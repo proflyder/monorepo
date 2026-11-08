@@ -107,7 +107,8 @@ RINGING --Answer(callee)--> CONNECTING --offer+answer--> ACTIVE
 
 ## Авторизация
 
-- телефон — `Authorization: Bearer <phone_token>` (стиль scheduler);
+- телефон — `Authorization: Bearer <app_token>`: тот же общий токен приложения,
+  что scheduler/control (`Authorization: Bearer` в стиле scheduler);
 - колонка — отдельный `station_token` (device secret);
 - identity endpoint'а **выводится из токена**, поля `id`/`kind` в запросе
   игнорируются; `WatchRequest.endpoint_id` допустим только равный identity;
@@ -120,7 +121,7 @@ RINGING --Answer(callee)--> CONNECTING --offer+answer--> ACTIVE
 | Переменная | По умолчанию | |
 |---|---|---|
 | `INTERCOM_LISTEN` | `127.0.0.1:8099` | listener |
-| `INTERCOM_TOKEN` / `_FILE` | — | phone bearer (обязателен) |
+| `INTERCOM_TOKEN` / `_FILE` | — | phone bearer, общий токен приложения (обязателен) |
 | `INTERCOM_STATION_TOKEN` / `_FILE` | — | station device token (обязателен) |
 | `INTERCOM_PHONE_ENDPOINT_ID` | `phone` | identity телефона |
 | `INTERCOM_STATION_ENDPOINT_ID` | `station` | identity колонки |
@@ -170,8 +171,10 @@ forward-only`): состояние звонков живёт только в п�
 
 Секреты:
 
-- OpenBao `secret/k8s/home-assistant/intercom`: `phone_token`,
-  `station_token` (разные, ≥32 случайных байта);
+- OpenBao `secret/k8s/home-assistant/scheduler-auth` → `token`: общий токен
+  приложения, ESO кладёт его в ключ `phone_token` секрета `intercom`;
+- OpenBao `secret/k8s/home-assistant/intercom` → `station_token` (device
+  secret, ≥32 случайных байта, не равен токену приложения);
 - `secret/ci/deploy-home` → `intercom_env`: `INTERCOM_NODE_PORT` (30097);
 - локальный `secrets/home/intercom.env` — только для ручного `deploy.sh`.
 

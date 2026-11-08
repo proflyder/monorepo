@@ -1,5 +1,6 @@
 package dev.proflyder.home.feature.scenarios
 
+import dev.proflyder.home.core.testing.TestFixtures
 import dev.proflyder.home.core.model.Field
 import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.core.model.RepeatKind
@@ -22,7 +23,7 @@ class ScenarioValidationTest {
         ),
         conditions = listOf(ScenarioCondition.EntityState("light.kitchen", "on")),
         steps = listOf(
-            ScenarioStep.Catalog("light.kitchen", "set", """{"brightness":40}"""),
+            ScenarioStep.Catalog("light.kitchen", "set", TestFixtures.read("brightness_params.json")),
             ScenarioStep.Speak("Good evening"),
             ScenarioStep.Delay(60),
         ),
@@ -97,9 +98,9 @@ class ScenarioValidationTest {
     @Test
     fun unknownOneofPartsBlockSaving() {
         val draft = valid().copy(
-            triggers = listOf(ScenarioTrigger.Unknown("""{"future":{}}""")),
-            conditions = listOf(ScenarioCondition.Unknown("""{"future":{}}""")),
-            steps = listOf(ScenarioStep.Unknown("""{"future":{}}""")),
+            triggers = listOf(ScenarioTrigger.Unknown(TestFixtures.read("unknown_empty.json"))),
+            conditions = listOf(ScenarioCondition.Unknown(TestFixtures.read("unknown_empty.json"))),
+            steps = listOf(ScenarioStep.Unknown(TestFixtures.read("unknown_empty.json"))),
         )
         assertEquals(RemoteFailure.Validation(Field.UNSUPPORTED), failure(draft))
     }

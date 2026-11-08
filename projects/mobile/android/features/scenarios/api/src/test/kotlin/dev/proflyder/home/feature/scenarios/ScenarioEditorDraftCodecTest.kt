@@ -1,5 +1,6 @@
 package dev.proflyder.home.feature.scenarios
 
+import dev.proflyder.home.core.testing.TestFixtures
 import dev.proflyder.home.core.model.RepeatKind
 import dev.proflyder.home.core.model.ScenarioCondition
 import dev.proflyder.home.core.model.ScenarioStep
@@ -23,18 +24,18 @@ class ScenarioEditorDraftCodecTest {
             ScenarioTrigger.Time(
                 TimeTrigger("Asia/Almaty", WallTime(19, 30), RepeatKind.CUSTOM, weekdays = listOf(1, 3, 5)),
             ),
-            ScenarioTrigger.Unknown("""{"futureTrigger":{"x":1}}"""),
+            ScenarioTrigger.Unknown(TestFixtures.read("unknown_trigger_x.json")),
         ),
         conditions = listOf(
             ScenarioCondition.EntityState("light.kitchen", "on"),
             ScenarioCondition.TimeWindow(WallTime(8, 0), WallTime(22, 0), listOf(6, 7)),
-            ScenarioCondition.Unknown("""{"futureCondition":{}}"""),
+            ScenarioCondition.Unknown(TestFixtures.read("unknown_condition_empty.json")),
         ),
         steps = listOf(
-            ScenarioStep.Catalog("light.kitchen", "set", """{"brightness":40}"""),
+            ScenarioStep.Catalog("light.kitchen", "set", TestFixtures.read("brightness_params.json")),
             ScenarioStep.Speak("Good evening"),
             ScenarioStep.Delay(90),
-            ScenarioStep.Unknown("""{"futureStep":{}}"""),
+            ScenarioStep.Unknown(TestFixtures.read("unknown_step_empty.json")),
         ),
     )
 
@@ -55,7 +56,7 @@ class ScenarioEditorDraftCodecTest {
                 revision = 9,
                 createdUnix = 0,
                 updatedUnix = 0,
-                triggers = listOf(ScenarioTrigger.Unknown("""{"future":{}}""")),
+                triggers = listOf(ScenarioTrigger.Unknown(TestFixtures.read("unknown_empty.json"))),
                 conditions = emptyList(),
                 steps = emptyList(),
                 continueOnError = false,

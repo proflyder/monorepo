@@ -1,5 +1,6 @@
 package dev.proflyder.home.core.network
 
+import dev.proflyder.home.core.testing.TestFixtures
 import dev.proflyder.home.core.config.ConnectionConfig
 import dev.proflyder.home.core.config.ConnectionSettingsStore
 import dev.proflyder.home.core.config.TokenStatus
@@ -81,10 +82,7 @@ class ConnectSchedulerClientTest {
     fun getStatusUsesConnectJsonHeadersAndSyncsServerClock() = runBlocking {
         server.enqueue(
             MockResponse().setResponseCode(200).setBody(
-                """{"version":"1.2.3","schemaVersion":"4","nowUnix":"5000","lastTickUnix":"4999",
-                   "pendingEvents":2,"leasedEvents":1,"enabledSchedules":3,"runningTimers":4,
-                   "consumers":[{"consumerId":"ha","lastSeenUnix":"4000","lastAckUnix":"3900","alive":true}],
-                   "scenarioExecutionSupported":false,"queues":[]}""",
+                TestFixtures.read("status_full.json"),
             ),
         )
 
@@ -113,10 +111,7 @@ class ConnectSchedulerClientTest {
     fun createScheduleSendsProtoLowerCamelCaseAndEnumNames() = runBlocking {
         server.enqueue(
             MockResponse().setResponseCode(200).setBody(
-                """{"schedule":{"id":"s1","label":"Wake up","kind":"SCHEDULE_KIND_ALARM",
-                   "timezone":"Asia/Almaty","at":{"hour":7,"minute":30,"second":0},
-                   "repeat":"REPEAT_KIND_CUSTOM","weekdays":[1,3,5],"enabled":true,
-                   "nextDueUnix":"9000","revision":"2"}}""",
+                TestFixtures.read("schedule_created.json"),
             ),
         )
         val draft = dev.proflyder.home.core.model.ScheduleDraft(
@@ -151,8 +146,7 @@ class ConnectSchedulerClientTest {
     fun startTimerEncodesInt64AsString() = runBlocking {
         server.enqueue(
             MockResponse().setResponseCode(200).setBody(
-                """{"timer":{"id":"t1","label":"Tea","durationSeconds":"90","remainingSeconds":"90",
-                   "dueUnix":"6000","state":"TIMER_STATE_RUNNING","revision":"1"}}""",
+                TestFixtures.read("timer_running.json"),
             ),
         )
         val result = client().startTimer("Tea", 90, "idem")
@@ -168,7 +162,7 @@ class ConnectSchedulerClientTest {
 
     @Test
     fun extraInterceptorsRunAfterTheConnectionInterceptor() = runBlocking {
-        server.enqueue(MockResponse().setResponseCode(200).setBody("""{"version":"1","nowUnix":"1"}"""))
+        server.enqueue(MockResponse().setResponseCode(200).setBody(TestFixtures.read("status_minimal.json")))
         val seen = mutableListOf<okhttp3.Request>()
         val client = ConnectSchedulerClient(
             settings = store,
@@ -196,9 +190,9 @@ class ConnectSchedulerClientTest {
 
     @Test
     fun enqueueTaskSendsQueueTypePayloadAndKey() = runBlocking {
-        server.enqueue(MockResponse().setResponseCode(200).setBody("""{"event":{"id":"evt-1","state":"EVENT_STATE_PENDING"}}"""))
+        server.enqueue(MockResponse().setResponseCode(200).setBody(TestFixtures.read("event_pending.json")))
 
-        val result = client().enqueueTask("home.control", "control", """{"entry":"focus","action":"run"}""", "key-1")
+        val result = client().enqueueTask("home.control", "control", TestFixtures.read("enqueue_payload.json"), "key-1")
         assertEquals("evt-1", (result as Outcome.Success).value)
 
         val request = server.takeRequest(2, TimeUnit.SECONDS)!!
@@ -206,7 +200,7 @@ class ConnectSchedulerClientTest {
         val body = json.parseToJsonElement(request.body.readUtf8()).jsonObject
         assertEquals("home.control", body.getValue("taskType").jsonPrimitive.content)
         assertEquals("control", body.getValue("queue").jsonPrimitive.content)
-        assertEquals("""{"entry":"focus","action":"run"}""", body.getValue("payloadJson").jsonPrimitive.content)
+        assertEquals(TestFixtures.read("enqueue_payload.json"), body.getValue("payloadJson").jsonPrimitive.content)
         assertEquals("key-1", body.getValue("idempotencyKey").jsonPrimitive.content)
     }
 
@@ -214,9 +208,7 @@ class ConnectSchedulerClientTest {
     fun updateScheduleSendsExpectedRevisionAsString() = runBlocking {
         server.enqueue(
             MockResponse().setResponseCode(200).setBody(
-                """{"schedule":{"id":"s1","label":"Wake up","kind":"SCHEDULE_KIND_ALARM",
-                   "timezone":"Asia/Almaty","at":{"hour":8,"minute":0},"repeat":"REPEAT_KIND_DAILY",
-                   "enabled":true,"revision":"3"}}""",
+                TestFixtures.read("schedule_updated.json"),
             ),
         )
         val existing = dev.proflyder.home.core.model.Schedule(
@@ -248,7 +240,7 @@ class ConnectSchedulerClientTest {
 
     @Test
     fun unauthorizedIsDistinctFromOffline() = runBlocking {
-        server.enqueue(MockResponse().setResponseCode(401).setBody("""{"code":"unauthenticated","message":"bad token"}"""))
+        server.enqueue(MockResponse().setResponseCode(401).setBody(TestFixtures.read("error_unauthenticated_bad_token.json")))
         assertEquals(RemoteFailure.Unauthorized, client().getStatus().failureOrNull())
     }
 
@@ -256,7 +248,7 @@ class ConnectSchedulerClientTest {
     fun connectErrorCodesAreMapped() = runBlocking {
         server.enqueue(
             MockResponse().setResponseCode(503).setBody(
-                """{"code":"unavailable","message":"scheduler ticking"}""",
+                TestFixtures.read("error_unavailable.json"),
             ),
         )
         val failure = client().getStatus().failureOrNull() as RemoteFailure.Offline
@@ -345,7 +337,7 @@ class ConnectSchedulerClientTest {
 
     @Test
     fun malformedPresentListFieldIsProtocolFailureButMissingFieldIsEmpty() = runBlocking {
-        server.enqueue(MockResponse().setResponseCode(200).setBody("""{"schedules":{}}"""))
+        server.enqueue(MockResponse().setResponseCode(200).setBody(TestFixtures.read("schedules_object.json")))
         val malformedSchedules = client().listSchedules(includeDisabled = true, kind = null)
         assertTrue(malformedSchedules.toString(), malformedSchedules.failureOrNull() is RemoteFailure.ProtocolFailure)
 
@@ -354,7 +346,7 @@ class ConnectSchedulerClientTest {
         assertTrue(emptySchedules is Outcome.Success)
         assertTrue((emptySchedules as Outcome.Success).value.isEmpty())
 
-        server.enqueue(MockResponse().setResponseCode(200).setBody("""{"timers":null}"""))
+        server.enqueue(MockResponse().setResponseCode(200).setBody(TestFixtures.read("timers_null.json")))
         assertTrue(client().listTimers(includeFinished = false).failureOrNull() is RemoteFailure.ProtocolFailure)
 
         server.enqueue(MockResponse().setResponseCode(200).setBody("""{}"""))
@@ -375,7 +367,7 @@ class ConnectSchedulerClientTest {
     @Test
     fun basePathPrefixIsPreserved() = runBlocking {
         store.set(defaultConfig(path = "api"))
-        server.enqueue(MockResponse().setResponseCode(200).setBody("""{"nowUnix":"1"}"""))
+        server.enqueue(MockResponse().setResponseCode(200).setBody(TestFixtures.read("now_only.json")))
         client().getStatus()
         assertEquals("/api/home.v1.SchedulerService/GetStatus", server.takeRequest().path)
     }
@@ -384,9 +376,7 @@ class ConnectSchedulerClientTest {
     fun listSchedulesMapsSchedulesAndFiltersKind() = runBlocking {
         server.enqueue(
             MockResponse().setResponseCode(200).setBody(
-                """{"schedules":[{"id":"s1","label":"A","kind":"SCHEDULE_KIND_ALARM",
-                   "timezone":"UTC","at":{"hour":9,"minute":0},"repeat":"REPEAT_KIND_DAILY",
-                   "enabled":true,"nextDueUnix":"123","snoozeUntilUnix":"0","revision":"1"}]}""",
+                TestFixtures.read("schedules_list.json"),
             ),
         )
         val result = client().listSchedules(includeDisabled = true, kind = ScheduleKind.ALARM)
@@ -405,7 +395,7 @@ class ConnectSchedulerClientTest {
 
     @Test
     fun requestBodyDoesNotContainToken() = runBlocking {
-        server.enqueue(MockResponse().setResponseCode(200).setBody("""{"nowUnix":"1"}"""))
+        server.enqueue(MockResponse().setResponseCode(200).setBody(TestFixtures.read("now_only.json")))
         client().getStatus()
         val request = server.takeRequest()
         assertFalse(request.body.readUtf8().contains("test-token"))
@@ -416,8 +406,6 @@ class ConnectSchedulerClientTest {
         override val config: StateFlow<ConnectionConfig> = MutableStateFlow(initial)
         override val tokenStatus: StateFlow<TokenStatus> =
             MutableStateFlow(if (initial.hasToken) TokenStatus.AVAILABLE else TokenStatus.ABSENT)
-        override val intercomTokenStatus: StateFlow<TokenStatus> =
-            MutableStateFlow(if (initial.hasIntercomToken) TokenStatus.AVAILABLE else TokenStatus.ABSENT)
 
         private val mutable = config as MutableStateFlow<ConnectionConfig>
 
@@ -430,9 +418,5 @@ class ConnectSchedulerClientTest {
             return Outcome.Success(Unit)
         }
 
-        override suspend fun updateIntercomToken(intercomToken: String?): Outcome<Unit> {
-            mutable.value = mutable.value.copy(intercomToken = intercomToken)
-            return Outcome.Success(Unit)
-        }
     }
 }

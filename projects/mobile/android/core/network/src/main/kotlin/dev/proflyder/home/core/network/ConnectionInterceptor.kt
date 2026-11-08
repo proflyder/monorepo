@@ -53,18 +53,9 @@ internal class ConnectionInterceptor(
                 RemoteFailure.Validation(endpointField)
             },
         )
-        val token = when (target) {
-            Target.SCHEDULER, Target.CONTROL -> config.bearerToken?.trim()
-            Target.INTERCOM -> config.intercomToken?.trim()
-        }
+        val token = config.bearerToken?.trim()
         if (!ConnectionConfig.isTokenValid(token)) {
-            throw RemoteFailureException(
-                if (target == Target.INTERCOM) {
-                    RemoteFailure.Validation(Field.INTERCOM_TOKEN)
-                } else {
-                    RemoteFailure.Validation(Field.TOKEN)
-                },
-            )
+            throw RemoteFailureException(RemoteFailure.Validation(Field.TOKEN))
         }
         val base = endpoint.baseUrl().toHttpUrlOrNull()
             ?: throw RemoteFailureException(RemoteFailure.Validation(endpointField))

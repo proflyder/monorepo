@@ -1,0 +1,4 @@
+{"version":"1.2.3","schemaVersion":"4","nowUnix":"5000","lastTickUnix":"4999",
+                   "pendingEvents":2,"leasedEvents":1,"enabledSchedules":3,"runningTimers":4,
+                   "consumers":[{"consumerId":"ha","lastSeenUnix":"4000","lastAckUnix":"3900","alive":true}],
+                   "scenarioExecutionSupported":false,"queues":[]}

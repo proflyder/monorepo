@@ -28,7 +28,7 @@
     <string name="call_route_bluetooth">Bluetooth</string>
     <string name="call_route_bluetooth_named">Bluetooth · %1$s</string>
     <string name="call_permission_microphone">Для звонка на колонку нужен доступ к микрофону.</string>
-    <string name="call_error_not_configured">Адрес intercom или телефонный токен не настроены в разделе «Подключение».</string>
+    <string name="call_error_not_configured">Адрес intercom или общий токен приложения не настроены в разделе «Подключение».</string>
     <string name="call_error_station_offline">Колонка не в сети.</string>
     <string name="call_error_busy">Колонка уже разговаривает.</string>
     <string name="call_error_media">Не удалось запустить звук.</string>
@@ -41,4 +41,5 @@
     <string name="call_quick_action_subtitle">Разговор через динамик и микрофон колонки</string>
     <string name="call_status_active_timer">Разговор · %1$s</string>
     <string name="call_route_selected">✓ %1$s</string>
+    <string name="call_account_label">Дом</string>
 </resources>

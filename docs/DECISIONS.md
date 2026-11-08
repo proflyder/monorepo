@@ -658,13 +658,13 @@
     `warm-caches` в `deploy-home` (push в `develop`): setup-bazel, диск-кэш
     Android (сборка `//projects/mobile/android:app`, ключ `android-app`,
     save под `-<run_id>` и `restore-keys` «точный ключ → юнит → платформа»,
-    архив ограничен `--experimental_disk_cache_gc_max_size=6G`) и бинарь
-    target-determinator. У юнитов без develop-писателя (`_native.yml`,
-    `_deploy-control.yml`) кэш только восстанавливается. target-determinator
-    выполняется один раз в job `plan` (параллельно `changes`, universe и
-    кандидаты — из карты юнитов); каждая запись матрицы лишь пересекает свои
-    цели с результатом (`platform/ci/plan-targets.mjs`), пустой результат
-    означает «все объявленные цели». Распространяемый APK собирается ровно
+    архив ограничен `--experimental_disk_cache_gc_max_size=6G`), а `warm-rust`
+    — общий диск-кэш host-Rust юнитов. У юнитов без develop-писателя
+    (`_native.yml`, `_deploy-control.yml`) кэш только восстанавливается.
+    Отдельного сужения целей нет: каждая запись матрицы гоняет объявленные
+    цели, незатронутые тесты Bazel берёт из кэша (job `plan` с
+    target-determinator удалён — он тратил ~5 мин на двойной анализ графа и
+    задерживал старт Android-джоб). Распространяемый APK собирается ровно
     один раз — в matrix-записи `android-app` (`_android.yml`) без секретов:
     `google-services.json` не секрет (идентификаторы Firebase открыто лежат в
     каждом APK) и берётся из переменной репозитория, тесты идут на том же

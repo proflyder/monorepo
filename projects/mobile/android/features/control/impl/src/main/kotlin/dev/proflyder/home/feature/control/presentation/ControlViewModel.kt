@@ -2,6 +2,7 @@ package dev.proflyder.home.feature.control.presentation
 
 import android.os.SystemClock
 import androidx.lifecycle.ViewModel
+import dev.proflyder.home.core.model.ControlCatalog
 import dev.proflyder.home.core.model.ControlEntry
 import dev.proflyder.home.core.model.FavoriteKind
 import dev.proflyder.home.core.model.FavoritePreferences
@@ -133,20 +134,24 @@ class ControlViewModel(
         refreshJob = launch {
             val result = loadCatalog()
             if (requested != generation) return@launch
-            when (result) {
-                is Outcome.Success -> updateState {
-                    copy(
-                        refreshing = false,
-                        entries = withExpectations(result.value.entries),
-                        statesOk = result.value.statesOk,
-                        // A room or category that vanished falls back to everything.
-                        filter = ControlItems.effectiveFilter(result.value.entries, filter),
-                    )
-                }
-                is Outcome.Failure -> updateState { copy(refreshing = false, loadError = result.failure) }
-            }
-            loadHub(catalogOk = result is Outcome.Success, requested = ++hubGeneration)
+            applyRefreshResult(result)
         }
+    }
+
+    private suspend fun applyRefreshResult(result: Outcome<ControlCatalog>) {
+        when (result) {
+            is Outcome.Success -> updateState {
+                copy(
+                    refreshing = false,
+                    entries = withExpectations(result.value.entries),
+                    statesOk = result.value.statesOk,
+                    // A room or category that vanished falls back to everything.
+                    filter = ControlItems.effectiveFilter(result.value.entries, filter),
+                )
+            }
+            is Outcome.Failure -> updateState { copy(refreshing = false, loadError = result.failure) }
+        }
+        loadHub(catalogOk = result is Outcome.Success, requested = ++hubGeneration)
     }
 
     /**
@@ -286,11 +291,16 @@ class ControlViewModel(
     /** Re-reads the catalog until the server shows the expected state (or the wait expires). */
     private suspend fun reconcile(id: String) {
         repeat(RECONCILE_ATTEMPTS) {
-            delay(RECONCILE_DELAY_MS)
-            if (expectedPower[id] == null) return
-            refresh(silent = true)
-            refreshJob?.join()
+            if (!reconcileStep(id)) return
         }
+    }
+
+    private suspend fun reconcileStep(id: String): Boolean {
+        delay(RECONCILE_DELAY_MS)
+        if (expectedPower[id] == null) return false
+        refresh(silent = true)
+        refreshJob?.join()
+        return true
     }
 
     /** Applies still-unconfirmed taps on top of freshly loaded [entries]. */

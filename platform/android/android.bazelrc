@@ -55,3 +55,7 @@ build:android --host_javacopt=-nowarn
 # Dex and desugar Android libraries in persistent workers instead of one JVM per
 # jar (~1200 actions for the Maven dependencies); output is unchanged.
 build:android --persistent_android_dex_desugar
+
+# Report every failing Android target in one run instead of stopping at the
+# first broken module (CI rounds are expensive; the result is unchanged).
+build:android --keep_going

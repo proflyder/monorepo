@@ -9,6 +9,7 @@ import java.net.SocketTimeoutException
 import java.net.UnknownHostException
 import javax.net.ssl.SSLException
 import javax.net.ssl.SSLHandshakeException
+import kotlinx.serialization.SerializationException
 import okhttp3.ResponseBody
 
 /** HTTP plumbing shared by the scheduler and control-catalog clients. */
@@ -46,6 +47,17 @@ internal fun sanitizeMessage(message: String?): String? = message
     ?.take(200)
     ?.replace(Regex("[\\p{Cntrl}]"), " ")
     ?.replace(Regex("(?i)bearer\\s+\\S+"), "Bearer <redacted>")
+
+/**
+ * Failure of a unary Connect call before a decoded response: transport errors
+ * keep their [toRemoteFailure] mapping, malformed JSON becomes a protocol
+ * failure, and anything else is a bug the caller should rethrow.
+ */
+internal fun Throwable.toCallFailure(): RemoteFailure = when (this) {
+    is IOException -> toRemoteFailure()
+    is SerializationException -> RemoteFailure.ProtocolFailure("invalid JSON response")
+    else -> RemoteFailure.ProtocolFailure(sanitizeMessage(message) ?: "unexpected response shape")
+}
 
 /** Reads at most [MAX_RESPONSE_BYTES]; larger bodies fail with [ResponseTooLargeException]. */
 internal fun ResponseBody.readBounded(): String {

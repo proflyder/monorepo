@@ -1,5 +1,6 @@
 package dev.proflyder.home.core.network
 
+import dev.proflyder.home.core.testing.TestFixtures
 import dev.proflyder.home.core.config.ConnectionConfig
 import dev.proflyder.home.core.config.ConnectionSettingsStore
 import dev.proflyder.home.core.config.TokenStatus
@@ -45,7 +46,7 @@ class ConnectIntercomClientTest {
         store = FakeIntercomSettingsStore(
             ConnectionConfig(
                 intercomEndpoint = (ServerEndpoint.parse(base) as EndpointParseResult.Valid).endpoint,
-                intercomToken = "phone-token",
+                bearerToken = "phone-token",
             ),
         )
     }
@@ -61,10 +62,7 @@ class ConnectIntercomClientTest {
     fun startCallUsesIntercomPathBearerAndIdempotencyKey() = runBlocking {
         server.enqueue(
             MockResponse().setResponseCode(200).setBody(
-                """{"call":{"id":"c-1","state":"CALL_STATE_RINGING",
-                   "caller":{"id":"phone","kind":"ENDPOINT_KIND_PHONE","online":true},
-                   "callee":{"id":"station","kind":"ENDPOINT_KIND_STATION","displayName":"Station","online":true},
-                   "createdUnix":"10"}}""",
+                TestFixtures.read("intercom_call_ringing.json"),
             ),
         )
 
@@ -85,8 +83,8 @@ class ConnectIntercomClientTest {
 
     @Test
     fun hangupCarriesReasonAndSendSignalCarriesSdp() = runBlocking {
-        server.enqueue(MockResponse().setResponseCode(200).setBody("""{"call":{"id":"c-1"}}"""))
-        server.enqueue(MockResponse().setResponseCode(200).setBody("""{"delivered":true}"""))
+        server.enqueue(MockResponse().setResponseCode(200).setBody(TestFixtures.read("intercom_call_minimal.json")))
+        server.enqueue(MockResponse().setResponseCode(200).setBody(TestFixtures.read("intercom_delivered.json")))
 
         client().hangup("c-1", IntercomEndReason.CANCELED)
         val hungUp = json.parseToJsonElement(server.takeRequest().body.readUtf8()).jsonObject
@@ -106,23 +104,21 @@ class ConnectIntercomClientTest {
 
     @Test
     fun iceConfigEmptyMeansHostCandidates() = runBlocking {
-        server.enqueue(MockResponse().setResponseCode(200).setBody("""{"iceServers":[]}"""))
+        server.enqueue(MockResponse().setResponseCode(200).setBody(TestFixtures.read("intercom_ice_empty.json")))
         val result = client().getIceConfig()
         assertEquals(emptyList<Any>(), (result as Outcome.Success).value)
     }
 
     @Test
     fun unauthorizedIsReportedWithoutRetry() = runBlocking {
-        server.enqueue(MockResponse().setResponseCode(401).setBody("""{"code":"unauthenticated"}"""))
+        server.enqueue(MockResponse().setResponseCode(401).setBody(TestFixtures.read("error_unauthenticated.json")))
         assertEquals(RemoteFailure.Unauthorized, client().listEndpoints().failureOrNull())
     }
 
     @Test
     fun watchParsesConnectEnvelopeFrames() = runBlocking {
-        val first = """{"call":{"call":{"id":"c-1","state":"CALL_STATE_CONNECTING"},
-            "previousState":"CALL_STATE_RINGING"}}"""
-        val second = """{"sdp":{"callId":"c-1","fromEndpointId":"station",
-            "signal":{"type":"SDP_TYPE_ANSWER","sdp":"v=0"}}}"""
+        val first = TestFixtures.read("intercom_state_changed.json")
+        val second = TestFixtures.read("intercom_sdp.json")
         val body = Buffer()
             .write(ConnectFrames.encode(first))
             .write(ConnectFrames.encode(second))
@@ -156,7 +152,7 @@ class ConnectIntercomClientTest {
 
     @Test
     fun watchReconnectsAfterStreamEnd() = runBlocking {
-        val event = """{"iceEnd":{"callId":"c-1","fromEndpointId":"station"}}"""
+        val event = TestFixtures.read("intercom_ice_end.json")
         repeat(2) {
             server.enqueue(
                 MockResponse()
@@ -174,31 +170,26 @@ class ConnectIntercomClientTest {
     }
 
     @Test
-    fun missingIntercomTokenFailsBeforeAnyRequest() = runBlocking {
+    fun missingTokenFailsBeforeAnyRequest() = runBlocking {
         store = FakeIntercomSettingsStore(
             ConnectionConfig(
                 intercomEndpoint = (ServerEndpoint.parse(server.url("/").toString().removeSuffix("/")) as EndpointParseResult.Valid).endpoint,
-                intercomToken = null,
+                bearerToken = null,
             ),
         )
         assertEquals(
-            RemoteFailure.Validation(dev.proflyder.home.core.model.Field.INTERCOM_TOKEN),
+            RemoteFailure.Validation(dev.proflyder.home.core.model.Field.TOKEN),
             client().listEndpoints().failureOrNull(),
         )
         assertEquals(0, server.requestCount)
-        assertFalse(store.config.value.hasIntercomToken)
+        assertFalse(store.config.value.hasToken)
     }
 
     private class FakeIntercomSettingsStore(initial: ConnectionConfig) : ConnectionSettingsStore {
         private val mutable = MutableStateFlow(initial)
         override val config: StateFlow<ConnectionConfig> = mutable
         override val tokenStatus: StateFlow<TokenStatus> = MutableStateFlow(TokenStatus.ABSENT)
-        override val intercomTokenStatus: StateFlow<TokenStatus> =
-            MutableStateFlow(if (initial.hasIntercomToken) TokenStatus.AVAILABLE else TokenStatus.ABSENT)
 
         override suspend fun updateToken(bearerToken: String?): Outcome<Unit> = Outcome.Success(Unit)
-        override suspend fun updateIntercomToken(intercomToken: String?): Outcome<Unit> = Outcome.Success(Unit)
     }
 }
-
-

@@ -86,15 +86,19 @@ internal class LightSheet(
         views.lightTemp.value = temperature.toFloat()
         showKelvin()
         views.lightTemp.addOnChangeListener { _, value, fromUser ->
-            temperature = value.roundToInt()
-            if (fromUser) {
-                colorMode = false
-                temperatureKnown = true
-            }
-            showKelvin()
-            renderPreview()
+            onTemperatureChanged(value, fromUser)
         }
         views.lightTemp.onRelease { onAdjust(LightAdjust(kelvin = it.roundToInt())) }
+    }
+
+    private fun onTemperatureChanged(value: Float, fromUser: Boolean) {
+        temperature = value.roundToInt()
+        if (fromUser) {
+            colorMode = false
+            temperatureKnown = true
+        }
+        showKelvin()
+        renderPreview()
     }
 
     private fun showKelvin() {
@@ -118,15 +122,19 @@ internal class LightSheet(
             renderPreview()
         }
         views.lightSaturation.addOnChangeListener { _, value, fromUser ->
-            saturation = value.roundToInt()
-            if (fromUser) colorMode = true
-            showSaturation()
-            renderPreview()
+            onSaturationChanged(value, fromUser)
         }
         // Hue and saturation are always sent together: the server needs both.
         val sendColor: (Float) -> Unit = { onAdjust(LightAdjust(hue = hue, saturation = saturation)) }
         views.lightHue.onRelease(sendColor)
         views.lightSaturation.onRelease(sendColor)
+    }
+
+    private fun onSaturationChanged(value: Float, fromUser: Boolean) {
+        saturation = value.roundToInt()
+        if (fromUser) colorMode = true
+        showSaturation()
+        renderPreview()
     }
 
     private fun showSaturation() {

@@ -1154,6 +1154,9 @@ kubectl -n home-assistant exec deployment/intercom -- \
 kubectl -n home-assistant exec deployment/intercom -- \
   /usr/local/bin/intercom -healthcheck
 
+# phone_token в секрете intercom — это общий токен приложения из
+# secret/k8s/home-assistant/scheduler-auth (поле token), не отдельный секрет.
+
 # NodePort 30097 фильтруется общим nft scheduler/control/intercom
 ```
 

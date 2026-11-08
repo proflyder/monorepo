@@ -1,0 +1,31 @@
+load("@rules_kotlin//kotlin:jvm.bzl", "kt_jvm_library", "kt_jvm_test")
+
+package(default_visibility = ["//visibility:public"])
+
+# First-party detekt ruleset (`home-rules`). The ServiceLoader descriptor under
+# resources makes detekt discover HomeRuleSetProvider when this jar is passed
+# with `--plugins`.
+kt_jvm_library(
+    name = "detekt-rules",
+    srcs = glob(["src/main/kotlin/**/*.kt"]),
+    kotlinc_opts = "//platform/android:jvm17_options",
+    resources = [
+        "src/main/resources/META-INF/services/io.gitlab.arturbosch.detekt.api.RuleSetProvider",
+    ],
+    deps = [
+        "@maven//:io_gitlab_arturbosch_detekt_detekt_api",
+    ],
+)
+
+kt_jvm_test(
+    name = "detekt_rules_test",
+    srcs = glob(["src/test/kotlin/**/*.kt"]),
+    kotlinc_opts = "//platform/android:jvm17_options",
+    test_class = "dev.proflyder.home.detekt.HomeRulesTestSuite",
+    deps = [
+        ":detekt-rules",
+        "@maven//:io_gitlab_arturbosch_detekt_detekt_api",
+        "@maven//:io_gitlab_arturbosch_detekt_detekt_test",
+        "@maven//:junit_junit",
+    ],
+)

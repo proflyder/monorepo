@@ -45,13 +45,15 @@ internal class EntityConditionDialog(
                 if (checked.first() == R.id.condition_state_on) "on" else "off",
             )
         }
-        views.conditionStateInput.doAfterTextChanged {
-            bindingState = true
-            views.conditionStateGroup.clearCheck()
-            bindingState = false
-            renderPositive()
-        }
+        views.conditionStateInput.doAfterTextChanged { onStateTextChanged() }
         renderEntity(entryTitle)
+    }
+
+    private fun onStateTextChanged() {
+        bindingState = true
+        views.conditionStateGroup.clearCheck()
+        bindingState = false
+        renderPositive()
     }
 
     fun show() {

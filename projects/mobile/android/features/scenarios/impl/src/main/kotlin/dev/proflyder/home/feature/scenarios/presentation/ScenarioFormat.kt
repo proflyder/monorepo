@@ -102,22 +102,7 @@ internal object ScenarioFormat {
         catalog: List<ControlEntry>,
         catalogLoaded: Boolean,
     ): StepDescription = when (step) {
-        is ScenarioStep.Catalog -> {
-            val entry = catalog.firstOrNull { it.id == step.entryId }
-            // Prefer the human device name when HA only sent a technical entity
-            // title ("Light", "Switch"); never repeat the same name twice.
-            val title = entry?.displayName?.ifBlank { entry.id } ?: step.entryId
-            val parts = mutableListOf(actionLabel(context, step.action))
-            if (entry != null) {
-                val room = entry.room
-                if (room.isNotBlank() && room != title) parts += room
-                entry.secondaryName?.takeIf { it != title }?.let { parts += it }
-            } else if (catalogLoaded) {
-                parts += context.getString(R.string.scenarios_step_missing)
-            }
-            parts += paramsSummary(context, step.paramsJson)
-            StepDescription(title, parts.joinToString(SEPARATOR))
-        }
+        is ScenarioStep.Catalog -> catalogStepDescription(context, step, catalog, catalogLoaded)
         is ScenarioStep.Speak -> StepDescription(
             context.getString(R.string.scenarios_step_speak_title),
             context.getString(R.string.scenarios_step_speak_detail, step.text),
@@ -130,6 +115,35 @@ internal object ScenarioFormat {
             context.getString(R.string.scenarios_step_unsupported),
             "",
         )
+    }
+
+    private fun catalogStepDescription(
+        context: Context,
+        step: ScenarioStep.Catalog,
+        catalog: List<ControlEntry>,
+        catalogLoaded: Boolean,
+    ): StepDescription {
+        val entry = catalog.firstOrNull { it.id == step.entryId }
+        // Prefer the human device name when HA only sent a technical entity
+        // title ("Light", "Switch"); never repeat the same name twice.
+        val title = entry?.displayName?.ifBlank { entry.id } ?: step.entryId
+        val parts = mutableListOf(actionLabel(context, step.action))
+        when {
+            entry != null -> addEntryDetails(parts, entry, title)
+            catalogLoaded -> parts += context.getString(R.string.scenarios_step_missing)
+        }
+        parts += paramsSummary(context, step.paramsJson)
+        return StepDescription(title, parts.joinToString(SEPARATOR))
+    }
+
+    private fun addEntryDetails(
+        parts: MutableList<String>,
+        entry: ControlEntry,
+        title: String,
+    ) {
+        val room = entry.room
+        if (room.isNotBlank() && room != title) parts += room
+        entry.secondaryName?.takeIf { it != title }?.let { parts += it }
     }
 
     fun actionLabel(context: Context, action: String): String = when (action) {
@@ -151,11 +165,9 @@ internal object ScenarioFormat {
 
     /** Parsed light/speak parameters in a stable, human-readable order. */
     private fun paramsSummary(context: Context, raw: String): List<String> {
-        val obj = try {
+        val obj = runCatching {
             Json.parseToJsonElement(raw.ifBlank { "{}" }) as? JsonObject
-        } catch (_: Exception) {
-            null
-        } ?: return emptyList()
+        }.getOrNull() ?: return emptyList()
         val parts = mutableListOf<String>()
         obj.int("brightness")?.let { parts += context.getString(R.string.scenarios_param_brightness, it) }
         obj.int("kelvin")?.let { parts += context.getString(R.string.scenarios_param_kelvin, it) }

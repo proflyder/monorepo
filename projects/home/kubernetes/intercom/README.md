@@ -9,8 +9,9 @@ Deployment/Service сигналинга звонка; код и контракт
   звонков in-memory), NodePort `${INTERCOM_NODE_PORT}`, пробы
   `intercom -healthcheck`.
 - `manifests/external-secrets.yaml` — ESO `ExternalSecret/intercom` из
-  OpenBao `secret/k8s/home-assistant/intercom` с ключами `phone_token` и
-  `station_token`.
+  OpenBao: `phone_token` — из `secret/k8s/home-assistant/scheduler-auth`
+  (`token`, общий токен приложения), `station_token` — из
+  `secret/k8s/home-assistant/intercom`.
 - HTTPS-маршрут `intercom.<домен>` — в
   `projects/home/kubernetes/ingress/manifests/routes.yaml`
   (`INTERCOM_HOST`), а не здесь: namespace/allow-list/TLS принадлежат
@@ -23,8 +24,9 @@ PR CI собирает `ghcr.io/proflyder/intercom` и публикует `tree-
 merge в `develop` продвигает digest и катит Deployment через
 `deploy.sh` (build-once, `DEPLOY_NO_BUILD=1`). Приватные значения:
 
-- `secret/k8s/home-assistant/intercom` в OpenBao: `phone_token`,
-  `station_token` (разные, ≥32 случайных байта);
+- `secret/k8s/home-assistant/scheduler-auth` → `token` (общий токен приложения);
+- `secret/k8s/home-assistant/intercom` → `station_token` (device secret,
+  ≥32 случайных байта, не равен токену приложения);
 - `intercom_env` в `secret/ci/deploy-home`: `INTERCOM_NODE_PORT`;
 - локально `secrets/home/intercom.env` (по образцу
   `intercom.env.example`) нужен только для ручного `deploy.sh`.

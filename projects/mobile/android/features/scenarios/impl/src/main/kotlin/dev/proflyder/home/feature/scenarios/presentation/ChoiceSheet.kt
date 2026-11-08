@@ -13,7 +13,7 @@ import dev.proflyder.home.feature.scenarios.impl.databinding.SheetChoiceBinding
  * 24dp icon, body-large label, ripple over the whole row, no filled button.
  */
 internal class ChoiceSheet(
-    context: Context,
+    private val context: Context,
     @StringRes titleRes: Int,
     private val choices: List<Choice>,
 ) {
@@ -28,17 +28,19 @@ internal class ChoiceSheet(
     init {
         val views = SheetChoiceBinding.inflate(LayoutInflater.from(context))
         views.choiceTitle.setText(titleRes)
-        choices.forEach { choice ->
-            val row = ItemChoiceRowBinding.inflate(LayoutInflater.from(context), views.choiceItems, false)
-            row.choiceIcon.setImageResource(choice.iconRes)
-            row.choiceLabel.text = choice.label
-            row.root.setOnClickListener {
-                dialog.dismiss()
-                choice.onClick()
-            }
-            views.choiceItems.addView(row.root)
-        }
+        choices.forEach { choice -> views.choiceItems.addView(choiceRow(choice, views.choiceItems)) }
         dialog.setContentView(views.root)
+    }
+
+    private fun choiceRow(choice: Choice, parent: android.view.ViewGroup): android.view.View {
+        val row = ItemChoiceRowBinding.inflate(LayoutInflater.from(context), parent, false)
+        row.choiceIcon.setImageResource(choice.iconRes)
+        row.choiceLabel.text = choice.label
+        row.root.setOnClickListener {
+            dialog.dismiss()
+            choice.onClick()
+        }
+        return row.root
     }
 
     fun show() = dialog.show()

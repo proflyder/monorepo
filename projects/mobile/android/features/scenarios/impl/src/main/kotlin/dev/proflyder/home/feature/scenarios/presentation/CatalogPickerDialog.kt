@@ -9,6 +9,8 @@ import androidx.core.widget.NestedScrollView
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import dev.proflyder.home.core.model.CatalogGrouping
 import dev.proflyder.home.core.model.CatalogGroupingLabels
+import dev.proflyder.home.core.model.CatalogDeviceGroup
+import dev.proflyder.home.core.model.CatalogRoomGroup
 import dev.proflyder.home.core.model.ControlAction
 import dev.proflyder.home.core.model.ControlEntry
 import dev.proflyder.home.core.model.ControlKind
@@ -50,19 +52,23 @@ internal class CatalogPickerDialog(
         if (rooms.isEmpty()) {
             list += header(context.getString(R.string.scenarios_catalog_empty))
         }
-        rooms.forEach { room ->
-            list += header(room.room.ifBlank { context.getString(R.string.scenarios_catalog_other_room) })
-            room.devices.forEach { group ->
-                if (CatalogGrouping.needsDeviceHeader(group, labels)) {
-                    list += subheader(group.title)
-                }
-                group.entries.forEach { entry -> list += catalogRow(entry) }
-            }
-        }
+        rooms.forEach { room -> addRoom(list, room) }
         val settingsCount = CatalogGrouping.settingsCount(entries)
         if (settingsCount > 0) {
             list += settingsToggle(settingsCount)
         }
+    }
+
+    private fun addRoom(list: android.widget.LinearLayout, room: CatalogRoomGroup) {
+        list += header(room.room.ifBlank { context.getString(R.string.scenarios_catalog_other_room) })
+        room.devices.forEach { group -> addDevice(list, group) }
+    }
+
+    private fun addDevice(list: android.widget.LinearLayout, group: CatalogDeviceGroup) {
+        if (CatalogGrouping.needsDeviceHeader(group, labels)) {
+            list += subheader(group.title)
+        }
+        group.entries.forEach { entry -> list += catalogRow(entry) }
     }
 
     private fun catalogRow(entry: ControlEntry): View {

@@ -12,6 +12,7 @@ load("@rules_kotlin//kotlin:android.bzl", "kt_android_library")
 load("@rules_kotlin//kotlin:jvm.bzl", "kt_jvm_library", "kt_jvm_test")
 load("@rules_android//android:rules.bzl", "android_binary")
 load(":lint.bzl", _android_lint = "android_lint")
+load(":detekt.bzl", _home_detekt = "home_detekt")
 
 METRO_COMPILER_PLUGIN = "//platform/android:metro_compiler_plugin"
 JVM17_OPTIONS = "//platform/android:jvm17_options"
@@ -86,6 +87,15 @@ def home_android_lint(name, deps, app_module, config, **kwargs):
         name = name,
         deps = deps,
         app_module = app_module,
+        config = config,
+        **kwargs
+    )
+
+def home_detekt(name, deps, config, **kwargs):
+    """detekt over every Kotlin source reachable from `deps`."""
+    _home_detekt(
+        name = name,
+        deps = deps,
         config = config,
         **kwargs
     )

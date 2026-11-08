@@ -2,7 +2,6 @@ package dev.proflyder.home.feature.alarms.data
 
 import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.model.Schedule
-import dev.proflyder.home.core.model.ScheduleDraft
 import dev.proflyder.home.core.model.ScheduleKind
 import dev.proflyder.home.core.network.SchedulerClient
 import dev.proflyder.home.feature.alarms.AlarmDraft

@@ -14,6 +14,7 @@ import dev.proflyder.home.core.config.TokenStatus
 import dev.proflyder.home.core.model.Field
 import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.model.RemoteFailure
+import dev.proflyder.home.core.operation.suspendRunCatching
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
@@ -58,10 +59,6 @@ class AndroidConnectionSettingsStore(
         ?.let(cipher::decrypt)
         ?.takeIf(ConnectionConfig::isTokenValid)
 
-    private val initialIntercomToken: String? = initial[KEY_INTERCOM_TOKEN_CIPHERTEXT]
-        ?.let(cipher::decrypt)
-        ?.takeIf(ConnectionConfig::isTokenValid)
-
     private val mutableTokenStatus = MutableStateFlow(
         when {
             !initial.contains(KEY_TOKEN_CIPHERTEXT) -> TokenStatus.ABSENT
@@ -71,23 +68,13 @@ class AndroidConnectionSettingsStore(
     )
     override val tokenStatus: StateFlow<TokenStatus> = mutableTokenStatus.asStateFlow()
 
-    private val mutableIntercomTokenStatus = MutableStateFlow(
-        when {
-            !initial.contains(KEY_INTERCOM_TOKEN_CIPHERTEXT) -> TokenStatus.ABSENT
-            initialIntercomToken != null -> TokenStatus.AVAILABLE
-            else -> TokenStatus.UNREADABLE
-        },
-    )
-    override val intercomTokenStatus: StateFlow<TokenStatus> = mutableIntercomTokenStatus.asStateFlow()
-
-    private val mutableConfig = MutableStateFlow(compose(remote.state.value, initialToken, initialIntercomToken))
+    private val mutableConfig = MutableStateFlow(compose(remote.state.value, initialToken))
     override val config: StateFlow<ConnectionConfig> = mutableConfig.asStateFlow()
 
     init {
         scope.launch {
             remote.state.collect { state ->
-                val current = mutableConfig.value
-                mutableConfig.value = compose(state, current.bearerToken, current.intercomToken)
+                mutableConfig.value = compose(state, mutableConfig.value.bearerToken)
             }
         }
     }
@@ -98,16 +85,7 @@ class AndroidConnectionSettingsStore(
             key = KEY_TOKEN_CIPHERTEXT,
             field = Field.TOKEN,
             status = mutableTokenStatus,
-            apply = { token -> mutableConfig.value = compose(remote.state.value, token, mutableConfig.value.intercomToken) },
-        )
-
-    override suspend fun updateIntercomToken(intercomToken: String?): Outcome<Unit> =
-        updateStoredToken(
-            value = intercomToken,
-            key = KEY_INTERCOM_TOKEN_CIPHERTEXT,
-            field = Field.INTERCOM_TOKEN,
-            status = mutableIntercomTokenStatus,
-            apply = { token -> mutableConfig.value = compose(remote.state.value, mutableConfig.value.bearerToken, token) },
+            apply = { token -> mutableConfig.value = compose(remote.state.value, token) },
         )
 
     private suspend fun updateStoredToken(
@@ -123,20 +101,21 @@ class AndroidConnectionSettingsStore(
         }
 
         val encrypted = if (normalizedToken != null) {
-            try {
+            runCatching {
                 cipher.encrypt(normalizedToken)
-            } catch (_: Exception) {
+            }.getOrElse {
                 return Outcome.Failure(RemoteFailure.Storage("The token could not be encrypted on this device."))
             }
         } else {
             null
         }
 
-        try {
+        suspendRunCatching {
             dataStore.edit { prefs ->
                 if (encrypted != null) prefs[key] = encrypted else prefs.remove(key)
             }
-        } catch (_: IOException) {
+        }.onFailure { failure ->
+            if (failure !is IOException) throw failure
             return Outcome.Failure(RemoteFailure.Storage("Settings could not be saved on this device."))
         }
 
@@ -145,11 +124,10 @@ class AndroidConnectionSettingsStore(
         return Outcome.Success(Unit)
     }
 
-    /** Endpoints/timeouts come only from Remote Config; tokens are device-local. */
+    /** Endpoints/timeouts come only from Remote Config; the token is device-local. */
     private fun compose(
         state: RemoteConnectionState,
         token: String?,
-        intercomToken: String?,
     ): ConnectionConfig {
         val loaded = when (state) {
             is RemoteConnectionState.Loaded -> state
@@ -165,7 +143,6 @@ class AndroidConnectionSettingsStore(
             controlEndpoint = loaded?.controlEndpoint,
             intercomEndpoint = loaded?.intercomEndpoint,
             bearerToken = token,
-            intercomToken = intercomToken,
             connectTimeoutMillis = loaded?.connectTimeoutMillis
                 ?: ConnectionConfig.DEFAULT_CONNECT_TIMEOUT_MILLIS,
             readTimeoutMillis = loaded?.readTimeoutMillis
@@ -185,8 +162,5 @@ class AndroidConnectionSettingsStore(
         val KEY_READ_TIMEOUT = longPreferencesKey("read_timeout_millis")
 
         val KEY_TOKEN_CIPHERTEXT = stringPreferencesKey("bearer_token_ciphertext")
-
-        /** Separate intercom phone token: a distinct device secret from the scheduler bearer. */
-        val KEY_INTERCOM_TOKEN_CIPHERTEXT = stringPreferencesKey("intercom_token_ciphertext")
     }
 }

@@ -12,14 +12,10 @@ interface ConnectionRepository {
     /** Effective endpoints/timeouts (Remote Config) plus the device-local token. */
     val config: StateFlow<ConnectionConfig>
     val tokenStatus: StateFlow<TokenStatus>
-    val intercomTokenStatus: StateFlow<TokenStatus>
     val remoteConfig: StateFlow<RemoteConnectionState>
 
     /** Persists only the token; endpoints and timeouts come from Remote Config. */
     suspend fun saveToken(update: TokenUpdate): Outcome<ConnectionConfig>
-
-    /** Persists the separate intercom phone token used for calls. */
-    suspend fun saveIntercomToken(update: TokenUpdate): Outcome<ConnectionConfig>
 
     /** Fetches and activates the latest Remote Config values. */
     suspend fun refreshRemoteConfig()

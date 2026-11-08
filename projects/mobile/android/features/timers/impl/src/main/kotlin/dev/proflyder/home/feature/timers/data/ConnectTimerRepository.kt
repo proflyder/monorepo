@@ -27,7 +27,7 @@ class ConnectTimerRepository(
         durationSeconds: Long,
         idempotencyKey: String,
     ): Outcome<Timer> = client.startTimer(
-        label = label.trim().ifEmpty { "Timer" },
+        label = label.trim(),
         durationSeconds = durationSeconds,
         idempotencyKey = idempotencyKey,
     )

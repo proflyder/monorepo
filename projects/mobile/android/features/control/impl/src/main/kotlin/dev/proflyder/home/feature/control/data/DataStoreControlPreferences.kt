@@ -5,6 +5,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import dev.proflyder.home.feature.control.ControlFilter
+import dev.proflyder.home.core.operation.suspendRunCatching
 import dev.proflyder.home.feature.control.ControlPreferences
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesBinding
@@ -20,16 +21,15 @@ import kotlinx.coroutines.flow.first
 class DataStoreControlPreferences(
     private val dataStore: DataStore<Preferences>,
 ) : ControlPreferences {
-    override suspend fun loadFilter(): ControlFilter? = try {
+    override suspend fun loadFilter(): ControlFilter? = suspendRunCatching {
         ControlFilter.decode(dataStore.data.first()[KEY_FILTER])
-    } catch (_: IOException) {
-        null
-    }
+    }.getOrElse { null }
 
     override suspend fun saveFilter(filter: ControlFilter) {
-        try {
+        suspendRunCatching {
             dataStore.edit { it[KEY_FILTER] = ControlFilter.encode(filter) }
-        } catch (_: IOException) {
+        }.onFailure { failure ->
+            if (failure !is IOException) throw failure
             // The choice just is not remembered; the screen keeps working.
         }
     }

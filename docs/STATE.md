@@ -170,10 +170,9 @@
   CI ставит подмножество через `jdx/mise-action`; Bazel — `setup-bazel`.
   Рабочее место — `mise run setup` (`docs/WORKSTATION.md`).
 - Кэши Actions пишет только `develop`: `deploy-home` → `warm-caches`
-  (setup-bazel, диск-кэш Android с ключом `android-app`, бинарь
-  target-determinator); PR-прогоны только восстанавливают их. Список
-  затронутых Android-целей считается один раз в job `plan`
-  (`platform/ci/plan-targets.mjs`), цикл `bazel build`/`test` идёт по нему.
+  (setup-bazel, диск-кэш Android с ключом `android-app`) и `warm-rust`
+  (общий host-Rust кэш); PR-прогоны только восстанавливают их. Android-юниты
+  гоняют объявленные цели, незатронутые тесты берутся из кэша Bazel.
 - Android-only флаги Bazel — `platform/android/android.bazelrc` под
   `--config=android` (подключается `try-import` из корневого `.bazelrc`);
   правка файла выбирает только android-юниты, а не все.
@@ -610,7 +609,9 @@
   колонка (SDP/ICE relay, `home.v1.IntercomService`, server-streaming
   `Watch`); медиа P2P, сервис его не несёт. Deploy-юнит `intercom` включён:
   образ `ghcr.io/proflyder/intercom`, ESO `intercom` из
-  `secret/k8s/home-assistant/intercom` (`phone_token`, `station_token`),
+  `secret/k8s/home-assistant/scheduler-auth` (`token` → `phone_token`,
+  общий токен приложения) и `secret/k8s/home-assistant/intercom`
+  (`station_token`),
   `intercom_env` в `secret/ci/deploy-home` (`INTERCOM_NODE_PORT=30097`),
   NodePort закрыт общим host-фильтром scheduler/control. Первый выкат — merge
   этой ветки в `develop`; до этого живой Deployment отсутствует.

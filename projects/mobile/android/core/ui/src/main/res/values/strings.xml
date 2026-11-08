@@ -15,7 +15,6 @@
     <string name="ui_validation_endpoint">Enter a full http:// or https:// address.</string>
     <string name="ui_validation_intercom_endpoint">Enter a full http:// or https:// address for the intercom service, or leave it blank.</string>
     <string name="ui_validation_token">Check the bearer token.</string>
-    <string name="ui_validation_intercom_token">Check the intercom phone token.</string>
     <string name="ui_validation_timeout">Timeouts must be between 1 and 120 seconds.</string>
     <string name="ui_validation_label">Enter a short label.</string>
     <string name="ui_validation_time">Enter a valid time of day.</string>

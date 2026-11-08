@@ -45,18 +45,20 @@ class ReminderEditorFragment :
         binding.reminderEditorDelete.setOnClickListener { confirmDelete() }
 
         viewModel.state.observe { render(it) }
-        viewModel.completion.observe(Lifecycle.State.RESUMED) { completion ->
-            if (completion == null) return@observe
-            viewModel.consumeCompletion()
-            showMessage(
-                if (completion == ReminderEditorCompletion.DELETED) {
-                    R.string.reminders_deleted
-                } else {
-                    R.string.reminders_saved
-                },
-            )
-            requireNavigator().back()
-        }
+        viewModel.completion.observe(Lifecycle.State.RESUMED) { completion -> handleCompletion(completion) }
+    }
+
+    private fun handleCompletion(completion: ReminderEditorCompletion?) {
+        if (completion == null) return
+        viewModel.consumeCompletion()
+        showMessage(
+            if (completion == ReminderEditorCompletion.DELETED) {
+                R.string.reminders_deleted
+            } else {
+                R.string.reminders_saved
+            },
+        )
+        requireNavigator().back()
     }
 
     private fun render(state: ReminderEditorUiState) = with(binding) {

@@ -41,15 +41,6 @@ class ConnectionFragment :
             binding.connectionToken.setText("")
             viewModel.requestClearToken()
         }
-        binding.connectionIntercomToken.doAfterTextChanged {
-            if (!rendering) viewModel.setIntercomToken(it?.toString().orEmpty())
-        }
-        binding.connectionIntercomClearToken.setOnClickListener {
-            binding.connectionIntercomToken.setText("")
-            viewModel.requestClearIntercomToken()
-        }
-        binding.connectionIntercomSave.setOnClickListener { viewModel.saveIntercomToken() }
-
         viewModel.state.observe { render(it) }
     }
 
@@ -88,18 +79,6 @@ class ConnectionFragment :
             }
             connectionTokenWarning.setVisible(state.tokenStatus == TokenStatus.UNREADABLE)
 
-            if (connectionIntercomToken.text?.toString() != state.intercomTokenInput) {
-                connectionIntercomToken.setText(state.intercomTokenInput)
-            }
-            connectionIntercomTokenStatus.text = when (state.intercomTokenStatus) {
-                TokenStatus.AVAILABLE -> getString(R.string.connection_token_present)
-                TokenStatus.UNREADABLE -> getString(R.string.connection_token_unreadable)
-                TokenStatus.ABSENT -> getString(R.string.connection_token_absent)
-            }
-            connectionIntercomTokenWarning.setVisible(state.intercomTokenStatus == TokenStatus.UNREADABLE)
-            connectionIntercomSave.isEnabled = !state.savingIntercom &&
-                (state.intercomTokenInput.isNotBlank() || state.clearIntercomTokenRequested)
-
             connectionTest.isEnabled = !state.busy
             connectionRefreshConfig.isEnabled = !state.refreshingConfig
             connectionRefresh.isRefreshing = state.saving || state.testing
@@ -116,7 +95,6 @@ class ConnectionFragment :
                     ConnectionNotice.SAVED -> R.string.connection_saved
                     ConnectionNotice.SAVED_AND_ONLINE -> R.string.connection_saved_and_online
                     ConnectionNotice.CONFIG_REFRESHED -> R.string.connection_remote_refreshed
-                    ConnectionNotice.INTERCOM_TOKEN_SAVED -> R.string.connection_intercom_token_saved
                 },
             )
             viewModel.consumeNotice()

@@ -71,7 +71,9 @@ class TimersFragment : BaseFragment<FragmentTimersBinding>(FragmentTimersBinding
             return
         }
         binding.timersInputError.setVisible(false)
-        viewModel.start(binding.timersLabelInput.text?.toString().orEmpty(), duration.seconds)
+        val label = binding.timersLabelInput.text?.toString().orEmpty()
+            .ifBlank { getString(R.string.timers_default_label) }
+        viewModel.start(label, duration.seconds)
     }
 
     private fun render(state: TimersUiState) {

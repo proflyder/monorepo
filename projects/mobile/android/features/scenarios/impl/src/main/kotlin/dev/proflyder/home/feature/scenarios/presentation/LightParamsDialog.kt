@@ -154,11 +154,9 @@ internal class LightParamsDialog(
         return value.takeIf { it.isFinite() && it in 0.0..300.0 }
     }
 
-    private fun parse(raw: String): JsonObject = try {
+    private fun parse(raw: String): JsonObject = runCatching {
         Json.parseToJsonElement(raw.ifBlank { "{}" }) as? JsonObject ?: JsonObject(emptyMap())
-    } catch (_: Exception) {
-        JsonObject(emptyMap())
-    }
+    }.getOrElse { JsonObject(emptyMap()) }
 
     private fun JsonObject.stringOrNull(name: String): String? =
         this[name]?.jsonPrimitive?.content?.takeIf { it != "null" && it.isNotBlank() }

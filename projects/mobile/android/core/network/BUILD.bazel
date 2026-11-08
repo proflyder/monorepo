@@ -19,9 +19,11 @@ kt_jvm_library(
 kt_jvm_test(
     name = "network_test",
     srcs = glob(["src/test/kotlin/**/*.kt"]),
+    resources = glob(["src/test/resources/**"]),
     test_class = "dev.proflyder.home.core.network.AllNetworkTests",
     deps = [
         ":network",
+        "//projects/mobile/android/core/testing",
         "//projects/mobile/android/core/config",
         "//projects/mobile/android/core/model",
         "@maven//:com_squareup_okhttp3_mockwebserver",

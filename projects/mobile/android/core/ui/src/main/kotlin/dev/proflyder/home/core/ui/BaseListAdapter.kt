@@ -103,13 +103,19 @@ class PayloadSet<A : Enum<A>> private constructor(private val changed: Set<A>) {
          */
         fun <A : Enum<A>> merge(payloads: List<Any>, aspectType: Class<A>): PayloadSet<A>? {
             val merged = LinkedHashSet<A>()
-            payloads.forEach { payload ->
-                if (payload !is PayloadSet<*>) return@forEach
-                payload.aspects.forEach { aspect ->
-                    if (aspectType.isInstance(aspect)) merged += aspectType.cast(aspect)
-                }
+            payloads.filterIsInstance<PayloadSet<*>>().forEach { payload ->
+                merged.addMatching(payload, aspectType)
             }
             return if (merged.isEmpty()) null else PayloadSet(merged)
+        }
+
+        private fun <A : Enum<A>> MutableSet<A>.addMatching(
+            payload: PayloadSet<*>,
+            aspectType: Class<A>,
+        ) {
+            payload.aspects
+                .filter(aspectType::isInstance)
+                .mapNotNullTo(this) { aspect -> aspectType.cast(aspect) }
         }
     }
 }

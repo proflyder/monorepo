@@ -190,14 +190,6 @@ jobs:
             bazel-android-${{ runner.os }}-android-app-
             bazel-android-${{ runner.os }}-
 
-      # The `plan` job's pinned binary (version and checksums are pinned in the
-      # installer script, so its hash stands for the version). The binary only
-      # changes when that script changes, so one entry per hash is enough.
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.cache/ci-tools
-          key: target-determinator-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('platform/ci/install-target-determinator.sh') }}
-
       - name: Populate the Bazel repository cache
         run: |
           set -euo pipefail
@@ -207,17 +199,6 @@ jobs:
           # `--config=android` supplies the Android version defines; without it
           # the Android genrules fail analysis ($(home_version_name) undefined).
           bazel fetch --config=android //solutions/... //packages/... //projects/...
-
-      - name: Install target-determinator
-        run: |
-          set -euo pipefail
-          dest="$HOME/.cache/ci-tools/target-determinator"
-          if [[ -x "$dest" ]]; then
-            echo "target-determinator cache already warm"
-          else
-            mkdir -p "$(dirname "$dest")"
-            platform/ci/install-target-determinator.sh "$dest" >/dev/null
-          fi
 
       # No secrets are involved: without `platform/android/keys/
       # google-services.json` the app still builds and Firebase stays inert.
@@ -244,6 +225,66 @@ jobs:
         with:
           path: ~/.cache/bazel-disk
           key: bazel-android-${{ runner.os }}-android-app-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'projects/mobile/android/maven_install.json') }}-${{ github.run_id }}-${{ github.run_attempt }}
+
+  # Develop-side writer of the host Rust disk cache that every `_bazel.yml`
+  # unit (services, proto, pulsar-bazel host checks) restores through the
+  # `bazel-Linux-rust-` prefix. PR runs are restore-only (GitHub scopes a
+  # PR-written cache to that PR), so without this job every Rust unit compiled
+  # from scratch. Runs in parallel with the deploy and never gates it.
+  warm-rust:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      - uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b # v5.2.7
+        with:
+          version: 2026.11.3
+          install_args: "node"
+          cache: true
+
+      - uses: bazel-contrib/setup-bazel@104e3eea9447cdaa4b00d0fb46191a3985d26ab3 # v0.19.1
+        with:
+          bazelisk-version: "1.30.0"
+          bazelisk-cache: true
+          repository-cache: true
+          cache-save: false
+
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/bazel-disk
+          key: bazel-${{ runner.os }}-rust-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'Cargo.lock', 'crate-universe.lock', 'rust-toolchain.toml') }}
+          restore-keys: |
+            bazel-${{ runner.os }}-rust-
+
+      # Every build and test target of the `bazel` platform units (the same
+      # lists `_bazel.yml` builds and tests), compiled once in one server.
+      - name: Warm the Rust disk cache
+        run: |
+          set -euo pipefail
+          mapfile -t targets < <(node --input-type=module -e '
+            const { config } = await import(process.cwd() + "/platform/ci/units.mjs");
+            const seen = new Set();
+            for (const unit of config.units) {
+              if (unit.platform !== "bazel" || !unit.bazel) continue;
+              for (const t of [...(unit.bazel.build_targets ?? []), ...(unit.bazel.test_targets ?? [])]) seen.add(t);
+            }
+            console.log([...seen].join("\n"));
+          ')
+          echo "warming ${#targets[@]} targets"
+          bazel build --keep_going "${targets[@]}" \
+            --experimental_disk_cache_gc_max_size=3G
+
+      - name: Stop the Bazel server
+        run: bazel shutdown
+
+      - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/bazel-disk
+          key: bazel-${{ runner.os }}-rust-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'Cargo.lock', 'crate-universe.lock', 'rust-toolchain.toml') }}-${{ github.run_id }}-${{ github.run_attempt }}
 
   # Route the change onto deployable units. Unknown/zero `before`, or any
   # routing failure, falls back to "deploy everything" rather than skipping a

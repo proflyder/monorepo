@@ -7,5 +7,6 @@ import org.junit.runners.Suite
 @Suite.SuiteClasses(
     IdempotentRequestKeyTest::class,
     EditorCompletionTest::class,
+    SuspendRunCatchingTest::class,
 )
 class OperationTestSuite

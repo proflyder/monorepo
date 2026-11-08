@@ -81,8 +81,12 @@ jobs:
           # so a small unit cannot evict the large Pulsar build.
           path: ~/.cache/bazel-disk
           key: bazel-${{ runner.os }}-${{ inputs.unit }}-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'Cargo.lock', 'crate-universe.lock', 'rust-toolchain.toml') }}
+          # deploy-home `warm-rust` writes one shared host Rust cache for every
+          # unit; it is the main fallback after the unit's own entry.
           restore-keys: |
             bazel-${{ runner.os }}-${{ inputs.unit }}-
+            bazel-${{ runner.os }}-rust-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'Cargo.lock', 'crate-universe.lock', 'rust-toolchain.toml') }}
+            bazel-${{ runner.os }}-rust-
             bazel-${{ runner.os }}-
 
       - name: bazel build ${{ inputs.unit }}

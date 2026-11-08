@@ -28,7 +28,7 @@
     <string name="call_route_bluetooth">Bluetooth</string>
     <string name="call_route_bluetooth_named">Bluetooth · %1$s</string>
     <string name="call_permission_microphone">Microphone permission is required to call the station.</string>
-    <string name="call_error_not_configured">The intercom address or phone token is not configured in Connection.</string>
+    <string name="call_error_not_configured">The intercom address or the app token is not configured in Connection.</string>
     <string name="call_error_station_offline">The station is offline.</string>
     <string name="call_error_busy">The station is already in a call.</string>
     <string name="call_error_media">Audio could not start.</string>
@@ -41,4 +41,5 @@
     <string name="call_quick_action_subtitle">Talk through the station speaker and microphone</string>
     <string name="call_status_active_timer">In call · %1$s</string>
     <string name="call_route_selected">✓ %1$s</string>
+    <string name="call_account_label">Home</string>
 </resources>

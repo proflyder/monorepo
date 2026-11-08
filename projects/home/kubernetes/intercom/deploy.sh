@@ -20,8 +20,8 @@
 #                        (or `all`) is accepted.
 #
 # One-time prerequisites (admin, not CI):
-#   secret/k8s/home-assistant/intercom in OpenBao with keys phone_token and
-#   station_token, then:
+#   secret/k8s/home-assistant/scheduler-auth -> token (shared app token) and
+#   secret/k8s/home-assistant/intercom -> station_token, then:
 #     kubectl apply -f projects/home/kubernetes/intercom/manifests/external-secrets.yaml
 #
 # The deploy is idempotent: re-running rolls the Deployment only when the image

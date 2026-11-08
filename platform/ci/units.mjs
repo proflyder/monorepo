@@ -693,6 +693,20 @@ export const config = {
       },
     },
 
+    // detekt (built-in rules, formatting and the first-party `home-rules`
+    // plug-in) over the same tree. A separate unit like Android Lint so a
+    // finding fails only `android / android-detekt`.
+    {
+      id: "android-detekt",
+      platform: "android",
+      title: "projects/mobile/android (detekt, whole app graph)",
+      paths: ["projects/mobile/android/**"],
+      bazel: {
+        roots: ["//projects/mobile/android"],
+        test_targets: ["//projects/mobile/android:detekt"],
+      },
+    },
+
     {
       id: "kotlin-shared",
       platform: "android",

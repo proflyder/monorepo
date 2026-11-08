@@ -1,5 +1,6 @@
 package dev.proflyder.home.core.network
 
+import dev.proflyder.home.core.testing.TestFixtures
 import dev.proflyder.home.core.model.RepeatKind
 import dev.proflyder.home.core.model.ScheduleKind
 import dev.proflyder.home.core.model.TimerState
@@ -15,8 +16,7 @@ class SchedulerJsonTest {
     fun parsesInt64FromStringsAndNumbers() {
         val timer = SchedulerJson.parseTimer(
             json.parseToJsonElement(
-                """{"id":"t","durationSeconds":"3600","remainingSeconds":12,"dueUnix":"99",
-                   "state":"TIMER_STATE_PAUSED","revision":"7"}""",
+                TestFixtures.read("timer_paused.json"),
             ),
         )
         assertEquals(3600L, timer.durationSeconds)
@@ -30,7 +30,7 @@ class SchedulerJsonTest {
     fun unknownEnumsFallBackToUnspecified() {
         val schedule = SchedulerJson.parseSchedule(
             json.parseToJsonElement(
-                """{"id":"s","kind":"SCHEDULE_KIND_FUTURE","repeat":"REPEAT_KIND_FUTURE"}""",
+                TestFixtures.read("schedule_future.json"),
             ),
         )
         assertEquals(ScheduleKind.UNSPECIFIED, schedule.kind)
@@ -39,7 +39,7 @@ class SchedulerJsonTest {
 
     @Test
     fun missingWallTimeParsesAsMidnightNotAsCrash() {
-        val schedule = SchedulerJson.parseSchedule(json.parseToJsonElement("""{"id":"s"}"""))
+        val schedule = SchedulerJson.parseSchedule(json.parseToJsonElement(TestFixtures.read("schedule_minimal.json")))
         assertEquals(0, schedule.at.hour)
         assertEquals(0, schedule.at.minute)
         assertEquals("", schedule.label)
@@ -49,7 +49,7 @@ class SchedulerJsonTest {
     fun parsesActiveOccurrenceFieldsFromAddendum() {
         val schedule = SchedulerJson.parseSchedule(
             json.parseToJsonElement(
-                """{"id":"s","activeOccurrenceUnix":"111","activeUntilUnix":"222"}""",
+                TestFixtures.read("schedule_active.json"),
             ),
         )
         assertEquals(111L, schedule.activeOccurrenceUnix)
@@ -60,8 +60,7 @@ class SchedulerJsonTest {
     fun statusParsesQueueAndConsumerFieldsTolerantly() {
         val status = SchedulerJson.parseStatus(
             json.parseToJsonElement(
-                """{"version":"dev","schemaVersion":"3","nowUnix":"1000","queues":[{"name":"home"}],
-                   "consumers":[]}""",
+                TestFixtures.read("status_dev.json"),
             ),
         )
         assertEquals("dev", status.version)

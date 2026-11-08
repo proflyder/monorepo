@@ -1,6 +1,5 @@
 package dev.proflyder.home.feature.call
 
-import dev.proflyder.home.core.model.IntercomCall
 import dev.proflyder.home.core.model.IntercomCallState
 import dev.proflyder.home.core.model.IntercomEndReason
 import dev.proflyder.home.core.model.IntercomEndpoint
@@ -243,7 +242,7 @@ class CallManager(
         if (current.callId != event.callId) return
         if (event.signal.type != IntercomSdpType.ANSWER) return
         val session = media ?: return
-        when (val applied = session.setRemoteAnswer(event.signal.sdp)) {
+        when (session.setRemoteAnswer(event.signal.sdp)) {
             is Outcome.Failure -> finishLocally(IntercomEndReason.ERROR, CallFailure.MediaFailure)
             is Outcome.Success -> updatePhase(CallPhase.CONNECTING)
         }

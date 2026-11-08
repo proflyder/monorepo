@@ -98,25 +98,7 @@ object ControlJson {
             "off" -> PowerState.OFF
             else -> null
         }
-        val light = (o["light"] as? JsonObject)?.let { l ->
-            fun num(name: String) = (l[name] as? JsonPrimitive)?.intOrNull ?: 0
-            fun flag(name: String) = (l[name] as? JsonPrimitive)?.booleanOrNull ?: false
-            val fields = (l["effects"] as? JsonArray).orEmpty()
-                .mapNotNull { (it as? JsonPrimitive)?.takeIf { p -> p.isString }?.content }
-            LightControls(
-                brightness = flag("brightness"),
-                colorTemp = flag("colorTemp"),
-                color = flag("color"),
-                minKelvin = num("minKelvin"),
-                maxKelvin = num("maxKelvin"),
-                brightnessPct = num("brightnessPct"),
-                kelvin = num("kelvin"),
-                hue = num("hue"),
-                saturation = num("saturation"),
-                mode = (l["mode"] as? JsonPrimitive)?.takeIf { it.isString }?.content.orEmpty(),
-                effects = fields,
-            )
-        }
+        val light = (o["light"] as? JsonObject)?.let(::parseLightControls)
         val id = text("id")
         require(id.isNotEmpty()) { "entry without id" }
         return ControlEntry(
@@ -134,6 +116,26 @@ object ControlJson {
             deviceId = text("device_id").ifEmpty { text("deviceId") },
             device = text("device"),
             role = if (text("role") == "setting") ControlRole.SETTING else ControlRole.PRIMARY,
+        )
+    }
+
+    private fun parseLightControls(l: JsonObject): LightControls {
+        fun num(name: String) = (l[name] as? JsonPrimitive)?.intOrNull ?: 0
+        fun flag(name: String) = (l[name] as? JsonPrimitive)?.booleanOrNull ?: false
+        val fields = (l["effects"] as? JsonArray).orEmpty()
+            .mapNotNull { (it as? JsonPrimitive)?.takeIf { p -> p.isString }?.content }
+        return LightControls(
+            brightness = flag("brightness"),
+            colorTemp = flag("colorTemp"),
+            color = flag("color"),
+            minKelvin = num("minKelvin"),
+            maxKelvin = num("maxKelvin"),
+            brightnessPct = num("brightnessPct"),
+            kelvin = num("kelvin"),
+            hue = num("hue"),
+            saturation = num("saturation"),
+            mode = (l["mode"] as? JsonPrimitive)?.takeIf { it.isString }?.content.orEmpty(),
+            effects = fields,
         )
     }
 }
@@ -158,28 +160,36 @@ class HttpControlCatalogClient(
         interceptors,
     )
 
-    override suspend fun fetch(): Outcome<ControlCatalog> = withContext(ioDispatcher) {
-        val response = try {
-            api.catalog()
-        } catch (e: IOException) {
-            return@withContext Outcome.Failure(e.toRemoteFailure())
-        } catch (e: SerializationException) {
-            return@withContext Outcome.Failure(RemoteFailure.ProtocolFailure("invalid JSON response"))
+    override suspend fun fetch(): Outcome<ControlCatalog> = withContext(ioDispatcher) { fetchCatalog() }
+
+    private suspend fun fetchCatalog(): Outcome<ControlCatalog> {
+        val response = runCatching { api.catalog() }.getOrElse { failure ->
+            when (failure) {
+                is IOException, is SerializationException ->
+                    return Outcome.Failure(failure.toCallFailure())
+                else -> throw failure
+            }
         }
         val code = response.code()
         response.errorBody()?.close()
-        when {
+        return when {
             code in 300..399 -> Outcome.Failure(RemoteFailure.ProtocolFailure("HTTP $code redirect refused"))
             code == 401 || code == 403 -> Outcome.Failure(RemoteFailure.Unauthorized)
             !response.isSuccessful -> Outcome.Failure(RemoteFailure.Server("http_$code", "server returned HTTP $code"))
             else -> {
                 val element = response.body()
-                    ?: return@withContext Outcome.Failure(RemoteFailure.ProtocolFailure("empty response body"))
-                try {
-                    Outcome.Success(ControlJson.parseCatalog(element))
-                } catch (e: Exception) {
-                    Outcome.Failure(RemoteFailure.ProtocolFailure(sanitizeMessage(e.message) ?: "unexpected response shape"))
-                }
+                    ?: return Outcome.Failure(RemoteFailure.ProtocolFailure("empty response body"))
+                runCatching { ControlJson.parseCatalog(element) }.fold(
+                    onSuccess = { Outcome.Success(it) },
+                    onFailure = { failure ->
+                        if (failure !is Exception) throw failure
+                        Outcome.Failure(
+                            RemoteFailure.ProtocolFailure(
+                                sanitizeMessage(failure.message) ?: "unexpected response shape",
+                            ),
+                        )
+                    },
+                )
             }
         }
     }

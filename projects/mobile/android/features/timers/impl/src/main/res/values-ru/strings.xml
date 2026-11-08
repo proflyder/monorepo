@@ -23,4 +23,5 @@
     <string name="timers_preset_10">10 мин</string>
     <string name="timers_preset_25">25 мин</string>
     <string name="timers_server_time_note">Оставшееся время считается по часам сервера из GetStatus.</string>
+    <string name="timers_default_label">Таймер</string>
 </resources>

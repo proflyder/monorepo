@@ -12,4 +12,8 @@
 <lint>
     <!-- Make every reported issue fatal, matching the -Werror CLI flag. -->
     <issue id="all" severity="error" />
+    <!-- User-facing text belongs in strings.xml (English + values-ru). Android
+         Lint covers XML layouts; the detekt NoHardcodedUiText rule covers the
+         Kotlin setText/Toast/Snackbar/.text call sites. -->
+    <issue id="HardcodedText" severity="error" />
 </lint>

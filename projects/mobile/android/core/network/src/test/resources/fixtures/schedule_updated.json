@@ -1,0 +1,3 @@
+{"schedule":{"id":"s1","label":"Wake up","kind":"SCHEDULE_KIND_ALARM",
+                   "timezone":"Asia/Almaty","at":{"hour":8,"minute":0},"repeat":"REPEAT_KIND_DAILY",
+                   "enabled":true,"revision":"3"}}

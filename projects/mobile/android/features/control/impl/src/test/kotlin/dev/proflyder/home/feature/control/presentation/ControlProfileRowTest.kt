@@ -1,6 +1,5 @@
 package dev.proflyder.home.feature.control.presentation
 
-import android.view.LayoutInflater
 import android.view.View
 import android.widget.FrameLayout
 import android.widget.LinearLayout

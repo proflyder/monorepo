@@ -191,11 +191,9 @@ object ScenarioJson {
     }
 
     /** Re-emits a retained unknown variant object exactly as received. */
-    private fun unknown(rawJson: String): JsonObject = try {
-        kotlinx.serialization.json.Json.parseToJsonElement(rawJson).jsonObject
-    } catch (_: Exception) {
-        JsonObject(emptyMap())
-    }
+    private fun unknown(rawJson: String): JsonObject =
+        runCatching { kotlinx.serialization.json.Json.parseToJsonElement(rawJson).jsonObject }
+            .getOrElse { JsonObject(emptyMap()) }
 
     private fun wallTime(time: WallTime): JsonObject = buildJsonObject {
         put("hour", time.hour)

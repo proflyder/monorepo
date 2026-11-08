@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import dev.proflyder.home.core.model.FavoritePreferences
 import dev.proflyder.home.core.model.FavoriteRef
 import dev.proflyder.home.core.model.Favorites
+import dev.proflyder.home.core.operation.suspendRunCatching
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
@@ -21,20 +22,19 @@ import kotlinx.coroutines.flow.first
 class DataStoreFavoritePreferences(
     private val dataStore: DataStore<Preferences>,
 ) : FavoritePreferences {
-    override suspend fun load(): List<FavoriteRef>? = try {
+    override suspend fun load(): List<FavoriteRef>? = suspendRunCatching {
         dataStore.data.first()[KEY_FAVORITES]?.let { raw ->
             Favorites.decode(raw.split(SEPARATOR).filter { it.isNotBlank() })
         }
-    } catch (_: IOException) {
-        null
-    }
+    }.getOrElse { null }
 
     override suspend fun save(refs: List<FavoriteRef>) {
-        try {
+        suspendRunCatching {
             dataStore.edit {
                 it[KEY_FAVORITES] = Favorites.encode(refs).joinToString(SEPARATOR)
             }
-        } catch (_: IOException) {
+        }.onFailure { failure ->
+            if (failure !is IOException) throw failure
             // The choice just is not remembered; the screen keeps working.
         }
     }

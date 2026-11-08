@@ -113,12 +113,12 @@ class ConnectScenarioClient(
         body: JsonObject,
         decode: (JsonElement) -> T,
     ): Outcome<T> = withContext(ioDispatcher) {
-        val response = try {
-            api.call(method, body)
-        } catch (e: IOException) {
-            return@withContext Outcome.Failure(e.toRemoteFailure())
-        } catch (e: SerializationException) {
-            return@withContext Outcome.Failure(RemoteFailure.ProtocolFailure("invalid JSON response"))
+        val response = runCatching { api.call(method, body) }.getOrElse { failure ->
+            when (failure) {
+                is IOException, is SerializationException ->
+                    return@withContext Outcome.Failure(failure.toCallFailure())
+                else -> throw failure
+            }
         }
 
         val code = response.code()
@@ -126,31 +126,38 @@ class ConnectScenarioClient(
             code in 300..399 -> Outcome.Failure(RemoteFailure.ProtocolFailure("HTTP $code redirect refused"))
             code == 401 || code == 403 -> Outcome.Failure(RemoteFailure.Unauthorized)
             !response.isSuccessful -> {
-                val text = try {
+                val text = runCatching {
                     response.errorBody()?.use { it.readBounded() }.orEmpty()
-                } catch (e: IOException) {
-                    return@withContext Outcome.Failure(e.toRemoteFailure())
+                }.getOrElse { failure ->
+                    if (failure is IOException) {
+                        return@withContext Outcome.Failure(failure.toRemoteFailure())
+                    }
+                    throw failure
                 }
                 Outcome.Failure(parseConnectError(code, text))
             }
             else -> {
                 val element = response.body()
                     ?: return@withContext Outcome.Failure(RemoteFailure.ProtocolFailure("empty response body"))
-                try {
-                    Outcome.Success(decode(element))
-                } catch (e: Exception) {
-                    Outcome.Failure(RemoteFailure.ProtocolFailure(sanitizeMessage(e.message) ?: "unexpected response shape"))
-                }
+                runCatching { decode(element) }.fold(
+                    onSuccess = { Outcome.Success(it) },
+                    onFailure = { failure ->
+                        if (failure !is Exception) throw failure
+                        Outcome.Failure(
+                            RemoteFailure.ProtocolFailure(
+                                sanitizeMessage(failure.message) ?: "unexpected response shape",
+                            ),
+                        )
+                    },
+                )
             }
         }
     }
 
     private fun parseConnectError(httpCode: Int, text: String): RemoteFailure {
-        val parsed = try {
+        val parsed = runCatching {
             if (text.isBlank()) null else json.parseToJsonElement(text).jsonObject
-        } catch (_: Exception) {
-            null
-        }
+        }.getOrNull()
         val code = sanitizeMessage((parsed?.get("code") as? JsonPrimitive)?.content).orEmpty()
         val message = sanitizeMessage((parsed?.get("message") as? JsonPrimitive)?.content).orEmpty()
         return when (code) {
