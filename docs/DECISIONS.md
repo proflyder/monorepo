@@ -650,16 +650,22 @@
     получает `pulsar-call` на `str0m` и `Phase::Call` отдельным этапом;
     scheduler и `ha-bridge` в звонке не участвуют.
 
-49. **Кэши Actions пишет только `develop`, Android-цели считаются один раз.**
+49. **Кэши Actions пишет только `develop`, один `warm-caches` считает всё.**
     PR-прогоны кэши только восстанавливают (`actions/cache/restore`): GitHub
     привязывает запись к ref'у, который её создал, поэтому PR-кэш не виден
     другим PR'ам, но занимает общий лимит 10 ГБ и минуты на загрузку. PR-кэши
     диска больше не создаются. Единственный писатель develop-стороны —
-    `warm-caches` в `deploy-home` (push в `develop`): setup-bazel, диск-кэш
-    Android (сборка `//projects/mobile/android:app`, ключ `android-app`,
-    save под `-<run_id>` и `restore-keys` «точный ключ → юнит → платформа»,
-    архив ограничен `--experimental_disk_cache_gc_max_size=6G`), а `warm-rust`
-    — общий диск-кэш host-Rust юнитов. У юнитов без develop-писателя
+    `warm-caches` в `deploy-home` (push в `develop`): setup-bazel и один
+    общий дисковый кэш Bazel. Одна команда `bazel build --config=android`
+    собирает в одном сервере Android-цели (`app`, `android_tests`) и все
+    build/test-цели юнитов платформы `bazel`; `--config=android` меняет только
+    Android-флаги и version defines, host-платформа Rust остаётся прежней.
+    После `bazel shutdown` архив сохраняется под ключом
+    `bazel-<os>-warm-<hash>` (`restore-keys`: «точный ключ → юнит →
+    `bazel-<os>-warm-`»), ограничен
+    `--experimental_disk_cache_gc_max_size=7G`. Один архив на Android и
+    host-Rust не раздувает лимит 10 ГБ: два save одного каталога под разными
+    ключами хранили бы его дважды. У юнитов без develop-писателя
     (`_native.yml`, `_deploy-control.yml`) кэш только восстанавливается.
     Отдельного сужения целей нет: каждая запись матрицы гоняет объявленные
     цели, незатронутые тесты Bazel берёт из кэша (job `plan` с

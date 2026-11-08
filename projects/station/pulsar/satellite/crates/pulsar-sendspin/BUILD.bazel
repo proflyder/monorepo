@@ -81,11 +81,17 @@ rust_library(
         "//conditions:default": [],
     }),
     target_compatible_with = LINUX,
-    deps = DEPS + select({
+    # C/C++ targets are link-only for Rust; rules_rust requires them in
+    # `link_deps` (C++ libraries in `deps` are deprecated).
+    link_deps = select({
         "@zig_0_14_1//:station": [
             ":static_link_group",
             ":sendspin_shim",
         ],
+        "//conditions:default": [],
+    }),
+    deps = DEPS + select({
+        "@zig_0_14_1//:station": [],
         "//conditions:default": [":pulsar_sendspin_build_script"],
     }),
 )

@@ -39,7 +39,13 @@ cc_library(
         "include",
         "src",
     ],
-    copts = ["-std=c99"],
+    # Upstream poly1305-donna.h expands `defined(...)` inside macros, which
+    # Clang reports as -Wexpansion-to-defined. It is third-party code; keep the
+    # rest of the warning set.
+    copts = [
+        "-std=c99",
+        "-Wno-expansion-to-defined",
+    ],
     defines = [
         "NOISE_USE_REFERENCE_BACKEND=1",
         "NOISE_USE_AES=0",

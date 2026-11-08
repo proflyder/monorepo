@@ -117,6 +117,12 @@ env:
   # without pulling it. Same pins as deploy-home.
   CRANE_VERSION: "v0.22.1"
   CRANE_SHA256: "0ab7a1d6932a213aed964ce97666c3077fe691c8606413674a8b3e0b9ec4cda0"
+  # actions/checkout runs `git init` under a throwaway HOME, so a global config
+  # cannot silence Git's default-branch hint. An environment-provided config is
+  # inherited by that git invocation and keeps the log clean.
+  GIT_CONFIG_COUNT: "1"
+  GIT_CONFIG_KEY_0: init.defaultBranch
+  GIT_CONFIG_VALUE_0: main
 
 jobs:
   # Build once, deploy the same bytes: on the deploy-home path, promote the

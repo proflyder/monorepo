@@ -48,9 +48,10 @@ name: deploy-home
 # scheduler and the reverse). A required image with no verified tree still
 # fails the job instead of building.
 #
-# The push also runs `warm-caches`, which saves the shared setup-bazel
-# caches under the keys PR jobs restore (CI itself no longer runs on develop).
-# It only populates caches; it is not part of the deploy and never publishes.
+# The push also runs `warm-caches`, which saves the shared setup-bazel caches
+# and one Bazel disk cache (Android + host Rust) under the keys PR jobs
+# restore (CI itself no longer runs on develop). It only populates caches; it
+# is not part of the deploy and never publishes.
 #
 # Push runs only the conservative preserve mode. Mode changes (execute, shadow,
 # control-execute, control-catalog) are manual workflow_dispatch runs for the
@@ -126,26 +127,37 @@ jobs:
   #     overridden anywhere, so every workflow produces the same key/prefix and
   #     PRs restore develop's cache. `bazel fetch` only populates the
   #     repository cache; it does not run tests or builds.
-  #   * actions/cache entries below use the exact keys `_android.yml` and
-  #     `ci.yml` restore, so a PR resolves them on the first restore level
-  #     instead of falling back to a platform prefix.
+  #   * the disk cache below uses one shared key for all host Bazel targets:
+  #     Android (Kotlin/Java/dex) and Rust (services, proto, Pulsar host
+  #     checks) are warmed in the same server into the same
+  #     `~/.cache/bazel-disk`. PR jobs restore it read-only (GitHub scopes a
+  #     cache to the ref that created it, so a PR-written cache would only
+  #     burn the 10 GB budget); `_android.yml` and `_bazel.yml` reach it
+  #     through the `bazel-Linux-warm-` prefix. One archive shared by both
+  #     families costs one slot; saving the same directory twice would double
+  #     the bytes in the 10 GB budget for identical content.
   #
-  # The Android disk cache is the one action-output cache written here. PR
-  # jobs restore it read-only (GitHub scopes a cache to the ref that created
-  # it, so a PR-written cache would only burn the 10 GB budget); `warm-caches`
-  # builds the app once per merge to fill it. `_deploy-control.yml` and the
-  # native units stay PR/restore-only: nothing on develop produces their
-  # outputs.
+  # `_deploy-control.yml` and the native units stay PR/restore-only: nothing
+  # on develop produces their outputs.
   warm-caches:
     if: github.event_name == 'push'
     runs-on: ubuntu-24.04
-    # A cold Android app build is the bulk of this job (the deploy itself only
-    # starts after `plan`, so the extra minutes do not delay a roll-out).
-    timeout-minutes: 60
+    # A cold Android app build plus the host Rust targets is the bulk of this
+    # job (the deploy itself only starts after `plan`, so the extra minutes do
+    # not delay a roll-out).
+    timeout-minutes: 75
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      # Node enumerates the Rust build/test targets of the `bazel` units from
+      # platform/ci/units.mjs (the same list `_bazel.yml` builds and tests).
+      - uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b # v5.2.7
+        with:
+          version: 2026.11.3
+          install_args: "node"
+          cache: true
 
       # The Android targets in `//projects/...` need the same SDK the Android
       # PR jobs install. The NDK supplies the C++ toolchain for
@@ -173,9 +185,10 @@ jobs:
           repository-cache: true
           cache-save: true
 
-      # Disk cache of the `android-app` matrix entry and of `android-distribute`
-      # (same key prefix). The other Android units reach it through
-      # `bazel-android-Linux-` in their restore-keys.
+      # One disk cache for the combined Android + host-Rust build. Both
+      # families restore it in PRs through the shared `bazel-<os>-warm-`
+      # prefix (`_android.yml` and `_bazel.yml` keep their own exact/unit
+      # levels first, so a unit cache written earlier still wins).
       #
       # Restore and save are separate steps: a key can be written once, so the
       # save key carries the run id and readers resolve the stable prefix. That
@@ -185,10 +198,9 @@ jobs:
       - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/bazel-disk
-          key: bazel-android-${{ runner.os }}-android-app-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'projects/mobile/android/maven_install.json') }}
+          key: bazel-${{ runner.os }}-warm-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'Cargo.lock', 'crate-universe.lock', 'rust-toolchain.toml', 'projects/mobile/android/maven_install.json') }}
           restore-keys: |
-            bazel-android-${{ runner.os }}-android-app-
-            bazel-android-${{ runner.os }}-
+            bazel-${{ runner.os }}-warm-
 
       - name: Populate the Bazel repository cache
         run: |
@@ -205,67 +217,18 @@ jobs:
       # `--experimental_disk_cache_gc_max_size` keeps the archived cache below
       # GitHub's 10 GB budget for all caches of the repository (best effort: the
       # server evicts in the background while idle, before the save below).
-      - name: Warm the Android disk cache
+      #
+      # One `bazel build` in one server builds both families. The Rust target
+      # list is the same build/test space `_bazel.yml` uses; the Android test
+      # suite is built too, so the PR `bazel test` step finds its compiled
+      # classes. `--config=android` only sets Android-specific flags
+      # (`--android_platforms`, Java toolchain, dex workers) and the version
+      # defines; it does not change the host platform or the Rust toolchain, so
+      # the Rust actions cache exactly as in `_bazel.yml`.
+      - name: Warm the shared Bazel disk cache
         run: |
           set -euo pipefail
-          # `--config=android` is mandatory: it activates
-          # platform/android/android.bazelrc, so the cached actions match the
-          # PR jobs that build with the same config.
-          # The test suite is built too, so the PR `bazel test` step finds its
-          # compiled test classes in the cache as well.
-          bazel build --config=android \
-            //projects/mobile/android:app //projects/mobile/android:android_tests \
-            --experimental_disk_cache_gc_max_size=6G
-
-      # Closes the cache files and lets the idle GC finish before archiving.
-      - name: Stop the Bazel server
-        run: bazel shutdown
-
-      - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.cache/bazel-disk
-          key: bazel-android-${{ runner.os }}-android-app-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'projects/mobile/android/maven_install.json') }}-${{ github.run_id }}-${{ github.run_attempt }}
-
-  # Develop-side writer of the host Rust disk cache that every `_bazel.yml`
-  # unit (services, proto, pulsar-bazel host checks) restores through the
-  # `bazel-Linux-rust-` prefix. PR runs are restore-only (GitHub scopes a
-  # PR-written cache to that PR), so without this job every Rust unit compiled
-  # from scratch. Runs in parallel with the deploy and never gates it.
-  warm-rust:
-    if: github.event_name == 'push'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 60
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
-
-      - uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b # v5.2.7
-        with:
-          version: 2026.11.3
-          install_args: "node"
-          cache: true
-
-      - uses: bazel-contrib/setup-bazel@104e3eea9447cdaa4b00d0fb46191a3985d26ab3 # v0.19.1
-        with:
-          bazelisk-version: "1.30.0"
-          bazelisk-cache: true
-          repository-cache: true
-          cache-save: false
-
-      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.cache/bazel-disk
-          key: bazel-${{ runner.os }}-rust-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'Cargo.lock', 'crate-universe.lock', 'rust-toolchain.toml') }}
-          restore-keys: |
-            bazel-${{ runner.os }}-rust-
-
-      # Every build and test target of the `bazel` platform units (the same
-      # lists `_bazel.yml` builds and tests), compiled once in one server.
-      - name: Warm the Rust disk cache
-        run: |
-          set -euo pipefail
-          mapfile -t targets < <(node --input-type=module -e '
+          mapfile -t rust_targets < <(node --input-type=module -e '
             const { config } = await import(process.cwd() + "/platform/ci/units.mjs");
             const seen = new Set();
             for (const unit of config.units) {
@@ -274,17 +237,20 @@ jobs:
             }
             console.log([...seen].join("\n"));
           ')
-          echo "warming ${#targets[@]} targets"
-          bazel build --keep_going "${targets[@]}" \
-            --experimental_disk_cache_gc_max_size=3G
+          echo "warming ${#rust_targets[@]} Rust targets plus Android"
+          bazel build --config=android --keep_going \
+            //projects/mobile/android:app //projects/mobile/android:android_tests \
+            "${rust_targets[@]}" \
+            --experimental_disk_cache_gc_max_size=7G
 
+      # Closes the cache files and lets the idle GC finish before archiving.
       - name: Stop the Bazel server
         run: bazel shutdown
 
       - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/bazel-disk
-          key: bazel-${{ runner.os }}-rust-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'Cargo.lock', 'crate-universe.lock', 'rust-toolchain.toml') }}-${{ github.run_id }}-${{ github.run_attempt }}
+          key: bazel-${{ runner.os }}-warm-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'Cargo.lock', 'crate-universe.lock', 'rust-toolchain.toml', 'projects/mobile/android/maven_install.json') }}-${{ github.run_id }}-${{ github.run_attempt }}
 
   # Route the change onto deployable units. Unknown/zero `before`, or any
   # routing failure, falls back to "deploy everything" rather than skipping a

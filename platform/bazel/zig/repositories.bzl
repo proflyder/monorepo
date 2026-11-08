@@ -44,7 +44,40 @@ if [ "$subcommand" = "cc" ]; then
     esac
   done
 fi
-{musl_link}exec "$DIR/zig" "$subcommand" {args} "${argv[@]}"
+# rustc passes `-O1` when linking an optimized binary. Zig's link driver
+# ignores it but prints "ignoring deprecated linker optimization setting",
+# which rustc 1.97+ forwards through the linker_messages lint. The flag only
+# affects linking here, so drop -O levels from link invocations; compile -O
+# (from cc-rs CFLAGS/CXXFLAGS) must stay.
+has_compile=0
+for arg in "${argv[@]}"; do
+  case "$arg" in
+    -c|-E|-S) has_compile=1 ;;
+  esac
+done
+if [ "$has_compile" = 0 ]; then
+  filtered=()
+  for arg in "${argv[@]}"; do
+    case "$arg" in
+      -O0|-O1|-O2|-O3|-Os|-Oz) ;;
+      -Wl,-O0|-Wl,-O1|-Wl,-O2|-Wl,-O3|-Wl,-Os|-Wl,-Oz) ;;
+      *) filtered+=("$arg") ;;
+    esac
+  done
+  argv=(${filtered[@]+"${filtered[@]}"})
+fi
+# `zig cc --version` parses the pinned `-target <triple>.<glibc>` as a native
+# Zig target and rejects the glibc-version suffix, which cc-rs reports as a
+# build-script warning. Compiler-identity probes do not need a target.
+probe=0
+for arg in "${argv[@]}"; do
+  case "$arg" in
+    --version|-dumpversion|-dumpmachine|-\\?) probe=1 ;;
+  esac
+done
+target_args=({args})
+if [ "$probe" = 1 ]; then target_args=(); fi
+{musl_link}exec "$DIR/zig" "$subcommand" ${target_args[@]+"${target_args[@]}"} "${argv[@]}"
 """
 
 # rules_rust drives the linker directly on windows-gnu targets and therefore

@@ -75,13 +75,33 @@ jobs:
           repository-cache: true
           cache-save: ${{ github.event_name != 'pull_request' }}
 
+      # `pull_request.base.sha` is the base at event creation, not necessarily
+      # the develop tip the checked-out `refs/pull/N/merge` commit was built
+      # on. Using it directly pulls files from other PRs merged in between into
+      # the base..merge diff and routes unrelated units. The first parent of the
+      # merge commit is the actual base tip; fall back to the event value if the
+      # ref is not a merge commit.
+      - name: Resolve pull request base
+        id: pr-base
+        if: github.event_name == 'pull_request'
+        env:
+          EVENT_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          if git rev-parse -q --verify HEAD^2 >/dev/null; then
+            base=$(git rev-parse HEAD^1)
+          else
+            base=$EVENT_BASE_SHA
+          fi
+          echo "sha=$base" >> "$GITHUB_OUTPUT"
+
       # `workflow_dispatch` intentionally runs every unit.
       - name: Route affected units
         id: route
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           EVENT_NAME: ${{ github.event_name }}
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_BASE_SHA: ${{ steps.pr-base.outputs.sha }}
           PUSH_BEFORE_SHA: ${{ github.event.before }}
         with:
           script: |

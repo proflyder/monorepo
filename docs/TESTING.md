@@ -284,11 +284,16 @@ CI (платформа `native`, `_native.yml`) ставит pinned Bazelisk, к
 `permissions: contents: read`, `concurrency` отменяет устаревший прогон только
 для PR. Выкладка — отдельный `.github/workflows/deploy-home.yml` на push в
 `develop` (см. ниже); его job `warm-caches` после merge — единственный
-писатель develop-стороны общих кэшей: `setup-bazel`, диск-кэша Android
-(собирает `//projects/mobile/android:app` и архивирует
-`~/.cache/bazel-disk` под ключом `android-app`). Ключи совпадают с теми, что восстанавливают PR, а
-`restore-keys` дают трёхуровневый откат (точный ключ → юнит → платформа),
-поэтому смена `maven_install.json` или lock-файлов не даёт полный холод.
+писатель develop-стороны общих кэшей: `setup-bazel` и одного дискового
+кэша Bazel. Одна команда `bazel build --config=android` в одном сервере
+собирает Android-цели (`//projects/mobile/android:app`,
+`//projects/mobile/android:android_tests`) и все build/test-цели юнитов
+платформы `bazel` из `platform/ci/units.mjs`; `--config=android` задаёт
+только Android-флаги и version defines и не меняет host-платформу Rust.
+После `bazel shutdown` каталог `~/.cache/bazel-disk` сохраняется под одним
+ключом `bazel-<os>-warm-<hash>`. PR-джобы находят его через `restore-keys`
+(`bazel-<os>-warm-`), сохраняя свои уровни «точный ключ → юнит», поэтому
+смена `maven_install.json` или lock-файлов не даёт полный холод.
 Версии инструментов CI (Python, Node, gitleaks, actionlint, shellcheck,
 kubectl, helm, oras) — из `mise.toml`/`mise.lock` через `jdx/mise-action`,
 как и на рабочем месте (`docs/WORKSTATION.md`).
@@ -300,12 +305,12 @@ PR-прогоны кэши только читают (`actions/cache/restore`): 
 `workflow_dispatch`) и для `warm-caches`. У юнитов без develop-писателя
 (`_native.yml`, `_deploy-control.yml`) кэш диска только восстанавливается:
 пока такой сборки на develop нет, лучше не плодить копии на каждый PR.
-Размер архива Android ограничен
-`--experimental_disk_cache_gc_max_size=6G` в `warm-caches`. Host-Rust юниты
-(`_bazel.yml`: сервисы, `proto`, `pulsar-bazel`) греет параллельный job
-`warm-rust`: он собирает все build/test-цели юнитов платформы `bazel` и
-сохраняет общий кэш `bazel-Linux-rust-…` (до 3 ГБ), который каждый юнит
-восстанавливает после собственной записи.
+Один общий архив ограничен `--experimental_disk_cache_gc_max_size=7G`
+в `warm-caches`: Android и host-Rust лежат в одном каталоге и не дублируют
+байты в лимите GitHub 10 ГБ (два `actions/cache/save` одного каталога под
+разными ключами дали бы две копии). Host-Rust юниты (`_bazel.yml`: сервисы,
+`proto`, `pulsar-bazel`) и Android-юниты (`_android.yml`) восстанавливают
+этот кэш через общий префикс, приоритет остаётся у их собственных ключей.
 
 
 Проверки, тесты и сборки внутри reusable workflow запускаются теми же
@@ -387,6 +392,11 @@ artifact.
 `android_distribute`, `base_sha`, `docs_only`; каждый output — JSON-массив
 записей matrix (`android_distribute` — `true`/`false`).
 Пустой массив означает «пропустить job» (законный skip для `ci-ok`).
+Для `pull_request` база маршрутизации — первый родитель проверенного
+merge-коммита (`git rev-parse HEAD^1`), а не `pull_request.base.sha` из
+события: последний может быть старше tip'а `develop`, на котором собран
+`refs/pull/N/merge`, и тогда в diff `base..merge` попадают файлы чужих PR.
+`push` использует `github.event.before`.
 
 Образы (`images` → `_images.yml`) собираются на PR и, если PR не из форка,
 сразу публикуются как `tree-<git tree hash>` с build provenance (решение 36).
