@@ -206,6 +206,8 @@ fn listen_k(t: f32) -> f32 {
 
 // Timer green of the ring and of the «timer started» one-shot.
 const TIMER_GREEN: u32 = 0x00dc00;
+/// Цвет звонка: циан, которого нет ни у голосовых состояний, ни у таймера.
+const CALL_CYAN: u32 = 0x00b4ff;
 const TIMER_START_GREEN: u32 = 0x00e600;
 const MUTE_RED: u32 = 0xd20000;
 
@@ -324,6 +326,8 @@ pub enum Voice {
     Speaking,
     Error,
     TimerRing,
+    /// Идёт звонок: два противоположных огня обегают кольцо, как вызов.
+    Call,
 }
 
 pub const ERROR_MS: i64 = 3540;
@@ -407,6 +411,15 @@ pub fn voice(v: Voice, t: i64, color: VoiceColor, out: &mut [Col]) {
             };
             fill(out, stock(0xef0000, k));
         }
+        Voice::Call => {
+            // Две противоположные точки обегают кольцо за 900 мс (вдвое быстрее таймера) —
+            // паттерн, который не спутать с LISTENING (сплошная волна) и TimerRing (качание).
+            let c = (t % 900) as f32 / 900.0 * nf;
+            for (i, o) in out.iter_mut().enumerate() {
+                let d = cdist(i as f32, c, nf).min(cdist(i as f32, c + half, nf)) * nf / 24.0;
+                *o = stock(CALL_CYAN, (1.0 - d / 1.6).max(0.0));
+            }
+        }
         Voice::TimerRing => {
             let k = breathe(f64::from(ft), 1300.0);
             if !wide(n) {
@@ -454,6 +467,7 @@ pub fn voice_logo(v: Voice, t: i64, color: VoiceColor, out: &mut [Col]) {
         }
         Voice::Speaking => fill(out, stock(p.small, breathe(f64::from(ft), 1240.0))),
         Voice::Error => voice(v, t, color, out),
+        Voice::Call => fill(out, stock(CALL_CYAN, breathe(f64::from(ft), 900.0))),
         Voice::TimerRing => fill(out, stock(TIMER_GREEN, breathe(f64::from(ft), 1300.0))),
     }
 }

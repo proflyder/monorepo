@@ -358,6 +358,8 @@ impl Io {
             channels: u32::from(self.want_channels),
             rate: self.want_rate,
             rate_exact: true,
+            period_frames: None,
+            buffer_frames: None,
         };
         match self.device.open(&req) {
             Ok(info) => {

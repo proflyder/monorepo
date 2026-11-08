@@ -97,7 +97,7 @@ impl Policy {
 impl Controller {
     pub(super) fn update_duck(&mut self) {
         let want = logic::want_duck(
-            self.session.phase(),
+            self.phase(),
             self.session.announcing(),
             self.timers_ha.ringing(),
             self.session.closing_earcon(),

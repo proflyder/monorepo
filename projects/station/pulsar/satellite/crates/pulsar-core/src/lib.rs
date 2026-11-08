@@ -63,6 +63,8 @@ pub enum UiState {
     Error,
     /// Timer finished, ringing.
     TimerRing,
+    /// Идёт звонок (входящий или активный): своё кольцо, отличное от LISTENING.
+    Call,
 }
 
 /// One-shot clock animations (stock Lite 2 `ledpatterns/clock`).

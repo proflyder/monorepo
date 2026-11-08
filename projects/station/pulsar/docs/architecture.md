@@ -36,6 +36,7 @@
 | `pulsar-deconz` | протокол deCONZ: SLIP, параметры и сервер для ZHA / Zigbee2MQTT |
 | `pulsar-zigbee` | радио Zigbee Миди: роли, координатор, роутер, прошивка и сервис; внутренний API — в `//!` `src/lib.rs` |
 | `pulsar-update` | бэкенд сущности обновления «Firmware» в HA |
+| `pulsar-call` | звонок на колонку как endpoint intercom: клиент сигналинга (Connect JSON), WebRTC на `str0m` (ICE/DTLS-SRTP), Opus, джиттер-буфер; без модели, HA и UI |
 
 Общие примитивы с другими программами монорепозитория живут в `packages/rust/`:
 `home-runtime` (Supervisor), `home-actor` (Handle/channel), `home-telemetry`

@@ -727,7 +727,7 @@ impl Controller {
 
     /// True when something was playing. Reads the player and Sendspin states before the
     /// commands (neither changes them synchronously, as in C++).
-    fn music_pause(&self) -> bool {
+    pub(super) fn music_pause(&self) -> bool {
         let mut paused = matches!(
             self.deps.player.state(Channel::Music),
             PlayState::Playing | PlayState::Loading
@@ -744,7 +744,7 @@ impl Controller {
         paused
     }
 
-    fn music_resume(&self) {
+    pub(super) fn music_resume(&self) {
         if self.deps.player.state(Channel::Music) == PlayState::Paused {
             self.deps.player.resume(Channel::Music);
         } else if let Some(ss) = &self.deps.sendspin {

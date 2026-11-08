@@ -115,6 +115,11 @@ rustix = { version = "=1.1.6", default-features = false, features = ["std", "fs"
 # есть для rustls).
 snow = { version = "=0.10.0", default-features = false, features = ["use-chacha20poly1305", "use-sha2", "use-curve25519", "use-getrandom"] }
 socket2 = { version = "=0.6.5", features = ["all"] }
+# WebRTC для звонка на колонку (pulsar-call): ICE-агент, DTLS-SRTP и RTP без внутренних
+# потоков и сети (sans-IO). DTLS — `str0m-rust-crypto` (чистый Rust вместо OpenSSL);
+# `aws-lc-rs` остаётся транзитивно через `dimpl`/rcgen и собирается zig-тулчейном.
+# SCTP/видео не используются, но `str0m-proto` их тянет как часть общего кодека.
+str0m = { version = "=0.25.0", default-features = false, features = ["rust-crypto"] }
 cc = "=1.10.0"
 # BlueZ is reached over the system bus. zbus is a pure-Rust implementation and
 # its `tokio` feature uses the same runtime as the rest of the daemon; it does
