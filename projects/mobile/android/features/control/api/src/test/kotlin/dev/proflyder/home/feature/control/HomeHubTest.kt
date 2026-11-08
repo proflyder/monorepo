@@ -127,7 +127,7 @@ class HomeHubTest {
         assertNull(entry("light.e", title = "Lamp").secondaryName)
     }
 
-    // --- carousel selection -------------------------------------------------
+    // --- live-row selection -------------------------------------------------
 
     private val strings = object : HubScheduleStrings {
         override fun today() = "сегодня"
@@ -144,7 +144,7 @@ class HomeHubTest {
     }
 
     @Test
-    fun onlyLiveCardsAreBuiltInOrder() {
+    fun liveRowsAreMergedAndSortedByTime() {
         val cards = HubCards.build(
             alarms = listOf(
                 alarm("later", epoch(10, 7, 30)),
@@ -156,40 +156,57 @@ class HomeHubTest {
                 timer("paused", due = 0, state = TimerState.PAUSED, remaining = 120),
                 timer("fired", now - 10, state = TimerState.FIRED),
             ),
-            scenarios = listOf(scenario("s1", epoch(9, 8, 0)), scenario("s2", epoch(9, 7, 0))),
             reminders = listOf(alarm("r1", epoch(8, 23, 0)), alarm("r2", epoch(10, 19, 0))),
             nowUnix = now,
         )
+        // Paused 21:17, running 21:20, reminder 23:00; the next alarm (07:30)
+        // is beyond the three-row cap. The disabled alarm and the fired timer
+        // are not live rows.
         assertEquals(
-            listOf("alarm:next", "timer:t1", "timer:paused", "scenario:s2", "reminder:r1"),
+            listOf("timer:paused", "timer:t1", "reminder:r1"),
             cards.map { it.key },
         )
     }
 
     @Test
-    fun aRingingAlarmReplacesTheNearestOneAndComesFirst() {
+    fun remindersOnlyAppearWithinTheNextDay() {
+        val cards = HubCards.build(
+            alarms = emptyList(),
+            timers = emptyList(),
+            reminders = listOf(
+                alarm("past", now - 60),
+                alarm("now", now),
+                alarm("justInside", now + 60),
+                alarm("edge", now + HubCards.REMINDER_WINDOW_SECONDS),
+                alarm("tooFar", now + HubCards.REMINDER_WINDOW_SECONDS + 1),
+            ),
+            nowUnix = now,
+        )
+        assertEquals(listOf("reminder:justInside", "reminder:edge"), cards.map { it.key })
+    }
+
+    @Test
+    fun aRingingAlarmLeadsTheRows() {
         val cards = HubCards.build(
             alarms = listOf(
                 alarm("next", epoch(9, 7, 30)),
                 alarm("ringing", epoch(8, 21, 0), activeOccurrence = epoch(8, 21, 0), activeUntil = now + 60),
             ),
-            timers = emptyList(),
-            scenarios = emptyList(),
+            timers = listOf(timer("t1", now + 30)),
             reminders = emptyList(),
             nowUnix = now,
         )
-        assertEquals(listOf("alarm:ringing"), cards.map { it.key })
-        assertTrue((cards.single() as HubCard.Alarm).ringing)
+        assertEquals(listOf("alarm:ringing", "timer:t1", "alarm:next"), cards.map { it.key })
+        assertTrue((cards.first() as HubCard.Alarm).ringing)
     }
 
     @Test
-    fun nothingLiveMeansNoCarousel() {
+    fun nothingLiveMeansNoHub() {
         assertTrue(
             HubCards.build(
                 alarms = listOf(alarm("off", 0L, enabled = false)),
                 timers = emptyList(),
-                scenarios = listOf(scenario("manual", 0L)),
-                reminders = emptyList(),
+                reminders = listOf(alarm("far", now + HubCards.REMINDER_WINDOW_SECONDS + 1)),
                 nowUnix = now,
             ).isEmpty(),
         )
@@ -261,31 +278,28 @@ class HomeHubTest {
     }
 
     @Test
-    fun failedHubSourceKeepsItsPreviousCard() {
+    fun failedHubSourceKeepsItsPreviousRow() {
         val due = epoch(9, 7, 30)
         val previous = HubCards.build(
             alarms = listOf(alarm("a1", due)),
             timers = listOf(timer("t1", due + 600)),
-            scenarios = listOf(scenario("s1", due)),
             reminders = listOf(alarm("r1", due)),
             nowUnix = now,
         )
-        // The alarm RPC failed: only the other three lists loaded.
+        // The alarm RPC failed: only the other two lists loaded.
         val cards = HubCards.buildOrKeep(
             alarms = null,
             timers = listOf(timer("t1", due + 600)),
-            scenarios = listOf(scenario("s1", due)),
             reminders = listOf(alarm("r1", due)),
             previous = previous,
             nowUnix = now,
         )
-        assertEquals(listOf("alarm:a1", "timer:t1", "scenario:s1", "reminder:r1"), cards.map { it.key })
+        assertEquals(listOf("alarm:a1", "reminder:r1", "timer:t1"), cards.map { it.key })
 
-        // A successful empty list still removes the card: the server said there is none.
+        // A successful empty list still removes the rows: the server said there is none.
         val emptied = HubCards.buildOrKeep(
             alarms = emptyList(),
             timers = emptyList(),
-            scenarios = emptyList(),
             reminders = emptyList(),
             previous = previous,
             nowUnix = now,

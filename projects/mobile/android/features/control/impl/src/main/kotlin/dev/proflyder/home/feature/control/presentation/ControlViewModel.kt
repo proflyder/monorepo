@@ -68,7 +68,7 @@ data class ControlUiState(
     val expandedDevices: Set<String> = emptySet(),
     /** Room section ids the user collapsed. */
     val collapsedRooms: Set<String> = emptySet(),
-    /** Live carousel cards ("nothing right now" is an empty list). */
+    /** Compact live rows ("nothing right now" is an empty list). */
     val hubCards: List<HubCard> = emptyList(),
     /** Server-accurate timer seconds per timer card key, refreshed by [ControlViewModel.tick]. */
     val hubRemaining: Map<String, Long> = emptyMap(),
@@ -155,8 +155,8 @@ class ControlViewModel(
     }
 
     /**
-     * Loads the live carousel and pinned shortcuts. A failing source simply
-     * contributes no cards: the hub is optional decoration over the catalog,
+     * Loads the live rows and pinned shortcuts. A failing source simply
+     * contributes no rows: the hub is optional decoration over the catalog,
      * so one unreachable feature must not replace the whole Home screen.
      */
     private suspend fun loadHub(catalogOk: Boolean, requested: Int) {
@@ -172,7 +172,6 @@ class ControlViewModel(
         val cards = HubCards.buildOrKeep(
             alarms = alarmsResult.getOrNull(),
             timers = timersResult.getOrNull(),
-            scenarios = scenariosResult.getOrNull(),
             reminders = remindersResult.getOrNull(),
             previous = currentState.hubCards,
             nowUnix = now,
@@ -388,22 +387,13 @@ class ControlViewModel(
         launch { favorites.save(updated) }
     }
 
-    // --- live carousel actions --------------------------------------------
+    // --- live hub row actions ---------------------------------------------
 
     fun hubPrimary(card: HubCard) {
         when (card) {
             is HubCard.Alarm -> if (card.ringing) stopAlarm(card.schedule) else toggleAlarm(card)
             is HubCard.TimerCard -> toggleTimerPause(card.timer)
-            is HubCard.ScenarioCard -> runScenarioNow(card.scenario)
             is HubCard.Reminder -> Unit
-        }
-    }
-
-    fun hubSecondary(card: HubCard) {
-        when (card) {
-            is HubCard.Alarm -> if (card.ringing) snoozeAlarm(card.schedule) else Unit
-            is HubCard.TimerCard -> cancelTimer(card.timer)
-            is HubCard.ScenarioCard, is HubCard.Reminder -> Unit
         }
     }
 
@@ -463,44 +453,12 @@ class ControlViewModel(
         }
     }
 
-    private fun snoozeAlarm(alarm: dev.proflyder.home.core.model.Schedule) {
-        if (alarm.id in currentState.pendingAlarms) return
-        updateState { copy(pendingAlarms = pendingAlarms + alarm.id, actionError = null) }
-        launch {
-            when (val result = alarms.snooze(alarm.id, SNOOZE_MINUTES)) {
-                is Outcome.Success -> {
-                    updateState { copy(pendingAlarms = pendingAlarms - alarm.id) }
-                    refreshHub()
-                }
-                is Outcome.Failure -> updateState {
-                    copy(pendingAlarms = pendingAlarms - alarm.id, actionError = result.failure)
-                }
-            }
-        }
-    }
-
     private fun toggleTimerPause(timer: Timer) {
         if (timer.id in currentState.pendingTimers) return
         updateState { copy(pendingTimers = pendingTimers + timer.id, actionError = null) }
         launch {
             val result = if (timer.state == TimerState.PAUSED) timers.resume(timer.id) else timers.pause(timer.id)
             when (result) {
-                is Outcome.Success -> {
-                    updateState { copy(pendingTimers = pendingTimers - timer.id) }
-                    refreshHub()
-                }
-                is Outcome.Failure -> updateState {
-                    copy(pendingTimers = pendingTimers - timer.id, actionError = result.failure)
-                }
-            }
-        }
-    }
-
-    private fun cancelTimer(timer: Timer) {
-        if (timer.id in currentState.pendingTimers) return
-        updateState { copy(pendingTimers = pendingTimers + timer.id, actionError = null) }
-        launch {
-            when (val result = timers.cancel(timer.id)) {
                 is Outcome.Success -> {
                     updateState { copy(pendingTimers = pendingTimers - timer.id) }
                     refreshHub()
@@ -544,7 +502,6 @@ class ControlViewModel(
         const val RECONCILE_DELAY_MS = 1_500L
         const val RECONCILE_ATTEMPTS = 8
         const val EXPECT_TTL_MS = 15_000L
-        const val SNOOZE_MINUTES = 9
     }
 }
 

@@ -53,13 +53,14 @@ Current device acceptance and remaining work are tracked in
   Assistant.
 - Devices are lights/switches. HA scripts are no longer shown on Home; native
   scenarios live in the **Scenarios** tab and in Quick actions.
-- The **live carousel** at the top shows only relevant cards and is hidden when
-  there is nothing to show: the nearest enabled alarm (or the ringing one, with
-  **Stop**/**Snooze**), every running/paused timer with a local one-second
-  countdown, the next native scenario (`next_due`, **Run now**) and the next
-  reminder. Tapping a card opens its section; card actions are sent to the
-  server. Data comes from the existing feature repositories through their API
-  modules. The hub refreshes on resume and pull-to-refresh.
+- The **live rows** block at the top is hidden when there is nothing to show: it
+  merges enabled alarms, running/paused timers (with a local one-second
+  countdown) and reminders that fire within the next 24 hours into at most three
+  single-line rows ordered by time (icon · time · label). An alarm row has a
+  compact switch (turning a recurring alarm off asks skip-once vs disable), a
+  timer row has a small pause/resume button, and tapping a row opens its section.
+  Data comes from the existing feature repositories through their API modules.
+  The hub refreshes on resume and pull-to-refresh.
 - **Quick actions** are pinned tiles. Long-press a device in a room group or a
   native scenario in the scenario list to **Pin to Home** / **Unpin**. Tiles are
   ordered by pin time and kept in DataStore. A device tile toggles on tap (a
@@ -327,7 +328,8 @@ sources still fails the build.
 JSON mapping and failures, idempotency, navigation queue/restoration, the real
 Metro graph via a Robolectric cold launch, a Robolectric smoke of the real
 profile row (`//projects/mobile/android/features/control/impl:profile_row_test`),
-the Home hub model (carousel selection/order, "tomorrow 07:30" text, favorites
+the Home hub model (live-row selection/order/cap and the 24 h reminder window,
+"tomorrow 07:30" text, favorites
 pin/order/defaults, display-name rule) in
 `//projects/mobile/android/features/control/api:api_test`, the call state
 machine (dialing → connecting → active → ended, local and remote hangup,

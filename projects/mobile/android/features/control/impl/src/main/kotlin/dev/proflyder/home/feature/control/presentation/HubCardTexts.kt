@@ -3,15 +3,13 @@ package dev.proflyder.home.feature.control.presentation
 import android.content.Context
 import dev.proflyder.home.core.model.RepeatKind
 import dev.proflyder.home.core.model.Schedule
-import dev.proflyder.home.core.model.TimerState
 import dev.proflyder.home.core.time.DurationText
 import dev.proflyder.home.feature.control.HubCard
 import dev.proflyder.home.feature.control.HubFormat
 import dev.proflyder.home.feature.control.HubScheduleStrings
 import dev.proflyder.home.feature.control.impl.R
-import java.time.ZoneId
 
-/** Resource-backed text for the live Home carousel. */
+/** Resource-backed text for the compact live rows. */
 internal class HubCardTexts(private val context: Context) : HubScheduleStrings {
     override fun today(): String = context.getString(R.string.control_hub_today)
     override fun tomorrow(): String = context.getString(R.string.control_hub_tomorrow)
@@ -21,21 +19,26 @@ internal class HubCardTexts(private val context: Context) : HubScheduleStrings {
     override fun time(hour: Int, minute: Int): String =
         String.format(java.util.Locale.ROOT, "%02d:%02d", hour, minute)
 
+    /** The row's own name, used by the label column and as the toggle description. */
     fun title(card: HubCard): String = when (card) {
         is HubCard.Alarm -> card.schedule.label.ifBlank { context.getString(R.string.control_hub_alarm) }
         is HubCard.TimerCard -> card.timer.label.ifBlank { context.getString(R.string.control_hub_timer) }
-        is HubCard.ScenarioCard -> card.scenario.label.ifBlank { context.getString(R.string.control_hub_scenario) }
         is HubCard.Reminder -> card.schedule.label.ifBlank { context.getString(R.string.control_hub_reminder) }
     }
 
-    /** The compact alarm card shows the wall-clock time as its headline. */
-    fun alarmTime(card: HubCard.Alarm): String = time(card.schedule.at.hour, card.schedule.at.minute)
+    /** The label column: an alarm also carries its repeat days (or "ringing"). */
+    fun label(card: HubCard): String = when (card) {
+        is HubCard.Alarm -> alarmLabel(card)
+        is HubCard.TimerCard, is HubCard.Reminder -> title(card)
+    }
 
-    /** One dense line under the time: the label and the repeat days. */
-    fun alarmSubtitle(card: HubCard.Alarm): String {
-        if (card.ringing) return context.getString(R.string.control_hub_ringing)
-        val days = alarmRepeat(card.schedule)
-        return context.getString(R.string.control_hub_alarm_subtitle, title(card), days)
+    private fun alarmLabel(card: HubCard.Alarm): String {
+        val suffix = if (card.ringing) {
+            context.getString(R.string.control_hub_ringing)
+        } else {
+            alarmRepeat(card.schedule)
+        }
+        return context.getString(R.string.control_hub_alarm_subtitle, title(card), suffix)
     }
 
     private fun alarmRepeat(schedule: Schedule): String =
@@ -53,26 +56,11 @@ internal class HubCardTexts(private val context: Context) : HubScheduleStrings {
         return days.sorted().joinToString(", ") { dayOfWeek(it) }
     }
 
-    fun summary(card: HubCard, remaining: Long?, nowUnix: Long): String = when (card) {
-        is HubCard.Alarm -> if (card.ringing) {
-            context.getString(R.string.control_hub_ringing)
-        } else {
-            HubFormat.whenText(
-                card.schedule.nextDueUnix,
-                HubFormat.zoneOf(card.schedule.timezone),
-                nowUnix,
-                this,
-            )
-        }
-        is HubCard.TimerCard -> context.getString(
-            R.string.control_hub_timer_left,
-            DurationText.format(remaining ?: HubFormat.timerRemaining(card.timer, nowUnix)),
-        )
-        is HubCard.ScenarioCard -> HubFormat.whenText(
-            card.scenario.nextDueUnix,
-            ZoneId.systemDefault(),
-            nowUnix,
-            this,
+    /** The time column: a clock moment, or a live countdown for a timer. */
+    fun timeText(card: HubCard, remaining: Long?, nowUnix: Long): String = when (card) {
+        is HubCard.Alarm -> alarmTimeText(card, nowUnix)
+        is HubCard.TimerCard -> DurationText.format(
+            remaining ?: HubFormat.timerRemaining(card.timer, nowUnix),
         )
         is HubCard.Reminder -> HubFormat.whenText(
             card.schedule.nextDueUnix,
@@ -82,22 +70,13 @@ internal class HubCardTexts(private val context: Context) : HubScheduleStrings {
         )
     }
 
-    fun primaryLabel(card: HubCard): String? = when (card) {
-        is HubCard.Alarm -> when {
-            card.ringing -> context.getString(R.string.control_hub_stop)
-            card.schedule.enabled -> context.getString(R.string.control_hub_turn_off)
-            else -> context.getString(R.string.control_hub_turn_on)
-        }
-        is HubCard.TimerCard -> context.getString(
-            if (card.timer.state == TimerState.PAUSED) R.string.control_hub_resume else R.string.control_hub_pause,
+    private fun alarmTimeText(card: HubCard.Alarm, nowUnix: Long): String {
+        val due = if (card.ringing) card.schedule.activeOccurrenceUnix else card.schedule.nextDueUnix
+        return HubFormat.whenText(
+            due,
+            HubFormat.zoneOf(card.schedule.timezone),
+            nowUnix,
+            this,
         )
-        is HubCard.ScenarioCard -> context.getString(R.string.control_hub_run)
-        is HubCard.Reminder -> null
-    }
-
-    fun secondaryLabel(card: HubCard): String? = when (card) {
-        is HubCard.Alarm -> if (card.ringing) context.getString(R.string.control_hub_snooze) else null
-        is HubCard.TimerCard -> context.getString(R.string.control_hub_stop)
-        is HubCard.ScenarioCard, is HubCard.Reminder -> null
     }
 }

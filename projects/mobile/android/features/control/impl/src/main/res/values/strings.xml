@@ -42,10 +42,8 @@
     <string name="control_hub_tomorrow">tomorrow</string>
     <string name="control_hub_alarm">Alarm</string>
     <string name="control_hub_timer">Timer</string>
-    <string name="control_hub_scenario">Scenario</string>
     <string name="control_hub_reminder">Reminder</string>
     <string name="control_hub_ringing">Ringing now</string>
-    <string name="control_hub_timer_left">%1$s left</string>
     <string name="control_hub_repeat_daily">every day</string>
     <string name="control_hub_repeat_weekdays">weekdays</string>
     <string name="control_hub_repeat_weekends">weekends</string>
@@ -56,13 +54,8 @@
     <string name="control_alarm_disable_message">This alarm repeats. Skip only the next occurrence, or turn the alarm off completely.</string>
     <string name="control_alarm_disable_skip_once">Skip once</string>
     <string name="control_alarm_disable_turn_off">Turn off completely</string>
-    <string name="control_hub_stop">Stop</string>
-    <string name="control_hub_snooze">Snooze</string>
-    <string name="control_hub_turn_off">Turn off</string>
-    <string name="control_hub_turn_on">Turn on</string>
     <string name="control_hub_pause">Pause</string>
     <string name="control_hub_resume">Resume</string>
-    <string name="control_hub_run">Run now</string>
     <string name="control_quick_actions_title">Quick actions</string>
     <string name="control_quick_actions_hint">Long-press a device to pin it here.</string>
     <string name="control_pin">Pin to Home</string>
