@@ -524,7 +524,10 @@ test("real repo: android lint unit is a separate job with the same paths", () =>
   assert.deepEqual(lint.bazelRoots, app.bazelRoots);
   assert.deepEqual(lint.testTargets, ["//projects/mobile/android:android_lint"]);
   assert.deepEqual(lint.buildTargets, []);
-  assert.deepEqual(lint.bazelSdkPackages, ["cmdline-tools;23.0"]);
+  assert.deepEqual(lint.bazelSdkPackages, [
+    "cmdline-tools;23.0",
+    "ndk;28.2.13676358",
+  ]);
 });
 
 test("real repo: android module change selects the app and the lint unit", () => {
@@ -591,7 +594,7 @@ test("real repo: lint rule change runs every android unit including lint", () =>
     build_targets: "",
     artifact: "",
     artifact_name: "",
-    sdk_packages: "cmdline-tools;23.0",
+    sdk_packages: "cmdline-tools;23.0 ndk;28.2.13676358",
     universe: "//packages/kotlin/... + //projects/mobile/android/...",
   });
 });

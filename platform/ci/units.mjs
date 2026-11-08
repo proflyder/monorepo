@@ -663,6 +663,11 @@ export const config = {
         // tests and signs the distributable APK itself and uploads it as
         // `android-release-apk` (the one artifact that needs the Environment
         // secrets).
+        // The APK targets //platform/android:android_arm64; rules_android
+        // resolves a C++ toolchain for that platform, which comes from the NDK
+        // (`rules_android_ndk` in MODULE.bazel). The exact version is pinned
+        // here so CI installs the same NDK as the workstation.
+        sdk_packages: ["ndk;28.2.13676358"],
       },
     },
 
@@ -672,8 +677,9 @@ export const config = {
     // paths and Bazel root: every Android module source/resource change selects
     // it together with `android-app`, and `platform/android/**` (the lint rule)
     // invalidates it through the android platform rule. The unit declares the
-    // SDK package that provides the standalone Lint CLI, so `_android.yml` only
-    // installs it for jobs that need it.
+    // SDK packages it needs that the workflow does not install unconditionally:
+    // the standalone Lint CLI and the NDK C++ toolchain for the app's arm64
+    // target platform, so `_android.yml` only installs them where needed.
     {
       id: "android-lint",
       platform: "android",
@@ -682,7 +688,7 @@ export const config = {
       bazel: {
         roots: ["//projects/mobile/android"],
         test_targets: ["//projects/mobile/android:android_lint"],
-        sdk_packages: ["cmdline-tools;23.0"],
+        sdk_packages: ["cmdline-tools;23.0", "ndk;28.2.13676358"],
       },
     },
 

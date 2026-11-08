@@ -247,13 +247,18 @@ It opens as an overlay on the current bottom tab; Back returns to that tab.
 
 ## Build and test
 
-Prerequisites: macOS/Linux, JDK 21, Android SDK with platform 36 and
-build-tools 36.0.0 (`ANDROID_HOME`), Bazelisk. The root contract is
+Prerequisites: macOS/Linux, JDK 21, Android SDK with platform 36,
+build-tools 36.0.0 and an NDK (`ANDROID_HOME`, and `ANDROID_NDK_HOME` or an
+`ndk/` directory under the SDK), Bazelisk. The APK targets the phone ABI
+`arm64-v8a` via `//platform/android:android_arm64`; `rules_android` needs the
+NDK's C++ toolchain for that platform. Install it with
+`sdkmanager "ndk;28.2.13676358"` (the version CI pins). The root contract is
 `MODULE.bazel` (no Gradle, no `WORKSPACE`).
 
 ```sh
 cd /path/to/yandex-station-lab
 export ANDROID_HOME="$HOME/Library/Android/sdk"
+export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/28.2.13676358"  # optional under mise
 mise install   # Bazelisk and the rest of mise.toml
 
 mise exec -- bazelisk build --config=android //projects/mobile/android:app
@@ -593,6 +598,7 @@ Local:
 
 ```sh
 export ANDROID_HOME="$HOME/Library/Android/sdk"
+export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/28.2.13676358"  # optional under mise
 mise run admin:android-distribute -- --dry-run   # print the command, no auth
 mise run admin:android-distribute                # build, sign + upload
 ```

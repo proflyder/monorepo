@@ -130,8 +130,9 @@ jobs:
       # setup-android accepts the SDK licenses by default; install exactly the
       # platform/build-tools pinned in MODULE.bazel plus the extra SDK packages
       # the unit declares (for example the cmdline-tools release that provides
-      # the standalone Android Lint CLI). Keep the lint version in sync with
-      # platform/android/tools/lint_runner.
+      # the standalone Android Lint CLI, or the NDK that provides the C++
+      # toolchain for //platform/android:android_arm64). Keep the lint version
+      # in sync with platform/android/tools/lint_runner.
       - name: Install Android SDK packages
         env:
           SDK_PACKAGES: ${{ inputs.sdk_packages }}
@@ -142,6 +143,13 @@ jobs:
             packages+=("${extra[@]}")
           fi
           sdkmanager --install "${packages[@]}"
+          # rules_android_ndk resolves the NDK from ANDROID_NDK_HOME; export it
+          # only for units that declared an `ndk;<version>` package.
+          for package in "${packages[@]}"; do
+            if [[ "$package" == ndk\;* ]]; then
+              echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/${package#ndk;}" >> "$GITHUB_ENV"
+            fi
+          done
 
       - name: Release signing self-test
         if: inputs.unit == 'android-app'
