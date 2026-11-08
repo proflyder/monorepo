@@ -104,12 +104,14 @@ internal object ScenarioFormat {
     ): StepDescription = when (step) {
         is ScenarioStep.Catalog -> {
             val entry = catalog.firstOrNull { it.id == step.entryId }
-            val title = entry?.let { it.title.ifBlank { it.id } } ?: step.entryId
+            // Prefer the human device name when HA only sent a technical entity
+            // title ("Light", "Switch"); never repeat the same name twice.
+            val title = entry?.displayName?.ifBlank { entry.id } ?: step.entryId
             val parts = mutableListOf(actionLabel(context, step.action))
             if (entry != null) {
-                parts += listOf(entry.room, entry.device)
-                    .filter { it.isNotBlank() && it != title }
-                    .distinct()
+                val room = entry.room
+                if (room.isNotBlank() && room != title) parts += room
+                entry.secondaryName?.takeIf { it != title }?.let { parts += it }
             } else if (catalogLoaded) {
                 parts += context.getString(R.string.scenarios_step_missing)
             }

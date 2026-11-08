@@ -26,7 +26,7 @@ import dev.proflyder.home.feature.connection.ConnectionDestination
 import kotlinx.coroutines.launch
 
 class MainActivity : AppCompatActivity(), NavigatorHost, ViewModelFactoryProvider {
-    private lateinit var router: FragmentRouter
+    internal lateinit var router: FragmentRouter
     private lateinit var binding: ActivityMainBinding
     private lateinit var features: FeatureRegistry
 

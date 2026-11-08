@@ -94,6 +94,53 @@ data class ControlEntry(
 
     /** The assistant profile selector: a global mode, not a device. */
     val isProfile: Boolean get() = kind == ControlKind.PROFILE
+
+    /**
+     * Name shown as the main label. Home Assistant often reports only the
+     * technical entity name ("Light", "Switch") while the meaningful name is
+     * the device ("Лампа", "Светильник"); the device wins in that case.
+     */
+    val displayName: String
+        get() {
+            val name = title.trim()
+            return if (device.isNotBlank() && isTechnicalEntityTitle()) device.trim() else name.ifEmpty { device.trim() }
+        }
+
+    /**
+     * Device name for a subtitle when [displayName] is the entry's own title
+     * and the device adds information; null when it would duplicate the title
+     * or when [displayName] is already the device.
+     */
+    val secondaryName: String?
+        get() {
+            val name = title.trim()
+            val deviceName = device.trim()
+            if (deviceName.isEmpty() || displayName == deviceName) return null
+            return deviceName.takeUnless { it == name }
+        }
+
+    /** True when the title is an entity id/domain default rather than a human name. */
+    fun isTechnicalEntityTitle(): Boolean {
+        val name = title.trim().lowercase()
+        if (name.isEmpty()) return true
+        val deviceName = device.trim().lowercase()
+        if (deviceName.isNotEmpty() && name == deviceName) return true
+        val domain = id.substringBefore('.').lowercase()
+        return name == domain || name == id.lowercase() || name in TECHNICAL_TITLES
+    }
+
+    private companion object {
+        val TECHNICAL_TITLES = setOf(
+            "light",
+            "switch",
+            "scene",
+            "script",
+            "action",
+            "profile",
+            "binary_sensor",
+            "sensor",
+        )
+    }
 }
 
 data class ControlCatalog(

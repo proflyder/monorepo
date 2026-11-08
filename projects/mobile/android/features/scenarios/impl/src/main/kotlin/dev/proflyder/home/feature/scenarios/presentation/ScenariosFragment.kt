@@ -3,6 +3,8 @@ package dev.proflyder.home.feature.scenarios.presentation
 import android.os.Bundle
 import androidx.fragment.app.activityViewModels
 import androidx.recyclerview.widget.GridLayoutManager
+import dev.proflyder.home.core.model.FavoriteKind
+import dev.proflyder.home.core.model.FavoriteRef
 import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.core.model.Scenario
 import dev.proflyder.home.core.navigation.requireNavigator
@@ -28,6 +30,7 @@ class ScenariosFragment : BaseFragment<FragmentScenariosBinding>(FragmentScenari
 
     private val adapterCallback = object : BaseAdapterCallback<ScenarioRow>(), ScenarioAdapterCallback {
         override fun onItemClick(item: ScenarioRow) = onScenarioClick(item.scenario)
+        override fun onItemLongClick(item: ScenarioRow) = showPinDialog(item.scenario)
         override fun onToggle(scenario: Scenario, enabled: Boolean) = viewModel.setEnabled(scenario, enabled)
         override fun onRun(scenario: Scenario) = viewModel.run(scenario)
     }
@@ -87,6 +90,28 @@ class ScenariosFragment : BaseFragment<FragmentScenariosBinding>(FragmentScenari
             Notices.show(binding.root, getString(R.string.scenarios_run_queued, label))
             viewModel.consumeQueued()
         }
+        state.favoriteNotice?.let { notice ->
+            Notices.show(
+                binding.root,
+                getString(
+                    if (notice.pinned) R.string.scenarios_favorite_pinned else R.string.scenarios_favorite_unpinned,
+                    notice.label,
+                ),
+            )
+            viewModel.consumeFavoriteNotice()
+        }
+    }
+
+    /** Long press pins the scenario to Home Quick actions, or unpins it. */
+    internal fun showPinDialog(scenario: Scenario) {
+        val ref = FavoriteRef(FavoriteKind.SCENARIO, scenario.id)
+        val pinned = ref in viewModel.state.value.favorites
+        confirm(
+            message = scenario.label,
+            positive = if (pinned) R.string.scenarios_unpin else R.string.scenarios_pin,
+            negative = android.R.string.cancel,
+            destructive = false,
+        ) { viewModel.toggleFavorite(scenario) }
     }
 
     internal fun onScenarioClick(scenario: Scenario) {

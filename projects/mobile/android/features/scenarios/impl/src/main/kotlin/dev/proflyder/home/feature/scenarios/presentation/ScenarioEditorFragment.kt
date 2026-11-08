@@ -61,14 +61,7 @@ class ScenarioEditorFragment :
             if (!rendering) viewModel.setContinueOnError(checked)
         }
 
-        binding.scenarioEditorAddTrigger.setOnClickListener {
-            TimeTriggerDialog(
-                requireContext(),
-                childFragmentManager,
-                initial = null,
-                onSave = viewModel::addTimeTrigger,
-            ).show()
-        }
+        binding.scenarioEditorAddTrigger.setOnClickListener { showAddTriggerSheet() }
         binding.scenarioEditorAddCondition.setOnClickListener { showAddConditionSheet() }
         binding.scenarioEditorAddStep.setOnClickListener { showAddStepSheet() }
         binding.scenarioEditorSave.setOnClickListener { viewModel.save() }
@@ -307,19 +300,45 @@ class ScenarioEditorFragment :
             .show()
     }
 
+    private fun showAddTriggerSheet() {
+        ChoiceSheet(
+            requireContext(),
+            R.string.scenarios_editor_add_trigger_title,
+            listOf(
+                ChoiceSheet.Choice(
+                    label = getString(R.string.scenarios_editor_add_trigger_time),
+                    iconRes = R.drawable.scenarios_ic_schedule,
+                ) {
+                    TimeTriggerDialog(
+                        requireContext(),
+                        childFragmentManager,
+                        initial = null,
+                        onSave = viewModel::addTimeTrigger,
+                    ).show()
+                },
+            ),
+        ).show()
+    }
+
     private fun showAddConditionSheet() {
         ChoiceSheet(
             requireContext(),
             R.string.scenarios_editor_add_condition_title,
             listOf(
-                ChoiceSheet.Choice(R.string.scenarios_editor_add_condition_entity) {
+                ChoiceSheet.Choice(
+                    label = getString(R.string.scenarios_editor_add_condition_entity),
+                    iconRes = R.drawable.scenarios_ic_devices,
+                ) {
                     pickEntry { entry ->
                         showEntityConditionDialog(entityId = entry.id, state = "on") { entityId, state ->
                             viewModel.addCondition(ScenarioCondition.EntityState(entityId, state))
                         }
                     }
                 },
-                ChoiceSheet.Choice(R.string.scenarios_editor_add_condition_window) {
+                ChoiceSheet.Choice(
+                    label = getString(R.string.scenarios_editor_add_condition_window),
+                    iconRes = R.drawable.scenarios_ic_schedule,
+                ) {
                     TimeWindowDialog(
                         requireContext(),
                         childFragmentManager,
@@ -336,15 +355,24 @@ class ScenarioEditorFragment :
             requireContext(),
             R.string.scenarios_editor_add_step_title,
             listOf(
-                ChoiceSheet.Choice(R.string.scenarios_editor_add_action) {
+                ChoiceSheet.Choice(
+                    label = getString(R.string.scenarios_editor_add_action),
+                    iconRes = R.drawable.scenarios_ic_tune,
+                ) {
                     pickEntry { entry -> startCatalogStep(entry) }
                 },
-                ChoiceSheet.Choice(R.string.scenarios_editor_add_speak) {
+                ChoiceSheet.Choice(
+                    label = getString(R.string.scenarios_editor_add_speak),
+                    iconRes = R.drawable.scenarios_ic_speak,
+                ) {
                     SpeakStepDialog(requireContext(), initial = "") { text ->
                         viewModel.addStep(ScenarioStep.Speak(text))
                     }.show()
                 },
-                ChoiceSheet.Choice(R.string.scenarios_editor_add_delay) {
+                ChoiceSheet.Choice(
+                    label = getString(R.string.scenarios_editor_add_delay),
+                    iconRes = R.drawable.scenarios_ic_timer,
+                ) {
                     DelayStepDialog(requireContext(), initialSeconds = 60) { seconds ->
                         viewModel.addStep(ScenarioStep.Delay(seconds))
                     }.show()
@@ -384,16 +412,18 @@ class ScenarioEditorFragment :
             onSelected(actions.single())
             return
         }
-        val labels = actions.map { ScenarioFormat.actionLabel(requireContext(), it) }.toTypedArray()
         val checked = actions.indexOf(initialAction)
-        MaterialAlertDialogBuilder(requireContext())
-            .setTitle(R.string.scenarios_action_dialog_title)
-            .setSingleChoiceItems(labels, checked) { dialog, which ->
-                dialog.dismiss()
-                onSelected(actions[which])
-            }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show()
+        val ordered = if (checked <= 0) actions else actions.sortedByDescending { it == initialAction }
+        ChoiceSheet(
+            requireContext(),
+            R.string.scenarios_action_dialog_title,
+            ordered.map { wire ->
+                ChoiceSheet.Choice(
+                    label = ScenarioFormat.actionLabel(requireContext(), wire),
+                    iconRes = if (wire == "speak") R.drawable.scenarios_ic_speak else R.drawable.scenarios_ic_tune,
+                ) { onSelected(wire) }
+            },
+        ).show()
     }
 
     private fun withParams(

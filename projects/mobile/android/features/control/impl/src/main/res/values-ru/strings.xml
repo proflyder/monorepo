@@ -37,4 +37,34 @@
     <string name="control_light_percent">%1$d%%</string>
     <string name="control_light_warm">Тёплый</string>
     <string name="control_light_cool">Холодный</string>
+    <string name="control_hub_today">сегодня</string>
+    <string name="control_hub_tomorrow">завтра</string>
+    <string name="control_hub_alarm">Будильник</string>
+    <string name="control_hub_timer">Таймер</string>
+    <string name="control_hub_scenario">Сценарий</string>
+    <string name="control_hub_reminder">Напоминание</string>
+    <string name="control_hub_ringing">Звонит</string>
+    <string name="control_hub_timer_left">%1$s осталось</string>
+    <string name="control_hub_stop">Стоп</string>
+    <string name="control_hub_snooze">Отложить</string>
+    <string name="control_hub_turn_off">Выключить</string>
+    <string name="control_hub_turn_on">Включить</string>
+    <string name="control_hub_pause">Пауза</string>
+    <string name="control_hub_resume">Продолжить</string>
+    <string name="control_hub_run">Запустить сейчас</string>
+    <string name="control_quick_actions_title">Быстрые действия</string>
+    <string name="control_quick_actions_hint">Долгий тап по устройству, чтобы закрепить.</string>
+    <string name="control_pin">Закрепить на главном</string>
+    <string name="control_unpin">Открепить</string>
+    <string name="control_favorite_pinned">Закреплено: %1$s</string>
+    <string name="control_favorite_unpinned">Откреплено: %1$s</string>
+    <string-array name="control_days_short">
+        <item>пн</item>
+        <item>вт</item>
+        <item>ср</item>
+        <item>чт</item>
+        <item>пт</item>
+        <item>сб</item>
+        <item>вс</item>
+    </string-array>
 </resources>

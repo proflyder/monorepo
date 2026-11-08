@@ -7,6 +7,7 @@ import org.junit.runners.Suite
 @Suite.SuiteClasses(
     ControlFilterTest::class,
     ControlItemsTest::class,
+    HomeHubTest::class,
     LightColorsTest::class,
     SpeakTextTest::class,
 )

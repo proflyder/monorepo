@@ -1,10 +1,14 @@
 package dev.proflyder.home.feature.control.presentation
 
+import android.graphics.drawable.GradientDrawable
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
 import androidx.recyclerview.widget.DiffUtil
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.PagerSnapHelper
+import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.color.MaterialColors
 import dev.proflyder.home.core.model.ControlEntry
 import dev.proflyder.home.core.model.PowerState
@@ -15,12 +19,17 @@ import dev.proflyder.home.core.ui.PayloadSet
 import dev.proflyder.home.core.ui.ViewBinding
 import dev.proflyder.home.core.ui.setVisible
 import dev.proflyder.home.feature.control.ControlItem
+import dev.proflyder.home.feature.control.HubCard
+import dev.proflyder.home.feature.control.QuickTile
 import dev.proflyder.home.feature.control.impl.R
 import dev.proflyder.home.feature.control.impl.databinding.ItemControlDeviceBinding
 import dev.proflyder.home.feature.control.impl.databinding.ItemControlDeviceGroupBinding
 import dev.proflyder.home.feature.control.impl.databinding.ItemControlDeviceRowBinding
 import dev.proflyder.home.feature.control.impl.databinding.ItemControlHeaderBinding
+import dev.proflyder.home.feature.control.impl.databinding.ItemControlHubBinding
 import dev.proflyder.home.feature.control.impl.databinding.ItemControlProfileBinding
+import dev.proflyder.home.feature.control.impl.databinding.ItemControlQuickActionsBinding
+import dev.proflyder.home.feature.control.impl.databinding.ItemControlQuickTileBinding
 import dev.proflyder.home.feature.control.impl.databinding.ItemControlScenarioBinding
 
 /** Row taps come from [AdapterCallback]; the switch reports an explicit target state. */
@@ -32,6 +41,22 @@ internal interface ControlAdapterCallback : AdapterCallback<ControlItem> {
 
     /** Opens or closes the settings rows of a device card. */
     fun onToggleSettings(deviceId: String)
+
+    /** Folds or unfolds a room section (header tap). */
+    fun onHeaderClick(header: ControlItem.Header)
+
+    /** Pins or unpins a device from a long press in its room group. */
+    fun onPinToggle(entry: ControlEntry)
+
+    fun onHubCardClick(card: HubCard)
+
+    fun onHubPrimary(card: HubCard)
+
+    fun onHubSecondary(card: HubCard)
+
+    fun onQuickTileClick(tile: QuickTile)
+
+    fun onQuickTileLongClick(tile: QuickTile)
 }
 
 /**
@@ -90,6 +115,8 @@ internal object ControlDiff : DiffUtil.ItemCallback<ControlItem>() {
             oldItem is ControlItem.Device && newItem is ControlItem.Device -> deviceChanges(oldItem, newItem)
             oldItem is ControlItem.DeviceGroup && newItem is ControlItem.DeviceGroup ->
                 if (oldItem == newItem) emptySet() else setOf(ControlChange.GROUP)
+            oldItem is ControlItem.Hub && newItem is ControlItem.Hub -> emptySet()
+            oldItem is ControlItem.QuickActions && newItem is ControlItem.QuickActions -> emptySet()
             else -> emptySet()
         }
         return if (changed.isEmpty()) null else PayloadSet.of(changed)
@@ -98,6 +125,7 @@ internal object ControlDiff : DiffUtil.ItemCallback<ControlItem>() {
     private fun headerChanges(old: ControlItem.Header, new: ControlItem.Header): Set<ControlChange> = buildSet {
         if (old.title != new.title) add(ControlChange.TITLE)
         if (old.summary != new.summary) add(ControlChange.SUMMARY)
+        if (old.collapsed != new.collapsed) add(ControlChange.SUMMARY)
     }
 
     private fun profileChanges(old: ControlItem.Profile, new: ControlItem.Profile): Set<ControlChange> = buildSet {
@@ -156,6 +184,8 @@ internal class ControlAdapter(
         is ControlItem.Scenario -> TYPE_SCENARIO
         is ControlItem.Device -> TYPE_DEVICE
         is ControlItem.DeviceGroup -> TYPE_GROUP
+        is ControlItem.Hub -> TYPE_HUB
+        is ControlItem.QuickActions -> TYPE_QUICK
     }
 
     override fun onCreateHolder(inflater: LayoutInflater, parent: ViewGroup, viewType: Int): ControlHolder =
@@ -164,6 +194,8 @@ internal class ControlAdapter(
             TYPE_PROFILE -> ProfileHolder(ItemControlProfileBinding.inflate(inflater, parent, false), callback)
             TYPE_SCENARIO -> ScenarioHolder(ItemControlScenarioBinding.inflate(inflater, parent, false), callback)
             TYPE_GROUP -> DeviceGroupHolder(ItemControlDeviceGroupBinding.inflate(inflater, parent, false), callback)
+            TYPE_HUB -> HubHolder(ItemControlHubBinding.inflate(inflater, parent, false), callback)
+            TYPE_QUICK -> QuickActionsHolder(ItemControlQuickActionsBinding.inflate(inflater, parent, false), callback)
             else -> DeviceHolder(ItemControlDeviceBinding.inflate(inflater, parent, false), callback)
         }
 
@@ -175,6 +207,7 @@ internal class ControlAdapter(
             val header = item as ControlItem.Header
             bindTitle(header)
             bindSummary(header)
+            bindCollapsed(header)
         }
 
         override fun bindPayloads(item: ControlItem, payloads: List<Any>) {
@@ -182,6 +215,7 @@ internal class ControlAdapter(
             val changes = controlChanges(payloads) ?: return bind(item)
             if (ControlChange.TITLE in changes) bindTitle(header)
             if (ControlChange.SUMMARY in changes) bindSummary(header)
+            bindCollapsed(header)
         }
 
         private fun bindTitle(header: ControlItem.Header) {
@@ -191,6 +225,15 @@ internal class ControlAdapter(
         private fun bindSummary(header: ControlItem.Header) {
             views.controlHeaderSummary.text = header.summary.orEmpty()
             views.controlHeaderSummary.setVisible(header.summary != null)
+        }
+
+        private fun bindCollapsed(header: ControlItem.Header) {
+            views.controlHeaderChevron.setVisible(header.collapsible)
+            // Expanded points up, collapsed points down.
+            views.controlHeaderChevron.rotation = if (header.collapsed) 0f else 180f
+            views.root.setOnClickListener {
+                if (header.collapsible) callback.onHeaderClick(header)
+            }
         }
     }
 
@@ -346,6 +389,142 @@ internal class ControlAdapter(
 
         private fun bindEnabled(row: ControlItem.Scenario) {
             views.root.isEnabled = row.entry.available && !row.busy
+        }
+    }
+
+    private class HubHolder(
+        private val views: ItemControlHubBinding,
+        callback: ControlAdapterCallback,
+    ) : ControlHolder(views, callback) {
+        private val pager = HubCardAdapter(HubCardTexts(views.root.context), callback)
+        private val dots = mutableListOf<View>()
+        private val snap = PagerSnapHelper()
+
+        init {
+            views.controlHubPager.layoutManager =
+                LinearLayoutManager(views.root.context, LinearLayoutManager.HORIZONTAL, false)
+            views.controlHubPager.adapter = pager
+            views.controlHubPager.itemAnimator = null
+            snap.attachToRecyclerView(views.controlHubPager)
+            views.controlHubPager.addOnScrollListener(
+                object : RecyclerView.OnScrollListener() {
+                    override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
+                        renderDots()
+                    }
+                },
+            )
+        }
+
+        override fun bind(item: ControlItem) {
+            val hub = item as ControlItem.Hub
+            pager.submit(hub.cards, hub.remaining, hub.nowUnix)
+            rebuildDots(hub.cards.size)
+            renderDots()
+            if (hub.cards.isEmpty()) views.controlHubPager.scrollToPosition(0)
+        }
+
+        override fun bindPayloads(item: ControlItem, payloads: List<Any>) = bind(item)
+
+        private fun rebuildDots(count: Int) {
+            if (dots.size == count) return
+            views.controlHubDots.removeAllViews()
+            dots.clear()
+            val size = dp(6)
+            val margin = dp(3)
+            repeat(count) {
+                val dot = View(views.root.context)
+                val params = LinearLayout.LayoutParams(size, size)
+                params.marginStart = margin
+                params.marginEnd = margin
+                dot.layoutParams = params
+                views.controlHubDots.addView(dot)
+                dots += dot
+            }
+        }
+
+        fun renderDots() {
+            if (dots.size <= 1) {
+                views.controlHubDots.setVisible(false)
+                return
+            }
+            views.controlHubDots.setVisible(true)
+            val layout = views.controlHubPager.layoutManager as? LinearLayoutManager ?: return
+            val selected = layout.findFirstVisibleItemPosition().coerceAtLeast(0)
+            dots.forEachIndexed { index, dot ->
+                dot.background = GradientDrawable().apply {
+                    shape = GradientDrawable.OVAL
+                    setColor(
+                        MaterialColors.getColor(
+                            dot,
+                            if (index == selected) androidx.appcompat.R.attr.colorPrimary
+                            else com.google.android.material.R.attr.colorOnSurfaceVariant,
+                        ),
+                    )
+                    alpha = if (index == selected) 255 else 100
+                }
+            }
+        }
+
+        private fun dp(value: Int): Int =
+            (value * views.root.resources.displayMetrics.density).toInt()
+    }
+
+    private class QuickActionsHolder(
+        private val views: ItemControlQuickActionsBinding,
+        callback: ControlAdapterCallback,
+    ) : ControlHolder(views, callback) {
+        override fun bind(item: ControlItem) {
+            val quick = item as ControlItem.QuickActions
+            views.controlQuickTiles.removeAllViews()
+            views.controlQuickHint.setVisible(quick.hint)
+            quick.tiles.chunked(COLUMNS).forEach { rowTiles ->
+                val row = LinearLayout(views.root.context).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                }
+                rowTiles.forEach { tile -> row.addView(tileView(row, tile)) }
+                // Keep the last row aligned with the grid instead of stretching.
+                repeat(COLUMNS - rowTiles.size) {
+                    row.addView(
+                        View(views.root.context),
+                        LinearLayout.LayoutParams(0, 1, 1f),
+                    )
+                }
+                views.controlQuickTiles.addView(row)
+            }
+        }
+
+        override fun bindPayloads(item: ControlItem, payloads: List<Any>) = bind(item)
+
+        private fun tileView(parent: LinearLayout, tile: QuickTile): View {
+            val views = ItemControlQuickTileBinding.inflate(
+                LayoutInflater.from(parent.context),
+                parent,
+                false,
+            )
+            views.quickTileLabel.text = when (tile) {
+                is QuickTile.Device -> tile.entry.displayName
+                is QuickTile.ScenarioTile -> tile.scenario.label
+                is QuickTile.Speak -> tile.entry.displayName
+            }
+            views.quickTileIcon.setImageResource(
+                when (tile) {
+                    is QuickTile.Device -> ControlIcons.resolve(tile.entry)
+                    is QuickTile.ScenarioTile -> R.drawable.control_ic_play
+                    is QuickTile.Speak -> R.drawable.control_ic_message
+                },
+            )
+            val busy = when (tile) {
+                is QuickTile.Device -> tile.busy
+                is QuickTile.ScenarioTile -> tile.busy
+                is QuickTile.Speak -> tile.busy
+            }
+            views.root.alpha = if (busy) DISABLED_ALPHA else 1f
+            views.root.setOnClickListener { callback.onQuickTileClick(tile) }
+            views.root.setOnLongClickListener {
+                callback.onQuickTileLongClick(tile)
+                true
+            }
+            return views.root
         }
     }
 
@@ -535,6 +714,10 @@ internal class ControlAdapter(
             rowViews.root.setOnClickListener {
                 callback.onItemClick(ControlItem.Device(entry, row.busy, statesKnown))
             }
+            rowViews.root.setOnLongClickListener {
+                callback.onPinToggle(entry)
+                true
+            }
             container.addView(rowViews.root)
         }
     }
@@ -545,6 +728,9 @@ internal class ControlAdapter(
         const val TYPE_DEVICE = 2
         const val TYPE_PROFILE = 3
         const val TYPE_GROUP = 4
+        const val TYPE_HUB = 5
+        const val TYPE_QUICK = 6
         const val DISABLED_ALPHA = 0.5f
+        const val COLUMNS = 3
     }
 }

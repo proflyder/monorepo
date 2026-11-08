@@ -91,12 +91,21 @@ class FragmentRouter(
             return
         }
         if (!entry.isTab) {
+            // A grouping tab may host this feature (alarms/timers/reminders live
+            // inside "Time"); selecting it opens that tab at the right section.
+            val host = registry.tabs().firstNotNullOfOrNull { tab ->
+                tab.hostedDestination(featureId)?.let { destination -> tab to destination }
+            }
+            if (host != null) {
+                enqueue(Command.SelectTab(host.first.id, host.second))
+                return
+            }
             // Settings-style features are not bottom tabs: open them as an
             // overlay on top of the current tab so Back returns there.
             navigate(entry.rootDestination)
             return
         }
-        enqueue(Command.SelectTab(featureId))
+        enqueue(Command.SelectTab(featureId, null))
     }
 
     override fun navigate(destination: Destination) {
@@ -146,10 +155,15 @@ class FragmentRouter(
         val entry = registry.entry(savedState.selectedTabId)?.takeIf { it.isTab }
             ?: savedState.stacks.keys.firstNotNullOfOrNull { registry.entry(it)?.takeIf(FeatureEntry::isTab) }
             ?: initialEntry
-        val rootRoute = entry.rootDestination.route
+        val savedStack = savedState.stacks[entry.id].orEmpty()
+        // A grouping tab may have been opened at a non-default section
+        // ("time/timers"); that saved first route is its root for this session.
+        val rootRoute = savedStack.firstOrNull()
+            ?.takeIf { route -> registry.entryForRoute(route)?.id == entry.id }
+            ?: entry.rootDestination.route
         routeState.restore(
             tabId = entry.id,
-            routes = savedState.stacks[entry.id].orEmpty(),
+            routes = savedStack,
             rootRoute = rootRoute,
         ) { route ->
             val owner = registry.entryForRoute(route)
@@ -195,7 +209,11 @@ class FragmentRouter(
                 .firstNotNullOfOrNull { name -> registry.entryForRoute(name)?.takeIf { it.isTab } }
                 ?: currentTabEntry()
         }
-        val rootRoute = tabEntry.rootDestination.route
+        val rootRoute = routeState.currentStack().firstOrNull()
+            ?.takeIf { route ->
+                routeState.currentTabId == tabEntry.id && registry.entryForRoute(route)?.id == tabEntry.id
+            }
+            ?: tabEntry.rootDestination.route
         val validNames = names.all { name ->
             val owner = name?.let(registry::entryForRoute) ?: return@all false
             owner.id == tabEntry.id || !owner.isTab
@@ -297,16 +315,17 @@ class FragmentRouter(
 
     private fun execute(command: Command) {
         when (command) {
-            is Command.SelectTab -> selectTabNow(command.featureId)
+            is Command.SelectTab -> selectTabNow(command.featureId, command.destination)
             is Command.Push -> pushNow(command.destination)
             Command.Back -> performBack()
         }
     }
 
-    private fun selectTabNow(featureId: String) {
+    private fun selectTabNow(featureId: String, destination: Destination? = null) {
         val entry = registry.entry(featureId) ?: return
-        val root = entry.rootDestination
+        val root = destination ?: entry.rootDestination
         val alreadyAtRoot = routeState.currentTabId == entry.id &&
+            routeState.currentRoute() == root.route &&
             routeState.isAtRoot() &&
             fragmentManager.backStackEntryCount == 0 &&
             fragmentManager.findFragmentByTag(root.route) != null
@@ -396,7 +415,7 @@ class FragmentRouter(
     }
 
     private sealed interface Command {
-        data class SelectTab(val featureId: String) : Command
+        data class SelectTab(val featureId: String, val destination: Destination? = null) : Command
         data class Push(val destination: Destination) : Command
         data object Back : Command
     }
