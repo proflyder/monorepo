@@ -18,4 +18,7 @@ exec shellcheck -S error \
   solutions/windows-logon-provider/*.sh \
   platform/workstation/env.sh \
   platform/workstation/run.sh \
-  platform/workstation/bin/bazel
+  platform/workstation/fnox.sh \
+  platform/workstation/with-kube-tunnel.sh \
+  platform/workstation/bin/bazel \
+  platform/workstation/bin/vault

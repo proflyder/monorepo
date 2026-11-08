@@ -125,9 +125,8 @@ export const TARGETS = [
       "`ls -lt local-data/local/backups/scheduler` (вне Git).",
     run: { shell: "projects/home/kubernetes/scheduler/backup.sh" },
     run_note:
-      "Нужен admin kubeconfig: `mise run secrets:file " +
-      "kubernetes-research/kubeconfig`, затем " +
-      "`export KUBECONFIG=secrets/kubernetes-research/kubeconfig`. " +
+      "Запуск — `mise run admin:scheduler-backup`: admin kubeconfig " +
+      "приходит из OpenBao через fnox (профиль kube). " +
       "Скрипт сам останавливает writers и возвращает replicas.",
     verify: {
       shell:
@@ -152,8 +151,8 @@ export const TARGETS = [
         "kubectl -n openbao get jobs",
     },
     run_note:
-      "Нужен admin kubeconfig (см. `mise run secrets:file " +
-      "kubernetes-research/kubeconfig`). Job `snapshot-manual` сначала " +
+      "Нужен admin kubeconfig: команду запускать через " +
+      "`mise run secrets:exec -- -P kube exec -- …`. Job `snapshot-manual` сначала " +
       "удалить, если он уже есть: имя в examples из docs фиксированное.",
     run: {
       shell:

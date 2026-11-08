@@ -169,6 +169,9 @@
   gitleaks, actionlint, shellcheck, kubectl, helm, oras, bao, gh, protoc, bw.
   CI ставит подмножество через `jdx/mise-action`; Bazel — `setup-bazel`.
   Рабочее место — `mise run setup` (`docs/WORKSTATION.md`).
+- Локальные скрипты с секретами — только `mise run admin:*`: fnox 1.47
+  (`fnox.toml`, профиль на скрипт, только ссылки на OpenBao) передаёт секреты
+  во временных файлах; туннель к API K3s поднимается на время команды.
 - `deploy-home` (push в `develop` = merge PR) деплоит только затронутые
   юниты параллельно: входит в VPN группой `ci`, затем OIDC в OpenBao,
   kubectl → K3s API `6443`, HTTPS → Traefik/OpenBao `443`. Режимы

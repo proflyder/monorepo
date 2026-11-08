@@ -175,7 +175,6 @@ Never paste secret values into chat or a commit. Use the private paths below.
 1. **Gateway↔Hermes bearer token** (value never printed):
 
    ```bash
-   export KUBECONFIG=/private/path/kubeconfig
    bao kv put secret/k8s/home-assistant/mcp-gateway-auth \
      token="$(openssl rand -hex 32)"
    ```
@@ -303,7 +302,6 @@ Never paste secret values into chat or a commit. Use the private paths below.
 Manual (workstation, imports the image into the node over SSH):
 
 ```bash
-export KUBECONFIG=/private/path/kubeconfig
 NODE_SSH=labuser@node ./projects/home/kubernetes/mcp-gateway/deploy.sh
 ```
 

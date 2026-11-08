@@ -100,9 +100,8 @@ Trade-offs:
 1. **Namespace and CI RBAC** (cluster-scoped, applied by an admin, not CI):
 
    ```bash
-   export KUBECONFIG=/private/path/kubeconfig
-   kubectl apply -f projects/home/kubernetes/currency-bot/manifests/namespace.yaml
-   kubectl apply -f projects/home/kubernetes/currency-bot/ci/rbac.yaml
+   mise run kubectl -- apply -f projects/home/kubernetes/currency-bot/manifests/namespace.yaml
+   mise run kubectl -- apply -f projects/home/kubernetes/currency-bot/ci/rbac.yaml
    ```
 
    `ci/rbac.yaml` binds the existing `home-assistant/ci-deploy`
@@ -166,7 +165,6 @@ Trade-offs:
 Manual (workstation, imports the image into the node over SSH):
 
 ```bash
-export KUBECONFIG=/private/path/kubeconfig
 NODE_SSH=labuser@node ./projects/home/kubernetes/currency-bot/deploy.sh
 ```
 

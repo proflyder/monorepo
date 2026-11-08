@@ -619,6 +619,19 @@
     новым `script.*` с меткой `scenario`; метка `scenario` остаётся для
     HA-сценариев, которым нужны сервисы вне каталога (обучение Рикардо).
 
+48. **Секреты для локальных скриптов — fnox, единая точка входа `mise run admin:*`.**
+    Скрипты деплоя и обслуживания с рабочего места (ingress, OpenBao,
+    Vaultwarden, observability, ESO, heartbeat, offsite, backup scheduler,
+    ручной deploy сервисов, Android-релиз, `deploy:status --live`,
+    `rollback --yes`) запускаются только через задачи mise. `fnox.toml` в
+    корне содержит лишь ссылки на OpenBao: профиль на скрипт, файловые
+    секреты — во временных файлах 0600, удаляемых после команды, в тех
+    переменных, что скрипт уже читает. fnox ходит в OpenBao через shim
+    `vault` → `bao` и токен машины (`workstation.py token`, с продлением);
+    туннель к API K3s — `with-kube-tunnel.sh` на время команды.
+    `secrets:file` остаётся запасным путём. `rclone.conf` офсайта намеренно
+    не передаётся (на узле rclone обновляет OAuth-токен сам).
+
 Меняется решение — обновить этот файл и `STATE.md`.
 
 48. **Звонок телефон ↔ колонка — WebRTC, сигналинг `solutions/intercom`.**

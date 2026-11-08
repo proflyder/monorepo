@@ -144,10 +144,14 @@ duck/resume и передачу wake-команд в HA. Текущая верс
   `platform/workstation/catalog.json`; рабочее место — `docs/WORKSTATION.md`.
 - Инструменты — только из `mise.toml` (`mise install`); не скачивать бинарники
   вручную и не класть их в `local-data/`.
-- Агент сам берёт нужный секрет: скрипту, читающему файл `secrets/<…>`, файл
-  временно восстанавливает `mise run secrets:file <file>` (в worktree токен
-  берётся из основной копии), после работы — `mise run secrets:clean <file>`.
-  Значения не печатать и не копировать в другие файлы, логи, чат.
+- Скрипты деплоя и обслуживания запускать только через `mise run admin:*`
+  (`mise tasks | grep admin:`): секреты передаёт fnox по профилю скрипта
+  (`fnox.toml`, только ссылки на OpenBao), во временных файлах, которые
+  удаляются после команды; туннель к API K3s поднимается сам. Новый скрипт с
+  секретами — профиль в `fnox.toml` + задача `admin:*`. Разовая команда —
+  `mise run secrets:exec -- -P <profile> exec -- <cmd>`. Запасной путь для
+  файла вручную — `mise run secrets:file`/`secrets:clean`. Значения не
+  печатать и не копировать в другие файлы, логи, чат.
   `mise run doctor` показывает, чего не хватает; `secrets:login` (пароль +
   TOTP) выполняет только человек.
 - Запись: GET → merge → POST с `options.cas`. Новый путь — сразу в OpenBao
