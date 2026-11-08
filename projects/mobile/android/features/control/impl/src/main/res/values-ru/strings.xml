@@ -1,17 +1,40 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!--
-  Only the voice-profile strings are translated today; the rest of the app is
-  English-only (see the README). Add the remaining control_* keys here when the
-  whole Home screen is localized.
--->
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="DuplicateStrings">
+    <string name="control_title">Дом</string>
+    <string name="control_section_scenarios">Сценарии</string>
     <string name="control_section_profile">Профиль голоса</string>
-    <string name="control_profile_personal">Личный</string>
-    <string name="control_profile_work">Рабочий</string>
-    <string name="control_profile_states_unknown">Состояние неизвестно</string>
-    <string name="control_device_settings">Настройки (%1$d)</string>
+    <string name="control_section_other">Другие устройства</string>
+    <string name="control_section_unavailable">Недоступно</string>
     <string name="control_section_actions">Действия</string>
     <string name="control_speak_title">Сказать на колонке</string>
     <string name="control_speak_hint">Текст для озвучивания</string>
     <string name="control_speak_send">Сказать</string>
+    <string name="control_on_summary">Включено %1$d из %2$d</string>
+    <string name="control_filter_all">Все</string>
+    <string name="control_filter_scenarios">Сценарии</string>
+    <string name="control_filter_lights">Свет</string>
+    <string name="control_filter_switches">Выключатели</string>
+    <string name="control_empty">Пока нечем управлять. Home Assistant не отдаёт приложению свет, выключатели или сцены.</string>
+    <string name="control_not_configured">Укажите адрес домашнего управления в «Подключении», чтобы увидеть сценарии и устройства.</string>
+    <string name="control_open_connection">Открыть «Подключение»</string>
+    <string name="control_states_unknown">Home Assistant недоступен, поэтому состояния устройств неизвестны.</string>
+    <string name="control_scenario_queued">Отправлено: %1$s</string>
+    <string name="control_state_on">Вкл</string>
+    <string name="control_state_off">Выкл</string>
+    <string name="control_state_unknown">Состояние неизвестно</string>
+    <string name="control_state_unavailable">Недоступно</string>
+    <string name="control_state_on_brightness">Вкл · %1$d%%</string>
+    <string name="control_device_settings">Настройки (%1$d)</string>
+    <string name="control_profile_personal">Личный</string>
+    <string name="control_profile_work">Рабочий</string>
+    <string name="control_profile_states_unknown">Состояние неизвестно</string>
+    <string name="control_light_brightness">Яркость</string>
+    <string name="control_light_temperature">Цветовая температура</string>
+    <string name="control_light_color">Цвет</string>
+    <string name="control_light_hue">Оттенок</string>
+    <string name="control_light_saturation">Насыщенность</string>
+    <string name="control_light_kelvin">%1$d K</string>
+    <string name="control_light_percent">%1$d%%</string>
+    <string name="control_light_warm">Тёплый</string>
+    <string name="control_light_cool">Холодный</string>
 </resources>

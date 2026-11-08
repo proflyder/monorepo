@@ -21,16 +21,20 @@ kt_compiler_plugin(
     deps = ["@maven//:dev_zacsweers_metro_compiler"],
 )
 
-# Stable personal debug keystore for the Home Android app.
+# Debug keystore for local Bazel builds of the Home Android app.
 #
 # rules_android signs debug APKs with `--ks <file> --ks-pass pass:android` and
 # no alias, so the file must contain exactly one entry whose password is
 # `android`. A local personal key lives in the gitignored
 # `platform/android/keys/home-debug.keystore` (a symlink to
-# `secrets/android/home-debug.keystore`). CI and clean checkouts have no such
-# file: they must still build, so the genrule falls back to the public
-# rules_android debug keystore and warns on stderr. Both are source files, so
-# the command stays hermetic and path-agnostic.
+# `secrets/android/home-debug.keystore`), which keeps `adb install -r` working
+# without an uninstall. That APK is only an intermediate: App Distribution
+# builds are re-signed by `platform/android/sign-release.sh` with the release
+# key from `secrets/android/home-release.keystore` (strong password, outside
+# Bazel). CI and clean checkouts have no such file: they must still build, so
+# the genrule falls back to the public rules_android debug keystore and warns
+# on stderr. Both are source files, so the command stays hermetic and
+# path-agnostic.
 genrule(
     name = "home_debug_keystore",
     srcs = glob(

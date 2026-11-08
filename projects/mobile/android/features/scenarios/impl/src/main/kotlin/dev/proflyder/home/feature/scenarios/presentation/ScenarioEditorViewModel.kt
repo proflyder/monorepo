@@ -90,7 +90,7 @@ class ScenarioEditorViewModel(
             createIdentity.adopt(restoredDraft.toScenarioDraft(), savedKey)
         }
         if (restoredDraft != null) {
-            mutableState.value = ScenarioEditorUiState(
+            mutableState.value = mutableState.value.copy(
                 existing = restoredDraft.restoredExisting(),
                 draft = restoredDraft,
             )
@@ -111,7 +111,16 @@ class ScenarioEditorViewModel(
             when (val result = loadScenario(scenarioId)) {
                 is Outcome.Success -> {
                     val draft = ScenarioEditorDraftCodec.fromScenario(result.value)
-                    mutableState.value = ScenarioEditorUiState(existing = result.value, draft = draft)
+                    // Keep the independently loaded catalog: replacing the
+                    // whole state here used to erase catalog/catalogLoading/
+                    // catalogError and made step picking say "catalog empty".
+                    mutableState.value = mutableState.value.copy(
+                        loading = false,
+                        existing = result.value,
+                        draft = draft,
+                        error = null,
+                        loadFailed = false,
+                    )
                     persistDraft()
                 }
                 is Outcome.Failure -> mutableState.value = mutableState.value.copy(
@@ -276,11 +285,12 @@ class ScenarioEditorViewModel(
             when (val result = loadScenario(id)) {
                 is Outcome.Success -> {
                     val draft = ScenarioEditorDraftCodec.fromScenario(result.value)
-                    mutableState.value = ScenarioEditorUiState(
+                    mutableState.value = mutableState.value.copy(
+                        loading = false,
                         existing = result.value,
                         draft = draft,
-                        catalog = mutableState.value.catalog,
-                        catalogError = mutableState.value.catalogError,
+                        error = null,
+                        conflict = false,
                     )
                     persistDraft()
                 }

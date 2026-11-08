@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="DuplicateStrings">
+    <string name="timers_title">Таймеры</string>
+    <string name="timers_empty">Активных таймеров нет. Отсчёт идёт на домашнем сервере.</string>
+    <string name="timers_label">Название</string>
+    <string name="timers_duration">Длительность</string>
+    <string name="timers_duration_hint">например, 5м, 1ч 30м, 01:30</string>
+    <string name="timers_start">Запустить таймер</string>
+    <string name="timers_pause">Пауза</string>
+    <string name="timers_resume">Продолжить</string>
+    <string name="timers_cancel">Отмена</string>
+    <string name="timers_paused">На паузе</string>
+    <string name="timers_running">Идёт</string>
+    <string name="timers_remaining">Осталось %1$s</string>
+    <string name="timers_duration_error">Введите длительность от 1 секунды до 7 дней.</string>
+    <string name="timers_started">Таймер запущен</string>
+    <string name="timers_cancelled">Таймер отменён</string>
+    <string name="timers_cancel_confirm">Отменить этот таймер на домашнем сервере?</string>
+    <string name="timers_cancel_yes">Отменить таймер</string>
+    <string name="timers_keep">Оставить</string>
+    <string name="timers_preset_1">1 мин</string>
+    <string name="timers_preset_5">5 мин</string>
+    <string name="timers_preset_10">10 мин</string>
+    <string name="timers_preset_25">25 мин</string>
+    <string name="timers_server_time_note">Оставшееся время считается по часам сервера из GetStatus.</string>
+</resources>

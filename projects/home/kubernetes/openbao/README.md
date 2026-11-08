@@ -391,15 +391,24 @@ Environment: если оставить политику только на `devel
 ### Android-секреты (App Distribution)
 
 `secret/ci/android-distribute` читает только роль `android-distribute`
-(политика `ci-android`). Значения — исходный текст (не base64), кроме
-keystore, который хранится как base64:
+(политика `ci-android`). Подпись APK делает `platform/android/sign-release.sh`
+поверх собранного Bazel APK; ключ и пароли в CI не попадают в Bazel и в env
+последующих шагов. Значения — исходный текст (не base64), кроме keystore,
+который хранится как base64:
 
 | Ключ | Откуда | Зачем |
 |---|---|---|
-| `keystore_b64` | `base64 secrets/android/home-debug.keystore` | подпись APK личным debug-ключом (SHA-256 `88ef5d61…04ad`) |
-| `keystore_password` | всегда `android` | rules_android подписывает с `--ks-pass pass:android` |
+| `signing_keystore_b64` | `base64 < secrets/android/home-release.keystore` | release-подпись APK (apksigner); сертификат остаётся `88ef5d61…04ad` |
+| `signing_store_password` | сильный пароль хранилища | `apksigner --ks-pass file:…` |
+| `signing_key_password` | пароль ключа (PKCS12 — тот же, что у хранилища) | `apksigner --key-pass file:…` |
+| `signing_key_alias` | alias ключа, например `home-release` | `apksigner --ks-key-alias` |
+| `signing_cert_sha256` | SHA-256 сертификата, hex | fail-closed проверка подписи перед публикацией |
 | `google_services_json` | `secrets/android/google-services.json` | `google_app_id` и Firebase-ресурсы |
 | `firebase_service_account_json` | JSON-ключ сервисного аккаунта GCP | аутентификация `firebase-tools appdistribution:distribute` |
+
+Старые `keystore_b64`/`keystore_password` (debug-ключ с паролем `android`) и
+`keystore_password = android` workflow больше не читает: они остаются бэкапом
+ключа. Пароль `android` в OpenBao для подписи не нужен.
 
 Сервисный аккаунт создаётся один раз: GCP console → **IAM & Admin** →
 **Service accounts** → создать аккаунт → роль **Firebase App Distribution
@@ -407,28 +416,34 @@ Admin** → **Keys** → **Add key** → JSON. Ключ сохраняется �
 `secrets/android/firebase-distribute-sa.json` (600, вне Git); в GitHub он не
 попадает.
 
-Запись и обновление (нужен admin/root-токен, после работы отозвать):
+Запись и обновление (нужен admin/root-токен, после работы отозвать). Значения
+дописываются к текущему объекту, чтобы не потерять `google_services_json` и
+`firebase_service_account_json`:
 
 ```bash
 export BAO_ADDR=https://vault.<home-domain>
 export BAO_TOKEN=...            # admin-токен, не печатать
-jq -n \
-  --arg keystore_b64 "$(base64 < secrets/android/home-debug.keystore)" \
-  --arg keystore_password android \
-  --rawfile google_services_json secrets/android/google-services.json \
-  --rawfile firebase_service_account_json secrets/android/firebase-distribute-sa.json \
-  '{data: {keystore_b64: $keystore_b64,
-           keystore_password: $keystore_password,
-           google_services_json: $google_services_json,
-           firebase_service_account_json: $firebase_service_account_json}}' \
+current="$(curl -sS --fail -H "X-Vault-Token: $BAO_TOKEN" \
+  "$BAO_ADDR/v1/secret/data/ci/android-distribute" | jq -c '.data.data')"
+jq -n --argjson current "$current" \
+  --arg signing_keystore_b64 "$(base64 < secrets/android/home-release.keystore)" \
+  --rawfile signing_store_password secrets/android/home-release.store.password \
+  --rawfile signing_key_password secrets/android/home-release.key.password \
+  --rawfile signing_key_alias secrets/android/home-release.alias \
+  --rawfile signing_cert_sha256 secrets/android/home-release.cert.sha256 \
+  '{data: ($current + {signing_keystore_b64: $signing_keystore_b64,
+                       signing_store_password: $signing_store_password,
+                       signing_key_password: $signing_key_password,
+                       signing_key_alias: $signing_key_alias,
+                       signing_cert_sha256: $signing_cert_sha256})}' \
 | curl -sS --fail -X POST -H "X-Vault-Token: $BAO_TOKEN" \
     --data-binary @- "$BAO_ADDR/v1/secret/data/ci/android-distribute" >/dev/null
 ```
 
-`jq --rawfile` сохраняет переводы строк JSON-файлов; base64 читается без
-переносов. Ротация ключа или сервисного аккаунта — повторная запись значения,
-workflow не меняется. Пароль keystore обязан остаться `android`: workflow
-падает до сборки, если значение другое.
+`jq --rawfile` сохраняет переводы строк; `sign-release.sh` их срезает, поэтому
+файлы паролей могут заканчиваться новой строкой. base64 читается без переносов.
+Ротация ключа — повторная запись `signing_*`; workflow не меняется. Пароли
+локально не остаются: `mise run secrets:clean` удаляет восстановленные файлы.
 
 ### Station-секреты (деплой прошивки станции)
 

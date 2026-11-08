@@ -1,6 +1,8 @@
 package dev.proflyder.home.feature.scenarios.presentation
 
+import androidx.appcompat.app.AlertDialog
 import android.os.Bundle
+import android.widget.ProgressBar
 import androidx.core.widget.doAfterTextChanged
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
@@ -37,6 +39,10 @@ class ScenarioEditorFragment :
     private var rendering = false
     private var conflictDialogShown = false
 
+    /** A picker waiting for the catalog to finish loading. */
+    private var pendingPick: ((List<ControlEntry>) -> Unit)? = null
+    private var catalogWaitDialog: AlertDialog? = null
+
     override fun onBindingCreated(binding: FragmentScenarioEditorBinding, savedInstanceState: Bundle?) {
         val scenarioId = arguments?.getString(ScenarioEditorDestination.ARG_SCENARIO_ID)
         viewModel.start(scenarioId)
@@ -63,39 +69,8 @@ class ScenarioEditorFragment :
                 onSave = viewModel::addTimeTrigger,
             ).show()
         }
-        binding.scenarioEditorAddConditionEntity.setOnClickListener {
-            pickEntry { entry ->
-                EntityConditionDialog(
-                    requireContext(),
-                    initialEntityId = entry.id,
-                    initialState = "on",
-                    entryTitle = { id -> viewModel.state.value.catalog.titleOf(id) },
-                    onPickEntity = { onPicked -> pickEntry { picked -> onPicked(picked.id) } },
-                    onSave = { entityId, state ->
-                        viewModel.addCondition(ScenarioCondition.EntityState(entityId, state))
-                    },
-                ).show()
-            }
-        }
-        binding.scenarioEditorAddConditionWindow.setOnClickListener {
-            TimeWindowDialog(
-                requireContext(),
-                childFragmentManager,
-                initial = ScenarioEditorViewModel.defaultTimeWindow(),
-                onSave = viewModel::addCondition,
-            ).show()
-        }
-        binding.scenarioEditorAddAction.setOnClickListener { pickEntry { entry -> startCatalogStep(entry) } }
-        binding.scenarioEditorAddSpeak.setOnClickListener {
-            SpeakStepDialog(requireContext(), initial = "") { text ->
-                viewModel.addStep(ScenarioStep.Speak(text))
-            }.show()
-        }
-        binding.scenarioEditorAddDelay.setOnClickListener {
-            DelayStepDialog(requireContext(), initialSeconds = 60) { seconds ->
-                viewModel.addStep(ScenarioStep.Delay(seconds))
-            }.show()
-        }
+        binding.scenarioEditorAddCondition.setOnClickListener { showAddConditionSheet() }
+        binding.scenarioEditorAddStep.setOnClickListener { showAddStepSheet() }
         binding.scenarioEditorSave.setOnClickListener { viewModel.save() }
         binding.scenarioEditorDelete.setOnClickListener { confirmDelete() }
         binding.scenarioEditorCatalogStatus.setOnClickListener { viewModel.reloadCatalog() }
@@ -125,11 +100,8 @@ class ScenarioEditorFragment :
         scenarioEditorContinueOnError.isChecked = draft.continueOnError
         scenarioEditorUnsupported.setVisible(state.hasUnsupportedParts)
         scenarioEditorAddTrigger.isEnabled = draft.triggers.size < ScenarioLimits.MAX_TRIGGERS
-        scenarioEditorAddConditionEntity.isEnabled = draft.conditions.size < ScenarioLimits.MAX_CONDITIONS
-        scenarioEditorAddConditionWindow.isEnabled = draft.conditions.size < ScenarioLimits.MAX_CONDITIONS
-        scenarioEditorAddAction.isEnabled = draft.steps.size < ScenarioLimits.MAX_STEPS
-        scenarioEditorAddSpeak.isEnabled = draft.steps.size < ScenarioLimits.MAX_STEPS
-        scenarioEditorAddDelay.isEnabled = draft.steps.size < ScenarioLimits.MAX_STEPS
+        scenarioEditorAddCondition.isEnabled = draft.conditions.size < ScenarioLimits.MAX_CONDITIONS
+        scenarioEditorAddStep.isEnabled = draft.steps.size < ScenarioLimits.MAX_STEPS
 
         val idle = !state.saving && !state.loading && !state.loadFailed
         scenarioEditorSave.isEnabled = idle && !state.hasUnsupportedParts
@@ -146,7 +118,7 @@ class ScenarioEditorFragment :
 
         renderTriggers(draft.triggers)
         renderConditions(draft.conditions)
-        renderSteps(draft.steps)
+        renderSteps(draft.steps, state.catalog, !state.catalogLoading && state.catalogError == null)
         rendering = false
 
         if (state.conflict && !conflictDialogShown) {
@@ -155,6 +127,7 @@ class ScenarioEditorFragment :
         } else if (!state.conflict) {
             conflictDialogShown = false
         }
+        drainPendingPick(state)
     }
 
     private fun renderTriggers(triggers: List<ScenarioTrigger>) = with(binding.scenarioEditorTriggers) {
@@ -197,16 +170,12 @@ class ScenarioEditorFragment :
             item.conditionEdit.setVisible(condition !is ScenarioCondition.Unknown)
             item.conditionEdit.setOnClickListener {
                 when (condition) {
-                    is ScenarioCondition.EntityState -> EntityConditionDialog(
-                        requireContext(),
-                        initialEntityId = condition.entityId,
-                        initialState = condition.state,
-                        entryTitle = { id -> viewModel.state.value.catalog.titleOf(id) },
-                        onPickEntity = { onPicked -> pickEntry { picked -> onPicked(picked.id) } },
-                        onSave = { entityId, state ->
-                            viewModel.updateCondition(index, ScenarioCondition.EntityState(entityId, state))
-                        },
-                    ).show()
+                    is ScenarioCondition.EntityState -> showEntityConditionDialog(
+                        entityId = condition.entityId,
+                        state = condition.state,
+                    ) { entityId, newState ->
+                        viewModel.updateCondition(index, ScenarioCondition.EntityState(entityId, newState))
+                    }
                     is ScenarioCondition.TimeWindow -> TimeWindowDialog(
                         requireContext(),
                         childFragmentManager,
@@ -221,16 +190,19 @@ class ScenarioEditorFragment :
         }
     }
 
-    private fun renderSteps(steps: List<ScenarioStep>) = with(binding.scenarioEditorSteps) {
+    private fun renderSteps(
+        steps: List<ScenarioStep>,
+        catalog: List<ControlEntry>,
+        catalogLoaded: Boolean,
+    ) = with(binding.scenarioEditorSteps) {
         removeAllViews()
         steps.forEachIndexed { index, step ->
             val item = ItemScenarioStepBinding.inflate(layoutInflater, this, false)
+            val description = ScenarioFormat.describeStep(requireContext(), step, catalog, catalogLoaded)
             item.stepIndex.text = getString(R.string.scenarios_step_number, index + 1)
-            item.stepSummary.text = ScenarioFormat.describeStep(
-                requireContext(),
-                step,
-                { id -> viewModel.state.value.catalog.titleOf(id) },
-            )
+            item.stepSummary.text = description.title
+            item.stepDetails.text = description.details
+            item.stepDetails.setVisible(description.details.isNotBlank())
             item.stepUp.isEnabled = index > 0
             item.stepDown.isEnabled = index < steps.lastIndex
             item.stepUp.setOnClickListener { viewModel.moveStep(index, -1) }
@@ -270,12 +242,26 @@ class ScenarioEditorFragment :
     }
 
     private fun pickEntry(initialId: String? = null, onSelected: (ControlEntry) -> Unit) {
-        val entries = viewModel.state.value.catalog
-        if (entries.isEmpty()) {
-            viewModel.state.value.catalogError?.let { showFailure(it) }
-                ?: showMessage(R.string.scenarios_catalog_empty)
+        val state = viewModel.state.value
+        if (state.catalog.isEmpty()) {
+            when {
+                state.catalogLoading -> {
+                    pendingPick = { entries -> showCatalogPicker(entries, initialId, onSelected) }
+                    showCatalogWait()
+                }
+                state.catalogError != null -> showCatalogError(state.catalogError)
+                else -> showError(R.string.scenarios_catalog_empty)
+            }
             return
         }
+        showCatalogPicker(state.catalog, initialId, onSelected)
+    }
+
+    private fun showCatalogPicker(
+        entries: List<ControlEntry>,
+        initialId: String?,
+        onSelected: (ControlEntry) -> Unit,
+    ) {
         val ordered = if (initialId == null) {
             entries
         } else {
@@ -284,10 +270,114 @@ class ScenarioEditorFragment :
         CatalogPickerDialog(requireContext(), ordered, onSelected).show()
     }
 
+    /** Dismisses the "catalog is loading" dialog and continues a pending picker. */
+    private fun drainPendingPick(state: ScenarioEditorUiState) {
+        val pending = pendingPick ?: return
+        if (state.catalogLoading) return
+        catalogWaitDialog?.dismiss()
+        catalogWaitDialog = null
+        pendingPick = null
+        when {
+            state.catalogError != null -> showCatalogError(state.catalogError)
+            state.catalog.isNotEmpty() -> pending(state.catalog)
+            else -> showError(R.string.scenarios_catalog_empty)
+        }
+    }
+
+    private fun showCatalogError(failure: dev.proflyder.home.core.model.RemoteFailure) {
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle(R.string.scenarios_catalog_error_title)
+            .setMessage(failure.userMessage(requireContext()))
+            .setPositiveButton(R.string.scenarios_retry) { _, _ -> viewModel.reloadCatalog() }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun showCatalogWait() {
+        if (catalogWaitDialog?.isShowing == true) return
+        val progress = ProgressBar(requireContext()).apply {
+            isIndeterminate = true
+            val padding = (24 * resources.displayMetrics.density).toInt()
+            setPadding(padding, padding, padding, padding)
+        }
+        catalogWaitDialog = MaterialAlertDialogBuilder(requireContext())
+            .setTitle(R.string.scenarios_catalog_loading)
+            .setView(progress)
+            .setNegativeButton(android.R.string.cancel) { _, _ -> pendingPick = null }
+            .show()
+    }
+
+    private fun showAddConditionSheet() {
+        ChoiceSheet(
+            requireContext(),
+            R.string.scenarios_editor_add_condition_title,
+            listOf(
+                ChoiceSheet.Choice(R.string.scenarios_editor_add_condition_entity) {
+                    pickEntry { entry ->
+                        showEntityConditionDialog(entityId = entry.id, state = "on") { entityId, state ->
+                            viewModel.addCondition(ScenarioCondition.EntityState(entityId, state))
+                        }
+                    }
+                },
+                ChoiceSheet.Choice(R.string.scenarios_editor_add_condition_window) {
+                    TimeWindowDialog(
+                        requireContext(),
+                        childFragmentManager,
+                        initial = ScenarioEditorViewModel.defaultTimeWindow(),
+                        onSave = viewModel::addCondition,
+                    ).show()
+                },
+            ),
+        ).show()
+    }
+
+    private fun showAddStepSheet() {
+        ChoiceSheet(
+            requireContext(),
+            R.string.scenarios_editor_add_step_title,
+            listOf(
+                ChoiceSheet.Choice(R.string.scenarios_editor_add_action) {
+                    pickEntry { entry -> startCatalogStep(entry) }
+                },
+                ChoiceSheet.Choice(R.string.scenarios_editor_add_speak) {
+                    SpeakStepDialog(requireContext(), initial = "") { text ->
+                        viewModel.addStep(ScenarioStep.Speak(text))
+                    }.show()
+                },
+                ChoiceSheet.Choice(R.string.scenarios_editor_add_delay) {
+                    DelayStepDialog(requireContext(), initialSeconds = 60) { seconds ->
+                        viewModel.addStep(ScenarioStep.Delay(seconds))
+                    }.show()
+                },
+            ),
+        ).show()
+    }
+
+    private fun showEntityConditionDialog(
+        entityId: String,
+        state: String,
+        onSave: (String, String) -> Unit,
+    ) {
+        EntityConditionDialog(
+            requireContext(),
+            initialEntityId = entityId,
+            initialState = state,
+            entryTitle = { id -> viewModel.state.value.catalog.titleOf(id) },
+            onPickEntity = { onPicked -> pickEntry { picked -> onPicked(picked.id) } },
+            onSave = onSave,
+        ).show()
+    }
+
+    override fun onBindingDestroyed() {
+        catalogWaitDialog?.dismiss()
+        catalogWaitDialog = null
+        pendingPick = null
+    }
+
     private fun chooseAction(entry: ControlEntry, initialAction: String?, onSelected: (String) -> Unit) {
         val actions = entry.actions.map { it.wire }.sorted()
         if (actions.isEmpty()) {
-            showMessage(R.string.scenarios_entry_has_no_actions)
+            showError(R.string.scenarios_entry_has_no_actions)
             return
         }
         if (actions.size == 1) {

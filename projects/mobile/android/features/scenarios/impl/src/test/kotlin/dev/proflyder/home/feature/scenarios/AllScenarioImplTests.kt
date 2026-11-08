@@ -6,5 +6,6 @@ import org.junit.runners.Suite
 @RunWith(Suite::class)
 @Suite.SuiteClasses(
     ScenarioUseCasesTest::class,
+    ScenarioEditorViewModelTest::class,
 )
 class AllScenarioImplTests

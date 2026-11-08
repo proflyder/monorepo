@@ -24,7 +24,7 @@
 
 | Путь | Что | Кто читает |
 |---|---|---|
-| `ci/android-distribute` | Android: APK signing keystore, Firebase App Distribution | CI android-distribute (OIDC) |
+| `ci/android-distribute` | Android: APK release signing key, passwords, alias and certificate; Firebase App Distribution | CI android-distribute (OIDC) |
 | `ci/deploy-home` | deploy-home: ci-deploy kubeconfig, service env files, runtime values (including intercom_env) | CI deploy-home (OIDC) |
 | `ci/deploy-station` | Pulsar rollout through HA (url, token, firmware entity) | CI deploy-station (OIDC) |
 | `ci/test` | smoke probe, not secret | CI auth smoke |
@@ -77,6 +77,16 @@
 | `k8s/monitoring/heartbeat` | dead-man switch Worker URL and token | ESO → monitoring |
 | `k8s/test` | smoke probe, not secret | Kubernetes auth smoke |
 | `k8s/vaultwarden/vaultwarden-admin` | Argon2id hash of the Vaultwarden /admin token | ESO → vaultwarden |
+
+Поля `ci/android-distribute` для release-подписи APK: `signing_keystore_b64`
+(base64 PKCS12-ключа), `signing_store_password`, `signing_key_password`,
+`signing_key_alias`, `signing_cert_sha256` (обязательный ожидаемый отпечаток
+сертификата), плюс `google_services_json` и `firebase_service_account_json`.
+Локально они восстанавливаются как `secrets/android/home-release.keystore`,
+`home-release.store.password`, `home-release.key.password`, `home-release.alias`,
+`home-release.cert.sha256` (`mise run secrets:file android/<имя>`); старые
+`keystore_b64`/`keystore_password` больше не читаются. Процедура — Android
+README, раздел Signing.
 
 ## Что `mise run secrets:pull` кладёт на рабочее место
 

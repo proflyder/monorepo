@@ -147,9 +147,11 @@ def home_android_binary(
     1 and 0.1.0; `projects/mobile/android/distribute.sh` overrides them so each
     App Distribution build has a higher versionCode. rules_android expands
     `$(...)` in manifest_values. The APK is signed with
-    //platform/android:home_debug_keystore, which uses the personal key when it
-    is present and the public rules_android debug keystore otherwise. A caller
-    can override this with `debug_key = ...`.
+    //platform/android:home_debug_keystore, which uses the local personal key
+    when it is present and the public rules_android debug keystore otherwise.
+    This output is an intermediate: distribution re-signs it with
+    `platform/android/sign-release.sh` and the release key. A caller can
+    override this with `debug_key = ...`.
     """
     if "debug_key" not in kwargs:
         kwargs["debug_key"] = "//platform/android:home_debug_keystore"

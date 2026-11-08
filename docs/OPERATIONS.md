@@ -1334,13 +1334,22 @@ LAN endpoint — `http://<node>:30098`. Переключение Android на HT
 (`maven.install(...)`, `use_repo(maven, ...)`): она меняет состав APK, поэтому
 маршрутизируется как `MODULE.bazel#maven` только на `android` и публикует APK;
 scoped-изменения native-входов (`MODULE.bazel#native`, `.bazelrc#cache`) не
-выбирают `android` и APK не публикуют. Job собирает `//projects/mobile/android:app`, проверяет подпись личным ключом
-(`88ef5d61…04ad`), загружает APK в Firebase App Distribution в группу `admins` («Admins»)
-и удаляет ключи. PR из форков пропускается: у них нет ни OIDC-токена, ни
-секретов Environment. Job не входит в `ci-ok` — неудачная загрузка видна на PR,
-но не блокирует merge; новый push в тот же PR отменяет предыдущую загрузку.
-Локально — `projects/mobile/android/distribute.sh` (`--dry-run` печатает
-команду без загрузки). Секреты и запись KV — README
+выбирают `android` и APK не публикуют. Job собирает `//projects/mobile/android:app`
+(промежуточный debug-signed APK), подписывает финальный APK ключом релиза
+скриптом `platform/android/sign-release.sh` (`zipalign -P 16`, `apksigner`
+v2/v3) и загружает в Firebase App Distribution в группу `admins` («Admins»).
+Подпись проверяется fail-closed: `apksigner verify --print-certs` должен дать
+SHA-256 из `signing_cert_sha256`, иначе загрузки нет. Ключ и пароли лежат
+только в OpenBao (`secret/ci/android-distribute`: `signing_keystore_b64`,
+`signing_store_password`, `signing_key_password`, `signing_key_alias`,
+`signing_cert_sha256`), материализуются в `$RUNNER_TEMP` (0600/0700) и
+удаляются; в env последующих шагов попадают только пути. Старые поля
+`keystore_b64`/`keystore_password` больше не читаются (остаются бэкапом). PR из
+форков пропускается: у них нет ни OIDC-токена, ни секретов Environment. Job не
+входит в `ci-ok` — неудачная загрузка видна на PR, но не блокирует merge; новый
+push в тот же PR отменяет предыдущую загрузку. Локально —
+`projects/mobile/android/distribute.sh` (`--dry-run` печатает команду без
+загрузки; подпись — тем же `sign-release.sh`). Секреты и запись KV — README
 `projects/home/kubernetes/openbao`; статус — вкладка Actions прогона PR
 (`android-distribute`).
 
