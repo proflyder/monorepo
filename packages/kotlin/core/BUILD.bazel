@@ -24,6 +24,7 @@ kt_jvm_test(
         "src/test/kotlin/dev/proflyder/home/core/operation/EditorCompletionTest.kt",
         "src/test/kotlin/dev/proflyder/home/core/operation/IdempotentRequestKeyTest.kt",
         "src/test/kotlin/dev/proflyder/home/core/operation/OperationTestSuite.kt",
+        "src/test/kotlin/dev/proflyder/home/core/operation/SuspendRunCatchingTest.kt",
     ],
     test_class = "dev.proflyder.home.core.operation.OperationTestSuite",
     deps = [

@@ -39,11 +39,13 @@ kt_android_local_test(
     associates = [":impl"],
     custom_package = "dev.proflyder.home.feature.scenarios.impl",
     manifest = "src/test/AndroidManifest.xml",
+    resources = glob(["src/test/resources/**"]),
     test_class = "dev.proflyder.home.feature.scenarios.AllScenarioImplTests",
     deps = [
         "//projects/mobile/android/core/config",
         "//projects/mobile/android/core/model",
         "//projects/mobile/android/core/network",
+        "//projects/mobile/android/core/testing",
         "//projects/mobile/android/core/ui",
         "//projects/mobile/android/features/scenarios/api",
         "@maven//:androidx_lifecycle_lifecycle_viewmodel_savedstate",

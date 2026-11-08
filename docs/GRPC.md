@@ -101,10 +101,11 @@ Android; Connect bidi потребовал бы HTTP/2 и поэтому не и
 События `WatchEvent`: `CallEvent` (снимок звонка + предыдущее состояние),
 `SdpEvent`, `IceCandidateEvent`, `IceEndEvent`.
 
-Авторизация intercom — два независимых bearer: phone token и station
-device token. Identity (`phone`/`station`) берётся из совпавшего токена;
-`endpoint_id` в `WatchRequest` допускается только равный identity.
-Неучастник звонка получает `PERMISSION_DENIED`. Тела SDP не логируются.
+Авторизация intercom — два bearer: phone token приложения (тот же общий
+токен, что scheduler/control) и station device token. Identity
+(`phone`/`station`) берётся из совпавшего токена; `endpoint_id` в
+`WatchRequest` допускается только равный identity. Неучастник звонка получает
+`PERMISSION_DENIED`. Тела SDP не логируются.
 
 ## Семантика, которую должен знать клиент
 

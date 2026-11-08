@@ -7,6 +7,7 @@ import dev.proflyder.home.core.config.TokenStatus
 import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.core.model.SchedulerStatus
+import dev.proflyder.home.core.operation.suspendRunCatching
 import dev.proflyder.home.core.ui.BaseViewModel
 import dev.proflyder.home.core.ui.SimpleViewModelFactory
 import dev.proflyder.home.core.ui.ViewModelFactoryContributor
@@ -20,7 +21,6 @@ enum class ConnectionNotice {
     SAVED,
     SAVED_AND_ONLINE,
     CONFIG_REFRESHED,
-    INTERCOM_TOKEN_SAVED,
 }
 
 data class ConnectionUiState(
@@ -28,11 +28,6 @@ data class ConnectionUiState(
     val clearTokenRequested: Boolean = false,
     val hasStoredToken: Boolean = false,
     val tokenStatus: TokenStatus = TokenStatus.ABSENT,
-    val intercomTokenInput: String = "",
-    val clearIntercomTokenRequested: Boolean = false,
-    val hasStoredIntercomToken: Boolean = false,
-    val intercomTokenStatus: TokenStatus = TokenStatus.ABSENT,
-    val savingIntercom: Boolean = false,
     val remote: RemoteConnectionState = RemoteConnectionState.Unavailable,
     val refreshingConfig: Boolean = false,
     val saving: Boolean = false,
@@ -41,7 +36,7 @@ data class ConnectionUiState(
     val status: SchedulerStatus? = null,
     val notice: ConnectionNotice? = null,
 ) {
-    val busy: Boolean get() = saving || testing || refreshingConfig || savingIntercom
+    val busy: Boolean get() = saving || testing || refreshingConfig
 }
 
 class ConnectionViewModel(
@@ -59,11 +54,6 @@ class ConnectionViewModel(
                 updateState { copy(tokenStatus = tokenStatus) }
             }
         }
-        launch {
-            repository.intercomTokenStatus.collect { status ->
-                updateState { copy(intercomTokenStatus = status) }
-            }
-        }
     }
 
     fun setToken(value: String) {
@@ -74,43 +64,6 @@ class ConnectionViewModel(
         updateState { copy(tokenInput = "", clearTokenRequested = true) }
     }
 
-    fun setIntercomToken(value: String) {
-        updateState {
-            copy(intercomTokenInput = value, clearIntercomTokenRequested = false, error = null)
-        }
-    }
-
-    fun requestClearIntercomToken() {
-        updateState { copy(intercomTokenInput = "", clearIntercomTokenRequested = true) }
-    }
-
-    /** Saves only the intercom phone token; endpoints stay Remote-Config owned. */
-    fun saveIntercomToken() {
-        val current = currentState
-        if (current.savingIntercom) return
-        val update = when {
-            current.clearIntercomTokenRequested -> TokenUpdate.Clear
-            current.intercomTokenInput.isNotBlank() -> TokenUpdate.Replace(current.intercomTokenInput)
-            else -> return
-        }
-        updateState { copy(savingIntercom = true, error = null, notice = null) }
-        launch {
-            when (val saved = repository.saveIntercomToken(update)) {
-                is Outcome.Failure -> updateState { copy(savingIntercom = false, error = saved.failure) }
-                is Outcome.Success -> updateState {
-                    copy(
-                        savingIntercom = false,
-                        intercomTokenInput = "",
-                        clearIntercomTokenRequested = false,
-                        hasStoredIntercomToken = saved.value.hasIntercomToken,
-                        intercomTokenStatus = repository.intercomTokenStatus.value,
-                        notice = ConnectionNotice.INTERCOM_TOKEN_SAVED,
-                    )
-                }
-            }
-        }
-    }
-
     fun test() = persist(testAfter = true)
 
     fun refreshConfig() {
@@ -118,10 +71,12 @@ class ConnectionViewModel(
         if (current.refreshingConfig) return
         updateState { copy(refreshingConfig = true, error = null, notice = null) }
         launch {
-            try {
+            suspendRunCatching {
                 repository.refreshRemoteConfig()
+            }.onSuccess {
                 updateState { copy(refreshingConfig = false, notice = ConnectionNotice.CONFIG_REFRESHED) }
-            } catch (_: Exception) {
+            }.onFailure { failure ->
+                if (failure !is Exception) throw failure
                 updateState {
                     copy(
                         refreshingConfig = false,
@@ -211,8 +166,6 @@ internal fun initialState(repository: ConnectionRepository): ConnectionUiState {
     return ConnectionUiState(
         hasStoredToken = config.hasToken,
         tokenStatus = repository.tokenStatus.value,
-        hasStoredIntercomToken = config.hasIntercomToken,
-        intercomTokenStatus = repository.intercomTokenStatus.value,
         remote = repository.remoteConfig.value,
     )
 }

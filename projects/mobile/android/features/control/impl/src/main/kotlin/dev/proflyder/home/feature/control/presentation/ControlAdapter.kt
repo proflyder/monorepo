@@ -449,7 +449,7 @@ internal class ControlAdapter(
             dots.clear()
             val size = dp(6)
             val margin = dp(3)
-            repeat(count) {
+            for (index in 0 until count) {
                 val dot = View(views.root.context)
                 val params = LinearLayout.LayoutParams(size, size)
                 params.marginStart = margin
@@ -496,19 +496,23 @@ internal class ControlAdapter(
             views.controlQuickTiles.removeAllViews()
             views.controlQuickHint.setVisible(quick.hint)
             quick.tiles.chunked(COLUMNS).forEach { rowTiles ->
-                val row = LinearLayout(views.root.context).apply {
-                    orientation = LinearLayout.HORIZONTAL
-                }
-                rowTiles.forEach { tile -> row.addView(tileView(row, tile)) }
-                // Keep the last row aligned with the grid instead of stretching.
-                repeat(COLUMNS - rowTiles.size) {
-                    row.addView(
-                        View(views.root.context),
-                        LinearLayout.LayoutParams(0, 1, 1f),
-                    )
-                }
-                views.controlQuickTiles.addView(row)
+                views.controlQuickTiles.addView(quickRow(rowTiles))
             }
+        }
+
+        private fun quickRow(rowTiles: List<QuickTile>): LinearLayout {
+            val row = LinearLayout(views.root.context).apply {
+                orientation = LinearLayout.HORIZONTAL
+            }
+            rowTiles.forEach { tile -> row.addView(tileView(row, tile)) }
+            // Keep the last row aligned with the grid instead of stretching.
+            repeat(COLUMNS - rowTiles.size) {
+                row.addView(
+                    View(views.root.context),
+                    LinearLayout.LayoutParams(0, 1, 1f),
+                )
+            }
+            return row
         }
 
         override fun bindPayloads(item: ControlItem, payloads: List<Any>) = bind(item)
@@ -587,18 +591,20 @@ internal class ControlAdapter(
             rendered = chips
             views.controlFilters.removeAllViews()
             val byId = LinkedHashMap<Int, ControlFilter>()
-            chips.forEach { chip ->
-                val view = ItemControlFilterBinding.inflate(
-                    LayoutInflater.from(views.root.context),
-                    views.controlFilters,
-                    false,
-                ).root
-                view.id = View.generateViewId()
-                view.text = chip.label
-                views.controlFilters.addView(view)
-                byId[view.id] = chip.filter
-            }
+            chips.forEach { chip -> addChip(chip, byId) }
             filterByViewId = byId
+        }
+
+        private fun addChip(chip: ControlItem.FilterChip, byId: MutableMap<Int, ControlFilter>) {
+            val view = ItemControlFilterBinding.inflate(
+                LayoutInflater.from(views.root.context),
+                views.controlFilters,
+                false,
+            ).root
+            view.id = View.generateViewId()
+            view.text = chip.label
+            views.controlFilters.addView(view)
+            byId[view.id] = chip.filter
         }
     }
 

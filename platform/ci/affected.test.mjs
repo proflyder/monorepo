@@ -530,6 +530,16 @@ test("real repo: android lint unit is a separate job with the same paths", () =>
   ]);
 });
 
+test("real repo: android detekt unit is a separate job with the same paths", () => {
+  const config = affected.loadConfig();
+  const app = config.get("android-app");
+  const detekt = config.get("android-detekt");
+  assert.deepEqual(detekt.paths, app.paths);
+  assert.deepEqual(detekt.bazelRoots, app.bazelRoots);
+  assert.deepEqual(detekt.testTargets, ["//projects/mobile/android:detekt"]);
+  assert.deepEqual(detekt.buildTargets, []);
+});
+
 test("real repo: android module change selects the app and the lint unit", () => {
   const config = affected.loadConfig();
   const result = withDeps({}, () =>
@@ -541,7 +551,7 @@ test("real repo: android module change selects the app and the lint unit", () =>
   );
   assert.deepEqual(
     result.routes.android.units.map((unit) => unit.id),
-    ["android-app", "android-lint"],
+    ["android-app", "android-lint", "android-detekt"],
   );
 });
 
@@ -558,7 +568,7 @@ test("real repo: shared kotlin change selects the lint unit through the graph", 
   );
   assert.deepEqual(
     result.routes.android.units.map((unit) => unit.id),
-    ["android-app", "android-lint", "kotlin-shared"],
+    ["android-app", "android-lint", "android-detekt", "kotlin-shared"],
   );
 });
 
@@ -570,7 +580,7 @@ test("real repo: the Android-only bazelrc selects only android units", () => {
   assert.equal(result.routes.android.mode, "all");
   assert.deepEqual(
     result.routes.android.units.map((unit) => unit.id),
-    ["android-app", "android-lint", "kotlin-shared"],
+    ["android-app", "android-lint", "android-detekt", "kotlin-shared"],
   );
   for (const platform of ["bazel", "python", "js", "native"]) {
     assert.deepEqual(result.routes[platform].units, [], platform);
@@ -583,7 +593,7 @@ test("real repo: lint rule change runs every android unit including lint", () =>
   assert.equal(result.routes.android.mode, "all");
   assert.deepEqual(
     result.routes.android.units.map((unit) => unit.id),
-    ["android-app", "android-lint", "kotlin-shared"],
+    ["android-app", "android-lint", "android-detekt", "kotlin-shared"],
   );
   const entry = affected
     .matrixEntries(result, config)

@@ -66,10 +66,12 @@ genrule(
 
 exports_files([
     "defs.bzl",
+    "detekt.bzl",
     "lint.bzl",
     # Reusable artifact checker wrapper; the owning project declares the sh_test
     # and runs //platform/android/tools/apk_runtime_closure inside it.
     "apk_abi_test.sh",
+    "apk_manifest_test.sh",
     "apk_runtime_closure.sh",
 ])
 

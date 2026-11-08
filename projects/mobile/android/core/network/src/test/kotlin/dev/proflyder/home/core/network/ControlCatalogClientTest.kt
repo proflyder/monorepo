@@ -1,5 +1,6 @@
 package dev.proflyder.home.core.network
 
+import dev.proflyder.home.core.testing.TestFixtures
 import dev.proflyder.home.core.config.ConnectionConfig
 import dev.proflyder.home.core.config.ConnectionSettingsStore
 import dev.proflyder.home.core.config.TokenStatus
@@ -48,9 +49,7 @@ class ControlCatalogClientTest {
     private class Store(config: ConnectionConfig) : ConnectionSettingsStore {
         override val config: StateFlow<ConnectionConfig> = MutableStateFlow(config)
         override val tokenStatus: StateFlow<TokenStatus> = MutableStateFlow(TokenStatus.AVAILABLE)
-        override val intercomTokenStatus: StateFlow<TokenStatus> = MutableStateFlow(TokenStatus.AVAILABLE)
         override suspend fun updateToken(bearerToken: String?): Outcome<Unit> = Outcome.Success(Unit)
-        override suspend fun updateIntercomToken(intercomToken: String?): Outcome<Unit> = Outcome.Success(Unit)
     }
 
     private fun client(control: ServerEndpoint? = endpoint(server), token: String? = "tok-123") =
@@ -137,7 +136,7 @@ class ControlCatalogClientTest {
 
     @Test
     fun malformedBodyIsAProtocolFailure() = runBlocking {
-        server.enqueue(MockResponse().setBody("""{"entries":"nope"}"""))
+        server.enqueue(MockResponse().setBody(TestFixtures.read("entries_not_array.json")))
         assertTrue((client().fetch() as Outcome.Failure).failure is RemoteFailure.ProtocolFailure)
         server.enqueue(MockResponse().setBody("not json"))
         assertTrue((client().fetch() as Outcome.Failure).failure is RemoteFailure.ProtocolFailure)
@@ -147,10 +146,7 @@ class ControlCatalogClientTest {
     fun parsesOptionalDeviceGroupingWithSafeDefaults() {
         val catalog = ControlJson.parseCatalog(
             kotlinx.serialization.json.Json.parseToJsonElement(
-                """{"statesOk":true,"entries":[
-                  {"id":"lamp","kind":"light","title":"Lamp","device_id":"dev.lamp","device":"Ceiling lamp","role":"primary","available":true},
-                  {"id":"lamp.night","kind":"switch","title":"Night light","device_id":"dev.lamp","device":"Ceiling lamp","role":"setting","available":true},
-                  {"id":"legacy","kind":"switch","title":"Legacy","available":true}]}""",
+                TestFixtures.read("catalog_grouped.json"),
             ),
         )
         val (lamp, night, legacy) = catalog.entries
@@ -169,10 +165,7 @@ class ControlCatalogClientTest {
     fun parsesLightCapabilitiesAndBuildsAdjustPayload() {
         val catalog = ControlJson.parseCatalog(
             kotlinx.serialization.json.Json.parseToJsonElement(
-                """{"statesOk":true,"entries":[
-                  {"id":"light.strip","kind":"light","title":"Strip","actions":["turn_on","turn_off","set"],"state":"on","available":true,
-                   "light":{"brightness":true,"colorTemp":true,"color":false,"minKelvin":2700,"maxKelvin":6500,"brightnessPct":40,"kelvin":3000}},
-                  {"id":"light.plain","kind":"light","title":"Plain","actions":["turn_on","turn_off"],"available":true}]}""",
+                TestFixtures.read("catalog_light_strip.json"),
             ),
         )
         val strip = catalog.entries[0].light!!
@@ -182,7 +175,7 @@ class ControlCatalogClientTest {
         assertEquals(setOf(ControlAction.TURN_ON, ControlAction.TURN_OFF, ControlAction.SET), catalog.entries[0].actions)
         assertNull(catalog.entries[1].light)
         assertEquals(
-            """{"entry":"light.strip","action":"set","brightness":55,"hue":120,"saturation":80}""",
+            TestFixtures.read("control_set_payload.json"),
             ControlJson.adjustPayload(
                 "light.strip",
                 dev.proflyder.home.core.model.LightAdjust(brightnessPct = 55, hue = 120, saturation = 80),
@@ -194,7 +187,7 @@ class ControlCatalogClientTest {
     fun buildsSpeakPayloadWithTheTextOnlyInTheTask() {
         val payload = ControlJson.speakPayload("action.station_speak", "Добрый вечер")
         assertEquals(
-            """{"entry":"action.station_speak","action":"speak","text":"Добрый вечер"}""",
+            TestFixtures.read("control_speak_payload.json"),
             payload,
         )
         // Normalization happens before this point; the codec must not drop or

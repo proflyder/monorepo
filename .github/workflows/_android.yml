@@ -1,12 +1,13 @@
 name: _android
 
 # Reusable Android platform workflow: one matrix entry per affected application
-# (or shared Kotlin library) unit, plus the dedicated Android Lint unit. The unit
-# is selected by the Bazel reverse dependency graph in ci.yml; the `plan` job
-# runs target-determinator once for the whole Android universe and each entry
-# only intersects its declared targets with that result (an empty result or a
-# failed plan keeps every declared target). Build runs before test, so a test
-# failure cannot hide a build error and a lint finding only fails the lint entry.
+# (or shared Kotlin library) unit, plus the dedicated Android Lint and detekt
+# units. The unit is selected by the Bazel reverse dependency graph in ci.yml;
+# the `plan` job runs target-determinator once for the whole Android universe
+# and each entry only intersects its declared targets with that result (an
+# empty result or a failed plan keeps every declared target). Build runs before
+# test, so a test failure cannot hide a build error and a lint/detekt finding
+# only fails its own entry.
 #
 # `android-app` is the one entry that owns the distributable APK: it builds
 # the app once with the release versionCode/versionName and google-services.json
@@ -232,8 +233,24 @@ jobs:
           BAZEL_EXTRA_ARGS: ${{ steps.version.outputs.define_args }}
         run: mise run test android-app
 
+      - name: Android Lint
+        if: inputs.unit == 'android-lint' && steps.targets.outputs.test_targets != ''
+        env:
+          BAZEL_TARGETS: ${{ steps.targets.outputs.test_targets }}
+        run: mise run test ${{ inputs.unit }}
+
+      - name: detekt
+        if: inputs.unit == 'android-detekt' && steps.targets.outputs.test_targets != ''
+        env:
+          BAZEL_TARGETS: ${{ steps.targets.outputs.test_targets }}
+        run: mise run test ${{ inputs.unit }}
+
       - name: bazel test ${{ inputs.unit }}
-        if: inputs.unit != 'android-app' && steps.targets.outputs.test_targets != ''
+        if: >-
+          inputs.unit != 'android-app' &&
+          inputs.unit != 'android-lint' &&
+          inputs.unit != 'android-detekt' &&
+          steps.targets.outputs.test_targets != ''
         env:
           BAZEL_TARGETS: ${{ steps.targets.outputs.test_targets }}
         run: mise run test ${{ inputs.unit }}

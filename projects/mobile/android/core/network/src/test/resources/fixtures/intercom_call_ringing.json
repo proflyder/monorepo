@@ -1,0 +1,4 @@
+{"call":{"id":"c-1","state":"CALL_STATE_RINGING",
+                   "caller":{"id":"phone","kind":"ENDPOINT_KIND_PHONE","online":true},
+                   "callee":{"id":"station","kind":"ENDPOINT_KIND_STATION","displayName":"Station","online":true},
+                   "createdUnix":"10"}}

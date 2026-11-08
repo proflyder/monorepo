@@ -73,17 +73,19 @@ class AlarmEditorFragment :
         }
 
         viewModel.state.observe { render(it) }
-        viewModel.completion.observe(Lifecycle.State.RESUMED) { completion ->
-            if (completion == null) return@observe
-            viewModel.consumeCompletion()
-            showMessage(
-                when (completion) {
-                    AlarmEditorCompletion.SAVED -> R.string.alarms_saved
-                    AlarmEditorCompletion.DELETED -> R.string.alarms_deleted
-                },
-            )
-            requireNavigator().back()
-        }
+        viewModel.completion.observe(Lifecycle.State.RESUMED) { completion -> handleCompletion(completion) }
+    }
+
+    private fun handleCompletion(completion: AlarmEditorCompletion?) {
+        if (completion == null) return
+        viewModel.consumeCompletion()
+        showMessage(
+            when (completion) {
+                AlarmEditorCompletion.SAVED -> R.string.alarms_saved
+                AlarmEditorCompletion.DELETED -> R.string.alarms_deleted
+            },
+        )
+        requireNavigator().back()
     }
 
     private fun render(state: AlarmEditorUiState) = with(binding) {

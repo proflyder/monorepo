@@ -87,10 +87,9 @@ class CallActivity : AppCompatActivity() {
         }
 
         if (savedInstanceState == null) {
-            if (intent.getBooleanExtra(EXTRA_START_CALL, false)) {
-                startCallWithPermissions()
-            } else if (!dependencies.controller.state.value.isLive) {
-                finish()
+            when {
+                intent.getBooleanExtra(EXTRA_START_CALL, false) -> startCallWithPermissions()
+                !dependencies.controller.state.value.isLive -> finish()
             }
         }
     }
@@ -154,34 +153,43 @@ class CallActivity : AppCompatActivity() {
         if (state.phase != CallPhase.IDLE) pendingStart = false
         when (state.phase) {
             CallPhase.IDLE -> if (!pendingStart) finish()
-            CallPhase.DIALING, CallPhase.RINGING, CallPhase.CONNECTING -> {
-                binding.callStatus.text = getString(
-                    when (state.phase) {
-                        CallPhase.RINGING -> R.string.call_status_ringing
-                        CallPhase.CONNECTING -> R.string.call_status_connecting
-                        else -> R.string.call_status_dialing
-                    },
-                )
-            }
-            CallPhase.ACTIVE -> {
-                startTimer(state)
-                dependencies.audioController.start()
-                acquireProximity()
-            }
-            CallPhase.ENDED -> {
-                timerJob?.cancel()
-                timerJob = null
-                releaseProximity()
-                dependencies.audioController.stop()
-                binding.callStatus.text = endedText(state)
-                binding.callError.apply {
-                    text = state.failure?.let { failureText(it) }
-                    visibility = if (state.failure == null) View.GONE else View.VISIBLE
-                }
-                binding.callHangup.text = getString(R.string.call_close)
-            }
+            CallPhase.DIALING, CallPhase.RINGING, CallPhase.CONNECTING -> renderConnecting(state.phase)
+            CallPhase.ACTIVE -> renderActive(state)
+            CallPhase.ENDED -> renderEnded(state)
         }
+        renderControls(state)
+    }
 
+    private fun renderConnecting(phase: CallPhase) {
+        binding.callStatus.text = getString(
+            when (phase) {
+                CallPhase.RINGING -> R.string.call_status_ringing
+                CallPhase.CONNECTING -> R.string.call_status_connecting
+                else -> R.string.call_status_dialing
+            },
+        )
+    }
+
+    private fun renderActive(state: CallSnapshot) {
+        startTimer(state)
+        dependencies.audioController.start()
+        acquireProximity()
+    }
+
+    private fun renderEnded(state: CallSnapshot) {
+        timerJob?.cancel()
+        timerJob = null
+        releaseProximity()
+        dependencies.audioController.stop()
+        binding.callStatus.text = endedText(state)
+        binding.callError.apply {
+            text = state.failure?.let { failureText(it) }
+            visibility = if (state.failure == null) View.GONE else View.VISIBLE
+        }
+        binding.callHangup.text = getString(R.string.call_close)
+    }
+
+    private fun renderControls(state: CallSnapshot) {
         val live = state.isLive
         binding.callMute.isEnabled = live
         binding.callRoute.isEnabled = live
@@ -263,24 +271,37 @@ class CallActivity : AppCompatActivity() {
         val container = (sheet.findViewById<View>(R.id.call_route_list) as? android.widget.LinearLayout) ?: return
         container.removeAllViews()
         state.available.forEach { option ->
-            val selected = option.route == state.selected
-            val button = MaterialButton(this).apply {
-                text = if (selected) getString(R.string.call_route_selected, routeLabel(option)) else routeLabel(option)
-                isAllCaps = false
-                minHeight = resources.getDimensionPixelSize(R.dimen.call_route_min_height)
-                setOnClickListener {
-                    dependencies.audioController.select(option.route)
-                    sheet.dismiss()
-                }
-            }
-            container.addView(
-                button,
-                android.widget.LinearLayout.LayoutParams(
-                    android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
-                    android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
-                ).apply { topMargin = resources.getDimensionPixelSize(R.dimen.call_route_gap) },
-            )
+            container.addView(routeButton(sheet, option, state.selected), routeButtonParams())
         }
+    }
+
+    private fun routeButton(
+        sheet: BottomSheetDialog,
+        option: AudioRouteOption,
+        selected: AudioRouteOption?,
+    ): MaterialButton {
+        val isSelected = option.route == selected
+        return MaterialButton(this).apply {
+            text = if (isSelected) {
+                getString(R.string.call_route_selected, routeLabel(option))
+            } else {
+                routeLabel(option)
+            }
+            isAllCaps = false
+            minHeight = resources.getDimensionPixelSize(R.dimen.call_route_min_height)
+            setOnClickListener { selectRoute(sheet, option) }
+        }
+    }
+
+    private fun routeButtonParams(): android.widget.LinearLayout.LayoutParams =
+        android.widget.LinearLayout.LayoutParams(
+            android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+            android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
+        ).apply { topMargin = resources.getDimensionPixelSize(R.dimen.call_route_gap) }
+
+    private fun selectRoute(sheet: BottomSheetDialog, option: AudioRouteOption) {
+        dependencies.audioController.select(option.route)
+        sheet.dismiss()
     }
 
     private fun routeLabel(option: AudioRouteOption): String = when (option.route) {

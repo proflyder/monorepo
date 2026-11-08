@@ -27,6 +27,7 @@ import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -34,6 +35,9 @@ import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ScenarioEditorViewModelTest {
+    @After
+    fun resetMainDispatcher() = Dispatchers.resetMain()
+
     private val entry = ControlEntry(
         id = "light.kitchen",
         kind = ControlKind.LIGHT,
@@ -48,61 +52,49 @@ class ScenarioEditorViewModelTest {
     @Test
     fun catalogLoadedBeforeScenarioIsNotErasedByScenarioState() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
-        try {
-            val viewModel = viewModel(catalogDelayMillis = 0, scenarioDelayMillis = 100)
-            viewModel.start("sc-1")
-            advanceUntilIdle()
+        val viewModel = viewModel(catalogDelayMillis = 0, scenarioDelayMillis = 100)
+        viewModel.start("sc-1")
+        advanceUntilIdle()
 
-            val state = viewModel.state.value
-            assertEquals(1, state.catalog.size)
-            assertFalse(state.catalogLoading)
-            assertNull(state.catalogError)
-            assertEquals("sc-1", state.draft.existingId)
-        } finally {
-            Dispatchers.resetMain()
-        }
+        val state = viewModel.state.value
+        assertEquals(1, state.catalog.size)
+        assertFalse(state.catalogLoading)
+        assertNull(state.catalogError)
+        assertEquals("sc-1", state.draft.existingId)
     }
 
     @Test
     fun catalogLoadedAfterScenarioStillUpdatesTheSameState() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
-        try {
-            val viewModel = viewModel(catalogDelayMillis = 100, scenarioDelayMillis = 0)
-            viewModel.start("sc-1")
-            advanceUntilIdle()
+        val viewModel = viewModel(catalogDelayMillis = 100, scenarioDelayMillis = 0)
+        viewModel.start("sc-1")
+        advanceUntilIdle()
 
-            val state = viewModel.state.value
-            assertEquals(1, state.catalog.size)
-            assertFalse(state.catalogLoading)
-            assertEquals("sc-1", state.draft.existingId)
-        } finally {
-            Dispatchers.resetMain()
-        }
+        val state = viewModel.state.value
+        assertEquals(1, state.catalog.size)
+        assertFalse(state.catalogLoading)
+        assertEquals("sc-1", state.draft.existingId)
     }
 
     @Test
     fun catalogErrorSurvivesScenarioLoad() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
-        try {
-            val viewModel = viewModel(
-                catalogDelayMillis = 0,
-                scenarioDelayMillis = 100,
-                catalogFailure = dev.proflyder.home.core.model.RemoteFailure.Offline("no catalog"),
-            )
-            viewModel.start("sc-1")
-            advanceUntilIdle()
+        val viewModel = viewModel(
+            catalogDelayMillis = 0,
+            scenarioDelayMillis = 100,
+            catalogFailure = dev.proflyder.home.core.model.RemoteFailure.Offline("no catalog"),
+        )
+        viewModel.start("sc-1")
+        advanceUntilIdle()
 
-            val state = viewModel.state.value
-            assertEquals(0, state.catalog.size)
-            assertFalse(state.catalogLoading)
-            assertEquals("sc-1", state.draft.existingId)
-            assertEquals(
-                dev.proflyder.home.core.model.RemoteFailure.Offline("no catalog"),
-                state.catalogError,
-            )
-        } finally {
-            Dispatchers.resetMain()
-        }
+        val state = viewModel.state.value
+        assertEquals(0, state.catalog.size)
+        assertFalse(state.catalogLoading)
+        assertEquals("sc-1", state.draft.existingId)
+        assertEquals(
+            dev.proflyder.home.core.model.RemoteFailure.Offline("no catalog"),
+            state.catalogError,
+        )
     }
 
     private fun viewModel(
@@ -153,9 +145,7 @@ class ScenarioEditorViewModelTest {
     private class FakeSettings : ConnectionSettingsStore {
         override val config: StateFlow<ConnectionConfig> = MutableStateFlow(ConnectionConfig())
         override val tokenStatus: StateFlow<TokenStatus> = MutableStateFlow(TokenStatus.ABSENT)
-        override val intercomTokenStatus: StateFlow<TokenStatus> = MutableStateFlow(TokenStatus.ABSENT)
         override suspend fun updateToken(bearerToken: String?): Outcome<Unit> = Outcome.Success(Unit)
-        override suspend fun updateIntercomToken(intercomToken: String?): Outcome<Unit> = Outcome.Success(Unit)
     }
 
     private companion object {

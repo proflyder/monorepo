@@ -47,14 +47,16 @@ object Favorites {
     fun encode(refs: List<FavoriteRef>): List<String> = refs.map(::encode)
 
     /** Inverse of [encode]; unknown or malformed entries are dropped. */
-    fun decode(values: List<String>): List<FavoriteRef> = values.mapNotNull { value ->
+    fun decode(values: List<String>): List<FavoriteRef> = values.mapNotNull(::decodeRef).distinct()
+
+    private fun decodeRef(value: String): FavoriteRef? {
         val separator = value.indexOf(':')
-        if (separator <= 0 || separator == value.lastIndex) return@mapNotNull null
+        if (separator <= 0 || separator == value.lastIndex) return null
         val kind = FavoriteKind.entries.firstOrNull {
             it.name.equals(value.substring(0, separator), ignoreCase = true)
-        } ?: return@mapNotNull null
-        FavoriteRef(kind, value.substring(separator + 1))
-    }.distinct()
+        } ?: return null
+        return FavoriteRef(kind, value.substring(separator + 1))
+    }
 }
 
 /**

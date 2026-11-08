@@ -84,7 +84,7 @@ class TimersViewModel(
 
     fun start(label: String, durationSeconds: Long) {
         if (mutableState.value.starting) return
-        val normalizedLabel = label.trim().ifEmpty { "Timer" }
+        val normalizedLabel = label.trim()
         val payload = StartPayload(
             label = normalizedLabel,
             durationSeconds = durationSeconds,

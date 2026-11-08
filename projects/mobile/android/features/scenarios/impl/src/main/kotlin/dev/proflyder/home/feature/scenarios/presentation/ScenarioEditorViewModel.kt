@@ -4,7 +4,6 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dev.proflyder.home.core.config.ConnectionSettingsStore
-import dev.proflyder.home.core.model.ControlCatalog
 import dev.proflyder.home.core.model.ControlEntry
 import dev.proflyder.home.core.model.Field
 import dev.proflyder.home.core.model.Outcome
@@ -84,17 +83,24 @@ class ScenarioEditorViewModel(
         val savedKey = savedState.get<String>(KEY_CREATE_KEY)
         val savedEndpoint = savedState.get<String>(KEY_CREATE_ENDPOINT)
         val currentEndpoint = settings.config.value.endpoint?.baseUrl().orEmpty()
-        if (restoredDraft != null && restoredDraft.existingId == null &&
-            savedKey != null && savedEndpoint == currentEndpoint
-        ) {
-            createIdentity.adopt(restoredDraft.toScenarioDraft(), savedKey)
-        }
+        adoptRestoredCreateIdentity(savedKey, savedEndpoint, currentEndpoint)
         if (restoredDraft != null) {
             mutableState.value = mutableState.value.copy(
                 existing = restoredDraft.restoredExisting(),
                 draft = restoredDraft,
             )
         }
+    }
+
+    private fun adoptRestoredCreateIdentity(
+        savedKey: String?,
+        savedEndpoint: String?,
+        currentEndpoint: String,
+    ) {
+        val draft = restoredDraft ?: return
+        if (draft.existingId != null) return
+        if (savedKey == null || savedEndpoint != currentEndpoint) return
+        createIdentity.adopt(draft.toScenarioDraft(), savedKey)
     }
 
     fun start(scenarioId: String?) {
@@ -205,13 +211,15 @@ class ScenarioEditorViewModel(
     }
 
     /** Moves a step one position up ([delta] = -1) or down ([delta] = 1). */
-    fun moveStep(index: Int, delta: Int) = editDraft {
+    fun moveStep(index: Int, delta: Int) = editDraft { moveStepIn(it, index, delta) }
+
+    private fun moveStepIn(draft: ScenarioEditorDraft, index: Int, delta: Int): ScenarioEditorDraft {
         val target = index + delta
-        if (index !in it.steps.indices || target !in it.steps.indices) return@editDraft it
-        val list = it.steps.toMutableList()
+        if (index !in draft.steps.indices || target !in draft.steps.indices) return draft
+        val list = draft.steps.toMutableList()
         val moved = list.removeAt(index)
         list.add(target, moved)
-        it.copy(steps = list)
+        return draft.copy(steps = list)
     }
 
     fun save() {

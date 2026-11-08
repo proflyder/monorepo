@@ -610,7 +610,9 @@
   колонка (SDP/ICE relay, `home.v1.IntercomService`, server-streaming
   `Watch`); медиа P2P, сервис его не несёт. Deploy-юнит `intercom` включён:
   образ `ghcr.io/proflyder/intercom`, ESO `intercom` из
-  `secret/k8s/home-assistant/intercom` (`phone_token`, `station_token`),
+  `secret/k8s/home-assistant/scheduler-auth` (`token` → `phone_token`,
+  общий токен приложения) и `secret/k8s/home-assistant/intercom`
+  (`station_token`),
   `intercom_env` в `secret/ci/deploy-home` (`INTERCOM_NODE_PORT=30097`),
   NodePort закрыт общим host-фильтром scheduler/control. Первый выкат — merge
   этой ветки в `develop`; до этого живой Deployment отсутствует.

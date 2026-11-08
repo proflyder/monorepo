@@ -93,6 +93,22 @@ sh_test(
     data = [":app.apk"],
 )
 
+# Library manifests are not merged unless they export them. This gate proves
+# the call feature's activity, services and permissions are in the packaged
+# manifest, so the call button cannot crash on ActivityNotFoundException.
+sh_test(
+    name = "apk_manifest_test",
+    srcs = ["//platform/android:apk_manifest_test.sh"],
+    args = [
+        "$(location @androidsdk//:aapt2)",
+        "$(location :app.apk)",
+    ],
+    data = [
+        ":app.apk",
+        "@androidsdk//:aapt2",
+    ],
+)
+
 # Robolectric resolves SDK 35 to this pinned preinstrumented jar. The staged
 # properties file avoids any runtime Maven download; rules_android turns it into
 # -Drobolectric-deps.properties for the test JVM.

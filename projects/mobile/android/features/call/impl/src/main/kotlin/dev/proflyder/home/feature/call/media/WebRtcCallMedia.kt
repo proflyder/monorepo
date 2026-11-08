@@ -55,7 +55,13 @@ private class WebRtcCallMedia(private val context: Context) : CallMedia {
     private var audioSource: AudioSource? = null
     private var audioTrack: AudioTrack? = null
 
-    override suspend fun prepare(iceServers: List<IntercomIceServer>): Outcome<Unit> = try {
+    override suspend fun prepare(iceServers: List<IntercomIceServer>): Outcome<Unit> =
+        runCatching { prepareInternal(iceServers) }.getOrElse { failure ->
+            close()
+            Outcome.Failure(failure.toMediaFailure("prepare failed"))
+        }
+
+    private suspend fun prepareInternal(iceServers: List<IntercomIceServer>): Outcome<Unit> {
         val createdFactory = buildPeerConnectionFactory(context)
         factory = createdFactory
 
@@ -80,47 +86,41 @@ private class WebRtcCallMedia(private val context: Context) : CallMedia {
             ?: return Outcome.Failure(RemoteFailure.ProtocolFailure("webrtc: peer connection was not created"))
         peerConnection = connection
         connection.addTrack(track, listOf(AUDIO_STREAM_ID))
-        Outcome.Success(Unit)
-    } catch (e: Throwable) {
-        close()
-        Outcome.Failure(RemoteFailure.ProtocolFailure("webrtc: ${e.message ?: "prepare failed"}"))
+        return Outcome.Success(Unit)
     }
 
     override suspend fun createOffer(): Outcome<String> {
         val connection = peerConnection
             ?: return Outcome.Failure(RemoteFailure.ProtocolFailure("webrtc: not prepared"))
-        return try {
+        return runCatching {
             val offer = createOffer(connection)
             setLocalDescription(connection, offer)
             Outcome.Success(offer.description)
-        } catch (e: Throwable) {
-            Outcome.Failure(RemoteFailure.ProtocolFailure("webrtc: ${e.message ?: "offer failed"}"))
-        }
+        }.getOrElse { failure -> Outcome.Failure(failure.toMediaFailure("offer failed")) }
     }
 
     override suspend fun setRemoteAnswer(sdp: String): Outcome<Unit> {
         val connection = peerConnection
             ?: return Outcome.Failure(RemoteFailure.ProtocolFailure("webrtc: not prepared"))
-        return try {
+        return runCatching {
             setRemoteDescription(connection, SessionDescription(SessionDescription.Type.ANSWER, sdp))
             Outcome.Success(Unit)
-        } catch (e: Throwable) {
-            Outcome.Failure(RemoteFailure.ProtocolFailure("webrtc: ${e.message ?: "answer failed"}"))
-        }
+        }.getOrElse { failure -> Outcome.Failure(failure.toMediaFailure("answer failed")) }
     }
 
     override suspend fun addRemoteCandidate(candidate: IntercomIceCandidate): Outcome<Unit> {
         val connection = peerConnection
             ?: return Outcome.Failure(RemoteFailure.ProtocolFailure("webrtc: not prepared"))
-        return try {
+        return runCatching {
             connection.addIceCandidate(
                 IceCandidate(candidate.sdpMid, candidate.sdpMlineIndex, candidate.candidate),
             )
             Outcome.Success(Unit)
-        } catch (e: Throwable) {
-            Outcome.Failure(RemoteFailure.ProtocolFailure("webrtc: ${e.message ?: "candidate failed"}"))
-        }
+        }.getOrElse { failure -> Outcome.Failure(failure.toMediaFailure("candidate failed")) }
     }
+
+    private fun Throwable.toMediaFailure(stage: String): RemoteFailure =
+        RemoteFailure.ProtocolFailure("webrtc: ${message ?: stage}")
 
     override fun setMuted(muted: Boolean) {
         audioTrack?.setEnabled(!muted)

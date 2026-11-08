@@ -92,9 +92,10 @@ fun View.animateBar(visible: Boolean, hiddenTranslationY: Float, animate: Boolea
     val targetAlpha = if (visible) 1f else 0f
     val targetVisibility = if (visible) View.VISIBLE else View.GONE
 
-    if (!animate || !ValueAnimator.areAnimatorsEnabled() ||
-        (visibility == targetVisibility && translationY == targetTranslation && alpha == targetAlpha)
-    ) {
+    val unchanged = visibility == targetVisibility &&
+        translationY == targetTranslation &&
+        alpha == targetAlpha
+    if (!animate || !ValueAnimator.areAnimatorsEnabled() || unchanged) {
         translationY = targetTranslation
         alpha = targetAlpha
         visibility = targetVisibility
@@ -147,9 +148,8 @@ fun View.animateVerticalPadding(
     (getTag(R.id.ui_motion_padding_animator) as? ValueAnimator)?.cancel()
     setTag(R.id.ui_motion_padding_animator, null)
 
-    if (!animate || !ValueAnimator.areAnimatorsEnabled() ||
-        (startTop == topPx && startBottom == bottomPx)
-    ) {
+    val unchanged = startTop == topPx && startBottom == bottomPx
+    if (!animate || !ValueAnimator.areAnimatorsEnabled() || unchanged) {
         setPadding(paddingLeft, topPx, paddingRight, bottomPx)
         return
     }

@@ -131,7 +131,6 @@ enum class Field {
     CONTROL_ENDPOINT,
     INTERCOM_ENDPOINT,
     TOKEN,
-    INTERCOM_TOKEN,
     TIMEOUT,
     LABEL,
     TIME,

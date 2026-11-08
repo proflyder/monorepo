@@ -1,5 +1,6 @@
 package dev.proflyder.home.feature.scenarios
 
+import dev.proflyder.home.core.testing.TestFixtures
 import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.model.RepeatKind
 import dev.proflyder.home.core.model.Scenario
@@ -92,7 +93,7 @@ class ScenarioUseCasesTest {
         val repository = FakeRepository()
         val result = SaveScenario(repository)(
             existing = scenario(),
-            draft = draft().copy(triggers = listOf(ScenarioTrigger.Unknown("""{"future":{}}"""))),
+            draft = draft().copy(triggers = listOf(ScenarioTrigger.Unknown(TestFixtures.read("unknown_empty.json")))),
             idempotencyKey = "",
         )
         assertTrue(result is Outcome.Failure)

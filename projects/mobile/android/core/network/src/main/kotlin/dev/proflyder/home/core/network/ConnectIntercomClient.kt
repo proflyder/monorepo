@@ -10,6 +10,7 @@ import dev.proflyder.home.core.model.IntercomStatus
 import dev.proflyder.home.core.model.IntercomWatchEvent
 import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.model.RemoteFailure
+import dev.proflyder.home.core.operation.suspendRunCatching
 import java.io.IOException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -155,18 +156,21 @@ class ConnectIntercomClient(
     override fun watch(): Flow<IntercomWatchEvent> = channelFlow {
         var backoffMillis = INITIAL_BACKOFF_MILLIS
         while (currentCoroutineContext().isActive) {
-            try {
+            suspendRunCatching {
                 withContext(ioDispatcher) {
                     streamWatch { event -> send(event) }
                 }
+            }.onSuccess {
                 // A clean end is unusual for a permanent Watch; reconnect too.
                 backoffMillis = INITIAL_BACKOFF_MILLIS
-            } catch (e: CancellationException) {
-                throw e
-            } catch (_: IOException) {
-                // Offline/TLS/stream reset: back off and reconnect.
-            } catch (_: SerializationException) {
-                // Malformed frame: drop this stream and reconnect.
+            }.onFailure { failure ->
+                when (failure) {
+                    is CancellationException -> throw failure
+                    // Offline/TLS/stream reset, or a malformed frame: drop this
+                    // stream and reconnect with backoff.
+                    is IOException, is SerializationException -> Unit
+                    else -> throw failure
+                }
             }
             delay(backoffMillis)
             backoffMillis = (backoffMillis * 2).coerceAtMost(MAX_BACKOFF_MILLIS)
@@ -186,24 +190,35 @@ class ConnectIntercomClient(
         // A blocking stream read does not react to coroutine cancellation by
         // itself; cancel the OkHttp call so the Watch socket closes promptly.
         val cancellation = currentCoroutineContext()[Job]?.invokeOnCompletion { call.cancel() }
-        try {
-            call.execute().use { response ->
-                if (response.code in 300..399) {
-                    throw IOException("HTTP ${response.code} redirect refused")
-                }
-                if (!response.isSuccessful) {
-                    throw IOException("HTTP ${response.code}")
-                }
-                val source = response.body?.source() ?: throw IOException("empty stream")
-                while (true) {
-                    val frame = ConnectFrames.read(source) ?: return
-                    if (frame.endStream) return
-                    val element = json.parseToJsonElement(frame.payload)
-                    IntercomJson.parseWatchEvent(element)?.let { onEvent(it) }
-                }
-            }
-        } finally {
-            cancellation?.dispose()
+        runCatching { readStream(call, onEvent) }
+            .also { cancellation?.dispose() }
+            .getOrThrow()
+    }
+
+    private suspend fun readStream(
+        call: okhttp3.Call,
+        onEvent: suspend (IntercomWatchEvent) -> Unit,
+    ) {
+        call.execute().use { response -> readResponse(response, onEvent) }
+    }
+
+    private suspend fun readResponse(
+        response: okhttp3.Response,
+        onEvent: suspend (IntercomWatchEvent) -> Unit,
+    ) {
+        if (response.code in 300..399) {
+            throw IOException("HTTP ${response.code} redirect refused")
+        }
+        if (!response.isSuccessful) {
+            throw IOException("HTTP ${response.code}")
+        }
+        val source = response.body?.source() ?: throw IOException("empty stream")
+        while (true) {
+            val frame = ConnectFrames.read(source) ?: return
+            if (frame.endStream) return
+            val element = json.parseToJsonElement(frame.payload)
+            val event = IntercomJson.parseWatchEvent(element)
+            if (event != null) onEvent(event)
         }
     }
 
@@ -212,12 +227,12 @@ class ConnectIntercomClient(
         body: JsonObject,
         decode: (JsonElement) -> T,
     ): Outcome<T> = withContext(ioDispatcher) {
-        val response = try {
-            api.call(method, body)
-        } catch (e: IOException) {
-            return@withContext Outcome.Failure(e.toRemoteFailure())
-        } catch (e: SerializationException) {
-            return@withContext Outcome.Failure(RemoteFailure.ProtocolFailure("invalid JSON response"))
+        val response = runCatching { api.call(method, body) }.getOrElse { failure ->
+            when (failure) {
+                is IOException, is SerializationException ->
+                    return@withContext Outcome.Failure(failure.toCallFailure())
+                else -> throw failure
+            }
         }
 
         val code = response.code()
@@ -225,33 +240,38 @@ class ConnectIntercomClient(
             code in 300..399 -> Outcome.Failure(RemoteFailure.ProtocolFailure("HTTP $code redirect refused"))
             code == 401 || code == 403 -> Outcome.Failure(RemoteFailure.Unauthorized)
             !response.isSuccessful -> {
-                val text = try {
+                val text = runCatching {
                     response.errorBody()?.use { it.readBounded() }.orEmpty()
-                } catch (e: IOException) {
-                    return@withContext Outcome.Failure(e.toRemoteFailure())
+                }.getOrElse { failure ->
+                    if (failure is IOException) {
+                        return@withContext Outcome.Failure(failure.toRemoteFailure())
+                    }
+                    throw failure
                 }
                 Outcome.Failure(parseConnectError(code, text))
             }
             else -> {
                 val element = response.body()
                     ?: return@withContext Outcome.Failure(RemoteFailure.ProtocolFailure("empty response body"))
-                try {
-                    Outcome.Success(decode(element))
-                } catch (e: Exception) {
-                    Outcome.Failure(
-                        RemoteFailure.ProtocolFailure(sanitizeMessage(e.message) ?: "unexpected response shape"),
-                    )
-                }
+                runCatching { decode(element) }.fold(
+                    onSuccess = { Outcome.Success(it) },
+                    onFailure = { failure ->
+                        if (failure !is Exception) throw failure
+                        Outcome.Failure(
+                            RemoteFailure.ProtocolFailure(
+                                sanitizeMessage(failure.message) ?: "unexpected response shape",
+                            ),
+                        )
+                    },
+                )
             }
         }
     }
 
     private fun parseConnectError(httpCode: Int, text: String): RemoteFailure {
-        val parsed = try {
+        val parsed = runCatching {
             if (text.isBlank()) null else json.parseToJsonElement(text).jsonObject
-        } catch (_: Exception) {
-            null
-        }
+        }.getOrNull()
         val code = sanitizeMessage((parsed?.get("code") as? kotlinx.serialization.json.JsonPrimitive)?.content)
             .orEmpty()
         val message = sanitizeMessage((parsed?.get("message") as? kotlinx.serialization.json.JsonPrimitive)?.content)

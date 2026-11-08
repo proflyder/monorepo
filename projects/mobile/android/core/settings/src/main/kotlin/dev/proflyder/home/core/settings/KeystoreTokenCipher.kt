@@ -36,25 +36,26 @@ class KeystoreTokenCipher(
     }
 
     /** Returns null when the key was invalidated or the blob is corrupt. */
-    override fun decrypt(encoded: String): String? {
-        return try {
-            val envelope = Base64.decode(encoded, Base64.NO_WRAP)
-            if (envelope.size <= IV_BYTES) return null
-            val iv = envelope.copyOfRange(0, IV_BYTES)
-            val ciphertext = envelope.copyOfRange(IV_BYTES, envelope.size)
-            val cipher = Cipher.getInstance(TRANSFORMATION)
-            cipher.init(Cipher.DECRYPT_MODE, getOrCreateKey(), GCMParameterSpec(TAG_BITS, iv))
-            cipher.updateAAD(ASSOCIATED_DATA)
-            String(cipher.doFinal(ciphertext), Charsets.UTF_8)
-        } catch (_: Exception) {
-            null
-        }
+    override fun decrypt(encoded: String): String? = runCatching {
+        decryptInternal(encoded)
+    }.getOrElse { null }
+
+    private fun decryptInternal(encoded: String): String {
+        val envelope = Base64.decode(encoded, Base64.NO_WRAP)
+        if (envelope.size <= IV_BYTES) throw IllegalArgumentException("ciphertext too short")
+        val iv = envelope.copyOfRange(0, IV_BYTES)
+        val ciphertext = envelope.copyOfRange(IV_BYTES, envelope.size)
+        val cipher = Cipher.getInstance(TRANSFORMATION)
+        cipher.init(Cipher.DECRYPT_MODE, getOrCreateKey(), GCMParameterSpec(TAG_BITS, iv))
+        cipher.updateAAD(ASSOCIATED_DATA)
+        return String(cipher.doFinal(ciphertext), Charsets.UTF_8)
     }
 
     fun deleteKey() {
-        try {
+        runCatching {
             if (keyStore.containsAlias(alias)) keyStore.deleteEntry(alias)
-        } catch (_: Exception) {
+        }.onFailure { failure ->
+            if (failure !is Exception) throw failure
             // A missing/unavailable keystore needs no cleanup.
         }
     }

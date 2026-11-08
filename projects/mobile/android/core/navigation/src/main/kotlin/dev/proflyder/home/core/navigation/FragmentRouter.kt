@@ -301,14 +301,15 @@ class FragmentRouter(
 
     private fun drainIfPossible() {
         if (!resumed || fragmentManager.isStateSaved || fragmentManager.isDestroyed) return
-        try {
+        runCatching {
             pending.drain { command ->
                 // State may have been saved between commands (e.g. an Activity
                 // transition); stop and keep the rest for the next resume.
                 if (fragmentManager.isStateSaved) throw StateSavedDuringDrain()
                 execute(command)
             }
-        } catch (_: StateSavedDuringDrain) {
+        }.onFailure { failure ->
+            if (failure !is StateSavedDuringDrain) throw failure
             // Remaining commands stay queued for the next onHostResumed().
         }
     }

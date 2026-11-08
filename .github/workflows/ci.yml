@@ -209,9 +209,9 @@ jobs:
     uses: ./.github/workflows/_quality.yml
 
   # One matrix entry per affected application or shared Kotlin library unit,
-  # plus the dedicated `android-lint` unit. Android Lint runs as its own job so
-  # a finding fails only that matrix entry instead of aborting the app's
-  # `bazel test` and hiding the other tests' results.
+  # plus the dedicated `android-lint` and `android-detekt` units. Both checks
+  # run as their own job so a finding fails only that matrix entry instead of
+  # aborting the app's `bazel test` and hiding the other tests' results.
   #
   # The matrix uses the targets `plan` narrowed; a missing plan output (skipped
   # or failed) falls back to the declared targets inside `_android.yml`.
@@ -220,6 +220,7 @@ jobs:
   # `android-app` entry without any secret or Environment; signing happens in
   # `android-distribute`.
   android:
+    name: android / ${{ matrix.id }}
     needs: [changes, plan]
     if: ${{ !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.android_units != '[]' }}
     permissions:
@@ -265,10 +266,11 @@ jobs:
   # invalidation such as `MODULE.bazel` still runs the `android` checks but does
   # not change the app, so it must not publish a build.
   #
-  # The whole `android` matrix must be green, so an `android-lint` finding also
-  # skips distribution. Lint gates the APK deliberately: a finding means the
-  # application code is not acceptable, and the PR still shows the exact
-  # `android / android-lint` failure.
+  # The whole `android` matrix must be green, so an `android-lint` or
+  # `android-detekt` finding also skips distribution. Lint and detekt gate the
+  # APK deliberately: a finding means the application code is not acceptable,
+  # and the PR still shows the exact `android / android-lint` or
+  # `android / android-detekt` failure.
   #
   # Deliberately NOT a dependency of `ci-ok`: distribution is a delivery
   # side effect, not a code gate. A failed upload stays visible on the PR (and

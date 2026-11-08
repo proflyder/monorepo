@@ -69,17 +69,19 @@ class ScenarioEditorFragment :
         binding.scenarioEditorCatalogStatus.setOnClickListener { viewModel.reloadCatalog() }
 
         viewModel.state.observe { render(it) }
-        viewModel.completion.observe(Lifecycle.State.RESUMED) { completion ->
-            if (completion == null) return@observe
-            viewModel.consumeCompletion()
-            showMessage(
-                when (completion) {
-                    ScenarioEditorCompletion.SAVED -> R.string.scenarios_saved
-                    ScenarioEditorCompletion.DELETED -> R.string.scenarios_deleted
-                },
-            )
-            requireNavigator().back()
-        }
+        viewModel.completion.observe(Lifecycle.State.RESUMED) { completion -> handleCompletion(completion) }
+    }
+
+    private fun handleCompletion(completion: ScenarioEditorCompletion?) {
+        if (completion == null) return
+        viewModel.consumeCompletion()
+        showMessage(
+            when (completion) {
+                ScenarioEditorCompletion.SAVED -> R.string.scenarios_saved
+                ScenarioEditorCompletion.DELETED -> R.string.scenarios_deleted
+            },
+        )
+        requireNavigator().back()
     }
 
     private fun render(state: ScenarioEditorUiState) = with(binding) {
@@ -114,73 +116,82 @@ class ScenarioEditorFragment :
         renderSteps(draft.steps, state.catalog, !state.catalogLoading && state.catalogError == null)
         rendering = false
 
-        if (state.conflict && !conflictDialogShown) {
-            conflictDialogShown = true
-            showConflictDialog()
-        } else if (!state.conflict) {
-            conflictDialogShown = false
+        when {
+            state.conflict && !conflictDialogShown -> {
+                conflictDialogShown = true
+                showConflictDialog()
+            }
+            !state.conflict -> conflictDialogShown = false
         }
         drainPendingPick(state)
     }
 
     private fun renderTriggers(triggers: List<ScenarioTrigger>) = with(binding.scenarioEditorTriggers) {
         removeAllViews()
-        triggers.forEachIndexed { index, trigger ->
-            if (trigger is ScenarioTrigger.Manual) return@forEachIndexed
-            val item = ItemScenarioTriggerBinding.inflate(layoutInflater, this, false)
-            item.triggerSummary.text = when (trigger) {
-                is ScenarioTrigger.Time -> describeTriggers(
-                    listOf(trigger),
-                    ResourceTriggerStrings(requireContext()),
-                )
-                is ScenarioTrigger.Unknown -> getString(R.string.scenarios_trigger_unsupported)
-                ScenarioTrigger.Manual -> ""
-            }
-            item.triggerEdit.setVisible(trigger is ScenarioTrigger.Time)
-            item.triggerEdit.setOnClickListener {
-                val time = (trigger as? ScenarioTrigger.Time) ?: return@setOnClickListener
-                TimeTriggerDialog(
-                    requireContext(),
-                    childFragmentManager,
-                    initial = time.trigger,
-                    onSave = { viewModel.updateTimeTrigger(index, it) },
-                ).show()
-            }
-            item.triggerDelete.setOnClickListener { viewModel.removeTrigger(index) }
-            addView(item.root)
+        triggers.forEachIndexed { index, trigger -> addTrigger(this, index, trigger) }
+    }
+
+    private fun addTrigger(container: android.view.ViewGroup, index: Int, trigger: ScenarioTrigger) {
+        if (trigger is ScenarioTrigger.Manual) return
+        val item = ItemScenarioTriggerBinding.inflate(layoutInflater, container, false)
+        item.triggerSummary.text = when (trigger) {
+            is ScenarioTrigger.Time -> describeTriggers(
+                listOf(trigger),
+                ResourceTriggerStrings(requireContext()),
+            )
+            is ScenarioTrigger.Unknown -> getString(R.string.scenarios_trigger_unsupported)
+            ScenarioTrigger.Manual -> ""
         }
+        item.triggerEdit.setVisible(trigger is ScenarioTrigger.Time)
+        item.triggerEdit.setOnClickListener {
+            val time = (trigger as? ScenarioTrigger.Time) ?: return@setOnClickListener
+            TimeTriggerDialog(
+                requireContext(),
+                childFragmentManager,
+                initial = time.trigger,
+                onSave = { viewModel.updateTimeTrigger(index, it) },
+            ).show()
+        }
+        item.triggerDelete.setOnClickListener { viewModel.removeTrigger(index) }
+        container.addView(item.root)
     }
 
     private fun renderConditions(conditions: List<ScenarioCondition>) = with(binding.scenarioEditorConditions) {
         removeAllViews()
-        conditions.forEachIndexed { index, condition ->
-            val item = ItemScenarioConditionBinding.inflate(layoutInflater, this, false)
-            item.conditionSummary.text = ScenarioFormat.describeCondition(
-                requireContext(),
-                condition,
-                { id -> viewModel.state.value.catalog.titleOf(id) },
-            )
-            item.conditionEdit.setVisible(condition !is ScenarioCondition.Unknown)
-            item.conditionEdit.setOnClickListener {
-                when (condition) {
-                    is ScenarioCondition.EntityState -> showEntityConditionDialog(
-                        entityId = condition.entityId,
-                        state = condition.state,
-                    ) { entityId, newState ->
-                        viewModel.updateCondition(index, ScenarioCondition.EntityState(entityId, newState))
-                    }
-                    is ScenarioCondition.TimeWindow -> TimeWindowDialog(
-                        requireContext(),
-                        childFragmentManager,
-                        initial = condition,
-                        onSave = { viewModel.updateCondition(index, it) },
-                    ).show()
-                    is ScenarioCondition.Unknown -> Unit
+        conditions.forEachIndexed { index, condition -> addCondition(this, index, condition) }
+    }
+
+    private fun addCondition(
+        container: android.view.ViewGroup,
+        index: Int,
+        condition: ScenarioCondition,
+    ) {
+        val item = ItemScenarioConditionBinding.inflate(layoutInflater, container, false)
+        item.conditionSummary.text = ScenarioFormat.describeCondition(
+            requireContext(),
+            condition,
+            { id -> viewModel.state.value.catalog.titleOf(id) },
+        )
+        item.conditionEdit.setVisible(condition !is ScenarioCondition.Unknown)
+        item.conditionEdit.setOnClickListener {
+            when (condition) {
+                is ScenarioCondition.EntityState -> showEntityConditionDialog(
+                    entityId = condition.entityId,
+                    state = condition.state,
+                ) { entityId, newState ->
+                    viewModel.updateCondition(index, ScenarioCondition.EntityState(entityId, newState))
                 }
+                is ScenarioCondition.TimeWindow -> TimeWindowDialog(
+                    requireContext(),
+                    childFragmentManager,
+                    initial = condition,
+                    onSave = { viewModel.updateCondition(index, it) },
+                ).show()
+                is ScenarioCondition.Unknown -> Unit
             }
-            item.conditionDelete.setOnClickListener { viewModel.removeCondition(index) }
-            addView(item.root)
         }
+        item.conditionDelete.setOnClickListener { viewModel.removeCondition(index) }
+        container.addView(item.root)
     }
 
     private fun renderSteps(
@@ -189,22 +200,30 @@ class ScenarioEditorFragment :
         catalogLoaded: Boolean,
     ) = with(binding.scenarioEditorSteps) {
         removeAllViews()
-        steps.forEachIndexed { index, step ->
-            val item = ItemScenarioStepBinding.inflate(layoutInflater, this, false)
-            val description = ScenarioFormat.describeStep(requireContext(), step, catalog, catalogLoaded)
-            item.stepIndex.text = getString(R.string.scenarios_step_number, index + 1)
-            item.stepSummary.text = description.title
-            item.stepDetails.text = description.details
-            item.stepDetails.setVisible(description.details.isNotBlank())
-            item.stepUp.isEnabled = index > 0
-            item.stepDown.isEnabled = index < steps.lastIndex
-            item.stepUp.setOnClickListener { viewModel.moveStep(index, -1) }
-            item.stepDown.setOnClickListener { viewModel.moveStep(index, 1) }
-            item.stepEdit.setVisible(step !is ScenarioStep.Unknown)
-            item.stepEdit.setOnClickListener { editStep(index, step) }
-            item.stepDelete.setOnClickListener { viewModel.removeStep(index) }
-            addView(item.root)
-        }
+        steps.forEachIndexed { index, step -> addStep(this, index, step, catalog, catalogLoaded) }
+    }
+
+    private fun addStep(
+        container: android.view.ViewGroup,
+        index: Int,
+        step: ScenarioStep,
+        catalog: List<ControlEntry>,
+        catalogLoaded: Boolean,
+    ) {
+        val item = ItemScenarioStepBinding.inflate(layoutInflater, container, false)
+        val description = ScenarioFormat.describeStep(requireContext(), step, catalog, catalogLoaded)
+        item.stepIndex.text = getString(R.string.scenarios_step_number, index + 1)
+        item.stepSummary.text = description.title
+        item.stepDetails.text = description.details
+        item.stepDetails.setVisible(description.details.isNotBlank())
+        item.stepUp.isEnabled = index > 0
+        item.stepDown.isEnabled = index < steps.lastIndex
+        item.stepUp.setOnClickListener { viewModel.moveStep(index, -1) }
+        item.stepDown.setOnClickListener { viewModel.moveStep(index, 1) }
+        item.stepEdit.setVisible(step !is ScenarioStep.Unknown)
+        item.stepEdit.setOnClickListener { editStep(index, step) }
+        item.stepDelete.setOnClickListener { viewModel.removeStep(index) }
+        container.addView(item.root)
     }
 
     private fun editStep(index: Int, step: ScenarioStep) {
@@ -442,12 +461,10 @@ class ScenarioEditorFragment :
         }
     }
 
-    private fun initialSpeak(raw: String): String = try {
+    private fun initialSpeak(raw: String): String = runCatching {
         val json = kotlinx.serialization.json.Json.parseToJsonElement(raw.ifBlank { "{}" }) as? JsonObject
         json?.get("text")?.jsonPrimitive?.content.orEmpty()
-    } catch (_: Exception) {
-        ""
-    }
+    }.getOrElse { "" }
 
     private fun showConflictDialog() {
         MaterialAlertDialogBuilder(requireContext())

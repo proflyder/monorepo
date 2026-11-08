@@ -1,0 +1,104 @@
+# detekt configuration for the Home Android client.
+#
+# Only the rules listed here are enabled, so the gate is explicit and does not
+# drift with detekt's defaults. Findings are failures (`build.maxIssues: 0`);
+# there is intentionally no baseline.
+#
+# The `home-rules` ruleset is the first-party plug-in in
+# platform/android/detekt-rules (passed to the CLI with --plugins).
+build:
+  maxIssues: 0
+
+complexity:
+  active: true
+  LongMethod:
+    active: true
+    # 60 is detekt's default but too tight for the explicit UI/JSON assembly
+    # functions here; 80 still catches genuinely sprawling methods.
+    threshold: 80
+  NestedBlockDepth:
+    active: true
+    # More than three nested blocks is an error; flatten with guard clauses.
+    threshold: 3
+  ComplexCondition:
+    active: true
+    threshold: 4
+  # Not part of this gate: they fire on the existing, deliberately explicit UI
+  # code and would force unrelated restructuring.
+  CognitiveComplexMethod:
+    active: false
+  CyclomaticComplexMethod:
+    active: false
+  LargeClass:
+    active: false
+  LongParameterList:
+    active: false
+  TooManyFunctions:
+    active: false
+
+exceptions:
+  active: true
+  TooGenericExceptionCaught:
+    active: true
+
+style:
+  active: true
+  UnusedImports:
+    active: true
+  UnusedParameter:
+    active: true
+  UnusedPrivateClass:
+    active: true
+  UnusedPrivateMember:
+    active: true
+  UnusedPrivateProperty:
+    active: true
+
+formatting:
+  active: true
+  Filename:
+    active: true
+  FinalNewline:
+    active: true
+  Indentation:
+    active: true
+    indentSize: 4
+  NoConsecutiveBlankLines:
+    active: true
+  NoEmptyFirstLineInMethodBlock:
+    active: true
+  NoMultipleSpaces:
+    active: true
+  NoSemicolons:
+    active: true
+  NoTrailingSpaces:
+    active: true
+  NoUnusedImports:
+    active: true
+  NoWildcardImports:
+    active: true
+  SpacingAroundComma:
+    active: true
+  SpacingAroundCurly:
+    active: true
+  SpacingAroundKeyword:
+    active: true
+  SpacingAroundOperators:
+    active: true
+  SpacingAroundParens:
+    active: true
+  SpacingBetweenPackageAndImports:
+    active: true
+
+home-rules:
+  NoElseIf:
+    active: true
+  NoTry:
+    active: true
+  LongLambda:
+    active: true
+    maxLines: 3
+  NoInlineJsonInTests:
+    active: true
+  NoHardcodedUiText:
+    active: true

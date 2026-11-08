@@ -28,7 +28,6 @@ class DefaultConnectionRepository(
 ) : ConnectionRepository {
     override val config: StateFlow<ConnectionConfig> = settings.config
     override val tokenStatus: StateFlow<TokenStatus> = settings.tokenStatus
-    override val intercomTokenStatus: StateFlow<TokenStatus> = settings.intercomTokenStatus
     override val remoteConfig: StateFlow<RemoteConnectionState> = remote.state
 
     override suspend fun saveToken(update: TokenUpdate): Outcome<ConnectionConfig> {
@@ -54,28 +53,6 @@ class DefaultConnectionRepository(
     }
 
     override suspend fun refreshRemoteConfig() = remote.refresh()
-
-    override suspend fun saveIntercomToken(update: TokenUpdate): Outcome<ConnectionConfig> {
-        val token = when (update) {
-            TokenUpdate.Keep -> when (settings.intercomTokenStatus.value) {
-                TokenStatus.UNREADABLE -> return Outcome.Failure(RemoteFailure.Validation(Field.INTERCOM_TOKEN))
-                else -> settings.config.value.intercomToken
-            }
-            TokenUpdate.Clear -> null
-            is TokenUpdate.Replace -> {
-                val value = update.value.trim()
-                if (!ConnectionConfig.isTokenValid(value)) {
-                    return Outcome.Failure(RemoteFailure.Validation(Field.INTERCOM_TOKEN))
-                }
-                value
-            }
-        }
-
-        return when (val stored = settings.updateIntercomToken(token)) {
-            is Outcome.Success -> Outcome.Success(settings.config.value)
-            is Outcome.Failure -> stored
-        }
-    }
 
     override suspend fun testConnection(): Outcome<SchedulerStatus> = client.getStatus()
 }

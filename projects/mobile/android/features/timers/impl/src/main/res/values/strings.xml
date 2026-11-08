@@ -24,4 +24,5 @@
     <string name="timers_preset_10">10 min</string>
     <string name="timers_preset_25">25 min</string>
     <string name="timers_server_time_note">Remaining time uses the server clock from GetStatus.</string>
+    <string name="timers_default_label">Timer</string>
 </resources>

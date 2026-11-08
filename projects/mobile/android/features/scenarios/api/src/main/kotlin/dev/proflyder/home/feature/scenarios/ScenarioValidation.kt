@@ -92,50 +92,33 @@ object ScenarioValidation {
     }
 
     private fun conditionProblem(condition: ScenarioCondition): RemoteFailure? = when (condition) {
-        is ScenarioCondition.EntityState -> {
-            if (!entityIdPattern.matches(condition.entityId) ||
-                condition.entityId.toByteArray(Charsets.UTF_8).size > ScenarioLimits.MAX_ENTITY_ID_BYTES
-            ) {
-                RemoteFailure.Validation(Field.ENTITY)
-            } else if (condition.state.isEmpty() ||
-                condition.state.toByteArray(Charsets.UTF_8).size > ScenarioLimits.MAX_ENTITY_STATE_BYTES ||
-                condition.state.any { it.isISOControl() }
-            ) {
-                RemoteFailure.Validation(Field.ENTITY)
-            } else {
-                null
-            }
-        }
-        is ScenarioCondition.TimeWindow -> {
-            if (condition.start.hour !in 0..23 || condition.start.minute !in 0..59 ||
-                condition.end.hour !in 0..23 || condition.end.minute !in 0..59
-            ) {
-                RemoteFailure.Validation(Field.TIME)
-            } else if (condition.weekdays.isNotEmpty() && !Weekdays.isValid(condition.weekdays)) {
-                RemoteFailure.Validation(Field.WEEKDAYS)
-            } else {
-                null
-            }
-        }
+        is ScenarioCondition.EntityState -> entityStateProblem(condition)
+        is ScenarioCondition.TimeWindow -> timeWindowProblem(condition)
         is ScenarioCondition.Unknown -> RemoteFailure.Validation(Field.UNSUPPORTED)
     }
 
+    private fun entityStateProblem(condition: ScenarioCondition.EntityState): RemoteFailure? = when {
+        !entityIdPattern.matches(condition.entityId) ||
+            condition.entityId.toByteArray(Charsets.UTF_8).size > ScenarioLimits.MAX_ENTITY_ID_BYTES ->
+            RemoteFailure.Validation(Field.ENTITY)
+        condition.state.isEmpty() ||
+            condition.state.toByteArray(Charsets.UTF_8).size > ScenarioLimits.MAX_ENTITY_STATE_BYTES ||
+            condition.state.any { it.isISOControl() } ->
+            RemoteFailure.Validation(Field.ENTITY)
+        else -> null
+    }
+
+    private fun timeWindowProblem(condition: ScenarioCondition.TimeWindow): RemoteFailure? = when {
+        condition.start.hour !in 0..23 || condition.start.minute !in 0..59 ||
+            condition.end.hour !in 0..23 || condition.end.minute !in 0..59 ->
+            RemoteFailure.Validation(Field.TIME)
+        condition.weekdays.isNotEmpty() && !Weekdays.isValid(condition.weekdays) ->
+            RemoteFailure.Validation(Field.WEEKDAYS)
+        else -> null
+    }
+
     private fun stepProblem(step: ScenarioStep): RemoteFailure? = when (step) {
-        is ScenarioStep.Catalog -> {
-            if (step.entryId.isBlank() ||
-                step.entryId.toByteArray(Charsets.UTF_8).size > ScenarioLimits.MAX_ENTRY_ID_BYTES
-            ) {
-                RemoteFailure.Validation(Field.ENTITY)
-            } else if (step.action.isBlank() ||
-                step.action.toByteArray(Charsets.UTF_8).size > ScenarioLimits.MAX_ACTION_BYTES
-            ) {
-                RemoteFailure.Validation(Field.STEPS)
-            } else if (step.paramsJson.isNotBlank() && !isJsonObject(step.paramsJson)) {
-                RemoteFailure.Validation(Field.STEPS)
-            } else {
-                null
-            }
-        }
+        is ScenarioStep.Catalog -> catalogStepProblem(step)
         is ScenarioStep.Speak -> {
             if (SpeakText.normalize(step.text) == null) {
                 RemoteFailure.Validation(Field.SPEAK)
@@ -143,19 +126,29 @@ object ScenarioValidation {
                 null
             }
         }
-        is ScenarioStep.Delay -> {
-            if (step.seconds !in ScenarioLimits.MIN_DELAY_SECONDS..ScenarioLimits.MAX_DELAY_SECONDS) {
-                RemoteFailure.Validation(Field.DURATION)
-            } else {
-                null
-            }
-        }
+        is ScenarioStep.Delay -> delayStepProblem(step)
         is ScenarioStep.Unknown -> RemoteFailure.Validation(Field.UNSUPPORTED)
     }
 
-    private fun isJsonObject(raw: String): Boolean = try {
-        Json.parseToJsonElement(raw) is kotlinx.serialization.json.JsonObject
-    } catch (_: Exception) {
-        false
+    private fun catalogStepProblem(step: ScenarioStep.Catalog): RemoteFailure? = when {
+        step.entryId.isBlank() ||
+            step.entryId.toByteArray(Charsets.UTF_8).size > ScenarioLimits.MAX_ENTRY_ID_BYTES ->
+            RemoteFailure.Validation(Field.ENTITY)
+        step.action.isBlank() ||
+            step.action.toByteArray(Charsets.UTF_8).size > ScenarioLimits.MAX_ACTION_BYTES ->
+            RemoteFailure.Validation(Field.STEPS)
+        step.paramsJson.isNotBlank() && !isJsonObject(step.paramsJson) ->
+            RemoteFailure.Validation(Field.STEPS)
+        else -> null
     }
+
+    private fun delayStepProblem(step: ScenarioStep.Delay): RemoteFailure? =
+        if (step.seconds !in ScenarioLimits.MIN_DELAY_SECONDS..ScenarioLimits.MAX_DELAY_SECONDS) {
+            RemoteFailure.Validation(Field.DURATION)
+        } else {
+            null
+        }
+
+    private fun isJsonObject(raw: String): Boolean =
+        runCatching { Json.parseToJsonElement(raw) }.getOrNull() is kotlinx.serialization.json.JsonObject
 }

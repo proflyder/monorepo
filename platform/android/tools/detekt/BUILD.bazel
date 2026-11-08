@@ -1,0 +1,15 @@
+load("@rules_java//java:defs.bzl", "java_binary")
+
+package(default_visibility = ["//visibility:public"])
+
+# detekt CLI launcher. `detekt-cli` already brings the standard rule sets;
+# `detekt-formatting` adds the ktlint-backed formatting rules. The first-party
+# `home-rules` plug-in is passed separately with `--plugins`.
+java_binary(
+    name = "detekt",
+    main_class = "io.gitlab.arturbosch.detekt.cli.Main",
+    runtime_deps = [
+        "@maven//:io_gitlab_arturbosch_detekt_detekt_cli",
+        "@maven//:io_gitlab_arturbosch_detekt_detekt_formatting",
+    ],
+)

@@ -1,5 +1,6 @@
 package dev.proflyder.home.core.network
 
+import dev.proflyder.home.core.testing.TestFixtures
 import dev.proflyder.home.core.model.RepeatKind
 import dev.proflyder.home.core.model.Scenario
 import dev.proflyder.home.core.model.ScenarioCondition
@@ -17,8 +18,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ScenarioJsonTest {
-    private val json = Json { ignoreUnknownKeys = true }
-
     private fun sample(): Scenario = Scenario(
         id = "sc-1",
         label = "Evening",
@@ -42,7 +41,7 @@ class ScenarioJsonTest {
             ScenarioCondition.TimeWindow(WallTime(8, 0), WallTime(22, 0), listOf(1, 3)),
         ),
         steps = listOf(
-            ScenarioStep.Catalog("light.kitchen", "set", """{"brightness":40}"""),
+            ScenarioStep.Catalog("light.kitchen", "set", TestFixtures.read("brightness_params.json")),
             ScenarioStep.Speak("Good evening"),
             ScenarioStep.Delay(120),
         ),
@@ -79,9 +78,9 @@ class ScenarioJsonTest {
 
     @Test
     fun unknownOneofVariantsArePreservedVerbatim() {
-        val unknownTrigger = """{"newTrigger":{"kind":"future","value":7}}"""
-        val unknownCondition = """{"weatherState":{"entityId":"weather.home","state":"sunny"}}"""
-        val unknownStep = """{"waitUntil":{"timestamp":"2099-01-01T00:00:00Z"}}"""
+        val unknownTrigger = TestFixtures.read("unknown_trigger.json")
+        val unknownCondition = TestFixtures.read("unknown_condition.json")
+        val unknownStep = TestFixtures.read("unknown_step.json")
         val scenario = sample().copy(
             triggers = listOf(ScenarioTrigger.Unknown(unknownTrigger)),
             conditions = listOf(ScenarioCondition.Unknown(unknownCondition)),
@@ -129,7 +128,7 @@ class ScenarioJsonTest {
     @Test
     fun parseScenarioWithMissingListsIsEmpty() {
         val parsed = ScenarioJson.parseScenario(
-            Json.parseToJsonElement("""{"id":"s","label":"L","revision":"1"}""") as JsonObject,
+            Json.parseToJsonElement(TestFixtures.read("scenario_minimal.json")) as JsonObject,
         )
         assertTrue(parsed.triggers.isEmpty())
         assertTrue(parsed.conditions.isEmpty())

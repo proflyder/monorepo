@@ -1,5 +1,6 @@
 package dev.proflyder.home.feature.scenarios
 
+import dev.proflyder.home.core.testing.TestFixtures
 import dev.proflyder.home.core.model.RepeatKind
 import dev.proflyder.home.core.model.ScenarioTrigger
 import dev.proflyder.home.core.model.TimeTrigger
@@ -67,7 +68,7 @@ class ScenarioTriggerDescriptionTest {
                 listOf(
                     time(8, 0, RepeatKind.DAILY),
                     time(10, 0, RepeatKind.WEEKENDS),
-                    ScenarioTrigger.Unknown("""{"future":{}}"""),
+                    ScenarioTrigger.Unknown(TestFixtures.read("unknown_empty.json")),
                 ),
                 ru,
             ),

@@ -76,16 +76,18 @@ class AlarmEditorViewModel(
         val savedKey = savedState.get<String>(KEY_CREATE_KEY)
         val savedEndpoint = savedState.get<String>(KEY_CREATE_ENDPOINT)
         val currentEndpoint = settings.config.value.endpoint?.baseUrl().orEmpty()
-        if (restoredDraft != null &&
-            restoredDraft.existingId == null &&
-            savedKey != null &&
-            savedEndpoint == currentEndpoint
-        ) {
-            createIdentity.adopt(
-                CreatePayload(restoredDraft.toAlarmDraft(), currentEndpoint),
-                savedKey,
-            )
-        }
+        adoptRestoredCreateIdentity(savedKey, savedEndpoint, currentEndpoint)
+    }
+
+    private fun adoptRestoredCreateIdentity(
+        savedKey: String?,
+        savedEndpoint: String?,
+        currentEndpoint: String,
+    ) {
+        val draft = restoredDraft ?: return
+        if (draft.existingId != null) return
+        if (savedKey == null || savedEndpoint != currentEndpoint) return
+        createIdentity.adopt(CreatePayload(draft.toAlarmDraft(), currentEndpoint), savedKey)
     }
 
     private data class CreatePayload(

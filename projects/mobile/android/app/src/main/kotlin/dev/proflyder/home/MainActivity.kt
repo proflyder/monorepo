@@ -118,13 +118,7 @@ class MainActivity : AppCompatActivity(), NavigatorHost, ViewModelFactoryProvide
     private fun setupBottomNavigation() {
         val menu: Menu = bottomNavigation.menu
         menu.clear()
-        var itemId = 1
-        features.tabs().forEach { entry: FeatureEntry ->
-            menu.add(Menu.NONE, itemId, entry.order, entry.titleRes).setIcon(entry.iconRes)
-            itemIdByFeature[entry.id] = itemId
-            featureByItemId[itemId] = entry.id
-            itemId++
-        }
+        features.tabs().forEachIndexed { index, entry -> addTab(menu, index + 1, entry) }
         // Restore the selected tab before attaching the listener so the menu's
         // automatic first-item selection cannot override router state.
         itemIdByFeature[router.currentTabId.value]?.let { bottomNavigation.selectedItemId = it }
@@ -136,20 +130,28 @@ class MainActivity : AppCompatActivity(), NavigatorHost, ViewModelFactoryProvide
         }
     }
 
+    private fun addTab(menu: Menu, itemId: Int, entry: FeatureEntry) {
+        menu.add(Menu.NONE, itemId, entry.order, entry.titleRes).setIcon(entry.iconRes)
+        itemIdByFeature[entry.id] = itemId
+        featureByItemId[itemId] = entry.id
+    }
+
     private fun setupToolbar() {
         toolbar.inflateMenu(R.menu.menu_main)
         toolbar.setNavigationOnClickListener { onBackPressedDispatcher.onBackPressed() }
         toolbar.setOnMenuItemClickListener { item ->
-            if (item.itemId == R.id.action_settings) {
-                // Settings opens as an overlay over the current tab, so Back
-                // returns to that tab instead of leaving the app.
-                router.navigate(ConnectionDestination)
-                true
-            } else if (item.itemId == R.id.action_call) {
-                (application as HomeApplication).graph.callLauncher.openCallScreen()
-                true
-            } else {
-                false
+            when (item.itemId) {
+                R.id.action_settings -> {
+                    // Settings opens as an overlay over the current tab, so Back
+                    // returns to that tab instead of leaving the app.
+                    router.navigate(ConnectionDestination)
+                    true
+                }
+                R.id.action_call -> {
+                    (application as HomeApplication).graph.callLauncher.openCallScreen()
+                    true
+                }
+                else -> false
             }
         }
     }

@@ -13,6 +13,7 @@ import android.telecom.TelecomManager
 import androidx.core.content.ContextCompat
 import dev.proflyder.home.feature.call.CallController
 import dev.proflyder.home.feature.call.CallCoordinator
+import dev.proflyder.home.feature.call.impl.R
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
@@ -30,7 +31,7 @@ class TelecomAccountRegistry(private val context: Context) {
             ACCOUNT_ID,
         )
         if (telecom.getPhoneAccount(handle) == null) {
-            val account = PhoneAccount.builder(handle, ACCOUNT_LABEL)
+            val account = PhoneAccount.builder(handle, context.getString(R.string.call_account_label))
                 .setCapabilities(PhoneAccount.CAPABILITY_SELF_MANAGED)
                 .addSupportedUriScheme(PhoneAccount.SCHEME_TEL)
                 .build()
@@ -41,7 +42,6 @@ class TelecomAccountRegistry(private val context: Context) {
 
     private companion object {
         const val ACCOUNT_ID = "home-call"
-        const val ACCOUNT_LABEL = "Home"
     }
 }
 
@@ -77,9 +77,10 @@ class AndroidCallCoordinator(
         val extras = Bundle().apply {
             putParcelable(TelecomManager.EXTRA_PHONE_ACCOUNT_HANDLE, handle)
         }
-        try {
+        runCatching {
             telecom.placeCall(Uri.fromParts("tel", "home", null), extras)
-        } catch (_: Exception) {
+        }.onFailure { failure ->
+            if (failure !is Exception) throw failure
             // No dialer permission, no SIM, or Telecom rejected the request:
             // still start the call so the feature keeps working.
             controller.placeCall()

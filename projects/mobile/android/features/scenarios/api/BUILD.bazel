@@ -15,11 +15,13 @@ kt_jvm_library(
 kt_jvm_test(
     name = "api_test",
     srcs = glob(["src/test/kotlin/**/*.kt"]),
+    resources = glob(["src/test/resources/**"]),
     test_class = "dev.proflyder.home.feature.scenarios.AllScenarioApiTests",
     deps = [
         ":api",
         "//packages/kotlin/core",
         "//projects/mobile/android/core/model",
+        "//projects/mobile/android/core/testing",
         "@maven//:junit_junit",
         "@maven//:org_jetbrains_kotlinx_kotlinx_serialization_json",
     ],

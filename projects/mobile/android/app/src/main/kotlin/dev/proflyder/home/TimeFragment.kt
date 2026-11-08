@@ -1,7 +1,6 @@
 package dev.proflyder.home
 
 import android.os.Bundle
-import androidx.fragment.app.Fragment
 import dev.proflyder.home.core.ui.BaseFragment
 import dev.proflyder.home.databinding.FragmentTimeBinding
 

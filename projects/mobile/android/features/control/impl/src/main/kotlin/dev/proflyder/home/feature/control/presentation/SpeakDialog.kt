@@ -29,18 +29,22 @@ internal class SpeakDialog(
     init {
         // The positive button is installed by hand so an invalid text cannot
         // dismiss the dialog and "succeed" silently.
-        dialog.setOnShowListener {
-            val send = dialog.getButton(DialogInterface.BUTTON_POSITIVE)
+        dialog.setOnShowListener { installSendButton() }
+    }
+
+    private fun installSendButton() {
+        val send = dialog.getButton(DialogInterface.BUTTON_POSITIVE)
+        send.isEnabled = speakable() != null
+        send.setOnClickListener { sendText() }
+        views.speakInput.doAfterTextChanged {
             send.isEnabled = speakable() != null
-            send.setOnClickListener {
-                val text = speakable() ?: return@setOnClickListener
-                onSpeak(text)
-                dialog.dismiss()
-            }
-            views.speakInput.doAfterTextChanged {
-                send.isEnabled = speakable() != null
-            }
         }
+    }
+
+    private fun sendText() {
+        val text = speakable() ?: return
+        onSpeak(text)
+        dialog.dismiss()
     }
 
     fun show() {

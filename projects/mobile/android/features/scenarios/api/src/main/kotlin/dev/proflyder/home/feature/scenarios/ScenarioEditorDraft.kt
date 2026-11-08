@@ -56,11 +56,9 @@ object ScenarioEditorDraftCodec {
     /** Returns null for an absent or unreadable draft. */
     fun fromMap(values: Map<String, Any?>): ScenarioEditorDraft? {
         val raw = values[KEY_DRAFT] as? String ?: return null
-        return try {
+        return runCatching {
             decode(json.parseToJsonElement(raw).jsonObject)
-        } catch (_: Exception) {
-            null
-        }
+        }.getOrElse { null }
     }
 
     fun fromScenario(scenario: Scenario): ScenarioEditorDraft = ScenarioEditorDraft(
@@ -76,90 +74,82 @@ object ScenarioEditorDraftCodec {
     )
 
     private fun encode(draft: ScenarioEditorDraft): String = buildJsonObject {
+        putBasicFields(draft)
+        put("triggers", buildJsonArray { draft.triggers.forEach { add(encodeTrigger(it)) } })
+        put("conditions", buildJsonArray { draft.conditions.forEach { add(encodeCondition(it)) } })
+        put("steps", buildJsonArray { draft.steps.forEach { add(encodeStep(it)) } })
+    }.toString()
+
+    private fun kotlinx.serialization.json.JsonObjectBuilder.putBasicFields(draft: ScenarioEditorDraft) {
         draft.existingId?.let { put("existingId", it) }
         draft.existingRevision?.let { put("existingRevision", it.toString()) }
         put("label", draft.label)
         put("description", draft.description)
         put("enabled", draft.enabled)
         put("continueOnError", draft.continueOnError)
-        put("triggers", buildJsonArray {
-            draft.triggers.forEach { trigger ->
-                add(
-                    when (trigger) {
-                        ScenarioTrigger.Manual -> buildJsonObject { put("kind", "manual") }
-                        is ScenarioTrigger.Time -> buildJsonObject {
-                            put("kind", "time")
-                            put("timezone", trigger.trigger.timezone)
-                            put("hour", trigger.trigger.at.hour)
-                            put("minute", trigger.trigger.at.minute)
-                            put("repeat", trigger.trigger.repeat.name)
-                            put("onceDate", trigger.trigger.onceDate)
-                            put("weekdays", buildJsonArray {
-                                trigger.trigger.weekdays.forEach { add(JsonPrimitive(it)) }
-                            })
-                        }
-                        is ScenarioTrigger.Unknown -> buildJsonObject {
-                            put("kind", "unknown")
-                            put("raw", trigger.rawJson)
-                        }
-                    },
-                )
-            }
-        })
-        put("conditions", buildJsonArray {
-            draft.conditions.forEach { condition ->
-                add(
-                    when (condition) {
-                        is ScenarioCondition.EntityState -> buildJsonObject {
-                            put("kind", "entity")
-                            put("entityId", condition.entityId)
-                            put("state", condition.state)
-                        }
-                        is ScenarioCondition.TimeWindow -> buildJsonObject {
-                            put("kind", "window")
-                            put("startHour", condition.start.hour)
-                            put("startMinute", condition.start.minute)
-                            put("endHour", condition.end.hour)
-                            put("endMinute", condition.end.minute)
-                            put("weekdays", buildJsonArray {
-                                condition.weekdays.forEach { add(JsonPrimitive(it)) }
-                            })
-                        }
-                        is ScenarioCondition.Unknown -> buildJsonObject {
-                            put("kind", "unknown")
-                            put("raw", condition.rawJson)
-                        }
-                    },
-                )
-            }
-        })
-        put("steps", buildJsonArray {
-            draft.steps.forEach { step ->
-                add(
-                    when (step) {
-                        is ScenarioStep.Catalog -> buildJsonObject {
-                            put("kind", "catalog")
-                            put("entryId", step.entryId)
-                            put("action", step.action)
-                            put("paramsJson", step.paramsJson)
-                        }
-                        is ScenarioStep.Speak -> buildJsonObject {
-                            put("kind", "speak")
-                            put("text", step.text)
-                        }
-                        is ScenarioStep.Delay -> buildJsonObject {
-                            put("kind", "delay")
-                            put("seconds", step.seconds)
-                        }
-                        is ScenarioStep.Unknown -> buildJsonObject {
-                            put("kind", "unknown")
-                            put("raw", step.rawJson)
-                        }
-                    },
-                )
-            }
-        })
-    }.toString()
+    }
+
+    private fun encodeTrigger(trigger: ScenarioTrigger): JsonObject = when (trigger) {
+        ScenarioTrigger.Manual -> buildJsonObject { put("kind", "manual") }
+        is ScenarioTrigger.Time -> buildJsonObject {
+            put("kind", "time")
+            put("timezone", trigger.trigger.timezone)
+            put("hour", trigger.trigger.at.hour)
+            put("minute", trigger.trigger.at.minute)
+            put("repeat", trigger.trigger.repeat.name)
+            put("onceDate", trigger.trigger.onceDate)
+            put("weekdays", buildJsonArray {
+                trigger.trigger.weekdays.forEach { add(JsonPrimitive(it)) }
+            })
+        }
+        is ScenarioTrigger.Unknown -> buildJsonObject {
+            put("kind", "unknown")
+            put("raw", trigger.rawJson)
+        }
+    }
+
+    private fun encodeCondition(condition: ScenarioCondition): JsonObject = when (condition) {
+        is ScenarioCondition.EntityState -> buildJsonObject {
+            put("kind", "entity")
+            put("entityId", condition.entityId)
+            put("state", condition.state)
+        }
+        is ScenarioCondition.TimeWindow -> buildJsonObject {
+            put("kind", "window")
+            put("startHour", condition.start.hour)
+            put("startMinute", condition.start.minute)
+            put("endHour", condition.end.hour)
+            put("endMinute", condition.end.minute)
+            put("weekdays", buildJsonArray {
+                condition.weekdays.forEach { add(JsonPrimitive(it)) }
+            })
+        }
+        is ScenarioCondition.Unknown -> buildJsonObject {
+            put("kind", "unknown")
+            put("raw", condition.rawJson)
+        }
+    }
+
+    private fun encodeStep(step: ScenarioStep): JsonObject = when (step) {
+        is ScenarioStep.Catalog -> buildJsonObject {
+            put("kind", "catalog")
+            put("entryId", step.entryId)
+            put("action", step.action)
+            put("paramsJson", step.paramsJson)
+        }
+        is ScenarioStep.Speak -> buildJsonObject {
+            put("kind", "speak")
+            put("text", step.text)
+        }
+        is ScenarioStep.Delay -> buildJsonObject {
+            put("kind", "delay")
+            put("seconds", step.seconds)
+        }
+        is ScenarioStep.Unknown -> buildJsonObject {
+            put("kind", "unknown")
+            put("raw", step.rawJson)
+        }
+    }
 
     private fun decode(obj: JsonObject): ScenarioEditorDraft = ScenarioEditorDraft(
         existingId = obj.stringOrNull("existingId"),

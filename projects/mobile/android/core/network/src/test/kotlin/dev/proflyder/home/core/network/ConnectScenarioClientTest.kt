@@ -1,5 +1,6 @@
 package dev.proflyder.home.core.network
 
+import dev.proflyder.home.core.testing.TestFixtures
 import dev.proflyder.home.core.config.ConnectionConfig
 import dev.proflyder.home.core.config.ConnectionSettingsStore
 import dev.proflyder.home.core.config.TokenStatus
@@ -74,13 +75,7 @@ class ConnectScenarioClientTest {
     fun listUsesScenarioServicePathAndParsesAllVariants() = runBlocking {
         server.enqueue(
             MockResponse().setResponseCode(200).setBody(
-                """{"scenarios":[{"id":"sc-1","label":"Evening","enabled":true,"revision":"3",
-                   "triggers":[{"manual":{}},{"time":{"timezone":"UTC","at":{"hour":19,"minute":30},
-                   "repeat":"REPEAT_KIND_DAILY"}}],
-                   "conditions":[{"entityState":{"entityId":"light.kitchen","state":"on"}},
-                                 {"timeWindow":{"start":{"hour":8,"minute":0},"end":{"hour":22,"minute":0},"weekdays":[1,3]}}],
-                   "steps":[{"catalog":{"entryId":"light.kitchen","action":"set","paramsJson":"{}"}},
-                            {"speak":{"text":"Hello"}},{"delay":{"seconds":5}}]}]}""",
+                TestFixtures.read("scenario_list.json"),
             ),
         )
         val result = client().listScenarios(includeDisabled = true)
@@ -140,7 +135,7 @@ class ConnectScenarioClientTest {
     fun runReturnsEventIdAndSendsIdempotencyKey() = runBlocking {
         server.enqueue(
             MockResponse().setResponseCode(200)
-                .setBody("""{"event":{"id":"evt-1","state":"EVENT_STATE_PENDING"}}"""),
+                .setBody(TestFixtures.read("event_pending.json")),
         )
         val result = client().runScenario("sc-1", "run-key")
         assertEquals("evt-1", (result as Outcome.Success).value)
@@ -155,7 +150,7 @@ class ConnectScenarioClientTest {
     fun revisionConflictIsAServerFailureWithAbortedCode() = runBlocking {
         server.enqueue(
             MockResponse().setResponseCode(409)
-                .setBody("""{"code":"aborted","message":"revision mismatch"}"""),
+                .setBody(TestFixtures.read("error_aborted.json")),
         )
         val failure = client().updateScenario(
             ScenarioJson.parseScenario(json.parseToJsonElement(scenarioJson()).jsonObject.getValue("scenario")),
@@ -176,7 +171,7 @@ class ConnectScenarioClientTest {
 
     @Test
     fun malformedListIsProtocolFailureButMissingListIsEmpty() = runBlocking {
-        server.enqueue(MockResponse().setResponseCode(200).setBody("""{"scenarios":{}}"""))
+        server.enqueue(MockResponse().setResponseCode(200).setBody(TestFixtures.read("scenarios_object.json")))
         assertTrue(client().listScenarios(true).failureOrNull() is RemoteFailure.ProtocolFailure)
 
         server.enqueue(MockResponse().setResponseCode(200).setBody("""{}"""))
@@ -196,8 +191,6 @@ class ConnectScenarioClientTest {
         override val config: StateFlow<ConnectionConfig> = MutableStateFlow(initial)
         override val tokenStatus: StateFlow<TokenStatus> =
             MutableStateFlow(if (initial.hasToken) TokenStatus.AVAILABLE else TokenStatus.ABSENT)
-        override val intercomTokenStatus: StateFlow<TokenStatus> =
-            MutableStateFlow(if (initial.hasIntercomToken) TokenStatus.AVAILABLE else TokenStatus.ABSENT)
 
         private val mutable = config as MutableStateFlow<ConnectionConfig>
 
@@ -210,9 +203,5 @@ class ConnectScenarioClientTest {
             return Outcome.Success(Unit)
         }
 
-        override suspend fun updateIntercomToken(intercomToken: String?): Outcome<Unit> {
-            mutable.value = mutable.value.copy(intercomToken = intercomToken)
-            return Outcome.Success(Unit)
-        }
     }
 }

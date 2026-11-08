@@ -76,9 +76,9 @@ private val remoteJson = Json { ignoreUnknownKeys = true }
 fun parseRemoteConnection(raw: String): RemoteConnectionState {
     if (raw.isBlank()) return RemoteConnectionState.Missing
 
-    val document = try {
+    val document = runCatching {
         remoteJson.parseToJsonElement(raw).jsonObject
-    } catch (_: Exception) {
+    }.getOrElse {
         return RemoteConnectionState.Invalid(detail = "Malformed JSON")
     }
 

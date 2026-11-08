@@ -1,5 +1,6 @@
 package dev.proflyder.home.core.config
 
+import dev.proflyder.home.core.testing.TestFixtures
 import dev.proflyder.home.core.model.Field
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -35,7 +36,7 @@ class RemoteConnectionSourceTest {
 
     @Test
     fun minimalDocumentUsesDefaultsAndDisablesHome() {
-        val loaded = parseRemoteConnection("""{"schedulerBaseUrl":"http://192.0.2.10:30098"}""")
+        val loaded = parseRemoteConnection(TestFixtures.read("scheduler_only.json"))
             as RemoteConnectionState.Loaded
 
         assertNull(loaded.controlEndpoint)
@@ -46,7 +47,7 @@ class RemoteConnectionSourceTest {
     @Test
     fun blankControlAddressDisablesHomeTab() {
         val loaded = parseRemoteConnection(
-            """{"schedulerBaseUrl":"http://192.0.2.10:30098","controlBaseUrl":""}""",
+            TestFixtures.read("control_empty.json"),
         ) as RemoteConnectionState.Loaded
 
         assertNull(loaded.controlEndpoint)
@@ -54,30 +55,30 @@ class RemoteConnectionSourceTest {
 
     @Test
     fun malformedJsonIsInvalidWithoutThrowing() {
-        val state = parseRemoteConnection("""{"schedulerBaseUrl":""")
+        val state = parseRemoteConnection(TestFixtures.read("malformed.json"))
         assertTrue(state is RemoteConnectionState.Invalid)
         assertNull((state as RemoteConnectionState.Invalid).field)
     }
 
     @Test
     fun missingRequiredSchedulerAddressIsInvalid() {
-        val state = parseRemoteConnection("""{"controlBaseUrl":"http://192.0.2.10:8099"}""")
+        val state = parseRemoteConnection(TestFixtures.read("control_only.json"))
         assertEquals(Field.ENDPOINT, (state as RemoteConnectionState.Invalid).field)
 
-        val blank = parseRemoteConnection("""{"schedulerBaseUrl":"   "}""")
+        val blank = parseRemoteConnection(TestFixtures.read("scheduler_blank.json"))
         assertEquals(Field.ENDPOINT, (blank as RemoteConnectionState.Invalid).field)
     }
 
     @Test
     fun invalidSchedulerAddressIsReported() {
-        val state = parseRemoteConnection("""{"schedulerBaseUrl":"192.0.2.10:30098"}""")
+        val state = parseRemoteConnection(TestFixtures.read("scheduler_no_scheme.json"))
         assertEquals(Field.ENDPOINT, (state as RemoteConnectionState.Invalid).field)
     }
 
     @Test
     fun invalidControlAddressIsReported() {
         val state = parseRemoteConnection(
-            """{"schedulerBaseUrl":"http://192.0.2.10:30098","controlBaseUrl":"not a url"}""",
+            TestFixtures.read("control_not_url.json"),
         )
         assertEquals(Field.CONTROL_ENDPOINT, (state as RemoteConnectionState.Invalid).field)
     }
@@ -98,7 +99,7 @@ class RemoteConnectionSourceTest {
     @Test
     fun nonNumericTimeoutIsInvalid() {
         val state = parseRemoteConnection(
-            """{"schedulerBaseUrl":"http://192.0.2.10:30098","connectTimeoutMs":"soon"}""",
+            TestFixtures.read("timeout_not_number.json"),
         )
         assertEquals(Field.TIMEOUT, (state as RemoteConnectionState.Invalid).field)
     }
@@ -120,11 +121,11 @@ class RemoteConnectionSourceTest {
     @Test
     fun intercomAddressIsOptionalAndParsed() {
         val loaded = parseRemoteConnection(
-            """{"schedulerBaseUrl":"http://192.0.2.10:30098","intercomBaseUrl":"https://intercom.example.test"}""",
+            TestFixtures.read("intercom_present.json"),
         ) as RemoteConnectionState.Loaded
         assertEquals("https://intercom.example.test", loaded.intercomEndpoint?.baseUrl())
 
-        val absent = parseRemoteConnection("""{"schedulerBaseUrl":"http://192.0.2.10:30098"}""")
+        val absent = parseRemoteConnection(TestFixtures.read("scheduler_only.json"))
             as RemoteConnectionState.Loaded
         assertNull(absent.intercomEndpoint)
     }
@@ -132,7 +133,7 @@ class RemoteConnectionSourceTest {
     @Test
     fun invalidIntercomAddressIsReported() {
         val state = parseRemoteConnection(
-            """{"schedulerBaseUrl":"http://192.0.2.10:30098","intercomBaseUrl":"not a url"}""",
+            TestFixtures.read("intercom_not_url.json"),
         )
         assertEquals(Field.INTERCOM_ENDPOINT, (state as RemoteConnectionState.Invalid).field)
     }

@@ -2,6 +2,7 @@ package dev.proflyder.home.feature.scenarios
 
 import dev.proflyder.home.core.model.RepeatKind
 import dev.proflyder.home.core.model.ScenarioTrigger
+import dev.proflyder.home.core.model.TimeTrigger
 import java.time.LocalDate
 
 /**
@@ -33,24 +34,25 @@ fun describeTriggers(triggers: List<ScenarioTrigger>, strings: ScenarioTriggerSt
     triggers.forEach { trigger ->
         when (trigger) {
             ScenarioTrigger.Manual -> Unit
-            is ScenarioTrigger.Time -> {
-                val time = trigger.trigger
-                val repeat = when (time.repeat) {
-                    RepeatKind.ONCE -> strings.once(
-                        runCatching { LocalDate.parse(time.onceDate) }.getOrNull(),
-                    )
-                    RepeatKind.DAILY -> strings.daily()
-                    RepeatKind.WEEKDAYS -> strings.weekdays()
-                    RepeatKind.WEEKENDS -> strings.weekends()
-                    RepeatKind.CUSTOM -> strings.custom(time.weekdays)
-                    else -> strings.unsupported()
-                }
-                parts += "$repeat ${strings.time(time.at.hour, time.at.minute)}"
-            }
+            is ScenarioTrigger.Time -> parts += describeTimeTrigger(trigger.trigger, strings)
             is ScenarioTrigger.Unknown -> hasUnsupported = true
         }
     }
     if (hasUnsupported) parts += strings.unsupported()
     if (parts.isEmpty()) return strings.manual()
     return parts.joinToString(", ")
+}
+
+private fun describeTimeTrigger(time: TimeTrigger, strings: ScenarioTriggerStrings): String {
+    val repeat = when (time.repeat) {
+        RepeatKind.ONCE -> strings.once(
+            runCatching { LocalDate.parse(time.onceDate) }.getOrNull(),
+        )
+        RepeatKind.DAILY -> strings.daily()
+        RepeatKind.WEEKDAYS -> strings.weekdays()
+        RepeatKind.WEEKENDS -> strings.weekends()
+        RepeatKind.CUSTOM -> strings.custom(time.weekdays)
+        else -> strings.unsupported()
+    }
+    return "$repeat ${strings.time(time.at.hour, time.at.minute)}"
 }

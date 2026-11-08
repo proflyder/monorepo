@@ -27,6 +27,7 @@ class HomeConnection(
     private val controller: CallController,
     private val bridge: CallTelecomBridge,
     private val scope: CoroutineScope,
+    private val callerName: String,
 ) : Connection() {
 
     private var observation: Job? = null
@@ -36,7 +37,7 @@ class HomeConnection(
         setAudioModeIsVoip(true)
         setInitializing()
         setAddress(Uri.fromParts("tel", "home", null), TelecomManager.PRESENTATION_ALLOWED)
-        setCallerDisplayName("Home", TelecomManager.PRESENTATION_ALLOWED)
+        setCallerDisplayName(callerName, TelecomManager.PRESENTATION_ALLOWED)
         bridge.attach(this)
     }
 

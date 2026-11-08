@@ -185,9 +185,9 @@ CallStyle notification, and an audio-only WebRTC peer connection.
 | `BLUETOOTH_CONNECT` | runtime (API 31+); denial hides Bluetooth routes |
 | `POST_NOTIFICATIONS` | runtime (API 33+); denial suppresses the ongoing notification, the call still works |
 
-Without an intercom address or phone token the call screen reports
-"not configured" instead of attempting a request. No live call is placed by
-tests or CI.
+Without an intercom address or the shared app token the call button shows a
+"not configured" message instead of attempting a request. No live call is
+placed by tests or CI.
 
 
 
@@ -207,13 +207,13 @@ It opens as an overlay on the current bottom tab; Back returns to that tab.
 - Connect and read timeouts also come from Remote Config. Invalid URLs,
   malformed JSON, or out-of-range timeouts are shown as an explicit invalid
   state; the app never crashes and no request is attempted.
-- The same bearer token is used for scheduler and control. Endpoints and
-  timeouts are deployment-specific and are set only in the Firebase console;
-  none are embedded in the app or the repository. The token remains
+- The same bearer token is used for scheduler, control and intercom. Endpoints
+  and timeouts are deployment-specific and are set only in the Firebase
+  console; none are embedded in the app or the repository. The token remains
   device-local and is never part of Remote Config.
-- Intercom uses a **separate phone token** (`INTERCOM_TOKEN` on the server),
-  entered in the Call token card on the Connection screen and encrypted with
-  the same Android Keystore key. It is never reused as the scheduler bearer.
+- The intercom server takes that shared app token as `phone_token` in its
+  Secret (ExternalSecret copies `scheduler-auth`'s `token`); the station keeps
+  its own `station_token`. There is no separate call token in the app.
 - Transport: Retrofit on OkHttp, Connect unary JSON
   (`POST {endpoint}/home.v1.SchedulerService/{RPC}`), protobuf JSON field
   names, `int64` as decimal strings. `Authorization: Bearer` is sent in the
@@ -271,6 +271,10 @@ bazelisk test --config=android //platform/android/...
 # Android Lint over the whole app graph (separate CI job `android / android-lint`).
 bazelisk test --config=android //projects/mobile/android:android_lint
 
+# detekt (separate CI job `android / android-detekt`): built-in rules,
+# formatting and the first-party `home-rules` plug-in.
+bazelisk test --config=android //projects/mobile/android:detekt
+
 # Optional: install on a connected device (keeps app data).
 adb install -r bazel-bin/projects/mobile/android/app/app.apk
 ```
@@ -292,6 +296,19 @@ for this job.
 `lint.xml` is the shared config. It is deliberately **not** a baseline: every
 finding must be fixed at the source. `tools:ignore`/`@Suppress` is allowed only
 for a documented false positive, scoped to the narrowest element or module.
+
+**detekt** is the second static-analysis gate, also a separate CI unit
+(`android / android-detekt`). `detekt.yml` enables `NestedBlockDepth` (3),
+`LongMethod`, `ComplexCondition`, `TooGenericExceptionCaught`, the `unused*`
+rules and a focused set of formatting rules; findings are failures and there is
+no baseline. `platform/android/detekt-rules` provides the first-party
+`home-rules` plug-in (`NoElseIf`, `NoTry`, `LongLambda`, `NoInlineJsonInTests`,
+`NoHardcodedUiText`), loaded with `--plugins` by the Bazel rule in
+`platform/android/detekt.bzl`. `NoTry` forbids `try`/`catch`/`finally`
+entirely: use `runCatching`, `suspendRunCatching` (rethrows
+`CancellationException`) or `use { }`. Test mock responses live in
+`src/test/resources/fixtures/*.json` and are read through
+`dev.proflyder.home.core.testing.TestFixtures`.
 
 **Zero-warning policy.** `bazelisk build --config=android //projects/mobile/android:app`
 and `bazelisk test --config=android //projects/mobile/android:android_tests` must

@@ -11,6 +11,7 @@ import dev.proflyder.home.core.config.REMOTE_CONNECTION_KEY
 import dev.proflyder.home.core.config.RemoteConnectionSource
 import dev.proflyder.home.core.config.RemoteConnectionState
 import dev.proflyder.home.core.config.parseRemoteConnection
+import dev.proflyder.home.core.operation.suspendRunCatching
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
@@ -80,10 +81,10 @@ class FirebaseRemoteConnectionSource(context: Context) : RemoteConnectionSource 
                 object : ConfigUpdateListener {
                     override fun onUpdate(update: ConfigUpdate) {
                         scope.launch {
-                            try {
+                            suspendRunCatching {
                                 config.activate().await()
                                 publish(config)
-                            } catch (_: Exception) {
+                            }.onFailure {
                                 mutableState.value = RemoteConnectionState.FetchFailed(lastLoaded)
                             }
                         }
@@ -101,28 +102,32 @@ class FirebaseRemoteConnectionSource(context: Context) : RemoteConnectionSource 
     override suspend fun refresh() {
         val config = remoteConfig ?: return
         refreshMutex.withLock {
-            try {
-                config.setConfigSettingsAsync(SETTINGS).await()
-                config.setDefaultsAsync(DEFAULTS).await()
-                // Manual refresh: 0 bypasses the one-hour minimum fetch interval.
-                config.fetch(0).await()
-                config.activate().await()
-                publish(config)
-            } catch (_: Exception) {
+            suspendRunCatching { activateAndPublish(config) }.onFailure {
                 mutableState.value = RemoteConnectionState.FetchFailed(lastLoaded)
             }
         }
     }
 
+    private suspend fun activateAndPublish(config: FirebaseRemoteConfig) {
+        config.setConfigSettingsAsync(SETTINGS).await()
+        config.setDefaultsAsync(DEFAULTS).await()
+        // Manual refresh: 0 bypasses the one-hour minimum fetch interval.
+        config.fetch(0).await()
+        config.activate().await()
+        publish(config)
+    }
+
     private suspend fun refreshInternal(config: FirebaseRemoteConfig) {
-        try {
-            config.setConfigSettingsAsync(SETTINGS).await()
-            config.setDefaultsAsync(DEFAULTS).await()
-            config.fetchAndActivate().await()
-            publish(config)
-        } catch (_: Exception) {
+        suspendRunCatching { fetchAndPublish(config) }.onFailure {
             mutableState.value = RemoteConnectionState.FetchFailed(lastLoaded)
         }
+    }
+
+    private suspend fun fetchAndPublish(config: FirebaseRemoteConfig) {
+        config.setConfigSettingsAsync(SETTINGS).await()
+        config.setDefaultsAsync(DEFAULTS).await()
+        config.fetchAndActivate().await()
+        publish(config)
     }
 
     internal fun publish(config: FirebaseRemoteConfig) {

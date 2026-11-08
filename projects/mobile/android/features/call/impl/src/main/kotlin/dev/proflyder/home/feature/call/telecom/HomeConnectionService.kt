@@ -5,6 +5,7 @@ import android.telecom.ConnectionRequest
 import android.telecom.ConnectionService
 import android.telecom.PhoneAccountHandle
 import dev.proflyder.home.feature.call.CallEntryPoint
+import dev.proflyder.home.feature.call.impl.R
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -29,6 +30,7 @@ class HomeConnectionService : ConnectionService() {
             controller = dependencies.controller,
             bridge = dependencies.telecomBridge,
             scope = scope,
+            callerName = getString(R.string.call_account_label),
         )
         connection.startOutgoing()
         return connection

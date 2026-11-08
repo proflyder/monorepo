@@ -230,25 +230,16 @@ object ControlItems {
         val byRoom = LinkedHashMap<String, MutableList<ControlEntry>>()
         working.forEach { byRoom.getOrPut(it.room) { mutableListOf() } += it }
         byRoom.forEach { (room, roomEntries) ->
-            // A group is shown when one of its primary controls matches the
-            // filter; its settings then follow the device, never the chip.
-            val groups = groupByDevice(roomEntries).filter { bucket ->
-                applied == ControlFilter.All || bucket.primary.any { it.matches(applied) }
-            }
-            if (groups.isEmpty()) return@forEach
-            val on = groups.sumOf { bucket -> bucket.primary.count { it.power == PowerState.ON } }
-            val total = groups.sumOf { bucket -> bucket.primary.size }
-            val summary = if (statesOk) texts.onSummary(on, total) else null
-            val section = if (room.isBlank()) SECTION_OTHER else SECTION_ROOM_PREFIX + room
-            val collapsed = section in collapsedRooms
-            items += if (room.isBlank()) {
-                ControlItem.Header(section, texts.otherDevices, summary, collapsible = true, collapsed = collapsed)
-            } else {
-                ControlItem.Header(section, room, summary, collapsible = true, collapsed = collapsed)
-            }
-            if (!collapsed) {
-                groups.forEach { bucket -> items += bucket.toItem(pending, statesOk, expandedDevices) }
-            }
+            items += roomSection(
+                room = room,
+                roomEntries = roomEntries,
+                applied = applied,
+                statesOk = statesOk,
+                texts = texts,
+                pending = pending,
+                expandedDevices = expandedDevices,
+                collapsedRooms = collapsedRooms,
+            )
         }
         if (dead.isNotEmpty()) {
             items += ControlItem.Header(SECTION_UNAVAILABLE, texts.unavailable, dead.size.toString())
@@ -256,6 +247,40 @@ object ControlItems {
         }
         return items
     }
+
+    private fun roomSection(
+        room: String,
+        roomEntries: List<ControlEntry>,
+        applied: ControlFilter,
+        statesOk: Boolean,
+        texts: ControlTexts,
+        pending: Set<String>,
+        expandedDevices: Set<String>,
+        collapsedRooms: Set<String>,
+    ): List<ControlItem> {
+        // A group is shown when one of its primary controls matches the
+        // filter; its settings then follow the device, never the chip.
+        val groups = groupByDevice(roomEntries).filter { it.matchesFilter(applied) }
+        if (groups.isEmpty()) return emptyList()
+        val on = groups.sumOf { bucket -> bucket.primary.count { it.power == PowerState.ON } }
+        val total = groups.sumOf { bucket -> bucket.primary.size }
+        val summary = if (statesOk) texts.onSummary(on, total) else null
+        val section = if (room.isBlank()) SECTION_OTHER else SECTION_ROOM_PREFIX + room
+        val collapsed = section in collapsedRooms
+        val result = mutableListOf<ControlItem>()
+        result += if (room.isBlank()) {
+            ControlItem.Header(section, texts.otherDevices, summary, collapsible = true, collapsed = collapsed)
+        } else {
+            ControlItem.Header(section, room, summary, collapsible = true, collapsed = collapsed)
+        }
+        if (!collapsed) {
+            groups.forEach { bucket -> result += bucket.toItem(pending, statesOk, expandedDevices) }
+        }
+        return result
+    }
+
+    private fun DeviceBucket.matchesFilter(filter: ControlFilter): Boolean =
+        filter == ControlFilter.All || primary.any { it.matches(filter) }
 
     /**
      * Groups one room's entries by device. An entry without a [ControlEntry.deviceId]
@@ -267,17 +292,19 @@ object ControlItems {
             val key = entry.deviceId.ifBlank { entry.id }
             buckets.getOrPut(key) { mutableListOf() } += entry
         }
-        return buckets.map { (deviceId, members) ->
-            val primary = members.filter { it.role != ControlRole.SETTING }
-            val settings = members.filter { it.role == ControlRole.SETTING }
-            val name = members.firstNotNullOfOrNull { it.device.takeIf(String::isNotBlank) }
-            DeviceBucket(
-                deviceId = deviceId,
-                title = name ?: primary.firstOrNull()?.displayTitle() ?: members.first().displayTitle(),
-                primary = primary,
-                settings = settings,
-            )
-        }
+        return buckets.map { (deviceId, members) -> bucketOf(deviceId, members) }
+    }
+
+    private fun bucketOf(deviceId: String, members: List<ControlEntry>): DeviceBucket {
+        val primary = members.filter { it.role != ControlRole.SETTING }
+        val settings = members.filter { it.role == ControlRole.SETTING }
+        val name = members.firstNotNullOfOrNull { it.device.takeIf(String::isNotBlank) }
+        return DeviceBucket(
+            deviceId = deviceId,
+            title = name ?: primary.firstOrNull()?.displayTitle() ?: members.first().displayTitle(),
+            primary = primary,
+            settings = settings,
+        )
     }
 
     private data class DeviceBucket(
