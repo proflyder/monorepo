@@ -632,7 +632,7 @@ fn build(radio: Option<Box<dyn Radio>>) -> Fixture {
         int: tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt()).unwrap(),
         model,
         store,
-        media: super::media::Policy::new(&model.volume),
+        media: super::media::Policy::new(&model.volume, 1.0),
         applied_tz: String::new(),
         hw_mic_muted: false,
         persist_on_start: false,

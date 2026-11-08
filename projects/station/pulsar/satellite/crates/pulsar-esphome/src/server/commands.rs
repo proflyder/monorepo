@@ -246,6 +246,9 @@ impl super::Server {
                 };
                 (NumberId::FollowupDuration, s as f32)
             }
+            k if k == key::NUMBER_ANNOUNCE_VOLUME.get() => {
+                (NumberId::AnnounceVolume, v.clamp(0.0, 100.0))
+            }
             _ => return,
         };
         self.emit(ApiEvent::Number(id, v));

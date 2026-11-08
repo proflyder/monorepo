@@ -20,8 +20,11 @@ impl Controller {
         self.st.nearest_answers && self.deps.arbiter.ok()
     }
 
-    /// Plays `urls` on ANNOUNCE; `done` runs on its end.
+    /// Plays `urls` on ANNOUNCE; `done` runs on its end. Spoken announcements and TTS answers
+    /// follow «Громкость объявлений»; earcons and the ring keep the master volume.
     pub(super) fn play_announce(&mut self, urls: Vec<String>, done: Pending) {
+        let speech = matches!(done, Pending::Tts { .. } | Pending::Announce { .. });
+        self.set_announce_speech(speech);
         let id = self.deps.player.play(Channel::Announce, urls);
         self.pending.insert(id, done);
     }
@@ -305,6 +308,7 @@ impl Controller {
         self.update_duck();
         if earcon {
             let sound = earcons::path(self.model.earcons.wake);
+            self.set_announce_speech(false);
             self.deps.player.play(Channel::Announce, vec![sound]);
         }
         // HA applies AnnounceFinished by forcing idle: an answer's report must not arrive over
