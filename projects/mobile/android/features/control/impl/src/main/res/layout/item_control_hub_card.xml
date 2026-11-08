@@ -6,8 +6,6 @@
     tools:ignore="SelectableText"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_marginStart="6dp"
-    android:layout_marginEnd="6dp"
     android:clickable="true"
     android:focusable="true">
 

@@ -24,6 +24,9 @@ internal object ControlIcons {
 
     @DrawableRes
     fun resolve(entry: ControlEntry): Int {
+        // The voice profile is a mode, not a device: its "message" hint must not
+        // reuse the speak artwork.
+        if (entry.kind == ControlKind.PROFILE) return R.drawable.control_ic_account
         val hint = entry.icon.lowercase()
         if (hint.isNotEmpty()) {
             keywords.firstOrNull { (words, _) -> words.any { it in hint } }?.let { return it.second }
@@ -31,7 +34,7 @@ internal object ControlIcons {
         return when (entry.kind) {
             ControlKind.LIGHT -> R.drawable.control_ic_bulb
             ControlKind.SWITCH -> R.drawable.control_ic_plug
-            ControlKind.PROFILE -> R.drawable.control_ic_work
+            ControlKind.PROFILE -> R.drawable.control_ic_account
             else -> R.drawable.control_ic_play
         }
     }

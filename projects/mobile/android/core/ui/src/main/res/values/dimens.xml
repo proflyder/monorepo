@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="DuplicateStrings">
+    <!-- Shared spacing/radius tokens for the Home, Scenarios and Time screens. -->
+    <dimen name="ui_screen_padding">16dp</dimen>
+    <dimen name="ui_section_gap">24dp</dimen>
+    <dimen name="ui_card_radius">24dp</dimen>
+    <dimen name="ui_tile_gap">8dp</dimen>
+    <dimen name="ui_tile_gap_half">4dp</dimen>
+</resources>

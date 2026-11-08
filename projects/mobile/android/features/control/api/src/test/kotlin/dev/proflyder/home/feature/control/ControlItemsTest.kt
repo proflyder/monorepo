@@ -65,19 +65,45 @@ class ControlItemsTest {
         expandedDevices: Set<String> = emptySet(),
     ) = ControlItems.build(entries, pending, statesOk, filter, texts, expandedDevices)
 
-    private fun List<ControlItem>.describe(): List<String> = map {
-        when (it) {
-            is ControlItem.Header -> "# ${it.title}" + (it.summary?.let { s -> " ($s)" } ?: "")
-            is ControlItem.Profile -> "P ${it.entry.id}"
-            is ControlItem.Scenario -> "S ${it.entry.id}"
-            is ControlItem.Device -> "D ${it.entry.id}"
-            is ControlItem.DeviceGroup ->
-                "G ${it.title} expanded=${it.expanded}" +
-                    " p=[${it.primary.joinToString(",") { row -> row.entry.id }}]" +
-                    " s=[${it.settings.joinToString(",") { row -> row.entry.id }}]"
-            is ControlItem.Hub -> "H ${it.cards.joinToString(",") { card -> card.key }}"
-            is ControlItem.QuickActions -> "Q ${it.tiles.joinToString(",") { tile -> tile.key }}"
+    private fun List<ControlItem>.describe(): List<String> =
+        filterNot { it is ControlItem.Filters }.map {
+            when (it) {
+                is ControlItem.Header -> "# ${it.title}" + (it.summary?.let { s -> " ($s)" } ?: "")
+                is ControlItem.Profile -> "P ${it.entry.id}"
+                is ControlItem.Scenario -> "S ${it.entry.id}"
+                is ControlItem.Device -> "D ${it.entry.id}"
+                is ControlItem.DeviceGroup ->
+                    "G ${it.title} expanded=${it.expanded}" +
+                        " p=[${it.primary.joinToString(",") { row -> row.entry.id }}]" +
+                        " s=[${it.settings.joinToString(",") { row -> row.entry.id }}]"
+                is ControlItem.Hub -> "H ${it.cards.joinToString(",") { card -> card.key }}"
+                is ControlItem.QuickActions -> "Q ${it.tiles.joinToString(",") { tile -> tile.key }}"
+                is ControlItem.Filters -> "F ${it.chips.joinToString(",") { chip -> chip.label }}"
+            }
         }
+
+    @Test
+    fun filterChipsSitBetweenQuickActionsAndTheRoomSections() {
+        val items = ControlItems.build(
+            entries = sample,
+            pending = emptySet(),
+            statesOk = true,
+            filter = ControlFilter.All,
+            texts = texts,
+            leading = listOf(ControlItem.QuickActions(emptyList(), hint = true)),
+        )
+        val kinds = items.map {
+            when (it) {
+                is ControlItem.QuickActions -> "quick"
+                is ControlItem.Filters -> "filters"
+                is ControlItem.Header -> "header:${it.section}"
+                is ControlItem.Profile -> "profile"
+                else -> "row"
+            }
+        }
+        assertEquals(listOf("quick", "filters", "header:room:Bedroom"), kinds.take(3))
+        val chips = items.filterIsInstance<ControlItem.Filters>().single().chips
+        assertEquals(listOf("All · 5", "Lights · 4", "Switches · 1", "Bedroom · 3", "Workspace · 1"), chips.map { it.label })
     }
 
     @Test

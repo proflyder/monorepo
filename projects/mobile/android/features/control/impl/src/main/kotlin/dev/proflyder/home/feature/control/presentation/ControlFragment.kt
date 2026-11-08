@@ -1,7 +1,6 @@
 package dev.proflyder.home.feature.control.presentation
 
 import android.os.Bundle
-import android.view.View
 import androidx.fragment.app.activityViewModels
 import androidx.recyclerview.widget.GridLayoutManager
 import dev.proflyder.home.core.model.ControlEntry
@@ -18,7 +17,6 @@ import dev.proflyder.home.core.ui.setupPullToRefresh
 import dev.proflyder.home.core.ui.userMessage
 import dev.proflyder.home.core.ui.viewModelFactory
 import dev.proflyder.home.feature.control.ControlFilter
-import dev.proflyder.home.feature.control.ControlFilterOption
 import dev.proflyder.home.feature.control.ControlItem
 import dev.proflyder.home.feature.control.ControlItems
 import dev.proflyder.home.feature.control.ControlTexts
@@ -27,7 +25,6 @@ import dev.proflyder.home.feature.control.QuickTile
 import dev.proflyder.home.feature.control.QuickTiles
 import dev.proflyder.home.feature.control.impl.R
 import dev.proflyder.home.feature.control.impl.databinding.FragmentControlBinding
-import dev.proflyder.home.feature.control.impl.databinding.ItemControlFilterBinding
 import kotlinx.coroutines.delay
 
 class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBinding.Companion::inflate) {
@@ -37,11 +34,6 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
 
     private lateinit var adapter: ControlAdapter
     private lateinit var states: ListStateViews
-    private var shownOptions: List<ControlFilterOption> = emptyList()
-
-    /** Chip view id -> filter, rebuilt together with the chips (view ids are generated, so they never collide). */
-    private var chipFilters: Map<Int, ControlFilter> = emptyMap()
-    private var syncingChips = false
     private var lightSheet: LightSheet? = null
     private var speakDialog: SpeakDialog? = null
 
@@ -62,7 +54,7 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
                 // A device group itself does nothing: its rows forward their taps.
                 // The profile is a mode: only its segmented buttons act.
                 is ControlItem.Header, is ControlItem.Profile, is ControlItem.DeviceGroup,
-                is ControlItem.Hub, is ControlItem.QuickActions,
+                is ControlItem.Hub, is ControlItem.QuickActions, is ControlItem.Filters,
                 -> Unit
             }
         }
@@ -117,6 +109,8 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
                 QuickTile.Call -> Unit
             }
         }
+
+        override fun onFilterSelected(filter: ControlFilter) = viewModel.setFilter(filter)
     }
 
     override fun onBindingCreated(binding: FragmentControlBinding, savedInstanceState: Bundle?) {
@@ -145,12 +139,6 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
         binding.controlRetry.setOnClickListener { viewModel.refresh() }
         binding.controlOpenConnection.setOnClickListener { requireNavigator().selectTab("connection") }
 
-        binding.controlFilters.setOnCheckedStateChangeListener { _, checkedIds ->
-            if (syncingChips) return@setOnCheckedStateChangeListener
-            val id = checkedIds.firstOrNull() ?: return@setOnCheckedStateChangeListener
-            chipFilters[id]?.let { viewModel.setFilter(it) }
-        }
-
         viewModel.state.observe { render(it) }
 
         repeatOnView {
@@ -178,8 +166,6 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
         lightSheet = null
         speakDialog?.dismiss()
         speakDialog = null
-        shownOptions = emptyList()
-        chipFilters = emptyMap()
     }
 
     override fun onResume() {
@@ -205,7 +191,6 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
             !hasItems -> states.showEmpty()
             else -> {
                 states.showContent()
-                renderFilters(state)
                 val tiles = QuickTiles.build(
                     refs = state.favorites,
                     entries = state.entries,
@@ -291,42 +276,10 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
         profile = getString(R.string.control_section_profile),
         onSummary = { on, total -> getString(R.string.control_on_summary, on, total) },
         actions = getString(R.string.control_section_actions),
+        all = getString(R.string.control_filter_all),
+        lights = getString(R.string.control_filter_lights),
+        switches = getString(R.string.control_filter_switches),
     )
-
-    private fun renderFilters(state: ControlUiState) {
-        val options = ControlItems.options(state.entries)
-        val group = binding.controlFilters
-        syncingChips = true
-        if (options != shownOptions) {
-            group.removeAllViews()
-            val filters = LinkedHashMap<Int, ControlFilter>()
-            options.forEach { option ->
-                val chip = ItemControlFilterBinding.inflate(layoutInflater, group, false).root
-                chip.id = View.generateViewId()
-                chip.text = labelOf(option)
-                group.addView(chip)
-                filters[chip.id] = option.filter
-            }
-            chipFilters = filters
-            shownOptions = options
-        }
-        // Always check the *applied* filter, so a stale selection still shows a checked chip.
-        val applied = ControlItems.effectiveFilter(state.entries, state.filter)
-        chipFilters.entries.firstOrNull { it.value == applied }?.let { group.check(it.key) }
-        syncingChips = false
-        binding.controlFiltersBar.setVisible(options.size > 1)
-    }
-
-    private fun labelOf(option: ControlFilterOption): String {
-        val name = when (val filter = option.filter) {
-            ControlFilter.All -> getString(R.string.control_filter_all)
-            ControlFilter.Scenarios -> getString(R.string.control_filter_scenarios)
-            ControlFilter.Lights -> getString(R.string.control_filter_lights)
-            ControlFilter.Switches -> getString(R.string.control_filter_switches)
-            is ControlFilter.Room -> filter.name
-        }
-        return "$name · ${option.count}"
-    }
 
     internal fun ControlEntry.isOn(): Boolean = power == dev.proflyder.home.core.model.PowerState.ON
 }
