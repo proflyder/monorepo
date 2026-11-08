@@ -1158,6 +1158,8 @@ kubectl -n home-assistant logs deploy/ha-bridge --tail=50
 Сценарии Home control — это HA-метка `scenario` (`CONTROL_SCENARIO_LABEL`,
 default `scenario`): назначьте её скриптам в Settings → Automations & scenes →
 Scripts. Иконки/комнаты/имена — только отображение. `CONTROL_LABEL` удалена.
+Нативные сценарии scheduler (`home.v1.ScenarioService`) в этот каталог не
+входят: каталог строится только из сущностей HA.
 
 Home control (каталог устройств/сценариев):
 `http://<node>:30099` (LAN) или `https://control.home.example.com` (LAN/VPN),
@@ -1236,6 +1238,39 @@ Time-триггер добавляется так же: `{"time":{"timezone":"As
 `{"timeWindow":{"start":{"hour":22},"end":{"hour":6},"weekdays":[1,2,3,4,5]}}`
 поддерживает переход через полночь; timezone условий — у первого
 time-триггера, иначе `SCENARIO_TIMEZONE`.
+
+### Сид бытовых сценариев
+
+«Блэкаут» и «Сел работать» засеваются идемпотентно из
+`projects/home/kubernetes/scheduler/scenarios/` (`blackout.json`,
+`work_mode.json`, `seed.mjs`). Сид читает `ListScenarios`, создаёт только
+сценарии, чьей метки ещё нет (`idempotencyKey=seed-<slug>`), и никогда не
+перезаписывает существующие: правки владельца в приложении сохраняются.
+Токен передаётся файлом, а не аргументом; в выводе только метки и id.
+
+```bash
+SCHEDULER_URL=https://alarms.home.example.com \
+SCHEDULER_TOKEN_FILE=secrets/home/scheduler.token \
+  node projects/home/kubernetes/scheduler/scenarios/seed.mjs --dry-run   # план
+SCHEDULER_URL=https://alarms.home.example.com \
+SCHEDULER_TOKEN_FILE=secrets/home/scheduler.token \
+  node projects/home/kubernetes/scheduler/scenarios/seed.mjs             # создать
+```
+
+`keep` — сценарий с такой меткой уже есть, `created` — создан,
+`would` — попал бы в план при `--dry-run`. Проверка после сида:
+
+```bash
+curl -fsS -X POST -H "Authorization: Bearer $SCHEDULER_TOKEN" \
+  -H 'Content-Type: application/json' \
+  https://alarms.home.example.com/home.v1.ScenarioService/ListScenarios \
+  -d '{"includeDisabled":true}' | jq -r '.scenarios[].label'
+```
+
+Голос запускает их через `script.scenario_run` по точной метке; ручная
+правка метки в приложении сломает голосовую команду, поэтому метки —
+часть контракта. Тест сида:
+`node --test projects/home/kubernetes/scheduler/scenarios/seed.test.mjs`.
 
 Выключить исполнение (манифест при следующем `deploy.sh` сохранит
 env/реплики, поэтому ручное выключение не откатывается само):

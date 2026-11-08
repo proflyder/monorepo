@@ -1,0 +1,32 @@
+{
+  "slug": "work_mode",
+  "label": "Сел работать",
+  "description": "Включает рабочий свет в спальне в снятых параметрах: лента 100% 2816 K, лампа у кровати 100% 2800 K с белым режимом Day, светильник на мониторе 100% 2800 K.",
+  "enabled": true,
+  "triggers": [{ "manual": {} }],
+  "conditions": [],
+  "steps": [
+    {
+      "catalog": {
+        "entryId": "light.spalnia_lenta",
+        "action": "set",
+        "paramsJson": "{\"brightness\":100,\"kelvin\":2816}"
+      }
+    },
+    {
+      "catalog": {
+        "entryId": "light.yeelink_cn_827036414_bslamp2_s_2_light",
+        "action": "set",
+        "paramsJson": "{\"brightness\":100,\"kelvin\":2800,\"effect\":\"Day\"}"
+      }
+    },
+    {
+      "catalog": {
+        "entryId": "light.yeelink_cn_919937191_lamp22_s_2",
+        "action": "set",
+        "paramsJson": "{\"brightness\":100,\"kelvin\":2800}"
+      }
+    }
+  ],
+  "continueOnError": true
+}
