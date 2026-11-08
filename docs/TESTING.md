@@ -302,7 +302,11 @@ PR-прогоны кэши только читают (`actions/cache/restore`): 
 (`_native.yml`, `_deploy-control.yml`) кэш диска только восстанавливается:
 пока такой сборки на develop нет, лучше не плодить копии на каждый PR.
 Размер архива Android ограничен
-`--experimental_disk_cache_gc_max_size=6G` в `warm-caches`.
+`--experimental_disk_cache_gc_max_size=6G` в `warm-caches`. Host-Rust юниты
+(`_bazel.yml`: сервисы, `proto`, `pulsar-bazel`) греет параллельный job
+`warm-rust`: он собирает все build/test-цели юнитов платформы `bazel` и
+сохраняет общий кэш `bazel-Linux-rust-…` (до 3 ГБ), который каждый юнит
+восстанавливает после собственной записи.
 
 
 Проверки, тесты и сборки внутри reusable workflow запускаются теми же
