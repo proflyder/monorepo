@@ -286,8 +286,7 @@ CI (платформа `native`, `_native.yml`) ставит pinned Bazelisk, к
 `develop` (см. ниже); его job `warm-caches` после merge — единственный
 писатель develop-стороны общих кэшей: `setup-bazel`, диск-кэша Android
 (собирает `//projects/mobile/android:app` и архивирует
-`~/.cache/bazel-disk` под ключом `android-app`) и бинаря
-target-determinator. Ключи совпадают с теми, что восстанавливают PR, а
+`~/.cache/bazel-disk` под ключом `android-app`). Ключи совпадают с теми, что восстанавливают PR, а
 `restore-keys` дают трёхуровневый откат (точный ключ → юнит → платформа),
 поэтому смена `maven_install.json` или lock-файлов не даёт полный холод.
 Версии инструментов CI (Python, Node, gitleaks, actionlint, shellcheck,
@@ -335,15 +334,7 @@ matrix одного платформенного workflow.
 | quality | `_quality.yml` | audit, static gates, unit-map, actionlint, shellcheck, Gitleaks |
 
 `ci.yml` содержит только координацию: `changes` → matrix-вызовы reusable
-workflow → `ci-ok`. Исключения — job `plan` и `android-distribute`.
-`plan` идёт параллельно с `changes` (ему не нужен список юнитов: universe и
-кандидаты берутся из карты юнитов) и один раз запускает target-determinator
-для всего Android-universe, отдавая `affected_targets`; каждая запись
-матрицы только пересекает свои объявленные цели с этим списком
-(`platform/ci/plan-targets.mjs narrow`). Пустой `affected_targets` (job
-пропущен при `workflow_dispatch`, установка/анализ упали) означает «гонять
-все объявленные цели»: сужение может только уменьшить список, но не скрыть
-сломанный план за зелёным job'ом. `plan` не входит в `ci-ok`.
+workflow → `ci-ok`. Исключение — `android-distribute`.
 `android-distribute` ждёт весь `android` matrix и при
 PR (не из форка) с `android_distribute` = true скачивает готовый
 `android-app-apk`, подписывает его релизным ключом и загружает в Firebase: он
@@ -546,17 +537,9 @@ lock-diff; `[workspace] members`, `[profile]`, `[workspace.lints]`, правка
   (`affected.mjs --all`);
 * база определена, но `git diff` пуст → ни один тяжёлый юнит, только quality.
 
-Список целей внутри android-юнита дополнительно сужается
-`target-determinator` (`v0.34.0`, sha256 закреплён в
-`platform/ci/install-target-determinator.sh`). Он анализирует граф базовой
-ревизии (`bazel cquery`), поэтому запускается в job `plan` с JDK/SDK, `bazel`,
-полной историей и тем же `--bazel-opts=--config=android`, что и реальная
-сборка (иначе анализ падает на version defines из
-`platform/android/android.bazelrc`); при любой ошибке, таймауте или
-отсутствии бинаря `platform/ci/bazel-targets.sh` печатает весь объявленный
-список целей, а `plan-targets.mjs narrow` тогда возвращает объявленные цели
-юнита. `plan` запускается один раз на PR (при `workflow_dispatch` базы нет —
-идут все объявленные цели).
+Внутри android-юнита идут все объявленные цели: незатронутые изменением
+тесты Bazel берёт из кэша (действий и результатов тестов), поэтому отдельного
+сужения через target-determinator нет.
 
 
 ### Инварианты и проверки
@@ -634,7 +617,7 @@ mise run scan:secrets                           # Gitleaks (working tree)
 `affected.sh` только читает Git и граф загрузки Bazel: он ничего не собирает,
 не деплоит и не трогает устройства. Версии сторонних actions закреплены
 commit SHA (сверены с тегами через `gh api`); Bazelisk `1.30.0`, actionlint
-`1.7.12`, target-determinator `0.34.0` и Gitleaks `8.30.1` скачиваются с
+`1.7.12` и Gitleaks `8.30.1` скачиваются с
 проверкой sha256.
 
 На чистом checkout (CI) отсутствуют игнорируемые источники, поэтому

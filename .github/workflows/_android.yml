@@ -2,10 +2,8 @@ name: _android
 
 # Reusable Android platform workflow: one matrix entry per affected application
 # (or shared Kotlin library) unit, plus the dedicated Android Lint and detekt
-# units. The unit is selected by the Bazel reverse dependency graph in ci.yml;
-# the `plan` job runs target-determinator once for the whole Android universe
-# and each entry only intersects its declared targets with that result (an
-# empty result or a failed plan keeps every declared target). Build runs before
+# units. The unit is selected by the Bazel reverse dependency graph in ci.yml
+# and runs every declared target (Bazel's cache skips unaffected tests). Build runs before
 # test, so a test failure cannot hide a build error and a lint/detekt finding
 # only fails its own entry.
 #
@@ -35,13 +33,6 @@ on:
         type: string
       sdk_packages:
         description: Extra Android SDK packages (space separated) this unit needs
-        required: false
-        default: ""
-        type: string
-      affected_targets:
-        description: >-
-          Space separated affected targets from the `plan` job (empty disables
-          narrowing and runs every declared target)
         required: false
         default: ""
         type: string
@@ -183,22 +174,17 @@ jobs:
           echo "enabled=true" >> "$GITHUB_OUTPUT"
           echo "google-services.json prepared"
 
-      # target-determinator runs once for the whole Android universe in the
-      # `plan` job; here only the unit's own candidates are intersected with
-      # that answer. An empty affected set (plan skipped, failed or degraded)
-      # keeps every declared target: narrowing may run fewer targets, never
-      # none.
-      - name: Select affected targets
+      # Every declared target runs; Bazel's cache skips unaffected tests.
+      - name: Select targets
         id: targets
         env:
-          AFFECTED: ${{ inputs.affected_targets }}
           TEST_CANDIDATES: ${{ inputs.test_targets }}
           BUILD_CANDIDATES: ${{ inputs.build_targets }}
         run: |
-          node platform/ci/plan-targets.mjs narrow \
-            --affected "$AFFECTED" \
-            --tests "$TEST_CANDIDATES" \
-            --builds "$BUILD_CANDIDATES" >> "$GITHUB_OUTPUT"
+          {
+            echo "test_targets=${TEST_CANDIDATES}"
+            echo "build_targets=${BUILD_CANDIDATES}"
+          } >> "$GITHUB_OUTPUT"
 
       # The app is always built from its declared target: this entry owns the
       # distributable APK, so a narrowed (possibly empty) build list must not

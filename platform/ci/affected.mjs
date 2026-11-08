@@ -2373,8 +2373,7 @@ export function nativePublishSelected(unit, changed) {
 /**
  * Bazel query expression covering every Android/Kotlin target, so target
  * narrowing sees shared libraries that belong to another unit than the
- * application it builds. Shared with `plan-targets.mjs`, which runs
- * target-determinator once for the whole expression.
+ * application it builds.
  */
 export function androidUniverse(config) {
   const androidRoots = [

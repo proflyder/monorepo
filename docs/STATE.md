@@ -170,10 +170,9 @@
   CI ставит подмножество через `jdx/mise-action`; Bazel — `setup-bazel`.
   Рабочее место — `mise run setup` (`docs/WORKSTATION.md`).
 - Кэши Actions пишет только `develop`: `deploy-home` → `warm-caches`
-  (setup-bazel, диск-кэш Android с ключом `android-app`, бинарь
-  target-determinator); PR-прогоны только восстанавливают их. Список
-  затронутых Android-целей считается один раз в job `plan`
-  (`platform/ci/plan-targets.mjs`), цикл `bazel build`/`test` идёт по нему.
+  (setup-bazel, диск-кэш Android с ключом `android-app`) и `warm-rust`
+  (общий host-Rust кэш); PR-прогоны только восстанавливают их. Android-юниты
+  гоняют объявленные цели, незатронутые тесты берутся из кэша Bazel.
 - Android-only флаги Bazel — `platform/android/android.bazelrc` под
   `--config=android` (подключается `try-import` из корневого `.bazelrc`);
   правка файла выбирает только android-юниты, а не все.

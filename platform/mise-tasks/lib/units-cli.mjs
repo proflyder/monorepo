@@ -145,7 +145,7 @@ export function unitHint(unit) {
 
 /**
  * Optional target override for Bazel units (`_android.yml` narrows the list
- * with target-determinator before calling the task). Space separated, like the
+ * before calling the task). Space separated, like the
  * workflow inputs.
  */
 function bazelTargetOverride() {

@@ -190,14 +190,6 @@ jobs:
             bazel-android-${{ runner.os }}-android-app-
             bazel-android-${{ runner.os }}-
 
-      # The `plan` job's pinned binary (version and checksums are pinned in the
-      # installer script, so its hash stands for the version). The binary only
-      # changes when that script changes, so one entry per hash is enough.
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.cache/ci-tools
-          key: target-determinator-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('platform/ci/install-target-determinator.sh') }}
-
       - name: Populate the Bazel repository cache
         run: |
           set -euo pipefail
@@ -207,17 +199,6 @@ jobs:
           # `--config=android` supplies the Android version defines; without it
           # the Android genrules fail analysis ($(home_version_name) undefined).
           bazel fetch --config=android //solutions/... //packages/... //projects/...
-
-      - name: Install target-determinator
-        run: |
-          set -euo pipefail
-          dest="$HOME/.cache/ci-tools/target-determinator"
-          if [[ -x "$dest" ]]; then
-            echo "target-determinator cache already warm"
-          else
-            mkdir -p "$(dirname "$dest")"
-            platform/ci/install-target-determinator.sh "$dest" >/dev/null
-          fi
 
       # No secrets are involved: without `platform/android/keys/
       # google-services.json` the app still builds and Firebase stays inert.

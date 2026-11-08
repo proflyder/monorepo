@@ -113,9 +113,9 @@ class PayloadSet<A : Enum<A>> private constructor(private val changed: Set<A>) {
             payload: PayloadSet<*>,
             aspectType: Class<A>,
         ) {
-            payload.aspects.forEach { aspect ->
-                if (aspectType.isInstance(aspect)) add(aspectType.cast(aspect))
-            }
+            payload.aspects
+                .filter(aspectType::isInstance)
+                .mapNotNullTo(this) { aspect -> aspectType.cast(aspect) }
         }
     }
 }
