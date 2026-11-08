@@ -6,8 +6,9 @@
 use home_proto::v1 as proto;
 
 use crate::domain::{
-    AckOutcome, Event, EventAction, EventState, Repeat, Schedule, ScheduleKind, SourceKind, Timer,
-    TimerState, WallTime,
+    AckOutcome, Event, EventAction, EventState, Repeat, Scenario, ScenarioCondition, ScenarioStep,
+    ScenarioTimeTrigger, ScenarioTrigger, Schedule, ScheduleKind, SourceKind, Timer, TimerState,
+    WallTime,
 };
 
 pub fn schedule_kind(code: i32) -> ScheduleKind {
@@ -264,5 +265,228 @@ pub fn schedule_to_alarm(schedule: &Schedule) -> proto::Alarm {
         last_ring_unix: schedule.last_fired_unix,
         revision: schedule.revision,
         ..proto::Alarm::default()
+    }
+}
+
+fn wall_time_to_proto(at: WallTime) -> proto::WallTime {
+    proto::WallTime {
+        hour: at.hour,
+        minute: at.minute,
+        second: at.second,
+        ..proto::WallTime::default()
+    }
+}
+
+fn wall_time_from_proto(at: Option<&proto::WallTime>) -> WallTime {
+    at.map_or_else(WallTime::default, |at| WallTime {
+        hour: at.hour,
+        minute: at.minute,
+        second: at.second,
+    })
+}
+
+pub fn scenario_trigger_from_proto(view: &proto::ScenarioTrigger) -> Option<ScenarioTrigger> {
+    match view.kind.as_ref()? {
+        proto::scenario_trigger::Kind::Manual(_) => Some(ScenarioTrigger::Manual),
+        proto::scenario_trigger::Kind::Time(time) => {
+            Some(ScenarioTrigger::Time(ScenarioTimeTrigger {
+                timezone: time.timezone.to_owned(),
+                at: wall_time_from_proto(time.at.as_option()),
+                repeat: repeat_kind(time.repeat.to_i32()),
+                once_date: time.once_date.to_owned(),
+                weekdays: time.weekdays.to_vec(),
+            }))
+        }
+    }
+}
+
+pub fn scenario_trigger_to_proto(trigger: &ScenarioTrigger) -> proto::ScenarioTrigger {
+    let kind = match trigger {
+        ScenarioTrigger::Manual => proto::scenario_trigger::Kind::Manual(Box::default()),
+        ScenarioTrigger::Time(time) => {
+            proto::scenario_trigger::Kind::Time(Box::new(proto::TimeTrigger {
+                timezone: time.timezone.clone(),
+                at: wall_time_to_proto(time.at).into(),
+                repeat: proto_repeat(time.repeat).into(),
+                once_date: time.once_date.clone(),
+                weekdays: time.weekdays.clone(),
+                ..proto::TimeTrigger::default()
+            }))
+        }
+    };
+    proto::ScenarioTrigger {
+        kind: Some(kind),
+        ..proto::ScenarioTrigger::default()
+    }
+}
+
+pub fn scenario_condition_from_proto(view: &proto::ScenarioCondition) -> Option<ScenarioCondition> {
+    match view.kind.as_ref()? {
+        proto::scenario_condition::Kind::EntityState(entity) => {
+            Some(ScenarioCondition::EntityState {
+                entity_id: entity.entity_id.to_owned(),
+                state: entity.state.to_owned(),
+            })
+        }
+        proto::scenario_condition::Kind::TimeWindow(window) => {
+            Some(ScenarioCondition::TimeWindow {
+                start: wall_time_from_proto(window.start.as_option()),
+                end: wall_time_from_proto(window.end.as_option()),
+                weekdays: window.weekdays.to_vec(),
+            })
+        }
+    }
+}
+
+pub fn scenario_condition_to_proto(condition: &ScenarioCondition) -> proto::ScenarioCondition {
+    let kind = match condition {
+        ScenarioCondition::EntityState { entity_id, state } => {
+            proto::scenario_condition::Kind::EntityState(Box::new(proto::EntityStateCondition {
+                entity_id: entity_id.clone(),
+                state: state.clone(),
+                ..proto::EntityStateCondition::default()
+            }))
+        }
+        ScenarioCondition::TimeWindow {
+            start,
+            end,
+            weekdays,
+        } => proto::scenario_condition::Kind::TimeWindow(Box::new(proto::TimeWindowCondition {
+            start: wall_time_to_proto(*start).into(),
+            end: wall_time_to_proto(*end).into(),
+            weekdays: weekdays.clone(),
+            ..proto::TimeWindowCondition::default()
+        })),
+    };
+    proto::ScenarioCondition {
+        kind: Some(kind),
+        ..proto::ScenarioCondition::default()
+    }
+}
+
+pub fn scenario_step_from_proto(view: &proto::ScenarioStep) -> Option<ScenarioStep> {
+    match view.kind.as_ref()? {
+        proto::scenario_step::Kind::Catalog(catalog) => Some(ScenarioStep::Catalog {
+            entry_id: catalog.entry_id.to_owned(),
+            action: catalog.action.to_owned(),
+            params_json: catalog.params_json.to_owned(),
+        }),
+        proto::scenario_step::Kind::Speak(speak) => Some(ScenarioStep::Speak {
+            text: speak.text.to_owned(),
+        }),
+        proto::scenario_step::Kind::Delay(delay) => Some(ScenarioStep::Delay {
+            seconds: delay.seconds,
+        }),
+    }
+}
+
+pub fn scenario_step_to_proto(step: &ScenarioStep) -> proto::ScenarioStep {
+    let kind = match step {
+        ScenarioStep::Catalog {
+            entry_id,
+            action,
+            params_json,
+        } => proto::scenario_step::Kind::Catalog(Box::new(proto::CatalogStep {
+            entry_id: entry_id.clone(),
+            action: action.clone(),
+            params_json: params_json.clone(),
+            ..proto::CatalogStep::default()
+        })),
+        ScenarioStep::Speak { text } => {
+            proto::scenario_step::Kind::Speak(Box::new(proto::SpeakStep {
+                text: text.clone(),
+                ..proto::SpeakStep::default()
+            }))
+        }
+        ScenarioStep::Delay { seconds } => {
+            proto::scenario_step::Kind::Delay(Box::new(proto::DelayStep {
+                seconds: *seconds,
+                ..proto::DelayStep::default()
+            }))
+        }
+    };
+    proto::ScenarioStep {
+        kind: Some(kind),
+        ..proto::ScenarioStep::default()
+    }
+}
+
+pub fn scenario_to_proto(scenario: &Scenario) -> proto::Scenario {
+    proto::Scenario {
+        id: scenario.id.clone(),
+        label: scenario.label.clone(),
+        description: scenario.description.clone(),
+        enabled: scenario.enabled,
+        revision: scenario.revision,
+        created_unix: scenario.created_unix,
+        updated_unix: scenario.updated_unix,
+        triggers: scenario
+            .triggers
+            .iter()
+            .map(scenario_trigger_to_proto)
+            .collect(),
+        conditions: scenario
+            .conditions
+            .iter()
+            .map(scenario_condition_to_proto)
+            .collect(),
+        steps: scenario.steps.iter().map(scenario_step_to_proto).collect(),
+        continue_on_error: scenario.continue_on_error,
+        next_due_unix: scenario.next_due_unix,
+        ..proto::Scenario::default()
+    }
+}
+
+pub fn view_to_scenario(view: &proto::Scenario) -> Scenario {
+    Scenario {
+        id: view.id.to_owned(),
+        label: view.label.to_owned(),
+        description: view.description.to_owned(),
+        enabled: view.enabled,
+        revision: view.revision,
+        created_unix: view.created_unix,
+        updated_unix: view.updated_unix,
+        triggers: view
+            .triggers
+            .iter()
+            .filter_map(scenario_trigger_from_proto)
+            .collect(),
+        conditions: view
+            .conditions
+            .iter()
+            .filter_map(scenario_condition_from_proto)
+            .collect(),
+        steps: view
+            .steps
+            .iter()
+            .filter_map(scenario_step_from_proto)
+            .collect(),
+        continue_on_error: view.continue_on_error,
+        ..Scenario::default()
+    }
+}
+
+pub fn create_view_to_scenario(view: &proto::CreateScenarioRequest) -> Scenario {
+    Scenario {
+        label: view.label.to_owned(),
+        description: view.description.to_owned(),
+        enabled: view.enabled,
+        triggers: view
+            .triggers
+            .iter()
+            .filter_map(scenario_trigger_from_proto)
+            .collect(),
+        conditions: view
+            .conditions
+            .iter()
+            .filter_map(scenario_condition_from_proto)
+            .collect(),
+        steps: view
+            .steps
+            .iter()
+            .filter_map(scenario_step_from_proto)
+            .collect(),
+        continue_on_error: view.continue_on_error,
+        ..Scenario::default()
     }
 }

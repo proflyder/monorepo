@@ -14,6 +14,14 @@ proto_library(
 proto_library(
     name = "scheduler_proto",
     srcs = ["scheduler.proto"],
+    strip_import_prefix = "/packages/proto/home/v1",
+)
+
+proto_library(
+    name = "scenario_proto",
+    srcs = ["scenario.proto"],
+    deps = [":scheduler_proto"],
+    strip_import_prefix = "/packages/proto/home/v1",
 )
 
 filegroup(

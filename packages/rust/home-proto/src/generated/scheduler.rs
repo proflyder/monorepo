@@ -21,9 +21,10 @@ pub enum ScheduleKind {
     SCHEDULE_KIND_UNSPECIFIED = 0i32,
     SCHEDULE_KIND_ALARM = 1i32,
     SCHEDULE_KIND_REMINDER = 2i32,
-    /// SCHEDULE_KIND_SCENARIO is reserved. Events carry the opaque payload for a
-    /// future scenario executor; scenario execution is NOT implemented and the
-    /// server does not advertise it (GetStatus reports it as unsupported).
+    /// SCHEDULE_KIND_SCENARIO is reserved for time triggers materialized from a
+    /// ScenarioService definition. Events carry the opaque payload for the
+    /// scenario executor; scenario execution is NOT implemented and the server
+    /// does not advertise it (GetStatus.scenario_execution_supported=false).
     SCHEDULE_KIND_SCENARIO = 3i32,
 }
 impl ScheduleKind {
@@ -3725,7 +3726,9 @@ pub struct ListSchedulesRequest {
         skip_serializing_if = "::buffa::json_helpers::skip_if::is_false"
     )]
     pub include_disabled: bool,
-    /// UNSPECIFIED means all kinds
+    /// UNSPECIFIED excludes SCHEDULE_KIND_SCENARIO so alarm/reminder clients never
+    /// render scenario trigger rows as schedules. Only an explicit
+    /// SCHEDULE_KIND_SCENARIO query returns them.
     ///
     /// Field 2: `kind`
     #[serde(
@@ -8612,6 +8615,17 @@ pub struct GetStatusResponse {
         skip_serializing_if = "::buffa::json_helpers::skip_if::is_empty_str"
     )]
     pub last_tick_error: ::buffa::alloc::string::String,
+    /// True when this server stores scenario definitions (ScenarioService).
+    /// Independent of scenario_execution_supported.
+    ///
+    /// Field 16: `scenario_store_supported`
+    #[serde(
+        rename = "scenarioStoreSupported",
+        alias = "scenario_store_supported",
+        with = "::buffa::json_helpers::proto_bool",
+        skip_serializing_if = "::buffa::json_helpers::skip_if::is_false"
+    )]
+    pub scenario_store_supported: bool,
     #[serde(skip)]
     #[doc(hidden)]
     pub __buffa_unknown_fields: ::buffa::UnknownFields,
@@ -8634,6 +8648,7 @@ impl ::core::fmt::Debug for GetStatusResponse {
             .field("last_tick_attempt_unix", &self.last_tick_attempt_unix)
             .field("last_tick_error_unix", &self.last_tick_error_unix)
             .field("last_tick_error", &self.last_tick_error)
+            .field("scenario_store_supported", &self.scenario_store_supported)
             .finish()
     }
 }
@@ -8729,6 +8744,9 @@ impl ::buffa::Message for GetStatusResponse {
                 += 1u64
                     + ::buffa::types::string_encoded_len(&self.last_tick_error) as u64;
         }
+        if self.scenario_store_supported {
+            size += 2u64 + ::buffa::types::BOOL_ENCODED_LEN as u64;
+        }
         size += self.__buffa_unknown_fields.encoded_len() as u64;
         ::buffa::saturate_size(size)
     }
@@ -8797,6 +8815,9 @@ impl ::buffa::Message for GetStatusResponse {
         }
         if !self.last_tick_error.is_empty() {
             ::buffa::types::put_string_field(15u32, &self.last_tick_error, buf);
+        }
+        if self.scenario_store_supported {
+            ::buffa::types::put_bool_field(16u32, self.scenario_store_supported, buf);
         }
         self.__buffa_unknown_fields.write_to(buf);
     }
@@ -8926,6 +8947,13 @@ impl ::buffa::Message for GetStatusResponse {
                 )?;
                 ::buffa::types::merge_string(&mut self.last_tick_error, buf)?;
             }
+            16u32 => {
+                ::buffa::encoding::check_wire_type(
+                    tag,
+                    ::buffa::encoding::WireType::Varint,
+                )?;
+                self.scenario_store_supported = ::buffa::types::decode_bool(buf)?;
+            }
             _ => {
                 self.__buffa_unknown_fields
                     .push(::buffa::encoding::decode_unknown_field(tag, buf, ctx)?);
@@ -8949,6 +8977,7 @@ impl ::buffa::Message for GetStatusResponse {
         self.last_tick_attempt_unix = 0i64;
         self.last_tick_error_unix = 0i64;
         self.last_tick_error.clear();
+        self.scenario_store_supported = false;
         self.__buffa_unknown_fields.clear();
     }
 }

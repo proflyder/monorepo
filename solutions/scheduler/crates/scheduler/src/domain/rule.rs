@@ -19,7 +19,9 @@ use jiff::tz::{AmbiguousOffset, TimeZone};
 pub const MAX_LOOKAHEAD_DAYS: i32 = 400;
 
 /// Repeat policy of a schedule rule.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize,
+)]
 #[repr(i32)]
 pub enum Repeat {
     #[default]
@@ -81,7 +83,9 @@ impl Repeat {
 }
 
 /// Local wall-clock time of day in [`Rule::timezone`].
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize,
+)]
 pub struct WallTime {
     pub hour: i32,
     pub minute: i32,

@@ -117,6 +117,20 @@ fn next_occurrence(schedule: &Schedule, now_unix: i64) -> Result<i64, StoreError
     }
 }
 
+/// Scenario-owned rows are managed only through `ScenarioService`.
+fn reject_scenario_schedule(schedule: &Schedule) -> Result<(), StoreError> {
+    if schedule.kind != ScheduleKind::Scenario {
+        return Ok(());
+    }
+    let owner = serde_json::from_str::<serde_json::Value>(&schedule.payload_json)
+        .ok()
+        .and_then(|payload| payload.get("scenario_id")?.as_str().map(str::to_owned))
+        .unwrap_or_else(|| schedule.id.clone());
+    Err(StoreError::precondition(format!(
+        "managed by scenario {owner}"
+    )))
+}
+
 impl Store {
     /// Creates a durable schedule. A non-empty idempotency key replays the
     /// original resource when the canonical request matches.
@@ -127,6 +141,11 @@ impl Store {
         now_unix: i64,
     ) -> Result<Schedule, StoreError> {
         let mut prepared = prepare_schedule(self, input)?;
+        if prepared.kind == ScheduleKind::Scenario {
+            return Err(StoreError::invalid(
+                "scenario schedules are created through ScenarioService",
+            ));
+        }
         validate_idempotency_key(idempotency_key)?;
         prepared.id = resource_id(now_unix.saturating_mul(1_000));
         prepared.revision = 1;
@@ -235,7 +254,13 @@ impl Store {
             if !include_disabled {
                 query.push_str(" AND enabled = 1");
             }
-            if kind != ScheduleKind::Unspecified {
+            if kind == ScheduleKind::Unspecified {
+                // Scenario rows are internal trigger materialization. They are
+                // returned only by an explicit kind=SCENARIO query so alarm and
+                // reminder clients never render them as schedules.
+                query.push_str(" AND kind != ?");
+                values.push(Box::new(kind_code(ScheduleKind::Scenario)));
+            } else {
                 query.push_str(" AND kind = ?");
                 values.push(Box::new(kind_code(kind)));
             }
@@ -264,6 +289,12 @@ impl Store {
         let ring_window = self.config().ring_window;
         self.with_tx(move |tx| {
             let existing = get_schedule_tx(tx, &prepared.id)?;
+            reject_scenario_schedule(&existing)?;
+            if prepared.kind == ScheduleKind::Scenario {
+                return Err(StoreError::invalid(
+                    "scenario schedules are created through ScenarioService",
+                ));
+            }
             if expected_revision != 0 && expected_revision != existing.revision {
                 return Err(StoreError::domain(
                     ErrorKind::Conflict,
@@ -347,6 +378,7 @@ impl Store {
         let ring_window = self.config().ring_window;
         self.with_tx(move |tx| {
             let mut current = get_schedule_tx(tx, &id)?;
+            reject_scenario_schedule(&current)?;
             if current.enabled == enabled {
                 return Ok(current);
             }
@@ -408,6 +440,7 @@ impl Store {
             if deleted != 0 {
                 return Ok(false);
             }
+            reject_scenario_schedule(&schedule)?;
             if let Some(occurrence) = schedule.active_occurrence(now_unix) {
                 insert_event(
                     tx,
@@ -461,6 +494,7 @@ impl Store {
         let id = id.to_owned();
         self.with_tx(move |tx| {
             let mut schedule = get_schedule_tx(tx, &id)?;
+            reject_scenario_schedule(&schedule)?;
             let Some(occurrence) = schedule.active_occurrence(now_unix) else {
                 return Err(StoreError::precondition("schedule is not ringing"));
             };
@@ -548,6 +582,7 @@ impl Store {
         let ring_window = self.config().ring_window;
         self.with_tx(move |tx| {
             let mut schedule = get_schedule_tx(tx, &id)?;
+            reject_scenario_schedule(&schedule)?;
             let Some(occurrence) = schedule.active_occurrence(now_unix) else {
                 let prior: Option<i64> = tx
                     .query_row(

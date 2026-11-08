@@ -2,6 +2,7 @@
 
 include!("scheduler.rs");
 include!("alarms.rs");
+include!("scenario.rs");
 #[allow(
     non_camel_case_types,
     dead_code,
@@ -21,6 +22,17 @@ pub mod __buffa {
         use super::*;
         include!("scheduler.__view.rs");
         include!("alarms.__view.rs");
+        include!("scenario.__view.rs");
+        pub mod oneof {
+            #[allow(unused_imports)]
+            use super::*;
+            include!("scenario.__view_oneof.rs");
+        }
+    }
+    pub mod oneof {
+        #[allow(unused_imports)]
+        use super::*;
+        include!("scenario.__oneof.rs");
     }
     /// Register this package's `Any` type entries and extension entries.
     pub fn register_types(reg: &mut ::buffa::type_registry::TypeRegistry) {
@@ -85,6 +97,31 @@ pub mod __buffa {
         reg.register_json_any(super::__SNOOZE_ALARM_RESPONSE_JSON_ANY);
         reg.register_json_any(super::__STOP_ALARM_REQUEST_JSON_ANY);
         reg.register_json_any(super::__STOP_ALARM_RESPONSE_JSON_ANY);
+        reg.register_json_any(super::__SCENARIO_TRIGGER_JSON_ANY);
+        reg.register_json_any(super::__MANUAL_TRIGGER_JSON_ANY);
+        reg.register_json_any(super::__TIME_TRIGGER_JSON_ANY);
+        reg.register_json_any(super::__SCENARIO_CONDITION_JSON_ANY);
+        reg.register_json_any(super::__ENTITY_STATE_CONDITION_JSON_ANY);
+        reg.register_json_any(super::__TIME_WINDOW_CONDITION_JSON_ANY);
+        reg.register_json_any(super::__SCENARIO_STEP_JSON_ANY);
+        reg.register_json_any(super::__CATALOG_STEP_JSON_ANY);
+        reg.register_json_any(super::__SPEAK_STEP_JSON_ANY);
+        reg.register_json_any(super::__DELAY_STEP_JSON_ANY);
+        reg.register_json_any(super::__SCENARIO_JSON_ANY);
+        reg.register_json_any(super::__CREATE_SCENARIO_REQUEST_JSON_ANY);
+        reg.register_json_any(super::__CREATE_SCENARIO_RESPONSE_JSON_ANY);
+        reg.register_json_any(super::__GET_SCENARIO_REQUEST_JSON_ANY);
+        reg.register_json_any(super::__GET_SCENARIO_RESPONSE_JSON_ANY);
+        reg.register_json_any(super::__LIST_SCENARIOS_REQUEST_JSON_ANY);
+        reg.register_json_any(super::__LIST_SCENARIOS_RESPONSE_JSON_ANY);
+        reg.register_json_any(super::__UPDATE_SCENARIO_REQUEST_JSON_ANY);
+        reg.register_json_any(super::__UPDATE_SCENARIO_RESPONSE_JSON_ANY);
+        reg.register_json_any(super::__DELETE_SCENARIO_REQUEST_JSON_ANY);
+        reg.register_json_any(super::__DELETE_SCENARIO_RESPONSE_JSON_ANY);
+        reg.register_json_any(super::__SET_SCENARIO_ENABLED_REQUEST_JSON_ANY);
+        reg.register_json_any(super::__SET_SCENARIO_ENABLED_RESPONSE_JSON_ANY);
+        reg.register_json_any(super::__RUN_SCENARIO_REQUEST_JSON_ANY);
+        reg.register_json_any(super::__RUN_SCENARIO_RESPONSE_JSON_ANY);
     }
 }
 #[doc(inline)]
@@ -332,6 +369,107 @@ pub use self::__buffa::view::StopAlarmResponseView;
 #[doc(inline)]
 pub use self::__buffa::view::StopAlarmResponseOwnedView;
 #[doc(inline)]
+pub use self::__buffa::view::ScenarioTriggerView;
+#[doc(inline)]
+pub use self::__buffa::view::ScenarioTriggerOwnedView;
+#[doc(inline)]
+pub use self::__buffa::view::ManualTriggerView;
+#[doc(inline)]
+pub use self::__buffa::view::ManualTriggerOwnedView;
+#[doc(inline)]
+pub use self::__buffa::view::TimeTriggerView;
+#[doc(inline)]
+pub use self::__buffa::view::TimeTriggerOwnedView;
+#[doc(inline)]
+pub use self::__buffa::view::ScenarioConditionView;
+#[doc(inline)]
+pub use self::__buffa::view::ScenarioConditionOwnedView;
+#[doc(inline)]
+pub use self::__buffa::view::EntityStateConditionView;
+#[doc(inline)]
+pub use self::__buffa::view::EntityStateConditionOwnedView;
+#[doc(inline)]
+pub use self::__buffa::view::TimeWindowConditionView;
+#[doc(inline)]
+pub use self::__buffa::view::TimeWindowConditionOwnedView;
+#[doc(inline)]
+pub use self::__buffa::view::ScenarioStepView;
+#[doc(inline)]
+pub use self::__buffa::view::ScenarioStepOwnedView;
+#[doc(inline)]
+pub use self::__buffa::view::CatalogStepView;
+#[doc(inline)]
+pub use self::__buffa::view::CatalogStepOwnedView;
+#[doc(inline)]
+pub use self::__buffa::view::SpeakStepView;
+#[doc(inline)]
+pub use self::__buffa::view::SpeakStepOwnedView;
+#[doc(inline)]
+pub use self::__buffa::view::DelayStepView;
+#[doc(inline)]
+pub use self::__buffa::view::DelayStepOwnedView;
+#[doc(inline)]
+pub use self::__buffa::view::ScenarioView;
+#[doc(inline)]
+pub use self::__buffa::view::ScenarioOwnedView;
+#[doc(inline)]
+pub use self::__buffa::view::CreateScenarioRequestView;
+#[doc(inline)]
+pub use self::__buffa::view::CreateScenarioRequestOwnedView;
+#[doc(inline)]
+pub use self::__buffa::view::CreateScenarioResponseView;
+#[doc(inline)]
+pub use self::__buffa::view::CreateScenarioResponseOwnedView;
+#[doc(inline)]
+pub use self::__buffa::view::GetScenarioRequestView;
+#[doc(inline)]
+pub use self::__buffa::view::GetScenarioRequestOwnedView;
+#[doc(inline)]
+pub use self::__buffa::view::GetScenarioResponseView;
+#[doc(inline)]
+pub use self::__buffa::view::GetScenarioResponseOwnedView;
+#[doc(inline)]
+pub use self::__buffa::view::ListScenariosRequestView;
+#[doc(inline)]
+pub use self::__buffa::view::ListScenariosRequestOwnedView;
+#[doc(inline)]
+pub use self::__buffa::view::ListScenariosResponseView;
+#[doc(inline)]
+pub use self::__buffa::view::ListScenariosResponseOwnedView;
+#[doc(inline)]
+pub use self::__buffa::view::UpdateScenarioRequestView;
+#[doc(inline)]
+pub use self::__buffa::view::UpdateScenarioRequestOwnedView;
+#[doc(inline)]
+pub use self::__buffa::view::UpdateScenarioResponseView;
+#[doc(inline)]
+pub use self::__buffa::view::UpdateScenarioResponseOwnedView;
+#[doc(inline)]
+pub use self::__buffa::view::DeleteScenarioRequestView;
+#[doc(inline)]
+pub use self::__buffa::view::DeleteScenarioRequestOwnedView;
+#[doc(inline)]
+pub use self::__buffa::view::DeleteScenarioResponseView;
+#[doc(inline)]
+pub use self::__buffa::view::DeleteScenarioResponseOwnedView;
+#[doc(inline)]
+pub use self::__buffa::view::SetScenarioEnabledRequestView;
+#[doc(inline)]
+pub use self::__buffa::view::SetScenarioEnabledRequestOwnedView;
+#[doc(inline)]
+pub use self::__buffa::view::SetScenarioEnabledResponseView;
+#[doc(inline)]
+pub use self::__buffa::view::SetScenarioEnabledResponseOwnedView;
+#[doc(inline)]
+pub use self::__buffa::view::RunScenarioRequestView;
+#[doc(inline)]
+pub use self::__buffa::view::RunScenarioRequestOwnedView;
+#[doc(inline)]
+pub use self::__buffa::view::RunScenarioResponseView;
+#[doc(inline)]
+pub use self::__buffa::view::RunScenarioResponseOwnedView;
+#[doc(inline)]
 pub use self::__buffa::register_types;
 include!("scheduler.__connect.rs");
 include!("alarms.__connect.rs");
+include!("scenario.__connect.rs");

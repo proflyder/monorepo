@@ -1,0 +1,428 @@
+{
+  "name": "scenario_lifecycle",
+  "description": "Scenario definitions, materialized time triggers, manual runs and idempotency. The fake clock is fixed at 2026-01-01T12:00:00Z; ids and next_due_unix are deterministic.",
+  "steps": [
+    {
+      "request": {
+        "method": "POST",
+        "path": "/home.v1.ScenarioService/CreateScenario",
+        "headers": {
+          "Authorization": "Bearer contract-test-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "label": "evening",
+          "description": "warm light",
+          "enabled": true,
+          "continueOnError": true,
+          "triggers": [
+            {"manual": {}},
+            {
+              "time": {
+                "timezone": "UTC",
+                "at": {"hour": 7, "minute": 30},
+                "repeat": "REPEAT_KIND_DAILY"
+              }
+            }
+          ],
+          "conditions": [
+            {"entityState": {"entityId": "light.kitchen", "state": "off"}}
+          ],
+          "steps": [
+            {
+              "catalog": {
+                "entryId": "light.kitchen",
+                "action": "turn_on",
+                "paramsJson": "{\"brightness\":40}"
+              }
+            },
+            {"delay": {"seconds": 5}},
+            {"speak": {"text": "Done"}}
+          ]
+        }
+      },
+      "capture": {"scenarioId": "scenario.id"},
+      "response": {
+        "status": 200,
+        "headers": {"Content-Type": "application/json"},
+        "body": {
+          "scenario": {
+            "id": "{{scenarioId}}",
+            "label": "evening",
+            "description": "warm light",
+            "enabled": true,
+            "revision": "1",
+            "createdUnix": "1767268800",
+            "updatedUnix": "1767268800",
+            "triggers": [
+              {"manual": {}},
+              {
+                "time": {
+                  "timezone": "UTC",
+                  "at": {"hour": 7, "minute": 30},
+                  "repeat": "REPEAT_KIND_DAILY"
+                }
+              }
+            ],
+            "conditions": [
+              {"entityState": {"entityId": "light.kitchen", "state": "off"}}
+            ],
+            "steps": [
+              {
+                "catalog": {
+                  "entryId": "light.kitchen",
+                  "action": "turn_on",
+                  "paramsJson": "{\"brightness\":40}"
+                }
+              },
+              {"delay": {"seconds": 5}},
+              {"speak": {"text": "Done"}}
+            ],
+            "continueOnError": true,
+            "nextDueUnix": "1767339000"
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/home.v1.ScenarioService/GetScenario",
+        "headers": {
+          "Authorization": "Bearer contract-test-token",
+          "Content-Type": "application/json"
+        },
+        "body": {"id": "{{scenarioId}}"}
+      },
+      "response": {
+        "status": 200,
+        "headers": {"Content-Type": "application/json"},
+        "body": {
+          "scenario": {
+            "id": "{{scenarioId}}",
+            "label": "evening",
+            "description": "warm light",
+            "enabled": true,
+            "revision": "1",
+            "createdUnix": "1767268800",
+            "updatedUnix": "1767268800",
+            "triggers": [
+              {"manual": {}},
+              {
+                "time": {
+                  "timezone": "UTC",
+                  "at": {"hour": 7, "minute": 30},
+                  "repeat": "REPEAT_KIND_DAILY"
+                }
+              }
+            ],
+            "conditions": [
+              {"entityState": {"entityId": "light.kitchen", "state": "off"}}
+            ],
+            "steps": [
+              {
+                "catalog": {
+                  "entryId": "light.kitchen",
+                  "action": "turn_on",
+                  "paramsJson": "{\"brightness\":40}"
+                }
+              },
+              {"delay": {"seconds": 5}},
+              {"speak": {"text": "Done"}}
+            ],
+            "continueOnError": true,
+            "nextDueUnix": "1767339000"
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/home.v1.ScenarioService/ListScenarios",
+        "headers": {
+          "Authorization": "Bearer contract-test-token",
+          "Content-Type": "application/json"
+        },
+        "body": {"includeDisabled": true}
+      },
+      "response": {
+        "status": 200,
+        "headers": {"Content-Type": "application/json"},
+        "body": {
+          "scenarios": [
+            {
+              "id": "{{scenarioId}}",
+              "label": "evening",
+              "description": "warm light",
+              "enabled": true,
+              "revision": "1",
+              "createdUnix": "1767268800",
+              "updatedUnix": "1767268800",
+              "triggers": [
+                {"manual": {}},
+                {
+                  "time": {
+                    "timezone": "UTC",
+                    "at": {"hour": 7, "minute": 30},
+                    "repeat": "REPEAT_KIND_DAILY"
+                  }
+                }
+              ],
+              "conditions": [
+                {"entityState": {"entityId": "light.kitchen", "state": "off"}}
+              ],
+              "steps": [
+                {
+                  "catalog": {
+                    "entryId": "light.kitchen",
+                    "action": "turn_on",
+                    "paramsJson": "{\"brightness\":40}"
+                  }
+                },
+                {"delay": {"seconds": 5}},
+                {"speak": {"text": "Done"}}
+              ],
+              "continueOnError": true,
+              "nextDueUnix": "1767339000"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/home.v1.SchedulerService/ListSchedules",
+        "headers": {
+          "Authorization": "Bearer contract-test-token",
+          "Content-Type": "application/json"
+        },
+        "body": {"includeDisabled": true}
+      },
+      "response": {
+        "status": 200,
+        "headers": {"Content-Type": "application/json"},
+        "body": {}
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/home.v1.SchedulerService/ListSchedules",
+        "headers": {
+          "Authorization": "Bearer contract-test-token",
+          "Content-Type": "application/json"
+        },
+        "body": {"kind": "SCHEDULE_KIND_ALARM", "includeDisabled": true}
+      },
+      "response": {
+        "status": 200,
+        "headers": {"Content-Type": "application/json"},
+        "body": {}
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/home.v1.ScenarioService/RunScenario",
+        "headers": {
+          "Authorization": "Bearer contract-test-token",
+          "Content-Type": "application/json"
+        },
+        "body": {"id": "{{scenarioId}}", "idempotencyKey": "run-1"}
+      },
+      "capture": {"runEventId": "event.id"},
+      "response": {
+        "status": 200,
+        "headers": {"Content-Type": "application/json"},
+        "body": {
+          "event": {
+            "id": "{{runEventId}}",
+            "sourceId": "{{scenarioId}}",
+            "sourceKind": "SOURCE_KIND_SCENARIO",
+            "dueUnix": "1767268800",
+            "label": "evening",
+            "payloadJson": "{\"scenario_id\":\"{{scenarioId}}\",\"trigger\":\"manual\"}",
+            "state": "EVENT_STATE_PENDING",
+            "action": "EVENT_ACTION_FIRE",
+            "taskType": "scenario.fire",
+            "queue": "scenario",
+            "createdUnix": "1767268800"
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/home.v1.ScenarioService/RunScenario",
+        "headers": {
+          "Authorization": "Bearer contract-test-token",
+          "Content-Type": "application/json"
+        },
+        "body": {"id": "{{scenarioId}}", "idempotencyKey": "run-1"}
+      },
+      "response": {
+        "status": 200,
+        "headers": {"Content-Type": "application/json"},
+        "body": {
+          "event": {
+            "id": "{{runEventId}}",
+            "sourceId": "{{scenarioId}}",
+            "sourceKind": "SOURCE_KIND_SCENARIO",
+            "dueUnix": "1767268800",
+            "label": "evening",
+            "payloadJson": "{\"scenario_id\":\"{{scenarioId}}\",\"trigger\":\"manual\"}",
+            "state": "EVENT_STATE_PENDING",
+            "action": "EVENT_ACTION_FIRE",
+            "taskType": "scenario.fire",
+            "queue": "scenario",
+            "createdUnix": "1767268800"
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/home.v1.ScenarioService/UpdateScenario",
+        "headers": {
+          "Authorization": "Bearer contract-test-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "expectedRevision": "99",
+          "scenario": {
+            "id": "{{scenarioId}}",
+            "label": "evening",
+            "enabled": true,
+            "triggers": [{"manual": {}}],
+            "steps": [{"speak": {"text": "Done"}}]
+          }
+        }
+      },
+      "response": {
+        "status": 409,
+        "headers": {"Content-Type": "application/json"},
+        "body": {
+          "code": "aborted",
+          "message": "revision conflict: current revision 1, expected 99"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/home.v1.ScenarioService/SetScenarioEnabled",
+        "headers": {
+          "Authorization": "Bearer contract-test-token",
+          "Content-Type": "application/json"
+        },
+        "body": {"id": "{{scenarioId}}", "enabled": false}
+      },
+      "response": {
+        "status": 200,
+        "headers": {"Content-Type": "application/json"},
+        "body": {
+          "scenario": {
+            "id": "{{scenarioId}}",
+            "label": "evening",
+            "description": "warm light",
+            "revision": "2",
+            "createdUnix": "1767268800",
+            "updatedUnix": "1767268800",
+            "triggers": [
+              {"manual": {}},
+              {
+                "time": {
+                  "timezone": "UTC",
+                  "at": {"hour": 7, "minute": 30},
+                  "repeat": "REPEAT_KIND_DAILY"
+                }
+              }
+            ],
+            "conditions": [
+              {"entityState": {"entityId": "light.kitchen", "state": "off"}}
+            ],
+            "steps": [
+              {
+                "catalog": {
+                  "entryId": "light.kitchen",
+                  "action": "turn_on",
+                  "paramsJson": "{\"brightness\":40}"
+                }
+              },
+              {"delay": {"seconds": 5}},
+              {"speak": {"text": "Done"}}
+            ],
+            "continueOnError": true
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/home.v1.SchedulerService/ListSchedules",
+        "headers": {
+          "Authorization": "Bearer contract-test-token",
+          "Content-Type": "application/json"
+        },
+        "body": {"kind": "SCHEDULE_KIND_SCENARIO", "includeDisabled": true}
+      },
+      "response": {
+        "status": 200,
+        "headers": {"Content-Type": "application/json"},
+        "body": {
+          "schedules": [
+            {
+              "id": "<uuid>",
+              "label": "evening",
+              "kind": "SCHEDULE_KIND_SCENARIO",
+              "timezone": "UTC",
+              "at": {"hour": 7, "minute": 30},
+              "repeat": "REPEAT_KIND_DAILY",
+              "payloadJson": "{\"scenario_id\":\"{{scenarioId}}\",\"trigger_index\":1}",
+              "revision": "1",
+              "createdUnix": "1767268800",
+              "updatedUnix": "1767268800"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/home.v1.ScenarioService/DeleteScenario",
+        "headers": {
+          "Authorization": "Bearer contract-test-token",
+          "Content-Type": "application/json"
+        },
+        "body": {"id": "{{scenarioId}}"}
+      },
+      "response": {
+        "status": 200,
+        "headers": {"Content-Type": "application/json"},
+        "body": {"deleted": true}
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/home.v1.ScenarioService/GetScenario",
+        "headers": {
+          "Authorization": "Bearer contract-test-token",
+          "Content-Type": "application/json"
+        },
+        "body": {"id": "{{scenarioId}}"}
+      },
+      "response": {
+        "status": 404,
+        "headers": {"Content-Type": "application/json"},
+        "body": {"code": "not_found", "message": "not found"}
+      }
+    }
+  ]
+}

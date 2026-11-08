@@ -191,7 +191,10 @@ Endpoints (private values in `secrets/home/scheduler.env`):
 
 Database restore: scale the scheduler to 0, restore the files from the latest
 `backup.sh` output into the `scheduler-data` PVC, then scale back to 1 and
-verify `GetStatus`.
+verify `GetStatus`. Backups are schema-agnostic whole-file copies: a v1 copy
+restored into this release migrates on startup. Rolling the binary back after
+the database has migrated requires restoring a v1 copy, because the older
+binary rejects schema v2.
 
 ## Bounded rollout
 

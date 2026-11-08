@@ -10,6 +10,7 @@ Connect/gRPC, outbox, auth; бинари `ha-bridge` (очередь `home`) и 
 
 ```text
 packages/proto/home/v1/scheduler.proto   home.v1.SchedulerService (основной)
+packages/proto/home/v1/scenario.proto    home.v1.ScenarioService
 packages/proto/home/v1/alarms.proto      home.v1.AlarmService (legacy facade)
 ```
 
@@ -19,6 +20,10 @@ durable outbox и generic-очереди задач:
 - schedules: `CreateSchedule`, `GetSchedule`, `ListSchedules`,
   `UpdateSchedule`, `DeleteSchedule`, `SetScheduleEnabled`,
   `SnoozeSchedule`, `StopSchedule`;
+- scenarios: `CreateScenario`, `GetScenario`, `ListScenarios`,
+  `UpdateScenario`, `DeleteScenario`, `SetScenarioEnabled`,
+  `RunScenario` (определения хранит scheduler, исполняет отдельный
+  `ha-scenario`);
 - timers: `StartTimer`, `GetTimer`, `ListTimers`, `PauseTimer`,
   `ResumeTimer`, `CancelTimer`;
 - outbox: `ListDueEvents`, `AckEvent`;

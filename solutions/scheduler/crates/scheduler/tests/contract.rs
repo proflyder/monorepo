@@ -51,7 +51,7 @@ async fn golden_contract_fixtures() {
     )
     .await
     .expect("contract fixtures");
-    assert_eq!(passed, 21);
+    assert_eq!(passed, 22);
 }
 
 fn new_router(scenario: &str) -> axum::Router {

@@ -5,14 +5,15 @@ use std::sync::Arc;
 use connectrpc::{ConnectError, RequestContext, Response, ServiceRequest, ServiceResult};
 use home_proto::v1 as proto;
 use home_sqlite::SqliteError;
+use proto::ScenarioService;
 use proto::SchedulerService;
 
 use crate::domain::Clock;
 use crate::store::{Store, StoreError};
 
 use super::convert::{
-    ack_outcome, create_view_to_schedule, event_to_proto, schedule_to_proto, timer_to_proto,
-    view_to_schedule,
+    ack_outcome, create_view_to_scenario, create_view_to_schedule, event_to_proto,
+    scenario_to_proto, schedule_to_proto, timer_to_proto, view_to_scenario, view_to_schedule,
 };
 
 /// Engine readiness and last-tick facts reported by `GetStatus`.
@@ -484,12 +485,178 @@ impl SchedulerService for Service {
             running_timers: status.running_timers,
             consumers,
             scenario_execution_supported: false,
+            scenario_store_supported: true,
             queues,
             ready: engine.ready,
             last_tick_attempt_unix: engine.last_tick_attempt_unix,
             last_tick_error_unix: engine.last_tick_error_unix,
             last_tick_error: engine.last_tick_error,
             ..proto::GetStatusResponse::default()
+        })
+    }
+}
+
+/// Rejects a request that contains an unknown oneof variant. The domain
+/// conversion drops unknown kinds, so a length mismatch means the client sent
+/// a trigger/condition/step this server does not understand.
+fn check_scenario_kinds(
+    scenario: &crate::domain::Scenario,
+    triggers: usize,
+    conditions: usize,
+    steps: usize,
+) -> Result<(), ConnectError> {
+    if scenario.triggers.len() != triggers
+        || scenario.conditions.len() != conditions
+        || scenario.steps.len() != steps
+    {
+        return Err(ConnectError::invalid_argument(
+            "scenario contains an unsupported trigger, condition or step kind",
+        ));
+    }
+    Ok(())
+}
+
+impl ScenarioService for Service {
+    async fn create_scenario<'a>(
+        &'a self,
+        _ctx: RequestContext,
+        request: ServiceRequest<'_, proto::CreateScenarioRequest>,
+    ) -> ServiceResult<impl connectrpc::Encodable<proto::CreateScenarioResponse> + Send + use<'a>>
+    {
+        let message = request.to_owned_message();
+        let scenario = create_view_to_scenario(&message);
+        check_scenario_kinds(
+            &scenario,
+            message.triggers.len(),
+            message.conditions.len(),
+            message.steps.len(),
+        )?;
+        let now = self.now_unix();
+        let key = message.idempotency_key.clone();
+        let created = self
+            .store_call(move |store| store.create_scenario(&scenario, &key, now))
+            .await?;
+        response(proto::CreateScenarioResponse {
+            scenario: scenario_to_proto(&created).into(),
+            ..proto::CreateScenarioResponse::default()
+        })
+    }
+
+    async fn get_scenario<'a>(
+        &'a self,
+        _ctx: RequestContext,
+        request: ServiceRequest<'_, proto::GetScenarioRequest>,
+    ) -> ServiceResult<impl connectrpc::Encodable<proto::GetScenarioResponse> + Send + use<'a>>
+    {
+        let id = request.id.to_owned();
+        let scenario = self
+            .store_call(move |store| store.get_scenario(&id))
+            .await?;
+        response(proto::GetScenarioResponse {
+            scenario: scenario_to_proto(&scenario).into(),
+            ..proto::GetScenarioResponse::default()
+        })
+    }
+
+    async fn list_scenarios<'a>(
+        &'a self,
+        _ctx: RequestContext,
+        request: ServiceRequest<'_, proto::ListScenariosRequest>,
+    ) -> ServiceResult<impl connectrpc::Encodable<proto::ListScenariosResponse> + Send + use<'a>>
+    {
+        let include_disabled = request.include_disabled;
+        let scenarios = self
+            .store_call(move |store| store.list_scenarios(include_disabled))
+            .await?;
+        response(proto::ListScenariosResponse {
+            scenarios: scenarios.iter().map(scenario_to_proto).collect(),
+            ..proto::ListScenariosResponse::default()
+        })
+    }
+
+    async fn update_scenario<'a>(
+        &'a self,
+        _ctx: RequestContext,
+        request: ServiceRequest<'_, proto::UpdateScenarioRequest>,
+    ) -> ServiceResult<impl connectrpc::Encodable<proto::UpdateScenarioResponse> + Send + use<'a>>
+    {
+        let message = request.to_owned_message();
+        let Some(view) = message.scenario.as_option() else {
+            return Err(ConnectError::invalid_argument("scenario is required"));
+        };
+        if message.expected_revision < 0 {
+            return Err(ConnectError::invalid_argument(
+                "expected_revision must not be negative",
+            ));
+        }
+        let scenario = view_to_scenario(view);
+        check_scenario_kinds(
+            &scenario,
+            view.triggers.len(),
+            view.conditions.len(),
+            view.steps.len(),
+        )?;
+        let expected_revision = message.expected_revision;
+        let now = self.now_unix();
+        let updated = self
+            .store_call(move |store| store.update_scenario(&scenario, expected_revision, now))
+            .await?;
+        response(proto::UpdateScenarioResponse {
+            scenario: scenario_to_proto(&updated).into(),
+            ..proto::UpdateScenarioResponse::default()
+        })
+    }
+
+    async fn delete_scenario<'a>(
+        &'a self,
+        _ctx: RequestContext,
+        request: ServiceRequest<'_, proto::DeleteScenarioRequest>,
+    ) -> ServiceResult<impl connectrpc::Encodable<proto::DeleteScenarioResponse> + Send + use<'a>>
+    {
+        let id = request.id.to_owned();
+        let now = self.now_unix();
+        let deleted = self
+            .store_call(move |store| store.delete_scenario(&id, now))
+            .await?;
+        response(proto::DeleteScenarioResponse {
+            deleted,
+            ..proto::DeleteScenarioResponse::default()
+        })
+    }
+
+    async fn set_scenario_enabled<'a>(
+        &'a self,
+        _ctx: RequestContext,
+        request: ServiceRequest<'_, proto::SetScenarioEnabledRequest>,
+    ) -> ServiceResult<impl connectrpc::Encodable<proto::SetScenarioEnabledResponse> + Send + use<'a>>
+    {
+        let id = request.id.to_owned();
+        let enabled = request.enabled;
+        let now = self.now_unix();
+        let scenario = self
+            .store_call(move |store| store.set_scenario_enabled(&id, enabled, now))
+            .await?;
+        response(proto::SetScenarioEnabledResponse {
+            scenario: scenario_to_proto(&scenario).into(),
+            ..proto::SetScenarioEnabledResponse::default()
+        })
+    }
+
+    async fn run_scenario<'a>(
+        &'a self,
+        _ctx: RequestContext,
+        request: ServiceRequest<'_, proto::RunScenarioRequest>,
+    ) -> ServiceResult<impl connectrpc::Encodable<proto::RunScenarioResponse> + Send + use<'a>>
+    {
+        let id = request.id.to_owned();
+        let key = request.idempotency_key.to_owned();
+        let now = self.now_unix();
+        let event = self
+            .store_call(move |store| store.run_scenario(&id, &key, now))
+            .await?;
+        response(proto::RunScenarioResponse {
+            event: event_to_proto(&event).into(),
+            ..proto::RunScenarioResponse::default()
         })
     }
 }

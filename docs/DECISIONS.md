@@ -540,7 +540,7 @@
       Серверы работают на multi-thread runtime, Pulsar явно строит
       `current_thread`.
     * Внешний контракт — `home.v1` (пути `/home.v1.*`), protojson,
-      UUIDv5 и dedupe-ключи, схема БД v1 (миграция на месте), имена env,
+      UUIDv5 и dedupe-ключи, схема БД v1→v2 (миграция на месте), имена env,
       имена и схемы MCP-инструментов, кадры SSE, метрики. Прежний
       `ricardo.v1` не сохранялся как алиас: Android, HA, ingress verify и
       preflight переведены одновременно с сервером.
@@ -593,5 +593,17 @@
     бандл — ошибка на старте. Клиенты, ходящие в публичный HTTPS
     (currency-bot → kurs.kz/Telegram, `home-telegram`, `home-clients`),
     строятся только через `home_tls::public_https_client()`.
+
+46. **Определения сценариев хранит scheduler, исполняет `ha-scenario`.**
+    scheduler — единственный владелец живых расписаний (решение 10), поэтому
+    `ScenarioService` живёт в нём: определения и revision в SQLite (схема v2),
+    time-триггеры материализуются строками `schedules`
+    (`kind=SCHEDULE_KIND_SCENARIO`, очередь `scenario`, `task_type` —
+    `scenario.fire`), `RunScenario` кладёт manual-событие в ту же очередь.
+    Условия и шаги scheduler только хранит и валидирует; вычисляет и исполняет
+    отдельный бинарь `ha-scenario` в `ha-bridge` (следующий этап). Второго
+    планировщика и второго владельца определений нет. `GetStatus` различает
+    `scenario_store_supported=true` (хранилище есть) и
+    `scenario_execution_supported=false` (исполнителя ещё нет).
 
 Меняется решение — обновить этот файл и `STATE.md`.

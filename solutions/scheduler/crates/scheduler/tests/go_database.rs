@@ -37,7 +37,7 @@ fn go_database_opens_and_reads_identically() {
             row.get(0)
         })
         .expect("schema version");
-    assert_eq!(version, 1, "schema_meta must stay at v1");
+    assert_eq!(version, 1, "fixture is a v1 database");
 
     let idempotency = {
         let mut statement = connection
@@ -87,7 +87,13 @@ fn go_database_opens_and_reads_identically() {
     let schedules = store
         .list_schedules(true, ScheduleKind::Unspecified)
         .expect("list schedules");
-    assert_eq!(schedules.len(), 3);
+    assert_eq!(schedules.len(), 2);
+    assert!(
+        schedules
+            .iter()
+            .all(|schedule| schedule.kind != ScheduleKind::Scenario),
+        "UNSPECIFIED hides scenario trigger rows"
+    );
     let wake = schedules
         .iter()
         .find(|schedule| schedule.label == "wake")
@@ -125,7 +131,11 @@ fn go_database_opens_and_reads_identically() {
     assert_eq!(reminder.next_due_unix, 1_769_936_400);
     assert_eq!(reminder.revision, 1);
 
-    let evening = schedules
+    let scenario_rows = store
+        .list_schedules(true, ScheduleKind::Scenario)
+        .expect("list scenario schedules");
+    assert_eq!(scenario_rows.len(), 1);
+    let evening = scenario_rows
         .iter()
         .find(|schedule| schedule.label == "evening")
         .expect("scenario");
@@ -225,4 +235,16 @@ fn go_database_opens_and_reads_identically() {
     assert_eq!(idempotency_row("task-key").hash, task_hash);
 
     store.close().expect("close store");
+
+    let migrated = Connection::open(&path).expect("reopen migrated database");
+    let version: i64 = migrated
+        .query_row("SELECT version FROM schema_meta LIMIT 1", [], |row| {
+            row.get(0)
+        })
+        .expect("schema version");
+    assert_eq!(version, 2, "v1 fixture migrates to v2");
+    let scenarios: i64 = migrated
+        .query_row("SELECT COUNT(*) FROM scenarios", [], |row| row.get(0))
+        .expect("scenarios table exists");
+    assert_eq!(scenarios, 0);
 }

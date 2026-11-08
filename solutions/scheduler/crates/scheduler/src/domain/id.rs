@@ -25,6 +25,12 @@ pub fn resource_id(now_unix_millis: i64) -> String {
     Uuid::new_v7(timestamp).to_string()
 }
 
+/// Opaque random id for identities that must stay unique within one second.
+#[must_use]
+pub fn random_id() -> String {
+    Uuid::new_v4().to_string()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
