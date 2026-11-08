@@ -105,6 +105,12 @@ object ControlJson {
             id = id,
             kind = kind,
             title = text("title").ifEmpty { id },
+            titleKey = text("titleKey"),
+            titleArgs = (o["titleArgs"] as? JsonObject).orEmpty()
+                .mapNotNull { (key, value) ->
+                    (value as? JsonPrimitive)?.takeIf { it.isString }?.let { key to it.content }
+                }
+                .toMap(),
             room = text("room"),
             icon = text("icon"),
             actions = actions,

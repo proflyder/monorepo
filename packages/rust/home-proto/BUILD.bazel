@@ -12,6 +12,7 @@ DEPS = [
     "@crates//:reqwest",
     "@crates//:rustls",
     "@crates//:serde",
+    "@crates//:serde_json",
     "@crates//:thiserror",
     "//packages/rust/home-secret:home_secret",
 ]

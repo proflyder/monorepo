@@ -187,11 +187,15 @@ impl SchedulerService for Service {
     {
         let message = request.to_owned_message();
         let Some(view) = message.schedule.as_option() else {
-            return Err(ConnectError::invalid_argument("schedule is required"));
+            return Err(super::text::connect(
+                ConnectError::invalid_argument("schedule is required"),
+                "scheduler.error.schedule_required",
+            ));
         };
         if message.expected_revision < 0 {
-            return Err(ConnectError::invalid_argument(
-                "expected_revision must not be negative",
+            return Err(super::text::connect(
+                ConnectError::invalid_argument("expected_revision must not be negative"),
+                "scheduler.error.expected_revision_negative",
             ));
         }
         let schedule = view_to_schedule(view);
@@ -502,6 +506,12 @@ impl SchedulerService for Service {
                 ..proto::QueueInfo::default()
             })
             .collect();
+        let tick_error_text = super::text::tick_error_text(&engine.last_tick_error);
+        let tick_error_text = if tick_error_text.key.is_empty() {
+            proto::GetStatusResponse::default().last_tick_error_text
+        } else {
+            tick_error_text.into()
+        };
         response(proto::GetStatusResponse {
             version: self.version.clone(),
             schema_version: i32::try_from(status.schema_version).unwrap_or(i32::MAX),
@@ -518,6 +528,7 @@ impl SchedulerService for Service {
             ready: engine.ready,
             last_tick_attempt_unix: engine.last_tick_attempt_unix,
             last_tick_error_unix: engine.last_tick_error_unix,
+            last_tick_error_text: tick_error_text,
             last_tick_error: engine.last_tick_error,
             ..proto::GetStatusResponse::default()
         })
@@ -537,8 +548,11 @@ fn check_scenario_kinds(
         || scenario.conditions.len() != conditions
         || scenario.steps.len() != steps
     {
-        return Err(ConnectError::invalid_argument(
-            "scenario contains an unsupported trigger, condition or step kind",
+        return Err(super::text::connect(
+            ConnectError::invalid_argument(
+                "scenario contains an unsupported trigger, condition or step kind",
+            ),
+            "scheduler.error.unsupported_scenario_part",
         ));
     }
     Ok(())
@@ -610,11 +624,15 @@ impl ScenarioService for Service {
     {
         let message = request.to_owned_message();
         let Some(view) = message.scenario.as_option() else {
-            return Err(ConnectError::invalid_argument("scenario is required"));
+            return Err(super::text::connect(
+                ConnectError::invalid_argument("scenario is required"),
+                "scheduler.error.scenario_required",
+            ));
         };
         if message.expected_revision < 0 {
-            return Err(ConnectError::invalid_argument(
-                "expected_revision must not be negative",
+            return Err(super::text::connect(
+                ConnectError::invalid_argument("expected_revision must not be negative"),
+                "scheduler.error.expected_revision_negative",
             ));
         }
         let scenario = view_to_scenario(view);

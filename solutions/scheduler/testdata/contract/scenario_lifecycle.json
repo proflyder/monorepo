@@ -16,17 +16,27 @@
           "enabled": true,
           "continueOnError": true,
           "triggers": [
-            {"manual": {}},
+            {
+              "manual": {}
+            },
             {
               "time": {
                 "timezone": "UTC",
-                "at": {"hour": 7, "minute": 30},
+                "at": {
+                  "hour": 7,
+                  "minute": 30
+                },
                 "repeat": "REPEAT_KIND_DAILY"
               }
             }
           ],
           "conditions": [
-            {"entityState": {"entityId": "light.kitchen", "state": "off"}}
+            {
+              "entityState": {
+                "entityId": "light.kitchen",
+                "state": "off"
+              }
+            }
           ],
           "steps": [
             {
@@ -36,15 +46,27 @@
                 "paramsJson": "{\"brightness\":40}"
               }
             },
-            {"delay": {"seconds": 5}},
-            {"speak": {"text": "Done"}}
+            {
+              "delay": {
+                "seconds": 5
+              }
+            },
+            {
+              "speak": {
+                "text": "Done"
+              }
+            }
           ]
         }
       },
-      "capture": {"scenarioId": "scenario.id"},
+      "capture": {
+        "scenarioId": "scenario.id"
+      },
       "response": {
         "status": 200,
-        "headers": {"Content-Type": "application/json"},
+        "headers": {
+          "Content-Type": "application/json"
+        },
         "body": {
           "scenario": {
             "id": "{{scenarioId}}",
@@ -55,17 +77,27 @@
             "createdUnix": "1767268800",
             "updatedUnix": "1767268800",
             "triggers": [
-              {"manual": {}},
+              {
+                "manual": {}
+              },
               {
                 "time": {
                   "timezone": "UTC",
-                  "at": {"hour": 7, "minute": 30},
+                  "at": {
+                    "hour": 7,
+                    "minute": 30
+                  },
                   "repeat": "REPEAT_KIND_DAILY"
                 }
               }
             ],
             "conditions": [
-              {"entityState": {"entityId": "light.kitchen", "state": "off"}}
+              {
+                "entityState": {
+                  "entityId": "light.kitchen",
+                  "state": "off"
+                }
+              }
             ],
             "steps": [
               {
@@ -75,8 +107,16 @@
                   "paramsJson": "{\"brightness\":40}"
                 }
               },
-              {"delay": {"seconds": 5}},
-              {"speak": {"text": "Done"}}
+              {
+                "delay": {
+                  "seconds": 5
+                }
+              },
+              {
+                "speak": {
+                  "text": "Done"
+                }
+              }
             ],
             "continueOnError": true,
             "nextDueUnix": "1767339000"
@@ -92,11 +132,15 @@
           "Authorization": "Bearer contract-test-token",
           "Content-Type": "application/json"
         },
-        "body": {"id": "{{scenarioId}}"}
+        "body": {
+          "id": "{{scenarioId}}"
+        }
       },
       "response": {
         "status": 200,
-        "headers": {"Content-Type": "application/json"},
+        "headers": {
+          "Content-Type": "application/json"
+        },
         "body": {
           "scenario": {
             "id": "{{scenarioId}}",
@@ -107,17 +151,27 @@
             "createdUnix": "1767268800",
             "updatedUnix": "1767268800",
             "triggers": [
-              {"manual": {}},
+              {
+                "manual": {}
+              },
               {
                 "time": {
                   "timezone": "UTC",
-                  "at": {"hour": 7, "minute": 30},
+                  "at": {
+                    "hour": 7,
+                    "minute": 30
+                  },
                   "repeat": "REPEAT_KIND_DAILY"
                 }
               }
             ],
             "conditions": [
-              {"entityState": {"entityId": "light.kitchen", "state": "off"}}
+              {
+                "entityState": {
+                  "entityId": "light.kitchen",
+                  "state": "off"
+                }
+              }
             ],
             "steps": [
               {
@@ -127,8 +181,16 @@
                   "paramsJson": "{\"brightness\":40}"
                 }
               },
-              {"delay": {"seconds": 5}},
-              {"speak": {"text": "Done"}}
+              {
+                "delay": {
+                  "seconds": 5
+                }
+              },
+              {
+                "speak": {
+                  "text": "Done"
+                }
+              }
             ],
             "continueOnError": true,
             "nextDueUnix": "1767339000"
@@ -144,11 +206,15 @@
           "Authorization": "Bearer contract-test-token",
           "Content-Type": "application/json"
         },
-        "body": {"includeDisabled": true}
+        "body": {
+          "includeDisabled": true
+        }
       },
       "response": {
         "status": 200,
-        "headers": {"Content-Type": "application/json"},
+        "headers": {
+          "Content-Type": "application/json"
+        },
         "body": {
           "scenarios": [
             {
@@ -160,17 +226,27 @@
               "createdUnix": "1767268800",
               "updatedUnix": "1767268800",
               "triggers": [
-                {"manual": {}},
+                {
+                  "manual": {}
+                },
                 {
                   "time": {
                     "timezone": "UTC",
-                    "at": {"hour": 7, "minute": 30},
+                    "at": {
+                      "hour": 7,
+                      "minute": 30
+                    },
                     "repeat": "REPEAT_KIND_DAILY"
                   }
                 }
               ],
               "conditions": [
-                {"entityState": {"entityId": "light.kitchen", "state": "off"}}
+                {
+                  "entityState": {
+                    "entityId": "light.kitchen",
+                    "state": "off"
+                  }
+                }
               ],
               "steps": [
                 {
@@ -180,8 +256,16 @@
                     "paramsJson": "{\"brightness\":40}"
                   }
                 },
-                {"delay": {"seconds": 5}},
-                {"speak": {"text": "Done"}}
+                {
+                  "delay": {
+                    "seconds": 5
+                  }
+                },
+                {
+                  "speak": {
+                    "text": "Done"
+                  }
+                }
               ],
               "continueOnError": true,
               "nextDueUnix": "1767339000"
@@ -198,11 +282,15 @@
           "Authorization": "Bearer contract-test-token",
           "Content-Type": "application/json"
         },
-        "body": {"includeDisabled": true}
+        "body": {
+          "includeDisabled": true
+        }
       },
       "response": {
         "status": 200,
-        "headers": {"Content-Type": "application/json"},
+        "headers": {
+          "Content-Type": "application/json"
+        },
         "body": {}
       }
     },
@@ -214,11 +302,16 @@
           "Authorization": "Bearer contract-test-token",
           "Content-Type": "application/json"
         },
-        "body": {"kind": "SCHEDULE_KIND_ALARM", "includeDisabled": true}
+        "body": {
+          "kind": "SCHEDULE_KIND_ALARM",
+          "includeDisabled": true
+        }
       },
       "response": {
         "status": 200,
-        "headers": {"Content-Type": "application/json"},
+        "headers": {
+          "Content-Type": "application/json"
+        },
         "body": {}
       }
     },
@@ -230,12 +323,19 @@
           "Authorization": "Bearer contract-test-token",
           "Content-Type": "application/json"
         },
-        "body": {"id": "{{scenarioId}}", "idempotencyKey": "run-1"}
+        "body": {
+          "id": "{{scenarioId}}",
+          "idempotencyKey": "run-1"
+        }
       },
-      "capture": {"runEventId": "event.id"},
+      "capture": {
+        "runEventId": "event.id"
+      },
       "response": {
         "status": 200,
-        "headers": {"Content-Type": "application/json"},
+        "headers": {
+          "Content-Type": "application/json"
+        },
         "body": {
           "event": {
             "id": "{{runEventId}}",
@@ -261,11 +361,16 @@
           "Authorization": "Bearer contract-test-token",
           "Content-Type": "application/json"
         },
-        "body": {"id": "{{scenarioId}}", "idempotencyKey": "run-1"}
+        "body": {
+          "id": "{{scenarioId}}",
+          "idempotencyKey": "run-1"
+        }
       },
       "response": {
         "status": 200,
-        "headers": {"Content-Type": "application/json"},
+        "headers": {
+          "Content-Type": "application/json"
+        },
         "body": {
           "event": {
             "id": "{{runEventId}}",
@@ -297,17 +402,37 @@
             "id": "{{scenarioId}}",
             "label": "evening",
             "enabled": true,
-            "triggers": [{"manual": {}}],
-            "steps": [{"speak": {"text": "Done"}}]
+            "triggers": [
+              {
+                "manual": {}
+              }
+            ],
+            "steps": [
+              {
+                "speak": {
+                  "text": "Done"
+                }
+              }
+            ]
           }
         }
       },
       "response": {
         "status": 409,
-        "headers": {"Content-Type": "application/json"},
+        "headers": {
+          "Content-Type": "application/json"
+        },
         "body": {
           "code": "aborted",
-          "message": "revision conflict: current revision 1, expected 99"
+          "message": "revision conflict: current revision 1, expected 99",
+          "details": [
+            {
+              "type": "home.v1.LocalizedText",
+              "debug": {
+                "key": "scheduler.error.revision_conflict"
+              }
+            }
+          ]
         }
       }
     },
@@ -319,11 +444,16 @@
           "Authorization": "Bearer contract-test-token",
           "Content-Type": "application/json"
         },
-        "body": {"id": "{{scenarioId}}", "enabled": false}
+        "body": {
+          "id": "{{scenarioId}}",
+          "enabled": false
+        }
       },
       "response": {
         "status": 200,
-        "headers": {"Content-Type": "application/json"},
+        "headers": {
+          "Content-Type": "application/json"
+        },
         "body": {
           "scenario": {
             "id": "{{scenarioId}}",
@@ -333,17 +463,27 @@
             "createdUnix": "1767268800",
             "updatedUnix": "1767268800",
             "triggers": [
-              {"manual": {}},
+              {
+                "manual": {}
+              },
               {
                 "time": {
                   "timezone": "UTC",
-                  "at": {"hour": 7, "minute": 30},
+                  "at": {
+                    "hour": 7,
+                    "minute": 30
+                  },
                   "repeat": "REPEAT_KIND_DAILY"
                 }
               }
             ],
             "conditions": [
-              {"entityState": {"entityId": "light.kitchen", "state": "off"}}
+              {
+                "entityState": {
+                  "entityId": "light.kitchen",
+                  "state": "off"
+                }
+              }
             ],
             "steps": [
               {
@@ -353,8 +493,16 @@
                   "paramsJson": "{\"brightness\":40}"
                 }
               },
-              {"delay": {"seconds": 5}},
-              {"speak": {"text": "Done"}}
+              {
+                "delay": {
+                  "seconds": 5
+                }
+              },
+              {
+                "speak": {
+                  "text": "Done"
+                }
+              }
             ],
             "continueOnError": true
           }
@@ -369,11 +517,16 @@
           "Authorization": "Bearer contract-test-token",
           "Content-Type": "application/json"
         },
-        "body": {"kind": "SCHEDULE_KIND_SCENARIO", "includeDisabled": true}
+        "body": {
+          "kind": "SCHEDULE_KIND_SCENARIO",
+          "includeDisabled": true
+        }
       },
       "response": {
         "status": 200,
-        "headers": {"Content-Type": "application/json"},
+        "headers": {
+          "Content-Type": "application/json"
+        },
         "body": {
           "schedules": [
             {
@@ -381,7 +534,10 @@
               "label": "evening",
               "kind": "SCHEDULE_KIND_SCENARIO",
               "timezone": "UTC",
-              "at": {"hour": 7, "minute": 30},
+              "at": {
+                "hour": 7,
+                "minute": 30
+              },
               "repeat": "REPEAT_KIND_DAILY",
               "payloadJson": "{\"scenario_id\":\"{{scenarioId}}\",\"trigger_index\":1}",
               "revision": "1",
@@ -400,12 +556,18 @@
           "Authorization": "Bearer contract-test-token",
           "Content-Type": "application/json"
         },
-        "body": {"id": "{{scenarioId}}"}
+        "body": {
+          "id": "{{scenarioId}}"
+        }
       },
       "response": {
         "status": 200,
-        "headers": {"Content-Type": "application/json"},
-        "body": {"deleted": true}
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "deleted": true
+        }
       }
     },
     {
@@ -416,12 +578,27 @@
           "Authorization": "Bearer contract-test-token",
           "Content-Type": "application/json"
         },
-        "body": {"id": "{{scenarioId}}"}
+        "body": {
+          "id": "{{scenarioId}}"
+        }
       },
       "response": {
         "status": 404,
-        "headers": {"Content-Type": "application/json"},
-        "body": {"code": "not_found", "message": "not found"}
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "code": "not_found",
+          "message": "not found",
+          "details": [
+            {
+              "type": "home.v1.LocalizedText",
+              "debug": {
+                "key": "scheduler.error.not_found"
+              }
+            }
+          ]
+        }
       }
     }
   ]

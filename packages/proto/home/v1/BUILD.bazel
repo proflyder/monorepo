@@ -12,8 +12,15 @@ proto_library(
 )
 
 proto_library(
+    name = "text_proto",
+    srcs = ["text.proto"],
+    strip_import_prefix = "/packages/proto/home/v1",
+)
+
+proto_library(
     name = "scheduler_proto",
     srcs = ["scheduler.proto"],
+    deps = [":text_proto"],
     strip_import_prefix = "/packages/proto/home/v1",
 )
 

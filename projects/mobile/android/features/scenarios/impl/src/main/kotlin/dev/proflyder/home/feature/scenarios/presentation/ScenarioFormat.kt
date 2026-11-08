@@ -5,6 +5,7 @@ import dev.proflyder.home.core.model.ControlEntry
 import dev.proflyder.home.core.model.Scenario
 import dev.proflyder.home.core.model.ScenarioCondition
 import dev.proflyder.home.core.model.ScenarioStep
+import dev.proflyder.home.core.ui.serverText
 import dev.proflyder.home.feature.scenarios.ScenarioTriggerStrings
 import dev.proflyder.home.feature.scenarios.describeTriggers
 import dev.proflyder.home.feature.scenarios.impl.R
@@ -126,7 +127,8 @@ internal object ScenarioFormat {
         val entry = catalog.firstOrNull { it.id == step.entryId }
         // Prefer the human device name when HA only sent a technical entity
         // title ("Light", "Switch"); never repeat the same name twice.
-        val title = entry?.displayName?.ifBlank { entry.id } ?: step.entryId
+        val localized = entry?.let { serverText(context, it.titleKey, it.titleArgs) }
+        val title = localized ?: entry?.displayName?.ifBlank { entry.id } ?: step.entryId
         val parts = mutableListOf(actionLabel(context, step.action))
         when {
             entry != null -> addEntryDetails(parts, entry, title)

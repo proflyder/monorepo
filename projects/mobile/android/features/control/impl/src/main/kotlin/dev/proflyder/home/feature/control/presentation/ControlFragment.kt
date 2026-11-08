@@ -103,9 +103,15 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
                 // A light's long press is reserved for its adjustment sheet.
                 is QuickTile.Device ->
                     if (tile.entry.light != null) openLightSheet(tile.entry)
-                    else viewModel.toggleFavoriteRef(FavoriteRef(FavoriteKind.DEVICE, tile.entry.id), tile.entry.displayName)
+                    else viewModel.toggleFavoriteRef(
+                        FavoriteRef(FavoriteKind.DEVICE, tile.entry.id),
+                        tile.entry.localizedDisplayName(requireContext()),
+                    )
                 is QuickTile.Speak ->
-                    viewModel.toggleFavoriteRef(FavoriteRef(FavoriteKind.ACTION, tile.entry.id), tile.entry.displayName)
+                    viewModel.toggleFavoriteRef(
+                        FavoriteRef(FavoriteKind.ACTION, tile.entry.id),
+                        tile.entry.localizedDisplayName(requireContext()),
+                    )
                 is QuickTile.ScenarioTile ->
                     viewModel.toggleFavoriteRef(
                         FavoriteRef(FavoriteKind.SCENARIO, tile.scenario.id),
@@ -257,7 +263,7 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
         val ref = FavoriteRef(FavoriteKind.DEVICE, entry.id)
         val pinned = ref in viewModel.state.value.favorites
         confirm(
-            message = entry.displayName,
+            message = entry.localizedDisplayName(requireContext()),
             positive = if (pinned) R.string.control_unpin else R.string.control_pin,
             negative = android.R.string.cancel,
             destructive = false,

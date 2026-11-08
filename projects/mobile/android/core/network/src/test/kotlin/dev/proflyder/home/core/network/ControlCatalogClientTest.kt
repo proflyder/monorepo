@@ -63,7 +63,7 @@ class ControlCatalogClientTest {
          {"id":"voice","kind":"profile","title":"Voice profile","actions":["turn_on","turn_off"],"state":"on","available":true},
          {"id":"focus","kind":"scenario","title":"Focus","icon":"work","actions":["run"],"available":true},
          {"id":"lamp","kind":"light","title":"Lamp","room":"Bedroom","actions":["turn_on","turn_off","bogus"],"state":"on","available":true},
-         {"id":"action.station_speak","kind":"action","title":"Сказать на колонке","device_id":"station-1","device":"Колонка","actions":["speak"],"available":true},
+         {"id":"action.station_speak","kind":"action","title":"Speak on the station","titleKey":"catalog.action.speak_title","device_id":"station-1","device":"Колонка","actions":["speak"],"available":true},
          {"id":"odd","kind":"lock","title":"Odd","actions":[],"available":false}]}
     """.trimIndent()
 
@@ -90,6 +90,8 @@ class ControlCatalogClientTest {
         assertEquals(ControlKind.ACTION, speak.kind)
         assertEquals(setOf(ControlAction.SPEAK), speak.actions)
         assertEquals("station-1", speak.deviceId)
+        assertEquals("catalog.action.speak_title", speak.titleKey)
+        assertTrue(speak.titleArgs.isEmpty())
         assertNull(speak.power)
         assertEquals(ControlKind.OTHER, odd.kind)
         assertFalse(odd.available)

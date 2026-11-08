@@ -25,6 +25,39 @@ metro_android_library(
     ],
 )
 
+kt_android_local_test(
+    name = "server_text_test",
+    srcs = ["src/test/kotlin/dev/proflyder/home/core/ui/ServerTextTest.kt"],
+    custom_package = "dev.proflyder.home.core.ui",
+    data = [
+        "robolectric-deps.properties",
+        ":robolectric_android_all_sdk35",
+    ],
+    jvm_flags = [
+        "-Drobolectric.offline=true",
+        "--add-opens=java.base/java.lang=ALL-UNNAMED",
+        "--add-opens=java.base/java.io=ALL-UNNAMED",
+        "--add-opens=java.base/java.net=ALL-UNNAMED",
+        "--add-opens=java.base/java.security=ALL-UNNAMED",
+        "--add-opens=java.base/java.text=ALL-UNNAMED",
+        "--add-opens=java.base/java.util=ALL-UNNAMED",
+        "--add-opens=java.base/java.util.concurrent=ALL-UNNAMED",
+        "--add-opens=java.base/jdk.internal.util=ALL-UNNAMED",
+    ],
+    manifest = "src/test/AndroidManifest.xml",
+    resources = glob(["src/test/resources/**"]),
+    robolectric_properties_file = "robolectric-deps.properties",
+    test_class = "dev.proflyder.home.core.ui.ServerTextTest",
+    deps = [
+        ":ui",
+        "@maven//:androidx_appcompat_appcompat",
+        "@maven//:com_google_android_material_material",
+        "@maven//:junit_junit",
+        "@maven//:org_robolectric_robolectric",
+        "@maven//:org_jetbrains_kotlinx_kotlinx_serialization_json",
+    ],
+)
+
 # Robolectric resolves SDK 35 to this pinned preinstrumented jar. Keeping it as
 # a data dependency avoids a runtime Maven download.
 android_all_dir(

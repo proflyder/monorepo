@@ -14,6 +14,7 @@ import dev.proflyder.home.core.model.CatalogRoomGroup
 import dev.proflyder.home.core.model.ControlAction
 import dev.proflyder.home.core.model.ControlEntry
 import dev.proflyder.home.core.model.ControlKind
+import dev.proflyder.home.core.ui.serverText
 import dev.proflyder.home.core.ui.setVisible
 import dev.proflyder.home.feature.scenarios.impl.R
 import dev.proflyder.home.feature.scenarios.impl.databinding.ItemCatalogRowBinding
@@ -29,12 +30,15 @@ import dev.proflyder.home.feature.scenarios.impl.databinding.SheetChoiceBinding
  */
 internal class CatalogPickerDialog(
     private val context: Context,
-    private val entries: List<ControlEntry>,
+    rawEntries: List<ControlEntry>,
     private val onSelect: (ControlEntry) -> Unit,
 ) {
     private val dialog = BottomSheetDialog(context)
     private val views = SheetChoiceBinding.inflate(LayoutInflater.from(context))
     private val labels = ResourceGroupingLabels(context)
+    private val entries = rawEntries.map { entry ->
+        entry.copy(title = serverText(context, entry.titleKey, entry.titleArgs) ?: entry.title)
+    }
     private var includeSettings = false
 
     init {

@@ -2,6 +2,8 @@ syntax = "proto3";
 
 package home.v1;
 
+import "text.proto";
+
 // SchedulerService is the durable schedule/timer/event contract.
 //
 // Transport: the server exposes this service over Connect (unary JSON/HTTP),
@@ -147,7 +149,9 @@ message DueEvent {
   int32 snooze_seq = 10;
   int64 created_unix = 11;
   int64 lease_until_unix = 12;
-  string detail = 13;       // skip/failure reason, never contains secrets
+  // Deprecated human-readable skip/failure reason, never contains secrets.
+  // New clients render `detail_text` instead.
+  string detail = 13 [deprecated = true];
   EventAction action = 14;  // FIRE for triggers, STOP for control events
   AckOutcome ack_outcome = 15; // terminal outcome once acked
   // task_type is the executor action for this event, for example
@@ -158,6 +162,9 @@ message DueEvent {
   // only their own queue and never steal unknown queues.
   string queue = 17;
   int64 acked_unix = 18; // 0 until a terminal ack
+  // Localized skip/failure reason. Empty for older rows and for events that
+  // have no reason; clients fall back to `detail`.
+  LocalizedText detail_text = 19;
 }
 
 message CreateScheduleRequest {
@@ -353,10 +360,14 @@ message GetStatusResponse {
   bool ready = 12;
   int64 last_tick_attempt_unix = 13;
   int64 last_tick_error_unix = 14;
-  string last_tick_error = 15; // bounded, no secrets
+  // Deprecated bounded diagnostic text, no secrets. New clients render
+  // `last_tick_error_text` instead.
+  string last_tick_error = 15 [deprecated = true];
   // True when this server stores scenario definitions (ScenarioService).
   // Independent of scenario_execution_supported.
   bool scenario_store_supported = 16;
+  // Localized last-tick failure. Empty when the tick is healthy.
+  LocalizedText last_tick_error_text = 17;
 }
 
 message QueueInfo {

@@ -60,14 +60,16 @@ impl Api {
 }
 
 fn map_error(error: crate::domain::DomainError) -> ConnectError {
-    match error.kind {
+    let text = super::text::error_text(error.kind, error.message);
+    let mapped = match error.kind {
         ErrorKind::InvalidArgument => ConnectError::invalid_argument(error.message),
         ErrorKind::NotFound => ConnectError::not_found(error.message),
         ErrorKind::AlreadyExists => ConnectError::already_exists(error.message),
         ErrorKind::FailedPrecondition => ConnectError::failed_precondition(error.message),
         ErrorKind::PermissionDenied => ConnectError::permission_denied(error.message),
         ErrorKind::Unavailable => ConnectError::unavailable(error.message),
-    }
+    };
+    mapped.with_detail(home_proto::error_detail(&text))
 }
 
 fn ok<T>(message: T) -> ServiceResult<T> {
@@ -201,7 +203,13 @@ impl IntercomService for Api {
         let identity = Self::identity(&ctx)?;
         let message = request.to_owned_message();
         let Some(signal) = message.signal.as_ref() else {
-            return Err(ConnectError::invalid_argument("signal is required"));
+            return Err(
+                ConnectError::invalid_argument("signal is required").with_detail(
+                    home_proto::error_detail(&home_proto::localized(
+                        "intercom.error.signal_required",
+                    )),
+                ),
+            );
         };
         let signal = match signal {
             proto::send_signal_request::Signal::Sdp(sdp) => Signal::Sdp(SdpSignal {
@@ -239,9 +247,12 @@ impl IntercomService for Api {
         let identity = Self::identity(&ctx)?;
         let message = request.to_owned_message();
         if !message.endpoint_id.is_empty() && message.endpoint_id != identity.endpoint_id {
-            return Err(ConnectError::permission_denied(
-                "endpoint_id does not match the token",
-            ));
+            return Err(
+                ConnectError::permission_denied("endpoint_id does not match the token")
+                    .with_detail(home_proto::error_detail(&home_proto::localized(
+                        "intercom.error.endpoint_token_mismatch",
+                    ))),
+            );
         }
         let (receiver, guard) = self
             .inner

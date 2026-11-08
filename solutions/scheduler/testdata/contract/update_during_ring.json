@@ -137,7 +137,10 @@
               "sourceId": "{{scheduleId}}",
               "sourceKind": "SOURCE_KIND_ALARM",
               "state": "EVENT_STATE_LEASED",
-              "taskType": "alarm.stop"
+              "taskType": "alarm.stop",
+              "detailText": {
+                "key": "scheduler.event.rule_changed"
+              }
             }
           ]
         }

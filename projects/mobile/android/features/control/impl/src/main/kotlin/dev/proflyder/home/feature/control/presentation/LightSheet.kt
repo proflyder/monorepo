@@ -41,7 +41,7 @@ internal class LightSheet(
 
     init {
         dialog.setContentView(views.root)
-        views.lightTitle.text = entry.title
+        views.lightTitle.text = entry.localizedTitle(views.root.context)
         setupBrightness()
         setupTemperature()
         setupColor()

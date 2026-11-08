@@ -11,5 +11,6 @@ import org.junit.runners.Suite
     ConnectScenarioClientTest::class,
     ConnectIntercomClientTest::class,
     ScenarioJsonTest::class,
+    ConnectErrorLocalizationTest::class,
 )
 class AllNetworkTests

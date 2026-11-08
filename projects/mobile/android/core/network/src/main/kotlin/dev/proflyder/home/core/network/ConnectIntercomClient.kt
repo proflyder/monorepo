@@ -270,24 +270,8 @@ class ConnectIntercomClient(
         }
     }
 
-    private fun parseConnectError(httpCode: Int, text: String): RemoteFailure {
-        val parsed = runCatching {
-            if (text.isBlank()) null else json.parseToJsonElement(text).jsonObject
-        }.getOrNull()
-        val code = sanitizeMessage((parsed?.get("code") as? kotlinx.serialization.json.JsonPrimitive)?.content)
-            .orEmpty()
-        val message = sanitizeMessage((parsed?.get("message") as? kotlinx.serialization.json.JsonPrimitive)?.content)
-            .orEmpty()
-        return when (code) {
-            "unauthenticated", "permission_denied" -> RemoteFailure.Unauthorized
-            "deadline_exceeded", "canceled" -> RemoteFailure.Timeout
-            "unavailable" -> RemoteFailure.Offline(message.ifBlank { "server unavailable" })
-            else -> RemoteFailure.Server(
-                code = code.ifBlank { "http_$httpCode" },
-                message = message.ifBlank { "server returned HTTP $httpCode" },
-            )
-        }
-    }
+    private fun parseConnectError(httpCode: Int, text: String): RemoteFailure =
+        parseConnectFailure(httpCode, text, json)
 
     private companion object {
         const val PLACEHOLDER_BASE_URL = "http://localhost/"

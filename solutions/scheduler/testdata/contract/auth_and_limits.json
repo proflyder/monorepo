@@ -62,7 +62,15 @@
         },
         "body": {
           "code": "permission_denied",
-          "message": "consumer not allowed"
+          "message": "consumer not allowed",
+          "details": [
+            {
+              "type": "home.v1.LocalizedText",
+              "debug": {
+                "key": "scheduler.error.consumer_denied"
+              }
+            }
+          ]
         }
       }
     },
@@ -104,7 +112,15 @@
         },
         "body": {
           "code": "invalid_argument",
-          "message": "invalid argument: limit must be 1..200"
+          "message": "invalid argument: limit must be 1..200",
+          "details": [
+            {
+              "type": "home.v1.LocalizedText",
+              "debug": {
+                "key": "scheduler.error.limit_range"
+              }
+            }
+          ]
         }
       }
     }

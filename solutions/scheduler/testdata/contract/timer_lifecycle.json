@@ -240,7 +240,18 @@
         },
         "body": {
           "code": "failed_precondition",
-          "message": "precondition failed: timer is timer_state_cancelled"
+          "message": "precondition failed: timer is timer_state_cancelled",
+          "details": [
+            {
+              "type": "home.v1.LocalizedText",
+              "debug": {
+                "key": "scheduler.error.timer_not_active",
+                "args": {
+                  "state": "timer_state_cancelled"
+                }
+              }
+            }
+          ]
         }
       }
     },
@@ -264,7 +275,15 @@
         },
         "body": {
           "code": "invalid_argument",
-          "message": "invalid argument: duration_seconds must be positive"
+          "message": "invalid argument: duration_seconds must be positive",
+          "details": [
+            {
+              "type": "home.v1.LocalizedText",
+              "debug": {
+                "key": "scheduler.error.duration_positive"
+              }
+            }
+          ]
         }
       }
     },
@@ -288,7 +307,18 @@
         },
         "body": {
           "code": "invalid_argument",
-          "message": "invalid argument: duration exceeds 168h0m0s"
+          "message": "invalid argument: duration exceeds 168h0m0s",
+          "details": [
+            {
+              "type": "home.v1.LocalizedText",
+              "debug": {
+                "key": "scheduler.error.duration_too_long",
+                "args": {
+                  "limit": "168h0m0s"
+                }
+              }
+            }
+          ]
         }
       }
     }

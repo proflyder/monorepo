@@ -30,7 +30,15 @@
         },
         "body": {
           "code": "invalid_argument",
-          "message": "invalid argument: reminders must use REPEAT_KIND_ONCE"
+          "message": "invalid argument: reminders must use REPEAT_KIND_ONCE",
+          "details": [
+            {
+              "type": "home.v1.LocalizedText",
+              "debug": {
+                "key": "scheduler.error.reminder_repeat"
+              }
+            }
+          ]
         }
       }
     },
@@ -61,7 +69,15 @@
         },
         "body": {
           "code": "invalid_argument",
-          "message": "invalid argument: invalid schedule rule: unknown timezone \"Mars/Olympus\""
+          "message": "invalid argument: invalid schedule rule: unknown timezone \"Mars/Olympus\"",
+          "details": [
+            {
+              "type": "home.v1.LocalizedText",
+              "debug": {
+                "key": "scheduler.error.invalid_schedule_rule"
+              }
+            }
+          ]
         }
       }
     },
@@ -95,7 +111,15 @@
         },
         "body": {
           "code": "invalid_argument",
-          "message": "invalid argument: invalid schedule rule: weekday 0 outside 1..7"
+          "message": "invalid argument: invalid schedule rule: weekday 0 outside 1..7",
+          "details": [
+            {
+              "type": "home.v1.LocalizedText",
+              "debug": {
+                "key": "scheduler.error.invalid_schedule_rule"
+              }
+            }
+          ]
         }
       }
     },
@@ -129,7 +153,15 @@
         },
         "body": {
           "code": "invalid_argument",
-          "message": "invalid argument: invalid schedule rule: weekday 8 outside 1..7"
+          "message": "invalid argument: invalid schedule rule: weekday 8 outside 1..7",
+          "details": [
+            {
+              "type": "home.v1.LocalizedText",
+              "debug": {
+                "key": "scheduler.error.invalid_schedule_rule"
+              }
+            }
+          ]
         }
       }
     },
@@ -161,7 +193,15 @@
         },
         "body": {
           "code": "invalid_argument",
-          "message": "invalid argument: payload_json must be valid JSON"
+          "message": "invalid argument: payload_json must be valid JSON",
+          "details": [
+            {
+              "type": "home.v1.LocalizedText",
+              "debug": {
+                "key": "scheduler.error.invalid_json"
+              }
+            }
+          ]
         }
       }
     },
@@ -192,7 +232,18 @@
         },
         "body": {
           "code": "invalid_argument",
-          "message": "invalid argument: label exceeds 200 bytes"
+          "message": "invalid argument: label exceeds 200 bytes",
+          "details": [
+            {
+              "type": "home.v1.LocalizedText",
+              "debug": {
+                "key": "scheduler.error.label_too_long",
+                "args": {
+                  "limit": "200"
+                }
+              }
+            }
+          ]
         }
       }
     },
@@ -215,7 +266,15 @@
         },
         "body": {
           "code": "invalid_argument",
-          "message": "invalid argument: id is required"
+          "message": "invalid argument: id is required",
+          "details": [
+            {
+              "type": "home.v1.LocalizedText",
+              "debug": {
+                "key": "scheduler.error.id_required"
+              }
+            }
+          ]
         }
       }
     },
@@ -246,7 +305,15 @@
         },
         "body": {
           "code": "invalid_argument",
-          "message": "invalid argument: invalid schedule rule: hour 24 outside 0..23"
+          "message": "invalid argument: invalid schedule rule: hour 24 outside 0..23",
+          "details": [
+            {
+              "type": "home.v1.LocalizedText",
+              "debug": {
+                "key": "scheduler.error.invalid_schedule_rule"
+              }
+            }
+          ]
         }
       }
     }

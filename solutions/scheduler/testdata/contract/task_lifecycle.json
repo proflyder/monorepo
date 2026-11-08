@@ -92,7 +92,10 @@
             "sourceId": "<uuid>",
             "sourceKind": "SOURCE_KIND_TASK",
             "state": "EVENT_STATE_SKIPPED",
-            "taskType": "notify.push"
+            "taskType": "notify.push",
+            "detailText": {
+              "key": "scheduler.event.cancelled"
+            }
           }
         }
       }
@@ -199,7 +202,10 @@
             "sourceId": "<uuid>",
             "sourceKind": "SOURCE_KIND_TASK",
             "state": "EVENT_STATE_SKIPPED",
-            "taskType": "notify.push"
+            "taskType": "notify.push",
+            "detailText": {
+              "key": "scheduler.event.cancelled"
+            }
           }
         }
       }
@@ -235,7 +241,10 @@
             "sourceId": "<uuid>",
             "sourceKind": "SOURCE_KIND_TASK",
             "state": "EVENT_STATE_SKIPPED",
-            "taskType": "notify.push"
+            "taskType": "notify.push",
+            "detailText": {
+              "key": "scheduler.event.cancelled"
+            }
           }
         }
       }
@@ -336,7 +345,15 @@
         },
         "body": {
           "code": "failed_precondition",
-          "message": "precondition failed: only task events can be cancelled; use StopSchedule"
+          "message": "precondition failed: only task events can be cancelled; use StopSchedule",
+          "details": [
+            {
+              "type": "home.v1.LocalizedText",
+              "debug": {
+                "key": "scheduler.error.task_cancel_only"
+              }
+            }
+          ]
         }
       }
     },
@@ -434,7 +451,15 @@
         },
         "body": {
           "code": "failed_precondition",
-          "message": "precondition failed: task is already leased by an executor"
+          "message": "precondition failed: task is already leased by an executor",
+          "details": [
+            {
+              "type": "home.v1.LocalizedText",
+              "debug": {
+                "key": "scheduler.error.task_leased"
+              }
+            }
+          ]
         }
       }
     }

@@ -11,6 +11,7 @@ mod auth;
 mod convert;
 mod error;
 mod service;
+mod text;
 
 use std::collections::HashSet;
 use std::convert::Infallible;

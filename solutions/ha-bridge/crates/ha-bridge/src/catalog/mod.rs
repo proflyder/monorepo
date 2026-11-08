@@ -150,6 +150,12 @@ pub struct Entry {
     pub id: String,
     pub kind: Kind,
     pub title: String,
+    /// Stable localization key of a server-generated title. Empty for titles
+    /// that come from Home Assistant user data (they are already the user's
+    /// words and must not be translated).
+    pub title_key: String,
+    /// Typed arguments for [`Entry::title_key`].
+    pub title_args: std::collections::BTreeMap<String, String>,
     pub room: String,
     pub icon: String,
     pub entity: String,
@@ -432,6 +438,8 @@ pub fn build(raws: &[Raw], rules: &Rules) -> Vec<Entry> {
             id: raw.entity.clone(),
             kind,
             title: title_of(raw),
+            title_key: String::new(),
+            title_args: std::collections::BTreeMap::new(),
             room: truncate_chars(raw.room.trim(), MAX_TEXT),
             icon: icon_of(&raw.icon),
             entity: raw.entity.clone(),
@@ -484,7 +492,11 @@ fn rank(kind: Kind) -> u8 {
 
 /// Title and icon of the synthetic speak action. They are fixed, because the
 /// action has no Home Assistant entity of its own to take a name from.
-const SPEAK_TITLE: &str = "Сказать на колонке";
+/// Legacy English title of the synthetic speak action. Current clients render
+/// [`SPEAK_TITLE_KEY`] instead.
+const SPEAK_TITLE: &str = "Speak on the station";
+/// Stable localization key of the synthetic speak action title.
+pub const SPEAK_TITLE_KEY: &str = "catalog.action.speak_title";
 const SPEAK_ICON: &str = "message-text";
 
 /// The synthetic "speak this text on the speaker" entry.
@@ -506,6 +518,8 @@ fn speak_entry(raws: &[Raw]) -> Option<Entry> {
         id: SPEAK_ENTRY_ID.to_owned(),
         kind: Kind::Action,
         title: SPEAK_TITLE.to_owned(),
+        title_key: SPEAK_TITLE_KEY.to_owned(),
+        title_args: std::collections::BTreeMap::new(),
         room: anchor.map_or_else(String::new, |raw| truncate_chars(raw.room.trim(), MAX_TEXT)),
         icon: SPEAK_ICON.to_owned(),
         entity: SPEAK_SCRIPT.to_owned(),
@@ -1368,7 +1382,8 @@ mod tests {
             .expect("speak action");
         assert_eq!(speak.kind, Kind::Action);
         assert_eq!(speak.kind.as_str(), "action");
-        assert_eq!(speak.title, "Сказать на колонке");
+        assert_eq!(speak.title, "Speak on the station");
+        assert_eq!(speak.title_key, SPEAK_TITLE_KEY);
         assert_eq!(speak.actions(), vec![ACTION_SPEAK]);
         assert_eq!(speak.device_id, "station-1");
         assert_eq!(speak.device, "Яндекс Станция Миди");

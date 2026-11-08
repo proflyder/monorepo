@@ -1,0 +1,15 @@
+{
+  "code": "resource_exhausted",
+  "message": "limit exceeded: at most 64 active timers",
+  "details": [
+    {
+      "type": "home.v1.LocalizedText",
+      "debug": {
+        "key": "scheduler.error.timer_limit",
+        "args": {
+          "limit": "64"
+        }
+      }
+    }
+  ]
+}

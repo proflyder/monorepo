@@ -132,7 +132,15 @@
         },
         "body": {
           "code": "aborted",
-          "message": "revision conflict: current revision 2, expected 1"
+          "message": "revision conflict: current revision 2, expected 1",
+          "details": [
+            {
+              "type": "home.v1.LocalizedText",
+              "debug": {
+                "key": "scheduler.error.revision_conflict"
+              }
+            }
+          ]
         }
       }
     }

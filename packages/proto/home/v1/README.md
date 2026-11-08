@@ -10,6 +10,9 @@
   отдельный executor, не этот сервис.
 - `alarms.proto` — legacy `AlarmService`, wire-совместимый facade над теми же
   schedules (`kind=SCHEDULE_KIND_ALARM`). Не второй планировщик.
+- `text.proto` — `LocalizedText` (`key` + typed `args`): пользовательский текст
+  сервера как стабильный ключ, который клиент переводит своими ресурсами.
+  Старые текстовые поля остаются для совместимости и помечены deprecated.
 
 `package home.v1`. Это внешний контракт: имена полей, номера и enum-значения
 заморожены. JSON-форма — стандартный protobuf mapping (lowerCamelCase,
@@ -22,6 +25,13 @@
 Один listener отдаёт Connect JSON/binary, gRPC-Web (HTTP/1.1) и, когда это
 включено в конкретной реализации, gRPC (HTTP/2, h2c). REST-фасада нет.
 Семантика — `docs/GRPC.md`.
+
+## Локализация ошибок
+
+Connect-ошибка несёт legacy `message` и, для новых клиентов, detail
+`home.v1.LocalizedText`: `type` detail и JSON `debug` с `key`/`args`. Android
+сначала переводит ключ через `strings.xml`, затем откатывается на `message`,
+затем на общий текст. Сервер не кладёт в `key` человекочитаемую фразу.
 
 ## Сгенерированные типы
 

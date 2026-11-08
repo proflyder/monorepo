@@ -71,7 +71,15 @@
         },
         "body": {
           "code": "not_found",
-          "message": "alarm not found"
+          "message": "alarm not found",
+          "details": [
+            {
+              "type": "home.v1.LocalizedText",
+              "debug": {
+                "key": "scheduler.error.alarm_not_found"
+              }
+            }
+          ]
         }
       }
     },
@@ -143,7 +151,15 @@
         },
         "body": {
           "code": "aborted",
-          "message": "revision conflict: current revision 1, expected 99"
+          "message": "revision conflict: current revision 1, expected 99",
+          "details": [
+            {
+              "type": "home.v1.LocalizedText",
+              "debug": {
+                "key": "scheduler.error.revision_conflict"
+              }
+            }
+          ]
         }
       }
     },
@@ -167,7 +183,15 @@
         },
         "body": {
           "code": "failed_precondition",
-          "message": "precondition failed: schedule is not ringing"
+          "message": "precondition failed: schedule is not ringing",
+          "details": [
+            {
+              "type": "home.v1.LocalizedText",
+              "debug": {
+                "key": "scheduler.error.schedule_not_ringing"
+              }
+            }
+          ]
         }
       }
     }
