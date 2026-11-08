@@ -1021,6 +1021,11 @@ Squash-коммит сохраняет tree PR только пока `develop` �
 дельта не затрагивает native-юнит; иначе `native-release` падает. Ошибка
 routing'а дельты — отказ (fail closed), а не разрешение.
 
+Профилактика: merge выполнять через `mise run pr:merge <N>` — он подтягивает
+`develop` в PR и ждёт `ci-ok` на итоговом head до merge, поэтому уехавшая база
+не возникает (docs/GIT.md, раздел «Merge»). Fallback выше остаётся страховкой
+`deploy-home`, а не штатным путём.
+
 Pulsar собирается release-shaped на каждом PR, затрагивающем его код, — с
 версией из `VERSION`, radio и `SHA256SUMS`; тег версии создаётся только при
 merge с изменением `VERSION`.

@@ -23,7 +23,7 @@ git switch -c fix/<name> origin/develop     # или git worktree add … для
 …правки, проверки, коммиты…
 git push -u origin fix/<name>               # pre-push guard
 gh pr create --base develop --fill          # PR в develop
-# CI: ci-ok зелёный → squash merge → ветка удаляется
+# CI: ci-ok зелёный → mise run pr:merge <N> → ветка удаляется
 # push в develop = merge PR → deploy-home выкатывает затронутые юниты
 #   и job warm-caches прогревает общие кэши для следующих PR
 ```
@@ -36,8 +36,36 @@ gh pr create --base develop --fill          # PR в develop
   (деплой, режимы, устройства). Секреты, реальные адреса и логи не вставлять.
 - Долго живущий PR перед merge обновить от `develop` (rebase или merge в
   ветку) и дождаться нового `ci-ok`: после merge код сразу уходит в деплой.
+  `mise run pr:merge <N>` делает это сам (см. «Merge»).
 - После merge ветку не переиспользовать; следующая работа — новая ветка от
   свежего `origin/develop`.
+
+## Merge
+
+Merge в `develop` — только `mise run pr:merge <N>` (`platform/ci/safe-merge.mjs`,
+тесты — `safe-merge.test.mjs`). Скрипт:
+
+- требует OPEN PR в `develop` и полный head; конфликтующий PR — ошибка;
+- сравнивает head с текущим `origin/develop`: если база устарела, вливает
+  `develop` в ветку (`gh pr update-branch`) и ждёт новый head; конфликт при
+  обновлении — ошибка без merge;
+- ждёт зелёный `ci-ok` на этом head (check-runs API, `--timeout <min>`,
+  по умолчанию 90 минут); красный или недождавшийся `ci-ok` не мержится;
+- перед merge повторно проверяет, что `develop` не ушёл, и при необходимости
+  повторяет обновление (до трёх попыток);
+- мержит `gh pr merge <N> --squash --admin --delete-branch
+  --match-head-commit <head>`: если head сдвинулся между проверкой и merge,
+  GitHub отказывает вместо merge непроверенного tree;
+- печатает merge-sha и ссылку на запуск `deploy-home` (или подсказку, если
+  запуск ещё не появился).
+
+Почему не `gh pr merge` вручную: `ci-ok` проверяет tree PR, а squash-merge на
+уехавший `develop` даёт tree, которого CI не видел, и `deploy-home`
+fail-closed отказывает затронутым юнитам (PR #218 после #217). Рулсет не
+strict, поэтому эту гонку закрывает только проверка базы непосредственно перед
+merge. `--dry-run` показывает план без изменений, `--no-update` только
+проверяет: устаревший head — ошибка, merge не выполняется. Токен — обычный
+`gh`; `GH_TOKEN` учитывается и не печатается.
 
 ## Защита на GitHub
 
