@@ -83,6 +83,11 @@ abstract class BaseFragment<VB : ViewBinding>(
         Notices.show(binding.root, getString(message))
     }
 
+    /** Error-styled notice (error icon/color); use for actionable failures, not confirmations. */
+    protected fun showError(@StringRes message: Int) {
+        Notices.show(binding.root, getString(message), NoticeKind.Error, long = true)
+    }
+
     protected fun showFailure(failure: RemoteFailure) {
         Notices.show(binding.root, failure.userMessage(requireContext()), NoticeKind.Error, long = true)
     }

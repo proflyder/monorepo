@@ -51,13 +51,21 @@
 
     <string name="scenarios_step_catalog">Do action “%1$s” on %2$s</string>
     <string name="scenarios_step_speak">Say “%1$s”</string>
-    <string name="scenarios_step_delay">Pause %1$d s</string>
+    <string name="scenarios_step_speak_detail">“%1$s”</string>
+    <string name="scenarios_step_delay">%1$d s</string>
     <string name="scenarios_step_unsupported">Unsupported step</string>
+    <string name="scenarios_step_missing">not in the catalog</string>
     <string name="scenarios_step_number">Step %1$d</string>
     <string name="scenarios_step_up">Move step up</string>
     <string name="scenarios_step_down">Move step down</string>
     <string name="scenarios_step_speak_title">Say on the station</string>
     <string name="scenarios_step_delay_title">Pause</string>
+    <string name="scenarios_param_brightness">Brightness %1$d%%</string>
+    <string name="scenarios_param_kelvin">%1$d K</string>
+    <string name="scenarios_param_effect">effect %1$s</string>
+    <string name="scenarios_param_color">color %1$d° / %2$d%%</string>
+    <string name="scenarios_param_transition">transition %1$s s</string>
+    <string name="scenarios_param_text">“%1$s”</string>
     <plurals name="scenarios_speak_counter">
         <item quantity="one">%1$d character left</item>
         <item quantity="other">%1$d characters left</item>
@@ -71,13 +79,17 @@
     <string name="scenarios_editor_description">Description</string>
     <string name="scenarios_editor_when">When</string>
     <string name="scenarios_editor_manual_note">Manual run is always available. Add a time trigger for automatic runs.</string>
-    <string name="scenarios_editor_add_trigger">Add time trigger</string>
+    <string name="scenarios_editor_add_trigger">Add trigger</string>
     <string name="scenarios_editor_if">If</string>
+    <string name="scenarios_editor_add_condition">Add condition</string>
+    <string name="scenarios_editor_add_condition_title">Add condition</string>
     <string name="scenarios_editor_add_condition_entity">Entity state</string>
     <string name="scenarios_editor_add_condition_window">Time window</string>
     <string name="scenarios_editor_do">Do</string>
+    <string name="scenarios_editor_add_step">Add step</string>
+    <string name="scenarios_editor_add_step_title">Add step</string>
     <string name="scenarios_editor_add_action">Action</string>
-    <string name="scenarios_editor_add_speak">Say</string>
+    <string name="scenarios_editor_add_speak">Say on the station</string>
     <string name="scenarios_editor_add_delay">Pause</string>
     <string name="scenarios_editor_continue_on_error">Continue if a step fails</string>
     <string name="scenarios_editor_save">Save on server</string>
@@ -90,15 +102,18 @@
 
     <string name="scenarios_catalog_title">Choose catalog entry</string>
     <string name="scenarios_catalog_empty">The catalog is empty or not loaded yet.</string>
+    <string name="scenarios_catalog_loading">Loading the catalog…</string>
+    <string name="scenarios_catalog_error_title">Catalog unavailable</string>
+    <string name="scenarios_retry">Retry</string>
     <string name="scenarios_catalog_other_room">Other</string>
     <string name="scenarios_catalog_failed">Catalog unavailable: %1$s. Tap to retry.</string>
     <string name="scenarios_entry_has_no_actions">This catalog entry has no actions.</string>
     <string name="scenarios_action_dialog_title">Choose action</string>
-    <string name="scenarios_action_run">run</string>
-    <string name="scenarios_action_turn_on">turn on</string>
-    <string name="scenarios_action_turn_off">turn off</string>
-    <string name="scenarios_action_set">set</string>
-    <string name="scenarios_action_speak">speak</string>
+    <string name="scenarios_action_run">Run</string>
+    <string name="scenarios_action_turn_on">Turn on</string>
+    <string name="scenarios_action_turn_off">Turn off</string>
+    <string name="scenarios_action_set">Set</string>
+    <string name="scenarios_action_speak">Speak</string>
 
     <string-array name="scenarios_day_short">
         <item>@string/scenarios_day_mon</item>

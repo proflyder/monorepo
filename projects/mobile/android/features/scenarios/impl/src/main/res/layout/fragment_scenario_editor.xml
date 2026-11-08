@@ -87,9 +87,10 @@
         <com.google.android.material.button.MaterialButton
             android:id="@+id/scenario_editor_add_trigger"
             style="@style/Widget.Material3.Button.TonalButton"
-            android:layout_width="wrap_content"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
+            android:maxLines="1"
             android:minHeight="48dp"
             android:text="@string/scenarios_editor_add_trigger"
             app:icon="@drawable/scenarios_ic_add" />
@@ -108,31 +109,16 @@
             android:layout_marginTop="8dp"
             android:orientation="vertical" />
 
-        <LinearLayout
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/scenario_editor_add_condition"
+            style="@style/Widget.Material3.Button.TonalButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
-            android:orientation="horizontal">
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/scenario_editor_add_condition_entity"
-                style="@style/Widget.Material3.Button.TonalButton"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:minHeight="48dp"
-                android:text="@string/scenarios_editor_add_condition_entity" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/scenario_editor_add_condition_window"
-                style="@style/Widget.Material3.Button.TonalButton"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="8dp"
-                android:layout_weight="1"
-                android:minHeight="48dp"
-                android:text="@string/scenarios_editor_add_condition_window" />
-        </LinearLayout>
+            android:maxLines="1"
+            android:minHeight="48dp"
+            android:text="@string/scenarios_editor_add_condition"
+            app:icon="@drawable/scenarios_ic_add" />
 
         <TextView
             android:layout_width="match_parent"
@@ -148,41 +134,16 @@
             android:layout_marginTop="8dp"
             android:orientation="vertical" />
 
-        <LinearLayout
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/scenario_editor_add_step"
+            style="@style/Widget.Material3.Button.TonalButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
-            android:orientation="horizontal">
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/scenario_editor_add_action"
-                style="@style/Widget.Material3.Button.TonalButton"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:minHeight="48dp"
-                android:text="@string/scenarios_editor_add_action" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/scenario_editor_add_speak"
-                style="@style/Widget.Material3.Button.TonalButton"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="8dp"
-                android:layout_weight="1"
-                android:minHeight="48dp"
-                android:text="@string/scenarios_editor_add_speak" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/scenario_editor_add_delay"
-                style="@style/Widget.Material3.Button.TonalButton"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="8dp"
-                android:layout_weight="1"
-                android:minHeight="48dp"
-                android:text="@string/scenarios_editor_add_delay" />
-        </LinearLayout>
+            android:maxLines="1"
+            android:minHeight="48dp"
+            android:text="@string/scenarios_editor_add_step"
+            app:icon="@drawable/scenarios_ic_add" />
 
         <TextView
             android:id="@+id/scenario_editor_catalog_status"

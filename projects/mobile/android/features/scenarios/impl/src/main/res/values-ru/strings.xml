@@ -50,13 +50,21 @@
 
     <string name="scenarios_step_catalog">Выполнить «%1$s» для %2$s</string>
     <string name="scenarios_step_speak">Сказать «%1$s»</string>
-    <string name="scenarios_step_delay">Пауза %1$d с</string>
+    <string name="scenarios_step_speak_detail">«%1$s»</string>
+    <string name="scenarios_step_delay">%1$d с</string>
     <string name="scenarios_step_unsupported">Неподдерживаемый шаг</string>
+    <string name="scenarios_step_missing">нет в каталоге</string>
     <string name="scenarios_step_number">Шаг %1$d</string>
     <string name="scenarios_step_up">Переместить шаг выше</string>
     <string name="scenarios_step_down">Переместить шаг ниже</string>
-    <string name="scenarios_step_speak_title">Произнести на колонке</string>
+    <string name="scenarios_step_speak_title">Сказать на колонке</string>
     <string name="scenarios_step_delay_title">Пауза</string>
+    <string name="scenarios_param_brightness">Яркость %1$d %%</string>
+    <string name="scenarios_param_kelvin">%1$d K</string>
+    <string name="scenarios_param_effect">эффект %1$s</string>
+    <string name="scenarios_param_color">цвет %1$d° / %2$d %%</string>
+    <string name="scenarios_param_transition">переход %1$s с</string>
+    <string name="scenarios_param_text">«%1$s»</string>
     <plurals name="scenarios_speak_counter">
         <item quantity="one">Остался %1$d символ</item>
         <item quantity="few">Осталось %1$d символа</item>
@@ -72,13 +80,17 @@
     <string name="scenarios_editor_description">Описание</string>
     <string name="scenarios_editor_when">Когда</string>
     <string name="scenarios_editor_manual_note">Ручной запуск доступен всегда. Добавьте триггер по времени для автоматических запусков.</string>
-    <string name="scenarios_editor_add_trigger">Добавить триггер по времени</string>
+    <string name="scenarios_editor_add_trigger">Добавить триггер</string>
     <string name="scenarios_editor_if">Если</string>
+    <string name="scenarios_editor_add_condition">Добавить условие</string>
+    <string name="scenarios_editor_add_condition_title">Добавить условие</string>
     <string name="scenarios_editor_add_condition_entity">Состояние устройства</string>
     <string name="scenarios_editor_add_condition_window">Окно времени</string>
     <string name="scenarios_editor_do">Сделать</string>
+    <string name="scenarios_editor_add_step">Добавить шаг</string>
+    <string name="scenarios_editor_add_step_title">Добавить шаг</string>
     <string name="scenarios_editor_add_action">Действие</string>
-    <string name="scenarios_editor_add_speak">Произнести</string>
+    <string name="scenarios_editor_add_speak">Сказать на колонке</string>
     <string name="scenarios_editor_add_delay">Пауза</string>
     <string name="scenarios_editor_continue_on_error">Продолжать при ошибке шага</string>
     <string name="scenarios_editor_save">Сохранить на сервере</string>
@@ -91,15 +103,18 @@
 
     <string name="scenarios_catalog_title">Выберите запись каталога</string>
     <string name="scenarios_catalog_empty">Каталог пуст или ещё не загружен.</string>
+    <string name="scenarios_catalog_loading">Загрузка каталога…</string>
+    <string name="scenarios_catalog_error_title">Каталог недоступен</string>
+    <string name="scenarios_retry">Повторить</string>
     <string name="scenarios_catalog_other_room">Другое</string>
     <string name="scenarios_catalog_failed">Каталог недоступен: %1$s. Нажмите, чтобы повторить.</string>
     <string name="scenarios_entry_has_no_actions">У этой записи каталога нет действий.</string>
     <string name="scenarios_action_dialog_title">Выберите действие</string>
-    <string name="scenarios_action_run">запустить</string>
-    <string name="scenarios_action_turn_on">включить</string>
-    <string name="scenarios_action_turn_off">выключить</string>
-    <string name="scenarios_action_set">настроить</string>
-    <string name="scenarios_action_speak">произнести</string>
+    <string name="scenarios_action_run">Запустить</string>
+    <string name="scenarios_action_turn_on">Включить</string>
+    <string name="scenarios_action_turn_off">Выключить</string>
+    <string name="scenarios_action_set">Настроить</string>
+    <string name="scenarios_action_speak">Сказать</string>
 
     <string-array name="scenarios_day_short">
         <item>@string/scenarios_day_mon</item>
