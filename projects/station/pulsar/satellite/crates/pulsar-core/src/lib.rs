@@ -17,7 +17,7 @@ mod timers;
 pub mod tz;
 pub mod volume;
 
-pub use ambient::AmbientDimmer;
+pub use ambient::{AmbientDimmer, DARK, perceptual};
 pub use logger::{
     LogLine, add_own_target, init_logger, set_log_sink, stderr_level, take_log_lines,
 };

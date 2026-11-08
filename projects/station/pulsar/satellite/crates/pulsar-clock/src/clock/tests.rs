@@ -20,6 +20,27 @@ fn level_math() {
     assert_eq!(level(1.0, 2.0), 255);
 }
 
+#[test]
+fn level_follows_the_light_perceptually() {
+    // Полная яркость через свежий диммер: первый отсчёт применяется сразу — то же, что станция
+    // показывает после скачка света.
+    let at = |lux: f32| {
+        let mut d = AmbientDimmer::new();
+        d.update(lux);
+        level(1.0, d.factor())
+    };
+    assert_eq!(at(0.0), 5);
+    // Один шаг датчика — всё ещё тьма: тот же уровень, что при 0 лк.
+    assert_eq!(at(1.14), at(0.0));
+    assert!(at(8.0) <= 40, "{}", at(8.0));
+    assert!((at(22.8) - 70).abs() <= 10, "{}", at(22.8));
+    assert!(at(58.0) <= 120, "{}", at(58.0));
+    assert_eq!(at(500.0), 255);
+    // Квадрат применяется только к фактору освещённости: ручная яркость остаётся линейной.
+    assert_eq!(level(0.5, 1.0), 128);
+    assert_eq!(level(0.25, 1.0), 64);
+}
+
 // --- Output on a fake sysfs tree ---
 
 /// A per-test directory under the system temp dir, removed on drop.

@@ -796,7 +796,7 @@ fn expect_level(model: &DeviceProfile, ambient: f32) -> bool {
     let Some(panel) = model.clock.as_ref() else {
         return false;
     };
-    let want = ((255.0 * ambient).round() as i32).clamp(2, 255);
+    let want = pulsar_clock::level(1.0, ambient);
     let (got, ok) = if panel.chip_current {
         let cur: Vec<i32> = MIDI_CURRENT
             .iter()

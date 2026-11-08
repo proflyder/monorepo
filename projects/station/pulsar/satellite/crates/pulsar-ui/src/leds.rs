@@ -6,7 +6,7 @@
 //! led_show > mute (Lite 2: steady dim red) > user light > music visualization > off. The Midi
 //! logo shows the voice state, else red while muted, else the ring's average colour.
 
-use pulsar_core::{AmbientDimmer, MusicFrame, UiState};
+use pulsar_core::{AmbientDimmer, MusicFrame, UiState, perceptual};
 
 use crate::Effect;
 use crate::MusicFrames;
@@ -113,7 +113,7 @@ pub fn to_px(c: Col, d: f32, matrix: Option<&Matrix>) -> [u8; 3] {
         fx::clamp01(c.b) * d,
     ];
     for v in &mut p {
-        *v *= *v;
+        *v = perceptual(*v);
     }
     if let Some(m) = matrix {
         let mut q = [0f32; 3];

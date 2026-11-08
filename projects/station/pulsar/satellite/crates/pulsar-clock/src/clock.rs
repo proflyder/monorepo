@@ -37,7 +37,9 @@ use std::os::fd::AsRawFd as _;
 use std::path::PathBuf;
 
 use home_linux as sysfs;
-use pulsar_core::{AmbientDimmer, ClockShot, MusicFrame, Timers, UiState, now_ms};
+use pulsar_core::{
+    AmbientDimmer, ClockShot, DARK, MusicFrame, Timers, UiState, now_ms, perceptual,
+};
 pub use pulsar_model::ClockPanel as PanelLayout;
 use pulsar_ui::font::DIGITS;
 use pulsar_ui::{ClockFace, ClockLayers, ClockMusicStyle, Frame, MusicSource, Wall};
@@ -103,14 +105,20 @@ pub fn music_styles() -> [&'static str; ClockMusicStyle::ALL.len()] {
     ClockMusicStyle::ALL.map(ClockMusicStyle::as_str)
 }
 
-/// Output level (chip current on the Midi, value of a lit segment on the Lite 2) for the user
-/// brightness 0..1 and the ambient factor 0.02..1 (1 with auto brightness off): 0 only when the
-/// user turned it to 0.
-fn level(user_bri: f32, ambient: f32) -> i32 {
+/// Уровень выхода (ток чипов на Миди, значение зажжённого сегмента на Lite 2) для
+/// пользовательской яркости 0..1 и фактора освещённости 0.02..1 (1 при выключенной
+/// автояркости): 0 только когда пользователь выкрутил яркость в 0.
+///
+/// Фактор освещённости проходит гамму 2, как пиксели кольца (`pulsar_ui::leds::to_px`), чтобы
+/// ток шёл за воспринимаемой яркостью; по линейному фактору часы горели половиной тока в
+/// полутёмной комнате. `user_bri` остаётся линейным, поэтому ручная яркость — ровно потолок.
+pub fn level(user_bri: f32, ambient: f32) -> i32 {
     if user_bri <= 0.0 {
         return 0;
     }
-    ((255.0 * user_bri * ambient).round() as i32).clamp(MIN_LEVEL, 255)
+    let a = ambient.clamp(0.0, 1.0);
+    let perceived = DARK + (1.0 - DARK) * perceptual(a);
+    ((255.0 * user_bri * perceived).round() as i32).clamp(MIN_LEVEL, 255)
 }
 
 /// The open sysfs attributes and what was last written to them (-1 = unknown).
