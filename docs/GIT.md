@@ -46,9 +46,27 @@ Merge в `develop` — только `mise run pr:merge <N>` (`platform/ci/safe-m
 тесты — `safe-merge.test.mjs`). Скрипт:
 
 - требует OPEN PR в `develop` и полный head; конфликтующий PR — ошибка;
-- сравнивает head с текущим `origin/develop`: если база устарела, вливает
-  `develop` в ветку (`gh pr update-branch`) и ждёт новый head; конфликт при
-  обновлении — ошибка без merge;
+- сравнивает head с текущим `origin/develop`: если база устарела, по
+  умолчанию вливает `develop` в ветку (`gh pr update-branch`) и ждёт новый
+  head; конфликт при обновлении — ошибка без merge. Обновление ветки — это
+  новый полный прогон CI (15–30 минут и раннеры), поэтому оно пропускается,
+  когда merge безопасен и без него:
+  - на текущем head зелёный `ci-ok`;
+  - GitHub считает PR `MERGEABLE` (без конфликтов), а не `UNKNOWN`;
+  - файлы PR (`merge-base..head`) и файлы новых коммитов `develop`
+    (`merge-base..develop`) не пересекаются, включая старые имена переименованных
+    файлов;
+  - новые коммиты `develop` не трогают CI-глобальные пути: `.github/**`,
+    `platform/ci/**`, `.bazelrc`, `.bazelversion`, `MODULE.bazel*`,
+    `platform/android/android.bazelrc`, `mise.toml`, `Cargo.lock`,
+    `**/maven_install.json`, `package-lock.json`, `pnpm-lock.yaml`,
+    `platform/bazel/**` (константа `CI_GLOBAL_PATHS` в скрипте, покрыта тестом).
+  Тогда скрипт печатает `develop +N commit(s), disjoint from PR files and no
+  CI-global paths → merging on green ci-ok at <sha> without refresh` и мержит
+  без `update-branch`: squash-tree отличается от проверенного tree только
+  чужими по файлам коммитами `develop`, которые сами прошли CI. Если `ci-ok`
+  ещё идёт, скрипт дожидается его, а не выбрасывает прогон. `--always-refresh`
+  возвращает старое поведение — обновлять ветку при любом отставании;
 - после обновления ждёт, пока compare для нового head догонит его (до ~60 с):
   GitHub несколько секунд отдаёт старый `behind_by`. Повторный `update-branch`
   не вызывается, пока `develop` действительно не получил новый коммит (sha
@@ -57,7 +75,8 @@ Merge в `develop` — только `mise run pr:merge <N>` (`platform/ci/safe-m
 - ждёт зелёный `ci-ok` на этом head (check-runs API, `--timeout <min>`,
   по умолчанию 90 минут); красный или недождавшийся `ci-ok` не мержится;
 - перед merge повторно проверяет, что `develop` не ушёл, и при необходимости
-  повторяет обновление (до трёх обновлений ветки);
+  повторяет обновление или заново проверяет безопасный merge без обновления
+  (до трёх обновлений ветки);
 - мержит `gh pr merge <N> --squash --admin --delete-branch
   --match-head-commit <head>`: если head сдвинулся между проверкой и merge,
   GitHub отказывает вместо merge непроверенного tree;
@@ -68,9 +87,13 @@ Merge в `develop` — только `mise run pr:merge <N>` (`platform/ci/safe-m
 уехавший `develop` даёт tree, которого CI не видел, и `deploy-home`
 fail-closed отказывает затронутым юнитам (PR #218 после #217). Рулсет не
 strict, поэтому эту гонку закрывает только проверка базы непосредственно перед
-merge. `--dry-run` показывает план без изменений, `--no-update` только
-проверяет: устаревший head — ошибка, merge не выполняется. Токен — обычный
-`gh`; `GH_TOKEN` учитывается и не печатается.
+merge. Проверка пересечения файлов не отменяет правило, а ослабляет его ровно
+настолько: если `develop` и PR меняют разные файлы и не трогают CI-обвязку,
+результат squash-merge — это tree PR плюс уже проверенные на `develop` файлы.
+`--dry-run` показывает план без изменений, `--no-update` только
+проверяет: устаревший head — ошибка, merge не выполняется, `--always-refresh`
+отключает merge без обновления. Токен — обычный `gh`; `GH_TOKEN` учитывается и
+не печатается.
 
 ## Защита на GitHub
 
