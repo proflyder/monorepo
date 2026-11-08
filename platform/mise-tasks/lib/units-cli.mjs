@@ -153,6 +153,22 @@ function bazelTargetOverride() {
   return raw ? raw.trim().split(/\s+/).filter(Boolean) : [];
 }
 
+/**
+ * Android-only flags live in `platform/android/android.bazelrc` and are selected
+ * with this config, so a change there routes to the Android units only instead
+ * of invalidating every unit through the root `.bazelrc`. Passed first, so a
+ * caller's own `--define` (distribute.sh version codes) still wins.
+ */
+export const ANDROID_CONFIG = "--config=android";
+
+/** Whether a command builds Android targets and needs `--config=android`. */
+export function needsAndroidConfig(unit) {
+  // `null` means the whole workspace (`bazel build //...`), which includes the
+  // Android targets and must behave exactly like a plain `bazel build` did
+  // while these flags still lived in the root `.bazelrc`.
+  return unit === null || unit.platform === "android";
+}
+
 /** Build/test targets of a Bazel unit, honouring BAZEL_TARGETS when set. */
 export function bazelTargets(unit, kind) {
   const override = bazelTargetOverride();
@@ -172,7 +188,8 @@ export function bazelTargets(unit, kind) {
  */
 export function buildCommands(unit, root = ROOT) {
   if (unit === null) {
-    return [{ command: "bazel", args: ["build", "//..."], cwd: root }];
+    // `//...` includes the Android targets, so keep the Android config active.
+    return [{ command: "bazel", args: ["build", ANDROID_CONFIG, "//..."], cwd: root }];
   }
   if (!["bazel", "android"].includes(unit.platform)) {
     throw new Error(
@@ -186,7 +203,8 @@ export function buildCommands(unit, root = ROOT) {
       `unit '${unit.id}' declares no build targets.\n${unitHint(unit)}`,
     );
   }
-  return [{ command: "bazel", args: ["build", ...targets], cwd: root }];
+  const config = needsAndroidConfig(unit) ? [ANDROID_CONFIG] : [];
+  return [{ command: "bazel", args: ["build", ...config, ...targets], cwd: root }];
 }
 
 function testFiles(root, directories, suffix) {
@@ -225,10 +243,11 @@ export function testCommands(unit, root = ROOT) {
           `unit '${unit.id}' declares no Bazel test targets.\n${unitHint(unit)}`,
         );
       }
+      const config = needsAndroidConfig(unit) ? [ANDROID_CONFIG] : [];
       return [
         {
           command: "bazel",
-          args: ["test", ...targets, "--test_output=errors"],
+          args: ["test", ...config, ...targets, "--test_output=errors"],
           cwd: root,
         },
       ];
@@ -386,6 +405,9 @@ const USAGE = `Usage: units-cli.mjs <command>
   ids            print unit ids, one per line (completion)
   build [unit]   bazel build //..., or one unit's Bazel targets
   test [unit]    hermetic suite or one unit's CI test commands
+
+Android units (and the whole-workspace build) pass --config=android, which
+activates platform/android/android.bazelrc.
 `;
 
 export function main(argv = process.argv.slice(2)) {

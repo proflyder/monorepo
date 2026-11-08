@@ -256,15 +256,15 @@ cd /path/to/yandex-station-lab
 export ANDROID_HOME="$HOME/Library/Android/sdk"
 mise install   # Bazelisk and the rest of mise.toml
 
-mise exec -- bazelisk build //projects/mobile/android:app
+mise exec -- bazelisk build --config=android //projects/mobile/android:app
 # bazel-bin/projects/mobile/android/app/app.apk
 
-bazelisk test //projects/mobile/android:android_tests
+bazelisk test --config=android //projects/mobile/android:android_tests
 # Bazel build tools are Kotlin/JVM: unit tests for the generators and lint runner.
-bazelisk test //platform/android/...
+bazelisk test --config=android //platform/android/...
 
 # Android Lint over the whole app graph (separate CI job `android / android-lint`).
-bazelisk test //projects/mobile/android:android_lint
+bazelisk test --config=android //projects/mobile/android:android_lint
 
 # Optional: install on a connected device (keeps app data).
 adb install -r bazel-bin/projects/mobile/android/app/app.apk
@@ -272,7 +272,8 @@ adb install -r bazel-bin/projects/mobile/android/app/app.apk
 
 Android Lint is **not** part of `android_tests`: it runs as its own CI unit
 (`android / android-lint`) and must also be run explicitly with
-`bazelisk test //projects/mobile/android:android_lint`. Keeping it separate
+`bazelisk test --config=android //projects/mobile/android:android_lint`.
+Keeping it separate
 means a lint finding fails that job instead of aborting `bazel test` and hiding
 the unit tests' results. It uses the standalone Lint CLI from the Android SDK
 `cmdline-tools` package, version-pinned to `23.0` (`sdkmanager --install
@@ -287,13 +288,15 @@ for this job.
 finding must be fixed at the source. `tools:ignore`/`@Suppress` is allowed only
 for a documented false positive, scoped to the narrowest element or module.
 
-**Zero-warning policy.** `bazelisk build //projects/mobile/android:app` and
-`bazelisk test //projects/mobile/android:android_tests` must not print
+**Zero-warning policy.** `bazelisk build --config=android //projects/mobile/android:app`
+and `bazelisk test --config=android //projects/mobile/android:android_tests` must
+not print
 `warning:`/`WARNING:` from this repository's code, resources, manifests or
 Bazel rules. Fix the root cause; do not silence the log. The one exception is
 javac warnings from pinned third-party build tools compiled in the exec
 configuration (`external/protobuf+`, `external/rules_android+` `[for tool]`
-libraries): those are not ours to fix and `.bazelrc` passes
+libraries): those are not ours to fix and
+`platform/android/android.bazelrc` passes
 `--host_javacopt=-Xlint:none -nowarn` for that configuration only. First-party
 code keeps `warn = "error"` and `android_lint -Werror`, so a new warning in our
 sources still fails the build.
@@ -405,7 +408,8 @@ are no longer read by CI.
 
 ### Bazel debug signing (local only)
 
-Local `bazel build //projects/mobile/android:app` still produces an APK signed
+Local `bazel build --config=android //projects/mobile/android:app` still produces
+an APK signed
 with the personal key when `platform/android/keys/home-debug.keystore` exists,
 so `adb install -r` keeps app data. That file is a **Bazel-only copy** of the
 same key with the password `android` (the only password rules_android can
@@ -598,7 +602,8 @@ Each upload gets `versionCode` = UTC epoch seconds and
 build and fit a 32-bit versionCode until 2038; a git commit count is not
 monotonic for dirty builds. Ordinary builds keep versionCode 1 / 0.1.0. Both
 are build settings (`--define home_version_code=… --define
-home_version_name=…`), so manual uploads can pass the same values.
+home_version_name=…`), defaulted in `platform/android/android.bazelrc` (active
+with `--config=android`), so manual uploads can pass the same values.
 
 **One-time console steps:**
 
@@ -668,7 +673,8 @@ catalog reads use `GET /v1/catalog`.
 
 - Application ID `dev.proflyder.home`; default version 0.1.0 (versionCode 1).
   `home_android_binary` reads `home_version_code`/`home_version_name` from
-  `--define`; `distribute.sh` overrides them for App Distribution.
+  `--define` (defaults in `platform/android/android.bazelrc`); `distribute.sh`
+  overrides them for App Distribution.
 - minSdk 26, target/compile SDK 36, Kotlin/JVM target 17.
 - `INTERNET`; call permissions are `RECORD_AUDIO`, `MANAGE_OWN_CALLS`,
   `FOREGROUND_SERVICE_PHONE_CALL`, `BLUETOOTH_CONNECT`, `POST_NOTIFICATIONS`

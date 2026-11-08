@@ -5,14 +5,18 @@
 #   platform/ci/bazel-targets.sh \
 #     --base "$PR_BASE_SHA" \
 #     --candidates "//projects/mobile/android:android_tests //app:smoke_test" \
-#     --universe '//projects/mobile/android/... + //packages/kotlin/...'
+#     --universe '//projects/mobile/android/... + //packages/kotlin/...' \
+#     --bazel-opts=--config=android
 #
 # Prints the space separated subset of --candidates that must run, and exits 0.
 # Any failure (missing binary, unclean tree, timeout, query error) prints every
 # candidate instead: the gate degrades to "run more", never to "run nothing".
 #
-# target-determinator needs the before-revision's analysis graph, so the caller
-# must provide JDK/Android SDK and a full-history checkout.
+# target-determinator runs `bazel cquery`, so it analyses targets (not just the
+# loading graph): the caller must provide JDK/Android SDK and a full-history
+# checkout, and the same `--bazel-opts` the real build uses. Android targets
+# need `--config=android` (platform/android/android.bazelrc) or the analysis
+# fails on the version defines.
 set -uo pipefail
 
 BASE=""
@@ -21,6 +25,7 @@ UNIVERSE="//..."
 BAZEL="${BAZEL:-bazel}"
 TD="${TARGET_DETERMINATOR:-target-determinator}"
 TIMEOUT="${TARGET_DETERMINATOR_TIMEOUT:-900}"
+BAZEL_OPTS=()
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -28,6 +33,8 @@ while [ $# -gt 0 ]; do
     --candidates) CANDIDATES="$2"; shift 2 ;;
     --universe) UNIVERSE="$2"; shift 2 ;;
     --bazel) BAZEL="$2"; shift 2 ;;
+    --bazel-opts) BAZEL_OPTS+=("--bazel-opts=$2"); shift 2 ;;
+    --bazel-opts=*) BAZEL_OPTS+=("$1"); shift ;;
     --td) TD="$2"; shift 2 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
@@ -62,6 +69,7 @@ if ! run_td "$TD" \
   --targets="$UNIVERSE" \
   --cache-dir="$CACHE_DIR" \
   --delete-cached-worktree \
+  "${BAZEL_OPTS[@]+"${BAZEL_OPTS[@]}"}" \
   "$BASE" >"$AFFECTED_FILE" 2>"$LOG_FILE"; then
   tail -5 "$LOG_FILE" >&2 || true
   fallback "target-determinator exited non-zero"

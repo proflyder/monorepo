@@ -1,5 +1,20 @@
 common --enable_bzlmod
 
+# Android-only flags (version defines, the Java toolchain of the Android build
+# tools, protoc/dex workers) live in `platform/android/android.bazelrc` and are
+# activated by `--config=android` in every Android task (the mise unit
+# dispatcher, the whole-workspace mise tasks, `distribute.sh` and the CI cache
+# warm build). Keeping them out of this file matters for CI routing: a change
+# here invalidates every unit, while the Android file is under
+# `platform/android/**` and selects only the Android units (units.mjs).
+# `try-import` tolerates a checkout without the file (sparse `ci-ok` checkout).
+try-import %workspace%/platform/android/android.bazelrc
+
+# Use the released protoc binary instead of compiling protoc from C++ sources
+# (Android tools and //packages/proto both need it; ~40% of a cold build).
+common --incompatible_enable_proto_toolchain_resolution
+common --@protobuf//bazel/toolchains:prefer_prebuilt_protoc
+
 # `rust_clippy_test` only exits non-zero on rustc errors: the levels from the
 # root Cargo.toml `[workspace.lints]` (forwarded through `extract_cargo_lints`)
 # are `warn`, so without this flag a new clippy warning passes both the local
@@ -12,12 +27,6 @@ build --announce_rc
 build --color=yes
 test --test_output=errors
 
-# Android app version defaults. `projects/mobile/android/distribute.sh`
-# overrides these with --define so each App Distribution build gets a higher
-# versionCode; ordinary builds stay 1 / 0.1.0.
-build --define=home_version_code=1
-build --define=home_version_name=0.1.0
-
 # Disk cache is machine-local, outside the checkout; output symlinks are ignored.
 common --disk_cache=~/.cache/bazel-disk
 # The cache is shared by every checkout/worktree and has no limit by default.
@@ -26,29 +35,3 @@ common --disk_cache=~/.cache/bazel-disk
 common --experimental_disk_cache_gc_max_size=15G
 common --experimental_disk_cache_gc_max_age=14d
 
-# Android builder tools and rules_android sources use Java 17 language
-# features (records, sealed types), and the Bazel tools that package them run
-# on JDK 21. These flags affect build tools only, not the Android minSdk.
-common --java_language_version=17
-common --tool_java_language_version=17
-common --java_runtime_version=remotejdk_21
-common --tool_java_runtime_version=remotejdk_21
-
-# Third-party javac sources that run as build tools (protobuf, the rules_android
-# dexer tools) are compiled in the exec configuration and emit their own
-# [removal]/deprecation warnings. They are not ours to fix and only add noise to
-# every cold build, so silence javac there. First-party Kotlin/Java keeps
-# `warn = "error"` (//platform/android:jvm17_options) in the target
-# configuration, and android_lint still runs with -Werror.
-build --host_javacopt=-Xlint:none
-build --host_javacopt=-nowarn
-
-# Use the released protoc binary instead of compiling protoc from C++ sources:
-# on a cold CI runner that compile was ~40% of the Android app build (the app
-# itself has no protos; rules_android's tools need protoc).
-common --incompatible_enable_proto_toolchain_resolution
-common --@protobuf//bazel/toolchains:prefer_prebuilt_protoc
-
-# Dex and desugar Android libraries in persistent workers instead of one JVM per
-# jar (~1200 actions for the Maven dependencies); output is unchanged.
-build --persistent_android_dex_desugar

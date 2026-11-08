@@ -19,7 +19,9 @@
  *             (`MODULE.bazel#maven` -> android), the Rust/zig/native station
  *             inputs (`MODULE.bazel#native` -> native + bazel) or both.
  *   .bazelrc - global, unless the diff only changes cache/output flags
- *             (`.bazelrc#cache` -> no platform).
+ *             (`.bazelrc#cache` -> no platform). Android-only flags live in
+ *             platform/android/android.bazelrc, which is an Android input only
+ *             (`--config=android`, activated by the Android tasks).
  *   platform/bazel/zig, platform/bazel/windows - the station/provider
  *             toolchains (`platform/bazel#native` -> native only).
  *   Cargo.toml - precise only for `[workspace.dependencies]` backed by a
@@ -2282,14 +2284,22 @@ export function nativePublishSelected(unit, changed) {
   return changed.some((item) => pathMatches(item, unit.nativePublishWhen));
 }
 
-export function matrixEntries(route_, config) {
-  // Matrix payloads for the reusable platform workflows.
-  // Every android/kotlin target so the precise target step can see shared
-  // libraries that belong to another unit than the application it builds.
+/**
+ * Bazel query expression covering every Android/Kotlin target, so target
+ * narrowing sees shared libraries that belong to another unit than the
+ * application it builds. Shared with `plan-targets.mjs`, which runs
+ * target-determinator once for the whole expression.
+ */
+export function androidUniverse(config) {
   const androidRoots = [
     ...new Set(config.byPlatform("android").flatMap((unit) => unit.bazelRoots)),
   ].sort();
-  const universe = androidRoots.map((root) => `${root}/...`).join(" + ");
+  return androidRoots.map((root) => `${root}/...`).join(" + ");
+}
+
+export function matrixEntries(route_, config) {
+  // Matrix payloads for the reusable platform workflows.
+  const universe = androidUniverse(config);
   const android = route_.routes.android.units.map((unit) => ({
     id: unit.id,
     test_targets: space(unit.testTargets),

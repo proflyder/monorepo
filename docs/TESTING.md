@@ -188,23 +188,23 @@ Android-сборка/тесты требуют Android SDK и выполняют
 
 ```bash
 export ANDROID_HOME="${ANDROID_HOME:-$HOME/Library/Android/sdk}"
-bazel test \
+bazel test --config=android \
   //projects/mobile/android:android_tests \
   //projects/mobile/android/app:main_activity_smoke_test \
   //projects/mobile/android:app \
   //solutions/scheduler/... //solutions/ha-bridge/... //packages/proto/... \
   --nocache_test_results --test_output=errors
-bazel build //projects/mobile/android:app
+bazel build --config=android //projects/mobile/android:app
 # debug APK: bazel-bin/projects/mobile/android/app/app.apk
 
 # Android Lint (separate CI unit `android / android-lint`, not in android_tests)
 # needs cmdline-tools 23.0.
-bazel test //projects/mobile/android:android_lint
+bazel test --config=android //projects/mobile/android:android_lint
 
 # Bazel-инструменты Android (Kotlin/JVM, exec-конфигурация): генераторы
 # ViewBinding/google-services, lint runner и APK closure; их тесты входят
 # в android_tests.
-bazel test //platform/android/...
+bazel test --config=android //platform/android/...
 ```
 
 Android-гейты и их актуальный состав перечислены в
@@ -279,13 +279,27 @@ CI (платформа `native`, `_native.yml`) ставит pinned Bazelisk, к
 зелёным `ci-ok`, повторный прогон после squash-merge избыточен.
 `permissions: contents: read`, `concurrency` отменяет устаревший прогон только
 для PR. Выкладка — отдельный `.github/workflows/deploy-home.yml` на push в
-`develop` (см. ниже); его job `warm-caches` после merge сохраняет общий кэш
-`setup-bazel` под теми же ключами, которые восстанавливают PR. Версии
-инструментов CI (Python, Node, gitleaks, actionlint, shellcheck, kubectl,
-helm, oras) — из `mise.toml`/`mise.lock` через `jdx/mise-action`, как и на
-рабочем месте (`docs/WORKSTATION.md`). Кэши `actions/cache` для Android и
-deploy-control остаются PR-локальными: их содержимое создаёт только
-соответствующий build/regression.
+`develop` (см. ниже); его job `warm-caches` после merge — единственный
+писатель develop-стороны общих кэшей: `setup-bazel`, диск-кэша Android
+(собирает `//projects/mobile/android:app` и архивирует
+`~/.cache/bazel-disk` под ключом `android-app`) и бинаря
+target-determinator. Ключи совпадают с теми, что восстанавливают PR, а
+`restore-keys` дают трёхуровневый откат (точный ключ → юнит → платформа),
+поэтому смена `maven_install.json` или lock-файлов не даёт полный холод.
+Версии инструментов CI (Python, Node, gitleaks, actionlint, shellcheck,
+kubectl, helm, oras) — из `mise.toml`/`mise.lock` через `jdx/mise-action`,
+как и на рабочем месте (`docs/WORKSTATION.md`).
+
+PR-прогоны кэши только читают (`actions/cache/restore`): GitHub привязывает
+кэш к ref'у, который его записал, поэтому кэш, сохранённый PR'ом, не виден
+другим PR'ам — он лишь тратит общий лимит 10 ГБ и минуты на загрузку. Save
+в reusable workflow остаётся только для `develop` (ручной
+`workflow_dispatch`) и для `warm-caches`. У юнитов без develop-писателя
+(`_native.yml`, `_deploy-control.yml`) кэш диска только восстанавливается:
+пока такой сборки на develop нет, лучше не плодить копии на каждый PR.
+Размер архива Android ограничен
+`--experimental_disk_cache_gc_max_size=6G` в `warm-caches`.
+
 
 Проверки, тесты и сборки внутри reusable workflow запускаются теми же
 mise-задачами, что и локально: `mise run test <unit>` / `mise run build
@@ -313,9 +327,19 @@ matrix одного платформенного workflow.
 | quality | `_quality.yml` | audit, static gates, unit-map, actionlint, shellcheck, Gitleaks |
 
 `ci.yml` содержит только координацию: `changes` → matrix-вызовы reusable
-workflow → `ci-ok`. Единственное исключение — job `android-distribute`: он ждёт `android` и при
-PR (не из форка) с `android_distribute` = true собирает и загружает APK в
-Firebase. Этот output true, когда изменился реальный вход приложения
+workflow → `ci-ok`. Исключения — job `plan` и `android-distribute`.
+`plan` идёт параллельно с `changes` (ему не нужен список юнитов: universe и
+кандидаты берутся из карты юнитов) и один раз запускает target-determinator
+для всего Android-universe, отдавая `affected_targets`; каждая запись
+матрицы только пересекает свои объявленные цели с этим списком
+(`platform/ci/plan-targets.mjs narrow`). Пустой `affected_targets` (job
+пропущен при `workflow_dispatch`, установка/анализ упали) означает «гонять
+все объявленные цели»: сужение может только уменьшить список, но не скрыть
+сломанный план за зелёным job'ом. `plan` не входит в `ci-ok`.
+`android-distribute` ждёт `android` и при
+PR (не из форка) с `android_distribute` = true собирает, подписывает и
+загружает APK в Firebase. Этот output true, когда изменился реальный вход
+приложения
 (`projects/mobile/android/**`, `packages/kotlin/**` или `platform/android/**`)
 либо `MODULE.bazel` изменился только внутри Maven-расширения
 rules_jvm_external (виртуальный путь `MODULE.bazel#maven`): тогда меняется
@@ -324,6 +348,20 @@ Maven/APK-замыкание. Прочие глобальные инвалида
 публикуют; `.bazelrc` с диффом только cache/output-флагов
 (`.bazelrc#cache`) не выбирает `android` вовсе. Job намеренно не входит в
 `ci-ok`, поэтому его падение не блокирует merge.
+
+Распространяемый APK собирается ровно один раз — в `android-distribute`:
+матричный `android-app` собирает тот же `:app` для
+`apk_runtime_closure_test`, но без приватного `google-services.json`
+(PR-CI не получает секреты Environment и не должен публиковать их в
+artifacts), а сборка без него оставляет Firebase выключенным. Поэтому
+`android-distribute` владеет единственным APK с Firebase-ресурсами и
+уникальным `versionCode`/`versionName`, подписывает его через
+`platform/android/sign-release.sh` и публикует подписанные байты как
+artifact `android-release-apk`. Его пересборка дешева: диск-кэш
+`bazel-android-${{ runner.os }}-android-app-…`, прогретый `warm-caches` на develop,
+оставляет только зависящие от `--define` и от приватного
+`google-services.json` действия (ресурсы, manifest, dex, упаковка).
+
 
 Android-платформа состоит из двух юнитов с одними и теми же `paths` и
 Bazel-корнем: `android-app` (сборка APK и unit/UI-тесты) и `android-lint`
@@ -403,6 +441,18 @@ Native-юниты с `native.publish_script` (`pulsar`, `logon-provider`) сле
   cache- и настоящий флаг, значима целиком; `import`/`try-import`,
   неизвестный флаг, неразбираемая строка, отсутствующая base или
   добавление/удаление файла — глобально.
+* `platform/android/android.bazelrc` — **не** глобальный вход, хотя и
+  называется `*.bazelrc`: он попадает под `platform/android/**` и выбирает
+  только android-юниты. Здесь лежат Android-специфичные флаги (version
+  defines, Java-toolchain build-инструментов, protoc/dex workers,
+  `--android_platforms`), а корневой `.bazelrc` подключает файл через
+  `try-import` и не содержит их. Активация — `--config=android`: его
+  передают диспетчер юнитов (`mise run build|test` для android-юнитов и
+  `mise run build`/`mise run test:bazel` на весь workspace),
+  `projects/mobile/android/distribute.sh` и Android-сборка в
+  `deploy-home` → `warm-caches`. Без конфига Android-сборка падает на
+  анализе (`$(home_version_name) not defined`), а не собирает тихо APK
+  чужой ABI; после #234 это дополнительно ловит `apk_abi_test`.
 * `platform/bazel/zig/**` и `platform/bazel/windows/**` — только платформа
   `native` (виртуальный `platform/bazel#native`): это target-constrained
   zig cc-toolchain'ы и rules_rust-патчи для кросс-сборки станции и Windows
@@ -480,12 +530,18 @@ lock-diff; `[workspace] members`, `[profile]`, `[workspace.lints]`, правка
   (`affected.mjs --all`);
 * база определена, но `git diff` пуст → ни один тяжёлый юнит, только quality.
 
-Внутри android-юнита список целей дополнительно сужается
+Список целей внутри android-юнита дополнительно сужается
 `target-determinator` (`v0.34.0`, sha256 закреплён в
 `platform/ci/install-target-determinator.sh`). Он анализирует граф базовой
-ревизии, поэтому запускается в job с JDK/SDK и полной историей; при любой
-ошибке, таймауте или отсутствии бинаря `platform/ci/bazel-targets.sh` печатает
-весь объявленный список целей.
+ревизии (`bazel cquery`), поэтому запускается в job `plan` с JDK/SDK, `bazel`,
+полной историей и тем же `--bazel-opts=--config=android`, что и реальная
+сборка (иначе анализ падает на version defines из
+`platform/android/android.bazelrc`); при любой ошибке, таймауте или
+отсутствии бинаря `platform/ci/bazel-targets.sh` печатает весь объявленный
+список целей, а `plan-targets.mjs narrow` тогда возвращает объявленные цели
+юнита. `plan` запускается один раз на PR (при `workflow_dispatch` базы нет —
+идут все объявленные цели).
+
 
 ### Инварианты и проверки
 

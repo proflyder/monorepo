@@ -52,7 +52,11 @@ export const config = {
   // `.bazelrc` is global unless its diff only changes cache/output flags
   // (`--disk_cache`, the disk-cache GC, `--repository_cache`, console output);
   // then `affected.mjs` rewrites it to `.bazelrc#cache`, which matches no unit
-  // and runs only the always-on quality job. `platform/bazel/zig/**` and
+  // and runs only the always-on quality job. Android-only flags are not global:
+  // they live in `platform/android/android.bazelrc`, which the root rc imports
+  // and Android tasks activate with `--config=android`; the file is covered by
+  // the `platform/android/**` invalidation below, so a flag change reruns only
+  // the Android units. `platform/bazel/zig/**` and
   // `platform/bazel/windows/**` become `platform/bazel#native`: they are
   // target-constrained toolchains/patches for the native station and the
   // Windows provider, never for the host Rust/images/Android builds.
@@ -91,6 +95,9 @@ export const config = {
       paths: ["platform/bazel#native"],
       platforms: ["native"],
     },
+    // Android platform inputs: the Bazel rules, the lint rule and
+    // `platform/android/android.bazelrc` (Android-only flags activated with
+    // `--config=android`). Never a global invalidation.
     {
       paths: ["platform/android/**"],
       platforms: ["android"],

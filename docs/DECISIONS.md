@@ -649,3 +649,44 @@
     конфигурации, поэтому coturn добавляется без смены клиентов. Pulsar
     получает `pulsar-call` на `str0m` и `Phase::Call` отдельным этапом;
     scheduler и `ha-bridge` в звонке не участвуют.
+
+49. **Кэши Actions пишет только `develop`, Android-цели считаются один раз.**
+    PR-прогоны кэши только восстанавливают (`actions/cache/restore`): GitHub
+    привязывает запись к ref'у, который её создал, поэтому PR-кэш не виден
+    другим PR'ам, но занимает общий лимит 10 ГБ и минуты на загрузку. PR-кэши
+    диска больше не создаются. Единственный писатель develop-стороны —
+    `warm-caches` в `deploy-home` (push в `develop`): setup-bazel, диск-кэш
+    Android (сборка `//projects/mobile/android:app`, ключ `android-app`,
+    save под `-<run_id>` и `restore-keys` «точный ключ → юнит → платформа»,
+    архив ограничен `--experimental_disk_cache_gc_max_size=6G`) и бинарь
+    target-determinator. У юнитов без develop-писателя (`_native.yml`,
+    `_deploy-control.yml`) кэш только восстанавливается. target-determinator
+    выполняется один раз в job `plan` (параллельно `changes`, universe и
+    кандидаты — из карты юнитов); каждая запись матрицы лишь пересекает свои
+    цели с результатом (`platform/ci/plan-targets.mjs`), пустой результат
+    означает «все объявленные цели». Распространяемый APK собирается только в
+    `android-distribute`: это единственный job с приватным
+    `google-services.json` (Environment `Android`), а матричный `android-app`
+    собирает `:app` лишь для `apk_runtime_closure_test` — без Firebase-конфига,
+    который нельзя публиковать в artifacts PR. Подписанные байты доступны как
+    artifact `android-release-apk`; благодаря прогретому develop-кэшу
+    пересборка ограничена действиями, зависящими от `--define` и конфига.
+
+50. **Android-only Bazel-флаги — в `platform/android/android.bazelrc` под
+    `--config=android`.** Корневой `.bazelrc` — глобальный вход планировщика
+    (`platform/ci/units.mjs`): любая правка запускает все юниты. Поэтому
+    Android-специфичные опции (version defines `home_version_code`/
+    `home_version_name`, Java-language/toolchain build-инструментов,
+    `--host_javacopt`, protoc toolchain, `--persistent_android_dex_desugar`,
+    в будущем `--android_platforms`) вынесены в
+    `platform/android/android.bazelrc`; корневой файл подключает его через
+    `try-import`, а активирует `--config=android`. Файл лежит под
+    `platform/android/**`, поэтому его правка выбирает только android-юниты.
+    `--config=android` передают все точки сборки Android: диспетчер юнитов
+    (`mise run build|test` для android-юнитов, а также `mise run build` и
+    `mise run test:bazel` на весь workspace), `distribute.sh` и
+    Android-сборка в `deploy-home` → `warm-caches`. В `distribute.sh`
+    `--config=android` идёт до `--define`, чтобы versionCode сборки победил
+    дефолт из конфига. Без конфига сборка падает на анализе
+    (`$(home_version_name) not defined`), а не собирает молча APK другого
+    ABI; ABI дополнительно проверяет `apk_abi_test`.
