@@ -38,6 +38,8 @@ export const config = {
   // code and must not roll the home units.
   //
   // `MODULE.bazel` is global by default, with three scoped exceptions
+  // (`#maven` also covers rules_android/rules_android_ndk, the SDK/NDK
+  // extensions and `register_toolchains("@androidndk//...")`)
   // (`affected.mjs` rewrites the changed path, fail safe is global):
   //   * Maven-only diff -> `MODULE.bazel#maven` -> android.
   //   * rules_rust/crate_universe, zig toolchains, rules_rust Windows patches
@@ -637,10 +639,10 @@ export const config = {
     // Android build tools (platform/android/tools) are Kotlin `kt_jvm_test`
     // targets; they are part of `android_tests`, so the Android app unit
     // exercises the toolchain it runs.
-    // `android-app` is also where the distributable APK is built, tested and
-    // signed once (`_android.yml`): that entry owns the `Android` Environment
-    // and its OpenBao role, and uploads `android-release-apk`. The Firebase
-    // upload job `android-distribute` follows `android_distribute` from
+    // `android-app` is also where the distributable APK is built and tested
+    // once (`_android.yml`, no secrets) and uploaded unsigned as
+    // `android-app-apk`. The signing + Firebase upload job `android-distribute`
+    // follows `android_distribute` from
     // `affected.mjs`: real `projects/mobile/android/**`, `packages/kotlin/**`
     // or `platform/android/**` changes publish an APK; a global invalidation or
     // a CI-workflow edit only runs this unit's checks.
@@ -659,10 +661,14 @@ export const config = {
         // Owns the distributable APK inside `_android.yml`; selected whenever
         // distribution is selected (see affected.mjs matrixEntries).
         release: true,
-        // No generic artifact: the `android-app` entry of `_android.yml` builds,
-        // tests and signs the distributable APK itself and uploads it as
-        // `android-release-apk` (the one artifact that needs the Environment
-        // secrets).
+        // No generic artifact: the `android-app` entry of `_android.yml` builds
+        // and tests the distributable APK itself and uploads it as
+        // `android-app-apk`; `android-distribute` signs it.
+        // The APK targets //platform/android:android_arm64; rules_android
+        // resolves a C++ toolchain for that platform, which comes from the NDK
+        // (`rules_android_ndk` in MODULE.bazel). The exact version is pinned
+        // here so CI installs the same NDK as the workstation.
+        sdk_packages: ["ndk;28.2.13676358"],
       },
     },
 
@@ -672,8 +678,9 @@ export const config = {
     // paths and Bazel root: every Android module source/resource change selects
     // it together with `android-app`, and `platform/android/**` (the lint rule)
     // invalidates it through the android platform rule. The unit declares the
-    // SDK package that provides the standalone Lint CLI, so `_android.yml` only
-    // installs it for jobs that need it.
+    // SDK packages it needs that the workflow does not install unconditionally:
+    // the standalone Lint CLI and the NDK C++ toolchain for the app's arm64
+    // target platform, so `_android.yml` only installs them where needed.
     {
       id: "android-lint",
       platform: "android",
@@ -682,7 +689,7 @@ export const config = {
       bazel: {
         roots: ["//projects/mobile/android"],
         test_targets: ["//projects/mobile/android:android_lint"],
-        sdk_packages: ["cmdline-tools;23.0"],
+        sdk_packages: ["cmdline-tools;23.0", "ndk;28.2.13676358"],
       },
     },
 

@@ -13,3 +13,15 @@ for candidate in "$root/secrets/openbao/addr" \
   fi
 done
 unset root candidate
+
+# rules_android_ndk resolves the NDK from ANDROID_NDK_HOME. Point it at the
+# newest NDK installed under $ANDROID_HOME so `mise exec -- bazel` builds the
+# Android app without a second export. CI sets it explicitly after
+# `sdkmanager --install "ndk;<version>"`.
+if [ -z "${ANDROID_NDK_HOME:-}" ] && [ -n "${ANDROID_HOME:-}" ] && [ -d "$ANDROID_HOME/ndk" ]; then
+  for ndk_candidate in "$ANDROID_HOME"/ndk/*/; do
+    [ -d "$ndk_candidate" ] && ANDROID_NDK_HOME="${ndk_candidate%/}"
+  done
+  [ -n "${ANDROID_NDK_HOME:-}" ] && export ANDROID_NDK_HOME
+fi
+unset ndk_candidate

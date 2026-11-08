@@ -7,11 +7,15 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  CI_GLOBAL_PATHS,
+  changedFiles,
   checkPull,
   checkRunsOf,
   decideBehind,
   decideChecks,
+  decideFastPath,
   findDeployRun,
+  isCiGlobalPath,
   parseArgs,
   runSafeMerge,
 } from "./safe-merge.mjs";
@@ -24,6 +28,7 @@ const MERGE = "c".repeat(40);
 const DEVELOP = "d".repeat(40);
 const DEVELOP2 = "e".repeat(40);
 const DEVELOP3 = "f".repeat(40);
+const BASE_SHA = "5".repeat(40);
 
 function clock(step = 1_000) {
   let time = 0;
@@ -51,6 +56,9 @@ function fakeGh({
   developShas = [DEVELOP],
   nextHead = HEAD2,
   nextHeads = null,
+  mergeBase = null,
+  headFiles = null,
+  developFiles = [],
 } = {}) {
   const calls = [];
   const state = {
@@ -62,6 +70,8 @@ function fakeGh({
     nextHeads: nextHeads ? [...nextHeads] : null,
   };
   const take = (list) => (list.length > 1 ? list.shift() : list[0]);
+  const files = (paths) =>
+    Array.isArray(paths) ? paths.map((path) => ({ filename: path })) : undefined;
   const exec = (command, args) => {
     calls.push([command, ...args]);
     assert.equal(command, "gh", `unexpected command ${command}`);
@@ -86,7 +96,19 @@ function fakeGh({
       return "";
     }
     if (group === "api" && String(action).includes("/compare/")) {
-      return JSON.stringify({ behind_by: take(state.compares) });
+      if (String(action).includes(`/compare/${BASE_SHA}...develop`)) {
+        return JSON.stringify({ behind_by: 0, files: files(developFiles) ?? [] });
+      }
+      const entry = take(state.compares);
+      const compared =
+        entry && typeof entry === "object" ? { ...entry } : { behind_by: entry };
+      if (compared.merge_base_commit === undefined && mergeBase) {
+        compared.merge_base_commit = { sha: mergeBase };
+      }
+      if (compared.files === undefined && headFiles) {
+        compared.files = files(headFiles);
+      }
+      return JSON.stringify(compared);
     }
     if (group === "api" && String(action).includes("/git/ref/heads/develop")) {
       return JSON.stringify({ object: { sha: take(state.developShas) } });
@@ -142,6 +164,7 @@ test("parseArgs reads the PR number, flags and timeout", () => {
     pr: 42,
     dryRun: false,
     noUpdate: false,
+    alwaysRefresh: false,
     timeoutMin: 90,
     help: false,
   });
@@ -149,9 +172,11 @@ test("parseArgs reads the PR number, flags and timeout", () => {
     pr: 42,
     dryRun: true,
     noUpdate: true,
+    alwaysRefresh: false,
     timeoutMin: 5,
     help: false,
   });
+  assert.equal(parseArgs(["42", "--always-refresh"]).alwaysRefresh, true);
   assert.equal(parseArgs(["--help"]).help, true);
   assert.equal(parseArgs([]).pr, null);
   assert.equal(parseArgs(["--timeout", "5"]).timeoutMin, 5);
@@ -215,6 +240,102 @@ test("decideChecks needs a completed success and keeps pending waiting", () => {
   assert.throws(() => checkRunsOf({}), /no check_runs/);
 });
 
+test("CI_GLOBAL_PATHS covers workflows, CI, Bazel/tool config and lock files", () => {
+  assert.deepEqual(CI_GLOBAL_PATHS, [
+    ".github/**",
+    "platform/ci/**",
+    ".bazelrc",
+    ".bazelversion",
+    "MODULE.bazel*",
+    "platform/android/android.bazelrc",
+    "mise.toml",
+    "Cargo.lock",
+    "**/maven_install.json",
+    "package-lock.json",
+    "pnpm-lock.yaml",
+    "platform/bazel/**",
+  ]);
+  for (const path of [
+    ".github/workflows/ci.yml",
+    "platform/ci/safe-merge.mjs",
+    ".bazelrc",
+    ".bazelversion",
+    "MODULE.bazel",
+    "MODULE.bazel.lock",
+    "platform/android/android.bazelrc",
+    "mise.toml",
+    "Cargo.lock",
+    "maven_install.json",
+    "packages/android/maven_install.json",
+    "package-lock.json",
+    "pnpm-lock.yaml",
+    "platform/bazel/zig/BUILD.bazel",
+  ]) {
+    assert.ok(isCiGlobalPath(path), `${path} should be CI-global`);
+  }
+  for (const path of [
+    "docs/GIT.md",
+    "platform/ci-tools/x.mjs",
+    "platform/runtime/main.rs",
+    "Cargo.toml",
+    "platform/android/BUILD.bazel",
+    "mise-tasks/x",
+    "MODULE",
+  ]) {
+    assert.equal(isCiGlobalPath(path), false, `${path} should not be CI-global`);
+  }
+});
+
+test("changedFiles keeps both sides of a rename and flags unknown or capped lists", () => {
+  const parsed = changedFiles({
+    files: [{ filename: "a.md" }, { filename: "b.md", previous_filename: "c.md" }],
+  });
+  assert.deepEqual(parsed.paths, ["a.md", "b.md", "c.md"]);
+  assert.equal(parsed.known, true);
+  assert.equal(parsed.truncated, false);
+
+  // No `files` array proves nothing; it must not read as "no changed files".
+  assert.deepEqual(changedFiles({}), { paths: [], known: false, truncated: false });
+  assert.equal(changedFiles(undefined).known, false);
+
+  const capped = { files: Array.from({ length: 300 }, (_, i) => ({ filename: `f${i}` })) };
+  assert.equal(changedFiles(capped).truncated, true);
+});
+
+test("decideFastPath needs green ci-ok, a mergeable PR and disjoint non-CI-global files", () => {
+  const safe = {
+    behindBy: 2,
+    mergeable: "MERGEABLE",
+    ciGreen: true,
+    prFiles: ["platform/app/main.ts"],
+    developFiles: ["docs/GIT.md", "projects/home/main.tf"],
+  };
+  const allowed = decideFastPath(safe);
+  assert.equal(allowed.allowed, true);
+  assert.equal(allowed.structural, true);
+  assert.match(allowed.reason, /develop \+2 commit\(s\), disjoint from PR files and no CI-global paths/);
+
+  const pending = decideFastPath({ ...safe, ciGreen: false });
+  assert.equal(pending.allowed, false);
+  assert.equal(pending.structural, true);
+  assert.match(pending.reason, /ci-ok is not green/);
+
+  assert.match(decideFastPath({ ...safe, mergeable: "UNKNOWN" }).reason, /not MERGEABLE/);
+  assert.match(decideFastPath({ ...safe, mergeable: "CONFLICTING" }).reason, /not MERGEABLE/);
+  assert.match(
+    decideFastPath({ ...safe, developFiles: ["platform/app/main.ts"] }).reason,
+    /same files: platform\/app\/main\.ts/,
+  );
+  assert.match(
+    decideFastPath({ ...safe, developFiles: [".github/workflows/ci.yml"] }).reason,
+    /CI-global paths: \.github\/workflows\/ci\.yml/,
+  );
+  assert.match(decideFastPath({ ...safe, filesKnown: false }).reason, /file list/);
+  assert.match(decideFastPath({ ...safe, filesTruncated: true }).reason, /capped at 300/);
+  assert.equal(decideFastPath({ ...safe, behindBy: 0 }).structural, false);
+  assert.equal(decideFastPath({ ...safe, alwaysRefresh: true }).allowed, false);
+});
+
 test("runs the happy path: up to date, ci green, squash merge by head", async () => {
   const { calls, exec } = fakeGh({
     view: pullView(),
@@ -257,6 +378,147 @@ test("updates a branch behind develop and waits for the new head", async () => {
   assert.equal(compares.length, 3);
   assert.match(compares[1][2], new RegExp(`${HEAD2}$`));
   assert.match(compares[2][2], new RegExp(`${HEAD2}$`));
+});
+
+test("disjoint develop commits merge on green ci-ok without refreshing the branch", async () => {
+  const { calls, exec } = fakeGh({
+    view: pullView(),
+    compares: [2],
+    mergeBase: BASE_SHA,
+    headFiles: ["platform/app/main.ts"],
+    developFiles: ["docs/GIT.md", "projects/home/main.tf"],
+  });
+  const { result, logs } = await runFlow(exec);
+  assert.equal(result.status, "merged");
+  assert.equal(result.head, HEAD);
+  assert.ok(!hasCall(calls, "pr", "update-branch"));
+  const merge = calls.find((call) => call[1] === "pr" && call[2] === "merge");
+  assert.equal(merge[merge.length - 1], HEAD);
+  // The files of the new develop commits were read from the PR's merge base.
+  assert.ok(
+    calls.some((call) => String(call[2]).includes(`/compare/${BASE_SHA}...develop`)),
+  );
+  assert.ok(
+    logs.some((line) =>
+      /develop \+2 commit\(s\), disjoint from PR files and no CI-global paths → merging on green ci-ok at .* without refresh/.test(
+        line,
+      ),
+    ),
+  );
+});
+
+test("overlapping files fall back to updating the branch", async () => {
+  const { calls, exec } = fakeGh({
+    view: pullView(),
+    compares: [2, 0],
+    mergeBase: BASE_SHA,
+    headFiles: ["platform/app/main.ts"],
+    developFiles: ["platform/app/main.ts"],
+    nextHead: HEAD2,
+  });
+  const { result, logs } = await runFlow(exec);
+  assert.equal(result.status, "merged");
+  assert.equal(result.head, HEAD2);
+  assert.ok(hasCall(calls, "pr", "update-branch"));
+  assert.ok(logs.some((line) => /same files: platform\/app\/main\.ts; refreshing the branch/.test(line)));
+});
+
+test("a CI-global change on develop falls back to updating the branch", async () => {
+  const { calls, exec } = fakeGh({
+    view: pullView(),
+    compares: [3, 0],
+    mergeBase: BASE_SHA,
+    headFiles: ["docs/GIT.md"],
+    developFiles: [".github/workflows/ci.yml"],
+    nextHead: HEAD2,
+  });
+  const { result } = await runFlow(exec);
+  assert.equal(result.status, "merged");
+  assert.ok(hasCall(calls, "pr", "update-branch"));
+});
+
+test("develop moving during CI merges without refresh when the changes are disjoint", async () => {
+  const { calls, exec } = fakeGh({
+    view: pullView(),
+    // head starts current, then develop gets a disjoint commit while CI runs
+    compares: [0, 2],
+    developShas: [DEVELOP, DEVELOP2],
+    mergeBase: BASE_SHA,
+    headFiles: ["platform/app/main.ts"],
+    developFiles: ["docs/GIT.md"],
+  });
+  const { result, logs } = await runFlow(exec);
+  assert.equal(result.status, "merged");
+  assert.ok(!hasCall(calls, "pr", "update-branch"));
+  assert.ok(
+    logs.some((line) =>
+      /develop \+2 commit\(s\), disjoint from PR files and no CI-global paths → merging on green ci-ok at .* without refresh/.test(
+        line,
+      ),
+    ),
+  );
+});
+
+test("a pending ci-ok on a safely stale head is awaited instead of refreshing", async () => {
+  const pending = {
+    total_count: 1,
+    check_runs: [{ id: 1, name: "ci-ok", status: "in_progress", conclusion: null }],
+  };
+  const { calls, exec } = fakeGh({
+    view: pullView(),
+    compares: [2],
+    checks: [pending, passChecks],
+    mergeBase: BASE_SHA,
+    headFiles: ["platform/app/main.ts"],
+    developFiles: ["docs/GIT.md"],
+  });
+  const { result, logs } = await runFlow(exec);
+  assert.equal(result.status, "merged");
+  assert.ok(!hasCall(calls, "pr", "update-branch"));
+  assert.ok(
+    logs.some((line) => /waiting for ci-ok on the current head instead of refreshing/.test(line)),
+  );
+});
+
+test("--always-refresh updates a disjoint branch anyway", async () => {
+  const { calls, exec } = fakeGh({
+    view: pullView(),
+    compares: [2, 0],
+    mergeBase: BASE_SHA,
+    headFiles: ["platform/app/main.ts"],
+    developFiles: ["docs/GIT.md"],
+    nextHead: HEAD2,
+  });
+  const { result } = await runFlow(exec, { alwaysRefresh: true });
+  assert.equal(result.status, "merged");
+  assert.ok(hasCall(calls, "pr", "update-branch"));
+});
+
+test("--dry-run reports a refresh-free merge for a safe stale head", async () => {
+  const { calls, exec } = fakeGh({
+    view: pullView(),
+    compares: [2],
+    mergeBase: BASE_SHA,
+    headFiles: ["platform/app/main.ts"],
+    developFiles: ["docs/GIT.md"],
+  });
+  const { result, logs } = await runFlow(exec, { dryRun: true });
+  assert.equal(result.status, "dry-run");
+  assert.equal(result.wouldMergeWithoutRefresh, true);
+  assert.ok(!hasCall(calls, "pr", "update-branch"));
+  assert.ok(logs.some((line) => /\[dry-run\].*without refresh/.test(line)));
+});
+
+test("a stale head without a merge base keeps refreshing", async () => {
+  const { calls, exec } = fakeGh({
+    view: pullView(),
+    compares: [2, 0],
+    nextHead: HEAD2,
+  });
+  const { result, logs } = await runFlow(exec);
+  assert.equal(result.status, "merged");
+  assert.ok(hasCall(calls, "pr", "update-branch"));
+  assert.ok(logs.some((line) => /compare did not report a merge base; refreshing/.test(line)));
 });
 
 test("a failed branch update is a clear error and merges nothing", async () => {

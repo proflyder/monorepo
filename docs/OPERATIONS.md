@@ -1328,22 +1328,20 @@ LAN endpoint — `http://<node>:30098`. Переключение Android на HT
 Каждый PR в `develop`, затрагивающий Android-приложение (изменился
 `projects/mobile/android/**`, общая Kotlin-библиотека `packages/kotlin/**` или
 `platform/android/**`; routing выставляет `android_distribute` = true), собирает
-и подписывает APK ровно один раз matrix-запись `android / android-app`
-(`.github/workflows/_android.yml`). Это единственная Android-запись с
-Environment `Android`: VPN группа `ci`, роль OpenBao `android-app-release` →
-`secret/ci/android-distribute`. Она собирает `//projects/mobile/android:app` с
-release-`versionCode`/`versionName`, прогоняет тесты на том же
-`--define`-варианте APK, подписывает финальный APK скриптом
-`platform/android/sign-release.sh` (`zipalign -P 16`, `apksigner` v2/v3) и
-публикует artifact `android-release-apk` (`app-release.apk` +
-`release-info.json`). Подпись проверяется fail-closed: `apksigner
-verify --print-certs` должен дать SHA-256 из `signing_cert_sha256`, иначе
-артефакта и загрузки нет. Затем job `android-distribute` в
-`.github/workflows/ci.yml`, дождавшись зелёного всего `android` matrix, только
-скачивает artifact, сверяет SHA-256 из `release-info.json` и загружает APK в
-Firebase App Distribution в группу `admins` («Admins») через
-`distribute.sh --upload-only`; роль OpenBao у него отдельная
-(`android-distribute`), и читает она только `firebase_service_account_json_b64`.
+APK ровно один раз matrix-запись `android / android-app`
+(`.github/workflows/_android.yml`) — без секретов и без Environment. Она
+собирает `//projects/mobile/android:app` с release-`versionCode`/`versionName`
+и `google-services.json` из переменной репозитория `GOOGLE_SERVICES_JSON_B64`
+(это не секрет: идентификаторы Firebase лежат открытым текстом в любом APK),
+прогоняет тесты на том же `--define`-варианте APK и публикует неподписанный
+artifact `android-app-apk` (`app.apk` + `release-info.json`). Затем job
+`android-distribute` в `.github/workflows/ci.yml` (Environment `Android`, VPN
+группа `ci`, роль OpenBao `android-distribute` → `secret/ci/android-distribute`),
+дождавшись зелёного всего `android` matrix, скачивает artifact, подписывает его
+`platform/android/sign-release.sh` (`zipalign -P 16`, `apksigner` v2/v3,
+fail-closed проверка SHA-256 сертификата из `signing_cert_sha256`), обновляет
+`release-info.json` под подписанные байты и загружает APK в Firebase App
+Distribution в группу `admins` («Admins») через `distribute.sh --upload-only`.
 Глобальная инвалидация (например `MODULE.bazel`) по-прежнему прогоняет проверки
 `android`, но APK не публикует. Исключение — правка `MODULE.bazel` только внутри
 Maven-расширения (`maven.install(...)`, `use_repo(maven, ...)`): она меняет

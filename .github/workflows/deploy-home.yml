@@ -148,7 +148,9 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       # The Android targets in `//projects/...` need the same SDK the Android
-      # PR jobs install.
+      # PR jobs install. The NDK supplies the C++ toolchain for
+      # //platform/android:android_arm64; `rules_android_ndk` reads its path
+      # from ANDROID_NDK_HOME.
       - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
 
       - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
@@ -157,7 +159,9 @@ jobs:
           java-version: "21"
 
       - name: Install Android SDK packages
-        run: sdkmanager --install "platforms;android-36" "build-tools;36.0.0"
+        run: |
+          sdkmanager --install "platforms;android-36" "build-tools;36.0.0" "ndk;28.2.13676358"
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358" >> "$GITHUB_ENV"
 
       # Identical inputs to `_android.yml`, `_images.yml`, `_deploy-control.yml`
       # and the `changes` job; explicit cache-save true writes the develop-side
@@ -200,7 +204,9 @@ jobs:
           # Same target space as the PR jobs: Rust tests/builds, container
           # images from //projects/... and the Android/Kotlin targets that pull
           # the Maven repositories. `fetch` resolves external repositories only.
-          bazel fetch //solutions/... //packages/... //projects/...
+          # `--config=android` supplies the Android version defines; without it
+          # the Android genrules fail analysis ($(home_version_name) undefined).
+          bazel fetch --config=android //solutions/... //packages/... //projects/...
 
       - name: Install target-determinator
         run: |
@@ -224,7 +230,10 @@ jobs:
           # `--config=android` is mandatory: it activates
           # platform/android/android.bazelrc, so the cached actions match the
           # PR jobs that build with the same config.
-          bazel build --config=android //projects/mobile/android:app \
+          # The test suite is built too, so the PR `bazel test` step finds its
+          # compiled test classes in the cache as well.
+          bazel build --config=android \
+            //projects/mobile/android:app //projects/mobile/android:android_tests \
             --experimental_disk_cache_gc_max_size=6G
 
       # Closes the cache files and lets the idle GC finish before archiving.

@@ -25,6 +25,15 @@
 build:android --define=home_version_code=1
 build:android --define=home_version_name=0.1.0
 
+# Package native libraries (JNI .so from AARs such as stream-webrtc-android)
+# for the phone ABI, not the host CPU: rules_android filters AAR `jni/` entries
+# by the target platform's CPU, and without this flag on a Linux CI host the APK
+# got only x86_64 libs and failed with INSTALL_FAILED_NO_MATCHING_ABIS. The
+# platform is defined in //platform/android:android_arm64; its C++ toolchain
+# comes from the NDK registered in MODULE.bazel (rules_android_ndk).
+# //projects/mobile/android/app:apk_abi_test guards the packaged ABIs.
+build:android --android_platforms=//platform/android:android_arm64
+
 # Android builder tools and rules_android sources use Java 17 language
 # features (records, sealed types), and the Bazel tools that package them run
 # on JDK 21. These flags affect build tools only, not the Android minSdk.

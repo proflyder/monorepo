@@ -11,19 +11,27 @@
  *   1. read the PR (`state`, `baseRefName`, `headRefOid`, `mergeable`);
  *   2. compare the current `origin/develop` with the PR head
  *      (`compare/develop...<head>`): `behind_by > 0` means CI ran on an older
- *      base, so merge `develop` into the branch (`gh pr update-branch`) and
- *      wait for the new head. A conflict is a hard error — nothing is merged;
+ *      base. Refreshing the branch (`gh pr update-branch`) costs a full CI run,
+ *      so the refresh is skipped when it is provably safe to land the PR on
+ *      the newer base: `ci-ok` is green on the current head, GitHub reports the
+ *      PR as `MERGEABLE`, the files changed by the PR and by the new `develop`
+ *      commits are disjoint, and none of those `develop` commits touches a
+ *      CI-global path (workflows, CI scripts, Bazel/toolchain config, lock
+ *      files). Otherwise merge `develop` into the branch and wait for the new
+ *      head. A conflict is a hard error — nothing is merged;
  *   3. wait for `ci-ok` on the current head (check-runs API, configurable
  *      timeout, 90 min by default). A non-success conclusion stops before merge;
- *   4. re-check `behind_by` right before merging and restart from step 2 if
- *      `develop` moved again (bounded number of attempts);
+ *   4. re-check `behind_by` right before merging; if `develop` moved again,
+ *      apply the same disjointness/CI-global test, otherwise restart from
+ *      step 2 (bounded number of attempts);
  *   5. merge with `--match-head-commit`, so a head that moved between the check
  *      and the merge is refused by GitHub instead of merged;
  *   6. print the merge sha and the `deploy-home` run URL for it.
  *
  * `--dry-run` performs every read and reports what it would do without
  * updating or merging. `--no-update` is a pure check: it refuses a PR whose
- * head lacks `develop` and never merges.
+ * head lacks `develop` and never merges. `--always-refresh` restores the old
+ * behaviour of always updating the branch when `develop` moved.
  *
  * All `gh` calls go through the injected `exec` command runner, so the decision
  * logic and the full flow are tested without a network (safe-merge.test.mjs).
@@ -52,15 +60,169 @@ export const DEFAULT_COMPARE_WAIT_MS = 60_000;
 export const DEFAULT_DEPLOY_WAIT_MS = 60_000;
 export const DEFAULT_DEPLOY_POLL_MS = 5_000;
 export const DEPLOY_WORKFLOW = "deploy-home.yml";
+// GitHub's compare API caps the `files` array; a capped list cannot prove that
+// the two changesets are disjoint, so it disables the refresh-free merge.
+export const MAX_COMPARE_FILES = 300;
+
+/**
+ * Paths whose change on `develop` makes a cached `ci-ok` unreliable for a
+ * squash merge: workflows, CI tooling, Bazel/toolchain configuration, the
+ * mise/tool versions and dependency lock files. Glob syntax supports `*`
+ * (within one segment), `**` (across segments) and `?`.
+ */
+export const CI_GLOBAL_PATHS = [
+  ".github/**",
+  "platform/ci/**",
+  ".bazelrc",
+  ".bazelversion",
+  "MODULE.bazel*",
+  "platform/android/android.bazelrc",
+  "mise.toml",
+  "Cargo.lock",
+  "**/maven_install.json",
+  "package-lock.json",
+  "pnpm-lock.yaml",
+  "platform/bazel/**",
+];
+
+const CI_GLOBAL_MATCHERS = CI_GLOBAL_PATHS.map((glob) => globToRegExp(glob));
 
 const COMMIT = /^[0-9a-f]{40}$/;
 
-/** Parse CLI arguments: `<N> [--dry-run] [--timeout <min>] [--no-update]`. */
+function globToRegExp(glob) {
+  let pattern = "^";
+  for (let index = 0; index < glob.length; index += 1) {
+    const char = glob[index];
+    if (char === "*") {
+      if (glob[index + 1] === "*") {
+        index += 1;
+        if (glob[index + 1] === "/") {
+          index += 1;
+          pattern += "(?:.*/)?";
+        } else {
+          pattern += ".*";
+        }
+      } else {
+        pattern += "[^/]*";
+      }
+    } else if (char === "?") {
+      pattern += "[^/]";
+    } else {
+      pattern += char.replace(/[.+^${}()|[\]\\]/g, "\\$&");
+    }
+  }
+  return new RegExp(`${pattern}$`);
+}
+
+/** True when `path` is one of the CI-global paths above. */
+export function isCiGlobalPath(path) {
+  return CI_GLOBAL_MATCHERS.some((matcher) => matcher.test(path));
+}
+
+/**
+ * Collect the paths a compare response says are changed, including the old
+ * side of a rename. `known` is false when the API returned no `files` array:
+ * an absent list proves nothing and must not be read as "no changed files".
+ */
+export function changedFiles(compare) {
+  const files = Array.isArray(compare?.files) ? compare.files : null;
+  if (files === null) {
+    return { paths: [], known: false, truncated: false };
+  }
+  const paths = new Set();
+  for (const file of files) {
+    if (file?.filename) {
+      paths.add(file.filename);
+    }
+    if (file?.previous_filename) {
+      paths.add(file.previous_filename);
+    }
+  }
+  return {
+    paths: [...paths].sort(),
+    known: true,
+    truncated: files.length >= MAX_COMPARE_FILES,
+  };
+}
+
+/**
+ * Decide whether `develop` may stay ahead of the PR head at merge time.
+ *
+ * The squash merge then produces a tree that was never tested as a whole, but
+ * which differs from the tested PR tree only by `develop` commits that touch
+ * other files and no CI-global path — so the green `ci-ok` still describes the
+ * relevant code. `structural` reports the file/mergeability checks alone, so
+ * the caller can wait for a pending `ci-ok` before deciding; `allowed` is the
+ * final answer and also requires a green check.
+ */
+export function decideFastPath({
+  behindBy,
+  mergeable,
+  ciGreen = false,
+  prFiles = [],
+  developFiles = [],
+  filesKnown = true,
+  filesTruncated = false,
+  alwaysRefresh = false,
+}) {
+  if (alwaysRefresh) {
+    return { allowed: false, structural: false, reason: "--always-refresh always refreshes the branch" };
+  }
+  if (!(behindBy > 0)) {
+    return { allowed: false, structural: false, reason: `head already contains ${BASE_BRANCH}` };
+  }
+  if (!filesKnown) {
+    return { allowed: false, structural: false, reason: "compare did not return a file list" };
+  }
+  if (filesTruncated) {
+    return {
+      allowed: false,
+      structural: false,
+      reason: `changed-file list is capped at ${MAX_COMPARE_FILES} entries`,
+    };
+  }
+  if (String(mergeable || "").toUpperCase() !== "MERGEABLE") {
+    return {
+      allowed: false,
+      structural: false,
+      reason: `GitHub reports the PR as ${mergeable || "UNKNOWN"}, not MERGEABLE`,
+    };
+  }
+  const developSet = new Set(developFiles);
+  const overlap = [...new Set(prFiles)].filter((file) => developSet.has(file)).sort();
+  if (overlap.length > 0) {
+    return {
+      allowed: false,
+      structural: false,
+      reason: `PR and ${BASE_BRANCH} touch the same files: ${overlap.join(", ")}`,
+    };
+  }
+  const globals = [...developSet].filter(isCiGlobalPath).sort();
+  if (globals.length > 0) {
+    return {
+      allowed: false,
+      structural: false,
+      reason: `${BASE_BRANCH} touches CI-global paths: ${globals.join(", ")}`,
+    };
+  }
+  const reason = `${BASE_BRANCH} +${behindBy} commit(s), disjoint from PR files and no CI-global paths`;
+  if (!ciGreen) {
+    return {
+      allowed: false,
+      structural: true,
+      reason: `${reason}, but ${REQUIRED_CHECK} is not green on the current head`,
+    };
+  }
+  return { allowed: true, structural: true, reason };
+}
+
+/** Parse CLI arguments: `<N> [--dry-run] [--timeout <min>] [--no-update] [--always-refresh]`. */
 export function parseArgs(argv) {
   const args = {
     pr: null,
     dryRun: false,
     noUpdate: false,
+    alwaysRefresh: false,
     timeoutMin: DEFAULT_TIMEOUT_MIN,
     help: false,
   };
@@ -73,6 +235,9 @@ export function parseArgs(argv) {
         break;
       case "--no-update":
         args.noUpdate = true;
+        break;
+      case "--always-refresh":
+        args.alwaysRefresh = true;
         break;
       case "--timeout":
         if (value === undefined || !/^\d+$/.test(value) || Number(value) <= 0) {
@@ -135,6 +300,7 @@ export function checkPull(pull) {
     number: pull.number,
     head,
     base: pull.baseRefName,
+    mergeable: String(pull.mergeable || "").toUpperCase(),
     url: pull.url || "",
     title: pull.title || "",
   };
@@ -243,12 +409,39 @@ function prView(exec, pr) {
 }
 
 function behindBy(exec, repository, head) {
-  const compared = ghJson(
+  return compareWithDevelop(exec, repository, head)?.behind_by;
+}
+
+/** Full compare response for `develop...<head>`, including the merge base. */
+function compareWithDevelop(exec, repository, head) {
+  return ghJson(
     exec,
     ["api", `repos/${repository}/compare/${BASE_BRANCH}...${head}`],
     `compare ${BASE_BRANCH}...${head}`,
   );
-  return compared?.behind_by;
+}
+
+/** Files changed between two refs, as reported by the compare API. */
+function compareFiles(exec, repository, base, head) {
+  return changedFiles(
+    ghJson(
+      exec,
+      ["api", `repos/${repository}/compare/${base}...${head}`],
+      `compare ${base}...${head}`,
+    ),
+  );
+}
+
+function readChecks(exec, repository, head) {
+  return decideChecks(
+    checkRunsOf(
+      ghJson(
+        exec,
+        ["api", `repos/${repository}/commits/${head}/check-runs?per_page=100`],
+        `check runs of ${head}`,
+      ),
+    ),
+  );
 }
 
 /** Current commit of `develop`, used to tell a real move from a stale compare. */
@@ -410,6 +603,7 @@ export async function runSafeMerge(options) {
     exec,
     dryRun = false,
     noUpdate = false,
+    alwaysRefresh = false,
     timeoutMin = DEFAULT_TIMEOUT_MIN,
     maxUpdates = DEFAULT_MAX_UPDATES,
     maxMoves = DEFAULT_MAX_MOVES,
@@ -447,8 +641,63 @@ export async function runSafeMerge(options) {
         `nothing was merged — retry later`,
     );
 
+  const logPath = (message) => log(dryRun ? `[dry-run] ${message}` : message);
+
+  /**
+   * Check the refresh-free merge conditions against the current API state:
+   * mergeability, the files of the PR and of the new `develop` commits, and
+   * `ci-ok` on the current head. `structural` ignores the check state, so a
+   * pending run can be awaited instead of being thrown away.
+   */
+  async function evaluateFastPath(behind, headCompare) {
+    if (alwaysRefresh) {
+      return {
+        allowed: false,
+        structural: false,
+        ciState: "unknown",
+        reason: "--always-refresh always refreshes the branch",
+      };
+    }
+    const view = prView(exec, pr);
+    const headNow = String(view.headRefOid || "");
+    if (headNow !== pull.head) {
+      return {
+        allowed: false,
+        structural: false,
+        ciState: "unknown",
+        reason: `PR head moved to ${headNow.slice(0, 12)}`,
+      };
+    }
+    const mergeBase = String(headCompare?.merge_base_commit?.sha || "");
+    if (!COMMIT.test(mergeBase)) {
+      return {
+        allowed: false,
+        structural: false,
+        ciState: "unknown",
+        reason: "compare did not report a merge base",
+      };
+    }
+    const prChanged = changedFiles(headCompare);
+    const developChanged = compareFiles(exec, repository, mergeBase, BASE_BRANCH);
+    const checks = readChecks(exec, repository, pull.head);
+    return {
+      ...decideFastPath({
+        behindBy: behind,
+        mergeable: view.mergeable,
+        ciGreen: checks.state === "pass",
+        prFiles: prChanged.paths,
+        developFiles: developChanged.paths,
+        filesKnown: prChanged.known && developChanged.known,
+        filesTruncated: prChanged.truncated || developChanged.truncated,
+        alwaysRefresh,
+      }),
+      ciState: checks.state,
+    };
+  }
+
   for (;;) {
-    let behind = behindBy(exec, repository, pull.head);
+    let compared = compareWithDevelop(exec, repository, pull.head);
+    let behind = compared?.behind_by;
 
     if (behind > 0) {
       const decision = decideBehind({ behindBy: behind, noUpdate });
@@ -491,60 +740,116 @@ export async function runSafeMerge(options) {
       }
     }
 
+    let merging = false;
+
     if (behind > 0) {
-      if (dryRun) {
+      if (!alwaysRefresh) {
+        let candidate = await evaluateFastPath(behind, compared);
+        if (candidate.structural && candidate.ciState === "pending" && !dryRun) {
+          // The current CI run already covers the PR tree; wait for it instead
+          // of discarding it with an update-branch.
+          log(
+            `${candidate.reason}; waiting for ${REQUIRED_CHECK} on the current head ` +
+              `instead of refreshing the branch`,
+          );
+          await waitForCi({
+            exec,
+            repository,
+            head: pull.head,
+            timeoutMin,
+            pollMs,
+            now,
+            sleep,
+            log,
+          });
+          compared = compareWithDevelop(exec, repository, pull.head);
+          behind = compared?.behind_by;
+          candidate =
+            behind > 0
+              ? await evaluateFastPath(behind, compared)
+              : {
+                  allowed: false,
+                  structural: false,
+                  ciState: "pass",
+                  reason: `head now contains ${BASE_BRANCH}`,
+                };
+        }
+
+        if (dryRun && candidate.structural) {
+          logPath(
+            `${candidate.reason}; would merge at ${pull.head.slice(0, 12)} without refresh ` +
+              `once ${REQUIRED_CHECK} is green`,
+          );
+          return { status: "dry-run", wouldMergeWithoutRefresh: true, head: pull.head };
+        }
+        if (candidate.allowed) {
+          logPath(
+            `${candidate.reason} → merging on green ${REQUIRED_CHECK} at ` +
+              `${pull.head.slice(0, 12)} without refresh`,
+          );
+          merging = true;
+        } else if (behind > 0) {
+          log(`${candidate.reason}; refreshing the branch`);
+        }
+      }
+
+      if (!merging && behind > 0) {
+        if (dryRun) {
+          log(
+            `[dry-run] PR head ${pull.head.slice(0, 12)} is ${behind} commit(s) ` +
+              `behind ${BASE_BRANCH}; would run: gh pr update-branch ${pr}`,
+          );
+          return { status: "dry-run", wouldUpdate: true, head: pull.head };
+        }
+        if (updates >= maxUpdates) {
+          throw new Error(
+            `refreshed the branch ${updates} time(s) without a stable base; ` +
+              `nothing was merged — retry later`,
+          );
+        }
         log(
-          `[dry-run] PR head ${pull.head.slice(0, 12)} is ${behind} commit(s) ` +
-            `behind ${BASE_BRANCH}; would run: gh pr update-branch ${pr}`,
+          `PR head ${pull.head.slice(0, 12)} is ${behind} commit(s) behind ` +
+            `${BASE_BRANCH}; merging ${BASE_BRANCH} into the branch`,
         );
-        return { status: "dry-run", wouldUpdate: true, head: pull.head };
+        const oldHead = pull.head;
+        try {
+          exec("gh", ["pr", "update-branch", String(pr)]);
+        } catch (error) {
+          throw new Error(
+            `cannot update PR #${pr} from ${BASE_BRANCH} (resolve the conflict locally and push): ` +
+              error.message,
+          );
+        }
+        updates += 1;
+        pull.head = await waitForNewHead({
+          exec,
+          pr,
+          oldHead,
+          waitMs: updateWaitMs,
+          pollMs,
+          now,
+          sleep,
+          log,
+        });
+        refreshed = true;
+        continue;
       }
-      if (updates >= maxUpdates) {
-        throw new Error(
-          `refreshed the branch ${updates} time(s) without a stable base; ` +
-            `nothing was merged — retry later`,
-        );
-      }
-      log(
-        `PR head ${pull.head.slice(0, 12)} is ${behind} commit(s) behind ` +
-          `${BASE_BRANCH}; merging ${BASE_BRANCH} into the branch`,
-      );
-      const oldHead = pull.head;
-      try {
-        exec("gh", ["pr", "update-branch", String(pr)]);
-      } catch (error) {
-        throw new Error(
-          `cannot update PR #${pr} from ${BASE_BRANCH} (resolve the conflict locally and push): ` +
-            error.message,
-        );
-      }
-      updates += 1;
-      pull.head = await waitForNewHead({
+    }
+
+    if (!merging) {
+      log(`PR head ${pull.head.slice(0, 12)} contains ${BASE_BRANCH}`);
+
+      await waitForCi({
         exec,
-        pr,
-        oldHead,
-        waitMs: updateWaitMs,
+        repository,
+        head: pull.head,
+        timeoutMin,
         pollMs,
         now,
         sleep,
         log,
       });
-      refreshed = true;
-      continue;
     }
-
-    log(`PR head ${pull.head.slice(0, 12)} contains ${BASE_BRANCH}`);
-
-    await waitForCi({
-      exec,
-      repository,
-      head: pull.head,
-      timeoutMin,
-      pollMs,
-      now,
-      sleep,
-      log,
-    });
 
     if (noUpdate) {
       log(`ready to merge PR #${pr} at ${pull.head}; --no-update stops here`);
@@ -558,12 +863,15 @@ export async function runSafeMerge(options) {
       return { status: "dry-run", wouldMerge: true, head: pull.head };
     }
 
-    const recheck = behindBy(exec, repository, pull.head);
+    let recheckCompare = compareWithDevelop(exec, repository, pull.head);
+    let recheck = recheckCompare?.behind_by;
     if (recheck !== 0) {
       const shaNow = readDevelopSha(exec, repository);
-      if (shaNow === developSha) {
-        // `develop` did not move, so the compare is lagging again; give it the
-        // same grace period instead of merging on a stale value.
+      if (shaNow === developSha && !merging) {
+        // `develop` did not move and the head was up to date before this
+        // check, so a non-zero value is a lagging compare. Give it the same
+        // grace period instead of merging on it. (A fast-path merge expects
+        // the head to stay behind, so it is not treated as lag.)
         const settled = await waitForCompareSettled({
           exec,
           repository,
@@ -579,22 +887,49 @@ export async function runSafeMerge(options) {
           if (settled.behindBy !== 0) {
             throw staleCompareError(settled.behindBy);
           }
+          recheck = 0;
         } else {
           developSha = settled.developSha;
+          recheck = settled.behindBy;
         }
-      } else {
+      } else if (shaNow !== developSha) {
         developSha = shaNow;
       }
-      if (behindBy(exec, repository, pull.head) !== 0) {
-        moves += 1;
-        if (moves > maxMoves) {
-          throw new Error(
-            `${BASE_BRANCH} moved ${moves} time(s) during the run; ` +
-              `nothing was merged — retry later`,
-          );
+      if (recheck !== 0) {
+        // The compare may have been read before `develop` moved; read it again
+        // right before deciding, so the file sets describe the real base.
+        recheckCompare = compareWithDevelop(exec, repository, pull.head);
+        recheck = recheckCompare?.behind_by;
+      }
+      if (recheck !== 0) {
+        let mergeWithoutRefresh = false;
+        if (!alwaysRefresh) {
+          const candidate = await evaluateFastPath(recheck, recheckCompare);
+          if (candidate.allowed) {
+            log(
+              `${candidate.reason} → merging on green ${REQUIRED_CHECK} at ` +
+                `${pull.head.slice(0, 12)} without refresh`,
+            );
+            mergeWithoutRefresh = true;
+          } else {
+            log(
+              `${BASE_BRANCH} moved while CI was running (${candidate.reason}); ` +
+                `refreshing the branch`,
+            );
+          }
+        } else {
+          log(`${BASE_BRANCH} moved while CI was running; refreshing the branch`);
         }
-        log(`${BASE_BRANCH} moved while CI was running; refreshing the branch`);
-        continue;
+        if (!mergeWithoutRefresh) {
+          moves += 1;
+          if (moves > maxMoves) {
+            throw new Error(
+              `${BASE_BRANCH} moved ${moves} time(s) during the run; ` +
+                `nothing was merged — retry later`,
+            );
+          }
+          continue;
+        }
       }
     }
 
@@ -675,13 +1010,16 @@ export async function main(argv = process.argv.slice(2), env = process.env) {
   const args = parseArgs(argv);
   if (args.help) {
     console.log(
-      "usage: safe-merge.mjs <pr> [--dry-run] [--no-update] [--timeout <min>]\n" +
-        "  merge a PR into develop only when ci-ok ran on the tree that lands",
+      "usage: safe-merge.mjs <pr> [--dry-run] [--no-update] [--always-refresh] [--timeout <min>]\n" +
+        "  merge a PR into develop only when ci-ok ran on the tree that lands;\n" +
+        "  a disjoint PR with green ci-ok merges without an update-branch refresh",
     );
     return 0;
   }
   if (args.pr === null) {
-    throw new Error("usage: safe-merge.mjs <pr> [--dry-run] [--no-update] [--timeout <min>]");
+    throw new Error(
+      "usage: safe-merge.mjs <pr> [--dry-run] [--no-update] [--always-refresh] [--timeout <min>]",
+    );
   }
   await runSafeMerge({
     pr: args.pr,
@@ -689,6 +1027,7 @@ export async function main(argv = process.argv.slice(2), env = process.env) {
     exec: spawnExec,
     dryRun: args.dryRun,
     noUpdate: args.noUpdate,
+    alwaysRefresh: args.alwaysRefresh,
     timeoutMin: args.timeoutMin,
   });
   return 0;

@@ -175,8 +175,7 @@ recovery keys → `operator generate-root` → `admin-destroy` + `admin-generate
 |---|---|---|---|
 | `userpass` | человек | имя из `secrets/openbao/username` | `admin` |
 | `github` (`jwt`) | GitHub Actions | `deploy-home` | `ci-deploy` |
-| `github` (`jwt`) | GitHub Actions, Android APK build/sign | `android-app-release` | `ci-android` |
-| `github` (`jwt`) | GitHub Actions, Android App Distribution | `android-distribute` | `ci-android` |
+| `github` (`jwt`) | GitHub Actions, Android APK sign + App Distribution | `android-distribute` | `ci-android` |
 | `github` (`jwt`) | GitHub Actions, station deploy | `deploy-station` | `ci-station` |
 | `kubernetes` | External Secrets Operator | `external-secrets` | `k8s-read` |
 | `kubernetes` | smoke-под | `k8s-smoke` | `k8s-read` |
@@ -206,8 +205,7 @@ delete, `sys/*`, `auth/*` запрещены. `secret/infra/*` — секрет�
 `ci-android`: read ровно `secret/data/ci/android-distribute` и
 `secret/metadata/ci/android-distribute`; `secret/ci/deploy-home`,
 `secret/ci/deploy-station`, `secret/k8s/*` и запись запрещены. Политика
-создаётся всегда вместе с ролями `android-app-release` и
-`android-distribute`.
+создаётся всегда вместе с ролью `android-distribute`.
 
 `backup`: только `read sys/storage/raft/snapshot`.
 
@@ -251,26 +249,15 @@ delete, `sys/*`, `auth/*` запрещены. `secret/infra/*` — секрет�
 создаются, остальная конфигурация не меняется. Повторный запуск с параметром
 идемпотентно обновляет роль.
 
-Роли `android-app-release` и `android-distribute`
-(`auth/github/role/…`) обслуживают сборку/подпись и загрузку Android APK в
-Firebase App Distribution внутри PR CI. Сборка и подпись идут в reusable
-workflow `_android.yml` (matrix-запись `android / android-app`), загрузка — в
-job `android-distribute` файла `ci.yml`:
+Роль `android-distribute` (`auth/github/role/…`) обслуживает подпись и загрузку
+Android APK в Firebase App Distribution внутри PR CI: APK без секретов собирает
+matrix-запись `android / android-app` (`_android.yml`), а подписывает и
+загружает job `android-distribute` файла `ci.yml`. Привязка по claims
+`repository`, `environment=Android`, `ref=refs/pull/*/merge`,
+`event_name=pull_request` и
+`job_workflow_ref=<owner>/<repo>/.github/workflows/ci.yml@refs/pull/*/merge`:
 
-- `oidc_discovery_url`/`bound_issuer` = `https://token.actions.githubusercontent.com`;
-- `bound_audiences` = тот же публичный URL OpenBao, что у `deploy-home`;
-- `bound_claims_type=glob` (единственные роли с глобами): `repository=<owner>/<repo>`
-  (как у `deploy-home`, из `git remote origin` или
-  `OPENBAO_GITHUB_REPOSITORY`), `environment=Android`,
-  `ref=refs/pull/*/merge`, `event_name=pull_request` и
-  `job_workflow_ref`:
-  - `android-app-release` —
-    `<owner>/<repo>/.github/workflows/_android.yml@refs/pull/*/merge`;
-  - `android-distribute` —
-    `<owner>/<repo>/.github/workflows/ci.yml@refs/pull/*/merge`.
-
-  Токен может выпустить только конкретный job на merge-ref конкретного PR;
-  роли не взаимозаменяемы (токен сборки не подойдёт job'у загрузки и наоборот);
+- токен может выпустить только этот job на merge-ref конкретного PR;
 - `user_claim=job_workflow_ref`, `token_policies=["ci-android"]`, TTL 10 мин,
   max 15 мин, `clock_skew=60`.
 
@@ -388,9 +375,8 @@ Environment `Android` (matrix-запись `android-app` в
 `.github/workflows/_android.yml` и job `android-distribute` в `ci.yml`) хранит
 те же четыре значения доступа: `VPN_SERVER`, `VPN_CERT_P12_B64`,
 `VPN_CERT_PASSWORD`, `OPENBAO_ADDR`; роль выбирается в workflow
-(`android-app-release` при сборке/подписи, `android-distribute` при загрузке),
-отдельного `OPENBAO_ROLE` нет. Environment объявляет только запись
-`android-app`; job загрузки объявляет его отдельно в `ci.yml`.
+(`android-distribute`), отдельного `OPENBAO_ROLE` нет. Environment объявляет
+только job `android-distribute` в `ci.yml`.
 
 Deployment branch policy этого Environment **должна разрешать PR-head-ветки**:
 правила вида `*` и `*/*` (protected branches и теги — как удобно). Ограничение
@@ -402,9 +388,9 @@ Environment: если оставить политику только на `devel
 
 ### Android-секреты (App Distribution)
 
-`secret/ci/android-distribute` читают роли `android-app-release` (ключ,
-`google-services.json`) и `android-distribute` (только Firebase service
-account) — обе с политикой `ci-android`. Подпись APK делает
+`secret/ci/android-distribute` читает роль `android-distribute` (ключ подписи и
+Firebase service account) с политикой `ci-android`; `google-services.json` CI
+берёт из переменной репозитория `GOOGLE_SERVICES_JSON_B64`. Подпись APK делает
 `platform/android/sign-release.sh`
 поверх собранного Bazel APK; ключ и пароли в CI не попадают в Bazel и в env
 последующих шагов. Значения — исходный текст (не base64), кроме keystore,

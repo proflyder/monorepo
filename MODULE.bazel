@@ -312,6 +312,32 @@ register_toolchains(
     "@androidsdk//:all",
 )
 
+# C++ toolchain for the target Android platform. `android_binary` always
+# resolves `@rules_cc//cc:current_cc_toolchain` for every platform in
+# `--android_platforms` (rules_android links client native deps and, even
+# without cc_library deps, needs the toolchain for the split config). Without an
+# NDK toolchain, the `build:android
+# --android_platforms=//platform/android:android_arm64` flag in
+# platform/android/android.bazelrc fails analysis with "Unable to find a CC
+# toolchain".
+#
+# The repository rule reads the NDK from the ANDROID_NDK_HOME environment
+# variable; install it from the official SDK with
+# `sdkmanager "ndk;28.2.13676358"` (CI installs it via sdk_packages of the
+# android-app/android-lint units in `_android.yml`, and in deploy-home
+# `warm-caches`). `api_level` matches the app's minSdkVersion (26); see
+# projects/mobile/android/app/src/main/AndroidManifest.xml.
+bazel_dep(name = "rules_android_ndk", version = "0.1.5")
+
+android_ndk_repository_extension = use_extension(
+    "@rules_android_ndk//:extension.bzl",
+    "android_ndk_repository_extension",
+)
+android_ndk_repository_extension.configure(api_level = 26)
+use_repo(android_ndk_repository_extension, "androidndk")
+
+register_toolchains("@androidndk//:all")
+
 maven = use_extension("@rules_jvm_external//:extensions.bzl", "maven")
 maven.install(
     name = "maven",

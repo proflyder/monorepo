@@ -338,8 +338,8 @@ workflow → `ci-ok`. Исключения — job `plan` и `android-distribute
 сломанный план за зелёным job'ом. `plan` не входит в `ci-ok`.
 `android-distribute` ждёт весь `android` matrix и при
 PR (не из форка) с `android_distribute` = true скачивает готовый
-`android-release-apk` и загружает его в Firebase: он ничего не собирает и не
-подписывает. Этот output true, когда изменился реальный вход
+`android-app-apk`, подписывает его релизным ключом и загружает в Firebase: он
+ничего не собирает. Этот output true, когда изменился реальный вход
 приложения
 (`projects/mobile/android/**`, `packages/kotlin/**` или `platform/android/**`)
 либо `MODULE.bazel` изменился только внутри Maven-расширения
@@ -351,24 +351,17 @@ Maven/APK-замыкание. Прочие глобальные инвалида
 `ci-ok`, поэтому его падение не блокирует merge.
 
 Распространяемый APK собирается ровно один раз — в matrix-записи
-`android / android-app` (`_android.yml`): это единственная запись Android
-matrix, которая объявляет Environment `Android` и читает из OpenBao ключ
-подписи и приватный `google-services.json`. Порядок: VPN → роль OpenBao
-`android-app-release` → материализация файлов → `bazel build` `:app` с
-release-`versionCode`/`versionName` (`BAZEL_EXTRA_ARGS`) → `bazel test` с
-теми же `--define`, поэтому `apk_runtime_closure_test` проверяет ровно
-подписываемый APK → `platform/android/sign-release.sh` → artifact
-`android-release-apk` (`app-release.apk` + `release-info.json`). Lint,
-`kotlin-shared` и `detekt` Environment не объявляют и секретов не читают.
-`android-distribute` только скачивает artifact, сверяет SHA-256 из
-`release-info.json` и вызывает `distribute.sh --upload-only`; ему нужен лишь
-`firebase_service_account_json_b64`. Пересборка дешева: диск-кэш
-`bazel-android-${{ runner.os }}-android-app-…`, прогретый `warm-caches` на develop,
-оставляет только зависящие от `--define` и от приватного
-`google-services.json` действия (ресурсы, manifest, dex, упаковка).
-PR из форка и `workflow_dispatch` не получают Environment: сборка и тесты
-идут без секретов, а подпись/artifact/distribution явно пропускаются с
-notice в summary, а не падают на невнятной ошибке секрета.
+`android / android-app` (`_android.yml`) без секретов и Environment:
+`google-services.json` из переменной репозитория `GOOGLE_SERVICES_JSON_B64` →
+`bazel build` `:app` с release-`versionCode`/`versionName` (`BAZEL_EXTRA_ARGS`)
+→ `bazel test` с теми же `--define`, поэтому `apk_runtime_closure_test` и
+`apk_abi_test` проверяют ровно публикуемый APK → неподписанный artifact
+`android-app-apk` (`app.apk` + `release-info.json`). Ни одна запись Android
+matrix секретов не читает.
+`android-distribute` (Environment `Android`, роль OpenBao `android-distribute`)
+скачивает artifact, подписывает его `platform/android/sign-release.sh`,
+обновляет `release-info.json` (`release_info.py resign`) и вызывает
+`distribute.sh --upload-only`.
 
 
 Android-платформа состоит из двух юнитов с одними и теми же `paths` и

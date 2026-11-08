@@ -445,7 +445,9 @@ export const MODULE_BAZEL_LOCK = "MODULE.bazel.lock";
 // not invalidate Rust/Python/JS/native units and a Rust/zig toolchain bump does
 // not invalidate Android/images.
 //
-//   #maven  - rules_jvm_external Maven extension -> android only.
+//   #maven  - rules_jvm_external Maven extension and the rules_android /
+//             rules_android_ndk modules, SDK/NDK extensions, NDK toolchains
+//             -> android only.
 //   #native - rules_rust (toolchains, crate_universe), the zig cc toolchains,
 //             rules_rust windows patches and the station's third-party
 //             C/C++ http_archive()s -> native units + the pulsar-bazel host
@@ -653,8 +655,85 @@ function stripProxyUse(list, proxies) {
   return rest;
 }
 
+// Android build inputs that only change the Android closure: the rules_android
+// and rules_android_ndk modules, their SDK/NDK repository extensions and the
+// NDK cc toolchain registration. They ride on the `#maven` scope (-> android).
+const ANDROID_MODULE = /^rules_android(?:_ndk)?$/;
+const ANDROID_EXTENSION_PREFIX = /^@rules_android(?:_ndk)?\/\//;
+const ANDROID_TOOLCHAIN_PREFIX = "@androidndk//";
+
+function stringArgNamed(args, key) {
+  for (let index = 0; index + 2 < args.length; index += 1) {
+    if (
+      args[index][0] === "ident" &&
+      args[index][1] === key &&
+      args[index + 1][0] === "punct" &&
+      args[index + 1][1] === "=" &&
+      args[index + 2][0] === "string"
+    ) {
+      return stringValue(args[index + 2]);
+    }
+  }
+  return null;
+}
+
+function firstString(args) {
+  const token = args.find((item) => item[0] === "string");
+  return token ? stringValue(token) : null;
+}
+
+function stripAndroid(list) {
+  // Drop `bazel_dep(name = "rules_android[_ndk]", ...)`, overrides of those
+  // modules, `<proxy> = use_extension("@rules_android[_ndk]//...", ...)` with
+  // every `<proxy>.<tag>(...)`/`use_repo(<proxy>, ...)`, and
+  // `register_toolchains(...)` that only registers `@androidndk//...`.
+  const proxies = new Set();
+  const rest = [];
+  let index = 0;
+  while (index < list.length) {
+    const token = list[index];
+    if (
+      token[0] === "ident" &&
+      list[index + 1]?.[0] === "punct" &&
+      list[index + 1][1] === "=" &&
+      list[index + 2]?.[0] === "ident" &&
+      list[index + 2][1] === "use_extension" &&
+      list[index + 3]?.[0] === "punct" &&
+      list[index + 3][1] === "("
+    ) {
+      const call = callArguments(list, index + 3);
+      const label = call ? firstString(call.args) : null;
+      if (call && label !== null && ANDROID_EXTENSION_PREFIX.test(label)) {
+        proxies.add(token[1]);
+        index = call.end + 1;
+        continue;
+      }
+    }
+    if (token[0] === "ident" && list[index + 1]?.[0] === "punct" && list[index + 1][1] === "(") {
+      const call = callArguments(list, index + 1);
+      if (call !== null) {
+        const name = token[1];
+        const moduleName = stringArgNamed(call.args, name === "bazel_dep" ? "name" : "module_name");
+        const scoped =
+          ((name === "bazel_dep" || name.endsWith("_override")) &&
+            moduleName !== null &&
+            ANDROID_MODULE.test(moduleName)) ||
+          (name === "register_toolchains" &&
+            onlyStrings(call.args, (value) => value.startsWith(ANDROID_TOOLCHAIN_PREFIX)));
+        if (scoped) {
+          index = call.end + 1;
+          continue;
+        }
+      }
+    }
+    rest.push(token);
+    index += 1;
+  }
+  return stripProxyUse(rest, proxies);
+}
+
 function stripMaven(list, proxy) {
-  return stripProxyUse(list, new Set([proxy]));
+  return stripAndroid(stripProxyUse(list, new Set([proxy])));
 }
 
 function callArguments(list, openIndex) {

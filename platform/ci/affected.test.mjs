@@ -216,7 +216,7 @@ test("android fixture: matrix entries are flat strings", () => {
 test("android distribution always includes the unit that owns the APK", () => {
   // A change can route only a shared Kotlin unit (a new package the app does
   // not import yet) while still counting as an application input. The upload
-  // job downloads `android-release-apk` instead of rebuilding, so the release
+  // job downloads `android-app-apk` instead of rebuilding, so the release
   // unit must be in the matrix whenever distribution is selected.
   const config = affected.loadConfig(fixtureConfig);
   const shared = config.get("shared-kotlin");
@@ -524,7 +524,10 @@ test("real repo: android lint unit is a separate job with the same paths", () =>
   assert.deepEqual(lint.bazelRoots, app.bazelRoots);
   assert.deepEqual(lint.testTargets, ["//projects/mobile/android:android_lint"]);
   assert.deepEqual(lint.buildTargets, []);
-  assert.deepEqual(lint.bazelSdkPackages, ["cmdline-tools;23.0"]);
+  assert.deepEqual(lint.bazelSdkPackages, [
+    "cmdline-tools;23.0",
+    "ndk;28.2.13676358",
+  ]);
 });
 
 test("real repo: android module change selects the app and the lint unit", () => {
@@ -591,7 +594,7 @@ test("real repo: lint rule change runs every android unit including lint", () =>
     build_targets: "",
     artifact: "",
     artifact_name: "",
-    sdk_packages: "cmdline-tools;23.0",
+    sdk_packages: "cmdline-tools;23.0 ndk;28.2.13676358",
     universe: "//packages/kotlin/... + //projects/mobile/android/...",
   });
 });
@@ -2079,3 +2082,40 @@ test("platform bazel routing: a native toolchain and a scheduler change select b
   assert.deepEqual(result.routes.android.units, []);
 });
 
+
+test("MODULE.bazel: rules_android/NDK edits scope to android (#maven)", () => {
+  const base = [
+    'bazel_dep(name = "rules_android", version = "0.7.3")',
+    'maven = use_extension("@rules_jvm_external//:extensions.bzl", "maven")',
+    'maven.install(artifacts = ["a:b:1"])',
+    'use_repo(maven, "maven")',
+    'bazel_dep(name = "rules_rust", version = "0.60.0")',
+    "",
+  ].join("\n");
+  const withNdk = base + [
+    'bazel_dep(name = "rules_android_ndk", version = "0.1.5")',
+    'ndk = use_extension("@rules_android_ndk//:extension.bzl", "android_ndk_repository_extension")',
+    "ndk.configure(api_level = 26)",
+    'use_repo(ndk, "androidndk")',
+    'register_toolchains("@androidndk//:all")',
+    "",
+  ].join("\n");
+  assert.equal(affected.moduleBazelScope(base, withNdk), "maven");
+  assert.equal(
+    affected.moduleBazelScope(base, base.replace('"0.7.3"', '"0.7.4"')),
+    "maven",
+  );
+  // Non-Android edits keep the global rule.
+  assert.equal(
+    affected.moduleBazelScope(base, base + 'bazel_dep(name = "rules_oci", version = "2.0.0")\n'),
+    null,
+  );
+  assert.equal(
+    affected.moduleBazelScope(base, base + 'register_toolchains("@other//:all")\n'),
+    null,
+  );
+  assert.equal(
+    affected.moduleBazelScope(base, base.replace('"0.60.0"', '"0.61.0"')),
+    null,
+  );
+});
