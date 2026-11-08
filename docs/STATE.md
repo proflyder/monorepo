@@ -559,15 +559,30 @@
 - Deploy/rollback: `projects/home/kubernetes/scheduler/` (manifest templates,
   render, preflight, backup). Приватные значения — `secrets/home/scheduler.env`;
   rendered manifests — `secrets/local/rendered/`.
+- Бытовые сценарии «Блэкаут» и «Сел работать» — нативные определения
+  `home.v1.ScenarioService` (manual-триггер, шаги `catalog`,
+  `continue_on_error=true`), а не HA-скрипты. Голосовые intents
+  `StationBlackout`/`StationWorkMode` вызывают `script.scenario_run`: он делает
+  `ListScenarios`, находит сценарий по точной метке (без учёта регистра),
+  ставит `RunScenario` с idempotency key от `context.id` и при промахе только
+  пишет `system_log` warning. Определения и идемпотентный сид живут в
+  `projects/home/kubernetes/scheduler/scenarios/` (`blackout.json`,
+  `work_mode.json`, `seed.mjs`): сид создаёт только отсутствующие по метке
+  сценарии (`idempotencyKey=seed-<slug>`) и не перезаписывает существующие.
 - `ha-control` (второй бинарь того же Rust-крейта, static musl, uid 65534,
-  entrypoint `/usr/local/bin/ha-control`) развёрнут отдельным Deployment: каталог
-  `GET /v1/catalog` из live HA, очередь `control`; `CONTROL_EXECUTE=true`,
+  entrypoint `/usr/local/bin/ha-control`) развёрнут отдельным Deployment:
+  каталог `GET /v1/catalog` из live HA, очередь `control`;
+  `CONTROL_EXECUTE=true`,
   consumer `ha-control-home` в allowlist планировщика рядом с
   `ha-bridge-home` и `ha-scenario-home`. Скрипты попадают в каталог только с
   нативной меткой HA `scenario` (`CONTROL_SCENARIO_LABEL`); иконки — только
-  отображение. Метка
-  назначена `script.work_mode` и `script.blackout`. Живой каталог: 2 сценария
-  + 15 light/switch, служебные скрипты отсутствуют. LAN NodePort `30099`,
+  отображение. После перевода «Блэкаута» и «Сесть работать» в scheduler метка
+  `scenario` осталась у HA-сценариев обучения Рикардо
+  (`script.wake_false_alarm`, `script.wake_missed`); нативные сценарии
+  scheduler в этот каталог не входят, поэтому раздел сценариев каталога
+  показывает только помеченные HA-скрипты (или пуст, если метки не
+  назначены). 15 light/switch, служебные скрипты
+  отсутствуют. LAN NodePort `30099`,
   HTTPS `https://control.home.example.com` (LAN/VPN). Доставка
   at-least-once, не exactly-once. Прежний образ `ha-control` остаётся в GHCR для
   отката по digest; Rust-контракт каталога закреплён `testdata/catalog`.

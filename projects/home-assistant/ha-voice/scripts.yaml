@@ -76,58 +76,6 @@ spotify_connect_previous:
     - stop: "spotify previous without token"
       response_variable: spotify_prev_result
 
-work_mode:
-  alias: "Scene: work lighting"
-  # Display only. Being a personal scenario is declared with the HA label "scenario"
-  # (entity registry), see solutions/ha-bridge/README.md.
-  icon: mdi:laptop
-  description: >-
-    Turn on all bedroom lights for a work session at the captured work
-    settings: LED strip 100% at 2816 K, bedside lamp 100% at 2800 K, and
-    monitor light 100% at 2800 K.
-  mode: single
-  sequence:
-    # Captured from the live entities on 2026-10-30. Each light is addressed
-    # separately: their color-temperature ranges differ and the monitor light
-    # supports color_temp only. light.turn_on both restores a light that is off
-    # and re-applies the captured settings to one that is already on. The
-    # bedside lamp's effect "Day" is its separate white-mode property; the
-    # integration applies it after brightness/color temperature, so including
-    # it restores white mode even if the lamp was left in "Color" mode.
-    - service: light.turn_on
-      target:
-        entity_id: light.spalnia_lenta
-      data:
-        brightness: 255
-        color_temp_kelvin: 2816
-    - service: light.turn_on
-      target:
-        entity_id: light.yeelink_cn_827036414_bslamp2_s_2_light
-      data:
-        brightness: 255
-        color_temp_kelvin: 2800
-        effect: Day
-    - service: light.turn_on
-      target:
-        entity_id: light.yeelink_cn_919937191_lamp22_s_2
-      data:
-        brightness: 255
-        color_temp_kelvin: 2800
-
-blackout:
-  alias: "Scene: black out bedroom lighting"
-  icon: mdi:weather-night
-  description: >-
-    Turn off all bedroom lights: LED strip, bedside lamp, and monitor light bar.
-  mode: single
-  sequence:
-    - service: light.turn_off
-      target:
-        entity_id:
-          - light.spalnia_lenta
-          - light.yeelink_cn_827036414_bslamp2_s_2_light
-          - light.yeelink_cn_919937191_lamp22_s_2
-
 komp_shutdown:
   alias: "Комп: выключение через минуту"
   icon: mdi:power
@@ -1398,6 +1346,110 @@ currency_rates:
 # Legacy alarm_* audio scripts above are still the sound executor. The legacy
 # todo/timer dispatchers below are kept for rollback but their automations are
 # disabled with initial_state: false; only the scheduler is authoritative.
+
+scenario_run:
+  alias: "Scenarios: run a native scheduler scenario by label"
+  description: >-
+    Resolve a manual scenario by exact label (case-insensitive) through
+    home.v1.ScenarioService and queue one RunScenario. Definitions live in the
+    scheduler, not in HA. An unknown label or an unreachable scheduler only
+    writes a warning: it never guesses an id and never edits a definition.
+  mode: parallel
+  max: 5
+  fields:
+    label:
+      required: true
+      description: "Scenario label, for example «Блэкаут»"
+      example: "Блэкаут"
+  sequence:
+    - variables:
+        scenario_endpoint_value: "{{ states('input_text.scheduler_endpoint') | trim | regex_replace('/+$', '') }}"
+        scenario_label: "{{ label | default('') | string | trim }}"
+    - if:
+        - condition: template
+          value_template: "{{ scenario_label == '' }}"
+      then:
+        - service: system_log.write
+          data:
+            level: warning
+            logger: homeassistant.components.script.scenario_run
+            message: "scenario_run: empty scenario label"
+        - stop: "empty scenario label"
+    - if:
+        - condition: template
+          value_template: "{{ scenario_endpoint_value in ['', 'unknown', 'unavailable', 'None'] or not (scenario_endpoint_value.startswith('http://') or scenario_endpoint_value.startswith('https://')) }}"
+      then:
+        - service: system_log.write
+          data:
+            level: warning
+            logger: homeassistant.components.script.scenario_run
+            message: "scenario_run: scheduler endpoint is not configured"
+        - stop: "scenario scheduler endpoint missing"
+    - service: rest_command.scenario_rpc
+      data:
+        method: "ListScenarios"
+        payload_json: '{"includeDisabled": true}'
+      response_variable: scenario_list_http
+      continue_on_error: true
+    - variables:
+        scenario_list_status: "{{ scenario_list_http.status | int(0) if scenario_list_http is mapping and scenario_list_http.status is defined else 0 }}"
+        scenario_list_content: >-
+          {{ (scenario_list_http.content if (scenario_list_http is mapping and scenario_list_http.content is defined and scenario_list_http.content is mapping)
+              else ((scenario_list_http.content | trim | from_json(default={}))
+                    if (scenario_list_http is mapping and scenario_list_http.content is defined and scenario_list_http.content is string and (scenario_list_http.content | trim) != '')
+                    else {})) }}
+    - if:
+        - condition: template
+          value_template: "{{ scenario_list_status < 200 or scenario_list_status >= 300 or scenario_list_content is not mapping }}"
+      then:
+        - service: system_log.write
+          data:
+            level: warning
+            logger: homeassistant.components.script.scenario_run
+            message: "scenario_run: ListScenarios failed; nothing was run"
+        - stop: "scenario list failed"
+    - variables:
+        scenario_id: >-
+          {%- set wanted = scenario_label | lower -%}
+          {%- set found = namespace(id='') -%}
+          {%- for scenario in scenario_list_content.get('scenarios', []) -%}
+          {%- if found.id == '' and scenario is mapping
+                and (scenario.get('label', '') | string | trim | lower) == wanted
+                and scenario.get('id') -%}
+          {%- set found.id = scenario.get('id') -%}
+          {%- endif -%}
+          {%- endfor -%}
+          {{ found.id | string | trim }}
+    - if:
+        - condition: template
+          value_template: "{{ scenario_id == '' }}"
+      then:
+        - service: system_log.write
+          data:
+            level: warning
+            logger: homeassistant.components.script.scenario_run
+            message: "scenario_run: no scenario matches the requested label"
+        - stop: "scenario label not found"
+    - variables:
+        scenario_idempotency_key: >-
+          {{ ('voice-scenario-' ~ context.id) if (context is defined and context.id is defined and context.id | string | trim != '') else '' }}
+    - service: rest_command.scenario_rpc
+      data:
+        method: "RunScenario"
+        payload_json: "{{ {'id': scenario_id, 'idempotencyKey': scenario_idempotency_key} | to_json }}"
+      response_variable: scenario_run_http
+      continue_on_error: true
+    - variables:
+        scenario_run_status: "{{ scenario_run_http.status | int(0) if scenario_run_http is mapping and scenario_run_http.status is defined else 0 }}"
+    - if:
+        - condition: template
+          value_template: "{{ scenario_run_status < 200 or scenario_run_status >= 300 }}"
+      then:
+        - service: system_log.write
+          data:
+            level: warning
+            logger: homeassistant.components.script.scenario_run
+            message: "scenario_run: RunScenario failed; the scenario was not queued"
 
 scheduler_rpc:
   alias: "Scheduler: Connect JSON RPC"

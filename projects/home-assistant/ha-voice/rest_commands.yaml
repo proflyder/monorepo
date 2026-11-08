@@ -36,6 +36,20 @@ scheduler_rpc:
   content_type: "application/json"
   timeout: 10
 
+# Same scheduler endpoint and bearer, different Connect service. Scenario
+# definitions live in home.v1.ScenarioService; HA only lists them and queues a
+# manual run.
+scenario_rpc:
+  url: "{{ states('input_text.scheduler_endpoint') | trim | regex_replace('/+$', '') }}/home.v1.ScenarioService/{{ method }}"
+  method: POST
+  headers:
+    Authorization: !secret scheduler_bearer
+    Content-Type: "application/json"
+    Connect-Protocol-Version: "1"
+  payload: "{{ '' }}{{ payload_json | to_json if payload_json is mapping else payload_json }}"
+  content_type: "application/json"
+  timeout: 10
+
 # wakegrant issuer (packages/contracts/wakegrant/PROTOCOL.md). Called right
 # before Wake-on-LAN so the machine can sign the owner in once, and before an
 # unlock so a running, locked PC can be unlocked once. The endpoint is a

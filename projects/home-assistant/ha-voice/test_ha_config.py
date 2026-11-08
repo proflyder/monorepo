@@ -334,46 +334,41 @@ class IntentTests(unittest.TestCase):
                         self.assertNotIn(normalized, seen, f"{phrase!r}: {seen.get(normalized)} and {intent}")
                         seen[normalized] = intent
 
-    def test_work_mode_turns_on_all_bedroom_lights(self):
-        self.assertIn("script.work_mode", services(INTENTS["StationWorkMode"]))
-        script = SCRIPTS["work_mode"]
-        dump = yaml.safe_dump(script, allow_unicode=True)
-        self.assertIn("light.turn_on", services(script))
-        for entity_id in (
-            "light.spalnia_lenta",
-            "light.yeelink_cn_827036414_bslamp2_s_2_light",
-            "light.yeelink_cn_919937191_lamp22_s_2",
-        ):
-            self.assertIn(entity_id, dump)
-
-        # The scenario must reproduce the captured live work settings, not just
-        # switch the lights on: full brightness and each device's own color
-        # temperature (the monitor light supports color_temp only).
-        captured = {
-            "light.spalnia_lenta": {"brightness": 255, "color_temp_kelvin": 2816},
-            "light.yeelink_cn_827036414_bslamp2_s_2_light": {
-                "brightness": 255,
-                "color_temp_kelvin": 2800,
-                "effect": "Day",
-            },
-            "light.yeelink_cn_919937191_lamp22_s_2": {
-                "brightness": 255,
-                "color_temp_kelvin": 2800,
-            },
+    def test_work_mode_intent_runs_the_native_scenario(self):
+        intent = INTENTS["StationWorkMode"]
+        self.assertTrue(
+            any(
+                step.get("service") == "script.scenario_run"
+                and step.get("data", {}).get("label") == "Сел работать"
+                for step in intent["action"]
+            ),
+            "StationWorkMode must queue the native «Сел работать» scenario",
+        )
+        # The native definitions live in the scheduler, not in HA YAML.
+        self.assertNotIn("work_mode", SCRIPTS)
+        definitions = load_yaml(
+            ROOT / "projects" / "home" / "kubernetes" / "scheduler" / "scenarios" / "work_mode.json"
+        )
+        self.assertEqual(definitions["label"], "Сел работать")
+        applied = {
+            step["catalog"]["entryId"]: json.loads(step["catalog"]["paramsJson"])
+            for step in definitions["steps"]
         }
-        applied: dict[str, dict[str, Any]] = {}
-        for step in script["sequence"]:
-            if step.get("service") != "light.turn_on":
-                continue
-            entity_id = step["target"]["entity_id"]
-            self.assertIn(entity_id, captured, f"unexpected work_mode entity {entity_id}")
-            self.assertNotIn(entity_id, applied, f"duplicate work_mode step for {entity_id}")
-            applied[entity_id] = step.get("data", {})
-        self.assertEqual(set(applied), set(captured), "work_mode must address every captured light")
-        for entity_id, settings in captured.items():
-            for key, value in settings.items():
-                self.assertEqual(applied[entity_id].get(key), value, f"{entity_id} {key}")
-
+        self.assertEqual(
+            applied,
+            {
+                "light.spalnia_lenta": {"brightness": 100, "kelvin": 2816},
+                "light.yeelink_cn_827036414_bslamp2_s_2_light": {
+                    "brightness": 100,
+                    "kelvin": 2800,
+                    "effect": "Day",
+                },
+                "light.yeelink_cn_919937191_lamp22_s_2": {
+                    "brightness": 100,
+                    "kelvin": 2800,
+                },
+            },
+        )
         phrases = {
             phrase
             for item in yaml.safe_load(
@@ -384,17 +379,32 @@ class IntentTests(unittest.TestCase):
         self.assertIn("я сел работать", phrases)
         self.assertIn("включи рабочий режим", phrases)
 
-    def test_blackout_turns_off_all_bedroom_lights(self):
-        self.assertIn("script.blackout", services(INTENTS["StationBlackout"]))
-        script = SCRIPTS["blackout"]
-        dump = yaml.safe_dump(script, allow_unicode=True)
-        self.assertIn("light.turn_off", services(script))
-        for entity_id in (
-            "light.spalnia_lenta",
-            "light.yeelink_cn_827036414_bslamp2_s_2_light",
-            "light.yeelink_cn_919937191_lamp22_s_2",
-        ):
-            self.assertIn(entity_id, dump)
+    def test_blackout_intent_runs_the_native_scenario(self):
+        intent = INTENTS["StationBlackout"]
+        self.assertTrue(
+            any(
+                step.get("service") == "script.scenario_run"
+                and step.get("data", {}).get("label") == "Блэкаут"
+                for step in intent["action"]
+            ),
+            "StationBlackout must queue the native «Блэкаут» scenario",
+        )
+        self.assertNotIn("blackout", SCRIPTS)
+        definitions = load_yaml(
+            ROOT / "projects" / "home" / "kubernetes" / "scheduler" / "scenarios" / "blackout.json"
+        )
+        self.assertEqual(definitions["label"], "Блэкаут")
+        self.assertEqual(
+            [
+                (step["catalog"]["entryId"], step["catalog"]["action"])
+                for step in definitions["steps"]
+            ],
+            [
+                ("light.spalnia_lenta", "turn_off"),
+                ("light.yeelink_cn_827036414_bslamp2_s_2_light", "turn_off"),
+                ("light.yeelink_cn_919937191_lamp22_s_2", "turn_off"),
+            ],
+        )
         phrases = {
             phrase
             for item in yaml.safe_load(
@@ -412,6 +422,22 @@ class IntentTests(unittest.TestCase):
             "блак аут",
         ):
             self.assertIn(phrase, phrases)
+
+    def test_scenario_run_resolves_label_and_queues_a_manual_run(self):
+        script = SCRIPTS["scenario_run"]
+        dump = yaml.safe_dump(script, allow_unicode=True)
+        self.assertIn("label", script["fields"])
+        self.assertIn("script.scenario_run", str(services(INTENTS["StationWorkMode"])))
+        self.assertIn("rest_command.scenario_rpc", services(script))
+        self.assertIn("ListScenarios", dump)
+        self.assertIn("RunScenario", dump)
+        # Definitions live in the scheduler: HA must not edit or create them.
+        for forbidden in ("CreateScenario", "UpdateScenario", "DeleteScenario"):
+            self.assertNotIn(forbidden, dump)
+        # An unknown label is a warning, never a guess or a silent HA action.
+        self.assertIn("system_log.write", services(script))
+        self.assertIn("idempotencyKey", dump)
+        self.assertIn("context.id", dump)
 
     def test_light_commands_are_local_and_target_known_lights(self):
         control = yaml.safe_load(

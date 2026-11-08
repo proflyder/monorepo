@@ -2,12 +2,16 @@ StationWorkMode:
   speech:
     text: "Включаю всё освещение в спальне."
   action:
-    - service: script.work_mode
+    - service: script.scenario_run
+      data:
+        label: "Сел работать"
 StationBlackout:
   speech:
     text: "Выключаю всё освещение в спальне."
   action:
-    - service: script.blackout
+    - service: script.scenario_run
+      data:
+        label: "Блэкаут"
 StationVoiceProfileWork:
   speech:
     text: "Рабочий профиль."

@@ -12,14 +12,17 @@
 - «включи/выключи лампу» (ночник, лампа у кровати), «светильник», «ленту»
   — локальные `StationLightOn/Off`, без Hermes;
 - «я сел работать» / «включи рабочий режим» — `StationWorkMode` →
-  `script.work_mode`: включает ленту, лампу у кровати и светильник на мониторе
-  в снятых рабочих параметрах — яркость 255 (100%) у всех трёх, цветовая
+  `script.scenario_run` с меткой «Сел работать»: нативный сценарий scheduler
+  (`home.v1.ScenarioService`) включает ленту, лампу у кровати и светильник на
+  мониторе в снятых рабочих параметрах — яркость 100% у всех трёх, цветовая
   температура 2816 K у ленты и 2800 K у лампы и светильника (светильник
   поддерживает только `color_temp`), у лампы также её белый режим
-  `effect: Day`;
+  `effect: Day`. Определение — `scheduler/scenarios/work_mode.json`;
 - «black out» / «blackout» / «блэкаут» / «блэк аут» — `StationBlackout` →
-  `script.blackout`: выключает те же три светильника. ASR-варианты
-  «блок аут», «блок-аут», «блак аут» тоже распознаются;
+  `script.scenario_run` с меткой «Блэкаут»: нативный сценарий scheduler
+  выключает те же три светильника. ASR-варианты «блок аут», «блок-аут»,
+  «блак аут» тоже распознаются. Определение —
+  `scheduler/scenarios/blackout.json`;
 - «рабочий профиль» / «включи рабочий профиль» / «переключи на рабочий
   профиль» — локальный `StationVoiceProfileWork` → `Рабочий` в
   `input_select.ricardo_voice_profile`; «личный профиль» и аналоги —
@@ -154,6 +157,7 @@ Pulsar (Алиса)
       ├── media_player.media_pause/play/stop → MA Pulsar
       ├── browse_media → play_media Liked Songs
       ├── scheduler_* → SchedulerService Connect JSON (canonical state)
+      ├── scenario_run → ScenarioService Connect JSON (native scenarios)
       └── alarm_* → audio executor path (start/announce/ramp/stop/restore)
 ```
 
@@ -173,6 +177,31 @@ so voice snooze/stop target the correct schedule id without guessing.
 - Endpoint: `GET /status`, `POST /gateway/on|off`,
   `POST /bluetooth/on|off`.
 
+## Бытовые сценарии: нативные определения scheduler
+
+«Блэкаут» и «Сел работать» — не HA-скрипты, а определения
+`home.v1.ScenarioService`: scheduler хранит их, `ha-scenario` исполняет шаги
+`catalog` из живого каталога HA. Голос не выбирает светильники и не пишет
+определения: `script.scenario_run` вызывает `ListScenarios`, находит сценарий
+по точной метке (без учёта регистра) и ставит один `RunScenario` с
+idempotency key от `context.id`. Метка не найдена или scheduler недоступен —
+только `system_log` warning, без угадывания id и без действий в HA.
+
+```text
+«блэкаут» → StationBlackout → script.scenario_run(label="Блэкаут")
+  → ListScenarios → RunScenario → scenario.fire (очередь scenario)
+  → ha-scenario → catalog turn_off ×3
+```
+
+Определения и идемпотентный сид — `projects/home/kubernetes/scheduler/scenarios/`
+(`blackout.json`, `work_mode.json`, `seed.mjs`). Сид создаёт только
+отсутствующие по метке сценарии и никогда не перезаписывает существующие:
+владелец может менять их в приложении. Эти нативные сценарии не попадают в
+каталог `ha-control` (`GET /v1/catalog` строится только из HA), поэтому в
+разделе «Сценарии» приложения они появятся только после клиента, читающего
+`ScenarioService`; там сейчас остаются HA-скрипты с меткой `scenario`
+(`wake_false_alarm`, `wake_missed`).
+
 ## Файлы
 
 - `rest_commands.yaml` — station HTTP, `scheduler_rpc` Connect JSON,
@@ -184,8 +213,9 @@ so voice snooze/stop target the correct schedule id without guessing.
 - `scripts.yaml` — Music, audio executor (`alarm_start` /
   `alarm_announce` / `alarm_loop` / `alarm_ramp` / `alarm_stop` /
   `alarm_restore` / `alarm_resume`), canonical `scheduler_*` /
-  `schedule_*` client, notes, scenarios (`work_mode`, `blackout`,
-  `wake_false_alarm`, `wake_missed`)
+  `schedule_*` client, notes, `scenario_run` (запуск нативного сценария
+  scheduler по метке), HA-сценарии обучения Рикардо (`wake_false_alarm`,
+  `wake_missed`; они остаются скриптами с меткой `scenario`)
 - `automations.yaml` — music route follows source, action-button stop,
   assist-satellite watchdog
 - `schedules_dashboard.yaml` — dashboard «Помощник» (read-only pointers;

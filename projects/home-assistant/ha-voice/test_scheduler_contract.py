@@ -1564,5 +1564,63 @@ class SingleWriterTests(unittest.TestCase):
         self.assertIn("удали будильник", delete_phrases)
 
 
+class ScenarioRunContractTests(unittest.TestCase):
+    """script.scenario_run resolves a native scheduler scenario by label."""
+
+    def _scenario_id(self, label: str, scenarios: list[dict]) -> str:
+        context = {
+            **BASE_CONTEXT,
+            "scenario_label": label,
+            "scenario_list_content": {"scenarios": scenarios},
+        }
+        return render_variables(SCRIPTS["scenario_run"], "scenario_id", context)[
+            "scenario_id"
+        ]
+
+    def test_matches_the_exact_label_case_insensitively(self):
+        rows = [
+            {"id": "scn-blackout", "label": "Блэкаут"},
+            {"id": "scn-work", "label": " Сел работать "},
+        ]
+        self.assertEqual(self._scenario_id("сел РАБОТАТЬ", rows), "scn-work")
+        self.assertEqual(self._scenario_id("блэкаут", rows), "scn-blackout")
+
+    def test_an_unknown_or_partial_label_returns_empty_instead_of_guessing(self):
+        rows = [{"id": "scn-blackout", "label": "Блэкаут"}]
+        self.assertEqual(self._scenario_id("блок аут", rows), "")
+        self.assertEqual(self._scenario_id("Блэк", rows), "")
+
+    def test_list_entries_without_id_are_not_a_match(self):
+        rows = [{"label": "Блэкаут"}]
+        self.assertEqual(self._scenario_id("Блэкаут", rows), "")
+
+    def test_idempotency_key_comes_from_the_call_context(self):
+        context = {**BASE_CONTEXT, "scenario_id": "scn-blackout"}
+        rendered = render_variables(
+            SCRIPTS["scenario_run"], "scenario_idempotency_key", context
+        )["scenario_idempotency_key"]
+        self.assertEqual(rendered, "voice-scenario-ctx-test-1")
+
+    def test_run_request_is_connect_json_with_a_camel_case_key(self):
+        context = {
+            **BASE_CONTEXT,
+            "scenario_id": "scn-blackout",
+            "scenario_idempotency_key": "ctx-1",
+        }
+        script = SCRIPTS["scenario_run"]
+        request = None
+        for step in script["sequence"]:
+            data = step.get("data") or {}
+            if data.get("method") == "RunScenario":
+                request = render(data["payload_json"], context)
+        self.assertIsNotNone(request)
+        if not isinstance(request, str):
+            request = json.dumps(request)
+        self.assertEqual(
+            json.loads(request),
+            {"id": "scn-blackout", "idempotencyKey": "ctx-1"},
+        )
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

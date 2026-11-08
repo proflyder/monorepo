@@ -1,0 +1,32 @@
+{
+  "slug": "blackout",
+  "label": "Блэкаут",
+  "description": "Выключает все светильники спальни: ленту, лампу у кровати и светильник на мониторе.",
+  "enabled": true,
+  "triggers": [{ "manual": {} }],
+  "conditions": [],
+  "steps": [
+    {
+      "catalog": {
+        "entryId": "light.spalnia_lenta",
+        "action": "turn_off",
+        "paramsJson": "{}"
+      }
+    },
+    {
+      "catalog": {
+        "entryId": "light.yeelink_cn_827036414_bslamp2_s_2_light",
+        "action": "turn_off",
+        "paramsJson": "{}"
+      }
+    },
+    {
+      "catalog": {
+        "entryId": "light.yeelink_cn_919937191_lamp22_s_2",
+        "action": "turn_off",
+        "paramsJson": "{}"
+      }
+    }
+  ],
+  "continueOnError": true
+}

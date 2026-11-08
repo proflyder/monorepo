@@ -55,6 +55,7 @@ manifests/control-service.yaml  ha-control ClusterIP + NodePort
 manifests/scenario.yaml         ha-scenario ledger PVC + executor Deployment
 manifests/preflight-job.yaml    in-cluster cutover preflight Job (template)
 manifests/external-secrets.yaml ExternalSecrets for scheduler-auth/ha-bridge-ha
+scenarios/                      household scenario definitions + idempotent seed
 nft/scheduler-nodeport.nft      NodePort source filter (template, host config)
 nft/apply.sh                    install/refresh that filter as root on the node
 scheduler.env.example           placeholders; copy to secrets/home/scheduler.env
@@ -173,6 +174,20 @@ and a separate `/data/scenario-ledger.json` on PVC `ha-scenario-data`.
   `SCENARIO_EXECUTION=true` flag, set in `manifests/scheduler.yaml`.
 - Disable: `kubectl -n home-assistant scale deployment/ha-scenario --replicas=0`
   or `set env ... SCENARIO_EXECUTE=false`; reruns preserve both.
+
+Household definitions («Блэкаут», «Сел работать») live in
+`scenarios/*.json` and are seeded idempotently by label:
+
+```bash
+SCHEDULER_URL=http://<node>:30098 SCHEDULER_TOKEN_FILE=secrets/home/scheduler.token \
+  node projects/home/kubernetes/scheduler/scenarios/seed.mjs [--dry-run]
+node --test projects/home/kubernetes/scheduler/scenarios/seed.test.mjs
+```
+
+The seed reads `ListScenarios`, creates only labels that are still missing
+(`idempotencyKey=seed-<slug>`) and never overwrites an existing definition,
+because the owner may edit it in the app. Renaming a scenario label breaks the
+voice command: HA resolves scenarios by exact label, case-insensitively.
 
 Endpoints (private values in `secrets/home/scheduler.env`):
 
