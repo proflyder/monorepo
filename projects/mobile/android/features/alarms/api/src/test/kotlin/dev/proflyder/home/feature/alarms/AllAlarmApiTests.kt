@@ -8,5 +8,6 @@ import org.junit.runners.Suite
     AlarmValidationTest::class,
     AlarmEditorDraftCodecTest::class,
     AlarmSchedulingTest::class,
+    AlarmEditorTimeTest::class,
 )
 class AllAlarmApiTests

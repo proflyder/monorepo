@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Only the alarm editor quick-offset presets are translated today; the rest of
+  the alarms UI is English-only (see the Android README). Add the remaining
+  alarms_* keys here when the whole feature is localized.
+-->
+<resources>
+    <string name="alarms_quick_offset_15">+15 мин</string>
+    <string name="alarms_quick_offset_30">+30 мин</string>
+    <string name="alarms_quick_offset_60">+1 ч</string>
+    <string name="alarms_quick_offset_90">+1,5 ч</string>
+    <string name="alarms_quick_offset_120">+2 ч</string>
+</resources>

@@ -20,13 +20,16 @@ import dev.proflyder.home.feature.alarms.AlarmDraft
 import dev.proflyder.home.feature.alarms.AlarmEditorCompletion
 import dev.proflyder.home.feature.alarms.AlarmEditorDraft
 import dev.proflyder.home.feature.alarms.AlarmEditorDraftCodec
+import dev.proflyder.home.feature.alarms.defaultAlarmTime
 import dev.proflyder.home.feature.alarms.domain.DeleteAlarm
 import dev.proflyder.home.feature.alarms.domain.LoadAlarm
 import dev.proflyder.home.feature.alarms.domain.SaveAlarm
+import dev.proflyder.home.feature.alarms.quickOffsetTime
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesIntoSet
 import dev.zacsweers.metro.Inject
 import java.time.LocalDate
+import java.time.LocalDateTime
 import java.time.ZoneId
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -36,8 +39,8 @@ data class AlarmEditorUiState(
     val saving: Boolean = false,
     val existing: Schedule? = null,
     val label: String = "",
-    val hour: Int = 7,
-    val minute: Int = 0,
+    val hour: Int = defaultAlarmTime(LocalDateTime.now()).hour,
+    val minute: Int = defaultAlarmTime(LocalDateTime.now()).minute,
     val timezone: String = ZoneId.systemDefault().id,
     val repeat: RepeatKind = RepeatKind.DAILY,
     val weekdays: Set<Int> = emptySet(),
@@ -117,6 +120,15 @@ class AlarmEditorViewModel(
     fun setLabel(value: String) = edit { it.copy(label = value) }
 
     fun setTime(hour: Int, minute: Int) = edit { it.copy(hour = hour, minute = minute) }
+
+    /**
+     * Applies a quick "now + N" preset from [dev.proflyder.home.feature.alarms.ALARM_QUICK_OFFSETS_MINUTES].
+     * The offset is measured from the current time in the alarm's timezone, matching
+     * a manual time pick for repeat days and the one-shot date.
+     */
+    fun applyQuickOffset(offsetMinutes: Int) = edit {
+        it.withQuickOffset(LocalDateTime.now(zoneOrSystem(it.timezone)), offsetMinutes)
+    }
 
     fun setTimezone(value: String) = edit { it.copy(timezone = value) }
 
@@ -306,6 +318,18 @@ class AlarmEditorViewModelFactoryContributor(
 internal fun restoreState(savedState: SavedStateHandle): AlarmEditorUiState =
     AlarmEditorDraftCodec.fromMap(savedState.keys().associateWith { key -> savedState.get<Any?>(key) })?.toUiState()
         ?: AlarmEditorUiState()
+
+/**
+ * Applies a quick "now + offset" preset. Extracted from the ViewModel so the
+ * "counted from now, not from the field" rule is unit-tested on the JVM.
+ */
+internal fun AlarmEditorUiState.withQuickOffset(
+    now: LocalDateTime,
+    offsetMinutes: Int,
+): AlarmEditorUiState {
+    val time = quickOffsetTime(now, offsetMinutes)
+    return copy(hour = time.hour, minute = time.minute)
+}
 
 private fun AlarmEditorDraft.toUiState(): AlarmEditorUiState = AlarmEditorUiState(
     existing = restoredExisting(),
