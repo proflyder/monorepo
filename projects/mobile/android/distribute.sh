@@ -3,12 +3,13 @@
 #
 # Runs locally and in the `android-distribute` job of `.github/workflows/ci.yml`
 # (pull requests only). Requires the private files
-#   platform/android/keys/home-debug.keystore
+#   secrets/android/home-release.keystore        (and its password files)
 #   platform/android/keys/google-services.json
-# (see projects/mobile/android/README.md). CI materialises both from OpenBao;
-# locally they are links under secrets/android/. The APK must be signed with
-# the personal debug key: distributing the public fallback key would produce
-# builds that cannot update an existing install.
+# (see projects/mobile/android/README.md). CI materialises them from OpenBao;
+# locally `mise run secrets:file android/home-release.keystore` restores them
+# from OpenBao. Bazel only produces a debug-signed APK; the release key is
+# applied to that artifact by `platform/android/sign-release.sh`, which also
+# refuses to publish a build whose signer certificate is unexpected.
 #
 # Authentication uses an existing `npx firebase-tools login` session or
 # GOOGLE_APPLICATION_CREDENTIALS (a service-account JSON). Credentials are
@@ -23,15 +24,15 @@
 set -euo pipefail
 
 FIREBASE_TOOLS_VERSION="15.34.2"
-CERT_SHA256="88ef5d61a365afbf15d290168d4ee7fd20a80be13ea4d4667ef1e521a2a504ad"
 APP_ID_PACKAGE="dev.proflyder.home"
 TESTER_GROUP="${HOME_TESTERS_GROUP:-admins}"
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
-ANDROID_DIR="$ROOT/projects/mobile/android"
-KEYSTORE_LINK="$ROOT/platform/android/keys/home-debug.keystore"
 GOOGLE_SERVICES_LINK="$ROOT/platform/android/keys/google-services.json"
 APK="$ROOT/bazel-bin/projects/mobile/android/app/app.apk"
+RELEASE_APK="$ROOT/bazel-bin/projects/mobile/android/app/app-release.apk"
+SIGN_SCRIPT="$ROOT/platform/android/sign-release.sh"
+SECRETS_ANDROID="$ROOT/secrets/android"
 
 DRY_RUN=0
 CI_MODE=0
@@ -50,11 +51,38 @@ for argument in "$@"; do
   esac
 done
 
-if [[ ! -e "$KEYSTORE_LINK" ]]; then
-  echo "Missing $KEYSTORE_LINK" >&2
-  echo "Link secrets/android/home-debug.keystore to it; see projects/mobile/android/README.md." >&2
+# Release signing material. CI passes it as environment variables; locally the
+# files live in the gitignored secrets/android/ and are restored with
+# `mise run secrets:file android/<name>`. Values are never printed.
+SIGNING_KEYSTORE="${SIGNING_KEYSTORE:-$SECRETS_ANDROID/home-release.keystore}"
+SIGNING_STORE_PASSWORD_FILE="${SIGNING_STORE_PASSWORD_FILE:-$SECRETS_ANDROID/home-release.store.password}"
+SIGNING_KEY_PASSWORD_FILE="${SIGNING_KEY_PASSWORD_FILE:-$SECRETS_ANDROID/home-release.key.password}"
+SIGNING_KEY_ALIAS_FILE="${SIGNING_KEY_ALIAS_FILE:-$SECRETS_ANDROID/home-release.alias}"
+SIGNING_CERT_SHA256_FILE="${SIGNING_CERT_SHA256_FILE:-$SECRETS_ANDROID/home-release.cert.sha256}"
+if [[ -z "${SIGNING_KEY_ALIAS:-}" && -f "$SIGNING_KEY_ALIAS_FILE" ]]; then
+  SIGNING_KEY_ALIAS="$(tr -d '[:space:]' < "$SIGNING_KEY_ALIAS_FILE")"
+fi
+if [[ -z "${SIGNING_CERT_SHA256:-}" && -f "$SIGNING_CERT_SHA256_FILE" ]]; then
+  SIGNING_CERT_SHA256="$(tr -d '[:space:]' < "$SIGNING_CERT_SHA256_FILE")"
+fi
+export SIGNING_KEYSTORE SIGNING_STORE_PASSWORD_FILE SIGNING_KEY_PASSWORD_FILE
+export SIGNING_KEY_ALIAS="${SIGNING_KEY_ALIAS:-}"
+export SIGNING_CERT_SHA256="${SIGNING_CERT_SHA256:-}"
+
+SIGNING_READY=1
+for required in "$SIGNING_KEYSTORE" "$SIGNING_STORE_PASSWORD_FILE" "$SIGNING_KEY_PASSWORD_FILE"; do
+  [[ -f "$required" ]] || SIGNING_READY=0
+done
+[[ -n "$SIGNING_CERT_SHA256" ]] || SIGNING_READY=0
+if [[ "$SIGNING_READY" -eq 0 && "$DRY_RUN" -eq 0 ]]; then
+  echo "Missing release signing material." >&2
+  echo "Expected keystore $SIGNING_KEYSTORE, password files next to it, and a signer SHA-256" >&2
+  echo "($SIGNING_CERT_SHA256_FILE or SIGNING_CERT_SHA256)." >&2
+  echo "Restore the files with 'mise run secrets:file android/home-release.keystore' (and the rest);" >&2
+  echo "see projects/mobile/android/README.md." >&2
   exit 1
 fi
+
 if [[ ! -e "$GOOGLE_SERVICES_LINK" ]]; then
   echo "Missing $GOOGLE_SERVICES_LINK" >&2
   echo "Link secrets/android/google-services.json to it; see projects/mobile/android/README.md." >&2
@@ -63,7 +91,7 @@ fi
 
 export ANDROID_HOME="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-$HOME/Library/Android/sdk}}"
 BUILD_TOOLS="${ANDROID_BUILD_TOOLS:-$ANDROID_HOME/build-tools/36.0.0}"
-for tool in apksigner aapt2; do
+for tool in apksigner zipalign; do
   if [[ ! -x "$BUILD_TOOLS/$tool" ]]; then
     echo "Missing $BUILD_TOOLS/$tool (set ANDROID_BUILD_TOOLS)." >&2
     exit 1
@@ -102,12 +130,14 @@ if [[ ! -f "$APK" ]]; then
   exit 1
 fi
 
-SIGNER_SHA256="$("$BUILD_TOOLS/apksigner" verify --print-certs "$APK" \
-  | sed -n 's/^Signer #1 certificate SHA-256 digest: //p')"
-if [[ "$SIGNER_SHA256" != "$CERT_SHA256" ]]; then
-  echo "Refusing to distribute: APK signer is $SIGNER_SHA256" >&2
-  echo "Expected the personal debug key ($CERT_SHA256). The public fallback key cannot update an existing install." >&2
-  exit 1
+if [[ "$SIGNING_READY" -eq 1 ]]; then
+  echo "Signing the APK with the release key"
+  "$SIGN_SCRIPT" "$APK" "$RELEASE_APK"
+  UPLOAD_APK="$RELEASE_APK"
+else
+  echo "Dry run: release signing material is absent; would run"
+  echo "  platform/android/sign-release.sh $APK $RELEASE_APK"
+  UPLOAD_APK="$RELEASE_APK"
 fi
 
 APP_ID="$(python3 - "$GOOGLE_SERVICES_LINK" "$APP_ID_PACKAGE" <<'PY'
@@ -155,14 +185,16 @@ else
   RELEASE_NOTES="$RELEASE_NOTES"$'\n'"$(git -C "$ROOT" log --oneline -5)"
 fi
 
-echo "APK signer verified: $SIGNER_SHA256"
+if [[ "$SIGNING_READY" -eq 1 ]]; then
+  echo "Release APK signed and verified: $RELEASE_APK"
+fi
 echo "Firebase app: $APP_ID, group: $TESTER_GROUP"
 echo "Release notes:"
 printf '%s\n' "$RELEASE_NOTES" | sed 's/^/  /'
 
 FIREBASE_ARGS=(
   "--yes" "firebase-tools@$FIREBASE_TOOLS_VERSION"
-  appdistribution:distribute "$APK"
+  appdistribution:distribute "$UPLOAD_APK"
   --app "$APP_ID"
   --groups "$TESTER_GROUP"
   --release-notes "$RELEASE_NOTES"

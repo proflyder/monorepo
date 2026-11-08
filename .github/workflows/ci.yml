@@ -213,9 +213,10 @@ jobs:
           cache-save: ${{ github.event_name != 'pull_request' }}
 
       # Restore-only: reuse the warm disk cache the `android` job (_android.yml)
-      # maintains on develop, so this rebuild only redoes the actions the
-      # personal key, google-services and versionCode change (resources,
-      # manifest, packaging, signing) instead of compiling from scratch.
+      # maintains on develop, so this rebuild only redoes the actions that
+      # google-services and versionCode change (resources, manifest, packaging)
+      # instead of compiling from scratch. The release key is applied after
+      # Bazel, so it does not invalidate any Bazel action.
       - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
@@ -297,18 +298,27 @@ jobs:
           jwtGithubAudience: ${{ env.OPENBAO_ADDR }}
           exportEnv: false
           secrets: |
-            secret/data/ci/android-distribute keystore_b64 | KEYSTORE_B64 ;
-            secret/data/ci/android-distribute keystore_password | KEYSTORE_PASSWORD ;
+            secret/data/ci/android-distribute signing_keystore_b64 | SIGNING_KEYSTORE_B64 ;
+            secret/data/ci/android-distribute signing_store_password | SIGNING_STORE_PASSWORD ;
+            secret/data/ci/android-distribute signing_key_password | SIGNING_KEY_PASSWORD ;
+            secret/data/ci/android-distribute signing_key_alias | SIGNING_KEY_ALIAS ;
+            secret/data/ci/android-distribute signing_cert_sha256 | SIGNING_CERT_SHA256 ;
             secret/data/ci/android-distribute google_services_json | GOOGLE_SERVICES_JSON ;
             secret/data/ci/android-distribute firebase_service_account_json | FIREBASE_SERVICE_ACCOUNT_JSON
 
-      # Materialise the private files into the checkout and $RUNNER_TEMP. The
-      # Bazel genrules pick up platform/android/keys/* exactly like the local
-      # symlinks do. Nothing here prints a value.
+      # Materialise the private files into the checkout and $RUNNER_TEMP.
+      # Bazel needs google-services.json under platform/android/keys/ exactly
+      # like the local symlink. The release key is deliberately NOT there:
+      # Bazel output stays debug-signed and only `sign-release.sh` applies the
+      # release key, to the final APK. Passwords land in files with mode 600 and
+      # are never written to the environment or to a log.
       - name: Materialise Android signing files
         env:
-          KEYSTORE_B64: ${{ steps.openbao.outputs.KEYSTORE_B64 }}
-          KEYSTORE_PASSWORD: ${{ steps.openbao.outputs.KEYSTORE_PASSWORD }}
+          SIGNING_KEYSTORE_B64: ${{ steps.openbao.outputs.SIGNING_KEYSTORE_B64 }}
+          SIGNING_STORE_PASSWORD: ${{ steps.openbao.outputs.SIGNING_STORE_PASSWORD }}
+          SIGNING_KEY_PASSWORD: ${{ steps.openbao.outputs.SIGNING_KEY_PASSWORD }}
+          SIGNING_KEY_ALIAS: ${{ steps.openbao.outputs.SIGNING_KEY_ALIAS }}
+          SIGNING_CERT_SHA256: ${{ steps.openbao.outputs.SIGNING_CERT_SHA256 }}
           GOOGLE_SERVICES_JSON: ${{ steps.openbao.outputs.GOOGLE_SERVICES_JSON }}
           FIREBASE_SERVICE_ACCOUNT_JSON: ${{ steps.openbao.outputs.FIREBASE_SERVICE_ACCOUNT_JSON }}
         run: |
@@ -317,29 +327,36 @@ jobs:
           umask 077
           KEYS_DIR="platform/android/keys"
           CI_DIR="$RUNNER_TEMP/ci"
-          for value in KEYSTORE_B64 KEYSTORE_PASSWORD GOOGLE_SERVICES_JSON \
-                       FIREBASE_SERVICE_ACCOUNT_JSON; do
+          SIGNING_DIR="$CI_DIR/signing"
+          for value in SIGNING_KEYSTORE_B64 SIGNING_STORE_PASSWORD \
+                       SIGNING_KEY_PASSWORD SIGNING_KEY_ALIAS SIGNING_CERT_SHA256 \
+                       GOOGLE_SERVICES_JSON FIREBASE_SERVICE_ACCOUNT_JSON; do
             if [[ -z "${!value:-}" ]]; then
               echo "OpenBao returned an empty $value" >&2
               exit 1
             fi
           done
-          # rules_android signs debug APKs with `--ks-pass pass:android`.
-          # Fail before building if the stored password drifted from that
-          # contract, without printing either value.
-          if [[ "$KEYSTORE_PASSWORD" != "android" ]]; then
-            echo "keystore_password must be 'android' for the Bazel signing flow" >&2
-            exit 1
-          fi
-          mkdir -p "$KEYS_DIR"
-          printf '%s' "$KEYSTORE_B64" | base64 -d > "$KEYS_DIR/home-debug.keystore"
+          mkdir -p "$KEYS_DIR" "$SIGNING_DIR"
+          chmod 700 "$CI_DIR" "$SIGNING_DIR"
           printf '%s' "$GOOGLE_SERVICES_JSON" > "$KEYS_DIR/google-services.json"
-          chmod 600 "$KEYS_DIR/home-debug.keystore" "$KEYS_DIR/google-services.json"
-          mkdir -p "$CI_DIR"
-          chmod 700 "$CI_DIR"
+          chmod 600 "$KEYS_DIR/google-services.json"
+          printf '%s' "$SIGNING_KEYSTORE_B64" | base64 -d > "$SIGNING_DIR/home-release.keystore"
+          printf '%s' "$SIGNING_STORE_PASSWORD" > "$SIGNING_DIR/store.password"
+          printf '%s' "$SIGNING_KEY_PASSWORD" > "$SIGNING_DIR/key.password"
+          printf '%s' "$SIGNING_KEY_ALIAS" > "$SIGNING_DIR/alias"
+          printf '%s' "$SIGNING_CERT_SHA256" > "$SIGNING_DIR/cert.sha256"
+          chmod 600 "$SIGNING_DIR"/*
           printf '%s' "$FIREBASE_SERVICE_ACCOUNT_JSON" > "$CI_DIR/firebase-sa.json"
           chmod 600 "$CI_DIR/firebase-sa.json"
-          echo "GOOGLE_APPLICATION_CREDENTIALS=$CI_DIR/firebase-sa.json" >> "$GITHUB_ENV"
+          # Only paths go to later steps' environment; the values stay in files.
+          {
+            echo "SIGNING_KEYSTORE=$SIGNING_DIR/home-release.keystore"
+            echo "SIGNING_STORE_PASSWORD_FILE=$SIGNING_DIR/store.password"
+            echo "SIGNING_KEY_PASSWORD_FILE=$SIGNING_DIR/key.password"
+            echo "SIGNING_KEY_ALIAS_FILE=$SIGNING_DIR/alias"
+            echo "SIGNING_CERT_SHA256_FILE=$SIGNING_DIR/cert.sha256"
+            echo "GOOGLE_APPLICATION_CREDENTIALS=$CI_DIR/firebase-sa.json"
+          } >> "$GITHUB_ENV"
           echo "Android signing files prepared"
 
       # The OpenBao token is short-lived and Maven/Firebase use the public
@@ -376,8 +393,7 @@ jobs:
         if: always()
         run: |
           set +e
-          rm -f platform/android/keys/home-debug.keystore \
-                platform/android/keys/google-services.json
+          rm -f platform/android/keys/google-services.json
           rmdir platform/android/keys 2>/dev/null
           rm -rf "$RUNNER_TEMP/ci"
           if [[ -f "$RUNNER_TEMP/openconnect.pid" ]]; then

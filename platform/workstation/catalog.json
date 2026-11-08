@@ -2,7 +2,7 @@
  "comment": "Public map of OpenBao KV v2 (mount `secret`): names only, never values. paths: every path with purpose and consumer (checked by `mise run secrets:check`). pull: files `mise run secrets:pull` writes on a workstation (~ = home, else repo-relative). files: legacy secrets/<file> restored on demand by `mise run secrets:file`.",
  "paths": {
   "ci/android-distribute": {
-   "purpose": "Android: APK signing keystore, Firebase App Distribution",
+   "purpose": "Android: APK release signing key, passwords, alias and certificate; Firebase App Distribution",
    "consumer": "CI android-distribute (OIDC)"
   },
   "ci/deploy-home": {
@@ -326,6 +326,36 @@
    "path": "ci/android-distribute",
    "field": "keystore_b64",
    "encoding": "b64"
+  },
+  {
+   "file": "android/home-release.keystore",
+   "path": "ci/android-distribute",
+   "field": "signing_keystore_b64",
+   "encoding": "b64"
+  },
+  {
+   "file": "android/home-release.store.password",
+   "path": "ci/android-distribute",
+   "field": "signing_store_password",
+   "encoding": "text"
+  },
+  {
+   "file": "android/home-release.key.password",
+   "path": "ci/android-distribute",
+   "field": "signing_key_password",
+   "encoding": "text"
+  },
+  {
+   "file": "android/home-release.alias",
+   "path": "ci/android-distribute",
+   "field": "signing_key_alias",
+   "encoding": "text"
+  },
+  {
+   "file": "android/home-release.cert.sha256",
+   "path": "ci/android-distribute",
+   "field": "signing_cert_sha256",
+   "encoding": "text"
   },
   {
    "file": "certs/emudhra-ca.crt",
