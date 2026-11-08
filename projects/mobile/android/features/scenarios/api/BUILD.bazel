@@ -1,0 +1,26 @@
+load("@rules_kotlin//kotlin:jvm.bzl", "kt_jvm_library", "kt_jvm_test")
+
+package(default_visibility = ["//visibility:public"])
+
+kt_jvm_library(
+    name = "api",
+    srcs = glob(["src/main/kotlin/**/*.kt"]),
+    deps = [
+        "//packages/kotlin/core",
+        "//projects/mobile/android/core/model",
+        "@maven//:org_jetbrains_kotlinx_kotlinx_serialization_json",
+    ],
+)
+
+kt_jvm_test(
+    name = "api_test",
+    srcs = glob(["src/test/kotlin/**/*.kt"]),
+    test_class = "dev.proflyder.home.feature.scenarios.AllScenarioApiTests",
+    deps = [
+        ":api",
+        "//packages/kotlin/core",
+        "//projects/mobile/android/core/model",
+        "@maven//:junit_junit",
+        "@maven//:org_jetbrains_kotlinx_kotlinx_serialization_json",
+    ],
+)

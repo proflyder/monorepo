@@ -1,0 +1,134 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Feature modules are independent; shared UI labels are intentionally duplicated. -->
+<resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="DuplicateStrings">
+    <string name="scenarios_title">Scenarios</string>
+    <string name="scenarios_add">New scenario</string>
+    <string name="scenarios_empty">No scenarios yet. Scenarios are stored and run on the home server.</string>
+    <string name="scenarios_open_connection">Open Connection</string>
+    <string name="scenarios_enabled">Enabled</string>
+    <string name="scenarios_disabled">Disabled</string>
+    <string name="scenarios_run">Run now</string>
+    <string name="scenarios_run_queued">Queued: %1$s</string>
+    <string name="scenarios_unsupported_badge">Contains parts this app version does not support.</string>
+    <string name="scenarios_no_next_run">No upcoming run</string>
+    <string name="scenarios_next">Next: %1$s</string>
+    <string name="scenarios_today">Today %1$s</string>
+    <string name="scenarios_tomorrow">Tomorrow %1$s</string>
+
+    <string name="scenarios_trigger_manual">Manual</string>
+    <string name="scenarios_trigger_daily">Every day</string>
+    <string name="scenarios_trigger_weekdays">Weekdays</string>
+    <string name="scenarios_trigger_weekends">Weekends</string>
+    <string name="scenarios_trigger_once">Once</string>
+    <string name="scenarios_trigger_once_on">Once on %1$s</string>
+    <string name="scenarios_trigger_custom">Selected days</string>
+    <string name="scenarios_trigger_custom_days">%1$s</string>
+    <string name="scenarios_trigger_unsupported">Unsupported trigger</string>
+    <string name="scenarios_trigger_dialog_title">Time trigger</string>
+
+    <string name="scenarios_repeat_once">Once</string>
+    <string name="scenarios_editor_days">Days</string>
+    <string name="scenarios_day_mon">Mon</string>
+    <string name="scenarios_day_tue">Tue</string>
+    <string name="scenarios_day_wed">Wed</string>
+    <string name="scenarios_day_thu">Thu</string>
+    <string name="scenarios_day_fri">Fri</string>
+    <string name="scenarios_day_sat">Sat</string>
+    <string name="scenarios_day_sun">Sun</string>
+
+    <string name="scenarios_condition_entity">%1$s is %2$s</string>
+    <string name="scenarios_condition_every_day">every day</string>
+    <string name="scenarios_condition_window">%1$s – %2$s (%3$s)</string>
+    <string name="scenarios_condition_unsupported">Unsupported condition</string>
+    <string name="scenarios_condition_dialog_title">Entity state condition</string>
+    <string name="scenarios_condition_window_dialog_title">Time window condition</string>
+    <string name="scenarios_condition_state">State (on, off or any value)</string>
+    <string name="scenarios_condition_choose_entity">Choose entity</string>
+    <string name="scenarios_condition_window_days">Days</string>
+    <string name="scenarios_condition_window_every_day_hint">No days selected means every day.</string>
+    <string name="scenarios_state_on">On</string>
+    <string name="scenarios_state_off">Off</string>
+
+    <string name="scenarios_step_catalog">Do action “%1$s” on %2$s</string>
+    <string name="scenarios_step_speak">Say “%1$s”</string>
+    <string name="scenarios_step_delay">Pause %1$d s</string>
+    <string name="scenarios_step_unsupported">Unsupported step</string>
+    <string name="scenarios_step_number">Step %1$d</string>
+    <string name="scenarios_step_up">Move step up</string>
+    <string name="scenarios_step_down">Move step down</string>
+    <string name="scenarios_step_speak_title">Say on the station</string>
+    <string name="scenarios_step_delay_title">Pause</string>
+    <plurals name="scenarios_speak_counter">
+        <item quantity="one">%1$d character left</item>
+        <item quantity="other">%1$d characters left</item>
+    </plurals>
+
+    <string name="scenarios_editor_title_new">New scenario</string>
+    <string name="scenarios_editor_title_edit">Edit scenario</string>
+    <string name="scenarios_editor_hint">The home server stores this scenario and owns running it. This phone only edits the definition.</string>
+    <string name="scenarios_editor_unsupported">This scenario was created by a newer server or app version. You can read it, but saving is blocked so its unsupported parts are not lost.</string>
+    <string name="scenarios_editor_label">Name</string>
+    <string name="scenarios_editor_description">Description</string>
+    <string name="scenarios_editor_when">When</string>
+    <string name="scenarios_editor_manual_note">Manual run is always available. Add a time trigger for automatic runs.</string>
+    <string name="scenarios_editor_add_trigger">Add time trigger</string>
+    <string name="scenarios_editor_if">If</string>
+    <string name="scenarios_editor_add_condition_entity">Entity state</string>
+    <string name="scenarios_editor_add_condition_window">Time window</string>
+    <string name="scenarios_editor_do">Do</string>
+    <string name="scenarios_editor_add_action">Action</string>
+    <string name="scenarios_editor_add_speak">Say</string>
+    <string name="scenarios_editor_add_delay">Pause</string>
+    <string name="scenarios_editor_continue_on_error">Continue if a step fails</string>
+    <string name="scenarios_editor_save">Save on server</string>
+    <string name="scenarios_editor_delete">Delete scenario</string>
+    <string name="scenarios_editor_speak_hint">Text to say</string>
+    <string name="scenarios_editor_delay_hint">Duration</string>
+    <string name="scenarios_editor_delay_seconds">Seconds</string>
+    <string name="scenarios_editor_delay_minutes">Minutes</string>
+    <string name="scenarios_editor_delay_range">Between 1 second and 3600 seconds (60 minutes).</string>
+
+    <string name="scenarios_catalog_title">Choose catalog entry</string>
+    <string name="scenarios_catalog_empty">The catalog is empty or not loaded yet.</string>
+    <string name="scenarios_catalog_other_room">Other</string>
+    <string name="scenarios_catalog_failed">Catalog unavailable: %1$s. Tap to retry.</string>
+    <string name="scenarios_entry_has_no_actions">This catalog entry has no actions.</string>
+    <string name="scenarios_action_dialog_title">Choose action</string>
+    <string name="scenarios_action_run">run</string>
+    <string name="scenarios_action_turn_on">turn on</string>
+    <string name="scenarios_action_turn_off">turn off</string>
+    <string name="scenarios_action_set">set</string>
+    <string name="scenarios_action_speak">speak</string>
+
+    <string-array name="scenarios_day_short">
+        <item>@string/scenarios_day_mon</item>
+        <item>@string/scenarios_day_tue</item>
+        <item>@string/scenarios_day_wed</item>
+        <item>@string/scenarios_day_thu</item>
+        <item>@string/scenarios_day_fri</item>
+        <item>@string/scenarios_day_sat</item>
+        <item>@string/scenarios_day_sun</item>
+    </string-array>
+
+    <string name="scenarios_light_dialog_title">Light parameters</string>
+    <string name="scenarios_light_note">Only parameters the light reports are shown. Turn off accepts only a transition.</string>
+    <string name="scenarios_light_brightness">Brightness</string>
+    <string name="scenarios_light_temperature">Color temperature</string>
+    <string name="scenarios_light_effect">Effect</string>
+    <string name="scenarios_light_effect_none">None</string>
+    <string name="scenarios_light_percent">%1$d%%</string>
+    <string name="scenarios_light_kelvin">%1$d K</string>
+    <string name="scenarios_light_transition">Transition, seconds (optional, 0–300)</string>
+
+    <string name="scenarios_conflict_title">Changed on the server</string>
+    <string name="scenarios_conflict_message">Another client saved a newer version of this scenario. Reload it? Local edits will be discarded.</string>
+    <string name="scenarios_conflict_reload">Reload</string>
+    <string name="scenarios_delete_confirm">Delete this scenario from the home server?</string>
+    <string name="scenarios_delete_yes">Delete</string>
+    <string name="scenarios_cancel">Cancel</string>
+    <string name="scenarios_save">Save</string>
+    <string name="scenarios_edit">Edit</string>
+    <string name="scenarios_remove">Remove</string>
+    <string name="scenarios_saved">Scenario saved</string>
+    <string name="scenarios_deleted">Scenario deleted</string>
+</resources>

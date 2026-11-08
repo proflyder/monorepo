@@ -5,7 +5,10 @@ package(default_visibility = ["//visibility:public"])
 kt_jvm_library(
     name = "api",
     srcs = glob(["src/main/kotlin/**/*.kt"]),
-    deps = ["//projects/mobile/android/core/model"],
+    deps = [
+        "//packages/kotlin/core",
+        "//projects/mobile/android/core/model",
+    ],
 )
 
 kt_jvm_test(
@@ -14,6 +17,7 @@ kt_jvm_test(
     test_class = "dev.proflyder.home.feature.control.AllControlApiTests",
     deps = [
         ":api",
+        "//packages/kotlin/core",
         "//projects/mobile/android/core/model",
         "@maven//:junit_junit",
     ],

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <dimen name="scenarios_screen_margin">32dp</dimen>
+    <integer name="scenarios_columns">2</integer>
+</resources>

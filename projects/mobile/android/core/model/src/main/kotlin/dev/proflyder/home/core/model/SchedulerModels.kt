@@ -138,6 +138,13 @@ enum class Field {
     WEEKDAYS,
     REPEAT,
     DURATION,
+    DESCRIPTION,
+    TRIGGERS,
+    CONDITIONS,
+    STEPS,
+    SPEAK,
+    ENTITY,
+    UNSUPPORTED,
 }
 
 /**

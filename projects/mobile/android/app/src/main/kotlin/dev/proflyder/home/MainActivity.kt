@@ -22,6 +22,7 @@ import dev.proflyder.home.core.navigation.Navigator
 import dev.proflyder.home.core.navigation.NavigatorHost
 import dev.proflyder.home.core.ui.ViewModelFactoryProvider
 import dev.proflyder.home.databinding.ActivityMainBinding
+import dev.proflyder.home.feature.connection.ConnectionDestination
 import kotlinx.coroutines.launch
 
 class MainActivity : AppCompatActivity(), NavigatorHost, ViewModelFactoryProvider {
@@ -118,7 +119,7 @@ class MainActivity : AppCompatActivity(), NavigatorHost, ViewModelFactoryProvide
         val menu: Menu = bottomNavigation.menu
         menu.clear()
         var itemId = 1
-        features.all().forEach { entry: FeatureEntry ->
+        features.tabs().forEach { entry: FeatureEntry ->
             menu.add(Menu.NONE, itemId, entry.order, entry.titleRes).setIcon(entry.iconRes)
             itemIdByFeature[entry.id] = itemId
             featureByItemId[itemId] = entry.id
@@ -136,7 +137,18 @@ class MainActivity : AppCompatActivity(), NavigatorHost, ViewModelFactoryProvide
     }
 
     private fun setupToolbar() {
+        toolbar.inflateMenu(R.menu.menu_main)
         toolbar.setNavigationOnClickListener { onBackPressedDispatcher.onBackPressed() }
+        toolbar.setOnMenuItemClickListener { item ->
+            if (item.itemId == R.id.action_settings) {
+                // Settings opens as an overlay over the current tab, so Back
+                // returns to that tab instead of leaving the app.
+                router.navigate(ConnectionDestination)
+                true
+            } else {
+                false
+            }
+        }
     }
 
     private fun applySystemBarInsets() {

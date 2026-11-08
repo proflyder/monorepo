@@ -1,0 +1,135 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="DuplicateStrings">
+    <string name="scenarios_title">Сценарии</string>
+    <string name="scenarios_add">Новый сценарий</string>
+    <string name="scenarios_empty">Сценариев пока нет. Они хранятся и выполняются на домашнем сервере.</string>
+    <string name="scenarios_open_connection">Открыть «Подключение»</string>
+    <string name="scenarios_enabled">Включён</string>
+    <string name="scenarios_disabled">Выключен</string>
+    <string name="scenarios_run">Запустить</string>
+    <string name="scenarios_run_queued">В очереди: %1$s</string>
+    <string name="scenarios_unsupported_badge">Есть части, не поддерживаемые этой версией приложения.</string>
+    <string name="scenarios_no_next_run">Ближайший запуск не запланирован</string>
+    <string name="scenarios_next">Далее: %1$s</string>
+    <string name="scenarios_today">Сегодня %1$s</string>
+    <string name="scenarios_tomorrow">Завтра %1$s</string>
+
+    <string name="scenarios_trigger_manual">Вручную</string>
+    <string name="scenarios_trigger_daily">Ежедневно</string>
+    <string name="scenarios_trigger_weekdays">Будни</string>
+    <string name="scenarios_trigger_weekends">Выходные</string>
+    <string name="scenarios_trigger_once">Однократно</string>
+    <string name="scenarios_trigger_once_on">Однократно %1$s</string>
+    <string name="scenarios_trigger_custom">Выбранные дни</string>
+    <string name="scenarios_trigger_custom_days">%1$s</string>
+    <string name="scenarios_trigger_unsupported">Неподдерживаемый триггер</string>
+    <string name="scenarios_trigger_dialog_title">Триггер по времени</string>
+
+    <string name="scenarios_repeat_once">Однократно</string>
+    <string name="scenarios_editor_days">Дни</string>
+    <string name="scenarios_day_mon">Пн</string>
+    <string name="scenarios_day_tue">Вт</string>
+    <string name="scenarios_day_wed">Ср</string>
+    <string name="scenarios_day_thu">Чт</string>
+    <string name="scenarios_day_fri">Пт</string>
+    <string name="scenarios_day_sat">Сб</string>
+    <string name="scenarios_day_sun">Вс</string>
+
+    <string name="scenarios_condition_entity">%1$s в состоянии %2$s</string>
+    <string name="scenarios_condition_every_day">каждый день</string>
+    <string name="scenarios_condition_window">%1$s – %2$s (%3$s)</string>
+    <string name="scenarios_condition_unsupported">Неподдерживаемое условие</string>
+    <string name="scenarios_condition_dialog_title">Условие по состоянию</string>
+    <string name="scenarios_condition_window_dialog_title">Условие по времени</string>
+    <string name="scenarios_condition_state">Состояние (on, off или другое)</string>
+    <string name="scenarios_condition_choose_entity">Выбрать сущность</string>
+    <string name="scenarios_condition_window_days">Дни</string>
+    <string name="scenarios_condition_window_every_day_hint">Если дни не выбраны, условие действует каждый день.</string>
+    <string name="scenarios_state_on">Вкл</string>
+    <string name="scenarios_state_off">Выкл</string>
+
+    <string name="scenarios_step_catalog">Выполнить «%1$s» для %2$s</string>
+    <string name="scenarios_step_speak">Сказать «%1$s»</string>
+    <string name="scenarios_step_delay">Пауза %1$d с</string>
+    <string name="scenarios_step_unsupported">Неподдерживаемый шаг</string>
+    <string name="scenarios_step_number">Шаг %1$d</string>
+    <string name="scenarios_step_up">Переместить шаг выше</string>
+    <string name="scenarios_step_down">Переместить шаг ниже</string>
+    <string name="scenarios_step_speak_title">Произнести на колонке</string>
+    <string name="scenarios_step_delay_title">Пауза</string>
+    <plurals name="scenarios_speak_counter">
+        <item quantity="one">Остался %1$d символ</item>
+        <item quantity="few">Осталось %1$d символа</item>
+        <item quantity="many">Осталось %1$d символов</item>
+        <item quantity="other">Осталось %1$d символа</item>
+    </plurals>
+
+    <string name="scenarios_editor_title_new">Новый сценарий</string>
+    <string name="scenarios_editor_title_edit">Изменить сценарий</string>
+    <string name="scenarios_editor_hint">Сценарий хранится и выполняется на домашнем сервере. Телефон только редактирует определение.</string>
+    <string name="scenarios_editor_unsupported">Сценарий создан более новой версией сервера или приложения. Его можно прочитать, но сохранение заблокировано, чтобы не потерять неподдерживаемые части.</string>
+    <string name="scenarios_editor_label">Название</string>
+    <string name="scenarios_editor_description">Описание</string>
+    <string name="scenarios_editor_when">Когда</string>
+    <string name="scenarios_editor_manual_note">Ручной запуск доступен всегда. Добавьте триггер по времени для автоматических запусков.</string>
+    <string name="scenarios_editor_add_trigger">Добавить триггер по времени</string>
+    <string name="scenarios_editor_if">Если</string>
+    <string name="scenarios_editor_add_condition_entity">Состояние устройства</string>
+    <string name="scenarios_editor_add_condition_window">Окно времени</string>
+    <string name="scenarios_editor_do">Сделать</string>
+    <string name="scenarios_editor_add_action">Действие</string>
+    <string name="scenarios_editor_add_speak">Произнести</string>
+    <string name="scenarios_editor_add_delay">Пауза</string>
+    <string name="scenarios_editor_continue_on_error">Продолжать при ошибке шага</string>
+    <string name="scenarios_editor_save">Сохранить на сервере</string>
+    <string name="scenarios_editor_delete">Удалить сценарий</string>
+    <string name="scenarios_editor_speak_hint">Текст для произнесения</string>
+    <string name="scenarios_editor_delay_hint">Длительность</string>
+    <string name="scenarios_editor_delay_seconds">Секунды</string>
+    <string name="scenarios_editor_delay_minutes">Минуты</string>
+    <string name="scenarios_editor_delay_range">От 1 секунды до 3600 секунд (60 минут).</string>
+
+    <string name="scenarios_catalog_title">Выберите запись каталога</string>
+    <string name="scenarios_catalog_empty">Каталог пуст или ещё не загружен.</string>
+    <string name="scenarios_catalog_other_room">Другое</string>
+    <string name="scenarios_catalog_failed">Каталог недоступен: %1$s. Нажмите, чтобы повторить.</string>
+    <string name="scenarios_entry_has_no_actions">У этой записи каталога нет действий.</string>
+    <string name="scenarios_action_dialog_title">Выберите действие</string>
+    <string name="scenarios_action_run">запустить</string>
+    <string name="scenarios_action_turn_on">включить</string>
+    <string name="scenarios_action_turn_off">выключить</string>
+    <string name="scenarios_action_set">настроить</string>
+    <string name="scenarios_action_speak">произнести</string>
+
+    <string-array name="scenarios_day_short">
+        <item>@string/scenarios_day_mon</item>
+        <item>@string/scenarios_day_tue</item>
+        <item>@string/scenarios_day_wed</item>
+        <item>@string/scenarios_day_thu</item>
+        <item>@string/scenarios_day_fri</item>
+        <item>@string/scenarios_day_sat</item>
+        <item>@string/scenarios_day_sun</item>
+    </string-array>
+
+    <string name="scenarios_light_dialog_title">Параметры света</string>
+    <string name="scenarios_light_note">Показаны только параметры, которые сообщает лампа. Для выключения доступен только переход.</string>
+    <string name="scenarios_light_brightness">Яркость</string>
+    <string name="scenarios_light_temperature">Цветовая температура</string>
+    <string name="scenarios_light_effect">Эффект</string>
+    <string name="scenarios_light_effect_none">Без эффекта</string>
+    <string name="scenarios_light_percent">%1$d%%</string>
+    <string name="scenarios_light_kelvin">%1$d K</string>
+    <string name="scenarios_light_transition">Переход, секунды (необязательно, 0–300)</string>
+
+    <string name="scenarios_conflict_title">Изменён на сервере</string>
+    <string name="scenarios_conflict_message">Другой клиент сохранил более новую версию сценария. Загрузить её? Локальные изменения будут потеряны.</string>
+    <string name="scenarios_conflict_reload">Загрузить заново</string>
+    <string name="scenarios_delete_confirm">Удалить сценарий с домашнего сервера?</string>
+    <string name="scenarios_delete_yes">Удалить</string>
+    <string name="scenarios_cancel">Отмена</string>
+    <string name="scenarios_save">Сохранить</string>
+    <string name="scenarios_edit">Изменить</string>
+    <string name="scenarios_remove">Убрать</string>
+    <string name="scenarios_saved">Сценарий сохранён</string>
+    <string name="scenarios_deleted">Сценарий удалён</string>
+</resources>

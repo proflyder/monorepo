@@ -43,7 +43,8 @@ class FragmentRouter(
     private val registry: FeatureRegistry,
     savedState: RouterSavedState? = null,
 ) : Navigator {
-    private val initialEntry = registry.all().first()
+    private val initialEntry = registry.tabs().firstOrNull()
+        ?: error("at least one bottom-bar feature is required")
     private val routeState = TabRouteStack(initialEntry.id, initialEntry.rootDestination.route)
     private val pending = PendingTransitions<Command>(capacity = 32)
     private val titlesByRoute = mutableMapOf<String, Int>()
@@ -87,6 +88,12 @@ class FragmentRouter(
         val entry = registry.entry(featureId)
         if (entry == null) {
             Log.w(TAG, "ignoring unknown feature tab")
+            return
+        }
+        if (!entry.isTab) {
+            // Settings-style features are not bottom tabs: open them as an
+            // overlay on top of the current tab so Back returns there.
+            navigate(entry.rootDestination)
             return
         }
         enqueue(Command.SelectTab(featureId))
@@ -136,15 +143,18 @@ class FragmentRouter(
     }
 
     private fun restoreSavedState(savedState: RouterSavedState) {
-        val entry = registry.entry(savedState.selectedTabId)
-            ?: savedState.stacks.keys.firstNotNullOfOrNull(registry::entry)
+        val entry = registry.entry(savedState.selectedTabId)?.takeIf { it.isTab }
+            ?: savedState.stacks.keys.firstNotNullOfOrNull { registry.entry(it)?.takeIf(FeatureEntry::isTab) }
             ?: initialEntry
         val rootRoute = entry.rootDestination.route
         routeState.restore(
             tabId = entry.id,
             routes = savedState.stacks[entry.id].orEmpty(),
             rootRoute = rootRoute,
-        ) { route -> registry.entryForRoute(route)?.id == entry.id }
+        ) { route ->
+            val owner = registry.entryForRoute(route)
+            owner != null && (owner.id == entry.id || !owner.isTab)
+        }
 
         savedState.titles.forEach { (route, title) ->
             if (route.isNotBlank() && title != 0 && registry.entryForRoute(route) != null) {
@@ -167,28 +177,32 @@ class FragmentRouter(
         val current = fragmentManager.findFragmentById(containerId) ?: return false
         val currentTag = current.tag
         val names = backStackNames()
-        val entry = currentTag?.let(registry::entryForRoute)
+        val currentEntry = currentTag?.let(registry::entryForRoute)
 
-        if (currentTag == null || entry == null) {
+        if (currentTag == null || currentEntry == null) {
             // An unknown/stale fragment must not be treated as route truth.
-            resetToRoot(registry.entry(routeState.currentTabId) ?: initialEntry)
+            resetToRoot(currentTabEntry())
             return true
         }
 
-        val rootRoute = entry.rootDestination.route
-        if (names.isEmpty()) {
-            if (currentTag != rootRoute) {
-                resetToRoot(entry)
-                return true
-            }
+        // A non-tab feature (for example Connection) is an overlay on top of a
+        // bottom tab. Its owning tab comes from the back stack root, the saved
+        // tab, or the first tab as a safe fallback.
+        val tabEntry = if (currentEntry.isTab) {
+            currentEntry
         } else {
-            val validNames = names.all { name ->
-                !name.isNullOrBlank() && registry.entryForRoute(name)?.id == entry.id
-            }
-            if (!validNames || names.last() != currentTag) {
-                resetToRoot(entry)
-                return true
-            }
+            names.filterNotNull()
+                .firstNotNullOfOrNull { name -> registry.entryForRoute(name)?.takeIf { it.isTab } }
+                ?: currentTabEntry()
+        }
+        val rootRoute = tabEntry.rootDestination.route
+        val validNames = names.all { name ->
+            val owner = name?.let(registry::entryForRoute) ?: return@all false
+            owner.id == tabEntry.id || !owner.isTab
+        }
+        if (!validNames || names.lastOrNull() != currentTag) {
+            resetToRoot(tabEntry)
+            return true
         }
 
         val routes = mutableListOf(rootRoute)
@@ -196,25 +210,31 @@ class FragmentRouter(
             if (name != routes.last()) routes.add(name)
         }
         if (currentTag != routes.last()) {
-            resetToRoot(entry)
+            resetToRoot(tabEntry)
             return true
         }
 
         routeState.restore(
-            tabId = entry.id,
+            tabId = tabEntry.id,
             routes = routes,
             rootRoute = rootRoute,
-        ) { route -> registry.entryForRoute(route)?.id == entry.id }
-        titlesByRoute.putIfAbsent(rootRoute, entry.titleRes(entry.rootDestination))
-        // The saved title for an editor was loaded above; this is only a safe
-        // fallback for an old/corrupt bundle.
-        titlesByRoute.putIfAbsent(currentTag, entry.titleRes)
+        ) { route ->
+            val owner = registry.entryForRoute(route)
+            owner != null && (owner.id == tabEntry.id || !owner.isTab)
+        }
+        titlesByRoute.putIfAbsent(rootRoute, tabEntry.titleRes(tabEntry.rootDestination))
+        // The saved title for an editor/settings screen was loaded above; this
+        // is only a safe fallback for an old/corrupt bundle.
+        titlesByRoute.putIfAbsent(currentTag, currentEntry.titleRes)
         updateDerivedState()
         if (Log.isLoggable(TAG, Log.DEBUG)) {
             Log.d(TAG, "restored ${routeState.currentStack()}")
         }
         return true
     }
+
+    private fun currentTabEntry(): FeatureEntry =
+        registry.entry(routeState.currentTabId)?.takeIf { it.isTab } ?: initialEntry
 
     private fun backStackNames(): List<String?> =
         (0 until fragmentManager.backStackEntryCount).map { index ->
@@ -302,6 +322,19 @@ class FragmentRouter(
 
     private fun pushNow(destination: Destination) {
         val entry = registry.entryFor(destination) ?: return
+        if (!entry.isTab) {
+            // Overlay on the current tab: do not change the selected bottom tab
+            // and add a real back-stack entry so Back returns to where the user
+            // opened it from.
+            if (!routeState.push(destination.route)) {
+                updateDerivedState()
+                return
+            }
+            titlesByRoute[destination.route] = entry.titleRes(destination)
+            replaceFragment(destination, addToBackStack = true)
+            updateDerivedState()
+            return
+        }
         if (routeState.currentTabId != entry.id) {
             routeState.selectTab(entry.id, entry.rootDestination.route)
             titlesByRoute[entry.rootDestination.route] = entry.titleRes(entry.rootDestination)
