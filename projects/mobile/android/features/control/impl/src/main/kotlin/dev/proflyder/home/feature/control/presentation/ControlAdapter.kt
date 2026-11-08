@@ -95,6 +95,9 @@ internal enum class ControlChange {
 
     /** Any visible change inside a device group; the holder rebuilds its dynamic rows. */
     GROUP,
+
+    /** The live carousel content changed; the holder updates the pager in place. */
+    HUB,
 }
 
 /** Identity of the artwork an entry resolves to; see [ControlIcons]. */
@@ -122,7 +125,8 @@ internal object ControlDiff : DiffUtil.ItemCallback<ControlItem>() {
             oldItem is ControlItem.Device && newItem is ControlItem.Device -> deviceChanges(oldItem, newItem)
             oldItem is ControlItem.DeviceGroup && newItem is ControlItem.DeviceGroup ->
                 if (oldItem == newItem) emptySet() else setOf(ControlChange.GROUP)
-            oldItem is ControlItem.Hub && newItem is ControlItem.Hub -> emptySet()
+            oldItem is ControlItem.Hub && newItem is ControlItem.Hub ->
+                if (oldItem == newItem) emptySet() else setOf(ControlChange.HUB)
             oldItem is ControlItem.QuickActions && newItem is ControlItem.QuickActions -> emptySet()
             oldItem is ControlItem.Filters && newItem is ControlItem.Filters -> emptySet()
             else -> emptySet()
@@ -434,7 +438,10 @@ internal class ControlAdapter(
             } else {
                 0
             }
-            views.controlHubPager.setPadding(peek, 0, peek, 0)
+            // Re-setting the same padding requests a layout on every tick.
+            if (views.controlHubPager.paddingLeft != peek) {
+                views.controlHubPager.setPadding(peek, 0, peek, 0)
+            }
             pager.submit(hub.cards, hub.remaining, hub.nowUnix)
             rebuildDots(hub.cards.size)
             renderDots()

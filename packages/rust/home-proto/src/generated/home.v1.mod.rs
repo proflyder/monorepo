@@ -60,6 +60,8 @@ pub mod __buffa {
         reg.register_json_any(super::__SNOOZE_SCHEDULE_RESPONSE_JSON_ANY);
         reg.register_json_any(super::__STOP_SCHEDULE_REQUEST_JSON_ANY);
         reg.register_json_any(super::__STOP_SCHEDULE_RESPONSE_JSON_ANY);
+        reg.register_json_any(super::__SKIP_SCHEDULE_OCCURRENCE_REQUEST_JSON_ANY);
+        reg.register_json_any(super::__SKIP_SCHEDULE_OCCURRENCE_RESPONSE_JSON_ANY);
         reg.register_json_any(super::__START_TIMER_REQUEST_JSON_ANY);
         reg.register_json_any(super::__START_TIMER_RESPONSE_JSON_ANY);
         reg.register_json_any(super::__GET_TIMER_REQUEST_JSON_ANY);
@@ -238,6 +240,14 @@ pub use self::__buffa::view::StopScheduleRequestOwnedView;
 pub use self::__buffa::view::StopScheduleResponseView;
 #[doc(inline)]
 pub use self::__buffa::view::StopScheduleResponseOwnedView;
+#[doc(inline)]
+pub use self::__buffa::view::SkipScheduleOccurrenceRequestView;
+#[doc(inline)]
+pub use self::__buffa::view::SkipScheduleOccurrenceRequestOwnedView;
+#[doc(inline)]
+pub use self::__buffa::view::SkipScheduleOccurrenceResponseView;
+#[doc(inline)]
+pub use self::__buffa::view::SkipScheduleOccurrenceResponseOwnedView;
 #[doc(inline)]
 pub use self::__buffa::view::StartTimerRequestView;
 #[doc(inline)]

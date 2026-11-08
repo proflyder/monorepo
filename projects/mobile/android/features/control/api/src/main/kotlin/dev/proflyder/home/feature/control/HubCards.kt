@@ -140,4 +140,24 @@ object HubCards {
     /** Today's date in the scheduler time zone; used by callers that need a date for text. */
     fun today(zone: ZoneId, nowUnix: Long): LocalDate =
         Instant.ofEpochSecond(nowUnix).atZone(zone).toLocalDate()
+
+    /**
+     * Builds the cards, but keeps the previous card of a source that failed to
+     * load (`null`). A transient RPC failure then cannot make one card vanish
+     * and reappear on the next refresh.
+     */
+    fun buildOrKeep(
+        alarms: List<Schedule>?,
+        timers: List<Timer>?,
+        scenarios: List<Scenario>?,
+        reminders: List<Schedule>?,
+        previous: List<HubCard>,
+        nowUnix: Long,
+    ): List<HubCard> = build(
+        alarms = alarms ?: previous.filterIsInstance<HubCard.Alarm>().map { it.schedule },
+        timers = timers ?: previous.filterIsInstance<HubCard.TimerCard>().map { it.timer },
+        scenarios = scenarios ?: previous.filterIsInstance<HubCard.ScenarioCard>().map { it.scenario },
+        reminders = reminders ?: previous.filterIsInstance<HubCard.Reminder>().map { it.schedule },
+        nowUnix = nowUnix,
+    )
 }

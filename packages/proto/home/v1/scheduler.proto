@@ -238,6 +238,18 @@ message StopScheduleResponse {
   Schedule schedule = 1;
 }
 
+// SkipScheduleOccurrence advances a recurring schedule past its next
+// occurrence without disabling it. A pending FIRE for that occurrence is
+// marked skipped, and an active (ringing) occurrence is closed. One-shot
+// schedules have no following occurrence and are rejected; disabling them is
+// the client's "turn off" path.
+message SkipScheduleOccurrenceRequest {
+  string id = 1;
+}
+message SkipScheduleOccurrenceResponse {
+  Schedule schedule = 1;
+}
+
 message StartTimerRequest {
   string label = 1;
   int64 duration_seconds = 2; // 1..604800
@@ -369,6 +381,7 @@ service SchedulerService {
   rpc SetScheduleEnabled(SetScheduleEnabledRequest) returns (SetScheduleEnabledResponse);
   rpc SnoozeSchedule(SnoozeScheduleRequest) returns (SnoozeScheduleResponse);
   rpc StopSchedule(StopScheduleRequest) returns (StopScheduleResponse);
+  rpc SkipScheduleOccurrence(SkipScheduleOccurrenceRequest) returns (SkipScheduleOccurrenceResponse);
 
   rpc StartTimer(StartTimerRequest) returns (StartTimerResponse);
   rpc GetTimer(GetTimerRequest) returns (GetTimerResponse);

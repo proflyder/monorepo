@@ -3,6 +3,7 @@ package dev.proflyder.home.feature.control.presentation
 import android.os.Bundle
 import androidx.fragment.app.activityViewModels
 import androidx.recyclerview.widget.GridLayoutManager
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import dev.proflyder.home.core.model.ControlEntry
 import dev.proflyder.home.core.model.ControlKind
 import dev.proflyder.home.core.model.FavoriteKind
@@ -23,6 +24,8 @@ import dev.proflyder.home.feature.control.ControlTexts
 import dev.proflyder.home.feature.control.HubCard
 import dev.proflyder.home.feature.control.QuickTile
 import dev.proflyder.home.feature.control.QuickTiles
+import dev.proflyder.home.feature.alarms.AlarmDisableChoice
+import dev.proflyder.home.feature.alarms.alarmDisableChoice
 import dev.proflyder.home.feature.control.impl.R
 import dev.proflyder.home.feature.control.impl.databinding.FragmentControlBinding
 import kotlinx.coroutines.delay
@@ -77,7 +80,12 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
 
         override fun onHubCardClick(card: HubCard) = openHubSection(card)
 
-        override fun onHubPrimary(card: HubCard) = viewModel.hubPrimary(card)
+        override fun onHubPrimary(card: HubCard) {
+            when {
+                card is HubCard.Alarm && hubAlarmNeedsChoice(card) -> showHubAlarmDisableChoice(card)
+                else -> viewModel.hubPrimary(card)
+            }
+        }
 
         override fun onHubSecondary(card: HubCard) = viewModel.hubSecondary(card)
 
@@ -267,6 +275,22 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
             is HubCard.ScenarioCard -> "scenarios"
         }
         requireNavigator().selectTab(featureId)
+    }
+
+    /** True when the hub's "turn off" must ask skip-once vs disable-completely. */
+    internal fun hubAlarmNeedsChoice(card: HubCard.Alarm): Boolean =
+        !card.ringing &&
+            card.schedule.enabled &&
+            alarmDisableChoice(card.schedule) == AlarmDisableChoice.ASK
+
+    internal fun showHubAlarmDisableChoice(card: HubCard.Alarm) {
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle(R.string.control_alarm_disable_title)
+            .setMessage(R.string.control_alarm_disable_message)
+            .setNeutralButton(R.string.control_alarm_disable_skip_once) { _, _ -> viewModel.skipAlarmOccurrence(card) }
+            .setPositiveButton(R.string.control_alarm_disable_turn_off) { _, _ -> viewModel.disableAlarm(card) }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
     }
 
     private fun texts() = ControlTexts(

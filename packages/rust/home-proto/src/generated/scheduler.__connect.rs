@@ -62,6 +62,14 @@ pub type OwnedStopScheduleRequestView = ::buffa::view::OwnedView<
 pub type OwnedStopScheduleResponseView = ::buffa::view::OwnedView<
     __buffa::view::StopScheduleResponseView<'static>,
 >;
+///Shorthand for `OwnedView<SkipScheduleOccurrenceRequestView<'static>>`.
+pub type OwnedSkipScheduleOccurrenceRequestView = ::buffa::view::OwnedView<
+    __buffa::view::SkipScheduleOccurrenceRequestView<'static>,
+>;
+///Shorthand for `OwnedView<SkipScheduleOccurrenceResponseView<'static>>`.
+pub type OwnedSkipScheduleOccurrenceResponseView = ::buffa::view::OwnedView<
+    __buffa::view::SkipScheduleOccurrenceResponseView<'static>,
+>;
 ///Shorthand for `OwnedView<StartTimerRequestView<'static>>`.
 pub type OwnedStartTimerRequestView = ::buffa::view::OwnedView<
     __buffa::view::StartTimerRequestView<'static>,
@@ -385,6 +393,40 @@ for __buffa::view::StopScheduleResponseView<'_> {
 }
 impl ::connectrpc::Encodable<StopScheduleResponse>
 for ::buffa::view::OwnedView<__buffa::view::StopScheduleResponseView<'static>> {
+    fn encode(
+        &self,
+        codec: ::connectrpc::CodecFormat,
+    ) -> ::std::result::Result<::buffa::bytes::Bytes, ::connectrpc::ConnectError> {
+        ::connectrpc::__codegen::encode_view_body(self.reborrow(), codec)
+    }
+    /// An `OwnedView` still holds the buffer it was decoded from, so
+    /// its large fields can be handed to the response body by
+    /// reference count instead of copied. The bare view impl above
+    /// cannot do this: it has borrows but no buffer to name.
+    fn encode_segments(
+        &self,
+        codec: ::connectrpc::CodecFormat,
+    ) -> ::std::result::Result<::connectrpc::EncodedBody, ::connectrpc::ConnectError> {
+        ::connectrpc::__codegen::encode_view_body_segments(
+            self.reborrow(),
+            self.bytes(),
+            codec,
+        )
+    }
+}
+impl ::connectrpc::Encodable<SkipScheduleOccurrenceResponse>
+for __buffa::view::SkipScheduleOccurrenceResponseView<'_> {
+    fn encode(
+        &self,
+        codec: ::connectrpc::CodecFormat,
+    ) -> ::std::result::Result<::buffa::bytes::Bytes, ::connectrpc::ConnectError> {
+        ::connectrpc::__codegen::encode_view_body(self, codec)
+    }
+}
+impl ::connectrpc::Encodable<SkipScheduleOccurrenceResponse>
+for ::buffa::view::OwnedView<
+    __buffa::view::SkipScheduleOccurrenceResponseView<'static>,
+> {
     fn encode(
         &self,
         codec: ::connectrpc::CodecFormat,
@@ -808,6 +850,12 @@ pub const SCHEDULER_SERVICE_STOP_SCHEDULE_SPEC: ::connectrpc::Spec = ::connectrp
         ::connectrpc::StreamType::Unary,
     )
     .with_idempotency_level(::connectrpc::IdempotencyLevel::Unknown);
+/// Static [`Spec`](::connectrpc::Spec) for the `SkipScheduleOccurrence` RPC, as seen by the server; the generated client passes it with [`origin`](::connectrpc::Spec::origin) `Client` (compare across sides with [`Spec::same_method`](::connectrpc::Spec::same_method)).
+pub const SCHEDULER_SERVICE_SKIP_SCHEDULE_OCCURRENCE_SPEC: ::connectrpc::Spec = ::connectrpc::Spec::server(
+        "/home.v1.SchedulerService/SkipScheduleOccurrence",
+        ::connectrpc::StreamType::Unary,
+    )
+    .with_idempotency_level(::connectrpc::IdempotencyLevel::Unknown);
 /// Static [`Spec`](::connectrpc::Spec) for the `StartTimer` RPC, as seen by the server; the generated client passes it with [`origin`](::connectrpc::Spec::origin) `Client` (compare across sides with [`Spec::same_method`](::connectrpc::Spec::same_method)).
 pub const SCHEDULER_SERVICE_START_TIMER_SPEC: ::connectrpc::Spec = ::connectrpc::Spec::server(
         "/home.v1.SchedulerService/StartTimer",
@@ -1069,6 +1117,26 @@ pub trait SchedulerService: Send + Sync + 'static {
     ) -> impl ::std::future::Future<
         Output = ::connectrpc::ServiceResult<
             impl ::connectrpc::Encodable<StopScheduleResponse> + Send + use<'a, Self>,
+        >,
+    > + Send;
+    /// Handle the SkipScheduleOccurrence RPC.
+    ///
+    /// `'a` lets the response body borrow from `&self` (e.g. server-resident state).
+    ///
+    /// `request` is borrowed from the request body and is valid for the
+    /// duration of the call; message fields are read directly on it
+    /// (zero-copy). The response cannot borrow from `request` — use
+    /// `.to_owned_message()` (or copy the specific fields) for anything
+    /// returned, stored, or moved into `tokio::spawn`.
+    fn skip_schedule_occurrence<'a>(
+        &'a self,
+        ctx: ::connectrpc::RequestContext,
+        request: ::connectrpc::ServiceRequest<'_, SkipScheduleOccurrenceRequest>,
+    ) -> impl ::std::future::Future<
+        Output = ::connectrpc::ServiceResult<
+            impl ::connectrpc::Encodable<
+                SkipScheduleOccurrenceResponse,
+            > + Send + use<'a, Self>,
         >,
     > + Send;
     /// Handle the StartTimer RPC.
@@ -1503,6 +1571,31 @@ impl<S: SchedulerService> SchedulerServiceExt for S {
             .with_spec(SCHEDULER_SERVICE_STOP_SCHEDULE_SPEC)
             .route_view(
                 SCHEDULER_SERVICE_SERVICE_NAME,
+                "SkipScheduleOccurrence",
+                {
+                    let svc = ::std::sync::Arc::clone(&self);
+                    ::connectrpc::view_handler_fn(move |
+                        ctx,
+                        req: ::buffa::view::OwnedView<
+                            __buffa::view::SkipScheduleOccurrenceRequestView<'static>,
+                        >,
+                        format|
+                    {
+                        let svc = ::std::sync::Arc::clone(&svc);
+                        async move {
+                            let sreq = ::connectrpc::ServiceRequest::<
+                                SkipScheduleOccurrenceRequest,
+                            >::from_parts(req.reborrow(), req.bytes());
+                            svc.skip_schedule_occurrence(ctx, sreq)
+                                .await?
+                                .encode::<SkipScheduleOccurrenceResponse>(format)
+                        }
+                    })
+                },
+            )
+            .with_spec(SCHEDULER_SERVICE_SKIP_SCHEDULE_OCCURRENCE_SPEC)
+            .route_view(
+                SCHEDULER_SERVICE_SERVICE_NAME,
                 "StartTimer",
                 {
                     let svc = ::std::sync::Arc::clone(&self);
@@ -1878,6 +1971,12 @@ impl<T: SchedulerService> ::connectrpc::Dispatcher for SchedulerServiceServer<T>
                         .with_spec(SCHEDULER_SERVICE_STOP_SCHEDULE_SPEC),
                 )
             }
+            "SkipScheduleOccurrence" => {
+                Some(
+                    ::connectrpc::dispatcher::codegen::MethodDescriptor::unary(false)
+                        .with_spec(SCHEDULER_SERVICE_SKIP_SCHEDULE_OCCURRENCE_SPEC),
+                )
+            }
             "StartTimer" => {
                 Some(
                     ::connectrpc::dispatcher::codegen::MethodDescriptor::unary(false)
@@ -2101,6 +2200,24 @@ impl<T: SchedulerService> ::connectrpc::Dispatcher for SchedulerServiceServer<T>
                     svc.stop_schedule(ctx, req)
                         .await?
                         .encode::<StopScheduleResponse>(format)
+                })
+            }
+            "SkipScheduleOccurrence" => {
+                let svc = ::std::sync::Arc::clone(&self.inner);
+                Box::pin(async move {
+                    let body = ::connectrpc::dispatcher::codegen::request_proto_bytes::<
+                        SkipScheduleOccurrenceRequest,
+                    >(request.encoded()?, format)?;
+                    let req: __buffa::view::SkipScheduleOccurrenceRequestView<'_> = ::connectrpc::dispatcher::codegen::decode_borrowed_request_view(
+                        &body,
+                        ctx.decode_options(),
+                    )?;
+                    let req = ::connectrpc::ServiceRequest::<
+                        SkipScheduleOccurrenceRequest,
+                    >::from_parts(&req, &body);
+                    svc.skip_schedule_occurrence(ctx, req)
+                        .await?
+                        .encode::<SkipScheduleOccurrenceResponse>(format)
                 })
             }
             "StartTimer" => {
@@ -2709,6 +2826,47 @@ where
                 &self.transport,
                 &self.config,
                 SCHEDULER_SERVICE_STOP_SCHEDULE_SPEC
+                    .with_origin(::connectrpc::SpecOrigin::Client),
+                request,
+                options,
+            )
+            .await
+    }
+    /// Call the SkipScheduleOccurrence RPC. Sends a request to /home.v1.SchedulerService/SkipScheduleOccurrence.
+    pub async fn skip_schedule_occurrence(
+        &self,
+        request: SkipScheduleOccurrenceRequest,
+    ) -> Result<
+        ::connectrpc::client::UnaryResponse<
+            ::buffa::view::OwnedView<
+                __buffa::view::SkipScheduleOccurrenceResponseView<'static>,
+            >,
+        >,
+        ::connectrpc::ConnectError,
+    > {
+        self.skip_schedule_occurrence_with_options(
+                request,
+                ::connectrpc::client::CallOptions::default(),
+            )
+            .await
+    }
+    /// Call the SkipScheduleOccurrence RPC with explicit per-call options. Options override [`ClientConfig`](::connectrpc::client::ClientConfig) defaults.
+    pub async fn skip_schedule_occurrence_with_options(
+        &self,
+        request: SkipScheduleOccurrenceRequest,
+        options: ::connectrpc::client::CallOptions,
+    ) -> Result<
+        ::connectrpc::client::UnaryResponse<
+            ::buffa::view::OwnedView<
+                __buffa::view::SkipScheduleOccurrenceResponseView<'static>,
+            >,
+        >,
+        ::connectrpc::ConnectError,
+    > {
+        ::connectrpc::client::call_unary(
+                &self.transport,
+                &self.config,
+                SCHEDULER_SERVICE_SKIP_SCHEDULE_OCCURRENCE_SPEC
                     .with_origin(::connectrpc::SpecOrigin::Client),
                 request,
                 options,

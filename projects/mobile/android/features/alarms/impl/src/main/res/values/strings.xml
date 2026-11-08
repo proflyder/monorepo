@@ -15,6 +15,10 @@
     <string name="alarms_delete_confirm">Delete this alarm from the home server?</string>
     <string name="alarms_delete_yes">Delete</string>
     <string name="alarms_cancel">Cancel</string>
+    <string name="alarms_disable_title">Turn off the alarm?</string>
+    <string name="alarms_disable_message">This alarm repeats. Skip only the next occurrence, or turn the alarm off completely.</string>
+    <string name="alarms_disable_skip_once">Skip once</string>
+    <string name="alarms_disable_turn_off">Turn off completely</string>
     <string name="alarms_repeat_daily">Every day</string>
     <string name="alarms_repeat_weekdays">Weekdays</string>
     <string name="alarms_repeat_weekends">Weekends</string>

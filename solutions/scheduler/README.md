@@ -47,7 +47,7 @@ service `SchedulerService`:
 
 - schedules: `CreateSchedule`, `GetSchedule`, `ListSchedules`,
   `UpdateSchedule`, `DeleteSchedule`, `SetScheduleEnabled`,
-  `SnoozeSchedule`, `StopSchedule`;
+  `SnoozeSchedule`, `StopSchedule`, `SkipScheduleOccurrence`;
 - scenarios: `home.v1.ScenarioService` в `packages/proto/home/v1/scenario.proto`
   — `CreateScenario`, `GetScenario`, `ListScenarios`, `UpdateScenario`,
   `DeleteScenario`, `SetScenarioEnabled`, `RunScenario`. Scheduler только
@@ -143,6 +143,10 @@ Reminder — `SCHEDULE_KIND_REMINDER`, обязательно `REPEAT_KIND_ONCE`
 - `SnoozeSchedule` ставит немедленный `STOP` control event и отложенный
   `FIRE` (тот же occurrence, `snooze_seq+1`);
 - `StopSchedule` ставит немедленный `STOP` и отменяет pending triggers;
+- `SkipScheduleOccurrence` сдвигает recurring schedule на следующее
+  occurrence без выключения: pending `FIRE` пропускаемого occurrence
+  помечается `SKIPPED` (`detail=skipped`), активное occurrence закрывается;
+  one-shot и уже выключенный schedule отвергаются;
 - повторный `Stop` в том же окне идемпотентен (тот же STOP event);
 - `Snooze` после `Stop` возвращает `FAILED_PRECONDITION`;
 - пока идёт snooze-ожидание, повторный snooze разрешён (active snooze

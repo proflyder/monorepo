@@ -38,6 +38,9 @@ class ConnectAlarmRepository(
     override suspend fun setEnabled(id: String, enabled: Boolean): Outcome<Schedule> =
         client.setScheduleEnabled(id, enabled)
 
+    override suspend fun skipNextOccurrence(id: String): Outcome<Schedule> =
+        client.skipScheduleOccurrence(id)
+
     override suspend fun delete(id: String): Outcome<Boolean> = client.deleteSchedule(id)
 
     override suspend fun snooze(id: String, minutes: Int): Outcome<Schedule> =

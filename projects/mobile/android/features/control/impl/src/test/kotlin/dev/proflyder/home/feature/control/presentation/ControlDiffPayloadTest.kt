@@ -181,6 +181,14 @@ class ControlDiffPayloadTest {
     }
 
     @Test
+    fun hubContentChangeUsesAnInPlacePayload() {
+        val old = ControlItem.Hub(emptyList(), emptyMap(), nowUnix = 10)
+        val new = ControlItem.Hub(emptyList(), emptyMap(), nowUnix = 11)
+        assertEquals(setOf(ControlChange.HUB), changes(old, new))
+        assertNull(changes(old, ControlItem.Hub(emptyList(), emptyMap(), nowUnix = 10)))
+    }
+
+    @Test
     fun severalPayloadsMergeIntoOneAspectSet() {
         val merged = PayloadSet.merge(
             listOf(

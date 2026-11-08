@@ -10,6 +10,7 @@ import dev.proflyder.home.core.ui.ViewModelFactoryContributor
 import dev.proflyder.home.feature.alarms.domain.DeleteAlarm
 import dev.proflyder.home.feature.alarms.domain.LoadAlarms
 import dev.proflyder.home.feature.alarms.domain.SetAlarmEnabled
+import dev.proflyder.home.feature.alarms.domain.SkipAlarmOccurrence
 import dev.proflyder.home.feature.alarms.domain.SnoozeAlarm
 import dev.proflyder.home.feature.alarms.domain.StopAlarm
 import dev.zacsweers.metro.AppScope
@@ -34,6 +35,7 @@ data class AlarmsUiState(
 class AlarmsViewModel(
     private val loadAlarms: LoadAlarms,
     private val setAlarmEnabled: SetAlarmEnabled,
+    private val skipAlarmOccurrence: SkipAlarmOccurrence,
     private val deleteAlarm: DeleteAlarm,
     private val snoozeAlarm: SnoozeAlarm,
     private val stopAlarm: StopAlarm,
@@ -66,6 +68,9 @@ class AlarmsViewModel(
     }
 
     fun setEnabled(alarm: Schedule, enabled: Boolean) = mutate { setAlarmEnabled(alarm.id, enabled) }
+
+    /** Skips the next occurrence only; the alarm stays enabled on the server. */
+    fun skipNextOccurrence(alarm: Schedule) = mutate { skipAlarmOccurrence(alarm.id) }
 
     fun snooze(alarm: Schedule) = mutate { snoozeAlarm(alarm.id) }
 
@@ -162,6 +167,7 @@ class AlarmsViewModel(
 class AlarmsViewModelFactoryContributor(
     private val loadAlarms: LoadAlarms,
     private val setAlarmEnabled: SetAlarmEnabled,
+    private val skipAlarmOccurrence: SkipAlarmOccurrence,
     private val deleteAlarm: DeleteAlarm,
     private val snoozeAlarm: SnoozeAlarm,
     private val stopAlarm: StopAlarm,
@@ -169,6 +175,6 @@ class AlarmsViewModelFactoryContributor(
     override val viewModelClass: Class<out ViewModel> = AlarmsViewModel::class.java
 
     override fun createFactory() = SimpleViewModelFactory {
-        AlarmsViewModel(loadAlarms, setAlarmEnabled, deleteAlarm, snoozeAlarm, stopAlarm)
+        AlarmsViewModel(loadAlarms, setAlarmEnabled, skipAlarmOccurrence, deleteAlarm, snoozeAlarm, stopAlarm)
     }
 }

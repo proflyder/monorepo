@@ -9,5 +9,6 @@ import org.junit.runners.Suite
     AlarmEditorDraftCodecTest::class,
     AlarmSchedulingTest::class,
     AlarmEditorTimeTest::class,
+    AlarmDisableChoiceTest::class,
 )
 class AllAlarmApiTests

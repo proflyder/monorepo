@@ -259,4 +259,37 @@ class HomeHubTest {
         assertEquals(listOf("call", "device:light.a", "action:action.speak", "scenario:s1"), tiles.map { it.key })
         assertFalse(tiles.isEmpty())
     }
+
+    @Test
+    fun failedHubSourceKeepsItsPreviousCard() {
+        val due = epoch(9, 7, 30)
+        val previous = HubCards.build(
+            alarms = listOf(alarm("a1", due)),
+            timers = listOf(timer("t1", due + 600)),
+            scenarios = listOf(scenario("s1", due)),
+            reminders = listOf(alarm("r1", due)),
+            nowUnix = now,
+        )
+        // The alarm RPC failed: only the other three lists loaded.
+        val cards = HubCards.buildOrKeep(
+            alarms = null,
+            timers = listOf(timer("t1", due + 600)),
+            scenarios = listOf(scenario("s1", due)),
+            reminders = listOf(alarm("r1", due)),
+            previous = previous,
+            nowUnix = now,
+        )
+        assertEquals(listOf("alarm:a1", "timer:t1", "scenario:s1", "reminder:r1"), cards.map { it.key })
+
+        // A successful empty list still removes the card: the server said there is none.
+        val emptied = HubCards.buildOrKeep(
+            alarms = emptyList(),
+            timers = emptyList(),
+            scenarios = emptyList(),
+            reminders = emptyList(),
+            previous = previous,
+            nowUnix = now,
+        )
+        assertTrue(emptied.isEmpty())
+    }
 }

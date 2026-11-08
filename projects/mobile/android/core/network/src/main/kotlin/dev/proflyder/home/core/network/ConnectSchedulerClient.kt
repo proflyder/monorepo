@@ -39,6 +39,12 @@ interface SchedulerClient {
     suspend fun snoozeSchedule(id: String, minutes: Int): Outcome<Schedule>
     suspend fun stopSchedule(id: String): Outcome<Schedule>
 
+    /**
+     * Advances a recurring schedule past its next occurrence without disabling
+     * it. One-shot schedules are rejected by the server; disable them instead.
+     */
+    suspend fun skipScheduleOccurrence(id: String): Outcome<Schedule>
+
     suspend fun startTimer(label: String, durationSeconds: Long, idempotencyKey: String): Outcome<Timer>
     suspend fun listTimers(includeFinished: Boolean): Outcome<List<Timer>>
     suspend fun pauseTimer(id: String): Outcome<Timer>
@@ -137,6 +143,11 @@ class ConnectSchedulerClient(
 
     override suspend fun stopSchedule(id: String): Outcome<Schedule> =
         call("StopSchedule", buildJsonObject { put("id", id) }) { element ->
+            SchedulerJson.parseSchedule(element.jsonObject.getValue("schedule"))
+        }
+
+    override suspend fun skipScheduleOccurrence(id: String): Outcome<Schedule> =
+        call("SkipScheduleOccurrence", buildJsonObject { put("id", id) }) { element ->
             SchedulerJson.parseSchedule(element.jsonObject.getValue("schedule"))
         }
 

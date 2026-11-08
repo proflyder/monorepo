@@ -14,6 +14,10 @@
     <string name="alarms_delete_confirm">Удалить этот будильник с домашнего сервера?</string>
     <string name="alarms_delete_yes">Удалить</string>
     <string name="alarms_cancel">Отмена</string>
+    <string name="alarms_disable_title">Выключить будильник?</string>
+    <string name="alarms_disable_message">Будильник повторяется. Пропустить только ближайшее срабатывание или отключить его совсем?</string>
+    <string name="alarms_disable_skip_once">Пропустить один раз</string>
+    <string name="alarms_disable_turn_off">Отключить совсем</string>
     <string name="alarms_repeat_daily">Ежедневно</string>
     <string name="alarms_repeat_weekdays">Будни</string>
     <string name="alarms_repeat_weekends">Выходные</string>
