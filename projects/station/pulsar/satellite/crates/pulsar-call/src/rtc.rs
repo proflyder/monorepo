@@ -70,20 +70,24 @@ pub struct Receiver {
 }
 
 impl Receiver {
-    /// Пакет с любого интерфейса и его источник.
-    pub async fn recv(&self) -> io::Result<(Vec<u8>, SocketAddr)> {
+    /// Пакет с любого интерфейса: данные, источник и локальный адрес сокета, на который он
+    /// пришёл. ICE сопоставляет пару по адресу назначения, поэтому он должен быть настоящим.
+    pub async fn recv(&self) -> io::Result<(Vec<u8>, SocketAddr, SocketAddr)> {
         let futures = self.sockets.iter().map(|socket| {
             let socket = Arc::clone(socket);
             Box::pin(async move {
                 let mut buf = vec![0u8; 2048];
-                let result = socket.recv_from(&mut buf).await;
+                let result = socket
+                    .recv_from(&mut buf)
+                    .await
+                    .and_then(|(n, source)| Ok((n, source, socket.local_addr()?)));
                 (result, buf)
             })
         });
         let ((result, mut buf), _, _) = futures_util::future::select_all(futures).await;
-        let (n, source) = result?;
+        let (n, source, destination) = result?;
         buf.truncate(n);
-        Ok((buf, source))
+        Ok((buf, source, destination))
     }
 }
 
@@ -104,7 +108,12 @@ impl Peer {
     /// адресу: телефон приходит либо по LAN, либо по VPN, и какой из них доступен, знает
     /// только ICE.
     pub async fn bind() -> Result<Self, PeerError> {
-        Self::bind_addrs(ffi::ipv4_addrs()).await
+        // Loopback и link-local телефону недоступны: лишние кандидаты только мешают ICE.
+        let addrs = ffi::ipv4_addrs()
+            .into_iter()
+            .filter(|ip| !ip.is_loopback() && !ip.is_link_local())
+            .collect();
+        Self::bind_addrs(addrs).await
     }
 
     /// Peer с явным списком адресов: тесты гоняют только loopback.
@@ -221,7 +230,7 @@ impl Peer {
     }
 
     /// Один UDP-пакет в движок.
-    pub fn handle_input(&mut self, packet: &[u8], source: SocketAddr) {
+    pub fn handle_input(&mut self, packet: &[u8], source: SocketAddr, destination: SocketAddr) {
         let now = Instant::now();
         let Ok(contents) = packet.try_into() else {
             return;
@@ -231,7 +240,7 @@ impl Peer {
             Receive {
                 proto: Protocol::Udp,
                 source,
-                destination: self.local_addr,
+                destination,
                 contents,
             },
         ));
@@ -355,16 +364,16 @@ mod tests {
         while Instant::now() < deadline && !(caller_connected && callee_connected) {
             caller_connected |= pump(&mut caller);
             callee_connected |= pump(&mut callee);
-            if let Ok(Ok((packet, src))) =
+            if let Ok(Ok((packet, src, dst))) =
                 tokio::time::timeout(std::time::Duration::from_millis(10), caller_rx.recv()).await
             {
-                caller.handle_input(&packet, src);
+                caller.handle_input(&packet, src, dst);
             }
-            if let Ok(Ok((packet, src))) =
+            if let Ok(Ok((packet, src, dst))) =
                 tokio::time::timeout(std::time::Duration::from_millis(10), callee_rx.recv()).await
             {
                 eprintln!("callee <- {} bytes", packet.len());
-                callee.handle_input(&packet, src);
+                callee.handle_input(&packet, src, dst);
             } else {
                 eprintln!("callee recv timeout");
             }
@@ -391,10 +400,10 @@ mod tests {
         let mut got = None;
         for _ in 0..50 {
             let _ = caller.drain();
-            if let Ok(Ok((packet, src))) =
+            if let Ok(Ok((packet, src, dst))) =
                 tokio::time::timeout(std::time::Duration::from_millis(10), callee_rx.recv()).await
             {
-                callee.handle_input(&packet, src);
+                callee.handle_input(&packet, src, dst);
             }
             let Ok((events, _)) = callee.drain() else {
                 continue;

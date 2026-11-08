@@ -377,8 +377,8 @@ async fn session(ctx: &Ctx<'_>, commands: &mut UnboundedReceiver<Cmd>) -> Result
                 ctx.apply(actions, &mut machine, &mut media).await;
             }
             packet = incoming, if media.is_some() => {
-                if let (Ok((packet, source)), Some(m)) = (packet, media.as_mut()) {
-                    m.peer.handle_input(&packet, source);
+                if let (Ok((packet, source, destination)), Some(m)) = (packet, media.as_mut()) {
+                    m.peer.handle_input(&packet, source, destination);
                     let active = machine.phase() == CallPhase::Active;
                     if !m.drive(ctx.downlink, active) {
                         let actions = machine.media_failed();
