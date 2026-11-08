@@ -103,3 +103,24 @@ spec:
           port: 8099
   tls:
     secretName: home-wildcard-tls
+
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: intercom
+  namespace: traefik
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`${INTERCOM_HOST}`)
+      kind: Rule
+      middlewares:
+        - name: home-allowlist
+      services:
+        - name: intercom
+          namespace: home-assistant
+          port: 8099
+  tls:
+    secretName: home-wildcard-tls

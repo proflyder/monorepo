@@ -814,6 +814,9 @@ jobs:
                 fi
                 echo "currency-bot-webhook ready endpoints: $webhook_ready"
                 ;;
+              intercom)
+                kubectl -n "$NS" exec deployment/intercom -- /usr/local/bin/intercom -healthcheck
+                ;;
               mcp-gateway)
                 # Readiness through the API-server Service proxy: proves the
                 # catalog and both mounted Secrets are wired, which plain

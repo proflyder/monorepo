@@ -620,3 +620,19 @@
     HA-сценариев, которым нужны сервисы вне каталога (обучение Рикардо).
 
 Меняется решение — обновить этот файл и `STATE.md`.
+
+48. **Звонок телефон ↔ колонка — WebRTC, сигналинг `solutions/intercom`.**
+    Медиа идёт P2P по UDP (DTLS/SRTP, Opus); кластер не пересылает звук.
+    `home.v1.IntercomService` держит только эфемерное состояние звонка и
+    релеит SDP/ICE. Транспорт — Connect по HTTP/1.1: unary вызовы и
+    server-streaming `Watch` (Android уже говорит Connect по HTTP/1.1;
+    bidi требует HTTP/2, поэтому `SendSignal` — отдельный unary). Контракт
+    симметричный: `StartCall`/`Answer`/`Hangup` не предполагают направление
+    «телефон → колонка», входящий звонок на телефон — будущий клиент.
+    Identity endpoint'а берётся из токена (phone bearer / station device
+    token), а не из запроса; звонок один на endpoint, RINGING 30 с,
+    CONNECTING 20 с, ENDED-сессия живёт 60 с. TURN не обязателен: телефон и
+    колонка в LAN/VPN; `GetIceConfig` уже отдаёт список STUN/TURN из
+    конфигурации, поэтому coturn добавляется без смены клиентов. Pulsar
+    получает `pulsar-call` на `str0m` и `Phase::Call` отдельным этапом;
+    scheduler и `ha-bridge` в звонке не участвуют.

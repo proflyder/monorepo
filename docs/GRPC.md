@@ -12,6 +12,7 @@ Connect/gRPC, outbox, auth; бинари `ha-bridge` (очередь `home`) и 
 packages/proto/home/v1/scheduler.proto   home.v1.SchedulerService (основной)
 packages/proto/home/v1/scenario.proto    home.v1.ScenarioService
 packages/proto/home/v1/alarms.proto      home.v1.AlarmService (legacy facade)
+packages/proto/home/v1/intercom.proto    home.v1.IntercomService (WebRTC signaling)
 ```
 
 `SchedulerService` — один protobuf-контракт для расписаний, таймеров,
@@ -38,6 +39,11 @@ optimistic concurrency.
 Streaming (`WatchEvents`) не реализован; unary-контракта достаточно для
 текущего среза. Recurring generic task schedules (`SCHEDULE_KIND_TASK`) тоже
 не реализованы — generic-очередь пока one-shot (`EnqueueTask`).
+
+`IntercomService` — отдельный сервис в `solutions/intercom`, не часть
+scheduler: `RegisterEndpoint`, `ListEndpoints`, `StartCall`, `Answer`,
+`Hangup`, `GetCall`, `SendSignal`, `Watch` (server streaming),
+`GetIceConfig`, `GetStatus`. Он не хранит медиа и не пишет на диск.
 
 ## Транспорт
 
@@ -85,6 +91,20 @@ curl -sS http://127.0.0.1:8098/home.v1.SchedulerService/CreateSchedule \
   timeouts и `MaxHeaderBytes` заданы на HTTP-сервере;
 - значения токенов и payload не пишутся в логи; `GetStatus.last_tick_error`
   ограничен и не содержит секретов.
+
+### Intercom: server-streaming
+
+`IntercomService/Watch` — единственный streaming RPC: один долгоживущий
+server stream на endpoint, unary `SendSignal` отправляет SDP/ICE в обратную
+сторону. Connect server-streaming работает по HTTP/1.1 и совместим с
+Android; Connect bidi потребовал бы HTTP/2 и поэтому не используется.
+События `WatchEvent`: `CallEvent` (снимок звонка + предыдущее состояние),
+`SdpEvent`, `IceCandidateEvent`, `IceEndEvent`.
+
+Авторизация intercom — два независимых bearer: phone token и station
+device token. Identity (`phone`/`station`) берётся из совпавшего токена;
+`endpoint_id` в `WatchRequest` допускается только равный identity.
+Неучастник звонка получает `PERMISSION_DENIED`. Тела SDP не логируются.
 
 ## Семантика, которую должен знать клиент
 
@@ -177,7 +197,7 @@ Android использует ручной protobuf-JSON маппинг
 
 ## Что не реализовано
 
-- streaming `WatchEvents`;
+- streaming `WatchEvents` в scheduler (у intercom отдельный server-streaming `Watch`);
 - recurring generic tasks и event-trigger rules;
 - event-триггеры сценариев (определения уже поддерживают только manual/time);
 - группа `scheduler.*` в `mcp-gateway`;

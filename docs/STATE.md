@@ -79,7 +79,8 @@
   `openbao`, `external-secrets`, `currency-bot`.
 - Приложения: GigaAM `10305`, Whisper `10300`, Piper `10200`,
   Hermes gateway `127.0.0.1:8642` + voice proxy `8643`, health exporter `9116`,
-  currency-bot + cloudflared, mcp-gateway (ClusterIP `:8080`).
+  currency-bot + cloudflared, mcp-gateway (ClusterIP `:8080`),
+  intercom (signaling, NodePort `30097`).
 - `8643` доступен только HAOS/K3s/loopback через nftables.
 - Observability: kube-prometheus-stack `92.14.0`, Loki `20.0.2`,
   Alloy `1.14.3`; четыре dashboard JSON через Helm ConfigMap.
@@ -138,7 +139,7 @@
   namespace `external-secrets`: `ClusterSecretStore/openbao` через in-cluster
   Service (Kubernetes auth, роль `external-secrets`, KV v2). Источник правды
   для `secret/k8s/*`: `scheduler-auth`, `ha-bridge-ha`, `hermes-environment`,
-  `grafana-admin`, `cloudflare-api-token`, `wakegrant`. Kubernetes Secrets с теми же
+  `intercom`, `grafana-admin`, `cloudflare-api-token`, `wakegrant`. Kubernetes Secrets с теми же
   именами/ключами создаёт ESO (`creationPolicy: Owner`,
   `deletionPolicy: Retain`, `refreshInterval: 1h`); deploy-скрипты и CI их не
   перезаписывают. Не переносятся: `openbao-seal`, helm release/SA token
@@ -173,8 +174,8 @@
   kubectl → K3s API `6443`, HTTPS → Traefik/OpenBao `443`. Режимы
   (`preserve`/`execute`/`shadow`/`control-*`) — только через
   `workflow_dispatch`.
-- scheduler (Rust, static musl), ha-bridge, ha-control, ha-scenario — собственные
-  distroless-образы, собираемые Bazel `rules_oci`/`rules_rust` и адресуемые по
+- scheduler (Rust, static musl), ha-bridge, ha-control, ha-scenario, intercom —
+  собственные distroless-образы, собираемые Bazel `rules_oci`/`rules_rust` и адресуемые по
   digest в `ghcr.io/proflyder/<name>@sha256:…`; CI пушит их job-scoped
   `GITHUB_TOKEN`, живой узел импортирует те же digest'ы в containerd.
 - Hermes и voice-proxy — публичные digest-pinned образы GHCR
@@ -593,6 +594,14 @@
   вызывает `script.turn_on` с `variables.message` (1–500 символов, без
   управляющих). Текст — пользовательские данные: не пишется в логи, detail и
   ledger. Device/room действия — от `assist_satellite` колонки.
+- `solutions/intercom` — Rust-сервис сигналинга WebRTC-звонка телефон ↔
+  колонка (SDP/ICE relay, `home.v1.IntercomService`, server-streaming
+  `Watch`); медиа P2P, сервис его не несёт. Deploy-юнит `intercom` включён:
+  образ `ghcr.io/proflyder/intercom`, ESO `intercom` из
+  `secret/k8s/home-assistant/intercom` (`phone_token`, `station_token`),
+  `intercom_env` в `secret/ci/deploy-home` (`INTERCOM_NODE_PORT=30097`),
+  NodePort закрыт общим host-фильтром scheduler/control. Первый выкат — merge
+  этой ветки в `develop`; до этого живой Deployment отсутствует.
 - `projects/mobile/android`: Kotlin-клиент (Views, одна Activity, Metro DI,
   `applicationId dev.proflyder.home`, minSdk 26 / target 36, только
   `INTERNET`, debug-signed). Вкладки **Home**, Alarms, Timers, Reminders,

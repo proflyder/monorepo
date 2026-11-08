@@ -1128,12 +1128,31 @@ NODE_SSH=labuser@<node> projects/home/kubernetes/scheduler/deploy.sh --shadow
 HA_TOKEN_FILE=secrets/home/ha.token NODE_SSH=labuser@<node> \
   projects/home/kubernetes/scheduler/deploy.sh --execute
 
-# NodePort-фильтр — host-конфигурация, вручную/root на узле
+# NodePort-фильтр scheduler/control/intercom — host-конфигурация,
+# вручную/root на узле; в env нужны SCHEDULER_NODE_PORT,
+# CONTROL_NODE_PORT и INTERCOM_NODE_PORT
 sudo PRIVATE_ENV=/path/scheduler.env \
   projects/home/kubernetes/scheduler/nft/apply.sh
 
 # резервная копия SQLite (quiesce + checksums, private путь по умолчанию)
 projects/home/kubernetes/scheduler/backup.sh
+```
+
+Сигналинг звонка (`solutions/intercom`):
+
+```bash
+# ручной деплой (обычно не нужен: merge в develop катит юнит сам)
+PRIVATE_ENV=secrets/home/intercom.env \
+  projects/home/kubernetes/intercom/deploy.sh
+
+# состояние и проба
+kubectl -n home-assistant rollout status deployment/intercom
+kubectl -n home-assistant exec deployment/intercom -- \
+  /usr/local/bin/intercom -status
+kubectl -n home-assistant exec deployment/intercom -- \
+  /usr/local/bin/intercom -healthcheck
+
+# NodePort 30097 фильтруется общим nft scheduler/control/intercom
 ```
 
 Проверки:

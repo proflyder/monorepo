@@ -348,6 +348,57 @@ export const config = {
     },
 
     {
+      id: "intercom",
+      platform: "bazel",
+      title: "solutions/intercom (Rust WebRTC signaling) + home deployment",
+      paths: [
+        "solutions/intercom/**",
+        "projects/home/kubernetes/intercom/**",
+        // The deploy tooling that renders this unit's manifests.
+        "platform/deploy/**",
+        "platform/deploy-rs/**",
+      ],
+      // One stateless image and Deployment; the ESO Secret
+      // (k8s/home-assistant/intercom: phone_token, station_token) is part of
+      // the same unit because the service is unusable without it.
+      deploy: {
+        builder: "bazel",
+        target_root: "//solutions/intercom",
+        images: ["intercom"],
+        workloads: ["intercom"],
+        namespace: "home-assistant",
+        script: "projects/home/kubernetes/intercom/deploy.sh",
+        env_key: "intercom_env",
+        env_file: "intercom.env",
+        externalsecrets: ["intercom"],
+      },
+      rollback: {
+        kind: "forward-only",
+        note:
+          "intercom keeps calls in memory only; fix forward by re-running " +
+          "deploy.sh from the previous commit.",
+        source: "projects/home/kubernetes/intercom/README.md (no Rollback section)",
+      },
+      bazel: {
+        roots: [
+          "//solutions/intercom",
+          "//packages/rust",
+          "//projects/home/kubernetes/intercom",
+        ],
+        test_targets: [
+          "//solutions/intercom/crates/intercom:unit_tests",
+          "//solutions/intercom/crates/intercom:integration_tests",
+          "//solutions/intercom/crates/intercom:clippy",
+          "//solutions/intercom/crates/intercom:rustfmt",
+        ],
+        build_targets: [
+          "//solutions/intercom/...",
+          "//projects/home/kubernetes/intercom/...",
+        ],
+      },
+    },
+
+    {
       id: "currency-bot",
       platform: "bazel",
       title: "solutions/currency-bot (Rust Telegram currency bot) + home deployment",
