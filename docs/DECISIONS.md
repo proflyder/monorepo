@@ -619,4 +619,33 @@
     новым `script.*` с меткой `scenario`; метка `scenario` остаётся для
     HA-сценариев, которым нужны сервисы вне каталога (обучение Рикардо).
 
+48. **Секреты для локальных скриптов — fnox, единая точка входа `mise run admin:*`.**
+    Скрипты деплоя и обслуживания с рабочего места (ingress, OpenBao,
+    Vaultwarden, observability, ESO, heartbeat, offsite, backup scheduler,
+    ручной deploy сервисов, Android-релиз, `deploy:status --live`,
+    `rollback --yes`) запускаются только через задачи mise. `fnox.toml` в
+    корне содержит лишь ссылки на OpenBao: профиль на скрипт, файловые
+    секреты — во временных файлах 0600, удаляемых после команды, в тех
+    переменных, что скрипт уже читает. fnox ходит в OpenBao через shim
+    `vault` → `bao` и токен машины (`workstation.py token`, с продлением);
+    туннель к API K3s — `with-kube-tunnel.sh` на время команды.
+    `secrets:file` остаётся запасным путём. `rclone.conf` офсайта намеренно
+    не передаётся (на узле rclone обновляет OAuth-токен сам).
+
 Меняется решение — обновить этот файл и `STATE.md`.
+
+48. **Звонок телефон ↔ колонка — WebRTC, сигналинг `solutions/intercom`.**
+    Медиа идёт P2P по UDP (DTLS/SRTP, Opus); кластер не пересылает звук.
+    `home.v1.IntercomService` держит только эфемерное состояние звонка и
+    релеит SDP/ICE. Транспорт — Connect по HTTP/1.1: unary вызовы и
+    server-streaming `Watch` (Android уже говорит Connect по HTTP/1.1;
+    bidi требует HTTP/2, поэтому `SendSignal` — отдельный unary). Контракт
+    симметричный: `StartCall`/`Answer`/`Hangup` не предполагают направление
+    «телефон → колонка», входящий звонок на телефон — будущий клиент.
+    Identity endpoint'а берётся из токена (phone bearer / station device
+    token), а не из запроса; звонок один на endpoint, RINGING 30 с,
+    CONNECTING 20 с, ENDED-сессия живёт 60 с. TURN не обязателен: телефон и
+    колонка в LAN/VPN; `GetIceConfig` уже отдаёт список STUN/TURN из
+    конфигурации, поэтому coturn добавляется без смены клиентов. Pulsar
+    получает `pulsar-call` на `str0m` и `Phase::Call` отдельным этапом;
+    scheduler и `ha-bridge` в звонке не участвуют.

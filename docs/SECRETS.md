@@ -11,9 +11,11 @@
 
 Доступ с рабочего места — `docs/WORKSTATION.md`: `mise run secrets:login` выдаёт
 машине periodic operator token (политика `operator-kv`: read/write
-`secret/{ci,k8s,infra}/*`, без delete), `mise run secrets:file <file>`
-временно восстанавливает старый файл `secrets/<file>`, `mise run secrets:check`
-сверяет каталог с OpenBao. Recovery keys и static seal key OpenBao хранятся
+`secret/{ci,k8s,infra}/*`, без delete). Скрипты получают секреты через
+`mise run admin:*`: fnox (`fnox.toml`, профиль на скрипт) передаёт их во
+временных файлах и переменных; `mise run secrets:file <file>` — запасной путь
+для файла вручную; `mise run secrets:check` сверяет каталог и ссылки
+`fnox.toml` с OpenBao. Recovery keys и static seal key OpenBao хранятся
 только у владельца (Bitwarden `Home recovery`, Vaultwarden `openbao:bootstrap`).
 Копия всего KV — Vaultwarden (`mise run vault:sync`).
 
@@ -25,7 +27,7 @@
 | Путь | Что | Кто читает |
 |---|---|---|
 | `ci/android-distribute` | Android: APK release signing key, passwords, alias and certificate; Firebase App Distribution | CI android-distribute (OIDC) |
-| `ci/deploy-home` | deploy-home: ci-deploy kubeconfig, service env files, runtime values | CI deploy-home (OIDC) |
+| `ci/deploy-home` | deploy-home: ci-deploy kubeconfig, service env files, runtime values (including intercom_env) | CI deploy-home (OIDC) |
 | `ci/deploy-station` | Pulsar rollout through HA (url, token, firmware entity) | CI deploy-station (OIDC) |
 | `ci/test` | smoke probe, not secret | CI auth smoke |
 | `infra/backup/ha` | HA backup encryption key | owner (restore) |
@@ -67,6 +69,7 @@
 | `k8s/currency-bot/currency-bot` | currency bot Telegram/API credentials | ESO → currency-bot |
 | `k8s/home-assistant/ha-bridge-ha` | HA long-lived token for ha-bridge | ESO → home-assistant |
 | `k8s/home-assistant/hermes-environment` | Hermes agent environment (HA/MA/Telegram/API keys) | ESO → home-assistant |
+| `k8s/home-assistant/intercom` | intercom signaling: phone bearer and station device token (created) | ESO → home-assistant |
 | `k8s/home-assistant/mcp-gateway-auth` | MCP gateway bearer | ESO → home-assistant |
 | `k8s/home-assistant/mcp-gateway-bb-ssh` | SSH key + known_hosts for bb dispatch from the MCP gateway | ESO → home-assistant |
 | `k8s/home-assistant/mcp-gateway-voice` | voice tool bearer of the MCP gateway | ESO → home-assistant |
@@ -87,7 +90,8 @@
 каждую строку, и GitHub вырезает из логов строку-маску `{`).
 Локально они восстанавливаются как `secrets/android/home-release.keystore`,
 `home-release.store.password`, `home-release.key.password`, `home-release.alias`,
-`home-release.cert.sha256` (`mise run secrets:file android/<имя>`); старые
+`home-release.cert.sha256` (`mise run secrets:file android/<имя>`), но обычно
+их передаёт fnox: `mise run admin:android-distribute` (профиль `android`); старые
 `keystore_b64`/`keystore_password` больше не читаются. Процедура — Android
 README, раздел Signing.
 

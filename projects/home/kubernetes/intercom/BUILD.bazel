@@ -1,0 +1,10 @@
+# Plain-file package: the templates are rendered by the intercom deploy script
+# and by //platform/deploy parity tests.
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "deploy_templates",
+    srcs = glob([
+        "manifests/*.yaml",
+    ]),
+)

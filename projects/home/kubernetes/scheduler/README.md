@@ -75,7 +75,7 @@ manifests go to `secrets/local/rendered/scheduler` (git-ignored).
 ```bash
 # Secrets are owned by External Secrets Operator and sourced from OpenBao
 # (secret/k8s/home-assistant/{scheduler-auth,ha-bridge-ha}). Apply once:
-./projects/home/kubernetes/external-secrets/deploy.sh
+mise run admin:external-secrets
 kubectl -n home-assistant apply -f projects/home/kubernetes/scheduler/ci/rbac.yaml
 ```
 
@@ -105,7 +105,7 @@ NODE_SSH=labuser@node KUBECONFIG=/path/kubeconfig \
 NODE_SSH=labuser@node ./projects/home/kubernetes/scheduler/deploy.sh --shadow
 HA_TOKEN_FILE=secrets/home/ha.token NODE_SSH=labuser@node \
   ./projects/home/kubernetes/scheduler/deploy.sh --execute         # preflight, then 1 replica
-./projects/home/kubernetes/scheduler/deploy.sh --only scheduler    # one unit only
+mise run admin:service scheduler -- --only scheduler    # one unit only
 ```
 
 - Re-running without `--execute`/`--shadow` preserves the bridge/control/
@@ -206,9 +206,10 @@ Endpoints (private values in `secrets/home/scheduler.env`):
 - Do not back a proxied route with a selectorless Service pointing at this
   node's own NodePort: single-node ClusterIP DNAT to the node NodePort does not
   re-enter kube-proxy's NodePort hook.
-- `nft/scheduler-nodeport.nft` drops the NodePort in `prerouting` before
-  kube-proxy DNAT unless the source is the home LAN or the pod CIDR; IPv6
-  NodePort is dropped. Persistence: `ricardo-scheduler-firewall.service` on the
+- `nft/scheduler-nodeport.nft` drops the scheduler, control and intercom
+  NodePorts in `prerouting` before kube-proxy DNAT unless the source is the
+  home LAN or the pod CIDR; IPv6 NodePort is dropped. The private env file
+  needs `SCHEDULER_NODE_PORT`, `CONTROL_NODE_PORT` and `INTERCOM_NODE_PORT`. Persistence: `ricardo-scheduler-firewall.service` on the
   node boots from `/etc/ricardo-scheduler-nodeport.nft`.
 - Every RPC requires `Authorization: Bearer <token>`; unauthenticated requests
   get HTTP 401. HA uses the LAN endpoint; Android can use either the LAN
@@ -253,7 +254,7 @@ binary rejects schema v2.
 When a change only touches one service, use `--only`:
 
 ```bash
-./projects/home/kubernetes/scheduler/deploy.sh --only scheduler
+mise run admin:service scheduler -- --only scheduler
 ```
 
 ## CI deploy (GitHub Actions, environment `home`)

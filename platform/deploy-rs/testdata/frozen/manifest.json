@@ -411,6 +411,8 @@
         "CONTROL_HOST=control.home.example.test",
         "--set",
         "CURRENCY_HOST=currency.home.example.test",
+        "--set",
+        "INTERCOM_HOST=intercom.home.example.test",
         "input/issuers.yaml",
         "input/certificate.yaml",
         "input/certificate-staging.yaml",

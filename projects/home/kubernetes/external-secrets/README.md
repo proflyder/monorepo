@@ -41,10 +41,9 @@ ExternalSecret-манифесты лежат рядом с проектами:
 ## Установка
 
 ```bash
-export KUBECONFIG=/private/path/kubeconfig
-./projects/home/kubernetes/openbao/deploy.sh
-./projects/home/kubernetes/openbao/bootstrap.sh      # роли/политики, включая external-secrets
-./projects/home/kubernetes/external-secrets/deploy.sh
+mise run admin:openbao
+mise run admin:openbao-bootstrap      # роли/политики, включая external-secrets
+mise run admin:external-secrets
 ```
 
 `deploy.sh` идемпотентен: namespace, `helm upgrade --install`, применение

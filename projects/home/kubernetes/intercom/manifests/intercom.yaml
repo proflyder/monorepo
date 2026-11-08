@@ -1,0 +1,141 @@
+# intercom signaling: phone <-> station WebRTC call control.
+#
+# TEMPLATE. deploy.sh renders it with private values from an ignored env file;
+# rendered manifests must never be committed.
+#
+#   INTERCOM_IMAGE      digest-pinned image built by Bazel
+#   INTERCOM_NODE_PORT  LAN/VPN NodePort for the phone client
+#   INTERCOM_HOST       HTTPS name served through Traefik (LAN/VPN allow-list)
+#   BUILD_ID            Deployment annotation (traceability, never rolls pods)
+#   ROLLOUT_ID          content-addressed pod-template annotation
+#
+# The call registry is in-memory, so exactly one replica runs: two pods would
+# split Watch streams and signaling state. Recreate avoids an overlap window
+# during a rollout.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: intercom
+  namespace: home-assistant
+  labels:
+    app.kubernetes.io/name: intercom
+    app.kubernetes.io/part-of: ricardo-home
+  annotations:
+    ricardo.dev/build: ${BUILD_ID}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: intercom
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: intercom
+      annotations:
+        ricardo.dev/rollout: ${ROLLOUT_ID}
+    spec:
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        fsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: intercom
+          image: ${INTERCOM_IMAGE}
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: INTERCOM_LISTEN
+              value: 0.0.0.0:8099
+            - name: INTERCOM_TOKEN_FILE
+              value: /run/secrets/intercom/phone_token
+            - name: INTERCOM_STATION_TOKEN_FILE
+              value: /run/secrets/intercom/station_token
+            # Role endpoints are configuration, never request fields.
+            - name: INTERCOM_PHONE_ENDPOINT_ID
+              value: phone
+            - name: INTERCOM_STATION_ENDPOINT_ID
+              value: station
+            - name: INTERCOM_RING_TIMEOUT_SECONDS
+              value: "30"
+            - name: INTERCOM_CONNECT_TIMEOUT_SECONDS
+              value: "20"
+            - name: INTERCOM_ENDED_RETENTION_SECONDS
+              value: "60"
+            - name: INTERCOM_MAX_CALL_SECONDS
+              value: "3600"
+            # Empty by default: host candidates only inside LAN/VPN. Add
+            # INTERCOM_STUN_URLS / INTERCOM_TURN_* later without a client change.
+            - name: LOG_LEVEL
+              value: info
+          ports:
+            - name: http
+              containerPort: 8099
+              protocol: TCP
+          readinessProbe:
+            exec:
+              command: ["/usr/local/bin/intercom", "-healthcheck"]
+            initialDelaySeconds: 3
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            exec:
+              command: ["/usr/local/bin/intercom", "-healthcheck"]
+            initialDelaySeconds: 30
+            periodSeconds: 60
+            timeoutSeconds: 5
+            failureThreshold: 5
+          resources:
+            requests:
+              cpu: 20m
+              memory: 32Mi
+            limits:
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: secrets
+              mountPath: /run/secrets/intercom
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: secrets
+          secret:
+            secretName: intercom
+            defaultMode: 0440
+            items:
+              - key: phone_token
+                path: phone_token
+              - key: station_token
+                path: station_token
+        - name: tmp
+          emptyDir:
+            sizeLimit: 16Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: intercom
+  namespace: home-assistant
+  labels:
+    app.kubernetes.io/name: intercom
+    app.kubernetes.io/part-of: ricardo-home
+spec:
+  type: NodePort
+  selector:
+    app.kubernetes.io/name: intercom
+  ports:
+    - name: http
+      port: 8099
+      targetPort: http
+      nodePort: ${INTERCOM_NODE_PORT}
+      protocol: TCP

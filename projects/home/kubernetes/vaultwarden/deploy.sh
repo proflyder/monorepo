@@ -5,7 +5,7 @@
 # Admin action from the operator's Mac, like OpenBao: the namespace is
 # cluster-scoped and the route lives in the `traefik` namespace.
 #
-# Private inputs (git-ignored; restore with `mise run secrets:file` if absent):
+# Private inputs — `mise run admin:vaultwarden` passes them from OpenBao (fnox):
 #   KUBECONFIG                       admin kubeconfig (required unless --render-only)
 #   secrets/home/ingress.env         HOME_DOMAIN, LAN_CIDR, NODE_IP
 #   secrets/home/vpn/cloudflare.env  CLOUDFLARE_API_TOKEN (DNS record)
@@ -49,7 +49,7 @@ fi
 : "${HOME_DOMAIN:?Set HOME_DOMAIN (private ingress suffix) or provide $PRIVATE_ENV}"
 : "${LAN_CIDR:?Set LAN_CIDR}"
 : "${NODE_IP:?Set NODE_IP (K3s node LAN address)}"
-CLOUDFLARE_API_TOKEN_FILE="${VAULTWARDEN_CLOUDFLARE_ENV:-$ROOT/secrets/home/vpn/cloudflare.env}"
+CLOUDFLARE_API_TOKEN_FILE="${CLOUDFLARE_API_TOKEN_FILE:-${VAULTWARDEN_CLOUDFLARE_ENV:-$ROOT/secrets/home/vpn/cloudflare.env}}"
 
 PASSWORDS_HOST="passwords.$HOME_DOMAIN"
 VAULTWARDEN_IMAGE="docker.io/vaultwarden/server:${VAULTWARDEN_IMAGE_VERSION}@${VAULTWARDEN_IMAGE_DIGEST}"

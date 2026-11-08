@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Install or refresh the scheduler NodePort source filter on the K3s node.
+# Install or refresh the scheduler/control/intercom NodePort source filter on the K3s node.
 #
 # This is host configuration, not part of a CI deploy: the API deploy path never
 # touches nftables. Run it as root on the node (or over SSH) once, and again

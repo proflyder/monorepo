@@ -58,12 +58,11 @@ projects/home/kubernetes/openbao/
 ## Установка и обновление
 
 ```bash
-export KUBECONFIG=/private/path/kubeconfig
 # первый раз: каталоги PV на узле
 export OPENBAO_NODE_SSH='ssh -i … -o UserKnownHostsFile=… labuser@192.0.2.27'
-./projects/home/kubernetes/openbao/deploy.sh
-./projects/home/kubernetes/openbao/bootstrap.sh
-./projects/home/kubernetes/openbao/verify.sh --kubernetes
+mise run admin:openbao
+mise run admin:openbao-bootstrap
+mise run admin:openbao-verify -- --kubernetes
 ```
 
 `deploy.sh` идемпотентен: namespace, Secret `openbao-seal` (ключ создаётся
@@ -97,17 +96,16 @@ admin-токена она возвращает `403`. Легаси-эндпои�
 Чтобы выпустить root из recovery keys, включите их на короткое время:
 
 ```bash
-export KUBECONFIG=/private/path/kubeconfig
 # 1. временно разрешить легаси-эндпоинты (только на время операции)
-helm get values openbao -n openbao -o yaml > /tmp/openbao-values.yaml
+mise run helm -- get values openbao -n openbao -o yaml > /tmp/openbao-values.yaml
 # добавить в listener: disable_unauthed_generate_root_endpoints = false
-helm upgrade openbao openbao/openbao --version 0.30.6 -n openbao \
+mise run helm -- upgrade openbao openbao/openbao --version 0.30.6 -n openbao \
   -f /tmp/openbao-values.yaml
-kubectl -n openbao delete pod openbao-0     # OnDelete применяет конфиг
-kubectl -n openbao wait --for=condition=Ready pod/openbao-0 --timeout=180s
+mise run kubectl -- -n openbao delete pod openbao-0     # OnDelete применяет конфиг
+mise run kubectl -- -n openbao wait --for=condition=Ready pod/openbao-0 --timeout=180s
 
 # 2. инициализировать попытку (nonce/otp сохранить), ввести 3 recovery key
-kubectl -n openbao exec openbao-0 -- /bin/sh -ec \
+mise run kubectl -- -n openbao exec openbao-0 -- /bin/sh -ec \
   'BAO_ADDR=http://127.0.0.1:8200 bao operator generate-root -init -format=json'
 # для каждого ключа: POST /v1/sys/generate-root/update {"key":..., "nonce":...}
 # или CLI: bao operator generate-root -nonce=<nonce> -   (ключ на stdin)
@@ -116,9 +114,9 @@ kubectl -n openbao exec openbao-0 -- /bin/sh -ec \
 # 4. отозвать root: curl -X POST -H "X-Vault-Token: <root>" \
 #      http://127.0.0.1:8200/v1/auth/token/revoke-self
 # 5. вернуть исходные values (без параметра) и удалить под
-helm upgrade openbao openbao/openbao --version 0.30.6 -n openbao \
+mise run helm -- upgrade openbao openbao/openbao --version 0.30.6 -n openbao \
   -f /tmp/openbao-values.original.yaml
-kubectl -n openbao delete pod openbao-0
+mise run kubectl -- -n openbao delete pod openbao-0
 ```
 
 Окно с открытыми легаси-эндпоинтами — секунды; endpoint доступен только
@@ -196,7 +194,8 @@ create/read/update/patch `secret/data/{ci,k8s,infra}/*`, list/read metadata;
 delete, `sys/*`, `auth/*` запрещены. `secret/infra/*` — секреты доступа
 владельца (SSH-ключи, CA, VPN, бэкапы, admin kubeconfig); карта путей —
 `docs/SECRETS.md`, токен машины и восстановление файлов — `docs/WORKSTATION.md`
-(`mise run secrets:login`, `secrets:file`).
+(`mise run secrets:login`); деплой и проверка — `mise run admin:openbao`,
+`admin:openbao-verify` (секреты через fnox).
 
 `ci-station`: read ровно `secret/data/ci/deploy-station` и
 `secret/metadata/ci/deploy-station`; ни `secret/ci/deploy-home`, ни
@@ -291,7 +290,7 @@ Chart включает `authDelegator` — ServiceAccount `openbao` получа
 ```bash
 KUBECONFIG=… kubectl auth can-i create tokenreviews.authentication.k8s.io \
   --as=system:serviceaccount:openbao:openbao
-./projects/home/kubernetes/openbao/verify.sh --kubernetes
+mise run admin:openbao-verify -- --kubernetes
 ```
 
 Проба создаёт namespace `openbao-smoke`, SA `openbao-smoke`, Job: логин через
@@ -309,10 +308,9 @@ ESO читает `secret/k8s/<namespace>/<secret-name>` и создаёт Kubern
 секретов — `projects/home/kubernetes/external-secrets/README.md`.
 
 ```bash
-export KUBECONFIG=/private/path/kubeconfig
-./projects/home/kubernetes/external-secrets/deploy.sh
-kubectl get clustersecretstore openbao
-kubectl get externalsecret -A
+mise run admin:external-secrets
+mise run kubectl -- get clustersecretstore openbao
+mise run kubectl -- get externalsecret -A
 ```
 
 Перенесены: `scheduler-auth`, `ha-bridge-ha`, `hermes-environment`,
@@ -552,14 +550,13 @@ kubectl -n openbao exec openbao-0 -- \
 ## Проверки
 
 ```bash
-export KUBECONFIG=/private/path/kubeconfig
-./projects/home/kubernetes/openbao/verify.sh --kubernetes
+mise run admin:openbao-verify -- --kubernetes
 python3 -m unittest discover -s projects/home/kubernetes/openbao -p 'test_*.py'
-kubectl -n openbao get pod,svc,pvc
-kubectl -n traefik get ingressroute openbao
-kubectl -n openbao logs openbao-0 --tail=50
-kubectl get clustersecretstore openbao
-kubectl get externalsecret -A
+mise run kubectl -- -n openbao get pod,svc,pvc
+mise run kubectl -- -n traefik get ingressroute openbao
+mise run kubectl -- -n openbao logs openbao-0 --tail=50
+mise run kubectl -- get clustersecretstore openbao
+mise run kubectl -- get externalsecret -A
 ```
 
 Ожидаемо: `initialized=true`, `sealed=false`, `recovery_seal=true`,

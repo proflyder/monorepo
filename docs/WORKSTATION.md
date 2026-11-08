@@ -30,11 +30,44 @@ mise trust && mise run setup
 
 `gh auth login` выполняется отдельно (браузер).
 
+## Секреты для скриптов: одна точка входа
+
+Скрипты деплоя и обслуживания запускаются только через `mise run admin:*`.
+Задача выбирает профиль fnox (`fnox.toml` в корне — только ссылки на OpenBao),
+fnox берёт значения из OpenBao токеном машины (`workstation.py token`, заодно
+продлевает его), кладёт файловые секреты во временные файлы 0600, передаёт
+пути в тех переменных, которые скрипт уже читает (`INGRESS_PRIVATE_ENV`,
+`KUBECONFIG`, `OFFSITE_ENV_FILE`, …), и удаляет файлы по завершении команды.
+Секрет получает только тот скрипт и только те значения, что указаны в его
+профиле; shell остаётся чистым. Задачам, которым нужен кластер, туннель к API
+K3s (`127.0.0.1:16443` → узел) поднимает `with-kube-tunnel.sh` на время
+команды. fnox вызывает CLI `vault` — это shim на `bao`.
+
+| Задача | Что запускает | Профиль fnox |
+|---|---|---|
+| `admin:ingress` / `admin:ingress-verify` | Traefik, cert-manager, маршруты / проверка | `ingress` |
+| `admin:openbao` / `admin:openbao-verify` | OpenBao (живой seal не трогает) / проверка | `openbao` |
+| `admin:vaultwarden` | Vaultwarden (`--render-only DIR` без кластера) | `vaultwarden` |
+| `admin:observability` | Prometheus/Loki/Alloy | `observability` |
+| `admin:external-secrets` | ESO и ExternalSecrets | `kube` |
+| `admin:heartbeat` | Cloudflare Worker heartbeat | `heartbeat` |
+| `admin:offsite-install` | offsite restic на узле K3s (`--dry-run`) | `offsite` |
+| `admin:pve-backup-install` | метрики vzdump на PVE (`--dry-run`) | — |
+| `admin:scheduler-backup` | бэкап SQLite scheduler в `local-data/` | `kube` |
+| `admin:service <unit>` | deploy.sh сервиса руками (обычно это делает CI) | `scheduler`, `currency-bot`, `mcp-gateway`, `wakegrant` |
+| `admin:android-distribute` | сборка, подпись, Firebase (`--dry-run`) | `android` |
+| `deploy:status <unit> --live`, `rollback --yes` | kubectl / helm по кластеру | `kube` (автоматически) |
+| `secrets:exec -- -P <p> exec -- <cmd>` | любая команда с секретами профиля | любой |
+
+`mise run secrets:file <file>` / `secrets:clean` остаются запасным путём для
+ручной работы с файлом (например, CA VPN для `vpncerts.py`).
+
 ## Каждый день
 
 | Задача | Команда |
 |---|---|
-| файл для старого скрипта | `mise run secrets:file home/ingress.env` → `mise run secrets:clean home/ingress.env` |
+| скрипт деплоя/обслуживания | `mise run admin:<задача>` (секреты — fnox, см. выше) |
+| файл вручную (запасной путь) | `mise run secrets:file home/ingress.env` → `mise run secrets:clean home/ingress.env` |
 | сверить каталог с OpenBao | `mise run secrets:check` |
 | копия в Vaultwarden | `export BW_SESSION=$(bw unlock --raw)` → `mise run vault:sync` |
 | всё ли на месте | `mise run doctor` |

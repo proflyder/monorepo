@@ -1,0 +1,127 @@
+# Secrets for local scripts — references to OpenBao only, never values.
+#
+# Entry point: `mise run admin:<task>` (each task picks its profile) or
+# `mise run secrets:exec -- -P <profile> exec -- <command>`. fnox resolves the
+# profile's secrets, writes `as_file` ones to private temp files (0600, deleted
+# when the command exits) and passes their paths in the variables the scripts
+# already read. Nothing persists on disk; the shell stays clean.
+#
+# Providers: one per OpenBao folder, because fnox references are `<leaf>/<field>`
+# (no nested paths). Address: VAULT_ADDR (mise env, secrets/openbao/addr).
+# Token: the machine's operator token via `workstation.py token`, which also
+# renews it. `vault` is a shim to `bao` (platform/workstation/bin/vault).
+# Every reference is checked against platform/workstation/catalog.json by
+# test_workstation.py and against OpenBao by `mise run secrets:check`.
+
+[providers.infra_kubernetes]
+type = "vault"
+path = "secret/infra/kubernetes"
+credential_command = 'r="$(git rev-parse --show-toplevel)" && "$r/platform/workstation/run.sh" "$r/platform/workstation/workstation.py" token'
+
+[providers.infra_cloudflare]
+type = "vault"
+path = "secret/infra/cloudflare"
+credential_command = 'r="$(git rev-parse --show-toplevel)" && "$r/platform/workstation/run.sh" "$r/platform/workstation/workstation.py" token'
+
+[providers.infra_backup]
+type = "vault"
+path = "secret/infra/backup"
+credential_command = 'r="$(git rev-parse --show-toplevel)" && "$r/platform/workstation/run.sh" "$r/platform/workstation/workstation.py" token'
+
+[providers.infra_ssh]
+type = "vault"
+path = "secret/infra/ssh"
+credential_command = 'r="$(git rev-parse --show-toplevel)" && "$r/platform/workstation/run.sh" "$r/platform/workstation/workstation.py" token'
+
+[providers.infra_station]
+type = "vault"
+path = "secret/infra/station"
+credential_command = 'r="$(git rev-parse --show-toplevel)" && "$r/platform/workstation/run.sh" "$r/platform/workstation/workstation.py" token'
+
+[providers.k8s_home_assistant]
+type = "vault"
+path = "secret/k8s/home-assistant"
+credential_command = 'r="$(git rev-parse --show-toplevel)" && "$r/platform/workstation/run.sh" "$r/platform/workstation/workstation.py" token'
+
+[providers.ci]
+type = "vault"
+path = "secret/ci"
+credential_command = 'r="$(git rev-parse --show-toplevel)" && "$r/platform/workstation/run.sh" "$r/platform/workstation/workstation.py" token'
+
+# --- admin kubeconfig: deploy:status --live, rollback, cluster-wide scripts --
+[profiles.kube.secrets]
+KUBECONFIG = { provider = "infra_kubernetes", value = "admin/admin_kubeconfig", as_file = true }
+
+# --- ingress: Traefik/cert-manager deploy and verify ------------------------
+[profiles.ingress.secrets]
+INGRESS_PRIVATE_ENV = { provider = "infra_kubernetes", value = "values-private/ingress_env", as_file = true }
+CLOUDFLARE_API_TOKEN_FILE = { provider = "infra_cloudflare", value = "vpn-dns/cloudflare_env", as_file = true }
+SCHEDULER_TOKEN_FILE = { provider = "k8s_home_assistant", value = "scheduler-auth/token", as_file = true }
+HA_TOKEN_FILE = { provider = "k8s_home_assistant", value = "ha-bridge-ha/token", as_file = true }
+KUBECONFIG = { provider = "infra_kubernetes", value = "admin/admin_kubeconfig", as_file = true }
+
+# --- OpenBao deploy/bootstrap/verify -----------------------------------------
+[profiles.openbao.secrets]
+INGRESS_PRIVATE_ENV = { provider = "infra_kubernetes", value = "values-private/ingress_env", as_file = true }
+CLOUDFLARE_API_TOKEN_FILE = { provider = "infra_cloudflare", value = "vpn-dns/cloudflare_env", as_file = true }
+KUBECONFIG = { provider = "infra_kubernetes", value = "admin/admin_kubeconfig", as_file = true }
+
+# --- Vaultwarden deploy -------------------------------------------------------
+[profiles.vaultwarden.secrets]
+INGRESS_PRIVATE_ENV = { provider = "infra_kubernetes", value = "values-private/ingress_env", as_file = true }
+CLOUDFLARE_API_TOKEN_FILE = { provider = "infra_cloudflare", value = "vpn-dns/cloudflare_env", as_file = true }
+KUBECONFIG = { provider = "infra_kubernetes", value = "admin/admin_kubeconfig", as_file = true }
+
+# --- observability (Prometheus/Loki/Alloy Helm) ------------------------------
+[profiles.observability.secrets]
+PROMETHEUS_PRIVATE_VALUES = { provider = "infra_kubernetes", value = "values-private/observability_values_yaml", as_file = true }
+KUBECONFIG = { provider = "infra_kubernetes", value = "admin/admin_kubeconfig", as_file = true }
+
+# --- heartbeat Worker (Cloudflare) -------------------------------------------
+[profiles.heartbeat.secrets]
+HEARTBEAT_ENV_FILE = { provider = "infra_cloudflare", value = "workers/heartbeat_env", as_file = true }
+CLOUDFLARE_ENV_FILE = { provider = "infra_cloudflare", value = "workers/cloudflare_workers_env", as_file = true }
+
+# --- offsite backup install (restic → Google Drive) --------------------------
+# No OFFSITE_RCLONE_CONF on purpose: rclone refreshes the OAuth token inside
+# /var/lib/offsite-backup/rclone.conf on the node, and re-uploading the copy
+# from OpenBao would overwrite a newer token. First install only:
+#   mise run secrets:exec -- -P offsite exec -- env OFFSITE_RCLONE_CONF=<file> …
+[profiles.offsite.secrets]
+OFFSITE_ENV_FILE = { provider = "infra_backup", value = "offsite/offsite_backup_env", as_file = true }
+OFFSITE_RESTIC_PASSWORD_FILE = { provider = "infra_backup", value = "offsite/offsite_restic_password", as_file = true }
+OFFSITE_HA_TOKEN_FILE = { provider = "infra_backup", value = "offsite/offsite_ha_token", as_file = true }
+OFFSITE_BB_KEY_FILE = { provider = "infra_ssh", value = "offsite-bb/offsite_bb_key", as_file = true }
+OFFSITE_BB_KNOWN_HOSTS_FILE = { provider = "infra_ssh", value = "offsite-bb/offsite_bb_known_hosts", as_file = true }
+
+# --- service deploy scripts run by hand (CI gets the same values by OIDC) ----
+[profiles.scheduler.secrets]
+PRIVATE_ENV = { provider = "ci", value = "deploy-home/scheduler_env", as_file = true }
+SCHEDULER_TOKEN_FILE = { provider = "k8s_home_assistant", value = "scheduler-auth/token", as_file = true }
+KUBECONFIG = { provider = "infra_kubernetes", value = "admin/admin_kubeconfig", as_file = true }
+
+[profiles.currency-bot.secrets]
+PRIVATE_ENV = { provider = "ci", value = "deploy-home/currency_bot_env", as_file = true }
+KUBECONFIG = { provider = "infra_kubernetes", value = "admin/admin_kubeconfig", as_file = true }
+
+[profiles.mcp-gateway.secrets]
+PRIVATE_ENV = { provider = "ci", value = "deploy-home/mcp_gateway_env", as_file = true }
+KUBECONFIG = { provider = "infra_kubernetes", value = "admin/admin_kubeconfig", as_file = true }
+
+[profiles.wakegrant.secrets]
+PRIVATE_ENV = { provider = "ci", value = "deploy-home/wakegrant_env", as_file = true }
+KUBECONFIG = { provider = "infra_kubernetes", value = "admin/admin_kubeconfig", as_file = true }
+
+# --- station tools ------------------------------------------------------------
+[profiles.station.secrets]
+STATION_HOST = { provider = "infra_station", value = "access/station_host_txt" }
+HA_TOKEN_FILE = { provider = "k8s_home_assistant", value = "ha-bridge-ha/token", as_file = true }
+
+# --- Android release signing + Firebase App Distribution --------------------
+[profiles.android.secrets]
+SIGNING_KEYSTORE_B64_FILE = { provider = "ci", value = "android-distribute/signing_keystore_b64", as_file = true }
+SIGNING_STORE_PASSWORD_FILE = { provider = "ci", value = "android-distribute/signing_store_password", as_file = true }
+SIGNING_KEY_PASSWORD_FILE = { provider = "ci", value = "android-distribute/signing_key_password", as_file = true }
+SIGNING_KEY_ALIAS = { provider = "ci", value = "android-distribute/signing_key_alias" }
+SIGNING_CERT_SHA256 = { provider = "ci", value = "android-distribute/signing_cert_sha256" }
+GOOGLE_APPLICATION_CREDENTIALS = { provider = "ci", value = "android-distribute/firebase_service_account_json", as_file = true }

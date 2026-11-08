@@ -27,15 +27,15 @@ Deployment wrapper for `solutions/heartbeat` — внешний dead-man switch 
 4. Задеплоить Worker и затем один раз положить секреты:
 
    ```bash
-   ./projects/home/cloudflare/heartbeat/deploy.sh
-   ./projects/home/cloudflare/heartbeat/deploy.sh --secrets
+   mise run admin:heartbeat
+   mise run admin:heartbeat -- --secrets
    ```
 
 5. Положить URL и тот же `PING_TOKEN` в OpenBao `secret/k8s/monitoring/heartbeat`
    (поля `url`, `token`) и применить Alertmanager:
 
    ```bash
-   ./projects/home/kubernetes/deploy-observability.sh
+   mise run admin:observability
    ```
 
 `wrangler.toml.example` — только шаблон с плейсхолдерами. Реальный

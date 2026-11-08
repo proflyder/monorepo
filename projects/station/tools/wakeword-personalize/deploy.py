@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Model-only deploy with backup and HA/MA recovery checks. No binary/config upgrade."""
 import argparse
+import os
 from datetime import datetime, timezone
 import hashlib
 import json
@@ -36,7 +37,8 @@ def main():
     p.add_argument("--profile", type=Path, default=ROOT / "projects/station/configs/wakeword-personal.json")
     p.add_argument("--connection", type=Path, default=ROOT / "local-data/voice-recorder/connection.json")
     p.add_argument("--ha-url", required=True)
-    p.add_argument("--ha-token-file", type=Path, default=ROOT / "secrets/home/ha.token")
+    p.add_argument("--ha-token-file", type=Path,
+                   default=Path(os.environ.get("HA_TOKEN_FILE") or ROOT / "secrets/home/ha.token"))
     args = p.parse_args()
     profile, connection = json.loads(args.profile.read_text()), json.loads(args.connection.read_text())
     model, manifest = payload(profile)

@@ -6,7 +6,9 @@ for candidate in "$root/secrets/openbao/addr" \
   "$(git -C "$root" rev-parse --path-format=absolute --git-common-dir 2>/dev/null | sed 's#/.git$##')/secrets/openbao/addr"; do
   if [ -f "$candidate" ]; then
     BAO_ADDR="$(cat "$candidate")"
-    export BAO_ADDR
+    # fnox's vault provider (and the `vault` → `bao` shim) read VAULT_ADDR.
+    VAULT_ADDR="$BAO_ADDR"
+    export BAO_ADDR VAULT_ADDR
     break
   fi
 done
