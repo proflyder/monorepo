@@ -26,7 +26,7 @@
 
 | Путь | Что | Кто читает |
 |---|---|---|
-| `ci/android-distribute` | Android: APK release signing key, passwords, alias and certificate; Firebase App Distribution | CI android-distribute (OIDC) |
+| `ci/android-distribute` | Android: APK release signing key, passwords, alias and certificate; Firebase App Distribution | CI android-app (OIDC) + android-distribute (OIDC) |
 | `ci/deploy-home` | deploy-home: ci-deploy kubeconfig, service env files, runtime values (including intercom_env) | CI deploy-home (OIDC) |
 | `ci/deploy-station` | Pulsar rollout through HA (url, token, firmware entity) | CI deploy-station (OIDC) |
 | `ci/test` | smoke probe, not secret | CI auth smoke |

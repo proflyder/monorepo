@@ -32,6 +32,7 @@ export const config = {
         build_targets: ["//apps/one:app"],
         artifact: "bazel-bin/apps/one/app.apk",
         artifact_name: "app-one-debug",
+        release: true,
       },
     },
 

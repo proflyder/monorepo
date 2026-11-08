@@ -79,6 +79,12 @@ export class Unit {
         buildTargets: [],
         artifact: "",
         artifactName: "",
+        // The Android unit that builds, tests and signs the distributable APK
+        // (`android-app`). When distribution is selected it must be in the
+        // matrix even if the change routed only a shared Kotlin unit: the
+        // `android-distribute` job downloads that entry's artifact instead of
+        // rebuilding the APK.
+        androidRelease: false,
         // Extra Android SDK packages a unit's Bazel actions need, beyond the
         // platform/build-tools baseline installed by `_android.yml`.
         bazelSdkPackages: [],
@@ -237,6 +243,7 @@ export function normalizeConfig(data, label = "units") {
       buildTargets: list(bazel.build_targets),
       artifact: bazel.artifact ?? "",
       artifactName: bazel.artifact_name ?? "",
+      androidRelease: Boolean(bazel.release),
       bazelSdkPackages: list(bazel.sdk_packages),
       suites: list(python.suites),
       compileDirs: list(python.compile),
@@ -2309,6 +2316,26 @@ export function matrixEntries(route_, config) {
     sdk_packages: space(unit.bazelSdkPackages),
     universe,
   }));
+  // `android-distribute` uploads the artifact of the release-owning unit, so
+  // that entry must be in the matrix whenever distribution is selected. A
+  // change can route only a shared Kotlin unit (a new package the app does not
+  // import yet) while still counting as an application input upstream.
+  if (route_.androidDistribute) {
+    const release = config.units.find(
+      (unit) => unit.platform === "android" && unit.androidRelease,
+    );
+    if (release && !android.some((entry) => entry.id === release.id)) {
+      android.push({
+        id: release.id,
+        test_targets: space(release.testTargets),
+        build_targets: space(release.buildTargets),
+        artifact: release.artifact,
+        artifact_name: release.artifactName,
+        sdk_packages: space(release.bazelSdkPackages),
+        universe,
+      });
+    }
+  }
   const bazel = route_.routes.bazel.units.map((unit) => ({
     id: unit.id,
     test_targets: space(unit.testTargets),

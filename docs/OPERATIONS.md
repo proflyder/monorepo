@@ -1327,36 +1327,44 @@ LAN endpoint — `http://<node>:30098`. Переключение Android на HT
 
 Каждый PR в `develop`, затрагивающий Android-приложение (изменился
 `projects/mobile/android/**`, общая Kotlin-библиотека `packages/kotlin/**` или
-`platform/android/**`; routing выставляет `android_distribute` = true), после
-успешной сборки `android` запускает job `android-distribute` в
-`.github/workflows/ci.yml`: Environment `Android`, VPN группа `ci`, роль OpenBao
-`android-distribute` → `secret/ci/android-distribute`. Глобальная инвалидация
-(например `MODULE.bazel`) по-прежнему прогоняет проверки `android`, но APK не
-публикует. Исключение — правка `MODULE.bazel` только внутри Maven-расширения
-(`maven.install(...)`, `use_repo(maven, ...)`): она меняет состав APK, поэтому
-маршрутизируется как `MODULE.bazel#maven` только на `android` и публикует APK;
-scoped-изменения native-входов (`MODULE.bazel#native`, `.bazelrc#cache`) не
-выбирают `android` и APK не публикуют. Job собирает `//projects/mobile/android:app`
-(промежуточный debug-signed APK), подписывает финальный APK ключом релиза
-скриптом `platform/android/sign-release.sh` (`zipalign -P 16`, `apksigner`
-v2/v3) и загружает в Firebase App Distribution в группу `admins` («Admins»).
-Подпись проверяется fail-closed: `apksigner verify --print-certs` должен дать
-SHA-256 из `signing_cert_sha256`, иначе загрузки нет. Ключ и пароли лежат
-только в OpenBao (`secret/ci/android-distribute`: `signing_keystore_b64`,
-`signing_store_password`, `signing_key_password`, `signing_key_alias`,
-`signing_cert_sha256`, `google_services_json_b64`,
+`platform/android/**`; routing выставляет `android_distribute` = true), собирает
+и подписывает APK ровно один раз matrix-запись `android / android-app`
+(`.github/workflows/_android.yml`). Это единственная Android-запись с
+Environment `Android`: VPN группа `ci`, роль OpenBao `android-app-release` →
+`secret/ci/android-distribute`. Она собирает `//projects/mobile/android:app` с
+release-`versionCode`/`versionName`, прогоняет тесты на том же
+`--define`-варианте APK, подписывает финальный APK скриптом
+`platform/android/sign-release.sh` (`zipalign -P 16`, `apksigner` v2/v3) и
+публикует artifact `android-release-apk` (`app-release.apk` +
+`release-info.json`). Подпись проверяется fail-closed: `apksigner
+verify --print-certs` должен дать SHA-256 из `signing_cert_sha256`, иначе
+артефакта и загрузки нет. Затем job `android-distribute` в
+`.github/workflows/ci.yml`, дождавшись зелёного всего `android` matrix, только
+скачивает artifact, сверяет SHA-256 из `release-info.json` и загружает APK в
+Firebase App Distribution в группу `admins` («Admins») через
+`distribute.sh --upload-only`; роль OpenBao у него отдельная
+(`android-distribute`), и читает она только `firebase_service_account_json_b64`.
+Глобальная инвалидация (например `MODULE.bazel`) по-прежнему прогоняет проверки
+`android`, но APK не публикует. Исключение — правка `MODULE.bazel` только внутри
+Maven-расширения (`maven.install(...)`, `use_repo(maven, ...)`): она меняет
+состав APK, поэтому маршрутизируется как `MODULE.bazel#maven` только на
+`android` и публикует APK; scoped-изменения native-входов
+(`MODULE.bazel#native`, `.bazelrc#cache`) не выбирают `android` и APK не
+публикуют. Ключ и пароли лежат только в OpenBao (`secret/ci/android-distribute`:
+`signing_keystore_b64`, `signing_store_password`, `signing_key_password`,
+`signing_key_alias`, `signing_cert_sha256`, `google_services_json_b64`,
 `firebase_service_account_json_b64`), материализуются в `$RUNNER_TEMP`
 (0600/0700) и удаляются; JSON-файлы читаются как однострочный base64, чтобы
 `vault-action` не маскировал их построчно (маска строки `{` вырезала её из
-всех логов), в env последующих шагов попадают только пути. Старые поля
-`keystore_b64`/`keystore_password` больше не читаются (остаются бэкапом). PR из
-форков пропускается: у них нет ни OIDC-токена, ни секретов Environment. Job не
-входит в `ci-ok` — неудачная загрузка видна на PR, но не блокирует merge; новый
-push в тот же PR отменяет предыдущую загрузку. Локально —
-`projects/mobile/android/distribute.sh` (`--dry-run` печатает команду без
-загрузки; подпись — тем же `sign-release.sh`). Секреты и запись KV — README
-`projects/home/kubernetes/openbao`; статус — вкладка Actions прогона PR
-(`android-distribute`).
+всех логов), в env последующих шагов попадают только пути. PR из форков
+пропускается: у них нет ни OIDC-токена, ни секретов Environment — сборка и
+тесты идут без секретов, а подпись/artifact/distribution пропускаются с явным
+notice. `android-distribute` не входит в `ci-ok` — неудачная загрузка видна на
+PR, но не блокирует merge; новый push в тот же PR отменяет предыдущую загрузку.
+Локально — `projects/mobile/android/distribute.sh` (`--dry-run` печатает
+команду без загрузки; подпись — тем же `sign-release.sh`). Секреты и запись
+KV — README `projects/home/kubernetes/openbao`; статус — вкладка Actions
+прогона PR (`android / android-app` и `android-distribute`).
 
 ## Currency bot
 

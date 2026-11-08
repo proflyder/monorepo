@@ -11,9 +11,10 @@ name: ci
 # succeeded or was legitimately skipped.
 #
 # No deploy steps and no repository secrets: deploy workflows are separate and
-# only run from `develop` with Environments. The single exception is
-# `android-distribute`, a PR-only delivery side effect that uses the `Android`
-# Environment (never `ci-ok`) to sign and upload the APK to Firebase.
+# only run from `develop` with Environments. The single exception is the
+# `android-app` entry of `_android.yml`, which reads the `Android` Environment
+# to build and sign the distributable APK once, and `android-distribute`, which
+# uploads that artifact to Firebase (never `ci-ok`).
 #
 # `develop` changes only through a PR with a green `ci-ok`, so there is no push
 # trigger: re-running the same checks on the squash merge would be redundant.
@@ -214,13 +215,25 @@ jobs:
   #
   # The matrix uses the targets `plan` narrowed; a missing plan output (skipped
   # or failed) falls back to the declared targets inside `_android.yml`.
+  #
+  # `_android.yml` builds, tests and signs the distributable APK inside the
+  # `android-app` entry (the only entry that declares the `Android`
+  # Environment), so the caller grants the OIDC permission and passes the
+  # Environment secrets through. The other entries never use them.
   android:
     needs: [changes, plan]
     if: ${{ !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.android_units != '[]' }}
+    permissions:
+      contents: read
+      # The `android-app` entry exchanges a GitHub OIDC token for the
+      # `android-app-release` OpenBao role; a fork PR has no Environment and
+      # never mints one.
+      id-token: write
     strategy:
       fail-fast: false
       matrix:
         include: ${{ fromJSON(needs.changes.outputs.android_units) }}
+    secrets: inherit
     uses: ./.github/workflows/_android.yml
     with:
       unit: ${{ matrix.id }}
@@ -248,7 +261,9 @@ jobs:
       build_targets: ${{ matrix.build_targets }}
 
   # Firebase App Distribution of the Home Android app on every PR that changes
-  # it: one APK per push, after that PR's `android` build passed.
+  # it: the `android-app` matrix entry builds, tests and signs exactly one APK
+  # (`android-release-apk`), and this job only uploads those bytes. There is no
+  # second build, so a tester installs what CI tested.
   #
   # `android_distribute` is true only for a real Android input (the app, the
   # shared Kotlin libraries it builds, or `platform/android/**`). A global
@@ -272,8 +287,9 @@ jobs:
   # workflows/ci.yml@refs/pull/*/merge`, `event_name=pull_request`) are the
   # trust boundary; the Environment itself must allow PR head branches.
   #
-  # The checkout is the default pull_request merge ref, so the APK is built
-  # from the merge of the PR into `develop`.
+  # Only the Firebase service account is read here (same KV record as the
+  # signing material, but this job never touches the key); the app id comes
+  # from the `release-info.json` sidecar of the artifact.
   android-distribute:
     needs: [changes, android]
     if: >-
@@ -284,7 +300,7 @@ jobs:
       needs.android.result == 'success' &&
       needs.changes.outputs.android_distribute == 'true'
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 20
     # OIDC `environment` claim keeps this exact casing; OpenBao binds "Android".
     environment: Android
     permissions:
@@ -297,62 +313,25 @@ jobs:
       group: android-distribute-${{ github.event.pull_request.number }}
       cancel-in-progress: true
     env:
-      BAZELISK_VERSION: "1.30.0"
-      # Public DNS name of the VPN and the OpenBao address are private values:
-      # they live in the `Android` Environment, not in this file.
-      VPN_SERVER: ${{ secrets.VPN_SERVER }}
-      OPENBAO_ADDR: ${{ secrets.OPENBAO_ADDR }}
-      # Release-note inputs for `distribute.sh --ci`. Passed as environment
-      # data, never interpolated into the script body, so a PR title cannot
-      # inject shell.
+      # Release-note inputs for `distribute.sh --ci --upload-only`. Passed as
+      # environment data, never interpolated into the script body, so a PR title
+      # cannot inject shell.
       PR_NUMBER: ${{ github.event.pull_request.number }}
       PR_TITLE: ${{ github.event.pull_request.title }}
     steps:
+      # The script and the release notes need the repository (git metadata).
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
-      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+      # The signed APK and its metadata, uploaded once by `android / android-app`.
+      # Uploading an artifact from a matrix entry into this run makes it
+      # available here; a missing artifact fails the download.
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          distribution: temurin
-          java-version: "21"
-
-      - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
-
-      # Pinned Bazelisk on PATH, plus its Bzlmod/repository caches (same as
-      # `_android.yml`).
-      - uses: bazel-contrib/setup-bazel@104e3eea9447cdaa4b00d0fb46191a3985d26ab3 # v0.19.1
-        with:
-          bazelisk-version: ${{ env.BAZELISK_VERSION }}
-          bazelisk-cache: true
-          repository-cache: true
-          cache-save: ${{ github.event_name != 'pull_request' }}
-
-      # Restore-only: reuse the warm disk cache `deploy-home`'s `warm-caches`
-      # maintains on develop, so this build only redoes the actions that the
-      # private google-services config and the versionCode/versionName define
-      # (resources, manifest, dex, packaging) instead of compiling from
-      # scratch. The release key is applied after Bazel, so it does not
-      # invalidate any Bazel action.
-      #
-      # The APK is built here and nowhere else: the matrix entry builds the same
-      # `:app` target for `apk_runtime_closure_test`, but it has no Firebase
-      # config (PR CI never sees the Environment secrets) and PR CI must not
-      # publish secret-bearing artifacts. Distribution therefore owns the one
-      # distributable APK; the develop cache keeps it cheap.
-      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.cache/bazel-disk
-          key: bazel-android-${{ runner.os }}-android-app-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'projects/mobile/android/maven_install.json') }}
-          restore-keys: |
-            bazel-android-${{ runner.os }}-android-app-
-            bazel-android-${{ runner.os }}-
-
-      # setup-android accepts the SDK licenses by default; install exactly the
-      # platform/build-tools pinned in MODULE.bazel.
-      - name: Install Android SDK packages
-        run: sdkmanager --install "platforms;android-36" "build-tools;36.0.0"
+          name: android-release-apk
+          path: ${{ runner.temp }}/release
 
       # No official action exists for openconnect; the runner image has none.
-      # The VPN steps below mirror deploy-home's minimal connect/health-check
+      # The VPN steps mirror deploy-home's minimal connect/health-check
       # sequence; they are duplicated rather than extracted so a change here
       # cannot alter the working home deployment job.
       - name: Install VPN client
@@ -378,6 +357,9 @@ jobs:
           echo "VPN credentials prepared"
 
       - name: Connect VPN (group ci)
+        env:
+          VPN_SERVER: ${{ secrets.VPN_SERVER }}
+          OPENBAO_ADDR: ${{ secrets.OPENBAO_ADDR }}
         run: |
           set -euo pipefail
           CI_DIR="$RUNNER_TEMP/ci"
@@ -404,86 +386,38 @@ jobs:
           tail -n 40 "$RUNNER_TEMP/openconnect.log" >&2 || true
           exit 1
 
-      # GitHub OIDC -> OpenBao (auth/github, JWT audience = OPENBAO_ADDR). The
-      # action masks every line of every value and exposes them as step outputs
-      # only (`exportEnv: false`), so they do not leak into later steps' env.
-      # The JSON files are read as single-line base64: vault-action masks every
-      # line of a multi-line value, and GitHub strips a masked line that is just
-      # "{" from all logs, which mangled the Kotlin stack traces.
-      - name: Read Android signing secrets from OpenBao
+      # The upload job needs only the Firebase service account; the signing key
+      # and google-services.json stay between `android-app` and its Environment.
+      - name: Read the Firebase service account from OpenBao
         id: openbao
         uses: hashicorp/vault-action@892a26828f195e65540a40b4768ae4571f51ebfc # v4.0.0
         with:
-          url: ${{ env.OPENBAO_ADDR }}
+          url: ${{ secrets.OPENBAO_ADDR }}
           method: jwt
           path: github
           role: android-distribute
-          jwtGithubAudience: ${{ env.OPENBAO_ADDR }}
+          jwtGithubAudience: ${{ secrets.OPENBAO_ADDR }}
           exportEnv: false
           secrets: |
-            secret/data/ci/android-distribute signing_keystore_b64 | SIGNING_KEYSTORE_B64 ;
-            secret/data/ci/android-distribute signing_store_password | SIGNING_STORE_PASSWORD ;
-            secret/data/ci/android-distribute signing_key_password | SIGNING_KEY_PASSWORD ;
-            secret/data/ci/android-distribute signing_key_alias | SIGNING_KEY_ALIAS ;
-            secret/data/ci/android-distribute signing_cert_sha256 | SIGNING_CERT_SHA256 ;
-            secret/data/ci/android-distribute google_services_json_b64 | GOOGLE_SERVICES_JSON_B64 ;
             secret/data/ci/android-distribute firebase_service_account_json_b64 | FIREBASE_SERVICE_ACCOUNT_JSON_B64
 
-      # Materialise the private files into the checkout and $RUNNER_TEMP.
-      # Bazel needs google-services.json under platform/android/keys/ exactly
-      # like the local symlink. The release key is deliberately NOT there:
-      # Bazel output stays debug-signed and only `sign-release.sh` applies the
-      # release key, to the final APK. Passwords land in files with mode 600 and
-      # are never written to the environment or to a log.
-      - name: Materialise Android signing files
+      - name: Materialise the Firebase credentials
         env:
-          SIGNING_KEYSTORE_B64: ${{ steps.openbao.outputs.SIGNING_KEYSTORE_B64 }}
-          SIGNING_STORE_PASSWORD: ${{ steps.openbao.outputs.SIGNING_STORE_PASSWORD }}
-          SIGNING_KEY_PASSWORD: ${{ steps.openbao.outputs.SIGNING_KEY_PASSWORD }}
-          SIGNING_KEY_ALIAS: ${{ steps.openbao.outputs.SIGNING_KEY_ALIAS }}
-          SIGNING_CERT_SHA256: ${{ steps.openbao.outputs.SIGNING_CERT_SHA256 }}
-          GOOGLE_SERVICES_JSON_B64: ${{ steps.openbao.outputs.GOOGLE_SERVICES_JSON_B64 }}
           FIREBASE_SERVICE_ACCOUNT_JSON_B64: ${{ steps.openbao.outputs.FIREBASE_SERVICE_ACCOUNT_JSON_B64 }}
         run: |
           set +x
           set -euo pipefail
           umask 077
-          KEYS_DIR="platform/android/keys"
           CI_DIR="$RUNNER_TEMP/ci"
-          SIGNING_DIR="$CI_DIR/signing"
-          for value in SIGNING_KEYSTORE_B64 SIGNING_STORE_PASSWORD \
-                       SIGNING_KEY_PASSWORD SIGNING_KEY_ALIAS SIGNING_CERT_SHA256 \
-                       GOOGLE_SERVICES_JSON_B64 FIREBASE_SERVICE_ACCOUNT_JSON_B64; do
-            if [[ -z "${!value:-}" ]]; then
-              echo "OpenBao returned an empty $value" >&2
-              exit 1
-            fi
-          done
-          mkdir -p "$KEYS_DIR" "$SIGNING_DIR"
-          chmod 700 "$CI_DIR" "$SIGNING_DIR"
-          printf '%s' "$GOOGLE_SERVICES_JSON_B64" | base64 -d > "$KEYS_DIR/google-services.json"
-          chmod 600 "$KEYS_DIR/google-services.json"
-          printf '%s' "$SIGNING_KEYSTORE_B64" | base64 -d > "$SIGNING_DIR/home-release.keystore"
-          printf '%s' "$SIGNING_STORE_PASSWORD" > "$SIGNING_DIR/store.password"
-          printf '%s' "$SIGNING_KEY_PASSWORD" > "$SIGNING_DIR/key.password"
-          printf '%s' "$SIGNING_KEY_ALIAS" > "$SIGNING_DIR/alias"
-          printf '%s' "$SIGNING_CERT_SHA256" > "$SIGNING_DIR/cert.sha256"
-          chmod 600 "$SIGNING_DIR"/*
+          if [[ -z "${FIREBASE_SERVICE_ACCOUNT_JSON_B64:-}" ]]; then
+            echo "OpenBao returned an empty firebase_service_account_json_b64" >&2
+            exit 1
+          fi
           printf '%s' "$FIREBASE_SERVICE_ACCOUNT_JSON_B64" | base64 -d > "$CI_DIR/firebase-sa.json"
           chmod 600 "$CI_DIR/firebase-sa.json"
-          # Only paths go to later steps' environment; the values stay in files.
-          {
-            echo "SIGNING_KEYSTORE=$SIGNING_DIR/home-release.keystore"
-            echo "SIGNING_STORE_PASSWORD_FILE=$SIGNING_DIR/store.password"
-            echo "SIGNING_KEY_PASSWORD_FILE=$SIGNING_DIR/key.password"
-            echo "SIGNING_KEY_ALIAS_FILE=$SIGNING_DIR/alias"
-            echo "SIGNING_CERT_SHA256_FILE=$SIGNING_DIR/cert.sha256"
-            echo "GOOGLE_APPLICATION_CREDENTIALS=$CI_DIR/firebase-sa.json"
-          } >> "$GITHUB_ENV"
-          echo "Android signing files prepared"
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$CI_DIR/firebase-sa.json" >> "$GITHUB_ENV"
 
-      # The OpenBao token is short-lived and Maven/Firebase use the public
-      # internet, so the private network is no longer needed.
+      # The token is short-lived and the upload uses the public internet.
       - name: Disconnect VPN
         run: |
           set +e
@@ -495,20 +429,13 @@ jobs:
           rm -f "$RUNNER_TEMP/openconnect.log" "$RUNNER_TEMP/openconnect.pid"
           echo "VPN disconnected"
 
-      - name: Build, verify and distribute
+      # Upload-only: the script verifies the APK digest against
+      # release-info.json and never builds or signs anything.
+      - name: Distribute the prebuilt APK
         run: |
           set -euo pipefail
-          projects/mobile/android/distribute.sh --ci
-
-      # The exact bytes installed by the testers, so a reviewer can sideload
-      # what was published without repeating the build.
-      - name: Upload the distributed APK
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: android-release-apk
-          path: bazel-bin/projects/mobile/android/app/app-release.apk
-          if-no-files-found: error
-          retention-days: 7
+          projects/mobile/android/distribute.sh --ci --upload-only \
+            --release-info "$RUNNER_TEMP/release/release-info.json"
 
       - name: Summary
         if: always()
@@ -519,22 +446,21 @@ jobs:
             echo "- PR: #$PR_NUMBER"
             echo "- commit: \`$GITHUB_SHA\`"
             echo "- event: \`$GITHUB_EVENT_NAME\`"
+            echo "- APK: built, tested and signed once in \`android / android-app\`"
             echo "- run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Remove key files and disconnect VPN
+      - name: Remove credentials and disconnect VPN
         if: always()
         run: |
           set +e
-          rm -f platform/android/keys/google-services.json
-          rmdir platform/android/keys 2>/dev/null
           rm -rf "$RUNNER_TEMP/ci"
           if [[ -f "$RUNNER_TEMP/openconnect.pid" ]]; then
             sudo kill "$(sudo cat "$RUNNER_TEMP/openconnect.pid")" 2>/dev/null
           fi
           sudo pkill -f 'openconnect --no-dtls' 2>/dev/null
           rm -f "$RUNNER_TEMP/openconnect.log" "$RUNNER_TEMP/openconnect.pid"
-          echo "temporary signing files removed"
+          echo "temporary credentials removed"
 
   # One matrix entry per affected Python project suite.
   python:

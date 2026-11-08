@@ -175,6 +175,7 @@ recovery keys → `operator generate-root` → `admin-destroy` + `admin-generate
 |---|---|---|---|
 | `userpass` | человек | имя из `secrets/openbao/username` | `admin` |
 | `github` (`jwt`) | GitHub Actions | `deploy-home` | `ci-deploy` |
+| `github` (`jwt`) | GitHub Actions, Android APK build/sign | `android-app-release` | `ci-android` |
 | `github` (`jwt`) | GitHub Actions, Android App Distribution | `android-distribute` | `ci-android` |
 | `github` (`jwt`) | GitHub Actions, station deploy | `deploy-station` | `ci-station` |
 | `kubernetes` | External Secrets Operator | `external-secrets` | `k8s-read` |
@@ -205,7 +206,8 @@ delete, `sys/*`, `auth/*` запрещены. `secret/infra/*` — секрет�
 `ci-android`: read ровно `secret/data/ci/android-distribute` и
 `secret/metadata/ci/android-distribute`; `secret/ci/deploy-home`,
 `secret/ci/deploy-station`, `secret/k8s/*` и запись запрещены. Политика
-создаётся всегда вместе с ролью `android-distribute`.
+создаётся всегда вместе с ролями `android-app-release` и
+`android-distribute`.
 
 `backup`: только `read sys/storage/raft/snapshot`.
 
@@ -249,29 +251,37 @@ delete, `sys/*`, `auth/*` запрещены. `secret/infra/*` — секрет�
 создаются, остальная конфигурация не меняется. Повторный запуск с параметром
 идемпотентно обновляет роль.
 
-Роль `android-distribute` (`auth/github/role/android-distribute`) обслуживает
-сборку и загрузку Android APK в Firebase App Distribution внутри PR CI
-(job `android-distribute` в `.github/workflows/ci.yml`):
+Роли `android-app-release` и `android-distribute`
+(`auth/github/role/…`) обслуживают сборку/подпись и загрузку Android APK в
+Firebase App Distribution внутри PR CI. Сборка и подпись идут в reusable
+workflow `_android.yml` (matrix-запись `android / android-app`), загрузка — в
+job `android-distribute` файла `ci.yml`:
 
 - `oidc_discovery_url`/`bound_issuer` = `https://token.actions.githubusercontent.com`;
 - `bound_audiences` = тот же публичный URL OpenBao, что у `deploy-home`;
-- `bound_claims_type=glob` (единственная роль с глобами): `repository=<owner>/<repo>`
+- `bound_claims_type=glob` (единственные роли с глобами): `repository=<owner>/<repo>`
   (как у `deploy-home`, из `git remote origin` или
   `OPENBAO_GITHUB_REPOSITORY`), `environment=Android`,
-  `ref=refs/pull/*/merge`, `job_workflow_ref=<owner>/<repo>/.github/workflows/ci.yml@refs/pull/*/merge`
-  и `event_name=pull_request`. Так токен может выпустить только job из самого
-  `ci.yml` на merge-ref конкретного PR;
+  `ref=refs/pull/*/merge`, `event_name=pull_request` и
+  `job_workflow_ref`:
+  - `android-app-release` —
+    `<owner>/<repo>/.github/workflows/_android.yml@refs/pull/*/merge`;
+  - `android-distribute` —
+    `<owner>/<repo>/.github/workflows/ci.yml@refs/pull/*/merge`.
+
+  Токен может выпустить только конкретный job на merge-ref конкретного PR;
+  роли не взаимозаменяемы (токен сборки не подойдёт job'у загрузки и наоборот);
 - `user_claim=job_workflow_ref`, `token_policies=["ci-android"]`, TTL 10 мин,
   max 15 мин, `clock_skew=60`.
 
 Модель доверия: OIDC получают только PR из веток этого же репозитория — у PR
 из форка прогон read-only, без Environment-секретов и без права на роль, поэтому
 подделать `repository`/`job_workflow_ref` нельзя. Остаточный риск осознан: тот,
-кто может пушить ветку в репозиторий, может изменить `ci.yml` и получить
-секреты сборки Android. Для репозитория с одним владельцем это приемлемо;
-роль даёт read ровно одной записи `secret/ci/android-distribute` и TTL 10 минут.
-Другие роли (`deploy-home`, `deploy-station`) остаются с точными claims и без
-глобов.
+кто может пушить ветку в репозиторий, может изменить `_android.yml`/`ci.yml` и
+получить секреты сборки Android. Для репозитория с одним владельцем это
+приемлемо; роли дают read ровно одной записи `secret/ci/android-distribute` и
+TTL 10 минут. Другие роли (`deploy-home`, `deploy-station`) остаются с точными
+claims и без глобов.
 
 Ключи KV v2: `secret/ci/test` → `{probe: ok-ci}`,
 `secret/ci/deploy-home` → `{kubeconfig, scheduler_env, runtime_values}` (см.
@@ -374,22 +384,28 @@ SHA-256 прочитанного значения с локальным файл
 workflow: обновить ключ, при необходимости перезапустить `deploy-home`
 (токен роли живёт ≤15 мин и не хранится).
 
-Environment `Android` (job `android-distribute` в PR CI, `ci.yml`) хранит те
-же четыре значения доступа: `VPN_SERVER`, `VPN_CERT_P12_B64`,
+Environment `Android` (matrix-запись `android-app` в
+`.github/workflows/_android.yml` и job `android-distribute` в `ci.yml`) хранит
+те же четыре значения доступа: `VPN_SERVER`, `VPN_CERT_P12_B64`,
 `VPN_CERT_PASSWORD`, `OPENBAO_ADDR`; роль выбирается в workflow
-(`android-distribute`), отдельного `OPENBAO_ROLE` нет.
+(`android-app-release` при сборке/подписи, `android-distribute` при загрузке),
+отдельного `OPENBAO_ROLE` нет. Environment объявляет только запись
+`android-app`; job загрузки объявляет его отдельно в `ci.yml`.
 
 Deployment branch policy этого Environment **должна разрешать PR-head-ветки**:
 правила вида `*` и `*/*` (protected branches и теги — как удобно). Ограничение
 ref'а делает роль OpenBao (`refs/pull/*/merge` + `job_workflow_ref`), а не
 Environment: если оставить политику только на `develop`, job упадёт ещё до
 получения OIDC-токена. Секреты и роль доступны и PR-прогонам, но только из
-этого репозитория: форки не получают ни секретов Environment, ни OIDC-токена.
+этого репозитория: форки не получают ни секретов Environment, ни OIDC-токена
+(сборка и тесты у них идут без подписи, с явным notice).
 
 ### Android-секреты (App Distribution)
 
-`secret/ci/android-distribute` читает только роль `android-distribute`
-(политика `ci-android`). Подпись APK делает `platform/android/sign-release.sh`
+`secret/ci/android-distribute` читают роли `android-app-release` (ключ,
+`google-services.json`) и `android-distribute` (только Firebase service
+account) — обе с политикой `ci-android`. Подпись APK делает
+`platform/android/sign-release.sh`
 поверх собранного Bazel APK; ключ и пароли в CI не попадают в Bazel и в env
 последующих шагов. Значения — исходный текст (не base64), кроме keystore,
 который хранится как base64:

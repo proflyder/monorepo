@@ -154,6 +154,18 @@ function bazelTargetOverride() {
 }
 
 /**
+ * Extra Bazel options appended to build and test commands (`BAZEL_EXTRA_ARGS`,
+ * space separated). `_android.yml` uses it to build and test the distributable
+ * APK once with the release `home_version_code`/`home_version_name` defines, so
+ * the APK the tests exercise is exactly the APK that gets signed. Local tasks
+ * leave it unset and keep the defaults from `platform/android/android.bazelrc`.
+ */
+function bazelExtraArgs() {
+  const raw = process.env.BAZEL_EXTRA_ARGS;
+  return raw ? raw.trim().split(/\s+/).filter(Boolean) : [];
+}
+
+/**
  * Android-only flags live in `platform/android/android.bazelrc` and are selected
  * with this config, so a change there routes to the Android units only instead
  * of invalidating every unit through the root `.bazelrc`. Passed first, so a
@@ -189,7 +201,11 @@ export function bazelTargets(unit, kind) {
 export function buildCommands(unit, root = ROOT) {
   if (unit === null) {
     // `//...` includes the Android targets, so keep the Android config active.
-    return [{ command: "bazel", args: ["build", ANDROID_CONFIG, "//..."], cwd: root }];
+    return [{
+      command: "bazel",
+      args: ["build", ANDROID_CONFIG, ...bazelExtraArgs(), "//..."],
+      cwd: root,
+    }];
   }
   if (!["bazel", "android"].includes(unit.platform)) {
     throw new Error(
@@ -204,7 +220,11 @@ export function buildCommands(unit, root = ROOT) {
     );
   }
   const config = needsAndroidConfig(unit) ? [ANDROID_CONFIG] : [];
-  return [{ command: "bazel", args: ["build", ...config, ...targets], cwd: root }];
+  return [{
+    command: "bazel",
+    args: ["build", ...config, ...bazelExtraArgs(), ...targets],
+    cwd: root,
+  }];
 }
 
 function testFiles(root, directories, suffix) {
@@ -247,7 +267,13 @@ export function testCommands(unit, root = ROOT) {
       return [
         {
           command: "bazel",
-          args: ["test", ...config, ...targets, "--test_output=errors"],
+          args: [
+            "test",
+            ...config,
+            ...bazelExtraArgs(),
+            ...targets,
+            "--test_output=errors",
+          ],
           cwd: root,
         },
       ];

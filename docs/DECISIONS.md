@@ -664,13 +664,18 @@
     выполняется один раз в job `plan` (параллельно `changes`, universe и
     кандидаты — из карты юнитов); каждая запись матрицы лишь пересекает свои
     цели с результатом (`platform/ci/plan-targets.mjs`), пустой результат
-    означает «все объявленные цели». Распространяемый APK собирается только в
-    `android-distribute`: это единственный job с приватным
-    `google-services.json` (Environment `Android`), а матричный `android-app`
-    собирает `:app` лишь для `apk_runtime_closure_test` — без Firebase-конфига,
-    который нельзя публиковать в artifacts PR. Подписанные байты доступны как
-    artifact `android-release-apk`; благодаря прогретому develop-кэшу
-    пересборка ограничена действиями, зависящими от `--define` и конфига.
+    означает «все объявленные цели». Распространяемый APK собирается ровно
+    один раз — в matrix-записи `android-app` (`_android.yml`): это
+    единственный Android-job с Environment `Android` и приватным
+    `google-services.json`, он же прогоняет тесты на том же `--define`-варианте
+    APK (`BAZEL_EXTRA_ARGS`), подписывает его и публикует artifact
+    `android-release-apk` (`app-release.apk` + `release-info.json`).
+    `android-distribute` ничего не собирает: скачивает artifact, сверяет
+    SHA-256 и загружает в Firebase, поэтому ему нужен только
+    `firebase_service_account_json_b64`; роль OpenBao у него отдельная от
+    роли сборки (`android-app-release`, `_android.yml`). Благодаря прогретому
+    develop-кэшу пересборка ограничена действиями, зависящими от `--define` и
+    конфига.
 
 50. **Android-only Bazel-флаги — в `platform/android/android.bazelrc` под
     `--config=android`.** Корневой `.bazelrc` — глобальный вход планировщика
