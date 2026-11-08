@@ -1728,7 +1728,6 @@ speak_text:
       selector:
         text:
           multiline: true
-          max: 500
   variables:
     speak_satellite: assist_satellite.iandeks_stantsiia_midi_assist_satellite
   sequence:
