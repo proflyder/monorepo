@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Minimal exposure for the scheduler NodePort.
+# Minimal exposure for the scheduler, control and intercom NodePorts.
 #
 # This file is a TEMPLATE: deploy.sh substitutes the real LAN CIDR from an
 # ignored env file. The published file keeps TEST-NET placeholders.
@@ -21,7 +21,7 @@ table inet ricardo_scheduler {
   chain prerouting {
     type filter hook prerouting priority dstnat - 10; policy accept;
     iifname "lo" accept
-    meta nfproto ipv6 tcp dport { 30098, 30099 } drop
-    ip daddr 192.0.2.27 tcp dport { 30098, 30099 } ip saddr != { 192.0.2.0/24, 10.42.0.0/16 } drop
+    meta nfproto ipv6 tcp dport { 30098, 30099, 30097 } drop
+    ip daddr 192.0.2.27 tcp dport { 30098, 30099, 30097 } ip saddr != { 192.0.2.0/24, 10.42.0.0/16 } drop
   }
 }

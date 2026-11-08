@@ -206,9 +206,10 @@ Endpoints (private values in `secrets/home/scheduler.env`):
 - Do not back a proxied route with a selectorless Service pointing at this
   node's own NodePort: single-node ClusterIP DNAT to the node NodePort does not
   re-enter kube-proxy's NodePort hook.
-- `nft/scheduler-nodeport.nft` drops the NodePort in `prerouting` before
-  kube-proxy DNAT unless the source is the home LAN or the pod CIDR; IPv6
-  NodePort is dropped. Persistence: `ricardo-scheduler-firewall.service` on the
+- `nft/scheduler-nodeport.nft` drops the scheduler, control and intercom
+  NodePorts in `prerouting` before kube-proxy DNAT unless the source is the
+  home LAN or the pod CIDR; IPv6 NodePort is dropped. The private env file
+  needs `SCHEDULER_NODE_PORT`, `CONTROL_NODE_PORT` and `INTERCOM_NODE_PORT`. Persistence: `ricardo-scheduler-firewall.service` on the
   node boots from `/etc/ricardo-scheduler-nodeport.nft`.
 - Every RPC requires `Authorization: Bearer <token>`; unauthenticated requests
   get HTTP 401. HA uses the LAN endpoint; Android can use either the LAN

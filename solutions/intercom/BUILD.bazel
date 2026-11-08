@@ -1,0 +1,17 @@
+load("//platform/bazel/oci:service_image.bzl", "rust_service_image")
+
+package(default_visibility = ["//visibility:public"])
+
+# Static x86_64-unknown-linux-musl binary on the shared digest-pinned
+# distroless static base.
+rust_service_image(
+    name = "intercom",
+    crate_binary = "//solutions/intercom/crates/intercom:intercom",
+    repo = "ghcr.io/proflyder/intercom",
+)
+
+filegroup(
+    name = "images",
+    srcs = [":intercom_image"],
+    visibility = ["//visibility:public"],
+)

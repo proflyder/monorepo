@@ -12,6 +12,7 @@
 | `mcp-gateway/` | Rust | MCP Streamable HTTP шлюз: группы `infra.read`, `infra.fix`, `infra.report`; каталог сервисов из env | развёрнут |
 | `voice-proxy/` | Rust | OpenAI-совместимый прокси перед LLM: делает ответы пригодными для Piper TTS | развёрнут |
 | `wakegrant/` | Rust | одноразовые гранты входа для ПК, разбуженного HA (`packages/contracts/wakegrant`) | развёрнут |
+| `intercom/` | Rust | сигналинг WebRTC-звонка телефон ↔ колонка: endpoint-регистрация, состояние звонка, SDP/ICE relay, `Watch` | деплой включён, первый выкат merge'ем |
 | `heartbeat/` | JS | Cloudflare Worker: внешний dead-man switch для Alertmanager `Watchdog` | развёрнут |
 | `bb-home-dispatcher/` | TS | плагин bb: детерминированный исполнитель голосовых команд от `mcp-gateway` | развёрнут |
 | `bb-profiles/` | TS | плагин bb: изолированные профили (логины, конфиги, провайдеры, машины) | развёрнут |

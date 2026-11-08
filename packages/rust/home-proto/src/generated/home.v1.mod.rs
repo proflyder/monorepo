@@ -3,6 +3,7 @@
 include!("scheduler.rs");
 include!("alarms.rs");
 include!("scenario.rs");
+include!("intercom.rs");
 #[allow(
     non_camel_case_types,
     dead_code,
@@ -23,16 +24,19 @@ pub mod __buffa {
         include!("scheduler.__view.rs");
         include!("alarms.__view.rs");
         include!("scenario.__view.rs");
+        include!("intercom.__view.rs");
         pub mod oneof {
             #[allow(unused_imports)]
             use super::*;
             include!("scenario.__view_oneof.rs");
+            include!("intercom.__view_oneof.rs");
         }
     }
     pub mod oneof {
         #[allow(unused_imports)]
         use super::*;
         include!("scenario.__oneof.rs");
+        include!("intercom.__oneof.rs");
     }
     /// Register this package's `Any` type entries and extension entries.
     pub fn register_types(reg: &mut ::buffa::type_registry::TypeRegistry) {
@@ -122,6 +126,36 @@ pub mod __buffa {
         reg.register_json_any(super::__SET_SCENARIO_ENABLED_RESPONSE_JSON_ANY);
         reg.register_json_any(super::__RUN_SCENARIO_REQUEST_JSON_ANY);
         reg.register_json_any(super::__RUN_SCENARIO_RESPONSE_JSON_ANY);
+        reg.register_json_any(super::__ENDPOINT_JSON_ANY);
+        reg.register_json_any(super::__CALL_JSON_ANY);
+        reg.register_json_any(super::__REGISTER_ENDPOINT_REQUEST_JSON_ANY);
+        reg.register_json_any(super::__REGISTER_ENDPOINT_RESPONSE_JSON_ANY);
+        reg.register_json_any(super::__LIST_ENDPOINTS_REQUEST_JSON_ANY);
+        reg.register_json_any(super::__LIST_ENDPOINTS_RESPONSE_JSON_ANY);
+        reg.register_json_any(super::__START_CALL_REQUEST_JSON_ANY);
+        reg.register_json_any(super::__START_CALL_RESPONSE_JSON_ANY);
+        reg.register_json_any(super::__ANSWER_REQUEST_JSON_ANY);
+        reg.register_json_any(super::__ANSWER_RESPONSE_JSON_ANY);
+        reg.register_json_any(super::__HANGUP_REQUEST_JSON_ANY);
+        reg.register_json_any(super::__HANGUP_RESPONSE_JSON_ANY);
+        reg.register_json_any(super::__GET_CALL_REQUEST_JSON_ANY);
+        reg.register_json_any(super::__GET_CALL_RESPONSE_JSON_ANY);
+        reg.register_json_any(super::__SDP_SIGNAL_JSON_ANY);
+        reg.register_json_any(super::__ICE_CANDIDATE_SIGNAL_JSON_ANY);
+        reg.register_json_any(super::__ICE_END_SIGNAL_JSON_ANY);
+        reg.register_json_any(super::__SEND_SIGNAL_REQUEST_JSON_ANY);
+        reg.register_json_any(super::__SEND_SIGNAL_RESPONSE_JSON_ANY);
+        reg.register_json_any(super::__WATCH_REQUEST_JSON_ANY);
+        reg.register_json_any(super::__CALL_EVENT_JSON_ANY);
+        reg.register_json_any(super::__SDP_EVENT_JSON_ANY);
+        reg.register_json_any(super::__ICE_CANDIDATE_EVENT_JSON_ANY);
+        reg.register_json_any(super::__ICE_END_EVENT_JSON_ANY);
+        reg.register_json_any(super::__WATCH_EVENT_JSON_ANY);
+        reg.register_json_any(super::__ICE_SERVER_JSON_ANY);
+        reg.register_json_any(super::__GET_ICE_CONFIG_REQUEST_JSON_ANY);
+        reg.register_json_any(super::__GET_ICE_CONFIG_RESPONSE_JSON_ANY);
+        reg.register_json_any(super::__GET_INTERCOM_STATUS_REQUEST_JSON_ANY);
+        reg.register_json_any(super::__GET_INTERCOM_STATUS_RESPONSE_JSON_ANY);
     }
 }
 #[doc(inline)]
@@ -469,7 +503,128 @@ pub use self::__buffa::view::RunScenarioResponseView;
 #[doc(inline)]
 pub use self::__buffa::view::RunScenarioResponseOwnedView;
 #[doc(inline)]
+pub use self::__buffa::view::EndpointView;
+#[doc(inline)]
+pub use self::__buffa::view::EndpointOwnedView;
+#[doc(inline)]
+pub use self::__buffa::view::CallView;
+#[doc(inline)]
+pub use self::__buffa::view::CallOwnedView;
+#[doc(inline)]
+pub use self::__buffa::view::RegisterEndpointRequestView;
+#[doc(inline)]
+pub use self::__buffa::view::RegisterEndpointRequestOwnedView;
+#[doc(inline)]
+pub use self::__buffa::view::RegisterEndpointResponseView;
+#[doc(inline)]
+pub use self::__buffa::view::RegisterEndpointResponseOwnedView;
+#[doc(inline)]
+pub use self::__buffa::view::ListEndpointsRequestView;
+#[doc(inline)]
+pub use self::__buffa::view::ListEndpointsRequestOwnedView;
+#[doc(inline)]
+pub use self::__buffa::view::ListEndpointsResponseView;
+#[doc(inline)]
+pub use self::__buffa::view::ListEndpointsResponseOwnedView;
+#[doc(inline)]
+pub use self::__buffa::view::StartCallRequestView;
+#[doc(inline)]
+pub use self::__buffa::view::StartCallRequestOwnedView;
+#[doc(inline)]
+pub use self::__buffa::view::StartCallResponseView;
+#[doc(inline)]
+pub use self::__buffa::view::StartCallResponseOwnedView;
+#[doc(inline)]
+pub use self::__buffa::view::AnswerRequestView;
+#[doc(inline)]
+pub use self::__buffa::view::AnswerRequestOwnedView;
+#[doc(inline)]
+pub use self::__buffa::view::AnswerResponseView;
+#[doc(inline)]
+pub use self::__buffa::view::AnswerResponseOwnedView;
+#[doc(inline)]
+pub use self::__buffa::view::HangupRequestView;
+#[doc(inline)]
+pub use self::__buffa::view::HangupRequestOwnedView;
+#[doc(inline)]
+pub use self::__buffa::view::HangupResponseView;
+#[doc(inline)]
+pub use self::__buffa::view::HangupResponseOwnedView;
+#[doc(inline)]
+pub use self::__buffa::view::GetCallRequestView;
+#[doc(inline)]
+pub use self::__buffa::view::GetCallRequestOwnedView;
+#[doc(inline)]
+pub use self::__buffa::view::GetCallResponseView;
+#[doc(inline)]
+pub use self::__buffa::view::GetCallResponseOwnedView;
+#[doc(inline)]
+pub use self::__buffa::view::SdpSignalView;
+#[doc(inline)]
+pub use self::__buffa::view::SdpSignalOwnedView;
+#[doc(inline)]
+pub use self::__buffa::view::IceCandidateSignalView;
+#[doc(inline)]
+pub use self::__buffa::view::IceCandidateSignalOwnedView;
+#[doc(inline)]
+pub use self::__buffa::view::IceEndSignalView;
+#[doc(inline)]
+pub use self::__buffa::view::IceEndSignalOwnedView;
+#[doc(inline)]
+pub use self::__buffa::view::SendSignalRequestView;
+#[doc(inline)]
+pub use self::__buffa::view::SendSignalRequestOwnedView;
+#[doc(inline)]
+pub use self::__buffa::view::SendSignalResponseView;
+#[doc(inline)]
+pub use self::__buffa::view::SendSignalResponseOwnedView;
+#[doc(inline)]
+pub use self::__buffa::view::WatchRequestView;
+#[doc(inline)]
+pub use self::__buffa::view::WatchRequestOwnedView;
+#[doc(inline)]
+pub use self::__buffa::view::CallEventView;
+#[doc(inline)]
+pub use self::__buffa::view::CallEventOwnedView;
+#[doc(inline)]
+pub use self::__buffa::view::SdpEventView;
+#[doc(inline)]
+pub use self::__buffa::view::SdpEventOwnedView;
+#[doc(inline)]
+pub use self::__buffa::view::IceCandidateEventView;
+#[doc(inline)]
+pub use self::__buffa::view::IceCandidateEventOwnedView;
+#[doc(inline)]
+pub use self::__buffa::view::IceEndEventView;
+#[doc(inline)]
+pub use self::__buffa::view::IceEndEventOwnedView;
+#[doc(inline)]
+pub use self::__buffa::view::WatchEventView;
+#[doc(inline)]
+pub use self::__buffa::view::WatchEventOwnedView;
+#[doc(inline)]
+pub use self::__buffa::view::IceServerView;
+#[doc(inline)]
+pub use self::__buffa::view::IceServerOwnedView;
+#[doc(inline)]
+pub use self::__buffa::view::GetIceConfigRequestView;
+#[doc(inline)]
+pub use self::__buffa::view::GetIceConfigRequestOwnedView;
+#[doc(inline)]
+pub use self::__buffa::view::GetIceConfigResponseView;
+#[doc(inline)]
+pub use self::__buffa::view::GetIceConfigResponseOwnedView;
+#[doc(inline)]
+pub use self::__buffa::view::GetIntercomStatusRequestView;
+#[doc(inline)]
+pub use self::__buffa::view::GetIntercomStatusRequestOwnedView;
+#[doc(inline)]
+pub use self::__buffa::view::GetIntercomStatusResponseView;
+#[doc(inline)]
+pub use self::__buffa::view::GetIntercomStatusResponseOwnedView;
+#[doc(inline)]
 pub use self::__buffa::register_types;
 include!("scheduler.__connect.rs");
 include!("alarms.__connect.rs");
 include!("scenario.__connect.rs");
+include!("intercom.__connect.rs");

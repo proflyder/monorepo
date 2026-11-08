@@ -15,6 +15,7 @@ BLE gateway остаются на станции. Версии зафиксир�
 - [OpenBao](openbao/).
 - [External Secrets Operator](external-secrets/).
 - [Hermes voice-proxy firewall](voice-firewall/).
+- Intercom signaling (WebRTC call) — `intercom/`, деплой merge'ем в `develop`.
 
 `/srv/k3s` находится на диске VM 200 GiB. K3s data-dir:
 `/srv/k3s/runtime`. Новые observability PVC используют `local-retain`;

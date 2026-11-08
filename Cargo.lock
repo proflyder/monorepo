@@ -1901,6 +1901,33 @@ dependencies = [
 ]
 
 [[package]]
+name = "intercom"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "axum",
+ "connectrpc",
+ "futures-util",
+ "home-config",
+ "home-http",
+ "home-proto",
+ "home-runtime",
+ "home-secret",
+ "home-telemetry",
+ "http",
+ "reqwest",
+ "rustls",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "tokio-util",
+ "tower",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "ipnet"
 version = "2.12.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"

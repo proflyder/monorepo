@@ -618,6 +618,7 @@ test("deploy: platform/deploy-rs change runs the Rust unit and routes deploy uni
     "platform-deploy",
     "scheduler",
     "wakegrant",
+    "intercom",
     "currency-bot",
     "mcp-gateway",
     "ha-bridge",
@@ -628,6 +629,7 @@ test("deploy: platform/deploy-rs change runs the Rust unit and routes deploy uni
     "currency-bot",
     "ha-bridge",
     "hermes",
+    "intercom",
     "mcp-gateway",
     "scheduler",
     "wakegrant",
@@ -1922,6 +1924,7 @@ test("module routing: native-only edit reaches native and every Rust Bazel unit"
     "health-exporter",
     "scheduler",
     "wakegrant",
+    "intercom",
     "currency-bot",
     "mcp-gateway",
     "ha-bridge",
@@ -1930,12 +1933,12 @@ test("module routing: native-only edit reaches native and every Rust Bazel unit"
     "pulsar-bazel",
   ]);
   assert.deepEqual(result.routes.quality.units.map((unit) => unit.id), ["repository"]);
-  // scheduler, wakegrant, currency-bot and ha-bridge are Rust Bazel deploy
-  // units now, so a Rust toolchain pin change legitimately rebuilds and rolls
-  // them; the native-only units are not deployed.
+  // scheduler, wakegrant, intercom, currency-bot and ha-bridge are Rust Bazel
+  // deploy units now, so a Rust toolchain pin change legitimately rebuilds and
+  // rolls them; the native-only units are not deployed.
   assert.deepEqual(
     affected.deployEntries(result, config).map((entry) => entry.id),
-    ["scheduler", "wakegrant", "currency-bot", "mcp-gateway", "ha-bridge"],
+    ["scheduler", "wakegrant", "intercom", "currency-bot", "mcp-gateway", "ha-bridge"],
   );
   assert.equal(result.androidDistribute, false);
 });

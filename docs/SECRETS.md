@@ -27,7 +27,7 @@
 | Путь | Что | Кто читает |
 |---|---|---|
 | `ci/android-distribute` | Android: APK release signing key, passwords, alias and certificate; Firebase App Distribution | CI android-distribute (OIDC) |
-| `ci/deploy-home` | deploy-home: ci-deploy kubeconfig, service env files, runtime values | CI deploy-home (OIDC) |
+| `ci/deploy-home` | deploy-home: ci-deploy kubeconfig, service env files, runtime values (including intercom_env) | CI deploy-home (OIDC) |
 | `ci/deploy-station` | Pulsar rollout through HA (url, token, firmware entity) | CI deploy-station (OIDC) |
 | `ci/test` | smoke probe, not secret | CI auth smoke |
 | `infra/backup/ha` | HA backup encryption key | owner (restore) |
@@ -69,6 +69,7 @@
 | `k8s/currency-bot/currency-bot` | currency bot Telegram/API credentials | ESO → currency-bot |
 | `k8s/home-assistant/ha-bridge-ha` | HA long-lived token for ha-bridge | ESO → home-assistant |
 | `k8s/home-assistant/hermes-environment` | Hermes agent environment (HA/MA/Telegram/API keys) | ESO → home-assistant |
+| `k8s/home-assistant/intercom` | intercom signaling: phone bearer and station device token (created) | ESO → home-assistant |
 | `k8s/home-assistant/mcp-gateway-auth` | MCP gateway bearer | ESO → home-assistant |
 | `k8s/home-assistant/mcp-gateway-bb-ssh` | SSH key + known_hosts for bb dispatch from the MCP gateway | ESO → home-assistant |
 | `k8s/home-assistant/mcp-gateway-voice` | voice tool bearer of the MCP gateway | ESO → home-assistant |

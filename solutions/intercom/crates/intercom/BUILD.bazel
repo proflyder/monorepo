@@ -1,0 +1,100 @@
+load("@rules_rust//cargo:defs.bzl", "extract_cargo_lints")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_clippy_test", "rust_library", "rust_test", "rustfmt_test")
+
+package(default_visibility = ["//visibility:public"])
+
+# Kept in sync with [package].version in Cargo.toml. Bazel does not derive
+# env!("CARGO_PKG_VERSION"); without this the deployed binary reports 0.0.0.
+PACKAGE_VERSION = "0.1.0"
+
+LIB_DEPS = [
+    "//packages/rust/home-config:home_config",
+    "//packages/rust/home-http:home_http",
+    "//packages/rust/home-proto:home_proto",
+    "//packages/rust/home-runtime:home_runtime",
+    "//packages/rust/home-secret:home_secret",
+    "//packages/rust/home-telemetry:home_telemetry",
+    "@crates//:anyhow",
+    "@crates//:axum",
+    "@crates//:connectrpc",
+    "@crates//:futures-util",
+    "@crates//:http",
+    "@crates//:reqwest",
+    "@crates//:rustls",
+    "@crates//:thiserror",
+    "@crates//:tokio",
+    "@crates//:tokio-util",
+    "@crates//:tower",
+    "@crates//:tracing",
+    "@crates//:uuid",
+]
+
+rust_library(
+    name = "intercom_lib",
+    crate_name = "intercom",
+    srcs = glob(
+        ["src/**/*.rs"],
+        exclude = ["src/main.rs"],
+    ),
+    edition = "2024",
+    lint_config = ":workspace_lints",
+    version = PACKAGE_VERSION,
+    deps = LIB_DEPS,
+)
+
+rust_binary(
+    name = "intercom",
+    srcs = ["src/main.rs"],
+    rustc_flags = ["-C", "strip=symbols"],
+    edition = "2024",
+    lint_config = ":workspace_lints",
+    version = PACKAGE_VERSION,
+    deps = LIB_DEPS + [":intercom_lib"],
+)
+
+rust_test(
+    name = "unit_tests",
+    crate = ":intercom_lib",
+    edition = "2024",
+    lint_config = ":workspace_lints",
+    deps = LIB_DEPS + [
+        "@crates//:serde_json",
+        "@crates//:tempfile",
+    ],
+)
+
+rust_test(
+    name = "integration_tests",
+    srcs = ["tests/signaling.rs"],
+    edition = "2024",
+    lint_config = ":workspace_lints",
+    deps = LIB_DEPS + [
+        ":intercom_lib",
+        "@crates//:serde_json",
+    ],
+)
+
+# Mirrors the root [workspace.lints] through the crate's `[lints] workspace = true`.
+extract_cargo_lints(
+    name = "workspace_lints",
+    manifest = "Cargo.toml",
+    workspace = "//:Cargo.toml",
+)
+
+rustfmt_test(
+    name = "rustfmt",
+    targets = [
+        ":intercom_lib",
+        ":intercom",
+        ":integration_tests",
+    ],
+)
+
+rust_clippy_test(
+    name = "clippy",
+    targets = [
+        ":intercom_lib",
+        ":intercom",
+        ":integration_tests",
+    ],
+)

@@ -1,5 +1,5 @@
 {
-  "checksum": "0e1d40d45bcdd8da0f1094f94a765760c3d5aa5d4b695813e589db1d3539e6df",
+  "checksum": "d7f43ce96da5d345fcb0090a1f7ee278555b1763b776ee75e6c8638160f1ef44",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -6217,6 +6217,10 @@
             "target": "axum"
           },
           {
+            "id": "jiff 0.2.39",
+            "target": "jiff"
+          },
+          {
             "id": "reqwest 0.12.28",
             "target": "reqwest"
           },
@@ -8604,6 +8608,91 @@
         }
       ],
       "version": "0.2.5"
+    },
+    "intercom 0.1.0": {
+      "common_attrs": {
+        "deps": [
+          {
+            "id": "anyhow 1.0.104",
+            "target": "anyhow"
+          },
+          {
+            "id": "axum 0.8.9",
+            "target": "axum"
+          },
+          {
+            "id": "connectrpc 0.9.1",
+            "target": "connectrpc"
+          },
+          {
+            "id": "futures-util 0.3.34",
+            "target": "futures_util"
+          },
+          {
+            "id": "http 1.5.0",
+            "target": "http"
+          },
+          {
+            "id": "reqwest 0.12.28",
+            "target": "reqwest"
+          },
+          {
+            "id": "rustls 0.23.46",
+            "target": "rustls"
+          },
+          {
+            "id": "thiserror 2.0.21",
+            "target": "thiserror"
+          },
+          {
+            "id": "tokio 1.54.1",
+            "target": "tokio"
+          },
+          {
+            "id": "tokio-util 0.7.20",
+            "target": "tokio_util"
+          },
+          {
+            "id": "tower 0.5.3",
+            "target": "tower"
+          },
+          {
+            "id": "tracing 0.1.44",
+            "target": "tracing"
+          },
+          {
+            "id": "uuid 1.29.0",
+            "target": "uuid"
+          }
+        ],
+        "deps_dev": [
+          {
+            "id": "serde_json 1.0.154",
+            "target": "serde_json"
+          },
+          {
+            "id": "tempfile 3.27.0",
+            "target": "tempfile"
+          }
+        ],
+        "edition": "2024"
+      },
+      "library_target_name": "intercom",
+      "license": "AGPL-3.0-only",
+      "license_ids": [
+        "AGPL-3.0"
+      ],
+      "name": "intercom",
+      "repository": null,
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "intercom",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.1.0"
     },
     "ipnet 2.12.2": {
       "common_attrs": {
@@ -14933,6 +15022,10 @@
           {
             "id": "rustls 0.23.46",
             "target": "rustls"
+          },
+          {
+            "id": "serde 1.0.229",
+            "target": "serde"
           },
           {
             "id": "serde_json 1.0.154",
@@ -22574,6 +22667,7 @@
     "home-telemetry 0.1.0": "packages/rust/home-telemetry",
     "home-tls 0.1.0": "packages/rust/home-tls",
     "home-worker 0.1.0": "packages/rust/home-worker",
+    "intercom 0.1.0": "solutions/intercom/crates/intercom",
     "logon_provider 0.1.0": "solutions/windows-logon-provider/crates/provider",
     "mcp-gateway 0.1.0": "solutions/mcp-gateway/crates/mcp-gateway",
     "pulsar 0.0.0": "projects/station/pulsar/satellite/crates/pulsar",
