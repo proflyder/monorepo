@@ -277,6 +277,24 @@ impl SchedulerService for Service {
         })
     }
 
+    async fn skip_schedule_occurrence<'a>(
+        &'a self,
+        _ctx: RequestContext,
+        request: ServiceRequest<'_, proto::SkipScheduleOccurrenceRequest>,
+    ) -> ServiceResult<
+        impl connectrpc::Encodable<proto::SkipScheduleOccurrenceResponse> + Send + use<'a>,
+    > {
+        let id = request.id.to_owned();
+        let now = self.now_unix();
+        let schedule = self
+            .store_call(move |store| store.skip_next_occurrence(&id, now))
+            .await?;
+        response(proto::SkipScheduleOccurrenceResponse {
+            schedule: schedule_to_proto(&schedule).into(),
+            ..proto::SkipScheduleOccurrenceResponse::default()
+        })
+    }
+
     async fn start_timer<'a>(
         &'a self,
         _ctx: RequestContext,

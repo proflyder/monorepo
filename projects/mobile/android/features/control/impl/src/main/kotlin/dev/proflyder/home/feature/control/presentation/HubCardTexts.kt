@@ -1,6 +1,8 @@
 package dev.proflyder.home.feature.control.presentation
 
 import android.content.Context
+import dev.proflyder.home.core.model.RepeatKind
+import dev.proflyder.home.core.model.Schedule
 import dev.proflyder.home.core.model.TimerState
 import dev.proflyder.home.core.time.DurationText
 import dev.proflyder.home.feature.control.HubCard
@@ -24,6 +26,31 @@ internal class HubCardTexts(private val context: Context) : HubScheduleStrings {
         is HubCard.TimerCard -> card.timer.label.ifBlank { context.getString(R.string.control_hub_timer) }
         is HubCard.ScenarioCard -> card.scenario.label.ifBlank { context.getString(R.string.control_hub_scenario) }
         is HubCard.Reminder -> card.schedule.label.ifBlank { context.getString(R.string.control_hub_reminder) }
+    }
+
+    /** The compact alarm card shows the wall-clock time as its headline. */
+    fun alarmTime(card: HubCard.Alarm): String = time(card.schedule.at.hour, card.schedule.at.minute)
+
+    /** One dense line under the time: the label and the repeat days. */
+    fun alarmSubtitle(card: HubCard.Alarm): String {
+        if (card.ringing) return context.getString(R.string.control_hub_ringing)
+        val days = alarmRepeat(card.schedule)
+        return context.getString(R.string.control_hub_alarm_subtitle, title(card), days)
+    }
+
+    private fun alarmRepeat(schedule: Schedule): String =
+        when (schedule.repeat) {
+            RepeatKind.DAILY -> context.getString(R.string.control_hub_repeat_daily)
+            RepeatKind.WEEKDAYS -> context.getString(R.string.control_hub_repeat_weekdays)
+            RepeatKind.WEEKENDS -> context.getString(R.string.control_hub_repeat_weekends)
+            RepeatKind.CUSTOM -> customDays(schedule.weekdays)
+            RepeatKind.ONCE -> context.getString(R.string.control_hub_repeat_once)
+            RepeatKind.UNSPECIFIED -> context.getString(R.string.control_hub_repeat_unknown)
+        }
+
+    private fun customDays(days: List<Int>): String {
+        if (days.isEmpty()) return context.getString(R.string.control_hub_repeat_unknown)
+        return days.sorted().joinToString(", ") { dayOfWeek(it) }
     }
 
     fun summary(card: HubCard, remaining: Long?, nowUnix: Long): String = when (card) {

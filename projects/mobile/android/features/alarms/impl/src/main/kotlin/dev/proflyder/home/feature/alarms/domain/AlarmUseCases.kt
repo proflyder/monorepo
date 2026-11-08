@@ -39,6 +39,12 @@ import dev.zacsweers.metro.Inject
         repository.setEnabled(id, enabled)
 }
 
+@Inject class SkipAlarmOccurrence(
+    private val repository: AlarmRepository,
+) {
+    suspend operator fun invoke(id: String): Outcome<Schedule> = repository.skipNextOccurrence(id)
+}
+
 @Inject class DeleteAlarm(
     private val repository: AlarmRepository,
 ) {

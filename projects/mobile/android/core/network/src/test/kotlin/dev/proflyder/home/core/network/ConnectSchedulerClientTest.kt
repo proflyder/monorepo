@@ -239,6 +239,24 @@ class ConnectSchedulerClientTest {
     }
 
     @Test
+    fun skipScheduleOccurrenceCallsTheSchedulerAndKeepsTheAlarmEnabled() = runBlocking {
+        server.enqueue(
+            MockResponse().setResponseCode(200).setBody(
+                TestFixtures.read("schedule_updated.json"),
+            ),
+        )
+        val result = client().skipScheduleOccurrence("s1")
+        assertTrue(result is Outcome.Success)
+        val schedule = (result as Outcome.Success).value
+        assertTrue(schedule.enabled)
+
+        val request = server.takeRequest()
+        assertEquals("/home.v1.SchedulerService/SkipScheduleOccurrence", request.path)
+        val body = json.parseToJsonElement(request.body.readUtf8()).jsonObject
+        assertEquals("s1", body.getValue("id").jsonPrimitive.content)
+    }
+
+    @Test
     fun unauthorizedIsDistinctFromOffline() = runBlocking {
         server.enqueue(MockResponse().setResponseCode(401).setBody(TestFixtures.read("error_unauthenticated_bad_token.json")))
         assertEquals(RemoteFailure.Unauthorized, client().getStatus().failureOrNull())

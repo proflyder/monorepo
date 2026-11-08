@@ -161,22 +161,32 @@ class ControlViewModel(
      */
     private suspend fun loadHub(catalogOk: Boolean, requested: Int) {
         timers.syncClock()
-        val alarmList = alarms.list().getOrNull().orEmpty()
-        val timerList = timers.list().getOrNull().orEmpty()
-        val scenarioList = scenarios.list().getOrNull().orEmpty()
-        val reminderList = reminders.list().getOrNull().orEmpty()
+        val alarmsResult = alarms.list()
+        val timersResult = timers.list()
+        val scenariosResult = scenarios.list()
+        val remindersResult = reminders.list()
         if (requested != hubGeneration) return
         val now = clock.nowUnix()
-        val cards = HubCards.build(alarmList, timerList, scenarioList, reminderList, now)
+        // A failed source keeps its previous cards on screen instead of making
+        // a card disappear and reappear on the next successful refresh.
+        val cards = HubCards.buildOrKeep(
+            alarms = alarmsResult.getOrNull(),
+            timers = timersResult.getOrNull(),
+            scenarios = scenariosResult.getOrNull(),
+            reminders = remindersResult.getOrNull(),
+            previous = currentState.hubCards,
+            nowUnix = now,
+        )
         val remaining = cards.filterIsInstance<HubCard.TimerCard>()
             .associate { it.key to HubFormat.timerRemaining(it.timer, now) }
         val entries = currentState.entries
-        val refs = resolveFavorites(entries, scenarioList, catalogOk)
+        val allScenarios = scenariosResult.getOrNull() ?: currentState.scenarios
+        val refs = resolveFavorites(entries, allScenarios, catalogOk)
         updateState {
             copy(
                 hubCards = cards,
                 hubRemaining = remaining,
-                scenarios = scenarioList,
+                scenarios = allScenarios,
                 favorites = refs,
                 tick = tick + 1,
                 nowUnix = now,
@@ -397,12 +407,35 @@ class ControlViewModel(
         }
     }
 
-    private fun toggleAlarm(card: HubCard.Alarm) {
+    private fun toggleAlarm(card: HubCard.Alarm) = changeAlarmEnabled(card, !card.schedule.enabled)
+
+    /** Explicit "turn off completely" from the recurring-alarm choice dialog. */
+    fun disableAlarm(card: HubCard.Alarm) = changeAlarmEnabled(card, false)
+
+    /** Skip only the nearest occurrence; the alarm stays enabled and repeats. */
+    fun skipAlarmOccurrence(card: HubCard.Alarm) {
         val alarm = card.schedule
         if (alarm.id in currentState.pendingAlarms) return
         updateState { copy(pendingAlarms = pendingAlarms + alarm.id, actionError = null) }
         launch {
-            when (val result = alarms.setEnabled(alarm.id, !alarm.enabled)) {
+            when (val result = alarms.skipNextOccurrence(alarm.id)) {
+                is Outcome.Success -> {
+                    updateState { copy(pendingAlarms = pendingAlarms - alarm.id) }
+                    refreshHub()
+                }
+                is Outcome.Failure -> updateState {
+                    copy(pendingAlarms = pendingAlarms - alarm.id, actionError = result.failure)
+                }
+            }
+        }
+    }
+
+    private fun changeAlarmEnabled(card: HubCard.Alarm, enabled: Boolean) {
+        val alarm = card.schedule
+        if (alarm.id in currentState.pendingAlarms) return
+        updateState { copy(pendingAlarms = pendingAlarms + alarm.id, actionError = null) }
+        launch {
+            when (val result = alarms.setEnabled(alarm.id, enabled)) {
                 is Outcome.Success -> {
                     updateState { copy(pendingAlarms = pendingAlarms - alarm.id) }
                     refreshHub()

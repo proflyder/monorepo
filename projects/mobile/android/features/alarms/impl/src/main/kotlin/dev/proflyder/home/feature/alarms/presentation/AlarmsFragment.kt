@@ -17,8 +17,11 @@ import dev.proflyder.home.core.ui.setupPullToRefresh
 import dev.proflyder.home.core.ui.userMessage
 import dev.proflyder.home.core.ui.viewModelFactory
 import dev.proflyder.home.feature.alarms.AlarmEditorDestination
+import dev.proflyder.home.feature.alarms.AlarmDisableChoice
+import dev.proflyder.home.feature.alarms.alarmDisableChoice
 import dev.proflyder.home.feature.alarms.impl.R
 import dev.proflyder.home.feature.alarms.impl.databinding.FragmentAlarmsBinding
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 
 class AlarmsFragment : BaseFragment<FragmentAlarmsBinding>(FragmentAlarmsBinding.Companion::inflate) {
     internal val viewModel: AlarmsViewModel by activityViewModels {
@@ -38,7 +41,7 @@ class AlarmsFragment : BaseFragment<FragmentAlarmsBinding>(FragmentAlarmsBinding
     private val adapterCallback = object : BaseAdapterCallback<AlarmRow>(), AlarmAdapterCallback {
         override fun onItemClick(item: AlarmRow) = onAlarmClick(item.alarm)
         override fun onItemLongClick(item: AlarmRow) = viewModel.toggleSelection(item.alarm.id)
-        override fun onToggle(alarm: Schedule, enabled: Boolean) = viewModel.setEnabled(alarm, enabled)
+        override fun onToggle(alarm: Schedule, enabled: Boolean) = requestToggle(alarm, enabled)
         override fun onSnooze(alarm: Schedule) = viewModel.snooze(alarm)
         override fun onStop(alarm: Schedule) = viewModel.stop(alarm)
         override fun onDelete(alarm: Schedule) = confirmDelete(alarm.id)
@@ -184,6 +187,36 @@ class AlarmsFragment : BaseFragment<FragmentAlarmsBinding>(FragmentAlarmsBinding
         } else {
             requireNavigator().navigate(AlarmEditorDestination(alarm.id))
         }
+    }
+
+    /**
+     * Turning a recurring alarm off would discard its rule, so ask whether to
+     * skip only the nearest occurrence or disable it entirely. A one-shot alarm
+     * keeps the direct switch behaviour.
+     */
+    private fun requestToggle(alarm: Schedule, enabled: Boolean) {
+        when {
+            enabled -> viewModel.setEnabled(alarm, true)
+            alarmDisableChoice(alarm) == AlarmDisableChoice.DISABLE -> viewModel.setEnabled(alarm, false)
+            else -> showDisableChoice(alarm)
+        }
+    }
+
+    private fun showDisableChoice(alarm: Schedule) {
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle(R.string.alarms_disable_title)
+            .setMessage(R.string.alarms_disable_message)
+            .setNeutralButton(R.string.alarms_disable_skip_once) { _, _ -> viewModel.skipNextOccurrence(alarm) }
+            .setPositiveButton(R.string.alarms_disable_turn_off) { _, _ -> viewModel.setEnabled(alarm, false) }
+            .setNegativeButton(R.string.alarms_cancel) { _, _ -> restoreSwitch(alarm) }
+            .setOnCancelListener { restoreSwitch(alarm) }
+            .show()
+    }
+
+    /** The switch moved before the choice; put the server state back without a reload. */
+    private fun restoreSwitch(alarm: Schedule) {
+        val position = viewModel.state.value.alarms.indexOfFirst { it.id == alarm.id }
+        if (position >= 0) adapter.notifyItemChanged(position)
     }
 
     internal fun confirmDelete(id: String) {

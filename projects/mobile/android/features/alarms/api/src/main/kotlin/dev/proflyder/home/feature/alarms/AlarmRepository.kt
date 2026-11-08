@@ -12,6 +12,9 @@ interface AlarmRepository {
     suspend fun create(draft: AlarmDraft, idempotencyKey: String): Outcome<Schedule>
     suspend fun update(existing: Schedule, draft: AlarmDraft): Outcome<Schedule>
     suspend fun setEnabled(id: String, enabled: Boolean): Outcome<Schedule>
+
+    /** Skips only the next occurrence of a recurring alarm, keeping it enabled. */
+    suspend fun skipNextOccurrence(id: String): Outcome<Schedule>
     suspend fun delete(id: String): Outcome<Boolean>
     suspend fun snooze(id: String, minutes: Int): Outcome<Schedule>
     suspend fun stop(id: String): Outcome<Schedule>

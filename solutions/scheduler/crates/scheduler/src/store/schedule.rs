@@ -431,6 +431,72 @@ impl Store {
         })
     }
 
+    /// Skips the next occurrence of a recurring schedule without disabling it.
+    ///
+    /// The pending FIRE of that occurrence is marked skipped (an executor may
+    /// still hold a lease, so it must not ring), and a currently active
+    /// occurrence is closed. The following occurrence is computed from the
+    /// skipped one, so the schedule keeps its wall-clock rule.
+    pub fn skip_next_occurrence(&self, id: &str, now_unix: i64) -> Result<Schedule, StoreError> {
+        let id = id.to_owned();
+        let ring_window = self.config().ring_window;
+        self.with_tx(move |tx| {
+            let mut schedule = get_schedule_tx(tx, &id)?;
+            reject_scenario_schedule(&schedule)?;
+            if !matches!(
+                schedule.repeat,
+                Repeat::Daily | Repeat::Weekdays | Repeat::Weekends | Repeat::Custom
+            ) {
+                return Err(StoreError::invalid(
+                    "only recurring schedules can skip an occurrence",
+                ));
+            }
+            if !schedule.enabled || schedule.next_due_unix <= 0 {
+                return Err(StoreError::precondition(
+                    "schedule has no upcoming occurrence",
+                ));
+            }
+            let skipped = schedule.next_due_unix;
+            if schedule.active_occurrence_unix == skipped {
+                close_occurrence(tx, &schedule, skipped, "skipped", now_unix, ring_window)?;
+                schedule.active_occurrence_unix = 0;
+                schedule.active_until_unix = 0;
+                schedule.snooze_until_unix = 0;
+                schedule.revision += 1;
+            } else {
+                skip_fire_events(tx, &schedule.id, skipped, now_unix, "skipped")?;
+            }
+            let following = match schedule.rule().next(skipped.max(now_unix)) {
+                Ok(next) => next.unwrap_or(0),
+                Err(error) => {
+                    return Err(crate::domain::DomainError::invalid_rule(&error).into());
+                }
+            };
+            schedule.next_due_unix = following;
+            if following == 0 {
+                schedule.enabled = false;
+            }
+            schedule.revision += 1;
+            schedule.updated_unix = now_unix;
+            tx.execute(
+                "UPDATE schedules SET next_due_unix=?, enabled=?, revision=?, updated_unix=?,
+                    snooze_until_unix=?, active_occurrence_unix=?, active_until_unix=?
+                    WHERE id=? AND deleted_unix=0",
+                params![
+                    schedule.next_due_unix,
+                    bool_to_int(schedule.enabled),
+                    schedule.revision,
+                    schedule.updated_unix,
+                    schedule.snooze_until_unix,
+                    schedule.active_occurrence_unix,
+                    schedule.active_until_unix,
+                    schedule.id,
+                ],
+            )?;
+            Ok(schedule)
+        })
+    }
+
     /// Soft-deletes a schedule, stops pending triggers and queues a STOP when
     /// an occurrence is active.
     pub fn delete_schedule(&self, id: &str, now_unix: i64) -> Result<bool, StoreError> {
@@ -697,4 +763,137 @@ pub fn close_occurrence(
         params![now_unix, schedule.id],
     )?;
     Ok(true)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::{EventState, ScheduleKind, SourceKind, event as event_keys};
+    use crate::store::Config;
+    use crate::store::event::{EventInsert, insert_event};
+
+    const BASE: i64 = 1_767_268_800; // 2026-01-01T12:00:00Z
+    const FIRST_DUE: i64 = 1_767_339_000; // 2026-01-02T07:30:00Z
+    const FOLLOWING_DUE: i64 = 1_767_425_400; // 2026-01-03T07:30:00Z
+
+    fn store() -> Store {
+        Store::open_in_memory(Config::default()).expect("store")
+    }
+
+    fn alarm(repeat: Repeat, enabled: bool) -> Schedule {
+        Schedule {
+            label: "wake up".to_owned(),
+            kind: ScheduleKind::Alarm,
+            timezone: "UTC".to_owned(),
+            at: WallTime {
+                hour: 7,
+                minute: 30,
+                second: 0,
+            },
+            repeat,
+            enabled,
+            ..Schedule::default()
+        }
+    }
+
+    #[test]
+    fn skip_advances_a_recurring_alarm_by_one_occurrence() {
+        let store = store();
+        let created = store
+            .create_schedule(&alarm(Repeat::Daily, true), "", BASE)
+            .expect("create");
+        assert_eq!(created.next_due_unix, FIRST_DUE);
+
+        let skipped = store.skip_next_occurrence(&created.id, BASE).expect("skip");
+
+        assert!(skipped.enabled, "skipping must not disable the alarm");
+        assert_eq!(skipped.next_due_unix, FOLLOWING_DUE);
+        assert_eq!(skipped.revision, created.revision + 1);
+        assert_eq!(skipped.id, created.id);
+        assert_eq!(skipped.repeat, Repeat::Daily);
+    }
+
+    #[test]
+    fn skip_marks_the_pending_fire_as_skipped() {
+        let store = store();
+        let created = store
+            .create_schedule(&alarm(Repeat::Daily, true), "", BASE)
+            .expect("create");
+        let source_id = created.id.clone();
+        let label = created.label.clone();
+        store
+            .with_tx(move |tx| {
+                insert_event(
+                    tx,
+                    EventInsert {
+                        dedupe_key: event_keys::schedule_trigger_key(
+                            SourceKind::Alarm,
+                            &source_id,
+                            FIRST_DUE,
+                            0,
+                        ),
+                        source_id,
+                        source_kind: SourceKind::Alarm,
+                        action: crate::domain::EventAction::Fire,
+                        due_unix: FIRST_DUE,
+                        occurrence_unix: FIRST_DUE,
+                        label,
+                        payload_json: "{}".to_owned(),
+                        state: EventState::Pending,
+                        created_unix: BASE,
+                        ..EventInsert::default()
+                    },
+                )?;
+                Ok(())
+            })
+            .expect("seed fire");
+        store.skip_next_occurrence(&created.id, BASE).expect("skip");
+
+        let event_source = created.id;
+        let (state, detail): (i64, String) = store
+            .read(move |connection| {
+                connection
+                    .query_row(
+                        "SELECT state, detail FROM events WHERE source_id = ?",
+                        params![event_source],
+                        |row| Ok((row.get(0)?, row.get(1)?)),
+                    )
+                    .map_err(StoreError::from)
+            })
+            .expect("event row");
+        assert_eq!(state, i64::from(EventState::Skipped.code()));
+        assert_eq!(detail, "skipped");
+    }
+
+    #[test]
+    fn skip_of_an_overdue_occurrence_lands_in_the_future() {
+        let store = store();
+        let created = store
+            .create_schedule(&alarm(Repeat::Daily, true), "", BASE)
+            .expect("create");
+        let later = BASE + 3 * 86_400;
+        let skipped = store
+            .skip_next_occurrence(&created.id, later)
+            .expect("skip");
+        assert!(skipped.next_due_unix > later);
+        assert!(skipped.enabled);
+    }
+
+    #[test]
+    fn skip_rejects_one_shot_and_disabled_schedules() {
+        let store = store();
+        let once = store.create_schedule(&alarm(Repeat::Once, true), "", BASE);
+        // A one-shot without a date is invalid; give it a date instead.
+        assert!(once.is_err());
+
+        let mut one_shot = alarm(Repeat::Once, true);
+        one_shot.once_date = "2026-01-02".to_owned();
+        let one_shot = store.create_schedule(&one_shot, "", BASE).expect("create");
+        assert!(store.skip_next_occurrence(&one_shot.id, BASE).is_err());
+
+        let disabled = store
+            .create_schedule(&alarm(Repeat::Daily, false), "", BASE)
+            .expect("create");
+        assert!(store.skip_next_occurrence(&disabled.id, BASE).is_err());
+    }
 }

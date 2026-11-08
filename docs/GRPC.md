@@ -20,7 +20,7 @@ durable outbox и generic-очереди задач:
 
 - schedules: `CreateSchedule`, `GetSchedule`, `ListSchedules`,
   `UpdateSchedule`, `DeleteSchedule`, `SetScheduleEnabled`,
-  `SnoozeSchedule`, `StopSchedule`;
+  `SnoozeSchedule`, `StopSchedule`, `SkipScheduleOccurrence`;
 - scenarios: `CreateScenario`, `GetScenario`, `ListScenarios`,
   `UpdateScenario`, `DeleteScenario`, `SetScenarioEnabled`,
   `RunScenario` (определения хранит scheduler, исполняет отдельный
