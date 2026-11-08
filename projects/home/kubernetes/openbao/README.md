@@ -61,7 +61,7 @@ projects/home/kubernetes/openbao/
 export KUBECONFIG=/private/path/kubeconfig
 # первый раз: каталоги PV на узле
 export OPENBAO_NODE_SSH='ssh -i … -o UserKnownHostsFile=… labuser@192.0.2.27'
-./projects/home/kubernetes/openbao/deploy.sh
+mise run admin:openbao
 ./projects/home/kubernetes/openbao/bootstrap.sh
 ./projects/home/kubernetes/openbao/verify.sh --kubernetes
 ```
@@ -196,7 +196,8 @@ create/read/update/patch `secret/data/{ci,k8s,infra}/*`, list/read metadata;
 delete, `sys/*`, `auth/*` запрещены. `secret/infra/*` — секреты доступа
 владельца (SSH-ключи, CA, VPN, бэкапы, admin kubeconfig); карта путей —
 `docs/SECRETS.md`, токен машины и восстановление файлов — `docs/WORKSTATION.md`
-(`mise run secrets:login`, `secrets:file`).
+(`mise run secrets:login`); деплой и проверка — `mise run admin:openbao`,
+`admin:openbao-verify` (секреты через fnox).
 
 `ci-station`: read ровно `secret/data/ci/deploy-station` и
 `secret/metadata/ci/deploy-station`; ни `secret/ci/deploy-home`, ни
@@ -310,7 +311,7 @@ ESO читает `secret/k8s/<namespace>/<secret-name>` и создаёт Kubern
 
 ```bash
 export KUBECONFIG=/private/path/kubeconfig
-./projects/home/kubernetes/external-secrets/deploy.sh
+mise run admin:external-secrets
 kubectl get clustersecretstore openbao
 kubectl get externalsecret -A
 ```

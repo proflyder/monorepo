@@ -217,6 +217,35 @@ class Catalog(unittest.TestCase):
         for meta in CATALOG["paths"].values():
             self.assertTrue(meta["purpose"] and meta["consumer"])
 
+    def test_fnox_references_documented_paths(self):
+        refs = ws.fnox_refs()
+        self.assertTrue(refs)
+        documented = set(CATALOG["paths"])
+        for ref in refs:
+            self.assertIn(ref["path"], documented, ref)
+        # nothing outside a profile: a bare `fnox exec` must resolve no secret
+        self.assertFalse([r for r in refs if r["profile"] == "default"])
+
+    def test_admin_tasks_use_defined_profiles(self):
+        import re
+        profiles = {r["profile"] for r in ws.fnox_refs()}
+        tasks = sorted((ws.ROOT / "platform/mise-tasks").rglob("*.sh"))
+        used = set()
+        for task in tasks:
+            for profile in re.findall(r"fnox\.sh\" -P ([a-z-]+) exec", task.read_text()):
+                used.add(profile)
+                self.assertIn(profile, profiles, task)
+        self.assertGreaterEqual(len(used), 7)
+        service = (ws.ROOT / "platform/mise-tasks/admin/service.sh").read_text()
+        units = re.search(r"\n  ([a-z|-]+)\) ;;", service).group(1).split("|")
+        for unit in units:
+            self.assertIn(unit, profiles, unit)
+            self.assertTrue((ws.ROOT / f"projects/home/kubernetes/{unit}/deploy.sh").is_file())
+        for script in re.findall(r'"\$ROOT/(projects/[^"]+)"',
+                                 "".join(t.read_text() for t in tasks if "admin" in t.parts)):
+            if "$" not in script:  # admin:service builds its path from the unit
+                self.assertTrue((ws.ROOT / script).is_file(), script)
+
     def test_docs_table_lists_every_path(self):
         doc = (ws.ROOT / "docs" / "SECRETS.md").read_text()
         for path in CATALOG["paths"]:

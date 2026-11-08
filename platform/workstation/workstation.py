@@ -313,6 +313,36 @@ def cmd_file(args, out=print) -> int:
     return 0
 
 
+FNOX = ROOT / "fnox.toml"
+
+
+def fnox_refs(path: pathlib.Path = FNOX) -> list[dict]:
+    """Every secret reference in fnox.toml as {profile, var, path, field}."""
+    import tomllib
+    config = tomllib.loads(path.read_text())
+    providers = {name: p["path"].removeprefix("secret/") for name, p in config["providers"].items()}
+    refs = []
+    sections = [("default", config.get("secrets", {}))] + [
+        (name, profile.get("secrets", {})) for name, profile in config.get("profiles", {}).items()]
+    for profile, secrets in sections:
+        for var, spec in secrets.items():
+            leaf, field = spec["value"].split("/", 1)
+            refs.append({"profile": profile, "var": var,
+                         "path": f"{providers[spec['provider']]}/{leaf}", "field": field})
+    return refs
+
+
+def cmd_token(args, out=print) -> int:
+    """Print the operator token for fnox (`credential_command`); renews it first.
+
+    Only fnox calls this: the value goes to its stdout pipe, never to a terminal
+    or log of ours.
+    """
+    bao = operator(args.secrets_dir)
+    out(bao.token)
+    return 0
+
+
 def cmd_check(args, out=print) -> int:
     catalog = load_catalog(args.catalog)
     bao = operator(args.secrets_dir)
@@ -320,7 +350,8 @@ def cmd_check(args, out=print) -> int:
     documented = set(catalog["paths"])
     problems = [f"in OpenBao, missing in catalog: {p}" for p in sorted(live - documented)]
     problems += [f"in catalog, missing in OpenBao: {p}" for p in sorted(documented - live)]
-    for entry in catalog["pull"] + catalog["files"]:
+    fnox = [dict(r) for r in fnox_refs()] if FNOX.is_file() else []
+    for entry in catalog["pull"] + catalog["files"] + fnox:
         if entry["path"] not in documented:
             problems.append(f"undocumented path used: {entry['path']}")
         elif entry["path"] in live and entry["field"] not in bao.data(entry["path"]):
@@ -340,7 +371,8 @@ def cmd_doctor(args, out=print, run=subprocess.run) -> int:
         failures += 0 if ok else 1
         out(("ok    " if ok else "FAIL  ") + what + ("" if ok or not hint else f" — {hint}"))
 
-    for tool in ("bazelisk", "gitleaks", "kubectl", "helm", "gh", "bao", "bw", "python3", "node"):
+    for tool in ("bazelisk", "gitleaks", "kubectl", "helm", "gh", "bao", "vault", "fnox", "bw",
+                 "python3", "node"):
         report(shutil.which(tool) is not None, f"tool {tool}", "run `mise install`")
     try:
         bao = operator(args.secrets_dir, renew=False)
@@ -381,6 +413,7 @@ def main(argv: list[str] | None = None) -> int:
         p.add_argument("names", nargs="*")
         p.add_argument("--all", action="store_true")
     sub.add_parser("check")
+    sub.add_parser("token", help="print the operator token (fnox credential_command)")
     sub.add_parser("doctor")
     args = ap.parse_args(argv)
     if args.cmd in ("file", "clean"):
@@ -389,7 +422,7 @@ def main(argv: list[str] | None = None) -> int:
         args.clean = args.cmd == "clean"
         return cmd_file(args)
     return {"login": cmd_login, "pull": cmd_pull, "check": cmd_check,
-            "doctor": cmd_doctor}[args.cmd](args)
+            "doctor": cmd_doctor, "token": cmd_token}[args.cmd](args)
 
 
 if __name__ == "__main__":

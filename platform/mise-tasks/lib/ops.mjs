@@ -552,12 +552,10 @@ export function statusPlanLines(list, parsed, env = process.env) {
         lines.push(`  check: ${formatCommand(statusKubectlCommand(unit, kubeconfig))}`);
       } else {
         lines.push(
-          "  check: kubectl command unavailable — restore the admin kubeconfig with " +
-            `\`mise run secrets:file ${KUBECONFIG_PATH.replace(/^secrets\//, "")}\``,
+          "  check: `mise run deploy:status " + unit.id + " --live` " +
+            "(admin kubeconfig comes from OpenBao through fnox, profile kube)",
         );
-        lines.push(
-          `         then: ${formatCommand(statusKubectlCommand(unit, `<${KUBECONFIG_PATH}>`))}`,
-        );
+        lines.push(`         runs: ${formatCommand(statusKubectlCommand(unit, "$KUBECONFIG"))}`);
       }
     } else if (unit.platform === "native" && unit.nativeKind === "pulsar") {
       lines.push("  station release: deploy-station (Environment Station) after an approved deploy-home run");
@@ -631,8 +629,8 @@ export async function runStatus(argv, options = {}) {
   const kubeconfig = kubeconfigFor(ROOT, env);
   if (!kubeconfig) {
     stderr.write(
-      `deploy:status: no kubeconfig for --live; restore ${KUBECONFIG_PATH} with ` +
-        `\`mise run secrets:file ${KUBECONFIG_PATH.replace(/^secrets\//, "")}\`\n`,
+      "deploy:status: no kubeconfig for --live; run it as `mise run deploy:status " +
+        "<unit> --live` (fnox profile kube) or set KUBECONFIG\n",
     );
     return 1;
   }

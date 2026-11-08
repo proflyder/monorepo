@@ -33,7 +33,7 @@ MA/Matter add-ons: `core_matter_server 9.2.0`, `d5369777_music_assistant 2.10.8`
 ```bash
 export KUBECONFIG=/private/path/kubeconfig
 export PROMETHEUS_PRIVATE_VALUES=/private/path/prometheus.yaml
-./projects/home/kubernetes/deploy-observability.sh
+mise run admin:observability
 export RUNTIME_PRIVATE_VALUES=/private/path/runtime-values.yaml
 ./projects/home/kubernetes/apply-runtime.sh
 ```

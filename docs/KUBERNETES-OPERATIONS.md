@@ -43,8 +43,9 @@ kubectl get pods -A
 ```
 
 Ключ, `known_hosts` и `config` (алиасы `pve`/`k3s`/`haos`) — `~/.ssh/home-lab/`
-(`mise run secrets:pull`); kubeconfig — `mise run secrets:file
-kubernetes-research/kubeconfig`, после работы `secrets:clean`.
+(`mise run secrets:pull`); kubeconfig — fnox, профиль `kube`
+(`mise run secrets:exec -- -P kube exec -- platform/workstation/with-kube-tunnel.sh
+kubectl …` поднимает этот туннель сам).
 
 API `6443`, kubelet `10250`, node-exporter `9100`, health `9116` и
 VXLAN `8472/udp` закрыты firewall от обычного LAN.
@@ -295,8 +296,8 @@ Grafana admin password — OpenBao `secret/k8s/monitoring/grafana-admin`.
 
 ```bash
 export KUBECONFIG=/private/path/kubeconfig
-./projects/home/kubernetes/ingress/deploy.sh --staging   # проверка DNS-01
-./projects/home/kubernetes/ingress/deploy.sh             # prod-сертификат
+mise run admin:ingress -- --staging   # проверка DNS-01
+mise run admin:ingress   # prod-сертификат
 NODE_IP=192.0.2.27 ./projects/home/kubernetes/ingress/verify.sh
 ```
 
@@ -329,7 +330,7 @@ Secrets приложений. `ClusterSecretStore/openbao` использует 
 
 ```bash
 export KUBECONFIG=/private/path/kubeconfig
-./projects/home/kubernetes/external-secrets/deploy.sh
+mise run admin:external-secrets
 kubectl get clustersecretstore openbao
 kubectl get externalsecret -A
 kubectl -n home-assistant annotate externalsecret scheduler-auth \

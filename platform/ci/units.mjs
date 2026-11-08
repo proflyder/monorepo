@@ -74,6 +74,8 @@ export const config = {
         // front door for every unit; a broken task must fail PR CI.
         "platform/mise-tasks/**",
         "platform/workstation/bin/**",
+        // fnox.toml feeds every admin:* entry point (secret references only).
+        "fnox.toml",
       ],
       platforms: ["*"],
     },

@@ -75,7 +75,7 @@ manifests go to `secrets/local/rendered/scheduler` (git-ignored).
 ```bash
 # Secrets are owned by External Secrets Operator and sourced from OpenBao
 # (secret/k8s/home-assistant/{scheduler-auth,ha-bridge-ha}). Apply once:
-./projects/home/kubernetes/external-secrets/deploy.sh
+mise run admin:external-secrets
 kubectl -n home-assistant apply -f projects/home/kubernetes/scheduler/ci/rbac.yaml
 ```
 

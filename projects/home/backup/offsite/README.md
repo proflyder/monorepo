@@ -74,9 +74,14 @@ K3s. A small stdlib WebSocket client avoids an extra apt dependency.
 ## Install / run
 
 ```bash
-projects/home/backup/offsite/install.sh --dry-run root@192.0.2.27
-projects/home/backup/offsite/install.sh root@192.0.2.27
-projects/home/backup/offsite/install.sh --run-now root@192.0.2.27
+# секреты — OpenBao через fnox (профиль offsite), цель — алиас k3s
+# из ~/.ssh/home-lab/config. rclone.conf НЕ загружается: на узле rclone сам
+# обновляет OAuth-токен, повторная загрузка копии из OpenBao его затёрла бы.
+# Первая установка: OFFSITE_RCLONE_CONF=<файл> (mise run secrets:file
+# home/offsite-rclone.conf, затем secrets:clean).
+mise run admin:offsite-install -- --dry-run
+mise run admin:offsite-install
+mise run admin:offsite-install -- --run-now
 ```
 
 The installer copies `secrets/home/offsite-backup.env`,

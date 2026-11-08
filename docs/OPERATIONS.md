@@ -29,8 +29,9 @@ mise run rollback scheduler --yes       # выполняет документи�
 
 `deploy` вызывает `gh workflow run deploy-home.yml --ref develop -f units=…`
 (+ существующие inputs workflow). `deploy:status` только читает `gh run list`;
-`--live` делает read-only `kubectl get deploy` через kubeconfig из раздела
-«Доступ» (`mise run secrets:file kubernetes-research/kubeconfig`). `rollback`
+`--live` делает read-only `kubectl get deploy`: admin kubeconfig приходит из
+OpenBao через fnox (профиль `kube`), туннель к API поднимается на время
+команды. `rollback --yes` получает kubeconfig так же. `rollback`
 печатает план всегда, выполняет команду только с `--yes`; `forward-only`
 завершается ненулевым кодом, а `pulsar` лишь печатает команду для станции —
 устройство автоматически не трогается. Подробности отката — в разделах ниже.
@@ -70,10 +71,13 @@ ssh -F ~/.ssh/home-lab/config pve
 ssh -F ~/.ssh/home-lab/config k3s 'sudo -n k3s kubectl get pods -A'
 ssh -F ~/.ssh/home-lab/config haos
 
-# admin kubeconfig для примеров ниже (API 6443 — через туннель, см.
-# KUBERNETES-OPERATIONS.md); после работы — mise run secrets:clean …
-mise run secrets:file kubernetes-research/kubeconfig
-export KUBECONFIG=secrets/kubernetes-research/kubeconfig
+# скрипты деплоя/обслуживания — `mise run admin:*` (секреты и kubeconfig из
+# OpenBao через fnox, туннель к API — сам; docs/WORKSTATION.md). Для разовых
+# kubectl-команд из примеров ниже:
+mise run secrets:exec -- -P kube exec -- \
+  platform/workstation/with-kube-tunnel.sh kubectl get pods -A
+# или вручную: mise run secrets:file kubernetes-research/kubeconfig,
+# export KUBECONFIG=secrets/kubernetes-research/kubeconfig, затем secrets:clean
 ```
 
 HA: `http://192.0.2.28:8123`  
@@ -289,8 +293,8 @@ curl -fsS -o /dev/null -w 'Grafana %{http_code}\n' \
 
 ```bash
 # HTTPS ingress (LAN/VPN)
-./projects/home/kubernetes/ingress/deploy.sh --staging   # проверка DNS-01
-./projects/home/kubernetes/ingress/deploy.sh             # prod-сертификат
+mise run admin:ingress -- --staging   # проверка DNS-01
+mise run admin:ingress   # prod-сертификат
 NODE_IP=192.0.2.27 ./projects/home/kubernetes/ingress/verify.sh
 
 KUBECONFIG=secrets/kubernetes-research/kubeconfig kubectl -n traefik get pods,certificate,ingressroute
@@ -316,7 +320,7 @@ kubectl -n openbao exec openbao-0 -- /bin/sh -ec \
 kubectl -n openbao logs openbao-0 --tail=50
 
 # раскатать конфигурацию (chart/values меняются — только через deploy.sh)
-./projects/home/kubernetes/openbao/deploy.sh
+mise run admin:openbao
 ./projects/home/kubernetes/openbao/bootstrap.sh   # идемпотентно; нужен admin-токен
 ./projects/home/kubernetes/openbao/verify.sh --kubernetes
 
@@ -334,13 +338,16 @@ delete), orphan, period 30 дней.
 
 Секреты владельца (SSH-ключи, CA, бэкап-пароли, admin kubeconfig) — в
 `secret/infra/*`; каталог путей — `docs/SECRETS.md`, рабочее место и задачи
-mise — `docs/WORKSTATION.md`. Скрипт, читающий файл вида
-`secrets/home/ingress.env`, запускать после временного восстановления:
+mise — `docs/WORKSTATION.md`. Скрипты деплоя и обслуживания запускаются через
+`mise run admin:*`: секреты им передаёт fnox (`fnox.toml`, профиль на скрипт,
+временные файлы удаляются после команды):
 
 ```bash
-mise run secrets:file home/ingress.env    # или -- --all
-mise run secrets:clean home/ingress.env
-mise run secrets:check                    # каталог ↔ OpenBao
+mise tasks | grep admin:                  # что есть
+mise run admin:vaultwarden -- --render-only /tmp/vw
+mise run secrets:check                    # каталог и fnox.toml ↔ OpenBao
+mise run secrets:file home/ingress.env    # запасной путь: файл вручную…
+mise run secrets:clean home/ingress.env   # …и убрать
 ```
 
 Не-секретные локальные данные (бэкапы, датасеты, логи) — `local-data/`
@@ -378,7 +385,7 @@ Kubernetes Secrets создаёт ESO. Пути, миграция и ротац�
 export KUBECONFIG=secrets/kubernetes-research/kubeconfig
 
 # установить/обновить оператор, store и все ExternalSecret
-./projects/home/kubernetes/external-secrets/deploy.sh
+mise run admin:external-secrets
 
 # состояние
 kubectl -n external-secrets get pods
@@ -401,7 +408,7 @@ Server URL — этот адрес). Файлы, первый вход, смен
 восстановление — `projects/home/kubernetes/vaultwarden/README.md`.
 
 ```bash
-KUBECONFIG=<admin kubeconfig> projects/home/kubernetes/vaultwarden/deploy.sh
+mise run admin:vaultwarden            # секреты и kubeconfig — fnox
 kubectl -n vaultwarden get pod,pvc,externalsecret
 kubectl -n vaultwarden logs deploy/vaultwarden --tail=50
 ```
@@ -424,8 +431,8 @@ node --test solutions/heartbeat/src/*.test.js
 # приватные значения: secrets/home/heartbeat.env (в .gitignore)
 # CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_API_TOKEN, KV_NAMESPACE_ID,
 # PING_TOKEN, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
-./projects/home/cloudflare/heartbeat/deploy.sh
-./projects/home/cloudflare/heartbeat/deploy.sh --secrets
+mise run admin:heartbeat
+mise run admin:heartbeat -- --secrets
 
 # liveness, затем ping без токена и с токеном (значение не печатать)
 curl -fsS "https://<worker>.<account-subdomain>.workers.dev/health"
@@ -444,7 +451,7 @@ bao kv put secret/k8s/monitoring/heartbeat \
 unset PING_TOKEN
 
 # применить Alertmanager (ESO рендерит webhook_configs из этой записи)
-./projects/home/kubernetes/deploy-observability.sh
+mise run admin:observability
 kubectl -n monitoring get externalsecret alertmanager-telegram
 ```
 
@@ -1133,7 +1140,7 @@ sudo PRIVATE_ENV=/path/scheduler.env \
   projects/home/kubernetes/scheduler/nft/apply.sh
 
 # резервная копия SQLite (quiesce + checksums, private путь по умолчанию)
-projects/home/kubernetes/scheduler/backup.sh
+mise run admin:scheduler-backup
 ```
 
 Проверки:
@@ -1516,10 +1523,10 @@ restic-репозиторий `rclone:gdrive:home-offsite-v2` (личный Goog
 #   secrets/home/offsite-restic.password restic password (копия — password manager)
 #   secrets/home/offsite-rclone.conf     rclone remote `gdrive` (OAuth token)
 #   secrets/home/offsite-ha.token        отдельный HA long-lived token
-SSH_CONFIG=~/.ssh/home-lab/config projects/home/backup/offsite/install.sh k3s
-SSH_CONFIG=~/.ssh/home-lab/config projects/home/backup/pve/install.sh pve
+mise run admin:offsite-install
+mise run admin:pve-backup-install
 # PVE scrape target и Grafana server — secrets/home/observability-values.yaml
-KUBECONFIG=secrets/kubernetes-research/kubeconfig projects/home/kubernetes/deploy-observability.sh
+mise run admin:observability
 ```
 
 Новый OAuth-токен Google: `rclone authorize drive <base64 JSON
