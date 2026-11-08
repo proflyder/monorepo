@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="DuplicateStrings">
+    <string name="connection_title">Подключение</string>
+    <string name="connection_intro">Телефон управляет будильниками, напоминаниями и таймерами на домашнем сервере. Выполнением владеет сервер; приложение не использует AlarmManager, FCM или встроенный VPN.</string>
+    <string name="connection_remote_title">Подключение из Remote Config</string>
+    <string name="connection_remote_refresh">Обновить конфигурацию</string>
+    <string name="connection_remote_refreshed">Remote Config обновлён.</string>
+    <string name="connection_remote_loading">Загрузка адресов и таймаутов из Firebase Remote Config…</string>
+    <string name="connection_remote_unavailable">Firebase не настроен в этой сборке, поэтому адреса загрузить нельзя.</string>
+    <string name="connection_remote_missing">Адрес планировщика не задан в Firebase Remote Config.</string>
+    <string name="connection_remote_invalid">Remote Config содержит недопустимое значение. Исправьте его в консоли Firebase.</string>
+    <string name="connection_remote_invalid_json">JSON в Remote Config повреждён. Исправьте значение home_connection в консоли Firebase.</string>
+    <string name="connection_remote_invalid_scheduler">В Remote Config недопустимый адрес планировщика. Укажите полный URL http:// или https:// без query и учётных данных.</string>
+    <string name="connection_remote_invalid_control">В Remote Config недопустимый адрес домашнего управления. Укажите полный URL http:// или https:// либо оставьте пустым.</string>
+    <string name="connection_remote_invalid_timeout">В Remote Config недопустимый таймаут. Используйте 1000–120000 мс.</string>
+    <string name="connection_remote_fetch_failed">Не удалось загрузить Remote Config. Проверьте сеть и обновите.</string>
+    <string name="connection_remote_fetch_failed_cached">Не удалось обновить Remote Config; показаны последние загруженные значения.</string>
+    <string name="connection_remote_loaded">Адреса и таймауты загружены из Firebase Remote Config.</string>
+    <string name="connection_remote_scheduler_label">Адрес планировщика</string>
+    <string name="connection_remote_control_label">Адрес домашнего управления</string>
+    <string name="connection_remote_timeouts_label">Таймауты</string>
+    <string name="connection_remote_not_provided">Не задано в Remote Config</string>
+    <string name="connection_remote_not_set">Не задано (вкладка «Дом» отключена)</string>
+    <string name="connection_remote_timeouts">Соединение %1$d с, чтение %2$d с</string>
+    <string name="connection_http_warning">HTTP не шифруется. Используйте HTTPS, когда сервер предоставляет доверенный сертификат; HTTP предназначен только для явно локальной настройки.</string>
+    <string name="connection_token_title">Bearer-токен</string>
+    <string name="connection_token">Bearer-токен</string>
+    <string name="connection_token_helper">Оставьте пустым, чтобы сохранить текущий токен. Он шифруется неэкспортируемым ключом Android Keystore и никогда не попадает в логи или URL. Токен никогда не читается из Remote Config.</string>
+    <string name="connection_clear_token">Удалить сохранённый токен</string>
+    <string name="connection_test">Сохранить и проверить подключение</string>
+    <string name="connection_status">Состояние</string>
+    <string name="connection_not_configured">Сервер ещё не настроен.</string>
+    <string name="connection_token_absent">Токен не сохранён.</string>
+    <string name="connection_token_present">Токен сохранён безопасно.</string>
+    <string name="connection_token_unreadable">Сохранённый токен нельзя расшифровать на этом устройстве. Введите его снова, чтобы восстановить доступ.</string>
+    <string name="connection_online">Сервер доступен</string>
+    <string name="connection_version">Версия %1$s, схема %2$d</string>
+    <string name="connection_server_time">Время сервера: %1$s</string>
+    <string name="connection_events">Ожидают события: %1$d, в аренде: %2$d</string>
+    <string name="connection_schedules">Включённых расписаний: %1$d, активных таймеров: %2$d</string>
+    <string name="connection_scenario">Эта версия сервера не поддерживает выполнение сценариев.</string>
+    <string name="connection_saved">Токен сохранён</string>
+    <string name="connection_saved_and_online">Токен сохранён; сервер доступен.</string>
+    <string name="connection_server_owns">Расписания остаются на домашнем сервере. Этот экран управляет только состоянием сервера.</string>
+    <string name="connection_notification_note">Уведомления напоминаний на телефоне в этой основе не реализованы.</string>
+    <string name="connection_not_tested">Конфигурация загружена. Нажмите «Сохранить и проверить подключение», чтобы проверить сервер.</string>
+</resources>

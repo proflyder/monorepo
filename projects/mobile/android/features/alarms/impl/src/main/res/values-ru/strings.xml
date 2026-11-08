@@ -1,13 +1,80 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!--
-  Only the alarm editor quick-offset presets are translated today; the rest of
-  the alarms UI is English-only (see the Android README). Add the remaining
-  alarms_* keys here when the whole feature is localized.
--->
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="DuplicateStrings">
+    <string name="alarms_title">Будильники</string>
+    <string name="alarms_add">Добавить будильник</string>
+    <string name="alarms_empty">Будильников пока нет. Они хранятся и выполняются на домашнем сервере.</string>
+    <string name="alarms_open_connection">Открыть «Подключение»</string>
+    <string name="alarms_snooze">Отложить на 9 мин</string>
+    <string name="alarms_stop">Стоп</string>
+    <string name="alarms_delete">Удалить</string>
+    <string name="alarms_enabled">Включён</string>
+    <string name="alarms_next">Далее: %1$s</string>
+    <string name="alarms_snoozed">Отложен до %1$s</string>
+    <string name="alarms_off">Выключен</string>
+    <string name="alarms_delete_confirm">Удалить этот будильник с домашнего сервера?</string>
+    <string name="alarms_delete_yes">Удалить</string>
+    <string name="alarms_cancel">Отмена</string>
+    <string name="alarms_repeat_daily">Ежедневно</string>
+    <string name="alarms_repeat_weekdays">Будни</string>
+    <string name="alarms_repeat_weekends">Выходные</string>
+    <string name="alarms_repeat_custom">Выбранные дни</string>
+    <string name="alarms_repeat_once">Однократный будильник</string>
+    <string name="alarms_repeat_once_on">Однократно %1$s</string>
+    <string name="alarms_repeat_unknown">Неподдерживаемый повтор</string>
+    <string name="alarms_timezone_default">Asia/Almaty</string>
+    <string name="alarms_editor_title_new">Новый будильник</string>
+    <string name="alarms_editor_title_edit">Изменить будильник</string>
+    <string name="alarms_editor_label">Название</string>
+    <string name="alarms_editor_time">Время</string>
     <string name="alarms_quick_offset_15">+15 мин</string>
     <string name="alarms_quick_offset_30">+30 мин</string>
     <string name="alarms_quick_offset_60">+1 ч</string>
     <string name="alarms_quick_offset_90">+1,5 ч</string>
     <string name="alarms_quick_offset_120">+2 ч</string>
+    <string name="alarms_editor_date">Дата (однократно)</string>
+    <string name="alarms_editor_timezone">Часовой пояс IANA</string>
+    <string name="alarms_editor_repeat">Повтор</string>
+    <string name="alarms_editor_days">Дни</string>
+    <string name="alarms_editor_save">Сохранить на сервере</string>
+    <string name="alarms_editor_delete">Удалить будильник</string>
+    <string name="alarms_editor_hint">Домашний сервер хранит этот будильник и решает, когда его запускать. Телефон не планирует локальные будильники.</string>
+    <string name="alarms_day_mon">Пн</string>
+    <string name="alarms_day_tue">Вт</string>
+    <string name="alarms_day_wed">Ср</string>
+    <string name="alarms_day_thu">Чт</string>
+    <string name="alarms_day_fri">Пт</string>
+    <string name="alarms_day_sat">Сб</string>
+    <string name="alarms_day_sun">Вс</string>
+    <string name="alarms_today">Сегодня %1$s</string>
+    <string name="alarms_tomorrow">Завтра %1$s</string>
+    <string name="alarms_in_days">%1$s %2$s</string>
+    <string name="alarms_saved">Будильник сохранён</string>
+    <string name="alarms_deleted">Будильник удалён</string>
+    <string name="alarms_select_all">Выбрать все</string>
+    <string name="alarms_select_none">Снять</string>
+    <string name="alarms_selection_close">Выйти из выбора</string>
+    <string name="alarms_selection_enable">Включить</string>
+    <string name="alarms_selection_disable">Выключить</string>
+    <string name="alarms_selection_delete">Удалить</string>
+    <plurals name="alarms_selected_count">
+        <item quantity="one">Выбран %1$d будильник</item>
+        <item quantity="few">Выбрано %1$d будильника</item>
+        <item quantity="many">Выбрано %1$d будильников</item>
+        <item quantity="other">Выбрано %1$d будильника</item>
+    </plurals>
+    <plurals name="alarms_delete_selected_confirm">
+        <item quantity="one">Удалить %1$d будильник с домашнего сервера?</item>
+        <item quantity="few">Удалить %1$d будильника с домашнего сервера?</item>
+        <item quantity="many">Удалить %1$d будильников с домашнего сервера?</item>
+        <item quantity="other">Удалить %1$d будильника с домашнего сервера?</item>
+    </plurals>
+    <string-array name="alarms_day_short">
+        <item>@string/alarms_day_mon</item>
+        <item>@string/alarms_day_tue</item>
+        <item>@string/alarms_day_wed</item>
+        <item>@string/alarms_day_thu</item>
+        <item>@string/alarms_day_fri</item>
+        <item>@string/alarms_day_sat</item>
+        <item>@string/alarms_day_sun</item>
+    </string-array>
 </resources>
