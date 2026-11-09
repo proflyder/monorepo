@@ -73,7 +73,9 @@
   `KompOn` → `switch.turn_on` `switch.komp` (одноразовый logon-пропуск
   wakegrant, best-effort, и Wake-on-LAN; MAC только из `!secret komp_mac`);
   «разблокируй комп» / «разблокируй мой комп» / «открой комп» — `KompUnlock`
-  (unlock-пропуск для работающего заблокированного ПК, без WoL); «выключи
+  (unlock-пропуск для работающего заблокированного ПК, без WoL); «заблокируй
+  комп» / «заблокируй мой комп» / «запри комп» — `KompLock` →
+  `script.komp_lock` (SSH → задача `\Home\KompLock` блокирует экран); «выключи
   комп» и варианты — `KompOff` →
   `script.komp_shutdown` (SSH → Windows `shutdown /s /t 60`); «отмени
   выключение компа» / «не выключай комп» — `KompCancelOff`; «комп включён»,
@@ -206,8 +208,9 @@ idempotency key от `context.id`. Метка не найдена или schedul
 
 - `rest_commands.yaml` — station HTTP, `scheduler_rpc` Connect JSON,
   `currency_latest` (Bearer)
-- `shell_commands.yaml` — `komp_shutdown` / `komp_cancel_shutdown`
-  (ограниченный SSH на Windows-ПК; адрес из `input_text.komp_ssh_target`)
+- `shell_commands.yaml` — `komp_shutdown` / `komp_cancel_shutdown` /
+  `komp_lock` (ограниченный SSH на Windows-ПК; адрес из
+  `input_text.komp_ssh_target`)
 - `command_line.yaml` — `binary_sensor.komp_v_seti` (ping компа каждые 10 с)
 - `intent_scripts.yaml` — station, music, schedule, currency intents
 - `scripts.yaml` — Music, audio executor (`alarm_start` /
@@ -227,11 +230,12 @@ idempotency key от `context.id`. Метка не найдена или schedul
 - `custom_sentences/ru/station_alarm.yaml`
 - `custom_sentences/ru/station_schedules.yaml` — timers/reminders/notes
 - `custom_sentences/ru/station_currency.yaml` — курсы валют
-- `custom_sentences/ru/station_komp.yaml` — включение/выключение/разблокировка/статус компа
+- `custom_sentences/ru/station_komp.yaml` — включение/выключение/блокировка/разблокировка/статус компа
 - `input_select.yaml` — `music_route`, `ricardo_voice_profile`
 - `templates.yaml` — `switch.ricardo_work_profile` (обёртка над
   `input_select.ricardo_voice_profile`: on = Рабочий, off = Личный; источник
-  истины — `input_select`)
+  истины — `input_select`), `switch.komp` и кнопки `button.komp_lock` /
+  `button.komp_unlock` группы «Комп»
 - `input_datetime.yaml` — `komp_off_requested` (когда запрошено выключение компа)
 - `input_boolean.yaml` — `alarm_ringing`, `alarm_music_was_playing`
 - `input_number.yaml` — `alarm_volume`, `alarm_previous_volume`
@@ -351,6 +355,8 @@ conversation.process: "включи комп"
 conversation.process: "комп включён"
 conversation.process: "выключи комп"
 conversation.process: "отмени выключение компа"
+conversation.process: "заблокируй комп"
+conversation.process: "разблокируй комп"
 conversation.process: "стоп"
 ```
 
@@ -391,6 +397,11 @@ switch.komp                 template switch, state = binary_sensor
 script.komp_shutdown        → input_datetime.komp_off_requested = now()
                             → shell_command.komp_shutdown  (SSH: shutdown)
 script.komp_cancel_shutdown → shell_command.komp_cancel_shutdown (SSH: cancel)
+script.komp_lock            → sensor on и адрес SSH задан
+                            → shell_command.komp_lock (SSH: lock)
+script.komp_unlock          → sensor on → rest_command.wakegrant_issue_unlock
+button.komp_lock            → script.komp_lock    (кнопка группы «Комп»)
+button.komp_unlock          → script.komp_unlock  (кнопка группы «Комп»)
 ```
 
 ```text
@@ -399,8 +410,10 @@ KompOn      sensor off или выключение запрошено < 5 мин
             иначе «Комп уже включён.», без действий
 KompOff     выключение уже запрошено < 2 мин → «Комп уже выключается.», без повторного SSH
             иначе sensor on → script.komp_shutdown; sensor off → «Комп уже выключен.»
-KompUnlock  sensor on → rest_command.wakegrant_issue_unlock, «Разблокирую.»
+KompUnlock  sensor on → script.komp_unlock → rest_command.wakegrant_issue_unlock, «Разблокирую.»
             sensor off → «Комп выключен.», ничего не выдаётся и WoL не отправляется
+KompLock    sensor on → script.komp_lock → shell_command.komp_lock (SSH: lock), «Блокирую.»
+            sensor off → «Комп выключен.», SSH не выполняется
 KompStatus  sensor on и выключение запрошено < 5 мин → «Комп выключается.»
 ```
 
@@ -447,7 +460,12 @@ wakegrant_bearer: "Bearer <issuer_token>"
 заменяет старый только в пределах своей пары (machine, purpose).
 
 `KompUnlock` вызывается только при `binary_sensor.komp_v_seti = on` и не
-отправляет Wake-on-LAN. Логин-компонент на ПК обменивает пропуск через
+отправляет Wake-on-LAN. `KompLock` и `script.komp_lock` тоже работают только
+при `on` и не будят ПК. SSH уходит в служебную сессию OpenSSH, поэтому
+`komp-power.ps1 lock` не вызывает `LockWorkStation` напрямую, а запускает
+задачу `\Home\KompLock`, созданную `projects/home/windows-pc/install-lock-task.ps1`;
+задача выполняет `rundll32.exe user32.dll,LockWorkStation` в интерактивной
+сессии пользователя. Логин-компонент на ПК обменивает пропуск через
 `/v1/challenge` и `/v1/claim` по `packages/contracts/wakegrant/PROTOCOL.md`;
 для разблокировки используется long-poll `/v1/claim` с
 `{"purpose":"unlock","waitSeconds":…}`, чтобы команда «разблокируй комп»
@@ -461,11 +479,14 @@ wakegrant_bearer: "Bearer <issuer_token>"
 нет реального адреса.
 
 `switch.komp` — обычная `switch`-сущность без ролевых меток. Каталог
-ha-control берёт все не скрытые switch'и (`solutions/ha-bridge/crates/ha-bridge/src/catalog/`),
-поэтому «Комп» появляется в каталоге ha-control и на вкладке «Дом» в Android
-как штатный on/off без изменений кода каталога. `on` = сенсор ping'а `on`. В
-шаблонной сущности задан `default_entity_id: switch.komp`: кириллическое имя
-не даёт стабильный slug.
+ha-control берёт все не скрытые switch'и и button'ы
+(`solutions/ha-bridge/crates/ha-bridge/src/catalog/`), поэтому «Комп»
+появляется в каталоге ha-control и на вкладке «Дом» в Android как штатный
+on/off. Кнопки `button.komp_lock`/`button.komp_unlock` не имеют
+entity-registry device, поэтому приложение группирует их вместе с
+`switch.komp` по общему префиксу entity_id `komp` и показывает в настройках
+устройства «Комп». `on` = сенсор ping'а `on`. В шаблонных сущностях задан
+`default_entity_id`: кириллическое имя не даёт стабильный slug.
 
 Отмена выключения должна успеть за 60 секунд (`shutdown /s /t 60` на Windows);
 `shutdown /a` при отсутствии запланированного выключения просто возвращает

@@ -123,6 +123,42 @@ komp_cancel_shutdown:
       data:
         datetime: "2000-01-01 00:00:00"
 
+komp_lock:
+  alias: "Комп: блокировка экрана"
+  icon: mdi:lock
+  description: >-
+    Lock the running desktop through the restricted SSH wrapper. The wrapper
+    starts the pre-created \Home\KompLock scheduled task, which runs
+    LockWorkStation in the interactive session. Does nothing when the PC is
+    offline or the SSH target secret is missing, so a powered-off PC is never
+    woken just to lock a screen nobody is looking at.
+  mode: single
+  sequence:
+    - if:
+        - condition: template
+          value_template: >-
+            {{ is_state('binary_sensor.komp_v_seti', 'on')
+               and states('input_text.komp_ssh_target')
+                   not in ['', 'unknown', 'unavailable'] }}
+      then:
+        - service: shell_command.komp_lock
+
+komp_unlock:
+  alias: "Комп: разблокировка"
+  icon: mdi:lock-open
+  description: >-
+    Issue a one-time unlock grant so a running, locked PC signs the user back
+    in. Nothing is sent to a powered-off PC, and this script never wakes it
+    (that is switch.komp.turn_on / script.komp_shutdown's counterpart).
+  mode: single
+  sequence:
+    - if:
+        - condition: template
+          value_template: "{{ is_state('binary_sensor.komp_v_seti', 'on') }}"
+      then:
+        - service: rest_command.wakegrant_issue_unlock
+          continue_on_error: true
+
 wake_false_alarm:
   alias: "Рикардо: ложное срабатывание"
   # Display only. Being a personal scenario is declared with the HA label

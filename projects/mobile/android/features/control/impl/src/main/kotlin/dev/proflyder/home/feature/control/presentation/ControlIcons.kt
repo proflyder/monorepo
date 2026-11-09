@@ -16,6 +16,10 @@ internal object ControlIcons {
         listOf("sun", "weather-sunny", "day", "morning") to R.drawable.control_ic_sun,
         listOf("laptop", "desk", "monitor", "briefcase", "work", "computer") to R.drawable.control_ic_work,
         listOf("bulb", "lamp", "light", "ceiling", "led") to R.drawable.control_ic_bulb,
+        // `lock-open` must be checked before `lock` (keyword matching is
+        // substring based), so "mdi:lock-open" gets the open padlock.
+        listOf("lock-open", "lock_open", "unlock", "unlocked") to R.drawable.control_ic_lock_open,
+        listOf("lock", "locked", "key") to R.drawable.control_ic_lock,
         listOf("plug", "power", "outlet", "socket", "fan") to R.drawable.control_ic_plug,
         listOf("play", "movie", "television", "tv", "theater", "scene") to R.drawable.control_ic_play,
         // Device-level one-shot actions ("say on the station").
@@ -34,6 +38,7 @@ internal object ControlIcons {
         return when (entry.kind) {
             ControlKind.LIGHT -> R.drawable.control_ic_bulb
             ControlKind.SWITCH -> R.drawable.control_ic_plug
+            ControlKind.BUTTON -> R.drawable.control_ic_lock
             ControlKind.PROFILE -> R.drawable.control_ic_account
             else -> R.drawable.control_ic_play
         }

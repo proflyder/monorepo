@@ -8,7 +8,7 @@ package dev.proflyder.home.core.model
  * it out of the device filters and drives it with turn_on ("work") / turn_off
  * ("personal").
  */
-enum class ControlKind { SCENARIO, LIGHT, SWITCH, PROFILE, ACTION, OTHER }
+enum class ControlKind { SCENARIO, LIGHT, SWITCH, BUTTON, PROFILE, ACTION, OTHER }
 
 /** Commands a catalog entry accepts; [wire] is the value sent to the server. */
 enum class ControlAction(val wire: String) {
@@ -16,6 +16,9 @@ enum class ControlAction(val wire: String) {
     TURN_ON("turn_on"),
     TURN_OFF("turn_off"),
     SET("set"),
+
+    /** Press a stateless Home Assistant button (lock/unlock the PC, ...). */
+    PRESS("press"),
 
     /** Speak a text on the speaker; the payload carries `text`. */
     SPEAK("speak"),
@@ -99,6 +102,9 @@ data class ControlEntry(
     val role: ControlRole = ControlRole.PRIMARY,
 ) {
     val isDevice: Boolean get() = kind == ControlKind.LIGHT || kind == ControlKind.SWITCH
+
+    /** A stateless one-shot button (lock/unlock); grouped as a device action. */
+    val isButton: Boolean get() = kind == ControlKind.BUTTON
 
     /** The assistant profile selector: a global mode, not a device. */
     val isProfile: Boolean get() = kind == ControlKind.PROFILE

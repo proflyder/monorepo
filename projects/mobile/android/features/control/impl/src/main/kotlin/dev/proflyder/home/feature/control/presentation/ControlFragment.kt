@@ -80,6 +80,8 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
 
         override fun onPowerChanged(entry: ControlEntry, on: Boolean) = viewModel.setPower(entry, on)
 
+        override fun onButtonPressed(entry: ControlEntry) = viewModel.press(entry)
+
         override fun onProfileChanged(entry: ControlEntry, work: Boolean) = viewModel.setProfile(entry, work)
 
         override fun onToggleSettings(deviceId: String) = viewModel.toggleDeviceSettings(deviceId)

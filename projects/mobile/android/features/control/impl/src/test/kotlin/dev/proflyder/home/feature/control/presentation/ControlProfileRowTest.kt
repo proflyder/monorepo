@@ -52,6 +52,8 @@ class ControlProfileRowTest {
             powerChanges += on
         }
 
+        override fun onButtonPressed(entry: ControlEntry) = Unit
+
         override fun onProfileChanged(entry: ControlEntry, work: Boolean) {
             changes += work
         }

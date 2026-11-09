@@ -15,6 +15,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 SCRIPT = HERE / "komp-power.ps1"
+INSTALL = HERE / "install-lock-task.ps1"
 
 
 class KompPowerAllowlistTests(unittest.TestCase):
@@ -32,9 +33,9 @@ class KompPowerAllowlistTests(unittest.TestCase):
     def test_reads_the_original_ssh_command(self):
         self.assertIn("$env:SSH_ORIGINAL_COMMAND", self.text)
 
-    def test_only_shutdown_and_cancel_are_compared(self):
+    def test_only_shutdown_cancel_and_lock_are_compared(self):
         comparisons = re.findall(r"-ceq\s+'([^']*)'", self.text)
-        self.assertEqual(comparisons, ["shutdown", "cancel"])
+        self.assertEqual(comparisons, ["shutdown", "cancel", "lock"])
         # Case-insensitive `-eq`/`-ieq` would widen the allowlist.
         self.assertNotRegex(self.text, r"-i?eq\s")
 
@@ -45,6 +46,27 @@ class KompPowerAllowlistTests(unittest.TestCase):
         # Everything else must be rejected with a non-zero exit code.
         self.assertIn("exit 1", self.text)
         self.assertRegex(self.text, r"\[Console\]::Error\.WriteLine\('komp-power: ")
+
+    def test_lock_runs_only_the_fixed_scheduled_task(self):
+        # LockWorkStation from the SSH service session would not lock the
+        # user's desktop, so `lock` may only start the pre-created task.
+        self.assertIn(r"& schtasks.exe /run /tn '\Home\KompLock'", self.text)
+        code = re.sub(r"<#.*?#>", "", self.text, flags=re.S)
+        code = "\n".join(line for line in code.splitlines() if not line.lstrip().startswith("#"))
+        self.assertNotIn("LockWorkStation", code)
+        self.assertNotIn("rundll32", code)
+        self.assertEqual(self.text.count("schtasks.exe"), 1)
+
+    def test_install_script_creates_the_interactive_task(self):
+        install = INSTALL.read_text(encoding="utf-8")
+        self.assertIn("KompLock", install)
+        self.assertIn(r"$TaskPath = '\Home\'", install)
+        self.assertIn("rundll32.exe", install)
+        self.assertIn("user32.dll,LockWorkStation", install)
+        self.assertIn("-LogonType Interactive", install)
+        self.assertIn("Register-ScheduledTask", install)
+        # No trigger: the task only runs on demand from komp-power.ps1.
+        self.assertNotIn("New-ScheduledTaskTrigger", install)
 
     def test_no_general_purpose_execution_surfaces(self):
         # Comments document the authorized_keys line ("-Command", "cmd.exe"),

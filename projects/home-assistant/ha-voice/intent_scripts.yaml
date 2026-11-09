@@ -770,8 +770,24 @@ KompUnlock:
         - condition: template
           value_template: "{{ is_state('binary_sensor.komp_v_seti', 'on') }}"
       then:
-        - service: rest_command.wakegrant_issue_unlock
-          continue_on_error: true
+        - service: script.komp_unlock
+
+KompLock:
+  # A running PC: lock its interactive desktop through the SSH wrapper and the
+  # \Home\KompLock scheduled task. A powered-off PC has nothing to lock.
+  speech:
+    text: >-
+      {% if is_state('binary_sensor.komp_v_seti', 'on') %}
+      Блокирую.
+      {% else %}
+      Комп выключен.
+      {% endif %}
+  action:
+    - if:
+        - condition: template
+          value_template: "{{ is_state('binary_sensor.komp_v_seti', 'on') }}"
+      then:
+        - service: script.komp_lock
 
 KompStatus:
   speech:

@@ -1237,6 +1237,11 @@ class KompPowerTests(unittest.TestCase):
         switches = [item for group in templates for item in group.get("switch", [])]
         return next(s for s in switches if s.get("default_entity_id") == self.SWITCH)
 
+    def _buttons(self) -> dict[str, dict[str, Any]]:
+        templates = load_yaml(HA / "templates.yaml")
+        buttons = [item for group in templates for item in group.get("button", [])]
+        return {item["default_entity_id"]: item for item in buttons}
+
     def _sentences(self) -> dict[str, list[str]]:
         komp = yaml.safe_load((HA / "custom_sentences" / "ru" / "station_komp.yaml").read_text())
         return {
@@ -1350,7 +1355,11 @@ class KompPowerTests(unittest.TestCase):
     def test_shutdown_shell_commands_keep_the_host_in_secrets(self):
         commands = load_yaml(HA / "shell_commands.yaml")
         target = "{{ states('input_text.komp_ssh_target') }}"
-        for name, word in (("komp_shutdown", "shutdown"), ("komp_cancel_shutdown", "cancel")):
+        for name, word in (
+            ("komp_shutdown", "shutdown"),
+            ("komp_cancel_shutdown", "cancel"),
+            ("komp_lock", "lock"),
+        ):
             with self.subTest(command=name):
                 command = self._squash(commands[name])
                 for option in (
@@ -1396,8 +1405,43 @@ class KompPowerTests(unittest.TestCase):
         self.assertEqual(shutdown["mode"], "single")
         self.assertEqual(cancel["mode"], "single")
 
+    def test_lock_and_unlock_scripts_are_guarded_by_the_ping_sensor(self):
+        lock = SCRIPTS["komp_lock"]
+        unlock = SCRIPTS["komp_unlock"]
+        self.assertEqual(services(lock), ["shell_command.komp_lock"])
+        self.assertEqual(services(unlock), ["rest_command.wakegrant_issue_unlock"])
+        for name, script in (("komp_lock", lock), ("komp_unlock", unlock)):
+            with self.subTest(script=name):
+                dump = yaml.safe_dump(script, allow_unicode=True)
+                self.assertIn(self.BINARY_SENSOR, dump)
+                self.assertIn("value_template", dump)
+                self.assertEqual(script["mode"], "single")
+        # Locking also refuses an unset SSH target, like the shutdown script;
+        # unlock never depends on the SSH target at all.
+        lock_dump = yaml.safe_dump(lock, allow_unicode=True)
+        self.assertIn(self.TARGET_INPUT, lock_dump)
+        self.assertIn("unavailable", lock_dump)
+        self.assertNotIn(self.TARGET_INPUT, yaml.safe_dump(unlock, allow_unicode=True))
+        # Unlocking a powered-off PC is a no-op, and neither action wakes it.
+        for script in (lock, unlock):
+            self.assertNotIn("wake_on_lan.send_magic_packet", yaml.safe_dump(script, allow_unicode=True))
+
+    def test_lock_and_unlock_buttons_press_the_guarded_scripts(self):
+        buttons = self._buttons()
+        self.assertEqual(set(buttons), {"button.komp_lock", "button.komp_unlock"})
+        self.assertEqual(services(buttons["button.komp_lock"]), ["script.komp_lock"])
+        self.assertEqual(services(buttons["button.komp_unlock"]), ["script.komp_unlock"])
+        self.assertEqual(buttons["button.komp_lock"]["icon"], "mdi:lock")
+        self.assertEqual(buttons["button.komp_unlock"]["icon"], "mdi:lock-open")
+        for entity, button in buttons.items():
+            with self.subTest(entity=entity):
+                self.assertTrue(button["unique_id"])
+                # The shared `komp` prefix is what the Android catalogue uses
+                # to put both buttons into the switch.komp device group.
+                self.assertTrue(entity.split(".", 1)[1].startswith("komp_"))
+
     def test_intents_are_local_and_reference_the_switch_entities(self):
-        for intent in ("KompOn", "KompOff", "KompUnlock", "KompStatus"):
+        for intent in ("KompOn", "KompOff", "KompUnlock", "KompLock", "KompStatus"):
             dump = yaml.safe_dump(INTENTS[intent], allow_unicode=True)
             self.assertNotIn("conversation.hermes", dump)
             self.assertIn(self.BINARY_SENSOR, dump)
@@ -1415,10 +1459,15 @@ class KompPowerTests(unittest.TestCase):
         self.assertEqual(services(INTENTS["KompOff"]), ["script.komp_shutdown"])
         self.assertIn(self.OFF_INPUT, yaml.safe_dump(INTENTS["KompOff"], allow_unicode=True))
         self.assertEqual(services(INTENTS["KompCancelOff"]), ["script.komp_cancel_shutdown"])
-        self.assertEqual(services(INTENTS["KompUnlock"]), ["rest_command.wakegrant_issue_unlock"])
+        self.assertEqual(services(INTENTS["KompUnlock"]), ["script.komp_unlock"])
         self.assertNotIn(
             "wake_on_lan.send_magic_packet",
             yaml.safe_dump(INTENTS["KompUnlock"], allow_unicode=True),
+        )
+        self.assertEqual(services(INTENTS["KompLock"]), ["script.komp_lock"])
+        self.assertNotIn(
+            "wake_on_lan.send_magic_packet",
+            yaml.safe_dump(INTENTS["KompLock"], allow_unicode=True),
         )
         self.assertEqual(services(INTENTS["KompStatus"]), [])
 
@@ -1460,6 +1509,10 @@ class KompPowerTests(unittest.TestCase):
         self.assertEqual(self._render(unlock, True), "Разблокирую.")
         self.assertEqual(self._render(unlock, False), "Комп выключен.")
 
+        lock = INTENTS["KompLock"]["speech"]["text"]
+        self.assertEqual(self._render(lock, True), "Блокирую.")
+        self.assertEqual(self._render(lock, False), "Комп выключен.")
+
     def test_sentences_cover_the_required_phrases_without_collisions(self):
         sentences = self._sentences()
         self.assertEqual(
@@ -1478,13 +1531,17 @@ class KompPowerTests(unittest.TestCase):
             set(sentences["KompUnlock"]),
             {"разблокируй комп", "разблокируй мой комп", "открой комп"},
         )
+        self.assertEqual(
+            set(sentences["KompLock"]),
+            {"заблокируй комп", "заблокируй мой комп", "запри комп"},
+        )
         self.assertTrue(
             {"комп включён", "мой комп включён", "включён ли комп", "комп работает"}
             <= set(sentences["KompStatus"])
         )
         self.assertEqual(
             set(sentences),
-            {"KompOn", "KompOff", "KompCancelOff", "KompUnlock", "KompStatus"},
+            {"KompOn", "KompOff", "KompCancelOff", "KompUnlock", "KompLock", "KompStatus"},
         )
 
         # No phrase is reused by another intent (duplicate detection also runs

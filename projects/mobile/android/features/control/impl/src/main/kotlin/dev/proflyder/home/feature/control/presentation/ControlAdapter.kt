@@ -43,6 +43,9 @@ import dev.proflyder.home.feature.control.impl.databinding.ItemControlVoiceBindi
 internal interface ControlAdapterCallback : AdapterCallback<ControlItem> {
     fun onPowerChanged(entry: ControlEntry, on: Boolean)
 
+    /** Presses a stateless device button (lock/unlock). */
+    fun onButtonPressed(entry: ControlEntry)
+
     /** The profile selector reports the chosen side: `work = true` is the named profile. */
     fun onProfileChanged(entry: ControlEntry, work: Boolean)
 
@@ -663,11 +666,38 @@ internal class ControlAdapter(
             val row = item as ControlItem.Device
             bindTitle(row.entry)
             bindIcon(row.entry)
+            val button = row.entry.isButton
+            views.controlDeviceSwitch.setVisible(!button)
+            views.controlDeviceState.setVisible(!button)
+            if (button) {
+                bindButtonRow(row)
+                return
+            }
             bindPower(row.entry)
             bindState(row)
             bindBusy(row)
             bindAvailability(row.entry)
             bindEnabled(row)
+        }
+
+        /**
+         * A standalone stateless button (an older server without device
+         * grouping still shows it): the card itself presses it.
+         */
+        private fun bindButtonRow(row: ControlItem.Device) {
+            bindBusy(row)
+            val tint = MaterialColors.getColor(
+                views.root,
+                com.google.android.material.R.attr.colorOnPrimaryContainer,
+            )
+            views.controlDeviceIcon.setColorFilter(tint)
+            views.controlDeviceIcon.isActivated = true
+            views.root.alpha = if (row.entry.available) 1f else DISABLED_ALPHA
+            val enabled = row.entry.available && !row.busy
+            views.root.isEnabled = enabled
+            views.root.setOnClickListener {
+                if (enabled) callback.onButtonPressed(row.entry)
+            }
         }
 
         override fun bindPayloads(item: ControlItem, payloads: List<Any>) {
@@ -795,6 +825,12 @@ internal class ControlAdapter(
                     .takeUnless { it.isBlank() || it == entry.id }
                     ?: entry.device.ifBlank { entry.localizedTitle(rowViews.root.context) }
             rowViews.controlRowIcon.setImageResource(ControlIcons.resolve(entry))
+            rowViews.controlRowProgress.setVisible(row.busy)
+            rowViews.root.alpha = if (entry.available) 1f else DISABLED_ALPHA
+            if (entry.isButton) {
+                bindButtonRow(rowViews, entry, row.busy)
+                return container.addView(rowViews.root)
+            }
             val on = entry.power == PowerState.ON
             val tint = MaterialColors.getColor(
                 rowViews.root,
@@ -822,8 +858,6 @@ internal class ControlAdapter(
                 rowViews.controlRowState.text =
                     rowViews.root.context.getString(R.string.control_state_on_brightness, brightness)
             }
-            rowViews.controlRowProgress.setVisible(row.busy)
-            rowViews.root.alpha = if (entry.available) 1f else DISABLED_ALPHA
             val enabled = entry.available && !row.busy
             rowViews.controlRowSwitch.isEnabled = enabled
             rowViews.root.isEnabled = enabled
@@ -835,6 +869,25 @@ internal class ControlAdapter(
                 true
             }
             container.addView(rowViews.root)
+        }
+
+        /**
+         * A button row is stateless: no toggle, no on/off text. The whole row
+         * presses the button, and the tap is disabled while it is in flight.
+         */
+        private fun bindButtonRow(rowViews: ItemControlDeviceRowBinding, entry: ControlEntry, busy: Boolean) {
+            rowViews.controlRowSwitch.setVisible(false)
+            rowViews.controlRowState.setVisible(false)
+            val tint = MaterialColors.getColor(
+                rowViews.root,
+                com.google.android.material.R.attr.colorOnPrimaryContainer,
+            )
+            rowViews.controlRowIcon.setColorFilter(tint)
+            rowViews.controlRowIcon.isActivated = true
+            rowViews.root.isEnabled = entry.available && !busy
+            rowViews.root.setOnClickListener {
+                if (entry.available && !busy) callback.onButtonPressed(entry)
+            }
         }
     }
 

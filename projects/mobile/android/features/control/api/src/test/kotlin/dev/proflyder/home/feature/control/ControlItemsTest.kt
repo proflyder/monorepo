@@ -39,6 +39,7 @@ class ControlItemsTest {
         actions = when (kind) {
             ControlKind.SCENARIO -> setOf(ControlAction.RUN)
             ControlKind.ACTION -> setOf(ControlAction.SPEAK)
+            ControlKind.BUTTON -> setOf(ControlAction.PRESS)
             else -> setOf(ControlAction.TURN_ON, ControlAction.TURN_OFF)
         },
         power = power,
@@ -410,8 +411,46 @@ class ControlItemsTest {
     }
 
     @Test
-    fun entriesWithoutADeviceIdAreEachTheirOwnDevice() {
-        // An older server omits device_id, so the flat rows stay exactly as before.
+    fun buttonsJoinTheirDeviceByEntityIdPrefixAsSettings() {
+        val entries = listOf(
+            entry("switch.komp", ControlKind.SWITCH, room = "Office", title = "Комп", power = PowerState.ON),
+            entry("button.komp_lock", ControlKind.BUTTON, room = "Office", title = "Заблокировать"),
+            entry("button.komp_unlock", ControlKind.BUTTON, room = "Office", title = "Разблокировать"),
+        )
+        assertEquals(
+            listOf(
+                "# Office (1 of 1 on)",
+                "G Комп expanded=false p=[switch.komp] s=[button.komp_lock,button.komp_unlock]",
+            ),
+            build(entries).describe(),
+        )
+    }
+
+    @Test
+    fun prefixGroupingNeedsABaseEntityAndTheSameRoom() {
+        // No base entity: `lamp_a`/`lamp_b` have no `lamp` anchor, so they stay
+        // separate rows even though they share a prefix.
+        val withoutAnchor = listOf(
+            entry("switch.lamp_a", ControlKind.SWITCH, room = "Office"),
+            entry("button.lamp_b", ControlKind.BUTTON, room = "Office"),
+        )
+        assertEquals(
+            listOf("# Office (0 of 2 on)", "D switch.lamp_a", "D button.lamp_b"),
+            build(withoutAnchor).describe(),
+        )
+        // A base entity in a different room is not the same device.
+        val acrossRooms = listOf(
+            entry("switch.komp", ControlKind.SWITCH, room = "Office"),
+            entry("button.komp_lock", ControlKind.BUTTON, room = "Bedroom"),
+        )
+        assertEquals(
+            listOf("# Office (0 of 1 on)", "D switch.komp", "# Bedroom (0 of 1 on)", "D button.komp_lock"),
+            build(acrossRooms).describe(),
+        )
+    }
+
+    @Test
+    fun entriesWithoutADeviceIdAreEachTheirOwnDevice() {        // An older server omits device_id, so the flat rows stay exactly as before.
         assertEquals(
             listOf("# Bedroom (1 of 2 on)", "D light.a", "D light.b"),
             build(

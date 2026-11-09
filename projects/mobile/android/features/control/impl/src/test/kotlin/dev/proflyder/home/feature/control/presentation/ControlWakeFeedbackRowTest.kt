@@ -39,6 +39,8 @@ class ControlWakeFeedbackRowTest {
 
         override fun onPowerChanged(entry: ControlEntry, on: Boolean) = Unit
 
+        override fun onButtonPressed(entry: ControlEntry) = Unit
+
         override fun onProfileChanged(entry: ControlEntry, work: Boolean) = Unit
 
         override fun onToggleSettings(deviceId: String) = Unit

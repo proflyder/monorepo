@@ -32,6 +32,7 @@ import dev.proflyder.home.feature.control.WakeFeedbackAction
 import dev.proflyder.home.feature.control.WakeFeedbackKind
 import dev.proflyder.home.feature.control.domain.AdjustLight
 import dev.proflyder.home.feature.control.domain.LoadControlCatalog
+import dev.proflyder.home.feature.control.domain.PressControl
 import dev.proflyder.home.feature.control.domain.RunScenario
 import dev.proflyder.home.feature.control.domain.SetDevicePower
 import dev.proflyder.home.feature.control.domain.SetVoiceProfile
@@ -93,6 +94,7 @@ data class ControlUiState(
 class ControlViewModel(
     private val loadCatalog: LoadControlCatalog,
     private val runScenario: RunScenario,
+    private val pressControl: PressControl,
     private val setDevicePower: SetDevicePower,
     private val setVoiceProfile: SetVoiceProfile,
     private val adjustLight: AdjustLight,
@@ -260,6 +262,27 @@ class ControlViewModel(
                     copy(pending = pending - entry.id, notice = ControlNotice.WakeMarked(action.kind))
                 }
                 is Outcome.Failure -> updateState { copy(pending = pending - entry.id, actionError = result.failure) }
+            }
+        }
+    }
+
+    /**
+     * Presses a stateless device button (lock/unlock the PC). It is a one-shot
+     * command: a button has no on/off state to optimistically update, so the
+     * catalog is only re-read afterwards to pick up side effects.
+     */
+    fun press(entry: ControlEntry) {
+        if (entry.id in currentState.pending || !entry.available) return
+        updateState { copy(pending = pending + entry.id, actionError = null) }
+        launch {
+            when (val result = pressControl(entry)) {
+                is Outcome.Success -> {
+                    updateState { copy(pending = pending - entry.id) }
+                    refresh(silent = true)
+                }
+                is Outcome.Failure -> updateState {
+                    copy(pending = pending - entry.id, actionError = result.failure)
+                }
             }
         }
     }
@@ -535,6 +558,7 @@ class ControlViewModel(
 class ControlViewModelFactoryContributor(
     private val loadCatalog: LoadControlCatalog,
     private val runScenario: RunScenario,
+    private val pressControl: PressControl,
     private val setDevicePower: SetDevicePower,
     private val setVoiceProfile: SetVoiceProfile,
     private val adjustLight: AdjustLight,
@@ -554,6 +578,7 @@ class ControlViewModelFactoryContributor(
         ControlViewModel(
             loadCatalog,
             runScenario,
+            pressControl,
             setDevicePower,
             setVoiceProfile,
             adjustLight,

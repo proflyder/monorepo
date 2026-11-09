@@ -68,6 +68,23 @@ class ControlCatalogClientTest {
     """.trimIndent()
 
     @Test
+    fun parsesButtonEntriesWithPressAction() = runBlocking {
+        server.enqueue(
+            MockResponse().setBody(
+                """{"statesOk":true,"entries":[{"id":"button.komp_lock","kind":"button",
+                "title":"Заблокировать","icon":"lock","actions":["press"],"available":true}]}""",
+            ),
+        )
+        val catalog = (client().fetch() as Outcome.Success).value
+        val button = catalog.entries.single()
+        assertEquals(ControlKind.BUTTON, button.kind)
+        assertTrue(button.isButton)
+        assertFalse(button.isDevice)
+        assertEquals(setOf(ControlAction.PRESS), button.actions)
+        assertNull(button.power)
+    }
+
+    @Test
     fun fetchesAndParsesCatalogWithBearer() = runBlocking {
         server.enqueue(MockResponse().setBody(body))
         val result = client().fetch()

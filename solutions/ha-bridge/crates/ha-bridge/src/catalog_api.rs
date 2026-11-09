@@ -38,6 +38,9 @@ const CACHE_CONTROL: &str = "no-store";
 /// `kind: "action"`, the same `device_id`/`device` as its device, a
 /// human-readable `title`, and its own allowlisted action name; commands keep
 /// travelling as `{"entry", "action"}` tasks, so this shape stays additive.
+/// A Home Assistant `button` entity is a `kind: "button"` entry with the
+/// one-shot action `press`; it may carry no `device_id`, and clients group it
+/// with its device by the shared entity-id prefix.
 #[derive(Debug, Serialize)]
 struct EntryView {
     id: String,
