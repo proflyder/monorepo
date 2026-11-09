@@ -489,6 +489,17 @@ impl Downlink for CallSink {
     fn flush(&self) {
         self.0.flush();
     }
+
+    fn stats(&self) -> pulsar_call::SinkStats {
+        let stats = self.0.stats();
+        pulsar_call::SinkStats {
+            queued_ms: stats.queued_ms,
+            written_ms: stats.written_ms,
+            partial: stats.partial,
+            overflow: stats.overflow,
+            xrun: stats.xrun,
+        }
+    }
 }
 
 /// Звонок: URL и токен из [`pulsar_call::CALL_DIR`]. Без них модуль выключен и станция

@@ -14,6 +14,9 @@ pub trait Codec: Send {
     fn encode(&mut self, pcm: &[i16]) -> Option<Vec<u8>>;
     /// Раскодировать пакет; `None` — битый пакет.
     fn decode(&mut self, packet: &[u8]) -> Option<Vec<i16>>;
+    /// Восстановить пропущенный кадр из in-band FEC следующего пакета.
+    /// `None` — FEC в пакете нет или декодер его не поддерживает.
+    fn decode_fec(&mut self, packet: &[u8]) -> Option<Vec<i16>>;
     /// PLC: кадр на место потерянного.
     fn conceal(&mut self) -> Vec<i16>;
 }
@@ -42,6 +45,10 @@ impl Codec for OpusCodec {
 
     fn decode(&mut self, packet: &[u8]) -> Option<Vec<i16>> {
         self.decoder.decode(packet)
+    }
+
+    fn decode_fec(&mut self, packet: &[u8]) -> Option<Vec<i16>> {
+        self.decoder.decode_fec(packet)
     }
 
     fn conceal(&mut self) -> Vec<i16> {

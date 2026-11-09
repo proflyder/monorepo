@@ -22,7 +22,22 @@ use crate::jitter::JitterBuffer;
 use crate::machine::{Action, CallPhase, Machine, SignalEvent};
 use crate::rtc::{Peer, PeerOutput};
 use crate::signaling::{SignalError, Signaling, WatchMessage};
-use crate::{CallConfig, CallEvent, FRAME_MS, FRAME_SAMPLES, RING_MS};
+use crate::{CallConfig, CallEvent, FRAME_MS, RING_MS};
+
+/// Счётчики вывода для наблюдаемости звонка.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct SinkStats {
+    /// Сколько мс звука ждёт в очереди канала.
+    pub queued_ms: u32,
+    /// Сколько мс реального звука уже ушло в устройство.
+    pub written_ms: u64,
+    /// Сколько раз период записан неполным (без добивки тишиной).
+    pub partial: u64,
+    /// Сколько кадров выброшено контролем дрейфа.
+    pub overflow: u64,
+    /// Ошибки/переполнения ALSA, после которых канал восстанавливался.
+    pub xrun: u64,
+}
 
 /// Куда писать downlink. Реализация — pulsar-media: отдельный PCM-канал `Call` с малым
 /// буфером, не Music/Announce.
@@ -31,6 +46,14 @@ pub trait Downlink: Send + Sync {
     fn write(&self, pcm: &[i16]);
     /// Выбросить всё непригранное (звонок закончился).
     fn flush(&self);
+    /// Текущая очередь канала и накопленные счётчики.
+    fn stats(&self) -> SinkStats {
+        SinkStats::default()
+    }
+    /// Сколько мс звука ждёт в очереди канала.
+    fn queued_ms(&self) -> u32 {
+        self.stats().queued_ms
+    }
 }
 
 enum Cmd {
@@ -214,17 +237,90 @@ impl Ctx<'_> {
     }
 }
 
+/// Один кадр downlink: PCM для вывода и исходный Opus-пакет для in-band FEC.
+struct CallFrame {
+    pcm: Vec<i16>,
+    packet: Vec<u8>,
+}
+
+/// Пересчёт RTP timestamp (48 кГц) в номер кадра для джиттер-буфера.
+///
+/// Длительность кадра берётся из предыдущего пакета, а не предполагается равной 20 мс:
+/// телефон вправе прислать 10, 20 или 60 мс, и тогда `time / 960` склеивает или теряет
+/// номера. Якорь — последний принятый пакет; сравнение идёт в его длительности.
+struct Timeline {
+    anchor: Option<Anchor>,
+}
+
+#[derive(Clone, Copy)]
+struct Anchor {
+    time: u64,
+    seq: u64,
+    samples: u64,
+}
+
+impl Timeline {
+    fn new() -> Self {
+        Self { anchor: None }
+    }
+
+    fn seq(&mut self, time: u64, samples: usize) -> u64 {
+        let samples = samples.max(1) as u64;
+        let Some(anchor) = self.anchor else {
+            self.anchor = Some(Anchor {
+                time,
+                seq: 0,
+                samples,
+            });
+            return 0;
+        };
+        let step = anchor.samples.max(1);
+        let (frames, forward) = if time >= anchor.time {
+            ((time - anchor.time + step / 2) / step, true)
+        } else {
+            ((anchor.time - time + step / 2) / step, false)
+        };
+        if frames == 0 {
+            return anchor.seq;
+        }
+        if forward {
+            let seq = anchor.seq + frames;
+            self.anchor = Some(Anchor { time, seq, samples });
+            seq
+        } else {
+            anchor.seq.saturating_sub(frames)
+        }
+    }
+}
+
+/// Сколько мс держать в очереди канала, прежде чем выдать ещё кадр.
+const DOWNLINK_TARGET_MS: u32 = 40;
+/// Период строки наблюдаемости.
+const REPORT_EVERY: Duration = Duration::from_secs(5);
+
 struct Media {
     peer: Peer,
     codec: OpusCodec,
-    jitter: JitterBuffer,
+    jitter: JitterBuffer<CallFrame>,
     upsampler: Upsampler,
+    timeline: Timeline,
+    rx_rtp: u64,
+    seq_gap: u64,
+    decode_errors: u64,
+    pushed: u64,
+    late: u64,
+    dup: u64,
+    plc: u64,
+    fec: u64,
+    max_seq: Option<u64>,
+    last_report: Instant,
 }
 
 impl Media {
-    /// Разобрать накопленное движком: потери/соединение/входящие кадры.
-    /// Возвращает `false`, если медиа потеряно.
-    fn drive(&mut self, downlink: &Arc<dyn Downlink>, active: bool) -> bool {
+    /// Разобрать накопленное движком: соединение и входящие кадры.
+    /// Возвращает `false`, если медиа потеряно. Кадры только кладутся в джиттер-буфер:
+    /// выдача живёт по часам воспроизведения в [`Media::pump`].
+    fn drive(&mut self) -> bool {
         // Сначала время: только `handle_timeout` пакетирует записанные Opus-кадры и
         // отправляет ICE/RTCP. Затем дренаж, который отдаёт `Transmit` в сокет.
         self.peer.handle_timeout(Instant::now());
@@ -236,26 +332,97 @@ impl Media {
                 PeerOutput::Connected => debug!("call: media connected"),
                 PeerOutput::Disconnected => {
                     debug!("call: media disconnected");
-                    downlink.flush();
                     return false;
                 }
                 PeerOutput::Audio { data, time } => {
+                    self.rx_rtp += 1;
+                    let Some(pcm) = self.codec.decode(&data) else {
+                        self.decode_errors += 1;
+                        continue;
+                    };
+                    let seq = self.timeline.seq(time, pcm.len());
+                    if let Some(max) = self.max_seq
+                        && seq > max
+                    {
+                        self.seq_gap += seq - max - 1;
+                    }
+                    self.max_seq = Some(self.max_seq.map_or(seq, |max| max.max(seq)));
                     let now = pulsar_core::now_ms();
-                    if let Some(pcm) = self.codec.decode(&data) {
-                        let seq = time / FRAME_SAMPLES as u64;
-                        let _ = self.jitter.push(seq, pcm, now);
+                    match self.jitter.push(seq, CallFrame { pcm, packet: data }, now) {
+                        crate::jitter::Push::Queued => self.pushed += 1,
+                        crate::jitter::Push::Late => self.late += 1,
+                        crate::jitter::Push::Duplicate => self.dup += 1,
                     }
                 }
             }
         }
-        if active {
+        true
+    }
+
+    /// Выдать один кадр по часам воспроизведения, если канал ещё не набрал свою цель.
+    fn pump(&mut self, downlink: &Arc<dyn Downlink>, active: bool) {
+        if active && downlink.queued_ms() < DOWNLINK_TARGET_MS {
             let now = pulsar_core::now_ms();
             let codec = &mut self.codec;
-            if let Some(pcm) = self.jitter.pop(now, &mut || codec.conceal()) {
-                downlink.write(&pcm);
+            let mut concealed = false;
+            let mut restored = false;
+            let frame = self.jitter.pop(now, &mut |next| {
+                // Пропуск N и на месте N+1: in-band FEC восстанавливает N по следующему
+                // пакету. Если FEC нет — обычный PLC.
+                if let Some(next) = next
+                    && let Some(pcm) = codec.decode_fec(&next.packet)
+                {
+                    restored = true;
+                    return CallFrame {
+                        pcm,
+                        packet: Vec::new(),
+                    };
+                }
+                concealed = true;
+                CallFrame {
+                    pcm: codec.conceal(),
+                    packet: Vec::new(),
+                }
+            });
+            if let Some(frame) = frame {
+                if restored {
+                    self.fec += 1;
+                } else if concealed {
+                    self.plc += 1;
+                }
+                downlink.write(&frame.pcm);
             }
         }
-        true
+        self.report(downlink);
+    }
+
+    fn report(&mut self, downlink: &Arc<dyn Downlink>) {
+        if self.last_report.elapsed() < REPORT_EVERY {
+            return;
+        }
+        self.last_report = Instant::now();
+        let sink = downlink.stats();
+        info!(
+            "call: rx_rtp={} seq_gap={} jitter_ms={} pushed={} late={} dup={} plc={} fec={} \
+             decode_errors={} depth={} target={} queue_ms={} written_ms={} partial={} overflow={} \
+             xrun={}",
+            self.rx_rtp,
+            self.seq_gap,
+            self.jitter.depth_ms(),
+            self.pushed,
+            self.late,
+            self.dup,
+            self.plc,
+            self.fec,
+            self.decode_errors,
+            self.jitter.depth(),
+            self.jitter.target_ms(),
+            sink.queued_ms,
+            sink.written_ms,
+            sink.partial,
+            sink.overflow,
+            sink.xrun,
+        );
     }
 
     fn uplink(&mut self, pcm: &[i16]) {
@@ -379,8 +546,8 @@ async fn session(ctx: &Ctx<'_>, commands: &mut UnboundedReceiver<Cmd>) -> Result
             packet = incoming, if media.is_some() => {
                 if let (Ok((packet, source, destination)), Some(m)) = (packet, media.as_mut()) {
                     m.peer.handle_input(&packet, source, destination);
-                    let active = machine.phase() == CallPhase::Active;
-                    if !m.drive(ctx.downlink, active) {
+                    if !m.drive() {
+                        ctx.downlink.flush();
                         let actions = machine.media_failed();
                         ctx.apply(actions, &mut machine, &mut media).await;
                     }
@@ -388,10 +555,16 @@ async fn session(ctx: &Ctx<'_>, commands: &mut UnboundedReceiver<Cmd>) -> Result
             }
             _ = ticker.tick() => {
                 let active = machine.phase() == CallPhase::Active;
-                let lost = media
-                    .as_mut()
-                    .is_some_and(|m| !m.drive(ctx.downlink, active));
+                let lost = media.as_mut().is_some_and(|m| {
+                    if !m.drive() {
+                        return true;
+                    }
+                    // Пакеты только наполняют буфер; кадр выходит здесь, по часам.
+                    m.pump(ctx.downlink, active);
+                    false
+                });
                 if lost {
+                    ctx.downlink.flush();
                     let actions = machine.media_failed();
                     ctx.apply(actions, &mut machine, &mut media).await;
                 }
@@ -413,13 +586,24 @@ fn new_media(peer: Peer, _call_id: String) -> Option<Media> {
     debug!(
         "call: media opened (local port {}, jitter target {} ms)",
         peer.local_addr().port(),
-        JitterBuffer::new(FRAME_MS).target_ms()
+        JitterBuffer::<CallFrame>::new(FRAME_MS).target_ms()
     );
     Some(Media {
         peer,
         codec: OpusCodec::new()?,
         jitter: JitterBuffer::new(FRAME_MS),
         upsampler: Upsampler::new(),
+        timeline: Timeline::new(),
+        rx_rtp: 0,
+        seq_gap: 0,
+        decode_errors: 0,
+        pushed: 0,
+        late: 0,
+        dup: 0,
+        plc: 0,
+        fec: 0,
+        max_seq: None,
+        last_report: Instant::now(),
     })
 }
 
@@ -442,6 +626,33 @@ mod tests {
         fn flush(&self) {
             *self.flushed.lock().unwrap() += 1;
         }
+    }
+
+    #[test]
+    fn the_timeline_uses_the_actual_frame_duration() {
+        let mut timeline = Timeline::new();
+        // 20 мс кадры.
+        assert_eq!(timeline.seq(0, 960), 0);
+        assert_eq!(timeline.seq(960, 960), 1);
+        assert_eq!(timeline.seq(1920, 960), 2);
+        // 60 мс кадр — один номер, а не три.
+        assert_eq!(timeline.seq(2880, 2880), 3);
+        assert_eq!(timeline.seq(5760, 2880), 4);
+        // Переход на 10 мс: длина берётся из предыдущего пакета.
+        assert_eq!(timeline.seq(8640, 480), 5);
+        assert_eq!(timeline.seq(9120, 480), 6);
+    }
+
+    #[test]
+    fn the_timeline_counts_lost_and_reordered_frames() {
+        let mut timeline = Timeline::new();
+        assert_eq!(timeline.seq(0, 960), 0);
+        // Потеряны кадры 1 и 2.
+        assert_eq!(timeline.seq(2880, 960), 3);
+        // Опоздавший кадр 1.
+        assert_eq!(timeline.seq(960, 960), 1);
+        // Дубликат того же timestamp.
+        assert_eq!(timeline.seq(2880, 960), 3);
     }
 
     #[test]

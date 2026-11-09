@@ -31,7 +31,7 @@ mod signaling;
 pub use codec::Codec;
 pub use config::{CA_FILE, CALL_DIR, CallConfig, ConfigError, TOKEN_FILE, URL_FILE};
 pub use machine::{CallPhase, HangupReason};
-pub use service::{CallHandle, Downlink, spawn};
+pub use service::{CallHandle, Downlink, SinkStats, spawn};
 
 /// Событие звонка для контроллера. Аудио через него не идёт.
 #[derive(Clone, Debug, PartialEq, Eq)]
