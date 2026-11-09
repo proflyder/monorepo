@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Padded label so the stadium indicator has room around the text. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content">
+
+    <!-- A tab label is a click target, not selectable content. -->
+    <TextView
+        android:id="@android:id/text1"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:duplicateParentState="true"
+        android:gravity="center"
+        android:maxLines="1"
+        android:paddingStart="@dimen/ui_tab_padding_horizontal"
+        android:paddingTop="@dimen/ui_tab_padding_vertical"
+        android:paddingEnd="@dimen/ui_tab_padding_horizontal"
+        android:paddingBottom="@dimen/ui_tab_padding_vertical"
+        android:textAppearance="@style/TextAppearance.Home.TimeTab"
+        android:textColor="@color/time_tab_text"
+        tools:ignore="SelectableText" />
+</FrameLayout>

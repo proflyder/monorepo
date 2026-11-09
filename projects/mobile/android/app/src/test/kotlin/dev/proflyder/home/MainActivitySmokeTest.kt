@@ -3,7 +3,7 @@ package dev.proflyder.home
 import androidx.viewpager2.widget.ViewPager2
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.bottomnavigation.BottomNavigationView
-import com.google.android.material.button.MaterialButtonToggleGroup
+import com.google.android.material.tabs.TabLayout
 import dev.proflyder.home.feature.alarms.presentation.AlarmsFragment
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -82,7 +82,7 @@ class MainActivitySmokeTest {
     }
 
     @Test
-    fun swipingTheTimePagerMovesTheSegmentedSwitch() {
+    fun swipingTheTimePagerSelectsTheMatchingPill() {
         val controller = Robolectric.buildActivity(MainActivity::class.java).setup()
         val activity = controller.get()
         shadowOf(activity.mainLooper).idle()
@@ -97,8 +97,8 @@ class MainActivitySmokeTest {
         shadowOf(activity.mainLooper).idle()
 
         assertEquals(TimeSection.REMINDERS, time.section)
-        val tabs = time.requireView().findViewById<MaterialButtonToggleGroup>(R.id.time_tabs)
-        assertEquals(R.id.time_tab_reminders, tabs.checkedButtonId)
+        val tabs = time.requireView().findViewById<TabLayout>(R.id.time_tabs)
+        assertEquals(TimeSection.REMINDERS.ordinal, tabs.selectedTabPosition)
     }
 
     @Test
@@ -112,9 +112,9 @@ class MainActivitySmokeTest {
         activity.supportFragmentManager.executePendingTransactions()
 
         val time = activity.supportFragmentManager.findFragmentById(R.id.fragment_container) as TimeFragment
-        val tabs = time.requireView().findViewById<MaterialButtonToggleGroup>(R.id.time_tabs)
+        val tabs = time.requireView().findViewById<TabLayout>(R.id.time_tabs)
         val pager = time.requireView().findViewById<ViewPager2>(R.id.time_pager)
-        tabs.check(R.id.time_tab_timers)
+        tabs.getTabAt(TimeSection.TIMERS.ordinal)?.select()
         shadowOf(activity.mainLooper).idle()
 
         assertEquals(TimeSection.TIMERS, time.section)
