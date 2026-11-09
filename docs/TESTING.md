@@ -49,7 +49,7 @@ teardown восстанавливает source/volume.
 | MCP gateway | Rust/Bazel unit (фейки backend'ов), каталог↔RBAC, contract `deploy.sh`, fake SSH |
 | bb plugins | `node --test` диспетчера и `profiles`; контракт `params.json` с обеих сторон |
 | Voice routing | Rust-юнит `solutions/voice-proxy`, `test_voice_routing_contract.py`, мост `test_bb_dispatch.py` |
-| Pulsar Rust | `bazel test //projects/station/pulsar/satellite/...` (fmt/clippy/tests, Linux) и `bazel build -c opt --platforms=//platform/bazel/zig:<arch>_linux //projects/station/pulsar/satellite:station_binary` для `aarch64`/`armhf` — CI-юниты `pulsar-bazel` (`_bazel.yml`) и `pulsar` (`_native.yml`) |
+| Pulsar Rust | `bazel test //projects/station/pulsar/satellite/...` (fmt/clippy/tests, Linux) и `bazel build -c opt --platforms=//platform/bazel/zig:<arch>_linux //projects/station/pulsar/satellite:station_binary` для `aarch64`/`armhf` — CI-юниты `pulsar-bazel` (`_unit.yml`) и `pulsar` (`_native.yml`) |
 | Pulsar installer | Rust-тесты установщика и golden-фикстуры из [`projects/station/pulsar/installer/`](../projects/station/pulsar/installer); `bazel test //projects/station/pulsar/installer/...` |
 
 ## Hermes
@@ -284,11 +284,16 @@ CI (платформа `native`, `_native.yml`) ставит pinned Bazelisk, к
 `permissions: contents: read`, `concurrency` отменяет устаревший прогон только
 для PR. Выкладка — отдельный `.github/workflows/deploy-home.yml` на push в
 `develop` (см. ниже); его job `warm-caches` после merge — единственный
-писатель develop-стороны общих кэшей: `setup-bazel`, диск-кэша Android
-(собирает `//projects/mobile/android:app` и архивирует
-`~/.cache/bazel-disk` под ключом `android-app`). Ключи совпадают с теми, что восстанавливают PR, а
-`restore-keys` дают трёхуровневый откат (точный ключ → юнит → платформа),
-поэтому смена `maven_install.json` или lock-файлов не даёт полный холод.
+писатель develop-стороны общих кэшей: `setup-bazel` и одного дискового
+кэша Bazel. Одна команда `bazel build --config=android` в одном сервере
+собирает Android-цели (`//projects/mobile/android:app`,
+`//projects/mobile/android:android_tests`) и все build/test-цели юнитов
+платформы `bazel` из `platform/ci/units.mjs`; `--config=android` задаёт
+только Android-флаги и version defines и не меняет host-платформу Rust.
+После `bazel shutdown` каталог `~/.cache/bazel-disk` сохраняется под одним
+ключом `bazel-<os>-warm-<hash>`. PR-джобы находят его через `restore-keys`
+(`bazel-<os>-warm-`), сохраняя свои уровни «точный ключ → юнит», поэтому
+смена `maven_install.json` или lock-файлов не даёт полный холод.
 Версии инструментов CI (Python, Node, gitleaks, actionlint, shellcheck,
 kubectl, helm, oras) — из `mise.toml`/`mise.lock` через `jdx/mise-action`,
 как и на рабочем месте (`docs/WORKSTATION.md`).
@@ -300,12 +305,12 @@ PR-прогоны кэши только читают (`actions/cache/restore`): 
 `workflow_dispatch`) и для `warm-caches`. У юнитов без develop-писателя
 (`_native.yml`, `_deploy-control.yml`) кэш диска только восстанавливается:
 пока такой сборки на develop нет, лучше не плодить копии на каждый PR.
-Размер архива Android ограничен
-`--experimental_disk_cache_gc_max_size=6G` в `warm-caches`. Host-Rust юниты
-(`_bazel.yml`: сервисы, `proto`, `pulsar-bazel`) греет параллельный job
-`warm-rust`: он собирает все build/test-цели юнитов платформы `bazel` и
-сохраняет общий кэш `bazel-Linux-rust-…` (до 3 ГБ), который каждый юнит
-восстанавливает после собственной записи.
+Один общий архив ограничен `--experimental_disk_cache_gc_max_size=7G`
+в `warm-caches`: Android и host-Rust лежат в одном каталоге и не дублируют
+байты в лимите GitHub 10 ГБ (два `actions/cache/save` одного каталога под
+разными ключами дали бы две копии). Host-Rust юниты (`_unit.yml`: сервисы,
+`proto`, `pulsar-bazel`) и Android-юниты (`_android.yml`) восстанавливают
+этот кэш через общий префикс, приоритет остаётся у их собственных ключей.
 
 
 Проверки, тесты и сборки внутри reusable workflow запускаются теми же
@@ -327,8 +332,8 @@ matrix одного платформенного workflow.
 | Платформа | Reusable workflow | Что делает юнит |
 |---|---|---|
 | android | `_android.yml` | JDK 21 + SDK 36, `bazel build` затем `bazel test`, APK в artifact |
-| bazel | `_bazel.yml` | Linux-runner, `bazel build` затем `bazel test` (Rust-сервисы, `home-deploy`, хост Pulsar: тесты, fmt, clippy) |
-| python | `_python.yml` | `compileall` + `unittest discover` по каталогам юнита |
+| unit | `_unit.yml` | Linux-runner: `kind=bazel` — `bazel build`/`test` (Rust-сервисы, `home-deploy`, хост Pulsar), `kind=python` — Python-suite Hermes; затем образы юнита (`bazel`/`docker`/`mixed`) в том же Bazel-сервере, push `tree-<hash>` и `_attest.yml` |
+| python | `_python.yml` | `compileall` + `unittest discover` по каталогам юнита (без образов) |
 | js | `_js.yml` | pinned Node + `node --test` по `*.test.js`, без npm |
 | native | `_native.yml` | pinned toolchain download + sha256, host tests, cross-build, `SHA256SUMS` artifact; same-repo PR публикует release-shaped `tree-<hash>` с provenance |
 | quality | `_quality.yml` | audit, static gates, unit-map, actionlint, shellcheck, Gitleaks |
@@ -382,17 +387,31 @@ Bazel-корнем: `android-app` (сборка APK и unit/UI-тесты), `and
 затронуло только общий Kotlin-юнит, — иначе `android-distribute` не нашёл бы
 artifact.
 
-`changes` выдаёт outputs `android_units`, `bazel_units`, `python_units`,
-`js_units`, `native_units`, `deploy_units`, `deploy_control`,
-`android_distribute`, `base_sha`, `docs_only`; каждый output — JSON-массив
-записей matrix (`android_distribute` — `true`/`false`).
+`changes` выдаёт outputs `android_units`, `unit_units`, `python_units`,
+`js_units`, `native_units`, `deploy_control`, `android_distribute`,
+`base_sha`, `docs_only`; каждый output — JSON-массив записей matrix
+(`android_distribute` — `true`/`false`). `unit_units` объединяет Bazel-юниты
+и те Python-юниты, которые владеют образами (сегодня Hermes), поэтому у
+такого юнита один build/test job, а не два. Типичный сервисный PR теперь
+запускает `changes`, `quality`, один `unit / <id>`, по одному
+`attest / <id>` на опубликованный образ и `ci-ok` (плюс `deploy-control`,
+если затронут scheduler/ha-bridge); раньше были отдельные `bazel / <id>` и
+`images / <id>`.
 Пустой массив означает «пропустить job» (законный skip для `ci-ok`).
+Для `pull_request` база маршрутизации — первый родитель проверенного
+merge-коммита (`git rev-parse HEAD^1`), а не `pull_request.base.sha` из
+события: последний может быть старше tip'а `develop`, на котором собран
+`refs/pull/N/merge`, и тогда в diff `base..merge` попадают файлы чужих PR.
+`push` использует `github.event.before`.
 
-Образы (`images` → `_images.yml`) собираются на PR и, если PR не из форка,
-сразу публикуются как `tree-<git tree hash>` с build provenance (решение 36).
-Форки и `workflow_dispatch` только собирают: у них нет прав на registry.
-Отдельный job `attest` матрицей по опубликованным digest'ам создаёт
-attestation; `ci-ok` не меняется.
+Образы деплой-юнитов собираются в том же job `unit / <id>` (`_unit.yml`):
+сначала идут проверки юнита, затем `<image>_image`/Docker-образы в том же
+Bazel-сервере, поэтому второй сборки тех же целей нет. На PR из этого
+репозитория они сразу публикуются как `tree-<git tree hash>` с build
+provenance (решение 36); форки и `workflow_dispatch` только собирают — у них
+нет прав на registry. Отдельный job `attest` (`_attest.yml`) матрицей по
+опубликованным digest'ам создаёт attestation; `ci-ok` не меняется. Docker и
+mixed (Hermes Buildx) — ветки того же шага `platform/ci/build-images.sh`.
 
 Native-юниты с `native.publish_script` (`pulsar`, `logon-provider`) следуют
 тому же правилу: `_native.yml` после сборки публикует release-shaped артефакт
@@ -473,7 +492,7 @@ Native-юниты с `native.publish_script` (`pulsar`, `logon-provider`) сле
   `mise run test:deploy-control` (scheduler, ha-bridge/ha-control,
   `projects/home/kubernetes/scheduler/**`).
 * `deploy` (у деплоимых юнитов) — `images`, `workloads` и `builder`
-  (`bazel`/`docker`/`mixed`). По нему `deploy-home` и job `images` в `ci.yml`
+  (`bazel`/`docker`/`mixed`). По нему `deploy-home` и job `unit` в `ci.yml`
   выбирают, что именно собирать и раскатывать; инфраструктурные юниты этой
   секции не имеют. `mixed` — один юнит с обоими типами образов: сегодня
   `hermes` (Docker) и `voice-proxy` (Bazel `//solutions/voice-proxy`).

@@ -94,15 +94,18 @@ jobs:
       # Only a develop push writes this entry (deploy-home `warm-caches`), under
       # the exact key restored first here. The key is ordered platform → unit →
       # content so `restore-keys` form a real hierarchy: the exact key, then the
-      # same unit with other lockfiles, then any Android unit's cache (a small
-      # `kotlin-shared` entry reuses the app's compiled libraries and a new
-      # `maven_install.json` is never a cold start).
+      # same unit with other lockfiles, then the shared develop-side
+      # Android+host-Rust cache written by `deploy-home` `warm-caches`, then any
+      # Android unit's cache (a small `kotlin-shared` entry reuses the app's
+      # compiled libraries and a new `maven_install.json` is never a cold
+      # start).
       - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/bazel-disk
           key: bazel-android-${{ runner.os }}-${{ inputs.unit }}-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'projects/mobile/android/maven_install.json') }}
           restore-keys: |
             bazel-android-${{ runner.os }}-${{ inputs.unit }}-
+            bazel-${{ runner.os }}-warm-
             bazel-android-${{ runner.os }}-
 
       # setup-android accepts the SDK licenses by default; install exactly the

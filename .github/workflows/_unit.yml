@@ -1,0 +1,292 @@
+name: _unit
+
+# One Linux unit job: checks, container images and their provenance.
+#
+# This is the merged successor of `_bazel.yml` and the build part of
+# `_images.yml`. A Rust service used to be built in two jobs: the Bazel checks
+# job restored the disk cache and ran `mise run build/test`, then a separate
+# images job started a cold Bazel server and rebuilt the same `<image>_image`
+# targets. Now one job restores the cache, runs the unit's checks and the image
+# targets in one Bazel server, pushes the images under `tree-<hash>` and hands
+# the digests to `_attest.yml`.
+#
+# `kind: bazel` is the usual Rust/Bazel unit: `mise run build/test` with the
+# unit's targets. `kind: python` is a unit whose checks are Python but which
+# owns deploy images (today only Hermes): the same job runs the Python suite,
+# then the Bazel/Docker image steps, so the docker/mixed Buildx path stays a
+# step of the unit job instead of a second build.
+#
+# Build once, deploy the same bytes (DECISIONS 36): a pull request from this
+# repository (never a fork) pushes each built image as
+# `ghcr.io/proflyder/<image>:tree-<git tree hash>` and `_attest.yml` signs its
+# provenance. Forks and manual `workflow_dispatch` runs only build; their token
+# is read-only, so they never log in to GHCR.
+#
+# The caller grants registry/OIDC/attestation permissions; this workflow keeps
+# them on the build/attest jobs only.
+
+on:
+  workflow_call:
+    inputs:
+      unit:
+        description: Unit id from platform/ci/units.mjs
+        required: true
+        type: string
+      kind:
+        description: Check kind (bazel or python)
+        required: false
+        default: bazel
+        type: string
+      test_targets:
+        description: Space separated Bazel test targets owned by the unit
+        required: false
+        default: ""
+        type: string
+      build_targets:
+        description: Space separated Bazel build targets owned by the unit
+        required: false
+        default: ""
+        type: string
+      artifact:
+        description: Path of the build artifact to upload (empty to skip)
+        required: false
+        default: ""
+        type: string
+      artifact_name:
+        required: false
+        default: ""
+        type: string
+      suites:
+        description: Space separated Python suite directories (kind python)
+        required: false
+        default: ""
+        type: string
+      compile:
+        description: Space separated Python directories that only need a syntax compile
+        required: false
+        default: ""
+        type: string
+      deploy_tool:
+        description: Build platform/deploy-rs:home-deploy for the Python tests
+        required: false
+        default: false
+        type: boolean
+      images:
+        description: Space separated image names owned by the unit (empty = no images)
+        required: false
+        default: ""
+        type: string
+      builder:
+        description: Image builder (bazel, docker or mixed)
+        required: false
+        default: bazel
+        type: string
+      target_root:
+        description: Bazel package owning the <image>_image targets (bazel)
+        required: false
+        default: ""
+        type: string
+      bazel_images:
+        description: JSON map image -> Bazel package for a mixed unit
+        required: false
+        default: ""
+        type: string
+      push_tree_tag:
+        description: Publish the built images under tree-<hash> and attest them
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  unit:
+    name: ${{ inputs.kind }} / ${{ inputs.unit }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    permissions:
+      contents: read
+      # Push the tree-tagged images (`_push` targets / `docker push`).
+      packages: write
+    outputs:
+      pushed: ${{ steps.collect.outputs.pushed }}
+    env:
+      MISE_TASK_RUN_AUTO_INSTALL: "false"
+      # Image-owning units build their checks and `<image>_image` targets on
+      # the same explicit linux/amd64 platform, so the second step reuses the
+      # analysis/actions of the first in this server. Non-image units keep the
+      # runner's default platform (and the warmed cache exactly as before).
+      BAZEL_EXTRA_ARGS: ${{ inputs.images != '' && '--platforms=//platform/bazel:linux_amd64' || '' }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      # `mise run build|test <unit>` resolves the target list from the unit map;
+      # Bazel itself comes from setup-bazel below. Python suites need Python from
+      # mise; every kind needs node for the unit dispatcher.
+      - uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b # v5.2.7
+        with:
+          version: 2026.11.3
+          install_args: ${{ inputs.kind == 'python' && 'python node' || 'node' }}
+          cache: true
+
+      # Pinned Bazelisk on PATH, plus its Bzlmod/repository caches. Rust units
+      # and image-owning Python units share one server for checks and images.
+      - uses: bazel-contrib/setup-bazel@104e3eea9447cdaa4b00d0fb46191a3985d26ab3 # v0.19.1
+        if: inputs.kind == 'bazel' || inputs.images != ''
+        with:
+          bazelisk-version: "1.30.0"
+          bazelisk-cache: true
+          repository-cache: true
+          cache-save: ${{ github.event_name != 'pull_request' }}
+
+      # Restore-only in pull requests: a PR-scoped cache is invisible to every
+      # other PR, so writing it only spends the repository's 10 GB budget and
+      # the minutes of upload. Only a develop push (deploy-home `warm-caches`)
+      # writes; the key order platform → unit → content makes the prefix chain
+      # a real fallback (unit with other lockfiles, then the shared warm cache).
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        if: inputs.kind == 'bazel' || inputs.images != ''
+        with:
+          # Action-output disk cache (.bazelrc only). The unit is per-unit keyed
+          # so a small unit cannot evict the large Pulsar build.
+          path: ~/.cache/bazel-disk
+          key: bazel-${{ runner.os }}-${{ inputs.unit }}-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'Cargo.lock', 'crate-universe.lock', 'rust-toolchain.toml') }}
+          # deploy-home `warm-caches` writes one shared Android+host-Rust cache
+          # for every unit; it is the main fallback after the unit's own entry.
+          restore-keys: |
+            bazel-${{ runner.os }}-${{ inputs.unit }}-
+            bazel-${{ runner.os }}-warm-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'Cargo.lock', 'crate-universe.lock', 'rust-toolchain.toml', 'projects/mobile/android/maven_install.json') }}
+            bazel-${{ runner.os }}-warm-
+            bazel-${{ runner.os }}-
+
+      - name: Install Python test dependencies
+        if: inputs.kind == 'python'
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install -r requirements-test.txt
+
+      - name: bazel build ${{ inputs.unit }}
+        if: inputs.kind == 'bazel' && inputs.build_targets != ''
+        run: mise run build ${{ inputs.unit }}
+
+      - name: bazel test ${{ inputs.unit }}
+        if: inputs.kind == 'bazel' && inputs.test_targets != ''
+        run: mise run test ${{ inputs.unit }}
+
+      # Python suite of an image-owning unit (Hermes). The same job then builds
+      # its Bazel and Dockerfile images in the server started above.
+      - name: test ${{ inputs.unit }}
+        if: inputs.kind == 'python'
+        run: mise run test ${{ inputs.unit }}
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: inputs.kind == 'bazel' && inputs.artifact != '' && inputs.build_targets != ''
+        with:
+          name: ${{ inputs.artifact_name }}
+          path: ${{ inputs.artifact }}
+          if-no-files-found: error
+          retention-days: 14
+
+      # Pushing a manifest needs credentials even for a public package (blobs
+      # are readable anonymously, so a missing login only fails at the PUT).
+      - name: Log in to GHCR
+        if: inputs.images != '' && inputs.push_tree_tag
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Buildx is what makes the Dockerfile image reproducible: with
+      # `rewrite-timestamp=true` and a fixed SOURCE_DATE_EPOCH it normalises the
+      # layer mtimes and the config `created`/`history` entries.
+      - name: Set up Buildx
+        if: inputs.images != '' && (inputs.builder == 'docker' || inputs.builder == 'mixed')
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      # The image identity is the git *tree*, not the commit: a pull request
+      # builds its merge ref, whose tree equals the squash commit's tree as long
+      # as `develop` did not move in between.
+      - name: Compute the tree tag
+        id: tree
+        if: inputs.images != '' && inputs.push_tree_tag
+        run: |
+          set -euo pipefail
+          tree=$(git rev-parse 'HEAD^{tree}')
+          if [[ ! "$tree" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "could not resolve HEAD^{tree}: '$tree'" >&2
+            exit 1
+          fi
+          echo "tag=tree-${tree}" >> "$GITHUB_OUTPUT"
+          echo "- image identity: \`tree-${tree}\`" >> "$GITHUB_STEP_SUMMARY"
+
+      # The Bazel image targets were already built by `mise run build <unit>`
+      # for Bazel units, so this step hits the same server and the disk cache.
+      # The docker/mixed branch is the Hermes Buildx path.
+      - name: Build and push images
+        if: inputs.images != ''
+        env:
+          INPUT_UNIT: ${{ inputs.unit }}
+          INPUT_BUILDER: ${{ inputs.builder }}
+          INPUT_IMAGES: ${{ inputs.images }}
+          INPUT_TARGET_ROOT: ${{ inputs.target_root }}
+          INPUT_BAZEL_IMAGES: ${{ inputs.bazel_images || '{}' }}
+          PUSH: ${{ inputs.push_tree_tag }}
+          TREE_TAG: ${{ steps.tree.outputs.tag }}
+        run: |
+          set -euo pipefail
+          platform/ci/build-images.sh \
+            --unit "$INPUT_UNIT" \
+            --builder "$INPUT_BUILDER" \
+            --images "$INPUT_IMAGES" \
+            --target-root "$INPUT_TARGET_ROOT" \
+            --bazel-images "$INPUT_BAZEL_IMAGES" \
+            --push "$PUSH" \
+            --tree-tag "$TREE_TAG" \
+            --pushed-file "$RUNNER_TEMP/pushed.txt"
+
+      # JSON list for the attestation matrix: [{"image":…, "digest":…}].
+      - name: Collect pushed image digests
+        id: collect
+        if: inputs.images != '' && inputs.push_tree_tag
+        run: |
+          set -euo pipefail
+          file="$RUNNER_TEMP/pushed.txt"
+          if [[ ! -s "$file" ]]; then
+            echo "pushed=[]" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          json=$(jq -Rsc 'split("\n") | map(select(length > 0) | capture("^(?<image>[^=]+)=(?<digest>.+)$"))' "$file")
+          echo "pushed=${json}" >> "$GITHUB_OUTPUT"
+
+      # Develop-only writer for the cache restored above; a key can be written
+      # once, so the save key carries the run id and PRs resolve the prefix.
+      - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        if: >-
+          (inputs.kind == 'bazel' || inputs.images != '') &&
+          github.event_name != 'pull_request' &&
+          github.ref == 'refs/heads/develop'
+        with:
+          path: ~/.cache/bazel-disk
+          key: bazel-${{ runner.os }}-${{ inputs.unit }}-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'Cargo.lock', 'crate-universe.lock', 'rust-toolchain.toml') }}-${{ github.run_id }}-${{ github.run_attempt }}
+
+  # Build provenance for every pushed digest. Kept as a called workflow because
+  # the action attests one OCI subject per invocation; this is the only part of
+  # image publication that cannot live in the unit job.
+  attest:
+    needs: unit
+    if: >-
+      inputs.push_tree_tag &&
+      needs.unit.result == 'success' &&
+      needs.unit.outputs.pushed != '' &&
+      needs.unit.outputs.pushed != '[]'
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+      packages: write
+    uses: ./.github/workflows/_attest.yml
+    with:
+      unit: ${{ inputs.unit }}
+      pushed: ${{ needs.unit.outputs.pushed }}

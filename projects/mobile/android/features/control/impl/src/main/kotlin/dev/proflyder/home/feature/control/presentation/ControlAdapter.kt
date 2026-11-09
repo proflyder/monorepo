@@ -1,18 +1,15 @@
 package dev.proflyder.home.feature.control.presentation
 
-import android.graphics.drawable.GradientDrawable
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
 import androidx.recyclerview.widget.DiffUtil
-import androidx.recyclerview.widget.LinearLayoutManager
-import androidx.recyclerview.widget.PagerSnapHelper
-import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.color.MaterialColors
 import dev.proflyder.home.core.model.ControlEntry
 import dev.proflyder.home.core.model.ControlKind
 import dev.proflyder.home.core.model.PowerState
+import dev.proflyder.home.core.model.TimerState
 import dev.proflyder.home.core.ui.AdapterCallback
 import dev.proflyder.home.core.ui.BaseListAdapter
 import dev.proflyder.home.core.ui.BaseViewHolder
@@ -31,6 +28,7 @@ import dev.proflyder.home.feature.control.impl.databinding.ItemControlFilterBind
 import dev.proflyder.home.feature.control.impl.databinding.ItemControlFiltersBinding
 import dev.proflyder.home.feature.control.impl.databinding.ItemControlHeaderBinding
 import dev.proflyder.home.feature.control.impl.databinding.ItemControlHubBinding
+import dev.proflyder.home.feature.control.impl.databinding.ItemControlHubRowBinding
 import dev.proflyder.home.feature.control.impl.databinding.ItemControlProfileBinding
 import dev.proflyder.home.feature.control.impl.databinding.ItemControlQuickActionsBinding
 import dev.proflyder.home.feature.control.impl.databinding.ItemControlQuickTileBinding
@@ -55,8 +53,6 @@ internal interface ControlAdapterCallback : AdapterCallback<ControlItem> {
     fun onHubCardClick(card: HubCard)
 
     fun onHubPrimary(card: HubCard)
-
-    fun onHubSecondary(card: HubCard)
 
     fun onQuickTileClick(tile: QuickTile)
 
@@ -96,7 +92,7 @@ internal enum class ControlChange {
     /** Any visible change inside a device group; the holder rebuilds its dynamic rows. */
     GROUP,
 
-    /** The live carousel content changed; the holder updates the pager in place. */
+    /** The live-rows content changed; the holder rebuilds its rows in place. */
     HUB,
 }
 
@@ -182,6 +178,13 @@ internal object ControlDiff : DiffUtil.ItemCallback<ControlItem>() {
         // Brightness is part of the state line while the light is on.
         if (before.light != after.light) add(ControlChange.STATE)
     }
+}
+
+/** Artwork of one live row, shared with no new image per entity. */
+internal fun hubIcon(card: HubCard): Int = when (card) {
+    is HubCard.Alarm -> R.drawable.control_ic_alarm
+    is HubCard.TimerCard -> R.drawable.control_ic_timer
+    is HubCard.Reminder -> R.drawable.control_ic_bell
 }
 
 private typealias ControlHolder = BaseViewHolder<ControlItem, ViewBinding, ControlAdapterCallback>
@@ -406,92 +409,85 @@ internal class ControlAdapter(
         }
     }
 
+    /**
+     * The compact "next up" block: one line per live item, at most
+     * [dev.proflyder.home.feature.control.HubCards.MAX_ROWS] rows. There is no
+     * pager and no big button: the trailing control is a switch for alarms and
+     * a small pause/resume button for timers.
+     */
     private class HubHolder(
         private val views: ItemControlHubBinding,
         callback: ControlAdapterCallback,
     ) : ControlHolder(views, callback) {
-        private val pager = HubCardAdapter(HubCardTexts(views.root.context), callback)
-        private val dots = mutableListOf<View>()
-        private val snap = PagerSnapHelper()
-
-        init {
-            views.controlHubPager.layoutManager =
-                LinearLayoutManager(views.root.context, LinearLayoutManager.HORIZONTAL, false)
-            views.controlHubPager.adapter = pager
-            views.controlHubPager.itemAnimator = null
-            snap.attachToRecyclerView(views.controlHubPager)
-            views.controlHubPager.addOnScrollListener(
-                object : RecyclerView.OnScrollListener() {
-                    override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
-                        renderDots()
-                    }
-                },
-            )
-        }
+        private val texts = HubCardTexts(views.root.context)
 
         override fun bind(item: ControlItem) {
             val hub = item as ControlItem.Hub
-            // A single card fills the content width; with more cards a small
-            // symmetric padding peeks the neighbours without narrowing the row.
-            val peek = if (hub.cards.size > 1) {
-                views.root.resources.getDimensionPixelSize(R.dimen.control_hub_peek)
-            } else {
-                0
-            }
-            // Re-setting the same padding requests a layout on every tick.
-            if (views.controlHubPager.paddingLeft != peek) {
-                views.controlHubPager.setPadding(peek, 0, peek, 0)
-            }
-            pager.submit(hub.cards, hub.remaining, hub.nowUnix)
-            rebuildDots(hub.cards.size)
-            renderDots()
-            if (hub.cards.isEmpty()) views.controlHubPager.scrollToPosition(0)
+            views.controlHubRows.removeAllViews()
+            hub.cards.forEach { card -> addRow(hub, card) }
         }
 
         override fun bindPayloads(item: ControlItem, payloads: List<Any>) = bind(item)
 
-        private fun rebuildDots(count: Int) {
-            if (dots.size == count) return
-            views.controlHubDots.removeAllViews()
-            dots.clear()
-            val size = dp(6)
-            val margin = dp(3)
-            for (index in 0 until count) {
-                val dot = View(views.root.context)
-                val params = LinearLayout.LayoutParams(size, size)
-                params.marginStart = margin
-                params.marginEnd = margin
-                dot.layoutParams = params
-                views.controlHubDots.addView(dot)
-                dots += dot
+        internal fun addRow(hub: ControlItem.Hub, card: HubCard) {
+            val row = ItemControlHubRowBinding.inflate(
+                LayoutInflater.from(views.root.context),
+                views.controlHubRows,
+                false,
+            )
+            row.hubRowIcon.setImageResource(hubIcon(card))
+            row.hubRowTime.text = texts.timeText(card, hub.remaining[card.key], hub.nowUnix)
+            row.hubRowLabel.text = texts.label(card)
+            bindTrailing(row, card)
+            row.root.setOnClickListener { callback.onHubCardClick(card) }
+            views.controlHubRows.addView(row.root)
+        }
+
+        internal fun bindTrailing(row: ItemControlHubRowBinding, card: HubCard) {
+            when (card) {
+                is HubCard.Alarm -> bindAlarmTrailing(row, card)
+                is HubCard.TimerCard -> bindTimerTrailing(row, card)
+                is HubCard.Reminder -> hideTrailing(row)
             }
         }
 
-        fun renderDots() {
-            if (dots.size <= 1) {
-                views.controlHubDots.setVisible(false)
-                return
-            }
-            views.controlHubDots.setVisible(true)
-            val layout = views.controlHubPager.layoutManager as? LinearLayoutManager ?: return
-            val selected = layout.findFirstVisibleItemPosition().coerceAtLeast(0)
-            dots.forEachIndexed { index, dot ->
-                dot.background = GradientDrawable().apply {
-                    shape = GradientDrawable.OVAL
-                    setColor(
-                        MaterialColors.getColor(
-                            dot,
-                            if (index == selected) androidx.appcompat.R.attr.colorPrimary
-                            else com.google.android.material.R.attr.colorOnSurfaceVariant,
-                        ),
-                    )
-                    alpha = if (index == selected) 255 else 100
-                }
+        internal fun bindAlarmTrailing(row: ItemControlHubRowBinding, card: HubCard.Alarm) {
+            row.hubRowAction.setVisible(false)
+            row.hubRowSwitch.setVisible(true)
+            row.hubRowSwitch.contentDescription = texts.title(card)
+            row.hubRowSwitch.isChecked = card.schedule.enabled
+            row.hubRowSwitch.setOnCheckedChangeListener { _, checked ->
+                if (!checked) toggleAlarmOff(row, card)
             }
         }
 
-        private fun dp(value: Int): Int =
-            (value * views.root.resources.displayMetrics.density).toInt()
+        /**
+         * A switch flip is optimistic; put it back until the server confirms.
+         * The recurring-alarm skip/disable dialog then decides what actually
+         * happens, so a cancelled dialog never leaves a false off state.
+         */
+        internal fun toggleAlarmOff(row: ItemControlHubRowBinding, card: HubCard.Alarm) {
+            row.hubRowSwitch.isChecked = true
+            callback.onHubPrimary(card)
+        }
+
+        internal fun bindTimerTrailing(row: ItemControlHubRowBinding, card: HubCard.TimerCard) {
+            row.hubRowSwitch.setVisible(false)
+            row.hubRowAction.setVisible(true)
+            val paused = card.timer.state == TimerState.PAUSED
+            row.hubRowAction.setImageResource(
+                if (paused) R.drawable.control_ic_play else R.drawable.control_ic_pause,
+            )
+            row.hubRowAction.contentDescription = views.root.context.getString(
+                if (paused) R.string.control_hub_resume else R.string.control_hub_pause,
+            )
+            row.hubRowAction.setOnClickListener { callback.onHubPrimary(card) }
+        }
+
+        internal fun hideTrailing(row: ItemControlHubRowBinding) {
+            row.hubRowSwitch.setVisible(false)
+            row.hubRowAction.setVisible(false)
+        }
     }
 
     private class QuickActionsHolder(
@@ -752,7 +748,7 @@ internal class ControlAdapter(
 
         override fun bindPayloads(item: ControlItem, payloads: List<Any>) = bind(item)
 
-        private fun addRow(
+        internal fun addRow(
             container: LinearLayout,
             row: ControlItem.DeviceGroup.Row,
             statesKnown: Boolean,

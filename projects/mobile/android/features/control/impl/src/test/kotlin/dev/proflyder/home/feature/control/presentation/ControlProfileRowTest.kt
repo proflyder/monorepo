@@ -65,8 +65,6 @@ class ControlProfileRowTest {
 
         override fun onHubPrimary(card: HubCard) = Unit
 
-        override fun onHubSecondary(card: HubCard) = Unit
-
         override fun onQuickTileClick(tile: QuickTile) = Unit
 
         override fun onQuickTileLongClick(tile: QuickTile) = Unit

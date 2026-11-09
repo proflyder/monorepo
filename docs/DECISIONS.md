@@ -73,7 +73,7 @@
 20. **Pulsar — код и релизы в монорепозитории, деплой через HA updater.**
     Исходники — `projects/station/pulsar/`; CI — юнит `pulsar`
     (`_native.yml`: Bazel-сборка обеих архитектур, installer, radio, ssh), хост
-    fmt/clippy/тесты — отдельный юнит `pulsar-bazel` (`_bazel.yml`).
+    fmt/clippy/тесты — отдельный юнит `pulsar-bazel` (`_unit.yml`).
     Версия — `projects/station/pulsar/VERSION` (`v<major.minor>.<1000+N>`).
     Pulsar — обычный publishable native-юнит общего `deploy-home`: поле
     `native.publish_when` пускает его в `native_units` на push только при
@@ -276,14 +276,17 @@
       `tree-<полный tree hash>`, а не sha коммита. Правило одно для
       контейнерных образов и native-артефактов (Pulsar, Windows logon
       provider).
-    * `ci.yml` → `_images.yml` для PR из этого репозитория (форки — только
-      сборка) после сборки публикует каждый образ затронутых деплой-юнитов в
-      `ghcr.io/proflyder/<image>:tree-<hash>` и создаёт build provenance для
-      digest официальным `actions/attest-build-provenance`
+    * `ci.yml` → `_unit.yml` собирает проверки юнита и его образы в одном job
+      и одном Bazel-сервере: Rust-сервис больше не строится дважды в
+      `_bazel`/`_images`. Для PR из этого репозитория (форки — только сборка)
+      каждый образ публикуется в `ghcr.io/proflyder/<image>:tree-<hash>` и
+      аттестуется официальным `actions/attest-build-provenance`
       (`push-to-registry`). Bazel-образы пушатся существующими `<image>_push`
       побайтно (digest после push обязан совпасть со собранным), Docker-образы
-      — `docker push`. Права `packages: write`, `id-token: write`,
-      `attestations: write` выданы только job `images` в `ci.yml`.
+      — `docker push`. `_attest.yml` — отдельный matrix-job на каждый digest
+      (action аттестует один OCI-subject). Права `packages: write`,
+      `id-token: write`, `attestations: write` выданы только job `unit`/
+      `attest` в `ci.yml` и его reusable workflow.
     * `ci.yml` → `_native.yml` делает то же для native-юнитов с
       `native.publish_script`: после сборки публикует release-shaped
       OCI-артефакт в `native.publish_repository` под `tree-<hash>` и аттестует
@@ -298,7 +301,8 @@
     * `deploy-home` считает tree деплоимого коммита. Для образов digest из
       `tree-<hash>` используется, только если тег существует, а provenance
       проверяется `gh attestation verify oci://… --repo <owner>/<repo>` с
-      signer, ограниченным `ci.yml`/`_images.yml` этого репозитория. Обычные
+      signer, ограниченным `ci.yml`/`_unit.yml`/`_attest.yml` этого
+      репозитория. Обычные
       теги (`<commit sha>`, `develop`) ставятся на тот же digest pinned-`crane`,
       digest передаётся существующему deploy-скрипту через
       `PREBUILT_DIGESTS`. **`deploy-home` ничего не собирает:** любой
@@ -307,7 +311,7 @@
       ни `docker build` на деплой-раннере не выполняются (`DEPLOY_NO_BUILD=1`).
       Сборка тех же образов локально/вручную остаётся доступной, если явно не
       выставлен `DEPLOY_NO_BUILD`.
-    * `_images.yml` для каждого затронутого деплой-юнита дополнительно
+    * `_unit.yml` для каждого затронутого деплой-юнита дополнительно
       публикует образ `ghcr.io/proflyder/home-deploy:tree-<hash>` (если юнит
       не перечисляет его сам) и аттестует его digest. `deploy-home` достаёт
       бинарник CLI из промоутнутого образа (`crane export`, путь
@@ -650,16 +654,22 @@
     получает `pulsar-call` на `str0m` и `Phase::Call` отдельным этапом;
     scheduler и `ha-bridge` в звонке не участвуют.
 
-49. **Кэши Actions пишет только `develop`, Android-цели считаются один раз.**
+49. **Кэши Actions пишет только `develop`, один `warm-caches` считает всё.**
     PR-прогоны кэши только восстанавливают (`actions/cache/restore`): GitHub
     привязывает запись к ref'у, который её создал, поэтому PR-кэш не виден
     другим PR'ам, но занимает общий лимит 10 ГБ и минуты на загрузку. PR-кэши
     диска больше не создаются. Единственный писатель develop-стороны —
-    `warm-caches` в `deploy-home` (push в `develop`): setup-bazel, диск-кэш
-    Android (сборка `//projects/mobile/android:app`, ключ `android-app`,
-    save под `-<run_id>` и `restore-keys` «точный ключ → юнит → платформа»,
-    архив ограничен `--experimental_disk_cache_gc_max_size=6G`), а `warm-rust`
-    — общий диск-кэш host-Rust юнитов. У юнитов без develop-писателя
+    `warm-caches` в `deploy-home` (push в `develop`): setup-bazel и один
+    общий дисковый кэш Bazel. Одна команда `bazel build --config=android`
+    собирает в одном сервере Android-цели (`app`, `android_tests`) и все
+    build/test-цели юнитов платформы `bazel`; `--config=android` меняет только
+    Android-флаги и version defines, host-платформа Rust остаётся прежней.
+    После `bazel shutdown` архив сохраняется под ключом
+    `bazel-<os>-warm-<hash>` (`restore-keys`: «точный ключ → юнит →
+    `bazel-<os>-warm-`»), ограничен
+    `--experimental_disk_cache_gc_max_size=7G`. Один архив на Android и
+    host-Rust не раздувает лимит 10 ГБ: два save одного каталога под разными
+    ключами хранили бы его дважды. У юнитов без develop-писателя
     (`_native.yml`, `_deploy-control.yml`) кэш только восстанавливается.
     Отдельного сужения целей нет: каждая запись матрицы гоняет объявленные
     цели, незатронутые тесты Bazel берёт из кэша (job `plan` с
@@ -692,3 +702,15 @@
     дефолт из конфига. Без конфига сборка падает на анализе
     (`$(home_version_name) not defined`), а не собирает молча APK другого
     ABI; ABI дополнительно проверяет `apk_abi_test`.
+
+51. **Проверки и образы юнита — один job.** `_unit.yml` заменил пару
+    `_bazel.yml` (диск-кэш, `mise run build/test`) и `_images.yml`
+    (холодный Bazel-сервер, повторная сборка `<image>_image`, push). Теперь
+    один job восстанавливает кэш, гоняет проверки и собирает образы в том же
+    Bazel-сервере, затем `platform/ci/build-images.sh` пушит `tree-<hash>` и
+    `_attest.yml` аттестует каждый digest. Это убирает вторую сборку Rust-
+    сервиса и второй job на типичном сервисном PR. `kind: python` покрывает
+    Hermes: его Python-suite и mixed Buildx-образы идут в том же job, а не в
+    отдельных `python` и `images`. `attest` остаётся отдельным matrix-job:
+    `actions/attest-build-provenance` аттестует ровно один OCI-subject за
+    вызов. `ci-ok` ждёт `unit` вместо `bazel`+`images`.

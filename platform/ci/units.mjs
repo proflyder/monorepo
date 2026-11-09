@@ -122,8 +122,10 @@ export const config = {
       deploy: false,
     },
     {
-      paths: [".github/workflows/_images.yml"],
-      platforms: ["bazel", "native"],
+      // The unit job owns image builds and calls `_attest.yml`; a change to
+      // either must exercise the image-owning bazel and python units.
+      paths: [".github/workflows/_unit.yml", ".github/workflows/_attest.yml"],
+      platforms: ["bazel", "python"],
       deploy: false,
     },
     {
@@ -134,11 +136,6 @@ export const config = {
     {
       paths: [".github/workflows/_android.yml"],
       platforms: ["android"],
-      deploy: false,
-    },
-    {
-      paths: [".github/workflows/_bazel.yml"],
-      platforms: ["bazel"],
       deploy: false,
     },
     {

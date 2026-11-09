@@ -1,22 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<!-- Compact "next up" block: a short list of live rows, hidden when empty. -->
+<com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    style="@style/Widget.Home.Card"
+    tools:ignore="SelectableText"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:orientation="vertical"
-    android:paddingTop="@dimen/ui_section_gap">
-
-    <androidx.recyclerview.widget.RecyclerView
-        android:id="@+id/control_hub_pager"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:clipToPadding="false"
-        android:scrollbars="none" />
+    android:layout_marginTop="@dimen/ui_section_gap">
 
     <LinearLayout
-        android:id="@+id/control_hub_dots"
-        android:layout_width="wrap_content"
+        android:id="@+id/control_hub_rows"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_gravity="center_horizontal"
-        android:layout_marginTop="@dimen/ui_tile_gap"
-        android:orientation="horizontal" />
-</LinearLayout>
+        android:divider="@drawable/control_quick_divider"
+        android:orientation="vertical"
+        android:paddingTop="4dp"
+        android:paddingBottom="4dp"
+        android:showDividers="middle" />
+</com.google.android.material.card.MaterialCardView>

@@ -170,8 +170,9 @@
   CI ставит подмножество через `jdx/mise-action`; Bazel — `setup-bazel`.
   Рабочее место — `mise run setup` (`docs/WORKSTATION.md`).
 - Кэши Actions пишет только `develop`: `deploy-home` → `warm-caches`
-  (setup-bazel, диск-кэш Android с ключом `android-app`) и `warm-rust`
-  (общий host-Rust кэш); PR-прогоны только восстанавливают их. Android-юниты
+  (setup-bazel и один общий диск-кэш Bazel `bazel-<os>-warm-<hash>`:
+  Android и host-Rust собираются одной командой `bazel build
+  --config=android`); PR-прогоны только восстанавливают их. Android-юниты
   гоняют объявленные цели, незатронутые тесты берутся из кэша Bazel.
 - Android-only флаги Bazel — `platform/android/android.bazelrc` под
   `--config=android` (подключается `try-import` из корневого `.bazelrc`);
@@ -205,7 +206,7 @@
   пушимый байт-в-байт через `oci_push`. Health exporter — Rust-сервис
   `projects/home-assistant/deploy/health-exporter/crates/health-exporter`,
   собранный тем же `rust_service_image` (static musl, distroless) в отдельный
-  `ghcr.io/proflyder/health-exporter`. PR CI (`_images.yml`, builder `mixed`,
+  `ghcr.io/proflyder/health-exporter`. PR CI (`_unit.yml`, builder `mixed`,
   карта `deploy.bazel_images`) собирает и публикует gateway, proxy, exporter и
   `home-deploy` под `tree-<hash>`; `deploy-home` продвигает digest'ы, затем
   `home-deploy hermes rollout` подставляет digest'ы,
@@ -221,7 +222,7 @@
 - Pulsar собирается в монорепо: исходники лежат в `projects/station/pulsar`,
   сборка — Bazel (Rust + герметичный zig cc-toolchain + sendspin-cpp из
   `http_archive`); монорепо собирает его в CI-юнитах `pulsar-bazel` и `pulsar`
-  (`_bazel.yml`/`_native.yml`). Весь first-party Rust (Pulsar, BLE gateway,
+  (`_unit.yml`/`_native.yml`). Весь first-party Rust (Pulsar, BLE gateway,
   Windows logon provider, voice-recorder helper) — один корневой Cargo
   workspace: `/Cargo.toml`, `/Cargo.lock`, `/rust-toolchain.toml`, один
   `@crates//` и общие `[workspace.lints]` (решение 40). Общий core-слой —

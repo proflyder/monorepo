@@ -1,6 +1,5 @@
 package dev.proflyder.home.feature.control
 
-import dev.proflyder.home.core.model.Scenario
 import dev.proflyder.home.core.model.Schedule
 import dev.proflyder.home.core.model.Timer
 import dev.proflyder.home.core.model.TimerState
@@ -11,11 +10,11 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 /**
- * One live card of the Home carousel. Only cards that are relevant right now
- * are built; an empty list means the carousel is hidden.
+ * One live row of the compact Home "next up" block. Only rows that are
+ * relevant right now are built; an empty list means the block is hidden.
  */
 sealed interface HubCard {
-    /** Stable identity for the pager adapter. */
+    /** Stable identity for the row renderer. */
     val key: String
 
     data class Alarm(val schedule: Schedule, val ringing: Boolean) : HubCard {
@@ -26,16 +25,12 @@ sealed interface HubCard {
         override val key: String get() = "timer:${timer.id}"
     }
 
-    data class ScenarioCard(val scenario: Scenario) : HubCard {
-        override val key: String get() = "scenario:${scenario.id}"
-    }
-
     data class Reminder(val schedule: Schedule) : HubCard {
         override val key: String get() = "reminder:${schedule.id}"
     }
 }
 
-/** Localized date words for the carousel; the implementation supplies resources. */
+/** Localized date words for the live rows; the implementation supplies resources. */
 interface HubScheduleStrings {
     fun today(): String
     fun tomorrow(): String
@@ -81,7 +76,7 @@ object HubFormat {
         schedule.activeOccurrenceUnix > 0 &&
             (schedule.activeUntilUnix <= 0 || schedule.activeUntilUnix > nowUnix)
 
-    /** Remaining seconds of a timer card, using the shared server clock. */
+    /** Remaining seconds of a timer row, using the shared server clock. */
     fun timerRemaining(timer: Timer, nowUnix: Long): Long = when (timer.state) {
         TimerState.RUNNING -> (timer.dueUnix - nowUnix).coerceAtLeast(0L)
         TimerState.PAUSED -> timer.remainingSeconds.coerceAtLeast(0L)
@@ -89,52 +84,57 @@ object HubFormat {
     }
 }
 
+/** A candidate row plus the moment it should be ordered by. */
+private data class HubRow(val card: HubCard, val atUnix: Long)
+
 /**
- * Selects the live cards: the nearest enabled alarm (or the ringing one), every
- * running/paused timer, the next native scenario and the next reminder.
+ * Selects the live rows: enabled alarms, running/paused timers and reminders
+ * that fire within the next day, merged into one chronological list. The block
+ * shows at most [MAX_ROWS] rows.
  */
 object HubCards {
+    /** More rows would stop the block from being compact; the rest lives in its section. */
+    const val MAX_ROWS = 3
+
+    /** A reminder enters the Home block only during the day before it fires. */
+    const val REMINDER_WINDOW_SECONDS = 24L * 60L * 60L
+
     fun build(
         alarms: List<Schedule>,
         timers: List<Timer>,
-        scenarios: List<Scenario>,
         reminders: List<Schedule>,
         nowUnix: Long,
     ): List<HubCard> {
-        val cards = mutableListOf<HubCard>()
+        val rows = mutableListOf<HubRow>()
+        alarms.forEach { addAlarm(it, nowUnix, rows) }
+        timers.forEach { addTimer(it, nowUnix, rows) }
+        reminders.forEach { addReminder(it, nowUnix, rows) }
+        return rows
+            .sortedWith(compareBy({ it.atUnix }, { it.card.key }))
+            .take(MAX_ROWS)
+            .map { it.card }
+    }
 
-        val ringing = alarms
-            .filter { HubFormat.isRinging(it, nowUnix) }
-            .minByOrNull { it.activeOccurrenceUnix }
-        val nearestAlarm = alarms
-            .filter { it.enabled && it.nextDueUnix > 0 && it.id != ringing?.id }
-            .minByOrNull { it.nextDueUnix }
-        (ringing ?: nearestAlarm)?.let { alarm ->
-            cards += HubCard.Alarm(alarm, ringing = alarm.id == ringing?.id)
-        }
+    private fun addAlarm(alarm: Schedule, nowUnix: Long, rows: MutableList<HubRow>) {
+        val ringing = HubFormat.isRinging(alarm, nowUnix)
+        if (!ringing && (!alarm.enabled || alarm.nextDueUnix <= 0)) return
+        val at = if (ringing) nowUnix else alarm.nextDueUnix
+        rows += HubRow(HubCard.Alarm(alarm, ringing), at)
+    }
 
-        timers
-            .filter { it.isActive && HubFormat.timerRemaining(it, nowUnix) > 0 }
-            .sortedWith(
-                compareBy(
-                    { if (it.state == TimerState.RUNNING) 0 else 1 },
-                    { it.dueUnix },
-                    { it.createdUnix },
-                ),
-            )
-            .forEach { cards += HubCard.TimerCard(it) }
+    private fun addTimer(timer: Timer, nowUnix: Long, rows: MutableList<HubRow>) {
+        val remaining = HubFormat.timerRemaining(timer, nowUnix)
+        if (!timer.isActive || remaining <= 0) return
+        // A paused timer has no due moment; it counts down from now.
+        val at = if (timer.state == TimerState.PAUSED) nowUnix + remaining else timer.dueUnix
+        rows += HubRow(HubCard.TimerCard(timer), at)
+    }
 
-        scenarios
-            .filter { it.enabled && it.nextDueUnix > 0 }
-            .minWithOrNull(compareBy({ it.nextDueUnix }, { it.label.lowercase() }))
-            ?.let { cards += HubCard.ScenarioCard(it) }
-
-        reminders
-            .filter { it.enabled && it.nextDueUnix > 0 }
-            .minWithOrNull(compareBy({ it.nextDueUnix }, { it.label.lowercase() }))
-            ?.let { cards += HubCard.Reminder(it) }
-
-        return cards
+    private fun addReminder(reminder: Schedule, nowUnix: Long, rows: MutableList<HubRow>) {
+        if (!reminder.enabled || reminder.nextDueUnix <= 0) return
+        val lead = reminder.nextDueUnix - nowUnix
+        if (lead !in 1L..REMINDER_WINDOW_SECONDS) return
+        rows += HubRow(HubCard.Reminder(reminder), reminder.nextDueUnix)
     }
 
     /** Today's date in the scheduler time zone; used by callers that need a date for text. */
@@ -142,21 +142,19 @@ object HubCards {
         Instant.ofEpochSecond(nowUnix).atZone(zone).toLocalDate()
 
     /**
-     * Builds the cards, but keeps the previous card of a source that failed to
-     * load (`null`). A transient RPC failure then cannot make one card vanish
+     * Builds the rows, but keeps the previous rows of a source that failed to
+     * load (`null`). A transient RPC failure then cannot make one row vanish
      * and reappear on the next refresh.
      */
     fun buildOrKeep(
         alarms: List<Schedule>?,
         timers: List<Timer>?,
-        scenarios: List<Scenario>?,
         reminders: List<Schedule>?,
         previous: List<HubCard>,
         nowUnix: Long,
     ): List<HubCard> = build(
         alarms = alarms ?: previous.filterIsInstance<HubCard.Alarm>().map { it.schedule },
         timers = timers ?: previous.filterIsInstance<HubCard.TimerCard>().map { it.timer },
-        scenarios = scenarios ?: previous.filterIsInstance<HubCard.ScenarioCard>().map { it.scenario },
         reminders = reminders ?: previous.filterIsInstance<HubCard.Reminder>().map { it.schedule },
         nowUnix = nowUnix,
     )

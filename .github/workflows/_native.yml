@@ -10,7 +10,7 @@ name: _native
 #     so there is no extra toolchain download or host compiler setup here.
 #
 #   * `pulsar` — the Rust station daemon in `projects/station/pulsar`. Its host
-#     fmt/clippy/tests are the `pulsar-bazel` unit (`_bazel.yml`); this workflow
+#     fmt/clippy/tests are the `pulsar-bazel` unit (`_unit.yml`); this workflow
 #     cross-builds both station ABIs and the Rust installer with Bazel, then the
 #     Zigbee radio and dropbear. Zig 0.14.1, Rust 1.99.1 and the sendspin C/C++
 #     are pinned by MODULE.bazel. Every run builds the release-shaped binaries:
@@ -117,6 +117,12 @@ env:
   # without pulling it. Same pins as deploy-home.
   CRANE_VERSION: "v0.22.1"
   CRANE_SHA256: "0ab7a1d6932a213aed964ce97666c3077fe691c8606413674a8b3e0b9ec4cda0"
+  # actions/checkout runs `git init` under a throwaway HOME, so a global config
+  # cannot silence Git's default-branch hint. An environment-provided config is
+  # inherited by that git invocation and keeps the log clean.
+  GIT_CONFIG_COUNT: "1"
+  GIT_CONFIG_KEY_0: init.defaultBranch
+  GIT_CONFIG_VALUE_0: main
 
 jobs:
   # Build once, deploy the same bytes: on the deploy-home path, promote the
@@ -229,7 +235,7 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       # Pinned Bazelisk plus the Bzlmod/repository caches, identical to the
-      # `pulsar` kind and the `_bazel.yml` unit the Rust host checks use.
+      # `pulsar` kind and the `_unit.yml` unit the Rust host checks use.
       - uses: bazel-contrib/setup-bazel@104e3eea9447cdaa4b00d0fb46191a3985d26ab3 # v0.19.1
         with:
           bazelisk-version: "1.30.0"
@@ -245,7 +251,7 @@ jobs:
       # with a `-<run_id>` key and keep these prefixes.
       #
       # No platform-wide `bazel-<os>-` fallback: it also matches the host
-      # `_bazel.yml` entries, and a cross-build restoring that cache would
+      # `_unit.yml` entries, and a cross-build restoring that cache would
       # download gigabytes for no usable action.
       - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -320,7 +326,7 @@ jobs:
           retention-days: ${{ inputs.retention_days }}
 
   # ---------------------------------------------------------------- pulsar ----
-  # Host fmt/clippy/tests are the `pulsar-bazel` unit (`_bazel.yml`); this unit
+  # Host fmt/clippy/tests are the `pulsar-bazel` unit (`_unit.yml`); this unit
   # only cross-builds the deployable station binaries with Bazel. The zig cc
   # toolchain, Rust toolchain and sendspin C/C++ all come from MODULE.bazel, so
   # no rustup/zig/cargo-zigbuild/CMake/ninja setup happens here.
@@ -341,7 +347,7 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       # Pinned Bazelisk plus the Bzlmod/repository caches, identical to the
-      # `_bazel.yml` unit the host checks use.
+      # `_unit.yml` unit the host checks use.
       - uses: bazel-contrib/setup-bazel@104e3eea9447cdaa4b00d0fb46191a3985d26ab3 # v0.19.1
         with:
           bazelisk-version: "1.30.0"

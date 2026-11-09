@@ -2414,17 +2414,55 @@ export function matrixEntries(route_, config) {
       });
     }
   }
+  // Shared deploy fields: a unit without images gets empty values and the
+  // `unit` workflow skips the image steps.
+  const deployFields = (unit) => ({
+    images: space(unit.deployImages),
+    builder: unit.deployBuilder,
+    target_root: unit.deployTargetRoot,
+    bazel_images: JSON.stringify(unit.deployBazelImages),
+  });
   const bazel = route_.routes.bazel.units.map((unit) => ({
     id: unit.id,
+    kind: "bazel",
     test_targets: space(unit.testTargets),
     build_targets: space(unit.buildTargets),
+    artifact: unit.artifact,
+    artifact_name: unit.artifactName,
+    suites: "",
+    compile: "",
+    deploy_tool: false,
+    ...deployFields(unit),
   }));
-  const python = route_.routes.python.units.map((unit) => ({
-    id: unit.id,
-    suites: space(unit.suites),
-    compile: space(unit.compileDirs),
-    deploy_tool: unit.pythonDeployTool,
-  }));
+  // A Python unit that owns deploy images runs its suite and its image build in
+  // the same `unit` job (today Hermes: python checks + mixed Buildx images);
+  // all other Python units keep the plain `_python.yml` job.
+  const pythonWithImages = route_.routes.python.units.filter(
+    (unit) => unit.deployImages.length,
+  );
+  const python = route_.routes.python.units
+    .filter((unit) => !unit.deployImages.length)
+    .map((unit) => ({
+      id: unit.id,
+      suites: space(unit.suites),
+      compile: space(unit.compileDirs),
+      deploy_tool: unit.pythonDeployTool,
+    }));
+  const unit_ = [
+    ...bazel,
+    ...pythonWithImages.map((unit) => ({
+      id: unit.id,
+      kind: "python",
+      test_targets: "",
+      build_targets: "",
+      artifact: "",
+      artifact_name: "",
+      suites: space(unit.suites),
+      compile: space(unit.compileDirs),
+      deploy_tool: unit.pythonDeployTool,
+      ...deployFields(unit),
+    })),
+  ];
   const js = route_.routes.js.units.map((unit) => ({
     id: unit.id,
     tests: space(unit.jsTests),
@@ -2448,7 +2486,7 @@ export function matrixEntries(route_, config) {
     toolchain_sha256: unit.nativeToolchainSha256,
     toolchain_root: unit.nativeToolchainRoot,
   }));
-  return { android, bazel, python, js, native };
+  return { android, bazel, unit: unit_, python, js, native };
 }
 
 export function deployEntries(route_, config) {
@@ -2655,7 +2693,7 @@ export function githubOutputs(computed) {
   return {
     base_sha: result.base || "",
     android_units: jsonDumps(entries.android),
-    bazel_units: jsonDumps(entries.bazel),
+    unit_units: jsonDumps(entries.unit),
     python_units: jsonDumps(entries.python),
     js_units: jsonDumps(entries.js),
     native_units: jsonDumps(entries.native),

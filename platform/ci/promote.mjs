@@ -98,17 +98,19 @@ export function parseDigest(value) {
 /**
  * Certificate identity of the workflows allowed to sign image provenance.
  *
- * The attestation is created inside the reusable `_images.yml`, so its SAN is
- * `<caller ref>` of the reusable workflow file. Restricting both the workflow
- * file and the repository keeps a manual push, a fork run or an unrelated
- * workflow from satisfying verification.
+ * The attestation is created inside the reusable `_attest.yml` called by the
+ * unit job, so its SAN is the workflow file that defines the attestation job
+ * (`_attest.yml`). Older tree images were attested by `_images.yml`; both, and
+ * the caller workflows, stay allowed. Restricting the workflow files and the
+ * repository keeps a manual push, a fork run or an unrelated workflow from
+ * satisfying verification.
  */
 export function signerIdentityPattern(repository) {
   if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(String(repository || ""))) {
     throw new Error(`invalid GitHub repository '${repository}' (expected owner/repo)`);
   }
   const escaped = repository.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return `^https://github\\.com/${escaped}/\\.github/workflows/(ci|_images)\\.yml@`;
+  return `^https://github\\.com/${escaped}/\\.github/workflows/(ci|_images|_unit|_python|_attest)\\.yml@`;
 }
 
 /**

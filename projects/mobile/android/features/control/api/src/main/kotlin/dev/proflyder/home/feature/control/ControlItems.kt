@@ -71,7 +71,7 @@ sealed interface ControlItem {
         data class Row(val entry: ControlEntry, val busy: Boolean)
     }
 
-    /** The live carousel; [remaining] holds server-accurate timer seconds for this tick. */
+    /** The compact live-rows block; [remaining] holds server-accurate timer seconds for this tick. */
     data class Hub(
         val cards: List<HubCard>,
         val remaining: Map<String, Long>,
@@ -176,7 +176,7 @@ object ControlItems {
         if (entries.isEmpty() || options(entries).any { it.filter == filter }) filter else ControlFilter.All
 
     /**
-     * [leading] items (the live carousel and the pinned quick actions) come
+     * [leading] items (the live rows and the pinned quick actions) come
      * first, then the profile (a mode, not content, shown whatever the filter
      * is), then available devices grouped by room and, inside a room, by
      * device, then unavailable devices in their own trailing section so dead
@@ -207,7 +207,7 @@ object ControlItems {
         }
 
         // Chips filter devices only, so they sit directly above the rooms
-        // instead of floating over the carousel and quick actions.
+        // instead of floating over the live rows and quick actions.
         val filterOptions = options(entries)
         if (filterOptions.size > 1) {
             items += ControlItem.Filters(

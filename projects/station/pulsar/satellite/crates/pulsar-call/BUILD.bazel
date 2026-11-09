@@ -16,7 +16,6 @@ cc_library(
 )
 
 DEPS = [
-    ":static_link_group",
     "//packages/rust/home-actor:home_actor",
     "//packages/rust/home-proto:home_proto",
     "//packages/rust/home-secret:home_secret",
@@ -29,14 +28,21 @@ DEPS = [
     "@crates//:thiserror",
     "@crates//:tokio",
     "@crates//:tracing",
-    "@opus//:opus",
     "//projects/station/pulsar/satellite/crates/pulsar-core:pulsar_core",
+]
+
+# C/C++ libraries are link-only here (the crate declares the opus FFI itself);
+# rules_rust requires them in `link_deps`, not `deps`.
+LINK_DEPS = [
+    ":static_link_group",
+    "@opus//:opus",
 ]
 
 rust_library(
     name = "pulsar_call",
     srcs = glob(["src/**/*.rs"]),
     edition = "2024",
+    link_deps = LINK_DEPS,
     lint_config = ":workspace_lints",
     target_compatible_with = LINUX,
     deps = DEPS,
@@ -46,6 +52,7 @@ rust_test(
     name = "pulsar_call_unit_tests",
     crate = ":pulsar_call",
     edition = "2024",
+    link_deps = LINK_DEPS,
     lint_config = ":workspace_lints",
     target_compatible_with = LINUX,
     deps = DEPS,

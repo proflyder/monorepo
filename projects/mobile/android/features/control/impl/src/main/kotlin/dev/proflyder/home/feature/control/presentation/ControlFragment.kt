@@ -87,8 +87,6 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
             }
         }
 
-        override fun onHubSecondary(card: HubCard) = viewModel.hubSecondary(card)
-
         override fun onQuickTileClick(tile: QuickTile) {
             when (tile) {
                 is QuickTile.Device ->
@@ -266,13 +264,12 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
         ) { viewModel.toggleFavorite(entry) }
     }
 
-    /** Tapping a live card jumps to the section that owns it. */
+    /** Tapping a live row jumps to the section that owns it. */
     internal fun openHubSection(card: HubCard) {
         val featureId = when (card) {
             is HubCard.Alarm -> "alarms"
             is HubCard.TimerCard -> "timers"
             is HubCard.Reminder -> "reminders"
-            is HubCard.ScenarioCard -> "scenarios"
         }
         requireNavigator().selectTab(featureId)
     }

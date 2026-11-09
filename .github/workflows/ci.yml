@@ -45,14 +45,13 @@ jobs:
       pull-requests: read
     outputs:
       android_units: ${{ steps.route.outputs.android_units }}
-      bazel_units: ${{ steps.route.outputs.bazel_units }}
+      unit_units: ${{ steps.route.outputs.unit_units }}
       python_units: ${{ steps.route.outputs.python_units }}
       js_units: ${{ steps.route.outputs.js_units }}
       native_units: ${{ steps.route.outputs.native_units }}
       base_sha: ${{ steps.route.outputs.base_sha }}
       docs_only: ${{ steps.route.outputs.docs_only }}
       deploy_control: ${{ steps.route.outputs.deploy_control }}
-      deploy_units: ${{ steps.route.outputs.deploy_units }}
       android_distribute: ${{ steps.route.outputs.android_distribute }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -75,13 +74,33 @@ jobs:
           repository-cache: true
           cache-save: ${{ github.event_name != 'pull_request' }}
 
+      # `pull_request.base.sha` is the base at event creation, not necessarily
+      # the develop tip the checked-out `refs/pull/N/merge` commit was built
+      # on. Using it directly pulls files from other PRs merged in between into
+      # the base..merge diff and routes unrelated units. The first parent of the
+      # merge commit is the actual base tip; fall back to the event value if the
+      # ref is not a merge commit.
+      - name: Resolve pull request base
+        id: pr-base
+        if: github.event_name == 'pull_request'
+        env:
+          EVENT_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          if git rev-parse -q --verify HEAD^2 >/dev/null; then
+            base=$(git rev-parse HEAD^1)
+          else
+            base=$EVENT_BASE_SHA
+          fi
+          echo "sha=$base" >> "$GITHUB_OUTPUT"
+
       # `workflow_dispatch` intentionally runs every unit.
       - name: Route affected units
         id: route
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           EVENT_NAME: ${{ github.event_name }}
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_BASE_SHA: ${{ steps.pr-base.outputs.sha }}
           PUSH_BEFORE_SHA: ${{ github.event.before }}
         with:
           script: |
@@ -128,21 +147,43 @@ jobs:
       artifact: ${{ matrix.artifact }}
       artifact_name: ${{ matrix.artifact_name }}
 
-  # One matrix entry per affected generic Bazel unit on a Linux runner (today:
-  # the Pulsar Rust workspace: host build, tests, rustfmt and clippy). Separate
-  # from `android` because it needs no JDK or Android SDK.
-  bazel:
+  # One matrix entry per affected Linux unit. The same job runs the unit's
+  # checks and, for a deploy unit, its container images in one Bazel server
+  # (`_unit.yml`), then pushes tree-tagged images and calls `_attest.yml`.
+  # `kind` is `bazel` for the Rust/Bazel units and `python` for a Python unit
+  # that owns images (Hermes, whose mixed Buildx path stays in this job).
+  unit:
     needs: changes
-    if: ${{ !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.bazel_units != '[]' }}
+    if: ${{ !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.unit_units != '[]' }}
+    permissions:
+      contents: read
+      # Push the tree-tagged images and sign their provenance. The same
+      # conditions as the former `images` job: only a same-repository PR (or
+      # the caller's `push_tree_tag`) reaches the registry; forks and a manual
+      # dispatch only build.
+      packages: write
+      id-token: write
+      attestations: write
     strategy:
       fail-fast: false
       matrix:
-        include: ${{ fromJSON(needs.changes.outputs.bazel_units) }}
-    uses: ./.github/workflows/_bazel.yml
+        include: ${{ fromJSON(needs.changes.outputs.unit_units) }}
+    uses: ./.github/workflows/_unit.yml
     with:
       unit: ${{ matrix.id }}
+      kind: ${{ matrix.kind }}
       test_targets: ${{ matrix.test_targets }}
       build_targets: ${{ matrix.build_targets }}
+      artifact: ${{ matrix.artifact }}
+      artifact_name: ${{ matrix.artifact_name }}
+      suites: ${{ matrix.suites }}
+      compile: ${{ matrix.compile }}
+      deploy_tool: ${{ matrix.deploy_tool }}
+      images: ${{ matrix.images }}
+      builder: ${{ matrix.builder }}
+      target_root: ${{ matrix.target_root }}
+      bazel_images: ${{ matrix.bazel_images }}
+      push_tree_tag: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
 
   # Firebase App Distribution of the Home Android app on every PR that changes
   # it: the `android-app` matrix entry builds and tests exactly one APK
@@ -452,35 +493,6 @@ jobs:
       promote: false
       push_tree_tag: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
 
-  # Container-image build for the affected deployable units. On a pull request
-  # from this repository, `_images.yml` also publishes the built images as
-  # `ghcr.io/proflyder/<image>:tree-<hash>` and attests their provenance, so the
-  # squash merge deploys the same bytes instead of rebuilding them (DECISIONS
-  # 36). Fork PRs get a read-only token and only build.
-  #
-  # Registry/OIDC/attestation permissions are granted to this job alone; every
-  # other job stays `contents: read`.
-  images:
-    needs: changes
-    if: ${{ !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.deploy_units != '[]' }}
-    permissions:
-      contents: read
-      packages: write
-      id-token: write
-      attestations: write
-    strategy:
-      fail-fast: false
-      matrix:
-        include: ${{ fromJSON(needs.changes.outputs.deploy_units) }}
-    uses: ./.github/workflows/_images.yml
-    with:
-      unit: ${{ matrix.id }}
-      images: ${{ matrix.images }}
-      builder: ${{ matrix.builder }}
-      target_root: ${{ matrix.target_root }}
-      bazel_images: ${{ matrix.bazel_images }}
-      push_tree_tag: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
-
   # Expensive regression with real linux/amd64 release binaries. Only when the
   # scheduler, ha-bridge (ha-control) or the Kubernetes deployment changed.
   deploy-control:
@@ -492,7 +504,7 @@ jobs:
   # dispatched job succeeded or was legitimately skipped.
   ci-ok:
     if: always()
-    needs: [changes, quality, android, bazel, python, js, native, images, deploy-control]
+    needs: [changes, quality, android, unit, python, js, native, deploy-control]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:

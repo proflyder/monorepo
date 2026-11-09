@@ -95,6 +95,17 @@ rust.toolchain(
             "embed-bitcode=yes",
         ],
     },
+    # Host tools (process_wrapper, lint runners, build-script runners) are
+    # linked through the auto-configured cc toolchain. On Linux that toolchain
+    # may select GNU gold, which rustc 1.97+ warns is deprecated and buggy with
+    # Rust. Force binutils ld (bfd) for exec/host links only; the station
+    # triples keep the hermetic zig linker from platform/bazel/zig.
+    extra_exec_rustc_flags_triples = {
+        "x86_64-unknown-linux-gnu": [
+            "-C",
+            "link-arg=-fuse-ld=bfd",
+        ],
+    },
     extra_target_triples = [
         "aarch64-unknown-linux-gnu",
         "armv7-unknown-linux-gnueabihf",
