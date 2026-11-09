@@ -109,7 +109,9 @@ class ExternalSecretsContracts(unittest.TestCase):
         # resolved by mcp-gateway's infra_alert.
         self.assertIn('{{ .Fingerprint | reReplaceAll "^(.{12}).*$" "$1" }}', tmpl)
         self.assertIn("ответьте на это сообщение", tmpl)
-        values = yaml.safe_load((ROOT / "platform/observability/values/prometheus.yaml").read_text())
+        values = yaml.safe_load(
+            (ROOT / "projects/home/kubernetes/observability/values/prometheus.yaml").read_text()
+        )
         self.assertEqual(values["alertmanager"]["alertmanagerSpec"]["configMaps"],
                          ["alertmanager-templates"])
 

@@ -31,6 +31,10 @@ grafana:
     requests: {cpu: 100m, memory: 256Mi}
     limits: {memory: 768Mi}
   grafana.ini:
+    server:
+      # Private suffix substituted from the flux-settings Secret.
+      root_url: https://grafana.${HOME_DOMAIN}/
+      serve_from_sub_path: false
     users:
       allow_sign_up: false
     auth.anonymous:
@@ -72,6 +76,16 @@ prometheus:
           accessModes: [ReadWriteOnce]
           resources:
             requests: {storage: 20Gi}
+    # PVE node-exporter textfile metrics (vzdump freshness). The private
+    # host:port is substituted from flux-settings; the values file is public.
+    additionalScrapeConfigs:
+      - job_name: pve-node
+        scrape_interval: 30s
+        static_configs:
+          - targets: ["${PVE_NODE_TARGET}"]
+            labels:
+              instance: pve
+              role: proxmox
 prometheusOperator:
   resources:
     requests: {cpu: 50m, memory: 128Mi}

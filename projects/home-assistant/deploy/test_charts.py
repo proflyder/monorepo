@@ -104,7 +104,7 @@ class AlloyPrivacy(unittest.TestCase):
     def setUpClass(cls):
         root = HERE.parents[2]
         values = yaml.safe_load(
-            (root / "platform/observability/values/alloy.yaml").read_text()
+            (root / "projects/home/kubernetes/observability/values/alloy.yaml").read_text()
         )
         cls.content = values["alloy"]["configMap"]["content"]
         cls.rules = []

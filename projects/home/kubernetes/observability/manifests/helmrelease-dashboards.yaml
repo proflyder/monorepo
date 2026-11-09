@@ -1,0 +1,24 @@
+# Project-owned dashboards and alert rules, built from the chart in this
+# repository. Same release name/namespace as the live `ha-observability`
+# release; the chart comes from the Flux GitRepository instead of a local path.
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: ha-observability
+  namespace: flux-system
+spec:
+  interval: 1h
+  timeout: 10m
+  targetNamespace: monitoring
+  chart:
+    spec:
+      chart: ./projects/home-assistant/observability/chart
+      interval: 1h
+      sourceRef:
+        kind: GitRepository
+        name: flux-system
+        namespace: flux-system
+  install:
+    createNamespace: true
+  upgrade:
+    timeout: 10m

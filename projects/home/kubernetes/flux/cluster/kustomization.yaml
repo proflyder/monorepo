@@ -11,5 +11,7 @@ resources:
   - ingress-cert-manager.yaml
   - ingress-traefik.yaml
   - ingress-routes.yaml
+  - observability.yaml
+  - observability-rules.yaml
   - nexus.yaml
   - nexus-provision.yaml

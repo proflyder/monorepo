@@ -1,0 +1,6 @@
+# Backup freshness rules, split out because PrometheusRule needs the
+# Prometheus Operator CRDs that the `monitoring` release installs.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - prometheusrule-backups.yaml
