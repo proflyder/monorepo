@@ -177,11 +177,11 @@
   gitleaks, actionlint, shellcheck, kubectl, helm, oras, bao, gh, protoc, bw.
   CI ставит подмножество через `jdx/mise-action`; Bazel — `setup-bazel`.
   Рабочее место — `mise run setup` (`docs/WORKSTATION.md`).
-- Кэши Actions пишет только `develop`: `deploy-home` → `warm-caches`
-  (setup-bazel и один общий диск-кэш Bazel `bazel-<os>-warm-<hash>`:
-  Android и host-Rust собираются одной командой `bazel build
-  --config=android`); PR-прогоны только восстанавливают их. Android-юниты
-  гоняют объявленные цели, незатронутые тесты берутся из кэша Bazel.
+- Кэши Actions пишет только `develop`: `deploy-home` → `warm-android` (disk
+  `bazel-android-<os>-warm-<hash>`) и `warm-rust` (repository
+  `bazel-repo-rust-<os>-<hash>` + disk `bazel-rust-<os>-warm-<hash>`);
+  PR-прогоны только восстанавливают кэш своего семейства. Android-юниты гоняют
+  объявленные цели, незатронутые тесты берутся из кэша Bazel.
 - Android-only флаги Bazel — `platform/android/android.bazelrc` под
   `--config=android` (подключается `try-import` из корневого `.bazelrc`);
   правка файла выбирает только android-юниты, а не все.

@@ -16,12 +16,12 @@ name: ci
 #
 # `develop` changes only through a PR with a green `ci-ok`, so there is no push
 # trigger: re-running the same checks on the squash merge would be redundant.
-# The shared caches that PRs restore (setup-bazel and the Android/Rust disk
-# caches) are warmed after merge by `deploy-home`'s
-# `warm-caches` job, which runs on `push` to `develop` without secrets or an
-# Environment. Pull requests never write caches: GitHub scopes them to the
-# writing ref, so a PR-written entry is invisible to other PRs and only spends
-# the repository's 10 GB budget.
+# The caches that PRs restore (the Rust repository archive and the per-family
+# Bazel disk caches) are warmed after merge by `deploy-home`'s
+# `warm-android` / `warm-rust` jobs, which run on `push` to `develop` without
+# secrets or an Environment. Pull requests never write caches: GitHub scopes
+# them to the writing ref, so a PR-written entry is invisible to other PRs and
+# only spends the repository's 10 GB budget.
 on:
   pull_request:
     branches: [develop]
@@ -73,13 +73,19 @@ jobs:
         run: git fetch --no-tags origin "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}"
 
       # Pinned Bazelisk on PATH plus its own Bzlmod/repository caches: the
-      # routing query only needs the external repositories, not action outputs.
+      # routing query needs the Rust repositories; the Android graph only loads
+      # BUILD files, so its downloads stay on Nexus instead of a develop cache.
       - uses: bazel-contrib/setup-bazel@104e3eea9447cdaa4b00d0fb46191a3985d26ab3 # v0.19.1
         with:
           bazelisk-version: "1.30.0"
           bazelisk-cache: true
-          repository-cache: true
+          repository-cache: false
           cache-save: ${{ github.event_name != 'pull_request' }}
+
+      - uses: ./.github/actions/bazel-repository-cache
+        with:
+          key: bazel-repo-rust-${{ runner.os }}-${{ hashFiles('MODULE.bazel', 'MODULE.bazel.lock', '.bazelversion', 'Cargo.lock', 'crate-universe.lock', 'rust-toolchain.toml') }}
+          restore-prefix: bazel-repo-rust-${{ runner.os }}-
 
       # `pull_request.base.sha` is the base at event creation, not necessarily
       # the develop tip the checked-out `refs/pull/N/merge` commit was built

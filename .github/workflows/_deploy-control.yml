@@ -32,8 +32,22 @@ jobs:
         with:
           bazelisk-version: "1.30.0"
           bazelisk-cache: true
-          repository-cache: true
+          repository-cache: false
           cache-save: ${{ github.event_name != 'pull_request' }}
+
+      - uses: ./.github/actions/bazel-repository-cache
+        with:
+          key: bazel-repo-rust-${{ runner.os }}-${{ hashFiles('MODULE.bazel', 'MODULE.bazel.lock', '.bazelversion', 'Cargo.lock', 'crate-universe.lock', 'rust-toolchain.toml') }}
+          restore-prefix: bazel-repo-rust-${{ runner.os }}-
+
+      # Restore-only, same family as `_unit.yml`'s Rust units.
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/bazel-disk
+          key: bazel-rust-${{ runner.os }}-deploy-control-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'Cargo.lock', 'crate-universe.lock', 'rust-toolchain.toml') }}
+          restore-keys: |
+            bazel-rust-${{ runner.os }}-warm-
+            bazel-rust-${{ runner.os }}-
 
       - uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b # v5.2.7
         with:

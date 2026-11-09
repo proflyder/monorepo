@@ -82,12 +82,14 @@ jobs:
 
       - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
 
-      # Pinned Bazelisk on PATH, plus its Bzlmod/repository caches.
+      # Pinned Bazelisk on PATH, plus its Bzlmod cache. Android downloads
+      # (Maven/PyPI/npm) go through Nexus and are not worth a develop-side
+      # repository archive (hundreds of MB of JARs for a quick download).
       - uses: bazel-contrib/setup-bazel@104e3eea9447cdaa4b00d0fb46191a3985d26ab3 # v0.19.1
         with:
           bazelisk-version: "1.30.0"
           bazelisk-cache: true
-          repository-cache: true
+          repository-cache: false
           cache-save: ${{ github.event_name != 'pull_request' }}
 
       # Optional read-through cache for GitHub release archives and Maven.
@@ -109,21 +111,18 @@ jobs:
       # Restore-only in pull requests. GitHub scopes a cache to the ref that
       # wrote it, so a PR-written cache is invisible to every other PR: it only
       # burns the repository's 10 GB budget and the minutes spent uploading it.
-      # Only a develop push writes this entry (deploy-home `warm-caches`), under
-      # the exact key restored first here. The key is ordered platform → unit →
-      # content so `restore-keys` form a real hierarchy: the exact key, then the
-      # same unit with other lockfiles, then the shared develop-side
-      # Android+host-Rust cache written by `deploy-home` `warm-caches`, then any
-      # Android unit's cache (a small `kotlin-shared` entry reuses the app's
-      # compiled libraries and a new `maven_install.json` is never a cold
-      # start).
+      # Only a develop push writes this family's entries (`warm-android` in
+      # deploy-home), under the stable `bazel-android-<os>-warm-` prefix. The key
+      # is ordered platform → unit → content so `restore-keys` form a real
+      # hierarchy: the exact key, the same unit with other lockfiles, then the
+      # develop-side warm cache. Nothing here can resolve a Rust family entry.
       - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/bazel-disk
           key: bazel-android-${{ runner.os }}-${{ inputs.unit }}-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'projects/mobile/android/maven_install.json') }}
           restore-keys: |
             bazel-android-${{ runner.os }}-${{ inputs.unit }}-
-            bazel-${{ runner.os }}-warm-
+            bazel-android-${{ runner.os }}-warm-
             bazel-android-${{ runner.os }}-
 
       # setup-android accepts the SDK licenses by default; install exactly the

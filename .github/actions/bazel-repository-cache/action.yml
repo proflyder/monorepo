@@ -1,0 +1,54 @@
+name: bazel-repository-cache
+description: Restore a family's Bazel repository cache and point Bazel at it.
+
+# The Bazel repository cache (downloaded archives: GitHub releases, crates.io,
+# Maven jars) is content-addressed and is *not* written by PR jobs. Only the
+# host-Rust family is archived (`bazel-repo-rust-<os>-<hash>`): Android's
+# downloads are mostly Maven JARs that Nexus already serves, so caching them
+# cost more budget than it saved. Warm restores the exact key only (no
+# `restore-keys`): a changed hash (lockfile, crate universe, toolchain) starts
+# from an empty directory, so old downloads never accumulate in the 10 GB
+# GitHub cache budget. PR jobs pass `restore-prefix` instead and may fall back
+# to the family's previous generation; they never save, so the archive they
+# restore stays authoritative.
+#
+# Only `content_addressable/` is archived: those are the downloaded archives
+# (sha256-keyed). Bazel also keeps the extracted copies in `contents/`, which
+# are derived from them and cost several times the archive size (a Rust
+# toolchain is unpacked per target/toolchain repo). Restoring the archives and
+# letting Bazel re-extract them is much smaller in the GitHub cache budget and
+# still avoids every network download.
+#
+# `setup-bazel` runs first with `repository-cache: false` and writes
+# `~/.bazelrc`; this action appends the `--repository_cache` line after it.
+inputs:
+  key:
+    description: Exact repository cache key for this family and input hash
+    required: true
+  restore-prefix:
+    description: >-
+      Prefix for a fallback restore (pull requests). Empty restores the exact
+      key only, so a changed key starts from an empty cache.
+    required: false
+    default: ""
+outputs:
+  cache-hit:
+    description: "'true' when the exact key was restored"
+    value: ${{ steps.restore.outputs.cache-hit }}
+runs:
+  using: composite
+  steps:
+    - name: Restore the Bazel repository cache
+      id: restore
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ~/.cache/bazel-repo/content_addressable
+        key: ${{ inputs.key }}
+        restore-keys: ${{ inputs.restore-prefix }}
+
+    - name: Point Bazel at the repository cache
+      shell: bash
+      run: |
+        set -euo pipefail
+        # setup-bazel writes ~/.bazelrc without a trailing newline.
+        printf '\ncommon --repository_cache=%s\n' "$HOME/.cache/bazel-repo" >> "$HOME/.bazelrc"
