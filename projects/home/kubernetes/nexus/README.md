@@ -21,9 +21,9 @@ account).
 
 | Repository | Type | Upstream | Consumer |
 |---|---|---|---|
-| `maven-public` | group | `maven-central`, `google-maven` | Bazel / rules_jvm_external |
-| `maven-central` | proxy | `https://repo1.maven.org/maven2/` | group member |
-| `google-maven` | proxy | `https://maven.google.com/` | group member |
+| `maven-public` | group | `maven-central`, `google-maven` | manual use only |
+| `maven-central` | proxy | `https://repo1.maven.org/maven2/` | Bazel / rules_jvm_external |
+| `google-maven` | proxy | `https://maven.google.com/` | Bazel / rules_jvm_external |
 | `github` | raw proxy | `https://github.com/` | `http_archive`, release assets |
 | `github-codeload` | raw proxy | `https://codeload.github.com/` | direct archive URLs |
 | `nodejs-dist` | raw proxy | `https://nodejs.org/dist/` | mise Node downloads |
