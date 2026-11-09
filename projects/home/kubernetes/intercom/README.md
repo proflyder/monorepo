@@ -12,18 +12,19 @@ Deployment/Service сигналинга звонка; код и контракт
   OpenBao: `phone_token` — из `secret/k8s/home-assistant/scheduler-auth`
   (`token`, общий токен приложения), `station_token` — из
   `secret/k8s/home-assistant/intercom`.
-- HTTPS-маршрут `intercom.<домен>` — в
+- HTTPS-маршрут `intercom.home.<home-suffix>` — в
   `projects/home/kubernetes/ingress/manifests/routes.yaml`
   (`INTERCOM_HOST`), а не здесь: namespace/allow-list/TLS принадлежат
-  ingress-юниту. Адрес для клиентов: `https://intercom.<домен>/`
+  ingress-юниту. Адрес для клиентов: `https://intercom.home.<home-suffix>/`
   (LAN/VPN, `home-allowlist`, wildcard TLS). В Firebase Remote Config это
   значение поля `intercomBaseUrl` в JSON-параметре `home_connection`:
 
   ```json
-  {"intercomBaseUrl": "https://intercom.<домен>"}
+  {"intercomBaseUrl": "https://intercom.home.<home-suffix>"}
   ```
 
-  Без завершающего `/v1`, без `:30097` и без `/` в конце; `https` обязателен.
+  Без завершающего `/v1`, без `:30097` и без `/` в конце. Для имени через
+  Traefik обязателен `https`; аварийный LAN NodePort допускает `http`.
 - `manifests` ingress-юнита также создаёт NetworkPolicy `intercom-ingress`
   (`intercom-networkpolicy.yaml`): к pod `intercom:8099` допускаются LAN/VPN
   (`LAN_CIDR`, включая узел с Traefik в `hostNetwork`), pod CIDR и kubelet
@@ -64,21 +65,22 @@ NodePort закрыт фильтром `projects/home/kubernetes/scheduler/nft`:
 # печатайте: TOKEN=$(tr -d '\r\n' < secrets/home/intercom.token)
 TOKEN=...
 
-curl -fsS --resolve "intercom.<домен>:443:<NODE_IP>" \
+curl -fsS --resolve "intercom.home.<home-suffix>:443:<NODE_IP>" \
   -H "Authorization: Bearer $TOKEN" \
   -H 'Content-Type: application/json' \
   -d '{}' \
-  "https://intercom.<домен>/home.v1.IntercomService/ListEndpoints"
+  "https://intercom.home.<home-suffix>/home.v1.IntercomService/ListEndpoints"
 ```
 
-Ожидается JSON `{"endpoints":[]}` или список зарегистрированных endpoint.
+Ожидается `{}` (пустое repeated-поле protobuf JSON опускает) или
+`{"endpoints":[...]}` с зарегистрированными endpoint.
 Проверка `Watch` (стрим не должен обрываться):
 
 ```bash
 curl -sS -N --http1.1 --max-time 120 \
   -H "Authorization: Bearer $TOKEN" \
   -H 'Content-Type: application/json' -d '{}' \
-  "https://intercom.<домен>/home.v1.IntercomService/Watch"
+  "https://intercom.home.<home-suffix>/home.v1.IntercomService/Watch"
 ```
 
 Стрим держится открытым до `--max-time` (или до события), без ответа

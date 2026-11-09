@@ -33,13 +33,15 @@ Skill `pre-publish-review` по диапазону PR.
 ## 4. PR и публикация
 
 1. Обычный PR в `develop`; merge — squash после зелёного `ci-ok`.
-2. Push в `develop` с изменённым `VERSION` проводит юнит `pulsar` через общий `deploy-home`
-   (`native.publish_when` по VERSION): `_native.yml` собирает `aarch64` и `armhf` с этой
-   версией, radio и `SHA256SUMS`, проверяет `--version` под qemu; `publish-native`
-   (`publish-oci.sh`) делает `oras push` в `ghcr.io/proflyder/pulsar-firmware:<version>` и
-   переносит `:latest`. Прочие изменения Pulsar публикации не запускают.
-3. Publish падает, если тег этой версии уже есть в GHCR. Уже опубликованную версию не
-   перезаписывать, а выпускать следующую.
+2. PR CI (`_native.yml`, `promote: false`) собирает `aarch64` и `armhf` с этой версией, radio
+   и `SHA256SUMS`, проверяет `--version` под qemu и делает `oras push` в
+   `ghcr.io/proflyder/pulsar-firmware:tree-<hash>` с provenance. Push в `develop` с изменённым
+   `VERSION` (`native.publish_when`) запускает `native-release`: он проверяет `tree-<hash>` и
+   provenance и ставит на тот же digest теги `<version>` и `:latest`; повторной сборки нет.
+   Прочие изменения Pulsar релиз не запускают.
+3. Тег версии неизменяем по содержимому: повторная публикация того же артефакта — no-op, другого
+   содержимого под тем же тегом — ошибка. Уже опубликованную версию не перезаписывать, а
+   выпускать следующую.
 
 ## 5. Контроль
 

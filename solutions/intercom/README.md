@@ -179,8 +179,8 @@ forward-only`): состояние звонков живёт только в п�
 - локальный `secrets/home/intercom.env` — только для ручного `deploy.sh`.
 
 ESO-манифест применяется один раз:
-`kubectl apply -f projects/home/kubernetes/intercom/manifests/external-secrets.yaml`.
-HTTPS-имя `intercom.<домен>` описано в
+`mise run kubectl -- apply -f projects/home/kubernetes/intercom/manifests/external-secrets.yaml`.
+HTTPS-имя `intercom.home.<home-suffix>` описано в
 `projects/home/kubernetes/ingress/manifests/routes.yaml` и появляется после
 обычного деплоя ingress (`INTERCOM_HOST` вычисляется из `HOME_DOMAIN`).
 NodePort закрыт host-фильтром `projects/home/kubernetes/scheduler/nft`:

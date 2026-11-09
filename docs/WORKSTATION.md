@@ -46,7 +46,8 @@ K3s (`127.0.0.1:16443` → узел) поднимает `with-kube-tunnel.sh` н
 | Задача | Что запускает | Профиль fnox |
 |---|---|---|
 | `admin:ingress` / `admin:ingress-verify` | Traefik, cert-manager, маршруты / проверка | `ingress` |
-| `admin:openbao` / `admin:openbao-verify` | OpenBao (живой seal не трогает) / проверка | `openbao` |
+| `admin:openbao` / `admin:openbao-verify` / `admin:openbao-bootstrap` | OpenBao (живой seal не трогает) / проверка / bootstrap | `openbao` |
+| `admin:flux-bootstrap` | Flux-контроллеры и передача Nexus в GitOps | `kube` |
 | `admin:vaultwarden` | Vaultwarden (`--render-only DIR` без кластера) | `vaultwarden` |
 | `admin:observability` | Prometheus/Loki/Alloy | `observability` |
 | `admin:external-secrets` | ESO и ExternalSecrets | `kube` |

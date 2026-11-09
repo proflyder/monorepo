@@ -96,11 +96,12 @@ git apply -3 --directory=projects/station/pulsar /tmp/pulsar-upstream.patch
 ```
 
 затем обычный squash PR. Релиз Pulsar — изменение
-`projects/station/pulsar/VERSION`: merge в `develop` проводит юнит `pulsar`
-через общий `deploy-home` (`publish_when` — только VERSION), `publish-native`
-публикует OCI-артефакт `ghcr.io/proflyder/pulsar-firmware:<version>`
-(+ `:latest`), затем `deploy-station` после approve в Environment `Station`
-катит его на колонку. GitHub Releases и теги в монорепо запрещены. Процедуры —
+`projects/station/pulsar/VERSION`: PR CI собирает обе архитектуры и публикует
+`ghcr.io/proflyder/pulsar-firmware:tree-<hash>` с provenance; merge в
+`develop` (`publish_when` — только VERSION) только продвигает этот digest на
+теги `<version>` и `:latest`, затем `deploy-station` после approve в
+Environment `Station` катит его на колонку. Повторной сборки в деплое нет.
+GitHub Releases и теги в монорепо запрещены. Процедуры —
 `docs/OPERATIONS.md` и `projects/station/pulsar/RICARDO.md`. Правила самого
 Pulsar — `projects/station/pulsar/AGENTS.md`.
 

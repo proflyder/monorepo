@@ -10,7 +10,7 @@
 ## Сборка
 
 Сборка — на Linux или WSL2. Демон и его C/C++-зависимости собираются Bazel
-(Bazelisk, Bazel 9.3.1); версии закреплены в корневом `MODULE.bazel`:
+(Bazelisk, Bazel 9.3.2); версии закреплены в корневом `MODULE.bazel`:
 Rust 1.99.1 (совпадает с корневым `/rust-toolchain.toml`), zig 0.14.1 с
 cc-toolchain для `aarch64-linux-gnu` (glibc 2.36) и
 `arm-linux-gnueabihf` (glibc 2.23, cortex-a53/VFPv4), sendspin-cpp и его
@@ -84,26 +84,28 @@ CI копирует их в `satellite/build/<arch>/`; локально можн
 
 ## CI и релизы
 
-CI Pulsar разделён на два юнита. `pulsar-bazel` (`.github/workflows/_bazel.yml`) — хост-сборка,
+CI Pulsar разделён на два юнита. `pulsar-bazel` (`.github/workflows/_unit.yml`) — хост-сборка,
 `rustfmt`, `clippy` и тесты: `bazel build //projects/station/pulsar/...` + `bazel test
 //projects/station/pulsar/satellite/... //projects/station/pulsar/installer/...`. `pulsar` (`.github/workflows/_native.yml`) — Bazel-кросс-сборка
 обеих архитектур и установщика (`pulsar-install`), `radio/build.sh` и `ssh/build.sh`.
 Версии инструментов — как в «Сборке» выше; `make check` больше не дублируется.
 
 Релиз — изменение `projects/station/pulsar/VERSION` (`v<major.minor>.<1000+N>`) в PR в
-`develop`; merge проводит юнит `pulsar` через общий `.github/workflows/deploy-home.yml`
-(`native.publish_when` по VERSION). `_native.yml` собирает обе архитектуры с этой версией и
+`develop`. PR CI (`_native.yml`, `promote: false`) собирает обе архитектуры с этой версией и
 radio, проверяет `--version` под qemu, складывает `pulsar-<arch>.bin`, `SHA256SUMS` и
-`zigbee-*.ybl` в OCI-артефакт `ghcr.io/proflyder/pulsar-firmware:<version>`
-(`publish-oci.sh`) и переносит `:latest`; затем `deploy-station` после approve в Environment
-`Station` катит его на станцию. GitHub Releases и теги не используются. Прочие изменения
-Pulsar — только PR CI. Имена слоёв — постоянный контракт; от них зависят:
+`zigbee-*.ybl` в OCI-артефакт и публикует его как `tree-<git hash>` с build provenance
+(`publish-oci.sh`). Merge в `develop` (`native.publish_when` по VERSION) запускает
+`native-release`: он проверяет `tree-<hash>` и provenance, ставит на тот же digest теги
+`ghcr.io/proflyder/pulsar-firmware:<version>` и `:latest` и ничего не собирает. Затем
+`deploy-station` после approve в Environment `Station` катит этот digest на станцию. GitHub
+Releases и теги в монорепо не используются; изменение исходников без бампа VERSION — только
+PR CI. Имена слоёв — постоянный контракт; от них зависят:
 
 | Слой OCI | Кто зависит |
 |---|---|
 | `pulsar-<arch>.bin` (`aarch64`, `armhf`) | апдейтер: сверяет digest слоя, `SHA256SUMS` и `--version` |
-| `zigbee-coordinator.ybl`, `zigbee-router.ybl` | апдейтер (только Миди; релиз без образа обновляется без него); архивы — `radio/out/zigbee-*.ybl` для установщика |
-| `SHA256SUMS` | апдейтер сверяет по нему `.bin` и `.ybl` |
+| `zigbee-coordinator.ybl`, `zigbee-router.ybl` | в профиле Ricardo не используются: runtime Zigbee выключен (`FEATURES.zigbee = false`), слои остаются для upstream/установщика (`radio/out/zigbee-*.ybl`) |
+| `SHA256SUMS` | апдейтер сверяет по нему `.bin` |
 | `pulsar-<arch>.debug` | не в OCI: workflow-артефакт для разбора crash-отчёта |
 
 Версия из `VERSION` передаётся сборке (`--define=pulsar_version=...`) и должна совпадать с

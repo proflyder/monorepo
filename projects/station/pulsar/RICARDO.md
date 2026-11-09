@@ -50,7 +50,7 @@ Pulsar — член единого корневого Cargo workspace: `projects
 | `отмена` | Recognized after the wake word as the request, it is an HA custom intent (`StationCancel`) with no speech and no side effects: no TTS answer and no Hermes fallback. The stock command model has no «отмена», so a mid-call «отмена» without a repeated wake word is not detected locally. |
 | Local commands | The command spotter runs only while something plays and outside a voice request, matching the deployed fork profile rather than upstream's always-on behavior. |
 | Nearest station | Default `nearest_answers=false`: this installation has one station and the 250 ms arbitration window only adds latency. It can be turned back on in HA. |
-| Zigbee | Runtime initialization is disabled (`ENABLE_ZIGBEE=false`); the radio and the `zigbee-*.ybl` assets are left untouched. |
+| Zigbee | Runtime initialization is disabled (`FEATURES.zigbee = false` in `satellite/crates/pulsar/src/controller/wiring.rs`); the radio and the `zigbee-*.ybl` assets are left untouched. |
 | Announce volume | `announce_volume` number «Громкость объявлений» (0–100 %, step 5, default 100 %): scales `assist_satellite.announce` and TTS answers only, not the timer ring, earcons or music; persisted in `state.conf`. |
 | Звонок | Новый крейт `pulsar-call` (WebRTC на `str0m`) и отдельный канал вывода `Call`: звонок на колонку — интерком, станция отвечает сама. Спотеры и музыка на время звонка выключены, мут глушит только uplink, кнопка действия сбрасывает. Без провижининга (`/data/pulsar/intercom_*`) модуль выключен, поведение станции не меняется. |
 | HA media state | `MediaState::Announcing` is published to Home Assistant as `PLAYING`: HA 2026.10's ESPHome media player knows only NONE/IDLE/PLAYING/PAUSED/OFF/ON and raises `KeyError: MediaPlayerState.ANNOUNCING` in its state subscription, losing the update. Pulsar's internal ANNOUNCING (ducking, announcement callbacks, `media_player` entity state) is unchanged; only the wire value differs. |
@@ -157,7 +157,7 @@ scp -r root@<ip>:/data/pulsar/wake-events/ ./wake-events/
 
 ## Build
 
-Linux or WSL2 with Bazelisk (Bazel 9.3.1) and a host C/C++ compiler. Zig 0.14.1,
+Linux or WSL2 with Bazelisk (Bazel 9.3.2) and a host C/C++ compiler. Zig 0.14.1,
 Rust 1.99.1 and the sendspin C/C++ libraries come from the root `MODULE.bazel`:
 
 ```bash
@@ -276,11 +276,12 @@ All checks were host-side; no binary was installed and no station was touched.
   (`4cba44a`) shows the same 7 failures on arm64, so this is a pre-existing
   upstream test limitation, not a merge regression. The new GHCR tests (token,
   manifest, layer digest, bearer only to ghcr.io) pass on arm64.
-- `make ARCH=armhf ZIG=…/zig-0.14.1 binary`: the daemon compiles and links as
-  an ARM EABI5 armhf ELF (`build/armhf/pulsar.debug`); the last
-  `zig objcopy --strip-all` step fails on the macOS host (undefined symbols in
-  zig's objcopy), so no stripped `build/armhf/pulsar` was produced here. The
-  Linux CI job performs the same strip step.
+- `bazel build -c opt --platforms=//platform/bazel/zig:armhf_linux
+  --define=pulsar_version=… //projects/station/pulsar/satellite:station_binary`:
+  the daemon compiles and links as an ARM EABI5 armhf ELF
+  (`bazel-bin/projects/station/pulsar/satellite/pulsar.debug`); the stripped
+  `pulsar` is produced by Bazel and CI copies both to
+  `satellite/build/armhf/`.
 
 Not performed: live microphone/wake-word acceptance, real `libtflite.so`
 loading on the station, ESPHome entity regression, Spotify/MA playback, or a

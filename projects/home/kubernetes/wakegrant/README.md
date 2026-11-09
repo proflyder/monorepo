@@ -40,8 +40,8 @@ openssl rand -base64 32         # machine key for komp
 Apply the ExternalSecret (ESO must already be installed):
 
 ```bash
-kubectl apply -f projects/home/kubernetes/wakegrant/manifests/external-secrets.yaml
-kubectl -n home-assistant wait --for=condition=Ready externalsecret/wakegrant --timeout=120s
+mise run kubectl -- apply -f projects/home/kubernetes/wakegrant/manifests/external-secrets.yaml
+mise run kubectl -- -n home-assistant wait --for=condition=Ready externalsecret/wakegrant --timeout=120s
 ```
 
 ## Deploy
@@ -69,8 +69,8 @@ directory, applies it and runs the in-container `-healthcheck` after rollout.
 ```bash
 # from the LAN
 curl -sS http://<k3s-node>:30130/healthz          # ok
-kubectl -n home-assistant logs deploy/wakegrant    # JSON, machine/outcome/grantId only
-kubectl -n home-assistant exec deploy/wakegrant -- /usr/local/bin/wakegrant -healthcheck
+mise run kubectl -- -n home-assistant logs deploy/wakegrant    # JSON, machine/outcome/grantId only
+mise run kubectl -- -n home-assistant exec deploy/wakegrant -- /usr/local/bin/wakegrant -healthcheck
 ```
 
 Issue a test grant (the token is read from a private file, never echoed):

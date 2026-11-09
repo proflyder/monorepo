@@ -1,7 +1,7 @@
 # gRPC / Connect contract
 
 Статус: **развёрнуто**. `solutions/scheduler` — durable SQLite engine,
-Connect/gRPC, outbox, auth; бинари `ha-bridge` (очередь `home`) и `ha-control`
+Connect/gRPC-Web, outbox, auth; бинари `ha-bridge` (очередь `home`) и `ha-control`
 (каталог Home, очередь `control`) Rust-крейта `solutions/ha-bridge/crates/ha-bridge`
 работают в K3s; HA-звук остаётся у HA, а
 расписания принадлежат scheduler. Android-клиент использует тот же контракт.
@@ -172,12 +172,13 @@ Rust-стабы (`connectrpc-build` + `buffa`) **лежат в репозито�
 требуют protoc. Перегенерация и проверка:
 
 ```bash
-mise exec -- packages/rust/home-proto/generate.sh   # protoc 33.4 из mise.toml
+mise exec -- packages/rust/home-proto/generate.sh   # protoc 36.2 из mise.toml
 packages/rust/home-proto/generate.sh --check
 ```
 
-Android использует ручной protobuf-JSON маппинг
-(`projects/mobile/android/core/network`); Go-стабы удалены вместе с Go-сервером.
+Android использует типизированные kotlinx.serialization DTO
+(`projects/mobile/android/core/network/src/main/kotlin/dev/proflyder/home/core/network/WireDtos.kt`) поверх Retrofit-клиентов
+Connect JSON; Go-стабы удалены вместе с Go-сервером.
 `packages/proto/home/v1/BUILD.bazel` держит `proto_library` как каноническую
 схему для descriptor tooling и других языков.
 

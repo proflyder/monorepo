@@ -9,8 +9,9 @@
 `projects/home/kubernetes/external-secrets/README.md`. Этап 3 переносит
 секреты CI-деплоя из GitHub Environment в `secret/ci/deploy-home`: GitHub
 хранит только то, что нужно до входа в OpenBao (VPN и адрес сервера). Тот же
-JWT-метод обслуживает второй репозиторий (форк Pulsar): роль `deploy-station`
-читает `secret/ci/deploy-station` для деплоя прошивки станции.
+JWT-метод обслуживает деплой прошивки станции: роль `deploy-station` читает
+`secret/ci/deploy-station`. Сейчас Pulsar лежит в этом же монорепозитории,
+поэтому роль привязана к нему и Environment `Station`.
 
 Публичные примеры используют `home.example.com` и `192.0.2.0/24`. Реальные
 имена — `secrets/home/ingress.env`, данные bootstrap — `secrets/openbao/`.
@@ -70,7 +71,7 @@ mise run admin:openbao-verify -- --kubernetes
 Cloudflare (DNS only), IngressRoute. `--skip-dns` не трогает DNS.
 
 Обновление версии: поправить `versions.sh`, выполнить `deploy.sh`, затем
-удалить под (`kubectl -n openbao delete pod openbao-0`) — StatefulSet
+удалить под (`mise run kubectl -- -n openbao delete pod openbao-0`) — StatefulSet
 использует `OnDelete`, auto-unseal распечатает сервер сам. Перед обновлением
 снять snapshot (см. «Backup»).
 
@@ -229,19 +230,20 @@ delete, `sys/*`, `auth/*` запрещены. `secret/infra/*` — секрет�
 каноническое имя; в OIDC-токене для environment-джобы
 `sub=repo:<owner>/<repo>:environment:Home`.
 
-Роль `deploy-station` (`auth/github/role/deploy-station`) — второй GitHub
-репозиторий (форк Pulsar) деплоит прошивку станции через OpenBao:
+Роль `deploy-station` (`auth/github/role/deploy-station`) деплоит прошивку
+станции через OpenBao из этого монорепозитория:
 
 - `oidc_discovery_url`/`bound_issuer` = `https://token.actions.githubusercontent.com`;
 - `bound_audiences` = тот же публичный URL OpenBao, что у `deploy-home`;
-- `bound_claims`: `repository=<owner>/<station-repo>` и
+- `bound_claims`: `repository=<owner>/<repo>` (монорепозиторий) и
   `environment=Station`. Репозиторий передаётся как
-  `--station-repository <owner>/<station-repo>` или через
+  `--station-repository <owner>/<repo>` или через
   `OPENBAO_STATION_REPOSITORY`; в публичной документации используются только
   обезличенные имена;
-- claim `ref` намеренно не задан: деплой запускается с тега через reusable
-  workflow, а какие теги допустимы, ограничивает GitHub Environment `Station`
-  (protection rules/rulesets), а не OIDC-роль;
+- claim `ref` намеренно не задан: job `deploy-station` запускается из
+  `deploy-home.yml` после merge в `develop`, а какие refs допустимы,
+  ограничивает GitHub Environment `Station` (protection rules/rulesets), а не
+  OIDC-роль;
 - `user_claim=job_workflow_ref`, `token_policies=["ci-station"]`, TTL 10 мин,
   max 15 мин, `clock_skew=60`.
 
@@ -319,7 +321,7 @@ cert-manager и служебные Secrets контроллеров.
 больше не источник правды. Немедленная синхронизация:
 
 ```bash
-kubectl -n <ns> annotate externalsecret <name> force-sync="$(date +%s)" --overwrite
+mise run kubectl -- -n <ns> annotate externalsecret <name> force-sync="$(date +%s)" --overwrite
 ```
 
 ## CI (GitHub OIDC)
@@ -512,17 +514,17 @@ CronJob `openbao-raft-snapshot` (03:17 UTC) логинится через Kubern
 
 ```bash
 # ручной snapshot
-kubectl -n openbao create job --from=cronjob/openbao-raft-snapshot snapshot-manual
-kubectl -n openbao logs job/snapshot-manual
+mise run kubectl -- -n openbao create job --from=cronjob/openbao-raft-snapshot snapshot-manual
+mise run kubectl -- -n openbao logs job/snapshot-manual
 
 # восстановление: скопировать файл с backup-PVC в под и применить
 # (PVC подключён только к CronJob, поэтому читаем его временным подом)
-kubectl -n openbao run snapshot-reader --rm -it --restart=Never \
+mise run kubectl -- -n openbao run snapshot-reader --rm -it --restart=Never \
   --image=quay.io/openbao/openbao --overrides='{"spec":{"containers":[{"name":"c","image":"quay.io/openbao/openbao","command":["sleep","600"],"volumeMounts":[{"name":"b","mountPath":"/b"}]}],"volumes":[{"name":"b","persistentVolumeClaim":{"claimName":"openbao-backups"}}]}}' -- sh
 # во втором терминале:
-kubectl -n openbao cp snapshot-reader:/b/<file>.snap ./restore.snap
-kubectl -n openbao cp ./restore.snap openbao-0:/tmp/restore.snap
-kubectl -n openbao exec openbao-0 -- \
+mise run kubectl -- -n openbao cp snapshot-reader:/b/<file>.snap ./restore.snap
+mise run kubectl -- -n openbao cp ./restore.snap openbao-0:/tmp/restore.snap
+mise run kubectl -- -n openbao exec openbao-0 -- \
   bao operator raft snapshot restore -force /tmp/restore.snap
 ```
 
@@ -562,7 +564,7 @@ mise run kubectl -- get externalsecret -A
 ```
 
 Ожидаемо: `initialized=true`, `sealed=false`, `recovery_seal=true`,
-`storage_type=raft`; после `kubectl delete pod openbao-0` под снова
+`storage_type=raft`; после `mise run kubectl -- delete pod openbao-0` под снова
 `Ready` без unseal человеком.
 
 ## Диагностика

@@ -31,7 +31,7 @@ PIPER_VOICE=ru_puriso2-medium
 После сохранения файлов и backup перезапустить только Deployment:
 
 ```bash
-kubectl -n home-assistant rollout restart deploy/piper
+mise run kubectl -- -n home-assistant rollout restart deploy/piper
 ```
 
 В HA pipeline «Рикардо»: engine `tts.piper`, language `ru`, voice `ru_puriso2-medium`. Применять через UI/WebSocket API, не править работающую `.storage` вручную.

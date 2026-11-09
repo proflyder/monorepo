@@ -84,7 +84,8 @@ HA: `http://192.0.2.28:8123`
 MA: `http://192.0.2.28:8095`  
 Grafana LAN: `http://192.0.2.27:30300/`  
 Grafana HTTPS: `https://grafana.home.example.com/`  
-HTTPS вход (LAN/VPN): `https://{ha,grafana,alarms,control,currency,vault}.home.example.com/`
+HTTPS вход (LAN/VPN):
+`https://{ha,grafana,alarms,control,currency,intercom,vault,passwords,nexus}.home.example.com/`
 
 Только LAN/VPN. Не пробрасывать `8123/8095/8099/6053/6638` и
 `80/443` на роутере.
@@ -517,7 +518,7 @@ mise run kubectl -- -n home-assistant exec deploy/hermes -c voice-proxy -- \
 # состояние голосового маршрута и bootstrap обновлений диспетчера:
 # kubectl-side port-forward вместо exec в контейнер, токен не печатается
 mise run kubectl -- -n home-assistant port-forward svc/mcp-gateway 18081:8080 &
-VOICE_TOKEN=$(kubectl -n home-assistant get secret mcp-gateway-voice \
+VOICE_TOKEN=$(mise run kubectl -- -n home-assistant get secret mcp-gateway-voice \
   -o jsonpath='{.data.token}' | base64 -d)
 curl -fsS -H "Authorization: Bearer $VOICE_TOKEN" \
   http://127.0.0.1:18081/v1/voice/state
@@ -738,13 +739,13 @@ Helm releases и обновление — `KUBERNETES-OPERATIONS.md`.
 ```bash
 mise run helm -- template runtime projects/home-assistant/deploy/chart \
   -n home-assistant -f "$RUNTIME_PRIVATE_VALUES" \
-  | kubectl diff -n home-assistant -f -
+  | mise run kubectl -- diff -n home-assistant -f -
 ```
 
 Полный `apply-runtime.sh` применяет storage (PV/PVC) через `kubectl`, а
 workloads — через Helm; CI катит только workloads. Скрипту нужен digest
 Health exporter'а: `HEALTH_EXPORTER_IMAGE=ghcr.io/proflyder/health-exporter@sha256:…`
-(взять текущий: `kubectl -n home-assistant get deployment
+(взять текущий: `mise run kubectl -- -n home-assistant get deployment
 runtime-health-exporter -o jsonpath='{.spec.template.spec.containers[0].image}'`);
 он подставляет image, command и пустые volume-монтирования вместо удалённого
 Python-скрипта/ConfigMap. Автодеплой Hermes
@@ -1148,10 +1149,10 @@ PRIVATE_ENV=secrets/home/intercom.env \
   projects/home/kubernetes/intercom/deploy.sh
 
 # состояние и проба
-kubectl -n home-assistant rollout status deployment/intercom
-kubectl -n home-assistant exec deployment/intercom -- \
+mise run kubectl -- -n home-assistant rollout status deployment/intercom
+mise run kubectl -- -n home-assistant exec deployment/intercom -- \
   /usr/local/bin/intercom -status
-kubectl -n home-assistant exec deployment/intercom -- \
+mise run kubectl -- -n home-assistant exec deployment/intercom -- \
   /usr/local/bin/intercom -healthcheck
 
 # phone_token в секрете intercom — это общий токен приложения из
@@ -1160,17 +1161,17 @@ kubectl -n home-assistant exec deployment/intercom -- \
 # NodePort 30097 фильтруется общим nft scheduler/control/intercom
 ```
 
-Адрес для клиентов — `https://intercom.<домен>/` за Traefik (LAN/VPN,
-`home-allowlist`, wildcard TLS). Именно его нужно положить в Firebase
-Remote Config в `home_connection.intercomBaseUrl` (полный URL без `/v1`).
-NodePort `30097` оставлен аварийным путём. Проверка с LAN:
+Адрес для клиентов — `https://intercom.home.<home-suffix>/` за Traefik
+(LAN/VPN, `home-allowlist`, wildcard TLS). Именно его нужно положить в
+Firebase Remote Config в `home_connection.intercomBaseUrl` (полный URL без
+`/v1`). NodePort `30097` оставлен аварийным путём. Проверка с LAN:
 
 ```bash
 TOKEN=$(tr -d '\r\n' < secrets/home/intercom.token)   # не печатать
-curl -fsS --resolve "intercom.<домен>:443:<NODE_IP>" \
+curl -fsS --resolve "intercom.home.<home-suffix>:443:<NODE_IP>" \
   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -d '{}' \
-  "https://intercom.<домен>/home.v1.IntercomService/ListEndpoints"
+  "https://intercom.home.<home-suffix>/home.v1.IntercomService/ListEndpoints"
 ```
 
 `Watch` — долгоживущий stream; маршрут и entrypoint настроены на
@@ -1191,7 +1192,7 @@ mise run kubectl -- -n home-assistant logs deploy/ha-bridge --tail=50
 `voice-proxy-home` в `consumers` (`alive` после первого цикла). Растущий
 `leased` без `pending` означает, что станция занята или ответ не подтверждён;
 `FAILED` после `SCHEDULER_EVENT_MAX_ATTEMPTS` пишется в `detail` (без текста).
-Логи — `kubectl -n home-assistant logs deploy/hermes -c voice-proxy`: строки
+Логи — `mise run kubectl -- -n home-assistant logs deploy/hermes -c voice-proxy`: строки
 `queue enqueued|delivered|stale|announce failed` содержат только структуру.
 `HERMES_VOICE_QUEUE=0` возвращает прямой announce без consumer'а.
 
@@ -1322,7 +1323,7 @@ mise run kubectl -- -n home-assistant set env deployment/ha-scenario SCENARIO_EX
 ```
 
 Перед снятием флага исполнения снять `SCENARIO_EXECUTION` с scheduler не
-обязательно, но честнее: `kubectl -n home-assistant set env deployment/scheduler
+обязательно, но честнее: `mise run kubectl -- -n home-assistant set env deployment/scheduler
 SCENARIO_EXECUTION=false` (манифест вернёт `true` при следующем деплое).
 
 Диагностика: `ACK_SKIPPED` с detail `condition not met` / `scenario is

@@ -16,10 +16,11 @@ Current device acceptance and remaining work are tracked in
 
 ## Features
 
-- Bottom tabs: **Home**, **Scenarios**, **Time**. **Time** is a container with an
-  in-screen switch for **Alarms**, **Timers** and **Reminders**; the existing
-  feature screens are reused unchanged and deep links such as
-  `selectTab("alarms")` open the Time tab on the matching section. **Connection**
+- Bottom tabs: **Home**, **Scenarios**, **Time**. **Time** is a `ViewPager2`
+  container with a segmented **Alarms** / **Timers** / **Reminders** switch;
+  a horizontal swipe and the pills drive the same page, the existing feature
+  screens are reused unchanged, and deep links such as `selectTab("alarms")`
+  open the Time tab on the matching section. **Connection**
   is not a tab; the settings icon (⚙) in the top app bar opens it as an overlay
   over the current tab, and Back returns to that tab.
 - Call: the phone icon in the top app bar and the pinned **Call the station**
@@ -36,8 +37,9 @@ Current device acceptance and remaining work are tracked in
 - Alarm multi-select: long-press enters selection; bulk enable/disable/delete
   run sequentially and stop on first failure, keeping unprocessed alarms
   selected.
-- Connection: scheduler and optional Home control base URLs plus connect/read
-  timeouts come from Firebase Remote Config (`home_connection`); the bearer
+- Connection: scheduler, optional Home control and optional Intercom base URLs
+  plus connect/read timeouts come from Firebase Remote Config
+  (`home_connection`); the bearer
   token is entered on the phone, **Save and test connection** (`GetStatus`)
   verifies the server, and a read-only section shows the active Remote Config
   values with their state and a **Refresh config** action. Explicit
@@ -63,12 +65,13 @@ Current device acceptance and remaining work are tracked in
   The hub refreshes on resume and pull-to-refresh.
 - **Quick actions** are pinned tiles. Long-press a device in a room group or a
   native scenario in the scenario list to **Pin to Home** / **Unpin**. Tiles are
-  ordered by pin time and kept in DataStore. A device tile toggles on tap (a
-  light opens its brightness/color sheet on long press), a scenario tile runs it,
-  and the "Say on the station" tile opens the speak dialog. On first launch the
-  speak action and the native **Blackout** / **Work mode** scenarios (when they
-  exist) are pinned. With no pins the screen shows
-  "Long-press a device to pin it here."
+  ordered by pin time and kept in DataStore. A non-light device tile toggles on
+  tap; a light tile opens its brightness/color sheet on tap (long press also
+  opens it); long-press on a non-light device pins/unpins it. A scenario tile
+  runs it, and the "Say on the station" tile opens the speak dialog. On first
+  launch the speak action and the native **Blackout** / **Work mode** scenarios
+  (when they exist) are pinned. The built-in Call tile is always present, so the
+  empty-quick-actions hint is currently unreachable.
 - Filter chips (All / Lights / Switches, plus room filters) are persisted in
   DataStore and restored on launch. Room sections are collapsible; the folded
   state is UI-only.
@@ -99,16 +102,20 @@ selected by a label in Home Assistant:
    label turns it back into an ordinary switch row. A different label id is set
    with `CONTROL_PROFILE_LABEL` on `ha-control`.
 
-The Home screen, profile strings and the Scenarios feature are localized in
-English and Russian (`values-ru`); other screens fall back to English for
-strings without a translation.
+All feature UI is localized in English and Russian (`values-ru`); the app
+label and some framework-level strings may fall back to English. Server
+messages arrive as language-neutral `home.v1.LocalizedText` keys and are
+resolved by `ServerText` to `@string/server_<key>` (`scheduler.error.not_found`
+→ `server_scheduler_error_not_found`); an unknown key falls back to the legacy
+server text, then to a generic message.
 
 ## Scenarios
 
 The **Scenarios** tab is a builder for the scheduler's durable
-`home.v1.ScenarioService` definitions. The server owns storage, validation,
-time-trigger materialization, and (once the `ha-scenario` executor exists)
-execution; the phone only edits the definition and queues manual runs.
+`home.v1.ScenarioService` definitions. The server owns storage, validation and
+time-trigger materialization; the `ha-scenario` executor consumes the
+`scenario` queue, and the phone only edits the definition and queues manual
+runs.
 
 - A scenario has a name (≤ 80 bytes), description (≤ 512 bytes), up to 8
   triggers, 8 conditions and 32 ordered steps, `enabled`, and
@@ -152,8 +159,9 @@ CallStyle notification, and an audio-only WebRTC peer connection.
   envelope framing (1 flag byte + 4-byte big-endian length) because bidi
   streaming would require HTTP/2; the stream reconnects with a bounded backoff
   and also marks the phone online.
-- The phone is always the caller: `StartCall(callee = first online STATION
-  endpoint)`, then `RINGING` → `CONNECTING` (the caller creates and sends the
+- The phone is always the caller: it calls the first online STATION endpoint,
+  otherwise the first STATION endpoint (which then fails as `UNAVAILABLE` if
+  offline), then `RINGING` → `CONNECTING` (the caller creates and sends the
   SDP offer) → `ACTIVE` after the station's answer. `Hangup` uses
   `CANCELED` while ringing and `HANGUP` otherwise.
 - Media is libwebrtc `io.getstream:stream-webrtc-android` (Opus, audio only,
@@ -202,7 +210,7 @@ It opens as an overlay on the current bottom tab; Back returns to that tab.
     `http://<node>:30099` or the home HTTPS name
     `https://control.<HOME_DOMAIN>` reached over the VPN.
   - **Intercom address** (calls, optional): LAN `http://<node>:30097` or the
-    home HTTPS name `https://intercom.<HOME_DOMAIN>` reached over the VPN.
+    home HTTPS name `https://intercom.home.<HOME_DOMAIN>` reached over the VPN.
   - The app appends the Connect RPC path or `/v1/catalog` itself. Do not put
     `/v1/catalog` into the configured URL.
 - Connect and read timeouts also come from Remote Config. Invalid URLs,
@@ -215,10 +223,12 @@ It opens as an overlay on the current bottom tab; Back returns to that tab.
 - The intercom server takes that shared app token as `phone_token` in its
   Secret (ExternalSecret copies `scheduler-auth`'s `token`); the station keeps
   its own `station_token`. There is no separate call token in the app.
-- Transport: Retrofit on OkHttp, Connect unary JSON
-  (`POST {endpoint}/home.v1.SchedulerService/{RPC}`), protobuf JSON field
-  names, `int64` as decimal strings. `Authorization: Bearer` is sent in the
-  header only.
+- Transport: Retrofit 3 on OkHttp, Connect unary JSON
+  (`POST {endpoint}/home.v1.SchedulerService/{RPC}`) with typed
+  kotlinx.serialization DTOs (`WireDtos.kt`), protobuf JSON field names and
+  `int64` as decimal strings. `OutcomeCallAdapterFactory` maps responses and
+  Connect errors to `Outcome`, `TokenRefreshAuthenticator` refreshes the bearer
+  on 401. `Authorization: Bearer` is sent in the header only.
 - Direct LAN `http://` is a deliberate private-network trade-off and is allowed
   by `network_security_config.xml`; HTTPS is recommended and uses the platform
   trust store. Redirects are disabled. No custom trust manager, hostname
@@ -498,7 +508,7 @@ Example value (illustrative only; use your own private deployment values):
 {
   "schedulerBaseUrl": "https://alarms.example.test",
   "controlBaseUrl": "http://192.0.2.28:8099",
-  "intercomBaseUrl": "https://intercom.example.test",
+  "intercomBaseUrl": "https://intercom.home.example.test",
   "connectTimeoutMs": 5000,
   "readTimeoutMs": 20000
 }
@@ -638,9 +648,11 @@ with `--config=android`), so manual uploads can pass the same values.
 3. Run `npx firebase-tools@15.34.2 login` once on a local machine that
    distributes outside CI.
 4. For CI, create a GCP service account with the **Firebase App Distribution
-   Admin** role and a JSON key, then store it (with the keystore and
-   `google-services.json`) in OpenBao `secret/ci/android-distribute` — see
-   [OpenBao](../../home/kubernetes/openbao/README.md).
+   Admin** role and a JSON key, then store it (with the release keystore) in
+   OpenBao `secret/ci/android-distribute` — see
+   [OpenBao](../../home/kubernetes/openbao/README.md). `google-services.json`
+   is not part of that record: CI takes it from the repository variable
+   `GOOGLE_SERVICES_JSON_B64`.
 
 ## Architecture
 

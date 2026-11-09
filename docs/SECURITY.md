@@ -7,8 +7,9 @@
 - Стенд только для своих устройств в своей сети.
 - Не публиковать `secrets/`, ключи, архивы, HA auth, логи с токенами.
 - Не пробрасывать HA/MA/ADB/Zigbee в интернет.
-- Публичный доступ — собственный VPN (ocserv) и единственный webhook
-  currency-bot через Cloudflare Tunnel; больше наружу ничего не публикуется.
+- Публичный доступ — собственный VPN (ocserv), webhook currency-bot и
+  read-only `/repository/*` Nexus через Cloudflare Tunnel; больше наружу
+  ничего не публикуется.
 
 ## Сеть
 
@@ -17,7 +18,8 @@
   HAOS/K3s/loopback; `6443/10250/9100/9116/8472` — firewall.
 - currency-bot: `8081` webhook — только cloudflared, `8080` API/metrics —
   кластер/узел/LAN и Traefik; API `currency.home.example.com` — LAN/VPN,
-  Bearer. Публично только `tg.example.com/telegram/webhook` через туннель.
+  Bearer. Публично только `tg.example.com/telegram/webhook` и
+  `ci-nexus.<public-zone>/repository/*` через туннель.
 - Станция `.13`: `6053`, `8928`, `8099`, `5555`, `22` — только LAN.
   `8099` — bearer token; ADB root без пароля; SSH root по паролю.
 - `6638` Zigbee — без auth; сейчас закрыт/не используется, наружу не выставлять.
@@ -56,17 +58,20 @@
 - Remotely-managed tunnel `home-k3s` запущен как Deployment `cloudflared` в
   namespace `currency-bot`; он только исходящий: `7844/udp` (QUIC) +
   `443/tcp` fallback и DNS. Входящих портов на роутере не добавляет.
-- Публичный маршрут один: `tg.example.com` путь `^/telegram/webhook$` →
-  `currency-bot-webhook:8081`; остальные пути — 404. Туннель не даёт доступа
-  к HA, API, Grafana, OpenBao или K3s API.
+- Публичных маршрута два: `tg.example.com` путь `^/telegram/webhook$` →
+  `currency-bot-webhook:8081` и `ci-nexus.<public-zone>` путь `^/repository/`
+  → `nexus.nexus.svc:8081` (read-only `ci-reader`); остальные пути — 404.
+  Туннель не даёт доступа к HA, API, Grafana, OpenBao, K3s API или админке
+  Nexus.
 - Webhook проверяет `X-Telegram-Bot-Api-Secret-Token` (constant time) и
   allowlist `CHAT_ID`; без секрета — 401. После успешной аутентификации
   всегда 200, чтобы Telegram не ретраил и не повторял `/trigger`.
 - `TUNNEL_TOKEN` — только OpenBao `k8s/currency-bot/cloudflared-tunnel` → ESO Secret
   `cloudflared-tunnel`; Cloudflare API token и tunnel credentials — в
   `secrets/currency-bot/`. Токены не логировать.
-- `cloudflared` egress ограничен NetworkPolicy; webhook ingress — только от
-  подов cloudflared.
+- `cloudflared` egress ограничен NetworkPolicy: webhook — `currency-bot-webhook:8081`,
+  CI-кэш — `nexus.nexus.svc:8081`; webhook ingress — только от подов
+  cloudflared.
 
 ## Egress guard
 
@@ -132,7 +137,10 @@
   issuer `https://token.actions.githubusercontent.com`, audience = адрес
   OpenBao, claims `repository`, `environment=Home`, `ref=refs/heads/develop`,
   TTL 10/15 мин, политика `ci-deploy` — read только `secret/ci/test` и
-  `secret/ci/deploy-home`.
+  `secret/ci/deploy-home`. Отдельные роли: `deploy-station` (Environment
+  `Station`, политика `ci-station` — только `secret/ci/deploy-station`) и
+  `android-distribute` (Environment `Android` на PR, политика `ci-android` —
+  только `secret/ci/android-distribute`).
 - Поды: `kubernetes` auth через TokenReview (`system:auth-delegator` на SA
   `openbao`); политика `k8s-read` — read только `secret/k8s/*`. Роль
   `external-secrets` используется External Secrets Operator (namespace
