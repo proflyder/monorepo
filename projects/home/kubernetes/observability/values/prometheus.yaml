@@ -26,6 +26,8 @@ grafana:
     enabled: true
     storageClassName: local-retain
     size: 2Gi
+    annotations:
+      helm.sh/resource-policy: keep
   deploymentStrategy: {type: Recreate}
   resources:
     requests: {cpu: 100m, memory: 256Mi}

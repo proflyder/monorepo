@@ -136,9 +136,22 @@ class Cluster(unittest.TestCase):
         rendered = yaml.safe_dump(egress)
         self.assertIn("${NODE_LAN_IP}/32", rendered)
         self.assertIn("140.82.112.0/20", rendered)
-        # Helm chart hosts used by the HelmRepositories.
-        self.assertIn("104.18.0.0/16", rendered)
-        self.assertIn("142.250.0.0/15", rendered)
+        # Chart CDNs are not pinned by address; only the source-controller gets
+        # general HTTPS egress through a dedicated policy.
+        self.assertNotIn("104.18.", rendered)
+        self.assertNotIn("142.250.", rendered)
+
+        charts = policies["flux-system-chart-egress"]["spec"]
+        self.assertEqual(charts["podSelector"], {"matchLabels": {"app": "source-controller"}})
+        self.assertEqual(charts["policyTypes"], ["Egress"])
+        rule = charts["egress"][0]
+        block = rule["to"][0]["ipBlock"]
+        self.assertEqual(block["cidr"], "0.0.0.0/0")
+        self.assertEqual(block["except"], [
+            "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16",
+            "100.64.0.0/10", "169.254.0.0/16",
+        ])
+        self.assertEqual(rule["ports"], [{"protocol": "TCP", "port": 443}])
 
     def test_every_kustomization_uses_the_git_source_and_prunes(self):
         self.assertEqual(set(self.kustomizations), {
@@ -237,6 +250,10 @@ class HelmReleases(unittest.TestCase):
             release = self.release(name)
             self.assertEqual(release["metadata"]["namespace"], "flux-system", name)
             self.assertEqual(release["spec"]["targetNamespace"], namespace, name)
+            # helm-controller must adopt the live release, not create
+            # `<targetNamespace>-<name>` with release secrets in flux-system.
+            self.assertEqual(release["spec"]["releaseName"], name, name)
+            self.assertEqual(release["spec"]["storageNamespace"], namespace, name)
 
     def test_chart_versions_match_the_reviewed_pins(self):
         expected = {
@@ -274,6 +291,15 @@ class HelmReleases(unittest.TestCase):
         self.assertEqual(spec["sourceRef"], {
             "kind": "GitRepository", "name": "flux-system", "namespace": "flux-system",
         })
+
+    def test_failed_upgrades_are_not_remediated_automatically(self):
+        for name, release in self.releases.items():
+            spec = release["spec"]
+            self.assertEqual(spec["install"]["remediation"]["retries"], 0, name)
+            self.assertEqual(spec["upgrade"]["remediation"]["retries"], 0, name)
+            self.assertNotIn("remediateLastFailure", spec["install"]["remediation"], name)
+            self.assertNotIn("remediateLastFailure", spec["upgrade"]["remediation"], name)
+            self.assertNotIn("driftDetection", spec, name)
 
     def test_cert_manager_crds_are_upgraded(self):
         spec = self.release("cert-manager")["spec"]
@@ -343,6 +369,22 @@ class Images(unittest.TestCase):
         for section in ("image", "webhook", "certController"):
             block = values["image"] if section == "image" else values[section]["image"]
             self.assertEqual(block["tag"], tag, section)
+
+    def test_grafana_pvc_survives_uninstall(self):
+        values = yaml.safe_load(
+            (K8S / "observability/values/prometheus.yaml").read_text()
+        )
+        self.assertEqual(
+            values["grafana"]["persistence"]["annotations"],
+            {"helm.sh/resource-policy": "keep"},
+        )
+
+    def test_manual_vaultwarden_pvc_is_never_pruned(self):
+        docs = docs_from(K8S / "vaultwarden/manifests/vaultwarden.yaml")
+        pvc = next(d for d in docs if d["kind"] == "PersistentVolumeClaim")
+        self.assertEqual(pvc["metadata"]["annotations"],
+                         {"kustomize.toolkit.fluxcd.io/prune": "disabled",
+                          "helm.sh/resource-policy": "keep"})
 
     def test_vaultwarden_image_matches_versions(self):
         docs = docs_from(K8S / "vaultwarden/manifests/vaultwarden.yaml")

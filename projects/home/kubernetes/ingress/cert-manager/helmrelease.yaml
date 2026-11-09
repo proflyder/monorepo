@@ -12,6 +12,8 @@ spec:
   interval: 1h
   timeout: 10m
   targetNamespace: cert-manager
+  releaseName: cert-manager
+  storageNamespace: cert-manager
   chart:
     spec:
       chart: cert-manager
@@ -24,9 +26,13 @@ spec:
   install:
     createNamespace: true
     crds: Create
+    remediation:
+      retries: 0
   upgrade:
     crds: CreateReplace
     timeout: 10m
+    remediation:
+      retries: 0
   valuesFrom:
     - kind: ConfigMap
       name: cert-manager-values

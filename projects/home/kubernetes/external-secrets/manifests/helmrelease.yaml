@@ -13,6 +13,8 @@ spec:
   interval: 1h
   timeout: 10m
   targetNamespace: external-secrets
+  releaseName: external-secrets
+  storageNamespace: external-secrets
   chart:
     spec:
       chart: external-secrets
@@ -24,8 +26,12 @@ spec:
         namespace: flux-system
   install:
     createNamespace: true
+    remediation:
+      retries: 0
   upgrade:
     timeout: 10m
+    remediation:
+      retries: 0
   valuesFrom:
     - kind: ConfigMap
       name: external-secrets-values

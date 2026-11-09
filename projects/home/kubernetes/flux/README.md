@@ -91,8 +91,10 @@ Kustomization `path`:
 | `nexus-provision` | `projects/home/kubernetes/nexus/provision` |
 
 Helm charts keep the same release name and namespace as the live releases
-(`helm list -A`), so `helm-controller` adopts them as an upgrade instead of
-reinstalling. Values come from generated ConfigMaps built from the reviewed
+(`helm list -A`): each HelmRelease sets `releaseName` and `storageNamespace`
+explicitly, because helm-controller otherwise defaults to
+`<targetNamespace>-<name>` and would store release secrets in `flux-system`
+(creating duplicates instead of adopting the live releases). Values come from generated ConfigMaps built from the reviewed
 files (`values/*.yaml`); chart versions are pinned in the HelmRelease and
 checked against `projects/home/kubernetes/versions.sh` by the tests.
 
@@ -206,9 +208,23 @@ platform-external-secrets -> platform-cert-manager -> platform-traefik -> platfo
   upgrades cert-manager CRDs.
 - Kustomizations use `wait: true`, so a dependency is only considered Ready
   after its HelmRelease reports Ready.
-- PVCs (Prometheus/Grafana/Alertmanager, Vaultwarden) are marked
-  `kustomize.toolkit.fluxcd.io/prune: disabled` where they are Flux-owned, so
-  pruning cannot delete data.
+- PVCs are protected at each ownership layer: the Grafana PVC (managed by the
+  chart) carries `helm.sh/resource-policy: keep`; Vaultwarden's plain PVC has
+  both that annotation and `kustomize.toolkit.fluxcd.io/prune: disabled`;
+  Prometheus/Alertmanager/Loki PVCs are created by their StatefulSets with
+  `Retain` (Loki `whenDeleted: Retain`), so Helm never owns them.
+- Helm upgrades are not self-remediated: every HelmRelease sets
+  `install/upgrade.remediation.retries: 0`, and drift detection stays off. A
+  failed upgrade stops and is fixed by a human, never by an automatic
+  uninstall/rollback.
+
+### Network egress
+
+`flux-system-egress` keeps all controllers on DNS, the API, source artifacts
+and GitHub git ranges. `flux-system-chart-egress` adds HTTPS (`443`) to
+`0.0.0.0/0` **except** `10/8`, `172.16/12`, `192.168/16`, `100.64/10` and
+`169.254/16` for the `source-controller` only, because chart indexes and
+tarballs live on CDNs whose addresses change.
 
 ## Day-to-day
 

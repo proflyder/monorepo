@@ -8,6 +8,8 @@ spec:
   interval: 1h
   timeout: 10m
   targetNamespace: monitoring
+  releaseName: alloy
+  storageNamespace: monitoring
   chart:
     spec:
       chart: alloy
@@ -19,8 +21,12 @@ spec:
         namespace: flux-system
   install:
     createNamespace: true
+    remediation:
+      retries: 0
   upgrade:
     timeout: 10m
+    remediation:
+      retries: 0
   valuesFrom:
     - kind: ConfigMap
       name: alloy-values

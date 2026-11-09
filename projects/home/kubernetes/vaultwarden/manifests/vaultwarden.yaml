@@ -14,8 +14,9 @@ metadata:
   name: vaultwarden-data
   namespace: vaultwarden
   annotations:
-    # Never let Kustomize pruning delete the SQLite volume.
+    # Never let Kustomize pruning or a Helm uninstall delete the SQLite volume.
     kustomize.toolkit.fluxcd.io/prune: disabled
+    helm.sh/resource-policy: keep
   labels:
     app.kubernetes.io/name: vaultwarden
     app.kubernetes.io/part-of: ricardo-home

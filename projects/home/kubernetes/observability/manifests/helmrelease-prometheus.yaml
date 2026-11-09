@@ -13,6 +13,8 @@ spec:
   interval: 1h
   timeout: 15m
   targetNamespace: monitoring
+  releaseName: monitoring
+  storageNamespace: monitoring
   chart:
     spec:
       chart: kube-prometheus-stack
@@ -24,8 +26,12 @@ spec:
         namespace: flux-system
   install:
     createNamespace: true
+    remediation:
+      retries: 0
   upgrade:
     timeout: 15m
+    remediation:
+      retries: 0
   valuesFrom:
     - kind: ConfigMap
       name: prometheus-values

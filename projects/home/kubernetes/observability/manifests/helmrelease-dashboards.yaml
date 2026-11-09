@@ -10,6 +10,8 @@ spec:
   interval: 1h
   timeout: 10m
   targetNamespace: monitoring
+  releaseName: ha-observability
+  storageNamespace: monitoring
   chart:
     spec:
       chart: ./projects/home-assistant/observability/chart
@@ -20,5 +22,9 @@ spec:
         namespace: flux-system
   install:
     createNamespace: true
+    remediation:
+      retries: 0
   upgrade:
     timeout: 10m
+    remediation:
+      retries: 0
