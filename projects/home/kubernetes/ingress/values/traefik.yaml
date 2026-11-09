@@ -39,6 +39,16 @@ ports:
     port: 443
     hostPort: 443
     exposedPort: 443
+    # Intercom `Watch` is a long-lived server-streaming response. Traefik's
+    # defaults (read 60s, write 0s, idle 180s) are tuned for ordinary HTTP;
+    # keep reads bounded, never time out an active response, and keep idle
+    # keep-alive connections much longer. The per-route `flushInterval` in
+    # routes.yaml handles prompt frame delivery.
+    transport:
+      respondingTimeouts:
+        readTimeout: 60s
+        writeTimeout: 0s
+        idleTimeout: 1800s
   # The metrics entrypoint is always created by the chart. Move it off 9100,
   # which node-exporter already owns on the host.
   metrics:
