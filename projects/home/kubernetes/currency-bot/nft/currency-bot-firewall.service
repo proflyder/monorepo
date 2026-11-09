@@ -6,8 +6,8 @@ Wants=network-online.target
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-ExecStart=/usr/sbin/nft -f /etc/ricardo-currency-bot-nodeport.nft
-ExecReload=/usr/sbin/nft -f /etc/ricardo-currency-bot-nodeport.nft
+ExecStart=/usr/sbin/nft -f /etc/home-currency-bot-nodeport.nft
+ExecReload=/usr/sbin/nft -f /etc/home-currency-bot-nodeport.nft
 
 [Install]
 WantedBy=multi-user.target

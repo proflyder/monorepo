@@ -37,7 +37,7 @@ metadata:
     app.kubernetes.io/part-of: home
   annotations:
     # Traceability only: a Deployment metadata change never rolls pods.
-    ricardo.dev/build: 0123456789ab
+    proflyder.dev/build: 0123456789ab
 spec:
   replicas: 1
   strategy:
@@ -51,7 +51,7 @@ spec:
         app.kubernetes.io/name: wakegrant
       annotations:
         # Content-addressed: identical rendered content keeps the pod template.
-        ricardo.dev/rollout: 415b1097349b
+        proflyder.dev/rollout: 1470a5456a05
     spec:
       enableServiceLinks: false
       securityContext:

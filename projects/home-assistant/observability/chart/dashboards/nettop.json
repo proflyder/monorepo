@@ -1,5 +1,5 @@
 {
-  "uid": "ricardo-nettop",
+  "uid": "home-nettop",
   "title": "K3s VM / resources",
   "description": "Ubuntu K3s VM resource overview: CPU, memory and disk space in human units.",
   "schemaVersion": 39,
@@ -11,7 +11,7 @@
     "to": "now"
   },
   "tags": [
-    "ricardo",
+    "home",
     "git-managed"
   ],
   "panels": [

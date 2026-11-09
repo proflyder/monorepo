@@ -7,7 +7,7 @@ import signal
 import subprocess
 import time
 
-LOG = logging.getLogger('ricardo-uplink')
+LOG = logging.getLogger('home-uplink')
 
 
 def choose(mode, wired_carrier):
@@ -68,7 +68,7 @@ def main():
     wired = os.environ.get('WIRED', 'nic0')
     wifi = os.environ.get('WIFI', 'wlp4s0')
     default_mode = os.environ.get('MODE', 'auto')
-    override = Path('/run/ricardo-uplink.mode')
+    override = Path('/run/home-uplink.mode')
     stopping = False
 
     def stop(*_):

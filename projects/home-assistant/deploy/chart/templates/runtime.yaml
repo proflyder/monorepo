@@ -56,7 +56,7 @@ spec:
     metadata:
       labels:
         app.kubernetes.io/name: {{ $name }}
-        ricardo.io/collect-logs: {{ $workload.collectLogs | default "false" | quote }}
+        proflyder.dev/collect-logs: {{ $workload.collectLogs | default "false" | quote }}
     spec:
       nodeSelector:
         kubernetes.io/hostname: {{ $.Values.nodeName | quote }}

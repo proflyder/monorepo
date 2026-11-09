@@ -151,7 +151,7 @@ helm lint projects/home-assistant/observability/chart
 ```
 
 Health exporter проверяет только TCP connect и экспортирует
-`ricardo_endpoint_up{endpoint="..."}`; это не измерение end-to-end voice latency.
+`home_endpoint_up{endpoint="..."}`; это не измерение end-to-end voice latency.
 Полные live проверки — `e2e/kubernetes_runtime.py`, `e2e/wyoming_smoke.py`
 и существующие HA/Hermes E2E. Пути приведены относительно проекта home-assistant.
 [Эксплуатация](../../../docs/KUBERNETES-OPERATIONS.md).

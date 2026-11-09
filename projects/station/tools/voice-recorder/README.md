@@ -8,7 +8,7 @@
 Обычный режим не меняется до нажатия «Включить режим записи» и отметки
 согласия. На время сеанса Pulsar останавливается корректным SIGTERM, его
 существующие supervisor-процессы приостанавливаются SIGSTOP. Самостоятельный
-`ricardo-voicestream` читает тот же `pulsar-audio` / VQE_OMNI_WITH_GAIN:
+`voicestream` читает тот же `pulsar-audio` / VQE_OMNI_WITH_GAIN:
 16 кГц, mono, PCM S16LE. Детекция wake/локальных команд выключена; HA
 контроллера в процессе нет. Первый ~1 с VQE пропускается.
 
@@ -127,7 +127,7 @@ projects/station/tools/voice-recorder/start.command --recover-device
 
 1. Завершите сеанс и убедитесь, что Pulsar запущен.
 2. Выполните `start.command --remove-device`: удаляется исключительно
-   `/tmp/ricardo-voice-recorder/`; при активном lock удаление запрещено.
+   `/tmp/voice-recorder/`; при активном lock удаление запрещено.
    Ключи, конфигурация и сервисы станции не затрагиваются.
 3. Остановите локальный сервер Ctrl+C. Автозапуска на Mac нет.
 4. Исходники можно удалить целиком из `projects/station/tools/voice-recorder/`;

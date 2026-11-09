@@ -6,7 +6,7 @@ Before=k3s.service
 
 [Service]
 Type=oneshot
-ExecStart=/usr/local/sbin/ricardo-k3s-firewall
+ExecStart=/usr/local/sbin/home-k3s-firewall
 RemainAfterExit=yes
 
 [Install]

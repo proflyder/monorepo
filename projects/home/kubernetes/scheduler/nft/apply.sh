@@ -11,7 +11,7 @@
 # Rendering needs the Rust `home-deploy` binary on this node (an installed
 # /usr/local/bin/home-deploy, or set HOME_DEPLOY); see platform/deploy.
 #
-# The rendered ruleset replaces only `table inet ricardo_scheduler`; the
+# The rendered ruleset replaces only `table inet home_scheduler`; the
 # Kubernetes and management tables are untouched.
 set -euo pipefail
 
@@ -21,7 +21,7 @@ ROOT="$(cd "$DIR/../../../../.." && pwd)"
 source "$ROOT/platform/deploy/resolve.sh"
 PRIVATE_ENV=${PRIVATE_ENV:-"$ROOT/secrets/home/scheduler.env"}
 NFT_BIN=${NFT_BIN:-/usr/sbin/nft}
-TARGET=/etc/ricardo-scheduler-nodeport.nft
+TARGET=/etc/home-scheduler-nodeport.nft
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -41,10 +41,10 @@ home_deploy render --unit scheduler --env "$PRIVATE_ENV" --out "$tmp" "$DIR/sche
 
 "$NFT_BIN" -c -f "$tmp/scheduler-nodeport.nft"
 install -m 0644 "$tmp/scheduler-nodeport.nft" "$TARGET"
-if "$NFT_BIN" list table inet ricardo_scheduler >/dev/null 2>&1; then
-  { echo 'delete table inet ricardo_scheduler'; cat "$TARGET"; } | "$NFT_BIN" -f -
+if "$NFT_BIN" list table inet home_scheduler >/dev/null 2>&1; then
+  { echo 'delete table inet home_scheduler'; cat "$TARGET"; } | "$NFT_BIN" -f -
 else
   "$NFT_BIN" -f "$TARGET"
 fi
-"$NFT_BIN" list table inet ricardo_scheduler >/dev/null
+"$NFT_BIN" list table inet home_scheduler >/dev/null
 echo "scheduler NodePort filter installed from $TARGET"

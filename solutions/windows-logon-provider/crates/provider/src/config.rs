@@ -3,11 +3,11 @@
 //! Value names, types, limits and error phrases are the install contract in
 //! `README.md`. `FailCount` arithmetic is pure Rust and host-tested.
 
-/// `HKLM\SOFTWARE\Ricardo\KompLogon` (64-bit view).
-pub const REGISTRY_KEY: &str = r"SOFTWARE\Ricardo\KompLogon";
+/// `HKLM\SOFTWARE\Home\KompLogon` (64-bit view).
+pub const REGISTRY_KEY: &str = r"SOFTWARE\Home\KompLogon";
 /// Fixed DPAPI entropy; `set-secret.ps1` uses the same bytes.
-pub const SECRET_ENTROPY: &[u8] = b"ricardo-komp-logon-v1";
-pub const SECRET_PATH: &str = r"C:\ProgramData\Ricardo\KompLogon\secret.bin";
+pub const SECRET_ENTROPY: &[u8] = b"home-komp-logon-v1";
+pub const SECRET_PATH: &str = r"C:\ProgramData\Home\KompLogon\secret.bin";
 pub const MAX_SECRET_FILE_BYTES: u64 = 64 * 1024;
 /// Third failed logon disables the provider.
 pub const FAILURE_DISABLE_THRESHOLD: u32 = 3;

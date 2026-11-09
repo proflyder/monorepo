@@ -10,13 +10,13 @@
             "image": "ghcr.io/proflyder/ha-bridge@sha256:old",
             "env": [{"name": "BRIDGE_EXECUTE", "value": "true"}],
             "volumeMounts": [
-              {"name": "bin", "mountPath": "/opt/ricardo/bin", "readOnly": true},
+              {"name": "bin", "mountPath": "/opt/home/bin", "readOnly": true},
               {"name": "data", "mountPath": "/data"}
             ]
           }
         ],
         "volumes": [
-          {"name": "bin", "hostPath": {"path": "/opt/ricardo/current/bin", "type": "Directory"}},
+          {"name": "bin", "hostPath": {"path": "/opt/home/current/bin", "type": "Directory"}},
           {"name": "data", "persistentVolumeClaim": {"claimName": "ha-bridge-data"}}
         ]
       }

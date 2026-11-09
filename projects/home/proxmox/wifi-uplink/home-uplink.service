@@ -5,8 +5,8 @@ After=networking.service
 
 [Service]
 Type=simple
-EnvironmentFile=-/etc/default/ricardo-uplink
-ExecStart=/usr/local/sbin/ricardo-uplink
+EnvironmentFile=-/etc/default/home-uplink
+ExecStart=/usr/local/sbin/home-uplink
 Restart=always
 RestartSec=3
 

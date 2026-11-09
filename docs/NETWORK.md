@@ -70,7 +70,7 @@
 
 HAOS и K3s используют статические адреса внутри guest. Сеть плоская;
 отдельных VLAN для гостей/IoT нет. Proxmox host использует Wi-Fi 4-address/WDS uplink с сохранением L2.
-Сервис `ricardo-uplink` выбирает Ethernet при наличии carrier, иначе Wi-Fi;
+Сервис `home-uplink` выбирает Ethernet при наличии carrier, иначе Wi-Fi;
 оба physical uplink одновременно к мосту не подключаются. Адреса VM не
 меняются, NAT нет. Адреса Proxmox, VM и станции дополнительно зарезервированы на роутере. Профиль Wi-Fi хранится только приватно.
 
@@ -130,7 +130,7 @@ K3s management/metrics-порты закрыты firewall от обычных LA
 Traefik и Prometheus. Для голосового intent «курс валют» тот же API Service
 дополнительно публикуется как NodePort (пример `30100`, реальное значение —
 `CURRENCY_BOT_NODE_PORT` в `secrets/home/currency-bot.env`) только в LAN:
-host-nftables фильтр `table inet ricardo_currency_bot` разрешает источник
+host-nftables фильтр `table inet home_currency_bot` разрешает источник
 `LAN_CIDR` и pod CIDR и дропает IPv6/остальные источники до kube-proxy
 DNAT. Запросы всё равно требуют Bearer. Наружу API выходит только как
 `https://currency.home.example.com/api/*` (LAN/VPN, Bearer); публичный

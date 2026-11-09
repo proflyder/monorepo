@@ -15,7 +15,7 @@ metadata:
     app.kubernetes.io/part-of: home
   annotations:
     # Traceability only: a Deployment metadata change never rolls pods.
-    ricardo.dev/build: ${BUILD_ID}
+    proflyder.dev/build: ${BUILD_ID}
 spec:
   replicas: 1
   strategy:
@@ -29,7 +29,7 @@ spec:
         app.kubernetes.io/name: ha-control
       annotations:
         # Content-addressed: identical rendered content keeps the pod template.
-        ricardo.dev/rollout: ${ROLLOUT_ID}
+        proflyder.dev/rollout: ${ROLLOUT_ID}
     spec:
       enableServiceLinks: false
       securityContext:

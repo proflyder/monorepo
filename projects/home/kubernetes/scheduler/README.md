@@ -209,8 +209,8 @@ Endpoints (private values in `secrets/home/scheduler.env`):
 - `nft/scheduler-nodeport.nft` drops the scheduler, control and intercom
   NodePorts in `prerouting` before kube-proxy DNAT unless the source is the
   home LAN or the pod CIDR; IPv6 NodePort is dropped. The private env file
-  needs `SCHEDULER_NODE_PORT`, `CONTROL_NODE_PORT` and `INTERCOM_NODE_PORT`. Persistence: `ricardo-scheduler-firewall.service` on the
-  node boots from `/etc/ricardo-scheduler-nodeport.nft`.
+  needs `SCHEDULER_NODE_PORT`, `CONTROL_NODE_PORT` and `INTERCOM_NODE_PORT`. Persistence: `home-scheduler-firewall.service` on the
+  node boots from `/etc/home-scheduler-nodeport.nft`.
 - Every RPC requires `Authorization: Bearer <token>`; unauthenticated requests
   get HTTP 401. HA uses the LAN endpoint; Android can use either the LAN
   endpoint or the HTTPS name over the VPN. Both terminate at the same Service.
@@ -302,7 +302,7 @@ Least-privilege access:
 
 - VPN certificate user `ci`, group `ci`, its own pool and a route only to the
   K3s node; the VPN firewall allows only `tcp/6443` there (no SSH).
-- The K3s node firewall (`ricardo_k3s`) accepts `6443` only from the VPN
+- The K3s node firewall (`home_k3s`) accepts `6443` only from the VPN
   container address, which masquerades the isolated `ci` pool.
 - Kubernetes ServiceAccount `ci-deploy` in `home-assistant` (Role in
   `ci/rbac.yaml`): deployments/replicasets/pods/exec/services/configmaps/

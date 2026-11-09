@@ -15,7 +15,7 @@ HA-совместимый endpoint HAOS доступен напрямую `.28:8
 HAProxy удалён.
 
 Wi-Fi RTL8821CE работает на host как 4-address/WDS uplink `vmbr0`,
-VM IP и L2/multicast сохраняются. `ricardo-uplink` выбирает один uplink:
+VM IP и L2/multicast сохраняются. `home-uplink` выбирает один uplink:
 Ethernet при carrier, иначе Wi-Fi. NAT и PCI passthrough не требуются.
 Исходники/установка/откат: [wifi-uplink](wifi-uplink/).
 `bootstrap-wifi-mapping.sh` и `backup-before-install.py` — помощники разовой
@@ -60,7 +60,7 @@ snippet загружаются bootstrap-этапом; Terraform использ�
 `cloud-init.yaml` — публичная часть, приватная добавляет SSH public key.
 
 Авторитетный Terraform directory/state находится на PVE в root-only
-`/var/lib/ricardo-terraform/`; после apply state сохраняется в OpenBao
+`/var/lib/home-terraform/`; после apply state сохраняется в OpenBao
 `secret/infra/proxmox/terraform#pve_terraform_tfstate`. Terraform запускается на Linux
 с проверкой CA (Go TLS на macOS игнорирует `SSL_CERT_FILE`); системное trust
 store Mac не меняется.

@@ -514,7 +514,7 @@ function nativeHandlers({ ref, tree, digest, existing = {}, manifests = {}, cand
 }
 
 const LAYER_DIGESTS = {
-  "RicardoKompLogon.dll": `sha256:${"d".repeat(64)}`,
+  "HomeKompLogon.dll": `sha256:${"d".repeat(64)}`,
   "cp-selftest.exe": `sha256:${"e".repeat(64)}`,
   SHA256SUMS: `sha256:${"a".repeat(64)}`,
 };
@@ -845,7 +845,7 @@ test("manifestContent compares ordered layer identity and artifact type", () => 
   const base = manifestContent(artifactManifest());
   assert.equal(base.artifactType, "application/vnd.example.windows-logon-provider.v1");
   assert.deepEqual(base.layers.map((layer) => layer.title), [
-    "RicardoKompLogon.dll",
+    "HomeKompLogon.dll",
     "cp-selftest.exe",
     "SHA256SUMS",
   ]);
@@ -859,7 +859,7 @@ test("manifestContent compares ordered layer identity and artifact type", () => 
     artifactManifest({
       layerDigests: {
         "cp-selftest.exe": LAYER_DIGESTS["cp-selftest.exe"],
-        "RicardoKompLogon.dll": LAYER_DIGESTS["RicardoKompLogon.dll"],
+        "HomeKompLogon.dll": LAYER_DIGESTS["HomeKompLogon.dll"],
         SHA256SUMS: LAYER_DIGESTS.SHA256SUMS,
       },
     }),

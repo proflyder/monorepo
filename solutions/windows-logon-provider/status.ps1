@@ -1,7 +1,7 @@
 ﻿#Requires -RunAsAdministrator
 <#
 .SYNOPSIS
-    Показывает состояние провайдера входа Ricardo (без секретов).
+    Показывает состояние провайдера входа Home (без секретов).
 
 .DESCRIPTION
     Печатает конфигурацию, состояние регистрации, DLL, FailCount/Disabled и
@@ -19,10 +19,10 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Continue'
 
 $ProviderClsid = '{9459CCEA-4CCC-4435-89BF-E0E132E0C27F}'
-$DllName = 'RicardoKompLogon.dll'
-$ConfigKey = 'HKLM:\SOFTWARE\Ricardo\KompLogon'
-$InstallDir = 'C:\Program Files\Ricardo\KompLogon'
-$DataDir = 'C:\ProgramData\Ricardo\KompLogon'
+$DllName = 'HomeKompLogon.dll'
+$ConfigKey = 'HKLM:\SOFTWARE\Home\KompLogon'
+$InstallDir = 'C:\Program Files\Home\KompLogon'
+$DataDir = 'C:\ProgramData\Home\KompLogon'
 $LogPath = Join-Path $DataDir 'logon.log'
 $ClassesKey = "HKLM:\SOFTWARE\Classes\CLSID\$ProviderClsid"
 $InprocKey = "$ClassesKey\InprocServer32"

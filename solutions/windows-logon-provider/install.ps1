@@ -1,7 +1,7 @@
 ﻿#Requires -RunAsAdministrator
 <#
 .SYNOPSIS
-    Устанавливает провайдер входа Ricardo для ПК «комп».
+    Устанавливает провайдер входа Home для ПК «комп».
 
 .DESCRIPTION
     Копирует DLL, настраивает ACL, пишет конфигурацию в реестр и регистрирует
@@ -35,11 +35,11 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $ProviderClsid = '{9459CCEA-4CCC-4435-89BF-E0E132E0C27F}'
-$ProviderName = 'Ricardo komp logon provider'
-$DllName = 'RicardoKompLogon.dll'
-$ConfigKey = 'HKLM:\SOFTWARE\Ricardo\KompLogon'
-$InstallDir = 'C:\Program Files\Ricardo\KompLogon'
-$DataDir = 'C:\ProgramData\Ricardo\KompLogon'
+$ProviderName = 'Home komp logon provider'
+$DllName = 'HomeKompLogon.dll'
+$ConfigKey = 'HKLM:\SOFTWARE\Home\KompLogon'
+$InstallDir = 'C:\Program Files\Home\KompLogon'
+$DataDir = 'C:\ProgramData\Home\KompLogon'
 $ClassesKey = "HKLM:\SOFTWARE\Classes\CLSID\$ProviderClsid"
 $InprocKey = "$ClassesKey\InprocServer32"
 $CredentialProvidersKey = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Authentication\Credential Providers'
@@ -120,7 +120,7 @@ Set-ItemProperty -Path $InprocKey -Name 'ThreadingModel' -Value 'Apartment' -Typ
 New-Item -Path $ProviderKey -Force | Out-Null
 Set-ItemProperty -Path $ProviderKey -Name '(default)' -Value $ProviderName -Type String
 
-Write-Output 'Ricardo komp logon provider installed.'
+Write-Output 'Home komp logon provider installed.'
 Write-Output "  CLSID:      $ProviderClsid"
 Write-Output "  DLL:        $installedDll"
 Write-Output "  Config:     $ConfigKey"

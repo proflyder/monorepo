@@ -65,7 +65,7 @@
    SchedulerService; HA остаётся исполнителем звука.
 4. Свободная речь → `voice-proxy` (Rust, `solutions/voice-proxy`): сначала
    точный cancel guard, затем
-   профиль из `input_select.ricardo_voice_profile` и
+   профиль из `input_select.home_voice_profile` и
    `mcp-gateway /v1/voice/utterance`:
 
    ```text
@@ -105,7 +105,7 @@
 
 ### Сеть и HTTPS
 
-- PVE `ricardo-uplink`: ровно один physical uplink — Ethernet при carrier,
+- PVE `home-uplink`: ровно один physical uplink — Ethernet при carrier,
   иначе Wi-Fi 4-address/WDS. Оба одновременно в мост не подключать.
 - VM сохраняют `.27/.28`, L2, ARP/mDNS/IPv6; NAT и PCI passthrough нет.
 - Traefik в `hostNetwork` (`80/443`) публикует `ha`, `grafana`, `alarms`,

@@ -16,7 +16,7 @@ metadata:
     app.kubernetes.io/part-of: home
   annotations:
     # Traceability only: a Deployment metadata change never rolls pods.
-    ricardo.dev/build: 0123456789ab
+    proflyder.dev/build: 0123456789ab
 spec:
   replicas: 1
   strategy:
@@ -30,7 +30,7 @@ spec:
         app.kubernetes.io/name: cloudflared
       annotations:
         # Content-addressed: identical rendered content keeps the pod template.
-        ricardo.dev/rollout: 96d0770138dc
+        proflyder.dev/rollout: 8b563b62b17b
     spec:
       enableServiceLinks: false
       securityContext:

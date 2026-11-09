@@ -180,24 +180,25 @@ mod tests {
     #[tokio::test]
     async fn active_alerts_carry_filters_and_summary() {
         let seen: Seen = Arc::default();
-        let app = Router::new()
-            .route(
-                "/api/v2/alerts",
-                get(
-                    |State(seen): State<Seen>,
-                     Query(params): Query<HashMap<String, String>>| async move {
-                        seen.lock().expect("lock").push(params);
-                        axum::Json(serde_json::json!([{
-                            "fingerprint": "a1b2c3d4e5f6",
-                            "labels": {"alertname": "RicardoEndpointDown", "severity": "warning"},
-                            "annotations": {"summary": "Гермес недоступен"},
-                            "startsAt": "2026-11-01T09:00:00Z",
-                            "status": {"state": "active"}
-                        }]))
-                    },
-                ),
-            )
-            .with_state(seen.clone());
+        let app =
+            Router::new()
+                .route(
+                    "/api/v2/alerts",
+                    get(
+                        |State(seen): State<Seen>,
+                         Query(params): Query<HashMap<String, String>>| async move {
+                            seen.lock().expect("lock").push(params);
+                            axum::Json(serde_json::json!([{
+                                "fingerprint": "a1b2c3d4e5f6",
+                                "labels": {"alertname": "HomeEndpointDown", "severity": "warning"},
+                                "annotations": {"summary": "Гермес недоступен"},
+                                "startsAt": "2026-11-01T09:00:00Z",
+                                "status": {"state": "active"}
+                            }]))
+                        },
+                    ),
+                )
+                .with_state(seen.clone());
         let base = serve(app).await;
         let alerts = Client::new(format!("{base}/"), Duration::from_secs(5))
             .expect("client")

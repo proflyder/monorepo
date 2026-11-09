@@ -1,5 +1,5 @@
 {
-  "uid": "ricardo-logs",
+  "uid": "home-logs",
   "title": "Infrastructure / safe logs",
   "schemaVersion": 39,
   "version": 1,
@@ -9,7 +9,7 @@
     "to": "now"
   },
   "tags": [
-    "ricardo",
+    "home",
     "git-managed"
   ],
   "panels": [

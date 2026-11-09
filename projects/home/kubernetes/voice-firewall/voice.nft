@@ -1,4 +1,4 @@
-table inet ricardo_voice {
+table inet home_voice {
   chain input {
     type filter hook input priority -10; policy accept;
     # Replace with the private HAOS and K3s VM addresses.

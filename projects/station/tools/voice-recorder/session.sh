@@ -1,15 +1,15 @@
 #!/bin/sh
 # Ephemeral /tmp-only session. Does not change enabled, state.conf, service scripts or binary.
 set -eu
-BASE=/tmp/ricardo-voice-recorder
+BASE=/tmp/voice-recorder
 ID=$1
 case "$ID" in ''|*[!a-f0-9]*) exit 2;; esac
 [ ${#ID} -eq 32 ] || exit 2
 S=$BASE/$ID
-mkdir /tmp/ricardo-voice-recorder.lock 2>/dev/null || exit 3
+mkdir /tmp/voice-recorder.lock 2>/dev/null || exit 3
 umask 077
 mkdir "$S"
-echo "$ID" > /tmp/ricardo-voice-recorder.lock/owner
+echo "$ID" > /tmp/voice-recorder.lock/owner
 SUP=$(pidof supervise.sh || true)
 DAEMON=$(pidof pulsar || true)
 WATCH=
@@ -31,7 +31,7 @@ resume() {
 stop_helper() {
   if [ -s "$S/helper.pid" ]; then
     p=$(cat "$S/helper.pid")
-    if [ "$(readlink /proc/$p/exe 2>/dev/null || true)" = "$BASE/ricardo-voicestream" ]; then
+    if [ "$(readlink /proc/$p/exe 2>/dev/null || true)" = "$BASE/voicestream" ]; then
       kill -KILL "$p" 2>/dev/null || true
     fi
   fi
@@ -43,9 +43,9 @@ cleanup() {
   [ -z "$WATCH" ] || kill "$WATCH" 2>/dev/null || true
   echo restored > "$S/state"
   # Only remove our own lock; preserve all diagnostics until explicit cleanup.
-  if [ "$(cat /tmp/ricardo-voice-recorder.lock/owner 2>/dev/null || true)" = "$ID" ]; then
-    rm /tmp/ricardo-voice-recorder.lock/owner
-    rmdir /tmp/ricardo-voice-recorder.lock
+  if [ "$(cat /tmp/voice-recorder.lock/owner 2>/dev/null || true)" = "$ID" ]; then
+    rm /tmp/voice-recorder.lock/owner
+    rmdir /tmp/voice-recorder.lock
   fi
 }
 trap cleanup EXIT
@@ -82,7 +82,7 @@ while daemon_alive && [ "$i" -lt 15 ]; do sleep 1; i=$((i + 1)); done
 if daemon_alive; then exit 6; fi
 [ ! -f "$S/stop" ] || exit 7
 echo capturing > "$S/state"
-"$BASE/ricardo-voicestream" 600 2>"$S/helper.log" &
+"$BASE/voicestream" 600 2>"$S/helper.log" &
 HELPER=$!
 echo "$HELPER" > "$S/helper.pid"
 wait "$HELPER" || true

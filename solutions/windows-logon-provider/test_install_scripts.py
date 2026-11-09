@@ -18,14 +18,14 @@ HERE = Path(__file__).resolve().parent
 PROVIDER = HERE / "crates" / "provider" / "src"
 
 CLSID_FIXED = "{9459CCEA-4CCC-4435-89BF-E0E132E0C27F}"
-DLL_NAME = "RicardoKompLogon.dll"
-CONFIG_KEY = r"HKLM:\SOFTWARE\Ricardo\KompLogon"
+DLL_NAME = "HomeKompLogon.dll"
+CONFIG_KEY = r"HKLM:\SOFTWARE\Home\KompLogon"
 PROVIDERS_KEY = (
     r"HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Authentication\Credential Providers"
 )
 CLASSES_KEY = r"HKLM:\SOFTWARE\Classes\CLSID"
-SECRET_PATH = r"C:\ProgramData\Ricardo\KompLogon\secret.bin"
-DATA_DIR = r"C:\ProgramData\Ricardo\KompLogon"
+SECRET_PATH = r"C:\ProgramData\Home\KompLogon\secret.bin"
+DATA_DIR = r"C:\ProgramData\Home\KompLogon"
 
 
 def read_ps1(name: str) -> tuple[bytes, str]:
@@ -188,16 +188,16 @@ class SecretScriptTests(unittest.TestCase):
 
     def test_uses_machine_scope_dpapi_with_the_rust_entropy(self):
         config_rs = (PROVIDER / "config.rs").read_text(encoding="utf-8")
-        self.assertIn('SECRET_ENTROPY: &[u8] = b"ricardo-komp-logon-v1"', config_rs)
-        self.assertIn("$Entropy = 'ricardo-komp-logon-v1'", self.text)
+        self.assertIn('SECRET_ENTROPY: &[u8] = b"home-komp-logon-v1"', config_rs)
+        self.assertIn("$Entropy = 'home-komp-logon-v1'", self.text)
         self.assertIn("DataProtectionScope]::LocalMachine", self.text)
         self.assertIn("ProtectedData]::Protect", self.text)
 
     def test_writes_the_documented_secret_path(self):
         self.assertIn("$SecretPath = Join-Path $DataDir 'secret.bin'", self.text)
-        self.assertIn(r"$DataDir = 'C:\ProgramData\Ricardo\KompLogon'", self.text)
+        self.assertIn(r"$DataDir = 'C:\ProgramData\Home\KompLogon'", self.text)
         config_rs = (PROVIDER / "config.rs").read_text(encoding="utf-8")
-        self.assertIn(r'SECRET_PATH: &str = r"C:\ProgramData\Ricardo\KompLogon\secret.bin"', config_rs)
+        self.assertIn(r'SECRET_PATH: &str = r"C:\ProgramData\Home\KompLogon\secret.bin"', config_rs)
 
     def test_secret_never_printed(self):
         self.assertNotIn("Write-Host", self.text)
@@ -291,7 +291,7 @@ class ProviderSourceTests(unittest.TestCase):
 
     def test_log_and_data_paths_match_the_documentation(self):
         log_rs = (PROVIDER / "log.rs").read_text(encoding="utf-8")
-        self.assertIn(r'LOG_PATH: &str = r"C:\ProgramData\Ricardo\KompLogon\logon.log"', log_rs)
+        self.assertIn(r'LOG_PATH: &str = r"C:\ProgramData\Home\KompLogon\logon.log"', log_rs)
         self.assertIn("MAX_LOG_BYTES: u64 = 256 * 1024", log_rs)
         self.assertIn(DATA_DIR, read_ps1("status.ps1")[1])
         self.assertIn("logon.log", read_ps1("status.ps1")[1])

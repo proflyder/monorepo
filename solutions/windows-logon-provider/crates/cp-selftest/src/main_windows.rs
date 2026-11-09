@@ -1,5 +1,5 @@
 //! Windows half of `cp-selftest.exe`: tries the registered CLSID, otherwise
-//! loads `RicardoKompLogon.dll` next to the executable. Output is `PASS`/`FAIL`;
+//! loads `HomeKompLogon.dll` next to the executable. Output is `PASS`/`FAIL`;
 //! exit codes are 0/1.
 
 use crate::bindings::Windows::Win32::Foundation::{E_FAIL, E_NOTIMPL, S_OK};
@@ -21,7 +21,7 @@ const PROVIDER_CLSID: GUID = GUID {
     data4: [0x89, 0xbf, 0xe0, 0xe1, 0x32, 0xe0, 0xc2, 0x7f],
 };
 
-const DLL_NAME: &str = "RicardoKompLogon.dll";
+const DLL_NAME: &str = "HomeKompLogon.dll";
 
 type GetClassObjectProc =
     unsafe extern "system" fn(*const GUID, *const GUID, *mut *mut core::ffi::c_void) -> HRESULT;
@@ -42,7 +42,7 @@ fn print(name: &str, hr: HRESULT) {
     );
 }
 
-/// `<directory of this executable>\RicardoKompLogon.dll`, NUL terminated by
+/// `<directory of this executable>\HomeKompLogon.dll`, NUL terminated by
 /// `HSTRING`.
 fn local_dll_path() -> HSTRING {
     let exe = std::env::current_exe().expect("current executable path");
@@ -78,7 +78,7 @@ fn provider_from_dll_next_to_executable() -> WinResult<ICredentialProvider> {
 }
 
 pub fn run() -> i32 {
-    println!("Ricardo komp logon provider self-test");
+    println!("Home komp logon provider self-test");
 
     // SAFETY: STA is the LogonUI threading model this tool mirrors.
     let com = unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED) };

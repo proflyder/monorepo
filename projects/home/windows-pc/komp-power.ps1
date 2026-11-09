@@ -5,7 +5,7 @@
     Home Assistant connects over SSH with an authorized_keys line that forces
     exactly this script:
 
-        restrict,command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\ProgramData\ricardo\komp-power.ps1" ssh-ed25519 AAAA... ha-komp
+        restrict,command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\ProgramData\home\komp-power.ps1" ssh-ed25519 AAAA... ha-komp
 
     OpenSSH puts the client's requested command into SSH_ORIGINAL_COMMAND.
     Only two exact, case-sensitive words are accepted; everything else is

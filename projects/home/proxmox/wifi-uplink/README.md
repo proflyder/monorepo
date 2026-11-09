@@ -13,7 +13,7 @@ Proxmox не доказывает передачу трафика VM.
 
 ## Политика uplink
 
-`ricardo-uplink.service` управляет только двумя physical bridge ports:
+`home-uplink.service` управляет только двумя physical bridge ports:
 
 - `auto`: Ethernet с carrier приоритетен; без carrier используется Wi-Fi;
 - прежде чем подключить один uplink, другой отсоединяется;
@@ -52,8 +52,8 @@ rollback на Ethernet. Installer не создаёт профиль и не п�
 ## Диагностика и приёмка
 
 ```bash
-systemctl status ricardo-uplink wpa_supplicant@wlp4s0
-journalctl -u ricardo-uplink -n 20
+systemctl status home-uplink wpa_supplicant@wlp4s0
+journalctl -u home-uplink -n 20
 cat /sys/class/net/nic0/carrier
 readlink /sys/class/net/wlp4s0/master
 wpa_cli -i wlp4s0 status | grep '^wpa_state='
@@ -61,9 +61,9 @@ wpa_cli -i wlp4s0 status | grep '^wpa_state='
 
 При Wi-Fi: carrier Ethernet = 0, Wi-Fi master = vmbr0,
 wpa_state = COMPLETED. Не публиковать полный wireless status: он содержит
-SSID/MAC. Временный режим задаётся root-only `/run/ricardo-uplink.mode`
+SSID/MAC. Временный режим задаётся root-only `/run/home-uplink.mode`
 со значением `wifi`, `ethernet` или `auto`; после удаления файла и reboot
-используется `MODE` из `/etc/default/ricardo-uplink` (обычно auto).
+используется `MODE` из `/etc/default/home-uplink` (обычно auto).
 
 Нужны тесты: доступ по SSH/PVE, HA/MA/Grafana, K3s acceptance через tunnel,
 HTTPS-имена, связь HAOS→STT/TTS/Hermes, IPv6 multicast и прямое чтение
@@ -74,8 +74,8 @@ Matter-устройства. Затем физически вынуть Ethernet
 
 При проблемах Wi-Fi подключить Ethernet: auto-policy выберет его по carrier,
 VM и host сохранят прежние адреса. При ручном force-wifi сначала удалить
-`/run/ricardo-uplink.mode` с консоли. Для полного отката с консоли остановить
-и disable `ricardo-uplink`, остановить Wi-Fi supplicant, отсоединить Wi-Fi,
+`/run/home-uplink.mode` с консоли. Для полного отката с консоли остановить
+и disable `home-uplink`, остановить Wi-Fi supplicant, отсоединить Wi-Fi,
 подключить Ethernet к vmbr0 и вернуть сохранённый `/etc/network/interfaces`.
 Сам daemon при остановке не разбирает мост.
 

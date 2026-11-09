@@ -41,24 +41,24 @@ echo "== windows cross-build =="
   //solutions/windows-logon-provider/crates/cp-selftest:cp-selftest
 
 mkdir -p out
-cp "$ROOT/bazel-bin/solutions/windows-logon-provider/crates/provider/RicardoKompLogon.dll" out/
+cp "$ROOT/bazel-bin/solutions/windows-logon-provider/crates/provider/HomeKompLogon.dll" out/
 cp "$ROOT/bazel-bin/solutions/windows-logon-provider/crates/cp-selftest/cp-selftest.exe" out/
 
 echo "== reproducible PE =="
-python3 pe_artifacts.py normalize out/RicardoKompLogon.dll out/cp-selftest.exe
+python3 pe_artifacts.py normalize out/HomeKompLogon.dll out/cp-selftest.exe
 
 echo "== verification =="
-python3 pe_artifacts.py verify out/RicardoKompLogon.dll
+python3 pe_artifacts.py verify out/HomeKompLogon.dll
 
 # `_native.yml` regenerates this from the uploaded files; producing it locally
 # too keeps `out/` directly publishable with publish-oci.sh.
 echo "== checksums =="
 if command -v sha256sum >/dev/null 2>&1; then
-  (cd out && sha256sum RicardoKompLogon.dll cp-selftest.exe > SHA256SUMS)
+  (cd out && sha256sum HomeKompLogon.dll cp-selftest.exe > SHA256SUMS)
 else
-  (cd out && shasum -a 256 RicardoKompLogon.dll cp-selftest.exe > SHA256SUMS)
+  (cd out && shasum -a 256 HomeKompLogon.dll cp-selftest.exe > SHA256SUMS)
 fi
 cat out/SHA256SUMS
 
 printf '\n'
-ls -l out/RicardoKompLogon.dll out/cp-selftest.exe out/SHA256SUMS
+ls -l out/HomeKompLogon.dll out/cp-selftest.exe out/SHA256SUMS

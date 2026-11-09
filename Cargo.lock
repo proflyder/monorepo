@@ -3427,16 +3427,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ricardo-voicestream"
-version = "0.1.0"
-dependencies = [
- "pulsar-audio",
- "pulsar-core",
- "pulsar-model",
- "tokio",
-]
-
-[[package]]
 name = "ring"
 version = "0.17.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4926,6 +4916,16 @@ dependencies = [
  "tracing",
  "unicode-normalization",
  "voice-contract",
+]
+
+[[package]]
+name = "voicestream"
+version = "0.1.0"
+dependencies = [
+ "pulsar-audio",
+ "pulsar-core",
+ "pulsar-model",
+ "tokio",
 ]
 
 [[package]]

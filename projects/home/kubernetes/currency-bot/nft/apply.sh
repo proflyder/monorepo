@@ -11,7 +11,7 @@
 # Rendering needs the Rust `home-deploy` binary on this node (an installed
 # /usr/local/bin/home-deploy, or set HOME_DEPLOY); see platform/deploy.
 #
-# The rendered ruleset replaces only `table inet ricardo_currency_bot`; the
+# The rendered ruleset replaces only `table inet home_currency_bot`; the
 # Kubernetes, scheduler and management tables are untouched.
 set -euo pipefail
 
@@ -21,7 +21,7 @@ ROOT="$(cd "$DIR/../../../../.." && pwd)"
 source "$ROOT/platform/deploy/resolve.sh"
 PRIVATE_ENV=${PRIVATE_ENV:-"$ROOT/secrets/home/currency-bot.env"}
 NFT_BIN=${NFT_BIN:-/usr/sbin/nft}
-TARGET=/etc/ricardo-currency-bot-nodeport.nft
+TARGET=/etc/home-currency-bot-nodeport.nft
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -41,14 +41,14 @@ home_deploy render --unit scheduler --env "$PRIVATE_ENV" --out "$tmp" "$DIR/curr
 
 "$NFT_BIN" -c -f "$tmp/currency-bot-nodeport.nft"
 install -m 0644 "$tmp/currency-bot-nodeport.nft" "$TARGET"
-if "$NFT_BIN" list table inet ricardo_currency_bot >/dev/null 2>&1; then
-  { echo 'delete table inet ricardo_currency_bot'; cat "$TARGET"; } | "$NFT_BIN" -f -
+if "$NFT_BIN" list table inet home_currency_bot >/dev/null 2>&1; then
+  { echo 'delete table inet home_currency_bot'; cat "$TARGET"; } | "$NFT_BIN" -f -
 else
   "$NFT_BIN" -f "$TARGET"
 fi
-"$NFT_BIN" list table inet ricardo_currency_bot >/dev/null
+"$NFT_BIN" list table inet home_currency_bot >/dev/null
 # Boot persistence: the unit reloads the rendered file after every reboot.
-install -m 0644 "$DIR/ricardo-currency-bot-firewall.service" /etc/systemd/system/ricardo-currency-bot-firewall.service
+install -m 0644 "$DIR/home-currency-bot-firewall.service" /etc/systemd/system/home-currency-bot-firewall.service
 systemctl daemon-reload
-systemctl enable ricardo-currency-bot-firewall.service >/dev/null
-echo "currency-bot NodePort filter installed from $TARGET (persistent via ricardo-currency-bot-firewall.service)"
+systemctl enable home-currency-bot-firewall.service >/dev/null
+echo "currency-bot NodePort filter installed from $TARGET (persistent via home-currency-bot-firewall.service)"

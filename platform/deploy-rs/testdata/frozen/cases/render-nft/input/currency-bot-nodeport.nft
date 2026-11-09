@@ -14,10 +14,10 @@
 # dropped explicitly instead of silently bypassing the filter.
 #
 # Install on the K3s node:
-#   nft -f /etc/ricardo-currency-bot-nodeport.nft
+#   nft -f /etc/home-currency-bot-nodeport.nft
 # Remove with:
-#   nft delete table inet ricardo_currency_bot
-table inet ricardo_currency_bot {
+#   nft delete table inet home_currency_bot
+table inet home_currency_bot {
   chain prerouting {
     type filter hook prerouting priority dstnat - 10; policy accept;
     iifname "lo" accept

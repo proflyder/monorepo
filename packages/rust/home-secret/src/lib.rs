@@ -1,4 +1,4 @@
-//! Redacted secrets and token files for first-party Ricardo services.
+//! Redacted secrets and token files for first-party home services.
 //!
 //! [`Secret`] and [`Token`] keep their contents in a [`Zeroize`]ing buffer,
 //! print `***` from `Debug`, and only compare through [`subtle`]'s

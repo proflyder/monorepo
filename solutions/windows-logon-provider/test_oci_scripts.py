@@ -52,7 +52,7 @@ class PublishScriptTests(unittest.TestCase):
 
     def test_files_and_media_types_match_the_artifact_contract(self):
         for name in (
-            "RicardoKompLogon.dll",
+            "HomeKompLogon.dll",
             "cp-selftest.exe",
             "SHA256SUMS",
         ):
