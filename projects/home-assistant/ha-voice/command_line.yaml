@@ -27,7 +27,7 @@
 # read-only `status` word (projects/home/windows-pc/komp-power.ps1).
 #
 # Home Assistant lock semantics: `on` means unlocked/open, `off` means
-# locked/closed. The entity id keeps the owner's `komp_zablokirovan` name, but
+# locked/closed. The entity id keeps the owner's `komp_razblokirovan` name, but
 # the state follows the device class, so the HA card shows "Unlocked"/"Locked"
 # correctly; the Android control catalog maps the same state to its own
 # localized subtitle.
@@ -43,18 +43,15 @@
     unique_id: komp_unlocked
     device_class: lock
     icon: mdi:lock
+    # HA templates only the arguments of a command_line command, never the
+    # program itself, so the condition lives inside `sh -c`.
     command: >-
-      {% if is_state('binary_sensor.komp_v_seti', 'on') -%}
-      ssh -i /config/.ssh/komp_ed25519
-      -o BatchMode=yes
-      -o ConnectTimeout=5
+      sh -c "{% if is_state('binary_sensor.komp_v_seti', 'on') %}ssh
+      -i /config/.ssh/komp_ed25519 -o BatchMode=yes -o ConnectTimeout=5
       -o UserKnownHostsFile=/config/.ssh/komp_known_hosts
       -o StrictHostKeyChecking=accept-new
-      {{ states('input_text.komp_ssh_target') }}
-      status
-      {%- else -%}
-      echo offline
-      {%- endif %}
+      {{ states('input_text.komp_ssh_target') }} status{% else %}echo
+      offline{% endif %}"
     availability: >-
       {{ is_state('binary_sensor.komp_v_seti', 'on') }}
     payload_on: "unlocked"
