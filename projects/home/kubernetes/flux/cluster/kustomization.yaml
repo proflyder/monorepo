@@ -3,14 +3,15 @@
 # This directory is applied by Flux, not by the bootstrap script: it needs the
 # `flux-settings` Secret for the private node address, and it must not tighten
 # the flux-system NetworkPolicy before the controllers can reach the API.
+#
+# `platform.yaml` is an umbrella: it applies the ESO/cert-manager/Traefik/routes
+# child Kustomizations and waits for them. Everything else depends on
+# `platform` and never repeats that ordering.
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
   - network-policy.yaml
-  - external-secrets.yaml
-  - ingress-cert-manager.yaml
-  - ingress-traefik.yaml
-  - ingress-routes.yaml
+  - platform.yaml
   - observability.yaml
   - observability-rules.yaml
   - vaultwarden.yaml

@@ -12,8 +12,9 @@ archive's ``.notes`` file) and atomically writes:
     home_vzdump_last_backup_bytes{vmid,guest}
 
 The node-exporter textfile collector on PVE serves the file, and Prometheus
-scrapes PVE through the private values file documented in
-``projects/home/kubernetes/observability/pve-scrape.values.example.yaml``.
+scrapes PVE through the `pve-node` job in
+``projects/home/kubernetes/observability/values/prometheus.yaml`` (the private
+target comes from the `PVE_NODE_TARGET` flux-settings key).
 """
 from __future__ import annotations
 

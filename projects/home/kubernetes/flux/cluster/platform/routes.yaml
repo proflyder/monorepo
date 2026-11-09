@@ -6,7 +6,7 @@
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
 metadata:
-  name: ingress-routes
+  name: platform-routes
   namespace: flux-system
 spec:
   interval: 10m
@@ -19,8 +19,8 @@ spec:
   prune: true
   wait: true
   dependsOn:
-    - name: ingress-traefik
-    - name: external-secrets
+    - name: platform-traefik
+    - name: platform-external-secrets
   postBuild:
     substituteFrom:
       - kind: Secret

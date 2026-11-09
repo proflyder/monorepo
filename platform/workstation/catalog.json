@@ -170,7 +170,7 @@
    "consumer": "ESO → flux-system (GitRepository)"
   },
   "k8s/flux-system/settings": {
-   "purpose": "Flux/Nexus deployment settings (NEXUS_HOST, NEXUS_PUBLIC_HOST, NODE_LAN_IP)",
+   "purpose": "Flux deployment settings (NEXUS_HOST, NEXUS_PUBLIC_HOST, NODE_LAN_IP, HOME_DOMAIN, LAN_CIDR, HAOS_ADDRESS, PVE_NODE_TARGET)",
    "consumer": "ESO → flux-system (postBuild substitution)"
   },
   "k8s/home-assistant/ha-bridge-ha": {

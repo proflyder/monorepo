@@ -14,13 +14,14 @@ OpenBao (`secret/{k8s,ci,infra}/*`).
 
 ```text
 projects/home/kubernetes/vaultwarden/
-  deploy.sh                   admin-деплой (namespace, ESO, NP, workload, DNS, route)
+  kustomization.yaml          Flux entry point (ресурсы ниже)
   manifests/namespace.yaml
   manifests/external-secrets.yaml   secret/k8s/vaultwarden/vaultwarden-admin → Secret vaultwarden-admin
   manifests/network-policies.yaml   ingress 8080 только с узла/LAN; egress только DNS
   manifests/vaultwarden.yaml        PVC local-retain 2Gi, Deployment (Recreate), Service
   manifests/ingressroute.yaml       passwords.<home-domain> → vaultwarden:8080
   test_deploy.py, test_cloudflare_dns.py
+  (DNS-запись создаётся вручную, см. «Деплой»)
 ```
 
 - Образ `docker.io/vaultwarden/server` по digest (`versions.sh`), non-root
@@ -49,13 +50,28 @@ projects/home/kubernetes/vaultwarden/
 
 ## Деплой
 
+Namespace, ExternalSecret, NetworkPolicies, workload и маршрут reconciled Flux
+(`vaultwarden` Kustomization, dependsOn `platform`). `HOME_DOMAIN`,
+`NODE_LAN_IP` и `LAN_CIDR` подставляются из `secret/k8s/flux-system/settings`.
+
 ```bash
-mise run admin:vaultwarden                         # ingress env, Cloudflare, kubeconfig — fnox
-mise run admin:vaultwarden -- --render-only /tmp/vw  # только рендер, без кластера
+# после merge в develop
+mise run kubectl -- -n flux-system annotate kustomization/vaultwarden \
+  reconcile.fluxcd.io/requestedAt="$(date +%s)" --overwrite
+mise run kubectl -- -n vaultwarden get pod,pvc,externalsecret
 ```
 
-Повторный запуск идемпотентен. Обновление — новый digest в `versions.sh`,
-затем `deploy.sh`.
+Обновление версии — новый digest в `versions.sh` **и** в
+`manifests/vaultwarden.yaml` (тест сверяет их), затем merge.
+
+DNS-запись `passwords.<home-domain>` → узел K3s создаётся вручную:
+
+```bash
+mise run secrets:file home/vpn/cloudflare.env
+python3 projects/home/kubernetes/cloudflare_dns.py \
+  secrets/home/vpn/cloudflare.env passwords.<home-domain> <node-lan-ip>
+mise run secrets:clean
+```
 
 ## Первый вход
 

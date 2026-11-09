@@ -35,7 +35,8 @@ Deployment wrapper for `solutions/heartbeat` — внешний dead-man switch 
    (поля `url`, `token`) и применить Alertmanager:
 
    ```bash
-   mise run admin:observability
+   mise run kubectl -- -n monitoring annotate externalsecret alertmanager-telegram \
+     force-sync="$(date +%s)" --overwrite
    ```
 
 `wrangler.toml.example` — только шаблон с плейсхолдерами. Реальный

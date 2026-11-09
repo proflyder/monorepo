@@ -129,10 +129,12 @@ Pulsar — `projects/station/pulsar/AGENTS.md`.
 
 ## GitOps под Flux
 
-- Инфраструктура, отданная Flux (сейчас Nexus: `projects/home/kubernetes/flux/`
-  и `projects/home/kubernetes/nexus/`), меняется только через Git и merge в
+- Инфраструктура, отданная Flux (`projects/home/kubernetes/flux/`):
+  платформа (`platform`: ESO → cert-manager → Traefik → общие маршруты),
+  observability, Vaultwarden и Nexus. Меняется только через Git и merge в
   `develop`. Ручной `kubectl apply` этих объектов не использовать — Flux
-  вернёт состояние из Git.
+  вернёт состояние из Git. OpenBao, host-firewall (nftables) и Cloudflare DNS
+  остаются ручными.
 - Bootstrap/секреты/статус — `projects/home/kubernetes/flux/README.md`;
   деплой-ключ и настройки живут в OpenBao (`secret/k8s/flux-system/*`), не в
   Git. Остальная инфраструктура и сервисы приложений остаются на

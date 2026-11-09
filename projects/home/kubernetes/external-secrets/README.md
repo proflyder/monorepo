@@ -15,9 +15,10 @@ deploy-скриптами.
 
 ```text
 projects/home/kubernetes/external-secrets/
-  deploy.sh                       namespace + helm + ClusterSecretStore + ExternalSecrets
-  values/external-secrets.yaml    chart values (image digest подставляет deploy.sh)
+  kustomization.yaml              Flux entry point (namespace, HelmRelease, store, values)
+  manifests/helmrelease.yaml      ESO release (live name/namespace, digest-pinned image)
   manifests/clustersecretstore.yaml
+  deploy.sh                       только application ExternalSecrets (не оператор)
   test_external_secrets.py        статические контракты путей/владения
 ```
 
@@ -28,9 +29,9 @@ ExternalSecret-манифесты лежат рядом с проектами:
 | `projects/home/kubernetes/scheduler/manifests/external-secrets.yaml` | `home-assistant/scheduler-auth` | `k8s/home-assistant/scheduler-auth` |
 | то же | `home-assistant/ha-bridge-ha` | `k8s/home-assistant/ha-bridge-ha` |
 | `projects/home-assistant/deploy/manifests/external-secrets.yaml` | `home-assistant/hermes-environment` | `k8s/home-assistant/hermes-environment` |
-| `projects/home/kubernetes/ingress/manifests/external-secret-cloudflare.yaml` | `cert-manager/cloudflare-api-token` | `k8s/cert-manager/cloudflare-api-token` |
+| `projects/home/kubernetes/ingress/routes/external-secret-cloudflare.yaml` | `cert-manager/cloudflare-api-token` | `k8s/cert-manager/cloudflare-api-token` |
 | `projects/home/kubernetes/observability/manifests/external-secret-grafana-admin.yaml` | `monitoring/grafana-admin` | `k8s/monitoring/grafana-admin` |
-| `projects/home/kubernetes/observability/manifests/external-secret-alertmanager-telegram.yaml` | `monitoring/alertmanager-telegram` | `k8s/home-assistant/hermes-environment` + `k8s/monitoring/heartbeat` (template data); применяет `deploy-observability.sh`, не `external-secrets/deploy.sh` |
+| `projects/home/kubernetes/observability/manifests/external-secret-alertmanager-telegram.yaml` | `monitoring/alertmanager-telegram` | `k8s/home-assistant/hermes-environment` + `k8s/monitoring/heartbeat` (template data); применяет Flux `observability` |
 | `projects/home/kubernetes/currency-bot/manifests/external-secrets.yaml` | `currency-bot/currency-bot` | `k8s/currency-bot/currency-bot` |
 | то же | `currency-bot/cloudflared-tunnel` | `k8s/currency-bot/cloudflared-tunnel` |
 | `projects/home/kubernetes/mcp-gateway/manifests/external-secrets.yaml` | `home-assistant/mcp-gateway-*` | `k8s/home-assistant/mcp-gateway-*` |
@@ -43,15 +44,22 @@ ExternalSecret-манифесты лежат рядом с проектами:
 
 ## Установка
 
+Оператор, `ClusterSecretStore` и инфраструктурные ExternalSecrets —
+под Flux (`platform-external-secrets` и компонентные Kustomization):
+
 ```bash
 mise run admin:openbao
 mise run admin:openbao-bootstrap      # роли/политики, включая external-secrets
-mise run admin:external-secrets
+mise run admin:flux-bootstrap         # или merge в develop после bootstrap
 ```
 
-`deploy.sh` идемпотентен: namespace, `helm upgrade --install`, применение
-`ClusterSecretStore` и всех ExternalSecret, ожидание `Ready`. `--skip-secrets`
-ставит только оператор и store (например, до записи значений в OpenBao).
+`deploy.sh` больше не ставит Helm-релиз: он применяет только ExternalSecrets
+приложений, которые остаются на `deploy-home` (scheduler, Hermes,
+currency-bot, mcp-gateway, wakegrant) и ждёт `Ready`. `--skip-secrets` — только
+проверка готовности оператора/store.
+
+На чистом кластере первая установка ESO всё ещё ручная (иначе `flux-settings`
+не из чего создать); см. `projects/home/kubernetes/flux/README.md`.
 
 Проверка:
 
@@ -97,8 +105,13 @@ mise run kubectl -- get externalsecret -A
    `secretStoreRef: openbao/ClusterSecretStore`, `dataFrom.extract.key:
    k8s/<ns>/<name>`, `target.name` = имя Secret,
    `creationPolicy: Owner`, `deletionPolicy: Retain`, `refreshInterval: 1h`.
+   Для инфраструктурного секрета — в каталог компонента, которым владеет Flux
+   (`ingress/routes`, `observability/manifests`, `vaultwarden/manifests`), и
+   добавить его в `kustomization.yaml` компонента. Для сервиса на
+   `deploy-home` — рядом с сервисом и в список `deploy.sh`.
 
-3. `./projects/home/kubernetes/external-secrets/deploy.sh` и проверить
+3. Merge в `develop` (Flux) либо `mise run admin:external-secrets` для
+   application-секретов; проверить
    `mise run kubectl -- -n <ns> get externalsecret <name>` → `SecretSynced`.
 
 ## Перехват существующего Secret

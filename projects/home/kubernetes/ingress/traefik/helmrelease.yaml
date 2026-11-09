@@ -14,7 +14,7 @@ spec:
   chart:
     spec:
       chart: traefik
-      version: 42.2.0
+      version: "42.2.0"
       interval: 1h
       sourceRef:
         kind: HelmRepository

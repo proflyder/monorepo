@@ -1080,6 +1080,11 @@ export const config = {
       paths: [
         "projects/home/kubernetes/flux/**",
         "projects/home/kubernetes/nexus/**",
+        // The suite renders every component that a Flux Kustomization applies.
+        "projects/home/kubernetes/external-secrets/**",
+        "projects/home/kubernetes/ingress/**",
+        "projects/home/kubernetes/observability/**",
+        "projects/home/kubernetes/vaultwarden/**",
       ],
       python: {
         suites: ["projects/home/kubernetes/flux"],
@@ -1107,7 +1112,7 @@ export const config = {
         "projects/home/kubernetes/external-secrets/**",
         "projects/home/kubernetes/scheduler/manifests/external-secrets.yaml",
         "projects/home-assistant/deploy/manifests/external-secrets.yaml",
-        "projects/home/kubernetes/ingress/manifests/external-secret-cloudflare.yaml",
+        "projects/home/kubernetes/ingress/routes/external-secret-cloudflare.yaml",
         "projects/home/kubernetes/observability/manifests/external-secret-grafana-admin.yaml",
         "projects/home/kubernetes/observability/manifests/external-secret-alertmanager-telegram.yaml",
         "projects/home/kubernetes/observability/alertmanager/**",

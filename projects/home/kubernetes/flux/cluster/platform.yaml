@@ -1,0 +1,21 @@
+# Platform umbrella: ESO -> cert-manager -> Traefik -> shared routes.
+#
+# This Kustomization applies the four child Kustomization objects and, because
+# `wait: true` is set on it, only reports Ready after each child (which in turn
+# waits for its HelmReleases) is Ready. Everything else depends on `platform`
+# instead of reproducing the internal order.
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: platform
+  namespace: flux-system
+spec:
+  interval: 10m
+  retryInterval: 2m
+  timeout: 30m
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  path: ./projects/home/kubernetes/flux/cluster/platform
+  prune: true
+  wait: true

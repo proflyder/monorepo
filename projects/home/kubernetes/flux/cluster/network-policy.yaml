@@ -98,3 +98,19 @@ spec:
       ports:
         - protocol: TCP
           port: 443
+    # Helm chart index/artifacts: charts.jetstack.io is behind Cloudflare and
+    # charts.external-secrets.io is Google-hosted. Chart tarballs themselves
+    # usually live on GitHub releases (ranges above). Keep these ranges narrow;
+    # extend them together with the HelmRepository when a chart host changes.
+    - to:
+        - ipBlock:
+            cidr: 104.18.0.0/16
+      ports:
+        - protocol: TCP
+          port: 443
+    - to:
+        - ipBlock:
+            cidr: 142.250.0.0/15
+      ports:
+        - protocol: TCP
+          port: 443

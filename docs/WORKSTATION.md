@@ -45,12 +45,10 @@ K3s (`127.0.0.1:16443` → узел) поднимает `with-kube-tunnel.sh` н
 
 | Задача | Что запускает | Профиль fnox |
 |---|---|---|
-| `admin:ingress` / `admin:ingress-verify` | Traefik, cert-manager, маршруты / проверка | `ingress` |
+| `admin:ingress-verify` | проверка HTTPS-маршрутов (Traefik/cert-manager — Flux) | `ingress` |
 | `admin:openbao` / `admin:openbao-verify` / `admin:openbao-bootstrap` | OpenBao (живой seal не трогает) / проверка / bootstrap | `openbao` |
-| `admin:flux-bootstrap` | Flux-контроллеры и передача Nexus в GitOps | `kube` |
-| `admin:vaultwarden` | Vaultwarden (`--render-only DIR` без кластера) | `vaultwarden` |
-| `admin:observability` | Prometheus/Loki/Alloy | `observability` |
-| `admin:external-secrets` | ESO и ExternalSecrets | `kube` |
+| `admin:flux-bootstrap` | Flux-контроллеры и передача инфраструктуры в GitOps | `kube` |
+| `admin:external-secrets` | application ExternalSecrets (ESO — Flux) | `kube` |
 | `admin:heartbeat` | Cloudflare Worker heartbeat | `heartbeat` |
 | `admin:offsite-install` | offsite restic на узле K3s (`--dry-run`) | `offsite` |
 | `admin:pve-backup-install` | метрики vzdump на PVE (`--dry-run`) | — |

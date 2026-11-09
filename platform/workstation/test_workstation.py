@@ -235,7 +235,9 @@ class Catalog(unittest.TestCase):
             for profile in re.findall(r"fnox\.sh\" -P ([a-z-]+) exec", task.read_text()):
                 used.add(profile)
                 self.assertIn(profile, profiles, task)
-        self.assertGreaterEqual(len(used), 7)
+        # Platform deploy tasks moved to Flux; the remaining admin tasks still
+        # cover the independent profiles (OpenBao, ingress verify, backups...).
+        self.assertGreaterEqual(len(used), 6)
         service = (ws.ROOT / "platform/mise-tasks/admin/service.sh").read_text()
         units = re.search(r"\n  ([a-z|-]+)\) ;;", service).group(1).split("|")
         for unit in units:

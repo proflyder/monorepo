@@ -18,7 +18,7 @@ MANIFESTS = {
          ("home-assistant", "ha-bridge-ha"): "k8s/home-assistant/ha-bridge-ha"},
     (ROOT / "projects/home-assistant/deploy/manifests/external-secrets.yaml"):
         {("home-assistant", "hermes-environment"): "k8s/home-assistant/hermes-environment"},
-    (ROOT / "projects/home/kubernetes/ingress/manifests/external-secret-cloudflare.yaml"):
+    (ROOT / "projects/home/kubernetes/ingress/routes/external-secret-cloudflare.yaml"):
         {("cert-manager", "cloudflare-api-token"): "k8s/cert-manager/cloudflare-api-token"},
     (ROOT / "projects/home/kubernetes/observability/manifests/external-secret-grafana-admin.yaml"):
         {("monitoring", "grafana-admin"): "k8s/monitoring/grafana-admin"},
@@ -184,17 +184,21 @@ class ExternalSecretsContracts(unittest.TestCase):
             self.assertIn(relative, text)
 
     def test_scripts_do_not_imperatively_create_application_secrets(self):
-        # The only allowed bootstrap is the explicit first-install path in the
-        # ingress script, which is gated by --bootstrap-secrets.
-        ingress = (ROOT / "projects/home/kubernetes/ingress/deploy.sh").read_text()
-        self.assertIn("--bootstrap-secrets", ingress)
-        self.assertRegex(ingress, r"if \[\[ \"\$BOOTSTRAP_SECRETS\" == 1 \]\]")
         for rel in ("projects/home/kubernetes/scheduler/deploy.sh",
                     "projects/home/kubernetes/apply-runtime.sh",
-                    "projects/home/kubernetes/deploy-observability.sh"):
+                    "projects/home/kubernetes/external-secrets/deploy.sh",
+                    "projects/home/kubernetes/vaultwarden/sync_openbao.py"):
             text = (ROOT / rel).read_text()
             self.assertNotRegex(text, r"create\s+secret\s+generic")
             self.assertNotRegex(text, r"kubectl[^\n]*\bcreate\b[^\n]*\bsecret\b")
+
+    def test_infrastructure_secrets_are_declared_next_to_their_flux_unit(self):
+        # The infra ExternalSecrets are applied by Flux, not by deploy.sh.
+        for rel in ("projects/home/kubernetes/ingress/routes/external-secret-cloudflare.yaml",
+                    "projects/home/kubernetes/observability/manifests/external-secret-grafana-admin.yaml",
+                    "projects/home/kubernetes/observability/manifests/external-secret-alertmanager-telegram.yaml",
+                    "projects/home/kubernetes/vaultwarden/manifests/external-secrets.yaml"):
+            self.assertTrue((ROOT / rel).is_file(), rel)
 
     def test_ci_verifies_eso_readiness_and_never_applies_externalsecrets(self):
         workflow = (ROOT / ".github/workflows/deploy-home.yml").read_text()

@@ -9,10 +9,14 @@ import yaml
 HERE = pathlib.Path(__file__).resolve().parent
 ROOT = HERE.parents[3]
 NEXUS = ROOT / "projects/home/kubernetes/nexus"
-VERSIONS = (ROOT / "projects/home/kubernetes/versions.sh").read_text()
+K8S = ROOT / "projects/home/kubernetes"
+VERSIONS = (K8S / "versions.sh").read_text()
 
 CONTROLLERS = {"source-controller", "kustomize-controller", "helm-controller"}
-PRIVATE_VARS = {"NEXUS_HOST", "NEXUS_PUBLIC_HOST", "NODE_LAN_IP"}
+FLUX_SETTINGS = {"NEXUS_HOST", "NEXUS_PUBLIC_HOST", "NODE_LAN_IP", "HOME_DOMAIN",
+                 "LAN_CIDR", "HAOS_ADDRESS", "PVE_NODE_TARGET"}
+PLATFORM = {"platform-external-secrets", "platform-cert-manager",
+            "platform-traefik", "platform-routes"}
 
 
 def kustomize(path):
@@ -31,6 +35,14 @@ def docs_from(path):
 
 def of_kind(docs, kind):
     return [doc for doc in docs if doc.get("kind") == kind]
+
+
+def by_name(docs, kind):
+    return {doc["metadata"]["name"]: doc for doc in of_kind(docs, kind)}
+
+
+def version(name):
+    return re.search(rf"(?m)^{name}=(\S+)$", VERSIONS).group(1)
 
 
 class Toolkit(unittest.TestCase):
@@ -85,6 +97,7 @@ class Cluster(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.docs = kustomize(HERE / "cluster")
+        cls.kustomizations = by_name(cls.docs, "Kustomization")
 
     def test_controllers_can_fetch_artifacts(self):
         # Without these the kustomize/helm controllers cannot download the
@@ -123,48 +136,222 @@ class Cluster(unittest.TestCase):
         rendered = yaml.safe_dump(egress)
         self.assertIn("${NODE_LAN_IP}/32", rendered)
         self.assertIn("140.82.112.0/20", rendered)
+        # Helm chart hosts used by the HelmRepositories.
+        self.assertIn("104.18.0.0/16", rendered)
+        self.assertIn("142.250.0.0/15", rendered)
 
-    def test_nexus_kustomizations_use_the_git_source(self):
-        kustomizations = {
-            d["metadata"]["name"]: d for d in of_kind(self.docs, "Kustomization")
-        }
-        self.assertEqual(set(kustomizations), {"nexus", "nexus-provision"})
-        for name, k in kustomizations.items():
-            self.assertEqual(k["spec"]["sourceRef"]["kind"], "GitRepository")
-            self.assertEqual(k["spec"]["sourceRef"]["name"], "flux-system")
+    def test_every_kustomization_uses_the_git_source_and_prunes(self):
+        self.assertEqual(set(self.kustomizations), {
+            "platform", "observability", "observability-rules",
+            "vaultwarden", "nexus", "nexus-provision",
+        })
+        for name, k in self.kustomizations.items():
+            self.assertEqual(k["spec"]["sourceRef"]["kind"], "GitRepository", name)
+            self.assertEqual(k["spec"]["sourceRef"]["name"], "flux-system", name)
             self.assertTrue(k["spec"]["prune"], name)
 
-        nexus = kustomizations["nexus"]
-        self.assertEqual(
-            nexus["spec"]["postBuild"]["substituteFrom"],
-            [{"kind": "Secret", "name": "flux-settings"}],
-        )
-        self.assertEqual(nexus["spec"]["path"], "./projects/home/kubernetes/nexus/manifests")
-        provision = kustomizations["nexus-provision"]
-        self.assertEqual(provision["spec"]["path"], "./projects/home/kubernetes/nexus/provision")
-        self.assertTrue(provision["spec"]["force"])
-        self.assertEqual(provision["spec"]["dependsOn"], [{"name": "nexus"}])
+    def test_platform_umbrella_waits_for_the_chain(self):
+        platform = self.kustomizations["platform"]
+        self.assertEqual(platform["spec"]["path"],
+                         "./projects/home/kubernetes/flux/cluster/platform")
+        self.assertTrue(platform["spec"]["wait"])
+        # Everything that needs platform internals depends on the umbrella,
+        # not on the individual children.
+        self.assertEqual(self.kustomizations["observability"]["spec"]["dependsOn"],
+                         [{"name": "platform"}])
+        self.assertEqual(self.kustomizations["vaultwarden"]["spec"]["dependsOn"],
+                         [{"name": "platform"}])
+        self.assertEqual(self.kustomizations["observability-rules"]["spec"]["dependsOn"],
+                         [{"name": "observability"}])
+        self.assertEqual(self.kustomizations["nexus-provision"]["spec"]["dependsOn"],
+                         [{"name": "nexus"}])
 
 
-class Sync(unittest.TestCase):
+class Platform(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.docs = docs_from(HERE / "sync.yaml")
+        cls.docs = kustomize(HERE / "cluster" / "platform")
+        cls.kustomizations = by_name(cls.docs, "Kustomization")
 
-    def test_git_repository_is_read_only_and_on_develop(self):
-        repo = of_kind(self.docs, "GitRepository")[0]
-        self.assertEqual(repo["metadata"]["namespace"], "flux-system")
-        self.assertEqual(repo["spec"]["url"], "ssh://git@github.com/proflyder/monorepo")
-        self.assertEqual(repo["spec"]["ref"], {"branch": "develop"})
-        self.assertEqual(repo["spec"]["secretRef"]["name"], "flux-system")
+    def test_children_and_order(self):
+        self.assertEqual(set(self.kustomizations), PLATFORM)
+        expected = {
+            "platform-external-secrets": [],
+            "platform-cert-manager": ["platform-external-secrets"],
+            "platform-traefik": ["platform-cert-manager"],
+            "platform-routes": ["platform-traefik", "platform-external-secrets"],
+        }
+        for name, deps in expected.items():
+            self.assertEqual(
+                [d["name"] for d in self.kustomizations[name]["spec"].get("dependsOn", [])],
+                deps, name,
+            )
+        self.assertEqual(self.kustomizations["platform-routes"]["spec"]["postBuild"]
+                         ["substituteFrom"], [{"kind": "Secret", "name": "flux-settings"}])
 
-    def test_root_kustomization_reconciles_cluster_dir(self):
-        root = of_kind(self.docs, "Kustomization")[0]
-        self.assertEqual(root["metadata"]["name"], "flux-system")
-        self.assertEqual(root["spec"]["path"], "./projects/home/kubernetes/flux/cluster")
+    def test_paths(self):
+        self.assertEqual(self.kustomizations["platform-external-secrets"]["spec"]["path"],
+                         "./projects/home/kubernetes/external-secrets")
+        self.assertEqual(self.kustomizations["platform-cert-manager"]["spec"]["path"],
+                         "./projects/home/kubernetes/ingress/cert-manager")
+        self.assertEqual(self.kustomizations["platform-traefik"]["spec"]["path"],
+                         "./projects/home/kubernetes/ingress/traefik")
+        self.assertEqual(self.kustomizations["platform-routes"]["spec"]["path"],
+                         "./projects/home/kubernetes/ingress/routes")
+
+
+class HelmReleases(unittest.TestCase):
+    """The live releases must be adopted in place: same name/namespace/values."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.releases = {}
+        cls.sources = {}
+        for relative in (
+            "external-secrets",
+            "ingress/cert-manager",
+            "ingress/traefik",
+            "observability",
+        ):
+            docs = kustomize(K8S / relative)
+            for release in of_kind(docs, "HelmRelease"):
+                cls.releases[release["metadata"]["name"]] = release
+            for repo in of_kind(docs, "HelmRepository"):
+                cls.sources[repo["metadata"]["name"]] = repo
+
+    def release(self, name):
+        return self.releases[name]
+
+    def test_live_names_and_namespaces_are_preserved(self):
+        expected = {
+            "external-secrets": "external-secrets",
+            "cert-manager": "cert-manager",
+            "traefik": "traefik",
+            "monitoring": "monitoring",
+            "loki": "monitoring",
+            "alloy": "monitoring",
+            "ha-observability": "monitoring",
+        }
+        self.assertEqual(set(self.releases), set(expected))
+        for name, namespace in expected.items():
+            release = self.release(name)
+            self.assertEqual(release["metadata"]["namespace"], "flux-system", name)
+            self.assertEqual(release["spec"]["targetNamespace"], namespace, name)
+
+    def test_chart_versions_match_the_reviewed_pins(self):
+        expected = {
+            "external-secrets": ("external-secrets", "EXTERNAL_SECRETS_CHART_VERSION"),
+            "cert-manager": ("cert-manager", "CERT_MANAGER_CHART_VERSION"),
+            "traefik": ("traefik", "TRAEFIK_CHART_VERSION"),
+            "monitoring": ("kube-prometheus-stack", "PROMETHEUS_CHART_VERSION"),
+            "loki": ("loki", "LOKI_CHART_VERSION"),
+            "alloy": ("alloy", "ALLOY_CHART_VERSION"),
+        }
+        for name, (chart, pin) in expected.items():
+            spec = self.release(name)["spec"]["chart"]["spec"]
+            self.assertEqual(spec["chart"], chart, name)
+            self.assertEqual(str(spec["version"]), version(pin), name)
+            self.assertEqual(spec["sourceRef"]["namespace"], "flux-system", name)
+
+    def test_values_come_from_generated_config_maps(self):
+        expected = {
+            "external-secrets": ("external-secrets-values", "external-secrets.yaml"),
+            "cert-manager": ("cert-manager-values", "values.yaml"),
+            "traefik": ("traefik-values", "values.yaml"),
+            "monitoring": ("prometheus-values", "prometheus.yaml"),
+            "loki": ("loki-values", "loki.yaml"),
+            "alloy": ("alloy-values", "alloy.yaml"),
+        }
+        for name, (configmap, key) in expected.items():
+            values_from = self.release(name)["spec"]["valuesFrom"]
+            self.assertEqual(values_from, [{
+                "kind": "ConfigMap", "name": configmap, "valuesKey": key,
+            }], name)
+
+    def test_dashboards_chart_comes_from_git(self):
+        spec = self.release("ha-observability")["spec"]["chart"]["spec"]
+        self.assertEqual(spec["chart"], "./projects/home-assistant/observability/chart")
+        self.assertEqual(spec["sourceRef"], {
+            "kind": "GitRepository", "name": "flux-system", "namespace": "flux-system",
+        })
+
+    def test_cert_manager_crds_are_upgraded(self):
+        spec = self.release("cert-manager")["spec"]
+        self.assertEqual(spec["install"]["crds"], "Create")
+        self.assertEqual(spec["upgrade"]["crds"], "CreateReplace")
+
+    def test_helm_repositories_are_pinned_to_https(self):
+        expected = {
+            "external-secrets": "https://charts.external-secrets.io",
+            "jetstack": "https://charts.jetstack.io",
+            "traefik": "https://traefik.github.io/charts",
+            "prometheus-community": "https://prometheus-community.github.io/helm-charts",
+            "grafana-community": "https://grafana-community.github.io/helm-charts",
+            "grafana": "https://grafana.github.io/helm-charts",
+        }
+        self.assertEqual({name: repo["spec"]["url"] for name, repo in self.sources.items()},
+                         expected)
+        for repo in self.sources.values():
+            self.assertNotIn("latest", repo["spec"]["url"])
+
+
+class Substitution(unittest.TestCase):
+    """Only the documented private variables may survive rendering."""
+
+    def placeholders(self, path):
+        rendered = subprocess.run(
+            ["kubectl", "kustomize", str(path)],
+            check=True, capture_output=True, text=True,
+        ).stdout
+        return set(re.findall(r"\$\{([A-Z_]+)\}", rendered))
+
+    def test_component_placeholders(self):
+        expected = {
+            "ingress/routes": {"HOME_DOMAIN", "LAN_CIDR", "HAOS_ADDRESS"},
+            "vaultwarden": {"HOME_DOMAIN", "LAN_CIDR", "NODE_LAN_IP"},
+            "observability": {"HOME_DOMAIN", "PVE_NODE_TARGET"},
+            "external-secrets": set(),
+            "ingress/cert-manager": set(),
+            "ingress/traefik": set(),
+        }
+        for relative, keys in expected.items():
+            self.assertEqual(self.placeholders(K8S / relative), keys, relative)
+
+    def test_flux_settings_keys_are_documented(self):
+        catalog = (ROOT / "platform/workstation/catalog.json").read_text()
+        secrets_doc = (ROOT / "docs/SECRETS.md").read_text()
+        readme = (HERE / "README.md").read_text()
+        for key in FLUX_SETTINGS:
+            self.assertIn(key, catalog)
+            self.assertIn(key, secrets_doc)
+            self.assertIn(key, readme)
+
+    def test_no_secret_value_is_committed(self):
+        managed = [HERE, K8S / "external-secrets", K8S / "ingress",
+                   K8S / "observability", K8S / "vaultwarden"]
+        for directory in managed:
+            for path in directory.rglob("*.yaml"):
+                text = path.read_text()
+                self.assertNotRegex(text, r"BEGIN (OPENSSH|RSA|EC) PRIVATE KEY", path.name)
+                self.assertNotRegex(text, r"(?m)^\s*password:\s*\S", path.name)
+
+
+class Images(unittest.TestCase):
+    def test_external_secrets_values_pin_the_live_digest(self):
+        values = yaml.safe_load((K8S / "external-secrets/values/external-secrets.yaml").read_text())
+        tag = f"{version('EXTERNAL_SECRETS_IMAGE_VERSION')}@{version('EXTERNAL_SECRETS_IMAGE_DIGEST')}"
+        for section in ("image", "webhook", "certController"):
+            block = values["image"] if section == "image" else values[section]["image"]
+            self.assertEqual(block["tag"], tag, section)
+
+    def test_vaultwarden_image_matches_versions(self):
+        docs = docs_from(K8S / "vaultwarden/manifests/vaultwarden.yaml")
+        deployment = by_name(docs, "Deployment")["vaultwarden"]
+        image = deployment["spec"]["template"]["spec"]["containers"][0]["image"]
         self.assertEqual(
-            root["spec"]["postBuild"]["substituteFrom"],
-            [{"kind": "Secret", "name": "flux-settings"}],
+            image,
+            f"docker.io/vaultwarden/server:{version('VAULTWARDEN_IMAGE_VERSION')}"
+            f"@{version('VAULTWARDEN_IMAGE_DIGEST')}",
         )
 
 
@@ -196,6 +383,28 @@ class Secrets(unittest.TestCase):
             self.assertIn(path, secrets_doc)
 
 
+class Sync(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.docs = docs_from(HERE / "sync.yaml")
+
+    def test_git_repository_is_read_only_and_on_develop(self):
+        repo = of_kind(self.docs, "GitRepository")[0]
+        self.assertEqual(repo["metadata"]["namespace"], "flux-system")
+        self.assertEqual(repo["spec"]["url"], "ssh://git@github.com/proflyder/monorepo")
+        self.assertEqual(repo["spec"]["ref"], {"branch": "develop"})
+        self.assertEqual(repo["spec"]["secretRef"]["name"], "flux-system")
+
+    def test_root_kustomization_reconciles_cluster_dir(self):
+        root = of_kind(self.docs, "Kustomization")[0]
+        self.assertEqual(root["metadata"]["name"], "flux-system")
+        self.assertEqual(root["spec"]["path"], "./projects/home/kubernetes/flux/cluster")
+        self.assertEqual(
+            root["spec"]["postBuild"]["substituteFrom"],
+            [{"kind": "Secret", "name": "flux-settings"}],
+        )
+
+
 class NexusManifests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -204,18 +413,18 @@ class NexusManifests(unittest.TestCase):
 
     def test_private_values_are_the_only_placeholders(self):
         left = set(re.findall(r"\$\{([A-Z_]+)\}", self.rendered))
-        self.assertEqual(left, PRIVATE_VARS)
+        self.assertEqual(left, {"NEXUS_HOST", "NEXUS_PUBLIC_HOST", "NODE_LAN_IP"})
 
     def test_images_are_pinned_from_versions(self):
         digest = re.search(r"NEXUS_IMAGE_DIGEST=(sha256:[0-9a-f]{64})", VERSIONS).group(1)
-        version = re.search(r"NEXUS_IMAGE_VERSION=([0-9.]+)", VERSIONS).group(1)
+        version_ = re.search(r"NEXUS_IMAGE_VERSION=([0-9.]+)", VERSIONS).group(1)
         images = {
             container["image"]
             for d in of_kind(self.docs, "StatefulSet")
             for container in d["spec"]["template"]["spec"]["containers"]
             + d["spec"]["template"]["spec"]["initContainers"]
         }
-        self.assertEqual(images, {f"docker.io/sonatype/nexus3:{version}@{digest}"})
+        self.assertEqual(images, {f"docker.io/sonatype/nexus3:{version_}@{digest}"})
 
     def test_no_secret_value_is_committed(self):
         for path in (NEXUS / "manifests").glob("*.yaml"):
@@ -243,14 +452,12 @@ class Provisioning(unittest.TestCase):
         digest = re.search(
             r"NEXUS_PROVISION_IMAGE_DIGEST=(sha256:[0-9a-f]{64})", VERSIONS
         ).group(1)
-        version = re.search(r"NEXUS_PROVISION_IMAGE_VERSION=([0-9.]+)", VERSIONS).group(1)
+        version_ = re.search(r"NEXUS_PROVISION_IMAGE_VERSION=([0-9.]+)", VERSIONS).group(1)
         job = of_kind(self.docs, "Job")[0]
         image = job["spec"]["template"]["spec"]["containers"][0]["image"]
-        self.assertEqual(image, f"docker.io/curlimages/curl:{version}@{digest}")
+        self.assertEqual(image, f"docker.io/curlimages/curl:{version_}@{digest}")
 
     def test_script_hash_changes_with_content(self):
-        # The generator hash is content-addressed, so editing provision.sh
-        # yields a different ConfigMap name (and therefore Job spec).
         first = of_kind(self.docs, "ConfigMap")[0]["metadata"]["name"]
         self.assertNotEqual(first, "nexus-provision")
 

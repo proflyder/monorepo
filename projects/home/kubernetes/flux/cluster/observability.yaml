@@ -18,7 +18,7 @@ spec:
   prune: true
   wait: true
   dependsOn:
-    - name: external-secrets
+    - name: platform
   postBuild:
     substituteFrom:
       - kind: Secret

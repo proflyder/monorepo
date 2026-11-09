@@ -23,7 +23,8 @@
   - `nexus`: Nexus Repository OSS — кэш артефактов CI, см.
     `projects/home/kubernetes/nexus/`;
   - `flux-system`: Flux (source/kustomize/helm controllers), pull-based GitOps
-    для Nexus.
+    для платформы (ESO, cert-manager, Traefik, маршруты), observability,
+    Vaultwarden и Nexus.
 - HAOS и add-ons MA/Matter — отдельная VM `.28`; в K3s их больше нет.
 - App PV — local-path, `Retain`; старые PV не удалять без проверки.
 
@@ -78,14 +79,11 @@ Firewall: `projects/home/kubernetes/management-firewall/`.
 ## Обновление
 
 ```bash
-# chart приложений и dashboard — из репозитория
+# chart приложений (runtime) — вручную; ha-observability/dashboard теперь
+# обновляет Flux после merge в develop
 mise run helm -- upgrade --install runtime projects/home-assistant/deploy/chart \
   -n home-assistant -f local-data/kubernetes-research/runtime-values.yaml \
   --wait --timeout 5m
-
-mise run helm -- upgrade --install ha-observability \
-  projects/home-assistant/observability/chart \
-  -n monitoring --wait --timeout 2m
 ```
 
 Перед upgrade: backup, сравнить versions/image digests. Не менять модели,
@@ -269,7 +267,9 @@ Grafana admin password — OpenBao `secret/k8s/monitoring/grafana-admin`.
 ## HTTPS ingress
 
 `projects/home/kubernetes/ingress/` — Traefik `42.2.0` + cert-manager
-`v1.21.3` и wildcard-сертификат Let's Encrypt (`*.home.example.com`).
+`v1.21.3` и wildcard-сертификат Let's Encrypt (`*.home.example.com`). Всё,
+кроме DNS-записей, reconciled Flux: `platform-cert-manager` →
+`platform-traefik` → `platform-routes` под umbrella `platform`.
 
 - Traefik работает в `hostNetwork` и слушает `80/443` на узле K3s, поэтому
   HA видит источником `192.0.2.27` и продолжает доверять
@@ -291,22 +291,23 @@ Grafana admin password — OpenBao `secret/k8s/monitoring/grafana-admin`.
   `passwords.home.example.com` → `vaultwarden/vaultwarden:8080`,
   `nexus.home.example.com` (UI/admin, LAN/VPN) и публичный
   `ci-nexus.<public-zone>/repository/*` → `nexus/nexus:8081` (Flux).
-- A-записи ingress-хостов (`ha`, `grafana`, `alarms`, `control`, `currency`,
-  `intercom`) создаёт/исправляет `ingress/deploy.sh` через Cloudflare API
-  (`NODE_IP` из `secrets/home/ingress.env`); запись `nexus` создаётся
-  отдельно, `--skip-dns` отключает шаг.
 - Все маршруты и сертификат — в namespace `traefik`; `allowCrossNamespace`
   разрешает Service из `monitoring`/`home-assistant`/`currency-bot`. Solver-Secret
   `cloudflare-api-token` живёт в namespace `cert-manager`, потому что
   `ClusterIssuer` резолвит его в cluster resource namespace.
-- Реальные имена и `LAN_CIDR` — `secrets/home/ingress.env`; токен Cloudflare
-  хранится в OpenBao (`secret/k8s/cert-manager/cloudflare-api-token`) и
-  попадает в Secret через ESO. `--bootstrap-secrets` — только для первой
-  установки без OpenBao/ESO.
+- Реальные имена, `LAN_CIDR` и `HAOS_ADDRESS` — `secrets/home/ingress.env` и
+  ключи `HOME_DOMAIN`/`LAN_CIDR`/`HAOS_ADDRESS` в
+  `secret/k8s/flux-system/settings`; токен Cloudflare хранится в OpenBao
+  (`secret/k8s/cert-manager/cloudflare-api-token`) и материализуется ESO.
+- **DNS — ручной шаг.** A-записи `ha`, `grafana`, `alarms`, `control`,
+  `currency`, `intercom`, `passwords`, `vault` создаются
+  `cloudflare_dns.py` с приватным токеном; Flux их не трогает.
 
 ```bash
-mise run admin:ingress -- --staging   # проверка DNS-01
-mise run admin:ingress   # prod-сертификат
+# после merge в develop дождаться сверки
+mise run kubectl -- get kustomizations -A
+mise run kubectl -- -n flux-system annotate kustomization/platform \
+  reconcile.fluxcd.io/requestedAt="$(date +%s)" --overwrite
 NODE_IP=192.0.2.27 ./projects/home/kubernetes/ingress/verify.sh
 ```
 
@@ -337,8 +338,14 @@ Secrets приложений. `ClusterSecretStore/openbao` использует 
 `http://openbao.openbao.svc:8200`, Kubernetes auth и роль `external-secrets`
 (политика `k8s-read`, только `secret/data/k8s/*`).
 
+Сам оператор, `ClusterSecretStore/openbao` и инфраструктурные
+ExternalSecrets (cert-manager, monitoring, vaultwarden) — под Flux
+(`platform-external-secrets` и компонентные Kustomization).
+`external-secrets/deploy.sh` применяет только ExternalSecrets приложений,
+которые остаются на `deploy-home`.
+
 ```bash
-mise run admin:external-secrets
+mise run admin:external-secrets        # только application ExternalSecrets
 mise run kubectl -- get clustersecretstore openbao
 mise run kubectl -- get externalsecret -A
 mise run kubectl -- -n home-assistant annotate externalsecret scheduler-auth \
@@ -349,7 +356,7 @@ mise run kubectl -- -n home-assistant annotate externalsecret scheduler-auth \
 `projects/home/kubernetes/external-secrets/README.md`. `deploy-home`
 проверяет `Ready` ExternalSecret перед выкаткой и не пишет их значения.
 
-## Flux / GitOps (пилот: Nexus)
+## Flux / GitOps (домашняя инфраструктура)
 
 `projects/home/kubernetes/flux/` устанавливает три контроллера Flux
 (`source-controller`, `kustomize-controller`, `helm-controller`; без
@@ -358,19 +365,29 @@ notification и image automation) и один `GitRepository` на
 OpenBao. Кластер сам тянет изменения; у CI нет admin-доступа, а `deploy-home`
 продолжает владеть сервисами приложений.
 
-Под Flux сейчас только Nexus (`nexus` + `nexus-provision` Kustomization).
-Ingress, Vaultwarden, observability, external-secrets и OpenBao в пилот не
-входят.
+Под Flux: платформа (`platform`: ESO → cert-manager → Traefik → общие
+маршруты), observability (`observability` + `observability-rules`),
+Vaultwarden и Nexus (`nexus` + `nexus-provision`). OpenBao, host-firewall
+(nftables) и Cloudflare DNS остаются ручными.
+
+`platform` — umbrella-Kustomization: она применяет четыре дочерние
+(`platform-external-secrets`, `platform-cert-manager`, `platform-traefik`,
+`platform-routes`) и ждёт их готовности; остальные юниты зависят только от
+`platform`. Helm-release'ы сохраняют живые имена и namespace
+(`external-secrets`, `cert-manager`, `traefik`, `monitoring`), поэтому
+helm-controller принимает их как upgrade, без переустановки и пересоздания
+PVC.
 
 Bootstrap и ручные шаги владельца — `projects/home/kubernetes/flux/README.md`
 (`mise run admin:flux-bootstrap`). Секреты — OpenBao
-`secret/k8s/flux-system/{git-deploy-key,settings}`, в Git их нет. Приватные
-`NEXUS_HOST`, `NEXUS_PUBLIC_HOST` и `NODE_LAN_IP` подставляются Flux из
-Secret `flux-settings`.
+`secret/k8s/flux-system/{git-deploy-key,settings}`, в Git их нет. Из
+`flux-settings` подставляются `NEXUS_HOST`, `NEXUS_PUBLIC_HOST`,
+`NODE_LAN_IP`, `HOME_DOMAIN`, `LAN_CIDR`, `HAOS_ADDRESS`, `PVE_NODE_TARGET`.
 
 ```bash
 # что синхронизировано и готово
 mise run kubectl -- get kustomizations -A
+mise run kubectl -- get helmreleases -A
 mise run kubectl -- get gitrepositories -A
 mise run kubectl -- -n flux-system get pods
 
@@ -378,14 +395,14 @@ mise run kubectl -- -n flux-system get pods
 mise run kubectl -- -n flux-system annotate kustomization flux-system \
   reconcile.fluxcd.io/requestedAt="$(date +%s)" --overwrite
 
-# приостановить / возобновить
-mise run kubectl -- -n flux-system suspend kustomization/nexus
-mise run kubectl -- -n flux-system resume kustomization/nexus
+# приостановить / возобновить юнит
+mise run kubectl -- -n flux-system suspend kustomization/observability
+mise run kubectl -- -n flux-system resume kustomization/observability
 ```
 
 Инфраструктуру под Flux меняют только merge'ем в `develop`; ручной
 `kubectl apply` тех же объектов будет перезаписан при следующей сверке.
-Cloudflare DNS для Nexus остаётся ручным шагом (см. README Nexus).
+Cloudflare DNS остаётся ручным шагом (см. README Flux и ingress).
 Логи и `exec` — через тот же `mise run kubectl -- ...`.
 
 ## Удалённый доступ
@@ -395,7 +412,7 @@ Cloudflare DNS для Nexus остаётся ручным шагом (см. READ
 - Внутри LAN/VPN — HTTPS-имена `*.home.example.com` из раздела выше.
 - HAOS в K3s подключён через Service `monitoring/home-assistant-external`
   и EndpointSlice с адресом HAOS; при смене IP обновить `HAOS_ADDRESS`
-  в приватном env и применить `ingress/manifests/backends.yaml`.
+  в `flux-settings` (`HAOS_ADDRESS`) и дождаться сверки `platform-routes`.
 - Публичного HA нет; port-forward на роутере только для VPN.
 
 ## Backup / restore
