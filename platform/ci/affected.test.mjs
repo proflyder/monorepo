@@ -821,6 +821,8 @@ test("unit matrix: a Bazel service carries its image fields in the same entry", 
   const unit = entries.unit.find((entry) => entry.id === "scheduler");
   assert.equal(unit.kind, "bazel");
   assert.equal(unit.images, "scheduler home-deploy");
+  assert.equal(unit.image_list, '["scheduler","home-deploy"]');
+  assert.equal(unit.image_count, 2);
   assert.equal(unit.builder, "bazel");
   assert.equal(unit.target_root, "//projects/home/kubernetes/scheduler");
   assert.deepEqual(JSON.parse(unit.bazel_images), {});
@@ -839,6 +841,27 @@ test("unit matrix: an image-owning Python unit runs in the unit job, not python"
     entries.python.some((entry) => entry.id === "hermes"),
     false,
   );
+});
+
+test("unit matrix: a CI-harness change runs checks but carries no images", () => {
+  const config = affected.loadConfig();
+  const result = routeReal([".github/workflows/_unit.yml"]);
+  const entries = affected.matrixEntries(result, config);
+  const scheduler = entries.unit.find((entry) => entry.id === "scheduler");
+  assert.equal(scheduler.images, "");
+  assert.equal(scheduler.image_list, "[]");
+});
+
+test("python matrix: a workflow change keeps all Python units in one job", () => {
+  const config = affected.loadConfig();
+  const result = routeReal([".github/workflows/_python.yml"]);
+  const entries = affected.matrixEntries(result, config);
+  assert.ok(entries.python.length > 1);
+  assert.equal(
+    entries.unit.some((entry) => entry.id === "hermes"),
+    false,
+  );
+  assert.ok(entries.python.some((entry) => entry.id === "hermes"));
 });
 
 test("deploy: hermes Dockerfile change deploys the hermes unit", () => {

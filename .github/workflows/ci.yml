@@ -149,7 +149,7 @@ jobs:
 
   # One matrix entry per affected Linux unit. The same job runs the unit's
   # checks and, for a deploy unit, its container images in one Bazel server
-  # (`_unit.yml`), then pushes tree-tagged images and calls `_attest.yml`.
+  # (`_unit.yml`), then pushes tree-tagged images and attests them in place.
   # `kind` is `bazel` for the Rust/Bazel units and `python` for a Python unit
   # that owns images (Hermes, whose mixed Buildx path stays in this job).
   unit:
@@ -180,6 +180,8 @@ jobs:
       compile: ${{ matrix.compile }}
       deploy_tool: ${{ matrix.deploy_tool }}
       images: ${{ matrix.images }}
+      image_list: ${{ matrix.image_list }}
+      image_count: ${{ matrix.image_count }}
       builder: ${{ matrix.builder }}
       target_root: ${{ matrix.target_root }}
       bazel_images: ${{ matrix.bazel_images }}
@@ -423,20 +425,16 @@ jobs:
           rm -f "$RUNNER_TEMP/openconnect.log" "$RUNNER_TEMP/openconnect.pid"
           echo "temporary credentials removed"
 
-  # One matrix entry per affected Python project suite.
+  # One job for all affected Python units. It runs their `mise run test <id>`
+  # commands sequentially after one checkout/setup; the old per-unit matrix
+  # spent most of its time on runner and mise setup. A failure still names the
+  # failing units and turns the job red.
   python:
     needs: changes
     if: ${{ !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.python_units != '[]' }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include: ${{ fromJSON(needs.changes.outputs.python_units) }}
     uses: ./.github/workflows/_python.yml
     with:
-      unit: ${{ matrix.id }}
-      suites: ${{ matrix.suites }}
-      compile: ${{ matrix.compile }}
-      deploy_tool: ${{ matrix.deploy_tool }}
+      units: ${{ needs.changes.outputs.python_units }}
 
   # One matrix entry per affected JavaScript edge Worker unit.
   js:

@@ -98,12 +98,11 @@ export function parseDigest(value) {
 /**
  * Certificate identity of the workflows allowed to sign image provenance.
  *
- * The attestation is created inside the reusable `_attest.yml` called by the
- * unit job, so its SAN is the workflow file that defines the attestation job
- * (`_attest.yml`). Older tree images were attested by `_images.yml`; both, and
- * the caller workflows, stay allowed. Restricting the workflow files and the
- * repository keeps a manual push, a fork run or an unrelated workflow from
- * satisfying verification.
+ * The attestation is created inside the reusable `_unit.yml` job, so its SAN is
+ * that workflow file. Older tree images were attested by `_images.yml`, and an
+ * intermediate `_attest.yml` existed briefly; all stay allowed. Restricting the
+ * workflow files and the repository keeps a manual push, a fork run or an
+ * unrelated workflow from satisfying verification.
  */
 export function signerIdentityPattern(repository) {
   if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(String(repository || ""))) {

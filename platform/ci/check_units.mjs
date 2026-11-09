@@ -38,6 +38,10 @@ export const KNOWN_PLATFORMS = new Set([
   "quality",
 ]);
 
+// `_unit.yml` attests each pushed image with one static step per index; the
+// unit map must not exceed that bound (today the maximum is Hermes' four).
+export const MAX_UNIT_IMAGES = 4;
+
 // Rollback kinds backed by `mise run rollback`. `forward-only` is an explicit
 // "no documented procedure"; `pulsar` only prints the on-device instruction.
 export const ROLLBACK_KINDS = new Set([
@@ -154,6 +158,21 @@ export function validateSchema(config, root = DEFAULT_ROOT) {
     }
     if (unit.deployImages.length && !["bazel", "docker", "mixed"].includes(unit.deployBuilder)) {
       problems.push(`${prefix}: unknown deploy.builder '${unit.deployBuilder}'`);
+    }
+    // `_unit.yml` has one static attestation step per index; include the
+    // automatically published home-deploy image in the bound.
+    const attestImages = [...unit.deployImages];
+    if (
+      (unit.deployBuilder === "bazel" || unit.deployBuilder === "mixed") &&
+      !attestImages.includes("home-deploy")
+    ) {
+      attestImages.push("home-deploy");
+    }
+    if (attestImages.length > MAX_UNIT_IMAGES) {
+      problems.push(
+        `${prefix}: ${attestImages.length} attested images (including ` +
+          `home-deploy) exceed the ${MAX_UNIT_IMAGES} attestation steps in _unit.yml`,
+      );
     }
     if (unit.rollbackKind) {
       if (!ROLLBACK_KINDS.has(unit.rollbackKind)) {
