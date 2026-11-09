@@ -1,4 +1,4 @@
-# TEMPLATE. deploy.sh substitutes ${PASSWORDS_HOST} (private home suffix).
+# Host suffix is substituted from the flux-settings Secret (`HOME_DOMAIN`).
 #
 # Like the other home routes: `traefik` namespace, wildcard TLS Secret and the
 # `home-allowlist` Middleware (LAN + VPN only). TLS ends at Traefik; the pod
@@ -12,7 +12,7 @@ spec:
   entryPoints:
     - websecure
   routes:
-    - match: Host(`${PASSWORDS_HOST}`)
+    - match: Host(`passwords.${HOME_DOMAIN}`)
       kind: Rule
       middlewares:
         - name: home-allowlist

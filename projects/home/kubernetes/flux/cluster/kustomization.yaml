@@ -13,5 +13,6 @@ resources:
   - ingress-routes.yaml
   - observability.yaml
   - observability-rules.yaml
+  - vaultwarden.yaml
   - nexus.yaml
   - nexus-provision.yaml

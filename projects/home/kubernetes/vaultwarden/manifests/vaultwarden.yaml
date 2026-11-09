@@ -1,9 +1,9 @@
 # Vaultwarden: Bitwarden-compatible password manager (official Bitwarden apps,
-# browser extensions and `bw` CLI point at https://${PASSWORDS_HOST}/).
+# browser extensions and `bw` CLI point at https://passwords.<home-domain>/).
 #
-# TEMPLATE rendered by deploy.sh:
-#   VAULTWARDEN_IMAGE  upstream image pinned by digest (versions.sh)
-#   PASSWORDS_HOST     private host under the home suffix
+# Flux-rendered manifest. The image is pinned by digest (keep it equal to
+# `VAULTWARDEN_IMAGE_VERSION`/`_DIGEST` in versions.sh; the Flux tests check
+# it). `HOME_DOMAIN` is substituted from the flux-settings Secret.
 #
 # One SQLite writer on one local-retain volume (`vaultwarden-data`): database,
 # attachments, sends and the JWT signing key. The offsite backup picks the
@@ -13,6 +13,9 @@ kind: PersistentVolumeClaim
 metadata:
   name: vaultwarden-data
   namespace: vaultwarden
+  annotations:
+    # Never let Kustomize pruning delete the SQLite volume.
+    kustomize.toolkit.fluxcd.io/prune: disabled
   labels:
     app.kubernetes.io/name: vaultwarden
     app.kubernetes.io/part-of: ricardo-home
@@ -56,11 +59,11 @@ spec:
           type: RuntimeDefault
       containers:
         - name: vaultwarden
-          image: ${VAULTWARDEN_IMAGE}
+          image: docker.io/vaultwarden/server:1.37.5@sha256:4fe17f415f90087377d37c755e0ea3cf189dcc6794e49cdd2a9adbb4937d9e1f
           imagePullPolicy: IfNotPresent
           env:
             - name: DOMAIN
-              value: https://${PASSWORDS_HOST}
+              value: https://passwords.${HOME_DOMAIN}
             - name: DATA_FOLDER
               value: /data
             - name: ROCKET_ADDRESS
