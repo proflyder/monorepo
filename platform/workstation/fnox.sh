@@ -9,4 +9,4 @@ if [[ -z "${VAULT_ADDR:-}" ]]; then
 fi
 : "${VAULT_ADDR:?no OpenBao address: run \`mise run secrets:login\` first}"
 export VAULT_ADDR
-exec fnox -c "$root/fnox.toml" "$@"
+exec fnox -c "$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/fnox.toml" "$@"

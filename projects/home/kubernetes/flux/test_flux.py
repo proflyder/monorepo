@@ -86,6 +86,21 @@ class Cluster(unittest.TestCase):
     def setUpClass(cls):
         cls.docs = kustomize(HERE / "cluster")
 
+    def test_controllers_can_fetch_artifacts(self):
+        # Without these the kustomize/helm controllers cannot download the
+        # Git artifact from the source-controller and every Kustomization
+        # except the root one fails with "failed to download archive".
+        policies = {d["metadata"]["name"]: d for d in of_kind(self.docs, "NetworkPolicy")}
+        artifacts = policies["flux-system-artifacts"]["spec"]
+        self.assertEqual(artifacts["podSelector"], {"matchLabels": {"app": "source-controller"}})
+        self.assertEqual(artifacts["ingress"][0]["ports"], [{"protocol": "TCP", "port": 9090}])
+        egress = policies["flux-system-egress"]["spec"]["egress"]
+        self.assertIn(
+            {"to": [{"podSelector": {"matchLabels": {"app": "source-controller"}}}],
+             "ports": [{"protocol": "TCP", "port": 9090}]},
+            egress,
+        )
+
     def test_network_policy_is_narrow(self):
         policies = {d["metadata"]["name"]: d for d in of_kind(self.docs, "NetworkPolicy")}
         ingress = policies["flux-system-ingress"]
@@ -99,6 +114,7 @@ class Cluster(unittest.TestCase):
             for port in rule.get("ports", [])
         }
         self.assertTrue({53, 22, 443, 6443}.issubset(ports))
+
         dns = egress["spec"]["egress"][0]
         self.assertEqual(
             dns["to"][0]["namespaceSelector"]["matchLabels"]["kubernetes.io/metadata.name"],
