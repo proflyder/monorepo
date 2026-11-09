@@ -73,13 +73,14 @@ spec:
             - /bin/sh
             - -ec
             - |
-              if [ ! -e /nexus-data/admin.password ] && [ ! -d /nexus-data/db ]; then
-                cp /seed/admin_password /nexus-data/admin.password
-                chmod 0644 /nexus-data/admin.password
-                echo "seeded /nexus-data/admin.password on a fresh volume"
-              else
-                echo "volume already initialised; keeping the existing admin password"
+              data=/nexus-data
+              # A volume Nexus has started on has its database; never touch it.
+              if test -d "$data/db" || test -e "$data/admin.password"; then
+                echo "nexus data present, initial password left alone"
+                exit 0
               fi
+              install -m 0644 /seed/admin_password "$data/admin.password"
+              echo "initial admin password placed on the empty volume"
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
