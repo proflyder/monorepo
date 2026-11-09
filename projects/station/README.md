@@ -17,12 +17,13 @@ docs/WAKE-WORD.md
 Профиль Ricardo — [`pulsar/RICARDO.md`](pulsar/RICARDO.md); установленная
 версия — `docs/STATE.md`.
 
-Исходники Pulsar — first-party в этом монорепозитории. Релиз — изменение
-`projects/station/pulsar/VERSION`: merge в `develop` проводит Pulsar через
-общий `deploy-home` (`publish_when` по VERSION), `publish-native` публикует
-OCI-артефакт `ghcr.io/proflyder/pulsar-firmware:<version>` (+ `:latest`),
-после approve в Environment `Station` job `deploy-station` катит его на
-станцию через HA updater. GitHub Releases и теги не используются. Upstream
+Исходники Pulsar — first-party в этом монорепозитории. PR CI собирает обе
+архитектуры и публикует `ghcr.io/proflyder/pulsar-firmware:tree-<hash>` с
+provenance; merge в `develop` с новым `projects/station/pulsar/VERSION`
+(`publish_when` по VERSION) только продвигает этот digest на теги `<version>`
+и `:latest` (`native-release`). После approve в Environment `Station` job
+`deploy-station` катит его на станцию через HA updater. GitHub Releases и
+теги не используются. Upstream
 `Morvex885/pulsar` вливается вручную патчем. Процедура —
 `docs/OPERATIONS.md`, полная версия — `projects/station/pulsar/RICARDO.md`,
 «Релизы и деплой». Откат — только на станции (`pulsar.prev` +

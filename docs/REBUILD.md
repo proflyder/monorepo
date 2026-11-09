@@ -171,7 +171,7 @@ synced Secrets, `ListSchedules`.
 
 ```bash
 # при необходимости — свежий snapshot (иначе берётся последний ночной)
-kubectl -n openbao create job --from=cronjob/openbao-raft-snapshot snapshot-manual
+mise run kubectl -- -n openbao create job --from=cronjob/openbao-raft-snapshot snapshot-manual
 
 projects/home/kubernetes/openbao/restore_drill.py \
   --ssh-config ~/.ssh/home-lab/config --ssh-host k3s

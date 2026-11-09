@@ -13,7 +13,7 @@ Assistant через ESPHome Native API, Music Assistant через Sendspin, н
   `.claude/`, `.codex/`, вложенные `AGENTS.md`. Симлинки под конкретные инструменты не коммитятся:
   читать `.agents/skills/` напрямую.
 - CI и релиз Pulsar — не в этом каталоге, а в корневых `.github/workflows/` монорепозитория
-  (`_native.yml` и общий `deploy-home.yml`).
+  (`_unit.yml` для host-проверок, `_native.yml` для кросс-сборки и общего `deploy-home.yml`).
 - `AGENTS.md` держать ≤ 16 KiB (у части агентов лимит чтения 32 KiB). Здесь только правила для любой
   задачи; новые факты идут в `docs/`.
 
@@ -61,7 +61,7 @@ ssh/build.sh
 - `bazel test //projects/station/pulsar/satellite/...` должен проходить. Хостовые тесты
   покрывают Rust-крейты и установщик; поведение железа проверяется на станции (skill
   `station-test`). Те же проверки (обе архитектуры, installer, radio, ssh) выполняют CI-юниты
-  `pulsar-bazel` и `pulsar` в корневых `_bazel.yml`/`_native.yml`.
+  `pulsar-bazel` и `pulsar` в корневых `_unit.yml`/`_native.yml`.
 - Перед `git push` и PR пройти skill `pre-publish-review` до чистого раунда в рамках правил
   монорепозитория.
 
@@ -109,9 +109,10 @@ ssh/build.sh
 - Рабочая ветка `<type>/<name>` от свежего `origin/develop`; PR в `develop` только squash-merge
   с зелёным `ci-ok`. Прямой push в `develop` и push тегов запрещены (pre-push hook).
 - Монорепозиторий не публикует GitHub Releases и не пушит теги. Релиз Pulsar — изменение
-  `projects/station/pulsar/VERSION`: merge в `develop` проводит юнит `pulsar` через общий
-  `deploy-home` (`publish_when` по VERSION), который собирает обе архитектуры, публикует
-  OCI-артефакт в `ghcr.io/proflyder/pulsar-firmware` и катит его job'ом `deploy-station`.
+  `projects/station/pulsar/VERSION`: PR CI собирает обе архитектуры и публикует `tree-<hash>` с
+  provenance, merge в `develop` (`publish_when` по VERSION) только продвигает этот digest на
+  версионные теги `ghcr.io/proflyder/pulsar-firmware`, а `deploy-station` катит его на станцию;
+  повторной сборки нет.
 - Upstream `Morvex885/pulsar` вливается вручную патчем (`git diff vA..vB` → `git apply -3
   --directory=projects/station/pulsar`), затем обычный PR. Вложенного checkout'а и snapshot-скрипта
   больше нет.

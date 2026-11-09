@@ -26,14 +26,14 @@
 
 | Путь | Что | Кто читает |
 |---|---|---|
-| `ci/android-distribute` | Android: APK release signing key, passwords, alias and certificate; Firebase App Distribution | CI android-app (OIDC) + android-distribute (OIDC) |
+| `ci/android-distribute` | Android: APK release signing key, passwords, alias and certificate; Firebase App Distribution | CI android-distribute (OIDC) |
 | `ci/deploy-home` | deploy-home: ci-deploy kubeconfig, service env files, runtime values (including intercom_env) | CI deploy-home (OIDC) |
 | `ci/deploy-station` | Pulsar rollout through HA (url, token, firmware entity) | CI deploy-station (OIDC) |
 | `ci/test` | smoke probe, not secret | CI auth smoke |
 | `infra/backup/ha` | HA backup encryption key | owner (restore) |
 | `infra/backup/offsite` | restic offsite: env, password, rclone/GDrive OAuth, HA token | owner (offsite install/restore) |
 | `infra/certs/station-tls` | station TLS: eMudhra CA, quasar leaf and legacy MITM keys | owner |
-| `infra/ci/github-environment` | values of GitHub Environments Home/Station (VPN p12, server, runtime values) | owner (GitHub settings) |
+| `infra/ci/github-environment` | values of GitHub Environments Home/Station (VPN p12, server, OpenBao address/role) | owner (GitHub settings) |
 | `infra/cloudflare/currency-bot-tunnel` | Cloudflare tunnel API token and tunnel metadata | owner |
 | `infra/cloudflare/vpn-dns` | Cloudflare DNS token (home records, OpenBao/Vaultwarden deploy) | owner deploy scripts |
 | `infra/cloudflare/workers` | Cloudflare Workers/KV token and heartbeat Worker env | owner deploy scripts |
@@ -86,11 +86,12 @@
 Поля `ci/android-distribute` для release-подписи APK: `signing_keystore_b64`
 (base64 PKCS12-ключа), `signing_store_password`, `signing_key_password`,
 `signing_key_alias`, `signing_cert_sha256` (обязательный ожидаемый отпечаток
-сертификата), плюс `google_services_json_b64` и
-`firebase_service_account_json_b64` (base64 одного JSON в одну строку: CI
-декодирует их в `$RUNNER_TEMP`, а многострочные `google_services_json` и
-`firebase_service_account_json` больше не читаются — `vault-action` маскирует
+сертификата) и `firebase_service_account_json_b64` (base64 одного JSON в одну
+строку: CI декодирует его в `$RUNNER_TEMP`, многострочный
+`firebase_service_account_json` больше не читается — `vault-action` маскирует
 каждую строку, и GitHub вырезает из логов строку-маску `{`).
+`google-services.json` в этой записи не нужен: APK собирается без секретов,
+а файл приходит из repository variable `GOOGLE_SERVICES_JSON_B64`.
 Локально они восстанавливаются как `secrets/android/home-release.keystore`,
 `home-release.store.password`, `home-release.key.password`, `home-release.alias`,
 `home-release.cert.sha256` (`mise run secrets:file android/<имя>`), но обычно

@@ -57,8 +57,8 @@ sudo home-deploy hermes render-config \
   --private-values secrets/home/hermes-private.yaml
 
 # 3. restart the gateway so it re-reads config.yaml and the context files
-kubectl -n home-assistant rollout restart deployment/hermes
-kubectl -n home-assistant rollout status deployment/hermes --timeout=180s
+mise run kubectl -- -n home-assistant rollout restart deployment/hermes
+mise run kubectl -- -n home-assistant rollout status deployment/hermes --timeout=180s
 ```
 
 If the binary is not installed on the host, run it from a checkout:
@@ -90,7 +90,7 @@ Python tooling guarantee, and the files are the same.  Stop the gateway first
 only when you need a consistent read; a restart after the render is enough
 because the gateway reads the config once at start.  Run as the user that owns
 `/srv/k3s/volumes/runtime-hermes`; if you had to use `sudo`, restore ownership of the
-rendered files to the Pod's uid (`kubectl -n home-assistant exec
+rendered files to the Pod's uid (`mise run kubectl -- -n home-assistant exec
 deploy/hermes -c hermes -- id`) and check `ls -l`, otherwise the gateway cannot
 open its own config.
 
@@ -125,8 +125,8 @@ Verify from the Pod (the tokens are already in the Pod environment from
 `Secret/hermes-environment`; the Pod also runs `voice-proxy`, hence `-c`):
 
 ```bash
-kubectl -n home-assistant exec deploy/hermes -c hermes -- hermes mcp test infra
-kubectl -n home-assistant exec deploy/hermes -c hermes -- hermes mcp list
+mise run kubectl -- -n home-assistant exec deploy/hermes -c hermes -- hermes mcp test infra
+mise run kubectl -- -n home-assistant exec deploy/hermes -c hermes -- hermes mcp list
 ```
 
 A healthy `mcp test infra` reports the tool count; `401` means the token is
@@ -226,7 +226,7 @@ Hermes-specific notes:
 - The proxy sets `model_options.reasoning_effort=low` (or
   `HERMES_VOICE_REASONING_EFFORT`) only for voice requests.
 - The container is distroless: diagnostics use
-  `kubectl -n home-assistant exec deploy/hermes -c voice-proxy -- /usr/local/bin/voice-proxy -status`
+  `mise run kubectl -- -n home-assistant exec deploy/hermes -c voice-proxy -- /usr/local/bin/voice-proxy -status`
   (or `-healthcheck`); there is no shell or `curl`.
 
 Deployment values and the readiness probe are described in
@@ -256,7 +256,7 @@ home-deploy hermes render-config \
 sudo home-deploy hermes render-config \
   --home /srv/k3s/volumes/runtime-hermes \
   --private-values secrets/home/hermes-private.yaml
-kubectl -n home-assistant rollout restart deployment/hermes
+mise run kubectl -- -n home-assistant rollout restart deployment/hermes
 ```
 
 The HA prompt/title are part of the live `llama_cpp` subentry and are updated
@@ -416,7 +416,7 @@ matching HA aliases and are exposed to Assist, so `GetLiveContext` and
 `HassTurnOff` can find them.
 
 If Hermes reports an MCP circuit-breaker pause after three rejected calls,
-restart the Pod (`kubectl -n home-assistant rollout restart deploy/hermes`) or
+restart the Pod (`mise run kubectl -- -n home-assistant rollout restart deploy/hermes`) or
 wait for the pause after fixing arguments; do not repeatedly retry the same
 failed call. A healthy check: `hermes mcp test homeassistant`.
 

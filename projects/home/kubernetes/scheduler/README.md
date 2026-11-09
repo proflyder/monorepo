@@ -76,7 +76,7 @@ manifests go to `secrets/local/rendered/scheduler` (git-ignored).
 # Secrets are owned by External Secrets Operator and sourced from OpenBao
 # (secret/k8s/home-assistant/{scheduler-auth,ha-bridge-ha}). Apply once:
 mise run admin:external-secrets
-kubectl -n home-assistant apply -f projects/home/kubernetes/scheduler/ci/rbac.yaml
+mise run kubectl -- -n home-assistant apply -f projects/home/kubernetes/scheduler/ci/rbac.yaml
 ```
 
 Both tokens are read from files at runtime (`SCHEDULER_TOKEN_FILE`,
@@ -172,7 +172,7 @@ and a separate `/data/scenario-ledger.json` on PVC `ha-scenario-data`.
 - One scenario never runs twice at once: a second FIRE is `SKIPPED` «already
   running». `GetStatus.scenario_execution_supported` is the scheduler
   `SCENARIO_EXECUTION=true` flag, set in `manifests/scheduler.yaml`.
-- Disable: `kubectl -n home-assistant scale deployment/ha-scenario --replicas=0`
+- Disable: `mise run kubectl -- -n home-assistant scale deployment/ha-scenario --replicas=0`
   or `set env ... SCENARIO_EXECUTE=false`; reruns preserve both.
 
 Household definitions («Блэкаут», «Сел работать») live in
@@ -289,7 +289,7 @@ kubectl only — no SSH and no root helper.
   failure during build, push, rendering or preflight leaves no marker, so the
   live Deployments are untouched.
 - Existing Deployments are converged with `home-deploy converge` (a full
-  replace of the rendered object) instead of `kubectl apply`/`kubectl patch`. A patch cannot
+  replace of the rendered object) instead of `mise run kubectl -- apply`/`mise run kubectl -- patch`. A patch cannot
   remove a volume or mount that an earlier ad-hoc change added; the replace
   prunes such drift. `--preserve-env` keeps `BRIDGE_EXECUTE`/`CONTROL_EXECUTE`
   and `--preserve-replicas` keeps the current scale, so mode transitions stay

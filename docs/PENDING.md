@@ -93,9 +93,10 @@
       Следующий шаг: согласовать окно и проверить на реальном телефоне, не
       трогая production-устройства без согласования.
 - [ ] **Первый релиз в Firebase App Distribution и первый тестовый краш.**
-      Следующий шаг: первый успешный PR с подписью в `android / android-app`,
-      загрузкой в `android-distribute`, установка через App Tester, краш через
-      `adb shell am crash dev.proflyder.home` и отчёт в Crashlytics.
+      Следующий шаг: первый успешный PR, где `android / android-app` собирает
+      APK, а `android-distribute` подписывает и загружает его; установка через
+      App Tester, краш через `adb shell am crash dev.proflyder.home` и отчёт в
+      Crashlytics.
 - [ ] **Живой звонок на колонку.** Клиент и станционный `pulsar-call` (#231)
       готовы; нужна проверка на устройстве: микрофон, Opus, AEC, маршруты,
       lock screen, отмена/завершение. Без устройства не проверялось; живые

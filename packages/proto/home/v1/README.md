@@ -37,9 +37,10 @@ Connect-ошибка несёт legacy `message` и, для новых клие�
 
 В репозитории коммитятся только Rust-стабы
 (`packages/rust/home-proto/src/generated`), их перегенерация —
-`packages/rust/home-proto/generate.sh`. Android-клиент использует ручной
-protobuf-JSON маппинг (`projects/mobile/android/core/network`). Go-стабы
-удалены вместе с Go-сервером и его клиентами.
+`packages/rust/home-proto/generate.sh`. Android-клиент использует
+типизированные kotlinx.serialization DTO
+(`projects/mobile/android/core/network/src/main/kotlin/dev/proflyder/home/core/network/WireDtos.kt`). Go-стабы удалены вместе
+с Go-сервером и его клиентами.
 
 Bazel собирает `proto_library` как схему для descriptor tooling и других
 языков.

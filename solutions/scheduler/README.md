@@ -224,7 +224,8 @@ outbox переиспользуются. Событие уходит в очер
 disabled-сценария: `enabled` отключает только автотриггеры.
 
 `GetStatus.scenario_store_supported=true`; `scenario_execution_supported`
-остаётся `false`, пока отдельный исполнитель `ha-scenario` не развёрнут.
+отражает deployment-флаг `SCENARIO_EXECUTION` (в K3s — `true`; очередь
+`scenario` исполняет отдельный `ha-scenario`).
 `ListSchedules` без явного `kind` (UNSPECIFIED) исключает scenario-строки;
 только `kind=SCENARIO` их возвращает, поэтому Android-будильники и голосовые
 скрипты не видят внутренние триггеры. Прямые
@@ -330,8 +331,8 @@ executor-ом и не гарантируется этим сервисом.
 
 ## Ограничения
 
-- нет scenario executor: определения и события хранятся, `ha-scenario` ещё
-  не исполняет очередь `scenario`;
+- `ha-scenario` исполняет очередь `scenario`; event-триггеры сценариев
+  (кроме manual/time) не поддерживаются;
 - нет recurring generic tasks (`SCHEDULE_KIND_TASK`);
 - нет streaming `WatchEvents`;
 - SQLite рассчитан на один процесс; горизонтальное масштабирование

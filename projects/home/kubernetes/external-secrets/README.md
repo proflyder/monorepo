@@ -30,9 +30,12 @@ ExternalSecret-манифесты лежат рядом с проектами:
 | `projects/home-assistant/deploy/manifests/external-secrets.yaml` | `home-assistant/hermes-environment` | `k8s/home-assistant/hermes-environment` |
 | `projects/home/kubernetes/ingress/manifests/external-secret-cloudflare.yaml` | `cert-manager/cloudflare-api-token` | `k8s/cert-manager/cloudflare-api-token` |
 | `projects/home/kubernetes/observability/manifests/external-secret-grafana-admin.yaml` | `monitoring/grafana-admin` | `k8s/monitoring/grafana-admin` |
-| `projects/home/kubernetes/observability/manifests/external-secret-alertmanager-telegram.yaml` | `monitoring/alertmanager-telegram` | `k8s/home-assistant/hermes-environment` + `k8s/monitoring/heartbeat` (template data) |
+| `projects/home/kubernetes/observability/manifests/external-secret-alertmanager-telegram.yaml` | `monitoring/alertmanager-telegram` | `k8s/home-assistant/hermes-environment` + `k8s/monitoring/heartbeat` (template data); применяет `deploy-observability.sh`, не `external-secrets/deploy.sh` |
 | `projects/home/kubernetes/currency-bot/manifests/external-secrets.yaml` | `currency-bot/currency-bot` | `k8s/currency-bot/currency-bot` |
 | то же | `currency-bot/cloudflared-tunnel` | `k8s/currency-bot/cloudflared-tunnel` |
+| `projects/home/kubernetes/mcp-gateway/manifests/external-secrets.yaml` | `home-assistant/mcp-gateway-*` | `k8s/home-assistant/mcp-gateway-*` |
+| `projects/home/kubernetes/wakegrant/manifests/external-secrets.yaml` | `home-assistant/wakegrant` | `k8s/home-assistant/wakegrant` |
+| `projects/home/kubernetes/vaultwarden/manifests/external-secrets.yaml` | `vaultwarden/vaultwarden-admin` | `k8s/vaultwarden/vaultwarden-admin` |
 
 Версии — `projects/home/kubernetes/versions.sh`
 (`EXTERNAL_SECRETS_CHART_VERSION`, `EXTERNAL_SECRETS_IMAGE_VERSION`,
@@ -53,9 +56,9 @@ mise run admin:external-secrets
 Проверка:
 
 ```bash
-kubectl -n external-secrets get pods
-kubectl get clustersecretstore openbao
-kubectl get externalsecret -A
+mise run kubectl -- -n external-secrets get pods
+mise run kubectl -- get clustersecretstore openbao
+mise run kubectl -- get externalsecret -A
 ```
 
 ## Права OpenBao
@@ -81,10 +84,10 @@ kubectl get externalsecret -A
    # локальный JSON 600, ключи = ключи Kubernetes Secret
    install -m 600 /dev/null /tmp/secret.json
    # ...заполнить {"key":"value"}...
-   kubectl -n openbao cp /tmp/secret.json openbao-0:/tmp/secret.json
-   kubectl -n openbao exec openbao-0 -- /bin/sh -ec \
+   mise run kubectl -- -n openbao cp /tmp/secret.json openbao-0:/tmp/secret.json
+   mise run kubectl -- -n openbao exec openbao-0 -- /bin/sh -ec \
      'BAO_ADDR=http://127.0.0.1:8200 BAO_TOKEN="$BAO_TOKEN" bao kv put secret/k8s/<ns>/<name> @/tmp/secret.json'
-   kubectl -n openbao exec openbao-0 -- rm -f /tmp/secret.json
+   mise run kubectl -- -n openbao exec openbao-0 -- rm -f /tmp/secret.json
    shred -u /tmp/secret.json
    ```
 
@@ -96,7 +99,7 @@ kubectl get externalsecret -A
    `creationPolicy: Owner`, `deletionPolicy: Retain`, `refreshInterval: 1h`.
 
 3. `./projects/home/kubernetes/external-secrets/deploy.sh` и проверить
-   `kubectl -n <ns> get externalsecret <name>` → `SecretSynced`.
+   `mise run kubectl -- -n <ns> get externalsecret <name>` → `SecretSynced`.
 
 ## Перехват существующего Secret
 
@@ -119,8 +122,8 @@ kubectl get externalsecret -A
 ESO обновляет Secret по `refreshInterval` (1 ч). Немедленно:
 
 ```bash
-kubectl -n <ns> annotate externalsecret <name> force-sync="$(date +%s)" --overwrite
-kubectl -n <ns> get externalsecret <name> \
+mise run kubectl -- -n <ns> annotate externalsecret <name> force-sync="$(date +%s)" --overwrite
+mise run kubectl -- -n <ns> get externalsecret <name> \
   -o jsonpath='{.status.conditions[?(@.type=="Ready")].reason}{"\n"}'
 ```
 

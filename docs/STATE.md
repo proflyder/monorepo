@@ -76,11 +76,13 @@
   Образы тянутся параллельно, до 4 одновременно (`serializeImagePulls: false`,
   drop-in `50-image-pull.conf`); таймауты выката — 600 с.
 - Namespaces: `home-assistant`, `monitoring`, `traefik`, `cert-manager`,
-  `openbao`, `external-secrets`, `currency-bot`.
+  `openbao`, `external-secrets`, `currency-bot`, `vaultwarden`, `nexus`,
+  `flux-system`.
 - Приложения: GigaAM `10305`, Whisper `10300`, Piper `10200`,
   Hermes gateway `127.0.0.1:8642` + voice proxy `8643`, health exporter `9116`,
   currency-bot + cloudflared, mcp-gateway (ClusterIP `:8080`),
-  intercom (signaling, NodePort `30097`).
+  intercom (signaling, NodePort `30097`), Nexus (`:8081`, кэш артефактов CI;
+  под Flux — только он) и Flux (`flux-system`).
 - `8643` доступен только HAOS/K3s/loopback через nftables.
 - Observability: kube-prometheus-stack `92.14.0`, Loki `20.0.2`,
   Alloy `1.14.3`; четыре dashboard JSON через Helm ConfigMap.
@@ -121,12 +123,16 @@
 - Auto-unseal — встроенный `static` seal (ключ в Secret `openbao-seal`), после
   `kubectl delete pod` сервер распечатывается сам.
 - Auth: `userpass` (человек, политика `admin`; пароль задаёт человек; обязательный
-  TOTP `human-totp`, устройство зарегистрировано, enforcement включён), `jwt` `github` (GitHub OIDC,
-  роль `deploy-home`, environment `Home`, ref `develop`, TTL ≤15 мин),
-  `kubernetes` (TokenReview, роли `external-secrets`/`k8s-smoke`/`backup`).
-- KV v2 `secret/`: `secret/ci/test`, `secret/ci/deploy-home` и
-  `secret/k8s/*`. `secret/ci/deploy-home` (`kubeconfig`, `scheduler_env`,
-  `runtime_values`) — источник для CI; в GitHub этих значений больше нет.
+  TOTP `human-totp`, устройство зарегистрировано, enforcement включён), `jwt` `github`
+  (GitHub OIDC: `deploy-home` — environment `Home`, ref `develop`;
+  `deploy-station` — environment `Station`; `android-distribute` — Environment
+  `Android` на PR; TTL ≤15 мин), `kubernetes` (TokenReview, роли
+  `external-secrets`/`k8s-smoke`/`backup`).
+- KV v2 `secret/`: `secret/ci/test`, `secret/ci/deploy-home`,
+  `secret/ci/deploy-station`, `secret/ci/android-distribute` и `secret/k8s/*`.
+  `secret/ci/deploy-home` (`kubeconfig` и env/values файлы деплой-юнитов,
+  включая `intercom_env` и `runtime_values`) — источник для CI; в GitHub этих
+  значений больше нет.
   `deploy-home` входит по OIDC после VPN, читает запись через
   `hashicorp/vault-action`, материализует файлы 600 и маскирует значения;
   токен живёт только до конца job (TTL роли), отдельного revoke нет; политика
@@ -165,7 +171,7 @@
   обязательный итог — `ci-ok`. Прямой push в `develop` запрещён; `develop`
   обновляется только squash-merge PR.
 - Версии инструментов CI и рабочего места — один `mise.toml` (+ `mise.lock`
-  с sha256 linux-x64/macos-arm64): Python 3.13, Node 22, Bazelisk,
+  с sha256 linux-x64/macos-arm64): Python 3.15.2, Node 26.13.0, Bazelisk,
   gitleaks, actionlint, shellcheck, kubectl, helm, oras, bao, gh, protoc, bw.
   CI ставит подмножество через `jdx/mise-action`; Bazel — `setup-bazel`.
   Рабочее место — `mise run setup` (`docs/WORKSTATION.md`).
@@ -270,7 +276,8 @@
   fullchain/privkey в ocserv и перезапускает его. MSS clamp в forward chain
   стоит до accept. Ручное продление и TXT-записи не нужны.
 - Лимит `max-same-clients = 10`; встроенный бан неудачных попыток.
-- HTTPS-имена LAN/VPN: `https://{ha,grafana,alarms,control,vault}.home.example.com`
+- HTTPS-имена LAN/VPN:
+  `https://{ha,grafana,alarms,control,currency,intercom,vault,passwords}.home.example.com`
   через Traefik + cert-manager. Публичного HA нет;
   `8123/8095/8099/6053/6638` наружу не проброшены.
 - K3s management/metrics `6443/10250/9100/9116/8472` закрыты от обычного LAN;
@@ -281,9 +288,9 @@
 ## Станция
 
 - Yandex Station Midi `cucumber`, IP `192.0.2.13`; `maind` остановлен.
-- Pulsar Rust `v0.5.1013` — armhf-сборка из `projects/station/pulsar/`
-  (Bazel), раскатана `deploy-station` 2026-11-08 (`.prev` = `v0.5.1012`;
-  артефакт продвинут из PR-сборки без пересборки). «Громкость объявлений»
+- Pulsar Rust `v0.5.1015` — armhf-сборка из `projects/station/pulsar/`
+  (Bazel); артефакт продвинут из PR-сборки без пересборки (build-once,
+  digest из `tree-<hash>`). «Громкость объявлений»
   (`number.…_gromkost_obiavlenii`, 0–100 %, по умолчанию 100) масштабирует
   только речевые анонсы и TTS-ответы; ANNOUNCING уходит в HA как PLAYING
   (HA 2026.10 не знает это состояние). Автояркость часов —
@@ -615,18 +622,19 @@
   (`station_token`),
   `intercom_env` в `secret/ci/deploy-home` (`INTERCOM_NODE_PORT=30097`),
   NodePort закрыт общим host-фильтром scheduler/control. LAN/VPN-клиенты
-  ходят по внутреннему имени `https://intercom.<домен>/` через Traefik
+  ходят по внутреннему имени `https://intercom.home.<home-suffix>/` через Traefik
   (`home-allowlist`, wildcard TLS): маршрут задаёт
   `responseForwarding.flushInterval: 100ms`, entrypoint `websecure` —
   `writeTimeout: 0s`/`idleTimeout: 1800s` для долгоживущего streaming
   `Watch`; NetworkPolicy `intercom-ingress` допускает LAN/VPN/узел и pod
   CIDR. A-запись `intercom` создаёт ingress-деплой. NodePort `30097`
   сохранён аварийным путём; в Remote Config (`home_connection`) поле
-  `intercomBaseUrl` указывает на `https://intercom.<домен>`.
+  `intercomBaseUrl` указывает на `https://intercom.home.<home-suffix>`.
 - `projects/mobile/android`: Kotlin-клиент (Views, одна Activity, Metro DI,
   `applicationId dev.proflyder.home`, minSdk 26 / target 36, debug-signed).
-  Вкладки **Home**, **Scenarios**, **Time** (переключатель Alarms/Timers/
-  Reminders), Connection; Home — хаб с живой каруселью, избранным и
+  Вкладки **Home**, **Scenarios**, **Time** (ViewPager2 и сегментированный
+  переключатель Alarms/Timers/Reminders; Connection открывается шестерёнкой);
+  Home — хаб с живой каруселью, избранным и
   «Быстрыми действиями», читает `GET /v1/catalog`, команды идут через
   `home.control`/очередь `control`.
   Bearer token в Keystore AES-GCM; адреса scheduler/control/intercom и
@@ -638,7 +646,9 @@
   (`io.getstream:stream-webrtc-android` 1.3.10, Opus), self-managed Telecom
   `ConnectionService` (`MANAGE_OWN_CALLS`), `phoneCall` foreground service с
   CallStyle, маршруты через Telecom `CallEndpoint` (API 34+) с fallback на
-  `AudioManager`. Телефонный токен intercom хранится отдельно от bearer.
+  `AudioManager`. Интерком использует тот же bearer, что scheduler/control;
+  отдельного телефонного токена нет (отличается только `station_token`
+  колонки).
   Станционная сторона — `pulsar-call` (#231): отвечает через str0m
   (DTLS-SRTP, Opus 48 кГц), глушит музыку/Sendspin на время звонка.
   Входящего UI нет (такие звонки отклоняются).

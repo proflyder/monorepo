@@ -20,7 +20,7 @@ projects/station/       Pulsar, ADB, BLE, provisioning
 projects/home/          Proxmox, K3s, Terraform, VPN
 projects/home-assistant/HA, voice, Hermes, MA, TTS, dashboards
 projects/mobile/        Android-клиент
-solutions/              переиспользуемые scheduler/bridge/currency-bot/wakegrant
+solutions/              переиспользуемые scheduler/bridge/currency-bot/intercom/mcp-gateway/wakegrant
 packages/               proto, общий Rust/Kotlin-код
 docs/                   эксплуатация и политики
 secrets/                реальные адреса, доступы, recovery (вне Git)
@@ -31,14 +31,17 @@ secrets/                реальные адреса, доступы, recovery 
 - **HAOS** — единственный HA runtime: Home Assistant, Music Assistant,
   Matter Server как add-ons.
 - **K3s** — GigaAM/Whisper/Piper, Hermes + voice proxy, scheduler,
-  ha-bridge, ha-control, currency-bot, observability.
+  ha-bridge, ha-control, ha-scenario, intercom, currency-bot, Nexus,
+  observability.
 - **Traefik + cert-manager** — HTTPS-имена `ha`, `grafana`, `alarms`,
-  `control`, `currency`, `vault` под `*.home.example.com` с wildcard-
-  сертификатом Let's Encrypt (ACME DNS-01 Cloudflare) и allow-list LAN/VPN.
+  `control`, `currency`, `intercom`, `vault`, `passwords`, `nexus` под
+  `*.home.example.com` с wildcard-сертификатом Let's Encrypt
+  (ACME DNS-01 Cloudflare) и allow-list LAN/VPN.
 - **VPN** — собственный ocserv в CT 102: `443/tcp+udp`, вход клиентским
   сертификатом или паролем + TOTP, группы `lan`/`full`/`ci`.
 - **Cloudflare Tunnel** — единственный публичный HTTP-путь:
-  `tg.example.com/telegram/webhook` для currency-bot; остальное LAN/VPN.
+  `tg.example.com/telegram/webhook` для currency-bot и
+  `ci-nexus.<public-zone>/repository/*` для CI-кэша Nexus; остальное LAN/VPN.
 - **OpenBao + External Secrets Operator** — единственный источник правды для
   секретов; ESO создаёт Kubernetes Secrets из `secret/k8s/*`.
 - **CI/CD** — GitHub Actions: PR → `ci-ok` → squash merge → `deploy-home`
@@ -55,8 +58,8 @@ ssh labuser@192.0.2.27       # K3s VM
 
 HA `192.0.2.28:8123`, MA `192.0.2.28:8095`, Grafana
 `192.0.2.27:30300/`. Имена `https://<name>.home.example.com` — только через
-LAN/VPN. Публично доступны только VPN `443/tcp+udp` и webhook currency-bot
-через Cloudflare Tunnel.
+LAN/VPN. Публично доступны только VPN `443/tcp+udp`, webhook currency-bot и
+read-only путь Nexus `/repository/*` через Cloudflare Tunnel.
 
 ## Статус
 
@@ -68,7 +71,7 @@ LAN/VPN. Публично доступны только VPN `443/tcp+udp` и web
   scheduler/currency-bot/observability.
 - Currency bot живёт в K3s (`currency-bot`), webhook — через Cloudflare Tunnel.
 - Remote — собственный VPN (ocserv), HTTPS-имена; публично только
-  Telegram webhook currency-bot.
+  Telegram webhook currency-bot и Nexus `/repository/*`.
 
 ## Тесты
 

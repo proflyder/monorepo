@@ -11,8 +11,8 @@ projects/home-assistant   HA/MA/STT/TTS/Hermes
 
 ```text
 solutions/scheduler       durable расписания/таймеры/задачи, SQLite outbox
-solutions/ha-bridge       executor очереди home → HA scripts
-solutions/ha-bridge/crates/ha-bridge  каталог Home + executor queue=control
+solutions/ha-bridge       executors: home → HA scripts, control → каталог Home
+solutions/intercom        сигналинг WebRTC-звонка телефон ↔ колонка
 ```
 
 Windows-десктоп «комп» (WoL, OpenSSH forced command) настраивается в
@@ -29,20 +29,24 @@ Windows-десктоп «комп» (WoL, OpenSSH forced command) настраи
 
 `solutions/scheduler` — server-authoritative планировщик: SQLite durable
 очереди (`home` для alarms/reminders/timers, `tasks` для one-shot
-`EnqueueTask`), lease/ack, Connect/gRPC API. Внешний брокер (Kafka) не
+`EnqueueTask`), lease/ack, Connect unary + gRPC-Web по HTTP/1.1
+(gRPC/h2c не отдаётся). Внешний брокер (Kafka) не
 используется; версия контракта — `packages/proto/home/v1/scheduler.proto`.
 
 `solutions/ha-bridge` — исполнитель: забирает только `home`, вызывает
 allowlisted HA scripts (`alarm_start`, `schedule_announce`, `alarm_stop`),
 подтверждает только после 2xx HA. Работает в режиме execute (1 реплика,
-очередь `home`); scheduler — действующий владелец расписаний, HA остаётся
-исполнителем звука. Второй исполнитель не запущен.
+очередь `home`); `ha-control` обслуживает `control`, `ha-scenario` — очередь
+`scenario`. scheduler — действующий владелец расписаний, HA остаётся
+исполнителем звука. Второй исполнитель `home` не запущен.
 
 Локальный процессный E2E (реальные бинарники + fake HA на loopback, без живых
 HA/ADB): `projects/home/e2e/scheduler_smoke.py`.
 
 Рабочая Kubernetes-композиция и pinned Helm releases — [kubernetes/](kubernetes/README.md).
 HA Core живёт в HAOS VM; MA и Matter — add-ons в HAOS. K3s VM содержит
-STT/TTS, Hermes, scheduler, OpenBao/ESO, mcp-gateway и observability. Hermes и
-другие проекты используют один общий `mcp-gateway`, а не MCP внутри каждого
-сервиса.
+STT/TTS, Hermes, scheduler/ha-bridge/ha-control/ha-scenario, intercom,
+OpenBao/ESO, mcp-gateway, Nexus и observability. Hermes и другие проекты
+используют один общий `mcp-gateway`, а не MCP внутри каждого сервиса; Nexus
+разворачивает Flux, остальную инфраструктуру — ручные `deploy.sh`, сервисы —
+`deploy-home`.

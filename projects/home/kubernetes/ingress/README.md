@@ -2,7 +2,7 @@
 
 Traefik + cert-manager дают LAN/VPN-доступ к домашним сервисам по именам с
 валидным сертификатом Let's Encrypt: `ha`, `grafana`, `alarms`, `control`,
-`currency` (а после включения деплоя intercom — ещё `intercom`) под приватным суффиксом (пример — `home.example.com`). Прямые LAN-адреса и
+`currency` и `intercom` под приватным суффиксом (пример — `home.example.com`). Прямые LAN-адреса и
 NodePort не удаляются и остаются аварийным путём.
 
 ## Состав
@@ -77,7 +77,7 @@ DNS: A-записи `ha`, `grafana`, `alarms`, `control`, `currency`, `intercom`
 → узел K3s (`NODE_IP`), Cloudflare **DNS only** (не proxied), TTL auto;
 создаются и исправляются деплоем. Wildcard-сертификат не покрывает apex.
 
-`intercom.<домен>` — сервис сигналинга звонков (`home-assistant/intercom:8099`).
+`intercom.home.<home-suffix>` — сервис сигналинга звонков (`home-assistant/intercom:8099`).
 `Watch` — долгоживущий server-streaming ответ Connect поверх HTTP/1.1;
 маршрут задаёт `responseForwarding.flushInterval: 100ms`, а в
 `values/traefik.yaml` для `websecure` выставлены `readTimeout: 60s`,
@@ -97,7 +97,7 @@ mise run admin:ingress -- --staging
 mise run admin:ingress
 ```
 
-Скрипт идемпотентен: `helm upgrade --install`, `kubectl apply`, Secret
+Скрипт идемпотентен: `helm upgrade --install`, `mise run kubectl -- apply`, Secret
 пересоздаётся из файла. Порядок: cert-manager → Secret → ClusterIssuer →
 Certificate → Traefik → Middleware/IngressRoute. Версии чартов — в
 `../versions.sh` (`TRAEFIK_CHART_VERSION`, `CERT_MANAGER_CHART_VERSION`).
@@ -118,12 +118,12 @@ WebSocket HA `/api/websocket` → 101. Токены читаются из `secre
 Ручные проверки:
 
 ```bash
-kubectl -n cert-manager get pods
-kubectl -n traefik get pods
-kubectl -n traefik get certificate,secret
-kubectl -n traefik get ingressroute,middleware
-kubectl -n traefik logs deploy/traefik --tail=50
-kubectl -n cert-manager get challenge,order
+mise run kubectl -- -n cert-manager get pods
+mise run kubectl -- -n traefik get pods
+mise run kubectl -- -n traefik get certificate,secret
+mise run kubectl -- -n traefik get ingressroute,middleware
+mise run kubectl -- -n traefik logs deploy/traefik --tail=50
+mise run kubectl -- -n cert-manager get challenge,order
 ```
 
 HA после запросов: нет `ip_ban` для адреса узла, `http://192.0.2.28:8123`
@@ -134,12 +134,12 @@ HA после запросов: нет `ip_ban` для адреса узла, `h
 Маршруты и прокси можно убрать, не трогая приложения:
 
 ```bash
-kubectl -n traefik delete ingressroute --all
+mise run kubectl -- -n traefik delete ingressroute --all
 helm uninstall traefik -n traefik
-kubectl delete certificate home-wildcard -n traefik
+mise run kubectl -- delete certificate home-wildcard -n traefik
 helm uninstall cert-manager -n cert-manager
-kubectl delete clusterissuer letsencrypt-staging letsencrypt-prod
-kubectl delete namespace traefik cert-manager
+mise run kubectl -- delete clusterissuer letsencrypt-staging letsencrypt-prod
+mise run kubectl -- delete namespace traefik cert-manager
 ```
 
 Прямые LAN-адреса и NodePort 30098/30099/30300 продолжают работать

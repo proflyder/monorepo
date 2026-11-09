@@ -17,7 +17,8 @@
 Интернет
    │
    ├── Cloudflare Tunnel ──► K3s cloudflared
-   │        публично только tg.example.com/telegram/webhook
+   │        публично tg.example.com/telegram/webhook
+   │        и ci-nexus.<public-zone>/repository/* (Nexus, read-only)
    │
    └── роутер / gateway / DNS       192.0.2.1
           │
@@ -28,7 +29,7 @@
                  │      ├── VM 100  HAOS          192.0.2.28
                  │      │      HA + MA + Matter add-ons
                  │      ├── VM 101  Ubuntu/K3s    192.0.2.27
-                 │      │      STT/TTS, Hermes, currency-bot, observability
+                 │      │      STT/TTS, Hermes, intercom, Nexus, observability
                  │      ├── CT 102  vpn           192.0.2.29
                  │      │      ocserv, OpenConnect, TOTP
                  │      └── CT 103  bb            192.0.2.30
@@ -44,12 +45,13 @@
 
 - **Proxmox host** — гипервизор и management-точка; не публикует HA.
 - **HAOS VM** — Home Assistant, Music Assistant и Matter Server add-ons.
-- **K3s VM** — STT/TTS, Hermes, currency-bot, наблюдаемость и Grafana.
+- **K3s VM** — STT/TTS, Hermes, currency-bot, intercom, Nexus, наблюдаемость
+  и Grafana.
 - **VPN CT** — ocserv для входа в домашнюю LAN снаружи (пароль + TOTP).
 - **BB CT** — сервер bb и SQLite; входящих портов не публикует, ходит
   исходящим HTTPS к bb Connect.
-- **Cloudflare Tunnel** — единственный публичный HTTP-путь: только webhook
-  currency-bot.
+- **Cloudflare Tunnel** — единственный публичный HTTP-путь: webhook
+  currency-bot и read-only `/repository/*` Nexus для CI.
 - **Станция** — Pulsar/ESPHome-спутник и Sendspin-плеер.
 - **Mac** — рабочая машина; адрес может меняться по DHCP.
 
@@ -134,6 +136,15 @@ DNAT. Запросы всё равно требуют Bearer. Наружу API �
 `https://currency.home.example.com/api/*` (LAN/VPN, Bearer); публичный
 webhook — `tg.example.com/telegram/webhook` через Cloudflare Tunnel.
 
+### Nexus
+
+Nexus (`home/kubernetes/nexus`) слушает `8081` только внутри кластера. UI и
+`/service/rest/*` доступны как `https://nexus.home.example.com/` через Traefik
+с `home-allowlist` (LAN/VPN). Для CI существующий туннель `home-k3s`
+публикует только `ci-nexus.<public-zone>/repository/*` с read-only учёткой
+`ci-reader`; остальные пути на публичном имени отдают 404. Отдельный входящий
+порт на роутере не открывается.
+
 ### VPN CT 102
 
 | Порт | Назначение | Класс доступа |
@@ -196,9 +207,11 @@ loopback, DHCP, multicast и NTP. Это часть голосового кон�
   `https://intercom.home.example.com/` (intercom signaling, Bearer;
   аварийный путь — NodePort `30097`),
   `https://vault.home.example.com/` (OpenBao UI/API),
-  `https://passwords.home.example.com/` (Vaultwarden, клиенты Bitwarden)
+  `https://passwords.home.example.com/` (Vaultwarden, клиенты Bitwarden),
+  `https://nexus.home.example.com/` (Nexus UI/admin, LAN/VPN)
 - Публично (Cloudflare Tunnel): `https://tg.example.com/telegram/webhook`
-  (currency-bot), остальные пути — 404.
+  (currency-bot) и `https://ci-nexus.<public-zone>/repository/*` (Nexus,
+  read-only, `ci-reader`); остальные пути — 404.
 - Grafana требует login; анонимный доступ выключен.
 - Matter не имеет отдельного LAN UI: используется HA add-on ingress.
 
@@ -233,16 +246,18 @@ cert-manager с ACME DNS-01 Cloudflare. Wildcard-сертификат
 `*.home.example.com` выпускается автоматически и продлевается cert-manager.
 
 - A-записи `ha`, `grafana`, `alarms`, `control`, `currency`, `intercom`,
-  `vault` → `192.0.2.27`, Cloudflare DNS only (не proxied), TTL auto; apex и
-  прочие записи не меняются. Записи ingress-хостов создаёт/исправляет
-  `projects/home/kubernetes/ingress/deploy.sh`; `vault` — deploy OpenBao.
+  `vault`, `nexus` → `192.0.2.27`, Cloudflare DNS only (не proxied), TTL auto;
+  apex и прочие записи не меняются. Записи ingress-хостов создаёт/исправляет
+  `projects/home/kubernetes/ingress/deploy.sh`; `vault` — deploy OpenBao,
+  `nexus` — Flux/README Nexus.
 - `80` редиректит на `443`; вход разрешён только LAN `192.0.2.0/24` (VPN
   приходит NAT-ом с адреса CT), pod CIDR и loopback.
 - HA видит источником адрес узла `192.0.2.27`; `trusted_proxies` не
   расширяется.
 - WebSocket (`/api/websocket`, Grafana `/api/live/ws`) проходит через прокси.
-- Публикации в интернет нет: роутер по-прежнему не пробрасывает `80/443`;
-  имена резолвятся в приватный адрес и работают только из LAN/VPN.
+- Роутер по-прежнему не пробрасывает `80/443`: имена резолвятся в приватный
+  адрес и работают только из LAN/VPN. Публичный HTTP идёт только исходящим
+  Cloudflare Tunnel (webhook currency-bot и read-only Nexus `/repository/*`).
 - `intercom` — долгоживущий server-streaming HTTP/1.1 (`Watch`): Traefik
   маршрут задаёт `flushInterval: 100ms`, а entrypoint `websecure` —
   `writeTimeout: 0s` / `idleTimeout: 1800s`, поэтому кадры не буферизуются
@@ -253,16 +268,22 @@ cert-manager с ACME DNS-01 Cloudflare. Wildcard-сертификат
   GitHub OIDC), `6443` — K3s API. Остальные адреса и порты для пула
   `10.77.1.0/24` закрыты.
 
-### Публичный webhook currency-bot
+### Публичные маршруты Cloudflare Tunnel
 
 Remotely-managed Cloudflare Tunnel `home-k3s` работает как Deployment
 `cloudflared` в namespace `currency-bot` и ходит только наружу
-(`7844/udp` QUIC + `443/tcp` fallback и DNS). На стороне Cloudflare маршрут
-`tg.example.com` с путём `^/telegram/webhook$` ведёт на
-`http://currency-bot-webhook.currency-bot.svc.cluster.local:8081`; остальные
-пути отдают 404. Входящих портов на роутере это не открывает. Webhook
-принимает только запросы с Telegram `secret_token` (иначе 401) и только из
-чатов allowlist.
+(`7844/udp` QUIC + `443/tcp` fallback и DNS). На стороне Cloudflare два
+маршрута:
+
+- `tg.example.com` путь `^/telegram/webhook$` →
+  `http://currency-bot-webhook.currency-bot.svc.cluster.local:8081`; webhook
+  принимает только запросы с Telegram `secret_token` (иначе 401) и только из
+  чатов allowlist.
+- `ci-nexus.<public-zone>` путь `^/repository/` →
+  `http://nexus.nexus.svc.cluster.local:8081`, read-only учётка `ci-reader`.
+
+Остальные пути на этих именах отдают 404; входящих портов на роутере это не
+открывает.
 
 Управление и проверки — `projects/home/kubernetes/ingress/README.md` и
 `KUBERNETES-OPERATIONS.md`. Прямые LAN-адреса и NodePort остаются аварийным
@@ -280,7 +301,8 @@ Remotely-managed Cloudflare Tunnel `home-k3s` работает как Deployment
   не пробрасывает, имена `*.home.example.com` работают только из LAN/VPN.
 - VPN `443/tcp+udp` — единственный входящий порт из интернета; SSH в
   VPN-CT остаётся LAN-only. HTTP наружу идёт только исходящим Cloudflare
-  Tunnel и только на `tg.example.com/telegram/webhook`.
+  Tunnel: `tg.example.com/telegram/webhook` и read-only
+  `ci-nexus.<public-zone>/repository/*`.
 - `6638` (Zigbee) не имеет auth; при включении не выставлять наружу.
 - Сервер bb (CT 103) не публикует входящих портов: доступ идёт через
   исходящий Connect, SSH — только LAN, а из кластера — только `mcp-gateway`

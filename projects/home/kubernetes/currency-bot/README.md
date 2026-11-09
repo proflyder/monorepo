@@ -192,14 +192,14 @@ are applied, Deployments are replaced so removed fields do not linger.
 Checks:
 
 ```bash
-kubectl -n currency-bot get deploy,pod,svc,externalsecret
-kubectl -n currency-bot get endpointslices
-kubectl -n currency-bot logs deploy/cloudflared --tail=50
+mise run kubectl -- -n currency-bot get deploy,pod,svc,externalsecret
+mise run kubectl -- -n currency-bot get endpointslices
+mise run kubectl -- -n currency-bot logs deploy/cloudflared --tail=50
 
 # LAN NodePort used by HA Assist (Bearer; token never printed)
 curl -fsS "http://<K3s node>:<CURRENCY_BOT_NODE_PORT>/api/latest" \
   -H "Authorization: Bearer $API_TOKEN"
-kubectl -n currency-bot get --raw \
+mise run kubectl -- -n currency-bot get --raw \
   "/api/v1/namespaces/currency-bot/services/http:currency-bot:8080/proxy/readyz"
 ```
 
@@ -227,10 +227,10 @@ forward.
 Full removal (history is lost unless the PVC is backed up first):
 
 ```bash
-kubectl -n currency-bot delete deployment cloudflared currency-bot
-kubectl -n currency-bot delete pvc currency-bot-data   # deletes SQLite
-kubectl delete namespace currency-bot
-kubectl delete -f projects/home/kubernetes/currency-bot/ci/rbac.yaml
+mise run kubectl -- -n currency-bot delete deployment cloudflared currency-bot
+mise run kubectl -- -n currency-bot delete pvc currency-bot-data   # deletes SQLite
+mise run kubectl -- delete namespace currency-bot
+mise run kubectl -- delete -f projects/home/kubernetes/currency-bot/ci/rbac.yaml
 ```
 
 Also remove the Cloudflare tunnel route and call Telegram `deleteWebhook`.

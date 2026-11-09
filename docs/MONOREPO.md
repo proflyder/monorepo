@@ -9,9 +9,9 @@
 
 ```text
 solutions/               переиспользуемые решения
-  scheduler/             durable scheduler, SQLite queues, Connect/gRPC
+  scheduler/             durable scheduler, SQLite queues, Connect/gRPC-Web
   ha-bridge/             executor-адаптер HA/Pulsar ↔ scheduler
-                         (Rust-крейт: бинари ha-bridge и ha-control)
+                         (Rust-крейт: бинари ha-bridge, ha-control и ha-scenario)
   mcp-gateway/           MCP Streamable HTTP: infra.read / infra.fix / infra.report
   currency-bot/          курсы kurs.kz, алерты, Telegram webhook
   voice-proxy/           OpenAI-совместимый прокси для Piper TTS
@@ -180,8 +180,10 @@ crate-пакет объявляет `extract_cargo_lints(... workspace = "//:Car
 cc-toolchain (`platform/bazel/zig/`) с платформами `aarch64_linux`/`armhf_linux`,
 sendspin-cpp и C/C++-зависимости — `http_archive` + BUILD-overlay'и в
 `satellite/third_party/bazel/`. Юнит `pulsar` (`_native.yml`) собирает обе
-архитектуры и релиз Bazel-путём, установщик — Rust-крейт того же workspace,
-radio/ssh остаются своими скриптами. Цели Linux-only; на macOS `bazel build //...` их пропускает.
+архитектуры на каждом PR и публикует `tree-<hash>`; на merge в `develop`
+`native-release` только продвигает этот digest на релизные теги.
+Установщик — Rust-крейт того же workspace, radio/ssh остаются своими
+скриптами. Цели Linux-only; на macOS `bazel build //...` их пропускает.
 `.bazelignore` исключает сгенерированные каталоги `satellite/` и игнорируемые
 локальные каталоги (`secrets`, `resources`, …).
 
@@ -198,9 +200,10 @@ MSVC-only import library; при обновлении rules_rust их надо �
 `build.sh`/`run-tests.sh` — тонкие обёртки над `bazel build`/`bazel test`
 (host-тесты + rustfmt/clippy, включая Windows-цели); CI — платформа `native`
 (`_native.yml`) с pinned Bazelisk. Значения `ServiceUrl`/`Machine`/`UserName`
-приходят из проекта при установке. На push в `develop` `deploy-home`
-публикует файлы как публичный OCI-артефакт GHCR (ORAS, `VERSION`, digest и
-provenance); домашний ПК только читает готовый digest.
+приходят из проекта при установке. PR CI собирает файлы и публикует их как
+публичный OCI-артефакт GHCR под `tree-<hash>` (ORAS, `VERSION`, digest и
+provenance); на push в `develop` `deploy-home` только продвигает проверенный
+digest, а домашний ПК читает готовый артефакт.
 
 ## gRPC / Connect
 

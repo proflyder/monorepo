@@ -18,6 +18,10 @@
   - `openbao`: OpenBao (raft, UI, auth), см. `projects/home/kubernetes/openbao/`;
   - `external-secrets`: External Secrets Operator, читает OpenBao и создаёт
     Secrets приложений;
+  - `vaultwarden`: Vaultwarden (пароли владельца), см.
+    `projects/home/kubernetes/vaultwarden/`;
+  - `nexus`: Nexus Repository OSS — кэш артефактов CI, см.
+    `projects/home/kubernetes/nexus/`;
   - `flux-system`: Flux (source/kustomize/helm controllers), pull-based GitOps
     для Nexus.
 - HAOS и add-ons MA/Matter — отдельная VM `.28`; в K3s их больше нет.
@@ -99,7 +103,7 @@ values-файл (`RUNTIME_PRIVATE_VALUES`, лежит в `secrets/`) долже�
 
 mise run helm -- template runtime projects/home-assistant/deploy/chart \
   -n home-assistant -f "$RUNTIME_PRIVATE_VALUES" \
-  | kubectl diff -n home-assistant -f -
+  | mise run kubectl -- diff -n home-assistant -f -
 ```
 
 Пустой вывод и код 0 означают совпадение. `helm get values runtime` после
@@ -283,12 +287,14 @@ Grafana admin password — OpenBao `secret/k8s/monitoring/grafana-admin`.
   `intercom.home.example.com` → `home-assistant/intercom:8099`
   (`responseForwarding.flushInterval: 100ms` для streaming `Watch`;
   NodePort `30097` остаётся аварийным путём).
-  Собственные маршруты (`deploy.sh` своих каталогов): `vault.home.example.com`
-  → `openbao/openbao:8200`, `passwords.home.example.com` →
-  `vaultwarden/vaultwarden:8080`.
+  Собственные маршруты: `vault.home.example.com` → `openbao/openbao:8200`,
+  `passwords.home.example.com` → `vaultwarden/vaultwarden:8080`,
+  `nexus.home.example.com` (UI/admin, LAN/VPN) и публичный
+  `ci-nexus.<public-zone>/repository/*` → `nexus/nexus:8081` (Flux).
 - A-записи ingress-хостов (`ha`, `grafana`, `alarms`, `control`, `currency`,
   `intercom`) создаёт/исправляет `ingress/deploy.sh` через Cloudflare API
-  (`NODE_IP` из `secrets/home/ingress.env`); `--skip-dns` отключает шаг.
+  (`NODE_IP` из `secrets/home/ingress.env`); запись `nexus` создаётся
+  отдельно, `--skip-dns` отключает шаг.
 - Все маршруты и сертификат — в namespace `traefik`; `allowCrossNamespace`
   разрешает Service из `monitoring`/`home-assistant`/`currency-bot`. Solver-Secret
   `cloudflare-api-token` живёт в namespace `cert-manager`, потому что
@@ -304,9 +310,9 @@ mise run admin:ingress   # prod-сертификат
 NODE_IP=192.0.2.27 ./projects/home/kubernetes/ingress/verify.sh
 ```
 
-Диагностика: `kubectl -n cert-manager get pods,challenge,order`,
-`kubectl -n traefik get certificate,secret,ingressroute`,
-`kubectl -n traefik logs deploy/traefik`. Порты `80/443` на узле заняты
+Диагностика: `mise run kubectl -- -n cert-manager get pods,challenge,order`,
+`mise run kubectl -- -n traefik get certificate,secret,ingressroute`,
+`mise run kubectl -- -n traefik logs deploy/traefik`. Порты `80/443` на узле заняты
 Traefik — не запускать там второй прокси без остановки release.
 
 ## OpenBao

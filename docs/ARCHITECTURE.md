@@ -9,7 +9,8 @@
   ├─ VPN 443/tcp+udp ──► CT 102 vpn (ocserv): группы lan / full / ci
   │      lan: 10.77.0.0/24 → домашняя LAN, DNS 192.0.2.1
   └─ Cloudflare Tunnel ─► K3s cloudflared
-         публичный только /telegram/webhook → currency-bot:8081
+         публично /telegram/webhook → currency-bot:8081
+         и /repository/* → Nexus (read-only CI cache)
   │
   ▼
 роутер/DNS 192.0.2.1
@@ -25,15 +26,22 @@
 
 - **PVE** — гипервизор; VM получают L2 через `vmbr0`.
 - **HAOS** — единственный HA runtime; MA/Matter — add-ons, не K3s.
-- **K3s** — приложения реального времени, scheduler/ha-bridge/ha-control,
-  currency-bot, OpenBao/ESO и наблюдаемость.
-- **VPN CT** — основная точка входа снаружи; публично открыт ещё только
-  webhook currency-bot через Cloudflare Tunnel.
+- **K3s** — приложения реального времени, scheduler/ha-bridge/ha-control/
+  ha-scenario, intercom, currency-bot, Nexus, OpenBao/ESO и наблюдаемость.
+- **VPN CT** — основная точка входа снаружи; через Cloudflare Tunnel публично
+  открыты только webhook currency-bot и read-only `/repository/*` Nexus.
 - **Станция** — ESPHome-спутник HA и Sendspin-плеер; `maind` остановлен.
 - **Scheduler** — единственный владелец расписаний/таймеров; HA bridge
   исполняет очередь `home`, ha-control — каталог Home и очередь `control`.
 - **Currency bot** — Rust-сервис курсов: SQLite на PVC, алерты в Telegram,
   webhook через Cloudflare Tunnel, внутренний JSON API.
+- **Intercom** — Rust-сигналинг WebRTC-звонка телефон ↔ колонка: SDP/ICE
+  relay, server-streaming `Watch`; внутреннее имя
+  `intercom.home.<home-suffix>` через Traefik, медиа идёт P2P.
+- **Nexus** — кэш артефактов CI: Maven/Google Maven/PyPI/npm через свои
+  прокси, read-only публичный путь `/repository/*` через Cloudflare Tunnel.
+  Пилот Flux: под Flux только Nexus, остальная инфраструктура — ручные
+  `deploy.sh`, сервисы — `deploy-home`.
 - **MCP gateway** — единый MCP-сервер для инфраструктуры: чтение
   Prometheus/Alertmanager/Loki/Kubernetes и подтверждаемый rollout restart.
   Hermes сам не имеет доступа к Kubernetes API; весь доступ идёт через шлюз
@@ -101,12 +109,13 @@
   иначе Wi-Fi 4-address/WDS. Оба одновременно в мост не подключать.
 - VM сохраняют `.27/.28`, L2, ARP/mDNS/IPv6; NAT и PCI passthrough нет.
 - Traefik в `hostNetwork` (`80/443`) публикует `ha`, `grafana`, `alarms`,
-  `control`, `vault` и `currency` как `https://<name>.home.example.com`;
-  сертификат — wildcard Let's Encrypt от cert-manager (ACME DNS-01
-  Cloudflare).
-- Трафик снаружи приходит через VPN; единственное исключение — Cloudflare
-  Tunnel `home-k3s`, который отдаёт публично только `tg.example.com` путь
-  `^/telegram/webhook$` на webhook Service (остальное — 404). Allow-list
+  `control`, `currency`, `intercom`, `vault`, `passwords` и `nexus` как
+  `https://<name>.home.example.com`; сертификат — wildcard Let's Encrypt от
+  cert-manager (ACME DNS-01 Cloudflare).
+- Трафик снаружи приходит через VPN; исключение — Cloudflare Tunnel
+  `home-k3s`, который публикует `tg.example.com` путь `^/telegram/webhook$`
+  на webhook Service и `ci-nexus.<public-zone>` путь `^/repository/` на
+  Nexus (остальное — 404). Allow-list
   Traefik пускает LAN и pod CIDR, VPN-клиенты приходят NAT-ом с адреса CT.
 - Станция: egress guard; публичный WAN и Яндекс закрыты, разрешён только
   `tcp/443` к публичным IPv4-диапазонам GitHub для updater'а.
@@ -147,6 +156,9 @@ OpenBao KV v2 secret/k8s/* ──► ESO ClusterSecretStore/openbao
 ```
 
 - Прямой push в `develop` запрещён; merge PR = деплой затронутых юнитов.
+- CI-скачивания Maven/Google Maven/PyPI/npm идут через Nexus, когда заданы
+  `NEXUS_HOST` и `NEXUS_CI_PASSWORD`; иначе — напрямую. Nexus разворачивает
+  Flux из Git, остальная инфраструктура — ручные `deploy.sh`.
 - Образы scheduler/ha-bridge/ha-control/currency-bot/voice-proxy собираются
   Bazel `rules_oci` (distroless) и адресуются по digest в GHCR. Hermes
   собирается Docker из upstream revision; оба образа тоже digest-pinned GHCR,
@@ -164,12 +176,13 @@ Pulsar живёт в монорепозитории (`projects/station/pulsar/`)
 монорепо, без GitHub Releases и тегов. Поток:
 
 ```text
+PR CI (_native.yml, promote: false): сборка aarch64/armhf с VERSION, radio,
+   SHA256SUMS, проверка --version под qemu → publish-oci.sh → oras push
+   ghcr.io/proflyder/pulsar-firmware:tree-<hash> (+ provenance)
 merge PR в develop с новым VERSION
    → deploy-home plan: native.publish_when по VERSION → native_units
-   → native-build (_native.yml): сборка aarch64/armhf с VERSION, radio,
-        SHA256SUMS, проверка --version под qemu
-   → publish-native: publish-oci.sh → oras push
-        ghcr.io/proflyder/pulsar-firmware:<version> (+ :latest)
+   → native-release: проверка tree-<hash>/provenance, теги <version> и :latest
+        на тот же digest (повторной сборки нет)
    → deploy-station: ручной approve в Environment `Station`
         → VPN группа ci
         → OIDC в OpenBao: роль deploy-station → secret/ci/deploy-station
@@ -205,7 +218,8 @@ merge PR в develop с новым VERSION
 
 - Один K3s node, без HA control plane/distributed storage.
 - Публичного HA/Grafana/OpenBao нет; только LAN/VPN, кроме webhook
-  currency-bot `tg.example.com/telegram/webhook` через Cloudflare Tunnel.
+  currency-bot `tg.example.com/telegram/webhook` и read-only Nexus
+  `/repository/*` через Cloudflare Tunnel.
 - Offsite backup и внешний dead-man switch live; проверенного disaster
   restore с чистого железа пока нет.
 - API bb не публикуется: дом ходит в него только плагином + SSH forced

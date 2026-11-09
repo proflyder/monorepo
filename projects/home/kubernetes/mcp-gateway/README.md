@@ -255,10 +255,10 @@ Never paste secret values into chat or a commit. Use the private paths below.
 6. **Admin manifests** (cluster/namespace objects, applied once):
 
    ```bash
-   kubectl apply -f projects/home/kubernetes/mcp-gateway/manifests/rbac.yaml
-   kubectl apply -f projects/home/kubernetes/mcp-gateway/ci/rbac.yaml
-   kubectl apply -f projects/home/kubernetes/mcp-gateway/manifests/external-secrets.yaml
-   kubectl -n home-assistant wait --for=condition=Ready \
+   mise run kubectl -- apply -f projects/home/kubernetes/mcp-gateway/manifests/rbac.yaml
+   mise run kubectl -- apply -f projects/home/kubernetes/mcp-gateway/ci/rbac.yaml
+   mise run kubectl -- apply -f projects/home/kubernetes/mcp-gateway/manifests/external-secrets.yaml
+   mise run kubectl -- -n home-assistant wait --for=condition=Ready \
      externalsecret/mcp-gateway-auth externalsecret/mcp-gateway-telegram \
      externalsecret/mcp-gateway-ha externalsecret/mcp-gateway-bb-ssh \
      externalsecret/mcp-gateway-voice --timeout=120s
@@ -291,11 +291,10 @@ Never paste secret values into chat or a commit. Use the private paths below.
    ```
 
 8. **ExternalSecrets in the ESO apply set.** `external-secrets/deploy.sh`
-   keeps an explicit list of ExternalSecret manifests. Until
-   `projects/home/kubernetes/mcp-gateway/manifests/external-secrets.yaml` is
-   added to that list (a separate change outside this unit), apply it with the
-   command in step 4. The CI job fails closed if any ExternalSecret is
-   missing or not Ready.
+   keeps an explicit list of ExternalSecret manifests;
+   `projects/home/kubernetes/mcp-gateway/manifests/external-secrets.yaml` is in
+   it, so one `mise run admin:external-secrets` covers it. The CI job fails
+   closed if any ExternalSecret is missing or not Ready.
 
 ## Deploy
 
@@ -325,12 +324,12 @@ runs with `PUSH_IMAGES=1` and `PRIVATE_ENV=$CI_DIR/mcp-gateway.env`.
 Checks:
 
 ```bash
-kubectl -n home-assistant get deploy,pod,svc,externalsecret -l app.kubernetes.io/name=mcp-gateway
-kubectl -n home-assistant logs deploy/mcp-gateway --tail=50
-kubectl -n home-assistant get --raw \
+mise run kubectl -- -n home-assistant get deploy,pod,svc,externalsecret -l app.kubernetes.io/name=mcp-gateway
+mise run kubectl -- -n home-assistant logs deploy/mcp-gateway --tail=50
+mise run kubectl -- -n home-assistant get --raw \
   "/api/v1/namespaces/home-assistant/services/http:mcp-gateway:8080/proxy/readyz"
-kubectl -n home-assistant exec deploy/mcp-gateway -- /usr/local/bin/mcp-gateway -healthcheck
-kubectl auth can-i --as=system:serviceaccount:home-assistant:mcp-gateway \
+mise run kubectl -- -n home-assistant exec deploy/mcp-gateway -- /usr/local/bin/mcp-gateway -healthcheck
+mise run kubectl -- auth can-i --as=system:serviceaccount:home-assistant:mcp-gateway \
   patch deployment/scheduler -n home-assistant
 ```
 
@@ -365,12 +364,12 @@ Rollout order (never partially enabled):
 Checks:
 
 ```bash
-kubectl -n home-assistant get secret mcp-gateway-bb-ssh mcp-gateway-voice
-kubectl -n home-assistant log deploy/mcp-gateway | grep -E '"bb"|"voice"'
+mise run kubectl -- -n home-assistant get secret mcp-gateway-bb-ssh mcp-gateway-voice
+mise run kubectl -- -n home-assistant log deploy/mcp-gateway | grep -E '"bb"|"voice"'
 # voice state (cluster-local only; the proxy image is distroless, so use a
 # kubectl-side port-forward instead of exec; the token is never printed)
-kubectl -n home-assistant port-forward svc/mcp-gateway 18081:8080 &
-VOICE_TOKEN=$(kubectl -n home-assistant get secret mcp-gateway-voice \
+mise run kubectl -- -n home-assistant port-forward svc/mcp-gateway 18081:8080 &
+VOICE_TOKEN=$(mise run kubectl -- -n home-assistant get secret mcp-gateway-voice \
   -o jsonpath='{.data.token}' | base64 -d)
 curl -fsS -H "Authorization: Bearer $VOICE_TOKEN" \
   http://127.0.0.1:18081/v1/voice/state
@@ -404,13 +403,13 @@ are idempotent and not rolled back; re-apply the previous commit if needed.
 Full removal:
 
 ```bash
-kubectl -n home-assistant delete deployment,service mcp-gateway
-kubectl -n home-assistant delete configmap mcp-gateway-catalog
-kubectl -n home-assistant delete networkpolicy mcp-gateway-ingress mcp-gateway-egress
-kubectl -n home-assistant delete servicemonitor mcp-gateway
-kubectl delete -f projects/home/kubernetes/mcp-gateway/manifests/rbac.yaml
-kubectl delete -f projects/home/kubernetes/mcp-gateway/ci/rbac.yaml
-kubectl delete -f projects/home/kubernetes/mcp-gateway/manifests/external-secrets.yaml
+mise run kubectl -- -n home-assistant delete deployment,service mcp-gateway
+mise run kubectl -- -n home-assistant delete configmap mcp-gateway-catalog
+mise run kubectl -- -n home-assistant delete networkpolicy mcp-gateway-ingress mcp-gateway-egress
+mise run kubectl -- -n home-assistant delete servicemonitor mcp-gateway
+mise run kubectl -- delete -f projects/home/kubernetes/mcp-gateway/manifests/rbac.yaml
+mise run kubectl -- delete -f projects/home/kubernetes/mcp-gateway/ci/rbac.yaml
+mise run kubectl -- delete -f projects/home/kubernetes/mcp-gateway/manifests/external-secrets.yaml
 ```
 
 ## Open risks

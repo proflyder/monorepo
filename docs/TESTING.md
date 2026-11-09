@@ -312,6 +312,16 @@ PR-прогоны кэши только читают (`actions/cache/restore`): 
 `proto`, `pulsar-bazel`) и Android-юниты (`_android.yml`) восстанавливают
 этот кэш через общий префикс, приоритет остаётся у их собственных ключей.
 
+Скачивания дополнительно идут через домашний Nexus, если заданы repository
+variable `NEXUS_HOST` и secret `NEXUS_CI_PASSWORD`: composite action
+`.github/actions/nexus-cache` пишет `~/.netrc`, `~/.npmrc`, `pip.conf` и
+рендерит `platform/bazel/downloader.cfg` в `~/.bazelrc`. `downloader.cfg`
+направляет Maven Central, Google Maven, PyPI и npm в прокси Nexus и оставляет
+прямой URL запасным правилом; GitHub releases, codeload и nodejs.org через
+Nexus не идут (их архивы берёт repository cache Bazel). Без переменной, без
+секрета (форк-PR) или при недоступном `/repository/npmjs/-/ping` сборка идёт
+напрямую.
+
 
 Проверки, тесты и сборки внутри reusable workflow запускаются теми же
 mise-задачами, что и локально: `mise run test <unit>` / `mise run build
@@ -424,7 +434,8 @@ Native-юниты с `native.publish_script` (`pulsar`, `logon-provider`) сле
 под `tree-<hash>` и аттестует digest. Pulsar собирается так на каждом PR
 (версия из `VERSION`, radio, `SHA256SUMS`, проверка `--version` под qemu), а
 не только при изменении `VERSION`. Права `packages`/`id-token`/`attestations`
-выданы только job `native`.
+выданы job `unit` (образы) и `native` (native-артефакты); у
+`android-distribute` есть только `id-token`.
 
 ### Карта юнитов
 
@@ -600,7 +611,7 @@ workflow `_<platform>.yml` с inputs юнита, `platform` в `units.mjs`, ра
 ```bash
 # каталог юнитов и их команды
 mise run units                    # id, platform, title, deployable
-mise run build <unit>             # bazel build целей юнита / go build бинарей (без юнита — //...)
+mise run build <unit>             # bazel build целей юнита (без юнита — //...)
 mise run test <unit>              # команды юнита из units.mjs
 mise run test:bazel               # bazel test //...
 
