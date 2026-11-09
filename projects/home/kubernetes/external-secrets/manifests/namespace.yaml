@@ -1,0 +1,7 @@
+# Owned by Flux; the operator release lives in this namespace.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: external-secrets
+  labels:
+    app.kubernetes.io/part-of: ricardo-home

@@ -4,6 +4,7 @@ These tests are static: they protect the wiring (store, paths, ownership) so a
 later edit cannot silently point a project at a different OpenBao path or let a
 deploy script write an application Secret again.
 """
+import re
 import unittest
 from pathlib import Path
 
@@ -140,15 +141,44 @@ class ExternalSecretsContracts(unittest.TestCase):
         self.assertTrue(values["installCRDs"])
         self.assertEqual(values["replicaCount"], 1)
         self.assertEqual(values["serviceAccount"]["name"], "external-secrets")
+        versions = (ROOT / "projects/home/kubernetes/versions.sh").read_text()
+        tag = re.search(r"(?m)^EXTERNAL_SECRETS_IMAGE_VERSION=(\S+)$", versions).group(1)
+        digest = re.search(r"(?m)^EXTERNAL_SECRETS_IMAGE_DIGEST=(sha256:[0-9a-f]{64})$",
+                           versions).group(1)
         for section in ("image", "webhook", "certController"):
             block = values["image"] if section == "image" else values[section]["image"]
-            self.assertEqual(block["tag"], "__ESO_IMAGE_TAG__")
+            # The literal in the values file must match the reviewed pin.
+            self.assertEqual(block["tag"], f"{tag}@{digest}")
 
-    def test_deploy_script_applies_store_and_every_manifest(self):
+    def test_operator_and_store_are_owned_by_flux(self):
+        kustomization = yaml.safe_load((ESO_DIR / "kustomization.yaml").read_text())
+        resources = set(kustomization["resources"])
+        self.assertEqual(resources, {
+            "manifests/namespace.yaml",
+            "manifests/helmrepository.yaml",
+            "manifests/helmrelease.yaml",
+            "manifests/clustersecretstore.yaml",
+        })
+        release = yaml.safe_load((ESO_DIR / "manifests/helmrelease.yaml").read_text())
+        self.assertEqual(release["metadata"]["name"], "external-secrets")
+        self.assertEqual(release["spec"]["targetNamespace"], "external-secrets")
+        self.assertEqual(release["spec"]["chart"]["spec"]["version"],
+                         re.search(r"(?m)^EXTERNAL_SECRETS_CHART_VERSION=(\S+)$",
+                                   (ROOT / "projects/home/kubernetes/versions.sh").read_text()).group(1))
+
+    def test_deploy_script_only_applies_application_secrets(self):
+        # The operator, the store and infrastructure ExternalSecrets are
+        # Flux-owned; the manual script must not touch them any more.
         text = (ESO_DIR / "deploy.sh").read_text()
-        self.assertIn("clustersecretstore.yaml", text)
+        self.assertNotIn("helm upgrade", text)
+        self.assertNotIn("clustersecretstore.yaml", text)
         for path in MANIFESTS:
+            if path.name.startswith("external-secret-cloudflare"):
+                continue
             relative = path.relative_to(ROOT).as_posix()
+            if "vaultwarden" in relative or "observability" in relative or "ingress" in relative:
+                self.assertNotIn(relative, text)
+                continue
             self.assertIn(relative, text)
 
     def test_scripts_do_not_imperatively_create_application_secrets(self):
