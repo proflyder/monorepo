@@ -719,3 +719,26 @@
     checkout/mise/pip и последовательный цикл `mise run test <id>` с
     `::group::`, вместо ~22 коротких job'ов. `ci-ok` ждёт `unit`+`python`
     вместо `bazel`+`images`+матрицы `python`.
+
+52. **CI читает артефакты через домашний Nexus.** `projects/home/kubernetes/nexus`
+    — один Nexus Repository OSS `3.76.1` (последний до лимитов Community
+    Edition) в namespace `nexus`, digest-пин, один PVC `50Gi local-retain`,
+    JVM `-Xms/-Xmx 1g` и `MaxDirectMemorySize 1g`. Провижининг — идемпотентный
+    Job по REST API (`provision.sh`): blob store, `maven-central` +
+    `google-maven` + группа `maven-public`, raw-прокси `github` и
+    `nodejs-dist`, npm и pypi, cargo — опционально (если формат недоступен,
+    Job продолжает работу). Анонимный доступ выключен, у CI только роль
+    `ci-reader` (`read`/`browse`); пароли `admin` и `ci-reader` — в OpenBao
+    `secret/k8s/nexus/nexus-secrets` через ESO, в Git и логи не попадают.
+    Публично открыт только `/repository/*`: отдельный IngressRoute без
+    `home-allowlist`, с лимитом тела 8 MiB и rate limit; UI и
+    `/service/rest/*` остаются на внутреннем имени и allow-list. Публичное
+    имя обслуживает существующий Cloudflare Tunnel, отдельный входящий порт
+    не открывается. CI включает кэш одним переключателем — repository
+    variable `NEXUS_HOST` + secret `NEXUS_CI_PASSWORD`; composite action
+    пишет `~/.netrc`/`~/.npmrc`/pip.conf и рендерит
+    `platform/bazel/downloader.cfg` в `~/.bazelrc`, но только если
+    `/service/rest/v1/status` отвечает 200. Без переменной, без секрета
+    (форк-PR) или при недоступном Nexus сборка идёт напрямую, как раньше;
+    локальные сборки этот файл не читают. `rules_jvm_external` пробует
+    Nexus-группу первой, затем публичные URL.

@@ -87,6 +87,14 @@ jobs:
           repository-cache: true
           cache-save: ${{ github.event_name != 'pull_request' }}
 
+      # Optional read-through cache for GitHub release archives and Maven.
+      # The action is a no-op when NEXUS_HOST/NEXUS_CI_PASSWORD are absent or
+      # the cache is down, so forks and outages keep the direct URLs.
+      - uses: ./.github/actions/nexus-cache
+        with:
+          host: ${{ vars.NEXUS_HOST }}
+          password: ${{ secrets.NEXUS_CI_PASSWORD }}
+
       # `mise run build|test <unit>` resolves the unit's targets; Bazel itself
       # comes from setup-bazel above.
       - uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b # v5.2.7

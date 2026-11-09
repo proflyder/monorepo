@@ -179,6 +179,13 @@ jobs:
             bazel-${{ runner.os }}-warm-
             bazel-${{ runner.os }}-
 
+      # Optional read-through cache; a no-op without NEXUS_HOST, without the
+      # password (fork PRs) or when the cache is unhealthy.
+      - uses: ./.github/actions/nexus-cache
+        with:
+          host: ${{ vars.NEXUS_HOST }}
+          password: ${{ secrets.NEXUS_CI_PASSWORD }}
+
       - name: Install Python test dependencies
         if: inputs.kind == 'python'
         run: |
