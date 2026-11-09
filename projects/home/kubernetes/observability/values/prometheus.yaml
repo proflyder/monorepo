@@ -1,4 +1,12 @@
 fullnameOverride: monitoring
+# The default delivery-rate alerts cannot separate the heartbeat webhook from
+# real integrations. They are redeclared with an `integration!="webhook"`
+# filter in rules/prometheusrule-alertmanager.yaml, together with
+# HeartbeatPingFailing for persistent ping failures.
+defaultRules:
+  disabled:
+    AlertmanagerFailedToSendAlerts: true
+    AlertmanagerClusterFailedToSendAlerts: true
 alertmanager:
   alertmanagerSpec:
     replicas: 1

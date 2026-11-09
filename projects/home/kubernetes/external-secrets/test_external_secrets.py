@@ -93,6 +93,10 @@ class ExternalSecretsContracts(unittest.TestCase):
         receivers = {receiver["name"]: receiver for receiver in config["receivers"]}
         webhook = receivers["heartbeat"]["webhook_configs"][0]
         self.assertIs(webhook["send_resolved"], False)
+        # A bounded attempt lets Alertmanager retry within group_interval; the
+        # 0.34 http_config has no keep-alive switch, so this is the mitigation.
+        self.assertEqual(webhook["timeout"], "10s")
+        self.assertNotIn("keep_alive", webhook["http_config"])
         self.assertEqual(webhook["http_config"]["authorization"]["type"], "Bearer")
         raw = spec["target"]["template"]["data"]["alertmanager.yaml"]
         self.assertIn("{{ .heartbeat_url | trim }}", raw)
