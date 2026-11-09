@@ -17,7 +17,7 @@
 set -eu
 
 BASE="${NEXUS_URL:?NEXUS_URL is required}"
-ADMIN_USER=admin
+ADMIN_USER="admin"
 : "${NEXUS_ADMIN_PASSWORD:?NEXUS_ADMIN_PASSWORD is required}"
 : "${NEXUS_CI_PASSWORD:?NEXUS_CI_PASSWORD is required}"
 
@@ -88,12 +88,31 @@ ensure_blob_store() {
   echo "created blob store $BLOB_STORE"
 }
 
+# A fresh Nexus ships sample repositories (maven-central, maven-public, ...) on
+# the `default` blob store, and the API refuses to move a repository between
+# blob stores. These are pure caches, so a repository on another store is
+# dropped and recreated on ours.
+drop_if_foreign_store() {
+  format="$1"
+  type="$2"
+  name="$3"
+  code="$(request GET "/service/rest/v1/repositories/$format/$type/$name")"
+  [ "$code" = "200" ] || return 0
+  if grep -q "\"blobStoreName\" *: *\"$BLOB_STORE\"" /tmp/body; then
+    return 0
+  fi
+  code="$(request DELETE "/service/rest/v1/repositories/$name")"
+  expect "$code" "removal of $name from a foreign blob store"
+  echo "removed $name (was on another blob store)"
+}
+
 # ensure_repo FORMAT TYPE NAME PAYLOAD
 ensure_repo() {
   format="$1"
   type="$2"
   name="$3"
   payload="$4"
+  drop_if_foreign_store "$format" "$type" "$name"
   code="$(request GET "/service/rest/v1/repositories/$name")"
   if [ "$code" = "200" ]; then
     code="$(request PUT "/service/rest/v1/repositories/$format/$type/$name" \
@@ -115,6 +134,7 @@ optional_repo() {
   type="$2"
   name="$3"
   payload="$4"
+  drop_if_foreign_store "$format" "$type" "$name"
   code="$(request GET "/service/rest/v1/repositories/$name")"
   if [ "$code" = "200" ]; then
     code="$(request PUT "/service/rest/v1/repositories/$format/$type/$name" \
@@ -137,6 +157,9 @@ common_http='{"blocked":false,"autoBlock":true}'
 
 wait_ready
 ensure_blob_store
+# The shipped maven-public group references maven-central; drop the group
+# first so its members can be recreated on our blob store.
+drop_if_foreign_store maven group maven-public
 
 maven_central="$(cat <<JSON
 {
