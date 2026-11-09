@@ -409,6 +409,22 @@ pub fn domain_of(entity: &str) -> &str {
 /// Output order is stable: profile, then scenarios, then devices; within each,
 /// by room (unassigned last), title, id.
 #[must_use]
+/// The object id of an entity (`komp_lock` in `button.komp_lock`).
+fn object_id(entity: &str) -> &str {
+    entity.split_once('.').map_or(entity, |(_, id)| id)
+}
+
+/// The base a button attaches to, with the base's room. A button is exposed
+/// only when it has no registry device and its object id starts with `<base>_`
+/// for a device-less non-button entity `<domain>.<base>`.
+fn button_base<'a>(raw: &Raw, bases: &HashMap<&'a str, &'a str>) -> Option<&'a str> {
+    if !raw.device_id.trim().is_empty() {
+        return None;
+    }
+    let (base, _) = object_id(&raw.entity).split_once('_')?;
+    bases.get(base).copied()
+}
+
 pub fn build(raws: &[Raw], rules: &Rules) -> Vec<Entry> {
     let mut entries: Vec<Entry> = Vec::with_capacity(raws.len());
     // Devices that expose a light control. Home Assistant reports a `null`
@@ -426,6 +442,17 @@ pub fn build(raws: &[Raw], rules: &Rules) -> Vec<Entry> {
         .filter(|raw| raw.role.trim().eq_ignore_ascii_case("setting"))
         .filter_map(device_key)
         .collect();
+    // Entity-id names (`komp` in `switch.komp`) that a device-less button may
+    // attach to. Only such buttons are exposed: integrations ship many
+    // maintenance buttons (identify, restart, Yeelight presets) that are not
+    // user controls.
+    // The value is the base's room: a template button usually has no area of
+    // its own, and the client groups by room + prefix.
+    let button_bases: HashMap<&str, &str> = raws
+        .iter()
+        .filter(|raw| domain_of(&raw.entity) != "button" && raw.device_id.trim().is_empty())
+        .map(|raw| (object_id(&raw.entity), raw.room.trim()))
+        .collect();
     for raw in raws {
         if !valid_entity(&raw.entity) {
             continue;
@@ -433,6 +460,13 @@ pub fn build(raws: &[Raw], rules: &Rules) -> Vec<Entry> {
         let domain = domain_of(&raw.entity);
         let Some(mut kind) = kind_of(domain) else {
             continue;
+        };
+        let button_base = match kind {
+            Kind::Button => match button_base(raw, &button_bases) {
+                Some(base) => Some(base),
+                None => continue,
+            },
+            _ => None,
         };
         if raw.hidden || excluded(&rules.exclude, &raw.entity) {
             continue;
@@ -448,14 +482,25 @@ pub fn build(raws: &[Raw], rules: &Rules) -> Vec<Entry> {
         }
 
         let state = raw.state.trim().to_lowercase();
-        let available = !state.is_empty() && state != "unavailable" && state != "unknown";
+        // A button's state is the time of its last press: `unknown` only means
+        // it was never pressed, not that it cannot be pressed.
+        let available = match kind {
+            Kind::Button => !state.is_empty() && state != "unavailable",
+            _ => !state.is_empty() && state != "unavailable" && state != "unknown",
+        };
         let mut entry = Entry {
             id: raw.entity.clone(),
             kind,
             title: title_of(raw),
             title_key: String::new(),
             title_args: std::collections::BTreeMap::new(),
-            room: truncate_chars(raw.room.trim(), MAX_TEXT),
+            room: truncate_chars(
+                match (raw.room.trim(), button_base) {
+                    ("", Some(base_room)) => base_room,
+                    (room, _) => room,
+                },
+                MAX_TEXT,
+            ),
             icon: icon_of(&raw.icon),
             entity: raw.entity.clone(),
             state: String::new(),
@@ -994,6 +1039,7 @@ mod tests {
                 entity: "switch.komp".to_owned(),
                 state: "on".to_owned(),
                 name: "Комп".to_owned(),
+                room: "Спальня".to_owned(),
                 ..Raw::default()
             },
             Raw {
@@ -1011,9 +1057,29 @@ mod tests {
                 ..Raw::default()
             },
         ];
+        let mut raws = raws;
+        // Integration maintenance buttons (with a device, or without a base
+        // entity) are not user controls and stay out of the catalogue.
+        raws.push(Raw {
+            entity: "button.yl_light_set_default".to_owned(),
+            state: "unknown".to_owned(),
+            name: "yl-light set-default".to_owned(),
+            device_id: "dev-yeelight".to_owned(),
+            ..Raw::default()
+        });
+        raws.push(Raw {
+            entity: "button.restart".to_owned(),
+            state: "unknown".to_owned(),
+            name: "Restart".to_owned(),
+            ..Raw::default()
+        });
         let entries = build(&raws, &rules());
         assert_eq!(entries.len(), 3);
         assert!(entries.iter().any(|entry| entry.id == "switch.komp"));
+        // Never pressed (`unknown`) is still pressable, and an area-less
+        // button takes its base's room so the client can group them.
+        assert!(entries.iter().all(|entry| entry.available));
+        assert!(entries.iter().all(|entry| entry.room == "Спальня"));
         let lock = entries
             .iter()
             .find(|entry| entry.id == "button.komp_lock")
