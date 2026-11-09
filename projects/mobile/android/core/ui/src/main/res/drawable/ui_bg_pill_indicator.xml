@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!-- Stadium behind the active segment; the TabLayout indicator tint supplies
-     the colour, so the same shape works on every screen. -->
-<shape xmlns:android="http://schemas.android.com/apk/res/android"
-    android:shape="rectangle">
-    <solid android:color="?attr/colorSecondaryContainer" />
-    <corners android:radius="@dimen/ui_pill_radius" />
-</shape>

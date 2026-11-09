@@ -64,10 +64,9 @@
                 android:textAppearance="?attr/textAppearanceTitleMedium"
                 android:textColor="?attr/colorOnSurface" />
 
-            <!-- The same pill switch style as the Time sections. -->
-            <com.google.android.material.tabs.TabLayout
+            <!-- The same pills as the Time sections. -->
+            <dev.proflyder.home.core.ui.PillSegments
                 android:id="@+id/control_voice_profile_tabs"
-                style="@style/Widget.Home.PillTabs"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="@dimen/ui_tile_gap" />
