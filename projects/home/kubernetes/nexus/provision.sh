@@ -313,33 +313,27 @@ fi
 expect "$code" "role ci-reader"
 echo "configured role ci-reader"
 
-# PUT keeps the password in sync with OpenBao on every run. The body is built
-# with printf so the password never appears in argv.
-json_escape() {
-  printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g'
-}
-reader_user="$(cat <<JSON
-{
-  "userId": "ci-reader",
-  "firstName": "CI",
-  "lastName": "Reader",
-  "emailAddress": "ci-reader@home.invalid",
-  "source": "default",
-  "status": "active",
-  "roles": ["ci-reader"],
-  "password": "$(json_escape "$NEXUS_CI_PASSWORD")"
-}
-JSON
-)"
-code="$(request GET '/service/rest/v1/security/users?userId=ci-reader')"
-if [ "$code" = "200" ]; then
+# The user record carries no password; the password is set separately and
+# streamed on stdin, so it never appears in argv or in the job log.
+reader_user='{"userId":"ci-reader","firstName":"CI","lastName":"Reader","emailAddress":"ci-reader@home.invalid","source":"default","status":"active","roles":["ci-reader"]}'
+request GET '/service/rest/v1/security/users?userId=ci-reader' >/dev/null
+if grep -q '"userId" *: *"ci-reader"' /tmp/body; then
   code="$(request PUT /service/rest/v1/security/users/ci-reader \
     -H 'Content-Type: application/json' -d "$reader_user")"
+  expect "$code" "user ci-reader"
 else
-  code="$(request POST /service/rest/v1/security/users \
-    -H 'Content-Type: application/json' -d "$reader_user")"
+  # Creation requires a password: send the record with it on stdin.
+  code="$(printf '%s' "$reader_user" | sed 's/}$//' | {
+    cat
+    printf ',"password":"%s"}' "$(printf '%s' "$NEXUS_CI_PASSWORD" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g')"
+  } | request POST /service/rest/v1/security/users \
+    -H 'Content-Type: application/json' --data-binary @-)"
+  expect "$code" "user ci-reader"
 fi
-expect "$code" "user ci-reader"
+code="$(printf '%s' "$NEXUS_CI_PASSWORD" | request PUT \
+  /service/rest/v1/security/users/ci-reader/change-password \
+  -H 'Content-Type: text/plain' --data-binary @-)"
+expect "$code" "ci-reader password"
 echo "configured user ci-reader"
 
 echo "Nexus provisioning complete"
