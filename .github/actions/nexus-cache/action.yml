@@ -11,7 +11,6 @@ description: Route CI downloads through the home Nexus cache when it is reachabl
 #   * ~/.npmrc          npm registry + basic auth
 #   * ~/.config/pip/pip.conf
 #   * ~/.bazelrc        `common --downloader_config=<rendered>`
-#   * $GITHUB_ENV       MISE_NODE_MIRROR_URL for the mise node backend
 inputs:
   host:
     description: Public Nexus hostname (no scheme, no path)
@@ -83,8 +82,4 @@ runs:
           "$GITHUB_WORKSPACE/platform/bazel/downloader.cfg" > "$cfg"
         echo "common --downloader_config=$cfg" >> "$HOME/.bazelrc"
 
-        {
-          echo "MISE_NODE_MIRROR_URL=https://${NEXUS_HOST}/repository/nodejs-dist/"
-        } >> "$GITHUB_ENV"
-
-        echo "::notice title=Nexus cache enabled::Bazel, npm, pip and mise node downloads go through https://${NEXUS_HOST}/repository/"
+        echo "::notice title=Nexus cache enabled::Bazel, npm and pip downloads go through https://${NEXUS_HOST}/repository/"
