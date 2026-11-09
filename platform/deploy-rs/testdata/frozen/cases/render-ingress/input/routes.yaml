@@ -105,6 +105,11 @@ spec:
     secretName: home-wildcard-tls
 
 ---
+# Intercom signaling is a long-lived server-streaming response (Connect
+# envelope frames over HTTP/1.1): the `Watch` call stays open for the whole
+# call. `flushInterval` makes Traefik forward each frame promptly instead of
+# buffering it; the entrypoint timeouts in values/traefik.yaml keep a long-lived
+# stream from being cut. The NodePort stays as the emergency path.
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
@@ -122,5 +127,7 @@ spec:
         - name: intercom
           namespace: home-assistant
           port: 8099
+          responseForwarding:
+            flushInterval: 100ms
   tls:
     secretName: home-wildcard-tls

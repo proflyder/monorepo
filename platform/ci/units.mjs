@@ -1036,6 +1036,7 @@ export const config = {
       title: "projects/home/kubernetes/ingress (Traefik/cert-manager templates)",
       paths: ["projects/home/kubernetes/ingress/**"],
       python: {
+        suites: ["projects/home/kubernetes/ingress"],
         compile: ["projects/home/kubernetes/ingress"],
       },
     },

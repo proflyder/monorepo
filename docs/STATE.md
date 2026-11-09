@@ -614,8 +614,15 @@
   общий токен приложения) и `secret/k8s/home-assistant/intercom`
   (`station_token`),
   `intercom_env` в `secret/ci/deploy-home` (`INTERCOM_NODE_PORT=30097`),
-  NodePort закрыт общим host-фильтром scheduler/control. Первый выкат — merge
-  этой ветки в `develop`; до этого живой Deployment отсутствует.
+  NodePort закрыт общим host-фильтром scheduler/control. LAN/VPN-клиенты
+  ходят по внутреннему имени `https://intercom.<домен>/` через Traefik
+  (`home-allowlist`, wildcard TLS): маршрут задаёт
+  `responseForwarding.flushInterval: 100ms`, entrypoint `websecure` —
+  `writeTimeout: 0s`/`idleTimeout: 1800s` для долгоживущего streaming
+  `Watch`; NetworkPolicy `intercom-ingress` допускает LAN/VPN/узел и pod
+  CIDR. A-запись `intercom` создаёт ingress-деплой. NodePort `30097`
+  сохранён аварийным путём; в Remote Config (`home_connection`) поле
+  `intercomBaseUrl` указывает на `https://intercom.<домен>`.
 - `projects/mobile/android`: Kotlin-клиент (Views, одна Activity, Metro DI,
   `applicationId dev.proflyder.home`, minSdk 26 / target 36, debug-signed).
   Вкладки **Home**, **Scenarios**, **Time** (переключатель Alarms/Timers/

@@ -279,10 +279,16 @@ Grafana admin password — OpenBao `secret/k8s/monitoring/grafana-admin`.
   `grafana.home.example.com` → `monitoring/monitoring-grafana:80`,
   `alarms.home.example.com` → `home-assistant/scheduler:8098`,
   `control.home.example.com` → `home-assistant/ha-control:8099`,
-  `currency.home.example.com` → `currency-bot/currency-bot:8080`.
+  `currency.home.example.com` → `currency-bot/currency-bot:8080`,
+  `intercom.home.example.com` → `home-assistant/intercom:8099`
+  (`responseForwarding.flushInterval: 100ms` для streaming `Watch`;
+  NodePort `30097` остаётся аварийным путём).
   Собственные маршруты (`deploy.sh` своих каталогов): `vault.home.example.com`
   → `openbao/openbao:8200`, `passwords.home.example.com` →
   `vaultwarden/vaultwarden:8080`.
+- A-записи ingress-хостов (`ha`, `grafana`, `alarms`, `control`, `currency`,
+  `intercom`) создаёт/исправляет `ingress/deploy.sh` через Cloudflare API
+  (`NODE_IP` из `secrets/home/ingress.env`); `--skip-dns` отключает шаг.
 - Все маршруты и сертификат — в namespace `traefik`; `allowCrossNamespace`
   разрешает Service из `monitoring`/`home-assistant`/`currency-bot`. Solver-Secret
   `cloudflare-api-token` живёт в namespace `cert-manager`, потому что

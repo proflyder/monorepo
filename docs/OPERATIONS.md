@@ -1160,6 +1160,22 @@ kubectl -n home-assistant exec deployment/intercom -- \
 # NodePort 30097 фильтруется общим nft scheduler/control/intercom
 ```
 
+Адрес для клиентов — `https://intercom.<домен>/` за Traefik (LAN/VPN,
+`home-allowlist`, wildcard TLS). Именно его нужно положить в Firebase
+Remote Config в `home_connection.intercomBaseUrl` (полный URL без `/v1`).
+NodePort `30097` оставлен аварийным путём. Проверка с LAN:
+
+```bash
+TOKEN=$(tr -d '\r\n' < secrets/home/intercom.token)   # не печатать
+curl -fsS --resolve "intercom.<домен>:443:<NODE_IP>" \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{}' \
+  "https://intercom.<домен>/home.v1.IntercomService/ListEndpoints"
+```
+
+`Watch` — долгоживущий stream; маршрут и entrypoint настроены на
+`flushInterval: 100ms`, `writeTimeout: 0s`, `idleTimeout: 1800s`.
+
 Проверки:
 
 ```bash
