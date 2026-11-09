@@ -2,10 +2,10 @@
 # Provision the Nexus repositories, the read-only CI user and the security
 # settings through the Nexus REST API.
 #
-# Run once inside the `nexus-provision` Job after a deploy, and re-run it by
-# deleting the Job (deploy.sh does this on every apply). Every step is
-# idempotent: an existing object is updated with PUT instead of being created
-# again, so a second run changes nothing.
+# Runs inside the `nexus-provision` Job. Flux recreates the Job whenever this
+# script changes (the ConfigMap content hash changes the mounted name); every
+# step is idempotent: an existing object is updated with PUT instead of being
+# created again, so a second run changes nothing.
 #
 # Inputs (environment, supplied by the Job from the `nexus-secrets` Secret):
 #   NEXUS_URL             in-cluster base URL, for example http://nexus.nexus.svc:8081

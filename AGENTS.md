@@ -126,6 +126,17 @@ Pulsar — `projects/station/pulsar/AGENTS.md`.
   endpoint/DB path. Один и тот же solution запускается в разных projects.
 - Архитектурные границы и выбор языков — `docs/MONOREPO.md`.
 
+## GitOps под Flux
+
+- Инфраструктура, отданная Flux (сейчас Nexus: `projects/home/kubernetes/flux/`
+  и `projects/home/kubernetes/nexus/`), меняется только через Git и merge в
+  `develop`. Ручной `kubectl apply` этих объектов не использовать — Flux
+  вернёт состояние из Git.
+- Bootstrap/секреты/статус — `projects/home/kubernetes/flux/README.md`;
+  деплой-ключ и настройки живут в OpenBao (`secret/k8s/flux-system/*`), не в
+  Git. Остальная инфраструктура и сервисы приложений остаются на
+  `deploy-home`.
+
 ## Совместимость функциональности
 
 Pulsar развиваем поверх актуального общего состояния всех сессий. Нельзя

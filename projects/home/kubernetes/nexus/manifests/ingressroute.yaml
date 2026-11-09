@@ -1,5 +1,6 @@
-# TEMPLATE. deploy.sh substitutes ${NEXUS_HOST} (internal name under the home
-# suffix) and ${NEXUS_PUBLIC_HOST} (Cloudflare Tunnel name used by CI).
+# TEMPLATE. Flux substitutes ${NEXUS_HOST} (internal name under the home
+# suffix) and ${NEXUS_PUBLIC_HOST} (Cloudflare Tunnel name used by CI) from the
+# `flux-settings` Secret.
 #
 # Two routes:
 #   * `/repository/*` on either host is the only public surface. GitHub-hosted

@@ -1,0 +1,72 @@
+# Flux talks only to the Kubernetes API, DNS, and GitHub.
+#
+# `${NODE_LAN_IP}` is substituted by the root Kustomization from the
+# `flux-settings` Secret (the K3s API is the node itself; a service ClusterIP
+# would be DNATed to this address before the policy is evaluated). The GitHub
+# ranges are the published git/web ranges; update them if GitHub changes its
+# network and the source-controller starts failing to clone.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: flux-system-ingress
+  namespace: flux-system
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: flux-system-egress
+  namespace: flux-system
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    # CoreDNS.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # Kubernetes API: the node endpoint directly and the service ClusterIP.
+    - to:
+        - ipBlock:
+            cidr: ${NODE_LAN_IP}/32
+      ports:
+        - protocol: TCP
+          port: 6443
+    - to:
+        - ipBlock:
+            cidr: 10.43.0.0/16
+      ports:
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 6443
+    # github.com (SSH clone and HTTPS redirects).
+    - to:
+        - ipBlock:
+            cidr: 140.82.112.0/20
+        - ipBlock:
+            cidr: 143.55.64.0/20
+        - ipBlock:
+            cidr: 192.30.252.0/22
+      ports:
+        - protocol: TCP
+          port: 22
+        - protocol: TCP
+          port: 443
+    # raw content served by GitHub for release artifacts.
+    - to:
+        - ipBlock:
+            cidr: 185.199.108.0/22
+      ports:
+        - protocol: TCP
+          port: 443

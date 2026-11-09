@@ -1,0 +1,18 @@
+# Bootstrap Kustomization for the Flux installation.
+#
+# `bootstrap.sh` applies this directory once with `kubectl apply -k`; after
+# that Flux reconciles the cluster from Git. The same directory is also safe to
+# apply again (idempotent).
+#
+# It intentionally does not contain the flux-system NetworkPolicy or the
+# Nexus Kustomizations: those are reconciled by Flux from `cluster/` so the
+# policy can substitute the private node address from OpenBao.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - gotk-components.yaml
+  - external-secrets.yaml
+patches:
+  - path: patches/source-controller.yaml
+  - path: patches/kustomize-controller.yaml
+  - path: patches/helm-controller.yaml

@@ -1,10 +1,10 @@
-# TEMPLATE rendered by deploy.sh:
-#   NEXUS_PROVISION_IMAGE  curl image pinned by tag and digest (versions.sh)
-#
-# `deploy.sh` creates the `nexus-provision` ConfigMap from `provision.sh` and
-# recreates this Job on every apply, so the API state converges to the script
-# even when the StatefulSet did not roll. The Job is safe to delete and re-run
-# by hand; `ttlSecondsAfterFinished` cleans up successful runs on its own.
+# The `nexus-provision` ConfigMap is generated from `provision.sh` by
+# kustomize; configMapGenerator puts the content hash in the generated name and
+# the volume below mounts that generated name. A changed script changes the Job
+# spec, so the Flux Kustomization (`force: true`) recreates the immutable Job
+# and provisioning runs again; an unchanged script is a no-op.
+# The completed Job is kept (its logs are the provisioning record); Flux
+# replaces it only when the script or another immutable field changes.
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -15,7 +15,6 @@ metadata:
     app.kubernetes.io/part-of: ricardo-home
 spec:
   backoffLimit: 3
-  ttlSecondsAfterFinished: 86400
   template:
     metadata:
       labels:
@@ -32,7 +31,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: provision
-          image: ${NEXUS_PROVISION_IMAGE}
+          image: nexus-provision
           imagePullPolicy: IfNotPresent
           command: ["/bin/sh", "/scripts/provision.sh"]
           env:

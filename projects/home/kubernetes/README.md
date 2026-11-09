@@ -13,6 +13,7 @@ BLE gateway остаются на станции. Версии зафиксир�
 - [Дашборды и мониторинг](../../home-assistant/observability/README.md).
 - [HTTPS ingress Traefik + cert-manager](ingress/).
 - [Nexus — кэш артефактов для CI](nexus/).
+- [Flux — pull-based GitOps для Nexus](flux/).
 - [OpenBao](openbao/).
 - [External Secrets Operator](external-secrets/).
 - [Hermes voice-proxy firewall](voice-firewall/).

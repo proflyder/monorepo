@@ -1,4 +1,5 @@
-# TEMPLATE: NODE_LAN_IP and LAN_CIDR come from the private ingress env.
+# NODE_LAN_IP is substituted by Flux from the `flux-settings`
+# Secret (OpenBao); it is never committed to Git.
 #
 # Traffic reaches the pod only through Traefik (hostNetwork, so its source is
 # the node address) and from the in-cluster provisioning Job (pod CIDR).

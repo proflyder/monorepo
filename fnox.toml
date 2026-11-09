@@ -66,12 +66,6 @@ INGRESS_PRIVATE_ENV = { provider = "infra_kubernetes", value = "values-private/i
 CLOUDFLARE_API_TOKEN_FILE = { provider = "infra_cloudflare", value = "vpn-dns/cloudflare_env", as_file = true }
 KUBECONFIG = { provider = "infra_kubernetes", value = "admin/admin_kubeconfig", as_file = true }
 
-# --- Nexus artifact cache deploy ---------------------------------------------
-[profiles.nexus.secrets]
-INGRESS_PRIVATE_ENV = { provider = "infra_kubernetes", value = "values-private/ingress_env", as_file = true }
-CLOUDFLARE_API_TOKEN_FILE = { provider = "infra_cloudflare", value = "vpn-dns/cloudflare_env", as_file = true }
-KUBECONFIG = { provider = "infra_kubernetes", value = "admin/admin_kubeconfig", as_file = true }
-
 # --- Vaultwarden deploy -------------------------------------------------------
 [profiles.vaultwarden.secrets]
 INGRESS_PRIVATE_ENV = { provider = "infra_kubernetes", value = "values-private/ingress_env", as_file = true }
