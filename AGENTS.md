@@ -156,6 +156,12 @@ duck/resume и передачу wake-команд в HA. Текущая верс
   и SSH-ключи `~/.ssh/home-lab/` (алиасы `ssh -F ~/.ssh/home-lab/config
   pve|k3s|haos`). Карта путей — `docs/SECRETS.md` и
   `platform/workstation/catalog.json`; рабочее место — `docs/WORKSTATION.md`.
+- Нужен доступ или креды (SSH к хосту, токен, пароль, адрес) — сначала
+  каталог, а не перебор ключей и не вопрос владельцу: `docs/SECRETS.md`
+  (раздел «Доступ к хостам») → `secrets/NETWORK.md` (адреса, пользователи) →
+  `~/.ssh/home-lab/` (ключи после `mise run secrets:pull`) → OpenBao
+  `secret/infra/*` через `operator.token`. Просить у владельца — только если
+  в каталоге этого нет; найденный пробел дописать в каталог.
 - Инструменты — только из `mise.toml` (`mise install`); не скачивать бинарники
   вручную и не класть их в `local-data/`.
 - Скрипты деплоя и обслуживания запускать только через `mise run admin:*`
