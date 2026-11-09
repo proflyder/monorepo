@@ -2443,7 +2443,8 @@ pub struct DueEvent {
         skip_serializing_if = "::buffa::json_helpers::skip_if::is_zero_i64"
     )]
     pub lease_until_unix: i64,
-    /// skip/failure reason, never contains secrets
+    /// Deprecated human-readable skip/failure reason, never contains secrets.
+    /// New clients render `detail_text` instead.
     ///
     /// Field 13: `detail`
     #[serde(
@@ -2503,6 +2504,19 @@ pub struct DueEvent {
         skip_serializing_if = "::buffa::json_helpers::skip_if::is_zero_i64"
     )]
     pub acked_unix: i64,
+    /// Localized skip/failure reason. Empty for older rows and for events that
+    /// have no reason; clients fall back to `detail`.
+    ///
+    /// Field 19: `detail_text`
+    #[serde(
+        rename = "detailText",
+        alias = "detail_text",
+        skip_serializing_if = "::buffa::json_helpers::skip_if::is_unset_message_field"
+    )]
+    pub detail_text: ::buffa::MessageField<
+        LocalizedText,
+        ::buffa::Inline<LocalizedText>,
+    >,
     #[serde(skip)]
     #[doc(hidden)]
     pub __buffa_unknown_fields: ::buffa::UnknownFields,
@@ -2528,6 +2542,7 @@ impl ::core::fmt::Debug for DueEvent {
             .field("task_type", &self.task_type)
             .field("queue", &self.queue)
             .field("acked_unix", &self.acked_unix)
+            .field("detail_text", &self.detail_text)
             .finish()
     }
 }
@@ -2554,7 +2569,7 @@ impl ::buffa::Message for DueEvent {
     /// above [`::buffa::MAX_MESSAGE_BYTES`] that the encode entry
     /// points reject, never a silently wrapped size.
     #[allow(clippy::let_and_return)]
-    fn compute_size(&self, _cache: &mut ::buffa::SizeCache) -> u32 {
+    fn compute_size(&self, __cache: &mut ::buffa::SizeCache) -> u32 {
         #[allow(unused_imports)]
         use ::buffa::Enumeration as _;
         let mut size = 0u64;
@@ -2627,12 +2642,20 @@ impl ::buffa::Message for DueEvent {
         if self.acked_unix != 0i64 {
             size += 2u64 + ::buffa::types::int64_encoded_len(self.acked_unix) as u64;
         }
+        if self.detail_text.is_set() {
+            let __slot = __cache.reserve();
+            let inner_size = self.detail_text.compute_size(__cache);
+            __cache.set(__slot, inner_size);
+            size
+                += 2u64 + ::buffa::encoding::varint_len(inner_size as u64) as u64
+                    + inner_size as u64;
+        }
         size += self.__buffa_unknown_fields.encoded_len() as u64;
         ::buffa::saturate_size(size)
     }
     fn write_to(
         &self,
-        _cache: &mut ::buffa::SizeCache,
+        __cache: &mut ::buffa::SizeCache,
         buf: &mut impl ::buffa::EncodeSink,
     ) {
         #[allow(unused_imports)]
@@ -2702,6 +2725,14 @@ impl ::buffa::Message for DueEvent {
         }
         if self.acked_unix != 0i64 {
             ::buffa::types::put_int64_field(18u32, self.acked_unix, buf);
+        }
+        if self.detail_text.is_set() {
+            ::buffa::types::put_len_delimited_header(
+                19u32,
+                u64::from(__cache.consume_next()),
+                buf,
+            );
+            self.detail_text.write_to(__cache, buf);
         }
         self.__buffa_unknown_fields.write_to(buf);
     }
@@ -2850,6 +2881,17 @@ impl ::buffa::Message for DueEvent {
                 )?;
                 self.acked_unix = ::buffa::types::decode_int64(buf)?;
             }
+            19u32 => {
+                ::buffa::encoding::check_wire_type(
+                    tag,
+                    ::buffa::encoding::WireType::LengthDelimited,
+                )?;
+                ::buffa::Message::merge_length_delimited(
+                    self.detail_text.get_or_insert_default(),
+                    buf,
+                    ctx,
+                )?;
+            }
             _ => {
                 self.__buffa_unknown_fields
                     .push(::buffa::encoding::decode_unknown_field(tag, buf, ctx)?);
@@ -2876,6 +2918,7 @@ impl ::buffa::Message for DueEvent {
         self.task_type.clear();
         self.queue.clear();
         self.acked_unix = 0i64;
+        self.detail_text = ::buffa::MessageField::none();
         self.__buffa_unknown_fields.clear();
     }
 }
@@ -8873,7 +8916,8 @@ pub struct GetStatusResponse {
         skip_serializing_if = "::buffa::json_helpers::skip_if::is_zero_i64"
     )]
     pub last_tick_error_unix: i64,
-    /// bounded, no secrets
+    /// Deprecated bounded diagnostic text, no secrets. New clients render
+    /// `last_tick_error_text` instead.
     ///
     /// Field 15: `last_tick_error`
     #[serde(
@@ -8894,6 +8938,18 @@ pub struct GetStatusResponse {
         skip_serializing_if = "::buffa::json_helpers::skip_if::is_false"
     )]
     pub scenario_store_supported: bool,
+    /// Localized last-tick failure. Empty when the tick is healthy.
+    ///
+    /// Field 17: `last_tick_error_text`
+    #[serde(
+        rename = "lastTickErrorText",
+        alias = "last_tick_error_text",
+        skip_serializing_if = "::buffa::json_helpers::skip_if::is_unset_message_field"
+    )]
+    pub last_tick_error_text: ::buffa::MessageField<
+        LocalizedText,
+        ::buffa::Inline<LocalizedText>,
+    >,
     #[serde(skip)]
     #[doc(hidden)]
     pub __buffa_unknown_fields: ::buffa::UnknownFields,
@@ -8917,6 +8973,7 @@ impl ::core::fmt::Debug for GetStatusResponse {
             .field("last_tick_error_unix", &self.last_tick_error_unix)
             .field("last_tick_error", &self.last_tick_error)
             .field("scenario_store_supported", &self.scenario_store_supported)
+            .field("last_tick_error_text", &self.last_tick_error_text)
             .finish()
     }
 }
@@ -9015,6 +9072,14 @@ impl ::buffa::Message for GetStatusResponse {
         if self.scenario_store_supported {
             size += 2u64 + ::buffa::types::BOOL_ENCODED_LEN as u64;
         }
+        if self.last_tick_error_text.is_set() {
+            let __slot = __cache.reserve();
+            let inner_size = self.last_tick_error_text.compute_size(__cache);
+            __cache.set(__slot, inner_size);
+            size
+                += 2u64 + ::buffa::encoding::varint_len(inner_size as u64) as u64
+                    + inner_size as u64;
+        }
         size += self.__buffa_unknown_fields.encoded_len() as u64;
         ::buffa::saturate_size(size)
     }
@@ -9086,6 +9151,14 @@ impl ::buffa::Message for GetStatusResponse {
         }
         if self.scenario_store_supported {
             ::buffa::types::put_bool_field(16u32, self.scenario_store_supported, buf);
+        }
+        if self.last_tick_error_text.is_set() {
+            ::buffa::types::put_len_delimited_header(
+                17u32,
+                u64::from(__cache.consume_next()),
+                buf,
+            );
+            self.last_tick_error_text.write_to(__cache, buf);
         }
         self.__buffa_unknown_fields.write_to(buf);
     }
@@ -9222,6 +9295,17 @@ impl ::buffa::Message for GetStatusResponse {
                 )?;
                 self.scenario_store_supported = ::buffa::types::decode_bool(buf)?;
             }
+            17u32 => {
+                ::buffa::encoding::check_wire_type(
+                    tag,
+                    ::buffa::encoding::WireType::LengthDelimited,
+                )?;
+                ::buffa::Message::merge_length_delimited(
+                    self.last_tick_error_text.get_or_insert_default(),
+                    buf,
+                    ctx,
+                )?;
+            }
             _ => {
                 self.__buffa_unknown_fields
                     .push(::buffa::encoding::decode_unknown_field(tag, buf, ctx)?);
@@ -9246,6 +9330,7 @@ impl ::buffa::Message for GetStatusResponse {
         self.last_tick_error_unix = 0i64;
         self.last_tick_error.clear();
         self.scenario_store_supported = false;
+        self.last_tick_error_text = ::buffa::MessageField::none();
         self.__buffa_unknown_fields.clear();
     }
 }

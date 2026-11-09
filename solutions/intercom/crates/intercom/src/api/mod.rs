@@ -7,6 +7,7 @@
 
 mod auth;
 mod service;
+mod text;
 
 use std::collections::HashSet;
 use std::convert::Infallible;

@@ -31,6 +31,7 @@ trap 'rm -rf "$scratch"' EXIT
 
 mkdir -p "$scratch/src" "$scratch/proto"
 cp "$root/packages/proto/home/v1/scheduler.proto" "$scratch/proto/"
+cp "$root/packages/proto/home/v1/text.proto" "$scratch/proto/"
 cp "$root/packages/proto/home/v1/alarms.proto" "$scratch/proto/"
 cp "$root/packages/proto/home/v1/scenario.proto" "$scratch/proto/"
 cp "$root/packages/proto/home/v1/intercom.proto" "$scratch/proto/"
@@ -52,7 +53,13 @@ cat > "$scratch/build.rs" <<'EOF'
 fn main() {
     let out = std::env::var("GEN_OUT").expect("GEN_OUT");
     connectrpc_build::Config::new()
-        .files(&["scheduler.proto", "alarms.proto", "scenario.proto", "intercom.proto"])
+        .files(&[
+            "scheduler.proto",
+            "text.proto",
+            "alarms.proto",
+            "scenario.proto",
+            "intercom.proto",
+        ])
         .includes(&["proto"])
         .out_dir(&out)
         .include_file("mod.rs")

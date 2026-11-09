@@ -14,7 +14,6 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -154,22 +153,8 @@ class ConnectScenarioClient(
         }
     }
 
-    private fun parseConnectError(httpCode: Int, text: String): RemoteFailure {
-        val parsed = runCatching {
-            if (text.isBlank()) null else json.parseToJsonElement(text).jsonObject
-        }.getOrNull()
-        val code = sanitizeMessage((parsed?.get("code") as? JsonPrimitive)?.content).orEmpty()
-        val message = sanitizeMessage((parsed?.get("message") as? JsonPrimitive)?.content).orEmpty()
-        return when (code) {
-            "unauthenticated", "permission_denied" -> RemoteFailure.Unauthorized
-            "deadline_exceeded", "canceled" -> RemoteFailure.Timeout
-            "unavailable" -> RemoteFailure.Offline(message.ifBlank { "server unavailable" })
-            else -> RemoteFailure.Server(
-                code = code.ifBlank { "http_$httpCode" },
-                message = message.ifBlank { "server returned HTTP $httpCode" },
-            )
-        }
-    }
+    private fun parseConnectError(httpCode: Int, text: String): RemoteFailure =
+        parseConnectFailure(httpCode, text, json)
 
     private fun decodeScenarios(element: JsonElement): List<Scenario> {
         val field = element.jsonObject["scenarios"] ?: return emptyList()

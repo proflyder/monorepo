@@ -127,7 +127,15 @@
         },
         "body": {
           "code": "already_exists",
-          "message": "idempotency key conflict: idempotency key reused with a different request"
+          "message": "idempotency key conflict: idempotency key reused with a different request",
+          "details": [
+            {
+              "type": "home.v1.LocalizedText",
+              "debug": {
+                "key": "scheduler.error.idempotency_key_reused"
+              }
+            }
+          ]
         }
       }
     }

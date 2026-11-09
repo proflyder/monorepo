@@ -120,7 +120,14 @@ sealed interface RemoteFailure {
     data class Offline(val detail: String) : RemoteFailure
     data object Timeout : RemoteFailure
     data class Tls(val detail: String) : RemoteFailure
-    data class Server(val code: String, val message: String) : RemoteFailure
+    data class Server(
+        val code: String,
+        val message: String,
+        /** Stable localization key from the server; empty for older servers. */
+        val textKey: String = "",
+        /** Typed arguments for [textKey]. */
+        val textArgs: Map<String, String> = emptyMap(),
+    ) : RemoteFailure
     data class ProtocolFailure(val detail: String) : RemoteFailure
     data class Validation(val field: Field, val detail: String = "") : RemoteFailure
     data class Storage(val detail: String) : RemoteFailure

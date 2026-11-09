@@ -139,6 +139,12 @@ pub fn timer_to_proto(timer: &Timer) -> proto::Timer {
 }
 
 pub fn event_to_proto(event: &Event) -> proto::DueEvent {
+    let detail_text = super::text::event_detail_text(&event.detail);
+    let detail_text = if detail_text.key.is_empty() {
+        proto::DueEvent::default().detail_text
+    } else {
+        detail_text.into()
+    };
     proto::DueEvent {
         id: event.id.clone(),
         source_id: event.source_id.clone(),
@@ -153,6 +159,7 @@ pub fn event_to_proto(event: &Event) -> proto::DueEvent {
         created_unix: event.created_unix,
         lease_until_unix: event.lease_until_unix,
         detail: event.detail.clone(),
+        detail_text,
         action: proto_event_action(event.action).into(),
         ack_outcome: proto_ack_outcome(event.ack_outcome).into(),
         task_type: event.task_type.clone(),

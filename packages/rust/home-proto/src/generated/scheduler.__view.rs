@@ -1664,7 +1664,8 @@ pub struct DueEventView<'a> {
     pub created_unix: i64,
     /// Field 12: `lease_until_unix`
     pub lease_until_unix: i64,
-    /// skip/failure reason, never contains secrets
+    /// Deprecated human-readable skip/failure reason, never contains secrets.
+    /// New clients render `detail_text` instead.
     ///
     /// Field 13: `detail`
     pub detail: &'a str,
@@ -1691,6 +1692,13 @@ pub struct DueEventView<'a> {
     ///
     /// Field 18: `acked_unix`
     pub acked_unix: i64,
+    /// Localized skip/failure reason. Empty for older rows and for events that
+    /// have no reason; clients fall back to `detail`.
+    ///
+    /// Field 19: `detail_text`
+    pub detail_text: ::buffa::MessageFieldView<
+        super::super::__buffa::view::LocalizedTextView<'a>,
+    >,
     pub __buffa_unknown_fields: ::buffa::UnknownFieldsView<'a>,
 }
 impl<'a> ::buffa::MessageView<'a> for DueEventView<'a> {
@@ -1857,6 +1865,27 @@ impl<'a> ::buffa::MessageView<'a> for DueEventView<'a> {
                 )?;
                 view.acked_unix = ::buffa::types::decode_int64(&mut cur)?;
             }
+            19u32 => {
+                ::buffa::encoding::check_wire_type(
+                    tag,
+                    ::buffa::encoding::WireType::LengthDelimited,
+                )?;
+                let __sub_ctx = ctx.descend()?;
+                let sub = ::buffa::types::borrow_bytes(&mut cur)?;
+                match view.detail_text.as_mut() {
+                    Some(existing) => {
+                        ::buffa::MessageView::merge_into_view(existing, sub, __sub_ctx)?
+                    }
+                    None => {
+                        view.detail_text = ::buffa::MessageFieldView::set(
+                            <super::super::__buffa::view::LocalizedTextView as ::buffa::MessageView>::decode_view_ctx(
+                                sub,
+                                __sub_ctx,
+                            )?,
+                        );
+                    }
+                }
+            }
             _ => {
                 ::buffa::encoding::skip_field_depth(tag, &mut cur, ctx.depth())?;
                 let span_len = before_tag.len() - cur.len();
@@ -1897,6 +1926,15 @@ impl<'a> ::buffa::MessageView<'a> for DueEventView<'a> {
             task_type: self.task_type.to_string(),
             queue: self.queue.to_string(),
             acked_unix: self.acked_unix,
+            detail_text: match self.detail_text.as_option() {
+                Some(v) => {
+                    ::buffa::MessageField::<
+                        super::super::LocalizedText,
+                        ::buffa::Inline<super::super::LocalizedText>,
+                    >::some(v.to_owned_from_source(__buffa_src)?)
+                }
+                None => ::buffa::MessageField::none(),
+            },
             __buffa_unknown_fields: self.__buffa_unknown_fields.to_owned()?.into(),
             ..::core::default::Default::default()
         })
@@ -1904,7 +1942,7 @@ impl<'a> ::buffa::MessageView<'a> for DueEventView<'a> {
 }
 impl<'a> ::buffa::ViewEncode<'a> for DueEventView<'a> {
     #[allow(clippy::needless_borrow, clippy::let_and_return)]
-    fn compute_size(&self, _cache: &mut ::buffa::SizeCache) -> u32 {
+    fn compute_size(&self, __cache: &mut ::buffa::SizeCache) -> u32 {
         #[allow(unused_imports)]
         use ::buffa::Enumeration as _;
         let mut size = 0u64;
@@ -1977,13 +2015,21 @@ impl<'a> ::buffa::ViewEncode<'a> for DueEventView<'a> {
         if self.acked_unix != 0i64 {
             size += 2u64 + ::buffa::types::int64_encoded_len(self.acked_unix) as u64;
         }
+        if self.detail_text.is_set() {
+            let __slot = __cache.reserve();
+            let inner_size = self.detail_text.compute_size(__cache);
+            __cache.set(__slot, inner_size);
+            size
+                += 2u64 + ::buffa::encoding::varint_len(inner_size as u64) as u64
+                    + inner_size as u64;
+        }
         size += self.__buffa_unknown_fields.encoded_len() as u64;
         ::buffa::saturate_size(size)
     }
     #[allow(clippy::needless_borrow)]
     fn write_to(
         &self,
-        _cache: &mut ::buffa::SizeCache,
+        __cache: &mut ::buffa::SizeCache,
         buf: &mut impl ::buffa::EncodeSink,
     ) {
         #[allow(unused_imports)]
@@ -2053,6 +2099,14 @@ impl<'a> ::buffa::ViewEncode<'a> for DueEventView<'a> {
         }
         if self.acked_unix != 0i64 {
             ::buffa::types::put_int64_field(18u32, self.acked_unix, buf);
+        }
+        if self.detail_text.is_set() {
+            ::buffa::types::put_len_delimited_header(
+                19u32,
+                u64::from(__cache.consume_next()),
+                buf,
+            );
+            self.detail_text.write_to(__cache, buf);
         }
         self.__buffa_unknown_fields.write_to(buf);
     }
@@ -2156,6 +2210,11 @@ impl<'__a> ::serde::Serialize for DueEventView<'__a> {
                     "ackedUnix",
                     &::buffa::json_helpers::ProtoJson(&self.acked_unix),
                 )?;
+        }
+        {
+            if let ::core::option::Option::Some(__v) = self.detail_text.as_option() {
+                __map.serialize_entry("detailText", __v)?;
+            }
         }
         __map.end()
     }
@@ -2312,7 +2371,8 @@ impl DueEventOwnedView {
     pub fn lease_until_unix(&self) -> i64 {
         self.0.reborrow().lease_until_unix
     }
-    /// skip/failure reason, never contains secrets
+    /// Deprecated human-readable skip/failure reason, never contains secrets.
+    /// New clients render `detail_text` instead.
     ///
     /// Field 13: `detail`
     #[must_use]
@@ -2356,6 +2416,16 @@ impl DueEventOwnedView {
     #[must_use]
     pub fn acked_unix(&self) -> i64 {
         self.0.reborrow().acked_unix
+    }
+    /// Localized skip/failure reason. Empty for older rows and for events that
+    /// have no reason; clients fall back to `detail`.
+    ///
+    /// Field 19: `detail_text`
+    #[must_use]
+    pub fn detail_text(
+        &self,
+    ) -> &::buffa::MessageFieldView<super::super::__buffa::view::LocalizedTextView<'_>> {
+        &self.0.reborrow().detail_text
     }
 }
 impl ::core::convert::From<::buffa::OwnedView<DueEventView<'static>>>
@@ -13803,7 +13873,8 @@ pub struct GetStatusResponseView<'a> {
     pub last_tick_attempt_unix: i64,
     /// Field 14: `last_tick_error_unix`
     pub last_tick_error_unix: i64,
-    /// bounded, no secrets
+    /// Deprecated bounded diagnostic text, no secrets. New clients render
+    /// `last_tick_error_text` instead.
     ///
     /// Field 15: `last_tick_error`
     pub last_tick_error: &'a str,
@@ -13812,6 +13883,12 @@ pub struct GetStatusResponseView<'a> {
     ///
     /// Field 16: `scenario_store_supported`
     pub scenario_store_supported: bool,
+    /// Localized last-tick failure. Empty when the tick is healthy.
+    ///
+    /// Field 17: `last_tick_error_text`
+    pub last_tick_error_text: ::buffa::MessageFieldView<
+        super::super::__buffa::view::LocalizedTextView<'a>,
+    >,
     pub __buffa_unknown_fields: ::buffa::UnknownFieldsView<'a>,
 }
 impl<'a> ::buffa::MessageView<'a> for GetStatusResponseView<'a> {
@@ -13944,6 +14021,27 @@ impl<'a> ::buffa::MessageView<'a> for GetStatusResponseView<'a> {
                 )?;
                 view.scenario_store_supported = ::buffa::types::decode_bool(&mut cur)?;
             }
+            17u32 => {
+                ::buffa::encoding::check_wire_type(
+                    tag,
+                    ::buffa::encoding::WireType::LengthDelimited,
+                )?;
+                let __sub_ctx = ctx.descend()?;
+                let sub = ::buffa::types::borrow_bytes(&mut cur)?;
+                match view.last_tick_error_text.as_mut() {
+                    Some(existing) => {
+                        ::buffa::MessageView::merge_into_view(existing, sub, __sub_ctx)?
+                    }
+                    None => {
+                        view.last_tick_error_text = ::buffa::MessageFieldView::set(
+                            <super::super::__buffa::view::LocalizedTextView as ::buffa::MessageView>::decode_view_ctx(
+                                sub,
+                                __sub_ctx,
+                            )?,
+                        );
+                    }
+                }
+            }
             9u32 => {
                 ::buffa::encoding::check_wire_type(
                     tag,
@@ -14028,6 +14126,15 @@ impl<'a> ::buffa::MessageView<'a> for GetStatusResponseView<'a> {
             last_tick_error_unix: self.last_tick_error_unix,
             last_tick_error: self.last_tick_error.to_string(),
             scenario_store_supported: self.scenario_store_supported,
+            last_tick_error_text: match self.last_tick_error_text.as_option() {
+                Some(v) => {
+                    ::buffa::MessageField::<
+                        super::super::LocalizedText,
+                        ::buffa::Inline<super::super::LocalizedText>,
+                    >::some(v.to_owned_from_source(__buffa_src)?)
+                }
+                None => ::buffa::MessageField::none(),
+            },
             __buffa_unknown_fields: self.__buffa_unknown_fields.to_owned()?.into(),
             ..::core::default::Default::default()
         })
@@ -14107,6 +14214,14 @@ impl<'a> ::buffa::ViewEncode<'a> for GetStatusResponseView<'a> {
         if self.scenario_store_supported {
             size += 2u64 + ::buffa::types::BOOL_ENCODED_LEN as u64;
         }
+        if self.last_tick_error_text.is_set() {
+            let __slot = __cache.reserve();
+            let inner_size = self.last_tick_error_text.compute_size(__cache);
+            __cache.set(__slot, inner_size);
+            size
+                += 2u64 + ::buffa::encoding::varint_len(inner_size as u64) as u64
+                    + inner_size as u64;
+        }
         size += self.__buffa_unknown_fields.encoded_len() as u64;
         ::buffa::saturate_size(size)
     }
@@ -14179,6 +14294,14 @@ impl<'a> ::buffa::ViewEncode<'a> for GetStatusResponseView<'a> {
         }
         if self.scenario_store_supported {
             ::buffa::types::put_bool_field(16u32, self.scenario_store_supported, buf);
+        }
+        if self.last_tick_error_text.is_set() {
+            ::buffa::types::put_len_delimited_header(
+                17u32,
+                u64::from(__cache.consume_next()),
+                buf,
+            );
+            self.last_tick_error_text.write_to(__cache, buf);
         }
         self.__buffa_unknown_fields.write_to(buf);
     }
@@ -14292,6 +14415,14 @@ impl<'__a> ::serde::Serialize for GetStatusResponseView<'__a> {
                     "scenarioStoreSupported",
                     &self.scenario_store_supported,
                 )?;
+        }
+        {
+            if let ::core::option::Option::Some(__v) = self
+                .last_tick_error_text
+                .as_option()
+            {
+                __map.serialize_entry("lastTickErrorText", __v)?;
+            }
         }
         __map.end()
     }
@@ -14475,7 +14606,8 @@ impl GetStatusResponseOwnedView {
     pub fn last_tick_error_unix(&self) -> i64 {
         self.0.reborrow().last_tick_error_unix
     }
-    /// bounded, no secrets
+    /// Deprecated bounded diagnostic text, no secrets. New clients render
+    /// `last_tick_error_text` instead.
     ///
     /// Field 15: `last_tick_error`
     #[must_use]
@@ -14489,6 +14621,15 @@ impl GetStatusResponseOwnedView {
     #[must_use]
     pub fn scenario_store_supported(&self) -> bool {
         self.0.reborrow().scenario_store_supported
+    }
+    /// Localized last-tick failure. Empty when the tick is healthy.
+    ///
+    /// Field 17: `last_tick_error_text`
+    #[must_use]
+    pub fn last_tick_error_text(
+        &self,
+    ) -> &::buffa::MessageFieldView<super::super::__buffa::view::LocalizedTextView<'_>> {
+        &self.0.reborrow().last_tick_error_text
     }
 }
 impl ::core::convert::From<::buffa::OwnedView<GetStatusResponseView<'static>>>

@@ -12,6 +12,7 @@ DEPS = [
     "@crates//:reqwest",
     "@crates//:rustls",
     "@crates//:serde",
+    "@crates//:serde_json",
     "@crates//:thiserror",
     "//packages/rust/home-secret:home_secret",
 ]
@@ -38,7 +39,6 @@ rust_test(
     tags = ["no_rustfmt"],
     deps = DEPS + [
         "@crates//:axum",
-        "@crates//:serde_json",
         "@crates//:tempfile",
         "@crates//:tokio",
     ],

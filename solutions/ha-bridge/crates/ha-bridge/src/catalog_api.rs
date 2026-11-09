@@ -9,6 +9,7 @@
 //! `omitempty` behaviour and the exact body of the error responses are pinned
 //! by `testdata/catalog/catalog.json`.
 
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use axum::Router;
@@ -42,6 +43,13 @@ struct EntryView {
     id: String,
     kind: &'static str,
     title: String,
+    /// Stable key of a server-generated title; omitted for Home Assistant
+    /// user data, which is shown verbatim.
+    #[serde(rename = "titleKey", skip_serializing_if = "String::is_empty")]
+    title_key: String,
+    /// Typed arguments for `titleKey`; omitted when there are none.
+    #[serde(rename = "titleArgs", skip_serializing_if = "BTreeMap::is_empty")]
+    title_args: BTreeMap<String, String>,
     #[serde(skip_serializing_if = "String::is_empty")]
     room: String,
     #[serde(skip_serializing_if = "String::is_empty")]
@@ -174,6 +182,8 @@ impl EntryView {
             id: entry.id.clone(),
             kind: entry.kind.as_str(),
             title: entry.title.clone(),
+            title_key: entry.title_key.clone(),
+            title_args: entry.title_args.clone(),
             room: entry.room.clone(),
             icon: entry.icon.clone(),
             device_id: entry.device_id.clone(),
@@ -342,6 +352,43 @@ mod tests {
     fn source_is_read_only_and_states_ok_is_carried() {
         let snapshot = source(false);
         let _ = snapshot;
+    }
+
+    #[test]
+    fn server_generated_titles_carry_a_key_and_user_data_does_not() {
+        let entries = build(
+            &[
+                Raw {
+                    entity: "script.speak_text".to_owned(),
+                    state: "off".to_owned(),
+                    ..Raw::default()
+                },
+                Raw {
+                    entity: "assist_satellite.station".to_owned(),
+                    state: "idle".to_owned(),
+                    ..Raw::default()
+                },
+                Raw {
+                    entity: "light.lamp".to_owned(),
+                    state: "on".to_owned(),
+                    name: "Лампа".to_owned(),
+                    ..Raw::default()
+                },
+            ],
+            &Rules {
+                scenario_label: "scenario".to_owned(),
+                profile_label: "voice_profile".to_owned(),
+                exclude: Vec::new(),
+            },
+        );
+        let body = catalog_body(&Catalog::new(entries), true);
+        assert!(
+            body.contains("\"titleKey\":\"catalog.action.speak_title\""),
+            "{body}"
+        );
+        // Home Assistant user data stays verbatim, without a key.
+        assert!(body.contains("\"title\":\"Лампа\""), "{body}");
+        assert_eq!(body.matches("\"titleKey\"").count(), 1, "{body}");
     }
 
     #[test]

@@ -306,7 +306,7 @@ internal class ControlAdapter(
         }
 
         private fun bindTitle(entry: ControlEntry) {
-            views.controlProfileTitle.text = entry.title
+            views.controlProfileTitle.text = entry.localizedTitle(views.root.context)
         }
 
         private fun bindIcon(entry: ControlEntry) {
@@ -389,7 +389,7 @@ internal class ControlAdapter(
         }
 
         private fun bindTitle(entry: ControlEntry) {
-            views.controlScenarioTitle.text = entry.title
+            views.controlScenarioTitle.text = entry.localizedTitle(views.root.context)
         }
 
         private fun bindIcon(entry: ControlEntry) {
@@ -527,9 +527,9 @@ internal class ControlAdapter(
                 false,
             )
             views.quickTileLabel.text = when (tile) {
-                is QuickTile.Device -> tile.entry.displayName
+                is QuickTile.Device -> tile.entry.localizedDisplayName(views.root.context)
                 is QuickTile.ScenarioTile -> tile.scenario.label
-                is QuickTile.Speak -> tile.entry.displayName
+                is QuickTile.Speak -> tile.entry.localizedDisplayName(views.root.context)
                 QuickTile.Call -> views.root.context.getString(R.string.control_call_title)
             }
             views.quickTileIcon.setImageResource(
@@ -658,7 +658,7 @@ internal class ControlAdapter(
         }
 
         private fun bindTitle(entry: ControlEntry) {
-            views.controlDeviceTitle.text = entry.title
+            views.controlDeviceTitle.text = entry.localizedTitle(views.root.context)
         }
 
         private fun bindIcon(entry: ControlEntry) {
@@ -760,7 +760,9 @@ internal class ControlAdapter(
             )
             val entry = row.entry
             rowViews.controlRowTitle.text =
-                entry.title.takeUnless { it.isBlank() || it == entry.id } ?: entry.device.ifBlank { entry.title }
+                entry.localizedTitle(rowViews.root.context)
+                    .takeUnless { it.isBlank() || it == entry.id }
+                    ?: entry.device.ifBlank { entry.localizedTitle(rowViews.root.context) }
             rowViews.controlRowIcon.setImageResource(ControlIcons.resolve(entry))
             val on = entry.power == PowerState.ON
             val tint = MaterialColors.getColor(

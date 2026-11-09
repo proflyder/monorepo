@@ -100,7 +100,15 @@
         },
         "body": {
           "code": "failed_precondition",
-          "message": "precondition failed: event is leased by another consumer"
+          "message": "precondition failed: event is leased by another consumer",
+          "details": [
+            {
+              "type": "home.v1.LocalizedText",
+              "debug": {
+                "key": "scheduler.error.event_leased_by_other"
+              }
+            }
+          ]
         }
       }
     },

@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+package home.v1;
+
+// LocalizedText is a user-visible text as a stable string key plus typed
+// arguments. Clients resolve the key through their own resources
+// (strings.xml on Android); the server never sends a human-readable sentence
+// in this field. The key is namespaced snake case, for example
+// `scheduler.error.schedule_not_ringing`; arguments are rendered by the
+// client's template for that key.
+//
+// This is additive to the legacy text fields: an older client ignores it, and
+// a client that does not know a key falls back to the legacy field.
+message LocalizedText {
+  // Stable, namespaced key. Empty when the server has nothing to localize.
+  string key = 1;
+  // Arguments substituted into the client's template for `key`.
+  map<string, string> args = 2;
+}

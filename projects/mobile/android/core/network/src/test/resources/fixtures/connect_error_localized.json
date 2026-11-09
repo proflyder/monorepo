@@ -1,0 +1,12 @@
+{
+  "code": "failed_precondition",
+  "message": "precondition failed: schedule is not ringing",
+  "details": [
+    {
+      "type": "home.v1.LocalizedText",
+      "debug": {
+        "key": "scheduler.error.schedule_not_ringing"
+      }
+    }
+  ]
+}

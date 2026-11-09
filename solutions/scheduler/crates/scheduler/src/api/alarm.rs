@@ -29,7 +29,9 @@ impl AlarmFacade {
             .store_call(move |store| store.get_schedule(&id))
             .await?;
         if schedule.kind != ScheduleKind::Alarm {
-            return Err(ConnectError::not_found("alarm not found"));
+            return Err(ConnectError::not_found("alarm not found").with_detail(
+                home_proto::error_detail(&home_proto::localized("scheduler.error.alarm_not_found")),
+            ));
         }
         Ok(schedule)
     }
@@ -42,7 +44,10 @@ fn legacy_repeat(code: i32) -> Result<Repeat, ConnectError> {
         3 => Ok(Repeat::Weekdays),
         4 => Ok(Repeat::Weekends),
         5 => Ok(Repeat::Custom),
-        _ => Err(ConnectError::invalid_argument("unsupported repeat")),
+        _ => Err(super::text::connect(
+            ConnectError::invalid_argument("unsupported repeat"),
+            "scheduler.error.unsupported_repeat",
+        )),
     }
 }
 
@@ -119,10 +124,16 @@ impl AlarmService for AlarmFacade {
     {
         let message = request.to_owned_message();
         let Some(alarm) = message.alarm.as_option() else {
-            return Err(ConnectError::invalid_argument("alarm.id is required"));
+            return Err(super::text::connect(
+                ConnectError::invalid_argument("alarm.id is required"),
+                "scheduler.error.alarm_id_required",
+            ));
         };
         if alarm.id.is_empty() {
-            return Err(ConnectError::invalid_argument("alarm.id is required"));
+            return Err(super::text::connect(
+                ConnectError::invalid_argument("alarm.id is required"),
+                "scheduler.error.alarm_id_required",
+            ));
         }
         self.get_alarm_schedule(&alarm.id).await?;
         let revision = alarm.revision;

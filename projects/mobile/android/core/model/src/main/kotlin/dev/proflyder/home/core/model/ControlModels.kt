@@ -81,6 +81,14 @@ data class ControlEntry(
     /** Set for lights that can be adjusted beyond on/off. */
     val light: LightControls? = null,
     /**
+     * Stable localization key of a server-generated title (for example the
+     * synthetic "Speak on the station" action). Empty when [title] is Home
+     * Assistant user data and must be shown verbatim.
+     */
+    val titleKey: String = "",
+    /** Typed arguments for [titleKey]. */
+    val titleArgs: Map<String, String> = emptyMap(),
+    /**
      * Device this entry belongs to; empty when the server does not group
      * entries (an older server), in which case the entry is its own device.
      */

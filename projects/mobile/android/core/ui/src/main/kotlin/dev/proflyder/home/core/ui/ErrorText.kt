@@ -11,8 +11,10 @@ fun RemoteFailure.userMessage(context: Context): String = when (this) {
     RemoteFailure.Timeout -> context.getString(R.string.ui_error_timeout)
     is RemoteFailure.Offline -> context.getString(R.string.ui_error_offline)
     is RemoteFailure.Tls -> context.getString(R.string.ui_error_tls)
-    is RemoteFailure.Server ->
-        context.getString(R.string.ui_error_server, code, message)
+    is RemoteFailure.Server -> serverText(context, textKey, textArgs) ?: when {
+        message.isNotBlank() -> context.getString(R.string.ui_error_server, code, message)
+        else -> context.getString(R.string.ui_error_server_generic, code)
+    }
     is RemoteFailure.ProtocolFailure -> context.getString(R.string.ui_error_protocol)
     is RemoteFailure.Storage -> context.getString(R.string.ui_error_storage, detail)
     is RemoteFailure.Validation -> when (field) {

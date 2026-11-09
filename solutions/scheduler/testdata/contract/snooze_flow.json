@@ -232,7 +232,13 @@
               "sourceId": "{{scheduleId}}",
               "sourceKind": "SOURCE_KIND_ALARM",
               "state": "EVENT_STATE_LEASED",
-              "taskType": "alarm.stop"
+              "taskType": "alarm.stop",
+              "detailText": {
+                "key": "scheduler.event.snoozed_for",
+                "args": {
+                  "minutes": "1440"
+                }
+              }
             }
           ]
         }
@@ -278,7 +284,13 @@
             "sourceId": "{{scheduleId}}",
             "sourceKind": "SOURCE_KIND_ALARM",
             "state": "EVENT_STATE_DELIVERED",
-            "taskType": "alarm.stop"
+            "taskType": "alarm.stop",
+            "detailText": {
+              "key": "scheduler.event.snoozed_for",
+              "args": {
+                "minutes": "1440"
+              }
+            }
           }
         }
       }
