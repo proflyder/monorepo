@@ -8,5 +8,8 @@ kind: Kustomization
 resources:
   - network-policy.yaml
   - external-secrets.yaml
+  - ingress-cert-manager.yaml
+  - ingress-traefik.yaml
+  - ingress-routes.yaml
   - nexus.yaml
   - nexus-provision.yaml

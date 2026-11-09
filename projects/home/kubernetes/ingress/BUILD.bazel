@@ -1,10 +1,10 @@
-# Plain-file package: the templates are rendered by the projects/home/kubernetes
-# deploy scripts and by //platform/deploy (golden parity tests).
+# Plain-file package: the route templates are consumed by static tests and by
+# the Flux `ingress-routes` Kustomization.
 package(default_visibility = ["//visibility:public"])
 
 filegroup(
     name = "deploy_templates",
     srcs = glob([
-        "manifests/*.yaml",
+        "routes/*.yaml",
     ]),
 )

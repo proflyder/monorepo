@@ -1,0 +1,33 @@
+# cert-manager, adopted from the live `cert-manager` release.
+#
+# Same release name/namespace as `helm list -A`. The chart installs CRDs from
+# its `crds/` directory; `upgrade.crds: CreateReplace` keeps them upgraded by
+# Flux (a plain `helm upgrade` skips that directory).
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: cert-manager
+  namespace: flux-system
+spec:
+  interval: 1h
+  timeout: 10m
+  targetNamespace: cert-manager
+  chart:
+    spec:
+      chart: cert-manager
+      version: v1.21.3
+      interval: 1h
+      sourceRef:
+        kind: HelmRepository
+        name: jetstack
+        namespace: flux-system
+  install:
+    createNamespace: true
+    crds: Create
+  upgrade:
+    crds: CreateReplace
+    timeout: 10m
+  valuesFrom:
+    - kind: ConfigMap
+      name: cert-manager-values
+      valuesKey: values.yaml

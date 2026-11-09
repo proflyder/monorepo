@@ -13,7 +13,7 @@ spec:
   entryPoints:
     - websecure
   routes:
-    - match: Host(`${HA_HOST}`)
+    - match: Host(`ha.${HOME_DOMAIN}`)
       kind: Rule
       middlewares:
         - name: home-allowlist
@@ -33,7 +33,7 @@ spec:
   entryPoints:
     - websecure
   routes:
-    - match: Host(`${GRAFANA_HOST}`)
+    - match: Host(`grafana.${HOME_DOMAIN}`)
       kind: Rule
       middlewares:
         - name: home-allowlist
@@ -53,7 +53,7 @@ spec:
   entryPoints:
     - websecure
   routes:
-    - match: Host(`${ALARMS_HOST}`)
+    - match: Host(`alarms.${HOME_DOMAIN}`)
       kind: Rule
       middlewares:
         - name: home-allowlist
@@ -73,7 +73,7 @@ spec:
   entryPoints:
     - websecure
   routes:
-    - match: Host(`${CURRENCY_HOST}`)
+    - match: Host(`currency.${HOME_DOMAIN}`)
       kind: Rule
       middlewares:
         - name: home-allowlist
@@ -93,7 +93,7 @@ spec:
   entryPoints:
     - websecure
   routes:
-    - match: Host(`${CONTROL_HOST}`)
+    - match: Host(`control.${HOME_DOMAIN}`)
       kind: Rule
       middlewares:
         - name: home-allowlist
@@ -119,7 +119,7 @@ spec:
   entryPoints:
     - websecure
   routes:
-    - match: Host(`${INTERCOM_HOST}`)
+    - match: Host(`intercom.${HOME_DOMAIN}`)
       kind: Rule
       middlewares:
         - name: home-allowlist
