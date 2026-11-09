@@ -99,6 +99,23 @@
 `keystore_b64`/`keystore_password` больше не читаются. Процедура — Android
 README, раздел Signing.
 
+## Доступ к хостам
+
+Адреса и имена пользователей — в `secrets/NETWORK.md` (приватная копия
+`infra/docs/network`), ключи — в `~/.ssh/home-lab/` после
+`mise run secrets:pull`. Перебирать ключи вслепую нельзя: Windows OpenSSH
+после нескольких неудачных попыток рвёт соединения.
+
+| Хост | Как зайти | Ключ (OpenBao) |
+|---|---|---|
+| PVE, K3s, HAOS | `ssh -F ~/.ssh/home-lab/config pve\|k3s\|haos` | `infra/ssh/proxmox-admin` |
+| Комп (Windows) | `ssh -i ~/.ssh/home-lab/dev_ed25519 -o UserKnownHostsFile=~/.ssh/home-lab/known_hosts_komp <user>@<komp-ip>`; ключ `komp-dev-mac`, админ, без forced command; PowerShell — через `-EncodedCommand` | `infra/ssh/komp#dev_ed25519` |
+| Комп из HA | только `shutdown`/`cancel` (forced command) | `infra/ssh/komp#komp_ed25519` |
+| Колонка | `ssh -i ~/.ssh/home-lab/station_ed25519 root@<station-ip>` | `infra/ssh/station` |
+| WSL на компе | `~/.ssh/home-lab/wsl_ed25519` | `infra/ssh/wsl` |
+
+`<user>`, `<komp-ip>`, `<station-ip>` — из `secrets/NETWORK.md`.
+
 ## Что `mise run secrets:pull` кладёт на рабочее место
 
 | Файл | Источник |
