@@ -1,21 +1,27 @@
 package dev.proflyder.home
 
 import android.os.Bundle
+import androidx.fragment.app.Fragment
+import androidx.viewpager2.adapter.FragmentStateAdapter
+import androidx.viewpager2.widget.ViewPager2
 import dev.proflyder.home.core.ui.BaseFragment
 import dev.proflyder.home.databinding.FragmentTimeBinding
 
 /**
- * Container for the Alarms / Timers / Reminders screens. The child Fragment is
- * replaced by the shared FragmentManager, so each existing feature keeps its
- * own ViewModel and behaviour unchanged. The selected section is restored from
- * the Fragment's saved state on rotation and from route arguments on a deep link.
+ * Container for the Alarms / Timers / Reminders screens. The sections live in a
+ * [ViewPager2], so a horizontal swipe and the segmented switch drive the same
+ * selected page. The selected section is restored from the Fragment's saved
+ * state on rotation and from route arguments on a deep link.
  */
 class TimeFragment : BaseFragment<FragmentTimeBinding>(FragmentTimeBinding.Companion::inflate) {
     internal var section: TimeSection = TimeSection.ALARMS
         private set
 
     private var syncingToggle = false
-    private var renderedSection: TimeSection? = null
+
+    private val pageCallback = object : ViewPager2.OnPageChangeCallback() {
+        override fun onPageSelected(position: Int) = onPageChanged(position)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -30,52 +36,71 @@ class TimeFragment : BaseFragment<FragmentTimeBinding>(FragmentTimeBinding.Compa
     }
 
     override fun onBindingCreated(binding: FragmentTimeBinding, savedInstanceState: Bundle?) {
+        binding.timePager.adapter = TimePagerAdapter(this)
+        binding.timePager.registerOnPageChangeCallback(pageCallback)
         binding.timeTabs.addOnButtonCheckedListener { _, checkedId, isChecked ->
             if (syncingToggle || !isChecked) return@addOnButtonCheckedListener
-            show(currentSectionFor(checkedId))
+            select(currentSectionFor(checkedId))
         }
         syncToggle()
-        val restored = savedInstanceState != null &&
-            childFragmentManager.findFragmentById(R.id.time_content) != null
-        if (!restored) show(section, force = true)
-        renderedSection = section
+        binding.timePager.setCurrentItem(section.ordinal, false)
+    }
+
+    override fun onBindingDestroyed() {
+        binding.timePager.unregisterOnPageChangeCallback(pageCallback)
+        binding.timePager.adapter = null
     }
 
     private fun savedSection(state: Bundle?): TimeSection? =
         TimeSection.fromRouteSegment(state?.getString(KEY_SECTION))
 
-    private fun currentSectionFor(checkedId: Int): TimeSection = when (checkedId) {
+    internal fun currentSectionFor(checkedId: Int): TimeSection = when (checkedId) {
         R.id.time_tab_timers -> TimeSection.TIMERS
         R.id.time_tab_reminders -> TimeSection.REMINDERS
         else -> TimeSection.ALARMS
     }
 
-    private fun buttonIdFor(section: TimeSection): Int = when (section) {
+    internal fun buttonIdFor(section: TimeSection): Int = when (section) {
         TimeSection.ALARMS -> R.id.time_tab_alarms
         TimeSection.TIMERS -> R.id.time_tab_timers
         TimeSection.REMINDERS -> R.id.time_tab_reminders
     }
 
-    private fun syncToggle() {
+    internal fun syncToggle() {
         syncingToggle = true
         binding.timeTabs.check(buttonIdFor(section))
         syncingToggle = false
     }
 
-    private fun show(next: TimeSection, force: Boolean = false) {
+    /** Swipe landed on another page: mirror it in the segmented switch. */
+    internal fun onPageChanged(position: Int) {
+        val next = TimeSection.entries.getOrNull(position) ?: return
         section = next
-        if (!force && renderedSection == next) return
-        renderedSection = next
         syncToggle()
-        val existing = childFragmentManager.findFragmentById(R.id.time_content)
-        if (existing != null && existing.tag == next.routeSegment) return
-        childFragmentManager.beginTransaction()
-            .setReorderingAllowed(true)
-            .replace(R.id.time_content, sectionFragment(next), next.routeSegment)
-            .commit()
+    }
+
+    /** A pill was tapped: move the pager, which keeps both controls in sync. */
+    internal fun select(next: TimeSection) {
+        if (next == section) return
+        section = next
+        syncToggle()
+        binding.timePager.setCurrentItem(next.ordinal, true)
     }
 
     private companion object {
         const val KEY_SECTION = "time_section"
     }
+}
+
+/** One page per Time section; stable ids let the pager restore its state. */
+internal class TimePagerAdapter(host: Fragment) : FragmentStateAdapter(host) {
+    override fun getItemCount(): Int = TimeSection.entries.size
+
+    override fun getItemId(position: Int): Long = TimeSection.entries[position].ordinal.toLong()
+
+    override fun containsItem(itemId: Long): Boolean =
+        TimeSection.entries.any { it.ordinal.toLong() == itemId }
+
+    override fun createFragment(position: Int): Fragment =
+        sectionFragment(TimeSection.entries[position])
 }

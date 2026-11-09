@@ -423,6 +423,7 @@ internal class ControlAdapter(
 
         override fun bind(item: ControlItem) {
             val hub = item as ControlItem.Hub
+            views.root.setVisible(hub.cards.isNotEmpty())
             views.controlHubRows.removeAllViews()
             hub.cards.forEach { card -> addRow(hub, card) }
         }

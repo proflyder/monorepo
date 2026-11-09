@@ -31,6 +31,10 @@
         <item name="shapeAppearanceMediumComponent">@style/ShapeAppearance.Home.Medium</item>
         <item name="shapeAppearanceLargeComponent">@style/ShapeAppearance.Home.Large</item>
 
+        <!-- The toolbar overflow menu follows the app's rounded tonal surfaces. -->
+        <item name="popupMenuStyle">@style/Widget.Home.PopupMenu</item>
+        <item name="actionOverflowMenuStyle">@style/Widget.Home.PopupMenu.Overflow</item>
+
         <item name="android:statusBarColor">@color/home_surface</item>
         <item name="android:navigationBarColor">@color/home_surface_container</item>
         <item name="android:windowLightStatusBar">@bool/home_light_bars</item>

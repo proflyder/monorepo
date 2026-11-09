@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Rounded tonal panel for the toolbar overflow menu; the inset hosts its shadow. -->
+<inset xmlns:android="http://schemas.android.com/apk/res/android"
+    android:insetLeft="@dimen/ui_popup_inset"
+    android:insetTop="@dimen/ui_popup_inset"
+    android:insetRight="@dimen/ui_popup_inset"
+    android:insetBottom="@dimen/ui_popup_inset">
+
+    <shape android:shape="rectangle">
+        <solid android:color="?attr/colorSurfaceContainerHigh" />
+        <corners android:radius="@dimen/ui_card_radius" />
+    </shape>
+</inset>
