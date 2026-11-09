@@ -293,8 +293,8 @@ phone ── EnqueueTask(queue=control) ───► scheduler ◄── ListDue
 Никакого списка сущностей на сервере нет. При каждом запросе (кэш `CONTROL_CACHE_TTL`,
 3 s) `ha-control` читает из HA:
 
-- сущности домена `light`, `switch`, `scene`, `script` с `friendly_name`, `icon` и
-  состоянием (`/api/states`);
+- сущности домена `light`, `switch`, `button`, `scene`, `script` с `friendly_name`,
+  `icon` и состоянием (`/api/states`);
 - **комнату** — HA area сущности (`area_name()` через `/api/template`);
 - **скрытые** сущности (`is_hidden_entity()`): всё, что скрыто в HA, не попадает в каталог;
 - **метки** — какие скрипты помечены ролью «сценарий» и какая сущность помечена
@@ -308,12 +308,19 @@ phone ── EnqueueTask(queue=control) ───► scheduler ◄── ListDue
 | Что | Правило |
 | --- | --- |
 | `light`, `switch` | показываются все; скрытые в HA (`hidden`) и попавшие под `CONTROL_EXCLUDE` — нет |
+| `button` | вид `button`, единственное действие `press`; подходит для одноразовых команд (заблокировать/разблокировать ПК) |
 | `switch` с меткой профиля | вид `profile`: селектор профиля ассистента, всегда первым в каталоге |
 | `scene` | показываются все (сцена — пользовательский пресет по определению); `hidden`/`CONTROL_EXCLUDE` действуют |
 | `script` | **только с меткой роли «сценарий»**: HA label с id `scenario` (`CONTROL_SCENARIO_LABEL`) |
 | действие `speak` | синтетическая запись `action.station_speak` (`kind: "action"`) появляется, только если в HA есть `script.speak_text`; device/room — от сущности `assist_satellite` |
 | иконка, area, имя | только отображение; на то, что показывать, не влияют |
 | `CONTROL_EXCLUDE=glob,glob` | `path.Match`-маски по entity id, например `switch.*_child_lock` |
+
+Кнопки и другие сущности без entity-registry device (шаблонные сущности HA)
+клиент группирует по общему префиксу entity id: `switch.komp` — базовая
+сущность, `button.komp_lock`/`button.komp_unlock` попадают в настройки того же
+устройства «Комп». Группировка требует совпадения комнаты и наличия базовой
+сущности с точным локальным id (`komp`).
 
 Что значит метка `scenario`: «сценарий, который я запускаю лично». Это доменная роль,
 а не имя клиента: тот же смысл может использовать приложение, голос или MCP-gateway. Почему именно метка. Скрипты в HA — смесь пользовательских сценариев и

@@ -106,6 +106,7 @@ private fun String.toControlKind(): ControlKind = when (this) {
     "scenario" -> ControlKind.SCENARIO
     "light" -> ControlKind.LIGHT
     "switch" -> ControlKind.SWITCH
+    "button" -> ControlKind.BUTTON
     "profile" -> ControlKind.PROFILE
     "action" -> ControlKind.ACTION
     // An unknown kind stays OTHER, so an older app never drives a command it

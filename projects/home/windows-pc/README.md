@@ -5,6 +5,8 @@
 
 - включение — Wake-on-LAN (magic packet);
 - выключение — `shutdown /s /t 60` через ограниченный SSH, с отменой;
+- блокировка — запуск задачи планировщика `\Home\KompLock` через тот же SSH;
+- разблокировка — одноразовый грант `wakegrant` (модуль входа, см. ниже);
 - состояние — ICMP ping из Home Assistant.
 
 HA-часть — `projects/home-assistant/ha-voice/` (см. её README). Реальные
@@ -58,8 +60,8 @@ Start-Service sshd
 ключ кладётся не в `%USERPROFILE%\.ssh`, а в общий файл:
 
 ```powershell
-New-Item -ItemType Directory -Force C:\ProgramData\home
-# скопировать komp-power.ps1 в C:\ProgramData\home\komp-power.ps1
+New-Item -ItemType Directory -Force C:\ProgramData\Home
+# скопировать komp-power.ps1 в C:\ProgramData\Home\komp-power.ps1
 New-Item -ItemType File -Force C:\ProgramData\ssh\administrators_authorized_keys
 icacls.exe "C:\ProgramData\ssh\administrators_authorized_keys" /inheritance:r `
   /grant "Administrators:F" /grant "SYSTEM:F"
@@ -68,12 +70,12 @@ icacls.exe "C:\ProgramData\ssh\administrators_authorized_keys" /inheritance:r `
 Строка в `administrators_authorized_keys` (одна строка, без переводов внутри):
 
 ```text
-from="192.0.2.28",restrict,command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\ProgramData\home\komp-power.ps1" ssh-ed25519 AAAA... ha-komp
+from="192.0.2.28",restrict,command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\ProgramData\Home\komp-power.ps1" ssh-ed25519 AAAA... ha-komp
 ```
 
 - `from="192.0.2.28"` — адрес HA (TEST-NET-плейсхолдер, заменить на реальный);
   ключ не сработает с другого адреса.- `command=` — forced command: клиент не может запустить ничего, кроме
-  `komp-power.ps1`, а тот принимает только `shutdown` и `cancel`.
+  `komp-power.ps1`, а тот принимает только `shutdown`, `cancel` и `lock`.
 - `restrict` отключает port/agent/X11 forwarding и pty.
 - `AAAA...` — публичный ключ (`/config/.ssh/komp_ed25519.pub` в HA).
 
@@ -84,6 +86,31 @@ Win32-OpenSSH читает `administrators_authorized_keys` — поэтому `
 
 `komp-power.ps1` хранить в UTF-8 **с BOM**: Windows PowerShell 5.1 иначе
 читает файл в ANSI и портит русский текст в диалоге выключения.
+
+## Блокировка экрана
+
+SSH-сессия HA идёт в служебной сессии OpenSSH, поэтому прямой
+`LockWorkStation` оттуда не блокирует экран пользователя. Вместо этого
+`komp-power.ps1 lock` запускает задачу планировщика `\Home\KompLock`, а задача
+выполняет `rundll32.exe user32.dll,LockWorkStation` в интерактивной сессии.
+
+Задачу создают **один раз** из PowerShell от администратора в сессии того же
+пользователя, который работает за ПК:
+
+```powershell
+# скопировать install-lock-task.ps1 на ПК, затем:
+powershell -NoProfile -ExecutionPolicy Bypass -File C:\ProgramData\Home\install-lock-task.ps1
+```
+
+Скрипт регистрирует `\Home\KompLock` с principal `Interactive`
+(«только когда пользователь вошёл», без пароля) и без триггера: задача
+запускается только по `schtasks /run`. Повторный запуск безопасно заменяет
+задачу. Проверка:
+
+```powershell
+schtasks /query /tn '\Home\KompLock' /v /fo LIST
+schtasks /run /tn '\Home\KompLock'   # экран должен заблокироваться
+```
 
 ## Ключ и known_hosts в HA
 
@@ -131,15 +158,24 @@ ssh -i /config/.ssh/komp_ed25519 \
   -o BatchMode=yes -o ConnectTimeout=5 \
   -o UserKnownHostsFile=/config/.ssh/komp_known_hosts \
   -o StrictHostKeyChecking=accept-new <user>@<host> cancel
+
+# блокировка (задача \Home\KompLock должна быть создана заранее)
+ssh -i /config/.ssh/komp_ed25519 \
+  -o BatchMode=yes -o ConnectTimeout=5 \
+  -o UserKnownHostsFile=/config/.ssh/komp_known_hosts \
+  -o StrictHostKeyChecking=accept-new <user>@<host> lock
 ```
 
 Из HA: Developer Tools → Actions:
 
 - `shell_command.komp_shutdown` — выключение через минуту;
 - `shell_command.komp_cancel_shutdown` — отмена;
+- `shell_command.komp_lock` — блокировка экрана;
+- `script.komp_lock` / `script.komp_unlock` — блокировка и разблокировка с
+  проверкой, что ПК в сети (кнопки `button.komp_lock`/`button.komp_unlock`);
 - `wake_on_lan.send_magic_packet` с `mac` — включение;
 - `switch.komp` — on/off как обычный переключатель;
 - голос: «включи комп», «выключи комп», «отмени выключение компа»,
-  «комп включён».
+  «заблокируй комп», «разблокируй комп», «комп включён».
 
 Любая другая команда по SSH должна вернуть ошибку и код 1 — это ожидаемо.

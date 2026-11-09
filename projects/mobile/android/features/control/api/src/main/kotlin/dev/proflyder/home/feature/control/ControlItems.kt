@@ -235,7 +235,7 @@ object ControlItems {
             )
         }
 
-        val devices = content.filter { it.isDevice }
+        val devices = content.filter { it.isDevice || it.isButton }
         val (working, deadEntries) = devices.partition { it.available }
         // Dead rows keep the old behaviour: they follow the applied filter too,
         // and a lone setting never shows up as its own unavailable device.
@@ -295,23 +295,62 @@ object ControlItems {
     private fun DeviceBucket.matchesFilter(filter: ControlFilter): Boolean =
         filter == ControlFilter.All || primary.any { it.matches(filter) }
 
+    private fun localId(entry: ControlEntry): String = entry.id.substringAfter('.', entry.id)
+
+    /** The part of the entity id before the first `_`, e.g. `komp` in `button.komp_lock`. */
+    private fun prefixOf(entry: ControlEntry): String = localId(entry).substringBefore('_')
+
     /**
-     * Groups one room's entries by device. An entry without a [ControlEntry.deviceId]
-     * is its own device, so an older server keeps rendering as before.
+     * Prefix groups present in [entries]: entities without a registry device id
+     * that share a room and the entity-id prefix of a base entity (`switch.komp`
+     * is the base of `button.komp_lock`/`button.komp_unlock`). Home Assistant
+     * template entities have no device registry entry, so this is how their
+     * buttons still join the device card.
+     */
+    private fun prefixGroups(entries: List<ControlEntry>): Set<Pair<String, String>> =
+        entries.filter { it.deviceId.isBlank() }
+            .groupBy { it.room to prefixOf(it) }
+            .filter { (_, members) ->
+                members.size > 1 && members.any { localId(it) == prefixOf(it) }
+            }
+            .keys
+
+    /**
+     * Groups one room's entries by device. An entry with a server device id
+     * joins that device; entities without one join a prefix group when their
+     * shared prefix has a base entity, and are otherwise each their own device,
+     * so an older server keeps rendering as before.
      */
     private fun groupByDevice(entries: List<ControlEntry>): List<DeviceBucket> {
+        val prefixes = prefixGroups(entries)
         val buckets = LinkedHashMap<String, MutableList<ControlEntry>>()
         entries.forEach { entry ->
-            val key = entry.deviceId.ifBlank { entry.id }
+            val group = entry.room to prefixOf(entry)
+            val key = when {
+                entry.deviceId.isNotBlank() -> "device:${entry.deviceId}"
+                group in prefixes -> "prefix:${group.first}:${group.second}"
+                else -> "entry:${entry.id}"
+            }
             buckets.getOrPut(key) { mutableListOf() } += entry
         }
-        return buckets.map { (deviceId, members) -> bucketOf(deviceId, members) }
+        return buckets.map { (key, members) ->
+            val prefix = prefixOf(members.first()).takeIf { key.startsWith("prefix:") }
+            val deviceId = if (prefix != null) key else members.first().deviceId.ifBlank { key }
+            bucketOf(deviceId, members, prefix)
+        }
     }
 
-    private fun bucketOf(deviceId: String, members: List<ControlEntry>): DeviceBucket {
-        val primary = members.filter { it.role != ControlRole.SETTING }
-        val settings = members.filter { it.role == ControlRole.SETTING }
+    private fun bucketOf(deviceId: String, members: List<ControlEntry>, prefix: String? = null): DeviceBucket {
+        // A base entity names a prefix group; it may not sort first (the catalog
+        // is ordered by title), so look it up explicitly.
+        val anchor = prefix?.let { value -> members.firstOrNull { localId(it) == value } }
+        val hasPrimary = members.any { it.role != ControlRole.SETTING && !it.isButton }
+        // Buttons are one-shot device actions: they live in the settings list
+        // next to the device's other options when that device has a primary row.
+        val settings = members.filter { it.role == ControlRole.SETTING || (it.isButton && hasPrimary) }
+        val primary = members.filter { entry -> settings.none { it.id == entry.id } }
         val name = members.firstNotNullOfOrNull { it.device.takeIf(String::isNotBlank) }
+            ?: anchor?.displayTitle()
         return DeviceBucket(
             deviceId = deviceId,
             title = name ?: primary.firstOrNull()?.displayTitle() ?: members.first().displayTitle(),

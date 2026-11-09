@@ -29,6 +29,9 @@ pub enum Kind {
     /// The assistant's named profile; a plain switch where on is the
     /// non-default profile.
     Profile,
+    /// A stateless push button (`button.<id>`). One-shot action `press`, for
+    /// example "lock the PC" or "unlock the PC" next to the PC's switch.
+    Button,
     /// A device-level one-shot action that is not an entity of its own, for
     /// example speaking a text on the speaker. It carries the owning device
     /// and resolves to its own allowlisted service call.
@@ -44,6 +47,7 @@ impl Kind {
             Self::Light => "light",
             Self::Switch => "switch",
             Self::Profile => "profile",
+            Self::Button => "button",
             Self::Action => "action",
         }
     }
@@ -54,6 +58,8 @@ pub const ACTION_RUN: &str = "run";
 pub const ACTION_TURN_ON: &str = "turn_on";
 pub const ACTION_TURN_OFF: &str = "turn_off";
 pub const ACTION_SET: &str = "set";
+/// A stateless Home Assistant `button` press.
+pub const ACTION_PRESS: &str = "press";
 pub const ACTION_SPEAK: &str = "speak";
 
 /// The scheduler task type of a control command.
@@ -235,6 +241,9 @@ impl Entry {
         if self.kind == Kind::Action {
             return vec![ACTION_SPEAK];
         }
+        if self.kind == Kind::Button {
+            return vec![ACTION_PRESS];
+        }
         if self.light.is_some() {
             return vec![ACTION_TURN_ON, ACTION_TURN_OFF, ACTION_SET];
         }
@@ -318,6 +327,12 @@ impl Entry {
             (Kind::Switch | Kind::Profile, ACTION_TURN_ON | ACTION_TURN_OFF) => Ok(ServiceCall {
                 domain,
                 service: action.to_owned(),
+                entity: self.entity.clone(),
+                data: Map::new(),
+            }),
+            (Kind::Button, ACTION_PRESS) => Ok(ServiceCall {
+                domain,
+                service: ACTION_PRESS.to_owned(),
                 entity: self.entity.clone(),
                 data: Map::new(),
             }),
@@ -486,7 +501,7 @@ fn rank(kind: Kind) -> u8 {
         Kind::Profile => 0,
         Kind::Scenario => 1,
         Kind::Action => 2,
-        Kind::Light | Kind::Switch => 3,
+        Kind::Light | Kind::Switch | Kind::Button => 3,
     }
 }
 
@@ -541,6 +556,7 @@ fn kind_of(domain: &str) -> Option<Kind> {
         "script" | "scene" => Some(Kind::Scenario),
         "light" => Some(Kind::Light),
         "switch" => Some(Kind::Switch),
+        "button" => Some(Kind::Button),
         _ => None,
     }
 }
@@ -969,6 +985,51 @@ mod tests {
                 "switch.desk_fan"
             ]
         );
+    }
+
+    #[test]
+    fn button_entities_become_press_actions_and_share_the_device_prefix() {
+        let raws = vec![
+            Raw {
+                entity: "switch.komp".to_owned(),
+                state: "on".to_owned(),
+                name: "Комп".to_owned(),
+                ..Raw::default()
+            },
+            Raw {
+                entity: "button.komp_lock".to_owned(),
+                state: "unknown".to_owned(),
+                name: "Заблокировать".to_owned(),
+                icon: "mdi:lock".to_owned(),
+                ..Raw::default()
+            },
+            Raw {
+                entity: "button.komp_unlock".to_owned(),
+                state: "unknown".to_owned(),
+                name: "Разблокировать".to_owned(),
+                icon: "mdi:lock-open".to_owned(),
+                ..Raw::default()
+            },
+        ];
+        let entries = build(&raws, &rules());
+        assert_eq!(entries.len(), 3);
+        assert!(entries.iter().any(|entry| entry.id == "switch.komp"));
+        let lock = entries
+            .iter()
+            .find(|entry| entry.id == "button.komp_lock")
+            .expect("lock button");
+        assert_eq!(lock.kind, Kind::Button);
+        assert_eq!(lock.actions(), vec![ACTION_PRESS]);
+        // Template buttons have no registry device, so the client groups them
+        // by the `komp` entity-id prefix they share with switch.komp.
+        assert_eq!(lock.device_id, "");
+        let call = lock
+            .resolve(ACTION_PRESS, &Params::default())
+            .expect("press");
+        assert_eq!(call.domain, "button");
+        assert_eq!(call.service, "press");
+        assert_eq!(call.entity, "button.komp_lock");
+        assert!(lock.resolve(ACTION_TURN_ON, &Params::default()).is_err());
     }
 
     #[test]

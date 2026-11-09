@@ -472,10 +472,15 @@
 - **Комп (Windows-ПК).** Голос и приложение управляют проводным десктопом:
   включение — Wake-on-LAN (`switch.komp` → `wake_on_lan.send_magic_packet`,
   MAC только в `secrets.yaml`), выключение — SSH с forced command
-  (`komp-power.ps1`, только слова `shutdown`/`cancel`) → Windows
-  `shutdown /s /t 60` с отменой, состояние — `binary_sensor.komp_v_seti`
+  (`komp-power.ps1`, только слова `shutdown`/`cancel`/`lock`) → Windows
+  `shutdown /s /t 60` с отменой, блокировка — задача `\Home\KompLock`
+  (интерактивная сессия, `LockWorkStation`), разблокировка — пропуск
+  `wakegrant` (`KompUnlock`), состояние — `binary_sensor.komp_v_seti`
   (`command_line` ping каждые 10 с). Локальные intents `KompOn`/`KompOff`/
-  `KompCancelOff`/`KompStatus` работают в обоих профилях без Hermes.
+  `KompCancelOff`/`KompLock`/`KompUnlock`/`KompStatus` работают в обоих
+  профилях без Hermes; `button.komp_lock`/`button.komp_unlock` приложение
+  показывает в настройках устройства «Комп» (группировка по префиксу
+  entity id).
   `script.komp_shutdown` пишет `input_datetime.komp_off_requested` до SSH:
   ping отстаёт на 1–2 минуты, поэтому недавний запрос значит «выключается»,
   а голосовое включение идёт через `switch.turn_on switch.komp` (выдаёт
@@ -512,7 +517,10 @@
   вживую 2026-11-07: холодный вход по grant, разблокировка по grant,
   недоступный `wakegrant` (одна строка `send_failed`, затем backoff).
   Последний релиз в GHCR — `1.3.16` (кода с `1.3.15` не менялось, на ПК не
-  ставился).
+  ставился). В `VERSION` поднято `1.3.17`: эта сборка делается уже после
+  переименования модуля, поэтому внутри лежит `HomeKompLogon.dll` (в `1.3.16`
+  ещё было имя `RicardoKompLogon.dll`). CI опубликует `1.3.17` после merge;
+  установка на ПК — **ожидает установки** владельцем.
   Прежние сборки лежат рядом для отката: `1.3.14`, `1.3.0`, `1.2.0` (Rust)
   и C++ `1.0.0`. HA-файлы `ha-voice` выложены в HAOS вручную (копия прежних —
   `/mnt/data/ha-voice-backup-*.tar`).

@@ -567,20 +567,30 @@ OpenBao одновременно. Список личных целей — `mani
 # из HA: Terminal & SSH add-on — состояние по ping
 ping -c 1 -W 1 <host>
 
-# из HA Terminal & SSH — ограниченный SSH (только shutdown|cancel)
+# из HA Terminal & SSH — ограниченный SSH (только shutdown|cancel|lock)
 ssh -i /config/.ssh/komp_ed25519 \
   -o BatchMode=yes -o ConnectTimeout=5 \
   -o UserKnownHostsFile=/config/.ssh/komp_known_hosts \
   -o StrictHostKeyChecking=accept-new <user>@<host> shutdown
 
+# блокировка: задача \Home\KompLock создаётся install-lock-task.ps1
+ssh -i /config/.ssh/komp_ed25519 \
+  -o BatchMode=yes -o ConnectTimeout=5 \
+  -o UserKnownHostsFile=/config/.ssh/komp_known_hosts \
+  -o StrictHostKeyChecking=accept-new <user>@<host> lock
+
 # ключ и known_hosts вне Git, но персистентны внутри HAOS
 ls -l /config/.ssh/komp_ed25519 /config/.ssh/komp_known_hosts
 ```
 
-В HA: Actions `shell_command.komp_shutdown` / `shell_command.komp_cancel_shutdown`,
-`wake_on_lan.send_magic_packet` (mac из секрета), сущность `switch.komp`.
+В HA: Actions `shell_command.komp_shutdown` / `shell_command.komp_cancel_shutdown` /
+`shell_command.komp_lock`, `wake_on_lan.send_magic_packet` (mac из секрета),
+сущность `switch.komp`, скрипты `script.komp_lock`/`script.komp_unlock` и кнопки
+`button.komp_lock`/`button.komp_unlock`.
 Голосом: «включи комп», «выключи комп», «отмени выключение компа»,
-«комп включён». Выключение откладывается на 60 с, отмена — в этом окне.
+«заблокируй комп», «разблокируй комп», «комп включён». Выключение
+откладывается на 60 с, отмена — в этом окне. Блокировка выполняется задачей
+`\Home\KompLock` в интерактивной сессии (`projects/home/windows-pc/README.md`).
 
 ### wakegrant — пропуск входа компа
 
@@ -696,7 +706,7 @@ Copy-Item .\HomeKompLogon.dll "$dir\HomeKompLogon.dll" -Force
 
 Журнал: `C:\ProgramData\Home\KompLogon\logon.log` (ротация в
 `logon.log.1` при 256 КиБ). Читать административной SSH-сессией; ключ HA
-ограничен только `shutdown`/`cancel` и журнал не покажет:
+ограничен только `shutdown`/`cancel`/`lock` и журнал не покажет:
 
 ```bash
 ssh <user>@<host> \

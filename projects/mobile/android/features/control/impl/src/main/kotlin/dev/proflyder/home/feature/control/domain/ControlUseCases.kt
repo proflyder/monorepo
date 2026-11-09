@@ -30,6 +30,14 @@ import dev.zacsweers.metro.Inject
         repository.send(entry.id, ControlAction.RUN)
 }
 
+/** Presses a stateless button such as "lock" or "unlock" the PC. */
+@Inject class PressControl(
+    private val repository: ControlRepository,
+) {
+    suspend operator fun invoke(entry: ControlEntry): Outcome<Unit> =
+        repository.send(entry.id, ControlAction.PRESS)
+}
+
 @Inject class SetDevicePower(
     private val repository: ControlRepository,
 ) {

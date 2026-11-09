@@ -5,11 +5,18 @@
     Home Assistant connects over SSH with an authorized_keys line that forces
     exactly this script:
 
-        restrict,command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\ProgramData\home\komp-power.ps1" ssh-ed25519 AAAA... ha-komp
+        restrict,command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\ProgramData\Home\komp-power.ps1" ssh-ed25519 AAAA... ha-komp
 
     OpenSSH puts the client's requested command into SSH_ORIGINAL_COMMAND.
-    Only two exact, case-sensitive words are accepted; everything else is
-    refused and no shell, file or process beyond shutdown.exe is touched.
+    Only three exact, case-sensitive words are accepted; everything else is
+    refused and no shell, file or process beyond shutdown.exe and the fixed
+    \\Home\\KompLock scheduled task is touched.
+
+    `lock` cannot call LockWorkStation directly: this script runs in the SSH
+    service session, not the interactive desktop. It starts the pre-created
+    task `\\Home\\KompLock` instead; that task runs as the logged-on user and
+    executes rundll32.exe user32.dll,LockWorkStation in their session
+    (see install-lock-task.ps1).
 
     Keep this file saved as UTF-8 with BOM: Windows PowerShell 5.1 reads .ps1
     without a BOM in the legacy ANSI code page and would mangle the Russian
@@ -34,5 +41,12 @@ if ($requested -ceq 'cancel') {
     exit $LASTEXITCODE
 }
 
-[Console]::Error.WriteLine('komp-power: only "shutdown" and "cancel" are allowed')
+if ($requested -ceq 'lock') {
+    # The task is the only thing that can run LockWorkStation in the
+    # interactive session; the name and path are fixed, not client input.
+    & schtasks.exe /run /tn '\Home\KompLock'
+    exit $LASTEXITCODE
+}
+
+[Console]::Error.WriteLine('komp-power: only "shutdown", "cancel" and "lock" are allowed')
 exit 1

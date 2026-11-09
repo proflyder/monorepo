@@ -27,8 +27,9 @@ use home_ha::{Entity, Error, RegistryEntity};
 use crate::catalog::{self, Catalog, Light, LightInput, Raw, Rules};
 
 /// Domains discovery reads. `assist_satellite` is not an entry of its own;
-/// it supplies the device and room of the synthetic speak action.
-const DOMAINS: &str = "['script','scene','light','switch','assist_satellite']";
+/// it supplies the device and room of the synthetic speak action. `button`
+/// entries are one-shot `press` actions (for example lock/unlock a PC).
+const DOMAINS: &str = "['script','scene','light','switch','button','assist_satellite']";
 
 /// The Home Assistant read surface discovery needs.
 pub trait HomeAssistant: Send + Sync {

@@ -64,3 +64,22 @@
             mac: !secret komp_mac
       turn_off:
         - service: script.komp_shutdown
+
+# `button.komp_lock` / `button.komp_unlock` are the device-level actions of the
+# same «Комп» group: HA template buttons have no entity-registry device, so the
+# ha-control catalogue groups them with `switch.komp` by the shared `komp`
+# entity-id prefix and the app shows them under the device settings. Both call
+# the guarded scripts, so pressing them while the PC is offline does nothing.
+- button:
+    - name: "Заблокировать"
+      unique_id: komp_lock
+      default_entity_id: button.komp_lock
+      icon: mdi:lock
+      press:
+        - service: script.komp_lock
+    - name: "Разблокировать"
+      unique_id: komp_unlock
+      default_entity_id: button.komp_unlock
+      icon: mdi:lock-open
+      press:
+        - service: script.komp_unlock

@@ -122,6 +122,7 @@ internal class CatalogPickerDialog(
     private fun iconOf(entry: ControlEntry): Int = when (entry.kind) {
         ControlKind.LIGHT -> R.drawable.scenarios_ic_light
         ControlKind.SWITCH -> R.drawable.scenarios_ic_power
+        ControlKind.BUTTON -> R.drawable.scenarios_ic_power
         ControlKind.SCENARIO -> R.drawable.scenarios_ic_play
         ControlKind.ACTION -> R.drawable.scenarios_ic_speak
         ControlKind.PROFILE -> R.drawable.scenarios_ic_profile

@@ -1,7 +1,7 @@
 # Restricted SSH into the wired Windows desktop («комп»).
 #
 # The remote side runs a forced-command wrapper (projects/home/windows-pc/
-# komp-power.ps1) that accepts only the two words `shutdown` and `cancel`;
+# komp-power.ps1) that accepts only the words `shutdown`, `cancel` and `lock`;
 # the local key is restricted too, so this is not a general-purpose shell.
 #
 # Destination (`user@host`) is not tracked: it lives in secrets.yaml as
@@ -30,3 +30,12 @@ komp_cancel_shutdown: >-
   -o StrictHostKeyChecking=accept-new
   {{ states('input_text.komp_ssh_target') }}
   cancel
+
+komp_lock: >-
+  ssh -i /config/.ssh/komp_ed25519
+  -o BatchMode=yes
+  -o ConnectTimeout=5
+  -o UserKnownHostsFile=/config/.ssh/komp_known_hosts
+  -o StrictHostKeyChecking=accept-new
+  {{ states('input_text.komp_ssh_target') }}
+  lock
