@@ -105,6 +105,7 @@ HAOS и K3s используют статические адреса внутр�
 | `443/tcp` | Traefik, TLS для `*.home.example.com` | LAN/VPN, IP allow-list |
 | `30300/tcp` | Grafana NodePort | LAN, login required |
 | `30100/tcp` | currency-bot API NodePort | LAN, Bearer, nft LAN/pod allow-list |
+| `30097/tcp` | intercom signaling NodePort (аварийный путь) | LAN/VPN, Bearer, nft LAN/pod allow-list |
 | `10200/tcp` | Piper TTS | LAN/HA |
 | `10300/tcp` | Whisper fallback | LAN/HA |
 | `10305/tcp` | GigaAM STT | LAN/HA |
@@ -192,6 +193,8 @@ loopback, DHCP, multicast и NTP. Это часть голосового кон�
   `https://alarms.home.example.com/` (scheduler),
   `https://control.home.example.com/` (ha-control),
   `https://currency.home.example.com/` (currency-bot API, Bearer),
+  `https://intercom.home.example.com/` (intercom signaling, Bearer;
+  аварийный путь — NodePort `30097`),
   `https://vault.home.example.com/` (OpenBao UI/API),
   `https://passwords.home.example.com/` (Vaultwarden, клиенты Bitwarden)
 - Публично (Cloudflare Tunnel): `https://tg.example.com/telegram/webhook`
@@ -229,9 +232,10 @@ VPN доступен из LAN по `https://192.0.2.29/` и снаружи по
 cert-manager с ACME DNS-01 Cloudflare. Wildcard-сертификат
 `*.home.example.com` выпускается автоматически и продлевается cert-manager.
 
-- A-записи `ha`, `grafana`, `alarms`, `control`, `vault` → `192.0.2.27`,
-  Cloudflare DNS only (не proxied), TTL auto; apex и прочие записи не
-  меняются.
+- A-записи `ha`, `grafana`, `alarms`, `control`, `currency`, `intercom`,
+  `vault` → `192.0.2.27`, Cloudflare DNS only (не proxied), TTL auto; apex и
+  прочие записи не меняются. Записи ingress-хостов создаёт/исправляет
+  `projects/home/kubernetes/ingress/deploy.sh`; `vault` — deploy OpenBao.
 - `80` редиректит на `443`; вход разрешён только LAN `192.0.2.0/24` (VPN
   приходит NAT-ом с адреса CT), pod CIDR и loopback.
 - HA видит источником адрес узла `192.0.2.27`; `trusted_proxies` не
@@ -239,6 +243,11 @@ cert-manager с ACME DNS-01 Cloudflare. Wildcard-сертификат
 - WebSocket (`/api/websocket`, Grafana `/api/live/ws`) проходит через прокси.
 - Публикации в интернет нет: роутер по-прежнему не пробрасывает `80/443`;
   имена резолвятся в приватный адрес и работают только из LAN/VPN.
+- `intercom` — долгоживущий server-streaming HTTP/1.1 (`Watch`): Traefik
+  маршрут задаёт `flushInterval: 100ms`, а entrypoint `websecure` —
+  `writeTimeout: 0s` / `idleTimeout: 1800s`, поэтому кадры не буферизуются
+  и стрим не обрывается по таймауту. NetworkPolicy `intercom-ingress`
+  допускает LAN/VPN (включая узел с Traefik в `hostNetwork`) и pod CIDR.
 - Группа VPN `ci` (CI) маршрутизируется только до `192.0.2.27`; nft
   `forward` разрешает `tcp/{443,6443}`: `443` — Traefik (OpenBao API/UI для
   GitHub OIDC), `6443` — K3s API. Остальные адреса и порты для пула

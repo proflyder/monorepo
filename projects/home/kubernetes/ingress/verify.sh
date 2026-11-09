@@ -20,6 +20,7 @@ fi
 NODE_IP="${NODE_IP:-192.0.2.27}"
 SCHEDULER_TOKEN_FILE="${SCHEDULER_TOKEN_FILE:-$ROOT/secrets/home/scheduler.token}"
 HA_TOKEN_FILE="${HA_TOKEN_FILE:-$ROOT/secrets/home/ha.token}"
+INTERCOM_TOKEN_FILE="${INTERCOM_TOKEN_FILE:-$ROOT/secrets/home/intercom.token}"
 
 fail=0
 check() {
@@ -43,7 +44,7 @@ check_any() {
   fi
 }
 
-for host in ha grafana alarms control; do
+for host in ha grafana alarms control intercom; do
   name="$host.$HOME_DOMAIN"
   resolved=$(dig +short A "$name" @harmony.ns.cloudflare.com | tail -1)
   check "dns $host" "$NODE_IP" "$resolved"
@@ -54,6 +55,7 @@ for host in ha grafana alarms control; do
     grafana) check_any "https $host /" "301|302" "$code" ;;
     alarms) check "https $host /" "404" "$code" ;;
     control) check "https $host /" "404" "$code" ;;
+    intercom) check_any "https $host /" "404" "$code" ;;
   esac
   redirect=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 \
     --resolve "$name:80:$NODE_IP" "http://$name/" || true)
@@ -88,6 +90,18 @@ if [[ -r "$SCHEDULER_TOKEN_FILE" ]]; then
   check "scheduler GetStatus" "200" "$status"
 else
   echo "SKIP scheduler/control bearer checks (no $SCHEDULER_TOKEN_FILE)"
+fi
+
+if [[ -r "$INTERCOM_TOKEN_FILE" ]]; then
+  token=$(tr -d '\r\n' <"$INTERCOM_TOKEN_FILE")
+  endpoints=$(curl -s -o /dev/null -w '%{http_code}' --http1.1 --max-time 10 \
+    --resolve "intercom.$HOME_DOMAIN:443:$NODE_IP" \
+    -H "Authorization: Bearer $token" -H 'Content-Type: application/json' \
+    -d '{}' \
+    "https://intercom.$HOME_DOMAIN/home.v1.IntercomService/ListEndpoints" || true)
+  check "intercom ListEndpoints" "200" "$endpoints"
+else
+  echo "SKIP intercom ListEndpoints (no $INTERCOM_TOKEN_FILE)"
 fi
 
 issuer=$(openssl s_client -connect "$NODE_IP:443" -servername "grafana.$HOME_DOMAIN" \

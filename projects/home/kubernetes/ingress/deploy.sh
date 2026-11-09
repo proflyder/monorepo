@@ -5,8 +5,14 @@
 # file (default: secrets/home/ingress.env) or the caller's environment:
 #   HOME_DOMAIN              private ingress suffix, e.g. home.example.com
 #   LAN_CIDR                 LAN range allowed by the IP allow-list
+#   NODE_IP                  K3s node LAN address for the DNS A records
 #   HAOS_ADDRESS             HAOS IPv4 address for the Service EndpointSlice
 #   CLOUDFLARE_API_TOKEN_FILE  file with CLOUDFLARE_API_TOKEN=<token>
+#
+# Options:
+#   --staging           also issue a staging certificate to validate DNS-01
+#   --bootstrap-secrets write the Cloudflare Secret once (first install only)
+#   --skip-dns          do not create/correct the Cloudflare A records
 #
 # The Cloudflare Secret is owned by External Secrets Operator (OpenBao
 # secret/k8s/cert-manager/cloudflare-api-token). Only a first install on a
@@ -25,11 +31,13 @@ command -v kubectl >/dev/null || { echo "kubectl is required" >&2; exit 1; }
 
 STAGING=0
 BOOTSTRAP_SECRETS=0
+SKIP_DNS=0
 for arg in "$@"; do
   case "$arg" in
     --staging) STAGING=1 ;;
     --bootstrap-secrets) BOOTSTRAP_SECRETS=1 ;;
-    -h|--help) sed -n '2,15p' "$0"; exit 0 ;;
+    --skip-dns) SKIP_DNS=1 ;;
+    -h|--help) sed -n '2,20p' "$0"; exit 0 ;;
     *) echo "unknown argument: $arg" >&2; exit 2 ;;
   esac
 done
@@ -45,6 +53,10 @@ fi
 : "${HOME_DOMAIN:?Set HOME_DOMAIN (private ingress suffix)}"
 
 LAN_CIDR="${LAN_CIDR:-192.0.2.0/24}"
+if [[ "$SKIP_DNS" != 1 ]]; then
+  : "${NODE_IP:?Set NODE_IP (K3s node LAN address) or pass --skip-dns}"
+fi
+NODE_IP="${NODE_IP:-192.0.2.27}"
 HAOS_ADDRESS="${HAOS_ADDRESS:-192.0.2.28}"
 CLOUDFLARE_API_TOKEN_FILE="${CLOUDFLARE_API_TOKEN_FILE:-$ROOT/secrets/home/vpn/cloudflare.env}"
 [[ -r "$CLOUDFLARE_API_TOKEN_FILE" ]] || {
@@ -97,6 +109,15 @@ apply_cloudflare_secret() {
     --env CLOUDFLARE_API_TOKEN | kubectl apply -f -
 }
 
+ensure_dns() {
+  local host
+  for host in "$HA_HOST" "$GRAFANA_HOST" "$ALARMS_HOST" "$CONTROL_HOST" \
+      "$CURRENCY_HOST" "$INTERCOM_HOST"; do
+    python3 "$ROOT/projects/home/kubernetes/cloudflare_dns.py" \
+      "$CLOUDFLARE_API_TOKEN_FILE" "$host" "$NODE_IP"
+  done
+}
+
 helm repo add traefik https://traefik.github.io/charts --force-update >/dev/null
 helm repo add jetstack https://charts.jetstack.io --force-update >/dev/null
 helm repo update >/dev/null
@@ -137,7 +158,14 @@ helm upgrade --install traefik traefik/traefik \
 
 render "$MANIFESTS/middleware.yaml" | kubectl apply -f -
 render "$MANIFESTS/backends.yaml" | kubectl apply -f -
+render "$MANIFESTS/intercom-networkpolicy.yaml" | kubectl apply -f -
 render "$MANIFESTS/routes.yaml" | kubectl apply -f -
+
+if [[ "$SKIP_DNS" == 1 ]]; then
+  echo "skipping the Cloudflare A records (--skip-dns)"
+else
+  ensure_dns
+fi
 
 kubectl -n "$TRAEFIK_NS" wait --for=condition=Ready certificate/home-wildcard \
   --timeout=600s

@@ -14,6 +14,7 @@ NodePort не удаляются и остаются аварийным путё
 | ClusterIssuer | cluster | `letsencrypt-staging`, `letsencrypt-prod` |
 | Certificate `home-wildcard` | `traefik` | `*.home.example.com` → Secret `home-wildcard-tls` |
 | IngressRoute ×6 | `traefik` | маршруты к Service в `monitoring`/`home-assistant`/`currency-bot` |
+| NetworkPolicy `intercom-ingress` | `home-assistant` | LAN/VPN/NodePort → `intercom:8099`; Traefik работает в `hostNetwork`, поэтому источник — адрес узла или LAN-клиент |
 
 Маршрут `vault.<домен>` и его DNS-запись обслуживает
 `projects/home/kubernetes/openbao/deploy.sh` — тот же namespace, allow-list и
@@ -56,18 +57,32 @@ read-only root и без privilege escalation. Менять
 ```bash
 HOME_DOMAIN=home.example.com
 LAN_CIDR=192.0.2.0/24
+NODE_IP=192.0.2.27
 HAOS_ADDRESS=192.0.2.28
 CLOUDFLARE_API_TOKEN_FILE=/private/path/cloudflare.env
 ```
+
+`NODE_IP` — LAN-адрес узла K3s: deploy-скрипт создаёт/исправляет A-записи
+всех хостов (`ha`, `grafana`, `alarms`, `control`, `currency`, `intercom`)
+через `projects/home/kubernetes/cloudflare_dns.py`. `--skip-dns` отключает
+этот шаг; без `NODE_IP` и без флага деплой останавливается, чтобы не
+записать DNS в документационный адрес.
 
 `CLOUDFLARE_API_TOKEN_FILE` содержит `CLOUDFLARE_API_TOKEN=<token>` (Zone DNS
 Edit только на зону; IP-фильтр — домашний внешний адрес). Токен читается
 скриптом из файла и попадает только в Kubernetes Secret; в argv, логи и Git он
 не передаётся.
 
-DNS: A-записи `ha`, `grafana`, `alarms`, `control`, `currency` (и `intercom`, когда сервис развёрнут) → узел K3s,
-Cloudflare **DNS only** (не proxied), TTL auto. Wildcard-сертификат не
-покрывает apex.
+DNS: A-записи `ha`, `grafana`, `alarms`, `control`, `currency`, `intercom`
+→ узел K3s (`NODE_IP`), Cloudflare **DNS only** (не proxied), TTL auto;
+создаются и исправляются деплоем. Wildcard-сертификат не покрывает apex.
+
+`intercom.<домен>` — сервис сигналинга звонков (`home-assistant/intercom:8099`).
+`Watch` — долгоживущий server-streaming ответ Connect поверх HTTP/1.1;
+маршрут задаёт `responseForwarding.flushInterval: 100ms`, а в
+`values/traefik.yaml` для `websecure` выставлены `readTimeout: 60s`,
+`writeTimeout: 0s`, `idleTimeout: 1800s`, чтобы ответ не буферизовался и не
+обрывался по таймауту. NodePort остаётся аварийным путём.
 
 `currency.<домен>` — внутренний JSON API бота (`/api/*`, `/metrics`), доступен
 только из LAN/VPN через `home-allowlist`. Telegram webhook идёт отдельным

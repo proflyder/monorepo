@@ -1,0 +1,34 @@
+# Public template. `deploy.sh` substitutes ${LAN_CIDR} (the private LAN range).
+#
+# Ingress policy for the intercom signaling pod. Traefik runs with hostNetwork,
+# so requests arrive from the node address (or keep the original LAN client
+# address) and carry no pod identity that a podSelector could match. The LAN
+# CIDR covers LAN clients, VPN clients (NATed to a LAN address), kubelet probes
+# and Traefik on the node; the pod CIDR covers in-cluster clients.
+#
+# The NodePort emergency path is unaffected: NodePort traffic also arrives from
+# a LAN address or the node itself. This policy only restricts ingress; egress
+# stays unrestricted because the service needs no outbound traffic.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: intercom-ingress
+  namespace: home-assistant
+  labels:
+    app.kubernetes.io/name: intercom
+    app.kubernetes.io/part-of: ricardo-home
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: intercom
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - ipBlock:
+            cidr: ${LAN_CIDR}
+        - ipBlock:
+            cidr: 10.42.0.0/16
+      ports:
+        - protocol: TCP
+          port: 8099
