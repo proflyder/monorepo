@@ -152,8 +152,12 @@ optional_repo() {
 }
 
 common_storage='{"blobStoreName":"ci-cache","strictContentTypeValidation":true,"writePolicy":"ALLOW"}'
-common_negative='{"enabled":true,"timeToLive":1440}'
-common_http='{"blocked":false,"autoBlock":true}'
+# Upstreams (GitHub release downloads above all) return transient 5xx. With
+# auto-blocking one such answer took the whole repository offline and Nexus
+# answered 404/503 for every path; a long negative cache then kept those 404s
+# for a day. Never auto-block, retry upstream calls, keep misses briefly.
+common_negative='{"enabled":true,"timeToLive":5}'
+common_http='{"blocked":false,"autoBlock":false,"connection":{"retries":3,"timeout":60}}'
 
 wait_ready
 ensure_blob_store
