@@ -7,7 +7,7 @@ serves later requests from a local volume. When a GitHub release download or
 an upstream registry answers with a 504, a warm cache keeps CI green.
 
 Internal UI/admin lives at `https://nexus.<home-domain>/` (LAN/VPN only).
-CI uses `https://ci-nexus.<home-domain>/repository/` (public, read-only
+CI uses `https://ci-nexus.<public-zone>/repository/` (public, read-only
 account).
 
 ## What is in the box
@@ -82,7 +82,7 @@ raw proxies. Verify a real release asset after an upgrade:
 
 ```bash
 curl -fsS -u ci-reader:<password> \
-  https://ci-nexus.<home-domain>/repository/github/cli/cli/releases/download/v2.62.0/gh_2.62.0_linux_amd64.tar.gz \
+  https://ci-nexus.<public-zone>/repository/github/cli/cli/releases/download/v2.62.0/gh_2.62.0_linux_amd64.tar.gz \
   -o /dev/null
 ```
 
@@ -145,13 +145,17 @@ public path, not a new inbound port:
 
 1. The existing remotely-managed tunnel `home-k3s` (cloudflared in the
    `currency-bot` namespace) carries a second route: hostname
-   `ci-nexus.<home-domain>`, path `^/repository/`, origin
+   `ci-nexus.<public-zone>`, path `^/repository/`, origin
    `http://nexus.nexus.svc.cluster.local:8081`. Every other path falls through
    to the tunnel's `http_status:404`. cloudflared's egress policy opens only
    `nexus:8081` for this. The route and its proxied CNAME are managed through
    the Cloudflare API (token `CF_TUNNEL_API_TOKEN` in
    `secret/infra/cloudflare/currency-bot-tunnel`).
-2. Set the GitHub repository variable `NEXUS_HOST=ci-nexus.<home-domain>`.
+   The public name sits directly under the Cloudflare zone (one label, e.g.
+   `ci-nexus.<public-zone>`): Universal SSL does not cover
+   `*.home.<public-zone>`. The `ci-nexus.home.*` Traefik route stays for LAN
+   checks only.
+2. Set the GitHub repository variable `NEXUS_HOST=ci-nexus.<public-zone>`.
 3. Set the GitHub repository secret `NEXUS_CI_PASSWORD` to the
    `ci_reader_password` value from OpenBao.
 
