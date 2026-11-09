@@ -23,6 +23,14 @@ CERT_MANAGER_CHART_VERSION=v1.21.3
 OPENBAO_CHART_VERSION=0.30.6
 OPENBAO_IMAGE_VERSION=2.7.2
 OPENBAO_IMAGE_DIGEST=sha256:5046911075e137e154ce49ab051502f4ec7cf367d484ae4a4dce665d9b90561f
+# Nexus Repository OSS artifact cache. 3.76.1 is the last release before the
+# Community Edition usage limits (3.77.0, 2025-02-04); the tag and its
+# manifest-list digest are pinned together so a moved tag cannot slip in.
+NEXUS_IMAGE_VERSION=3.76.1
+NEXUS_IMAGE_DIGEST=sha256:390b8ec7e712c680ed8b449b766695a7c5ebbf41e489317618e63ca199f2cc09
+# One-shot provisioning Job (curl + sh only; no Python or JDK needed).
+NEXUS_PROVISION_IMAGE_VERSION=8.23.0
+NEXUS_PROVISION_IMAGE_DIGEST=sha256:3fb7e13e5d179a845c97d78204f3f1064d1907037f26a3ebf91710571151fd93
 # Vaultwarden (Bitwarden-compatible password manager): upstream image by digest.
 VAULTWARDEN_IMAGE_VERSION=1.37.5
 VAULTWARDEN_IMAGE_DIGEST=sha256:4fe17f415f90087377d37c755e0ea3cf189dcc6794e49cdd2a9adbb4937d9e1f

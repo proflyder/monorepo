@@ -1,0 +1,163 @@
+# Nexus Repository OSS: a read-through cache for CI downloads (Maven, npm,
+# PyPI, raw GitHub release assets and Node.js distributions).
+#
+# TEMPLATE rendered by deploy.sh:
+#   NEXUS_IMAGE  upstream image pinned by tag and digest (versions.sh)
+#
+# One replica and one local-retain volume: the embedded H2 store and the blob
+# store are single-writer. A cache is disposable, but retaining the volume
+# keeps CI warm across pod restarts; deleting the PVC only costs a cold cache.
+#
+# The initial `admin` password is copied from the `nexus-secrets` Secret into
+# `/nexus-data/admin.password` by an init container on a fresh volume. Nexus
+# consumes that file on first boot and authenticates from H2 afterwards, so
+# later rotations happen through the API (see README) and this step is a no-op.
+apiVersion: v1
+kind: Service
+metadata:
+  name: nexus
+  namespace: nexus
+  labels:
+    app.kubernetes.io/name: nexus
+    app.kubernetes.io/part-of: ricardo-home
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: nexus
+  ports:
+    - name: http
+      port: 8081
+      targetPort: http
+      protocol: TCP
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: nexus
+  namespace: nexus
+  labels:
+    app.kubernetes.io/name: nexus
+    app.kubernetes.io/part-of: ricardo-home
+spec:
+  replicas: 1
+  serviceName: nexus
+  podManagementPolicy: Parallel
+  updateStrategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: nexus
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: nexus
+    spec:
+      enableServiceLinks: false
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 200
+        runAsGroup: 200
+        fsGroup: 200
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        # Seed the first-boot admin password, but only before the H2 database
+        # exists. Both files live on the same volume, so a crash between the
+        # two never leaves a half-initialised store behind.
+        - name: seed-admin-password
+          image: ${NEXUS_IMAGE}
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -ec
+            - |
+              if [ ! -e /nexus-data/admin.password ] && [ ! -d /nexus-data/db ]; then
+                cp /seed/admin_password /nexus-data/admin.password
+                chmod 0644 /nexus-data/admin.password
+                echo "seeded /nexus-data/admin.password on a fresh volume"
+              else
+                echo "volume already initialised; keeping the existing admin password"
+              fi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: data
+              mountPath: /nexus-data
+            - name: seed
+              mountPath: /seed
+              readOnly: true
+      containers:
+        - name: nexus
+          image: ${NEXUS_IMAGE}
+          imagePullPolicy: IfNotPresent
+          env:
+            # A small home server: a 1 GiB heap plus 1 GiB of direct buffers
+            # keeps the JVM below the container limit without starving the page
+            # cache for the blob store.
+            - name: INSTALL4J_ADD_VM_PARAMS
+              value: >-
+                -Xms1024m -Xmx1024m
+                -XX:MaxDirectMemorySize=1024m
+                -Djava.util.prefs.userRoot=/nexus-data/javaprefs
+            - name: NEXUS_DATA
+              value: /nexus-data
+          ports:
+            - name: http
+              containerPort: 8081
+              protocol: TCP
+          # Nexus opens the HTTP port only after the OSGi bundles are active.
+          # A cold start on an empty volume takes a few minutes; the probe
+          # budget is deliberately generous so kubelet never restarts it.
+          readinessProbe:
+            httpGet:
+              path: /service/rest/v1/status/writable
+              port: http
+            initialDelaySeconds: 120
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 30
+          livenessProbe:
+            httpGet:
+              path: /service/rest/v1/status
+              port: http
+            initialDelaySeconds: 300
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 6
+          resources:
+            requests:
+              cpu: 200m
+              memory: 1Gi
+            limits:
+              memory: 2500Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: data
+              mountPath: /nexus-data
+      volumes:
+        - name: seed
+          secret:
+            secretName: nexus-secrets
+            items:
+              - key: admin_password
+                path: admin_password
+            defaultMode: 0440
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels:
+          app.kubernetes.io/name: nexus
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        storageClassName: local-retain
+        resources:
+          requests:
+            storage: 50Gi
