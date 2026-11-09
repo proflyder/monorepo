@@ -410,7 +410,7 @@ mod tests {
                     ..Raw::default()
                 },
                 Raw {
-                    entity: "binary_sensor.komp_zablokirovan".to_owned(),
+                    entity: "binary_sensor.komp_razblokirovan".to_owned(),
                     state: "off".to_owned(),
                     name: "Комп разблокирован".to_owned(),
                     device_class: "lock".to_owned(),
@@ -430,7 +430,7 @@ mod tests {
         );
         // The lock binary sensor is not an entry of its own.
         assert_eq!(body.matches("\"id\":\"switch.komp\"").count(), 1, "{body}");
-        assert!(!body.contains("komp_zablokirovan"), "{body}");
+        assert!(!body.contains("komp_razblokirovan"), "{body}");
     }
 
     #[test]

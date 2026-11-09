@@ -147,7 +147,7 @@ komp_lock:
         - delay: 3
         - service: homeassistant.update_entity
           target:
-            entity_id: binary_sensor.komp_zablokirovan
+            entity_id: binary_sensor.komp_razblokirovan
 
 komp_unlock:
   alias: "Комп: разблокировка"
@@ -169,7 +169,7 @@ komp_unlock:
         - delay: 3
         - service: homeassistant.update_entity
           target:
-            entity_id: binary_sensor.komp_zablokirovan
+            entity_id: binary_sensor.komp_razblokirovan
 
 wake_false_alarm:
   alias: "Рикардо: ложное срабатывание"

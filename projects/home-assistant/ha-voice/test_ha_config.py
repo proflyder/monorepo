@@ -1320,7 +1320,8 @@ class KompPowerTests(unittest.TestCase):
         self.assertIn("{{ states('input_text.komp_ssh_target') }}", command)
         self.assertNotIn("@", command)
         # SSH only ever receives the same single word from the wrapper.
-        self.assertTrue(command.endswith("status {%- else -%} echo offline {%- endif %}"))
+        self.assertTrue(command.startswith('sh -c "{% if '))
+        self.assertTrue(command.endswith('status{% else %}echo offline{% endif %}"'))
 
     def test_off_request_helper_is_a_date_time(self):
         helpers = load_yaml(HA / "input_datetime.yaml")
@@ -1449,7 +1450,7 @@ class KompPowerTests(unittest.TestCase):
             with self.subTest(refresh=name):
                 self.assertEqual(
                     service_targets(script),
-                    {"binary_sensor.komp_zablokirovan"},
+                    {"binary_sensor.komp_razblokirovan"},
                 )
                 self.assertIn("delay: 3", yaml.safe_dump(script, allow_unicode=True))
         for name, script in (("komp_lock", lock), ("komp_unlock", unlock)):

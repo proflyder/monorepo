@@ -477,7 +477,7 @@
   (интерактивная сессия, `LockWorkStation`), разблокировка — пропуск
   `wakegrant` (`KompUnlock`), состояние — `binary_sensor.komp_v_seti`
   (`command_line` ping каждые 10 с) и признак экрана
-  `binary_sensor.komp_zablokirovan` (`command_line` SSH `status` раз в 30 с,
+  `binary_sensor.komp_razblokirovan` (`command_line` SSH `status` раз в 30 с,
   только при включённом ПК; HA `device_class: lock`, on = разблокирован).
   ha-bridge отдаёт его как локализуемый `detailKey` у `switch.komp`, поэтому
   приложение показывает «Вкл · заблокирован» / «Вкл · разблокирован»; кнопки

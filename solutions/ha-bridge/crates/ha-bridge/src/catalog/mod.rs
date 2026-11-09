@@ -1154,7 +1154,7 @@ mod tests {
             ..Raw::default()
         };
         let locked = Raw {
-            entity: "binary_sensor.komp_zablokirovan".to_owned(),
+            entity: "binary_sensor.komp_razblokirovan".to_owned(),
             state: "off".to_owned(),
             name: "Комп разблокирован".to_owned(),
             device_class: "lock".to_owned(),
