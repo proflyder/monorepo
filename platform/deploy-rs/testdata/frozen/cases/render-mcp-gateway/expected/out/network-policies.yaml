@@ -24,7 +24,7 @@ metadata:
   namespace: home-assistant
   labels:
     app.kubernetes.io/name: mcp-gateway
-    app.kubernetes.io/part-of: ricardo-home
+    app.kubernetes.io/part-of: home
 spec:
   podSelector:
     matchLabels:
@@ -60,7 +60,7 @@ metadata:
   namespace: home-assistant
   labels:
     app.kubernetes.io/name: mcp-gateway
-    app.kubernetes.io/part-of: ricardo-home
+    app.kubernetes.io/part-of: home
 spec:
   podSelector:
     matchLabels:

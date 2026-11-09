@@ -15,7 +15,7 @@ metadata:
   namespace: home-assistant
   labels:
     app.kubernetes.io/name: scheduler-preflight
-    app.kubernetes.io/part-of: ricardo-home
+    app.kubernetes.io/part-of: home
 spec:
   backoffLimit: 0
   activeDeadlineSeconds: 180

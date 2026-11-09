@@ -18,7 +18,7 @@ metadata:
   namespace: home-assistant
   labels:
     app.kubernetes.io/name: wakegrant
-    app.kubernetes.io/part-of: ricardo-home
+    app.kubernetes.io/part-of: home
 spec:
   accessModes:
     - ReadWriteOnce
@@ -34,7 +34,7 @@ metadata:
   namespace: home-assistant
   labels:
     app.kubernetes.io/name: wakegrant
-    app.kubernetes.io/part-of: ricardo-home
+    app.kubernetes.io/part-of: home
   annotations:
     # Traceability only: a Deployment metadata change never rolls pods.
     ricardo.dev/build: 0123456789ab
@@ -51,7 +51,7 @@ spec:
         app.kubernetes.io/name: wakegrant
       annotations:
         # Content-addressed: identical rendered content keeps the pod template.
-        ricardo.dev/rollout: 92572cd86ec2
+        ricardo.dev/rollout: 415b1097349b
     spec:
       enableServiceLinks: false
       securityContext:
@@ -143,7 +143,7 @@ metadata:
   namespace: home-assistant
   labels:
     app.kubernetes.io/name: wakegrant
-    app.kubernetes.io/part-of: ricardo-home
+    app.kubernetes.io/part-of: home
 spec:
   type: NodePort
   selector:

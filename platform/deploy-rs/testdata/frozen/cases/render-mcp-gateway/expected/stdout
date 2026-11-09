@@ -1,4 +1,4 @@
-rollout id: e868e83cd607
+rollout id: 2e8e78a7930d
 rendered input/deployment.yaml -> out/deployment.yaml
 rendered input/network-policies.yaml -> out/network-policies.yaml
 rendered input/servicemonitor.yaml -> out/servicemonitor.yaml

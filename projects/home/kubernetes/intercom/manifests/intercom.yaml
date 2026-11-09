@@ -19,7 +19,7 @@ metadata:
   namespace: home-assistant
   labels:
     app.kubernetes.io/name: intercom
-    app.kubernetes.io/part-of: ricardo-home
+    app.kubernetes.io/part-of: home
   annotations:
     ricardo.dev/build: ${BUILD_ID}
 spec:
@@ -128,7 +128,7 @@ metadata:
   namespace: home-assistant
   labels:
     app.kubernetes.io/name: intercom
-    app.kubernetes.io/part-of: ricardo-home
+    app.kubernetes.io/part-of: home
 spec:
   type: NodePort
   selector:

@@ -5,7 +5,7 @@ metadata:
   namespace: home-assistant
   labels:
     app.kubernetes.io/name: ha-control
-    app.kubernetes.io/part-of: ricardo-home
+    app.kubernetes.io/part-of: home
 spec:
   type: NodePort
   selector:

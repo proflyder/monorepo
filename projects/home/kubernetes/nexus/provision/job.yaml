@@ -12,7 +12,7 @@ metadata:
   namespace: nexus
   labels:
     app.kubernetes.io/name: nexus
-    app.kubernetes.io/part-of: ricardo-home
+    app.kubernetes.io/part-of: home
 spec:
   backoffLimit: 3
   template:

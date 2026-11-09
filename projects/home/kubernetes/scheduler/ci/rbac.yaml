@@ -15,7 +15,7 @@ metadata:
   name: ci-deploy
   namespace: home-assistant
   labels:
-    app.kubernetes.io/part-of: ricardo-home
+    app.kubernetes.io/part-of: home
 ---
 apiVersion: v1
 kind: Secret
@@ -23,7 +23,7 @@ metadata:
   name: ci-deploy-token
   namespace: home-assistant
   labels:
-    app.kubernetes.io/part-of: ricardo-home
+    app.kubernetes.io/part-of: home
   annotations:
     kubernetes.io/service-account.name: ci-deploy
 type: kubernetes.io/service-account-token
@@ -82,7 +82,7 @@ metadata:
   name: ci-deploy
   namespace: home-assistant
   labels:
-    app.kubernetes.io/part-of: ricardo-home
+    app.kubernetes.io/part-of: home
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role

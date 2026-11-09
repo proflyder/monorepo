@@ -8,7 +8,7 @@ metadata:
   namespace: currency-bot
   labels:
     app.kubernetes.io/name: currency-bot
-    app.kubernetes.io/part-of: ricardo-home
+    app.kubernetes.io/part-of: home
 spec:
   namespaceSelector:
     matchNames:
