@@ -543,6 +543,7 @@ data class ControlEntryDto(
     val title: String = "",
     val titleKey: String = "",
     val titleArgs: Map<String, String> = emptyMap(),
+    val detailKey: String = "",
     val room: String = "",
     val icon: String = "",
     val actions: List<String> = emptyList(),

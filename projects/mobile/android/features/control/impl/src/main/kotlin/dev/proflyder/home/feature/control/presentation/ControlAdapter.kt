@@ -182,8 +182,10 @@ internal object ControlDiff : DiffUtil.ItemCallback<ControlItem>() {
             add(ControlChange.STATE)
         }
         if (old.busy != new.busy) add(ControlChange.BUSY)
-        // Brightness is part of the state line while the light is on.
+        // Brightness and a device detail (for example the PC lock state) are
+        // part of the state line.
         if (before.light != after.light) add(ControlChange.STATE)
+        if (before.detailKey != after.detailKey) add(ControlChange.STATE)
     }
 }
 
@@ -746,12 +748,7 @@ internal class ControlAdapter(
             val entry = row.entry
             val on = entry.power == PowerState.ON
             views.controlDeviceState.setText(
-                when {
-                    !entry.available -> R.string.control_state_unavailable
-                    entry.power == PowerState.ON -> R.string.control_state_on
-                    entry.power == PowerState.OFF -> R.string.control_state_off
-                    else -> R.string.control_state_unknown
-                },
+                entry.localizedStateText(views.root.context, R.string.control_state_unavailable),
             )
             val brightness = entry.light?.takeIf { on && entry.available && it.brightness && it.brightnessPct > 0 }?.brightnessPct
             if (brightness != null) {
@@ -790,35 +787,51 @@ internal class ControlAdapter(
             // device title (see ControlItems.DeviceGroup).
             views.controlGroupTitle.text = group.title
             views.controlGroupTitle.setVisible(group.primary.size != 1)
-            views.controlGroupPrimary.removeAllViews()
-            group.primary.forEach { addRow(views.controlGroupPrimary, it, group.statesKnown) }
-            views.controlGroupActions.removeAllViews()
-            group.actions.forEach { addRow(views.controlGroupActions, it, group.statesKnown) }
+            syncRows(views.controlGroupPrimary, group.primary, group.statesKnown)
+            syncRows(views.controlGroupActions, group.actions, group.statesKnown)
             views.controlGroupActions.setVisible(group.actions.isNotEmpty())
             views.controlGroupSettings.text =
                 views.root.context.getString(R.string.control_device_settings, group.settings.size)
             views.controlGroupSettings.setVisible(group.settings.isNotEmpty())
             val showSettings = group.expanded && group.settings.isNotEmpty()
-            views.controlGroupSettingsList.removeAllViews()
-            if (showSettings) {
-                group.settings.forEach { addRow(views.controlGroupSettingsList, it, group.statesKnown) }
-            }
+            syncRows(views.controlGroupSettingsList, group.settings.takeIf { showSettings }.orEmpty(), group.statesKnown)
             views.controlGroupSettingsList.setVisible(showSettings)
             views.controlGroupSettings.setOnClickListener { callback.onToggleSettings(group.deviceId) }
         }
 
         override fun bindPayloads(item: ControlItem, payloads: List<Any>) = bind(item)
 
-        internal fun addRow(
+        /**
+         * Rebinds the rows of [container] in place: a pressed row keeps its
+         * view, so its ripple and busy indicator survive the state update that
+         * the press itself triggers. Only the row count changes the hierarchy.
+         */
+        private fun syncRows(
             container: LinearLayout,
+            rows: List<ControlItem.DeviceGroup.Row>,
+            statesKnown: Boolean,
+        ) {
+            while (container.childCount > rows.size) {
+                container.removeViewAt(container.childCount - 1)
+            }
+            rows.forEachIndexed { index, row -> bindRow(rowViews(container, index), row, statesKnown) }
+        }
+
+        internal fun rowViews(container: LinearLayout, index: Int): ItemControlDeviceRowBinding =
+            container.getChildAt(index)?.let(ItemControlDeviceRowBinding::bind)
+                ?: ItemControlDeviceRowBinding.inflate(LayoutInflater.from(container.context), container, false)
+                    .also { container.addView(it.root) }
+
+        internal fun bindRow(
+            rowViews: ItemControlDeviceRowBinding,
             row: ControlItem.DeviceGroup.Row,
             statesKnown: Boolean,
         ) {
-            val rowViews = ItemControlDeviceRowBinding.inflate(
-                LayoutInflater.from(container.context),
-                container,
-                false,
-            )
+            // A reused row may carry the previous entry's listeners.
+            rowViews.controlRowSwitch.setOnCheckedChangeListener(null)
+            rowViews.root.setOnLongClickListener(null)
+            rowViews.controlRowSwitch.setVisible(true)
+            rowViews.controlRowState.setVisible(true)
             val entry = row.entry
             rowViews.controlRowTitle.text =
                 entry.localizedTitle(rowViews.root.context)
@@ -828,8 +841,7 @@ internal class ControlAdapter(
             rowViews.controlRowProgress.setVisible(row.busy)
             rowViews.root.alpha = if (entry.available) 1f else DISABLED_ALPHA
             if (entry.isButton) {
-                bindButtonRow(rowViews, entry, row.busy)
-                return container.addView(rowViews.root)
+                return bindButtonRow(rowViews, entry, row.busy)
             }
             val on = entry.power == PowerState.ON
             val tint = MaterialColors.getColor(
@@ -846,12 +858,7 @@ internal class ControlAdapter(
                 callback.onPowerChanged(entry, checked)
             }
             rowViews.controlRowState.setText(
-                when {
-                    !entry.available -> R.string.control_state_unavailable
-                    entry.power == PowerState.ON -> R.string.control_state_on
-                    entry.power == PowerState.OFF -> R.string.control_state_off
-                    else -> R.string.control_state_unknown
-                },
+                entry.localizedStateText(rowViews.root.context, R.string.control_state_unavailable),
             )
             val brightness = entry.light?.takeIf { on && entry.available && it.brightness && it.brightnessPct > 0 }?.brightnessPct
             if (brightness != null) {
@@ -868,7 +875,6 @@ internal class ControlAdapter(
                 callback.onPinToggle(entry)
                 true
             }
-            container.addView(rowViews.root)
         }
 
         /**

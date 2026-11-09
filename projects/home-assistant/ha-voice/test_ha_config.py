@@ -1225,12 +1225,14 @@ class KompPowerTests(unittest.TestCase):
     def _squash(text: str) -> str:
         return " ".join(text.split())
 
-    def _command_line(self) -> dict[str, Any]:
+    def _command_line_sensors(self) -> dict[str, dict[str, Any]]:
         groups = load_yaml(HA / "command_line.yaml")
-        for group in groups:
-            if "binary_sensor" in group:
-                return group["binary_sensor"]
-        self.fail("command_line.yaml has no binary_sensor group")
+        sensors = [group["binary_sensor"] for group in groups if "binary_sensor" in group]
+        return {sensor["unique_id"]: sensor for sensor in sensors}
+
+    def _command_line(self) -> dict[str, Any]:
+        sensors = self._command_line_sensors()
+        return sensors["komp_online"]
 
     def _switch(self) -> dict[str, Any]:
         templates = load_yaml(HA / "templates.yaml")
@@ -1294,6 +1296,31 @@ class KompPowerTests(unittest.TestCase):
         # 30 s poll made «включи комп» answer «Комп уже включён».
         self.assertEqual(sensor["scan_interval"], 10)
         self.assertNotIn("platform", sensor, "legacy platform YAML is not supported anymore")
+
+    def test_lock_binary_sensor_polls_ssh_only_while_the_pc_is_online(self):
+        sensors = self._command_line_sensors()
+        self.assertEqual(set(sensors), {"komp_online", "komp_unlocked"})
+        sensor = sensors["komp_unlocked"]
+        self.assertEqual(sensor["name"], "Комп разблокирован")
+        self.assertEqual(sensor["device_class"], "lock")
+        # HA lock device class: on = unlocked/open, off = locked/closed.
+        self.assertEqual(sensor["payload_on"], "unlocked")
+        self.assertEqual(sensor["payload_off"], "locked")
+        self.assertEqual(sensor["scan_interval"], 30)
+        self.assertEqual(
+            self._squash(sensor["availability"]),
+            "{{ is_state('binary_sensor.komp_v_seti', 'on') }}",
+        )
+        command = self._squash(sensor["command"])
+        # The command itself is gated too: no SSH attempt while the PC is off.
+        self.assertIn("is_state('binary_sensor.komp_v_seti', 'on')", command)
+        self.assertIn("echo offline", command)
+        self.assertIn("status", command)
+        self.assertIn("ssh -i /config/.ssh/komp_ed25519", command)
+        self.assertIn("{{ states('input_text.komp_ssh_target') }}", command)
+        self.assertNotIn("@", command)
+        # SSH only ever receives the same single word from the wrapper.
+        self.assertTrue(command.endswith("status {%- else -%} echo offline {%- endif %}"))
 
     def test_off_request_helper_is_a_date_time(self):
         helpers = load_yaml(HA / "input_datetime.yaml")
@@ -1408,8 +1435,23 @@ class KompPowerTests(unittest.TestCase):
     def test_lock_and_unlock_scripts_are_guarded_by_the_ping_sensor(self):
         lock = SCRIPTS["komp_lock"]
         unlock = SCRIPTS["komp_unlock"]
-        self.assertEqual(services(lock), ["shell_command.komp_lock"])
-        self.assertEqual(services(unlock), ["rest_command.wakegrant_issue_unlock"])
+        self.assertEqual(
+            services(lock),
+            ["shell_command.komp_lock", "homeassistant.update_entity"],
+        )
+        self.assertEqual(
+            services(unlock),
+            ["rest_command.wakegrant_issue_unlock", "homeassistant.update_entity"],
+        )
+        # Both refresh the lock sensor after the action, without waiting for
+        # the 30 s poll.
+        for name, script in (("komp_lock", lock), ("komp_unlock", unlock)):
+            with self.subTest(refresh=name):
+                self.assertEqual(
+                    service_targets(script),
+                    {"binary_sensor.komp_zablokirovan"},
+                )
+                self.assertIn("delay: 3", yaml.safe_dump(script, allow_unicode=True))
         for name, script in (("komp_lock", lock), ("komp_unlock", unlock)):
             with self.subTest(script=name):
                 dump = yaml.safe_dump(script, allow_unicode=True)

@@ -212,6 +212,8 @@ idempotency key от `context.id`. Метка не найдена или schedul
   `komp_lock` (ограниченный SSH на Windows-ПК; адрес из
   `input_text.komp_ssh_target`)
 - `command_line.yaml` — `binary_sensor.komp_v_seti` (ping компа каждые 10 с)
+  и `binary_sensor.komp_zablokirovan` (`device_class: lock`, SSH `status` раз
+  в 30 с только при включённом ПК; on = разблокирован)
 - `intent_scripts.yaml` — station, music, schedule, currency intents
 - `scripts.yaml` — Music, audio executor (`alarm_start` /
   `alarm_announce` / `alarm_loop` / `alarm_ramp` / `alarm_stop` /
@@ -389,6 +391,9 @@ MA (`sync_spotify`), поэтому app/Pulsar не расходятся. Ток
 
 ```text
 binary_sensor.komp_v_seti   command_line: busybox ping -c 1 -W 1, 10 с
+binary_sensor.komp_zablokirovan
+                            command_line: SSH status, 30 с, только когда ПК в сети
+                            device_class lock: on = разблокирован, off = заблокирован
 switch.komp                 template switch, state = binary_sensor
   turn_on  → если ПК выключен/выключается:
                rest_command.wakegrant_issue (logon, best-effort)
@@ -399,7 +404,10 @@ script.komp_shutdown        → input_datetime.komp_off_requested = now()
 script.komp_cancel_shutdown → shell_command.komp_cancel_shutdown (SSH: cancel)
 script.komp_lock            → sensor on и адрес SSH задан
                             → shell_command.komp_lock (SSH: lock)
+                            → через 3 с homeassistant.update_entity
+                              binary_sensor.komp_zablokirovan
 script.komp_unlock          → sensor on → rest_command.wakegrant_issue_unlock
+                            → через 3 с homeassistant.update_entity
 button.komp_lock            → script.komp_lock    (кнопка группы «Комп»)
 button.komp_unlock          → script.komp_unlock  (кнопка группы «Комп»)
 ```

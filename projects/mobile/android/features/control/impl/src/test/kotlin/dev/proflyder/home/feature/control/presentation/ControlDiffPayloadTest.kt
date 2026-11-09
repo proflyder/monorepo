@@ -28,6 +28,7 @@ class ControlDiffPayloadTest {
         available: Boolean = true,
         light: LightControls? = null,
         actions: Set<ControlAction> = setOf(ControlAction.TURN_ON, ControlAction.TURN_OFF),
+        detailKey: String = "",
     ) = ControlEntry(
         id = id,
         kind = kind,
@@ -38,6 +39,7 @@ class ControlDiffPayloadTest {
         power = power,
         available = available,
         light = light,
+        detailKey = detailKey,
     )
 
     private fun device(
@@ -72,6 +74,17 @@ class ControlDiffPayloadTest {
         assertEquals(
             setOf(ControlChange.POWER, ControlChange.STATE),
             changes(device(entry(power = PowerState.OFF)), device(entry(power = PowerState.ON))),
+        )
+    }
+
+    @Test
+    fun deviceDetailChangeReportsState() {
+        assertEquals(
+            setOf(ControlChange.STATE),
+            changes(
+                device(entry(detailKey = "catalog.status.unlocked")),
+                device(entry(detailKey = "catalog.status.locked")),
+            ),
         )
     }
 

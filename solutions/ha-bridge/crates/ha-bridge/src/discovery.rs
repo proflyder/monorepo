@@ -29,7 +29,10 @@ use crate::catalog::{self, Catalog, Light, LightInput, Raw, Rules};
 /// Domains discovery reads. `assist_satellite` is not an entry of its own;
 /// it supplies the device and room of the synthetic speak action. `button`
 /// entries are one-shot `press` actions (for example lock/unlock a PC).
-const DOMAINS: &str = "['script','scene','light','switch','button','assist_satellite']";
+/// `binary_sensor` entities are not entries either: a `lock` binary sensor
+/// attached to a device-less base becomes that device's status detail.
+const DOMAINS: &str =
+    "['script','scene','light','switch','button','binary_sensor','assist_satellite']";
 
 /// The Home Assistant read surface discovery needs.
 pub trait HomeAssistant: Send + Sync {
@@ -204,6 +207,12 @@ impl<H: HomeAssistant> Provider<H> {
                     state: entity.state.clone(),
                     name: entity.name().to_owned(),
                     icon: entity.icon().to_owned(),
+                    device_class: entity
+                        .attributes
+                        .device_class
+                        .as_deref()
+                        .unwrap_or_default()
+                        .to_owned(),
                     room,
                     device_id: device.map(|device| device.id.clone()).unwrap_or_default(),
                     device: device.map(|device| device.name.clone()).unwrap_or_default(),

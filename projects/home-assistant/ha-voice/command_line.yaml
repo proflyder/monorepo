@@ -22,3 +22,41 @@
     payload_on: "1"
     payload_off: "0"
     scan_interval: 10
+
+# Screen lock of the same wired desktop, over the restricted SSH wrapper's
+# read-only `status` word (projects/home/windows-pc/komp-power.ps1).
+#
+# Home Assistant lock semantics: `on` means unlocked/open, `off` means
+# locked/closed. The entity id keeps the owner's `komp_zablokirovan` name, but
+# the state follows the device class, so the HA card shows "Unlocked"/"Locked"
+# correctly; the Android control catalog maps the same state to its own
+# localized subtitle.
+#
+# `command` is a Jinja template. It runs SSH only while the ping sensor says
+# the PC is on; otherwise it prints `offline` locally. `availability` hides the
+# entity when the PC is offline, so no SSH attempt is made and the state is
+# `unavailable` instead of a stale lock state. The SSH target comes from
+# `input_text.komp_ssh_target` (the secret lives there), the same way as the
+# shell commands; `!secret` cannot be spliced into a longer version.
+- binary_sensor:
+    name: "Комп разблокирован"
+    unique_id: komp_unlocked
+    device_class: lock
+    icon: mdi:lock
+    command: >-
+      {% if is_state('binary_sensor.komp_v_seti', 'on') -%}
+      ssh -i /config/.ssh/komp_ed25519
+      -o BatchMode=yes
+      -o ConnectTimeout=5
+      -o UserKnownHostsFile=/config/.ssh/komp_known_hosts
+      -o StrictHostKeyChecking=accept-new
+      {{ states('input_text.komp_ssh_target') }}
+      status
+      {%- else -%}
+      echo offline
+      {%- endif %}
+    availability: >-
+      {{ is_state('binary_sensor.komp_v_seti', 'on') }}
+    payload_on: "unlocked"
+    payload_off: "locked"
+    scan_interval: 30

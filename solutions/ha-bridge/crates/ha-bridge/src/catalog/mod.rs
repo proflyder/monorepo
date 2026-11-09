@@ -89,6 +89,8 @@ pub struct Raw {
     pub state: String,
     pub name: String,
     pub icon: String,
+    /// `device_class` reported by Home Assistant (`lock`, `connectivity`, …).
+    pub device_class: String,
     pub room: String,
     /// Home Assistant device registry id, empty when the entity has no device
     /// or the registry could not be read.
@@ -162,6 +164,9 @@ pub struct Entry {
     pub title_key: String,
     /// Typed arguments for [`Entry::title_key`].
     pub title_args: std::collections::BTreeMap<String, String>,
+    /// Stable localization key of a device status shown under the title (for
+    /// example the PC lock state). Empty when the device has no status.
+    pub detail_key: String,
     pub room: String,
     pub icon: String,
     pub entity: String,
@@ -224,6 +229,7 @@ impl Catalog {
             .map(|entry| Entry {
                 available: false,
                 state: String::new(),
+                detail_key: String::new(),
                 ..entry.clone()
             })
             .collect();
@@ -425,6 +431,30 @@ fn button_base<'a>(raw: &Raw, bases: &HashMap<&'a str, &'a str>) -> Option<&'a s
     bases.get(base).copied()
 }
 
+/// Stable localization key of a locked device status.
+pub const DETAIL_LOCKED: &str = "catalog.status.locked";
+/// Stable localization key of an unlocked device status.
+pub const DETAIL_UNLOCKED: &str = "catalog.status.unlocked";
+
+/// The status detail a device-less `binary_sensor` contributes to its base.
+///
+/// Home Assistant lock semantics are `on` = unlocked (open), `off` = locked
+/// (closed). The catalog never invents a state: an unknown, unavailable or
+/// non-lock sensor contributes nothing, and the key is localized by clients.
+fn lock_detail_key(raw: &Raw) -> Option<&'static str> {
+    if domain_of(&raw.entity) != "binary_sensor"
+        || !raw.device_id.trim().is_empty()
+        || !raw.device_class.trim().eq_ignore_ascii_case("lock")
+    {
+        return None;
+    }
+    match raw.state.trim().to_lowercase().as_str() {
+        "on" => Some(DETAIL_UNLOCKED),
+        "off" => Some(DETAIL_LOCKED),
+        _ => None,
+    }
+}
+
 pub fn build(raws: &[Raw], rules: &Rules) -> Vec<Entry> {
     let mut entries: Vec<Entry> = Vec::with_capacity(raws.len());
     // Devices that expose a light control. Home Assistant reports a `null`
@@ -452,6 +482,19 @@ pub fn build(raws: &[Raw], rules: &Rules) -> Vec<Entry> {
         .iter()
         .filter(|raw| domain_of(&raw.entity) != "button" && raw.device_id.trim().is_empty())
         .map(|raw| (object_id(&raw.entity), raw.room.trim()))
+        .collect();
+    // Status detail of a base entity, keyed by the base object id. Only an
+    // explicit lock binary sensor with the same `komp_`-style prefix and no
+    // registry device (a template entity) can attach; anything else stays an
+    // ordinary binary sensor and is never exposed.
+    let statuses: HashMap<&str, &'static str> = raws
+        .iter()
+        .filter(|raw| !raw.hidden)
+        .filter_map(|raw| {
+            let key = lock_detail_key(raw)?;
+            let (base, _) = object_id(&raw.entity).split_once('_')?;
+            button_bases.contains_key(base).then_some((base, key))
+        })
         .collect();
     for raw in raws {
         if !valid_entity(&raw.entity) {
@@ -494,6 +537,9 @@ pub fn build(raws: &[Raw], rules: &Rules) -> Vec<Entry> {
             title: title_of(raw),
             title_key: String::new(),
             title_args: std::collections::BTreeMap::new(),
+            detail_key: statuses
+                .get(object_id(&raw.entity))
+                .map_or_else(String::new, |key| (*key).to_owned()),
             room: truncate_chars(
                 match (raw.room.trim(), button_base) {
                     ("", Some(base_room)) => base_room,
@@ -580,6 +626,7 @@ fn speak_entry(raws: &[Raw]) -> Option<Entry> {
         title: SPEAK_TITLE.to_owned(),
         title_key: SPEAK_TITLE_KEY.to_owned(),
         title_args: std::collections::BTreeMap::new(),
+        detail_key: String::new(),
         room: anchor.map_or_else(String::new, |raw| truncate_chars(raw.room.trim(), MAX_TEXT)),
         icon: SPEAK_ICON.to_owned(),
         entity: SPEAK_SCRIPT.to_owned(),
@@ -1096,6 +1143,56 @@ mod tests {
         assert_eq!(call.service, "press");
         assert_eq!(call.entity, "button.komp_lock");
         assert!(lock.resolve(ACTION_TURN_ON, &Params::default()).is_err());
+    }
+
+    #[test]
+    fn a_lock_binary_sensor_becomes_the_base_device_detail() {
+        let base = Raw {
+            entity: "switch.komp".to_owned(),
+            state: "on".to_owned(),
+            name: "Комп".to_owned(),
+            ..Raw::default()
+        };
+        let locked = Raw {
+            entity: "binary_sensor.komp_zablokirovan".to_owned(),
+            state: "off".to_owned(),
+            name: "Комп разблокирован".to_owned(),
+            device_class: "lock".to_owned(),
+            ..Raw::default()
+        };
+        let entries = build(&[base.clone(), locked.clone()], &rules());
+        // The sensor is never an entry of its own, only the switch's detail.
+        assert_eq!(ids(&entries), vec!["switch.komp"]);
+        assert_eq!(entries[0].detail_key, DETAIL_LOCKED);
+
+        // HA lock semantics: on = unlocked.
+        let unlocked = Raw {
+            state: "on".to_owned(),
+            ..locked.clone()
+        };
+        let entries = build(&[base.clone(), unlocked], &rules());
+        assert_eq!(entries[0].detail_key, DETAIL_UNLOCKED);
+
+        // Unknown/unavailable sensors and sensors with a registry device or a
+        // non-lock class never invent a status.
+        let unknown = Raw {
+            state: "unknown".to_owned(),
+            ..locked.clone()
+        };
+        let entries = build(&[base.clone(), unknown], &rules());
+        assert_eq!(entries[0].detail_key, "");
+        let other_class = Raw {
+            device_class: "connectivity".to_owned(),
+            ..locked.clone()
+        };
+        let entries = build(&[base.clone(), other_class], &rules());
+        assert_eq!(entries[0].detail_key, "");
+        let with_device = Raw {
+            device_id: "dev-1".to_owned(),
+            ..locked
+        };
+        let entries = build(&[base, with_device], &rules());
+        assert_eq!(entries[0].detail_key, "");
     }
 
     #[test]
