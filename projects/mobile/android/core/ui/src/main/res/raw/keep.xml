@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Server keys are resolved by name at runtime; keep their resources. -->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@string/server_*" />
