@@ -26,15 +26,15 @@ bazel_dep(name = "platforms", version = "1.1.0")
 
 # Direct dep only to name its build setting in .bazelrc (`@protobuf//...`);
 # same version the graph already resolves.
-bazel_dep(name = "protobuf", version = "33.4")
+bazel_dep(name = "protobuf", version = "36.2")
 
 # Container images for the home K3s services. Images are assembled
 # hermetically (no Docker daemon, no RUN steps) from the Rust service binaries
 # and a digest-pinned distroless base; the same targets build on macOS and on
 # the GitHub runner.
 bazel_dep(name = "rules_oci", version = "2.3.0")
-bazel_dep(name = "rules_pkg", version = "1.1.0")
-bazel_dep(name = "aspect_bazel_lib", version = "2.22.0")
+bazel_dep(name = "rules_pkg", version = "1.3.0")
+bazel_dep(name = "aspect_bazel_lib", version = "2.22.5")
 
 oci = use_extension("@rules_oci//oci:extensions.bzl", "oci")
 oci.pull(
@@ -237,7 +237,7 @@ http_archive(
 # Hermetic zig 0.14.1 cc toolchains for the two station ABIs and the Windows
 # provider. Only these target-constrained toolchains are registered, so host
 # builds keep using the host compiler. See platform/bazel/zig/.
-bazel_dep(name = "rules_cc", version = "0.2.17")
+bazel_dep(name = "rules_cc", version = "0.2.28")
 
 zig_sdk_repository = use_repo_rule("//platform/bazel/zig:repositories.bzl", "zig_sdk_repository")
 
@@ -280,13 +280,13 @@ use_repo(crate, "crates")
 # The Android SDK is discovered from ANDROID_HOME. It is deliberately not
 # committed as a machine-specific path; see projects/mobile/android/README.md.
 # ---------------------------------------------------------------------------
-bazel_dep(name = "rules_android", version = "0.7.3")
+bazel_dep(name = "rules_android", version = "0.8.1")
 
 # Direct dep only to load `JavaInfo` in platform/android/lint.bzl; it is the
 # version rules_android already resolves.
-bazel_dep(name = "rules_java", version = "9.3.0")
-bazel_dep(name = "rules_kotlin", version = "2.4.20")
-bazel_dep(name = "rules_jvm_external", version = "7.1")
+bazel_dep(name = "rules_java", version = "9.9.0")
+bazel_dep(name = "rules_kotlin", version = "2.4.21")
+bazel_dep(name = "rules_jvm_external", version = "7.2")
 
 # The coursier lock file normally lists every configured repository for every
 # artifact, so a cold build probes Google Maven for Central-only artifacts and
@@ -300,7 +300,7 @@ single_version_override(
 
 # Packaging gate (platform/android) is a shell test; Bazel 9 no longer ships
 # native sh_test.
-bazel_dep(name = "rules_shell", version = "0.6.1")
+bazel_dep(name = "rules_shell", version = "0.8.0")
 
 remote_android_extensions = use_extension(
     "@rules_android//bzlmod_extensions:android_extensions.bzl",
@@ -354,49 +354,49 @@ maven.install(
     name = "maven",
     aar_import_bzl_label = "@rules_android//rules:rules.bzl",
     artifacts = [
-        "androidx.activity:activity-ktx:1.9.3",
-        "androidx.appcompat:appcompat:1.7.0",
-        "androidx.core:core-ktx:1.13.1",
-        "androidx.datastore:datastore-preferences:1.1.1@aar",
-        "androidx.emoji2:emoji2:1.5.0",
-        "androidx.emoji2:emoji2-views-helper:1.5.0",
-        "androidx.fragment:fragment-ktx:1.8.5",
-        "androidx.lifecycle:lifecycle-common:2.8.7",
-        "androidx.lifecycle:lifecycle-livedata:2.8.7",
-        "androidx.lifecycle:lifecycle-livedata-core:2.8.7",
-        "androidx.lifecycle:lifecycle-livedata-ktx:2.8.7",
-        "androidx.lifecycle:lifecycle-process:2.8.7",
-        "androidx.lifecycle:lifecycle-runtime:2.8.7",
-        "androidx.lifecycle:lifecycle-runtime-ktx:2.8.7",
-        "androidx.lifecycle:lifecycle-viewmodel:2.8.7",
-        "androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.7",
-        "androidx.lifecycle:lifecycle-viewmodel-savedstate:2.8.7",
+        "androidx.activity:activity-ktx:1.13.0",
+        "androidx.appcompat:appcompat:1.8.0",
+        "androidx.core:core-ktx:1.19.1",
+        "androidx.datastore:datastore-preferences:1.3.0@aar",
+        "androidx.emoji2:emoji2:1.7.0",
+        "androidx.emoji2:emoji2-views-helper:1.7.0",
+        "androidx.fragment:fragment-ktx:1.9.1",
+        "androidx.lifecycle:lifecycle-common:2.11.0",
+        "androidx.lifecycle:lifecycle-livedata:2.11.0",
+        "androidx.lifecycle:lifecycle-livedata-core:2.11.0",
+        "androidx.lifecycle:lifecycle-livedata-ktx:2.11.0",
+        "androidx.lifecycle:lifecycle-process:2.11.0",
+        "androidx.lifecycle:lifecycle-runtime:2.11.0",
+        "androidx.lifecycle:lifecycle-runtime-ktx:2.11.0",
+        "androidx.lifecycle:lifecycle-viewmodel:2.11.0",
+        "androidx.lifecycle:lifecycle-viewmodel-ktx:2.11.0",
+        "androidx.lifecycle:lifecycle-viewmodel-savedstate:2.11.0",
         # Referenced by Room (via Chucker); pinned so the APK runtime closure is complete.
-        "androidx.paging:paging-common:2.1.2",
-        "androidx.recyclerview:recyclerview:1.3.2",
-        "androidx.swiperefreshlayout:swiperefreshlayout:1.1.0",
-        "com.google.android.material:material:1.12.0",
-        # Firebase Crashlytics, pinned from Firebase BoM 33.16.0 (Gradle BOMs
+        "androidx.paging:paging-common:3.5.3",
+        "androidx.recyclerview:recyclerview:1.4.0",
+        # activity 1.13 wants savedstate 1.2.1 while lifecycle 2.11 resolves
+        # 1.4.0; the pinned conflict policy needs an explicit pin.
+        "androidx.savedstate:savedstate:1.4.0",
+        "androidx.swiperefreshlayout:swiperefreshlayout:1.2.0",
+        "com.google.android.material:material:1.14.0",
+        # Firebase Crashlytics, pinned from Firebase BoM 35.1.0 (Gradle BOMs
         # cannot be consumed by rules_jvm_external, so versions are explicit).
-        # BoM 34+ pulls datastore-preferences 1.1.7, a Kotlin-multiplatform
-        # artifact whose placeholder jar the coursier resolver cannot fetch;
-        # this BoM is the latest one that keeps the pinned datastore version.
-        "com.google.firebase:firebase-annotations:16.2.0",
-        "com.google.firebase:firebase-common:21.0.0",
-        "com.google.firebase:firebase-components:18.0.0",
-        "com.google.firebase:firebase-config-interop:16.0.1",
+        "com.google.firebase:firebase-annotations:18.0.0",
+        "com.google.firebase:firebase-common:23.0.0",
+        "com.google.firebase:firebase-components:20.0.0",
+        "com.google.firebase:firebase-config-interop:17.0.0",
         # Remote Config (endpoints/timeouts): firebase-config is pinned from the
         # same BoM; abt is its A/B-testing runtime dependency (from the
         # firebase-config POM) and must ship in the APK closure.
-        "com.google.firebase:firebase-abt:21.1.1",
-        "com.google.firebase:firebase-config:22.1.2",
-        "com.google.firebase:firebase-crashlytics:19.4.4",
-        "com.google.firebase:firebase-encoders:17.0.0",
-        "com.google.firebase:firebase-encoders-json:18.0.1",
-        "com.google.firebase:firebase-installations:18.0.0",
-        "com.google.firebase:firebase-installations-interop:17.2.0",
-        "com.google.firebase:firebase-measurement-connector:20.0.1",
-        "com.google.firebase:firebase-sessions:2.1.2",
+        "com.google.firebase:firebase-abt:24.0.0",
+        "com.google.firebase:firebase-config:24.0.1",
+        "com.google.firebase:firebase-crashlytics:21.0.1",
+        "com.google.firebase:firebase-encoders:18.0.0",
+        "com.google.firebase:firebase-encoders-json:19.0.0",
+        "com.google.firebase:firebase-installations:20.0.0",
+        "com.google.firebase:firebase-installations-interop:18.0.0",
+        "com.google.firebase:firebase-measurement-connector:18.0.0",
+        "com.google.firebase:firebase-sessions:4.0.1",
         # Guava is only a Robolectric (test) dependency. Without an explicit
         # pin, Maven selects Guava's empty `9999.0-empty-to-avoid-conflict-with-guava`
         # placeholder for androidx.concurrent.futures, leaving ListenableFuture
@@ -404,16 +404,16 @@ maven.install(
         # standalone artifact so the runtime closure is self-contained.
         "com.google.guava:listenablefuture:1.0",
         # Runtime dependencies of firebase-crashlytics not otherwise pinned.
-        "com.google.android.datatransport:transport-api:3.2.0",
-        "com.google.android.datatransport:transport-backend-cct:3.3.0",
-        "com.google.android.datatransport:transport-runtime:3.3.0",
-        "com.google.android.gms:play-services-basement:18.3.0",
-        "com.google.android.gms:play-services-tasks:18.1.0",
-        "com.github.chuckerteam.chucker:library:4.0.0",
-        "com.squareup.okhttp3:logging-interceptor:4.12.0",
-        "com.squareup.okhttp3:mockwebserver:4.12.0",
-        "com.squareup.okhttp3:okhttp:4.12.0",
-        "com.squareup.retrofit2:retrofit:2.11.0",
+        "com.google.android.datatransport:transport-api:5.0.0",
+        "com.google.android.datatransport:transport-backend-cct:5.0.0",
+        "com.google.android.datatransport:transport-runtime:5.0.0",
+        "com.google.android.gms:play-services-basement:18.12.0",
+        "com.google.android.gms:play-services-tasks:18.4.1",
+        "com.github.chuckerteam.chucker:library:4.3.1",
+        "com.squareup.okhttp3:logging-interceptor:5.5.1",
+        "com.squareup.okhttp3:mockwebserver:5.5.1",
+        "com.squareup.okhttp3:okhttp:5.5.1",
+        "com.squareup.retrofit2:retrofit:3.0.0",
         # Detekt static analysis for the Android client: CLI + formatting rules
         # run as //projects/mobile/android:detekt; api/test back the first-party
         # `home-rules` ruleset under platform/android/detekt-rules.
@@ -424,17 +424,21 @@ maven.install(
         # Prebuilt libwebrtc for Android (audio-only PeerConnection, Opus,
         # hardware AEC/NS/AGC through JavaAudioDeviceModule). Apache-2.0.
         "io.getstream:stream-webrtc-android:1.3.10",
-        "dev.zacsweers.metro:compiler:1.5.0",
-        "dev.zacsweers.metro:runtime-jvm:1.5.0",
+        "dev.zacsweers.metro:compiler:1.5.2",
+        "dev.zacsweers.metro:runtime-jvm:1.5.2",
         "junit:junit:4.13.2",
-        "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2",
-        "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2",
-        "org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.10.2",
-        "org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2",
-        "org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0",
+        "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0",
+        "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.11.0",
+        "org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.11.0",
+        "org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0",
+        "org.jetbrains.kotlinx:kotlinx-serialization-json:1.12.0",
         "org.robolectric:android-all-instrumented:15-robolectric-13954326-i7",
         "org.robolectric:robolectric:4.17",
     ],
+    # datastore 1.3.0 is a KMP module whose root artifact is published as an
+    # AAR; the root jar cannot be fetched (the Android variant
+    # datastore-android is used instead), so exclude the metadata-only root.
+    excluded_artifacts = ["androidx.datastore:datastore"],
     known_contributing_modules = ["protobuf"],
     lock_file = "//projects/mobile/android:maven_install.json",
     repositories = [
@@ -443,5 +447,13 @@ maven.install(
     ],
     use_starlark_android_rules = True,
     version_conflict_policy = "pinned",
+)
+
+# OkHttp 5 is a Kotlin-multiplatform module: the root `okhttp` jar only
+# carries metadata, the real classes are in `okhttp-jvm`.
+maven.override(
+    name = "maven",
+    coordinates = "com.squareup.okhttp3:okhttp",
+    target = "@maven//:com_squareup_okhttp3_okhttp_jvm",
 )
 use_repo(maven, "maven")

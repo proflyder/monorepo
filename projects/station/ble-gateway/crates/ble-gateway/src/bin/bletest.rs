@@ -8,7 +8,7 @@ use std::process::ExitCode;
 use anyhow::Context;
 use ble_gateway::gatt::characteristic_path;
 use clap::Parser;
-use zbus::zvariant::Value;
+use zbus::Variant;
 
 #[derive(Debug, Parser)]
 struct Args {
@@ -24,7 +24,7 @@ struct Args {
 #[rustfmt::skip]
 #[zbus::proxy(interface = "org.bluez.GattCharacteristic1", default_service = "org.bluez")]
 trait GattCharacteristic1 {
-    fn write_value(&self, value: Vec<u8>, options: HashMap<&str, Value<'_>>) -> zbus::Result<()>;
+    fn write_value(&self, value: Vec<u8>, options: HashMap<&str, Variant<'_>>) -> zbus::Result<()>;
     #[zbus(property)]
     fn value(&self) -> zbus::Result<Vec<u8>>;
 }
@@ -43,8 +43,8 @@ async fn run() -> anyhow::Result<()> {
     let args = Args::parse();
     let connection = zbus::Connection::system().await?;
     let proxy = GattCharacteristic1Proxy::builder(&connection)
-        .destination(zbus::names::BusName::try_from(args.destination)?)?
-        .path(characteristic_path(args.index))?
+        .destination(zbus::names::BusName::try_from(args.destination)?)
+        .path(characteristic_path(args.index))
         .build()
         .await?;
     if args.status { println!("status={}", String::from_utf8_lossy(&proxy.value().await?).trim()); return Ok(()); }

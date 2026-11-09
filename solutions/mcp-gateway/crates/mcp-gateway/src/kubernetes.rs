@@ -126,13 +126,10 @@ impl Client {
             .ca_file
             .unwrap_or_else(|| PathBuf::from(DEFAULT_CA_FILE));
         // The ServiceAccount CA is the only trust anchor: the workspace
-        // `reqwest` has no built-in roots, and relying on the node's bundle
-        // would accept any publicly trusted certificate for the API server.
-        let mut builder = reqwest::Client::builder()
-            .tls_built_in_root_certs(false)
-            .timeout(options.timeout.unwrap_or(DEFAULT_TIMEOUT))
-            .redirect(reqwest::redirect::Policy::none());
-        if ca_file.exists() {
+        // `reqwest` verifies against the platform store by default, and relying
+        // on the node's bundle would accept any publicly trusted certificate
+        // for the API server. `tls_certs_only` replaces that store entirely.
+        let certificates = if ca_file.exists() {
             let pem = std::fs::read(&ca_file).map_err(|_| Error::Certificate {
                 operation: "read Kubernetes CA",
             })?;
@@ -145,10 +142,14 @@ impl Client {
                     operation: "decode Kubernetes CA",
                 });
             }
-            for certificate in certificates {
-                builder = builder.add_root_certificate(certificate);
-            }
-        }
+            certificates
+        } else {
+            Vec::new()
+        };
+        let builder = reqwest::Client::builder()
+            .tls_certs_only(certificates)
+            .timeout(options.timeout.unwrap_or(DEFAULT_TIMEOUT))
+            .redirect(reqwest::redirect::Policy::none());
         let http = builder.build().map_err(|source| Error::Transport {
             operation: "build Kubernetes client",
             source,

@@ -152,7 +152,7 @@ jobs:
     steps:
       # Full history: the PR-head fallback fetches `refs/pull/<n>/head` and
       # diffs it against the merge commit.
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: inputs.promote && inputs.publish_repository != ''
         with:
           fetch-depth: 0
@@ -173,7 +173,7 @@ jobs:
       # The Docker config written here is what `crane tag` reads.
       - name: Log in to GHCR
         if: inputs.promote && inputs.publish_repository != ''
-        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -232,7 +232,7 @@ jobs:
       run:
         working-directory: ${{ inputs.workdir }}
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # Pinned Bazelisk plus the Bzlmod/repository caches, identical to the
       # `pulsar` kind and the `_unit.yml` unit the Rust host checks use.
@@ -344,7 +344,7 @@ jobs:
       matrix:
         arch: [aarch64, armhf]
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # Pinned Bazelisk plus the Bzlmod/repository caches, identical to the
       # `_unit.yml` unit the host checks use.
@@ -448,7 +448,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - uses: bazel-contrib/setup-bazel@104e3eea9447cdaa4b00d0fb46191a3985d26ab3 # v0.19.1
         with:
@@ -500,7 +500,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up zig
         uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
@@ -578,7 +578,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up zig
         uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
@@ -628,7 +628,7 @@ jobs:
       id-token: write
       attestations: write
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
@@ -638,7 +638,7 @@ jobs:
       # oras publishes the OCI artifact; version and sha256 from mise.toml/mise.lock.
       - uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b # v5.2.7
         with:
-          version: 2026.11.3
+          version: 2026.11.4
           install_args: "oras"
           cache: true
 
@@ -658,7 +658,7 @@ jobs:
           echo "- artifact identity: \`tree-${tree}\`" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Log in to GHCR
-        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}

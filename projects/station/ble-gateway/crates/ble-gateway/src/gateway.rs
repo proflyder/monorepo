@@ -139,7 +139,7 @@ impl Gateway {
         if let Err(error) = connection
             .request_name_with_flags(
                 "com.station.gateway",
-                zbus::fdo::RequestNameFlags::DoNotQueue.into(),
+                zbus::fdo::RequestNameFlags::DO_NOT_QUEUE,
             )
             .await
         {

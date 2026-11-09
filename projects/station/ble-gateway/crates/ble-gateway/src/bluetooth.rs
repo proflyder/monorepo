@@ -119,8 +119,8 @@ impl AdapterOps for BlueZAdapter {
         Box::pin(async move {
             let connection = self.connection()?;
             let manager = ObjectManagerProxy::builder(connection)
-                .destination("org.bluez")?
-                .path("/")?
+                .destination("org.bluez")
+                .path("/")
                 .build()
                 .await?;
             for (path, interfaces) in manager.get_managed_objects().await? {
@@ -133,8 +133,8 @@ impl AdapterOps for BlueZAdapter {
                     continue;
                 }
                 let device = Device1Proxy::builder(connection)
-                    .destination("org.bluez")?
-                    .path(path)?
+                    .destination("org.bluez")
+                    .path(path)
                     .build()
                     .await?;
                 if let Err(error) = device.disconnect().await {

@@ -72,22 +72,23 @@ anyhow = "=1.0.104"
 clap = { version = "=4.6.7", default-features = false, features = ["std", "derive", "env", "help", "usage", "error-context"] }
 axum = { version = "=0.8.9", default-features = false, features = ["http1", "json", "tokio", "query"] }
 # HTTP-клиент станции (pulsar-update): только HTTP/1, rustls с провайдером ring и
-# собственными корнями из CA-бандла прошивки. aws-lc-rs не собирается
+# собственными корнями из CA-бандла прошивки (`tls_certs_only`; reqwest 0.13
+# иначе доверяет системному/платформенному хранилищу). aws-lc-rs не собирается
 # zig-тулчейном; http2, cookies, gzip, charset и system-proxy не нужны.
-reqwest = { version = "=0.12.28", default-features = false, features = ["rustls-tls-manual-roots-no-provider"] }
+reqwest = { version = "=0.13.5", default-features = false, features = ["rustls-no-provider", "query", "form"] }
 # Реестр сущностей Home Assistant доступен только по WebSocket: `home-ha`
 # открывает одно короткое соединение на обновление каталога. rustls с корнями
 # WebPKI покрывает публичный HTTPS, HA_CA_FILE задаёт приватный CA.
 tokio-tungstenite = { version = "=0.30.0", default-features = false, features = ["connect", "rustls-tls-webpki-roots"] }
 # Stream/Sink для того же WebSocket-клиента (уже в lock через `futures`).
 futures-util = { version = "=0.3.34", default-features = false, features = ["sink", "std"] }
-getrandom = "=0.3.4"
+getrandom = "=0.4.3"
 hex = "=0.4.3"
 # Android SDK Platform-Tools для установщика Pulsar: их архив — zip, а
 # Redistributable License Google запрещает класть его в репозиторий.
 # `deflate-flate2-zlib-rs` — чистый Rust zlib-rs, без C и на Windows-кросс-сборке;
 # остальные кодеки (bzip2/lzma/zstd/AES) архиву не нужны.
-zip = { version = "=9.4.1", default-features = false, features = ["deflate-flate2-zlib-rs"] }
+zip = { version = "=9.4.2", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 # Gzip layer decoding for `home-deploy oci docker` (docker-archive stores the
 # uncompressed layer tar). The backend is the same pure-Rust zlib-rs `zip`
 # already pulls in, so no C and no second codec.
@@ -99,13 +100,13 @@ ureq = { version = "=3.5.1", default-features = false, features = ["rustls"] }
 # protobuf-кодек ESPHome Native API (esphome-proto): только ручные `derive(Message)`,
 # без protoc и рефлексии; `no-recursion-limit` не нужен, вложенность сообщений фиксирована.
 prost = { version = "=0.14.4", default-features = false, features = ["std", "derive"] }
-base64 = { version = "=0.22.1", default-features = false, features = ["std"] }
+base64 = { version = "=0.23.1", default-features = false, features = ["std"] }
 http = { version = "=1.5.0", default-features = false, features = ["std"] }
 tokio-rustls = { version = "=0.26.6", default-features = false, features = ["ring", "tls12", "logging"] }
 rustls = { version = "=0.23.46", default-features = false, features = ["ring", "std", "tls12", "logging"] }
 rustls-pki-types = { version = "=1.15.1", features = ["std"] }
 ring = "=0.17.14"
-log = { version = "=0.4.34", features = ["std"] }
+log = { version = "=0.4.35", features = ["std"] }
 libc = "=0.2.191"
 libloading = "=0.9.0"
 # Safe syscall wrappers (errno, pwrite) for the shared Linux helpers.
@@ -120,11 +121,11 @@ socket2 = { version = "=0.6.5", features = ["all"] }
 # `aws-lc-rs` остаётся транзитивно через `dimpl`/rcgen и собирается zig-тулчейном.
 # SCTP/видео не используются, но `str0m-proto` их тянет как часть общего кодека.
 str0m = { version = "=0.25.0", default-features = false, features = ["rust-crypto"] }
-cc = "=1.10.0"
+cc = "=1.11.1"
 # BlueZ is reached over the system bus. zbus is a pure-Rust implementation and
 # its `tokio` feature uses the same runtime as the rest of the daemon; it does
 # not link libdbus (unlike `dbus`/`bluer`).
-zbus = { version = "=5.19.0", default-features = false, features = ["tokio"] }
+zbus = { version = "=6.2.1", default-features = false, features = ["tokio", "proxy", "service", "object-manager"] }
 # std::time cannot format local calendar timestamps without unsafe libc calls;
 # `time` keeps the BLE gateway log format identical to the former Go daemon.
 # `parsing`: обратный разбор `utc` сайдкаров контракта v1 (ретеншн и окно метки).
@@ -135,7 +136,7 @@ time = { version = "=0.3.55", default-features = false, features = ["std", "form
 rusqlite = { version = "=0.41.1", features = ["bundled"] }
 # Scheduler ids (DECISIONS 41): `v5` reproduces Go's UUIDv5/DNS event ids and
 # `v7` the same 36-character time-ordered format as `uuid.NewV7`.
-uuid = { version = "=1.29.0", features = ["v4", "v5", "v7"] }
+uuid = { version = "=1.29.1", features = ["v4", "v5", "v7"] }
 # SHA-1 of canonical idempotency requests (DECISIONS 41): the same digest the
 # Legacy Go store persisted, so a restarted or migrated scheduler replays keys. It is
 # already in the lock as `uuid`'s own v5 digest; declaring it directly avoids
@@ -144,9 +145,9 @@ sha1_smol = "=1.0.1"
 # IANA time zones with a bundled tzdb (no system tzdata on the station image):
 # `tzdb-bundle-always` keeps DST/gap/fold behaviour reproducible. Pinned so a
 # tzdb update cannot change scheduler occurrences silently.
-jiff = { version = "=0.2.39", default-features = false, features = ["std", "tzdb-bundle-always"] }
+jiff = { version = "=0.2.41", default-features = false, features = ["std", "tzdb-bundle-always"] }
 tower = { version = "=0.5.3", default-features = false, features = ["util"] }
-tower-http = { version = "=0.6.11", default-features = false, features = ["limit", "timeout"] }
+tower-http = { version = "=0.7.1", default-features = false, features = ["limit", "timeout"] }
 # Prometheus exposition for the home services (DECISIONS 41). Pure Rust, no C.
 # The registry is built locally, so no global default registry or process/go
 # collectors leak into the service: only the `currency_bot_*` families are

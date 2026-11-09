@@ -97,7 +97,7 @@ Mobile не владеет расписанием и не заменяет се�
 ```text
 MODULE.bazel       Bzlmod: rules_rust, rules_proto, rules_oci, Android
 MODULE.bazel.lock  зафиксированные зависимости
-.bazelversion      Bazel 9.3.1
+.bazelversion      Bazel 9.3.2
 .bazelrc           cache/вывод
 .bazelignore       тяжёлые/чужие/legacy каталоги
 BUILD.bazel        exports_files корня

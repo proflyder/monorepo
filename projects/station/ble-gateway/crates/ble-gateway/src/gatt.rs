@@ -11,8 +11,9 @@ use std::sync::{Arc, Mutex, OnceLock};
 use anyhow::{Context, Result, anyhow};
 use tokio::sync::mpsc;
 use tracing::{debug, warn};
-use zbus::zvariant::{ObjectPath, OwnedObjectPath, OwnedValue, Value};
-use zbus::{Connection, object_server::SignalEmitter};
+use zbus::{
+    Connection, ObjectPath, OwnedObjectPath, OwnedVariant, Variant, object_server::SignalEmitter,
+};
 
 use crate::credentials::{CredentialField, Credentials};
 
@@ -47,7 +48,7 @@ trait GattManager1 {
     fn register_application(
         &self,
         application: ObjectPath<'_>,
-        options: HashMap<&str, Value<'_>>,
+        options: HashMap<&str, Variant<'_>>,
     ) -> zbus::Result<()>;
     fn unregister_application(&self, application: ObjectPath<'_>) -> zbus::Result<()>;
 }
@@ -58,7 +59,7 @@ trait LeAdvertisingManager1 {
     fn register_advertisement(
         &self,
         advertisement: ObjectPath<'_>,
-        options: HashMap<&str, Value<'_>>,
+        options: HashMap<&str, Variant<'_>>,
     ) -> zbus::Result<()>;
     fn unregister_advertisement(&self, advertisement: ObjectPath<'_>) -> zbus::Result<()>;
 }
@@ -102,7 +103,7 @@ impl Characteristic {
         else {
             return;
         };
-        let changed = HashMap::from([("Value", Value::from(value.to_vec()))]);
+        let changed = HashMap::from([("Value", Variant::from(value.to_vec()))]);
         if let Err(error) = emitter
             .emit(
                 "org.freedesktop.DBus.Properties",
@@ -115,7 +116,7 @@ impl Characteristic {
         }
     }
 
-    fn offset(options: &HashMap<String, OwnedValue>) -> i64 {
+    fn offset(options: &HashMap<String, OwnedVariant>) -> i64 {
         let Some(value) = options.get("offset") else {
             return 0;
         };
@@ -164,7 +165,7 @@ impl Characteristic {
 
     #[allow(clippy::needless_pass_by_value)]
     #[zbus(name = "ReadValue")]
-    fn read_value(&self, options: HashMap<String, OwnedValue>) -> Result<Vec<u8>, BluezError> {
+    fn read_value(&self, options: HashMap<String, OwnedVariant>) -> Result<Vec<u8>, BluezError> {
         let value = self.value();
         let offset = Self::offset(&options);
         let offset = usize::try_from(offset).map_err(|_| BluezError::InvalidOffset)?;
@@ -178,7 +179,7 @@ impl Characteristic {
     async fn write_value(
         &self,
         value: Vec<u8>,
-        options: HashMap<String, OwnedValue>,
+        options: HashMap<String, OwnedVariant>,
     ) -> Result<(), BluezError> {
         match self.inner.source {
             Source::Credential(field) => {
@@ -310,7 +311,7 @@ impl Ble {
             zbus::fdo::PropertiesProxy::new(&connection, "org.bluez", "/org/bluez/hci0").await
             && let Ok(interface) = zbus::names::InterfaceName::try_from("org.bluez.Adapter1")
             && let Err(error) = properties
-                .set(interface, "Connectable", Value::Bool(true))
+                .set(interface, "Connectable", &Variant::Bool(true))
                 .await
         {
             warn!(%error, "set Connectable");
@@ -498,8 +499,6 @@ async fn remove_gatt_objects(connection: &Connection) {
 
 #[cfg(test)]
 mod tests {
-    use zbus::zvariant::Value;
-
     use super::*;
 
     fn characteristic(
@@ -522,10 +521,10 @@ mod tests {
         CHARS[0]
     }
 
-    fn offset(value: i32) -> HashMap<String, OwnedValue> {
+    fn offset(value: i32) -> HashMap<String, OwnedVariant> {
         HashMap::from([(
             "offset".to_string(),
-            OwnedValue::try_from(Value::I32(value)).expect("owned value"),
+            OwnedVariant::try_from(Variant::I32(value)).expect("owned value"),
         )])
     }
 
@@ -569,7 +568,7 @@ mod tests {
             .expect("first chunk");
         let offset8 = HashMap::from([(
             "offset".to_string(),
-            OwnedValue::try_from(Value::U16(8)).expect("owned u16"),
+            OwnedVariant::try_from(Variant::U16(8)).expect("owned u16"),
         )]);
         characteristic
             .write_value(b"123".to_vec(), offset8.clone())
@@ -579,7 +578,7 @@ mod tests {
         assert_eq!(characteristic.read_value(offset8).expect("read"), b"123");
         let past_end = HashMap::from([(
             "offset".to_string(),
-            OwnedValue::try_from(Value::U16(20)).expect("owned u16"),
+            OwnedVariant::try_from(Variant::U16(20)).expect("owned u16"),
         )]);
         assert!(characteristic.read_value(past_end.clone()).is_err());
         assert!(

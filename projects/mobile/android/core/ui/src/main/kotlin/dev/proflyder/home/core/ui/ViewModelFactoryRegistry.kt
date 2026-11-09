@@ -58,5 +58,5 @@ class SavedStateViewModelFactory<VM : ViewModel>(
 
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T =
-        create(SavedStateHandle()) as T
+        create(SavedStateHandle.createHandle(null, null)) as T
 }

@@ -61,6 +61,10 @@ private val OPTIONAL_PREFIXES = listOf(
     "org.bouncycastle.",
     "org.conscrypt.",
     "org.openjsse.",
+    // OkHttp 5's JVM artifact references the GraalVM native-image hooks from
+    // its optional native-image configuration; they are never loaded on
+    // Android.
+    "org.graalvm.nativeimage.",
 )
 
 private val OPTIONAL_CLASSES = setOf(

@@ -214,7 +214,7 @@ class ConnectIntercomClient(
         if (!response.isSuccessful) {
             throw IOException("HTTP ${response.code}")
         }
-        val source = response.body?.source() ?: throw IOException("empty stream")
+        val source = response.body.source()
         while (true) {
             val frame = ConnectFrames.read(source) ?: return
             if (frame.endStream) return
