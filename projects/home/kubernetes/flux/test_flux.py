@@ -288,6 +288,9 @@ class HelmReleases(unittest.TestCase):
     def test_dashboards_chart_comes_from_git(self):
         spec = self.release("ha-observability")["spec"]["chart"]["spec"]
         self.assertEqual(spec["chart"], "./projects/home-assistant/observability/chart")
+        # The in-repo chart keeps version 0.1.0: without the Revision strategy
+        # template edits (dashboards) never reach the live release.
+        self.assertEqual(spec.get("reconcileStrategy"), "Revision")
         self.assertEqual(spec["sourceRef"], {
             "kind": "GitRepository", "name": "flux-system", "namespace": "flux-system",
         })

@@ -15,6 +15,10 @@ spec:
   chart:
     spec:
       chart: ./projects/home-assistant/observability/chart
+      # The chart lives in this repository and keeps version 0.1.0; with the
+      # default ChartVersion strategy template changes (dashboards) never
+      # reached the release. Revision upgrades on every new Git revision.
+      reconcileStrategy: Revision
       interval: 1h
       sourceRef:
         kind: GitRepository
