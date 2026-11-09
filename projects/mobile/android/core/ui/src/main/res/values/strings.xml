@@ -97,6 +97,8 @@
     <string name="server_intercom_error_sdp_too_large">The call description is too large.</string>
     <string name="server_intercom_error_signal_required">The call signal is missing.</string>
     <string name="server_catalog_action_speak_title">Speak on the station</string>
+    <string name="server_catalog_status_locked">locked</string>
+    <string name="server_catalog_status_unlocked">unlocked</string>
     <string name="ui_error_protocol">The server returned an unexpected response.</string>
     <string name="ui_error_storage">Settings could not be stored securely: %1$s</string>
     <string name="ui_validation_control_endpoint">Enter a full http:// or https:// address for the home control service, or leave it blank.</string>

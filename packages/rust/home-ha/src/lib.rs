@@ -573,6 +573,8 @@ pub struct RegistryEntity {
 pub struct EntityAttributes {
     pub friendly_name: Option<String>,
     pub icon: Option<String>,
+    /// `device_class` of a binary sensor (`lock`, `connectivity`, …).
+    pub device_class: Option<String>,
     pub supported_color_modes: Vec<String>,
     pub min_color_temp_kelvin: Option<f64>,
     pub max_color_temp_kelvin: Option<f64>,

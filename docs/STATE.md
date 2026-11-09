@@ -472,11 +472,17 @@
 - **Комп (Windows-ПК).** Голос и приложение управляют проводным десктопом:
   включение — Wake-on-LAN (`switch.komp` → `wake_on_lan.send_magic_packet`,
   MAC только в `secrets.yaml`), выключение — SSH с forced command
-  (`komp-power.ps1`, только слова `shutdown`/`cancel`/`lock`) → Windows
-  `shutdown /s /t 60` с отменой, блокировка — задача `\Home\KompLock`
+  (`komp-power.ps1`, только слова `shutdown`/`cancel`/`lock`/`status`) →
+  Windows `shutdown /s /t 60` с отменой, блокировка — задача `\Home\KompLock`
   (интерактивная сессия, `LockWorkStation`), разблокировка — пропуск
   `wakegrant` (`KompUnlock`), состояние — `binary_sensor.komp_v_seti`
-  (`command_line` ping каждые 10 с). Локальные intents `KompOn`/`KompOff`/
+  (`command_line` ping каждые 10 с) и признак экрана
+  `binary_sensor.komp_zablokirovan` (`command_line` SSH `status` раз в 30 с,
+  только при включённом ПК; HA `device_class: lock`, on = разблокирован).
+  ha-bridge отдаёт его как локализуемый `detailKey` у `switch.komp`, поэтому
+  приложение показывает «Вкл · заблокирован» / «Вкл · разблокирован»; кнопки
+  блокировки/разблокировки дают рипл, busy и сообщение «Команда отправлена».
+  Локальные intents `KompOn`/`KompOff`/
   `KompCancelOff`/`KompLock`/`KompUnlock`/`KompStatus` работают в обоих
   профилях без Hermes; `button.komp_lock`/`button.komp_unlock` приложение
   показывает в настройках устройства «Комп» (группировка по префиксу

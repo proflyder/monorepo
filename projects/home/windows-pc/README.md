@@ -7,7 +7,8 @@
 - выключение — `shutdown /s /t 60` через ограниченный SSH, с отменой;
 - блокировка — запуск задачи планировщика `\Home\KompLock` через тот же SSH;
 - разблокировка — одноразовый грант `wakegrant` (модуль входа, см. ниже);
-- состояние — ICMP ping из Home Assistant.
+- состояние — ICMP ping из Home Assistant и, для запущенного ПК, признак
+  блокировки экрана по SSH-слову `status`.
 
 HA-часть — `projects/home-assistant/ha-voice/` (см. её README). Реальные
 IP/MAC/имя пользователя живут только в HA `secrets.yaml`; в Git их нет, здесь
@@ -75,7 +76,8 @@ from="192.0.2.28",restrict,command="powershell.exe -NoProfile -ExecutionPolicy B
 
 - `from="192.0.2.28"` — адрес HA (TEST-NET-плейсхолдер, заменить на реальный);
   ключ не сработает с другого адреса.- `command=` — forced command: клиент не может запустить ничего, кроме
-  `komp-power.ps1`, а тот принимает только `shutdown`, `cancel` и `lock`.
+  `komp-power.ps1`, а тот принимает только `shutdown`, `cancel`, `lock` и
+  `status`.
 - `restrict` отключает port/agent/X11 forwarding и pty.
 - `AAAA...` — публичный ключ (`/config/.ssh/komp_ed25519.pub` в HA).
 
@@ -110,6 +112,29 @@ powershell -NoProfile -ExecutionPolicy Bypass -File C:\ProgramData\Home\install-
 ```powershell
 schtasks /query /tn '\Home\KompLock' /v /fo LIST
 schtasks /run /tn '\Home\KompLock'   # экран должен заблокироваться
+```
+
+## Состояние блокировки
+
+`komp-power.ps1 status` — только чтение процессов, без запуска чего-либо:
+
+- `locked`, если `LogonUI.exe` работает в интерактивной сессии пользователя;
+- `unlocked`, если его там нет;
+- если интерактивной оболочки (`explorer.exe`) нет вообще — это экран входа,
+  он тоже считается `locked`.
+
+Сессию пользователя определяет `explorer.exe` (интерактивная оболочка), поэтому
+служебная SSH-сессия OpenSSH (session 0) не может дать ложный `locked`.
+`LogonUI.exe` появляется на экране блокировки, экране входа и на короткое
+время на UAC-запросе; опрос раз в 30 с такой короткий всплеск обычно не
+замечает. Команда печатает ровно `locked` или `unlocked` и всегда завершается
+кодом 0; проверка:
+
+```bash
+ssh -i /config/.ssh/komp_ed25519 \
+  -o BatchMode=yes -o ConnectTimeout=5 \
+  -o UserKnownHostsFile=/config/.ssh/komp_known_hosts \
+  -o StrictHostKeyChecking=accept-new <user>@<host> status
 ```
 
 ## Ключ и known_hosts в HA

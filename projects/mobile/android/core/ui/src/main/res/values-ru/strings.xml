@@ -97,6 +97,8 @@
     <string name="server_intercom_error_sdp_too_large">Описание звонка слишком большое.</string>
     <string name="server_intercom_error_signal_required">Сигнал звонка отсутствует.</string>
     <string name="server_catalog_action_speak_title">Сказать на колонке</string>
+    <string name="server_catalog_status_locked">заблокирован</string>
+    <string name="server_catalog_status_unlocked">разблокирован</string>
     <string name="ui_empty_alarms">Пока нет будильников. Будильники работают на домашнем сервере.</string>
     <string name="ui_empty_reminders">Пока нет напоминаний. Напоминания отправляет домашний сервер.</string>
     <string name="ui_empty_timers">Нет активных таймеров. Таймеры отсчитываются на домашнем сервере.</string>

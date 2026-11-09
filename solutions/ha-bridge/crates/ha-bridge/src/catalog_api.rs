@@ -53,6 +53,10 @@ struct EntryView {
     /// Typed arguments for `titleKey`; omitted when there are none.
     #[serde(rename = "titleArgs", skip_serializing_if = "BTreeMap::is_empty")]
     title_args: BTreeMap<String, String>,
+    /// Stable key of a device status shown under the title (for example the
+    /// PC lock state); omitted when the device has no status.
+    #[serde(rename = "detailKey", skip_serializing_if = "String::is_empty")]
+    detail_key: String,
     #[serde(skip_serializing_if = "String::is_empty")]
     room: String,
     #[serde(skip_serializing_if = "String::is_empty")]
@@ -187,6 +191,7 @@ impl EntryView {
             title: entry.title.clone(),
             title_key: entry.title_key.clone(),
             title_args: entry.title_args.clone(),
+            detail_key: entry.detail_key.clone(),
             room: entry.room.clone(),
             icon: entry.icon.clone(),
             device_id: entry.device_id.clone(),
@@ -392,6 +397,40 @@ mod tests {
         // Home Assistant user data stays verbatim, without a key.
         assert!(body.contains("\"title\":\"Лампа\""), "{body}");
         assert_eq!(body.matches("\"titleKey\"").count(), 1, "{body}");
+    }
+
+    #[test]
+    fn lock_status_is_a_localized_detail_key_on_the_base_entry() {
+        let entries = build(
+            &[
+                Raw {
+                    entity: "switch.komp".to_owned(),
+                    state: "on".to_owned(),
+                    name: "Комп".to_owned(),
+                    ..Raw::default()
+                },
+                Raw {
+                    entity: "binary_sensor.komp_zablokirovan".to_owned(),
+                    state: "off".to_owned(),
+                    name: "Комп разблокирован".to_owned(),
+                    device_class: "lock".to_owned(),
+                    ..Raw::default()
+                },
+            ],
+            &Rules {
+                scenario_label: "scenario".to_owned(),
+                profile_label: "voice_profile".to_owned(),
+                exclude: Vec::new(),
+            },
+        );
+        let body = catalog_body(&Catalog::new(entries), true);
+        assert!(
+            body.contains("\"detailKey\":\"catalog.status.locked\""),
+            "{body}"
+        );
+        // The lock binary sensor is not an entry of its own.
+        assert_eq!(body.matches("\"id\":\"switch.komp\"").count(), 1, "{body}");
+        assert!(!body.contains("komp_zablokirovan"), "{body}");
     }
 
     #[test]

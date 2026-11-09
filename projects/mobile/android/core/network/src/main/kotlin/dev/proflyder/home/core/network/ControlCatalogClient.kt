@@ -76,6 +76,7 @@ internal fun ControlEntryDto.toDomain(): ControlEntry {
         title = title.ifEmpty { id },
         titleKey = titleKey,
         titleArgs = titleArgs,
+        detailKey = detailKey,
         room = room,
         icon = icon,
         actions = actions.mapNotNull(ControlAction::fromWire).toSet(),

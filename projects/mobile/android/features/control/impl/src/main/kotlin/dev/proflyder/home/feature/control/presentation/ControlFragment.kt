@@ -288,6 +288,8 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
                         },
                     ),
                 )
+            ControlNotice.CommandSent ->
+                Notices.show(binding.root, getString(R.string.control_command_sent))
         }
     }
 

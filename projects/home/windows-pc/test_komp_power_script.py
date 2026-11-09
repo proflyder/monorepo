@@ -33,9 +33,9 @@ class KompPowerAllowlistTests(unittest.TestCase):
     def test_reads_the_original_ssh_command(self):
         self.assertIn("$env:SSH_ORIGINAL_COMMAND", self.text)
 
-    def test_only_shutdown_cancel_and_lock_are_compared(self):
+    def test_only_the_documented_words_are_compared(self):
         comparisons = re.findall(r"-ceq\s+'([^']*)'", self.text)
-        self.assertEqual(comparisons, ["shutdown", "cancel", "lock"])
+        self.assertEqual(comparisons, ["shutdown", "cancel", "lock", "status"])
         # Case-insensitive `-eq`/`-ieq` would widen the allowlist.
         self.assertNotRegex(self.text, r"-i?eq\s")
 
@@ -56,6 +56,23 @@ class KompPowerAllowlistTests(unittest.TestCase):
         self.assertNotIn("LockWorkStation", code)
         self.assertNotIn("rundll32", code)
         self.assertEqual(self.text.count("schtasks.exe"), 1)
+
+    def test_status_reports_the_lock_state_without_any_execution(self):
+        # `status` is read-only: LogonUI.exe in the user's interactive
+        # (explorer.exe) session means the desktop is locked. Those are the
+        # only processes it looks at.
+        self.assertIn("Get-Process -Name LogonUI", self.text)
+        self.assertIn("Get-Process -Name explorer", self.text)
+        self.assertIn("'locked'", self.text)
+        self.assertIn("'unlocked'", self.text)
+        # Exactly `locked` or `unlocked` on stdout, always success.
+        status = self.text.split("if ($requested -ceq 'status')", 1)[1]
+        status = status.split("[Console]::Error", 1)[0]
+        self.assertIn("exit 0", status)
+        self.assertNotIn("Write-Output", status)
+        self.assertNotIn("schtasks", status)
+        self.assertNotIn("shutdown", status)
+        self.assertNotIn("ssh", status.lower())
 
     def test_install_script_creates_the_interactive_task(self):
         install = INSTALL.read_text(encoding="utf-8")

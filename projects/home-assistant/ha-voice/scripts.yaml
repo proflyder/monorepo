@@ -142,6 +142,12 @@ komp_lock:
                    not in ['', 'unknown', 'unavailable'] }}
       then:
         - service: shell_command.komp_lock
+        # The scheduled task starts asynchronously; refresh the lock sensor
+        # shortly after so the app subtitle does not wait for the 30 s poll.
+        - delay: 3
+        - service: homeassistant.update_entity
+          target:
+            entity_id: binary_sensor.komp_zablokirovan
 
 komp_unlock:
   alias: "Комп: разблокировка"
@@ -158,6 +164,12 @@ komp_unlock:
       then:
         - service: rest_command.wakegrant_issue_unlock
           continue_on_error: true
+        # The logon provider unlocks the session shortly after the grant; give
+        # it a moment and refresh the lock sensor before the next poll.
+        - delay: 3
+        - service: homeassistant.update_entity
+          target:
+            entity_id: binary_sensor.komp_zablokirovan
 
 wake_false_alarm:
   alias: "Рикардо: ложное срабатывание"

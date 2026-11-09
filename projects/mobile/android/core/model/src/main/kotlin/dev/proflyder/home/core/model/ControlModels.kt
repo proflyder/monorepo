@@ -92,6 +92,12 @@ data class ControlEntry(
     /** Typed arguments for [titleKey]. */
     val titleArgs: Map<String, String> = emptyMap(),
     /**
+     * Stable localization key of a device status shown under the title (for
+     * example `catalog.status.locked` for the PC). Empty when there is no
+     * status; the server never sends display text here.
+     */
+    val detailKey: String = "",
+    /**
      * Device this entry belongs to; empty when the server does not group
      * entries (an older server), in which case the entry is its own device.
      */

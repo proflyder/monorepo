@@ -56,6 +56,9 @@ sealed interface ControlNotice {
 
     /** A wake event was marked for the wake-word statistics. */
     data class WakeMarked(val kind: WakeFeedbackKind) : ControlNotice
+
+    /** A one-shot device button was accepted by the scheduler. */
+    data object CommandSent : ControlNotice
 }
 
 data class ControlUiState(
@@ -277,7 +280,9 @@ class ControlViewModel(
         launch {
             when (val result = pressControl(entry)) {
                 is Outcome.Success -> {
-                    updateState { copy(pending = pending - entry.id) }
+                    updateState {
+                        copy(pending = pending - entry.id, notice = ControlNotice.CommandSent)
+                    }
                     refresh(silent = true)
                 }
                 is Outcome.Failure -> updateState {

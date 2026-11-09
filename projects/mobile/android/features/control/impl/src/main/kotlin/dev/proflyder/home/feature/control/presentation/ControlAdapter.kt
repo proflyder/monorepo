@@ -182,8 +182,10 @@ internal object ControlDiff : DiffUtil.ItemCallback<ControlItem>() {
             add(ControlChange.STATE)
         }
         if (old.busy != new.busy) add(ControlChange.BUSY)
-        // Brightness is part of the state line while the light is on.
+        // Brightness and a device detail (for example the PC lock state) are
+        // part of the state line.
         if (before.light != after.light) add(ControlChange.STATE)
+        if (before.detailKey != after.detailKey) add(ControlChange.STATE)
     }
 }
 
@@ -746,12 +748,7 @@ internal class ControlAdapter(
             val entry = row.entry
             val on = entry.power == PowerState.ON
             views.controlDeviceState.setText(
-                when {
-                    !entry.available -> R.string.control_state_unavailable
-                    entry.power == PowerState.ON -> R.string.control_state_on
-                    entry.power == PowerState.OFF -> R.string.control_state_off
-                    else -> R.string.control_state_unknown
-                },
+                entry.localizedStateText(views.root.context, R.string.control_state_unavailable),
             )
             val brightness = entry.light?.takeIf { on && entry.available && it.brightness && it.brightnessPct > 0 }?.brightnessPct
             if (brightness != null) {
@@ -846,12 +843,7 @@ internal class ControlAdapter(
                 callback.onPowerChanged(entry, checked)
             }
             rowViews.controlRowState.setText(
-                when {
-                    !entry.available -> R.string.control_state_unavailable
-                    entry.power == PowerState.ON -> R.string.control_state_on
-                    entry.power == PowerState.OFF -> R.string.control_state_off
-                    else -> R.string.control_state_unknown
-                },
+                entry.localizedStateText(rowViews.root.context, R.string.control_state_unavailable),
             )
             val brightness = entry.light?.takeIf { on && entry.available && it.brightness && it.brightnessPct > 0 }?.brightnessPct
             if (brightness != null) {
