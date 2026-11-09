@@ -52,6 +52,7 @@
     "com.squareup.okhttp3:logging-interceptor": -1617595461,
     "com.squareup.okhttp3:mockwebserver": -2082839279,
     "com.squareup.okhttp3:okhttp": -750577442,
+    "com.squareup.retrofit2:converter-kotlinx-serialization": -1906038759,
     "com.squareup.retrofit2:retrofit": -519203915,
     "dev.zacsweers.metro:compiler": 1977966209,
     "dev.zacsweers.metro:runtime-jvm": 453693898,
@@ -61,23 +62,25 @@
     "io.gitlab.arturbosch.detekt:detekt-formatting": -1753457783,
     "io.gitlab.arturbosch.detekt:detekt-test": 179826294,
     "junit:junit": 1633899997,
+    "org.jetbrains.kotlin:kotlin-serialization-compiler-plugin-embeddable": 1407367069,
     "org.jetbrains.kotlinx:kotlinx-coroutines-android": -545042416,
     "org.jetbrains.kotlinx:kotlinx-coroutines-core": -1223695678,
     "org.jetbrains.kotlinx:kotlinx-coroutines-play-services": -752091336,
     "org.jetbrains.kotlinx:kotlinx-coroutines-test": -2081186443,
+    "org.jetbrains.kotlinx:kotlinx-serialization-core": -354571344,
     "org.jetbrains.kotlinx:kotlinx-serialization-json": 902645305,
     "org.robolectric:android-all-instrumented": 1453665809,
     "org.robolectric:robolectric": -817610713,
     "repositories": 1670674627
   },
   "__RESOLVED_ARTIFACTS_HASH": {
-    "androidx.activity:activity-ktx:aar": 2123548813,
-    "androidx.activity:activity:aar": 516219595,
+    "androidx.activity:activity-ktx:aar": -1407205644,
+    "androidx.activity:activity:aar": 505047987,
     "androidx.annotation:annotation": -768068631,
     "androidx.annotation:annotation-experimental:aar": 1556614212,
     "androidx.annotation:annotation-jvm": 1621212161,
     "androidx.appcompat:appcompat-resources:aar": -1946203412,
-    "androidx.appcompat:appcompat:aar": -197946898,
+    "androidx.appcompat:appcompat:aar": 1103377523,
     "androidx.arch.core:core-common": -1515962432,
     "androidx.arch.core:core-runtime:aar": 1186749229,
     "androidx.cardview:cardview:aar": -1211788058,
@@ -88,7 +91,7 @@
     "androidx.compose.runtime:runtime-annotation-jvm": -236254881,
     "androidx.concurrent:concurrent-futures": 268108516,
     "androidx.constraintlayout:constraintlayout-core": -1240744547,
-    "androidx.constraintlayout:constraintlayout:aar": 179070996,
+    "androidx.constraintlayout:constraintlayout:aar": 1009212524,
     "androidx.coordinatorlayout:coordinatorlayout:aar": -921242166,
     "androidx.core:core-ktx:aar": -2050302453,
     "androidx.core:core-viewtree:aar": -463298928,
@@ -100,24 +103,24 @@
     "androidx.datastore:datastore-android:aar": -553462704,
     "androidx.datastore:datastore-core-android:aar": 1217647536,
     "androidx.datastore:datastore-core-jvm": 237143079,
-    "androidx.datastore:datastore-core-okio": -727711955,
+    "androidx.datastore:datastore-core-okio": -1914123570,
     "androidx.datastore:datastore-core-okio-jvm": -78277948,
     "androidx.datastore:datastore-core:aar": -1464309549,
-    "androidx.datastore:datastore-preferences": 198734967,
+    "androidx.datastore:datastore-preferences": -666166955,
     "androidx.datastore:datastore-preferences-android:aar": -437858198,
-    "androidx.datastore:datastore-preferences-core": -748179890,
+    "androidx.datastore:datastore-preferences-core": 544981740,
     "androidx.datastore:datastore-preferences-core-android:aar": -7062786,
     "androidx.datastore:datastore-preferences-core-jvm": 32282842,
     "androidx.datastore:datastore-preferences-external-protobuf": -370401972,
     "androidx.datastore:datastore-preferences-proto": -1044762852,
-    "androidx.datastore:datastore-preferences:aar": -1341424154,
+    "androidx.datastore:datastore-preferences:aar": 669623814,
     "androidx.documentfile:documentfile:aar": -1337010746,
     "androidx.drawerlayout:drawerlayout:aar": 663729347,
     "androidx.dynamicanimation:dynamicanimation:aar": -1272050175,
     "androidx.emoji2:emoji2-views-helper:aar": -1393454915,
     "androidx.emoji2:emoji2:aar": -529447890,
-    "androidx.fragment:fragment-ktx:aar": -1655957936,
-    "androidx.fragment:fragment:aar": 1554023721,
+    "androidx.fragment:fragment-ktx:aar": 2006268989,
+    "androidx.fragment:fragment:aar": -1308247414,
     "androidx.graphics:graphics-shapes-android:aar": -183775881,
     "androidx.graphics:graphics-shapes:aar": -1891402232,
     "androidx.interpolator:interpolator:aar": 854801916,
@@ -136,7 +139,7 @@
     "androidx.lifecycle:lifecycle-viewmodel-android:aar": -310135756,
     "androidx.lifecycle:lifecycle-viewmodel-ktx:aar": -194454544,
     "androidx.lifecycle:lifecycle-viewmodel-savedstate-android:aar": -1843966927,
-    "androidx.lifecycle:lifecycle-viewmodel-savedstate:aar": 842003096,
+    "androidx.lifecycle:lifecycle-viewmodel-savedstate:aar": -1714193441,
     "androidx.lifecycle:lifecycle-viewmodel:aar": 695039767,
     "androidx.loader:loader:aar": -903000296,
     "androidx.localbroadcastmanager:localbroadcastmanager:aar": -50424910,
@@ -156,8 +159,8 @@
     "androidx.room:room-runtime-android:aar": -1990636102,
     "androidx.room:room-runtime:aar": 411302890,
     "androidx.savedstate:savedstate-android:aar": -2038164563,
-    "androidx.savedstate:savedstate-ktx:aar": -1193008047,
-    "androidx.savedstate:savedstate:aar": -875940917,
+    "androidx.savedstate:savedstate-ktx:aar": 890835125,
+    "androidx.savedstate:savedstate:aar": 2080713200,
     "androidx.sqlite:sqlite-android:aar": -719792308,
     "androidx.sqlite:sqlite-framework-android:aar": 920400570,
     "androidx.sqlite:sqlite-framework:aar": -127275529,
@@ -172,35 +175,35 @@
     "androidx.vectordrawable:vectordrawable-animated:aar": 739346405,
     "androidx.vectordrawable:vectordrawable:aar": 1923028639,
     "androidx.versionedparcelable:versionedparcelable:aar": 480290835,
-    "androidx.viewpager2:viewpager2:aar": -1261538926,
+    "androidx.viewpager2:viewpager2:aar": 1860221063,
     "androidx.viewpager:viewpager:aar": 1484592146,
     "com.almworks.sqlite4java:sqlite4java": 1585971300,
-    "com.github.chuckerteam.chucker:library:aar": 1623726594,
+    "com.github.chuckerteam.chucker:library:aar": 658839949,
     "com.google.android.datatransport:transport-api:aar": -1797064977,
     "com.google.android.datatransport:transport-backend-cct:aar": 1598741274,
     "com.google.android.datatransport:transport-runtime:aar": 1730030366,
-    "com.google.android.gms:play-services-basement:aar": 931575756,
-    "com.google.android.gms:play-services-tasks:aar": -963397548,
-    "com.google.android.material:material:aar": -807246186,
+    "com.google.android.gms:play-services-basement:aar": -1129105163,
+    "com.google.android.gms:play-services-tasks:aar": 1819529444,
+    "com.google.android.material:material:aar": 2002046576,
     "com.google.auto.value:auto-value-annotations": 641752776,
     "com.google.code.findbugs:jsr305": 870839855,
     "com.google.code.gson:gson": -1575757252,
     "com.google.errorprone:error_prone_annotations": 967586345,
-    "com.google.firebase:firebase-abt:aar": -919023381,
+    "com.google.firebase:firebase-abt:aar": 619069083,
     "com.google.firebase:firebase-annotations": 1045434589,
-    "com.google.firebase:firebase-common:aar": 961022350,
+    "com.google.firebase:firebase-common:aar": -391466273,
     "com.google.firebase:firebase-components:aar": 1272402741,
     "com.google.firebase:firebase-config-interop:aar": 1103503698,
-    "com.google.firebase:firebase-config:aar": -1355810095,
-    "com.google.firebase:firebase-crashlytics:aar": -1600014544,
+    "com.google.firebase:firebase-config:aar": -1256820372,
+    "com.google.firebase:firebase-crashlytics:aar": 597146111,
     "com.google.firebase:firebase-datatransport:aar": 675719735,
     "com.google.firebase:firebase-encoders": 1078738781,
     "com.google.firebase:firebase-encoders-json:aar": -884459589,
     "com.google.firebase:firebase-encoders-proto": 241141455,
-    "com.google.firebase:firebase-installations-interop:aar": 2136419242,
-    "com.google.firebase:firebase-installations:aar": 2061806154,
-    "com.google.firebase:firebase-measurement-connector:aar": -1234544413,
-    "com.google.firebase:firebase-sessions:aar": 794027409,
+    "com.google.firebase:firebase-installations-interop:aar": 1407336064,
+    "com.google.firebase:firebase-installations:aar": 1903585721,
+    "com.google.firebase:firebase-measurement-connector:aar": -1054570061,
+    "com.google.firebase:firebase-sessions:aar": -458808405,
     "com.google.guava:failureaccess": -1890754729,
     "com.google.guava:guava": 1451151182,
     "com.google.guava:listenablefuture": -1728764445,
@@ -218,6 +221,7 @@
     "com.squareup.okhttp3:okhttp-jvm": -23513861,
     "com.squareup.okio:okio": 1200805913,
     "com.squareup.okio:okio-jvm": -505501008,
+    "com.squareup.retrofit2:converter-kotlinx-serialization": -475331606,
     "com.squareup.retrofit2:retrofit": -2051375609,
     "dev.drewhamilton.poko:poko-annotations-jvm": 1252648719,
     "dev.zacsweers.metro:compiler": 1667127973,
@@ -273,6 +277,7 @@
     "org.jetbrains.kotlin:kotlin-scripting-compiler-embeddable": 1114793951,
     "org.jetbrains.kotlin:kotlin-scripting-compiler-impl-embeddable": -1082860429,
     "org.jetbrains.kotlin:kotlin-scripting-jvm": 901103794,
+    "org.jetbrains.kotlin:kotlin-serialization-compiler-plugin-embeddable": 2024002392,
     "org.jetbrains.kotlin:kotlin-stdlib": -1302217397,
     "org.jetbrains.kotlin:kotlin-stdlib-jdk7": -1168065067,
     "org.jetbrains.kotlin:kotlin-stdlib-jdk8": 362753199,
@@ -281,11 +286,11 @@
     "org.jetbrains.kotlinx:kotlinx-coroutines-android": 631367046,
     "org.jetbrains.kotlinx:kotlinx-coroutines-core": -2074100514,
     "org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm": 1904095726,
-    "org.jetbrains.kotlinx:kotlinx-coroutines-play-services": 2117482851,
+    "org.jetbrains.kotlinx:kotlinx-coroutines-play-services": -1679919303,
     "org.jetbrains.kotlinx:kotlinx-coroutines-test": 723220457,
     "org.jetbrains.kotlinx:kotlinx-coroutines-test-jvm": -1799559430,
     "org.jetbrains.kotlinx:kotlinx-html-jvm": -1247508674,
-    "org.jetbrains.kotlinx:kotlinx-serialization-core": -913717298,
+    "org.jetbrains.kotlinx:kotlinx-serialization-core": -1134242407,
     "org.jetbrains.kotlinx:kotlinx-serialization-core-jvm": -985765084,
     "org.jetbrains.kotlinx:kotlinx-serialization-json": 1916898120,
     "org.jetbrains.kotlinx:kotlinx-serialization-json-jvm": -415042813,
@@ -1200,6 +1205,12 @@
       },
       "version": "3.18.1"
     },
+    "com.squareup.retrofit2:converter-kotlinx-serialization": {
+      "shasums": {
+        "jar": "e9078b659251a2ef63e70729e0dec5f6cb57d220a1002948dc24b865fa6b42b0"
+      },
+      "version": "3.0.0"
+    },
     "com.squareup.retrofit2:retrofit": {
       "shasums": {
         "jar": "69c6a2d3451b6df9549a93fab744094ebf07a4b0ce4f453d6c8f575ef0fec9a1"
@@ -1530,6 +1541,12 @@
       },
       "version": "2.0.21"
     },
+    "org.jetbrains.kotlin:kotlin-serialization-compiler-plugin-embeddable": {
+      "shasums": {
+        "jar": "63b381018a7d45221795d18301150fb80a1d00f30aae7be0550ab86f9ddd0ce8"
+      },
+      "version": "2.4.21"
+    },
     "org.jetbrains.kotlin:kotlin-stdlib": {
       "shasums": {
         "jar": "4ec0293bc3751423b203f1d8493251c57c42e73eb6377a6b8560d0974ff0a6df"
@@ -1604,9 +1621,9 @@
     },
     "org.jetbrains.kotlinx:kotlinx-serialization-core": {
       "shasums": {
-        "jar": "4850682e0e5976862695330d84eb8699f1dc5d50849f625263995cc88bc6f37b"
+        "jar": "e4d4b24318e2dd6d6fff8bf2a92e93270237438d6ca97d13542cc1bfd1eb7a34"
       },
-      "version": "1.7.3"
+      "version": "1.12.0"
     },
     "org.jetbrains.kotlinx:kotlinx-serialization-core-jvm": {
       "shasums": {
@@ -2656,6 +2673,11 @@
     ],
     "com.squareup.okio:okio-jvm": [
       "org.jetbrains.kotlin:kotlin-stdlib"
+    ],
+    "com.squareup.retrofit2:converter-kotlinx-serialization": [
+      "com.squareup.retrofit2:retrofit",
+      "org.jetbrains.kotlin:kotlin-stdlib",
+      "org.jetbrains.kotlinx:kotlinx-serialization-core-jvm"
     ],
     "com.squareup.retrofit2:retrofit": [
       "com.squareup.okhttp3:okhttp",
@@ -3719,6 +3741,9 @@
     "com.squareup.okio:okio-jvm": [
       "okio",
       "okio.internal"
+    ],
+    "com.squareup.retrofit2:converter-kotlinx-serialization": [
+      "retrofit2.converter.kotlinx.serialization"
     ],
     "com.squareup.retrofit2:retrofit": [
       "retrofit2",
@@ -5473,6 +5498,15 @@
       "kotlin.script.experimental.jvm.compat",
       "kotlin.script.experimental.jvm.impl",
       "kotlin.script.experimental.jvm.util"
+    ],
+    "org.jetbrains.kotlin:kotlin-serialization-compiler-plugin-embeddable": [
+      "org.jetbrains.kotlinx.serialization.compiler.backend.ir",
+      "org.jetbrains.kotlinx.serialization.compiler.diagnostic",
+      "org.jetbrains.kotlinx.serialization.compiler.extensions",
+      "org.jetbrains.kotlinx.serialization.compiler.fir",
+      "org.jetbrains.kotlinx.serialization.compiler.fir.checkers",
+      "org.jetbrains.kotlinx.serialization.compiler.fir.services",
+      "org.jetbrains.kotlinx.serialization.compiler.resolve"
     ],
     "org.jetbrains.kotlin:kotlin-stdlib": [
       "kotlin",
@@ -7574,6 +7608,7 @@
       "com.squareup.okhttp3:okhttp-jvm",
       "com.squareup.okio:okio",
       "com.squareup.okio:okio-jvm",
+      "com.squareup.retrofit2:converter-kotlinx-serialization",
       "com.squareup.retrofit2:retrofit",
       "dev.drewhamilton.poko:poko-annotations-jvm",
       "dev.zacsweers.metro:compiler",
@@ -7629,6 +7664,7 @@
       "org.jetbrains.kotlin:kotlin-scripting-compiler-embeddable",
       "org.jetbrains.kotlin:kotlin-scripting-compiler-impl-embeddable",
       "org.jetbrains.kotlin:kotlin-scripting-jvm",
+      "org.jetbrains.kotlin:kotlin-serialization-compiler-plugin-embeddable",
       "org.jetbrains.kotlin:kotlin-stdlib",
       "org.jetbrains.kotlin:kotlin-stdlib-jdk7",
       "org.jetbrains.kotlin:kotlin-stdlib-jdk8",
@@ -7913,6 +7949,14 @@
       ],
       "org.jetbrains.kotlin.compiler.plugin.ComponentRegistrar": [
         "org.jetbrains.kotlin.scripting.compiler.plugin.ScriptingCompilerConfigurationComponentRegistrar"
+      ]
+    },
+    "org.jetbrains.kotlin:kotlin-serialization-compiler-plugin-embeddable": {
+      "org.jetbrains.kotlin.compiler.plugin.CommandLineProcessor": [
+        "org.jetbrains.kotlinx.serialization.compiler.extensions.SerializationPluginOptions"
+      ],
+      "org.jetbrains.kotlin.compiler.plugin.CompilerPluginRegistrar": [
+        "org.jetbrains.kotlinx.serialization.compiler.extensions.SerializationComponentRegistrar"
       ]
     },
     "org.jetbrains.kotlinx:kotlinx-coroutines-android": {

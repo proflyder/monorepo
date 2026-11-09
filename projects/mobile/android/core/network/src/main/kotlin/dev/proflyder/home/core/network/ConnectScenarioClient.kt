@@ -2,22 +2,11 @@ package dev.proflyder.home.core.network
 
 import dev.proflyder.home.core.config.ConnectionSettingsStore
 import dev.proflyder.home.core.model.Outcome
-import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.core.model.Scenario
 import dev.proflyder.home.core.model.ScenarioDraft
-import java.io.IOException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.SerializationException
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
-import kotlinx.serialization.json.put
 import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 
@@ -53,11 +42,6 @@ class ConnectScenarioClient(
     interceptors: List<Interceptor> = emptyList(),
 ) : ScenarioClient {
 
-    private val json = Json {
-        ignoreUnknownKeys = true
-        isLenient = false
-    }
-
     private val api: ScenarioApi = HomeRetrofit.create(
         ScenarioApi::class.java,
         settings,
@@ -66,101 +50,42 @@ class ConnectScenarioClient(
         interceptors,
     )
 
-    override suspend fun listScenarios(includeDisabled: Boolean): Outcome<List<Scenario>> =
-        call("ListScenarios", buildJsonObject { put("includeDisabled", includeDisabled) }) { element ->
-            decodeScenarios(element)
-        }
-
-    override suspend fun getScenario(id: String): Outcome<Scenario> =
-        call("GetScenario", buildJsonObject { put("id", id) }) { element ->
-            ScenarioJson.parseScenario(element.jsonObject.getValue("scenario"))
-        }
-
-    override suspend fun createScenario(draft: ScenarioDraft): Outcome<Scenario> =
-        call("CreateScenario", ScenarioJson.createRequest(draft)) { element ->
-            ScenarioJson.parseScenario(element.jsonObject.getValue("scenario"))
-        }
-
-    override suspend fun updateScenario(scenario: Scenario, expectedRevision: Long): Outcome<Scenario> =
-        call("UpdateScenario", ScenarioJson.updateRequest(scenario, expectedRevision)) { element ->
-            ScenarioJson.parseScenario(element.jsonObject.getValue("scenario"))
-        }
-
-    override suspend fun deleteScenario(id: String): Outcome<Boolean> =
-        call("DeleteScenario", buildJsonObject { put("id", id) }) { element ->
-            element.jsonObject["deleted"]?.jsonPrimitive?.content == "true"
-        }
-
-    override suspend fun setScenarioEnabled(id: String, enabled: Boolean): Outcome<Scenario> =
-        call("SetScenarioEnabled", buildJsonObject { put("id", id); put("enabled", enabled) }) { element ->
-            ScenarioJson.parseScenario(element.jsonObject.getValue("scenario"))
-        }
-
-    override suspend fun runScenario(id: String, idempotencyKey: String): Outcome<String> =
-        call(
-            "RunScenario",
-            buildJsonObject {
-                put("id", id)
-                if (idempotencyKey.isNotBlank()) put("idempotencyKey", idempotencyKey)
-            },
-        ) { element ->
-            element.jsonObject.getValue("event").jsonObject.getValue("id").jsonPrimitive.content
-        }
-
-    private suspend fun <T> call(
-        method: String,
-        body: JsonObject,
-        decode: (JsonElement) -> T,
-    ): Outcome<T> = withContext(ioDispatcher) {
-        val response = runCatching { api.call(method, body) }.getOrElse { failure ->
-            when (failure) {
-                is IOException, is SerializationException ->
-                    return@withContext Outcome.Failure(failure.toCallFailure())
-                else -> throw failure
-            }
-        }
-
-        val code = response.code()
-        when {
-            code in 300..399 -> Outcome.Failure(RemoteFailure.ProtocolFailure("HTTP $code redirect refused"))
-            code == 401 || code == 403 -> Outcome.Failure(RemoteFailure.Unauthorized)
-            !response.isSuccessful -> {
-                val text = runCatching {
-                    response.errorBody()?.use { it.readBounded() }.orEmpty()
-                }.getOrElse { failure ->
-                    if (failure is IOException) {
-                        return@withContext Outcome.Failure(failure.toRemoteFailure())
-                    }
-                    throw failure
-                }
-                Outcome.Failure(parseConnectError(code, text))
-            }
-            else -> {
-                val element = response.body()
-                    ?: return@withContext Outcome.Failure(RemoteFailure.ProtocolFailure("empty response body"))
-                runCatching { decode(element) }.fold(
-                    onSuccess = { Outcome.Success(it) },
-                    onFailure = { failure ->
-                        if (failure !is Exception) throw failure
-                        Outcome.Failure(
-                            RemoteFailure.ProtocolFailure(
-                                sanitizeMessage(failure.message) ?: "unexpected response shape",
-                            ),
-                        )
-                    },
-                )
+    override suspend fun listScenarios(includeDisabled: Boolean): Outcome<List<Scenario>> {
+        val request = ListScenariosRequestDto(includeDisabled)
+        return io {
+            api.listScenarios(request).mapResult {
+                requireNotNull(it.scenarios) { "scenarios must be an array" }
+                    .map(ScenarioDto::toDomain)
             }
         }
     }
 
-    private fun parseConnectError(httpCode: Int, text: String): RemoteFailure =
-        parseConnectFailure(httpCode, text, json)
-
-    private fun decodeScenarios(element: JsonElement): List<Scenario> {
-        val field = element.jsonObject["scenarios"] ?: return emptyList()
-        val array = field as? JsonArray ?: throw MalformedResponse("scenarios must be an array")
-        return array.map(ScenarioJson::parseScenario)
+    override suspend fun getScenario(id: String): Outcome<Scenario> = io {
+        api.getScenario(ScenarioIdRequestDto(id)).mapResult { it.scenario.toDomain() }
     }
 
-    private class MalformedResponse(message: String) : Exception(message)
+    override suspend fun createScenario(draft: ScenarioDraft): Outcome<Scenario> = io {
+        api.createScenario(ScenarioJson.createRequest(draft)).mapResult { it.scenario.toDomain() }
+    }
+
+    override suspend fun updateScenario(scenario: Scenario, expectedRevision: Long): Outcome<Scenario> {
+        val request = ScenarioJson.updateRequest(scenario, expectedRevision)
+        return io { api.updateScenario(request).mapResult { it.scenario.toDomain() } }
+    }
+
+    override suspend fun deleteScenario(id: String): Outcome<Boolean> = io {
+        api.deleteScenario(ScenarioIdRequestDto(id)).mapResult { it.deleted }
+    }
+
+    override suspend fun setScenarioEnabled(id: String, enabled: Boolean): Outcome<Scenario> = io {
+        api.setScenarioEnabled(SetScenarioEnabledRequestDto(id, enabled))
+            .mapResult { it.scenario.toDomain() }
+    }
+
+    override suspend fun runScenario(id: String, idempotencyKey: String): Outcome<String> {
+        val request = RunScenarioRequestDto(id, idempotencyKey.takeIf { it.isNotBlank() })
+        return io { api.runScenario(request).mapResult { it.event.id } }
+    }
+
+    private suspend fun <T> io(block: () -> Outcome<T>): Outcome<T> = withContext(ioDispatcher) { block() }
 }

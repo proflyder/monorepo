@@ -11,10 +11,6 @@ import javax.net.ssl.SSLException
 import javax.net.ssl.SSLHandshakeException
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.jsonObject
 import okhttp3.ResponseBody
 
 /** HTTP plumbing shared by the scheduler and control-catalog clients. */
@@ -79,11 +75,13 @@ internal fun ResponseBody.readBounded(): String {
  */
 fun parseConnectFailure(httpCode: Int, text: String, json: Json): RemoteFailure {
     val parsed = runCatching {
-        if (text.isBlank()) null else json.parseToJsonElement(text).jsonObject
+        if (text.isBlank()) null else json.decodeFromString(ConnectErrorDto.serializer(), text)
     }.getOrNull()
-    val code = sanitizeMessage((parsed?.get("code") as? JsonPrimitive)?.content).orEmpty()
-    val message = sanitizeMessage((parsed?.get("message") as? JsonPrimitive)?.content).orEmpty()
-    val localized = parsed?.let(::localizedDetail)
+    val code = sanitizeMessage(parsed?.code).orEmpty()
+    val message = sanitizeMessage(parsed?.message).orEmpty()
+    val localized = parsed?.details?.firstNotNullOfOrNull { detail ->
+        detail.debug?.takeIf { it.key.isNotBlank() }?.let { it.key to it.args }
+    }
     return when (code) {
         "unauthenticated", "permission_denied" -> RemoteFailure.Unauthorized
         "deadline_exceeded", "canceled" -> RemoteFailure.Timeout
@@ -95,20 +93,4 @@ fun parseConnectFailure(httpCode: Int, text: String, json: Json): RemoteFailure 
             textArgs = localized?.second.orEmpty(),
         )
     }
-}
-
-private fun localizedDetail(root: JsonObject): Pair<String, Map<String, String>>? {
-    val details = root["details"] as? JsonArray ?: return null
-    for (element in details) {
-        val debug = (element as? JsonObject)?.get("debug") as? JsonObject ?: continue
-        val key = (debug["key"] as? JsonPrimitive)?.takeIf { it.isString }?.content.orEmpty()
-        if (key.isBlank()) continue
-        val args = (debug["args"] as? JsonObject).orEmpty()
-            .mapNotNull { (name, value) ->
-                (value as? JsonPrimitive)?.takeIf { it.isString }?.let { name to it.content }
-            }
-            .toMap()
-        return key to args
-    }
-    return null
 }
