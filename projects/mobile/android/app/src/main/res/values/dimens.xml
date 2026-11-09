@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Toolbar popup: inset leaves room for the window shadow. -->
+    <dimen name="ui_popup_inset">8dp</dimen>
+    <dimen name="ui_popup_elevation">8dp</dimen>
+    <!-- Time section pills, matching the rounded shapes of the cards. -->
+    <dimen name="ui_tab_height">40dp</dimen>
+    <dimen name="ui_tab_radius">20dp</dimen>
+</resources>

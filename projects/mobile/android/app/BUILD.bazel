@@ -46,6 +46,7 @@ metro_android_library(
         "@maven//:androidx_fragment_fragment_ktx",
         "@maven//:androidx_lifecycle_lifecycle_runtime_ktx",
         "@maven//:androidx_lifecycle_lifecycle_viewmodel_ktx",
+        "@maven//:androidx_viewpager2_viewpager2",
         "@maven//:com_google_android_material_material",
         # Runtime implementation of ListenableFuture used by
         # androidx.concurrent.futures / androidx.profileinstaller. It must be a

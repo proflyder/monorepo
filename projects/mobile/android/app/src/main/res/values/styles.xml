@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Toolbar overflow popup: the same tonal cards and large corners as the list. -->
+    <style name="Widget.Home.PopupMenu" parent="Widget.Material3.PopupMenu">
+        <item name="android:popupBackground">@drawable/app_popup_menu_background</item>
+        <item name="android:popupElevation">@dimen/ui_popup_elevation</item>
+        <item name="android:itemBackground">@drawable/app_popup_menu_item_background</item>
+        <item name="android:itemTextAppearance">@style/TextAppearance.Home.PopupItem</item>
+    </style>
+
+    <style name="Widget.Home.PopupMenu.Overflow" parent="Widget.Home.PopupMenu" />
+
+    <style name="ThemeOverlay.Home.Toolbar" parent="">
+        <item name="popupMenuStyle">@style/Widget.Home.PopupMenu</item>
+        <item name="actionOverflowMenuStyle">@style/Widget.Home.PopupMenu.Overflow</item>
+    </style>
+
+    <style name="TextAppearance.Home.PopupItem" parent="TextAppearance.Material3.BodyLarge">
+        <item name="android:textColor">?attr/colorOnSurface</item>
+    </style>
+
+    <!-- Time section switch: separate text pills; only the active one is filled. -->
+    <style name="Widget.Home.TimeTab" parent="Widget.Material3.Button.TextButton">
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+        <item name="android:minHeight">@dimen/ui_tab_height</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="android:textAppearance">?attr/textAppearanceLabelLarge</item>
+        <item name="android:textColor">@color/time_tab_text</item>
+        <item name="backgroundTint">@color/time_tab_background</item>
+        <item name="cornerRadius">@dimen/ui_tab_radius</item>
+        <item name="rippleColor">?attr/colorOnSurfaceVariant</item>
+        <item name="strokeWidth">0dp</item>
+    </style>
+</resources>

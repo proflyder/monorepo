@@ -1,7 +1,9 @@
 package dev.proflyder.home
 
+import androidx.viewpager2.widget.ViewPager2
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.bottomnavigation.BottomNavigationView
+import com.google.android.material.button.MaterialButtonToggleGroup
 import dev.proflyder.home.feature.alarms.presentation.AlarmsFragment
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -58,7 +60,8 @@ class MainActivitySmokeTest {
         assertTrue("selecting alarms must open the Time container", time is TimeFragment)
         assertEquals(TimeSection.ALARMS, (time as TimeFragment).section)
         time.childFragmentManager.executePendingTransactions()
-        assertTrue(time.childFragmentManager.findFragmentById(R.id.time_content) is AlarmsFragment)
+        assertTrue(time.childFragmentManager.fragments.any { it is AlarmsFragment })
+        assertEquals(0, time.requireView().findViewById<ViewPager2>(R.id.time_pager).currentItem)
 
         val bottom = activity.findViewById<BottomNavigationView>(R.id.home_notice_anchor)
         assertEquals("Time", bottom.menu.findItem(bottom.selectedItemId).title.toString())
@@ -76,5 +79,45 @@ class MainActivitySmokeTest {
 
         val time = activity.supportFragmentManager.findFragmentById(R.id.fragment_container) as TimeFragment
         assertEquals(TimeSection.TIMERS, time.section)
+    }
+
+    @Test
+    fun swipingTheTimePagerMovesTheSegmentedSwitch() {
+        val controller = Robolectric.buildActivity(MainActivity::class.java).setup()
+        val activity = controller.get()
+        shadowOf(activity.mainLooper).idle()
+
+        activity.router.selectTab("alarms")
+        shadowOf(activity.mainLooper).idle()
+        activity.supportFragmentManager.executePendingTransactions()
+
+        val time = activity.supportFragmentManager.findFragmentById(R.id.fragment_container) as TimeFragment
+        val pager = time.requireView().findViewById<ViewPager2>(R.id.time_pager)
+        pager.setCurrentItem(TimeSection.REMINDERS.ordinal, false)
+        shadowOf(activity.mainLooper).idle()
+
+        assertEquals(TimeSection.REMINDERS, time.section)
+        val tabs = time.requireView().findViewById<MaterialButtonToggleGroup>(R.id.time_tabs)
+        assertEquals(R.id.time_tab_reminders, tabs.checkedButtonId)
+    }
+
+    @Test
+    fun tappingATimePillMovesThePager() {
+        val controller = Robolectric.buildActivity(MainActivity::class.java).setup()
+        val activity = controller.get()
+        shadowOf(activity.mainLooper).idle()
+
+        activity.router.selectTab("alarms")
+        shadowOf(activity.mainLooper).idle()
+        activity.supportFragmentManager.executePendingTransactions()
+
+        val time = activity.supportFragmentManager.findFragmentById(R.id.fragment_container) as TimeFragment
+        val tabs = time.requireView().findViewById<MaterialButtonToggleGroup>(R.id.time_tabs)
+        val pager = time.requireView().findViewById<ViewPager2>(R.id.time_pager)
+        tabs.check(R.id.time_tab_timers)
+        shadowOf(activity.mainLooper).idle()
+
+        assertEquals(TimeSection.TIMERS, time.section)
+        assertEquals(TimeSection.TIMERS.ordinal, pager.currentItem)
     }
 }

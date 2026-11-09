@@ -5,6 +5,7 @@
     android:layout_height="match_parent"
     android:orientation="vertical">
 
+    <!-- Segmented switch matching the bottom navigation: text pills, active one filled. -->
     <com.google.android.material.button.MaterialButtonToggleGroup
         android:id="@+id/time_tabs"
         android:layout_width="match_parent"
@@ -12,42 +13,40 @@
         android:layout_marginStart="@dimen/ui_screen_padding"
         android:layout_marginTop="@dimen/ui_tile_gap"
         android:layout_marginEnd="@dimen/ui_screen_padding"
+        android:background="@android:color/transparent"
         app:selectionRequired="true"
         app:singleSelection="true">
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/time_tab_alarms"
-            style="@style/Widget.Material3.Button.OutlinedButton"
+            style="@style/Widget.Home.TimeTab"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
+            android:layout_marginHorizontal="@dimen/ui_tile_gap_half"
             android:layout_weight="1"
-            android:minHeight="40dp"
-            android:text="@string/app_time_alarms"
-            android:textAllCaps="false" />
+            android:text="@string/app_time_alarms" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/time_tab_timers"
-            style="@style/Widget.Material3.Button.OutlinedButton"
+            style="@style/Widget.Home.TimeTab"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
+            android:layout_marginHorizontal="@dimen/ui_tile_gap_half"
             android:layout_weight="1"
-            android:minHeight="40dp"
-            android:text="@string/app_time_timers"
-            android:textAllCaps="false" />
+            android:text="@string/app_time_timers" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/time_tab_reminders"
-            style="@style/Widget.Material3.Button.OutlinedButton"
+            style="@style/Widget.Home.TimeTab"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
+            android:layout_marginHorizontal="@dimen/ui_tile_gap_half"
             android:layout_weight="1"
-            android:minHeight="40dp"
-            android:text="@string/app_time_reminders"
-            android:textAllCaps="false" />
+            android:text="@string/app_time_reminders" />
     </com.google.android.material.button.MaterialButtonToggleGroup>
 
-    <androidx.fragment.app.FragmentContainerView
-        android:id="@+id/time_content"
+    <androidx.viewpager2.widget.ViewPager2
+        android:id="@+id/time_pager"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1" />

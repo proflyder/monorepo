@@ -40,6 +40,14 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
     private var lightSheet: LightSheet? = null
     private var speakDialog: SpeakDialog? = null
 
+    /**
+     * The live rows arrive after the first content frame. Their item stays in
+     * the list from the start (with a stable key), so that arrival inserts no
+     * row above Quick actions; this flag additionally pulls the list to the
+     * top when the user has not scrolled yet.
+     */
+    private var hubWasEmpty = true
+
     /** The single callback instance shared with the adapter. */
     private val adapterCallback = object : BaseAdapterCallback<ControlItem>(), ControlAdapterCallback {
         override fun onItemClick(item: ControlItem) {
@@ -211,23 +219,24 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
                     pendingScenarios = state.pendingScenarios,
                 )
                 val leading = buildList<ControlItem> {
-                    if (state.hubCards.isNotEmpty()) {
-                        add(ControlItem.Hub(state.hubCards, state.hubRemaining, state.nowUnix))
-                    }
+                    add(ControlItem.Hub(state.hubCards, state.hubRemaining, state.nowUnix))
                     add(ControlItem.QuickActions(tiles, hint = tiles.isEmpty()))
                 }
-                adapter.submitList(
-                    ControlItems.build(
-                        entries = state.entries,
-                        pending = state.pending,
-                        statesOk = state.statesOk,
-                        filter = state.filter,
-                        texts = texts(),
-                        expandedDevices = state.expandedDevices,
-                        leading = leading,
-                        collapsedRooms = state.collapsedRooms,
-                    ),
+                val stickToTop = hubWasEmpty &&
+                    state.hubCards.isNotEmpty() &&
+                    !binding.controlList.canScrollVertically(-1)
+                hubWasEmpty = state.hubCards.isEmpty()
+                val items = ControlItems.build(
+                    entries = state.entries,
+                    pending = state.pending,
+                    statesOk = state.statesOk,
+                    filter = state.filter,
+                    texts = texts(),
+                    expandedDevices = state.expandedDevices,
+                    leading = leading,
+                    collapsedRooms = state.collapsedRooms,
                 )
+                adapter.submitList(items) { if (stickToTop) binding.controlList.scrollToPosition(0) }
             }
         }
         binding.controlRefresh.isRefreshing = state.refreshing && hasItems
