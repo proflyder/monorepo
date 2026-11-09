@@ -26,5 +26,4 @@
     <color name="home_launcher_bg">#0B3D33</color>
     <color name="home_launcher_fg">#8CF8DC</color>
     <!-- Subtle ripple on the Time pills. -->
-    <color name="time_tab_ripple">#1F3F4945</color>
 </resources>

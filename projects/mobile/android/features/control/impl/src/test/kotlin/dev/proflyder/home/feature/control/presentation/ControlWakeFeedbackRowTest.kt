@@ -25,8 +25,9 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 
 /**
- * Robolectric smoke test of the "Voice activator" section: both marks must be
- * visible with localized labels, and a tap must report exactly that action.
+ * Robolectric smoke test of the voice card wake marks: both chips must be
+ * visible with localized one-line labels, hidden independently when a script
+ * is absent, and a tap must report exactly that action.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
@@ -81,9 +82,9 @@ class ControlWakeFeedbackRowTest {
         busy = busy,
     )
 
-    private class Row(val root: View, val falseAlarm: MaterialButton, val missed: MaterialButton)
+    private class Row(val root: View, val falseAlarm: MaterialButton, val missed: MaterialButton, val actions: View)
 
-    private fun bind(item: ControlItem.WakeFeedback): Row {
+    private fun bind(item: ControlItem.Voice): Row {
         val themed = ContextThemeWrapper(
             RuntimeEnvironment.getApplication(),
             com.google.android.material.R.style.Theme_Material3_DayNight_NoActionBar,
@@ -97,16 +98,22 @@ class ControlWakeFeedbackRowTest {
             holder.itemView,
             holder.itemView.findViewById(R.id.control_wake_false_alarm),
             holder.itemView.findViewById(R.id.control_wake_missed),
+            holder.itemView.findViewById(R.id.control_voice_actions),
         )
     }
 
     @Test
     fun bothMarksAreVisibleAndTapSendsThem() {
-        val row = bind(ControlItem.WakeFeedback(listOf(action(WakeFeedbackKind.FALSE_ALARM), action(WakeFeedbackKind.MISSED))))
+        val row = bind(
+            ControlItem.Voice(
+                actions = listOf(action(WakeFeedbackKind.FALSE_ALARM), action(WakeFeedbackKind.MISSED)),
+            ),
+        )
+        assertEquals(View.VISIBLE, row.actions.visibility)
         assertEquals(View.VISIBLE, row.falseAlarm.visibility)
         assertEquals(View.VISIBLE, row.missed.visibility)
-        assertEquals("False activation", row.falseAlarm.text.toString())
-        assertEquals("Didn’t hear", row.missed.text.toString())
+        assertEquals("False alarm", row.falseAlarm.text.toString())
+        assertEquals("Missed wake", row.missed.text.toString())
 
         row.falseAlarm.performClick()
         row.missed.performClick()
@@ -116,26 +123,33 @@ class ControlWakeFeedbackRowTest {
     @Test
     fun unavailableOrBusyMarkCannotBeTapped() {
         val unavailable = bind(
-            ControlItem.WakeFeedback(listOf(action(WakeFeedbackKind.MISSED, available = false))),
+            ControlItem.Voice(actions = listOf(action(WakeFeedbackKind.MISSED, available = false))),
         )
         assertFalse(unavailable.missed.isEnabled)
         unavailable.missed.performClick()
         assertEquals(emptyList<WakeFeedbackKind>(), marks)
 
         val busy = bind(
-            ControlItem.WakeFeedback(listOf(action(WakeFeedbackKind.MISSED, busy = true))),
+            ControlItem.Voice(actions = listOf(action(WakeFeedbackKind.MISSED, busy = true))),
         )
         assertFalse(busy.missed.isEnabled)
+        assertEquals(0.5f, busy.missed.alpha, 0f)
     }
 
     @Test
-    fun aMissingScriptHidesItsButtonAndTheOtherStillWorks() {
-        val row = bind(ControlItem.WakeFeedback(listOf(action(WakeFeedbackKind.MISSED))))
+    fun aMissingScriptHidesItsChipAndTheOtherStillWorks() {
+        val row = bind(ControlItem.Voice(actions = listOf(action(WakeFeedbackKind.MISSED))))
         assertEquals(View.GONE, row.falseAlarm.visibility)
         assertEquals(View.VISIBLE, row.missed.visibility)
         row.falseAlarm.performClick()
         assertEquals(emptyList<WakeFeedbackKind>(), marks)
         row.missed.performClick()
         assertEquals(listOf(WakeFeedbackKind.MISSED), marks)
+    }
+
+    @Test
+    fun withoutWakeScriptsTheActionsRowIsHidden() {
+        val row = bind(ControlItem.Voice())
+        assertEquals(View.GONE, row.actions.visibility)
     }
 }

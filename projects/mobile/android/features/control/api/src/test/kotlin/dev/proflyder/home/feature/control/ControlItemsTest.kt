@@ -16,7 +16,7 @@ class ControlItemsTest {
         otherDevices = "Other devices",
         scenarios = "Scenarios",
         unavailable = "Unavailable",
-        profile = "Voice profile",
+        voice = "Voice",
         onSummary = { on, total -> "$on of $total on" },
     )
 
@@ -69,7 +69,8 @@ class ControlItemsTest {
         filterNot { it is ControlItem.Filters }.map {
             when (it) {
                 is ControlItem.Header -> "# ${it.title}" + (it.summary?.let { s -> " ($s)" } ?: "")
-                is ControlItem.Profile -> "P ${it.entry.id}"
+                is ControlItem.Voice -> "V profile=${it.profile?.entry?.id ?: ""}" +
+                    " wake=${it.actions.joinToString(",") { action -> action.kind.name }}"
                 is ControlItem.Scenario -> "S ${it.entry.id}"
                 is ControlItem.Device -> "D ${it.entry.id}"
                 is ControlItem.DeviceGroup ->
@@ -78,7 +79,6 @@ class ControlItemsTest {
                         " s=[${it.settings.joinToString(",") { row -> row.entry.id }}]"
                 is ControlItem.Hub -> "H ${it.cards.joinToString(",") { card -> card.key }}"
                 is ControlItem.QuickActions -> "Q ${it.tiles.joinToString(",") { tile -> tile.key }}"
-                is ControlItem.WakeFeedback -> "W ${it.actions.joinToString(",") { action -> action.kind.name }}"
                 is ControlItem.Filters -> "F ${it.chips.joinToString(",") { chip -> chip.label }}"
             }
         }
@@ -98,7 +98,7 @@ class ControlItemsTest {
                 is ControlItem.QuickActions -> "quick"
                 is ControlItem.Filters -> "filters"
                 is ControlItem.Header -> "header:${it.section}"
-                is ControlItem.Profile -> "profile"
+                is ControlItem.Voice -> "voice"
                 else -> "row"
             }
         }
@@ -214,7 +214,7 @@ class ControlItemsTest {
     fun profileIsPinnedAboveDevices() {
         assertEquals(
             listOf(
-                "# Voice profile", "P switch.voice_profile",
+                "# Voice", "V profile=switch.voice_profile wake=",
                 "# Bedroom (1 of 2 on)", "D light.a", "D light.b",
                 "# Workspace (0 of 1 on)", "D switch.fan",
                 "# Other devices (1 of 1 on)", "D light.hall",
@@ -225,7 +225,7 @@ class ControlItemsTest {
         // Its section and key never collide with a room or another section.
         val keys = build(withProfile).map { it.key }
         assertEquals(keys.size, keys.toSet().size)
-        assertEquals(listOf("profile", "room:Bedroom", "room:Workspace", "other", "unavailable"),
+        assertEquals(listOf("voice", "room:Bedroom", "room:Workspace", "other", "unavailable"),
             build(withProfile).filterIsInstance<ControlItem.Header>().map { it.section })
     }
 
@@ -235,12 +235,12 @@ class ControlItemsTest {
         assertEquals(ControlItems.options(sample), ControlItems.options(withProfile))
         // It stays visible whatever the filter is.
         assertEquals(
-            listOf("# Voice profile", "P switch.voice_profile", "# Workspace (0 of 1 on)", "D switch.fan"),
+            listOf("# Voice", "V profile=switch.voice_profile wake=", "# Workspace (0 of 1 on)", "D switch.fan"),
             build(withProfile, filter = ControlFilter.Switches).describe(),
         )
         assertEquals(
             listOf(
-                "# Voice profile", "P switch.voice_profile",
+                "# Voice", "V profile=switch.voice_profile wake=",
                 "# Bedroom (1 of 2 on)", "D light.a", "D light.b",
                 "# Unavailable (1)", "D light.dead",
             ),
@@ -251,7 +251,7 @@ class ControlItemsTest {
     @Test
     fun profileAloneIsNotAnEmptyList() {
         val items = build(listOf(profile))
-        assertEquals(listOf("# Voice profile", "P switch.voice_profile"), items.describe())
+        assertEquals(listOf("# Voice", "V profile=switch.voice_profile wake="), items.describe())
         // Nothing filterable: only the "All" chip exists, with a zero count.
         assertEquals(listOf(ControlFilterOption(ControlFilter.All, 0)), ControlItems.options(listOf(profile)))
         // A stored category with nothing to show falls back to All; with no
@@ -261,14 +261,14 @@ class ControlItemsTest {
     }
 
     @Test
-    fun profileCarriesBusyAndKnownStateFlags() {
-        val idle = build(withProfile).filterIsInstance<ControlItem.Profile>().single()
-        assertFalse(idle.busy)
-        assertTrue(idle.statesKnown)
-        assertTrue(build(withProfile, pending = setOf("switch.voice_profile")).filterIsInstance<ControlItem.Profile>().single().busy)
-        assertFalse(build(withProfile, statesOk = false).filterIsInstance<ControlItem.Profile>().single().statesKnown)
-        // Devices are unaffected by the profile entry.
-        assertTrue(build(withProfile).filterIsInstance<ControlItem.Device>().all { it.statesKnown })
+    fun voiceCarriesTheBusyFlagAndDevicesKeepTheirKnownState() {
+        val idle = build(withProfile).filterIsInstance<ControlItem.Voice>().single().profile
+        assertFalse(requireNotNull(idle).busy)
+        val busy = build(withProfile, pending = setOf("switch.voice_profile"))
+            .filterIsInstance<ControlItem.Voice>().single().profile
+        assertTrue(requireNotNull(busy).busy)
+        // Devices are unaffected by the voice block.
+        assertTrue(build(withProfile, statesOk = false).filterIsInstance<ControlItem.Device>().all { !it.statesKnown })
     }
 
     // --- device grouping ------------------------------------------------------

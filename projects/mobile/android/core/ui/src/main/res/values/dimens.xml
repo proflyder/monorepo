@@ -6,4 +6,8 @@
     <dimen name="ui_card_radius">24dp</dimen>
     <dimen name="ui_tile_gap">8dp</dimen>
     <dimen name="ui_tile_gap_half">4dp</dimen>
+    <!-- Segmented pills: one compact shape shared by Time and the voice card. -->
+    <dimen name="ui_pill_radius">100dp</dimen>
+    <dimen name="ui_pill_padding_horizontal">12dp</dimen>
+    <dimen name="ui_pill_padding_vertical">7dp</dimen>
 </resources>

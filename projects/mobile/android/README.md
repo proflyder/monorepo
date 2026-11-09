@@ -75,10 +75,14 @@ Current device acceptance and remaining work are tracked in
 - Filter chips (All / Lights / Switches, plus room filters) are persisted in
   DataStore and restored on launch. Room sections are collapsible; the folded
   state is UI-only.
-- The **voice profile** (an HA switch carrying the `voice_profile` label, shown
-  as `kind: "profile"`) stays pinned above the rooms: two segmented buttons,
-  **Personal** (`turn_off`) and **Work** (`turn_on`). Row taps do not act, only
-  an explicit side does.
+- The **Voice** card sits between Quick actions and the rooms and merges the
+  assistant profile with the two wake marks. The profile is an HA switch
+  carrying the `voice_profile` label (shown as `kind: "profile"`) and uses the
+  shared pill switch — **Personal** (`turn_off`) / **Work** (`turn_on`); row
+  taps do not act, only an explicit pill does. The wake chips (`ear-off` /
+  `ear`) send the `script.wake_false_alarm` and `script.wake_missed` marks at
+  once. Each row hides on its own, and the card disappears when neither the
+  profile nor a wake script exists.
 - Tapping a scenario or toggling a device enqueues a scheduler task
   `home.control` on the `control` queue (`EnqueueTask`). The phone only queues;
   the server executor owns execution. Device switches are optimistic and then

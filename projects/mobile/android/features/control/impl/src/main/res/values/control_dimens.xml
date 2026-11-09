@@ -3,4 +3,13 @@
     <dimen name="control_screen_margin">@dimen/ui_screen_padding</dimen>
     <integer name="control_columns">2</integer>
     <integer name="control_device_columns">1</integer>
+    <!-- Voice card: a compact row, not a second screen. -->
+    <dimen name="control_voice_icon">40dp</dimen>
+    <dimen name="control_voice_icon_padding">10dp</dimen>
+    <dimen name="control_voice_row_min_height">48dp</dimen>
+    <dimen name="control_voice_chip_height">32dp</dimen>
+    <dimen name="control_voice_chip_padding">10dp</dimen>
+    <dimen name="control_voice_chip_icon">18dp</dimen>
+    <dimen name="control_voice_chip_icon_gap">6dp</dimen>
+    <dimen name="control_voice_chip_gap">@dimen/ui_tile_gap</dimen>
 </resources>

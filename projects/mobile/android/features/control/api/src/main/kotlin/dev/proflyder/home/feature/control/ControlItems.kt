@@ -34,15 +34,6 @@ sealed interface ControlItem {
         override val key: String get() = "header:$section"
     }
 
-    /**
-     * The assistant profile selector, pinned above everything else. It is a
-     * global mode (`on`/`off` as reported by the server: work / personal), so it
-     * gets its own segmented row instead of a device switch.
-     */
-    data class Profile(val entry: ControlEntry, val busy: Boolean, val statesKnown: Boolean) : ControlItem {
-        override val key: String get() = "entry:${entry.id}"
-    }
-
     data class Scenario(val entry: ControlEntry, val busy: Boolean) : ControlItem {
         override val key: String get() = "entry:${entry.id}"
     }
@@ -86,11 +77,18 @@ sealed interface ControlItem {
     }
 
     /**
-     * The compact "Voice activator" section: two one-tap marks of a live wake
-     * event. It is shown only while the catalog exposes the marking scripts.
+     * The single compact "Voice" card: the assistant profile (a global mode,
+     * not a device) and the one-tap marks of a live wake event. Either part can
+     * be absent; the card itself exists only while one of them is.
      */
-    data class WakeFeedback(val actions: List<WakeFeedbackAction>) : ControlItem {
-        override val key: String get() = "wake_feedback"
+    data class Voice(
+        val profile: Profile? = null,
+        val actions: List<WakeFeedbackAction> = emptyList(),
+    ) : ControlItem {
+        override val key: String get() = "voice"
+
+        /** The profile is a mode: only the segmented pills act, never a row tap. */
+        data class Profile(val entry: ControlEntry, val busy: Boolean)
     }
 
     /** Device filter chips, placed directly above the room sections they filter. */
@@ -109,7 +107,8 @@ class ControlTexts(
     val otherDevices: String,
     val scenarios: String,
     val unavailable: String,
-    val profile: String,
+    /** Section title of the combined voice card. */
+    val voice: String,
     val onSummary: (on: Int, total: Int) -> String,
     /** Header of the device-level action cards ("Say on the station"). */
     val actions: String = "Actions",
@@ -130,7 +129,7 @@ class ControlTexts(
 }
 
 object ControlItems {
-    private const val SECTION_PROFILE = "profile"
+    private const val SECTION_VOICE = "voice"
     private const val SECTION_UNAVAILABLE = "unavailable"
     private const val SECTION_OTHER = "other"
     private const val SECTION_ROOM_PREFIX = "room:"
@@ -185,13 +184,14 @@ object ControlItems {
 
     /**
      * [leading] items (the live rows and the pinned quick actions) come
-     * first, then the profile (a mode, not content, shown whatever the filter
-     * is), then available devices grouped by room and, inside a room, by
-     * device, then unavailable devices in their own trailing section so dead
-     * entries do not interleave with working ones.
+     * first, then the single voice card (a mode and wake marks, not content,
+     * shown whatever the filter is), then available devices grouped by room
+     * and, inside a room, by device, then unavailable devices in their own
+     * trailing section so dead entries do not interleave with working ones.
      *
      * [expandedDevices] holds the device ids whose "Settings (N)" row is open;
-     * [collapsedRooms] holds section ids of collapsed room groups.
+     * [collapsedRooms] holds section ids of collapsed room groups;
+     * [wakeFeedback] holds the resolved wake-mark actions for the voice card.
      */
     fun build(
         entries: List<ControlEntry>,
@@ -202,16 +202,21 @@ object ControlItems {
         expandedDevices: Set<String> = emptySet(),
         leading: List<ControlItem> = emptyList(),
         collapsedRooms: Set<String> = emptySet(),
+        wakeFeedback: List<WakeFeedbackAction> = emptyList(),
     ): List<ControlItem> {
         val applied = effectiveFilter(entries, filter)
-        val profiles = entries.filter { it.isProfile }
+        val profile = entries.firstOrNull { it.isProfile }
         val content = entries.filterNot { it.isProfile }
         val items = mutableListOf<ControlItem>()
         items += leading
 
-        if (profiles.isNotEmpty()) {
-            items += ControlItem.Header(SECTION_PROFILE, texts.profile)
-            profiles.mapTo(items) { ControlItem.Profile(it, it.id in pending, statesOk) }
+        // One card for the whole voice block: profile and/or wake marks.
+        if (profile != null || wakeFeedback.isNotEmpty()) {
+            items += ControlItem.Header(SECTION_VOICE, texts.voice)
+            items += ControlItem.Voice(
+                profile = profile?.let { ControlItem.Voice.Profile(it, busy = it.id in pending) },
+                actions = wakeFeedback,
+            )
         }
 
         // Chips filter devices only, so they sit directly above the rooms

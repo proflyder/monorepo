@@ -5,7 +5,7 @@
     android:layout_width="wrap_content"
     android:layout_height="wrap_content">
 
-    <!-- A tab label is a click target, not selectable content. -->
+    <!-- A segment label is a click target, not selectable content. -->
     <TextView
         android:id="@android:id/text1"
         android:layout_width="wrap_content"
@@ -13,11 +13,11 @@
         android:duplicateParentState="true"
         android:gravity="center"
         android:maxLines="1"
-        android:paddingStart="@dimen/ui_tab_padding_horizontal"
-        android:paddingTop="@dimen/ui_tab_padding_vertical"
-        android:paddingEnd="@dimen/ui_tab_padding_horizontal"
-        android:paddingBottom="@dimen/ui_tab_padding_vertical"
-        android:textAppearance="@style/TextAppearance.Home.TimeTab"
-        android:textColor="@color/time_tab_text"
+        android:paddingStart="@dimen/ui_pill_padding_horizontal"
+        android:paddingTop="@dimen/ui_pill_padding_vertical"
+        android:paddingEnd="@dimen/ui_pill_padding_horizontal"
+        android:paddingBottom="@dimen/ui_pill_padding_vertical"
+        android:textAppearance="@style/TextAppearance.Home.PillTab"
+        android:textColor="@color/ui_pill_text"
         tools:ignore="SelectableText" />
 </FrameLayout>

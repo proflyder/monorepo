@@ -40,7 +40,7 @@ class TimeFragment : BaseFragment<FragmentTimeBinding>(FragmentTimeBinding.Compa
         binding.timePager.adapter = TimePagerAdapter(this)
         binding.timePager.registerOnPageChangeCallback(pageCallback)
         tabsMediator = TabLayoutMediator(binding.timeTabs, binding.timePager) { tab, position ->
-            tab.setCustomView(R.layout.view_time_tab)
+            tab.setCustomView(R.layout.view_pill_tab)
             tab.text = getString(titleResFor(TimeSection.entries[position]))
         }.apply { attach() }
         binding.timePager.setCurrentItem(section.ordinal, false)

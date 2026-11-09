@@ -3,9 +3,4 @@
     <!-- Toolbar popup: inset leaves room for the window shadow. -->
     <dimen name="ui_popup_inset">8dp</dimen>
     <dimen name="ui_popup_elevation">8dp</dimen>
-    <!-- Time section pills: a stadium indicator that hugs the label. -->
-    <dimen name="ui_tab_radius">100dp</dimen>
-    <dimen name="ui_tab_padding_horizontal">16dp</dimen>
-    <dimen name="ui_tab_padding_vertical">8dp</dimen>
-    <dimen name="ui_tab_gap">4dp</dimen>
 </resources>

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Compact one-line tonal chip used by the voice card actions. -->
+    <style name="Widget.Control.VoiceChip" parent="Widget.Material3.Button.TonalButton">
+        <item name="android:minHeight">@dimen/control_voice_chip_height</item>
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+        <item name="android:paddingStart">@dimen/control_voice_chip_padding</item>
+        <item name="android:paddingEnd">@dimen/control_voice_chip_padding</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:gravity">center</item>
+        <item name="android:textAppearance">?attr/textAppearanceLabelLarge</item>
+        <item name="iconSize">@dimen/control_voice_chip_icon</item>
+        <item name="iconPadding">@dimen/control_voice_chip_icon_gap</item>
+        <item name="iconGravity">textStart</item>
+        <item name="shapeAppearance">@style/ShapeAppearance.Material3.Corner.Full</item>
+    </style>
+</resources>
