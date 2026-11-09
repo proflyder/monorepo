@@ -1,10 +1,17 @@
 # Nexus — in-house artifact cache for CI
 
 A single-replica Sonatype Nexus Repository OSS on the home K3s node. CI
-downloads Maven artifacts, npm packages, PyPI wheels, GitHub release assets
-and Node.js distributions through it; Nexus fetches each object once and
-serves later requests from a local volume. When a GitHub release download or
-an upstream registry answers with a 504, a warm cache keeps CI green.
+downloads Maven artifacts, npm packages and PyPI wheels through it; Nexus
+fetches each object once and serves later requests from a local volume, so a
+registry outage does not fail CI.
+
+Bazel does not take GitHub release assets, codeload archives or Node.js
+distributions from Nexus (`platform/bazel/downloader.cfg` has no rewrite for
+them). These archives are large, and twenty parallel runners pulling them
+through the home uplink and the tunnel broke with `Premature EOF`. They come
+from the Bazel repository cache that the develop `warm-caches` job saves and
+PR jobs restore. The `github`, `github-codeload` and `nodejs-dist` proxies
+stay provisioned for manual use.
 
 Internal UI/admin lives at `https://nexus.<home-domain>/` (LAN/VPN only).
 CI uses `https://ci-nexus.<public-zone>/repository/` (public, read-only
@@ -76,7 +83,7 @@ from its H2 database and the init step is a no-op.
 3. Add a row to the table above and run `mise run test nexus-deploy`.
 4. Deploy and re-run the provisioning Job.
 
-The raw `github` proxy follows GitHub's redirect to
+The raw `github` proxy (not used by CI) follows GitHub's redirect to
 `objects.githubusercontent.com`; Nexus's HTTP client follows redirects for
 raw proxies. Verify a real release asset after an upgrade:
 

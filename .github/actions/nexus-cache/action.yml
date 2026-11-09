@@ -80,6 +80,9 @@ runs:
         cfg="$RUNNER_TEMP/nexus-downloader.cfg"
         sed "s/__NEXUS_HOST__/${NEXUS_HOST}/g" \
           "$GITHUB_WORKSPACE/platform/bazel/downloader.cfg" > "$cfg"
-        echo "common --downloader_config=$cfg" >> "$HOME/.bazelrc"
+        # setup-bazel leaves ~/.bazelrc without a trailing newline; without the
+        # leading one this line glued onto --repository_cache and Bazel never
+        # saw the repository cache restored from develop.
+        printf '\ncommon --downloader_config=%s\n' "$cfg" >> "$HOME/.bazelrc"
 
         echo "::notice title=Nexus cache enabled::Bazel, npm and pip downloads go through https://${NEXUS_HOST}/repository/"
