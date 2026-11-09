@@ -16,7 +16,7 @@ metadata:
   namespace: home-assistant
   labels:
     app.kubernetes.io/name: ha-bridge
-    app.kubernetes.io/part-of: ricardo-home
+    app.kubernetes.io/part-of: home
 spec:
   accessModes:
     - ReadWriteOnce
@@ -32,7 +32,7 @@ metadata:
   namespace: home-assistant
   labels:
     app.kubernetes.io/name: ha-bridge
-    app.kubernetes.io/part-of: ricardo-home
+    app.kubernetes.io/part-of: home
   annotations:
     # Traceability only: a Deployment metadata change never rolls pods.
     ricardo.dev/build: ${BUILD_ID}

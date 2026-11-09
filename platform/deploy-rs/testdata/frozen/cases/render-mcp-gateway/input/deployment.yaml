@@ -18,7 +18,7 @@ metadata:
   namespace: home-assistant
   labels:
     app.kubernetes.io/name: mcp-gateway
-    app.kubernetes.io/part-of: ricardo-home
+    app.kubernetes.io/part-of: home
   annotations:
     # Traceability only: a Deployment metadata change never rolls pods.
     ricardo.dev/build: ${BUILD_ID}
@@ -225,7 +225,7 @@ metadata:
   namespace: home-assistant
   labels:
     app.kubernetes.io/name: mcp-gateway
-    app.kubernetes.io/part-of: ricardo-home
+    app.kubernetes.io/part-of: home
 spec:
   type: ClusterIP
   selector:

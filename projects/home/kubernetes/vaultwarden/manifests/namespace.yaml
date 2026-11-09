@@ -4,4 +4,4 @@ kind: Namespace
 metadata:
   name: vaultwarden
   labels:
-    app.kubernetes.io/part-of: ricardo-home
+    app.kubernetes.io/part-of: home

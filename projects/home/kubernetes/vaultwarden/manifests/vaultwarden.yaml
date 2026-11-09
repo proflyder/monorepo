@@ -19,7 +19,7 @@ metadata:
     helm.sh/resource-policy: keep
   labels:
     app.kubernetes.io/name: vaultwarden
-    app.kubernetes.io/part-of: ricardo-home
+    app.kubernetes.io/part-of: home
 spec:
   accessModes:
     - ReadWriteOnce
@@ -35,7 +35,7 @@ metadata:
   namespace: vaultwarden
   labels:
     app.kubernetes.io/name: vaultwarden
-    app.kubernetes.io/part-of: ricardo-home
+    app.kubernetes.io/part-of: home
 spec:
   replicas: 1
   # SQLite is single-writer: never two pods against the same volume.
@@ -149,7 +149,7 @@ metadata:
   namespace: vaultwarden
   labels:
     app.kubernetes.io/name: vaultwarden
-    app.kubernetes.io/part-of: ricardo-home
+    app.kubernetes.io/part-of: home
 spec:
   type: ClusterIP
   selector:

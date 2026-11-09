@@ -3,4 +3,4 @@ kind: Namespace
 metadata:
   name: cert-manager
   labels:
-    app.kubernetes.io/part-of: ricardo-home
+    app.kubernetes.io/part-of: home
