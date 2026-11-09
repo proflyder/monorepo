@@ -1,0 +1,74 @@
+# TEMPLATE. deploy.sh substitutes ${NEXUS_HOST} (internal name under the home
+# suffix) and ${NEXUS_PUBLIC_HOST} (Cloudflare Tunnel name used by CI).
+#
+# Two routes:
+#   * `/repository/*` on either host is the only public surface. GitHub-hosted
+#     runners reach it without the VPN and authenticate as the read-only
+#     `ci-reader` user (anonymous access is disabled). Request bodies and
+#     request rates are capped so the proxy cannot be used as an open upload or
+#     flood target.
+#   * every other path on the internal host (UI, `/service/rest/*` admin API)
+#     stays on the LAN/VPN allow-list; the public host has no catch-all route,
+#     so Traefik returns 404 there instead of exposing the UI.
+#
+# TLS is terminated here with the shared wildcard certificate; the pod speaks
+# plain HTTP on 8081.
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: nexus-public-limits
+  namespace: traefik
+spec:
+  # Artifacts are large, but no legitimate CI request uploads more than a POM
+  # or an npm tarball; 8 MiB is far above a normal metadata upload and still
+  # bounds an abusive POST.
+  buffering:
+    maxRequestBodyBytes: 8388608
+    memRequestBodyBytes: 1048576
+  rateLimit:
+    average: 200
+    burst: 400
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: nexus-public
+  namespace: traefik
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: (Host(`${NEXUS_HOST}`) || Host(`${NEXUS_PUBLIC_HOST}`)) && PathPrefix(`/repository/`)
+      kind: Rule
+      priority: 100
+      middlewares:
+        - name: nexus-public-limits
+      services:
+        - name: nexus
+          namespace: nexus
+          port: 8081
+  tls:
+    secretName: home-wildcard-tls
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: nexus-admin
+  namespace: traefik
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`${NEXUS_HOST}`)
+      kind: Rule
+      priority: 10
+      middlewares:
+        - name: home-allowlist
+        - name: nexus-public-limits
+      services:
+        - name: nexus
+          namespace: nexus
+          port: 8081
+  tls:
+    secretName: home-wildcard-tls

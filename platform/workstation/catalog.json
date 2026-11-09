@@ -205,6 +205,10 @@
    "purpose": "dead-man switch Worker URL and token",
    "consumer": "ESO → monitoring"
   },
+  "k8s/nexus/nexus-secrets": {
+   "purpose": "Nexus admin password and read-only ci-reader password",
+   "consumer": "ESO → nexus (init container, provisioning Job)"
+  },
   "k8s/test": {
    "purpose": "smoke probe, not secret",
    "consumer": "Kubernetes auth smoke"

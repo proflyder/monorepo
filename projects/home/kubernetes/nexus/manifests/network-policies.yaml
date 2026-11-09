@@ -1,0 +1,54 @@
+# TEMPLATE: NODE_LAN_IP and LAN_CIDR come from the private ingress env.
+#
+# Traffic reaches the pod only through Traefik (hostNetwork, so its source is
+# the node address) and from the in-cluster provisioning Job (pod CIDR).
+# Egress is DNS plus the public HTTP(S) ports Nexus needs to fetch upstream
+# artifacts; nothing else on the LAN is reachable from a compromised proxy.
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: nexus-ingress
+  namespace: nexus
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: nexus
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - ipBlock:
+            cidr: ${NODE_LAN_IP}/32
+        - ipBlock:
+            cidr: 10.42.0.0/16
+      ports:
+        - protocol: TCP
+          port: 8081
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: nexus-egress
+  namespace: nexus
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: nexus
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    - ports:
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 80

@@ -153,6 +153,8 @@ jobs:
       sdk_packages: ${{ matrix.sdk_packages }}
       artifact: ${{ matrix.artifact }}
       artifact_name: ${{ matrix.artifact_name }}
+    secrets:
+      NEXUS_CI_PASSWORD: ${{ secrets.NEXUS_CI_PASSWORD }}
 
   # One matrix entry per affected Linux unit. The same job runs the unit's
   # checks and, for a deploy unit, its container images in one Bazel server
@@ -193,6 +195,8 @@ jobs:
       target_root: ${{ matrix.target_root }}
       bazel_images: ${{ matrix.bazel_images }}
       push_tree_tag: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
+    secrets:
+      NEXUS_CI_PASSWORD: ${{ secrets.NEXUS_CI_PASSWORD }}
 
   # Firebase App Distribution of the Home Android app on every PR that changes
   # it: the `android-app` matrix entry builds and tests exactly one APK
@@ -497,6 +501,8 @@ jobs:
       publish_attest_glob: ${{ matrix.publish_attest_glob }}
       promote: false
       push_tree_tag: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
+    secrets:
+      NEXUS_CI_PASSWORD: ${{ secrets.NEXUS_CI_PASSWORD }}
 
   # Expensive regression with real linux/amd64 release binaries. Only when the
   # scheduler, ha-bridge (ha-control) or the Kubernetes deployment changed.

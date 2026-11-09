@@ -160,3 +160,15 @@ spec:
       ports:
         - protocol: TCP
           port: 8081
+    # Second origin: the Nexus artifact cache, public path /repository/* only
+    # (the path filter lives in the tunnel route; see nexus/README.md).
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: nexus
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: nexus
+      ports:
+        - protocol: TCP
+          port: 8081

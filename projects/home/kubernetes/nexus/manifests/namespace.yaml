@@ -1,0 +1,7 @@
+# Applied by deploy.sh (admin); CI never creates cluster-scoped objects.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: nexus
+  labels:
+    app.kubernetes.io/part-of: ricardo-home

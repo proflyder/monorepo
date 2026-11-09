@@ -1,0 +1,88 @@
+name: nexus-cache
+description: Route CI downloads through the home Nexus cache when it is reachable.
+
+# Single switch: the caller passes the repository variable NEXUS_HOST and the
+# repository secret NEXUS_CI_PASSWORD. An empty value, a missing secret (fork
+# PRs) or an unhealthy Nexus leaves the build on the direct upstream URLs, so
+# CI degrades to the old behaviour instead of failing.
+#
+# Side effects, all scoped to the runner:
+#   * ~/.netrc          Bazel/Maven basic auth for the repository paths
+#   * ~/.npmrc          npm registry + basic auth
+#   * ~/.config/pip/pip.conf
+#   * ~/.bazelrc        `common --downloader_config=<rendered>`
+inputs:
+  host:
+    description: Public Nexus hostname (no scheme, no path)
+    required: false
+    default: ""
+  username:
+    description: Read-only Nexus user
+    required: false
+    default: ci-reader
+  password:
+    description: Password of the read-only Nexus user
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Configure the Nexus cache
+      shell: bash
+      env:
+        NEXUS_HOST: ${{ inputs.host }}
+        NEXUS_USER: ${{ inputs.username }}
+        NEXUS_PASSWORD: ${{ inputs.password }}
+      run: |
+        set -euo pipefail
+        if [[ -z "${NEXUS_HOST}" || -z "${NEXUS_PASSWORD}" ]]; then
+          echo "::notice title=Nexus cache off::NEXUS_HOST or NEXUS_CI_PASSWORD is not available; using direct upstream downloads."
+          exit 0
+        fi
+
+        umask 077
+        printf 'machine %s login %s password %s\n' \
+          "${NEXUS_HOST}" "${NEXUS_USER}" "${NEXUS_PASSWORD}" > "$HOME/.netrc"
+        chmod 600 "$HOME/.netrc"
+
+        # Probe through the path the public ingress actually exposes (the
+        # admin `/service/rest` API is not routed there). npm ping is tiny and
+        # cached upstream. If the tunnel or the pod is down, do not rewrite
+        # anything: a rewrite replaces the original URL.
+        code=$(curl -sS --netrc-file "$HOME/.netrc" -o /dev/null -w '%{http_code}' \
+          --max-time 15 "https://${NEXUS_HOST}/repository/npmjs/-/ping" || true)
+        if [[ "${code}" != "200" ]]; then
+          echo "::notice title=Nexus cache unreachable::https://${NEXUS_HOST}/repository/npmjs/-/ping returned ${code:-no response}; using direct upstream downloads."
+          rm -f "$HOME/.netrc"
+          exit 0
+        fi
+
+        # npm needs an explicit auth line; it does not read ~/.netrc.
+        auth=$(printf '%s:%s' "${NEXUS_USER}" "${NEXUS_PASSWORD}" | base64 | tr -d '\n')
+        registry_path="//${NEXUS_HOST}/repository/npmjs/"
+        {
+          printf 'registry=https://%s/repository/npmjs/\n' "${NEXUS_HOST}"
+          printf '%s:_auth=%s\n' "${registry_path}" "${auth}"
+          printf 'always-auth=true\n'
+        } > "$HOME/.npmrc"
+        chmod 600 "$HOME/.npmrc"
+        unset auth
+
+        pip_dir="$HOME/.config/pip"
+        mkdir -p "$pip_dir"
+        cat > "$pip_dir/pip.conf" <<EOF
+        [global]
+        index-url = https://${NEXUS_USER}:${NEXUS_PASSWORD}@${NEXUS_HOST}/repository/pypi/simple
+        EOF
+        chmod 600 "$pip_dir/pip.conf"
+
+        cfg="$RUNNER_TEMP/nexus-downloader.cfg"
+        sed "s/__NEXUS_HOST__/${NEXUS_HOST}/g" \
+          "$GITHUB_WORKSPACE/platform/bazel/downloader.cfg" > "$cfg"
+        # setup-bazel leaves ~/.bazelrc without a trailing newline; without the
+        # leading one this line glued onto --repository_cache and Bazel never
+        # saw the repository cache restored from develop.
+        printf '\ncommon --downloader_config=%s\n' "$cfg" >> "$HOME/.bazelrc"
+
+        echo "::notice title=Nexus cache enabled::Bazel, npm and pip downloads go through https://${NEXUS_HOST}/repository/"

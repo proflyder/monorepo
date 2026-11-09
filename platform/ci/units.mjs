@@ -154,7 +154,7 @@ export const config = {
       deploy: false,
     },
     {
-      paths: [".github/workflows/**", "platform/ci/**"],
+      paths: [".github/workflows/**", ".github/actions/**", "platform/ci/**"],
       platforms: ["quality"],
       deploy: false,
     },
@@ -1061,6 +1061,16 @@ export const config = {
     },
 
     {
+      id: "nexus-deploy",
+      platform: "python",
+      title: "projects/home/kubernetes/nexus (artifact cache deploy/provisioning contract)",
+      paths: ["projects/home/kubernetes/nexus/**"],
+      python: {
+        suites: ["projects/home/kubernetes/nexus"],
+      },
+    },
+
+    {
       id: "vaultwarden",
       platform: "python",
       title: "projects/home/kubernetes/vaultwarden (password manager, admin deploy)",
@@ -1089,6 +1099,7 @@ export const config = {
         "projects/home/kubernetes/mcp-gateway/manifests/external-secrets.yaml",
         "projects/home/kubernetes/wakegrant/manifests/external-secrets.yaml",
         "projects/home/kubernetes/vaultwarden/manifests/external-secrets.yaml",
+        "projects/home/kubernetes/nexus/manifests/external-secrets.yaml",
       ],
       python: {
         suites: ["projects/home/kubernetes/external-secrets"],

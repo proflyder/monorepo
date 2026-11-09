@@ -108,7 +108,10 @@ on:
         required: false
         default: false
         type: boolean
-
+    secrets:
+      # Read-only Nexus cache credential; absent on forks (cache stays off).
+      NEXUS_CI_PASSWORD:
+        required: false
 permissions:
   contents: read
 
@@ -355,6 +358,12 @@ jobs:
           repository-cache: true
           cache-save: ${{ github.event_name != 'pull_request' }}
 
+      # Optional read-through cache; no-op without NEXUS_HOST or the password.
+      - uses: ./.github/actions/nexus-cache
+        with:
+          host: ${{ vars.NEXUS_HOST }}
+          password: ${{ secrets.NEXUS_CI_PASSWORD }}
+
       - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           # Action-output disk cache (.bazelrc only); keyed like the pulsar-bazel
@@ -456,6 +465,12 @@ jobs:
           bazelisk-cache: true
           repository-cache: true
           cache-save: ${{ github.event_name != 'pull_request' }}
+
+      # Optional read-through cache; no-op without NEXUS_HOST or the password.
+      - uses: ./.github/actions/nexus-cache
+        with:
+          host: ${{ vars.NEXUS_HOST }}
+          password: ${{ secrets.NEXUS_CI_PASSWORD }}
 
       - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
