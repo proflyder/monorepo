@@ -61,6 +61,11 @@ build:android --host_javacopt=-nowarn
 # jar (~1200 actions for the Maven dependencies); output is unchanged.
 build:android --persistent_android_dex_desugar
 
+# minSdk is 26, so java.time/nio.stream APIs are platform classes and the j$
+# core-library shims are unnecessary. rules_android 0.8 starlarkified this flag
+# with a default of true; keep the pre-0.8 behaviour (no j$ rewriting) explicit.
+build:android --@rules_android//flags:desugar_java8_libs=false
+
 # Report every failing Android target in one run instead of stopping at the
 # first broken module (CI rounds are expensive; the result is unchanged).
 build:android --keep_going
