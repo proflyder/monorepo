@@ -58,6 +58,7 @@ rust_binary(
 
 rust_test(
     name = "unit_tests",
+    size = "small",
     crate = ":wakegrant_lib",
     data = ["//solutions/wakegrant:contract_fixtures"],
     edition = "2024",
@@ -78,6 +79,7 @@ extract_cargo_lints(
 
 rustfmt_test(
     name = "rustfmt",
+    size = "small",
     targets = [
         ":wakegrant_lib",
         ":wakegrant",
@@ -87,6 +89,7 @@ rustfmt_test(
 # rules_rust turns every clippy warning into an error, the `-D warnings` gate.
 rust_clippy_test(
     name = "clippy",
+    size = "small",
     targets = [
         ":wakegrant_lib",
         ":wakegrant",

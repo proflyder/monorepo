@@ -52,7 +52,8 @@ class ScenarioJsonTest {
     @Test
     fun updateRequestUsesProtoJsonOneofShapeAndRoundTrips() {
         val request = ScenarioJson.updateRequest(sample(), expectedRevision = 4)
-        val encoded = request.jsonObject.getValue("scenario")
+        val requestJson = WireJson.encodeToJsonElement(UpdateScenarioRequestDto.serializer(), request).jsonObject
+        val encoded = requestJson.getValue("scenario")
         val triggers = encoded.jsonObject.getValue("triggers").jsonArray
         assertTrue(triggers[0].jsonObject.containsKey("manual"))
         assertEquals("19", triggers[1].jsonObject.getValue("time").jsonObject.getValue("at").jsonObject["hour"]!!.jsonPrimitive.content)
@@ -73,7 +74,7 @@ class ScenarioJsonTest {
         val parsed = ScenarioJson.parseScenario(encoded)
         // UpdateRequest carries only client-controlled fields; server fields stay on the server.
         assertEquals(sample().copy(createdUnix = 0, updatedUnix = 0, nextDueUnix = 0), parsed)
-        assertEquals("4", request.jsonObject["expectedRevision"]!!.jsonPrimitive.content)
+        assertEquals("4", requestJson["expectedRevision"]!!.jsonPrimitive.content)
     }
 
     @Test
@@ -87,7 +88,10 @@ class ScenarioJsonTest {
             steps = listOf(ScenarioStep.Unknown(unknownStep)),
         )
 
-        val encoded = ScenarioJson.updateRequest(scenario, 1).jsonObject.getValue("scenario")
+        val encoded = WireJson.encodeToJsonElement(
+            UpdateScenarioRequestDto.serializer(),
+            ScenarioJson.updateRequest(scenario, 1),
+        ).jsonObject.getValue("scenario")
         val parsed = ScenarioJson.parseScenario(encoded)
 
         assertTrue(parsed.hasUnsupportedParts)
@@ -105,7 +109,10 @@ class ScenarioJsonTest {
         )
 
         // Saving the same scenario again must not drop the retained objects.
-        val again = ScenarioJson.updateRequest(parsed, 1).jsonObject.getValue("scenario")
+        val again = WireJson.encodeToJsonElement(
+            UpdateScenarioRequestDto.serializer(),
+            ScenarioJson.updateRequest(parsed, 1),
+        ).jsonObject.getValue("scenario")
         assertEquals(
             Json.parseToJsonElement(unknownTrigger),
             again.jsonObject.getValue("triggers").jsonArray.single().jsonObject,
@@ -114,12 +121,15 @@ class ScenarioJsonTest {
 
     @Test
     fun createRequestCarriesIdempotencyKeyAndDefaults() {
-        val request = ScenarioJson.createRequest(
-            dev.proflyder.home.core.model.ScenarioDraft(
-                label = "Morning",
-                idempotencyKey = "key-1",
+        val request = WireJson.encodeToJsonElement(
+            CreateScenarioRequestDto.serializer(),
+            ScenarioJson.createRequest(
+                dev.proflyder.home.core.model.ScenarioDraft(
+                    label = "Morning",
+                    idempotencyKey = "key-1",
+                ),
             ),
-        )
+        ).jsonObject
         assertEquals("key-1", request["idempotencyKey"]!!.jsonPrimitive.content)
         assertTrue(request.getValue("triggers").jsonArray.isEmpty())
         assertTrue(request.getValue("steps").jsonArray.isEmpty())

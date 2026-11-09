@@ -64,6 +64,7 @@ rust_binary(
 # runtime instead of embedding a second copy.
 rust_test(
     name = "unit_tests",
+    size = "small",
     crate = ":scheduler_lib",
     compile_data = [
         "//solutions/scheduler:ids_vectors",
@@ -80,6 +81,7 @@ rust_test(
 
 rust_test(
     name = "contract_tests",
+    size = "small",
     srcs = ["tests/contract.rs"],
     data = ["//solutions/scheduler:contract_fixtures"],
     edition = "2024",
@@ -92,6 +94,7 @@ rust_test(
 
 rust_test(
     name = "go_database_test",
+    size = "small",
     srcs = ["tests/go_database.rs"],
     data = ["//solutions/scheduler:go_database_dump"],
     edition = "2024",
@@ -111,6 +114,7 @@ extract_cargo_lints(
 
 rustfmt_test(
     name = "rustfmt",
+    size = "small",
     targets = [
         ":scheduler_lib",
         ":scheduler",
@@ -122,6 +126,7 @@ rustfmt_test(
 # rules_rust turns every clippy warning into an error, the `-D warnings` gate.
 rust_clippy_test(
     name = "clippy",
+    size = "small",
     targets = [
         ":scheduler_lib",
         ":scheduler",

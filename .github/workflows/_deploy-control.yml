@@ -10,6 +10,13 @@ on:
 permissions:
   contents: read
 
+env:
+  # Set Git's default branch for actions/checkout's `git init` (it warns when unset;
+  # it runs under a throwaway HOME, so only an env-provided config reaches it).
+  GIT_CONFIG_COUNT: "1"
+  GIT_CONFIG_KEY_0: init.defaultBranch
+  GIT_CONFIG_VALUE_0: main
+
 jobs:
   deploy-control:
     name: deploy-control

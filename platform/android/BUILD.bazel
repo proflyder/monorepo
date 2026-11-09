@@ -21,6 +21,16 @@ kt_compiler_plugin(
     deps = ["@maven//:dev_zacsweers_metro_compiler"],
 )
 
+# Kotlin serialization is a compiler plugin: `@Serializable` classes generate
+# their serializers at compile time. It is applied through the macros in
+# //platform/android:defs.bzl so every Kotlin module can use DTOs.
+kt_compiler_plugin(
+    name = "serialization_compiler_plugin",
+    compile_phase = True,
+    id = "org.jetbrains.kotlinx.serialization",
+    deps = ["@maven//:org_jetbrains_kotlin_kotlin_serialization_compiler_plugin_embeddable"],
+)
+
 # Debug keystore for local Bazel builds of the Home Android app.
 #
 # rules_android signs debug APKs with `--ks <file> --ks-pass pass:android` and

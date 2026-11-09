@@ -43,6 +43,7 @@ _ALL_TARGETS = [
 
 rustfmt_test(
     name = "rustfmt",
+    size = "small",
     targets = _ALL_TARGETS,
 )
 
@@ -50,5 +51,6 @@ rustfmt_test(
 # otherwise, which is the `-D warnings` gate.
 rust_clippy_test(
     name = "clippy",
+    size = "small",
     targets = _ALL_TARGETS,
 )

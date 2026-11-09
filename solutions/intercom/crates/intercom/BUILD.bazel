@@ -54,6 +54,7 @@ rust_binary(
 
 rust_test(
     name = "unit_tests",
+    size = "small",
     crate = ":intercom_lib",
     edition = "2024",
     lint_config = ":workspace_lints",
@@ -65,6 +66,7 @@ rust_test(
 
 rust_test(
     name = "integration_tests",
+    size = "small",
     srcs = ["tests/signaling.rs"],
     edition = "2024",
     lint_config = ":workspace_lints",
@@ -83,6 +85,7 @@ extract_cargo_lints(
 
 rustfmt_test(
     name = "rustfmt",
+    size = "small",
     targets = [
         ":intercom_lib",
         ":intercom",
@@ -92,6 +95,7 @@ rustfmt_test(
 
 rust_clippy_test(
     name = "clippy",
+    size = "small",
     targets = [
         ":intercom_lib",
         ":intercom",

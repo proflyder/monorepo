@@ -23,6 +23,7 @@
         <FrameLayout
             android:layout_width="40dp"
             android:layout_height="40dp"
+            android:layout_gravity="center_horizontal"
             android:background="@drawable/control_bg_tile_icon">
 
             <ImageView

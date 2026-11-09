@@ -18,6 +18,7 @@ rust_library(
 
 rust_test(
     name = "unit_tests",
+    size = "small",
     crate = ":voice_contract",
     edition = "2024",
     lint_config = ":workspace_lints",

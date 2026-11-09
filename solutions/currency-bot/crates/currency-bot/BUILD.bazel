@@ -68,6 +68,7 @@ rust_binary(
 # fixtures. The files are read at runtime from the repository or runfiles.
 rust_test(
     name = "unit_tests",
+    size = "small",
     crate = ":currency_bot_lib",
     data = [
         "//solutions/currency-bot/testdata:contract",
@@ -89,6 +90,7 @@ extract_cargo_lints(
 
 rustfmt_test(
     name = "rustfmt",
+    size = "small",
     targets = [
         ":currency_bot_lib",
         ":currency-bot",
@@ -99,6 +101,7 @@ rustfmt_test(
 # rules_rust turns every clippy warning into an error, the `-D warnings` gate.
 rust_clippy_test(
     name = "clippy",
+    size = "small",
     targets = [
         ":currency_bot_lib",
         ":currency-bot",

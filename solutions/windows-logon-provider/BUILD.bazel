@@ -25,11 +25,13 @@ _WINDOWS_TARGETS = [
 # fmt/clippy run once per platform on local targets only; warnings fail.
 rustfmt_test(
     name = "rustfmt",
+    size = "small",
     targets = _HOST_TARGETS,
 )
 
 rust_clippy_test(
     name = "clippy",
+    size = "small",
     targets = _HOST_TARGETS,
 )
 
@@ -37,12 +39,14 @@ rust_clippy_test(
 # still runs on the host, which is what makes a Windows cross-clippy possible.
 rustfmt_test(
     name = "rustfmt_windows",
+    size = "small",
     platform = "//platform/bazel/windows:x86_64_windows",
     targets = _WINDOWS_TARGETS,
 )
 
 rust_clippy_test(
     name = "clippy_windows",
+    size = "small",
     platform = "//platform/bazel/windows:x86_64_windows",
     targets = _WINDOWS_TARGETS,
 )
