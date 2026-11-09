@@ -67,8 +67,8 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
                     else viewModel.setPower(item.entry, !item.entry.isOn())
                 // A device group itself does nothing: its rows forward their taps.
                 // The profile is a mode: only its segmented buttons act.
-                is ControlItem.Header, is ControlItem.Profile, is ControlItem.DeviceGroup,
-                is ControlItem.Hub, is ControlItem.QuickActions, is ControlItem.WakeFeedback,
+                is ControlItem.Header, is ControlItem.Voice, is ControlItem.DeviceGroup,
+                is ControlItem.Hub, is ControlItem.QuickActions,
                 is ControlItem.Filters,
                 -> Unit
             }
@@ -226,10 +226,9 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
                 )
                 val leading = buildList<ControlItem> {
                     add(ControlItem.Hub(state.hubCards, state.hubRemaining, state.nowUnix))
-                    val wake = WakeFeedback.actions(state.entries, state.pending)
-                    if (wake.isNotEmpty()) add(ControlItem.WakeFeedback(wake))
                     add(ControlItem.QuickActions(tiles, hint = tiles.isEmpty()))
                 }
+                val wake = WakeFeedback.actions(state.entries, state.pending)
                 val stickToTop = hubWasEmpty &&
                     state.hubCards.isNotEmpty() &&
                     !binding.controlList.canScrollVertically(-1)
@@ -243,6 +242,7 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
                     expandedDevices = state.expandedDevices,
                     leading = leading,
                     collapsedRooms = state.collapsedRooms,
+                    wakeFeedback = wake,
                 )
                 adapter.submitList(items) { if (stickToTop) binding.controlList.scrollToPosition(0) }
             }
@@ -331,7 +331,7 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
         otherDevices = getString(R.string.control_section_other),
         scenarios = getString(R.string.control_section_scenarios),
         unavailable = getString(R.string.control_section_unavailable),
-        profile = getString(R.string.control_section_profile),
+        voice = getString(R.string.control_section_voice),
         onSummary = { on, total -> getString(R.string.control_on_summary, on, total) },
         actions = getString(R.string.control_section_actions),
         all = getString(R.string.control_filter_all),

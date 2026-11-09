@@ -3,7 +3,8 @@
 <resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="DuplicateStrings">
     <string name="control_title">Home</string>
     <string name="control_section_scenarios">Scenarios</string>
-    <string name="control_section_profile">Voice profile</string>
+    <string name="control_section_voice">Voice</string>
+    <string name="control_voice_profile">Profile</string>
     <string name="control_section_other">Other devices</string>
     <string name="control_section_unavailable">Unavailable</string>
     <string name="control_section_actions">Actions</string>
@@ -28,7 +29,6 @@
     <string name="control_device_settings">Settings (%1$d)</string>
     <string name="control_profile_personal">Personal</string>
     <string name="control_profile_work">Work</string>
-    <string name="control_profile_states_unknown">State unknown</string>
     <string name="control_light_brightness">Brightness</string>
     <string name="control_light_temperature">Color temperature</string>
     <string name="control_light_color">Color</string>
@@ -58,9 +58,9 @@
     <string name="control_hub_resume">Resume</string>
     <string name="control_quick_actions_title">Quick actions</string>
     <string name="control_quick_actions_hint">Long-press a device to pin it here.</string>
-    <string name="control_wake_title">Voice activator</string>
-    <string name="control_wake_false_alarm">False activation</string>
-    <string name="control_wake_missed">Didn’t hear</string>
+
+    <string name="control_wake_false_alarm">False alarm</string>
+    <string name="control_wake_missed">Missed wake</string>
     <string name="control_wake_false_alarm_sent">False activation marked</string>
     <string name="control_wake_missed_sent">Missed wake marked</string>
     <string name="control_pin">Pin to Home</string>

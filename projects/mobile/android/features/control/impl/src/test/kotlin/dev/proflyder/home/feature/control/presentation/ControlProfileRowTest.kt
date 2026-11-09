@@ -5,8 +5,8 @@ import android.widget.FrameLayout
 import android.widget.LinearLayout
 import androidx.appcompat.view.ContextThemeWrapper
 import com.google.android.material.button.MaterialButton
-import com.google.android.material.button.MaterialButtonToggleGroup
 import com.google.android.material.materialswitch.MaterialSwitch
+import com.google.android.material.tabs.TabLayout
 import dev.proflyder.home.core.model.ControlAction
 import dev.proflyder.home.core.model.ControlEntry
 import dev.proflyder.home.core.model.ControlKind
@@ -29,9 +29,10 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 
 /**
- * Robolectric smoke test of the profile row: it must inflate with real
- * resources, show the current side, and report only *user* choices — the
- * programmatic `check` during binding must never send a command.
+ * Robolectric smoke test of the voice card profile row: it must inflate with
+ * real resources, show the current side, hide the row when there is no profile,
+ * and report only *user* choices — the programmatic selection during binding
+ * must never send a command.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
@@ -86,6 +87,11 @@ class ControlProfileRowTest {
         available = available,
     )
 
+    private fun voice(power: PowerState?, available: Boolean = true, busy: Boolean = false) =
+        ControlItem.Voice(
+            profile = ControlItem.Voice.Profile(profile(power, available), busy),
+        )
+
     private fun device(power: PowerState?) = ControlEntry(
         id = "light.desk",
         kind = ControlKind.LIGHT,
@@ -99,12 +105,14 @@ class ControlProfileRowTest {
 
     private class Row(
         val root: View,
-        val group: MaterialButtonToggleGroup,
-        val personal: MaterialButton,
-        val work: MaterialButton,
-    )
+        val tabs: TabLayout,
+        val profileRow: View,
+    ) {
+        val personal get() = requireNotNull(tabs.getTabAt(0))
+        val work get() = requireNotNull(tabs.getTabAt(1))
+    }
 
-    private fun bind(item: ControlItem.Profile): Row {
+    private fun bind(item: ControlItem.Voice): Row {
         val themed = ContextThemeWrapper(
             RuntimeEnvironment.getApplication(),
             com.google.android.material.R.style.Theme_Material3_DayNight_NoActionBar,
@@ -116,63 +124,63 @@ class ControlProfileRowTest {
         adapter.onBindViewHolder(holder, 0)
         return Row(
             holder.itemView,
-            holder.itemView.findViewById(R.id.control_profile_group),
-            holder.itemView.findViewById(R.id.control_profile_personal),
-            holder.itemView.findViewById(R.id.control_profile_work),
+            holder.itemView.findViewById(R.id.control_voice_profile_tabs),
+            holder.itemView.findViewById(R.id.control_voice_profile_row),
         )
     }
 
     @Test
     fun showsTheCurrentProfileAndReportsOnlyTaps() {
-        val off = bind(ControlItem.Profile(profile(PowerState.OFF), busy = false, statesKnown = true))
-        assertEquals("Voice profile", off.root.findViewById<android.widget.TextView>(R.id.control_profile_title).text)
+        val off = bind(voice(PowerState.OFF))
+        assertEquals(View.VISIBLE, off.profileRow.visibility)
+        assertEquals("Profile", off.root.findViewById<android.widget.TextView>(R.id.control_voice_profile_title).text)
         assertEquals("Personal", off.personal.text)
         assertEquals("Work", off.work.text)
-        assertTrue(off.personal.isChecked)
-        assertFalse(off.work.isChecked)
+        assertEquals(0, off.tabs.selectedTabPosition)
         // Binding is not a user choice.
         assertEquals(emptyList<Boolean>(), changes)
 
-        off.work.performClick()
+        off.work.select()
         assertEquals(listOf(true), changes)
-        off.personal.performClick()
+        off.personal.select()
         assertEquals(listOf(true, false), changes)
 
-        val on = bind(ControlItem.Profile(profile(PowerState.ON), busy = false, statesKnown = true))
-        assertTrue(on.work.isChecked)
-        assertFalse(on.personal.isChecked)
+        val on = bind(voice(PowerState.ON))
+        assertEquals(1, on.tabs.selectedTabPosition)
         // Re-binding a row never replays a command.
         assertEquals(listOf(true, false), changes)
     }
 
     @Test
-    fun unknownStateShowsNeitherSideAndNoneIsSent() {
-        val row = bind(ControlItem.Profile(profile(null), busy = false, statesKnown = false))
-        assertFalse(row.personal.isChecked)
-        assertFalse(row.work.isChecked)
+    fun unknownStateSelectsNeitherSideAndSendsNothing() {
+        val row = bind(voice(null))
+        assertEquals(-1, row.tabs.selectedTabPosition)
         assertEquals(emptyList<Boolean>(), changes)
     }
 
     @Test
-    fun unavailableOrBusyRowCannotBeTapped() {
-        val unavailable = bind(ControlItem.Profile(profile(PowerState.OFF, available = false), busy = false, statesKnown = true))
-        assertFalse(unavailable.personal.isEnabled)
-        assertFalse(unavailable.work.isEnabled)
-        unavailable.work.performClick()
+    fun unavailableOrBusyRowCannotBeChosen() {
+        val unavailable = bind(voice(PowerState.OFF, available = false))
+        unavailable.work.select()
         assertEquals(emptyList<Boolean>(), changes)
 
-        val busy = bind(ControlItem.Profile(profile(PowerState.OFF), busy = true, statesKnown = true))
-        assertFalse(busy.work.isEnabled)
-        assertFalse(busy.personal.isEnabled)
-        busy.work.performClick()
+        val busy = bind(voice(PowerState.OFF, busy = true))
+        busy.work.select()
         assertEquals(emptyList<Boolean>(), changes)
+    }
+
+    @Test
+    fun aVoiceCardWithoutAProfileHidesTheProfileRow() {
+        val actionsOnly = ControlItem.Voice(actions = emptyList())
+        val row = bind(actionsOnly)
+        assertEquals(View.GONE, row.profileRow.visibility)
     }
 
     @Test
     fun theRowItselfDoesNothing() {
         // There is no "toggle": the card is not clickable and only the two
-        // explicit sides send a command.
-        val row = bind(ControlItem.Profile(profile(PowerState.OFF), busy = false, statesKnown = true))
+        // explicit pills send a command.
+        val row = bind(voice(PowerState.OFF))
         row.root.performClick()
         assertEquals(emptyList<ControlItem>(), rowClicks)
         assertEquals(emptyList<Boolean>(), changes)

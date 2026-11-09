@@ -8,6 +8,7 @@ import android.widget.LinearLayout
 import androidx.recyclerview.widget.DiffUtil
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.color.MaterialColors
+import com.google.android.material.tabs.TabLayout
 import dev.proflyder.home.core.model.ControlEntry
 import dev.proflyder.home.core.model.ControlKind
 import dev.proflyder.home.core.model.PowerState
@@ -18,6 +19,7 @@ import dev.proflyder.home.core.ui.BaseViewHolder
 import dev.proflyder.home.core.ui.PayloadSet
 import dev.proflyder.home.core.ui.ViewBinding
 import dev.proflyder.home.core.ui.setVisible
+import dev.proflyder.home.core.ui.R as CoreUiR
 import dev.proflyder.home.feature.control.ControlFilter
 import dev.proflyder.home.feature.control.ControlItem
 import dev.proflyder.home.feature.control.HubCard
@@ -33,11 +35,10 @@ import dev.proflyder.home.feature.control.impl.databinding.ItemControlFiltersBin
 import dev.proflyder.home.feature.control.impl.databinding.ItemControlHeaderBinding
 import dev.proflyder.home.feature.control.impl.databinding.ItemControlHubBinding
 import dev.proflyder.home.feature.control.impl.databinding.ItemControlHubRowBinding
-import dev.proflyder.home.feature.control.impl.databinding.ItemControlProfileBinding
 import dev.proflyder.home.feature.control.impl.databinding.ItemControlQuickActionsBinding
 import dev.proflyder.home.feature.control.impl.databinding.ItemControlQuickTileBinding
 import dev.proflyder.home.feature.control.impl.databinding.ItemControlScenarioBinding
-import dev.proflyder.home.feature.control.impl.databinding.ItemControlWakeFeedbackBinding
+import dev.proflyder.home.feature.control.impl.databinding.ItemControlVoiceBinding
 
 /** Row taps come from [AdapterCallback]; the switch reports an explicit target state. */
 internal interface ControlAdapterCallback : AdapterCallback<ControlItem> {
@@ -124,7 +125,6 @@ internal object ControlDiff : DiffUtil.ItemCallback<ControlItem>() {
     override fun getChangePayload(oldItem: ControlItem, newItem: ControlItem): Any? {
         val changed = when {
             oldItem is ControlItem.Header && newItem is ControlItem.Header -> headerChanges(oldItem, newItem)
-            oldItem is ControlItem.Profile && newItem is ControlItem.Profile -> profileChanges(oldItem, newItem)
             oldItem is ControlItem.Scenario && newItem is ControlItem.Scenario -> scenarioChanges(oldItem, newItem)
             oldItem is ControlItem.Device && newItem is ControlItem.Device -> deviceChanges(oldItem, newItem)
             oldItem is ControlItem.DeviceGroup && newItem is ControlItem.DeviceGroup ->
@@ -142,22 +142,6 @@ internal object ControlDiff : DiffUtil.ItemCallback<ControlItem>() {
         if (old.title != new.title) add(ControlChange.TITLE)
         if (old.summary != new.summary) add(ControlChange.SUMMARY)
         if (old.collapsed != new.collapsed) add(ControlChange.SUMMARY)
-    }
-
-    private fun profileChanges(old: ControlItem.Profile, new: ControlItem.Profile): Set<ControlChange> = buildSet {
-        val before = old.entry
-        val after = new.entry
-        if (before.title != after.title) add(ControlChange.TITLE)
-        if (before.iconIdentity() != after.iconIdentity()) add(ControlChange.ICON)
-        if (before.power != after.power) {
-            add(ControlChange.POWER)
-            add(ControlChange.STATE)
-        }
-        if (before.available != after.available) {
-            add(ControlChange.AVAILABILITY)
-            add(ControlChange.STATE)
-        }
-        if (old.busy != new.busy) add(ControlChange.BUSY)
     }
 
     private fun scenarioChanges(old: ControlItem.Scenario, new: ControlItem.Scenario): Set<ControlChange> = buildSet {
@@ -203,25 +187,23 @@ internal class ControlAdapter(
 
     override fun viewTypeOf(item: ControlItem): Int = when (item) {
         is ControlItem.Header -> TYPE_HEADER
-        is ControlItem.Profile -> TYPE_PROFILE
+        is ControlItem.Voice -> TYPE_VOICE
         is ControlItem.Scenario -> TYPE_SCENARIO
         is ControlItem.Device -> TYPE_DEVICE
         is ControlItem.DeviceGroup -> TYPE_GROUP
         is ControlItem.Hub -> TYPE_HUB
         is ControlItem.QuickActions -> TYPE_QUICK
-        is ControlItem.WakeFeedback -> TYPE_WAKE
         is ControlItem.Filters -> TYPE_FILTERS
     }
 
     override fun onCreateHolder(inflater: LayoutInflater, parent: ViewGroup, viewType: Int): ControlHolder =
         when (viewType) {
             TYPE_HEADER -> HeaderHolder(ItemControlHeaderBinding.inflate(inflater, parent, false), callback)
-            TYPE_PROFILE -> ProfileHolder(ItemControlProfileBinding.inflate(inflater, parent, false), callback)
+            TYPE_VOICE -> VoiceHolder(ItemControlVoiceBinding.inflate(inflater, parent, false), callback)
             TYPE_SCENARIO -> ScenarioHolder(ItemControlScenarioBinding.inflate(inflater, parent, false), callback)
             TYPE_GROUP -> DeviceGroupHolder(ItemControlDeviceGroupBinding.inflate(inflater, parent, false), callback)
             TYPE_HUB -> HubHolder(ItemControlHubBinding.inflate(inflater, parent, false), callback)
             TYPE_QUICK -> QuickActionsHolder(ItemControlQuickActionsBinding.inflate(inflater, parent, false), callback)
-            TYPE_WAKE -> WakeFeedbackHolder(ItemControlWakeFeedbackBinding.inflate(inflater, parent, false), callback)
             TYPE_FILTERS -> FiltersHolder(ItemControlFiltersBinding.inflate(inflater, parent, false), callback)
             else -> DeviceHolder(ItemControlDeviceBinding.inflate(inflater, parent, false), callback)
         }
@@ -265,62 +247,66 @@ internal class ControlAdapter(
     }
 
     /**
-     * The profile is a mode, not a device: two segmented buttons instead of a
-     * switch. The card itself is not clickable — only an explicit side acts,
-     * because "toggle" is not a safe action for an at-least-once delivery.
+     * The single "Voice" card: the profile is a mode, not a device, so only an
+     * explicit pill acts (never a row tap); the two wake marks send at once.
+     * Programmatic selection during binding must never look like a user choice.
      */
-    private class ProfileHolder(
-        private val views: ItemControlProfileBinding,
+    private class VoiceHolder(
+        private val views: ItemControlVoiceBinding,
         callback: ControlAdapterCallback,
     ) : ControlHolder(views, callback) {
-        /** Programmatic `check` must not be reported as a user choice. */
         private var binding_ = false
+        private var row: ControlItem.Voice? = null
+        private var canChoose = false
 
         init {
-            views.controlProfilePersonal.setText(R.string.control_profile_personal)
-            views.controlProfileWork.setText(R.string.control_profile_work)
-            views.controlProfileGroup.addOnButtonCheckedListener { _, checkedId, isChecked ->
-                if (binding_ || !isChecked) return@addOnButtonCheckedListener
-                val row = item as ControlItem.Profile
-                callback.onProfileChanged(row.entry, checkedId == views.controlProfileWork.id)
-            }
+            addTab(R.string.control_profile_personal)
+            addTab(R.string.control_profile_work)
+            views.controlVoiceProfileTabs.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
+                override fun onTabSelected(tab: TabLayout.Tab) = chooseProfile(tab)
+
+                override fun onTabUnselected(tab: TabLayout.Tab) = Unit
+
+                override fun onTabReselected(tab: TabLayout.Tab) = Unit
+            })
+        }
+
+        internal fun chooseProfile(tab: TabLayout.Tab) {
+            val current = row ?: return
+            if (binding_ || !canChoose) return
+            val profile = current.profile ?: return
+            callback.onProfileChanged(profile.entry, tab.position == WORK_TAB)
+        }
+
+        private fun addTab(labelRes: Int) {
+            val tab = views.controlVoiceProfileTabs.newTab()
+            tab.setCustomView(CoreUiR.layout.view_pill_tab)
+            tab.setText(labelRes)
+            views.controlVoiceProfileTabs.addTab(tab)
         }
 
         override fun bind(item: ControlItem) {
-            val row = item as ControlItem.Profile
-            bindTitle(row.entry)
-            bindIcon(row.entry)
-            bindPower(row.entry)
-            bindState(row.entry)
-            bindBusy(row)
-            bindAvailability(row.entry)
-            bindEnabled(row)
+            val voice = item as ControlItem.Voice
+            row = voice
+            views.root.setVisible(voice.profile != null || voice.actions.isNotEmpty())
+            bindProfile(voice.profile)
+            bindActions(voice.actions)
         }
 
-        override fun bindPayloads(item: ControlItem, payloads: List<Any>) {
-            val row = item as ControlItem.Profile
-            val changes = controlChanges(payloads) ?: return bind(item)
-            if (ControlChange.TITLE in changes) bindTitle(row.entry)
-            if (ControlChange.ICON in changes) bindIcon(row.entry)
-            if (ControlChange.POWER in changes) bindPower(row.entry)
-            if (
-                ControlChange.STATE in changes ||
-                ControlChange.POWER in changes ||
-                ControlChange.AVAILABILITY in changes
-            ) {
-                bindState(row.entry)
+        override fun bindPayloads(item: ControlItem, payloads: List<Any>) = bind(item)
+
+        private fun bindProfile(profile: ControlItem.Voice.Profile?) {
+            views.controlVoiceProfileRow.setVisible(profile != null)
+            if (profile == null) {
+                canChoose = false
+                return
             }
-            if (ControlChange.BUSY in changes) bindBusy(row)
-            if (ControlChange.AVAILABILITY in changes) bindAvailability(row.entry)
-            if (ControlChange.BUSY in changes || ControlChange.AVAILABILITY in changes) bindEnabled(row)
-        }
-
-        private fun bindTitle(entry: ControlEntry) {
-            views.controlProfileTitle.text = entry.localizedTitle(views.root.context)
-        }
-
-        private fun bindIcon(entry: ControlEntry) {
-            views.controlProfileIcon.setImageResource(ControlIcons.resolve(entry))
+            views.controlVoiceProfileIcon.setImageResource(ControlIcons.resolve(profile.entry))
+            bindPower(profile.entry)
+            views.controlVoiceProfileProgress.setVisible(profile.busy)
+            views.controlVoiceProfileRow.alpha = if (profile.entry.available) 1f else DISABLED_ALPHA
+            canChoose = profile.entry.available && !profile.busy
+            views.controlVoiceProfileTabs.alpha = if (canChoose) 1f else DISABLED_ALPHA
         }
 
         private fun bindPower(entry: ControlEntry) {
@@ -330,44 +316,50 @@ internal class ControlAdapter(
                 if (work) com.google.android.material.R.attr.colorOnPrimaryContainer
                 else com.google.android.material.R.attr.colorOnSurfaceVariant,
             )
-            views.controlProfileIcon.setColorFilter(tint)
-            views.controlProfileIcon.isActivated = work
+            views.controlVoiceProfileIcon.setColorFilter(tint)
+            views.controlVoiceProfileIcon.isActivated = work
             // Neither side is claimed while the server state is unknown.
             val target = when (entry.power) {
-                PowerState.ON -> views.controlProfileWork.id
-                PowerState.OFF -> views.controlProfilePersonal.id
-                null -> View.NO_ID
+                PowerState.ON -> WORK_TAB
+                PowerState.OFF -> PERSONAL_TAB
+                null -> NO_TAB
             }
-            if (views.controlProfileGroup.checkedButtonId == target) return
+            if (views.controlVoiceProfileTabs.selectedTabPosition == target) return
             binding_ = true
-            if (target == View.NO_ID) views.controlProfileGroup.clearChecked() else views.controlProfileGroup.check(target)
+            if (target == NO_TAB) {
+                views.controlVoiceProfileTabs.selectTab(null)
+            } else {
+                views.controlVoiceProfileTabs.getTabAt(target)?.select()
+            }
             binding_ = false
         }
 
-        private fun bindState(entry: ControlEntry) {
-            views.controlProfileState.setText(
-                when {
-                    !entry.available -> R.string.control_state_unavailable
-                    entry.power == null -> R.string.control_profile_states_unknown
-                    entry.power == PowerState.ON -> R.string.control_profile_work
-                    else -> R.string.control_profile_personal
-                },
+        private fun bindActions(actions: List<WakeFeedbackAction>) {
+            views.controlVoiceActions.setVisible(actions.isNotEmpty())
+            bindButton(
+                views.controlWakeFalseAlarm,
+                actions.firstOrNull { it.kind == WakeFeedbackKind.FALSE_ALARM },
+                R.string.control_wake_false_alarm,
+            )
+            bindButton(
+                views.controlWakeMissed,
+                actions.firstOrNull { it.kind == WakeFeedbackKind.MISSED },
+                R.string.control_wake_missed,
             )
         }
 
-        private fun bindBusy(row: ControlItem.Profile) {
-            views.controlProfileProgress.setVisible(row.busy)
+        internal fun bindButton(button: MaterialButton, action: WakeFeedbackAction?, labelRes: Int) {
+            button.setText(labelRes)
+            button.setVisible(action != null)
+            button.isEnabled = action != null && action.entry.available && !action.busy
+            button.alpha = if (action?.busy == true) DISABLED_ALPHA else 1f
+            button.setOnClickListener { pressed -> handleClick(pressed, action) }
         }
 
-        private fun bindAvailability(entry: ControlEntry) {
-            views.root.alpha = if (entry.available) 1f else DISABLED_ALPHA
-        }
-
-        private fun bindEnabled(row: ControlItem.Profile) {
-            val enabled = row.entry.available && !row.busy
-            views.controlProfileGroup.isEnabled = enabled
-            views.controlProfilePersonal.isEnabled = enabled
-            views.controlProfileWork.isEnabled = enabled
+        internal fun handleClick(pressed: View, action: WakeFeedbackAction?) {
+            if (!pressed.isEnabled || action == null) return
+            pressed.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+            callback.onWakeAction(action)
         }
     }
 
@@ -555,6 +547,8 @@ internal class ControlAdapter(
                     QuickTile.Call -> R.drawable.control_ic_call
                 },
             )
+            // A quick action is always an active accent icon, like a device that is on.
+            views.quickTileIconBg.isActivated = true
             val busy = when (tile) {
                 is QuickTile.Device -> tile.busy
                 is QuickTile.ScenarioTile -> tile.busy
@@ -572,45 +566,10 @@ internal class ControlAdapter(
     }
 
     /**
-     * The compact "Voice activator" section. Each button sends its mark at
-     * once: a missed wake must be reported while the ring buffer still holds
-     * the previous ~20 seconds, so there is no confirmation step. The card
-     * itself is inert; only the two explicit buttons act.
+     * The compact "Voice" card binds profile and wake marks together; see
+     * [VoiceHolder]. Each mark sends at once: a missed wake must be reported
+     * while the ring buffer still holds the previous ~20 seconds.
      */
-    private class WakeFeedbackHolder(
-        private val views: ItemControlWakeFeedbackBinding,
-        callback: ControlAdapterCallback,
-    ) : ControlHolder(views, callback) {
-        override fun bind(item: ControlItem) {
-            val wake = item as ControlItem.WakeFeedback
-            bindButton(
-                views.controlWakeFalseAlarm,
-                wake.actions.firstOrNull { it.kind == WakeFeedbackKind.FALSE_ALARM },
-                R.string.control_wake_false_alarm,
-            )
-            bindButton(
-                views.controlWakeMissed,
-                wake.actions.firstOrNull { it.kind == WakeFeedbackKind.MISSED },
-                R.string.control_wake_missed,
-            )
-        }
-
-        override fun bindPayloads(item: ControlItem, payloads: List<Any>) = bind(item)
-
-        internal fun bindButton(button: MaterialButton, action: WakeFeedbackAction?, labelRes: Int) {
-            button.setText(labelRes)
-            button.setVisible(action != null)
-            button.isEnabled = action != null && action.entry.available && !action.busy
-            button.setOnClickListener { pressed -> handleClick(pressed, action) }
-        }
-
-        internal fun handleClick(pressed: View, action: WakeFeedbackAction?) {
-            if (!pressed.isEnabled || action == null) return
-            pressed.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
-            callback.onWakeAction(action)
-        }
-    }
-
     private class FiltersHolder(
         private val views: ItemControlFiltersBinding,
         callback: ControlAdapterCallback,
@@ -862,13 +821,15 @@ internal class ControlAdapter(
         const val TYPE_HEADER = 0
         const val TYPE_SCENARIO = 1
         const val TYPE_DEVICE = 2
-        const val TYPE_PROFILE = 3
+        const val TYPE_VOICE = 3
         const val TYPE_GROUP = 4
         const val TYPE_HUB = 5
         const val TYPE_QUICK = 6
         const val TYPE_FILTERS = 7
-        const val TYPE_WAKE = 8
         const val DISABLED_ALPHA = 0.5f
         const val COLUMNS = 3
+        const val PERSONAL_TAB = 0
+        const val WORK_TAB = 1
+        const val NO_TAB = -1
     }
 }

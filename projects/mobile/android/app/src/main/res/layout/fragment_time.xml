@@ -5,15 +5,15 @@
     android:layout_height="match_parent"
     android:orientation="vertical">
 
-    <!-- Text pills with a stadium indicator, matching the bottom navigation. -->
+    <!-- Text pills start on the same grid as the screen title and cards. -->
     <com.google.android.material.tabs.TabLayout
         android:id="@+id/time_tabs"
         style="@style/Widget.Home.TimeTabs"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginStart="@dimen/ui_screen_padding"
         android:layout_marginTop="@dimen/ui_tile_gap"
-        android:layout_marginEnd="@dimen/ui_screen_padding" />
+        android:paddingEnd="@dimen/ui_screen_padding"
+        app:tabContentStart="@dimen/ui_screen_padding" />
 
     <androidx.viewpager2.widget.ViewPager2
         android:id="@+id/time_pager"

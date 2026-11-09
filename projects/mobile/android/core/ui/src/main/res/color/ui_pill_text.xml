@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Active segment text uses the theme accent; the rest is quiet. -->
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:state_selected="true" android:color="?attr/colorOnSecondaryContainer" />
+    <item android:state_selected="true" android:color="?attr/colorPrimary" />
     <item android:color="?attr/colorOnSurfaceVariant" />
 </selector>

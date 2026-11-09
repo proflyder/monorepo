@@ -44,11 +44,10 @@ class ControlDiffPayloadTest {
         statesKnown: Boolean = true,
     ) = ControlItem.Device(entry, busy, statesKnown)
 
-    private fun profile(
+    private fun voice(
         entry: ControlEntry = entry(id = "switch.voice_profile", kind = ControlKind.PROFILE),
         busy: Boolean = false,
-        statesKnown: Boolean = true,
-    ) = ControlItem.Profile(entry, busy, statesKnown)
+    ) = ControlItem.Voice(profile = ControlItem.Voice.Profile(entry, busy))
 
     private fun scenario(
         entry: ControlEntry = entry(id = "script.movie", kind = ControlKind.SCENARIO, power = null),
@@ -61,7 +60,7 @@ class ControlDiffPayloadTest {
     @Test
     fun identicalItemsHaveNoPayload() {
         assertNull(changes(device(), device()))
-        assertNull(changes(profile(), profile()))
+        assertNull(changes(voice(), voice()))
         assertNull(changes(scenario(), scenario()))
         assertNull(changes(ControlItem.Header("room:Office", "Office", "1 of 2 on"), ControlItem.Header("room:Office", "Office", "1 of 2 on")))
     }
@@ -128,18 +127,11 @@ class ControlDiffPayloadTest {
     }
 
     @Test
-    fun profileCoversPowerBusyAvailabilityTitleAndIcon() {
-        assertEquals(
-            setOf(ControlChange.POWER, ControlChange.STATE),
-            changes(profile(entry(kind = ControlKind.PROFILE, power = PowerState.OFF)), profile(entry(kind = ControlKind.PROFILE, power = PowerState.ON))),
-        )
-        assertEquals(setOf(ControlChange.BUSY), changes(profile(), profile(busy = true)))
-        assertEquals(
-            setOf(ControlChange.AVAILABILITY, ControlChange.STATE),
-            changes(profile(), profile(entry(kind = ControlKind.PROFILE, available = false))),
-        )
-        assertEquals(setOf(ControlChange.TITLE), changes(profile(), profile(entry(kind = ControlKind.PROFILE, title = "Assistant mode"))))
-        assertEquals(setOf(ControlChange.ICON), changes(profile(), profile(entry(kind = ControlKind.PROFILE, icon = "account-voice"))))
+    fun voiceChangesUseAFullRebind() {
+        // The whole card is small; any change rebinds it instead of trying to
+        // map a payload onto two independent rows.
+        assertNull(changes(voice(), voice(busy = true)))
+        assertNull(changes(voice(), voice(entry(kind = ControlKind.PROFILE, power = PowerState.ON))))
     }
 
     @Test

@@ -20,11 +20,13 @@
         android:orientation="vertical"
         android:padding="@dimen/ui_tile_gap">
 
+        <!-- The same active icon container as a smart-home device row. -->
         <FrameLayout
+            android:id="@+id/quick_tile_icon_bg"
             android:layout_width="40dp"
             android:layout_height="40dp"
             android:layout_gravity="center_horizontal"
-            android:background="@drawable/control_bg_tile_icon">
+            android:background="@drawable/control_bg_icon">
 
             <ImageView
                 android:id="@+id/quick_tile_icon"
@@ -32,7 +34,7 @@
                 android:layout_height="24dp"
                 android:layout_gravity="center"
                 android:contentDescription="@null"
-                android:tint="?attr/colorOnSecondaryContainer" />
+                android:tint="?attr/colorOnPrimaryContainer" />
         </FrameLayout>
 
         <TextView
