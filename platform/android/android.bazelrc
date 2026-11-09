@@ -6,7 +6,7 @@
 #     `mise run build` / `mise run test:bazel`
 #     (platform/mise-tasks/lib/units-cli.mjs, platform/mise-tasks/test/bazel.sh);
 #   * `projects/mobile/android/distribute.sh`;
-#   * `deploy-home`'s `warm-caches` Android build.
+#   * `deploy-home`'s `warm-android` Android build.
 #
 # The split exists for CI routing: a flag in the root `.bazelrc` is a global
 # input and re-runs every unit, while this file matches `platform/android/**`

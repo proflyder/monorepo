@@ -654,23 +654,33 @@
     получает `pulsar-call` на `str0m` и `Phase::Call` отдельным этапом;
     scheduler и `ha-bridge` в звонке не участвуют.
 
-49. **Кэши Actions пишет только `develop`, один `warm-caches` считает всё.**
+49. **Кэши Actions пишет только `develop`, по семействам (Android и host-Rust).**
     PR-прогоны кэши только восстанавливают (`actions/cache/restore`): GitHub
     привязывает запись к ref'у, который её создал, поэтому PR-кэш не виден
     другим PR'ам, но занимает общий лимит 10 ГБ и минуты на загрузку. PR-кэши
-    диска больше не создаются. Единственный писатель develop-стороны —
-    `warm-caches` в `deploy-home` (push в `develop`): setup-bazel и один
-    общий дисковый кэш Bazel. Одна команда `bazel build --config=android`
-    собирает в одном сервере Android-цели (`app`, `android_tests`) и все
-    build/test-цели юнитов платформы `bazel`; `--config=android` меняет только
-    Android-флаги и version defines, host-платформа Rust остаётся прежней.
-    После `bazel shutdown` архив сохраняется под ключом
-    `bazel-<os>-warm-<hash>` (`restore-keys`: «точный ключ → юнит →
-    `bazel-<os>-warm-`»), ограничен
-    `--experimental_disk_cache_gc_max_size=7G`. Один архив на Android и
-    host-Rust не раздувает лимит 10 ГБ: два save одного каталога под разными
-    ключами хранили бы его дважды. У юнитов без develop-писателя
-    (`_native.yml`, `_deploy-control.yml`) кэш только восстанавливается.
+    диска больше не создаются. Единственные писатели develop-стороны —
+    `warm-android` и `warm-rust` в `deploy-home` (push в `develop`). Кэши
+    разделены по семействам, потому что наборы целей и скачиваний разные, а
+    лимит общий: у Android только disk cache
+    `bazel-android-<os>-warm-<hash>` (его скачивания — в основном Maven JAR,
+    которые раннер качает напрямую, Nexus — только fallback; отдельный
+    repository archive не окупается), у host-Rust
+    `bazel-repo-rust-<os>-<hash>` и `bazel-rust-<os>-warm-<hash>`. `warm-android`
+    собирает все build/test-цели android-юнитов с `--config=android`;
+    `warm-rust` — все build/test-цели `bazel`-юнитов без `--config=android`
+    (ровно флаги `_unit.yml`, иначе configuration checksum version defines не
+    совпал бы). Repository cache хранит только скачанные архивы
+    (`content_addressable/`), не их распаковку (`contents/`), и `warm-rust`
+    восстанавливает его только по точному ключу: смена hash начинает с пустого
+    каталога, старые версии не накапливаются. `bazel fetch` не используется —
+    он тянет все зарегистрированные toolchain независимо от семейства (так
+    общий кэш и вырос до 8 ГБ); `bazel build` фетчит только нужное. Дисковый
+    кэш ограничен `--experimental_disk_cache_gc_max_size` (5G Android, 3G
+    Rust). У юнитов без develop-писателя (`_native.yml`,
+    `_deploy-control.yml`) кэш только восстанавливается. `_native.yml` берёт
+    repository-архив семейства rust (общие крейты/toolchain), свои дисковые
+    ключи (`bazel-logon-`, `bazel-pulsar-`, `bazel-installer-`) остаются
+    отдельными из-за кросс-платформенных toolchain.
     Отдельного сужения целей нет: каждая запись матрицы гоняет объявленные
     цели, незатронутые тесты Bazel берёт из кэша (job `plan` с
     target-determinator удалён — он тратил ~5 мин на двойной анализ графа и
@@ -697,7 +707,7 @@
     `--config=android` передают все точки сборки Android: диспетчер юнитов
     (`mise run build|test` для android-юнитов, а также `mise run build` и
     `mise run test:bazel` на весь workspace), `distribute.sh` и
-    Android-сборка в `deploy-home` → `warm-caches`. В `distribute.sh`
+    Android-сборка в `deploy-home` → `warm-android`. В `distribute.sh`
     `--config=android` идёт до `--define`, чтобы versionCode сборки победил
     дефолт из конфига. Без конфига сборка падает на анализе
     (`$(home_version_name) not defined`), а не собирает молча APK другого

@@ -154,33 +154,41 @@ jobs:
 
       # Pinned Bazelisk on PATH, plus its Bzlmod/repository caches. Rust units
       # and image-owning Python units share one server for checks and images.
+      # The repository cache is the host-Rust family's, restored by the composite
+      # below (same key/prefix as `deploy-home` `warm-rust`).
       - uses: bazel-contrib/setup-bazel@104e3eea9447cdaa4b00d0fb46191a3985d26ab3 # v0.19.1
         if: inputs.kind == 'bazel' || inputs.images != ''
         with:
           bazelisk-version: "1.30.0"
           bazelisk-cache: true
-          repository-cache: true
+          repository-cache: false
           cache-save: ${{ github.event_name != 'pull_request' }}
+
+      - uses: ./.github/actions/bazel-repository-cache
+        if: inputs.kind == 'bazel' || inputs.images != ''
+        with:
+          key: bazel-repo-rust-${{ runner.os }}-${{ hashFiles('MODULE.bazel', 'MODULE.bazel.lock', '.bazelversion', 'Cargo.lock', 'crate-universe.lock', 'rust-toolchain.toml') }}
+          restore-prefix: bazel-repo-rust-${{ runner.os }}-
 
       # Restore-only in pull requests: a PR-scoped cache is invisible to every
       # other PR, so writing it only spends the repository's 10 GB budget and
-      # the minutes of upload. Only a develop push (deploy-home `warm-caches`)
-      # writes; the key order platform → unit → content makes the prefix chain
-      # a real fallback (unit with other lockfiles, then the shared warm cache).
+      # the minutes of upload. Only a develop push (`warm-rust`) writes; the key
+      # order platform/family → unit → content makes the prefix chain a real
+      # fallback (unit with other lockfiles, then the family warm cache). A unit
+      # never resolves the Android family's entry.
       - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         if: inputs.kind == 'bazel' || inputs.images != ''
         with:
           # Action-output disk cache (.bazelrc only). The unit is per-unit keyed
           # so a small unit cannot evict the large Pulsar build.
           path: ~/.cache/bazel-disk
-          key: bazel-${{ runner.os }}-${{ inputs.unit }}-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'Cargo.lock', 'crate-universe.lock', 'rust-toolchain.toml') }}
-          # deploy-home `warm-caches` writes one shared Android+host-Rust cache
-          # for every unit; it is the main fallback after the unit's own entry.
+          key: bazel-rust-${{ runner.os }}-${{ inputs.unit }}-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'Cargo.lock', 'crate-universe.lock', 'rust-toolchain.toml') }}
+          # deploy-home `warm-rust` writes the family cache every unit can use;
+          # it is the main fallback after the unit's own entry.
           restore-keys: |
-            bazel-${{ runner.os }}-${{ inputs.unit }}-
-            bazel-${{ runner.os }}-warm-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'Cargo.lock', 'crate-universe.lock', 'rust-toolchain.toml', 'projects/mobile/android/maven_install.json') }}
-            bazel-${{ runner.os }}-warm-
-            bazel-${{ runner.os }}-
+            bazel-rust-${{ runner.os }}-${{ inputs.unit }}-
+            bazel-rust-${{ runner.os }}-warm-
+            bazel-rust-${{ runner.os }}-
 
       # Optional read-through cache; a no-op without NEXUS_HOST, without the
       # password (fork PRs) or when the cache is unhealthy.
@@ -360,5 +368,5 @@ jobs:
           github.ref == 'refs/heads/develop'
         with:
           path: ~/.cache/bazel-disk
-          key: bazel-${{ runner.os }}-${{ inputs.unit }}-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'Cargo.lock', 'crate-universe.lock', 'rust-toolchain.toml') }}-${{ github.run_id }}-${{ github.run_attempt }}
+          key: bazel-rust-${{ runner.os }}-${{ inputs.unit }}-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'Cargo.lock', 'crate-universe.lock', 'rust-toolchain.toml') }}-${{ github.run_id }}-${{ github.run_attempt }}
 

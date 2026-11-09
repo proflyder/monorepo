@@ -243,8 +243,17 @@ jobs:
         with:
           bazelisk-version: "1.30.0"
           bazelisk-cache: true
-          repository-cache: true
+          repository-cache: false
           cache-save: ${{ github.event_name != 'pull_request' }}
+
+      # Restore-only: the host-Rust family archive covers the common crates and
+      # toolchains this cross-build also resolves. Nothing on develop saves a
+      # native-specific repository cache, so a miss just downloads the zig/
+      # Windows archives (and a PR never writes them back).
+      - uses: ./.github/actions/bazel-repository-cache
+        with:
+          key: bazel-repo-rust-${{ runner.os }}-${{ hashFiles('MODULE.bazel', 'MODULE.bazel.lock', '.bazelversion', 'Cargo.lock', 'crate-universe.lock', 'rust-toolchain.toml') }}
+          restore-prefix: bazel-repo-rust-${{ runner.os }}-
 
       # Restore-only everywhere. These units have no develop-side builder
       # (deploy-home only promotes the PR-built artifact), so there is no
@@ -355,8 +364,17 @@ jobs:
         with:
           bazelisk-version: "1.30.0"
           bazelisk-cache: true
-          repository-cache: true
+          repository-cache: false
           cache-save: ${{ github.event_name != 'pull_request' }}
+
+      # Restore-only: the host-Rust family archive covers the common crates and
+      # toolchains this cross-build also resolves. Nothing on develop saves a
+      # native-specific repository cache, so a miss just downloads the zig/
+      # Windows archives (and a PR never writes them back).
+      - uses: ./.github/actions/bazel-repository-cache
+        with:
+          key: bazel-repo-rust-${{ runner.os }}-${{ hashFiles('MODULE.bazel', 'MODULE.bazel.lock', '.bazelversion', 'Cargo.lock', 'crate-universe.lock', 'rust-toolchain.toml') }}
+          restore-prefix: bazel-repo-rust-${{ runner.os }}-
 
       # Optional read-through cache; no-op without NEXUS_HOST or the password.
       - uses: ./.github/actions/nexus-cache
@@ -463,8 +481,17 @@ jobs:
         with:
           bazelisk-version: "1.30.0"
           bazelisk-cache: true
-          repository-cache: true
+          repository-cache: false
           cache-save: ${{ github.event_name != 'pull_request' }}
+
+      # Restore-only: the host-Rust family archive covers the common crates and
+      # toolchains this cross-build also resolves. Nothing on develop saves a
+      # native-specific repository cache, so a miss just downloads the zig/
+      # Windows archives (and a PR never writes them back).
+      - uses: ./.github/actions/bazel-repository-cache
+        with:
+          key: bazel-repo-rust-${{ runner.os }}-${{ hashFiles('MODULE.bazel', 'MODULE.bazel.lock', '.bazelversion', 'Cargo.lock', 'crate-universe.lock', 'rust-toolchain.toml') }}
+          restore-prefix: bazel-repo-rust-${{ runner.os }}-
 
       # Optional read-through cache; no-op without NEXUS_HOST or the password.
       - uses: ./.github/actions/nexus-cache

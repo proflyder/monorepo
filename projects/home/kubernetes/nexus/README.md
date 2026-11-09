@@ -1,7 +1,10 @@
 # Nexus — in-house artifact cache for CI
 
-A single-replica Sonatype Nexus Repository OSS on the home K3s node. CI
-downloads Maven artifacts, npm packages and PyPI wheels through it; Nexus
+A single-replica Sonatype Nexus Repository OSS on the home K3s node. CI uses
+it as a **fallback** artifact cache for Bazel: Maven, PyPI and npm are fetched
+from the upstream first (GitHub runners are in Azure and have their own IP),
+and Nexus is tried second when the direct URL fails with 429/5xx or a dropped
+connection. The pip/npm steps in CI still point at the Nexus proxies. Nexus
 fetches each object once and serves later requests from a local volume, so a
 registry outage does not fail CI.
 
@@ -9,7 +12,7 @@ Bazel does not take GitHub release assets, codeload archives or Node.js
 distributions from Nexus (`platform/bazel/downloader.cfg` has no rewrite for
 them). These archives are large, and twenty parallel runners pulling them
 through the home uplink and the tunnel broke with `Premature EOF`. They come
-from the Bazel repository cache that the develop `warm-caches` job saves and
+from the Bazel repository cache that the develop `warm-rust` job saves and
 PR jobs restore. The `github`, `github-codeload` and `nodejs-dist` proxies
 stay provisioned for manual use.
 
@@ -26,8 +29,8 @@ Kustomizations in `projects/home/kubernetes/flux/`.
 | Repository | Type | Upstream | Consumer |
 |---|---|---|---|
 | `maven-public` | group | `maven-central`, `google-maven` | manual use only |
-| `maven-central` | proxy | `https://repo1.maven.org/maven2/` | Bazel / rules_jvm_external |
-| `google-maven` | proxy | `https://maven.google.com/` | Bazel / rules_jvm_external |
+| `maven-central` | proxy | `https://repo1.maven.org/maven2/` | Bazel / rules_jvm_external (fallback) |
+| `google-maven` | proxy | `https://maven.google.com/` | Bazel / rules_jvm_external (fallback) |
 | `github` | raw proxy | `https://github.com/` | manual use only |
 | `github-codeload` | raw proxy | `https://codeload.github.com/` | manual use only |
 | `nodejs-dist` | raw proxy | `https://nodejs.org/dist/` | manual use only |
@@ -151,20 +154,21 @@ fail if OpenBao and the live password disagree.
 
 ## Disabling the CI switch
 
-CI uses Nexus only when the repository variable `NEXUS_HOST` is set and the
-secret `NEXUS_CI_PASSWORD` is present. To fall back to direct downloads:
+CI configures Nexus only when the repository variable `NEXUS_HOST` is set and
+the secret `NEXUS_CI_PASSWORD` is present; without it the builds use the direct
+upstream URLs (the normal path) and pip/npm have no proxy. To remove the
+fallback entirely:
 
 ```bash
 gh variable delete NEXUS_HOST
 ```
 
 `.github/actions/nexus-cache/action.yml` also probes a repository path through
-the public ingress, `https://$NEXUS_HOST/repository/npmjs/-/ping`, and leaves
-the build on the original URLs when Nexus is unreachable, so an outage degrades
-to the old behaviour instead of breaking CI. (`/service/rest/v1/status` is only
-used inside the cluster by `provision.sh`; the public hostname does not route
-it.) To enable again, set `NEXUS_HOST` (for example `ci-nexus.example.com`) and
-the secret.
+the public ingress, `https://$NEXUS_HOST/repository/npmjs/-/ping`, and writes
+nothing when Nexus is unreachable, so an outage degrades to direct downloads
+instead of breaking CI. (`/service/rest/v1/status` is only used inside the
+cluster by `provision.sh`; the public hostname does not route it.) To enable
+again, set `NEXUS_HOST` (for example `ci-nexus.example.com`) and the secret.
 
 Local developer builds never read the Nexus files: the downloader config is
 rendered by the CI action into `$RUNNER_TEMP`, and `~/.netrc` is written only

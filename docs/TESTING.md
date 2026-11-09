@@ -283,44 +283,68 @@ CI (платформа `native`, `_native.yml`) ставит pinned Bazelisk, к
 зелёным `ci-ok`, повторный прогон после squash-merge избыточен.
 `permissions: contents: read`, `concurrency` отменяет устаревший прогон только
 для PR. Выкладка — отдельный `.github/workflows/deploy-home.yml` на push в
-`develop` (см. ниже); его job `warm-caches` после merge — единственный
-писатель develop-стороны общих кэшей: `setup-bazel` и одного дискового
-кэша Bazel. Одна команда `bazel build --config=android` в одном сервере
-собирает Android-цели (`//projects/mobile/android:app`,
-`//projects/mobile/android:android_tests`) и все build/test-цели юнитов
-платформы `bazel` из `platform/ci/units.mjs`; `--config=android` задаёт
-только Android-флаги и version defines и не меняет host-платформу Rust.
-После `bazel shutdown` каталог `~/.cache/bazel-disk` сохраняется под одним
-ключом `bazel-<os>-warm-<hash>`. PR-джобы находят его через `restore-keys`
-(`bazel-<os>-warm-`), сохраняя свои уровни «точный ключ → юнит», поэтому
-смена `maven_install.json` или lock-файлов не даёт полный холод.
-Версии инструментов CI (Python, Node, gitleaks, actionlint, shellcheck,
-kubectl, helm, oras) — из `mise.toml`/`mise.lock` через `jdx/mise-action`,
-как и на рабочем месте (`docs/WORKSTATION.md`).
+`develop` (см. ниже); его job-ы `warm-android` и `warm-rust` после merge —
+единственные писатели develop-стороны кэшей. Кэши разделены по семействам,
+потому что Android и host-Rust скачивают и компилируют разное, а лимит GitHub
+(10 ГБ) общий:
 
+* Android: `bazel-android-<os>-warm-<hash>` (disk cache). `warm-android`
+  собирает все build/test-цели юнитов платформы `android` из
+  `platform/ci/units.mjs` с `--config=android`. Develop-стороны repository cache
+  для Android нет: почти всё скачиваемое — Maven-артефакты (сотни МБ JAR),
+  которые раннер качает напрямую (Nexus — только запасной путь), и отдельный
+  архив не окупается.
+* Host-Rust: `bazel-repo-rust-<os>-<hash>` (repository cache) и
+  `bazel-rust-<os>-warm-<hash>` (disk cache). `warm-rust` собирает все
+  build/test-цели юнитов платформы `bazel` без `--config=android` — ровно те
+  флаги, что у `_unit.yml`, иначе configuration checksum (Android version
+  defines) не совпал бы с PR-сборкой.
+
+PR-джобы восстанавливают только своё семейство: `_android.yml` —
+`bazel-android-` (только disk), `_unit.yml`/`_native.yml`/`_deploy-control.yml`
+— `bazel-rust-` и `bazel-repo-rust-`. Ключи упорядочены family → unit →
+content, поэтому `restore-keys` дают цепочку «точный ключ → юнит с другими
+lock-файлами → семейный warm-кэш». Смена lock-файлов не даёт полный холод, но и
+не смешивает семейства.
+
+Repository cache (`~/.cache/bazel-repo`) хранит скачанные архивы
+(`content_addressable/`, sha256) и отдельно их распакованные копии
+(`contents/`). В GitHub архивируется только `content_addressable`: распакованные
+копии — производные и в несколько раз больше (Rust-тулчейн распаковывается на
+каждую toolchain-репу), Bazel распаковывает их сам. `warm-rust` восстанавливает
+свой repository cache **только по точному ключу**: при смене hash каталог
+начинается с пустого, поэтому старые версии архивов не накапливаются. PR-джобы
+могут взять предыдущее поколение по префиксу, но никогда не пишут его.
+`bazel fetch` в warm не используется: он тянет *все* зарегистрированные
+toolchain (NDK, zig, Windows, musl) даже для Rust-only целей и именно из-за него
+общий кэш разросся до 8 ГБ; `bazel build` фетчит только нужное семейству.
+
+Дисковый кэш ограничен по размеру в каждом warm-job
+(`--experimental_disk_cache_gc_max_size`: 5G Android, 3G Rust) и сохраняется
+снимком под стабильным префиксом; superseded-записи вытесняет общий LRU.
 PR-прогоны кэши только читают (`actions/cache/restore`): GitHub привязывает
 кэш к ref'у, который его записал, поэтому кэш, сохранённый PR'ом, не виден
 другим PR'ам — он лишь тратит общий лимит 10 ГБ и минуты на загрузку. Save
 в reusable workflow остаётся только для `develop` (ручной
-`workflow_dispatch`) и для `warm-caches`. У юнитов без develop-писателя
-(`_native.yml`, `_deploy-control.yml`) кэш диска только восстанавливается:
+`workflow_dispatch`) и для `warm-*`. У юнитов без develop-писателя
+(`_native.yml`, `_deploy-control.yml`) дисковый кэш только восстанавливается:
 пока такой сборки на develop нет, лучше не плодить копии на каждый PR.
-Один общий архив ограничен `--experimental_disk_cache_gc_max_size=7G`
-в `warm-caches`: Android и host-Rust лежат в одном каталоге и не дублируют
-байты в лимите GitHub 10 ГБ (два `actions/cache/save` одного каталога под
-разными ключами дали бы две копии). Host-Rust юниты (`_unit.yml`: сервисы,
-`proto`, `pulsar-bazel`) и Android-юниты (`_android.yml`) восстанавливают
-этот кэш через общий префикс, приоритет остаётся у их собственных ключей.
+Версии инструментов CI (Python, Node, gitleaks, actionlint, shellcheck,
+kubectl, helm, oras) — из `mise.toml`/`mise.lock` через `jdx/mise-action`,
+как и на рабочем месте (`docs/WORKSTATION.md`).
 
-Скачивания дополнительно идут через домашний Nexus, если заданы repository
-variable `NEXUS_HOST` и secret `NEXUS_CI_PASSWORD`: composite action
+Скачивания идут напрямую с раннеров GitHub (Azure, у каждого свой IP) — это
+основной путь. Домашний Nexus — запасной: если заданы repository variable
+`NEXUS_HOST` и secret `NEXUS_CI_PASSWORD`, composite action
 `.github/actions/nexus-cache` пишет `~/.netrc`, `~/.npmrc`, `pip.conf` и
 рендерит `platform/bazel/downloader.cfg` в `~/.bazelrc`. `downloader.cfg`
-направляет Maven Central, Google Maven, PyPI и npm в прокси Nexus и оставляет
-прямой URL запасным правилом; GitHub releases, codeload и nodejs.org через
-Nexus не идут (их архивы берёт repository cache Bazel). Без переменной, без
-секрета (форк-PR) или при недоступном `/repository/npmjs/-/ping` сборка идёт
-напрямую.
+ставит прямой URL первым правилом, а прокси Nexus (`maven-central`,
+`google-maven`, `pypi`, `npmjs`) — вторым для того же хоста: Bazel пробует
+совпавшие rewrite-правила по порядку и уходит в Nexus только при 429/5xx или
+обрыве соединения, а не делит домашний канал между всеми раннерами постоянно.
+GitHub releases, codeload и nodejs.org через Nexus не идут (их архивы берёт
+repository cache Bazel). Без переменной, без секрета (форк-PR) или при
+недоступном `/repository/npmjs/-/ping` остаётся прямой путь.
 
 
 Проверки, тесты и сборки внутри reusable workflow запускаются теми же
@@ -493,7 +517,7 @@ Native-юниты с `native.publish_script` (`pulsar`, `logon-provider`) сле
   передают диспетчер юнитов (`mise run build|test` для android-юнитов и
   `mise run build`/`mise run test:bazel` на весь workspace),
   `projects/mobile/android/distribute.sh` и Android-сборка в
-  `deploy-home` → `warm-caches`. Без конфига Android-сборка падает на
+  `deploy-home` → `warm-android`. Без конфига Android-сборка падает на
   анализе (`$(home_version_name) not defined`), а не собирает тихо APK
   чужой ABI; после #234 это дополнительно ловит `apk_abi_test`.
 * `platform/bazel/zig/**` и `platform/bazel/windows/**` — только платформа
