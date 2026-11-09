@@ -15,6 +15,26 @@ spec:
   policyTypes:
     - Ingress
 ---
+# The kustomize and helm controllers download Git artifacts from the
+# source-controller (Service :80 -> pod :9090) inside this namespace.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: flux-system-artifacts
+  namespace: flux-system
+spec:
+  podSelector:
+    matchLabels:
+      app: source-controller
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector: {}
+      ports:
+        - protocol: TCP
+          port: 9090
+---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -35,6 +55,14 @@ spec:
           port: 53
         - protocol: TCP
           port: 53
+    # Artifacts from the source-controller.
+    - to:
+        - podSelector:
+            matchLabels:
+              app: source-controller
+      ports:
+        - protocol: TCP
+          port: 9090
     # Kubernetes API: the node endpoint directly and the service ClusterIP.
     - to:
         - ipBlock:
