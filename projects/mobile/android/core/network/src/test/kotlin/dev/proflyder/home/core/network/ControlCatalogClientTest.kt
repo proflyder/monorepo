@@ -71,8 +71,7 @@ class ControlCatalogClientTest {
     fun parsesButtonEntriesWithPressAction() = runBlocking {
         server.enqueue(
             MockResponse().setBody(
-                """{"statesOk":true,"entries":[{"id":"button.komp_lock","kind":"button",
-                "title":"Заблокировать","icon":"lock","actions":["press"],"available":true}]}""",
+                checkNotNull(javaClass.getResource("/fixtures/catalog_button.json")).readText(),
             ),
         )
         val catalog = (client().fetch() as Outcome.Success).value

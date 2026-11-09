@@ -450,7 +450,8 @@ class ControlItemsTest {
     }
 
     @Test
-    fun entriesWithoutADeviceIdAreEachTheirOwnDevice() {        // An older server omits device_id, so the flat rows stay exactly as before.
+    fun entriesWithoutADeviceIdAreEachTheirOwnDevice() {
+        // An older server omits device_id, so the flat rows stay exactly as before.
         assertEquals(
             listOf("# Bedroom (1 of 2 on)", "D light.a", "D light.b"),
             build(
