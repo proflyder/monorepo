@@ -332,8 +332,8 @@ matrix одного платформенного workflow.
 | Платформа | Reusable workflow | Что делает юнит |
 |---|---|---|
 | android | `_android.yml` | JDK 21 + SDK 36, `bazel build` затем `bazel test`, APK в artifact |
-| unit | `_unit.yml` | Linux-runner: `kind=bazel` — `bazel build`/`test` (Rust-сервисы, `home-deploy`, хост Pulsar), `kind=python` — Python-suite Hermes; затем образы юнита (`bazel`/`docker`/`mixed`) в том же Bazel-сервере, push `tree-<hash>` и `_attest.yml` |
-| python | `_python.yml` | `compileall` + `unittest discover` по каталогам юнита (без образов) |
+| unit | `_unit.yml` | Linux-runner: `kind=bazel` — `bazel build`/`test` (Rust-сервисы, `home-deploy`, хост Pulsar), `kind=python` — Python-suite Hermes; затем образы юнита (`bazel`/`docker`/`mixed`) в том же Bazel-сервере, push `tree-<hash>` и attestation в том же job |
+| python | `_python.yml` | один job на все затронутые Python-юниты: один checkout/mise/pip, затем `mise run test <id>` последовательно с `::group::`, в конце список упавших |
 | js | `_js.yml` | pinned Node + `node --test` по `*.test.js`, без npm |
 | native | `_native.yml` | pinned toolchain download + sha256, host tests, cross-build, `SHA256SUMS` artifact; same-repo PR публикует release-shaped `tree-<hash>` с provenance |
 | quality | `_quality.yml` | audit, static gates, unit-map, actionlint, shellcheck, Gitleaks |
@@ -392,11 +392,15 @@ artifact.
 `base_sha`, `docs_only`; каждый output — JSON-массив записей matrix
 (`android_distribute` — `true`/`false`). `unit_units` объединяет Bazel-юниты
 и те Python-юниты, которые владеют образами (сегодня Hermes), поэтому у
-такого юнита один build/test job, а не два. Типичный сервисный PR теперь
-запускает `changes`, `quality`, один `unit / <id>`, по одному
-`attest / <id>` на опубликованный образ и `ci-ok` (плюс `deploy-control`,
-если затронут scheduler/ha-bridge); раньше были отдельные `bazel / <id>` и
-`images / <id>`.
+такого юнита один build/test job, а не два; attestation — шаги этого же
+job'а, без отдельных `attest / <id>`-задач. `python_units` — список всех
+затронутых Python-юнитов без образов, и `_python.yml` прогоняет их в одном
+job последовательно.
+Типичный сервисный PR теперь запускает `changes`, `quality`,
+один `unit / <id>` (проверки + образы + attestation) и `ci-ok` (плюс
+`deploy-control`, если затронут scheduler/ha-bridge); раньше были отдельные
+`bazel / <id>`, `images / <id>` и по job'у на каждый digest. На
+CI-global PR вместо ~22 `python / <id>` остаётся один `python` job.
 Пустой массив означает «пропустить job» (законный skip для `ci-ok`).
 Для `pull_request` база маршрутизации — первый родитель проверенного
 merge-коммита (`git rev-parse HEAD^1`), а не `pull_request.base.sha` из
@@ -409,8 +413,10 @@ merge-коммита (`git rev-parse HEAD^1`), а не `pull_request.base.sha` �
 Bazel-сервере, поэтому второй сборки тех же целей нет. На PR из этого
 репозитория они сразу публикуются как `tree-<git tree hash>` с build
 provenance (решение 36); форки и `workflow_dispatch` только собирают — у них
-нет прав на registry. Отдельный job `attest` (`_attest.yml`) матрицей по
-опубликованным digest'ам создаёт attestation; `ci-ok` не меняется. Docker и
+нет прав на registry. Attestation создаётся шагами того же job `unit`
+(по одному статическому шагу на индекс образа, максимум 4 — это проверяет
+`check_units.mjs`); отдельных `attest`-job'ов больше нет, и у юнита без
+образов никаких attest-строк не появляется. Docker и
 mixed (Hermes Buildx) — ветки того же шага `platform/ci/build-images.sh`.
 
 Native-юниты с `native.publish_script` (`pulsar`, `logon-provider`) следуют

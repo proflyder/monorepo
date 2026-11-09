@@ -122,9 +122,9 @@ export const config = {
       deploy: false,
     },
     {
-      // The unit job owns image builds and calls `_attest.yml`; a change to
-      // either must exercise the image-owning bazel and python units.
-      paths: [".github/workflows/_unit.yml", ".github/workflows/_attest.yml"],
+      // The unit job owns image builds and attestation; a change must exercise
+      // the image-owning bazel and python units.
+      paths: [".github/workflows/_unit.yml"],
       platforms: ["bazel", "python"],
       deploy: false,
     },

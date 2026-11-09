@@ -283,10 +283,10 @@
       аттестуется официальным `actions/attest-build-provenance`
       (`push-to-registry`). Bazel-образы пушатся существующими `<image>_push`
       побайтно (digest после push обязан совпасть со собранным), Docker-образы
-      — `docker push`. `_attest.yml` — отдельный matrix-job на каждый digest
-      (action аттестует один OCI-subject). Права `packages: write`,
-      `id-token: write`, `attestations: write` выданы только job `unit`/
-      `attest` в `ci.yml` и его reusable workflow.
+      — `docker push`. Attestation — статические шаги того же job'а (по
+      одному на индекс образа; action аттестует один OCI-subject). Права
+      `packages: write`, `id-token: write`, `attestations: write` выданы
+      только job `unit` в `ci.yml`.
     * `ci.yml` → `_native.yml` делает то же для native-юнитов с
       `native.publish_script`: после сборки публикует release-shaped
       OCI-артефакт в `native.publish_repository` под `tree-<hash>` и аттестует
@@ -301,8 +301,8 @@
     * `deploy-home` считает tree деплоимого коммита. Для образов digest из
       `tree-<hash>` используется, только если тег существует, а provenance
       проверяется `gh attestation verify oci://… --repo <owner>/<repo>` с
-      signer, ограниченным `ci.yml`/`_unit.yml`/`_attest.yml` этого
-      репозитория. Обычные
+      signer, ограниченным `ci.yml`/`_unit.yml` этого репозитория (плюс
+      исторические `_images.yml`/`_attest.yml`). Обычные
       теги (`<commit sha>`, `develop`) ставятся на тот же digest pinned-`crane`,
       digest передаётся существующему deploy-скрипту через
       `PREBUILT_DIGESTS`. **`deploy-home` ничего не собирает:** любой
@@ -708,9 +708,14 @@
     (холодный Bazel-сервер, повторная сборка `<image>_image`, push). Теперь
     один job восстанавливает кэш, гоняет проверки и собирает образы в том же
     Bazel-сервере, затем `platform/ci/build-images.sh` пушит `tree-<hash>` и
-    `_attest.yml` аттестует каждый digest. Это убирает вторую сборку Rust-
-    сервиса и второй job на типичном сервисном PR. `kind: python` покрывает
-    Hermes: его Python-suite и mixed Buildx-образы идут в том же job, а не в
-    отдельных `python` и `images`. `attest` остаётся отдельным matrix-job:
-    `actions/attest-build-provenance` аттестует ровно один OCI-subject за
-    вызов. `ci-ok` ждёт `unit` вместо `bazel`+`images`.
+    тот же job аттестует каждый digest статическими шагами (по одному на
+    индекс образа, максимум 4; `actions/attest-build-provenance` принимает
+    ровно один OCI-subject за вызов, а `subject-checksums` не умеет
+    `push-to-registry`). Отдельного `attest`-job'а и `_attest.yml` нет.
+    Это убирает вторую сборку Rust-сервиса и второй job на типичном
+    сервисном PR. `kind: python` покрывает Hermes: его Python-suite и mixed
+    Buildx-образы идут в том же job, а не в отдельных `python` и `images`.
+    Python-юниты без образов схлопнуты в один `python` job: один
+    checkout/mise/pip и последовательный цикл `mise run test <id>` с
+    `::group::`, вместо ~22 коротких job'ов. `ci-ok` ждёт `unit`+`python`
+    вместо `bazel`+`images`+матрицы `python`.

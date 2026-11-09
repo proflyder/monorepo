@@ -2414,14 +2414,40 @@ export function matrixEntries(route_, config) {
       });
     }
   }
-  // Shared deploy fields: a unit without images gets empty values and the
-  // `unit` workflow skips the image steps.
-  const deployFields = (unit) => ({
-    images: space(unit.deployImages),
-    builder: unit.deployBuilder,
-    target_root: unit.deployTargetRoot,
-    bazel_images: JSON.stringify(unit.deployBazelImages),
-  });
+  // Shared deploy fields: only a deploy-selected unit publishes images (a
+  // CI-harness change still runs the checks but must not push every image).
+  // A unit without images gets empty values and the `unit` workflow skips the
+  // image/attestation steps.
+  const deployFields = (unit) => {
+    if (!unit.deployImages.length || !route_.deploySelected.has(unit.id)) {
+      return {
+        images: "",
+        image_list: "[]",
+        image_count: 0,
+        builder: unit.deployBuilder,
+        target_root: "",
+        bazel_images: "{}",
+      };
+    }
+    // `build-images.sh` publishes home-deploy for every bazel/mixed unit that
+    // does not own it; include it in the attestation list so deploy-home can
+    // verify the CLI image too.
+    const imageList = [...unit.deployImages];
+    if (
+      (unit.deployBuilder === "bazel" || unit.deployBuilder === "mixed") &&
+      !imageList.includes("home-deploy")
+    ) {
+      imageList.push("home-deploy");
+    }
+    return {
+      images: space(unit.deployImages),
+      image_list: JSON.stringify(imageList),
+      image_count: imageList.length,
+      builder: unit.deployBuilder,
+      target_root: unit.deployTargetRoot,
+      bazel_images: JSON.stringify(unit.deployBazelImages),
+    };
+  };
   const bazel = route_.routes.bazel.units.map((unit) => ({
     id: unit.id,
     kind: "bazel",
@@ -2434,14 +2460,14 @@ export function matrixEntries(route_, config) {
     deploy_tool: false,
     ...deployFields(unit),
   }));
-  // A Python unit that owns deploy images runs its suite and its image build in
-  // the same `unit` job (today Hermes: python checks + mixed Buildx images);
-  // all other Python units keep the plain `_python.yml` job.
+  // A deploy-selected Python unit that owns images runs its suite and its
+  // image build in the same `unit` job (today Hermes: python checks + mixed
+  // Buildx images); all other Python units keep the plain `_python.yml` job.
   const pythonWithImages = route_.routes.python.units.filter(
-    (unit) => unit.deployImages.length,
+    (unit) => unit.deployImages.length && route_.deploySelected.has(unit.id),
   );
   const python = route_.routes.python.units
-    .filter((unit) => !unit.deployImages.length)
+    .filter((unit) => !pythonWithImages.includes(unit))
     .map((unit) => ({
       id: unit.id,
       suites: space(unit.suites),

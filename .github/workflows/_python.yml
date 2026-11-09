@@ -1,39 +1,32 @@
 name: _python
 
-# Reusable Python platform workflow: one matrix entry per project suite. Runs a
-# syntax compile of every file in the unit plus hermetic unittest discovery.
+# One job for every affected Python unit. A CI-global PR used to fan out one
+# `python / <unit>` job per unit (~22 jobs, most finishing in 12-20 s of pure
+# runner/setup overhead). The units share the same checkout, Python, pip and
+# (when needed) Bazel/mise setup, so this job runs their `mise run test <id>`
+# commands sequentially, one `::group::` per unit, and fails at the end with
+# the list of failing units.
+#
+# Units whose suites drive the Rust deploy CLI (`deploy_tool`) build
+# `//platform/deploy-rs:home-deploy` through the same Bazel server/cache, so
+# the heavy deploy units stay in this job instead of a second one.
 
 on:
   workflow_call:
     inputs:
-      unit:
-        description: Unit id from platform/ci/units.mjs
+      units:
+        description: JSON array of matrix entries (id, suites, compile, deploy_tool)
         required: true
         type: string
-      suites:
-        description: Space separated directories with hermetic unittest suites
-        required: false
-        default: ""
-        type: string
-      compile:
-        description: Space separated directories that only need a syntax compile
-        required: false
-        default: ""
-        type: string
-      deploy_tool:
-        description: Build platform/deploy-rs:home-deploy and export HOME_DEPLOY
-        required: false
-        default: false
-        type: boolean
 
 permissions:
   contents: read
 
 jobs:
   python:
-    name: python / ${{ inputs.unit }}
+    name: python
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 60
     # The test commands come from the unit map via `mise run test <unit>`;
     # tools come from mise-action's install_args, never from `mise run` itself.
     env:
@@ -41,12 +34,13 @@ jobs:
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
-      # Tool versions and checksums: mise.toml + mise.lock (one source with the
-      # workstation). Only the tools this job needs are installed.
+      # One setup for all units. `bazelisk` is included because a
+      # `deploy_tool` unit builds the Rust deploy binary; the extra install is
+      # much cheaper than a second job.
       - uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b # v5.2.7
         with:
           version: 2026.11.3
-          install_args: ${{ inputs.deploy_tool && 'python bazelisk node' || 'python node' }}
+          install_args: "python bazelisk node"
           cache: true
 
       - name: Install test dependencies
@@ -54,7 +48,28 @@ jobs:
           python3 -m pip install --upgrade pip
           python3 -m pip install -r requirements-test.txt
 
-      # Units whose suites drive a deploy script get the Rust deploy binary (Bazel) from
-      # the task itself (HOME_DEPLOY), exactly like a local `mise run test`.
-      - name: Test ${{ inputs.unit }}
-        run: mise run test ${{ inputs.unit }}
+      - name: Test affected Python units
+        env:
+          UNITS: ${{ inputs.units }}
+        run: |
+          set -euo pipefail
+          mapfile -t ids < <(jq -r '.[].id' <<< "$UNITS")
+          if [[ ${#ids[@]} -eq 0 ]]; then
+            echo "no affected Python units"
+            exit 0
+          fi
+          failed=()
+          for id in "${ids[@]}"; do
+            echo "::group::python / ${id}"
+            if mise run test "$id"; then
+              echo "python / ${id}: PASSED"
+            else
+              failed+=("$id")
+              echo "python / ${id}: FAILED"
+            fi
+            echo "::endgroup::"
+          done
+          if [[ ${#failed[@]} -gt 0 ]]; then
+            echo "::error::python units failed: ${failed[*]}"
+            exit 1
+          fi

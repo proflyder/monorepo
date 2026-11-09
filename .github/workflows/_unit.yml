@@ -8,7 +8,7 @@ name: _unit
 # images job started a cold Bazel server and rebuilt the same `<image>_image`
 # targets. Now one job restores the cache, runs the unit's checks and the image
 # targets in one Bazel server, pushes the images under `tree-<hash>` and hands
-# the digests to `_attest.yml`.
+# attests the digests in the same job.
 #
 # `kind: bazel` is the usual Rust/Bazel unit: `mise run build/test` with the
 # unit's targets. `kind: python` is a unit whose checks are Python but which
@@ -18,8 +18,9 @@ name: _unit
 #
 # Build once, deploy the same bytes (DECISIONS 36): a pull request from this
 # repository (never a fork) pushes each built image as
-# `ghcr.io/proflyder/<image>:tree-<git tree hash>` and `_attest.yml` signs its
-# provenance. Forks and manual `workflow_dispatch` runs only build; their token
+# `ghcr.io/proflyder/<image>:tree-<git tree hash>` and signs its provenance
+# with one static attestation step per pushed image. Forks and manual
+# `workflow_dispatch` runs only build; their token
 # is read-only, so they never log in to GHCR.
 #
 # The caller grants registry/OIDC/attestation permissions; this workflow keeps
@@ -76,6 +77,16 @@ on:
         required: false
         default: ""
         type: string
+      image_list:
+        description: JSON array of image names (for the per-image attestation steps)
+        required: false
+        default: "[]"
+        type: string
+      image_count:
+        description: Number of images in image_list (guards the static attestation steps)
+        required: false
+        default: 0
+        type: number
       builder:
         description: Image builder (bazel, docker or mixed)
         required: false
@@ -107,10 +118,11 @@ jobs:
     timeout-minutes: 75
     permissions:
       contents: read
-      # Push the tree-tagged images (`_push` targets / `docker push`).
+      # Push the tree-tagged images (`_push` targets / `docker push`) and sign
+      # their provenance in this same job.
       packages: write
-    outputs:
-      pushed: ${{ steps.collect.outputs.pushed }}
+      id-token: write
+      attestations: write
     env:
       MISE_TASK_RUN_AUTO_INSTALL: "false"
       # Image-owning units build their checks and `<image>_image` targets on
@@ -250,15 +262,77 @@ jobs:
       - name: Collect pushed image digests
         id: collect
         if: inputs.images != '' && inputs.push_tree_tag
+        env:
+          IMAGE_LIST: ${{ inputs.image_list }}
         run: |
           set -euo pipefail
           file="$RUNNER_TEMP/pushed.txt"
           if [[ ! -s "$file" ]]; then
-            echo "pushed=[]" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          json=$(jq -Rsc 'split("\n") | map(select(length > 0) | capture("^(?<image>[^=]+)=(?<digest>.+)$"))' "$file")
-          echo "pushed=${json}" >> "$GITHUB_OUTPUT"
+          # Per-index digests for the static attestation steps below. The image
+          # order is the unit map's `deploy.images`; `home-deploy` is appended
+          # by build-images.sh only when the unit does not own it, so it never
+          # shifts the leading indices.
+          for i in 0 1 2 3; do
+            image=$(jq -r --argjson i "$i" '.[$i] // empty' <<< "$IMAGE_LIST")
+            [[ -n "$image" ]] || continue
+            digest=$(awk -F= -v image="$image" '$1 == image { print substr($0, index($0, "=") + 1); exit }' "$file")
+            echo "digest_${i}=${digest}" >> "$GITHUB_OUTPUT"
+          done
+
+      # Build provenance for each pushed image, one action invocation per OCI
+      # subject (`push-to-registry` requires exactly one subject). The unit map
+      # has at most four images (checked by `check_units.mjs`); a unit without
+      # images has `image_list == []`, so none of these steps run and no
+      # skipped placeholder job is created.
+      - name: Attest ${{ fromJSON(inputs.image_list)[0] }}
+        if: >-
+          inputs.push_tree_tag &&
+          inputs.images != '' &&
+          inputs.image_count > 0 &&
+          steps.collect.outputs.digest_0 != ''
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ghcr.io/proflyder/${{ fromJSON(inputs.image_list)[0] }}
+          subject-digest: ${{ steps.collect.outputs.digest_0 }}
+          push-to-registry: true
+
+      - name: Attest ${{ fromJSON(inputs.image_list)[1] }}
+        if: >-
+          inputs.push_tree_tag &&
+          inputs.images != '' &&
+          inputs.image_count > 1 &&
+          steps.collect.outputs.digest_1 != ''
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ghcr.io/proflyder/${{ fromJSON(inputs.image_list)[1] }}
+          subject-digest: ${{ steps.collect.outputs.digest_1 }}
+          push-to-registry: true
+
+      - name: Attest ${{ fromJSON(inputs.image_list)[2] }}
+        if: >-
+          inputs.push_tree_tag &&
+          inputs.images != '' &&
+          inputs.image_count > 2 &&
+          steps.collect.outputs.digest_2 != ''
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ghcr.io/proflyder/${{ fromJSON(inputs.image_list)[2] }}
+          subject-digest: ${{ steps.collect.outputs.digest_2 }}
+          push-to-registry: true
+
+      - name: Attest ${{ fromJSON(inputs.image_list)[3] }}
+        if: >-
+          inputs.push_tree_tag &&
+          inputs.images != '' &&
+          inputs.image_count > 3 &&
+          steps.collect.outputs.digest_3 != ''
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ghcr.io/proflyder/${{ fromJSON(inputs.image_list)[3] }}
+          subject-digest: ${{ steps.collect.outputs.digest_3 }}
+          push-to-registry: true
 
       # Develop-only writer for the cache restored above; a key can be written
       # once, so the save key carries the run id and PRs resolve the prefix.
@@ -271,22 +345,3 @@ jobs:
           path: ~/.cache/bazel-disk
           key: bazel-${{ runner.os }}-${{ inputs.unit }}-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'Cargo.lock', 'crate-universe.lock', 'rust-toolchain.toml') }}-${{ github.run_id }}-${{ github.run_attempt }}
 
-  # Build provenance for every pushed digest. Kept as a called workflow because
-  # the action attests one OCI subject per invocation; this is the only part of
-  # image publication that cannot live in the unit job.
-  attest:
-    needs: unit
-    if: >-
-      inputs.push_tree_tag &&
-      needs.unit.result == 'success' &&
-      needs.unit.outputs.pushed != '' &&
-      needs.unit.outputs.pushed != '[]'
-    permissions:
-      contents: read
-      id-token: write
-      attestations: write
-      packages: write
-    uses: ./.github/workflows/_attest.yml
-    with:
-      unit: ${{ inputs.unit }}
-      pushed: ${{ needs.unit.outputs.pushed }}
