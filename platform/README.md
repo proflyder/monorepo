@@ -10,7 +10,7 @@
 - `platform/deploy-rs/` — `home-deploy` (Rust): render/converge/rollout
   юнитов; `platform/deploy/` — `resolve.sh` и общие манифесты.
 - `platform/android/` — Bazel-правила, lint и инструменты Android-сборки.
-- `platform/observability/` — общие Helm values Prometheus/Loki/Alloy.
+- Values Prometheus/Loki/Alloy — `projects/home/kubernetes/observability/values/`.
 
 CI работает на GitHub-hosted runners, использует `.github/workflows/_*.yml`
 и публикует обязательный `ci-ok`; деплой — `deploy-home.yml`. Подробности —

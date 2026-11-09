@@ -1,0 +1,46 @@
+# Observability stack reconciled by Flux.
+#
+# `monitoring`, `loki`, `alloy` and `ha-observability` keep the live release
+# names/namespaces; their values files are the same reviewed files as before,
+# now mounted through generated ConfigMaps. Grafana's root URL and the PVE
+# scrape target are substituted from flux-settings.
+#
+# The PrometheusRule that depends on the Prometheus Operator CRDs lives in
+# `rules/` and is applied by a later Kustomization.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - manifests/namespace.yaml
+  - manifests/helmrepositories.yaml
+  - manifests/helmrelease-prometheus.yaml
+  - manifests/helmrelease-loki.yaml
+  - manifests/helmrelease-alloy.yaml
+  - manifests/helmrelease-dashboards.yaml
+  - manifests/external-secret-grafana-admin.yaml
+  - manifests/external-secret-alertmanager-telegram.yaml
+  - manifests/grafana-lan.yaml
+configMapGenerator:
+  - name: prometheus-values
+    namespace: flux-system
+    files:
+      - values/prometheus.yaml
+    options:
+      disableNameSuffixHash: true
+  - name: loki-values
+    namespace: flux-system
+    files:
+      - values/loki.yaml
+    options:
+      disableNameSuffixHash: true
+  - name: alloy-values
+    namespace: flux-system
+    files:
+      - values/alloy.yaml
+    options:
+      disableNameSuffixHash: true
+  - name: alertmanager-templates
+    namespace: monitoring
+    files:
+      - alertmanager/telegram.tmpl
+    options:
+      disableNameSuffixHash: true

@@ -246,9 +246,9 @@ cert-manager с ACME DNS-01 Cloudflare. Wildcard-сертификат
 `*.home.example.com` выпускается автоматически и продлевается cert-manager.
 
 - A-записи `ha`, `grafana`, `alarms`, `control`, `currency`, `intercom`,
-  `vault`, `nexus` → `192.0.2.27`, Cloudflare DNS only (не proxied), TTL auto;
-  apex и прочие записи не меняются. Записи ingress-хостов создаёт/исправляет
-  `projects/home/kubernetes/ingress/deploy.sh`; `vault` — deploy OpenBao,
+  `passwords`, `vault`, `nexus` → `192.0.2.27`, Cloudflare DNS only (не
+  proxied), TTL auto; apex и прочие записи не меняются. Записи создаются
+  вручную `projects/home/kubernetes/cloudflare_dns.py` (Flux их не трогает);
   `nexus` — Flux/README Nexus.
 - `80` редиректит на `443`; вход разрешён только LAN `192.0.2.0/24` (VPN
   приходит NAT-ом с адреса CT), pod CIDR и loopback.

@@ -18,13 +18,14 @@ Loki. Datasource UIDs: `prometheus`, `loki`; dashboard UIDs
 стабильны, UI-изменения provisioned dashboard не сохраняются. Экспериментальную
 копию можно экспортировать в JSON и принять обычным code review.
 
-```bash
-helm upgrade --install ha-observability projects/home-assistant/observability/chart \
-  -n monitoring --wait --timeout 2m
-```
+Release `ha-observability` (вместе с Prometheus/Loki/Alloy) reconciled Flux из
+этого каталога: HelmRelease `ha-observability` в
+`projects/home/kubernetes/observability/manifests/` берёт chart из Git.
+Dashboard меняются merge'ем в `develop`; `helm upgrade` вручную не нужен.
 
-Общие pinned values Prometheus/Grafana, Loki и Alloy — `platform/observability/values`
-от корня репозитория. Composition/версии — `projects/home/kubernetes`.
+Pinned values Prometheus/Grafana, Loki и Alloy — 
+`projects/home/kubernetes/observability/values/`. Composition/версии —
+`projects/home/kubernetes`.
 Retention: Prometheus 7d/12GB при PVC 20Gi; Loki 7d при PVC 20Gi и включённом
 Compactor. Это не жёсткая дисковая квота: следить за свободным местом.
 

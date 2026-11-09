@@ -1,0 +1,19 @@
+# Flux entry point for External Secrets Operator.
+#
+# The release keeps its live name and namespace (`external-secrets`), and the
+# values keep the digest-pinned image, so helm-controller adopts the existing
+# Helm release instead of reinstalling it.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - manifests/namespace.yaml
+  - manifests/helmrepository.yaml
+  - manifests/helmrelease.yaml
+  - manifests/clustersecretstore.yaml
+configMapGenerator:
+  - name: external-secrets-values
+    namespace: flux-system
+    files:
+      - values/external-secrets.yaml
+    options:
+      disableNameSuffixHash: true

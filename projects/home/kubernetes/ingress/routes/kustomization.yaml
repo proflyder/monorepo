@@ -1,0 +1,18 @@
+# Shared HTTPS routes, wildcard certificate and the Cloudflare solver secret.
+#
+# Applied after cert-manager and Traefik so both CRD sets exist. The private
+# values (`HOME_DOMAIN`, `LAN_CIDR`, `HAOS_ADDRESS`) come from the
+# ESO-owned `flux-settings` Secret through the Kustomization postBuild.
+#
+# DNS A-records are intentionally not created here: they stay a documented
+# manual Cloudflare step (see ingress/README.md).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - external-secret-cloudflare.yaml
+  - issuers.yaml
+  - certificate.yaml
+  - middleware.yaml
+  - backends.yaml
+  - intercom-networkpolicy.yaml
+  - routes.yaml

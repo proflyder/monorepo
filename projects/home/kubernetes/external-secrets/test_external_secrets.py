@@ -4,6 +4,7 @@ These tests are static: they protect the wiring (store, paths, ownership) so a
 later edit cannot silently point a project at a different OpenBao path or let a
 deploy script write an application Secret again.
 """
+import re
 import unittest
 from pathlib import Path
 
@@ -17,7 +18,7 @@ MANIFESTS = {
          ("home-assistant", "ha-bridge-ha"): "k8s/home-assistant/ha-bridge-ha"},
     (ROOT / "projects/home-assistant/deploy/manifests/external-secrets.yaml"):
         {("home-assistant", "hermes-environment"): "k8s/home-assistant/hermes-environment"},
-    (ROOT / "projects/home/kubernetes/ingress/manifests/external-secret-cloudflare.yaml"):
+    (ROOT / "projects/home/kubernetes/ingress/routes/external-secret-cloudflare.yaml"):
         {("cert-manager", "cloudflare-api-token"): "k8s/cert-manager/cloudflare-api-token"},
     (ROOT / "projects/home/kubernetes/observability/manifests/external-secret-grafana-admin.yaml"):
         {("monitoring", "grafana-admin"): "k8s/monitoring/grafana-admin"},
@@ -108,7 +109,9 @@ class ExternalSecretsContracts(unittest.TestCase):
         # resolved by mcp-gateway's infra_alert.
         self.assertIn('{{ .Fingerprint | reReplaceAll "^(.{12}).*$" "$1" }}', tmpl)
         self.assertIn("ответьте на это сообщение", tmpl)
-        values = yaml.safe_load((ROOT / "platform/observability/values/prometheus.yaml").read_text())
+        values = yaml.safe_load(
+            (ROOT / "projects/home/kubernetes/observability/values/prometheus.yaml").read_text()
+        )
         self.assertEqual(values["alertmanager"]["alertmanagerSpec"]["configMaps"],
                          ["alertmanager-templates"])
 
@@ -140,29 +143,62 @@ class ExternalSecretsContracts(unittest.TestCase):
         self.assertTrue(values["installCRDs"])
         self.assertEqual(values["replicaCount"], 1)
         self.assertEqual(values["serviceAccount"]["name"], "external-secrets")
+        versions = (ROOT / "projects/home/kubernetes/versions.sh").read_text()
+        tag = re.search(r"(?m)^EXTERNAL_SECRETS_IMAGE_VERSION=(\S+)$", versions).group(1)
+        digest = re.search(r"(?m)^EXTERNAL_SECRETS_IMAGE_DIGEST=(sha256:[0-9a-f]{64})$",
+                           versions).group(1)
         for section in ("image", "webhook", "certController"):
             block = values["image"] if section == "image" else values[section]["image"]
-            self.assertEqual(block["tag"], "__ESO_IMAGE_TAG__")
+            # The literal in the values file must match the reviewed pin.
+            self.assertEqual(block["tag"], f"{tag}@{digest}")
 
-    def test_deploy_script_applies_store_and_every_manifest(self):
+    def test_operator_and_store_are_owned_by_flux(self):
+        kustomization = yaml.safe_load((ESO_DIR / "kustomization.yaml").read_text())
+        resources = set(kustomization["resources"])
+        self.assertEqual(resources, {
+            "manifests/namespace.yaml",
+            "manifests/helmrepository.yaml",
+            "manifests/helmrelease.yaml",
+            "manifests/clustersecretstore.yaml",
+        })
+        release = yaml.safe_load((ESO_DIR / "manifests/helmrelease.yaml").read_text())
+        self.assertEqual(release["metadata"]["name"], "external-secrets")
+        self.assertEqual(release["spec"]["targetNamespace"], "external-secrets")
+        self.assertEqual(release["spec"]["chart"]["spec"]["version"],
+                         re.search(r"(?m)^EXTERNAL_SECRETS_CHART_VERSION=(\S+)$",
+                                   (ROOT / "projects/home/kubernetes/versions.sh").read_text()).group(1))
+
+    def test_deploy_script_only_applies_application_secrets(self):
+        # The operator, the store and infrastructure ExternalSecrets are
+        # Flux-owned; the manual script must not touch them any more.
         text = (ESO_DIR / "deploy.sh").read_text()
-        self.assertIn("clustersecretstore.yaml", text)
+        self.assertNotIn("helm upgrade", text)
+        self.assertNotIn("clustersecretstore.yaml", text)
         for path in MANIFESTS:
+            if path.name.startswith("external-secret-cloudflare"):
+                continue
             relative = path.relative_to(ROOT).as_posix()
+            if "vaultwarden" in relative or "observability" in relative or "ingress" in relative:
+                self.assertNotIn(relative, text)
+                continue
             self.assertIn(relative, text)
 
     def test_scripts_do_not_imperatively_create_application_secrets(self):
-        # The only allowed bootstrap is the explicit first-install path in the
-        # ingress script, which is gated by --bootstrap-secrets.
-        ingress = (ROOT / "projects/home/kubernetes/ingress/deploy.sh").read_text()
-        self.assertIn("--bootstrap-secrets", ingress)
-        self.assertRegex(ingress, r"if \[\[ \"\$BOOTSTRAP_SECRETS\" == 1 \]\]")
         for rel in ("projects/home/kubernetes/scheduler/deploy.sh",
                     "projects/home/kubernetes/apply-runtime.sh",
-                    "projects/home/kubernetes/deploy-observability.sh"):
+                    "projects/home/kubernetes/external-secrets/deploy.sh",
+                    "projects/home/kubernetes/vaultwarden/sync_openbao.py"):
             text = (ROOT / rel).read_text()
             self.assertNotRegex(text, r"create\s+secret\s+generic")
             self.assertNotRegex(text, r"kubectl[^\n]*\bcreate\b[^\n]*\bsecret\b")
+
+    def test_infrastructure_secrets_are_declared_next_to_their_flux_unit(self):
+        # The infra ExternalSecrets are applied by Flux, not by deploy.sh.
+        for rel in ("projects/home/kubernetes/ingress/routes/external-secret-cloudflare.yaml",
+                    "projects/home/kubernetes/observability/manifests/external-secret-grafana-admin.yaml",
+                    "projects/home/kubernetes/observability/manifests/external-secret-alertmanager-telegram.yaml",
+                    "projects/home/kubernetes/vaultwarden/manifests/external-secrets.yaml"):
+            self.assertTrue((ROOT / rel).is_file(), rel)
 
     def test_ci_verifies_eso_readiness_and_never_applies_externalsecrets(self):
         workflow = (ROOT / ".github/workflows/deploy-home.yml").read_text()

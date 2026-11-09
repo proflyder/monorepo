@@ -46,8 +46,7 @@ read-only root и без privilege escalation. Менять
   (`cert-manager`), а не в namespace Certificate; проверено на staging-
   сертификате. Значение хранится в OpenBao
   (`secret/k8s/cert-manager/cloudflare-api-token`) и материализуется
-  ExternalSecret; `deploy.sh --bootstrap-secrets` — только первая установка
-  без OpenBao/ESO.
+  ExternalSecret (Flux `platform-routes`).
 
 ## Приватные значения
 
@@ -62,20 +61,19 @@ HAOS_ADDRESS=192.0.2.28
 CLOUDFLARE_API_TOKEN_FILE=/private/path/cloudflare.env
 ```
 
-`NODE_IP` — LAN-адрес узла K3s: deploy-скрипт создаёт/исправляет A-записи
-всех хостов (`ha`, `grafana`, `alarms`, `control`, `currency`, `intercom`)
-через `projects/home/kubernetes/cloudflare_dns.py`. `--skip-dns` отключает
-этот шаг; без `NODE_IP` и без флага деплой останавливается, чтобы не
-записать DNS в документационный адрес.
+`NODE_IP` — LAN-адрес узла K3s: A-записи создаются вручную через
+`projects/home/kubernetes/cloudflare_dns.py`. Flux DNS не трогает.
+`HOME_DOMAIN`, `LAN_CIDR` и `HAOS_ADDRESS` дублируются в
+`secret/k8s/flux-system/settings` и подставляются в манифесты.
 
 `CLOUDFLARE_API_TOKEN_FILE` содержит `CLOUDFLARE_API_TOKEN=<token>` (Zone DNS
-Edit только на зону; IP-фильтр — домашний внешний адрес). Токен читается
-скриптом из файла и попадает только в Kubernetes Secret; в argv, логи и Git он
-не передаётся.
+Edit только на зону; IP-фильтр — домашний внешний адрес). Токен попадает
+только в Kubernetes Secret (`secret/k8s/cert-manager/cloudflare-api-token` →
+ESO); в argv, логи и Git он не передаётся.
 
-DNS: A-записи `ha`, `grafana`, `alarms`, `control`, `currency`, `intercom`
-→ узел K3s (`NODE_IP`), Cloudflare **DNS only** (не proxied), TTL auto;
-создаются и исправляются деплоем. Wildcard-сертификат не покрывает apex.
+DNS: A-записи `ha`, `grafana`, `alarms`, `control`, `currency`, `intercom`,
+`passwords`, `vault` → узел K3s (`NODE_IP`), Cloudflare **DNS only**
+(не proxied), TTL auto. Wildcard-сертификат не покрывает apex.
 
 `intercom.home.<home-suffix>` — сервис сигналинга звонков (`home-assistant/intercom:8099`).
 `Watch` — долгоживущий server-streaming ответ Connect поверх HTTP/1.1;
@@ -90,17 +88,40 @@ DNS: A-записи `ha`, `grafana`, `alarms`, `control`, `currency`, `intercom`
 
 ## Деплой
 
+Всё, кроме DNS-записей, reconciled Flux (см. `../flux/README.md`):
+
+| Kustomization | Каталог |
+|---|---|
+| `platform-cert-manager` | `cert-manager/` |
+| `platform-traefik` | `traefik/` |
+| `platform-routes` | `routes/` |
+
+Umbrella `platform` применяет их по цепочке
+ESO → cert-manager → Traefik → маршруты. Helm-релизы сохраняют живые имена и
+namespace (`cert-manager`, `traefik`), поэтому принимаются как upgrade.
+Версии чартов — в `../versions.sh` (`TRAEFIK_CHART_VERSION`,
+`CERT_MANAGER_CHART_VERSION`) и продублированы в HelmRelease (проверяется
+тестом).
+
 ```bash
-# 1) проверка DNS-01 на staging (не тратит prod-лимит)
-mise run admin:ingress -- --staging
-# 2) боевой сертификат Let's Encrypt prod + маршруты
-mise run admin:ingress
+# после merge в develop
+mise run kubectl -- -n flux-system annotate kustomization/platform \
+  reconcile.fluxcd.io/requestedAt="$(date +%s)" --overwrite
+mise run kubectl -- get kustomizations -A
 ```
 
-Скрипт идемпотентен: `helm upgrade --install`, `mise run kubectl -- apply`, Secret
-пересоздаётся из файла. Порядок: cert-manager → Secret → ClusterIssuer →
-Certificate → Traefik → Middleware/IngressRoute. Версии чартов — в
-`../versions.sh` (`TRAEFIK_CHART_VERSION`, `CERT_MANAGER_CHART_VERSION`).
+DNS-записи (ручной шаг, один раз или при смене адреса):
+
+```bash
+mise run secrets:file home/vpn/cloudflare.env
+python3 projects/home/kubernetes/cloudflare_dns.py \
+  secrets/home/vpn/cloudflare.env <host>.<home-domain> <node-lan-ip>
+mise run secrets:clean
+```
+
+Staging-сертификат в Flux не входит: DNS-01 проверялся при первой установке.
+Для повторной проверки можно временно применить отдельный `Certificate` с
+`letsencrypt-staging` вручную и удалить его после проверки.
 
 ## Проверки
 

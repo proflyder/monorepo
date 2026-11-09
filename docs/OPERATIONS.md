@@ -293,18 +293,20 @@ curl -fsS -o /dev/null -w 'Grafana %{http_code}\n' \
 ```
 
 ```bash
-# HTTPS ingress (LAN/VPN)
-mise run admin:ingress -- --staging   # проверка DNS-01
-mise run admin:ingress   # prod-сертификат
+# HTTPS ingress (LAN/VPN): Traefik/cert-manager/маршруты — Flux
+mise run kubectl -- get kustomizations -A
+mise run kubectl -- -n flux-system annotate kustomization/platform \
+  reconcile.fluxcd.io/requestedAt="$(date +%s)" --overwrite
 NODE_IP=192.0.2.27 ./projects/home/kubernetes/ingress/verify.sh
 
 mise run kubectl -- -n traefik get pods,certificate,ingressroute
 mise run kubectl -- -n cert-manager get challenge,order
 ```
 
-Реальные имена и LAN_CIDR — `secrets/home/ingress.env`; токен Cloudflare
-хранится в OpenBao (`secret/k8s/cert-manager/cloudflare-api-token`) и
-материализуется ESO (не печатать).
+Реальные имена, LAN_CIDR и HAOS_ADDRESS — `secrets/home/ingress.env` и
+`flux-settings`; токен Cloudflare хранится в OpenBao
+(`secret/k8s/cert-manager/cloudflare-api-token`) и материализуется ESO.
+Cloudflare DNS-записи — ручной шаг (`cloudflare_dns.py`).
 
 ## OpenBao
 
@@ -344,7 +346,7 @@ mise — `docs/WORKSTATION.md`. Скрипты деплоя и обслужив�
 
 ```bash
 mise tasks | grep admin:                  # что есть
-mise run admin:vaultwarden -- --render-only /tmp/vw
+mise run admin:external-secrets -- --skip-secrets
 mise run secrets:check                    # каталог и fnox.toml ↔ OpenBao
 mise run secrets:file home/ingress.env    # запасной путь: файл вручную…
 mise run secrets:clean home/ingress.env   # …и убрать
@@ -383,7 +385,10 @@ Kubernetes Secrets создаёт ESO. Пути, миграция и ротац�
 
 ```bash
 
-# установить/обновить оператор, store и все ExternalSecret
+# оператор, store и инфраструктурные ExternalSecrets — Flux
+mise run kubectl -- -n flux-system annotate kustomization/platform \
+  reconcile.fluxcd.io/requestedAt="$(date +%s)" --overwrite
+# только application ExternalSecrets (deploy-home)
 mise run admin:external-secrets
 
 # состояние
@@ -397,8 +402,9 @@ mise run kubectl -- -n home-assistant annotate externalsecret scheduler-auth \
 ```
 
 `deploy-home` проверяет `Ready` ExternalSecret перед выкаткой; deploy-скрипты
-не создают и не перезаписывают эти Secrets. `--bootstrap-secrets` у
-`ingress/deploy.sh` — только для первой установки без OpenBao/ESO.
+не создают и не перезаписывают эти Secrets. Первая установка на чистом
+кластере требует однократно поставить ESO (иначе `flux-settings` не из чего
+создать) — см. `projects/home/kubernetes/flux/README.md`.
 
 ## Vaultwarden (менеджер паролей)
 
@@ -407,7 +413,9 @@ Server URL — этот адрес). Файлы, первый вход, смен
 восстановление — `projects/home/kubernetes/vaultwarden/README.md`.
 
 ```bash
-mise run admin:vaultwarden            # секреты и kubeconfig — fnox
+# Vaultwarden reconciled Flux после merge в develop
+mise run kubectl -- -n flux-system annotate kustomization/vaultwarden \
+  reconcile.fluxcd.io/requestedAt="$(date +%s)" --overwrite
 mise run kubectl -- -n vaultwarden get pod,pvc,externalsecret
 mise run kubectl -- -n vaultwarden logs deploy/vaultwarden --tail=50
 ```
@@ -450,7 +458,8 @@ bao kv put secret/k8s/monitoring/heartbeat \
 unset PING_TOKEN
 
 # применить Alertmanager (ESO рендерит webhook_configs из этой записи)
-mise run admin:observability
+mise run kubectl -- -n monitoring annotate externalsecret alertmanager-telegram \
+  force-sync="$(date +%s)" --overwrite
 mise run kubectl -- -n monitoring get externalsecret alertmanager-telegram
 ```
 
@@ -1567,8 +1576,8 @@ restic-репозиторий `rclone:gdrive:home-offsite-v2` (личный Goog
 #   secrets/home/offsite-ha.token        отдельный HA long-lived token
 mise run admin:offsite-install
 mise run admin:pve-backup-install
-# PVE scrape target и Grafana server — secrets/home/observability-values.yaml
-mise run admin:observability
+# PVE scrape target (PVE_NODE_TARGET) и HOME_DOMAIN — ключи flux-settings в OpenBao;
+# после изменения дождаться sync flux-settings и reconcile observability
 ```
 
 Новый OAuth-токен Google: `rclone authorize drive <base64 JSON

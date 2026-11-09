@@ -1,13 +1,37 @@
 # Flux — pull-based GitOps for home infrastructure
 
-Flux runs in the `flux-system` namespace and reconciles a small part of the
-home K3s cluster from `github.com/proflyder/monorepo` (`develop`). The pilot is
-Nexus (`projects/home/kubernetes/nexus`); everything else stays on
-`deploy-home` or its existing admin script.
+Flux runs in the `flux-system` namespace and reconciles the home K3s cluster
+from `github.com/proflyder/monorepo` (`develop`). The model is pull-only: Flux
+clones the repository with a read-only deploy key and applies changes from
+inside the cluster. CI never gets cluster credentials for infrastructure.
 
-The model is pull-only: Flux clones the repository with a read-only deploy key
-and applies changes from inside the cluster. CI never gets cluster credentials
-for infrastructure, and `deploy-home` keeps owning application services.
+Reconciled by Flux today:
+
+| Unit | Namespace | What |
+|---|---|---|
+| `platform` (umbrella) | all platform namespaces | applies and waits for the four children below |
+| `platform-external-secrets` | `external-secrets` | ESO release and `ClusterSecretStore/openbao` |
+| `platform-cert-manager` | `cert-manager` | cert-manager release (CRDs via `CreateReplace`) |
+| `platform-traefik` | `traefik` | Traefik release (hostNetwork `80/443`) |
+| `platform-routes` | `traefik`, `cert-manager`, `monitoring` | wildcard Certificate, ClusterIssuers, allow-list, shared IngressRoutes, HA EndpointSlice, Cloudflare solver Secret |
+| `observability` | `monitoring` | kube-prometheus-stack, Loki, Alloy, project dashboards, Grafana NodePort Service, monitoring Secrets |
+| `observability-rules` | `monitoring` | backup-freshness PrometheusRule |
+| `vaultwarden` | `vaultwarden` | password manager, PVC, route, admin Secret |
+| `nexus` / `nexus-provision` | `nexus` | artifact cache and REST provisioning |
+
+Still manual, on purpose:
+
+- **OpenBao** (raft, seal, bootstrap, Kubernetes auth). It is the source of
+  every Secret and must be able to recover without GitOps.
+- **Host firewalls** (`management-firewall/`, `voice-firewall/`): nftables on
+  the K3s VM, outside the Kubernetes API.
+- **Cloudflare DNS records**: `ha`, `grafana`, `alarms`, `control`, `currency`,
+  `intercom`, `passwords`, `vault`, `nexus` are created with
+  `cloudflare_dns.py` (or the `nexus` procedure).
+- **Application services** (`scheduler`, `intercom`, `currency-bot`,
+  `wakegrant`, `mcp-gateway`, Hermes runtime) stay on `deploy-home`; their
+  ExternalSecrets are applied by
+  `projects/home/kubernetes/external-secrets/deploy.sh`.
 
 ## Components
 
@@ -17,7 +41,7 @@ Only the minimum three controllers are installed, at Flux `v2.10.0`:
 |---|---|
 | `source-controller` | clones the GitRepository, produces the artifact |
 | `kustomize-controller` | builds Kustomizations and applies them |
-| `helm-controller` | reconciles HelmRelease objects (not used by Nexus yet) |
+| `helm-controller` | reconciles HelmRelease objects |
 
 `notification-controller`, image automation and `source-watcher` are
 intentionally absent. `gotk-components.yaml` is the pinned
@@ -35,15 +59,76 @@ projects/home/kubernetes/flux/
 ├── sync.yaml                 GitRepository + root Kustomization (applied once)
 ├── bootstrap.sh              owner-run, idempotent install
 └── cluster/                  reconciled by Flux, not by bootstrap
-    ├── network-policy.yaml   flux-system egress: DNS, API, GitHub only
-    ├── nexus.yaml            Kustomization for the Nexus workload
-    └── nexus-provision.yaml  Kustomization for the provisioning Job
+    ├── kustomization.yaml
+    ├── network-policy.yaml
+    ├── platform.yaml          umbrella for the platform chain
+    ├── platform/
+    │   ├── external-secrets.yaml
+    │   ├── cert-manager.yaml
+    │   ├── traefik.yaml
+    │   └── routes.yaml
+    ├── observability.yaml
+    ├── observability-rules.yaml
+    ├── vaultwarden.yaml
+    ├── nexus.yaml
+    └── nexus-provision.yaml
 ```
+
+Component manifests stay next to their project and are pointed at by the
+Kustomization `path`:
+
+| Kustomization | Path |
+|---|---|
+| `platform` | `projects/home/kubernetes/flux/cluster/platform` |
+| `platform-external-secrets` | `projects/home/kubernetes/external-secrets` |
+| `platform-cert-manager` | `projects/home/kubernetes/ingress/cert-manager` |
+| `platform-traefik` | `projects/home/kubernetes/ingress/traefik` |
+| `platform-routes` | `projects/home/kubernetes/ingress/routes` |
+| `observability` | `projects/home/kubernetes/observability` |
+| `observability-rules` | `projects/home/kubernetes/observability/rules` |
+| `vaultwarden` | `projects/home/kubernetes/vaultwarden` |
+| `nexus` | `projects/home/kubernetes/nexus/manifests` |
+| `nexus-provision` | `projects/home/kubernetes/nexus/provision` |
+
+Helm charts keep the same release name and namespace as the live releases
+(`helm list -A`): each HelmRelease sets `releaseName` and `storageNamespace`
+explicitly, because helm-controller otherwise defaults to
+`<targetNamespace>-<name>` and would store release secrets in `flux-system`
+(creating duplicates instead of adopting the live releases). Values come from generated ConfigMaps built from the reviewed
+files (`values/*.yaml`); chart versions are pinned in the HelmRelease and
+checked against `projects/home/kubernetes/versions.sh` by the tests.
+
+## Private values (`flux-settings`)
+
+`secret/k8s/flux-system/settings` is materialised by ESO as the
+`flux-settings` Secret and used by Kustomization `postBuild.substituteFrom`.
+
+| Key | Used by |
+|---|---|
+| `NEXUS_HOST` | Nexus IngressRoute |
+| `NEXUS_PUBLIC_HOST` | public Nexus route (Cloudflare Tunnel) |
+| `NODE_LAN_IP` | Flux NetworkPolicy, Vaultwarden ingress |
+| `HOME_DOMAIN` | wildcard certificate, every `*.home` route, Grafana root URL, Vaultwarden domain |
+| `LAN_CIDR` | `home-allowlist` Middleware, intercom/Vaultwarden ingress |
+| `HAOS_ADDRESS` | `home-assistant-external` EndpointSlice |
+| `PVE_NODE_TARGET` | `pve-node` scrape target (`host:9100`) |
+
+No value is committed to Git. `HOME_DOMAIN`, `LAN_CIDR` and `HAOS_ADDRESS`
+come from the private `secrets/home/ingress.env`; `PVE_NODE_TARGET` from the
+private observability overlay.
 
 ## First bootstrap (owner, manual)
 
-Prerequisites: the External Secrets Operator, `ClusterSecretStore/openbao` and
-the Traefik routes already exist.
+Prerequisites:
+
+- OpenBao is running and `configure.py` has created the `external-secrets`
+  Kubernetes-auth role;
+- **External Secrets Operator and `ClusterSecretStore/openbao` already exist**.
+  On a clean cluster this is the one chicken-and-egg step: install ESO once
+  with Helm (the values file is
+  `projects/home/kubernetes/external-secrets/values/external-secrets.yaml`
+  with the digest from `versions.sh`), or restore it from backup. After Flux
+  is running it owns the release and later upgrades come from Git.
 
 ### 1. Create the read-only deploy key
 
@@ -71,16 +156,10 @@ and removed afterwards.
 ### 2. Write the deployment settings
 
 From the private `secrets/home/ingress.env` values, create
-`secret/k8s/flux-system/settings` with these keys (no values in Git):
-
-| Key | Meaning |
-|---|---|
-| `NEXUS_HOST` | internal Nexus name under the home suffix |
-| `NEXUS_PUBLIC_HOST` | Cloudflare Tunnel hostname used by CI |
-| `NODE_LAN_IP` | K3s node LAN address (NetworkPolicy, DNS) |
-
-ESO materialises this as the `flux-settings` Secret; Flux uses it for
-`postBuild` substitution.
+`secret/k8s/flux-system/settings` with the keys in the table above (no values
+in Git). `secret/k8s/flux-system/settings` already holds `NEXUS_*` and
+`NODE_LAN_IP`; add the four new keys with the same GET → merge → POST
+procedure.
 
 ### 3. Install
 
@@ -94,38 +173,77 @@ prints secret values and is safe to run again.
 
 ### 4. DNS (manual, intentionally outside Flux)
 
-The internal Nexus `A` record still points at the K3s node. Create it once:
+Create or correct the A records once with the private Cloudflare token:
 
 ```bash
 mise run secrets:file home/vpn/cloudflare.env
 python3 projects/home/kubernetes/cloudflare_dns.py \
-  secrets/home/vpn/cloudflare.env nexus.<home-domain> <node-lan-ip>
+  secrets/home/vpn/cloudflare.env <host>.<home-domain> <node-lan-ip>
 mise run secrets:clean
 ```
 
-The public `ci-nexus.<public-zone>` hostname belongs to the existing
-`home-k3s` Cloudflare Tunnel and is managed with it (see the Nexus README).
-Neither record is reconciled by Flux.
+Hosts: `ha`, `grafana`, `alarms`, `control`, `currency`, `intercom`,
+`passwords`, `vault`. The public `ci-nexus.<public-zone>` hostname belongs to
+the existing `home-k3s` Cloudflare Tunnel. Neither record is reconciled by
+Flux.
+
+## Adoption and ordering
+
+Kustomizations form a dependency chain:
+
+```text
+platform-external-secrets -> platform-cert-manager -> platform-traefik -> platform-routes
+                              (all wrapped by `platform`, wait: true)
+        platform ──> observability ──> observability-rules
+        platform ──> vaultwarden
+```
+
+- `platform` is the only entry point for the platform chain: it applies the
+  four child Kustomizations and waits for all of them. Nothing outside the
+  chain repeats the ESO -> cert-manager -> Traefik order.
+- `platform-external-secrets` must be Ready first: every other unit consumes
+  its CRDs and the `flux-settings` Secret.
+- cert-manager and Traefik exist before the route CRs. Both releases keep the
+  live name/namespace so Helm adopts them; `upgrade.crds: CreateReplace` only
+  upgrades cert-manager CRDs.
+- Kustomizations use `wait: true`, so a dependency is only considered Ready
+  after its HelmRelease reports Ready.
+- PVCs are protected at each ownership layer: the Grafana PVC (managed by the
+  chart) carries `helm.sh/resource-policy: keep`; Vaultwarden's plain PVC has
+  both that annotation and `kustomize.toolkit.fluxcd.io/prune: disabled`;
+  Prometheus/Alertmanager/Loki PVCs are created by their StatefulSets with
+  `Retain` (Loki `whenDeleted: Retain`), so Helm never owns them.
+- Helm upgrades are not self-remediated: every HelmRelease sets
+  `install/upgrade.remediation.retries: 0`, and drift detection stays off. A
+  failed upgrade stops and is fixed by a human, never by an automatic
+  uninstall/rollback.
+
+### Network egress
+
+`flux-system-egress` keeps all controllers on DNS, the API, source artifacts
+and GitHub git ranges. `flux-system-chart-egress` adds HTTPS (`443`) to
+`0.0.0.0/0` **except** `10/8`, `172.16/12`, `192.168/16`, `100.64/10` and
+`169.254/16` for the `source-controller` only, because chart indexes and
+tarballs live on CDNs whose addresses change.
 
 ## Day-to-day
 
 ```bash
 # what is reconciled and whether it is ready
 mise run kubectl -- get kustomizations -A
+mise run kubectl -- get helmreleases -A
 mise run kubectl -- get gitrepositories -A
 mise run kubectl -- -n flux-system get pods
 
 # force a reconcile after pushing a commit
 mise run kubectl -- -n flux-system annotate kustomization flux-system \
   reconcile.fluxcd.io/requestedAt="$(date +%s)" --overwrite
-mise run kubectl -- -n flux-system annotate kustomization nexus \
+mise run kubectl -- -n flux-system annotate kustomization observability \
   reconcile.fluxcd.io/requestedAt="$(date +%s)" --overwrite
 
-# pause / resume reconciliation
-mise run kubectl -- -n flux-system annotate kustomization nexus \
-  reconcile.fluxcd.io/requestedAt- --overwrite
-mise run kubectl -- -n flux-system suspend kustomization/nexus
-mise run kubectl -- -n flux-system resume kustomization/nexus
+# pause / resume one unit
+mise run kubectl -- -n flux-system suspend kustomization/vaultwarden
+mise run kubectl -- -n flux-system resume kustomization/vaultwarden
 ```
 
 Changes to infrastructure under Flux are made by merging to `develop`; do not
@@ -134,16 +252,14 @@ reverted on the next reconcile.
 
 ## Adding another service later
 
-1. Turn its manifests into a Kustomize directory with no secret values and no
-   template placeholders that Kustomize cannot resolve.
-2. Put private values in the `flux-settings` Secret (or a second ESO Secret)
-   and use Flux `postBuild.substituteFrom`.
-3. Add a `Kustomization` CR under `cluster/` with `dependsOn` on the
-   resources it needs.
+1. Turn its manifests into a Kustomize directory with no secret values; keep
+   private values as `${PLACEHOLDER}` and add the key to `flux-settings`.
+2. For Helm, pin the chart version and reuse the live release name/namespace;
+   put the values file next to the component and load it through a generated
+   ConfigMap (`disableNameSuffixHash: true`).
+3. Add a `Kustomization` CR under `cluster/` with `dependsOn` on the units it
+   needs, and add it to `cluster/kustomization.yaml`.
 4. Add static tests next to the service and extend this README.
-
-Non-sensitive infrastructure can stay on `deploy-home`; the pilot does not
-move ingress, Vaultwarden, observability, OpenBao or application services.
 
 ## Tests
 
@@ -151,7 +267,8 @@ move ingress, Vaultwarden, observability, OpenBao or application services.
 mise run test flux-deploy
 ```
 
-The suite renders the toolkit bundle, the root Kustomization and the Nexus
-Kustomizations with `kubectl kustomize`, then checks the controller set,
-resource limits, NetworkPolicy ports, image pins, ExternalSecret paths and the
-absence of committed secrets.
+The suite renders the toolkit bundle, the root Kustomization, every component
+Kustomization and the Nexus Kustomizations with `kubectl kustomize`, then
+checks the controller set, resource limits, NetworkPolicy ports, image pins,
+release adoption (name, namespace, chart version, values source), the
+dependency chain, ExternalSecret paths and the absence of committed secrets.

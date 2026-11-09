@@ -1,0 +1,33 @@
+# Loki, adopted from the live `loki` release (same values file as before).
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: loki
+  namespace: flux-system
+spec:
+  interval: 1h
+  timeout: 10m
+  targetNamespace: monitoring
+  releaseName: loki
+  storageNamespace: monitoring
+  chart:
+    spec:
+      chart: loki
+      version: "20.0.2"
+      interval: 1h
+      sourceRef:
+        kind: HelmRepository
+        name: grafana-community
+        namespace: flux-system
+  install:
+    createNamespace: true
+    remediation:
+      retries: 0
+  upgrade:
+    timeout: 10m
+    remediation:
+      retries: 0
+  valuesFrom:
+    - kind: ConfigMap
+      name: loki-values
+      valuesKey: loki.yaml

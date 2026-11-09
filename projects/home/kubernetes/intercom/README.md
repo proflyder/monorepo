@@ -13,7 +13,7 @@ Deployment/Service сигналинга звонка; код и контракт
   (`token`, общий токен приложения), `station_token` — из
   `secret/k8s/home-assistant/intercom`.
 - HTTPS-маршрут `intercom.home.<home-suffix>` — в
-  `projects/home/kubernetes/ingress/manifests/routes.yaml`
+  `projects/home/kubernetes/ingress/routes/routes.yaml`
   (`INTERCOM_HOST`), а не здесь: namespace/allow-list/TLS принадлежат
   ingress-юниту. Адрес для клиентов: `https://intercom.home.<home-suffix>/`
   (LAN/VPN, `home-allowlist`, wildcard TLS). В Firebase Remote Config это

@@ -13,7 +13,7 @@ BLE gateway остаются на станции. Версии зафиксир�
 - [Дашборды и мониторинг](../../home-assistant/observability/README.md).
 - [HTTPS ingress Traefik + cert-manager](ingress/).
 - [Nexus — кэш артефактов для CI](nexus/).
-- [Flux — pull-based GitOps для Nexus](flux/).
+- [Flux — pull-based GitOps для платформы, observability, Vaultwarden и Nexus](flux/).
 - [OpenBao](openbao/).
 - [External Secrets Operator](external-secrets/).
 - [Hermes voice-proxy firewall](voice-firewall/).
@@ -28,18 +28,16 @@ MA/Matter add-ons: `core_matter_server 9.2.0`, `d5369777_music_assistant 2.10.8`
 
 ## Обновление
 
-Нужны Helm repositories `prometheus-community`, `grafana-community`, `grafana`,
-приватный kubeconfig и закрытые values. Kubernetes Secret `grafana-admin`
-создаётся External Secrets Operator из OpenBao; значения не передаются через
-командную строку.
+Traefik, cert-manager, ESO, observability и Vaultwarden обновляются merge'ем
+в `develop` (Flux). Chart приложений (`runtime`) и его storage по-прежнему
+катятся вручную/`deploy-home`:
 
 ```bash
-export PROMETHEUS_PRIVATE_VALUES=/private/path/prometheus.yaml
-mise run admin:observability
 export RUNTIME_PRIVATE_VALUES=/private/path/runtime-values.yaml
 ./projects/home/kubernetes/apply-runtime.sh
 ```
 
+Изменения HelmRelease и values — в Git; вручную Helm-релизы не трогать.
 Не выполнять параллельные Helm операции над одним release; rollback — в
 runbook (`docs/KUBERNETES-OPERATIONS.md`).
 

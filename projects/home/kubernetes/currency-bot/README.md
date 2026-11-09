@@ -157,8 +157,8 @@ Trade-offs:
    not automated here.
 
 6. **DNS/TLS for the internal route:** `currency.<HOME_DOMAIN>` A record →
-   node (DNS only), and run `projects/home/kubernetes/ingress/deploy.sh` so the
-   IngressRoute and wildcard certificate include the new host.
+   node (DNS only, manual `cloudflare_dns.py`). The IngressRoute and wildcard
+   certificate are already reconciled by Flux (`platform-routes`).
 
 ## Deploy
 

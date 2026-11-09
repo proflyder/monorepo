@@ -66,17 +66,6 @@ INGRESS_PRIVATE_ENV = { provider = "infra_kubernetes", value = "values-private/i
 CLOUDFLARE_API_TOKEN_FILE = { provider = "infra_cloudflare", value = "vpn-dns/cloudflare_env", as_file = true }
 KUBECONFIG = { provider = "infra_kubernetes", value = "admin/admin_kubeconfig", as_file = true }
 
-# --- Vaultwarden deploy -------------------------------------------------------
-[profiles.vaultwarden.secrets]
-INGRESS_PRIVATE_ENV = { provider = "infra_kubernetes", value = "values-private/ingress_env", as_file = true }
-CLOUDFLARE_API_TOKEN_FILE = { provider = "infra_cloudflare", value = "vpn-dns/cloudflare_env", as_file = true }
-KUBECONFIG = { provider = "infra_kubernetes", value = "admin/admin_kubeconfig", as_file = true }
-
-# --- observability (Prometheus/Loki/Alloy Helm) ------------------------------
-[profiles.observability.secrets]
-PROMETHEUS_PRIVATE_VALUES = { provider = "infra_kubernetes", value = "values-private/observability_values_yaml", as_file = true }
-KUBECONFIG = { provider = "infra_kubernetes", value = "admin/admin_kubeconfig", as_file = true }
-
 # --- heartbeat Worker (Cloudflare) -------------------------------------------
 [profiles.heartbeat.secrets]
 HEARTBEAT_ENV_FILE = { provider = "infra_cloudflare", value = "workers/heartbeat_env", as_file = true }

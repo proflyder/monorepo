@@ -1,0 +1,38 @@
+# kube-prometheus-stack, adopted from the live `monitoring` release.
+#
+# The chart version and values match the live release; the private Grafana root
+# URL and PVE scrape target are substituted from flux-settings by the
+# `observability` Kustomization. Prometheus/Alertmanager/Grafana PVCs and their
+# local-retain volumes already exist, so a reconcile does not recreate them.
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: monitoring
+  namespace: flux-system
+spec:
+  interval: 1h
+  timeout: 15m
+  targetNamespace: monitoring
+  releaseName: monitoring
+  storageNamespace: monitoring
+  chart:
+    spec:
+      chart: kube-prometheus-stack
+      version: "92.14.0"
+      interval: 1h
+      sourceRef:
+        kind: HelmRepository
+        name: prometheus-community
+        namespace: flux-system
+  install:
+    createNamespace: true
+    remediation:
+      retries: 0
+  upgrade:
+    timeout: 15m
+    remediation:
+      retries: 0
+  valuesFrom:
+    - kind: ConfigMap
+      name: prometheus-values
+      valuesKey: prometheus.yaml

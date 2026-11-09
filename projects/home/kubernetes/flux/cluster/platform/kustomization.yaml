@@ -1,0 +1,12 @@
+# Platform components reconciled by the `platform` Kustomization.
+#
+# Flux applies these four Kustomization objects, then `platform` (wait: true)
+# waits for every child to become Ready. The children keep the Helm releases in
+# their live namespaces and order ESO -> cert-manager -> Traefik -> routes.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - external-secrets.yaml
+  - cert-manager.yaml
+  - traefik.yaml
+  - routes.yaml

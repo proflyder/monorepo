@@ -1,0 +1,13 @@
+# Vaultwarden, reconciled by Flux.
+#
+# The namespace, ExternalSecret, NetworkPolicies, SQLite workload and route are
+# all declarative. `NODE_LAN_IP`, `LAN_CIDR` and `HOME_DOMAIN` come from the
+# ESO-owned `flux-settings` Secret. The Cloudflare A record stays a manual step.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - manifests/namespace.yaml
+  - manifests/external-secrets.yaml
+  - manifests/network-policies.yaml
+  - manifests/vaultwarden.yaml
+  - manifests/ingressroute.yaml

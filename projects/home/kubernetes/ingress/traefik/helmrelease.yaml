@@ -1,0 +1,36 @@
+# Traefik, adopted from the live `traefik` release.
+#
+# Same release name/namespace as `helm list -A`; the values file is the live
+# configuration (hostNetwork, Recreate, allow-list provider settings).
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: traefik
+  namespace: flux-system
+spec:
+  interval: 1h
+  timeout: 10m
+  targetNamespace: traefik
+  releaseName: traefik
+  storageNamespace: traefik
+  chart:
+    spec:
+      chart: traefik
+      version: "42.2.0"
+      interval: 1h
+      sourceRef:
+        kind: HelmRepository
+        name: traefik
+        namespace: flux-system
+  install:
+    createNamespace: true
+    remediation:
+      retries: 0
+  upgrade:
+    timeout: 10m
+    remediation:
+      retries: 0
+  valuesFrom:
+    - kind: ConfigMap
+      name: traefik-values
+      valuesKey: values.yaml

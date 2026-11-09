@@ -35,6 +35,37 @@ spec:
         - protocol: TCP
           port: 9090
 ---
+# Helm chart index and tarballs live on third-party CDNs whose addresses move
+# (charts.jetstack.io, charts.external-secrets.io, GitHub release assets).
+# Only the source-controller may reach HTTPS outside the private networks; the
+# other controllers stay limited by `flux-system-egress` below. NetworkPolicy
+# egress rules are additive, so this grants 443 to the source-controller in
+# addition to its DNS/API/artifact/GitHub rules.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: flux-system-chart-egress
+  namespace: flux-system
+spec:
+  podSelector:
+    matchLabels:
+      app: source-controller
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+              - 100.64.0.0/10
+              - 169.254.0.0/16
+      ports:
+        - protocol: TCP
+          port: 443
+---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -98,3 +129,6 @@ spec:
       ports:
         - protocol: TCP
           port: 443
+    # Helm chart repositories are fetched by the source-controller over
+    # arbitrary CDN addresses (Cloudflare, Google, Fastly); the dedicated
+    # policy below allows it HTTPS-only outside the private ranges.

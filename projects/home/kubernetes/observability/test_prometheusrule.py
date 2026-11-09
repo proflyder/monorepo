@@ -11,7 +11,7 @@ import unittest
 
 import yaml
 
-RULE_FILE = Path(__file__).with_name("manifests") / "prometheusrule-backups.yaml"
+RULE_FILE = Path(__file__).with_name("rules") / "prometheusrule-backups.yaml"
 REQUIRED_ALERTS = {
     "VzdumpBackupStale",
     "OffsiteBackupFailed",
@@ -59,16 +59,22 @@ class BackupRuleTests(unittest.TestCase):
         for vmid in ("100", "101", "102"):
             self.assertIn(f'vmid="{vmid}"', absent[0])
 
-    def test_pve_scrape_example_uses_test_net(self) -> None:
-        example = yaml.safe_load(
-            (Path(__file__).with_name("pve-scrape.values.example.yaml")).read_text(
-                encoding="utf-8"
-            )
+    def test_pve_scrape_target_is_substituted_from_flux_settings(self) -> None:
+        values = yaml.safe_load(
+            (Path(__file__).with_name("values") / "prometheus.yaml").read_text(encoding="utf-8")
         )
-        targets = example["prometheus"]["prometheusSpec"]["additionalScrapeConfigs"][0][
-            "static_configs"
-        ][0]["targets"]
-        self.assertTrue(all(target.startswith("192.0.2.") for target in targets))
+        configs = values["prometheus"]["prometheusSpec"]["additionalScrapeConfigs"]
+        self.assertEqual(len(configs), 1)
+        self.assertEqual(configs[0]["job_name"], "pve-node")
+        # The real host:port stays out of Git.
+        self.assertEqual(configs[0]["static_configs"][0]["targets"], ["${PVE_NODE_TARGET}"])
+
+    def test_grafana_root_url_uses_the_home_suffix(self) -> None:
+        values = yaml.safe_load(
+            (Path(__file__).with_name("values") / "prometheus.yaml").read_text(encoding="utf-8")
+        )
+        server = values["grafana"]["grafana.ini"]["server"]
+        self.assertEqual(server["root_url"], "https://grafana.${HOME_DOMAIN}/")
 
 
 if __name__ == "__main__":
