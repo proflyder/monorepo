@@ -22,4 +22,5 @@
     <color name="home_surface_container_highest">#2F3633</color>
     <color name="home_outline">#89938E</color>
     <color name="home_outline_variant">#3F4945</color>
+    <color name="time_tab_ripple">#1FBFC9C4</color>
 </resources>
