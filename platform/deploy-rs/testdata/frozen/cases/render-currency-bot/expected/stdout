@@ -1,4 +1,4 @@
-rollout id: 96d0770138dc
+rollout id: 8b563b62b17b
 rendered input/currency-bot.yaml -> out/currency-bot.yaml
 rendered input/cloudflared.yaml -> out/cloudflared.yaml
 rendered input/network-policies.yaml -> out/network-policies.yaml

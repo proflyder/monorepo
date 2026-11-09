@@ -20,8 +20,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[3]
-BASE = "/tmp/ricardo-voice-recorder"
-MAGIC = b"RICARDO_PCM_S16LE_16000\n"
+BASE = "/tmp/voice-recorder"
+MAGIC = b"HOME_PCM_S16LE_16000\n"
 BLOCKS = {"normal", "relaxed", "quiet", "whisper", "commands", "background"}
 
 
@@ -124,13 +124,13 @@ class Recorder:
 
     def install(self):
         if not self.helper.is_file():
-            raise RuntimeError("Сначала соберите ricardo-voicestream по README.")
+            raise RuntimeError("Сначала соберите voicestream по README.")
         self.helper_hash = hashlib.sha256(self.helper.read_bytes()).hexdigest()
-        self.shell(f"test ! -d /tmp/ricardo-voice-recorder.lock && mkdir -p {BASE} && chmod 700 {BASE}")
-        self.run("push", str(self.helper), BASE + "/ricardo-voicestream")
+        self.shell(f"test ! -d /tmp/voice-recorder.lock && mkdir -p {BASE} && chmod 700 {BASE}")
+        self.run("push", str(self.helper), BASE + "/voicestream")
         self.run("push", str(HERE / "session.sh"), BASE + "/session.sh")
         self.run("push", str(HERE / "recover.sh"), BASE + "/recover.sh")
-        self.shell(f"chmod 700 {BASE}/ricardo-voicestream {BASE}/session.sh {BASE}/recover.sh")
+        self.shell(f"chmod 700 {BASE}/voicestream {BASE}/session.sh {BASE}/recover.sh")
 
     def start(self):
         with self.lock:
@@ -301,7 +301,7 @@ class Recorder:
             try:
                 status = self.shell("pidof pulsar >/dev/null && pidof supervise.sh >/dev/null && "
                     "test -f /data/pulsar/enabled && "
-                    "test ! -d /tmp/ricardo-voice-recorder.lock && echo restored", timeout=3)
+                    "test ! -d /tmp/voice-recorder.lock && echo restored", timeout=3)
                 if status == "restored":
                     with self.lock:
                         self.restored = True
@@ -343,7 +343,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(data)))
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
-        self.send_header("X-Ricardo-Recorder", "local-v1")
+        self.send_header("X-Home-Recorder", "local-v1")
         self.send_header("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'")
         self.end_headers()
         self.wfile.write(data)
@@ -407,7 +407,7 @@ def main():
     auth.add_argument("--ssh-key", type=Path)
     auth.add_argument("--credentials", type=Path, help="Private CREDENTIALS.md with SSH-пароль field")
     parser.add_argument("--ssh-port", type=int, default=22)
-    parser.add_argument("--helper", type=Path, default=ROOT / "local-data/local-tools/voice-recorder-target/armv7-unknown-linux-gnueabihf/release/ricardo-voicestream")
+    parser.add_argument("--helper", type=Path, default=ROOT / "local-data/local-tools/voice-recorder-target/armv7-unknown-linux-gnueabihf/release/voicestream")
     parser.add_argument("--output", type=Path, default=ROOT / "local-data/voice-recorder/recordings")
     parser.add_argument("--remove-device", action="store_true")
     parser.add_argument("--recover-device", action="store_true")
@@ -420,7 +420,7 @@ def main():
         print(rec.shell(f"sh {BASE}/recover.sh", timeout=25))
         return
     if args.remove_device:
-        rec.shell(f"test ! -d /tmp/ricardo-voice-recorder.lock && ! pidof ricardo-voicestream >/dev/null && busybox rm -rf {BASE}")
+        rec.shell(f"test ! -d /tmp/voice-recorder.lock && ! pidof voicestream >/dev/null && busybox rm -rf {BASE}")
         print("Временные файлы инструмента удалены с колонки. Записи на Mac сохранены.")
         return
     server = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)

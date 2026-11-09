@@ -53,7 +53,8 @@ static DIGEST_PATTERN: LazyLock<Regex> =
 static ERROR_PATTERN: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"\b(ERROR|CRITICAL|Traceback)\b|panic:").expect("error regex"));
 static HEALTH_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r#"^ricardo_endpoint_up\{endpoint="([^"]+)"\}\s+([0-9.]+)"#).expect("health regex")
+    Regex::new(r#"^(?:home|ricardo)_endpoint_up\{endpoint="([^"]+)"\}\s+([0-9.]+)"#)
+        .expect("health regex")
 });
 
 const TRANSIENT_WORDS: &[&str] = &[
@@ -428,7 +429,7 @@ pub fn exporter_metrics_path(namespace: &str, service: &str) -> String {
     format!("/api/v1/namespaces/{namespace}/services/{service}:9116/proxy/metrics")
 }
 
-/// Parses `ricardo_endpoint_up{endpoint="…"} N`.
+/// Parses `home_endpoint_up{endpoint="…"} N` (and the deprecated `ricardo_` alias).
 #[must_use]
 pub fn parse_health(text: &str) -> BTreeMap<String, i64> {
     let mut values = BTreeMap::new();
@@ -1211,7 +1212,7 @@ mod tests {
     fn all_up_metrics() -> String {
         EXPECTED_ENDPOINTS
             .iter()
-            .map(|name| format!("ricardo_endpoint_up{{endpoint=\"{name}\"}} 1"))
+            .map(|name| format!("home_endpoint_up{{endpoint=\"{name}\"}} 1"))
             .collect::<Vec<_>>()
             .join("\n")
     }
@@ -1293,9 +1294,12 @@ mod tests {
     #[test]
     fn health_checks_all_endpoints() {
         assert!(check_health(&all_up_metrics()).is_ok());
+        // The deprecated ricardo_* alias from an older exporter still parses.
+        let legacy = all_up_metrics().replace("home_endpoint_up", "ricardo_endpoint_up");
+        assert!(check_health(&legacy).is_ok());
         let down = all_up_metrics().replace("endpoint=\"ha\"} 1", "endpoint=\"ha\"} 0");
         assert!(check_health(&down).is_err());
-        let missing = all_up_metrics().replace("ricardo_endpoint_up{endpoint=\"piper\"} 1\n", "");
+        let missing = all_up_metrics().replace("home_endpoint_up{endpoint=\"piper\"} 1\n", "");
         assert!(
             check_health(&missing)
                 .unwrap_err()

@@ -14,7 +14,7 @@ if not any(a in sys.argv for a in ["--recover-device", "--remove-device"]):
     url = "http://127.0.0.1:" + str(config.get("port", 8765))
     try:
         with urlopen(url, timeout=1) as response:
-            existing = response.headers.get("X-Ricardo-Recorder") == "local-v1"
+            existing = response.headers.get("X-Home-Recorder") == "local-v1"
     except OSError:
         existing = False
     if existing:

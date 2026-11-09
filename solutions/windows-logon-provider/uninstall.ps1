@@ -1,7 +1,7 @@
 ﻿#Requires -RunAsAdministrator
 <#
 .SYNOPSIS
-    Удаляет провайдер входа Ricardo с ПК «комп».
+    Удаляет провайдер входа Home с ПК «комп».
 
 .DESCRIPTION
     Сначала снимает обе регистрации в реестре (LogonUI перестаёт загружать
@@ -20,9 +20,9 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $ProviderClsid = '{9459CCEA-4CCC-4435-89BF-E0E132E0C27F}'
-$DllName = 'RicardoKompLogon.dll'
-$InstallDir = 'C:\Program Files\Ricardo\KompLogon'
-$DataDir = 'C:\ProgramData\Ricardo\KompLogon'
+$DllName = 'HomeKompLogon.dll'
+$InstallDir = 'C:\Program Files\Home\KompLogon'
+$DataDir = 'C:\ProgramData\Home\KompLogon'
 $ClassesKey = "HKLM:\SOFTWARE\Classes\CLSID\$ProviderClsid"
 $CredentialProvidersKey = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Authentication\Credential Providers'
 $ProviderKey = "$CredentialProvidersKey\$ProviderClsid"
@@ -64,4 +64,4 @@ if (-not $KeepSecret) {
 
 # Configuration (ServiceUrl/Machine/UserName/Domain) stays so a reinstall keeps
 # the same values. Logs stay for diagnostics.
-Write-Output 'Uninstalled. Logs kept in C:\ProgramData\Ricardo\KompLogon.'
+Write-Output 'Uninstalled. Logs kept in C:\ProgramData\Home\KompLogon.'

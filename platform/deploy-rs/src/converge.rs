@@ -423,7 +423,7 @@ spec:
               value: "false"
 "#;
 
-    const LIVE: &str = r#"{"metadata":{"name":"ha-bridge","generation":18,"resourceVersion":"12345"},"spec":{"replicas":1,"template":{"spec":{"containers":[{"name":"ha-bridge","env":[{"name":"BRIDGE_EXECUTE","value":"true"}],"volumeMounts":[{"name":"bin","mountPath":"/opt/ricardo/bin"}]}]}}}}"#;
+    const LIVE: &str = r#"{"metadata":{"name":"ha-bridge","generation":18,"resourceVersion":"12345"},"spec":{"replicas":1,"template":{"spec":{"containers":[{"name":"ha-bridge","env":[{"name":"BRIDGE_EXECUTE","value":"true"}],"volumeMounts":[{"name":"bin","mountPath":"/opt/home/bin"}]}]}}}}"#;
 
     fn manifest_file() -> tempfile::NamedTempFile {
         let mut file = tempfile::NamedTempFile::new().expect("temp file");

@@ -51,7 +51,7 @@ fn main() -> std::io::Result<()> {
                         continue;
                     }
                     if !ready {
-                        out.write_all(b"RICARDO_PCM_S16LE_16000\n")?;
+                        out.write_all(b"HOME_PCM_S16LE_16000\n")?;
                         ready = true;
                     }
                     let bytes: Vec<u8> = samples.iter().flat_map(|s| s.to_le_bytes()).collect();

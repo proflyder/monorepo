@@ -119,10 +119,17 @@ impl Exporter {
     pub async fn metrics(&self) -> String {
         use std::fmt::Write as _;
 
+        // `home_endpoint_*` is the current name. The `ricardo_endpoint_*`
+        // series stay for one rollout as deprecated aliases so an older
+        // dashboard or alert rule keeps working while the new exporter lands.
         let mut out = String::from(
-            "# HELP ricardo_endpoint_up Whether a configured TCP endpoint accepts connections.\n\
+            "# HELP home_endpoint_up Whether a configured TCP endpoint accepts connections.\n\
+             # TYPE home_endpoint_up gauge\n\
+             # HELP home_endpoint_connect_seconds TCP connection time, not voice latency.\n\
+             # TYPE home_endpoint_connect_seconds gauge\n\
+             # HELP ricardo_endpoint_up Deprecated alias of home_endpoint_up.\n\
              # TYPE ricardo_endpoint_up gauge\n\
-             # HELP ricardo_endpoint_connect_seconds TCP connection time, not voice latency.\n\
+             # HELP ricardo_endpoint_connect_seconds Deprecated alias of home_endpoint_connect_seconds.\n\
              # TYPE ricardo_endpoint_connect_seconds gauge\n",
         );
         for endpoint in ENDPOINTS {
@@ -137,6 +144,16 @@ impl Exporter {
             };
             let elapsed = (self.now)().saturating_sub(started);
             let seconds = elapsed as f64 / 1_000_000_000.0;
+            let _ = writeln!(
+                out,
+                "home_endpoint_up{{endpoint=\"{}\"}} {}",
+                endpoint.name, up
+            );
+            let _ = writeln!(
+                out,
+                "home_endpoint_connect_seconds{{endpoint=\"{}\"}} {seconds:.6}",
+                endpoint.name
+            );
             let _ = writeln!(
                 out,
                 "ricardo_endpoint_up{{endpoint=\"{}\"}} {}",
@@ -240,12 +257,12 @@ mod tests {
             now: step_clock(),
         };
         let body = exporter.metrics().await;
-        assert!(body.contains("# TYPE ricardo_endpoint_up gauge"));
-        assert!(body.contains("# TYPE ricardo_endpoint_connect_seconds gauge"));
+        assert!(body.contains("# TYPE home_endpoint_up gauge"));
+        assert!(body.contains("# TYPE home_endpoint_connect_seconds gauge"));
         for endpoint in ENDPOINTS {
             assert!(
                 body.contains(&format!(
-                    "ricardo_endpoint_up{{endpoint=\"{}\"}} 1",
+                    "home_endpoint_up{{endpoint=\"{}\"}} 1",
                     endpoint.name
                 )),
                 "{} up metric is missing",
@@ -253,7 +270,7 @@ mod tests {
             );
             assert!(
                 body.contains(&format!(
-                    "ricardo_endpoint_connect_seconds{{endpoint=\"{}\"}} ",
+                    "home_endpoint_connect_seconds{{endpoint=\"{}\"}} ",
                     endpoint.name
                 )),
                 "{} duration metric is missing",
@@ -278,7 +295,7 @@ mod tests {
             now: step_clock(),
         };
         let body = exporter.metrics().await;
-        assert!(body.contains("ricardo_endpoint_up{endpoint=\"voice_proxy\"} 0"));
+        assert!(body.contains("home_endpoint_up{endpoint=\"voice_proxy\"} 0"));
     }
 
     #[tokio::test]
@@ -303,7 +320,7 @@ mod tests {
             now: step_clock(),
         };
         let body = exporter.metrics().await;
-        assert!(body.contains("ricardo_endpoint_up{endpoint=\"ha\"} 1"));
+        assert!(body.contains("home_endpoint_up{endpoint=\"ha\"} 1"));
         let dialled = seen.lock().expect("dialled addresses").clone();
         assert!(dialled.contains(&"haos.home.arpa:8123".to_owned()));
         assert!(dialled.contains(&"127.0.0.1:8095".to_owned()));
@@ -340,7 +357,7 @@ mod tests {
             .expect("body")
             .to_bytes();
         assert!(std::str::from_utf8(&body).expect("utf-8").contains(
-            "# HELP ricardo_endpoint_up Whether a configured TCP endpoint accepts connections."
+            "# HELP home_endpoint_up Whether a configured TCP endpoint accepts connections."
         ));
 
         let other = router(Arc::new(Exporter {

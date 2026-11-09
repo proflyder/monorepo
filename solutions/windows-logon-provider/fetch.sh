@@ -9,7 +9,7 @@
 #
 # Requires `oras` and an authenticated `gh` (GitHub CLI). The reference is
 # pulled with ORAS, SHA256SUMS must verify locally, and `gh attestation verify`
-# must confirm the build provenance of RicardoKompLogon.dll. Any mismatch,
+# must confirm the build provenance of HomeKompLogon.dll. Any mismatch,
 # missing tool or failed attestation aborts with a non-zero status. The resolved
 # OCI digest is printed at the end and the unpacked files are kept in
 # DESTINATION (a mktemp directory when omitted).
@@ -60,7 +60,7 @@ fi
 # the owner is not duplicated as a literal in this script.
 owner="${REPOSITORY#*/}"
 owner="${owner%%/*}"
-gh attestation verify "$destination/RicardoKompLogon.dll" --owner "$owner"
+gh attestation verify "$destination/HomeKompLogon.dll" --owner "$owner"
 
 if [[ "$ref" == sha256:* ]]; then
   resolved="$ref"

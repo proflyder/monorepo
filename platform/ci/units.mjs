@@ -1214,7 +1214,7 @@ export const config = {
         test: "./run-tests.sh",
         build: "./build.sh",
         artifacts: [
-          "out/RicardoKompLogon.dll",
+          "out/HomeKompLogon.dll",
           "out/cp-selftest.exe",
         ],
         checksums: "out/SHA256SUMS",
@@ -1224,7 +1224,7 @@ export const config = {
         // change is still built, tested and verified by PR CI.
         publish_when: ["solutions/windows-logon-provider/VERSION"],
         publish_tags: ["{version}", "sha-{commit12}"],
-        publish_attest_glob: "RicardoKompLogon.dll",
+        publish_attest_glob: "HomeKompLogon.dll",
       },
     },
 

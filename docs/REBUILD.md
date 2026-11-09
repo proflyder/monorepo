@@ -35,7 +35,7 @@ K3s — `KUBERNETES-OPERATIONS.md`.
 3. Восстановить terraform state/private tfvars; `terraform plan` → apply.
 4. Создать VM 100/101 с теми же ресурсами и MAC/static IP.
 5. Восстановить HAOS и K3s (ниже).
-6. Вернуть Wi-Fi профиль/`ricardo-uplink`; проверить Ethernet fallback.
+6. Вернуть Wi-Fi профиль/`home-uplink`; проверить Ethernet fallback.
 7. Пересоздать CT 102 `vpn` скриптами `projects/home/proxmox/vpn/`;
    восстановить пользователей/клиентские сертификаты или выпустить новые
    (старые `.p12` в `secrets/home/vpn/clients/`), проверить `443/tcp+udp`.

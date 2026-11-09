@@ -21,7 +21,7 @@ metadata:
     app.kubernetes.io/name: intercom
     app.kubernetes.io/part-of: home
   annotations:
-    ricardo.dev/build: ${BUILD_ID}
+    proflyder.dev/build: ${BUILD_ID}
 spec:
   replicas: 1
   strategy:
@@ -34,7 +34,7 @@ spec:
       labels:
         app.kubernetes.io/name: intercom
       annotations:
-        ricardo.dev/rollout: ${ROLLOUT_ID}
+        proflyder.dev/rollout: ${ROLLOUT_ID}
     spec:
       enableServiceLinks: false
       securityContext:

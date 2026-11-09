@@ -63,7 +63,7 @@ gateway, MAC. Не переиспользовать старый config-drive in
 
 ## Wi-Fi uplink
 
-- Wi-Fi остаётся на PVE; `ricardo-uplink` подключает либо Ethernet, либо
+- Wi-Fi остаётся на PVE; `home-uplink` подключает либо Ethernet, либо
   Wi-Fi 4addr/WDS к `vmbr0`. VM IP/URL не меняются.
 - Не подключать оба uplink в мост одновременно.
 - При смене AP/драйвера повторить canary: отдельный MAC, DHCP, gateway,

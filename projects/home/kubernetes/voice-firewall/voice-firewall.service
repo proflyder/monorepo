@@ -5,7 +5,7 @@ Wants=network-online.target
 
 [Service]
 Type=oneshot
-ExecStart=/usr/local/sbin/ricardo-voice-firewall
+ExecStart=/usr/local/sbin/home-voice-firewall
 RemainAfterExit=yes
 
 [Install]

@@ -72,17 +72,20 @@ kubectl. `deploy-home` собирает эти строки в job summary.
 
 ### Rollout без перезапуска при неизменном содержимом
 
-Pod template аннотируется `ricardo.dev/rollout: ${ROLLOUT_ID}` —
+Pod template аннотируется `proflyder.dev/rollout: ${ROLLOUT_ID}` —
 content-addressed хешем всего, что рендерится для юнита (digest'ы всех
 образов, значения из private env, данные ConfigMap, probes, resources).
 `BUILD_ID` (`<git rev>-<image fingerprint>`) остаётся только в аннотации
-`metadata.annotations.ricardo.dev/build` самого Deployment: смена ревизии
+`proflyder.dev/build` самого Deployment: смена ревизии
 Git видна для трассировки, но не меняет pod template, поэтому
 `kubectl apply`/`replace` не создаёт новый ReplicaSet. Изменение образа,
 отрендеренного конфига или смонтированного ConfigMap по-прежнему меняет
 `ROLLOUT_ID` и перезапускает pods. Тот же подход применяется к юнитам
 scheduler, currency-bot, mcp-gateway и wakegrant; первый deploy после
-смены формата аннотации один раз перезапускает все pods. ESO-managed
+смены формата аннотации один раз перезапускает все pods. Прежние ключи с
+доменом `*.dev` нигде не читаются: rollout определяется по
+`metadata.generation`, поэтому fallback не нужен, а старые аннотации просто
+исчезают при первом `replace`. ESO-managed
 Secret'ы в хеш не входят: они не рендерятся юнитом и управляются отдельно
 (как и до этого изменения); отрендеренные ConfigMap, которые монтирует
 pod, входят.

@@ -23,7 +23,7 @@ function renderFiles(s){
   const title=document.createElement('strong');title.textContent=`${labels[f.block]||f.block} · ${f.split==='test'?'Проверка':'Обучение'} · ${f.seconds} с`;
   const info=document.createElement('p');info.className='small';info.textContent=[f.created,f.note,f.interrupted?'Запись прервана — проверь целостность':'',f.peak===0?'Нет сигнала':f.peak>=32760?'Возможна перегрузка':'',f.excluded?'Исключён из набора':''].filter(Boolean).join(' · ');
   item.append(title,info);
-  const link=document.createElement('a');link.href='/audio/'+f.id;link.download=`ricardo-${f.block}-${f.split}-${f.id}.wav`;link.textContent='Скачать WAV';item.append(link);
+  const link=document.createElement('a');link.href='/audio/'+f.id;link.download=`home-${f.block}-${f.split}-${f.id}.wav`;link.textContent='Скачать WAV';item.append(link);
   if(s.restored){const audio=document.createElement('audio');audio.controls=true;audio.preload='none';audio.src='/audio/'+f.id;item.append(audio);}
   const exclude=document.createElement('button');exclude.className='secondary';exclude.textContent=f.excluded?'Вернуть в набор':'Исключить дубль';exclude.onclick=()=>post('/api/take/exclude',{id:f.id,excluded:!f.excluded});item.append(exclude);
   $('files').append(item);

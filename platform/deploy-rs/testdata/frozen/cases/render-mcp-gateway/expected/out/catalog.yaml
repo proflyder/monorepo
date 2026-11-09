@@ -26,7 +26,7 @@ overview: |
 
   - **HAOS VM** — Home Assistant, Music Assistant и Matter как add-ons.
     В Kubernetes это не workload: доступность видна только TCP-проверкой
-    (`ricardo_endpoint_up{endpoint="ha"}` и `"music_assistant"`).
+    (`home_endpoint_up{endpoint="ha"}` и `"music_assistant"`).
   - **K3s VM** (один узел) — все приложения ниже, observability и секреты.
   - **Станция** — колонка с Pulsar/ESPHome; метрик и логов в кластере нет,
     поэтому доступность проверяется TCP-портами и сущностями Home Assistant
@@ -91,10 +91,10 @@ services:
       name: hermes
     containers: [gateway, voice-proxy]
     signals:
-      - promql: ricardo_endpoint_up{endpoint="hermes"} == 0
+      - promql: home_endpoint_up{endpoint="hermes"} == 0
         meaning: шлюз Hermes не отвечает
         status: true
-      - promql: ricardo_endpoint_up{endpoint="voice_proxy"} == 0
+      - promql: home_endpoint_up{endpoint="voice_proxy"} == 0
         meaning: голосовой прокси не отвечает
         status: true
       - promql: kube_deployment_status_replicas_available{namespace="home-assistant",deployment="hermes"} < 1
@@ -121,7 +121,7 @@ services:
       name: gigaam
     containers: [gigaam]
     signals:
-      - promql: ricardo_endpoint_up{endpoint="gigaam"} == 0
+      - promql: home_endpoint_up{endpoint="gigaam"} == 0
         meaning: основное распознавание речи не отвечает
         status: true
       - promql: kube_deployment_status_replicas_available{namespace="home-assistant",deployment="gigaam"} < 1
@@ -147,7 +147,7 @@ services:
       name: whisper
     containers: [whisper]
     signals:
-      - promql: ricardo_endpoint_up{endpoint="whisper"} == 0
+      - promql: home_endpoint_up{endpoint="whisper"} == 0
         meaning: резервное распознавание речи не отвечает
         status: false
       - promql: kube_deployment_status_replicas_available{namespace="home-assistant",deployment="whisper"} < 1
@@ -173,7 +173,7 @@ services:
       name: piper
     containers: [piper]
     signals:
-      - promql: ricardo_endpoint_up{endpoint="piper"} == 0
+      - promql: home_endpoint_up{endpoint="piper"} == 0
         meaning: синтез речи не отвечает
         status: true
       - promql: kube_deployment_status_replicas_available{namespace="home-assistant",deployment="piper"} < 1
@@ -741,7 +741,7 @@ services:
       en: [home-assistant, ha, home]
     kind: external
     signals:
-      - promql: ricardo_endpoint_up{endpoint="ha"} == 0
+      - promql: home_endpoint_up{endpoint="ha"} == 0
         meaning: Home Assistant не отвечает
         status: true
     checks:
@@ -770,7 +770,7 @@ services:
       en: [music-assistant, ma, music]
     kind: external
     signals:
-      - promql: ricardo_endpoint_up{endpoint="music_assistant"} == 0
+      - promql: home_endpoint_up{endpoint="music_assistant"} == 0
         meaning: Music Assistant не отвечает
         status: true
     checks:

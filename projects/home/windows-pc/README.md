@@ -58,8 +58,8 @@ Start-Service sshd
 ключ кладётся не в `%USERPROFILE%\.ssh`, а в общий файл:
 
 ```powershell
-New-Item -ItemType Directory -Force C:\ProgramData\ricardo
-# скопировать komp-power.ps1 в C:\ProgramData\ricardo\komp-power.ps1
+New-Item -ItemType Directory -Force C:\ProgramData\home
+# скопировать komp-power.ps1 в C:\ProgramData\home\komp-power.ps1
 New-Item -ItemType File -Force C:\ProgramData\ssh\administrators_authorized_keys
 icacls.exe "C:\ProgramData\ssh\administrators_authorized_keys" /inheritance:r `
   /grant "Administrators:F" /grant "SYSTEM:F"
@@ -68,7 +68,7 @@ icacls.exe "C:\ProgramData\ssh\administrators_authorized_keys" /inheritance:r `
 Строка в `administrators_authorized_keys` (одна строка, без переводов внутри):
 
 ```text
-from="192.0.2.28",restrict,command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\ProgramData\ricardo\komp-power.ps1" ssh-ed25519 AAAA... ha-komp
+from="192.0.2.28",restrict,command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\ProgramData\home\komp-power.ps1" ssh-ed25519 AAAA... ha-komp
 ```
 
 - `from="192.0.2.28"` — адрес HA (TEST-NET-плейсхолдер, заменить на реальный);

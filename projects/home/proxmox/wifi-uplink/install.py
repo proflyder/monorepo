@@ -52,9 +52,9 @@ def main():
     shutil.copy2(network, backup / 'interfaces.before')
     source = Path(__file__).resolve().parent
     files = {
-        '/usr/local/sbin/ricardo-uplink': ((source / 'uplink.py').read_text(), 0o755),
-        '/etc/systemd/system/ricardo-uplink.service': ((source / 'ricardo-uplink.service').read_text(), 0o644),
-        '/etc/default/ricardo-uplink': (f'BRIDGE={args.bridge}\nWIRED={args.wired}\nWIFI={args.wifi}\nMODE=auto\n', 0o644),
+        '/usr/local/sbin/home-uplink': ((source / 'uplink.py').read_text(), 0o755),
+        '/etc/systemd/system/home-uplink.service': ((source / 'home-uplink.service').read_text(), 0o644),
+        '/etc/default/home-uplink': (f'BRIDGE={args.bridge}\nWIRED={args.wired}\nWIFI={args.wifi}\nMODE=auto\n', 0o644),
         f'/etc/wpa_supplicant/wpa_supplicant-{args.wifi}.conf': (profile, 0o600),
         f'/etc/systemd/system/wpa_supplicant@{args.wifi}.service.d/bridge.conf': (
             '[Service]\nExecStart=\nExecStart=/usr/sbin/wpa_supplicant '
@@ -72,8 +72,8 @@ def main():
     network.write_text(config)
     subprocess.run(['ip', 'link', 'set', args.bridge, 'type', 'bridge', 'mcast_snooping', '0'], check=True)
     subprocess.run(['systemctl', 'daemon-reload'], check=True)
-    subprocess.run(['systemctl', 'enable', 'ricardo-uplink'], check=True)
-    subprocess.run(['systemctl', 'restart', 'ricardo-uplink'], check=True)
+    subprocess.run(['systemctl', 'enable', 'home-uplink'], check=True)
+    subprocess.run(['systemctl', 'restart', 'home-uplink'], check=True)
     print('Installed; private previous configuration:', backup)
 
 

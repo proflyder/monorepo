@@ -1,5 +1,5 @@
 {
-  "uid": "ricardo-runtime",
+  "uid": "home-runtime",
   "title": "HA voice / runtime",
   "schemaVersion": 39,
   "version": 1,
@@ -9,7 +9,7 @@
     "to": "now"
   },
   "tags": [
-    "ricardo",
+    "home",
     "git-managed"
   ],
   "panels": [
@@ -30,7 +30,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "ricardo_endpoint_up",
+          "expr": "home_endpoint_up",
           "legendFormat": "{{endpoint}}{{pod}}{{instance}}"
         }
       ],
@@ -57,7 +57,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "ricardo_endpoint_connect_seconds",
+          "expr": "home_endpoint_connect_seconds",
           "legendFormat": "{{endpoint}}{{pod}}{{instance}}"
         }
       ],

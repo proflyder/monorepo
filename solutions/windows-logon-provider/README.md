@@ -1,7 +1,7 @@
-# Провайдер входа Windows (Ricardo Komp Logon)
+# Провайдер входа Windows (Home Komp Logon)
 
 Переиспользуемый Credential Provider для Windows 11: показывает одну плитку
-«Ricardo — Автовход» и выполняет действие с настроенной учётной записью
+«Home — Автовход» и выполняет действие с настроенной учётной записью
 **только** тогда, когда сервис `wakegrant` выдал одноразовый грант нужного
 назначения (контракт `packages/contracts/wakegrant/PROTOCOL.md`):
 
@@ -109,7 +109,7 @@ CLSID провайдера (зафиксирован, менять нельзя 
 
 ## Конфигурация
 
-Реестр `HKLM\SOFTWARE\Ricardo\KompLogon` (x64):
+Реестр `HKLM\SOFTWARE\Home\KompLogon` (x64):
 
 | значение | тип | смысл |
 |---|---|---|
@@ -124,9 +124,9 @@ CLSID провайдера (зафиксирован, менять нельзя 
 выключается, даже если `ServiceUrl` или имена в реестре испорчены. Отсутствие
 `Disabled`/`FailCount` провайдер не выключает.
 
-Секрет `C:\ProgramData\Ricardo\KompLogon\secret.bin` — DPAPI в машинной
+Секрет `C:\ProgramData\Home\KompLogon\secret.bin` — DPAPI в машинной
 области (`CRYPTPROTECT_LOCAL_MACHINE`) с фиксированной энтропией
-`ricardo-komp-logon-v1`. После расшифровки это JSON
+`home-komp-logon-v1`. После расшифровки это JSON
 `{"version":1,"password":"…","key":"<base64 32 байта>"}`. Каталог и файл:
 System + Administrators полный доступ, больше никого.
 
@@ -139,7 +139,7 @@ System + Administrators полный доступ, больше никого.
 `mise install` (скрипты находят его в `PATH`), либо задаётся `BAZELISK`.
 
 ```bash
-solutions/windows-logon-provider/build.sh         # out/RicardoKompLogon.dll, out/cp-selftest.exe
+solutions/windows-logon-provider/build.sh         # out/HomeKompLogon.dll, out/cp-selftest.exe
 solutions/windows-logon-provider/run-tests.sh     # host-тесты, rustfmt/clippy (host и Windows)
 ```
 
@@ -203,7 +203,7 @@ ghcr.io/proflyder/windows-logon-provider:sha-<12 hex коммита>
 ```
 
 Тип артефакта — `application/vnd.<owner>.windows-logon-provider.v1`; файлы:
-`RicardoKompLogon.dll`, `cp-selftest.exe` и `SHA256SUMS`. Тег `<VERSION>` неизменяем по содержимому: повторная публикация
+`HomeKompLogon.dll`, `cp-selftest.exe` и `SHA256SUMS`. Тег `<VERSION>` неизменяем по содержимому: повторная публикация
 с тем же `SHA256SUMS` — успешный no-op, с другим — ошибка. Поэтому релиз
 делается сменой `VERSION`. Provenance attestation создаётся для digest
 опубликованного артефакта (`push-to-registry`) и для файла DLL.
@@ -244,7 +244,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File status.ps1
 
 `install.ps1` требует `-ServiceUrl`, `-Machine` и `-UserName`: значения
 приходят от проекта при установке, а не из решения. Скрипт копирует DLL в
-`C:\Program Files\Ricardo\KompLogon\`, ставит ACL (System/Administrators —
+`C:\Program Files\Home\KompLogon\`, ставит ACL (System/Administrators —
 запись, Users — чтение/запуск), пишет конфигурацию, регистрирует
 `HKLM\SOFTWARE\Classes\CLSID\{…}\InprocServer32`
 (`ThreadingModel = Apartment`, это и есть машинная часть `HKCR`) и ключ в
@@ -259,7 +259,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File uninstall.ps1
 
 ## Журнал
 
-`C:\ProgramData\Ricardo\KompLogon\logon.log`, добавление строк, ротация при
+`C:\ProgramData\Home\KompLogon\logon.log`, добавление строк, ротация при
 256 КиБ в `logon.log.1` (одно поколение). Формат:
 
 ```

@@ -1,5 +1,5 @@
 {
-  "checksum": "cad5975a5779c19794315d84be4229d422d0d833bf3cae77fde986c839f19a74",
+  "checksum": "96a69e98bc7b16ece74ed093e2be0aa611e2094cd75023b0a48818c08465cd54",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -7675,6 +7675,10 @@
             "target": "serde"
           },
           {
+            "id": "serde_json 1.0.154",
+            "target": "serde_json"
+          },
+          {
             "id": "thiserror 2.0.21",
             "target": "thiserror"
           }
@@ -7683,10 +7687,6 @@
           {
             "id": "axum 0.8.9",
             "target": "axum"
-          },
-          {
-            "id": "serde_json 1.0.154",
-            "target": "serde_json"
           },
           {
             "id": "tempfile 3.27.0",
@@ -15047,25 +15047,6 @@
       ],
       "version": "0.6.0"
     },
-    "ricardo-voicestream 0.1.0": {
-      "common_attrs": {
-        "deps": [
-          {
-            "id": "tokio 1.54.1",
-            "target": "tokio"
-          }
-        ],
-        "edition": "2024"
-      },
-      "license": "AGPL-3.0-only",
-      "license_ids": [
-        "AGPL-3.0"
-      ],
-      "name": "ricardo-voicestream",
-      "repository": null,
-      "targets": [],
-      "version": "0.1.0"
-    },
     "ring 0.17.14": {
       "build_script_attrs": {
         "deps": [
@@ -21961,6 +21942,25 @@
       ],
       "version": "0.1.0"
     },
+    "voicestream 0.1.0": {
+      "common_attrs": {
+        "deps": [
+          {
+            "id": "tokio 1.54.1",
+            "target": "tokio"
+          }
+        ],
+        "edition": "2024"
+      },
+      "license": "AGPL-3.0-only",
+      "license_ids": [
+        "AGPL-3.0"
+      ],
+      "name": "voicestream",
+      "repository": null,
+      "targets": [],
+      "version": "0.1.0"
+    },
     "wakegrant 0.1.0": {
       "common_attrs": {
         "deps": [
@@ -25168,10 +25168,10 @@
     "pulsar-wake-events 0.0.0": "projects/station/pulsar/satellite/crates/pulsar-wake-events",
     "pulsar-zbhci 0.0.0": "projects/station/pulsar/satellite/crates/pulsar-zbhci",
     "pulsar-zigbee 0.0.0": "projects/station/pulsar/satellite/crates/pulsar-zigbee",
-    "ricardo-voicestream 0.1.0": "projects/station/tools/voice-recorder/helper",
     "scheduler 0.1.0": "solutions/scheduler/crates/scheduler",
     "voice-contract 0.1.0": "packages/rust/voice-contract",
     "voice-proxy 0.1.0": "solutions/voice-proxy/crates/voice-proxy",
+    "voicestream 0.1.0": "projects/station/tools/voice-recorder/helper",
     "wakegrant 0.1.0": "solutions/wakegrant/crates/wakegrant",
     "wakegrant-protocol 0.1.0": "packages/rust/wakegrant-protocol"
   }

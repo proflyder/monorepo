@@ -65,7 +65,7 @@ Firewall: `projects/home/kubernetes/management-firewall/`.
 - `/srv/k3s/volumes/openbao{, -backups}` — OpenBao raft и raft snapshots
   (PV `openbao-data`/`openbao-backups`, `ricardo-existing`, `Retain`).
 - `/srv/k3s/recovery` — закрытые recovery-файлы.
-- Host-дерева `/opt/ricardo` и запасных релизов нет: откат — только
+- Host-дерева `/opt/home` и запасных релизов нет: откат — только
   digest-pinned образы в GHCR/containerd, деплой — `home-deploy converge`.
 - `runtime-ha` — архив старого HA Container, не активный writer.
 

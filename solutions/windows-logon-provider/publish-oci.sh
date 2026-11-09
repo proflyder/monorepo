@@ -92,7 +92,7 @@ file_path() {
   fi
 }
 
-file_path RicardoKompLogon.dll >/dev/null
+file_path HomeKompLogon.dll >/dev/null
 file_path cp-selftest.exe >/dev/null
 CHECKSUMS="$(file_path SHA256SUMS)"
 
@@ -151,7 +151,7 @@ check_existing_tag() {
 
 push_artifact() {
   local destination="$1"
-  # `cd` keeps the layer names bare (RicardoKompLogon.dll, ...) and the working
+  # `cd` keeps the layer names bare (HomeKompLogon.dll, ...) and the working
   # directory outside the pushed file set.
   (
     cd "$(dirname "$CHECKSUMS")"
@@ -163,7 +163,7 @@ push_artifact() {
       --annotation "org.opencontainers.image.created=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
       --annotation "org.opencontainers.image.source=${source_url}" \
       --annotation "io.github.windows-logon-provider.toolchain=bazel-rules_rust-zig-x86_64-windows-gnu" \
-      "RicardoKompLogon.dll:application/vnd.microsoft.portable-executable" \
+      "HomeKompLogon.dll:application/vnd.microsoft.portable-executable" \
       "cp-selftest.exe:application/vnd.microsoft.portable-executable" \
       "SHA256SUMS:text/plain"
   )

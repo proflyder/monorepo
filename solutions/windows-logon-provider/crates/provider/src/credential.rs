@@ -13,13 +13,11 @@ pub const FIELD_SMALL_TEXT: u32 = 1;
 pub const FIELD_COUNT: u32 = 2;
 
 /// Tile title, as UTF-8 (tests assert the UTF-16 constants match).
-pub const TILE_TITLE: &str = "Ricardo";
+pub const TILE_TITLE: &str = "Home";
 pub const TILE_SUBTITLE: &str = "Автовход";
 
-/// `L"Ricardo"`, NUL terminated.
-pub const TILE_TITLE_UTF16: &[u16] = &[
-    0x0052, 0x0069, 0x0063, 0x0061, 0x0072, 0x0064, 0x006f, 0x0000,
-];
+/// `L"Home"`, NUL terminated.
+pub const TILE_TITLE_UTF16: &[u16] = &[0x0048, 0x006f, 0x006d, 0x0065, 0x0000];
 /// `L"Автовход"`, NUL terminated. Universal-style code units so the source
 /// encoding cannot change the UI text.
 pub const TILE_SUBTITLE_UTF16: &[u16] = &[
@@ -627,7 +625,7 @@ mod tests {
 
     #[test]
     fn tile_texts_are_the_documented_strings() {
-        assert_eq!(TILE_TITLE, "Ricardo");
+        assert_eq!(TILE_TITLE, "Home");
         assert_eq!(TILE_SUBTITLE, "Автовход");
         // The UTF-16 literals used by the COM methods are NUL terminated and
         // encode exactly those strings.

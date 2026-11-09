@@ -3,8 +3,8 @@
 
 Dependency-free; runs on macOS and the Ubuntu CI runner:
 
-    python3 pe_artifacts.py normalize out/RicardoKompLogon.dll out/cp-selftest.exe
-    python3 pe_artifacts.py verify out/RicardoKompLogon.dll
+    python3 pe_artifacts.py normalize out/HomeKompLogon.dll out/cp-selftest.exe
+    python3 pe_artifacts.py verify out/HomeKompLogon.dll
 
 `normalize` zeroes the linker-stamped PE timestamps so identical sources give
 identical bytes (immutable OCI tags). `verify` fails unless the DLL imports

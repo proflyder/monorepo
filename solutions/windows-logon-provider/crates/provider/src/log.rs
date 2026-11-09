@@ -9,9 +9,9 @@
 //! ignored: logging must never break logon.
 
 /// Directory and files are created by the installer; the path is fixed.
-pub const DATA_DIR: &str = r"C:\ProgramData\Ricardo\KompLogon";
-pub const LOG_PATH: &str = r"C:\ProgramData\Ricardo\KompLogon\logon.log";
-pub const ROTATED_PATH: &str = r"C:\ProgramData\Ricardo\KompLogon\logon.log.1";
+pub const DATA_DIR: &str = r"C:\ProgramData\Home\KompLogon";
+pub const LOG_PATH: &str = r"C:\ProgramData\Home\KompLogon\logon.log";
+pub const ROTATED_PATH: &str = r"C:\ProgramData\Home\KompLogon\logon.log.1";
 /// Rotation threshold (256 KiB).
 pub const MAX_LOG_BYTES: u64 = 256 * 1024;
 /// Cap for the event name and the field string, in bytes.
@@ -241,7 +241,7 @@ mod imp {
     pub fn log_event(event: &str, fields: &str) {
         ensure_data_dir();
         tracing::dispatcher::with_default(dispatch(), || {
-            tracing::info!(target: "ricardo_logon", event = event, fields = fields);
+            tracing::info!(target: "home_logon", event = event, fields = fields);
         });
     }
 }

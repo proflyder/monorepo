@@ -5,8 +5,8 @@
 ## Wi-Fi на PVE
 
 ```bash
-systemctl status ricardo-uplink wpa_supplicant@wlp4s0
-journalctl -u ricardo-uplink -n 50
+systemctl status home-uplink wpa_supplicant@wlp4s0
+journalctl -u home-uplink -n 50
 cat /sys/class/net/nic0/carrier
 ip -br addr
 bridge link
@@ -94,12 +94,12 @@ Rust Pulsar/данные не откатывать поверх актуальн
 ## Boot degraded / нет Ethernet
 
 `systemd-networkd-wait-online` не должен блокировать boot при Wi-Fi.
-Если boot долгий — проверить `ricardo-uplink`, `wpa_supplicant@wlp4s0`,
+Если boot долгий — проверить `home-uplink`, `wpa_supplicant@wlp4s0`,
 `nic0` carrier. Ethernet не обязателен, но остаётся fallback.
 
 ## Rollback
 
-- Wi-Fi uplink: остановить `ricardo-uplink`, вернуть Ethernet в `vmbr0`.
+- Wi-Fi uplink: остановить `home-uplink`, вернуть Ethernet в `vmbr0`.
 - HA/K3s: `../../docs/REBUILD.md`; не запускать второй writer.
 
 ## Не делать

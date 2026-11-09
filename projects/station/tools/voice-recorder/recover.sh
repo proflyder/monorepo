@@ -1,8 +1,8 @@
 #!/bin/sh
 # Explicit recovery for this temporary tool only. Never edits service configuration.
 set -eu
-BASE=/tmp/ricardo-voice-recorder
-LOCK=/tmp/ricardo-voice-recorder.lock
+BASE=/tmp/voice-recorder
+LOCK=/tmp/voice-recorder.lock
 if [ ! -d "$LOCK" ]; then
   pidof pulsar >/dev/null && echo 'Pulsar is running; no recording lock.'
   exit
@@ -15,7 +15,7 @@ touch "$S/stop"
 sleep 3
 if [ -s "$S/helper.pid" ]; then
   p=$(cat "$S/helper.pid")
-  if [ "$(readlink /proc/$p/exe 2>/dev/null || true)" = "$BASE/ricardo-voicestream" ]; then
+  if [ "$(readlink /proc/$p/exe 2>/dev/null || true)" = "$BASE/voicestream" ]; then
     kill -KILL "$p" 2>/dev/null || true
   fi
 fi

@@ -1,12 +1,12 @@
 ﻿#Requires -RunAsAdministrator
 <#
 .SYNOPSIS
-    Записывает DPAPI-защищённый секрет провайдера входа Ricardo.
+    Записывает DPAPI-защищённый секрет провайдера входа Home.
 
 .DESCRIPTION
     Пароль Windows и ключ машины (32 байта, base64) шифруются DPAPI в машинной
-    области с фиксированной энтропией ricardo-komp-logon-v1 и сохраняются в
-    C:\ProgramData\Ricardo\KompLogon\secret.bin с ACL SYSTEM + Administrators.
+    области с фиксированной энтропией home-komp-logon-v1 и сохраняются в
+    C:\ProgramData\Home\KompLogon\secret.bin с ACL SYSTEM + Administrators.
 
     Значения никогда не печатаются. Пароль запрашивается интерактивно или
     передаётся SecureString; ключ передаётся параметром или одной строкой в
@@ -28,9 +28,9 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-$DataDir = 'C:\ProgramData\Ricardo\KompLogon'
+$DataDir = 'C:\ProgramData\Home\KompLogon'
 $SecretPath = Join-Path $DataDir 'secret.bin'
-$Entropy = 'ricardo-komp-logon-v1'
+$Entropy = 'home-komp-logon-v1'
 
 try {
     Add-Type -AssemblyName System.Security -ErrorAction Stop

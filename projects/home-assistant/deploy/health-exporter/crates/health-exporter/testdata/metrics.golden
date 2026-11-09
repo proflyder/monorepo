@@ -1,18 +1,36 @@
-# HELP ricardo_endpoint_up Whether a configured TCP endpoint accepts connections.
+# HELP home_endpoint_up Whether a configured TCP endpoint accepts connections.
+# TYPE home_endpoint_up gauge
+# HELP home_endpoint_connect_seconds TCP connection time, not voice latency.
+# TYPE home_endpoint_connect_seconds gauge
+# HELP ricardo_endpoint_up Deprecated alias of home_endpoint_up.
 # TYPE ricardo_endpoint_up gauge
-# HELP ricardo_endpoint_connect_seconds TCP connection time, not voice latency.
+# HELP ricardo_endpoint_connect_seconds Deprecated alias of home_endpoint_connect_seconds.
 # TYPE ricardo_endpoint_connect_seconds gauge
+home_endpoint_up{endpoint="ha"} 1
+home_endpoint_connect_seconds{endpoint="ha"} 0.001000
 ricardo_endpoint_up{endpoint="ha"} 1
 ricardo_endpoint_connect_seconds{endpoint="ha"} 0.001000
+home_endpoint_up{endpoint="music_assistant"} 1
+home_endpoint_connect_seconds{endpoint="music_assistant"} 0.001000
 ricardo_endpoint_up{endpoint="music_assistant"} 1
 ricardo_endpoint_connect_seconds{endpoint="music_assistant"} 0.001000
+home_endpoint_up{endpoint="piper"} 1
+home_endpoint_connect_seconds{endpoint="piper"} 0.001000
 ricardo_endpoint_up{endpoint="piper"} 1
 ricardo_endpoint_connect_seconds{endpoint="piper"} 0.001000
+home_endpoint_up{endpoint="whisper"} 1
+home_endpoint_connect_seconds{endpoint="whisper"} 0.001000
 ricardo_endpoint_up{endpoint="whisper"} 1
 ricardo_endpoint_connect_seconds{endpoint="whisper"} 0.001000
+home_endpoint_up{endpoint="gigaam"} 1
+home_endpoint_connect_seconds{endpoint="gigaam"} 0.001000
 ricardo_endpoint_up{endpoint="gigaam"} 1
 ricardo_endpoint_connect_seconds{endpoint="gigaam"} 0.001000
+home_endpoint_up{endpoint="hermes"} 1
+home_endpoint_connect_seconds{endpoint="hermes"} 0.001000
 ricardo_endpoint_up{endpoint="hermes"} 1
 ricardo_endpoint_connect_seconds{endpoint="hermes"} 0.001000
+home_endpoint_up{endpoint="voice_proxy"} 0
+home_endpoint_connect_seconds{endpoint="voice_proxy"} 0.001000
 ricardo_endpoint_up{endpoint="voice_proxy"} 0
 ricardo_endpoint_connect_seconds{endpoint="voice_proxy"} 0.001000

@@ -17,7 +17,7 @@
 - Management `vmbr0`: `192.0.2.26/24`; uplink — Wi-Fi `RTL8821CE` в
   4-address/WDS к `vmbr0`, Ethernet — резерв по carrier. NAT/PCI passthrough
   не используются; VM сохраняют L2-адреса и IPv6 multicast.
-- `ricardo-uplink` держит ровно один physical uplink; полные перезагрузки PVE
+- `home-uplink` держит ровно один physical uplink; полные перезагрузки PVE
   без Ethernet проходят.
 - Power-loss тест 2026-11-02 (выдернуто питание): PVE, HAOS, K3s (30/30 подов),
   VPN, OpenBao auto-unseal, scheduler со всеми consumer, backup SSD и таймеры
@@ -335,7 +335,7 @@
 - `select.iandeks_stantsiia_midi_voice_color` — цвет анимации слушания
   (Violet/Blue). Автоматизация HA `voice_profile_station_color` ставит Blue для
   рабочего профиля и Violet для личного: при смене
-  `input_select.ricardo_voice_profile`, при старте HA и когда select появляется
+  `input_select.home_voice_profile`, при старте HA и когда select появляется
   после недоступности; пока сущности нет — no-op. Прямое управление
   `light.ring`/`led_show` во время LISTENING перекрывается voice state прошивки,
   поэтому профиль задаётся только этим select.
@@ -400,7 +400,7 @@
 
 - Pipeline «Рикардо»: GigaAM v3 CTC int8 primary, Whisper `medium-int8`
   fallback; локальные intents → Hermes только для свободной речи.
-- **Профиль голоса.** `input_select.ricardo_voice_profile` (Личный/Рабочий) —
+- **Профиль голоса.** `input_select.home_voice_profile` (Личный/Рабочий) —
   единственный источник истины; переключается только вручную: голосом
   («рабочий/личный профиль», «какой профиль»), на дашборде «Помощник» → view
   «Голос», в Android карточкой «Личный | Рабочий». В HA это
@@ -506,7 +506,7 @@
   ничего. Пропуск одного вида не срабатывает за другой. Модуль входа —
   переиспользуемое решение `solutions/windows-logon-provider` (Rust, CLSID
   `{9459CCEA-4CCC-4435-89BF-E0E132E0C27F}`, журнал
-  `C:\ProgramData\Ricardo\KompLogon\logon.log`). На ПК установлена сборка
+  `C:\ProgramData\Home\KompLogon\logon.log`). На ПК установлена сборка
   `1.3.15` (sha256 DLL `46d67528fff5eda59d0beb069ace326ed3f83c34907e904db81a94a996b9d5ab`;
   PE-таймстемп обнуляется, поэтому релизный тег содержит те же байты), принята
   вживую 2026-11-07: холодный вход по grant, разблокировка по grant,
@@ -702,8 +702,8 @@
 - Голосовой intent «курс рубля/доллара/валют» (`StationCurrencyRate`,
   `projects/home-assistant/ha-voice`) live с 2026-11-02: HA читает
   `GET /api/latest` currency-bot через NodePort `CURRENCY_BOT_NODE_PORT`
-  (host-nftables `ricardo_currency_bot`, LAN/pod CIDR, persistent unit
-  `ricardo-currency-bot-firewall.service`) bearer-токеном из `secrets.yaml`.
+  (host-nftables `home_currency_bot`, LAN/pod CIDR, persistent unit
+  `home-currency-bot-firewall.service`) bearer-токеном из `secrets.yaml`.
   Ответ: «купить» = поле `sell`, «продать» = `buy`. Проверено через
   `conversation/process`; живой голос — за владельцем.
 - Наблюдаемость: Alloy шипит логи namespace `currency-bot` (редакция

@@ -49,7 +49,7 @@
     `imagePullPolicy: IfNotPresent`. CI пушит образы job-scoped
     `GITHUB_TOKEN`, а `deploy-home` на push в `develop` катит только
     затронутые юниты через VPN группу `ci` и kubectl под ServiceAccount
-    `ci-deploy`. SSH, root-helper, hostPath и `/opt/ricardo` из пути
+    `ci-deploy`. SSH, root-helper, hostPath и `/opt/home` из пути
     деплоя удалены; NodePort-nft остаётся host-конфигурацией.
 
 18. **OpenBao — единственный секрет-сервер.** OpenBao 2.7 (chart и образ
@@ -146,7 +146,7 @@
     PVE scrape target и rclone token — только private values/env, не Git.
 
 25. **Голосовой профиль — ручной режим, а не догадка модели.** Источник
-    истины — `input_select.ricardo_voice_profile` в HA (Личный/Рабочий);
+    истины — `input_select.home_voice_profile` в HA (Личный/Рабочий);
     меняется только явно: голосом, дашбордом или `switch.ricardo_work_profile`
     из Android (нативная HA-метка `voice_profile` → каталог
     `kind: "profile"`). Профиль не выводится из текста фразы, времени или
@@ -435,14 +435,14 @@
 38. **Pod template аннотируется содержимым, а не git-ревизией.**
     * Почему: git-ревизия в pod template перезапускала все pods на каждом
       merge, даже при тех же образах и конфиге.
-    * Pod template несёт `ricardo.dev/rollout`, а
+    * Pod template несёт `proflyder.dev/rollout`, а
       `home-deploy render --rollout-key ROLLOUT_ID` заполняет его первыми
       12 hex sha256 **всего отрендеренного юнита** (digest'ы всех
       контейнеров, значения из private env, содержимое ConfigMap, probes,
       resources). При хешировании маскируются `BUILD_ID` (git-ревизия) и сам
       `ROLLOUT_ID`, поэтому хеш зависит только от того, что исполняют pods.
     * `BUILD_ID` остаётся аннотацией самого Deployment
-      (`metadata.annotations.ricardo.dev/build`) для трассировки; изменение
+      (`proflyder.dev/build`) для трассировки; изменение
       metadata не меняет generation и не катит pods. `converge
       --summary-file` пишет `unchanged|rolled-out` по сравнению
       `metadata.generation` до и после apply; `deploy-home` показывает это в
@@ -546,7 +546,7 @@
     * Внешний контракт — `home.v1` (пути `/home.v1.*`), protojson,
       UUIDv5 и dedupe-ключи, схема БД v1→v2 (миграция на месте), имена env,
       имена и схемы MCP-инструментов, кадры SSE, метрики. Прежний
-      `ricardo.v1` не сохранялся как алиас: Android, HA, ingress verify и
+      контракт v1 не сохранялся как алиас: Android, HA, ingress verify и
       preflight переведены одновременно с сервером.
       Эталон — golden-фикстуры `testdata/contract/`; после удаления Go они
       остаются замороженными данными и проходят на Rust-реализации.

@@ -86,7 +86,7 @@ mod winhttp {
     const CONNECT_TIMEOUT_MS: i32 = 2000;
     const SEND_TIMEOUT_MS: i32 = 4000;
     const MAX_RESPONSE_BYTES: usize = 16 * 1024;
-    const USER_AGENT: &str = "RicardoKompLogon/1.0 (Windows LogonUI)";
+    const USER_AGENT: &str = "HomeKompLogon/1.0 (Windows LogonUI)";
     // The headers are passed with an explicit character count, so (unlike the
     // host and the target) they are not required to be NUL-terminated.
     const HEADERS: &str = "Content-Type: application/json\r\nAccept: application/json\r\n";

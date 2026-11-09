@@ -1,6 +1,6 @@
 [package]
 name = "logon_provider"
-description = "Windows Credential Provider (COM in-proc server) for Ricardo Komp Logon"
+description = "Windows Credential Provider (COM in-proc server) for Home Komp Logon"
 version = "0.1.0"
 edition.workspace = true
 license.workspace = true

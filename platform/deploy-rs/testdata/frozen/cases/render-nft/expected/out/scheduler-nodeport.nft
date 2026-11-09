@@ -14,10 +14,10 @@
 # dropped explicitly instead of silently bypassing the filter.
 #
 # Install on the K3s node:
-#   nft -f /etc/ricardo/scheduler-nodeport.nft
+#   nft -f /etc/home/scheduler-nodeport.nft
 # Remove with:
-#   nft delete table inet ricardo_scheduler
-table inet ricardo_scheduler {
+#   nft delete table inet home_scheduler
+table inet home_scheduler {
   chain prerouting {
     type filter hook prerouting priority dstnat - 10; policy accept;
     iifname "lo" accept

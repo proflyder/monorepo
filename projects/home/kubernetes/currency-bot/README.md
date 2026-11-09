@@ -148,7 +148,7 @@ Trade-offs:
      bash projects/home/kubernetes/currency-bot/nft/apply.sh
    ```
 
-   It installs `table inet ricardo_currency_bot` and leaves the Kubernetes and
+   It installs `table inet home_currency_bot` and leaves the Kubernetes and
    scheduler tables untouched.
 
 5. **Cloudflare side:** create/confirm the tunnel `home-k3s`, its credentials

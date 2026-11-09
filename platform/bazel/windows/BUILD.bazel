@@ -1,4 +1,4 @@
-# Windows cross-build platform for the Ricardo Komp Logon credential provider
+# Windows cross-build platform for the Home Komp Logon credential provider
 # (solutions/windows-logon-provider).
 #
 # It carries the zig windows constraint so toolchain resolution selects the

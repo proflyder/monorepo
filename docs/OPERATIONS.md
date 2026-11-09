@@ -544,7 +544,7 @@ unset VOICE_TOKEN
 профиль «Рабочий». Выключается `HERMES_VOICE_UPDATES=0`; подробности —
 `solutions/voice-proxy/README.md`.
 
-Профиль и цвет кольца станции: HA `input_select.ricardo_voice_profile`,
+Профиль и цвет кольца станции: HA `input_select.home_voice_profile`,
 `switch.ricardo_work_profile`; станция —
 `select.iandeks_stantsiia_midi_voice_color` (Blue = рабочий).
 
@@ -635,7 +635,7 @@ ghcr.io/proflyder/windows-logon-provider:<VERSION>
 ghcr.io/proflyder/windows-logon-provider:sha-<12 hex коммита>
 ```
 
-Файлы артефакта: `RicardoKompLogon.dll`, `cp-selftest.exe`, `SHA256SUMS`.
+Файлы артефакта: `HomeKompLogon.dll`, `cp-selftest.exe`, `SHA256SUMS`.
 Тег `<VERSION>` неизменяем: повторная публикация с тем же содержимым — no-op,
 с другим — ошибка, поэтому релиз
 делается сменой `VERSION`. Provenance attestation создаётся для digest
@@ -683,9 +683,9 @@ LogonUI держит файл, поэтому `Copy-Item -Force` падает �
 перезагрузки:
 
 ```powershell
-$dir = 'C:\Program Files\Ricardo\KompLogon'
-Move-Item "$dir\RicardoKompLogon.dll" "$dir\RicardoKompLogon.dll.old" -Force
-Copy-Item .\RicardoKompLogon.dll "$dir\RicardoKompLogon.dll" -Force
+$dir = 'C:\Program Files\Home\KompLogon'
+Move-Item "$dir\HomeKompLogon.dll" "$dir\HomeKompLogon.dll.old" -Force
+Copy-Item .\HomeKompLogon.dll "$dir\HomeKompLogon.dll" -Force
 # .old удалить позже, когда файл больше не занят
 ```
 
@@ -694,13 +694,13 @@ Copy-Item .\RicardoKompLogon.dll "$dir\RicardoKompLogon.dll" -Force
 `status.ps1` показывает конфигурацию, регистрацию, DLL, `FailCount`/`Disabled`
 и последние строки журнала.
 
-Журнал: `C:\ProgramData\Ricardo\KompLogon\logon.log` (ротация в
+Журнал: `C:\ProgramData\Home\KompLogon\logon.log` (ротация в
 `logon.log.1` при 256 КиБ). Читать административной SSH-сессией; ключ HA
 ограничен только `shutdown`/`cancel` и журнал не покажет:
 
 ```bash
 ssh <user>@<host> \
-  "powershell -NoProfile -Command \"Get-Content 'C:\\ProgramData\\Ricardo\\KompLogon\\logon.log' -Tail 50\""
+  "powershell -NoProfile -Command \"Get-Content 'C:\\ProgramData\\Home\\KompLogon\\logon.log' -Tail 50\""
 ```
 
 Self-test (запускать, когда грант не ожидается — `cp-selftest.exe` на
@@ -1487,7 +1487,7 @@ PSK `…4c02`, token `…4c03`, commit `…4c04`, status `…4c05`.
 Расписания и таймеры — canonical scheduler (см. `STATE.md`); старые
 `todo`/`timer` helpers и legacy single-slot не использовать.
 
-Профиль голоса (Личный/Рабочий) — `input_select.ricardo_voice_profile`;
+Профиль голоса (Личный/Рабочий) — `input_select.home_voice_profile`;
 менять только вручную: голосом («рабочий профиль», «личный профиль», «какой
 профиль»), на дашборде «Помощник» → «Голос» или карточкой «Личный | Рабочий»
 в Android (`switch.ricardo_work_profile`, метка `voice_profile`). Проверка без

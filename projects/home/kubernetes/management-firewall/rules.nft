@@ -1,7 +1,7 @@
 # Replace NODE_IPV4, POD_CIDR and CI_VPN_SOURCE before installing; single-node
 # K3s only. CI_VPN_SOURCE is the VPN container address: the isolated `ci` group
 # is masqueraded to that one address, and only the API port is opened for it.
-table inet ricardo_k3s {
+table inet home_k3s {
   chain input {
     type filter hook input priority -20; policy accept;
     iifname "lo" accept

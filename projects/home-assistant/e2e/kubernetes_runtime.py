@@ -49,11 +49,11 @@ class KubernetesRuntime(unittest.TestCase):
         auth = base64.b64encode(("admin:" + password).encode()).decode()
         data = get(url + "/api/search", {"Authorization": "Basic " + auth})
         uids = {x.get("uid") for x in data}
-        self.assertTrue({"ricardo-nettop", "ricardo-runtime", "ricardo-cluster", "ricardo-logs"} <= uids)
+        self.assertTrue({"home-nettop", "home-runtime", "home-cluster", "home-logs"} <= uids)
 
     def test_prometheus_endpoint_checks(self):
         query = urllib.parse.urlencode({
-            "query": 'max by (endpoint) (ricardo_endpoint_up{endpoint=~"ha|music_assistant|piper|whisper|gigaam|hermes|voice_proxy"})'
+            "query": 'max by (endpoint) (home_endpoint_up{endpoint=~"ha|music_assistant|piper|whisper|gigaam|hermes|voice_proxy"})'
         })
         data = get(os.environ["PROMETHEUS_URL"].rstrip("/") + "/api/v1/query?" + query)
         values = data["data"]["result"]
