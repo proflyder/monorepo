@@ -10,7 +10,7 @@
 //! период и буфер запрашиваются маленькими, как позволяет профиль модели.
 
 use std::collections::VecDeque;
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
@@ -40,14 +40,30 @@ pub struct CallTuning {
 }
 
 impl CallTuning {
-    /// Маленький буфер: 5 мс период, 30 мс буфер. Меньше буфер — чаще xruns на dmix.
+    /// Маленький буфер: 5 мс период, 50 мс буфер. Меньше буфер — чаще xruns на dmix,
+    /// больше — растёт задержка разговора; 40–60 мс перекрывает джиттер сети и тик 20 мс.
     pub const CALL: Self = Self {
         period_ms: 5,
-        buffer_ms: 30,
+        buffer_ms: 50,
         wait_ms: 5,
         queue_ms: 120,
         prime_ms: 20,
     };
+}
+
+/// Счётчики канала звонка.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct CallStats {
+    /// Сколько мс звука ждёт в очереди.
+    pub queued_ms: u32,
+    /// Сколько мс реального звука записано в устройство.
+    pub written_ms: u64,
+    /// Периодов записано меньше `avail` (реальный звук без добивки тишиной).
+    pub partial: u64,
+    /// Кадров выброшено контролем дрейфа.
+    pub overflow: u64,
+    /// Ошибок/переполнений ALSA, после которых канал восстанавливался.
+    pub xrun: u64,
 }
 
 impl Default for CallTuning {
@@ -70,8 +86,16 @@ struct Shared {
     flush_epoch: AtomicU32,
     stop: AtomicBool,
     rate: u32,
-    /// Сколько мс реального звука записано (диагностика).
+    /// Предел очереди в сэмплах (из [`CallTuning::queue_ms`]).
+    capacity: usize,
+    /// Сколько сэмплов реального звука записано (диагностика).
     written_frames: AtomicU32,
+    /// Неполные периоды: реальный звук без добивки тишиной.
+    partial: AtomicU64,
+    /// Выброшенные кадры контроля дрейфа.
+    overflow: AtomicU64,
+    /// Восстановления после ошибок ALSA.
+    xrun: AtomicU64,
 }
 
 impl Shared {
@@ -89,13 +113,18 @@ pub struct CallOut {
 impl CallOut {
     /// Запустить писатель на PCM модели. `None` — не удалось создать поток.
     pub fn spawn(playback: &'static Playback, tuning: CallTuning) -> Option<Self> {
+        let rate = 48_000;
         let shared = Arc::new(Shared {
             queue: Mutex::new(VecDeque::new()),
             doorbell: Condvar::new(),
             flush_epoch: AtomicU32::new(0),
             stop: AtomicBool::new(false),
-            rate: 48_000,
+            rate,
+            capacity: frames(rate, tuning.queue_ms),
             written_frames: AtomicU32::new(0),
+            partial: AtomicU64::new(0),
+            overflow: AtomicU64::new(0),
+            xrun: AtomicU64::new(0),
         });
         let worker = Arc::clone(&shared);
         let thread = std::thread::Builder::new()
@@ -109,16 +138,47 @@ impl CallOut {
         })
     }
 
-    /// Дописать моно 48 кГц. Лишнее сверх `queue_ms` отбрасывается (старое первым).
+    /// Дописать моно 48 кГц.
+    ///
+    /// Дрейф выравнивается одним кадром: при переполнении выбрасывается ровно столько же
+    /// сэмплов, сколько пришло, а не весь хвост. Иначе разовое опоздание рвёт очередь и
+    /// слышимо режет речь.
     pub fn write(&self, pcm: &[i16]) {
-        let capacity = frames(self.shared.rate, CallTuning::CALL.queue_ms);
         let mut queue = self.shared.lock();
+        if queue.len() + pcm.len() > self.shared.capacity {
+            let drop = pcm.len().min(queue.len());
+            if drop > 0 {
+                queue.drain(..drop);
+                self.shared.overflow.fetch_add(1, Ordering::Relaxed);
+            }
+        }
         queue.extend(pcm.iter().copied());
-        while queue.len() > capacity {
-            queue.pop_front();
+        if queue.len() > self.shared.capacity {
+            let excess = queue.len() - self.shared.capacity;
+            queue.drain(..excess);
+            self.shared.overflow.fetch_add(1, Ordering::Relaxed);
         }
         drop(queue);
         self.shared.doorbell.notify_one();
+    }
+
+    /// Сколько мс звука ждёт в очереди.
+    #[must_use]
+    pub fn queued_ms(&self) -> u32 {
+        u32::try_from(self.shared.lock().len() * 1000 / self.shared.rate as usize)
+            .unwrap_or(u32::MAX)
+    }
+
+    /// Накопленные счётчики канала.
+    #[must_use]
+    pub fn stats(&self) -> CallStats {
+        CallStats {
+            queued_ms: self.queued_ms(),
+            written_ms: self.played_ms(),
+            partial: self.shared.partial.load(Ordering::Relaxed),
+            overflow: self.shared.overflow.load(Ordering::Relaxed),
+            xrun: self.shared.xrun.load(Ordering::Relaxed),
+        }
     }
 
     /// Сбросить непригранное (звонок завершён или переподключение).
@@ -228,7 +288,8 @@ fn writer(shared: Arc<Shared>, mut device: AlsaDevice, tuning: CallTuning) {
             continue;
         }
 
-        // Собираем ровно `avail` стерео-кадров: реальный звук + тишина на остаток.
+        // Собираем реальный звук. Неполный период не добиваем тишиной: иначе посреди
+        // речи появляется провал, а следующий кадр начинается с середины периода.
         let mut buffer = vec![0u8; avail * FRAME_BYTES];
         let taken = {
             let mut queue = shared.lock();
@@ -244,11 +305,17 @@ fn writer(shared: Arc<Shared>, mut device: AlsaDevice, tuning: CallTuning) {
             }
             n
         };
-        if taken == 0 {
-            // Ничего нет: тишина держит устройство открытым, задержка не растёт.
+        let to_write = if taken == 0 {
+            // Совсем пусто: тишина держит устройство открытым, задержка не растёт.
             buffer.copy_from_slice(&silence[..avail * FRAME_BYTES]);
-        }
-        match device.write(&buffer, avail) {
+            avail
+        } else {
+            if taken < avail {
+                shared.partial.fetch_add(1, Ordering::Relaxed);
+            }
+            taken
+        };
+        match device.write(&buffer, to_write) {
             Ok(written) => {
                 if taken > 0 {
                     let _ = shared.written_frames.fetch_add(
@@ -258,6 +325,7 @@ fn writer(shared: Arc<Shared>, mut device: AlsaDevice, tuning: CallTuning) {
                 }
             }
             Err(error) => {
+                shared.xrun.fetch_add(1, Ordering::Relaxed);
                 if !handle(&mut device, error) {
                     info = None;
                 }
@@ -376,7 +444,11 @@ mod tests {
             flush_epoch: AtomicU32::new(0),
             stop: AtomicBool::new(false),
             rate: 48_000,
+            capacity: frames(48_000, CallTuning::CALL.queue_ms),
             written_frames: AtomicU32::new(0),
+            partial: AtomicU64::new(0),
+            overflow: AtomicU64::new(0),
+            xrun: AtomicU64::new(0),
         });
         let out = CallOut {
             shared: Arc::clone(&shared),
@@ -389,6 +461,38 @@ mod tests {
     }
 
     #[test]
+    fn drift_drops_one_frame_instead_of_the_whole_queue() {
+        let shared = Arc::new(Shared {
+            queue: Mutex::new(VecDeque::new()),
+            doorbell: Condvar::new(),
+            flush_epoch: AtomicU32::new(0),
+            stop: AtomicBool::new(false),
+            rate: 48_000,
+            capacity: 3 * 960,
+            written_frames: AtomicU32::new(0),
+            partial: AtomicU64::new(0),
+            overflow: AtomicU64::new(0),
+            xrun: AtomicU64::new(0),
+        });
+        let out = CallOut {
+            shared: Arc::clone(&shared),
+            thread: None,
+        };
+        for value in [1i16, 2, 3] {
+            out.write(&vec![value; 960]);
+        }
+        out.write(&vec![4i16; 960]);
+        let queue = out.shared.lock();
+        assert_eq!(queue.len(), 3 * 960);
+        // Ушёл ровно один старый кадр, остальные два сохранили порядок.
+        assert_eq!(
+            queue.iter().copied().take(960).collect::<Vec<_>>(),
+            vec![2; 960]
+        );
+        assert_eq!(out.shared.overflow.load(Ordering::Relaxed), 1);
+    }
+
+    #[test]
     fn flush_clears_the_queue_and_bumps_the_epoch() {
         let shared = Arc::new(Shared {
             queue: Mutex::new(VecDeque::new()),
@@ -396,7 +500,11 @@ mod tests {
             flush_epoch: AtomicU32::new(0),
             stop: AtomicBool::new(false),
             rate: 48_000,
+            capacity: frames(48_000, CallTuning::CALL.queue_ms),
             written_frames: AtomicU32::new(0),
+            partial: AtomicU64::new(0),
+            overflow: AtomicU64::new(0),
+            xrun: AtomicU64::new(0),
         });
         let out = CallOut {
             shared: Arc::clone(&shared),

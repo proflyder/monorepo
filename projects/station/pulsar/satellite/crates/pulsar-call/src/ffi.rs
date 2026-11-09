@@ -142,6 +142,15 @@ impl Decoder {
 
     /// Раскодировать пакет в моно 48 кГц; `None` — битый пакет или ошибка кодека.
     pub fn decode(&mut self, packet: &[u8]) -> Option<Vec<i16>> {
+        self.decode_inner(packet, false)
+    }
+
+    /// Восстановить пропущенный кадр из in-band FEC следующего пакета.
+    pub fn decode_fec(&mut self, packet: &[u8]) -> Option<Vec<i16>> {
+        self.decode_inner(packet, true)
+    }
+
+    fn decode_inner(&mut self, packet: &[u8], fec: bool) -> Option<Vec<i16>> {
         let mut stereo = vec![0i16; MAX_FRAME * 2];
         // SAFETY: the packet pointer/length pair is valid and the output buffer holds
         // MAX_FRAME stereo samples, which is the largest Opus frame.
@@ -152,19 +161,14 @@ impl Decoder {
                 packet.len() as i32,
                 stereo.as_mut_ptr(),
                 MAX_FRAME as i32,
-                0,
+                i32::from(fec),
             )
         };
         if n <= 0 {
             log_error(n);
             return None;
         }
-        let frames = n as usize;
-        let mut mono = Vec::with_capacity(frames);
-        for frame in stereo[..frames * 2].as_chunks::<2>().0 {
-            mono.push(((i32::from(frame[0]) + i32::from(frame[1])) / 2) as i16);
-        }
-        Some(mono)
+        Some(mono(&stereo, n as usize))
     }
 
     /// PLC: продолжить последний кадр на [`FRAME`] сэмплов.
@@ -185,13 +189,18 @@ impl Decoder {
         if n <= 0 {
             return vec![0i16; FRAME];
         }
-        let frames = n as usize;
-        let mut mono = Vec::with_capacity(frames);
-        for frame in stereo[..frames * 2].as_chunks::<2>().0 {
-            mono.push(((i32::from(frame[0]) + i32::from(frame[1])) / 2) as i16);
-        }
-        mono
+        mono(&stereo, n as usize)
     }
+}
+
+/// Стерео-выборка libopus → моно (среднее каналов).
+fn mono(stereo: &[i16], frames: usize) -> Vec<i16> {
+    stereo[..frames * 2]
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|frame| ((i32::from(frame[0]) + i32::from(frame[1])) / 2) as i16)
+        .collect()
 }
 
 impl Drop for Decoder {
