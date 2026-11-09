@@ -28,6 +28,8 @@ import dev.proflyder.home.feature.control.HubCard
 import dev.proflyder.home.feature.control.HubCards
 import dev.proflyder.home.feature.control.HubFormat
 import dev.proflyder.home.feature.control.SpeakText
+import dev.proflyder.home.feature.control.WakeFeedbackAction
+import dev.proflyder.home.feature.control.WakeFeedbackKind
 import dev.proflyder.home.feature.control.domain.AdjustLight
 import dev.proflyder.home.feature.control.domain.LoadControlCatalog
 import dev.proflyder.home.feature.control.domain.RunScenario
@@ -50,6 +52,9 @@ sealed interface ControlNotice {
 
     /** A shortcut was pinned or unpinned from a long press. */
     data class FavoriteChanged(val title: String, val pinned: Boolean) : ControlNotice
+
+    /** A wake event was marked for the wake-word statistics. */
+    data class WakeMarked(val kind: WakeFeedbackKind) : ControlNotice
 }
 
 data class ControlUiState(
@@ -233,6 +238,26 @@ class ControlViewModel(
             when (val result = runScenario(entry)) {
                 is Outcome.Success -> updateState {
                     copy(pending = pending - entry.id, notice = ControlNotice.ScenarioQueued(entry.title))
+                }
+                is Outcome.Failure -> updateState { copy(pending = pending - entry.id, actionError = result.failure) }
+            }
+        }
+    }
+
+    /**
+     * Marks a live wake event (false alarm or missed wake). It is one tap and
+     * sends at once — especially for a missed wake the ring buffer only holds
+     * the last ~20 seconds. The call goes through the same scenario run path
+     * as any other catalog script, so failures reuse [actionError].
+     */
+    fun markWake(action: WakeFeedbackAction) {
+        val entry = action.entry
+        if (action.busy || !entry.available || entry.id in currentState.pending) return
+        updateState { copy(pending = pending + entry.id, actionError = null) }
+        launch {
+            when (val result = runScenario(entry)) {
+                is Outcome.Success -> updateState {
+                    copy(pending = pending - entry.id, notice = ControlNotice.WakeMarked(action.kind))
                 }
                 is Outcome.Failure -> updateState { copy(pending = pending - entry.id, actionError = result.failure) }
             }

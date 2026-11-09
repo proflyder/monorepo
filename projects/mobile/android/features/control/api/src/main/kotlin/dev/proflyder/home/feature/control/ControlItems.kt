@@ -85,6 +85,14 @@ sealed interface ControlItem {
         override val key: String get() = "quick_actions"
     }
 
+    /**
+     * The compact "Voice activator" section: two one-tap marks of a live wake
+     * event. It is shown only while the catalog exposes the marking scripts.
+     */
+    data class WakeFeedback(val actions: List<WakeFeedbackAction>) : ControlItem {
+        override val key: String get() = "wake_feedback"
+    }
+
     /** Device filter chips, placed directly above the room sections they filter. */
     data class Filters(val chips: List<FilterChip>, val selected: ControlFilter) : ControlItem {
         override val key: String get() = "filters"

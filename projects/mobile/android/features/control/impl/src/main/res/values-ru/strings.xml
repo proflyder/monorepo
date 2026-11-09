@@ -57,6 +57,11 @@
     <string name="control_hub_resume">Продолжить</string>
     <string name="control_quick_actions_title">Быстрые действия</string>
     <string name="control_quick_actions_hint">Долгий тап по устройству, чтобы закрепить.</string>
+    <string name="control_wake_title">Голосовой активатор</string>
+    <string name="control_wake_false_alarm">Ложное срабатывание</string>
+    <string name="control_wake_missed">Не услышал(а)</string>
+    <string name="control_wake_false_alarm_sent">Отмечено: ложное срабатывание</string>
+    <string name="control_wake_missed_sent">Отмечено: не услышал(а)</string>
     <string name="control_pin">Закрепить на главном</string>
     <string name="control_unpin">Открепить</string>
     <string name="control_favorite_pinned">Закреплено: %1$s</string>

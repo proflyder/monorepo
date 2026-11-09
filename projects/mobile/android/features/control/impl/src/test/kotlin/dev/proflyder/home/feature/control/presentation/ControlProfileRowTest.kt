@@ -17,6 +17,7 @@ import dev.proflyder.home.feature.control.ControlFilter
 import dev.proflyder.home.feature.control.ControlItem
 import dev.proflyder.home.feature.control.HubCard
 import dev.proflyder.home.feature.control.QuickTile
+import dev.proflyder.home.feature.control.WakeFeedbackAction
 import dev.proflyder.home.feature.control.impl.R
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -68,6 +69,8 @@ class ControlProfileRowTest {
         override fun onQuickTileClick(tile: QuickTile) = Unit
 
         override fun onQuickTileLongClick(tile: QuickTile) = Unit
+
+        override fun onWakeAction(action: WakeFeedbackAction) = Unit
 
         override fun onFilterSelected(filter: ControlFilter) = Unit
     }
