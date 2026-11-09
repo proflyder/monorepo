@@ -107,7 +107,10 @@ on:
         required: false
         default: false
         type: boolean
-
+    secrets:
+      # Read-only Nexus cache credential; absent on forks (cache stays off).
+      NEXUS_CI_PASSWORD:
+        required: false
 permissions:
   contents: read
 

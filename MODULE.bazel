@@ -451,12 +451,7 @@ maven.install(
     excluded_artifacts = ["androidx.datastore:datastore"],
     known_contributing_modules = ["protobuf"],
     lock_file = "//projects/mobile/android:maven_install.json",
-    # The in-house Nexus group is tried first, then the public upstreams.
-    # Normal builds resolve from `maven_install.json`, so the missing cache
-    # host on a developer machine is only touched by an explicit repin; CI
-    # additionally rewrites the public URLs through the downloader config.
     repositories = [
-        "https://nexus.home.example.com/repository/maven-public",
         "https://maven.google.com",
         "https://repo1.maven.org/maven2",
     ],
