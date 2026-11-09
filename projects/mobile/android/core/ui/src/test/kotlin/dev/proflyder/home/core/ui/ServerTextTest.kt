@@ -30,7 +30,7 @@ class ServerTextTest {
         val debug = details.first().jsonObject.getValue("debug").jsonObject
         val key = debug.getValue("key").toString().trim('"')
         val resolved = serverText(context, key, emptyMap())
-        assertEquals(context.getString(R.string.server_scheduler_schedule_not_ringing), resolved)
+        assertEquals(context.getString(R.string.server_scheduler_error_schedule_not_ringing), resolved)
     }
 
     @Test
@@ -40,7 +40,7 @@ class ServerTextTest {
             "scheduler.error.timer_limit",
             mapOf("limit" to "64"),
         )
-        assertEquals(context.getString(R.string.server_scheduler_timer_limit, "64"), resolved)
+        assertEquals(context.getString(R.string.server_scheduler_error_timer_limit, "64"), resolved)
     }
 
     @Test
