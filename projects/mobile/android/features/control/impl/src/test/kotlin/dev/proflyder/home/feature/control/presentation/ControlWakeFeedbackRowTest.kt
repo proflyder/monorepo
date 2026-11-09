@@ -64,7 +64,7 @@ class ControlWakeFeedbackRowTest {
     private fun entry(id: String, available: Boolean = true) = ControlEntry(
         id = id,
         kind = ControlKind.SCENARIO,
-        title = "Рикардо: скрытое имя",
+        title = "Script title from server",
         room = "",
         icon = "",
         actions = setOf(ControlAction.RUN),

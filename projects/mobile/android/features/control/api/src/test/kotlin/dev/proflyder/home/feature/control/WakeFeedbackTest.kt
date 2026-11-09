@@ -16,7 +16,7 @@ class WakeFeedbackTest {
     ) = ControlEntry(
         id = id,
         kind = kind,
-        title = "Рикардо: скрипт",
+        title = "Script title from server",
         room = "",
         icon = "",
         actions = setOf(ControlAction.RUN),
