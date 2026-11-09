@@ -156,9 +156,11 @@ OpenBao KV v2 secret/k8s/* ──► ESO ClusterSecretStore/openbao
 ```
 
 - Прямой push в `develop` запрещён; merge PR = деплой затронутых юнитов.
-- CI-скачивания Maven/Google Maven/PyPI/npm идут через Nexus, когда заданы
-  `NEXUS_HOST` и `NEXUS_CI_PASSWORD`; иначе — напрямую. Nexus разворачивает
-  Flux из Git, остальная инфраструктура — ручные `deploy.sh`.
+- CI-скачивания Maven/Google Maven/PyPI/npm у Bazel идут напрямую с раннеров,
+  а Nexus — запасной путь (второе rewrite-правило) при 429/5xx/обрыве; pip/npm
+  шаги используют Nexus, когда заданы `NEXUS_HOST` и `NEXUS_CI_PASSWORD`.
+  Nexus разворачивает Flux из Git, остальная инфраструктура — ручные
+  `deploy.sh`.
 - Образы scheduler/ha-bridge/ha-control/currency-bot/voice-proxy собираются
   Bazel `rules_oci` (distroless) и адресуются по digest в GHCR. Hermes
   собирается Docker из upstream revision; оба образа тоже digest-pinned GHCR,

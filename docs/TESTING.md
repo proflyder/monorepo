@@ -292,7 +292,8 @@ CI (платформа `native`, `_native.yml`) ставит pinned Bazelisk, к
   собирает все build/test-цели юнитов платформы `android` из
   `platform/ci/units.mjs` с `--config=android`. Develop-стороны repository cache
   для Android нет: почти всё скачиваемое — Maven-артефакты (сотни МБ JAR),
-  которые уже отдаёт Nexus, и кэшировать их дороже, чем скачать.
+  которые раннер качает напрямую (Nexus — только запасной путь), и отдельный
+  архив не окупается.
 * Host-Rust: `bazel-repo-rust-<os>-<hash>` (repository cache) и
   `bazel-rust-<os>-warm-<hash>` (disk cache). `warm-rust` собирает все
   build/test-цели юнитов платформы `bazel` без `--config=android` — ровно те
@@ -332,15 +333,18 @@ PR-прогоны кэши только читают (`actions/cache/restore`): 
 kubectl, helm, oras) — из `mise.toml`/`mise.lock` через `jdx/mise-action`,
 как и на рабочем месте (`docs/WORKSTATION.md`).
 
-Скачивания дополнительно идут через домашний Nexus, если заданы repository
-variable `NEXUS_HOST` и secret `NEXUS_CI_PASSWORD`: composite action
+Скачивания идут напрямую с раннеров GitHub (Azure, у каждого свой IP) — это
+основной путь. Домашний Nexus — запасной: если заданы repository variable
+`NEXUS_HOST` и secret `NEXUS_CI_PASSWORD`, composite action
 `.github/actions/nexus-cache` пишет `~/.netrc`, `~/.npmrc`, `pip.conf` и
 рендерит `platform/bazel/downloader.cfg` в `~/.bazelrc`. `downloader.cfg`
-направляет Maven Central, Google Maven, PyPI и npm в прокси Nexus и оставляет
-прямой URL запасным правилом; GitHub releases, codeload и nodejs.org через
-Nexus не идут (их архивы берёт repository cache Bazel). Без переменной, без
-секрета (форк-PR) или при недоступном `/repository/npmjs/-/ping` сборка идёт
-напрямую.
+ставит прямой URL первым правилом, а прокси Nexus (`maven-central`,
+`google-maven`, `pypi`, `npmjs`) — вторым для того же хоста: Bazel пробует
+совпавшие rewrite-правила по порядку и уходит в Nexus только при 429/5xx или
+обрыве соединения, а не делит домашний канал между всеми раннерами постоянно.
+GitHub releases, codeload и nodejs.org через Nexus не идут (их архивы берёт
+repository cache Bazel). Без переменной, без секрета (форк-PR) или при
+недоступном `/repository/npmjs/-/ping` остаётся прямой путь.
 
 
 Проверки, тесты и сборки внутри reusable workflow запускаются теми же

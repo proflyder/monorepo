@@ -83,8 +83,8 @@ jobs:
       - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
 
       # Pinned Bazelisk on PATH, plus its Bzlmod cache. Android downloads
-      # (Maven/PyPI/npm) go through Nexus and are not worth a develop-side
-      # repository archive (hundreds of MB of JARs for a quick download).
+      # (Maven/PyPI/npm) go directly from the runner; Nexus is only a fallback,
+      # so they are not worth a develop-side repository archive.
       - uses: bazel-contrib/setup-bazel@104e3eea9447cdaa4b00d0fb46191a3985d26ab3 # v0.19.1
         with:
           bazelisk-version: "1.30.0"

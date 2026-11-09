@@ -1,10 +1,15 @@
 name: nexus-cache
-description: Route CI downloads through the home Nexus cache when it is reachable.
+description: Configure the home Nexus cache as a Bazel download fallback (and pip/npm registry).
 
 # Single switch: the caller passes the repository variable NEXUS_HOST and the
 # repository secret NEXUS_CI_PASSWORD. An empty value, a missing secret (fork
 # PRs) or an unhealthy Nexus leaves the build on the direct upstream URLs, so
-# CI degrades to the old behaviour instead of failing.
+# CI degrades to the normal path instead of failing.
+#
+# Bazel downloads go to the upstream first: `downloader.cfg` has two rewrite
+# rules per host, the direct URL and then Nexus. The home uplink is shared by
+# every runner, so Nexus is only the fallback for 429/5xx or a dropped
+# connection. pip/npm steps use the Nexus registries configured below.
 #
 # Side effects, all scoped to the runner:
 #   * ~/.netrc          Bazel/Maven basic auth for the repository paths

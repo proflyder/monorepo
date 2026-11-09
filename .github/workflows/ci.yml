@@ -74,7 +74,8 @@ jobs:
 
       # Pinned Bazelisk on PATH plus its own Bzlmod/repository caches: the
       # routing query needs the Rust repositories; the Android graph only loads
-      # BUILD files, so its downloads stay on Nexus instead of a develop cache.
+      # BUILD files, so its downloads (direct, Nexus only as a fallback) need no
+      # develop cache.
       - uses: bazel-contrib/setup-bazel@104e3eea9447cdaa4b00d0fb46191a3985d26ab3 # v0.19.1
         with:
           bazelisk-version: "1.30.0"

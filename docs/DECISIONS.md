@@ -662,8 +662,9 @@
     `warm-android` и `warm-rust` в `deploy-home` (push в `develop`). Кэши
     разделены по семействам, потому что наборы целей и скачиваний разные, а
     лимит общий: у Android только disk cache
-    `bazel-android-<os>-warm-<hash>` (его скачивания — в основном Maven JAR из
-    Nexus, отдельный repository archive не окупается), у host-Rust
+    `bazel-android-<os>-warm-<hash>` (его скачивания — в основном Maven JAR,
+    которые раннер качает напрямую, Nexus — только fallback; отдельный
+    repository archive не окупается), у host-Rust
     `bazel-repo-rust-<os>-<hash>` и `bazel-rust-<os>-warm-<hash>`. `warm-android`
     собирает все build/test-цели android-юнитов с `--config=android`;
     `warm-rust` — все build/test-цели `bazel`-юнитов без `--config=android`

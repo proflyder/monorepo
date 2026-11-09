@@ -130,10 +130,11 @@ jobs:
   #   * rust:    `bazel-repo-rust-<os>-<hash>` (repository archives) and
   #     `bazel-rust-<os>-warm-<hash>` (disk).
   # Android deliberately has no develop-side repository cache: its downloads
-  # are almost entirely Maven/PyPI/npm artifacts (hundreds of MB of JARs) that
-  # Nexus already serves, so caching them only spent the budget on data a
-  # download fetches quickly anyway. `_android.yml` and the routing jobs therefore
-  # resolve them through Nexus (or directly on a fork). `_unit.yml`,
+  # are almost entirely Maven/PyPI/npm artifacts (hundreds of MB of JARs) that a
+  # runner fetches directly from its own IP (Nexus is only a fallback), so
+  # caching them spent the budget on data a download gets quickly anyway.
+  # `_android.yml` and the routing jobs therefore download directly (or through
+  # Nexus on a 429/5xx). `_unit.yml`,
   # `_native.yml`, `_deploy-control.yml` restore the Rust family archive; no job
   # falls back to another family's disk cache.
   #
@@ -330,8 +331,8 @@ jobs:
 
       # Pinned Bazelisk on PATH (`bazel`) plus its own Bzlmod/repository caches:
       # routing runs Bazel loading queries; the Rust repositories come from the
-      # develop archive, the Android graph loads BUILD files only (its JARs stay
-      # on Nexus). Restore-only.
+      # develop archive, the Android graph loads BUILD files only (its JARs are
+      # downloaded directly; Nexus is only a fallback). Restore-only.
       - uses: bazel-contrib/setup-bazel@104e3eea9447cdaa4b00d0fb46191a3985d26ab3 # v0.19.1
         with:
           bazelisk-version: ${{ env.BAZELISK_VERSION }}
