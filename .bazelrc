@@ -20,8 +20,9 @@ common --@protobuf//bazel/toolchains:prefer_prebuilt_protoc
 # are `warn`, so without this flag a new clippy warning passes both the local
 # build and PR CI. Deny warnings for every Rust unit, matching the cargo
 # invocation in the Pulsar/provider scripts.
-build --@rules_rust//rust/settings:clippy_flag=-Dwarnings
-test --@rules_rust//rust/settings:clippy_flag=-Dwarnings
+# `common` so query/fetch/build/test share one value and Bazel never discards
+# the analysis cache because the flag "changed" between commands.
+common --@rules_rust//rust/settings:clippy_flag=-Dwarnings
 
 build --announce_rc
 build --color=yes

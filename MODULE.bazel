@@ -80,6 +80,13 @@ rust.toolchain(
             "-C",
             "embed-bitcode=yes",
         ],
+        # Linux x86_64 services/tests (CI images use --platforms=linux_amd64):
+        # the auto-configured cc toolchain may pick GNU gold, which rustc warns
+        # is deprecated; use binutils ld like the exec config below.
+        "x86_64-unknown-linux-gnu": [
+            "-C",
+            "link-arg=-fuse-ld=bfd",
+        ],
         "armv7-unknown-linux-gnueabihf": [
             "-C",
             "relocation-model=static",
