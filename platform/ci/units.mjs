@@ -1063,10 +1063,25 @@ export const config = {
     {
       id: "nexus-deploy",
       platform: "python",
-      title: "projects/home/kubernetes/nexus (artifact cache deploy/provisioning contract)",
+      title: "projects/home/kubernetes/nexus (artifact cache manifests/provisioning contract)",
       paths: ["projects/home/kubernetes/nexus/**"],
       python: {
         suites: ["projects/home/kubernetes/nexus"],
+      },
+    },
+
+    {
+      id: "flux-deploy",
+      platform: "python",
+      title: "projects/home/kubernetes/flux (GitOps toolkit/bootstrap/substitution contract)",
+      // The suite renders the Flux bundle *and* the Nexus Kustomizations it
+      // reconciles, so a Nexus manifest change exercises the GitOps contract.
+      paths: [
+        "projects/home/kubernetes/flux/**",
+        "projects/home/kubernetes/nexus/**",
+      ],
+      python: {
+        suites: ["projects/home/kubernetes/flux"],
       },
     },
 
@@ -1100,6 +1115,7 @@ export const config = {
         "projects/home/kubernetes/wakegrant/manifests/external-secrets.yaml",
         "projects/home/kubernetes/vaultwarden/manifests/external-secrets.yaml",
         "projects/home/kubernetes/nexus/manifests/external-secrets.yaml",
+        "projects/home/kubernetes/flux/external-secrets.yaml",
       ],
       python: {
         suites: ["projects/home/kubernetes/external-secrets"],

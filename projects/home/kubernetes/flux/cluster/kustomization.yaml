@@ -1,0 +1,11 @@
+# Resources reconciled by the root `flux-system` Kustomization.
+#
+# This directory is applied by Flux, not by the bootstrap script: it needs the
+# `flux-settings` Secret for the private node address, and it must not tighten
+# the flux-system NetworkPolicy before the controllers can reach the API.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - network-policy.yaml
+  - nexus.yaml
+  - nexus-provision.yaml

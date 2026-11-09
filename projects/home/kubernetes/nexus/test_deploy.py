@@ -1,9 +1,7 @@
-"""Static contracts for the Nexus deploy (no cluster needed)."""
-import os
+"""Static contracts for the Nexus manifests (no cluster needed)."""
 import pathlib
 import re
 import subprocess
-import tempfile
 import unittest
 
 import yaml
@@ -11,83 +9,69 @@ import yaml
 HERE = pathlib.Path(__file__).resolve().parent
 ROOT = HERE.parents[3]
 VERSIONS = (ROOT / "projects/home/kubernetes/versions.sh").read_text()
+FLUX_CLUSTER = ROOT / "projects/home/kubernetes/flux/cluster"
 
 
-def render(extra_env=None, drop=()):
-    out = tempfile.mkdtemp()
-    env = dict(
-        os.environ,
-        HOME_DOMAIN="home.example.com",
-        LAN_CIDR="192.0.2.0/24",
-        NODE_IP="192.0.2.27",
-        INGRESS_PRIVATE_ENV="/nonexistent",
-    )
-    env.pop("KUBECONFIG", None)
-    env.pop("NEXUS_PUBLIC_HOST", None)
-    env.update(extra_env or {})
-    for key in drop:
-        env.pop(key, None)
-    subprocess.run(
-        ["bash", str(HERE / "deploy.sh"), "--render-only", out],
+def kustomize(path):
+    result = subprocess.run(
+        ["kubectl", "kustomize", str(path)],
         check=True,
-        env=env,
         capture_output=True,
         text=True,
     )
-    return {p.name: p.read_text() for p in pathlib.Path(out).iterdir()}
+    return [doc for doc in yaml.safe_load_all(result.stdout) if doc]
 
 
-def docs(text):
-    return [d for d in yaml.safe_load_all(text) if d]
+def of_kind(docs, kind):
+    return [doc for doc in docs if doc.get("kind") == kind]
 
 
-class Render(unittest.TestCase):
+class Manifests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.files = render()
+        cls.docs = kustomize(HERE / "manifests")
+        cls.rendered = yaml.safe_dump_all(cls.docs)
 
-    def test_all_templates_render_without_placeholders(self):
+    def test_flux_owns_the_nexus_resources(self):
+        kustomizations = {
+            d["metadata"]["name"]: d
+            for d in kustomize(FLUX_CLUSTER)
+            if d.get("kind") == "Kustomization"
+        }
         self.assertEqual(
-            sorted(self.files),
-            sorted(
-                [
-                    "namespace.yaml",
-                    "external-secrets.yaml",
-                    "network-policies.yaml",
-                    "nexus.yaml",
-                    "provisioning.yaml",
-                    "ingressroute.yaml",
-                    "provision.sh",
-                ]
-            ),
+            kustomizations["nexus"]["spec"]["path"],
+            "./projects/home/kubernetes/nexus/manifests",
         )
-        for name, text in self.files.items():
-            self.assertNotRegex(text, r"\$\{[A-Z_]+\}", name)
+        self.assertEqual(
+            kustomizations["nexus-provision"]["spec"]["path"],
+            "./projects/home/kubernetes/nexus/provision",
+        )
+
+    def test_private_values_are_flux_placeholders_only(self):
+        left = set(re.findall(r"\$\{([A-Z_]+)\}", self.rendered))
+        self.assertEqual(
+            left, {"NEXUS_HOST", "NEXUS_PUBLIC_HOST", "NODE_LAN_IP"}
+        )
 
     def test_hosts_use_the_private_suffix_and_a_separate_public_name(self):
-        routes = docs(self.files["ingressroute.yaml"])
-        ingress = [d for d in routes if d["kind"] == "IngressRoute"]
+        ingress = [d for d in of_kind(self.docs, "IngressRoute")]
         public = next(d for d in ingress if d["metadata"]["name"] == "nexus-public")
         admin = next(d for d in ingress if d["metadata"]["name"] == "nexus-admin")
         public_rule = public["spec"]["routes"][0]
         admin_rule = admin["spec"]["routes"][0]
-        self.assertIn("Host(`nexus.home.example.com`)", public_rule["match"])
-        self.assertIn("Host(`ci-nexus.home.example.com`)", public_rule["match"])
+        self.assertIn("Host(`${NEXUS_HOST}`)", public_rule["match"])
+        self.assertIn("Host(`${NEXUS_PUBLIC_HOST}`)", public_rule["match"])
         self.assertIn("PathPrefix(`/repository/`)", public_rule["match"])
-        self.assertNotIn("home-allowlist", public_rule["middlewares"])
+        self.assertNotIn("home-allowlist", [m["name"] for m in public_rule["middlewares"]])
         self.assertEqual(public_rule["priority"], 100)
-        self.assertIn("Host(`nexus.home.example.com`)", admin_rule["match"])
+        self.assertIn("Host(`${NEXUS_HOST}`)", admin_rule["match"])
         self.assertIn(
             "home-allowlist", [m["name"] for m in admin_rule["middlewares"]]
         )
         self.assertEqual(admin_rule["priority"], 10)
 
     def test_public_route_is_body_and_rate_limited(self):
-        middlewares = [
-            d
-            for d in docs(self.files["ingressroute.yaml"])
-            if d["kind"] == "Middleware"
-        ]
+        middlewares = of_kind(self.docs, "Middleware")
         limits = next(d for d in middlewares if d["metadata"]["name"] == "nexus-public-limits")
         self.assertEqual(limits["spec"]["buffering"]["maxRequestBodyBytes"], 8388608)
         self.assertGreater(limits["spec"]["rateLimit"]["average"], 0)
@@ -97,11 +81,12 @@ class Render(unittest.TestCase):
         digest = re.search(r"NEXUS_IMAGE_DIGEST=(sha256:[0-9a-f]{64})", VERSIONS).group(1)
         version = re.search(r"NEXUS_IMAGE_VERSION=([0-9.]+)", VERSIONS).group(1)
         self.assertEqual(version, "3.76.1")
-        self.assertIn(f"docker.io/sonatype/nexus3:{version}@{digest}", self.files["nexus.yaml"])
+        self.assertIn(
+            f"docker.io/sonatype/nexus3:{version}@{digest}", self.rendered
+        )
 
     def test_single_writer_statefulset_and_volume(self):
-        specs = docs(self.files["nexus.yaml"])
-        statefulset = next(d for d in specs if d["kind"] == "StatefulSet")
+        statefulset = of_kind(self.docs, "StatefulSet")[0]
         self.assertEqual(statefulset["spec"]["replicas"], 1)
         self.assertEqual(statefulset["spec"]["serviceName"], "nexus")
         claim = statefulset["spec"]["volumeClaimTemplates"][0]
@@ -125,21 +110,37 @@ class Render(unittest.TestCase):
         )
 
     def test_admin_password_is_seeded_from_eso_without_baked_secrets(self):
-        statefulset = next(d for d in docs(self.files["nexus.yaml"]) if d["kind"] == "StatefulSet")
+        statefulset = of_kind(self.docs, "StatefulSet")[0]
         pod = statefulset["spec"]["template"]["spec"]
         init = pod["initContainers"][0]
         self.assertEqual(init["volumeMounts"][1]["name"], "seed")
         self.assertEqual(pod["volumes"][0]["secret"]["secretName"], "nexus-secrets")
-        self.assertIn("k8s/nexus/nexus-secrets", self.files["external-secrets.yaml"])
-        self.assertNotRegex(self.files["nexus.yaml"], r"password\s*:\s*[^\s]")
+        external = (HERE / "manifests/external-secrets.yaml").read_text()
+        self.assertIn("k8s/nexus/nexus-secrets", external)
+        self.assertNotRegex(self.rendered, r"password\s*:\s*[^\s]")
 
-    def test_provisioning_job_is_idempotent_and_uses_read_only_user(self):
-        job = next(d for d in docs(self.files["provisioning.yaml"]) if d["kind"] == "Job")
+    def test_network_policies_are_narrow(self):
+        policies = {d["metadata"]["name"]: d for d in of_kind(self.docs, "NetworkPolicy")}
+        ingress = policies["nexus-ingress"]
+        egress = policies["nexus-egress"]
+        self.assertIn("${NODE_LAN_IP}/32", ingress["spec"]["ingress"][0]["from"][0]["ipBlock"]["cidr"])
+        ports = {p["port"] for rule in egress["spec"]["egress"] for p in rule["ports"]}
+        self.assertEqual(ports, {53, 80, 443})
+
+
+class Provisioning(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.docs = kustomize(HERE / "provision")
+
+    def test_job_is_idempotent_and_uses_read_only_user(self):
+        job = of_kind(self.docs, "Job")[0]
         container = job["spec"]["template"]["spec"]["containers"][0]
         env = {e["name"]: e for e in container["env"]}
         self.assertEqual(env["NEXUS_ADMIN_PASSWORD"]["valueFrom"]["secretKeyRef"]["key"], "admin_password")
         self.assertEqual(env["NEXUS_CI_PASSWORD"]["valueFrom"]["secretKeyRef"]["key"], "ci_reader_password")
-        script = self.files["provision.sh"]
+
+        script = (HERE / "provision/provision.sh").read_text()
         for needle in (
             "ensure_repo maven proxy maven-central",
             "ensure_repo maven group maven-public",
@@ -149,29 +150,41 @@ class Render(unittest.TestCase):
             "ensure_repo pypi proxy pypi",
             '"enabled":false',
             "nx-repository-view-*-*-read",
-            'GET /service/rest/v1/security/roles/ci-reader',
-            'GET \'/service/rest/v1/security/users?userId=ci-reader\'',
+            "GET /service/rest/v1/security/roles/ci-reader",
+            "GET '/service/rest/v1/security/users?userId=ci-reader'",
         ):
             self.assertIn(needle, script)
-        # A failed optional format (cargo) must not fail the whole run.
         self.assertIn("optional_repo cargo proxy crates", script)
-        # No verbose curl and no shell tracing: credentials stay out of logs.
+        # Upstream 5xx must not auto-block a repository or poison the cache.
+        self.assertIn('"autoBlock":false', script)
+        self.assertIn('"retries":3', script)
+        self.assertIn('"timeout":60', script)
+        self.assertIn('"timeToLive":5', script)
         self.assertNotRegex(script, r"curl[^\n]*\s-[a-zA-Z]*v")
         self.assertNotIn("set -x", script)
 
-    def test_network_policies_are_narrow(self):
-        policies = docs(self.files["network-policies.yaml"])
-        ingress = next(d for d in policies if d["metadata"]["name"] == "nexus-ingress")
-        egress = next(d for d in policies if d["metadata"]["name"] == "nexus-egress")
-        self.assertIn("192.0.2.27/32", ingress["spec"]["ingress"][0]["from"][0]["ipBlock"]["cidr"])
-        ports = {p["port"] for rule in egress["spec"]["egress"] for p in rule["ports"]}
-        self.assertEqual(ports, {53, 80, 443})
+    def test_job_reruns_when_the_script_hash_changes(self):
+        configmap = of_kind(self.docs, "ConfigMap")[0]
+        job = of_kind(self.docs, "Job")[0]
+        self.assertRegex(configmap["metadata"]["name"], r"^nexus-provision-[a-z0-9]+$")
+        scripts = next(
+            v for v in job["spec"]["template"]["spec"]["volumes"] if v["name"] == "scripts"
+        )
+        self.assertEqual(scripts["configMap"]["name"], configmap["metadata"]["name"])
+        script = (HERE / "provision/provision.sh").read_text()
+        self.assertEqual(configmap["data"]["provision.sh"], script)
+        kustomization = (FLUX_CLUSTER / "nexus-provision.yaml").read_text()
+        self.assertIn("force: true", kustomization)
+        self.assertIn("dependsOn:", kustomization)
 
-    def test_missing_private_values_fail(self):
-        with self.assertRaises(subprocess.CalledProcessError):
-            render({"HOME_DOMAIN": ""})
-        with self.assertRaises(subprocess.CalledProcessError):
-            render(drop=("NODE_IP",))
+    def test_image_pinned_by_digest_from_versions(self):
+        digest = re.search(
+            r"NEXUS_PROVISION_IMAGE_DIGEST=(sha256:[0-9a-f]{64})", VERSIONS
+        ).group(1)
+        version = re.search(r"NEXUS_PROVISION_IMAGE_VERSION=([0-9.]+)", VERSIONS).group(1)
+        job = of_kind(self.docs, "Job")[0]
+        image = job["spec"]["template"]["spec"]["containers"][0]["image"]
+        self.assertEqual(image, f"docker.io/curlimages/curl:{version}@{digest}")
 
 
 if __name__ == "__main__":

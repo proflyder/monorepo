@@ -67,6 +67,8 @@
 | `k8s/cert-manager/cloudflare-api-token` | Cloudflare DNS-01 token for the wildcard certificate | ESO → cert-manager |
 | `k8s/currency-bot/cloudflared-tunnel` | Cloudflare Tunnel token for the Telegram webhook | ESO → currency-bot |
 | `k8s/currency-bot/currency-bot` | currency bot Telegram/API credentials | ESO → currency-bot |
+| `k8s/flux-system/git-deploy-key` | Flux GitRepository read-only deploy key and pinned github.com host key | ESO → flux-system (GitRepository) |
+| `k8s/flux-system/settings` | Flux/Nexus deployment settings (`NEXUS_HOST`, `NEXUS_PUBLIC_HOST`, `NODE_LAN_IP`) | ESO → flux-system (postBuild substitution) |
 | `k8s/home-assistant/ha-bridge-ha` | HA long-lived token for ha-bridge | ESO → home-assistant |
 | `k8s/home-assistant/hermes-environment` | Hermes agent environment (HA/MA/Telegram/API keys) | ESO → home-assistant |
 | `k8s/home-assistant/intercom` | intercom signaling: station device token; `phone_token` is taken from `scheduler-auth` (`token`) | ESO → home-assistant |

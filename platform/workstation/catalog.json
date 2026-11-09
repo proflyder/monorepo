@@ -165,6 +165,14 @@
    "purpose": "currency bot Telegram/API credentials",
    "consumer": "ESO → currency-bot"
   },
+  "k8s/flux-system/git-deploy-key": {
+   "purpose": "Flux GitRepository read-only deploy key and pinned github.com host key",
+   "consumer": "ESO → flux-system (GitRepository)"
+  },
+  "k8s/flux-system/settings": {
+   "purpose": "Flux/Nexus deployment settings (NEXUS_HOST, NEXUS_PUBLIC_HOST, NODE_LAN_IP)",
+   "consumer": "ESO → flux-system (postBuild substitution)"
+  },
   "k8s/home-assistant/ha-bridge-ha": {
    "purpose": "HA long-lived token for ha-bridge",
    "consumer": "ESO → home-assistant"

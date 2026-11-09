@@ -17,7 +17,9 @@
   - `cert-manager`: cert-manager и ACME solver Secrets;
   - `openbao`: OpenBao (raft, UI, auth), см. `projects/home/kubernetes/openbao/`;
   - `external-secrets`: External Secrets Operator, читает OpenBao и создаёт
-    Secrets приложений.
+    Secrets приложений;
+  - `flux-system`: Flux (source/kustomize/helm controllers), pull-based GitOps
+    для Nexus.
 - HAOS и add-ons MA/Matter — отдельная VM `.28`; в K3s их больше нет.
 - App PV — local-path, `Retain`; старые PV не удалять без проверки.
 
@@ -334,6 +336,45 @@ mise run kubectl -- -n home-assistant annotate externalsecret scheduler-auth \
 Манифесты — рядом с проектами; таблица путей, миграция и ротация —
 `projects/home/kubernetes/external-secrets/README.md`. `deploy-home`
 проверяет `Ready` ExternalSecret перед выкаткой и не пишет их значения.
+
+## Flux / GitOps (пилот: Nexus)
+
+`projects/home/kubernetes/flux/` устанавливает три контроллера Flux
+(`source-controller`, `kustomize-controller`, `helm-controller`; без
+notification и image automation) и один `GitRepository` на
+`github.com/proflyder/monorepo`, ветка `develop`, с read-only deploy key из
+OpenBao. Кластер сам тянет изменения; у CI нет admin-доступа, а `deploy-home`
+продолжает владеть сервисами приложений.
+
+Под Flux сейчас только Nexus (`nexus` + `nexus-provision` Kustomization).
+Ingress, Vaultwarden, observability, external-secrets и OpenBao в пилот не
+входят.
+
+Bootstrap и ручные шаги владельца — `projects/home/kubernetes/flux/README.md`
+(`mise run admin:flux-bootstrap`). Секреты — OpenBao
+`secret/k8s/flux-system/{git-deploy-key,settings}`, в Git их нет. Приватные
+`NEXUS_HOST`, `NEXUS_PUBLIC_HOST` и `NODE_LAN_IP` подставляются Flux из
+Secret `flux-settings`.
+
+```bash
+# что синхронизировано и готово
+mise run kubectl -- get kustomizations -A
+mise run kubectl -- get gitrepositories -A
+mise run kubectl -- -n flux-system get pods
+
+# форсировать sync после merge в develop
+mise run kubectl -- -n flux-system annotate kustomization flux-system \
+  reconcile.fluxcd.io/requestedAt="$(date +%s)" --overwrite
+
+# приостановить / возобновить
+mise run kubectl -- -n flux-system suspend kustomization/nexus
+mise run kubectl -- -n flux-system resume kustomization/nexus
+```
+
+Инфраструктуру под Flux меняют только merge'ем в `develop`; ручной
+`kubectl apply` тех же объектов будет перезаписан при следующей сверке.
+Cloudflare DNS для Nexus остаётся ручным шагом (см. README Nexus).
+Логи и `exec` — через тот же `mise run kubectl -- ...`.
 
 ## Удалённый доступ
 

@@ -1,0 +1,23 @@
+# Nexus workload, Sources and routes.
+#
+# Flux reconciles this directory through the `nexus` Kustomization in
+# `projects/home/kubernetes/flux/cluster/nexus.yaml`. The image is pinned here
+# (tag + digest) so a moved upstream tag cannot slip into the cluster;
+# `versions.sh` records the same pins for the repository-wide review.
+#
+# Deployment-specific values that must not live in Git (`NEXUS_HOST`,
+# `NEXUS_PUBLIC_HOST`, `NODE_LAN_IP`) are substituted by Flux from
+# the `flux-settings` Secret before apply.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - namespace.yaml
+  - external-secrets.yaml
+  - network-policies.yaml
+  - nexus.yaml
+  - ingressroute.yaml
+images:
+  - name: nexus
+    newName: docker.io/sonatype/nexus3
+    newTag: 3.76.1
+    digest: sha256:390b8ec7e712c680ed8b449b766695a7c5ebbf41e489317618e63ca199f2cc09

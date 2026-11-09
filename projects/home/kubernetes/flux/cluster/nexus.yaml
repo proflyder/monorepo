@@ -1,0 +1,29 @@
+# Nexus workload and routes.
+#
+# `postBuild` substitutes the private values (`NEXUS_HOST`,
+# `NEXUS_PUBLIC_HOST`, `NODE_LAN_IP`) from the ESO-owned
+# `flux-settings` Secret. External Secrets Operator must already be running;
+# it is intentionally not managed by this pilot.
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: nexus
+  namespace: flux-system
+spec:
+  interval: 10m
+  retryInterval: 2m
+  timeout: 10m
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  path: ./projects/home/kubernetes/nexus/manifests
+  prune: true
+  postBuild:
+    substituteFrom:
+      - kind: Secret
+        name: flux-settings
+  healthChecks:
+    - apiVersion: apps/v1
+      kind: StatefulSet
+      name: nexus
+      namespace: nexus

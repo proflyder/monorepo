@@ -1,8 +1,7 @@
 # Nexus Repository OSS: a read-through cache for CI downloads (Maven, npm,
 # PyPI, raw GitHub release assets and Node.js distributions).
 #
-# TEMPLATE rendered by deploy.sh:
-#   NEXUS_IMAGE  upstream image pinned by tag and digest (versions.sh)
+# The image is pinned by tag and digest in `kustomization.yaml` (versions.sh).
 #
 # One replica and one local-retain volume: the embedded H2 store and the blob
 # store are single-writer. A cache is disposable, but retaining the volume
@@ -67,7 +66,7 @@ spec:
         # exists. Both files live on the same volume, so a crash between the
         # two never leaves a half-initialised store behind.
         - name: seed-admin-password
-          image: ${NEXUS_IMAGE}
+          image: nexus
           imagePullPolicy: IfNotPresent
           command:
             - /bin/sh
@@ -93,7 +92,7 @@ spec:
               readOnly: true
       containers:
         - name: nexus
-          image: ${NEXUS_IMAGE}
+          image: nexus
           imagePullPolicy: IfNotPresent
           env:
             # A small home server: a 1 GiB heap plus 1 GiB of direct buffers

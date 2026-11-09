@@ -1,0 +1,29 @@
+# Idempotent Nexus REST provisioning.
+#
+# Kept separate from `../manifests` because the provisioning script contains
+# shell parameter expansions (`${VAR:?}` and `$(...)`); running Flux postBuild
+# substitution over it would rewrite those. This Kustomization has no
+# substitution at all.
+#
+# `configMapGenerator` gives the generated ConfigMap a content hash in its
+# name, and the Job mounts that generated name. A changed `provision.sh`
+# therefore changes the Job spec; the Flux Kustomization sets `force: true` so
+# the immutable Job is deleted and recreated, which is exactly what re-runs
+# provisioning. An unchanged script remains a no-op.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: nexus
+resources:
+  - job.yaml
+configMapGenerator:
+  - name: nexus-provision
+    files:
+      - provision.sh
+    options:
+      # The script runs from a read-only mount; 0555 keeps it executable.
+      disableNameSuffixHash: false
+images:
+  - name: nexus-provision
+    newName: docker.io/curlimages/curl
+    newTag: 8.23.0
+    digest: sha256:3fb7e13e5d179a845c97d78204f3f1064d1907037f26a3ebf91710571151fd93

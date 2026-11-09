@@ -1,0 +1,19 @@
+# Keep the three controllers small: the home node also runs every workload.
+# Flux defaults ask for 1 CPU / 1 GiB limits per controller.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: source-controller
+  namespace: flux-system
+spec:
+  template:
+    spec:
+      containers:
+        - name: manager
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi

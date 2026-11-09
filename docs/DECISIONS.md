@@ -742,3 +742,18 @@
     (форк-PR) или при недоступном Nexus сборка идёт напрямую, как раньше;
     локальные сборки этот файл не читают. `rules_jvm_external` пробует
     Nexus-группу первой, затем публичные URL.
+
+53. **Чувствительная инфраструктура — pull-based GitOps на Flux.** Пилот —
+    Nexus (`projects/home/kubernetes/flux/`, `projects/home/kubernetes/nexus/`).
+    В кластере только `source-controller`, `kustomize-controller` и
+    `helm-controller` Flux `v2.10.0` (без notification/image automation),
+    манифесты зафиксированы в репозитории и ужаты по CPU/памяти под один
+    домашний узел. `GitRepository` смотрит на `develop` через read-only
+    deploy key из OpenBao (`secret/k8s/flux-system/git-deploy-key`); в CI нет
+    admin-доступа к кластеру. Приватные `NEXUS_HOST`, `NEXUS_PUBLIC_HOST` и
+    `NODE_LAN_IP` приходят из `secret/k8s/flux-system/settings` и
+    подставляются в `postBuild`. Провизор Nexus остался Job'ом, но его
+    ConfigMap хешируется по содержимому `provision.sh`, поэтому изменение
+    скрипта перезапускает провижининг; Cloudflare DNS — ручной шаг.
+    Остальные namespace, OpenBao и сервисы приложений остаются на
+    `deploy-home`.
