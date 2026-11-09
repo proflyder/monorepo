@@ -324,4 +324,37 @@ class ControlProfileRowTest {
         assertEquals(listOf("Microphones", "Clock display", "Ring"), titles)
     }
 
+    @Test
+    fun rebindingAGroupKeepsTheRowViews() {
+        // A press flips the row to busy; the same view must stay on screen so
+        // its ripple and progress are visible (no remove-and-inflate).
+        val group = ControlItem.DeviceGroup(
+            deviceId = "dev.desk",
+            title = "Desk lamp",
+            primary = listOf(ControlItem.DeviceGroup.Row(device(PowerState.ON), busy = false)),
+            settings = listOf(ControlItem.DeviceGroup.Row(setting(PowerState.OFF), busy = false)),
+            expanded = true,
+            statesKnown = true,
+        )
+        val themed = ContextThemeWrapper(
+            RuntimeEnvironment.getApplication(),
+            com.google.android.material.R.style.Theme_Material3_DayNight_NoActionBar,
+        )
+        val adapter = ControlAdapter(callback)
+        adapter.submitList(listOf(group))
+        val holder = adapter.onCreateViewHolder(FrameLayout(themed), adapter.getItemViewType(0))
+        adapter.onBindViewHolder(holder, 0)
+        val settingsList = holder.itemView.findViewById<LinearLayout>(R.id.control_group_settings_list)
+        val before = settingsList.getChildAt(0)
+
+        // The first submitList of an adapter is applied synchronously; a second
+        // adapter carries the busy state into the same holder.
+        val busy = ControlAdapter(callback)
+        busy.submitList(listOf(group.copy(settings = listOf(ControlItem.DeviceGroup.Row(setting(PowerState.OFF), busy = true)))))
+        busy.onBindViewHolder(holder, 0)
+
+        assertTrue(before === settingsList.getChildAt(0))
+        assertEquals(View.VISIBLE, before.findViewById<View>(R.id.control_row_progress).visibility)
+        assertFalse(before.isEnabled)
+    }
 }
