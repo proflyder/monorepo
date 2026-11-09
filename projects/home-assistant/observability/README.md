@@ -38,7 +38,10 @@ Alloy собирает CRI-логи kube-system/monitoring и `currency-bot`, и
 Расширение списка источников требует отдельной проверки содержимого, одной
 redaction regex недостаточно. Алерты уходят во внешний канал — Telegram через
 `k8s/home-assistant/hermes-environment` (`TELEGRAM_BOT_TOKEN`,
-`TELEGRAM_ALLOWED_USERS`, отдельный инфра-бот).
+`TELEGRAM_ALLOWED_USERS`, отдельный инфра-бот). Watchdog-пинг в heartbeat
+имеет таймаут вебхука 10 с, а стандартные алерты доставки Alertmanager
+исключают `integration="webhook"`; постоянные сбои пинга ловит
+`HeartbeatPingFailing`.
 
 Приложения не обязаны иметь нативный `/metrics`: TCP availability собирается
 health exporter’ом, host/container state — node-exporter/kubelet/kube-state-metrics.

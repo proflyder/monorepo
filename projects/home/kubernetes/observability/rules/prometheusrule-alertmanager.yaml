@@ -1,0 +1,82 @@
+# Alertmanager delivery alerts.
+#
+# The chart's default AlertmanagerFailedToSendAlerts and
+# AlertmanagerClusterFailedToSendAlerts are disabled in values/prometheus.yaml
+# (defaultRules.disabled) and redeclared here with the same expressions,
+# severities and runbooks, except that the heartbeat webhook is excluded.
+#
+# Why: the Watchdog is re-sent to the external dead-man switch every 5 minutes.
+# A single webhook failure in that window is 33-50% of the rate the default
+# rules measure, so one transient error raises a critical page even though the
+# dead-man switch itself tolerates 900 s of silence. Delivery problems of the
+# heartbeat integration are covered separately by HeartbeatPingFailing, which
+# requires several failures and has a warning severity.
+#
+# The heartbeat receiver now has an explicit webhook timeout (see
+# manifests/external-secret-alertmanager-telegram.yaml), so Alertmanager can
+# retry inside the one-minute group interval instead of hitting the group
+# context deadline. Alertmanager 0.34 http_config has no option to disable
+# keep-alive, hence the timeout is the only client-side mitigation.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: home-alertmanager-alerts
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/part-of: home-observability
+spec:
+  groups:
+    - name: home-alertmanager
+      rules:
+        - alert: AlertmanagerFailedToSendAlerts
+          expr: |-
+            (
+              rate(alertmanager_notifications_failed_total{job="monitoring-alertmanager",container="alertmanager",namespace="monitoring",integration!="webhook"}[15m])
+            /
+              ignoring (reason) group_left rate(alertmanager_notifications_total{job="monitoring-alertmanager",container="alertmanager",namespace="monitoring",integration!="webhook"}[15m])
+            )
+            > 0.01
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Alertmanager не доставил уведомления"
+            description: >-
+              Alertmanager {{ $labels.namespace }}/{{ $labels.pod }} не смог
+              отправить {{ $value | humanizePercentage }} уведомлений в
+              {{ $labels.integration }} (heartbeat webhook исключён).
+            runbook_url: https://runbooks.prometheus-operator.dev/runbooks/alertmanager/alertmanagerfailedtosendalerts
+
+        - alert: AlertmanagerClusterFailedToSendAlerts
+          expr: |-
+            min by (namespace, service, integration) (
+              rate(alertmanager_notifications_failed_total{job="monitoring-alertmanager",container="alertmanager",namespace="monitoring", integration=~".*",integration!="webhook"}[15m])
+            /
+              ignoring (reason) group_left rate(alertmanager_notifications_total{job="monitoring-alertmanager",container="alertmanager",namespace="monitoring", integration=~".*",integration!="webhook"}[15m]) > 0
+            )
+            > 0.01
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Все Alertmanager не доставляют уведомления в интеграцию"
+            description: >-
+              Минимальная доля неудачных уведомлений в {{ $labels.integration }}
+              среди инстансов {{ $labels.namespace }}/{{ $labels.service }} —
+              {{ $value | humanizePercentage }} (heartbeat webhook исключён).
+            runbook_url: https://runbooks.prometheus-operator.dev/runbooks/alertmanager/alertmanagerclusterfailedtosendalerts
+
+        - alert: HeartbeatPingFailing
+          expr: >-
+            increase(alertmanager_notifications_failed_total{job="monitoring-alertmanager",container="alertmanager",namespace="monitoring",integration="webhook"}[30m]) >= 4
+          for: 10m
+          labels:
+            severity: warning
+            component: alertmanager
+          annotations:
+            summary: "Пинг heartbeat не доставляется"
+            description: >-
+              За последние 30 минут минимум 4 отправки Watchdog во внешний
+              dead-man switch завершились ошибкой. Проверить доступность Worker
+              heartbeat, токен в OpenBao k8s/monitoring/heartbeat и логи
+              Alertmanager.
