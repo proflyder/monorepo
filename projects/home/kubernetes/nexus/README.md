@@ -143,18 +143,20 @@ cold refill.
 The internal name is an ordinary `home-allowlist` route. CI needs the existing
 public path, not a new inbound port:
 
-1. Create (or reuse) a Cloudflare Tunnel for the home, with a public hostname
-   `ci-nexus.<home-domain>` and origin
-   `https://traefik.traefik.svc.cluster.local:443`, preserving the original
-   `Host` header (so Traefik applies the `/repository/` route and returns 404
-   for every other path). Store its token in OpenBao as
-   `secret/k8s/nexus/tunnel` (`TUNNEL_TOKEN`) if the tunnel runs in-cluster.
+1. The existing remotely-managed tunnel `home-k3s` (cloudflared in the
+   `currency-bot` namespace) carries a second route: hostname
+   `ci-nexus.<home-domain>`, path `^/repository/`, origin
+   `http://nexus.nexus.svc.cluster.local:8081`. Every other path falls through
+   to the tunnel's `http_status:404`. cloudflared's egress policy opens only
+   `nexus:8081` for this. The route and its proxied CNAME are managed through
+   the Cloudflare API (token `CF_TUNNEL_API_TOKEN` in
+   `secret/infra/cloudflare/currency-bot-tunnel`).
 2. Set the GitHub repository variable `NEXUS_HOST=ci-nexus.<home-domain>`.
 3. Set the GitHub repository secret `NEXUS_CI_PASSWORD` to the
    `ci_reader_password` value from OpenBao.
 
-The public route allows only `/repository/*`, caps request bodies at 8 MiB and
-rate at 200 rps / 400 burst per source. The UI and `/service/rest/*` are not
+The public route allows only `/repository/*` (enforced by the tunnel path
+rule); the Traefik limits apply to the internal name. The UI and `/service/rest/*` are not
 routed on the public hostname.
 
 ## Checks
