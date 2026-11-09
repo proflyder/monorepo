@@ -1,31 +1,31 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- A compact quick action: accent icon on the left, a label of up to two
+     lines next to it. Two tiles share a row; every tile has the same height. -->
 <com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
     style="@style/Widget.Home.Card"
     tools:ignore="SelectableText"
     android:layout_width="0dp"
-    android:layout_height="112dp"
+    android:layout_height="@dimen/control_quick_tile_height"
     android:layout_margin="@dimen/ui_tile_gap_half"
     android:layout_weight="1"
     android:clickable="true"
-    android:focusable="true"
-    android:minHeight="112dp">
+    android:focusable="true">
 
-    <!-- The icon keeps a fixed top area so every tile lines up; only the
-         label is centred inside its own two-line box. -->
     <LinearLayout
         tools:ignore="UseCompoundDrawables"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:orientation="vertical"
-        android:padding="@dimen/ui_tile_gap">
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp">
 
         <!-- The same active icon container as a smart-home device row. -->
         <FrameLayout
             android:id="@+id/quick_tile_icon_bg"
             android:layout_width="40dp"
             android:layout_height="40dp"
-            android:layout_gravity="center_horizontal"
             android:background="@drawable/control_bg_icon">
 
             <ImageView
@@ -39,12 +39,11 @@
 
         <TextView
             android:id="@+id/quick_tile_label"
-            android:layout_width="match_parent"
-            android:layout_height="48dp"
-            android:layout_marginTop="@dimen/ui_tile_gap"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:layout_weight="1"
             android:ellipsize="end"
-            android:gravity="center"
-            android:includeFontPadding="false"
             android:maxLines="2"
             android:textAppearance="?attr/textAppearanceLabelLarge"
             android:textColor="?attr/colorOnSurface" />

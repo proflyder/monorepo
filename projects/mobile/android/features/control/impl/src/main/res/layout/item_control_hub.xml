@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Compact "next up" block: a short list of live rows, hidden when empty. -->
+<!-- Compact "next up" block: a short list of live rows, hidden when empty.
+     Rows fill the card edge to edge so a row ripple is clipped by the card
+     corners instead of stopping short of them. -->
 <com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
     style="@style/Widget.Home.Card"
@@ -14,7 +16,5 @@
         android:layout_height="wrap_content"
         android:divider="@drawable/control_quick_divider"
         android:orientation="vertical"
-        android:paddingTop="4dp"
-        android:paddingBottom="4dp"
         android:showDividers="middle" />
 </com.google.android.material.card.MaterialCardView>

@@ -12,4 +12,6 @@
     <dimen name="control_voice_chip_icon">18dp</dimen>
     <dimen name="control_voice_chip_icon_gap">6dp</dimen>
     <dimen name="control_voice_chip_gap">@dimen/ui_tile_gap</dimen>
+    <!-- Quick action tile: icon + two-line label in a row, two per row. -->
+    <dimen name="control_quick_tile_height">64dp</dimen>
 </resources>
