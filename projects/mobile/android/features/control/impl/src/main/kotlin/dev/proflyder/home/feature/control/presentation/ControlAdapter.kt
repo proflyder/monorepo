@@ -1,10 +1,12 @@
 package dev.proflyder.home.feature.control.presentation
 
+import android.view.HapticFeedbackConstants
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
 import androidx.recyclerview.widget.DiffUtil
+import com.google.android.material.button.MaterialButton
 import com.google.android.material.color.MaterialColors
 import dev.proflyder.home.core.model.ControlEntry
 import dev.proflyder.home.core.model.ControlKind
@@ -20,6 +22,8 @@ import dev.proflyder.home.feature.control.ControlFilter
 import dev.proflyder.home.feature.control.ControlItem
 import dev.proflyder.home.feature.control.HubCard
 import dev.proflyder.home.feature.control.QuickTile
+import dev.proflyder.home.feature.control.WakeFeedbackAction
+import dev.proflyder.home.feature.control.WakeFeedbackKind
 import dev.proflyder.home.feature.control.impl.R
 import dev.proflyder.home.feature.control.impl.databinding.ItemControlDeviceBinding
 import dev.proflyder.home.feature.control.impl.databinding.ItemControlDeviceGroupBinding
@@ -33,6 +37,7 @@ import dev.proflyder.home.feature.control.impl.databinding.ItemControlProfileBin
 import dev.proflyder.home.feature.control.impl.databinding.ItemControlQuickActionsBinding
 import dev.proflyder.home.feature.control.impl.databinding.ItemControlQuickTileBinding
 import dev.proflyder.home.feature.control.impl.databinding.ItemControlScenarioBinding
+import dev.proflyder.home.feature.control.impl.databinding.ItemControlWakeFeedbackBinding
 
 /** Row taps come from [AdapterCallback]; the switch reports an explicit target state. */
 internal interface ControlAdapterCallback : AdapterCallback<ControlItem> {
@@ -57,6 +62,9 @@ internal interface ControlAdapterCallback : AdapterCallback<ControlItem> {
     fun onQuickTileClick(tile: QuickTile)
 
     fun onQuickTileLongClick(tile: QuickTile)
+
+    /** One-tap mark of a live wake event. */
+    fun onWakeAction(action: WakeFeedbackAction)
 
     /** A device filter chip was chosen. */
     fun onFilterSelected(filter: ControlFilter)
@@ -201,6 +209,7 @@ internal class ControlAdapter(
         is ControlItem.DeviceGroup -> TYPE_GROUP
         is ControlItem.Hub -> TYPE_HUB
         is ControlItem.QuickActions -> TYPE_QUICK
+        is ControlItem.WakeFeedback -> TYPE_WAKE
         is ControlItem.Filters -> TYPE_FILTERS
     }
 
@@ -212,6 +221,7 @@ internal class ControlAdapter(
             TYPE_GROUP -> DeviceGroupHolder(ItemControlDeviceGroupBinding.inflate(inflater, parent, false), callback)
             TYPE_HUB -> HubHolder(ItemControlHubBinding.inflate(inflater, parent, false), callback)
             TYPE_QUICK -> QuickActionsHolder(ItemControlQuickActionsBinding.inflate(inflater, parent, false), callback)
+            TYPE_WAKE -> WakeFeedbackHolder(ItemControlWakeFeedbackBinding.inflate(inflater, parent, false), callback)
             TYPE_FILTERS -> FiltersHolder(ItemControlFiltersBinding.inflate(inflater, parent, false), callback)
             else -> DeviceHolder(ItemControlDeviceBinding.inflate(inflater, parent, false), callback)
         }
@@ -561,6 +571,46 @@ internal class ControlAdapter(
         }
     }
 
+    /**
+     * The compact "Voice activator" section. Each button sends its mark at
+     * once: a missed wake must be reported while the ring buffer still holds
+     * the previous ~20 seconds, so there is no confirmation step. The card
+     * itself is inert; only the two explicit buttons act.
+     */
+    private class WakeFeedbackHolder(
+        private val views: ItemControlWakeFeedbackBinding,
+        callback: ControlAdapterCallback,
+    ) : ControlHolder(views, callback) {
+        override fun bind(item: ControlItem) {
+            val wake = item as ControlItem.WakeFeedback
+            bindButton(
+                views.controlWakeFalseAlarm,
+                wake.actions.firstOrNull { it.kind == WakeFeedbackKind.FALSE_ALARM },
+                R.string.control_wake_false_alarm,
+            )
+            bindButton(
+                views.controlWakeMissed,
+                wake.actions.firstOrNull { it.kind == WakeFeedbackKind.MISSED },
+                R.string.control_wake_missed,
+            )
+        }
+
+        override fun bindPayloads(item: ControlItem, payloads: List<Any>) = bind(item)
+
+        internal fun bindButton(button: MaterialButton, action: WakeFeedbackAction?, labelRes: Int) {
+            button.setText(labelRes)
+            button.setVisible(action != null)
+            button.isEnabled = action != null && action.entry.available && !action.busy
+            button.setOnClickListener { pressed -> handleClick(pressed, action) }
+        }
+
+        internal fun handleClick(pressed: View, action: WakeFeedbackAction?) {
+            if (!pressed.isEnabled || action == null) return
+            pressed.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+            callback.onWakeAction(action)
+        }
+    }
+
     private class FiltersHolder(
         private val views: ItemControlFiltersBinding,
         callback: ControlAdapterCallback,
@@ -817,6 +867,7 @@ internal class ControlAdapter(
         const val TYPE_HUB = 5
         const val TYPE_QUICK = 6
         const val TYPE_FILTERS = 7
+        const val TYPE_WAKE = 8
         const val DISABLED_ALPHA = 0.5f
         const val COLUMNS = 3
     }

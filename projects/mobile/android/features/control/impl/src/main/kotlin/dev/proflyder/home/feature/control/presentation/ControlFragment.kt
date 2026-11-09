@@ -24,6 +24,9 @@ import dev.proflyder.home.feature.control.ControlTexts
 import dev.proflyder.home.feature.control.HubCard
 import dev.proflyder.home.feature.control.QuickTile
 import dev.proflyder.home.feature.control.QuickTiles
+import dev.proflyder.home.feature.control.WakeFeedback
+import dev.proflyder.home.feature.control.WakeFeedbackAction
+import dev.proflyder.home.feature.control.WakeFeedbackKind
 import dev.proflyder.home.feature.alarms.AlarmDisableChoice
 import dev.proflyder.home.feature.alarms.alarmDisableChoice
 import dev.proflyder.home.feature.control.impl.R
@@ -65,7 +68,8 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
                 // A device group itself does nothing: its rows forward their taps.
                 // The profile is a mode: only its segmented buttons act.
                 is ControlItem.Header, is ControlItem.Profile, is ControlItem.DeviceGroup,
-                is ControlItem.Hub, is ControlItem.QuickActions, is ControlItem.Filters,
+                is ControlItem.Hub, is ControlItem.QuickActions, is ControlItem.WakeFeedback,
+                is ControlItem.Filters,
                 -> Unit
             }
         }
@@ -131,6 +135,8 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
         }
 
         override fun onFilterSelected(filter: ControlFilter) = viewModel.setFilter(filter)
+
+        override fun onWakeAction(action: WakeFeedbackAction) = viewModel.markWake(action)
     }
 
     override fun onBindingCreated(binding: FragmentControlBinding, savedInstanceState: Bundle?) {
@@ -220,6 +226,8 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
                 )
                 val leading = buildList<ControlItem> {
                     add(ControlItem.Hub(state.hubCards, state.hubRemaining, state.nowUnix))
+                    val wake = WakeFeedback.actions(state.entries, state.pending)
+                    if (wake.isNotEmpty()) add(ControlItem.WakeFeedback(wake))
                     add(ControlItem.QuickActions(tiles, hint = tiles.isEmpty()))
                 }
                 val stickToTop = hubWasEmpty &&
@@ -251,19 +259,33 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
             viewModel.consumeActionError()
         }
         state.notice?.let { notice ->
-            when (notice) {
-                is ControlNotice.ScenarioQueued ->
-                    Notices.show(binding.root, getString(R.string.control_scenario_queued, notice.title))
-                is ControlNotice.FavoriteChanged ->
-                    Notices.show(
-                        binding.root,
-                        getString(
-                            if (notice.pinned) R.string.control_favorite_pinned else R.string.control_favorite_unpinned,
-                            notice.title,
-                        ),
-                    )
-            }
+            showNotice(notice)
             viewModel.consumeNotice()
+        }
+    }
+
+    private fun showNotice(notice: ControlNotice) {
+        when (notice) {
+            is ControlNotice.ScenarioQueued ->
+                Notices.show(binding.root, getString(R.string.control_scenario_queued, notice.title))
+            is ControlNotice.FavoriteChanged ->
+                Notices.show(
+                    binding.root,
+                    getString(
+                        if (notice.pinned) R.string.control_favorite_pinned else R.string.control_favorite_unpinned,
+                        notice.title,
+                    ),
+                )
+            is ControlNotice.WakeMarked ->
+                Notices.show(
+                    binding.root,
+                    getString(
+                        when (notice.kind) {
+                            WakeFeedbackKind.FALSE_ALARM -> R.string.control_wake_false_alarm_sent
+                            WakeFeedbackKind.MISSED -> R.string.control_wake_missed_sent
+                        },
+                    ),
+                )
         }
     }
 

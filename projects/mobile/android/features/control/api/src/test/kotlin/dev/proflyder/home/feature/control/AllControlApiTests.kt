@@ -11,5 +11,6 @@ import org.junit.runners.Suite
     HomeHubTest::class,
     LightColorsTest::class,
     SpeakTextTest::class,
+    WakeFeedbackTest::class,
 )
 class AllControlApiTests

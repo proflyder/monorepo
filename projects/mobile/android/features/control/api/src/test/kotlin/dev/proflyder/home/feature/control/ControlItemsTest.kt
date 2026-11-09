@@ -78,6 +78,7 @@ class ControlItemsTest {
                         " s=[${it.settings.joinToString(",") { row -> row.entry.id }}]"
                 is ControlItem.Hub -> "H ${it.cards.joinToString(",") { card -> card.key }}"
                 is ControlItem.QuickActions -> "Q ${it.tiles.joinToString(",") { tile -> tile.key }}"
+                is ControlItem.WakeFeedback -> "W ${it.actions.joinToString(",") { action -> action.kind.name }}"
                 is ControlItem.Filters -> "F ${it.chips.joinToString(",") { chip -> chip.label }}"
             }
         }

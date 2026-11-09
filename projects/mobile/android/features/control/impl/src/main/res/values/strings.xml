@@ -58,6 +58,11 @@
     <string name="control_hub_resume">Resume</string>
     <string name="control_quick_actions_title">Quick actions</string>
     <string name="control_quick_actions_hint">Long-press a device to pin it here.</string>
+    <string name="control_wake_title">Voice activator</string>
+    <string name="control_wake_false_alarm">False activation</string>
+    <string name="control_wake_missed">Didn’t hear</string>
+    <string name="control_wake_false_alarm_sent">False activation marked</string>
+    <string name="control_wake_missed_sent">Missed wake marked</string>
     <string name="control_pin">Pin to Home</string>
     <string name="control_unpin">Unpin</string>
     <string name="control_favorite_pinned">Pinned: %1$s</string>
