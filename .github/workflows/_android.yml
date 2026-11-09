@@ -208,9 +208,19 @@ jobs:
       # The apk_abi_test log is only printed on failure (--test_output=errors),
       # so repeat the ABI check on the built APK to show the packaged ABIs in
       # the job log ("APK ABIs: arm64-v8a").
+      # Copy the APK out of bazel-bin right after the build: a later `bazel test`
+      # in another configuration repoints the bazel-bin convenience symlink
+      # (rules_android 0.8), so `bazel-bin/.../app.apk` would no longer exist.
+      - name: Stash the release APK
+        if: inputs.unit == 'android-app'
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/android-release"
+          cp -L bazel-bin/projects/mobile/android/app/app.apk "$RUNNER_TEMP/android-release/app.apk"
+
       - name: Show APK ABIs
         if: inputs.unit == 'android-app'
-        run: platform/android/apk_abi_test.sh bazel-bin/projects/mobile/android/app/app.apk
+        run: platform/android/apk_abi_test.sh "$RUNNER_TEMP/android-release/app.apk"
 
       # Same `--config=android` and the same version defines as the build step,
       # so `apk_runtime_closure_test` (and any APK-level test) inspects exactly
@@ -252,13 +262,13 @@ jobs:
         run: |
           set -euo pipefail
           python3 projects/mobile/android/release_info.py write \
-            --apk bazel-bin/projects/mobile/android/app/app.apk \
+            --apk "$RUNNER_TEMP/android-release/app.apk" \
             --google-services platform/android/keys/google-services.json \
             --version-code "${{ steps.version.outputs.version_code }}" \
             --version-name "${{ steps.version.outputs.version_name }}" \
             --commit "$GITHUB_SHA" \
             --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
-            --output bazel-bin/projects/mobile/android/app/release-info.json
+            --output "$RUNNER_TEMP/android-release/release-info.json"
 
       - name: Upload the release APK (unsigned)
         if: inputs.unit == 'android-app' && steps.firebase.outputs.enabled == 'true'
@@ -266,8 +276,8 @@ jobs:
         with:
           name: android-app-apk
           path: |
-            bazel-bin/projects/mobile/android/app/app.apk
-            bazel-bin/projects/mobile/android/app/release-info.json
+            ${{ runner.temp }}/android-release/app.apk
+            ${{ runner.temp }}/android-release/release-info.json
           if-no-files-found: error
           retention-days: 7
 
