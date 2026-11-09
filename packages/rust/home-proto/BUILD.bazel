@@ -39,7 +39,6 @@ rust_test(
     tags = ["no_rustfmt"],
     deps = DEPS + [
         "@crates//:axum",
-        "@crates//:serde_json",
         "@crates//:tempfile",
         "@crates//:tokio",
     ],

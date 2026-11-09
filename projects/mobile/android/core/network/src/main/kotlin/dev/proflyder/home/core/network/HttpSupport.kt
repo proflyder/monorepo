@@ -77,7 +77,7 @@ internal fun ResponseBody.readBounded(): String {
  * failure for older servers; new servers attach a `home.v1.LocalizedText`
  * detail whose JSON `debug` carries a stable key and typed arguments.
  */
-internal fun parseConnectFailure(httpCode: Int, text: String, json: Json): RemoteFailure {
+fun parseConnectFailure(httpCode: Int, text: String, json: Json): RemoteFailure {
     val parsed = runCatching {
         if (text.isBlank()) null else json.parseToJsonElement(text).jsonObject
     }.getOrNull()
