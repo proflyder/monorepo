@@ -154,6 +154,12 @@ duck/resume и передачу wake-команд в HA. Текущая верс
   печатать и не копировать в другие файлы, логи, чат.
   `mise run doctor` показывает, чего не хватает; `secrets:login` (пароль +
   TOTP) выполняет только человек.
+- Кластер K3s: только `mise run kubectl -- <args>` и `mise run helm -- <args>`
+  (профиль `kube`: admin kubeconfig из OpenBao + SSH-туннель к API). Голый
+  `kubectl`/`helm` на рабочей машине смотрит в чужие кластеры (текущий
+  контекст по умолчанию — не домашний), его не использовать и `~/.kube/config`
+  не менять. Логи и `exec` — тем же путём, например
+  `mise run kubectl -- -n nexus logs nexus-0 -c nexus`.
 - Запись: GET → merge → POST с `options.cas`. Новый путь — сразу в OpenBao
   плюс запись в `platform/workstation/catalog.json` и `docs/SECRETS.md`
   (`mise run secrets:check` должен быть чистым); локальные копии не создавать.
