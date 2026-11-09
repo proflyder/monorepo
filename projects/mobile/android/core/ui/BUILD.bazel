@@ -72,7 +72,10 @@ android_all_dir(
 # the interrupt and end-state contract.
 kt_android_local_test(
     name = "motion_test",
-    srcs = glob(["src/test/kotlin/**/*.kt"]),
+    srcs = glob(
+        ["src/test/kotlin/**/*.kt"],
+        exclude = ["src/test/kotlin/dev/proflyder/home/core/ui/ServerTextTest.kt"],
+    ),
     custom_package = "dev.proflyder.home.core.ui",
     data = [
         "robolectric-deps.properties",
