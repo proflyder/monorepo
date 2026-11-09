@@ -120,5 +120,4 @@ class MainActivitySmokeTest {
         assertEquals(TimeSection.TIMERS, time.section)
         assertEquals(TimeSection.TIMERS.ordinal, pager.currentItem)
     }
-
 }

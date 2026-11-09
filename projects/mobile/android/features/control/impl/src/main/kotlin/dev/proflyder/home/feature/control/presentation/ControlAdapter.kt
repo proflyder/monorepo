@@ -16,6 +16,7 @@ import dev.proflyder.home.core.ui.AdapterCallback
 import dev.proflyder.home.core.ui.BaseListAdapter
 import dev.proflyder.home.core.ui.BaseViewHolder
 import dev.proflyder.home.core.ui.PayloadSet
+import dev.proflyder.home.core.ui.PillSegments
 import dev.proflyder.home.core.ui.ViewBinding
 import dev.proflyder.home.core.ui.setVisible
 import dev.proflyder.home.feature.control.ControlFilter
@@ -101,6 +102,15 @@ internal enum class ControlChange {
 
     /** The live-rows content changed; the holder rebuilds its rows in place. */
     HUB,
+
+    /** The voice card (profile side, busy state or wake marks) changed in place. */
+    VOICE,
+
+    /** The filter chips or the selected chip changed. */
+    FILTERS,
+
+    /** Quick tiles changed (a tile went busy, or the set of tiles changed). */
+    QUICK,
 }
 
 /** Identity of the artwork an entry resolves to; see [ControlIcons]. */
@@ -129,8 +139,12 @@ internal object ControlDiff : DiffUtil.ItemCallback<ControlItem>() {
                 if (oldItem == newItem) emptySet() else setOf(ControlChange.GROUP)
             oldItem is ControlItem.Hub && newItem is ControlItem.Hub ->
                 if (oldItem == newItem) emptySet() else setOf(ControlChange.HUB)
-            oldItem is ControlItem.QuickActions && newItem is ControlItem.QuickActions -> emptySet()
-            oldItem is ControlItem.Filters && newItem is ControlItem.Filters -> emptySet()
+            oldItem is ControlItem.QuickActions && newItem is ControlItem.QuickActions ->
+                if (oldItem == newItem) emptySet() else setOf(ControlChange.QUICK)
+            oldItem is ControlItem.Filters && newItem is ControlItem.Filters ->
+                if (oldItem == newItem) emptySet() else setOf(ControlChange.FILTERS)
+            oldItem is ControlItem.Voice && newItem is ControlItem.Voice ->
+                if (oldItem == newItem) emptySet() else setOf(ControlChange.VOICE)
             else -> emptySet()
         }
         return if (changed.isEmpty()) null else PayloadSet.of(changed)
@@ -308,7 +322,7 @@ internal class ControlAdapter(
             val target = when (entry.power) {
                 PowerState.ON -> WORK_TAB
                 PowerState.OFF -> PERSONAL_TAB
-                null -> NO_TAB
+                null -> PillSegments.NONE
             }
             views.controlVoiceProfileTabs.select(target)
         }
@@ -476,11 +490,33 @@ internal class ControlAdapter(
         private val views: ItemControlQuickActionsBinding,
         callback: ControlAdapterCallback,
     ) : ControlHolder(views, callback) {
+        private var renderedKeys: List<String> = emptyList()
+        private val tileViews = mutableMapOf<String, View>()
+
+        /**
+         * The grid is rebuilt only when the set of tiles changes. A tile going
+         * busy after a tap updates in place, so its ripple is not cut off by a
+         * freshly inflated view.
+         */
         override fun bind(item: ControlItem) {
             val quick = item as ControlItem.QuickActions
-            views.controlQuickTiles.removeAllViews()
             views.controlQuickHint.setVisible(quick.hint)
-            quick.tiles.chunked(COLUMNS).forEach { rowTiles ->
+            val keys = quick.tiles.map { it.key }
+            when (keys == renderedKeys) {
+                true -> update(quick.tiles)
+                false -> rebuild(quick.tiles, keys)
+            }
+        }
+
+        private fun update(tiles: List<QuickTile>) {
+            tiles.forEach { tile -> tileViews[tile.key]?.let { bindTile(it, tile) } }
+        }
+
+        private fun rebuild(tiles: List<QuickTile>, keys: List<String>) {
+            renderedKeys = keys
+            tileViews.clear()
+            views.controlQuickTiles.removeAllViews()
+            tiles.chunked(COLUMNS).forEach { rowTiles ->
                 views.controlQuickTiles.addView(quickRow(rowTiles))
             }
         }
@@ -503,11 +539,18 @@ internal class ControlAdapter(
         override fun bindPayloads(item: ControlItem, payloads: List<Any>) = bind(item)
 
         private fun tileView(parent: LinearLayout, tile: QuickTile): View {
-            val views = ItemControlQuickTileBinding.inflate(
+            val root = ItemControlQuickTileBinding.inflate(
                 LayoutInflater.from(parent.context),
                 parent,
                 false,
-            )
+            ).root
+            tileViews[tile.key] = root
+            bindTile(root, tile)
+            return root
+        }
+
+        internal fun bindTile(root: View, tile: QuickTile) {
+            val views = ItemControlQuickTileBinding.bind(root)
             views.quickTileLabel.text = when (tile) {
                 is QuickTile.Device -> tile.entry.localizedDisplayName(views.root.context)
                 is QuickTile.ScenarioTile -> tile.scenario.label
@@ -540,7 +583,6 @@ internal class ControlAdapter(
                 callback.onQuickTileLongClick(tile)
                 true
             }
-            return views.root
         }
     }
 
@@ -806,9 +848,8 @@ internal class ControlAdapter(
         const val TYPE_QUICK = 6
         const val TYPE_FILTERS = 7
         const val DISABLED_ALPHA = 0.5f
-        const val COLUMNS = 3
+        const val COLUMNS = 2
         const val PERSONAL_TAB = 0
         const val WORK_TAB = 1
-        const val NO_TAB = -1
     }
 }

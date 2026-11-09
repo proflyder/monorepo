@@ -6,7 +6,9 @@ import dev.proflyder.home.core.model.ControlKind
 import dev.proflyder.home.core.model.LightControls
 import dev.proflyder.home.core.model.PowerState
 import dev.proflyder.home.core.ui.PayloadSet
+import dev.proflyder.home.feature.control.ControlFilter
 import dev.proflyder.home.feature.control.ControlItem
+import dev.proflyder.home.feature.control.QuickTile
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -127,14 +129,6 @@ class ControlDiffPayloadTest {
     }
 
     @Test
-    fun voiceChangesUseAFullRebind() {
-        // The whole card is small; any change rebinds it instead of trying to
-        // map a payload onto two independent rows.
-        assertNull(changes(voice(), voice(busy = true)))
-        assertNull(changes(voice(), voice(entry(kind = ControlKind.PROFILE, power = PowerState.ON))))
-    }
-
-    @Test
     fun scenarioCoversTitleIconBusyAndAvailability() {
         assertEquals(setOf(ControlChange.TITLE), changes(scenario(), scenario(entry(kind = ControlKind.SCENARIO, power = null, title = "Cinema"))))
         assertEquals(setOf(ControlChange.ICON), changes(scenario(), scenario(entry(kind = ControlKind.SCENARIO, power = null, icon = "movie"))))
@@ -192,5 +186,33 @@ class ControlDiffPayloadTest {
         assertEquals(setOf(ControlChange.TITLE, ControlChange.POWER, ControlChange.STATE), merged?.aspects)
         assertNull(PayloadSet.merge(emptyList(), ControlChange::class.java))
         assertNull(PayloadSet.merge(listOf("not a payload"), ControlChange::class.java))
+    }
+
+    // A null payload makes RecyclerView crossfade the whole card; these rows
+    // update in place, so a tap must always produce a typed payload.
+    @Test
+    fun voiceProfileChangeUpdatesTheCardInPlace() {
+        val before = voice(entry(id = "switch.voice_profile", kind = ControlKind.PROFILE, power = PowerState.OFF))
+        val after = voice(entry(id = "switch.voice_profile", kind = ControlKind.PROFILE, power = PowerState.ON))
+        assertEquals(setOf(ControlChange.VOICE), changes(before, after))
+        assertEquals(setOf(ControlChange.VOICE), changes(voice(busy = false), voice(busy = true)))
+    }
+
+    @Test
+    fun selectingAFilterUpdatesTheChipsInPlace() {
+        val chips = listOf(
+            ControlItem.FilterChip(ControlFilter.All, "All", 3),
+            ControlItem.FilterChip(ControlFilter.Lights, "Lights", 2),
+        )
+        val before = ControlItem.Filters(chips, ControlFilter.All)
+        val after = ControlItem.Filters(chips, ControlFilter.Lights)
+        assertEquals(setOf(ControlChange.FILTERS), changes(before, after))
+    }
+
+    @Test
+    fun aQuickTileGoingBusyUpdatesTheGridInPlace() {
+        val before = ControlItem.QuickActions(listOf(QuickTile.Call), hint = false)
+        val after = ControlItem.QuickActions(listOf(QuickTile.Call), hint = true)
+        assertEquals(setOf(ControlChange.QUICK), changes(before, after))
     }
 }
