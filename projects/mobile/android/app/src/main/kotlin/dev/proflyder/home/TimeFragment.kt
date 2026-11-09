@@ -4,7 +4,6 @@ import android.os.Bundle
 import androidx.fragment.app.Fragment
 import androidx.viewpager2.adapter.FragmentStateAdapter
 import androidx.viewpager2.widget.ViewPager2
-import com.google.android.material.tabs.TabLayoutMediator
 import dev.proflyder.home.core.ui.BaseFragment
 import dev.proflyder.home.databinding.FragmentTimeBinding
 
@@ -17,8 +16,6 @@ import dev.proflyder.home.databinding.FragmentTimeBinding
 class TimeFragment : BaseFragment<FragmentTimeBinding>(FragmentTimeBinding.Companion::inflate) {
     internal var section: TimeSection = TimeSection.ALARMS
         private set
-
-    private var tabsMediator: TabLayoutMediator? = null
 
     private val pageCallback = object : ViewPager2.OnPageChangeCallback() {
         override fun onPageSelected(position: Int) = onPageChanged(position)
@@ -39,16 +36,14 @@ class TimeFragment : BaseFragment<FragmentTimeBinding>(FragmentTimeBinding.Compa
     override fun onBindingCreated(binding: FragmentTimeBinding, savedInstanceState: Bundle?) {
         binding.timePager.adapter = TimePagerAdapter(this)
         binding.timePager.registerOnPageChangeCallback(pageCallback)
-        tabsMediator = TabLayoutMediator(binding.timeTabs, binding.timePager) { tab, position ->
-            tab.setCustomView(R.layout.view_pill_tab)
-            tab.text = getString(titleResFor(TimeSection.entries[position]))
-        }.apply { attach() }
+        binding.timeTabs.setLabels(TimeSection.entries.map { getString(titleResFor(it)) })
+        binding.timeTabs.onSelected = { binding.timePager.currentItem = it }
         binding.timePager.setCurrentItem(section.ordinal, false)
+        binding.timeTabs.select(section.ordinal)
     }
 
     override fun onBindingDestroyed() {
-        tabsMediator?.detach()
-        tabsMediator = null
+        binding.timeTabs.onSelected = null
         binding.timePager.unregisterOnPageChangeCallback(pageCallback)
         binding.timePager.adapter = null
     }
@@ -62,9 +57,10 @@ class TimeFragment : BaseFragment<FragmentTimeBinding>(FragmentTimeBinding.Compa
         TimeSection.REMINDERS -> R.string.app_time_reminders
     }
 
-    /** Swipe or tab tap landed on another page: both controls already follow it. */
+    /** Swipe or pill tap landed on another page: keep the pills in step. */
     internal fun onPageChanged(position: Int) {
         section = TimeSection.entries.getOrNull(position) ?: return
+        binding.timeTabs.select(position)
     }
 
     private companion object {

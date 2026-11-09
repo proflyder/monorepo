@@ -8,7 +8,6 @@ import android.widget.LinearLayout
 import androidx.recyclerview.widget.DiffUtil
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.color.MaterialColors
-import com.google.android.material.tabs.TabLayout
 import dev.proflyder.home.core.model.ControlEntry
 import dev.proflyder.home.core.model.ControlKind
 import dev.proflyder.home.core.model.PowerState
@@ -19,7 +18,6 @@ import dev.proflyder.home.core.ui.BaseViewHolder
 import dev.proflyder.home.core.ui.PayloadSet
 import dev.proflyder.home.core.ui.ViewBinding
 import dev.proflyder.home.core.ui.setVisible
-import dev.proflyder.home.core.ui.R as CoreUiR
 import dev.proflyder.home.feature.control.ControlFilter
 import dev.proflyder.home.feature.control.ControlItem
 import dev.proflyder.home.feature.control.HubCard
@@ -255,34 +253,24 @@ internal class ControlAdapter(
         private val views: ItemControlVoiceBinding,
         callback: ControlAdapterCallback,
     ) : ControlHolder(views, callback) {
-        private var binding_ = false
         private var row: ControlItem.Voice? = null
         private var canChoose = false
 
         init {
-            addTab(R.string.control_profile_personal)
-            addTab(R.string.control_profile_work)
-            views.controlVoiceProfileTabs.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
-                override fun onTabSelected(tab: TabLayout.Tab) = chooseProfile(tab)
-
-                override fun onTabUnselected(tab: TabLayout.Tab) = Unit
-
-                override fun onTabReselected(tab: TabLayout.Tab) = Unit
-            })
+            val context = views.root.context
+            views.controlVoiceProfileTabs.setLabels(
+                listOf(context.getString(R.string.control_profile_personal), context.getString(R.string.control_profile_work)),
+            )
+            views.controlVoiceProfileTabs.onSelected = { chooseProfile(it) }
         }
 
-        internal fun chooseProfile(tab: TabLayout.Tab) {
-            val current = row ?: return
-            if (binding_ || !canChoose) return
-            val profile = current.profile ?: return
-            callback.onProfileChanged(profile.entry, tab.position == WORK_TAB)
-        }
-
-        private fun addTab(labelRes: Int) {
-            val tab = views.controlVoiceProfileTabs.newTab()
-            tab.setCustomView(CoreUiR.layout.view_pill_tab)
-            tab.setText(labelRes)
-            views.controlVoiceProfileTabs.addTab(tab)
+        /** Only a user tap reaches here; programmatic PillSegments.select does not. */
+        internal fun chooseProfile(position: Int) {
+            val profile = row?.profile ?: return
+            when (canChoose) {
+                true -> callback.onProfileChanged(profile.entry, position == WORK_TAB)
+                false -> bindPower(profile.entry)
+            }
         }
 
         override fun bind(item: ControlItem) {
@@ -297,10 +285,8 @@ internal class ControlAdapter(
 
         private fun bindProfile(profile: ControlItem.Voice.Profile?) {
             views.controlVoiceProfileRow.setVisible(profile != null)
-            if (profile == null) {
-                canChoose = false
-                return
-            }
+            canChoose = false
+            profile ?: return
             views.controlVoiceProfileIcon.setImageResource(ControlIcons.resolve(profile.entry))
             bindPower(profile.entry)
             views.controlVoiceProfileProgress.setVisible(profile.busy)
@@ -324,14 +310,7 @@ internal class ControlAdapter(
                 PowerState.OFF -> PERSONAL_TAB
                 null -> NO_TAB
             }
-            if (views.controlVoiceProfileTabs.selectedTabPosition == target) return
-            binding_ = true
-            if (target == NO_TAB) {
-                views.controlVoiceProfileTabs.selectTab(null)
-            } else {
-                views.controlVoiceProfileTabs.getTabAt(target)?.select()
-            }
-            binding_ = false
+            views.controlVoiceProfileTabs.select(target)
         }
 
         private fun bindActions(actions: List<WakeFeedbackAction>) {

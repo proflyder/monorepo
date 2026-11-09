@@ -3,16 +3,17 @@ package dev.proflyder.home.feature.control.presentation
 import android.view.View
 import android.widget.FrameLayout
 import android.widget.LinearLayout
+import android.widget.TextView
 import androidx.appcompat.view.ContextThemeWrapper
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.materialswitch.MaterialSwitch
-import com.google.android.material.tabs.TabLayout
 import dev.proflyder.home.core.model.ControlAction
 import dev.proflyder.home.core.model.ControlEntry
 import dev.proflyder.home.core.model.ControlKind
 import dev.proflyder.home.core.model.ControlRole
 import dev.proflyder.home.core.model.PowerState
 import dev.proflyder.home.core.ui.BaseAdapterCallback
+import dev.proflyder.home.core.ui.PillSegments
 import dev.proflyder.home.feature.control.ControlFilter
 import dev.proflyder.home.feature.control.ControlItem
 import dev.proflyder.home.feature.control.HubCard
@@ -105,11 +106,11 @@ class ControlProfileRowTest {
 
     private class Row(
         val root: View,
-        val tabs: TabLayout,
+        val tabs: PillSegments,
         val profileRow: View,
     ) {
-        val personal get() = requireNotNull(tabs.getTabAt(0))
-        val work get() = requireNotNull(tabs.getTabAt(1))
+        val personal get() = tabs.getChildAt(0) as TextView
+        val work get() = tabs.getChildAt(1) as TextView
     }
 
     private fun bind(item: ControlItem.Voice): Row {
@@ -136,17 +137,17 @@ class ControlProfileRowTest {
         assertEquals("Profile", off.root.findViewById<android.widget.TextView>(R.id.control_voice_profile_title).text)
         assertEquals("Personal", off.personal.text)
         assertEquals("Work", off.work.text)
-        assertEquals(0, off.tabs.selectedTabPosition)
+        assertEquals(0, off.tabs.selectedIndex)
         // Binding is not a user choice.
         assertEquals(emptyList<Boolean>(), changes)
 
-        off.work.select()
+        off.work.performClick()
         assertEquals(listOf(true), changes)
-        off.personal.select()
+        off.personal.performClick()
         assertEquals(listOf(true, false), changes)
 
         val on = bind(voice(PowerState.ON))
-        assertEquals(1, on.tabs.selectedTabPosition)
+        assertEquals(1, on.tabs.selectedIndex)
         // Re-binding a row never replays a command.
         assertEquals(listOf(true, false), changes)
     }
@@ -154,18 +155,18 @@ class ControlProfileRowTest {
     @Test
     fun unknownStateSelectsNeitherSideAndSendsNothing() {
         val row = bind(voice(null))
-        assertEquals(-1, row.tabs.selectedTabPosition)
+        assertEquals(-1, row.tabs.selectedIndex)
         assertEquals(emptyList<Boolean>(), changes)
     }
 
     @Test
     fun unavailableOrBusyRowCannotBeChosen() {
         val unavailable = bind(voice(PowerState.OFF, available = false))
-        unavailable.work.select()
+        unavailable.work.performClick()
         assertEquals(emptyList<Boolean>(), changes)
 
         val busy = bind(voice(PowerState.OFF, busy = true))
-        busy.work.select()
+        busy.work.performClick()
         assertEquals(emptyList<Boolean>(), changes)
     }
 
@@ -320,4 +321,5 @@ class ControlProfileRowTest {
         }
         assertEquals(listOf("Microphones", "Clock display", "Ring"), titles)
     }
+
 }

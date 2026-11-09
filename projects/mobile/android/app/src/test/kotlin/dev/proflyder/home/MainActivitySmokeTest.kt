@@ -3,7 +3,7 @@ package dev.proflyder.home
 import androidx.viewpager2.widget.ViewPager2
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.bottomnavigation.BottomNavigationView
-import com.google.android.material.tabs.TabLayout
+import dev.proflyder.home.core.ui.PillSegments
 import dev.proflyder.home.feature.alarms.presentation.AlarmsFragment
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -97,8 +97,8 @@ class MainActivitySmokeTest {
         shadowOf(activity.mainLooper).idle()
 
         assertEquals(TimeSection.REMINDERS, time.section)
-        val tabs = time.requireView().findViewById<TabLayout>(R.id.time_tabs)
-        assertEquals(TimeSection.REMINDERS.ordinal, tabs.selectedTabPosition)
+        val tabs = time.requireView().findViewById<PillSegments>(R.id.time_tabs)
+        assertEquals(TimeSection.REMINDERS.ordinal, tabs.selectedIndex)
     }
 
     @Test
@@ -112,12 +112,13 @@ class MainActivitySmokeTest {
         activity.supportFragmentManager.executePendingTransactions()
 
         val time = activity.supportFragmentManager.findFragmentById(R.id.fragment_container) as TimeFragment
-        val tabs = time.requireView().findViewById<TabLayout>(R.id.time_tabs)
+        val tabs = time.requireView().findViewById<PillSegments>(R.id.time_tabs)
         val pager = time.requireView().findViewById<ViewPager2>(R.id.time_pager)
-        tabs.getTabAt(TimeSection.TIMERS.ordinal)?.select()
+        tabs.getChildAt(TimeSection.TIMERS.ordinal).performClick()
         shadowOf(activity.mainLooper).idle()
 
         assertEquals(TimeSection.TIMERS, time.section)
         assertEquals(TimeSection.TIMERS.ordinal, pager.currentItem)
     }
+
 }

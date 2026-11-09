@@ -20,5 +20,4 @@
     </style>
 
     <!-- Time uses the same compact pill switch as the voice profile. -->
-    <style name="Widget.Home.TimeTabs" parent="Widget.Home.PillTabs" />
 </resources>
