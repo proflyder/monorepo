@@ -2,26 +2,15 @@ package dev.proflyder.home.core.network
 
 import dev.proflyder.home.core.config.ConnectionSettingsStore
 import dev.proflyder.home.core.model.Outcome
-import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.core.model.Schedule
 import dev.proflyder.home.core.model.ScheduleDraft
 import dev.proflyder.home.core.model.ScheduleKind
 import dev.proflyder.home.core.model.SchedulerStatus
 import dev.proflyder.home.core.model.ServerClock
 import dev.proflyder.home.core.model.Timer
-import java.io.IOException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.SerializationException
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
-import kotlinx.serialization.json.put
 import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 
@@ -81,11 +70,6 @@ class ConnectSchedulerClient(
     interceptors: List<Interceptor> = emptyList(),
 ) : SchedulerClient {
 
-    private val json = Json {
-        ignoreUnknownKeys = true
-        isLenient = false
-    }
-
     private val api: SchedulerApi = HomeRetrofit.create(
         SchedulerApi::class.java,
         settings,
@@ -94,171 +78,105 @@ class ConnectSchedulerClient(
         interceptors,
     )
 
-    override suspend fun getStatus(): Outcome<SchedulerStatus> =
-        call("GetStatus", buildJsonObject { }) { element ->
-            SchedulerJson.parseStatus(element).also { status ->
-                serverClock.sync(status.nowUnix)
-            }
+    override suspend fun getStatus(): Outcome<SchedulerStatus> = io {
+        api.getStatus(EmptyBody).mapResult { status ->
+            status.toDomain().also { serverClock.sync(it.nowUnix) }
         }
+    }
 
-    override suspend fun listSchedules(includeDisabled: Boolean, kind: ScheduleKind?): Outcome<List<Schedule>> =
-        call(
-            "ListSchedules",
-            buildJsonObject {
-                put("includeDisabled", includeDisabled)
-                if (kind != null && kind != ScheduleKind.UNSPECIFIED) put("kind", "SCHEDULE_KIND_${kind.name}")
-            },
-        ) { element -> decodeSchedules(element) }
-
-    override suspend fun createSchedule(draft: ScheduleDraft): Outcome<Schedule> =
-        call("CreateSchedule", SchedulerJson.createScheduleRequest(draft)) { element ->
-            SchedulerJson.parseSchedule(element.jsonObject.getValue("schedule"))
+    override suspend fun listSchedules(includeDisabled: Boolean, kind: ScheduleKind?): Outcome<List<Schedule>> = io {
+        val request = ListSchedulesRequestDto(
+            includeDisabled = includeDisabled,
+            kind = kind?.takeIf { it != ScheduleKind.UNSPECIFIED }?.dto(),
+        )
+        api.listSchedules(request).mapResult {
+            requireNotNull(it.schedules) { "schedules must be an array" }
+                .map(ScheduleDto::toDomain)
         }
+    }
 
-    override suspend fun getSchedule(id: String): Outcome<Schedule> =
-        call("GetSchedule", buildJsonObject { put("id", id) }) { element ->
-            SchedulerJson.parseSchedule(element.jsonObject.getValue("schedule"))
-        }
+    override suspend fun getSchedule(id: String): Outcome<Schedule> = io {
+        api.getSchedule(ScheduleIdRequestDto(id)).mapResult { it.schedule.toDomain() }
+    }
 
-    override suspend fun updateSchedule(schedule: Schedule, expectedRevision: Long): Outcome<Schedule> =
-        call("UpdateSchedule", SchedulerJson.updateScheduleRequest(schedule, expectedRevision)) { element ->
-            SchedulerJson.parseSchedule(element.jsonObject.getValue("schedule"))
-        }
+    override suspend fun createSchedule(draft: ScheduleDraft): Outcome<Schedule> = io {
+        api.createSchedule(SchedulerJson.createScheduleRequest(draft))
+            .mapResult { it.schedule.toDomain() }
+    }
 
-    override suspend fun deleteSchedule(id: String): Outcome<Boolean> =
-        call("DeleteSchedule", buildJsonObject { put("id", id) }) { element ->
-            element.jsonObject["deleted"]?.jsonPrimitive?.content == "true"
-        }
+    override suspend fun updateSchedule(schedule: Schedule, expectedRevision: Long): Outcome<Schedule> = io {
+        api.updateSchedule(SchedulerJson.updateScheduleRequest(schedule, expectedRevision))
+            .mapResult { it.schedule.toDomain() }
+    }
 
-    override suspend fun setScheduleEnabled(id: String, enabled: Boolean): Outcome<Schedule> =
-        call("SetScheduleEnabled", buildJsonObject { put("id", id); put("enabled", enabled) }) { element ->
-            SchedulerJson.parseSchedule(element.jsonObject.getValue("schedule"))
-        }
+    override suspend fun deleteSchedule(id: String): Outcome<Boolean> = io {
+        api.deleteSchedule(ScheduleIdRequestDto(id)).mapResult { it.deleted }
+    }
 
-    override suspend fun snoozeSchedule(id: String, minutes: Int): Outcome<Schedule> =
-        call("SnoozeSchedule", buildJsonObject { put("id", id); put("minutes", minutes) }) { element ->
-            SchedulerJson.parseSchedule(element.jsonObject.getValue("schedule"))
-        }
+    override suspend fun setScheduleEnabled(id: String, enabled: Boolean): Outcome<Schedule> = io {
+        api.setScheduleEnabled(SetScheduleEnabledRequestDto(id, enabled))
+            .mapResult { it.schedule.toDomain() }
+    }
 
-    override suspend fun stopSchedule(id: String): Outcome<Schedule> =
-        call("StopSchedule", buildJsonObject { put("id", id) }) { element ->
-            SchedulerJson.parseSchedule(element.jsonObject.getValue("schedule"))
-        }
+    override suspend fun snoozeSchedule(id: String, minutes: Int): Outcome<Schedule> = io {
+        api.snoozeSchedule(SnoozeScheduleRequestDto(id, minutes))
+            .mapResult { it.schedule.toDomain() }
+    }
 
-    override suspend fun skipScheduleOccurrence(id: String): Outcome<Schedule> =
-        call("SkipScheduleOccurrence", buildJsonObject { put("id", id) }) { element ->
-            SchedulerJson.parseSchedule(element.jsonObject.getValue("schedule"))
-        }
+    override suspend fun stopSchedule(id: String): Outcome<Schedule> = io {
+        api.stopSchedule(ScheduleIdRequestDto(id)).mapResult { it.schedule.toDomain() }
+    }
+
+    override suspend fun skipScheduleOccurrence(id: String): Outcome<Schedule> = io {
+        api.skipScheduleOccurrence(ScheduleIdRequestDto(id)).mapResult { it.schedule.toDomain() }
+    }
 
     override suspend fun startTimer(
         label: String,
         durationSeconds: Long,
         idempotencyKey: String,
-    ): Outcome<Timer> = call(
-        "StartTimer",
-        buildJsonObject {
-            put("label", label)
-            // int64 is a decimal string in protobuf JSON.
-            put("durationSeconds", durationSeconds.toString())
-            if (idempotencyKey.isNotBlank()) put("idempotencyKey", idempotencyKey)
-        },
-    ) { element ->
-        SchedulerJson.parseTimer(element.jsonObject.getValue("timer"))
+    ): Outcome<Timer> = io {
+        val request = StartTimerRequestDto(
+            label = label,
+            durationSeconds = durationSeconds,
+            idempotencyKey = idempotencyKey.takeIf { it.isNotBlank() },
+        )
+        api.startTimer(request).mapResult { it.timer.toDomain() }
     }
 
-    override suspend fun listTimers(includeFinished: Boolean): Outcome<List<Timer>> =
-        call("ListTimers", buildJsonObject { put("includeFinished", includeFinished) }) { element ->
-            decodeTimers(element)
+    override suspend fun listTimers(includeFinished: Boolean): Outcome<List<Timer>> = io {
+        api.listTimers(ListTimersRequestDto(includeFinished)).mapResult {
+            requireNotNull(it.timers) { "timers must be an array" }
+                .map(TimerDto::toDomain)
         }
+    }
 
-    override suspend fun pauseTimer(id: String): Outcome<Timer> = timerAction("PauseTimer", id)
-    override suspend fun resumeTimer(id: String): Outcome<Timer> = timerAction("ResumeTimer", id)
-    override suspend fun cancelTimer(id: String): Outcome<Timer> = timerAction("CancelTimer", id)
+    override suspend fun pauseTimer(id: String): Outcome<Timer> = io {
+        api.pauseTimer(ScheduleIdRequestDto(id)).mapResult { it.timer.toDomain() }
+    }
+
+    override suspend fun resumeTimer(id: String): Outcome<Timer> = io {
+        api.resumeTimer(ScheduleIdRequestDto(id)).mapResult { it.timer.toDomain() }
+    }
+
+    override suspend fun cancelTimer(id: String): Outcome<Timer> = io {
+        api.cancelTimer(ScheduleIdRequestDto(id)).mapResult { it.timer.toDomain() }
+    }
 
     override suspend fun enqueueTask(
         taskType: String,
         queue: String,
         payloadJson: String,
         idempotencyKey: String,
-    ): Outcome<String> = call(
-        "EnqueueTask",
-        buildJsonObject {
-            put("taskType", taskType)
-            put("payloadJson", payloadJson)
-            put("queue", queue)
-            if (idempotencyKey.isNotBlank()) put("idempotencyKey", idempotencyKey)
-        },
-    ) { element ->
-        element.jsonObject.getValue("event").jsonObject.getValue("id").jsonPrimitive.content
+    ): Outcome<String> = io {
+        val request = EnqueueTaskRequestDto(
+            taskType = taskType,
+            payloadJson = payloadJson,
+            queue = queue,
+            idempotencyKey = idempotencyKey.takeIf { it.isNotBlank() },
+        )
+        api.enqueueTask(request).mapResult { it.event.id }
     }
 
-    private suspend fun timerAction(method: String, id: String): Outcome<Timer> =
-        call(method, buildJsonObject { put("id", id) }) { element ->
-            SchedulerJson.parseTimer(element.jsonObject.getValue("timer"))
-        }
-
-    private suspend fun <T> call(
-        method: String,
-        body: JsonObject,
-        decode: (JsonElement) -> T,
-    ): Outcome<T> = withContext(ioDispatcher) {
-        val response = runCatching { api.call(method, body) }.getOrElse { failure ->
-            when (failure) {
-                is IOException, is SerializationException ->
-                    return@withContext Outcome.Failure(failure.toCallFailure())
-                else -> throw failure
-            }
-        }
-
-        val code = response.code()
-        when {
-            // Never read Location: following it could leak the bearer token.
-            code in 300..399 -> Outcome.Failure(RemoteFailure.ProtocolFailure("HTTP $code redirect refused"))
-            code == 401 || code == 403 -> Outcome.Failure(RemoteFailure.Unauthorized)
-            !response.isSuccessful -> {
-                val text = runCatching {
-                    response.errorBody()?.use { it.readBounded() }.orEmpty()
-                }.getOrElse { failure ->
-                    if (failure is IOException) {
-                        return@withContext Outcome.Failure(failure.toRemoteFailure())
-                    }
-                    throw failure
-                }
-                Outcome.Failure(parseConnectError(code, text))
-            }
-            else -> {
-                val element = response.body()
-                    ?: return@withContext Outcome.Failure(RemoteFailure.ProtocolFailure("empty response body"))
-                runCatching { decode(element) }.fold(
-                    onSuccess = { Outcome.Success(it) },
-                    onFailure = { failure ->
-                        if (failure !is Exception) throw failure
-                        Outcome.Failure(
-                            RemoteFailure.ProtocolFailure(
-                                sanitizeMessage(failure.message) ?: "unexpected response shape",
-                            ),
-                        )
-                    },
-                )
-            }
-        }
-    }
-
-    private fun parseConnectError(httpCode: Int, text: String): RemoteFailure =
-        parseConnectFailure(httpCode, text, json)
-
-    private fun decodeSchedules(element: JsonElement): List<Schedule> {
-        val field = element.jsonObject["schedules"] ?: return emptyList()
-        val array = field as? JsonArray ?: throw MalformedResponse("schedules must be an array")
-        return array.map(SchedulerJson::parseSchedule)
-    }
-
-    private fun decodeTimers(element: JsonElement): List<Timer> {
-        val field = element.jsonObject["timers"] ?: return emptyList()
-        val array = field as? JsonArray ?: throw MalformedResponse("timers must be an array")
-        return array.map(SchedulerJson::parseTimer)
-    }
-
-    private class MalformedResponse(message: String) : Exception(message)
-
+    private suspend fun <T> io(block: () -> Outcome<T>): Outcome<T> = withContext(ioDispatcher) { block() }
 }

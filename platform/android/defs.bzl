@@ -4,8 +4,10 @@ The root build contract is MODULE.bazel + Bazelisk. Android application code
 lives under projects/mobile/android; this package only carries toolchain and
 macro wiring that can be reused by a future Android project.
 
-Metro's compiler plugin is added to every Kotlin compilation by these macros.
-A module can still pass extra plugins with `plugins = [...]`.
+Metro's compiler plugin is added to every Kotlin compilation by these macros;
+the kotlinx serialization compiler plugin is added as well so any module can
+declare `@Serializable` DTOs. A module can still pass extra plugins with
+`plugins = [...]`.
 """
 
 load("@rules_kotlin//kotlin:android.bzl", "kt_android_library")
@@ -15,6 +17,7 @@ load(":lint.bzl", _android_lint = "android_lint")
 load(":detekt.bzl", _home_detekt = "home_detekt")
 
 METRO_COMPILER_PLUGIN = "//platform/android:metro_compiler_plugin"
+SERIALIZATION_COMPILER_PLUGIN = "//platform/android:serialization_compiler_plugin"
 JVM17_OPTIONS = "//platform/android:jvm17_options"
 
 def metro_jvm_library(name, srcs, deps = [], plugins = [], **kwargs):
@@ -24,7 +27,7 @@ def metro_jvm_library(name, srcs, deps = [], plugins = [], **kwargs):
         srcs = srcs,
         deps = deps,
         kotlinc_opts = JVM17_OPTIONS,
-        plugins = [METRO_COMPILER_PLUGIN] + plugins,
+        plugins = [METRO_COMPILER_PLUGIN, SERIALIZATION_COMPILER_PLUGIN] + plugins,
         **kwargs
     )
 
@@ -65,7 +68,7 @@ def metro_android_library(
         deps = deps,
         kotlinc_opts = JVM17_OPTIONS,
         manifest = manifest,
-        plugins = [METRO_COMPILER_PLUGIN] + plugins,
+        plugins = [METRO_COMPILER_PLUGIN, SERIALIZATION_COMPILER_PLUGIN] + plugins,
         resource_files = resource_files,
         **kwargs
     )
@@ -77,7 +80,32 @@ def metro_jvm_test(name, srcs, deps = [], plugins = [], **kwargs):
         srcs = srcs,
         deps = deps,
         kotlinc_opts = JVM17_OPTIONS,
-        plugins = [METRO_COMPILER_PLUGIN] + plugins,
+        plugins = [METRO_COMPILER_PLUGIN, SERIALIZATION_COMPILER_PLUGIN] + plugins,
+        **kwargs
+    )
+
+def home_jvm_library(name, srcs, deps = [], plugins = [], **kwargs):
+    """Plain Kotlin/JVM library with the serialization compiler plugin.
+
+    Used by infrastructure modules that do not use Metro DI.
+    """
+    kt_jvm_library(
+        name = name,
+        srcs = srcs,
+        deps = deps,
+        kotlinc_opts = JVM17_OPTIONS,
+        plugins = [SERIALIZATION_COMPILER_PLUGIN] + plugins,
+        **kwargs
+    )
+
+def home_jvm_test(name, srcs, deps = [], plugins = [], **kwargs):
+    """Plain Kotlin/JVM test with the serialization compiler plugin."""
+    kt_jvm_test(
+        name = name,
+        srcs = srcs,
+        deps = deps,
+        kotlinc_opts = JVM17_OPTIONS,
+        plugins = [SERIALIZATION_COMPILER_PLUGIN] + plugins,
         **kwargs
     )
 

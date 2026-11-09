@@ -10,21 +10,11 @@ import dev.proflyder.home.core.model.LightAdjust
 import dev.proflyder.home.core.model.LightControls
 import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.model.PowerState
-import dev.proflyder.home.core.model.RemoteFailure
-import java.io.IOException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.SerializationException
-import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.booleanOrNull
-import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import okhttp3.Interceptor
 import okhttp3.OkHttpClient
@@ -69,81 +59,64 @@ object ControlJson {
             adjust.saturation?.let { put("saturation", it) }
         }.toString()
 
-    fun parseCatalog(element: JsonElement): ControlCatalog {
-        val root = element.jsonObject
-        val array = root["entries"] as? JsonArray ?: throw IllegalArgumentException("entries must be an array")
-        return ControlCatalog(
-            entries = array.map { parseEntry(it.jsonObject) },
-            statesOk = root["statesOk"]?.jsonPrimitive?.booleanOrNull ?: false,
-        )
-    }
+    fun parseCatalog(element: JsonElement): ControlCatalog =
+        WireJson.decodeFromJsonElement(ControlCatalogDto.serializer(), element).toDomain()
+}
 
-    private fun parseEntry(o: JsonObject): ControlEntry {
-        fun text(name: String) = (o[name] as? JsonPrimitive)?.takeIf { it.isString }?.content.orEmpty()
-        val kind = when (text("kind")) {
-            "scenario" -> ControlKind.SCENARIO
-            "light" -> ControlKind.LIGHT
-            "switch" -> ControlKind.SWITCH
-            "profile" -> ControlKind.PROFILE
-            "action" -> ControlKind.ACTION
-            // An unknown kind stays OTHER, so an older app never drives a
-            // command it does not understand.
-            else -> ControlKind.OTHER
-        }
-        val actions = (o["actions"] as? JsonArray).orEmpty()
-            .mapNotNull { ControlAction.fromWire(it.jsonPrimitive.content) }
-            .toSet()
-        val power = when (text("state")) {
-            "on" -> PowerState.ON
-            "off" -> PowerState.OFF
-            else -> null
-        }
-        val light = (o["light"] as? JsonObject)?.let(::parseLightControls)
-        val id = text("id")
-        require(id.isNotEmpty()) { "entry without id" }
-        return ControlEntry(
-            id = id,
-            kind = kind,
-            title = text("title").ifEmpty { id },
-            titleKey = text("titleKey"),
-            titleArgs = (o["titleArgs"] as? JsonObject).orEmpty()
-                .mapNotNull { (key, value) ->
-                    (value as? JsonPrimitive)?.takeIf { it.isString }?.let { key to it.content }
-                }
-                .toMap(),
-            room = text("room"),
-            icon = text("icon"),
-            actions = actions,
-            power = power,
-            available = o["available"]?.jsonPrimitive?.booleanOrNull ?: false,
-            light = light,
-            // Grouping fields are optional: an older server omits them and
-            // every entry stays its own primary device.
-            deviceId = text("device_id").ifEmpty { text("deviceId") },
-            device = text("device"),
-            role = if (text("role") == "setting") ControlRole.SETTING else ControlRole.PRIMARY,
-        )
-    }
+internal fun ControlCatalogDto.toDomain(): ControlCatalog = ControlCatalog(
+    entries = entries.map { it.toDomain() },
+    statesOk = statesOk,
+)
 
-    private fun parseLightControls(l: JsonObject): LightControls {
-        fun num(name: String) = (l[name] as? JsonPrimitive)?.intOrNull ?: 0
-        fun flag(name: String) = (l[name] as? JsonPrimitive)?.booleanOrNull ?: false
-        val fields = (l["effects"] as? JsonArray).orEmpty()
-            .mapNotNull { (it as? JsonPrimitive)?.takeIf { p -> p.isString }?.content }
-        return LightControls(
-            brightness = flag("brightness"),
-            colorTemp = flag("colorTemp"),
-            color = flag("color"),
-            minKelvin = num("minKelvin"),
-            maxKelvin = num("maxKelvin"),
-            brightnessPct = num("brightnessPct"),
-            kelvin = num("kelvin"),
-            hue = num("hue"),
-            saturation = num("saturation"),
-            mode = (l["mode"] as? JsonPrimitive)?.takeIf { it.isString }?.content.orEmpty(),
-            effects = fields,
-        )
-    }
+internal fun ControlEntryDto.toDomain(): ControlEntry {
+    require(id.isNotEmpty()) { "entry without id" }
+    return ControlEntry(
+        id = id,
+        kind = kind.toControlKind(),
+        title = title.ifEmpty { id },
+        titleKey = titleKey,
+        titleArgs = titleArgs,
+        room = room,
+        icon = icon,
+        actions = actions.mapNotNull(ControlAction::fromWire).toSet(),
+        power = state.toPowerState(),
+        available = available,
+        light = light?.toDomain(),
+        deviceId = deviceIdSnake.ifEmpty { deviceId },
+        device = device,
+        role = if (role == "setting") ControlRole.SETTING else ControlRole.PRIMARY,
+    )
+}
+
+internal fun LightControlsDto.toDomain(): LightControls = LightControls(
+    brightness = brightness,
+    colorTemp = colorTemp,
+    color = color,
+    minKelvin = minKelvin,
+    maxKelvin = maxKelvin,
+    brightnessPct = brightnessPct,
+    kelvin = kelvin,
+    hue = hue,
+    saturation = saturation,
+    mode = mode,
+    effects = effects,
+)
+
+private fun String.toControlKind(): ControlKind = when (this) {
+    "scenario" -> ControlKind.SCENARIO
+    "light" -> ControlKind.LIGHT
+    "switch" -> ControlKind.SWITCH
+    "profile" -> ControlKind.PROFILE
+    "action" -> ControlKind.ACTION
+    // An unknown kind stays OTHER, so an older app never drives a command it
+    // does not understand.
+    else -> ControlKind.OTHER
+}
+
+private fun String?.toPowerState(): PowerState? = when (this) {
+    "on" -> PowerState.ON
+    "off" -> PowerState.OFF
+    else -> null
 }
 
 /**
@@ -166,37 +139,6 @@ class HttpControlCatalogClient(
         interceptors,
     )
 
-    override suspend fun fetch(): Outcome<ControlCatalog> = withContext(ioDispatcher) { fetchCatalog() }
-
-    private suspend fun fetchCatalog(): Outcome<ControlCatalog> {
-        val response = runCatching { api.catalog() }.getOrElse { failure ->
-            when (failure) {
-                is IOException, is SerializationException ->
-                    return Outcome.Failure(failure.toCallFailure())
-                else -> throw failure
-            }
-        }
-        val code = response.code()
-        response.errorBody()?.close()
-        return when {
-            code in 300..399 -> Outcome.Failure(RemoteFailure.ProtocolFailure("HTTP $code redirect refused"))
-            code == 401 || code == 403 -> Outcome.Failure(RemoteFailure.Unauthorized)
-            !response.isSuccessful -> Outcome.Failure(RemoteFailure.Server("http_$code", "server returned HTTP $code"))
-            else -> {
-                val element = response.body()
-                    ?: return Outcome.Failure(RemoteFailure.ProtocolFailure("empty response body"))
-                runCatching { ControlJson.parseCatalog(element) }.fold(
-                    onSuccess = { Outcome.Success(it) },
-                    onFailure = { failure ->
-                        if (failure !is Exception) throw failure
-                        Outcome.Failure(
-                            RemoteFailure.ProtocolFailure(
-                                sanitizeMessage(failure.message) ?: "unexpected response shape",
-                            ),
-                        )
-                    },
-                )
-            }
-        }
-    }
+    override suspend fun fetch(): Outcome<ControlCatalog> =
+        withContext(ioDispatcher) { api.catalog().mapResult { it.toDomain() } }
 }

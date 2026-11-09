@@ -9,27 +9,19 @@ import dev.proflyder.home.core.model.IntercomOutgoingSignal
 import dev.proflyder.home.core.model.IntercomStatus
 import dev.proflyder.home.core.model.IntercomWatchEvent
 import dev.proflyder.home.core.model.Outcome
-import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.core.operation.suspendRunCatching
 import java.io.IOException
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerializationException
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.put
 import okhttp3.Interceptor
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -75,11 +67,6 @@ class ConnectIntercomClient(
     interceptors: List<Interceptor> = emptyList(),
 ) : IntercomClient {
 
-    private val json = Json {
-        ignoreUnknownKeys = true
-        isLenient = false
-    }
-
     private val api: IntercomApi = HomeRetrofit.create(
         IntercomApi::class.java,
         settings,
@@ -101,59 +88,52 @@ class ConnectIntercomClient(
     override suspend fun registerEndpoint(
         displayName: String,
         capabilities: List<String>,
-    ): Outcome<IntercomEndpoint> = call(
-        "RegisterEndpoint",
-        IntercomJson.registerEndpointRequest(displayName, capabilities),
-    ) { element ->
-        IntercomJson.parseEndpoint(element.jsonObject.getValue("endpoint"))
+    ): Outcome<IntercomEndpoint> {
+        val request = IntercomJson.registerEndpointRequest(displayName, capabilities)
+        return io { api.registerEndpoint(request).mapResult { it.endpoint.toDomain() } }
     }
 
-    override suspend fun listEndpoints(): Outcome<List<IntercomEndpoint>> =
-        call("ListEndpoints", buildJsonObject { }) { element ->
-            val array = element.jsonObject["endpoints"] as? JsonArray ?: return@call emptyList()
-            array.map(IntercomJson::parseEndpoint)
-        }
+    override suspend fun listEndpoints(): Outcome<List<IntercomEndpoint>> = io {
+        api.listEndpoints(EmptyBody).mapResult { it.endpoints.map(EndpointDto::toDomain) }
+    }
 
     override suspend fun startCall(
         calleeEndpointId: String,
         idempotencyKey: String,
-    ): Outcome<IntercomCall> = call(
-        "StartCall",
-        IntercomJson.startCallRequest(calleeEndpointId, idempotencyKey),
-    ) { element ->
-        IntercomJson.parseCall(element.jsonObject.getValue("call"))
+    ): Outcome<IntercomCall> {
+        val request = IntercomJson.startCallRequest(calleeEndpointId, idempotencyKey)
+        return io { api.startCall(request).mapResult { it.call.toDomain() } }
     }
 
-    override suspend fun answer(callId: String): Outcome<IntercomCall> =
-        call("Answer", buildJsonObject { put("callId", callId) }) { element ->
-            IntercomJson.parseCall(element.jsonObject.getValue("call"))
-        }
+    override suspend fun answer(callId: String): Outcome<IntercomCall> = io {
+        api.answer(CallRequestDto(callId)).mapResult { it.call.toDomain() }
+    }
 
     override suspend fun hangup(
         callId: String,
         reason: IntercomEndReason,
-    ): Outcome<IntercomCall> = call(
-        "Hangup",
-        IntercomJson.hangupRequest(callId, reason),
-    ) { element ->
-        IntercomJson.parseCall(element.jsonObject.getValue("call"))
+    ): Outcome<IntercomCall> {
+        val request = IntercomJson.hangupRequest(callId, reason)
+        return io { api.hangup(request).mapResult { it.call.toDomain() } }
     }
 
     override suspend fun sendSignal(
         callId: String,
         signal: IntercomOutgoingSignal,
-    ): Outcome<Boolean> = call(
-        "SendSignal",
-        IntercomJson.sendSignalRequest(callId, signal),
-    ) { element ->
-        (element.jsonObject["delivered"]?.toString() == "true")
+    ): Outcome<Boolean> {
+        val request = IntercomJson.sendSignalRequest(callId, signal)
+        return io { api.sendSignal(request).mapResult { it.delivered } }
     }
 
-    override suspend fun getIceConfig(): Outcome<List<IntercomIceServer>> =
-        call("GetIceConfig", buildJsonObject { }) { element -> IntercomJson.parseIceServers(element) }
+    override suspend fun getIceConfig(): Outcome<List<IntercomIceServer>> = io {
+        api.getIceConfig(EmptyBody).mapResult { response ->
+            response.iceServers.map(IceServerDto::toDomain)
+        }
+    }
 
-    override suspend fun getStatus(): Outcome<IntercomStatus> =
-        call("GetStatus", buildJsonObject { }) { element -> IntercomJson.parseStatus(element) }
+    override suspend fun getStatus(): Outcome<IntercomStatus> = io {
+        api.getStatus(EmptyBody).mapResult { it.toDomain() }
+    }
 
     override fun watch(): Flow<IntercomWatchEvent> = channelFlow {
         var backoffMillis = INITIAL_BACKOFF_MILLIS
@@ -180,7 +160,7 @@ class ConnectIntercomClient(
     }
 
     private suspend fun streamWatch(onEvent: suspend (IntercomWatchEvent) -> Unit) {
-        val body = ConnectFrames.encode(json.encodeToString(JsonObject.serializer(), buildJsonObject { }))
+        val body = ConnectFrames.encode(WireJson.encodeToString(EmptyBody.serializer(), EmptyBody))
         val request = Request.Builder()
             .url("$PLACEHOLDER_BASE_URL$SERVICE_PATH/Watch")
             .header(STREAM_REQUEST_HEADER, "1")
@@ -218,60 +198,12 @@ class ConnectIntercomClient(
         while (true) {
             val frame = ConnectFrames.read(source) ?: return
             if (frame.endStream) return
-            val element = json.parseToJsonElement(frame.payload)
-            val event = IntercomJson.parseWatchEvent(element)
+            val event = WireJson.decodeFromString(WatchEventDto.serializer(), frame.payload).toDomain()
             if (event != null) onEvent(event)
         }
     }
 
-    private suspend fun <T> call(
-        method: String,
-        body: JsonObject,
-        decode: (JsonElement) -> T,
-    ): Outcome<T> = withContext(ioDispatcher) {
-        val response = runCatching { api.call(method, body) }.getOrElse { failure ->
-            when (failure) {
-                is IOException, is SerializationException ->
-                    return@withContext Outcome.Failure(failure.toCallFailure())
-                else -> throw failure
-            }
-        }
-
-        val code = response.code()
-        when {
-            code in 300..399 -> Outcome.Failure(RemoteFailure.ProtocolFailure("HTTP $code redirect refused"))
-            code == 401 || code == 403 -> Outcome.Failure(RemoteFailure.Unauthorized)
-            !response.isSuccessful -> {
-                val text = runCatching {
-                    response.errorBody()?.use { it.readBounded() }.orEmpty()
-                }.getOrElse { failure ->
-                    if (failure is IOException) {
-                        return@withContext Outcome.Failure(failure.toRemoteFailure())
-                    }
-                    throw failure
-                }
-                Outcome.Failure(parseConnectError(code, text))
-            }
-            else -> {
-                val element = response.body()
-                    ?: return@withContext Outcome.Failure(RemoteFailure.ProtocolFailure("empty response body"))
-                runCatching { decode(element) }.fold(
-                    onSuccess = { Outcome.Success(it) },
-                    onFailure = { failure ->
-                        if (failure !is Exception) throw failure
-                        Outcome.Failure(
-                            RemoteFailure.ProtocolFailure(
-                                sanitizeMessage(failure.message) ?: "unexpected response shape",
-                            ),
-                        )
-                    },
-                )
-            }
-        }
-    }
-
-    private fun parseConnectError(httpCode: Int, text: String): RemoteFailure =
-        parseConnectFailure(httpCode, text, json)
+    private suspend fun <T> io(block: () -> Outcome<T>): Outcome<T> = withContext(ioDispatcher) { block() }
 
     private companion object {
         const val PLACEHOLDER_BASE_URL = "http://localhost/"

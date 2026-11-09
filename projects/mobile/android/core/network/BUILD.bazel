@@ -1,8 +1,8 @@
-load("@rules_kotlin//kotlin:jvm.bzl", "kt_jvm_library", "kt_jvm_test")
+load("//platform/android:defs.bzl", "home_jvm_library", "home_jvm_test")
 
 package(default_visibility = ["//visibility:public"])
 
-kt_jvm_library(
+home_jvm_library(
     name = "network",
     srcs = glob(["src/main/kotlin/**/*.kt"]),
     deps = [
@@ -10,13 +10,15 @@ kt_jvm_library(
         "//projects/mobile/android/core/config",
         "//projects/mobile/android/core/model",
         "@maven//:com_squareup_okhttp3_okhttp",
+        "@maven//:com_squareup_retrofit2_converter_kotlinx_serialization",
         "@maven//:com_squareup_retrofit2_retrofit",
         "@maven//:org_jetbrains_kotlinx_kotlinx_coroutines_core",
+        "@maven//:org_jetbrains_kotlinx_kotlinx_serialization_core_jvm",
         "@maven//:org_jetbrains_kotlinx_kotlinx_serialization_json",
     ],
 )
 
-kt_jvm_test(
+home_jvm_test(
     name = "network_test",
     srcs = glob(["src/test/kotlin/**/*.kt"]),
     resources = glob(["src/test/resources/**"]),
@@ -30,5 +32,7 @@ kt_jvm_test(
         "@maven//:com_squareup_okhttp3_okhttp",
         "@maven//:junit_junit",
         "@maven//:org_jetbrains_kotlinx_kotlinx_coroutines_test",
+        "@maven//:org_jetbrains_kotlinx_kotlinx_serialization_core_jvm",
+        "@maven//:org_jetbrains_kotlinx_kotlinx_serialization_json",
     ],
 )
