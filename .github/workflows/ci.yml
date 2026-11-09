@@ -54,7 +54,7 @@ jobs:
       deploy_control: ${{ steps.route.outputs.deploy_control }}
       android_distribute: ${{ steps.route.outputs.android_distribute }}
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # The base revision of a PR/previous push must be in history.
           fetch-depth: 0
@@ -249,7 +249,7 @@ jobs:
       PR_TITLE: ${{ github.event.pull_request.title }}
     steps:
       # The script and the release notes need the repository (git metadata).
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # The signed APK and its metadata, uploaded once by `android / android-app`.
       # Uploading an artifact from a matrix entry into this run makes it
@@ -506,7 +506,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           sparse-checkout: platform/ci
       - name: Verify every required job succeeded or was skipped

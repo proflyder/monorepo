@@ -131,7 +131,7 @@ jobs:
       # runner's default platform (and the warmed cache exactly as before).
       BAZEL_EXTRA_ARGS: ${{ inputs.images != '' && '--platforms=//platform/bazel:linux_amd64' || '' }}
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # `mise run build|test <unit>` resolves the target list from the unit map;
       # Bazel itself comes from setup-bazel below. Python suites need Python from
@@ -204,7 +204,7 @@ jobs:
       # are readable anonymously, so a missing login only fails at the PUT).
       - name: Log in to GHCR
         if: inputs.images != '' && inputs.push_tree_tag
-        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
