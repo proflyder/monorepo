@@ -70,6 +70,7 @@ rust_binary(
 # runfiles tree under Bazel, from the repository under cargo test).
 rust_test(
     name = "unit_tests",
+    size = "small",
     crate = ":mcp_gateway",
     edition = "2024",
     lint_config = ":workspace_lints",
@@ -81,6 +82,7 @@ rust_test(
 
 rust_test(
     name = "contract_tests",
+    size = "small",
     srcs = ["tests/contract.rs"],
     data = [
         "//solutions/mcp-gateway/testdata:contract_server",
@@ -99,6 +101,7 @@ rust_test(
 # real validators. Replaces the former Go `catalog_contract_test.go`.
 rust_test(
     name = "deploy_contract_tests",
+    size = "small",
     srcs = ["tests/deploy_contract.rs"],
     data = ["//projects/home/kubernetes/mcp-gateway:deploy_templates"],
     edition = "2024",
@@ -108,6 +111,7 @@ rust_test(
 
 rust_test(
     name = "voice_tests",
+    size = "small",
     srcs = ["tests/voice.rs"],
     data = ["//solutions/mcp-gateway/testdata:contract_voice"],
     edition = "2024",
@@ -127,6 +131,7 @@ extract_cargo_lints(
 
 rustfmt_test(
     name = "rustfmt",
+    size = "small",
     targets = [
         ":mcp_gateway",
         ":mcp-gateway",
@@ -140,6 +145,7 @@ rustfmt_test(
 # rules_rust turns every clippy warning into an error, the `-D warnings` gate.
 rust_clippy_test(
     name = "clippy",
+    size = "small",
     targets = [
         ":mcp_gateway",
         ":mcp-gateway",

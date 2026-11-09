@@ -20,6 +20,7 @@ rust_library(
 
 rust_test(
     name = "unit_tests",
+    size = "small",
     # The test CA and server certificate are embedded with `include_str!`, so
     # the PEM files are compile data rather than runtime runfiles.
     compile_data = glob(["testdata/*.pem"]),

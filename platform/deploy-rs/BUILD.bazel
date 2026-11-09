@@ -78,6 +78,7 @@ filegroup(
 
 sh_test(
     name = "parity",
+    size = "small",
     srcs = ["tests/parity.sh"],
     args = [
         "$(rootpath :parity_runner)",
@@ -94,6 +95,7 @@ sh_test(
 
 rust_test(
     name = "unit_tests",
+    size = "small",
     crate = ":home_deploy_lib",
     data = [":frozen"],
     edition = "2024",
@@ -112,6 +114,7 @@ extract_cargo_lints(
 
 rustfmt_test(
     name = "rustfmt",
+    size = "small",
     targets = [
         ":home_deploy_lib",
         ":home-deploy",
@@ -123,6 +126,7 @@ rustfmt_test(
 # rules_rust turns every clippy warning into an error, the `-D warnings` gate.
 rust_clippy_test(
     name = "clippy",
+    size = "small",
     targets = [
         ":home_deploy_lib",
         ":home-deploy",

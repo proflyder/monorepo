@@ -80,6 +80,7 @@ rust_binary(
 # The frozen golden vectors live under //solutions/ha-bridge.
 rust_test(
     name = "unit_tests",
+    size = "small",
     crate = ":ha_bridge_lib",
     edition = "2024",
     lint_config = ":workspace_lints",
@@ -90,6 +91,7 @@ rust_test(
 
 rust_test(
     name = "golden_tests",
+    size = "small",
     srcs = ["tests/golden.rs"],
     data = [
         "//solutions/ha-bridge:catalog_vectors",
@@ -114,6 +116,7 @@ extract_cargo_lints(
 
 rustfmt_test(
     name = "rustfmt",
+    size = "small",
     targets = [
         ":ha_bridge_lib",
         ":ha-bridge",
@@ -126,6 +129,7 @@ rustfmt_test(
 # rules_rust turns every clippy warning into an error, the `-D warnings` gate.
 rust_clippy_test(
     name = "clippy",
+    size = "small",
     targets = [
         ":ha_bridge_lib",
         ":ha-bridge",

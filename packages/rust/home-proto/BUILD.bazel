@@ -32,6 +32,7 @@ rust_library(
 
 rust_test(
     name = "unit_tests",
+    size = "small",
     crate = ":home_proto",
     compile_data = ["testdata/test-ca.pem"],
     edition = "2024",
