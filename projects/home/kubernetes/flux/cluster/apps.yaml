@@ -1,0 +1,90 @@
+# Application deployment moved from `deploy-home` to Flux (variant B).
+#
+# CI builds and verifies each image, then commits the digest to the machine
+# branch `deploy/home-apps`. Flux reads that branch through its own read-only
+# `GitRepository` and exposes the digests as the `home-app-images` ConfigMap;
+# application manifests stay in `develop` and substitute `${...}` from that
+# ConfigMap plus the ESO-owned `flux-app-settings` Secret.
+#
+# `deploy/home-apps` is not a code branch: it contains only `pins/` (see
+# `projects/home/kubernetes/flux/README.md`). `develop` remains PR-only and
+# Flux never writes to either branch.
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  name: flux-pins
+  namespace: flux-system
+spec:
+  # The pins branch moves on every deployable merge, so poll more often than
+  # the `develop` source. A revert of a pins commit is applied within 1-2m.
+  interval: 1m
+  url: ssh://git@github.com/proflyder/monorepo
+  ref:
+    branch: deploy/home-apps
+  # Same read-only deploy key as `flux-system`; `deploy/home-apps` is protected
+  # by a ruleset that allows pushes only from the CI bot.
+  secretRef:
+    name: flux-system
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: home-app-pins
+  namespace: flux-system
+spec:
+  interval: 1m
+  retryInterval: 1m
+  timeout: 2m
+  sourceRef:
+    kind: GitRepository
+    name: flux-pins
+  # The branch contains only `pins/kustomization.yaml` and
+  # `pins/home-app-images.yaml`; the latter is the `home-app-images` ConfigMap.
+  path: ./pins
+  prune: true
+  wait: true
+  # ESO owns `flux-app-settings`, which app Kustomizations also substitute;
+  # the platform umbrella must be Ready before the pins ConfigMap is relied on.
+  dependsOn:
+    - name: platform
+---
+# Pilot application. `suspend: true` keeps Flux from touching the live
+# `wakegrant` workload until the owner explicitly flips it after the pins
+# branch exists and `kubectl diff` has been reviewed (FLUX-APPS-PLAN 6.1).
+#
+# The manifest set is `projects/home/kubernetes/wakegrant/manifests`; its
+# `kustomize.toolkit.fluxcd.io/prune: disabled` PVC annotation protects the
+# SQLite volume from `prune`.
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: app-wakegrant
+  namespace: flux-system
+spec:
+  interval: 1m
+  retryInterval: 1m
+  timeout: 5m
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  path: ./projects/home/kubernetes/wakegrant/manifests
+  prune: true
+  wait: true
+  suspend: true
+  dependsOn:
+    - name: platform
+    - name: home-app-pins
+  postBuild:
+    substituteFrom:
+      # `WAKEGRANT_IMAGE` and `BUILD_ID` (verified CI digests).
+      - kind: ConfigMap
+        name: home-app-images
+      # `WAKE_GRANT_NODE_PORT` and the other private app values.
+      - kind: Secret
+        name: flux-app-settings
+  healthChecks:
+    - apiVersion: apps/v1
+      kind: Deployment
+      name: wakegrant
+      namespace: home-assistant

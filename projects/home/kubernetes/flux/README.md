@@ -18,6 +18,8 @@ Reconciled by Flux today:
 | `observability-rules` | `monitoring` | backup-freshness PrometheusRule |
 | `vaultwarden` | `vaultwarden` | password manager, PVC, route, admin Secret |
 | `nexus` / `nexus-provision` | `nexus` | artifact cache and REST provisioning |
+| `home-app-pins` | `flux-system` | `home-app-images` ConfigMap from the machine branch `deploy/home-apps` |
+| `app-wakegrant` | `home-assistant` | pilot application; **`suspend: true`** until the owner enables it |
 
 Still manual, on purpose:
 
@@ -31,7 +33,8 @@ Still manual, on purpose:
 - **Application services** (`scheduler`, `intercom`, `currency-bot`,
   `wakegrant`, `mcp-gateway`, Hermes runtime) stay on `deploy-home`; their
   ExternalSecrets are applied by
-  `projects/home/kubernetes/external-secrets/deploy.sh`.
+  `projects/home/kubernetes/external-secrets/deploy.sh`. The `wakegrant` Flux
+  path exists but is suspended (see below).
 
 ## Components
 
@@ -97,6 +100,73 @@ explicitly, because helm-controller otherwise defaults to
 (creating duplicates instead of adopting the live releases). Values come from generated ConfigMaps built from the reviewed
 files (`values/*.yaml`); chart versions are pinned in the HelmRelease and
 checked against `projects/home/kubernetes/versions.sh` by the tests.
+
+## Application images (pins branch)
+
+Application manifests stay in `develop`, but the verified image digests live in
+a separate machine branch, `deploy/home-apps` (variant B of
+`docs/FLUX-APPS-PLAN.md`). CI verifies provenance and commits the digest there;
+Flux reads the branch with its own `GitRepository/flux-pins` (same read-only
+deploy key) and publishes `ConfigMap/home-app-images` through
+`Kustomization/home-app-pins`. `develop` stays PR-only and Flux never writes to
+Git.
+
+The branch is an orphan with exactly two files:
+
+```text
+deploy/home-apps
+├── pins/kustomization.yaml       kind: Kustomization, resources: [home-app-images.yaml]
+└── pins/home-app-images.yaml     ConfigMap/home-app-images in flux-system
+```
+
+`pins/home-app-images.yaml` (values are digests, not secrets):
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: home-app-images
+  namespace: flux-system
+  annotations:
+    proflyder.dev/source-commit: "<40-hex merge commit>"
+    proflyder.dev/source-tree: "<40-hex tree tag>"
+    proflyder.dev/verified-at: "2026-11-10T12:00:00Z"
+    proflyder.dev/run: "https://github.com/proflyder/monorepo/actions/runs/<id>"
+data:
+  BUILD_ID: "<commit12>"
+  WAKEGRANT_IMAGE: "ghcr.io/proflyder/wakegrant@sha256:<64-hex>"
+```
+
+Keys are added per migrated unit. `BUILD_ID` is the `proflyder.dev/build`
+annotation; `WAKEGRANT_IMAGE` is the digest-pinned image.
+
+Current live digest (read-only, safe to copy into the initial pins commit):
+
+```bash
+mise run kubectl -- -n home-assistant get deployment wakegrant \
+  -o jsonpath='{.spec.template.spec.containers[0].image}'
+```
+
+`Kustomization/app-wakegrant` is the pilot. It is `suspend: true`: Flux applies
+nothing for wakegrant until the owner:
+
+1. creates the `deploy/home-apps` branch with the files above;
+2. writes `secret/k8s/flux-system/app-settings` (`WAKE_GRANT_NODE_PORT` for
+   this pilot; later the other `secret/ci/deploy-home` app env keys);
+3. compares `kubectl kustomize projects/home/kubernetes/wakegrant/manifests`
+   with the live objects (`kubectl diff`), expecting only the `BUILD_ID` and
+   rollout annotations to differ;
+4. sets `suspend: false` and reconciles.
+
+Rollback is `suspend: true` plus a pins revert, never `kubectl rollout undo`.
+Do not delete the Kustomization: `prune: true` would remove the workload, and
+`PersistentVolumeClaim/wakegrant-data` carries
+`kustomize.toolkit.fluxcd.io/prune: disabled` for exactly that reason.
+
+Delivery alerts (`FluxKustomizationNotReady`, `HelmReleaseNotReady`,
+`PinsStale`) live in `projects/home/kubernetes/observability/rules`; the
+`PodMonitor/flux-controllers` scrapes the controller `gotk_*` metrics, and
+`flux-system-ingress` allows only the monitoring namespace on port 8080.
 
 ## Private values (`flux-settings`)
 

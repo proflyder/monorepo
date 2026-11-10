@@ -1,0 +1,93 @@
+# GitOps delivery alerts for the Flux-managed applications.
+#
+# Sources:
+#   gotk_reconcile_condition  kustomize-/helm-controller (Flux 2.x)
+#   kube_configmap_info       kube-state-metrics
+#
+# Metrics arrive through PodMonitor/flux-controllers (pod port `http-prom`);
+# `flux-system-ingress` allows the monitoring namespace on 8080.
+#
+# These alerts replace the "job failed" signal that `deploy-home` used to give:
+# Flux has no automatic rollback for an application rollout, so a Kustomization
+# stuck in Ready=False is the operator's cue to revert the pins or manifest
+# commit (FLUX-APPS-PLAN 4.2).
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: home-flux-alerts
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/part-of: home-observability
+spec:
+  groups:
+    - name: home-flux
+      rules:
+        - alert: FluxKustomizationNotReady
+          # `status="False"` selects only the active condition; a Ready=True
+          # series has status="True" and never matches.
+          expr: >-
+            gotk_reconcile_condition{
+              kind="Kustomization", type="Ready", status="False",
+              namespace="flux-system"
+            } == 1
+          for: 15m
+          labels:
+            severity: warning
+            component: flux
+          annotations:
+            summary: "Flux Kustomization {{ $labels.name }} не готова"
+            description: >-
+              Kustomization {{ $labels.name }} в flux-system держит Ready=False
+              дольше 15 минут. Смотреть `mise run kubectl -- -n flux-system
+              describe kustomization {{ $labels.name }}` и события
+              kustomize-controller. Откат — revert коммита с манифестом или
+              pins, а не `kubectl rollout undo`.
+
+        - alert: HelmReleaseNotReady
+          expr: >-
+            gotk_reconcile_condition{
+              kind="HelmRelease", type="Ready", status="False",
+              namespace="flux-system"
+            } == 1
+          for: 15m
+          labels:
+            severity: warning
+            component: flux
+          annotations:
+            summary: "HelmRelease {{ $labels.name }} не готова"
+            description: >-
+              HelmRelease {{ $labels.name }} в flux-system держит Ready=False
+              дольше 15 минут (failed install/upgrade). Проверить
+              `mise run helm -- -n flux-system history {{ $labels.name }}` и
+              events helm-controller; откат — предыдущая ревизия или revert
+              values-коммита.
+
+        - alert: PinsStale
+          # Two machine-checkable forms of "pins не доставляются": the
+          # `home-app-images` ConfigMap is missing, or the pins source has no
+          # healthy reconcile. The develop-vs-pins lag needs the timestamp that
+          # the future `pins` CI job will publish; until then this alert covers
+          # the failure modes that would silently freeze every app at its last
+          # digest.
+          expr: >-
+            absent(kube_configmap_info{
+              namespace="flux-system", configmap="home-app-images"
+            })
+            or
+            absent(gotk_reconcile_condition{
+              kind="GitRepository", name="flux-pins", namespace="flux-system",
+              type="Ready", status="True"
+            })
+          for: 15m
+          labels:
+            severity: warning
+            component: flux
+          annotations:
+            summary: "Pins-ветка deploy/home-apps не доставляет digest'ы"
+            description: >-
+              ConfigMap home-app-images отсутствует или GitRepository/flux-pins
+              в flux-system не имеет Ready=True дольше 15 минут. Проверить
+              ветку `deploy/home-apps` (файл pins/home-app-images.yaml),
+              `mise run kubectl -- -n flux-system describe gitrepository
+              flux-pins` и последний запуск job `pins`. Приложения продолжают
+              работать на прежнем digest.

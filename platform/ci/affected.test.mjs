@@ -691,6 +691,30 @@ test("deploy: platform/deploy-rs change runs the Rust unit and routes deploy uni
   ]);
 });
 
+test("deploy: runtime=flux leaves deploy-home for the pins path", () => {
+  const config = affected.loadConfig();
+  const result = routeReal(["platform/deploy-rs/src/render.rs"], undefined, {
+    affectedRules: () => new Set(),
+  });
+  const patched = new affected.Config({
+    units: config.units.map((unit) =>
+      unit.id === "wakegrant"
+        ? new affected.Unit({ ...unit, deployRuntime: "flux" })
+        : unit,
+    ),
+    invalidations: config.invalidations,
+  });
+  const ids = affected.deployEntries(result, patched).map((entry) => entry.id);
+  assert.ok(!ids.includes("wakegrant"));
+  assert.ok(ids.includes("scheduler"));
+  assert.equal(
+    affected.deployEntries(result, config).find((entry) => entry.id === "wakegrant").runtime,
+    "ci",
+  );
+  // Units without an explicit runtime default to the current CI path.
+  assert.equal(new affected.Unit().deployRuntime, "ci");
+});
+
 test("deploy: scheduler change deploys only scheduler", () => {
   const config = affected.loadConfig();
   const result = routeReal(

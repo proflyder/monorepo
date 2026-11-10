@@ -14,6 +14,17 @@ spec:
   podSelector: {}
   policyTypes:
     - Ingress
+  # Prometheus scrapes the controller metrics (`gotk_reconcile_condition`)
+  # through PodMonitor/flux-controllers in the monitoring namespace. Everything
+  # else stays denied: this is the only ingress rule in the namespace.
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - protocol: TCP
+          port: 8080
 ---
 # The kustomize and helm controllers download Git artifacts from the
 # source-controller (Service :80 -> pod :9090) inside this namespace.
