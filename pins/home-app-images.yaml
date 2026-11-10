@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: home-app-images
+  namespace: flux-system
+  annotations:
+    proflyder.dev/source: "initial pin from live cluster 2026-11-10"
+data:
+  BUILD_ID: "d844e96e677e"
+  WAKEGRANT_IMAGE: "ghcr.io/proflyder/wakegrant@sha256:7ce7c04965a22c0557efaddbd68baa39069c10747abb57182e1e02842fb9ecf7"
