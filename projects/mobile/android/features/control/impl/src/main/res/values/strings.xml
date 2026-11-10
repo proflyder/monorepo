@@ -73,6 +73,8 @@
     <string name="control_wake_missed">Missed wake</string>
     <string name="control_wake_false_alarm_sent">False activation marked</string>
     <string name="control_wake_missed_sent">Missed wake marked</string>
+    <string name="control_quick_fab">Quick actions</string>
+    <string name="control_quick_fab_close">Close quick actions</string>
     <string name="control_pin">Pin to Home</string>
     <string name="control_unpin">Unpin</string>
     <string name="control_favorite_pinned">Pinned: %1$s</string>

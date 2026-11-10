@@ -32,4 +32,15 @@
     <dimen name="control_tile_row_gap">8dp</dimen>
     <integer name="control_tile_label_lines">2</integer>
     <integer name="control_tile_columns">4</integer>
+    <!-- Quick-actions FAB and its speed-dial panel. -->
+    <dimen name="control_speed_dial_fab_margin">16dp</dimen>
+    <dimen name="control_speed_dial_offset">88dp</dimen>
+    <dimen name="control_speed_dial_width">248dp</dimen>
+    <dimen name="control_speed_dial_max_height">360dp</dimen>
+    <dimen name="control_speed_dial_padding">8dp</dimen>
+    <dimen name="control_speed_dial_item_padding">12dp</dimen>
+    <dimen name="control_speed_dial_item_height">64dp</dimen>
+    <dimen name="control_speed_dial_item_gap">12dp</dimen>
+    <dimen name="control_speed_dial_icon">40dp</dimen>
+    <dimen name="control_speed_dial_icon_padding">10dp</dimen>
 </resources>

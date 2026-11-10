@@ -191,7 +191,9 @@ object ControlItems {
      *
      * [expandedDevices] holds the device ids whose "Settings (N)" row is open;
      * [collapsedRooms] holds section ids of collapsed room groups;
-     * [wakeFeedback] holds the resolved wake-mark actions for the voice card.
+     * [wakeFeedback] holds the resolved wake-mark actions for the voice card;
+     * [voiceCard] is false when the screen renders the profile and wake marks
+     * elsewhere (a toolbar chip and a quick-actions dial).
      */
     fun build(
         entries: List<ControlEntry>,
@@ -203,6 +205,7 @@ object ControlItems {
         leading: List<ControlItem> = emptyList(),
         collapsedRooms: Set<String> = emptySet(),
         wakeFeedback: List<WakeFeedbackAction> = emptyList(),
+        voiceCard: Boolean = true,
     ): List<ControlItem> {
         val applied = effectiveFilter(entries, filter)
         val profile = entries.firstOrNull { it.isProfile }
@@ -211,7 +214,7 @@ object ControlItems {
         items += leading
 
         // One card for the whole voice block: profile and/or wake marks.
-        if (profile != null || wakeFeedback.isNotEmpty()) {
+        if (voiceCard && (profile != null || wakeFeedback.isNotEmpty())) {
             items += ControlItem.Header(SECTION_VOICE, texts.voice)
             items += ControlItem.Voice(
                 profile = profile?.let { ControlItem.Voice.Profile(it, busy = it.id in pending) },

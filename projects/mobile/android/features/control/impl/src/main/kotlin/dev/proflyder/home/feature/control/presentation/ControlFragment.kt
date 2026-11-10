@@ -1,8 +1,11 @@
 package dev.proflyder.home.feature.control.presentation
 
 import android.os.Bundle
+import androidx.activity.OnBackPressedCallback
 import androidx.fragment.app.activityViewModels
 import androidx.recyclerview.widget.GridLayoutManager
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import dev.proflyder.home.core.model.ControlAction
 import dev.proflyder.home.core.model.ControlEntry
@@ -25,6 +28,8 @@ import dev.proflyder.home.feature.control.ControlTexts
 import dev.proflyder.home.feature.control.HubCard
 import dev.proflyder.home.feature.control.QuickTile
 import dev.proflyder.home.feature.control.QuickTiles
+import dev.proflyder.home.feature.control.SpeedDialItem
+import dev.proflyder.home.feature.control.SpeedDialItems
 import dev.proflyder.home.feature.control.WakeFeedback
 import dev.proflyder.home.feature.control.WakeFeedbackAction
 import dev.proflyder.home.feature.control.WakeFeedbackKind
@@ -41,6 +46,9 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
 
     private lateinit var adapter: ControlAdapter
     private lateinit var states: ListStateViews
+    private lateinit var speedDialAdapter: SpeedDialAdapter
+    private lateinit var dialBack: OnBackPressedCallback
+    private var speedDialOpen = false
     private var lightSheet: LightSheet? = null
     private var volumeSheet: VolumeSheet? = null
     private var speakDialog: SpeakDialog? = null
@@ -48,8 +56,8 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
     /**
      * The live rows arrive after the first content frame. Their item stays in
      * the list from the start (with a stable key), so that arrival inserts no
-     * row above Quick actions; this flag additionally pulls the list to the
-     * top when the user has not scrolled yet.
+     * row above the device sections; this flag additionally pulls the list to
+     * the top when the user has not scrolled yet.
      */
     private var hubWasEmpty = true
 
@@ -166,6 +174,28 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
             }
         }
         binding.controlList.adapter = adapter
+        binding.controlList.addOnScrollListener(object : RecyclerView.OnScrollListener() {
+            override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
+                if (speedDialOpen || dy == 0) return
+                when {
+                    dy > 0 -> binding.controlQuickFab.hide()
+                    else -> binding.controlQuickFab.show()
+                }
+            }
+        })
+
+        speedDialAdapter = SpeedDialAdapter(
+            onClick = { item -> runSpeedDialItem(item) },
+            onLongClick = { item -> pinSpeedDialItem(item) },
+        )
+        binding.controlQuickList.layoutManager = LinearLayoutManager(requireContext())
+        binding.controlQuickList.adapter = speedDialAdapter
+        binding.controlQuickFab.setOnClickListener { toggleSpeedDial() }
+        binding.controlQuickScrim.setOnClickListener { closeSpeedDial() }
+        dialBack = object : OnBackPressedCallback(false) {
+            override fun handleOnBackPressed() = closeSpeedDial()
+        }
+        requireActivity().onBackPressedDispatcher.addCallback(viewLifecycleOwner, dialBack)
 
         states = ListStateViews(
             progress = binding.controlProgress,
@@ -218,6 +248,102 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
             .also { it.show() }
     }
 
+    /**
+     * The speed dial replaces the old quick-actions block. Its height is
+     * capped so a long favourites list scrolls inside the card.
+     */
+    private fun updateSpeedDial(items: List<SpeedDialItem>) {
+        speedDialAdapter.submitList(items)
+        val row = resources.getDimensionPixelSize(R.dimen.control_speed_dial_item_height)
+        val padding = resources.getDimensionPixelSize(R.dimen.control_speed_dial_padding) * 2
+        val max = resources.getDimensionPixelSize(R.dimen.control_speed_dial_max_height)
+        val target = (items.size * row + padding).coerceAtMost(max)
+        val params = binding.controlQuickList.layoutParams
+        if (params.height != target) {
+            params.height = target
+            binding.controlQuickList.layoutParams = params
+        }
+    }
+
+    private fun toggleSpeedDial() {
+        when (speedDialOpen) {
+            true -> closeSpeedDial()
+            false -> openSpeedDial()
+        }
+    }
+
+    private fun openSpeedDial() {
+        speedDialOpen = true
+        binding.controlQuickScrim.setVisible(true)
+        binding.controlQuickDial.setVisible(true)
+        binding.controlQuickFab.show()
+        syncSpeedDialFab()
+        dialBack.isEnabled = true
+    }
+
+    internal fun closeSpeedDial() {
+        if (!speedDialOpen) return
+        speedDialOpen = false
+        binding.controlQuickScrim.setVisible(false)
+        binding.controlQuickDial.setVisible(false)
+        binding.controlQuickFab.show()
+        syncSpeedDialFab()
+        dialBack.isEnabled = false
+    }
+
+    private fun syncSpeedDialFab() {
+        binding.controlQuickFab.setImageResource(
+            if (speedDialOpen) R.drawable.control_ic_close else R.drawable.control_ic_bolt,
+        )
+        binding.controlQuickFab.contentDescription = getString(
+            if (speedDialOpen) R.string.control_quick_fab_close else R.string.control_quick_fab,
+        )
+    }
+
+    /** A dial device flips on/off; the other items run their existing actions. */
+    private fun runSpeedDialItem(item: SpeedDialItem) {
+        closeSpeedDial()
+        when (item) {
+            is SpeedDialItem.Tile -> runQuickTileFromDial(item.tile)
+            is SpeedDialItem.Wake -> viewModel.markWake(item.action)
+        }
+    }
+
+    private fun runQuickTileFromDial(tile: QuickTile) {
+        when (tile) {
+            is QuickTile.Device -> viewModel.setPower(tile.entry, !tile.entry.isOn())
+            is QuickTile.Speak -> openSpeakDialog(tile.entry)
+            is QuickTile.ScenarioTile -> viewModel.runScenarioNow(tile.scenario)
+            QuickTile.Call -> viewModel.callStation()
+        }
+    }
+
+    /** Long press keeps the old quick-tile pin/unpin path for all favourites. */
+    private fun pinSpeedDialItem(item: SpeedDialItem) {
+        when (item) {
+            is SpeedDialItem.Tile -> pinQuickTile(item.tile)
+            is SpeedDialItem.Wake -> Unit
+        }
+    }
+
+    private fun pinQuickTile(tile: QuickTile) {
+        when (tile) {
+            is QuickTile.Device -> viewModel.toggleFavoriteRef(
+                FavoriteRef(FavoriteKind.DEVICE, tile.entry.id),
+                tile.entry.localizedDisplayName(requireContext()),
+            )
+            is QuickTile.Speak -> viewModel.toggleFavoriteRef(
+                FavoriteRef(FavoriteKind.ACTION, tile.entry.id),
+                tile.entry.localizedDisplayName(requireContext()),
+            )
+            is QuickTile.ScenarioTile -> viewModel.toggleFavoriteRef(
+                FavoriteRef(FavoriteKind.SCENARIO, tile.scenario.id),
+                tile.scenario.label,
+            )
+            QuickTile.Call -> Unit
+        }
+    }
+
     override fun onBindingDestroyed() {
         lightSheet?.dismiss()
         lightSheet = null
@@ -257,11 +383,11 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
                     pendingEntries = state.pending,
                     pendingScenarios = state.pendingScenarios,
                 )
-                val leading = buildList<ControlItem> {
-                    add(ControlItem.Hub(state.hubCards, state.hubRemaining, state.nowUnix))
-                    add(ControlItem.QuickActions(tiles, hint = tiles.isEmpty()))
-                }
                 val wake = WakeFeedback.actions(state.entries, state.pending)
+                updateSpeedDial(SpeedDialItems.build(tiles, wake))
+                val leading = listOf(
+                    ControlItem.Hub(state.hubCards, state.hubRemaining, state.nowUnix),
+                )
                 val stickToTop = hubWasEmpty &&
                     state.hubCards.isNotEmpty() &&
                     !binding.controlList.canScrollVertically(-1)
@@ -275,7 +401,7 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
                     expandedDevices = state.expandedDevices,
                     leading = leading,
                     collapsedRooms = state.collapsedRooms,
-                    wakeFeedback = wake,
+                    voiceCard = false,
                 )
                 adapter.submitList(items) { if (stickToTop) binding.controlList.scrollToPosition(0) }
             }

@@ -12,6 +12,7 @@ import org.junit.runners.Suite
     HomeHubTest::class,
     LightColorsTest::class,
     SpeakTextTest::class,
+    SpeedDialTest::class,
     WakeFeedbackTest::class,
 )
 class AllControlApiTests
