@@ -690,10 +690,11 @@ commit SHA (сверены с тегами через `gh api`); Bazelisk `1.30.
 собранных бинарников: он передаёт deploy.sh заранее разрешённые
 digest-пины образов, поэтому `mise run test` и `mise run test:deploy-control`
 запускают его без Bazel. Путь продвижения (`PREBUILT_DIGESTS`,
-`PREBUILT_DIGESTS_FILE`, решение 36) покрыт там же и в `test_deploy.py`
-юнитов `scheduler`/`currency-bot`/`mcp-gateway`/`wakegrant`:
-образ не собирается и не пушится, digest попадает в отрендеренный манифест,
-а кривое/дублирующее значение падает fail-closed до обращения к кластеру.
+`PREBUILT_DIGESTS_FILE`, решение 36) покрыт `test_deploy_control.sh`
+(scheduler) и `test_build_and_push.py`: образ не собирается и не пушится,
+digest попадает в отрендеренный манифест, а кривое/дублирующее значение
+падает fail-closed. У остальных юнитов этого пути больше нет — CI только
+пинует digest, манифесты проверяют `test_flux.py` и manifest-тесты.
 `projects/home-assistant/deploy/test_build_and_push.py` проверяет то же для
 `build-and-push.sh` (`hermes`, `voice-proxy`, `health-exporter`,
 `home-deploy`) с заглушками docker/bazel/git. Hermes rollout и

@@ -374,7 +374,6 @@ export function testCommands(unit, root = ROOT) {
               "platform/deploy/*.sh",
               "projects/home/kubernetes/scheduler/*.sh",
               "projects/home/kubernetes/scheduler/nft/*.sh",
-              "projects/home/kubernetes/currency-bot/*.sh",
               "projects/home/kubernetes/currency-bot/nft/*.sh",
               "projects/station/scripts/*.sh",
               "solutions/windows-logon-provider/*.sh",
