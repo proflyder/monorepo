@@ -229,6 +229,13 @@ impl Controller {
             SwitchId::Microphones => {
                 self.st.mic_muted =
                     logic::sw_mute_after_switch(state, self.st.mic_muted, self.hw_mic_muted);
+                if state && self.hw_mic_muted {
+                    // The button's latch cuts the microphones in hardware: there is nothing to
+                    // switch on, and HA must not stay "on" after asking for it.
+                    warn!(
+                        "mic held by hardware switch: Home Assistant asked for microphones on, publishing off"
+                    );
+                }
                 if !state {
                     self.cancel_arbitration();
                     if self.session.is_listening() {
@@ -239,6 +246,8 @@ impl Controller {
                 self.update_detection();
                 self.update_ui();
                 // The actual state, not the command: "on" under the button mute comes back off.
+                // Published even when the stored mute did not change, otherwise HA keeps showing
+                // the state it asked for.
                 self.publish_microphones();
                 // Privacy: a mute must not be undone by a power cut right after it. A failed
                 // write is logged and stays pending; the mute itself is in effect either way.

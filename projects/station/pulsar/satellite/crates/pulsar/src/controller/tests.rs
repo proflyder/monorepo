@@ -896,6 +896,140 @@ async fn mask_and_privacy_switches_write_at_once() {
 }
 
 #[tokio::test]
+async fn hardware_mute_transition_table_publishes_the_real_state_and_led() {
+    // sw = the stored mute from HA, hw = the button's latch, muted = what the speaker does.
+    #[derive(Clone, Copy)]
+    enum Step {
+        Button(bool),
+        Ha(bool),
+    }
+    #[derive(Debug)]
+    struct Want {
+        sw: bool,
+        hw: bool,
+        muted: bool,
+    }
+    use Step::{Button, Ha};
+    let w = |sw, hw, muted| Want { sw, hw, muted };
+
+    let scenarios: Vec<(&str, Vec<(Step, Want)>)> = vec![
+        ("button on", vec![(Button(true), w(false, true, true))]),
+        (
+            "button on, HA on",
+            vec![
+                (Button(true), w(false, true, true)),
+                (Ha(true), w(false, true, true)),
+            ],
+        ),
+        (
+            "button on, HA off, button off",
+            vec![
+                (Button(true), w(false, true, true)),
+                (Ha(false), w(true, true, true)),
+                (Button(false), w(false, false, false)),
+            ],
+        ),
+        (
+            "button on, HA on twice, button off",
+            vec![
+                (Button(true), w(false, true, true)),
+                (Ha(true), w(false, true, true)),
+                (Ha(true), w(false, true, true)),
+                (Button(false), w(false, false, false)),
+            ],
+        ),
+        (
+            "button on, HA off, HA on under the latch, button off",
+            vec![
+                (Button(true), w(false, true, true)),
+                (Ha(false), w(true, true, true)),
+                (Ha(true), w(true, true, true)),
+                (Button(false), w(false, false, false)),
+            ],
+        ),
+        (
+            "HA off then HA on",
+            vec![
+                (Ha(false), w(true, false, true)),
+                (Ha(true), w(false, false, false)),
+            ],
+        ),
+        (
+            "HA off, button on, button off",
+            vec![
+                (Ha(false), w(true, false, true)),
+                (Button(true), w(true, true, true)),
+                (Button(false), w(false, false, false)),
+            ],
+        ),
+        ("HA on alone", vec![(Ha(true), w(false, false, false))]),
+        (
+            "button on, button off",
+            vec![
+                (Button(true), w(false, true, true)),
+                (Button(false), w(false, false, false)),
+            ],
+        ),
+    ];
+
+    for (name, steps) in scenarios {
+        let mut f = controller();
+        f.calls();
+        for (i, (step, want)) in steps.iter().enumerate() {
+            match step {
+                Button(on) => f.c.on_input(pulsar_hw::InputEvent::Mute(*on)),
+                Ha(on) => f.c.on_api(ApiEvent::Switch(SwitchId::Microphones, *on)),
+            }
+            let calls = f.calls();
+            assert_eq!(f.c.st.mic_muted, want.sw, "{name}: step {i} stored mute");
+            assert_eq!(f.c.hw_mic_muted, want.hw, "{name}: step {i} latch");
+            // Every HA command publishes the real state, even when the latch keeps it "off".
+            let published = format!("publish_switch Microphones {}", !want.muted);
+            assert!(
+                calls.contains(&published),
+                "{name}: step {i}: missing {published:?} in {calls:?}"
+            );
+            let led = format!("leds.muted {}", want.muted);
+            assert!(
+                calls.contains(&led),
+                "{name}: step {i}: missing {led:?} in {calls:?}"
+            );
+            match step {
+                Button(on) => assert!(
+                    calls.contains(&format!("publish_binary HwMicMute {on}")),
+                    "{name}: step {i}: binary sensor not published: {calls:?}"
+                ),
+                Ha(_) => assert!(
+                    !calls
+                        .iter()
+                        .any(|c| c.starts_with("publish_binary HwMicMute")),
+                    "{name}: step {i}: HA must not fake the latch: {calls:?}"
+                ),
+            }
+        }
+    }
+}
+
+#[tokio::test]
+async fn client_connected_reports_the_hardware_mute_and_the_real_switch_state() {
+    let mut f = controller();
+    f.c.hw_mic_muted = true;
+    f.calls();
+    f.c.on_api(ApiEvent::ClientConnected {
+        client_info: "test".into(),
+    });
+    let calls = f.calls();
+    assert!(
+        calls.contains(&"publish_binary HwMicMute true".to_owned()),
+        "{calls:?}"
+    );
+    assert!(
+        calls.contains(&"publish_switch Microphones false".to_owned()),
+        "{calls:?}"
+    );
+}
+
+#[tokio::test]
 async fn ha_timer_shows_rings_and_yields_to_speech() {
     let mut f = controller();
     f.calls();
