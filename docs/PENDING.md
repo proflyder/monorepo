@@ -6,6 +6,21 @@
 
 ## P1 — безопасность и надёжность
 
+- [ ] **Flux 6.7: убрать входящий доступ CI в K3s.** Все приложения уже катит
+      Flux (`deploy.runtime: "flux"`, Kustomizations включены), поэтому job
+      `deploy` в `deploy-home` не выбирает ни одного юнита: VPN, OIDC,
+      `kubectl`/`helm` и `ci-deploy` больше не нужны. Следующий шаг (после
+      наблюдения, с подтверждением владельца): удалить job `deploy` и
+      Environment `Home`; удалить `secret/ci/deploy-home` и роль
+      `deploy-home`, политику `ci-deploy`; удалить `*/ci/rbac.yaml` и
+      Role/RoleBinding `ci-deploy` в кластере; отозвать сертификат `ci-github`
+      и убрать правило `6443` из `management-firewall/rules.nft` (порт `443`
+      и группа `ci` остаются для `deploy-station`/`ci-pulsar`); обновить
+      `STATE.md`, `OPERATIONS.md`, `KUBERNETES-OPERATIONS.md`,
+      `ARCHITECTURE.md`, `DECISIONS.md`, `SECRETS.md` и Flux README.
+      Откат: вернуть `ci/rbac.yaml` из Git, выпустить **новый** сертификат,
+      восстановить правило и секрет.
+
 ## P2 — проверки и улучшения инфраструктуры
 
 - [ ] **Вход `gh` и Codex на CT 103.** Нужен только для агентов, запускаемых

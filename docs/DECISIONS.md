@@ -767,3 +767,21 @@
     скрипта перезапускает провижининг; Cloudflare DNS — ручной шаг.
     Остальные namespace, OpenBao и сервисы приложений остаются на
     `deploy-home`.
+
+54. **Все деплой-юниты приложений катит Flux, CI только пинует digest'ы.**
+    `wakegrant`, `intercom`, `currency-bot`, `mcp-gateway`, `scheduler` +
+    executors (`ha-bridge`/`ha-control`/`ha-scenario`) и `hermes` имеют
+    `deploy.runtime: "flux"` в `platform/ci/units.mjs` и включённые
+    `Kustomization` (`suspend: false`) в
+    `projects/home/kubernetes/flux/cluster/apps.yaml`. Job `pins` в
+    `deploy-home` проверяет provenance собранного PR образа и коммитит digest
+    в машинную ветку `deploy/home-apps`; Flux читает её как
+    `ConfigMap/home-app-images` и применяет манифесты из `develop`. У CI нет
+    VPN, OpenBao, kubeconfig и `kubectl` на этом пути, `develop` остаётся
+    PR-only. Режимы и реплики исполнителей зафиксированы в Git-патче;
+    переключение и учения — PR либо `flux suspend` + admin-скрипт, но не
+    неявный side effect деплоя. Откат приложения — `flux suspend` +
+    revert pins, не `kubectl rollout undo`; PVC несут
+    `kustomize.toolkit.fluxcd.io/prune: disabled`. Удаление job `deploy`,
+    `ci-deploy`, сертификата `ci-github` и `secret/ci/deploy-home` —
+    отдельный этап 6.7 после наблюдения (`docs/PENDING.md`).

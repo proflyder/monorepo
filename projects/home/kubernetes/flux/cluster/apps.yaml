@@ -90,9 +90,8 @@ spec:
       name: wakegrant
       namespace: home-assistant
 ---
-# Stateless signaling service (FLUX-APPS-PLAN 6.2). Suspended until the owner
-# runs the cutover checks (diff, reconcile, call/signaling smoke); while
-# suspended the live Deployment keeps running and CI no longer rolls it.
+# Stateless signaling service (FLUX-APPS-PLAN 6.2), cut over to Flux. CI only
+# pins the verified digest; Flux applies the live Deployment from `develop`.
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
 metadata:
@@ -108,7 +107,7 @@ spec:
   path: ./projects/home/kubernetes/intercom/manifests
   prune: true
   wait: true
-  suspend: true
+  suspend: false
   dependsOn:
     - name: platform
     - name: home-app-pins
@@ -125,8 +124,8 @@ spec:
       namespace: home-assistant
 ---
 # Currency bot, its Cloudflare Tunnel and the currency-bot namespace objects
-# (FLUX-APPS-PLAN 6.3). The namespace itself stays admin-owned. Suspended until
-# the cutover checks (`/readyz`, webhook endpoint, ServiceMonitor) are done.
+# (FLUX-APPS-PLAN 6.3), cut over to Flux. The namespace itself stays
+# admin-owned; the tunnel route and host nftables rule remain manual.
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
 metadata:
@@ -142,7 +141,7 @@ spec:
   path: ./projects/home/kubernetes/currency-bot/manifests
   prune: true
   wait: true
-  suspend: true
+  suspend: false
   dependsOn:
     - name: platform
     - name: home-app-pins
@@ -163,8 +162,8 @@ spec:
       namespace: currency-bot
 ---
 # MCP infrastructure gateway, catalog ConfigMap, RBAC and its ExternalSecrets
-# (FLUX-APPS-PLAN 6.4). Suspended until the cutover checks (`/readyz`, catalog,
-# API access, bb-dispatch without a real call) are done.
+# (FLUX-APPS-PLAN 6.4), cut over to Flux. `ci/rbac.yaml` is deliberately not
+# part of the set.
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
 metadata:
@@ -180,7 +179,7 @@ spec:
   path: ./projects/home/kubernetes/mcp-gateway/manifests
   prune: true
   wait: true
-  suspend: true
+  suspend: false
   dependsOn:
     - name: platform
     - name: home-app-pins
@@ -200,7 +199,7 @@ spec:
 # scheduler, ha-bridge, ha-control and ha-scenario because they share one
 # template set; splitting it would make two `prune: true` Kustomizations fight
 # over the same objects. Executor modes/replicas are pinned to the live
-# steady state in the manifest patch. Suspended until the windowed cutover.
+# steady state in the manifest patch (FLUX-APPS-PLAN 6.5, cut over to Flux).
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
 metadata:
@@ -216,7 +215,7 @@ spec:
   path: ./projects/home/kubernetes/scheduler/manifests
   prune: true
   wait: true
-  suspend: true
+  suspend: false
   dependsOn:
     - name: platform
     - name: home-app-pins
@@ -247,8 +246,8 @@ spec:
 # Hermes runtime Helm release (FLUX-APPS-PLAN 6.6). The chart is in-repo, the
 # values come from `runtime-values` (ESO), images from the pins branch, and a
 # post-upgrade smoke hook plus `remediation.strategy: rollback` replace
-# `home-deploy hermes rollout`'s smoke/rollback. Suspended until the voice
-# smoke and a rollback drill pass.
+# `home-deploy hermes rollout`'s smoke/rollback (FLUX-APPS-PLAN 6.6, cut over
+# to Flux). PV/PVC stay admin-owned.
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
 metadata:
@@ -264,7 +263,7 @@ spec:
   path: ./projects/home-assistant/deploy/flux
   prune: true
   wait: true
-  suspend: true
+  suspend: false
   dependsOn:
     - name: platform
     - name: home-app-pins

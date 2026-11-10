@@ -83,8 +83,10 @@
   currency-bot + cloudflared, mcp-gateway (ClusterIP `:8080`),
   intercom (signaling, NodePort `30097`), Nexus (`:8081`, кэш артефактов CI)
   и Flux (`flux-system`). Под Flux — платформа (ESO, cert-manager, Traefik,
-  маршруты), observability, Vaultwarden и Nexus; OpenBao, host-firewall и
-  Cloudflare DNS остаются ручными.
+  маршруты), observability, Vaultwarden, Nexus и все семь деплой-юнитов
+  приложений (`wakegrant`, `intercom`, `currency-bot`, `mcp-gateway`,
+  `scheduler` + executors, `hermes`); OpenBao, host-firewall и Cloudflare DNS
+  остаются ручными.
 - `8643` доступен только HAOS/K3s/loopback через nftables.
 - Observability: kube-prometheus-stack `92.14.0`, Loki `20.0.2`,
   Alloy `1.14.3`; четыре dashboard JSON через Helm ConfigMap.
@@ -189,10 +191,13 @@
 - Локальные скрипты с секретами — только `mise run admin:*`: fnox 1.47
   (`fnox.toml`, профиль на скрипт, только ссылки на OpenBao) передаёт секреты
   во временных файлах; туннель к API K3s поднимается на время команды.
-- `deploy-home` (push в `develop` = merge PR) деплоит только затронутые
-  юниты параллельно: входит в VPN группой `ci`, затем OIDC в OpenBao,
-  kubectl → K3s API `6443`, HTTPS → Traefik/OpenBao `443`. Режимы
-  (`preserve`/`execute`/`shadow`/`control-*`) — только через
+- `deploy-home` (push в `develop` = merge PR) для приложений только
+  продвигает и пинует digest'ы: job `pins` без VPN/OpenBao/kubeconfig
+  коммитит их в `deploy/home-apps`, а Flux применяет workload'ы из
+  `develop`. Job `deploy` (VPN группа `ci`, OIDC в OpenBao, kubectl/helm)
+  не выбирает ни одного юнита, пока все они `deploy.runtime: "flux"`; его
+  удаление и отзыв `ci-deploy`/`ci-github` — этап 6.7 в `docs/PENDING.md`.
+  Режимы (`preserve`/`execute`/`shadow`/`control-*`) — только через
   `workflow_dispatch`.
 - scheduler (Rust, static musl), ha-bridge, ha-control, ha-scenario, intercom —
   собственные distroless-образы, собираемые Bazel `rules_oci`/`rules_rust` и адресуемые по

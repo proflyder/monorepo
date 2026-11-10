@@ -40,8 +40,8 @@
   `intercom.home.<home-suffix>` через Traefik, медиа идёт P2P.
 - **Nexus** — кэш артефактов CI: Maven/Google Maven/PyPI/npm через свои
   прокси, read-only публичный путь `/repository/*` через Cloudflare Tunnel.
-  Пилот Flux: под Flux только Nexus, остальная инфраструктура — ручные
-  `deploy.sh`, сервисы — `deploy-home`.
+  Под Flux — платформа, наблюдаемость, Nexus и все деплой-юниты приложений;
+  ручными остаются OpenBao, host firewall и Cloudflare DNS.
 - **MCP gateway** — единый MCP-сервер для инфраструктуры: чтение
   Prometheus/Alertmanager/Loki/Kubernetes и подтверждаемый rollout restart.
   Hermes сам не имеет доступа к Kubernetes API; весь доступ идёт через шлюз
@@ -149,11 +149,18 @@ OpenBao KV v2 secret/k8s/* ──► ESO ClusterSecretStore/openbao
 ```text
 ветка <type>/<name> → PR → CI (units.mjs, reusable workflows) → ci-ok
    → squash merge в develop
-   → deploy-home: затронутые юниты параллельно
-        → VPN группа ci → OIDC в OpenBao → kubectl/helm
-        → K3s API :6443, образы GHCR по digest
-   → smoke (Hermes Assist/health) → при провале откат только применённого
+   → deploy-home plan (units.mjs)
+        → pins job: verified digest → машинная ветка deploy/home-apps
+             → Flux: ConfigMap/home-app-images → применяет workload из develop
+        → deploy-station: Pulsar через HA (Environment Station)
 ```
+
+- Приложения (scheduler/executors, wakegrant, intercom, currency-bot,
+  mcp-gateway, hermes) имеют `deploy.runtime: "flux"`: CI не входит в VPN и
+  не применяет объекты, Flux делает это из кластера. Откат — pins revert
+  (или manifest revert), не `kubectl rollout undo`.
+- Пока не завершён этап 6.7, в `deploy-home` остаётся job `deploy` (VPN
+  группа `ci`, OIDC, `kubectl`/`helm`), но он не выбирает ни одного юнита.
 
 - Прямой push в `develop` запрещён; merge PR = деплой затронутых юнитов.
 - CI-скачивания Maven/Google Maven/PyPI/npm у Bazel идут напрямую с раннеров,

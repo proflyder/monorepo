@@ -34,9 +34,10 @@ spec:
   storageNamespace: home-assistant
   interval: 10m
   timeout: 8m
-  # `wait` matches the CI `helm upgrade --wait`; the smoke hook runs after the
-  # release is ready and fails the upgrade if the assistant does not answer.
-  wait: true
+  # helm-controller waits for the release to become ready; the post-upgrade
+  # smoke hook then fails the upgrade if the assistant does not answer.
+  # There is no `spec.wait` field in HelmRelease v2 (that is a Kustomization
+  # field); adding one fails the CRD dry-run.
   chart:
     spec:
       chart: ./projects/home-assistant/deploy/chart

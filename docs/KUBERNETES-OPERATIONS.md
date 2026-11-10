@@ -362,13 +362,18 @@ mise run kubectl -- -n home-assistant annotate externalsecret scheduler-auth \
 (`source-controller`, `kustomize-controller`, `helm-controller`; без
 notification и image automation) и один `GitRepository` на
 `github.com/proflyder/monorepo`, ветка `develop`, с read-only deploy key из
-OpenBao. Кластер сам тянет изменения; у CI нет admin-доступа, а `deploy-home`
-продолжает владеть сервисами приложений.
+OpenBao. Кластер сам тянет изменения; у CI нет admin-доступа, а `deploy-home` только
+публикует проверенные digest'ы в машинную ветку `deploy/home-apps`, которую
+Flux читает как `ConfigMap/home-app-images`.
 
 Под Flux: платформа (`platform`: ESO → cert-manager → Traefik → общие
 маршруты), observability (`observability` + `observability-rules`),
-Vaultwarden и Nexus (`nexus` + `nexus-provision`). OpenBao, host-firewall
-(nftables) и Cloudflare DNS остаются ручными.
+Vaultwarden, Nexus (`nexus` + `nexus-provision`) и все деплой-юниты
+приложений: `app-wakegrant`, `app-intercom`, `app-currency-bot`,
+`app-mcp-gateway`, `app-ha-executors` (scheduler + три executor'а) и
+`app-hermes` (`HelmRelease/runtime`). OpenBao, host-firewall (nftables) и
+Cloudflare DNS остаются ручными; job `deploy` в `deploy-home` уже не
+выбирает ни одного юнита и удаляется на этапе 6.7 (`docs/PENDING.md`).
 
 `platform` — umbrella-Kustomization: она применяет четыре дочерние
 (`platform-external-secrets`, `platform-cert-manager`, `platform-traefik`,
@@ -429,11 +434,12 @@ Cloudflare DNS остаётся ручным шагом (см. README Flux и in
   (`ghcr.io/proflyder/{hermes,voice-proxy}@sha256:…`), `imagePullPolicy:
   IfNotPresent`, без pull-secret. `hermes` собирается Docker, `voice-proxy` —
   Bazel `rules_oci` (distroless, `oci_push` без переписывания digest).
-  deploy-home продвигает digest'ы, затем `home-deploy hermes rollout`
-  подставляет digest'и (включая `ghcr.io/proflyder/health-exporter`) в релиз
-  `runtime`, прогоняет голосовую проверку и откатывается на предыдущую
-  ревизию при провале.
-  Текущие пины — `versions.sh`; ручной откат — `helm rollback`.
+  Flux (`HelmRelease/runtime` в `app-hermes`) подставляет digest'ы (включая
+  `ghcr.io/proflyder/health-exporter`) из pins-ветки, прогоняет голосовой
+  smoke hook и откатывается на предыдущую ревизию при провале
+  (`remediation.strategy: rollback`). CI только пинует digest'ы; ручной
+  аварийный путь — `projects/home-assistant/deploy/rollout.sh` и
+  `helm rollback`.
 - Полный restore:
   1. восстановить Ubuntu/K3s;
   2. остановить K3s;

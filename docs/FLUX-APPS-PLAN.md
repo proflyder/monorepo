@@ -1,21 +1,20 @@
 # FLUX-APPS-PLAN — перевод сервисов `deploy-home` на Flux
 
-Статус: **этапы 6.0–6.6 подготовлены; 6.1 включён, 6.2–6.6 ждут
-включения**. Пилот `wakegrant` (6.1) работает в `develop`: pins-ветка
+Статус: **этапы 6.0–6.6 выполнены; приложения катит Flux**. Все семь
+деплой-юнитов (`wakegrant`, `intercom`, `currency-bot`, `mcp-gateway`,
+`scheduler` + executors, `hermes`) имеют `deploy.runtime: "flux"` и
+включённые Kustomization'ы (`suspend: false`): pins-ветка
 `deploy/home-apps`, `GitRepository/flux-pins`, `Kustomization/home-app-pins`,
-`app-wakegrant` с `suspend: false`, `secret/k8s/flux-system/app-settings` →
-`flux-app-settings`, job `pins` в `deploy-home` (пишет digest'ы без
-VPN/kubeconfig) и алерты Flux.
+`secret/k8s/flux-system/app-settings` → `flux-app-settings`, job `pins` в
+`deploy-home` (пишет digest'ы без VPN/kubeconfig) и алерты Flux.
+`deploy-home` больше не применяет приложения через `kubectl`/`helm`.
 
-PR `feat/flux-apps-all` добавил Manifest-наборы и `Kustomization` для
-`intercom`, `currency-bot`, `mcp-gateway`, `scheduler`+`ha-bridge`
-(один `app-ha-executors`) и `hermes` (`HelmRelease/runtime`). Все шесть
-юнитов переведены на `deploy.runtime: "flux"`, поэтому `deploy-home` больше
-не катит их через `kubectl`/`helm`; их Kustomizations созданы с
-`suspend: true`, и включение — отдельное окно владельца (diff, reconcile,
-smoke, наблюдение). После завершения всех этапов действующие факты
-переносятся в `STATE.md`/`DECISIONS.md`, команды — в `OPERATIONS.md`, а этот
-план удаляется (правило `docs/README.md`).
+Остаётся этап 6.7 — убрать входящий доступ CI (`ci-deploy`, сертификат
+`ci-github`, `secret/ci/deploy-home`) после наблюдения; его шаги и
+необратимые действия требуют владельца и отслеживаются в `docs/PENDING.md`.
+После завершения 6.7 действующие факты переносятся в
+`STATE.md`/`DECISIONS.md`, команды — в `OPERATIONS.md`, а этот план
+удаляется (правило `docs/README.md`).
 
 Дата снимка состояния: 2026-11-10.
 
@@ -504,7 +503,7 @@ ruleset, аудит коммитов, аварийный revert.
 - `prune: true` удаляет объекты, убранные из манифеста (для PVC это опасно,
   см. §4.2).
 - `suspend: true` замораживает Kustomization, не удаляя ресурсы.
-- HelmRelease умеет `wait`, `timeout` и remediation с откатом на прежнюю
+- HelmRelease умеет `timeout` и remediation с откатом на прежнюю
   ревизию.
 
 ### 4.2. Что теряется и чем заменяется
@@ -722,7 +721,7 @@ Application Secrets уже живут в OpenBao и создаются ESO:
 Критерии готовности: 7 дней без деплоя из CI, Flux `Ready`, digest
 совпадает с pins, PVC тот же, алертов нет, rollback-учение выполнено.
 
-### 6.2. `intercom` — **подготовлено (PR `feat/flux-apps-all`)**
+### 6.2. `intercom` — **выполнено 2026-11-10**
 
 Проще пилота (нет PVC), но проверяет app без состояния и зависимость от
 `ingress/routes`. Шаги аналогичны: kustomization + `suspend`, diff, reconcile,
@@ -732,10 +731,10 @@ Application Secrets уже живут в OpenBao и создаются ESO:
 
 Сделано: `projects/home/kubernetes/intercom/manifests/kustomization.yaml`
 (Deployment, Service, ExternalSecret; `ROLLOUT_ID` заменён на digest) и
-`Kustomization/app-intercom` с `suspend: true`. `deploy.runtime` — `flux`,
-rollback — `flux-pins`.
+`Kustomization/app-intercom`, включена (`suspend: false`). `deploy.runtime` —
+`flux`, rollback — `flux-pins`.
 
-### 6.3. `currency-bot` — **подготовлено (PR `feat/flux-apps-all`)**
+### 6.3. `currency-bot` — **выполнено 2026-11-10**
 
 Проверяет namespace, два Deployment, NetworkPolicy, ServiceMonitor,
 Cloudflare Tunnel и PVC. Namespace остаётся admin-owned (не включать
@@ -755,10 +754,10 @@ Cloudflare Tunnel и PVC. Namespace остаётся admin-owned (не вклю�
 Сделано: `manifests/kustomization.yaml` (PVC с `prune: disabled`,
 `namespace.yaml` исключён, `CLOUDFLARED_IMAGE` — литерал tag+digest из
 `versions.sh` в Flux-патче; `test_flux.py` держит их синхронными) и
-`Kustomization/app-currency-bot` с `suspend: true`. `deploy.runtime` —
-`flux`, rollback — `flux-pins`.
+`Kustomization/app-currency-bot`, включена (`suspend: false`).
+`deploy.runtime` — `flux`, rollback — `flux-pins`.
 
-### 6.4. `mcp-gateway` — **подготовлено (PR `feat/flux-apps-all`)**
+### 6.4. `mcp-gateway` — **выполнено 2026-11-10**
 
 Проверяет `configMapGenerator` и RBAC. Шаги:
 
@@ -775,10 +774,10 @@ Cloudflare Tunnel и PVC. Namespace остаётся admin-owned (не вклю�
 `ci-deploy`.
 
 Сделано: `manifests/kustomization.yaml` (генератор `mcp-gateway-catalog`,
-`ci/rbac.yaml` исключён) и `Kustomization/app-mcp-gateway` с
-`suspend: true`. `deploy.runtime` — `flux`, rollback — `flux-pins`.
+`ci/rbac.yaml` исключён) и `Kustomization/app-mcp-gateway`, включена
+(`suspend: false`). `deploy.runtime` — `flux`, rollback — `flux-pins`.
 
-### 6.5. `scheduler` + `ha-bridge` (executors) — **подготовлено (PR `feat/flux-apps-all`)**
+### 6.5. `scheduler` + `ha-bridge` (executors) — **выполнено 2026-11-10**
 
 Это одна группа шаблонов и один скрипт, поэтому на первом шаге — одна
 Kustomization `app-ha-executors` с четырьмя workload'ами (scheduler,
@@ -795,7 +794,8 @@ ha-bridge, ha-control, ha-scenario). Разделять её на две име�
    (`ha-bridge` 1/true, `ha-control` 1/true); шаблоны для `deploy.sh` не
    меняются. Переключение режимов — Git/PR плюс `flux suspend` на время
    учений.
-3. `kustomization.yaml` + `suspend: true`; `preflight-job.yaml` не входит
+3. `kustomization.yaml` + включённая Kustomization (`suspend: false`);
+   `preflight-job.yaml` не входит
    (ручной admin-Job), PVC — `prune: disabled`.
 4. reconcile в оконном режиме: сначала `scheduler`, затем
    bridge/control/scenario. Проверить `GetStatus.ready`, `-healthcheck`,
@@ -809,7 +809,7 @@ ha-bridge, ha-control, ha-scenario). Разделять её на две име�
 Критерий: 14 дней без CI-деплоя, режимы не менялись неявно, будильники и
 сценарии работают, очередь `control` пуста, алертов нет.
 
-### 6.6. `hermes` — **подготовлено (PR `feat/flux-apps-all`)**
+### 6.6. `hermes` — **выполнено 2026-11-10**
 
 Самый сложный. Сделано:
 
