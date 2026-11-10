@@ -60,8 +60,16 @@ internal class SpeedDialOverlay(
         private set
 
     init {
+        fab.setOnClickListener { toggle() }
         content.controlDialScrim.setOnClickListener { close() }
         content.controlDialFab.setOnClickListener { close() }
+    }
+
+    fun toggle() {
+        when (isOpen) {
+            true -> close()
+            false -> open()
+        }
     }
 
     fun render(newItems: List<SpeedDialItem>) {
