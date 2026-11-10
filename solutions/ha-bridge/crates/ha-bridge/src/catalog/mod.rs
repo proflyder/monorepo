@@ -726,9 +726,19 @@ fn volume_entries(raws: &[Raw]) -> Vec<Entry> {
         ));
     }
     if let Some(raw) = announce {
-        let state = raw.state.trim();
-        let parsed = state.parse::<i32>().ok();
-        let level = parsed.unwrap_or(0).clamp(0, 100);
+        let state = raw.state.trim().to_lowercase();
+        // Home Assistant renders a number state as a decimal string ("100.0"),
+        // so an integer parser would drop the whole entry as unavailable.
+        let known = !state.is_empty() && state != "unavailable" && state != "unknown";
+        let parsed = state
+            .parse::<f64>()
+            .ok()
+            .filter(|value| known && value.is_finite());
+        let level = parsed.map_or(0, |value| {
+            #[allow(clippy::cast_possible_truncation)]
+            let scaled = value.round() as i32;
+            scaled.clamp(0, 100)
+        });
         entries.push(volume_entry(
             raw,
             anchor,

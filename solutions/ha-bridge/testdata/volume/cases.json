@@ -180,6 +180,87 @@
       ]
     },
     {
+      "name": "announce_decimal_100",
+      "raws": [
+        {
+          "entity": "number.spalnia_iandeks_stantsiia_midi_gromkost_obiavlenii",
+          "state": "100.0",
+          "room": "Спальня",
+          "deviceId": "station-1",
+          "device": "Яндекс Станция Миди"
+        }
+      ],
+      "entries": [
+        {
+          "id": "volume.station_announce",
+          "titleKey": "catalog.volume.announce_title",
+          "title": "Announcement volume",
+          "state": "100",
+          "available": true,
+          "level": 100,
+          "muted": false,
+          "room": "Спальня",
+          "device": "Яндекс Станция Миди",
+          "deviceId": "station-1",
+          "actions": ["set"]
+        }
+      ]
+    },
+    {
+      "name": "announce_decimal_45",
+      "raws": [
+        {
+          "entity": "number.spalnia_iandeks_stantsiia_midi_gromkost_obiavlenii",
+          "state": "45.0",
+          "room": "Спальня",
+          "deviceId": "station-1",
+          "device": "Яндекс Станция Миди"
+        }
+      ],
+      "entries": [
+        {
+          "id": "volume.station_announce",
+          "titleKey": "catalog.volume.announce_title",
+          "title": "Announcement volume",
+          "state": "45",
+          "available": true,
+          "level": 45,
+          "muted": false,
+          "room": "Спальня",
+          "device": "Яндекс Станция Миди",
+          "deviceId": "station-1",
+          "actions": ["set"]
+        }
+      ]
+    },
+    {
+      "name": "announce_unavailable",
+      "raws": [
+        {
+          "entity": "number.spalnia_iandeks_stantsiia_midi_gromkost_obiavlenii",
+          "state": "unavailable",
+          "room": "Спальня",
+          "deviceId": "station-1",
+          "device": "Яндекс Станция Миди"
+        }
+      ],
+      "entries": [
+        {
+          "id": "volume.station_announce",
+          "titleKey": "catalog.volume.announce_title",
+          "title": "Announcement volume",
+          "state": "0",
+          "available": false,
+          "level": 0,
+          "muted": false,
+          "room": "Спальня",
+          "device": "Яндекс Станция Миди",
+          "deviceId": "station-1",
+          "actions": ["set"]
+        }
+      ]
+    },
+    {
       "name": "missing",
       "raws": [],
       "entries": []

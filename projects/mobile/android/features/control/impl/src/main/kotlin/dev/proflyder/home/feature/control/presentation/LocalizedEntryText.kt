@@ -1,7 +1,6 @@
 package dev.proflyder.home.feature.control.presentation
 
 import android.content.Context
-import dev.proflyder.home.core.model.ControlAction
 import dev.proflyder.home.core.model.ControlEntry
 import dev.proflyder.home.core.model.PowerState
 import dev.proflyder.home.core.ui.serverText
@@ -26,22 +25,18 @@ internal fun ControlEntry.localizedDetail(context: Context): String? =
     serverText(context, detailKey, emptyMap())?.takeUnless { it.isBlank() }
 
 /**
- * The subtitle of a station volume row: "Volume 45%", "Sound off" when muted,
- * or the unavailable text. A level is a live value, not server user data.
+ * The subtitle of a station volume row: just the level ("45%"), the title
+ * already names the control; "Sound off" when muted, or the unavailable text.
+ * A level is a live value, not server user data.
  */
 internal fun ControlEntry.localizedVolumeText(context: Context, unavailable: Int): String {
     val volume = volume ?: return localizedStateText(context, unavailable)
     return when {
         !available -> context.getString(unavailable)
         volume.muted -> context.getString(R.string.control_volume_muted)
-        isVolumeAnnouncement -> context.getString(R.string.control_volume_announce_level, volume.level)
-        else -> context.getString(R.string.control_volume_level, volume.level)
+        else -> context.getString(R.string.control_volume_percent, volume.level)
     }
 }
-
-/** The announcement row is the volume entry without mute support. */
-private val ControlEntry.isVolumeAnnouncement: Boolean
-    get() = actions.contains(ControlAction.SET) && !actions.contains(ControlAction.MUTE)
 
 /**
  * The subtitle of a device row: the on/off text (or the unavailable text)

@@ -42,8 +42,7 @@
     <string name="control_volume_title">Громкость</string>
     <string name="control_volume_main">Громкость</string>
     <string name="control_volume_announce">Громкость объявлений</string>
-    <string name="control_volume_level">Громкость %1$d%%</string>
-    <string name="control_volume_announce_level">Объявления %1$d%%</string>
+    <string name="control_volume_percent">%1$d%%</string>
     <string name="control_volume_muted">Звук выкл.</string>
     <string name="control_volume_mute">Выключить звук</string>
     <string name="control_volume_unmute">Включить звук</string>

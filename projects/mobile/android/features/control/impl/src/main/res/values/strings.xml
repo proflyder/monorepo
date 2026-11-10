@@ -43,8 +43,7 @@
     <string name="control_volume_title">Volume</string>
     <string name="control_volume_main">Volume</string>
     <string name="control_volume_announce">Announcement volume</string>
-    <string name="control_volume_level">Volume %1$d%%</string>
-    <string name="control_volume_announce_level">Announcements %1$d%%</string>
+    <string name="control_volume_percent">%1$d%%</string>
     <string name="control_volume_muted">Sound off</string>
     <string name="control_volume_mute">Mute</string>
     <string name="control_volume_unmute">Unmute</string>

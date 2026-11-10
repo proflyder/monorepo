@@ -4,6 +4,7 @@ import android.view.HapticFeedbackConstants
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.ImageView
 import android.widget.LinearLayout
 import androidx.recyclerview.widget.DiffUtil
 import com.google.android.material.button.MaterialButton
@@ -188,6 +189,22 @@ internal object ControlDiff : DiffUtil.ItemCallback<ControlItem>() {
         if (before.volume != after.volume) add(ControlChange.STATE)
         if (before.detailKey != after.detailKey) add(ControlChange.STATE)
     }
+}
+
+/**
+ * A live volume row is an active control, so it uses the same tint as a switch
+ * that is on. A muted or unavailable row stays in the inactive colour.
+ */
+internal fun bindVolumeIcon(icon: ImageView, root: View, entry: ControlEntry) {
+    val active = entry.available && entry.volume?.muted != true
+    icon.isActivated = active
+    icon.setColorFilter(
+        MaterialColors.getColor(
+            root,
+            if (active) com.google.android.material.R.attr.colorOnPrimaryContainer
+            else com.google.android.material.R.attr.colorOnSurfaceVariant,
+        ),
+    )
 }
 
 /** Artwork of one live row, shared with no new image per entity. */
@@ -693,13 +710,7 @@ internal class ControlAdapter(
             views.controlDeviceState.setVisible(true)
             views.controlDeviceState.text =
                 row.entry.localizedVolumeText(views.root.context, R.string.control_state_unavailable)
-            views.controlDeviceIcon.isActivated = false
-            views.controlDeviceIcon.setColorFilter(
-                MaterialColors.getColor(
-                    views.root,
-                    com.google.android.material.R.attr.colorOnSurfaceVariant,
-                ),
-            )
+            bindVolumeIcon(views.controlDeviceIcon, views.root, row.entry)
             views.controlDeviceProgress.setVisible(row.busy)
             views.root.alpha = if (row.entry.available) 1f else DISABLED_ALPHA
             val enabled = row.entry.available && !row.busy
@@ -919,13 +930,7 @@ internal class ControlAdapter(
             rowViews.controlRowState.setVisible(true)
             rowViews.controlRowState.text =
                 entry.localizedVolumeText(rowViews.root.context, R.string.control_state_unavailable)
-            rowViews.controlRowIcon.isActivated = false
-            rowViews.controlRowIcon.setColorFilter(
-                MaterialColors.getColor(
-                    rowViews.root,
-                    com.google.android.material.R.attr.colorOnSurfaceVariant,
-                ),
-            )
+            bindVolumeIcon(rowViews.controlRowIcon, rowViews.root, entry)
             val enabled = entry.available && !busy
             rowViews.root.isEnabled = enabled
             rowViews.root.setOnClickListener {
