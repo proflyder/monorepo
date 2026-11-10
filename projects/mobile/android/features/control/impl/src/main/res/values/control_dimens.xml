@@ -20,4 +20,8 @@
     <dimen name="control_row_corner">12dp</dimen>
     <dimen name="control_row_bleed">8dp</dimen>
     <dimen name="control_card_inset">8dp</dimen>
+    <!-- Station volume sheet: icon button and the gap between its slider groups. -->
+    <dimen name="control_volume_icon">40dp</dimen>
+    <dimen name="control_volume_icon_padding">8dp</dimen>
+    <dimen name="control_volume_group_gap">20dp</dimen>
 </resources>

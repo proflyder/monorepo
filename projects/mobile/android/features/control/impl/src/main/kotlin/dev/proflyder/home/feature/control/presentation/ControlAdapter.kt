@@ -185,6 +185,7 @@ internal object ControlDiff : DiffUtil.ItemCallback<ControlItem>() {
         // Brightness and a device detail (for example the PC lock state) are
         // part of the state line.
         if (before.light != after.light) add(ControlChange.STATE)
+        if (before.volume != after.volume) add(ControlChange.STATE)
         if (before.detailKey != after.detailKey) add(ControlChange.STATE)
     }
 }
@@ -668,6 +669,10 @@ internal class ControlAdapter(
             val row = item as ControlItem.Device
             bindTitle(row.entry)
             bindIcon(row.entry)
+            if (row.entry.isVolume) {
+                bindVolumeRow(row)
+                return
+            }
             val button = row.entry.isButton
             views.controlDeviceSwitch.setVisible(!button)
             views.controlDeviceState.setVisible(!button)
@@ -680,6 +685,26 @@ internal class ControlAdapter(
             bindBusy(row)
             bindAvailability(row.entry)
             bindEnabled(row)
+        }
+
+        /** A station volume row: no toggle, the whole row opens the slider sheet. */
+        private fun bindVolumeRow(row: ControlItem.Device) {
+            views.controlDeviceSwitch.setVisible(false)
+            views.controlDeviceState.setVisible(true)
+            views.controlDeviceState.text =
+                row.entry.localizedVolumeText(views.root.context, R.string.control_state_unavailable)
+            views.controlDeviceIcon.isActivated = false
+            views.controlDeviceIcon.setColorFilter(
+                MaterialColors.getColor(
+                    views.root,
+                    com.google.android.material.R.attr.colorOnSurfaceVariant,
+                ),
+            )
+            views.controlDeviceProgress.setVisible(row.busy)
+            views.root.alpha = if (row.entry.available) 1f else DISABLED_ALPHA
+            val enabled = row.entry.available && !row.busy
+            views.root.isEnabled = enabled
+            views.root.setOnClickListener { callback.onItemClick(row) }
         }
 
         /**
@@ -840,6 +865,9 @@ internal class ControlAdapter(
             rowViews.controlRowIcon.setImageResource(ControlIcons.resolve(entry))
             rowViews.controlRowProgress.setVisible(row.busy)
             rowViews.root.alpha = if (entry.available) 1f else DISABLED_ALPHA
+            if (entry.isVolume) {
+                return bindVolumeRow(rowViews, entry, row.busy, statesKnown)
+            }
             if (entry.isButton) {
                 return bindButtonRow(rowViews, entry, row.busy)
             }
@@ -874,6 +902,34 @@ internal class ControlAdapter(
             rowViews.root.setOnLongClickListener {
                 callback.onPinToggle(entry)
                 true
+            }
+        }
+
+        /**
+         * A station volume row has no switch: its subtitle is the live level or
+         * "Sound off", and the tap opens the volume sheet.
+         */
+        private fun bindVolumeRow(
+            rowViews: ItemControlDeviceRowBinding,
+            entry: ControlEntry,
+            busy: Boolean,
+            statesKnown: Boolean,
+        ) {
+            rowViews.controlRowSwitch.setVisible(false)
+            rowViews.controlRowState.setVisible(true)
+            rowViews.controlRowState.text =
+                entry.localizedVolumeText(rowViews.root.context, R.string.control_state_unavailable)
+            rowViews.controlRowIcon.isActivated = false
+            rowViews.controlRowIcon.setColorFilter(
+                MaterialColors.getColor(
+                    rowViews.root,
+                    com.google.android.material.R.attr.colorOnSurfaceVariant,
+                ),
+            )
+            val enabled = entry.available && !busy
+            rowViews.root.isEnabled = enabled
+            rowViews.root.setOnClickListener {
+                callback.onItemClick(ControlItem.Device(entry, busy, statesKnown))
             }
         }
 

@@ -16,6 +16,7 @@ import dev.proflyder.home.core.model.Scenario
 import dev.proflyder.home.core.model.ServerClock
 import dev.proflyder.home.core.model.Timer
 import dev.proflyder.home.core.model.TimerState
+import dev.proflyder.home.core.model.VolumeControls
 import dev.proflyder.home.core.ui.BaseViewModel
 import dev.proflyder.home.core.ui.SimpleViewModelFactory
 import dev.proflyder.home.core.ui.ViewModelFactoryContributor
@@ -36,6 +37,8 @@ import dev.proflyder.home.feature.control.domain.PressControl
 import dev.proflyder.home.feature.control.domain.RunScenario
 import dev.proflyder.home.feature.control.domain.SetDevicePower
 import dev.proflyder.home.feature.control.domain.SetVoiceProfile
+import dev.proflyder.home.feature.control.domain.SetVolume
+import dev.proflyder.home.feature.control.domain.SetVolumeMuted
 import dev.proflyder.home.feature.control.domain.SpeakOnStation
 import dev.proflyder.home.feature.reminders.ReminderRepository
 import dev.proflyder.home.feature.scenarios.ScenarioRepository
@@ -102,6 +105,8 @@ class ControlViewModel(
     private val setVoiceProfile: SetVoiceProfile,
     private val adjustLight: AdjustLight,
     private val speakOnStation: SpeakOnStation,
+    private val setStationVolume: SetVolume,
+    private val setStationMuted: SetVolumeMuted,
     private val preferences: ControlPreferences,
     private val favorites: FavoritePreferences,
     private val alarms: AlarmRepository,
@@ -117,6 +122,8 @@ class ControlViewModel(
     private var hubGeneration = 0
     private var filterChosenByUser = false
     private val expectedPower = HashMap<String, Pair<PowerState, Long>>()
+    /** Optimistic volume values until the server confirms them. */
+    private val expectedVolume = HashMap<String, Pair<VolumeControls, Long>>()
 
     init {
         // Restore the last selected filter. A tap that happens before this
@@ -368,14 +375,31 @@ class ControlViewModel(
 
     /** Applies still-unconfirmed taps on top of freshly loaded [entries]. */
     private fun withExpectations(entries: List<ControlEntry>): List<ControlEntry> {
-        if (expectedPower.isEmpty()) return entries
+        if (expectedPower.isEmpty() && expectedVolume.isEmpty()) return entries
         val now = SystemClock.elapsedRealtime()
-        return entries.map { entry ->
-            val (target, deadline) = expectedPower[entry.id] ?: return@map entry
-            when {
-                entry.power == target || now >= deadline -> entry.also { expectedPower.remove(entry.id) }
-                else -> entry.copy(power = target)
-            }
+        return entries.map { applyExpectations(it, now) }
+    }
+
+    private fun applyExpectations(entry: ControlEntry, now: Long): ControlEntry {
+        val volume = expectedVolume[entry.id]
+        if (volume != null) return withVolumeExpectation(entry, volume, now)
+        val power = expectedPower[entry.id] ?: return entry
+        val (target, deadline) = power
+        return when {
+            entry.power == target || now >= deadline -> entry.also { expectedPower.remove(entry.id) }
+            else -> entry.copy(power = target)
+        }
+    }
+
+    private fun withVolumeExpectation(
+        entry: ControlEntry,
+        expectation: Pair<VolumeControls, Long>,
+        now: Long,
+    ): ControlEntry {
+        val (target, deadline) = expectation
+        return when {
+            entry.volume == target || now >= deadline -> entry.also { expectedVolume.remove(entry.id) }
+            else -> entry.copy(volume = target)
         }
     }
 
@@ -403,6 +427,60 @@ class ControlViewModel(
                 }
             }
         }
+    }
+
+    /**
+     * Sets a station volume level. The slider keeps its value while the
+     * executor applies the command; the catalog is re-read after a short
+     * settle delay, and the optimistic value wins until the server agrees.
+     */
+    fun setVolume(entry: ControlEntry, level: Int) {
+        val current = entry.volume ?: return
+        if (!entry.available) return
+        optimisticVolume(entry, current.copy(level = level))
+        launch {
+            when (val result = setStationVolume(entry, level)) {
+                is Outcome.Success -> reconcileVolume(entry.id)
+                is Outcome.Failure -> failVolume(entry.id, result.failure)
+            }
+        }
+    }
+
+    /** Mutes or unmutes the station without changing the level. */
+    fun setVolumeMuted(entry: ControlEntry, muted: Boolean) {
+        val current = entry.volume ?: return
+        if (!entry.available) return
+        optimisticVolume(entry, current.copy(muted = muted))
+        launch {
+            when (val result = setStationMuted(entry, muted)) {
+                is Outcome.Success -> reconcileVolume(entry.id)
+                is Outcome.Failure -> failVolume(entry.id, result.failure)
+            }
+        }
+    }
+
+    private fun optimisticVolume(entry: ControlEntry, target: VolumeControls) {
+        expectedVolume[entry.id] = target to SystemClock.elapsedRealtime() + EXPECT_TTL_MS
+        updateState {
+            copy(
+                actionError = null,
+                entries = entries.map { if (it.id == entry.id) it.copy(volume = target) else it },
+            )
+        }
+    }
+
+    private fun failVolume(id: String, failure: RemoteFailure) {
+        expectedVolume.remove(id)
+        updateState { copy(actionError = failure) }
+        refresh(silent = true)
+    }
+
+    /** Re-reads the catalog once the executor had time to apply the level. */
+    private suspend fun reconcileVolume(id: String) {
+        delay(VOLUME_SETTLE_DELAY_MS)
+        if (expectedVolume[id] == null) return
+        refresh(silent = true)
+        refreshJob?.join()
     }
 
     fun setFilter(filter: ControlFilter) {
@@ -564,6 +642,7 @@ class ControlViewModel(
 
     private companion object {
         const val PRESS_SETTLE_DELAY_MS = 4_500L
+        const val VOLUME_SETTLE_DELAY_MS = 1_500L
         const val RECONCILE_DELAY_MS = 1_500L
         const val RECONCILE_ATTEMPTS = 8
         const val EXPECT_TTL_MS = 15_000L
@@ -580,6 +659,8 @@ class ControlViewModelFactoryContributor(
     private val setVoiceProfile: SetVoiceProfile,
     private val adjustLight: AdjustLight,
     private val speakOnStation: SpeakOnStation,
+    private val setStationVolume: SetVolume,
+    private val setStationMuted: SetVolumeMuted,
     private val preferences: ControlPreferences,
     private val favorites: FavoritePreferences,
     private val alarms: AlarmRepository,
@@ -600,6 +681,8 @@ class ControlViewModelFactoryContributor(
             setVoiceProfile,
             adjustLight,
             speakOnStation,
+            setStationVolume,
+            setStationMuted,
             preferences,
             favorites,
             alarms,

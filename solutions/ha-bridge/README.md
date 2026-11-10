@@ -409,6 +409,29 @@ entity registry нет REST-эндпоинта. `home-ha` открывает о�
 Непрочитанная метка профиля только теряет роль: `switch` остаётся обычным устройством
 и продолжает работать.
 
+### Громкость колонки
+
+Две синтетические записи `kind: "volume"` управляют колонкой Pulsar. Они не
+появляются для произвольных `media_player`: сущности жёстко заданы в каталоге
+(`media_player.iandeks_stantsiia_midi_media_player` и
+`number.spalnia_iandeks_stantsiia_midi_gromkost_obiavlenii`), поэтому payload не
+может выбрать другую сущность или сервис.
+
+| Запись | `state` | Действия | HA-вызов |
+| --- | --- | --- | --- |
+| `volume.station` | уровень 0–100 (`round(volume_level*100)`) | `set`, `mute`, `unmute` | `media_player.volume_set` (`volume_level` = level/100), `media_player.volume_mute` (`is_volume_muted`) |
+| `volume.station_announce` | уровень объявлений 0–100 | `set` | `number.set_value` (`value`) |
+
+`set` требует `level` 0–100 кратный 5; иначе `ACK_FAILED` без вызова HA.
+`mute`/`unmute` не принимают параметров. Запись `volume` в ответе каталога
+содержит `{"level": 45, "muted": false}`; `detailKey` равен
+`catalog.volume.muted`, когда звук выключен. Обе записи привязаны к устройству
+колонки (`device_id`, `device`, `room`), поэтому клиент группирует их в карточку
+колонки. Если сущности нет в HA, запись не отдаётся; если она `unavailable`,
+запись остаётся с `available: false`. Задача:
+`{"entry":"volume.station","action":"set","level":45}`;
+`{"entry":"volume.station","action":"mute"}`.
+
 ### Исполнение — через планировщик
 
 Телефон делает `EnqueueTask(task_type="home.control", queue="control",
@@ -429,9 +452,9 @@ payload={"entry": "<id>", "action": "run|turn_on|turn_off|set|speak"})`. Исп�
 `GET /v1/catalog`, `Authorization: Bearer <CONTROL_TOKEN>` (константное время,
 пустой токен не авторизует никого). Ответ: `{"statesOk": bool, "entries": [{id,
 kind, title, room, icon, device_id, device, role, actions[], state("on"/"off",
-устройства и профиль), available, light}]}`; `kind` — `scenario`, `light`,
-`switch`, `profile` или `action`; порядок: профиль, сценарии, действия, устройства
-по комнатам. `device_id`, `device` и `role` (`primary`/`setting`) появились
+устройства и профиль; "0"–"100" у громкости), available, light, volume}]}`;
+`kind` — `scenario`, `light`, `switch`, `profile`, `action` или `volume`; порядок:
+профиль, сценарии, действия, устройства по комнатам. `device_id`, `device` и `role` (`primary`/`setting`) появились
 аддитивно и опускаются, пока пусты; старые клиенты их игнорируют. `light.effects`
 (список `effect_list` лампы) — тоже аддитивное поле, опускается, если HA его не
 отдаёт. Действия

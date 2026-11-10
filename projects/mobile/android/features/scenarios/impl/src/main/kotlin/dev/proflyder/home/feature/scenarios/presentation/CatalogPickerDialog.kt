@@ -125,6 +125,7 @@ internal class CatalogPickerDialog(
         ControlKind.BUTTON -> R.drawable.scenarios_ic_power
         ControlKind.SCENARIO -> R.drawable.scenarios_ic_play
         ControlKind.ACTION -> R.drawable.scenarios_ic_speak
+        ControlKind.VOLUME -> R.drawable.scenarios_ic_power
         ControlKind.PROFILE -> R.drawable.scenarios_ic_profile
         ControlKind.OTHER -> R.drawable.scenarios_ic_devices
     }

@@ -74,3 +74,19 @@ import dev.zacsweers.metro.Inject
     suspend operator fun invoke(entry: ControlEntry, text: String): Outcome<Unit> =
         repository.speak(entry.id, text)
 }
+
+/** Sets the station volume or its announcement level. */
+@Inject class SetVolume(
+    private val repository: ControlRepository,
+) {
+    suspend operator fun invoke(entry: ControlEntry, level: Int): Outcome<Unit> =
+        repository.setVolume(entry.id, level)
+}
+
+/** Silences or restores the station media player. */
+@Inject class SetVolumeMuted(
+    private val repository: ControlRepository,
+) {
+    suspend operator fun invoke(entry: ControlEntry, muted: Boolean): Outcome<Unit> =
+        repository.setVolumeMuted(entry.id, muted)
+}

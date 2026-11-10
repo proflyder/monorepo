@@ -12,8 +12,10 @@
 //! characters, not bytes, so a Cyrillic title never splits into U+FFFD.
 
 mod light;
+mod volume;
 
 pub use light::{Light, LightInput, Params};
+pub use volume::{Volume, VolumeError};
 
 use std::collections::{HashMap, HashSet};
 
@@ -36,6 +38,9 @@ pub enum Kind {
     /// example speaking a text on the speaker. It carries the owning device
     /// and resolves to its own allowlisted service call.
     Action,
+    /// A synthetic station volume control: main volume or announcement
+    /// volume. The entity is fixed by the catalog, never by the command.
+    Volume,
 }
 
 impl Kind {
@@ -49,6 +54,7 @@ impl Kind {
             Self::Profile => "profile",
             Self::Button => "button",
             Self::Action => "action",
+            Self::Volume => "volume",
         }
     }
 }
@@ -61,6 +67,8 @@ pub const ACTION_SET: &str = "set";
 /// A stateless Home Assistant `button` press.
 pub const ACTION_PRESS: &str = "press";
 pub const ACTION_SPEAK: &str = "speak";
+pub const ACTION_MUTE: &str = "mute";
+pub const ACTION_UNMUTE: &str = "unmute";
 
 /// The scheduler task type of a control command.
 pub const TASK_TYPE: &str = "home.control";
@@ -75,6 +83,23 @@ pub const SPEAK_SCRIPT: &str = "script.speak_text";
 const SPEAK_SATELLITE_DOMAIN: &str = "assist_satellite";
 /// Longest text the action accepts, in characters.
 pub const SPEAK_MAX_TEXT: usize = 500;
+
+/// Synthetic catalog id of the station volume control.
+pub const VOLUME_ENTRY_ID: &str = "volume.station";
+/// Synthetic catalog id of the station announcement volume control.
+pub const VOLUME_ANNOUNCE_ENTRY_ID: &str = "volume.station_announce";
+/// Legacy English title of the synthetic station volume entry.
+const VOLUME_TITLE: &str = "Volume";
+/// Stable localization key of the station volume title.
+pub const VOLUME_TITLE_KEY: &str = "catalog.volume.title";
+const VOLUME_ICON: &str = "volume-high";
+/// Legacy English title of the synthetic announcement volume entry.
+const VOLUME_ANNOUNCE_TITLE: &str = "Announcement volume";
+/// Stable localization key of the announcement volume title.
+pub const VOLUME_ANNOUNCE_TITLE_KEY: &str = "catalog.volume.announce_title";
+const VOLUME_ANNOUNCE_ICON: &str = "bullhorn";
+/// Stable localization key of the muted device status.
+pub const VOLUME_MUTED_DETAIL_KEY: &str = "catalog.volume.muted";
 
 const MAX_ENTRIES: usize = 200;
 const MAX_TEXT: usize = 80;
@@ -105,6 +130,11 @@ pub struct Raw {
     pub scenario: bool,
     pub profile: bool,
     pub light: Option<Light>,
+    /// `volume_level` of a media player, `None` when Home Assistant does not
+    /// report it.
+    pub volume_level: Option<f64>,
+    /// `is_volume_muted` of a media player.
+    pub volume_muted: bool,
 }
 
 /// Which entities discovery exposes and under which role labels.
@@ -179,6 +209,8 @@ pub struct Entry {
     /// `"primary"`, `"setting"` or empty when unknown.
     pub role: String,
     pub light: Option<Light>,
+    /// Live volume state for a [`Kind::Volume`] entry.
+    pub volume: Option<Volume>,
 }
 
 /// A resolved Home Assistant service invocation.
@@ -249,6 +281,15 @@ impl Entry {
         }
         if self.kind == Kind::Button {
             return vec![ACTION_PRESS];
+        }
+        if self.kind == Kind::Volume {
+            let Some(volume) = self.volume.as_ref() else {
+                return vec![ACTION_SET];
+            };
+            return match volume.mute {
+                true => vec![ACTION_SET, ACTION_MUTE, ACTION_UNMUTE],
+                false => vec![ACTION_SET],
+            };
         }
         if self.light.is_some() {
             return vec![ACTION_TURN_ON, ACTION_TURN_OFF, ACTION_SET];
@@ -330,6 +371,48 @@ impl Entry {
                     data,
                 })
             }
+            (Kind::Volume, ACTION_SET) => {
+                let state = self
+                    .volume
+                    .as_ref()
+                    .ok_or_else(|| ResolveError::NotAdjustable {
+                        id: self.id.clone(),
+                    })?;
+                let level = state.set_level(params)?;
+                match state.announce {
+                    true => Ok(ServiceCall {
+                        domain: "number".to_owned(),
+                        service: "set_value".to_owned(),
+                        entity: volume::VOLUME_ANNOUNCE_NUMBER.to_owned(),
+                        data: volume::value_data(level),
+                    }),
+                    false => Ok(ServiceCall {
+                        domain: "media_player".to_owned(),
+                        service: "volume_set".to_owned(),
+                        entity: volume::VOLUME_MEDIA_PLAYER.to_owned(),
+                        data: Volume::set_data(level),
+                    }),
+                }
+            }
+            (Kind::Volume, ACTION_MUTE | ACTION_UNMUTE) => {
+                self.volume
+                    .as_ref()
+                    .filter(|state| state.mute)
+                    .ok_or_else(|| ResolveError::Unsupported {
+                        action: action.to_owned(),
+                        kind: self.kind,
+                        id: self.id.clone(),
+                    })?;
+                if !params.is_empty() {
+                    return Err(ResolveError::Volume(VolumeError::UnexpectedParams));
+                }
+                Ok(ServiceCall {
+                    domain: "media_player".to_owned(),
+                    service: "volume_mute".to_owned(),
+                    entity: volume::VOLUME_MEDIA_PLAYER.to_owned(),
+                    data: Volume::mute_data(action == ACTION_MUTE),
+                })
+            }
             (Kind::Switch | Kind::Profile, ACTION_TURN_ON | ACTION_TURN_OFF) => Ok(ServiceCall {
                 domain,
                 service: action.to_owned(),
@@ -366,6 +449,8 @@ pub enum ResolveError {
     Light(#[from] light::LightError),
     #[error("{0}")]
     Speak(#[from] SpeakError),
+    #[error("{0}")]
+    Volume(#[from] VolumeError),
 }
 
 /// Why a `speak` text was rejected. Messages never contain the text itself:
@@ -559,6 +644,7 @@ pub fn build(raws: &[Raw], rules: &Rules) -> Vec<Entry> {
                 device_key(raw).is_some_and(|key| categorized_devices.contains(key)),
             ),
             light: None,
+            volume: None,
         };
         if kind == Kind::Light && available {
             entry.light.clone_from(&raw.light);
@@ -572,6 +658,7 @@ pub fn build(raws: &[Raw], rules: &Rules) -> Vec<Entry> {
     if let Some(entry) = speak_entry(raws) {
         entries.push(entry);
     }
+    entries.extend(volume_entries(raws));
 
     entries.sort_by(|a, b| {
         let rank_a = rank(a.kind);
@@ -592,7 +679,109 @@ fn rank(kind: Kind) -> u8 {
         Kind::Profile => 0,
         Kind::Scenario => 1,
         Kind::Action => 2,
-        Kind::Light | Kind::Switch | Kind::Button => 3,
+        Kind::Light | Kind::Switch | Kind::Button | Kind::Volume => 3,
+    }
+}
+
+/// The two synthetic station volume entries.
+///
+/// They exist only while Home Assistant exposes the fixed pulsar entities. A
+/// missing entity is simply not advertised; an unavailable one stays in the
+/// catalog flagged unavailable. Device and room come from the media player,
+/// falling back to the announcement number, so both rows join the station card.
+fn volume_entries(raws: &[Raw]) -> Vec<Entry> {
+    let player = raws.iter().find(|raw| {
+        raw.entity == volume::VOLUME_MEDIA_PLAYER && !raw.hidden && valid_entity(&raw.entity)
+    });
+    let announce = raws.iter().find(|raw| {
+        raw.entity == volume::VOLUME_ANNOUNCE_NUMBER && !raw.hidden && valid_entity(&raw.entity)
+    });
+    if player.is_none() && announce.is_none() {
+        return Vec::new();
+    }
+    let anchor = player.or(announce);
+    let mut entries = Vec::new();
+    if let Some(raw) = player {
+        let state = raw.state.trim().to_lowercase();
+        let level = raw.volume_level.map_or(0, |value| {
+            #[allow(clippy::cast_possible_truncation)]
+            let scaled = (value * 100.0).round() as i32;
+            scaled.clamp(0, 100)
+        });
+        entries.push(volume_entry(
+            raw,
+            anchor,
+            VOLUME_ENTRY_ID,
+            VOLUME_TITLE,
+            VOLUME_TITLE_KEY,
+            VOLUME_ICON,
+            level,
+            !state.is_empty() && state != "unavailable" && state != "unknown",
+            Volume {
+                level,
+                muted: raw.volume_muted,
+                mute: true,
+                announce: false,
+            },
+        ));
+    }
+    if let Some(raw) = announce {
+        let state = raw.state.trim();
+        let parsed = state.parse::<i32>().ok();
+        let level = parsed.unwrap_or(0).clamp(0, 100);
+        entries.push(volume_entry(
+            raw,
+            anchor,
+            VOLUME_ANNOUNCE_ENTRY_ID,
+            VOLUME_ANNOUNCE_TITLE,
+            VOLUME_ANNOUNCE_TITLE_KEY,
+            VOLUME_ANNOUNCE_ICON,
+            level,
+            parsed.is_some(),
+            Volume {
+                level,
+                muted: false,
+                mute: false,
+                announce: true,
+            },
+        ));
+    }
+    entries
+}
+
+#[allow(clippy::too_many_arguments)]
+fn volume_entry(
+    raw: &Raw,
+    anchor: Option<&Raw>,
+    id: &str,
+    title: &str,
+    title_key: &str,
+    icon: &str,
+    level: i32,
+    available: bool,
+    volume: Volume,
+) -> Entry {
+    let device = anchor.unwrap_or(raw);
+    Entry {
+        id: id.to_owned(),
+        kind: Kind::Volume,
+        title: title.to_owned(),
+        title_key: title_key.to_owned(),
+        title_args: std::collections::BTreeMap::new(),
+        detail_key: match volume.muted {
+            true => VOLUME_MUTED_DETAIL_KEY.to_owned(),
+            false => String::new(),
+        },
+        room: truncate_chars(device.room.trim(), MAX_TEXT),
+        icon: icon.to_owned(),
+        entity: raw.entity.clone(),
+        state: level.to_string(),
+        available,
+        device_id: truncate_chars(device.device_id.trim(), MAX_TEXT),
+        device: truncate_chars(device.device.trim(), MAX_TEXT),
+        role: "primary".to_owned(),
+        light: None,
+        volume: Some(volume),
     }
 }
 
@@ -640,6 +829,7 @@ fn speak_entry(raws: &[Raw]) -> Option<Entry> {
         }),
         role: "primary".to_owned(),
         light: None,
+        volume: None,
     })
 }
 

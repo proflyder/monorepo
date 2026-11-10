@@ -74,6 +74,10 @@ pub struct Params {
     /// variable, never stored, logged or echoed in an ack detail.
     #[serde(default)]
     pub text: Option<String>,
+    /// Level of a `set` action on a [`super::Kind::Volume`] entry, 0-100 in
+    /// steps of five.
+    #[serde(default)]
+    pub level: Option<i32>,
 }
 
 impl Params {
@@ -87,6 +91,7 @@ impl Params {
             && self.effect.is_none()
             && self.transition.is_none()
             && self.text.is_none()
+            && self.level.is_none()
     }
 }
 

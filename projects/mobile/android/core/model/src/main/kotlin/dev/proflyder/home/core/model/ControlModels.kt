@@ -8,7 +8,7 @@ package dev.proflyder.home.core.model
  * it out of the device filters and drives it with turn_on ("work") / turn_off
  * ("personal").
  */
-enum class ControlKind { SCENARIO, LIGHT, SWITCH, BUTTON, PROFILE, ACTION, OTHER }
+enum class ControlKind { SCENARIO, LIGHT, SWITCH, BUTTON, PROFILE, ACTION, VOLUME, OTHER }
 
 /** Commands a catalog entry accepts; [wire] is the value sent to the server. */
 enum class ControlAction(val wire: String) {
@@ -22,6 +22,12 @@ enum class ControlAction(val wire: String) {
 
     /** Speak a text on the speaker; the payload carries `text`. */
     SPEAK("speak"),
+
+    /** Silence the station volume; no payload. */
+    MUTE("mute"),
+
+    /** Restore the station volume; no payload. */
+    UNMUTE("unmute"),
     ;
 
     companion object {
@@ -71,6 +77,15 @@ data class LightAdjust(
     val saturation: Int? = null,
 )
 
+/**
+ * Live station volume: [level] is 0–100 and [muted] is the media player mute.
+ * Announcement volume reports the number entity and is never muted.
+ */
+data class VolumeControls(
+    val level: Int = 0,
+    val muted: Boolean = false,
+)
+
 data class ControlEntry(
     val id: String,
     val kind: ControlKind,
@@ -83,6 +98,8 @@ data class ControlEntry(
     val available: Boolean,
     /** Set for lights that can be adjusted beyond on/off. */
     val light: LightControls? = null,
+    /** Set for the station volume entries. */
+    val volume: VolumeControls? = null,
     /**
      * Stable localization key of a server-generated title (for example the
      * synthetic "Speak on the station" action). Empty when [title] is Home
@@ -114,6 +131,9 @@ data class ControlEntry(
 
     /** The assistant profile selector: a global mode, not a device. */
     val isProfile: Boolean get() = kind == ControlKind.PROFILE
+
+    /** A station volume row: a slider sheet, not an on/off toggle. */
+    val isVolume: Boolean get() = kind == ControlKind.VOLUME
 
     /**
      * Name shown as the main label. Home Assistant often reports only the

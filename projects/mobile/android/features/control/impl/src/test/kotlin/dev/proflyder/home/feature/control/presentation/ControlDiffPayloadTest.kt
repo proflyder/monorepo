@@ -5,6 +5,7 @@ import dev.proflyder.home.core.model.ControlEntry
 import dev.proflyder.home.core.model.ControlKind
 import dev.proflyder.home.core.model.LightControls
 import dev.proflyder.home.core.model.PowerState
+import dev.proflyder.home.core.model.VolumeControls
 import dev.proflyder.home.core.ui.PayloadSet
 import dev.proflyder.home.feature.control.ControlFilter
 import dev.proflyder.home.feature.control.ControlItem
@@ -227,5 +228,13 @@ class ControlDiffPayloadTest {
         val before = ControlItem.QuickActions(listOf(QuickTile.Call), hint = false)
         val after = ControlItem.QuickActions(listOf(QuickTile.Call), hint = true)
         assertEquals(setOf(ControlChange.QUICK), changes(before, after))
+    }
+
+    @Test
+    fun deviceVolumeChangeReportsStateText() {
+        val quiet = entry(kind = ControlKind.VOLUME, power = null).copy(volume = VolumeControls(20, false))
+        val loud = quiet.copy(volume = VolumeControls(60, false))
+        assertEquals(setOf(ControlChange.STATE), changes(device(quiet), device(loud)))
+        assertEquals(setOf(ControlChange.STATE), changes(device(quiet), device(quiet.copy(volume = VolumeControls(20, true)))))
     }
 }

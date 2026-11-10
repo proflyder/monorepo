@@ -36,6 +36,12 @@ class ConnectControlRepository(
     override suspend fun speak(entryId: String, text: String): Outcome<Unit> =
         enqueue(ControlJson.speakPayload(entryId, text))
 
+    override suspend fun setVolume(entryId: String, level: Int): Outcome<Unit> =
+        enqueue(ControlJson.volumePayload(entryId, level))
+
+    override suspend fun setVolumeMuted(entryId: String, muted: Boolean): Outcome<Unit> =
+        enqueue(ControlJson.mutePayload(entryId, muted))
+
     private suspend fun enqueue(payloadJson: String): Outcome<Unit> =
         when (
             val queued = scheduler.enqueueTask(

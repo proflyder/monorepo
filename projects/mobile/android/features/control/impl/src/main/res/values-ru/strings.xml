@@ -39,6 +39,14 @@
     <string name="control_light_percent">%1$d%%</string>
     <string name="control_light_warm">Тёплый</string>
     <string name="control_light_cool">Холодный</string>
+    <string name="control_volume_title">Громкость</string>
+    <string name="control_volume_main">Громкость</string>
+    <string name="control_volume_announce">Громкость объявлений</string>
+    <string name="control_volume_level">Громкость %1$d%%</string>
+    <string name="control_volume_announce_level">Объявления %1$d%%</string>
+    <string name="control_volume_muted">Звук выкл.</string>
+    <string name="control_volume_mute">Выключить звук</string>
+    <string name="control_volume_unmute">Включить звук</string>
     <string name="control_hub_today">сегодня</string>
     <string name="control_hub_tomorrow">завтра</string>
     <string name="control_hub_alarm">Будильник</string>

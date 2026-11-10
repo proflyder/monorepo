@@ -664,3 +664,187 @@ fn catalog_vectors_match_the_go_server() {
         "unreachable",
     );
 }
+
+// ---------------------------------------------------------------------------
+// station volume vectors
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Deserialize)]
+struct VolumeFixture {
+    cases: Vec<VolumeCase>,
+}
+
+#[derive(Debug, Deserialize)]
+struct VolumeCase {
+    name: String,
+    #[serde(default)]
+    raws: Vec<VolumeRaw>,
+    #[serde(default)]
+    entries: Vec<VolumeExpectedEntry>,
+    #[serde(default)]
+    calls: Vec<VolumeCall>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct VolumeRaw {
+    #[serde(default)]
+    entity: String,
+    #[serde(default)]
+    state: String,
+    #[serde(default)]
+    room: String,
+    #[serde(rename = "deviceId", default)]
+    device_id: String,
+    #[serde(default)]
+    device: String,
+    #[serde(rename = "volumeLevel", default)]
+    volume_level: Option<f64>,
+    #[serde(rename = "volumeMuted", default)]
+    volume_muted: bool,
+}
+
+#[derive(Debug, Deserialize)]
+struct VolumeExpectedEntry {
+    id: String,
+    #[serde(rename = "titleKey")]
+    title_key: String,
+    title: String,
+    state: String,
+    available: bool,
+    level: i32,
+    muted: bool,
+    room: String,
+    device: String,
+    #[serde(rename = "deviceId")]
+    device_id: String,
+    actions: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct VolumeCall {
+    entry: String,
+    action: String,
+    #[serde(default)]
+    level: Option<i32>,
+    #[serde(default)]
+    expected: Option<VolumeExpectedCall>,
+    #[serde(default)]
+    error: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct VolumeExpectedCall {
+    domain: String,
+    service: String,
+    entity: String,
+    data: Value,
+}
+
+#[test]
+fn volume_vectors_match_the_station_contract() {
+    let fixture: VolumeFixture =
+        serde_json::from_value(read_json(&testdata_dir().join("volume/cases.json")))
+            .expect("volume fixture");
+    let rules = ha_bridge::catalog::Rules {
+        scenario_label: "scenario".to_owned(),
+        profile_label: "voice_profile".to_owned(),
+        exclude: Vec::new(),
+    };
+    for case in &fixture.cases {
+        let raws: Vec<ha_bridge::catalog::Raw> = case
+            .raws
+            .iter()
+            .map(|raw| ha_bridge::catalog::Raw {
+                entity: raw.entity.clone(),
+                state: raw.state.clone(),
+                room: raw.room.clone(),
+                device_id: raw.device_id.clone(),
+                device: raw.device.clone(),
+                volume_level: raw.volume_level,
+                volume_muted: raw.volume_muted,
+                ..ha_bridge::catalog::Raw::default()
+            })
+            .collect();
+        let entries = ha_bridge::catalog::build(&raws, &rules);
+        assert_eq!(
+            entries.len(),
+            case.entries.len(),
+            "{}: entry count",
+            case.name
+        );
+        for expected in &case.entries {
+            let entry = entries
+                .iter()
+                .find(|entry| entry.id == expected.id)
+                .unwrap_or_else(|| panic!("{}: missing {}", case.name, expected.id));
+            assert_eq!(entry.title_key, expected.title_key, "{}: key", case.name);
+            assert_eq!(entry.title, expected.title, "{}: title", case.name);
+            assert_eq!(entry.state, expected.state, "{}: state", case.name);
+            assert_eq!(
+                entry.available, expected.available,
+                "{}: available",
+                case.name
+            );
+            assert_eq!(entry.room, expected.room, "{}: room", case.name);
+            assert_eq!(entry.device, expected.device, "{}: device", case.name);
+            assert_eq!(
+                entry.device_id, expected.device_id,
+                "{}: device id",
+                case.name
+            );
+            assert_eq!(
+                entry.actions(),
+                expected
+                    .actions
+                    .iter()
+                    .map(String::as_str)
+                    .collect::<Vec<_>>(),
+                "{}: actions",
+                case.name
+            );
+            let volume = entry
+                .volume
+                .as_ref()
+                .unwrap_or_else(|| panic!("{}: no volume", case.name));
+            assert_eq!(volume.level, expected.level, "{}: level", case.name);
+            assert_eq!(volume.muted, expected.muted, "{}: muted", case.name);
+        }
+        for call in &case.calls {
+            let entry = entries
+                .iter()
+                .find(|entry| entry.id == call.entry)
+                .unwrap_or_else(|| panic!("{}: missing {}", case.name, call.entry));
+            let params = ha_bridge::catalog::Params {
+                level: call.level,
+                ..ha_bridge::catalog::Params::default()
+            };
+            match (&call.expected, &call.error) {
+                (Some(expected), None) => {
+                    let resolved = entry
+                        .resolve(&call.action, &params)
+                        .unwrap_or_else(|error| panic!("{}: {}", case.name, error));
+                    assert_eq!(resolved.domain, expected.domain, "{}: domain", case.name);
+                    assert_eq!(resolved.service, expected.service, "{}: service", case.name);
+                    assert_eq!(resolved.entity, expected.entity, "{}: entity", case.name);
+                    assert_eq!(
+                        Value::Object(resolved.data),
+                        expected.data,
+                        "{}: data",
+                        case.name
+                    );
+                }
+                (None, Some(error)) => {
+                    let actual = entry
+                        .resolve(&call.action, &params)
+                        .expect_err("call must be rejected");
+                    assert!(
+                        actual.to_string().contains(error),
+                        "{}: {actual} does not contain {error}",
+                        case.name
+                    );
+                }
+                _ => panic!("{}: a call needs exactly one of expected/error", case.name),
+            }
+        }
+    }
+}

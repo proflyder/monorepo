@@ -4,6 +4,7 @@ import android.os.Bundle
 import androidx.fragment.app.activityViewModels
 import androidx.recyclerview.widget.GridLayoutManager
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import dev.proflyder.home.core.model.ControlAction
 import dev.proflyder.home.core.model.ControlEntry
 import dev.proflyder.home.core.model.ControlKind
 import dev.proflyder.home.core.model.FavoriteKind
@@ -41,6 +42,7 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
     private lateinit var adapter: ControlAdapter
     private lateinit var states: ListStateViews
     private var lightSheet: LightSheet? = null
+    private var volumeSheet: VolumeSheet? = null
     private var speakDialog: SpeakDialog? = null
 
     /**
@@ -63,8 +65,11 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
                 // An adjustable light opens its sheet; anything else flips on a row tap.
                 // The switch itself always reports its own target state.
                 is ControlItem.Device ->
-                    if (item.entry.light != null && item.entry.available) openLightSheet(item.entry)
-                    else viewModel.setPower(item.entry, !item.entry.isOn())
+                    when {
+                        item.entry.isVolume && item.entry.available -> openVolumeSheet(item.entry)
+                        item.entry.light != null && item.entry.available -> openLightSheet(item.entry)
+                        else -> viewModel.setPower(item.entry, !item.entry.isOn())
+                    }
                 // A device group itself does nothing: its rows forward their taps.
                 // The profile is a mode: only its segmented buttons act.
                 is ControlItem.Header, is ControlItem.Voice, is ControlItem.DeviceGroup,
@@ -104,8 +109,11 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
         override fun onQuickTileClick(tile: QuickTile) {
             when (tile) {
                 is QuickTile.Device ->
-                    if (tile.entry.light != null && tile.entry.available) openLightSheet(tile.entry)
-                    else viewModel.setPower(tile.entry, !tile.entry.isOn())
+                    when {
+                        tile.entry.isVolume && tile.entry.available -> openVolumeSheet(tile.entry)
+                        tile.entry.light != null && tile.entry.available -> openLightSheet(tile.entry)
+                        else -> viewModel.setPower(tile.entry, !tile.entry.isOn())
+                    }
                 is QuickTile.Speak -> openSpeakDialog(tile.entry)
                 is QuickTile.ScenarioTile -> viewModel.runScenarioNow(tile.scenario)
                 QuickTile.Call -> viewModel.callStation()
@@ -116,11 +124,14 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
             when (tile) {
                 // A light's long press is reserved for its adjustment sheet.
                 is QuickTile.Device ->
-                    if (tile.entry.light != null) openLightSheet(tile.entry)
-                    else viewModel.toggleFavoriteRef(
-                        FavoriteRef(FavoriteKind.DEVICE, tile.entry.id),
-                        tile.entry.localizedDisplayName(requireContext()),
-                    )
+                    when {
+                        tile.entry.isVolume -> openVolumeSheet(tile.entry)
+                        tile.entry.light != null -> openLightSheet(tile.entry)
+                        else -> viewModel.toggleFavoriteRef(
+                            FavoriteRef(FavoriteKind.DEVICE, tile.entry.id),
+                            tile.entry.localizedDisplayName(requireContext()),
+                        )
+                    }
                 is QuickTile.Speak ->
                     viewModel.toggleFavoriteRef(
                         FavoriteRef(FavoriteKind.ACTION, tile.entry.id),
@@ -183,6 +194,24 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
             .also { it.show() }
     }
 
+    /**
+     * Opens the station volume sheet. Either volume row opens the same sheet:
+     * the media player row is the main slider, the announcement row the second.
+     */
+    internal fun openVolumeSheet(entry: ControlEntry) {
+        volumeSheet?.dismiss()
+        val volumes = viewModel.state.value.entries.filter { it.isVolume && it.deviceId == entry.deviceId }
+        val main = volumes.firstOrNull { ControlAction.MUTE in it.actions } ?: entry
+        val announce = volumes.firstOrNull { it.id != main.id }
+        volumeSheet = VolumeSheet(
+            context = requireContext(),
+            entry = main,
+            announceEntry = announce,
+            onLevel = { target, level -> viewModel.setVolume(target, level) },
+            onMuted = { target, muted -> viewModel.setVolumeMuted(target, muted) },
+        ).also { it.show() }
+    }
+
     internal fun openSpeakDialog(entry: ControlEntry) {
         speakDialog?.dismiss()
         speakDialog = SpeakDialog(requireContext()) { text -> viewModel.speak(entry, text) }
@@ -192,6 +221,8 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
     override fun onBindingDestroyed() {
         lightSheet?.dismiss()
         lightSheet = null
+        volumeSheet?.dismiss()
+        volumeSheet = null
         speakDialog?.dismiss()
         speakDialog = null
     }

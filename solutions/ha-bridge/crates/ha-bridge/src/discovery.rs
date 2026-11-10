@@ -31,8 +31,7 @@ use crate::catalog::{self, Catalog, Light, LightInput, Raw, Rules};
 /// entries are one-shot `press` actions (for example lock/unlock a PC).
 /// `binary_sensor` entities are not entries either: a `lock` binary sensor
 /// attached to a device-less base becomes that device's status detail.
-const DOMAINS: &str =
-    "['script','scene','light','switch','button','binary_sensor','assist_satellite']";
+const DOMAINS: &str = "['script','scene','light','switch','button','binary_sensor','assist_satellite','media_player','number']";
 
 /// The Home Assistant read surface discovery needs.
 pub trait HomeAssistant: Send + Sync {
@@ -223,6 +222,17 @@ impl<H: HomeAssistant> Provider<H> {
                     scenario: scenarios.iter().any(|id| id == &entity.entity_id),
                     profile: profiles.iter().any(|id| id == &entity.entity_id),
                     light: light_of(entity),
+                    volume_level: entity
+                        .attributes
+                        .other
+                        .get("volume_level")
+                        .and_then(serde_json::Value::as_f64),
+                    volume_muted: entity
+                        .attributes
+                        .other
+                        .get("is_volume_muted")
+                        .and_then(serde_json::Value::as_bool)
+                        .unwrap_or(false),
                 }
             })
             .collect::<Vec<_>>();
