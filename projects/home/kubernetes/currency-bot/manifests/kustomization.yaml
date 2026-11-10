@@ -1,0 +1,58 @@
+# Flux-rendered manifest set for currency-bot (FLUX-APPS-PLAN 6.3).
+#
+# The four object files stay the templates used by `deploy.sh` (CI/admin path):
+# PVC, two Deployments, two Services, four NetworkPolicies, the ServiceMonitor
+# and both ExternalSecrets. This kustomization is the Flux path.
+#
+# `namespace.yaml` is deliberately absent: Kubernetes namespaces are
+# cluster-scoped and admin-owned (FLUX-APPS-PLAN 6.3), and the namespace
+# already exists.
+#
+# Substituted by Kustomization/app-currency-bot:
+#   ${CURRENCY_BOT_IMAGE}        from ConfigMap/home-app-images (pins branch)
+#   ${CURRENCY_BOT_NODE_PORT}    from Secret/flux-app-settings (ESO)
+#   ${CURRENCY_WEBHOOK_URL}      from Secret/flux-app-settings (ESO)
+#   ${LAN_CIDR}, ${NODE_LAN_IP}  from Secret/flux-app-settings (ESO)
+#   ${BUILD_ID}                  from ConfigMap/home-app-images (pins branch)
+#
+# `cloudflared` is not built by this repository: its reviewed tag+digest lives
+# in `projects/home/kubernetes/versions.sh`, so the Flux patch pins the same
+# literal instead of a pins-branch key (test_flux.py keeps the two in sync).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - currency-bot.yaml
+  - cloudflared.yaml
+  - network-policies.yaml
+  - servicemonitor.yaml
+  - external-secrets.yaml
+patches:
+  # `prune: true` must never delete the SQLite volume if a manifest is removed
+  # by mistake (FLUX-APPS-PLAN 4.2).
+  - target:
+      kind: PersistentVolumeClaim
+      name: currency-bot-data
+    patch: |-
+      - op: add
+        path: /metadata/annotations
+        value:
+          kustomize.toolkit.fluxcd.io/prune: disabled
+  # The image itself changes the pod template, so the annotation follows the
+  # digest instead of the CI-only `ROLLOUT_ID`.
+  - target:
+      kind: Deployment
+      name: currency-bot
+    patch: |-
+      - op: replace
+        path: /spec/template/metadata/annotations/proflyder.dev~1rollout
+        value: ${CURRENCY_BOT_IMAGE}
+  - target:
+      kind: Deployment
+      name: cloudflared
+    patch: |-
+      - op: replace
+        path: /spec/template/metadata/annotations/proflyder.dev~1rollout
+        value: cloudflare/cloudflared:2026.10.7@sha256:4955524aeaa379e154023d5a027c250f7b35041a2e7e950cf13f144bc9b9c5ba
+      - op: replace
+        path: /spec/template/spec/containers/0/image
+        value: cloudflare/cloudflared:2026.10.7@sha256:4955524aeaa379e154023d5a027c250f7b35041a2e7e950cf13f144bc9b9c5ba

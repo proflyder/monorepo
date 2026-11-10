@@ -1,0 +1,26 @@
+# Flux-rendered manifest set for intercom (FLUX-APPS-PLAN 6.2).
+#
+# `intercom.yaml` and `external-secrets.yaml` stay the templates used by
+# `deploy.sh` (CI/admin path). This kustomization is the Flux path: the same
+# objects, with the CI-only rollout annotation replaced so `kustomize-controller`
+# never sees an undefined `ROLLOUT_ID`.
+#
+# Substituted by Kustomization/app-intercom:
+#   ${INTERCOM_IMAGE}      from ConfigMap/home-app-images (pins branch)
+#   ${BUILD_ID}            from ConfigMap/home-app-images (pins branch)
+#   ${INTERCOM_NODE_PORT}  from Secret/flux-app-settings (ESO)
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - intercom.yaml
+  - external-secrets.yaml
+patches:
+  # The image itself changes the pod template under Flux, so the annotation
+  # follows the digest and stays traceable without an extra CI variable.
+  - target:
+      kind: Deployment
+      name: intercom
+    patch: |-
+      - op: replace
+        path: /spec/template/metadata/annotations/proflyder.dev~1rollout
+        value: ${INTERCOM_IMAGE}

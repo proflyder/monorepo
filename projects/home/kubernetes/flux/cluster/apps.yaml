@@ -89,3 +89,201 @@ spec:
       kind: Deployment
       name: wakegrant
       namespace: home-assistant
+---
+# Stateless signaling service (FLUX-APPS-PLAN 6.2). Suspended until the owner
+# runs the cutover checks (diff, reconcile, call/signaling smoke); while
+# suspended the live Deployment keeps running and CI no longer rolls it.
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: app-intercom
+  namespace: flux-system
+spec:
+  interval: 1m
+  retryInterval: 1m
+  timeout: 5m
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  path: ./projects/home/kubernetes/intercom/manifests
+  prune: true
+  wait: true
+  suspend: true
+  dependsOn:
+    - name: platform
+    - name: home-app-pins
+  postBuild:
+    substituteFrom:
+      - kind: ConfigMap
+        name: home-app-images
+      - kind: Secret
+        name: flux-app-settings
+  healthChecks:
+    - apiVersion: apps/v1
+      kind: Deployment
+      name: intercom
+      namespace: home-assistant
+---
+# Currency bot, its Cloudflare Tunnel and the currency-bot namespace objects
+# (FLUX-APPS-PLAN 6.3). The namespace itself stays admin-owned. Suspended until
+# the cutover checks (`/readyz`, webhook endpoint, ServiceMonitor) are done.
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: app-currency-bot
+  namespace: flux-system
+spec:
+  interval: 1m
+  retryInterval: 1m
+  timeout: 5m
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  path: ./projects/home/kubernetes/currency-bot/manifests
+  prune: true
+  wait: true
+  suspend: true
+  dependsOn:
+    - name: platform
+    - name: home-app-pins
+  postBuild:
+    substituteFrom:
+      - kind: ConfigMap
+        name: home-app-images
+      - kind: Secret
+        name: flux-app-settings
+  healthChecks:
+    - apiVersion: apps/v1
+      kind: Deployment
+      name: currency-bot
+      namespace: currency-bot
+    - apiVersion: apps/v1
+      kind: Deployment
+      name: cloudflared
+      namespace: currency-bot
+---
+# MCP infrastructure gateway, catalog ConfigMap, RBAC and its ExternalSecrets
+# (FLUX-APPS-PLAN 6.4). Suspended until the cutover checks (`/readyz`, catalog,
+# API access, bb-dispatch without a real call) are done.
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: app-mcp-gateway
+  namespace: flux-system
+spec:
+  interval: 1m
+  retryInterval: 1m
+  timeout: 5m
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  path: ./projects/home/kubernetes/mcp-gateway/manifests
+  prune: true
+  wait: true
+  suspend: true
+  dependsOn:
+    - name: platform
+    - name: home-app-pins
+  postBuild:
+    substituteFrom:
+      - kind: ConfigMap
+        name: home-app-images
+      - kind: Secret
+        name: flux-app-settings
+  healthChecks:
+    - apiVersion: apps/v1
+      kind: Deployment
+      name: mcp-gateway
+      namespace: home-assistant
+---
+# Scheduler and the HA executors (FLUX-APPS-PLAN 6.5). One Kustomization owns
+# scheduler, ha-bridge, ha-control and ha-scenario because they share one
+# template set; splitting it would make two `prune: true` Kustomizations fight
+# over the same objects. Executor modes/replicas are pinned to the live
+# steady state in the manifest patch. Suspended until the windowed cutover.
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: app-ha-executors
+  namespace: flux-system
+spec:
+  interval: 1m
+  retryInterval: 1m
+  timeout: 10m
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  path: ./projects/home/kubernetes/scheduler/manifests
+  prune: true
+  wait: true
+  suspend: true
+  dependsOn:
+    - name: platform
+    - name: home-app-pins
+  postBuild:
+    substituteFrom:
+      - kind: ConfigMap
+        name: home-app-images
+      - kind: Secret
+        name: flux-app-settings
+  healthChecks:
+    - apiVersion: apps/v1
+      kind: Deployment
+      name: scheduler
+      namespace: home-assistant
+    - apiVersion: apps/v1
+      kind: Deployment
+      name: ha-bridge
+      namespace: home-assistant
+    - apiVersion: apps/v1
+      kind: Deployment
+      name: ha-control
+      namespace: home-assistant
+    - apiVersion: apps/v1
+      kind: Deployment
+      name: ha-scenario
+      namespace: home-assistant
+---
+# Hermes runtime Helm release (FLUX-APPS-PLAN 6.6). The chart is in-repo, the
+# values come from `runtime-values` (ESO), images from the pins branch, and a
+# post-upgrade smoke hook plus `remediation.strategy: rollback` replace
+# `home-deploy hermes rollout`'s smoke/rollback. Suspended until the voice
+# smoke and a rollback drill pass.
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: app-hermes
+  namespace: flux-system
+spec:
+  interval: 1m
+  retryInterval: 1m
+  timeout: 10m
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  path: ./projects/home-assistant/deploy/flux
+  prune: true
+  wait: true
+  suspend: true
+  dependsOn:
+    - name: platform
+    - name: home-app-pins
+  postBuild:
+    substituteFrom:
+      - kind: ConfigMap
+        name: home-app-images
+      - kind: Secret
+        name: flux-app-settings
+  healthChecks:
+    - apiVersion: helm.toolkit.fluxcd.io/v2
+      kind: HelmRelease
+      name: runtime
+      namespace: flux-system
+    - apiVersion: apps/v1
+      kind: Deployment
+      name: hermes
+      namespace: home-assistant
+    - apiVersion: apps/v1
+      kind: Deployment
+      name: runtime-health-exporter
+      namespace: home-assistant

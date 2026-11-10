@@ -54,6 +54,19 @@ function fakeSpawn(responses = {}) {
 const realUnits = units();
 const scheduler = realUnits.find((unit) => unit.id === "scheduler");
 const pulsar = realUnits.find((unit) => unit.id === "pulsar");
+// All live home units are Flux-managed now, so the executable rollback kinds
+// are exercised with a synthetic unit: the code path still exists for admin
+// tooling and must not rot.
+const deployStateUnit = {
+  id: "fixture-service",
+  title: "fixture service",
+  rollbackKind: "deploy-state",
+  rollbackStateDir: "secrets/local/rendered/fixture/state",
+  rollbackNamespace: "home-assistant",
+  rollbackSource: "fixture (test only)",
+  deployWorkloads: ["fixture"],
+  deployNamespace: "home-assistant",
+};
 
 test("ops: deploy targets are the deploy units plus pulsar only", () => {
   const ids = deployTargets(realUnits).map((unit) => unit.id);
@@ -233,21 +246,22 @@ test("ops: every unit with a rollback kind has the fields its kind needs", () =>
 });
 
 test("ops: rollback plan for a deploy-state unit carries state dir and source", () => {
-  const text = rollbackPlanLines(scheduler).join("\n");
+  const text = rollbackPlanLines(deployStateUnit).join("\n");
   assert.ok(text.includes("kind: deploy-state"));
-  assert.ok(text.includes("state: secrets/local/rendered/scheduler/state"));
+  assert.ok(text.includes("state: secrets/local/rendered/fixture/state"));
   assert.ok(text.includes("in namespace home-assistant"));
-  assert.ok(text.includes("projects/home/kubernetes/scheduler/README.md"));
+  assert.ok(text.includes("fixture (test only)"));
   assert.ok(text.includes("home_deploy state rollback"));
 });
 
-test("ops: hermes rollback uses the recorded revision and names the helm fallback", () => {
+test("ops: hermes rollback leans on HelmRelease remediation and names the helm fallback", () => {
   const hermes = realUnits.find((unit) => unit.id === "hermes");
   const text = rollbackPlanLines(hermes).join("\n");
   assert.ok(text.includes("kind: hermes"));
-  assert.ok(text.includes("--rollback-only"));
+  assert.ok(text.includes("HelmRelease remediation"));
   assert.ok(text.includes("helm --namespace home-assistant rollback runtime"));
-  assert.ok(rollbackCommand(hermes).args[1].includes("home_deploy hermes rollout --rollback-only"));
+  // Flux writes no local revision state, so the command is instruction-only.
+  assert.equal(rollbackCommand(hermes), null);
 });
 
 test("ops: pulsar rollback prints the on-device instruction and never executes", async () => {
@@ -263,7 +277,7 @@ test("ops: pulsar rollback prints the on-device instruction and never executes",
 test("ops: forward-only units exit non-zero without executing", async () => {
   const spawn = fakeSpawn();
   const stderr = buffer();
-  const code = await runRollback(["intercom", "--yes"], {
+  const code = await runRollback(["ha-stack", "--yes"], {
     spawn,
     stdout: buffer(),
     stderr,
@@ -290,7 +304,8 @@ test("ops: flux-pins rollback prints the pins revert and never executes", async 
 test("ops: rollback --dry-run prints the command without executing", async () => {
   const spawn = fakeSpawn();
   const stdout = buffer();
-  const code = await runRollback(["scheduler", "--dry-run"], {
+  const code = await runRollback(["fixture-service", "--dry-run"], {
+    units: [deployStateUnit],
     spawn,
     stdout,
     stderr: buffer(),
@@ -302,7 +317,8 @@ test("ops: rollback --dry-run prints the command without executing", async () =>
 
 test("ops: rollback --yes executes the documented deploy-state command", async () => {
   const spawn = fakeSpawn();
-  const code = await runRollback(["scheduler", "--yes"], {
+  const code = await runRollback(["fixture-service", "--yes"], {
+    units: [deployStateUnit],
     spawn,
     stdout: buffer(),
     stderr: buffer(),
@@ -317,7 +333,12 @@ test("ops: rollback --yes executes the documented deploy-state command", async (
 test("ops: rollback needs --yes to execute", async () => {
   const spawn = fakeSpawn();
   const stderr = buffer();
-  const code = await runRollback(["scheduler"], { spawn, stdout: buffer(), stderr });
+  const code = await runRollback(["fixture-service"], {
+    units: [deployStateUnit],
+    spawn,
+    stdout: buffer(),
+    stderr,
+  });
   assert.equal(code, 1);
   assert.equal(spawn.calls.length, 0);
   assert.ok(stderr.text().includes("--yes"));
