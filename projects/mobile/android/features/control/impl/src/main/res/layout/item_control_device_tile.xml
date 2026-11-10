@@ -18,9 +18,9 @@
         android:id="@+id/control_tile_ripple"
         android:layout_width="@dimen/control_tile_icon"
         android:layout_height="@dimen/control_tile_icon"
-        android:background="?attr/selectableItemBackgroundBorderless"
         android:clickable="true"
-        android:focusable="true">
+        android:focusable="true"
+        android:foreground="?attr/selectableItemBackgroundBorderless">
 
         <ImageView
             android:id="@+id/control_tile_icon"
