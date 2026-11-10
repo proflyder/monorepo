@@ -65,6 +65,7 @@ Restore намеренно не автоматизирован: вывод вс�
 adb connect 192.0.2.13:5555
 adb devices
 ssh -i ~/.ssh/home-lab/station_ed25519 root@192.0.2.13   # ключ; пароль — fallback
+mise run station:audit -- --ip 192.0.2.13                # read-only сверка с манифестом
 
 # Proxmox / K3s / HAOS: ключ и config из `mise run secrets:pull`
 ssh -F ~/.ssh/home-lab/config pve

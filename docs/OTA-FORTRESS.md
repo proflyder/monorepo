@@ -1,7 +1,9 @@
 # OTA / ADB fortress
 
 Текущая прошивка: `0.369.1.46.4778262955.20261013.160`.
-Факты — `STATE.md`; откат — `OPERATIONS.md`.
+Факты — `STATE.md`; откат — `OPERATIONS.md`. Полный состав ПО колонки
+(что OTA обновляет, а что поставлено вручную) — `STATION-SOFTWARE.md` и
+`projects/station/manifest.yaml`.
 
 ## Установлено
 
