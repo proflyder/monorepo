@@ -275,7 +275,7 @@ the workloads. There is no VPN, OpenBao, kubeconfig or `ci-deploy` on that path.
   documentation-only push pins nothing; a shared proto/Rust package change
   selects its importers; an unknown or zero `before` falls back to every
   deployable unit.
-- `pins` runs per unit with `concurrency: deploy-home-pins`; image promotion
+- `pins` runs per unit with `max-parallel: 1` (a job-level concurrency group would cancel the queued matrix jobs); image promotion
   verifies the `tree-<hash>` tag, provenance and digest read-back, then commits
   only that unit's keys. A failed promotion keeps the previous pin (fail
   closed) and the old workload keeps running.

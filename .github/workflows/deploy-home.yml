@@ -505,12 +505,13 @@ jobs:
       pull-requests: read
     strategy:
       fail-fast: false
+      # One writer at a time inside a run. A job-level `concurrency` group must
+      # not be used here: GitHub keeps only one pending job per group and
+      # cancels the rest of the matrix. Races between runs are handled by the
+      # refetch/reapply/retry loop in platform/ci/pins.mjs.
+      max-parallel: 1
       matrix:
         include: ${{ fromJSON(needs.plan.outputs.units) }}
-    # One writer at a time; the retry loop is the second line of defence.
-    concurrency:
-      group: deploy-home-pins
-      cancel-in-progress: false
     steps:
       # Full history: promotion may fall back to the PR head, and the pins
       # annotation records the deploy commit's tree.
