@@ -1,0 +1,27 @@
+# Scrape the three Flux controllers for `gotk_*` metrics.
+#
+# The controllers expose Prometheus metrics on the `http-prom` pod port (8080).
+# Their Services only publish the artifact and health ports, so a PodMonitor is
+# used instead of a ServiceMonitor. `flux-system-ingress` allows only the
+# monitoring namespace on 8080.
+#
+# Applied by `observability-rules`, which depends on `observability`: the
+# Prometheus Operator CRDs exist by then.
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: flux-controllers
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/part-of: home-observability
+spec:
+  namespaceSelector:
+    matchNames:
+      - flux-system
+  selector:
+    matchLabels:
+      app.kubernetes.io/part-of: flux
+  podMetricsEndpoints:
+    - port: http-prom
+      path: /metrics
+      interval: 30s
