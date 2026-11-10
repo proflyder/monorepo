@@ -14,7 +14,6 @@ exec shellcheck -S error \
   projects/home/kubernetes/currency-bot/*.sh \
   projects/home/kubernetes/currency-bot/nft/*.sh \
   projects/station/scripts/*.sh \
-  projects/home-assistant/stack/*.sh \
   solutions/windows-logon-provider/*.sh \
   platform/workstation/env.sh \
   platform/workstation/run.sh \

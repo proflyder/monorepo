@@ -78,7 +78,6 @@ def yaml_files() -> list[Path]:
     files = list(HA.rglob("*.yaml"))
     files += [
         ROOT / "projects" / "home-assistant" / "configs" / "00-installer-config.yaml",
-        ROOT / "projects" / "home-assistant" / "stack" / "docker-compose.yml",
     ]
     return sorted(p for p in files if p.exists())
 
@@ -855,19 +854,6 @@ def _walk(value: Any) -> list[Any]:
     if isinstance(value, list):
         return [node for child in value for node in _walk(child)]
     return []
-
-
-class VoiceStackTests(unittest.TestCase):
-    def test_gigaam_wyoming_service_is_configured(self):
-        compose = yaml.safe_load((ROOT / "projects" / "home-assistant" / "stack" / "docker-compose.yml").read_text())
-        service = compose["services"]["onnx-stt"]
-        self.assertEqual(service["network_mode"], "host")
-        self.assertIn("./data/onnx-asr:/data", service["volumes"])
-        env = service["environment"]
-        self.assertEqual(env["STT_MODEL"], "${ONNX_STT_MODEL:-gigaam-v3-ctc}")
-        self.assertEqual(env["STT_LANGUAGES"], "${ONNX_STT_LANGUAGES:-ru}")
-        self.assertEqual(env["STT_DEVICE"], "cpu")
-        self.assertEqual(env["STT_URI"], "tcp://0.0.0.0:10305")
 
 
 class InputContractTests(unittest.TestCase):

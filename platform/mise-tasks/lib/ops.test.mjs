@@ -56,6 +56,12 @@ const pulsar = realUnits.find((unit) => unit.id === "pulsar");
 // All live home units are Flux-managed now, so the executable rollback kinds
 // are exercised with a synthetic unit: the code path still exists for admin
 // tooling and must not rot.
+const forwardOnlyUnit = {
+  id: "fixture-forward",
+  title: "fixture forward-only",
+  rollbackKind: "forward-only",
+  rollbackNote: "fixture (test only)",
+};
 const deployStateUnit = {
   id: "fixture-service",
   title: "fixture service",
@@ -235,10 +241,11 @@ test("ops: pulsar rollback prints the on-device instruction and never executes",
 test("ops: forward-only units exit non-zero without executing", async () => {
   const spawn = fakeSpawn();
   const stderr = buffer();
-  const code = await runRollback(["ha-stack", "--yes"], {
+  const code = await runRollback(["fixture-forward", "--yes"], {
     spawn,
     stdout: buffer(),
     stderr,
+    units: [forwardOnlyUnit],
   });
   assert.equal(code, 1);
   assert.equal(spawn.calls.length, 0);

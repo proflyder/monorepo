@@ -50,7 +50,6 @@ projects/home/kubernetes/openbao/
   manifests/ingressroute.yaml
   manifests/backup.yaml         CronJob raft snapshot
   manifests/smoke-kubernetes.yaml
-.github/workflows/openbao-smoke.yml   GitHub OIDC smoke (workflow_dispatch)
 ```
 
 Версии — `projects/home/kubernetes/versions.sh`: `OPENBAO_CHART_VERSION`,

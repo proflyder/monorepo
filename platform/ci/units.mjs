@@ -828,25 +828,6 @@ export const config = {
     },
 
     {
-      id: "ha-stack",
-      platform: "python",
-      title: "projects/home-assistant/stack",
-      paths: ["projects/home-assistant/stack/**"],
-      // HA/MA updates are pulled by `ctl.sh update`; the documented recovery
-      // path is a Supervisor/Proxmox backup restore, not an image rollback.
-      rollback: {
-        kind: "forward-only",
-        note:
-          "Update pulls newer HA/MA images; restore from the HA Supervisor " +
-          "backup or Proxmox vzdump instead of rolling images back.",
-        source: "docs/OPERATIONS.md (Backup), projects/home-assistant/stack/ctl.sh",
-      },
-      python: {
-        suites: ["projects/home-assistant/stack"],
-      },
-    },
-
-    {
       id: "ha-deploy",
       platform: "python",
       title: "projects/home-assistant/deploy",
