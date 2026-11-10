@@ -468,4 +468,50 @@ class ControlProfileRowTest {
             main.copy(volume = VolumeControls(level = 10, muted = true)).localizedVolumeText(context, unavailable),
         )
     }
+
+    private fun topIn(root: View, view: View): Int {
+        var y = 0
+        var current: View = view
+        while (current !== root) {
+            y += current.top
+            current = current.parent as View
+        }
+        return y
+    }
+
+    @Test
+    fun settingsButtonGapsStayWithinFourteenDp() {
+        val group = ControlItem.DeviceGroup(
+            deviceId = "dev.tiles",
+            title = "Tiles",
+            primary = listOf(
+                ControlItem.DeviceGroup.Row(switchEntry("switch.one", "One"), busy = false),
+                ControlItem.DeviceGroup.Row(switchEntry("switch.two", "Two"), busy = false),
+            ),
+            settings = listOf(ControlItem.DeviceGroup.Row(setting(PowerState.OFF), busy = false)),
+            expanded = false,
+            statesKnown = true,
+        )
+        val root = bindAny(group)
+        root.measure(
+            View.MeasureSpec.makeMeasureSpec(1000, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
+        )
+        root.layout(0, 0, 1000, root.measuredHeight)
+
+        val button = root.findViewById<MaterialButton>(R.id.control_group_settings)
+        val layout = requireNotNull(button.layout)
+        val buttonTop = topIn(root, button)
+        val textTop = buttonTop + (button.height - layout.height) / 2f + layout.getLineTop(0)
+        val textBottom = buttonTop + (button.height - layout.height) / 2f + layout.getLineBottom(0)
+        val limit = 14 * root.resources.displayMetrics.density
+
+        assertTrue("text bottom to card bottom", root.height - textBottom <= limit)
+
+        val tiles = root.findViewById<LinearLayout>(R.id.control_group_tiles)
+        val tileRow = tiles.getChildAt(0) as LinearLayout
+        val label = tileRow.getChildAt(0).findViewById<TextView>(R.id.control_tile_label)
+        val labelBottom = topIn(root, label) + label.height
+        assertTrue("tile label to settings text", textTop - labelBottom <= limit)
+    }
 }

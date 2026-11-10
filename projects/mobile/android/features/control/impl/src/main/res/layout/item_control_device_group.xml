@@ -12,11 +12,14 @@
     tools:ignore="SelectableText">
 
     <LinearLayout
+        android:id="@+id/control_group_body"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:paddingHorizontal="@dimen/control_card_inset"
-        android:paddingVertical="16dp">
+        android:paddingStart="@dimen/control_card_inset"
+        android:paddingTop="@dimen/control_card_padding_top"
+        android:paddingEnd="@dimen/control_card_inset"
+        android:paddingBottom="@dimen/control_card_padding_bottom_with_settings">
 
         <TextView
             android:id="@+id/control_group_title"

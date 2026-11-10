@@ -39,6 +39,8 @@ internal class SpeedDialOverlay(
     private val content = OverlayControlSpeedDialBinding.inflate(LayoutInflater.from(context))
     private val rows = mutableListOf<Row>()
     private var items: List<SpeedDialItem> = emptyList()
+    private var preDrawListener: android.view.ViewTreeObserver.OnPreDrawListener? = null
+    private var openFrameStarted = false
     private val scrimDuration = context.resources.getInteger(R.integer.control_speed_dial_scrim_ms).toLong()
     private val itemDuration = context.resources.getInteger(R.integer.control_speed_dial_item_ms).toLong()
     private val stagger = context.resources.getInteger(R.integer.control_speed_dial_stagger_ms).toLong()
@@ -85,30 +87,82 @@ internal class SpeedDialOverlay(
     fun open() {
         if (isOpen) return
         isOpen = true
+        openFrameStarted = false
+        // Hide everything before the popup window paints its first frame;
+        // the exact distance to the FAB is known only after layout.
         content.controlDialScrim.alpha = 0f
+        content.controlDialFab.alpha = 0f
         content.controlDialFab.rotation = -90f
+        rows.forEach { hideRow(it) }
         popup.showAtLocation(anchor, Gravity.TOP or Gravity.START, 0, 0)
         onOpenChanged(true)
-        content.root.post { beginOpen() }
+        waitForLayoutThenAnimate()
     }
 
-    private fun beginOpen() {
+    private fun waitForLayoutThenAnimate() {
+        removePreDrawListener()
+        val observer = content.root.viewTreeObserver
+        val listener = object : android.view.ViewTreeObserver.OnPreDrawListener {
+            private var positioned = false
+
+            override fun onPreDraw(): Boolean {
+                if (!positioned) {
+                    positioned = true
+                    prepareFirstFrame()
+                    // Skip this frame: the clone FAB and column just moved.
+                    return false
+                }
+                removePreDrawListener()
+                animateOpen()
+                return true
+            }
+        }
+        preDrawListener = listener
+        observer.addOnPreDrawListener(listener)
+    }
+
+    internal fun prepareFirstFrame() {
         positionOverRootFab()
+        capHeight()
+        rows.forEach(::placeAtStart)
+        content.controlDialFab.alpha = 1f
+    }
+
+    internal fun animateOpen() {
+        openFrameStarted = true
         content.controlDialScrim.animate().alpha(1f).setDuration(scrimDuration).start()
         content.controlDialFab.animate()
             .rotation(0f)
             .setDuration(itemDuration)
             .setInterpolator(AnimationUtils.FAST_OUT_SLOW_IN_INTERPOLATOR)
             .start()
-        content.root.post {
-            capHeight()
-            content.controlDialItems.post { animateIn() }
+        animateIn()
+    }
+
+    private fun hideRow(row: Row) {
+        row.view.animate().cancel()
+        row.view.alpha = 0f
+        row.view.scaleX = ITEM_SCALE
+        row.view.scaleY = ITEM_SCALE
+    }
+
+    internal fun placeAtStart(row: Row) {
+        hideRow(row)
+        row.view.translationY = deltaToFab(row.view)
+    }
+
+    internal fun removePreDrawListener() {
+        preDrawListener?.let { listener ->
+            content.root.viewTreeObserver.removeOnPreDrawListener(listener)
         }
+        preDrawListener = null
     }
 
     fun close() {
         if (!isOpen) return
         isOpen = false
+        openFrameStarted = false
+        removePreDrawListener()
         onOpenChanged(false)
         content.controlDialFab.animate()
             .rotation(-90f)
@@ -122,12 +176,16 @@ internal class SpeedDialOverlay(
 
     /** Dismiss without animation when the fragment view goes away. */
     fun reset() {
+        removePreDrawListener()
         rows.forEach { it.view.animate().cancel() }
         isOpen = false
+        openFrameStarted = false
         popup.dismiss()
     }
 
     private fun dismissed() {
+        removePreDrawListener()
+        openFrameStarted = false
         if (isOpen) {
             isOpen = false
             onOpenChanged(false)
@@ -140,7 +198,7 @@ internal class SpeedDialOverlay(
         content.controlDialFab.rotation = -90f
     }
 
-    private fun positionOverRootFab() {
+    internal fun positionOverRootFab() {
         val fabLocation = IntArray(2).also(fab::getLocationOnScreen)
         val rootLocation = IntArray(2).also(content.root::getLocationOnScreen)
         val left = fabLocation[0] - rootLocation[0]
@@ -164,7 +222,7 @@ internal class SpeedDialOverlay(
         content.controlDialScroll.visibility = View.VISIBLE
     }
 
-    private fun capHeight() {
+    internal fun capHeight() {
         val fabTop = (content.controlDialFab.layoutParams as FrameLayout.LayoutParams).topMargin
         val max = fabTop - gap
         val columnHeight = content.controlDialItems.height
@@ -194,7 +252,12 @@ internal class SpeedDialOverlay(
             rows += Row(item.key, binding)
         }
         bindRows()
-        if (isOpen) rows.forEach(::resetRowState)
+        if (isOpen) {
+            when (openFrameStarted) {
+                true -> rows.forEach(::resetRowState)
+                false -> rows.forEach(::hideRow)
+            }
+        }
     }
 
     private fun resetRowState(row: Row) {
@@ -263,7 +326,7 @@ internal class SpeedDialOverlay(
         return fabCenter - rowCenter
     }
 
-    private inner class Row(val key: String, val binding: ItemControlSpeedDialActionBinding) {
+    internal inner class Row(val key: String, val binding: ItemControlSpeedDialActionBinding) {
         val view: View get() = binding.root
 
         fun bind() {
