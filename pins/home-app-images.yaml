@@ -5,6 +5,10 @@ metadata:
   namespace: flux-system
   annotations:
     proflyder.dev/source: "initial pin from live cluster 2026-11-10"
+    proflyder.dev/source-commit: "dda2cdbca779d60215ebc73f0969b15173822652"
+    proflyder.dev/source-tree: "c9ee2270dc2256938ef8ce22b573de0b36e44bd0"
+    proflyder.dev/verified-at: "2026-11-10T14:11:49Z"
+    proflyder.dev/run: "https://github.com/proflyder/monorepo/actions/runs/42831527234"
 data:
-  BUILD_ID: "d844e96e677e"
+  BUILD_ID: "dda2cdbca779"
   WAKEGRANT_IMAGE: "ghcr.io/proflyder/wakegrant@sha256:7ce7c04965a22c0557efaddbd68baa39069c10747abb57182e1e02842fb9ecf7"
