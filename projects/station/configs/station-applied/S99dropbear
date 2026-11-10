@@ -1,0 +1,29 @@
+#!/bin/sh
+DAEMON=/usr/sbin/dropbear
+KEY=/etc/dropbear/dropbear_ed25519_host_key
+PIDFILE=/var/run/dropbear.pid
+ARGS="-p 22 -r $KEY -P $PIDFILE"
+
+case "$1" in
+  start)
+    echo "Starting dropbear..."
+    if [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
+      echo "dropbear already running (pid $(cat "$PIDFILE"))"
+      exit 0
+    fi
+    [ -x "$DAEMON" ] || { echo "ERROR: $DAEMON not found"; exit 1; }
+    [ -f "$KEY" ]   || { echo "ERROR: $KEY not found";   exit 1; }
+    "$DAEMON" $ARGS
+    ;;
+  stop)
+    echo "Stopping dropbear..."
+    [ -f "$PIDFILE" ] && kill "$(cat "$PIDFILE")" 2>/dev/null
+    rm -f "$PIDFILE"
+    ;;
+  restart)
+    "$0" stop; sleep 1; "$0" start
+    ;;
+  *)
+    echo "Usage: $0 {start|stop|restart}"; exit 1
+    ;;
+esac

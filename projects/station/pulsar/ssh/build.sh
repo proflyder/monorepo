@@ -2,6 +2,12 @@
 # Builds static (musl) dropbear + OpenSSH sftp-server with zig into ssh/out/<arch>/ for
 # aarch64 (Station Midi) and armhf (Station Lite 2).
 # Usage: ssh/build.sh            (host tools: zig >= 0.13, curl, make; ZIG=/path/to/zig to override)
+#
+# LEGACY for the live Midi station. The device runs the rootfs prebuilt
+# /usr/sbin/dropbear 2026.94 started by /etc/init.d/S99dropbear (see
+# projects/station/configs/station-applied/S99dropbear and docs/STATION-SOFTWARE.md).
+# This script stays only for `pulsar-install --ssh`, which installs another
+# dropbear into /data/dropbear; do not run it on a station that uses S99dropbear.
 set -eu
 DROPBEAR_VER=2025.88
 DROPBEAR_SHA256=783f50ea27b17c16da89578fafdb6decfa44bb8f6590e5698a4e4d3672dc53d4

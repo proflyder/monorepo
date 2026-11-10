@@ -69,6 +69,43 @@ class ManifestTests(unittest.TestCase):
         for component in manifest["components"]:
             self.assertIn(component["update"], audit.UPDATE_MODES)
 
+    def test_build_artifacts_are_pinned(self):
+        manifest = audit.load_manifest(audit.DEFAULT_MANIFEST)
+        components = {component["id"]: component for component in manifest["components"]}
+        ble = next(
+            spec
+            for spec in components["ble-gateway"]["files"]
+            if spec["device"] == "/data/quasar/ble-gateway/ble-gateway"
+        )
+        self.assertEqual(len(ble["deployed_sha256"]), 64)
+        self.assertIn("expected", ble)
+        dropbear = next(
+            spec
+            for spec in components["dropbear"]["files"]
+            if spec["device"] == "/usr/sbin/dropbear"
+        )
+        self.assertEqual(len(dropbear["deployed_sha256"]), 64)
+        self.assertNotIn("expected", dropbear)
+        init = next(
+            spec
+            for spec in components["dropbear"]["files"]
+            if spec["device"] == "/etc/init.d/S99dropbear"
+        )
+        self.assertEqual(init["compare"], "sha256")
+        self.assertEqual(
+            init["repo"], "projects/station/configs/station-applied/S99dropbear"
+        )
+
+    def test_rollback_slots_are_allowed(self):
+        manifest = audit.load_manifest(audit.DEFAULT_MANIFEST)
+        self.assertEqual(
+            set(manifest["audit"]["extra_allow"]),
+            {
+                "/data/pulsar/pulsar.prev",
+                "/data/quasar/ble-gateway/ble-gateway.prev",
+            },
+        )
+
     def test_validate_rejects_unknown_compare(self):
         with self.assertRaises(audit.ManifestError):
             audit.validate_manifest(
@@ -91,7 +128,7 @@ class ManifestTests(unittest.TestCase):
                 }
             )
 
-    def test_validate_rejects_duplicate_ids(self):
+    def test_validate_rejects_bad_deployed_sha256(self):
         component = {
             "id": "x",
             "title": "x",
@@ -101,12 +138,147 @@ class ManifestTests(unittest.TestCase):
             "update": "ota",
             "recovery": False,
             "source": {"path": "."},
-            "files": [{"device": "/x", "compare": "presence"}],
+            "files": [
+                {
+                    "device": "/x",
+                    "compare": "version",
+                    "version_command": "/x --version",
+                    "deployed_sha256": "not-a-hash",
+                }
+            ],
         }
         with self.assertRaises(audit.ManifestError):
+            audit.validate_manifest({"version": 1, "audit": {}, "components": [component]})
+
+    def test_validate_rejects_deployed_sha256_outside_version(self):
+        component = {
+            "id": "x",
+            "title": "x",
+            "purpose": "x",
+            "startup": "x",
+            "owner": "x",
+            "update": "ota",
+            "recovery": False,
+            "source": {"path": "."},
+            "files": [
+                {
+                    "device": "/x",
+                    "compare": "sha256",
+                    "repo": "a.txt",
+                    "deployed_sha256": "0" * 64,
+                }
+            ],
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            (root / "a.txt").write_text("alpha", encoding="utf-8")
+            with self.assertRaises(audit.ManifestError):
+                audit.validate_manifest(
+                    {"version": 1, "audit": {}, "components": [component]}, repo_root=root
+                )
+
+    def test_validate_rejects_relative_extra_allow(self):
+        with self.assertRaises(audit.ManifestError):
             audit.validate_manifest(
-                {"version": 1, "audit": {}, "components": [component, component]}
+                {
+                    "version": 1,
+                    "audit": {"extra_allow": ["relative.prev"]},
+                    "components": [
+                        {
+                            "id": "x",
+                            "title": "x",
+                            "purpose": "x",
+                            "startup": "x",
+                            "owner": "x",
+                            "update": "ota",
+                            "recovery": False,
+                            "source": {"path": "."},
+                            "files": [{"device": "/x", "compare": "presence"}],
+                        }
+                    ],
+                }
             )
+
+
+class PinnedArtifactTests(unittest.TestCase):
+    def manifest(self, pinned: str, allow: list[str] | None = None):
+        return {
+            "version": 1,
+            "audit": {
+                "extra_dirs": ["/d"],
+                "extra_patterns": ["*.prev"],
+                "extra_allow": allow or [],
+            },
+            "components": [
+                {
+                    "id": "x",
+                    "title": "x",
+                    "purpose": "x",
+                    "startup": "x",
+                    "owner": "x",
+                    "update": "manual-rootfs",
+                    "recovery": True,
+                    "device_root": "/d",
+                    "source": {"path": "."},
+                    "files": [
+                        {
+                            "device": "/d/bin",
+                            "compare": "version",
+                            "version_command": "/d/bin --version",
+                            "deployed_sha256": pinned,
+                            "expected": {"repo": "VERSION", "prefix": "bin "},
+                        }
+                    ],
+                }
+            ],
+        }
+
+    def test_pinned_hash_is_authoritative_and_version_is_informational(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            (root / "VERSION").write_text("1.0.0\n", encoding="utf-8")
+            pinned = "a" * 64
+            remote = audit.Remote(
+                files={"/d/bin": ("file", pinned)},
+                versions={0: "bin 0.0.0"},
+                listings={"/d": ["bin", "bin.prev"]},
+            )
+            rows = audit.evaluate(self.manifest(pinned), remote, repo_root=root)
+            by_path = {row.path: row for row in rows}
+            self.assertEqual(by_path["/d/bin"].status, "OK")
+            self.assertIn("bin 0.0.0", by_path["/d/bin"].detail)
+            # A rollback slot is still EXTRA unless explicitly allowed.
+            self.assertEqual(by_path["/d/bin.prev"].status, "EXTRA")
+
+    def test_pinned_hash_drift(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            (root / "VERSION").write_text("1.0.0\n", encoding="utf-8")
+            remote = audit.Remote(
+                files={"/d/bin": ("file", "b" * 64)},
+                versions={0: "bin 1.0.0"},
+                listings={"/d": []},
+            )
+            rows = audit.evaluate(self.manifest("a" * 64), remote, repo_root=root)
+            row = next(row for row in rows if row.path == "/d/bin")
+            self.assertEqual(row.status, "DRIFT")
+            self.assertIn("deployed_sha256", row.detail)
+
+    def test_allowed_rollback_slot_is_not_extra(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            (root / "VERSION").write_text("1.0.0\n", encoding="utf-8")
+            pinned = "a" * 64
+            remote = audit.Remote(
+                files={"/d/bin": ("file", pinned)},
+                versions={0: "bin 1.0.0"},
+                listings={"/d": ["bin.prev", "old.prev"]},
+            )
+            rows = audit.evaluate(
+                self.manifest(pinned, allow=["/d/bin.prev"]), remote, repo_root=root
+            )
+            extras = [row.path for row in rows if row.status == "EXTRA"]
+            self.assertEqual(extras, ["/d/old.prev"])
 
 
 class CompareTests(unittest.TestCase):

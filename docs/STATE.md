@@ -293,6 +293,16 @@
 - Состав ПО (что обновляет OTA, что поставлено вручную, владельцы и
   recovery-критичность) — `projects/station/manifest.yaml`, описание —
   `docs/STATION-SOFTWARE.md`; сверка — `mise run station:audit` (read-only).
+  Сверка 2026-11-10: `0 DRIFT, 0 EXTRA`. Build-артефакты, которые не
+  пересобраны или пришли из rootfs, закреплены `deployed_sha256` (BLE gateway,
+  dropbear); штатные `pulsar.prev`/`ble-gateway.prev` разрешены явно.
+- BLE gateway (`/data/quasar/ble-gateway`, armhf, сборка 2026-11-05, sha256
+  `cdadac02…a9377f`) на устройстве отвечает `ble-gateway 0.0.0`: сборка старше
+  исправления `CARGO_PKG_VERSION` в Bazel. В репозитории версия уже
+  передаётся (`version = PACKAGE_VERSION`, 0.2.0) и проверяется unit-тестом;
+  после следующей переустановки `--version` станет `ble-gateway 0.2.0`.
+  Сейчас gateway не обновляется; порядок — `docs/STATION-SOFTWARE.md`
+  «Обновление BLE gateway» (проверка BLE с телефона, откат `ble-gateway.prev`).
 - Pulsar Rust `v0.5.1015` — armhf-сборка из `projects/station/pulsar/`
   (Bazel); артефакт продвинут из PR-сборки без пересборки (build-once,
   digest из `tree-<hash>`). «Громкость объявлений»
@@ -349,7 +359,11 @@
   `button.iandeks_stantsiia_midi_wake_ne_uslyshala`,
   `switch.iandeks_stantsiia_midi_wake_zapis_sobytii`,
   `switch.iandeks_stantsiia_midi_wake_testovyi_rezhim_bez_otveta`.
-- SSH: dropbear `v2026.94`; ключ Mac `~/.ssh/home-lab/station_ed25519` →
+- SSH: dropbear `v2026.94` (`/usr/sbin/dropbear`, sha256 `374be9f8…4a654db2`,
+  prebuilt из rootfs) под `/etc/init.d/S99dropbear`; точная копия init-скрипта —
+  `projects/station/configs/station-applied/S99dropbear`. `/data/dropbear` нет;
+  репозиторный `projects/station/pulsar/ssh/` — legacy только для
+  `pulsar-install --ssh`. Ключ Mac `~/.ssh/home-lab/station_ed25519` →
   `/root/.ssh/authorized_keys`. Вход по паролю оставлен как fallback
   осознанно (решение); ADB/SSH доступны только из LAN.
 - Установленная модель wake word — кандидат v27

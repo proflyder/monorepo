@@ -12,6 +12,11 @@
 #             the real LAN) and hashes everything else.
 #   version - the file is a build artifact; compare `version_command` output
 #             with the value derived from `expected` in the repository.
+#             Adding `deployed_sha256` pins the artifact that is actually
+#             installed: the audit then compares the device hash with that
+#             value (OK/DRIFT) and prints the version only as information.
+#             Use it when the installed build predates a version fix or comes
+#             from outside the repository (e.g. a prebuilt rootfs binary).
 #   presence - only existence is checked (firmware binaries and scripts whose
 #             content is owned by the firmware or written by an installer).
 #
@@ -51,6 +56,11 @@ audit:
     - "*.new"
     - "*.old"
     - "*~"
+  # Standard rollback slots kept on purpose (pulsar and gateway updaters leave
+  # them). Exact paths only; anything else matching extra_patterns is EXTRA.
+  extra_allow:
+    - /data/pulsar/pulsar.prev
+    - /data/quasar/ble-gateway/ble-gateway.prev
 
 components:
   - id: pulsar
@@ -116,12 +126,19 @@ components:
     files:
       - device: /data/quasar/ble-gateway/ble-gateway
         compare: version
+        # The installed build predates the CARGO_PKG_VERSION fix in Bazel and
+        # still prints `0.0.0`; pin the artifact that is actually deployed.
+        # `version` stays informational until the gateway is rebuilt and
+        # redeployed (see docs/STATION-SOFTWARE.md).
+        deployed_sha256: cdadac02b864b26fc6979965ebf5d2be3bc68c34e775aab1d6deff26e8a9377f
         version_command: /data/quasar/ble-gateway/ble-gateway --version
         expected:
           repo: projects/station/ble-gateway/crates/ble-gateway/Cargo.toml
           regex: '^version = "([^"]+)"'
           prefix: "ble-gateway "
-        note: build artifact, compare version string
+        note: >
+          build artifact (armhf, 2026-11-05); sha256 is authoritative, version
+          is informational until the next rebuild
       - device: /data/quasar/ble-gateway/start.sh
         repo: projects/station/ble-gateway/station/start.sh
         compare: sha256
@@ -138,31 +155,35 @@ components:
       SSH-доступ к станции для обслуживания (ключ Mac в authorized_keys,
       пароль — осознанный аварийный fallback). ADB/SSH только в LAN.
     source:
-      path: projects/station/pulsar/ssh
-      # Известное расхождение: репозиторный build.sh/start.sh ставят dropbear в
-      # /data/dropbear, а на устройстве стоит вручную собранный /usr/sbin/dropbear
-      # с /etc/init.d/S99dropbear. Аудит показывает это как DRIFT по версии.
-      note: repo expects /data/dropbear; the device uses /usr/sbin + S99dropbear
+      path: projects/station/configs/station-applied
+      note: >
+        S99dropbear — точная копия init-скрипта с устройства. Сам бинарник
+        origin: prebuilt dropbear 2026.94, rootfs (/usr/sbin/dropbear): его
+        собрала прошивка, в репозитории исходников нет. Репозиторный
+        projects/station/pulsar/ssh/ — legacy-путь установщика Pulsar
+        (2025.88 → /data/dropbear), на этой станции не используется.
     device_root: /
     startup: /etc/init.d/S99dropbear start (firmware rcS)
     update: manual-rootfs
     owner: >
       /etc/dropbear/* host keys и /root/.ssh/authorized_keys — состояние;
-      /etc/init.d/S99dropbear — рукописный init-скрипт.
+      /etc/init.d/S99dropbear — init-скрипт (копия в
+      projects/station/configs/station-applied/).
     recovery: true
     criticality: critical
     files:
       - device: /usr/sbin/dropbear
         compare: version
+        # Prebuilt rootfs binary; the hash is the source of truth.
+        # origin: prebuilt dropbear 2026.94, rootfs.
+        deployed_sha256: 374be9f85dabfab4d1f649d553f45e6238973e272b447fd2d81c2ab24a654db2
         version_command: /usr/sbin/dropbear -V
-        expected:
-          repo: projects/station/pulsar/ssh/build.sh
-          regex: '^DROPBEAR_VER=([0-9.]+)$'
-          prefix: "Dropbear v"
-        note: build artifact, compare version string
+        note: >
+          origin: prebuilt dropbear 2026.94, rootfs; sha256 is authoritative,
+          version is informational
       - device: /etc/init.d/S99dropbear
-        compare: presence
-        note: not versioned in the repository; content lives on the device only
+        repo: projects/station/configs/station-applied/S99dropbear
+        compare: sha256
 
   - id: rootkeeper
     title: Rootkeeper (ADB/BLE supervisor)

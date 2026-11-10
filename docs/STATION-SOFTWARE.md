@@ -66,14 +66,20 @@ mise run station:audit -- --fail-on any      # ненулевой код при 
 
 | Статус | Значение |
 |---|---|
-| `OK` | содержимое/версия совпадает с репозиторием |
-| `DRIFT` | файл есть, но sha256 или версия отличается |
+| `OK` | содержимое/версия/зафиксированный sha256 совпадает |
+| `DRIFT` | файл есть, но sha256, версия или `deployed_sha256` отличается |
 | `MISSING` | ожидаемого пути на устройстве нет |
-| `EXTRA` | рядом с управляемыми файлами лежит `.bak`/`.prev`/`.new`/`.old` |
+| `EXTRA` | рядом с управляемыми файлами лежит `.bak`/`.prev`/`.new`/`.old`, кроме путей из `audit.extra_allow` |
 
-Для собираемых бинарников sha256 не сравнивается: манифест помечает их
-`compare: version` и сверяет строку версии с `VERSION`/`Cargo.toml`/пином
-сборки. Для конфигов с адресом домашней сети включён `normalize: ipv4`:
+Для собираемых бинарников есть два режима. `compare: version` сверяет
+строку версии с `VERSION`/`Cargo.toml`/пином сборки. Если у бинарника задан
+`deployed_sha256`, сверяется sha256 установленного файла (`OK`/`DRIFT`), а
+версия печатается только информативно: так фиксируются сборки, которые
+старше исправления версии, и бинарники из прошивки/rootfs, для которых в
+репозитории нет исходников. `audit.extra_allow` — точные пути штатных слотов
+отката (`pulsar.prev`, `ble-gateway.prev`), которые не считаются мусором.
+
+Для конфигов с адресом домашней сети включён `normalize: ipv4`:
 репозиторные копии используют `192.0.2.x`, на устройстве — реальный LAN-адрес,
 и это не считается дрейфом. Любое другое отличие содержимого — дрейф.
 
@@ -82,21 +88,53 @@ mise run station:audit -- --fail-on any      # ненулевой код при 
 в `mise run check`: ему нужна живая колонка, поэтому он остаётся ручным
 чтением. Тесты парсинга/отчёта — герметичные, без сети.
 
-## Известные расхождения (зафиксированы аудитом)
+## Закрытые расхождения (источник правды — устройство, 2026-11-10)
 
-Это факты текущего устройства, а не ошибка манифеста:
+Расхождения ниже были зафиксированы аудитом и теперь закрыты в репозитории;
+устройство при этом не менялось.
 
-- **BLE gateway**: бинарник на устройстве отвечает `0.0.0`, в репозитории
-  `Cargo.toml` уже `0.2.0`. Нужна пересборка/переустановка бинарника либо
-  осознанное решение не сверять версию.
-- **dropbear**: в репозитории `projects/station/pulsar/ssh` собирается
-  dropbear `2025.88` и ставится в `/data/dropbear` с запуском из
-  `S99zpulsar`; на устройстве вручную стоит `v2026.94` в
-  `/usr/sbin/dropbear` с отдельным `S99dropbear`. Два пути сосуществуют;
-  переустановка Pulsar с `--ssh` создаст второй экземпляр в `/data`.
-- **Лишние файлы**: `pulsar.prev*`, `ble-gateway.prev*`,
-  `egress-guard.sh.bak-*`, `onboot.sh.new` — кандидаты на уборку после
-  подтверждения, что текущие версии рабочие.
+- **BLE gateway — версия.** Любая Bazel-сборка печатала `ble-gateway 0.0.0`,
+  потому что `rules_rust` не передавал `CARGO_PKG_VERSION`. Теперь в
+  `crates/ble-gateway/BUILD.bazel` задан `version = PACKAGE_VERSION` (0.2.0 из
+  `Cargo.toml`), unit-тест сверяет `--version` с манифестом Cargo. Установленный
+  бинарник (сборка 2026-11-05, sha256 `cdadac02…a9377f`) пока отвечает `0.0.0`;
+  в манифесте он закреплён через `deployed_sha256`, версия информативна.
+  Gateway на устройстве сейчас не переустанавливается.
+- **dropbear.** На устройстве стоит предустановленный прошивкой
+  `/usr/sbin/dropbear` `v2026.94` (sha256 `374be9f8…4a654db2`), запуск —
+  `/etc/init.d/S99dropbear` (`DAEMON=/usr/sbin/dropbear`,
+  `KEY=/etc/dropbear/dropbear_ed25519_host_key`, `-p 22 -r $KEY -P
+  /var/run/dropbear.pid`); `/data/dropbear` отсутствует. Точная копия
+  init-скрипта лежит в `projects/station/configs/station-applied/S99dropbear` и
+  сверяется по sha256, бинарник закреплён `deployed_sha256` с пометкой
+  `origin: prebuilt dropbear 2026.94, rootfs`. Репозиторный
+  `projects/station/pulsar/ssh/` (build.sh 2025.88 → `/data/dropbear`,
+  запуск из `S99zpulsar`) на этой станции не используется и помечен legacy;
+  он остаётся только для `pulsar-install --ssh`.
+- **Лишние файлы.** Нештатные `.bak`/`.new`/`.old` удалены с устройства.
+  Штатные слоты отката `pulsar.prev` и `ble-gateway.prev` оставлены осознанно
+  и внесены в `audit.extra_allow`.
+
+## Обновление BLE gateway
+
+1. Собрать armhf-бинарник с версией и ревизией:
+   ```bash
+   bazel build -c opt --platforms=//platform/bazel/zig:armhf_linux \
+     --define=ble_gateway_git_rev=$(git rev-parse --short HEAD) \
+     //projects/station/ble-gateway:ble-gateway
+   bazel-bin/projects/station/ble-gateway/crates/ble-gateway/ble-gateway --version
+   ```
+   Ожидается `ble-gateway 0.2.0`; без `version` в BUILD снова будет `0.0.0`.
+2. `bazel test //projects/station/ble-gateway/...` (unit, clippy, rustfmt).
+3. Скопировать бинарник в `/data/quasar/ble-gateway/ble-gateway`, сохранив
+   текущий как `ble-gateway.prev`; `start.sh`/`stop.sh`/`status.sh` не меняются.
+4. Проверить с телефона: BLE-устройство видно, GATT-сервис отвечает,
+   `--dry-run --auto=false --no-button --force` возвращает `DRY_RUN_OK`;
+   после этого — обычный provisioning в тестовой сети.
+5. Обновить `deployed_sha256` в `manifest.yaml` и прогнать
+   `mise run station:audit` до `0 DRIFT, 0 EXTRA`.
+6. Откат: остановить gateway, вернуть `ble-gateway.prev` на место
+   `ble-gateway`, запустить `start.sh`.
 
 ## План этапов 2–5
 

@@ -2,6 +2,8 @@
 
 use std::path::PathBuf;
 
+#[cfg(test)]
+use clap::CommandFactory;
 use clap::Parser;
 use clap::builder::BoolishValueParser;
 
@@ -43,6 +45,19 @@ mod tests {
 
     fn parse(arguments: &[&str]) -> Config {
         Config::try_parse_from(arguments).expect("valid arguments")
+    }
+
+    #[test]
+    fn version_matches_the_cargo_manifest() {
+        let manifest = include_str!("../Cargo.toml");
+        let version = manifest
+            .lines()
+            .find_map(|line| line.strip_prefix("version = \"")?.strip_suffix('"'))
+            .expect("Cargo.toml has a package version");
+        // Bazel injects this via the rules_rust `version` attribute; a plain
+        // cargo build takes it from the same manifest.
+        assert_eq!(env!("CARGO_PKG_VERSION"), version);
+        assert_eq!(Config::command().get_version(), Some(version));
     }
 
     #[test]

@@ -2,6 +2,10 @@
 # Starts dropbear SSH on port 22 (root, blank password allowed: -B).
 # Installed to /data/dropbear; started at boot by /etc/init.d/S99zpulsar (written by pulsar-install).
 # Independent of adbd: never touches adb.
+#
+# LEGACY for the live Midi station: it uses the rootfs /usr/sbin/dropbear with
+# /etc/init.d/S99dropbear (projects/station/configs/station-applied/S99dropbear).
+# Keep this script only for `pulsar-install --ssh` on a station without S99dropbear.
 D=/data/dropbear
 cd "$D" || exit 1
 for t in dropbear dropbearkey scp dbclient; do
