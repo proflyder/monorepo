@@ -203,6 +203,34 @@ class ControlCatalogClientTest {
     }
 
     @Test
+    fun parsesVolumeEntriesAndBuildsVolumePayloads() {
+        val catalog = ControlJson.parseCatalog(
+            kotlinx.serialization.json.Json.parseToJsonElement(
+                TestFixtures.read("catalog_volume.json"),
+            ),
+        )
+        val (station, announce) = catalog.entries
+        assertEquals(ControlKind.VOLUME, station.kind)
+        assertTrue(station.isVolume)
+        assertEquals(45, station.volume?.level)
+        assertEquals(false, station.volume?.muted)
+        assertEquals(setOf(ControlAction.SET, ControlAction.MUTE, ControlAction.UNMUTE), station.actions)
+        assertEquals("station-1", station.deviceId)
+        assertEquals("catalog.volume.title", station.titleKey)
+        assertEquals(ControlKind.VOLUME, announce.kind)
+        assertEquals(setOf(ControlAction.SET), announce.actions)
+        assertEquals(60, announce.volume?.level)
+        assertEquals(
+            TestFixtures.read("control_volume_payload.json"),
+            ControlJson.volumePayload("volume.station", 45),
+        )
+        assertEquals(
+            TestFixtures.read("control_mute_payload.json"),
+            ControlJson.mutePayload("volume.station", muted = true),
+        )
+    }
+
+    @Test
     fun buildsSpeakPayloadWithTheTextOnlyInTheTask() {
         val payload = ControlJson.speakPayload("action.station_speak", "Добрый вечер")
         assertEquals(

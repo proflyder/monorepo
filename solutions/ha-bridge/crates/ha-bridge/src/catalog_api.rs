@@ -20,7 +20,7 @@ use axum::routing::get;
 use home_secret::Token;
 use serde::Serialize;
 
-use crate::catalog::{Catalog, Entry, Light};
+use crate::catalog::{Catalog, Entry, Light, Volume};
 use crate::discovery::CatalogSource;
 
 const CACHE_CONTROL: &str = "no-store";
@@ -40,7 +40,10 @@ const CACHE_CONTROL: &str = "no-store";
 /// travelling as `{"entry", "action"}` tasks, so this shape stays additive.
 /// A Home Assistant `button` entity is a `kind: "button"` entry with the
 /// one-shot action `press`; it may carry no `device_id`, and clients group it
-/// with its device by the shared entity-id prefix.
+/// with its device by the shared entity-id prefix. A station volume control is
+/// a `kind: "volume"` entry with the actions `set`, `mute` and `unmute`; its
+/// fixed entity and the live `volume` object keep the phone away from arbitrary
+/// media players.
 #[derive(Debug, Serialize)]
 struct EntryView {
     id: String,
@@ -73,6 +76,17 @@ struct EntryView {
     available: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     light: Option<LightView>,
+    /// Live station volume; omitted for every other entry.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    volume: Option<VolumeView>,
+}
+
+/// A station volume entry: the level in percent and whether the device is
+/// muted. Additive: an older client ignores it and keeps the plain row.
+#[derive(Debug, Serialize)]
+struct VolumeView {
+    level: i32,
+    muted: bool,
 }
 
 /// What a light can do and its current values.
@@ -201,6 +215,16 @@ impl EntryView {
             state: entry.state.clone(),
             available: entry.available,
             light: entry.light.as_ref().map(LightView::from_light),
+            volume: entry.volume.as_ref().map(VolumeView::from_volume),
+        }
+    }
+}
+
+impl VolumeView {
+    fn from_volume(volume: &Volume) -> Self {
+        Self {
+            level: volume.level,
+            muted: volume.muted,
         }
     }
 }
@@ -467,5 +491,36 @@ mod tests {
         assert!(body.contains("\"role\":\"primary\""), "{body}");
         assert_eq!(body.matches("\"device_id\"").count(), 1, "{body}");
         assert_eq!(body.matches("\"role\"").count(), 1, "{body}");
+    }
+
+    #[test]
+    fn volume_entries_carry_a_level_and_mute_flag() {
+        let entries = build(
+            &[Raw {
+                entity: "media_player.iandeks_stantsiia_midi_media_player".to_owned(),
+                state: "playing".to_owned(),
+                volume_level: Some(0.45),
+                volume_muted: true,
+                device_id: "station-1".to_owned(),
+                device: "Яндекс Станция Миди".to_owned(),
+                ..Raw::default()
+            }],
+            &Rules {
+                scenario_label: "scenario".to_owned(),
+                profile_label: "voice_profile".to_owned(),
+                exclude: Vec::new(),
+            },
+        );
+        let body = catalog_body(&Catalog::new(entries), true);
+        assert!(body.contains("\"kind\":\"volume\""), "{body}");
+        assert!(body.contains("\"state\":\"45\""), "{body}");
+        assert!(
+            body.contains("\"volume\":{\"level\":45,\"muted\":true}"),
+            "{body}"
+        );
+        assert!(
+            body.contains("\"actions\":[\"set\",\"mute\",\"unmute\"]"),
+            "{body}"
+        );
     }
 }

@@ -10,6 +10,7 @@ import dev.proflyder.home.core.model.LightAdjust
 import dev.proflyder.home.core.model.LightControls
 import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.model.PowerState
+import dev.proflyder.home.core.model.VolumeControls
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -59,6 +60,21 @@ object ControlJson {
             adjust.saturation?.let { put("saturation", it) }
         }.toString()
 
+    /** Payload of a station volume level: the server validates range and step. */
+    fun volumePayload(entryId: String, level: Int): String =
+        buildJsonObject {
+            put("entry", entryId)
+            put("action", ControlAction.SET.wire)
+            put("level", level)
+        }.toString()
+
+    /** Payload of a mute toggle: `mute` silences, `unmute` restores. */
+    fun mutePayload(entryId: String, muted: Boolean): String =
+        buildJsonObject {
+            put("entry", entryId)
+            put("action", if (muted) ControlAction.MUTE.wire else ControlAction.UNMUTE.wire)
+        }.toString()
+
     fun parseCatalog(element: JsonElement): ControlCatalog =
         WireJson.decodeFromJsonElement(ControlCatalogDto.serializer(), element).toDomain()
 }
@@ -83,11 +99,17 @@ internal fun ControlEntryDto.toDomain(): ControlEntry {
         power = state.toPowerState(),
         available = available,
         light = light?.toDomain(),
+        volume = volume?.toDomain(),
         deviceId = deviceIdSnake.ifEmpty { deviceId },
         device = device,
         role = if (role == "setting") ControlRole.SETTING else ControlRole.PRIMARY,
     )
 }
+
+internal fun VolumeControlsDto.toDomain(): VolumeControls = VolumeControls(
+    level = level,
+    muted = muted,
+)
 
 internal fun LightControlsDto.toDomain(): LightControls = LightControls(
     brightness = brightness,
@@ -110,6 +132,7 @@ private fun String.toControlKind(): ControlKind = when (this) {
     "button" -> ControlKind.BUTTON
     "profile" -> ControlKind.PROFILE
     "action" -> ControlKind.ACTION
+    "volume" -> ControlKind.VOLUME
     // An unknown kind stays OTHER, so an older app never drives a command it
     // does not understand.
     else -> ControlKind.OTHER

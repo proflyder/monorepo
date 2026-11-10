@@ -147,7 +147,7 @@ object ControlItems {
      * The chip counts describe primary controls only: a device's settings are
      * part of it and never add a chip or a count of their own.
      */
-    private fun ControlEntry.isCounted(): Boolean = isDevice && role != ControlRole.SETTING
+    private fun ControlEntry.isCounted(): Boolean = (isDevice || isVolume) && role != ControlRole.SETTING
 
     /**
      * The chips: All, then the device categories that exist, then each room
@@ -235,7 +235,7 @@ object ControlItems {
             )
         }
 
-        val devices = content.filter { it.isDevice || it.isButton }
+        val devices = content.filter { it.isDevice || it.isButton || it.isVolume }
         val (working, deadEntries) = devices.partition { it.available }
         // Dead rows keep the old behaviour: they follow the applied filter too,
         // and a lone setting never shows up as its own unavailable device.

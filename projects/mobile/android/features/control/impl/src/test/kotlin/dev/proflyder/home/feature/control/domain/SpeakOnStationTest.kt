@@ -30,6 +30,10 @@ class SpeakOnStationTest {
             speaks += entryId to text
             return result
         }
+
+        override suspend fun setVolume(entryId: String, level: Int): Outcome<Unit> = result
+
+        override suspend fun setVolumeMuted(entryId: String, muted: Boolean): Outcome<Unit> = result
     }
 
     private val speak = ControlEntry(

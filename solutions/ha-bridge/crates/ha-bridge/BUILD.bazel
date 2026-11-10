@@ -97,6 +97,7 @@ rust_test(
         "//solutions/ha-bridge:catalog_vectors",
         "//solutions/ha-bridge:event_vectors",
         "//solutions/ha-bridge:ledger_vectors",
+        "//solutions/ha-bridge:volume_vectors",
     ],
     edition = "2024",
     lint_config = ":workspace_lints",

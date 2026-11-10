@@ -5,6 +5,7 @@ import dev.proflyder.home.core.model.ControlEntry
 import dev.proflyder.home.core.model.ControlKind
 import dev.proflyder.home.core.model.ControlRole
 import dev.proflyder.home.core.model.PowerState
+import dev.proflyder.home.core.model.VolumeControls
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -530,4 +531,38 @@ class ControlItemsTest {
         leading = leading,
         collapsedRooms = collapsedRooms,
     )
+
+    @Test
+    fun stationVolumeRowsJoinTheirDeviceCard() {
+        val stationVolume = ControlEntry(
+            id = "volume.station",
+            kind = ControlKind.VOLUME,
+            title = "Volume",
+            room = "Bedroom",
+            icon = "volume-high",
+            actions = setOf(ControlAction.SET, ControlAction.MUTE, ControlAction.UNMUTE),
+            power = null,
+            available = true,
+            volume = VolumeControls(level = 45, muted = false),
+            deviceId = "station-1",
+            device = "Station",
+        )
+        val stationMic = entry(
+            "switch.station_mic",
+            ControlKind.SWITCH,
+            room = "Bedroom",
+            power = PowerState.OFF,
+            deviceId = "station-1",
+            device = "Station",
+        )
+        val group = build(listOf(stationMic, stationVolume))
+            .filterIsInstance<ControlItem.DeviceGroup>()
+            .single()
+        assertEquals("Station", group.title)
+        assertEquals(
+            listOf("switch.station_mic", "volume.station"),
+            group.primary.map { it.entry.id },
+        )
+        assertEquals(2, ControlItems.options(listOf(stationMic, stationVolume)).first().count)
+    }
 }

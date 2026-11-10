@@ -99,6 +99,9 @@
     <string name="server_catalog_action_speak_title">Сказать на колонке</string>
     <string name="server_catalog_status_locked">заблокирован</string>
     <string name="server_catalog_status_unlocked">разблокирован</string>
+    <string name="server_catalog_volume_title">Громкость</string>
+    <string name="server_catalog_volume_announce_title">Громкость объявлений</string>
+    <string name="server_catalog_volume_muted">Звук выкл.</string>
     <string name="ui_empty_alarms">Пока нет будильников. Будильники работают на домашнем сервере.</string>
     <string name="ui_empty_reminders">Пока нет напоминаний. Напоминания отправляет домашний сервер.</string>
     <string name="ui_empty_timers">Нет активных таймеров. Таймеры отсчитываются на домашнем сервере.</string>

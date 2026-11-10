@@ -24,6 +24,7 @@ internal object ControlIcons {
         listOf("play", "movie", "television", "tv", "theater", "scene") to R.drawable.control_ic_play,
         // Device-level one-shot actions ("say on the station").
         listOf("message", "speak", "voice", "text", "comment") to R.drawable.control_ic_message,
+        listOf("volume", "speaker", "bullhorn", "megaphone") to R.drawable.control_ic_volume_up,
     )
 
     @DrawableRes

@@ -1,0 +1,188 @@
+{
+  "cases": [
+    {
+      "name": "station",
+      "raws": [
+        {
+          "entity": "media_player.iandeks_stantsiia_midi_media_player",
+          "state": "playing",
+          "room": "Спальня",
+          "deviceId": "station-1",
+          "device": "Яндекс Станция Миди",
+          "volumeLevel": 0.45,
+          "volumeMuted": false
+        },
+        {
+          "entity": "number.spalnia_iandeks_stantsiia_midi_gromkost_obiavlenii",
+          "state": "60",
+          "room": "Спальня",
+          "deviceId": "station-1",
+          "device": "Яндекс Станция Миди"
+        }
+      ],
+      "entries": [
+        {
+          "id": "volume.station",
+          "titleKey": "catalog.volume.title",
+          "title": "Volume",
+          "state": "45",
+          "available": true,
+          "level": 45,
+          "muted": false,
+          "room": "Спальня",
+          "device": "Яндекс Станция Миди",
+          "deviceId": "station-1",
+          "actions": ["set", "mute", "unmute"]
+        },
+        {
+          "id": "volume.station_announce",
+          "titleKey": "catalog.volume.announce_title",
+          "title": "Announcement volume",
+          "state": "60",
+          "available": true,
+          "level": 60,
+          "muted": false,
+          "room": "Спальня",
+          "device": "Яндекс Станция Миди",
+          "deviceId": "station-1",
+          "actions": ["set"]
+        }
+      ],
+      "calls": [
+        {
+          "entry": "volume.station",
+          "action": "set",
+          "level": 45,
+          "expected": {
+            "domain": "media_player",
+            "service": "volume_set",
+            "entity": "media_player.iandeks_stantsiia_midi_media_player",
+            "data": { "volume_level": 0.45 }
+          }
+        },
+        {
+          "entry": "volume.station",
+          "action": "mute",
+          "expected": {
+            "domain": "media_player",
+            "service": "volume_mute",
+            "entity": "media_player.iandeks_stantsiia_midi_media_player",
+            "data": { "is_volume_muted": true }
+          }
+        },
+        {
+          "entry": "volume.station",
+          "action": "unmute",
+          "expected": {
+            "domain": "media_player",
+            "service": "volume_mute",
+            "entity": "media_player.iandeks_stantsiia_midi_media_player",
+            "data": { "is_volume_muted": false }
+          }
+        },
+        {
+          "entry": "volume.station_announce",
+          "action": "set",
+          "level": 60,
+          "expected": {
+            "domain": "number",
+            "service": "set_value",
+            "entity": "number.spalnia_iandeks_stantsiia_midi_gromkost_obiavlenii",
+            "data": { "value": 60 }
+          }
+        },
+        {
+          "entry": "volume.station_announce",
+          "action": "mute",
+          "error": "not supported"
+        },
+        {
+          "entry": "volume.station",
+          "action": "set",
+          "level": 42,
+          "error": "volume level 42 must be a multiple of 5"
+        },
+        {
+          "entry": "volume.station",
+          "action": "set",
+          "error": "volume needs a level"
+        },
+        {
+          "entry": "volume.station",
+          "action": "set",
+          "level": 105,
+          "error": "volume level 105 out of range 0-100"
+        },
+        {
+          "entry": "volume.station",
+          "action": "mute",
+          "level": 45,
+          "error": "mute accepts no parameters"
+        }
+      ]
+    },
+    {
+      "name": "muted",
+      "raws": [
+        {
+          "entity": "media_player.iandeks_stantsiia_midi_media_player",
+          "state": "playing",
+          "room": "Спальня",
+          "deviceId": "station-1",
+          "device": "Яндекс Станция Миди",
+          "volumeLevel": 0.5,
+          "volumeMuted": true
+        }
+      ],
+      "entries": [
+        {
+          "id": "volume.station",
+          "titleKey": "catalog.volume.title",
+          "title": "Volume",
+          "state": "50",
+          "available": true,
+          "level": 50,
+          "muted": true,
+          "room": "Спальня",
+          "device": "Яндекс Станция Миди",
+          "deviceId": "station-1",
+          "actions": ["set", "mute", "unmute"]
+        }
+      ]
+    },
+    {
+      "name": "unavailable",
+      "raws": [
+        {
+          "entity": "media_player.iandeks_stantsiia_midi_media_player",
+          "state": "unavailable",
+          "room": "Спальня",
+          "deviceId": "station-1",
+          "device": "Яндекс Станция Миди",
+          "volumeLevel": 0.3,
+          "volumeMuted": false
+        }
+      ],
+      "entries": [
+        {
+          "id": "volume.station",
+          "titleKey": "catalog.volume.title",
+          "title": "Volume",
+          "state": "30",
+          "available": false,
+          "level": 30,
+          "muted": false,
+          "room": "Спальня",
+          "device": "Яндекс Станция Миди",
+          "deviceId": "station-1",
+          "actions": ["set", "mute", "unmute"]
+        }
+      ]
+    },
+    {
+      "name": "missing",
+      "raws": [],
+      "entries": []
+    }
+  ]
+}

@@ -40,6 +40,14 @@
     <string name="control_light_percent">%1$d%%</string>
     <string name="control_light_warm">Warm</string>
     <string name="control_light_cool">Cool</string>
+    <string name="control_volume_title">Volume</string>
+    <string name="control_volume_main">Volume</string>
+    <string name="control_volume_announce">Announcement volume</string>
+    <string name="control_volume_level">Volume %1$d%%</string>
+    <string name="control_volume_announce_level">Announcements %1$d%%</string>
+    <string name="control_volume_muted">Sound off</string>
+    <string name="control_volume_mute">Mute</string>
+    <string name="control_volume_unmute">Unmute</string>
     <string name="control_hub_today">today</string>
     <string name="control_hub_tomorrow">tomorrow</string>
     <string name="control_hub_alarm">Alarm</string>

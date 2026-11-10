@@ -1,0 +1,3 @@
+{"statesOk":true,"entries":[
+ {"id":"volume.station","kind":"volume","title":"Volume","titleKey":"catalog.volume.title","device_id":"station-1","device":"Колонка","room":"Спальня","actions":["set","mute","unmute"],"state":"45","available":true,"volume":{"level":45,"muted":false}},
+ {"id":"volume.station_announce","kind":"volume","title":"Announcement volume","titleKey":"catalog.volume.announce_title","device_id":"station-1","device":"Колонка","room":"Спальня","actions":["set"],"state":"60","available":true,"volume":{"level":60,"muted":false}}]}

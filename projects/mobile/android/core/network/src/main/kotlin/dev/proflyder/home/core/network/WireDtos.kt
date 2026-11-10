@@ -550,10 +550,17 @@ data class ControlEntryDto(
     val state: String? = null,
     val available: Boolean = false,
     val light: LightControlsDto? = null,
+    val volume: VolumeControlsDto? = null,
     @SerialName("device_id") val deviceIdSnake: String = "",
     val deviceId: String = "",
     val device: String = "",
     val role: String = "",
+)
+
+@Serializable
+data class VolumeControlsDto(
+    val level: Int = 0,
+    val muted: Boolean = false,
 )
 
 @Serializable

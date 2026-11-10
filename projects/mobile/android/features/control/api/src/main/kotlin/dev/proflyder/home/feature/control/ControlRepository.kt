@@ -28,4 +28,10 @@ interface ControlRepository {
      * only ever goes into the task payload, never into a URL or a log line.
      */
     suspend fun speak(entryId: String, text: String): Outcome<Unit>
+
+    /** Queues a station volume level (0–100, a multiple of five). */
+    suspend fun setVolume(entryId: String, level: Int): Outcome<Unit>
+
+    /** Queues mute/unmute of the station media player. */
+    suspend fun setVolumeMuted(entryId: String, muted: Boolean): Outcome<Unit>
 }

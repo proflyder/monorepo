@@ -58,6 +58,7 @@
 | `infra/test` | smoke probe, not secret | operator token check |
 | `infra/vaultwarden/admin` | Vaultwarden /admin password | owner |
 | `infra/vpn/client-ca` | ocserv client CA (key, cert, CRL, OpenSSL dir) | owner (vpncerts.py) |
+| `infra/vpn/clients/ci-android` | VPN client certificate for CI android-distribute (Environment `Android`) | owner |
 | `infra/vpn/clients/ci-pulsar` | VPN client certificate for CI deploy-station | owner |
 | `infra/vpn/clients/owner-phone` | VPN client certificate of the owner's phone | owner |
 | `infra/vpn/owner` | owner VPN login: password, TOTP seed and QR | owner |

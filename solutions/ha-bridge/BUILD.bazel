@@ -25,3 +25,8 @@ filegroup(
     name = "catalog_vectors",
     srcs = glob(["testdata/catalog/**"]),
 )
+
+filegroup(
+    name = "volume_vectors",
+    srcs = glob(["testdata/volume/*.json"]),
+)
