@@ -463,6 +463,14 @@ export function rollbackPlanLines(unit) {
   if (unit.rollbackNote) {
     lines.push(`  note: ${unit.rollbackNote}`);
   }
+  if (unit.rollbackKind === "flux-pins") {
+    lines.push("  restores: the previous digest pinned in `deploy/home-apps`");
+    lines.push(
+      "  action: revert the pins commit; Flux applies it within 1-2m " +
+        "(never `kubectl rollout undo`).",
+    );
+    return lines;
+  }
   if (unit.rollbackKind === "forward-only") {
     lines.push("  action: none — fix forward with the previous commit.");
     return lines;
@@ -518,6 +526,10 @@ export async function runRollback(argv, options = {}) {
   }
   if (unit.rollbackKind === "pulsar") {
     stdout.write("rollback: station rollback is manual; nothing was executed\n");
+    return 0;
+  }
+  if (unit.rollbackKind === "flux-pins") {
+    stdout.write("rollback: revert the deploy/home-apps pins commit; nothing was executed\n");
     return 0;
   }
   if (parsed.dryRun) {

@@ -687,8 +687,12 @@ test("deploy: platform/deploy-rs change runs the Rust unit and routes deploy uni
     "intercom",
     "mcp-gateway",
     "scheduler",
-    "wakegrant",
   ]);
+  // wakegrant is applied by Flux: it is routed to the pins job instead.
+  assert.deepEqual(
+    affected.fluxEntries(result, config).map((entry) => entry.id),
+    ["wakegrant"],
+  );
 });
 
 test("deploy: runtime=flux leaves deploy-home for the pins path", () => {
@@ -696,21 +700,19 @@ test("deploy: runtime=flux leaves deploy-home for the pins path", () => {
   const result = routeReal(["platform/deploy-rs/src/render.rs"], undefined, {
     affectedRules: () => new Set(),
   });
-  const patched = new affected.Config({
-    units: config.units.map((unit) =>
-      unit.id === "wakegrant"
-        ? new affected.Unit({ ...unit, deployRuntime: "flux" })
-        : unit,
-    ),
-    invalidations: config.invalidations,
-  });
-  const ids = affected.deployEntries(result, patched).map((entry) => entry.id);
+  // wakegrant is migrated: deploy-home must not roll it with kubectl and the
+  // pins job must receive the same routing entry instead.
+  assert.equal(
+    config.units.find((unit) => unit.id === "wakegrant").deployRuntime,
+    "flux",
+  );
+  const ids = affected.deployEntries(result, config).map((entry) => entry.id);
   assert.ok(!ids.includes("wakegrant"));
   assert.ok(ids.includes("scheduler"));
-  assert.equal(
-    affected.deployEntries(result, config).find((entry) => entry.id === "wakegrant").runtime,
-    "ci",
-  );
+  const flux = affected.fluxEntries(result, config);
+  assert.deepEqual(flux.map((entry) => entry.id), ["wakegrant"]);
+  assert.equal(flux[0].runtime, "flux");
+  assert.equal(flux[0].images, "wakegrant");
   // Units without an explicit runtime default to the current CI path.
   assert.equal(new affected.Unit().deployRuntime, "ci");
 });
@@ -1431,7 +1433,10 @@ test("deploy: module change still deploys every deployable unit", () => {
   const config = affected.loadConfig();
   const result = routeReal(["MODULE.bazel"]);
   const entries = affected.deployEntries(result, config);
-  const expected = config.units.filter((unit) => unit.deployImages.length).map((unit) => unit.id);
+  // `deploy` only applies `ci` units; Flux-owned ones are pinned instead.
+  const expected = config.units
+    .filter((unit) => unit.deployImages.length && unit.deployRuntime === "ci")
+    .map((unit) => unit.id);
   assert.deepEqual(entries.map((entry) => entry.id), expected);
   assert.equal(entries.length, expected.length);
 });
@@ -1692,7 +1697,10 @@ test("module routing: bazel_dep change keeps the global invalidation", () => {
   const result = routeModule(MODULE_BAZEL_MAVEN_OLD, updated);
   assert.deepEqual(result.changed, ["MODULE.bazel"]);
   assert.equal(result.routes.python.mode, "all");
-  const expected = config.units.filter((unit) => unit.deployImages.length).map((unit) => unit.id);
+  // `deploy` only applies `ci` units; Flux-owned ones are pinned instead.
+  const expected = config.units
+    .filter((unit) => unit.deployImages.length && unit.deployRuntime === "ci")
+    .map((unit) => unit.id);
   assert.deepEqual(
     affected.deployEntries(result, config).map((entry) => entry.id),
     expected,
@@ -2062,12 +2070,17 @@ test("module routing: native-only edit reaches native and every Rust Bazel unit"
     "pulsar-bazel",
   ]);
   assert.deepEqual(result.routes.quality.units.map((unit) => unit.id), ["repository"]);
-  // scheduler, wakegrant, intercom, currency-bot and ha-bridge are Rust Bazel
+  // scheduler, intercom, currency-bot, mcp-gateway and ha-bridge are Rust Bazel
   // deploy units now, so a Rust toolchain pin change legitimately rebuilds and
-  // rolls them; the native-only units are not deployed.
+  // rolls them; wakegrant is Flux-owned and goes to the pins job; the
+  // native-only units are not deployed.
   assert.deepEqual(
     affected.deployEntries(result, config).map((entry) => entry.id),
-    ["scheduler", "wakegrant", "intercom", "currency-bot", "mcp-gateway", "ha-bridge"],
+    ["scheduler", "intercom", "currency-bot", "mcp-gateway", "ha-bridge"],
+  );
+  assert.deepEqual(
+    affected.fluxEntries(result, config).map((entry) => entry.id),
+    ["wakegrant"],
   );
   assert.equal(result.androidDistribute, false);
 });

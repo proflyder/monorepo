@@ -19,7 +19,7 @@ Reconciled by Flux today:
 | `vaultwarden` | `vaultwarden` | password manager, PVC, route, admin Secret |
 | `nexus` / `nexus-provision` | `nexus` | artifact cache and REST provisioning |
 | `home-app-pins` | `flux-system` | `home-app-images` ConfigMap from the machine branch `deploy/home-apps` |
-| `app-wakegrant` | `home-assistant` | pilot application; **`suspend: true`** until the owner enables it |
+| `app-wakegrant` | `home-assistant` | pilot application, applied by Flux since the 6.1 cutover |
 
 Still manual, on purpose:
 
@@ -31,10 +31,11 @@ Still manual, on purpose:
   `intercom`, `passwords`, `vault`, `nexus` are created with
   `cloudflare_dns.py` (or the `nexus` procedure).
 - **Application services** (`scheduler`, `intercom`, `currency-bot`,
-  `wakegrant`, `mcp-gateway`, Hermes runtime) stay on `deploy-home`; their
+  `mcp-gateway`, Hermes runtime) still run on `deploy-home`; their
   ExternalSecrets are applied by
-  `projects/home/kubernetes/external-secrets/deploy.sh`. The `wakegrant` Flux
-  path exists but is suspended (see below).
+  `projects/home/kubernetes/external-secrets/deploy.sh`. `wakegrant` is the
+  first migrated unit: `deploy-home` only commits its digest to the pins
+  branch and Flux applies it (see below).
 
 ## Components
 
@@ -147,16 +148,20 @@ mise run kubectl -- -n home-assistant get deployment wakegrant \
   -o jsonpath='{.spec.template.spec.containers[0].image}'
 ```
 
-`Kustomization/app-wakegrant` is the pilot. It is `suspend: true`: Flux applies
-nothing for wakegrant until the owner:
+`Kustomization/app-wakegrant` is the pilot and is **enabled** (FLUX-APPS-PLAN
+6.1): Flux applies the live workload from `develop` and substitutes
+`WAKEGRANT_IMAGE`/`BUILD_ID` from the pins ConfigMap plus
+`WAKE_GRANT_NODE_PORT` from `Secret/flux-app-settings`. `deploy-home` no longer
+runs `wakegrant/deploy.sh`: the unit has `deploy.runtime: "flux"`, so its
+`pins` job (no VPN, no OpenBao, no kubeconfig) promotes the PR-built digest,
+verifies provenance and commits only `BUILD_ID`, `WAKEGRANT_IMAGE` and the
+`proflyder.dev/*` annotations to `deploy/home-apps` via
+`platform/ci/pins.mjs`. Pushes race with other units, so the writer refetches,
+reapplies the same keys and retries; `develop` is never written.
 
-1. creates the `deploy/home-apps` branch with the files above;
-2. writes `secret/k8s/flux-system/app-settings` (`WAKE_GRANT_NODE_PORT` for
-   this pilot; later the other `secret/ci/deploy-home` app env keys);
-3. compares `kubectl kustomize projects/home/kubernetes/wakegrant/manifests`
-   with the live objects (`kubectl diff`), expecting only the `BUILD_ID` and
-   rollout annotations to differ;
-4. sets `suspend: false` and reconciles.
+The remaining app units move one at a time: drop `suspend` for a new
+Kustomization and flip its `deploy.runtime` to `"flux"`; the pins job picks it
+up without a workflow edit.
 
 Rollback is `suspend: true` plus a pins revert, never `kubectl rollout undo`.
 Do not delete the Kustomization: `prune: true` would remove the workload, and

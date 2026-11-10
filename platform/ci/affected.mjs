@@ -2520,27 +2520,26 @@ export function matrixEntries(route_, config) {
   return { android, bazel, unit: unit_, python, js, native };
 }
 
-export function deployEntries(route_, config) {
-  /**
-   * Deployable units selected by the same routing as CI.
-   *
-   * A shared Rust crate change reaches every importer through the Bazel
-   * loading graph, so it also deploys every importer that declares a `deploy`
-   * block. Units without one (documentation, infrastructure, observability)
-   * never appear here, so `deploy-home` cannot roll them by accident.
-   *
-   * `deploy.runtime` splits the same unit map between `deploy-home` (`ci`) and
-   * the Flux pins job (`flux`). Until a unit is migrated every entry is `ci`,
-   * so this filter is a no-op; keeping it here means the switch is one field,
-   * not a workflow edit.
-   */
+/**
+ * Deployable units selected by the same routing as CI.
+ *
+ * A shared Rust crate change reaches every importer through the Bazel
+ * loading graph, so it also deploys every importer that declares a `deploy`
+ * block. Units without one (documentation, infrastructure, observability)
+ * never appear here, so `deploy-home` cannot roll them by accident.
+ *
+ * `deploy.runtime` splits the same unit map between `deploy-home` (`ci`) and
+ * the Flux pins job (`flux`). Both lists are produced from the same routing, so
+ * migrating a unit is one field, not a workflow edit.
+ */
+function deployEntriesFor(route_, config, runtime) {
   const selected = route_.deploySelected;
   const entries = [];
   for (const unit of config.units) {
     if (
       !unit.deployImages.length ||
       !selected.has(unit.id) ||
-      unit.deployRuntime !== "ci"
+      unit.deployRuntime !== runtime
     ) {
       continue;
     }
@@ -2561,6 +2560,22 @@ export function deployEntries(route_, config) {
     });
   }
   return entries;
+}
+
+/** Units `deploy-home` applies through `kubectl`/`helm` (`runtime: ci`). */
+export function deployEntries(route_, config) {
+  return deployEntriesFor(route_, config, "ci");
+}
+
+/**
+ * Units Flux applies from the `deploy/home-apps` pins branch (`runtime: flux`).
+ *
+ * The `pins` job of `deploy-home` promotes their images and commits only the
+ * digests to the machine branch; it never uses the VPN, OpenBao or a
+ * kubeconfig.
+ */
+export function fluxEntries(route_, config) {
+  return deployEntriesFor(route_, config, "flux");
 }
 
 export function summaryMarkdown(route_, config) {
@@ -2743,6 +2758,7 @@ export function githubOutputs(computed) {
     deploy_control: String(result.deployControl),
     android_distribute: String(result.androidDistribute),
     deploy_units: jsonDumps(deployEntries(result, config)),
+    flux_units: jsonDumps(fluxEntries(result, config)),
     summary: summaryMarkdown(result, config),
   };
 }
@@ -2762,6 +2778,7 @@ export async function main(argv = process.argv.slice(2)) {
           deploy_control: result.deployControl,
           android_distribute: result.androidDistribute,
           deploy_units: deployEntries(result, config),
+          flux_units: fluxEntries(result, config),
           warnings: result.warnings,
           modes: Object.fromEntries(
             Object.entries(result.routes).map(([name, platformRoute]) => [
