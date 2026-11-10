@@ -1,5 +1,6 @@
 package dev.proflyder.home.feature.control.presentation
 
+import android.graphics.drawable.RippleDrawable
 import android.view.View
 import android.widget.FrameLayout
 import android.widget.LinearLayout
@@ -13,6 +14,7 @@ import dev.proflyder.home.core.model.ControlKind
 import dev.proflyder.home.core.model.ControlRole
 import dev.proflyder.home.core.model.LightControls
 import dev.proflyder.home.core.model.PowerState
+import dev.proflyder.home.core.model.VolumeControls
 import dev.proflyder.home.core.ui.BaseAdapterCallback
 import dev.proflyder.home.core.ui.PillSegments
 import dev.proflyder.home.feature.control.ControlFilter
@@ -21,8 +23,10 @@ import dev.proflyder.home.feature.control.HubCard
 import dev.proflyder.home.feature.control.QuickTile
 import dev.proflyder.home.feature.control.WakeFeedbackAction
 import dev.proflyder.home.feature.control.impl.R
+import dev.proflyder.home.feature.control.impl.databinding.ItemControlDeviceTileBinding
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -397,5 +401,71 @@ class ControlProfileRowTest {
         assertTrue(before === settingsList.getChildAt(0))
         assertEquals(View.VISIBLE, before.findViewById<View>(R.id.control_row_progress).visibility)
         assertFalse(before.isEnabled)
+    }
+
+    private fun switchEntry(id: String, title: String) = ControlEntry(
+        id = id,
+        kind = ControlKind.SWITCH,
+        title = title,
+        room = "Office",
+        icon = "",
+        actions = setOf(ControlAction.TURN_ON, ControlAction.TURN_OFF),
+        power = PowerState.ON,
+        available = true,
+        deviceId = "dev.tiles",
+        device = "Tiles",
+    )
+
+    @Test
+    fun aTileRippleIsAClippedOval() {
+        val group = ControlItem.DeviceGroup(
+            deviceId = "dev.tiles",
+            title = "Tiles",
+            primary = listOf(
+                ControlItem.DeviceGroup.Row(switchEntry("switch.one", "One"), busy = false),
+                ControlItem.DeviceGroup.Row(switchEntry("switch.two", "Two"), busy = false),
+            ),
+            settings = emptyList(),
+            expanded = false,
+            statesKnown = true,
+        )
+        val root = bindAny(group)
+        val tiles = root.findViewById<LinearLayout>(R.id.control_group_tiles)
+        val row = tiles.getChildAt(0) as LinearLayout
+        val tile = ItemControlDeviceTileBinding.bind(row.getChildAt(0))
+        assertTrue(tile.controlTileRipple.foreground is RippleDrawable)
+        assertTrue(tile.controlTileRipple.clipToOutline)
+        assertSame(OvalTileOutlineProvider, tile.controlTileRipple.outlineProvider)
+    }
+
+    @Test
+    fun aMergedVolumeRowShowsTheAnnouncementLevel() {
+        val announce = ControlEntry(
+            id = "volume.station_announce",
+            kind = ControlKind.VOLUME,
+            title = "Announcement volume",
+            room = "Bedroom",
+            icon = "",
+            actions = setOf(ControlAction.SET),
+            power = null,
+            available = true,
+            volume = VolumeControls(level = 100),
+            deviceId = "dev.station",
+            device = "Station",
+        )
+        val main = announce.copy(
+            id = "volume.station",
+            title = "Volume",
+            actions = setOf(ControlAction.SET, ControlAction.MUTE, ControlAction.UNMUTE),
+            volume = VolumeControls(level = 10),
+            volumeCompanion = announce,
+        )
+        val context = RuntimeEnvironment.getApplication()
+        val unavailable = R.string.control_state_unavailable
+        assertEquals("10% · announcements 100%", main.localizedVolumeText(context, unavailable))
+        assertEquals(
+            "Sound off · announcements 100%",
+            main.copy(volume = VolumeControls(level = 10, muted = true)).localizedVolumeText(context, unavailable),
+        )
     }
 }

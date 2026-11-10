@@ -930,6 +930,15 @@ fn speak_entry(raws: &[Raw]) -> Option<Entry> {
     })
 }
 
+/// First non-blank value in priority order.
+fn first_text<'a>(values: &[&'a str]) -> &'a str {
+    values
+        .iter()
+        .map(|value| value.trim())
+        .find(|value| !value.is_empty())
+        .unwrap_or("")
+}
+
 /// One configured synthetic toggle: the state sensor provides the live
 /// boolean, the two buttons provide the on/off calls. Home Assistant lock
 /// sensors are `on` while unlocked, so the exposed tile is `on` while locked.
@@ -937,27 +946,34 @@ fn toggle_entry(raws: &[Raw], rule: &ToggleRule) -> Option<Entry> {
     let state_raw = raws
         .iter()
         .find(|raw| raw.entity == rule.state && !raw.hidden)?;
+    // The visibleWhen base is the control this toggle belongs to (the PC
+    // switch), so inherit its device/room when the rule does not override
+    // them. The state sensor is the next fallback, exactly like buttons.
+    let anchor = rule
+        .visible_when
+        .as_ref()
+        .and_then(|condition| raws.iter().find(|raw| raw.entity == condition.entry));
     let state = state_raw.state.trim().to_lowercase();
     let tile_state = match state.as_str() {
         "on" => "off",
         "off" => "on",
         _ => "",
     };
-    let room = if rule.room.trim().is_empty() {
-        state_raw.room.trim()
-    } else {
-        rule.room.trim()
-    };
-    let device_id = if rule.device_id.trim().is_empty() {
-        state_raw.device_id.trim()
-    } else {
-        rule.device_id.trim()
-    };
-    let device = if rule.device.trim().is_empty() {
-        state_raw.device.trim()
-    } else {
-        rule.device.trim()
-    };
+    let room = first_text(&[
+        &rule.room,
+        anchor.map_or("", |raw| raw.room.as_str()),
+        state_raw.room.as_str(),
+    ]);
+    let device_id = first_text(&[
+        &rule.device_id,
+        anchor.map_or("", |raw| raw.device_id.as_str()),
+        state_raw.device_id.as_str(),
+    ]);
+    let device = first_text(&[
+        &rule.device,
+        anchor.map_or("", |raw| raw.device.as_str()),
+        state_raw.device.as_str(),
+    ]);
     let icon = if rule.icon.trim().is_empty() {
         "lock"
     } else {
@@ -1378,7 +1394,7 @@ mod tests {
             state: "binary_sensor.komp_razblokirovan".to_owned(),
             on: "button.komp_lock".to_owned(),
             off: "button.komp_unlock".to_owned(),
-            room: "Кабинет".to_owned(),
+            room: String::new(),
             device_id: String::new(),
             device: String::new(),
             visible_when: Some(VisibleWhen {
@@ -1395,13 +1411,13 @@ mod tests {
                 state: "on".to_owned(),
                 name: "Комп".to_owned(),
                 room: "Кабинет".to_owned(),
+                device: "Комп".to_owned(),
                 ..Raw::default()
             },
             Raw {
                 entity: "binary_sensor.komp_razblokirovan".to_owned(),
                 state: sensor.to_owned(),
                 name: "Разблокирован".to_owned(),
-                room: "Кабинет".to_owned(),
                 device_class: "lock".to_owned(),
                 ..Raw::default()
             },
@@ -1436,6 +1452,9 @@ mod tests {
         // The lock sensor is on while unlocked, so the tile is off.
         assert_eq!(toggle.state, "off");
         assert!(toggle.available);
+        // Device and room come from the visibleWhen base (the PC switch).
+        assert_eq!(toggle.room, "Кабинет");
+        assert_eq!(toggle.device, "Комп");
         assert_eq!(
             toggle.toggle.as_ref().expect("calls").on,
             ServiceCall {

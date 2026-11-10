@@ -1,5 +1,6 @@
 package dev.proflyder.home.feature.control
 
+import dev.proflyder.home.core.model.ControlAction
 import dev.proflyder.home.core.model.ControlEntry
 import dev.proflyder.home.core.model.ControlKind
 import dev.proflyder.home.core.model.ControlRole
@@ -366,25 +367,44 @@ object ControlItems {
         }
     }
 
+    /**
+     * One station volume row instead of two: every volume entry of a device is
+     * merged into the primary one (the entry that supports mute), and the
+     * others travel as its companion for the subtitle and the sheet.
+     */
+    private fun mergeVolumes(members: List<ControlEntry>): List<ControlEntry> {
+        val volumes = members.filter { it.isVolume }
+        if (volumes.size < 2) return members
+        val main = volumes.firstOrNull { ControlAction.MUTE in it.actions } ?: volumes.first()
+        val companions = volumes.filter { it.id != main.id }
+        val merged = main.copy(volumeCompanion = companions.firstOrNull())
+        val companionIds = companions.map { it.id }.toSet()
+        return members.map { if (it.id == main.id) merged else it }.filter { it.id !in companionIds }
+    }
+
     private fun bucketOf(deviceId: String, members: List<ControlEntry>, prefix: String? = null): DeviceBucket {
+        val entries = mergeVolumes(members)
         // A base entity names a prefix group; it may not sort first (the catalog
         // is ordered by title), so look it up explicitly.
-        val anchor = prefix?.let { value -> members.firstOrNull { localId(it) == value } }
-        val hasPrimary = members.any { it.role != ControlRole.SETTING && !it.isButton }
+        val anchor = prefix?.let { value -> entries.firstOrNull { localId(it) == value } }
+        val hasPrimary = entries.any { it.role != ControlRole.SETTING && !it.isButton }
         // Buttons are one-shot device actions: they live in the settings list
         // next to the device's other options when that device has a primary row.
-        val settings = members.filter { it.role == ControlRole.SETTING || (it.isButton && hasPrimary) }
-        val primary = members.filter { entry -> settings.none { it.id == entry.id } }
-        val name = members.firstNotNullOfOrNull { it.device.takeIf(String::isNotBlank) }
+        val settings = entries.filter { it.role == ControlRole.SETTING || (it.isButton && hasPrimary) }
+        val primary = entries.filter { entry -> settings.none { it.id == entry.id } }
+        val name = entries.firstNotNullOfOrNull { it.device.takeIf(String::isNotBlank) }
             ?: anchor?.displayTitle()
         // The main control names the device and carries its status: it always
         // stays a switch row instead of becoming a compact tile. A prefix
         // group names it explicitly (the base entity); a registry group falls
-        // back to the control that reports a device status.
-        val main = anchor ?: primary.firstOrNull { it.detailKey.isNotBlank() }
+        // back to the control that reports a device status, and a card with a
+        // single primary control keeps that control as its main row.
+        val main = anchor
+            ?: primary.firstOrNull { it.detailKey.isNotBlank() }
+            ?: primary.singleOrNull()
         return DeviceBucket(
             deviceId = deviceId,
-            title = name ?: primary.firstOrNull()?.displayTitle() ?: members.first().displayTitle(),
+            title = name ?: primary.firstOrNull()?.displayTitle() ?: entries.first().displayTitle(),
             primary = primary,
             settings = settings,
             mainId = main?.id,

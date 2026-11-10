@@ -20,7 +20,7 @@
         android:layout_height="@dimen/control_tile_icon"
         android:clickable="true"
         android:focusable="true"
-        android:foreground="?attr/selectableItemBackgroundBorderless">
+        android:foreground="@drawable/control_tile_ripple">
 
         <ImageView
             android:id="@+id/control_tile_icon"

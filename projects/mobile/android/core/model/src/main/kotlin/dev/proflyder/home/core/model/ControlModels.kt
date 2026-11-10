@@ -136,6 +136,11 @@ data class ControlEntry(
     val role: ControlRole = ControlRole.PRIMARY,
     /** Show this entry only while another catalog entry has a given state. */
     val visibleWhen: VisibleWhen? = null,
+    /**
+     * Client-side merge of a device's announcement volume into its main
+     * volume row. Never sent by the server and absent from the companion.
+     */
+    val volumeCompanion: ControlEntry? = null,
 ) {
     val isDevice: Boolean get() = kind == ControlKind.LIGHT || kind == ControlKind.SWITCH
 
