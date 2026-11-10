@@ -131,7 +131,8 @@ PVC приложений: `scheduler-data` 2Gi, `ha-bridge-data` 256Mi,
   ничего не собирает и не пушит;
 - считает `BUILD_ID` (revision + fingerprint) и `ROLLOUT_ID` (fingerprint
   отрендеренного набора) и рендерит шаблоны `home-deploy render --unit
-  scheduler`;
+  scheduler`; под Flux `BUILD_ID` приходит из pins, а `ROLLOUT_ID` из
+  pod-template убирается (см. §3.3);
 - применяет только `scheduler.yaml` (Deployment, PVC, Service) для юнита
   `scheduler`; `bridge.yaml`, `control.yaml`, `control-service.yaml`,
   `scenario.yaml`, `preflight-job.yaml` рендерятся, но не применяются;
@@ -149,8 +150,9 @@ PVC приложений: `scheduler-data` 2Gi, `ha-bridge-data` 256Mi,
 HA, scheduler и ожидаемый endpoint; на обычном push он не выполняется.
 
 Для Flux: Deployment/PVC/Service и `ExternalSecret` — обычные ресурсы;
-`BUILD_ID`/`ROLLOUT_ID` подставляются из pins; `preflight-job.yaml` пока
-остаётся ручным/admin-инструментом (cutover — редкая операция).
+`BUILD_ID` подставляется из pins, `ROLLOUT_ID` убирается из pod-template;
+`preflight-job.yaml` пока остаётся ручным/admin-инструментом (cutover —
+редкая операция).
 
 ### 2.3. `ha-bridge`
 
@@ -334,7 +336,7 @@ metadata:
     proflyder.dev/verified-at: "2026-11-10T12:00:00Z"
     proflyder.dev/run: "https://github.com/<owner>/<repo>/actions/runs/<id>"
 data:
-  REVISION: "<commit12>"
+  BUILD_ID: "<commit12>"
   SCHEDULER_IMAGE: "ghcr.io/proflyder/scheduler@sha256:<64-hex>"
   HA_BRIDGE_IMAGE: "ghcr.io/proflyder/ha-bridge@sha256:<64-hex>"
   HA_CONTROL_IMAGE: "ghcr.io/proflyder/ha-control@sha256:<64-hex>"
@@ -385,11 +387,11 @@ spec:
       namespace: home-assistant
 ```
 
-`BUILD_ID` подставляется как `${REVISION}`. Для `ROLLOUT_ID` есть два
-варианта: заменить в манифесте сам placeholder на `${<UNIT>_IMAGE}` (тогда
-annotation меняется только вместе с образом, а конфигурационные изменения и
-так меняют pod template) либо писать в pins отдельный ключ
-`<UNIT>_ROLLOUT_ID`.
+`BUILD_ID` — обычный ключ pins-ConfigMap, поэтому подставляется напрямую.
+`ROLLOUT_ID` лучше убрать из pod-template: Flux и так применяет новый
+manifest при изменении конфига, а новый образ меняет `image` и запускает
+rollout. Если annotation нужна для трассировки, в манифесте можно
+использовать `${<UNIT>_IMAGE}` (тогда она меняется только вместе с образом).
 
 Теги при B: `tree-<hash>` остаётся идентичностью сборки, `<commit>` и
 `develop` ставит промоушен (трассировка и защита от `ghcr-cleanup`). При
@@ -678,8 +680,9 @@ Application Secrets уже живут в OpenBao и создаются ESO:
    `projects/home/kubernetes/wakegrant/manifests` (Deployment, PVC, Service,
    ExternalSecret) и `Kustomization/app-wakegrant` (`suspend: true`).
 2. Снять live-объекты (read-only) и сравнить `kubectl kustomize` +
-   `kubectl diff` (admin, вне CI): ожидаются только изменения аннотаций
-   `BUILD_ID`/`ROLLOUT_ID`; PVC/PV и `volumeName` не меняются.
+   `kubectl diff` (admin, вне CI): ожидается изменение только annotation
+   `BUILD_ID` (и удаление `ROLLOUT_ID`, если он убирается из шаблона);
+   PVC/PV и `volumeName` не меняются.
 3. Поставить на PVC аннотацию `kustomize.toolkit.fluxcd.io/prune: disabled`.
 4. `suspend: false`, `flux reconcile`; проверить `Ready=True`, pod, NodePort
    `/healthz`, `wakegrant -healthcheck`, отсутствие рестартов.
