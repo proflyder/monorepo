@@ -27,6 +27,7 @@
     <string name="control_state_unavailable">Unavailable</string>
     <string name="control_state_on_brightness">On · %1$d%%</string>
     <string name="control_state_detail">%1$s · %2$s</string>
+    <string name="control_tile_description">%1$s, %2$s</string>
     <string name="control_command_sent">Command sent</string>
     <string name="control_device_settings">Settings (%1$d)</string>
     <string name="control_profile_personal">Personal</string>

@@ -26,6 +26,7 @@
     <string name="control_state_unavailable">Недоступно</string>
     <string name="control_state_on_brightness">Вкл · %1$d%%</string>
     <string name="control_state_detail">%1$s · %2$s</string>
+    <string name="control_tile_description">%1$s, %2$s</string>
     <string name="control_command_sent">Команда отправлена</string>
     <string name="control_device_settings">Настройки (%1$d)</string>
     <string name="control_profile_personal">Личный</string>

@@ -36,6 +36,14 @@
             android:orientation="vertical" />
 
         <LinearLayout
+            android:id="@+id/control_group_tiles"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginHorizontal="@dimen/control_row_bleed"
+            android:orientation="vertical"
+            android:visibility="gone" />
+
+        <LinearLayout
             android:id="@+id/control_group_actions"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

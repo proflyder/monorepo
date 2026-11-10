@@ -24,4 +24,12 @@
     <dimen name="control_volume_icon">40dp</dimen>
     <dimen name="control_volume_icon_padding">8dp</dimen>
     <dimen name="control_volume_group_gap">20dp</dimen>
+    <!-- Compact binary toggles inside a device card: round icon and short label. -->
+    <dimen name="control_tile_icon">48dp</dimen>
+    <dimen name="control_tile_icon_padding">12dp</dimen>
+    <dimen name="control_tile_progress">28dp</dimen>
+    <dimen name="control_tile_label_gap">6dp</dimen>
+    <dimen name="control_tile_row_gap">8dp</dimen>
+    <integer name="control_tile_label_lines">2</integer>
+    <integer name="control_tile_columns">4</integer>
 </resources>

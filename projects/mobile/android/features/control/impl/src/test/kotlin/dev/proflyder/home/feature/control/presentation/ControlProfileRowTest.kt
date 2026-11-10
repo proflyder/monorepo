@@ -11,6 +11,7 @@ import dev.proflyder.home.core.model.ControlAction
 import dev.proflyder.home.core.model.ControlEntry
 import dev.proflyder.home.core.model.ControlKind
 import dev.proflyder.home.core.model.ControlRole
+import dev.proflyder.home.core.model.LightControls
 import dev.proflyder.home.core.model.PowerState
 import dev.proflyder.home.core.ui.BaseAdapterCallback
 import dev.proflyder.home.core.ui.PillSegments
@@ -95,7 +96,7 @@ class ControlProfileRowTest {
             profile = ControlItem.Voice.Profile(profile(power, available), busy),
         )
 
-    private fun device(power: PowerState?) = ControlEntry(
+    private fun device(power: PowerState?, light: LightControls? = null) = ControlEntry(
         id = "light.desk",
         kind = ControlKind.LIGHT,
         title = "Desk lamp",
@@ -104,6 +105,7 @@ class ControlProfileRowTest {
         actions = setOf(ControlAction.TURN_ON, ControlAction.TURN_OFF),
         power = power,
         available = true,
+        light = light,
     )
 
     private class Row(
@@ -252,7 +254,12 @@ class ControlProfileRowTest {
         val group = ControlItem.DeviceGroup(
             deviceId = "dev.desk",
             title = "Desk lamp",
-            primary = listOf(ControlItem.DeviceGroup.Row(device(PowerState.ON), busy = false)),
+            primary = listOf(
+                ControlItem.DeviceGroup.Row(
+                    device(PowerState.ON, LightControls(brightness = true, colorTemp = false, color = false)),
+                    busy = false,
+                ),
+            ),
             settings = listOf(ControlItem.DeviceGroup.Row(setting(PowerState.OFF), busy = false)),
             expanded = false,
             statesKnown = true,
@@ -285,29 +292,30 @@ class ControlProfileRowTest {
     }
 
     @Test
-    fun multiPrimaryGroupKeepsTheHeaderAndShortRowNames() {
-        fun primary(id: String, title: String) = ControlItem.DeviceGroup.Row(
-            ControlEntry(
-                id = id,
-                kind = ControlKind.SWITCH,
-                title = title,
-                room = "Living room",
-                icon = "",
-                actions = setOf(ControlAction.TURN_ON, ControlAction.TURN_OFF),
-                power = PowerState.OFF,
-                available = true,
-                deviceId = "dev.speaker",
-                device = "Колонка",
-            ),
-            busy = false,
-        )
+    fun multiPrimaryGroupKeepsTheHeaderAndShowsCompactTiles() {
+        fun primary(id: String, title: String, power: PowerState?, available: Boolean = true) =
+            ControlItem.DeviceGroup.Row(
+                ControlEntry(
+                    id = id,
+                    kind = ControlKind.SWITCH,
+                    title = title,
+                    room = "Living room",
+                    icon = "",
+                    actions = setOf(ControlAction.TURN_ON, ControlAction.TURN_OFF),
+                    power = power,
+                    available = available,
+                    deviceId = "dev.speaker",
+                    device = "Колонка",
+                ),
+                busy = false,
+            )
         val group = ControlItem.DeviceGroup(
             deviceId = "dev.speaker",
             title = "Колонка",
             primary = listOf(
-                primary("media.mic", "Microphones"),
-                primary("media.clock", "Clock display"),
-                primary("media.ring", "Ring"),
+                primary("media.mic", "Microphones", PowerState.ON),
+                primary("media.clock", "Clock display", PowerState.OFF),
+                primary("media.ring", "Ring", PowerState.ON, available = false),
             ),
             settings = emptyList(),
             expanded = false,
@@ -317,11 +325,18 @@ class ControlProfileRowTest {
         val header = root.findViewById<android.widget.TextView>(R.id.control_group_title)
         assertEquals(View.VISIBLE, header.visibility)
         assertEquals("Колонка", header.text.toString())
-        val container = root.findViewById<LinearLayout>(R.id.control_group_primary)
-        val titles = (0 until container.childCount).map {
-            container.getChildAt(it).findViewById<android.widget.TextView>(R.id.control_row_title).text.toString()
+        // Plain binary controls of a multi-element card are tiles, not rows.
+        assertEquals(View.GONE, root.findViewById<LinearLayout>(R.id.control_group_primary).visibility)
+        val tiles = root.findViewById<LinearLayout>(R.id.control_group_tiles)
+        assertEquals(View.VISIBLE, tiles.visibility)
+        val row = tiles.getChildAt(0) as LinearLayout
+        val labels = (0 until 3).map {
+            row.getChildAt(it).findViewById<android.widget.TextView>(R.id.control_tile_label).text.toString()
         }
-        assertEquals(listOf("Microphones", "Clock display", "Ring"), titles)
+        assertEquals(listOf("Microphones", "Clock display", "Ring"), labels)
+        assertEquals("Microphones, On", row.getChildAt(0).contentDescription)
+        assertEquals("Clock display, Off", row.getChildAt(1).contentDescription)
+        assertEquals("Ring, Unavailable", row.getChildAt(2).contentDescription)
     }
 
     @Test
