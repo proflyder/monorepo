@@ -55,6 +55,10 @@ run = [
 description = "Check tools, OpenBao token, SSH to pve/k3s/haos and gh login"
 run = "platform/workstation/run.sh platform/workstation/workstation.py doctor"
 
+[tasks."station:audit"]
+description = "Read-only station software audit against projects/station/manifest.yaml (-- --ip <addr>)"
+run = "python3 projects/station/tools/station-audit"
+
 [tasks."secrets:login"]
 description = "Human OpenBao login (password + TOTP) → operator token for this machine"
 run = "platform/workstation/run.sh platform/workstation/workstation.py login"

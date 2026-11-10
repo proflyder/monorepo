@@ -8,11 +8,18 @@ BLE gateway и provisioning. Это **не** HA и не TTS-стек.
 ```text
 projects/station/pulsar/          Rust Pulsar (AGPL-3.0), включая radio/ и installer/
 projects/station/ble-gateway/     BLE provisioning gateway (Rust, Bazel)
+projects/station/manifest.yaml    состав ПО колонки и пути/версии для сверки
+projects/station/tools/station-audit  read-only сверка устройства с манифестом
 projects/station/scripts/station-*  station-side операции
 docs/OTA-FORTRESS.md
+docs/STATION-SOFTWARE.md
 docs/PROVISIONING.md
 docs/WAKE-WORD.md
 ```
+
+Состав ПО, известные расхождения и план этапов 2–5 —
+[`docs/STATION-SOFTWARE.md`](../../docs/STATION-SOFTWARE.md). Сверка с живой
+колонкой — `mise run station:audit` (только чтение по SSH).
 
 Профиль Ricardo — [`pulsar/RICARDO.md`](pulsar/RICARDO.md); установленная
 версия — `docs/STATE.md`.
