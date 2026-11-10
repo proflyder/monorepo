@@ -1,0 +1,41 @@
+# Flux-rendered manifest set for the wakegrant pilot (FLUX-APPS-PLAN 6.1).
+#
+# `wakegrant.yaml` stays a template for `deploy.sh` (CI/admin path). This
+# kustomization is the Flux path: it keeps the same objects and replaces the
+# CI-only rollout annotation, so `kustomize-controller` never sees a missing
+# `ROLLOUT_ID` variable.
+#
+# Substituted by Kustomization/app-wakegrant:
+#   ${WAKEGRANT_IMAGE}      from ConfigMap/home-app-images (pins branch)
+#   ${BUILD_ID}             from ConfigMap/home-app-images (pins branch)
+#   ${WAKE_GRANT_NODE_PORT} from Secret/flux-app-settings (ESO)
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - wakegrant.yaml
+  - external-secrets.yaml
+patches:
+  # `prune: true` on the app Kustomization must never delete the SQLite volume
+  # when a manifest is removed by mistake (FLUX-APPS-PLAN 4.2).
+  - target:
+      kind: PersistentVolumeClaim
+      name: wakegrant-data
+    patch: |-
+      - op: add
+        path: /metadata/annotations
+        value:
+          kustomize.toolkit.fluxcd.io/prune: disabled
+  # CI's `ROLLOUT_ID` is content-addressed over the rendered file; under Flux
+  # the image itself changes the pod template, so the annotation follows the
+  # digest and stays traceable without an extra CI variable. The image also
+  # switches to the pins key name (`WAKEGRANT_IMAGE`) used by CI's pins file.
+  - target:
+      kind: Deployment
+      name: wakegrant
+    patch: |-
+      - op: replace
+        path: /spec/template/metadata/annotations/proflyder.dev~1rollout
+        value: ${WAKEGRANT_IMAGE}
+      - op: replace
+        path: /spec/template/spec/containers/0/image
+        value: ${WAKEGRANT_IMAGE}
