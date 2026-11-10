@@ -290,6 +290,9 @@
 ## Станция
 
 - Yandex Station Midi `cucumber`, IP `192.0.2.13`; `maind` остановлен.
+- Состав ПО (что обновляет OTA, что поставлено вручную, владельцы и
+  recovery-критичность) — `projects/station/manifest.yaml`, описание —
+  `docs/STATION-SOFTWARE.md`; сверка — `mise run station:audit` (read-only).
 - Pulsar Rust `v0.5.1015` — armhf-сборка из `projects/station/pulsar/`
   (Bazel); артефакт продвинут из PR-сборки без пересборки (build-once,
   digest из `tree-<hash>`). «Громкость объявлений»

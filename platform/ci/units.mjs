@@ -923,10 +923,12 @@ export const config = {
     {
       id: "station-tools",
       platform: "python",
-      title: "projects/station/tools (voice-recorder, wakeword-personalize, root kit)",
-      paths: ["projects/station/tools/**"],
+      title: "projects/station/tools (voice-recorder, wakeword-personalize, root kit, station-audit)",
+      paths: ["projects/station/tools/**", "projects/station/manifest.yaml"],
       python: {
         suites: [
+          // The station manifest and the read-only audit that reconciles it.
+          "projects/station/tools",
           "projects/station/tools/voice-recorder",
           "projects/station/tools/wakeword-personalize",
         ],

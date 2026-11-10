@@ -1,5 +1,14 @@
 # Инструменты
 
+## `station-audit`
+
+Read-only сверка файлов на колонке с `projects/station/manifest.yaml`:
+sha256, версии бинарников и лишние `.bak`/`.prev`/`.new` рядом. Одно SSH-
+соединение, только чтение; адрес — `--ip`, `STATION_IP` или приватный
+`secrets/NETWORK.md`. Запуск — `mise run station:audit -- --ip 192.0.2.13`;
+описание и статусы — [`docs/STATION-SOFTWARE.md`](../../../docs/STATION-SOFTWARE.md).
+Тесты — `projects/station/tools/test_station_audit.py` (без сети).
+
 ## `voice-recorder/`
 
 Временная локальная веб-консоль записи микрофонов колонки на Mac для
