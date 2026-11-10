@@ -46,6 +46,7 @@
     <string name="control_volume_announce">Announcement volume</string>
     <string name="control_volume_percent">%1$d%%</string>
     <string name="control_volume_muted">Sound off</string>
+    <string name="control_volume_with_announcement">%1$s · announcements %2$d%%</string>
     <string name="control_volume_mute">Mute</string>
     <string name="control_volume_unmute">Unmute</string>
     <string name="control_hub_today">today</string>

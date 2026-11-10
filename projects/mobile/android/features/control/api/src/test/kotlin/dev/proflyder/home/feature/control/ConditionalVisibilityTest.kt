@@ -4,7 +4,9 @@ import dev.proflyder.home.core.model.ControlAction
 import dev.proflyder.home.core.model.ControlEntry
 import dev.proflyder.home.core.model.ControlKind
 import dev.proflyder.home.core.model.PowerState
+import dev.proflyder.home.core.model.ControlRole
 import dev.proflyder.home.core.model.VisibleWhen
+import dev.proflyder.home.core.model.VolumeControls
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -85,5 +87,73 @@ class ConditionalVisibilityTest {
         assertEquals(listOf("switch.komp"), ids(hidden))
         val shown = build(PowerState.ON)
         assertEquals(listOf("switch.komp", "toggle.komp_lock"), ids(shown))
+        val group = shown.filterIsInstance<ControlItem.DeviceGroup>().single()
+        assertEquals("switch.komp", group.mainId)
+        val lock = group.primary.single { it.entry.id == "toggle.komp_lock" }.entry
+        assertTrue(lock.isCompactTile(group.primary.size, isMain = false))
+    }
+
+    @Test
+    fun aSinglePrimaryControlWithSettingsStaysTheMainRow() {
+        val lamp = ControlEntry(
+            id = "light.lamp",
+            kind = ControlKind.LIGHT,
+            title = "Lamp",
+            room = "Office",
+            icon = "",
+            actions = setOf(ControlAction.TURN_ON, ControlAction.TURN_OFF),
+            power = PowerState.ON,
+            available = true,
+            deviceId = "dev.lamp",
+            device = "Lamp",
+        )
+        val timer = lamp.copy(
+            id = "switch.lamp_timer",
+            kind = ControlKind.SWITCH,
+            title = "Timer",
+            role = ControlRole.SETTING,
+        )
+        val group = ControlItems.build(
+            entries = listOf(lamp, timer),
+            pending = emptySet(),
+            statesOk = true,
+            filter = ControlFilter.All,
+            texts = texts,
+        ).filterIsInstance<ControlItem.DeviceGroup>().single()
+        assertEquals("light.lamp", group.mainId)
+        assertFalse(lamp.copy(title = "Lamp").isCompactTile(2, isMain = true))
+    }
+
+    @Test
+    fun volumeEntriesOfOneDeviceBecomeOneRowWithACompanion() {
+        val main = ControlEntry(
+            id = "volume.station",
+            kind = ControlKind.VOLUME,
+            title = "Volume",
+            room = "Bedroom",
+            icon = "",
+            actions = setOf(ControlAction.SET, ControlAction.MUTE, ControlAction.UNMUTE),
+            power = null,
+            available = true,
+            volume = VolumeControls(level = 10),
+            deviceId = "dev.station",
+            device = "Station",
+        )
+        val announcement = main.copy(
+            id = "volume.station_announce",
+            title = "Announcement volume",
+            actions = setOf(ControlAction.SET),
+            volume = VolumeControls(level = 100),
+        )
+        val items = ControlItems.build(
+            entries = listOf(main, announcement),
+            pending = emptySet(),
+            statesOk = true,
+            filter = ControlFilter.All,
+            texts = texts,
+        )
+        val row = items.filterIsInstance<ControlItem.Device>().single().entry
+        assertEquals("volume.station", row.id)
+        assertEquals("volume.station_announce", row.volumeCompanion?.id)
     }
 }

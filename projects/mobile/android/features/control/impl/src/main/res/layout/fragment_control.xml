@@ -109,39 +109,6 @@
         </FrameLayout>
     </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
 
-    <FrameLayout
-        android:id="@+id/control_quick_overlay"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:visibility="gone">
-
-        <View
-            android:id="@+id/control_quick_scrim"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:background="@color/control_scrim"
-            android:clickable="true"
-            android:focusable="true" />
-
-        <androidx.core.widget.NestedScrollView
-            android:id="@+id/control_quick_scroll"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="bottom|end"
-            android:layout_marginEnd="@dimen/control_speed_dial_fab_margin"
-            android:layout_marginBottom="@dimen/control_speed_dial_offset"
-            android:clipToPadding="false"
-            android:scrollbars="none">
-
-            <LinearLayout
-                android:id="@+id/control_quick_items"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:gravity="end"
-                android:orientation="vertical" />
-        </androidx.core.widget.NestedScrollView>
-    </FrameLayout>
-
     <com.google.android.material.floatingactionbutton.FloatingActionButton
         android:id="@+id/control_quick_fab"
         android:layout_width="wrap_content"

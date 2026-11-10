@@ -6,7 +6,6 @@ import androidx.fragment.app.activityViewModels
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
-import dev.proflyder.home.core.model.ControlAction
 import dev.proflyder.home.core.model.ControlEntry
 import dev.proflyder.home.core.model.ControlKind
 import dev.proflyder.home.core.model.FavoriteKind
@@ -190,11 +189,7 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
         })
 
         speedDial = SpeedDialOverlay(
-            root = binding.controlRoot,
-            overlay = binding.controlQuickOverlay,
-            scrim = binding.controlQuickScrim,
-            scroll = binding.controlQuickScroll,
-            column = binding.controlQuickItems,
+            anchor = binding.controlRoot,
             fab = binding.controlQuickFab,
             onClick = { item -> runSpeedDialItem(item) },
             onLongClick = { item -> pinSpeedDialItem(item) },
@@ -238,12 +233,15 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
      */
     internal fun openVolumeSheet(entry: ControlEntry) {
         volumeSheet?.dismiss()
-        val volumes = viewModel.state.value.entries.filter { it.isVolume && it.deviceId == entry.deviceId }
-        val main = volumes.firstOrNull { ControlAction.MUTE in it.actions } ?: entry
-        val announce = volumes.firstOrNull { it.id != main.id }
+        // The list already merges the device's announcement volume into this
+        // row; the state entries remain the source for older unmerged data.
+        val announce = entry.volumeCompanion
+            ?: viewModel.state.value.entries.firstOrNull {
+                it.isVolume && it.deviceId == entry.deviceId && it.id != entry.id
+            }
         volumeSheet = VolumeSheet(
             context = requireContext(),
-            entry = main,
+            entry = entry,
             announceEntry = announce,
             onLevel = { target, level -> viewModel.setVolume(target, level) },
             onMuted = { target, muted -> viewModel.setVolumeMuted(target, muted) },

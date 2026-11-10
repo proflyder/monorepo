@@ -1,10 +1,12 @@
 package dev.proflyder.home.feature.control.presentation
 
 import android.content.Context
+import android.graphics.Outline
 import android.view.HapticFeedbackConstants
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.view.ViewOutlineProvider
 import android.widget.ImageView
 import android.widget.LinearLayout
 import androidx.recyclerview.widget.DiffUtil
@@ -191,6 +193,16 @@ internal object ControlDiff : DiffUtil.ItemCallback<ControlItem>() {
         if (before.light != after.light) add(ControlChange.STATE)
         if (before.volume != after.volume) add(ControlChange.STATE)
         if (before.detailKey != after.detailKey) add(ControlChange.STATE)
+    }
+}
+
+/**
+ * A compact tile clips its foreground ripple to the icon circle; the ripple
+ * drawable itself also carries an oval mask.
+ */
+internal object OvalTileOutlineProvider : ViewOutlineProvider() {
+    override fun getOutline(view: View, outline: Outline) {
+        outline.setOval(0, 0, view.width, view.height)
     }
 }
 
@@ -937,6 +949,8 @@ internal class ControlAdapter(
             val on = entry.power == PowerState.ON
             val enabled = entry.available && !row.busy
             val context = tile.root.context
+            tile.controlTileRipple.clipToOutline = true
+            tile.controlTileRipple.outlineProvider = OvalTileOutlineProvider
             tile.root.alpha = if (entry.available) 1f else DISABLED_ALPHA
             tile.root.isEnabled = enabled
             tile.controlTileRipple.isEnabled = enabled

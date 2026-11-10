@@ -27,15 +27,18 @@ internal fun ControlEntry.localizedDetail(context: Context): String? =
 /**
  * The subtitle of a station volume row: just the level ("45%"), the title
  * already names the control; "Sound off" when muted, or the unavailable text.
- * A level is a live value, not server user data.
+ * When the device's announcement volume is merged into this row, its level
+ * follows after a separator. A level is a live value, not server user data.
  */
 internal fun ControlEntry.localizedVolumeText(context: Context, unavailable: Int): String {
     val volume = volume ?: return localizedStateText(context, unavailable)
-    return when {
-        !available -> context.getString(unavailable)
+    if (!available) return context.getString(unavailable)
+    val main = when {
         volume.muted -> context.getString(R.string.control_volume_muted)
         else -> context.getString(R.string.control_volume_percent, volume.level)
     }
+    val announcement = volumeCompanion?.volume?.level ?: return main
+    return context.getString(R.string.control_volume_with_announcement, main, announcement)
 }
 
 /**

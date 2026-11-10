@@ -45,6 +45,7 @@
     <string name="control_volume_announce">Громкость объявлений</string>
     <string name="control_volume_percent">%1$d%%</string>
     <string name="control_volume_muted">Звук выкл.</string>
+    <string name="control_volume_with_announcement">%1$s · объявления %2$d%%</string>
     <string name="control_volume_mute">Выключить звук</string>
     <string name="control_volume_unmute">Включить звук</string>
     <string name="control_hub_today">сегодня</string>
