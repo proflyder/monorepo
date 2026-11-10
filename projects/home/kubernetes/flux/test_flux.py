@@ -1,4 +1,5 @@
 """Static contracts for the Flux GitOps bundle (no cluster needed)."""
+import json
 import pathlib
 import re
 import subprocess
@@ -169,6 +170,9 @@ class Cluster(unittest.TestCase):
             # Applications consume the machine pins branch; their manifests
             # still come from `develop` (GitRepository/flux-system).
             "home-app-pins", "app-wakegrant",
+            # FLUX-APPS-PLAN 6.2-6.6: prepared, suspended until cutover.
+            "app-intercom", "app-currency-bot", "app-mcp-gateway",
+            "app-ha-executors", "app-hermes",
         })
         sources = {
             "home-app-pins": ("GitRepository", "flux-pins"),
@@ -217,6 +221,66 @@ class Cluster(unittest.TestCase):
             "name": "wakegrant",
             "namespace": "home-assistant",
         }])
+
+    def test_prepared_apps_are_suspended_and_wait(self):
+        expected = {
+            "app-intercom": "./projects/home/kubernetes/intercom/manifests",
+            "app-currency-bot": "./projects/home/kubernetes/currency-bot/manifests",
+            "app-mcp-gateway": "./projects/home/kubernetes/mcp-gateway/manifests",
+            "app-ha-executors": "./projects/home/kubernetes/scheduler/manifests",
+            "app-hermes": "./projects/home-assistant/deploy/flux",
+        }
+        for name, path in expected.items():
+            with self.subTest(app=name):
+                spec = self.kustomizations[name]["spec"]
+                self.assertEqual(spec["path"], path)
+                # Prepared, not yet cut over: Flux must not touch the live
+                # workload until the owner removes `suspend`.
+                self.assertTrue(spec["suspend"])
+                self.assertTrue(spec["wait"])
+                self.assertEqual(spec["dependsOn"], [
+                    {"name": "platform"}, {"name": "home-app-pins"},
+                ])
+                self.assertEqual(spec["postBuild"]["substituteFrom"], [
+                    {"kind": "ConfigMap", "name": "home-app-images"},
+                    {"kind": "Secret", "name": "flux-app-settings"},
+                ])
+                self.assertTrue(spec["healthChecks"])
+
+    def test_pins_cover_every_flux_unit_image(self):
+        # Every image a `deploy.runtime: flux` unit pins must be referenced by
+        # its rendered manifests, with the ConfigMap key `pins.mjs` writes.
+        # The scheduler's `home-deploy` image is only used by the admin
+        # preflight Job, which is not part of the Flux set.
+        script = (
+            "const { config } = await import(process.argv[1] + '/platform/ci/units.mjs');\n"
+            "console.log(JSON.stringify(config.units.filter((u) => "
+            "u.deploy && u.deploy.runtime === 'flux')"
+            ".map((u) => ({ id: u.id, images: u.deploy.images }))));"
+        )
+        units = json.loads(subprocess.run(
+            ["node", "--input-type=module", "-e", script, str(ROOT)],
+            check=True, capture_output=True, text=True,
+        ).stdout)
+        paths = {
+            "wakegrant": K8S / "wakegrant/manifests",
+            "intercom": K8S / "intercom/manifests",
+            "currency-bot": K8S / "currency-bot/manifests",
+            "mcp-gateway": K8S / "mcp-gateway/manifests",
+            "scheduler": K8S / "scheduler/manifests",
+            "ha-bridge": K8S / "scheduler/manifests",
+            "hermes": ROOT / "projects/home-assistant/deploy/flux",
+        }
+        self.assertEqual({unit["id"] for unit in units}, set(paths))
+        unused = {("scheduler", "home-deploy")}
+        for unit in units:
+            rendered = yaml.safe_dump_all(kustomize(paths[unit["id"]]))
+            for image in unit["images"]:
+                if (unit["id"], image) in unused:
+                    continue
+                key = re.sub(r"[^A-Z0-9]+", "_", image.upper()) + "_IMAGE"
+                with self.subTest(unit=unit["id"], image=image):
+                    self.assertIn("${" + key + "}", rendered)
 
     def test_platform_umbrella_waits_for_the_chain(self):
         platform = self.kustomizations["platform"]
@@ -470,11 +534,18 @@ class Secrets(unittest.TestCase):
             "flux-git-deploy-key": "flux-system",
             "flux-settings": "flux-settings",
             "flux-app-settings": "flux-app-settings",
+            "flux-runtime-values": "runtime-values",
         })
         # The live Secret survives removal of the ExternalSecret, so an ESO
         # outage does not strip a running pod of its configuration.
         app = by_name(docs, "ExternalSecret")["flux-app-settings"]
         self.assertEqual(app["spec"]["target"]["deletionPolicy"], "Retain")
+        runtime = by_name(docs, "ExternalSecret")["flux-runtime-values"]
+        self.assertEqual(runtime["spec"]["target"]["deletionPolicy"], "Retain")
+        self.assertEqual(runtime["spec"]["data"], [{
+            "secretKey": "values",
+            "remoteRef": {"key": "k8s/flux-system/runtime-values", "property": "values"},
+        }])
         self.assertNotRegex(text, r"BEGIN (OPENSSH|RSA|EC) PRIVATE KEY")
         self.assertNotRegex(text, r"password\s*:\s*\S")
 
@@ -605,6 +676,162 @@ class WakegrantApp(unittest.TestCase):
             deployment["spec"]["template"]["spec"]["containers"][0]["image"],
             "${WAKEGRANT_IMAGE}",
         )
+
+
+class MigratedApps(unittest.TestCase):
+    """Flux manifest sets for FLUX-APPS-PLAN 6.2-6.5."""
+
+    EXPECTED = {
+        "intercom": ({"Deployment", "Service", "ExternalSecret"},
+                     {"INTERCOM_IMAGE", "BUILD_ID", "INTERCOM_NODE_PORT"}),
+        "currency-bot": ({"PersistentVolumeClaim", "Deployment", "Service",
+                          "NetworkPolicy", "ServiceMonitor", "ExternalSecret"},
+                         {"CURRENCY_BOT_IMAGE", "BUILD_ID", "CURRENCY_BOT_NODE_PORT",
+                          "CURRENCY_WEBHOOK_URL", "LAN_CIDR", "NODE_LAN_IP"}),
+        "mcp-gateway": ({"Deployment", "Service", "NetworkPolicy", "ServiceMonitor",
+                         "ConfigMap", "ServiceAccount", "Role", "RoleBinding",
+                         "ExternalSecret"},
+                        {"MCP_GATEWAY_IMAGE", "BUILD_ID", "LAN_CIDR", "NODE_LAN_IP",
+                         "HAOS_IP", "STATION_IP", "BB_CT_IP",
+                         "BB_PROJECT_STATION_LAB", "BB_PROJECT_ENGLISH_NOTES",
+                         "BB_DISPATCHER_THREAD_ID"}),
+        "scheduler": ({"PersistentVolumeClaim", "Deployment", "Service",
+                       "ExternalSecret"},
+                      {"SCHEDULER_IMAGE", "HA_BRIDGE_IMAGE", "HA_CONTROL_IMAGE",
+                       "HA_SCENARIO_IMAGE", "BUILD_ID", "HA_URL",
+                       "SCHEDULER_NODE_PORT", "CONTROL_NODE_PORT"}),
+    }
+
+    @classmethod
+    def setUpClass(cls):
+        cls.rendered = {
+            name: yaml.safe_dump_all(kustomize(K8S / name / "manifests"))
+            for name in cls.EXPECTED
+        }
+
+    def test_object_sets_match_the_ci_deploy(self):
+        for name, (kinds, _) in self.EXPECTED.items():
+            with self.subTest(unit=name):
+                docs = kustomize(K8S / name / "manifests")
+                self.assertEqual({d["kind"] for d in docs}, kinds)
+
+    def test_only_pins_and_app_settings_variables_remain(self):
+        for name, (_, keys) in self.EXPECTED.items():
+            with self.subTest(unit=name):
+                left = set(re.findall(r"\$\{([A-Z_]+)\}", self.rendered[name]))
+                self.assertEqual(left, keys)
+                self.assertNotIn("ROLLOUT_ID", left)
+
+    def test_pvcs_are_never_pruned(self):
+        for name in ("currency-bot", "scheduler"):
+            for pvc in of_kind(kustomize(K8S / name / "manifests"),
+                               "PersistentVolumeClaim"):
+                with self.subTest(unit=name, pvc=pvc["metadata"]["name"]):
+                    self.assertEqual(
+                        pvc["metadata"]["annotations"],
+                        {"kustomize.toolkit.fluxcd.io/prune": "disabled"},
+                    )
+
+    def test_namespace_manifest_is_not_in_the_flux_set(self):
+        # currency-bot's namespace is cluster-scoped and admin-owned.
+        self.assertNotIn("kind: Namespace", self.rendered["currency-bot"])
+
+    def test_ci_rbac_is_not_in_the_mcp_gateway_set(self):
+        # `ci/rbac.yaml` only grants `ci-deploy`; it goes away with that path.
+        self.assertNotIn("ci-deploy", self.rendered["mcp-gateway"])
+
+    def test_executor_steady_state_is_pinned(self):
+        docs = kustomize(K8S / "scheduler/manifests")
+        deployments = by_name(docs, "Deployment")
+        self.assertEqual(deployments["ha-bridge"]["spec"]["replicas"], 1)
+        self.assertEqual(deployments["ha-control"]["spec"]["replicas"], 1)
+        env = {
+            d["metadata"]["name"]: {
+                item["name"]: item.get("value")
+                for item in d["spec"]["template"]["spec"]["containers"][0]["env"]
+            }
+            for d in deployments.values()
+        }
+        self.assertEqual(env["ha-bridge"]["BRIDGE_EXECUTE"], "true")
+        self.assertEqual(env["ha-control"]["CONTROL_EXECUTE"], "true")
+        self.assertEqual(env["ha-scenario"]["SCENARIO_EXECUTE"], "true")
+
+    def test_rollout_annotation_tracks_the_unit_digest(self):
+        for name, (_, _) in self.EXPECTED.items():
+            docs = kustomize(K8S / name / "manifests")
+            for deployment in of_kind(docs, "Deployment"):
+                image = deployment["spec"]["template"]["spec"]["containers"][0]["image"]
+                annotation = deployment["spec"]["template"]["metadata"]["annotations"][
+                    "proflyder.dev/rollout"]
+                with self.subTest(unit=name, deployment=deployment["metadata"]["name"]):
+                    # cloudflared is a reviewed versions.sh literal, everything
+                    # else is the pins-branch placeholder.
+                    if "cloudflared" in image:
+                        self.assertIn("cloudflare/cloudflared:", annotation)
+                    else:
+                        self.assertEqual(annotation, image)
+
+    def test_catalog_config_map_keeps_its_stable_name(self):
+        configmaps = by_name(kustomize(K8S / "mcp-gateway/manifests"), "ConfigMap")
+        catalog = configmaps["mcp-gateway-catalog"]
+        self.assertEqual(catalog["metadata"]["namespace"], "home-assistant")
+        self.assertEqual(set(catalog["data"]), {"catalog.yaml", "bb-targets.yaml"})
+
+    def test_cloudflared_pin_matches_versions(self):
+        image = version("CLOUDFLARED_IMAGE")
+        self.assertIn(image, (K8S / "currency-bot/manifests/kustomization.yaml").read_text())
+
+
+class HermesApp(unittest.TestCase):
+    """The Flux Helm release for the Hermes runtime (FLUX-APPS-PLAN 6.6)."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.docs = kustomize(ROOT / "projects/home-assistant/deploy/flux")
+        cls.release = by_name(cls.docs, "HelmRelease")["runtime"]
+
+    def test_adopts_the_live_release_in_place(self):
+        spec = self.release["spec"]
+        self.assertEqual(self.release["metadata"]["namespace"], "flux-system")
+        self.assertEqual(spec["releaseName"], "runtime")
+        self.assertEqual(spec["targetNamespace"], "home-assistant")
+        self.assertEqual(spec["storageNamespace"], "home-assistant")
+
+    def test_chart_comes_from_git(self):
+        chart = self.release["spec"]["chart"]["spec"]
+        self.assertEqual(chart["chart"], "./projects/home-assistant/deploy/chart")
+        self.assertEqual(chart["reconcileStrategy"], "Revision")
+        self.assertEqual(chart["sourceRef"], {
+            "kind": "GitRepository", "name": "flux-system", "namespace": "flux-system",
+        })
+
+    def test_values_come_from_the_eso_secret(self):
+        self.assertEqual(self.release["spec"]["valuesFrom"], [{
+            "kind": "Secret", "name": "runtime-values", "valuesKey": "values",
+        }])
+
+    def test_images_are_pinned_by_the_post_renderer(self):
+        rendered = yaml.safe_dump(self.release)
+        for key in ("HERMES_IMAGE", "VOICE_PROXY_IMAGE",
+                    "HEALTH_EXPORTER_IMAGE", "HOME_DEPLOY_IMAGE"):
+            self.assertIn("${" + key + "}", rendered)
+
+    def test_failed_upgrades_roll_back(self):
+        remediation = self.release["spec"]["upgrade"]["remediation"]
+        self.assertEqual(remediation["strategy"], "rollback")
+        self.assertTrue(remediation["remediateLastFailure"])
+        self.assertTrue(self.release["spec"]["wait"])
+
+    def test_smoke_hook_is_a_post_upgrade_job(self):
+        template = (ROOT / "projects/home-assistant/deploy/chart/templates"
+                    / "smoke-hook.yaml").read_text()
+        self.assertIn("helm.sh/hook: post-upgrade", template)
+        self.assertIn("hermes assist-smoke", template)
+        # Disabled by default: the CI/admin `helm upgrade` path is unchanged.
+        self.assertIn("default dict", template)
+        smoke = self.release["spec"]["values"]["smoke"]
+        self.assertTrue(smoke["enabled"])
+        self.assertEqual(smoke["image"], "${HOME_DEPLOY_IMAGE}")
 
 
 class FluxAlerts(unittest.TestCase):

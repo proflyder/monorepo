@@ -20,6 +20,16 @@ Reconciled by Flux today:
 | `nexus` / `nexus-provision` | `nexus` | artifact cache and REST provisioning |
 | `home-app-pins` | `flux-system` | `home-app-images` ConfigMap from the machine branch `deploy/home-apps` |
 | `app-wakegrant` | `home-assistant` | pilot application, applied by Flux since the 6.1 cutover |
+| `app-intercom` | `home-assistant` | prepared in 6.2, **suspended** until the call/signaling cover check |
+| `app-currency-bot` | `currency-bot` | prepared in 6.3, **suspended** until the webhook/readiness cover check |
+| `app-mcp-gateway` | `home-assistant` | prepared in 6.4, **suspended** until the catalog/RBAC cover check |
+| `app-ha-executors` | `home-assistant` | prepared in 6.5 (scheduler + ha-bridge + ha-control + ha-scenario), **suspended** until the windowed cutover |
+| `app-hermes` | `home-assistant` / `flux-system` | prepared in 6.6 (`HelmRelease/runtime`), **suspended** until the voice smoke/rollback drill |
+
+"Prepared" means the Kustomization, manifests and CI pins path are merged and
+the unit has `deploy.runtime: "flux"` in `units.mjs`; the live workload keeps
+running unchanged until the owner removes `suspend`. `deploy-home` no longer
+applies those units in either state.
 
 Still manual, on purpose:
 
@@ -30,12 +40,13 @@ Still manual, on purpose:
 - **Cloudflare DNS records**: `ha`, `grafana`, `alarms`, `control`, `currency`,
   `intercom`, `passwords`, `vault`, `nexus` are created with
   `cloudflare_dns.py` (or the `nexus` procedure).
-- **Application services** (`scheduler`, `intercom`, `currency-bot`,
-  `mcp-gateway`, Hermes runtime) still run on `deploy-home`; their
-  ExternalSecrets are applied by
-  `projects/home/kubernetes/external-secrets/deploy.sh`. `wakegrant` is the
-  first migrated unit: `deploy-home` only commits its digest to the pins
-  branch and Flux applies it (see below).
+- **Application services** are prepared for Flux: `intercom`,
+  `currency-bot`, `mcp-gateway`, the HA executors and Hermes have
+  `Kustomization`s in `apps.yaml` (suspended until the owner's cutover) and
+  `deploy.runtime: "flux"`, so `deploy-home` only writes their digests to the
+  pins branch. Their `ExternalSecrets` are owned by their Flux manifest sets;
+  `projects/home/kubernetes/external-secrets/deploy.sh` remains an emergency
+  admin tool. `wakegrant` is the already-enabled pilot (see below).
 
 ## Components
 
@@ -65,6 +76,7 @@ projects/home/kubernetes/flux/
 └── cluster/                  reconciled by Flux, not by bootstrap
     ├── kustomization.yaml
     ├── network-policy.yaml
+    ├── apps.yaml             pins source + every app Kustomization
     ├── platform.yaml          umbrella for the platform chain
     ├── platform/
     │   ├── external-secrets.yaml
@@ -135,17 +147,42 @@ metadata:
     proflyder.dev/run: "https://github.com/proflyder/monorepo/actions/runs/<id>"
 data:
   BUILD_ID: "<commit12>"
+  SCHEDULER_IMAGE: "ghcr.io/proflyder/scheduler@sha256:<64-hex>"
+  HA_BRIDGE_IMAGE: "ghcr.io/proflyder/ha-bridge@sha256:<64-hex>"
+  HA_CONTROL_IMAGE: "ghcr.io/proflyder/ha-control@sha256:<64-hex>"
+  HA_SCENARIO_IMAGE: "ghcr.io/proflyder/ha-scenario@sha256:<64-hex>"
   WAKEGRANT_IMAGE: "ghcr.io/proflyder/wakegrant@sha256:<64-hex>"
+  INTERCOM_IMAGE: "ghcr.io/proflyder/intercom@sha256:<64-hex>"
+  CURRENCY_BOT_IMAGE: "ghcr.io/proflyder/currency-bot@sha256:<64-hex>"
+  MCP_GATEWAY_IMAGE: "ghcr.io/proflyder/mcp-gateway@sha256:<64-hex>"
+  HERMES_IMAGE: "ghcr.io/proflyder/hermes@sha256:<64-hex>"
+  VOICE_PROXY_IMAGE: "ghcr.io/proflyder/voice-proxy@sha256:<64-hex>"
+  HEALTH_EXPORTER_IMAGE: "ghcr.io/proflyder/health-exporter@sha256:<64-hex>"
+  HOME_DEPLOY_IMAGE: "ghcr.io/proflyder/home-deploy@sha256:<64-hex>"
 ```
 
-Keys are added per migrated unit. `BUILD_ID` is the `proflyder.dev/build`
-annotation; `WAKEGRANT_IMAGE` is the digest-pinned image.
+Keys are written by the `pins` job (`platform/ci/pins.mjs`) for every unit
+with `deploy.runtime: "flux"`; `cloudflared` is not CI-built and stays a
+reviewed `versions.sh` literal. `BUILD_ID` is the `proflyder.dev/build`
+annotation on the non-Hermes workloads; every other key is a digest-pinned
+image. A key that a suspended unit does not consume yet is harmless.
 
-Current live digest (read-only, safe to copy into the initial pins commit):
+Current live digests (read-only, safe to copy into the initial pins commit):
 
 ```bash
-mise run kubectl -- -n home-assistant get deployment wakegrant \
+# one unit
+mise run kubectl -- -n home-assistant get deployment scheduler \
   -o jsonpath='{.spec.template.spec.containers[0].image}'
+
+# every application workload of the six units
+mise run kubectl -- -n home-assistant get deploy \
+  scheduler ha-bridge ha-control ha-scenario intercom mcp-gateway \
+  -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.template.spec.containers[0].image}{"\n"}{end}'
+mise run kubectl -- -n currency-bot get deploy \
+  -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.template.spec.containers[0].image}{"\n"}{end}'
+mise run kubectl -- -n home-assistant get deploy \
+  hermes runtime-health-exporter \
+  -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.template.spec.containers[*].image}{"\n"}{end}'
 ```
 
 `Kustomization/app-wakegrant` is the pilot and is **enabled** (FLUX-APPS-PLAN
@@ -159,14 +196,30 @@ verifies provenance and commits only `BUILD_ID`, `WAKEGRANT_IMAGE` and the
 `platform/ci/pins.mjs`. Pushes race with other units, so the writer refetches,
 reapplies the same keys and retries; `develop` is never written.
 
-The remaining app units move one at a time: drop `suspend` for a new
-Kustomization and flip its `deploy.runtime` to `"flux"`; the pins job picks it
-up without a workflow edit.
+The prepared app units (6.2–6.6) already have `deploy.runtime: "flux"` and
+their Kustomizations in `apps.yaml` with `suspend: true`. Cutover per unit is
+one field plus the checks in `docs/FLUX-APPS-PLAN.md`: remove `suspend`, run
+`kubectl diff` against the rendered set, reconcile, exercise the unit's smoke
+(intercom call, `/readyz`, catalog check, `GetStatus`, Hermes voice smoke) and
+watch it. Nothing else changes in CI: the `pins` job already writes its keys.
+
+Manifest paths for the prepared units:
+
+| Kustomization | Path | Notes |
+|---|---|---|
+| `app-intercom` | `projects/home/kubernetes/intercom/manifests` | no PVC |
+| `app-currency-bot` | `projects/home/kubernetes/currency-bot/manifests` | namespace stays admin-owned |
+| `app-mcp-gateway` | `projects/home/kubernetes/mcp-gateway/manifests` | catalog via `configMapGenerator` |
+| `app-ha-executors` | `projects/home/kubernetes/scheduler/manifests` | one set for scheduler + three executors; steady-state modes pinned |
+| `app-hermes` | `projects/home-assistant/deploy/flux` | `HelmRelease/runtime`, values from `runtime-values` |
 
 Rollback is `suspend: true` plus a pins revert, never `kubectl rollout undo`.
-Do not delete the Kustomization: `prune: true` would remove the workload, and
-`PersistentVolumeClaim/wakegrant-data` carries
-`kustomize.toolkit.fluxcd.io/prune: disabled` for exactly that reason.
+For Hermes, `HelmRelease/runtime` remediation rolls back on a failed upgrade or
+smoke hook; a pins revert re-applies the previous digests. Do not delete a
+Kustomization: `prune: true` would remove the workload, and every app PVC
+(`wakegrant-data`, `scheduler-data`, `ha-bridge-data`, `ha-scenario-data`,
+`currency-bot-data`) carries `kustomize.toolkit.fluxcd.io/prune: disabled` for
+exactly that reason.
 
 Delivery alerts (`FluxKustomizationNotReady`, `HelmReleaseNotReady`,
 `PinsStale`) live in `projects/home/kubernetes/observability/rules`; the
@@ -191,6 +244,17 @@ Delivery alerts (`FluxKustomizationNotReady`, `HelmReleaseNotReady`,
 No value is committed to Git. `HOME_DOMAIN`, `LAN_CIDR` and `HAOS_ADDRESS`
 come from the private `secrets/home/ingress.env`; `PVE_NODE_TARGET` from the
 private observability overlay.
+
+Application values are separate:
+
+| OpenBao path | Secret | Consumed by |
+|---|---|---|
+| `secret/k8s/flux-system/app-settings` | `flux-app-settings` | `postBuild.substituteFrom` of every app Kustomization (NodePorts, `HA_URL`, LAN/host addresses, bb project ids) |
+| `secret/k8s/flux-system/runtime-values` (field `values`) | `runtime-values` | `HelmRelease/runtime` `valuesFrom` (Hermes workload values, no `storage` block) |
+
+Both are declared by `ExternalSecret`s in `flux/external-secrets.yaml`
+(bootstrap bundle) with `deletionPolicy: Retain`. `app-settings` and
+`runtime-values` are also documented in `docs/SECRETS.md` once created.
 
 ## First bootstrap (owner, manual)
 

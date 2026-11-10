@@ -1,0 +1,104 @@
+# Flux entry point for the Hermes runtime Helm release (FLUX-APPS-PLAN 6.6).
+#
+# The chart is the same in-repo chart the CI/admin path renders
+# (`projects/home-assistant/deploy/chart`), with the live release name and
+# namespaces so helm-controller adopts `runtime` in `home-assistant` instead of
+# creating a second release. `reconcileStrategy: Revision` makes chart edits
+# (including this repository's templates) reach the live release; the chart
+# version stays 0.1.0.
+#
+# Private values: `Secret/runtime-values` (flux-system) is materialised by ESO
+# from `secret/k8s/flux-system/runtime-values`, field `values`. It must hold the
+# workload values only: the `storage` block (PV/PVC) stays admin-owned
+# (`apply-runtime.sh`), exactly like the CI path that drops it before
+# `helm upgrade`. Tokens are not in these values; they live in Kubernetes
+# Secrets created by ESO.
+#
+# Images are digest-pinned by the post-renderer from the pins branch, because
+# they sit inside private list values:
+#   ${HERMES_IMAGE}, ${VOICE_PROXY_IMAGE}
+#   ${HEALTH_EXPORTER_IMAGE}, ${HOME_DEPLOY_IMAGE}
+#
+# Rollback: failed install/upgrade is rolled back to the previous revision by
+# the remediation policy, and the Assist smoke is a post-upgrade Helm hook
+# (`templates/smoke-hook.yaml`). A pins revert re-applies the previous digests.
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: runtime
+  namespace: flux-system
+spec:
+  releaseName: runtime
+  targetNamespace: home-assistant
+  # helm release Secrets stay in the live release namespace, not flux-system.
+  storageNamespace: home-assistant
+  interval: 10m
+  timeout: 8m
+  # `wait` matches the CI `helm upgrade --wait`; the smoke hook runs after the
+  # release is ready and fails the upgrade if the assistant does not answer.
+  wait: true
+  chart:
+    spec:
+      chart: ./projects/home-assistant/deploy/chart
+      reconcileStrategy: Revision
+      sourceRef:
+        kind: GitRepository
+        name: flux-system
+        namespace: flux-system
+  valuesFrom:
+    - kind: Secret
+      name: runtime-values
+      valuesKey: values
+  values:
+    # Enables the post-upgrade Assist smoke hook; the image comes from pins.
+    smoke:
+      enabled: true
+      image: ${HOME_DEPLOY_IMAGE}
+  install:
+    remediation:
+      retries: 0
+  upgrade:
+    remediation:
+      retries: 0
+      # A failed upgrade (including the smoke hook) returns to the previous
+      # revision instead of leaving a half-applied release.
+      strategy: rollback
+      remediateLastFailure: true
+  postRenderers:
+    - kustomize:
+        patches:
+          - target:
+              kind: Deployment
+              name: hermes
+            patch: |-
+              apiVersion: apps/v1
+              kind: Deployment
+              metadata:
+                name: hermes
+              spec:
+                template:
+                  spec:
+                    containers:
+                      - name: gateway
+                        image: ${HERMES_IMAGE}
+                      - name: voice-proxy
+                        image: ${VOICE_PROXY_IMAGE}
+          # The exporter is a distroless Rust image: pin it and drop the old
+          # Python ConfigMap mount, like `home-deploy hermes rollout` does.
+          # JSON6902 `add` works whether or not the live keys exist yet.
+          - target:
+              kind: Deployment
+              name: runtime-health-exporter
+            patch: |-
+              - op: add
+                path: /spec/template/spec/containers/0/image
+                value: ${HEALTH_EXPORTER_IMAGE}
+              - op: add
+                path: /spec/template/spec/containers/0/command
+                value: ["/usr/local/bin/health-exporter"]
+              - op: add
+                path: /spec/template/spec/containers/0/volumeMounts
+                value: []
+              - op: add
+                path: /spec/template/spec/volumes
+                value: []

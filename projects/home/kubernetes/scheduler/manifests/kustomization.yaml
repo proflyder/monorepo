@@ -1,0 +1,127 @@
+# Flux-rendered manifest set for the HA executors (FLUX-APPS-PLAN 6.5):
+# scheduler, ha-bridge, ha-control, ha-scenario.
+#
+# One Kustomization owns all four workloads because they share the scheduler
+# deploy script and templates; two Kustomizations over the same directory with
+# `prune: true` would fight over each other's objects.
+#
+# The templates stay untouched for `deploy.sh` (CI/admin path). This Flux path
+# differs in exactly two intended ways:
+#   * the CI-only `ROLLOUT_ID` annotation becomes the digest of the unit's own
+#     image;
+#   * the executor modes and replicas are pinned to the live steady state
+#     (`ha-bridge` 1 / BRIDGE_EXECUTE=true, `ha-control` 1 / CONTROL_EXECUTE=true)
+#     instead of `deploy.sh`'s preserve mode. Mode changes are a Git change
+#     (plus `flux suspend` for a drill), never an implicit Flux side effect.
+#
+# `preflight-job.yaml` is deliberately absent: the cutover preflight stays a
+# manual admin Job (FLUX-APPS-PLAN 4.3/6.5).
+#
+# Substituted by Kustomization/app-ha-executors:
+#   ${SCHEDULER_IMAGE}, ${HA_BRIDGE_IMAGE}, ${HA_CONTROL_IMAGE},
+#   ${HA_SCENARIO_IMAGE}, ${BUILD_ID}   from ConfigMap/home-app-images
+#   ${HA_URL}, ${SCHEDULER_NODE_PORT}, ${CONTROL_NODE_PORT}
+#                                       from Secret/flux-app-settings (ESO)
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - scheduler.yaml
+  - bridge.yaml
+  - control.yaml
+  - control-service.yaml
+  - scenario.yaml
+  - external-secrets.yaml
+patches:
+  # `prune: true` must never delete a SQLite volume if a manifest is removed by
+  # mistake (FLUX-APPS-PLAN 4.2).
+  - target:
+      kind: PersistentVolumeClaim
+      name: scheduler-data
+    patch: |-
+      - op: add
+        path: /metadata/annotations
+        value:
+          kustomize.toolkit.fluxcd.io/prune: disabled
+  - target:
+      kind: PersistentVolumeClaim
+      name: ha-bridge-data
+    patch: |-
+      - op: add
+        path: /metadata/annotations
+        value:
+          kustomize.toolkit.fluxcd.io/prune: disabled
+  - target:
+      kind: PersistentVolumeClaim
+      name: ha-scenario-data
+    patch: |-
+      - op: add
+        path: /metadata/annotations
+        value:
+          kustomize.toolkit.fluxcd.io/prune: disabled
+  # The image itself changes the pod template, so each annotation follows the
+  # digest instead of the CI-only `ROLLOUT_ID`.
+  - target:
+      kind: Deployment
+      name: scheduler
+    patch: |-
+      - op: replace
+        path: /spec/template/metadata/annotations/proflyder.dev~1rollout
+        value: ${SCHEDULER_IMAGE}
+  - target:
+      kind: Deployment
+      name: ha-bridge
+    patch: |-
+      - op: replace
+        path: /spec/template/metadata/annotations/proflyder.dev~1rollout
+        value: ${HA_BRIDGE_IMAGE}
+  - target:
+      kind: Deployment
+      name: ha-control
+    patch: |-
+      - op: replace
+        path: /spec/template/metadata/annotations/proflyder.dev~1rollout
+        value: ${HA_CONTROL_IMAGE}
+  - target:
+      kind: Deployment
+      name: ha-scenario
+    patch: |-
+      - op: replace
+        path: /spec/template/metadata/annotations/proflyder.dev~1rollout
+        value: ${HA_SCENARIO_IMAGE}
+  # Live steady state recorded on 2026-11-10 (FLUX-APPS-PLAN 6.5 step 1/2).
+  # The template keeps `0`/false for `deploy.sh`'s first install; Flux owns the
+  # long-lived executor with these values.
+  - target:
+      kind: Deployment
+      name: ha-bridge
+    patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: ha-bridge
+      spec:
+        replicas: 1
+        template:
+          spec:
+            containers:
+              - name: ha-bridge
+                env:
+                  - name: BRIDGE_EXECUTE
+                    value: "true"
+  - target:
+      kind: Deployment
+      name: ha-control
+    patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: ha-control
+      spec:
+        replicas: 1
+        template:
+          spec:
+            containers:
+              - name: ha-control
+                env:
+                  - name: CONTROL_EXECUTE
+                    value: "true"

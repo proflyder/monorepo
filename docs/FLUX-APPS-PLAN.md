@@ -1,15 +1,21 @@
 # FLUX-APPS-PLAN — перевод сервисов `deploy-home` на Flux
 
-Статус: **пилот выполнен, миграция продолжается**. Сделаны этапы 6.0 и 6.1:
-pins-ветка `deploy/home-apps`, `GitRepository/flux-pins`,
-`Kustomization/home-app-pins`, `app-wakegrant` с `suspend: false`,
-`secret/k8s/flux-system/app-settings` → `flux-app-settings`, job `pins` в
-`deploy-home` (пишет digest'ы без VPN/kubeconfig) и алерты Flux. `wakegrant`
-переведён на `deploy.runtime: "flux"`, поэтому `deploy-home` больше не катит
-его через `kubectl`. Остальные юниты (§6.2–6.6) остаются планом; после
-завершения всех этапов действующие факты переносятся в
-`STATE.md`/`DECISIONS.md`, команды — в `OPERATIONS.md`, а этот план удаляется
-(правило `docs/README.md`).
+Статус: **этапы 6.0–6.6 подготовлены; 6.1 включён, 6.2–6.6 ждут
+включения**. Пилот `wakegrant` (6.1) работает в `develop`: pins-ветка
+`deploy/home-apps`, `GitRepository/flux-pins`, `Kustomization/home-app-pins`,
+`app-wakegrant` с `suspend: false`, `secret/k8s/flux-system/app-settings` →
+`flux-app-settings`, job `pins` в `deploy-home` (пишет digest'ы без
+VPN/kubeconfig) и алерты Flux.
+
+PR `feat/flux-apps-all` добавил Manifest-наборы и `Kustomization` для
+`intercom`, `currency-bot`, `mcp-gateway`, `scheduler`+`ha-bridge`
+(один `app-ha-executors`) и `hermes` (`HelmRelease/runtime`). Все шесть
+юнитов переведены на `deploy.runtime: "flux"`, поэтому `deploy-home` больше
+не катит их через `kubectl`/`helm`; их Kustomizations созданы с
+`suspend: true`, и включение — отдельное окно владельца (diff, reconcile,
+smoke, наблюдение). После завершения всех этапов действующие факты
+переносятся в `STATE.md`/`DECISIONS.md`, команды — в `OPERATIONS.md`, а этот
+план удаляется (правило `docs/README.md`).
 
 Дата снимка состояния: 2026-11-10.
 
@@ -602,9 +608,9 @@ CI не пишет значения секретов в Git и не создаё
 | `scheduler_env` | `HA_URL`, `LAN_CIDR`, `NODE_LAN_IP`, `SCHEDULER_NODE_PORT`, `SCHEDULER_PUBLIC_URL`, `CONTROL_NODE_PORT` | `secret/k8s/flux-system/app-settings` → `Secret/flux-app-settings` |
 | `wakegrant_env` | `WAKE_GRANT_NODE_PORT` | туда же |
 | `intercom_env` | `INTERCOM_NODE_PORT` | туда же |
-| `currency_bot_env` | `WEBHOOK_URL`, `LAN_CIDR`, `NODE_LAN_IP`, `CURRENCY_BOT_NODE_PORT` | туда же |
+| `currency_bot_env` | `WEBHOOK_URL` → `CURRENCY_WEBHOOK_URL`, `LAN_CIDR`, `NODE_LAN_IP`, `CURRENCY_BOT_NODE_PORT` | `secret/k8s/flux-system/app-settings` → `Secret/flux-app-settings` |
 | `mcp_gateway_env` | `LAN_CIDR`, `NODE_LAN_IP`, `HAOS_IP`, `STATION_IP`, `BB_CT_IP`, `BB_PROJECT_STATION_LAB`, `BB_PROJECT_ENGLISH_NOTES`, `BB_DISPATCHER_THREAD_ID` | туда же |
-| `runtime_values` | приватные Helm values Hermes (без токенов) | `secret/k8s/flux-system/runtime-values` → `Secret/runtime-values` в `flux-system` (ESO) |
+| `runtime_values` | приватные Helm values Hermes (без токенов, без блока `storage`) | `secret/k8s/flux-system/runtime-values`, поле `values` → `Secret/runtime-values` в `flux-system` (ESO) |
 
 Application Secrets уже живут в OpenBao и создаются ESO:
 
@@ -716,7 +722,7 @@ Application Secrets уже живут в OpenBao и создаются ESO:
 Критерии готовности: 7 дней без деплоя из CI, Flux `Ready`, digest
 совпадает с pins, PVC тот же, алертов нет, rollback-учение выполнено.
 
-### 6.2. `intercom`
+### 6.2. `intercom` — **подготовлено (PR `feat/flux-apps-all`)**
 
 Проще пилота (нет PVC), но проверяет app без состояния и зависимость от
 `ingress/routes`. Шаги аналогичны: kustomization + `suspend`, diff, reconcile,
@@ -724,7 +730,12 @@ Application Secrets уже живут в OpenBao и создаются ESO:
 включается в Flux (сейчас он не входит в `external-secrets/deploy.sh`).
 Критерий: звонок/сигналинг работает, NodePort и ingress не изменились.
 
-### 6.3. `currency-bot`
+Сделано: `projects/home/kubernetes/intercom/manifests/kustomization.yaml`
+(Deployment, Service, ExternalSecret; `ROLLOUT_ID` заменён на digest) и
+`Kustomization/app-intercom` с `suspend: true`. `deploy.runtime` — `flux`,
+rollback — `flux-pins`.
+
+### 6.3. `currency-bot` — **подготовлено (PR `feat/flux-apps-all`)**
 
 Проверяет namespace, два Deployment, NetworkPolicy, ServiceMonitor,
 Cloudflare Tunnel и PVC. Namespace остаётся admin-owned (не включать
@@ -741,7 +752,13 @@ Cloudflare Tunnel и PVC. Namespace остаётся admin-owned (не вклю�
 Вне Flux остаются Cloudflare-маршрут туннеля и host nft-фильтр NodePort —
 это ручные операции, как и сейчас.
 
-### 6.4. `mcp-gateway`
+Сделано: `manifests/kustomization.yaml` (PVC с `prune: disabled`,
+`namespace.yaml` исключён, `CLOUDFLARED_IMAGE` — литерал tag+digest из
+`versions.sh` в Flux-патче; `test_flux.py` держит их синхронными) и
+`Kustomization/app-currency-bot` с `suspend: true`. `deploy.runtime` —
+`flux`, rollback — `flux-pins`.
+
+### 6.4. `mcp-gateway` — **подготовлено (PR `feat/flux-apps-all`)**
 
 Проверяет `configMapGenerator` и RBAC. Шаги:
 
@@ -757,7 +774,11 @@ Cloudflare Tunnel и PVC. Namespace остаётся admin-owned (не вклю�
 `ci/rbac.yaml` в Flux не включается; после финала удаляется вместе с
 `ci-deploy`.
 
-### 6.5. `scheduler` + `ha-bridge` (executors)
+Сделано: `manifests/kustomization.yaml` (генератор `mcp-gateway-catalog`,
+`ci/rbac.yaml` исключён) и `Kustomization/app-mcp-gateway` с
+`suspend: true`. `deploy.runtime` — `flux`, rollback — `flux-pins`.
+
+### 6.5. `scheduler` + `ha-bridge` (executors) — **подготовлено (PR `feat/flux-apps-all`)**
 
 Это одна группа шаблонов и один скрипт, поэтому на первом шаге — одна
 Kustomization `app-ha-executors` с четырьмя workload'ами (scheduler,
@@ -767,57 +788,59 @@ ha-bridge, ha-control, ha-scenario). Разделять её на две име�
 
 Порядок:
 
-1. Зафиксировать live-режимы: `BRIDGE_EXECUTE`, `CONTROL_EXECUTE`,
-   replicas, образы; записать в PR/документ (без секретов).
-2. Привести манифесты к steady-state: `ha-bridge` `replicas: 1`,
-   `BRIDGE_EXECUTE: "true"`, `CONTROL_EXECUTE` — по факту; либо оставить
-   `replicas: 0` и управлять режимом только через Git/PR.
-3. Добавить kustomization + `suspend`, diff; особое внимание:
-   `enableServiceLinks: false`, PVC, NodePort, `HA_URL`, отсутствие
-   `--preserve-env`.
-4. reconcile в оконном режиме: сначала `scheduler` (он не зависит от
-   bridge), затем bridge/control/scenario. Проверить `GetStatus.ready`,
-   `-healthcheck`, очередь `control`, отсутствие дублей исполнения.
+1. Live-режимы сняты read-only 2026-11-10: `ha-bridge` 1 реплика,
+   `BRIDGE_EXECUTE=true`; `ha-control` 1 реплика, `CONTROL_EXECUTE=true`;
+   `ha-scenario` 1, `SCENARIO_EXECUTE=true`.
+2. Steady-state зафиксирован в Flux-патче `manifests/kustomization.yaml`
+   (`ha-bridge` 1/true, `ha-control` 1/true); шаблоны для `deploy.sh` не
+   меняются. Переключение режимов — Git/PR плюс `flux suspend` на время
+   учений.
+3. `kustomization.yaml` + `suspend: true`; `preflight-job.yaml` не входит
+   (ручной admin-Job), PVC — `prune: disabled`.
+4. reconcile в оконном режиме: сначала `scheduler`, затем
+   bridge/control/scenario. Проверить `GetStatus.ready`, `-healthcheck`,
+   очередь `control`, отсутствие дублей исполнения.
 5. `runtime: "flux"` для обоих юнитов; следующий деплой.
 6. Учения: `flux suspend` + `--shadow`/`--execute` admin-скриптом; вернуть
    steady-state; убедиться, что Flux не включает второй executor.
 
-Откат: suspend + вернуть `runtime: "ci"` + `deploy.sh` предыдущего коммита.
-Не удалять Kustomization с prune.
+Откат: suspend + pins revert (не удалять Kustomization с prune).
 
 Критерий: 14 дней без CI-деплоя, режимы не менялись неявно, будильники и
 сценарии работают, очередь `control` пуста, алертов нет.
 
-### 6.6. `hermes`
+### 6.6. `hermes` — **подготовлено (PR `feat/flux-apps-all`)**
 
-Самый сложный. Предлагаемая схема:
+Самый сложный. Сделано:
 
 1. `HelmChart` из Git (`sourceRef: GitRepository/flux-system`,
    `chart: projects/home-assistant/deploy/chart`) и `HelmRelease/runtime`
    в `flux-system` (`releaseName: runtime`, `targetNamespace:
    home-assistant`, `storageNamespace: home-assistant`), чтобы
    helm-controller принял живой релиз как upgrade.
-2. `valuesFrom: Secret/runtime-values` в `flux-system` (ESO) +
-   `spec.values`/`postRenderers`
-   для digest'ов. `postRenderers` с strategic-merge patch по контейнерам
-   позволяет подставить `${HERMES_IMAGE}`, `${VOICE_PROXY_IMAGE}`,
-   `${HEALTH_EXPORTER_IMAGE}` без перезаписи массивов приватных values.
-3. Exporter: убрать runtime-перезапись из `home-deploy`, оформить
-   distroless-контейнер в chart (command, пустые volumeMounts) — это
-   небольшое изменение chart, поведение сохраняется.
-4. Smoke/rollback: post-upgrade Helm hook Job с образом `home-deploy` и
-   командами `hermes assist-smoke`/`voice-proxy -healthcheck`;
-   `remediation.strategy: rollback` и
-   `remediateLastFailure: true`. Падение hook'а → откат на прежнюю ревизию.
+2. `valuesFrom: Secret/runtime-values` в `flux-system` (ESO,
+   `ExternalSecret/flux-runtime-values`, OpenBao-поле `values`; блок
+   `storage` в записи отсутствует — PV/PVC admin-owned).
+   `postRenderers` с strategic-merge/JSON6902 патчами подставляет
+   `${HERMES_IMAGE}`, `${VOICE_PROXY_IMAGE}`, `${HEALTH_EXPORTER_IMAGE}` и
+   `${HOME_DEPLOY_IMAGE}` без перезаписи массивов приватных values.
+3. Exporter: patch убирает старый ConfigMap-mount и ставит distroless
+   `command`, как это делает `home-deploy hermes rollout`.
+4. Smoke/rollback: `chart/templates/smoke-hook.yaml` — post-upgrade Helm
+   hook Job (`home-deploy hermes assist-smoke`) под `smoke.enabled`
+   (по умолчанию выключен, CI-путь не меняется); Flux включает hook и
+   задаёт digest `home-deploy`. `remediation.strategy: rollback` +
+   `remediateLastFailure: true` возвращают прежнюю ревизию. Voice-proxy
+   `-healthcheck` остаётся readiness-пробой pod'а, exporter — probes и
+   `healthChecks`; отдельный Job для них не добавлялся (осознанно).
 5. PV/PVC остаются admin-owned (`apply-runtime.sh`), в chart `storage`
    пустой; Flux не трогает PV.
-6. После стабилизации — `runtime: "flux"` для юнита `hermes`, затем убрать
-   `rollout.sh`/`home-deploy hermes rollout` из CI-пути, оставив команду для
-   ручного аварийного отката.
+6. `runtime: "flux"` для юнита `hermes`; `rollout.sh` сохранён как ручной
+   аварийный путь.
 
 Откат: HelmRelease remediation; вручную — `helm rollback runtime <rev>` или
 revert pins. Критерий: 14 дней, голосовой smoke зелёный, PV не пересоздан,
-откат проверен на `--simulate-smoke-failure`-аналоге.
+откат проверен.
 
 ### 6.7. Финал: убрать входящий доступ CI
 

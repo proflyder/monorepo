@@ -427,6 +427,12 @@ export function rollbackCommand(unit) {
         args: ["--namespace", unit.rollbackNamespace, "rollback", unit.rollbackRelease],
       };
     case "hermes":
+      // Flux writes no local revision state: the HelmRelease remediation
+      // rolls back automatically. Without a recorded state dir this is a
+      // print-only instruction.
+      if (!stateDir) {
+        return null;
+      }
       return {
         command: "bash",
         args: [
@@ -455,7 +461,11 @@ export function rollbackPlanLines(unit) {
   }
   if (unit.rollbackKind === "hermes") {
     lines.push(`  restores: Helm release ${unit.rollbackRelease} in namespace ${unit.rollbackNamespace}`);
-    lines.push(`  state: ${unit.rollbackStateDir} (recorded previous revision)`);
+    if (unit.rollbackStateDir) {
+      lines.push(`  state: ${unit.rollbackStateDir} (recorded previous revision)`);
+    } else {
+      lines.push("  action: HelmRelease remediation rolls back to the previous revision");
+    }
   }
   if (unit.rollbackKind === "helm") {
     lines.push(`  restores: Helm release ${unit.rollbackRelease} in namespace ${unit.rollbackNamespace}`);
@@ -489,6 +499,11 @@ export function rollbackPlanLines(unit) {
           `${unit.rollbackNamespace} rollback ${unit.rollbackRelease} <revision>`,
       );
     }
+  } else if (unit.rollbackKind === "hermes") {
+    lines.push(
+      "  fallback: helm --namespace " +
+        `${unit.rollbackNamespace} rollback ${unit.rollbackRelease} <revision>`,
+    );
   }
   return lines;
 }
@@ -508,7 +523,7 @@ export async function runRollback(argv, options = {}) {
   let unit;
   try {
     parsed = parseRollback(argv);
-    unit = findRollbackUnit(units(), parsed.unit);
+    unit = findRollbackUnit(options.units ?? units(), parsed.unit);
   } catch (error) {
     stderr.write(`${error.message}\n`);
     return 2;
@@ -530,6 +545,12 @@ export async function runRollback(argv, options = {}) {
   }
   if (unit.rollbackKind === "flux-pins") {
     stdout.write("rollback: revert the deploy/home-apps pins commit; nothing was executed\n");
+    return 0;
+  }
+  if (!rollbackCommand(unit)) {
+    // Instruction-only kinds (for example a Flux-managed Helm release with no
+    // local revision state): the plan above is the action.
+    stdout.write("rollback: manual action only; nothing was executed\n");
     return 0;
   }
   if (parsed.dryRun) {
