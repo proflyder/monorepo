@@ -745,9 +745,11 @@ Cloudflare Tunnel и PVC. Namespace остаётся admin-owned (не вклю�
 
 ### 6.5. `scheduler` + `ha-bridge` (executors)
 
-Это одна группа шаблонов и один скрипт, поэтому переводим вместе, но
-отдельными Kustomization'ами, если получится разделить каталоги; иначе —
-одна `app-ha-executors` с четырьмя workload'ами.
+Это одна группа шаблонов и один скрипт, поэтому на первом шаге — одна
+Kustomization `app-ha-executors` с четырьмя workload'ами (scheduler,
+ha-bridge, ha-control, ha-scenario). Разделять её на две имеет смысл только
+отдельным рефакторингом каталогов `manifests/`; для миграции это не
+требуется.
 
 Порядок:
 
