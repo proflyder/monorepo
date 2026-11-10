@@ -129,6 +129,10 @@
    "purpose": "ocserv client CA (key, cert, CRL, OpenSSL dir)",
    "consumer": "owner (vpncerts.py)"
   },
+  "infra/vpn/clients/ci-android": {
+   "purpose": "VPN client certificate for CI android-distribute (GitHub Environment Android)",
+   "consumer": "owner"
+  },
   "infra/vpn/clients/ci-pulsar": {
    "purpose": "VPN client certificate for CI deploy-station",
    "consumer": "owner"
@@ -630,6 +634,24 @@
    "path": "infra/vpn/client-ca",
    "field": "client_ca_dir_tar_gz_b64",
    "encoding": "tar_b64"
+  },
+  {
+   "file": "home/vpn/clients/ci-android.p12",
+   "path": "infra/vpn/clients/ci-android",
+   "field": "p12_b64",
+   "encoding": "b64"
+  },
+  {
+   "file": "home/vpn/clients/ci-android.legacy.p12",
+   "path": "infra/vpn/clients/ci-android",
+   "field": "legacy_p12_b64",
+   "encoding": "b64"
+  },
+  {
+   "file": "home/vpn/clients/ci-android.password",
+   "path": "infra/vpn/clients/ci-android",
+   "field": "password",
+   "encoding": "text+nl"
   },
   {
    "file": "home/vpn/clients/ci-pulsar.legacy.p12",

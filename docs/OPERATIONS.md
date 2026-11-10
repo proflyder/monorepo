@@ -1397,7 +1397,7 @@ APK ровно один раз matrix-запись `android / android-app`
 прогоняет тесты на том же `--define`-варианте APK и публикует неподписанный
 artifact `android-app-apk` (`app.apk` + `release-info.json`). Затем job
 `android-distribute` в `.github/workflows/ci.yml` (Environment `Android`, VPN
-группа `ci`, роль OpenBao `android-distribute` → `secret/ci/android-distribute`),
+группа `ci` сертификатом `ci-android`, роль OpenBao `android-distribute` → `secret/ci/android-distribute`),
 дождавшись зелёного всего `android` matrix, скачивает artifact, подписывает его
 `platform/android/sign-release.sh` (`zipalign -P 16`, `apksigner` v2/v3,
 fail-closed проверка SHA-256 сертификата из `signing_cert_sha256`), обновляет
