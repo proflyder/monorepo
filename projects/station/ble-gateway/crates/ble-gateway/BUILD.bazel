@@ -1,7 +1,16 @@
 load("@rules_rust//cargo:defs.bzl", "extract_cargo_lints")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
+load("//projects/station/ble-gateway:version.bzl", "ble_gateway_version_env")
 
 package(default_visibility = ["//visibility:public"])
+
+# Kept in sync with [package].version in Cargo.toml. Bazel does not read the
+# Cargo manifest; the `version` attribute injects env!("CARGO_PKG_VERSION").
+# Without it `ble-gateway --version` prints 0.0.0 (see docs/STATION-SOFTWARE.md).
+PACKAGE_VERSION = "0.2.0"
+
+# Optional `--define=ble_gateway_git_rev=<rev>`; the binary logs it at startup.
+ble_gateway_version_env(name = "version_env")
 
 DEPS = [
     "@crates//:anyhow",
@@ -30,6 +39,9 @@ rust_library(
     ),
     edition = "2024",
     lint_config = ":workspace_lints",
+    # `src/cli.rs` asserts the injected CARGO_PKG_VERSION against this file.
+    compile_data = ["Cargo.toml"],
+    version = PACKAGE_VERSION,
     deps = DEPS,
 )
 
@@ -40,6 +52,8 @@ rust_binary(
     srcs = ["src/main.rs"],
     edition = "2024",
     lint_config = ":workspace_lints",
+    rustc_env_files = [":version_env"],
+    version = PACKAGE_VERSION,
     rustc_flags = select({
         "@zig_0_14_1//:station": [
             "-C",
@@ -66,6 +80,7 @@ rust_binary(
     srcs = ["src/bin/bletest.rs"],
     edition = "2024",
     lint_config = ":workspace_lints",
+    version = PACKAGE_VERSION,
     deps = [
         ":ble_gateway",
         "@crates//:anyhow",

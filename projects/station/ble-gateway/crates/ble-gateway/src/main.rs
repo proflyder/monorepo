@@ -9,6 +9,15 @@ use home_runtime::{Supervisor, shutdown_signal};
 use home_telemetry::{LevelFilter, TelemetryBuilder, local_offset};
 use tracing::{error, info};
 
+/// From Cargo.toml through the rules_rust `version` attribute; `--version` prints it.
+const VERSION: &str = env!("CARGO_PKG_VERSION");
+
+/// Optional `--define=ble_gateway_git_rev=<rev>`; `unknown` for plain builds.
+const GIT_REV: &str = match option_env!("BLE_GATEWAY_GIT_REV") {
+    Some(revision) => revision,
+    None => "unknown",
+};
+
 fn main() -> ExitCode {
     let config = Config::parse();
     let level = std::env::var("RUST_LOG")
@@ -25,6 +34,11 @@ fn main() -> ExitCode {
         eprintln!("log: {cause}");
         return ExitCode::FAILURE;
     }
+    info!(
+        version = VERSION,
+        revision = GIT_REV,
+        "ble-gateway starting"
+    );
     let runtime = match tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()

@@ -11,17 +11,22 @@ It opens one SSH connection and runs only read operations: `sha256sum`,
 `ls`, and the `--version` of a few binaries. It never writes to the station,
 never prints file contents and never prints secrets.
 
+Build artifacts can be pinned with `deployed_sha256`: the audit then compares
+the installed hash (OK/DRIFT) and prints the `--version` output as information.
+This covers builds that predate a version fix and binaries that come from the
+firmware rootfs rather than from this repository.
+
 Usage:
     python3 projects/station/tools/station-audit
     mise run station:audit -- --ip 192.0.2.13
     python3 projects/station/tools/station-audit --json
 
 Statuses:
-    OK      installed state matches the repository
-    DRIFT   present, but content/version differs
+    OK      installed state matches the repository or the pinned `deployed_sha256`
+    DRIFT   present, but content/version/hash differs
     MISSING expected path is absent on the device
     EXTRA   stale backup/candidate sibling (.bak/.prev/.new/...) next to a
-            managed directory
+            managed directory, unless the exact path is in `audit.extra_allow`
 """
 
 from __future__ import annotations
@@ -52,6 +57,7 @@ NORMALIZERS = {"ipv4"}
 _STATUS_ORDER = {"MISSING": 0, "DRIFT": 1, "EXTRA": 2, "OK": 3}
 _IPV4_RE = re.compile(r"(?:[0-9]{1,3}\.){3}[0-9]{1,3}")
 _IPV4_SED = "s/([0-9]{1,3}\\.){3}[0-9]{1,3}/<ip>/g"
+_SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 
 
 class ManifestError(Exception):
@@ -105,6 +111,15 @@ def validate_manifest(data: dict, repo_root: pathlib.Path = ROOT) -> None:
     for key in ("extra_dirs", "extra_patterns"):
         if not isinstance(audit.get(key, []), list):
             errors.append(f"audit.{key} must be a list")
+    allow = audit.get("extra_allow", [])
+    if not isinstance(allow, list):
+        errors.append("audit.extra_allow must be a list")
+    else:
+        for index, path in enumerate(allow):
+            if not isinstance(path, str) or not path.startswith("/"):
+                errors.append(f"audit.extra_allow[{index}] must be an absolute path")
+            elif "\t" in path or "\n" in path:
+                errors.append(f"audit.extra_allow[{index}] must not contain tabs or newlines")
     address = audit.get("address", {})
     if not isinstance(address, dict):
         errors.append("audit.address must be a mapping")
@@ -168,7 +183,16 @@ def validate_manifest(data: dict, repo_root: pathlib.Path = ROOT) -> None:
                 command = spec.get("version_command")
                 if not isinstance(command, str) or not command.strip():
                     errors.append(f"{fwhere}.version_command is required for compare: version")
+                pinned = spec.get("deployed_sha256")
+                if pinned is not None:
+                    if not isinstance(pinned, str) or not _SHA256_RE.match(pinned.lower()):
+                        errors.append(
+                            f"{fwhere}.deployed_sha256 must be 64 hex characters"
+                        )
                 expected = spec.get("expected")
+                if pinned is not None and expected is None:
+                    # The pinned hash is authoritative; a version string is optional.
+                    continue
                 if not isinstance(expected, dict) or not isinstance(expected.get("repo"), str):
                     errors.append(f"{fwhere}.expected.repo is required for compare: version")
                 elif not _safe_repo_file(repo_root, expected["repo"]):
@@ -181,6 +205,8 @@ def validate_manifest(data: dict, repo_root: pathlib.Path = ROOT) -> None:
                         re.compile(expected["regex"])
                     except re.error as error:
                         errors.append(f"{fwhere}.expected.regex is invalid: {error}")
+            elif spec.get("deployed_sha256") is not None:
+                errors.append(f"{fwhere}.deployed_sha256 is only valid with compare: version")
     if errors:
         raise ManifestError("\n".join(errors))
 
@@ -442,8 +468,33 @@ def evaluate(manifest: dict, remote: Remote, repo_root: pathlib.Path = ROOT) -> 
                         )
                     )
                 continue
-            want = expected_version(spec, repo_root)
+            want = expected_version(spec, repo_root) if spec.get("expected") else None
             actual_version = remote.versions.get(version_index[spec["version_command"]], "")
+            version_text = actual_version or "<нет вывода>"
+            pinned = spec.get("deployed_sha256")
+            if pinned:
+                actual = state[1] or ""
+                if actual == pinned.lower():
+                    rows.append(
+                        Row(
+                            "OK",
+                            cid,
+                            device,
+                            f"зафиксированный sha256 совпадает; версия {version_text}",
+                        )
+                    )
+                else:
+                    rows.append(
+                        Row(
+                            "DRIFT",
+                            cid,
+                            device,
+                            f"sha256 не совпадает с deployed_sha256: ожидается "
+                            f"{pinned[:12]}…, на устройстве {actual[:12]}…; "
+                            f"версия {version_text}",
+                        )
+                    )
+                continue
             if want == actual_version:
                 rows.append(Row("OK", cid, device, f"build artifact, версия {actual_version}"))
             else:
@@ -452,8 +503,7 @@ def evaluate(manifest: dict, remote: Remote, repo_root: pathlib.Path = ROOT) -> 
                         "DRIFT",
                         cid,
                         device,
-                        f"версия: ожидается {want}, на устройстве "
-                        f"{actual_version or '<нет вывода>'}",
+                        f"версия: ожидается {want}, на устройстве {version_text}",
                     )
                 )
     rows.extend(_extras(manifest, remote))
@@ -466,6 +516,7 @@ def _extras(manifest: dict, remote: Remote) -> list[Row]:
     patterns = audit.get("extra_patterns", [])
     if not patterns:
         return []
+    allowed = set(audit.get("extra_allow", []))
     roots = [
         (component["id"], component.get("device_root", ""))
         for component in manifest["components"]
@@ -482,11 +533,14 @@ def _extras(manifest: dict, remote: Remote) -> list[Row]:
         for name in remote.listings.get(directory, []):
             if not any(fnmatch.fnmatch(name, pattern) for pattern in patterns):
                 continue
+            path = f"{directory.rstrip('/')}/{name}"
+            if path in allowed:
+                continue
             rows.append(
                 Row(
                     "EXTRA",
                     owner or "-",
-                    f"{directory.rstrip('/')}/{name}",
+                    path,
                     "лишний backup/кандидат рядом с управляемыми файлами",
                 )
             )
