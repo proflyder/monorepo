@@ -838,6 +838,18 @@ internal class ControlAdapter(
             val group = item as ControlItem.DeviceGroup
             // A card with one primary has no header: that row itself is the
             // device title (see ControlItems.DeviceGroup).
+            views.controlGroupBody.setPadding(
+                views.controlGroupBody.paddingLeft,
+                views.controlGroupBody.paddingTop,
+                views.controlGroupBody.paddingRight,
+                views.root.resources.getDimensionPixelSize(
+                    if (group.settings.isEmpty()) {
+                        R.dimen.control_card_padding_bottom_plain
+                    } else {
+                        R.dimen.control_card_padding_bottom_with_settings
+                    },
+                ),
+            )
             views.controlGroupTitle.text = group.title
             views.controlGroupTitle.setVisible(group.primary.size != 1)
             val controlCount = group.primary.size + group.settings.size + group.actions.size

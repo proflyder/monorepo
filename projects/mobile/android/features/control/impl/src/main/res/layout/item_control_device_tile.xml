@@ -11,7 +11,6 @@
     android:gravity="center_horizontal"
     android:orientation="vertical"
     android:paddingTop="@dimen/control_tile_row_gap"
-    android:paddingBottom="@dimen/control_tile_row_gap"
     tools:ignore="SelectableText">
 
     <FrameLayout

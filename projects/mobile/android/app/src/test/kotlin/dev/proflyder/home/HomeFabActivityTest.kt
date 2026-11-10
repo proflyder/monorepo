@@ -61,6 +61,34 @@ class HomeFabActivityTest {
     }
 
     @Test
+    fun itemsAreHiddenAndAtTheFabBeforeTheFirstAnimationFrame() {
+        val activity = launch()
+        seedCallItem(activity)
+
+        fab(activity).performClick()
+        val root = requireNotNull(popupRoot(activity))
+        val earlyItems = root.findViewById<LinearLayout>(R.id.control_dial_items)
+        assertEquals(1, earlyItems.childCount)
+        // The very first frame after showAtLocation is already hidden.
+        assertEquals(0f, earlyItems.getChildAt(0).alpha, 0.001f)
+        root.measure(
+            View.MeasureSpec.makeMeasureSpec(1000, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(2000, View.MeasureSpec.EXACTLY),
+        )
+        root.layout(0, 0, 1000, 2000)
+        // First pre-draw positions the clone FAB and gives every row its start
+        // state; it must not paint the expanded state in the meantime.
+        root.viewTreeObserver.dispatchOnPreDraw()
+
+        val items = root.findViewById<LinearLayout>(R.id.control_dial_items)
+        assertEquals(1, items.childCount)
+        val row = items.getChildAt(0)
+        assertEquals(0f, row.alpha, 0.001f)
+        assertEquals(0.6f, row.scaleX, 0.001f)
+        assertTrue("the row must start at the FAB, not at its final slot", row.translationY != 0f)
+    }
+
+    @Test
     fun fabOpensTheDialAndScrimAndBackCloseIt() {
         val activity = launch()
         seedCallItem(activity)

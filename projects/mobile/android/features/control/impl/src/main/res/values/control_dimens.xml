@@ -43,6 +43,11 @@
     <dimen name="control_speed_dial_row_gap">8dp</dimen>
     <!-- Compact "Settings (N)" step inside a device card. -->
     <dimen name="control_settings_top_gap">4dp</dimen>
-    <dimen name="control_settings_min_height">40dp</dimen>
-    <dimen name="control_settings_vertical_padding">4dp</dimen>
+    <dimen name="control_settings_min_height">32dp</dimen>
+    <dimen name="control_settings_vertical_padding">0dp</dimen>
+    <!-- Card body vertical padding; without a settings button the lower gap
+         is restored to the plain single-card value. -->
+    <dimen name="control_card_padding_top">16dp</dimen>
+    <dimen name="control_card_padding_bottom_with_settings">8dp</dimen>
+    <dimen name="control_card_padding_bottom_plain">16dp</dimen>
 </resources>
