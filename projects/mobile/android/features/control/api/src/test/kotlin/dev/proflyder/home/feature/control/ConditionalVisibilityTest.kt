@@ -9,6 +9,7 @@ import dev.proflyder.home.core.model.VisibleWhen
 import dev.proflyder.home.core.model.VolumeControls
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -155,5 +156,45 @@ class ConditionalVisibilityTest {
         val row = items.filterIsInstance<ControlItem.Device>().single().entry
         assertEquals("volume.station", row.id)
         assertEquals("volume.station_announce", row.volumeCompanion?.id)
+    }
+
+    @Test
+    fun aStatusDetailDoesNotPromoteAStationSwitchToTheMainRow() {
+        fun stationEntry(id: String, title: String, detail: String = "", volume: VolumeControls? = null) =
+            ControlEntry(
+                id = id,
+                kind = if (volume != null) ControlKind.VOLUME else ControlKind.SWITCH,
+                title = title,
+                room = "Bedroom",
+                icon = "",
+                actions = if (volume != null) {
+                    setOf(ControlAction.SET, ControlAction.MUTE, ControlAction.UNMUTE)
+                } else {
+                    setOf(ControlAction.TURN_ON, ControlAction.TURN_OFF)
+                },
+                power = if (volume != null) null else PowerState.ON,
+                available = true,
+                detailKey = detail,
+                volume = volume,
+                deviceId = "dev.station",
+                device = "Yandex Station Midi",
+            )
+        val group = ControlItems.build(
+            entries = listOf(
+                stationEntry("volume.station", "Volume", volume = VolumeControls(level = 10)),
+                stationEntry("switch.mic", "Microphones", detail = "catalog.status.muted"),
+                stationEntry("light.backlight", "Backlight"),
+                stationEntry("switch.clock", "Clock"),
+            ),
+            pending = emptySet(),
+            statesOk = true,
+            filter = ControlFilter.All,
+            texts = texts,
+        ).filterIsInstance<ControlItem.DeviceGroup>().single()
+        assertNull(group.mainId)
+        val binaries = group.primary.filter { !it.entry.isVolume }
+        assertEquals(3, binaries.size)
+        assertTrue(binaries.all { it.entry.isCompactTile(group.primary.size) })
+        assertFalse(group.primary.single { it.entry.id == "volume.station" }.entry.isCompactTile(group.primary.size))
     }
 }

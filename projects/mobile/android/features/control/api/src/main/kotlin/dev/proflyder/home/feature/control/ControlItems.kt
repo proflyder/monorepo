@@ -382,6 +382,18 @@ object ControlItems {
         return members.map { if (it.id == main.id) merged else it }.filter { it.id !in companionIds }
     }
 
+    /**
+     * A control that represents the device itself: its own name is the device
+     * name (or a technical title that falls back to it), or its entity id ends
+     * in a power suffix. Status details play no role here.
+     */
+    private fun ControlEntry.namesDevice(deviceName: String?): Boolean {
+        val target = deviceName?.trim().orEmpty()
+        if (target.isEmpty()) return false
+        if (title.trim().equals(target, ignoreCase = true)) return true
+        return isDevice && localId(this).substringAfterLast('_').equals("power", ignoreCase = true)
+    }
+
     private fun bucketOf(deviceId: String, members: List<ControlEntry>, prefix: String? = null): DeviceBucket {
         val entries = mergeVolumes(members)
         // A base entity names a prefix group; it may not sort first (the catalog
@@ -394,13 +406,14 @@ object ControlItems {
         val primary = entries.filter { entry -> settings.none { it.id == entry.id } }
         val name = entries.firstNotNullOfOrNull { it.device.takeIf(String::isNotBlank) }
             ?: anchor?.displayTitle()
-        // The main control names the device and carries its status: it always
-        // stays a switch row instead of becoming a compact tile. A prefix
-        // group names it explicitly (the base entity); a registry group falls
-        // back to the control that reports a device status, and a card with a
-        // single primary control keeps that control as its main row.
+        // The main control names the device and stays a switch row instead of
+        // becoming a compact tile. A prefix group names it explicitly (the
+        // base entity); otherwise a control whose own name is the device name
+        // (or its power switch) is the main one; otherwise a card with a single
+        // primary control uses it. Everything else is a tile candidate, even
+        // when it carries a status detail such as the hardware mute.
         val main = anchor
-            ?: primary.firstOrNull { it.detailKey.isNotBlank() }
+            ?: primary.firstOrNull { it.namesDevice(name) }
             ?: primary.singleOrNull()
         return DeviceBucket(
             deviceId = deviceId,
