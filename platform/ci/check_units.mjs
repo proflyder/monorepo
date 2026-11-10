@@ -42,6 +42,10 @@ export const KNOWN_PLATFORMS = new Set([
 // unit map must not exceed that bound (today the maximum is Hermes' four).
 export const MAX_UNIT_IMAGES = 4;
 
+// Where a deployable unit is applied: `deploy-home` (`ci`) or a Flux
+// Kustomization that reads the `deploy/home-apps` pins branch (`flux`).
+export const DEPLOY_RUNTIMES = new Set(["ci", "flux"]);
+
 // Rollback kinds backed by `mise run rollback`. `forward-only` is an explicit
 // "no documented procedure"; `pulsar` only prints the on-device instruction.
 export const ROLLBACK_KINDS = new Set([
@@ -158,6 +162,12 @@ export function validateSchema(config, root = DEFAULT_ROOT) {
     }
     if (unit.deployImages.length && !["bazel", "docker", "mixed"].includes(unit.deployBuilder)) {
       problems.push(`${prefix}: unknown deploy.builder '${unit.deployBuilder}'`);
+    }
+    if (unit.deployImages.length && !DEPLOY_RUNTIMES.has(unit.deployRuntime)) {
+      problems.push(
+        `${prefix}: unknown deploy.runtime '${unit.deployRuntime}' ` +
+          `(expected ${[...DEPLOY_RUNTIMES].join(", ")})`,
+      );
     }
     // `_unit.yml` has one static attestation step per index; include the
     // automatically published home-deploy image in the bound.

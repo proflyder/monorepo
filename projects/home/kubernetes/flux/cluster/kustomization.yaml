@@ -12,6 +12,7 @@ kind: Kustomization
 resources:
   - network-policy.yaml
   - platform.yaml
+  - apps.yaml
   - observability.yaml
   - observability-rules.yaml
   - vaultwarden.yaml

@@ -119,7 +119,16 @@ class Cluster(unittest.TestCase):
         ingress = policies["flux-system-ingress"]
         egress = policies["flux-system-egress"]
         self.assertEqual(ingress["spec"]["policyTypes"], ["Ingress"])
-        self.assertNotIn("ingress", ingress["spec"])
+        # The only allowed ingress is Prometheus scraping the controller
+        # metrics; every other connection into flux-system stays denied.
+        self.assertEqual(ingress["spec"]["ingress"], [{
+            "from": [{
+                "namespaceSelector": {
+                    "matchLabels": {"kubernetes.io/metadata.name": "monitoring"},
+                },
+            }],
+            "ports": [{"protocol": "TCP", "port": 8080}],
+        }])
 
         ports = {
             port["port"]
@@ -157,11 +166,56 @@ class Cluster(unittest.TestCase):
         self.assertEqual(set(self.kustomizations), {
             "platform", "observability", "observability-rules",
             "vaultwarden", "nexus", "nexus-provision",
+            # Applications consume the machine pins branch; their manifests
+            # still come from `develop` (GitRepository/flux-system).
+            "home-app-pins", "app-wakegrant",
         })
+        sources = {
+            "home-app-pins": ("GitRepository", "flux-pins"),
+        }
         for name, k in self.kustomizations.items():
-            self.assertEqual(k["spec"]["sourceRef"]["kind"], "GitRepository", name)
-            self.assertEqual(k["spec"]["sourceRef"]["name"], "flux-system", name)
+            kind, source = sources.get(name, ("GitRepository", "flux-system"))
+            self.assertEqual(k["spec"]["sourceRef"]["kind"], kind, name)
+            self.assertEqual(k["spec"]["sourceRef"]["name"], source, name)
             self.assertTrue(k["spec"]["prune"], name)
+
+    def test_pins_source_is_a_read_only_branch_checkout(self):
+        repos = by_name(self.docs, "GitRepository")
+        pins = repos["flux-pins"]
+        self.assertEqual(pins["metadata"]["namespace"], "flux-system")
+        self.assertEqual(pins["spec"]["url"], "ssh://git@github.com/proflyder/monorepo")
+        self.assertEqual(pins["spec"]["ref"], {"branch": "deploy/home-apps"})
+        # Same read-only deploy key as flux-system: Flux never writes to Git.
+        self.assertEqual(pins["spec"]["secretRef"]["name"], "flux-system")
+        self.assertEqual(pins["spec"]["interval"], "1m")
+
+    def test_pins_kustomization_publishes_the_digest_config_map(self):
+        pins = self.kustomizations["home-app-pins"]
+        self.assertEqual(pins["spec"]["path"], "./pins")
+        self.assertTrue(pins["spec"]["wait"])
+        self.assertEqual(pins["spec"]["dependsOn"], [{"name": "platform"}])
+
+    def test_wakegrant_app_is_suspended_until_the_owner_enables_it(self):
+        app = self.kustomizations["app-wakegrant"]
+        spec = app["spec"]
+        self.assertEqual(spec["path"], "./projects/home/kubernetes/wakegrant/manifests")
+        # Prep phase: Flux must not apply anything for wakegrant yet.
+        self.assertTrue(spec["suspend"])
+        self.assertTrue(spec["wait"])
+        self.assertEqual(spec["timeout"], "5m")
+        self.assertEqual(spec["dependsOn"], [
+            {"name": "platform"}, {"name": "home-app-pins"},
+        ])
+        self.assertEqual(spec["postBuild"]["substituteFrom"], [
+            {"kind": "ConfigMap", "name": "home-app-images"},
+            {"kind": "Secret", "name": "flux-app-settings"},
+        ])
+        self.assertEqual(spec["healthChecks"], [{
+            "apiVersion": "apps/v1",
+            "kind": "Deployment",
+            "name": "wakegrant",
+            "namespace": "home-assistant",
+        }])
 
     def test_platform_umbrella_waits_for_the_chain(self):
         platform = self.kustomizations["platform"]
@@ -405,6 +459,7 @@ class Secrets(unittest.TestCase):
         text = (HERE / "external-secrets.yaml").read_text()
         self.assertIn("k8s/flux-system/git-deploy-key", text)
         self.assertIn("k8s/flux-system/settings", text)
+        self.assertIn("k8s/flux-system/app-settings", text)
         docs = docs_from(HERE / "external-secrets.yaml")
         targets = {
             d["metadata"]["name"]: d["spec"]["target"]["name"]
@@ -413,7 +468,12 @@ class Secrets(unittest.TestCase):
         self.assertEqual(targets, {
             "flux-git-deploy-key": "flux-system",
             "flux-settings": "flux-settings",
+            "flux-app-settings": "flux-app-settings",
         })
+        # The live Secret survives removal of the ExternalSecret, so an ESO
+        # outage does not strip a running pod of its configuration.
+        app = by_name(docs, "ExternalSecret")["flux-app-settings"]
+        self.assertEqual(app["spec"]["target"]["deletionPolicy"], "Retain")
         self.assertNotRegex(text, r"BEGIN (OPENSSH|RSA|EC) PRIVATE KEY")
         self.assertNotRegex(text, r"password\s*:\s*\S")
 
@@ -505,6 +565,95 @@ class Provisioning(unittest.TestCase):
     def test_script_hash_changes_with_content(self):
         first = of_kind(self.docs, "ConfigMap")[0]["metadata"]["name"]
         self.assertNotEqual(first, "nexus-provision")
+
+
+class WakegrantApp(unittest.TestCase):
+    """The Flux manifest set for the wakegrant pilot (FLUX-APPS-PLAN 6.1)."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.docs = kustomize(K8S / "wakegrant/manifests")
+        cls.rendered = yaml.safe_dump_all(cls.docs)
+
+    def test_object_set_matches_the_ci_deploy(self):
+        self.assertEqual(
+            {d["kind"] for d in self.docs},
+            {"PersistentVolumeClaim", "Deployment", "Service", "ExternalSecret"},
+        )
+
+    def test_only_pins_and_app_settings_variables_remain(self):
+        left = set(re.findall(r"\$\{([A-Z_]+)\}", self.rendered))
+        self.assertEqual(left, {"WAKEGRANT_IMAGE", "BUILD_ID", "WAKE_GRANT_NODE_PORT"})
+        # ROLLOUT_ID is a CI-only variable; kustomize-controller would fail on
+        # an undefined one, so the Flux patch replaces it with the digest.
+        self.assertNotIn("ROLLOUT_ID", left)
+        self.assertNotIn("WAKE_GRANT_IMAGE", left)
+
+    def test_pvc_is_never_pruned(self):
+        pvc = by_name(self.docs, "PersistentVolumeClaim")["wakegrant-data"]
+        self.assertEqual(
+            pvc["metadata"]["annotations"],
+            {"kustomize.toolkit.fluxcd.io/prune": "disabled"},
+        )
+
+    def test_rollout_annotation_tracks_the_digest(self):
+        deployment = by_name(self.docs, "Deployment")["wakegrant"]
+        annotations = deployment["spec"]["template"]["metadata"]["annotations"]
+        self.assertEqual(annotations["proflyder.dev/rollout"], "${WAKEGRANT_IMAGE}")
+        self.assertEqual(
+            deployment["spec"]["template"]["spec"]["containers"][0]["image"],
+            "${WAKEGRANT_IMAGE}",
+        )
+
+
+class FluxAlerts(unittest.TestCase):
+    """Delivery alerts for Flux-managed applications."""
+
+    RULES = K8S / "observability/rules"
+
+    @classmethod
+    def setUpClass(cls):
+        cls.document = yaml.safe_load((cls.RULES / "prometheusrule-flux.yaml").read_text())
+        cls.rules = {
+            rule["alert"]: rule
+            for group in cls.document["spec"]["groups"]
+            for rule in group["rules"]
+        }
+
+    def test_required_alerts_are_present(self):
+        self.assertEqual(set(self.rules), {
+            "FluxKustomizationNotReady", "HelmReleaseNotReady", "PinsStale",
+        })
+        self.assertEqual(self.document["metadata"]["namespace"], "monitoring")
+
+    def test_alerts_are_warnings_on_flux_metrics(self):
+        for name, rule in self.rules.items():
+            with self.subTest(alert=name):
+                self.assertEqual(rule["labels"]["severity"], "warning")
+                self.assertTrue(rule["annotations"]["summary"].strip())
+                self.assertTrue(rule["annotations"]["description"].strip())
+        self.assertIn("gotk_reconcile_condition", self.rules["FluxKustomizationNotReady"]["expr"])
+        self.assertIn("gotk_reconcile_condition", self.rules["HelmReleaseNotReady"]["expr"])
+        self.assertIn("kind=\"Kustomization\"", self.rules["FluxKustomizationNotReady"]["expr"])
+        self.assertIn("kind=\"HelmRelease\"", self.rules["HelmReleaseNotReady"]["expr"])
+        # Pins staleness is the missing ConfigMap or an unhealthy source.
+        self.assertIn("home-app-images", self.rules["PinsStale"]["expr"])
+        self.assertIn("flux-pins", self.rules["PinsStale"]["expr"])
+
+    def test_rules_kustomization_ships_the_flux_scrape_and_alerts(self):
+        kustomization = yaml.safe_load((self.RULES / "kustomization.yaml").read_text())
+        for name in ("prometheusrule-flux.yaml", "podmonitor-flux.yaml"):
+            self.assertIn(name, kustomization["resources"])
+
+    def test_pod_monitor_scrapes_the_controller_metrics_port(self):
+        monitor = yaml.safe_load((self.RULES / "podmonitor-flux.yaml").read_text())
+        self.assertEqual(monitor["kind"], "PodMonitor")
+        self.assertEqual(monitor["spec"]["namespaceSelector"], {"matchNames": ["flux-system"]})
+        self.assertEqual(
+            monitor["spec"]["selector"]["matchLabels"],
+            {"app.kubernetes.io/part-of": "flux"},
+        )
+        self.assertEqual(monitor["spec"]["podMetricsEndpoints"][0]["port"], "http-prom")
 
 
 if __name__ == "__main__":

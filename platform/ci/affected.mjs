@@ -126,6 +126,10 @@ export class Unit {
         deployOptionalImages: [],
         deployWorkloads: [],
         deployBuilder: "bazel",
+        // `ci` applies through deploy-home; `flux` applies through the Flux
+        // Kustomization that consumes the pins branch. Defaults to `ci` so an
+        // un-migrated unit keeps the current behaviour.
+        deployRuntime: "ci",
         // Bazel package that owns the `<image>_image`/`<image>_push` targets
         // (single-image `bazel` units).
         deployTargetRoot: "",
@@ -275,6 +279,7 @@ export function normalizeConfig(data, label = "units") {
       deployOptionalImages: list(deploy.optional_images),
       deployWorkloads: list(deploy.workloads),
       deployBuilder: String(deploy.builder ?? "bazel"),
+      deployRuntime: String(deploy.runtime ?? "ci"),
       deployTargetRoot: String(deploy.target_root ?? ""),
       deployBazelImages: normalizeImageMap(deploy.bazel_images),
       deployNamespace: String(deploy.namespace ?? ""),
@@ -2523,15 +2528,25 @@ export function deployEntries(route_, config) {
    * loading graph, so it also deploys every importer that declares a `deploy`
    * block. Units without one (documentation, infrastructure, observability)
    * never appear here, so `deploy-home` cannot roll them by accident.
+   *
+   * `deploy.runtime` splits the same unit map between `deploy-home` (`ci`) and
+   * the Flux pins job (`flux`). Until a unit is migrated every entry is `ci`,
+   * so this filter is a no-op; keeping it here means the switch is one field,
+   * not a workflow edit.
    */
   const selected = route_.deploySelected;
   const entries = [];
   for (const unit of config.units) {
-    if (!unit.deployImages.length || !selected.has(unit.id)) {
+    if (
+      !unit.deployImages.length ||
+      !selected.has(unit.id) ||
+      unit.deployRuntime !== "ci"
+    ) {
       continue;
     }
     entries.push({
       id: unit.id,
+      runtime: unit.deployRuntime,
       images: space(unit.deployImages),
       optional_images: space(unit.deployOptionalImages),
       workloads: space(unit.deployWorkloads),

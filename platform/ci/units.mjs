@@ -254,6 +254,10 @@ export const config = {
       // has no deploy block on purpose: it is not auto-deployed.
       deploy: {
         builder: "bazel",
+        // Who applies the workload: `ci` = deploy-home (current), `flux` =
+        // Kustomization/app-<unit> reading the pins branch. All units stay on
+        // `ci` until their pilot is verified.
+        runtime: "ci",
         target_root: "//projects/home/kubernetes/scheduler",
         images: ["scheduler", "home-deploy"],
         // The shared scheduler deploy script also renders ha-bridge, ha-control
@@ -321,6 +325,7 @@ export const config = {
       // because the service is unusable without it.
       deploy: {
         builder: "bazel",
+        runtime: "ci",
         target_root: "//solutions/wakegrant",
         images: ["wakegrant"],
         workloads: ["wakegrant"],
@@ -371,6 +376,7 @@ export const config = {
       // the same unit because the service is unusable without it.
       deploy: {
         builder: "bazel",
+        runtime: "ci",
         target_root: "//solutions/intercom",
         images: ["intercom"],
         workloads: ["intercom"],
@@ -421,6 +427,7 @@ export const config = {
       // same unit because the webhook is unusable without it.
       deploy: {
         builder: "bazel",
+        runtime: "ci",
         target_root: "//solutions/currency-bot",
         images: ["currency-bot"],
         workloads: ["currency-bot"],
@@ -475,6 +482,7 @@ export const config = {
       // an image without its catalog or token is unusable.
       deploy: {
         builder: "bazel",
+        runtime: "ci",
         target_root: "//solutions/mcp-gateway",
         images: ["mcp-gateway"],
         workloads: ["mcp-gateway"],
@@ -539,6 +547,7 @@ export const config = {
       // executor code.
       deploy: {
         builder: "bazel",
+        runtime: "ci",
         target_root: "//projects/home/kubernetes/scheduler",
         images: ["ha-bridge", "ha-control", "ha-scenario"],
         // The shared script renders the scheduler too; this unit never applies
@@ -796,6 +805,7 @@ export const config = {
       // the previous revision.
       deploy: {
         builder: "mixed",
+        runtime: "ci",
         // image -> Bazel package of the `<image>_image`/`<image>_push` targets.
         // Images not listed here are Dockerfile builds.
         bazel_images: {
