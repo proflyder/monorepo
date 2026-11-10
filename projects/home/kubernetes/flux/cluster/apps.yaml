@@ -49,9 +49,10 @@ spec:
   dependsOn:
     - name: platform
 ---
-# Pilot application. `suspend: true` keeps Flux from touching the live
-# `wakegrant` workload until the owner explicitly flips it after the pins
-# branch exists and `kubectl diff` has been reviewed (FLUX-APPS-PLAN 6.1).
+# Pilot application, cut over to Flux (FLUX-APPS-PLAN 6.1). Flux applies the
+# live `wakegrant` workload; CI only commits the verified digest to the
+# `deploy/home-apps` branch. `suspend` must stay absent/false or Flux would
+# revert the cutover.
 #
 # The manifest set is `projects/home/kubernetes/wakegrant/manifests`; its
 # `kustomize.toolkit.fluxcd.io/prune: disabled` PVC annotation protects the
@@ -71,7 +72,7 @@ spec:
   path: ./projects/home/kubernetes/wakegrant/manifests
   prune: true
   wait: true
-  suspend: true
+  suspend: false
   dependsOn:
     - name: platform
     - name: home-app-pins
