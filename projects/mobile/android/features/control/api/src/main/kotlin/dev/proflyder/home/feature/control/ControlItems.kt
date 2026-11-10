@@ -125,6 +125,10 @@ fun ControlEntry.isVisible(entries: List<ControlEntry>): Boolean {
     }
 }
 
+/** The catalog entries allowed by their `visibleWhen` conditions. */
+fun visibleEntries(entries: List<ControlEntry>): List<ControlEntry> =
+    entries.filter { it.isVisible(entries) }
+
 /** Texts the list needs; the presentation layer supplies localized strings. */
 class ControlTexts(
     val otherDevices: String,
@@ -181,7 +185,8 @@ object ControlItems {
      */
     fun options(entries: List<ControlEntry>): List<ControlFilterOption> {
         if (entries.isEmpty()) return emptyList()
-        val counted = entries.filter { it.isCounted() }
+        val visible = visibleEntries(entries)
+        val counted = visible.filter { it.isCounted() }
         val options = mutableListOf(ControlFilterOption(ControlFilter.All, counted.size))
         listOf(ControlFilter.Lights, ControlFilter.Switches).forEach { filter ->
             val count = counted.count { it.matches(filter) }
@@ -230,7 +235,10 @@ object ControlItems {
         wakeFeedback: List<WakeFeedbackAction> = emptyList(),
         voiceCard: Boolean = true,
     ): List<ControlItem> {
-        val visible = entries.filter { it.isVisible(entries) }
+        // Visibility comes first: a conditional entry whose target is not in
+        // the requested state must never reach cards, chips, counters or the
+        // "Unavailable" section.
+        val visible = visibleEntries(entries)
         val applied = effectiveFilter(visible, filter)
         val profile = visible.firstOrNull { it.isProfile }
         val content = visible.filterNot { it.isProfile }

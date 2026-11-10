@@ -197,4 +197,48 @@ class ConditionalVisibilityTest {
         assertTrue(binaries.all { it.entry.isCompactTile(group.primary.size) })
         assertFalse(group.primary.single { it.entry.id == "volume.station" }.entry.isCompactTile(group.primary.size))
     }
+
+    @Test
+    fun anUnavailableConditionalEntryIsHiddenBeforeTheAvailabilitySplit() {
+        val base = entry("switch.komp", ControlKind.SWITCH, PowerState.OFF)
+        val lock = entry(
+            "toggle.komp_lock",
+            ControlKind.SWITCH,
+            PowerState.ON,
+            VisibleWhen(entry = "switch.komp", state = "on"),
+        ).copy(available = false)
+        val fan = entry("switch.fan", ControlKind.SWITCH, PowerState.ON).copy(
+            room = "Workspace",
+            deviceId = "dev.fan",
+            device = "Fan",
+        )
+        val items = ControlItems.build(
+            entries = listOf(base, lock, fan),
+            pending = emptySet(),
+            statesOk = true,
+            filter = ControlFilter.All,
+            texts = texts,
+        )
+        // The hidden lock is not a row, not an unavailable row and not counted.
+        assertFalse(ids(items).contains("toggle.komp_lock"))
+        val allChip = items.filterIsInstance<ControlItem.Filters>()
+            .single()
+            .chips
+            .single { it.filter == ControlFilter.All }
+        assertEquals(2, allChip.count)
+        val office = items.filterIsInstance<ControlItem.Header>()
+            .single { it.section == "room:Office" }
+        assertEquals("0 of 1 on", office.summary)
+
+        val shown = ControlItems.build(
+            entries = listOf(base.copy(power = PowerState.ON), lock.copy(available = true), fan),
+            pending = emptySet(),
+            statesOk = true,
+            filter = ControlFilter.All,
+            texts = texts,
+        )
+        val group = shown.filterIsInstance<ControlItem.DeviceGroup>()
+            .single { group -> group.primary.any { it.entry.id == "toggle.komp_lock" } }
+        assertTrue(group.primary.any { it.entry.id == "toggle.komp_lock" })
+    }
 }
