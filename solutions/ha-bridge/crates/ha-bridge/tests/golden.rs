@@ -593,6 +593,7 @@ fn catalog_vectors_match_the_go_server() {
     let provider = Arc::new(Provider::new(
         Arc::clone(&ha),
         rules.clone(),
+        Vec::new(),
         Duration::from_secs(3600),
     ));
     let source: Arc<dyn CatalogSource> = provider;
@@ -616,6 +617,7 @@ fn catalog_vectors_match_the_go_server() {
     let stale_source: Arc<dyn CatalogSource> = Arc::new(Provider::new(
         Arc::clone(&ha),
         rules.clone(),
+        Vec::new(),
         Duration::from_secs(0),
     ));
     let stale_router = catalog_api::router(Arc::clone(&stale_source), token());
@@ -637,6 +639,7 @@ fn catalog_vectors_match_the_go_server() {
     let outage_source: Arc<dyn CatalogSource> = Arc::new(Provider::new(
         Arc::clone(&outage_ha),
         rules.clone(),
+        Vec::new(),
         Duration::from_secs(0),
     ));
     assert_catalog_response(
@@ -653,8 +656,12 @@ fn catalog_vectors_match_the_go_server() {
     down_ha
         .down
         .store(true, std::sync::atomic::Ordering::SeqCst);
-    let down_source: Arc<dyn CatalogSource> =
-        Arc::new(Provider::new(down_ha, rules, Duration::from_secs(0)));
+    let down_source: Arc<dyn CatalogSource> = Arc::new(Provider::new(
+        down_ha,
+        rules,
+        Vec::new(),
+        Duration::from_secs(0),
+    ));
     assert_catalog_response(
         &catalog_request(
             catalog_api::router(down_source, token()),

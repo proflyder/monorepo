@@ -65,6 +65,12 @@ spec:
             # are never exposed (infrastructure helpers stay hidden).
             - name: CONTROL_SCENARIO_LABEL
               value: scenario
+            # One binary control synthesized from a state sensor and a pair of
+            # buttons: the PC lock. The bridge maps it to the buttons, hides
+            # them, and shows the tile only while the PC is on. The mapping is
+            # data, so another such control needs no app release.
+            - name: CONTROL_TOGGLES
+              value: '[{"id":"toggle.komp_lock","title":"Блокировка","icon":"lock","state":"binary_sensor.komp_razblokirovan","on":"button.komp_lock","off":"button.komp_unlock","visibleWhen":{"entry":"switch.komp","state":"on"}}]'
             - name: CONTROL_LISTEN
               value: 0.0.0.0:8099
             # Catalog-only until the control queue is reviewed; flipped by an

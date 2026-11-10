@@ -236,6 +236,20 @@ class ControlProfileRowTest {
         role = ControlRole.SETTING,
     )
 
+    private fun buttonSetting() = ControlEntry(
+        id = "button.desk_restart",
+        kind = ControlKind.BUTTON,
+        title = "Restart",
+        room = "Office",
+        icon = "",
+        actions = setOf(ControlAction.PRESS),
+        power = null,
+        available = true,
+        deviceId = "dev.desk",
+        device = "Desk lamp",
+        role = ControlRole.SETTING,
+    )
+
     private fun bindAny(item: ControlItem): View {
         val themed = ContextThemeWrapper(
             RuntimeEnvironment.getApplication(),
@@ -263,6 +277,7 @@ class ControlProfileRowTest {
             settings = listOf(ControlItem.DeviceGroup.Row(setting(PowerState.OFF), busy = false)),
             expanded = false,
             statesKnown = true,
+            mainId = "light.desk",
         )
         val root = bindAny(group)
         // A single-primary card has no separate header: its row is the title.
@@ -279,16 +294,21 @@ class ControlProfileRowTest {
         val settingsButton = root.findViewById<MaterialButton>(R.id.control_group_settings)
         assertEquals("Settings (1)", settingsButton.text.toString())
         assertEquals(View.VISIBLE, settingsButton.visibility)
+        assertEquals(View.GONE, root.findViewById<LinearLayout>(R.id.control_group_settings_tiles).visibility)
         assertEquals(View.GONE, root.findViewById<LinearLayout>(R.id.control_group_settings_list).visibility)
         settingsButton.performClick()
         assertEquals(listOf("dev.desk"), settingsToggles)
 
         val expanded = bindAny(group.copy(expanded = true))
+        // A binary setting is a compact tile, not a full row.
+        val settingsTiles = expanded.findViewById<LinearLayout>(R.id.control_group_settings_tiles)
+        assertEquals(View.VISIBLE, settingsTiles.visibility)
+        val tileRow = settingsTiles.getChildAt(0) as LinearLayout
         assertEquals(
-            View.VISIBLE,
-            expanded.findViewById<LinearLayout>(R.id.control_group_settings_list).visibility,
+            1,
+            (0 until tileRow.childCount).count { tileRow.getChildAt(it).visibility == View.VISIBLE },
         )
-        assertEquals(1, expanded.findViewById<LinearLayout>(R.id.control_group_settings_list).childCount)
+        assertEquals(View.GONE, expanded.findViewById<LinearLayout>(R.id.control_group_settings_list).visibility)
     }
 
     @Test
@@ -347,7 +367,7 @@ class ControlProfileRowTest {
             deviceId = "dev.desk",
             title = "Desk lamp",
             primary = listOf(ControlItem.DeviceGroup.Row(device(PowerState.ON), busy = false)),
-            settings = listOf(ControlItem.DeviceGroup.Row(setting(PowerState.OFF), busy = false)),
+            settings = listOf(ControlItem.DeviceGroup.Row(buttonSetting(), busy = false)),
             expanded = true,
             statesKnown = true,
         )
@@ -365,7 +385,13 @@ class ControlProfileRowTest {
         // The first submitList of an adapter is applied synchronously; a second
         // adapter carries the busy state into the same holder.
         val busy = ControlAdapter(callback)
-        busy.submitList(listOf(group.copy(settings = listOf(ControlItem.DeviceGroup.Row(setting(PowerState.OFF), busy = true)))))
+        busy.submitList(
+            listOf(
+                group.copy(
+                    settings = listOf(ControlItem.DeviceGroup.Row(buttonSetting(), busy = true)),
+                ),
+            ),
+        )
         busy.onBindViewHolder(holder, 0)
 
         assertTrue(before === settingsList.getChildAt(0))

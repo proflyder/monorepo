@@ -6,7 +6,6 @@
     android:layout_width="0dp"
     android:layout_height="wrap_content"
     android:layout_weight="1"
-    android:foreground="?attr/selectableItemBackgroundBorderless"
     android:clickable="true"
     android:focusable="true"
     android:gravity="center_horizontal"
@@ -16,8 +15,12 @@
     tools:ignore="SelectableText">
 
     <FrameLayout
+        android:id="@+id/control_tile_ripple"
         android:layout_width="@dimen/control_tile_icon"
-        android:layout_height="@dimen/control_tile_icon">
+        android:layout_height="@dimen/control_tile_icon"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:clickable="true"
+        android:focusable="true">
 
         <ImageView
             android:id="@+id/control_tile_icon"

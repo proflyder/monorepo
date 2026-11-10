@@ -5,6 +5,7 @@ import dev.proflyder.home.core.model.ControlAction
 import dev.proflyder.home.core.model.ControlCatalog
 import dev.proflyder.home.core.model.ControlEntry
 import dev.proflyder.home.core.model.ControlKind
+import dev.proflyder.home.core.model.VisibleWhen
 import dev.proflyder.home.core.model.ControlRole
 import dev.proflyder.home.core.model.LightAdjust
 import dev.proflyder.home.core.model.LightControls
@@ -103,6 +104,7 @@ internal fun ControlEntryDto.toDomain(): ControlEntry {
         deviceId = deviceIdSnake.ifEmpty { deviceId },
         device = device,
         role = if (role == "setting") ControlRole.SETTING else ControlRole.PRIMARY,
+        visibleWhen = visibleWhen?.let { VisibleWhen(it.entry, it.state) },
     )
 }
 

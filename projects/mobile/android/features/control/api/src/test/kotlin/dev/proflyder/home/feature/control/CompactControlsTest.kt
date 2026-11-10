@@ -38,14 +38,9 @@ class CompactControlsTest {
     }
 
     @Test
-    fun anAdjustableLightStaysARow() {
-        val light = LightControls(brightness = true, colorTemp = false, color = false)
-        assertFalse(entry(ControlKind.LIGHT, light = light).isCompactTile(deviceControls = 2))
-    }
-
-    @Test
-    fun aPlainLightWithoutAdjustmentsIsATile() {
-        assertTrue(entry(ControlKind.LIGHT).isCompactTile(deviceControls = 2))
+    fun anAdjustableLightIsStillATile() {
+        val light = LightControls(brightness = true, colorTemp = true, color = true)
+        assertTrue(entry(ControlKind.LIGHT, light = light).isCompactTile(deviceControls = 2))
     }
 
     @Test
@@ -67,18 +62,14 @@ class CompactControlsTest {
     }
 
     @Test
-    fun aControlWithExtraActionsStaysARow() {
-        val extra = entry(
-            ControlKind.SWITCH,
-            actions = setOf(ControlAction.TURN_ON, ControlAction.TURN_OFF, ControlAction.SET),
-        )
-        assertFalse(extra.isCompactTile(deviceControls = 2))
+    fun aSettingBinaryControlIsATileToo() {
+        val setting = entry(ControlKind.SWITCH, role = ControlRole.SETTING)
+        assertTrue(setting.isCompactTile(deviceControls = 3))
     }
 
     @Test
-    fun aSettingStaysARow() {
-        val setting = entry(ControlKind.SWITCH, role = ControlRole.SETTING)
-        assertFalse(setting.isCompactTile(deviceControls = 2))
+    fun theMainControlOfTheCardAlwaysStaysARow() {
+        assertFalse(entry(ControlKind.SWITCH).isCompactTile(deviceControls = 3, isMain = true))
     }
 
     @Test
@@ -88,7 +79,6 @@ class CompactControlsTest {
 
     @Test
     fun anUnknownBinaryKindIsATileWithoutAnyKindList() {
-        val unknown = entry(ControlKind.OTHER)
-        assertTrue(unknown.isCompactTile(deviceControls = 2))
+        assertTrue(entry(ControlKind.OTHER).isCompactTile(deviceControls = 2))
     }
 }

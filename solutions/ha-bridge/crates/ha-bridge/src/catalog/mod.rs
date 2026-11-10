@@ -19,6 +19,7 @@ pub use volume::{Volume, VolumeError};
 
 use std::collections::{HashMap, HashSet};
 
+use serde::Deserialize;
 use serde_json::{Map, Value};
 
 /// The control model of an entry.
@@ -146,6 +147,46 @@ pub struct Rules {
     pub exclude: Vec<String>,
 }
 
+/// A server-side visibility condition for a catalog entry.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct VisibleWhen {
+    /// Catalog id of the entry that controls visibility.
+    pub entry: String,
+    /// Required state of that entry: `"on"` or `"off"`.
+    pub state: String,
+}
+
+/// A configured binary control synthesized from a state sensor and a pair of
+/// button entities. The app sees one ordinary on/off entry and never the
+/// source buttons; the mapping lives in the bridge configuration, not in the
+/// client.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ToggleRule {
+    /// Catalog id of the synthesized entry.
+    pub id: String,
+    pub title: String,
+    #[serde(default)]
+    pub title_key: String,
+    /// Icon hint; `lock` when empty.
+    #[serde(default)]
+    pub icon: String,
+    /// Home Assistant entity whose `on`/`off` state mirrors the toggle.
+    pub state: String,
+    /// Entity pressed or turned on to switch the toggle on.
+    pub on: String,
+    /// Entity pressed or turned off to switch the toggle off.
+    pub off: String,
+    #[serde(default)]
+    pub room: String,
+    #[serde(default)]
+    pub device_id: String,
+    #[serde(default)]
+    pub device: String,
+    #[serde(rename = "visibleWhen", default)]
+    pub visible_when: Option<VisibleWhen>,
+}
+
 impl Rules {
     /// Check rule syntax so a misconfiguration fails at startup.
     pub fn validate(&self) -> Result<(), RulesError> {
@@ -211,6 +252,17 @@ pub struct Entry {
     pub light: Option<Light>,
     /// Live volume state for a [`Kind::Volume`] entry.
     pub volume: Option<Volume>,
+    /// Show this entry only while another entry has the given state.
+    pub visible_when: Option<VisibleWhen>,
+    /// On/off service calls of a configured synthetic toggle.
+    pub toggle: Option<Toggle>,
+}
+
+/// The two service calls behind a configured synthetic toggle.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Toggle {
+    pub on: ServiceCall,
+    pub off: ServiceCall,
 }
 
 /// A resolved Home Assistant service invocation.
@@ -301,6 +353,17 @@ impl Entry {
     /// actions are rejected here, so the executor can only perform what the
     /// catalog allows.
     pub fn resolve(&self, action: &str, params: &Params) -> Result<ServiceCall, ResolveError> {
+        if let Some(toggle) = self.toggle.as_ref() {
+            return match action {
+                ACTION_TURN_ON => Ok(toggle.on.clone()),
+                ACTION_TURN_OFF => Ok(toggle.off.clone()),
+                _ => Err(ResolveError::Unsupported {
+                    action: action.to_owned(),
+                    kind: self.kind,
+                    id: self.id.clone(),
+                }),
+            };
+        }
         let domain = domain_of(&self.entity).to_owned();
         match (self.kind, action) {
             (Kind::Light, ACTION_SET) => {
@@ -541,6 +604,23 @@ fn lock_detail_key(raw: &Raw) -> Option<&'static str> {
 }
 
 pub fn build(raws: &[Raw], rules: &Rules) -> Vec<Entry> {
+    build_with_toggles(raws, rules, &[])
+}
+
+/// Build the catalog with configured synthetic toggles. The source button
+/// entities of an active toggle are consumed and never appear on their own.
+pub fn build_with_toggles(raws: &[Raw], rules: &Rules, toggles: &[ToggleRule]) -> Vec<Entry> {
+    let active: Vec<&ToggleRule> = toggles
+        .iter()
+        .filter(|rule| {
+            raws.iter()
+                .any(|raw| raw.entity == rule.state && !raw.hidden)
+        })
+        .collect();
+    let consumed: HashSet<&str> = active
+        .iter()
+        .flat_map(|rule| [rule.on.as_str(), rule.off.as_str()])
+        .collect();
     let mut entries: Vec<Entry> = Vec::with_capacity(raws.len());
     // Devices that expose a light control. Home Assistant reports a `null`
     // category for Yeelight-style setting switches; the light sibling is the
@@ -582,7 +662,7 @@ pub fn build(raws: &[Raw], rules: &Rules) -> Vec<Entry> {
         })
         .collect();
     for raw in raws {
-        if !valid_entity(&raw.entity) {
+        if !valid_entity(&raw.entity) || consumed.contains(raw.entity.as_str()) {
             continue;
         }
         let domain = domain_of(&raw.entity);
@@ -645,6 +725,8 @@ pub fn build(raws: &[Raw], rules: &Rules) -> Vec<Entry> {
             ),
             light: None,
             volume: None,
+            visible_when: None,
+            toggle: None,
         };
         if kind == Kind::Light && available {
             entry.light.clone_from(&raw.light);
@@ -659,6 +741,7 @@ pub fn build(raws: &[Raw], rules: &Rules) -> Vec<Entry> {
         entries.push(entry);
     }
     entries.extend(volume_entries(raws));
+    entries.extend(active.iter().filter_map(|rule| toggle_entry(raws, rule)));
 
     entries.sort_by(|a, b| {
         let rank_a = rank(a.kind);
@@ -792,6 +875,8 @@ fn volume_entry(
         role: "primary".to_owned(),
         light: None,
         volume: Some(volume),
+        visible_when: None,
+        toggle: None,
     }
 }
 
@@ -840,7 +925,85 @@ fn speak_entry(raws: &[Raw]) -> Option<Entry> {
         role: "primary".to_owned(),
         light: None,
         volume: None,
+        visible_when: None,
+        toggle: None,
     })
+}
+
+/// One configured synthetic toggle: the state sensor provides the live
+/// boolean, the two buttons provide the on/off calls. Home Assistant lock
+/// sensors are `on` while unlocked, so the exposed tile is `on` while locked.
+fn toggle_entry(raws: &[Raw], rule: &ToggleRule) -> Option<Entry> {
+    let state_raw = raws
+        .iter()
+        .find(|raw| raw.entity == rule.state && !raw.hidden)?;
+    let state = state_raw.state.trim().to_lowercase();
+    let tile_state = match state.as_str() {
+        "on" => "off",
+        "off" => "on",
+        _ => "",
+    };
+    let room = if rule.room.trim().is_empty() {
+        state_raw.room.trim()
+    } else {
+        rule.room.trim()
+    };
+    let device_id = if rule.device_id.trim().is_empty() {
+        state_raw.device_id.trim()
+    } else {
+        rule.device_id.trim()
+    };
+    let device = if rule.device.trim().is_empty() {
+        state_raw.device.trim()
+    } else {
+        rule.device.trim()
+    };
+    let icon = if rule.icon.trim().is_empty() {
+        "lock"
+    } else {
+        rule.icon.trim()
+    };
+    Some(Entry {
+        id: rule.id.clone(),
+        kind: Kind::Switch,
+        title: truncate_chars(rule.title.trim(), MAX_TEXT),
+        title_key: rule.title_key.clone(),
+        title_args: std::collections::BTreeMap::new(),
+        detail_key: String::new(),
+        room: truncate_chars(room, MAX_TEXT),
+        icon: truncate_chars(icon, MAX_ICON),
+        entity: rule.state.clone(),
+        state: tile_state.to_owned(),
+        available: !tile_state.is_empty(),
+        device_id: truncate_chars(device_id, MAX_TEXT),
+        device: truncate_chars(device, MAX_TEXT),
+        role: "primary".to_owned(),
+        light: None,
+        volume: None,
+        visible_when: rule.visible_when.clone(),
+        toggle: Some(Toggle {
+            on: toggle_call(&rule.on, true),
+            off: toggle_call(&rule.off, false),
+        }),
+    })
+}
+
+/// A button is pressed; any other configured entity is switched on/off.
+fn toggle_call(entity: &str, on: bool) -> ServiceCall {
+    let domain = domain_of(entity).to_owned();
+    let service = if domain == "button" {
+        "press"
+    } else if on {
+        ACTION_TURN_ON
+    } else {
+        ACTION_TURN_OFF
+    };
+    ServiceCall {
+        domain,
+        service: service.to_owned(),
+        entity: entity.to_owned(),
+        data: Map::new(),
+    }
 }
 
 fn kind_of(domain: &str) -> Option<Kind> {
@@ -997,7 +1160,7 @@ fn truncate_chars(text: &str, limit: usize) -> String {
     text.chars().take(limit).collect()
 }
 
-fn valid_entity(entity: &str) -> bool {
+pub(crate) fn valid_entity(entity: &str) -> bool {
     let Some((domain, object)) = entity.split_once('.') else {
         return false;
     };
@@ -1204,6 +1367,127 @@ mod tests {
 
     fn ids(entries: &[Entry]) -> Vec<&str> {
         entries.iter().map(|entry| entry.id.as_str()).collect()
+    }
+
+    fn lock_toggle() -> ToggleRule {
+        ToggleRule {
+            id: "toggle.komp_lock".to_owned(),
+            title: "Блокировка".to_owned(),
+            title_key: String::new(),
+            icon: String::new(),
+            state: "binary_sensor.komp_razblokirovan".to_owned(),
+            on: "button.komp_lock".to_owned(),
+            off: "button.komp_unlock".to_owned(),
+            room: "Кабинет".to_owned(),
+            device_id: String::new(),
+            device: String::new(),
+            visible_when: Some(VisibleWhen {
+                entry: "switch.komp".to_owned(),
+                state: "on".to_owned(),
+            }),
+        }
+    }
+
+    fn lock_raws(sensor: &str) -> Vec<Raw> {
+        vec![
+            Raw {
+                entity: "switch.komp".to_owned(),
+                state: "on".to_owned(),
+                name: "Комп".to_owned(),
+                room: "Кабинет".to_owned(),
+                ..Raw::default()
+            },
+            Raw {
+                entity: "binary_sensor.komp_razblokirovan".to_owned(),
+                state: sensor.to_owned(),
+                name: "Разблокирован".to_owned(),
+                room: "Кабинет".to_owned(),
+                device_class: "lock".to_owned(),
+                ..Raw::default()
+            },
+            Raw {
+                entity: "button.komp_lock".to_owned(),
+                state: "unknown".to_owned(),
+                name: "Заблокировать".to_owned(),
+                room: "Кабинет".to_owned(),
+                ..Raw::default()
+            },
+            Raw {
+                entity: "button.komp_unlock".to_owned(),
+                state: "unknown".to_owned(),
+                name: "Разблокировать".to_owned(),
+                room: "Кабинет".to_owned(),
+                ..Raw::default()
+            },
+        ]
+    }
+
+    #[test]
+    fn a_configured_toggle_replaces_its_button_pair_and_maps_actions() {
+        let entries = build_with_toggles(&lock_raws("on"), &rules(), &[lock_toggle()]);
+        let ids = ids(&entries);
+        assert!(ids.contains(&"toggle.komp_lock"), "{ids:?}");
+        assert!(!ids.contains(&"button.komp_lock"), "{ids:?}");
+        assert!(!ids.contains(&"button.komp_unlock"), "{ids:?}");
+        let toggle = entries
+            .iter()
+            .find(|entry| entry.id == "toggle.komp_lock")
+            .expect("toggle");
+        // The lock sensor is on while unlocked, so the tile is off.
+        assert_eq!(toggle.state, "off");
+        assert!(toggle.available);
+        assert_eq!(
+            toggle.toggle.as_ref().expect("calls").on,
+            ServiceCall {
+                domain: "button".to_owned(),
+                service: "press".to_owned(),
+                entity: "button.komp_lock".to_owned(),
+                data: Map::new(),
+            }
+        );
+        let on = toggle
+            .resolve(ACTION_TURN_ON, &Params::default())
+            .expect("on");
+        assert_eq!(on.entity, "button.komp_lock");
+        let off = toggle
+            .resolve(ACTION_TURN_OFF, &Params::default())
+            .expect("off");
+        assert_eq!(off.entity, "button.komp_unlock");
+    }
+
+    #[test]
+    fn the_lock_toggle_follows_the_sensor_and_keeps_its_visibility_condition() {
+        let locked = build_with_toggles(&lock_raws("off"), &rules(), &[lock_toggle()]);
+        let toggle = locked
+            .iter()
+            .find(|entry| entry.id == "toggle.komp_lock")
+            .expect("toggle");
+        assert_eq!(toggle.state, "on");
+        assert_eq!(
+            toggle
+                .visible_when
+                .as_ref()
+                .map(|condition| condition.entry.as_str()),
+            Some("switch.komp")
+        );
+        let dead = build_with_toggles(&lock_raws("unavailable"), &rules(), &[lock_toggle()]);
+        let toggle = dead
+            .iter()
+            .find(|entry| entry.id == "toggle.komp_lock")
+            .expect("toggle");
+        assert!(!toggle.available);
+        assert_eq!(toggle.state, "");
+    }
+
+    #[test]
+    fn a_toggle_without_its_state_sensor_does_not_hide_the_buttons() {
+        let raws = lock_raws("on")
+            .into_iter()
+            .filter(|raw| raw.entity != "binary_sensor.komp_razblokirovan")
+            .collect::<Vec<_>>();
+        let entries = build_with_toggles(&raws, &rules(), &[lock_toggle()]);
+        assert!(ids(&entries).contains(&"button.komp_lock"));
+        assert!(!ids(&entries).contains(&"toggle.komp_lock"));
     }
 
     #[test]

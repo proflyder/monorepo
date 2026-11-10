@@ -315,6 +315,15 @@ phone ── EnqueueTask(queue=control) ───► scheduler ◄── ListDue
 | действие `speak` | синтетическая запись `action.station_speak` (`kind: "action"`) появляется, только если в HA есть `script.speak_text`; device/room — от сущности `assist_satellite` |
 | иконка, area, имя | только отображение; на то, что показывать, не влияют |
 | `CONTROL_EXCLUDE=glob,glob` | `path.Match`-маски по entity id, например `switch.*_child_lock` |
+| `CONTROL_TOGGLES` | JSON-массив синтетических бинарных элементов: `state` (датчик on/off), `on`/`off` (кнопки или переключатели), необязательный `visibleWhen: {entry, state}` |
+
+`CONTROL_TOGGLES` заменяет пару кнопок одной записью `switch` с действиями
+`turn_on`/`turn_off`: например, `toggle.komp_lock` слушает
+`binary_sensor.komp_razblokirovan` (on = разблокирован, поэтому плитка «Блокировка»
+включена при `off`), а `turn_on`/`turn_off` нажимают
+`button.komp_lock`/`button.komp_unlock`. Исходные кнопки из каталога исчезают.
+`visibleWhen` заставляет клиент скрывать элемент, пока указанная запись не в
+нужном состоянии (`on`/`off`).
 
 Кнопки и другие сущности без entity-registry device (шаблонные сущности HA)
 клиент группирует по общему префиксу entity id: `switch.komp` — базовая
@@ -476,6 +485,7 @@ kind, title, room, icon, device_id, device, role, actions[], state("on"/"off",
 | `CONTROL_SCENARIO_LABEL` | нет | `scenario` | HA label id роли «сценарий» (`CONTROL_LABEL` удалена: при её наличии старт отклоняется) |
 | `CONTROL_PROFILE_LABEL` | нет | `voice_profile` | HA label id роли «профиль» (вид `profile` для `switch`) |
 | `CONTROL_EXCLUDE` | нет | — | Маски entity id через запятую |
+| `CONTROL_TOGGLES` | нет | — | JSON синтетических бинарных элементов (`state`, `on`, `off`, `visibleWhen`) |
 | `CONTROL_LISTEN` | нет | `127.0.0.1:8099` | Адрес каталога |
 | `CONTROL_QUEUE` | нет | `control` | Очередь команд (не `home`/`tasks`) |
 | `CONTROL_EXECUTE` | нет | `false` | `true` включает исполнение очереди; без него только каталог |

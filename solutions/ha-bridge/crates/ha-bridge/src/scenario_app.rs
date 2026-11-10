@@ -46,6 +46,7 @@ pub async fn run() -> anyhow::Result<()> {
     let catalog = Arc::new(Provider::new(
         Arc::clone(&ha),
         config.rules(),
+        Vec::new(),
         config.catalog_ttl,
     ));
     let scenarios: Arc<dyn ScenarioSource> = Arc::new(scenario_client(&config)?);

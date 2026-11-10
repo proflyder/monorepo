@@ -56,6 +56,8 @@ sealed interface ControlItem {
         val actions: List<Row> = emptyList(),
         val expanded: Boolean,
         val statesKnown: Boolean,
+        /** The control that names the device and keeps the main switch row. */
+        val mainId: String? = null,
     ) : ControlItem {
         override val key: String get() = "device:$deviceId"
 
@@ -101,6 +103,26 @@ sealed interface ControlItem {
 
 /** A selectable chip: the filter plus how many entries it shows. */
 data class ControlFilterOption(val filter: ControlFilter, val count: Int)
+
+/**
+ * The server's visibility condition resolved against the catalog: an entry is
+ * hidden until the referenced entry is in the requested on/off state. Unknown
+ * states hide it rather than guessing.
+ */
+fun ControlEntry.isVisible(entries: List<ControlEntry>): Boolean {
+    val condition = visibleWhen ?: return true
+    val target = entries.firstOrNull { it.id == condition.entry } ?: return false
+    val on = when (target.power) {
+        PowerState.ON -> true
+        PowerState.OFF -> false
+        null -> return false
+    }
+    return when (condition.state.trim().lowercase()) {
+        "on" -> on
+        "off" -> !on
+        else -> false
+    }
+}
 
 /** Texts the list needs; the presentation layer supplies localized strings. */
 class ControlTexts(
@@ -207,9 +229,10 @@ object ControlItems {
         wakeFeedback: List<WakeFeedbackAction> = emptyList(),
         voiceCard: Boolean = true,
     ): List<ControlItem> {
-        val applied = effectiveFilter(entries, filter)
-        val profile = entries.firstOrNull { it.isProfile }
-        val content = entries.filterNot { it.isProfile }
+        val visible = entries.filter { it.isVisible(entries) }
+        val applied = effectiveFilter(visible, filter)
+        val profile = visible.firstOrNull { it.isProfile }
+        val content = visible.filterNot { it.isProfile }
         val items = mutableListOf<ControlItem>()
         items += leading
 
@@ -224,7 +247,7 @@ object ControlItems {
 
         // Chips filter devices only, so they sit directly above the rooms
         // instead of floating over the live rows and quick actions.
-        val filterOptions = options(entries)
+        val filterOptions = options(visible)
         if (filterOptions.size > 1) {
             items += ControlItem.Filters(
                 chips = filterOptions.map { option ->
@@ -354,11 +377,17 @@ object ControlItems {
         val primary = members.filter { entry -> settings.none { it.id == entry.id } }
         val name = members.firstNotNullOfOrNull { it.device.takeIf(String::isNotBlank) }
             ?: anchor?.displayTitle()
+        // The main control names the device and carries its status: it always
+        // stays a switch row instead of becoming a compact tile. A prefix
+        // group names it explicitly (the base entity); a registry group falls
+        // back to the control that reports a device status.
+        val main = anchor ?: primary.firstOrNull { it.detailKey.isNotBlank() }
         return DeviceBucket(
             deviceId = deviceId,
             title = name ?: primary.firstOrNull()?.displayTitle() ?: members.first().displayTitle(),
             primary = primary,
             settings = settings,
+            mainId = main?.id,
         )
     }
 
@@ -367,6 +396,7 @@ object ControlItems {
         val title: String,
         val primary: List<ControlEntry>,
         val settings: List<ControlEntry>,
+        val mainId: String?,
     ) {
         fun toItem(pending: Set<String>, statesOk: Boolean, expandedDevices: Set<String>): ControlItem =
             // A lone primary control is still an ordinary device row; the device
@@ -388,6 +418,7 @@ object ControlItems {
                     actions = emptyList(),
                     expanded = deviceId in expandedDevices,
                     statesKnown = statesOk,
+                    mainId = mainId,
                 )
             }
     }

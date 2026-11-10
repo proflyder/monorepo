@@ -24,7 +24,7 @@ use std::time::{Duration, Instant};
 
 use home_ha::{Entity, Error, RegistryEntity};
 
-use crate::catalog::{self, Catalog, Light, LightInput, Raw, Rules};
+use crate::catalog::{self, Catalog, Light, LightInput, Raw, Rules, ToggleRule};
 
 /// Domains discovery reads. `assist_satellite` is not an entry of its own;
 /// it supplies the device and room of the synthetic speak action. `button`
@@ -107,6 +107,7 @@ pub trait CatalogSource: Send + Sync {
 pub struct Provider<H: HomeAssistant> {
     ha: H,
     rules: Rules,
+    toggles: Vec<ToggleRule>,
     ttl: Duration,
     last: Mutex<Option<(Arc<Catalog>, Instant)>>,
 }
@@ -116,6 +117,7 @@ impl<H: HomeAssistant> std::fmt::Debug for Provider<H> {
         formatter
             .debug_struct("Provider")
             .field("rules", &self.rules)
+            .field("toggles", &self.toggles)
             .field("ttl", &self.ttl)
             .finish_non_exhaustive()
     }
@@ -124,10 +126,11 @@ impl<H: HomeAssistant> std::fmt::Debug for Provider<H> {
 impl<H: HomeAssistant> Provider<H> {
     /// Build a provider. `ttl` bounds how often Home Assistant is queried.
     #[must_use]
-    pub fn new(ha: H, rules: Rules, ttl: Duration) -> Self {
+    pub fn new(ha: H, rules: Rules, toggles: Vec<ToggleRule>, ttl: Duration) -> Self {
         Self {
             ha,
             rules,
+            toggles,
             ttl,
             last: Mutex::new(None),
         }
@@ -236,7 +239,11 @@ impl<H: HomeAssistant> Provider<H> {
                 }
             })
             .collect::<Vec<_>>();
-        Ok(catalog::build(&raws, &self.rules))
+        Ok(catalog::build_with_toggles(
+            &raws,
+            &self.rules,
+            &self.toggles,
+        ))
     }
 
     async fn rooms(&self) -> Option<Vec<(String, String)>> {
@@ -511,7 +518,12 @@ mod tests {
         devices: Result<&'static str, ()>,
         registry: Result<Vec<RegistryEntity>, ()>,
     ) -> Vec<catalog::Entry> {
-        let provider = Provider::new(Fake { devices, registry }, rules(), Duration::from_secs(0));
+        let provider = Provider::new(
+            Fake { devices, registry },
+            rules(),
+            Vec::new(),
+            Duration::from_secs(0),
+        );
         provider
             .get()
             .await

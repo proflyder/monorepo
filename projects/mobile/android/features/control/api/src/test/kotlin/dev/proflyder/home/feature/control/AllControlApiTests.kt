@@ -8,6 +8,7 @@ import org.junit.runners.Suite
     ControlFilterTest::class,
     ControlItemsTest::class,
     CompactControlsTest::class,
+    ConditionalVisibilityTest::class,
     CatalogGroupingTest::class,
     HomeHubTest::class,
     LightColorsTest::class,
