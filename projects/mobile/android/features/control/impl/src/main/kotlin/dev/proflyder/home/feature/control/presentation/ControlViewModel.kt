@@ -284,6 +284,7 @@ class ControlViewModel(
                         copy(pending = pending - entry.id, notice = ControlNotice.CommandSent)
                     }
                     refresh(silent = true)
+                    refreshAfterPress()
                 }
                 is Outcome.Failure -> updateState {
                     copy(pending = pending - entry.id, actionError = result.failure)
@@ -551,7 +552,18 @@ class ControlViewModel(
 
     fun consumeLoadError() = updateState { copy(loadError = null) }
 
+    /**
+     * A button usually changes state a few seconds later (the PC lock sensor
+     * is re-read ~3 s after the press), so the catalog is read again once the
+     * server had time to see it; the user does not have to pull to refresh.
+     */
+    private suspend fun refreshAfterPress() {
+        delay(PRESS_SETTLE_DELAY_MS)
+        refresh(silent = true)
+    }
+
     private companion object {
+        const val PRESS_SETTLE_DELAY_MS = 4_500L
         const val RECONCILE_DELAY_MS = 1_500L
         const val RECONCILE_ATTEMPTS = 8
         const val EXPECT_TTL_MS = 15_000L

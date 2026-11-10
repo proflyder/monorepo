@@ -14,4 +14,10 @@
     <dimen name="control_voice_chip_gap">@dimen/ui_tile_gap</dimen>
     <!-- Quick action tile: icon + two-line label in a row, two per row. -->
     <dimen name="control_quick_tile_height">64dp</dimen>
+    <!-- Rounded press area of a device-card row. The card pads its content by
+         control_card_inset and each row adds control_row_bleed, so the content
+         stays 16dp from the edge while the ripple reaches 8dp from it. -->
+    <dimen name="control_row_corner">12dp</dimen>
+    <dimen name="control_row_bleed">8dp</dimen>
+    <dimen name="control_card_inset">8dp</dimen>
 </resources>
