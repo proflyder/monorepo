@@ -125,6 +125,10 @@ fun ControlEntry.isVisible(entries: List<ControlEntry>): Boolean {
     }
 }
 
+/** The catalog entries allowed by their `visibleWhen` conditions. */
+fun visibleEntries(entries: List<ControlEntry>): List<ControlEntry> =
+    entries.filter { it.isVisible(entries) }
+
 /** Texts the list needs; the presentation layer supplies localized strings. */
 class ControlTexts(
     val otherDevices: String,
@@ -181,7 +185,8 @@ object ControlItems {
      */
     fun options(entries: List<ControlEntry>): List<ControlFilterOption> {
         if (entries.isEmpty()) return emptyList()
-        val counted = entries.filter { it.isCounted() }
+        val visible = visibleEntries(entries)
+        val counted = visible.filter { it.isCounted() }
         val options = mutableListOf(ControlFilterOption(ControlFilter.All, counted.size))
         listOf(ControlFilter.Lights, ControlFilter.Switches).forEach { filter ->
             val count = counted.count { it.matches(filter) }
@@ -230,7 +235,10 @@ object ControlItems {
         wakeFeedback: List<WakeFeedbackAction> = emptyList(),
         voiceCard: Boolean = true,
     ): List<ControlItem> {
-        val visible = entries.filter { it.isVisible(entries) }
+        // Visibility comes first: a conditional entry whose target is not in
+        // the requested state must never reach cards, chips, counters or the
+        // "Unavailable" section.
+        val visible = visibleEntries(entries)
         val applied = effectiveFilter(visible, filter)
         val profile = visible.firstOrNull { it.isProfile }
         val content = visible.filterNot { it.isProfile }
@@ -382,6 +390,18 @@ object ControlItems {
         return members.map { if (it.id == main.id) merged else it }.filter { it.id !in companionIds }
     }
 
+    /**
+     * A control that represents the device itself: its own name is the device
+     * name (or a technical title that falls back to it), or its entity id ends
+     * in a power suffix. Status details play no role here.
+     */
+    private fun ControlEntry.namesDevice(deviceName: String?): Boolean {
+        val target = deviceName?.trim().orEmpty()
+        if (target.isEmpty()) return false
+        if (title.trim().equals(target, ignoreCase = true)) return true
+        return isDevice && localId(this).substringAfterLast('_').equals("power", ignoreCase = true)
+    }
+
     private fun bucketOf(deviceId: String, members: List<ControlEntry>, prefix: String? = null): DeviceBucket {
         val entries = mergeVolumes(members)
         // A base entity names a prefix group; it may not sort first (the catalog
@@ -394,13 +414,14 @@ object ControlItems {
         val primary = entries.filter { entry -> settings.none { it.id == entry.id } }
         val name = entries.firstNotNullOfOrNull { it.device.takeIf(String::isNotBlank) }
             ?: anchor?.displayTitle()
-        // The main control names the device and carries its status: it always
-        // stays a switch row instead of becoming a compact tile. A prefix
-        // group names it explicitly (the base entity); a registry group falls
-        // back to the control that reports a device status, and a card with a
-        // single primary control keeps that control as its main row.
+        // The main control names the device and stays a switch row instead of
+        // becoming a compact tile. A prefix group names it explicitly (the
+        // base entity); otherwise a control whose own name is the device name
+        // (or its power switch) is the main one; otherwise a card with a single
+        // primary control uses it. Everything else is a tile candidate, even
+        // when it carries a status detail such as the hardware mute.
         val main = anchor
-            ?: primary.firstOrNull { it.detailKey.isNotBlank() }
+            ?: primary.firstOrNull { it.namesDevice(name) }
             ?: primary.singleOrNull()
         return DeviceBucket(
             deviceId = deviceId,
