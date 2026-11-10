@@ -39,10 +39,9 @@ media type и digest. Все образы публикуются в GHCR (`ghcr.
 по digest `imagePullPolicy: IfNotPresent`, без pull-secret. Юнит `hermes`
 имеет `deploy.builder: mixed`: `hermes` собирается Docker, а
 `voice-proxy`, `health-exporter` и `home-deploy` — Bazel (явная карта
-`deploy.bazel_images` в `platform/ci/units.mjs`). `deploy-home` вызывает один
-`build-and-push.sh`, затем `home-deploy hermes rollout`
-(`projects/home-assistant/deploy/rollout.sh` — тонкая обёртка) подставляет
-digest'ы в релиз `runtime`, проверяет rollout, health exporter,
+`deploy.bazel_images` в `platform/ci/units.mjs`). `deploy-home` только пинует
+проверенные digest'ы; Flux (`HelmRelease/runtime`) обновляет релиз `runtime`, а
+пост-апгрейд hook проверяет rollout, health exporter,
 `voice-proxy -healthcheck`, Assist через Hermes и логи voice-proxy и
 откатывается на прежнюю ревизию при провале. Сборка без новых digest'ов не
 перезапускает контур.
@@ -64,7 +63,7 @@ image, command и пустые `volumeMounts`/`volumes` через `helm --set/-
 как раньше, поэтому новый образ раскатывается безопасно и до настройки
 маршрутов.
 
-В `runtime_values` (OpenBao `secret/ci/deploy-home`) нужны адреса и ссылки на
+В `runtime_values` (OpenBao `secret/k8s/flux-system/runtime-values`) нужны адреса и ссылки на
 секреты; значения токенов остаются в Kubernetes Secrets:
 
 ```yaml
@@ -123,11 +122,12 @@ Secret в volume.
 через Helm. Для ручного полного apply нужен digest exporter'а:
 `HEALTH_EXPORTER_IMAGE=ghcr.io/proflyder/health-exporter@sha256:…`
 (`kubectl -n home-assistant get deployment runtime-health-exporter -o jsonpath='{.spec.template.spec.containers[0].image}'`). PV/PVC помечены `helm.sh/resource-policy: keep` и не входят в
-Helm-релиз, чтобы `ci-deploy` (namespace-scoped, без cluster-scoped прав,
-VPN-группа только к API 6443) не мог их изменить или удалить. Ручной rollout
-выполняется тем же скриптом, что и CI; OpenBao `secret/ci/deploy-home`
-(key `runtime_values`) содержит приватные values без токенов (они остаются в
-Kubernetes Secrets).
+Helm-релиз: их применяет администратор (`apply-runtime.sh`), а Flux владеет
+только namespace-scoped workloads. OpenBao
+`secret/k8s/flux-system/runtime-values` (поле `values`) содержит приватные
+values без токенов (они остаются в Kubernetes Secrets); ESO создаёт
+`Secret/runtime-values` для `valuesFrom`. Ручной `hermes rollout` остаётся
+аварийным путём.
 
 ## Перенос Hermes home
 

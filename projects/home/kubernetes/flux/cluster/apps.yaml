@@ -49,7 +49,7 @@ spec:
   dependsOn:
     - name: platform
 ---
-# Pilot application, cut over to Flux (FLUX-APPS-PLAN 6.1). Flux applies the
+# Pilot application, cut over to Flux (решение 54). Flux applies the
 # live `wakegrant` workload; CI only commits the verified digest to the
 # `deploy/home-apps` branch. `suspend` must stay absent/false or Flux would
 # revert the cutover.
@@ -90,7 +90,7 @@ spec:
       name: wakegrant
       namespace: home-assistant
 ---
-# Stateless signaling service (FLUX-APPS-PLAN 6.2), cut over to Flux. CI only
+# Stateless signaling service (решение 54), cut over to Flux. CI only
 # pins the verified digest; Flux applies the live Deployment from `develop`.
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
@@ -124,7 +124,7 @@ spec:
       namespace: home-assistant
 ---
 # Currency bot, its Cloudflare Tunnel and the currency-bot namespace objects
-# (FLUX-APPS-PLAN 6.3), cut over to Flux. The namespace itself stays
+# (решение 54), cut over to Flux. The namespace itself stays
 # admin-owned; the tunnel route and host nftables rule remain manual.
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
@@ -162,8 +162,7 @@ spec:
       namespace: currency-bot
 ---
 # MCP infrastructure gateway, catalog ConfigMap, RBAC and its ExternalSecrets
-# (FLUX-APPS-PLAN 6.4), cut over to Flux. `ci/rbac.yaml` is deliberately not
-# part of the set.
+# (решение 54), cut over to Flux.
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
 metadata:
@@ -195,11 +194,11 @@ spec:
       name: mcp-gateway
       namespace: home-assistant
 ---
-# Scheduler and the HA executors (FLUX-APPS-PLAN 6.5). One Kustomization owns
+# Scheduler and the HA executors (решение 54). One Kustomization owns
 # scheduler, ha-bridge, ha-control and ha-scenario because they share one
 # template set; splitting it would make two `prune: true` Kustomizations fight
 # over the same objects. Executor modes/replicas are pinned to the live
-# steady state in the manifest patch (FLUX-APPS-PLAN 6.5, cut over to Flux).
+# steady state in the manifest patch (решение 54, cut over to Flux).
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
 metadata:
@@ -243,10 +242,10 @@ spec:
       name: ha-scenario
       namespace: home-assistant
 ---
-# Hermes runtime Helm release (FLUX-APPS-PLAN 6.6). The chart is in-repo, the
+# Hermes runtime Helm release (решение 54). The chart is in-repo, the
 # values come from `runtime-values` (ESO), images from the pins branch, and a
 # post-upgrade smoke hook plus `remediation.strategy: rollback` replace
-# `home-deploy hermes rollout`'s smoke/rollback (FLUX-APPS-PLAN 6.6, cut over
+# `home-deploy hermes rollout`'s smoke/rollback (решение 54, cut over
 # to Flux). PV/PVC stay admin-owned.
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization

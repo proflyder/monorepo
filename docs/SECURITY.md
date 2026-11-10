@@ -43,10 +43,10 @@
   сертификата (`cert-group-oid`), по умолчанию `lan`. Пул `10.77.0.0/24`,
   masquerade в CT.
 - Группа `ci` для GitHub Actions изолирована: пул `10.77.1.0/24`, маршрут
-  только до K3s, без DNS; nftables `forward` разрешает только
-  `tcp/{443,6443}` на K3s (443 — Traefik/OpenBao OIDC, 6443 — API) и `drop`
-  остальное. Сертификат CI не даёт доступа к HA, PVE, станции или другим
-  LAN-адресам.
+  только до K3s, без DNS; nftables `forward` разрешает только `tcp/443`
+  (Traefik → HA для установки прошивки станции) и `drop` остальное. K3s API
+  (`6443`), SSH, PVE, станция и другие LAN-адреса недоступны. Порт `443` и
+  группа `ci` нужны только сертификату `ci-pulsar` (`deploy-station`).
 - Сервер проброшен на ONT/AX3: снаружи открыт только `443/tcp+udp`; SSH в CT
   остаётся только из LAN. Лимит `max-same-clients = 10` на пользователя.
 - Серверный сертификат — публичный Let's Encrypt с автоматическим продлением
@@ -135,12 +135,12 @@
   принято владельцем 2026-11-02; отзыв — `bao token revoke` или UI.
 - CI: `jwt` mount `github`, только GitHub OIDC (без статических токенов):
   issuer `https://token.actions.githubusercontent.com`, audience = адрес
-  OpenBao, claims `repository`, `environment=Home`, `ref=refs/heads/develop`,
-  TTL 10/15 мин, политика `ci-deploy` — read только `secret/ci/test` и
-  `secret/ci/deploy-home`. Отдельные роли: `deploy-station` (Environment
+  OpenBao, TTL 10/15 мин. Остались роли `deploy-station` (Environment
   `Station`, политика `ci-station` — только `secret/ci/deploy-station`) и
   `android-distribute` (Environment `Android` на PR, политика `ci-android` —
-  только `secret/ci/android-distribute`).
+  только `secret/ci/android-distribute`). Роль `deploy-home`/политика
+  `ci-deploy` удалены: home-сервисы применяет Flux, CI в OpenBao за ними не
+  ходит.
 - Поды: `kubernetes` auth через TokenReview (`system:auth-delegator` на SA
   `openbao`); политика `k8s-read` — read только `secret/k8s/*`. Роль
   `external-secrets` используется External Secrets Operator (namespace
@@ -188,26 +188,22 @@
   физдоступом и планом.
 - `labuser` с sudo NOPASSWD — root-эквивалент; убрать при многопользовательском
   доступе.
-- CI не имеет SSH и root на узлах: группа `ci` маршрутизируется только до
-  `K3S_NODE`, VPN nft разрешает только `tcp/{443,6443}` (443 — Traefik для
-  OpenBao OIDC, 6443 — API), а узел принимает `6443` лишь с адреса VPN-CT
-  (пул `ci` маскируется в него). Пользователь `ci-deploy` и root-helper
-  удалены с узла.
-- Kubeconfig CI — ServiceAccount `ci-deploy` только в `home-assistant`
-  (Role, не ClusterRole): нет других namespace и cluster-scoped объектов;
-  добавлены только `batch/jobs` для in-cluster preflight. API доступен
-  напрямую по `https://<K3S_NODE>:6443` (IP узла в SAN сертификата).
+- CI не имеет SSH, root и доступа к K3s API: группа `ci` маршрутизируется
+  только до `K3S_NODE`, VPN nft разрешает только `tcp/443` (Traefik → HA для
+  `deploy-station`); правило `6443` снято. Сертификат `ci-github` и
+  ServiceAccount/RBAC `ci-deploy` удалены, root-helper с узла убран. Единственный
+  CI-пользователь VPN — `ci-pulsar` (станция).
+- Kubeconfig CI больше не существует: применение в кластере делает Flux
+  in-cluster, без входящего ServiceAccount.
 - Образы неизменяемы и адресуются по digest; GHCR-пакеты должны быть
   публичными (pull без секрета), push выполняет job-scoped `GITHUB_TOKEN`
   с `packages: write` только в deploy-джобе.
-- Секреты Environment `Home` (VPN p12/пароль, `OPENBAO_ADDR`, `OPENBAO_ROLE`)
-  загружаются primary вручную через `gh`; в Git их нет. Всё, что нужно только
-  после входа в OpenBao (`kubeconfig`, `scheduler.env`, runtime values),
-  хранится в `secret/ci/deploy-home`, читается по GitHub OIDC ролью
-  `deploy-home` (политика `ci-deploy`: read только `secret/ci/test` и
-  `secret/ci/deploy-home`) и материализуется в файлы 600 с маскированием
-  значений; токен отзывается в `if: always()`. HA/scheduler токены CI больше
-  не нужны: preflight выполняется Job-ом в кластере.
+- Environment `Home` удалён. Секреты Environment `Station` (VPN p12/пароль,
+  `OPENBAO_ADDR`, `OPENBAO_ROLE`) загружаются primary вручную через `gh`; в Git
+  их нет. Приватные env приложений лежат в `secret/k8s/flux-system/app-settings`,
+  values Hermes — в `secret/k8s/flux-system/runtime-values`; их читает ESO
+  (Kubernetes auth, только `secret/k8s/*`), а не job CI. HA/scheduler токены
+  CI не нужны.
 
 ## Логи / публикация
 

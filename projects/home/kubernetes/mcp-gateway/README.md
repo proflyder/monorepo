@@ -35,15 +35,12 @@ manifests/rbac.yaml               ServiceAccount + per-namespace read/restart Ro
 manifests/external-secrets.yaml   auth, telegram, ha, bb-ssh, voice secrets
 manifests/network-policies.yaml   ingress from Hermes/monitoring, narrow egress
 manifests/servicemonitor.yaml     Prometheus scrape of /metrics
-ci/rbac.yaml                      extra ci-deploy verbs (NetworkPolicy, ServiceMonitor)
-deploy.sh                         build/push/import image, render, apply, roll out
-                                  (`home-deploy render --unit mcp-gateway`)
-mcp-gateway.env.example           LAN/host/bb placeholders
-test_deploy.py                    catalog↔RBAC, manifests, render, deploy contract
+test_deploy.py                    catalog↔RBAC and manifest contracts
 ```
 
-Rendered manifests go to `secrets/local/rendered/mcp-gateway` (git-ignored).
-Tracked files contain only placeholders/TEST-NET values.
+Flux renders `catalog.yaml`/`bb-targets.yaml` into the catalog ConfigMap and
+substitutes the private placeholders; tracked files contain only
+placeholders/TEST-NET values.
 
 ## Catalog is the allow-list
 
@@ -79,8 +76,8 @@ Tracked files contain only placeholders/TEST-NET values.
   `ha_unavailable_summary`), MA TCP + web root, and station TCP ports plus
   `ha_state`/`ha_template` for the ESPHome entities and the Pulsar version.
   The catalog, the Deployment and the NetworkPolicy carry `${HAOS_IP}` /
-  `${STATION_IP}`; `deploy.sh` renders them from the private env, so tracked
-  files never contain real host addresses.
+  `${STATION_IP}`; Flux substitutes them from `Secret/flux-app-settings`, so
+  tracked files never contain real host addresses.
 - `infra_report` is the full-report tool used by the Telegram `/report` skill.
   The text is cognitive-first: a header, an emoji verdict, then «Проблемы»
   (one block per failing service with ready/restarts/failing check/entities),
@@ -256,7 +253,6 @@ Never paste secret values into chat or a commit. Use the private paths below.
 
    ```bash
    mise run kubectl -- apply -f projects/home/kubernetes/mcp-gateway/manifests/rbac.yaml
-   mise run kubectl -- apply -f projects/home/kubernetes/mcp-gateway/ci/rbac.yaml
    mise run kubectl -- apply -f projects/home/kubernetes/mcp-gateway/manifests/external-secrets.yaml
    mise run kubectl -- -n home-assistant wait --for=condition=Ready \
      externalsecret/mcp-gateway-auth externalsecret/mcp-gateway-telegram \
@@ -264,62 +260,33 @@ Never paste secret values into chat or a commit. Use the private paths below.
      externalsecret/mcp-gateway-voice --timeout=120s
    ```
 
-   `ci/rbac.yaml` only adds what the scheduler Role for `home-assistant`
-   lacks: NetworkPolicy and ServiceMonitor, plus `get` on `services/proxy` for
-   the gateway's Service so the post-deploy smoke can read `/readyz`.
+7. **Deploy-time env** in OpenBao `secret/k8s/flux-system/app-settings`
+   (ESO creates `Secret/flux-app-settings`; Flux substitutes it):
 
-7. **Deploy-time env** in `secrets/home/mcp-gateway.env` (copy the example):
-
-   ```bash
-   LAN_CIDR=<LAN CIDR>
-   NODE_LAN_IP=<K3s node address>
-   HAOS_IP=<HAOS VM address>
-   STATION_IP=<station address>
-   BB_CT_IP=<bb host address>
-   BB_PROJECT_STATION_LAB=<station-lab projectId or exact name>
-   BB_PROJECT_ENGLISH_NOTES=<english-learning-notes projectId or exact name>
-   BB_DISPATCHER_THREAD_ID=<permanent work dispatcher thread id>
-   ```
-
-   CI reads the same text from `secret/ci/deploy-home` key
-   `mcp_gateway_env`:
-
-   ```bash
-   # one-time, content from the private file, value not printed
-   bao kv patch secret/ci/deploy-home \
-     mcp_gateway_env="$(cat secrets/home/mcp-gateway.env)"
+   ```text
+   LAN_CIDR                 <LAN CIDR>
+   NODE_LAN_IP              <K3s node address>
+   HAOS_IP                  <HAOS VM address>
+   STATION_IP               <station address>
+   BB_CT_IP                 <bb host address>
+   BB_PROJECT_STATION_LAB   <station-lab projectId or exact name>
+   BB_PROJECT_ENGLISH_NOTES <english-learning-notes projectId or exact name>
+   BB_DISPATCHER_THREAD_ID  <permanent work dispatcher thread id>
    ```
 
 8. **ExternalSecrets in the ESO apply set.** `external-secrets/deploy.sh`
    keeps an explicit list of ExternalSecret manifests;
    `projects/home/kubernetes/mcp-gateway/manifests/external-secrets.yaml` is in
-   it, so one `mise run admin:external-secrets` covers it. The CI job fails
-   closed if any ExternalSecret is missing or not Ready.
+   it, so one `mise run admin:external-secrets` covers it. Flux applies the
+   same objects; the emergency tool remains for a manual re-apply.
 
 ## Deploy
 
-Manual (workstation, imports the image into the node over SSH):
-
-```bash
-NODE_SSH=labuser@node ./projects/home/kubernetes/mcp-gateway/deploy.sh
-```
-
-CI (`deploy-home`, push to `develop`): the `mcp-gateway` unit comes from
-`platform/ci/units.mjs`; the image is built/pushed by Bazel, then `deploy.sh`
-runs with `PUSH_IMAGES=1` and `PRIVATE_ENV=$CI_DIR/mcp-gateway.env`.
-
-`deploy.sh` is idempotent and:
-
-1. builds `//solutions/mcp-gateway:mcp-gateway_image` and resolves the digest
-   (never a moving tag);
-2. renders the manifests (no half-rendered input is possible);
-3. verifies the ServiceAccount and all five ExternalSecrets exist and are Ready;
-4. renders `manifests/catalog.yaml` and `manifests/bb-targets.yaml` (host and
-   project placeholders) and applies both as the catalog ConfigMap;
-5. applies NetworkPolicies and the ServiceMonitor;
-6. converges the Deployment and waits for the rollout;
-7. runs the binary's `-healthcheck` through `kubectl exec`, which loads the
-   mounted token/catalog/groups and calls `/healthz` on loopback.
+Flux applies the unit (`Kustomization/app-mcp-gateway`) from `develop`: the
+digest comes from `deploy/home-apps`, the catalog ConfigMap is generated from
+`catalog.yaml`/`bb-targets.yaml`, and `${...}` placeholders come from
+`Secret/flux-app-settings`. After a merge, `deploy-home`'s `pins` job promotes
+the verified digest; there is no CI VPN, kubeconfig or deploy script.
 
 Checks:
 
@@ -389,26 +356,19 @@ unset VOICE_TOKEN
 
 ## Rollback
 
-`deploy.sh` records the Deployment before changing it and writes an `.applied`
-marker after a successful apply. CI restores exactly those objects:
-
-```bash
-home-deploy state rollback \
-  --state-dir secrets/local/rendered/mcp-gateway/state \
-  --namespace home-assistant
-```
-
-Support objects (ConfigMap, NetworkPolicy, ServiceMonitor, ExternalSecrets)
-are idempotent and not rolled back; re-apply the previous commit if needed.
+Revert the `deploy/home-apps` commit that changed `MCP_GATEWAY_IMAGE`; Flux
+re-applies the previous digest and the catalog from Git. For a drill, freeze
+first with `flux suspend kustomization/app-mcp-gateway`, then resume after the
+revert. Do not delete the Kustomization (`prune: true` removes the workload).
 Full removal:
 
 ```bash
+mise run kubectl -- -n flux-system suspend kustomization/app-mcp-gateway
 mise run kubectl -- -n home-assistant delete deployment,service mcp-gateway
 mise run kubectl -- -n home-assistant delete configmap mcp-gateway-catalog
 mise run kubectl -- -n home-assistant delete networkpolicy mcp-gateway-ingress mcp-gateway-egress
 mise run kubectl -- -n home-assistant delete servicemonitor mcp-gateway
 mise run kubectl -- delete -f projects/home/kubernetes/mcp-gateway/manifests/rbac.yaml
-mise run kubectl -- delete -f projects/home/kubernetes/mcp-gateway/ci/rbac.yaml
 mise run kubectl -- delete -f projects/home/kubernetes/mcp-gateway/manifests/external-secrets.yaml
 ```
 

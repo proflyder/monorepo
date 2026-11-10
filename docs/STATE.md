@@ -128,19 +128,16 @@
   `kubectl delete pod` сервер распечатывается сам.
 - Auth: `userpass` (человек, политика `admin`; пароль задаёт человек; обязательный
   TOTP `human-totp`, устройство зарегистрировано, enforcement включён), `jwt` `github`
-  (GitHub OIDC: `deploy-home` — environment `Home`, ref `develop`;
-  `deploy-station` — environment `Station`; `android-distribute` — Environment
+  (`deploy-station` — environment `Station`; `android-distribute` — Environment
   `Android` на PR; TTL ≤15 мин), `kubernetes` (TokenReview, роли
-  `external-secrets`/`k8s-smoke`/`backup`).
-- KV v2 `secret/`: `secret/ci/test`, `secret/ci/deploy-home`,
-  `secret/ci/deploy-station`, `secret/ci/android-distribute` и `secret/k8s/*`.
-  `secret/ci/deploy-home` (`kubeconfig` и env/values файлы деплой-юнитов,
-  включая `intercom_env` и `runtime_values`) — источник для CI; в GitHub этих
-  значений больше нет.
-  `deploy-home` входит по OIDC после VPN, читает запись через
-  `hashicorp/vault-action`, материализует файлы 600 и маскирует значения;
-  токен живёт только до конца job (TTL роли), отдельного revoke нет; политика
-  `ci-deploy` — read только `secret/ci/test` и `secret/ci/deploy-home`.
+  `external-secrets`/`k8s-smoke`/`backup`). Роли `deploy-home`/политики
+  `ci-deploy` больше нет: home-сервисы применяет Flux, CI в OpenBao за ними не
+  ходит.
+- KV v2 `secret/`: `secret/ci/test` (не секрет, negative-probe для
+  k8s-auth smoke), `secret/ci/deploy-station`, `secret/ci/android-distribute`,
+  `secret/k8s/*`. Приватные env приложений — `secret/k8s/flux-system/app-settings`,
+  values Hermes — `secret/k8s/flux-system/runtime-values`, ESO создаёт
+  `flux-app-settings`/`runtime-values` в `flux-system`; в GitHub значений нет.
 - Ночной CronJob raft snapshot в `/srv/k3s/volumes/openbao-backups`
   (7 файлов). Root-токен отозван, recovery keys — только `secrets/openbao/`.
 - Restore OpenBao snapshot и SQLite scheduler проверен на локальном стенде
@@ -194,11 +191,13 @@
 - `deploy-home` (push в `develop` = merge PR) для приложений только
   продвигает и пинует digest'ы: job `pins` без VPN/OpenBao/kubeconfig
   коммитит их в `deploy/home-apps`, а Flux применяет workload'ы из
-  `develop`. Job `deploy` (VPN группа `ci`, OIDC в OpenBao, kubectl/helm)
-  не выбирает ни одного юнита, пока все они `deploy.runtime: "flux"`; его
-  удаление и отзыв `ci-deploy`/`ci-github` — этап 6.7 в `docs/PENDING.md`.
-  Режимы (`preserve`/`execute`/`shadow`/`control-*`) — только через
-  `workflow_dispatch`.
+  `develop`. Job `deploy` удалён (этап 6.7 завершён): пути «CI входит в VPN и
+  катит kubectl/helm» больше нет, входящий доступ `ci-deploy`/`ci-github`
+  отозван. Откат — revert pins-коммита или `flux suspend`; режимы
+  (`preserve`/`execute`/`shadow`/`control-*`) меняются Git-состоянием и
+  admin-скриптом `projects/home/kubernetes/scheduler/deploy.sh`.
+- Ручной запуск `mise run deploy <unit>` = `workflow_dispatch` с `units=...`:
+  пересчитывает и пинует digest, применять ничего не нужно.
 - scheduler (Rust, static musl), ha-bridge, ha-control, ha-scenario, intercom —
   собственные distroless-образы, собираемые Bazel `rules_oci`/`rules_rust` и адресуемые по
   digest в `ghcr.io/proflyder/<name>@sha256:…`; CI пушит их job-scoped
@@ -221,17 +220,19 @@
   собранный тем же `rust_service_image` (static musl, distroless) в отдельный
   `ghcr.io/proflyder/health-exporter`. PR CI (`_unit.yml`, builder `mixed`,
   карта `deploy.bazel_images`) собирает и публикует gateway, proxy, exporter и
-  `home-deploy` под `tree-<hash>`; `deploy-home` продвигает digest'ы, затем
-  `home-deploy hermes rollout` подставляет digest'ы,
-  проверяет `-healthcheck`/health/Assist/логи и делает `helm rollback` при
-  провале. Assist smoke Job работает на `home-deploy` (`hermes assist-smoke`).
+  `home-deploy` под `tree-<hash>`; `deploy-home` пинует digest'ы, затем
+  Flux (`HelmRelease/runtime`) обновляет релиз, а post-upgrade smoke hook
+  (`home-deploy hermes assist-smoke`) валит upgrade и возвращает прежнюю
+  ревизию при провале. Ручной аварийный путь — `hermes rollout`/`helm rollback`.
   Voice-proxy принят вживую на станции: оба профиля, подтверждение с
   открытым микрофоном, отмена, поздние ответы.
-- Деплой — `home-deploy converge` (Rust-крейт `platform/deploy-rs`): полная замена Deployment, сохранение env/режима и
-  replicas; откат восстанавливает только применённый объект целиком.
-- PV/PVC применяет `apply-runtime.sh` через kubectl; Helm управляет только
-  namespace-scoped workloads, поэтому `ci-deploy` не имеет cluster-scoped
-  прав.
+- Обычный деплой — Flux: Kustomization применяет манифесты из `develop` с
+  digest'ами из pins; readiness — `healthChecks`, откат — revert pins.
+  `home-deploy converge` (Rust-крейт `platform/deploy-rs`) остаётся для
+  admin-операций (drills, cutover) и полностью заменяет Deployment, сохраняя
+  env/режим и replicas.
+- PV/PVC Hermes применяет `apply-runtime.sh` через kubectl; Helm управляет
+  только namespace-scoped workloads.
 - Pulsar собирается в монорепо: исходники лежат в `projects/station/pulsar`,
   сборка — Bazel (Rust + герметичный zig cc-toolchain + sendspin-cpp из
   `http_archive`); монорепо собирает его в CI-юнитах `pulsar-bazel` и `pulsar`
@@ -658,7 +659,8 @@
   `secret/k8s/home-assistant/scheduler-auth` (`token` → `phone_token`,
   общий токен приложения) и `secret/k8s/home-assistant/intercom`
   (`station_token`),
-  `intercom_env` в `secret/ci/deploy-home` (`INTERCOM_NODE_PORT=30097`),
+  `${INTERCOM_NODE_PORT}` (`30097`) в
+  `secret/k8s/flux-system/app-settings` → `flux-app-settings`,
   NodePort закрыт общим host-фильтром scheduler/control. LAN/VPN-клиенты
   ходят по внутреннему имени `https://intercom.home.<home-suffix>/` через Traefik
   (`home-allowlist`, wildcard TLS): маршрут задаёт
@@ -729,12 +731,10 @@
   NetworkPolicies: 8081 только от cloudflared; egress cloudflared к Cloudflare
   `7844/udp` + `443/tcp` и DNS.
 - `/trigger` и `POST /api/trigger` всегда отправляют.
-- CI: юниты `currency-bot` (bazel: Rust crate, musl-образ, deploy) и
-  `currency-bot-deploy` (contract-тест `deploy.sh`); deploy-env —
-  `secret/ci/deploy-home`,
-  ключ `currency_bot_env` (в нём должен появиться `CURRENCY_BOT_NODE_PORT`
-  рядом с `WEBHOOK_URL`, `LAN_CIDR`, `NODE_LAN_IP`).
-  Деплой `currency-bot` зелёный.
+- CI: юнит `currency-bot` (bazel: Rust crate + musl-образ); применяет Flux
+  (`app-currency-bot`). Приватные значения (`CURRENCY_WEBHOOK_URL`,
+  `LAN_CIDR`, `NODE_LAN_IP`, `CURRENCY_BOT_NODE_PORT`) — в
+  `secret/k8s/flux-system/app-settings`.
 - Голосовой intent «курс рубля/доллара/валют» (`StationCurrencyRate`,
   `projects/home-assistant/ha-voice`) live с 2026-11-02: HA читает
   `GET /api/latest` currency-bot через NodePort `CURRENCY_BOT_NODE_PORT`
@@ -837,12 +837,12 @@
   Telegram-подтверждения, у каждого — честное предупреждение; `hermes` и
   `mcp-gateway` помечены `self_disrupting` (патч откладывается на ~20 с, чтобы
   ответ успели озвучить). HAOS, Music Assistant и станция — только чтение.
-- CI: юниты `mcp-gateway` (bazel: crate fmt/clippy/тесты + musl-образ +
-  deploy, env `mcp_gateway_env` в `secret/ci/deploy-home`) и
-  `mcp-gateway-deploy` (catalog↔RBAC, манифесты, render, contract-тест
-  `deploy.sh`); схема каталога и bb-allowlist проверяется настоящими
-  Rust-валидаторами в
-  `crates/mcp-gateway/tests/deploy_contract.rs`.
+- CI: юнит `mcp-gateway` (bazel: crate fmt/clippy/тесты + musl-образ) и
+  `mcp-gateway-deploy` (catalog↔RBAC и манифесты); значения
+  `${LAN_CIDR}`, `${NODE_LAN_IP}`, `${HAOS_IP}`, `${STATION_IP}`,
+  `${BB_CT_IP}`, `${BB_PROJECT_*}`, `${BB_DISPATCHER_THREAD_ID}` Flux берёт из
+  `flux-app-settings`. Схема каталога и bb-allowlist проверяется настоящими
+  Rust-валидаторами в `crates/mcp-gateway/tests/deploy_contract.rs`.
 - Hermes: третий MCP-сервер `infra`
   (`mcp-gateway.home-assistant.svc.cluster.local:8080/mcp`, Bearer
   `HERMES_INFRA_TOKEN`); `platform_toolsets.api_server` и `telegram` =

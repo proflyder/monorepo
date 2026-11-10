@@ -13,7 +13,7 @@ tts/puriso/    Piper Puriso model/install
 tools/tts-lab/ TTS evaluation/installer
 e2e/           live e2e проекта
 scripts/       операторские скрипты
-stack/, configs/, patches/  прежний docker-compose стек неттопа; в runtime не используется
+configs/, patches/  PVE/Wi-Fi-драйвер и сетевые примеры (прежний неттоп)
 ```
 
 ## Текущий контур
@@ -33,6 +33,7 @@ stack/, configs/, patches/  прежний docker-compose стек неттоп�
 - [`ha-voice/README.md`](ha-voice/README.md)
 - [`hermes/README.md`](hermes/README.md)
 - [`tts/puriso/README.md`](tts/puriso/README.md)
+- [`TROUBLESHOOTING.md`](TROUBLESHOOTING.md)
 
 ## Границы
 

@@ -249,16 +249,16 @@ export const config = {
         "platform/deploy/**",
         "platform/deploy-rs/**",
       ],
-      // deploy-home rolls exactly these container images and Deployments when the
-      // unit is affected. Infrastructure (ingress, observability, runtime chart)
-      // has no deploy block on purpose: it is not auto-deployed.
+      // `deploy-home` pins exactly these images when the unit is affected and
+      // Flux rolls the Deployments from the pins branch. Infrastructure
+      // (ingress, observability, runtime chart) has no deploy block on purpose:
+      // it is not auto-deployed.
       deploy: {
         builder: "bazel",
-        // Flux owns the executors (FLUX-APPS-PLAN 6.5): Kustomization
+        // Flux owns the executors (решение 54): Kustomization
         // `app-ha-executors` applies scheduler, ha-bridge, ha-control and
         // ha-scenario from the digest the `pins` job commits. `deploy.sh`
         // remains the admin tool for mode drills and manual cutover.
-        runtime: "flux",
         target_root: "//projects/home/kubernetes/scheduler",
         images: ["scheduler", "home-deploy"],
         // The shared scheduler deploy script also renders ha-bridge, ha-control
@@ -269,10 +269,6 @@ export const config = {
         optional_images: ["ha-bridge", "ha-control", "ha-scenario"],
         workloads: ["scheduler"],
         namespace: "home-assistant",
-        script: "projects/home/kubernetes/scheduler/deploy.sh",
-        env_key: "scheduler_env",
-        env_file: "scheduler.env",
-        externalsecrets: ["scheduler-auth", "ha-bridge-ha"],
       },
       // `deploy.sh` records every Deployment it is about to change and marks it
       // applied only after a successful converge. Under Flux the rollback is a
@@ -283,7 +279,7 @@ export const config = {
           "Revert the `deploy/home-apps` commit that changed SCHEDULER_IMAGE; " +
           "Flux applies the previous digest within 1-2m. For a windowed drill " +
           "use `flux suspend kustomization app-ha-executors` plus deploy.sh.",
-        source: "docs/FLUX-APPS-PLAN.md (6.5) and projects/home/kubernetes/flux/README.md",
+        source: "DECISIONS 54/55 and projects/home/kubernetes/flux/README.md",
       },
       // The deployed service is the Rust crate; the former Go implementation
       // is deleted, and the golden fixtures under solutions/scheduler/testdata
@@ -328,19 +324,14 @@ export const config = {
       // because the service is unusable without it.
       deploy: {
         builder: "bazel",
-        // Flux owns wakegrant since the pilot cutover (FLUX-APPS-PLAN 6.1):
+        // Flux owns wakegrant since the pilot cutover (решение 54):
         // Kustomization/app-wakegrant applies the digest from the
         // `deploy/home-apps` pins branch. deploy-home only commits the verified
         // digest through its `pins` job and never applies the workload.
-        runtime: "flux",
         target_root: "//solutions/wakegrant",
         images: ["wakegrant"],
         workloads: ["wakegrant"],
         namespace: "home-assistant",
-        script: "projects/home/kubernetes/wakegrant/deploy.sh",
-        env_key: "wakegrant_env",
-        env_file: "wakegrant.env",
-        externalsecrets: ["wakegrant"],
       },
       // Flux applies the digest and reports readiness through the
       // Kustomization `healthChecks`; the documented rollback is a revert of
@@ -351,7 +342,7 @@ export const config = {
           "Revert the `deploy/home-apps` commit that changed WAKEGRANT_IMAGE; " +
           "Flux applies the previous digest within 1-2m. `suspend: true` plus a " +
           "pins revert, never `kubectl rollout undo`.",
-        source: "docs/FLUX-APPS-PLAN.md (6.1 wakegrant) and projects/home/kubernetes/flux/README.md",
+        source: "DECISIONS 54 and projects/home/kubernetes/flux/README.md",
       },
       // Rust service: host fmt/clippy/tests plus the static musl image. The
       // protocol and shared core crates live in //packages/rust.
@@ -384,24 +375,19 @@ export const config = {
       // the same unit because the service is unusable without it.
       deploy: {
         builder: "bazel",
-        // Flux owns intercom since the FLUX-APPS-PLAN 6.2 migration:
+        // Flux owns intercom since the решение 54 migration:
         // Kustomization/app-intercom applies the digest from the pins branch.
-        runtime: "flux",
         target_root: "//solutions/intercom",
         images: ["intercom"],
         workloads: ["intercom"],
         namespace: "home-assistant",
-        script: "projects/home/kubernetes/intercom/deploy.sh",
-        env_key: "intercom_env",
-        env_file: "intercom.env",
-        externalsecrets: ["intercom"],
       },
       rollback: {
         kind: "flux-pins",
         note:
           "Stateless: revert the `deploy/home-apps` commit that changed " +
           "INTERCOM_IMAGE and let Flux re-apply the previous digest.",
-        source: "docs/FLUX-APPS-PLAN.md (6.2) and projects/home/kubernetes/intercom/README.md",
+        source: "DECISIONS 54 and projects/home/kubernetes/intercom/README.md",
       },
       bazel: {
         roots: [
@@ -437,18 +423,13 @@ export const config = {
       // same unit because the webhook is unusable without it.
       deploy: {
         builder: "bazel",
-        // Flux owns currency-bot since FLUX-APPS-PLAN 6.3:
+        // Flux owns currency-bot since решение 54:
         // Kustomization/app-currency-bot applies the digest from the pins
         // branch. The `currency-bot` namespace stays admin-owned.
-        runtime: "flux",
         target_root: "//solutions/currency-bot",
         images: ["currency-bot"],
         workloads: ["currency-bot"],
         namespace: "currency-bot",
-        script: "projects/home/kubernetes/currency-bot/deploy.sh",
-        env_key: "currency_bot_env",
-        env_file: "currency-bot.env",
-        externalsecrets: ["currency-bot", "cloudflared-tunnel"],
       },
       rollback: {
         kind: "flux-pins",
@@ -456,7 +437,7 @@ export const config = {
           "Revert the `deploy/home-apps` commit that changed CURRENCY_BOT_IMAGE; " +
           "Flux re-applies the previous digest. `cloudflared` is pinned by a " +
           "reviewed versions.sh literal, so roll it back with a PR.",
-        source: "docs/FLUX-APPS-PLAN.md (6.3), projects/home/kubernetes/currency-bot/README.md",
+        source: "DECISIONS 54 and projects/home/kubernetes/currency-bot/README.md",
       },
       // Rust service: host fmt/clippy/tests plus the static musl image. The Go
       // implementation is deleted; `testdata` stays as frozen contract data.
@@ -497,32 +478,20 @@ export const config = {
       // an image without its catalog or token is unusable.
       deploy: {
         builder: "bazel",
-        // Flux owns mcp-gateway since FLUX-APPS-PLAN 6.4:
+        // Flux owns mcp-gateway since решение 54:
         // Kustomization/app-mcp-gateway renders the catalog ConfigMap and
-        // applies the digest from the pins branch. `ci/rbac.yaml` is not part
-        // of the Flux path and goes away with `ci-deploy`.
-        runtime: "flux",
+        // applies the digest from the pins branch.
         target_root: "//solutions/mcp-gateway",
         images: ["mcp-gateway"],
         workloads: ["mcp-gateway"],
         namespace: "home-assistant",
-        script: "projects/home/kubernetes/mcp-gateway/deploy.sh",
-        env_key: "mcp_gateway_env",
-        env_file: "mcp-gateway.env",
-        externalsecrets: [
-          "mcp-gateway-auth",
-          "mcp-gateway-telegram",
-          "mcp-gateway-ha",
-          "mcp-gateway-bb-ssh",
-          "mcp-gateway-voice",
-        ],
       },
       rollback: {
         kind: "flux-pins",
         note:
           "Revert the `deploy/home-apps` commit that changed MCP_GATEWAY_IMAGE; " +
           "Flux re-applies the previous digest and the catalog from git.",
-        source: "projects/home/kubernetes/mcp-gateway/README.md (Rollback), docs/FLUX-APPS-PLAN.md (6.4)",
+        source: "projects/home/kubernetes/mcp-gateway/README.md (Rollback)",
       },
       // Rust service: host fmt/clippy/tests plus the static musl image. The Go
       // implementation is deleted; `testdata` stays as frozen contract data.
@@ -567,10 +536,9 @@ export const config = {
       // executor code.
       deploy: {
         builder: "bazel",
-        // Flux owns ha-bridge/ha-control/ha-scenario since FLUX-APPS-PLAN 6.5:
+        // Flux owns ha-bridge/ha-control/ha-scenario since решение 54:
         // the single Kustomization/app-ha-executors applies the digests from
         // the pins branch. `deploy.sh` remains the admin tool for mode drills.
-        runtime: "flux",
         target_root: "//projects/home/kubernetes/scheduler",
         images: ["ha-bridge", "ha-control", "ha-scenario"],
         // The shared script renders the scheduler too; this unit never applies
@@ -579,10 +547,6 @@ export const config = {
         optional_images: ["scheduler"],
         workloads: ["ha-bridge", "ha-control", "ha-scenario"],
         namespace: "home-assistant",
-        script: "projects/home/kubernetes/scheduler/deploy.sh",
-        env_key: "scheduler_env",
-        env_file: "scheduler.env",
-        externalsecrets: ["scheduler-auth", "ha-bridge-ha"],
       },
       // Under Flux the rollback is a pins revert; executor modes/replicas are
       // Git state, so a drill uses `flux suspend` plus deploy.sh.
@@ -592,7 +556,7 @@ export const config = {
           "Revert the `deploy/home-apps` commit that changed HA_BRIDGE_IMAGE / " +
           "HA_CONTROL_IMAGE / HA_SCENARIO_IMAGE. Mode changes are a Git change " +
           "plus `flux suspend kustomization app-ha-executors` for a drill.",
-        source: "docs/FLUX-APPS-PLAN.md (6.5) and projects/home/kubernetes/scheduler/README.md",
+        source: "DECISIONS 54 and projects/home/kubernetes/scheduler/README.md",
       },
       // All deployed services are the Rust crate: ha-bridge, ha-control and
       // ha-scenario.
@@ -830,10 +794,9 @@ export const config = {
       // the previous revision.
       deploy: {
         builder: "mixed",
-        // Flux owns the release since FLUX-APPS-PLAN 6.6: HelmRelease/runtime
+        // Flux owns the release since решение 54: HelmRelease/runtime
         // updates the chart from git, images from the pins branch, and the
         // post-upgrade smoke hook plus remediation replace `hermes rollout`.
-        runtime: "flux",
         // image -> Bazel package of the `<image>_image`/`<image>_push` targets.
         // Images not listed here are Dockerfile builds.
         bazel_images: {
@@ -845,10 +808,6 @@ export const config = {
         images: ["hermes", "voice-proxy", "health-exporter", "home-deploy"],
         workloads: ["hermes"],
         namespace: "home-assistant",
-        script: "projects/home-assistant/deploy/rollout.sh",
-        env_key: "runtime_values",
-        env_file: "runtime-values.yaml",
-        externalsecrets: ["hermes-environment"],
       },
       // `HelmRelease/runtime` rolls back automatically to the previous
       // revision when the upgrade or the post-upgrade smoke hook fails; the
@@ -865,25 +824,6 @@ export const config = {
       },
       python: {
         suites: ["projects/home-assistant/hermes"],
-      },
-    },
-
-    {
-      id: "ha-stack",
-      platform: "python",
-      title: "projects/home-assistant/stack",
-      paths: ["projects/home-assistant/stack/**"],
-      // HA/MA updates are pulled by `ctl.sh update`; the documented recovery
-      // path is a Supervisor/Proxmox backup restore, not an image rollback.
-      rollback: {
-        kind: "forward-only",
-        note:
-          "Update pulls newer HA/MA images; restore from the HA Supervisor " +
-          "backup or Proxmox vzdump instead of rolling images back.",
-        source: "docs/OPERATIONS.md (Backup), projects/home-assistant/stack/ctl.sh",
-      },
-      python: {
-        suites: ["projects/home-assistant/stack"],
       },
     },
 
@@ -1028,44 +968,27 @@ export const config = {
     },
 
     {
-      id: "currency-bot-deploy",
-      platform: "python",
-      title: "projects/home/kubernetes/currency-bot (deploy script contract)",
-      paths: ["projects/home/kubernetes/currency-bot/**"],
-      python: {
-        suites: ["projects/home/kubernetes/currency-bot"],
-        // The suite drives deploy.sh, which runs the home-deploy binary.
-        deploy_tool: true,
-      },
-    },
-
-    {
       id: "wakegrant-deploy",
       platform: "python",
-      title: "projects/home/kubernetes/wakegrant (deploy/manifest contract)",
+      title: "projects/home/kubernetes/wakegrant (manifest contract)",
       paths: ["projects/home/kubernetes/wakegrant/**"],
       python: {
         suites: ["projects/home/kubernetes/wakegrant"],
-        // The suite drives deploy.sh, which runs the home-deploy binary.
-        deploy_tool: true,
       },
     },
 
     {
       id: "mcp-gateway-deploy",
       platform: "python",
-      title: "projects/home/kubernetes/mcp-gateway (catalog/RBAC/deploy contract)",
+      title: "projects/home/kubernetes/mcp-gateway (catalog/RBAC/manifest contract)",
       paths: [
         // The catalog's schema is checked by the Rust deploy-contract test in
         // the mcp-gateway unit (real loader); this unit owns the catalog↔RBAC
-        // correspondence, manifest hardening and the deploy-script/render
-        // contract.
+        // correspondence and manifest hardening.
         "projects/home/kubernetes/mcp-gateway/**",
       ],
       python: {
         suites: ["projects/home/kubernetes/mcp-gateway"],
-        // The suite drives deploy.sh, which runs the home-deploy binary.
-        deploy_tool: true,
       },
     },
 

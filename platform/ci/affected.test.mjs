@@ -679,7 +679,7 @@ test("deploy: platform/deploy-rs change runs the Rust unit and routes deploy uni
     "ha-bridge",
   ]);
   // A tooling change reaches every unit that runs a deploy script.
-  const entries = affected.fluxEntries(result, config);
+  const entries = affected.deployEntries(result, config);
   assert.deepEqual(entries.map((entry) => entry.id).sort(), [
     "currency-bot",
     "ha-bridge",
@@ -689,37 +689,19 @@ test("deploy: platform/deploy-rs change runs the Rust unit and routes deploy uni
     "scheduler",
     "wakegrant",
   ]);
-  // Every home unit is Flux-owned in this change set: deploy-home applies
-  // nothing with kubectl.
-  assert.deepEqual(affected.deployEntries(result, config), []);
 });
 
-test("deploy: runtime=flux leaves deploy-home for the pins path", () => {
+test("deploy: the pins job covers every deployable unit", () => {
   const config = affected.loadConfig();
   const result = routeReal(["platform/deploy-rs/src/render.rs"], undefined, {
     affectedRules: () => new Set(),
   });
-  // All home units are migrated: deploy-home must not roll any of them with
-  // kubectl and the pins job must receive the same routing entries instead.
-  const migrated = ["scheduler", "ha-bridge", "wakegrant", "intercom",
-                   "currency-bot", "mcp-gateway", "hermes"];
-  for (const id of migrated) {
-    assert.equal(
-      config.units.find((unit) => unit.id === id).deployRuntime,
-      "flux",
-      id,
-    );
-  }
-  assert.deepEqual(affected.deployEntries(result, config), []);
-  const flux = affected.fluxEntries(result, config);
-  assert.deepEqual(
-    flux.map((entry) => entry.id).sort(),
-    [...migrated].sort(),
-  );
-  assert.ok(flux.every((entry) => entry.runtime === "flux"));
-  assert.equal(flux.find((entry) => entry.id === "wakegrant").images, "wakegrant");
-  // Units without an explicit runtime still default to the CI path.
-  assert.equal(new affected.Unit().deployRuntime, "ci");
+  const expected = ["scheduler", "ha-bridge", "wakegrant", "intercom",
+                    "currency-bot", "mcp-gateway", "hermes"];
+  const entries = affected.deployEntries(result, config);
+  assert.deepEqual(entries.map((entry) => entry.id).sort(), [...expected].sort());
+  assert.ok(entries.every((entry) => !("runtime" in entry)));
+  assert.equal(entries.find((entry) => entry.id === "wakegrant").images, "wakegrant");
 });
 
 test("deploy: scheduler change deploys only scheduler", () => {
@@ -732,7 +714,7 @@ test("deploy: scheduler change deploys only scheduler", () => {
         new Set(["//solutions/scheduler/crates/scheduler:scheduler_lib"]),
     },
   );
-  const entries = affected.fluxEntries(result, config);
+  const entries = affected.deployEntries(result, config);
   assert.deepEqual(entries.map((entry) => entry.id), ["scheduler"]);
   assert.equal(entries[0].namespace, "home-assistant");
   assert.equal(entries[0].target_root, "//projects/home/kubernetes/scheduler");
@@ -750,7 +732,7 @@ test("deploy: scheduler Rust crate change deploys scheduler", () => {
   );
   assert.deepEqual(result.routes.bazel.units.map((unit) => unit.id), ["scheduler"]);
   assert.equal(result.deployControl, true);
-  const entries = affected.fluxEntries(result, config);
+  const entries = affected.deployEntries(result, config);
   assert.deepEqual(entries.map((entry) => entry.id), ["scheduler"]);
 });
 
@@ -764,12 +746,10 @@ test("deploy: currency-bot change deploys its namespace", () => {
         new Set(["//solutions/currency-bot/crates/currency-bot:currency_bot_lib"]),
     },
   );
-  const entries = affected.fluxEntries(result, config);
+  const entries = affected.deployEntries(result, config);
   assert.deepEqual(entries.map((entry) => entry.id), ["currency-bot"]);
   assert.equal(entries[0].namespace, "currency-bot");
   assert.equal(entries[0].target_root, "//solutions/currency-bot");
-  assert.equal(entries[0].script, "projects/home/kubernetes/currency-bot/deploy.sh");
-  assert.equal(entries[0].externalsecrets, "currency-bot cloudflared-tunnel");
 });
 
 test("deploy: currency-bot manifest change deploys it", () => {
@@ -782,7 +762,7 @@ test("deploy: currency-bot manifest change deploys it", () => {
         new Set(["//projects/home/kubernetes/currency-bot:deploy_templates"]),
     },
   );
-  const entries = affected.fluxEntries(result, config);
+  const entries = affected.deployEntries(result, config);
   assert.deepEqual(entries.map((entry) => entry.id), ["currency-bot"]);
 });
 
@@ -796,7 +776,7 @@ test("deploy: ha-bridge change deploys bridge and control", () => {
         new Set(["//solutions/ha-bridge/crates/ha-bridge:ha-bridge"]),
     },
   );
-  const entries = affected.fluxEntries(result, config);
+  const entries = affected.deployEntries(result, config);
   assert.deepEqual(entries.map((entry) => entry.id), ["ha-bridge"]);
   assert.equal(entries[0].images, "ha-bridge ha-control ha-scenario");
   assert.equal(entries[0].workloads, "ha-bridge ha-control ha-scenario");
@@ -812,7 +792,7 @@ test("deploy: Rust ha-control crate change deploys both services", () => {
         new Set(["//solutions/ha-bridge/crates/ha-bridge:ha-control"]),
     },
   );
-  const entries = affected.fluxEntries(result, config);
+  const entries = affected.deployEntries(result, config);
   assert.deepEqual(entries.map((entry) => entry.id), ["ha-bridge"]);
   assert.equal(entries[0].images, "ha-bridge ha-control ha-scenario");
 });
@@ -826,14 +806,14 @@ test("deploy: shared proto package deploys scheduler and ha-bridge", () => {
     undefined,
     { affectedRules: () => new Set() },
   );
-  const entries = affected.fluxEntries(result, config);
+  const entries = affected.deployEntries(result, config);
   assert.deepEqual(entries.map((entry) => entry.id), ["scheduler", "ha-bridge"]);
 });
 
 test("deploy: hermes change selects its images", () => {
   const config = affected.loadConfig();
   const result = routeReal(["projects/home-assistant/hermes/README.md"]);
-  const entries = affected.fluxEntries(result, config);
+  const entries = affected.deployEntries(result, config);
   assert.deepEqual(entries.map((entry) => entry.id), ["hermes"]);
   assert.equal(entries[0].images, "hermes voice-proxy health-exporter home-deploy");
   assert.equal(entries[0].builder, "mixed");
@@ -898,14 +878,14 @@ test("python matrix: a workflow change keeps all Python units in one job", () =>
 test("deploy: hermes Dockerfile change deploys the hermes unit", () => {
   const config = affected.loadConfig();
   const result = routeReal(["projects/home-assistant/deploy/images/hermes/Dockerfile"]);
-  const entries = affected.fluxEntries(result, config);
+  const entries = affected.deployEntries(result, config);
   assert.deepEqual(entries.map((entry) => entry.id), ["hermes"]);
 });
 
 test("deploy: hermes upstream revision bump deploys the hermes unit", () => {
   const config = affected.loadConfig();
   const result = routeReal(["projects/home-assistant/deploy/images/hermes/revision"]);
-  const entries = affected.fluxEntries(result, config);
+  const entries = affected.deployEntries(result, config);
   assert.deepEqual(entries.map((entry) => entry.id), ["hermes"]);
 });
 
@@ -917,7 +897,7 @@ test("deploy: voice-proxy solution change runs its bazel unit and deploys hermes
     { root: REPO, base: "b", graph: { affectedRules: () => new Set() } },
   );
   assert.deepEqual(result.routes.bazel.units.map((unit) => unit.id), ["voice-proxy"]);
-  const entries = affected.fluxEntries(result, config);
+  const entries = affected.deployEntries(result, config);
   assert.deepEqual(entries.map((entry) => entry.id), ["hermes"]);
 });
 
@@ -940,7 +920,7 @@ test("deploy: a shared rust crate change reaches the hermes deploy unit", () => 
       },
     },
   );
-  const entries = affected.fluxEntries(result, config).map((entry) => entry.id);
+  const entries = affected.deployEntries(result, config).map((entry) => entry.id);
   assert.ok(entries.includes("hermes"), entries.join(","));
 });
 
@@ -1263,7 +1243,7 @@ test("rust routing: test-only consumers run CI but do not deploy", () => {
     "ha-bridge",
   ]);
   assert.deepEqual(
-    affected.fluxEntries(result, config).map((entry) => entry.id),
+    affected.deployEntries(result, config).map((entry) => entry.id),
     ["ha-bridge"],
   );
 });
@@ -1430,7 +1410,7 @@ test("deploy: workflow and service change deploys only the service", () => {
         new Set(["//solutions/currency-bot/crates/currency-bot:currency_bot_lib"]),
     },
   );
-  const entries = affected.fluxEntries(result, config);
+  const entries = affected.deployEntries(result, config);
   assert.deepEqual(entries.map((entry) => entry.id), ["currency-bot"]);
 });
 
@@ -1438,19 +1418,11 @@ test("deploy: module change still deploys every deployable unit", () => {
   const config = affected.loadConfig();
   const result = routeReal(["MODULE.bazel"]);
   const entries = affected.deployEntries(result, config);
-  // `deploy` only applies `ci` units; Flux-owned ones are pinned instead.
   const expected = config.units
-    .filter((unit) => unit.deployImages.length && unit.deployRuntime === "ci")
+    .filter((unit) => unit.deployImages.length)
     .map((unit) => unit.id);
   assert.deepEqual(entries.map((entry) => entry.id), expected);
   assert.equal(entries.length, expected.length);
-  assert.deepEqual(
-    affected.fluxEntries(result, config).map((entry) => entry.id).sort(),
-    config.units
-      .filter((unit) => unit.deployImages.length && unit.deployRuntime === "flux")
-      .map((unit) => unit.id)
-      .sort(),
-  );
 });
 
 test("android distribution: module change runs tests without distributing", () => {
@@ -1709,9 +1681,8 @@ test("module routing: bazel_dep change keeps the global invalidation", () => {
   const result = routeModule(MODULE_BAZEL_MAVEN_OLD, updated);
   assert.deepEqual(result.changed, ["MODULE.bazel"]);
   assert.equal(result.routes.python.mode, "all");
-  // `deploy` only applies `ci` units; Flux-owned ones are pinned instead.
   const expected = config.units
-    .filter((unit) => unit.deployImages.length && unit.deployRuntime === "ci")
+    .filter((unit) => unit.deployImages.length)
     .map((unit) => unit.id);
   assert.deepEqual(
     affected.deployEntries(result, config).map((entry) => entry.id),
@@ -2082,13 +2053,10 @@ test("module routing: native-only edit reaches native and every Rust Bazel unit"
     "pulsar-bazel",
   ]);
   assert.deepEqual(result.routes.quality.units.map((unit) => unit.id), ["repository"]);
-  // scheduler, intercom, currency-bot, mcp-gateway, ha-bridge and wakegrant are
-  // Flux-owned deploy units now, so a Rust toolchain pin change legitimately
-  // rebuilds them and pins their digests; the native-only units are not
-  // deployed.
-  assert.deepEqual(affected.deployEntries(result, config), []);
+  // A Rust toolchain pin change legitimately rebuilds and pins the deployable
+  // units; the native-only units are not deployed.
   assert.deepEqual(
-    affected.fluxEntries(result, config).map((entry) => entry.id).sort(),
+    affected.deployEntries(result, config).map((entry) => entry.id).sort(),
     ["currency-bot", "ha-bridge", "intercom", "mcp-gateway", "scheduler", "wakegrant"],
   );
   assert.equal(result.androidDistribute, false);

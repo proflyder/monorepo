@@ -45,7 +45,8 @@ secrets/                реальные адреса, доступы, recovery 
 - **OpenBao + External Secrets Operator** — единственный источник правды для
   секретов; ESO создаёт Kubernetes Secrets из `secret/k8s/*`.
 - **CI/CD** — GitHub Actions: PR → `ci-ok` → squash merge → `deploy-home`
-  деплоит затронутые юниты через VPN и OpenBao OIDC; образы GHCR по digest.
+  пинует проверенные digest'ы затронутых юнитов, применяет их Flux; образы
+  GHCR по digest. Входящего доступа CI в K3s нет.
 
 ## Доступ
 
@@ -87,7 +88,7 @@ mise run test:e2e  # live HA/BLE, нужны токены
 ## Публикация
 
 Изменения попадают в `develop` только через pull request (squash, обязательный
-`ci-ok`); merge в `develop` выкатывает затронутые сервисы. Публикуются рабочие
+`ci-ok`); merge в `develop` пересчитывает pins, а сервисы применяет Flux. Публикуются рабочие
 ветки `<type>/<name>`, без секретов и Git-истории с приватными данными. Перед
 push: `mise run test`, `node platform/quality/audit_repository.mjs`, проверка
 `docs/SENSITIVE-DATA.md` и Gitleaks (их же выполняет pre-push guard). Не

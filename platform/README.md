@@ -13,5 +13,5 @@
 - Values Prometheus/Loki/Alloy — `projects/home/kubernetes/observability/values/`.
 
 CI работает на GitHub-hosted runners, использует `.github/workflows/_*.yml`
-и публикует обязательный `ci-ok`; деплой — `deploy-home.yml`. Подробности —
+и публикует обязательный `ci-ok`; release/pins — `deploy-home.yml`. Подробности —
 `docs/TESTING.md` и `docs/GIT.md`.

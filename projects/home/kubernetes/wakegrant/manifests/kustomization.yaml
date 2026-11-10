@@ -1,9 +1,8 @@
-# Flux-rendered manifest set for the wakegrant pilot (FLUX-APPS-PLAN 6.1).
+# Flux-rendered manifest set for the wakegrant pilot (решение 54).
 #
-# `wakegrant.yaml` stays a template for `deploy.sh` (CI/admin path). This
-# kustomization is the Flux path: it keeps the same objects and replaces the
-# CI-only rollout annotation, so `kustomize-controller` never sees a missing
-# `ROLLOUT_ID` variable.
+# `wakegrant.yaml` is the workload template. This kustomization is the Flux
+# path: it keeps the same objects and replaces the CI-only rollout annotation,
+# so `kustomize-controller` never sees a missing `ROLLOUT_ID` variable.
 #
 # Substituted by Kustomization/app-wakegrant:
 #   ${WAKEGRANT_IMAGE}      from ConfigMap/home-app-images (pins branch)
@@ -16,7 +15,7 @@ resources:
   - external-secrets.yaml
 patches:
   # `prune: true` on the app Kustomization must never delete the SQLite volume
-  # when a manifest is removed by mistake (FLUX-APPS-PLAN 4.2).
+  # when a manifest is removed by mistake (решение 54).
   - target:
       kind: PersistentVolumeClaim
       name: wakegrant-data

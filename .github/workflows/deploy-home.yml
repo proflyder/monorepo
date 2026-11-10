@@ -1,9 +1,10 @@
 name: deploy-home
 
-# Home K3s deploy (scheduler, ha-bridge/ha-control, currency-bot, mcp-gateway,
-# wakegrant, Hermes) from `develop`. Per-unit namespace, workload list, deploy
-# script, OpenBao env key and ExternalSecret set come from `platform/ci/units.mjs`
-# (matrix payload), so adding a deployable unit does not need a workflow edit.
+# Home application release from `develop`. Every deployable unit is applied by
+# Flux: this workflow only promotes the digests the merged PR built and
+# attested and commits them to the machine branch `deploy/home-apps`, which
+# Flux reads. The unit map is `platform/ci/units.mjs`, so adding a
+# deployable unit does not need a workflow edit.
 #
 # A push also promotes affected `native` units as public OCI artifacts: the
 # Windows logon provider on any affected change, and Pulsar only when
@@ -13,36 +14,31 @@ name: deploy-home
 # missing or unverified tree tag fails the job: this workflow never builds or
 # publishes a native artifact. Pull requests never reach this workflow, so they
 # never publish release tags. A Pulsar release then rolls out through
-# `deploy-station` (Environment `Station`); that job is independent of the home
-# `deploy` job and installs the published image through HA.
+# `deploy-station` (Environment `Station`); that job is independent and installs
+# the published image through HA.
 #
 # A push to `develop` is a squash-merge of a PR, so it runs in the base
-# repository context with Environment secrets. The `plan` job routes the change
-# range (`before..sha`) through the same unit map as CI and deploys exactly the
-# affected deployable units; documentation-only pushes deploy nothing.
+# repository context. The `plan` job routes the change range (`before..sha`)
+# through the same unit map as CI and selects exactly the affected deployable
+# units; documentation-only pushes deploy nothing.
 #
-# Build once (DECISIONS 36): this workflow never builds. Each deploy job
-# promotes the digests the merged PR built and attested under `tree-<hash>`.
-# Their provenance must verify against this repository's CI workflows; only then
-# are the usual tags attached and the digest handed to the deploy script. A
-# missing or unverified image fails the job with the promotion decisions in the
-# summary — there is no "build as before" path (it would deploy bytes CI
-# never tested and made every deploy slow).
+# Build once (DECISIONS 36): this workflow never builds. The `pins` job promotes
+# the digests the merged PR built and attested under `tree-<hash>`. Their
+# provenance must verify against this repository's CI workflows; only then are
+# the usual tags attached and the digest written to the pins file. A missing or
+# unverified image fails the job with the promotion decisions in the summary —
+# there is no "build as before" path (it would deploy bytes CI never tested and
+# made every deploy slow).
 #
-# The deploy CLI itself is not compiled here either: `HOME_DEPLOY` is extracted
-# from the promoted `ghcr.io/proflyder/home-deploy` image, which the CI unit
-# job (`_unit.yml`) publishes for every affected deployable unit. That keeps the mechanism
-# independent of the language `home-deploy` is written in (the Rust crate today).
+# The pins job has no VPN, OpenBao or kubeconfig; it only needs
+# `contents: write` on the pins branch. `develop` is never written, and a failed
+# promotion keeps the previous pin in force. The former `deploy` job (VPN group
+# `ci`, OpenBao OIDC role `deploy-home`, `kubectl`/`helm` under the `ci-deploy`
+# ServiceAccount) is gone: merge → pins → Flux is the only deploy path, and a
+# rollback is a revert of the pins commit or a `flux suspend`.
 #
-# Flux-owned application units (`deploy.runtime: flux` in units.mjs) are not
-# applied by this workflow at all: the `pins` job promotes and verifies their
-# images exactly like `deploy` does and commits the digests to the machine
-# branch `deploy/home-apps`, which Flux reads. That job has no VPN, OpenBao or
-# kubeconfig; it only needs `contents: write` on that branch. `develop` is
-# never written, and a failed promotion keeps the previous pin in force.
-#
-# A manual dispatch deploys the current `develop`, whose tree has no CI build
-# for units the last merged PR did not touch (the tree changes on every merge).
+# A manual dispatch pins the current `develop`, whose tree has no CI build for
+# units the last merged PR did not touch (the tree changes on every merge).
 # Promotion therefore walks the first-parent lineage (~200 commits) of the
 # deploy commit and picks the newest image whose `tree-<hash>` tag exists AND
 # whose provenance verifies; the summary names that commit. That is correct
@@ -50,7 +46,7 @@ name: deploy-home
 # found commit would have produced a later, found-first tree.
 #
 # On a push the unit's own images must match this tree exactly; history is only
-# used for sibling images the shared scheduler script renders but never applies
+# used for sibling images of the shared scheduler unit
 # (units.mjs `deploy.optional_images`, ha-bridge/ha-control while rolling the
 # scheduler and the reverse). A required image with no verified tree still
 # fails the job instead of building.
@@ -58,45 +54,21 @@ name: deploy-home
 # The push also runs `warm-android` and `warm-rust`, which save the disk cache
 # of their family plus (for Rust) its repository cache under the keys the
 # matching PR jobs restore (CI itself no longer runs on develop). They only
-# populate caches; they are not part of the deploy and never publish.
+# populate caches; they are not part of the release and never publish.
 #
-# Push runs only the conservative preserve mode. Mode changes (execute, shadow,
-# control-execute, control-catalog) are manual workflow_dispatch runs for the
-# ha-bridge unit and always go through deploy.sh's own fail-closed preflight.
-# There is no second executor path: CI never bypasses preflight and never
-# force-enables a writer.
-#
-# Secrets: GitHub holds only what is needed to reach OpenBao (VPN client
-# credentials, OPENBAO_ADDR, OPENBAO_ROLE). After the VPN is up the job logs in
-# with GitHub OIDC (auth/github role `deploy-home`, audience = OPENBAO_ADDR)
-# through `hashicorp/vault-action`, which reads `secret/ci/deploy-home` and
-# exposes each value as a masked step output; a minimal step then writes
-# kubeconfig / scheduler env / runtime values into `$RUNNER_TEMP/ci` (mode 600).
-# The role's short token TTL is the revocation limit, so there is no explicit
-# revoke step.
+# Mode changes for the executors and cutovers stay manual: Flux holds the
+# steady state from Git, and a drill uses `flux suspend` plus the admin
+# `projects/home/kubernetes/scheduler/deploy.sh` (fail-closed preflight). CI
+# never bypasses preflight and never force-enables a writer.
 on:
   push:
     branches: [develop]
   workflow_dispatch:
     inputs:
       units:
-        description: Deployable units to roll (comma list) or `all`
+        description: Deployable units to pin (comma list) or `all`
         type: string
         default: all
-      mode:
-        description: Deploy mode (push always uses preserve)
-        type: choice
-        default: preserve
-        options:
-          - preserve
-          - execute
-          - shadow
-          - control-execute
-          - control-catalog
-      simulate_hermes_failure:
-        description: Force the Hermes smoke to fail after upgrade (rollback drill)
-        type: boolean
-        default: false
 
 permissions:
   contents: read
@@ -117,13 +89,6 @@ env:
   # Linux_x86_64.
   CRANE_VERSION: "v0.22.1"
   CRANE_SHA256: "0ab7a1d6932a213aed964ce97666c3077fe691c8606413674a8b3e0b9ec4cda0"
-  DEPLOY_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || 'preserve' }}
-  HERMES_SIMULATE_SMOKE_FAILURE: ${{ (github.event_name == 'workflow_dispatch' && inputs.simulate_hermes_failure) && '1' || '0' }}
-  # Public DNS name of the VPN and the OpenBao address are private values: they
-  # live in the `Home` Environment, not in this file. Everything that is only
-  # needed *after* OpenBao login (kubeconfig, scheduler env, runtime values)
-  # is not a GitHub secret: it is read from `secret/ci/deploy-home`.
-  VPN_SERVER: ${{ secrets.VPN_SERVER }}
 
 jobs:
   # Save the caches that PR jobs restore. `ci.yml` no longer runs on push to
@@ -326,9 +291,6 @@ jobs:
     outputs:
       units: ${{ steps.filter.outputs.units }}
       native_units: ${{ steps.filter.outputs.native_units }}
-      # Units applied by Flux from the `deploy/home-apps` pins branch. Their
-      # digests are committed by the `pins` job; `deploy` never sees them.
-      flux_units: ${{ steps.filter.outputs.flux_units }}
       # `true` when the station release should run (Pulsar VERSION changed on
       # push, or an explicit dispatch asks for it).
       station: ${{ steps.filter.outputs.station }}
@@ -399,37 +361,32 @@ jobs:
             }
             const outputs = affected.githubOutputs(computed);
             core.setOutput('deploy_units', outputs.deploy_units);
-            core.setOutput('flux_units', outputs.flux_units);
             core.setOutput('native_units', outputs.native_units);
 
       # A dispatch may narrow the list explicitly (comma separated ids); a push
-      # always deploys exactly the routed set.
+      # always pins exactly the routed set.
       - name: Filter dispatched deployable units
         id: filter
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           EVENT_NAME: ${{ github.event_name }}
           DEPLOY_UNITS: ${{ steps.route.outputs.deploy_units }}
-          FLUX_UNITS: ${{ steps.route.outputs.flux_units }}
           NATIVE_UNITS: ${{ steps.route.outputs.native_units }}
           WANTED: ${{ github.event_name == 'workflow_dispatch' && inputs.units || '' }}
         with:
           script: |
             const affected = await import(`${process.env.GITHUB_WORKSPACE}/platform/ci/affected.mjs`);
             const units = JSON.parse(process.env.DEPLOY_UNITS || '[]');
-            const fluxUnits = JSON.parse(process.env.FLUX_UNITS || '[]');
             const allNative = JSON.parse(process.env.NATIVE_UNITS || '[]');
             const dispatch = process.env.EVENT_NAME === 'workflow_dispatch';
             const wantedRaw = (process.env.WANTED || '').trim();
             const isPulsar = (entry) => entry.id === 'pulsar';
             let selected = units;
-            let selectedFlux = fluxUnits;
             let station = false;
             if (dispatch && wantedRaw && wantedRaw !== 'all') {
               const wanted = new Set(wantedRaw.split(',').map((item) => item.trim()).filter(Boolean));
               const known = new Set([
                 ...units.map((entry) => entry.id),
-                ...fluxUnits.map((entry) => entry.id),
                 ...allNative.map((entry) => entry.id),
               ]);
               const unknown = [...wanted].filter((id) => !known.has(id)).sort();
@@ -437,8 +394,6 @@ jobs:
                 throw new Error(`unknown deployable unit(s): [${unknown.map((id) => `'${id}'`).join(', ')}]`);
               }
               selected = units.filter((entry) => wanted.has(entry.id));
-              // Flux-owned units are pinned, never applied by `deploy`.
-              selectedFlux = fluxUnits.filter((entry) => wanted.has(entry.id));
               // A dispatch with units=pulsar re-deploys the already published
               // VERSION through `deploy-station`; it never rebuilds or pushes.
               station = wanted.has('pulsar');
@@ -451,9 +406,7 @@ jobs:
               station = allNative.some((entry) => isPulsar(entry) && entry.publish !== false);
             }
             const json = affected.jsonDumps(selected);
-            const fluxJson = affected.jsonDumps(selectedFlux);
             core.setOutput('units', json);
-            core.setOutput('flux_units', fluxJson);
             // Native units whose release trigger did not fire are PR CI only:
             // they are built by `ci.yml`, never by deploy-home.
             const natives = allNative.filter((entry) => entry.publish !== false);
@@ -462,7 +415,6 @@ jobs:
             core.setOutput('station', String(station));
             core.summary.addRaw(`### deploy-home plan\n\n\`\`\`json\n${json}\n\`\`\`\n`);
             core.summary
-              .addRaw(`\nflux units: \`${fluxJson}\`\n`)
               .addRaw(`\nnative units: \`${nativeJson}\`\nstation release: \`${station}\`\n`)
               .write();
 
@@ -527,596 +479,12 @@ jobs:
       promote: true
       push_tree_tag: false
 
-  # One matrix entry per affected deployable unit. Jobs run one at a time and a
-  # unit never runs two deploys concurrently; neither is ever cancelled.
-  deploy:
-    # One job per affected unit; without a name GitHub lists every matrix value.
-    name: deploy ${{ matrix.id }}
-    needs: plan
-    if: needs.plan.outputs.units != '[]' && needs.plan.outputs.units != ''
-    runs-on: ubuntu-24.04
-    timeout-minutes: 60
-    # OIDC `environment` claim keeps this exact casing; OpenBao binds "Home".
-    environment: Home
-    permissions:
-      contents: read
-      packages: write
-      # Request the OIDC token that OpenBao's auth/github role trusts. Only
-      # this job needs it; `plan` runs without any secret access.
-      id-token: write
-      # Read the build provenance of a PR-built image before promoting its
-      # digest (DECISIONS 36). Reading never grants the right to sign.
-      attestations: read
-      # Find the PR a squash-merged commit came from when `develop` moved
-      # while the PR's CI ran (the PR-head delta fallback).
-      pull-requests: read
-    env:
-      OPENBAO_ADDR: ${{ secrets.OPENBAO_ADDR }}
-      OPENBAO_ROLE: ${{ secrets.OPENBAO_ROLE || 'deploy-home' }}
-    strategy:
-      # Units are independent; per-unit concurrency still serialises a unit.
-      fail-fast: false
-      matrix:
-        include: ${{ fromJSON(needs.plan.outputs.units) }}
-    concurrency:
-      group: deploy-home-${{ matrix.id }}
-      cancel-in-progress: false
-    steps:
-      # Full history: promotion walks the first-parent lineage of `develop` to
-      # find the newest verified build of an image this change did not touch
-      # (manual dispatch, sibling images of the shared scheduler manifests).
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-
-      - name: Mode guard
-        run: |
-          set -euo pipefail
-          case "$DEPLOY_MODE" in
-            preserve|execute|shadow|control-execute|control-catalog) ;;
-            *) echo "unknown mode: $DEPLOY_MODE" >&2; exit 2 ;;
-          esac
-          if [[ "$DEPLOY_MODE" != "preserve" ]]; then
-            if [[ "$GITHUB_EVENT_NAME" != "workflow_dispatch" ]]; then
-              echo "mode '$DEPLOY_MODE' is only allowed from workflow_dispatch" >&2
-              exit 1
-            fi
-            if [[ "${{ matrix.id }}" != "ha-bridge" ]]; then
-              echo "mode '$DEPLOY_MODE' only applies to the ha-bridge unit (executor state)" >&2
-              exit 1
-            fi
-          fi
-          echo "selected mode: $DEPLOY_MODE for ${{ matrix.id }}"
-
-      # kubectl and helm: versions and checksums from mise.toml/mise.lock.
-      - name: Install pinned kubectl and helm
-        uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b # v5.2.7
-        with:
-          version: 2026.11.3
-          install_args: "kubectl helm"
-          cache: true
-
-      # Same Buildx as PR CI: the digest of the Docker-built `hermes` image must
-      # not depend on which job built it. `rewrite-timestamp` needs BuildKit
-      # >= 0.13, which the action's containerised builder guarantees.
-      - name: Set up Buildx
-        if: matrix.builder == 'docker' || matrix.builder == 'mixed'
-        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
-
-      - name: Install VPN client
-        # No official action exists for openconnect; the runner image has none.
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends openconnect vpnc-scripts curl
-
-      - name: Materialise VPN credentials
-        env:
-          IN_VPN_CERT_P12_B64: ${{ secrets.VPN_CERT_P12_B64 }}
-          IN_VPN_CERT_PASSWORD: ${{ secrets.VPN_CERT_PASSWORD }}
-        run: |
-          set +x
-          set -euo pipefail
-          umask 077
-          CI_DIR="$RUNNER_TEMP/ci"
-          rm -rf "$CI_DIR"
-          mkdir -p "$CI_DIR"
-          chmod 700 "$CI_DIR"
-          printf '%s' "$IN_VPN_CERT_P12_B64" | base64 -d > "$CI_DIR/ci.p12"
-          printf '%s' "$IN_VPN_CERT_PASSWORD" > "$CI_DIR/ci.pass"
-          chmod 600 "$CI_DIR"/*
-          echo "VPN credentials prepared"
-
-      - name: Connect VPN (group ci)
-        run: |
-          set -euo pipefail
-          CI_DIR="$RUNNER_TEMP/ci"
-          test -n "$OPENBAO_ADDR"
-          # shellcheck disable=SC2024 # the log is user-writable; only openconnect is root
-          sudo openconnect \
-            --no-dtls \
-            --certificate "$CI_DIR/ci.p12" \
-            --passwd-on-stdin \
-            --authgroup ci \
-            --pid-file "$RUNNER_TEMP/openconnect.pid" \
-            "${VPN_SERVER%/}" \
-            < "$CI_DIR/ci.pass" > "$RUNNER_TEMP/openconnect.log" 2>&1 &
-          # The ci group routes only the K3s node; OpenBao health on 443 is the
-          # first service the job needs, before any GitHub-side secret beyond
-          # OPENBAO_ADDR is used.
-          for _ in $(seq 1 30); do
-            code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 \
-              "$OPENBAO_ADDR/v1/sys/health" || true)
-            if [[ -n "$code" && "$code" != "000" ]]; then
-              echo "OpenBao reachable over the VPN"
-              exit 0
-            fi
-            sleep 2
-          done
-          echo "OpenBao is not reachable over the VPN" >&2
-          tail -n 40 "$RUNNER_TEMP/openconnect.log" >&2 || true
-          exit 1
-
-      # GitHub OIDC -> OpenBao (auth/github, JWT audience = OPENBAO_ADDR). The
-      # action masks every line of every value and exposes them as step outputs
-      # only (`exportEnv: false`), so they do not leak into later steps' env.
-      - name: Read deploy secrets from OpenBao
-        id: openbao
-        uses: hashicorp/vault-action@892a26828f195e65540a40b4768ae4571f51ebfc # v4.0.0
-        with:
-          url: ${{ env.OPENBAO_ADDR }}
-          method: jwt
-          path: github
-          role: ${{ env.OPENBAO_ROLE }}
-          jwtGithubAudience: ${{ env.OPENBAO_ADDR }}
-          exportEnv: false
-          secrets: |
-            secret/data/ci/deploy-home kubeconfig | KUBECONFIG_CONTENT ;
-            secret/data/ci/deploy-home ${{ matrix.env_key }} | DEPLOY_ENV_CONTENT
-
-      # Each unit materialises only the files it consumes: the kubeconfig plus
-      # the private deploy-time env named by units.mjs (scheduler.env,
-      # currency-bot.env or runtime-values.yaml).
-      - name: Write deploy files
-        env:
-          KUBECONFIG_CONTENT: ${{ steps.openbao.outputs.KUBECONFIG_CONTENT }}
-          DEPLOY_ENV_CONTENT: ${{ steps.openbao.outputs.DEPLOY_ENV_CONTENT }}
-          DEPLOY_ENV_FILE: ${{ matrix.env_file }}
-        run: |
-          set -euo pipefail
-          umask 077
-          CI_DIR="$RUNNER_TEMP/ci"
-          if [[ -z "${KUBECONFIG_CONTENT:-}" || -z "${DEPLOY_ENV_CONTENT:-}" ]]; then
-            echo "OpenBao returned an empty deploy value" >&2
-            exit 1
-          fi
-          case "$DEPLOY_ENV_FILE" in
-            ""|*/*) echo "unsafe env file name: '$DEPLOY_ENV_FILE'" >&2; exit 2 ;;
-          esac
-          mkdir -p "$CI_DIR"
-          chmod 700 "$CI_DIR"
-          printf '%s' "$KUBECONFIG_CONTENT" > "$CI_DIR/kubeconfig"
-          printf '%s' "$DEPLOY_ENV_CONTENT" > "$CI_DIR/$DEPLOY_ENV_FILE"
-          chmod 600 "$CI_DIR/kubeconfig" "$CI_DIR/$DEPLOY_ENV_FILE"
-          echo "deploy files prepared"
-
-      - name: Check CI identity
-        run: |
-          set -euo pipefail
-          CI_DIR="$RUNNER_TEMP/ci"
-          export KUBECONFIG="$CI_DIR/kubeconfig"
-          kubectl -n "${{ matrix.namespace }}" get pods
-
-      - name: Check CI RBAC boundary
-        run: |
-          set -euo pipefail
-          CI_DIR="$RUNNER_TEMP/ci"
-          export KUBECONFIG="$CI_DIR/kubeconfig"
-          NS="${{ matrix.namespace }}"
-          # The runtime chart is split: CI only upgrades namespace-scoped
-          # workloads. Storage (PV/PVC) is applied by an admin, so this must
-          # stay "no" for cluster-scoped resources and every other namespace.
-          denied() {
-            if kubectl "$@" >/dev/null 2>&1; then
-              echo "ci-deploy unexpectedly allows: $*" >&2
-              exit 1
-            fi
-          }
-          allowed() {
-            if ! kubectl -n "$NS" auth can-i "$@" >/dev/null 2>&1; then
-              echo "ci-deploy is missing: $*" >&2
-              exit 1
-            fi
-          }
-          denied -n "$NS" auth can-i get persistentvolumes
-          denied -n "$NS" auth can-i patch persistentvolumes
-          denied -n "$NS" auth can-i get storageclasses.storage.k8s.io
-          denied -n "$NS" auth can-i get clusterroles.rbac.authorization.k8s.io
-          denied -n monitoring auth can-i get deployments.apps
-          denied -n traefik auth can-i get secrets
-          allowed get deployments.apps
-          allowed patch deployments.apps
-          allowed get secrets
-          # Secrets are ESO-managed; CI may read them (and Helm release
-          # Secrets) but must not need to write application values.
-          allowed get externalsecrets.external-secrets.io
-          allowed create secrets
-          allowed delete secrets
-          allowed get configmaps
-          allowed create jobs.batch
-          echo "ci-deploy RBAC boundary is namespace-scoped ($NS)"
-
-      - name: Verify External Secrets are Ready
-        run: |
-          set -euo pipefail
-          CI_DIR="$RUNNER_TEMP/ci"
-          export KUBECONFIG="$CI_DIR/kubeconfig"
-          # Application Secrets are owned by External Secrets Operator and
-          # sourced from OpenBao. A deploy must fail closed if ESO is unhealthy
-          # rather than let a script recreate a stale value. The list is
-          # per-unit, from units.mjs.
-          NS="${{ matrix.namespace }}"
-          for es in ${{ matrix.externalsecrets }}; do
-            kubectl -n "$NS" wait --for=condition=Ready \
-              "externalsecret/$es" --timeout=90s
-            kubectl -n "$NS" get secret "$es" >/dev/null
-          done
-          echo "ESO-managed Secrets are Ready in $NS"
-
-      # Official crane release, pinned by sha256 like oras/kubectl/helm. It reads
-      # the Docker config written by the login step below.
-      - name: Install pinned crane
-        run: |
-          set -euo pipefail
-          archive="$RUNNER_TEMP/crane_${CRANE_VERSION}_linux_amd64.tar.gz"
-          curl -fsSL --retry 3 --retry-delay 5 -o "$archive" \
-            "https://github.com/google/go-containerregistry/releases/download/${CRANE_VERSION}/go-containerregistry_Linux_x86_64.tar.gz"
-          echo "${CRANE_SHA256}  ${archive}" | sha256sum -c -
-          tar -xzf "$archive" -C "$RUNNER_TEMP" crane
-          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
-
-      - name: Log in to GHCR
-        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      # Build once, deploy the same bytes: promote the digests CI already built
-      # and attested under `tree-<hash>`. Each image must exist AND its
-      # provenance must verify against this repository's CI workflows; otherwise
-      # the job fails. On dispatch (and for sibling images) the newest verified
-      # build in first-parent history is used and named in the summary.
-      # `home-deploy` is always part of the set: it is the deploy CLI image the
-      # next step extracts the binary from.
-      #
-      # A squash merge keeps the PR's tree only while `develop` does not move.
-      # When it does, the merge commit has a different tree and no tree tag: on
-      # push the PR head is the fallback, used only after `affected.compute`
-      # proves the delta between that head and the merge does not touch this
-      # unit. A delta that does touch it fails the job (DECISIONS 36).
-      #
-      # This is the correctness gate: a wrong-tree image can never be deployed,
-      # because the tree tag, the verified provenance and the digest read-back
-      # all have to agree before a digest is passed to the deploy script.
-      - name: Promote PR-built images by tree hash
-        id: promote
-        env:
-          GH_TOKEN: ${{ github.token }}
-          IMAGES: ${{ matrix.images }} home-deploy
-          # Sibling images the shared deploy script renders but this unit does
-          # not apply (units.mjs `deploy.optional_images`).
-          OPTIONAL_IMAGES: ${{ matrix.optional_images }}
-          # A dispatch deploys the current `develop`, whose tree has no CI build
-          # for units the last merged PR did not touch. On push the required
-          # images come from this tree or from the PR head when the delta is
-          # provably unrelated to the unit.
-          ALLOW_HISTORY: ${{ github.event_name == 'workflow_dispatch' && '1' || '0' }}
-          ALLOW_PR_HEAD: ${{ github.event_name == 'push' && '1' || '0' }}
-          UNIT: ${{ matrix.id }}
-          DEPLOY_COMMIT: ${{ github.sha }}
-        run: |
-          set -euo pipefail
-          tree=$(git rev-parse "${DEPLOY_COMMIT}^{tree}") || {
-            echo "::error::cannot resolve the tree of ${DEPLOY_COMMIT}" >&2
-            exit 1
-          }
-          history_args=()
-          if [[ "$ALLOW_HISTORY" == "1" || -n "$OPTIONAL_IMAGES" ]]; then
-            history_args=(--history-limit 200)
-          fi
-          if [[ "$ALLOW_HISTORY" == "1" ]]; then
-            history_args+=(--allow-history)
-          fi
-          pr_head_args=()
-          if [[ "$ALLOW_PR_HEAD" == "1" ]]; then
-            pr_head_args=(--allow-pr-head --unit "$UNIT")
-          fi
-          if ! node platform/ci/promote.mjs \
-            --images "$IMAGES" \
-            --optional-images "$OPTIONAL_IMAGES" \
-            "${history_args[@]}" \
-            "${pr_head_args[@]}" \
-            --tree "$tree" \
-            --commit "$DEPLOY_COMMIT" \
-            --repository "${GITHUB_REPOSITORY}"; then
-            echo "::error::image promotion failed; see the job summary" >&2
-            exit 1
-          fi
-          if ! grep -qx 'mode=prebuilt' "$GITHUB_OUTPUT"; then
-            echo "::error::no verified image set for this unit (commit ${DEPLOY_COMMIT}, tree ${tree})" >&2
-            echo "deploy-home never builds: on a push, bring develop into the PR, wait for" >&2
-            echo "CI and merge again (or dispatch after the next merged PR); on a dispatch," >&2
-            echo "check the 'image promotion' block in the" >&2
-            echo "job summary and the history limit (--history-limit, default 200)" >&2
-            exit 1
-          fi
-
-      # The deploy CLI comes from the promoted image, not from a Bazel build on
-      # the runner (DECISIONS 36). The contract is the image layout: the binary
-      # is /usr/local/bin/home-deploy, built from platform/deploy-rs today.
-      - name: Extract the deploy CLI from the promoted image
-        run: |
-          set -euo pipefail
-          digest=$(tr ',' '\n' <<< "${{ steps.promote.outputs.prebuilt_digests }}" \
-            | sed -n 's/^home-deploy=//p')
-          if [[ ! "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
-            echo "no promoted home-deploy digest for this unit" >&2
-            exit 1
-          fi
-          mkdir -p "$RUNNER_TEMP/home-deploy"
-          crane export "ghcr.io/proflyder/home-deploy@${digest}" - \
-            | tar -x -C "$RUNNER_TEMP/home-deploy" usr/local/bin/home-deploy
-          binary="$RUNNER_TEMP/home-deploy/usr/local/bin/home-deploy"
-          test -x "$binary" || { echo "missing $binary in the promoted image" >&2; exit 1; }
-          "$binary" --help >/dev/null
-          echo "HOME_DEPLOY=$binary" >> "$GITHUB_ENV"
-
-      - name: Deploy ${{ matrix.id }}
-        env:
-          # The deploy entrypoints read this shared value
-          # (platform/ci/prebuilt-digests.sh).
-          PREBUILT_DIGESTS: ${{ steps.promote.outputs.prebuilt_digests }}
-          # Forbid every build/push on the deployment runner. An image that is
-          # missing here (a sibling workload of the shared manifests) is taken
-          # from the live Deployment instead.
-          DEPLOY_NO_BUILD: "1"
-          # converge/kubectl record `workload<TAB>created|unchanged|rolled-out`
-          # here; the Summary step renders it per workload.
-          DEPLOY_SUMMARY_FILE: ${{ runner.temp }}/ci/rollout-summary
-        run: |
-          set -euo pipefail
-          CI_DIR="$RUNNER_TEMP/ci"
-          if [[ "${{ matrix.builder }}" == "docker" || "${{ matrix.builder }}" == "mixed" ]]; then
-            # Hermes/voice-proxy/health-exporter (builder `mixed`): collect the
-            # promoted PR digests (build-and-push.sh refuses to build with
-            # DEPLOY_NO_BUILD=1) and roll them into the runtime release.
-            # `home-deploy hermes rollout` skips the upgrade when the digests
-            # did not change, runs the voice smoke checks and rolls back to the
-            # previous revision on failure. The smoke Job runs the same
-            # `home-deploy` image, so the cluster never needs a Python image.
-            DIGEST_FILE="$CI_DIR/digests" \
-            IMAGE_TAG="$GITHUB_SHA" \
-              projects/home-assistant/deploy/images/build-and-push.sh ${{ matrix.images }}
-            hermes_digest=$(sed -n 's/^hermes=//p' "$CI_DIR/digests")
-            voice_digest=$(sed -n 's/^voice-proxy=//p' "$CI_DIR/digests")
-            exporter_digest=$(sed -n 's/^health-exporter=//p' "$CI_DIR/digests")
-            home_deploy_digest=$(sed -n 's/^home-deploy=//p' "$CI_DIR/digests")
-            test -n "$hermes_digest" && test -n "$voice_digest"
-            test -n "$exporter_digest" && test -n "$home_deploy_digest"
-            ROLLOUT_ARGS=()
-            if [[ "$HERMES_SIMULATE_SMOKE_FAILURE" == "1" ]]; then
-              ROLLOUT_ARGS+=(--simulate-smoke-failure)
-            fi
-            KUBECONFIG="$CI_DIR/kubeconfig" \
-              "${{ matrix.script }}" \
-                --values-file "$CI_DIR/${{ matrix.env_file }}" \
-                --hermes-digest "$hermes_digest" \
-                --voice-proxy-digest "$voice_digest" \
-                --exporter-digest "$exporter_digest" \
-                --smoke-image "ghcr.io/proflyder/home-deploy@${home_deploy_digest}" \
-                --state-dir "$CI_DIR/hermes-state" \
-                "${ROLLOUT_ARGS[@]}"
-            exit 0
-          fi
-          case "$DEPLOY_MODE" in
-            preserve) MODE_ARGS=() ;;
-            shadow) MODE_ARGS=(--shadow) ;;
-            execute) MODE_ARGS=(--execute) ;;
-            control-execute) MODE_ARGS=(--control-execute) ;;
-            control-catalog) MODE_ARGS=(--control-catalog) ;;
-            *) echo "unknown mode: $DEPLOY_MODE" >&2; exit 2 ;;
-          esac
-          ONLY="${{ matrix.workloads }}"
-          KUBECONFIG="$CI_DIR/kubeconfig" \
-          PRIVATE_ENV="$CI_DIR/${{ matrix.env_file }}" \
-          DEPLOY_STATE_DIR="$CI_DIR/deploy-state" \
-          IMAGE_TAG="$GITHUB_SHA" \
-          ONLY="${ONLY// /,}" \
-          PREFLIGHT_IN_CLUSTER=1 \
-            "${{ matrix.script }}" "${MODE_ARGS[@]}"
-
-      - name: Post-deploy smoke
-        if: matrix.builder == 'bazel'
-        run: |
-          set -euo pipefail
-          CI_DIR="$RUNNER_TEMP/ci"
-          export KUBECONFIG="$CI_DIR/kubeconfig"
-          NS="${{ matrix.namespace }}"
-          for workload in ${{ matrix.workloads }}; do
-            kubectl -n "$NS" rollout status "deployment/$workload" --timeout=180s
-            case "$workload" in
-              scheduler)
-                kubectl -n "$NS" exec deployment/scheduler -- /usr/local/bin/scheduler -healthcheck
-                kubectl -n "$NS" exec deployment/scheduler -- /usr/local/bin/scheduler -status \
-                  | tee "$CI_DIR/status.json"
-                if ! jq -e '.ready == true' "$CI_DIR/status.json" >/dev/null; then
-                  echo "scheduler reports ready=false" >&2
-                  exit 1
-                fi
-                echo "GetStatus ready: $(jq -r '.ready' "$CI_DIR/status.json")"
-                ;;
-              ha-bridge)
-                kubectl -n "$NS" exec deployment/ha-bridge -- /usr/local/bin/ha-bridge -healthcheck
-                ;;
-              ha-control)
-                if [[ "$(kubectl -n "$NS" get deployment ha-control -o jsonpath='{.spec.replicas}')" != "0" ]]; then
-                  kubectl -n "$NS" exec deployment/ha-control -- /usr/local/bin/ha-control -healthcheck
-                fi
-                ;;
-              currency-bot)
-                # The image is distroless and has no shell/curl. Read /readyz
-                # through the API-server Service proxy, which load-balances over
-                # the ready endpointslices exactly like an in-cluster client.
-                kubectl -n "$NS" get --raw \
-                  "/api/v1/namespaces/$NS/services/http:currency-bot:8080/proxy/readyz" \
-                  | tee "$CI_DIR/readyz.json"
-                if ! jq -e '.status == "ready"' "$CI_DIR/readyz.json" >/dev/null; then
-                  echo "currency-bot reports not ready" >&2
-                  exit 1
-                fi
-                echo "currency-bot /readyz: $(jq -r '.status' "$CI_DIR/readyz.json")"
-                webhook_ready=$(kubectl -n "$NS" get endpointslices \
-                  -l "kubernetes.io/service-name=currency-bot-webhook" \
-                  -o jsonpath='{range .items[*].endpoints[*]}{.conditions.ready}{"\n"}{end}' \
-                  | grep -c '^true$' || true)
-                if [[ "$webhook_ready" -lt 1 ]]; then
-                  echo "currency-bot-webhook has no ready endpoint" >&2
-                  exit 1
-                fi
-                echo "currency-bot-webhook ready endpoints: $webhook_ready"
-                ;;
-              intercom)
-                kubectl -n "$NS" exec deployment/intercom -- /usr/local/bin/intercom -healthcheck
-                ;;
-              mcp-gateway)
-                # Readiness through the API-server Service proxy: proves the
-                # catalog and both mounted Secrets are wired, which plain
-                # `rollout status` cannot show for a distroless image.
-                kubectl -n "$NS" get --raw \
-                  "/api/v1/namespaces/$NS/services/http:mcp-gateway:8080/proxy/readyz" \
-                  | tee "$CI_DIR/mcp-readyz.json"
-                if ! jq -e '.status == "ready"' "$CI_DIR/mcp-readyz.json" >/dev/null; then
-                  echo "mcp-gateway reports not ready" >&2
-                  exit 1
-                fi
-                echo "mcp-gateway /readyz: $(jq -r '.status' "$CI_DIR/mcp-readyz.json")"
-                ;;
-            esac
-          done
-          # The ci VPN group reaches only the K3s API, so NodePorts are checked
-          # from the cluster side: each Service must have a ready endpoint.
-          for workload in ${{ matrix.workloads }}; do
-            if ! kubectl -n "$NS" get service "$workload" >/dev/null 2>&1; then
-              echo "service $workload: none (worker without a Service)"
-              continue
-            fi
-            ready=$(kubectl -n "$NS" get endpointslices \
-              -l "kubernetes.io/service-name=$workload" \
-              -o jsonpath='{range .items[*].endpoints[*]}{.conditions.ready}{"\n"}{end}' \
-              | grep -c '^true$' || true)
-            if [[ "$ready" -lt 1 ]]; then
-              echo "service $workload has no ready endpoint" >&2
-              exit 1
-            fi
-            echo "service $workload ready endpoints: $ready"
-          done
-
-      - name: Roll back on failure
-        if: failure() && matrix.builder == 'bazel'
-        run: |
-          set +e
-          CI_DIR="$RUNNER_TEMP/ci"
-          export KUBECONFIG="$CI_DIR/kubeconfig"
-          # Restore only what this job actually applied, to the exact recorded
-          # spec. A failure during render leaves no `.applied` marker and must
-          # not touch the running Deployments. If the job failed before the
-          # deploy CLI was extracted, nothing was applied: skip.
-          if [[ -z "${HOME_DEPLOY:-}" || ! -x "$HOME_DEPLOY" ]]; then
-            echo "deploy CLI unavailable; nothing was applied by this job"
-            exit 0
-          fi
-          "$HOME_DEPLOY" state rollback \
-            --state-dir "$CI_DIR/deploy-state" \
-            --namespace "${{ matrix.namespace }}" \
-            --kubectl kubectl | tee "$RUNNER_TEMP/rollback.log"
-
-      - name: Roll back Hermes on failure
-        if: failure() && matrix.builder != 'bazel'
-        run: |
-          set +e
-          CI_DIR="$RUNNER_TEMP/ci"
-          export KUBECONFIG="$CI_DIR/kubeconfig"
-          # Safety net if the runner dies before the rollout can roll back. The
-          # rollout removes the marker after a successful smoke, so a failure
-          # before the rollout never touches the running release. Without the
-          # promoted CLI nothing was applied: skip.
-          if [[ -z "${HOME_DEPLOY:-}" || ! -x "$HOME_DEPLOY" ]]; then
-            echo "deploy CLI unavailable; nothing was applied by this job"
-            exit 0
-          fi
-          "${{ matrix.script }}" \
-            --rollback-only \
-            --state-dir "$CI_DIR/hermes-state" \
-            --namespace "${{ matrix.namespace }}" | tee "$RUNNER_TEMP/hermes-rollback.log"
-
-      - name: Summary
-        if: always()
-        run: |
-          set +e
-          CI_DIR="$RUNNER_TEMP/ci"
-          export KUBECONFIG="$CI_DIR/kubeconfig"
-          {
-            echo "### deploy-home / ${{ matrix.id }}"
-            echo
-            echo "- mode: \`$DEPLOY_MODE\`"
-            echo "- event: \`$GITHUB_EVENT_NAME\`"
-            echo "- workloads: \`${{ matrix.workloads }}\`"
-            echo "- images: \`${{ matrix.images }}\`"
-            # Always `prebuilt` on a successful deploy: deploy-home never
-            # builds (DECISIONS 36). `build` means promotion refused the unit.
-            echo "- image path: \`${IMAGE_PROMOTION:-unknown}\`"
-            echo "- pull request: ${{ needs.plan.outputs.pr_url }}"
-            if [[ -s "$CI_DIR/rollout-summary" ]]; then
-              while IFS=$'\t' read -r workload status; do
-                case "$status" in
-                  unchanged) echo "- $workload: \`unchanged\` (pod template identical, no rollout)" ;;
-                  rolled-out) echo "- $workload: \`rolled out\`" ;;
-                  created) echo "- $workload: \`created\`" ;;
-                  *) echo "- $workload: \`${status:-unknown}\`" ;;
-                esac
-              done < "$CI_DIR/rollout-summary"
-            fi
-            if kubectl -n "${{ matrix.namespace }}" get deployment scheduler >/dev/null 2>&1; then
-              STATUS=$(kubectl -n "${{ matrix.namespace }}" exec deployment/scheduler -- \
-                /usr/local/bin/scheduler -status 2>/dev/null)
-              echo "- GetStatus: \`${STATUS:-unavailable}\`"
-            else
-              echo "- GetStatus: unavailable"
-            fi
-            if helm -n home-assistant status runtime >/dev/null 2>&1; then
-              echo "- runtime revision: \`$(helm -n home-assistant list -o json \
-                | jq -r 'map(select(.name == "runtime"))[0].revision // "unknown"')\`"
-            fi
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Disconnect VPN and remove temporary files
-        if: always()
-        run: |
-          set +e
-          CI_DIR="$RUNNER_TEMP/ci"
-          if [[ -f "$RUNNER_TEMP/openconnect.pid" ]]; then
-            sudo kill "$(sudo cat "$RUNNER_TEMP/openconnect.pid")" 2>/dev/null
-          fi
-          sudo pkill -f 'openconnect --no-dtls' 2>/dev/null
-          rm -rf "$CI_DIR" "$RUNNER_TEMP/openconnect.log" "$RUNNER_TEMP/openconnect.pid"
-          echo "temporary deploy files removed"
-
-  # Flux-owned units. `deploy.runtime: flux` means Flux applies the workload
-  # from `deploy/home-apps`; CI only has to publish the verified digest there.
+  # Every deployable unit is Flux-owned: Flux applies the workload from
+  # `deploy/home-apps`, so CI only has to publish the verified digest there.
   # This job therefore has no VPN, no OpenBao, no kubeconfig and no `kubectl`:
-  # it promotes the PR-built digest exactly like `deploy` does and commits the
-  # pins file with `GITHUB_TOKEN` (`contents: write`). The branch is not code;
-  # `develop` is never touched and Flux never writes to Git.
+  # it promotes the PR-built digest and commits the pins file with
+  # `GITHUB_TOKEN` (`contents: write`). The branch is not code; `develop` is
+  # never touched and Flux never writes to Git.
   #
   # Matrix jobs can race on the branch, so the writer refetches, reapplies only
   # this unit's keys and retries the push (platform/ci/pins.mjs). A missing or
@@ -1124,7 +492,7 @@ jobs:
   pins:
     name: pins ${{ matrix.id }}
     needs: plan
-    if: needs.plan.outputs.flux_units != '[]' && needs.plan.outputs.flux_units != ''
+    if: needs.plan.outputs.units != '[]' && needs.plan.outputs.units != ''
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
@@ -1138,7 +506,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include: ${{ fromJSON(needs.plan.outputs.flux_units) }}
+        include: ${{ fromJSON(needs.plan.outputs.units) }}
     # One writer at a time; the retry loop is the second line of defence.
     concurrency:
       group: deploy-home-pins
@@ -1169,7 +537,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Same gate as `deploy`: a digest whose `tree-<hash>` tag or provenance
+      # The correctness gate: a digest whose `tree-<hash>` tag or provenance
       # does not verify is never written to the branch.
       - name: Promote PR-built images by tree hash
         id: promote
@@ -1242,7 +610,7 @@ jobs:
           {
             echo "### deploy-home / pins ${{ matrix.id }}"
             echo
-            echo "- runtime: \`flux\` (Flux applies from \`deploy/home-apps\`)"
+            echo "- applies: \`flux\` (Flux reads \`deploy/home-apps\`)"
             echo "- event: \`$GITHUB_EVENT_NAME\`"
             echo "- images: \`${{ matrix.images }}\`"
             echo "- digests: \`${{ steps.promote.outputs.prebuilt_digests }}\`"
@@ -1253,7 +621,7 @@ jobs:
   # The station release. It runs only when Pulsar's `publish_when` release path
   # (VERSION) changed on push, or when a dispatch explicitly asks for it. The
   # Environment approval is the only gate before the station is touched; the
-  # job is independent from `deploy`, so home units neither wait for it nor
+  # job is independent from the pins job, so home units neither wait for it nor
   # fail with it. On dispatch it installs the already published VERSION and
   # does not rebuild or push (Pulsar tags are immutable).
   # The version tag points at the promoted PR digest: `native-release` only

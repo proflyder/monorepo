@@ -204,15 +204,16 @@ class ExternalSecretsContracts(unittest.TestCase):
                     "projects/home/kubernetes/vaultwarden/manifests/external-secrets.yaml"):
             self.assertTrue((ROOT / rel).is_file(), rel)
 
-    def test_ci_verifies_eso_readiness_and_never_applies_externalsecrets(self):
+    def test_flux_owns_externalsecrets_and_ci_never_applies_them(self):
+        # `deploy-home` no longer applies manifests at all: it only pins the
+        # image digests, so ESO readiness is a Flux health check now.
         workflow = (ROOT / ".github/workflows/deploy-home.yml").read_text()
-        self.assertIn("Verify External Secrets are Ready", workflow)
-        self.assertIn("externalsecret/$es", workflow)
+        self.assertNotIn("Verify External Secrets are Ready", workflow)
+        self.assertNotIn("environment: Home", workflow)
+        self.assertNotIn("secret/ci/deploy-home", workflow)
+        self.assertNotIn("export KUBECONFIG", workflow)
         self.assertNotIn("apply -f projects/home-assistant/deploy/manifests", workflow)
         self.assertNotIn("apply -f projects/home/kubernetes/scheduler/manifests/external-secrets", workflow)
-        rbac = (ROOT / "projects/home/kubernetes/scheduler/ci/rbac.yaml").read_text()
-        self.assertIn("external-secrets.io", rbac)
-        self.assertIn('resources: ["externalsecrets"]', rbac)
 
 
 if __name__ == "__main__":

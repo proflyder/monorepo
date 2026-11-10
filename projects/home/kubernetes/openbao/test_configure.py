@@ -1,10 +1,10 @@
 """Contracts for the optional station (firmware) deploy identity.
 
-`configure.py` must keep the existing deploy-home configuration untouched and
-add the `ci-station` policy plus the `deploy-station` JWT role only when a
-station repository is supplied. The Android App Distribution role is bound to
-PR CI runs, so its claims use a glob and must not affect the other roles.
-These tests record API calls, so no OpenBao is needed.
+`configure.py` adds the `ci-station` policy plus the `deploy-station` JWT role
+only when a station repository is supplied. The Android App Distribution role
+is bound to PR CI runs, so its claims use a glob. The former home deploy role is
+gone: home services are applied by Flux and CI no longer reaches OpenBao for
+them. These tests record API calls, so no OpenBao is needed.
 """
 import os
 import sys
@@ -78,7 +78,7 @@ class StationRole(unittest.TestCase):
                       configure.STATION_POLICY)
         self.assertIn('path "secret/metadata/ci/deploy-station"',
                       configure.STATION_POLICY)
-        for forbidden in ("ci/deploy-home", "ci/test", "k8s/", '"*"'):
+        for forbidden in ("ci/test", "k8s/", '"*"'):
             self.assertNotIn(forbidden, configure.STATION_POLICY)
 
 
@@ -142,26 +142,23 @@ class AndroidRole(unittest.TestCase):
                     "example/home/.github/workflows/_android.yml@refs/pull/42/merge",
                     workflow))
 
-    def test_android_role_does_not_change_deploy_home(self):
+    def test_no_home_deploy_role_is_created(self):
         bao = Recorder()
         with redirect_stdout(StringIO()):
             configure.ensure_github(bao, AUDIENCE, HOME_REPOSITORY)
-        deploy_home = bao.payload("/v1/auth/github/role/deploy-home")
-        self.assertEqual(deploy_home["token_policies"], ["ci-deploy"])
-        # Only the Android role opts into glob matching and PR refs.
-        self.assertNotIn("bound_claims_type", deploy_home)
-        self.assertEqual(deploy_home["bound_claims"], {
-            "repository": HOME_REPOSITORY,
-            "environment": "Home",
-            "ref": "refs/heads/develop",
-        })
+        self.assertNotIn("/v1/auth/github/role/deploy-home", bao.paths())
+        # Only the Android PR role exists without a station repository.
+        self.assertEqual(
+            [path for path in bao.paths() if path.startswith("/v1/auth/github/role/")],
+            ["/v1/auth/github/role/android-distribute"],
+        )
 
     def test_android_policy_is_scoped_to_its_entry(self):
         self.assertIn('path "secret/data/ci/android-distribute"',
                       configure.CI_ANDROID_POLICY)
         self.assertIn('path "secret/metadata/ci/android-distribute"',
                       configure.CI_ANDROID_POLICY)
-        for forbidden in ("ci/deploy-home", "ci/deploy-station", "ci/test",
+        for forbidden in ("ci/deploy-station", "ci/test",
                           "k8s/", '"*"'):
             self.assertNotIn(forbidden, configure.CI_ANDROID_POLICY)
 
@@ -201,7 +198,7 @@ class MainGating(unittest.TestCase):
     def test_no_flag_keeps_existing_configuration(self):
         names, _, github = run_main()
         self.assertNotIn("ci-station", names)
-        self.assertEqual(names, ["admin", "ci-deploy", "ci-android",
+        self.assertEqual(names, ["admin", "ci-android",
                                  "k8s-read", "backup", "operator-kv"])
         self.assertEqual(github, [(AUDIENCE, HOME_REPOSITORY, None)])
 

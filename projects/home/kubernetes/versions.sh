@@ -7,9 +7,9 @@ MUSIC_ASSISTANT_ADDON_VERSION=2.10.8
 # (`projects/home-assistant/deploy/images/build-and-push.sh`) from the upstream
 # revision and Dockerfile in `projects/home-assistant/deploy/images/hermes/`
 # (see `revision` there); `voice-proxy`, `health-exporter` and `home-deploy` are
-# Bazel/rules_oci images (distroless). deploy-home then calls
-# `home-deploy hermes rollout`, which sets the pushed digests on the `runtime` release,
-# runs the voice smoke checks and rolls back on failure. The values below
+# Bazel/rules_oci images (distroless). Flux (`HelmRelease/runtime`) sets the pinned
+# digests on the `runtime` release, and the post-upgrade smoke hook rolls back on
+# failure; `home-deploy hermes rollout` is the manual emergency path. The values below
 # record the last reviewed pins; the live release is the source of truth.
 VOICE_PROXY_IMAGE=ghcr.io/proflyder/voice-proxy@sha256:238e0a0f3afe5f152e3d8b1de7a35452c016d68368e3bac24c5fde882869fca9
 HERMES_IMAGE=ghcr.io/proflyder/hermes@sha256:09a542f3ae846026e466c0f0b4acf81522da12cf9cbb1bec22125ae068c9b7e6

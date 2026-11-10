@@ -6,12 +6,12 @@
 остальные домашние сервисы. Этап 1 поднимает хранилище, вход человеком и
 машинные auth-методы. Этап 2 (External Secrets Operator) переносит
 приложенческие Kubernetes Secrets в KV v2 `secret/k8s/*`; см.
-`projects/home/kubernetes/external-secrets/README.md`. Этап 3 переносит
-секреты CI-деплоя из GitHub Environment в `secret/ci/deploy-home`: GitHub
-хранит только то, что нужно до входа в OpenBao (VPN и адрес сервера). Тот же
-JWT-метод обслуживает деплой прошивки станции: роль `deploy-station` читает
-`secret/ci/deploy-station`. Сейчас Pulsar лежит в этом же монорепозитории,
-поэтому роль привязана к нему и Environment `Station`.
+`projects/home/kubernetes/external-secrets/README.md`. Секреты home-сервисов
+живут в `secret/k8s/*` и `secret/k8s/flux-system/*`; CI их не читает — Flux
+применяет workload'ы внутри кластера. JWT-метод обслуживает только деплой
+прошивки станции: роль `deploy-station` читает `secret/ci/deploy-station`.
+Pulsar лежит в этом же монорепозитории, поэтому роль привязана к нему и
+Environment `Station`.
 
 Публичные примеры используют `home.example.com` и `192.0.2.0/24`. Реальные
 имена — `secrets/home/ingress.env`, данные bootstrap — `secrets/openbao/`.
@@ -50,7 +50,6 @@ projects/home/kubernetes/openbao/
   manifests/ingressroute.yaml
   manifests/backup.yaml         CronJob raft snapshot
   manifests/smoke-kubernetes.yaml
-.github/workflows/openbao-smoke.yml   GitHub OIDC smoke (workflow_dispatch)
 ```
 
 Версии — `projects/home/kubernetes/versions.sh`: `OPENBAO_CHART_VERSION`,
@@ -175,18 +174,15 @@ recovery keys → `operator generate-root` → `admin-destroy` + `admin-generate
 | Mount | Кто | Роль/пользователь | Политика |
 |---|---|---|---|
 | `userpass` | человек | имя из `secrets/openbao/username` | `admin` |
-| `github` (`jwt`) | GitHub Actions | `deploy-home` | `ci-deploy` |
 | `github` (`jwt`) | GitHub Actions, Android APK sign + App Distribution | `android-distribute` | `ci-android` |
 | `github` (`jwt`) | GitHub Actions, station deploy | `deploy-station` | `ci-station` |
 | `kubernetes` | External Secrets Operator | `external-secrets` | `k8s-read` |
 | `kubernetes` | smoke-под | `k8s-smoke` | `k8s-read` |
 | `kubernetes` | CronJob backup | `backup` | `backup` |
 
-`ci-deploy`: read ровно `secret/data/ci/test` и
-`secret/data/ci/deploy-home`; list `secret/metadata/ci` и read metadata этих
-двух записей; запись, другие пути и другой namespace запрещены. Политика
-намеренно перечисляет пути явно: новая запись `secret/ci/<name>` требует
-правки `configure.py` и повторного применения.
+Политика `ci-deploy` и роль `deploy-home` удалены (этап 6.7): home-сервисы
+применяет Flux, CI больше не читает `secret/ci/*` для них. `secret/ci/test`
+остаётся несекретным negative-probe для k8s-auth smoke.
 
 `k8s-read`: read `secret/data/k8s/*`, list/read metadata; запись запрещена.
 
@@ -199,42 +195,25 @@ delete, `sys/*`, `auth/*` запрещены. `secret/infra/*` — секрет�
 `admin:openbao-verify` (секреты через fnox).
 
 `ci-station`: read ровно `secret/data/ci/deploy-station` и
-`secret/metadata/ci/deploy-station`; ни `secret/ci/deploy-home`, ни
-`secret/k8s/*`, ни запись политика не разрешает. Создаётся только вместе с
+`secret/metadata/ci/deploy-station`; ни `secret/ci/test`, ни `secret/k8s/*`,
+ни запись политика не разрешает. Создаётся только вместе с
 параметром `--station-repository`.
 
 `ci-android`: read ровно `secret/data/ci/android-distribute` и
-`secret/metadata/ci/android-distribute`; `secret/ci/deploy-home`,
+`secret/metadata/ci/android-distribute`; `secret/ci/test`,
 `secret/ci/deploy-station`, `secret/k8s/*` и запись запрещены. Политика
 создаётся всегда вместе с ролью `android-distribute`.
 
 `backup`: только `read sys/storage/raft/snapshot`.
 
-Роль `deploy-home` (`auth/github/role/deploy-home`):
-
-- `oidc_discovery_url`/`bound_issuer` = `https://token.actions.githubusercontent.com`;
-- `bound_audiences` = `https://vault.<home-domain>` (workflow запрашивает
-  ровно этот audience);
-- в workflow `environment:` пишется с той же буквы, что в `bound_claims`
-  (`Home`): claim сохраняет регистр из YAML;
-- `configure.py` через локальный port-forward запускать с
-  `OPENBAO_AUDIENCE=https://vault.<home-domain>`, иначе роль привяжется к
-  loopback-адресу (скрипт теперь отказывает в таком audience);
-- `bound_claims`: `repository=<owner>/<repo>` (берётся из `git remote origin`, можно
-  переопределить `OPENBAO_GITHUB_REPOSITORY`), `environment=Home`
-  (каноническое имя environment в GitHub — `Home`, хотя в YAML пишется
-  `home`), `ref=refs/heads/develop`;
-- `user_claim=job_workflow_ref`, TTL 10 мин, max 15 мин.
-
-Проверить клеймы у себя: `gh api repos/<owner>/<repo>/environments` возвращает
-каноническое имя; в OIDC-токене для environment-джобы
-`sub=repo:<owner>/<repo>:environment:Home`.
+Роль `deploy-home` не создаётся: `configure.py` больше не регистрирует её, а
+`deploy-home.yml` не содержит job с `environment: Home`.
 
 Роль `deploy-station` (`auth/github/role/deploy-station`) деплоит прошивку
 станции через OpenBao из этого монорепозитория:
 
 - `oidc_discovery_url`/`bound_issuer` = `https://token.actions.githubusercontent.com`;
-- `bound_audiences` = тот же публичный URL OpenBao, что у `deploy-home`;
+- `bound_audiences` = публичный URL OpenBao (`https://vault.<home-domain>`);
 - `bound_claims`: `repository=<owner>/<repo>` (монорепозиторий) и
   `environment=Station`. Репозиторий передаётся как
   `--station-repository <owner>/<repo>` или через
@@ -269,12 +248,10 @@ matrix-запись `android / android-app` (`_android.yml`), а подписы�
 кто может пушить ветку в репозиторий, может изменить `_android.yml`/`ci.yml` и
 получить секреты сборки Android. Для репозитория с одним владельцем это
 приемлемо; роли дают read ровно одной записи `secret/ci/android-distribute` и
-TTL 10 минут. Другие роли (`deploy-home`, `deploy-station`) остаются с точными
-claims и без глобов.
+TTL 10 минут. Роль `deploy-station` остаётся с точными claims и без глобов.
 
-Ключи KV v2: `secret/ci/test` → `{probe: ok-ci}`,
-`secret/ci/deploy-home` → `{kubeconfig, scheduler_env, runtime_values}` (см.
-«CI-секреты»), `secret/ci/deploy-station` → `{ha_url, ha_token, entity_id}`
+Ключи KV v2: `secret/ci/test` → `{probe: ok-ci}` (negative-probe),
+`secret/ci/deploy-station` → `{ha_url, ha_token, entity_id}`
 (см. «Station-секреты»), `secret/ci/android-distribute` →
 `{keystore_b64, keystore_password, google_services_json,
 firebase_service_account_json}` (см. «Android-секреты»), `secret/k8s/test` →
@@ -328,50 +305,13 @@ mise run kubectl -- -n <ns> annotate externalsecret <name> force-sync="$(date +%
 
 ### CI-секреты
 
-В GitHub Environment `Home` остаются только значения, нужные до входа в
-OpenBao:
-
-| Secret | Зачем |
-|---|---|
-| `VPN_SERVER`, `VPN_CERT_P12_B64`, `VPN_CERT_PASSWORD` | подключение в VPN-группу `ci` |
-| `OPENBAO_ADDR` | базовый URL без завершающего слэша; он же audience OIDC |
-| `OPENBAO_ROLE` | опционально, по умолчанию `deploy-home` |
-
-Остальные значения лежат в OpenBao в одной записи `secret/ci/deploy-home`
-(KV v2, исходный текст, не base64; многострочные значения — с переводами
-строк):
-
-| Ключ | Файл в CI (`$RUNNER_TEMP/ci`, 600) | Кто использует |
-|---|---|---|
-| `kubeconfig` | `kubeconfig` | все deploy-юниты (kubectl/helm/smoke) |
-| `scheduler_env` | `scheduler.env` | bazel-юниты (`scheduler`, `ha-bridge`) |
-| `runtime_values` | `runtime-values.yaml` | docker-юнит `hermes` (rollout/откат) |
-
-`K3S_NODE` в GitHub больше не нужен: VPN-проверка идёт через
-`$OPENBAO_ADDR/v1/sys/health`, а адрес API уже внутри kubeconfig. GitHub
-хранит только то, без чего не дойти до OpenBao; `kubeconfig`,
-`scheduler_env` и `runtime_values` удаляются из Environment после первого
-успешного прогона.
-
-Запись и обновление (нужен admin/root-токен, после работы отозвать):
-
-```bash
-export BAO_ADDR=https://vault.<home-domain>
-export BAO_TOKEN=...            # admin-токен, не печатать
-jq -n \
-  --rawfile kubeconfig secrets/ci/github/kubeconfig.yaml \
-  --rawfile scheduler_env secrets/home/scheduler.env \
-  --rawfile runtime_values "$RUNTIME_PRIVATE_VALUES" \
-  '{data: {kubeconfig: $kubeconfig, scheduler_env: $scheduler_env,
-           runtime_values: $runtime_values}}' \
-| curl -sS --fail -X POST -H "X-Vault-Token: $BAO_TOKEN" \
-    --data-binary @- "$BAO_ADDR/v1/secret/data/ci/deploy-home" >/dev/null
-```
-
-`jq --rawfile` сохраняет переводы строк байт-в-байт; после записи сверить
-SHA-256 прочитанного значения с локальным файлом. Ротация значения не меняет
-workflow: обновить ключ, при необходимости перезапустить `deploy-home`
-(токен роли живёт ≤15 мин и не хранится).
+`deploy-home` больше не входит в VPN и не читает OpenBao: home-сервисы
+применяет Flux, а CI только пинует проверенные digest'ы в `deploy/home-apps`.
+Поэтому Environment `Home`, `secret/ci/deploy-home`, kubeconfig и
+`scheduler.env`/`runtime_values` в CI удалены. Приватные значения приложений
+лежат в `secret/k8s/flux-system/app-settings` (ESO → `flux-app-settings`),
+values Hermes — в `secret/k8s/flux-system/runtime-values` (поле `values`);
+их читает ESO через Kubernetes auth, не GitHub OIDC.
 
 Environment `Android` (matrix-запись `android-app` в
 `.github/workflows/_android.yml` и job `android-distribute` в `ci.yml`) хранит
@@ -474,37 +414,30 @@ bao kv put -mount=secret ci/deploy-station \
 -mount=secret ci/deploy-station` (печатает значения; не в CI-логе). Ротация —
 тот же вызов, workflow не меняется: токен роли живёт ≤15 мин и не хранится.
 
-### Поток deploy-home
+### Поток `deploy-station`
 
-`deploy-home.yml` (`environment: home`, `permissions: id-token: write` только
-у deploy-джобы; у `plan` секретов нет) выполняет шаги строго по порядку:
+`deploy-home.yml` (job `deploy-station`, `environment: Station`,
+`permissions: id-token: write`) выполняет шаги строго по порядку:
 
-1. материализует VPN-сертификат и пароль в `$RUNNER_TEMP/ci` (600);
+1. материализует VPN-сертификат `ci-pulsar` и пароль в `$RUNNER_TEMP/ci`
+   (600);
 2. поднимает VPN-группу `ci` и ждёт `200/…` от `$OPENBAO_ADDR/v1/sys/health`;
 3. `hashicorp/vault-action` (OIDC `method: jwt`, `path: github`, audience =
-   `OPENBAO_ADDR`, роль `deploy-home`) логинится и читает
-   `secret/ci/deploy-home`; action маскирует каждую строку значения и отдаёт
-   его только как step output (`exportEnv: false`);
-4. минимальный shell-шаг пишет из outputs нужные юниту файлы (kubeconfig и
-   env из `units.mjs`) в `$RUNNER_TEMP/ci` с правами 600; сами значения в лог
-   не печатаются;
-5. отдельного шага отзыва токена нет: роль выдаёт токен с коротким TTL, он
-   живёт только до конца job;
-6. дальше — прежние kubectl/helm шаги, smoke и откат; cleanup удаляет
-   `$RUNNER_TEMP/ci`.
+   `OPENBAO_ADDR`, роль `deploy-station`) читает `secret/ci/deploy-station`;
+   action маскирует значения и отдаёт их только как step outputs;
+4. `ha_firmware_deploy.py` ставит опубликованную версию через HA
+   (`update_entity` + `update.install`) и ждёт `installed_version`;
+5. cleanup отключает VPN и удаляет `$RUNNER_TEMP/ci`.
 
-Политика `ci-deploy` допускает только read `secret/ci/test` и
-`secret/ci/deploy-home` (плюс metadata); запись и `secret/k8s/*` запрещены —
-это проверяет `openbao-smoke.yml` (ожидаемые отказы остаются сырыми API
-запросами: `vault-action` только читает и не умеет выражать «должно быть
-запрещено»), он же убеждается, что в `secret/ci/deploy-home` есть все три
-ключа.
+Политика `ci-station` допускает только read `secret/ci/deploy-station` (плюс
+metadata); запись, `secret/ci/*` других записей и `secret/k8s/*` запрещены.
+Роль живёт ≤15 мин и не хранится.
 
 Сеть: группа `ci` пула `10.77.1.0/24` маршрутизируется только до узла K3s,
-nftables `forward` разрешает `tcp/{443,6443}`, `postrouting` маскирует в адрес
-VPN-CT. Traefik видит LAN-адрес и пропускает через `home-allowlist`. Через 443
-группа `ci` технически достаёт и другие `*.home`-имена, но они за собственной
-аутентификацией; это принятый trade-off вместо отдельного порта.
+nftables `forward` разрешает только `tcp/443`, `postrouting` маскирует в адрес
+VPN-CT. Traefik видит LAN-адрес и пропускает через `home-allowlist`. Правило
+`6443` и сертификат `ci-github` удалены: CI-деплой home-сервисов больше не
+существует.
 
 ## Backup / restore
 
@@ -541,9 +474,9 @@ mise run kubectl -- -n openbao exec openbao-0 -- \
 - **Пароль человека**: задаёт человек, меняет через UI или API; файла
   `human.pass` нет.
 - **CI**: смена role/audience — правка `configure.py`, повторный запуск; токены
-  живут ≤15 мин и не хранятся. Смена значений деплоя — обновление
-  `secret/ci/deploy-home` (см. «CI-секреты»), workflow не меняется. Для станции
-  аналогично: `secret/ci/deploy-station` и роль `deploy-station`.
+  живут ≤15 мин и не хранятся. Деплой home-сервисов идёт через Flux, поэтому
+  CI-значений для них нет; станция — `secret/ci/deploy-station` и роль
+  `deploy-station`.
 - **Root**: только через recovery keys (`generate-root`), после работ токен
   отозвать.
 - **Приложенческие секреты**: менять значение в OpenBao

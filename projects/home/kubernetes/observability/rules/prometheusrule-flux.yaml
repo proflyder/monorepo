@@ -10,7 +10,7 @@
 # These alerts replace the "job failed" signal that `deploy-home` used to give:
 # Flux has no automatic rollback for an application rollout, so a Kustomization
 # stuck in Ready=False is the operator's cue to revert the pins or manifest
-# commit (FLUX-APPS-PLAN 4.2).
+# commit (решение 54).
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:

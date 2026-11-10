@@ -238,15 +238,9 @@ class Catalog(unittest.TestCase):
         # Platform deploy tasks moved to Flux; the remaining admin tasks still
         # cover the independent profiles (OpenBao, ingress verify, backups...).
         self.assertGreaterEqual(len(used), 6)
-        service = (ws.ROOT / "platform/mise-tasks/admin/service.sh").read_text()
-        units = re.search(r"\n  ([a-z|-]+)\) ;;", service).group(1).split("|")
-        for unit in units:
-            self.assertIn(unit, profiles, unit)
-            self.assertTrue((ws.ROOT / f"projects/home/kubernetes/{unit}/deploy.sh").is_file())
         for script in re.findall(r'"\$ROOT/(projects/[^"]+)"',
                                  "".join(t.read_text() for t in tasks if "admin" in t.parts)):
-            if "$" not in script:  # admin:service builds its path from the unit
-                self.assertTrue((ws.ROOT / script).is_file(), script)
+            self.assertTrue((ws.ROOT / script).is_file(), script)
 
     def test_docs_table_lists_every_path(self):
         doc = (ws.ROOT / "docs" / "SECRETS.md").read_text()

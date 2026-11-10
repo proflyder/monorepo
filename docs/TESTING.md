@@ -690,10 +690,11 @@ commit SHA (сверены с тегами через `gh api`); Bazelisk `1.30.
 собранных бинарников: он передаёт deploy.sh заранее разрешённые
 digest-пины образов, поэтому `mise run test` и `mise run test:deploy-control`
 запускают его без Bazel. Путь продвижения (`PREBUILT_DIGESTS`,
-`PREBUILT_DIGESTS_FILE`, решение 36) покрыт там же и в `test_deploy.py`
-юнитов `scheduler`/`currency-bot`/`mcp-gateway`/`wakegrant`:
-образ не собирается и не пушится, digest попадает в отрендеренный манифест,
-а кривое/дублирующее значение падает fail-closed до обращения к кластеру.
+`PREBUILT_DIGESTS_FILE`, решение 36) покрыт `test_deploy_control.sh`
+(scheduler) и `test_build_and_push.py`: образ не собирается и не пушится,
+digest попадает в отрендеренный манифест, а кривое/дублирующее значение
+падает fail-closed. У остальных юнитов этого пути больше нет — CI только
+пинует digest, манифесты проверяют `test_flux.py` и manifest-тесты.
 `projects/home-assistant/deploy/test_build_and_push.py` проверяет то же для
 `build-and-push.sh` (`hermes`, `voice-proxy`, `health-exporter`,
 `home-deploy`) с заглушками docker/bazel/git. Hermes rollout и
@@ -713,23 +714,22 @@ Matrix-entry `android / android-lint` (и `android / android-detekt`) не тр�
 уже проверяет, поэтому падение lint или detekt делает `ci-ok` красным как и
 любой другой android-юнит.
 
-### Деплой (`deploy-home`)
+### Релиз (`deploy-home`)
 
-Push в `develop` — это squash-merge PR, поэтому workflow получает секреты
-Environment `Home`. `plan` прогоняет тот же `units.mjs` по диапазону
-`before..sha` и деплоит только затронутые деплоимые юниты параллельно:
-VPN группой `ci` → GitHub OIDC в OpenBao (`hashicorp/vault-action`,
-роль `deploy-home`) → `secret/ci/deploy-home` → kubectl/helm к K3s `6443`
-и Traefik `443`.
-Документация и инфраструктурные юниты без `deploy` ничего не катят.
+Push в `develop` — это squash-merge PR; `plan` прогоняет тот же `units.mjs`
+по диапазону `before..sha` и выбирает только затронутые юниты. Применение
+делает Flux, поэтому workflow не входит в VPN, не читает OpenBao и не
+вызывает kubectl/helm: job `pins` проверяет provenance и коммитит digest'ы в
+`deploy/home-apps`. Документация и инфраструктурные юниты без `deploy` ничего
+не пинуют.
 
-- Смена режима (`preserve`, `execute`, `shadow`, `control-*`) — только
-  `workflow_dispatch`; push всегда conservative preserve.
+- Смена режима исполнителей (`preserve`, `execute`, `shadow`, `control-*`)
+  больше не dispatch-параметр: steady-state в Git, учения — `flux suspend` +
+  admin-скрипт `scheduler/deploy.sh`.
 - Hermes/voice-proxy (builder `mixed`): `hermes` — Docker, `voice-proxy` —
-  Bazel/rules_oci; PR CI собирает и публикует их; deploy-home берёт
-  промоутнутые digest'ы → релиз `runtime` → `-healthcheck`/health/Assist-
-  проверка → `helm rollback` при провале. С `DEPLOY_NO_BUILD=1` отсутствие
-  digest'а — ошибка, а не сборка.
+  Bazel/rules_oci; PR CI собирает и публикует их; `pins` проверяет digest'ы,
+  `HelmRelease/runtime` обновляет релиз, post-upgrade smoke hook валит upgrade
+  и `remediation.strategy: rollback` возвращает прежнюю ревизию.
 - Build once (решение 36): job считает tree деплоимого коммита и продвигает
   digest'ы PR-сборки (`tree-<hash>` + проверенный provenance), включая
   `home-deploy`, из образа которого достаётся CLI. На `workflow_dispatch` и
@@ -740,8 +740,8 @@ VPN группой `ci` → GitHub OIDC в OpenBao (`hashicorp/vault-action`,
   (`promote.test.mjs`: дельта не затрагивает → promoted from PR head;
   затрагивает / нет PR / provenance не сходится → refused). Deploy-home
   ничего не собирает: если хоть один образ не прошёл проверку, job падает, а
-  не откатывается на сборку. Выбранный путь виден в job summary
-  (`image path: prebuilt|build`, где `build` = отказ promotion).
+  не откатывается на сборку. Выбранный путь и digest'ы видны в job summary
+  `pins <unit>`.
 - Native (Pulsar, logon provider): job `native-release` вызывает `_native.yml`
   с `promote: true`. Тот проверяет `tree-<hash>` и provenance, ставит релизные
   теги на тот же digest; при missing/unverified job падает — деплой ничего не

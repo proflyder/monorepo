@@ -1,7 +1,6 @@
 # The namespace is applied once by an admin (Kubernetes namespaces are
-# cluster-scoped and the CI ServiceAccount has no cluster-scoped permissions).
-# deploy.sh only creates it when it is missing; on the CI path it must already
-# exist, together with ci/rbac.yaml.
+# cluster-scoped and admin-owned). Flux applies only the namespaced objects and
+# never creates or prunes the namespace.
 apiVersion: v1
 kind: Namespace
 metadata:

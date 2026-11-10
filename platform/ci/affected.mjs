@@ -126,24 +126,14 @@ export class Unit {
         deployOptionalImages: [],
         deployWorkloads: [],
         deployBuilder: "bazel",
-        // `ci` applies through deploy-home; `flux` applies through the Flux
-        // Kustomization that consumes the pins branch. Defaults to `ci` so an
-        // un-migrated unit keeps the current behaviour.
-        deployRuntime: "ci",
         // Bazel package that owns the `<image>_image`/`<image>_push` targets
         // (single-image `bazel` units).
         deployTargetRoot: "",
         // Explicit image -> Bazel package map for `mixed` units, so several
         // Bazel images can live next to a Dockerfile image.
         deployBazelImages: {},
-        // Kubernetes namespace, deploy entrypoint and the OpenBao `secret/ci/
-        // deploy-home` key/file that carries the private deploy-time env.
+        // Kubernetes namespace and the workloads Flux owns for this unit.
         deployNamespace: "",
-        deployScript: "",
-        deployEnvKey: "",
-        deployEnvFile: "",
-        // ExternalSecrets that must be Ready before the deploy touches workloads.
-        deployExternalsecrets: [],
         // Documented rollback procedure (see `mise run rollback`). Optional:
         // units without a documented procedure carry no rollback block.
         rollbackKind: "",
@@ -279,14 +269,9 @@ export function normalizeConfig(data, label = "units") {
       deployOptionalImages: list(deploy.optional_images),
       deployWorkloads: list(deploy.workloads),
       deployBuilder: String(deploy.builder ?? "bazel"),
-      deployRuntime: String(deploy.runtime ?? "ci"),
       deployTargetRoot: String(deploy.target_root ?? ""),
       deployBazelImages: normalizeImageMap(deploy.bazel_images),
       deployNamespace: String(deploy.namespace ?? ""),
-      deployScript: String(deploy.script ?? ""),
-      deployEnvKey: String(deploy.env_key ?? ""),
-      deployEnvFile: String(deploy.env_file ?? ""),
-      deployExternalsecrets: list(deploy.externalsecrets),
       rollbackKind: String(rollback.kind ?? ""),
       rollbackStateDir: String(rollback.state_dir ?? ""),
       rollbackNamespace: String(rollback.namespace ?? ""),
@@ -2526,26 +2511,21 @@ export function matrixEntries(route_, config) {
  * A shared Rust crate change reaches every importer through the Bazel
  * loading graph, so it also deploys every importer that declares a `deploy`
  * block. Units without one (documentation, infrastructure, observability)
- * never appear here, so `deploy-home` cannot roll them by accident.
+ * never appear here, so `deploy-home` cannot pin them by accident.
  *
- * `deploy.runtime` splits the same unit map between `deploy-home` (`ci`) and
- * the Flux pins job (`flux`). Both lists are produced from the same routing, so
- * migrating a unit is one field, not a workflow edit.
+ * Every deployable unit is applied by Flux. The `pins` job of `deploy-home`
+ * promotes the images and commits only the digests to the `deploy/home-apps`
+ * machine branch; it never uses the VPN, OpenBao or a kubeconfig.
  */
-function deployEntriesFor(route_, config, runtime) {
+export function deployEntries(route_, config) {
   const selected = route_.deploySelected;
   const entries = [];
   for (const unit of config.units) {
-    if (
-      !unit.deployImages.length ||
-      !selected.has(unit.id) ||
-      unit.deployRuntime !== runtime
-    ) {
+    if (!unit.deployImages.length || !selected.has(unit.id)) {
       continue;
     }
     entries.push({
       id: unit.id,
-      runtime: unit.deployRuntime,
       images: space(unit.deployImages),
       optional_images: space(unit.deployOptionalImages),
       workloads: space(unit.deployWorkloads),
@@ -2553,29 +2533,9 @@ function deployEntriesFor(route_, config, runtime) {
       target_root: unit.deployTargetRoot,
       bazel_images: JSON.stringify(unit.deployBazelImages),
       namespace: unit.deployNamespace,
-      script: unit.deployScript,
-      env_key: unit.deployEnvKey,
-      env_file: unit.deployEnvFile,
-      externalsecrets: space(unit.deployExternalsecrets),
     });
   }
   return entries;
-}
-
-/** Units `deploy-home` applies through `kubectl`/`helm` (`runtime: ci`). */
-export function deployEntries(route_, config) {
-  return deployEntriesFor(route_, config, "ci");
-}
-
-/**
- * Units Flux applies from the `deploy/home-apps` pins branch (`runtime: flux`).
- *
- * The `pins` job of `deploy-home` promotes their images and commits only the
- * digests to the machine branch; it never uses the VPN, OpenBao or a
- * kubeconfig.
- */
-export function fluxEntries(route_, config) {
-  return deployEntriesFor(route_, config, "flux");
 }
 
 export function summaryMarkdown(route_, config) {
@@ -2758,7 +2718,6 @@ export function githubOutputs(computed) {
     deploy_control: String(result.deployControl),
     android_distribute: String(result.androidDistribute),
     deploy_units: jsonDumps(deployEntries(result, config)),
-    flux_units: jsonDumps(fluxEntries(result, config)),
     summary: summaryMarkdown(result, config),
   };
 }
@@ -2778,7 +2737,6 @@ export async function main(argv = process.argv.slice(2)) {
           deploy_control: result.deployControl,
           android_distribute: result.androidDistribute,
           deploy_units: deployEntries(result, config),
-          flux_units: fluxEntries(result, config),
           warnings: result.warnings,
           modes: Object.fromEntries(
             Object.entries(result.routes).map(([name, platformRoute]) => [

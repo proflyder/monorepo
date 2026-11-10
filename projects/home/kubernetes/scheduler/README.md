@@ -63,7 +63,6 @@ deploy.sh                       build/push/import images, apply, mode transition
                                 (templates rendered by `home-deploy render`)
 backup.sh                       quiesced SQLite + ledger backup with checksums
                                 (preflight/state/converge: `home-deploy`, platform/deploy-rs)
-ci/rbac.yaml                    ServiceAccount/Role for CI kubectl
 ```
 
 Tracked templates contain only placeholders/TEST-NET values. Real addresses,
@@ -76,7 +75,6 @@ manifests go to `secrets/local/rendered/scheduler` (git-ignored).
 # Secrets are owned by External Secrets Operator and sourced from OpenBao
 # (secret/k8s/home-assistant/{scheduler-auth,ha-bridge-ha}). Apply once:
 mise run admin:external-secrets
-mise run kubectl -- -n home-assistant apply -f projects/home/kubernetes/scheduler/ci/rbac.yaml
 ```
 
 Both tokens are read from files at runtime (`SCHEDULER_TOKEN_FILE`,
@@ -92,12 +90,16 @@ ssh <node> sudo env PRIVATE_ENV=/path/to/scheduler.env \
   bash projects/home/kubernetes/scheduler/nft/apply.sh
 ```
 
-## Deploy (manual, from the workstation)
+## Deploy (Flux; manual script for drills)
 
-`deploy.sh` builds the images, imports them into the node's containerd over SSH
-(no registry push), renders the manifests with the new digests and applies
-them. `NODE_SSH` is the K3s node; `KUBECONFIG` must reach the API (LAN, or the
-documented SSH tunnel).
+Flux applies the stack (`Kustomization/app-ha-executors`) from `develop` with
+digests from `deploy/home-apps` and steady-state modes/replicas pinned in
+`manifests/kustomization.yaml`. `deploy.sh` remains the admin tool for mode
+transitions, cutover preflight and local debugging: it builds the images,
+imports them into the node's containerd over SSH (no registry push), renders the
+manifests with the new digests and applies them. Private values come from
+`PRIVATE_ENV` (default `secrets/home/scheduler.env`, git-ignored);
+`KUBECONFIG` must reach the API (LAN or the documented SSH tunnel).
 
 ```bash
 NODE_SSH=labuser@node KUBECONFIG=/path/kubeconfig \
@@ -105,7 +107,8 @@ NODE_SSH=labuser@node KUBECONFIG=/path/kubeconfig \
 NODE_SSH=labuser@node ./projects/home/kubernetes/scheduler/deploy.sh --shadow
 HA_TOKEN_FILE=secrets/home/ha.token NODE_SSH=labuser@node \
   ./projects/home/kubernetes/scheduler/deploy.sh --execute         # preflight, then 1 replica
-mise run admin:service scheduler -- --only scheduler    # one unit only
+PRIVATE_ENV=secrets/home/scheduler.env KUBECONFIG=/path/kubeconfig \
+  ./projects/home/kubernetes/scheduler/deploy.sh --only scheduler   # one group
 ```
 
 - Re-running without `--execute`/`--shadow` preserves the bridge/control/
@@ -115,9 +118,10 @@ mise run admin:service scheduler -- --only scheduler    # one unit only
 - `--execute` runs the preflight first and refuses if a legacy HA writer is on,
   an alarm is ringing, the scheduler is not ready or the HA endpoint differs.
 - The preflight runs locally by default; `PREFLIGHT_IN_CLUSTER=1` runs it as a
-  one-shot Job next to the scheduler (used by CI, which cannot reach HA).
-- Pushing instead of importing (`PUSH_IMAGES=1`, needs `docker login ghcr.io`)
-  is the CI path; the digest is verified against the built image before apply.
+  one-shot Job next to the scheduler (works from a workstation that cannot reach HA).
+- `PUSH_IMAGES=1` (needs `docker login ghcr.io`) pushes instead of importing
+  locally; the digest is verified against the built image before apply. CI never
+  calls this script: it only pins the verified digest.
 
 ## ha-control
 
@@ -254,69 +258,41 @@ binary rejects schema v2.
 When a change only touches one service, use `--only`:
 
 ```bash
-mise run admin:service scheduler -- --only scheduler
+PRIVATE_ENV=secrets/home/scheduler.env KUBECONFIG=/path/kubeconfig \
+  ./projects/home/kubernetes/scheduler/deploy.sh --only scheduler
 ```
 
-## CI deploy (GitHub Actions, environment `home`)
+## Flux and CI
 
-`.github/workflows/deploy-home.yml` deploys this stack from `develop` with
-kubectl only — no SSH and no root helper.
+`.github/workflows/deploy-home.yml` no longer touches the cluster. On a push to
+`develop` the `pins` job promotes the verified image digests into the
+`deploy/home-apps` branch; `Kustomization/app-ha-executors` applies
+`manifests/kustomization.yaml` from `develop` with those digests and waits for
+the workloads. There is no VPN, OpenBao, kubeconfig or `ci-deploy` on that path.
 
 - `plan` routes the pushed range (`before..sha`) through the CI unit map
-  (`platform/ci/units.mjs`) and produces the affected **deployable** units
-  (`deploy.images` / `deploy.workloads`). A documentation-only push deploys
-  nothing; a shared proto/Rust package change deploys its importers; an unknown or
-  zero `before` falls back to every deployable unit.
-- The deploy matrix runs affected units in parallel; each unit is
-  serialised by `concurrency: deploy-home-<unit>` and never cancelled.
-  Image-only units (Hermes/voice-proxy) skip the VPN and the cluster.
-- Each job logs in to GHCR with the job-scoped `GITHUB_TOKEN`
-  (`packages: write` on that job only), runs `deploy.sh` with `PUSH_IMAGES=1`
-  and `PREFLIGHT_IN_CLUSTER=1`, then verifies rollout, `-healthcheck`,
-  `-status` and both NodePorts.
-- Images are pushed with the `rules_oci` `oci_push` targets (crane), not
-  `docker push`: crane stores the exact OCI manifest that was built, so the
-  registry digest equals the built digest. `deploy.sh` fails if they differ —
-  this is what "deploy exactly the pushed digest" means. (A `docker push`
-  rewrites the manifest into Docker media types and can add an attestation
-  index, which changes the digest.)
-- Rollback is driven by recorded state, not `kubectl rollout undo`.
-  `deploy.sh` captures each Deployment before it changes it
-  (`<name>.before.json`, or `<name>.absent`) and writes `<name>.applied` only
-  after the converge succeeds. `home-deploy state rollback` replaces the
-  Deployment with the full remembered object, and only when the generation
-  actually changed. A
-  failure during build, push, rendering or preflight leaves no marker, so the
-  live Deployments are untouched.
-- Existing Deployments are converged with `home-deploy converge` (a full
-  replace of the rendered object) instead of `mise run kubectl -- apply`/`mise run kubectl -- patch`. A patch cannot
-  remove a volume or mount that an earlier ad-hoc change added; the replace
-  prunes such drift. `--preserve-env` keeps `BRIDGE_EXECUTE`/`CONTROL_EXECUTE`
-  and `--preserve-replicas` keeps the current scale, so mode transitions stay
-  manual.
-- Push runs preserve mode only; `execute`, `shadow`, `control-execute`
-  and `control-catalog` are manual `workflow_dispatch` inputs for the
-  `ha-bridge` unit and still go through the fail-closed preflight.
+  (`platform/ci/units.mjs`) and selects the affected deployable units. A
+  documentation-only push pins nothing; a shared proto/Rust package change
+  selects its importers; an unknown or zero `before` falls back to every
+  deployable unit.
+- `pins` runs per unit with `concurrency: deploy-home-pins`; image promotion
+  verifies the `tree-<hash>` tag, provenance and digest read-back, then commits
+  only that unit's keys. A failed promotion keeps the previous pin (fail
+  closed) and the old workload keeps running.
+- Steady state (one replica each, `BRIDGE_EXECUTE=true`,
+  `CONTROL_EXECUTE=true`, `SCENARIO_EXECUTE=true`) lives in the Flux patch.
+  Mode changes are a Git change; a drill uses
+  `flux suspend kustomization/app-ha-executors` plus `deploy.sh`, then resume.
+- Rollback is a revert of the pins commit (or `flux suspend` first). Do not use
+  `kubectl rollout undo`: it bypasses Git and loses the audit trail.
+- `test_deploy_control.sh` / `_deploy-control.yml` stay as the mocked
+  `deploy.sh --control-*` regression; the admin script is still what a drill
+  runs.
 
-Least-privilege access:
-
-- VPN certificate user `ci`, group `ci`, its own pool and a route only to the
-  K3s node; the VPN firewall allows only `tcp/6443` there (no SSH).
-- The K3s node firewall (`home_k3s`) accepts `6443` only from the VPN
-  container address, which masquerades the isolated `ci` pool.
-- Kubernetes ServiceAccount `ci-deploy` in `home-assistant` (Role in
-  `ci/rbac.yaml`): deployments/replicasets/pods/exec/services/configmaps/
-  secrets/PVCs in that namespace only, plus `deployments/scale` and one-shot
-  `jobs` for the preflight. No other namespace, no cluster-scoped access.
-- The same Role also runs `helm upgrade runtime` for the Hermes/voice-proxy
-  digest rollout: Helm release Secrets (`owner=helm`) and the namespace-scoped
-  chart resources. Runtime storage (PV/PVC) is applied by an admin outside the
-  release, so the CI identity never needs cluster-scoped verbs.
-- The kubeconfig points at `https://<K3S_NODE>:6443`; the API certificate
-  already carries the node IP in its SAN, so no k3s restart or `tls-san` change
-  is needed.
-- The cutover preflight runs as a Job in `home-assistant`, so the runner needs
-  neither HA access nor the HA/scheduler tokens.
+Access: Flux runs in-cluster with its own ServiceAccount; there is no CI
+kubeconfig anymore. Host-side NodePort filtering remains manual (`nft/apply.sh`),
+and the cutover preflight still runs as a Job (`preflight-job.yaml`,
+`PREFLIGHT_IN_CLUSTER=1`) or locally with HA/scheduler token files.
 
 ## Limits
 

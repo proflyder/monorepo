@@ -6,20 +6,17 @@
 
 ## P1 — безопасность и надёжность
 
-- [ ] **Flux 6.7: убрать входящий доступ CI в K3s.** Все приложения уже катит
-      Flux (`deploy.runtime: "flux"`, Kustomizations включены), поэтому job
-      `deploy` в `deploy-home` не выбирает ни одного юнита: VPN, OIDC,
-      `kubectl`/`helm` и `ci-deploy` больше не нужны. Следующий шаг (после
-      наблюдения, с подтверждением владельца): удалить job `deploy` и
-      Environment `Home`; удалить `secret/ci/deploy-home` и роль
-      `deploy-home`, политику `ci-deploy`; удалить `*/ci/rbac.yaml` и
-      Role/RoleBinding `ci-deploy` в кластере; отозвать сертификат `ci-github`
-      и убрать правило `6443` из `management-firewall/rules.nft` (порт `443`
-      и группа `ci` остаются для `deploy-station`/`ci-pulsar`); обновить
-      `STATE.md`, `OPERATIONS.md`, `KUBERNETES-OPERATIONS.md`,
-      `ARCHITECTURE.md`, `DECISIONS.md`, `SECRETS.md` и Flux README.
-      Откат: вернуть `ci/rbac.yaml` из Git, выпустить **новый** сертификат,
-      восстановить правило и секрет.
+- [ ] **Flux 6.7: удалить живые следы CI-доступа (действия владельца после
+      merge).** Код, RBAC-файлы, VPN-правило `6443`, роль/политику OpenBao и
+      документация уже удалены в репозитории; остались необратимые действия в
+      кластере/OpenBao/VPN/GitHub (список с командами — в описании PR
+      `chore/flux-cutover-cleanup` и в `OPERATIONS.md`, раздел «Доступ CI»):
+      удалить SA/Role/RoleBinding и token `ci-deploy`, отозвать сертификат
+      `ci-github`, удалить `secret/ci/deploy-home` и роль `deploy-home`,
+      удалить Environment `Home` и лишние GitHub secrets/variables. Группа
+      VPN `ci` и `443` остаются для `deploy-station`/`ci-pulsar`.
+      Откат: вернуть RBAC из Git, выпустить **новый** сертификат, вернуть
+      правило/секрет — отозванный сертификат не восстанавливается.
 
 ## P2 — проверки и улучшения инфраструктуры
 

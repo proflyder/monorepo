@@ -83,24 +83,6 @@ OFFSITE_HA_TOKEN_FILE = { provider = "infra_backup", value = "offsite/offsite_ha
 OFFSITE_BB_KEY_FILE = { provider = "infra_ssh", value = "offsite-bb/offsite_bb_key", as_file = true }
 OFFSITE_BB_KNOWN_HOSTS_FILE = { provider = "infra_ssh", value = "offsite-bb/offsite_bb_known_hosts", as_file = true }
 
-# --- service deploy scripts run by hand (CI gets the same values by OIDC) ----
-[profiles.scheduler.secrets]
-PRIVATE_ENV = { provider = "ci", value = "deploy-home/scheduler_env", as_file = true }
-SCHEDULER_TOKEN_FILE = { provider = "k8s_home_assistant", value = "scheduler-auth/token", as_file = true }
-KUBECONFIG = { provider = "infra_kubernetes", value = "admin/admin_kubeconfig", as_file = true }
-
-[profiles.currency-bot.secrets]
-PRIVATE_ENV = { provider = "ci", value = "deploy-home/currency_bot_env", as_file = true }
-KUBECONFIG = { provider = "infra_kubernetes", value = "admin/admin_kubeconfig", as_file = true }
-
-[profiles.mcp-gateway.secrets]
-PRIVATE_ENV = { provider = "ci", value = "deploy-home/mcp_gateway_env", as_file = true }
-KUBECONFIG = { provider = "infra_kubernetes", value = "admin/admin_kubeconfig", as_file = true }
-
-[profiles.wakegrant.secrets]
-PRIVATE_ENV = { provider = "ci", value = "deploy-home/wakegrant_env", as_file = true }
-KUBECONFIG = { provider = "infra_kubernetes", value = "admin/admin_kubeconfig", as_file = true }
-
 # --- station tools ------------------------------------------------------------
 [profiles.station.secrets]
 STATION_HOST = { provider = "infra_station", value = "access/station_host_txt" }

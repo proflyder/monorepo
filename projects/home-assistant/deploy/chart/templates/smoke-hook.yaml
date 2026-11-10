@@ -1,4 +1,4 @@
-# Post-upgrade smoke hook (FLUX-APPS-PLAN 6.6).
+# Post-upgrade smoke hook (решение 54).
 #
 # `home-deploy hermes rollout` runs the Assist smoke after the upgrade and
 # rolls back on failure. Under Flux the same check is a Helm post-upgrade hook:

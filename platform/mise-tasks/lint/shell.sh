@@ -11,10 +11,8 @@ exec shellcheck -S error \
   platform/deploy/*.sh \
   projects/home/kubernetes/scheduler/*.sh \
   projects/home/kubernetes/scheduler/nft/*.sh \
-  projects/home/kubernetes/currency-bot/*.sh \
   projects/home/kubernetes/currency-bot/nft/*.sh \
   projects/station/scripts/*.sh \
-  projects/home-assistant/stack/*.sh \
   solutions/windows-logon-provider/*.sh \
   platform/workstation/env.sh \
   platform/workstation/run.sh \

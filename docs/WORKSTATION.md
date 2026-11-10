@@ -53,7 +53,6 @@ K3s (`127.0.0.1:16443` → узел) поднимает `with-kube-tunnel.sh` н
 | `admin:offsite-install` | offsite restic на узле K3s (`--dry-run`) | `offsite` |
 | `admin:pve-backup-install` | метрики vzdump на PVE (`--dry-run`) | — |
 | `admin:scheduler-backup` | бэкап SQLite scheduler в `local-data/` | `kube` |
-| `admin:service <unit>` | deploy.sh сервиса руками (обычно это делает CI) | `scheduler`, `currency-bot`, `mcp-gateway`, `wakegrant` |
 | `admin:android-distribute` | сборка, подпись, Firebase (`--dry-run`) | `android` |
 | `deploy:status <unit> --live`, `rollback --yes` | kubectl / helm по кластеру | `kube` (автоматически) |
 | `secrets:exec -- -P <p> exec -- <cmd>` | любая команда с секретами профиля | любой |

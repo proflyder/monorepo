@@ -28,8 +28,6 @@ ROOT = Path(__file__).resolve().parents[4]
 SECRETS = ROOT / "secrets" / "openbao"
 
 GITHUB_ISSUER = "https://token.actions.githubusercontent.com"
-GITHUB_ENVIRONMENT = "Home"
-GITHUB_REF = "refs/heads/develop"
 GITHUB_STATION_ENVIRONMENT = "Station"
 GITHUB_ANDROID_ENVIRONMENT = "Android"
 # Android App Distribution runs from PR CI, so every subject is the merge ref of
@@ -66,26 +64,6 @@ path "sys/rekey/*" {
 }
 path "sys/rekey-recovery-key/*" {
   capabilities = ["deny"]
-}
-"""
-
-CI_POLICY = """\
-# GitHub Actions may only read the CI entries that deploy-home and the smoke
-# check actually use. A new secret/ci/<name> needs an explicit entry here.
-path "secret/data/ci/test" {
-  capabilities = ["read"]
-}
-path "secret/data/ci/deploy-home" {
-  capabilities = ["read"]
-}
-path "secret/metadata/ci" {
-  capabilities = ["list"]
-}
-path "secret/metadata/ci/test" {
-  capabilities = ["read"]
-}
-path "secret/metadata/ci/deploy-home" {
-  capabilities = ["read"]
 }
 """
 
@@ -300,21 +278,6 @@ def ensure_github(bao: Bao, audience: str, repository: str,
     print("auth: jwt (github) " + ("enabled" if created else "already enabled"))
     bao.expect("POST", "/v1/auth/github/config",
                {"oidc_discovery_url": GITHUB_ISSUER, "bound_issuer": GITHUB_ISSUER})
-    bao.expect("POST", "/v1/auth/github/role/deploy-home", {
-        "role_type": "jwt",
-        "user_claim": "job_workflow_ref",
-        "bound_audiences": [audience],
-        "bound_claims": {
-            "repository": repository,
-            "environment": GITHUB_ENVIRONMENT,
-            "ref": GITHUB_REF,
-        },
-        "token_policies": ["ci-deploy"],
-        "token_ttl": "10m",
-        "token_max_ttl": "15m",
-        "clock_skew": 60,
-    })
-    print("role: auth/github/role/deploy-home (audience %s)" % audience)
     # Android App Distribution runs inside PR CI from the `Android` Environment.
     # Glob claims pin a role to a PR merge ref and to exactly one workflow file:
     # `repository`, `environment`, `ref=refs/pull/*/merge`, `job_workflow_ref`
@@ -512,7 +475,6 @@ def main() -> None:
     ensure_kv(bao)
     ensure_audit(bao)
     ensure_policy(bao, "admin", ADMIN_POLICY)
-    ensure_policy(bao, "ci-deploy", CI_POLICY)
     ensure_policy(bao, "ci-android", CI_ANDROID_POLICY)
     if station_repository:
         ensure_policy(bao, "ci-station", STATION_POLICY)
@@ -524,8 +486,10 @@ def main() -> None:
     if not station_repository:
         print("station: no --station-repository, deploy-station role skipped")
     ensure_kubernetes(bao)
+    # Non-secret probe kept as a negative-path fixture for the Kubernetes auth
+    # smoke (`secret/ci/*` must never be readable by a workload policy).
     ensure_secret(bao, "ci/test", {"probe": "ok-ci",
-                                   "purpose": "CI auth smoke test; non-secret"})
+                                   "purpose": "policy probe, non-secret"})
     ensure_secret(bao, "k8s/test", {"probe": "ok-k8s",
                                     "purpose": "Kubernetes auth smoke test; non-secret"})
     ensure_totp(bao, args.enforce_totp)

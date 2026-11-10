@@ -27,13 +27,12 @@
 | Путь | Что | Кто читает |
 |---|---|---|
 | `ci/android-distribute` | Android: APK release signing key, passwords, alias and certificate; Firebase App Distribution | CI android-distribute (OIDC) |
-| `ci/deploy-home` | deploy-home: ci-deploy kubeconfig, service env files, runtime values (including intercom_env) | CI deploy-home (OIDC) |
 | `ci/deploy-station` | Pulsar rollout through HA (url, token, firmware entity) | CI deploy-station (OIDC) |
-| `ci/test` | smoke probe, not secret | CI auth smoke |
+| `ci/test` | smoke probe, not secret | owner (negative-path check) |
 | `infra/backup/ha` | HA backup encryption key | owner (restore) |
 | `infra/backup/offsite` | restic offsite: env, password, rclone/GDrive OAuth, HA token | owner (offsite install/restore) |
 | `infra/certs/station-tls` | station TLS: eMudhra CA, quasar leaf and legacy MITM keys | owner |
-| `infra/ci/github-environment` | values of GitHub Environments Home/Station (VPN p12, server, OpenBao address/role) | owner (GitHub settings) |
+| `infra/ci/github-environment` | values of the GitHub Environment Station (VPN p12, password) | owner (GitHub settings) |
 | `infra/cloudflare/currency-bot-tunnel` | Cloudflare tunnel API token and tunnel metadata | owner |
 | `infra/cloudflare/vpn-dns` | Cloudflare DNS token (home records, OpenBao/Vaultwarden deploy) | owner deploy scripts |
 | `infra/cloudflare/workers` | Cloudflare Workers/KV token and heartbeat Worker env | owner deploy scripts |
@@ -45,7 +44,6 @@
 | `infra/kubernetes/values-private` | private Helm values and ingress env | owner deploy scripts |
 | `infra/legacy/llm` | legacy v3rt3p LLM env | owner (legacy) |
 | `infra/proxmox/terraform` | Proxmox API token, Terraform state/vars, install settings | owner (Terraform) |
-| `infra/ssh/ci-deploy` | CI deploy SSH key and known_hosts | owner |
 | `infra/ssh/currency-bot-vps` | SSH to the currency bot VPS | secrets:pull |
 | `infra/ssh/ha-addon` | SSH key of the HA SSH add-on | secrets:pull |
 | `infra/ssh/komp` | SSH to the Windows PC (dev key) and its host key | secrets:pull |
@@ -60,7 +58,6 @@
 | `infra/test` | smoke probe, not secret | operator token check |
 | `infra/vaultwarden/admin` | Vaultwarden /admin password | owner |
 | `infra/vpn/client-ca` | ocserv client CA (key, cert, CRL, OpenSSL dir) | owner (vpncerts.py) |
-| `infra/vpn/clients/ci-github` | VPN client certificate for CI deploy-home | owner |
 | `infra/vpn/clients/ci-pulsar` | VPN client certificate for CI deploy-station | owner |
 | `infra/vpn/clients/owner-phone` | VPN client certificate of the owner's phone | owner |
 | `infra/vpn/owner` | owner VPN login: password, TOTP seed and QR | owner |

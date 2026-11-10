@@ -42,16 +42,16 @@ Options:
                         PATH-derived CRL unless --client-crl is given
   --client-crl PATH     CRL for the client CA (PEM)
   --ci-cidr CIDR        pool for the restricted "ci" group (default 10.77.1.0/24)
-  --ci-host ADDRESS     the only host the "ci" group may reach (K3s API/6443)
+  --ci-host ADDRESS     the only host the "ci" group may reach (Traefik/443)
 
 Client certificate login is enabled only when a client CA is supplied (or a
 previously installed /etc/ocserv/ssl/client-ca.pem exists). Password + TOTP
 stays enabled in every case.
 
 With --ci-host a certificate whose OU is `ci` gets its own pool, a route only
-to ADDRESS/32, no DNS, and firewall rules that allow only ADDRESS tcp/443
-(Traefik, for OpenBao over HTTPS) and tcp/6443 (the K3s API, used by kubectl;
-no SSH). The general `lan`/`full` pool is never widened to the ci pool.
+to ADDRESS/32, no DNS, and a firewall rule that allows only ADDRESS tcp/443
+(Traefik, used by the station firmware deploy through Home Assistant; no SSH,
+no K3s API). The general `lan`/`full` pool is never widened to the ci pool.
 EOF
 }
 
@@ -268,10 +268,11 @@ CI_NFT_FORWARD=
 CI_NFT_NAT=
 if [[ -n $CI_HOST ]]; then
   CI_NFT_FORWARD=$(cat <<EOF
-    # CI pool: two targets only, the K3s API and HTTPS (Traefik, used for
-    # OpenBao CI auth). This rule sits before the general pool accept; the
-    # pools do not overlap.
-    ip saddr $CI_CIDR iifname "vpns*" oifname "$IFACE" ip daddr $CI_HOST tcp dport { 443, 6443 } accept
+    # CI pool: one target only, HTTPS on the K3s node (Traefik routes the
+    # station firmware deploy to Home Assistant). No K3s API and no SSH: home
+    # services are applied by Flux, not by CI. This rule sits before the
+    # general pool accept; the pools do not overlap.
+    ip saddr $CI_CIDR iifname "vpns*" oifname "$IFACE" ip daddr $CI_HOST tcp dport 443 accept
     ip saddr $CI_CIDR drop
 EOF
 )

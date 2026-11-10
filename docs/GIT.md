@@ -24,8 +24,8 @@ git switch -c fix/<name> origin/develop     # или git worktree add … для
 git push -u origin fix/<name>               # pre-push guard
 gh pr create --base develop --fill          # PR в develop
 # CI: ci-ok зелёный → mise run pr:merge <N> → ветка удаляется
-# push в develop = merge PR → deploy-home выкатывает затронутые юниты
-#   и job-ы warm-android/warm-rust прогревают кэши для следующих PR
+# push в develop = merge PR → deploy-home пинует digest'ы затронутых юнитов,
+#   Flux их применяет, warm-android/warm-rust прогревают кэши для PR
 ```
 
 - Одно логическое изменение — одна ветка и один PR. Мелкие PR проще
@@ -135,13 +135,15 @@ git -c credential.helper= \
 
 ## Выкладка и откат
 
-- Деплой — `.github/workflows/deploy-home.yml` на push в `develop`: только
-  затронутые деплоимые юниты, параллельно, образы GHCR по digest.
-- Режимы исполнения (`execute`, `shadow`, `control-*`) — только ручной
-  запуск workflow с выбором режима.
-- Неудачный деплой откатывает только то, что сам применил. Откат изменения
-  целиком — новый PR с `git revert <squash-commit>`; историю `develop` не
-  переписывать.
+- Релиз — `.github/workflows/deploy-home.yml` на push в `develop`: job `pins`
+  продвигает проверенные digest'ы затронутых юнитов в `deploy/home-apps`, а
+  Flux применяет манифесты из `develop`. Прямого доступа CI в K3s нет.
+- Режимы исполнения (`execute`, `shadow`, `control-*`) — Git-состояние в
+  `scheduler/manifests/kustomization.yaml`; учения — `flux suspend` плюс
+  admin-скрипт, затем `flux resume`.
+- Откат приложения — revert pins-коммита или `flux suspend`, не
+  `kubectl rollout undo`. Откат изменения целиком — новый PR с
+  `git revert <squash-commit>`; историю `develop` не переписывать.
 
 ## Версии и публикация артефактов
 

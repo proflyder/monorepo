@@ -14,8 +14,8 @@ Secret wakegrant       ESO ← secret/k8s/home-assistant/wakegrant
 
 NodePort `30130` is free in the repository: the scheduler uses `30098/30099`,
 currency-bot `30100` and Grafana `30300`. The value is deployment-specific and
-lives in `secrets/home/wakegrant.env` (or OpenBao
-`secret/ci/deploy-home` key `wakegrant_env`), never in Git.
+lives in OpenBao `secret/k8s/flux-system/app-settings` (key
+`WAKE_GRANT_NODE_PORT` → `Secret/flux-app-settings`), never in Git.
 
 ## Secrets
 
@@ -46,23 +46,29 @@ mise run kubectl -- -n home-assistant wait --for=condition=Ready externalsecret/
 
 ## Deploy
 
-CI deploys the unit after a merge to `develop` (see
-`platform/ci/units.mjs`, unit `wakegrant`). Manual flow:
+Flux applies the unit (`Kustomization/app-wakegrant`) from `develop`, with the
+image digest from `deploy/home-apps`. After a merge, `deploy-home`'s `pins`
+job promotes the verified digest and commits it; no VPN, kubeconfig or
+manual script is involved.
 
 ```bash
-cp projects/home/kubernetes/wakegrant/wakegrant.env.example secrets/home/wakegrant.env
-# set WAKE_GRANT_NODE_PORT if 30130 is taken on this cluster
+# what Flux is applying
+mise run kubectl -- -n flux-system get kustomization app-wakegrant
+mise run kubectl -- -n flux-system get configmap home-app-images -o yaml \
+  | grep WAKEGRANT_IMAGE
 
-# workstation → import the digest-pinned image over SSH
-NODE_SSH=<admin@node> projects/home/kubernetes/wakegrant/deploy.sh
+# roll back to the previous digest: revert the pins commit
+#   (or freeze first: flux suspend kustomization app-wakegrant)
+git log --oneline origin/deploy/home-apps -- pins/home-app-images.yaml
 
-# or build + push to GHCR and let the node pull
-PUSH_IMAGES=1 projects/home/kubernetes/wakegrant/deploy.sh
+# force a reconcile after a pins/manifest change
+mise run kubectl -- -n flux-system annotate kustomization/app-wakegrant \
+  reconcile.fluxcd.io/requestedAt="$(date +%s)" --overwrite
 ```
 
-`deploy.sh` builds the image hermetically with Bazel (no Docker daemon),
-verifies the ESO Secret is Ready, renders the manifest into an ignored
-directory, applies it and runs the in-container `-healthcheck` after rollout.
+Do not delete the Kustomization: `prune: true` would remove the workload; the
+PVC carries `kustomize.toolkit.fluxcd.io/prune: disabled` so the SQLite volume
+survives.
 
 ## Verify
 

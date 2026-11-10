@@ -54,8 +54,9 @@ mise run admin:flux-bootstrap         # или merge в develop после boots
 ```
 
 `deploy.sh` больше не ставит Helm-релиз: он применяет только ExternalSecrets
-приложений, которые остаются на `deploy-home` (scheduler, Hermes,
-currency-bot, mcp-gateway, wakegrant) и ждёт `Ready`. `--skip-secrets` — только
+приложений (scheduler, Hermes, currency-bot, mcp-gateway, wakegrant) и ждёт
+`Ready`. В обычной работе те же объекты применяет Flux; скрипт — аварийный
+ручной путь. `--skip-secrets` — только
 проверка готовности оператора/store.
 
 На чистом кластере первая установка ESO всё ещё ручная (иначе `flux-settings`
@@ -107,8 +108,8 @@ mise run kubectl -- get externalsecret -A
    `creationPolicy: Owner`, `deletionPolicy: Retain`, `refreshInterval: 1h`.
    Для инфраструктурного секрета — в каталог компонента, которым владеет Flux
    (`ingress/routes`, `observability/manifests`, `vaultwarden/manifests`), и
-   добавить его в `kustomization.yaml` компонента. Для сервиса на
-   `deploy-home` — рядом с сервисом и в список `deploy.sh`.
+   добавить его в `kustomization.yaml` компонента Flux. Аварийный
+   `deploy.sh` держит свой список — обновите и его.
 
 3. Merge в `develop` (Flux) либо `mise run admin:external-secrets` для
    application-секретов; проверить
@@ -149,5 +150,6 @@ scheduler/HA-токены читаются при старте процесса,
 ## Отказ ESO
 
 Если ESO недоступен, существующие Secrets остаются на месте (Kubernetes не
-удаляет их). `deploy.sh` и CI проверяют `Ready` перед выкаткой и падают
-fail-closed, а не пересоздают значения из локальных файлов.
+удаляет их). Аварийный `deploy.sh` проверяет `Ready` перед выкаткой и падает
+fail-closed, а не пересоздаёт значения из локальных файлов; Flux ждёт
+готовности workload'ов через `Kustomization.wait`/`healthChecks`.
