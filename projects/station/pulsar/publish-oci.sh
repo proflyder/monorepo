@@ -9,11 +9,12 @@
 #   ./publish-oci.sh --source-dir /path/to/artifact
 #   ./publish-oci.sh --source-dir /path/to/artifact --tag tree-<git tree hash>
 #
-# `--tag` publishes the same release-shaped artifact under exactly one tag (the
-# PR build-once path uses `tree-<git tree hash>`) and leaves `<VERSION>` and
-# `:latest` alone. It is idempotent for identical content and refuses different
-# content; deploy-home later promotes the verified tree digest to the release
-# tags without rebuilding.
+# `--tag` публикует тот же release-артефакт под ровно одним тегом (PR-путь
+# build once использует `tree-<git tree hash>`) и не трогает `<VERSION>` и
+# `:latest`. Идентичное содержимое — no-op. Другое содержимое под уже
+# существующим тегом не перезаписывается: пересборка того же дерева исходников
+# не бит-воспроизводима, проверенным считается первый опубликованный артефакт.
+# deploy-home позже продвигает этот digest на релизные теги без пересборки.
 #
 # The station updater reads this exact contract, so the names are frozen:
 #   repository  ghcr.io/proflyder/pulsar-firmware
@@ -145,7 +146,10 @@ if [[ -n "$TAG" ]]; then
       echo "tag $TAG is already published with identical content; not rebuilding"
     else
       rm -rf "$tmp"
-      die "tag $TAG already exists with different content"
+      # Пересборка того же дерева исходников не бит-воспроизводима (другие
+      # SHA256SUMS), а проверенным остаётся первый артефакт: тег не трогаем и
+      # продолжаем с его digest, чтобы merge не блокировался.
+      echo "publish-oci: warning: tag $TAG already published for this source tree; keeping the existing artifact (build is not bit-reproducible)" >&2
     fi
   elif ! grep -qiE 'not found|manifest_unknown|name unknown|404' <<< "$output"; then
     die "cannot check $REPOSITORY:$TAG: $output"

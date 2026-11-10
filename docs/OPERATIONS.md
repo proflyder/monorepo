@@ -870,6 +870,8 @@ $EDITOR projects/station/pulsar/VERSION
 #    вперёд до squash-merge, берётся head PR, но только когда дельта
 #    head→merge не затрагивает pulsar; иначе — подтянуть develop в PR,
 #    дождаться CI и смержить заново.
+#    Тот же tree-тег с другими SHA256SUMS не перезаписывается: publish-oci
+#    оставляет первый артефакт и берёт его digest (сборка не бит-воспроизводима).
 # 3. approve в GitHub Environment `Station` (job deploy-station)
 #    → VPN группа ci → OIDC в OpenBao (deploy-station)
 #    → HA update_entity + update.install

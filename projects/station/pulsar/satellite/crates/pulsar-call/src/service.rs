@@ -18,7 +18,7 @@ use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 use tracing::{debug, info, warn};
 
 use crate::codec::{Codec, OpusCodec, Upsampler};
-use crate::jitter::JitterBuffer;
+use crate::jitter::{JitterBuffer, Playout};
 use crate::machine::{Action, CallPhase, Machine, SignalEvent};
 use crate::rtc::{Peer, PeerOutput};
 use crate::signaling::{SignalError, Signaling, WatchMessage};
@@ -237,11 +237,8 @@ impl Ctx<'_> {
     }
 }
 
-/// Один кадр downlink: PCM для вывода и исходный Opus-пакет для in-band FEC.
-struct CallFrame {
-    pcm: Vec<i16>,
-    packet: Vec<u8>,
-}
+/// Один кадр downlink: сырой Opus-пакет; декодирование идёт в порядке воспроизведения.
+type OpusPacket = Vec<u8>;
 
 /// Пересчёт RTP timestamp (48 кГц) в номер кадра для джиттер-буфера.
 ///
@@ -294,24 +291,92 @@ impl Timeline {
 }
 
 /// Сколько мс держать в очереди канала, прежде чем выдать ещё кадр.
-const DOWNLINK_TARGET_MS: u32 = 40;
+///
+/// Один пропущенный тик (20 мс) должен восстанавливаться этим же вызовом: 60 мс — это три
+/// кадра, которые закрывают провал и оставляют запас до следующего тика. Устройство —
+/// мастер-часов, поэтому очередь проверяется перед каждым кадром, а не раз в тик.
+const DOWNLINK_TARGET_MS: u32 = 60;
+/// Предел кадров за один вызов: залп после долгого провала не должен забивать очередь.
+const MAX_FRAMES_PER_PUMP: usize = 5;
 /// Период строки наблюдаемости.
 const REPORT_EVERY: Duration = Duration::from_secs(5);
+
+/// Счётчики, которые меняются в порядке воспроизведения (декодер stateful).
+#[derive(Clone, Copy, Debug, Default)]
+struct PlayoutCounters {
+    decode_errors: u64,
+    plc: u64,
+    fec: u64,
+}
+
+/// Декодирование кадров джиттер-буфера в порядке выдачи.
+struct DownlinkPlayback<'a, C: Codec> {
+    codec: &'a mut C,
+    counters: &'a mut PlayoutCounters,
+}
+
+impl<C: Codec> Playout<OpusPacket> for DownlinkPlayback<'_, C> {
+    type Output = Vec<i16>;
+
+    fn frame(&mut self, packet: &OpusPacket) -> Vec<i16> {
+        if let Some(pcm) = self.codec.decode(packet) {
+            pcm
+        } else {
+            // Битый пакет не должен ронять выдачу: место закрывает PLC декодера.
+            self.counters.decode_errors += 1;
+            self.codec.conceal()
+        }
+    }
+
+    fn lost(&mut self, next: Option<&OpusPacket>) -> Vec<i16> {
+        // Пропуск N и на месте N+1: in-band FEC восстанавливает N по следующему
+        // пакету. Если FEC нет — обычный PLC.
+        if let Some(next) = next
+            && let Some(pcm) = self.codec.decode_fec(next)
+        {
+            self.counters.fec += 1;
+            return pcm;
+        }
+        self.counters.plc += 1;
+        self.codec.conceal()
+    }
+}
+
+/// Докармливать очередь вывода кадрами, пока устройство не набрало цель.
+///
+/// Цикл, а не один кадр за тик: опоздавший тик иначе навсегда теряет 20 мс, и ALSA
+/// получает провал вместо речи. `active` проверяется вызывающим: вне звонка кадры копятся.
+fn playout<C: Codec>(
+    jitter: &mut JitterBuffer<OpusPacket>,
+    codec: &mut C,
+    downlink: &dyn Downlink,
+    counters: &mut PlayoutCounters,
+) {
+    let mut playback = DownlinkPlayback { codec, counters };
+    for _ in 0..MAX_FRAMES_PER_PUMP {
+        if downlink.queued_ms() >= DOWNLINK_TARGET_MS {
+            break;
+        }
+        let now = pulsar_core::now_ms();
+        let Some(pcm) = jitter.pop(now, &mut playback) else {
+            break;
+        };
+        downlink.write(&pcm);
+    }
+}
 
 struct Media {
     peer: Peer,
     codec: OpusCodec,
-    jitter: JitterBuffer<CallFrame>,
+    jitter: JitterBuffer<OpusPacket>,
     upsampler: Upsampler,
     timeline: Timeline,
     rx_rtp: u64,
     seq_gap: u64,
-    decode_errors: u64,
+    counters: PlayoutCounters,
     pushed: u64,
     late: u64,
     dup: u64,
-    plc: u64,
-    fec: u64,
     max_seq: Option<u64>,
     last_report: Instant,
 }
@@ -336,11 +401,13 @@ impl Media {
                 }
                 PeerOutput::Audio { data, time } => {
                     self.rx_rtp += 1;
-                    let Some(pcm) = self.codec.decode(&data) else {
-                        self.decode_errors += 1;
+                    // Декодирование — при выдаче: декодер stateful, и FEC/PLC должны идти
+                    // в порядке воспроизведения, а не прихода. Здесь нужна только длина.
+                    let Some(samples) = self.codec.packet_samples(&data) else {
+                        self.counters.decode_errors += 1;
                         continue;
                     };
-                    let seq = self.timeline.seq(time, pcm.len());
+                    let seq = self.timeline.seq(time, samples);
                     if let Some(max) = self.max_seq
                         && seq > max
                     {
@@ -348,7 +415,7 @@ impl Media {
                     }
                     self.max_seq = Some(self.max_seq.map_or(seq, |max| max.max(seq)));
                     let now = pulsar_core::now_ms();
-                    match self.jitter.push(seq, CallFrame { pcm, packet: data }, now) {
+                    match self.jitter.push(seq, data, now) {
                         crate::jitter::Push::Queued => self.pushed += 1,
                         crate::jitter::Push::Late => self.late += 1,
                         crate::jitter::Push::Duplicate => self.dup += 1,
@@ -359,39 +426,15 @@ impl Media {
         true
     }
 
-    /// Выдать один кадр по часам воспроизведения, если канал ещё не набрал свою цель.
+    /// Докармливать очередь вывода по часам воспроизведения.
     fn pump(&mut self, downlink: &Arc<dyn Downlink>, active: bool) {
-        if active && downlink.queued_ms() < DOWNLINK_TARGET_MS {
-            let now = pulsar_core::now_ms();
-            let codec = &mut self.codec;
-            let mut concealed = false;
-            let mut restored = false;
-            let frame = self.jitter.pop(now, &mut |next| {
-                // Пропуск N и на месте N+1: in-band FEC восстанавливает N по следующему
-                // пакету. Если FEC нет — обычный PLC.
-                if let Some(next) = next
-                    && let Some(pcm) = codec.decode_fec(&next.packet)
-                {
-                    restored = true;
-                    return CallFrame {
-                        pcm,
-                        packet: Vec::new(),
-                    };
-                }
-                concealed = true;
-                CallFrame {
-                    pcm: codec.conceal(),
-                    packet: Vec::new(),
-                }
-            });
-            if let Some(frame) = frame {
-                if restored {
-                    self.fec += 1;
-                } else if concealed {
-                    self.plc += 1;
-                }
-                downlink.write(&frame.pcm);
-            }
+        if active {
+            playout(
+                &mut self.jitter,
+                &mut self.codec,
+                downlink.as_ref(),
+                &mut self.counters,
+            );
         }
         self.report(downlink);
     }
@@ -412,9 +455,9 @@ impl Media {
             self.pushed,
             self.late,
             self.dup,
-            self.plc,
-            self.fec,
-            self.decode_errors,
+            self.counters.plc,
+            self.counters.fec,
+            self.counters.decode_errors,
             self.jitter.depth(),
             self.jitter.target_ms(),
             sink.queued_ms,
@@ -586,7 +629,7 @@ fn new_media(peer: Peer, _call_id: String) -> Option<Media> {
     debug!(
         "call: media opened (local port {}, jitter target {} ms)",
         peer.local_addr().port(),
-        JitterBuffer::<CallFrame>::new(FRAME_MS).target_ms()
+        JitterBuffer::<OpusPacket>::new(FRAME_MS).target_ms()
     );
     Some(Media {
         peer,
@@ -596,12 +639,10 @@ fn new_media(peer: Peer, _call_id: String) -> Option<Media> {
         timeline: Timeline::new(),
         rx_rtp: 0,
         seq_gap: 0,
-        decode_errors: 0,
+        counters: PlayoutCounters::default(),
         pushed: 0,
         late: 0,
         dup: 0,
-        plc: 0,
-        fec: 0,
         max_seq: None,
         last_report: Instant::now(),
     })
@@ -610,22 +651,139 @@ fn new_media(peer: Peer, _call_id: String) -> Option<Media> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{CALL_RATE, FRAME_SAMPLES};
     use std::sync::Mutex;
+    use std::sync::atomic::{AtomicU32, Ordering};
 
+    /// Выход с управляемой очередью: `drain` изображает проигранное устройством время.
     #[derive(Default)]
     struct FakeDownlink {
         written: Mutex<Vec<i16>>,
         flushed: Mutex<u32>,
+        queued_ms: AtomicU32,
+    }
+
+    impl FakeDownlink {
+        fn drain(&self, ms: u32) {
+            if self.queued_ms.load(Ordering::Relaxed) > ms {
+                self.queued_ms.fetch_sub(ms, Ordering::Relaxed);
+            } else {
+                self.queued_ms.store(0, Ordering::Relaxed);
+            }
+        }
+
+        fn frames(&self) -> usize {
+            self.written.lock().unwrap().len() / FRAME_SAMPLES
+        }
     }
 
     impl Downlink for FakeDownlink {
         fn write(&self, pcm: &[i16]) {
+            let ms = u32::try_from(pcm.len() * 1000 / CALL_RATE as usize).unwrap_or(u32::MAX);
             self.written.lock().unwrap().extend_from_slice(pcm);
+            self.queued_ms.fetch_add(ms, Ordering::Relaxed);
         }
 
         fn flush(&self) {
             *self.flushed.lock().unwrap() += 1;
+            self.queued_ms.store(0, Ordering::Relaxed);
         }
+
+        fn queued_ms(&self) -> u32 {
+            self.queued_ms.load(Ordering::Relaxed)
+        }
+    }
+
+    /// Декодер без libopus: кадр — один байт, PCM — его значение на весь кадр.
+    struct FakeCodec;
+
+    impl Codec for FakeCodec {
+        fn encode(&mut self, _pcm: &[i16]) -> Option<Vec<u8>> {
+            None
+        }
+
+        fn decode(&mut self, packet: &[u8]) -> Option<Vec<i16>> {
+            Some(vec![i16::from(*packet.first()?); FRAME_SAMPLES])
+        }
+
+        fn decode_fec(&mut self, _packet: &[u8]) -> Option<Vec<i16>> {
+            None
+        }
+
+        fn conceal(&mut self) -> Vec<i16> {
+            vec![-1; FRAME_SAMPLES]
+        }
+
+        fn packet_samples(&self, _packet: &[u8]) -> Option<usize> {
+            Some(FRAME_SAMPLES)
+        }
+    }
+
+    fn packet(seq: u8) -> OpusPacket {
+        vec![seq]
+    }
+
+    #[test]
+    fn a_late_tick_refills_the_output_queue_in_one_pass() {
+        let sink = FakeDownlink::default();
+        let mut codec = FakeCodec;
+        let mut counters = PlayoutCounters::default();
+        let mut jitter = JitterBuffer::new(FRAME_MS);
+        for seq in 0..6u64 {
+            jitter.push(seq, packet(seq as u8), 0);
+        }
+        // Очередь устройства пуста: один вызов обязан выдать три кадра (60 мс),
+        // иначе опоздавший тик навсегда теряет 20 мс и ALSA недокармливается.
+        playout(&mut jitter, &mut codec, &sink, &mut counters);
+        assert_eq!(sink.frames(), 3);
+        assert_eq!(sink.queued_ms(), DOWNLINK_TARGET_MS);
+
+        // Устройство проиграло 20 мс — на следующем тике выходит ровно один кадр.
+        sink.drain(20);
+        playout(&mut jitter, &mut codec, &sink, &mut counters);
+        assert_eq!(sink.frames(), 4);
+        assert_eq!(sink.queued_ms(), DOWNLINK_TARGET_MS);
+
+        // Очередь полна — новых кадров нет.
+        playout(&mut jitter, &mut codec, &sink, &mut counters);
+        assert_eq!(sink.frames(), 4);
+
+        let written = sink.written.lock().unwrap();
+        for seq in 0..4 {
+            assert_eq!(written[seq * FRAME_SAMPLES], seq as i16);
+        }
+    }
+
+    #[test]
+    fn steady_state_writes_frames_below_the_jitter_target() {
+        let sink = FakeDownlink::default();
+        let mut codec = FakeCodec;
+        let mut counters = PlayoutCounters::default();
+        let mut jitter = JitterBuffer::new(FRAME_MS);
+        jitter.push(0, packet(0), 0);
+        jitter.push(1, packet(1), 0);
+        playout(&mut jitter, &mut codec, &sink, &mut counters);
+        assert_eq!(sink.frames(), 2, "both frames must play out");
+        // Буфер пуст: PLC в пустоту не гонится.
+        playout(&mut jitter, &mut codec, &sink, &mut counters);
+        assert_eq!(sink.frames(), 2);
+        assert_eq!(counters.plc, 0);
+    }
+
+    #[test]
+    fn a_gap_produces_one_concealed_frame() {
+        let sink = FakeDownlink::default();
+        let mut codec = FakeCodec;
+        let mut counters = PlayoutCounters::default();
+        let mut jitter = JitterBuffer::new(FRAME_MS);
+        for seq in [0u64, 2, 3, 4] {
+            jitter.push(seq, packet(seq as u8), 0);
+        }
+        playout(&mut jitter, &mut codec, &sink, &mut counters);
+        // 0 — звук, 1 — пропуск (PLC), 2 — звук; очередь набрала цель.
+        assert_eq!(sink.frames(), 3);
+        assert_eq!(counters.plc, 1);
+        assert_eq!(counters.fec, 0);
     }
 
     #[test]

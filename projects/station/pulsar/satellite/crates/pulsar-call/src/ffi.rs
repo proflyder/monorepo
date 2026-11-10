@@ -59,6 +59,8 @@ unsafe extern "C" {
     ) -> i32;
     fn opus_decoder_destroy(decoder: *mut RawDecoder);
 
+    fn opus_packet_get_nb_samples(packet: *const u8, len: i32, fs: i32) -> i32;
+
     fn opus_strerror(error: i32) -> *const std::ffi::c_char;
 }
 
@@ -208,6 +210,20 @@ impl Drop for Decoder {
         // SAFETY: created by opus_decoder_create and destroyed once.
         unsafe { opus_decoder_destroy(self.0.as_ptr()) };
     }
+}
+
+/// Длительность Opus-пакета в сэмплах одного канала при 48 кГц.
+///
+/// RTP-таймлайн считается по этой длине, а не по 20 мс: телефон вправе прислать 10, 20
+/// или 60 мс. `None` — пакет не разбирается как Opus.
+#[must_use]
+pub fn packet_samples(packet: &[u8]) -> Option<usize> {
+    if packet.is_empty() || packet.len() > i32::MAX as usize {
+        return None;
+    }
+    // SAFETY: `packet` is valid for `len` bytes and libopus only reads it.
+    let n = unsafe { opus_packet_get_nb_samples(packet.as_ptr(), packet.len() as i32, 48_000) };
+    usize::try_from(n).ok().filter(|&n| n > 0)
 }
 
 fn log_error(code: i32) {
