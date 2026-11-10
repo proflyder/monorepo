@@ -22,8 +22,9 @@ spec:
   url: ssh://git@github.com/proflyder/monorepo
   ref:
     branch: deploy/home-apps
-  # Same read-only deploy key as `flux-system`; `deploy/home-apps` is protected
-  # by a ruleset that allows pushes only from the CI bot.
+  # Same read-only deploy key as `flux-system`. Ruleset `Deploy pins branch`
+  # forbids deleting or force-pushing `deploy/home-apps`; ordinary pushes are
+  # possible for anyone with write access (see docs/GIT.md).
   secretRef:
     name: flux-system
 ---

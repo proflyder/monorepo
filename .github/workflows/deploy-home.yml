@@ -496,7 +496,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
-      # Push the pins commit; the branch ruleset only admits the CI bot.
+      # Push the pins commit (fast-forward only: the ruleset forbids force-push).
       contents: write
       # Re-tag the promoted digest (`crane tag`).
       packages: write
