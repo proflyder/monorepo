@@ -47,6 +47,7 @@ pub async fn run() -> anyhow::Result<()> {
     let provider = Arc::new(Provider::new(
         Arc::clone(&ha),
         config.rules(),
+        config.toggles(),
         config.cache_ttl,
     ));
     let source: Arc<dyn CatalogSource> = provider;

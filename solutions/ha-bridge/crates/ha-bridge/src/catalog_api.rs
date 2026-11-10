@@ -79,6 +79,15 @@ struct EntryView {
     /// Live station volume; omitted for every other entry.
     #[serde(skip_serializing_if = "Option::is_none")]
     volume: Option<VolumeView>,
+    /// Server-side visibility condition; omitted when unconditional.
+    #[serde(rename = "visibleWhen", skip_serializing_if = "Option::is_none")]
+    visible_when: Option<VisibleWhenView>,
+}
+
+#[derive(Debug, Serialize)]
+struct VisibleWhenView {
+    entry: String,
+    state: String,
 }
 
 /// A station volume entry: the level in percent and whether the device is
@@ -216,6 +225,13 @@ impl EntryView {
             available: entry.available,
             light: entry.light.as_ref().map(LightView::from_light),
             volume: entry.volume.as_ref().map(VolumeView::from_volume),
+            visible_when: entry
+                .visible_when
+                .as_ref()
+                .map(|condition| VisibleWhenView {
+                    entry: condition.entry.clone(),
+                    state: condition.state.clone(),
+                }),
         }
     }
 }

@@ -555,6 +555,13 @@ data class ControlEntryDto(
     val deviceId: String = "",
     val device: String = "",
     val role: String = "",
+    val visibleWhen: VisibleWhenDto? = null,
+)
+
+@Serializable
+data class VisibleWhenDto(
+    val entry: String = "",
+    val state: String = "",
 )
 
 @Serializable

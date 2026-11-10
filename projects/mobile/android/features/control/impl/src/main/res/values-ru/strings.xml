@@ -26,6 +26,7 @@
     <string name="control_state_unavailable">Недоступно</string>
     <string name="control_state_on_brightness">Вкл · %1$d%%</string>
     <string name="control_state_detail">%1$s · %2$s</string>
+    <string name="control_tile_description">%1$s, %2$s</string>
     <string name="control_command_sent">Команда отправлена</string>
     <string name="control_device_settings">Настройки (%1$d)</string>
     <string name="control_profile_personal">Личный</string>
@@ -42,8 +43,7 @@
     <string name="control_volume_title">Громкость</string>
     <string name="control_volume_main">Громкость</string>
     <string name="control_volume_announce">Громкость объявлений</string>
-    <string name="control_volume_level">Громкость %1$d%%</string>
-    <string name="control_volume_announce_level">Объявления %1$d%%</string>
+    <string name="control_volume_percent">%1$d%%</string>
     <string name="control_volume_muted">Звук выкл.</string>
     <string name="control_volume_mute">Выключить звук</string>
     <string name="control_volume_unmute">Включить звук</string>
@@ -72,6 +72,8 @@
     <string name="control_wake_missed">Не услышал</string>
     <string name="control_wake_false_alarm_sent">Отмечено: ложное срабатывание</string>
     <string name="control_wake_missed_sent">Отмечено: не услышал(а)</string>
+    <string name="control_quick_fab">Быстрые действия</string>
+    <string name="control_quick_fab_close">Закрыть быстрые действия</string>
     <string name="control_pin">Закрепить на главном</string>
     <string name="control_unpin">Открепить</string>
     <string name="control_favorite_pinned">Закреплено: %1$s</string>

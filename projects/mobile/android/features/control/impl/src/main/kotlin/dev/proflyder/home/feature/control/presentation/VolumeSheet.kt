@@ -57,10 +57,7 @@ internal class VolumeSheet(
         views.volumeAnnounceGroup.setVisible(announceEntry != null)
         announceEntry ?: return
         views.volumeAnnounceSlider.value = announceLevel.coerceIn(0, 100).toFloat()
-        views.volumeAnnounceValue.text = views.root.context.getString(
-            R.string.control_volume_announce_level,
-            announceLevel,
-        )
+        views.volumeAnnounceValue.text = percent(announceLevel)
         views.volumeAnnounceSlider.addOnChangeListener { _, value, _ -> showAnnouncePercent(value) }
         views.volumeAnnounceSlider.onRelease { sendLevel(announceEntry, it) }
     }
@@ -97,15 +94,11 @@ internal class VolumeSheet(
     }
 
     private fun showAnnouncePercent(value: Float) {
-        val shown = value.roundToInt()
-        views.volumeAnnounceValue.text = views.root.context.getString(
-            R.string.control_volume_announce_level,
-            shown,
-        )
+        views.volumeAnnounceValue.text = percent(value.roundToInt())
     }
 
     private fun percent(value: Int): String =
-        views.root.context.getString(R.string.control_volume_level, value)
+        views.root.context.getString(R.string.control_volume_percent, value)
 
     /**
      * Hardware volume keys adjust the station by five percent per press. The

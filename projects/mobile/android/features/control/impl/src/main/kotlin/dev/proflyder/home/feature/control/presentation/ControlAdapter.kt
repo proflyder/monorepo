@@ -1,9 +1,11 @@
 package dev.proflyder.home.feature.control.presentation
 
+import android.content.Context
 import android.view.HapticFeedbackConstants
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.ImageView
 import android.widget.LinearLayout
 import androidx.recyclerview.widget.DiffUtil
 import com.google.android.material.button.MaterialButton
@@ -26,9 +28,11 @@ import dev.proflyder.home.feature.control.QuickTile
 import dev.proflyder.home.feature.control.WakeFeedbackAction
 import dev.proflyder.home.feature.control.WakeFeedbackKind
 import dev.proflyder.home.feature.control.impl.R
+import dev.proflyder.home.feature.control.isCompactTile
 import dev.proflyder.home.feature.control.impl.databinding.ItemControlDeviceBinding
 import dev.proflyder.home.feature.control.impl.databinding.ItemControlDeviceGroupBinding
 import dev.proflyder.home.feature.control.impl.databinding.ItemControlDeviceRowBinding
+import dev.proflyder.home.feature.control.impl.databinding.ItemControlDeviceTileBinding
 import dev.proflyder.home.feature.control.impl.databinding.ItemControlFilterBinding
 import dev.proflyder.home.feature.control.impl.databinding.ItemControlFiltersBinding
 import dev.proflyder.home.feature.control.impl.databinding.ItemControlHeaderBinding
@@ -188,6 +192,22 @@ internal object ControlDiff : DiffUtil.ItemCallback<ControlItem>() {
         if (before.volume != after.volume) add(ControlChange.STATE)
         if (before.detailKey != after.detailKey) add(ControlChange.STATE)
     }
+}
+
+/**
+ * A live volume row is an active control, so it uses the same tint as a switch
+ * that is on. A muted or unavailable row stays in the inactive colour.
+ */
+internal fun bindVolumeIcon(icon: ImageView, root: View, entry: ControlEntry) {
+    val active = entry.available && entry.volume?.muted != true
+    icon.isActivated = active
+    icon.setColorFilter(
+        MaterialColors.getColor(
+            root,
+            if (active) com.google.android.material.R.attr.colorOnPrimaryContainer
+            else com.google.android.material.R.attr.colorOnSurfaceVariant,
+        ),
+    )
 }
 
 /** Artwork of one live row, shared with no new image per entity. */
@@ -693,13 +713,7 @@ internal class ControlAdapter(
             views.controlDeviceState.setVisible(true)
             views.controlDeviceState.text =
                 row.entry.localizedVolumeText(views.root.context, R.string.control_state_unavailable)
-            views.controlDeviceIcon.isActivated = false
-            views.controlDeviceIcon.setColorFilter(
-                MaterialColors.getColor(
-                    views.root,
-                    com.google.android.material.R.attr.colorOnSurfaceVariant,
-                ),
-            )
+            bindVolumeIcon(views.controlDeviceIcon, views.root, row.entry)
             views.controlDeviceProgress.setVisible(row.busy)
             views.root.alpha = if (row.entry.available) 1f else DISABLED_ALPHA
             val enabled = row.entry.available && !row.busy
@@ -806,21 +820,34 @@ internal class ControlAdapter(
         private val views: ItemControlDeviceGroupBinding,
         callback: ControlAdapterCallback,
     ) : ControlHolder(views, callback) {
+        private val tileColumns = views.root.resources.getInteger(R.integer.control_tile_columns)
+
         override fun bind(item: ControlItem) {
             val group = item as ControlItem.DeviceGroup
             // A card with one primary has no header: that row itself is the
             // device title (see ControlItems.DeviceGroup).
             views.controlGroupTitle.text = group.title
             views.controlGroupTitle.setVisible(group.primary.size != 1)
-            syncRows(views.controlGroupPrimary, group.primary, group.statesKnown)
+            val controlCount = group.primary.size + group.settings.size + group.actions.size
+            val (tiles, rowItems) = group.primary.partition {
+                it.entry.isCompactTile(controlCount, isMain = it.entry.id == group.mainId)
+            }
+            val rows = rowItems.sortedBy { if (it.entry.id == group.mainId) 0 else 1 }
+            views.controlGroupPrimary.setVisible(rows.isNotEmpty())
+            syncRows(views.controlGroupPrimary, rows, group.statesKnown)
+            syncTiles(views.controlGroupTiles, tiles, group.statesKnown)
             syncRows(views.controlGroupActions, group.actions, group.statesKnown)
             views.controlGroupActions.setVisible(group.actions.isNotEmpty())
             views.controlGroupSettings.text =
                 views.root.context.getString(R.string.control_device_settings, group.settings.size)
             views.controlGroupSettings.setVisible(group.settings.isNotEmpty())
             val showSettings = group.expanded && group.settings.isNotEmpty()
-            syncRows(views.controlGroupSettingsList, group.settings.takeIf { showSettings }.orEmpty(), group.statesKnown)
-            views.controlGroupSettingsList.setVisible(showSettings)
+            val shownSettings = group.settings.takeIf { showSettings }.orEmpty()
+            val (settingTiles, settingRows) = shownSettings.partition { it.entry.isCompactTile(controlCount) }
+            syncTiles(views.controlGroupSettingsTiles, settingTiles, group.statesKnown)
+            views.controlGroupSettingsTiles.setVisible(showSettings && settingTiles.isNotEmpty())
+            syncRows(views.controlGroupSettingsList, settingRows, group.statesKnown)
+            views.controlGroupSettingsList.setVisible(showSettings && settingRows.isNotEmpty())
             views.controlGroupSettings.setOnClickListener { callback.onToggleSettings(group.deviceId) }
         }
 
@@ -840,6 +867,114 @@ internal class ControlAdapter(
                 container.removeViewAt(container.childCount - 1)
             }
             rows.forEachIndexed { index, row -> bindRow(rowViews(container, index), row, statesKnown) }
+        }
+
+        /**
+         * Compact binary toggles of the card: up to the configured number of
+         * round tiles per row, then the next row. Slots are reused so a tapped
+         * tile keeps its view (and ripple) across the optimistic state update;
+         * empty slots stay invisible to keep every tile the same width.
+         */
+        internal fun syncTiles(
+            container: LinearLayout,
+            tiles: List<ControlItem.DeviceGroup.Row>,
+            statesKnown: Boolean,
+        ) {
+            container.setVisible(tiles.isNotEmpty())
+            val rowCount = (tiles.size + tileColumns - 1) / tileColumns
+            while (container.childCount < rowCount) addTileRow(container)
+            for (rowIndex in 0 until container.childCount) {
+                val row = container.getChildAt(rowIndex) as LinearLayout
+                row.setVisible(rowIndex < rowCount)
+                bindTileRow(row, rowIndex, tiles, statesKnown)
+            }
+        }
+
+        private fun addTileRow(container: LinearLayout): LinearLayout {
+            val row = LinearLayout(views.root.context).apply {
+                orientation = LinearLayout.HORIZONTAL
+            }
+            container.addView(
+                row,
+                LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                ),
+            )
+            return row
+        }
+
+        private fun bindTileRow(
+            row: LinearLayout,
+            rowIndex: Int,
+            tiles: List<ControlItem.DeviceGroup.Row>,
+            statesKnown: Boolean,
+        ) {
+            for (column in 0 until tileColumns) {
+                val tile = tiles.getOrNull(rowIndex * tileColumns + column)
+                val slot = tileSlot(row, column)
+                slot.root.visibility = if (tile != null) View.VISIBLE else View.INVISIBLE
+                tile ?: continue
+                bindTile(slot, tile, statesKnown)
+            }
+        }
+
+        internal fun tileSlot(row: LinearLayout, column: Int): ItemControlDeviceTileBinding =
+            row.getChildAt(column)?.let(ItemControlDeviceTileBinding::bind)
+                ?: ItemControlDeviceTileBinding.inflate(LayoutInflater.from(row.context), row, false)
+                    .also { row.addView(it.root) }
+
+        /**
+         * A tile is the same switch as a row's toggle: the tap sends the same
+         * optimistic power change, and an unavailable or busy tile ignores it.
+         */
+        internal fun bindTile(
+            tile: ItemControlDeviceTileBinding,
+            row: ControlItem.DeviceGroup.Row,
+            statesKnown: Boolean,
+        ) {
+            val entry = row.entry
+            val on = entry.power == PowerState.ON
+            val enabled = entry.available && !row.busy
+            val context = tile.root.context
+            tile.root.alpha = if (entry.available) 1f else DISABLED_ALPHA
+            tile.root.isEnabled = enabled
+            tile.controlTileRipple.isEnabled = enabled
+            tile.root.contentDescription = context.getString(
+                R.string.control_tile_description,
+                entry.localizedTitle(context),
+                tileState(entry, context),
+            )
+            tile.controlTileIcon.setImageResource(ControlIcons.resolve(entry))
+            tile.controlTileIcon.isActivated = on
+            tile.controlTileIcon.setColorFilter(
+                MaterialColors.getColor(
+                    tile.root,
+                    if (on) com.google.android.material.R.attr.colorOnPrimaryContainer
+                    else com.google.android.material.R.attr.colorOnSurfaceVariant,
+                ),
+            )
+            tile.controlTileProgress.setVisible(row.busy)
+            tile.controlTileLabel.text = entry.localizedTitle(context)
+            val tap = View.OnClickListener { if (enabled) callback.onPowerChanged(entry, !on) }
+            tile.root.setOnClickListener(tap)
+            tile.controlTileRipple.setOnClickListener(tap)
+            val hold = View.OnLongClickListener { longPressTile(entry, row.busy, statesKnown) }
+            tile.root.setOnLongClickListener(hold)
+            tile.controlTileRipple.setOnLongClickListener(hold)
+        }
+
+        /** A light's long press opens its sheet; anything else keeps pinning. */
+        internal fun longPressTile(entry: ControlEntry, busy: Boolean, statesKnown: Boolean): Boolean {
+            callback.onItemLongClick(ControlItem.Device(entry, busy, statesKnown))
+            return true
+        }
+
+        private fun tileState(entry: ControlEntry, context: Context): String = when {
+            !entry.available -> context.getString(R.string.control_state_unavailable)
+            entry.power == PowerState.ON -> context.getString(R.string.control_state_on)
+            entry.power == PowerState.OFF -> context.getString(R.string.control_state_off)
+            else -> context.getString(R.string.control_state_unknown)
         }
 
         internal fun rowViews(container: LinearLayout, index: Int): ItemControlDeviceRowBinding =
@@ -919,13 +1054,7 @@ internal class ControlAdapter(
             rowViews.controlRowState.setVisible(true)
             rowViews.controlRowState.text =
                 entry.localizedVolumeText(rowViews.root.context, R.string.control_state_unavailable)
-            rowViews.controlRowIcon.isActivated = false
-            rowViews.controlRowIcon.setColorFilter(
-                MaterialColors.getColor(
-                    rowViews.root,
-                    com.google.android.material.R.attr.colorOnSurfaceVariant,
-                ),
-            )
+            bindVolumeIcon(rowViews.controlRowIcon, rowViews.root, entry)
             val enabled = entry.available && !busy
             rowViews.root.isEnabled = enabled
             rowViews.root.setOnClickListener {

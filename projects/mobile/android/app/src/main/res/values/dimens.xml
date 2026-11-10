@@ -3,4 +3,9 @@
     <!-- Toolbar popup: inset leaves room for the window shadow. -->
     <dimen name="ui_popup_inset">8dp</dimen>
     <dimen name="ui_popup_elevation">8dp</dimen>
+    <!-- Compact voice-profile chip next to the toolbar title. -->
+    <dimen name="app_profile_chip_height">32dp</dimen>
+    <dimen name="app_profile_chip_padding">10dp</dimen>
+    <dimen name="app_profile_chip_gap">8dp</dimen>
+    <dimen name="app_profile_chip_text">12sp</dimen>
 </resources>

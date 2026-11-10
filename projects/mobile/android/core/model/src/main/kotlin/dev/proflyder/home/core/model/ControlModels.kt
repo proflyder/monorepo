@@ -86,6 +86,17 @@ data class VolumeControls(
     val muted: Boolean = false,
 )
 
+/**
+ * A server-side visibility condition: the entry is shown only while
+ * [entry] (another catalog id) has the given power state ("on"/"off"). It is
+ * additive metadata, not a client rule, so a new conditional control needs no
+ * app change.
+ */
+data class VisibleWhen(
+    val entry: String,
+    val state: String,
+)
+
 data class ControlEntry(
     val id: String,
     val kind: ControlKind,
@@ -123,6 +134,8 @@ data class ControlEntry(
     val device: String = "",
     /** Primary control or a secondary setting of [deviceId]. */
     val role: ControlRole = ControlRole.PRIMARY,
+    /** Show this entry only while another catalog entry has a given state. */
+    val visibleWhen: VisibleWhen? = null,
 ) {
     val isDevice: Boolean get() = kind == ControlKind.LIGHT || kind == ControlKind.SWITCH
 

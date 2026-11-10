@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One quick action: a plain label left of the same FAB component as the root FAB. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:paddingTop="@dimen/control_speed_dial_row_gap"
+    android:paddingBottom="@dimen/control_speed_dial_row_gap"
+    tools:ignore="SelectableText">
+
+    <TextView
+        android:id="@+id/control_dial_label"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginEnd="@dimen/control_speed_dial_item_gap"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:textAppearance="?attr/textAppearanceBodyLarge"
+        android:textColor="@color/control_speed_dial_label" />
+
+    <com.google.android.material.floatingactionbutton.FloatingActionButton
+        android:id="@+id/control_dial_action"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        app:ensureMinTouchTargetSize="true"
+        app:fabSize="normal"
+        tools:ignore="ContentDescription" />
+</LinearLayout>

@@ -7,10 +7,13 @@ import org.junit.runners.Suite
 @Suite.SuiteClasses(
     ControlFilterTest::class,
     ControlItemsTest::class,
+    CompactControlsTest::class,
+    ConditionalVisibilityTest::class,
     CatalogGroupingTest::class,
     HomeHubTest::class,
     LightColorsTest::class,
     SpeakTextTest::class,
+    SpeedDialTest::class,
     WakeFeedbackTest::class,
 )
 class AllControlApiTests

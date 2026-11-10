@@ -17,7 +17,7 @@ use home_config::parse_go_duration;
 use home_secret::Token;
 use thiserror::Error;
 
-use crate::catalog::Rules;
+use crate::catalog::{Rules, ToggleRule, valid_entity};
 use crate::config::{base_url, bool_value, non_empty, token};
 
 /// Default queue carrying control commands.
@@ -36,6 +36,7 @@ pub struct ControlConfig {
     pub scenario_label: String,
     pub profile_label: String,
     pub exclude: Vec<String>,
+    pub toggles: Vec<ToggleRule>,
     pub cache_ttl: Duration,
     pub listen: String,
     pub control_token: Token,
@@ -60,6 +61,7 @@ impl std::fmt::Debug for ControlConfig {
             .field("scenario_label", &self.scenario_label)
             .field("profile_label", &self.profile_label)
             .field("exclude", &self.exclude)
+            .field("toggles", &self.toggles)
             .field("cache_ttl", &self.cache_ttl)
             .field("listen", &self.listen)
             .field("consumer_id", &self.consumer_id)
@@ -152,6 +154,13 @@ impl ControlConfig {
                 "CONTROL_SCENARIO_LABEL/CONTROL_PROFILE_LABEL/CONTROL_EXCLUDE: {error}"
             ))
         })?;
+        let toggles = match non_empty(getenv("CONTROL_TOGGLES")) {
+            Some(raw) => serde_json::from_str::<Vec<ToggleRule>>(&raw).map_err(|error| {
+                ControlConfigError::Invalid(format!("CONTROL_TOGGLES: {error}"))
+            })?,
+            None => Vec::new(),
+        };
+        validate_toggles(&toggles)?;
 
         let listen =
             non_empty(getenv("CONTROL_LISTEN")).unwrap_or_else(|| DEFAULT_LISTEN.to_owned());
@@ -214,6 +223,7 @@ impl ControlConfig {
             scenario_label,
             profile_label,
             exclude,
+            toggles,
             cache_ttl,
             listen,
             control_token,
@@ -239,6 +249,41 @@ impl ControlConfig {
             exclude: self.exclude.clone(),
         }
     }
+
+    /// The configured synthetic binary toggles.
+    #[must_use]
+    pub fn toggles(&self) -> Vec<ToggleRule> {
+        self.toggles.clone()
+    }
+}
+
+fn validate_toggles(toggles: &[ToggleRule]) -> Result<(), ControlConfigError> {
+    for rule in toggles {
+        for entity in [&rule.id, &rule.state, &rule.on, &rule.off] {
+            if !valid_entity(entity) {
+                return Err(ControlConfigError::Invalid(format!(
+                    "CONTROL_TOGGLES: invalid entity {entity:?} in toggle {:?}",
+                    rule.id
+                )));
+            }
+        }
+        if rule.title.trim().is_empty() {
+            return Err(ControlConfigError::Invalid(format!(
+                "CONTROL_TOGGLES: toggle {:?} needs a title",
+                rule.id
+            )));
+        }
+        if let Some(condition) = &rule.visible_when
+            && (!valid_entity(&condition.entry)
+                || !matches!(condition.state.as_str(), "on" | "off"))
+        {
+            return Err(ControlConfigError::Invalid(format!(
+                "CONTROL_TOGGLES: invalid visibleWhen in toggle {:?}",
+                rule.id
+            )));
+        }
+    }
+    Ok(())
 }
 
 fn control_error(error: &crate::config::ConfigError) -> ControlConfigError {
@@ -422,5 +467,31 @@ mod tests {
         assert_eq!(split_host_port("[::]:8099"), Some(("::", "8099")));
         assert_eq!(split_host_port("8099"), None);
         assert_eq!(split_host_port("host:port"), None);
+    }
+
+    #[test]
+    fn toggles_are_parsed_and_validated() {
+        let mut values = base();
+        values.push((
+            "CONTROL_TOGGLES",
+            r#"[{"id":"toggle.komp_lock","title":"Блокировка","state":"binary_sensor.komp_razblokirovan","on":"button.komp_lock","off":"button.komp_unlock","visibleWhen":{"entry":"switch.komp","state":"on"}}]"#,
+        ));
+        let config = ControlConfig::load_from(&env(&values), &no_file).expect("load");
+        assert_eq!(config.toggles().len(), 1);
+        assert_eq!(config.toggles()[0].on, "button.komp_lock");
+        assert_eq!(
+            config.toggles()[0]
+                .visible_when
+                .as_ref()
+                .map(|condition| condition.state.as_str()),
+            Some("on")
+        );
+
+        let mut broken = base();
+        broken.push((
+            "CONTROL_TOGGLES",
+            r#"[{"id":"toggle.komp_lock","title":"Блокировка","state":"binary_sensor.x","on":"button.x","off":"button.y","visibleWhen":{"entry":"switch.komp","state":"maybe"}}]"#,
+        ));
+        assert!(ControlConfig::load_from(&env(&broken), &no_file).is_err());
     }
 }

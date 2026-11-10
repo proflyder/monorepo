@@ -19,5 +19,18 @@
         <item name="android:textColor">?attr/colorOnSurface</item>
     </style>
 
+    <!-- Compact current voice-profile mode in the toolbar title row. -->
+    <style name="Widget.Home.ProfileChip" parent="Widget.Material3.Button.OutlinedButton">
+        <item name="android:minHeight">@dimen/app_profile_chip_height</item>
+        <item name="android:minWidth">0dp</item>
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+        <item name="android:paddingStart">@dimen/app_profile_chip_padding</item>
+        <item name="android:paddingEnd">@dimen/app_profile_chip_padding</item>
+        <item name="android:textSize">@dimen/app_profile_chip_text</item>
+        <item name="android:maxLines">1</item>
+        <item name="shapeAppearance">@style/ShapeAppearance.Material3.Corner.Full</item>
+    </style>
+
     <!-- Time uses the same compact pill switch as the voice profile. -->
 </resources>

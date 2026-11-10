@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One compact round toggle inside a device card; display-only label. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="0dp"
+    android:layout_height="wrap_content"
+    android:layout_weight="1"
+    android:clickable="true"
+    android:focusable="true"
+    android:gravity="center_horizontal"
+    android:orientation="vertical"
+    android:paddingTop="@dimen/control_tile_row_gap"
+    android:paddingBottom="@dimen/control_tile_row_gap"
+    tools:ignore="SelectableText">
+
+    <FrameLayout
+        android:id="@+id/control_tile_ripple"
+        android:layout_width="@dimen/control_tile_icon"
+        android:layout_height="@dimen/control_tile_icon"
+        android:clickable="true"
+        android:focusable="true"
+        android:foreground="?attr/selectableItemBackgroundBorderless">
+
+        <ImageView
+            android:id="@+id/control_tile_icon"
+            android:layout_width="@dimen/control_tile_icon"
+            android:layout_height="@dimen/control_tile_icon"
+            android:background="@drawable/control_bg_icon"
+            android:importantForAccessibility="no"
+            android:padding="@dimen/control_tile_icon_padding" />
+
+        <com.google.android.material.progressindicator.CircularProgressIndicator
+            android:id="@+id/control_tile_progress"
+            android:layout_width="@dimen/control_tile_icon"
+            android:layout_height="@dimen/control_tile_icon"
+            android:indeterminate="true"
+            android:visibility="gone"
+            app:indicatorSize="@dimen/control_tile_progress" />
+    </FrameLayout>
+
+    <TextView
+        android:id="@+id/control_tile_label"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/control_tile_label_gap"
+        android:ellipsize="end"
+        android:gravity="center_horizontal"
+        android:maxLines="@integer/control_tile_label_lines"
+        android:textAppearance="?attr/textAppearanceLabelMedium"
+        android:textColor="?attr/colorOnSurface" />
+</LinearLayout>

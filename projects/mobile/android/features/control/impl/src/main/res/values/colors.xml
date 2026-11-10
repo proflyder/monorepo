@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Dims the Home screen behind the quick-actions speed dial. -->
+    <color name="control_scrim">#99000000</color>
+    <!-- Plain label on the scrim, readable in both themes. -->
+    <color name="control_speed_dial_label">#F2FFFFFF</color>
+</resources>

@@ -2,7 +2,9 @@ package dev.proflyder.home
 
 import android.os.Bundle
 import android.view.Menu
+import android.view.View
 import androidx.activity.OnBackPressedCallback
+import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
@@ -20,9 +22,13 @@ import dev.proflyder.home.core.navigation.FeatureRegistry
 import dev.proflyder.home.core.navigation.FragmentRouter
 import dev.proflyder.home.core.navigation.Navigator
 import dev.proflyder.home.core.navigation.NavigatorHost
+import dev.proflyder.home.core.model.PowerState
 import dev.proflyder.home.core.ui.ViewModelFactoryProvider
 import dev.proflyder.home.databinding.ActivityMainBinding
 import dev.proflyder.home.feature.connection.ConnectionDestination
+import dev.proflyder.home.feature.control.presentation.ControlUiState
+import dev.proflyder.home.feature.control.presentation.ControlViewModel
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
 class MainActivity : AppCompatActivity(), NavigatorHost, ViewModelFactoryProvider {
@@ -32,6 +38,11 @@ class MainActivity : AppCompatActivity(), NavigatorHost, ViewModelFactoryProvide
 
     private val bottomNavigation: BottomNavigationView get() = binding.homeNoticeAnchor
     private val toolbar: MaterialToolbar get() = binding.toolbar
+
+    /** The same activity-scoped ViewModel the Home fragment uses. */
+    private val controlViewModel: ControlViewModel by viewModels {
+        viewModelFactory(ControlViewModel::class.java)
+    }
 
     private val itemIdByFeature = mutableMapOf<String, Int>()
     private val featureByItemId = mutableMapOf<Int, String>()
@@ -69,29 +80,30 @@ class MainActivity : AppCompatActivity(), NavigatorHost, ViewModelFactoryProvide
         )
 
         lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                launch {
-                    router.currentTabId.collect { featureId ->
-                        val itemId = itemIdByFeature[featureId] ?: return@collect
-                        if (bottomNavigation.selectedItemId != itemId) {
-                            syncingSelection = true
-                            bottomNavigation.selectedItemId = itemId
-                            syncingSelection = false
-                        }
-                    }
-                }
-                launch {
-                    router.currentTitleRes.collect { toolbar.setTitle(it) }
-                }
-                launch {
-                    router.canGoBack.collect { canGoBack ->
-                        if (canGoBack) {
-                            toolbar.setNavigationIcon(R.drawable.app_ic_back)
-                            toolbar.setNavigationContentDescription(R.string.app_back)
-                        } else {
-                            toolbar.navigationIcon = null
-                        }
-                    }
+            repeatOnLifecycle(Lifecycle.State.STARTED) { observeAppState() }
+        }
+    }
+
+    private suspend fun CoroutineScope.observeAppState() {
+        launch {
+            router.currentTabId.collect(::syncBottomSelection)
+        }
+        launch {
+            router.currentTitleRes.collect { binding.toolbarTitle.setText(it) }
+        }
+        launch {
+            controlViewModel.state.collect { renderProfileChip(it, router.currentTabId.value) }
+        }
+        launch {
+            router.currentTabId.collect { renderProfileChip(controlViewModel.state.value, it) }
+        }
+        launch {
+            router.canGoBack.collect { canGoBack ->
+                if (canGoBack) {
+                    toolbar.setNavigationIcon(R.drawable.app_ic_back)
+                    toolbar.setNavigationContentDescription(R.string.app_back)
+                } else {
+                    toolbar.navigationIcon = null
                 }
             }
         }
@@ -115,6 +127,14 @@ class MainActivity : AppCompatActivity(), NavigatorHost, ViewModelFactoryProvide
     override fun viewModelFactory(viewModelClass: Class<out ViewModel>): ViewModelProvider.Factory =
         (application as HomeApplication).graph.viewModelFactories.viewModelFactory(viewModelClass)
 
+    private fun syncBottomSelection(featureId: String) {
+        val itemId = itemIdByFeature[featureId] ?: return
+        if (bottomNavigation.selectedItemId == itemId) return
+        syncingSelection = true
+        bottomNavigation.selectedItemId = itemId
+        syncingSelection = false
+    }
+
     private fun setupBottomNavigation() {
         val menu: Menu = bottomNavigation.menu
         menu.clear()
@@ -137,6 +157,7 @@ class MainActivity : AppCompatActivity(), NavigatorHost, ViewModelFactoryProvide
     }
 
     private fun setupToolbar() {
+        toolbar.title = null
         toolbar.inflateMenu(R.menu.menu_main)
         toolbar.setNavigationOnClickListener { onBackPressedDispatcher.onBackPressed() }
         toolbar.setOnMenuItemClickListener { item ->
@@ -156,6 +177,23 @@ class MainActivity : AppCompatActivity(), NavigatorHost, ViewModelFactoryProvide
         }
     }
 
+    /**
+     * The profile is a mode, not a list card: a compact chip next to the Home
+     * title shows the current side and toggles it. It exists only on the Home
+     * tab and only while the catalog exposes the profile switch.
+     */
+    private fun renderProfileChip(state: ControlUiState, tabId: String) {
+        val profile = state.entries.firstOrNull { it.isProfile }
+        val chip = binding.profileChip
+        chip.visibility = if (tabId == CONTROL_TAB && profile != null) View.VISIBLE else View.GONE
+        profile ?: return
+        val work = profile.power == PowerState.ON
+        chip.setText(if (work) R.string.app_profile_work else R.string.app_profile_personal)
+        chip.contentDescription = getString(R.string.app_profile_chip, chip.text)
+        chip.isEnabled = profile.available
+        chip.setOnClickListener { controlViewModel.setProfile(profile, !work) }
+    }
+
     private fun applySystemBarInsets() {
         val appBar = binding.appbar
         ViewCompat.setOnApplyWindowInsetsListener(appBar) { view, insets ->
@@ -173,5 +211,9 @@ class MainActivity : AppCompatActivity(), NavigatorHost, ViewModelFactoryProvide
             view.updatePadding(bottom = insets.getInsets(WindowInsetsCompat.Type.ime()).bottom)
             insets
         }
+    }
+
+    private companion object {
+        const val CONTROL_TAB = "control"
     }
 }

@@ -1,8 +1,10 @@
 package dev.proflyder.home.feature.control.presentation
 
 import android.os.Bundle
+import androidx.activity.OnBackPressedCallback
 import androidx.fragment.app.activityViewModels
 import androidx.recyclerview.widget.GridLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import dev.proflyder.home.core.model.ControlAction
 import dev.proflyder.home.core.model.ControlEntry
@@ -25,6 +27,8 @@ import dev.proflyder.home.feature.control.ControlTexts
 import dev.proflyder.home.feature.control.HubCard
 import dev.proflyder.home.feature.control.QuickTile
 import dev.proflyder.home.feature.control.QuickTiles
+import dev.proflyder.home.feature.control.SpeedDialItem
+import dev.proflyder.home.feature.control.SpeedDialItems
 import dev.proflyder.home.feature.control.WakeFeedback
 import dev.proflyder.home.feature.control.WakeFeedbackAction
 import dev.proflyder.home.feature.control.WakeFeedbackKind
@@ -41,6 +45,8 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
 
     private lateinit var adapter: ControlAdapter
     private lateinit var states: ListStateViews
+    private lateinit var speedDial: SpeedDialOverlay
+    private lateinit var dialBack: OnBackPressedCallback
     private var lightSheet: LightSheet? = null
     private var volumeSheet: VolumeSheet? = null
     private var speakDialog: SpeakDialog? = null
@@ -48,8 +54,8 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
     /**
      * The live rows arrive after the first content frame. Their item stays in
      * the list from the start (with a stable key), so that arrival inserts no
-     * row above Quick actions; this flag additionally pulls the list to the
-     * top when the user has not scrolled yet.
+     * row above the device sections; this flag additionally pulls the list to
+     * the top when the user has not scrolled yet.
      */
     private var hubWasEmpty = true
 
@@ -80,7 +86,14 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
         }
 
         override fun onItemLongClick(item: ControlItem) {
-            if (item is ControlItem.Device) showPinDialog(item.entry)
+            if (item !is ControlItem.Device) return
+            // A binary tile with extra light controls opens its sheet on a
+            // long press; everything else keeps the pin/unpin dialog.
+            if (item.entry.light != null && item.entry.available) {
+                openLightSheet(item.entry)
+            } else {
+                showPinDialog(item.entry)
+            }
         }
 
         override fun onPowerChanged(entry: ControlEntry, on: Boolean) = viewModel.setPower(entry, on)
@@ -166,6 +179,31 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
             }
         }
         binding.controlList.adapter = adapter
+        binding.controlList.addOnScrollListener(object : RecyclerView.OnScrollListener() {
+            override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
+                if (speedDial.isOpen || dy == 0) return
+                when {
+                    dy > 0 -> binding.controlQuickFab.hide()
+                    else -> binding.controlQuickFab.show()
+                }
+            }
+        })
+
+        speedDial = SpeedDialOverlay(
+            root = binding.controlRoot,
+            overlay = binding.controlQuickOverlay,
+            scrim = binding.controlQuickScrim,
+            scroll = binding.controlQuickScroll,
+            column = binding.controlQuickItems,
+            fab = binding.controlQuickFab,
+            onClick = { item -> runSpeedDialItem(item) },
+            onLongClick = { item -> pinSpeedDialItem(item) },
+            onOpenChanged = { open -> dialBack.isEnabled = open },
+        )
+        dialBack = object : OnBackPressedCallback(false) {
+            override fun handleOnBackPressed() = speedDial.close()
+        }
+        requireActivity().onBackPressedDispatcher.addCallback(viewLifecycleOwner, dialBack)
 
         states = ListStateViews(
             progress = binding.controlProgress,
@@ -218,7 +256,51 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
             .also { it.show() }
     }
 
+    /** A dial device flips on/off; the other items run their existing actions. */
+    private fun runSpeedDialItem(item: SpeedDialItem) {
+        when (item) {
+            is SpeedDialItem.Tile -> runQuickTileFromDial(item.tile)
+            is SpeedDialItem.Wake -> viewModel.markWake(item.action)
+        }
+    }
+
+    private fun runQuickTileFromDial(tile: QuickTile) {
+        when (tile) {
+            is QuickTile.Device -> viewModel.setPower(tile.entry, !tile.entry.isOn())
+            is QuickTile.Speak -> openSpeakDialog(tile.entry)
+            is QuickTile.ScenarioTile -> viewModel.runScenarioNow(tile.scenario)
+            QuickTile.Call -> viewModel.callStation()
+        }
+    }
+
+    /** Long press keeps the old quick-tile pin/unpin path for all favourites. */
+    private fun pinSpeedDialItem(item: SpeedDialItem) {
+        when (item) {
+            is SpeedDialItem.Tile -> pinQuickTile(item.tile)
+            is SpeedDialItem.Wake -> Unit
+        }
+    }
+
+    private fun pinQuickTile(tile: QuickTile) {
+        when (tile) {
+            is QuickTile.Device -> viewModel.toggleFavoriteRef(
+                FavoriteRef(FavoriteKind.DEVICE, tile.entry.id),
+                tile.entry.localizedDisplayName(requireContext()),
+            )
+            is QuickTile.Speak -> viewModel.toggleFavoriteRef(
+                FavoriteRef(FavoriteKind.ACTION, tile.entry.id),
+                tile.entry.localizedDisplayName(requireContext()),
+            )
+            is QuickTile.ScenarioTile -> viewModel.toggleFavoriteRef(
+                FavoriteRef(FavoriteKind.SCENARIO, tile.scenario.id),
+                tile.scenario.label,
+            )
+            QuickTile.Call -> Unit
+        }
+    }
+
     override fun onBindingDestroyed() {
+        if (::speedDial.isInitialized) speedDial.reset()
         lightSheet?.dismiss()
         lightSheet = null
         volumeSheet?.dismiss()
@@ -257,11 +339,11 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
                     pendingEntries = state.pending,
                     pendingScenarios = state.pendingScenarios,
                 )
-                val leading = buildList<ControlItem> {
-                    add(ControlItem.Hub(state.hubCards, state.hubRemaining, state.nowUnix))
-                    add(ControlItem.QuickActions(tiles, hint = tiles.isEmpty()))
-                }
                 val wake = WakeFeedback.actions(state.entries, state.pending)
+                speedDial.render(SpeedDialItems.build(tiles, wake))
+                val leading = listOf(
+                    ControlItem.Hub(state.hubCards, state.hubRemaining, state.nowUnix),
+                )
                 val stickToTop = hubWasEmpty &&
                     state.hubCards.isNotEmpty() &&
                     !binding.controlList.canScrollVertically(-1)
@@ -275,7 +357,7 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
                     expandedDevices = state.expandedDevices,
                     leading = leading,
                     collapsedRooms = state.collapsedRooms,
-                    wakeFeedback = wake,
+                    voiceCard = false,
                 )
                 adapter.submitList(items) { if (stickToTop) binding.controlList.scrollToPosition(0) }
             }

@@ -12,4 +12,7 @@
     <string name="app_time_timers">Timers</string>
     <string name="app_time_reminders">Reminders</string>
     <string name="app_call">Call</string>
+    <string name="app_profile_personal">Personal</string>
+    <string name="app_profile_work">Work</string>
+    <string name="app_profile_chip">Voice profile: %1$s</string>
 </resources>
