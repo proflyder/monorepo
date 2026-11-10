@@ -829,6 +829,9 @@ class HermesApp(unittest.TestCase):
                     / "smoke-hook.yaml").read_text()
         self.assertIn("helm.sh/hook: post-upgrade", template)
         self.assertIn("hermes assist-smoke", template)
+        # The HA token Secret is root-owned 0440; without fsGroup the
+        # non-root smoke user cannot read it (EACCES, failed upgrade).
+        self.assertIn("fsGroup: 65534", template)
         # Disabled by default: the CI/admin `helm upgrade` path is unchanged.
         self.assertIn("default dict", template)
         smoke = self.release["spec"]["values"]["smoke"]
