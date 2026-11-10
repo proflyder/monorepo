@@ -38,6 +38,8 @@ spec:
         runAsNonRoot: true
         runAsUser: 65534
         runAsGroup: 65534
+        # Secret files are root-owned; fsGroup makes the 0440 token readable.
+        fsGroup: 65534
         seccompProfile:
           type: RuntimeDefault
       containers:
