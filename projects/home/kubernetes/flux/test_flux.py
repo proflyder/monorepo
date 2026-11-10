@@ -170,7 +170,7 @@ class Cluster(unittest.TestCase):
             # Applications consume the machine pins branch; their manifests
             # still come from `develop` (GitRepository/flux-system).
             "home-app-pins", "app-wakegrant",
-            # FLUX-APPS-PLAN 6.2-6.6: prepared, suspended until cutover.
+            # FLUX-APPS-PLAN 6.2-6.6: application units applied by Flux.
             "app-intercom", "app-currency-bot", "app-mcp-gateway",
             "app-ha-executors", "app-hermes",
         })
@@ -222,7 +222,7 @@ class Cluster(unittest.TestCase):
             "namespace": "home-assistant",
         }])
 
-    def test_prepared_apps_are_suspended_and_wait(self):
+    def test_app_units_are_applied_by_flux_and_wait(self):
         expected = {
             "app-intercom": "./projects/home/kubernetes/intercom/manifests",
             "app-currency-bot": "./projects/home/kubernetes/currency-bot/manifests",
@@ -234,9 +234,9 @@ class Cluster(unittest.TestCase):
             with self.subTest(app=name):
                 spec = self.kustomizations[name]["spec"]
                 self.assertEqual(spec["path"], path)
-                # Prepared, not yet cut over: Flux must not touch the live
-                # workload until the owner removes `suspend`.
-                self.assertTrue(spec["suspend"])
+                # Cut over (FLUX-APPS-PLAN 6.2-6.6): Flux owns the live
+                # workload; a `suspend: true` here would silently freeze it.
+                self.assertFalse(spec.get("suspend", False))
                 self.assertTrue(spec["wait"])
                 self.assertEqual(spec["dependsOn"], [
                     {"name": "platform"}, {"name": "home-app-pins"},
@@ -820,7 +820,9 @@ class HermesApp(unittest.TestCase):
         remediation = self.release["spec"]["upgrade"]["remediation"]
         self.assertEqual(remediation["strategy"], "rollback")
         self.assertTrue(remediation["remediateLastFailure"])
-        self.assertTrue(self.release["spec"]["wait"])
+        # HelmRelease v2 has no `wait` field; only Kustomization does. A stray
+        # one fails the CRD dry-run and blocks the whole app Kustomization.
+        self.assertNotIn("wait", self.release["spec"])
 
     def test_smoke_hook_is_a_post_upgrade_job(self):
         template = (ROOT / "projects/home-assistant/deploy/chart/templates"

@@ -309,6 +309,30 @@ mise run kubectl -- -n cert-manager get challenge,order
 (`secret/k8s/cert-manager/cloudflare-api-token`) и материализуется ESO.
 Cloudflare DNS-записи — ручной шаг (`cloudflare_dns.py`).
 
+```bash
+# Приложения: Flux катит их из develop, CI только пинует digest'ы
+# в deploy/home-apps (job `pins`; deploy-home job `deploy` их не трогает).
+mise run kubectl -- -n flux-system get kustomizations | grep app-
+mise run kubectl -- -n flux-system get configmap home-app-images -o yaml
+mise run kubectl -- -n flux-system annotate kustomization/app-ha-executors \
+  reconcile.fluxcd.io/requestedAt="$(date +%s)" --overwrite
+mise run kubectl -- -n home-assistant get deploy,pod,pvc
+mise run kubectl -- -n currency-bot get deploy,pod,pvc
+mise run kubectl -- -n flux-system get helmreleases
+
+# Откат приложения — не kubectl rollout undo: заморозить Kustomization и
+# вернуть предыдущий pins-коммит в deploy/home-apps, затем resume.
+mise run kubectl -- -n flux-system suspend kustomization/app-wakegrant
+```
+
+`app-ha-executors` — один Kustomization на scheduler, `ha-bridge`,
+`ha-control` и `ha-scenario`; режимы и реплики зафиксированы в
+`projects/home/kubernetes/scheduler/manifests/kustomization.yaml`, учения
+переключают их через `flux suspend` + `deploy.sh`, не через live-правку.
+`app-hermes` — `HelmRelease/runtime` с post-upgrade smoke и
+`remediation.strategy: rollback`; ручной аварийный путь —
+`projects/home-assistant/deploy/rollout.sh`.
+
 ## OpenBao
 
 UI/API — `https://vault.<home-domain>/` (LAN/VPN), файлы —

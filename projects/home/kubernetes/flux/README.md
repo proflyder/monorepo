@@ -20,16 +20,17 @@ Reconciled by Flux today:
 | `nexus` / `nexus-provision` | `nexus` | artifact cache and REST provisioning |
 | `home-app-pins` | `flux-system` | `home-app-images` ConfigMap from the machine branch `deploy/home-apps` |
 | `app-wakegrant` | `home-assistant` | pilot application, applied by Flux since the 6.1 cutover |
-| `app-intercom` | `home-assistant` | prepared in 6.2, **suspended** until the call/signaling cover check |
-| `app-currency-bot` | `currency-bot` | prepared in 6.3, **suspended** until the webhook/readiness cover check |
-| `app-mcp-gateway` | `home-assistant` | prepared in 6.4, **suspended** until the catalog/RBAC cover check |
-| `app-ha-executors` | `home-assistant` | prepared in 6.5 (scheduler + ha-bridge + ha-control + ha-scenario), **suspended** until the windowed cutover |
-| `app-hermes` | `home-assistant` / `flux-system` | prepared in 6.6 (`HelmRelease/runtime`), **suspended** until the voice smoke/rollback drill |
+| `app-intercom` | `home-assistant` | signaling service, Flux-owned since the 6.2 cutover |
+| `app-currency-bot` | `currency-bot` | bot and Cloudflare Tunnel, Flux-owned since the 6.3 cutover |
+| `app-mcp-gateway` | `home-assistant` | gateway and catalog, Flux-owned since the 6.4 cutover |
+| `app-ha-executors` | `home-assistant` | scheduler + ha-bridge + ha-control + ha-scenario, Flux-owned since the 6.5 cutover |
+| `app-hermes` | `home-assistant` / `flux-system` | `HelmRelease/runtime`, Flux-owned since the 6.6 cutover |
 
-"Prepared" means the Kustomization, manifests and CI pins path are merged and
-the unit has `deploy.runtime: "flux"` in `units.mjs`; the live workload keeps
-running unchanged until the owner removes `suspend`. `deploy-home` no longer
-applies those units in either state.
+All six application units carry `deploy.runtime: "flux"` in `units.mjs`:
+`deploy-home` only commits their verified digests to `deploy/home-apps`, and
+Flux applies the workloads from `develop`. `suspend` must stay
+absent/false; a manual `flux suspend` is the rollback/drill lever, not a
+supported steady state.
 
 Still manual, on purpose:
 
@@ -40,13 +41,13 @@ Still manual, on purpose:
 - **Cloudflare DNS records**: `ha`, `grafana`, `alarms`, `control`, `currency`,
   `intercom`, `passwords`, `vault`, `nexus` are created with
   `cloudflare_dns.py` (or the `nexus` procedure).
-- **Application services** are prepared for Flux: `intercom`,
+- **Application services** are Flux-owned: `wakegrant`, `intercom`,
   `currency-bot`, `mcp-gateway`, the HA executors and Hermes have
-  `Kustomization`s in `apps.yaml` (suspended until the owner's cutover) and
-  `deploy.runtime: "flux"`, so `deploy-home` only writes their digests to the
-  pins branch. Their `ExternalSecrets` are owned by their Flux manifest sets;
+  `Kustomization`s in `apps.yaml` and `deploy.runtime: "flux"`, so
+  `deploy-home` only writes their digests to the pins branch. Their
+  `ExternalSecrets` are owned by their Flux manifest sets;
   `projects/home/kubernetes/external-secrets/deploy.sh` remains an emergency
-  admin tool. `wakegrant` is the already-enabled pilot (see below).
+  admin tool.
 
 ## Components
 
@@ -165,7 +166,7 @@ Keys are written by the `pins` job (`platform/ci/pins.mjs`) for every unit
 with `deploy.runtime: "flux"`; `cloudflared` is not CI-built and stays a
 reviewed `versions.sh` literal. `BUILD_ID` is the `proflyder.dev/build`
 annotation on the non-Hermes workloads; every other key is a digest-pinned
-image. A key that a suspended unit does not consume yet is harmless.
+image. Every key is consumed by exactly one app Kustomization.
 
 Current live digests (read-only, safe to copy into the initial pins commit):
 
@@ -196,14 +197,14 @@ verifies provenance and commits only `BUILD_ID`, `WAKEGRANT_IMAGE` and the
 `platform/ci/pins.mjs`. Pushes race with other units, so the writer refetches,
 reapplies the same keys and retries; `develop` is never written.
 
-The prepared app units (6.2–6.6) already have `deploy.runtime: "flux"` and
-their Kustomizations in `apps.yaml` with `suspend: true`. Cutover per unit is
-one field plus the checks in `docs/FLUX-APPS-PLAN.md`: remove `suspend`, run
-`kubectl diff` against the rendered set, reconcile, exercise the unit's smoke
-(intercom call, `/readyz`, catalog check, `GetStatus`, Hermes voice smoke) and
-watch it. Nothing else changes in CI: the `pins` job already writes its keys.
+The other app units (6.2–6.6) are cut over the same way: `deploy.runtime:
+"flux"`, a Kustomization in `apps.yaml` with `suspend: false`, and images
+substituted from the pins ConfigMap. `deploy-home`'s `pins` job writes their
+keys and has no VPN, OpenBao or kubeconfig. The remaining decommission work
+(`ci-deploy`, VPN certificate, OpenBao `secret/ci/deploy-home`) is tracked in
+`docs/PENDING.md`.
 
-Manifest paths for the prepared units:
+Manifest paths for the app units:
 
 | Kustomization | Path | Notes |
 |---|---|---|
