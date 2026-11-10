@@ -639,6 +639,37 @@ async fn states_go_to_subscribers_and_zigbee_entities_need_modes() {
 }
 
 #[tokio::test]
+async fn an_unchanged_switch_state_is_published_every_time() {
+    local()
+        .run_until(async {
+            let mut ts = TestServer::start(selftest_config(None));
+            let h = ts.api.clone();
+            let mut rx = ts.take_events();
+            let mut p = ts.connect();
+            p.hello("HA").await;
+            event(&mut rx).await;
+            p.send(msg::SUBSCRIBE_STATES_REQ, &[]).await;
+            let _ = p.sync().await;
+            // HA asked for "on" under the hardware mute: the controller publishes the real
+            // "off" after every command, so the server must not deduplicate identical states.
+            h.publish_switch(SwitchId::Microphones, false);
+            h.publish_switch(SwitchId::Microphones, false);
+            let got = p.sync().await;
+            let off = got
+                .iter()
+                .filter(|(t, m)| {
+                    *t == msg::SWITCH_STATE
+                        && state_key(m) == Some(key::SW_MICROPHONES.get())
+                        // `state = false` is encoded as an absent field, as in ESPHome.
+                        && field(m, 2).is_none()
+                })
+                .count();
+            assert_eq!(off, 2, "{got:?}");
+        })
+        .await;
+}
+
+#[tokio::test]
 async fn mini_has_no_clock_lux_mute_case_or_button_entities() {
     local()
         .run_until(async {
