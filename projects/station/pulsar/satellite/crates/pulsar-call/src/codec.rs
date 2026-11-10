@@ -19,6 +19,11 @@ pub trait Codec: Send {
     fn decode_fec(&mut self, packet: &[u8]) -> Option<Vec<i16>>;
     /// PLC: кадр на место потерянного.
     fn conceal(&mut self) -> Vec<i16>;
+    /// Длительность пакета в сэмплах 48 кГц; `None` — пакет не разбирается.
+    ///
+    /// Нужна RTP-таймлайну до декодирования: кадр в буфере лежит сырым, а номер
+    /// воспроизведения считается по времени пакета.
+    fn packet_samples(&self, packet: &[u8]) -> Option<usize>;
 }
 
 /// Opus 48 кГц моно/стерео поверх libopus прошивки.
@@ -53,6 +58,10 @@ impl Codec for OpusCodec {
 
     fn conceal(&mut self) -> Vec<i16> {
         self.decoder.conceal()
+    }
+
+    fn packet_samples(&self, packet: &[u8]) -> Option<usize> {
+        ffi::packet_samples(packet)
     }
 }
 
