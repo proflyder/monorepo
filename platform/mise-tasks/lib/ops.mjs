@@ -4,10 +4,10 @@
  * `rollback`.
  *
  * The CI unit map (`platform/ci/units.mjs`) is the single source of truth: a
- * unit is deployable when deploy-home owns images/workloads for it, and its
- * documented rollback procedure lives in the unit's `rollback` block. This
- * module only turns that data into `gh workflow run` dispatches, status reads
- * and rollback commands. It never guesses from a directory name.
+ * unit is deployable when it owns images/workloads, and its documented rollback
+ * procedure lives in the unit's `rollback` block. This module only turns that
+ * data into `gh workflow run` dispatches, status reads and rollback commands.
+ * It never guesses from a directory name.
  *
  * Nothing here talks to the cluster by default: a dispatch is a `gh` call and
  * `deploy:status` is read-only `gh run list`; `--live` adds read-only
@@ -37,7 +37,6 @@ export const ROOT = path.resolve(HERE, "../../..");
 
 export const WORKFLOW = "deploy-home.yml";
 export const REF = "develop";
-export const MODES = ["preserve", "execute", "shadow", "control-execute", "control-catalog"];
 export const KUBECONFIG_PATH = "secrets/kubernetes-research/kubeconfig";
 
 export function units() {
@@ -45,8 +44,8 @@ export function units() {
 }
 
 /**
- * What a manual `deploy-home` dispatch can address: every unit deploy-home
- * owns (deploy.images/deploy.workloads), plus the Pulsar station release,
+ * What a manual `deploy-home` dispatch can address: every unit that owns
+ * images (their digests are pinned for Flux), plus the Pulsar station release,
  * which `--dispatch units=pulsar` re-deploys through `deploy-station`.
  *
  * Native publication units without a station release (logon-provider) are
@@ -115,57 +114,40 @@ function flagValue(argv, index, name) {
 export function parseDeploy(argv) {
   const result = {
     units: [],
-    mode: "preserve",
-    simulateHermesFailure: false,
     dryRun: false,
     yes: false,
     watch: false,
   };
-  for (let index = 0; index < argv.length; index += 1) {
-    const arg = argv[index];
+  for (const arg of argv) {
     if (arg === "--dry-run") {
       result.dryRun = true;
     } else if (arg === "--yes" || arg === "-y") {
       result.yes = true;
     } else if (arg === "--watch") {
       result.watch = true;
-    } else if (arg === "--simulate-hermes-failure") {
-      result.simulateHermesFailure = true;
-    } else if (arg === "--mode" || arg.startsWith("--mode=")) {
-      result.mode = flagValue(argv, index, "--mode");
-      if (!arg.includes("=")) {
-        index += 1;
-      }
     } else if (arg.startsWith("-")) {
       throw new Error(`deploy: unknown flag '${arg}'`);
     } else {
       result.units.push(arg);
     }
   }
-  if (!MODES.includes(result.mode)) {
-    throw new Error(`deploy: unknown mode '${result.mode}' (expected ${MODES.join(", ")})`);
-  }
   return result;
 }
 
 /** The `gh workflow run` command for a resolved dispatch. */
 export function deployCommand(plan) {
-  const args = [
-    "workflow",
-    "run",
-    WORKFLOW,
-    "--ref",
-    REF,
-    "-f",
-    `units=${plan.units.map((unit) => unit.id).join(",")}`,
-  ];
-  if (plan.mode !== "preserve") {
-    args.push("-f", `mode=${plan.mode}`);
-  }
-  if (plan.simulateHermesFailure) {
-    args.push("-f", "simulate_hermes_failure=true");
-  }
-  return { command: "gh", args };
+  return {
+    command: "gh",
+    args: [
+      "workflow",
+      "run",
+      WORKFLOW,
+      "--ref",
+      REF,
+      "-f",
+      `units=${plan.units.map((unit) => unit.id).join(",")}`,
+    ],
+  };
 }
 
 function shellQuote(token) {
@@ -179,22 +161,19 @@ export function formatCommand({ command, args }) {
   return [command, ...args].map(shellQuote).join(" ");
 }
 
-/** Human-readable plan: what deploy-home will roll and why. */
+/** Human-readable plan: what deploy-home will pin and why. */
 export function deployPlanLines(plan) {
   const lines = [
     `deploy-home: ${plan.units.length} unit(s) → ref ${REF}`,
   ];
   for (const unit of plan.units) {
     const where = unit.deployImages.length
-      ? `namespace ${unit.deployNamespace}; workloads ${unit.deployWorkloads.join(", ")}`
+      ? `namespace ${unit.deployNamespace}; Flux workloads ${unit.deployWorkloads.join(", ")}`
       : "Pulsar station release (deploy-station)";
     lines.push(`  - ${unit.id}: ${unit.title}`);
     lines.push(`      ${where}`);
   }
-  lines.push(`  mode: ${plan.mode}`);
-  if (plan.simulateHermesFailure) {
-    lines.push("  simulate_hermes_failure: true");
-  }
+  lines.push("  apply path: pins → Flux (`deploy/home-apps`)");
   lines.push("");
   lines.push(`  ${formatCommand(deployCommand(plan))}`);
   return lines;
@@ -266,31 +245,7 @@ export async function runDeploy(argv, options = {}) {
     stderr.write(`${error.message}\n`);
     return 2;
   }
-  if (
-    parsed.simulateHermesFailure &&
-    !selected.some((unit) => unit.id === "hermes")
-  ) {
-    stderr.write("deploy: --simulate-hermes-failure needs the hermes unit\n");
-    return 2;
-  }
-  // deploy-home.yml's Mode guard rejects a non-preserve mode for any unit other
-  // than ha-bridge; fail here with the same rule instead of after the dispatch.
-  if (
-    parsed.mode !== "preserve" &&
-    !(selected.length === 1 && selected[0].id === "ha-bridge")
-  ) {
-    stderr.write(
-      `deploy: mode '${parsed.mode}' is only allowed for the ha-bridge unit ` +
-        "(executor state)\n",
-    );
-    return 2;
-  }
-
-  const plan = {
-    units: selected,
-    mode: parsed.mode,
-    simulateHermesFailure: parsed.simulateHermesFailure,
-  };
+  const plan = { units: selected };
   stdout.write(`${deployPlanLines(plan).join("\n")}\n`);
 
   if (parsed.dryRun) {
@@ -579,7 +534,7 @@ export function statusPlanLines(list, parsed, env = process.env) {
     if (unit.deployImages.length) {
       lines.push(`  namespace: ${unit.deployNamespace}`);
       lines.push(`  workloads: ${unit.deployWorkloads.join(", ")}`);
-      lines.push(`  deploy: ${unit.deployScript}`);
+      lines.push("  applies: Flux (Kustomization reading `deploy/home-apps`)");
       const kubeconfig = kubeconfigFor(ROOT, env);
       if (kubeconfig) {
         lines.push(`  check: ${formatCommand(statusKubectlCommand(unit, kubeconfig))}`);

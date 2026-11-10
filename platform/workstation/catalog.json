@@ -5,10 +5,6 @@
    "purpose": "Android: APK release signing key, passwords, alias and certificate; Firebase App Distribution",
    "consumer": "CI android-app (OIDC) + android-distribute (OIDC)"
   },
-  "ci/deploy-home": {
-   "purpose": "deploy-home: ci-deploy kubeconfig, service env files, runtime values",
-   "consumer": "CI deploy-home (OIDC)"
-  },
   "ci/deploy-station": {
    "purpose": "Pulsar rollout through HA (url, token, firmware entity)",
    "consumer": "CI deploy-station (OIDC)"
@@ -30,7 +26,7 @@
    "consumer": "owner"
   },
   "infra/ci/github-environment": {
-   "purpose": "values of GitHub Environments Home/Station (VPN p12, server, runtime values)",
+   "purpose": "values of the GitHub Environment Station (VPN p12, password)",
    "consumer": "owner (GitHub settings)"
   },
   "infra/cloudflare/currency-bot-tunnel": {
@@ -76,10 +72,6 @@
   "infra/proxmox/terraform": {
    "purpose": "Proxmox API token, Terraform state/vars, install settings",
    "consumer": "owner (Terraform)"
-  },
-  "infra/ssh/ci-deploy": {
-   "purpose": "CI deploy SSH key and known_hosts",
-   "consumer": "owner"
   },
   "infra/ssh/currency-bot-vps": {
    "purpose": "SSH to the currency bot VPS",
@@ -136,10 +128,6 @@
   "infra/vpn/client-ca": {
    "purpose": "ocserv client CA (key, cert, CRL, OpenSSL dir)",
    "consumer": "owner (vpncerts.py)"
-  },
-  "infra/vpn/clients/ci-github": {
-   "purpose": "VPN client certificate for CI deploy-home",
-   "consumer": "owner"
   },
   "infra/vpn/clients/ci-pulsar": {
    "purpose": "VPN client certificate for CI deploy-station",
@@ -398,60 +386,6 @@
    "encoding": "text"
   },
   {
-   "file": "ci/github/K3S_NODE",
-   "path": "infra/ci/github-environment",
-   "field": "home_K3S_NODE",
-   "encoding": "text"
-  },
-  {
-   "file": "ci/github/KUBECONFIG_B64",
-   "path": "ci/deploy-home",
-   "field": "kubeconfig",
-   "encoding": "to_b64"
-  },
-  {
-   "file": "ci/github/README.txt",
-   "path": "infra/ci/github-environment",
-   "field": "home_README.txt",
-   "encoding": "text"
-  },
-  {
-   "file": "ci/github/RUNTIME_VALUES_B64",
-   "path": "infra/ci/github-environment",
-   "field": "home_RUNTIME_VALUES_B64",
-   "encoding": "text"
-  },
-  {
-   "file": "ci/github/SCHEDULER_ENV_B64",
-   "path": "ci/deploy-home",
-   "field": "scheduler_env",
-   "encoding": "to_b64"
-  },
-  {
-   "file": "ci/github/VPN_CERT_P12_B64",
-   "path": "infra/ci/github-environment",
-   "field": "home_VPN_CERT_P12_B64",
-   "encoding": "text"
-  },
-  {
-   "file": "ci/github/VPN_CERT_PASSWORD",
-   "path": "infra/ci/github-environment",
-   "field": "home_VPN_CERT_PASSWORD",
-   "encoding": "text"
-  },
-  {
-   "file": "ci/github/VPN_SERVER",
-   "path": "infra/ci/github-environment",
-   "field": "home_VPN_SERVER",
-   "encoding": "text"
-  },
-  {
-   "file": "ci/github/kubeconfig.yaml",
-   "path": "ci/deploy-home",
-   "field": "kubeconfig",
-   "encoding": "text"
-  },
-  {
    "file": "ci/kubeconfig",
    "path": "infra/kubernetes/admin",
    "field": "ci_kubeconfig",
@@ -470,12 +404,6 @@
    "encoding": "text"
   },
   {
-   "file": "ci/pulsar/VPN_SERVER",
-   "path": "infra/ci/github-environment",
-   "field": "home_VPN_SERVER",
-   "encoding": "text"
-  },
-  {
    "file": "ci/pulsar/entity_id",
    "path": "ci/deploy-station",
    "field": "entity_id",
@@ -491,24 +419,6 @@
    "file": "ci/pulsar/ha_url",
    "path": "ci/deploy-station",
    "field": "ha_url",
-   "encoding": "text"
-  },
-  {
-   "file": "ci/ssh/ci-deploy_ed25519",
-   "path": "infra/ssh/ci-deploy",
-   "field": "ci_deploy_ed25519",
-   "encoding": "text"
-  },
-  {
-   "file": "ci/ssh/ci-deploy_ed25519.pub",
-   "path": "infra/ssh/ci-deploy",
-   "field": "ci_deploy_ed25519_pub",
-   "encoding": "text"
-  },
-  {
-   "file": "ci/ssh/known_hosts_k3s",
-   "path": "infra/ssh/ci-deploy",
-   "field": "known_hosts_k3s",
    "encoding": "text"
   },
   {
@@ -569,12 +479,6 @@
    "file": "home/cloudflare-workers.env",
    "path": "infra/cloudflare/workers",
    "field": "cloudflare_workers_env",
-   "encoding": "text"
-  },
-  {
-   "file": "home/currency-bot.env",
-   "path": "ci/deploy-home",
-   "field": "currency_bot_env",
    "encoding": "text"
   },
   {
@@ -662,12 +566,6 @@
    "encoding": "text+nl"
   },
   {
-   "file": "home/mcp-gateway.env",
-   "path": "ci/deploy-home",
-   "field": "mcp_gateway_env",
-   "encoding": "text"
-  },
-  {
    "file": "home/observability-values.yaml",
    "path": "infra/kubernetes/values-private",
    "field": "observability_values_yaml",
@@ -722,12 +620,6 @@
    "encoding": "text"
   },
   {
-   "file": "home/scheduler.env",
-   "path": "ci/deploy-home",
-   "field": "scheduler_env",
-   "encoding": "text"
-  },
-  {
    "file": "home/scheduler.token",
    "path": "k8s/home-assistant/scheduler-auth",
    "field": "token",
@@ -738,24 +630,6 @@
    "path": "infra/vpn/client-ca",
    "field": "client_ca_dir_tar_gz_b64",
    "encoding": "tar_b64"
-  },
-  {
-   "file": "home/vpn/clients/ci-github.legacy.p12",
-   "path": "infra/vpn/clients/ci-github",
-   "field": "legacy_p12_b64",
-   "encoding": "b64"
-  },
-  {
-   "file": "home/vpn/clients/ci-github.p12",
-   "path": "infra/ci/github-environment",
-   "field": "home_VPN_CERT_P12_B64",
-   "encoding": "b64"
-  },
-  {
-   "file": "home/vpn/clients/ci-github.password",
-   "path": "infra/ci/github-environment",
-   "field": "home_VPN_CERT_PASSWORD",
-   "encoding": "text+nl"
   },
   {
    "file": "home/vpn/clients/ci-pulsar.legacy.p12",

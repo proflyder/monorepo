@@ -26,9 +26,9 @@ Reconciled by Flux today:
 | `app-ha-executors` | `home-assistant` | scheduler + ha-bridge + ha-control + ha-scenario, Flux-owned since the 6.5 cutover |
 | `app-hermes` | `home-assistant` / `flux-system` | `HelmRelease/runtime`, Flux-owned since the 6.6 cutover |
 
-All six application units carry `deploy.runtime: "flux"` in `units.mjs`:
-`deploy-home` only commits their verified digests to `deploy/home-apps`, and
-Flux applies the workloads from `develop`. `suspend` must stay
+All deployable application units are Flux-owned: `deploy-home` only commits
+their verified digests to `deploy/home-apps`, and Flux applies the workloads
+from `develop`. `suspend` must stay
 absent/false; a manual `flux suspend` is the rollback/drill lever, not a
 supported steady state.
 
@@ -43,11 +43,10 @@ Still manual, on purpose:
   `cloudflare_dns.py` (or the `nexus` procedure).
 - **Application services** are Flux-owned: `wakegrant`, `intercom`,
   `currency-bot`, `mcp-gateway`, the HA executors and Hermes have
-  `Kustomization`s in `apps.yaml` and `deploy.runtime: "flux"`, so
-  `deploy-home` only writes their digests to the pins branch. Their
-  `ExternalSecrets` are owned by their Flux manifest sets;
-  `projects/home/kubernetes/external-secrets/deploy.sh` remains an emergency
-  admin tool.
+  `Kustomization`s in `apps.yaml`, so `deploy-home` only writes their digests to
+  the pins branch. Their `ExternalSecrets` are owned by their Flux manifest
+  sets; `projects/home/kubernetes/external-secrets/deploy.sh` remains an
+  emergency admin tool.
 
 ## Components
 
@@ -119,7 +118,7 @@ checked against `projects/home/kubernetes/versions.sh` by the tests.
 
 Application manifests stay in `develop`, but the verified image digests live in
 a separate machine branch, `deploy/home-apps` (variant B of
-`docs/FLUX-APPS-PLAN.md`). CI verifies provenance and commits the digest there;
+DECISIONS 54–55). CI verifies provenance and commits the digest there;
 Flux reads the branch with its own `GitRepository/flux-pins` (same read-only
 deploy key) and publishes `ConfigMap/home-app-images` through
 `Kustomization/home-app-pins`. `develop` stays PR-only and Flux never writes to
@@ -162,9 +161,9 @@ data:
   HOME_DEPLOY_IMAGE: "ghcr.io/proflyder/home-deploy@sha256:<64-hex>"
 ```
 
-Keys are written by the `pins` job (`platform/ci/pins.mjs`) for every unit
-with `deploy.runtime: "flux"`; `cloudflared` is not CI-built and stays a
-reviewed `versions.sh` literal. `BUILD_ID` is the `proflyder.dev/build`
+Keys are written by the `pins` job (`platform/ci/pins.mjs`) for every
+deployable unit; `cloudflared` is not CI-built and stays a reviewed
+`versions.sh` literal. `BUILD_ID` is the `proflyder.dev/build`
 annotation on the non-Hermes workloads; every other key is a digest-pinned
 image. Every key is consumed by exactly one app Kustomization.
 
@@ -186,23 +185,23 @@ mise run kubectl -- -n home-assistant get deploy \
   -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.template.spec.containers[*].image}{"\n"}{end}'
 ```
 
-`Kustomization/app-wakegrant` is the pilot and is **enabled** (FLUX-APPS-PLAN
-6.1): Flux applies the live workload from `develop` and substitutes
+`Kustomization/app-wakegrant` is the pilot and is **enabled** (DECISIONS 54): Flux applies the live workload from `develop` and substitutes
 `WAKEGRANT_IMAGE`/`BUILD_ID` from the pins ConfigMap plus
 `WAKE_GRANT_NODE_PORT` from `Secret/flux-app-settings`. `deploy-home` no longer
-runs `wakegrant/deploy.sh`: the unit has `deploy.runtime: "flux"`, so its
-`pins` job (no VPN, no OpenBao, no kubeconfig) promotes the PR-built digest,
+runs `wakegrant/deploy.sh` (the script is deleted), so its `pins` job (no VPN,
+no OpenBao, no kubeconfig) promotes the PR-built digest,
 verifies provenance and commits only `BUILD_ID`, `WAKEGRANT_IMAGE` and the
 `proflyder.dev/*` annotations to `deploy/home-apps` via
 `platform/ci/pins.mjs`. Pushes race with other units, so the writer refetches,
 reapplies the same keys and retries; `develop` is never written.
 
-The other app units (6.2–6.6) are cut over the same way: `deploy.runtime:
-"flux"`, a Kustomization in `apps.yaml` with `suspend: false`, and images
-substituted from the pins ConfigMap. `deploy-home`'s `pins` job writes their
-keys and has no VPN, OpenBao or kubeconfig. The remaining decommission work
-(`ci-deploy`, VPN certificate, OpenBao `secret/ci/deploy-home`) is tracked in
-`docs/PENDING.md`.
+The other app units (6.2–6.6) are cut over the same way: a Kustomization in
+`apps.yaml` with `suspend: false`, and images substituted from the pins
+ConfigMap. `deploy-home`'s `pins` job writes their keys and has no VPN, OpenBao
+or kubeconfig. The 6.7 cleanup removed the old CI path (`deploy` job,
+`ci-deploy`, VPN certificate `ci-github`, OpenBao `secret/ci/deploy-home`);
+live leftovers are the owner's commands listed in `docs/OPERATIONS.md`
+(«Доступ CI»).
 
 Manifest paths for the app units:
 

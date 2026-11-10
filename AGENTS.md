@@ -137,8 +137,8 @@ Pulsar — `projects/station/pulsar/AGENTS.md`.
   остаются ручными.
 - Bootstrap/секреты/статус — `projects/home/kubernetes/flux/README.md`;
   деплой-ключ и настройки живут в OpenBao (`secret/k8s/flux-system/*`), не в
-  Git. Остальная инфраструктура и сервисы приложений остаются на
-  `deploy-home`.
+  Git. Сервисы приложений применяет Flux из pins; входящего доступа CI в
+  K3s нет (этап 6.7 завершён).
 
 ## Совместимость функциональности
 

@@ -1,4 +1,4 @@
-// Unit tests for the pins writer (FLUX-APPS-PLAN 6.1).
+// Unit tests for the pins writer (решение 54).
 //
 // No network and no registry: the text update is pure, and the retry path is
 // exercised through an injected `once`.

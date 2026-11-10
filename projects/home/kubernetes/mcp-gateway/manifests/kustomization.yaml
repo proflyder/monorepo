@@ -1,13 +1,11 @@
-# Flux-rendered manifest set for mcp-gateway (FLUX-APPS-PLAN 6.4).
+# Flux-rendered manifest set for mcp-gateway (решение 54).
 #
 # Deployment, Service, NetworkPolicies, ServiceMonitor, RBAC and the five
-# ExternalSecrets are the same objects `deploy.sh` applies. The catalog and
-# bb-targets files are deployment data, so they are rendered as a ConfigMap by
-# the generator instead of `kubectl create configmap` in CI; the Deployment
-# mounts the stable name, hence `disableNameSuffixHash`.
+# ExternalSecrets are the workload. The catalog and bb-targets files are
+# deployment data, so they are rendered as a ConfigMap by the generator; the
+# Deployment mounts the stable name, hence `disableNameSuffixHash`.
 #
-# `ci/rbac.yaml` (the `ci-deploy` grants) is deliberately absent: it only
-# exists for the retired CI path.
+# The CI-only `ci-deploy` grants are gone with the old deploy path.
 #
 # Substituted by Kustomization/app-mcp-gateway:
 #   ${MCP_GATEWAY_IMAGE}      from ConfigMap/home-app-images (pins branch)

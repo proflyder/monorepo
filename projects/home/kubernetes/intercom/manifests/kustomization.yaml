@@ -1,4 +1,4 @@
-# Flux-rendered manifest set for intercom (FLUX-APPS-PLAN 6.2).
+# Flux-rendered manifest set for intercom (решение 54).
 #
 # `intercom.yaml` and `external-secrets.yaml` stay the templates used by
 # `deploy.sh` (CI/admin path). This kustomization is the Flux path: the same

@@ -5,11 +5,11 @@
 #   * PersistentVolume/PersistentVolumeClaim ("storage") are applied by
 #     kubectl. They are cluster-scoped/retained data, and CI must never need
 #     cluster-scoped RBAC or be able to delete a volume.
-#   * everything else is a regular Helm release ("workloads"), which the
-#     deploy-home workflow may roll by digest.
+#   * everything else is a regular Helm release ("workloads"), which Flux
+#     (HelmRelease/runtime) rolls by digest from the pins branch.
 # Both halves come from the same private values file, so a manual apply and the
-# CI rollout render identical objects. Run this script as a cluster admin; the
-# CI ServiceAccount only has the workload half.
+# Flux render identical objects. Run this script as a cluster admin; Flux owns
+# only the workload half.
 #
 # `HEALTH_EXPORTER_IMAGE` must be the digest-pinned
 # `ghcr.io/proflyder/health-exporter@sha256:…` image. The chart no longer ships

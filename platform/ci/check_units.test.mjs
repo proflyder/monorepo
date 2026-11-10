@@ -65,10 +65,6 @@ test("check_units: a mixed unit needs an explicit Bazel image map", () => {
     deployWorkloads: ["w"],
     deployBuilder: "mixed",
     deployNamespace: "ns",
-    deployScript: "projects/home-assistant/deploy/rollout.sh",
-    deployEnvKey: "k",
-    deployEnvFile: "f",
-    deployExternalsecrets: ["s"],
   };
   const validate = (extra) =>
     checkUnits.validateSchema(
@@ -87,17 +83,6 @@ test("check_units: a mixed unit needs an explicit Bazel image map", () => {
     ),
   );
   assert.deepEqual(validate({ deployBazelImages: { a: "//x", b: "//y" } }), []);
-  // `deploy.runtime` selects the apply path; a typo would silently drop the
-  // unit from both deploy-home and the Flux pins job.
-  assert.ok(
-    validate({ deployBazelImages: { a: "//x", b: "//y" }, deployRuntime: "nomad" }).some(
-      (problem) => problem.includes("unknown deploy.runtime"),
-    ),
-  );
-  assert.deepEqual(
-    validate({ deployBazelImages: { a: "//x", b: "//y" }, deployRuntime: "flux" }),
-    [],
-  );
 });
 
 function workflowFixture(files) {

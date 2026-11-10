@@ -120,39 +120,43 @@ mise run helm -- template runtime projects/home-assistant/deploy/chart \
   (cluster-scoped и `Retain`); они не входят в Helm-релиз;
 - остальные объекты — `helm upgrade --install runtime` (namespace-scoped).
 
-Это разделение обязательно: CI-SA `ci-deploy` не имеет cluster-scoped прав, а
-Helm при удалении объекта из релиза делает GET и без `get persistentvolumes`
-падает. PV/PVC помечены `helm.sh/resource-policy: keep`, поэтому переход
-безопасен и для релиза, который ещё помнит storage. Полный ручной apply —
-единственный путь менять storage; CI его не трогает. На чистой установке
-сначала `apply-runtime.sh` (создаёт PV/PVC), затем CI может катить workloads.
+Это разделение обязательно: Flux применяет только namespace-scoped объекты
+(`targetNamespace: home-assistant`), а Helm при удалении объекта из релиза
+делает GET и без `get persistentvolumes` падает. PV/PVC помечены
+`helm.sh/resource-policy: keep`, поэтому переход безопасен и для релиза,
+который ещё помнит storage. Полный ручной apply (`apply-runtime.sh`) —
+единственный путь менять storage; Flux его не трогает. На чистой установке
+сначала `apply-runtime.sh` (создаёт PV/PVC), затем Flux катит workloads.
 
 ## Автодеплой Hermes / voice-proxy / health exporter
 
-`deploy-home` для юнита `hermes` (builder `mixed`: `hermes` — Docker;
-`voice-proxy`, `health-exporter` и `home-deploy` — Bazel/rules_oci, явная
-карта `deploy.bazel_images`) вызывает
-`projects/home-assistant/deploy/rollout.sh` →
-`home-deploy hermes rollout`:
+Юнит `hermes` (builder `mixed`: `hermes` — Docker; `voice-proxy`,
+`health-exporter` и `home-deploy` — Bazel/rules_oci, явная карта
+`deploy.bazel_images`) катит Flux: `HelmRelease/runtime` (в `flux-system`,
+`targetNamespace`/`storageNamespace: home-assistant`) берёт chart из Git,
+образы — из `ConfigMap/home-app-images`, приватные values — из
+`Secret/runtime-values` (`valuesFrom`, без блока `storage`). Job `pins`
+только записывает проверенные digest'ы.
 
-1. значения берутся из OpenBao `secret/ci/deploy-home` (key `runtime_values`,
-   исходный текст без base64; токенов в нём нет — они в Kubernetes Secrets),
-   job материализует их в файл 600 после OIDC-входа;
-2. если digest'ы не изменились, upgrade не запускается;
-3. `helm upgrade runtime` получает только `--set`/`--set-json` образов (без
-   `--reuse-values`), `storage` вырезается; exporter получает образ
-   `health-exporter` (static musl, distroless), command и пустые
-   volume-монтирования, поэтому приватные values не меняются;
-4. запоминается ревизия до upgrade, затем проверяются rollout, health exporter
-   (все endpoint'ы = 1), Assist-запрос через `conversation.hermes_agent`,
-   `kubectl exec deploy/hermes -c voice-proxy -- /usr/local/bin/voice-proxy
-   -healthcheck` и отсутствие ошибок в логах voice-proxy. Assist Job работает
-   на том же distroless-образе `home-deploy` (`hermes assist-smoke`), поэтому
-   python-образ в кластере не нужен; HA-токен читается Job'ом из Secret
-   `ha-bridge-ha`, HA вызывается по cluster-internal Service, поэтому в GitHub
-   он не попадает;
-5. при провале — `helm rollback runtime <прежняя ревизия>`, повторная проверка;
-   если upgrade не создал ревизию, откат не выполняется.
+1. `valuesFrom` читает `Secret/runtime-values`; ESO создаёт его из OpenBao
+   `secret/k8s/flux-system/runtime-values` (поле `values`, токенов нет — они
+   в Kubernetes Secrets);
+2. если digest не изменился, pod template не меняется и rollout не идёт;
+3. `postRenderers` подставляют `${HERMES_IMAGE}`, `${VOICE_PROXY_IMAGE}`,
+   `${HEALTH_EXPORTER_IMAGE}`, `${HOME_DEPLOY_IMAGE}` через strategic-merge/
+   JSON6902, не перезаписывая приватные массивы values; exporter получает
+   distroless command и без старого ConfigMap-mount;
+4. post-upgrade Helm hook (`chart/templates/smoke-hook.yaml`,
+   `home-deploy hermes assist-smoke` под `smoke.enabled`) проверяет rollout,
+   health exporter (все endpoint'ы = 1), Assist через
+   `conversation.hermes_agent` и voice-proxy; HA-токен читается из Secret
+   `ha-bridge-ha`, в GitHub он не попадает;
+5. `remediation.strategy: rollback` + `remediateLastFailure: true` возвращают
+   прежнюю ревизию при провале upgrade или hook'а.
+
+Ручной аварийный путь остаётся `projects/home-assistant/deploy/rollout.sh` →
+`home-deploy hermes rollout` (digest no-op, `helm upgrade`, smoke,
+`helm rollback`) и `helm rollback runtime <revision>`.
 
 План и документированную команду отката печатает
 `mise run rollback hermes --dry-run` (источник — `platform/ci/units.mjs`).
@@ -198,7 +202,6 @@ Deployment, `ServiceMonitor`. Hermes ходит в `/mcp` с Bearer-токено
 # токен шлюза↔Hermes; значение никогда не печатать
 BAO_TOKEN=$(cat secrets/openbao/operator.token) bao kv put secret/k8s/home-assistant/mcp-gateway-auth token="$(openssl rand -hex 32)"
 mise run kubectl -- apply -f projects/home/kubernetes/mcp-gateway/manifests/rbac.yaml
-mise run kubectl -- apply -f projects/home/kubernetes/mcp-gateway/ci/rbac.yaml
 mise run kubectl -- apply -f projects/home/kubernetes/mcp-gateway/manifests/external-secrets.yaml
 mise run kubectl -- -n home-assistant wait --for=condition=Ready \
   externalsecret/mcp-gateway-auth externalsecret/mcp-gateway-telegram \
@@ -206,14 +209,10 @@ mise run kubectl -- -n home-assistant wait --for=condition=Ready \
   externalsecret/mcp-gateway-voice --timeout=120s
 ```
 
-`ci/rbac.yaml` добавляет `home-assistant/ci-deploy` только NetworkPolicy и
-ServiceMonitor; остальные глаголы деплоя уже есть в scheduler-Role.
-
-Деплой и проверки:
+RBAC самого gateway — `manifests/rbac.yaml`; CI-only `ci-deploy` удалён.
+Деплой — Flux (`app-mcp-gateway`); проверки:
 
 ```bash
-NODE_SSH=labuser@192.0.2.27 mise run admin:service mcp-gateway
-
 mise run kubectl -- -n home-assistant get deploy,pod,svc -l app.kubernetes.io/name=mcp-gateway
 mise run kubectl -- -n home-assistant logs deploy/mcp-gateway --tail=50
 mise run kubectl -- -n home-assistant get --raw \
@@ -341,8 +340,8 @@ Secrets приложений. `ClusterSecretStore/openbao` использует 
 Сам оператор, `ClusterSecretStore/openbao` и инфраструктурные
 ExternalSecrets (cert-manager, monitoring, vaultwarden) — под Flux
 (`platform-external-secrets` и компонентные Kustomization).
-`external-secrets/deploy.sh` применяет только ExternalSecrets приложений,
-которые остаются на `deploy-home`.
+`external-secrets/deploy.sh` применяет только ExternalSecrets приложений
+(аварийный ручной путь); в обычной работе их ведёт Flux.
 
 ```bash
 mise run admin:external-secrets        # только application ExternalSecrets
@@ -353,8 +352,8 @@ mise run kubectl -- -n home-assistant annotate externalsecret scheduler-auth \
 ```
 
 Манифесты — рядом с проектами; таблица путей, миграция и ротация —
-`projects/home/kubernetes/external-secrets/README.md`. `deploy-home`
-проверяет `Ready` ExternalSecret перед выкаткой и не пишет их значения.
+`projects/home/kubernetes/external-secrets/README.md`. Flux применяет их и
+ждёт готовности workload'ов; CI значения не пишет.
 
 ## Flux / GitOps (домашняя инфраструктура)
 
@@ -362,9 +361,9 @@ mise run kubectl -- -n home-assistant annotate externalsecret scheduler-auth \
 (`source-controller`, `kustomize-controller`, `helm-controller`; без
 notification и image automation) и один `GitRepository` на
 `github.com/proflyder/monorepo`, ветка `develop`, с read-only deploy key из
-OpenBao. Кластер сам тянет изменения; у CI нет admin-доступа, а `deploy-home` только
-публикует проверенные digest'ы в машинную ветку `deploy/home-apps`, которую
-Flux читает как `ConfigMap/home-app-images`.
+OpenBao. Кластер сам тянет изменения; у CI нет admin-доступа, а `deploy-home`
+только пинует проверенные digest'ы в машинную ветку `deploy/home-apps`,
+которую Flux читает как `ConfigMap/home-app-images`.
 
 Под Flux: платформа (`platform`: ESO → cert-manager → Traefik → общие
 маршруты), observability (`observability` + `observability-rules`),
@@ -372,8 +371,8 @@ Vaultwarden, Nexus (`nexus` + `nexus-provision`) и все деплой-юнит
 приложений: `app-wakegrant`, `app-intercom`, `app-currency-bot`,
 `app-mcp-gateway`, `app-ha-executors` (scheduler + три executor'а) и
 `app-hermes` (`HelmRelease/runtime`). OpenBao, host-firewall (nftables) и
-Cloudflare DNS остаются ручными; job `deploy` в `deploy-home` уже не
-выбирает ни одного юнита и удаляется на этапе 6.7 (`docs/PENDING.md`).
+Cloudflare DNS остаются ручными. Входящего доступа CI в K3s больше нет:
+`deploy-home` не содержит job `deploy`, `ci-deploy`/`ci-github` отозваны.
 
 `platform` — umbrella-Kustomization: она применяет четыре дочерние
 (`platform-external-secrets`, `platform-cert-manager`, `platform-traefik`,
@@ -446,7 +445,7 @@ Cloudflare DNS остаётся ручным шагом (см. README Flux и in
   3. вернуть data-dir/token/ключи;
   4. вернуть PVC до запуска Pods;
   5. pull из GHCR по digest-пинам; если пакеты недоступны — пересобрать и
-     запушить образы из монорепо (`deploy-home`/Bazel);
+     запушить образы из монорепо (CI/Bazel);
   6. проверить endpoints, HTTPS-имена, voice/music.
 
 Disaster restore на запасном железе ещё не выполнялся.

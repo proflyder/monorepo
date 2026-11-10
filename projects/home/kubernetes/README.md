@@ -29,8 +29,8 @@ MA/Matter add-ons: `core_matter_server 9.2.0`, `d5369777_music_assistant 2.10.8`
 ## Обновление
 
 Traefik, cert-manager, ESO, observability и Vaultwarden обновляются merge'ем
-в `develop` (Flux). Chart приложений (`runtime`) и его storage по-прежнему
-катятся вручную/`deploy-home`:
+в `develop` (Flux). Chart приложений (`runtime`) катит Flux, а его storage — вручную
+(`apply-runtime.sh`):
 
 ```bash
 export RUNTIME_PRIVATE_VALUES=/private/path/runtime-values.yaml

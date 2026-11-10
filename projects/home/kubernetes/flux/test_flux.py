@@ -170,7 +170,7 @@ class Cluster(unittest.TestCase):
             # Applications consume the machine pins branch; their manifests
             # still come from `develop` (GitRepository/flux-system).
             "home-app-pins", "app-wakegrant",
-            # FLUX-APPS-PLAN 6.2-6.6: application units applied by Flux.
+            # решение 54: application units applied by Flux.
             "app-intercom", "app-currency-bot", "app-mcp-gateway",
             "app-ha-executors", "app-hermes",
         })
@@ -203,7 +203,7 @@ class Cluster(unittest.TestCase):
         app = self.kustomizations["app-wakegrant"]
         spec = app["spec"]
         self.assertEqual(spec["path"], "./projects/home/kubernetes/wakegrant/manifests")
-        # Pilot cutover done (FLUX-APPS-PLAN 6.1): Flux owns wakegrant and CI
+        # Pilot cutover done (решение 54): Flux owns wakegrant and CI
         # only commits its verified digest to `deploy/home-apps`.
         self.assertFalse(spec.get("suspend", False))
         self.assertTrue(spec["wait"])
@@ -234,7 +234,7 @@ class Cluster(unittest.TestCase):
             with self.subTest(app=name):
                 spec = self.kustomizations[name]["spec"]
                 self.assertEqual(spec["path"], path)
-                # Cut over (FLUX-APPS-PLAN 6.2-6.6): Flux owns the live
+                # Cut over (решение 54): Flux owns the live
                 # workload; a `suspend: true` here would silently freeze it.
                 self.assertFalse(spec.get("suspend", False))
                 self.assertTrue(spec["wait"])
@@ -248,14 +248,13 @@ class Cluster(unittest.TestCase):
                 self.assertTrue(spec["healthChecks"])
 
     def test_pins_cover_every_flux_unit_image(self):
-        # Every image a `deploy.runtime: flux` unit pins must be referenced by
-        # its rendered manifests, with the ConfigMap key `pins.mjs` writes.
+        # Every image a deployable unit pins must be referenced by its rendered
+        # manifests, with the ConfigMap key `pins.mjs` writes.
         # The scheduler's `home-deploy` image is only used by the admin
         # preflight Job, which is not part of the Flux set.
         script = (
             "const { config } = await import(process.argv[1] + '/platform/ci/units.mjs');\n"
-            "console.log(JSON.stringify(config.units.filter((u) => "
-            "u.deploy && u.deploy.runtime === 'flux')"
+            "console.log(JSON.stringify(config.units.filter((u) => u.deploy)"
             ".map((u) => ({ id: u.id, images: u.deploy.images }))));"
         )
         units = json.loads(subprocess.run(
@@ -640,7 +639,7 @@ class Provisioning(unittest.TestCase):
 
 
 class WakegrantApp(unittest.TestCase):
-    """The Flux manifest set for the wakegrant pilot (FLUX-APPS-PLAN 6.1)."""
+    """The Flux manifest set for the wakegrant pilot (решение 54)."""
 
     @classmethod
     def setUpClass(cls):
@@ -679,7 +678,7 @@ class WakegrantApp(unittest.TestCase):
 
 
 class MigratedApps(unittest.TestCase):
-    """Flux manifest sets for FLUX-APPS-PLAN 6.2-6.5."""
+    """Flux manifest sets for решение 54."""
 
     EXPECTED = {
         "intercom": ({"Deployment", "Service", "ExternalSecret"},
@@ -736,8 +735,9 @@ class MigratedApps(unittest.TestCase):
         # currency-bot's namespace is cluster-scoped and admin-owned.
         self.assertNotIn("kind: Namespace", self.rendered["currency-bot"])
 
-    def test_ci_rbac_is_not_in_the_mcp_gateway_set(self):
-        # `ci/rbac.yaml` only grants `ci-deploy`; it goes away with that path.
+    def test_the_deleted_ci_rbac_is_not_in_the_mcp_gateway_set(self):
+        # The CI-only RBAC (`home-assistant/ci-deploy` grants) is gone with the
+        # CI deploy path; the Flux set must never reintroduce it.
         self.assertNotIn("ci-deploy", self.rendered["mcp-gateway"])
 
     def test_executor_steady_state_is_pinned(self):
@@ -783,7 +783,7 @@ class MigratedApps(unittest.TestCase):
 
 
 class HermesApp(unittest.TestCase):
-    """The Flux Helm release for the Hermes runtime (FLUX-APPS-PLAN 6.6)."""
+    """The Flux Helm release for the Hermes runtime (решение 54)."""
 
     @classmethod
     def setUpClass(cls):

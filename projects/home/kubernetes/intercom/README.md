@@ -39,17 +39,18 @@ NodePort `${INTERCOM_NODE_PORT}` (`30097` на стенде) сохраняет�
 
 ## Деплой
 
-Юнит `intercom` в `platform/ci/units.mjs` — полноценный deploy-юнит:
-PR CI собирает `ghcr.io/proflyder/intercom` и публикует `tree-<hash>`,
-merge в `develop` продвигает digest и катит Deployment через
-`deploy.sh` (build-once, `DEPLOY_NO_BUILD=1`). Приватные значения:
+Юнит `intercom` в `platform/ci/units.mjs` — deploy-юнит: PR CI собирает
+`ghcr.io/proflyder/intercom` и публикует `tree-<hash>`, merge в `develop`
+пинует digest в `deploy/home-apps`, а Flux (`Kustomization/app-intercom`)
+применяет Deployment из `develop`. Приватные значения:
 
 - `secret/k8s/home-assistant/scheduler-auth` → `token` (общий токен приложения);
 - `secret/k8s/home-assistant/intercom` → `station_token` (device secret,
   ≥32 случайных байта, не равен токену приложения);
-- `intercom_env` в `secret/ci/deploy-home`: `INTERCOM_NODE_PORT`;
-- локально `secrets/home/intercom.env` (по образцу
-  `intercom.env.example`) нужен только для ручного `deploy.sh`.
+- `secret/k8s/flux-system/app-settings` → `INTERCOM_NODE_PORT`
+  (`Secret/flux-app-settings`).
+
+Откат — revert pins-коммита или `flux suspend`; ручного deploy-скрипта нет.
 
 NodePort закрыт фильтром `projects/home/kubernetes/scheduler/nft`:
 источник — только LAN/VPN и pod CIDR. После изменения порта/сети

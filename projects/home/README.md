@@ -48,5 +48,5 @@ HA Core живёт в HAOS VM; MA и Matter — add-ons в HAOS. K3s VM соде
 STT/TTS, Hermes, scheduler/ha-bridge/ha-control/ha-scenario, intercom,
 OpenBao/ESO, mcp-gateway, Nexus и observability. Hermes и другие проекты
 используют один общий `mcp-gateway`, а не MCP внутри каждого сервиса; Nexus
-разворачивает Flux, остальную инфраструктуру — ручные `deploy.sh`, сервисы —
-`deploy-home`.
+разворачивает Flux, остальную инфраструктуру — ручные `deploy.sh`, сервисы
+приложений — также Flux из pins (`deploy-home` только пинует digest'ы).

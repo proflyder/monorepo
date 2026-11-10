@@ -123,11 +123,11 @@
 ### Секреты
 
 ```text
-GitHub Actions ──OIDC──► OpenBao jwt роль deploy-home
-                              │  secret/ci/deploy-home
+GitHub Actions ──OIDC──► OpenBao jwt роль deploy-station   (только станция)
+                              │  secret/ci/deploy-station
                               ▼
-                         VPN группа ci → K3s 6443
-                              │
+                         VPN группа ci → Traefik 443 → HA
+
 OpenBao KV v2 secret/k8s/* ──► ESO ClusterSecretStore/openbao
                               │  Kubernetes auth
                               ▼
@@ -140,9 +140,10 @@ OpenBao KV v2 secret/k8s/* ──► ESO ClusterSecretStore/openbao
   Secrets (`scheduler-auth`, `ha-bridge-ha`, `hermes-environment`,
   `grafana-admin`, `cloudflare-api-token`, `currency-bot`,
   `cloudflared-tunnel`); deploy-скрипты их не пишут.
-- В GitHub Environment `Home` остаются только VPN-креды и адрес/роль
-  OpenBao; kubeconfig, scheduler env, `currency_bot_env` и runtime values
-  выдаёт OpenBao после OIDC-входа.
+- GitHub Environment `Home` и входящий CI-доступ в K3s удалены. Приватные
+  env приложений лежат в `secret/k8s/flux-system/app-settings`, values Hermes —
+  в `secret/k8s/flux-system/runtime-values`; ESO создаёт из них
+  `flux-app-settings`/`runtime-values`, и Flux подставляет их при применении.
 
 ### CI/CD
 
@@ -155,12 +156,14 @@ OpenBao KV v2 secret/k8s/* ──► ESO ClusterSecretStore/openbao
         → deploy-station: Pulsar через HA (Environment Station)
 ```
 
-- Приложения (scheduler/executors, wakegrant, intercom, currency-bot,
-  mcp-gateway, hermes) имеют `deploy.runtime: "flux"`: CI не входит в VPN и
-  не применяет объекты, Flux делает это из кластера. Откат — pins revert
-  (или manifest revert), не `kubectl rollout undo`.
-- Пока не завершён этап 6.7, в `deploy-home` остаётся job `deploy` (VPN
-  группа `ci`, OIDC, `kubectl`/`helm`), но он не выбирает ни одного юнита.
+- Все приложения (scheduler/executors, wakegrant, intercom, currency-bot,
+  mcp-gateway, hermes) применяет Flux из кластера: CI не входит в VPN, не
+  читает OpenBao и не вызывает kubectl/helm. Откат — pins revert (или manifest
+  revert), не `kubectl rollout undo`; аварийная заморозка — `flux suspend`.
+- `deploy-home` содержит только `plan`, `pins`, `warm-*`, `native-release` и
+  `deploy-station`. Прежний job `deploy` (VPN группа `ci`, OIDC, `ci-deploy`)
+  удалён вместе с RBAC и сертификатом `ci-github`; правило `6443` снято,
+  `443` и группа `ci` остаются для `deploy-station`.
 
 - Прямой push в `develop` запрещён; merge PR = деплой затронутых юнитов.
 - CI-скачивания Maven/Google Maven/PyPI/npm у Bazel идут напрямую с раннеров,

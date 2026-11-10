@@ -1,4 +1,4 @@
-# Flux entry point for the Hermes runtime Helm release (FLUX-APPS-PLAN 6.6).
+# Flux entry point for the Hermes runtime Helm release (решение 54).
 #
 # The chart is the same in-repo chart the CI/admin path renders
 # (`projects/home-assistant/deploy/chart`), with the live release name and

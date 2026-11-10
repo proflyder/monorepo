@@ -1,47 +1,30 @@
 #!/usr/bin/env python3
 """Deploy contracts for projects/home/kubernetes/mcp-gateway.
 
-Hermetic: no cluster, no network, no secrets. deploy.sh is exercised with a
-stub kubectl that records calls and fails, so only the pre-cluster behaviour is
-asserted. The catalog's schema is validated by the gateway's real Rust loader in
+Hermetic: no cluster, no network, no secrets. Flux applies the manifests, so
+these tests check them directly. The catalog's schema is validated by the
+gateway's real Rust loader in
 `solutions/mcp-gateway/crates/mcp-gateway/tests/deploy_contract.rs`; here we
 check the things that only the deployment knows: catalog↔RBAC correspondence,
-alias unambiguity, manifest hardening and the full placeholder rendering path.
+alias unambiguity, manifest hardening and the documented placeholders.
 """
 from __future__ import annotations
 
-import os
 import re
-import subprocess
-import sys
-import tempfile
 import unittest
 from pathlib import Path
 
 import yaml
 
 HERE = Path(__file__).resolve().parent
-SCRIPT = HERE / "deploy.sh"
 MANIFESTS = HERE / "manifests"
 CATALOG = MANIFESTS / "catalog.yaml"
 BB_TARGETS = MANIFESTS / "bb-targets.yaml"
 RBAC = MANIFESTS / "rbac.yaml"
-CI_RBAC = HERE / "ci" / "rbac.yaml"
 DEPLOYMENT = MANIFESTS / "deployment.yaml"
 NETWORK = MANIFESTS / "network-policies.yaml"
 SERVICEMONITOR = MANIFESTS / "servicemonitor.yaml"
 EXTERNAL_SECRETS = MANIFESTS / "external-secrets.yaml"
-
-GOOD_ENV = """# private values
-LAN_CIDR=192.0.2.0/24
-NODE_LAN_IP="192.0.2.27"
-HAOS_IP=192.0.2.28
-STATION_IP=192.0.2.13
-BB_CT_IP=192.0.2.30
-BB_PROJECT_STATION_LAB=proj_0000000000000001
-BB_PROJECT_ENGLISH_NOTES=proj_0000000000000003
-BB_DISPATCHER_THREAD_ID=thr_0000000000000002
-"""
 
 ALLOWED_CATALOG_PLACEHOLDERS = {"HAOS_IP", "STATION_IP"}
 ALLOWED_BB_TARGET_PLACEHOLDERS = {"BB_PROJECT_STATION_LAB", "BB_PROJECT_ENGLISH_NOTES"}
@@ -374,48 +357,6 @@ class RbacTests(unittest.TestCase):
         }
         self.assertEqual(declared, bound)
 
-    def test_ci_role_only_adds_policy_monitor_and_readiness_proxy(self):
-        # home-assistant/ci-deploy already owns Services/ConfigMaps/Deployments;
-        # this extension must not widen that.
-        ci_roles = [doc for doc in load_docs(CI_RBAC) if doc.get("kind") == "Role"]
-        self.assertEqual(len(ci_roles), 1)
-        granted = {
-            (rule["apiGroups"][0], resource)
-            for rule in ci_roles[0]["rules"]
-            for resource in rule["resources"]
-        }
-        self.assertEqual(
-            granted,
-            {
-                ("networking.k8s.io", "networkpolicies"),
-                ("monitoring.coreos.com", "servicemonitors"),
-                ("", "services/proxy"),
-            },
-        )
-        self.assertTrue(
-            all(
-                set(rule["verbs"]) <= {"get", "list", "watch", "create", "update", "patch"}
-                for rule in ci_roles[0]["rules"]
-            )
-        )
-
-    def test_ci_role_allows_exactly_the_deploy_home_readiness_proxy(self):
-        # The smoke reads /readyz through the API-server Service proxy, which
-        # authorizes `services/proxy` by the full name used in the URL. The
-        # rule must cover that name and stay restricted with resourceNames.
-        workflow = (
-            HERE.parents[3] / ".github" / "workflows" / "deploy-home.yml"
-        ).read_text()
-        proxied = set(re.findall(r"services/(http:mcp-gateway:[0-9]+)/proxy/readyz", workflow))
-        self.assertEqual(proxied, {"http:mcp-gateway:8080"})
-        ci_role = next(doc for doc in load_docs(CI_RBAC) if doc.get("kind") == "Role")
-        rule = next(
-            rule for rule in ci_role["rules"] if rule["resources"] == ["services/proxy"]
-        )
-        self.assertEqual(rule["apiGroups"], [""])
-        self.assertEqual(rule["verbs"], ["get"])
-        self.assertTrue(proxied <= set(rule["resourceNames"]))
-
 
 class ManifestTests(unittest.TestCase):
     def test_catalog_only_uses_renderable_placeholders(self):
@@ -593,212 +534,10 @@ class ManifestTests(unittest.TestCase):
             self.assertEqual(doc["spec"]["target"]["creationPolicy"], "Owner")
             self.assertEqual(doc["spec"]["target"]["deletionPolicy"], "Retain")
 
-    def test_example_env_matches_required_keys(self):
-        example = (HERE / "mcp-gateway.env.example").read_text()
-        keys = {
-            line.split("=", 1)[0].strip()
-            for line in example.splitlines()
-            if line.strip() and not line.startswith("#")
-        }
-        self.assertEqual(
-            keys,
-            {
-                "LAN_CIDR",
-                "NODE_LAN_IP",
-                "HAOS_IP",
-                "STATION_IP",
-                "BB_CT_IP",
-                "BB_PROJECT_STATION_LAB",
-                "BB_PROJECT_ENGLISH_NOTES",
-                "BB_DISPATCHER_THREAD_ID",
-            },
-        )
-        values = dict(
-            line.split("=", 1)
-            for line in example.splitlines()
-            if line.strip() and not line.startswith("#")
-        )
-        # Placeholder values only: TEST-NET addresses and zero-filled ids,
-        # never a real LAN, project or thread.
-        for key, value in values.items():
-            cleaned = value.strip().strip('"')
-            if key == "LAN_CIDR":
-                self.assertTrue(cleaned.startswith("192.0.2."), cleaned)
-            elif key in {"BB_PROJECT_STATION_LAB", "BB_PROJECT_ENGLISH_NOTES", "BB_DISPATCHER_THREAD_ID"}:
-                self.assertRegex(cleaned, r"^(proj|thr)_[0-9]+$")
-            else:
-                self.assertTrue(cleaned.startswith("192.0.2."), cleaned)
-
 
 def container_volumes(docs: list[dict]) -> list[dict]:
     deployment = next(doc for doc in docs if doc["kind"] == "Deployment")
     return deployment["spec"]["template"]["spec"]["volumes"]
-
-
-class DeployScriptTests(unittest.TestCase):
-    def run_deploy(
-        self,
-        env_text: str,
-        kubectl_script: str | None = None,
-        build: bool = False,
-        extra_env: dict[str, str] | None = None,
-    ) -> subprocess.CompletedProcess:
-        tmp = Path(tempfile.mkdtemp(prefix="mcp-deploy-"))
-        self.addCleanup(lambda: __import__("shutil").rmtree(tmp, ignore_errors=True))
-        env_file = tmp / "mcp-gateway.env"
-        env_file.write_text(env_text)
-        kubectl = tmp / "kubectl"
-        kubectl.write_text(
-            kubectl_script
-            or '#!/bin/sh\necho "kubectl $*" >> "$KUBECTL_LOG"\nexit 3\n'
-        )
-        kubectl.chmod(0o755)
-        bazel = tmp / "bazel"
-        bazel.write_text('#!/bin/sh\necho "bazel $*" >> "$BAZEL_LOG"\nexit 0\n')
-        bazel.chmod(0o755)
-        env = os.environ.copy()
-        env.pop("BAZELISK", None)
-        env.update(
-            {
-                "PRIVATE_ENV": str(env_file),
-                "KUBECTL": str(kubectl),
-                "KUBECTL_LOG": str(tmp / "kubectl.log"),
-                "BAZEL_LOG": str(tmp / "bazel.log"),
-                "RENDER_DIR": str(tmp / "rendered"),
-                "PATH": f"{tmp}:{env['PATH']}",
-            }
-        )
-        if not build:
-            env["MCP_GATEWAY_IMAGE"] = "ghcr.io/example/mcp-gateway@sha256:" + "0" * 64
-        if extra_env:
-            env.update(extra_env)
-        args = ["bash", str(SCRIPT)] + ([] if build else ["--skip-build"])
-        res = subprocess.run(args, env=env, text=True, capture_output=True, timeout=60)
-        res.kubectl_log = tmp / "kubectl.log"
-        res.bazel_log = tmp / "bazel.log"
-        res.rendered = tmp / "rendered"
-        return res
-
-    def test_valid_values_render_and_reach_the_cluster(self):
-        res = self.run_deploy(GOOD_ENV)
-        self.assertNotIn("are required", res.stderr)
-        self.assertTrue((res.rendered / "deployment.yaml").is_file(), res.stderr)
-        self.assertTrue(res.kubectl_log.exists(), res.stderr)
-
-    def test_missing_network_values_are_rejected_before_kubectl(self):
-        res = self.run_deploy("LAN_CIDR=192.0.2.0/24\n")
-        self.assertNotEqual(res.returncode, 0)
-        self.assertIn("LAN_CIDR, NODE_LAN_IP, HAOS_IP and STATION_IP are required", res.stderr)
-        self.assertFalse(res.kubectl_log.exists())
-
-    def test_missing_bb_values_are_rejected_before_kubectl(self):
-        env = "\n".join(
-            line
-            for line in GOOD_ENV.splitlines()
-            if not line.startswith("BB_")
-        )
-        res = self.run_deploy(env)
-        self.assertNotEqual(res.returncode, 0)
-        self.assertIn("BB_CT_IP, BB_PROJECT_STATION_LAB, BB_PROJECT_ENGLISH_NOTES and BB_DISPATCHER_THREAD_ID are required", res.stderr)
-        self.assertFalse(res.kubectl_log.exists())
-
-    def test_unknown_only_group_is_rejected(self):
-        env = os.environ.copy()
-        env["ONLY"] = "scheduler"
-        res = subprocess.run(
-            ["bash", str(SCRIPT), "--skip-build"],
-            env={**env, "PRIVATE_ENV": "/nonexistent"},
-            text=True,
-            capture_output=True,
-            timeout=60,
-        )
-        self.assertNotEqual(res.returncode, 0)
-        self.assertIn("selects no mcp-gateway workload", res.stderr)
-
-    def test_missing_service_account_fails_closed(self):
-        stub = """#!/bin/sh
-echo "kubectl $*" >> "$KUBECTL_LOG"
-case "$*" in
-  "get namespace home-assistant -o name")
-    echo 'Error from server (Forbidden): namespaces "home-assistant" is forbidden' >&2; exit 1 ;;
-  "-n home-assistant get serviceaccount mcp-gateway")
-    echo 'Error from server (NotFound): serviceaccounts "mcp-gateway" not found' >&2; exit 1 ;;
-esac
-exit 3
-"""
-        res = self.run_deploy(GOOD_ENV, stub)
-        self.assertNotEqual(res.returncode, 0)
-        self.assertIn("missing ServiceAccount home-assistant/mcp-gateway", res.stderr)
-        log = res.kubectl_log.read_text()
-        self.assertNotIn("apply -f", log)
-
-    def test_forbidden_service_account_read_is_not_a_failure(self):
-        # CI cannot read ServiceAccounts in home-assistant; the deploy must
-        # continue to the ExternalSecret check instead of dying here.
-        stub = """#!/bin/sh
-echo "kubectl $*" >> "$KUBECTL_LOG"
-case "$*" in
-  "get namespace home-assistant -o name")
-    echo 'Error from server (Forbidden): namespaces "home-assistant" is forbidden' >&2; exit 1 ;;
-  "-n home-assistant get serviceaccount mcp-gateway")
-    echo 'Error from server (Forbidden): serviceaccounts "mcp-gateway" is forbidden' >&2; exit 1 ;;
-esac
-exit 3
-"""
-        res = self.run_deploy(GOOD_ENV, stub)
-        self.assertIn("assuming admin-managed home-assistant/mcp-gateway", res.stdout)
-        self.assertIn("missing ExternalSecret", res.stderr)
-
-    def test_missing_namespace_is_not_created(self):
-        stub = """#!/bin/sh
-echo "kubectl $*" >> "$KUBECTL_LOG"
-case "$*" in
-  "get namespace home-assistant -o name")
-    echo 'Error from server (NotFound): namespaces "home-assistant" not found' >&2; exit 1 ;;
-esac
-exit 3
-"""
-        res = self.run_deploy(GOOD_ENV, stub)
-        self.assertNotEqual(res.returncode, 0)
-        self.assertIn("apply projects/home/kubernetes/scheduler/manifests/namespace.yaml", res.stderr)
-        self.assertNotIn("namespace.yaml\"", res.kubectl_log.read_text())
-
-    def test_build_invokes_the_bazel_binary_from_path(self):
-        res = self.run_deploy(GOOD_ENV, build=True)
-        self.assertTrue(res.bazel_log.exists(), res.stderr)
-        self.assertIn(
-            "build //solutions/mcp-gateway:mcp-gateway_image",
-            res.bazel_log.read_text(),
-        )
-
-    def test_prebuilt_digest_skips_the_build_and_is_rendered(self):
-        # deploy-home passes the digest promoted from the pull request
-        # (DECISIONS 36): no Bazel, no push, the digest goes into the manifest.
-        digest = "sha256:" + "d" * 64
-        res = self.run_deploy(
-            GOOD_ENV,
-            build=True,
-            extra_env={"PREBUILT_DIGESTS": f"mcp-gateway={digest}"},
-        )
-        self.assertTrue(res.kubectl_log.exists(), res.stderr)
-        self.assertFalse(
-            res.bazel_log.exists() and res.bazel_log.read_text().strip(),
-            "prebuilt digest must not trigger a build",
-        )
-        self.assertIn(
-            f"ghcr.io/proflyder/mcp-gateway@{digest}",
-            (res.rendered / "deployment.yaml").read_text(),
-        )
-
-    def test_malformed_prebuilt_digest_fails_closed(self):
-        res = self.run_deploy(
-            GOOD_ENV,
-            build=True,
-            extra_env={"PREBUILT_DIGESTS": "mcp-gateway=sha256:abc"},
-        )
-        self.assertNotEqual(res.returncode, 0)
-        self.assertIn("malformed prebuilt digest", res.stderr)
-        self.assertFalse(res.kubectl_log.exists())
 
 
 if __name__ == "__main__":

@@ -3,9 +3,9 @@
  * Commit verified image digests to the machine branch `deploy/home-apps`.
  *
  * Flux reads that branch through `GitRepository/flux-pins` and publishes the
- * `home-app-images` ConfigMap, so a unit migrated to `deploy.runtime: flux`
+ * `home-app-images` ConfigMap, so a unit that owns images
  * receives its image from here instead of from a `kubectl` rollout
- * (FLUX-APPS-PLAN, variant B).
+ * (DECISIONS 54).
  *
  * The job that runs this script is deliberately small: it has no VPN, no
  * OpenBao and no kubeconfig. It only rewrites the keys of the unit it was

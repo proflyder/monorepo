@@ -9,13 +9,12 @@
 живут в `platform/ci/units.mjs` (`deploy` и `rollback` блоки).
 
 ```bash
-# деплой затронутых юнитов через deploy-home.yml (ref develop)
+# пересчитать и запинить digest'ы затронутых юнитов (deploy-home.yml, ref develop)
+# применение делает Flux; в кластер из CI ничего не катится
 mise run deploy scheduler --dry-run     # печатает gh-команду, ничего не запускает
 mise run deploy scheduler --yes         # без --yes спрашивает подтверждение
 mise run deploy scheduler,ha-bridge --yes --watch
 mise run deploy all --yes
-# режимы deploy-home: --mode preserve|execute|shadow|control-execute|control-catalog
-# (не-preserve принимает только юнит ha-bridge); --simulate-hermes-failure — учения отката hermes
 
 # последние запуски deploy-home и подсказка проверки в кластере
 mise run deploy:status
@@ -28,7 +27,7 @@ mise run rollback scheduler --yes       # выполняет документи�
 ```
 
 `deploy` вызывает `gh workflow run deploy-home.yml --ref develop -f units=…`
-(+ существующие inputs workflow). `deploy:status` только читает `gh run list`;
+(единственный input workflow). `deploy:status` только читает `gh run list`;
 `--live` делает read-only `kubectl get deploy`: admin kubeconfig приходит из
 OpenBao через fnox (профиль `kube`), туннель к API поднимается на время
 команды. `rollback --yes` получает kubeconfig так же. `rollback`
@@ -162,35 +161,32 @@ CA: `secrets/home/vpn/client-ca/` (ключ CA на сервер не копир
 После изменения методов аутентификации нужен restart ocserv, после смены
 CRL достаточно reload. Проверка конфигурации — `ocserv --test-config`.
 
-### Доступ CI (`ci-deploy`)
+### Доступ CI: только станция
 
-GitHub Actions ходит в дом только сертификатом группы `ci` (свой пул, маршрут
-только до K3s, nft разрешает лишь `tcp/{443,6443}` — Traefik для OpenBao и
-K3s API) и работает kubectl под ServiceAccount `ci-deploy` в
-`home-assistant`. SSH и root-helper на узле отсутствуют; узел принимает
-`6443` только с адреса VPN-CT (пул `ci` маскируется в него).
+CI больше не входит в K3s: приложения применяет Flux, поэтому `ci-deploy`,
+его RBAC, `secret/ci/deploy-home`, роль OpenBao `deploy-home` и сертификат
+`ci-github` удалены (решение 55 (этап 6.7)). Группа VPN `ci` и `443` остаются
+только для `deploy-station` (сертификат `ci-pulsar`): маршрут ведёт до узла,
+nft разрешает лишь `tcp/443` (Traefik → HA). Правило `tcp/6443` (K3s API)
+снято; SSH и root-helper у CI нет.
 
 ```bash
-# 1. отозвать сертификат CI (CRL обновится на CT, ocserv перезагрузится)
-python3 projects/home/proxmox/vpn/vpncerts.py revoke \
-  secrets/home/vpn/clients/ci-github.p12 \
-  --pve 192.0.2.26 --ssh-key ~/.ssh/home-lab/proxmox_admin \
-  --known-hosts ~/.ssh/home-lab/known_hosts_pve
+# проверить состояние (read-only)
+python3 projects/home/proxmox/vpn/vpncerts.py list
 
-# 2. отозвать Kubernetes-доступ: удалить долгоживущий token Secret
-mise run kubectl -- -n home-assistant delete secret ci-deploy-token
-# rbac.yaml создаёт его заново; после этого пересобрать kubeconfig
-# (server https://<K3S_NODE>:6443, token из этого Secret).
+# станция: повторить уже опубликованную VERSION через HA
+mise run deploy -- pulsar --yes
 
-# полный отзыв роли и аккаунта
-mise run kubectl -- delete -f projects/home/kubernetes/scheduler/ci/rbac.yaml
+# следы старого доступа, которых быть не должно
+mise run kubectl -- -n home-assistant get sa,role,rolebinding | grep ci-deploy
+mise run kubectl -- auth can-i --list --as=system:serviceaccount:home-assistant:ci-deploy
 ```
 
-Ротация без отзыва: `vpncerts.py issue ci --device github --groups ci --force`.
-Обновить файлы `secrets/ci/github/` и секреты Environment `home`
-(`VPN_CERT_P12_B64`, `VPN_CERT_PASSWORD`).
-Проверка: `kubectl auth can-i` с kubeconfig CI не должен видеть другие
-namespace и cluster-scoped объекты.
+Отзыв сертификата `ci-pulsar` (если станция переедет на другой путь) —
+`vpncerts.py revoke secrets/home/vpn/clients/ci-pulsar.p12` с флагами
+`--pve/--ssh-key/--known-hosts`, как в
+`projects/home/proxmox/vpn/README.md`. Отозванный сертификат не возвращается:
+нужен новый.
 
 Сертификат продлевается автоматически через DNS-01 Cloudflare
 (`certbot.timer`, credentials `/etc/letsencrypt/cloudflare.ini`, deploy hook
@@ -311,7 +307,7 @@ Cloudflare DNS-записи — ручной шаг (`cloudflare_dns.py`).
 
 ```bash
 # Приложения: Flux катит их из develop, CI только пинует digest'ы
-# в deploy/home-apps (job `pins`; deploy-home job `deploy` их не трогает).
+# в deploy/home-apps (job `pins`).
 mise run kubectl -- -n flux-system get kustomizations | grep app-
 mise run kubectl -- -n flux-system get configmap home-app-images -o yaml
 mise run kubectl -- -n flux-system annotate kustomization/app-ha-executors \
@@ -383,7 +379,7 @@ mise run secrets:clean home/ingress.env   # …и убрать
 ```bash
 # BAO_ADDR уже в окружении mise; токен — только на время команды
 BAO_TOKEN=$(cat secrets/openbao/operator.token) bao token lookup
-BAO_TOKEN=$(cat secrets/openbao/operator.token) bao kv get secret/ci/deploy-home
+BAO_TOKEN=$(cat secrets/openbao/operator.token) bao kv get secret/k8s/flux-system/app-settings
 # новый токен машины: mise run secrets:login (пароль + TOTP); каждая задача
 # secrets:* продлевает period 30 дней
 ```
@@ -396,11 +392,11 @@ BAO_TOKEN=$(cat secrets/openbao/operator.token) bao kv get secret/ci/deploy-home
 
 Recovery keys и seal key — у владельца в Bitwarden (`Home recovery`) и в Vaultwarden (`openbao:bootstrap`), не на диске; root уже отозван, новый
 выпускается `bao operator generate-root` из recovery keys. GitHub Environment
-`Home` хранит только VPN-креды, `OPENBAO_ADDR` и (опционально)
-`OPENBAO_ROLE`; `kubeconfig`, `scheduler.env` и runtime values лежат в
-`secret/ci/deploy-home` и материализуются job'ом в файлы 600 из outputs
-`hashicorp/vault-action` после OIDC-входа (схема и команда обновления —
-README OpenBao).
+`Home` больше не существует: единственный CI-доступ в OpenBao — роль
+`deploy-station` (Environment `Station`). Приватные env приложений лежат в
+`secret/k8s/flux-system/app-settings`, values Hermes — в
+`secret/k8s/flux-system/runtime-values`; их читает ESO, а не job
+`deploy-home` (схема — README OpenBao и `projects/home/kubernetes/flux/README.md`).
 
 ## External Secrets Operator
 
@@ -413,7 +409,7 @@ Kubernetes Secrets создаёт ESO. Пути, миграция и ротац�
 # оператор, store и инфраструктурные ExternalSecrets — Flux
 mise run kubectl -- -n flux-system annotate kustomization/platform \
   reconcile.fluxcd.io/requestedAt="$(date +%s)" --overwrite
-# только application ExternalSecrets (deploy-home)
+# application ExternalSecrets вручную (аварийный путь; обычно их ведёт Flux)
 mise run admin:external-secrets
 
 # состояние
@@ -426,8 +422,9 @@ mise run kubectl -- -n home-assistant annotate externalsecret scheduler-auth \
   force-sync="$(date +%s)" --overwrite
 ```
 
-`deploy-home` проверяет `Ready` ExternalSecret перед выкаткой; deploy-скрипты
-не создают и не перезаписывают эти Secrets. Первая установка на чистом
+`Kustomization.wait`/`healthChecks` Flux ждут готовности workload'ов, а
+`ExternalSecret` применяет сам Flux; deploy-скрипты не создают и не
+перезаписывают эти Secrets. Первая установка на чистом
 кластере требует однократно поставить ESO (иначе `flux-settings` не из чего
 создать) — см. `projects/home/kubernetes/flux/README.md`.
 
@@ -1020,8 +1017,8 @@ provenance; `deploy-home` проверяет тег и provenance:
   для logon provider `<version>` и `sha-<12>`. Версия неизменяема: тот же
   digest — no-op, другой — отказ; двигается только `latest`.
 
-`deploy-home` — только доставка: он не запускает `bazel build`/`bazel run`
-и не собирает Docker-образы. Native-юниты (Pulsar, logon provider) тоже
+`deploy-home` — только promotion и pins: он не запускает `bazel build`/`bazel run`
+и не собирает Docker-образы; применение делает Flux. Native-юниты (Pulsar, logon provider) тоже
 только продвигаются: если `tree-<hash>` не опубликован или provenance не
 сходится, job `native-release` падает с подсказкой перезапустить PR CI; история
 для них не используется, потому что релизный артефакт должен соответствовать
@@ -1087,8 +1084,8 @@ merge с изменением `VERSION`.
 apt только из snapshot Debian, `SOURCE_DATE_EPOCH` = время upstream-коммита, а
 Buildx переписывает mtime слоёв (`rewrite-timestamp=true`). Поэтому две сборки
 одной ревизии дают один digest и неподвижный образ не вызывает rollout. В
-`deploy-home` `build-and-push.sh` только принимает промоутнутые digest'ы
-(`DEPLOY_NO_BUILD=1`) и ничего не собирает.
+`deploy-home` `build-and-push.sh` больше не вызывается: job `pins` принимает
+промоутнутые digest'ы напрямую и ничего не собирает (`DECISIONS` 36).
 
 ```bash
 # две сборки без кэша в разные каталоги → сравнение digest'ов
@@ -1108,13 +1105,15 @@ PR CI (`_unit.yml`) читает общий кэш слоёв Buildx
 `projects/home-assistant/deploy/images/hermes/**` привязан к деплой-юниту
 `hermes`, так что изменение доезжает до кластера.
 
-Как понять, что использовал деплой:
+Как понять, что приехало в кластер:
 
-* вкладка Actions → прогон `deploy-home` → summary job'а
-  `deploy <unit>`: строка `image path: prebuilt` (взят проверенный PR-образ);
-  `build` означает, что promotion отказал и job упал до выкатки (причина — в
-  блоке `image promotion`);
-* там же видны digest'ы образов и `runtime revision` Helm-релиза.
+* вкладка Actions → прогон `deploy-home` → summary job'а `pins <unit>`:
+  digest'ы, исходный commit/tree и ссылка на run;
+* `mise run kubectl -- -n flux-system get configmap home-app-images -o yaml`
+  показывает актуальные pins, `get kustomizations -n flux-system` — Ready,
+  `flux events`/алерты — применение;
+* для Hermes — `helm -n home-assistant history runtime` (ревизии создаёт
+  `HelmRelease/runtime`).
 
 Если для образа нет ни текущего tree, ни верифицированной сборки в истории,
 job падает с понятной ошибкой; автосборки на деплой-раннере нет. Частая
@@ -1124,12 +1123,10 @@ job падает с понятной ошибкой; автосборки на �
 подтянуть `develop` в PR, дождаться CI и смержить заново. Локально сборка
 остаётся поведением по умолчанию; в CI её запрещает `DEPLOY_NO_BUILD=1`.
 
-Локально путь продвижения можно повторить, передав проверенные digest'ы
-(без них скрипты собирают и пушат как обычно):
+Повторить pins для текущего `develop` (без сборки и без доступа в кластер):
 
 ```bash
-PREBUILT_DIGESTS="scheduler=sha256:…,ha-bridge=sha256:…,ha-control=sha256:…" \
-  NODE_SSH=labuser@<node> projects/home/kubernetes/scheduler/deploy.sh
+mise run deploy -- scheduler --yes      # workflow_dispatch units=scheduler
 ```
 
 Чистка GHCR — `.github/workflows/ghcr-cleanup.yml`, ежедневно по расписанию.
@@ -1157,25 +1154,24 @@ node platform/ci/ghcr_cleanup.mjs \
 
 ## Планировщик / HA bridge
 
-Deploy, пауза и запуск исполнителя — `projects/home/kubernetes/scheduler/README.md`.
-Короткие команды (приватные значения в `secrets/home/scheduler.env`):
+Обычный деплой — Flux (`app-ha-executors`); режимы и реплики зафиксированы в
+Git. Учения и cutover — `projects/home/kubernetes/scheduler/README.md`:
+сначала `flux suspend kustomization app-ha-executors`, затем admin-скрипт с
+приватным env (по умолчанию `secrets/home/scheduler.env`, git-ignored) и
+admin-kubeconfig. После учения — вернуть steady-state и `flux resume`.
 
 ```bash
-# ключ ноды: ~/.ssh/home-lab/proxmox_admin (labuser@<node>);
-# образы собираются Bazel и импортируются в containerd по SSH, применяются kubectl.
-# сборка + применение, режим исполнителя сохраняется
-NODE_SSH=labuser@<node> SSH_KEY=~/.ssh/home-lab/proxmox_admin \
-  projects/home/kubernetes/scheduler/deploy.sh
-
 # только один юнит (scheduler | ha-bridge | ha-control; ha-bridge катит и ha-scenario)
-NODE_SSH=labuser@<node> projects/home/kubernetes/scheduler/deploy.sh --only scheduler
+PRIVATE_ENV=secrets/home/scheduler.env KUBECONFIG=<admin> \
+  projects/home/kubernetes/scheduler/deploy.sh --only scheduler
 
 # осознанный переход в shadow (dry-run, 0 реплик)
-NODE_SSH=labuser@<node> projects/home/kubernetes/scheduler/deploy.sh --shadow
+PRIVATE_ENV=secrets/home/scheduler.env KUBECONFIG=<admin> \
+  projects/home/kubernetes/scheduler/deploy.sh --shadow
 
 # запуск исполнителя: preflight (в кластере или локально) + execute
-HA_TOKEN_FILE=secrets/home/ha.token NODE_SSH=labuser@<node> \
-  projects/home/kubernetes/scheduler/deploy.sh --execute
+PRIVATE_ENV=secrets/home/scheduler.env HA_TOKEN_FILE=secrets/home/ha.token \
+  KUBECONFIG=<admin> projects/home/kubernetes/scheduler/deploy.sh --execute
 
 # NodePort-фильтр scheduler/control/intercom — host-конфигурация,
 # вручную/root на узле; в env нужны SCHEDULER_NODE_PORT,
@@ -1190,9 +1186,7 @@ mise run admin:scheduler-backup
 Сигналинг звонка (`solutions/intercom`):
 
 ```bash
-# ручной деплой (обычно не нужен: merge в develop катит юнит сам)
-PRIVATE_ENV=secrets/home/intercom.env \
-  projects/home/kubernetes/intercom/deploy.sh
+# деплой — Flux (app-intercom); вручную только состояние и проба
 
 # состояние и проба
 mise run kubectl -- -n home-assistant rollout status deployment/intercom
@@ -1438,9 +1432,7 @@ KV — README `projects/home/kubernetes/openbao`; статус — вкладк�
 
 ```bash
 
-# деплой вручную: Bazel-образ импортируется на узел по SSH
-NODE_SSH=labuser@192.0.2.27 \
-  ./projects/home/kubernetes/currency-bot/deploy.sh
+# деплой — Flux (app-currency-bot); вручную только состояние
 
 # состояние; ExternalSecrets должны быть SecretSynced=True
 mise run kubectl -- -n currency-bot get deploy,pod,svc,pvc,externalsecret

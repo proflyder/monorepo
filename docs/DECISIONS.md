@@ -43,14 +43,14 @@
 16. **Legacy HA-helper-ы расписаний удалены.** `todo.alarms_*` и
     `todo.reminders` удалены, `timer.taimer_1…8` отключены в registry;
     источник истины — scheduler. Заметки остаются в `todo.notes`.
-17. **Сервисы K3s — digest-пины образов, деплой только kubectl.** scheduler,
-    ha-bridge и ha-control собираются Bazel `rules_oci` (distroless,
-    digest-pinned base) и адресуются `ghcr.io/proflyder/<name>@sha256:...`;
+17. **Сервисы K3s — digest-пины образов.** scheduler, ha-bridge и ha-control
+    собираются Bazel `rules_oci` (distroless, digest-pinned base) и
+    адресуются `ghcr.io/proflyder/<name>@sha256:...`;
     `imagePullPolicy: IfNotPresent`. CI пушит образы job-scoped
-    `GITHUB_TOKEN`, а `deploy-home` на push в `develop` катит только
-    затронутые юниты через VPN группу `ci` и kubectl под ServiceAccount
-    `ci-deploy`. SSH, root-helper, hostPath и `/opt/home` из пути
-    деплоя удалены; NodePort-nft остаётся host-конфигурацией.
+    `GITHUB_TOKEN`. Применение в K3s переведено с CI-kubectl на Flux
+    (решения 53–55): VPN-путь и `ci-deploy` удалены. SSH, root-helper,
+    hostPath и `/opt/home` из пути деплоя удалены; NodePort-nft остаётся
+    host-конфигурацией.
 
 18. **OpenBao — единственный секрет-сервер.** OpenBao 2.7 (chart и образ
     по digest) в namespace `openbao`, UI/API — `vault` под приватным
@@ -62,14 +62,16 @@
     KMS/HSM/TPM не вводим; ключ не входит в snapshot и в offsite-бэкап
     кладётся отдельно от raft-снапшотов). Человек —
     `userpass` + TOTP, политика `admin` без `sys/seal`/`raw`/`rekey`; CI —
-    GitHub OIDC (repository, environment, ref `develop`, TTL ≤ 15 мин, только
-    `secret/ci/{test,deploy-home}`); поды — Kubernetes auth (только
-    `secret/k8s/*`). Root-токен отозван, recovery keys — только офлайн.
+    GitHub OIDC только для станции (`deploy-station`, Environment `Station`,
+    TTL ≤ 15 мин, `secret/ci/deploy-station`) и Android (`ci-android`); поды —
+    Kubernetes auth (только `secret/k8s/*`). Роль `deploy-home` и политика
+    `ci-deploy` удалены вместе с CI-деплоем home-сервисов (решение 55).
+    Root-токен отозван, recovery keys — только офлайн.
 
 19. **Git — только PR, squash и `ci-ok`.** Прямой push в `develop` запрещён;
-    merge PR запускает `deploy-home`. Режимы исполнения меняются только
-    ручным `workflow_dispatch`; откат — только применённого объекта, полный —
-    новым revert-PR.
+    merge PR запускает `deploy-home` (promotion + pins), а применяет Flux.
+    Режимы исполнения — Git-состояние плюс `flux suspend` и admin-скрипт;
+    откат — revert pins-коммита или новый revert-PR, не `kubectl rollout undo`.
 20. **Pulsar — код и релизы в монорепозитории, деплой через HA updater.**
     Исходники — `projects/station/pulsar/`; CI — юнит `pulsar`
     (`_native.yml`: Bazel-сборка обеих архитектур, installer, radio, ssh), хост
@@ -782,6 +784,23 @@
     переключение и учения — PR либо `flux suspend` + admin-скрипт, но не
     неявный side effect деплоя. Откат приложения — `flux suspend` +
     revert pins, не `kubectl rollout undo`; PVC несут
-    `kustomize.toolkit.fluxcd.io/prune: disabled`. Удаление job `deploy`,
-    `ci-deploy`, сертификата `ci-github` и `secret/ci/deploy-home` —
-    отдельный этап 6.7 после наблюдения (`docs/PENDING.md`).
+    `kustomize.toolkit.fluxcd.io/prune: disabled`. Job `deploy`, `ci-deploy`,
+    сертификат `ci-github`, VPN-правило `6443` и `secret/ci/deploy-home`
+    удалены в 6.7 (решение 55).
+
+55. **Входящий доступ CI в K3s удалён (решение 55 (этап 6.7)).** После перевода
+    всех семи деплой-юнитов на Flux `deploy-home` больше не применяет
+    объекты: из workflow удалён job `deploy` (VPN группа `ci`, OIDC-роль
+    `deploy-home`, kubeconfig, `kubectl`/`helm` под `ci-deploy`), а также
+    ручные mode/simulate inputs. Остались `plan`, `pins`, `warm-*`,
+    `native-release` и `deploy-station`. Удалены `*/ci/rbac.yaml`, роль
+    `deploy-home` и политика `ci-deploy` из `configure.py`, сертификат
+    `ci-github` и правило `tcp/6443` из VPN-конфигурации; группа `ci` и
+    `443` сохранены для `deploy-station` (`ci-pulsar`). Ручные
+    `deploy.sh` четырёх простых юнитов и `admin:service` удалены: их заменяют
+    Flux и pins. Сохранены как аварийные/admin-инструменты
+    `scheduler/deploy.sh` (режимы, preflight), `hermes rollout`,
+    `external-secrets/deploy.sh`, `apply-runtime.sh` и регрессия
+    `test_deploy_control.sh`. Штатный путь: merge → `pins` → Flux; откат —
+    pins revert или `flux suspend`. Живые следы (SA/RBAC, OpenBao, VPN,
+    GitHub Environment) удаляет владелец отдельными командами.

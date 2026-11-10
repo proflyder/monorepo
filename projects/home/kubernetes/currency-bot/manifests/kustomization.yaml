@@ -1,11 +1,11 @@
-# Flux-rendered manifest set for currency-bot (FLUX-APPS-PLAN 6.3).
+# Flux-rendered manifest set for currency-bot (решение 54).
 #
 # The four object files stay the templates used by `deploy.sh` (CI/admin path):
 # PVC, two Deployments, two Services, four NetworkPolicies, the ServiceMonitor
 # and both ExternalSecrets. This kustomization is the Flux path.
 #
 # `namespace.yaml` is deliberately absent: Kubernetes namespaces are
-# cluster-scoped and admin-owned (FLUX-APPS-PLAN 6.3), and the namespace
+# cluster-scoped and admin-owned (решение 54), and the namespace
 # already exists.
 #
 # Substituted by Kustomization/app-currency-bot:
@@ -28,7 +28,7 @@ resources:
   - external-secrets.yaml
 patches:
   # `prune: true` must never delete the SQLite volume if a manifest is removed
-  # by mistake (FLUX-APPS-PLAN 4.2).
+  # by mistake (решение 54).
   - target:
       kind: PersistentVolumeClaim
       name: currency-bot-data

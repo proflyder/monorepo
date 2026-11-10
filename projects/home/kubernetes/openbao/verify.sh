@@ -104,7 +104,7 @@ else
 fi
 
 # Policy preconditions for the machine identities.
-for policy in ci-deploy k8s-read; do
+for policy in k8s-read; do
   body=$(curl_host "https://$HOST/v1/sys/policies/acl/$policy" || true)
   if [[ "$body" == *'"write"'* || "$body" == *'"update"'* ]]; then
     check "policy $policy write" "absent" "present"

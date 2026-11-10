@@ -6,7 +6,6 @@ import { test } from "node:test";
 
 import { loadConfig } from "../../ci/affected.mjs";
 import {
-  MODES,
   deployCommand,
   deployPlanLines,
   deployTargets,
@@ -95,20 +94,19 @@ test("ops: resolveDeployUnits rejects unknown, non-dispatchable and `all` mixed"
   assert.throws(() => resolveDeployUnits(realUnits, []), /at least one unit/);
 });
 
-test("ops: parseDeploy accepts flags in both forms and rejects unknown ones", () => {
-  const parsed = parseDeploy(["scheduler", "--mode=execute", "--yes", "--watch", "--simulate-hermes-failure"]);
+test("ops: parseDeploy accepts the remaining flags and rejects unknown ones", () => {
+  const parsed = parseDeploy(["scheduler", "--yes", "--watch"]);
   assert.deepEqual(parsed.units, ["scheduler"]);
-  assert.equal(parsed.mode, "execute");
   assert.equal(parsed.yes, true);
   assert.equal(parsed.watch, true);
-  assert.equal(parsed.simulateHermesFailure, true);
-  assert.throws(() => parseDeploy(["--mode", "bogus"]), /unknown mode/);
+  // Executor modes are no longer dispatched through CI: they are Git state
+  // plus `flux suspend` and the admin deploy.sh.
+  assert.throws(() => parseDeploy(["--mode=execute"]), /unknown flag/);
   assert.throws(() => parseDeploy(["--bogus"]), /unknown flag/);
-  assert.deepEqual(MODES, ["preserve", "execute", "shadow", "control-execute", "control-catalog"]);
 });
 
-test("ops: deployCommand only sends non-default flags", () => {
-  const command = deployCommand({ units: [scheduler], mode: "preserve", simulateHermesFailure: false });
+test("ops: deployCommand sends only the unit list", () => {
+  const command = deployCommand({ units: [scheduler] });
   assert.deepEqual(command.args, [
     "workflow",
     "run",
@@ -118,23 +116,13 @@ test("ops: deployCommand only sends non-default flags", () => {
     "-f",
     "units=scheduler",
   ]);
-  const drill = deployCommand({
-    units: [scheduler],
-    mode: "execute",
-    simulateHermesFailure: true,
-  });
-  assert.ok(drill.args.includes("mode=execute"));
-  assert.ok(drill.args.includes("simulate_hermes_failure=true"));
 });
 
 test("ops: deploy plan names the namespace and the exact gh command", () => {
-  const text = deployPlanLines({
-    units: [scheduler],
-    mode: "preserve",
-    simulateHermesFailure: false,
-  }).join("\n");
+  const text = deployPlanLines({ units: [scheduler] }).join("\n");
   assert.ok(text.includes("namespace home-assistant"));
-  assert.ok(text.includes("workloads scheduler"));
+  assert.ok(text.includes("Flux workloads scheduler"));
+  assert.ok(text.includes("pins → Flux"));
   assert.ok(text.includes("gh workflow run deploy-home.yml --ref develop -f units=scheduler"));
 });
 
@@ -191,36 +179,6 @@ test("ops: deploy --watch watches the found run", async () => {
   });
   assert.equal(code, 0);
   assert.deepEqual(spawn.calls.at(-1).args, ["run", "watch", "7", "--exit-status"]);
-});
-
-test("ops: --simulate-hermes-failure without the hermes unit is rejected", async () => {
-  const spawn = fakeSpawn();
-  const stderr = buffer();
-  const code = await runDeploy(["scheduler", "--dry-run", "--simulate-hermes-failure"], {
-    spawn,
-    stdout: buffer(),
-    stderr,
-  });
-  assert.equal(code, 2);
-  assert.ok(stderr.text().includes("needs the hermes unit"));
-});
-
-test("ops: non-preserve modes are limited to ha-bridge like the workflow", async () => {
-  const stderr = buffer();
-  const code = await runDeploy(["scheduler", "--mode", "execute", "--dry-run"], {
-    spawn: fakeSpawn(),
-    stdout: buffer(),
-    stderr,
-  });
-  assert.equal(code, 2);
-  assert.ok(stderr.text().includes("only allowed for the ha-bridge unit"));
-
-  const ok = await runDeploy(["ha-bridge", "--mode", "execute", "--dry-run"], {
-    spawn: fakeSpawn(),
-    stdout: buffer(),
-    stderr: buffer(),
-  });
-  assert.equal(ok, 0);
 });
 
 test("ops: every unit with a rollback kind has the fields its kind needs", () => {

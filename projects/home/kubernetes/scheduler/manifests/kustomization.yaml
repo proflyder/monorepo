@@ -1,4 +1,4 @@
-# Flux-rendered manifest set for the HA executors (FLUX-APPS-PLAN 6.5):
+# Flux-rendered manifest set for the HA executors (решение 54):
 # scheduler, ha-bridge, ha-control, ha-scenario.
 #
 # One Kustomization owns all four workloads because they share the scheduler
@@ -15,7 +15,7 @@
 #     (plus `flux suspend` for a drill), never an implicit Flux side effect.
 #
 # `preflight-job.yaml` is deliberately absent: the cutover preflight stays a
-# manual admin Job (FLUX-APPS-PLAN 4.3/6.5).
+# manual admin Job (решение 54).
 #
 # Substituted by Kustomization/app-ha-executors:
 #   ${SCHEDULER_IMAGE}, ${HA_BRIDGE_IMAGE}, ${HA_CONTROL_IMAGE},
@@ -33,7 +33,7 @@ resources:
   - external-secrets.yaml
 patches:
   # `prune: true` must never delete a SQLite volume if a manifest is removed by
-  # mistake (FLUX-APPS-PLAN 4.2).
+  # mistake (решение 54).
   - target:
       kind: PersistentVolumeClaim
       name: scheduler-data
@@ -88,7 +88,7 @@ patches:
       - op: replace
         path: /spec/template/metadata/annotations/proflyder.dev~1rollout
         value: ${HA_SCENARIO_IMAGE}
-  # Live steady state recorded on 2026-11-10 (FLUX-APPS-PLAN 6.5 step 1/2).
+  # Live steady state recorded on 2026-11-10 (решение 54 step 1/2).
   # The template keeps `0`/false for `deploy.sh`'s first install; Flux owns the
   # long-lived executor with these values.
   - target:

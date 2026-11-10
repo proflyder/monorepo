@@ -25,9 +25,9 @@ home_deploy render --unit scheduler --env "$PRIVATE_ENV" --out "$RENDER_DIR" \
 `bazel-bin/platform/deploy-rs/home-deploy` после `bazel build` →
 `bazel run //platform/deploy-rs:home-deploy --` (Bazelisk — из `mise install`).
 
-`deploy-home` не компилирует инструмент: он достаёт бинарник из промоутнутого
-OCI-образа `ghcr.io/proflyder/home-deploy` (`crane export`, путь
-`/usr/local/bin/home-deploy`) и экспортирует `HOME_DEPLOY`. Контракт — образ,
+CI больше не запускает этот инструмент для деплоя: образ
+`ghcr.io/proflyder/home-deploy` собирается и аттестуется на PR, а скрипты
+запускают админ вручную (локальный `bazel run` или извлечённый бинарник). Контракт — образ,
 а не язык: сейчас его собирает `rust_service_image` из
 `//platform/deploy-rs:home-deploy`.
 `DEPLOY_NO_BUILD=1` в CI также запрещает запасные пути `bazel-bin` и `bazel
@@ -68,7 +68,7 @@ JSON-payload'ы с эталонными трассами
 `created`, `unchanged` или `rolled-out`. Статус определяется сравнением
 `metadata.generation` до и после `replace` (это то же, по чему Kubernetes
 создаёт новый ReplicaSet), поэтому rollout не угадывается по сообщению
-kubectl. `deploy-home` собирает эти строки в job summary.
+kubectl. Админ/deploy-скрипты собирают эти строки в отчёт.
 
 ### Rollout без перезапуска при неизменном содержимом
 

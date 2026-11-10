@@ -1,4 +1,4 @@
-# Manifest set for Kustomization/app-hermes (FLUX-APPS-PLAN 6.6).
+# Manifest set for Kustomization/app-hermes (решение 54).
 #
 # Only the Helm release lives here: the PV/PVC stay admin-owned
 # (`projects/home/kubernetes/apply-runtime.sh`), and the application Secret

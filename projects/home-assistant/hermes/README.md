@@ -163,8 +163,9 @@ levels are only passed through when the owner names them, and the gateway still
 validates them against the dispatcher's live list.
 
 Rollout: prompts and context are installed by the renderer above (then restart
-`hermes`); the target list and the gateway tool group ship with
-`projects/home/kubernetes/mcp-gateway/deploy.sh`.  Verify with `hermes mcp test
+`hermes`); the target list and the gateway tool group ship with the
+mcp-gateway manifest set (`manifests/bb-targets.yaml`, applied by Flux).
+Verify with `hermes mcp test
 infra` (the tool count includes the four bb tools) and a spoken «что делают
 агенты?».
 
