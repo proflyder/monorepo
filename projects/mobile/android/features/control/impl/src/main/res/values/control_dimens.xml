@@ -41,4 +41,8 @@
     <dimen name="control_speed_dial_offset">88dp</dimen>
     <dimen name="control_speed_dial_item_gap">12dp</dimen>
     <dimen name="control_speed_dial_row_gap">8dp</dimen>
+    <!-- Compact "Settings (N)" step inside a device card. -->
+    <dimen name="control_settings_top_gap">4dp</dimen>
+    <dimen name="control_settings_min_height">40dp</dimen>
+    <dimen name="control_settings_vertical_padding">4dp</dimen>
 </resources>
