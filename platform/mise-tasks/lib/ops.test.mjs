@@ -211,7 +211,7 @@ test("ops: non-preserve modes are limited to ha-bridge like the workflow", async
 });
 
 test("ops: every unit with a rollback kind has the fields its kind needs", () => {
-  const kinds = new Set(["deploy-state", "helm", "hermes", "pulsar", "forward-only"]);
+  const kinds = new Set(["deploy-state", "helm", "hermes", "pulsar", "flux-pins", "forward-only"]);
   for (const unit of loadConfig().units.filter((candidate) => candidate.rollbackKind)) {
     assert.ok(kinds.has(unit.rollbackKind), `${unit.id}: ${unit.rollbackKind}`);
     assert.ok(unit.rollbackSource, `${unit.id}: source`);
@@ -263,7 +263,7 @@ test("ops: pulsar rollback prints the on-device instruction and never executes",
 test("ops: forward-only units exit non-zero without executing", async () => {
   const spawn = fakeSpawn();
   const stderr = buffer();
-  const code = await runRollback(["wakegrant", "--yes"], {
+  const code = await runRollback(["intercom", "--yes"], {
     spawn,
     stdout: buffer(),
     stderr,
@@ -271,6 +271,20 @@ test("ops: forward-only units exit non-zero without executing", async () => {
   assert.equal(code, 1);
   assert.equal(spawn.calls.length, 0);
   assert.ok(stderr.text().includes("forward-only"));
+});
+
+test("ops: flux-pins rollback prints the pins revert and never executes", async () => {
+  const spawn = fakeSpawn();
+  const stdout = buffer();
+  const code = await runRollback(["wakegrant", "--yes"], {
+    spawn,
+    stdout,
+    stderr: buffer(),
+  });
+  assert.equal(code, 0);
+  assert.equal(spawn.calls.length, 0);
+  assert.ok(stdout.text().includes("deploy/home-apps"));
+  assert.ok(stdout.text().includes("nothing was executed"));
 });
 
 test("ops: rollback --dry-run prints the command without executing", async () => {

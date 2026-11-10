@@ -34,6 +34,13 @@ name: deploy-home
 # job (`_unit.yml`) publishes for every affected deployable unit. That keeps the mechanism
 # independent of the language `home-deploy` is written in (the Rust crate today).
 #
+# Flux-owned application units (`deploy.runtime: flux` in units.mjs) are not
+# applied by this workflow at all: the `pins` job promotes and verifies their
+# images exactly like `deploy` does and commits the digests to the machine
+# branch `deploy/home-apps`, which Flux reads. That job has no VPN, OpenBao or
+# kubeconfig; it only needs `contents: write` on that branch. `develop` is
+# never written, and a failed promotion keeps the previous pin in force.
+#
 # A manual dispatch deploys the current `develop`, whose tree has no CI build
 # for units the last merged PR did not touch (the tree changes on every merge).
 # Promotion therefore walks the first-parent lineage (~200 commits) of the
@@ -319,6 +326,9 @@ jobs:
     outputs:
       units: ${{ steps.filter.outputs.units }}
       native_units: ${{ steps.filter.outputs.native_units }}
+      # Units applied by Flux from the `deploy/home-apps` pins branch. Their
+      # digests are committed by the `pins` job; `deploy` never sees them.
+      flux_units: ${{ steps.filter.outputs.flux_units }}
       # `true` when the station release should run (Pulsar VERSION changed on
       # push, or an explicit dispatch asks for it).
       station: ${{ steps.filter.outputs.station }}
@@ -389,6 +399,7 @@ jobs:
             }
             const outputs = affected.githubOutputs(computed);
             core.setOutput('deploy_units', outputs.deploy_units);
+            core.setOutput('flux_units', outputs.flux_units);
             core.setOutput('native_units', outputs.native_units);
 
       # A dispatch may narrow the list explicitly (comma separated ids); a push
@@ -399,22 +410,26 @@ jobs:
         env:
           EVENT_NAME: ${{ github.event_name }}
           DEPLOY_UNITS: ${{ steps.route.outputs.deploy_units }}
+          FLUX_UNITS: ${{ steps.route.outputs.flux_units }}
           NATIVE_UNITS: ${{ steps.route.outputs.native_units }}
           WANTED: ${{ github.event_name == 'workflow_dispatch' && inputs.units || '' }}
         with:
           script: |
             const affected = await import(`${process.env.GITHUB_WORKSPACE}/platform/ci/affected.mjs`);
             const units = JSON.parse(process.env.DEPLOY_UNITS || '[]');
+            const fluxUnits = JSON.parse(process.env.FLUX_UNITS || '[]');
             const allNative = JSON.parse(process.env.NATIVE_UNITS || '[]');
             const dispatch = process.env.EVENT_NAME === 'workflow_dispatch';
             const wantedRaw = (process.env.WANTED || '').trim();
             const isPulsar = (entry) => entry.id === 'pulsar';
             let selected = units;
+            let selectedFlux = fluxUnits;
             let station = false;
             if (dispatch && wantedRaw && wantedRaw !== 'all') {
               const wanted = new Set(wantedRaw.split(',').map((item) => item.trim()).filter(Boolean));
               const known = new Set([
                 ...units.map((entry) => entry.id),
+                ...fluxUnits.map((entry) => entry.id),
                 ...allNative.map((entry) => entry.id),
               ]);
               const unknown = [...wanted].filter((id) => !known.has(id)).sort();
@@ -422,6 +437,8 @@ jobs:
                 throw new Error(`unknown deployable unit(s): [${unknown.map((id) => `'${id}'`).join(', ')}]`);
               }
               selected = units.filter((entry) => wanted.has(entry.id));
+              // Flux-owned units are pinned, never applied by `deploy`.
+              selectedFlux = fluxUnits.filter((entry) => wanted.has(entry.id));
               // A dispatch with units=pulsar re-deploys the already published
               // VERSION through `deploy-station`; it never rebuilds or pushes.
               station = wanted.has('pulsar');
@@ -434,7 +451,9 @@ jobs:
               station = allNative.some((entry) => isPulsar(entry) && entry.publish !== false);
             }
             const json = affected.jsonDumps(selected);
+            const fluxJson = affected.jsonDumps(selectedFlux);
             core.setOutput('units', json);
+            core.setOutput('flux_units', fluxJson);
             // Native units whose release trigger did not fire are PR CI only:
             // they are built by `ci.yml`, never by deploy-home.
             const natives = allNative.filter((entry) => entry.publish !== false);
@@ -442,7 +461,8 @@ jobs:
             core.setOutput('native_units', nativeJson);
             core.setOutput('station', String(station));
             core.summary.addRaw(`### deploy-home plan\n\n\`\`\`json\n${json}\n\`\`\`\n`);
-            await core.summary
+            core.summary
+              .addRaw(`\nflux units: \`${fluxJson}\`\n`)
               .addRaw(`\nnative units: \`${nativeJson}\`\nstation release: \`${station}\`\n`)
               .write();
 
@@ -1090,6 +1110,145 @@ jobs:
           sudo pkill -f 'openconnect --no-dtls' 2>/dev/null
           rm -rf "$CI_DIR" "$RUNNER_TEMP/openconnect.log" "$RUNNER_TEMP/openconnect.pid"
           echo "temporary deploy files removed"
+
+  # Flux-owned units. `deploy.runtime: flux` means Flux applies the workload
+  # from `deploy/home-apps`; CI only has to publish the verified digest there.
+  # This job therefore has no VPN, no OpenBao, no kubeconfig and no `kubectl`:
+  # it promotes the PR-built digest exactly like `deploy` does and commits the
+  # pins file with `GITHUB_TOKEN` (`contents: write`). The branch is not code;
+  # `develop` is never touched and Flux never writes to Git.
+  #
+  # Matrix jobs can race on the branch, so the writer refetches, reapplies only
+  # this unit's keys and retries the push (platform/ci/pins.mjs). A missing or
+  # unverified digest fails closed and leaves the previous pin in place.
+  pins:
+    name: pins ${{ matrix.id }}
+    needs: plan
+    if: needs.plan.outputs.flux_units != '[]' && needs.plan.outputs.flux_units != ''
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      # Push the pins commit; the branch ruleset only admits the CI bot.
+      contents: write
+      # Re-tag the promoted digest (`crane tag`).
+      packages: write
+      # Read the PR build provenance before pinning the digest.
+      attestations: read
+      pull-requests: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.flux_units) }}
+    # One writer at a time; the retry loop is the second line of defence.
+    concurrency:
+      group: deploy-home-pins
+      cancel-in-progress: false
+    steps:
+      # Full history: promotion may fall back to the PR head, and the pins
+      # annotation records the deploy commit's tree.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      # Official crane release, pinned by sha256 like oras/kubectl/helm.
+      - name: Install pinned crane
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/crane_${CRANE_VERSION}_linux_amd64.tar.gz"
+          curl -fsSL --retry 3 --retry-delay 5 -o "$archive" \
+            "https://github.com/google/go-containerregistry/releases/download/${CRANE_VERSION}/go-containerregistry_Linux_x86_64.tar.gz"
+          echo "${CRANE_SHA256}  ${archive}" | sha256sum -c -
+          tar -xzf "$archive" -C "$RUNNER_TEMP" crane
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+
+      # The Docker config written here is what `crane tag` reads.
+      - name: Log in to GHCR
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Same gate as `deploy`: a digest whose `tree-<hash>` tag or provenance
+      # does not verify is never written to the branch.
+      - name: Promote PR-built images by tree hash
+        id: promote
+        env:
+          GH_TOKEN: ${{ github.token }}
+          IMAGES: ${{ matrix.images }}
+          OPTIONAL_IMAGES: ${{ matrix.optional_images }}
+          ALLOW_HISTORY: ${{ github.event_name == 'workflow_dispatch' && '1' || '0' }}
+          ALLOW_PR_HEAD: ${{ github.event_name == 'push' && '1' || '0' }}
+          UNIT: ${{ matrix.id }}
+          DEPLOY_COMMIT: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          tree=$(git rev-parse "${DEPLOY_COMMIT}^{tree}") || {
+            echo "::error::cannot resolve the tree of ${DEPLOY_COMMIT}" >&2
+            exit 1
+          }
+          history_args=()
+          if [[ "$ALLOW_HISTORY" == "1" || -n "$OPTIONAL_IMAGES" ]]; then
+            history_args=(--history-limit 200)
+          fi
+          if [[ "$ALLOW_HISTORY" == "1" ]]; then
+            history_args+=(--allow-history)
+          fi
+          pr_head_args=()
+          if [[ "$ALLOW_PR_HEAD" == "1" ]]; then
+            pr_head_args=(--allow-pr-head --unit "$UNIT")
+          fi
+          if ! node platform/ci/promote.mjs \
+            --images "$IMAGES" \
+            --optional-images "$OPTIONAL_IMAGES" \
+            "${history_args[@]}" \
+            "${pr_head_args[@]}" \
+            --tree "$tree" \
+            --commit "$DEPLOY_COMMIT" \
+            --repository "${GITHUB_REPOSITORY}"; then
+            echo "::error::image promotion failed for the pins job; see the job summary" >&2
+            exit 1
+          fi
+          if ! grep -qx 'mode=prebuilt' "$GITHUB_OUTPUT"; then
+            echo "::error::no verified image set to pin (commit ${DEPLOY_COMMIT}, tree ${tree})" >&2
+            exit 1
+          fi
+
+      # Rewrites only this unit's keys plus the provenance annotations. The
+      # previous pin stays in force if anything here fails.
+      - name: Commit ${{ matrix.id }} digests to deploy/home-apps
+        env:
+          UNIT: ${{ matrix.id }}
+          IMAGES: ${{ matrix.images }}
+          DIGESTS: ${{ steps.promote.outputs.prebuilt_digests }}
+          DEPLOY_COMMIT: ${{ github.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          tree=$(git rev-parse "${DEPLOY_COMMIT}^{tree}")
+          node platform/ci/pins.mjs \
+            --unit "$UNIT" \
+            --images "$IMAGES" \
+            --digests "$DIGESTS" \
+            --commit "$DEPLOY_COMMIT" \
+            --tree "$tree" \
+            --run "$RUN_URL" \
+            --branch deploy/home-apps
+
+      - name: Summary
+        if: always()
+        run: |
+          set +e
+          {
+            echo "### deploy-home / pins ${{ matrix.id }}"
+            echo
+            echo "- runtime: \`flux\` (Flux applies from \`deploy/home-apps\`)"
+            echo "- event: \`$GITHUB_EVENT_NAME\`"
+            echo "- images: \`${{ matrix.images }}\`"
+            echo "- digests: \`${{ steps.promote.outputs.prebuilt_digests }}\`"
+            echo "- pins commit: \`${GITHUB_SHA:0:12}\` re-tagged to this unit's images"
+            echo "- pull request: ${{ needs.plan.outputs.pr_url }}"
+          } >> "$GITHUB_STEP_SUMMARY"
 
   # The station release. It runs only when Pulsar's `publish_when` release path
   # (VERSION) changed on push, or when a dispatch explicitly asks for it. The

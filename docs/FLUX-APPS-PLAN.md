@@ -1,13 +1,15 @@
 # FLUX-APPS-PLAN — перевод сервисов `deploy-home` на Flux
 
-Статус: **частично реализовано**. Сделаны этапы 6.0 (кроме создания
-pins-ветки и работы в кластере) и 6.1, шаги 1 и 3: GitRepository/flux-pins,
-home-app-pins, suspended app-wakegrant, kustomization для манифестов
-wakegrant, `deploy.runtime: "ci"` в unit-map и алерты Flux. Ветка
-`deploy/home-apps` и включение `suspend: false` — действия владельца.
-Остальной план остаётся предложением; после завершения всех этапов
-действующие факты переносятся в `STATE.md`/`DECISIONS.md`, команды — в
-`OPERATIONS.md`, а этот план удаляется (правило `docs/README.md`).
+Статус: **пилот выполнен, миграция продолжается**. Сделаны этапы 6.0 и 6.1:
+pins-ветка `deploy/home-apps`, `GitRepository/flux-pins`,
+`Kustomization/home-app-pins`, `app-wakegrant` с `suspend: false`,
+`secret/k8s/flux-system/app-settings` → `flux-app-settings`, job `pins` в
+`deploy-home` (пишет digest'ы без VPN/kubeconfig) и алерты Flux. `wakegrant`
+переведён на `deploy.runtime: "flux"`, поэтому `deploy-home` больше не катит
+его через `kubectl`. Остальные юниты (§6.2–6.6) остаются планом; после
+завершения всех этапов действующие факты переносятся в
+`STATE.md`/`DECISIONS.md`, команды — в `OPERATIONS.md`, а этот план удаляется
+(правило `docs/README.md`).
 
 Дата снимка состояния: 2026-11-10.
 
@@ -665,8 +667,8 @@ Application Secrets уже живут в OpenBao и создаются ESO:
 4. Создать `secret/k8s/flux-system/app-settings` и
    `ExternalSecret/flux-app-settings`; проверить `Ready`.
 5. Добавить `deploy.runtime` в `units.mjs`/`check_units.mjs`; job `pins`
-   пишет pins для `flux`-юнитов. Пока все юниты `ci`, job только проверяет
-   сборку (dry-run).
+   пишет pins для `flux`-юнитов (сейчас `wakegrant`), остальные остаются в
+   `deploy-home`.
 6. Добавить алерты `FluxKustomizationNotReady`, `HelmReleaseNotReady`,
    `PinsStale` и дашборд (по желанию).
 7. Обновить `test_flux.py` (второй GitRepository, app-Kustomization'ы,
@@ -675,27 +677,33 @@ Application Secrets уже живут в OpenBao и создаются ESO:
 Критерий: `deploy-home` ведёт себя как раньше, Flux ничего не применяет
 (`suspend: true`), тесты зелёные.
 
-### 6.1. Пилот: `wakegrant`
+### 6.1. Пилот: `wakegrant` — **выполнено 2026-11-10**
+
+Статус: ветка `deploy/home-apps` создана, `app-wakegrant` включён
+(`suspend: false`) и `Ready`, pod здоров, PVC adoption и `kubectl diff`
+проверены владельцем. `wakegrant` переведён на `deploy.runtime: "flux"`, job
+`pins` коммитит проверенный digest в `deploy/home-apps` без VPN и kubeconfig.
+Откат — revert pins-коммита (учение по откату остаётся в §4.4/6.1.9).
 
 Почему он: один Deployment + PVC + Service + один `ExternalSecret`, нет
 режимов, нет cross-service зависимостей, ограниченный blast radius. Он же
 проверяет adoption PVC — самый рискованный общий элемент.
 
-Шаги:
+Шаги (1–7 выполнены, 8–9 ждут следующего реального деплоя/учения):
 
-1. Добавить `kustomization.yaml` в
+1. ✅ Добавить `kustomization.yaml` в
    `projects/home/kubernetes/wakegrant/manifests` (Deployment, PVC, Service,
    ExternalSecret) и `Kustomization/app-wakegrant` (`suspend: true`).
-2. Снять live-объекты (read-only) и сравнить `kubectl kustomize` +
+2. ✅ Снять live-объекты (read-only) и сравнить `kubectl kustomize` +
    `kubectl diff` (admin, вне CI): ожидается изменение только annotation
    `BUILD_ID` (и удаление `ROLLOUT_ID`, если он убирается из шаблона);
    PVC/PV и `volumeName` не меняются.
-3. Поставить на PVC аннотацию `kustomize.toolkit.fluxcd.io/prune: disabled`.
-4. `suspend: false`, `flux reconcile`; проверить `Ready=True`, pod, NodePort
+3. ✅ Поставить на PVC аннотацию `kustomize.toolkit.fluxcd.io/prune: disabled`.
+4. ✅ `suspend: false`, `flux reconcile`; проверить `Ready=True`, pod, NodePort
    `/healthz`, `wakegrant -healthcheck`, отсутствие рестартов.
-5. Проверить, что Secret не пересоздан (тот же UID) и ESO `Ready`.
-6. Проверить drift: изменить annotation/лейбл вручную, reconcile, вернуть.
-7. В `units.mjs` поставить `wakegrant.deploy.runtime: "flux"`; убедиться,
+5. ✅ Проверить, что Secret не пересоздан (тот же UID) и ESO `Ready`.
+6. ✅ Проверить drift: изменить annotation/лейбл вручную, reconcile, вернуть.
+7. ✅ В `units.mjs` поставить `wakegrant.deploy.runtime: "flux"`; убедиться,
    что `deploy-home` больше не выбирает его, а `pins` обновляет digest.
 8. Сделать тестовый digest-деплой (следующий реальный merge или
    `workflow_dispatch`) и убедиться, что Flux применил его без CI-доступа.

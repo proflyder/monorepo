@@ -325,7 +325,11 @@ export const config = {
       // because the service is unusable without it.
       deploy: {
         builder: "bazel",
-        runtime: "ci",
+        // Flux owns wakegrant since the pilot cutover (FLUX-APPS-PLAN 6.1):
+        // Kustomization/app-wakegrant applies the digest from the
+        // `deploy/home-apps` pins branch. deploy-home only commits the verified
+        // digest through its `pins` job and never applies the workload.
+        runtime: "flux",
         target_root: "//solutions/wakegrant",
         images: ["wakegrant"],
         workloads: ["wakegrant"],
@@ -335,15 +339,16 @@ export const config = {
         env_file: "wakegrant.env",
         externalsecrets: ["wakegrant"],
       },
-      // deploy.sh uses the same state markers as the other units, but neither
-      // its README nor docs/OPERATIONS.md documents a rollback procedure, so
-      // this unit is an explicit fix-forward.
+      // Flux applies the digest and reports readiness through the
+      // Kustomization `healthChecks`; the documented rollback is a revert of
+      // the pins commit (manifests stay in `develop`).
       rollback: {
-        kind: "forward-only",
+        kind: "flux-pins",
         note:
-          "Rollback is not documented for wakegrant (README has no rollback " +
-          "section); fix forward by re-running deploy.sh from the previous commit.",
-        source: "projects/home/kubernetes/wakegrant/README.md (no Rollback section)",
+          "Revert the `deploy/home-apps` commit that changed WAKEGRANT_IMAGE; " +
+          "Flux applies the previous digest within 1-2m. `suspend: true` plus a " +
+          "pins revert, never `kubectl rollout undo`.",
+        source: "docs/FLUX-APPS-PLAN.md (6.1 wakegrant) and projects/home/kubernetes/flux/README.md",
       },
       // Rust service: host fmt/clippy/tests plus the static musl image. The
       // protocol and shared core crates live in //packages/rust.

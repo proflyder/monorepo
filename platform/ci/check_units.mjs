@@ -53,6 +53,7 @@ export const ROLLBACK_KINDS = new Set([
   "helm",
   "hermes",
   "pulsar",
+  "flux-pins",
   "forward-only",
 ]);
 

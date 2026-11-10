@@ -195,12 +195,13 @@ class Cluster(unittest.TestCase):
         self.assertTrue(pins["spec"]["wait"])
         self.assertEqual(pins["spec"]["dependsOn"], [{"name": "platform"}])
 
-    def test_wakegrant_app_is_suspended_until_the_owner_enables_it(self):
+    def test_wakegrant_app_is_applied_by_flux(self):
         app = self.kustomizations["app-wakegrant"]
         spec = app["spec"]
         self.assertEqual(spec["path"], "./projects/home/kubernetes/wakegrant/manifests")
-        # Prep phase: Flux must not apply anything for wakegrant yet.
-        self.assertTrue(spec["suspend"])
+        # Pilot cutover done (FLUX-APPS-PLAN 6.1): Flux owns wakegrant and CI
+        # only commits its verified digest to `deploy/home-apps`.
+        self.assertFalse(spec.get("suspend", False))
         self.assertTrue(spec["wait"])
         self.assertEqual(spec["timeout"], "5m")
         self.assertEqual(spec["dependsOn"], [
