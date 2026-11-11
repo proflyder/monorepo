@@ -1,5 +1,6 @@
 //! Volume, mute, ducking, the HA media player and the Sendspin hooks (controller.cpp "media").
 
+use pulsar_core::volume::curve_gain;
 use pulsar_core::{ClockShot, now_ms};
 use pulsar_esphome::{MediaCommand, MediaCommandRequest};
 use pulsar_media::{Channel, PlayState};
@@ -19,7 +20,9 @@ const DUCK_GAIN: f32 = 0.15;
 pub struct Policy {
     curve: &'static VolumeCurve,
     ducked: bool,
-    /// «Громкость объявлений», 0..1: scales spoken announcements only.
+    /// «Громкость объявлений», 0..1: absolute volume on the model curve for spoken
+    /// announcements and TTS answers only. 1.0 means «as the master volume» because the
+    /// announce channel can never be louder than the hardware master (see `announce_gain`).
     announce_volume: f32,
     /// The ANNOUNCE channel currently carries an announcement or a TTS answer (scaled by
     /// `announce_volume`), not an earcon or the timer ring (which stay on the master volume).
@@ -59,22 +62,35 @@ impl Policy {
         }
     }
 
-    /// Announce channel gain: mute zeroes it, speech is never ducked; spoken announcements and
-    /// TTS answers are scaled by «Громкость объявлений», earcons and the timer ring are not.
+    /// Announce channel gain: mute zeroes it, speech is never ducked; earcons and the timer
+    /// ring stay on the master volume.
+    ///
+    /// «Громкость объявлений» is an absolute volume on the same dB curve as the master, not a
+    /// multiplier: 5 % there sounds like 5 % of the station. The channel carries the ratio
+    /// `curve_gain(announce) / curve_gain(volume)` on top of `master_gain`, so on the Midi the
+    /// hardware softvol still applies the master and the channel only attenuates when the
+    /// announcement is quieter. The ratio is capped at 1: the announcement can never be louder
+    /// than the current master volume. For software-volume models (the Mini) `master_gain` is
+    /// the curve itself, so the product is the absolute announce gain.
     pub fn announce_gain(&self, volume: f32, muted: bool) -> f32 {
         if muted {
-            0.0
-        } else {
-            self.master_gain(volume)
-                * if self.announce_speech {
-                    self.announce_volume
-                } else {
-                    1.0
-                }
+            return 0.0;
         }
+        let master = self.master_gain(volume);
+        if !self.announce_speech {
+            return master;
+        }
+        let current = curve_gain(self.curve, volume);
+        if current <= 0.0 {
+            // Master is at the bottom of the range: the announcement cannot be louder.
+            return master;
+        }
+        let target = curve_gain(self.curve, self.announce_volume);
+        master * (target / current).min(1.0)
     }
 
-    /// «Громкость объявлений» (0..1); true when the current announce gain changed.
+    /// «Громкость объявлений» (0..1, absolute on the model curve); true when the current
+    /// announce gain changed.
     pub fn set_announce_volume(&mut self, volume: f32) -> bool {
         let volume = cxx_min(1.0, cxx_max(0.0, volume));
         if volume == self.announce_volume {
@@ -351,64 +367,104 @@ impl Controller {
 mod tests {
     use super::*;
 
-    fn policy(announce_volume: f32) -> Policy {
-        let model = pulsar_model::profile_from_compatible(b"yandex,cucumber\0").unwrap();
+    fn midi() -> &'static pulsar_model::DeviceProfile {
+        pulsar_model::profile_from_compatible(b"yandex,cucumber\0").unwrap()
+    }
+
+    fn mini() -> &'static pulsar_model::DeviceProfile {
+        pulsar_model::profile_from_dt_id(b"axg_s420_v03\0").unwrap()
+    }
+
+    fn policy_for(model: &'static pulsar_model::DeviceProfile, announce_volume: f32) -> Policy {
         Policy::new(&model.volume, announce_volume)
     }
 
     #[test]
-    fn announce_volume_100_keeps_the_old_gain() {
-        let mut p = policy(1.0);
-        // Speech and earcons alike are on the master volume until the default changes.
-        assert_eq!(p.announce_gain(0.5, false), p.master_gain(0.5));
+    fn equal_sliders_keep_the_ordinary_master_gain_on_the_midi() {
+        // Midi has hardware volume: 5 % is raw 49, and the announce channel adds no gain.
+        let mut p = policy_for(midi(), 0.05);
         p.set_announce_speech(true);
-        assert_eq!(p.announce_gain(0.5, false), p.master_gain(0.5));
-        p.set_announce_speech(false);
-        assert_eq!(p.announce_gain(0.5, false), p.master_gain(0.5));
+        assert_eq!(p.announce_gain(0.05, false), 1.0);
+        assert_eq!(p.announce_gain(0.05, false), p.master_gain(0.05));
+        // The default 100 % is capped at the master, so it still means «as the main volume».
+        let mut p = policy_for(midi(), 1.0);
+        p.set_announce_speech(true);
+        assert_eq!(p.announce_gain(0.05, false), p.master_gain(0.05));
     }
 
     #[test]
-    fn announce_volume_scales_only_spoken_announcements() {
-        let mut p = policy(0.5);
+    fn quieter_announce_volume_follows_the_curve() {
+        let model = midi();
+        let mut p = policy_for(model, 0.05);
         p.set_announce_speech(true);
-        let scaled = p.announce_gain(0.5, false);
-        assert!((scaled - p.master_gain(0.5) * 0.5).abs() < f32::EPSILON);
-        // The timer ring, earcons and music are not touched: the flag switches them back.
-        assert!(p.set_announce_speech(false));
-        assert_eq!(p.announce_gain(0.5, false), p.master_gain(0.5));
-        assert_eq!(p.music_gain(0.5, false), p.master_gain(0.5));
-        assert!(!p.set_announce_speech(false), "no gain change to re-apply");
+        let gain = p.announce_gain(0.5, false);
+        let expected = curve_gain(&model.volume, 0.05) / curve_gain(&model.volume, 0.5);
+        assert!((gain - expected).abs() < 1e-7, "{gain} vs {expected}");
+        assert!(gain < p.master_gain(0.5));
     }
 
     #[test]
-    fn announce_volume_is_clamped_and_mute_zeroes_it() {
-        let mut p = policy(2.0);
+    fn louder_announce_volume_is_capped_at_the_master() {
+        let mut p = policy_for(midi(), 0.5);
         p.set_announce_speech(true);
-        assert_eq!(p.announce_gain(0.5, false), p.master_gain(0.5));
+        assert_eq!(p.announce_gain(0.05, false), p.master_gain(0.05));
+        // At 100 % the hardware master is the limit, not +26 dB over it.
+        let mut p = policy_for(midi(), 1.0);
+        p.set_announce_speech(true);
+        assert_eq!(p.announce_gain(0.05, false), p.master_gain(0.05));
+    }
+
+    #[test]
+    fn mute_zeroes_the_announce_gain() {
+        let mut p = policy_for(midi(), 0.05);
+        p.set_announce_speech(true);
         assert_eq!(p.announce_gain(0.5, true), 0.0);
+    }
 
-        let mut silent = policy(-1.0);
-        silent.set_announce_speech(true);
-        assert_eq!(silent.announce_gain(0.5, false), 0.0);
+    #[test]
+    fn software_volume_multiplies_the_ratio_with_the_master() {
+        let model = mini();
+        let mut p = policy_for(model, 0.05);
+        p.set_announce_speech(true);
+        // Equal sliders: the channel gain is the ordinary 5 % software gain.
+        assert_eq!(p.announce_gain(0.05, false), p.master_gain(0.05));
+        assert!((p.announce_gain(0.05, false) - curve_gain(&model.volume, 0.05)).abs() < 1e-7);
+        // Quieter announcement: the channel gain is the absolute curve gain.
+        let mut p = policy_for(model, 0.05);
+        p.set_announce_speech(true);
+        assert!((p.announce_gain(0.5, false) - curve_gain(&model.volume, 0.05)).abs() < 1e-7);
+        // Louder announcement: capped at the software master.
+        let mut p = policy_for(model, 1.0);
+        p.set_announce_speech(true);
+        assert_eq!(p.announce_gain(0.05, false), p.master_gain(0.05));
     }
 
     #[test]
     fn announce_volume_change_reapplies_only_while_speech_plays() {
-        let mut p = policy(1.0);
+        let mut p = policy_for(midi(), 1.0);
         assert!(
             !p.set_announce_volume(0.4),
             "idle: the value is stored, nothing audible changes"
         );
-        assert!(p.set_announce_speech(true), "speech is now scaled by 0.4");
+        assert!(p.set_announce_speech(true), "speech is now scaled to 0.4");
         assert!(!p.set_announce_volume(0.4), "same value");
         assert!(
             p.set_announce_volume(0.6),
             "a new value changes speech gain"
         );
-        assert!((p.announce_gain(0.5, false) - p.master_gain(0.5) * 0.6).abs() < f32::EPSILON);
+        assert_eq!(
+            p.announce_gain(0.5, false),
+            p.master_gain(0.5),
+            "0.6 is above the 0.5 master"
+        );
+        assert!(p.set_announce_volume(0.4));
+        assert!(p.announce_gain(0.5, false) < p.master_gain(0.5));
         // A zero announce volume is silence for announcements, not mute of the station.
         assert!(p.set_announce_volume(0.0));
         assert_eq!(p.announce_gain(0.5, false), 0.0);
         assert_eq!(p.music_gain(0.5, false), p.master_gain(0.5));
+        // Earcons and the timer ring switch the speech scale off entirely.
+        assert!(p.set_announce_speech(false));
+        assert_eq!(p.announce_gain(0.5, false), p.master_gain(0.5));
     }
 }

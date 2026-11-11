@@ -77,6 +77,20 @@ fn grid_step(v: f32, grid: i32, up: bool) -> f32 {
     point.clamp(0, grid) as f32 / grid as f32
 }
 
+/// Gain of volume `v` on the model's softvol dB curve (60 dB from raw 0 to 255), for every
+/// model. This is the attenuation the hardware softvol applies on models with a usable ALSA
+/// master; on software-volume models the same curve gives the gain the controller applies
+/// itself. Unlike [`master_gain`] it does not short-circuit for hardware-volume models, so the
+/// announce-channel ratio can compare two volumes on the same scale.
+pub fn curve_gain(curve: &VolumeCurve, v: f32) -> f32 {
+    let raw = to_raw(curve, v);
+    if raw <= 0 {
+        return 0.0;
+    }
+    let db = -60.0 + 60.0 * raw as f64 / 255.0;
+    10f64.powf(db / 20.0) as f32
+}
+
 /// Master gain of a software-volume model (the Mini): the controller applies the volume to the
 /// player channels itself because the hardware "Master" does not attenuate the output. The gain is
 /// derived from the same curve as the softvol of the other models (60 dB from raw 0 to 255), so a
@@ -85,12 +99,7 @@ pub fn master_gain(curve: &VolumeCurve, v: f32) -> f32 {
     if !curve.software_volume {
         return 1.0;
     }
-    let raw = to_raw(curve, v);
-    if raw <= 0 {
-        return 0.0;
-    }
-    let db = -60.0 + 60.0 * raw as f64 / 255.0;
-    10f64.powf(db / 20.0) as f32
+    curve_gain(curve, v)
 }
 
 // The curve of builds before the stock map (alsamixer's "mapped volume" over a -60..0 dB
@@ -160,6 +169,22 @@ mod tests {
         }
         assert_eq!(master_gain(&mini.volume, 2.0), 1.0);
         assert_eq!(master_gain(&mini.volume, -1.0), 0.0);
+    }
+
+    #[test]
+    fn curve_gain_exists_for_hardware_volume_models_too() {
+        let midi = profile_from_compatible(b"yandex,cucumber\0").unwrap();
+        // The hardware softvol applies the master elsewhere; master_gain is a no-op there.
+        assert_eq!(master_gain(&midi.volume, 0.5), 1.0);
+        assert!(curve_gain(&midi.volume, 0.5) < 1.0);
+        assert_eq!(curve_gain(&midi.volume, 0.0), 0.0);
+        assert_eq!(curve_gain(&midi.volume, 1.0), 1.0);
+        // A software-volume model uses the same curve as its master gain.
+        let mini = profile_from_dt_id(b"axg_s420_v03\0").unwrap();
+        assert_eq!(
+            curve_gain(&mini.volume, 0.15),
+            master_gain(&mini.volume, 0.15)
+        );
     }
 
     #[test]
