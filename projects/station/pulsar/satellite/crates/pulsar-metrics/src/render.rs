@@ -193,13 +193,13 @@ pub fn render(metrics: &Metrics, sample: &SystemSample) -> String {
     histogram(
         &mut out,
         "pulsar_assistant_wake_to_stt_seconds",
-        "Wake word to STT start.",
+        "Wake word to the start of STT.",
         &metrics.wake_to_stt,
     );
     histogram(
         &mut out,
         "pulsar_assistant_wake_to_answer_seconds",
-        "Wake word to the end of the TTS answer.",
+        "Wake word to the start of TTS playback (playback duration excluded).",
         &metrics.wake_to_answer,
     );
 
