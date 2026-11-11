@@ -25,7 +25,7 @@ impl EntityKey {
     }
 }
 
-/// Ключи сущностей C++-референса и этого форка (1..=40).
+/// Ключи сущностей C++-референса и этого форка (1..=41).
 pub mod key {
     use super::EntityKey;
 
@@ -69,6 +69,7 @@ pub mod key {
     pub const SELECT_VOICE_COLOR: EntityKey = EntityKey(38);
     pub const NUMBER_FOLLOWUP_DURATION: EntityKey = EntityKey(39);
     pub const NUMBER_ANNOUNCE_VOLUME: EntityKey = EntityKey(40);
+    pub const NUMBER_MIC_GAIN: EntityKey = EntityKey(41);
 }
 
 /// aioesphomeapi VoiceAssistantFeature: голосовой ассистент, API-аудио, таймеры, анонсы,
@@ -337,6 +338,7 @@ id_enum!(NumberId {
     LedSpeed = 3 => NUMBER_LED_SPEED,
     FollowupDuration = 4 => NUMBER_FOLLOWUP_DURATION,
     AnnounceVolume = 5 => NUMBER_ANNOUNCE_VOLUME,
+    MicGain = 6 => NUMBER_MIC_GAIN,
 });
 
 id_enum!(TextId {
@@ -540,6 +542,19 @@ pub const ENTITIES: &[EntityDef] = &[
         "announce_volume",
         "Громкость объявлений",
         Some("mdi:bullhorn"),
+        Capability::Always,
+    ),
+    ent(
+        key::NUMBER_MIC_GAIN,
+        EntityKind::Number {
+            min: 0.0,
+            max: 40.0,
+            step: 1.0,
+            unit: "dB",
+        },
+        "microphone_gain",
+        "Microphone gain",
+        Some("mdi:microphone-plus"),
         Capability::Always,
     ),
     ent(
@@ -871,6 +886,7 @@ pub const REPLAY_ORDER: &[EntityKey] = &[
     key::SELECT_ZIGBEE_MODE,
     key::TEXT_ZIGBEE,
     key::NUMBER_ANNOUNCE_VOLUME,
+    key::NUMBER_MIC_GAIN,
 ];
 
 /// Запись таблицы по ключу.

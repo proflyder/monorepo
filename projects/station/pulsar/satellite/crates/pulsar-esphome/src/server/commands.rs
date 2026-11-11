@@ -249,6 +249,12 @@ impl super::Server {
             k if k == key::NUMBER_ANNOUNCE_VOLUME.get() => {
                 (NumberId::AnnounceVolume, v.clamp(0.0, 100.0))
             }
+            k if k == key::NUMBER_MIC_GAIN.get() => {
+                let Some(db) = crate::mic_gain_db(v) else {
+                    return;
+                };
+                (NumberId::MicGain, db as f32)
+            }
             _ => return,
         };
         self.emit(ApiEvent::Number(id, v));

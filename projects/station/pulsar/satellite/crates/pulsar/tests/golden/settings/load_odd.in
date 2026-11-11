@@ -22,3 +22,4 @@ auto_update=1
 update_attempt=v9.9.9
 wake_word=yandex
 =empty key
+mic_gain_db=99

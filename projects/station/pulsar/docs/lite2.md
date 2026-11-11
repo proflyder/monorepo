@@ -22,7 +22,8 @@
 - Воспроизведение: `speakers`; громкость — softvol «Master Playback Volume» на `speakers`.
   `speakers` создаёт `/etc/init.d/S45amplifier-settings` (`/tmp/asound-vol.conf`).
 - VQE: пресет `plum`: 2 микрофона, 1 референс, 48 кГц, чанк 1536 → 512 @ 16 кГц; выходы 1, 2, 4,
-  6, 8, 9.
+  6, 8, 9. Выход 9 (`VQE_OMNI_WITH_GAIN`) — выход 6 × 50 (+34 дБ, `omniChannelGainCoefficient`
+  пресета). В HA идёт выход 6 с «Microphone gain»; по умолчанию 34 дБ — тот же уровень, что давал выход 9.
 - Спотеры: `alisa` / `yandex` — типы 0 и 4 (по 1 каналу); `command` — тип 0. Модели в
   `spotter_models/` настроены под plum.
 - alsa-lib 1.2.1.2, неверсионированная —

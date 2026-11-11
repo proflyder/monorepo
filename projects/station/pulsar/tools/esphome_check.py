@@ -491,11 +491,13 @@ async def cmd_scenario_entities(client, args):
         ("led_speed", 1.5, 1.5),
         ("followup_duration", 50.0, 10.0),
         ("followup_duration", 7.6, 8.0),
+        ("microphone_gain", 99.0, 40.0),
+        ("microphone_gain", 33.6, 34.0),
     ]:
         if oid not in k:
             continue
         await expect(w, f"number {oid} {value} -> {want}", k[oid], lambda o=oid, v=value: client.number_command(k[o], v), lambda s, x=want: abs(s.state - x) < 1e-3)
-    for oid in ["clock_brightness", "clock_text_speed", "led_speed", "followup_duration"]:
+    for oid in ["clock_brightness", "clock_text_speed", "led_speed", "followup_duration", "microphone_gain"]:
         if st(oid) is not None:
             v = st(oid)
             restore.append((f"number {oid} -> {v}", k[oid], lambda o=oid, x=v: client.number_command(k[o], x), lambda s, x=v: abs(s.state - x) < 1e-3))

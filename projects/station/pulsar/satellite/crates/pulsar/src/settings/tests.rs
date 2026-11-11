@@ -4,7 +4,7 @@
 // затем `save`. С тех пор правились руками: `wake_preroll` (после `clock_music`; 0 в load_odd.in);
 // `clock_auto_brightness` (после `wake_preroll`); `voice_color` (после `led_case_color`);
 // `followup_duration_s` (10); ключи форка `wake_event_recording` / `wake_dry_run` /
-// `announce_volume` — последними; и
+// `announce_volume` / `mic_gain_db` — последними; и
 // умолчания форка (`wake_word=ricardo`, `nearest_answers=0`).
 //
 // `Settings` больше не хранит чужие доменные типы: опции HA и роль Zigbee — строки `state.conf`,
@@ -410,8 +410,34 @@ fn wake_event_switches_round_trip() {
     assert!(!parsed.wake_recording);
     assert!(parsed.wake_dry_run);
     assert!(parsed.serialize().contains("wake_dry_run=1\n"));
-    // The newest fork key goes last, so `wake_dry_run` is no longer the tail.
-    assert!(parsed.serialize().ends_with("announce_volume=1\n"));
+    // The newest fork keys go last, so `wake_dry_run` is no longer the tail.
+    assert!(parsed.serialize().ends_with("mic_gain_db=34\n"));
+}
+
+#[test]
+fn microphone_gain_defaults_roundtrips_and_clamps() {
+    // 34 dB is the previous VQE_OMNI_WITH_GAIN level: an older `state.conf` has no key and
+    // upgrades without changing the audio sent to HA.
+    let mut st = Settings::default();
+    assert_eq!(st.mic_gain_db, 34);
+    assert!(st.serialize().contains("mic_gain_db=34\n"));
+    for db in [0, 12, 34, 40] {
+        st.mic_gain_db = db;
+        let mut loaded = Settings::default();
+        loaded.parse(st.serialize().as_bytes());
+        assert_eq!(loaded.mic_gain_db, db);
+    }
+    for (value, expected) in [
+        ("-5", 0),
+        ("99", 40),
+        ("33.6", 34),
+        ("NaN", 34),
+        ("inf", 34),
+    ] {
+        let mut loaded = Settings::default();
+        loaded.parse(format!("mic_gain_db={value}\n").as_bytes());
+        assert_eq!(loaded.mic_gain_db, expected, "{value}");
+    }
 }
 
 #[test]
@@ -420,7 +446,7 @@ fn announce_volume_defaults_roundtrips_and_clamps() {
     let mut st = Settings::default();
     st.parse(b"unknown_old_setting=1\n");
     assert_eq!(st.announce_volume, 1.0);
-    assert!(st.serialize().ends_with("announce_volume=1\n"));
+    assert!(st.serialize().ends_with("mic_gain_db=34\n"));
     for volume in [0.0, 0.25, 0.55, 1.0] {
         st.announce_volume = volume;
         let mut loaded = Settings::default();
