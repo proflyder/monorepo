@@ -287,6 +287,11 @@ pub struct Catalog {
     /// Alert names that are expected to fire permanently.
     #[serde(default)]
     pub ignore_alerts: Vec<String>,
+    /// Workloads that exist on purpose but are not catalog services, written
+    /// as `namespace/Kind/name`. The report coverage check names everything
+    /// else that runs in the cluster, so a new service cannot stay invisible.
+    #[serde(default)]
+    pub ignore_workloads: Vec<String>,
     /// Fixed report group order.
     #[serde(default)]
     pub group_order: Vec<String>,
@@ -336,6 +341,30 @@ impl Catalog {
                 problems.push(format!(
                     "ignore_alerts[{index}]: duplicate alert {trimmed:?} (first at ignore_alerts[{first}])"
                 ));
+            }
+        }
+        for (index, entry) in self.ignore_workloads.iter().enumerate() {
+            let trimmed = entry.trim();
+            if trimmed.is_empty() {
+                problems.push(format!(
+                    "ignore_workloads[{index}]: namespace/Kind/name is required"
+                ));
+                continue;
+            }
+            match split_workload_key(trimmed) {
+                None => problems.push(format!(
+                    "ignore_workloads[{index}]: {trimmed:?} must be namespace/Kind/name with a known workload kind"
+                )),
+                Some((namespace, kind, name)) => {
+                    if let Some(first) = self.ignore_workloads.iter().take(index).position(|previous| {
+                        split_workload_key(previous.trim())
+                            .is_some_and(|(ns, k, n)| ns == namespace && k == kind && n == name)
+                    }) {
+                        problems.push(format!(
+                            "ignore_workloads[{index}]: duplicate workload {trimmed:?} (first at ignore_workloads[{first}])"
+                        ));
+                    }
+                }
             }
         }
         for (index, group) in self.group_order.iter().enumerate() {
@@ -480,6 +509,9 @@ impl Catalog {
         for name in &mut self.ignore_alerts {
             *name = name.trim().to_owned();
         }
+        for entry in &mut self.ignore_workloads {
+            *entry = entry.trim().to_owned();
+        }
         for service in &mut self.services {
             service.alias_index = service.aliases.all();
             service.normalized = service
@@ -508,6 +540,17 @@ impl Catalog {
     #[must_use]
     pub fn find(&self, id: &str) -> Option<&Service> {
         self.services.iter().find(|service| service.id == id)
+    }
+
+    /// Reports whether a workload is deliberately outside the catalog. The
+    /// report coverage check lists every cluster workload except the catalog
+    /// services and these entries.
+    #[must_use]
+    pub fn ignores_workload(&self, namespace: &str, kind: &str, name: &str) -> bool {
+        self.ignore_workloads.iter().any(|entry| {
+            split_workload_key(entry.trim())
+                .is_some_and(|(ns, k, n)| ns == namespace && k == kind && n == name)
+        })
     }
 
     /// Maps a spoken name to exactly one service.
@@ -687,6 +730,21 @@ fn validate_check(prefix: &str, index: usize, check: &Check) -> Vec<String> {
     problems
 }
 
+/// Splits `namespace/Kind/name` and validates the kind.
+fn split_workload_key(raw: &str) -> Option<(&str, &str, &str)> {
+    let mut parts = raw.split('/');
+    let namespace = parts.next()?.trim();
+    let kind = parts.next()?.trim();
+    let name = parts.next()?.trim();
+    if parts.next().is_some() || namespace.is_empty() || name.is_empty() {
+        return None;
+    }
+    if !matches!(kind, KIND_DEPLOYMENT | KIND_STATEFUL_SET | KIND_DAEMON_SET) {
+        return None;
+    }
+    Some((namespace, kind, name))
+}
+
 fn unique_match(services: &[Service], matches: impl Fn(&Service) -> bool) -> Option<&Service> {
     let mut found = services.iter().filter(|service| matches(service));
     let first = found.next()?;
@@ -762,4 +820,67 @@ fn capitalize(raw: &str) -> String {
     }
     out.push_str(chars.as_str());
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const BASE: &str = r#"
+services:
+  - id: scheduler
+    aliases: {en: [scheduler]}
+    kind: k8s
+    namespace: home-assistant
+    workload: {kind: Deployment, name: scheduler}
+    logs: {source: none}
+    restart: {allowed: false}
+"#;
+
+    #[test]
+    fn ignore_workloads_accepts_namespace_kind_name() {
+        let catalog = Catalog::parse(&format!(
+            "{BASE}\nignore_workloads:\n  - kube-system/Deployment/coredns\n  - kube-system/DaemonSet/svclb-traefik\n"
+        ))
+        .expect("catalog");
+        assert!(catalog.ignores_workload("kube-system", "Deployment", "coredns"));
+        assert!(catalog.ignores_workload("kube-system", "DaemonSet", "svclb-traefik"));
+        assert!(!catalog.ignores_workload("kube-system", "Deployment", "other"));
+    }
+
+    #[test]
+    fn ignore_workloads_rejects_a_malformed_entry() {
+        let error = Catalog::parse(&format!(
+            "{BASE}\nignore_workloads:\n  - kube-system/coredns\n"
+        ))
+        .expect_err("two parts must be rejected");
+        assert!(
+            error.to_string().contains("namespace/Kind/name"),
+            "unexpected error: {error}"
+        );
+    }
+
+    #[test]
+    fn ignore_workloads_rejects_an_unknown_kind() {
+        let error = Catalog::parse(&format!(
+            "{BASE}\nignore_workloads:\n  - kube-system/Pod/coredns\n"
+        ))
+        .expect_err("Pod is not a workload kind");
+        assert!(
+            error.to_string().contains("known workload kind"),
+            "unexpected error: {error}"
+        );
+    }
+
+    #[test]
+    fn ignore_workloads_rejects_duplicates() {
+        let error = Catalog::parse(&format!(
+            "{BASE}\nignore_workloads:\n  - kube-system/Deployment/coredns\n  - kube-system/Deployment/coredns\n"
+        ))
+        .expect_err("duplicates must be rejected");
+        assert!(
+            error.to_string().contains("duplicate workload"),
+            "unexpected error: {error}"
+        );
+    }
 }

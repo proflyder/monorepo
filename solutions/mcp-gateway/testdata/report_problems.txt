@@ -1,11 +1,11 @@
-Отчёт по инфраструктуре, 01.11 12:00
-⚠️ Есть проблемы: 2 из 4
+Отчёт по инфраструктуре, 01.11 17:00
+⚠️ Есть проблемы: 2 из 6
 
 Проблемы
-❌ Home Assistant — недоступно сущностей: 1 (media_player.kitchen)
-❌ Prometheus — готовы 0 из 1
-   рестартов 1ч: 0
+⚠️ Flux — Kustomization flux-system/apps: HealthCheckFailed: Deployment/nexus is not ready
+⚠️ Каталог отчёта — не в каталоге отчёта: vaultwarden/Deployment/vaultwarden
 
 В норме
 ✅ Голос: Hermes
-✅ Дом: Music Assistant
+✅ Дом: Home Assistant, Music Assistant
+✅ Мониторинг: Prometheus

@@ -1,18 +1,19 @@
-# RBAC for the MCP gateway pod itself. Applied once by an admin, never by CI:
-#
-#   kubectl apply -f projects/home/kubernetes/mcp-gateway/manifests/rbac.yaml
+# RBAC for the MCP gateway pod itself. Applied by Flux, never by hand:
 #
 # Surface:
-#   * read (get/list/watch) on pods, pods/log, events, services and the four
-#     workload kinds in the namespaces the catalog covers — that is what
-#     infra_status/infra_service/infra_logs need;
+#   * ONE cluster-wide read ClusterRole: get/list on pods, pods/log, events,
+#     services, the three workload kinds and ReplicaSets, plus the Flux
+#     Kustomization and HelmRelease CRDs. The report lists every workload in
+#     every namespace to prove that nothing runs outside the catalog, so the
+#     read grant cannot be namespace-scoped; it never includes write verbs.
 #   * patch ONLY on the exact workload names whose catalog entry has
-#     `restart.allowed: true`, restricted with resourceNames. No other verb and
-#     no other object is reachable, so the catalog is the real allow-list and
-#     RBAC enforces the same set.
+#     `restart.allowed: true`, restricted with resourceNames in a per-namespace
+#     Role. No other verb and no other object is reachable, so the catalog is
+#     the real allow-list and RBAC enforces the same set.
 #
-# `kube-system` is read-only: nothing there is managed by this repository.
-# Namespaces without a restart Role (kube-system) cannot be mutated at all.
+# `kube-system` and `flux-system` are read-only on purpose: their workloads
+# belong to K3s and to the Flux bootstrap, so the gateway may look but never
+# restart anything. Namespaces without a restart Role cannot be mutated at all.
 ---
 apiVersion: v1
 kind: ServiceAccount
@@ -24,30 +25,38 @@ metadata:
     app.kubernetes.io/part-of: home
 ---
 apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
+kind: ClusterRole
 metadata:
   name: mcp-gateway-read
-  namespace: home-assistant
   labels:
     app.kubernetes.io/name: mcp-gateway
+    app.kubernetes.io/part-of: home
 rules:
   - apiGroups: [""]
     resources: ["pods", "pods/log", "events", "services"]
-    verbs: ["get", "list", "watch"]
+    verbs: ["get", "list"]
   - apiGroups: ["apps"]
     resources: ["deployments", "statefulsets", "daemonsets", "replicasets"]
-    verbs: ["get", "list", "watch"]
+    verbs: ["get", "list"]
+  # Flux: the report requires every Kustomization and HelmRelease to be
+  # Ready=True. Read-only, like everything else.
+  - apiGroups: ["kustomize.toolkit.fluxcd.io"]
+    resources: ["kustomizations"]
+    verbs: ["get", "list"]
+  - apiGroups: ["helm.toolkit.fluxcd.io"]
+    resources: ["helmreleases"]
+    verbs: ["get", "list"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
+kind: ClusterRoleBinding
 metadata:
   name: mcp-gateway-read
-  namespace: home-assistant
   labels:
     app.kubernetes.io/name: mcp-gateway
+    app.kubernetes.io/part-of: home
 roleRef:
   apiGroup: rbac.authorization.k8s.io
-  kind: Role
+  kind: ClusterRole
   name: mcp-gateway-read
 subjects:
   - kind: ServiceAccount
@@ -73,6 +82,9 @@ rules:
       - scheduler
       - ha-bridge
       - ha-control
+      - ha-scenario
+      - intercom
+      - wakegrant
       - mcp-gateway
     verbs: ["patch"]
 ---
@@ -87,37 +99,6 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
   name: mcp-gateway-restart
-subjects:
-  - kind: ServiceAccount
-    name: mcp-gateway
-    namespace: home-assistant
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  name: mcp-gateway-read
-  namespace: monitoring
-  labels:
-    app.kubernetes.io/name: mcp-gateway
-rules:
-  - apiGroups: [""]
-    resources: ["pods", "pods/log", "events", "services"]
-    verbs: ["get", "list", "watch"]
-  - apiGroups: ["apps"]
-    resources: ["deployments", "statefulsets", "daemonsets", "replicasets"]
-    verbs: ["get", "list", "watch"]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  name: mcp-gateway-read
-  namespace: monitoring
-  labels:
-    app.kubernetes.io/name: mcp-gateway
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: Role
-  name: mcp-gateway-read
 subjects:
   - kind: ServiceAccount
     name: mcp-gateway
@@ -171,37 +152,6 @@ subjects:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: mcp-gateway-read
-  namespace: currency-bot
-  labels:
-    app.kubernetes.io/name: mcp-gateway
-rules:
-  - apiGroups: [""]
-    resources: ["pods", "pods/log", "events", "services"]
-    verbs: ["get", "list", "watch"]
-  - apiGroups: ["apps"]
-    resources: ["deployments", "statefulsets", "daemonsets", "replicasets"]
-    verbs: ["get", "list", "watch"]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  name: mcp-gateway-read
-  namespace: currency-bot
-  labels:
-    app.kubernetes.io/name: mcp-gateway
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: Role
-  name: mcp-gateway-read
-subjects:
-  - kind: ServiceAccount
-    name: mcp-gateway
-    namespace: home-assistant
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
   name: mcp-gateway-restart
   namespace: currency-bot
   labels:
@@ -233,37 +183,6 @@ subjects:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: mcp-gateway-read
-  namespace: openbao
-  labels:
-    app.kubernetes.io/name: mcp-gateway
-rules:
-  - apiGroups: [""]
-    resources: ["pods", "pods/log", "events", "services"]
-    verbs: ["get", "list", "watch"]
-  - apiGroups: ["apps"]
-    resources: ["deployments", "statefulsets", "daemonsets", "replicasets"]
-    verbs: ["get", "list", "watch"]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  name: mcp-gateway-read
-  namespace: openbao
-  labels:
-    app.kubernetes.io/name: mcp-gateway
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: Role
-  name: mcp-gateway-read
-subjects:
-  - kind: ServiceAccount
-    name: mcp-gateway
-    namespace: home-assistant
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
   name: mcp-gateway-restart
   namespace: openbao
   labels:
@@ -286,37 +205,6 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
   name: mcp-gateway-restart
-subjects:
-  - kind: ServiceAccount
-    name: mcp-gateway
-    namespace: home-assistant
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  name: mcp-gateway-read
-  namespace: external-secrets
-  labels:
-    app.kubernetes.io/name: mcp-gateway
-rules:
-  - apiGroups: [""]
-    resources: ["pods", "pods/log", "events", "services"]
-    verbs: ["get", "list", "watch"]
-  - apiGroups: ["apps"]
-    resources: ["deployments", "statefulsets", "daemonsets", "replicasets"]
-    verbs: ["get", "list", "watch"]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  name: mcp-gateway-read
-  namespace: external-secrets
-  labels:
-    app.kubernetes.io/name: mcp-gateway
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: Role
-  name: mcp-gateway-read
 subjects:
   - kind: ServiceAccount
     name: mcp-gateway
@@ -357,37 +245,6 @@ subjects:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: mcp-gateway-read
-  namespace: traefik
-  labels:
-    app.kubernetes.io/name: mcp-gateway
-rules:
-  - apiGroups: [""]
-    resources: ["pods", "pods/log", "events", "services"]
-    verbs: ["get", "list", "watch"]
-  - apiGroups: ["apps"]
-    resources: ["deployments", "statefulsets", "daemonsets", "replicasets"]
-    verbs: ["get", "list", "watch"]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  name: mcp-gateway-read
-  namespace: traefik
-  labels:
-    app.kubernetes.io/name: mcp-gateway
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: Role
-  name: mcp-gateway-read
-subjects:
-  - kind: ServiceAccount
-    name: mcp-gateway
-    namespace: home-assistant
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
   name: mcp-gateway-restart
   namespace: traefik
   labels:
@@ -410,37 +267,6 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
   name: mcp-gateway-restart
-subjects:
-  - kind: ServiceAccount
-    name: mcp-gateway
-    namespace: home-assistant
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  name: mcp-gateway-read
-  namespace: cert-manager
-  labels:
-    app.kubernetes.io/name: mcp-gateway
-rules:
-  - apiGroups: [""]
-    resources: ["pods", "pods/log", "events", "services"]
-    verbs: ["get", "list", "watch"]
-  - apiGroups: ["apps"]
-    resources: ["deployments", "statefulsets", "daemonsets", "replicasets"]
-    verbs: ["get", "list", "watch"]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  name: mcp-gateway-read
-  namespace: cert-manager
-  labels:
-    app.kubernetes.io/name: mcp-gateway
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: Role
-  name: mcp-gateway-read
 subjects:
   - kind: ServiceAccount
     name: mcp-gateway
@@ -478,34 +304,61 @@ subjects:
     name: mcp-gateway
     namespace: home-assistant
 ---
-# kube-system is read-only on purpose: no repository-managed workload lives
-# there, so the gateway may look but never restart anything.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: mcp-gateway-read
-  namespace: kube-system
+  name: mcp-gateway-restart
+  namespace: vaultwarden
   labels:
     app.kubernetes.io/name: mcp-gateway
 rules:
-  - apiGroups: [""]
-    resources: ["pods", "pods/log", "events", "services"]
-    verbs: ["get", "list", "watch"]
   - apiGroups: ["apps"]
-    resources: ["deployments", "statefulsets", "daemonsets", "replicasets"]
-    verbs: ["get", "list", "watch"]
+    resources: ["deployments"]
+    resourceNames:
+      - vaultwarden
+    verbs: ["patch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: mcp-gateway-read
-  namespace: kube-system
+  name: mcp-gateway-restart
+  namespace: vaultwarden
   labels:
     app.kubernetes.io/name: mcp-gateway
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: mcp-gateway-read
+  name: mcp-gateway-restart
+subjects:
+  - kind: ServiceAccount
+    name: mcp-gateway
+    namespace: home-assistant
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: mcp-gateway-restart
+  namespace: nexus
+  labels:
+    app.kubernetes.io/name: mcp-gateway
+rules:
+  - apiGroups: ["apps"]
+    resources: ["statefulsets"]
+    resourceNames:
+      - nexus
+    verbs: ["patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: mcp-gateway-restart
+  namespace: nexus
+  labels:
+    app.kubernetes.io/name: mcp-gateway
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: mcp-gateway-restart
 subjects:
   - kind: ServiceAccount
     name: mcp-gateway

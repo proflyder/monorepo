@@ -763,14 +763,21 @@
   деплой-контракт — `projects/home/kubernetes/mcp-gateway/`.
 - `infra_report` — полный отчёт по всем сервисам каталога: статус, готовые
   реплики, перезапуски за час, digest-образ, возраст, внешние проверки, версии
-  HA и алерты; короткий вердикт + plain-text ≤ 3500 символов. `infra_status`
+  HA и алерты; короткий вердикт + plain-text ≤ 3500 символов. Плюс две
+  кластерные проверки в группе «Платформа»: **Flux** (каждый Kustomization и
+  HelmRelease должен быть `Ready=True`, `suspend: true` показывается и не
+  считается проблемой) и **Каталог отчёта** (все Deployment/StatefulSet/
+  DaemonSet кластера, которых нет ни в `services`, ни в `ignore_workloads`,
+  становятся проблемой «не в каталоге отчёта: ns/Kind/name»). `infra_status`
   тоже выполняет внешние проверки.
 - Внешние проверки каталога (`checks:`): `tcp`, `http` (`auth: ha`, тело не
   возвращается), `ha_state`, `ha_template`, `ha_unavailable_summary`. HA URL и
   токен — `MCP_HA_URL`/`MCP_HA_TOKEN_FILE` из Secret `mcp-gateway-ha` (та же
   OpenBao-запись `k8s/home-assistant/ha-bridge-ha`, что у ha-bridge); если не
   заданы — «не настроено», не ошибка. Адреса HAOS/станции — плейсхолдеры
-  `${HAOS_IP}`/`${STATION_IP}`, рендерятся из `secrets/home/mcp-gateway.env`.
+  `${HAOS_IP}`/`${STATION_IP}`, рендерятся при деплое. Proxmox (`${PVE_IP}`,
+  TCP 8006: TLS самоподписанный), VPN CT (`${VPN_CT_IP}`, TCP 443) и CT 103
+  (`${BB_CT_IP}`, TCP 22) проверяются только на доступность порта.
 - Namespace `home-assistant`, Deployment `mcp-gateway` (1 реплика,
   RollingUpdate, distroless, non-root, read-only rootfs), ClusterIP
   `mcp-gateway:8080` без ingress/NodePort; `/mcp` требует Bearer, `/healthz`,
@@ -781,16 +788,18 @@
   сигналы (пустой результат = норма, непустой = проблема), источник логов
   (Loki там, где Alloy шипит namespace, иначе `pods/log`), предупреждение и
   `self_disrupting` для перезапуска.
-- RBAC — ServiceAccount `home-assistant/mcp-gateway`, без ClusterRole:
-  чтение pods/pods-log/events/services и четырёх видов workload в
-  `home-assistant`, `monitoring`, `currency-bot`, `openbao`,
-  `external-secrets`, `traefik`, `cert-manager`, `kube-system`; `patch`
-  только на deployments/statefulsets/daemonsets с `resourceNames`, равными
-  каталогу. `kube-system` — только чтение.
+- RBAC — ServiceAccount `home-assistant/mcp-gateway`: один кластерный
+  ClusterRole `mcp-gateway-read` (get/list на pods, pods/log, events,
+  services, deployments, statefulsets, daemonsets, replicasets, а также
+  Kustomization и HelmRelease Flux) — без него нельзя перечислить workload'ы
+  всех namespace для проверки каталога; `patch` только через namespaced Role
+  на deployments/statefulsets/daemonsets с `resourceNames`, равными
+  каталогу. `kube-system` и `flux-system` — только чтение.
 - NetworkPolicy: ingress на 8080 от адреса узла (Hermes в `hostNetwork`),
   LAN/pod CIDR и namespace `monitoring`; egress — kube-API 6443, monitoring
   9090/9093/3100, LAN-порты проверок (HAOS 8123/8095, станция
-  6053/8928/8099), CT 103 `:22` только, DNS 53 и Telegram 443.
+  6053/8928/8099, Proxmox 8006, VPN 443), CT 103 `:22` только, DNS 53 и
+  Telegram 443.
 - **Мост в bb.** Кластер не открывает API bb: шлюз идёт по SSH с отдельным
   ограниченным ed25519-ключом и pinned `known_hosts` (алгоритмы хоста — из
   файла) к CT 103, пользователь `bb`, forced command `/usr/local/bin/bb-dispatch`.
@@ -836,12 +845,15 @@
 - Перезапуск разрешён для всех repo-managed workload'ов после голосового или
   Telegram-подтверждения, у каждого — честное предупреждение; `hermes` и
   `mcp-gateway` помечены `self_disrupting` (патч откладывается на ~20 с, чтобы
-  ответ успели озвучить). HAOS, Music Assistant и станция — только чтение.
+  ответ успели озвучить). `kube-system` и `flux-system` (CoreDNS, local-path,
+  metrics-server, контроллеры Flux) — только чтение: ими управляют K3s и
+  bootstrap Flux. HAOS, Music Assistant, станция, Proxmox, VPN и CT 103 —
+  только чтение.
 - CI: юнит `mcp-gateway` (bazel: crate fmt/clippy/тесты + musl-образ) и
   `mcp-gateway-deploy` (catalog↔RBAC и манифесты); значения
   `${LAN_CIDR}`, `${NODE_LAN_IP}`, `${HAOS_IP}`, `${STATION_IP}`,
-  `${BB_CT_IP}`, `${BB_PROJECT_*}`, `${BB_DISPATCHER_THREAD_ID}` Flux берёт из
-  `flux-app-settings`. Схема каталога и bb-allowlist проверяется настоящими
+  `${BB_CT_IP}`, `${PVE_IP}`, `${VPN_CT_IP}`, `${BB_PROJECT_*}`,
+  `${BB_DISPATCHER_THREAD_ID}` Flux берёт из `flux-app-settings`. Схема каталога и bb-allowlist проверяется настоящими
   Rust-валидаторами в `crates/mcp-gateway/tests/deploy_contract.rs`.
 - Hermes: третий MCP-сервер `infra`
   (`mcp-gateway.home-assistant.svc.cluster.local:8080/mcp`, Bearer

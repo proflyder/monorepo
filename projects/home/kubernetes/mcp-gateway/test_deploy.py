@@ -26,21 +26,12 @@ NETWORK = MANIFESTS / "network-policies.yaml"
 SERVICEMONITOR = MANIFESTS / "servicemonitor.yaml"
 EXTERNAL_SECRETS = MANIFESTS / "external-secrets.yaml"
 
-ALLOWED_CATALOG_PLACEHOLDERS = {"HAOS_IP", "STATION_IP"}
+ALLOWED_CATALOG_PLACEHOLDERS = {"HAOS_IP", "STATION_IP", "PVE_IP", "VPN_CT_IP", "BB_CT_IP"}
 ALLOWED_BB_TARGET_PLACEHOLDERS = {"BB_PROJECT_STATION_LAB", "BB_PROJECT_ENGLISH_NOTES"}
 
-# Namespaces the gateway may look into. kube-system is read-only, so it is not
-# derived from the catalog (which only lists repository-managed workloads).
-READ_NAMESPACES = {
-    "home-assistant",
-    "monitoring",
-    "currency-bot",
-    "openbao",
-    "external-secrets",
-    "traefik",
-    "cert-manager",
-    "kube-system",
-}
+# Workloads the gateway may read but never restart: K3s' own components and
+# the Flux bootstrap.
+READ_ONLY_NAMESPACES = {"kube-system", "flux-system"}
 
 INGESTED_NAMESPACES = {"monitoring", "currency-bot", "openbao", "kube-system"}
 
@@ -68,6 +59,14 @@ def roles(path: Path, name: str) -> list[dict]:
         for doc in load_docs(path)
         if doc.get("kind") == "Role" and doc.get("metadata", {}).get("name") == name
     ]
+
+
+def cluster_role(path: Path, name: str) -> dict:
+    return next(
+        doc
+        for doc in load_docs(path)
+        if doc.get("kind") == "ClusterRole" and doc.get("metadata", {}).get("name") == name
+    )
 
 
 class CatalogTests(unittest.TestCase):
@@ -138,9 +137,13 @@ class CatalogTests(unittest.TestCase):
         self.assertTrue(k8s)
         self.assertTrue(external)
         for service in k8s:
+            self.assertIn(service["workload"]["kind"], {"Deployment", "StatefulSet", "DaemonSet"})
+            if service["namespace"] in READ_ONLY_NAMESPACES:
+                # K3s and Flux own these; the gateway must never write here.
+                self.assertFalse(service["restart"]["allowed"], service["id"])
+                continue
             self.assertTrue(service["restart"]["allowed"], service["id"])
             self.assertTrue(service["restart"].get("warning", "").strip(), service["id"])
-            self.assertIn(service["workload"]["kind"], {"Deployment", "StatefulSet", "DaemonSet"})
         for service in external:
             self.assertFalse(service["restart"]["allowed"], service["id"])
 
@@ -164,9 +167,9 @@ class CatalogTests(unittest.TestCase):
                 )
         self.assertGreater(status_signals, 0)
 
-    def test_external_checks_cover_ha_ma_and_station(self):
+    def test_external_checks_cover_ha_ma_station_and_platform_hosts(self):
         by_id = {service["id"]: service for service in self.services}
-        for service_id in ("home-assistant", "music-assistant", "station"):
+        for service_id in ("home-assistant", "music-assistant", "station", "proxmox", "vpn", "bb-host"):
             self.assertTrue(by_id[service_id].get("checks"), service_id)
         # Every check is typed, labelled and type-complete.
         allowed = {"tcp", "http", "ha_state", "ha_template", "ha_unavailable_summary"}
@@ -308,24 +311,45 @@ class RbacTests(unittest.TestCase):
     def test_service_account_exists(self):
         self.assertEqual(self.service_account["metadata"]["namespace"], "home-assistant")
 
-    def test_read_role_in_every_catalog_namespace_plus_kube_system(self):
-        catalog_namespaces = {
-            service["namespace"] for service in self.catalog["services"] if service["kind"] == "k8s"
+    def test_read_grant_is_one_cluster_role_bound_to_the_gateway(self):
+        role = cluster_role(RBAC, "mcp-gateway-read")
+        bindings = [
+            doc
+            for doc in load_docs(RBAC)
+            if doc.get("kind") == "ClusterRoleBinding"
+            and doc.get("metadata", {}).get("name") == "mcp-gateway-read"
+        ]
+        self.assertEqual(len(bindings), 1)
+        self.assertEqual(bindings[0]["roleRef"]["name"], role["metadata"]["name"])
+        self.assertEqual(
+            bindings[0]["subjects"],
+            [{"kind": "ServiceAccount", "name": "mcp-gateway", "namespace": "home-assistant"}],
+        )
+        self.assertEqual(self.read_roles, [])
+
+    def test_cluster_read_role_covers_workloads_pods_and_flux(self):
+        role = cluster_role(RBAC, "mcp-gateway-read")
+        granted = {
+            (group, resource)
+            for rule in role["rules"]
+            for group in rule["apiGroups"]
+            for resource in rule["resources"]
         }
-        self.assertEqual(catalog_namespaces | {"kube-system"}, READ_NAMESPACES)
-        declared = {role["metadata"]["namespace"] for role in self.read_roles}
-        self.assertEqual(declared, READ_NAMESPACES)
+        for resource in ("pods", "pods/log", "events", "services"):
+            self.assertIn(("", resource), granted)
+        for resource in ("deployments", "statefulsets", "daemonsets", "replicasets"):
+            self.assertIn(("apps", resource), granted)
+        self.assertIn(("kustomize.toolkit.fluxcd.io", "kustomizations"), granted)
+        self.assertIn(("helm.toolkit.fluxcd.io", "helmreleases"), granted)
 
     def test_write_resource_names_equal_catalog_restartable_workloads(self):
         # This is the security contract: RBAC cannot grant more than the catalog
         # lists, and a catalog entry without RBAC would fail at runtime.
         self.assertEqual(self.rbac_targets(), self.catalog_targets())
 
-    def test_kube_system_is_read_only(self):
-        self.assertNotIn(
-            "kube-system",
-            {role["metadata"]["namespace"] for role in self.restart_roles},
-        )
+    def test_platform_namespaces_are_read_only(self):
+        restart_namespaces = {role["metadata"]["namespace"] for role in self.restart_roles}
+        self.assertFalse(READ_ONLY_NAMESPACES & restart_namespaces)
 
     def test_restart_role_grants_only_patch(self):
         for role in self.restart_roles:
@@ -334,11 +358,11 @@ class RbacTests(unittest.TestCase):
                 self.assertTrue(rule.get("resourceNames"), "resourceNames are mandatory")
 
     def test_read_role_grants_no_write_verbs(self):
-        for role in self.read_roles:
+        for role in [cluster_role(RBAC, "mcp-gateway-read")]:
             for rule in role["rules"]:
                 self.assertTrue(
-                    set(rule["verbs"]) <= {"get", "list", "watch"},
-                    f"{role['metadata']['namespace']} grants {rule['verbs']}",
+                    set(rule["verbs"]) <= {"get", "list"},
+                    f"{role['metadata']['name']} grants {rule['verbs']}",
                 )
 
     def test_every_role_has_a_binding_for_the_gateway_sa(self):
@@ -353,7 +377,7 @@ class RbacTests(unittest.TestCase):
         }
         declared = {
             (role["metadata"]["namespace"], role["metadata"]["name"])
-            for role in self.read_roles + self.restart_roles
+            for role in self.restart_roles
         }
         self.assertEqual(declared, bound)
 
@@ -461,7 +485,7 @@ class ManifestTests(unittest.TestCase):
         self.assertTrue({6443, 9090, 9093, 3100, 443, 53, 22} <= ports)
         # External catalog checks: HA REST/MA and the station's ports, all on
         # the LAN CIDR (host IPs are rendered at deploy time).
-        self.assertTrue({8123, 8095, 6053, 8928, 8099} <= ports)
+        self.assertTrue({8123, 8095, 6053, 8928, 8099, 8006} <= ports)
         bb_rule = next(
             rule
             for rule in egress["spec"]["egress"]
@@ -474,7 +498,7 @@ class ManifestTests(unittest.TestCase):
             if {"ipBlock": {"cidr": "${LAN_CIDR}"}} in rule["to"]
         )
         lan_ports = {port["port"] for port in lan_rule["ports"]}
-        self.assertTrue({8123, 8095, 6053, 8928, 8099} <= lan_ports)
+        self.assertTrue({8123, 8095, 6053, 8928, 8099, 8006} <= lan_ports)
 
     def test_servicemonitor_selects_the_gateway_service(self):
         monitor = yaml.safe_load(SERVICEMONITOR.read_text())

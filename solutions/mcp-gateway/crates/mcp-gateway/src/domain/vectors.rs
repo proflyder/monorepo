@@ -14,7 +14,8 @@ use super::catalog::{Catalog, CatalogError};
 use super::clock::{Clock, FixedClock};
 use super::redact;
 use super::report::{
-    ContainerState, PodState, ReportInput, ServiceProbe, WorkloadState, build_report,
+    ContainerState, FluxResource, PodState, ReportInput, ServiceProbe, WorkloadRef, WorkloadState,
+    build_report,
 };
 use super::speech::speech as normalize_speech;
 use super::state::{
@@ -355,6 +356,39 @@ fn report_vectors_match_go() {
                 .get("verbose")
                 .and_then(Value::as_bool)
                 .unwrap_or(false),
+            workloads: input
+                .get("clusterWorkloads")
+                .and_then(Value::as_array)
+                .map(|items| {
+                    Ok(items
+                        .iter()
+                        .map(|item| WorkloadRef {
+                            namespace: text(item, "namespace"),
+                            kind: text(item, "kind"),
+                            name: text(item, "name"),
+                        })
+                        .collect())
+                }),
+            flux: input.get("flux").and_then(Value::as_array).map(|items| {
+                Ok(items
+                    .iter()
+                    .map(|item| FluxResource {
+                        kind: text(item, "kind"),
+                        namespace: text(item, "namespace"),
+                        name: text(item, "name"),
+                        ready: item.get("ready").and_then(Value::as_bool).unwrap_or(false),
+                        suspended: item
+                            .get("suspended")
+                            .and_then(Value::as_bool)
+                            .unwrap_or(false),
+                        message: item
+                            .get("message")
+                            .and_then(Value::as_str)
+                            .unwrap_or_default()
+                            .to_owned(),
+                    })
+                    .collect())
+            }),
         });
         let expected = case.get("expected").expect("expected");
         assert_eq!(

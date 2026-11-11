@@ -100,22 +100,32 @@ Rendered sample (all healthy):
 
 ```text
 Отчёт по инфраструктуре, 01.11 19:52
-✅ Всё работает: 30 из 30
+✅ Всё работает: 43 из 43
 
 В норме
 ✅ Голос: Hermes, GigaAM, Whisper, Piper, Runtime Health Exporter
 ✅ Дом: Home Assistant, Music Assistant, Станция Midi (Pulsar)
-✅ Планировщик: Scheduler, HA Bridge, HA Control
+✅ Планировщик: Scheduler, HA Bridge, HA Control, HA Scenario
 ✅ Мониторинг (8)
-✅ Секреты и сеть (8)
-✅ Приложения: MCP Gateway, Currency Bot, Cloudflared
+✅ Секреты и сеть (9)
+✅ Приложения: MCP Gateway, Currency Bot, Cloudflared, Intercom, Wake Grant
+✅ Платформа: Nexus, Flux (приостановлено 1), Каталог отчёта
 ```
+
+`Flux` is a report-only check: every Kustomization and HelmRelease must be
+`Ready=True`; a suspended resource is counted in the note but never reported as
+a problem. `Каталог отчёта` is the self-maintenance check: every
+Deployment/StatefulSet/DaemonSet in the cluster must be a catalog service or
+listed in the catalog's `ignore_workloads` (`namespace/Kind/name`), otherwise
+the report says `не в каталоге отчёта: ns/Kind/name`. Adding a service without
+a catalog entry therefore shows up on the next report instead of staying
+invisible.
 
 With problems the failing services come first, for example:
 
 ```text
 Отчёт по инфраструктуре, 01.11 19:52
-⚠️ Есть проблемы: 2 из 30
+⚠️ Есть проблемы: 2 из 43
 
 Проблемы
 ❌ Home Assistant — недоступно сущностей: 1 (media_player.kitchen)
@@ -137,14 +147,15 @@ is rejected in the same test.
 
 ## RBAC
 
-- ServiceAccount `home-assistant/mcp-gateway`; no ClusterRole.
-- `mcp-gateway-read` in `home-assistant`, `monitoring`, `currency-bot`,
-  `openbao`, `external-secrets`, `traefik`, `cert-manager`, `kube-system`:
-  `get/list/watch` on pods, pods/log, events, services, deployments,
-  statefulsets, daemonsets, replicasets.
+- ServiceAccount `home-assistant/mcp-gateway`.
+- ONE cluster-wide ClusterRole `mcp-gateway-read` (read-only, `get/list`):
+  pods, pods/log, events, services, deployments, statefulsets, daemonsets,
+  replicasets, plus Flux `kustomizations` and `helmreleases`. The cluster-wide
+  grant is what lets the report enumerate workloads in every namespace.
 - `mcp-gateway-restart` only in namespaces with restartable workloads, verb
-  `patch` only, restricted with `resourceNames`.
-- `kube-system` is read-only; no repository-managed workload lives there.
+  `patch` only, restricted with `resourceNames` equal to the catalog.
+- `kube-system` and `flux-system` are read-only: their workloads belong to K3s
+  and to the Flux bootstrap.
 - Hermes keeps `automountServiceAccountToken: false`; all cluster access goes
   through this pod.
 
@@ -158,8 +169,8 @@ is rejected in the same test.
   `/mcp` still requires the bearer token.
 - Egress: kube-API 6443 (service CIDR `10.43.0.0/16` and the node), monitoring
   9090/9093/3100, external checks on the `${LAN_CIDR}` (HAOS 8123/8095, station
-  6053/8928/8099), bb host `${BB_CT_IP}:22` only, DNS 53 (UDP/TCP), Telegram
-  443. Telegram publishes no stable ranges, so 443 is any-destination — the
+  6053/8928/8099, Proxmox 8006, VPN 443), bb host `${BB_CT_IP}:22` only, DNS 53
+  (UDP/TCP), Telegram 443. Telegram publishes no stable ranges, so 443 is any-destination — the
   same trade-off as currency-bot.
 - K3s (kube-router) enforces NetworkPolicies. Prefer allowing over breaking:
   if the CNI ever stops attributing hostNetwork sources to the node address,

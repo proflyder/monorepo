@@ -221,6 +221,229 @@
         "speech": "Всё работает: 4 из 4. Прислать подробности в Telegram?",
         "text": "Отчёт по инфраструктуре, 01.11 17:00\n✅ Всё работает: 4 из 4\n\nВ норме\n✅ Голос: Hermes\n✅ Дом: Home Assistant, Music Assistant\n✅ Мониторинг: Prometheus\n\nВерсии\nHermes — prometheus-config-reloader:v0.94.2, возраст 2д\nPrometheus — prometheus:v3.8.0, возраст 2д"
       }
+    },
+    {
+      "name": "flux_and_coverage_ok",
+      "input": {
+        "now": "2026-11-01T12:00:00Z",
+        "timezone": "Asia/Almaty",
+        "catalog": "\ngroup_order: [Голос, Дом, Мониторинг]\nservices:\n  - id: hermes\n    title: Hermes\n    group: Голос\n    aliases: {ru: [гермес], en: [hermes]}\n    kind: k8s\n    namespace: home\n    workload: {kind: Deployment, name: hermes}\n    restart: {allowed: false}\n  - id: prometheus\n    title: Prometheus\n    group: Мониторинг\n    aliases: {ru: [прометеус], en: [prometheus]}\n    kind: k8s\n    namespace: home\n    containers: [prometheus]\n    workload: {kind: StatefulSet, name: prometheus-monitoring-prometheus}\n    restart: {allowed: false}\n  - id: home-assistant\n    title: Home Assistant\n    group: Дом\n    host_title: HAOS VM\n    aliases: {ru: [дом, ха], en: [home-assistant]}\n    kind: external\n    checks:\n      - {type: ha_unavailable_summary, label: недоступные сущности, domains: [media_player]}\n    restart: {allowed: false}\n  - id: music-assistant\n    title: Music Assistant\n    group: Дом\n    host_title: HAOS VM\n    aliases: {ru: [музыка], en: [music-assistant]}\n    kind: external\n    checks:\n      - {type: tcp, label: API, host: 192.0.2.10, port: 8095}\n    restart: {allowed: false}\n",
+        "workloads": [
+          {
+            "namespace": "home",
+            "kind": "Deployment",
+            "name": "hermes",
+            "generation": 2,
+            "observedGeneration": 2,
+            "desired": 1,
+            "updated": 1,
+            "ready": 1,
+            "available": 1
+          },
+          {
+            "namespace": "home",
+            "kind": "StatefulSet",
+            "name": "prometheus-monitoring-prometheus",
+            "generation": 2,
+            "observedGeneration": 2,
+            "desired": 1,
+            "updated": 1,
+            "ready": 1,
+            "available": 1
+          }
+        ],
+        "pods": [
+          {
+            "namespace": "home",
+            "name": "prometheus-1",
+            "ready": true,
+            "startTime": "2026-10-30T12:00:00Z",
+            "containers": [
+              {
+                "name": "prometheus-config-reloader",
+                "image": "quay.io/prometheus-operator/prometheus-config-reloader:v0.94.2",
+                "ready": true
+              },
+              {
+                "name": "prometheus",
+                "image": "quay.io/prometheus/prometheus:v3.8.0",
+                "ready": true
+              }
+            ]
+          }
+        ],
+        "checks": [
+          {
+            "service": "home-assistant",
+            "type": "ha_unavailable_summary",
+            "label": "недоступные сущности",
+            "ok": true,
+            "value": "0"
+          },
+          {
+            "service": "music-assistant",
+            "type": "tcp",
+            "label": "API",
+            "ok": true
+          }
+        ],
+        "verbose": false,
+        "clusterWorkloads": [
+          {
+            "namespace": "home",
+            "kind": "Deployment",
+            "name": "hermes"
+          },
+          {
+            "namespace": "home",
+            "kind": "StatefulSet",
+            "name": "prometheus-monitoring-prometheus"
+          }
+        ],
+        "flux": [
+          {
+            "kind": "Kustomization",
+            "namespace": "flux-system",
+            "name": "apps",
+            "ready": true
+          },
+          {
+            "kind": "Kustomization",
+            "namespace": "flux-system",
+            "name": "paused",
+            "ready": false,
+            "suspended": true,
+            "message": "Reconciliation is suspended"
+          },
+          {
+            "kind": "HelmRelease",
+            "namespace": "flux-system",
+            "name": "runtime",
+            "ready": true
+          }
+        ]
+      },
+      "expected": {
+        "speech": "Всё работает: 6 из 6. Прислать подробности в Telegram?",
+        "text": "Отчёт по инфраструктуре, 01.11 17:00\n✅ Всё работает: 6 из 6\n\nВ норме\n✅ Голос: Hermes\n✅ Дом: Home Assistant, Music Assistant\n✅ Мониторинг: Prometheus\n✅ Платформа: Flux (приостановлено 1), Каталог отчёта"
+      }
+    },
+    {
+      "name": "flux_and_coverage_problems",
+      "input": {
+        "now": "2026-11-01T12:00:00Z",
+        "timezone": "Asia/Almaty",
+        "catalog": "\ngroup_order: [Голос, Дом, Мониторинг]\nservices:\n  - id: hermes\n    title: Hermes\n    group: Голос\n    aliases: {ru: [гермес], en: [hermes]}\n    kind: k8s\n    namespace: home\n    workload: {kind: Deployment, name: hermes}\n    restart: {allowed: false}\n  - id: prometheus\n    title: Prometheus\n    group: Мониторинг\n    aliases: {ru: [прометеус], en: [prometheus]}\n    kind: k8s\n    namespace: home\n    containers: [prometheus]\n    workload: {kind: StatefulSet, name: prometheus-monitoring-prometheus}\n    restart: {allowed: false}\n  - id: home-assistant\n    title: Home Assistant\n    group: Дом\n    host_title: HAOS VM\n    aliases: {ru: [дом, ха], en: [home-assistant]}\n    kind: external\n    checks:\n      - {type: ha_unavailable_summary, label: недоступные сущности, domains: [media_player]}\n    restart: {allowed: false}\n  - id: music-assistant\n    title: Music Assistant\n    group: Дом\n    host_title: HAOS VM\n    aliases: {ru: [музыка], en: [music-assistant]}\n    kind: external\n    checks:\n      - {type: tcp, label: API, host: 192.0.2.10, port: 8095}\n    restart: {allowed: false}\nignore_workloads:\n  - kube-system/DaemonSet/svclb-traefik\n",
+        "workloads": [
+          {
+            "namespace": "home",
+            "kind": "Deployment",
+            "name": "hermes",
+            "generation": 2,
+            "observedGeneration": 2,
+            "desired": 1,
+            "updated": 1,
+            "ready": 1,
+            "available": 1
+          },
+          {
+            "namespace": "home",
+            "kind": "StatefulSet",
+            "name": "prometheus-monitoring-prometheus",
+            "generation": 2,
+            "observedGeneration": 2,
+            "desired": 1,
+            "updated": 1,
+            "ready": 1,
+            "available": 1
+          }
+        ],
+        "pods": [
+          {
+            "namespace": "home",
+            "name": "prometheus-1",
+            "ready": true,
+            "startTime": "2026-10-30T12:00:00Z",
+            "containers": [
+              {
+                "name": "prometheus-config-reloader",
+                "image": "quay.io/prometheus-operator/prometheus-config-reloader:v0.94.2",
+                "ready": true
+              },
+              {
+                "name": "prometheus",
+                "image": "quay.io/prometheus/prometheus:v3.8.0",
+                "ready": true
+              }
+            ]
+          }
+        ],
+        "checks": [
+          {
+            "service": "home-assistant",
+            "type": "ha_unavailable_summary",
+            "label": "недоступные сущности",
+            "ok": true,
+            "value": "0"
+          },
+          {
+            "service": "music-assistant",
+            "type": "tcp",
+            "label": "API",
+            "ok": true
+          }
+        ],
+        "verbose": false,
+        "clusterWorkloads": [
+          {
+            "namespace": "home",
+            "kind": "Deployment",
+            "name": "hermes"
+          },
+          {
+            "namespace": "home",
+            "kind": "StatefulSet",
+            "name": "prometheus-monitoring-prometheus"
+          },
+          {
+            "namespace": "vaultwarden",
+            "kind": "Deployment",
+            "name": "vaultwarden"
+          },
+          {
+            "namespace": "kube-system",
+            "kind": "DaemonSet",
+            "name": "svclb-traefik"
+          }
+        ],
+        "flux": [
+          {
+            "kind": "Kustomization",
+            "namespace": "flux-system",
+            "name": "apps",
+            "ready": false,
+            "message": "HealthCheckFailed: Deployment/nexus is not ready"
+          },
+          {
+            "kind": "Kustomization",
+            "namespace": "flux-system",
+            "name": "paused",
+            "ready": false,
+            "suspended": true,
+            "message": "Reconciliation is suspended"
+          },
+          {
+            "kind": "HelmRelease",
+            "namespace": "flux-system",
+            "name": "runtime",
+            "ready": true
+          }
+        ]
+      },
+      "expected": {
+        "speech": "Проверено сервисов: 6, работают 4. Проблемы: Flux, Каталог отчёта. Прислать подробности в Telegram?",
+        "text": "Отчёт по инфраструктуре, 01.11 17:00\n⚠️ Есть проблемы: 2 из 6\n\nПроблемы\n⚠️ Flux — Kustomization flux-system/apps: HealthCheckFailed: Deployment/nexus is not ready\n⚠️ Каталог отчёта — не в каталоге отчёта: vaultwarden/Deployment/vaultwarden\n\nВ норме\n✅ Голос: Hermes\n✅ Дом: Home Assistant, Music Assistant\n✅ Мониторинг: Prometheus"
+      }
     }
   ]
 }

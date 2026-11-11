@@ -341,6 +341,96 @@ impl Client {
         Ok(events)
     }
 
+    /// List every Deployment, StatefulSet and DaemonSet in the cluster.
+    ///
+    /// Used by the report coverage check: a workload that exists in the
+    /// cluster but not in the catalog must become visible instead of silently
+    /// disappearing from the report. Requires the cluster-wide read
+    /// ClusterRole; the result is sorted by namespace, kind and name.
+    pub async fn list_workloads(&self) -> Result<Vec<WorkloadRef>, Error> {
+        let mut workloads = Vec::new();
+        for (kind, resource) in [
+            ("Deployment", "deployments"),
+            ("StatefulSet", "statefulsets"),
+            ("DaemonSet", "daemonsets"),
+        ] {
+            let path = format!("/apis/apps/v1/{resource}");
+            let list: NamedListJson = self.get_json("kubernetes workloads", &path).await?;
+            for item in list.items {
+                workloads.push(WorkloadRef {
+                    namespace: item.metadata.namespace,
+                    kind: kind.to_owned(),
+                    name: item.metadata.name,
+                });
+            }
+        }
+        workloads.sort_by(|left, right| {
+            (&left.namespace, &left.kind, &left.name).cmp(&(
+                &right.namespace,
+                &right.kind,
+                &right.name,
+            ))
+        });
+        Ok(workloads)
+    }
+
+    /// List Flux Kustomizations and HelmReleases in every namespace.
+    ///
+    /// The report treats a missing `Ready=True` condition as a problem; a
+    /// `suspend: true` resource is reported separately and is never an error,
+    /// because a deliberately paused Kustomization is a normal state.
+    pub async fn list_flux(&self) -> Result<Vec<FluxResource>, Error> {
+        let mut resources = Vec::new();
+        for (kind, path) in [
+            (
+                "Kustomization",
+                "/apis/kustomize.toolkit.fluxcd.io/v1/kustomizations",
+            ),
+            (
+                "HelmRelease",
+                "/apis/helm.toolkit.fluxcd.io/v2/helmreleases",
+            ),
+        ] {
+            let list: FluxListJson = self.get_json("flux resources", path).await?;
+            for item in list.items {
+                let mut message = String::new();
+                let mut ready = false;
+                let mut saw_ready = false;
+                for condition in &item.status.conditions {
+                    if condition.condition_type != "Ready" {
+                        continue;
+                    }
+                    saw_ready = true;
+                    ready = condition.status == "True";
+                    if condition.reason.is_empty() {
+                        message.clone_from(&condition.message);
+                    } else {
+                        message = format!("{}: {}", condition.reason, condition.message);
+                    }
+                }
+                if !saw_ready && message.is_empty() {
+                    "нет условия Ready".clone_into(&mut message);
+                }
+                resources.push(FluxResource {
+                    kind: kind.to_owned(),
+                    namespace: item.metadata.namespace,
+                    name: item.metadata.name,
+                    ready: ready && saw_ready,
+                    suspended: item.spec.suspend,
+                    message: message.trim().to_owned(),
+                });
+            }
+        }
+        resources.sort_by(|left, right| {
+            (&left.namespace, &left.kind, &left.name).cmp(&(
+                &right.namespace,
+                &right.kind,
+                &right.name,
+            ))
+        });
+        Ok(resources)
+    }
+
     /// Read the tail of one container's log.
     pub async fn pod_logs(
         &self,
@@ -553,6 +643,25 @@ pub struct Pod {
     pub restarts: i32,
     pub containers: Vec<ContainerStatus>,
     pub start_time: Option<OffsetDateTime>,
+}
+
+/// One workload that exists in the cluster, used by the report coverage check.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct WorkloadRef {
+    pub namespace: String,
+    pub kind: String,
+    pub name: String,
+}
+
+/// One Flux Kustomization or HelmRelease as seen by the report.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct FluxResource {
+    pub kind: String,
+    pub namespace: String,
+    pub name: String,
+    pub ready: bool,
+    pub suspended: bool,
+    pub message: String,
 }
 
 /// A normalized Kubernetes event.
@@ -838,6 +947,66 @@ struct EventJson {
 struct EventMetadata {
     #[serde(default, rename = "creationTimestamp")]
     creation_timestamp: Option<String>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct NamedListJson {
+    #[serde(default)]
+    items: Vec<NamedItemJson>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct NamedItemJson {
+    #[serde(default)]
+    metadata: NamespacedMetadata,
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct NamespacedMetadata {
+    #[serde(default)]
+    namespace: String,
+    #[serde(default)]
+    name: String,
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct FluxListJson {
+    #[serde(default)]
+    items: Vec<FluxItemJson>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct FluxItemJson {
+    #[serde(default)]
+    metadata: NamespacedMetadata,
+    #[serde(default)]
+    spec: FluxSpecJson,
+    #[serde(default)]
+    status: FluxStatusJson,
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct FluxSpecJson {
+    #[serde(default)]
+    suspend: bool,
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct FluxStatusJson {
+    #[serde(default)]
+    conditions: Vec<FluxConditionJson>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct FluxConditionJson {
+    #[serde(default, rename = "type")]
+    condition_type: String,
+    #[serde(default)]
+    status: String,
+    #[serde(default)]
+    reason: String,
+    #[serde(default)]
+    message: String,
 }
 
 #[cfg(test)]
@@ -1236,6 +1405,115 @@ mod tests {
         assert!(last_restart(&workload).is_none());
         workload.annotations.clear();
         assert!(last_restart(&workload).is_none());
+    }
+
+    #[tokio::test]
+    async fn list_workloads_reads_all_three_kinds_and_sorts() {
+        let app = Router::new()
+            .route(
+                "/apis/apps/v1/deployments",
+                get(|| async {
+                    axum::Json(serde_json::json!({"items": [
+                        {"metadata": {"namespace": "kube-system", "name": "coredns"}},
+                        {"metadata": {"namespace": "home-assistant", "name": "scheduler"}}
+                    ]}))
+                }),
+            )
+            .route(
+                "/apis/apps/v1/statefulsets",
+                get(|| async {
+                    axum::Json(serde_json::json!({"items": [
+                        {"metadata": {"namespace": "nexus", "name": "nexus"}}
+                    ]}))
+                }),
+            )
+            .route(
+                "/apis/apps/v1/daemonsets",
+                get(|| async {
+                    axum::Json(serde_json::json!({"items": [
+                        {"metadata": {"namespace": "monitoring", "name": "alloy"}}
+                    ]}))
+                }),
+            );
+        let base = serve(app).await;
+        let workloads = client(&base).list_workloads().await.expect("workloads");
+        let keys: Vec<(String, String, String)> = workloads
+            .into_iter()
+            .map(|w| (w.namespace, w.kind, w.name))
+            .collect();
+        assert_eq!(
+            keys,
+            vec![
+                (
+                    "home-assistant".to_owned(),
+                    "Deployment".to_owned(),
+                    "scheduler".to_owned()
+                ),
+                (
+                    "kube-system".to_owned(),
+                    "Deployment".to_owned(),
+                    "coredns".to_owned()
+                ),
+                (
+                    "monitoring".to_owned(),
+                    "DaemonSet".to_owned(),
+                    "alloy".to_owned()
+                ),
+                (
+                    "nexus".to_owned(),
+                    "StatefulSet".to_owned(),
+                    "nexus".to_owned()
+                ),
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn list_flux_maps_ready_and_suspended() {
+        let app = Router::new()
+            .route(
+                "/apis/kustomize.toolkit.fluxcd.io/v1/kustomizations",
+                get(|| async {
+                    axum::Json(serde_json::json!({"items": [
+                        {
+                            "metadata": {"namespace": "flux-system", "name": "apps"},
+                            "spec": {"suspend": false},
+                            "status": {"conditions": [
+                                {"type": "Reconciling", "status": "False", "reason": "Progressing", "message": "когда-нибудь"},
+                                {"type": "Ready", "status": "False", "reason": "HealthCheckFailed", "message": "Deployment/nexus is not ready"}
+                            ]}
+                        },
+                        {
+                            "metadata": {"namespace": "flux-system", "name": "paused"},
+                            "spec": {"suspend": true},
+                            "status": {"conditions": [{"type": "Ready", "status": "False", "reason": "Suspended", "message": "Reconciliation is suspended"}]}
+                        }
+                    ]}))
+                }),
+            )
+            .route(
+                "/apis/helm.toolkit.fluxcd.io/v2/helmreleases",
+                get(|| async {
+                    axum::Json(serde_json::json!({"items": [
+                        {
+                            "metadata": {"namespace": "flux-system", "name": "runtime"},
+                            "status": {"conditions": [{"type": "Ready", "status": "True"}]}
+                        }
+                    ]}))
+                }),
+            );
+        let base = serve(app).await;
+        let flux = client(&base).list_flux().await.expect("flux");
+        assert_eq!(flux.len(), 3);
+        assert_eq!(flux[0].kind, "HelmRelease");
+        assert!(flux[0].ready);
+        assert!(!flux[1].ready);
+        assert_eq!(
+            flux[1].message,
+            "HealthCheckFailed: Deployment/nexus is not ready"
+        );
+        assert!(flux[2].suspended);
+        assert!(!flux[2].ready);
     }
 
     #[test]

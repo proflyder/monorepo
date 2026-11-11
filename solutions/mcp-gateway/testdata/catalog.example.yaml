@@ -27,6 +27,11 @@ ignore_alerts:
   - Watchdog
   - InfoInhibitor
 
+# Workloads that exist on purpose but are not catalog services. infra_report
+# names everything else that runs in the cluster, so a new service cannot stay
+# invisible. Format: namespace/Kind/name.
+ignore_workloads: []
+
 # Fixed report section order. A service selects its section with `group`.
 group_order: [Apps, Data, Edge, External]
 

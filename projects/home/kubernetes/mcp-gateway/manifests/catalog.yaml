@@ -14,7 +14,13 @@
 #     (manifests/rbac.yaml) restricts `patch` to the same workload names;
 #   * `restart.self_disrupting` defers the patch so the spoken reply survives;
 #   * logs: `loki` where Alloy ingests the namespace, otherwise `pods`
-#     (pods/log through the Kubernetes API), `none` for external targets.
+#     (pods/log through the Kubernetes API), `none` for external targets;
+#   * every Deployment/StatefulSet/DaemonSet in the cluster must be a service
+#     above or be listed in `ignore_workloads` as `namespace/Kind/name`.
+#     infra_report lists everything else as «не в каталоге отчёта», so a new
+#     service cannot stay invisible just because nobody edited this file;
+#   * the report also requires every Flux Kustomization and HelmRelease to be
+#     Ready=True; `suspend: true` is shown but is not a problem.
 #
 # tests enforce the catalog/RBAC correspondence:
 #   cargo test -p mcp-gateway
@@ -49,7 +55,11 @@ overview: |
   - `external-secrets` — оператор, который материализует секреты из OpenBao.
   - `traefik` — HTTPS-ingress всего домашнего суффикса (hostNetwork).
   - `cert-manager` — выпуск сертификатов Let's Encrypt (ACME DNS-01).
-  - `kube-system` — системные компоненты K3s.
+  - `kube-system` — системные компоненты K3s (CoreDNS, local-path,
+    metrics-server): только чтение, перезапуск не поддержан.
+  - `flux-system` — контроллеры Flux: применяют Git и Helm, только чтение.
+  - `nexus` — репозиторий артефактов для CI.
+  - `vaultwarden` — менеджер паролей семьи.
 
   ## Что важно знать
 
@@ -74,7 +84,7 @@ ignore_alerts:
   - InfoInhibitor
 
 # Report section order. Each service selects one of these with `group`.
-group_order: [Голос, Дом, Планировщик, Мониторинг, Секреты и сеть, Приложения]
+group_order: [Голос, Дом, Планировщик, Мониторинг, Секреты и сеть, Приложения, Платформа]
 
 services:
   # ------------------------------------------------------ home-assistant ----
@@ -300,6 +310,29 @@ services:
       self_disrupting: true
       warning: "Это сам шлюз: ответ на текущий запрос может не дойти до голосового ассистента."
     description: Этот MCP-шлюз (диагностика, перезапуск, отчёты).
+
+  - id: ha-scenario
+    title: HA Scenario
+    group: Планировщик
+    aliases:
+      ru: [сценарии, исполнитель сценариев]
+      en: [ha-scenario, scenarios, scenario executor]
+    kind: k8s
+    namespace: home-assistant
+    workload:
+      kind: Deployment
+      name: ha-scenario
+    containers: [ha-scenario]
+    signals:
+      - promql: kube_deployment_status_replicas_available{namespace="home-assistant",deployment="ha-scenario"} < 1
+        meaning: исполнитель сценариев недоступен
+        status: false
+    logs:
+      source: pods
+    restart:
+      allowed: true
+      warning: "Сценарии, уже запущенные, оборвутся и будут помечены как прерванные; повторного запуска не будет."
+    description: Исполнитель очереди scenario (условия, шаги, журнал на PVC).
 
   # ---------------------------------------------------------- monitoring ----
   - id: prometheus
@@ -543,6 +576,52 @@ services:
       warning: "Telegram-webhook валютного бота будет недоступен около десяти секунд."
     description: Cloudflare Tunnel home-k3s (публичный webhook валютного бота).
 
+  - id: intercom
+    title: Intercom
+    group: Приложения
+    aliases:
+      ru: [интерком, домофон]
+      en: [intercom]
+    kind: k8s
+    namespace: home-assistant
+    workload:
+      kind: Deployment
+      name: intercom
+    containers: [intercom]
+    signals:
+      - promql: kube_deployment_status_replicas_available{namespace="home-assistant",deployment="intercom"} < 1
+        meaning: сервис звонка недоступен
+        status: true
+    logs:
+      source: pods
+    restart:
+      allowed: true
+      warning: "Активный звонок оборвётся, состояние звонков хранится только в памяти."
+    description: Сигналинг звонка со станции (in-memory, NodePort и HTTPS-маршрут).
+
+  - id: wakegrant
+    title: Wake Grant
+    group: Приложения
+    aliases:
+      ru: [вейкгрант, пробуждение станции]
+      en: [wakegrant, wake grant]
+    kind: k8s
+    namespace: home-assistant
+    workload:
+      kind: Deployment
+      name: wakegrant
+    containers: [wakegrant]
+    signals:
+      - promql: kube_deployment_status_replicas_available{namespace="home-assistant",deployment="wakegrant"} < 1
+        meaning: выдача разрешений на пробуждение недоступна
+        status: true
+    logs:
+      source: pods
+    restart:
+      allowed: true
+      warning: "Выдача разрешений на пробуждение приостановится на время перезапуска; SQLite на PVC сохранится."
+    description: Сертификаты пробуждения станции (SQLite на local-retain PVC).
+
   # --------------------------------------------------------------- openbao ----
   - id: openbao
     title: OpenBao
@@ -731,6 +810,190 @@ services:
       warning: "CA в webhook-конфигурациях не будет обновляться во время перезапуска."
     description: Раскладывает CA-бандлы в webhook-конфигурации.
 
+  - id: vaultwarden
+    title: Vaultwarden
+    group: Секреты и сеть
+    aliases:
+      ru: [волтварден, пароли, хранилище паролей]
+      en: [vaultwarden, passwords]
+    kind: k8s
+    namespace: vaultwarden
+    workload:
+      kind: Deployment
+      name: vaultwarden
+    containers: [vaultwarden]
+    signals:
+      - promql: kube_deployment_status_replicas_available{namespace="vaultwarden",deployment="vaultwarden"} < 1
+        meaning: Vaultwarden недоступен
+        status: true
+    logs:
+      source: pods
+    restart:
+      allowed: true
+      warning: "Веб-интерфейс паролей и синхронизация клиентов будут недоступны около тридцати секунд."
+    description: Менеджер паролей семьи (Rocket, data на PVC, вход через Traefik).
+
+  # -------------------------------------------------------------- platform ----
+  # Кластерная платформа: Flux, Nexus и системные компоненты K3s. Restart для
+  # них запрещён: ими управляют Flux и сам K3s, а не этот шлюз.
+  - id: nexus
+    title: Nexus
+    group: Платформа
+    aliases:
+      ru: [нексус, репозиторий артефактов]
+      en: [nexus, artifacts]
+    kind: k8s
+    namespace: nexus
+    workload:
+      kind: StatefulSet
+      name: nexus
+    containers: [nexus]
+    signals:
+      - promql: kube_statefulset_status_replicas_ready{namespace="nexus",statefulset="nexus"} < 1
+        meaning: Nexus недоступен
+        status: true
+    logs:
+      source: pods
+    restart:
+      allowed: true
+      warning: "CI потеряет доступ к кэшу артефактов, сборки и загрузки зависимостей приостановятся на несколько минут."
+    description: Репозиторий артефактов для CI (StatefulSet, PVC, read-only /repository).
+
+  - id: flux-source-controller
+    title: Flux Source Controller
+    group: Платформа
+    aliases:
+      ru: [источник конфигурации, flux источник]
+      en: [source-controller, flux source]
+    kind: k8s
+    namespace: flux-system
+    workload:
+      kind: Deployment
+      name: source-controller
+    containers: [manager]
+    signals:
+      - promql: kube_deployment_status_replicas_available{namespace="flux-system",deployment="source-controller"} < 1
+        meaning: Flux не может читать Git-источники
+        status: true
+    logs:
+      source: pods
+    restart:
+      allowed: false
+    description: Скачивает Git-источники для Flux (управляется bootstrap'ом Flux).
+
+  - id: flux-kustomize-controller
+    title: Flux Kustomize Controller
+    group: Платформа
+    aliases:
+      ru: [кустомайз контроллер, flux применение]
+      en: [kustomize-controller, flux kustomize]
+    kind: k8s
+    namespace: flux-system
+    workload:
+      kind: Deployment
+      name: kustomize-controller
+    containers: [manager]
+    signals:
+      - promql: kube_deployment_status_replicas_available{namespace="flux-system",deployment="kustomize-controller"} < 1
+        meaning: Flux не применяет манифесты
+        status: true
+    logs:
+      source: pods
+    restart:
+      allowed: false
+    description: Применяет Kustomization'ы и следит за их Ready.
+
+  - id: flux-helm-controller
+    title: Flux Helm Controller
+    group: Платформа
+    aliases:
+      ru: [хелм контроллер, flux релизы]
+      en: [helm-controller, flux helm]
+    kind: k8s
+    namespace: flux-system
+    workload:
+      kind: Deployment
+      name: helm-controller
+    containers: [manager]
+    signals:
+      - promql: kube_deployment_status_replicas_available{namespace="flux-system",deployment="helm-controller"} < 1
+        meaning: Flux не обновляет HelmRelease
+        status: true
+    logs:
+      source: pods
+    restart:
+      allowed: false
+    description: Устанавливает и обновляет HelmRelease.
+
+  - id: coredns
+    title: CoreDNS
+    group: Платформа
+    aliases:
+      ru: [кордиэнэс, dns кластера]
+      en: [coredns, cluster dns]
+    kind: k8s
+    namespace: kube-system
+    workload:
+      kind: Deployment
+      name: coredns
+    containers: [coredns]
+    signals:
+      - promql: kube_deployment_status_replicas_available{namespace="kube-system",deployment="coredns"} < 1
+        meaning: DNS внутри кластера не работает
+        status: true
+    logs:
+      source: loki
+      selector: '{namespace="kube-system",container="coredns"}'
+    restart:
+      allowed: false
+    description: DNS-резолвер K3s (Service-имена).
+
+  - id: local-path-provisioner
+    title: Local Path Provisioner
+    group: Платформа
+    aliases:
+      ru: [провижионер дисков, локальные тома]
+      en: [local-path-provisioner, local path storage]
+    kind: k8s
+    namespace: kube-system
+    workload:
+      kind: Deployment
+      name: local-path-provisioner
+    containers: [local-path-provisioner]
+    signals:
+      - promql: kube_deployment_status_replicas_available{namespace="kube-system",deployment="local-path-provisioner"} < 1
+        meaning: новые PVC не будут создаваться
+        status: false
+    logs:
+      source: loki
+      selector: '{namespace="kube-system",container="local-path-provisioner"}'
+    restart:
+      allowed: false
+    description: Выдаёт локальные PV для PVC (local-path, local-retain).
+
+  - id: metrics-server
+    title: Metrics Server
+    group: Платформа
+    aliases:
+      ru: [сервер метрик, метрики ресурсов]
+      en: [metrics-server, resource metrics]
+    kind: k8s
+    namespace: kube-system
+    workload:
+      kind: Deployment
+      name: metrics-server
+    containers: [metrics-server]
+    signals:
+      - promql: kube_deployment_status_replicas_available{namespace="kube-system",deployment="metrics-server"} < 1
+        meaning: метрики CPU и памяти подов недоступны
+        status: false
+    logs:
+      source: loki
+      selector: '{namespace="kube-system",container="metrics-server"}'
+    restart:
+      allowed: false
+    description: Метрики ресурсов для HPA и kubectl top.
+
   # -------------------------------------------------------------- external ----
   - id: home-assistant
     title: Home Assistant
@@ -825,3 +1088,63 @@ services:
     restart:
       allowed: false
     description: Колонка Midi с Pulsar/ESPHome. Метрик и логов в кластере нет; доступность — TCP и сущности HA.
+
+  - id: proxmox
+    title: Proxmox VE
+    group: Платформа
+    host_title: Proxmox VE
+    aliases:
+      ru: [проксмокс, гипервизор]
+      en: [proxmox, pve, hypervisor]
+    kind: external
+    checks:
+      # Веб-интерфейс PVE слушает только TLS с самоподписанным сертификатом,
+      # а публичный клиент проверок доверяет только публичным CA: проверяем
+      # доступность порта, а не HTTPS-ответ.
+      - type: tcp
+        label: веб-интерфейс 8006
+        host: ${PVE_IP}
+        port: 8006
+    logs:
+      source: none
+    restart:
+      allowed: false
+    description: Гипервизор Proxmox VE; HAOS и K3s — его виртуальные машины. Перезапуск только вручную.
+
+  - id: vpn
+    title: VPN (ocserv)
+    group: Платформа
+    host_title: VPN CT 102
+    aliases:
+      ru: [впн, випиэн, оксерв]
+      en: [vpn, ocserv, openconnect]
+    kind: external
+    checks:
+      - type: tcp
+        label: ocserv TLS/DTLS
+        host: ${VPN_CT_IP}
+        port: 443
+    logs:
+      source: none
+    restart:
+      allowed: false
+    description: Удалённый вход в домашнюю LAN (ocserv, пароль и TOTP). Перезапуск только вручную в Proxmox.
+
+  - id: bb-host
+    title: BB Host
+    group: Платформа
+    host_title: BB CT 103
+    aliases:
+      ru: [биби хост, сервер агентов]
+      en: [bb host, agents host]
+    kind: external
+    checks:
+      - type: tcp
+        label: SSH моста
+        host: ${BB_CT_IP}
+        port: 22
+    logs:
+      source: none
+    restart:
+      allowed: false
+    description: Хост bb и forced-command моста для bb.read/bb.act. Входящих портов, кроме SSH, не публикует.
