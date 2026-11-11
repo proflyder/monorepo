@@ -631,8 +631,10 @@ curl -s http://<адрес-колонки>:9101/metrics
   (`/proc/meminfo`), диск `/data` и `/` (`statvfs`), uptime.
 - **Связь с HA** — `pulsar_ha_connected`, `pulsar_ha_reconnects_total`.
 - **Ассистент** — `pulsar_assistant_requests_total{result="ok|error|timeout"}`,
-  гистограммы `pulsar_assistant_wake_to_stt_seconds` и
-  `pulsar_assistant_wake_to_answer_seconds`.
+  гистограммы `pulsar_assistant_wake_to_stt_seconds` (wake → начало STT) и
+  `pulsar_assistant_wake_to_answer_seconds` (wake → начало проигрывания TTS;
+  длительность самого ответа не входит — отсчёт останавливается до старта
+  плеера, один замер на run).
 - **Звук** — `pulsar_playback_started_total`/`_finished_total{kind,result}`,
   `pulsar_alsa_xruns_total`, `pulsar_mute{kind="hw|sw"}`, `pulsar_volume_ratio`.
 - **Звонки** — `pulsar_call_active`, `pulsar_call_incoming_total`,

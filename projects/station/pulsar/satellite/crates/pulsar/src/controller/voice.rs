@@ -312,6 +312,7 @@ impl Controller {
         self.run_metric = Some(RunMetric {
             started_ms: started,
             wake: !phrase.is_empty(),
+            answer_started: false,
         });
         self.run_result = None;
         self.update_duck();
@@ -530,18 +531,13 @@ impl Controller {
         let Some((dialog, url)) = self.session.take_tts() else {
             return;
         };
+        self.observe_answer_start();
         self.update_ui();
         self.play_announce(vec![url], Pending::Tts { dialog });
     }
 
     /// A cut-short or failed answer does not reopen the microphone, nor does a ringing timer.
     fn tts_finished(&mut self, ok: bool) {
-        if ok
-            && let Some(run) = self.run_metric
-            && run.wake
-        {
-            pulsar_metrics::observe_wake_to_answer((now_ms() - run.started_ms) as f64 / 1000.0);
-        }
         self.send_tts_report(ok);
         let followup = self.session.followup();
         if followup.should_continue(
@@ -625,6 +621,19 @@ impl Controller {
         }
         self.session.mark_stop_sent(); // by the server itself
         self.abort_dialog("network too slow for the microphone audio");
+    }
+
+    /// Wakes→TTS-start: taken when playback is requested, before any audio
+    /// plays, and only once per wake run.
+    fn observe_answer_start(&mut self) {
+        let now = now_ms();
+        if let Some(latency) = self
+            .run_metric
+            .as_mut()
+            .and_then(|run| run.answer_latency(now))
+        {
+            pulsar_metrics::observe_wake_to_answer(latency);
+        }
     }
 
     /// Закрывает счётчик текущего run ровно один раз (Ok, если явного итога нет).

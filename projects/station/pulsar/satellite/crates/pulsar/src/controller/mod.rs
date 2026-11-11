@@ -237,6 +237,22 @@ struct RunMetric {
     started_ms: i64,
     /// Opened by a wake word (not by a button, follow-up or Home Assistant).
     wake: bool,
+    /// The wake→TTS-start histogram already got its one sample for this run.
+    answer_started: bool,
+}
+
+impl RunMetric {
+    /// Wake→TTS-start latency, once per wake run. `None` for a run opened
+    /// without a wake word and for every TTS start after the first: a follow-up
+    /// answer in the same run must not add a second sample, and playback time is
+    /// deliberately excluded (the sample is taken before the player starts).
+    fn answer_latency(&mut self, now_ms: i64) -> Option<f64> {
+        if !self.wake || self.answer_started {
+            return None;
+        }
+        self.answer_started = true;
+        Some((now_ms - self.started_ms) as f64 / 1000.0)
+    }
 }
 
 pub struct Controller {
