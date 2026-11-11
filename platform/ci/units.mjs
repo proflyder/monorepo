@@ -1047,6 +1047,16 @@ export const config = {
         "projects/home/kubernetes/ingress/**",
         "projects/home/kubernetes/observability/**",
         "projects/home/kubernetes/vaultwarden/**",
+        // ...including every app Kustomization (`flux/cluster/apps.yaml`): an
+        // app manifest change must re-run the object-set and substitution
+        // contract (#297 broke it unnoticed because these were not routed).
+        "projects/home/kubernetes/wakegrant/manifests/**",
+        "projects/home/kubernetes/intercom/manifests/**",
+        "projects/home/kubernetes/currency-bot/manifests/**",
+        "projects/home/kubernetes/mcp-gateway/manifests/**",
+        "projects/home/kubernetes/scheduler/manifests/**",
+        "projects/home-assistant/deploy/flux/**",
+        "projects/home-assistant/deploy/chart/**",
       ],
       python: {
         suites: ["projects/home/kubernetes/flux"],

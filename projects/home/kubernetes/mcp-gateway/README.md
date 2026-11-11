@@ -46,7 +46,8 @@ placeholders/TEST-NET values.
 
 `manifests/catalog.yaml` lists every service the gateway may read and — when
 `restart.allowed` — restart. It is applied verbatim as the ConfigMap
-`mcp-gateway-catalog` and mounted at `/etc/mcp-gateway/catalog.yaml`.
+`mcp-gateway-catalog-<hash>` (content-hashed, so a catalog change rolls the pod:
+the gateway reads it once at start) and mounted at `/etc/mcp-gateway/catalog.yaml`.
 
 - Spoken aliases (ru/en) must be unambiguous; `infra_prepare_restart` resolves
   them to a catalog id, never to free text.
@@ -376,7 +377,7 @@ Full removal:
 ```bash
 mise run kubectl -- -n flux-system suspend kustomization/app-mcp-gateway
 mise run kubectl -- -n home-assistant delete deployment,service mcp-gateway
-mise run kubectl -- -n home-assistant delete configmap mcp-gateway-catalog
+mise run kubectl -- -n home-assistant get configmap -o name | grep mcp-gateway-catalog | xargs mise run kubectl -- -n home-assistant delete
 mise run kubectl -- -n home-assistant delete networkpolicy mcp-gateway-ingress mcp-gateway-egress
 mise run kubectl -- -n home-assistant delete servicemonitor mcp-gateway
 mise run kubectl -- delete -f projects/home/kubernetes/mcp-gateway/manifests/rbac.yaml

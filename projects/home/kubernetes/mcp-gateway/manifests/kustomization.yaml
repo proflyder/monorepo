@@ -2,8 +2,10 @@
 #
 # Deployment, Service, NetworkPolicies, ServiceMonitor, RBAC and the five
 # ExternalSecrets are the workload. The catalog and bb-targets files are
-# deployment data, so they are rendered as a ConfigMap by the generator; the
-# Deployment mounts the stable name, hence `disableNameSuffixHash`.
+# deployment data, so they are rendered as a ConfigMap by the generator. The
+# generator keeps its content-hash suffix: the gateway reads the catalog once
+# at start, so a catalog change must roll the pod. Kustomize rewrites the
+# Deployment's volume reference to the hashed name and Flux prunes the old one.
 #
 # The CI-only `ci-deploy` grants are gone with the old deploy path.
 #
@@ -25,13 +27,10 @@ resources:
   - external-secrets.yaml
 configMapGenerator:
   - name: mcp-gateway-catalog
-    # The Deployment mounts this ConfigMap by its stable name.
     namespace: home-assistant
     files:
       - catalog.yaml
       - bb-targets.yaml
-    options:
-      disableNameSuffixHash: true
 patches:
   # The image itself changes the pod template, so the annotation follows the
   # digest instead of the CI-only `ROLLOUT_ID`.
