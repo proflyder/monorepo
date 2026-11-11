@@ -694,11 +694,12 @@ async fn mini_has_no_clock_lux_mute_case_or_button_entities() {
             p.hello("HA").await;
             event(&mut rx).await;
             let keys = list_keys(&mut p).await;
-            // 21 сущность плюс сервис led_show; без часов, Lux, wake pre-roll, аппаратного
-            // MUTE, цвета корпуса и кнопок Button, но с follow-up duration. Два switch и две
-            // кнопки wake-event и select голосового цвета есть всегда.
-            assert_eq!(keys.len(), 22, "keys: {keys:?}");
+            // 22 сущности плюс сервис led_show; без часов, Lux, wake pre-roll, аппаратного
+            // MUTE, цвета корпуса и кнопок Button, но с follow-up duration и microphone gain.
+            // Два switch и две кнопки wake-event и select голосового цвета есть всегда.
+            assert_eq!(keys.len(), 23, "keys: {keys:?}");
             assert!(keys.contains(&key::NUMBER_FOLLOWUP_DURATION.get()));
+            assert!(keys.contains(&key::NUMBER_MIC_GAIN.get()));
             assert!(keys.contains(&key::ACTION_LED_SHOW.get()));
             let absent = [
                 key::SW_CLOCK,

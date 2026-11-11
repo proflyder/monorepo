@@ -625,16 +625,12 @@ pub static MINI: DeviceProfile = DeviceProfile {
                 config: "/data/pulsar/asound.conf",
                 lib: "/system/vendor/quasar/libs/libasound.so.2",
             }),
-            spk_mute_ctl: Some("SPK mute"),
-            // The stock maind opens the tdm_state amplifier gates; without them the ALSA sink
-            // runs but the speaker stays silent (SPK mute cannot be cleared while amp_table is
-            // 0). The driver clears amp_table when the playback PCM closes (observed idle
-            // state), and both sinks close it when playback ends, so only the next start has to
-            // set the gates again.
-            amp_enable_paths: &[
-                "/sys/class/tdm_state/amp_table",
-                "/sys/class/tdm_state/aux_amp",
-            ],
+            spk_mute_ctl: None,
+            // Затвор выхода — только amp_table: на Мини 1 «SPK mute» = 1 глушит усилитель и
+            // сбрасывает amp_table, а aux_amp = 1 поднимает aux_amp_mute (см. docs/mini.md,
+            // «Звук»). Драйвер обнуляет amp_table при закрытии PCM, поэтому каждый запуск
+            // воспроизведения выставляет его снова.
+            amp_enable_paths: &["/sys/class/tdm_state/amp_table"],
         },
     },
     volume: MINI_VOLUME,
@@ -829,13 +825,7 @@ mod tests {
             (&MIDI, "speakers", None, None, 0usize),
             (&LITE2, "speakers", None, None, 0),
             (&MINI2, "default", None, None, 0),
-            (
-                &MINI,
-                "mini",
-                Some("/data/pulsar/asound.conf"),
-                Some("SPK mute"),
-                2,
-            ),
+            (&MINI, "mini", Some("/data/pulsar/asound.conf"), None, 1),
             (&MINI3, "speakers", None, None, 0),
         ];
         for (p, pcm, config, mute, amps) in want {

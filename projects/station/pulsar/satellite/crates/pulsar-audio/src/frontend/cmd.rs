@@ -18,6 +18,8 @@ pub(super) enum FrontendCmd {
     SetMusic(bool),
     SetRecording(bool),
     SetDryRun(bool),
+    /// «Microphone gain», дБ: усиление звука запроса перед отправкой в HA.
+    SetMicGain(u32),
     WakeHandled,
     Missed,
 }

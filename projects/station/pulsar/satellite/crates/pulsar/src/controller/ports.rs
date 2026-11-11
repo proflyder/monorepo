@@ -75,6 +75,7 @@ pub trait Frontend {
     fn wake_handled(&self);
     fn set_preroll(&self, on: bool);
     fn set_music_analysis(&self, on: bool);
+    fn set_mic_gain(&self, db: u32);
     fn set_wake_recording(&self, on: bool);
     fn set_wake_dry_run(&self, on: bool);
     fn wake_missed(&self);
@@ -313,7 +314,6 @@ impl Frontend for FrontendHandle {
     fn set_model(&self, dir: PathBuf) {
         Self::set_model(self, dir);
     }
-
     fn set_detection(&self, on: bool) {
         Self::set_detection(self, on);
     }
@@ -340,6 +340,10 @@ impl Frontend for FrontendHandle {
 
     fn set_music_analysis(&self, on: bool) {
         Self::set_music_analysis(self, on);
+    }
+
+    fn set_mic_gain(&self, db: u32) {
+        Self::set_mic_gain(self, db);
     }
 
     fn set_wake_recording(&self, on: bool) {

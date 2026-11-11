@@ -54,15 +54,16 @@ const PROCESSING_STACK: usize = 8 << 20;
 
 pub enum FrontendEvent {
     /// level_db: wake word level in dBFS on VQE_OMNI (after echo cancellation, before AGC),
-    /// rounded to 0.1 dB; -100 = no data. `audio` is the 0.5 s pre-roll ending with the chunk
-    /// that confirmed the phrase: without it an immediate command loses its first syllables.
+    /// rounded to 0.1 dB; -100 = no data. `preroll` is the tail of the HA stream ending with the
+    /// chunk that confirmed the phrase: without it an immediate command loses its first
+    /// syllables.
     Wake {
         phrase: String,
         level_db: f32,
         /// 16 kHz mono audio from the end of the wake word up to and including the confirming
-        /// chunk, oldest first; empty without values for the model (`Preroll`).
-        /// The `Audio` events after it continue it without a gap until
-        /// [`FrontendHandle::wake_handled`].
+        /// chunk, oldest first; empty without values for the model (`Preroll`). It is the same
+        /// `VQE_OMNI` channel as `Audio`, with «Microphone gain». The `Audio` events after it
+        /// continue it without a gap until [`FrontendHandle::wake_handled`].
         preroll: Vec<i16>,
         /// Levels of the wake window on the same channel as `Audio`, for the experimental
         /// local endpoint detector. None until a full window was seen.
@@ -75,8 +76,8 @@ pub enum FrontendEvent {
     Command {
         word: String,
     },
-    /// 16 kHz mono, one VQE chunk (512 samples, 256 on the Mini 3 and Mini), while streaming is on
-    /// or a `Wake` is not yet handled.
+    /// 16 kHz mono, one VQE chunk (512 samples, 256 on the Mini 3 and Mini) of `VQE_OMNI` with
+    /// «Microphone gain», while streaming is on or a `Wake` is not yet handled.
     Audio(Vec<i16>),
     /// One per 32 ms FFT window while music analysis is on.
     Music(MusicFrame),
@@ -306,6 +307,11 @@ impl FrontendHandle {
     /// While on, music features of the speaker reference come as [`FrontendEvent::Music`].
     pub fn set_music_analysis(&self, on: bool) {
         self.send(FrontendCmd::SetMusic(on));
+    }
+
+    /// Усиление звука для HA (`Audio` и пре-ролл), дБ; 0 — выход VQE как есть. По умолчанию 0.
+    pub fn set_mic_gain(&self, db: u32) {
+        self.send(FrontendCmd::SetMicGain(db));
     }
 
     /// Counters of the capture and processing threads (frontend_probe).
