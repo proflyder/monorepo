@@ -865,10 +865,17 @@ class FluxAlerts(unittest.TestCase):
                 self.assertEqual(rule["labels"]["severity"], "warning")
                 self.assertTrue(rule["annotations"]["summary"].strip())
                 self.assertTrue(rule["annotations"]["description"].strip())
-        self.assertIn("gotk_reconcile_condition", self.rules["FluxKustomizationNotReady"]["expr"])
-        self.assertIn("gotk_reconcile_condition", self.rules["HelmReleaseNotReady"]["expr"])
-        self.assertIn("kind=\"Kustomization\"", self.rules["FluxKustomizationNotReady"]["expr"])
-        self.assertIn("kind=\"HelmRelease\"", self.rules["HelmReleaseNotReady"]["expr"])
+        # Flux 2.x controllers export no reconcile status, so readiness comes
+        # from kube-state-metrics customResourceState; the label contract is
+        # asserted in observability/test_prometheusrule.py.
+        self.assertNotIn("gotk_reconcile_condition",
+                         self.rules["FluxKustomizationNotReady"]["expr"])
+        self.assertIn("gotk_resource_info", self.rules["FluxKustomizationNotReady"]["expr"])
+        self.assertIn("gotk_resource_info", self.rules["HelmReleaseNotReady"]["expr"])
+        self.assertIn('customresource_kind="Kustomization"',
+                      self.rules["FluxKustomizationNotReady"]["expr"])
+        self.assertIn('customresource_kind="HelmRelease"',
+                      self.rules["HelmReleaseNotReady"]["expr"])
         # Pins staleness is the missing ConfigMap or an unhealthy source.
         self.assertIn("home-app-images", self.rules["PinsStale"]["expr"])
         self.assertIn("flux-pins", self.rules["PinsStale"]["expr"])

@@ -222,9 +222,15 @@ Kustomization: `prune: true` would remove the workload, and every app PVC
 exactly that reason.
 
 Delivery alerts (`FluxKustomizationNotReady`, `HelmReleaseNotReady`,
-`PinsStale`) live in `projects/home/kubernetes/observability/rules`; the
-`PodMonitor/flux-controllers` scrapes the controller `gotk_*` metrics, and
-`flux-system-ingress` allows only the monitoring namespace on port 8080.
+`PinsStale`) live in `projects/home/kubernetes/observability/rules`. They read
+`gotk_resource_info`, which kube-state-metrics builds from the Flux CRDs
+(`customResourceState` in `observability/values/prometheus.yaml`, list/watch
+RBAC included): Flux 2.x controllers only export reconcile duration and token
+metrics, so controller metrics alone cannot answer "is it Ready". The
+kube-state-metrics configmap collector still feeds `kube_configmap_info` for
+`PinsStale`. `PodMonitor/flux-controllers` keeps scraping the controller
+`gotk_*` metrics, and `flux-system-ingress` allows only the monitoring
+namespace on port 8080.
 
 ## Private values (`flux-settings`)
 

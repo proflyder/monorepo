@@ -14,8 +14,8 @@ spec:
   podSelector: {}
   policyTypes:
     - Ingress
-  # Prometheus scrapes the controller metrics (`gotk_reconcile_condition`)
-  # through PodMonitor/flux-controllers in the monitoring namespace. Everything
+  # Prometheus scrapes the controller metrics (`gotk_*`) through
+  # PodMonitor/flux-controllers in the monitoring namespace. Everything
   # else stays denied: this is the only ingress rule in the namespace.
   ingress:
     - from:
