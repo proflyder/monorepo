@@ -8,6 +8,7 @@
 //! Аудио звонка никуда не пишется; в логах только факт входящего/завершения.
 
 use pulsar_call::{CallEvent, CallPhase};
+use pulsar_core::now_ms;
 use pulsar_media::Channel;
 use tracing::info;
 
@@ -25,6 +26,9 @@ impl Controller {
                     return;
                 }
                 self.call_active = true;
+                self.call_started_ms = now_ms();
+                pulsar_metrics::set_call_active(true);
+                pulsar_metrics::call_incoming();
                 info!("call: incoming, station answers");
                 // Один поток VQE на всех: во время звонка он идёт в uplink, а не в HA.
                 self.deps.frontend.set_streaming(true);
@@ -52,6 +56,8 @@ impl Controller {
                     return;
                 }
                 self.call_active = false;
+                pulsar_metrics::set_call_active(false);
+                pulsar_metrics::call_ended((now_ms() - self.call_started_ms) as f64 / 1000.0);
                 info!("call: ended");
                 self.deps.player.stop(Channel::Announce);
                 self.deps.frontend.set_streaming(false);

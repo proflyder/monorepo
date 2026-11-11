@@ -29,6 +29,7 @@ DEPS = [
     "@crates//:tokio",
     "@crates//:tracing",
     "//projects/station/pulsar/satellite/crates/pulsar-core:pulsar_core",
+    "//projects/station/pulsar/satellite/crates/pulsar-metrics:pulsar_metrics",
 ]
 
 # C/C++ libraries are link-only here (the crate declares the opus FFI itself);

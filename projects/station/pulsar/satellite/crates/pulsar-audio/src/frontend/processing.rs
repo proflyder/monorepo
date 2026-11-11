@@ -255,12 +255,16 @@ impl<E: WakeEngine, D: Detector, S: WakeStore, C: Clock> Processing<E, D, S, C> 
             out.feeding = true;
             match self.detector.as_mut().map(|d| d.feed(slot)) {
                 Some(Ok(Detection { hit: true, score })) => {
+                    pulsar_metrics::observe_wake_score(f64::from(score));
                     out.hit = Some(score);
                     out.mean = Some(score);
                 }
                 Some(Ok(Detection { hit: false, score })) => {
                     // The windowed mean of every chunk drives the near-miss band;
                     // negative means the detector window is still filling.
+                    if score >= 0.0 {
+                        pulsar_metrics::observe_wake_score(f64::from(score));
+                    }
                     out.mean = (score >= 0.0).then_some(score);
                 }
                 Some(Err(e)) => {
@@ -306,6 +310,7 @@ impl<E: WakeEngine, D: Detector, S: WakeStore, C: Clock> Processing<E, D, S, C> 
         let Some(score) = det.hit else {
             return;
         };
+        pulsar_metrics::wake_detected();
         if self.state.dry_run() {
             // Recorded with the outcome `dry_run` by the writer; no earcon, no claim, no
             // dialog, and the music keeps playing.

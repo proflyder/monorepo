@@ -1,0 +1,6 @@
+apiVersion: v2
+name: station-observability
+description: Grafana dashboards for the Pulsar station (folder «Колонка»)
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

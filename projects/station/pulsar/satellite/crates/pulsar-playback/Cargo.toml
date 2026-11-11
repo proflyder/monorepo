@@ -10,6 +10,7 @@ libc = { workspace = true }
 tracing = { workspace = true }
 pulsar-alsa = { path = "../pulsar-alsa" }
 pulsar-model = { path = "../pulsar-model" }
+pulsar-metrics = { path = "../pulsar-metrics" }
 
 [lints]
 workspace = true

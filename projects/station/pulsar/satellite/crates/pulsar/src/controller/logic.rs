@@ -58,6 +58,7 @@ pub struct Ports {
     pub sendspin: u16,
     pub deconz: u16,
     pub arbiter: u16,
+    pub metrics: u16,
 }
 
 pub const API_PORT: u16 = 6053;
@@ -66,6 +67,8 @@ pub const SENDSPIN_PORT: u16 = 8928;
 /// network Zigbee coordinators conventionally use.
 pub const DECONZ_PORT: u16 = 6638;
 pub const ARBITER_PORT: u16 = 6054;
+/// Prometheus endpoint (see pulsar_metrics). LAN-only, scraped by the home Prometheus.
+pub const METRICS_PORT: u16 = pulsar_metrics::DEFAULT_PORT;
 
 /// `offset`: the variable's value, None when unset. None: not a u16, or a port overflows.
 pub fn ports(offset: Option<&OsStr>) -> Option<Ports> {
@@ -79,6 +82,7 @@ pub fn ports(offset: Option<&OsStr>) -> Option<Ports> {
         sendspin: SENDSPIN_PORT.checked_add(offset)?,
         deconz: DECONZ_PORT.checked_add(offset)?,
         arbiter: ARBITER_PORT.checked_add(offset)?,
+        metrics: METRICS_PORT.checked_add(offset)?,
     })
 }
 

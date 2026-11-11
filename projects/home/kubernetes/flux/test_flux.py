@@ -362,6 +362,7 @@ class HelmReleases(unittest.TestCase):
             "loki": "monitoring",
             "alloy": "monitoring",
             "ha-observability": "monitoring",
+            "station-observability": "monitoring",
         }
         self.assertEqual(set(self.releases), set(expected))
         for name, namespace in expected.items():
@@ -403,15 +404,21 @@ class HelmReleases(unittest.TestCase):
                 "kind": "ConfigMap", "name": configmap, "valuesKey": key,
             }], name)
 
-    def test_dashboards_chart_comes_from_git(self):
-        spec = self.release("ha-observability")["spec"]["chart"]["spec"]
-        self.assertEqual(spec["chart"], "./projects/home-assistant/observability/chart")
-        # The in-repo chart keeps version 0.1.0: without the Revision strategy
-        # template edits (dashboards) never reach the live release.
-        self.assertEqual(spec.get("reconcileStrategy"), "Revision")
-        self.assertEqual(spec["sourceRef"], {
-            "kind": "GitRepository", "name": "flux-system", "namespace": "flux-system",
-        })
+    def test_dashboards_charts_come_from_git(self):
+        expected = {
+            "ha-observability": "./projects/home-assistant/observability/chart",
+            "station-observability": "./projects/station/observability/chart",
+        }
+        for name, chart in expected.items():
+            spec = self.release(name)["spec"]["chart"]["spec"]
+            with self.subTest(release=name):
+                self.assertEqual(spec["chart"], chart)
+                # The in-repo charts keep version 0.1.0: without the Revision
+                # strategy template edits (dashboards) never reach the live release.
+                self.assertEqual(spec.get("reconcileStrategy"), "Revision")
+                self.assertEqual(spec["sourceRef"], {
+                    "kind": "GitRepository", "name": "flux-system", "namespace": "flux-system",
+                })
 
     def test_failed_upgrades_are_not_remediated_automatically(self):
         for name, release in self.releases.items():
@@ -456,7 +463,7 @@ class Substitution(unittest.TestCase):
         expected = {
             "ingress/routes": {"HOME_DOMAIN", "LAN_CIDR", "HAOS_ADDRESS"},
             "vaultwarden": {"HOME_DOMAIN", "LAN_CIDR", "NODE_LAN_IP"},
-            "observability": {"HOME_DOMAIN", "PVE_NODE_TARGET"},
+            "observability": {"HOME_DOMAIN", "PVE_NODE_TARGET", "STATION_IP"},
             "external-secrets": set(),
             "ingress/cert-manager": set(),
             "ingress/traefik": set(),

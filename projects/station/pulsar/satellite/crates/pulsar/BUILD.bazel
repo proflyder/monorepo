@@ -15,6 +15,7 @@ DEPS = [
     "//projects/station/pulsar/satellite/crates/pulsar-audio:pulsar_audio",
     "//projects/station/pulsar/satellite/crates/pulsar-clock:pulsar_clock",
     "//projects/station/pulsar/satellite/crates/pulsar-core:pulsar_core",
+    "//projects/station/pulsar/satellite/crates/pulsar-metrics:pulsar_metrics",
     "//projects/station/pulsar/satellite/crates/pulsar-esphome:pulsar_esphome",
     "//projects/station/pulsar/satellite/crates/pulsar-hw:pulsar_hw",
     "//projects/station/pulsar/satellite/crates/pulsar-arbiter:pulsar_arbiter",

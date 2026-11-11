@@ -13,7 +13,7 @@ use tracing::{debug, info, warn};
 use super::earcons;
 use super::logic::{self, Phase, VoiceCommand};
 use super::wake::{ClaimToken, Decision};
-use super::{Controller, Pending, Tk, WakeRecord};
+use super::{Controller, Pending, RunMetric, Tk, WakeRecord};
 
 impl Controller {
     fn arbitration_on(&self) -> bool {
@@ -25,12 +25,14 @@ impl Controller {
     pub(super) fn play_announce(&mut self, urls: Vec<String>, done: Pending) {
         let speech = matches!(done, Pending::Tts { .. } | Pending::Announce { .. });
         self.set_announce_speech(speech);
+        pulsar_metrics::playback_started(done.playback_kind());
         let id = self.deps.player.play(Channel::Announce, urls);
         self.pending.insert(id, done);
     }
 
     /// The C++ completion callbacks of `play()`.
     pub(super) fn play_done(&mut self, p: Pending, ok: bool) {
+        pulsar_metrics::playback_finished(p.playback_kind(), ok);
         match p {
             Pending::Tts { dialog } => {
                 if dialog == self.session.current_id() && self.session.is_speaking() {
@@ -191,6 +193,7 @@ impl Controller {
             self.mark_wake_cancelled();
             self.finish_wake_rec();
             self.interrupt_speech(); // barge-in: cut the answer short
+            self.count_current_run();
         }
         self.session.set_record(rec);
         self.start_pipeline(phrase, true, preroll, live, endpoint_prior);
@@ -304,7 +307,13 @@ impl Controller {
                 p.noise_db, p.speech_db, on, off
             );
         }
-        self.session.begin(now_ms(), !phrase.is_empty(), endpoint);
+        let started = now_ms();
+        self.session.begin(started, !phrase.is_empty(), endpoint);
+        self.run_metric = Some(RunMetric {
+            started_ms: started,
+            wake: !phrase.is_empty(),
+        });
+        self.run_result = None;
         self.update_duck();
         if earcon {
             let sound = earcons::path(self.model.earcons.wake);
@@ -449,6 +458,11 @@ impl Controller {
     }
 
     fn on_stt_start(&mut self) {
+        if let Some(run) = self.run_metric
+            && run.wake
+        {
+            pulsar_metrics::observe_wake_to_stt((now_ms() - run.started_ms) as f64 / 1000.0);
+        }
         if self.session.is_listening()
             && let Some(ms) = self.session.followup_window_ms(self.st.followup_duration_s)
         {
@@ -502,6 +516,7 @@ impl Controller {
             self.stop_streaming();
         } else {
             warn!("pipeline error: {} {}", code, get(data, "message"));
+            self.run_result = Some(pulsar_metrics::PipelineResult::Error);
             self.session.record_error();
             self.stop_streaming();
             self.error_shown = true;
@@ -521,6 +536,12 @@ impl Controller {
 
     /// A cut-short or failed answer does not reopen the microphone, nor does a ringing timer.
     fn tts_finished(&mut self, ok: bool) {
+        if ok
+            && let Some(run) = self.run_metric
+            && run.wake
+        {
+            pulsar_metrics::observe_wake_to_answer((now_ms() - run.started_ms) as f64 / 1000.0);
+        }
         self.send_tts_report(ok);
         let followup = self.session.followup();
         if followup.should_continue(
@@ -528,6 +549,7 @@ impl Controller {
             self.st.followup_duration_s,
             self.timers_ha.ringing() || self.mic_muted(),
         ) {
+            self.count_current_run();
             self.start_pipeline("", false, &[], &[], None);
             if self.session.is_listening() {
                 self.session.set_followup(followup.next_turn());
@@ -555,6 +577,7 @@ impl Controller {
     }
 
     pub(super) fn finish_interaction(&mut self) {
+        self.count_current_run();
         self.timers.cancel(Tk::FollowupWait);
         // The dialog may end before its run does (answer cut short, cancel, timeout): stop the
         // run so HA does not go on generating; whatever it still sends is dropped while idle.
@@ -579,6 +602,8 @@ impl Controller {
 
     /// The dialog failed without a pipeline run to end it: error ring, then idle.
     pub(super) fn abort_dialog(&mut self, why: &str) {
+        self.run_result
+            .get_or_insert(pulsar_metrics::PipelineResult::Error);
         warn!("voice pipeline: {why}");
         self.error_shown = true;
         self.show_ui(UiState::Error);
@@ -600,6 +625,17 @@ impl Controller {
         }
         self.session.mark_stop_sent(); // by the server itself
         self.abort_dialog("network too slow for the microphone audio");
+    }
+
+    /// Закрывает счётчик текущего run ровно один раз (Ok, если явного итога нет).
+    fn count_current_run(&mut self) {
+        let result = self
+            .run_result
+            .take()
+            .unwrap_or(pulsar_metrics::PipelineResult::Ok);
+        if self.run_metric.take().is_some() {
+            pulsar_metrics::pipeline_finished(result);
+        }
     }
 
     /// Without it a run HA never ends (lost connection state, a hung agent) would leave the ring

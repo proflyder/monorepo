@@ -6,6 +6,7 @@ package(default_visibility = ["//visibility:public"])
 LINUX = ["@platforms//os:linux"]
 
 DEPS = [
+    "//projects/station/pulsar/satellite/crates/pulsar-metrics:pulsar_metrics",
     "@crates//:hex",
     "@crates//:ring",
     "@crates//:serde",

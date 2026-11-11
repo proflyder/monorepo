@@ -68,6 +68,7 @@ impl WakeStore for RecordingStore {
     fn missed(&mut self, utc_ms: i64) {
         if let Some(rec) = self.capture.miss(utc_ms) {
             self.counters.miss.fetch_add(1, Relaxed);
+            pulsar_metrics::wake_miss();
             self.send(rec);
         }
     }
@@ -87,6 +88,7 @@ impl WakeStore for RecordingStore {
         }
         if p.near {
             self.counters.near.fetch_add(1, Relaxed);
+            pulsar_metrics::wake_near();
         }
         if p.dropped {
             self.counters.dropped.fetch_add(1, Relaxed);

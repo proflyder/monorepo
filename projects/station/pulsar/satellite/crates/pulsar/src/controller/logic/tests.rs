@@ -11,12 +11,19 @@ fn port_offset() {
             sendspin: 8928,
             deconz: 6638,
             arbiter: 6054,
+            metrics: 9101,
         }
     );
     let test = ports(Some(OsStr::new("10000"))).unwrap();
     assert_eq!(
-        (test.api, test.sendspin, test.deconz, test.arbiter),
-        (16053, 18928, 16638, 16054)
+        (
+            test.api,
+            test.sendspin,
+            test.deconz,
+            test.arbiter,
+            test.metrics
+        ),
+        (16053, 18928, 16638, 16054, 19101)
     );
     assert_eq!(ports(Some(OsStr::new("0"))), Some(base));
     for bad in ["", "abc", "-1", "65536", "1e4", " 5", "60000"] {

@@ -179,6 +179,19 @@ enum Pending {
     Ring,
 }
 
+impl Pending {
+    fn playback_kind(self) -> pulsar_metrics::PlaybackKind {
+        use pulsar_metrics::PlaybackKind;
+        match self {
+            Self::Tts { .. } => PlaybackKind::Tts,
+            Self::Announce { .. } => PlaybackKind::Announce,
+            Self::MediaAnnounce { .. } => PlaybackKind::MediaAnnounce,
+            Self::Earcon { .. } => PlaybackKind::Earcon,
+            Self::Ring => PlaybackKind::Ring,
+        }
+    }
+}
+
 /// Event channels of the services; a closed one is dropped.
 struct Rx {
     api: Option<UnboundedReceiver<ApiEvent>>,
@@ -218,6 +231,14 @@ enum Trigger {
     Lux(Option<f32>),
 }
 
+/// One pipeline run as the metrics see it; the counters close it once.
+#[derive(Clone, Copy, Debug)]
+struct RunMetric {
+    started_ms: i64,
+    /// Opened by a wake word (not by a button, follow-up or Home Assistant).
+    wake: bool,
+}
+
 pub struct Controller {
     // Service handles first: fields drop in declaration order, which is the C++ members'
     // reverse declaration order (Sendspin first, the API server last). Dropping the last handle
@@ -255,6 +276,12 @@ pub struct Controller {
     /// Version being installed (for the messages of its outcome).
     install_version: String,
     sendspin_pairing_prompt: bool,
+    /// Метрики текущего run пайплайна: время старта, был ли он по wake word, уже посчитан.
+    run_metric: Option<RunMetric>,
+    /// Итог run, если он закончился не штатно (ошибка HA или watchdog).
+    run_result: Option<pulsar_metrics::PipelineResult>,
+    /// Начало текущего звонка для длительности.
+    call_started_ms: i64,
     /// Идёт звонок: спотеры выключены, музыка на паузе.
     call_active: bool,
     /// Музыка/Sendspin играли до звонка и должны продолжить после.
@@ -355,6 +382,9 @@ impl Controller {
             applied_tz,
             session: Session::default(),
             wake: Arbitration::default(),
+            run_metric: None,
+            run_result: None,
+            call_started_ms: 0,
             hw_mic_muted,
             local_endpointing: local_endpointing_enabled(),
             error_shown: false,
@@ -541,7 +571,10 @@ impl Controller {
     fn on_timer(&mut self, k: Tk) {
         match k {
             Tk::UiAfterNotSubscribed | Tk::UiAfterError => self.update_ui(),
-            Tk::Watchdog => self.abort_dialog("no progress from Home Assistant, giving up"),
+            Tk::Watchdog => {
+                self.run_result = Some(pulsar_metrics::PipelineResult::Timeout);
+                self.abort_dialog("no progress from Home Assistant, giving up");
+            }
             Tk::FollowupWait => {
                 info!("follow-up: no speech started, conversation ends");
                 self.finish_interaction();
@@ -685,6 +718,8 @@ impl Controller {
     }
 
     fn update_ui(&mut self) {
+        pulsar_metrics::set_mute(self.hw_mic_muted, self.st.mic_muted);
+        pulsar_metrics::set_volume(f64::from(self.st.volume));
         self.deps.display.leds.set_muted(self.mic_muted());
         self.update_commands();
         // Мут колонки во время звонка глушит uplink; состояние шлём только при изменении.

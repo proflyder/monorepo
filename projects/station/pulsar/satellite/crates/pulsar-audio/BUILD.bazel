@@ -29,6 +29,7 @@ DEPS = [
     "@crates//:tokio",
     "//projects/station/pulsar/satellite/crates/pulsar-alsa:pulsar_alsa",
     "//projects/station/pulsar/satellite/crates/pulsar-core:pulsar_core",
+    "//projects/station/pulsar/satellite/crates/pulsar-metrics:pulsar_metrics",
     "//projects/station/pulsar/satellite/crates/pulsar-dsp:pulsar_dsp",
     "//projects/station/pulsar/satellite/crates/pulsar-model:pulsar_model",
     "//projects/station/pulsar/satellite/crates/pulsar-wake-events:pulsar_wake_events",

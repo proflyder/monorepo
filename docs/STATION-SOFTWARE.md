@@ -136,6 +136,40 @@ mise run station:audit -- --fail-on any      # ненулевой код при 
 6. Откат: остановить gateway, вернуть `ble-gateway.prev` на место
    `ble-gateway`, запустить `start.sh`.
 
+## Мониторинг
+
+Pulsar отдаёт `/metrics` на `http://<колонка>:9101/metrics` (Prometheus text,
+без авторизации, только LAN; `PULSAR_PORT_OFFSET` сдвигает порт). Бинарник и
+набор файлов на колонке от этого не меняются — OTA достаточно.
+
+Домашний Prometheus забирает колонку как **внешний** таргет: job `station` в
+`projects/home/kubernetes/observability/values/prometheus.yaml`, адрес —
+`${STATION_IP}:9101` из `Secret/flux-app-settings` (в Git значения нет).
+Prometheus в namespace `monitoring` не ограничен egress-NetworkPolicy, поэтому
+дополнительных правил не нужно. Grafana-дашборды («Колонка — железо»,
+«Колонка — Pulsar») и PrometheusRule `home-station-alerts` провиженятся Flux:
+
+| Объект | Где |
+|---|---|
+| Scrape job `station` | `projects/home/kubernetes/observability/values/prometheus.yaml` |
+| Дашборды, папка Grafana «Колонка» | `projects/station/observability/chart/` |
+| HelmRelease `station-observability` | `projects/home/kubernetes/observability/manifests/helmrelease-station-dashboards.yaml` |
+| Алерты | `projects/home/kubernetes/observability/rules/prometheusrule-station.yaml` |
+
+Алерты (Telegram, severity `warning`):
+
+- `StationDown` — `up{job="station"}` нет 5 минут (питание, сеть, порт 9101).
+- `StationCpuHot` — температура SoC > 85 °C 10 минут. У Amlogic Tj max
+  125 °C, штатный троттлинг около 90 °C; 85 °C — запас до него.
+- `StationMemoryHigh` — available < 10% RAM 10 минут.
+- `StationDiskFilling` — свободно < 15% `/data` 30 минут или линейный прогноз
+  заполнения за 24 часа по 6 часам.
+
+Проверки без кластера: `python3 -m unittest
+projects.home.kubernetes.observability.test_prometheusrule` (контракт алертов,
+сверка имён метрик с `pulsar-metrics/src/catalog.rs`, `promtool` при наличии),
+`mise run check` и `node platform/quality/audit_repository.mjs`.
+
 ## План этапов 2–5
 
 Ниже — план, не реализация. Каждый этап — отдельный PR со своими проверками.
