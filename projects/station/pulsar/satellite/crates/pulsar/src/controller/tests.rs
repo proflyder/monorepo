@@ -25,7 +25,7 @@ use super::ports::{
     Updater,
 };
 use super::wake::ClaimToken;
-use super::{Controller, Pending, Tk, wiring};
+use super::{Controller, Pending, RunMetric, Tk, wiring};
 use crate::settings::Store;
 
 /// One ordered log of every port call.
@@ -1677,4 +1677,46 @@ async fn clean_vqe_audio_goes_to_the_uplink_during_a_call() {
     assert!(calls.contains(&"call.uplink 512".to_owned()), "{calls:?}");
     // Во время звонка это не HA и не wake-пре-ролл.
     assert!(!calls.contains(&"ha.audio".to_owned()), "{calls:?}");
+}
+
+#[test]
+fn answer_latency_is_once_per_wake_run_and_excludes_playback() {
+    let mut wake = RunMetric {
+        started_ms: 1_000,
+        wake: true,
+        answer_started: false,
+    };
+    // The first sample is taken when playback starts; later TTS starts in the
+    // same run (a follow-up answer) must not add another.
+    assert_eq!(wake.answer_latency(3_500), Some(2.5));
+    assert_eq!(wake.answer_latency(20_000), None);
+    let mut button = RunMetric {
+        started_ms: 1_000,
+        wake: false,
+        answer_started: false,
+    };
+    assert_eq!(button.answer_latency(1_500), None);
+}
+
+#[tokio::test]
+async fn wake_to_answer_is_sampled_at_tts_start() {
+    let mut f = controller();
+    f.subscribed.set(true);
+    f.c.start_pipeline("Рикардо", false, &[], &[], None);
+    let started = f.c.run_metric.expect("pipeline run").started_ms;
+    let mut data = HashMap::new();
+    data.insert("url".to_owned(), "/a.mp3".to_owned());
+    f.c.on_voice_event(VaEvent::RunStart, &data);
+    f.c.on_voice_event(VaEvent::TtsStart, &data);
+    assert!(
+        !f.c.run_metric.expect("pipeline run").answer_started,
+        "TTS_START alone does not start playback"
+    );
+    f.c.on_voice_event(VaEvent::TtsEnd, &data);
+    let run = f.c.run_metric.expect("pipeline run");
+    assert!(
+        run.answer_started,
+        "sample is taken when TTS playback starts"
+    );
+    assert_eq!(run.started_ms, started);
 }
