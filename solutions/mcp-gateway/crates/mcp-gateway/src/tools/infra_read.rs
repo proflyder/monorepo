@@ -1,6 +1,6 @@
 //! `infra.read`: status, service, alert, logs, query, overview and report.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fmt::Write as _;
 use std::sync::Arc;
 use std::time::Duration;
@@ -109,7 +109,7 @@ impl ToolGroup for ReadGroup {
             },
             ToolSpec {
                 name: "infra_report",
-                description: "Full infrastructure report across every catalog service. Returns a short Russian speech verdict (with an offer to send details) and a ready-to-send plain-text Telegram message in details.text: header, emoji verdict, problems first, then healthy services grouped by the catalog group, then active alerts. Set verbose=true to append a compact versions section (image, age, versions). Images, age and versions always stay in the structured details. Read-only; use infra_send_report only when a separate delivery is requested.",
+                description: "Full infrastructure report across every catalog service plus two cluster-wide checks: Flux (every Kustomization and HelmRelease must be Ready=True; suspended resources are shown but are not problems) and catalog coverage (any Deployment/StatefulSet/DaemonSet in the cluster that is neither a catalog service nor in the catalog ignore_workloads is reported as a problem). Returns a short Russian speech verdict (with an offer to send details) and a ready-to-send plain-text Telegram message in details.text: header, emoji verdict, problems first, then healthy services grouped by the catalog group, then active alerts. Set verbose=true to append a compact versions section (image, age, versions). Images, age and versions always stay in the structured details. Read-only; use infra_send_report only when a separate delivery is requested.",
                 input_schema: json!({
                     "type": "object",
                     "additionalProperties": false,
@@ -1090,9 +1090,17 @@ async fn infra_report(deps: &Deps, arguments: &Value) -> ToolOutcome {
         errors.push("алерты: Alertmanager не настроен".to_owned());
     }
 
+    // The three cluster-wide reads are independent: run them together so the
+    // report budget is not spent on serial round trips.
+    let (workloads, flux, checks) = tokio::join!(
+        fetch_workloads(deps),
+        fetch_flux(deps),
+        run_catalog_checks(deps, catalog)
+    );
+
     let mut probes = Vec::with_capacity(catalog.services.len());
     for service in &catalog.services {
-        probes.push(collect_service_probe(deps, catalog, service, &now).await);
+        probes.push(collect_service_probe(deps, service, &checks).await);
     }
 
     let input = ReportInput {
@@ -1103,17 +1111,73 @@ async fn infra_report(deps: &Deps, arguments: &Value) -> ToolOutcome {
         alerts,
         errors,
         verbose,
+        workloads,
+        flux,
     };
     let detail = report::build_report(&input);
     let speech = detail.verdict.clone();
     respond(speech, Some(&detail))
 }
 
+type ChecksByService = Option<HashMap<String, Vec<CheckResult>>>;
+
+/// Every Deployment, StatefulSet and DaemonSet in the cluster.
+async fn fetch_workloads(deps: &Deps) -> Option<Result<Vec<report::WorkloadRef>, String>> {
+    let kube = deps.kube()?;
+    Some(kube.list_workloads().await.map(|items| {
+        items
+            .into_iter()
+            .map(|workload| report::WorkloadRef {
+                namespace: workload.namespace,
+                kind: workload.kind,
+                name: workload.name,
+            })
+            .collect()
+    }))
+}
+
+/// Every Flux Kustomization and HelmRelease, read-only through the API.
+async fn fetch_flux(deps: &Deps) -> Option<Result<Vec<report::FluxResource>, String>> {
+    let kube = deps.kube()?;
+    Some(kube.list_flux().await.map(|items| {
+        items
+            .into_iter()
+            .map(|resource| report::FluxResource {
+                kind: resource.kind,
+                namespace: resource.namespace,
+                name: resource.name,
+                ready: resource.ready,
+                suspended: resource.suspended,
+                message: resource.message,
+            })
+            .collect()
+    }))
+}
+
+/// Runs every catalog check exactly once and groups the results by service.
+async fn run_catalog_checks(deps: &Deps, catalog: &Catalog) -> ChecksByService {
+    let checks = deps.checks()?;
+    if catalog
+        .services
+        .iter()
+        .all(|service| service.checks.is_empty())
+    {
+        return None;
+    }
+    let mut by_service: HashMap<String, Vec<CheckResult>> = HashMap::new();
+    for result in checks.run_all(&catalog.services).await {
+        by_service
+            .entry(result.service.clone())
+            .or_default()
+            .push(result);
+    }
+    Some(by_service)
+}
+
 async fn collect_service_probe(
     deps: &Deps,
-    catalog: &Catalog,
     service: &Service,
-    _now: &Timestamp,
+    checks: &ChecksByService,
 ) -> ServiceProbe {
     let mut probe = ServiceProbe::default();
     if service.kind == catalog::SERVICE_K8S {
@@ -1143,34 +1207,30 @@ async fn collect_service_probe(
             }
         }
     }
-    if let Some(checks) = deps.checks() {
-        if !service.checks.is_empty() {
-            let results: Vec<CheckResult> = checks
-                .run_all(&catalog.services)
-                .await
-                .into_iter()
-                .filter(|result| result.service == service.id)
-                .collect();
-            probe.checks_configured = true;
-            probe.checks = results;
-        }
-    } else if !service.checks.is_empty() {
-        // A service that declares checks but has no runner reports them as
-        // skipped, exactly like an unconfigured Home Assistant endpoint.
+    if !service.checks.is_empty() {
         probe.checks_configured = true;
-        probe.checks = service
-            .checks
-            .iter()
-            .map(|check| CheckResult {
-                service: service.id.clone(),
-                check_type: check.check_type.clone(),
-                label: check.display_label(),
-                ok: true,
-                skipped: true,
-                value: "не настроено".to_owned(),
-                ..CheckResult::default()
-            })
-            .collect();
+        probe.checks = checks
+            .as_ref()
+            .and_then(|by_service| by_service.get(&service.id))
+            .cloned()
+            .unwrap_or_else(|| {
+                // A service that declares checks but has no runner reports them
+                // as skipped, exactly like an unconfigured Home Assistant
+                // endpoint.
+                service
+                    .checks
+                    .iter()
+                    .map(|check| CheckResult {
+                        service: service.id.clone(),
+                        check_type: check.check_type.clone(),
+                        label: check.display_label(),
+                        ok: true,
+                        skipped: true,
+                        value: "не настроено".to_owned(),
+                        ..CheckResult::default()
+                    })
+                    .collect()
+            });
     }
     probe
 }

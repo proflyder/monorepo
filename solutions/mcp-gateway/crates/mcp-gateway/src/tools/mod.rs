@@ -139,6 +139,15 @@ pub trait KubeApi: Send + Sync {
         name: &'a str,
         at: Timestamp,
     ) -> BoxFuture<'a, Result<(), String>>;
+    /// Every Deployment/StatefulSet/DaemonSet in the cluster (report
+    /// coverage check).
+    fn list_workloads<'a>(
+        &'a self,
+    ) -> BoxFuture<'a, Result<Vec<crate::kubernetes::WorkloadRef>, String>>;
+    /// Flux Kustomizations and HelmReleases in every namespace.
+    fn list_flux<'a>(
+        &'a self,
+    ) -> BoxFuture<'a, Result<Vec<crate::kubernetes::FluxResource>, String>>;
 }
 
 /// Executes the typed external probes of every catalog service.

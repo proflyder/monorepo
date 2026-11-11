@@ -408,6 +408,16 @@ impl KubeApi for FakeKube {
             Ok(())
         })
     }
+
+    fn list_workloads<'a>(&'a self) -> BoxFuture<'a, Result<Vec<kubernetes::WorkloadRef>, String>> {
+        // The contract scenarios pin per-service behaviour; an empty cluster
+        // listing keeps the report coverage entry out of their totals.
+        Box::pin(async move { Ok(Vec::new()) })
+    }
+
+    fn list_flux<'a>(&'a self) -> BoxFuture<'a, Result<Vec<kubernetes::FluxResource>, String>> {
+        Box::pin(async move { Ok(Vec::new()) })
+    }
 }
 
 #[derive(Default)]

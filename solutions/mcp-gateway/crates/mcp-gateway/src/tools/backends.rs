@@ -150,6 +150,26 @@ impl KubeApi for crate::kubernetes::Client {
                 .map_err(|error| error.to_string())
         })
     }
+
+    fn list_workloads<'a>(
+        &'a self,
+    ) -> BoxFuture<'a, Result<Vec<crate::kubernetes::WorkloadRef>, String>> {
+        Box::pin(async move {
+            Self::list_workloads(self)
+                .await
+                .map_err(|error| error.to_string())
+        })
+    }
+
+    fn list_flux<'a>(
+        &'a self,
+    ) -> BoxFuture<'a, Result<Vec<crate::kubernetes::FluxResource>, String>> {
+        Box::pin(async move {
+            Self::list_flux(self)
+                .await
+                .map_err(|error| error.to_string())
+        })
+    }
 }
 
 impl CheckRunner for crate::checks::Runner {

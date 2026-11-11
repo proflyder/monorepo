@@ -197,7 +197,7 @@
                   "openWorldHint": false,
                   "readOnlyHint": true
                 },
-                "description": "Full infrastructure report across every catalog service. Returns a short Russian speech verdict (with an offer to send details) and a ready-to-send plain-text Telegram message in details.text: header, emoji verdict, problems first, then healthy services grouped by the catalog group, then active alerts. Set verbose=true to append a compact versions section (image, age, versions). Images, age and versions always stay in the structured details. Read-only; use infra_send_report only when a separate delivery is requested.",
+                "description": "Full infrastructure report across every catalog service plus two cluster-wide checks: Flux (every Kustomization and HelmRelease must be Ready=True; suspended resources are shown but are not problems) and catalog coverage (any Deployment/StatefulSet/DaemonSet in the cluster that is neither a catalog service nor in the catalog ignore_workloads is reported as a problem). Returns a short Russian speech verdict (with an offer to send details) and a ready-to-send plain-text Telegram message in details.text: header, emoji verdict, problems first, then healthy services grouped by the catalog group, then active alerts. Set verbose=true to append a compact versions section (image, age, versions). Images, age and versions always stay in the structured details. Read-only; use infra_send_report only when a separate delivery is requested.",
                 "inputSchema": {
                   "additionalProperties": false,
                   "properties": {

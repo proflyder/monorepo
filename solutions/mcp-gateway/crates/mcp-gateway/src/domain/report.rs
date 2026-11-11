@@ -18,6 +18,13 @@ use super::status::{CheckResult, check_issue};
 /// Keeps the Telegram-ready report below the message budget.
 pub const REPORT_TEXT_CAP: usize = 3500;
 
+/// Report group for cluster-wide checks that are not catalog services.
+pub const PLATFORM_GROUP: &str = "Платформа";
+/// Report-only service id of the Flux consistency check.
+pub const SERVICE_FLUX: &str = "flux";
+/// Report-only service id of the catalog coverage check.
+pub const SERVICE_CATALOG: &str = "catalog";
+
 /// Healthy service.
 pub const STATUS_OK: &str = "ok";
 /// Partially working service.
@@ -147,6 +154,41 @@ pub struct ReportInput<'a> {
     pub errors: Vec<String>,
     /// Append the versions section.
     pub verbose: bool,
+    /// `None` when Kubernetes is not configured; used by the coverage check.
+    pub workloads: Option<Result<Vec<WorkloadRef>, String>>,
+    /// `None` when Kubernetes is not configured; used by the Flux check.
+    pub flux: Option<Result<Vec<FluxResource>, String>>,
+}
+
+/// One workload that exists in the cluster, used by the coverage check.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkloadRef {
+    /// Namespace.
+    pub namespace: String,
+    /// Deployment, StatefulSet or DaemonSet.
+    pub kind: String,
+    /// Object name.
+    pub name: String,
+}
+
+/// One Flux Kustomization or HelmRelease as observed through the Kubernetes API.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FluxResource {
+    /// Kustomization or HelmRelease.
+    pub kind: String,
+    /// Namespace.
+    pub namespace: String,
+    /// Object name.
+    pub name: String,
+    /// `Ready=True`.
+    pub ready: bool,
+    /// Deliberately paused; never a problem.
+    pub suspended: bool,
+    /// Ready condition reason and message.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub message: String,
 }
 
 /// One service in the structured report.
@@ -192,10 +234,21 @@ pub struct ServiceReport {
     /// Human issues.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub issues: Vec<String>,
+    /// Short informational suffix, for example the number of suspended Flux
+    /// resources. Never a problem by itself.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub note: String,
 }
 
 fn is_zero(value: &i64) -> bool {
     *value == 0
+}
+
+/// An empty successful list means there is nothing to check; the synthetic
+/// entry is omitted so a backend that has not been queried does not shift the
+/// report totals. Errors always become visible.
+fn is_empty_ok<T>(result: &Result<Vec<T>, String>) -> bool {
+    matches!(result, Ok(items) if items.is_empty())
 }
 
 /// The whole `infra_report` detail.
@@ -252,6 +305,20 @@ pub fn build_report(input: &ReportInput<'_>) -> ReportDetail {
         ..ReportDetail::default()
     };
     detail.errors.clone_from(&input.errors);
+
+    if let Some(flux) = &input.flux
+        && !is_empty_ok(flux)
+    {
+        detail.services.push(collect_flux_report(flux));
+    }
+    if let Some(workloads) = &input.workloads
+        && !is_empty_ok(workloads)
+    {
+        detail
+            .services
+            .push(collect_coverage_report(input.catalog, workloads));
+    }
+    detail.total = i64::try_from(detail.services.len()).unwrap_or(i64::MAX);
 
     let compacts = input
         .alerts
@@ -394,6 +461,107 @@ fn collect_workload_report(
         };
         item.issues
             .push(format!("готовы {} из {}", workload.ready, workload.desired));
+    }
+    item
+}
+
+/// The Flux consistency entry: every Kustomization and HelmRelease must be
+/// `Ready=True`; a suspended resource is reported but is never a problem.
+fn collect_flux_report(flux: &Result<Vec<FluxResource>, String>) -> ServiceReport {
+    let mut item = ServiceReport {
+        id: SERVICE_FLUX.to_owned(),
+        name: "Flux".to_owned(),
+        group: PLATFORM_GROUP.to_owned(),
+        kind: SERVICE_FLUX.to_owned(),
+        namespace: "flux-system".to_owned(),
+        status: STATUS_OK.to_owned(),
+        ..ServiceReport::default()
+    };
+    let resources = match flux {
+        Ok(resources) => resources,
+        Err(error) => {
+            STATUS_UNKNOWN.clone_into(&mut item.status);
+            item.issues
+                .push(format!("проверка Flux недоступна: {error}"));
+            return item;
+        }
+    };
+    let mut suspended = 0usize;
+    for resource in resources {
+        if resource.suspended {
+            suspended += 1;
+            continue;
+        }
+        if resource.ready {
+            continue;
+        }
+        if item.status == STATUS_OK {
+            STATUS_DEGRADED.clone_into(&mut item.status);
+        }
+        let message = if resource.message.trim().is_empty() {
+            "не Ready".to_owned()
+        } else {
+            resource.message.trim().to_owned()
+        };
+        item.issues.push(format!(
+            "{} {}/{}: {message}",
+            resource.kind, resource.namespace, resource.name
+        ));
+    }
+    if suspended > 0 {
+        item.note = format!("приостановлено {suspended}");
+    }
+    item
+}
+
+/// The catalog coverage entry: every workload in the cluster must either be a
+/// catalog service or be listed in the catalog's `ignore_workloads`. This is
+/// what makes the report self-maintaining — a service deployed without a
+/// catalog entry shows up as a problem on the next run.
+fn collect_coverage_report(
+    catalog: &Catalog,
+    workloads: &Result<Vec<WorkloadRef>, String>,
+) -> ServiceReport {
+    let mut item = ServiceReport {
+        id: SERVICE_CATALOG.to_owned(),
+        name: "Каталог отчёта".to_owned(),
+        group: PLATFORM_GROUP.to_owned(),
+        kind: SERVICE_CATALOG.to_owned(),
+        status: STATUS_OK.to_owned(),
+        ..ServiceReport::default()
+    };
+    let listed = match workloads {
+        Ok(listed) => listed,
+        Err(error) => {
+            STATUS_UNKNOWN.clone_into(&mut item.status);
+            item.issues
+                .push(format!("список workload'ов недоступен: {error}"));
+            return item;
+        }
+    };
+    let registered = |namespace: &str, kind: &str, name: &str| {
+        catalog.services.iter().any(|service| {
+            service.kind == catalog::SERVICE_K8S
+                && service.namespace == namespace
+                && service.workload.kind == kind
+                && service.workload.name == name
+        })
+    };
+    let mut missing = 0usize;
+    for workload in listed {
+        if registered(&workload.namespace, &workload.kind, &workload.name)
+            || catalog.ignores_workload(&workload.namespace, &workload.kind, &workload.name)
+        {
+            continue;
+        }
+        missing += 1;
+        item.issues.push(format!(
+            "не в каталоге отчёта: {}/{}/{}",
+            workload.namespace, workload.kind, workload.name
+        ));
+    }
+    if missing > 0 {
+        STATUS_DEGRADED.clone_into(&mut item.status);
     }
     item
 }
@@ -594,7 +762,14 @@ fn problem_facts(service: &ServiceReport, reason: &str) -> Vec<String> {
     for issue in &service.issues {
         push_fact(&mut facts, issue, reason);
     }
-    facts.truncate(5);
+    // Missing catalog entries must stay visible: cap them far above the usual
+    // five facts and let the report character budget bound the text.
+    let limit = if service.kind == SERVICE_CATALOG {
+        20
+    } else {
+        5
+    };
+    facts.truncate(limit);
     facts
 }
 
@@ -654,10 +829,16 @@ fn push_group<'a>(
 fn normal_group_lines(detail: &ReportDetail, catalog: &Catalog) -> Vec<String> {
     let mut lines = Vec::new();
     for (name, services) in report_groups(detail, catalog) {
-        let names: Vec<&str> = services
+        let names: Vec<String> = services
             .iter()
             .filter(|service| service.status == STATUS_OK)
-            .map(|service| service.name.as_str())
+            .map(|service| {
+                if service.note.is_empty() {
+                    service.name.clone()
+                } else {
+                    format!("{} ({})", service.name, service.note)
+                }
+            })
             .collect();
         if names.is_empty() {
             continue;
@@ -823,4 +1004,179 @@ fn human_stamp(raw: &str, timezone: &TimeZone) -> String {
         .to_zoned(timezone.clone())
         .strftime("%d.%m %H:%M")
         .to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn flux(kind: &str, name: &str, ready: bool, suspended: bool) -> FluxResource {
+        FluxResource {
+            kind: kind.to_owned(),
+            namespace: "flux-system".to_owned(),
+            name: name.to_owned(),
+            ready,
+            suspended,
+            message: if ready {
+                String::new()
+            } else {
+                "health check failed".to_owned()
+            },
+        }
+    }
+
+    #[test]
+    fn flux_reports_every_not_ready_resource_with_its_kind_and_message() {
+        let entry = collect_flux_report(&Ok(vec![
+            flux("Kustomization", "apps", false, false),
+            flux("HelmRelease", "runtime", false, false),
+            flux("Kustomization", "paused", false, true),
+            flux("Kustomization", "platform", true, false),
+        ]));
+        assert_eq!(entry.status, STATUS_DEGRADED);
+        assert_eq!(entry.kind, SERVICE_FLUX);
+        assert_eq!(entry.group, PLATFORM_GROUP);
+        assert_eq!(
+            entry.issues,
+            vec![
+                "Kustomization flux-system/apps: health check failed",
+                "HelmRelease flux-system/runtime: health check failed",
+            ]
+        );
+        // A suspended resource is shown but never reported as a problem.
+        assert_eq!(entry.note, "приостановлено 1");
+    }
+
+    #[test]
+    fn flux_is_ok_when_everything_is_ready_or_suspended() {
+        let entry = collect_flux_report(&Ok(vec![
+            flux("Kustomization", "apps", true, false),
+            flux("Kustomization", "paused", false, true),
+        ]));
+        assert_eq!(entry.status, STATUS_OK);
+        assert!(entry.issues.is_empty());
+        assert_eq!(entry.note, "приостановлено 1");
+    }
+
+    #[test]
+    fn flux_read_error_is_unknown_and_visible() {
+        let entry = collect_flux_report(&Err("HTTP 403".to_owned()));
+        assert_eq!(entry.status, STATUS_UNKNOWN);
+        assert_eq!(entry.issues, vec!["проверка Flux недоступна: HTTP 403"]);
+        assert!(is_problem(&entry));
+    }
+
+    fn catalog(yaml: &str) -> Catalog {
+        Catalog::parse(yaml).expect("catalog")
+    }
+
+    const ONE_SERVICE: &str = r#"
+services:
+  - id: scheduler
+    title: Scheduler
+    aliases: {en: [scheduler]}
+    kind: k8s
+    namespace: home-assistant
+    workload: {kind: Deployment, name: scheduler}
+    logs: {source: none}
+    restart: {allowed: true, warning: "restart"}
+"#;
+
+    fn workload(namespace: &str, kind: &str, name: &str) -> WorkloadRef {
+        WorkloadRef {
+            namespace: namespace.to_owned(),
+            kind: kind.to_owned(),
+            name: name.to_owned(),
+        }
+    }
+
+    #[test]
+    fn coverage_names_workloads_missing_from_the_catalog() {
+        let catalog = catalog(ONE_SERVICE);
+        let entry = collect_coverage_report(
+            &catalog,
+            &Ok(vec![
+                workload("home-assistant", "Deployment", "scheduler"),
+                workload("home-assistant", "Deployment", "intercom"),
+                workload("kube-system", "DaemonSet", "svclb-traefik"),
+            ]),
+        );
+        assert_eq!(entry.status, STATUS_DEGRADED);
+        assert_eq!(entry.kind, SERVICE_CATALOG);
+        assert_eq!(
+            entry.issues,
+            vec![
+                "не в каталоге отчёта: home-assistant/Deployment/intercom",
+                "не в каталоге отчёта: kube-system/DaemonSet/svclb-traefik",
+            ]
+        );
+    }
+
+    #[test]
+    fn coverage_respects_the_explicit_ignore_list() {
+        let catalog = catalog(&format!(
+            "{ONE_SERVICE}\nignore_workloads:\n  - kube-system/DaemonSet/svclb-traefik\n"
+        ));
+        let entry = collect_coverage_report(
+            &catalog,
+            &Ok(vec![
+                workload("home-assistant", "Deployment", "scheduler"),
+                workload("kube-system", "DaemonSet", "svclb-traefik"),
+            ]),
+        );
+        assert_eq!(entry.status, STATUS_OK);
+        assert!(entry.issues.is_empty());
+    }
+
+    #[test]
+    fn coverage_read_error_is_a_problem() {
+        let catalog = catalog(ONE_SERVICE);
+        let entry = collect_coverage_report(&catalog, &Err("HTTP 403".to_owned()));
+        assert_eq!(entry.status, STATUS_UNKNOWN);
+        assert!(is_problem(&entry));
+        assert_eq!(
+            entry.issues,
+            vec!["список workload'ов недоступен: HTTP 403"]
+        );
+    }
+
+    #[test]
+    fn report_total_counts_the_synthetic_checks() {
+        let catalog = catalog(ONE_SERVICE);
+        let now: Timestamp = "2026-11-01T12:00:00Z".parse().expect("time");
+        let probe = ServiceProbe {
+            workload: Some(Ok(WorkloadState {
+                namespace: "home-assistant".to_owned(),
+                kind: "Deployment".to_owned(),
+                name: "scheduler".to_owned(),
+                desired: 1,
+                ready: 1,
+                available: 1,
+                updated: 1,
+                ..WorkloadState::default()
+            })),
+            pods: Some(Ok(Vec::new())),
+            ..ServiceProbe::default()
+        };
+        let detail = build_report(&ReportInput {
+            catalog: &catalog,
+            now,
+            timezone: TimeZone::UTC,
+            probes: vec![probe],
+            alerts: Vec::new(),
+            errors: Vec::new(),
+            verbose: false,
+            workloads: Some(Ok(vec![workload(
+                "home-assistant",
+                "Deployment",
+                "scheduler",
+            )])),
+            flux: Some(Ok(vec![flux("Kustomization", "apps", true, false)])),
+        });
+        assert_eq!(detail.total, 3);
+        assert_eq!(detail.ok, 3);
+        assert_eq!(detail.problems, 0);
+        assert!(detail.text.contains("✅ Всё работает: 3 из 3"));
+        assert!(detail.text.contains("Платформа"));
+    }
 }
