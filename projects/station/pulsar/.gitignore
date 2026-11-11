@@ -20,3 +20,7 @@
 
 # Test recordings / synthesized speech.
 *.wav
+
+# Python bytecode of tools/ (upstream #76).
+__pycache__/
+*.pyc

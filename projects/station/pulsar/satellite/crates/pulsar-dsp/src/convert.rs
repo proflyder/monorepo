@@ -19,6 +19,14 @@ pub fn to_s16_slice(src: &[f32], dst: &mut [i16]) {
     }
 }
 
+/// `src * gain` в `dst` по [`to_s16`] (усиление до перевода в s16, с насыщением на его границах);
+/// длина — по короткому срезу.
+pub fn to_s16_scaled(src: &[f32], gain: f32, dst: &mut [i16]) {
+    for (o, &v) in dst.iter_mut().zip(src) {
+        *o = to_s16(v * gain);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -40,5 +48,19 @@ mod tests {
         assert_eq!(to_s16(0.6 / 32768.0), 1);
         assert_eq!(to_s16(32766.5 / 32768.0), 32766);
         assert_eq!(to_s16(f32::NAN), 0);
+    }
+
+    #[test]
+    fn scaled_conversion_applies_gain_before_clamping() {
+        let mut dst = [0i16; 6];
+        to_s16_scaled(&[0.01, -0.01, 0.5, -0.5, 2.0, -2.0], 10.0, &mut dst);
+        assert_eq!(dst, [3277, -3277, 32767, -32768, 32767, -32768]);
+        // 0 дБ — то же, что to_s16.
+        let src = [0.25, -0.75, 0.0];
+        let mut dst = [0i16; 3];
+        to_s16_scaled(&src, 1.0, &mut dst);
+        let mut want = [0i16; 3];
+        to_s16_slice(&src, &mut want);
+        assert_eq!(dst, want);
     }
 }

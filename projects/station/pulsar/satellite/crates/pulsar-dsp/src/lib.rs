@@ -12,7 +12,7 @@ mod ring;
 pub mod spectrum;
 pub mod wav;
 
-pub use convert::{to_s16, to_s16_slice};
+pub use convert::{to_s16, to_s16_scaled, to_s16_slice};
 pub use level::{LEVEL_CHUNKS, LEVEL_SAMPLES, LEVEL_TOP, LevelDb, LevelHistory};
 pub use ring::Ring;
 pub use spectrum::SpectrumAnalyzer;

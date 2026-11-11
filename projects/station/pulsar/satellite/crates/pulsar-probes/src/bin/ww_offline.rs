@@ -5,9 +5,10 @@
 //! usage: ww_offline <wav> [model_dir]   (default: .../spotter_models/activation/alisa)
 //! Prints every spotter event with its time; "HIT" lines are confirmations (events 2 and 5), and
 //! per second the RMS of the speaker reference and of the VQE output (echo cancellation check).
-//! Experiments: VT=<type> feeds every spotter channel from that VQE output; SPK=<ch>[,<ch>...]
-//! overrides the speaker reference capture channels; unlike the C++ tool, it must name as many
-//! channels as the model's VQE preset takes (the library is never given other counts).
+//! Experiments: VT=<type> feeds every spotter channel from that VQE output; LEGACY=1 — прежнюю
+//! раскладку wake-спотера pulsar (`LEGACY_SPOTTER_TO_VQE`); SPK=<ch>[,<ch>...] заменяет каналы
+//! захвата референса динамика; в отличие от C++-утилиты, их должно быть столько, сколько берёт
+//! пресет VQE модели (библиотека не получает других количеств).
 #![deny(unsafe_code)]
 #![deny(unsafe_op_in_unsafe_fn)]
 
@@ -18,8 +19,8 @@ use std::process::ExitCode;
 
 use clap::Parser;
 use pulsar_audio::engine::{
-    Lib, LoadError, SPOTTER_RATE, SPOTTER_TO_VQE, SPOTTER_TYPES, Spotter, SpotterConf, VQE_MODELS,
-    Vqe, VqeStep, preload_deps, spotter_layout,
+    LEGACY_SPOTTER_TO_VQE, Lib, LoadError, SPOTTER_RATE, SPOTTER_TO_VQE, SPOTTER_TYPES, Spotter,
+    SpotterConf, VQE_MODELS, Vqe, VqeStep, preload_deps, spotter_layout,
 };
 
 const DEFAULT_MODEL: &str = "/system/vendor/quasar/spotter_models/activation/alisa";
@@ -140,11 +141,17 @@ fn run() -> u8 {
     for (t, n) in counts.iter_mut().enumerate() {
         *n = conf.channel_count(t as i64).unwrap_or(0);
     }
-    let mut layout = spotter_layout(&counts, SPOTTER_TO_VQE[0]);
+    let table = if std::env::var_os("LEGACY").is_some() {
+        &LEGACY_SPOTTER_TO_VQE
+    } else {
+        &SPOTTER_TO_VQE
+    };
+    let mut layout = spotter_layout(&counts, table);
     // VT=<type>: every channel from that VQE output (experiments).
     if let Some(vt) = std::env::var_os("VT") {
         layout.vqe.fill(atoi(&vt.to_string_lossy()));
     }
+    out!("channels [{layout}]");
     let mut sp = match Spotter::create(&conf, SPOTTER_RATE, &layout.types) {
         (Some(sp), _) => sp,
         (None, e) => {

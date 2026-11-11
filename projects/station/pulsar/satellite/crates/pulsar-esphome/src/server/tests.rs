@@ -500,7 +500,7 @@ fn publish_selftest_states(h: &ApiHandle) {
 }
 
 fn fork_only(t: u32, m: &[u8]) -> bool {
-    const KEYS: [u32; 6] = [36, 37, 34, 35, 38, 40];
+    const KEYS: [u32; 7] = [36, 37, 34, 35, 38, 40, 41];
     let key = match t {
         msg::LIST_SWITCH | msg::LIST_BUTTON | msg::LIST_SELECT | msg::LIST_NUMBER => {
             field(m, 2).map(Field::u32)

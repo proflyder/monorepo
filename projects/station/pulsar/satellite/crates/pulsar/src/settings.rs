@@ -114,6 +114,9 @@ pub struct Settings {
     /// music are unaffected. Above the current master the gain is capped at it, so the default
     /// 1.0 keeps the old «as the main volume» behaviour.
     pub announce_volume: f32,
+    /// Усиление звука запроса перед отправкой в HA, дБ («Microphone gain»); 34 — прежний
+    /// уровень усиленного канала, 0 — канал VQE как есть.
+    pub mic_gain_db: u32,
     /// Stem of `pulsar_hw::case_colors()`, "" = none.
     pub led_case_color: String,
     /// Hue of the ring's listening / thinking / speaking animation (`voice_color=`).
@@ -156,6 +159,9 @@ impl Default for Settings {
             wake_recording: true,
             wake_dry_run: false,
             announce_volume: 1.0,
+            // 34 дБ = прежний VQE_OMNI_WITH_GAIN на Миди и Лайт 2 (выход 9 = выход 6 × 50):
+            // обновление не меняет уровень потока, уходящего в STT на живой колонке.
+            mic_gain_db: 34,
             led_case_color: String::new(),
             voice_color: "Violet".into(),
             update_attempt: String::new(),
@@ -254,6 +260,11 @@ impl Settings {
                         1.0
                     };
                 }
+                b"mic_gain_db" => {
+                    if let Some(db) = pulsar_esphome::mic_gain_db(fv) {
+                        self.mic_gain_db = db;
+                    }
+                }
                 b"led_case_color" => self.led_case_color = v,
                 b"voice_color" => self.voice_color = canonical(&VOICE_COLORS, &v, "Violet"),
                 _ => {}
@@ -273,7 +284,7 @@ impl Settings {
              zigbee_role={}\nzigbee_flash_failed={:x}\nnearest_answers={}\nmusic_viz={}\n\
              led_speed={}\nvoice_indication={}\nled_case_color={}\nvoice_color={}\nclock_music={}\n\
              wake_preroll={}\nclock_auto_brightness={}\nfollowup_duration_s={}\n\
-             wake_event_recording={}\nwake_dry_run={}\nannounce_volume={}\n",
+             wake_event_recording={}\nwake_dry_run={}\nannounce_volume={}\nmic_gain_db={}\n",
             f(self.volume),
             f(self.volume_legacy),
             b(self.muted),
@@ -306,6 +317,7 @@ impl Settings {
             b(self.wake_recording),
             b(self.wake_dry_run),
             f(self.announce_volume),
+            self.mic_gain_db,
         )
     }
 
