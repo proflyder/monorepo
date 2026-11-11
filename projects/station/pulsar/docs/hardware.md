@@ -41,8 +41,41 @@ Wake word, командный спотер и эхоподавление раб�
   `Config_Get*` возвращают значение напрямую.
 - Спотер: `spotter_create_multichannel(conf, rate, n, types, false, &err)` и
   `spotter_submit_raw_data(sp, s16_interleaved, bytes, &err)`. Сколько каналов нужно каждому
-  типу, задаёт конфиг модели спотера (`spotter_conf_get_required_channel_count`). Спотер типа 0
-  получает основной канал VQE.
+  типу, задаёт конфиг модели спотера (`spotter_conf_get_required_channel_count`). Какой выход VQE
+  питает каждый тип — ниже.
+- Каналы спотера → выходы VQE (`voicetech.AudioInputChannelType`, имена
+  `AUDIO_INPUT_CHANNEL_TYPE_*` в `libyandex_evil.so`) — контракт библиотеки, общий для всех
+  моделей. Таблица восстановлена реверсом конвертеров `maind` (`toSpotterChannelType`,
+  [#60](https://github.com/Morvex885/pulsar/pull/60)); названия флагов каналов спотера в
+  библиотеке совпадают с ней по смыслу. Номера 2, 6, 8 проверены, 3, 5, 7 — по порядку
+  имён enum (вывод).
+
+  | Тип | Флаг в `flags.txt` модели | Выход VQE |
+  |---|---|---|
+  | 0 | основной (`omni-channel`) | 6 `VQE_OMNI` |
+  | 1 | `beamforming-channels` | 7 `VQE_BEAMFORMING` |
+  | 2 | `feedback-channel` | 5 `RAW_FEEDBACK_SYNC` |
+  | 3 | `bnr-channel` | 8 `VQE_BACKGROUND_NOISE_REDUCER` |
+  | 4 | `raw-mic-channels`, `freq-filter-audio-channel raw-mic` | 2 `RAW_MAIN_MIC_SYNC` |
+  | 5 | — | 3 `RAW_AUXILIARY_MIC_SYNC` |
+
+  Типы 3 и 4 подтверждены парами «флаг — запрошенный тип» у `alisa` Миди и Лайт 2, остальные
+  флаги — по именам. Прежняя раскладка pulsar `[9,2,6]` пришла из списка maind со старой
+  нумерацией и подавала wake-спотеру усиленный канал вместо BNR. Командная модель работает
+  только с `VQE_OMNI` (10/14 синтетических команд против 0/14 на канале после AGC). Если в
+  пресете VQE нет выхода из таблицы, спотер переходит на прежнюю раскладку с предупреждением в
+  логе; нет и её выходов — спотер выключается с ошибкой.
+- Главный канал стока — `vqe_0` (выход 6): в `quasar.cfg` это `audiod.audioDevice.mainChannel`
+  (канал распознавания SpeechKit: в `maind` — `NSpeechKit::AudioStreamProcess::
+  setMainChannelName`), `audiosender.spotterChannelName` и `audiosender.playerChannelName`.
+  `vqe_gain` (выход 9 = выход 6 × `omniChannelGainCoefficient` пресета; у `cucumber` и `plum` — 50
+  по отношению отсчётов выходов 9 и 6; AGC пресета выключен) — только звонки (`phone_calls.*.
+  channel`), в `audiosender.availableChannels` его нет. Так в `quasar.cfg` Миди, Лайт 2, Мини,
+  Мини 2 и Станции 2; `bergamot` и `pickle` не смотрелись. Уровень `vqe_0` у моделей разный:
+  на Мини он около −45 dBFS на фоне и −20 dBFS на речи, без насыщения
+  ([mini.md, «Звук»](mini.md#звук)), а усиленный выход там перегружен. Поэтому в HA и в пре-ролл
+  идёт `VQE_OMNI`, а недостающий уровень добавляет настройка «Microphone gain» (0–40 дБ,
+  по умолчанию 0).
 - События спотера (`event_id_to_str`): 2 и 5 — срабатывания (`CONFIRMATION_1ST_STAGE` и
   `_2ND_STAGE`), 3 — `1ST_STAGE_HIT` (верификатор ждёт ещё данных), 6 — отказ второй стадии.
   Спотер подтверждает слово через несколько чанков после того, как оно закончилось. По замеру

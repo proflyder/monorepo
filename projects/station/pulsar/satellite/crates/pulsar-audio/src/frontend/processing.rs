@@ -11,12 +11,12 @@ use pulsar_dsp::endpoint::EndpointPrior;
 use pulsar_dsp::level::{
     LEVEL_CHUNKS, LEVEL_SAMPLES, LevelHistory, level_db, mean_square, percentile_db,
 };
-use pulsar_dsp::{Ring, SpectrumAnalyzer, to_s16_slice};
+use pulsar_dsp::{Ring, SpectrumAnalyzer, to_s16_scaled, to_s16_slice};
 use pulsar_model::{Capture as CaptureLayout, Preroll, PrerollRule};
 use tokio::sync::mpsc::UnboundedSender;
 use tracing::{error, info, warn};
 
-use crate::engine::{Stage, VQE_OMNI, VQE_OMNI_WITH_GAIN, WakeEngine};
+use crate::engine::{Stage, VQE_OMNI, VQE_OMNI_WITH_GAIN, WakeEngine, db_to_gain};
 use crate::wake_events::logic;
 
 use super::capture::{Pipe, deinterleave};
@@ -81,7 +81,12 @@ pub(super) struct Processing<E: WakeEngine, D: Detector, S: WakeStore, C: Clock>
     ana: SpectrumAnalyzer,
     music_was_on: bool,
     ring: Ring<i16>,
+    /// Звук для HA и пре-ролла: `VQE_OMNI` с «Microphone gain».
     pcm_chunk: Vec<i16>,
+    /// Звук детектора Ricardo: прежний `VQE_OMNI_WITH_GAIN`, как до «Microphone gain».
+    detector_pcm: Vec<i16>,
+    /// «Microphone gain», дБ: усиление [`Self::pcm_chunk`].
+    mic_gain: u32,
     /// Chunks since the wake spotter's 1st-stage hit, while its verifier waits.
     first_stage_age: Option<usize>,
     frame: usize,
@@ -139,6 +144,8 @@ impl<E: WakeEngine, D: Detector, S: WakeStore, C: Clock> Processing<E, D, S, C> 
             music_was_on: false,
             ring: Ring::new(frame, PREROLL_SAMPLES),
             pcm_chunk: vec![0i16; frame],
+            detector_pcm: vec![0i16; frame],
+            mic_gain: 0,
             first_stage_age: None,
             frame,
             capture_chunk,
@@ -218,18 +225,16 @@ impl<E: WakeEngine, D: Detector, S: WakeStore, C: Clock> Processing<E, D, S, C> 
         }
     }
 
-    /// Ricardo, окно записи и `Audio` одного чанка: всё, что зависит от очищенного
-    /// `VQE_OMNI_WITH_GAIN`.
+    /// Ricardo, окно записи и `Audio` одного чанка.
     fn detector_chunk(&mut self, events: &mut Vec<FrontendEvent>) -> DetectorChunk {
         let mut out = DetectorChunk::default();
         let custom_active = self.custom;
         let detecting = self.state.detecting();
         let dry_run = self.state.dry_run();
-        let Some(d) = self
-            .engine
-            .output(VQE_OMNI_WITH_GAIN)
-            .filter(|d| !d.is_empty())
-        else {
+        // В HA и в кольцо пре-ролла идёт VQE_OMNI — главный канал распознавания стока, с
+        // усилением «Microphone gain»; см. docs/hardware.md, «Библиотеки Яндекса (C API)».
+        // Уровень для арбитража считается по нему же без усиления (см. `level_chunk`).
+        let Some(d) = self.engine.output(VQE_OMNI).filter(|d| !d.is_empty()) else {
             self.ring.clear();
             // A missing output is a gap: restart the prior window.
             self.reset_gain_window();
@@ -239,7 +244,7 @@ impl<E: WakeEngine, D: Detector, S: WakeStore, C: Clock> Processing<E, D, S, C> 
         self.gain_pos = (self.gain_pos + 1) % LEVEL_CHUNKS;
         self.gain_filled = (self.gain_filled + 1).min(LEVEL_CHUNKS);
         let stored = if d.len() == self.frame && self.frame > 0 {
-            to_s16_slice(d, &mut self.pcm_chunk);
+            to_s16_scaled(d, db_to_gain(self.mic_gain), &mut self.pcm_chunk);
             self.ring.push_chunk(&self.pcm_chunk)
         } else {
             self.ring.clear();
@@ -249,11 +254,24 @@ impl<E: WakeEngine, D: Detector, S: WakeStore, C: Clock> Processing<E, D, S, C> 
             return out;
         }
         let slot = &self.pcm_chunk[..];
-        // The Ricardo detector hears the same cleaned chunk as the ring and the
-        // stock spotter; its confirmation then takes the pre-roll from the ring.
+        // Детектор Ricardo слышит прежний VQE_OMNI_WITH_GAIN: он обучен и проверен на нём, а
+        // «Microphone gain» меняет только звук для HA и пре-ролл. Нет выхода — тот же чанк.
+        let detector_slot: &[i16] = match self
+            .engine
+            .output(VQE_OMNI_WITH_GAIN)
+            .filter(|w| w.len() == self.frame)
+        {
+            Some(w) => {
+                to_s16_slice(w, &mut self.detector_pcm);
+                &self.detector_pcm
+            }
+            None => slot,
+        };
+        // Детектор Ricardo слышит прежний очищенный VQE_OMNI_WITH_GAIN, как и стоковый спотер;
+        // его подтверждение берёт пре-ролл из кольца (в HA он идёт с «Microphone gain»).
         if custom_active && detecting && !self.custom_failed {
             out.feeding = true;
-            match self.detector.as_mut().map(|d| d.feed(slot)) {
+            match self.detector.as_mut().map(|d| d.feed(detector_slot)) {
                 Some(Ok(Detection { hit: true, score })) => {
                     out.hit = Some(score);
                     out.mean = Some(score);
@@ -288,7 +306,7 @@ impl<E: WakeEngine, D: Detector, S: WakeStore, C: Clock> Processing<E, D, S, C> 
             if miss {
                 store.missed(utc);
             }
-            out.hit_id = store.push(slot, out.mean, out.hit, dry_run, now, utc);
+            out.hit_id = store.push(detector_slot, out.mean, out.hit, dry_run, now, utc);
         } else {
             // No ring without recording: a miss button pressed meanwhile is void.
             self.wake_missed = false;
@@ -397,6 +415,13 @@ impl<E: WakeEngine, D: Detector, S: WakeStore, C: Clock> Processing<E, D, S, C> 
             FrontendCmd::SetMusic(on) => self.music = on,
             FrontendCmd::SetRecording(on) => self.recording = on,
             FrontendCmd::SetDryRun(on) => self.state.apply(StateEvent::DryRun(on)),
+            FrontendCmd::SetMicGain(db) => {
+                if db != self.mic_gain {
+                    self.mic_gain = db;
+                    // В пре-ролле одной команды уровень не скачет.
+                    self.ring.clear();
+                }
+            }
             FrontendCmd::WakeHandled => self.state.apply(StateEvent::WakeHandled),
             FrontendCmd::Missed => self.wake_missed = true,
         }
@@ -647,6 +672,35 @@ mod tests {
         assert_eq!(audio_count(&process(&mut h, 5)), 1);
         h.cmd.send(FrontendCmd::SetDetection(false)).unwrap();
         assert_eq!(audio_count(&process(&mut h, 6)), 1);
+    }
+
+    #[test]
+    fn microphone_gain_scales_the_ha_stream_of_the_stock_channel() {
+        let steps = vec![Step::outputs(512, 0.01, 0.5), Step::outputs(512, 0.01, 0.5)];
+        let mut h = harness_with(
+            midi(),
+            None,
+            ScriptedEngine::new(steps),
+            Option::<ScriptedDetector>::None,
+            Option::<NullStore>::None,
+            FixedClock::new(),
+            false,
+        );
+        h.cmd.send(FrontendCmd::SetStreaming(true)).unwrap();
+        let first = |events: &[FrontendEvent]| {
+            events
+                .iter()
+                .find_map(|ev| match ev {
+                    FrontendEvent::Audio(pcm) => Some(pcm[0]),
+                    _ => None,
+                })
+                .expect("Audio while streaming")
+        };
+        // 0 дБ: в HA идёт VQE_OMNI как есть, а не прежний VQE_OMNI_WITH_GAIN.
+        assert_eq!(first(&process(&mut h, 0)), 328);
+        h.cmd.send(FrontendCmd::SetMicGain(20)).unwrap();
+        // +20 дБ — в десять раз; смена усиления очищает пре-ролл.
+        assert_eq!(first(&process(&mut h, 0)), 3277);
     }
 
     #[test]

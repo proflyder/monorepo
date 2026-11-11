@@ -92,6 +92,7 @@ impl Publisher {
         ha.publish_number(NumberId::LedSpeed, s.st.led_speed);
         ha.publish_number(NumberId::FollowupDuration, s.st.followup_duration_s as f32);
         ha.publish_number(NumberId::AnnounceVolume, s.st.announce_volume * 100.0);
+        ha.publish_number(NumberId::MicGain, s.st.mic_gain_db as f32);
         ha.publish_select(SelectId::MusicViz, &s.st.music_viz);
         ha.publish_select(SelectId::ClockMusic, &s.st.clock_music);
         ha.publish_select(SelectId::CaseColor, s.case_color);
@@ -364,6 +365,14 @@ impl Controller {
                 self.deps
                     .ha
                     .publish_number(id, self.st.announce_volume * 100.0);
+            }
+            NumberId::MicGain => {
+                let Some(db) = pulsar_esphome::mic_gain_db(value) else {
+                    return;
+                };
+                self.st.mic_gain_db = db;
+                self.deps.frontend.set_mic_gain(db);
+                self.deps.ha.publish_number(id, db as f32);
             }
         }
         self.persist();

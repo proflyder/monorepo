@@ -374,6 +374,7 @@ impl Boot {
         mic.set_preroll(self.store.wake_preroll);
         mic.set_wake_recording(self.store.wake_recording);
         mic.set_wake_dry_run(self.store.wake_dry_run);
+        mic.set_mic_gain(self.store.mic_gain_db);
         (mic, rx)
     }
 

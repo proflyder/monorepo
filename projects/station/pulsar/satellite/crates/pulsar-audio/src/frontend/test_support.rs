@@ -35,6 +35,15 @@ impl Step {
             ok: true,
         }
     }
+
+    /// `VQE_OMNI` и `VQE_OMNI_WITH_GAIN` с разными уровнями.
+    pub(super) fn outputs(frame: usize, omni: f32, gain: f32) -> Self {
+        Self {
+            gain: vec![gain; frame],
+            omni: vec![omni; frame],
+            ok: true,
+        }
+    }
 }
 
 pub(super) struct ScriptedEngine {
@@ -320,7 +329,7 @@ pub(super) fn indexed_steps(n: usize) -> Vec<Step> {
     (0..n)
         .map(|k| Step {
             gain: vec![k as f32 / 32768.0; 512],
-            omni: vec![0.0; 512],
+            omni: vec![k as f32 / 32768.0; 512],
             ok: true,
         })
         .collect()

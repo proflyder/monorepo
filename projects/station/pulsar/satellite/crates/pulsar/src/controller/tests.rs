@@ -265,6 +265,10 @@ impl Frontend for FakeFrontend {
         self.rec.push(format!("frontend.music_analysis {on}"));
     }
 
+    fn set_mic_gain(&self, db: u32) {
+        self.rec.push(format!("frontend.mic_gain {db}"));
+    }
+
     fn set_wake_recording(&self, on: bool) {
         self.rec.push(format!("frontend.wake_recording {on}"));
     }
@@ -809,6 +813,7 @@ async fn client_connected_publishes_entities_in_the_cpp_order() {
             "publish_number LedSpeed 1",
             "publish_number FollowupDuration 10",
             "publish_number AnnounceVolume 100",
+            "publish_number MicGain 0",
             "publish_select MusicViz 'All styles'",
             "publish_select ClockMusic 'Off'",
             "publish_select CaseColor 'None'",

@@ -307,6 +307,18 @@ pub fn followup_duration_s(v: f32) -> Option<u32> {
         .then(|| v.round().clamp(0.0, FOLLOWUP_DURATION_MAX_S as f32) as u32)
 }
 
+/// Верхняя граница «Microphone gain», дБ: с запасом выше 34 дБ — коэффициента 50, с которым
+/// библиотека отдаёт усиленный выход VQE.
+// см. docs/hardware.md, «Библиотеки Яндекса (C API)»
+pub const MIC_GAIN_MAX_DB: u32 = 40;
+
+/// «Microphone gain» из команды HA или `state.conf` — целые дБ 0..=MAX; `None` для NaN и
+/// бесконечности (значение не меняется).
+pub fn mic_gain_db(v: f32) -> Option<u32> {
+    v.is_finite()
+        .then(|| v.round().clamp(0.0, MIC_GAIN_MAX_DB as f32) as u32)
+}
+
 /// Что Home Assistant (или другой клиент API) попросила или сообщила; C++ `ApiHooks`.
 #[derive(Clone, Debug, PartialEq)]
 pub enum ApiEvent {
