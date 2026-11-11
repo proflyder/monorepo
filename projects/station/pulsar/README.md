@@ -609,6 +609,55 @@ armhf-сборку.
 - Код сопряжения Sendspin выводится только в журнал. USB-плеер и AirPlay-приёмник не
   поддерживаются.
 
+## Мониторинг (Prometheus)
+
+Демон отдаёт метрики в текстовом формате Prometheus:
+
+```bash
+curl -s http://<адрес-колонки>:9101/metrics
+```
+
+Порт — `9101` (базовый, как в `pulsar_metrics::DEFAULT_PORT`; `PULSAR_PORT_OFFSET`
+сдвигает его вместе с остальными портами станции). Слушает `0.0.0.0`, без
+авторизации и TLS: это LAN-эндпойнт для домашнего Prometheus, в интернет его
+публиковать нельзя. Firewall на колонке не настраивается; если появится
+входящий фильтр, разрешите `tcp/9101` только с адреса Prometheus.
+
+Что экспортируется (все имена с префиксом `pulsar_`):
+
+- **Железо** — загрузка CPU (из `/proc/stat`, доля за интервал между scrape),
+  CPU-секунды по режимам, load average, температура SoC
+  (`/sys/class/thermal/thermal_zone*/temp`), RAM total/available
+  (`/proc/meminfo`), диск `/data` и `/` (`statvfs`), uptime.
+- **Связь с HA** — `pulsar_ha_connected`, `pulsar_ha_reconnects_total`.
+- **Ассистент** — `pulsar_assistant_requests_total{result="ok|error|timeout"}`,
+  гистограммы `pulsar_assistant_wake_to_stt_seconds` и
+  `pulsar_assistant_wake_to_answer_seconds`.
+- **Звук** — `pulsar_playback_started_total`/`_finished_total{kind,result}`,
+  `pulsar_alsa_xruns_total`, `pulsar_mute{kind="hw|sw"}`, `pulsar_volume_ratio`.
+- **Звонки** — `pulsar_call_active`, `pulsar_call_incoming_total`,
+  `pulsar_call_ended_total`, гистограмма `pulsar_call_duration_seconds`,
+  `pulsar_call_fec_total`, `pulsar_call_plc_total`,
+  `pulsar_call_packets_lost_total`, `pulsar_call_underrun_total`,
+  `pulsar_call_overflow_total`.
+- **Wake-word** — `pulsar_wake_detections_total`, `pulsar_wake_near_total`
+  (отклонено порогом), `pulsar_wake_miss_total`,
+  `pulsar_wake_labels_total{label="false|missed"}`,
+  гистограмма `pulsar_wake_score`, `pulsar_wake_threshold`,
+  `pulsar_wake_model_info{model,version}`.
+
+Счётчики и гистограммы — атомарные (`Relaxed`), аудиопоток и звонок в них не
+блокируются и не аллоцируют. Полный каталог имён —
+`satellite/crates/pulsar-metrics/src/catalog.rs`; тест
+`projects/home/kubernetes/observability/test_prometheusrule.py` сверяет с ним
+каждую метрику из правил и дашбордов.
+
+Готовые дашборды («Колонка — железо», «Колонка — Pulsar») и алерты лежат в
+`projects/station/observability/`; их ставит Flux в папку Grafana «Колонка».
+Scrape-задание `station` в Prometheus описано в
+`projects/home/kubernetes/observability/values/prometheus.yaml` и берёт адрес
+из `${STATION_IP}`.
+
 ## Ограничения и риски
 
 - Пока HA не записал ключ шифрования, API открыт без шифрования любому в сети: добавьте колонку в

@@ -324,6 +324,7 @@ impl<C: Codec> Playout<OpusPacket> for DownlinkPlayback<'_, C> {
         } else {
             // Битый пакет не должен ронять выдачу: место закрывает PLC декодера.
             self.counters.decode_errors += 1;
+            pulsar_metrics::call_decode_error();
             self.codec.conceal()
         }
     }
@@ -335,9 +336,11 @@ impl<C: Codec> Playout<OpusPacket> for DownlinkPlayback<'_, C> {
             && let Some(pcm) = self.codec.decode_fec(next)
         {
             self.counters.fec += 1;
+            pulsar_metrics::call_fec();
             return pcm;
         }
         self.counters.plc += 1;
+        pulsar_metrics::call_plc();
         self.codec.conceal()
     }
 }
@@ -401,10 +404,12 @@ impl Media {
                 }
                 PeerOutput::Audio { data, time } => {
                     self.rx_rtp += 1;
+                    pulsar_metrics::call_rx_packet();
                     // Декодирование — при выдаче: декодер stateful, и FEC/PLC должны идти
                     // в порядке воспроизведения, а не прихода. Здесь нужна только длина.
                     let Some(samples) = self.codec.packet_samples(&data) else {
                         self.counters.decode_errors += 1;
+                        pulsar_metrics::call_decode_error();
                         continue;
                     };
                     let seq = self.timeline.seq(time, samples);
@@ -412,6 +417,7 @@ impl Media {
                         && seq > max
                     {
                         self.seq_gap += seq - max - 1;
+                        pulsar_metrics::call_packet_lost(seq - max - 1);
                     }
                     self.max_seq = Some(self.max_seq.map_or(seq, |max| max.max(seq)));
                     let now = pulsar_core::now_ms();

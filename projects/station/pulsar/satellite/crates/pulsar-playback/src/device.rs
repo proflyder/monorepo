@@ -309,6 +309,7 @@ pub fn recover(dev: &mut dyn PcmDevice, err: PcmError, xruns: &mut u32) -> Recov
     }
     if err.is_xrun() {
         *xruns = xruns.saturating_add(1);
+        pulsar_metrics::alsa_xrun();
         let mut r = if err.code == -libc::ESTRPIPE {
             dev.resume()
         } else {

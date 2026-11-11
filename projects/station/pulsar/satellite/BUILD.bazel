@@ -45,6 +45,8 @@ _CRATES = [
     "//projects/station/pulsar/satellite/crates/pulsar-probes:lan_probe",
     "//projects/station/pulsar/satellite/crates/pulsar-arbiter:pulsar_arbiter_unit_tests",
     "//projects/station/pulsar/satellite/crates/pulsar-media:pulsar_media",
+    "//projects/station/pulsar/satellite/crates/pulsar-metrics:pulsar_metrics",
+    "//projects/station/pulsar/satellite/crates/pulsar-metrics:pulsar_metrics_unit_tests",
     "//projects/station/pulsar/satellite/crates/pulsar-probes:player_probe",
     "//projects/station/pulsar/satellite/crates/pulsar-media:mixer_golden_test",
     "//projects/station/pulsar/satellite/crates/pulsar-media:pulsar_media_unit_tests",

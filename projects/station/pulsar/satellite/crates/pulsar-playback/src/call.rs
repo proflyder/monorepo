@@ -150,6 +150,7 @@ impl CallOut {
             if drop > 0 {
                 queue.drain(..drop);
                 self.shared.overflow.fetch_add(1, Ordering::Relaxed);
+                pulsar_metrics::call_overflow();
             }
         }
         queue.extend(pcm.iter().copied());
@@ -157,6 +158,7 @@ impl CallOut {
             let excess = queue.len() - self.shared.capacity;
             queue.drain(..excess);
             self.shared.overflow.fetch_add(1, Ordering::Relaxed);
+            pulsar_metrics::call_overflow();
         }
         drop(queue);
         self.shared.doorbell.notify_one();
@@ -326,6 +328,7 @@ fn writer(shared: Arc<Shared>, mut device: AlsaDevice, tuning: CallTuning) {
             }
             Err(error) => {
                 shared.xrun.fetch_add(1, Ordering::Relaxed);
+                pulsar_metrics::call_underrun();
                 if !handle(&mut device, error) {
                     info = None;
                 }

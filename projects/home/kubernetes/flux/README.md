@@ -14,8 +14,8 @@ Reconciled by Flux today:
 | `platform-cert-manager` | `cert-manager` | cert-manager release (CRDs via `CreateReplace`) |
 | `platform-traefik` | `traefik` | Traefik release (hostNetwork `80/443`) |
 | `platform-routes` | `traefik`, `cert-manager`, `monitoring` | wildcard Certificate, ClusterIssuers, allow-list, shared IngressRoutes, HA EndpointSlice, Cloudflare solver Secret |
-| `observability` | `monitoring` | kube-prometheus-stack, Loki, Alloy, project dashboards, Grafana NodePort Service, monitoring Secrets |
-| `observability-rules` | `monitoring` | backup-freshness PrometheusRule |
+| `observability` | `monitoring` | kube-prometheus-stack, Loki, Alloy, project dashboards (Home Assistant and station folders), Grafana NodePort Service, monitoring Secrets |
+| `observability-rules` | `monitoring` | backup, Alertmanager, Flux and station PrometheusRules |
 | `vaultwarden` | `vaultwarden` | password manager, PVC, route, admin Secret |
 | `nexus` / `nexus-provision` | `nexus` | artifact cache and REST provisioning |
 | `home-app-pins` | `flux-system` | `home-app-images` ConfigMap from the machine branch `deploy/home-apps` |
@@ -249,7 +249,9 @@ namespace on port 8080.
 
 No value is committed to Git. `HOME_DOMAIN`, `LAN_CIDR` and `HAOS_ADDRESS`
 come from the private `secrets/home/ingress.env`; `PVE_NODE_TARGET` from the
-private observability overlay.
+private observability overlay. The station scrape target is
+`${STATION_IP}:9101`, substituted from `flux-app-settings` (the same Secret the
+application Kustomizations use) so the address stays out of Git.
 
 Application values are separate:
 

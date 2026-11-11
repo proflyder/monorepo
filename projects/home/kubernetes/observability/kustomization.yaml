@@ -16,6 +16,7 @@ resources:
   - manifests/helmrelease-loki.yaml
   - manifests/helmrelease-alloy.yaml
   - manifests/helmrelease-dashboards.yaml
+  - manifests/helmrelease-station-dashboards.yaml
   - manifests/external-secret-grafana-admin.yaml
   - manifests/external-secret-alertmanager-telegram.yaml
   - manifests/grafana-lan.yaml

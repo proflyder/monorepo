@@ -96,6 +96,18 @@ prometheus:
             labels:
               instance: pve
               role: proxmox
+      # The station (Yandex Station Midi running Pulsar) is an external
+      # target on the LAN: Pulsar serves Prometheus text on 9101. The address
+      # comes from flux-app-settings (`STATION_IP`), never from Git.
+      - job_name: station
+        scrape_interval: 30s
+        scrape_timeout: 10s
+        metrics_path: /metrics
+        static_configs:
+          - targets: ["${STATION_IP}:9101"]
+            labels:
+              instance: station
+              role: speaker
 prometheusOperator:
   resources:
     requests: {cpu: 50m, memory: 128Mi}

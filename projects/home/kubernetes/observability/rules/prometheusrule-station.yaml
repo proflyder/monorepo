@@ -1,0 +1,81 @@
+# Alerts for the station (Yandex Station Midi running Pulsar).
+#
+# The station is an external Prometheus target (`job="station"`, port 9101);
+# metrics come from Pulsar's /metrics endpoint, not from node-exporter.
+#
+# Temperature threshold: the Amlogic S905 SoC of the station has Tj max
+# 125 °C and the stock firmware starts throttling around 90 °C. 85 °C for
+# ten minutes leaves headroom for a short spike while catching a blocked
+# vent or a runaway load. Disk pressure watches /data (the only writable
+# volume; / is the read-only rootfs).
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: home-station-alerts
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/part-of: home-observability
+spec:
+  groups:
+    - name: home-station
+      rules:
+        - alert: StationDown
+          expr: up{job="station"} == 0 or absent(up{job="station"})
+          for: 5m
+          labels:
+            severity: warning
+            component: station
+          annotations:
+            summary: "Колонка не отдаёт метрики"
+            description: >-
+              Prometheus не может scrape `/metrics` колонки больше 5 минут.
+              Проверить питание и сеть колонки, `pulsar` на ней
+              (`/data/pulsar/ctl.sh status`) и порт 9101 (`ss -ltn`).
+              Колонка при этом может продолжать работать — пропал только
+              мониторинг.
+
+        - alert: StationCpuHot
+          expr: pulsar_cpu_temperature_celsius > 85
+          for: 10m
+          labels:
+            severity: warning
+            component: station
+          annotations:
+            summary: "SoC колонки перегревается ({{ $value }} °C)"
+            description: >-
+              Температура SoC ({{ $labels.zone }}, {{ $labels.type }})
+              выше 85 °C десять минут. Tj max Amlogic — 125 °C, троттлинг
+              прошивки начинается около 90 °C. Проверить вентиляцию и
+              нагрузку: `top`, `pulsar` в цикле перезапуска.
+
+        - alert: StationMemoryHigh
+          expr: pulsar_memory_available_bytes / pulsar_memory_total_bytes < 0.10
+          for: 10m
+          labels:
+            severity: warning
+            component: station
+          annotations:
+            summary: "Мало свободной памяти на колонке"
+            description: >-
+              Доступно меньше 10% RAM десять минут. Проверить утечку в
+              `pulsar` (`/proc/<pid>/status`, RSS) и размер wake-events на
+              `/data/pulsar/wake-events`; при необходимости перезапустить
+              демон через HA (кнопка Restart) или `ctl.sh restart`.
+
+        - alert: StationDiskFilling
+          expr: >-
+            pulsar_filesystem_free_bytes{mount="/data"}
+            / pulsar_filesystem_total_bytes{mount="/data"} < 0.15
+            or predict_linear(pulsar_filesystem_free_bytes{mount="/data"}[6h], 86400) < 0
+          for: 30m
+          labels:
+            severity: warning
+            component: station
+          annotations:
+            summary: "Заканчивается место на /data колонки"
+            description: >-
+              Свободно меньше 15% `/data` или линейный прогноз по последним
+              6 часам показывает заполнение за сутки. Проверить
+              `/data/pulsar/wake-events` (retention 300 МБ/3000 событий),
+              `/data/pulsar/updates` и логи; лишние записи удалять только
+              после проверки, что это не состояние демона.
