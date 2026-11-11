@@ -263,6 +263,30 @@ mise run kubectl -- -n monitoring port-forward svc/loki 13100:3100
 
 Grafana admin password — OpenBao `secret/k8s/monitoring/grafana-admin`.
 
+### Алерты доставки Flux
+
+`FluxKustomizationNotReady`, `HelmReleaseNotReady` и `PinsStale`
+(`observability/rules/prometheusrule-flux.yaml`) читают `gotk_resource_info` —
+info-метрику, которую kube-state-metrics строит из Flux CRD через
+`kube-state-metrics.customResourceState` в `observability/values/prometheus.yaml`
+(RBAC list/watch на `kustomizations`, `helmreleases`, `gitrepositories`,
+`helmrepositories`, `ocirepositories` — там же). Контроллеры Flux 2.x отдают
+только `gotk_reconcile_duration_seconds_*` и `gotk_token_*`, статуса Ready в их
+метриках нет; `gotk_reconcile_condition` не существует, ссылки на него давали
+вечный `PinsStale` и два алерта, которые не могли сработать никогда.
+
+- Лейблы метрики: `customresource_kind` (не `kind`), `exported_namespace`
+  (kube-state-metrics не добавляет `namespace` к custom-resource метрикам),
+  `name`, `ready`, `suspended`, `revision`.
+- Отсутствующий путь в объекте = метки нет; поэтому правила сравнивают через
+  `!=` (`ready!="True"`, `suspended!="true"`), а не равенством.
+- `PinsStale` дополнительно смотрит `kube_configmap_info` (collectors
+  kube-state-metrics остаются включёнными) и отдельным `absent()` — полное
+  отсутствие `gotk_resource_info` для `flux-pins`.
+- Проверка правил: `python3 -m unittest discover -s
+  projects/home/kubernetes/observability -p 'test_*.py' -v` (структурные
+  контракты + `promtool check rules`, если `promtool` есть в PATH).
+
 ## HTTPS ingress
 
 `projects/home/kubernetes/ingress/` — Traefik `42.2.0` + cert-manager

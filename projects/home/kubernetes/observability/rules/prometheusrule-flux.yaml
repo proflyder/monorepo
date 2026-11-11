@@ -1,11 +1,33 @@
 # GitOps delivery alerts for the Flux-managed applications.
 #
 # Sources:
-#   gotk_reconcile_condition  kustomize-/helm-controller (Flux 2.x)
-#   kube_configmap_info       kube-state-metrics
+#   gotk_resource_info    kube-state-metrics customResourceState
+#                         (values/prometheus.yaml, `kube-state-metrics`)
+#   kube_configmap_info   kube-state-metrics configmap collector
 #
-# Metrics arrive through PodMonitor/flux-controllers (pod port `http-prom`);
-# `flux-system-ingress` allows the monitoring namespace on 8080.
+# Flux 2.x controllers do not export reconcile status: the `gotk_*` series they
+# publish are `gotk_reconcile_duration_seconds_*` and `gotk_token_*` only, so the
+# former `gotk_reconcile_condition` alert expressions could never fire (and the
+# `absent()` in PinsStale fired forever). Everything below reads the info metric
+# that kube-state-metrics builds from the Flux CRDs instead.
+#
+# Label contract of `gotk_resource_info` (value 1 per object):
+#   customresource_kind   Kustomization / HelmRelease / GitRepository / ...
+#                         (kube-state-metrics reserves this name for the CRD kind;
+#                         there is no plain `kind` label)
+#   exported_namespace    metadata.namespace. kube-state-metrics adds no bare
+#                         `namespace` label to custom-resource metrics, hence the
+#                         `exported_` prefix from the upstream recipe.
+#   name                  metadata.name
+#   ready                 status.conditions[type=Ready].status: "True"/"False"
+#   suspended             spec.suspend: "true"/"false"
+#   revision              last applied revision / chart version
+#
+# A label whose path is missing on the object is omitted entirely, so `ready`
+# is absent until the first Ready condition exists and `suspended` is absent
+# unless the manifest sets `spec.suspend`. The rules therefore compare with
+# `!=` instead of equality: `ready!="True"` also matches "no Ready condition
+# yet" and `suspended!="true"` also matches "not suspended explicitly".
 #
 # These alerts replace the "job failed" signal that `deploy-home` used to give:
 # Flux has no automatic rollback for an application rollout, so a Kustomization
@@ -23,12 +45,13 @@ spec:
     - name: home-flux
       rules:
         - alert: FluxKustomizationNotReady
-          # `status="False"` selects only the active condition; a Ready=True
-          # series has status="True" and never matches.
+          # Suspended Kustomizations are skipped on purpose (drills, rollback);
+          # `suspended` is absent when the manifest never set `spec.suspend`.
           expr: >-
-            gotk_reconcile_condition{
-              kind="Kustomization", type="Ready", status="False",
-              namespace="flux-system"
+            gotk_resource_info{
+              customresource_kind="Kustomization",
+              exported_namespace="flux-system",
+              ready!="True", suspended!="true"
             } == 1
           for: 15m
           labels:
@@ -38,16 +61,17 @@ spec:
             summary: "Flux Kustomization {{ $labels.name }} не готова"
             description: >-
               Kustomization {{ $labels.name }} в flux-system держит Ready=False
-              дольше 15 минут. Смотреть `mise run kubectl -- -n flux-system
-              describe kustomization {{ $labels.name }}` и события
-              kustomize-controller. Откат — revert коммита с манифестом или
-              pins, а не `kubectl rollout undo`.
+              (revision {{ $labels.revision }}) дольше 15 минут. Смотреть
+              `mise run kubectl -- -n flux-system describe kustomization
+              {{ $labels.name }}` и события kustomize-controller. Откат — revert
+              коммита с манифестом или pins, а не `kubectl rollout undo`.
 
         - alert: HelmReleaseNotReady
           expr: >-
-            gotk_reconcile_condition{
-              kind="HelmRelease", type="Ready", status="False",
-              namespace="flux-system"
+            gotk_resource_info{
+              customresource_kind="HelmRelease",
+              exported_namespace="flux-system",
+              ready!="True", suspended!="true"
             } == 1
           for: 15m
           labels:
@@ -57,26 +81,36 @@ spec:
             summary: "HelmRelease {{ $labels.name }} не готова"
             description: >-
               HelmRelease {{ $labels.name }} в flux-system держит Ready=False
-              дольше 15 минут (failed install/upgrade). Проверить
+              (chart {{ $labels.chart_name }} {{ $labels.revision }}) дольше
+              15 минут (failed install/upgrade). Проверить
               `mise run helm -- -n flux-system history {{ $labels.name }}` и
               events helm-controller; откат — предыдущая ревизия или revert
               values-коммита.
 
         - alert: PinsStale
-          # Two machine-checkable forms of "pins не доставляются": the
-          # `home-app-images` ConfigMap is missing, or the pins source has no
-          # healthy reconcile. The develop-vs-pins lag needs the timestamp that
-          # the future `pins` CI job will publish; until then this alert covers
-          # the failure modes that would silently freeze every app at its last
-          # digest.
+          # Three machine-checkable forms of "pins не доставляются": the
+          # `home-app-images` ConfigMap is missing, the pins source is not
+          # Ready, or kube-state-metrics stopped publishing the pins source at
+          # all (customResourceState broken — that also freezes every app at its
+          # last digest unnoticed). The develop-vs-pins lag still needs the
+          # timestamp that the future `pins` CI job will publish.
+          #
+          # Healthy steady state is an empty result: the ConfigMap exists, so the
+          # first `absent()` is silent, `ready="True"` fails `ready!="True"`, and
+          # the third branch is silent because the series exists.
           expr: >-
             absent(kube_configmap_info{
               namespace="flux-system", configmap="home-app-images"
             })
             or
-            absent(gotk_reconcile_condition{
-              kind="GitRepository", name="flux-pins", namespace="flux-system",
-              type="Ready", status="True"
+            gotk_resource_info{
+              customresource_kind="GitRepository", name="flux-pins",
+              exported_namespace="flux-system", ready!="True"
+            }
+            or
+            absent(gotk_resource_info{
+              customresource_kind="GitRepository", name="flux-pins",
+              exported_namespace="flux-system"
             })
           for: 15m
           labels:
@@ -85,9 +119,11 @@ spec:
           annotations:
             summary: "Pins-ветка deploy/home-apps не доставляет digest'ы"
             description: >-
-              ConfigMap home-app-images отсутствует или GitRepository/flux-pins
-              в flux-system не имеет Ready=True дольше 15 минут. Проверить
-              ветку `deploy/home-apps` (файл pins/home-app-images.yaml),
+              ConfigMap home-app-images отсутствует, GitRepository/flux-pins
+              в flux-system не имеет Ready=True, или kube-state-metrics вообще
+              не отдаёт `gotk_resource_info` для flux-pins (проверить
+              customResourceState в values/prometheus.yaml) дольше 15 минут.
+              Проверить ветку `deploy/home-apps` (файл pins/home-app-images.yaml),
               `mise run kubectl -- -n flux-system describe gitrepository
               flux-pins` и последний запуск job `pins`. Приложения продолжают
               работать на прежнем digest.
