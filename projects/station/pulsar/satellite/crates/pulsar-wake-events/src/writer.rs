@@ -256,6 +256,9 @@ impl Writer {
             rec.samples.len() as f64 / f64::from(logic::SAMPLE_RATE),
             rec.score_peak
         );
+        if rec.kind == super::Kind::Miss {
+            pulsar_metrics::wake_label_missed();
+        }
         self.index.push(logic::Meta {
             id: rec.id.clone(),
             kind: rec.kind.as_str().to_owned(),
@@ -322,6 +325,7 @@ impl Writer {
                     return;
                 }
                 self.index[i].labeled = true;
+                pulsar_metrics::wake_label_false_alarm();
                 info!("wake events: {id} labeled false by the user");
             }
         }

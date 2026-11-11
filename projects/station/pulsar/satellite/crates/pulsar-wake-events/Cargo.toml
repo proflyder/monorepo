@@ -14,6 +14,7 @@ thiserror = { workspace = true }
 time = { workspace = true }
 tracing = { workspace = true }
 pulsar-dsp = { path = "../pulsar-dsp" }
+pulsar-metrics = { path = "../pulsar-metrics" }
 
 [dev-dependencies]
 serde_json = { workspace = true }

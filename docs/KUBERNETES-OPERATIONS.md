@@ -411,6 +411,8 @@ Bootstrap и ручные шаги владельца — `projects/home/kuberne
 `secret/k8s/flux-system/{git-deploy-key,settings}`, в Git их нет. Из
 `flux-settings` подставляются `NEXUS_HOST`, `NEXUS_PUBLIC_HOST`,
 `NODE_LAN_IP`, `HOME_DOMAIN`, `LAN_CIDR`, `HAOS_ADDRESS`, `PVE_NODE_TARGET`.
+Kustomization `observability` дополнительно подставляет `STATION_IP` из
+`flux-app-settings` (scrape-таргет колонки `${STATION_IP}:9101`).
 
 ```bash
 # что синхронизировано и готово

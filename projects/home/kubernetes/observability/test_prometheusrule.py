@@ -11,6 +11,7 @@ are also syntax-checked; otherwise that test skips.
 """
 from __future__ import annotations
 
+import json
 from pathlib import Path
 import re
 import shutil
@@ -20,10 +21,17 @@ import unittest
 
 import yaml
 
+ROOT = Path(__file__).resolve().parents[4]
 RULE_DIR = Path(__file__).with_name("rules")
 RULE_FILE = RULE_DIR / "prometheusrule-backups.yaml"
 ALERTMANAGER_RULE_FILE = RULE_DIR / "prometheusrule-alertmanager.yaml"
 FLUX_RULE_FILE = RULE_DIR / "prometheusrule-flux.yaml"
+STATION_RULE_FILE = RULE_DIR / "prometheusrule-station.yaml"
+STATION_DASHBOARDS = ROOT / "projects/station/observability/chart/dashboards"
+PULSAR_METRICS_CATALOG = (
+    ROOT
+    / "projects/station/pulsar/satellite/crates/pulsar-metrics/src/catalog.rs"
+)
 VALUES_FILE = Path(__file__).with_name("values") / "prometheus.yaml"
 REQUIRED_ALERTS = {
     "VzdumpBackupStale",
@@ -41,6 +49,12 @@ REQUIRED_FLUX_ALERTS = {
     "FluxKustomizationNotReady",
     "HelmReleaseNotReady",
     "PinsStale",
+}
+REQUIRED_STATION_ALERTS = {
+    "StationDown",
+    "StationCpuHot",
+    "StationMemoryHigh",
+    "StationDiskFilling",
 }
 # Metric deleted from the Flux controllers in 2.x; nothing may reference it.
 REMOVED_FLUX_METRIC = "gotk_reconcile_condition"
@@ -94,15 +108,23 @@ class BackupRuleTests(unittest.TestCase):
         for vmid in ("100", "101", "102"):
             self.assertIn(f'vmid="{vmid}"', absent[0])
 
-    def test_pve_scrape_target_is_substituted_from_flux_settings(self) -> None:
+    def test_external_scrape_targets_are_substituted_from_secrets(self) -> None:
         values = yaml.safe_load(
             (Path(__file__).with_name("values") / "prometheus.yaml").read_text(encoding="utf-8")
         )
-        configs = values["prometheus"]["prometheusSpec"]["additionalScrapeConfigs"]
-        self.assertEqual(len(configs), 1)
-        self.assertEqual(configs[0]["job_name"], "pve-node")
+        configs = {
+            config["job_name"]: config
+            for config in values["prometheus"]["prometheusSpec"]["additionalScrapeConfigs"]
+        }
+        self.assertEqual(set(configs), {"pve-node", "station"})
         # The real host:port stays out of Git.
-        self.assertEqual(configs[0]["static_configs"][0]["targets"], ["${PVE_NODE_TARGET}"])
+        self.assertEqual(
+            configs["pve-node"]["static_configs"][0]["targets"], ["${PVE_NODE_TARGET}"]
+        )
+        self.assertEqual(
+            configs["station"]["static_configs"][0]["targets"], ["${STATION_IP}:9101"]
+        )
+        self.assertEqual(configs["station"]["metrics_path"], "/metrics")
 
     def test_grafana_root_url_uses_the_home_suffix(self) -> None:
         values = yaml.safe_load(
@@ -333,6 +355,102 @@ class FluxRuleTests(unittest.TestCase):
                 self.assertTrue(
                     all(rule["verbs"] == ["list", "watch"] for rule in matching)
                 )
+
+
+class StationRuleTests(unittest.TestCase):
+    """The station is an external Pulsar target, not a Kubernetes workload."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.document = yaml.safe_load(STATION_RULE_FILE.read_text(encoding="utf-8"))
+        cls.rules = [
+            rule
+            for group in cls.document["spec"]["groups"]
+            for rule in group["rules"]
+        ]
+
+    def test_manifest_contract(self) -> None:
+        self.assertEqual(self.document["apiVersion"], "monitoring.coreos.com/v1")
+        self.assertEqual(self.document["kind"], "PrometheusRule")
+        self.assertEqual(self.document["metadata"]["namespace"], "monitoring")
+        self.assertEqual(self.document["metadata"]["name"], "home-station-alerts")
+        kustomization = yaml.safe_load((RULE_DIR / "kustomization.yaml").read_text(encoding="utf-8"))
+        self.assertIn(STATION_RULE_FILE.name, kustomization["resources"])
+
+    def test_all_required_alerts_are_present(self) -> None:
+        self.assertEqual({rule["alert"] for rule in self.rules}, REQUIRED_STATION_ALERTS)
+
+    def test_alerts_are_warning_with_russian_telegram_annotations(self) -> None:
+        for rule in self.rules:
+            with self.subTest(alert=rule["alert"]):
+                self.assertEqual(rule["labels"]["severity"], "warning")
+                self.assertEqual(rule["labels"]["component"], "station")
+                self.assertTrue(rule["annotations"]["summary"].strip())
+                self.assertTrue(rule["annotations"]["description"].strip())
+                self.assertNotIn("\t", rule["expr"])
+
+    def test_thresholds_and_timers_match_the_documented_contract(self) -> None:
+        by_name = {rule["alert"]: rule for rule in self.rules}
+        self.assertEqual(by_name["StationDown"]["for"], "5m")
+        self.assertIn('job="station"', by_name["StationDown"]["expr"])
+        self.assertIn("absent(", by_name["StationDown"]["expr"])
+        self.assertEqual(by_name["StationCpuHot"]["for"], "10m")
+        self.assertEqual(normalize(by_name["StationCpuHot"]["expr"]),
+                         "pulsar_cpu_temperature_celsius > 85")
+        self.assertEqual(by_name["StationMemoryHigh"]["for"], "10m")
+        self.assertEqual(
+            normalize(by_name["StationMemoryHigh"]["expr"]),
+            "pulsar_memory_available_bytes / pulsar_memory_total_bytes < 0.10",
+        )
+        disk = normalize(by_name["StationDiskFilling"]["expr"])
+        self.assertIn('pulsar_filesystem_free_bytes{mount="/data"}', disk)
+        self.assertIn("0.15", disk)
+        self.assertIn("predict_linear(", disk)
+        self.assertIn("86400", disk)
+
+
+class StationMetricsContractTests(unittest.TestCase):
+    """Every metric named by an alert or a dashboard exists in the Pulsar catalog."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        text = PULSAR_METRICS_CATALOG.read_text(encoding="utf-8")
+        cls.catalog = set(re.findall(r'"(pulsar_[a-z0-9_]+)"', text))
+        cls.referenced = set()
+        sources = [STATION_RULE_FILE] + sorted(STATION_DASHBOARDS.glob("*.json"))
+        for path in sources:
+            cls.referenced |= set(re.findall(r"\b(pulsar_[a-z0-9_]+)\b", path.read_text(encoding="utf-8")))
+
+    def test_catalog_is_not_empty(self) -> None:
+        self.assertGreater(len(self.catalog), 30)
+
+    def test_every_referenced_metric_is_exported(self) -> None:
+        def base(name: str) -> str:
+            for suffix in ("_bucket", "_sum", "_count"):
+                if name.endswith(suffix):
+                    return name[: -len(suffix)]
+            return name
+
+        missing = sorted(name for name in self.referenced if base(name) not in self.catalog)
+        self.assertEqual(missing, [])
+
+    def test_dashboards_are_provisioned_into_the_station_folder(self) -> None:
+        chart = ROOT / "projects/station/observability/chart"
+        template = (chart / "templates/dashboards.yaml").read_text(encoding="utf-8")
+        self.assertIn("grafana_folder", template)
+        self.assertIn("grafana_dashboard", template)
+        values = yaml.safe_load((chart / "values.yaml").read_text(encoding="utf-8"))
+        self.assertEqual(values["folder"], "Колонка")
+
+    def test_dashboards_use_the_station_folder_and_prometheus(self) -> None:
+        paths = sorted(STATION_DASHBOARDS.glob("*.json"))
+        self.assertEqual({p.stem for p in paths}, {"station-hardware", "station-pulsar"})
+        for path in paths:
+            document = json.loads(path.read_text(encoding="utf-8"))
+            with self.subTest(dashboard=path.name):
+                self.assertTrue(document["uid"].startswith("station-"))
+                self.assertIn('"uid": "prometheus"', json.dumps(document))
+                self.assertTrue(document["panels"])
 
 
 class RuleFileSyntaxTests(unittest.TestCase):

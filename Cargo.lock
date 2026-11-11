@@ -2913,6 +2913,7 @@ dependencies = [
  "pulsar-hw",
  "pulsar-mdns",
  "pulsar-media",
+ "pulsar-metrics",
  "pulsar-model",
  "pulsar-playback",
  "pulsar-sendspin",
@@ -2959,6 +2960,7 @@ dependencies = [
  "pulsar-alsa",
  "pulsar-core",
  "pulsar-dsp",
+ "pulsar-metrics",
  "pulsar-model",
  "pulsar-wake-events",
  "thiserror",
@@ -2978,6 +2980,7 @@ dependencies = [
  "http",
  "libc",
  "pulsar-core",
+ "pulsar-metrics",
  "reqwest",
  "str0m",
  "thiserror",
@@ -3113,6 +3116,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "pulsar-metrics"
+version = "0.0.0"
+dependencies = [
+ "libc",
+ "tracing",
+]
+
+[[package]]
 name = "pulsar-model"
 version = "0.0.0"
 dependencies = [
@@ -3125,6 +3136,7 @@ version = "0.0.0"
 dependencies = [
  "libc",
  "pulsar-alsa",
+ "pulsar-metrics",
  "pulsar-model",
  "tracing",
 ]
@@ -3209,6 +3221,7 @@ version = "0.0.0"
 dependencies = [
  "hex",
  "pulsar-dsp",
+ "pulsar-metrics",
  "ring",
  "serde",
  "serde_json",

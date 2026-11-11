@@ -11,20 +11,28 @@ fn port_offset() {
             sendspin: 8928,
             deconz: 6638,
             arbiter: 6054,
+            metrics: 9101,
         }
     );
     let test = ports(Some(OsStr::new("10000"))).unwrap();
     assert_eq!(
-        (test.api, test.sendspin, test.deconz, test.arbiter),
-        (16053, 18928, 16638, 16054)
+        (
+            test.api,
+            test.sendspin,
+            test.deconz,
+            test.arbiter,
+            test.metrics
+        ),
+        (16053, 18928, 16638, 16054, 19101)
     );
     assert_eq!(ports(Some(OsStr::new("0"))), Some(base));
     for bad in ["", "abc", "-1", "65536", "1e4", " 5", "60000"] {
         assert_eq!(ports(Some(OsStr::new(bad))), None, "{bad:?}");
     }
-    // 8928 + 56607 = 65535 still fits, 56608 overflows the Sendspin port.
-    assert!(ports(Some(OsStr::new("56607"))).is_some());
-    assert_eq!(ports(Some(OsStr::new("56608"))), None);
+    // The metrics port (9101) is the highest base: 9101 + 56434 = 65535 still
+    // fits, one more overflows it.
+    assert!(ports(Some(OsStr::new("56434"))).is_some());
+    assert_eq!(ports(Some(OsStr::new("56435"))), None);
     assert_eq!(ports(Some(OsStr::from_bytes(b"1\xff"))), None);
 }
 

@@ -9,6 +9,7 @@ publish.workspace = true
 home-actor = { path = "../../../../../../packages/rust/home-actor" }
 home-proto = { path = "../../../../../../packages/rust/home-proto" }
 home-secret = { path = "../../../../../../packages/rust/home-secret" }
+pulsar-metrics = { path = "../pulsar-metrics" }
 
 connectrpc = { workspace = true }
 futures-util = { workspace = true }

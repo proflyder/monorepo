@@ -132,8 +132,8 @@ impl Boot {
         // After the TZ: the log's timestamps are local time.
         if ports.offset != 0 {
             info!(
-                "PULSAR_PORT_OFFSET={}: API {}, Sendspin {}, deCONZ {}, arbiter {}, no mDNS",
-                ports.offset, ports.api, ports.sendspin, ports.deconz, ports.arbiter
+                "PULSAR_PORT_OFFSET={}: API {}, Sendspin {}, deCONZ {}, arbiter {}, metrics {}, no mDNS",
+                ports.offset, ports.api, ports.sendspin, ports.deconz, ports.arbiter, ports.metrics
             );
         }
         let id = logic::identity(
@@ -542,6 +542,8 @@ pub struct Wired {
 /// Starts every service in the C++ `start()` order and returns the controller's dependencies.
 pub fn wire(model: &'static DeviceProfile, state_path: PathBuf) -> Result<Wired, StartError> {
     let mut boot = Boot::load(model, state_path)?;
+    pulsar_metrics::init(VERSION, model.identity.model_name);
+    pulsar_metrics::start_http(boot.ports.metrics);
     let lux_rx = boot.open_sensor();
     let (api, api_rx) = boot.bind_api(lux_rx.is_some())?;
     let (player, player_rx) = boot.spawn_player();

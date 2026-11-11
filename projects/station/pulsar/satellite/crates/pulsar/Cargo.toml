@@ -25,6 +25,7 @@ pulsar-sendspin = { path = "../pulsar-sendspin" }
 pulsar-update = { path = "../pulsar-update" }
 pulsar-zigbee = { path = "../pulsar-zigbee" }
 tokio = { workspace = true }
+pulsar-metrics = { path = "../pulsar-metrics" }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }

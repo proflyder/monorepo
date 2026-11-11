@@ -1,0 +1,2 @@
+# Folder in Grafana; the sidecar reads the annotation grafana_folder.
+folder: "Колонка"

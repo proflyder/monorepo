@@ -16,6 +16,7 @@ pulsar-dsp = { path = "../pulsar-dsp" }
 pulsar-model = { path = "../pulsar-model" }
 pulsar-wake-events = { path = "../pulsar-wake-events" }
 tokio = { workspace = true }
+pulsar-metrics = { path = "../pulsar-metrics" }
 
 [build-dependencies]
 cc = { workspace = true }

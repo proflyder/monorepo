@@ -23,3 +23,7 @@ spec:
     substituteFrom:
       - kind: Secret
         name: flux-settings
+      # Application settings: the station scrape target is `${STATION_IP}`
+      # (ESO renders the Secret in the individual app Kustomizations too).
+      - kind: Secret
+        name: flux-app-settings

@@ -7,4 +7,5 @@ resources:
   - prometheusrule-backups.yaml
   - prometheusrule-alertmanager.yaml
   - prometheusrule-flux.yaml
+  - prometheusrule-station.yaml
   - podmonitor-flux.yaml

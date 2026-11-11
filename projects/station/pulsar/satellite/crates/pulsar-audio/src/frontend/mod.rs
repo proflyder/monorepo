@@ -134,6 +134,11 @@ pub fn spawn(
                 "defaults, no valid manifest".to_owned()
             }
         );
+        pulsar_metrics::set_wake_threshold(f64::from(thresholds.cutoff));
+        let model = path
+            .file_stem()
+            .map_or_else(String::new, |s| s.to_string_lossy().into_owned());
+        pulsar_metrics::set_wake_model(&model, wake.map_or("", |w| w.version.as_str()));
     }
     let (cmd_tx, cmd_rx) = mpsc::channel();
     let (tap_tx, tap_rx) = mpsc::channel();

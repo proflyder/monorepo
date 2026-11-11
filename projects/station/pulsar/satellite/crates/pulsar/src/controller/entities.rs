@@ -123,8 +123,13 @@ pub struct ClientSnapshot<'a> {
 impl Controller {
     pub(super) fn on_api(&mut self, ev: ApiEvent) {
         match ev {
-            ApiEvent::ClientConnected { client_info } => self.on_client_connected(&client_info),
+            ApiEvent::ClientConnected { client_info } => {
+                pulsar_metrics::ha_connected(true);
+                pulsar_metrics::ha_reconnect();
+                self.on_client_connected(&client_info);
+            }
             ApiEvent::ClientDisconnected => {
+                pulsar_metrics::ha_connected(false);
                 warn!("Home Assistant disconnected");
                 self.voice_link_lost();
             }
