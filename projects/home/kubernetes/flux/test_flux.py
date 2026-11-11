@@ -689,9 +689,9 @@ class MigratedApps(unittest.TestCase):
                           "CURRENCY_WEBHOOK_URL", "LAN_CIDR", "NODE_LAN_IP"}),
         "mcp-gateway": ({"Deployment", "Service", "NetworkPolicy", "ServiceMonitor",
                          "ConfigMap", "ServiceAccount", "Role", "RoleBinding",
-                         "ExternalSecret"},
+                         "ClusterRole", "ClusterRoleBinding", "ExternalSecret"},
                         {"MCP_GATEWAY_IMAGE", "BUILD_ID", "LAN_CIDR", "NODE_LAN_IP",
-                         "HAOS_IP", "STATION_IP", "BB_CT_IP",
+                         "HAOS_IP", "STATION_IP", "BB_CT_IP", "PVE_IP", "VPN_CT_IP",
                          "BB_PROJECT_STATION_LAB", "BB_PROJECT_ENGLISH_NOTES",
                          "BB_DISPATCHER_THREAD_ID"}),
         "scheduler": ({"PersistentVolumeClaim", "Deployment", "Service",
@@ -771,11 +771,21 @@ class MigratedApps(unittest.TestCase):
                     else:
                         self.assertEqual(annotation, image)
 
-    def test_catalog_config_map_keeps_its_stable_name(self):
-        configmaps = by_name(kustomize(K8S / "mcp-gateway/manifests"), "ConfigMap")
-        catalog = configmaps["mcp-gateway-catalog"]
+    def test_catalog_config_map_is_hashed_and_mounted(self):
+        # The gateway reads the catalog once at start: a content-hashed name
+        # makes every catalog change roll the pod (a stable name left the pod
+        # on the old catalog after #297).
+        docs = kustomize(K8S / "mcp-gateway/manifests")
+        configmaps = by_name(docs, "ConfigMap")
+        names = [name for name in configmaps if name.startswith("mcp-gateway-catalog")]
+        self.assertEqual(len(names), 1, names)
+        self.assertNotEqual(names[0], "mcp-gateway-catalog")
+        catalog = configmaps[names[0]]
         self.assertEqual(catalog["metadata"]["namespace"], "home-assistant")
         self.assertEqual(set(catalog["data"]), {"catalog.yaml", "bb-targets.yaml"})
+        deployment = by_name(docs, "Deployment")["mcp-gateway"]
+        volumes = {v["name"]: v for v in deployment["spec"]["template"]["spec"]["volumes"]}
+        self.assertEqual(volumes["catalog"]["configMap"]["name"], names[0])
 
     def test_cloudflared_pin_matches_versions(self):
         image = version("CLOUDFLARED_IMAGE")
