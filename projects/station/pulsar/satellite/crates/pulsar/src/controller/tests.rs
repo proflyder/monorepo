@@ -813,7 +813,7 @@ async fn client_connected_publishes_entities_in_the_cpp_order() {
             "publish_number LedSpeed 1",
             "publish_number FollowupDuration 10",
             "publish_number AnnounceVolume 100",
-            "publish_number MicGain 0",
+            "publish_number MicGain 34",
             "publish_select MusicViz 'All styles'",
             "publish_select ClockMusic 'Off'",
             "publish_select CaseColor 'None'",

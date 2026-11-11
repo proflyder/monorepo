@@ -112,8 +112,8 @@ pub struct Settings {
     /// «Громкость объявлений», 0..1: multiplier of spoken announcements (HA announce, TTS
     /// answers); the master volume, earcons, the timer ring and music are unaffected.
     pub announce_volume: f32,
-    /// Усиление звука запроса перед отправкой в HA, дБ («Microphone gain»); 0 — канал VQE как
-    /// есть.
+    /// Усиление звука запроса перед отправкой в HA, дБ («Microphone gain»); 34 — прежний
+    /// уровень усиленного канала, 0 — канал VQE как есть.
     pub mic_gain_db: u32,
     /// Stem of `pulsar_hw::case_colors()`, "" = none.
     pub led_case_color: String,
@@ -157,7 +157,9 @@ impl Default for Settings {
             wake_recording: true,
             wake_dry_run: false,
             announce_volume: 1.0,
-            mic_gain_db: 0,
+            // 34 дБ = прежний VQE_OMNI_WITH_GAIN на Миди и Лайт 2 (выход 9 = выход 6 × 50):
+            // обновление не меняет уровень потока, уходящего в STT на живой колонке.
+            mic_gain_db: 34,
             led_case_color: String::new(),
             voice_color: "Violet".into(),
             update_attempt: String::new(),
