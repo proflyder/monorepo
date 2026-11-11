@@ -109,8 +109,10 @@ pub struct Settings {
     pub wake_recording: bool,
     /// Dry run of the Ricardo detector: record, never answer («Wake: тестовый режим»).
     pub wake_dry_run: bool,
-    /// «Громкость объявлений», 0..1: multiplier of spoken announcements (HA announce, TTS
-    /// answers); the master volume, earcons, the timer ring and music are unaffected.
+    /// «Громкость объявлений», 0..1: absolute volume on the model's curve for spoken
+    /// announcements (HA announce, TTS answers); the master volume, earcons, the timer ring and
+    /// music are unaffected. Above the current master the gain is capped at it, so the default
+    /// 1.0 keeps the old «as the main volume» behaviour.
     pub announce_volume: f32,
     /// Усиление звука запроса перед отправкой в HA, дБ («Microphone gain»); 34 — прежний
     /// уровень усиленного канала, 0 — канал VQE как есть.
