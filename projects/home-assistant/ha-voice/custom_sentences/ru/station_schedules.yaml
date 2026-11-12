@@ -815,6 +815,10 @@ lists:
       out: все
   timer_name:
     wildcard: true
+  # Free text after «через» in timer phrases. Only the clarification guard
+  # uses it; timer intents keep owning explicit «на N минут» durations.
+  timer_phrase:
+    wildcard: true
   alarm_name:
     wildcard: true
 language: ru
@@ -837,6 +841,17 @@ intents:
       - поставь таймер {timer_name:name} на {timer_minutes:minutes}
       - поставь таймер {timer_name:name} на {timer_hours:hours} час[а|ов] [и {timer_minutes:minutes} минут]
       - поставь таймер {timer_name:name} на {timer_hours:hours} час[а|ов] [утра|дня|вечера|ночи] [и {timer_minutes:minutes} минут[у|ы]]
+  StationTimerRelativeUnclear:
+    # Guard: «поставь таймер через …» has no closed duration template, and the
+    # built-in HassMediaSearchAndPlay «<play> {search_query}» would answer
+    # «Воспроизвожу» and start music. Custom sentences outrank the built-in
+    # one, so ask for the duration instead. Explicit «на N минут» timer
+    # sentences stay untouched.
+    data:
+    - sentences:
+      - поставь таймер через {timer_phrase}
+      - запусти таймер через {timer_phrase}
+      - таймер через {timer_phrase}
   StationTimerStatus:
     data:
     - sentences:

@@ -421,6 +421,14 @@ StationAlarmRelative:
     - stop: "station_alarm_relative"
       response_variable: alarm_result
 
+StationAlarmRelativeUnclear:
+  # A relative alarm phrase the closed duration lists did not parse. Answer
+  # locally so the built-in media search never starts music; do not guess a
+  # duration and do not call the scheduler.
+  speech:
+    text: "Не понял, через сколько поставить будильник. Скажи, например, через час."
+  action: []
+
 StationAlarmStatus:
   speech:
     text: >-
@@ -511,6 +519,14 @@ StationTimerStart:
       response_variable: timer_result
     - stop: "station_timer_start"
       response_variable: timer_result
+
+StationTimerRelativeUnclear:
+  # Same guard as StationAlarmRelativeUnclear: «поставь таймер через …» must
+  # not reach the built-in media search, and the timer must not start with an
+  # invented duration. Explicit «на N минут» stays in StationTimerStart.
+  speech:
+    text: "Не понял, на сколько поставить таймер. Скажи, например, на десять минут."
+  action: []
 
 StationTimerStatus:
   speech:

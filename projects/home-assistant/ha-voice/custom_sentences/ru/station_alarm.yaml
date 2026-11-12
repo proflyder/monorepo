@@ -399,6 +399,53 @@ lists:
       out: По выходным
   alarm_name:
     wildcard: true
+  # Relative durations that carry no separate numeral. They are closed lists so
+  # HassIL normalizes the words to the same hours/minutes slots as «через 1 час»;
+  # fractional hours are converted to minutes by script.schedule_alarm_create_relative.
+  alarm_rel_hours:
+    values:
+    - in: час
+      out: '1'
+    - in: часик
+      out: '1'
+    - in: один час
+      out: '1'
+    - in: полтора часа
+      out: '1.5'
+    - in: полтора
+      out: '1.5'
+    - in: пару часов
+      out: '2'
+    - in: пара часов
+      out: '2'
+    - in: несколько часов
+      out: '2'
+  alarm_rel_minutes:
+    values:
+    - in: минуту
+      out: '1'
+    - in: минута
+      out: '1'
+    - in: одну минуту
+      out: '1'
+    - in: пару минут
+      out: '2'
+    - in: пара минут
+      out: '2'
+    - in: пару минуточек
+      out: '2'
+    - in: несколько минут
+      out: '5'
+    - in: полчаса
+      out: '30'
+    - in: пол часа
+      out: '30'
+    - in: полчасика
+      out: '30'
+  # Free text after «через» that the closed duration lists could not parse.
+  # It only powers the clarification guard, never a scheduler call.
+  alarm_phrase:
+    wildcard: true
   alarm_all:
     values:
     - in: все
@@ -431,8 +478,32 @@ intents:
       - '[поставь|установи|заведи|включи] будильник через {alarm_minute:minutes} минут[у|ы]'
       - '[поставь|установи|заведи|включи] будильник через {alarm_hour:hours} час[а|ов]'
       - '[поставь|установи|заведи|включи] будильник через {alarm_hour:hours} час[а|ов] [и] {alarm_minute:minutes} минут[у|ы]'
+      - '[поставь|установи|заведи|включи] будильник через {alarm_rel_hours:hours}'
+      - '[поставь|установи|заведи|включи] будильник через {alarm_rel_minutes:minutes}'
       - '[поставь|установи|заведи|включи] будильник {alarm_name:name} через {alarm_minute:minutes} минут[у|ы]'
       - '[поставь|установи|заведи|включи] будильник {alarm_name:name} через {alarm_hour:hours} час[а|ов] [и {alarm_minute:minutes} минут[у|ы]]'
+      - 'разбуди меня через {alarm_minute:minutes} минут[у|ы]'
+      - 'разбуди меня через {alarm_hour:hours} час[а|ов]'
+      - 'разбуди меня через {alarm_hour:hours} час[а|ов] [и] {alarm_minute:minutes} минут[у|ы]'
+      - 'разбуди меня через {alarm_rel_hours:hours}'
+      - 'разбуди меня через {alarm_rel_minutes:minutes}'
+      - 'будильник через {alarm_minute:minutes} минут[у|ы]'
+      - 'будильник через {alarm_hour:hours} час[а|ов] [и {alarm_minute:minutes} минут[у|ы]]'
+      - 'будильник через {alarm_rel_hours:hours}'
+      - 'будильник через {alarm_rel_minutes:minutes}'
+  StationAlarmRelativeUnclear:
+    # Guard: a relative alarm phrase that the closed lists above could not
+    # parse (for example «через сутки» or «через 90 минут») must never fall
+    # through to the built-in HassMediaSearchAndPlay sentence «<play>
+    # {search_query}», which used to answer «Воспроизвожу» and start music.
+    # Custom sentences outrank built-in ones, so this asks a short question
+    # instead. The valid relative sentences match with more literal words and
+    # win over this wildcard.
+    data:
+    - sentences:
+      - '[поставь|установи|заведи|включи] будильник через {alarm_phrase}'
+      - 'разбуди меня через {alarm_phrase}'
+      - 'будильник через {alarm_phrase}'
   StationAlarmStatus:
     data:
     - sentences:

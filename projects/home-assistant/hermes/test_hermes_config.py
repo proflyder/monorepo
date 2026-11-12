@@ -124,6 +124,18 @@ class HermesConfigTests(unittest.TestCase):
         for marker in ("Рикардо", "Никогда не называй", "URL", "web_search", "music_search", "Будильники", "искажённым", "Похоже", "180", "Комп включается 1–2 минуты"):
             assert marker in prompt
 
+    def test_voice_prompt_forbids_guessed_alarm_durations(self):
+        # Live regression 2026-11-12: Hermes called
+        # schedule_alarm_create_relative(hours=0, minutes=0, name="через час")
+        # and the voice path announced a one-minute alarm. The prompt must make
+        # an unclear duration a question, never an invented 1-minute alarm.
+        prompt = (ROOT / "projects" / "home-assistant" / "hermes" / "voice_prompt.txt").read_text()
+        soul = (ROOT / "projects" / "home-assistant" / "hermes" / "SOUL.md").read_text()
+        for marker in ("hours=0", "одну минуту", "name", "вопрос о времени"):
+            assert marker in prompt, marker
+        assert "задай один короткий вопрос о времени" in soul
+        assert "ничего не создавай наугад" in soul
+
     def test_voice_layers_require_infra_confirmation(self):
         prompt = (ROOT / "projects" / "home-assistant" / "hermes" / "voice_prompt.txt").read_text()
         for marker in ("infra_status", "infra_report", "infra_prepare_restart",

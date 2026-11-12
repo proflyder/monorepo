@@ -1993,22 +1993,45 @@ schedule_alarm_create:
 
 schedule_alarm_create_relative:
   alias: "Scheduler: create relative alarm"
+  description: >-
+    Create a one-shot alarm N hours/minutes from now. hours may be fractional
+    («через полтора часа» is hours: 1.5). At least one of hours/minutes must be
+    greater than zero; 0/0 is an error and creates nothing. name is only an
+    explicit alarm label (for example «Работа»), never the recognized command
+    text.
   mode: single
   fields:
     hours:
-      description: "Hours from now"
+      description: >-
+        Hours from now, 0-23. «через час» = 1, «через полтора часа» = 1.5,
+        «через два часа» = 2. Use 0 only when minutes is greater than 0.
       example: 1
+      required: false
     minutes:
-      description: "Minutes from now"
+      description: >-
+        Minutes from now, 0-59. «через полчаса» = 30, «через N минут» = N.
+        Use 0 only when hours is greater than 0; hours=0 and minutes=0 is an
+        error.
       example: 30
+      required: false
     name:
-      description: "Optional alarm label"
+      description: >-
+        Optional explicit alarm label the user named (for example «Работа»).
+        Never pass the phrase itself: «через час» is not a label.
       example: "Работа"
+      required: false
   sequence:
     - variables:
-        hours_num: "{{ hours | default(0) | int(0) }}"
-        minutes_num: "{{ minutes | default(0) | int(0) }}"
-        total_minutes: "{{ [1, (hours_num * 60) + minutes_num] | max | int }}"
+        hours_num: "{{ hours | default(0) | float(0) }}"
+        minutes_num: "{{ minutes | default(0) | float(0) }}"
+        # Fractional hours («через полтора часа» = 1.5) become whole minutes.
+        total_minutes: "{{ ((hours_num * 60) + minutes_num) | round(0) | int }}"
+        # Hermes used to pass name="через час"; a command phrase is not a label.
+        name_text: "{{ name | default('') | string | trim }}"
+        name_lower: "{{ name_text | lower }}"
+        name_looks_like_command: >-
+          {{ 'через' in name_lower or 'будильник' in name_lower or 'таймер' in name_lower }}
+        relative_label: "{{ '' if name_looks_like_command else name_text }}"
         # HA (2026.10) cannot represent a datetime as a script variable value:
         # the native value is rendered to str, so `.date()` on it fails.
         # Numbers/dicts/lists keep their type. Keep one epoch integer and derive
@@ -2017,6 +2040,21 @@ schedule_alarm_create_relative:
         relative_today: "{{ now().timestamp() | timestamp_custom('%Y-%m-%d', true) }}"
         relative_day_date: "{{ relative_target_ts | timestamp_custom('%Y-%m-%d', true) }}"
         relative_day: "{{ 'завтра' if relative_day_date != relative_today else '' }}"
+    # Fail closed: «через непонятно что» must not become a one-minute alarm.
+    - if:
+        - condition: template
+          value_template: >-
+            {{ (hours_num | float) < 0 or (minutes_num | float) < 0
+               or (total_minutes | int) < 1 }}
+      then:
+        - variables:
+            relative_error: >-
+              {{ {'status': 'error',
+                  'text': 'Не понял, через сколько поставить будильник.',
+                  'schedule_id': '',
+                  'label': ''} }}
+        - stop: "schedule_alarm_create_relative"
+          response_variable: relative_error
     - service: script.schedule_alarm_create
       data:
         hour: "{{ relative_target_ts | timestamp_custom('%H', true) | int(0) }}"
@@ -2024,7 +2062,7 @@ schedule_alarm_create_relative:
         second: "{{ relative_target_ts | timestamp_custom('%S', true) | int(0) }}"
         day: "{{ relative_day }}"
         repeat: "Однократно"
-        name: "{{ name | default('') }}"
+        name: "{{ relative_label }}"
       response_variable: relative_result
     - stop: "schedule_alarm_create_relative"
       response_variable: relative_result
