@@ -70,23 +70,23 @@ intents:
   StationTimeRouteAlarm:
     data:
     - sentences:
-      - '{time_command:command} [мне|у меня] [будильник|будильники|будильника|будильников] [{time_phrase:time_phrase}]'
-      - '[будильник|будильники|будильника|будильников] [{time_phrase:time_phrase}]'
-      - 'сколько осталось [на] [будильнике|будильника]'
-      - '[что|статус] [с] [будильником|будильника]'
+      - '{time_command:command} [мне|у меня] (будильник|будильники|будильника|будильников) [{time_phrase:time_phrase}]'
+      - '(будильник|будильники|будильника|будильников) [{time_phrase:time_phrase}]'
+      - 'сколько осталось [на] (будильнике|будильника)'
+      - '[что|статус] [с] (будильником|будильника)'
   StationTimeRouteTimer:
     data:
     - sentences:
-      - '{time_command:command} [мне|у меня] [таймер|таймеры|таймера|таймеров] [{time_phrase:time_phrase}]'
-      - '[таймер|таймеры|таймера|таймеров] [{time_phrase:time_phrase}]'
-      - 'сколько осталось [на] [таймере|таймера]'
-      - '[что|статус] [с] [таймером|таймера]'
+      - '{time_command:command} [мне|у меня] (таймер|таймеры|таймера|таймеров) [{time_phrase:time_phrase}]'
+      - '(таймер|таймеры|таймера|таймеров) [{time_phrase:time_phrase}]'
+      - 'сколько осталось [на] (таймере|таймера)'
+      - '[что|статус] [с] (таймером|таймера)'
   StationTimeRouteReminder:
     data:
     - sentences:
-      - '{time_command:command} [мне|у меня] [напоминание|напоминания|напоминании] [{time_phrase:time_phrase}]'
-      - '[напоминание|напоминания|напоминании] [{time_phrase:time_phrase}]'
-      - 'сколько осталось [до] [напоминания|напоминании]'
+      - '{time_command:command} [мне|у меня] (напоминание|напоминания|напоминании) [{time_phrase:time_phrase}]'
+      - '(напоминание|напоминания|напоминании) [{time_phrase:time_phrase}]'
+      - 'сколько осталось [до] (напоминания|напоминании)'
   StationTimeRouteWake:
     data:
     - sentences:
