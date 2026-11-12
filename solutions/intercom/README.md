@@ -163,11 +163,12 @@ bazelisk test //solutions/intercom/...
 ## Деплой
 
 Манифесты — `projects/home/kubernetes/intercom/`, юнит CI — `intercom` в
-`platform/ci/units.mjs`. Это полноценный deploy-юнит: PR CI собирает
-`ghcr.io/proflyder/intercom` и публикует `tree-<hash>`; merge в `develop`
-продвигает проверенный digest (`DEPLOY_NO_BUILD=1`, build-once) и катит
-Deployment через `deploy.sh`. Откат — fix forward (`rollback.kind:
-forward-only`): состояние звонков живёт только в памяти.
+`platform/ci/units.mjs`. PR CI собирает `ghcr.io/proflyder/intercom` и
+публикует `tree-<hash>`; merge в `develop` пинует проверенный digest
+(`DEPLOY_NO_BUILD=1`, build-once) в `deploy/home-apps`, а Flux
+(`Kustomization/app-intercom`) применяет Deployment из `develop`. Откат —
+revert pins-коммита или `flux suspend`; ручного deploy-скрипта нет, а
+состояние звонков живёт только в памяти (`rollback.kind: forward-only`).
 
 Секреты:
 
@@ -175,13 +176,15 @@ forward-only`): состояние звонков живёт только в п�
   приложения, ESO кладёт его в ключ `phone_token` секрета `intercom`;
 - OpenBao `secret/k8s/home-assistant/intercom` → `station_token` (device
   secret, ≥32 случайных байта, не равен токену приложения);
-- `secret/ci/deploy-home` → `intercom_env`: `INTERCOM_NODE_PORT` (30097);
-- локальный `secrets/home/intercom.env` — только для ручного `deploy.sh`.
+- `secret/k8s/flux-system/app-settings` → `INTERCOM_NODE_PORT` (30097)
+  через `Secret/flux-app-settings`;
+- локальный `secrets/home/intercom.env` — только для разовой ручной
+  проверки, не для деплоя.
 
 ESO-манифест применяется один раз:
 `mise run kubectl -- apply -f projects/home/kubernetes/intercom/manifests/external-secrets.yaml`.
 HTTPS-имя `intercom.home.<home-suffix>` описано в
-`projects/home/kubernetes/ingress/manifests/routes.yaml` и появляется после
+`projects/home/kubernetes/ingress/routes/routes.yaml` и появляется после
 обычного деплоя ingress (`INTERCOM_HOST` вычисляется из `HOME_DOMAIN`).
 NodePort закрыт host-фильтром `projects/home/kubernetes/scheduler/nft`:
 источник — только LAN/VPN и pod CIDR.

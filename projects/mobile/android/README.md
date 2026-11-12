@@ -53,8 +53,10 @@ Current device acceptance and remaining work are tracked in
 - The catalog comes from the home control service (`GET /v1/catalog`); nothing
   is hard-coded in the app. Names, rooms, icons, and hidden flags come from Home
   Assistant.
-- Devices are lights/switches. HA scripts are no longer shown on Home; native
-  scenarios live in the **Scenarios** tab and in Quick actions.
+- Devices are lights/switches; the station also adds two `volume` rows (main
+  volume with mute/unmute and announcement volume) that open the shared volume
+  sheet. HA scripts are no longer shown on Home; native scenarios live in the
+  **Scenarios** tab and in Quick actions.
 - The **live rows** block at the top is hidden when there is nothing to show: it
   merges enabled alarms, running/paused timers (with a local one-second
   countdown) and reminders that fire within the next 24 hours into at most three
@@ -63,15 +65,15 @@ Current device acceptance and remaining work are tracked in
   timer row has a small pause/resume button, and tapping a row opens its section.
   Data comes from the existing feature repositories through their API modules.
   The hub refreshes on resume and pull-to-refresh.
-- **Quick actions** are pinned tiles. Long-press a device in a room group or a
-  native scenario in the scenario list to **Pin to Home** / **Unpin**. Tiles are
-  ordered by pin time and kept in DataStore. A non-light device tile toggles on
-  tap; a light tile opens its brightness/color sheet on tap (long press also
-  opens it); long-press on a non-light device pins/unpins it. A scenario tile
-  runs it, and the "Say on the station" tile opens the speak dialog. On first
+- **Quick actions** open from a FAB as a speed-dial overlay: tapping a row
+  runs the action, long-pressing a device or scenario pins/unpins it. The dial
+  lists pinned devices, scenarios, the "Say on the station" action, the wake
+  marks and the built-in Call tile; order and set are kept in DataStore. Pins
+  are changed by long-pressing a device in a room group or a native scenario in
+  the scenario list (**Pin to Home** / **Unpin**). A non-light device tile
+  toggles on tap; a light tile opens its brightness/color sheet on tap. On first
   launch the speak action and the native **Blackout** / **Work mode** scenarios
-  (when they exist) are pinned. The built-in Call tile is always present, so the
-  empty-quick-actions hint is currently unreachable.
+  (when they exist) are pinned. The built-in Call item is always present.
 - Filter chips (All / Lights / Switches, plus room filters) are persisted in
   DataStore and restored on launch. Room sections are collapsible; the folded
   state is UI-only.

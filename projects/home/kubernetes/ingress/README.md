@@ -78,7 +78,7 @@ DNS: A-записи `ha`, `grafana`, `alarms`, `control`, `currency`, `intercom`
 `intercom.home.<home-suffix>` — сервис сигналинга звонков (`home-assistant/intercom:8099`).
 `Watch` — долгоживущий server-streaming ответ Connect поверх HTTP/1.1;
 маршрут задаёт `responseForwarding.flushInterval: 100ms`, а в
-`values/traefik.yaml` для `websecure` выставлены `readTimeout: 60s`,
+`traefik/values.yaml` для `websecure` выставлены `readTimeout: 60s`,
 `writeTimeout: 0s`, `idleTimeout: 1800s`, чтобы ответ не буферизовался и не
 обрывался по таймауту. NodePort остаётся аварийным путём.
 

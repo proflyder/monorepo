@@ -39,7 +39,7 @@
 
 | Документ | Содержимое |
 |---|---|
-| [`STATION-SOFTWARE.md`](STATION-SOFTWARE.md) | состав ПО колонки, манифест и `station-audit`, план этапов 2–5 |
+| [`STATION-SOFTWARE.md`](STATION-SOFTWARE.md) | состав ПО колонки, манифест и `station-audit` |
 | [`PROVISIONING.md`](PROVISIONING.md) | BLE gateway / восстановление Wi-Fi |
 | [`OTA-FORTRESS.md`](OTA-FORTRESS.md) | OTA/ADB-защита |
 | [`WAKE-WORD.md`](WAKE-WORD.md) | сборка и установка «Рикардо» |

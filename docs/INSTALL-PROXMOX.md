@@ -58,7 +58,7 @@ gateway, MAC. Не переиспользовать старый config-drive in
 
 - HAOS — восстановить supported backup через Supervisor, проверить
   `internal_url`, trusted proxy, add-ons MA/Matter;
-- K3s VM — восстановить data/PV/Helm по `KUBERNETES-OPERATIONS.md`;
+- K3s VM — восстановить data/PV и bootstrap Flux по `KUBERNETES-OPERATIONS.md`;
 - проверить `.28:8123`, `.27:30300/`, HTTPS ingress, voice/music.
 
 ## Wi-Fi uplink

@@ -46,7 +46,7 @@ teardown восстанавливает source/volume.
 | Heartbeat Worker | grace-логика, auth, KV transitions, Telegram-доставка (моки) |
 | HA live | API, entities, text intents, optional mutation/alarm |
 | Gateway live | bearer auth, status shape, method guards |
-| MCP gateway | Rust/Bazel unit (фейки backend'ов), каталог↔RBAC, contract `deploy.sh`, fake SSH |
+| MCP gateway | Rust/Bazel unit (фейки backend'ов), каталог↔RBAC и контракт манифестов, fake SSH |
 | bb plugins | `node --test` диспетчера и `profiles`; контракт `params.json` с обеих сторон |
 | Voice routing | Rust-юнит `solutions/voice-proxy`, `test_voice_routing_contract.py`, мост `test_bb_dispatch.py` |
 | Pulsar Rust | `bazel test //projects/station/pulsar/satellite/...` (fmt/clippy/tests, Linux) и `bazel build -c opt --platforms=//platform/bazel/zig:<arch>_linux //projects/station/pulsar/satellite:station_binary` для `aarch64`/`armhf` — CI-юниты `pulsar-bazel` (`_unit.yml`) и `pulsar` (`_native.yml`) |

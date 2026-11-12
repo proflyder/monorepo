@@ -24,7 +24,8 @@ Ethernet при carrier, иначе Wi-Fi. NAT и PCI passthrough не треб�
 VPN-сервер (ocserv) разворачивается отдельным unprivileged CT 102 `vpn`
 скриптами [vpn](vpn/): создание LXC, установка ocserv с nftables,
 пользователи и клиентские сертификаты. Публичный сертификат Let's Encrypt
-продлевается автоматически (DNS-01 Cloudflare); группа `ci` — только до K3s.
+продлевается автоматически (DNS-01 Cloudflare); группа `ci` — только до узла
+K3s по `tcp/443`.
 Проброс на роутере — только `443/tcp+udp`; подробности и откат — в
 [vpn/README.md](vpn/README.md).
 

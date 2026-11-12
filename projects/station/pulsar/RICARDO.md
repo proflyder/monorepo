@@ -5,7 +5,7 @@ installation. The code lives in the monorepo at `projects/station/pulsar/`; rele
 versions `v0.5.10NN` published to GHCR (see «Релизы и деплой»), and the station runs the
 latest such release, the current one is recorded in the monorepo `docs/STATE.md`.
 
-Base: `Morvex885/pulsar` `v0.5.4`, merged with the earlier upstream merges kept in history.
+Base: `Morvex885/pulsar` `v0.6.1` (history keeps the earlier merges since `v0.5.4`).
 Deliberate deviations from upstream are listed below.
 
 ## Upstream merge и Cargo.toml
@@ -199,9 +199,9 @@ missing; it does not silently fall back to «Алиса».
 (`projects/station/pulsar/`). GitHub Releases и теги в монорепозитории запрещены; источник
 обновлений станции — OCI-пакет `ghcr.io/proflyder/pulsar-firmware`.
 
-Версия продолжает нумерацию upstream: `v<upstream major.minor>.<1000+N>` — например
-`v0.5.1008`; после merge upstream `v0.6.x` — `v0.6.1001`. Патч-номер 1000+ больше любого
-upstream-патча, поэтому сравнение версий (`vMAJOR.MINOR.PATCH`) считает релиз новее.
+Версия форка — `v0.5.10NN`: major.minor 0.5 сохраняется, чтобы patch-номер 1000+ был больше любого
+upstream-патча; `v0.6.1001` появится только при полном переходе на upstream 0.6.x. Патч-номер 1000+
+больше любого upstream-патча, поэтому сравнение версий (`vMAJOR.MINOR.PATCH`) считает релиз новее.
 
 1. Изменить `projects/station/pulsar/VERSION` в рабочей ветке и открыть обычный PR в `develop`.
 2. Каждый PR, затрагивающий Pulsar, уже собирает release-shaped артефакт: обе архитектуры с

@@ -13,7 +13,7 @@ BLE gateway остаются на станции. Версии зафиксир�
 - [Дашборды и мониторинг](../../home-assistant/observability/README.md).
 - [HTTPS ingress Traefik + cert-manager](ingress/).
 - [Nexus — кэш артефактов для CI](nexus/).
-- [Flux — pull-based GitOps для платформы, observability, Vaultwarden и Nexus](flux/).
+- [Flux — pull-based GitOps для платформы, observability, Vaultwarden, Nexus и всех деплой-юнитов приложений](flux/).
 - [OpenBao](openbao/).
 - [External Secrets Operator](external-secrets/).
 - [Hermes voice-proxy firewall](voice-firewall/).
@@ -47,5 +47,5 @@ runbook (`docs/KUBERNETES-OPERATIONS.md`).
 обслуживает Traefik (`hostNetwork`, `80/443`, IP allow-list) с
 wildcard-сертификатом Let's Encrypt от cert-manager; см. [ingress/](ingress/).
 Вход снаружи — собственный VPN (ocserv, CT `102`); CI ходит группой `ci`
-только до K3s `tcp/{443,6443}`. Аварийный доступ к host — LAN/Wi-Fi или
-Ethernet. Реальные URL и credentials — в secrets.
+только до узла K3s по `tcp/443` (Traefik → HA/OpenBao). Аварийный доступ к
+host — LAN/Wi-Fi или Ethernet. Реальные URL и credentials — в secrets.

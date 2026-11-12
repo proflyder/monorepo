@@ -25,9 +25,10 @@
 - Бинарник и device-откат (`pulsar.prev`) — `/data/pulsar`.
 - Изменяемые исходники — `projects/station/pulsar/` (монорепозиторий).
 
-База — upstream tag `v0.5.4`, commit `f1f5b17`; установленная версия —
-`docs/STATE.md`. Upstream вливается патчем (`git diff vA..vB` →
-`git apply -3 --directory=projects/station/pulsar`), см. `docs/OPERATIONS.md`.
+База — upstream tag `v0.6.1` (предыдущая — `v0.5.4`, commit `f1f5b17`);
+установленная версия — `docs/STATE.md`. Upstream вливается патчем (`git diff
+vA..vB` → `git apply -3 --directory=projects/station/pulsar`), см.
+`docs/OPERATIONS.md`.
 ALSA ABI armhf обрабатывается runtime-обёрткой `pulsar-alsa`.
 
 ## Сборка
