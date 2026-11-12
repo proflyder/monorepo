@@ -19,7 +19,7 @@ object AlarmValidation {
     )
 
     fun validate(draft: AlarmDraft): RemoteFailure? {
-        if (draft.label.trim().isEmpty()) return RemoteFailure.Validation(Field.LABEL)
+        // A blank name is valid: [withDefaultLabel] fills it before the request.
         if (draft.label.trim().length > 120) return RemoteFailure.Validation(Field.LABEL)
         if (draft.hour !in 0..23 || draft.minute !in 0..59) {
             return RemoteFailure.Validation(Field.TIME)

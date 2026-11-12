@@ -1,5 +1,6 @@
 package dev.proflyder.home.feature.alarms.presentation
 
+import android.content.Context
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -24,6 +25,7 @@ import dev.proflyder.home.feature.alarms.defaultAlarmTime
 import dev.proflyder.home.feature.alarms.domain.DeleteAlarm
 import dev.proflyder.home.feature.alarms.domain.LoadAlarm
 import dev.proflyder.home.feature.alarms.domain.SaveAlarm
+import dev.proflyder.home.feature.alarms.impl.R
 import dev.proflyder.home.feature.alarms.quickOffsetTime
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesIntoSet
@@ -56,6 +58,8 @@ class AlarmEditorViewModel(
     private val deleteAlarm: DeleteAlarm,
     private val settings: ConnectionSettingsStore,
     private val savedState: SavedStateHandle,
+    /** Localized name used when the user leaves the label empty. */
+    private val defaultLabel: String,
 ) : BaseViewModel<AlarmEditorUiState>(restoreState(savedState)) {
     private val restoredDraft: AlarmEditorDraft? = AlarmEditorDraftCodec.fromMap(
         savedState.keys().associateWith { key -> savedState.get<Any?>(key) },
@@ -170,7 +174,7 @@ class AlarmEditorViewModel(
         }
         mutableState.value = current.copy(saving = true, error = null)
         viewModelScope.launch {
-            when (val result = saveAlarm(current.existing, draft, key)) {
+            when (val result = saveAlarm(current.existing, draft, key, defaultLabel)) {
                 is Outcome.Success -> {
                     createIdentity.markSucceeded()
                     clearPendingKey()
@@ -309,11 +313,19 @@ class AlarmEditorViewModelFactoryContributor(
     private val saveAlarm: SaveAlarm,
     private val deleteAlarm: DeleteAlarm,
     private val settings: ConnectionSettingsStore,
+    private val context: Context,
 ) : ViewModelFactoryContributor {
     override val viewModelClass: Class<out ViewModel> = AlarmEditorViewModel::class.java
 
     override fun createFactory() = SavedStateViewModelFactory { savedState ->
-        AlarmEditorViewModel(loadAlarm, saveAlarm, deleteAlarm, settings, savedState)
+        AlarmEditorViewModel(
+            loadAlarm = loadAlarm,
+            saveAlarm = saveAlarm,
+            deleteAlarm = deleteAlarm,
+            settings = settings,
+            savedState = savedState,
+            defaultLabel = context.getString(R.string.alarms_label_default),
+        )
     }
 }
 
