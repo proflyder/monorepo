@@ -5,12 +5,12 @@ metadata:
   namespace: flux-system
   annotations:
     proflyder.dev/source: "initial pin from live cluster 2026-11-10"
-    proflyder.dev/source-commit: "56612564adad7d85e13f63446e214520202a1bf2"
-    proflyder.dev/source-tree: "89889bc2013429ee623b768d5260c8a5401b43e9"
-    proflyder.dev/verified-at: "2026-11-12T20:35:26Z"
-    proflyder.dev/run: "https://github.com/proflyder/monorepo/actions/runs/43301044354"
+    proflyder.dev/source-commit: "bc5fab8b0247fbdff7f1c003817c1b8961623081"
+    proflyder.dev/source-tree: "4a00708cb71a7269d4c66d98900fded74a376c28"
+    proflyder.dev/verified-at: "2026-11-12T20:39:01Z"
+    proflyder.dev/run: "https://github.com/proflyder/monorepo/actions/runs/43302215244"
 data:
-  BUILD_ID: "56612564adad"
+  BUILD_ID: "bc5fab8b0247"
   CURRENCY_BOT_IMAGE: "ghcr.io/proflyder/currency-bot@sha256:e8accf9a60b23f0a05520c9c745c951c05b96c8e22eda79c6d29570779c9daed"
   HA_BRIDGE_IMAGE: "ghcr.io/proflyder/ha-bridge@sha256:24660a671a7a675e6449e890b5fa4f44a9da5ac3a852c63942495eed7d35a7d8"
   HA_CONFIG_SYNC_IMAGE: "ghcr.io/proflyder/ha-config-sync@sha256:2d7e9ab595d770a548235d46e1478fe68bc1dae0416391df344fc09267362464"
@@ -19,7 +19,7 @@ data:
   HEALTH_EXPORTER_IMAGE: "ghcr.io/proflyder/health-exporter@sha256:63d4a5d52976cb1c9b24e2d5aacf591a106c6d941db8e4c46fb3cb7d1de38b49"
   HERMES_CONFIG_IMAGE: "ghcr.io/proflyder/hermes-config@sha256:aa739704f84b4e75fe2c8cb8de57798ad53d73413b6cce0d65eef6656246e3df"
   HERMES_IMAGE: "ghcr.io/proflyder/hermes@sha256:30daafe3fa413c64d2807211f84aca20b65796ea410ea0c2bf5f5c65930f0970"
-  HOME_DEPLOY_IMAGE: "ghcr.io/proflyder/home-deploy@sha256:452fd82a86a0095863235bd408cff19eb9a3fa543a9e73238fdf352f4d7543b2"
+  HOME_DEPLOY_IMAGE: "ghcr.io/proflyder/home-deploy@sha256:f2ecc0ce8c20ebe0ddaf115dcb6aba2edec40e3b49e0fa5fffdd332fa2712d2e"
   INTERCOM_IMAGE: "ghcr.io/proflyder/intercom@sha256:aaa5d8166118113a4dd88738b648ef3c19191f951204ddbac111ca60f8d01f11"
   MCP_GATEWAY_IMAGE: "ghcr.io/proflyder/mcp-gateway@sha256:c5c1a781d89f207e7193f0e79bd03ba1f288b6a1c06a3774ed51a91b01b8f783"
   SCHEDULER_IMAGE: "ghcr.io/proflyder/scheduler@sha256:9d82d900758a8af393ea618f1784638ee82aa203a015b3a297ee0eb5bf75a763"
