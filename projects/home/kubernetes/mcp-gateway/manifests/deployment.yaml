@@ -58,7 +58,7 @@ spec:
           imagePullPolicy: IfNotPresent
           env:
             - name: MCP_GROUPS
-              value: infra.read,infra.fix,infra.report,bb.read,bb.act
+              value: infra.read,infra.fix,infra.report,bb.read,bb.act,time
             - name: MCP_HTTP_ADDR
               value: ":8080"
             # Human-facing clock times in report/alert texts. IANA zone; the
@@ -108,6 +108,13 @@ spec:
             # Voice entry point: a separate bearer token, never the MCP token.
             - name: MCP_VOICE_TOKEN_FILE
               value: /run/secrets/mcp-gateway-voice/token
+            # Durable scheduler for the `time` tools (alarms/timers/reminders).
+            # The bearer is the scheduler's own OpenBao key; this is the same
+            # Connect JSON API Home Assistant and Android use.
+            - name: MCP_SCHEDULER_URL
+              value: http://scheduler.home-assistant.svc.cluster.local:8098
+            - name: MCP_SCHEDULER_TOKEN_FILE
+              value: /run/secrets/mcp-gateway-scheduler/token
             - name: LOG_LEVEL
               value: info
           ports:
@@ -162,6 +169,9 @@ spec:
             - name: voice
               mountPath: /run/secrets/mcp-gateway-voice
               readOnly: true
+            - name: scheduler
+              mountPath: /run/secrets/mcp-gateway-scheduler
+              readOnly: true
             - name: tmp
               mountPath: /tmp
       volumes:
@@ -208,6 +218,13 @@ spec:
         - name: voice
           secret:
             secretName: mcp-gateway-voice
+            defaultMode: 0440
+            items:
+              - key: token
+                path: token
+        - name: scheduler
+          secret:
+            secretName: mcp-gateway-scheduler
             defaultMode: 0440
             items:
               - key: token

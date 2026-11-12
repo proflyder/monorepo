@@ -1,6 +1,6 @@
 {
   "name": "mcp_tools_list_all",
-  "description": "MCP tools/list with every group enabled: 15 tools, sorted by name. Semantic comparison still pins the exact tool set, descriptions, schemas and annotations.",
+  "description": "MCP tools/list with every group enabled: 30 tools, sorted by name. Semantic comparison still pins the exact tool set, descriptions, schemas and annotations.",
   "compare": "semantic",
   "steps": [
     {
@@ -105,6 +105,171 @@
           "jsonrpc": "2.0",
           "result": {
             "tools": [
+              {
+                "annotations": {
+                  "destructiveHint": true,
+                  "openWorldHint": false,
+                  "readOnlyHint": false
+                },
+                "description": "Выключить будильник, не удаляя его. Нужен id из alarm_list или all=true для явного «выключи все будильники». Не угадывай id по времени: сначала alarm_list. Ответ подтверждает, какой будильник выключен.",
+                "inputSchema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "all": {
+                      "description": "Выключить все будильники. Используй только при явном «все».",
+                      "type": "boolean"
+                    },
+                    "id": {
+                      "description": "id будильника из alarm_list.",
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                },
+                "name": "alarm_cancel"
+              },
+              {
+                "annotations": {
+                  "destructiveHint": true,
+                  "openWorldHint": false,
+                  "readOnlyHint": false
+                },
+                "description": "Удалить будильник навсегда. Нужен id из alarm_list или all=true только при явном «удали все будильники». Не угадывай id по времени: сначала alarm_list.",
+                "inputSchema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "all": {
+                      "description": "Удалить все будильники. Используй только при явном «все».",
+                      "type": "boolean"
+                    },
+                    "id": {
+                      "description": "id будильника из alarm_list.",
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                },
+                "name": "alarm_delete"
+              },
+              {
+                "annotations": {
+                  "openWorldHint": false,
+                  "readOnlyHint": true
+                },
+                "description": "Список будильников с ближайшим срабатыванием, меткой и повтором. Используй для «какие будильники», «когда будильник», «во сколько разбудишь», а также чтобы найти id перед alarm_cancel, alarm_update, alarm_snooze или alarm_stop. Пустой список — нормальный ответ «Будильников нет.», не ошибка.",
+                "inputSchema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "include_disabled": {
+                      "description": "Показать и выключенные будильники. По умолчанию false.",
+                      "type": "boolean"
+                    }
+                  },
+                  "type": "object"
+                },
+                "name": "alarm_list"
+              },
+              {
+                "annotations": {
+                  "destructiveHint": true,
+                  "openWorldHint": false,
+                  "readOnlyHint": false
+                },
+                "description": "Поставить будильник на абсолютное время. at — только RFC3339 с офсетом (2026-11-12T22:00:00+05:00); локальное время без пояса отклоняется. Сначала вызови time_now и вычисли at из текущего времени. repeat: once (по умолчанию), daily, weekdays (по будням), weekends (по выходным). Однократный будильник — не дальше 7 дней вперёд; прошедшее время отклоняется без создания. label — только явная метка владельца («Работа»), не текст команды. Примеры: «поставь будильник через час» → at = now + 1h; «на двадцать два ноль ноль» → at = сегодня 22:00; «разбуди в семь утра по будням» → at = ближайшие 07:00, repeat=weekdays; «через полчаса» → at = now + 30m. Ответ всегда содержит итоговое локальное время для озвучки.",
+                "inputSchema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "at": {
+                      "description": "Абсолютное время RFC3339 с офсетом, например 2026-11-12T22:00:00+05:00. Не присылай локальное время без пояса.",
+                      "type": "string"
+                    },
+                    "label": {
+                      "description": "Необязательная короткая метка, названная владельцем (например, «Работа»). Не передавай сюда текст команды.",
+                      "type": "string"
+                    },
+                    "repeat": {
+                      "description": "once — один раз (по умолчанию), daily — каждый день, weekdays — по будням, weekends — по выходным.",
+                      "enum": [
+                        "once",
+                        "daily",
+                        "weekdays",
+                        "weekends"
+                      ],
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "at"
+                  ],
+                  "type": "object"
+                },
+                "name": "alarm_set"
+              },
+              {
+                "annotations": {
+                  "destructiveHint": true,
+                  "openWorldHint": false,
+                  "readOnlyHint": false
+                },
+                "description": "Отложить звонящий будильник на девять минут. Если id не указан, инструмент сам находит активный звонок. Используй для «отложи», «ещё девять минут», «отложи будильник». Если будильник не звонит — так и скажи.",
+                "inputSchema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "id": {
+                      "description": "id звонящего будильника. Можно не указывать: инструмент сам найдёт активный звонок.",
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                },
+                "name": "alarm_snooze"
+              },
+              {
+                "annotations": {
+                  "destructiveHint": true,
+                  "openWorldHint": false,
+                  "readOnlyHint": false
+                },
+                "description": "Остановить звонящий будильник. Если id не указан, инструмент сам находит активный звонок. Используй для «останови будильник», «выключи звонок», «хватит», когда звонок уже идёт. Если звонка нет, ответ говорит об этом; музыку этот инструмент не трогает.",
+                "inputSchema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "id": {
+                      "description": "id звонящего будильника. Можно не указывать: инструмент сам найдёт активный звонок.",
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                },
+                "name": "alarm_stop"
+              },
+              {
+                "annotations": {
+                  "destructiveHint": true,
+                  "openWorldHint": false,
+                  "readOnlyHint": false
+                },
+                "description": "Перенести существующий будильник на новое абсолютное время RFC3339 с офсетом. Сначала alarm_list, чтобы взять id; повтор и метка сохраняются. Прошедшее время и горизонт больше 7 дней для однократного будильника отклоняются.",
+                "inputSchema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "at": {
+                      "description": "Новое абсолютное время RFC3339 с офсетом, например 2026-11-12T07:30:00+05:00.",
+                      "type": "string"
+                    },
+                    "id": {
+                      "description": "id будильника из alarm_list.",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "at"
+                  ],
+                  "type": "object"
+                },
+                "name": "alarm_update"
+              },
               {
                 "annotations": {
                   "destructiveHint": true,
@@ -390,6 +555,170 @@
                   "type": "object"
                 },
                 "name": "infra_status"
+              },
+              {
+                "annotations": {
+                  "openWorldHint": false,
+                  "readOnlyHint": true
+                },
+                "description": "Список напоминаний с временем и текстом. Используй для «какие напоминания», «что я просил напомнить». Пустой список — нормальное «Напоминаний нет.».",
+                "inputSchema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "include_disabled": {
+                      "description": "Показать и выключенные напоминания. По умолчанию false.",
+                      "type": "boolean"
+                    }
+                  },
+                  "type": "object"
+                },
+                "name": "reminder_list"
+              },
+              {
+                "annotations": {
+                  "destructiveHint": true,
+                  "openWorldHint": false,
+                  "readOnlyHint": false
+                },
+                "description": "Создать однократное напоминание на абсолютное время RFC3339 с офсетом. Сначала time_now, затем at; text — короткая суть напоминания. Примеры: «напомни завтра в девять позвонить маме» → at = завтра 09:00, text=\"позвонить маме\"; «напомни через два часа выключить духовку» → at = now + 2h. Прошедшее время и горизонт больше 7 дней отклоняются.",
+                "inputSchema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "at": {
+                      "description": "Абсолютное время RFC3339 с офсетом, например 2026-11-13T09:00:00+05:00.",
+                      "type": "string"
+                    },
+                    "text": {
+                      "description": "О чём напомнить, коротко и по делу.",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "at",
+                    "text"
+                  ],
+                  "type": "object"
+                },
+                "name": "reminder_set"
+              },
+              {
+                "annotations": {
+                  "openWorldHint": false,
+                  "readOnlyHint": true
+                },
+                "description": "Текущее локальное время дома и часовой пояс. Вызывай первым для любой фразы про время: «который час», «поставь будильник через час», «напомни завтра в девять». Возвращает RFC3339 с офсетом, человеческую строку и IANA-пояс дома (например Asia/Almaty). Никогда не вычисляй время сам: возьми now() здесь, прибавь длительность и передай alarm_set/timer_set. Пример: «поставь будильник через час» → time_now, затем alarm_set(at = now + 1 час).",
+                "inputSchema": {
+                  "additionalProperties": false,
+                  "type": "object"
+                },
+                "name": "time_now"
+              },
+              {
+                "annotations": {
+                  "destructiveHint": true,
+                  "openWorldHint": false,
+                  "readOnlyHint": false
+                },
+                "description": "Отменить таймер по id из timer_list; all=true — только при явном «отмени все таймеры». Если id не указан и активен ровно один таймер, он и отменяется.",
+                "inputSchema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "all": {
+                      "description": "Отменить все активные таймеры. Используй только при явном «все».",
+                      "type": "boolean"
+                    },
+                    "id": {
+                      "description": "id таймера из timer_list.",
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                },
+                "name": "timer_cancel"
+              },
+              {
+                "annotations": {
+                  "openWorldHint": false,
+                  "readOnlyHint": true
+                },
+                "description": "Активные таймеры: метка, остаток и состояние (идёт/пауза). Используй для «какие таймеры», «сколько осталось», а также чтобы найти id перед timer_cancel, timer_pause или timer_resume.",
+                "inputSchema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "include_finished": {
+                      "description": "Показать и завершённые таймеры. По умолчанию false.",
+                      "type": "boolean"
+                    }
+                  },
+                  "type": "object"
+                },
+                "name": "timer_list"
+              },
+              {
+                "annotations": {
+                  "destructiveHint": true,
+                  "openWorldHint": false,
+                  "readOnlyHint": false
+                },
+                "description": "Поставить таймер на паузу по id из timer_list; если активен ровно один таймер, id можно не указывать. Используй для «поставь таймер на паузу».",
+                "inputSchema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "id": {
+                      "description": "id таймера. Можно не указывать, если активен ровно один таймер.",
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                },
+                "name": "timer_pause"
+              },
+              {
+                "annotations": {
+                  "destructiveHint": true,
+                  "openWorldHint": false,
+                  "readOnlyHint": false
+                },
+                "description": "Продолжить таймер с паузы по id из timer_list; если на паузе ровно один таймер, id можно не указывать. Используй для «продолжи таймер».",
+                "inputSchema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "id": {
+                      "description": "id таймера. Можно не указывать, если на паузе ровно один таймер.",
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                },
+                "name": "timer_resume"
+              },
+              {
+                "annotations": {
+                  "destructiveHint": true,
+                  "openWorldHint": false,
+                  "readOnlyHint": false
+                },
+                "description": "Поставить таймер на длительность в секундах (1..604800, то есть до 7 дней). Сначала time_now не обязателен: длительность считается от текущего момента. Примеры: «таймер на 10 минут» → seconds=600; «на полтора часа» → seconds=5400; «на 30 секунд» → seconds=30; «таймер пицца на 20 минут» → seconds=1200, label=\"Пицца\". Ноль, отрицательное значение и больше 7 дней отклоняются без создания. Ответ проговаривает длительность.",
+                "inputSchema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "label": {
+                      "description": "Необязательная короткая метка, например «Пицца».",
+                      "type": "string"
+                    },
+                    "seconds": {
+                      "description": "Длительность таймера в секундах, от 1 до 604800 (7 дней). 10 минут — это 600.",
+                      "maximum": 604800,
+                      "minimum": 1,
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "seconds"
+                  ],
+                  "type": "object"
+                },
+                "name": "timer_set"
               }
             ]
           }

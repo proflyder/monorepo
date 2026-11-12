@@ -56,43 +56,23 @@
   (курс, по которому вы продаёте). USD — 1 знак, RUB — 2, десятичная запятая;
   если снимок старше 3 ч, добавляется «Данные от HH:MM» (Asia/Almaty).
   Ошибка API — только «Не удалось получить курс.», без деталей;
-- «поставь таймер на 5 минут», «поставь таймер пицца на 10 минут»,
-  «какие таймеры», «поставь на паузу», «продолжи», «отмени» — durable
-  таймеры `SchedulerService`; выполнение — ha-bridge;
-- «поставь будильник на 7:30», «на завтра», «по будням», «какие будильники»,
-  «выключи/удали будильник …», «отложи/останови/стоп» — durable расписания
-  `SchedulerService`; snooze и stop управляют серверным occurrence, звук
-  останавливает executor. Одно срабатывание звучит не дольше
-  `RingWindow` (900 с): по истечении scheduler ставит `STOP` и звонок
-  замолкает сам, без участия HA-таймера;
-- «поставь будильник через час», «через полчаса», «через минуту», «через
-  полтора часа», «через пару часов/минут», «через 2 часа 30 минут»,
-  «разбуди меня через …» — `StationAlarmRelative` →
-  `script.schedule_alarm_create_relative`. Слова длительности нормализуют
-  закрытые списки `alarm_rel_hours` / `alarm_rel_minutes` (дробные часы:
-  «полтора часа» = 1.5), числа — штатные `alarm_hour` / `alarm_minute`.
-  `hours=0` и `minutes=0` — ошибка «Не понял, через сколько поставить
-  будильник», а не минутный будильник; `name` принимается только как явная
-  метка, текст команды в метку не попадает;
-- абсолютное время: «на 22:00», «на двадцать два ноль ноль», «ноль-ноль»,
-  «00», «на десять ровно» (минута 0), «в десять», «десять вечера»,
-  «в десять вечера», «разбуди меня в семь»; глаголы
-  «поставь/установи/заведи/включи/сделай»;
-- нераспознанное время или длительность в фразе про будильник/таймер
-  («через сутки», «через 90 минут», «на полночь», «пораньше», «поставь
-  таймер через час») → локальные guard'ы `StationAlarmRelativeUnclear` /
-  `StationTimerRelativeUnclear` / `StationAlarmUnclear` /
-  `StationTimerUnclear`: короткий вопрос о времени. Это защита от built-in
-  `HassMediaSearchAndPlay` («<play> {search_query}»), который раньше отвечал
-  «Воспроизвожу» и включал музыку (живой инцидент 2026-11-12: STT
-  «поставь будильник на двадцать два ноль ноль»). Точные шаблоны выигрывают
-  у guard'ов по ранжированию hassil: 0 wildcard и больше литеральных слов;
-  явные «поставь таймер на N минут» по-прежнему идут в `StationTimerStart`;
-- списки `alarm_hour`/`alarm_minute` продублированы в `station_alarm.yaml` и
-  `station_schedules.yaml` (последний нужен reminder-интентам); HA мержит
-  `lists` по имени и выигрывает последний загруженный файл, поэтому копии
-  обязаны быть идентичны — это проверяет `SharedSentenceListTests`;
-- «напомни завтра в 9:00 …», «какие напоминания» — one-shot расписания
+- время (будильники, таймеры, напоминания) в HA **не парсится**: фразы
+  «поставь будильник …», «разбуди меня …», «поставь таймер …», «напомни …»,
+  «какие будильники», «отмени таймер» ловит `StationTimeRoute*`
+  (`custom_sentences/ru/station_time.yaml`) и пересылает в Hermes
+  (`conversation.hermes_agent`). Hermes вызывает инструменты mcp-gateway
+  `time_*`: сначала `time_now`, затем `alarm_set` / `timer_set` /
+  `reminder_set` с абсолютным RFC3339. Источник истины — durable
+  `SchedulerService`; звук по-прежнему играет ha-bridge через
+  `script.alarm_start` / `schedule_announce` / `alarm_stop`. Никаких
+  `alarm_hour`/`alarm_minute`/`timer_minutes` и intent-скриптов
+  `StationAlarmSet/Relative/Update/...` больше нет;
+- локально остаются только мгновенные команды без параметров:
+  «стоп» / «хватит» / «останови будильник» / «выключи звонок» →
+  `StationAlarmStop` и «отложи будильник» / «ещё девять минут» →
+  `StationAlarmSnooze`. Они работают, даже если Hermes или сеть недоступны;
+- «напомни завтра в 9:00 …», «какие напоминания» — тот же путь Hermes →
+  `reminder_set` / `reminder_list`; хранятся как one-shot
   `SCHEDULE_KIND_REMINDER` в `SchedulerService`;
 - «запомни …», «покажи заметки», «что я записал про …» — `todo.notes`
   (заметки остаются в Home Assistant без изменений);
@@ -153,11 +133,13 @@ Spotify 429 обрабатывается голосовым ответом; по
 `music_assistant.play_media`; Connect-ветка — Spotify Web API. Не смешивать:
 Connect сохраняет source, MA переключает на MA Queue.
 
-Pipeline `Рикардо` теперь использует `conversation.hermes_agent` с
-`prefer_local_intents: true`: локальные команды (таймеры, будильник,
-громкость, музыка, простой дом) идут первыми; свободная речь/веб-поиск —
-в Hermes. Если Hermes недоступен, локальные команды должны продолжать
-работать.
+Pipeline `Рикардо` использует `conversation.hermes_agent` с
+`prefer_local_intents: true`: локальные команды (свет, музыка, громкость,
+простой дом, мгновенные «стоп/отложи») идут первыми. Время — исключение:
+`StationTimeRoute*` перехватывает фразы про будильник/таймер/напоминание
+раньше built-in `HassMediaSearchAndPlay` и передаёт их Hermes, который
+работает через MCP `time`-инструменты. Если Hermes недоступен, локальные
+команды и кнопка «стоп» продолжают работать.
 
 ## STT и устойчивость
 
@@ -178,8 +160,9 @@ Pipeline `Рикардо` теперь использует `conversation.hermes
 Pulsar (Алиса)
   → HA Assist pipeline «Рикардо»
   → custom_sentences/ru/station_control.yaml
-  → custom_sentences/ru/station_alarm.yaml
-  → custom_sentences/ru/station_schedules.yaml
+  → custom_sentences/ru/station_time.yaml   (время → Hermes → MCP `time`)
+  → custom_sentences/ru/station_alarm.yaml  (локальные «стоп/отложи»)
+  → custom_sentences/ru/station_schedules.yaml (заметки)
   → intent_scripts.yaml
       ├── rest_command → station HTTP :8099 (gateway/bluetooth)
       ├── media_player.volume_set → Pulsar
@@ -253,15 +236,16 @@ idempotency key от `context.id`. Метка не найдена или schedul
 - `schedules_dashboard.yaml` — dashboard «Помощник» (read-only pointers;
   notes remain editable; отдельный view «Голос» с профилем)
 - `test_ha_config.py` — static audio/entity/template invariants
-- `test_custom_sentences.py` — phrase matching against the real
-  `custom_sentences/ru/*.yaml` with the `hassil` best-match ranking (absolute
-  and relative alarm times, 30+ STT formulations, the anti-media-search
-  guards, and identical shared lists)
+- `test_custom_sentences.py` — phrase routing against the real
+  `custom_sentences/ru/*.yaml`: 30+ time phrases go to `StationTimeRoute*` and
+  never to the built-in media search, while the two ring commands stay local
+  and music/lights are untouched
 - `test_scheduler_contract.py` — Connect JSON request/response, resolution and
   truthful-speech contract tests (fake clock/timezone, no live calls)
 - `custom_sentences/ru/station_control.yaml`
-- `custom_sentences/ru/station_alarm.yaml`
-- `custom_sentences/ru/station_schedules.yaml` — timers/reminders/notes
+- `custom_sentences/ru/station_alarm.yaml` — только локальные «стоп/отложи»
+- `custom_sentences/ru/station_time.yaml` — маршрутизация времени в Hermes
+- `custom_sentences/ru/station_schedules.yaml` — заметки (todo.notes)
 - `custom_sentences/ru/station_currency.yaml` — курсы валют
 - `custom_sentences/ru/station_komp.yaml` — включение/выключение/блокировка/разблокировка/статус компа
 - `input_select.yaml` — `music_route`, `ricardo_voice_profile`
@@ -618,21 +602,16 @@ currency_bot_bearer: "Bearer <currency-bot API_TOKEN>"
 
 ### Голосовые операции
 
-- Создание будильника: `CreateSchedule`, `kind=SCHEDULE_KIND_ALARM`,
-  IANA timezone из `now().tzinfo`, локальное `WallTime`, `REPEAT_KIND_ONCE`
-  + `onceDate` для однократного, `DAILY`/`WEEKDAYS`/`WEEKENDS` для повторов.
-  «на завтра» и переход через полночь сохраняются; прошедшее время
-  однократного переносится на следующий день.
-- Создание напоминания: `SCHEDULE_KIND_REMINDER`, только `REPEAT_KIND_ONCE`.
-- Таймер: `StartTimer`, `durationSeconds` — строка; 1…604800 с. Значение
-  ≤ 0 по-прежнему означает 60 с; больше семи дней отклоняется с честной
-  речью.
-- Список: `ListSchedules`/`ListTimers`; пустой ответ — нормальный
-  «Будильников нет» / «Активных таймеров нет», а не ошибка.
-- Включение/выключение/удаление/изменение: id находится по точному или
-  частичному label либо времени следующего срабатывания. Несколько
-  совпадений → просьба уточнить, без массового удаления. Массовое действие
-  выполняется только при явном «все» (отдельный slot `alarm_all`).
+- Создание будильника/таймера/напоминания голосом — Hermes через
+  mcp-gateway `time`-инструменты (`alarm_set`, `timer_set`,
+  `reminder_set`) и тот же `CreateSchedule`/`StartTimer`: `kind`,
+  IANA timezone из `MCP_TIMEZONE`, локальное `WallTime`, `REPEAT_KIND_*`.
+  HA-скрипты `schedule_*` остаются для Android/совместимости и звука, но
+  Hermes их не видит (`tools.exclude`).
+- Список/изменение/отмена/удаление — `alarm_list`, `alarm_update`,
+  `alarm_cancel`, `alarm_delete`, `timer_list`, `timer_cancel`. Snooze и
+  stop используют серверный occurrence; для мгновенных «стоп/отложи» есть
+  локальные HA-intents.
 - Snooze: `SnoozeSchedule` (9 минут). Планировщик ставит STOP и отложенный
   FIRE. После 200 скрипт ждёт до 3 с, пока `alarm_ringing` выключится; если
   звук всё ещё идёт от **того же** captured schedule/event, вызывается только

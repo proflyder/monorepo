@@ -88,6 +88,33 @@ MCP client (Hermes, IDE, agent)          voice proxy
 нашёл», без кода `profile_mismatch` и без имени проекта. Запуск всегда
 двухшаговый; свободный текст проекта не принимается.
 
+### `time` (Hermes: будильники, таймеры, напоминания)
+
+Группа говорит с durable `home.v1.SchedulerService` тем же Connect JSON API,
+что Home Assistant и Android; звук по-прежнему проигрывает `ha-bridge` через
+`script.alarm_start` / `schedule_announce` / `alarm_stop`. В HA не осталось
+шаблонов времени: фразы маршрутизируются в Hermes, а Hermes зовёт эти
+инструменты.
+
+| Инструмент | Что делает |
+|---|---|
+| `time_now()` | Текущее локальное время дома (`MCP_TIMEZONE`), RFC3339 с офсетом, человеческая строка и IANA-пояс. Первый вызов для любой фразы про время. |
+| `alarm_set(at, label?, repeat?)` | Абсолютное время RFC3339 **с офсетом**. `repeat`: `once`/`daily`/`weekdays`/`weekends`. Однократный — не дальше 7 дней, прошедшее время отклоняется без создания. Создаёт тот же `CreateSchedule`, что HA: `kind=SCHEDULE_KIND_ALARM`, `payloadJson="{}"`, метка по умолчанию «Будильник HH:MM». |
+| `alarm_list(include_disabled?)` | Ближайшее срабатывание, метка, повтор; id для остальных операций. |
+| `alarm_cancel(id?, all?)` | Выключить (`SetScheduleEnabled=false`), не удаляя. |
+| `alarm_delete(id?, all?)` | Удалить навсегда. |
+| `alarm_update(id, at)` | Перенести на новое абсолютное время, сохранив повтор и метку; `expectedRevision` защищает от гонки. |
+| `alarm_snooze(id?)` / `alarm_stop(id?)` | Отложить на 9 минут / остановить; без id ищут активный звонок. |
+| `timer_set(seconds, label?)` | Длительность 1…604800 с; 0, отрицательное и больше 7 дней отклоняются. |
+| `timer_list(include_finished?)` | Остаток и состояние (идёт/пауза). |
+| `timer_cancel(id?, all?)`, `timer_pause(id?)`, `timer_resume(id?)` | Управление таймером; без id работает, если активен ровно один. |
+| `reminder_set(at, text)` / `reminder_list(include_disabled?)` | Однократные напоминания (`SCHEDULE_KIND_REMINDER`). |
+
+Ответ всегда содержит итоговое локальное время или длительность человеческим
+текстом для озвучки; ошибки планировщика озвучиваются короткой фразой, без
+технических деталей. Токен — `MCP_SCHEDULER_TOKEN_FILE`
+(`k8s/home-assistant/scheduler-auth`), URL — `MCP_SCHEDULER_URL`.
+
 ### Голосовой вход (`/v1/voice/*`)
 
 Отдельный Bearer-токен, только для voice proxy в том же namespace.
@@ -143,7 +170,7 @@ hint, не конфигурация).
 | Переменная | Обязательна | По умолчанию | Назначение |
 |---|---|---|---|
 | `MCP_AUTH_TOKEN_FILE` | да | — | Bearer-токен для `/mcp`. |
-| `MCP_GROUPS` | нет | `infra.read` | Включённые группы: `infra.read`, `infra.fix`, `infra.report`, `bb.read`, `bb.act`. |
+| `MCP_GROUPS` | нет | `infra.read` | Включённые группы: `infra.read`, `infra.fix`, `infra.report`, `bb.read`, `bb.act`, `time`. |
 | `MCP_INFRA_CATALOG_FILE` | для read/fix | — | YAML-каталог сервисов. |
 | `MCP_HTTP_ADDR` | нет | `:8080` | Адрес HTTP-сервера. |
 | `MCP_TIMEZONE` | нет | `UTC` | IANA-зона для человекочитаемого времени в текстах инструментов (заголовок отчёта). Проверяется при загрузке; для distroless-образа IANA tzdata встроена в бинарник. |
@@ -167,6 +194,8 @@ hint, не конфигурация).
 | `MCP_BB_TARGETS_FILE` | для `bb.act` | — | Allowlist личных проектов и spoken-алиасов. |
 | `MCP_BB_DISPATCHER_THREAD_ID` | для voice | — | Постоянный рабочий тред для `profile=work`. |
 | `MCP_VOICE_TOKEN_FILE` | нет | — | Включает `/v1/voice/*`; токен обязан отличаться от MCP-токена. |
+| `MCP_SCHEDULER_URL` | для `time` | — | База `home.v1.SchedulerService`, например `http://scheduler.home-assistant.svc.cluster.local:8098`. |
+| `MCP_SCHEDULER_TOKEN_FILE` | для `time` | — | Bearer планировщика (`secret/k8s/home-assistant/scheduler-auth`, ключ `token`). |
 | `MCP_PENDING_TTL` | нет | `90s` | Время жизни отложенного действия. |
 | `MCP_RESTART_COOLDOWN` | нет | `5m` | Минимальный интервал между перезапусками одного workload'а. |
 | `MCP_SELF_RESTART_DELAY` | нет | `20s` | Задержка перезапуска `self_disrupting` сервиса. |

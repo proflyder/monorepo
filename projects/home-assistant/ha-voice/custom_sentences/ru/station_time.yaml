@@ -1,0 +1,97 @@
+# Voice routing for everything time-related.
+#
+# Home Assistant runs custom sentences before the conversation agent, and the
+# built-in `HassMediaSearchAndPlay` / timer intents would otherwise swallow
+# «поставь будильник …» and start music or a local timer. These intents are not
+# alarm parsers: they recognise only the verb + a literal subject (alarm,
+# timer, reminder) and forward the phrase to Hermes
+# (`conversation.hermes_agent`). Hermes calls the mcp-gateway `time` tools
+# (`time_now`, `alarm_set`, `timer_set`, `reminder_set`, …) on the durable
+# scheduler. There are no hour/minute/period/repeat slots or time lists here.
+#
+# The subject is a literal alternation, not a slot, so the router outranks the
+# built-in `<play> {search_query}` template instead of being reduced to slots.
+#
+# The two parameterless ring commands stay local in `station_alarm.yaml`
+# (стоп / отложи / хватит / выключи звонок).
+lists:
+  time_command:
+    values:
+    - in: поставь
+      out: поставь
+    - in: поставить
+      out: поставь
+    - in: установи
+      out: установи
+    - in: заведи
+      out: заведи
+    - in: сделай
+      out: сделай
+    - in: включи
+      out: включи
+    - in: выключи
+      out: выключи
+    - in: убери
+      out: убери
+    - in: отмени
+      out: отмени
+    - in: удали
+      out: удали
+    - in: перенеси
+      out: перенеси
+    - in: измени
+      out: измени
+    - in: покажи
+      out: покажи
+    - in: скажи
+      out: скажи
+    - in: продолжи
+      out: продолжи
+    - in: возобнови
+      out: возобнови
+    - in: какие
+      out: какие
+    - in: какой
+      out: какой
+    - in: когда
+      out: когда
+    - in: во сколько
+      out: во сколько
+    - in: сколько
+      out: сколько
+    - in: статус
+      out: статус
+    - in: список
+      out: список
+  time_phrase:
+    wildcard: true
+language: ru
+intents:
+  StationTimeRouteAlarm:
+    data:
+    - sentences:
+      - '{time_command:command} [мне|у меня] [будильник|будильники|будильника|будильников] [{time_phrase:time_phrase}]'
+      - '[будильник|будильники|будильника|будильников] [{time_phrase:time_phrase}]'
+      - 'сколько осталось [на] [будильнике|будильника]'
+      - '[что|статус] [с] [будильником|будильника]'
+  StationTimeRouteTimer:
+    data:
+    - sentences:
+      - '{time_command:command} [мне|у меня] [таймер|таймеры|таймера|таймеров] [{time_phrase:time_phrase}]'
+      - '[таймер|таймеры|таймера|таймеров] [{time_phrase:time_phrase}]'
+      - 'сколько осталось [на] [таймере|таймера]'
+      - '[что|статус] [с] [таймером|таймера]'
+  StationTimeRouteReminder:
+    data:
+    - sentences:
+      - '{time_command:command} [мне|у меня] [напоминание|напоминания|напоминании] [{time_phrase:time_phrase}]'
+      - '[напоминание|напоминания|напоминании] [{time_phrase:time_phrase}]'
+      - 'сколько осталось [до] [напоминания|напоминании]'
+  StationTimeRouteWake:
+    data:
+    - sentences:
+      - 'разбуди меня {time_phrase:time_phrase}'
+  StationTimeRouteRemind:
+    data:
+    - sentences:
+      - 'напомни [мне] {time_phrase:time_phrase}'

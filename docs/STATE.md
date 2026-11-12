@@ -446,22 +446,22 @@
 
 - Pipeline «Рикардо»: GigaAM v3 CTC int8 primary, Whisper `medium-int8`
   fallback; локальные intents → Hermes только для свободной речи.
-- **Относительные будильники.** `StationAlarmRelative` понимает «через
-  час/полчаса/минуту/полтора часа/пару часов/пару минут/N часов N минут» и
-  «разбуди меня через …»; слова нормализуют `alarm_rel_hours` /
-  `alarm_rel_minutes` (дробные часы → минуты). `schedule_alarm_create_relative`
-  fail-closed: `hours=0` и `minutes=0` → «Не понял, через сколько поставить
-  будильник» (не минутный будильник), текст команды не используется как
-  метка. Абсолютное время принимает «ноль ноль»/«ноль-ноль»/«00» как
-  минуту 0, «ровно» как 0 минут и формы «в десять», «десять вечера»,
-  «в десять вечера», «разбуди меня в семь». Любая фраза про
-  будильник/таймер без разобранного времени → локальные
-  `StationAlarmRelativeUnclear` / `StationTimerRelativeUnclear` /
-  `StationAlarmUnclear` / `StationTimerUnclear`: короткий вопрос, чтобы
-  фраза не уходила в built-in `HassMediaSearchAndPlay` («Воспроизвожу» +
-  музыка). Точные шаблоны выигрывают у guard'ов по ранжированию hassil
-  (0 wildcard против 1). Детали —
-  `projects/home-assistant/ha-voice/README.md`.
+- **Время только через MCP.** В HA больше нет шаблонов времени и
+  intent-скриптов `StationAlarmSet/Relative/Update/...`, `StationTimer*`,
+  `StationReminder*`. `custom_sentences/ru/station_time.yaml`
+  (`StationTimeRouteAlarm/Timer/Reminder/Wake/Remind`) ловит фразы про
+  будильник/таймер/напоминание раньше built-in `HassMediaSearchAndPlay` и
+  пересылает их Hermes через `conversation.process`; Hermes вызывает
+  mcp-gateway `time` (`time_now`, `alarm_set/list/cancel/delete/update/
+  snooze/stop`, `timer_set/list/cancel/pause/resume`,
+  `reminder_set/list`). Инструменты пишут в `home.v1.SchedulerService` тем же
+  Connect JSON, что HA/Android; звук — по-прежнему ha-bridge → `alarm_start`.
+  Валидация времени (RFC3339 с офсетом, прошлое, горизонт once ≤ 7 дней,
+  timer 1…604800 с) — в шлюзе; ответ всегда содержит итоговое локальное
+  время/длительность. Локально остались только «стоп/хватит/выключи звонок»
+  (`StationAlarmStop`) и «отложи/ещё девять минут» (`StationAlarmSnooze`).
+  Детали — `projects/home-assistant/ha-voice/README.md` и
+  `solutions/mcp-gateway/README.md`.
 - **Профиль голоса.** `input_select.home_voice_profile` (Личный/Рабочий) —
   единственный источник истины; переключается только вручную: голосом
   («рабочий/личный профиль», «какой профиль»), на дашборде «Помощник» → view
@@ -503,11 +503,12 @@
 - TTS: Piper `2.5.2`, `ru_puriso2-medium`.
 - Hermes `v0.22.5`, модель `gpt-5.6-luna` через ChatGPT/Codex OAuth; low
   reasoning + streaming; HA MCP 73 tools, MA MCP 86 tools. Третий MCP-сервер
-  `infra` (`mcp-gateway`) несёт группы `infra.*`, `bb.read`/`bb.act`:
-  `bb_status`, `bb_prepare_spawn` → `bb_confirm`/`bb_cancel`. Hermes видит
-  только личные проекты из `bb-targets.yaml`; рабочие и проекты с неизвестным
-  профилем отфильтрованы шлюзом и неотличимы от несуществующих. После запуска
-  включается режим агента, выход — «выйди из режима агента».
+  `infra` (`mcp-gateway`) несёт группы `infra.*`, `bb.read`/`bb.act`,
+  `time`: `bb_status`, `bb_prepare_spawn` → `bb_confirm`/`bb_cancel` и
+  `time_now`/`alarm_*`/`timer_*`/`reminder_*` на durable scheduler. Hermes
+  видит только личные проекты из `bb-targets.yaml`; рабочие и проекты с
+  неизвестным профилем отфильтрованы шлюзом и неотличимы от несуществующих.
+  После запуска включается режим агента, выход — «выйди из режима агента».
 - Voice proxy: маршрутизация по профилю (см. «Профиль голоса»); без всех
   четырёх значений URL+токен для HA и шлюза маршрутизации нет. Exact cancel
   guard: если предыдущий ответ Hermes закончился вопросом, HA включает

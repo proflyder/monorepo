@@ -398,20 +398,6 @@ class RequestContractTests(unittest.TestCase):
         self.assertEqual(request["onceDate"], "2026-10-30")
         self.assertEqual(request["at"]["hour"], 9)
 
-    def test_reminder_tomorrow_sentence_captures_day_before_generic(self):
-        intents = yaml.safe_load(
-            (HA / "custom_sentences" / "ru" / "station_schedules.yaml").read_text()
-        )["intents"]
-        phrases = [
-            phrase
-            for item in intents["StationReminderCreate"]["data"]
-            for phrase in item["sentences"]
-        ]
-        specific = "напомни {text} [на] {alarm_day:day} в {alarm_hour:hour}:{alarm_minute:minute} [{alarm_period:period}]"
-        generic = "напомни {text} в {alarm_hour:hour}:{alarm_minute:minute} [{alarm_period:period}] [на {alarm_day:day}]"
-        self.assertIn(specific, phrases)
-        self.assertLess(phrases.index(specific), phrases.index(generic))
-
     def test_timer_request_uses_int64_string_and_idempotency(self):
         context = {
             **BASE_CONTEXT,
@@ -427,30 +413,6 @@ class RequestContractTests(unittest.TestCase):
         self.assertEqual(request["durationSeconds"], "600")
         self.assertIsInstance(request["durationSeconds"], str)
         self.assertTrue(request["idempotencyKey"].startswith("ha:timer:"))
-
-    def test_timer_name_slot_maps_to_intent_name_and_request_label(self):
-        phrases = [
-            phrase
-            for item in yaml.safe_load(
-                (HA / "custom_sentences" / "ru" / "station_schedules.yaml").read_text()
-            )["intents"]["StationTimerStart"]["data"]
-            for phrase in item["sentences"]
-        ]
-        self.assertIn(
-            "[поставь|сделай|установи|заведи|включи] таймер {timer_name:name} на {timer_minutes:minutes} минут[у|ы]",
-            phrases,
-        )
-        self.assertFalse(any("{timer_name}" in phrase for phrase in phrases))
-        context = {
-            **BASE_CONTEXT,
-            "hours": "0",
-            "minutes": "30",
-            "seconds": "0",
-            "name": "тесттаймер",
-        }
-        context = render_first_variables(SCRIPTS["schedule_timer_start"], "timer_total_seconds", context)
-        context = render_first_variables(SCRIPTS["schedule_timer_start"], "timer_request_json", context)
-        self.assertEqual(as_json(context["timer_request_json"])["label"], "тесттаймер")
 
     def _key_template(self, script_name, field):
         for step in SCRIPTS[script_name]["sequence"]:
@@ -1292,19 +1254,6 @@ class RelativeAlarmTemplateTests(unittest.TestCase):
         self.assertIn("second", create_fields)
         self.assertEqual(create_fields["second"].get("default"), 0)
 
-    def test_relative_parser_cannot_exceed_24h(self) -> None:
-        # The relative intent slots reuse the alarm_hour/alarm_minute lists, so
-        # the maximum is 23h59m and the target can only be today or tomorrow.
-        sentence_doc = yaml.safe_load(
-            (HA / "custom_sentences" / "ru" / "station_alarm.yaml").read_text(encoding="utf-8")
-        )
-        hours = [int(v["out"]) for v in sentence_doc["lists"]["alarm_hour"]["values"]]
-        minutes = [int(v["out"]) for v in sentence_doc["lists"]["alarm_minute"]["values"]]
-        self.assertEqual(max(hours), 23)
-        self.assertEqual(max(minutes), 59)
-        self.assertLess(max(hours) * 60 + max(minutes), 24 * 60)
-
-
 class MediaUrlReachabilityTests(unittest.TestCase):
     """Live incident: the ringtone/chime URL used the sanitized TEST-NET host.
 
@@ -1555,21 +1504,6 @@ class ResolutionTests(unittest.TestCase):
         self.assertEqual(partial["status"], "error")
         self.assertIn("Не удалось удалить 1", partial["text"])
 
-    def test_reminder_delete_all_requires_explicit_all_slot(self):
-        script = dump(SCRIPTS["schedule_reminder_delete"])
-        self.assertIn("DeleteSchedule", script)
-        self.assertIn("reminder_delete_all", script)
-        self.assertIn("scheduler_resolve_schedule", script)
-        sentences = yaml.safe_load(
-            (HA / "custom_sentences" / "ru" / "station_schedules.yaml").read_text()
-        )["intents"]["StationReminderDelete"]["data"][0]["sentences"]
-        self.assertIn("удали напоминание {query:query}", sentences)
-        self.assertIn("удали {reminder_all:all} напоминания", sentences)
-        intent = dump(INTENTS["StationReminderDelete"])
-        self.assertIn("script.schedule_reminder_delete", intent)
-        self.assertIn("== ''все''", intent)
-
-
 class SingleWriterTests(unittest.TestCase):
     CANONICAL = (
         "schedule_alarm_create",
@@ -1638,24 +1572,6 @@ class SingleWriterTests(unittest.TestCase):
             "script.alarm_stop",
             dump(SCRIPTS["scheduler_confirm_ring_stopped"]),
         )
-
-    def test_explicit_all_is_a_separate_sentence_slot(self):
-        self.assertIn("alarm_all", SENTENCES["lists"])
-        cancel_phrases = [
-            phrase
-            for item in SENTENCES["intents"]["StationAlarmCancel"]["data"]
-            for phrase in item["sentences"]
-        ]
-        delete_phrases = [
-            phrase
-            for item in SENTENCES["intents"]["StationAlarmDelete"]["data"]
-            for phrase in item["sentences"]
-        ]
-        self.assertTrue(any("{alarm_all:all}" in phrase for phrase in cancel_phrases))
-        self.assertTrue(any("{alarm_all:all}" in phrase for phrase in delete_phrases))
-        self.assertIn("отмени будильник", cancel_phrases)
-        self.assertIn("удали будильник", delete_phrases)
-
 
 class ScenarioRunContractTests(unittest.TestCase):
     """script.scenario_run resolves a native scheduler scenario by label."""
