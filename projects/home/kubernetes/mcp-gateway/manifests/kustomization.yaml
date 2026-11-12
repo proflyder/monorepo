@@ -1,6 +1,6 @@
 # Flux-rendered manifest set for mcp-gateway (решение 54).
 #
-# Deployment, Service, NetworkPolicies, ServiceMonitor, RBAC and the five
+# Deployment, Service, NetworkPolicies, ServiceMonitor, RBAC and the six
 # ExternalSecrets are the workload. The catalog and bb-targets files are
 # deployment data, so they are rendered as a ConfigMap by the generator. The
 # generator keeps its content-hash suffix: the gateway reads the catalog once

@@ -416,7 +416,7 @@ class ManifestTests(unittest.TestCase):
             "spec"
         ]["containers"][0]
         env = {entry["name"]: entry.get("value") for entry in container["env"]}
-        self.assertEqual(env["MCP_GROUPS"], "infra.read,infra.fix,infra.report,bb.read,bb.act")
+        self.assertEqual(env["MCP_GROUPS"], "infra.read,infra.fix,infra.report,bb.read,bb.act,time")
         self.assertEqual(env["MCP_TIMEZONE"], "Asia/Almaty")
         self.assertEqual(env["MCP_AUTH_TOKEN_FILE"], "/run/secrets/mcp-gateway-auth/token")
         self.assertEqual(env["MCP_INFRA_CATALOG_FILE"], "/etc/mcp-gateway/catalog.yaml")
@@ -434,6 +434,12 @@ class ManifestTests(unittest.TestCase):
         self.assertEqual(env["MCP_BB_TARGETS_FILE"], "/etc/mcp-gateway/bb-targets.yaml")
         self.assertEqual(env["MCP_BB_DISPATCHER_THREAD_ID"], "${BB_DISPATCHER_THREAD_ID}")
         self.assertEqual(env["MCP_VOICE_TOKEN_FILE"], "/run/secrets/mcp-gateway-voice/token")
+        self.assertEqual(
+            env["MCP_SCHEDULER_URL"], "http://scheduler.home-assistant.svc.cluster.local:8098"
+        )
+        self.assertEqual(
+            env["MCP_SCHEDULER_TOKEN_FILE"], "/run/secrets/mcp-gateway-scheduler/token"
+        )
         # Secrets only as files; no secret value and no *_TOKEN env.
         self.assertNotIn("TELEGRAM_BOT_TOKEN", env)
         self.assertNotIn("MCP_AUTH_TOKEN", env)
@@ -454,6 +460,9 @@ class ManifestTests(unittest.TestCase):
         self.assertEqual(volumes["bb-ssh"]["secret"]["defaultMode"], 0o400)
         voice_items = volumes["voice"]["secret"]["items"]
         self.assertEqual(voice_items, [{"key": "token", "path": "token"}])
+        scheduler_items = volumes["scheduler"]["secret"]["items"]
+        self.assertEqual(scheduler_items, [{"key": "token", "path": "token"}])
+        self.assertEqual(volumes["scheduler"]["secret"]["secretName"], "mcp-gateway-scheduler")
 
     def test_service_is_cluster_ip_only(self):
         docs = load_docs(DEPLOYMENT)
@@ -482,7 +491,7 @@ class ManifestTests(unittest.TestCase):
             for rule in egress["spec"]["egress"]
             for port in rule["ports"]
         }
-        self.assertTrue({6443, 9090, 9093, 3100, 443, 53, 22} <= ports)
+        self.assertTrue({6443, 9090, 9093, 3100, 443, 53, 22, 8098} <= ports)
         # External catalog checks: HA REST/MA and the station's ports, all on
         # the LAN CIDR (host IPs are rendered at deploy time).
         self.assertTrue({8123, 8095, 6053, 8928, 8099, 8006} <= ports)
@@ -551,6 +560,16 @@ class ManifestTests(unittest.TestCase):
                 {
                     "secretKey": "token",
                     "remoteRef": {"key": "k8s/home-assistant/mcp-gateway-voice", "property": "token"},
+                }
+            ],
+        )
+        scheduler = by_name["mcp-gateway-scheduler"]["spec"]["data"]
+        self.assertEqual(
+            scheduler,
+            [
+                {
+                    "secretKey": "token",
+                    "remoteRef": {"key": "k8s/home-assistant/scheduler-auth", "property": "token"},
                 }
             ],
         )

@@ -297,6 +297,87 @@ StationMusicRouteMA:
   action:
     - service: script.music_route_ma
 
+StationTimeRouteAlarm:
+  # Time routing only: see custom_sentences/ru/station_time.yaml.
+  speech: &time_route_speech
+    text: >-
+      {% set result = action_response if action_response is mapping else {} %}
+      {% set response = result.get('response', result) if result is mapping else {} %}
+      {% set speech = response.get('speech', {}) if response is mapping else {} %}
+      {% set plain = speech.get('plain', {}) if speech is mapping else {} %}
+      {{ plain.get('speech') if plain is mapping and plain.get('speech') else 'Не удалось передать запрос агенту.' }}
+  action:
+    - variables:
+        route_text: "{{ command | default('') }} будильник {{ time_phrase | default('') }}"
+    - service: conversation.process
+      data:
+        agent_id: conversation.hermes_agent
+        language: ru
+        text: "{{ route_text | trim }}"
+      response_variable: hermes_time_reply
+    - stop: "station_time_route"
+      response_variable: hermes_time_reply
+
+StationTimeRouteTimer:
+  # Time routing only: see custom_sentences/ru/station_time.yaml.
+  speech: *time_route_speech
+  action:
+    - variables:
+        route_text: "{{ command | default('') }} таймер {{ time_phrase | default('') }}"
+    - service: conversation.process
+      data:
+        agent_id: conversation.hermes_agent
+        language: ru
+        text: "{{ route_text | trim }}"
+      response_variable: hermes_time_reply
+    - stop: "station_time_route"
+      response_variable: hermes_time_reply
+
+StationTimeRouteReminder:
+  # Time routing only: see custom_sentences/ru/station_time.yaml.
+  speech: *time_route_speech
+  action:
+    - variables:
+        route_text: "{{ command | default('') }} напоминание {{ time_phrase | default('') }}"
+    - service: conversation.process
+      data:
+        agent_id: conversation.hermes_agent
+        language: ru
+        text: "{{ route_text | trim }}"
+      response_variable: hermes_time_reply
+    - stop: "station_time_route"
+      response_variable: hermes_time_reply
+
+StationTimeRouteWake:
+  # Time routing only: see custom_sentences/ru/station_time.yaml.
+  speech: *time_route_speech
+  action:
+    - variables:
+        route_text: "разбуди меня {{ time_phrase | default('') }}"
+    - service: conversation.process
+      data:
+        agent_id: conversation.hermes_agent
+        language: ru
+        text: "{{ route_text | trim }}"
+      response_variable: hermes_time_reply
+    - stop: "station_time_route"
+      response_variable: hermes_time_reply
+
+StationTimeRouteRemind:
+  # Time routing only: see custom_sentences/ru/station_time.yaml.
+  speech: *time_route_speech
+  action:
+    - variables:
+        route_text: "напомни мне {{ time_phrase | default('') }}"
+    - service: conversation.process
+      data:
+        agent_id: conversation.hermes_agent
+        language: ru
+        text: "{{ route_text | trim }}"
+      response_variable: hermes_time_reply
+    - stop: "station_time_route"
+      response_variable: hermes_time_reply
+
 StationMusicPlayQuery:
   speech:
     text: >-
@@ -388,79 +469,6 @@ StationCurrencyRate:
     - stop: "station_currency_rate"
       response_variable: currency_result
 
-StationAlarmSet:
-  speech:
-    text: >-
-      {% set result = action_response if action_response is mapping else {} %}
-      {{ result.get('text', 'Не удалось установить будильник.') }}
-  action:
-    - service: script.schedule_alarm_create
-      data:
-        hour: "{{ hour | default(7) }}"
-        minute: "{{ minute | default(0) }}"
-        period: "{{ period | default('') }}"
-        day: "{{ day | default('') }}"
-        repeat: "{{ repeat | default('Однократно') }}"
-        name: "{{ name | default('') }}"
-      response_variable: alarm_result
-    - stop: "station_alarm_set"
-      response_variable: alarm_result
-
-StationAlarmRelative:
-  speech:
-    text: >-
-      {% set result = action_response if action_response is mapping else {} %}
-      {{ result.get('text', 'Не удалось установить будильник.') }}
-  action:
-    - service: script.schedule_alarm_create_relative
-      data:
-        hours: "{{ hours | default(0) }}"
-        minutes: "{{ minutes | default(0) }}"
-        name: "{{ name | default('') }}"
-      response_variable: alarm_result
-    - stop: "station_alarm_relative"
-      response_variable: alarm_result
-
-StationAlarmRelativeUnclear:
-  # A relative alarm phrase the closed duration lists did not parse. Answer
-  # locally so the built-in media search never starts music; do not guess a
-  # duration and do not call the scheduler.
-  speech:
-    text: "Не понял, через сколько поставить будильник. Скажи, например, через час."
-  action: []
-
-StationAlarmUnclear:
-  # General alarm catch-all: an alarm phrase that no exact time template
-  # matched (for example «на полночь» or «пораньше»). Ask for the time locally
-  # instead of letting the built-in media search start music.
-  speech:
-    text: "Не понял, на какое время поставить будильник. Скажи, например, на семь тридцать."
-  action: []
-
-StationAlarmStatus:
-  speech:
-    text: >-
-      {% set result = action_response if action_response is mapping else {} %}
-      {{ result.get('text', 'Не удалось прочитать будильники.') }}
-  action:
-    - service: script.schedule_alarm_status
-      response_variable: alarm_result
-    - stop: "station_alarm_status"
-      response_variable: alarm_result
-
-StationAlarmCancel:
-  speech:
-    text: >-
-      {% set result = action_response if action_response is mapping else {} %}
-      {{ result.get('text', 'Не удалось выключить будильники.') }}
-  action:
-    - service: script.schedule_alarm_disable
-      data:
-        all: "{{ all | default('') == 'все' }}"
-      response_variable: alarm_result
-    - stop: "station_alarm_cancel"
-      response_variable: alarm_result
-
 StationAlarmSnooze:
   speech:
     text: >-
@@ -499,143 +507,6 @@ StationAlarmStop:
     - stop: "station_alarm_stop"
       response_variable: station_stop_result
 
-StationAlarmDelete:
-  speech:
-    text: >-
-      {% set result = action_response if action_response is mapping else {} %}
-      {{ result.get('text', 'Не удалось удалить будильник.') }}
-  action:
-    - service: script.schedule_alarm_delete
-      data:
-        all: "{{ all | default('') == 'все' }}"
-      response_variable: alarm_result
-    - stop: "station_alarm_delete"
-      response_variable: alarm_result
-
-StationTimerStart:
-  speech:
-    text: >-
-      {% set result = action_response if action_response is mapping else {} %}
-      {{ result.get('text', 'Не удалось установить таймер.') }}
-  action:
-    - service: script.schedule_timer_start
-      data:
-        hours: "{{ hours | default(0) }}"
-        minutes: "{{ minutes | default(0) }}"
-        seconds: "{{ seconds | default(0) }}"
-        name: "{{ name | default('') }}"
-      response_variable: timer_result
-    - stop: "station_timer_start"
-      response_variable: timer_result
-
-StationTimerRelativeUnclear:
-  # Same guard as StationAlarmRelativeUnclear: «поставь таймер через …» must
-  # not reach the built-in media search, and the timer must not start with an
-  # invented duration. Explicit «на N минут» stays in StationTimerStart.
-  speech:
-    text: "Не понял, на сколько поставить таймер. Скажи, например, на десять минут."
-  action: []
-
-StationTimerUnclear:
-  # General timer catch-all: any «таймер» phrase without a parsed duration asks
-  # locally instead of reaching the built-in media search. Explicit «на N
-  # минут» remains StationTimerStart.
-  speech:
-    text: "Не понял, на сколько поставить таймер. Скажи, например, на десять минут или через час."
-  action: []
-
-StationTimerStatus:
-  speech:
-    text: >-
-      {% set result = action_response if action_response is mapping else {} %}
-      {{ result.get('text', 'Не удалось прочитать таймеры.') }}
-  action:
-    - service: script.schedule_timer_status
-      response_variable: timer_result
-    - stop: "station_timer_status"
-      response_variable: timer_result
-
-StationTimerCancel:
-  speech:
-    text: >-
-      {% set result = action_response if action_response is mapping else {} %}
-      {{ result.get('text', 'Не удалось отменить таймер.') }}
-  action:
-    - service: script.schedule_timer_cancel
-      data:
-        name: "{{ name | default('') }}"
-      response_variable: timer_result
-    - stop: "station_timer_cancel"
-      response_variable: timer_result
-
-StationTimerPause:
-  speech:
-    text: >-
-      {% set result = action_response if action_response is mapping else {} %}
-      {{ result.get('text', 'Не удалось поставить таймер на паузу.') }}
-  action:
-    - service: script.schedule_timer_pause
-      data:
-        name: "{{ name | default('') }}"
-      response_variable: timer_result
-    - stop: "station_timer_pause"
-      response_variable: timer_result
-
-StationTimerResume:
-  speech:
-    text: >-
-      {% set result = action_response if action_response is mapping else {} %}
-      {{ result.get('text', 'Не удалось продолжить таймер.') }}
-  action:
-    - service: script.schedule_timer_resume
-      data:
-        name: "{{ name | default('') }}"
-      response_variable: timer_result
-    - stop: "station_timer_resume"
-      response_variable: timer_result
-
-StationReminderStatus:
-  speech:
-    text: >-
-      {% set result = action_response if action_response is mapping else {} %}
-      {{ result.get('text', 'Не удалось прочитать напоминания.') }}
-  action:
-    - service: script.schedule_reminder_status
-      response_variable: reminder_result
-    - stop: "station_reminder_status"
-      response_variable: reminder_result
-
-StationReminderCreate:
-  speech:
-    text: >-
-      {% set result = action_response if action_response is mapping else {} %}
-      {{ result.get('text', 'Не удалось создать напоминание.') }}
-  action:
-    - service: script.schedule_reminder_create
-      data:
-        text: "{{ text }}"
-        hour: "{{ hour | default(9) }}"
-        minute: "{{ minute | default(0) }}"
-        period: "{{ period | default('') }}"
-        day: "{{ day | default('') }}"
-      response_variable: reminder_result
-    - stop: "station_reminder_create"
-      response_variable: reminder_result
-
-StationReminderDelete:
-  speech:
-    text: >-
-      {% set result = action_response if action_response is mapping else {} %}
-      {{ result.get('text', 'Не удалось удалить напоминание.') }}
-  action:
-    - service: script.schedule_reminder_delete
-      data:
-        query: "{{ query | default('') }}"
-        all: "{{ all | default('') == 'все' }}"
-      response_variable: reminder_result
-    - stop: "station_reminder_delete"
-      response_variable: reminder_result
-
 StationNoteAdd:
   speech:
     text: "Записал."
@@ -662,64 +533,6 @@ StationNoteDelete:
     - service: script.schedule_note_delete
       data:
         query: "{{ query }}"
-
-StationAlarmDeleteOne:
-  speech:
-    text: >-
-      {% set result = action_response if action_response is mapping else {} %}
-      {{ result.get('text', 'Не удалось удалить будильник.') }}
-  action:
-    - service: script.schedule_alarm_delete
-      data:
-        query: "{{ alarm_name }}"
-      response_variable: alarm_result
-    - stop: "station_alarm_delete_one"
-      response_variable: alarm_result
-
-StationAlarmDisableOne:
-  speech:
-    text: >-
-      {% set result = action_response if action_response is mapping else {} %}
-      {{ result.get('text', 'Не удалось выключить будильник.') }}
-  action:
-    - service: script.schedule_alarm_set_enabled
-      data:
-        query: "{{ alarm_name }}"
-        enabled: false
-      response_variable: alarm_result
-    - stop: "station_alarm_disable_one"
-      response_variable: alarm_result
-
-StationAlarmUpdate:
-  speech:
-    text: >-
-      {% set result = action_response if action_response is mapping else {} %}
-      {{ result.get('text', 'Не удалось изменить будильник.') }}
-  action:
-    - service: script.schedule_alarm_update
-      data:
-        query: "{{ alarm_name | default('') }}"
-        hour: "{{ hour }}"
-        minute: "{{ minute }}"
-        period: "{{ period | default('') }}"
-        day: "{{ day | default('') }}"
-      response_variable: alarm_result
-    - stop: "station_alarm_update"
-      response_variable: alarm_result
-
-StationAlarmEnableOne:
-  speech:
-    text: >-
-      {% set result = action_response if action_response is mapping else {} %}
-      {{ result.get('text', 'Не удалось включить будильник.') }}
-  action:
-    - service: script.schedule_alarm_set_enabled
-      data:
-        query: "{{ alarm_name | default(hour | default('') ~ ':' ~ minute | default('')) }}"
-        enabled: true
-      response_variable: alarm_result
-    - stop: "station_alarm_enable_one"
-      response_variable: alarm_result
 
 KompOn:
   # The ping sensor lags 1–2 minutes behind Windows shutdown, so a recent

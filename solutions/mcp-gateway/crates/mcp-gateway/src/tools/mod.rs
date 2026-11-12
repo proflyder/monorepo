@@ -15,6 +15,7 @@ pub mod bb;
 pub mod infra_fix;
 pub mod infra_read;
 pub mod infra_report;
+pub mod time;
 
 use std::collections::BTreeMap;
 use std::future::Future;
@@ -385,6 +386,10 @@ pub struct Deps {
     pub clock: Arc<dyn Clock>,
     /// Report timezone.
     pub location: TimeZone,
+    /// IANA name of [`Self::location`], for speech and scheduler requests.
+    pub timezone_name: String,
+    /// Durable home scheduler.
+    pub scheduler: Option<Arc<dyn crate::scheduler::SchedulerApi>>,
     /// Restart cooldown.
     pub cooldown: Duration,
     /// Delay before a self-disrupting restart.
@@ -461,6 +466,14 @@ impl Deps {
     #[must_use]
     pub fn bb(&self) -> Option<&dyn crate::bb::BbApi> {
         self.bb.as_deref().filter(|backend| backend.configured())
+    }
+
+    /// The configured durable scheduler.
+    #[must_use]
+    pub fn scheduler(&self) -> Option<&dyn crate::scheduler::SchedulerApi> {
+        self.scheduler
+            .as_deref()
+            .filter(|backend| backend.configured())
     }
 
     /// Register an action metric.

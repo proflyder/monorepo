@@ -8,6 +8,8 @@ Telegram reports.
 - Project: this directory — manifests, catalog, RBAC, secrets wiring, deploy.
 - Namespace: `home-assistant`; one Deployment, one ClusterIP Service, no
   ingress and no NodePort.
+- Tool groups: `infra.*`, `bb.read`/`bb.act` and `time` (alarms, timers,
+  reminders on the durable scheduler).
 - CI unit: `mcp-gateway` (Bazel: Rust crate tests/clippy/fmt + musl image +
   deploy) and `mcp-gateway-deploy` (catalog/RBAC/deploy contract).
 
@@ -21,6 +23,7 @@ Service mcp-gateway:8080 ──► Deployment mcp-gateway
    │                          ├─ Loki         loki:3100
    │                          ├─ Kubernetes API (ServiceAccount + RBAC)
    │                          ├─ Telegram Bot API (fixed recipient)
+   │                          ├─ Scheduler :8098 (time tools, Connect JSON)
    │                          └─ SSH :22 ──► bb host forced command ──► bb plugin
    └─ /healthz /readyz /metrics (cluster-local only)
 ```
@@ -32,7 +35,7 @@ manifests/deployment.yaml         Deployment + ClusterIP Service (template)
 manifests/catalog.yaml            service catalog + sanitized topology overview
 manifests/bb-targets.yaml         personal-only spoken allowlist for bb spawns
 manifests/rbac.yaml               ServiceAccount + per-namespace read/restart Roles
-manifests/external-secrets.yaml   auth, telegram, ha, bb-ssh, voice secrets
+manifests/external-secrets.yaml   auth, telegram, ha, bb-ssh, voice, scheduler secrets
 manifests/network-policies.yaml   ingress from Hermes/monitoring, narrow egress
 manifests/servicemonitor.yaml     Prometheus scrape of /metrics
 test_deploy.py                    catalog↔RBAC and manifest contracts

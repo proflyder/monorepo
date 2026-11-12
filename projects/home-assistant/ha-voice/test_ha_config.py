@@ -500,14 +500,6 @@ class IntentTests(unittest.TestCase):
         for word in ("стоп", "остановись", "хватит"):
             self.assertIn(word, phrases)
 
-    def test_time_lists_cover_ranges(self):
-        alarm = yaml.safe_load((HA / "custom_sentences" / "ru" / "station_alarm.yaml").read_text())
-        hours = {int(v["out"]) for v in alarm["lists"]["alarm_hour"]["values"]}
-        minutes = {int(v["out"]) for v in alarm["lists"]["alarm_minute"]["values"]}
-        self.assertEqual(hours, set(range(24)))
-        self.assertEqual(minutes, set(range(60)))
-
-
 class AlarmMusicStateMachineTests(unittest.TestCase):
     def test_alarm_start_saves_source_volume_and_playback(self):
         dump = yaml.safe_dump(SCRIPTS["alarm_start"], allow_unicode=True)

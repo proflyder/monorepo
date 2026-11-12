@@ -14,6 +14,8 @@
 //! * [`bb`] — the typed dispatcher client and the personal-only spoken
 //!   allow-list on top of the SSH bridge.
 //! * [`voice`] — the `/v1/voice/*` routing and long-poll surface.
+//! * [`scheduler`] — the typed `home.v1.SchedulerService` client for the time
+//!   tools.
 //! * [`tools`] — the extensible `ToolGroup` registry and the infra tool groups.
 //! * [`mcp`] / [`server`] — the `rmcp` server and the axum HTTP surface.
 //! * [`config`] / [`app`] / [`health`] — the process around them.
@@ -27,6 +29,7 @@ pub mod health;
 pub mod kubernetes;
 pub mod mcp;
 pub mod metrics;
+pub mod scheduler;
 pub mod server;
 pub mod ssh;
 pub mod tools;

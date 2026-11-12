@@ -90,6 +90,14 @@ spec:
           port: 9093
         - protocol: TCP
           port: 3100
+    # Durable scheduler Connect JSON (:8098) for the `time` voice tools.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: home-assistant
+      ports:
+        - protocol: TCP
+          port: 8098
     # External catalog checks on the LAN: HAOS REST/MA, the station's ESPHome,
     # Sendspin and HTTP-control ports, the Proxmox web UI (TCP only: its TLS
     # certificate is self-signed) and the VPN CT's ocserv port. The

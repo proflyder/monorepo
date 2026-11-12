@@ -169,6 +169,8 @@ fn base_deps(clock: Arc<dyn Clock>) -> Arc<Deps> {
         metrics: Arc::new(Metrics::new()),
         clock: clock.clone(),
         location: jiff::tz::TimeZone::UTC,
+        timezone_name: "Asia/Almaty".to_owned(),
+        scheduler: None,
         cooldown: Duration::from_secs(300),
         self_restart_delay: Duration::from_secs(20),
         query_timeout: Duration::from_secs(1),

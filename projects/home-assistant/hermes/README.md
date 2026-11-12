@@ -7,9 +7,11 @@ State is `/srv/k3s/volumes/runtime-hermes` on the host (`/opt/data` in the Pod);
 start a native gateway next to the Pod: it would be a second production writer.
 
 Hermes is the **fallback** brain for the Station Midi voice cascade, not the
-fast path.  HA Assist keeps timers, alarms, volume, music transport and simple
-home commands local; Hermes handles unmatched or open-ended requests through
-the full Home Assistant MCP surface and the Music Assistant MCP server.
+fast path.  HA Assist keeps lights, volume, music transport and simple home
+commands local. Time — alarms, timers, reminders — is routed to Hermes and
+written only through the mcp-gateway `time` tools on the durable scheduler;
+other unmatched or open-ended requests use the full Home Assistant MCP surface
+and the Music Assistant MCP server.
 
 ## Layout
 
@@ -132,6 +134,35 @@ mise run kubectl -- -n home-assistant exec deploy/hermes -c hermes -- hermes mcp
 A healthy `mcp test infra` reports the tool count; `401` means the token is
 missing or stale, `connection refused` means the gateway Service or its Pod is
 not ready.
+
+## Time tools (mcp-gateway `time`)
+
+The same `infra` MCP server carries the `time` group: `time_now`,
+`alarm_set/list/cancel/delete/update/snooze/stop`, `timer_set/list/cancel/
+pause/resume` and `reminder_set/list`. Hermes is the only voice writer for
+alarms, timers and reminders: it takes `time_now`, computes an absolute RFC3339
+instant and calls the typed tool. The tools talk to `home.v1.SchedulerService`
+with the same Connect API and token as HA/Android, so `ha-bridge` still rings the
+station through `script.alarm_start`; the scheduler remains the single owner.
+
+The HA intent scripts `StationAlarm*`, `StationTimer*`, `StationReminder*`,
+`StationTimeRoute*` and the `script.schedule_*` / `script.alarm_*` executor
+scripts are **excluded** from the HA MCP server in `config.fragment.yaml`. The
+voice prompt and `SOUL.md` say the same thing: time only through `time` tools,
+always repeat the final local time, one clarifying question when the time is
+unclear. `StationTimeRoute*` in HA is only a forwarder to this agent, never an
+alarm parser.
+
+`MCP_GROUPS` on the gateway must include `time`, and the gateway needs
+`MCP_SCHEDULER_URL` + `MCP_SCHEDULER_TOKEN_FILE`
+(`k8s/home-assistant/scheduler-auth`, key `token`). Both are part of the
+Flux-rendered mcp-gateway manifest set, not the Hermes PVC.
+
+`config.fragment.yaml`, `voice_prompt.txt`, `SOUL.md` and `HERMES.md` are **not**
+delivered by Flux: they live on the Hermes PVC and are rendered manually with
+`home-deploy hermes render-config` (see below), then the gateway is restarted.
+Do not hand-edit the PVC or expect a merge to change Hermes behaviour before
+that render.
 
 ## Agents (bb tools)
 
@@ -311,7 +342,8 @@ to the keyless provider ring; add a keyed extract backend only if page
 extraction becomes a real workload.
 
 Voice uses this only after the local HA intent path fails.  A question such as
-"что такое фотосинтез" goes to Hermes; "какой будильник" stays in HA.
+"что такое фотосинтез" goes to Hermes; "какой будильник" is routed by
+`StationTimeRoute*` to Hermes and answered with `alarm_list`.
 
 ## Voice proxy (TTS sanitizer)
 
@@ -336,18 +368,23 @@ enabled:
 
 - **Home Assistant** exposes all discovered HA MCP tools (57 at the time of
   deployment), including all intent scripts, lights, media players, timers,
-  todos, broadcasts and live context.
+  todos, broadcasts and live context. The time-writing intent/scripts
+  (`StationAlarm*`, `StationTimer*`, `StationReminder*`, `StationTimeRoute*`,
+  `script.schedule_*`, `script.alarm_*`) are excluded so Hermes uses the typed
+  `time` tools instead.
 - **Music Assistant** exposes all discovered MA MCP tools (86 at deployment),
   including library search, queue/playback/player control, playlists, favorites,
   volume, announcements, debug and config namespaces.
 - **infra** (mcp-gateway) exposes the read-only diagnostics, the two-step
-  restart pair and `infra_send_report`; every restart target is allow-listed by
-  the gateway catalog, and the gateway itself performs only a rollout restart.
+  restart pair, `infra_send_report`, the `bb.*` tools and the `time` group;
+  every restart target is allow-listed by the gateway catalog, and the gateway
+  itself performs only a rollout restart.
 
 Non-HA platform toolsets remain disabled: terminal, shell, file, browser,
 computer-use and similar. Only the MCP servers and `web` are enabled, on both
-`api_server` and `telegram`. The HA voice prompt still tells Hermes that local
-intents own timers/alarms; the MCP surface is broader than the voice policy.
+`api_server` and `telegram`. Time writes are restricted to the mcp-gateway
+`time` tools by the HA MCP exclusions and the prompt; the rest of the MCP
+surface stays intentionally broad.
 
 This is a deliberate tradeoff: Hermes can now do anything the HA/MA MCP servers
 expose. MA config/debug tools and destructive library/queue operations are
@@ -390,17 +427,16 @@ pipeline (`01m5t7gvhp2c3bmvn3bw5emje7`) uses:
 Flow:
 
 1. Local intents and custom sentences run first (`Prefer handling commands
-   locally`).
-2. Unmatched text goes to the Hermes conversation agent.
-3. Hermes uses the MCP music tools and `web_search`; HA owns the player,
-   source, alarms and timers.
+   locally`); the `StationTimeRoute*` sentences forward time phrases to Hermes.
+2. Everything else unmatched goes to the Hermes conversation agent.
+3. Hermes uses the MCP music tools, the MCP `time` tools and `web_search`; HA
+   owns the player, source and the alarm audio executor.
 
-Verified without Hermes running: `какой будильник` still returns
-"Будильник выключен" while the gateway is stopped.  That is the required
-failure mode: local alarms/timers/volume must not depend on the fallback.
-
-If Hermes is down, local volume/timer/alarm/music commands must still work.
-Do not put alarms, timers or the alarm audio endpoint behind Hermes.
+Verified without Hermes running: `какой будильник` now intentionally goes to
+Hermes, while the local ring commands (`стоп`, `отложи`, `хватит`,
+`выключи звонок`), lights, music and volume still work. Keep the alarm audio
+path (`script.alarm_start` / `alarm_stop`) independent of Hermes: the scheduler
+and ha-bridge own it.
 
 
 ## HA MCP tool errors

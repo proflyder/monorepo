@@ -90,6 +90,20 @@ pub async fn run() -> anyhow::Result<()> {
         ))
     };
 
+    let scheduler: Option<Arc<dyn crate::scheduler::SchedulerApi>> =
+        if config.groups.iter().any(|name| name == "time") {
+            Some(Arc::new(
+                crate::scheduler::Client::new(
+                    &config.scheduler_url,
+                    config.scheduler_token.clone(),
+                    config.query_timeout,
+                )
+                .map_err(anyhow::Error::msg)?,
+            ))
+        } else {
+            None
+        };
+
     let bb_targets = if config.bb_targets_file.is_empty() {
         None
     } else {
@@ -137,6 +151,8 @@ pub async fn run() -> anyhow::Result<()> {
         metrics: Arc::clone(&metrics),
         clock: clock.clone(),
         location: config.location.clone(),
+        timezone_name: config.timezone.clone(),
+        scheduler,
         cooldown: config.cooldown,
         self_restart_delay: config.self_restart_delay,
         query_timeout: config.query_timeout,
@@ -178,6 +194,7 @@ pub async fn run() -> anyhow::Result<()> {
         Arc::new(ReportGroup::new(Arc::clone(&deps))),
         Arc::new(BbReadGroup::new(Arc::clone(&deps))),
         Arc::new(BbActGroup::new(Arc::clone(&deps))),
+        Arc::new(crate::tools::time::TimeGroup::new(Arc::clone(&deps))),
     ]);
     let groups = registry
         .select(&config.groups)

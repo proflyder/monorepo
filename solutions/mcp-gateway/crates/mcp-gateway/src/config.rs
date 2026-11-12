@@ -117,6 +117,13 @@ pub struct Config {
     /// Voice bearer token.
     pub voice_token: String,
 
+    /// Durable scheduler base URL.
+    pub scheduler_url: String,
+    /// Durable scheduler token file.
+    pub scheduler_token_file: String,
+    /// Durable scheduler bearer token.
+    pub scheduler_token: String,
+
     /// IANA timezone name.
     pub timezone: String,
     /// Loaded timezone.
@@ -170,6 +177,9 @@ impl Config {
             bb_dispatcher_thread_id: trimmed(getenv, "MCP_BB_DISPATCHER_THREAD_ID"),
             voice_token_file: trimmed(getenv, "MCP_VOICE_TOKEN_FILE"),
             voice_token: String::new(),
+            scheduler_url: trimmed(getenv, "MCP_SCHEDULER_URL"),
+            scheduler_token_file: trimmed(getenv, "MCP_SCHEDULER_TOKEN_FILE"),
+            scheduler_token: String::new(),
             timezone: value_or(getenv, "MCP_TIMEZONE", DEFAULT_TIMEZONE),
             location: TimeZone::UTC,
         };
@@ -248,6 +258,7 @@ impl Config {
         validate_groups(&cfg)?;
         load_telegram_files(&mut cfg, getenv, read_file)?;
         load_ha_files(&mut cfg, read_file)?;
+        load_scheduler_files(&mut cfg, read_file)?;
         load_bb_files(&mut cfg, read_file)?;
         Ok(cfg)
     }
@@ -324,6 +335,23 @@ fn load_bb_files(cfg: &mut Config, read_file: &ReadFile<'_>) -> Result<(), Strin
     Ok(())
 }
 
+fn load_scheduler_files(cfg: &mut Config, read_file: &ReadFile<'_>) -> Result<(), String> {
+    if !cfg.groups.iter().any(|name| name == "time") {
+        return Ok(());
+    }
+    if cfg.scheduler_url.is_empty() || cfg.scheduler_token_file.is_empty() {
+        return Err(
+            "group time requires MCP_SCHEDULER_URL and MCP_SCHEDULER_TOKEN_FILE".to_owned(),
+        );
+    }
+    cfg.scheduler_token = read_secret(
+        read_file,
+        &cfg.scheduler_token_file,
+        "MCP_SCHEDULER_TOKEN_FILE",
+    )?;
+    Ok(())
+}
+
 fn load_ha_files(cfg: &mut Config, read_file: &ReadFile<'_>) -> Result<(), String> {
     if cfg.ha_url.is_empty() && cfg.ha_token_file.is_empty() {
         return Ok(());
@@ -350,7 +378,7 @@ fn validate_groups(cfg: &Config) -> Result<(), String> {
                     );
                 }
             }
-            "bb.read" | "bb.act" => {}
+            "bb.read" | "bb.act" | "time" => {}
             other => return Err(format!("unknown tool group {other:?}")),
         }
     }
@@ -490,6 +518,24 @@ mod tests {
         assert_eq!(config.log_byte_cap, 64 << 10);
         assert_eq!(config.auth_token, "secret");
         assert_eq!(config.timezone, "UTC");
+    }
+
+    #[test]
+    fn time_group_requires_the_scheduler_url_and_token() {
+        let pairs = [("MCP_AUTH_TOKEN_FILE", "/token"), ("MCP_GROUPS", "time")];
+        let read = |_path: &str| Ok(b"secret\n".to_vec());
+        let error = Config::load_from(&env(&pairs), &read).expect_err("missing scheduler");
+        assert!(error.contains("MCP_SCHEDULER_URL"), "{error}");
+
+        let pairs = [
+            ("MCP_AUTH_TOKEN_FILE", "/token"),
+            ("MCP_GROUPS", "time"),
+            ("MCP_SCHEDULER_URL", "http://scheduler:8098"),
+            ("MCP_SCHEDULER_TOKEN_FILE", "/scheduler-token"),
+        ];
+        let config = Config::load_from(&env(&pairs), &read).expect("config");
+        assert_eq!(config.scheduler_token, "secret");
+        assert_eq!(config.groups, vec!["time"]);
     }
 
     #[test]

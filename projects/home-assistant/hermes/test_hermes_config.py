@@ -29,10 +29,23 @@ class HermesConfigTests(unittest.TestCase):
         assert server["tools"]["resources"] is True
         assert server["tools"]["prompts"] is True
 
-    def test_mcp_exposes_all_ha_tools(self):
+    def test_mcp_exposes_every_ha_tool_except_time_writers(self):
         tools = self.data["mcp_servers"]["homeassistant"]["tools"]
         assert "include" not in tools, "tools.include would narrow the HA MCP surface"
-        assert "exclude" not in tools
+        excluded = set(tools["exclude"])
+        # Time writes are exclusively the mcp-gateway `time` tools; the local
+        # HA intent scripts and executor scripts remain only for the ring path.
+        for pattern in (
+            "StationAlarm*",
+            "StationTimer*",
+            "StationReminder*",
+            "StationTimeRoute",
+            "script.schedule_alarm_*",
+            "script.schedule_timer_*",
+            "script.schedule_reminder_*",
+            "script.alarm_*",
+        ):
+            assert pattern in excluded, pattern
         assert tools["resources"] is True
         assert tools["prompts"] is True
 
@@ -127,13 +140,15 @@ class HermesConfigTests(unittest.TestCase):
     def test_voice_prompt_forbids_guessed_alarm_durations(self):
         # Live regression 2026-11-12: Hermes called
         # schedule_alarm_create_relative(hours=0, minutes=0, name="через час")
-        # and the voice path announced a one-minute alarm. The prompt must make
-        # an unclear duration a question, never an invented 1-minute alarm.
+        # and the voice path announced a one-minute alarm. The prompt now keeps
+        # Hermes on the typed scheduler tools and makes an unclear duration a
+        # question, never an invented 1-minute alarm.
         prompt = (ROOT / "projects" / "home-assistant" / "hermes" / "voice_prompt.txt").read_text()
         soul = (ROOT / "projects" / "home-assistant" / "hermes" / "SOUL.md").read_text()
-        for marker in ("hours=0", "одну минуту", "name", "вопрос о времени"):
+        for marker in ("time_now", "alarm_set", "timer_set", "reminder_set", "одну минуту", "label", "вопрос"):
             assert marker in prompt, marker
-        assert "задай один короткий вопрос о времени" in soul
+        assert "один короткий вопрос" in prompt
+        assert "time_now" in soul
         assert "ничего не создавай наугад" in soul
 
     def test_voice_layers_require_infra_confirmation(self):

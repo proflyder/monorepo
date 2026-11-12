@@ -26,6 +26,7 @@ pub mod report;
 pub mod speech;
 pub mod state;
 pub mod status;
+pub mod time;
 
 #[cfg(test)]
 mod vectors;

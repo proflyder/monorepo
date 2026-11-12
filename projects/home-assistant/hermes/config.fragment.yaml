@@ -95,10 +95,24 @@ mcp_servers:
     connect_timeout: 20
     timeout: 90
     trust: full
-    # No tools.include: all HA MCP tools are available.
+    # Alarms, timers and reminders are owned by the durable scheduler through
+    # the mcp-gateway `time` group (`time_now`, `alarm_*`, `timer_*`,
+    # `reminder_*`). The HA intent scripts and executor scripts stay for the
+    # local ring path, but Hermes must not call them: the removed schedule
+    # templates plus these exclusions are what keep the voice model on the
+    # typed scheduler API instead of ad-hoc HA scripts.
     tools:
       resources: true
       prompts: true
+      exclude:
+        - "StationAlarm*"
+        - "StationTimer*"
+        - "StationReminder*"
+        - "StationTimeRoute"
+        - "script.schedule_alarm_*"
+        - "script.schedule_timer_*"
+        - "script.schedule_reminder_*"
+        - "script.alarm_*"
   infra:
     # mcp-gateway in the same namespace.  Streamable HTTP at /mcp, bearer auth.
     # trust: full is required: the voice path cannot show approval prompts, so
