@@ -46,7 +46,8 @@ spec:
         - name: smoke
           image: {{ required "smoke.image is required when the hook is enabled" $smoke.image | quote }}
           imagePullPolicy: IfNotPresent
-          command: ["/usr/local/bin/home-deploy", "hermes", "assist-smoke"]
+          # Hermes restarts on a config change: retry while its Pod starts.
+          command: ["/usr/local/bin/home-deploy", "hermes", "assist-smoke", "--timeout", "90s", "--retry-window", "180s"]
           env:
             - name: HA_URL
               value: http://home-assistant-external.monitoring.svc.cluster.local:8123
