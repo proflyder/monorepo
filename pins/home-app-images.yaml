@@ -7,7 +7,7 @@ metadata:
     proflyder.dev/source: "initial pin from live cluster 2026-11-10"
     proflyder.dev/source-commit: "126199dfc17a0b6b90e8f65e17e40ec7f54dd373"
     proflyder.dev/source-tree: "066bcf3d12b8ef9b08995df87c3554a2305739a1"
-    proflyder.dev/verified-at: "2026-11-12T19:34:37Z"
+    proflyder.dev/verified-at: "2026-11-12T19:35:23Z"
     proflyder.dev/run: "https://github.com/proflyder/monorepo/actions/runs/43291395482"
 data:
   BUILD_ID: "126199dfc17a"
