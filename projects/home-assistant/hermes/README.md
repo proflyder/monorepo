@@ -135,6 +135,16 @@ A healthy `mcp test infra` reports the tool count; `401` means the token is
 missing or stale, `connection refused` means the gateway Service or its Pod is
 not ready.
 
+After a gateway restart Hermes reconnects and re-lists tools, but its own
+registry keeps the old set unless the server announces a change (upstream
+`_register_discovered_tools_if_needed` returns early when tools are already
+registered).  The gateway therefore sends
+`notifications/tools/list_changed` once per initialized session on the
+standalone GET stream, and Hermes refreshes its registry from that
+notification.  When the gateway's tool set changes, restart the gateway only —
+Hermes does not need a restart.  See
+`solutions/mcp-gateway/README.md` for the delivery details.
+
 ## Time tools (mcp-gateway `time`)
 
 The same `infra` MCP server carries the `time` group: `time_now`,
