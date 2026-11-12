@@ -76,7 +76,7 @@ pub fn router(options: Options) -> Router {
         .disable_allowed_hosts()
         .with_json_response(false);
     let service = StreamableHttpService::new(
-        move || Ok(handler.clone()),
+        move || Ok(handler.new_session()),
         Arc::new(LocalSessionManager::default()),
         config,
     );
@@ -381,6 +381,9 @@ impl Service<Request<Body>> for McpService {
                 ));
             }
 
+            // The standalone GET stream carries server-initiated messages
+            // (including `notifications/tools/list_changed`); it must stay
+            // unbuffered so the notification reaches the client immediately.
             let mut request = request;
             if !request.headers().contains_key(header::HOST) {
                 request
