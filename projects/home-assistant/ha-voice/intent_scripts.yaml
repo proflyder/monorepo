@@ -429,6 +429,14 @@ StationAlarmRelativeUnclear:
     text: "Не понял, через сколько поставить будильник. Скажи, например, через час."
   action: []
 
+StationAlarmUnclear:
+  # General alarm catch-all: an alarm phrase that no exact time template
+  # matched (for example «на полночь» or «пораньше»). Ask for the time locally
+  # instead of letting the built-in media search start music.
+  speech:
+    text: "Не понял, на какое время поставить будильник. Скажи, например, на семь тридцать."
+  action: []
+
 StationAlarmStatus:
   speech:
     text: >-
@@ -526,6 +534,14 @@ StationTimerRelativeUnclear:
   # invented duration. Explicit «на N минут» stays in StationTimerStart.
   speech:
     text: "Не понял, на сколько поставить таймер. Скажи, например, на десять минут."
+  action: []
+
+StationTimerUnclear:
+  # General timer catch-all: any «таймер» phrase without a parsed duration asks
+  # locally instead of reaching the built-in media search. Explicit «на N
+  # минут» remains StationTimerStart.
+  speech:
+    text: "Не понял, на сколько поставить таймер. Скажи, например, на десять минут или через час."
   action: []
 
 StationTimerStatus:

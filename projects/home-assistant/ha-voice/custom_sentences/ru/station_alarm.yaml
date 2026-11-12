@@ -109,6 +109,10 @@ lists:
       out: '0'
     - in: ноль
       out: '0'
+    - in: ноль ноль
+      out: '0'
+    - in: ноль-ноль
+      out: '0'
     - in: '1'
       out: '1'
     - in: '01'
@@ -457,31 +461,41 @@ intents:
   StationAlarmSet:
     data:
     - sentences:
-      - '[поставь|установи|заведи|включи] будильник на {alarm_hour:hour}:{alarm_minute:minute} [{alarm_period:period}] [на {alarm_day:day}] [{alarm_repeat:repeat}]'
-      - '[поставь|установи|заведи|включи] будильник на {alarm_hour:hour}.{alarm_minute:minute} [{alarm_period:period}] [на {alarm_day:day}] [{alarm_repeat:repeat}]'
-      - '[поставь|установи|заведи|включи] будильник на {alarm_hour:hour} {alarm_minute:minute} [{alarm_period:period}] [на {alarm_day:day}] [{alarm_repeat:repeat}]'
-      - '[поставь|установи|заведи|включи] будильник на {alarm_hour:hour} [часов] [и] {alarm_minute:minute} [минут] [{alarm_period:period}] [на {alarm_day:day}] [{alarm_repeat:repeat}]'
-      - '[поставь|установи|заведи|включи] будильник на {alarm_hour:hour} [часов] [{alarm_period:period}] [на {alarm_day:day}] [{alarm_repeat:repeat}]'
-      - '[поставь|установи|заведи|включи] будильник в {alarm_hour:hour}:{alarm_minute:minute} [{alarm_period:period}] [на {alarm_day:day}] [{alarm_repeat:repeat}]'
-      - '[поставь|установи|заведи|включи] будильник в {alarm_hour:hour} {alarm_minute:minute} [{alarm_period:period}] [на {alarm_day:day}] [{alarm_repeat:repeat}]'
+      - '[поставь|установи|заведи|включи|сделай] будильник на {alarm_hour:hour}:{alarm_minute:minute} [{alarm_period:period}] [на {alarm_day:day}] [{alarm_repeat:repeat}]'
+      - '[поставь|установи|заведи|включи|сделай] будильник на {alarm_hour:hour}.{alarm_minute:minute} [{alarm_period:period}] [на {alarm_day:day}] [{alarm_repeat:repeat}]'
+      - '[поставь|установи|заведи|включи|сделай] будильник на {alarm_hour:hour} {alarm_minute:minute} [{alarm_period:period}] [на {alarm_day:day}] [{alarm_repeat:repeat}]'
+      - '[поставь|установи|заведи|включи|сделай] будильник на {alarm_hour:hour} [часов] [и] {alarm_minute:minute} [минут] [{alarm_period:period}] [на {alarm_day:day}] [{alarm_repeat:repeat}]'
+      - '[поставь|установи|заведи|включи|сделай] будильник на {alarm_hour:hour} [часов] [{alarm_period:period}] [на {alarm_day:day}] [{alarm_repeat:repeat}]'
+      - '[поставь|установи|заведи|включи|сделай] будильник в {alarm_hour:hour}:{alarm_minute:minute} [{alarm_period:period}] [на {alarm_day:day}] [{alarm_repeat:repeat}]'
+      - '[поставь|установи|заведи|включи|сделай] будильник в {alarm_hour:hour} {alarm_minute:minute} [{alarm_period:period}] [на {alarm_day:day}] [{alarm_repeat:repeat}]'
       - разбуди меня в {alarm_hour:hour}:{alarm_minute:minute} [{alarm_period:period}] [на {alarm_day:day}] [{alarm_repeat:repeat}]
       - разбуди меня в {alarm_hour:hour} {alarm_minute:minute} [{alarm_period:period}] [на {alarm_day:day}] [{alarm_repeat:repeat}]
       - будильник на {alarm_hour:hour}:{alarm_minute:minute} [{alarm_period:period}] [на {alarm_day:day}] [{alarm_repeat:repeat}]
       - будильник на {alarm_hour:hour} {alarm_minute:minute} [{alarm_period:period}] [на {alarm_day:day}] [{alarm_repeat:repeat}]
       - поставь будильник {alarm_name:name} на {alarm_hour:hour}:{alarm_minute:minute} [{alarm_period:period}] [на {alarm_day:day}] [{alarm_repeat:repeat}]
-      - '[поставь|установи|заведи|включи] будильник {alarm_name:name} на {alarm_hour:hour} [часов] [и] {alarm_minute:minute} [минут] [{alarm_period:period}] [на {alarm_day:day}] [{alarm_repeat:repeat}]'
-      - '[поставь|установи|заведи|включи] будильник {alarm_name:name} на {alarm_hour:hour} [часов] [{alarm_period:period}] [на {alarm_day:day}] [{alarm_repeat:repeat}]'
-      - '[поставь|установи|заведи|включи] будильник {alarm_name:name} в {alarm_hour:hour}:{alarm_minute:minute} [{alarm_period:period}] [на {alarm_day:day}] [{alarm_repeat:repeat}]'
+      - '[поставь|установи|заведи|включи|сделай] будильник {alarm_name:name} на {alarm_hour:hour} [часов] [и] {alarm_minute:minute} [минут] [{alarm_period:period}] [на {alarm_day:day}] [{alarm_repeat:repeat}]'
+      - '[поставь|установи|заведи|включи|сделай] будильник {alarm_name:name} на {alarm_hour:hour} [часов] [{alarm_period:period}] [на {alarm_day:day}] [{alarm_repeat:repeat}]'
+      - '[поставь|установи|заведи|включи|сделай] будильник {alarm_name:name} в {alarm_hour:hour}:{alarm_minute:minute} [{alarm_period:period}] [на {alarm_day:day}] [{alarm_repeat:repeat}]'
+      # Hour-only absolute forms and «ровно». «в десять» / «десять вечера»
+      # must be an alarm, not a media search; «ровно» means minute=0.
+      - '[поставь|установи|заведи|включи|сделай] будильник в {alarm_hour:hour} [{alarm_period:period}] [на {alarm_day:day}] [{alarm_repeat:repeat}]'
+      - 'разбуди меня в {alarm_hour:hour} [{alarm_period:period}] [на {alarm_day:day}] [{alarm_repeat:repeat}]'
+      - 'будильник в {alarm_hour:hour} [{alarm_period:period}] [на {alarm_day:day}] [{alarm_repeat:repeat}]'
+      - '[поставь|установи|заведи|включи|сделай] будильник на {alarm_hour:hour} [часов] [{alarm_period:period}] ровно [на {alarm_day:day}] [{alarm_repeat:repeat}]'
+      - '[поставь|установи|заведи|включи|сделай] будильник на {alarm_hour:hour} [часов] [и] {alarm_minute:minute} [минут] [{alarm_period:period}] ровно [на {alarm_day:day}] [{alarm_repeat:repeat}]'
+      - '[поставь|установи|заведи|включи|сделай] будильник в {alarm_hour:hour} [{alarm_period:period}] ровно [на {alarm_day:day}] [{alarm_repeat:repeat}]'
+      - 'будильник на {alarm_hour:hour} [часов] [{alarm_period:period}] ровно [на {alarm_day:day}] [{alarm_repeat:repeat}]'
+      - 'разбуди меня в {alarm_hour:hour} [{alarm_period:period}] ровно [на {alarm_day:day}] [{alarm_repeat:repeat}]'
   StationAlarmRelative:
     data:
     - sentences:
-      - '[поставь|установи|заведи|включи] будильник через {alarm_minute:minutes} минут[у|ы]'
-      - '[поставь|установи|заведи|включи] будильник через {alarm_hour:hours} час[а|ов]'
-      - '[поставь|установи|заведи|включи] будильник через {alarm_hour:hours} час[а|ов] [и] {alarm_minute:minutes} минут[у|ы]'
-      - '[поставь|установи|заведи|включи] будильник через {alarm_rel_hours:hours}'
-      - '[поставь|установи|заведи|включи] будильник через {alarm_rel_minutes:minutes}'
-      - '[поставь|установи|заведи|включи] будильник {alarm_name:name} через {alarm_minute:minutes} минут[у|ы]'
-      - '[поставь|установи|заведи|включи] будильник {alarm_name:name} через {alarm_hour:hours} час[а|ов] [и {alarm_minute:minutes} минут[у|ы]]'
+      - '[поставь|установи|заведи|включи|сделай] будильник через {alarm_minute:minutes} минут[у|ы]'
+      - '[поставь|установи|заведи|включи|сделай] будильник через {alarm_hour:hours} час[а|ов]'
+      - '[поставь|установи|заведи|включи|сделай] будильник через {alarm_hour:hours} час[а|ов] [и] {alarm_minute:minutes} минут[у|ы]'
+      - '[поставь|установи|заведи|включи|сделай] будильник через {alarm_rel_hours:hours}'
+      - '[поставь|установи|заведи|включи|сделай] будильник через {alarm_rel_minutes:minutes}'
+      - '[поставь|установи|заведи|включи|сделай] будильник {alarm_name:name} через {alarm_minute:minutes} минут[у|ы]'
+      - '[поставь|установи|заведи|включи|сделай] будильник {alarm_name:name} через {alarm_hour:hours} час[а|ов] [и {alarm_minute:minutes} минут[у|ы]]'
       - 'разбуди меня через {alarm_minute:minutes} минут[у|ы]'
       - 'разбуди меня через {alarm_hour:hours} час[а|ов]'
       - 'разбуди меня через {alarm_hour:hours} час[а|ов] [и] {alarm_minute:minutes} минут[у|ы]'
@@ -501,9 +515,22 @@ intents:
     # win over this wildcard.
     data:
     - sentences:
-      - '[поставь|установи|заведи|включи] будильник через {alarm_phrase}'
+      - '[поставь|установи|заведи|включи|сделай] будильник через {alarm_phrase}'
       - 'разбуди меня через {alarm_phrase}'
       - 'будильник через {alarm_phrase}'
+  StationAlarmUnclear:
+    # General catch-all guard: any «будильник» / «разбуди меня» phrase that no
+    # exact alarm template matched (absolute or relative) asks for the time
+    # locally. Without it the built-in HassMediaSearchAndPlay «<play>
+    # {search_query}» wins the remainder and answers «Воспроизвожу» with music
+    # (live regression 2026-11-12: STT «поставь будильник на двадцать два ноль
+    # ноль»). Exact templates have zero wildcards and more literal text, so
+    # hassil ranks them above this one.
+    data:
+    - sentences:
+      - '[поставь|установи|заведи|включи|сделай] будильник {alarm_phrase}'
+      - 'будильник {alarm_phrase}'
+      - 'разбуди меня {alarm_phrase}'
   StationAlarmStatus:
     data:
     - sentences:

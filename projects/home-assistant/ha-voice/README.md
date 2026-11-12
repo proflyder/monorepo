@@ -74,13 +74,24 @@
   `hours=0` и `minutes=0` — ошибка «Не понял, через сколько поставить
   будильник», а не минутный будильник; `name` принимается только как явная
   метка, текст команды в метку не попадает;
-- нераспознанная длительность в фразе про будильник/таймер («через сутки»,
-  «через 90 минут», «поставь таймер через час») → локальные
-  `StationAlarmRelativeUnclear` / `StationTimerRelativeUnclear`: короткий
-  вопрос о времени. Это защита от built-in `HassMediaSearchAndPlay`
-  («<play> {search_query}»), который раньше отвечал «Воспроизвожу» и включал
-  музыку; явные «поставь таймер на N минут» по-прежнему идут в
-  `StationTimerStart`;
+- абсолютное время: «на 22:00», «на двадцать два ноль ноль», «ноль-ноль»,
+  «00», «на десять ровно» (минута 0), «в десять», «десять вечера»,
+  «в десять вечера», «разбуди меня в семь»; глаголы
+  «поставь/установи/заведи/включи/сделай»;
+- нераспознанное время или длительность в фразе про будильник/таймер
+  («через сутки», «через 90 минут», «на полночь», «пораньше», «поставь
+  таймер через час») → локальные guard'ы `StationAlarmRelativeUnclear` /
+  `StationTimerRelativeUnclear` / `StationAlarmUnclear` /
+  `StationTimerUnclear`: короткий вопрос о времени. Это защита от built-in
+  `HassMediaSearchAndPlay` («<play> {search_query}»), который раньше отвечал
+  «Воспроизвожу» и включал музыку (живой инцидент 2026-11-12: STT
+  «поставь будильник на двадцать два ноль ноль»). Точные шаблоны выигрывают
+  у guard'ов по ранжированию hassil: 0 wildcard и больше литеральных слов;
+  явные «поставь таймер на N минут» по-прежнему идут в `StationTimerStart`;
+- списки `alarm_hour`/`alarm_minute` продублированы в `station_alarm.yaml` и
+  `station_schedules.yaml` (последний нужен reminder-интентам); HA мержит
+  `lists` по имени и выигрывает последний загруженный файл, поэтому копии
+  обязаны быть идентичны — это проверяет `SharedSentenceListTests`;
 - «напомни завтра в 9:00 …», «какие напоминания» — one-shot расписания
   `SCHEDULE_KIND_REMINDER` в `SchedulerService`;
 - «запомни …», «покажи заметки», «что я записал про …» — `todo.notes`
@@ -243,8 +254,9 @@ idempotency key от `context.id`. Метка не найдена или schedul
   notes remain editable; отдельный view «Голос» с профилем)
 - `test_ha_config.py` — static audio/entity/template invariants
 - `test_custom_sentences.py` — phrase matching against the real
-  `custom_sentences/ru/*.yaml` with the `hassil` best-match ranking (relative
-  alarm durations and the anti-media-search guards)
+  `custom_sentences/ru/*.yaml` with the `hassil` best-match ranking (absolute
+  and relative alarm times, 30+ STT formulations, the anti-media-search
+  guards, and identical shared lists)
 - `test_scheduler_contract.py` — Connect JSON request/response, resolution and
   truthful-speech contract tests (fake clock/timezone, no live calls)
 - `custom_sentences/ru/station_control.yaml`
