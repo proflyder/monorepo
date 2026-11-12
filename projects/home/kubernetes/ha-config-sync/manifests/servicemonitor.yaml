@@ -1,0 +1,23 @@
+# kube-prometheus-stack runs with ruleSelectorNilUsesHelmValues=false, so a
+# ServiceMonitor in any namespace is picked up. The selector matches only this
+# Service.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: ha-config-sync
+  namespace: home-assistant
+  labels:
+    app.kubernetes.io/name: ha-config-sync
+    app.kubernetes.io/part-of: home
+spec:
+  namespaceSelector:
+    matchNames:
+      - home-assistant
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ha-config-sync
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 30s
+      scrapeTimeout: 10s

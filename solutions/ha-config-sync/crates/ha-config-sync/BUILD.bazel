@@ -1,0 +1,105 @@
+load("@rules_rust//cargo:defs.bzl", "extract_cargo_lints")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_clippy_test", "rust_library", "rust_test", "rustfmt_test")
+
+package(default_visibility = ["//visibility:public"])
+
+# Kept in sync with [package].version in Cargo.toml. Bazel does not read the
+# Cargo manifest; the `version` attribute injects env!("CARGO_PKG_VERSION").
+PACKAGE_VERSION = "0.1.0"
+
+LIB_DEPS = [
+    "//packages/rust/forced-ssh:forced_ssh",
+    "//packages/rust/home-ha:home_ha",
+    "//packages/rust/home-secret:home_secret",
+    "@crates//:anyhow",
+    "@crates//:axum",
+    "@crates//:base64",
+    "@crates//:futures",
+    "@crates//:hex",
+    "@crates//:regex",
+    "@crates//:reqwest",
+    "@crates//:rustls",
+    "@crates//:serde",
+    "@crates//:serde_json",
+    "@crates//:serde-saphyr",
+    "@crates//:sha2",
+    "@crates//:thiserror",
+    "@crates//:tokio",
+    "@crates//:tracing",
+    "@crates//:tracing-subscriber",
+]
+
+TEST_DEPS = LIB_DEPS + [
+    "@crates//:tempfile",
+]
+
+rust_library(
+    name = "ha_config_sync_lib",
+    crate_name = "ha_config_sync",
+    srcs = glob(
+        ["src/**/*.rs"],
+        exclude = ["src/main.rs"],
+    ),
+    compile_data = ["//solutions/ha-config-sync:agent"],
+    edition = "2024",
+    lint_config = ":workspace_lints",
+    version = PACKAGE_VERSION,
+    deps = LIB_DEPS,
+)
+
+rust_binary(
+    name = "ha-config-sync",
+    srcs = ["src/main.rs"],
+    edition = "2024",
+    lint_config = ":workspace_lints",
+    version = PACKAGE_VERSION,
+    deps = LIB_DEPS + [":ha_config_sync_lib"],
+)
+
+rust_test(
+    name = "unit_tests",
+    size = "small",
+    crate = ":ha_config_sync_lib",
+    edition = "2024",
+    lint_config = ":workspace_lints",
+    deps = TEST_DEPS,
+)
+
+# Runs the real agent script against a temporary root on the host shell.
+rust_test(
+    name = "agent_tests",
+    size = "small",
+    srcs = ["tests/agent.rs"],
+    compile_data = ["//solutions/ha-config-sync:agent"],
+    edition = "2024",
+    lint_config = ":workspace_lints",
+    deps = TEST_DEPS,
+)
+
+extract_cargo_lints(
+    name = "workspace_lints",
+    manifest = "Cargo.toml",
+    workspace = "//:Cargo.toml",
+)
+
+rustfmt_test(
+    name = "rustfmt",
+    size = "small",
+    targets = [
+        ":ha_config_sync_lib",
+        ":ha-config-sync",
+        ":unit_tests",
+        ":agent_tests",
+    ],
+)
+
+rust_clippy_test(
+    name = "clippy",
+    size = "small",
+    targets = [
+        ":ha_config_sync_lib",
+        ":ha-config-sync",
+        ":unit_tests",
+        ":agent_tests",
+    ],
+)

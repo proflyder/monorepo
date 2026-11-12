@@ -1,0 +1,16 @@
+# Example manifest for ha-config-sync. The project owns the real file; this
+# copy shows the schema. Every file under DESIRED_DIR must be covered by exactly
+# one glob, and only these paths are ever written:
+#   <name>.yaml
+#   custom_sentences/<lang>/<name>.yaml
+files:
+  - glob: "scripts.yaml"
+    reload: ["script.reload"]
+  - glob: "automations.yaml"
+    reload: ["automation.reload"]
+  - glob: "custom_sentences/ru/*.yaml"
+    reload: ["conversation.reload"]
+  - glob: "shell_commands.yaml"
+    # shell_command entries are read only at start-up, so a change needs a
+    # restart instead of a service reload.
+    restart: true

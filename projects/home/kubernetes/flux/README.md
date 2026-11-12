@@ -24,6 +24,7 @@ Reconciled by Flux today:
 | `app-currency-bot` | `currency-bot` | bot and Cloudflare Tunnel, Flux-owned since the 6.3 cutover |
 | `app-mcp-gateway` | `home-assistant` | gateway and catalog, Flux-owned since the 6.4 cutover |
 | `app-ha-executors` | `home-assistant` | scheduler + ha-bridge + ha-control + ha-scenario, Flux-owned since the 6.5 cutover |
+| `app-ha-config-sync` | `home-assistant` | ha-voice delivery to HAOS (PR-3) |
 | `app-hermes` | `home-assistant` / `flux-system` | `HelmRelease/runtime`, Flux-owned since the 6.6 cutover |
 
 All deployable application units are Flux-owned: `deploy-home` only commits
@@ -212,6 +213,7 @@ Manifest paths for the app units:
 | `app-currency-bot` | `projects/home/kubernetes/currency-bot/manifests` | namespace stays admin-owned |
 | `app-mcp-gateway` | `projects/home/kubernetes/mcp-gateway/manifests` | catalog via `configMapGenerator` |
 | `app-ha-executors` | `projects/home/kubernetes/scheduler/manifests` | one set for scheduler + three executors; steady-state modes pinned |
+| `app-ha-config-sync` | `projects/home/kubernetes/ha-config-sync/manifests` | image also carries the ha-voice file set + manifest |
 | `app-hermes` | `projects/home-assistant/deploy/flux` | `HelmRelease/runtime`, values from `runtime-values` |
 
 Rollback is `suspend: true` plus a pins revert, never `kubectl rollout undo`.

@@ -1,0 +1,26 @@
+load("//platform/bazel/oci:service_image.bzl", "rust_service_image")
+
+package(default_visibility = ["//visibility:public"])
+
+# Static musl solution binary plus the reviewed ha-voice files. The image digest
+# is the checksum of the binary, the delivered YAML and the manifest, so a
+# project file change rolls the Deployment through the pins branch.
+rust_service_image(
+    name = "ha-config-sync",
+    crate_binary = "//solutions/ha-config-sync/crates/ha-config-sync:ha-config-sync",
+    env = {
+        "DESIRED_DIR": "/opt/ha-voice",
+        "MANIFEST_FILE": "/opt/ha-voice-sync.yaml",
+    },
+    extra_tars = [
+        "//projects/home-assistant/ha-voice:overlay",
+        "//projects/home-assistant/ha-voice:manifest",
+    ],
+    repo = "ghcr.io/proflyder/ha-config-sync",
+)
+
+filegroup(
+    name = "images",
+    srcs = [":ha-config-sync_image"],
+    visibility = ["//visibility:public"],
+)

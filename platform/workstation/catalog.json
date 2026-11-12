@@ -169,6 +169,10 @@
    "purpose": "HA long-lived token for ha-bridge",
    "consumer": "ESO → home-assistant"
   },
+  "k8s/home-assistant/ha-config-sync": {
+   "purpose": "HAOS forced-command agent key and pinned host key for ha-config-sync",
+   "consumer": "ESO → home-assistant"
+  },
   "k8s/home-assistant/hermes-config": {
    "purpose": "Hermes renderer private values (real HA/MA endpoints, Telegram owner chat id)",
    "consumer": "ESO → home-assistant (Secret hermes-config-private)"

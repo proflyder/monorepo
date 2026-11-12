@@ -75,7 +75,9 @@ REST = load_yaml(HA / "rest_commands.yaml")
 
 
 def yaml_files() -> list[Path]:
-    files = list(HA.rglob("*.yaml"))
+    # sync.yaml is the ha-config-sync delivery manifest, not Home Assistant
+    # configuration; test_sync_manifest.py owns it.
+    files = [path for path in HA.rglob("*.yaml") if path.name != "sync.yaml"]
     files += [
         ROOT / "projects" / "home-assistant" / "configs" / "00-installer-config.yaml",
     ]
