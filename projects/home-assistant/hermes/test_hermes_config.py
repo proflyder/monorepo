@@ -39,7 +39,7 @@ class HermesConfigTests(unittest.TestCase):
             "StationAlarm*",
             "StationTimer*",
             "StationReminder*",
-            "StationTimeRoute",
+            "StationTimeRoute*",
             "script.schedule_alarm_*",
             "script.schedule_timer_*",
             "script.schedule_reminder_*",

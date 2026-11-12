@@ -279,6 +279,35 @@ class TimeRouteTests(unittest.TestCase):
         self.assertEqual(match.intent, BUILTIN_PLAY["intent"])
 
 
+def time_intent_matches(phrase: str) -> list[str]:
+    """Every time-router template that matches: real HA prefers custom intents
+    over built-ins, so any match here would steal the phrase from music."""
+    text = normalize(phrase)
+    return [
+        intent
+        for intent in TIME_INTENTS
+        for template in INTENTS.get(intent, [])
+        if compile_template(template)[0].match(text)
+    ]
+
+
+class TimeRouterDoesNotStealTests(unittest.TestCase):
+    def test_non_time_phrases_match_no_time_template(self) -> None:
+        for phrase in (
+            "поставь queen",
+            "поставь музыку",
+            "включи radiohead",
+            "что",
+            "статус",
+            "сколько осталось",
+            "сколько осталось до нового года",
+            "поставь громкость на пять",
+            "поставь на паузу",
+        ):
+            with self.subTest(phrase=phrase):
+                self.assertEqual(time_intent_matches(phrase), [])
+
+
 class TimeRouterScriptTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
