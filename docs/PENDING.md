@@ -28,17 +28,14 @@
       Следующий шаг: живая проверка «Рикардо отмена» + повтор, обычных пауз,
       continued conversation и earcon; затем калибровка onset/release/trailing
       и решение о boot-persistent/default-on.
-- [ ] **Wake word v27.** Установлен model-only (`4f645834…b0e12444`),
-      `live_voice_acceptance=pending`; v24 остаётся best-known/reference.
-      Следующий шаг: новый независимый ambient и живая приёмка всех манер
-      речи/ложных срабатываний, recall/FP в тишине/шуме и latency; откат — `wakeword-v24.json`, затем
-      `wakeword-v22.json`.
-- [ ] **Wake-события: первый FP/ч.** Инструменты сбора, разметки, отчёта,
-      manifest и калибровки готовы (`station_events.py`, `calibrate.py`);
-      запись работает на станции с 2026-11-01.
-      Следующий шаг: собрать не менее трёх суток, `collect` → `review`/`label`
-      подозрительных hits → `report` с подтверждёнными FP/ч; затем
-      дообучение с `--extra-manifest` и калибровка cutoff/window.
+- [ ] **Wake word v28.** Установлен 2026-11-12 model-only (`a039ed2d…e05efb6e`),
+      `live_voice_acceptance=pending`; до v28 на 215 ч прослушивания v27 давала
+      0.18 подтверждённых FP/ч. Следующий шаг: живая приёмка всех манер речи,
+      затем через ~неделю `collect` → `report` и сравнение FP/ч с v27; разметить
+      24 подозрительных hits. Откат — `wakeword-v27.json`, затем `wakeword-v24.json`.
+- [ ] **deploy.py и local endpointing.** `deploy.py` делает `ctl.sh reload` без
+      `PULSAR_LOCAL_ENDPOINTING=1`. Следующий шаг: сохранять переменную при reload
+      (или сделать её boot-persistent) и проверять её после установки.
 - [ ] **Двухступенчатый верификатор.** Следующий шаг: после первых
       station-данных проверить второй каскад поверх Ricardo на подтверждённых
       false hits; сравнить FP/ч и recall, не ухудшая текущую приёмку 0.9/10.
