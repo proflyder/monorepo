@@ -7,7 +7,7 @@ table inet home_k3s {
     iifname "lo" accept
     ip saddr NODE_IPV4 accept
     ip saddr POD_CIDR accept
-    tcp dport { 6443, 10250, 9100, 9116 } drop
+    tcp dport { 6443, 10250, 9100, 9116, 9118 } drop
     udp dport 8472 drop
   }
 }

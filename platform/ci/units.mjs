@@ -828,6 +828,59 @@ export const config = {
     },
 
     {
+      id: "hermes-config",
+      platform: "bazel",
+      title: "projects/home-assistant/hermes (config renderer image + drift exporter)",
+      // The renderer, the reviewed overlay files and the shared image macro
+      // are this image's inputs. `hermes render-config`/`drift-exporter` ship
+      // in the same image, so a deploy-rs change rebuilds it even when the
+      // overlay did not move.
+      paths: [
+        "projects/home-assistant/hermes/BUILD.bazel",
+        "projects/home-assistant/hermes/config.fragment.yaml",
+        "projects/home-assistant/hermes/HERMES.md",
+        "projects/home-assistant/hermes/SOUL.md",
+        "projects/home-assistant/hermes/voice_prompt.txt",
+        "projects/home-assistant/hermes/telegram_prompt.txt",
+        "projects/home-assistant/hermes/skills/**",
+        "platform/deploy-rs/**",
+        "platform/bazel/oci/**",
+      ],
+      // The image is the static `//platform/deploy-rs:home-deploy` binary, so
+      // shared crates reach it through the deploy-rs root; the hermes package
+      // owns the overlay tar and the image targets.
+      bazel: {
+        roots: ["//projects/home-assistant/hermes", "//platform/deploy-rs"],
+        test_targets: [
+          "//platform/deploy-rs:unit_tests",
+          "//platform/deploy-rs:clippy",
+        ],
+        build_targets: ["//projects/home-assistant/hermes:hermes-config_image"],
+      },
+      // Flux owns the runtime release (решение 54); a pins update changes the
+      // pod template, and the init container/sidecar come from this image.
+      deploy: {
+        builder: "bazel",
+        target_root: "//projects/home-assistant/hermes",
+        images: ["hermes-config"],
+        workloads: ["hermes"],
+        namespace: "home-assistant",
+      },
+      // `HelmRelease/runtime` rolls back automatically to the previous
+      // revision when the upgrade or smoke hook fails.
+      rollback: {
+        kind: "hermes",
+        release: "runtime",
+        namespace: "home-assistant",
+        source: "docs/KUBERNETES-OPERATIONS.md (Автодеплой Hermes / voice-proxy / health exporter)",
+        note:
+          "Flux: `HelmRelease/runtime` uses upgrade.remediation.strategy " +
+          "rollback. Manual emergency path: `helm rollback runtime <revision>` " +
+          "or a `deploy/home-apps` revert.",
+      },
+    },
+
+    {
       id: "ha-deploy",
       platform: "python",
       title: "projects/home-assistant/deploy",

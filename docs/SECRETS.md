@@ -68,6 +68,7 @@
 | `k8s/flux-system/git-deploy-key` | Flux GitRepository read-only deploy key and pinned github.com host key | ESO → flux-system (GitRepository) |
 | `k8s/flux-system/settings` | Flux deployment settings (`NEXUS_HOST`, `NEXUS_PUBLIC_HOST`, `NODE_LAN_IP`, `HOME_DOMAIN`, `LAN_CIDR`, `HAOS_ADDRESS`, `PVE_NODE_TARGET`) | ESO → flux-system (postBuild substitution) |
 | `k8s/home-assistant/ha-bridge-ha` | HA long-lived token for ha-bridge | ESO → home-assistant |
+| `k8s/home-assistant/hermes-config` | Hermes renderer private values: `private.yaml` (real HA/MA endpoints, Telegram owner chat id) | ESO → home-assistant (`hermes-config-private`) |
 | `k8s/home-assistant/hermes-environment` | Hermes agent environment (HA/MA/Telegram/API keys) | ESO → home-assistant |
 | `k8s/home-assistant/intercom` | intercom signaling: station device token; `phone_token` is taken from `scheduler-auth` (`token`) | ESO → home-assistant |
 | `k8s/home-assistant/mcp-gateway-auth` | MCP gateway bearer | ESO → home-assistant |
@@ -80,6 +81,14 @@
 | `k8s/nexus/nexus-secrets` | Nexus admin password and read-only `ci-reader` password | ESO → nexus (init container, provisioning Job) |
 | `k8s/test` | smoke probe, not secret | Kubernetes auth smoke |
 | `k8s/vaultwarden/vaultwarden-admin` | Argon2id hash of the Vaultwarden /admin token | ESO → vaultwarden |
+
+`k8s/home-assistant/hermes-config#private.yaml` заменяет старый
+`infra/kubernetes/values-private#hermes_private_yaml` после перевода Hermes на
+init container. Перенос — один раз перед merge PR: GET старого поля → merge в
+новый путь → POST с `options.cas` (без печати значений); подробная команда —
+`docs/KUBERNETES-OPERATIONS.md`, раздел «Автодеплой Hermes». Старое поле остаётся
+только как источник для копирования и после проверки может быть удалено
+владельцем.
 
 Поля `ci/android-distribute` для release-подписи APK: `signing_keystore_b64`
 (base64 PKCS12-ключа), `signing_store_password`, `signing_key_password`,

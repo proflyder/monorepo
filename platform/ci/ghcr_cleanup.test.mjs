@@ -50,6 +50,7 @@ test("deploy images and native publish repositories of units.mjs are considered"
     "ha-scenario",
     "health-exporter",
     "hermes",
+    "hermes-config",
     "home-deploy",
     "intercom",
     "mcp-gateway",

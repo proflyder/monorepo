@@ -810,6 +810,16 @@ mise run secrets:exec -- -P kube exec -- platform/workstation/with-kube-tunnel.s
 — проверить откат. План отката и документированную команду печатает
 `mise run rollback hermes --dry-run`.
 
+Конфиг Hermes (config.yaml, HERMES.md, SOUL.md, prompts, skills) едет тем же
+Flux-релизом: образ `hermes-config` (`HERMES_CONFIG_IMAGE`) запускается как
+initContainer `render-config` до gateway и как sidecar `config-drift` (`:9118`).
+Приватные значения рендера — `Secret/hermes-config-private` из OpenBao
+`k8s/home-assistant/hermes-config` поле `private.yaml`. Ручной
+`home-deploy hermes render-config --source-dir projects/home-assistant/hermes`
+нужен только в аварии (Flux/pins недоступны); штатных ручных рендеров и
+restart'ов больше нет. Миграция секрета, проверка после merge и правило
+firewall `9118` — `KUBERNETES-OPERATIONS.md`, раздел «Автодеплой Hermes».
+
 ## HA / MA / Matter / K3s компоненты
 
 ```bash

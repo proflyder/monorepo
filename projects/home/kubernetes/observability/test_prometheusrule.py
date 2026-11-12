@@ -28,6 +28,14 @@ ALERTMANAGER_RULE_FILE = RULE_DIR / "prometheusrule-alertmanager.yaml"
 FLUX_RULE_FILE = RULE_DIR / "prometheusrule-flux.yaml"
 STATION_RULE_FILE = RULE_DIR / "prometheusrule-station.yaml"
 STATION_DASHBOARDS = ROOT / "projects/station/observability/chart/dashboards"
+HA_RUNTIME_MONITORS = (
+    ROOT / "projects/home-assistant/observability/chart/templates/monitors.yaml"
+)
+HERMES_CONFIG_ALERTS = {
+    "HermesConfigDrift",
+    "HermesConfigCheckFailing",
+    "HermesConfigDriftExporterDown",
+}
 PULSAR_METRICS_CATALOG = (
     ROOT
     / "projects/station/pulsar/satellite/crates/pulsar-metrics/src/catalog.rs"
@@ -451,6 +459,56 @@ class StationMetricsContractTests(unittest.TestCase):
                 self.assertTrue(document["uid"].startswith("station-"))
                 self.assertIn('"uid": "prometheus"', json.dumps(document))
                 self.assertTrue(document["panels"])
+
+
+class HermesConfigAlertTests(unittest.TestCase):
+    """Drift alerts and scrape target in the HA runtime chart."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.docs = [doc for doc in yaml.safe_load_all(
+            HA_RUNTIME_MONITORS.read_text(encoding="utf-8")) if doc]
+        cls.rules = {
+            rule["alert"]: rule
+            for doc in cls.docs if doc["kind"] == "PrometheusRule"
+            for group in doc["spec"]["groups"] for rule in group["rules"]
+        }
+
+    def test_drift_exporter_is_scraped(self) -> None:
+        monitors = [doc for doc in self.docs if doc["kind"] == "ServiceMonitor"]
+        monitor = next(doc for doc in monitors
+                       if doc["metadata"]["name"] == "hermes-config-drift")
+        self.assertEqual(monitor["spec"]["namespaceSelector"],
+                         {"matchNames": ["home-assistant"]})
+        self.assertEqual(monitor["spec"]["selector"]["matchLabels"],
+                         {"app.kubernetes.io/name": "hermes-config-drift"})
+        self.assertEqual(monitor["spec"]["endpoints"], [{
+            "port": "metrics", "honorLabels": True, "interval": "60s",
+        }])
+
+    def test_required_alerts_are_present(self) -> None:
+        self.assertTrue(HERMES_CONFIG_ALERTS.issubset(self.rules))
+
+    def test_drift_alerts_are_warnings_with_russian_text(self) -> None:
+        for name in HERMES_CONFIG_ALERTS:
+            with self.subTest(alert=name):
+                rule = self.rules[name]
+                self.assertEqual(rule["labels"]["severity"], "warning")
+                self.assertEqual(rule["labels"]["component"], "hermes")
+                self.assertEqual(rule["for"], "15m")
+                self.assertRegex(rule["annotations"]["summary"], r"[А-Яа-я]")
+                self.assertRegex(rule["annotations"]["description"], r"[А-Яа-я]")
+
+    def test_expressions_match_the_exporter_contract(self) -> None:
+        self.assertEqual(normalize(self.rules["HermesConfigDrift"]["expr"]),
+                         "max(hermes_config_drift_files) > 0")
+        self.assertEqual(normalize(self.rules["HermesConfigCheckFailing"]["expr"]),
+                         "min(hermes_config_check_success) == 0")
+        self.assertEqual(
+            normalize(self.rules["HermesConfigDriftExporterDown"]["expr"]),
+            "absent(hermes_config_check_success) or "
+            "(time() - max(hermes_config_last_check_timestamp_seconds)) > 1200",
+        )
 
 
 class RuleFileSyntaxTests(unittest.TestCase):

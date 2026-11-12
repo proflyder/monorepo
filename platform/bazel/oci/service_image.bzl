@@ -8,8 +8,28 @@ load("//platform/bazel/rust:musl_binary.bzl", "musl_binary")
 BASE = "@distroless_static_linux_amd64"
 
 
-def service_image(name, binary, repo, user = "65534:65534"):
-    """One static binary on distroless, plus a loadable tar and push target."""
+def service_image(
+        name,
+        binary,
+        repo,
+        user = "65534:65534",
+        extra_tars = [],
+        env = {},
+        entrypoint = None):
+    """One static binary on distroless, plus a loadable tar and push target.
+
+    Args:
+      name: target prefix (`<name>_image`, `<name>_load`, `<name>_push`).
+      binary: the executable to package at `/usr/local/bin`.
+      repo: GHCR repository for the push target.
+      user: runtime user recorded in the image.
+      extra_tars: optional additional layers (e.g. a read-only data overlay).
+      env: optional environment variables baked into the image.
+      entrypoint: optional entrypoint override; defaults to the package name.
+
+    The defaults keep every existing image byte-identical: with no `extra_tars`,
+    no `env` and no `entrypoint` the produced manifest is unchanged.
+    """
     layer = name + "_layer"
     image = name + "_image"
     pkg_tar(
@@ -19,14 +39,21 @@ def service_image(name, binary, repo, user = "65534:65534"):
         mode = "0755",
         visibility = ["//visibility:private"],
     )
+    kwargs = {}
+    if env:
+        kwargs["env"] = env
+    if entrypoint:
+        kwargs["entrypoint"] = entrypoint
+    else:
+        kwargs["entrypoint"] = ["/usr/local/bin/" + name]
     oci_image(
         name = image,
         base = BASE,
-        tars = [":" + layer],
+        tars = [":" + layer] + list(extra_tars),
         # rules_oci writes a fixed creation time, so the digest is reproducible.
-        entrypoint = ["/usr/local/bin/" + name],
         user = user,
         visibility = ["//visibility:public"],
+        **kwargs
     )
     oci_load(
         name = name + "_load",
@@ -42,9 +69,16 @@ def service_image(name, binary, repo, user = "65534:65534"):
     )
 
 
-def rust_service_image(name, crate_binary, repo, user = "65534:65534"):
+def rust_service_image(
+        name,
+        crate_binary,
+        repo,
+        user = "65534:65534",
+        extra_tars = [],
+        env = {},
+        entrypoint = None):
     """A Rust service image: the crate binary rebuilt for static musl, then
-    packaged as one distroless layer."""
+    packaged as one distroless layer (plus optional extra layers)."""
     binary = name + "_binary"
     musl_binary(
         name = binary,
@@ -55,4 +89,7 @@ def rust_service_image(name, crate_binary, repo, user = "65534:65534"):
         binary = ":" + binary,
         repo = repo,
         user = user,
+        extra_tars = extra_tars,
+        env = env,
+        entrypoint = entrypoint,
     )

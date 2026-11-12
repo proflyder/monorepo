@@ -1,3 +1,6 @@
+load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
+load("//platform/bazel/oci:service_image.bzl", "rust_service_image")
+
 package(default_visibility = ["//visibility:public"])
 
 # Reviewed renderer inputs. The renderer is the Rust crate
@@ -14,4 +17,43 @@ filegroup(
         ],
         exclude = ["hermes-private.yaml"],
     ),
+)
+
+# The image overlay: exactly the files the renderer installs, at the same
+# relative layout under /opt/hermes-overlay. README, tests, BUILD files and the
+# private values example stay out of the image.
+pkg_tar(
+    name = "hermes-config_overlay",
+    srcs = [
+        "HERMES.md",
+        "SOUL.md",
+        "config.fragment.yaml",
+        "telegram_prompt.txt",
+        "voice_prompt.txt",
+    ] + glob(
+        ["skills/**"],
+        exclude = [
+            "**/__pycache__/**",
+            "**/*.pyc",
+        ],
+    ),
+    package_dir = "/opt/hermes-overlay",
+    strip_prefix = ".",
+    mode = "0644",
+)
+
+# Reproducible image: the static `home-deploy` binary is the entrypoint (the
+# init container runs `hermes render-config`, the sidecar `hermes
+# drift-exporter`) and the reviewed overlay ships read-only in the same digest.
+# A pins update therefore restarts Hermes only when the overlay or renderer
+# changed.
+rust_service_image(
+    name = "hermes-config",
+    crate_binary = "//platform/deploy-rs:home-deploy",
+    repo = "ghcr.io/proflyder/hermes-config",
+    extra_tars = [":hermes-config_overlay"],
+    env = {
+        "HERMES_OVERLAY_DIR": "/opt/hermes-overlay",
+    },
+    entrypoint = ["/usr/local/bin/home-deploy"],
 )

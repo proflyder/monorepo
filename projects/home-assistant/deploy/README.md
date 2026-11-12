@@ -46,6 +46,21 @@ media type и digest. Все образы публикуются в GHCR (`ghcr.
 откатывается на прежнюю ревизию при провале. Сборка без новых digest'ов не
 перезапускает контур.
 
+Hermes-конфиг — отдельный воспроизводимый образ `hermes-config`
+(`//projects/home-assistant/hermes:hermes-config_image`,
+`ghcr.io/proflyder/hermes-config`): статический `home-deploy` и reviewed-overlay
+в `/opt/hermes-overlay` (файлы, `skills/**`). `pins` пишет
+`HERMES_CONFIG_IMAGE`; `postRenderers` в `flux/helmrelease.yaml` запускают его
+как initContainer `render-config` (пишет `config.yaml`, `.hermes.md`, `SOUL.md`,
+skills и prompts на PVC; при ошибке Pod не стартует, Helm откатывает релиз) и
+как sidecar `config-drift` (`hermes drift-exporter`, read-only, `:9118`).
+Приватные значения рендера — `Secret/hermes-config-private` из OpenBao
+`k8s/home-assistant/hermes-config` поле `private.yaml`, монтируется в
+`/run/hermes-config`. Chart рендерит opt-in Service `hermes-config-drift`
+(`hermesConfigDrift.enabled`, у Flux включён) для ServiceMonitor. Плановый
+перезапуск gateway использует preStop drain, поэтому «shutting down» в
+Telegram не приходит; ручной render остаётся только аварийным путём.
+
 Health exporter — Rust-бинарник
 `health-exporter/crates/health-exporter` (distroless-образ
 `//projects/home-assistant/deploy/health-exporter:health-exporter_image`,

@@ -17,7 +17,13 @@
 # Images are digest-pinned by the post-renderer from the pins branch, because
 # they sit inside private list values:
 #   ${HERMES_IMAGE}, ${VOICE_PROXY_IMAGE}
-#   ${HEALTH_EXPORTER_IMAGE}, ${HOME_DEPLOY_IMAGE}
+#   ${HEALTH_EXPORTER_IMAGE}, ${HOME_DEPLOY_IMAGE}, ${HERMES_CONFIG_IMAGE}
+#
+# The same post-renderer delivers the reviewed Hermes overlay: the
+# `hermes-config` image runs `hermes render-config` as an initContainer (fails
+# closed before the gateway starts), `hermes drift-exporter` as the
+# `config-drift` sidecar (:9118 metrics), and the gateway gets a preStop hook
+# that requests a quiet drain before SIGTERM.
 #
 # Rollback: failed install/upgrade is rolled back to the previous revision by
 # the remediation policy, and the Assist smoke is a post-upgrade Helm hook
@@ -55,6 +61,9 @@ spec:
     smoke:
       enabled: true
       image: ${HOME_DEPLOY_IMAGE}
+    # Renders the opt-in Service that exposes the drift sidecar to Prometheus.
+    hermesConfigDrift:
+      enabled: true
   install:
     remediation:
       retries: 0
@@ -79,11 +88,95 @@ spec:
               spec:
                 template:
                   spec:
+                    initContainers:
+                      # Reviewed overlay -> PVC. Any error (placeholder refusal,
+                      # unreadable private values) exits non-zero and blocks the
+                      # gateway; Helm remediation rolls the release back.
+                      - name: render-config
+                        image: ${HERMES_CONFIG_IMAGE}
+                        args:
+                          - hermes
+                          - render-config
+                          - --home
+                          - /opt/data
+                          - --source-dir
+                          - /opt/hermes-overlay
+                          - --private-values
+                          - /run/hermes-config/private.yaml
+                        volumeMounts:
+                          - {name: data, mountPath: /opt/data}
+                          - {name: hermes-config-private, mountPath: /run/hermes-config, readOnly: true}
+                        securityContext:
+                          allowPrivilegeEscalation: false
+                          readOnlyRootFilesystem: true
+                          capabilities: {drop: [ALL]}
+                        resources:
+                          requests: {cpu: 5m, memory: 16Mi}
+                          limits: {memory: 64Mi}
                     containers:
                       - name: gateway
                         image: ${HERMES_IMAGE}
+                        lifecycle:
+                          preStop:
+                            exec:
+                              command:
+                                - /opt/venv/bin/python
+                                - -c
+                                - |
+                                  import time
+                                  try:
+                                      from gateway.drain_control import write_drain_request
+                                      from gateway.status import parse_active_agents, read_runtime_status
+                                      start = time.monotonic()
+                                      write_drain_request(principal="kubelet-prestop", suppress_notification=True)
+                                      # The gateway watcher polls every second and stops
+                                      # accepting new turns; wait for in-flight work.
+                                      time.sleep(2)
+                                      while time.monotonic() - start < 60:
+                                          record = read_runtime_status() or {}
+                                          if parse_active_agents(record.get("active_agents")) == 0:
+                                              break
+                                          time.sleep(1)
+                                  except Exception:
+                                      pass
                       - name: voice-proxy
                         image: ${VOICE_PROXY_IMAGE}
+                      # Read-only drift view of the same plan the init container
+                      # applied; never writes to the PVC.
+                      - name: config-drift
+                        image: ${HERMES_CONFIG_IMAGE}
+                        args:
+                          - hermes
+                          - drift-exporter
+                          - --listen
+                          - 0.0.0.0:9118
+                          - --interval
+                          - "300"
+                          - --home
+                          - /opt/data
+                          - --source-dir
+                          - /opt/hermes-overlay
+                          - --private-values
+                          - /run/hermes-config/private.yaml
+                        ports:
+                          - {name: config-drift, containerPort: 9118}
+                        readinessProbe:
+                          tcpSocket: {port: 9118}
+                        volumeMounts:
+                          - {name: data, mountPath: /opt/data, readOnly: true}
+                          - {name: hermes-config-private, mountPath: /run/hermes-config, readOnly: true}
+                        securityContext:
+                          allowPrivilegeEscalation: false
+                          readOnlyRootFilesystem: true
+                          capabilities: {drop: [ALL]}
+                        resources:
+                          requests: {cpu: 5m, memory: 16Mi}
+                          limits: {memory: 64Mi}
+                    volumes:
+                      - name: hermes-config-private
+                        secret:
+                          secretName: hermes-config-private
+                          defaultMode: 0440
           # The exporter is a distroless Rust image: pin it and drop the old
           # Python ConfigMap mount, like `home-deploy hermes rollout` does.
           # JSON6902 `add` works whether or not the live keys exist yet.

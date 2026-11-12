@@ -80,13 +80,14 @@
   `flux-system`.
 - Приложения: GigaAM `10305`, Whisper `10300`, Piper `10200`,
   Hermes gateway `127.0.0.1:8642` + voice proxy `8643`, health exporter `9116`,
+  sidecar дрейфа конфига Hermes `9118` (закрыт от LAN),
   currency-bot + cloudflared, mcp-gateway (ClusterIP `:8080`),
   intercom (signaling, NodePort `30097`), Nexus (`:8081`, кэш артефактов CI)
   и Flux (`flux-system`). Под Flux — платформа (ESO, cert-manager, Traefik,
-  маршруты), observability, Vaultwarden, Nexus и все семь деплой-юнитов
-  приложений (`wakegrant`, `intercom`, `currency-bot`, `mcp-gateway`,
-  `scheduler` + executors, `hermes`); OpenBao, host-firewall и Cloudflare DNS
-  остаются ручными.
+  маршруты), observability, Vaultwarden, Nexus и деплой-юниты приложений
+  (`wakegrant`, `intercom`, `currency-bot`, `mcp-gateway`, `scheduler` +
+  executors, `hermes`, `hermes-config`); OpenBao, host-firewall и Cloudflare
+  DNS остаются ручными.
 - `8643` доступен только HAOS/K3s/loopback через nftables.
 - Observability: kube-prometheus-stack `92.14.0`, Loki `20.0.2`,
   Alloy `1.14.3`; пять dashboard JSON Home Assistant и два дашборда колонки
@@ -219,7 +220,10 @@
   пушимый байт-в-байт через `oci_push`. Health exporter — Rust-сервис
   `projects/home-assistant/deploy/health-exporter/crates/health-exporter`,
   собранный тем же `rust_service_image` (static musl, distroless) в отдельный
-  `ghcr.io/proflyder/health-exporter`. PR CI (`_unit.yml`, builder `mixed`,
+  `ghcr.io/proflyder/health-exporter`. Конфиг Hermes — воспроизводимый
+  `ghcr.io/proflyder/hermes-config` (тот же `home-deploy` + overlay в
+  `/opt/hermes-overlay`, digest = checksum входов), юнит `hermes-config`.
+  PR CI (`_unit.yml`, builder `mixed`,
   карта `deploy.bazel_images`) собирает и публикует gateway, proxy, exporter и
   `home-deploy` под `tree-<hash>`; `deploy-home` пинует digest'ы, затем
   Flux (`HelmRelease/runtime`) обновляет релиз, а post-upgrade smoke hook
@@ -291,7 +295,7 @@
   `https://{ha,grafana,alarms,control,currency,intercom,vault,passwords}.home.example.com`
   через Traefik + cert-manager. Публичного HA нет;
   `8123/8095/8099/6053/6638` наружу не проброшены.
-- K3s management/metrics `6443/10250/9100/9116/8472` закрыты от обычного LAN;
+- K3s management/metrics `6443/10250/9100/9116/9118/8472` закрыты от обычного LAN;
   SSH — LAN, K3s API — через туннель. Аварийный доступ к Proxmox — LAN/Wi-Fi.
 - Исходники: `projects/home/proxmox/vpn/`; приватные учётные данные —
   `secrets/home/vpn/`.
@@ -903,9 +907,14 @@
   home/music/web/mcp-infra, без terminal/file/browser. Telegram-канал Hermes —
   тот же инфра-бот, long polling, allow-list владельца. Контекст —
   `hermes/HERMES.md` → `/opt/data/.hermes.md`; overlay на PVC ставит
-  идемпотентный `home-deploy hermes render-config` (реальные endpoint'ы — из
-  git-ignored `secrets/home/hermes-private.yaml`, `--private-values`;
-  `agent.personalities.voice` рендерится из `voice_prompt.txt`).
+  Flux: образ `hermes-config` (`HERMES_CONFIG_IMAGE`, digest = checksum
+  overlay) работает initContainer'ом `render-config`
+  (`home-deploy hermes render-config --source-dir /opt/hermes-overlay`;
+  реальные endpoint'ы — из `Secret/hermes-config-private` ← OpenBao
+  `k8s/home-assistant/hermes-config#private.yaml`) и sidecar'ом `config-drift`
+  (`hermes drift-exporter`, read-only, `:9118`). Ручной render — только
+  аварийный путь. `agent.personalities.voice` рендерится из
+  `voice_prompt.txt`; формат-only правка config.yaml — semantic no-op.
   Telegram-промпт — `telegram_prompt.txt` в
   `platforms.telegram.channel_overrides[<owner chat id>].system_prompt`
   (иначе `display.personality: voice` режет ответы до 180 символов);

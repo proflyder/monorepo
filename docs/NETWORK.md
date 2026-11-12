@@ -117,6 +117,7 @@ HAOS и K3s используют статические адреса внутр�
 | `10250/tcp` | kubelet | localhost/pod/node; не обычный LAN |
 | `9100/tcp` | node-exporter | не обычный LAN |
 | `9116/tcp` | runtime health exporter | не обычный LAN |
+| `9118/tcp` | Hermes config-drift exporter | не обычный LAN (SSH-туннель) |
 | `8472/udp` | Flannel VXLAN | cluster-only |
 
 K3s management/metrics-порты закрыты firewall от обычных LAN-клиентов.
@@ -294,7 +295,7 @@ Remotely-managed Cloudflare Tunnel `home-k3s` работает как Deployment
 ## 6. Политика доступа
 
 - Административные интерфейсы — только LAN или VPN.
-- `6443/10250/9100/9116/8472` не публикуются в обычный LAN.
+- `6443/10250/9100/9116/9118/8472` не публикуются в обычный LAN.
 - `8643` voice proxy доступен только HAOS, K3s и loopback.
 - `8123/8095/8099/6053/6638` не пробрасываются в интернет; `9101` — только
   LAN и только для Prometheus.

@@ -72,6 +72,36 @@ class ChartContracts(unittest.TestCase):
         # No Python source is shipped by the chart any more.
         self.assertFalse((HERE / "chart/files/health_exporter.py").exists())
 
+    def test_hermes_config_drift_service_is_opt_in(self):
+        # The drift Service is rendered only for the Flux release; the admin
+        # `helm upgrade` path without the sidecar must stay valid.
+        base = {"nodeName": "example-node", "storage": {}, "workloads": {}}
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml") as f:
+            yaml.safe_dump(base, f)
+            f.flush()
+            default = [x for x in yaml.safe_load_all(subprocess.check_output(
+                ["helm", "template", "test", str(HERE / "chart"), "-f", f.name])) if x]
+        self.assertNotIn("hermes-config-drift",
+                         {x["metadata"]["name"] for x in default if x["kind"] == "Service"})
+
+        enabled = dict(base, hermesConfigDrift={"enabled": True})
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml") as f:
+            yaml.safe_dump(enabled, f)
+            f.flush()
+            rendered = [x for x in yaml.safe_load_all(subprocess.check_output(
+                ["helm", "template", "test", str(HERE / "chart"), "-f", f.name])) if x]
+        services = [x for x in rendered if x["kind"] == "Service"
+                    and x["metadata"]["name"] == "hermes-config-drift"]
+        self.assertEqual(len(services), 1)
+        service = services[0]
+        self.assertEqual(service["metadata"]["name"], "hermes-config-drift")
+        self.assertEqual(service["metadata"]["labels"],
+                         {"app.kubernetes.io/name": "hermes-config-drift"})
+        self.assertEqual(service["spec"]["selector"],
+                         {"app.kubernetes.io/name": "hermes"})
+        self.assertEqual(service["spec"]["ports"],
+                         [{"name": "metrics", "port": 9118, "targetPort": 9118}])
+
     def test_every_dashboard_is_packaged_once_with_stable_uid(self):
         rendered = subprocess.check_output(["helm", "template", "dashboards", str(OBS), "-n", "monitoring"])
         maps = [x for x in yaml.safe_load_all(rendered) if x and x["kind"] == "ConfigMap"]

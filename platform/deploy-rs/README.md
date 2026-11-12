@@ -28,6 +28,7 @@ src/http.rs           JSON HTTP client for preflight / assist-smoke
 src/preflight.rs      read-only cutover checks
 src/hermes.rs         Hermes rollout, smoke Job and Assist client
 src/hermesconfig.rs   Hermes config merge, plan, diff and apply
+src/hermesdrift.rs    read-only Hermes config drift exporter (`/metrics`)
 src/diff.rs           unified diff for `render-config --dry-run`
 src/oci.rs            layout index/manifest, OCI and docker archives
 src/oci/json.rs       ordered JSON with Python `json.dumps` formatting
@@ -39,8 +40,48 @@ testdata/frozen/      contract fixtures captured from the Go binary
 
 Every subcommand is ported: `env get`, `build-id`, `render`, `eso names`,
 `secret opaque`, `runtime split`, `oci digest`, `oci pack`/`oci docker`,
-`converge`, `state`, `preflight`, `hermes rollout`, `hermes render-config` and
-`hermes assist-smoke`.
+`converge`, `state`, `preflight`, `hermes rollout`, `hermes render-config`,
+`hermes drift-exporter` and `hermes assist-smoke`.
+
+## Hermes config delivery
+
+The reviewed overlay lives in `projects/home-assistant/hermes` and is baked into
+the `hermes-config` image at `/opt/hermes-overlay`
+(`//projects/home-assistant/hermes:hermes-config_image`, repository
+`ghcr.io/proflyder/hermes-config`). The image holds the static `home-deploy`
+binary as its entrypoint and sets `HERMES_OVERLAY_DIR=/opt/hermes-overlay`, so
+the same image runs both the init container (`hermes render-config`) and the
+drift sidecar (`hermes drift-exporter`).
+
+Overlay path precedence for both commands:
+
+1. an explicit flag (`--fragment`, `--context`, `--soul`, `--voice-prompt`,
+   `--telegram-prompt`, `--skills`);
+2. `--source-dir DIR`, which fills every unset path with `DIR/<file>`;
+3. `$HERMES_OVERLAY_DIR`;
+4. the repository overlay (`projects/home-assistant/hermes`).
+
+`render-config` keeps the parsed YAML tree as the contract: when Hermes rewrites
+`config.yaml` with its own emitter (quotes, comments, indentation), the merged
+tree is still equal, so no write and no `.prev` rotation happen. A real semantic
+change writes the file, keeps one `.prev` backup (mode 600), prints a redacted
+diff and still refuses TEST-NET/example placeholders unless
+`--allow-placeholders` is passed. `--dry-run` and `--check` never write.
+
+`drift-exporter` runs the same plan read-only, immediately at start and then
+every `--interval` seconds (default 300), and serves Prometheus text on
+`GET /metrics` (and `GET /healthz`). It exposes:
+
+- `hermes_config_drift{file="<path relative to HERMES_HOME>"} 1` for every file
+  the plan would rewrite;
+- `hermes_config_drift_files <n>`;
+- `hermes_config_check_success 1|0` (0 when the plan errors; the redacted error
+  goes to stderr);
+- `hermes_config_last_check_timestamp_seconds <unix>`;
+- `hermes_config_overlay_info{digest="<sha256 of the overlay inputs>"} 1`.
+
+The exporter never writes to `HERMES_HOME` and a failed check keeps the process
+running so the alert fires instead of the sidecar crash-looping.
 
 ## Frozen contract fixtures
 

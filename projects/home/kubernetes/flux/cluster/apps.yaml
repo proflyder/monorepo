@@ -278,6 +278,10 @@ spec:
       kind: HelmRelease
       name: runtime
       namespace: flux-system
+    - apiVersion: external-secrets.io/v1
+      kind: ExternalSecret
+      name: hermes-config-private
+      namespace: home-assistant
     - apiVersion: apps/v1
       kind: Deployment
       name: hermes

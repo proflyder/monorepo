@@ -15,7 +15,7 @@
 
 - HAOS `.28`: `8123`, `8095/8097/8927` — LAN/VPN, login/MFA.
 - K3s `.27`: `30300` Grafana — LAN/VPN, login; `8643` — только
-  HAOS/K3s/loopback; `6443/10250/9100/9116/8472` — firewall.
+  HAOS/K3s/loopback; `6443/10250/9100/9116/9118/8472` — firewall.
 - currency-bot: `8081` webhook — только cloudflared, `8080` API/metrics —
   кластер/узел/LAN и Traefik; API `currency.home.example.com` — LAN/VPN,
   Bearer. Публично только `tg.example.com/telegram/webhook` и
