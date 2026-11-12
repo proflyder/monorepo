@@ -36,6 +36,119 @@ def negative_key(entry, partition):
     return ("hard_" if entry.get("hard_negative") else "") + partition + "_neg"
 
 
+def mixture_buckets(batch, *, hard, station, synthetic_hard, extra):
+    """Batch composition as ``(source, key, label, count)`` tuples.
+
+    ``source`` selects the feature array group (``real``, ``synthetic`` or
+    ``extra``) instead of carrying the arrays themselves, so the mixture can be
+    unit-tested without TensorFlow/NumPy. Counts always sum to ``batch``; an
+    impossible batch size raises instead of silently yielding a short batch.
+    """
+    if extra:
+        if station:
+            # Extra voice keeps the v27 shares; the hard-negative slot splits
+            # evenly between personal hard negatives and station false positives.
+            if batch % 16:
+                raise ValueError("Batch must divide into sixteen for station and additional voice")
+            if hard:
+                buckets = [("real", "train_pos", 1, batch // 8),
+                           ("synthetic", "train_pos", 1, batch // 4),
+                           ("extra", "train_pos", 1, batch // 8),
+                           ("real", "train_neg", 0, batch // 8),
+                           ("real", "hard_train_neg", 0, batch // 16),
+                           ("real", "station_train_neg", 0, batch // 16),
+                           ("synthetic", "train_neg", 0, batch // 8),
+                           ("extra", "train_neg", 0, batch // 8)]
+            else:
+                buckets = [("real", "train_pos", 1, batch // 8),
+                           ("synthetic", "train_pos", 1, batch // 4),
+                           ("extra", "train_pos", 1, batch // 8),
+                           ("real", "train_neg", 0, batch // 8),
+                           ("real", "station_train_neg", 0, batch // 8),
+                           ("synthetic", "train_neg", 0, batch // 8),
+                           ("extra", "train_neg", 0, batch // 8)]
+        else:
+            # Half positive, half negative; each new voice supplies both labels.
+            buckets = [("real", "train_pos", 1, batch // 8),
+                       ("synthetic", "train_pos", 1, batch // 4),
+                       ("extra", "train_pos", 1, batch // 8),
+                       ("real", "train_neg", 0, batch // 8),
+                       ("real", "hard_train_neg", 0, batch // 8),
+                       ("synthetic", "train_neg", 0, batch // 8),
+                       ("extra", "train_neg", 0, batch // 8)]
+    else:
+        divisor = 8 if (hard or station) else 4
+        buckets = [("real", "train_pos", 1, batch // 4),
+                   ("synthetic", "train_pos", 1, batch // 4),
+                   ("real", "train_neg", 0, batch // divisor),
+                   ("synthetic", "train_neg", 0, batch // divisor)]
+        if hard:
+            buckets.append(("real", "hard_train_neg", 0,
+                            batch // (8 if (synthetic_hard or station) else 4)))
+        if station:
+            # Station false positives get their own bucket; without personal
+            # hard negatives they take the whole hard-negative share.
+            buckets.append(("real", "station_train_neg", 0,
+                            batch // (8 if hard else 4)))
+        if synthetic_hard:
+            buckets.append(("real", "hard_synth_train_neg", 0, batch // 8))
+    if sum(count for *_, count in buckets) != batch:
+        raise ValueError("Mixture buckets do not fill batch " + str(batch))
+    return buckets
+
+
+def mixture_recipe(*, hard, station, synthetic_hard, extra):
+    """Human-readable description of ``mixture_buckets`` for provenance."""
+    if extra:
+        if station:
+            if hard:
+                return ("12.5% personal-positive / 25% original-positive / "
+                        "12.5% extra-voice-positive / 12.5% personal-negative / "
+                        "6.25% real-hard-negative / 6.25% station-false-positive / "
+                        "12.5% original-negative / 12.5% extra-voice-negative")
+            return ("12.5% personal-positive / 25% original-positive / "
+                    "12.5% extra-voice-positive / 12.5% personal-negative / "
+                    "12.5% station-false-positive / 12.5% original-negative / "
+                    "12.5% extra-voice-negative")
+        return ("12.5% personal-positive / 25% original-positive / "
+                "12.5% extra-voice-positive / 12.5% personal-negative / "
+                "12.5% real-hard-negative / 12.5% original-negative / "
+                "12.5% extra-voice-negative")
+    if synthetic_hard:
+        return ("25% real-positive / 25% synthetic-positive / "
+                "12.5% real-hard-negative / 12.5% synthetic-confusable / "
+                "12.5% real-negative / 12.5% old-synthetic-negative")
+    if station and hard:
+        return ("25% real-positive / 25% synthetic-positive / "
+                "12.5% real-negative / 12.5% old-synthetic-negative / "
+                "12.5% personal-hard-negative / 12.5% station-false-positive")
+    if station:
+        return ("25% real-positive / 25% synthetic-positive / "
+                "12.5% real-negative / 12.5% old-synthetic-negative / "
+                "25% station-false-positive")
+    if hard:
+        return ("25% real-positive / 25% synthetic-positive / "
+                "25% hard-negative / 12.5% real-negative / "
+                "12.5% synthetic-negative")
+    return "25% real-positive / synthetic-positive / real-negative / synthetic-negative"
+
+
+def mixture_shares(batch, *, hard, station, synthetic_hard, extra):
+    """Per-source batch shares for provenance, derived from ``mixture_buckets``."""
+    names = {("real", "train_pos"): "real_positive",
+             ("synthetic", "train_pos"): "old_positive",
+             ("extra", "train_pos"): "extra_positive",
+             ("real", "train_neg"): "real_negative",
+             ("real", "hard_train_neg"): "hard_negative",
+             ("real", "station_train_neg"): "station_negative",
+             ("real", "hard_synth_train_neg"): "synthetic_confusable",
+             ("synthetic", "train_neg"): "old_negative",
+             ("extra", "train_neg"): "extra_negative"}
+    return {names[(source, key)]: count / batch for source, key, _, count
+            in mixture_buckets(batch, hard=hard, station=station,
+                               synthetic_hard=synthetic_hard, extra=extra)}
+
+
 def merge_manifests(primary, extras):
     """Merge extra manifests (e.g. station wake events) into the run manifest.
 
@@ -317,8 +430,6 @@ def main():
                                  + "-day events; collect more days or change --seed")
     if station and synthetic_hard:
         raise ValueError("Station negatives and synthetic_hard_features cannot share a mixture yet")
-    if station and args.extra_features:
-        raise ValueError("Station negatives and --extra-features cannot share a mixture yet")
     if hard:
         real.update(hard_train_neg=[], hard_val_neg=[])
     if station:
@@ -442,7 +553,9 @@ def main():
                                    ("val_pos", "positive_val"), ("val_neg", "negative_val")]}
     extra = None
     if args.extra_features:
-        if not hard or synthetic_hard:
+        # Extra voice needs personal hard negatives; station false positives can
+        # take that batch slot when the personal manifest has none.
+        if synthetic_hard or (not hard and not station):
             raise ValueError("Additional voice mixture requires real hard negatives, without synthetic_hard_features")
         extra = {key: np.load(args.extra_features / (name + ".npy"), mmap_mode="r")
                  for key, name in [("train_pos", "positive_train"), ("train_neg", "negative_train"),
@@ -480,35 +593,17 @@ def main():
     model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate), loss="binary_crossentropy", jit_compile=False,
                   metrics=[tf.keras.metrics.BinaryAccuracy(), tf.keras.metrics.Recall(), tf.keras.metrics.Precision()])
     batch = cfg["batch_size"]
-    if batch % (8 if (hard or station) else 4):
-        raise ValueError("Batch must divide into four source buckets")
+    arrays = {"real": real, "synthetic": synthetic, "extra": extra}
+    # Fail before TF builds a dataset from an impossible batch size.
+    mixture_buckets(batch, hard=hard, station=station,
+                    synthetic_hard=synthetic_hard, extra=extra is not None)
     def batches():
         while True:
             xs, ys = [], []
-            buckets = [(real, "train_pos", 1, batch // 4), (synthetic, "train_pos", 1, batch // 4),
-                       (real, "train_neg", 0, batch // (8 if (hard or station) else 4)),
-                       (synthetic, "train_neg", 0, batch // (8 if (hard or station) else 4))]
-            if hard:
-                buckets.append((real, "hard_train_neg", 0,
-                                batch // (8 if (synthetic_hard or station) else 4)))
-            if station:
-                # Station false positives get their own bucket; without personal
-                # hard negatives they take the whole hard-negative share.
-                buckets.append((real, "station_train_neg", 0,
-                                batch // (8 if hard else 4)))
-            if synthetic_hard:
-                buckets.append((real, "hard_synth_train_neg", 0, batch // 8))
-            if extra is not None:
-                # Half positive, half negative; each new voice supplies both labels.
-                buckets = [(real, "train_pos", 1, batch // 8),
-                           (synthetic, "train_pos", 1, batch // 4),
-                           (extra, "train_pos", 1, batch // 8),
-                           (real, "train_neg", 0, batch // 8),
-                           (real, "hard_train_neg", 0, batch // 8),
-                           (synthetic, "train_neg", 0, batch // 8),
-                           (extra, "train_neg", 0, batch // 8)]
-            for arrays, key, label, count in buckets:
-                arr = arrays[key]
+            for source, key, label, count in mixture_buckets(
+                    batch, hard=hard, station=station,
+                    synthetic_hard=synthetic_hard, extra=extra is not None):
+                arr = arrays[source][key]
                 xs.append(np.asarray(arr[rng.integers(0, len(arr), count)], dtype=np.float32))
                 ys.append(np.full(count, label, dtype=np.float32))
             x, y = np.concatenate(xs), np.concatenate(ys)
@@ -550,29 +645,11 @@ def main():
         xval = np.concatenate([xval, ep, en])
         yval = np.concatenate([yval, np.ones(len(ep)), np.zeros(len(en))])
         valweights = np.concatenate([valweights, np.ones(len(ep)), np.ones(len(en))])
-    if extra is not None:
-        bucket_recipe = ("12.5% personal-positive / 25% original-positive / "
-                         "12.5% extra-voice-positive / 12.5% personal-negative / "
-                         "12.5% real-hard-negative / 12.5% original-negative / "
-                         "12.5% extra-voice-negative")
-    elif synthetic_hard:
-        bucket_recipe = ("25% real-positive / 25% synthetic-positive / "
-                         "12.5% real-hard-negative / 12.5% synthetic-confusable / "
-                         "12.5% real-negative / 12.5% old-synthetic-negative")
-    elif station and hard:
-        bucket_recipe = ("25% real-positive / 25% synthetic-positive / "
-                         "12.5% real-negative / 12.5% old-synthetic-negative / "
-                         "12.5% personal-hard-negative / 12.5% station-false-positive")
-    elif station:
-        bucket_recipe = ("25% real-positive / 25% synthetic-positive / "
-                         "12.5% real-negative / 12.5% old-synthetic-negative / "
-                         "25% station-false-positive")
-    elif hard:
-        bucket_recipe = ("25% real-positive / 25% synthetic-positive / "
-                         "25% hard-negative / 12.5% real-negative / "
-                         "12.5% synthetic-negative")
-    else:
-        bucket_recipe = "25% real-positive / synthetic-positive / real-negative / synthetic-negative"
+    if not (len(xval) == len(yval) == len(valweights)):
+        raise ValueError("Validation features, labels and weights do not align")
+    bucket_recipe = mixture_recipe(hard=hard, station=station,
+                                   synthetic_hard=synthetic_hard,
+                                   extra=extra is not None)
     best = modeldir / "best.weights.h5"
     selection = []
     protected_selection = (hard or station) and not args.from_scratch
@@ -617,9 +694,9 @@ def main():
         "class_weights": {"0": cfg["negative_class_weight"], "1": cfg["positive_class_weight"]} if args.from_scratch else None,
         "additional_voice_features": str(args.extra_features) if args.extra_features else None,
         "extra_manifests": [str(path) for path in args.extra_manifest],
-        "mixture": {"real_positive": .125, "old_positive": .25, "extra_positive": .125,
-                    "real_negative": .125, "hard_negative": .125, "old_negative": .125,
-                    "extra_negative": .125} if extra is not None else None,
+        "mixture": (mixture_shares(batch, hard=hard, station=station,
+                                   synthetic_hard=synthetic_hard, extra=True)
+                    if extra is not None else None),
         "feature_mode": args.feature_mode,
         "architecture": architecture,
         "freeze_batchnorm": args.freeze_batchnorm and not args.from_scratch,

@@ -143,8 +143,11 @@ python station_events.py to-manifest --events local-data/datasets/station-events
 записи с основным manifest по уникальному `id`. Станция идёт отдельным
 bucket «station false positives» (12.5% батча вместе с личными hard negatives;
 25%, если личных hard negatives нет), чтобы не растворяться в обычном фоне.
-Без `--extra-manifest` прежние рецепты bucket'ов не меняются. Сочетание со
-`--extra-features` и `synthetic_hard_features` пока запрещено явной ошибкой.
+Без `--extra-manifest` прежние рецепты bucket'ов не меняются. `synthetic_hard_features`
+со станционными негативами по-прежнему не совмещается, а `--extra-features`
+теперь разрешён: доли рецепта v27 сохраняются, но слот hard negatives делится
+на 6.25% личных hard negatives и 6.25% station false positives (12.5% станционных,
+если личных hard negatives нет).
 
 Калибровка порога и окна — на тех же replay-оценках, без дублирования
 потоковой симуляции:
