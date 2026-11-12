@@ -65,6 +65,22 @@
   останавливает executor. Одно срабатывание звучит не дольше
   `RingWindow` (900 с): по истечении scheduler ставит `STOP` и звонок
   замолкает сам, без участия HA-таймера;
+- «поставь будильник через час», «через полчаса», «через минуту», «через
+  полтора часа», «через пару часов/минут», «через 2 часа 30 минут»,
+  «разбуди меня через …» — `StationAlarmRelative` →
+  `script.schedule_alarm_create_relative`. Слова длительности нормализуют
+  закрытые списки `alarm_rel_hours` / `alarm_rel_minutes` (дробные часы:
+  «полтора часа» = 1.5), числа — штатные `alarm_hour` / `alarm_minute`.
+  `hours=0` и `minutes=0` — ошибка «Не понял, через сколько поставить
+  будильник», а не минутный будильник; `name` принимается только как явная
+  метка, текст команды в метку не попадает;
+- нераспознанная длительность в фразе про будильник/таймер («через сутки»,
+  «через 90 минут», «поставь таймер через час») → локальные
+  `StationAlarmRelativeUnclear` / `StationTimerRelativeUnclear`: короткий
+  вопрос о времени. Это защита от built-in `HassMediaSearchAndPlay`
+  («<play> {search_query}»), который раньше отвечал «Воспроизвожу» и включал
+  музыку; явные «поставь таймер на N минут» по-прежнему идут в
+  `StationTimerStart`;
 - «напомни завтра в 9:00 …», «какие напоминания» — one-shot расписания
   `SCHEDULE_KIND_REMINDER` в `SchedulerService`;
 - «запомни …», «покажи заметки», «что я записал про …» — `todo.notes`
@@ -226,6 +242,9 @@ idempotency key от `context.id`. Метка не найдена или schedul
 - `schedules_dashboard.yaml` — dashboard «Помощник» (read-only pointers;
   notes remain editable; отдельный view «Голос» с профилем)
 - `test_ha_config.py` — static audio/entity/template invariants
+- `test_custom_sentences.py` — phrase matching against the real
+  `custom_sentences/ru/*.yaml` with the `hassil` best-match ranking (relative
+  alarm durations and the anti-media-search guards)
 - `test_scheduler_contract.py` — Connect JSON request/response, resolution and
   truthful-speech contract tests (fake clock/timezone, no live calls)
 - `custom_sentences/ru/station_control.yaml`
@@ -349,6 +368,11 @@ conversation.process: "поставь таймер на 30 секунд"
 conversation.process: "что с таймером"
 conversation.process: "отмени таймер"
 conversation.process: "поставь будильник на 7:30 по будням"
+conversation.process: "поставь будильник через час"
+conversation.process: "разбуди меня через полчаса"
+conversation.process: "поставь будильник через полтора часа"
+conversation.process: "поставь будильник через сутки"
+conversation.process: "поставь таймер через час"
 conversation.process: "какой будильник"
 conversation.process: "отмени будильник"
 conversation.process: "курс доллара"

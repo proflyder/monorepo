@@ -442,6 +442,17 @@
 
 - Pipeline «Рикардо»: GigaAM v3 CTC int8 primary, Whisper `medium-int8`
   fallback; локальные intents → Hermes только для свободной речи.
+- **Относительные будильники.** `StationAlarmRelative` понимает «через
+  час/полчаса/минуту/полтора часа/пару часов/пару минут/N часов N минут» и
+  «разбуди меня через …»; слова нормализуют `alarm_rel_hours` /
+  `alarm_rel_minutes` (дробные часы → минуты). `schedule_alarm_create_relative`
+  fail-closed: `hours=0` и `minutes=0` → «Не понял, через сколько поставить
+  будильник» (не минутный будильник), текст команды не используется как
+  метка. Нераспознанная длительность → локальные
+  `StationAlarmRelativeUnclear` / `StationTimerRelativeUnclear`, чтобы
+  фраза про будильник/таймер не уходила в built-in
+  `HassMediaSearchAndPlay` («Воспроизвожу» + музыка). Детали —
+  `projects/home-assistant/ha-voice/README.md`.
 - **Профиль голоса.** `input_select.home_voice_profile` (Личный/Рабочий) —
   единственный источник истины; переключается только вручную: голосом
   («рабочий/личный профиль», «какой профиль»), на дашборде «Помощник» → view

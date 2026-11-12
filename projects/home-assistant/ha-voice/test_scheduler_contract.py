@@ -1133,7 +1133,7 @@ class RelativeAlarmTemplateTests(unittest.TestCase):
             return str(value)
         return value
 
-    def _ha_variables(self, hours: int, minutes: int, now=None) -> dict:
+    def _ha_variables(self, hours: float, minutes: float, now=None) -> dict:
         now_value = now or NOW
         context = {
             "now": lambda: now_value,
@@ -1148,13 +1148,45 @@ class RelativeAlarmTemplateTests(unittest.TestCase):
             rendered[name] = self._ha_value(result)
         return rendered
 
+    def _service_step(self) -> dict:
+        return next(
+            step
+            for step in SCRIPTS["schedule_alarm_create_relative"]["sequence"]
+            if step.get("service") == "script.schedule_alarm_create"
+        )
+
     def _service_data(self, variables: dict) -> dict:
-        step = SCRIPTS["schedule_alarm_create_relative"]["sequence"][1]
-        data = step["data"]
+        data = self._service_step()["data"]
         return {
             key: render(data[key], variables)
-            for key in ("hour", "minute", "second", "day")
+            for key in ("hour", "minute", "second", "day", "name")
         }
+
+    def _guard_condition(self) -> str:
+        """The fail-closed template that rejects a non-positive duration."""
+        for step in SCRIPTS["schedule_alarm_create_relative"]["sequence"]:
+            if "if" not in step:
+                continue
+            for condition in step["if"]:
+                if condition.get("condition") == "template":
+                    return condition["value_template"]
+        raise AssertionError("relative alarm has no fail-closed guard")
+
+    def _is_rejected(self, variables: dict) -> bool:
+        return bool(render(self._guard_condition(), variables))
+
+    def _error_result(self, variables: dict) -> dict:
+        for step in SCRIPTS["schedule_alarm_create_relative"]["sequence"]:
+            if "if" not in step:
+                continue
+            for branch in step["if"]:
+                if branch.get("condition") != "template":
+                    continue
+                for then_step in step.get("then", []):
+                    value = (then_step.get("variables") or {}).get("relative_error")
+                    if value is not None:
+                        return render(value, variables)
+        raise AssertionError("relative alarm has no error result")
 
     def test_variables_are_strings_not_datetimes(self) -> None:
         variables = self._ha_variables(1, 30)
@@ -1177,8 +1209,69 @@ class RelativeAlarmTemplateTests(unittest.TestCase):
             (int(data["hour"]), int(data["minute"]), data["day"]), (2, 0, "завтра")
         )
 
+    def test_zero_zero_is_an_error_not_a_one_minute_alarm(self) -> None:
+        # Live regression 2026-11-12: Hermes called this script with
+        # hours=0, minutes=0 and the silent `max(1, ...)` floor created an
+        # alarm one minute later. The script must refuse and explain.
+        variables = self._ha_variables(0, 0)
+        self.assertTrue(self._is_rejected(variables))
+        error = self._error_result(variables)
+        self.assertEqual(error["status"], "error")
+        self.assertEqual(error["text"], "Не понял, через сколько поставить будильник.")
+        self.assertEqual(error["label"], "")
+
+    def test_negative_or_fractional_minutes_are_rejected(self) -> None:
+        self.assertTrue(self._is_rejected(self._ha_variables(-1, 0)))
+        self.assertTrue(self._is_rejected(self._ha_variables(0, -5)))
+        self.assertTrue(self._is_rejected(self._ha_variables(0, 0.2)))
+        self.assertFalse(self._is_rejected(self._ha_variables(0, 1)))
+
+    def test_fractional_hours_become_minutes(self) -> None:
+        # «через полтора часа» normalizes to hours=1.5 in the sentence list.
+        data = self._service_data(self._ha_variables(1.5, 0))
+        self.assertEqual(
+            (int(data["hour"]), int(data["minute"]), data["day"]), (7, 30, "")
+        )
+
+    def test_half_hour_is_thirty_minutes(self) -> None:
+        data = self._service_data(self._ha_variables(0, 30))
+        self.assertEqual((int(data["hour"]), int(data["minute"])), (6, 30))
+
+    def test_command_text_is_not_used_as_the_alarm_label(self) -> None:
+        # Live regression: Hermes passed name="через час".
+        for label in ("через час", "Будильник через час", "таймер на 5 минут"):
+            variables = self._ha_variables(1, 0)
+            variables.update(
+                {
+                    "name_text": label,
+                    "name_lower": label.lower(),
+                    "name_looks_like_command": True,
+                    "relative_label": "",
+                }
+            )
+            self.assertEqual(self._service_data(variables)["name"], "")
+        variables = self._ha_variables(1, 0)
+        variables.update(
+            {
+                "name_text": "Работа",
+                "name_lower": "работа",
+                "name_looks_like_command": False,
+                "relative_label": "Работа",
+            }
+        )
+        self.assertEqual(self._service_data(variables)["name"], "Работа")
+
+    def test_fields_teach_the_llm_tool_the_duration_semantics(self) -> None:
+        fields = SCRIPTS["schedule_alarm_create_relative"]["fields"]
+        for name in ("hours", "minutes", "name"):
+            self.assertIn(name, fields)
+            self.assertTrue(fields[name].get("description"), name)
+        self.assertIn("1.5", fields["hours"]["description"])
+        self.assertIn("greater than 0", fields["minutes"]["description"])
+        self.assertIn("Never pass the phrase", fields["name"]["description"])
+
     def test_minimum_one_minute(self) -> None:
-        data = self._service_data(self._ha_variables(0, 0))
+        data = self._service_data(self._ha_variables(0, 1))
         self.assertEqual((int(data["hour"]), int(data["minute"])), (6, 1))
 
     def test_seconds_are_preserved(self) -> None:
