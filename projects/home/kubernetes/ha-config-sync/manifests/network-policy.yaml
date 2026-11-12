@@ -1,0 +1,71 @@
+# ha-config-sync is LAN-local: it only needs DNS, HAOS SSH (22222) and the Home
+# Assistant REST API (8123). Prometheus scrapes 9119; kubelet probes arrive from
+# the node address, and the mcp-gateway NetworkPolicy documents the same
+# kube-router trade-off.
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ha-config-sync-ingress
+  namespace: home-assistant
+  labels:
+    app.kubernetes.io/name: ha-config-sync
+    app.kubernetes.io/part-of: home
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: ha-config-sync
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - protocol: TCP
+          port: 9119
+    # kubelet readiness/liveness probes use the node address as the source.
+    - from:
+        - ipBlock:
+            cidr: ${NODE_LAN_IP}/32
+      ports:
+        - protocol: TCP
+          port: 9119
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ha-config-sync-egress
+  namespace: home-assistant
+  labels:
+    app.kubernetes.io/name: ha-config-sync
+    app.kubernetes.io/part-of: home
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: ha-config-sync
+  policyTypes:
+    - Egress
+  egress:
+    # HAOS host SSH (forced-command agent) and Home Assistant REST.
+    - to:
+        - ipBlock:
+            cidr: ${HAOS_IP}/32
+      ports:
+        - protocol: TCP
+          port: 22222
+        - protocol: TCP
+          port: 8123
+    # DNS.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53

@@ -124,6 +124,35 @@ services:
       warning: "Текущий разговор и озвучка прервутся, голосовой ассистент будет недоступен около тридцати секунд."
     description: Hermes (LLM-агент) и voice-proxy в одном Deployment.
 
+  - id: ha-config-sync
+    title: HA Config Sync
+    group: Голос
+    aliases:
+      ru: [синхронизация конфигурации, доставка конфигурации, конфиг ha]
+      en: [ha-config-sync, config sync, ha voice sync]
+    kind: k8s
+    namespace: home-assistant
+    workload:
+      kind: Deployment
+      name: ha-config-sync
+    containers: [ha-config-sync]
+    signals:
+      - promql: ha_config_sync_drift_files > 0
+        meaning: файлы Home Assistant расходятся с репозиторием
+        status: true
+      - promql: ha_config_sync_last_check_success == 0
+        meaning: цикл синхронизации конфигурации не завершается успешно
+        status: true
+      - promql: kube_deployment_status_replicas_available{namespace="home-assistant",deployment="ha-config-sync"} < 1
+        meaning: под синхронизации конфигурации недоступен
+        status: false
+    logs:
+      source: pods
+    restart:
+      allowed: true
+      warning: "Синхронизация ha-voice приостановится на время перезапуска; Home Assistant продолжит работать, изменения доставятся следующим циклом."
+    description: Доставляет файлы ha-voice на HAOS по SSH и откатывает неудачные изменения.
+
   - id: gigaam
     title: GigaAM
     group: Голос

@@ -272,13 +272,32 @@ todo.notes    # canonical notes list, editable from the dashboard
 
 Установка:
 
-HA config живёт внутри HAOS в `/config`. Копировать файлы через HA File
-Editor, Samba или HAOS SSH add-on; не писать в HAOS из host. После копирования
-проверить `configuration.yaml` includes и выполнить **Developer Tools → YAML →
-Check configuration → Restart**.
+Файлы этого каталога (кроме README, тестов и `sync.yaml`) доставляет
+`ha-config-sync`: образ собирается из `projects/home-assistant/ha-voice`,
+Flux катит его в `home-assistant`, а сервис по SSH сравнивает файлы с
+`/mnt/data/supervisor/homeassistant` на HAOS, применяет изменения, проверяет
+конфигурацию, перезагружает нужные домены и откатывается при ошибке.
+`shell_commands.yaml` требует restart, остальные файлы — reload;
+`schedules_dashboard.yaml` перечитывает frontend. Список файлов и действий —
+`sync.yaml`, его проверяет `test_sync_manifest.py`. Вручную файлы не
+копируются и в HAOS из host не пишутся.
 
-В репозитории нет копии `configuration.yaml`: он живёт только внутри HAOS,
-поэтому includes ниже добавляются вручную один раз.
+Аварийный ручной путь (только если `ha-config-sync` лежит): скопировать нужные
+файлы в `/mnt/data/supervisor/homeassistant` через
+`ssh -F ~/.ssh/home-lab/config haos` (бэкап копий рядом), затем
+**Developer Tools → YAML → Check configuration** и reload нужных доменов или
+Restart. После восстановления сервиса
+следующий цикл снова сравнит файлы с репозиторием.
+
+Пауза синхронизации — только через Git: в
+`projects/home/kubernetes/ha-config-sync/manifests/deployment.yaml` выставить
+`SYNC_MODE=observe` (сервис продолжит мерить drift, но ничего не пишет) или
+`replicas: 0`, затем merge в `develop`; Flux применит изменение. Не менять
+живой Deployment через `kubectl`: Flux вернёт состояние из Git.
+
+HA config живёт внутри HAOS в `/config`. В репозитории нет копии
+`configuration.yaml`: он живёт только внутри HAOS, поэтому includes ниже
+добавляются вручную один раз.
 
 В `configuration.yaml`:
 

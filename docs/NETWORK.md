@@ -68,6 +68,11 @@
 | Станция | `192.0.2.13` | Pulsar |
 | Mac | `192.0.2.11` | DHCP |
 
+`22222/tcp` на HAOS — host SSH (dropbear), не add-on. Ключ ha-config-sync
+принимается только через `restrict,command="HA_CONFIG_AGENT_ALLOWED_FROM=<K3s node> /mnt/data/ha-config-sync/agent.sh"`;
+dropbear не поддерживает ограничение по адресу в authorized_keys, поэтому
+источник проверяет агент.
+
 HAOS и K3s используют статические адреса внутри guest. Сеть плоская;
 отдельных VLAN для гостей/IoT нет. Proxmox host использует Wi-Fi 4-address/WDS uplink с сохранением L2.
 Сервис `home-uplink` выбирает Ethernet при наличии carrier, иначе Wi-Fi;
@@ -97,6 +102,7 @@ HAOS и K3s используют статические адреса внутр�
 | `8097/tcp` | MA stream | LAN |
 | `8927/tcp` | MA Sendspin | LAN |
 | `5580/tcp` | Matter Server | только loopback внутри HAOS |
+| `22222/tcp` | SSH хоста HAOS (dropbear) для ha-config-sync | LAN, только K3s-узел, ключ с forced command |
 
 ### K3s VM
 

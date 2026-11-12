@@ -57,6 +57,36 @@ Restore намеренно не автоматизирован: вывод вс�
 Подробности и цели — раздел «Backup» ниже.
 
 
+## ha-config-sync (доставка ha-voice)
+
+`ha-config-sync` — Flux-owned Deployment в `home-assistant`. Он доставляет
+файлы `projects/home-assistant/ha-voice` (список и reload-действия —
+`sync.yaml`) на HAOS `/mnt/data/supervisor/homeassistant`, проверяет
+`check_config`, перезагружает затронутые домены и откатывается при ошибке.
+`shell_commands.yaml` перезапускает HA только когда
+`input_boolean.alarm_ringing` выключен.
+
+```bash
+# один раз, до merge: агент на HAOS + ключ в OpenBao + authorized_keys
+mise run admin:ha-config-sync-bootstrap -- --dry-run
+mise run admin:ha-config-sync-bootstrap
+
+# состояние и метрики
+mise run kubectl -- -n home-assistant get deploy,pod -l app.kubernetes.io/name=ha-config-sync
+mise run kubectl -- -n home-assistant logs deploy/ha-config-sync --tail=100
+mise run kubectl -- -n home-assistant port-forward svc/ha-config-sync 19119:9119
+curl -s localhost:19119/metrics | grep ha_config_sync
+```
+
+Пауза — Git-изменение: `SYNC_MODE=observe` (только drift) или `replicas: 0` в
+`projects/home/kubernetes/ha-config-sync/manifests/deployment.yaml`, затем
+merge. Ручной `kubectl edit` Flux откатит.
+
+Аварийная ручная доставка (сервис лежит): скопировать нужные YAML через HA
+File Editor/Samba/SSH add-on и выполнить Check configuration → Restart.
+После merge новый образ катится через pins (`HA_CONFIG_SYNC_IMAGE`), откат —
+revert соответствующего коммита `deploy/home-apps`.
+
 ## Доступ
 
 ```bash

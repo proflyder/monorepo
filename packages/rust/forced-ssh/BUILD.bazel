@@ -1,0 +1,56 @@
+load("@rules_rust//cargo:defs.bzl", "extract_cargo_lints")
+load("@rules_rust//rust:defs.bzl", "rust_clippy_test", "rust_library", "rust_test", "rustfmt_test")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPS = [
+    "@crates//:hmac",
+    "@crates//:russh",
+    "@crates//:sha1",
+    "@crates//:tokio",
+]
+
+rust_library(
+    name = "forced_ssh",
+    srcs = ["src/lib.rs"],
+    edition = "2024",
+    lint_config = ":workspace_lints",
+    deps = DEPS,
+)
+
+rust_test(
+    name = "unit_tests",
+    size = "small",
+    crate = ":forced_ssh",
+    edition = "2024",
+    lint_config = ":workspace_lints",
+    deps = DEPS + [
+        "@crates//:base64",
+        "@crates//:rand",
+        "@crates//:tempfile",
+    ],
+)
+
+extract_cargo_lints(
+    name = "workspace_lints",
+    manifest = "Cargo.toml",
+    workspace = "//:Cargo.toml",
+)
+
+rustfmt_test(
+    name = "rustfmt",
+    size = "small",
+    targets = [
+        ":forced_ssh",
+        ":unit_tests",
+    ],
+)
+
+rust_clippy_test(
+    name = "clippy",
+    size = "small",
+    targets = [
+        ":forced_ssh",
+        ":unit_tests",
+    ],
+)

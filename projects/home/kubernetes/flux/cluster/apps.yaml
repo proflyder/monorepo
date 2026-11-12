@@ -243,6 +243,40 @@ spec:
       name: ha-scenario
       namespace: home-assistant
 ---
+# ha-config-sync delivers projects/home-assistant/ha-voice to HAOS and keeps it
+# in sync (PR-3). CI pins HA_CONFIG_SYNC_IMAGE on the `deploy/home-apps`
+# branch; the manifests and the file set stay in `develop`.
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: app-ha-config-sync
+  namespace: flux-system
+spec:
+  interval: 1m
+  retryInterval: 1m
+  timeout: 5m
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  path: ./projects/home/kubernetes/ha-config-sync/manifests
+  prune: true
+  wait: true
+  suspend: false
+  dependsOn:
+    - name: platform
+    - name: home-app-pins
+  postBuild:
+    substituteFrom:
+      - kind: ConfigMap
+        name: home-app-images
+      - kind: Secret
+        name: flux-app-settings
+  healthChecks:
+    - apiVersion: apps/v1
+      kind: Deployment
+      name: ha-config-sync
+      namespace: home-assistant
+---
 # Hermes runtime Helm release (решение 54). The chart is in-repo, the
 # values come from `runtime-values` (ESO), images from the pins branch, and a
 # post-upgrade smoke hook plus `remediation.strategy: rollback` replace

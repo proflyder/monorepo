@@ -1,0 +1,18 @@
+# ClusterIP only: Prometheus scrapes it, nothing outside the cluster reaches it.
+apiVersion: v1
+kind: Service
+metadata:
+  name: ha-config-sync
+  namespace: home-assistant
+  labels:
+    app.kubernetes.io/name: ha-config-sync
+    app.kubernetes.io/part-of: home
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: ha-config-sync
+  ports:
+    - name: http
+      port: 9119
+      targetPort: http
+      protocol: TCP

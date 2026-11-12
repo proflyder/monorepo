@@ -1,5 +1,5 @@
 {
-  "checksum": "96a69e98bc7b16ece74ed093e2be0aa611e2094cd75023b0a48818c08465cd54",
+  "checksum": "091641f7a3344da17b6fbe43cf45930fa0a29513279503125cb17c8c86651c8a",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -5837,6 +5837,59 @@
       ],
       "version": "0.2.0"
     },
+    "forced-ssh 0.1.0": {
+      "common_attrs": {
+        "deps": [
+          {
+            "id": "hmac 0.13.0",
+            "target": "hmac"
+          },
+          {
+            "id": "russh 0.65.1",
+            "target": "russh"
+          },
+          {
+            "id": "sha1 0.11.0",
+            "target": "sha1"
+          },
+          {
+            "id": "tokio 1.54.1",
+            "target": "tokio"
+          }
+        ],
+        "deps_dev": [
+          {
+            "id": "base64 0.23.1",
+            "target": "base64"
+          },
+          {
+            "id": "rand 0.10.3",
+            "target": "rand"
+          },
+          {
+            "id": "tempfile 3.27.0",
+            "target": "tempfile"
+          }
+        ],
+        "edition": "2024"
+      },
+      "library_target_name": "forced_ssh",
+      "license": "AGPL-3.0-only",
+      "license_ids": [
+        "AGPL-3.0"
+      ],
+      "name": "forced-ssh",
+      "repository": null,
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "forced_ssh",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.1.0"
+    },
     "form_urlencoded 1.2.2": {
       "common_attrs": {
         "crate_features": [
@@ -6897,6 +6950,99 @@
         {
           "Library": {
             "crate_name": "ha_bridge",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.1.0"
+    },
+    "ha-config-sync 0.1.0": {
+      "common_attrs": {
+        "deps": [
+          {
+            "id": "anyhow 1.0.104",
+            "target": "anyhow"
+          },
+          {
+            "id": "axum 0.8.9",
+            "target": "axum"
+          },
+          {
+            "id": "base64 0.23.1",
+            "target": "base64"
+          },
+          {
+            "id": "futures 0.3.34",
+            "target": "futures"
+          },
+          {
+            "id": "hex 0.4.3",
+            "target": "hex"
+          },
+          {
+            "id": "regex 1.13.1",
+            "target": "regex"
+          },
+          {
+            "id": "reqwest 0.13.5",
+            "target": "reqwest"
+          },
+          {
+            "id": "rustls 0.23.46",
+            "target": "rustls"
+          },
+          {
+            "id": "serde 1.0.229",
+            "target": "serde"
+          },
+          {
+            "id": "serde-saphyr 2.1.1",
+            "target": "serde_saphyr"
+          },
+          {
+            "id": "serde_json 1.0.154",
+            "target": "serde_json"
+          },
+          {
+            "id": "sha2 0.11.1",
+            "target": "sha2"
+          },
+          {
+            "id": "thiserror 2.0.21",
+            "target": "thiserror"
+          },
+          {
+            "id": "tokio 1.54.1",
+            "target": "tokio"
+          },
+          {
+            "id": "tracing 0.1.44",
+            "target": "tracing"
+          },
+          {
+            "id": "tracing-subscriber 0.3.23",
+            "target": "tracing_subscriber"
+          }
+        ],
+        "deps_dev": [
+          {
+            "id": "tempfile 3.27.0",
+            "target": "tempfile"
+          }
+        ],
+        "edition": "2024"
+      },
+      "library_target_name": "ha_config_sync",
+      "license": "AGPL-3.0-only",
+      "license_ids": [
+        "AGPL-3.0"
+      ],
+      "name": "ha-config-sync",
+      "repository": null,
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ha_config_sync",
             "crate_root": "src/lib.rs"
           }
         }
@@ -10491,10 +10637,6 @@
             "target": "futures"
           },
           {
-            "id": "hmac 0.13.0",
-            "target": "hmac"
-          },
-          {
             "id": "http 1.5.0",
             "target": "http"
           },
@@ -10545,10 +10687,6 @@
           {
             "id": "serde_json 1.0.154",
             "target": "serde_json"
-          },
-          {
-            "id": "sha1 0.11.0",
-            "target": "sha1"
           },
           {
             "id": "thiserror 2.0.21",
@@ -13805,6 +13943,37 @@
         {
           "Library": {
             "crate_name": "pulsar_media",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.0.0"
+    },
+    "pulsar-metrics 0.0.0": {
+      "common_attrs": {
+        "deps": [
+          {
+            "id": "libc 0.2.191",
+            "target": "libc"
+          },
+          {
+            "id": "tracing 0.1.44",
+            "target": "tracing"
+          }
+        ],
+        "edition": "2024"
+      },
+      "library_target_name": "pulsar_metrics",
+      "license": "AGPL-3.0-only",
+      "license_ids": [
+        "AGPL-3.0"
+      ],
+      "name": "pulsar-metrics",
+      "repository": null,
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "pulsar_metrics",
             "crate_root": "src/lib.rs"
           }
         }
@@ -25124,7 +25293,9 @@
     "cp_selftest 0.1.0": "solutions/windows-logon-provider/crates/cp-selftest",
     "currency-bot 0.1.0": "solutions/currency-bot/crates/currency-bot",
     "esphome-proto 0.0.0": "projects/station/pulsar/satellite/crates/esphome-proto",
+    "forced-ssh 0.1.0": "packages/rust/forced-ssh",
     "ha-bridge 0.1.0": "solutions/ha-bridge/crates/ha-bridge",
+    "ha-config-sync 0.1.0": "solutions/ha-config-sync/crates/ha-config-sync",
     "health-exporter 0.1.0": "projects/home-assistant/deploy/health-exporter/crates/health-exporter",
     "home-actor 0.1.0": "packages/rust/home-actor",
     "home-clients 0.1.0": "packages/rust/home-clients",
@@ -25159,6 +25330,7 @@
     "pulsar-installer 0.0.0": "projects/station/pulsar/installer",
     "pulsar-mdns 0.0.0": "projects/station/pulsar/satellite/crates/pulsar-mdns",
     "pulsar-media 0.0.0": "projects/station/pulsar/satellite/crates/pulsar-media",
+    "pulsar-metrics 0.0.0": "projects/station/pulsar/satellite/crates/pulsar-metrics",
     "pulsar-model 0.0.0": "projects/station/pulsar/satellite/crates/pulsar-model",
     "pulsar-playback 0.0.0": "projects/station/pulsar/satellite/crates/pulsar-playback",
     "pulsar-probes 0.0.0": "projects/station/pulsar/satellite/crates/pulsar-probes",

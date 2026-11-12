@@ -1,0 +1,16 @@
+# Flux-rendered manifest set for ha-config-sync (PR-3).
+#
+# Substituted by Kustomization/app-ha-config-sync:
+#   ${HA_CONFIG_SYNC_IMAGE}  from ConfigMap/home-app-images (pins branch)
+#   ${BUILD_ID}              from ConfigMap/home-app-images (pins branch)
+#   ${HAOS_IP}, ${NODE_LAN_IP}
+#                            from Secret/flux-app-settings (ESO)
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - deployment.yaml
+  - service.yaml
+  - servicemonitor.yaml
+  - external-secrets.yaml
+  - network-policy.yaml
+  - prometheusrule.yaml

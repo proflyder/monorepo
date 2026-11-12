@@ -1,0 +1,40 @@
+# Deliverable Home Assistant YAML for ha-voice and what each change needs.
+#
+# The file set is the authority: every YAML below is copied to
+# /opt/ha-voice in the ha-config-sync image and compared with
+# /mnt/data/supervisor/homeassistant on HAOS. `configuration.yaml`,
+# `secrets.yaml`, `scenes.yaml`, tests and README are never delivered.
+#
+# `shell_commands.yaml` is read only at Home Assistant start, so a change needs
+# a restart; the other files are picked up by the matching reload service.
+# `schedules_dashboard.yaml` is a YAML dashboard re-read by the frontend, so it
+# needs no action. Keep this file in sync with test_sync_manifest.py.
+files:
+  - glob: "automations.yaml"
+    reload: ["automation.reload"]
+  - glob: "scripts.yaml"
+    reload: ["script.reload"]
+  - glob: "intent_scripts.yaml"
+    reload: ["intent_script.reload"]
+  - glob: "rest_commands.yaml"
+    reload: ["rest_command.reload"]
+  - glob: "input_boolean.yaml"
+    reload: ["input_boolean.reload"]
+  - glob: "input_datetime.yaml"
+    reload: ["input_datetime.reload"]
+  - glob: "input_number.yaml"
+    reload: ["input_number.reload"]
+  - glob: "input_select.yaml"
+    reload: ["input_select.reload"]
+  - glob: "input_text.yaml"
+    reload: ["input_text.reload"]
+  - glob: "templates.yaml"
+    reload: ["template.reload"]
+  - glob: "command_line.yaml"
+    reload: ["command_line.reload"]
+  - glob: "shell_commands.yaml"
+    restart: true
+  # Frontend YAML dashboard: re-read without a reload or restart.
+  - glob: "schedules_dashboard.yaml"
+  - glob: "custom_sentences/ru/*.yaml"
+    reload: ["conversation.reload"]

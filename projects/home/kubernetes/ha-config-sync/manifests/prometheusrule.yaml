@@ -1,0 +1,73 @@
+# Alerts for the ha-voice delivery loop.
+#
+# Drift means HAOS no longer matches projects/home-assistant/ha-voice; the
+# service is supposed to correct it within one 5-minute cycle. `last_check` is
+# 0 when a cycle failed (including a guard-deferred restart), so a stuck restart
+# is visible too. `rolled_back` is counted when the files were restored.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: home-ha-config-sync-alerts
+  namespace: home-assistant
+  labels:
+    app.kubernetes.io/part-of: home-observability
+spec:
+  groups:
+    - name: home-ha-config-sync
+      rules:
+        - alert: HaConfigDrift
+          expr: max(ha_config_sync_drift_files) > 0
+          for: 15m
+          labels:
+            severity: warning
+            component: ha-config
+          annotations:
+            summary: "Конфигурация Home Assistant расходится с репозиторием"
+            description: >-
+              ha-config-sync видит файлы в `/mnt/data/supervisor/homeassistant`,
+              которые отличаются от `projects/home-assistant/ha-voice`, дольше
+              15 минут. Проверить логи пода `ha-config-sync` и метрику
+              `ha_config_sync_drift{file="…"}`; при необходимости применить
+              вручную (аварийный раздел README ha-voice).
+
+        - alert: HaConfigSyncFailing
+          expr: min(ha_config_sync_last_check_success) == 0
+          for: 30m
+          labels:
+            severity: warning
+            component: ha-config
+          annotations:
+            summary: "ha-config-sync не завершает цикл"
+            description: >-
+              Последний цикл синхронизации не закончился успешно (check_config,
+              reload, restart или проверка хешей). Смотреть логи пода
+              `ha-config-sync` и `ha_config_sync_apply_total`; если
+              `ha_config_sync_restart_pending 1`, ждёт выключения
+              `input_boolean.alarm_ringing`.
+
+        - alert: HaConfigSyncRolledBack
+          expr: increase(ha_config_sync_apply_total{result="rolled_back"}[1h]) > 0
+          labels:
+            severity: warning
+            component: ha-config
+          annotations:
+            summary: "ha-config-sync откатил изменение Home Assistant"
+            description: >-
+              За последний час хотя бы одно применение было откатано: Home
+              Assistant отклонил конфигурацию, reload вернул ошибку или хеши не
+              совпали. Файлы восстановлены из бэкапа; проверить логи и
+              `ha_config_sync_apply_total{result="failed"}`.
+
+        - alert: HaConfigSyncDown
+          expr: absent(up{job=~".*ha-config-sync.*"} == 1)
+          for: 15m
+          labels:
+            severity: warning
+            component: ha-config
+          annotations:
+            summary: "ha-config-sync не отдаёт метрики"
+            description: >-
+              Prometheus не видит `up{job=~".*ha-config-sync.*"}` больше
+              15 минут. Проверить Deployment `ha-config-sync` в namespace
+              `home-assistant`, его ServiceMonitor и логи пода. Пока сервис
+              лежит, изменения ha-voice не доставляются автоматически.

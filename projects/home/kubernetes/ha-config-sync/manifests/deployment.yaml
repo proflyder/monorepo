@@ -1,0 +1,120 @@
+# ha-config-sync: delivers projects/home-assistant/ha-voice to HAOS and keeps it
+# in sync (DECISIONS 58).
+#
+# Substituted by Kustomization/app-ha-config-sync:
+#   ${HA_CONFIG_SYNC_IMAGE}  digest from ConfigMap/home-app-images (pins branch)
+#   ${BUILD_ID}              traceability only, never rolls pods
+#   ${HAOS_IP}          HAOS LAN address from Secret/flux-app-settings
+#
+# The pod is stateless: files and manifest are read-only layers of the image,
+# the SSH key/known_hosts/HA token come from the ESO Secret, and no
+# ServiceAccount token is mounted (the service never talks to the API).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ha-config-sync
+  namespace: home-assistant
+  labels:
+    app.kubernetes.io/name: ha-config-sync
+    app.kubernetes.io/part-of: home
+  annotations:
+    proflyder.dev/build: ${BUILD_ID}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ha-config-sync
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ha-config-sync
+      annotations:
+        # The image digest contains the delivered YAML, so this is the roll.
+        proflyder.dev/rollout: ${HA_CONFIG_SYNC_IMAGE}
+    spec:
+      enableServiceLinks: false
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        fsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: ha-config-sync
+          image: ${HA_CONFIG_SYNC_IMAGE}
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: HA_URL
+              value: "http://${HAOS_IP}:8123"
+            - name: HA_TOKEN_FILE
+              value: /run/secrets/ha-config-sync/ha_token
+            # HAOS host SSH (dropbear). The key is restricted to the forced
+            # command in /mnt/data/ha-config-sync/agent.sh; the source address
+            # is enforced by the agent because dropbear cannot pin it in
+            # authorized_keys.
+            - name: SSH_ADDR
+              value: "${HAOS_IP}:22222"
+            - name: SSH_USER
+              value: root
+            - name: SSH_KEY_FILE
+              value: /run/secrets/ha-config-sync/ssh_private_key
+            - name: SSH_KNOWN_HOSTS_FILE
+              value: /run/secrets/ha-config-sync/known_hosts
+            - name: DESIRED_DIR
+              value: /opt/ha-voice
+            - name: MANIFEST_FILE
+              value: /opt/ha-voice-sync.yaml
+            - name: SYNC_INTERVAL
+              value: "300"
+            - name: SYNC_MODE
+              value: apply
+            - name: METRICS_ADDR
+              value: 0.0.0.0:9119
+            # Never restart Home Assistant while the alarm is ringing.
+            - name: RESTART_GUARD_ENTITY
+              value: input_boolean.alarm_ringing
+          ports:
+            - name: http
+              containerPort: 9119
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 15
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 3
+            failureThreshold: 5
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: secrets
+              mountPath: /run/secrets/ha-config-sync
+              readOnly: true
+      volumes:
+        - name: secrets
+          secret:
+            secretName: ha-config-sync
+            defaultMode: 0440

@@ -172,7 +172,7 @@ class Cluster(unittest.TestCase):
             "home-app-pins", "app-wakegrant",
             # решение 54: application units applied by Flux.
             "app-intercom", "app-currency-bot", "app-mcp-gateway",
-            "app-ha-executors", "app-hermes",
+            "app-ha-executors", "app-ha-config-sync", "app-hermes",
         })
         sources = {
             "home-app-pins": ("GitRepository", "flux-pins"),
@@ -228,6 +228,7 @@ class Cluster(unittest.TestCase):
             "app-currency-bot": "./projects/home/kubernetes/currency-bot/manifests",
             "app-mcp-gateway": "./projects/home/kubernetes/mcp-gateway/manifests",
             "app-ha-executors": "./projects/home/kubernetes/scheduler/manifests",
+            "app-ha-config-sync": "./projects/home/kubernetes/ha-config-sync/manifests",
             "app-hermes": "./projects/home-assistant/deploy/flux",
         }
         for name, path in expected.items():
@@ -268,6 +269,7 @@ class Cluster(unittest.TestCase):
             "mcp-gateway": K8S / "mcp-gateway/manifests",
             "scheduler": K8S / "scheduler/manifests",
             "ha-bridge": K8S / "scheduler/manifests",
+            "ha-config-sync": K8S / "ha-config-sync/manifests",
             "hermes": ROOT / "projects/home-assistant/deploy/flux",
             # Phase 2 adds the `${HERMES_CONFIG_IMAGE}` reference to the same
             # rendered set (init container + drift sidecar).
@@ -709,6 +711,11 @@ class MigratedApps(unittest.TestCase):
                       {"SCHEDULER_IMAGE", "HA_BRIDGE_IMAGE", "HA_CONTROL_IMAGE",
                        "HA_SCENARIO_IMAGE", "BUILD_ID", "HA_URL",
                        "SCHEDULER_NODE_PORT", "CONTROL_NODE_PORT"}),
+        # Only app-settings keys exist for app Kustomizations: HAOS_IP, not
+        # the platform-only HAOS_ADDRESS.
+        "ha-config-sync": ({"Deployment", "Service", "ServiceMonitor", "NetworkPolicy",
+                            "PrometheusRule", "ExternalSecret"},
+                           {"HA_CONFIG_SYNC_IMAGE", "BUILD_ID", "HAOS_IP", "NODE_LAN_IP"}),
     }
 
     @classmethod
