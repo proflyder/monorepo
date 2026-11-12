@@ -5,6 +5,7 @@ import dev.proflyder.home.core.model.Schedule
 import dev.proflyder.home.feature.alarms.AlarmDraft
 import dev.proflyder.home.feature.alarms.AlarmRepository
 import dev.proflyder.home.feature.alarms.AlarmValidation
+import dev.proflyder.home.feature.alarms.withDefaultLabel
 import dev.zacsweers.metro.Inject
 
 @Inject class LoadAlarms(
@@ -22,13 +23,23 @@ import dev.zacsweers.metro.Inject
 @Inject class SaveAlarm(
     private val repository: AlarmRepository,
 ) {
+    /**
+     * [defaultLabel] is the localized name used when the editor field is empty,
+     * so the request sent to the server always carries a non-empty label.
+     */
     suspend operator fun invoke(
         existing: Schedule?,
         draft: AlarmDraft,
         idempotencyKey: String,
+        defaultLabel: String,
     ): Outcome<Schedule> {
-        AlarmValidation.validate(draft)?.let { return Outcome.Failure(it) }
-        return if (existing == null) repository.create(draft, idempotencyKey) else repository.update(existing, draft)
+        val resolved = draft.withDefaultLabel(defaultLabel)
+        AlarmValidation.validate(resolved)?.let { return Outcome.Failure(it) }
+        return if (existing == null) {
+            repository.create(resolved, idempotencyKey)
+        } else {
+            repository.update(existing, resolved)
+        }
     }
 }
 

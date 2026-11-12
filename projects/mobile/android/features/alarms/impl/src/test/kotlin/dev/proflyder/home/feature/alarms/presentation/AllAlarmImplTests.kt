@@ -7,5 +7,6 @@ import org.junit.runners.Suite
 @Suite.SuiteClasses(
     AlarmSelectionAnimationTest::class,
     AlarmQuickOffsetStateTest::class,
+    dev.proflyder.home.feature.alarms.domain.SaveAlarmLabelTest::class,
 )
 class AllAlarmImplTests

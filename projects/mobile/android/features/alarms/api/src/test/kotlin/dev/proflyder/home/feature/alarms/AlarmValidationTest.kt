@@ -35,8 +35,13 @@ class AlarmValidationTest {
     }
 
     @Test
-    fun rejectsBlankAndOverlongLabels() {
-        assertEquals(Field.LABEL, fieldOf(draft(label = "   ")))
+    fun acceptsBlankLabelBecauseTheDefaultFillsIt() {
+        assertNull(AlarmValidation.validate(draft(label = "")))
+        assertNull(AlarmValidation.validate(draft(label = "   ")))
+    }
+
+    @Test
+    fun rejectsOverlongLabel() {
         assertEquals(Field.LABEL, fieldOf(draft(label = "x".repeat(121))))
     }
 

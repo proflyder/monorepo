@@ -1,5 +1,6 @@
 load("@rules_kotlin//kotlin:android.bzl", "kt_android_local_test")
 load("//platform/android:defs.bzl", "metro_android_library")
+load(":robolectric_android_all.bzl", "android_all_dir")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -34,12 +35,63 @@ metro_android_library(
 # no Android runtime needed.
 kt_android_local_test(
     name = "selection_animation_test",
-    srcs = glob(["src/test/kotlin/**/*.kt"]),
+    srcs = [
+        "src/test/kotlin/dev/proflyder/home/feature/alarms/domain/SaveAlarmLabelTest.kt",
+        "src/test/kotlin/dev/proflyder/home/feature/alarms/presentation/AlarmQuickOffsetStateTest.kt",
+        "src/test/kotlin/dev/proflyder/home/feature/alarms/presentation/AlarmSelectionAnimationTest.kt",
+        "src/test/kotlin/dev/proflyder/home/feature/alarms/presentation/AllAlarmImplTests.kt",
+    ],
     associates = [":impl"],
     custom_package = "dev.proflyder.home.feature.alarms.impl",
     manifest = "src/test/AndroidManifest.xml",
     test_class = "dev.proflyder.home.feature.alarms.presentation.AllAlarmImplTests",
     deps = [
+        "//projects/mobile/android/core/model",
+        "//projects/mobile/android/features/alarms/api",
         "@maven//:junit_junit",
+        "@maven//:org_jetbrains_kotlinx_kotlinx_coroutines_core",
+    ],
+)
+
+# Robolectric resolves SDK 35 to this pinned preinstrumented jar. Keeping it as
+# a data dependency avoids a runtime Maven download.
+android_all_dir(
+    name = "robolectric_android_all_sdk35",
+    jar = "@maven//:org_robolectric_android_all_instrumented",
+    jar_name = "android-all-instrumented-15-robolectric-13954326-i7.jar",
+)
+
+# The editor is real Material UI: only an inflated layout proves the label
+# placeholder in the dark theme. The rendered PNG is review evidence.
+kt_android_local_test(
+    name = "editor_screenshot_test",
+    srcs = ["src/test/kotlin/dev/proflyder/home/feature/alarms/presentation/AlarmEditorScreenshotTest.kt"],
+    associates = [":impl"],
+    custom_package = "dev.proflyder.home.feature.alarms.impl",
+    data = [
+        "robolectric-deps.properties",
+        ":robolectric_android_all_sdk35",
+    ],
+    jvm_flags = [
+        "-Drobolectric.offline=true",
+        "--add-opens=java.base/java.lang=ALL-UNNAMED",
+        "--add-opens=java.base/java.io=ALL-UNNAMED",
+        "--add-opens=java.base/java.net=ALL-UNNAMED",
+        "--add-opens=java.base/java.security=ALL-UNNAMED",
+        "--add-opens=java.base/java.text=ALL-UNNAMED",
+        "--add-opens=java.base/java.util=ALL-UNNAMED",
+        "--add-opens=java.base/java.util.concurrent=ALL-UNNAMED",
+        "--add-opens=java.base/jdk.internal.util=ALL-UNNAMED",
+    ],
+    manifest = "src/test/AndroidManifest.xml",
+    robolectric_properties_file = "robolectric-deps.properties",
+    test_class = "dev.proflyder.home.feature.alarms.presentation.AlarmEditorScreenshotTest",
+    deps = [
+        "//projects/mobile/android/core/model",
+        "//projects/mobile/android/features/alarms/api",
+        "@maven//:androidx_appcompat_appcompat",
+        "@maven//:com_google_android_material_material",
+        "@maven//:junit_junit",
+        "@maven//:org_robolectric_robolectric",
     ],
 )

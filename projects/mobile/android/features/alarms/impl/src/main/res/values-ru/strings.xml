@@ -28,7 +28,8 @@
     <string name="alarms_timezone_default">Asia/Almaty</string>
     <string name="alarms_editor_title_new">Новый будильник</string>
     <string name="alarms_editor_title_edit">Изменить будильник</string>
-    <string name="alarms_editor_label">Название</string>
+    <string name="alarms_label_default">Будильник</string>
+    <string name="alarms_label_default_hint">Если оставить пустым, название будет «Будильник».</string>
     <string name="alarms_editor_time">Время</string>
     <string name="alarms_quick_offset_15">+15 мин</string>
     <string name="alarms_quick_offset_30">+30 мин</string>

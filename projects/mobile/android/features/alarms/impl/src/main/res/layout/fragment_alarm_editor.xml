@@ -19,10 +19,12 @@
             android:textColor="?attr/colorOnSurfaceVariant" />
 
         <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/alarm_editor_label_layout"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
-            android:hint="@string/alarms_editor_label"
+            android:hint="@string/alarms_label_default"
+            app:helperText="@string/alarms_label_default_hint"
             style="@style/Widget.Material3.TextInputLayout.OutlinedBox">
 
             <com.google.android.material.textfield.TextInputEditText
