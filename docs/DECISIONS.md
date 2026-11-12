@@ -833,3 +833,20 @@
     suppress_notification=True)`) в preStop, поэтому домашний канал не получает
     «shutting down»; per-chat прерывания при реально идущей задаче остаются,
     `gateway_restart_notification: false` не используется.
+
+58. **Конфигурация Home Assistant доставляется in-cluster pull-синхронизацией,
+    а не CI-over-VPN.** `solutions/ha-config-sync` — generic Rust-сервис,
+    который по SSH (форс-команда на HAOS dropbear `:22222`, pin `known_hosts`)
+    сравнивает хеши файлов `projects/home-assistant/ha-voice` с
+    `/mnt/data/supervisor/homeassistant`, применяет изменения через staging и
+    бэкап, проверяет `check_config`, перезагружает затронутые домены и
+    откатывается при ошибке. Выбран pull/GitOps-путь, как у Flux: в домашнюю
+    LAN нет входящего доступа из CI, сервис живёт рядом с HA и сам непрерывно
+    измеряет drift; CI собирает образ и пинует digest, Flux катит его.
+    Альтернатива «CI через VPN применяет файлы» отклонена: у CI нет
+    постоянного пути в LAN, а одноразовый job не лечит drift между запусками.
+    `restart`-файлы (`shell_commands.yaml`) перезапускают HA только при
+    выключенном `input_boolean.alarm_ringing`; неудачный digest повторяется с
+    экспоненциальным backoff до 6 ч. Решение не даёт доступа к
+    `configuration.yaml`, `secrets.yaml` и `scenes.yaml` ни контроллеру, ни
+    агенту.

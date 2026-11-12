@@ -19,9 +19,9 @@ anyhow = { workspace = true }
 axum = { workspace = true }
 base64 = { workspace = true }
 futures = { workspace = true }
-hmac = { workspace = true }
 home-clients = { path = "../../../../packages/rust/home-clients" }
 home-config = { path = "../../../../packages/rust/home-config" }
+forced-ssh = { path = "../../../../packages/rust/forced-ssh" }
 home-http = { path = "../../../../packages/rust/home-http" }
 home-runtime = { path = "../../../../packages/rust/home-runtime" }
 home-secret = { path = "../../../../packages/rust/home-secret" }
@@ -41,7 +41,6 @@ rustls = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde-saphyr = { workspace = true }
-sha1 = { workspace = true }
 thiserror = { workspace = true }
 time = { workspace = true }
 tokio = { workspace = true }

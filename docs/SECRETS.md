@@ -68,6 +68,7 @@
 | `k8s/flux-system/git-deploy-key` | Flux GitRepository read-only deploy key and pinned github.com host key | ESO → flux-system (GitRepository) |
 | `k8s/flux-system/settings` | Flux deployment settings (`NEXUS_HOST`, `NEXUS_PUBLIC_HOST`, `NODE_LAN_IP`, `HOME_DOMAIN`, `LAN_CIDR`, `HAOS_ADDRESS`, `PVE_NODE_TARGET`) | ESO → flux-system (postBuild substitution) |
 | `k8s/home-assistant/ha-bridge-ha` | HA long-lived token for ha-bridge | ESO → home-assistant |
+| `k8s/home-assistant/ha-config-sync` | HAOS forced-command agent key and pinned host key for ha-config-sync | ESO → home-assistant |
 | `k8s/home-assistant/hermes-config` | Hermes renderer private values: `private.yaml` (real HA/MA endpoints, Telegram owner chat id) | ESO → home-assistant (`hermes-config-private`) |
 | `k8s/home-assistant/hermes-environment` | Hermes agent environment (HA/MA/Telegram/API keys) | ESO → home-assistant |
 | `k8s/home-assistant/intercom` | intercom signaling: station device token; `phone_token` is taken from `scheduler-auth` (`token`) | ESO → home-assistant |

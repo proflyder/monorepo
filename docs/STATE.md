@@ -82,12 +82,14 @@
   Hermes gateway `127.0.0.1:8642` + voice proxy `8643`, health exporter `9116`,
   sidecar дрейфа конфига Hermes `9118` (закрыт от LAN),
   currency-bot + cloudflared, mcp-gateway (ClusterIP `:8080`),
+  ha-config-sync (ClusterIP `:9119`, доставляет `projects/home-assistant/ha-voice`
+  на HAOS по SSH и откатывает неудачные изменения),
   intercom (signaling, NodePort `30097`), Nexus (`:8081`, кэш артефактов CI)
   и Flux (`flux-system`). Под Flux — платформа (ESO, cert-manager, Traefik,
   маршруты), observability, Vaultwarden, Nexus и деплой-юниты приложений
   (`wakegrant`, `intercom`, `currency-bot`, `mcp-gateway`, `scheduler` +
-  executors, `hermes`, `hermes-config`); OpenBao, host-firewall и Cloudflare
-  DNS остаются ручными.
+  executors, `hermes`, `hermes-config`, `ha-config-sync`); OpenBao,
+  host-firewall и Cloudflare DNS остаются ручными.
 - `8643` доступен только HAOS/K3s/loopback через nftables.
 - Observability: kube-prometheus-stack `92.14.0`, Loki `20.0.2`,
   Alloy `1.14.3`; пять dashboard JSON Home Assistant и два дашборда колонки

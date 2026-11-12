@@ -86,6 +86,7 @@ rules:
       - intercom
       - wakegrant
       - mcp-gateway
+      - ha-config-sync
     verbs: ["patch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1

@@ -743,7 +743,76 @@ export const config = {
       },
     },
 
+    {
+      id: "ha-config-sync",
+      platform: "bazel",
+      title: "solutions/ha-config-sync (Rust HA config delivery) + ha-voice image",
+      paths: [
+        "solutions/ha-config-sync/**",
+        // The shared forced-command SSH transport extracted from mcp-gateway.
+        "packages/rust/forced-ssh/**",
+        // Delivered Home Assistant files and the project manifest are baked
+        // into the image layer, so a change must rebuild the image.
+        "projects/home-assistant/ha-voice/**",
+        "projects/home/kubernetes/ha-config-sync/**",
+        // The shared service_image helper now carries the extra layers.
+        "platform/bazel/oci/**",
+      ],
+      // One image and one Deployment in home-assistant. The delivered YAML,
+      // manifest, ExternalSecret and NetworkPolicy are part of the same unit:
+      // an image without its file set or key is unusable.
+      deploy: {
+        builder: "bazel",
+        // Flux owns ha-config-sync: Kustomization/app-ha-config-sync applies
+        // the digest from the pins branch; the manifests stay in `develop`.
+        target_root: "//projects/home/kubernetes/ha-config-sync",
+        images: ["ha-config-sync"],
+        workloads: ["ha-config-sync"],
+        namespace: "home-assistant",
+      },
+      rollback: {
+        kind: "flux-pins",
+        note:
+          "Revert the `deploy/home-apps` commit that changed HA_CONFIG_SYNC_IMAGE; " +
+          "Flux re-applies the previous digest and the previous ha-voice file set " +
+          "within 1-2m. The agent and the SSH key on HAOS are unchanged by an " +
+          "image rollback.",
+        source: "projects/home/kubernetes/ha-config-sync/README.md (Rollback)",
+      },
+      bazel: {
+        roots: [
+          "//solutions/ha-config-sync",
+          "//packages/rust/forced-ssh",
+          "//projects/home/kubernetes/ha-config-sync",
+        ],
+        test_targets: [
+          "//solutions/ha-config-sync/crates/ha-config-sync:unit_tests",
+          "//solutions/ha-config-sync/crates/ha-config-sync:agent_tests",
+          "//solutions/ha-config-sync/crates/ha-config-sync:clippy",
+          "//solutions/ha-config-sync/crates/ha-config-sync:rustfmt",
+          "//packages/rust/forced-ssh:unit_tests",
+          "//packages/rust/forced-ssh:clippy",
+          "//packages/rust/forced-ssh:rustfmt",
+        ],
+        build_targets: [
+          "//solutions/ha-config-sync/...",
+          "//packages/rust/forced-ssh/...",
+          "//projects/home/kubernetes/ha-config-sync/...",
+        ],
+      },
+    },
+
     // ------------------------------------------------------------ Python --------
+    {
+      id: "ha-config-sync-deploy",
+      platform: "python",
+      title: "projects/home/kubernetes/ha-config-sync (manifest/alerts contract)",
+      paths: ["projects/home/kubernetes/ha-config-sync/**"],
+      python: {
+        suites: ["projects/home/kubernetes/ha-config-sync"],
+      },
+    },
+
     {
       id: "ha-voice",
       platform: "python",

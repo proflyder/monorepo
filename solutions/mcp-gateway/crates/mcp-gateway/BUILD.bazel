@@ -8,6 +8,7 @@ package(default_visibility = ["//visibility:public"])
 PACKAGE_VERSION = "0.1.0"
 
 DEPS = [
+    "//packages/rust/forced-ssh:forced_ssh",
     "//packages/rust/home-clients:home_clients",
     "//packages/rust/home-config:home_config",
     "//packages/rust/home-http:home_http",
@@ -20,7 +21,6 @@ DEPS = [
     "@crates//:axum",
     "@crates//:base64",
     "@crates//:futures",
-    "@crates//:hmac",
     "@crates//:http",
     "@crates//:http-body-util",
     "@crates//:jiff",
@@ -34,7 +34,6 @@ DEPS = [
     "@crates//:serde",
     "@crates//:serde_json",
     "@crates//:serde-saphyr",
-    "@crates//:sha1",
     "@crates//:thiserror",
     "@crates//:time",
     "@crates//:tokio",

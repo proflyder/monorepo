@@ -1,0 +1,52 @@
+load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
+
+package(default_visibility = ["//visibility:public"])
+
+# Exactly the files ha-config-sync delivers. Kept explicit (not `glob("*.yaml")`)
+# so configuration.yaml/secrets.yaml/scenes.yaml, tests and README can never
+# enter the image by accident; test_sync_manifest.py checks the same set.
+DELIVERED = [
+    "automations.yaml",
+    "command_line.yaml",
+    "input_boolean.yaml",
+    "input_datetime.yaml",
+    "input_number.yaml",
+    "input_select.yaml",
+    "input_text.yaml",
+    "intent_scripts.yaml",
+    "rest_commands.yaml",
+    "schedules_dashboard.yaml",
+    "scripts.yaml",
+    "shell_commands.yaml",
+    "templates.yaml",
+] + glob(["custom_sentences/ru/*.yaml"])
+
+filegroup(
+    name = "delivered",
+    srcs = DELIVERED,
+)
+
+# Mounted at /opt/ha-voice-sync.yaml, outside DESIRED_DIR.
+filegroup(
+    name = "sync_manifest",
+    srcs = ["sync.yaml"],
+)
+
+# Layer for the ha-config-sync image. `strip_prefix = "."` keeps the layout
+# below this package, so custom_sentences/ru/*.yaml stays nested under
+# /opt/ha-voice.
+pkg_tar(
+    name = "overlay",
+    srcs = DELIVERED,
+    mode = "0644",
+    package_dir = "/opt/ha-voice",
+    strip_prefix = ".",
+)
+
+# Runtime manifest, outside DESIRED_DIR (/opt/ha-voice).
+pkg_tar(
+    name = "manifest",
+    files = {"sync.yaml": "ha-voice-sync.yaml"},
+    mode = "0644",
+    package_dir = "/opt",
+)

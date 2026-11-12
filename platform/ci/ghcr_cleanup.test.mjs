@@ -46,6 +46,7 @@ test("deploy images and native publish repositories of units.mjs are considered"
   assert.deepEqual(deployImagePackages(), [
     "currency-bot",
     "ha-bridge",
+    "ha-config-sync",
     "ha-control",
     "ha-scenario",
     "health-exporter",
