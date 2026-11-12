@@ -123,6 +123,18 @@ rust_test(
     ],
 )
 
+# Per-session `notifications/tools/list_changed`: the notification must reach
+# the standalone GET stream whether it opens before or after
+# `notifications/initialized`, exactly once.
+rust_test(
+    name = "tool_list_changed_tests",
+    size = "small",
+    srcs = ["tests/tool_list_changed.rs"],
+    edition = "2024",
+    lint_config = ":workspace_lints",
+    deps = DEPS + [":mcp_gateway"],
+)
+
 extract_cargo_lints(
     name = "workspace_lints",
     manifest = "Cargo.toml",
@@ -139,6 +151,7 @@ rustfmt_test(
         ":contract_tests",
         ":deploy_contract_tests",
         ":voice_tests",
+        ":tool_list_changed_tests",
     ],
 )
 
@@ -152,5 +165,6 @@ rust_clippy_test(
         ":unit_tests",
         ":contract_tests",
         ":deploy_contract_tests",
+        ":tool_list_changed_tests",
     ],
 )
