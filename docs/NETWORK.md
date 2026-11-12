@@ -187,6 +187,7 @@ egress ровно на `${BB_CT_IP}:22`, публикации API bb наруж�
 | `6053/tcp` | ESPHome/Pulsar API | LAN |
 | `8928/tcp` | Sendspin | LAN |
 | `8099/tcp` | HTTP control | LAN, bearer auth |
+| `9101/tcp` | Prometheus-метрики Pulsar | LAN; только с адреса Prometheus |
 | `5555/tcp` | ADB | LAN |
 | `22/tcp` | SSH | LAN |
 | `6638/tcp` | Zigbee coordinator | закрыт/не используется; без auth, не публиковать |
@@ -264,9 +265,10 @@ cert-manager с ACME DNS-01 Cloudflare. Wildcard-сертификат
   и стрим не обрывается по таймауту. NetworkPolicy `intercom-ingress`
   допускает LAN/VPN (включая узел с Traefik в `hostNetwork`) и pod CIDR.
 - Группа VPN `ci` (CI) маршрутизируется только до `192.0.2.27`; nft
-  `forward` разрешает `tcp/{443,6443}`: `443` — Traefik (OpenBao API/UI для
-  GitHub OIDC), `6443` — K3s API. Остальные адреса и порты для пула
-  `10.77.1.0/24` закрыты.
+  `forward` разрешает лишь `tcp/443`: Traefik → HA (`deploy-station`) и
+  OpenBao API/UI для GitHub OIDC (`deploy-station`, `android-distribute`).
+  Остальные адреса и порты для пула `10.77.1.0/24` закрыты; правило
+  `6443` снято вместе с CI-деплоем.
 
 ### Публичные маршруты Cloudflare Tunnel
 
@@ -294,7 +296,8 @@ Remotely-managed Cloudflare Tunnel `home-k3s` работает как Deployment
 - Административные интерфейсы — только LAN или VPN.
 - `6443/10250/9100/9116/8472` не публикуются в обычный LAN.
 - `8643` voice proxy доступен только HAOS, K3s и loopback.
-- `8123/8095/8099/6053/6638` не пробрасываются в интернет.
+- `8123/8095/8099/6053/6638` не пробрасываются в интернет; `9101` — только
+  LAN и только для Prometheus.
 - Currency API NodePort (пример `30100`) — только LAN, Bearer и nft
   allow-list; в интернет не пробрасывается.
 - `80/443` на узле K3s обслуживает только Traefik с IP allow-list; роутер их

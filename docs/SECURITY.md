@@ -20,8 +20,9 @@
   кластер/узел/LAN и Traefik; API `currency.home.example.com` — LAN/VPN,
   Bearer. Публично только `tg.example.com/telegram/webhook` и
   `ci-nexus.<public-zone>/repository/*` через туннель.
-- Станция `.13`: `6053`, `8928`, `8099`, `5555`, `22` — только LAN.
-  `8099` — bearer token; ADB root без пароля; SSH root по паролю.
+- Станция `.13`: `6053`, `8928`, `8099`, `9101`, `5555`, `22` — только LAN.
+  `8099` — bearer token; `9101` — метрики, доступ только с адреса
+  Prometheus; ADB root без пароля; SSH root по паролю.
 - `6638` Zigbee — без auth; сейчас закрыт/не используется, наружу не выставлять.
 - ONT/AX3: проброшен только VPN `443/tcp+udp`; внешний скан 2026-10-31: из
   WAN открыт лишь `443/tcp` (`22`, `80`, `8006`, `8443` закрыты).
@@ -46,7 +47,8 @@
   только до K3s, без DNS; nftables `forward` разрешает только `tcp/443`
   (Traefik → HA для установки прошивки станции) и `drop` остальное. K3s API
   (`6443`), SSH, PVE, станция и другие LAN-адреса недоступны. Порт `443` и
-  группа `ci` нужны только сертификату `ci-pulsar` (`deploy-station`).
+  группа `ci` нужны сертификатам `ci-pulsar` (`deploy-station`) и
+  `ci-android` (`android-distribute`).
 - Сервер проброшен на ONT/AX3: снаружи открыт только `443/tcp+udp`; SSH в CT
   остаётся только из LAN. Лимит `max-same-clients = 10` на пользователя.
 - Серверный сертификат — публичный Let's Encrypt с автоматическим продлением
@@ -190,14 +192,17 @@
   доступе.
 - CI не имеет SSH, root и доступа к K3s API: группа `ci` маршрутизируется
   только до `K3S_NODE`, VPN nft разрешает только `tcp/443` (Traefik → HA для
-  `deploy-station`); правило `6443` снято. Сертификат `ci-github` и
-  ServiceAccount/RBAC `ci-deploy` удалены, root-helper с узла убран. Единственный
-  CI-пользователь VPN — `ci-pulsar` (станция).
+  `deploy-station`, OpenBao для OIDC `deploy-station`/`android-distribute`);
+  правило `6443` снято. Сертификат `ci-github` и
+  ServiceAccount/RBAC `ci-deploy` удалены, root-helper с узла убран.
+  CI-пользователи VPN — `ci-pulsar` (станция) и `ci-android`
+  (App Distribution).
 - Kubeconfig CI больше не существует: применение в кластере делает Flux
   in-cluster, без входящего ServiceAccount.
 - Образы неизменяемы и адресуются по digest; GHCR-пакеты должны быть
-  публичными (pull без секрета), push выполняет job-scoped `GITHUB_TOKEN`
-  с `packages: write` только в deploy-джобе.
+  публичными (pull без секрета), push выполняет job-scoped `GITHUB_TOKEN` в
+  CI-джобах, собирающих образ (unit/native), с `packages: write`; job `pins`
+  пишет только pins-ветку и имеет `contents: write`.
 - Environment `Home` удалён. Секреты Environment `Station` (VPN p12/пароль,
   `OPENBAO_ADDR`, `OPENBAO_ROLE`) загружаются primary вручную через `gh`; в Git
   их нет. Приватные env приложений лежат в `secret/k8s/flux-system/app-settings`,

@@ -32,7 +32,7 @@ Deployment/Service сигналинга звонка; код и контракт
 
 `Watch` — долгоживущий server-streaming ответ Connect поверх HTTP/1.1.
 Маршрут явно задаёт `responseForwarding.flushInterval: 100ms`, а
-`ingress/values/traefik.yaml` — `writeTimeout: 0s` и `idleTimeout: 1800s`,
+`../ingress/traefik/values.yaml` — `writeTimeout: 0s` и `idleTimeout: 1800s`,
 поэтому Traefik не буферизует кадры и не обрывает стрим по таймауту.
 NodePort `${INTERCOM_NODE_PORT}` (`30097` на стенде) сохраняется как
 аварийный путь на случай проблем с DNS/Traefik.

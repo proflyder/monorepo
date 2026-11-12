@@ -89,7 +89,8 @@
   остаются ручными.
 - `8643` доступен только HAOS/K3s/loopback через nftables.
 - Observability: kube-prometheus-stack `92.14.0`, Loki `20.0.2`,
-  Alloy `1.14.3`; четыре dashboard JSON через Helm ConfigMap.
+  Alloy `1.14.3`; пять dashboard JSON Home Assistant и два дашборда колонки
+  («Колонка — железо», «Колонка — Pulsar») через Helm ConfigMap/Flux.
 - Alertmanager шлёт warning/critical в личный чат владельца через инфра-бот
   Hermes (`telegram_configs`, resolved тоже). Конфиг — Secret
   `alertmanager-telegram`, его рендерит ESO из
@@ -277,8 +278,10 @@
   `secrets/home/vpn/client-ca/`; в CT — `client-ca.pem` и `client-ca.crl`.
   Клиентские сертификаты — RSA 2048, 2 года, CN = пользователь, OU = группа.
   Управление — `vpncerts.py` (`init-ca`/`issue`/`revoke`/`list`).
-- Группа `ci` маршрутизируется только до K3s; nftables `forward` разрешает
-  `tcp/{443,6443}` и `drop` остальное, SSH из группы закрыт.
+- Группа `ci` маршрутизируется только до узла K3s; nftables `forward`
+  разрешает `tcp/443` (Traefik → HA/OpenBao) и `drop` остальное, SSH из
+  группы закрыт. Группа нужна `deploy-station` (`ci-pulsar`) и
+  `android-distribute` (`ci-android`).
 - Серверный сертификат Let's Encrypt продлевается автоматически: certbot +
   `dns-cloudflare` (DNS-01), `certbot.timer`, deploy hook копирует
   fullchain/privkey в ocserv и перезапускает его. MSS clamp в forward chain
@@ -309,43 +312,53 @@
   после следующей переустановки `--version` станет `ble-gateway 0.2.0`.
   Сейчас gateway не обновляется; порядок — `docs/STATION-SOFTWARE.md`
   «Обновление BLE gateway» (проверка BLE с телефона, откат `ble-gateway.prev`).
-- Pulsar Rust `v0.5.1015` — armhf-сборка из `projects/station/pulsar/`
+- Pulsar Rust `v0.5.1018` — armhf-сборка из `projects/station/pulsar/`
   (Bazel); артефакт продвинут из PR-сборки без пересборки (build-once,
-  digest из `tree-<hash>`). «Громкость объявлений»
+  digest из `tree-<hash>`). Синхронизирован с upstream `v0.6.1`: канал
+  распознавания, усилитель Mini 1 и #76; намеренно не взяты #66, #64, #34,
+  аппаратная поддержка Mini 3 Pro/Станции 2 и prune (#303). wake→answer
+  измеряется до старта TTS (#301). «Громкость объявлений»
   (`number.…_gromkost_obiavlenii`, 0–100 %, по умолчанию 100) — абсолютная
   громкость только речевых анонсов и TTS-ответов на кривой модели, не громче
-  текущей общей (100 % = «как основная»); ANNOUNCING уходит в HA как PLAYING
-  (HA 2026.10 не знает это состояние). Автояркость часов —
+  текущей общей (100 % = «как основная») (#302); ANNOUNCING уходит в HA как
+  PLAYING (HA 2026.10 не знает это состояние). Автояркость часов —
   перцептивная (гамма 2 к фактору освещённости, как у кольца): датчик под
   крышкой видит 0–60 лк, при ~18 лк ток часов 64/255, в темноте пол 5;
-  линия Ricardo, база upstream `v0.5.4` = `f1f5b17`. Внутри — завершённый
+  линия Ricardo, база upstream `v0.6.1` (предыдущая — `v0.5.4` =
+  `f1f5b17`). Внутри — завершённый
   Rust-рефакторинг (решение 40): крейты за портами, явные состояния
   фронтенда, голоса и арбитража, `pulsar-playback`, Zigbee разделён и
   выключен; pairing PSK и токен Sendspin в журнал не пишутся.
   Включает повторный wake, заменяющий активный диалог, экспериментальный
   локальный endpointing, Ricardo pre-roll 256 ms и запись wake-событий
   (`/data/pulsar/wake-events/`, cutoff/window из manifest модели); из
-  upstream `v0.5.4` — number «Follow-up duration», STT stop-word fallback,
-  switch часов «Clock auto brightness», Mini gen1 и Mini 3 (experimental),
-  S32 capture, переработанные volume/mixer/player/pcm_out/sendspin и
-  `deploy/asound.conf`. «Wake: не услышала» сохраняет последние 30 с
+  upstream `v0.6.1` — number «Follow-up duration», STT stop-word fallback,
+  «Microphone gain» (0–40 дБ, по умолчанию 34; на Mini 1 — 0), канал
+  распознавания VQE_OMNI, switch часов «Clock auto brightness», Mini gen1 и
+  Mini 3 (experimental), S32 capture, переработанные
+  volume/mixer/player/pcm_out/sendspin и `deploy/asound.conf`. «Wake: не
+  услышала» сохраняет последние 30 с
   (кольцевой буфер 31 с). Процесс запущен с `PULSAR_LOCAL_ENDPOINTING=1`,
   унаследованным supervisor'ом от `ctl.sh reload`; это не boot-persistent:
   после reboot или нового supervisor без env feature выключен.
   `--version` различает сборки по тегу.
-- `v0.5.4` в Ricardo-профиле: в диалоге, открытом «Рикардо», распознанный текст всегда
+- `v0.6.1` в Ricardo-профиле: в диалоге, открытом «Рикардо», распознанный
+  текст всегда
   уходит в HA — локальной отмены/паузы нет, поэтому «Рикардо, стоп» доходит
   до HA. Для диалогов по кнопке, follow-up и `start_conversation` отдельное
   «стоп»/«хватит» отменяет диалог локально и останавливает звонящий таймер.
-- Версия Pulsar — `v<upstream major.minor>.<1000+N>`: updater демона ставит только строго большую
-  `MAJOR.MINOR.PATCH`, а upstream уже имеет `v0.5.4`. Релиз, публикация и
+- Версия форка — `v0.5.10NN`: major.minor 0.5 сохраняется, чтобы patch
+  1000+ был больше любого upstream-патча, а updater ставит только строго
+  большую `MAJOR.MINOR.PATCH`. Полный переход на upstream 0.6.x даст
+  `v0.6.1001`. Релиз, публикация и
   деплой — `projects/station/pulsar/RICARDO.md` «Релизы и деплой»; репозиторий
   обновлений — константа `pulsar_update::UPDATE_REPO`.
 - Upstream `Morvex885/pulsar` вливается вручную патчем (`git diff vA..vB` →
   `git apply -3 --directory=projects/station/pulsar`), затем обычный PR.
   Прежние GitHub `proflyder/pulsar` и `pulsar-fork-old` удалены. Откат на станции —
   `pulsar.prev` (предыдущий бинарник рядом с текущим).
-- ESPHome `6053`, Sendspin `8928`, HTTP control `8099` (bearer), ADB `5555`,
+- ESPHome `6053`, Sendspin `8928`, HTTP control `8099` (bearer), метрики
+  `9101` (LAN, только с адреса Prometheus), ADB `5555`,
   SSH `22`; Noise; HA satellite работает.
   Switch «Clock auto brightness» включён: автояркость часов по датчику
   освещённости, при выключении — уровень «Clock brightness».
@@ -675,9 +688,11 @@
   `applicationId dev.proflyder.home`, minSdk 26 / target 36, debug-signed).
   Вкладки **Home**, **Scenarios**, **Time** (ViewPager2 и сегментированный
   переключатель Alarms/Timers/Reminders; Connection открывается шестерёнкой);
-  Home — хаб с живой каруселью, избранным и
-  «Быстрыми действиями», читает `GET /v1/catalog`, команды идут через
-  `home.control`/очередь `control`.
+  Home — хаб с живой каруселью, избранным и «Быстрыми действиями» (FAB со
+  speed-dial: тап выполняет, долгое нажатие закрепляет/открепляет), читает
+  `GET /v1/catalog`, команды идут через `home.control`/очередь `control`.
+  Колонка в каталоге даёт строки громкости (общая с mute/unmute и громкость
+  объявлений), обе открывают общий `VolumeSheet`.
   Bearer token в Keystore AES-GCM; адреса scheduler/control/intercom и
   таймауты — Firebase Remote Config (`home_connection`), фильтр Home и
   зашифрованные токены — Jetpack DataStore с миграцией из SharedPreferences;

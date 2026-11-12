@@ -234,20 +234,23 @@ openconnect --authenticate \
 
 ## Группа `ci` (доступ GitHub Actions)
 
-Для автоматического деплоя на K3s заведена отдельная группа сертификата `ci`.
+Для CI-доступа к HA (`deploy-station`) и OpenBao (`deploy-station`,
+`android-distribute`) заведена отдельная группа сертификата `ci`.
 Она не пересекается с `lan`/`full`:
 
 - собственный пул `10.77.1.0/24` (`ipv4-network` в
   `config-per-group/ci`), общий пул `10.77.0.0/24` в него не входит;
 - клиенту выдаётся единственный маршрут `<k3s-node>/32`, DNS не пушится;
 - nftables `forward` разрешает из `10.77.1.0/24` только
-  `<k3s-node> tcp/{443,6443}` (K3s API и HTTPS/Traefik для OpenBao; SSH из
-  этой группы закрыт — правило стоит до общего `accept` для `10.77.0.0/24`,
-  затем `drop`),
+  `<k3s-node> tcp/443` (HTTPS/Traefik → HA для `deploy-station`, OpenBao для
+  OIDC `deploy-station`/`android-distribute`; SSH из этой группы закрыт —
+  правило стоит до общего `accept` для `10.77.0.0/24`, затем `drop`),
   `postrouting` маскирует пул в адрес CT;
 - сертификат выпускается только с OU `ci`:
-  `vpncerts.py issue ci --device github --groups ci`. В профиле клиента
-  выбирать группу не нужно: ocserv берёт её из OU сертификата.
+  `vpncerts.py issue ci --device pulsar --groups ci` и
+  `vpncerts.py issue ci --device android --groups ci` (файлы
+  `ci-pulsar.p12`, `ci-android.p12`). В профиле клиента выбирать группу не
+  нужно: ocserv берёт её из OU сертификата.
 
 Установка/обновление (идемпотентно, активные сессии `lan`/`full` не рвутся —
 меняются только файлы групп и nftables, ocserv делает reload):
@@ -263,12 +266,12 @@ pct exec 102 -- /root/install-ocserv.sh \
 Проверка без поднятия туннеля на рабочей машине:
 
 ```bash
-openconnect --authenticate --certificate ci.p12 --passwd-on-stdin \
+openconnect --authenticate --certificate ci-pulsar.p12 --passwd-on-stdin \
   --authgroup ci --resolve vpn.example.com:192.0.2.29 \
   https://vpn.example.com/ < ci.password
 ```
 
-Отзыв доступа — обычный `vpncerts.py revoke <ci-github.p12>`; см.
+Отзыв доступа — обычный `vpncerts.py revoke <ci-pulsar.p12|ci-android.p12>`; см.
 `docs/OPERATIONS.md`.
 
 ## Проверки

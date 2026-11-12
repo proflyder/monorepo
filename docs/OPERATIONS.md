@@ -22,7 +22,7 @@ mise run deploy:status scheduler
 mise run deploy:status scheduler --live  # read-only kubectl get deploy; нужен admin kubeconfig
 
 # откат по процедуре из units.mjs
-mise run rollback scheduler --dry-run   # план: kind, state-dir, команда, источник в docs
+mise run rollback scheduler --dry-run   # план: kind, что восстанавливается, действие, источник
 mise run rollback scheduler --yes       # выполняет документированную команду
 ```
 
@@ -161,14 +161,15 @@ CA: `secrets/home/vpn/client-ca/` (ключ CA на сервер не копир
 После изменения методов аутентификации нужен restart ocserv, после смены
 CRL достаточно reload. Проверка конфигурации — `ocserv --test-config`.
 
-### Доступ CI: только станция
+### Доступ CI: станция и Android-дистрибуция
 
 CI больше не входит в K3s: приложения применяет Flux, поэтому `ci-deploy`,
 его RBAC, `secret/ci/deploy-home`, роль OpenBao `deploy-home` и сертификат
-`ci-github` удалены (решение 55 (этап 6.7)). Группа VPN `ci` и `443` остаются
-только для `deploy-station` (сертификат `ci-pulsar`): маршрут ведёт до узла,
-nft разрешает лишь `tcp/443` (Traefik → HA). Правило `tcp/6443` (K3s API)
-снято; SSH и root-helper у CI нет.
+`ci-github` удалены (решение 55 (этап 6.7)). Группа VPN `ci` и `443` нужны
+`deploy-station` (сертификат `ci-pulsar`) и `android-distribute`
+(сертификат `ci-android`, Environment `Android` на PR): маршрут ведёт до
+узла, nft разрешает лишь `tcp/443` (Traefik → HA/OpenBao). Правило
+`tcp/6443` (K3s API) снято; SSH и root-helper у CI нет.
 
 ```bash
 # проверить состояние (read-only)
@@ -577,8 +578,9 @@ unset VOICE_TOKEN
 Ротация: `mcp-gateway-auth` — перезапустить `mcp-gateway` и `hermes`;
 `mcp-gateway-voice` — перезапустить `mcp-gateway` и `hermes` (voice-proxy);
 `mcp-gateway-bb-ssh` — заменить ключ на CT (строка `authorized_keys`) и в
-OpenBao одновременно. Список личных целей — `manifests/bb-targets.yaml`,
-рендерится `deploy.sh` из `BB_PROJECT_*`.
+OpenBao одновременно. Список личных целей — `manifests/bb-targets.yaml`;
+Flux подставляет `BB_PROJECT_*` из `Secret/flux-app-settings` при рендере
+каталога.
 
 ## Комп (Windows-ПК)
 
@@ -1467,8 +1469,10 @@ Webhook — `https://tg.example.com/telegram/webhook`: без secret token — 4
 с ним — 200. Метрики скрейпит `ServiceMonitor/currency-bot`; Grafana —
 dashboard `currency-bot` (uid `currency-bot`).
 
-Откат Deployment из state последнего деплоя (для всех юнитов с записанным
-state есть общая точка входа `mise run rollback <unit> --dry-run`):
+Откат приложения — revert pins-коммита в `deploy/home-apps` (план:
+`mise run rollback currency-bot --dry-run`), после чего Flux применяет
+предыдущий digest. `home-deploy state rollback` остаётся admin-инструментом
+для state, записанного admin-скриптом:
 
 ```bash
 home-deploy state rollback \

@@ -65,8 +65,9 @@ Firewall: `projects/home/kubernetes/management-firewall/`.
 - `/srv/k3s/volumes/openbao{, -backups}` — OpenBao raft и raft snapshots
   (PV `openbao-data`/`openbao-backups`, `ricardo-existing`, `Retain`).
 - `/srv/k3s/recovery` — закрытые recovery-файлы.
-- Host-дерева `/opt/home` и запасных релизов нет: откат — только
-  digest-pinned образы в GHCR/containerd, деплой — `home-deploy converge`.
+- Host-дерева `/opt/home` и запасных релизов нет: откат — revert
+  pins-коммита или `flux suspend`; штатный деплой — Flux, `home-deploy
+  converge` остаётся admin-путём (drills, cutover).
 - `runtime-ha` — архив старого HA Container, не активный writer.
 
 Секреты Hermes (`Secret/hermes-environment`), scheduler/HA
@@ -79,10 +80,12 @@ Firewall: `projects/home/kubernetes/management-firewall/`.
 ## Обновление
 
 ```bash
-# chart приложений (runtime) — вручную; ha-observability/dashboard теперь
-# обновляет Flux после merge в develop
+# chart runtime штатно катит Flux (`HelmRelease/runtime`, `app-hermes`)
+# после merge в develop; ручной upgrade — только аварийный путь и будет
+# перетёрт сверкой Flux. PV/PVC (storage) по-прежнему применяет admin
+# через `apply-runtime.sh`.
 mise run helm -- upgrade --install runtime projects/home-assistant/deploy/chart \
-  -n home-assistant -f local-data/kubernetes-research/runtime-values.yaml \
+  -n home-assistant -f "$RUNTIME_PRIVATE_VALUES" \
   --wait --timeout 5m
 ```
 
@@ -166,7 +169,7 @@ mise run helm -- template runtime projects/home-assistant/deploy/chart \
 ```bash
 mise run secrets:exec -- -P kube exec -- platform/workstation/with-kube-tunnel.sh \
   home-deploy hermes rollout \
-    --values-file local-data/kubernetes-research/runtime-values.yaml \
+    --values-file "$RUNTIME_PRIVATE_VALUES" \
     --hermes-digest sha256:… --voice-proxy-digest sha256:… \
     --exporter-digest sha256:… \
     --smoke-image ghcr.io/proflyder/home-deploy@sha256:… \

@@ -17,8 +17,9 @@ docs/PROVISIONING.md
 docs/WAKE-WORD.md
 ```
 
-Состав ПО, известные расхождения и план этапов 2–5 —
-[`docs/STATION-SOFTWARE.md`](../../docs/STATION-SOFTWARE.md). Сверка с живой
+Состав ПО и известные расхождения —
+[`docs/STATION-SOFTWARE.md`](../../docs/STATION-SOFTWARE.md); открытые этапы —
+[`docs/PENDING.md`](../../docs/PENDING.md). Сверка с живой
 колонкой — `mise run station:audit` (только чтение по SSH).
 
 Профиль Ricardo — [`pulsar/RICARDO.md`](pulsar/RICARDO.md); установленная

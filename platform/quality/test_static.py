@@ -8,7 +8,7 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-# Documented in docs/RESOURCES.md: incomplete legacy copy, not in any active path.
+# Documented in resources/README.md: incomplete legacy copy, not in any active path.
 KNOWN_BROKEN_LEGACY = {ROOT / "resources" / "spotify-autostart" / "spotify.sh"}
 
 

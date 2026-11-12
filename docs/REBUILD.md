@@ -86,15 +86,19 @@ ha-bridge; `home-assistant/backup_*.tar` — в HA onboarding;
 3. Остановить K3s перед восстановлением datastore.
 4. Вернуть SQLite cluster snapshot, token, TLS/cred, config.
 5. Вернуть `/srv/k3s/volumes/*` до старта Pods.
-6. Поднять образы: сначала попробовать pull из GHCR по digest
-   (`scheduler`, `ha-bridge`, `ha-control`, `hermes`, `voice-proxy`;
-   `hermes` — Docker, остальные — Bazel `rules_oci`); если пакеты
-   недоступны — импортировать OCI-архивы
+6. Поднять образы: сначала попробовать pull из GHCR по digest для всех
+   деплой-юнитов из `platform/ci/units.mjs` (`scheduler`, `ha-bridge`,
+   `ha-control`, `ha-scenario`, `mcp-gateway`, `intercom`, `wakegrant`,
+   `currency-bot`, `hermes`, `voice-proxy`, `health-exporter`,
+   `home-deploy`); `hermes` — Docker, остальные — Bazel `rules_oci`; если
+   пакеты недоступны — импортировать OCI-архивы
    (`sudo k3s ctr images import --platform linux/amd64 <archive>`).
 7. Восстановить OpenBao: PV raft/backups, Secret `openbao-seal`,
    recovery keys из `secrets/openbao/`; проверить auto-unseal и логин.
    Если PV потерян — поднять пустой OpenBao, восстановить snapshot (§6).
-8. Применить Helm releases из репозитория/private values.
+8. Bootstrap Flux (`mise run admin:flux-bootstrap`): `GitRepository`,
+   Kustomization и HelmRelease применят платформу, observability и
+   workload'ы; PV/PVC — `apply-runtime.sh`, OpenBao — вручную.
 9. Проверить pods, PV, Grafana, HTTPS ingress, ExternalSecrets и voice
    endpoints.
 

@@ -220,9 +220,6 @@ export function audit(root = ROOT) {
       if (!target || /^\w+:\/\/|mailto:/.test(target)) {
         continue;
       }
-      if (target === "url" && name === "docs/HISTORY.md") {
-        continue; // Literal Markdown syntax example in the historical log.
-      }
       const resolved = path.resolve(path.dirname(full), target);
       if (!fs.existsSync(resolved)) {
         errors.push(`broken local Markdown link: ${name}: ${target}`);

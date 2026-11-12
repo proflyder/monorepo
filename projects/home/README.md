@@ -47,6 +47,7 @@ HA/ADB): `projects/home/e2e/scheduler_smoke.py`.
 HA Core живёт в HAOS VM; MA и Matter — add-ons в HAOS. K3s VM содержит
 STT/TTS, Hermes, scheduler/ha-bridge/ha-control/ha-scenario, intercom,
 OpenBao/ESO, mcp-gateway, Nexus и observability. Hermes и другие проекты
-используют один общий `mcp-gateway`, а не MCP внутри каждого сервиса; Nexus
-разворачивает Flux, остальную инфраструктуру — ручные `deploy.sh`, сервисы
-приложений — также Flux из pins (`deploy-home` только пинует digest'ы).
+используют один общий `mcp-gateway`, а не MCP внутри каждого сервиса; Nexus,
+платформу, observability и Vaultwarden разворачивает Flux, ручными остаются
+OpenBao, host-firewall и Cloudflare DNS, сервисы приложений — тоже Flux из
+pins (`deploy-home` только пинует digest'ы).

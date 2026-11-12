@@ -102,7 +102,8 @@
     вместо Unkey. Публичный ingress — только
     `tg.example.com/telegram/webhook` через Cloudflare Tunnel `home-k3s`;
     API остаётся LAN/VPN. Логи — JSON в stdout, метрики — Prometheus,
-    деплой — data-driven CI-юнит `currency-bot`.
+    деплой — data-driven юнит `currency-bot` в `platform/ci/units.mjs`;
+    применяет Flux по pins (решение 54).
 
 22. **Один MCP-шлюз, перезапуск только с подтверждением.** Вся
     инфраструктурная диагностика идёт через `solutions/mcp-gateway`: Hermes
@@ -320,6 +321,9 @@
       `/usr/local/bin/home-deploy`) и передаёт его скриптам как `HOME_DEPLOY`.
       Механизм не зависит от языка: образ собирается из Rust-крейта
       `platform/deploy-rs:home-deploy`.
+      С решения 54 `deploy-home` не вызывает deploy-скрипты: job `pins` только
+      коммитит digest'ы в `deploy/home-apps`, а `PREBUILT_DIGESTS`/`HOME_DEPLOY`
+      остаются для admin-скриптов и их тестов.
     * Ручной `workflow_dispatch` выкатывает текущий `develop`, у которого нет
       CI-сборки для юнитов, не затронутых последним merged PR (tree меняется
       на каждом merge). Поэтому promotion для каждого образа, у которого нет
@@ -767,15 +771,14 @@
     подставляются в `postBuild`. Провизор Nexus остался Job'ом, но его
     ConfigMap хешируется по содержимому `provision.sh`, поэтому изменение
     скрипта перезапускает провижининг; Cloudflare DNS — ручной шаг.
-    Остальные namespace, OpenBao и сервисы приложений остаются на
-    `deploy-home`.
+    Остальные namespace, OpenBao и сервисы приложений позже переведены на
+    Flux (решение 54); `deploy-home` остаётся только promotion/pins.
 
 54. **Все деплой-юниты приложений катит Flux, CI только пинует digest'ы.**
     `wakegrant`, `intercom`, `currency-bot`, `mcp-gateway`, `scheduler` +
-    executors (`ha-bridge`/`ha-control`/`ha-scenario`) и `hermes` имеют
-    `deploy.runtime: "flux"` в `platform/ci/units.mjs` и включённые
-    `Kustomization` (`suspend: false`) в
-    `projects/home/kubernetes/flux/cluster/apps.yaml`. Job `pins` в
+    executors (`ha-bridge`/`ha-control`/`ha-scenario`) и `hermes` перечислены
+    деплой-юнитами в `platform/ci/units.mjs` и включены (`suspend: false`) как
+    `Kustomization` в `projects/home/kubernetes/flux/cluster/apps.yaml`. Job `pins` в
     `deploy-home` проверяет provenance собранного PR образа и коммитит digest
     в машинную ветку `deploy/home-apps`; Flux читает её как
     `ConfigMap/home-app-images` и применяет манифесты из `develop`. У CI нет

@@ -123,10 +123,11 @@
 ### Секреты
 
 ```text
-GitHub Actions ──OIDC──► OpenBao jwt роль deploy-station   (только станция)
-                              │  secret/ci/deploy-station
+GitHub Actions ──OIDC──► OpenBao jwt роли deploy-station (Environment
+                              │  Station) и android-distribute (Environment Android)
+                              │  secret/ci/deploy-station, secret/ci/android-distribute
                               ▼
-                         VPN группа ci → Traefik 443 → HA
+                         VPN группа ci → Traefik 443 → HA/OpenBao
 
 OpenBao KV v2 secret/k8s/* ──► ESO ClusterSecretStore/openbao
                               │  Kubernetes auth
@@ -163,25 +164,28 @@ OpenBao KV v2 secret/k8s/* ──► ESO ClusterSecretStore/openbao
 - `deploy-home` содержит только `plan`, `pins`, `warm-*`, `native-release` и
   `deploy-station`. Прежний job `deploy` (VPN группа `ci`, OIDC, `ci-deploy`)
   удалён вместе с RBAC и сертификатом `ci-github`; правило `6443` снято,
-  `443` и группа `ci` остаются для `deploy-station`.
+  `443` и группа `ci` остаются для `deploy-station` (`ci-pulsar`) и
+  `android-distribute` (`ci-android`).
 
 - Прямой push в `develop` запрещён; merge PR = деплой затронутых юнитов.
 - CI-скачивания Maven/Google Maven/PyPI/npm у Bazel идут напрямую с раннеров,
   а Nexus — запасной путь (второе rewrite-правило) при 429/5xx/обрыве; pip/npm
   шаги используют Nexus, когда заданы `NEXUS_HOST` и `NEXUS_CI_PASSWORD`.
-  Nexus разворачивает Flux из Git, остальная инфраструктура — ручные
-  `deploy.sh`.
+  Nexus, платформу и наблюдаемость разворачивает Flux из Git; вручную
+  остаются только OpenBao, host-firewall (nftables) и Cloudflare DNS.
 - Образы scheduler/ha-bridge/ha-control/currency-bot/voice-proxy собираются
   Bazel `rules_oci` (distroless) и адресуются по digest в GHCR. Hermes
   собирается Docker из upstream revision; оба образа тоже digest-pinned GHCR,
   а юнит `hermes` имеет builder `mixed` (Docker + Bazel).
 - currency-bot — data-driven юнит `platform/ci/units.mjs`: свой namespace,
-  script, `externalsecrets`, `env_key`/`env_file`; contract-тест
-  `currency-bot-deploy`. `home-deploy converge` заменяет Deployment целиком и сохраняет
-  env/режим/replicas; откат восстанавливает ровно тот объект, который применил
-  job.
-- Режимы исполнения (`execute`, `shadow`, `control-*`) меняются только
-  ручным `workflow_dispatch`.
+  `images`/`workloads`; контракт манифестов проверяют manifest-тесты.
+  Workload применяет Flux (`app-currency-bot`) из `develop` с digest'ом из
+  pins-ветки; откат — revert pins-коммита или `flux suspend`, а
+  `home-deploy converge` остаётся только admin-инструментом (drills,
+  cutover) и сохраняет env/режим/replicas.
+- Режимы исполнения (`execute`, `shadow`, `control-*`) — Git-состояние в
+  `scheduler/manifests/kustomization.yaml`; учения — `flux suspend` плюс
+  admin-скрипт `scheduler/deploy.sh`, затем `flux resume`.
 
 Pulsar живёт в монорепозитории (`projects/station/pulsar/`). Релиз — изменение
 `projects/station/pulsar/VERSION` в PR в `develop`; сборка и публикация — в
@@ -202,7 +206,8 @@ merge PR в develop с новым VERSION
         → проверка installed_version == version и 90 с стабильности
 ```
 
-- Версия `v<upstream major.minor>.<1000+N>` больше любого upstream-патча, поэтому
+- Версия форка `v0.5.10NN` больше любого upstream-патча `0.5.x`; при полном
+  переходе на upstream 0.6.x — `v0.6.1001`, поэтому
   updater (`vMAJOR.MINOR.PATCH`) видит релиз новее.
 - Откат через CI невозможен (updater только повышает версию): на станции
   `.prev` + `ctl.sh reload`.
