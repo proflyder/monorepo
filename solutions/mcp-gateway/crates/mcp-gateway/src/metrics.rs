@@ -48,6 +48,11 @@ struct VoiceLabels {
     outcome: String,
 }
 
+#[derive(Clone, Debug, Hash, PartialEq, Eq, EncodeLabelSet)]
+struct NotifyLabels {
+    outcome: String,
+}
+
 /// The metric registry that is rendered at `/metrics`.
 #[derive(Debug)]
 pub struct Metrics {
@@ -57,6 +62,7 @@ pub struct Metrics {
     tool_duration: Family<ToolNameLabels, Histogram>,
     http_requests: Family<HttpLabels, Counter>,
     voice_utterances: Family<VoiceLabels, Counter>,
+    tool_list_changed: Family<NotifyLabels, Counter>,
 }
 
 impl Default for Metrics {
@@ -77,6 +83,7 @@ impl Metrics {
         });
         let http_requests = Family::<HttpLabels, Counter>::default();
         let voice_utterances = Family::<VoiceLabels, Counter>::default();
+        let tool_list_changed = Family::<NotifyLabels, Counter>::default();
         registry.register(
             "mcp_gateway_actions",
             "Executed mutating gateway actions.",
@@ -102,6 +109,11 @@ impl Metrics {
             "Voice utterances by route and outcome.",
             voice_utterances.clone(),
         );
+        registry.register(
+            "mcp_gateway_tool_list_changed",
+            "Announcements of a changed MCP tool list, by outcome.",
+            tool_list_changed.clone(),
+        );
         Self {
             registry,
             actions,
@@ -109,6 +121,7 @@ impl Metrics {
             tool_duration,
             http_requests,
             voice_utterances,
+            tool_list_changed,
         }
     }
 
@@ -158,6 +171,15 @@ impl Metrics {
             .inc();
     }
 
+    /// Counts one attempt to announce a changed MCP tool list.
+    pub fn observe_tool_list_changed(&self, outcome: &str) {
+        self.tool_list_changed
+            .get_or_create(&NotifyLabels {
+                outcome: outcome.to_owned(),
+            })
+            .inc();
+    }
+
     /// Prometheus text exposition.
     #[must_use]
     pub fn render(&self) -> String {
@@ -184,6 +206,7 @@ mod tests {
         metrics.observe_http("/mcp", 200);
         metrics.observe_action("rollout-restart", "scheduler", "success");
         metrics.observe_voice("hermes", "ok");
+        metrics.observe_tool_list_changed("sent");
         let body = metrics.render();
         // `prometheus-client` appends `_total` to counters; the Go-era names
         // already end in `_total`, so the registered names must not.
@@ -192,6 +215,7 @@ mod tests {
         assert!(body.contains("mcp_gateway_http_requests_total{"));
         assert!(body.contains("mcp_gateway_actions_total{"));
         assert!(body.contains("mcp_gateway_voice_utterances_total{"));
+        assert!(body.contains("mcp_gateway_tool_list_changed_total{"));
         assert!(!body.contains("_total_total"));
         assert!(!body.contains("backend_up"));
         assert!(!body.contains("go_"));
