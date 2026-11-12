@@ -110,6 +110,12 @@ services:
       - promql: kube_deployment_status_replicas_available{namespace="home-assistant",deployment="hermes"} < 1
         meaning: под Hermes недоступен
         status: true
+      - promql: max(hermes_config_drift_files) > 0
+        meaning: конфиг Hermes расходится с develop
+        status: true
+      - promql: min(hermes_config_check_success) == 0
+        meaning: рендер конфига Hermes не проходит проверку
+        status: true
     logs:
       source: pods
     restart:

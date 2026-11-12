@@ -159,6 +159,7 @@ data:
   VOICE_PROXY_IMAGE: "ghcr.io/proflyder/voice-proxy@sha256:<64-hex>"
   HEALTH_EXPORTER_IMAGE: "ghcr.io/proflyder/health-exporter@sha256:<64-hex>"
   HOME_DEPLOY_IMAGE: "ghcr.io/proflyder/home-deploy@sha256:<64-hex>"
+  HERMES_CONFIG_IMAGE: "ghcr.io/proflyder/hermes-config@sha256:<64-hex>"
 ```
 
 Keys are written by the `pins` job (`platform/ci/pins.mjs`) for every

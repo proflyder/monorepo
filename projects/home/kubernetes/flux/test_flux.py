@@ -269,6 +269,9 @@ class Cluster(unittest.TestCase):
             "scheduler": K8S / "scheduler/manifests",
             "ha-bridge": K8S / "scheduler/manifests",
             "hermes": ROOT / "projects/home-assistant/deploy/flux",
+            # Phase 2 adds the `${HERMES_CONFIG_IMAGE}` reference to the same
+            # rendered set (init container + drift sidecar).
+            "hermes-config": ROOT / "projects/home-assistant/deploy/flux",
         }
         self.assertEqual({unit["id"] for unit in units}, set(paths))
         unused = {("scheduler", "home-deploy")}
@@ -830,7 +833,8 @@ class HermesApp(unittest.TestCase):
     def test_images_are_pinned_by_the_post_renderer(self):
         rendered = yaml.safe_dump(self.release)
         for key in ("HERMES_IMAGE", "VOICE_PROXY_IMAGE",
-                    "HEALTH_EXPORTER_IMAGE", "HOME_DEPLOY_IMAGE"):
+                    "HEALTH_EXPORTER_IMAGE", "HOME_DEPLOY_IMAGE",
+                    "HERMES_CONFIG_IMAGE"):
             self.assertIn("${" + key + "}", rendered)
 
     def test_failed_upgrades_roll_back(self):
@@ -840,6 +844,155 @@ class HermesApp(unittest.TestCase):
         # HelmRelease v2 has no `wait` field; only Kustomization does. A stray
         # one fails the CRD dry-run and blocks the whole app Kustomization.
         self.assertNotIn("wait", self.release["spec"])
+
+    def hermes_patch(self):
+        patches = self.release["spec"]["postRenderers"][0]["kustomize"]["patches"]
+        patch = next(item["patch"] for item in patches
+                     if item["target"] == {"kind": "Deployment", "name": "hermes"})
+        return yaml.safe_load(patch)
+
+    def gateway_container(self):
+        containers = self.hermes_patch()["spec"]["template"]["spec"]["containers"]
+        return next(c for c in containers if c["name"] == "gateway")
+
+    def test_render_config_is_a_fail_closed_init_container(self):
+        init = self.hermes_patch()["spec"]["template"]["spec"]["initContainers"]
+        self.assertEqual(len(init), 1)
+        container = init[0]
+        self.assertEqual(container["name"], "render-config")
+        self.assertEqual(container["image"], "${HERMES_CONFIG_IMAGE}")
+        self.assertEqual(container["args"], [
+            "hermes", "render-config", "--home", "/opt/data",
+            "--source-dir", "/opt/hermes-overlay",
+            "--private-values", "/run/hermes-config/private.yaml",
+        ])
+        self.assertEqual(container["volumeMounts"], [
+            {"name": "data", "mountPath": "/opt/data"},
+            {"name": "hermes-config-private", "mountPath": "/run/hermes-config",
+             "readOnly": True},
+        ])
+        self.assertEqual(container["securityContext"], {
+            "allowPrivilegeEscalation": False,
+            "readOnlyRootFilesystem": True,
+            "capabilities": {"drop": ["ALL"]},
+        })
+        self.assertIn("resources", container)
+
+    def test_config_drift_sidecar_is_read_only_metrics(self):
+        containers = self.hermes_patch()["spec"]["template"]["spec"]["containers"]
+        drift = next(c for c in containers if c["name"] == "config-drift")
+        self.assertEqual(drift["image"], "${HERMES_CONFIG_IMAGE}")
+        self.assertEqual(drift["args"], [
+            "hermes", "drift-exporter", "--listen", "0.0.0.0:9118",
+            "--interval", "300", "--home", "/opt/data",
+            "--source-dir", "/opt/hermes-overlay",
+            "--private-values", "/run/hermes-config/private.yaml",
+        ])
+        self.assertEqual(drift["ports"],
+                         [{"name": "config-drift", "containerPort": 9118}])
+        self.assertEqual(drift["readinessProbe"],
+                         {"tcpSocket": {"port": 9118}})
+        mounts = {m["name"]: m for m in drift["volumeMounts"]}
+        self.assertEqual(mounts["data"]["readOnly"], True)
+        self.assertEqual(mounts["hermes-config-private"]["readOnly"], True)
+        self.assertEqual(drift["securityContext"]["readOnlyRootFilesystem"], True)
+
+    def test_private_values_volume_is_a_restricted_secret(self):
+        volumes = self.hermes_patch()["spec"]["template"]["spec"]["volumes"]
+        secret = next(v for v in volumes if v["name"] == "hermes-config-private")
+        self.assertEqual(secret["secret"], {
+            "secretName": "hermes-config-private",
+            "defaultMode": 0o440,
+        })
+
+    def test_external_secret_delivers_private_yaml(self):
+        document = next(d for d in of_kind(self.docs, "ExternalSecret")
+                        if d["metadata"]["name"] == "hermes-config-private")
+        self.assertEqual(document["metadata"]["namespace"], "home-assistant")
+        spec = document["spec"]
+        self.assertEqual(spec["refreshInterval"], "1h")
+        self.assertEqual(spec["secretStoreRef"],
+                         {"name": "openbao", "kind": "ClusterSecretStore"})
+        self.assertEqual(spec["target"], {
+            "name": "hermes-config-private",
+            "creationPolicy": "Owner",
+            "deletionPolicy": "Retain",
+        })
+        self.assertEqual(spec["data"], [{
+            "secretKey": "private.yaml",
+            "remoteRef": {
+                "key": "k8s/home-assistant/hermes-config",
+                "property": "private.yaml",
+            },
+        }])
+
+    def test_prestop_requests_a_quiet_drain(self):
+        snippet = self.gateway_container()["lifecycle"]["preStop"]["exec"]["command"]
+        self.assertEqual(snippet[0:2], ["/opt/venv/bin/python", "-c"])
+        compile(snippet[2], "<prestop>", "exec")
+        self.assertIn('principal="kubelet-prestop"', snippet[2])
+        self.assertIn("suppress_notification=True", snippet[2])
+        self.assertIn("parse_active_agents", snippet[2])
+
+    def _run_prestop(self, write=None, agents=0):
+        import sys
+        import time as real_time
+        import types
+
+        clock = types.SimpleNamespace(now=0.0)
+        calls = []
+        drain = types.ModuleType("gateway.drain_control")
+
+        def default_write(**kwargs):
+            calls.append(kwargs)
+            return kwargs
+
+        drain.write_drain_request = write or default_write
+        status = types.ModuleType("gateway.status")
+        status.read_runtime_status = lambda *args, **kwargs: {"active_agents": agents}
+        status.parse_active_agents = lambda raw: max(0, int(raw))
+        package = types.ModuleType("gateway")
+        package.__path__ = []
+        modules = {
+            "gateway": package,
+            "gateway.drain_control": drain,
+            "gateway.status": status,
+        }
+        saved = {name: sys.modules.get(name) for name in modules}
+        saved_monotonic, saved_sleep = real_time.monotonic, real_time.sleep
+        sys.modules.update(modules)
+        real_time.monotonic = lambda: clock.now
+        real_time.sleep = lambda seconds: setattr(clock, "now", clock.now + seconds)
+        try:
+            snippet = self.gateway_container()["lifecycle"]["preStop"]["exec"]["command"][2]
+            exec(compile(snippet, "<prestop>", "exec"), {})
+        finally:
+            real_time.monotonic, real_time.sleep = saved_monotonic, saved_sleep
+            for name, module in saved.items():
+                if module is None:
+                    sys.modules.pop(name, None)
+                else:
+                    sys.modules[name] = module
+        return calls, clock.now
+
+    def test_prestop_stops_after_the_drain_marker_and_idle_count(self):
+        calls, elapsed = self._run_prestop(agents=0)
+        self.assertEqual(calls, [{"principal": "kubelet-prestop",
+                                  "suppress_notification": True}])
+        self.assertEqual(elapsed, 2)
+
+    def test_prestop_waits_for_in_flight_work_but_bounded(self):
+        _, elapsed = self._run_prestop(agents=3)
+        self.assertGreaterEqual(elapsed, 60)
+        self.assertLess(elapsed, 70)
+
+    def test_prestop_swallows_errors(self):
+        def explode(**kwargs):
+            raise RuntimeError("no drain control")
+
+        calls, elapsed = self._run_prestop(write=explode)
+        self.assertEqual(calls, [])
+        self.assertEqual(elapsed, 0)
 
     def test_smoke_hook_is_a_post_upgrade_job(self):
         template = (ROOT / "projects/home-assistant/deploy/chart/templates"

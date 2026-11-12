@@ -126,6 +126,34 @@ pub fn dump_config(data: &Value) -> String {
     yaml::to_string(data)
 }
 
+/// Compares parsed trees, ignoring mapping key order and emitter formatting.
+///
+/// Hermes rewrites `config.yaml` with its own emitter, so a byte comparison
+/// would schedule a rewrite (and a `.prev` rotation) on every restart even when
+/// the configuration is identical.
+#[must_use]
+pub fn trees_equal(left: &Value, right: &Value) -> bool {
+    match (left, right) {
+        (Value::Map(left), Value::Map(right)) => {
+            left.len() == right.len()
+                && left.iter().all(|(key, value)| {
+                    right
+                        .iter()
+                        .find(|(other, _)| other == key)
+                        .is_some_and(|(_, other)| trees_equal(value, other))
+                })
+        }
+        (Value::Seq(left), Value::Seq(right)) => {
+            left.len() == right.len()
+                && left
+                    .iter()
+                    .zip(right)
+                    .all(|(left, right)| trees_equal(left, right))
+        }
+        _ => left == right,
+    }
+}
+
 /// Masks token-shaped values so a dry-run diff is safe to paste.
 #[must_use]
 pub fn redact(text: &str) -> String {
@@ -207,11 +235,12 @@ pub fn build_plan(options: &Options) -> Result<Vec<File>, String> {
     }
 
     let mut plan = Vec::new();
-    let rendered = dump_config(&merged);
-    if fs::read_to_string(&config_path).map_or(true, |existing| existing != rendered) {
+    // Only a semantic change is a write: formatting-only differences (Hermes
+    // rewrites the file itself) must not churn the config or `.prev`.
+    if !config_path.exists() || !trees_equal(&merged, &current) {
         plan.push(File {
             path: config_path,
-            content: rendered,
+            content: dump_config(&merged),
         });
     }
     for (name, source) in [(".hermes.md", &options.context), ("SOUL.md", &options.soul)] {
@@ -523,6 +552,69 @@ mod tests {
                 .map(Value::as_str),
             Some("speak")
         );
+    }
+
+    fn render_options(root: &Path) -> Options {
+        let source = root.join("source");
+        fs::create_dir_all(&source).expect("source");
+        let home = root.join("home");
+        fs::create_dir_all(&home).expect("home");
+        fs::write(
+            source.join("config.fragment.yaml"),
+            "agent:\n  name: hermes\n",
+        )
+        .expect("fragment");
+        fs::write(source.join("voice_prompt.txt"), "speak\n").expect("voice");
+        Options {
+            home: home.display().to_string(),
+            fragment: source.join("config.fragment.yaml").display().to_string(),
+            context: source.join("HERMES.md").display().to_string(),
+            soul: source.join("SOUL.md").display().to_string(),
+            voice_prompt: source.join("voice_prompt.txt").display().to_string(),
+            telegram_prompt: source.join("telegram_prompt.txt").display().to_string(),
+            skills: source.join("skills").display().to_string(),
+            private_values: String::new(),
+            allow_placeholders: true,
+        }
+    }
+
+    #[test]
+    fn formatting_only_differences_do_not_plan_a_write() {
+        let root = tempfile::tempdir().expect("root");
+        let options = render_options(root.path());
+        let config = Path::new(&options.home).join("config.yaml");
+        // Hermes rewrote the file: quoted scalars, comments, wider indentation.
+        fs::write(
+            &config,
+            "# managed by hermes\nagent:\n    name: 'hermes'\n    personalities:\n        voice: \"speak\"\n",
+        )
+        .expect("config");
+        let plan = build_plan(&options).expect("plan");
+        assert!(plan.is_empty(), "{:?}", plan.len());
+    }
+
+    #[test]
+    fn a_real_change_still_plans_a_write() {
+        let root = tempfile::tempdir().expect("root");
+        let options = render_options(root.path());
+        let config = Path::new(&options.home).join("config.yaml");
+        fs::write(
+            &config,
+            "agent:\n  name: old\n  personalities:\n    voice: speak\n",
+        )
+        .expect("config");
+        let plan = build_plan(&options).expect("plan");
+        assert_eq!(plan.len(), 1);
+        assert_eq!(plan[0].path, config);
+        assert!(plan[0].content.contains("name: hermes"));
+    }
+
+    #[test]
+    fn trees_equal_ignores_mapping_order() {
+        let left = mapping("a:\n  b: 1\n  c: 2\n");
+        let right = mapping("a:\n  c: 2\n  b: 1\n");
+        assert!(trees_equal(&left, &right));
+        assert!(!trees_equal(&left, &mapping("a:\n  b: 1\n  c: 3\n")));
     }
 
     #[test]

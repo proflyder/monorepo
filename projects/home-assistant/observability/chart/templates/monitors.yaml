@@ -13,6 +13,20 @@ spec:
       interval: 30s
 ---
 apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: hermes-config-drift
+spec:
+  namespaceSelector:
+    matchNames: [home-assistant]
+  selector:
+    matchLabels: {app.kubernetes.io/name: hermes-config-drift}
+  endpoints:
+    - port: metrics
+      honorLabels: true
+      interval: 60s
+---
+apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
   name: home-runtime
@@ -32,3 +46,36 @@ spec:
           labels: {severity: warning}
           annotations:
             summary: An ext4 filesystem has less than 15 percent available
+    - name: home.hermes-config
+      rules:
+        - alert: HermesConfigDrift
+          expr: max(hermes_config_drift_files) > 0
+          for: 15m
+          labels: {severity: warning, component: hermes}
+          annotations:
+            summary: Конфиг Hermes расходится с develop
+            description: >-
+              Sidecar `config-drift` видит файлы, которые init container ещё не
+              перезаписал. Проверьте `/metrics` Deployment/hermes: возможно,
+              рендер падал или PVC изменён вручную.
+        - alert: HermesConfigCheckFailing
+          expr: min(hermes_config_check_success) == 0
+          for: 15m
+          labels: {severity: warning, component: hermes}
+          annotations:
+            summary: Рендер конфига Hermes не проходит проверку
+            description: >-
+              `hermes drift-exporter` не может построить план (placeholder
+              refusal, недоступные private values или нечитаемый PVC). Смотрите
+              stderr контейнера `config-drift` и логи init container
+              `render-config`.
+        - alert: HermesConfigDriftExporterDown
+          expr: absent(hermes_config_check_success) or (time() - max(hermes_config_last_check_timestamp_seconds)) > 1200
+          for: 15m
+          labels: {severity: warning, component: hermes}
+          annotations:
+            summary: Экспортёр дрейфа конфига Hermes не работает
+            description: >-
+              Нет метрики `hermes_config_check_success` или последняя проверка
+              старше 20 минут. Проверьте pod Hermes, контейнер `config-drift` и
+              ServiceMonitor `hermes-config-drift`.

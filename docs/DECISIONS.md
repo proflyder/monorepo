@@ -816,3 +816,20 @@
     checkpoint. Малый learning rate и замороженный BatchNorm этого не
     отменяют. Рецепт, данные и выбор эпохи — `WAKE-WORD.md`; цикл
     инструментов — `projects/station/tools/wakeword-personalize/README.md`.
+
+57. **Конфиг Hermes — content-addressed образ, плановые остановки — тихие.**
+    Reviewed-overlay (`projects/home-assistant/hermes`) пакуется в
+    воспроизводимый образ `ghcr.io/proflyder/hermes-config` вместе со статическим
+    `home-deploy`; digest образа и есть checksum входов. Flux запускает его
+    initContainer'ом `render-config` (пишет `config.yaml`, `.hermes.md`,
+    `SOUL.md`, skills и prompts на PVC, fail-closed) и sidecar'ом
+    `config-drift` (read-only план раз в 300 с, Prometheus `:9118`). Приватные
+    значения рендера идут отдельным ESO Secret из
+    `k8s/home-assistant/hermes-config#private.yaml`; ручной render остаётся
+    только аварийным путём. Pins-update перезапускает Pod только когда
+    изменился overlay или рендерер, а `render-config` не пишет при
+    format-only различиях. Planned restarts используют upstream drain
+    (`write_drain_request(principal="kubelet-prestop",
+    suppress_notification=True)`) в preStop, поэтому домашний канал не получает
+    «shutting down»; per-chat прерывания при реально идущей задаче остаются,
+    `gateway_restart_notification: false` не используется.

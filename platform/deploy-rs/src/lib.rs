@@ -7,8 +7,8 @@
 //!
 //! Every subcommand is ported: `env get`, `build-id`, `render`, `oci`,
 //! `converge`, `state`, `preflight`, `runtime split`, `eso names`,
-//! `secret opaque`, `hermes rollout`, `hermes render-config` and
-//! `hermes assist-smoke`.
+//! `secret opaque`, `hermes rollout`, `hermes render-config`,
+//! `hermes drift-exporter` and `hermes assist-smoke`.
 
 pub mod buildid;
 pub mod cli;
@@ -18,6 +18,7 @@ pub mod envfile;
 pub mod gojson;
 pub mod hermes;
 pub mod hermesconfig;
+pub mod hermesdrift;
 pub mod http;
 pub mod manifests;
 pub mod oci;
@@ -73,8 +74,17 @@ Commands:
             --exporter-digest D --smoke-image IMAGE --state-dir D [--force]
             [--simulate-smoke-failure] [--rollback-only]
            promote the Hermes/voice-proxy/exporter digests into the runtime release
-  hermes render-config --home DIR [--private-values F] [--dry-run|--check]
+  hermes render-config --home DIR [--source-dir DIR] [--private-values F]
+            [--fragment F] [--context F] [--soul F] [--voice-prompt F]
+            [--telegram-prompt F] [--skills DIR] [--dry-run|--check]
            merge config.fragment.yaml into a live HERMES_HOME
+           (unset overlay paths default under --source-dir, else
+            $HERMES_OVERLAY_DIR, else the repository overlay)
+  hermes drift-exporter --listen ADDR:PORT [--interval SECS] [--home DIR]
+            [--source-dir DIR] [--private-values F] [--fragment F]
+            [--context F] [--soul F] [--voice-prompt F]
+            [--telegram-prompt F] [--skills DIR]
+           serve Prometheus config-drift metrics on /metrics (read-only)
   hermes assist-smoke
            one Assist turn through the in-cluster HA API (smoke Job client)
 "#;

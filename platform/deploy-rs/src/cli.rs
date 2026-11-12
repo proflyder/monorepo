@@ -15,8 +15,8 @@ use std::path::{Path, PathBuf};
 use crate::process::{SystemCommandRunner, SystemRunner};
 use crate::render::{self, Options};
 use crate::{
-    USAGE, buildid, converge, envfile, hermes, hermesconfig, manifests, oci, preflight,
-    runtimevalues, state,
+    USAGE, buildid, converge, envfile, hermes, hermesconfig, hermesdrift, manifests, oci,
+    preflight, runtimevalues, state,
 };
 
 /// Commands that are declared but not ported yet.
@@ -283,15 +283,17 @@ fn run_hermes(
 ) -> Result<(), Failure> {
     let Some((command, sub)) = matches.subcommand() else {
         return Err(Failure::new(
-            "usage: home-deploy hermes rollout|render-config|assist-smoke ...",
+            "usage: home-deploy hermes rollout|render-config|drift-exporter|assist-smoke ...",
         ));
     };
     match command {
         "rollout" => run_hermes_rollout(sub, stdout, stderr),
         "render-config" => run_hermes_render_config(sub, stdout),
+        "drift-exporter" => run_hermes_drift_exporter(sub, stderr),
         "assist-smoke" => run_hermes_assist_smoke(sub, stdout),
         other => Err(Failure::new(format!(
-            "unknown hermes command {other:?} (expected rollout, render-config or assist-smoke)"
+            "unknown hermes command {other:?} (expected rollout, render-config, \
+             drift-exporter or assist-smoke)"
         ))),
     }
 }
@@ -387,19 +389,30 @@ fn run_hermes_rollout(
     }
 }
 
-fn run_hermes_render_config(sub: &clap::ArgMatches, stdout: &mut dyn Write) -> Result<(), Failure> {
-    let home = sub.get_one::<String>("home").map_or("", String::as_str);
-    if home.is_empty() {
-        return Err(Failure::new("hermes render-config: --home is required"));
-    }
-    let dry_run = sub.get_flag("dry-run");
-    let check = sub.get_flag("check");
-    if dry_run && check {
-        return Err(Failure::new(
-            "hermes render-config: --dry-run and --check are mutually exclusive",
-        ));
-    }
-    let source_dir = repo_root().map(|root| root.join("projects/home-assistant/hermes"));
+/// Resolves the overlay directory for the Hermes config commands.
+///
+/// Precedence: explicit `--source-dir`, then `HERMES_OVERLAY_DIR`, then the
+/// repository overlay. The environment value is read here rather than through
+/// clap so the fallback stays testable.
+fn overlay_dir(explicit: &str, environment: Option<String>) -> Option<PathBuf> {
+    let chosen = if explicit.is_empty() {
+        environment.filter(|value| !value.is_empty())
+    } else {
+        Some(explicit.to_string())
+    };
+    chosen
+        .map(PathBuf::from)
+        .or_else(|| repo_root().map(|root| root.join("projects/home-assistant/hermes")))
+}
+
+/// Builds the shared render/plan options for `render-config` and
+/// `drift-exporter`: an explicit flag wins, then the source directory.
+fn hermes_config_options(sub: &clap::ArgMatches) -> hermesconfig::Options {
+    let source_dir = overlay_dir(
+        sub.get_one::<String>("source-dir")
+            .map_or("", String::as_str),
+        std::env::var("HERMES_OVERLAY_DIR").ok(),
+    );
     let default_path = |value: &str, name: &str| {
         if value.is_empty() {
             source_dir
@@ -410,8 +423,11 @@ fn run_hermes_render_config(sub: &clap::ArgMatches, stdout: &mut dyn Write) -> R
             value.to_string()
         }
     };
-    let options = hermesconfig::Options {
-        home: home.to_string(),
+    hermesconfig::Options {
+        home: sub
+            .get_one::<String>("home")
+            .map_or("", String::as_str)
+            .to_string(),
         fragment: default_path(
             sub.get_one::<String>("fragment").map_or("", String::as_str),
             "config.fragment.yaml",
@@ -442,8 +458,30 @@ fn run_hermes_render_config(sub: &clap::ArgMatches, stdout: &mut dyn Write) -> R
             .get_one::<String>("private-values")
             .map_or("", String::as_str)
             .to_string(),
-        allow_placeholders: sub.get_flag("allow-placeholders"),
-    };
+        // Only `render-config` defines this flag; `drift-exporter` never
+        // allows placeholders, so an absent id means false rather than a panic.
+        allow_placeholders: sub
+            .try_get_one::<bool>("allow-placeholders")
+            .ok()
+            .flatten()
+            .copied()
+            .unwrap_or(false),
+    }
+}
+
+fn run_hermes_render_config(sub: &clap::ArgMatches, stdout: &mut dyn Write) -> Result<(), Failure> {
+    let home = sub.get_one::<String>("home").map_or("", String::as_str);
+    if home.is_empty() {
+        return Err(Failure::new("hermes render-config: --home is required"));
+    }
+    let dry_run = sub.get_flag("dry-run");
+    let check = sub.get_flag("check");
+    if dry_run && check {
+        return Err(Failure::new(
+            "hermes render-config: --dry-run and --check are mutually exclusive",
+        ));
+    }
+    let options = hermes_config_options(sub);
     let mut buffer = Vec::new();
     let code = hermesconfig::run(&options, dry_run, check, &mut buffer).map_err(Failure::new)?;
     stdout
@@ -454,6 +492,39 @@ fn run_hermes_render_config(sub: &clap::ArgMatches, stdout: &mut dyn Write) -> R
     } else {
         Err(Failure::code(code))
     }
+}
+
+fn run_hermes_drift_exporter(
+    sub: &clap::ArgMatches,
+    stderr: &mut dyn Write,
+) -> Result<(), Failure> {
+    let options = hermes_config_options(sub);
+    if options.home.is_empty() {
+        return Err(Failure::new("hermes drift-exporter: --home is required"));
+    }
+    let listen = sub.get_one::<String>("listen").map_or("", String::as_str);
+    if listen.is_empty() {
+        return Err(Failure::new("hermes drift-exporter: --listen is required"));
+    }
+    let interval = match sub.get_one::<String>("interval") {
+        Some(value) => value
+            .parse::<u64>()
+            .ok()
+            .filter(|seconds| *seconds > 0)
+            .ok_or_else(|| {
+                Failure::new(format!(
+                    "hermes drift-exporter: --interval must be a positive number of seconds, got {value:?}"
+                ))
+            })?,
+        None => 300,
+    };
+    hermesdrift::run(
+        &options,
+        listen,
+        std::time::Duration::from_secs(interval),
+        stderr,
+    )
+    .map_err(Failure::new)
 }
 
 fn run_hermes_assist_smoke(sub: &clap::ArgMatches, stdout: &mut dyn Write) -> Result<(), Failure> {
@@ -934,6 +1005,7 @@ fn hermes_command() -> Command {
         .subcommand(
             Command::new("render-config")
                 .arg(string("home"))
+                .arg(string("source-dir"))
                 .arg(string("private-values"))
                 .arg(string("fragment"))
                 .arg(string("voice-prompt"))
@@ -944,6 +1016,20 @@ fn hermes_command() -> Command {
                 .arg(boolean("allow-placeholders"))
                 .arg(boolean("dry-run"))
                 .arg(boolean("check")),
+        )
+        .subcommand(
+            Command::new("drift-exporter")
+                .arg(string("home"))
+                .arg(string("source-dir"))
+                .arg(string("private-values"))
+                .arg(string("fragment"))
+                .arg(string("voice-prompt"))
+                .arg(string("telegram-prompt"))
+                .arg(string("context"))
+                .arg(string("soul"))
+                .arg(string("skills"))
+                .arg(string("listen"))
+                .arg(string("interval")),
         )
         .subcommand(
             Command::new("assist-smoke")
@@ -1001,5 +1087,89 @@ mod tests {
         let (code, stdout, _) = execute(&["build-id", "-fingerprint", "hello"]);
         assert_eq!(code, 0);
         assert_eq!(stdout, "2cf24dba5fb0\n");
+    }
+
+    #[test]
+    fn overlay_dir_prefers_the_flag_then_the_environment() {
+        assert_eq!(
+            overlay_dir("/flag", Some("/environment".to_string())),
+            Some(PathBuf::from("/flag"))
+        );
+        assert_eq!(
+            overlay_dir("", Some("/environment".to_string())),
+            Some(PathBuf::from("/environment"))
+        );
+        assert_eq!(overlay_dir("", Some(String::new())), repo_overlay());
+    }
+
+    fn repo_overlay() -> Option<PathBuf> {
+        repo_root().map(|root| root.join("projects/home-assistant/hermes"))
+    }
+
+    #[test]
+    fn drift_exporter_requires_a_listen_address_without_panicking() {
+        let (code, _, stderr) =
+            execute(&["hermes", "drift-exporter", "--home", "/tmp", "--listen", ""]);
+        assert_eq!(code, 1);
+        assert!(stderr.contains("--listen is required"), "{stderr}");
+    }
+
+    #[test]
+    fn source_dir_supplies_the_unset_overlay_paths() {
+        let root = tempfile::tempdir().expect("root");
+        let home = root.path().join("home");
+        let overlay = root.path().join("overlay");
+        std::fs::create_dir_all(&home).expect("home");
+        std::fs::create_dir_all(&overlay).expect("overlay");
+        std::fs::write(
+            overlay.join("config.fragment.yaml"),
+            "sentinel: from-source-dir\n",
+        )
+        .expect("fragment");
+        std::fs::write(overlay.join("voice_prompt.txt"), "voice\n").expect("voice");
+        let (code, stdout, stderr) = execute(&[
+            "hermes",
+            "render-config",
+            "--home",
+            &home.display().to_string(),
+            "--source-dir",
+            &overlay.display().to_string(),
+            "--allow-placeholders",
+            "--dry-run",
+        ]);
+        assert_eq!(code, 0, "{stderr}");
+        assert!(stdout.contains("sentinel: from-source-dir"), "{stdout}");
+    }
+
+    #[test]
+    fn explicit_overlay_flags_beat_source_dir() {
+        let root = tempfile::tempdir().expect("root");
+        let home = root.path().join("home");
+        let overlay = root.path().join("overlay");
+        std::fs::create_dir_all(&home).expect("home");
+        std::fs::create_dir_all(&overlay).expect("overlay");
+        std::fs::write(
+            overlay.join("config.fragment.yaml"),
+            "sentinel: from-source-dir\n",
+        )
+        .expect("fragment");
+        std::fs::write(overlay.join("voice_prompt.txt"), "voice\n").expect("voice");
+        let explicit = root.path().join("explicit.fragment.yaml");
+        std::fs::write(&explicit, "sentinel: explicit-flag\n").expect("explicit");
+        let (code, stdout, stderr) = execute(&[
+            "hermes",
+            "render-config",
+            "--home",
+            &home.display().to_string(),
+            "--source-dir",
+            &overlay.display().to_string(),
+            "--fragment",
+            &explicit.display().to_string(),
+            "--allow-placeholders",
+            "--dry-run",
+        ]);
+        assert_eq!(code, 0, "{stderr}");
+        assert!(stdout.contains("sentinel: explicit-flag"), "{stdout}");
+        assert!(!stdout.contains("from-source-dir"), "{stdout}");
     }
 }

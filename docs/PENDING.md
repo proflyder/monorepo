@@ -10,6 +10,15 @@
 
 ## P2 — проверки и улучшения инфраструктуры
 
+- [ ] **Приёмка Flux-конфига Hermes.** Перед merge владелец копирует
+      `hermes_private_yaml` из `secret/infra/kubernetes/values-private` в
+      `secret/k8s/home-assistant/hermes-config#private.yaml` (GET→merge→POST с
+      `cas`; команда — `docs/KUBERNETES-OPERATIONS.md`, раздел «Автодеплой
+      Hermes»). После merge: init-логи `render-config` без ошибок, на `:9118`
+      `hermes_config_drift_files 0` и `hermes_config_check_success 1`, плановый
+      rollout без «shutting down» в Telegram; применить `9118` в
+      `projects/home/kubernetes/management-firewall/rules.nft` и переустановить
+      правило. Затем удалить старое поле `hermes_private_yaml`.
 - [ ] **Вход `gh` и Codex на CT 103.** Нужен только для агентов, запускаемых
       на самом сервере bb; треды на Mac работают без него. Следующий шаг:
       авторизовать `gh` и Codex под пользователем `bb` перед первым таким

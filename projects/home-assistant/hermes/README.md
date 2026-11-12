@@ -38,24 +38,69 @@ lives in [`HERMES.md`](HERMES.md); the TTS sanitizer is the
 [`solutions/voice-proxy`](../../../solutions/voice-proxy/README.md) service.
 Do not copy secrets into this directory.
 
-## Render the overlay into the live home
+## Delivery: Flux init container
 
-`config.yaml`, `.hermes.md` and `SOUL.md` live on the PVC
-(`/srv/k3s/volumes/runtime-hermes` on lab-host, `/opt/data` in the Pod) and are not
-watched by CI.  `home-deploy hermes render-config`
-(`//platform/deploy-rs:home-deploy`) is the
-only reviewed path from this directory to that volume:
+`config.yaml`, `.hermes.md`, `SOUL.md`, `skills/` and both prompts live on the
+PVC (`/srv/k3s/volumes/runtime-hermes` on lab-host, `/opt/data` in the Pod).
+They are delivered automatically: this directory is baked into the reproducible
+`hermes-config` image (`//projects/home-assistant/hermes:hermes-config_image`,
+`ghcr.io/proflyder/hermes-config`) at `/opt/hermes-overlay`, and that image's
+digest is the checksum of the reviewed inputs. CI publishes it, the `pins` job
+writes `HERMES_CONFIG_IMAGE`, and `HelmRelease/runtime` runs the image twice:
+
+- **initContainer `render-config`** before the gateway starts:
+  `hermes render-config --home /opt/data --source-dir /opt/hermes-overlay
+  --private-values /run/hermes-config/private.yaml`. `--private-values` is
+  required on a live home and comes from `Secret/hermes-config-private`, an ESO
+  Secret built from OpenBao `k8s/home-assistant/hermes-config` field
+  `private.yaml` and mounted read-only at `/run/hermes-config`. The tracked
+  fragment carries TEST-NET placeholders for the HA/MA endpoints; the private
+  file is deep-merged **after** it and keeps the real addresses. The renderer
+  refuses to write when a placeholder would replace a different live value and
+  lists the offending keys, so a bad Secret fails the init container closed
+  instead of writing a broken config.
+- **sidecar `config-drift`** after start: `hermes drift-exporter` rebuilds the
+  same plan every 300 s without writing and serves Prometheus metrics on
+  `:9118`. Alerts `HermesConfigDrift`, `HermesConfigCheckFailing` and
+  `HermesConfigDriftExporterDown` cover PVC divergence, a failed plan and a
+  dead exporter.
+
+Normal change: edit these files, open a PR, merge. Flux updates the image
+digest and restarts Hermes; there is no manual render, copy or restart step.
+Planned restarts also request a quiet drain (preStop) so the home channel does
+not receive a "shutting down" message.
+
+The merge is deep: unrelated keys in the generated `config.yaml` survive
+(including MCP servers the fragment does not mention), the fragment wins for
+the keys it declares, private values win over both, and lists are replaced.
+`agent.personalities.voice` is not in the fragment: it is set from
+[`voice_prompt.txt`](voice_prompt.txt), the single source of truth for the
+Ricardo persona. The renderer installs `skills/` (currently `skills/report`)
+into `<HERMES_HOME>/skills` and, when the private file has
+`telegram_owner_chat_id`, the Telegram channel prompt and home channel from
+`telegram_prompt.txt` — see «Telegram-промпт» below. A formatting-only rewrite
+by Hermes is a semantic no-op: no write and no `.prev` churn. A real change
+keeps one `.prev` backup (mode 600); `config.yaml.prev` is the one-step
+rollback (`cp config.yaml.prev config.yaml` + restart). Comments in a
+hand-edited `config.yaml` are not preserved.
+
+## Emergency manual render
+
+Use this only when Flux/pins are unavailable and the PVC must be fixed by hand.
+The reviewed source is still this directory; do not hand-edit the PVC.
 
 ```bash
 cd <repo>
 # 1. see what would change (prints a redacted diff, writes nothing)
 home-deploy hermes render-config \
   --home /srv/k3s/volumes/runtime-hermes \
+  --source-dir projects/home-assistant/hermes \
   --private-values secrets/home/hermes-private.yaml --dry-run
 
 # 2. render; a changed file keeps its previous version as <name>.prev (600)
 sudo home-deploy hermes render-config \
   --home /srv/k3s/volumes/runtime-hermes \
+  --source-dir projects/home-assistant/hermes \
   --private-values secrets/home/hermes-private.yaml
 
 # 3. restart the gateway so it re-reads config.yaml and the context files
@@ -64,37 +109,19 @@ mise run kubectl -- -n home-assistant rollout status deployment/hermes --timeout
 ```
 
 If the binary is not installed on the host, run it from a checkout:
-`bazel run //platform/deploy-rs:home-deploy -- hermes render-config …`.
+`bazel run //platform/deploy-rs:home-deploy -- hermes render-config …`. A
+second run is a no-op, and `--check` exits `1` when a render is pending
+(pre-flight use). `--allow-placeholders` is only for throw-away test homes.
 
-`--private-values` is required on a live home.  The tracked fragment carries
-TEST-NET placeholders for the Home Assistant and Music Assistant endpoints;
-the private file (copy [`hermes-private.example.yaml`](hermes-private.example.yaml),
-git-ignored under `secrets/`) is deep-merged **after** the fragment and keeps
-the real addresses.  The renderer refuses to write when a placeholder would
-replace a different live value, and lists the offending keys — the only escape
-hatch is `--allow-placeholders`, for throw-away test homes.
-
-The merge is deep: unrelated keys in the generated `config.yaml` survive
-(including MCP servers the fragment does not mention), the fragment wins for
-the keys it declares, private values win over both, and lists are replaced.
-`agent.personalities.voice` is not in the fragment: it is set from
-[`voice_prompt.txt`](voice_prompt.txt), the single source of truth for the
-Ricardo persona.  The renderer also installs `skills/` (currently
-`skills/report`) into `<HERMES_HOME>/skills` and, when the private file has
-`telegram_owner_chat_id`, the Telegram channel prompt and home channel from
-`telegram_prompt.txt` — see «Telegram-промпт» below.  Comments in a hand-edited `config.yaml` are not preserved —
-`config.yaml.prev` is the one-step rollback (`cp config.yaml.prev config.yaml`
-+ restart).  A second run is a no-op, and `--check` exits `1` when a render is
-pending (pre-flight use).
-
-Run it on lab-host against the host path, not inside the Pod: the Pod has no
-Python tooling guarantee, and the files are the same.  Stop the gateway first
-only when you need a consistent read; a restart after the render is enough
-because the gateway reads the config once at start.  Run as the user that owns
-`/srv/k3s/volumes/runtime-hermes`; if you had to use `sudo`, restore ownership of the
-rendered files to the Pod's uid (`mise run kubectl -- -n home-assistant exec
-deploy/hermes -c hermes -- id`) and check `ls -l`, otherwise the gateway cannot
-open its own config.
+Run it on lab-host against the host path, not inside the Pod: the files are the
+same and the Pod is not a supported manual writer. Stop the gateway first only
+when you need a consistent read; a restart after the render is enough because
+the gateway reads the config once at start. Run as the user that owns
+`/srv/k3s/volumes/runtime-hermes`; if you had to use `sudo`, restore ownership
+of the rendered files to the Pod's uid (`mise run kubectl -- -n home-assistant
+exec deploy/hermes -c gateway -- id`) and check `ls -l`, otherwise the gateway
+cannot open its own config. After the emergency is over, merge the intended
+change so the image and PVC converge again.
 
 ## Infra tools (mcp-gateway)
 
@@ -168,11 +195,11 @@ alarm parser.
 (`k8s/home-assistant/scheduler-auth`, key `token`). Both are part of the
 Flux-rendered mcp-gateway manifest set, not the Hermes PVC.
 
-`config.fragment.yaml`, `voice_prompt.txt`, `SOUL.md` and `HERMES.md` are **not**
-delivered by Flux: they live on the Hermes PVC and are rendered manually with
-`home-deploy hermes render-config` (see below), then the gateway is restarted.
-Do not hand-edit the PVC or expect a merge to change Hermes behaviour before
-that render.
+`config.fragment.yaml`, `voice_prompt.txt`, `SOUL.md` and `HERMES.md` are
+delivered by Flux through the `hermes-config` image: the `render-config`
+initContainer merges them into the PVC before the gateway starts, and a merge
+into `develop` (plus the image pins) is enough. Do not hand-edit the PVC; the
+manual render in «Emergency manual render» is only the fallback.
 
 ## Agents (bb tools)
 
@@ -247,9 +274,11 @@ from `platforms.telegram.channel_overrides[<chat_id>].system_prompt`.
 - Only our own skill directories are installed; any other skill already on the
   PVC is left untouched, and the renderer never deletes files.
 
-After rendering, restart the gateway; `/report` appears in the bot menu on the
-next Telegram connect.  Verify with a `/report` message from the owner account
-and check the reply length (it must exceed 180 characters for a real report).
+The initContainer installs the override on every Pod start, so merging
+`telegram_prompt.txt` (or the private chat id) is enough; the rollout restarts
+the gateway and `/report` appears in the bot menu on the next Telegram connect.
+Verify with a `/report` message from the owner account and check the reply
+length (it must exceed 180 characters for a real report).
 
 ## Voice proxy (Rust)
 
@@ -287,19 +316,10 @@ The station assistant is **Рикардо**, the user's personal voice assistant
 3. HA `llama_cpp` conversation subentry — prompt from
    `voice_prompt.txt`, title/entity `Рикардо`.
 
-Apply on lab-host after editing the repo files.  The renderer installs
+Commit the reviewed files and merge; the `render-config` initContainer installs
 `SOUL.md` and `agent.personalities.voice` (from `voice_prompt.txt`) into the
-HERMES_HOME, so no hand edit of the PVC is needed:
-
-```bash
-home-deploy hermes render-config \
-  --home /srv/k3s/volumes/runtime-hermes \
-  --private-values secrets/home/hermes-private.yaml --dry-run
-sudo home-deploy hermes render-config \
-  --home /srv/k3s/volumes/runtime-hermes \
-  --private-values secrets/home/hermes-private.yaml
-mise run kubectl -- -n home-assistant rollout restart deployment/hermes
-```
+HERMES_HOME on the next rollout, so no hand edit of the PVC is needed. If Flux
+is unavailable, use the manual render in «Emergency manual render».
 
 The HA prompt/title are part of the live `llama_cpp` subentry and are updated
 through its subentry reconfigure flow; keep `voice_prompt.txt` as the source.

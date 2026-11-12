@@ -677,13 +677,16 @@ test("deploy: platform/deploy-rs change runs the Rust unit and routes deploy uni
     "currency-bot",
     "mcp-gateway",
     "ha-bridge",
+    "hermes-config",
   ]);
-  // A tooling change reaches every unit that runs a deploy script.
+  // A tooling change reaches every unit that runs a deploy script, including
+  // the renderer image that ships this binary.
   const entries = affected.deployEntries(result, config);
   assert.deepEqual(entries.map((entry) => entry.id).sort(), [
     "currency-bot",
     "ha-bridge",
     "hermes",
+    "hermes-config",
     "intercom",
     "mcp-gateway",
     "scheduler",
@@ -697,7 +700,7 @@ test("deploy: the pins job covers every deployable unit", () => {
     affectedRules: () => new Set(),
   });
   const expected = ["scheduler", "ha-bridge", "wakegrant", "intercom",
-                    "currency-bot", "mcp-gateway", "hermes"];
+                    "currency-bot", "mcp-gateway", "hermes", "hermes-config"];
   const entries = affected.deployEntries(result, config);
   assert.deepEqual(entries.map((entry) => entry.id).sort(), [...expected].sort());
   assert.ok(entries.every((entry) => !("runtime" in entry)));
@@ -2051,13 +2054,14 @@ test("module routing: native-only edit reaches native and every Rust Bazel unit"
     "ble-gateway",
     "proto",
     "pulsar-bazel",
+    "hermes-config",
   ]);
   assert.deepEqual(result.routes.quality.units.map((unit) => unit.id), ["repository"]);
   // A Rust toolchain pin change legitimately rebuilds and pins the deployable
   // units; the native-only units are not deployed.
   assert.deepEqual(
     affected.deployEntries(result, config).map((entry) => entry.id).sort(),
-    ["currency-bot", "ha-bridge", "intercom", "mcp-gateway", "scheduler", "wakegrant"],
+    ["currency-bot", "ha-bridge", "hermes-config", "intercom", "mcp-gateway", "scheduler", "wakegrant"],
   );
   assert.equal(result.androidDistribute, false);
 });

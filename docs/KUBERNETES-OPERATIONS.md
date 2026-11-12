@@ -52,8 +52,8 @@ mise run kubectl -- get pods -A
 (`mise run secrets:exec -- -P kube exec -- platform/workstation/with-kube-tunnel.sh
 kubectl …` поднимает этот туннель сам).
 
-API `6443`, kubelet `10250`, node-exporter `9100`, health `9116` и
-VXLAN `8472/udp` закрыты firewall от обычного LAN.
+API `6443`, kubelet `10250`, node-exporter `9100`, health `9116`,
+Hermes config-drift `9118` и VXLAN `8472/udp` закрыты firewall от обычного LAN.
 `80/443` открыты для LAN/VPN и обслуживаются Traefik (IP allow-list на уровне
 Middleware).
 Firewall: `projects/home/kubernetes/management-firewall/`.
@@ -70,7 +70,8 @@ Firewall: `projects/home/kubernetes/management-firewall/`.
   converge` остаётся admin-путём (drills, cutover).
 - `runtime-ha` — архив старого HA Container, не активный writer.
 
-Секреты Hermes (`Secret/hermes-environment`), scheduler/HA
+Секреты Hermes (`Secret/hermes-environment`, `Secret/hermes-config-private`),
+scheduler/HA
 (`scheduler-auth`, `ha-bridge-ha`), currency-bot (`currency-bot`,
 `cloudflared-tunnel`), Grafana (`grafana-admin`) и Cloudflare
 (`cloudflare-api-token`) создаются External Secrets Operator из OpenBao
@@ -146,9 +147,12 @@ mise run helm -- template runtime projects/home-assistant/deploy/chart \
    в Kubernetes Secrets);
 2. если digest не изменился, pod template не меняется и rollout не идёт;
 3. `postRenderers` подставляют `${HERMES_IMAGE}`, `${VOICE_PROXY_IMAGE}`,
-   `${HEALTH_EXPORTER_IMAGE}`, `${HOME_DEPLOY_IMAGE}` через strategic-merge/
-   JSON6902, не перезаписывая приватные массивы values; exporter получает
-   distroless command и без старого ConfigMap-mount;
+   `${HEALTH_EXPORTER_IMAGE}`, `${HOME_DEPLOY_IMAGE}`, `${HERMES_CONFIG_IMAGE}`
+   через strategic-merge/JSON6902, не перезаписывая приватные массивы values;
+   exporter получает distroless command и без старого ConfigMap-mount;
+   `hermes-config` добавляет initContainer `render-config` (reviewed overlay →
+   PVC, fail-closed), sidecar `config-drift` (`:9118`) и preStop drain у
+   `gateway`;
 4. post-upgrade Helm hook (`chart/templates/smoke-hook.yaml`,
    `home-deploy hermes assist-smoke` под `smoke.enabled`) проверяет rollout,
    health exporter (все endpoint'ы = 1), Assist через
@@ -156,6 +160,54 @@ mise run helm -- template runtime projects/home-assistant/deploy/chart \
    `ha-bridge-ha`, в GitHub он не попадает;
 5. `remediation.strategy: rollback` + `remediateLastFailure: true` возвращают
    прежнюю ревизию при провале upgrade или hook'а.
+
+### Конфиг Hermes из Git
+
+Reviewed-overlay из `projects/home-assistant/hermes` больше не рендерится
+вручную: образ `hermes-config` (`ghcr.io/proflyder/hermes-config`, digest —
+checksum overlay) запускает `home-deploy hermes render-config` как initContainer
+до gateway и `hermes drift-exporter` как sidecar `config-drift` (read-only,
+`0.0.0.0:9118`, интервал 300 с). InitContainer пишет `config.yaml`,
+`.hermes.md`, `SOUL.md`, skills и prompts на `/opt/data`; ошибка (placeholder
+refusal, нечитаемый private Secret, плохой YAML) валит Pod, а Helm откатывает
+релиз. Sidecar публикует `hermes_config_drift_files`,
+`hermes_config_check_success`, `hermes_config_last_check_timestamp_seconds` и
+`hermes_config_overlay_info`; алерты `HermesConfigDrift`,
+`HermesConfigCheckFailing`, `HermesConfigDriftExporterDown` — warning в тот же
+Telegram. Opt-in Service `hermes-config-drift` рендерится chart'ом только при
+`hermesConfigDrift.enabled` (у Flux включён).
+
+Приватные значения рендера — `Secret/hermes-config-private` из OpenBao
+`k8s/home-assistant/hermes-config` поле `private.yaml` (ESO,
+`ExternalSecret/hermes-config-private`). Токены остаются в
+`hermes-environment`; в private.yaml только реальные endpoint'ы и Telegram
+chat id. До merge владелец один раз копирует старое поле (значения не печатать):
+
+```bash
+export VAULT_TOKEN="$(cat secrets/openbao/operator.token)"
+tmp=$(mktemp) && chmod 600 "$tmp"
+mise exec -- bao kv get -format=json secret/infra/kubernetes/values-private |
+  jq '{"private.yaml": .data.data.hermes_private_yaml}' > "$tmp"
+version=$(mise exec -- bao kv metadata get -format=json \
+  secret/k8s/home-assistant/hermes-config 2>/dev/null |
+  jq -r '.data.current_version // 0')
+mise exec -- bao kv put -cas="$version" secret/k8s/home-assistant/hermes-config @"$tmp"
+rm -f "$tmp"; unset VAULT_TOKEN
+```
+
+`-cas` защищает от перезаписи чужой правки; при `version=0` путь создаётся.
+После проверки старое поле `infra/kubernetes/values-private#hermes_private_yaml`
+можно удалить (оно больше не читается).
+
+После merge владелец проверяет: init-логи `render-config` без ошибок,
+`hermes_config_drift_files 0` и `hermes_config_check_success 1` на `:9118`
+(например, `mise run kubectl -- -n home-assistant port-forward
+deploy/hermes 9118:9118` и `curl -s localhost:9118/metrics`, либо график
+Prometheus), и что плановый rollout не прислал «shutting down» в Telegram. Отдельно применяется host-firewall: `9118` добавлен в drop-список
+`projects/home/kubernetes/management-firewall/rules.nft` (Prometheus скрейпит
+порт из pod-сети, которую правило пропускает; LAN — нет); владелец
+переустанавливает правило по README этого каталога. Откат конфига — revert PR/pins (Flux
+перезапустит Pod со старым образом) или аварийный ручной render.
 
 Ручной аварийный путь остаётся `projects/home-assistant/deploy/rollout.sh` →
 `home-deploy hermes rollout` (digest no-op, `helm upgrade`, smoke,

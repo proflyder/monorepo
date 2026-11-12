@@ -1,0 +1,16 @@
+{{- if and .Values.hermesConfigDrift .Values.hermesConfigDrift.enabled }}
+# Opt-in scrape target for the `config-drift` sidecar. The sidecar runs in the
+# hostNetwork Hermes Pod, so Prometheus reaches it through the Pod IP; this
+# ClusterIP Service only gives the ServiceMonitor a stable port name.
+apiVersion: v1
+kind: Service
+metadata:
+  name: hermes-config-drift
+  labels: {app.kubernetes.io/name: hermes-config-drift}
+spec:
+  selector: {app.kubernetes.io/name: hermes}
+  ports:
+    - name: metrics
+      port: 9118
+      targetPort: 9118
+{{- end }}
