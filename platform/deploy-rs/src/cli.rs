@@ -546,7 +546,22 @@ fn run_hermes_assist_smoke(sub: &clap::ArgMatches, stdout: &mut dyn Write) -> Re
             parse_go_duration(value)
         })
         .map_err(|error| Failure::new(format!("hermes assist-smoke: {error}")))?;
-    let code = hermes::assist_smoke_client(ha_url, agent, text, token_file, timeout, stdout);
+    let retry_window = sub
+        .get_one::<String>("retry-window")
+        .map_or(Ok(std::time::Duration::from_secs(240)), |value| {
+            parse_go_duration(value)
+        })
+        .map_err(|error| Failure::new(format!("hermes assist-smoke: {error}")))?;
+    // The hook runs right after the upgrade, while a restarted Hermes Pod is
+    // still starting: retry until it answers or the window closes.
+    let deadline = std::time::Instant::now() + retry_window;
+    let code = loop {
+        let code = hermes::assist_smoke_client(ha_url, agent, text, token_file, timeout, stdout);
+        if code == 0 || std::time::Instant::now() >= deadline {
+            break code;
+        }
+        std::thread::sleep(std::time::Duration::from_secs(10));
+    };
     if code == 0 {
         Ok(())
     } else {
@@ -1037,7 +1052,8 @@ fn hermes_command() -> Command {
                 .arg(string("agent"))
                 .arg(string("text"))
                 .arg(string("token-file"))
-                .arg(string("timeout")),
+                .arg(string("timeout"))
+                .arg(string("retry-window")),
         )
 }
 

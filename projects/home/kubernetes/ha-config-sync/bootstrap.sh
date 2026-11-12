@@ -16,7 +16,7 @@
 # script is read-only on the controller except for its temporary directory.
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
 AGENT="$ROOT/solutions/ha-config-sync/agent/ha-config-agent.sh"
 HELPER="$ROOT/projects/home/kubernetes/ha-config-sync/openbao_kv.py"
 SSH_CONFIG="${HOME_LAB_SSH_CONFIG:-$HOME/.ssh/home-lab/config}"
