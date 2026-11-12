@@ -3,8 +3,9 @@
 Отдельный offline pipeline. Не изменяет Pulsar, HA, текущую модель или
 параметры станции. Результат — кандидат для отдельной живой приёмки.
 Личные WAV, транскрипты, annotations, метрики и персональные веса остаются
-в `secrets/` на Mac и в приватном training/run каталоге своего WSL.
-Не коммитить их даже при успешных метриках.
+в `local-data/wakeword/` на Mac и в приватном training/run каталоге своего
+WSL. Не коммитить их даже при успешных метриках. Точка входа в приватные
+данные — `local-data/wakeword/README.md`; факты о модели — `docs/WAKE-WORD.md`.
 
 ## Входные данные
 
@@ -93,7 +94,7 @@ Pulsar записывает реальные срабатывания on-device 
 и короткие фоновые записи их не заменяют.
 
 Цикл: `collect → review/label → report → to-manifest → finetune → evaluate →
-calibrate → deploy`. Записи, метрики и манифесты остаются в `secrets/` и
+calibrate → deploy`. Записи, метрики и манифесты остаются в `local-data/` и
 приватном run-каталоге, вне Git.
 
 ```sh
@@ -170,15 +171,23 @@ python calibrate.py --model PRIVATE_MODEL_DIR/ru_ricardo_mww.tflite \
 
 ## Обучение и приёмка
 
-Fine-tuning стартует с исходных `.weights.h5`, LR 3e-5, bounded 1000 steps,
-seed 42. Четыре равных bucket: личные позитивы, прежние синтетические
+**Новый кандидат обучается только с нуля** (`--from-scratch`). Дообучение от
+готовых весов во всех экспериментах ухудшало распознавание: v23 сохранила
+эпоху 0, а частичный v28-finetune после 9 эпох дал
+`PROTECTED_VALIDATION safe=False`. Малый LR и замороженный BatchNorm этого не
+отменяют; решение зафиксировано в `docs/DECISIONS.md` (56). Рецепт v28 и
+выбор эпохи — `docs/WAKE-WORD.md`.
+
+Legacy-режим fine-tuning (ниже) сохранён только для воспроизведения старых
+экспериментов. Он стартует с исходных `.weights.h5`, LR 3e-5, bounded 1000
+steps, seed 42. Четыре равных bucket: личные позитивы, прежние синтетические
 позитивы, личный фон, прежние негативы. Небольшие изменения усиления и
-скорости только в train; шёпот берётся из настоящих записей. Без сложных негативов лучшие веса выбираются по val_loss. При их наличии
-checkpoint должен сохранять число распознанных validation-позитивов каждой
-манеры речи при пороге 0.9; среди допустимых выбирается меньшее число
-ошибок на сложных validation-негативах, затем val_loss. Это оконная проверка,
-она не заменяет потоковый replay после экспорта. Тест не используется для
-перебора настроек.
+скорости только в train; шёпот берётся из настоящих записей. Без сложных
+негативов лучшие веса выбираются по val_loss. При их наличии checkpoint
+должен сохранять число распознанных validation-позитивов каждой манеры речи
+при пороге 0.9; среди допустимых выбирается меньшее число ошибок на сложных
+validation-негативах, затем val_loss. Это оконная проверка, она не заменяет
+потоковый replay после экспорта. Тест не используется для перебора настроек.
 
 Экспорт обязан дать int8 `[1,3,40]` -> uint8. Непотоковый/неправильно
 квантизованный fallback отклоняется. Calibration использует старые и новые
@@ -206,8 +215,9 @@ Replay моделирует порог 0.9, окно 10, warm-up 100 frames и �
 файлов и самого manifest. Персональные веса не публикуются в GitHub.
 
 При следующих обучениях finetune.py сохраняет веса каждой завершённой
-эпохи в `model/epochs/`, отдельно лучшие/финальные веса и, после успешного
-экспорта, регистрирует новую неизменяемую версию. Путь по умолчанию на
+эпохи в `epochs/`, отдельно лучшие/финальные веса и, после успешного
+экспорта, регистрирует новую неизменяемую версию (в архиве registry они
+лежат как `weights/epochs/` и `weights/epoch-NNN-selected.weights.h5`). Путь по умолчанию на
 WSL — `TRAINER/training/model-registry/ricardo/`; переопределение:
 `--registry PRIVATE_PATH --version UNIQUE_VERSION_ID`. На Mac копию
 такого нового архива нужно отдельно синхронизировать и проверить:
@@ -253,8 +263,11 @@ python deploy.py --ha-url http://192.0.2.28:8123 \
   --profile projects/station/configs/wakeword-v27.json
 ```
 
-Подставьте свой HA URL. Доступ берётся из приватного connection.json
-рекордера и secrets/home/ha.token; модели — из приватного registry.
+Подставьте свой HA URL. Доступ к станции берётся из приватного
+`local-data/voice-recorder/connection.json`, HA token — из OpenBao через
+профиль fnox `station` (`HA_TOKEN_FILE`): запускайте как
+`mise run secrets:exec -- -P station exec -- python3 .../deploy.py ...`;
+модели — из приватного registry.
 Перед запуском закончите режим записи и остановите музыку. При активном
 будильнике или голосовом pipeline deploy отказывается работать.
 Сначала сохраняется пара текущих model/manifest в device backups, затем
@@ -262,7 +275,7 @@ python deploy.py --ha-url http://192.0.2.28:8123 \
 его версия, ключи, firmware и конфигурация HA не обновляются. Проверяются
 HA Assist и MA, hash бинарника и установленной модели; при неуспехе
 предпринимается откат к сохранённой паре. При сетевом отказе смотрите
-приватный журнал в local-data/model-deployments, а не запускайте второй deploy.
+приватный журнал в `local-data/wakeword/deployments/`, а не запускайте второй deploy.
 
 local-data/model-registry/ricardo/active.json фиксирует последний успешный
 выбор; регистрационный VERSION.json старых архивов не переписывается.
@@ -305,6 +318,10 @@ Train/val граница выбирается внутри содержател�
 
 ## Дообучение с сохранением нормализации и акустического контекста
 
+Этот режим относится к legacy fine-tuning и не используется для новых
+кандидатов (решение 56: только с нуля). В обучении с нуля BatchNorm обучается,
+а `--feature-mode continuous` и `--no-freeze-batchnorm` применяются так же.
+
 По умолчанию BatchNormalization заморожен до compile: его moving mean/variance
 не должны подстраиваться к маленькому личному набору. Малый learning rate
 сам по себе не предотвращает изменение этих статистик. Для контрольного
@@ -337,8 +354,26 @@ ASR-разметка шёпота требует проверки: совпад�
 checkpoint не загружается. BatchNorm в этом режиме обучается, поскольку
 полезных исходных статистик ещё нет. Применяются SpecAugment, заданные
 class weights, cosine learning-rate schedule и сохранение каждой эпохи.
-Выбор предварительного checkpoint идёт по val_loss; окончательная приёмка
-экспорта требует непрерывной валидации и независимой проверки записей.
+Предварительный выбор по val_loss недостаточен: после экспорта обязательна
+непрерывная validation всех сохранённых эпох против текущей модели. Для
+scratch-запуска ранняя эпоха часто лучше поздней (у v28 выбрана 14 из 21), а
+test нельзя использовать при выборе. Критерий и результаты v28 —
+`docs/WAKE-WORD.md`, «Обучение v28».
+
+Помимо дополнительного голоса (`--extra-features`), в run можно добавить
+станционные события: `--extra-manifest PRIVATE_RUN/station-manifest.json`.
+Это тот же рецепт с нуля; `station_events.py to-manifest` даёт записи,
+совместимые с `finetune.py`, поэтому отдельного fine-tuning не требуется.
+
+```sh
+python finetune.py --trainer "$TRAINER" --run "$PRIVATE_RUN" \
+  --from-scratch --steps 15000 --learning-rate 0.001 \
+  --config "$PRIVATE_RUN_V27/ricardo-w128.yaml" \
+  --extra-features "$PRIVATE_EXTRA_FEATURES" \
+  --extra-manifest "$PRIVATE_RUN/station-manifest.json" \
+  --feature-mode continuous --no-freeze-batchnorm \
+  --model-name NEW_MODEL --version NEW_REGISTRY_VERSION
+```
 
 ## Более ёмкий MixedNet в том же потоковом контракте
 
@@ -353,9 +388,9 @@ class weights, cosine learning-rate schedule и сохранение каждо�
 формы завершается явной ошибкой, а не частичным восстановлением весов. `--config`
 должен указывать абсолютный путь, потому что скрипт меняет рабочий каталог.
 Измеренное число параметров (`model.count_params()`, не размер HDF5) и форма
-экспорта пишутся в `training-provenance.json`; каждая эпоха сохраняется отдельно,
-а выбор checkpoint для scratch-запуска по-прежнему идёт по val_loss, после чего
-обязателен непрерывный post-hoc replay validation перед единственным test.
+экспорта пишутся в `training-provenance.json`; каждая эпоха сохраняется отдельно.
+Val_loss даёт только предварительный checkpoint; для scratch-запуска обязателен
+непрерывный post-hoc replay validation всех эпох перед единственным test.
 
 --extra-features PRIVATE_DIR добавляет positive_train.npy, positive_val.npy,
 negative_train.npy и negative_val.npy нового синтетического голоса.
@@ -367,12 +402,12 @@ Batch 128 содержит: 16 личных позитивов, 32 исходн�
 Новый голос также участвует в validation и calibration; контрольные суммы
 модели голоса, рецепта и признаков сохраняются private рядом с экспериментом.
 
-```sh
-python finetune.py --trainer "$TRAINER" --run "$PRIVATE_RUN" \
-  --from-scratch --extra-features "$PRIVATE_EXTRA_FEATURES" \
-  --steps 15000 --learning-rate 0.001 --model-name NEW_MODEL \
-  --version NEW_REGISTRY_VERSION
-```
+Со станционными событиями слот реальных hard negatives делится пополам:
+8 личных hard negatives + 8 станционных ложных (16, если личных нет); остальные
+доли не меняются (`mixture_buckets` в `finetune.py`). Без `--extra-features`
+действует другая смесь — 25% личных и 25% синтетических позитивов.
+После экспорта выберите эпоху непрерывной validation и только затем один раз
+прогоните test.
 
 ## Приватные данные
 

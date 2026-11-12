@@ -11,7 +11,7 @@ TTS-исследования — не recovery-critical; Mini 2 — в `archive/
 | `ssh/dropbear`, `ssh/dropbearkey` | статические ARM32-бинарники | SSH на станции |
 | `pcap/station.pcap` | TLS-захват | диагностика bootstrap |
 | `firmware/yandexmidi-…zip` | официальная прошивка **Station 2** | **НЕ для Midi**; не прошивать |
-| `wakeword/ricardo-v1/` | модель, manifest, конфиг, метрики и зависимости | обучение и восстановление wake word |
+| `wakeword/ricardo-v1/` | baseline v1: модель, manifest, конфиг, метрики и зависимости | воспроизведение и откат; установленная v28 — private registry |
 | `reference/jarvis.zip` | сторонний on-device wake word | reference |
 | `prior-session/codex-session-…md` | транскрипт прошлой сессии | исторический; **секреты** |
 | `tts-research-2026-10-26/`, `tts-samples/` | TTS-ресерч/сэмплы | research, не recovery |
@@ -26,4 +26,8 @@ TTS-исследования — не recovery-critical; Mini 2 — в `archive/
   на Midi**.
 - `alice-mitm`/`prior-session` — чувствительные; см. `docs/SENSITIVE-DATA.md`.
 - Legacy Pulsar исходники, patch и binaries — private в `secrets/local/`, вне Git.
+- Персональные модели v2+ и их веса здесь не лежат: private registry на Mac
+  (`local-data/wakeword/model-registry/ricardo/`, вне Git) и WSL. Установлена
+  v28; профили отката — `projects/station/configs/wakeword-*.json`, факты —
+  `docs/WAKE-WORD.md`.
 - Полный recovery-порядок — `docs/REBUILD.md`.

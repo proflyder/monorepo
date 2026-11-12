@@ -338,9 +338,11 @@
   Mini 3 (experimental), S32 capture, переработанные
   volume/mixer/player/pcm_out/sendspin и `deploy/asound.conf`. «Wake: не
   услышала» сохраняет последние 30 с
-  (кольцевой буфер 31 с). Процесс запущен с `PULSAR_LOCAL_ENDPOINTING=1`,
-  унаследованным supervisor'ом от `ctl.sh reload`; это не boot-persistent:
-  после reboot или нового supervisor без env feature выключен.
+  (кольцевой буфер 31 с). Local endpointing включается только ручным
+  `PULSAR_LOCAL_ENDPOINTING=1 /data/pulsar/ctl.sh reload` и не boot-persistent:
+  после reboot или нового supervisor без env feature выключен. Model-only
+  установка v28 сделала reload без переменной; 2026-11-12 endpointing возвращён
+  тем же reload и проверен в `/proc/<pid>/environ`.
   `--version` различает сборки по тегу.
 - `v0.6.1` в Ricardo-профиле: в диалоге, открытом «Рикардо», распознанный
   текст всегда
@@ -372,9 +374,9 @@
   после недоступности; пока сущности нет — no-op. Прямое управление
   `light.ring`/`led_show` во время LISTENING перекрывается voice state прошивки,
   поэтому профиль задаётся только этим select.
-- Модель Ricardo загружается с cutoff 0.90 / window 10 из manifest, `PULSAR_LOCAL_ENDPOINTING=1` сохранён, запись
+- Модель Ricardo загружается с cutoff 0.90 / window 10 из manifest, `PULSAR_LOCAL_ENDPOINTING=1` включается вручную (model-only deploy его теряет, см. ниже), запись
   wake-событий включена (`state.conf`: `wake_event_recording=1`,
-  `wake_dry_run=0`), первое near-событие записано. Сущности HA:
+  `wake_dry_run=0`); к 2026-11-12 записано 435 событий за 215,36 ч. Сущности HA:
   `button.iandeks_stantsiia_midi_wake_lozhnoe_srabatyvanie`,
   `button.iandeks_stantsiia_midi_wake_ne_uslyshala`,
   `switch.iandeks_stantsiia_midi_wake_zapis_sobytii`,
@@ -390,10 +392,12 @@
   (`v28-station-scratch-sel14-20261112`, SHA256 `a039ed2d…e05efb6e`,
   207 640 Б), установлена 2026-11-12 по решению владельца; threshold 0.9,
   окно 10. Обучена с нуля по рецепту v27 (w128, Puriso) плюс станционные
-  wake-события (39 confirmed false + 289 near, split по дням); эпоха 14 выбрана
-  непрерывной validation (32/32 по манерам). Офлайн: станционный test-split
-  13 → 1 клипов с ложным срабатыванием против v27, регрессия 164/164 (v27
-  161/164). Установка model-only, бинарник Pulsar не менялся; живая приёмка
+  wake-события (39 confirmed false + 289 near, split по дням; 24 подозрительных
+  `empty_stt`/`cancelled` без метки); эпоха 14 выбрана непрерывной validation
+  всех 21 эпох (32/32 по манерам, станционный val 7 → 2 клипа с FP). Офлайн:
+  станционный test-split 13 → 1 клип с FP, ambient-val 2 → 3 (суммарно 9 → 5),
+  регрессия 164/164 (v27 161/164), FP/ч на 39 confirmed ~0.01 против ~0.14.
+  Установка model-only, бинарник Pulsar не менялся; живая приёмка
   ещё не выполнялась (`live_voice_acceptance=pending`). Device backup v27 —
   `/data/pulsar/backups/model-20261112T161203Z-3a2e7fd6`.
 - Откат на v27 — профиль `projects/station/configs/wakeword-v27.json` через

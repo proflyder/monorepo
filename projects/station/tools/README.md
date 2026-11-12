@@ -19,9 +19,11 @@ SSH-поток PCM, watchdog восстановления и удаление б
 
 ## `wakeword-personalize/`
 
-Offline разметка, подготовка, GPU fine-tuning и сравнение персональной
-wakeword-модели. Станцию не меняет; данные и персональные веса остаются
-приватными. Инструкция — [wakeword-personalize/README.md](wakeword-personalize/README.md).
+Offline разметка, подготовка, обучение с нуля на GPU, сбор станционных
+wake-событий, сравнение и model-only deploy персональной wakeword-модели.
+Станцию меняет только явный `deploy.py`. Данные и веса остаются приватными;
+текущая модель и рецепт — [`docs/WAKE-WORD.md`](../../../docs/WAKE-WORD.md),
+инструкция — [wakeword-personalize/README.md](wakeword-personalize/README.md).
 
 ## `quasar-root-kit/`
 
