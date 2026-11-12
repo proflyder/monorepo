@@ -110,8 +110,11 @@ Hermes auth старой копией.
 - ADB/SSH: только LAN; ключ — `~/.ssh/home-lab/station_ed25519`, аварийный
   пароль — OpenBao `secret/infra/station/access#ssh_root_password`.
 - Pulsar: `/data/pulsar`; бинарник — `ghcr.io/proflyder/pulsar-firmware:<version>`
-  (установка — `deploy-station` или `pulsar-install`), модель —
-  `artifacts/wakeword/`, откат — `pulsar.prev`.
+  (установка — `deploy-station` или `pulsar-install`), откат — `pulsar.prev`.
+- Wake word: baseline v1 — `artifacts/wakeword/ricardo-v1/`; установленная
+  персональная v28 — private `local-data/wakeword/model-registry/ricardo/`,
+  ставится model-only профилем `projects/station/configs/wakeword-personal.json`
+  через `deploy.py`. Версии и откат — `docs/WAKE-WORD.md`.
 - Factory reset сносит `/data`, root/SSH/OTA/guard. Делать только с
   согласованием и запасной станцией.
 - После восстановления: ESPHome entities, wake word, HA pipeline, Sendspin,

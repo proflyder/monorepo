@@ -948,7 +948,8 @@ crash-loop) снова откроется `:31116` без auth — перед в
 backup пары и проверит hashes/HA/MA):
 
 ```bash
-python3 projects/station/tools/wakeword-personalize/deploy.py \
+mise run secrets:exec -- -P station exec -- \
+  python3 projects/station/tools/wakeword-personalize/deploy.py \
   --ha-url http://192.0.2.28:8123 \
   --profile projects/station/configs/wakeword-v27.json
 # deploy.py перезапускает Pulsar без local endpointing — вернуть на станции:
@@ -990,7 +991,12 @@ python3 projects/station/tools/wakeword-personalize/calibrate.py \
 ```
 
 `collect --prune-labeled` удаляет с устройства только локально проверенные и
-размеченные файлы; без флага устройство не меняется.
+размеченные файлы; без флага устройство не меняется. Снимки неизменяемы
+(`local-data/datasets/station-events/<UTC>/` + `stats/`); последние на
+2026-11-12 — `20261104T080941Z` и `20261110T195906Z`, 215,36 ч прослушивания.
+`report` группирует события по `model_sha256`, поэтому v27 и v28 не смешиваются;
+события после установки v28 (2026-11-12 ~16:12 UTC) относятся к
+`a039ed2d…`. Дальше — `docs/WAKE-WORD.md`.
 
 После рестарта Pulsar MA переподключается сам: supervised `reload` завершает
 Sendspin-сессию goodbye-причиной `restart`, после чего MA делает redial
