@@ -452,10 +452,15 @@
   `alarm_rel_minutes` (дробные часы → минуты). `schedule_alarm_create_relative`
   fail-closed: `hours=0` и `minutes=0` → «Не понял, через сколько поставить
   будильник» (не минутный будильник), текст команды не используется как
-  метка. Нераспознанная длительность → локальные
-  `StationAlarmRelativeUnclear` / `StationTimerRelativeUnclear`, чтобы
-  фраза про будильник/таймер не уходила в built-in
-  `HassMediaSearchAndPlay` («Воспроизвожу» + музыка). Детали —
+  метка. Абсолютное время принимает «ноль ноль»/«ноль-ноль»/«00» как
+  минуту 0, «ровно» как 0 минут и формы «в десять», «десять вечера»,
+  «в десять вечера», «разбуди меня в семь». Любая фраза про
+  будильник/таймер без разобранного времени → локальные
+  `StationAlarmRelativeUnclear` / `StationTimerRelativeUnclear` /
+  `StationAlarmUnclear` / `StationTimerUnclear`: короткий вопрос, чтобы
+  фраза не уходила в built-in `HassMediaSearchAndPlay` («Воспроизвожу» +
+  музыка). Точные шаблоны выигрывают у guard'ов по ранжированию hassil
+  (0 wildcard против 1). Детали —
   `projects/home-assistant/ha-voice/README.md`.
 - **Профиль голоса.** `input_select.home_voice_profile` (Личный/Рабочий) —
   единственный источник истины; переключается только вручную: голосом

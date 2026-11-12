@@ -437,7 +437,7 @@ class RequestContractTests(unittest.TestCase):
             for phrase in item["sentences"]
         ]
         self.assertIn(
-            "поставь таймер {timer_name:name} на {timer_minutes:minutes} минут[у|ы]",
+            "[поставь|сделай|установи|заведи|включи] таймер {timer_name:name} на {timer_minutes:minutes} минут[у|ы]",
             phrases,
         )
         self.assertFalse(any("{timer_name}" in phrase for phrase in phrases))

@@ -13,7 +13,12 @@ by a wildcard, intent name):
    clarification guard instead of the built-in `HassMediaSearchAndPlay`
    sentence «<play> {search_query}» (live regression 2026-11-12: «поставь
    будильник через час» answered «Воспроизвожу» and started music);
-3. the guard does not steal explicit timer or music commands.
+3. the guard does not steal explicit timer or music commands;
+4. every absolute alarm formulation from the live STT set (including «ноль
+   ноль», «ровно», «в десять», «десять вечера») reaches a custom intent and
+   never the media search;
+5. lists shared by several sentence files stay identical, so the file that
+   Home Assistant happens to load last cannot silently drop vocabulary.
 """
 from __future__ import annotations
 
@@ -268,13 +273,128 @@ class RelativeGuardTests(unittest.TestCase):
 
     def test_guard_intents_are_local_and_do_not_call_the_scheduler(self) -> None:
         intent_scripts = yaml.safe_load((HA / "intent_scripts.yaml").read_text(encoding="utf-8"))
-        for intent in ("StationAlarmRelativeUnclear", "StationTimerRelativeUnclear"):
+        for intent in (
+            "StationAlarmRelativeUnclear",
+            "StationTimerRelativeUnclear",
+            "StationAlarmUnclear",
+            "StationTimerUnclear",
+        ):
             with self.subTest(intent=intent):
                 body = intent_scripts[intent]
                 self.assertEqual(body.get("action"), [])
                 text = body["speech"]["text"]
                 self.assertTrue(text.strip())
                 self.assertNotIn("schedule_", text)
+
+
+class AbsoluteAlarmPhraseTests(unittest.TestCase):
+    """The live STT formulations must reach an alarm intent, never music."""
+
+    CASES: dict[str, tuple[str, dict[str, str]]] = {
+        # Live regression 2026-11-12: STT produced «ноль ноль» and the phrase
+        # fell through to the built-in media search.
+        "поставь будильник на двадцать два ноль ноль": ("StationAlarmSet", {"hour": "22", "minute": "0"}),
+        "поставь будильник на двадцать два ноль-ноль": ("StationAlarmSet", {"hour": "22", "minute": "0"}),
+        "поставь будильник на двадцать два 00": ("StationAlarmSet", {"hour": "22", "minute": "0"}),
+        "поставь будильник на 22:00": ("StationAlarmSet", {"hour": "22", "minute": "0"}),
+        "поставь будильник на двадцать два ноль ноль ровно": (
+            "StationAlarmSet",
+            {"hour": "22", "minute": "0"},
+        ),
+        "разбуди меня в двадцать два ноль ноль": ("StationAlarmSet", {"hour": "22", "minute": "0"}),
+        "поставь будильник на двадцать три пятьдесят девять": (
+            "StationAlarmSet",
+            {"hour": "23", "minute": "59"},
+        ),
+        "поставь будильник работа на 7:00": (
+            "StationAlarmSet",
+            {"name": "работа", "hour": "7", "minute": "0"},
+        ),
+        # Spoken hours, period words and «ровно».
+        "поставь будильник на десять вечера": (
+            "StationAlarmSet",
+            {"hour": "10", "period": "вечера"},
+        ),
+        "поставь будильник в десять вечера": (
+            "StationAlarmSet",
+            {"hour": "10", "period": "вечера"},
+        ),
+        "поставь будильник в десять": ("StationAlarmSet", {"hour": "10"}),
+        "поставь будильник на десять ровно": ("StationAlarmSet", {"hour": "10"}),
+        "поставь будильник в десять ровно": ("StationAlarmSet", {"hour": "10"}),
+        "сделай будильник в десять": ("StationAlarmSet", {"hour": "10"}),
+        "будильник на семь утра": ("StationAlarmSet", {"hour": "7", "period": "утра"}),
+        "будильник в семь утра": ("StationAlarmSet", {"hour": "7", "period": "утра"}),
+        "будильник в семь": ("StationAlarmSet", {"hour": "7"}),
+        "разбуди меня в семь": ("StationAlarmSet", {"hour": "7"}),
+        "разбуди меня в семь утра": ("StationAlarmSet", {"hour": "7", "period": "утра"}),
+        # Every command verb the guard accepts must also reach the setter when
+        # the time is exact.
+        "установи будильник на 6:30": ("StationAlarmSet", {"hour": "6", "minute": "30"}),
+        "заведи будильник на семь": ("StationAlarmSet", {"hour": "7"}),
+        "включи будильник на семь": ("StationAlarmSet", {"hour": "7"}),
+        "сделай будильник на семь": ("StationAlarmSet", {"hour": "7"}),
+        "заведи будильник на десять вечера": (
+            "StationAlarmSet",
+            {"hour": "10", "period": "вечера"},
+        ),
+        "поставь будильник на семь на завтра": (
+            "StationAlarmSet",
+            {"hour": "7", "day": "завтра"},
+        ),
+        "поставь будильник на семь по будням": (
+            "StationAlarmSet",
+            {"hour": "7", "repeat": "По будням"},
+        ),
+        # Phrases without an exact time template ask locally instead of
+        # starting music.
+        "поставь будильник на полночь": ("StationAlarmUnclear", {}),
+        "будильник на рассвете": ("StationAlarmUnclear", {}),
+        "разбуди меня в полседьмого": ("StationAlarmUnclear", {}),
+        "сделай будильник пораньше": ("StationAlarmUnclear", {}),
+        "поставь будильник как обычно": ("StationAlarmUnclear", {}),
+        "установи будильник на выходных": ("StationAlarmUnclear", {}),
+        # Timers keep their explicit duration intent and their guard.
+        "поставь таймер на десять минут": ("StationTimerStart", {"minutes": "10"}),
+        "сделай таймер на пять минут": ("StationTimerStart", {"minutes": "5"}),
+        "заведи таймер на пять минут": ("StationTimerStart", {"minutes": "5"}),
+        "таймер на семь минут": ("StationTimerStart", {"minutes": "7"}),
+        "поставь таймер на паузу": ("StationTimerPause", {}),
+        "поставь таймер через час": ("StationTimerRelativeUnclear", {}),
+    }
+
+    def test_each_phrase_reaches_a_custom_intent_not_media_search(self) -> None:
+        self.assertGreaterEqual(len(self.CASES), 30)
+        for phrase, (intent, slots) in self.CASES.items():
+            with self.subTest(phrase=phrase):
+                match = best_match(phrase)
+                self.assertIsNotNone(match, phrase)
+                assert match is not None
+                self.assertNotEqual(match.intent, BUILTIN_PLAY["intent"], phrase)
+                self.assertEqual(match.intent, intent, f"{phrase}: {match.slots}")
+                for key, value in slots.items():
+                    self.assertEqual(match.slots.get(key), value, f"{phrase}: {match.slots}")
+
+
+class SharedSentenceListTests(unittest.TestCase):
+    """Home Assistant merges `lists` by name; later files win."""
+
+    def test_lists_with_the_same_name_are_identical(self) -> None:
+        seen: dict[str, tuple[str, object]] = {}
+        for path in sorted(SENTENCES_DIR.glob("*.yaml")):
+            data = yaml.safe_load(path.read_text(encoding="utf-8"))
+            for name, spec in (data.get("lists") or {}).items():
+                if name not in seen:
+                    seen[name] = (path.name, spec)
+                    continue
+                first_path, first_spec = seen[name]
+                with self.subTest(list=name):
+                    self.assertEqual(
+                        spec,
+                        first_spec,
+                        f"{name} differs between {first_path} and {path.name}; "
+                        "the last loaded file silently wins",
+                    )
 
 
 if __name__ == "__main__":
