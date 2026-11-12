@@ -5,6 +5,11 @@
 - The primary Codex thread owns planning, architecture, task decomposition,
   coordination, review, and acceptance. Delegate research, implementation, and
   test execution to BB child threads using provider `acp-opencode`.
+- Only the primary thread delegates. A worker thread (`bb status` shows a
+  parent thread) never runs `bb thread spawn` and never hands its task to
+  another thread or model: it does the assigned work itself, whatever its
+  provider (Claude Code, Codex, opencode). If the task is too large, it reports
+  that to the parent instead of splitting it.
 - Default worker model is `opencode-go/deepseek-v4.1-flash` with
   `--reasoning-level low`. Research workers use `mode=plan`; implementation
   workers use `mode=build`. Prefer Flash throughout; raise the reasoning level
