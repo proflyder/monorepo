@@ -42,7 +42,7 @@ Pulsar — член единого корневого Cargo workspace: `projects
 
 | Area | Change |
 |---|---|
-| Wake word | New on-device «Рикардо» detector, same microWakeWord model as the deployed fork build; `wake_word=ricardo` is the default. |
+| Wake word | New on-device «Рикардо» detector, same microWakeWord model as the deployed fork build; `wake_word=ricardo` is the default. The station runs the private v28 (`projects/station/configs/wakeword-personal.json`, model-only); versions, data and the from-scratch recipe — [docs/WAKE-WORD.md](../../../docs/WAKE-WORD.md). |
 | Pre-roll | The wake event carries 256 ms (8 chunks) of VQE-cleaned audio taken from the shared 1.024 s ring (upstream `wake_preroll` rule `Fixed(8)` for the `ricardo` id), so «Рикардо, включи свет» does not lose its first syllables. The upstream `WakePreroll` switch and `wake_preroll=` key control it. |
 | Silent cancel | `stt-no-text-recognized` is treated as a cancel, not as an error ring. |
 | Repeated wake | A wake word heard during LISTENING / PROCESSING ends that dialog (`voice_request_stop`) and starts a new one with the wake earcon; during SPEAKING the answer is cut and the new dialog starts. A station that loses wake arbitration does not cut its answer. Late events of a replaced started run are dropped (its RUN_END is treated as stale). |
@@ -151,9 +151,10 @@ scp -r root@<ip>:/data/pulsar/wake-events/ ./wake-events/
 ```
 
 Проверки: `bazel test //projects/station/pulsar/satellite/...` (fmt, clippy с `-D warnings`,
-юнит/интеграционные тесты, golden-файлы; Linux). На станции не проверено: реальная запись с
-микрофона, загрузка манифеста рядом с моделью, поведение кнопок в HA и заполнение `outcome`
-живым пайплайном.
+юнит/интеграционные тесты, golden-файлы; Linux). На станции подтверждено живой работой:
+запись с микрофона идёт с 2026-11-01 (на 2026-11-12 — 215,36 ч прослушивания), манифест
+рядом с моделью задаёт cutoff/window, кнопки HA и `outcome` заполняются. Сбор и разметка
+этих событий — `projects/station/tools/wakeword-personalize/README.md`.
 
 ## Build
 

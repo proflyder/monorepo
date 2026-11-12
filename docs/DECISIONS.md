@@ -807,3 +807,12 @@
     `test_deploy_control.sh`. Штатный путь: merge → `pins` → Flux; откат —
     pins revert или `flux suspend`. Живые следы (SA/RBAC, OpenBao, VPN,
     GitHub Environment) удаляет владелец отдельными командами.
+
+56. **Wake word «Рикардо» обучается только с нуля.** Дообучение от готовых
+    весов во всех экспериментах ухудшало распознавание: v23 сохранила
+    исходные веса, частичный v28-finetune после 9 эпох дал
+    `PROTECTED_VALIDATION safe=False`. Новый кандидат всегда стартует
+    случайной инициализацией (`--from-scratch`), а не продолжением
+    checkpoint. Малый learning rate и замороженный BatchNorm этого не
+    отменяют. Рецепт, данные и выбор эпохи — `WAKE-WORD.md`; цикл
+    инструментов — `projects/station/tools/wakeword-personalize/README.md`.
