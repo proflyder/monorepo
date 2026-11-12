@@ -386,18 +386,23 @@
   `pulsar-install --ssh`. Ключ Mac `~/.ssh/home-lab/station_ed25519` →
   `/root/.ssh/authorized_keys`. Вход по паролю оставлен как fallback
   осознанно (решение); ADB/SSH доступны только из LAN.
-- Установленная модель wake word — кандидат v27
-  (`v27-ambient-capacity-sel22-20261030`, SHA256 `4f645834…b0e12444`,
-  207 720 Б); threshold 0.9, окно 10. Установка model-only, бинарник Pulsar
-  не менялся; живая голосовая приёмка не выполнялась — private `active.json`
-  фиксирует `live_voice_acceptance=pending`.
-- Best-known/reference по решению пользователя остаётся v24
-  (`v24-ambient-scratch-20261030`, SHA256 `83b92351…314787a`) и не заменяется
-  установленным кандидатом до его живой приёмки. Откат на v24 — профиль
-  `projects/station/configs/wakeword-v24.json` через
-  `projects/station/tools/wakeword-personalize/deploy.py`; откат на v22 —
-  `wakeword-v22.json`.
-- Кандидат v27 — более ёмкий MixedNet (pointwise 128×4, первая свёртка 64;
+- Установленная модель wake word — v28
+  (`v28-station-scratch-sel14-20261112`, SHA256 `a039ed2d…e05efb6e`,
+  207 640 Б), установлена 2026-11-12 по решению владельца; threshold 0.9,
+  окно 10. Обучена с нуля по рецепту v27 (w128, Puriso) плюс станционные
+  wake-события (39 confirmed false + 289 near, split по дням); эпоха 14 выбрана
+  непрерывной validation (32/32 по манерам). Офлайн: станционный test-split
+  13 → 1 клипов с ложным срабатыванием против v27, регрессия 164/164 (v27
+  161/164). Установка model-only, бинарник Pulsar не менялся; живая приёмка
+  ещё не выполнялась (`live_voice_acceptance=pending`). Device backup v27 —
+  `/data/pulsar/backups/model-20261112T161203Z-3a2e7fd6`.
+- Откат на v27 — профиль `projects/station/configs/wakeword-v27.json` через
+  `projects/station/tools/wakeword-personalize/deploy.py`; v24
+  (`wakeword-v24.json`, прежний best-known/reference) и v22
+  (`wakeword-v22.json`) — более старые откаты. `deploy.py` перезапускает
+  Pulsar без `PULSAR_LOCAL_ENDPOINTING=1`: после установки вернуть его
+  `PULSAR_LOCAL_ENDPOINTING=1 /data/pulsar/ctl.sh reload` на станции.
+- Прежняя модель v27 — более ёмкий MixedNet (pointwise 128×4, первая свёртка 64;
   те же MixConv-ядра, stride 3, residual, контекст 204×40), 138 113
   параметров против 40 385 у v24, вход `int8[1,3,40]`. C++/firmware-проверка
   замороженного файла e22 на станции: 162/164 на регрессионном наборе против
