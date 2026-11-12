@@ -942,18 +942,20 @@ crash-loop) снова откроется `:31116` без auth — перед в
 правилом INPUT.
 
 Модель wake word меняется отдельно, model-only, без замены бинарника.
-Установлен кандидат v27; best-known/reference по решению пользователя — v24.
-Быстрый откат на v24 (в реальном запуске подставьте LAN-адрес HA из
+Установлена v28; прежняя v27 — профиль быстрого отката, v24/v22 — старые.
+Быстрый откат на v27 (в реальном запуске подставьте LAN-адрес HA из
 `secrets/NETWORK.md`; deploy.py сам проверит alarm/idle/recorder, сохранит
 backup пары и проверит hashes/HA/MA):
 
 ```bash
 python3 projects/station/tools/wakeword-personalize/deploy.py \
   --ha-url http://192.0.2.28:8123 \
-  --profile projects/station/configs/wakeword-v24.json
+  --profile projects/station/configs/wakeword-v27.json
+# deploy.py перезапускает Pulsar без local endpointing — вернуть на станции:
+# PULSAR_LOCAL_ENDPOINTING=1 /data/pulsar/ctl.sh reload
 ```
 
-`wakeword-v22.json` — отдельный откат на v22. Установка не заменяет живую
+`wakeword-v24.json` и `wakeword-v22.json` — более старые откаты. Установка не заменяет живую
 голосовую приёмку: private `active.json` хранит `live_voice_acceptance=pending`.
 
 ### Wake-события
