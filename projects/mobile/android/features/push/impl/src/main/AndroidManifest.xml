@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="dev.proflyder.home.feature.push">
+
+    <!-- Find phone: the alarm tone and vibration, the DND override and the
+         full-screen ring over the lock screen. POST_NOTIFICATIONS and
+         MODIFY_AUDIO_SETTINGS are declared by the app manifest. -->
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+    <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+
+    <application>
+        <!-- FCM entry point. Exported=false: only Google Play services
+             delivers here through the system. -->
+        <service
+            android:name=".HomeMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
+        <!-- Keeps the ring alive in the background; started from a
+             high-priority FCM data message. -->
+        <service
+            android:name=".FindPhoneService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />
+
+        <!-- Full-screen intent target: turns the screen on and shows over the
+             lock screen. -->
+        <activity
+            android:name=".FindPhoneActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:launchMode="singleTop" />
+    </application>
+</manifest>

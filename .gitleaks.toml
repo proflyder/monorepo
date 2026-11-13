@@ -6,6 +6,10 @@ description = "Synthetic HTTPS test server key/cert fixtures for pulsar-update t
 paths = ['''^projects/station/pulsar/satellite/crates/pulsar-update/tests/data/.*\.(key|pem)$''']
 
 [[allowlists]]
+description = "Synthetic service-account RSA key for phone-push sender tests"
+paths = ['''^solutions/phone-push/crates/phone-push/testdata/service-account\.pem$''']
+
+[[allowlists]]
 description = "Synthetic HTTPS test CA and loopback server key/cert for home-tls tests"
 paths = ['''^packages/rust/home-tls/testdata/.*\.(key|pem)$''']
 

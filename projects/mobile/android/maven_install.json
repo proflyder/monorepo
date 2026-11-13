@@ -27,7 +27,9 @@
     "com.google.android.datatransport:transport-api": -1491411290,
     "com.google.android.datatransport:transport-backend-cct": 616409831,
     "com.google.android.datatransport:transport-runtime": -1434232860,
+    "com.google.android.gms:play-services-base": -1043385002,
     "com.google.android.gms:play-services-basement": -1394019542,
+    "com.google.android.gms:play-services-cloud-messaging": 754154807,
     "com.google.android.gms:play-services-tasks": -1253332073,
     "com.google.android.material:material": -260933394,
     "com.google.code.findbugs:jsr305": 495355163,
@@ -40,11 +42,15 @@
     "com.google.firebase:firebase-config": -91856259,
     "com.google.firebase:firebase-config-interop": -1153513648,
     "com.google.firebase:firebase-crashlytics": -578058693,
+    "com.google.firebase:firebase-datatransport": 898411168,
     "com.google.firebase:firebase-encoders": -1622830538,
     "com.google.firebase:firebase-encoders-json": 466316520,
+    "com.google.firebase:firebase-encoders-proto": -1845119344,
+    "com.google.firebase:firebase-iid-interop": -2090086147,
     "com.google.firebase:firebase-installations": 1774406105,
     "com.google.firebase:firebase-installations-interop": -1462940366,
-    "com.google.firebase:firebase-measurement-connector": 1782692805,
+    "com.google.firebase:firebase-measurement-connector": 1489289798,
+    "com.google.firebase:firebase-messaging": -833473941,
     "com.google.firebase:firebase-sessions": -1604566612,
     "com.google.guava:guava": 1943808618,
     "com.google.guava:listenablefuture": 558639266,
@@ -182,28 +188,33 @@
     "com.google.android.datatransport:transport-api:aar": -1797064977,
     "com.google.android.datatransport:transport-backend-cct:aar": 1598741274,
     "com.google.android.datatransport:transport-runtime:aar": 1730030366,
+    "com.google.android.gms:play-services-base:aar": -35938866,
     "com.google.android.gms:play-services-basement:aar": -1129105163,
+    "com.google.android.gms:play-services-cloud-messaging:aar": 1344394213,
+    "com.google.android.gms:play-services-stats:aar": 845197963,
     "com.google.android.gms:play-services-tasks:aar": 1819529444,
     "com.google.android.material:material:aar": 2002046576,
     "com.google.auto.value:auto-value-annotations": 641752776,
     "com.google.code.findbugs:jsr305": 870839855,
     "com.google.code.gson:gson": -1575757252,
     "com.google.errorprone:error_prone_annotations": 967586345,
-    "com.google.firebase:firebase-abt:aar": 619069083,
+    "com.google.firebase:firebase-abt:aar": -1034329370,
     "com.google.firebase:firebase-annotations": 1045434589,
     "com.google.firebase:firebase-common:aar": -391466273,
     "com.google.firebase:firebase-components:aar": 1272402741,
     "com.google.firebase:firebase-config-interop:aar": 1103503698,
-    "com.google.firebase:firebase-config:aar": -1256820372,
-    "com.google.firebase:firebase-crashlytics:aar": 597146111,
-    "com.google.firebase:firebase-datatransport:aar": 675719735,
+    "com.google.firebase:firebase-config:aar": -1128717608,
+    "com.google.firebase:firebase-crashlytics:aar": 1387613877,
+    "com.google.firebase:firebase-datatransport:aar": 1993515523,
     "com.google.firebase:firebase-encoders": 1078738781,
     "com.google.firebase:firebase-encoders-json:aar": -884459589,
     "com.google.firebase:firebase-encoders-proto": 241141455,
+    "com.google.firebase:firebase-iid-interop:aar": -967597102,
     "com.google.firebase:firebase-installations-interop:aar": 1407336064,
     "com.google.firebase:firebase-installations:aar": 1903585721,
-    "com.google.firebase:firebase-measurement-connector:aar": -1054570061,
-    "com.google.firebase:firebase-sessions:aar": -458808405,
+    "com.google.firebase:firebase-measurement-connector:aar": 760712747,
+    "com.google.firebase:firebase-messaging:aar": -1781782848,
+    "com.google.firebase:firebase-sessions:aar": -1993630286,
     "com.google.guava:failureaccess": -1890754729,
     "com.google.guava:guava": 1451151182,
     "com.google.guava:listenablefuture": -1728764445,
@@ -971,11 +982,29 @@
       },
       "version": "5.0.0"
     },
+    "com.google.android.gms:play-services-base:aar": {
+      "shasums": {
+        "jar": "a071d2f2b09a81182db7b10fe62f5ce24ec8646529400ff1423f9be1178c2cb5"
+      },
+      "version": "18.9.0"
+    },
     "com.google.android.gms:play-services-basement:aar": {
       "shasums": {
         "jar": "30e9df7012c15ef31a4b288b3d77eb4550b195a0581675cad121b0b4bbc47b76"
       },
       "version": "18.12.0"
+    },
+    "com.google.android.gms:play-services-cloud-messaging:aar": {
+      "shasums": {
+        "jar": "c525314ab50fb6bb915da1dab99ea71b45fdb2aeb5ea6b857e7b9562ebbb8c85"
+      },
+      "version": "17.4.0"
+    },
+    "com.google.android.gms:play-services-stats:aar": {
+      "shasums": {
+        "jar": "dd4314a53f49a378ec146103d36232b96c75454d29526336ccbdf132941764d3"
+      },
+      "version": "17.0.2"
     },
     "com.google.android.gms:play-services-tasks:aar": {
       "shasums": {
@@ -1079,6 +1108,12 @@
       },
       "version": "17.0.0"
     },
+    "com.google.firebase:firebase-iid-interop:aar": {
+      "shasums": {
+        "jar": "0b7c3721c84b62e70415307239ed4a7f998989084bf2833f90b9f5bea3095a05"
+      },
+      "version": "17.1.0"
+    },
     "com.google.firebase:firebase-installations-interop:aar": {
       "shasums": {
         "jar": "fab7f3633204dd1c889a2ea419bfc1937e0e3766aae236a4b9d3c665d59765eb"
@@ -1093,9 +1128,15 @@
     },
     "com.google.firebase:firebase-measurement-connector:aar": {
       "shasums": {
-        "jar": "17e8b9b60ac0a79fcbed754d03d4b966cc5bb8837e79c2308bf2970f1d05700c"
+        "jar": "dba74d6bf94647ee397bf7afb2ab07f6fe8d13157e56785fa540a2a13ed82c99"
       },
-      "version": "18.0.0"
+      "version": "19.0.0"
+    },
+    "com.google.firebase:firebase-messaging:aar": {
+      "shasums": {
+        "jar": "2f9b97a0f5646d428d53fef82e4ec9568af6bbe3f7c3e4299f399a8751dbef44"
+      },
+      "version": "26.0.1"
     },
     "com.google.firebase:firebase-sessions:aar": {
       "shasums": {
@@ -2478,10 +2519,26 @@
       "javax.inject:javax.inject",
       "org.jetbrains.kotlin:kotlin-stdlib"
     ],
+    "com.google.android.gms:play-services-base:aar": [
+      "androidx.collection:collection",
+      "androidx.core:core:aar",
+      "androidx.fragment:fragment:aar",
+      "com.google.android.gms:play-services-basement:aar",
+      "com.google.android.gms:play-services-tasks:aar"
+    ],
     "com.google.android.gms:play-services-basement:aar": [
       "androidx.collection:collection",
       "androidx.core:core:aar",
       "androidx.fragment:fragment:aar"
+    ],
+    "com.google.android.gms:play-services-cloud-messaging:aar": [
+      "com.google.android.gms:play-services-base:aar",
+      "com.google.android.gms:play-services-basement:aar",
+      "com.google.android.gms:play-services-tasks:aar"
+    ],
+    "com.google.android.gms:play-services-stats:aar": [
+      "androidx.legacy:legacy-support-core-utils:aar",
+      "com.google.android.gms:play-services-basement:aar"
     ],
     "com.google.android.gms:play-services-tasks:aar": [
       "com.google.android.gms:play-services-basement:aar"
@@ -2576,6 +2633,8 @@
       "com.google.android.datatransport:transport-api:aar",
       "com.google.android.datatransport:transport-backend-cct:aar",
       "com.google.android.datatransport:transport-runtime:aar",
+      "com.google.firebase:firebase-common:aar",
+      "com.google.firebase:firebase-components:aar",
       "javax.inject:javax.inject",
       "org.jetbrains.kotlin:kotlin-stdlib-jdk8"
     ],
@@ -2591,6 +2650,10 @@
       "androidx.annotation:annotation",
       "com.google.firebase:firebase-encoders"
     ],
+    "com.google.firebase:firebase-iid-interop:aar": [
+      "com.google.android.gms:play-services-basement:aar",
+      "com.google.android.gms:play-services-tasks:aar"
+    ],
     "com.google.firebase:firebase-installations-interop:aar": [
       "com.google.android.gms:play-services-tasks:aar",
       "com.google.firebase:firebase-annotations"
@@ -2605,7 +2668,31 @@
       "org.jetbrains.kotlin:kotlin-stdlib"
     ],
     "com.google.firebase:firebase-measurement-connector:aar": [
-      "com.google.android.gms:play-services-basement:aar"
+      "com.google.android.gms:play-services-basement:aar",
+      "com.google.firebase:firebase-annotations"
+    ],
+    "com.google.firebase:firebase-messaging:aar": [
+      "androidx.annotation:annotation",
+      "com.google.android.datatransport:transport-api:aar",
+      "com.google.android.datatransport:transport-backend-cct:aar",
+      "com.google.android.datatransport:transport-runtime:aar",
+      "com.google.android.gms:play-services-base:aar",
+      "com.google.android.gms:play-services-basement:aar",
+      "com.google.android.gms:play-services-cloud-messaging:aar",
+      "com.google.android.gms:play-services-stats:aar",
+      "com.google.android.gms:play-services-tasks:aar",
+      "com.google.errorprone:error_prone_annotations",
+      "com.google.firebase:firebase-common:aar",
+      "com.google.firebase:firebase-components:aar",
+      "com.google.firebase:firebase-datatransport:aar",
+      "com.google.firebase:firebase-encoders",
+      "com.google.firebase:firebase-encoders-json:aar",
+      "com.google.firebase:firebase-encoders-proto",
+      "com.google.firebase:firebase-iid-interop:aar",
+      "com.google.firebase:firebase-installations-interop:aar",
+      "com.google.firebase:firebase-installations:aar",
+      "com.google.firebase:firebase-measurement-connector:aar",
+      "org.jetbrains.kotlin:kotlin-stdlib"
     ],
     "com.google.firebase:firebase-sessions:aar": [
       "androidx.annotation:annotation",
@@ -3423,6 +3510,26 @@
       "com.google.android.datatransport.runtime.time",
       "com.google.android.datatransport.runtime.util"
     ],
+    "com.google.android.gms:play-services-base:aar": [
+      "com.google.android.gms.auth.api.signin",
+      "com.google.android.gms.auth.api.signin.internal",
+      "com.google.android.gms.common",
+      "com.google.android.gms.common.api",
+      "com.google.android.gms.common.api.internal",
+      "com.google.android.gms.common.data",
+      "com.google.android.gms.common.images",
+      "com.google.android.gms.common.internal",
+      "com.google.android.gms.common.internal.service",
+      "com.google.android.gms.common.moduleinstall",
+      "com.google.android.gms.common.moduleinstall.internal",
+      "com.google.android.gms.common.server",
+      "com.google.android.gms.common.server.converter",
+      "com.google.android.gms.common.server.response",
+      "com.google.android.gms.dynamic",
+      "com.google.android.gms.internal.base",
+      "com.google.android.gms.signin",
+      "com.google.android.gms.signin.internal"
+    ],
     "com.google.android.gms:play-services-basement:aar": [
       "com.google.android.gms.actions",
       "com.google.android.gms.common",
@@ -3447,6 +3554,14 @@
       "com.google.android.gms.libs.throttling",
       "com.google.android.gms.security",
       "com.google.firebase"
+    ],
+    "com.google.android.gms:play-services-cloud-messaging:aar": [
+      "com.google.android.gms.cloudmessaging",
+      "com.google.android.gms.internal.cloudmessaging"
+    ],
+    "com.google.android.gms:play-services-stats:aar": [
+      "com.google.android.gms.internal.stats",
+      "com.google.android.gms.stats"
     ],
     "com.google.android.gms:play-services-tasks:aar": [
       "com.google.android.gms.internal.tasks",
@@ -3609,6 +3724,9 @@
     "com.google.firebase:firebase-encoders-proto": [
       "com.google.firebase.encoders.proto"
     ],
+    "com.google.firebase:firebase-iid-interop:aar": [
+      "com.google.firebase.iid.internal"
+    ],
     "com.google.firebase:firebase-installations-interop:aar": [
       "com.google.firebase.installations",
       "com.google.firebase.installations.internal",
@@ -3622,6 +3740,12 @@
     ],
     "com.google.firebase:firebase-measurement-connector:aar": [
       "com.google.firebase.analytics.connector"
+    ],
+    "com.google.firebase:firebase-messaging:aar": [
+      "com.google.firebase.iid",
+      "com.google.firebase.messaging",
+      "com.google.firebase.messaging.reporting",
+      "com.google.firebase.messaging.threads"
     ],
     "com.google.firebase:firebase-sessions:aar": [
       "com.google.firebase.sessions",
@@ -7565,7 +7689,10 @@
       "com.google.android.datatransport:transport-api:aar",
       "com.google.android.datatransport:transport-backend-cct:aar",
       "com.google.android.datatransport:transport-runtime:aar",
+      "com.google.android.gms:play-services-base:aar",
       "com.google.android.gms:play-services-basement:aar",
+      "com.google.android.gms:play-services-cloud-messaging:aar",
+      "com.google.android.gms:play-services-stats:aar",
       "com.google.android.gms:play-services-tasks:aar",
       "com.google.android.material:material:aar",
       "com.google.firebase:firebase-abt:aar",
@@ -7579,9 +7706,11 @@
       "com.google.firebase:firebase-encoders",
       "com.google.firebase:firebase-encoders-json:aar",
       "com.google.firebase:firebase-encoders-proto",
+      "com.google.firebase:firebase-iid-interop:aar",
       "com.google.firebase:firebase-installations-interop:aar",
       "com.google.firebase:firebase-installations:aar",
       "com.google.firebase:firebase-measurement-connector:aar",
+      "com.google.firebase:firebase-messaging:aar",
       "com.google.firebase:firebase-sessions:aar"
     ],
     "https://repo1.maven.org/maven2/": [

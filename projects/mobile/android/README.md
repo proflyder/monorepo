@@ -9,8 +9,10 @@ API/implementation modules, and a typed router.
 
 Debug builds only. App Distribution builds are release-signed with a stable
 personal key so upgrades keep app data and the encrypted token (see
-[Signing](#signing)); the APK Bazel produces is an intermediate. No FCM
-messaging, phone-side background execution, offline cache, or generic task UI.
+[Signing](#signing)); the APK Bazel produces is an intermediate. Push delivery
+(FCM) and the find-phone ring are implemented
+([Push and find phone](#push-and-find-phone)); there is still no offline cache
+or generic task UI.
 Current device acceptance and remaining work are tracked in
 [STATE](../../../docs/STATE.md) and [PENDING](../../../docs/PENDING.md).
 
@@ -481,14 +483,66 @@ That digest is the personal key's. Both the local Bazel APK and the
 release-signed distribution APK carry it, so they update each other in place.
 Builds without the key (public fallback) cannot update an existing install.
 
+## Push and find phone
+
+Two delivery shapes arrive over FCM from the home server (the `phone-push`
+service, triggered by the `phone_find` / `phone_notify` MCP tools):
+
+- **Find phone** — a data-only, high-priority message with
+  `type=phone_find`. Nothing is drawn by the system; `HomeMessagingService`
+  starts the `mediaPlayback` foreground service, which rings and vibrates.
+  The ring uses `AudioAttributes.USAGE_ALARM`, raises the alarm stream volume
+  to its maximum for the duration and restores it afterwards, bypasses silent
+  mode and Do Not Disturb (channel `home_phone_find`, `bypassDnd`), opens the
+  `FindPhoneActivity` over the lock screen through a full-screen intent, and
+  stops on «Нашёл» or after 60 seconds. A high-priority FCM message is exactly
+  the case Android allows a background/killed app to start a foreground
+  service from, so the behaviour is the same with the screen off, the app in
+  the background and the app killed.
+- **Notification** — `phone_notify` or a `notification` block: title, body and
+  an optional `home://…` deep link on the ordinary `home_notifications`
+  channel. The tap opens the app; a deep link naming a feature id selects that
+  tab, anything else just opens the current tab. Every label and button is a
+  string resource; the server only supplies the text.
+
+**Token registration.** The app registers its FCM token with the home server
+on the scheduler base URL and bearer it already uses
+(`POST /v1/push/devices`, and `/v1/push/devices/remove` on rotation), so no
+fourth endpoint and no second credential exist. Registration runs at start and
+again on every token change (`onRegistered`/`onNewToken`); a failure is only
+shown on the settings screen and retried on the next start. Without
+`google-services.json` (Firebase uninitialized) or without a configured
+server, registration is skipped and the app starts normally.
+
+**Permissions screen.** «Уведомления и поиск телефона» (top app bar → bell)
+shows the real state of the three permissions the loud path needs and opens
+the matching system page for each:
+
+| Permission | Why | Where it is granted |
+| --- | --- | --- |
+| `POST_NOTIFICATIONS` (13+) | draw any notification | runtime dialog / app notification settings |
+| notification-policy access | `bypassDnd` actually overrides Do Not Disturb | `ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS` |
+| full-screen intent (14+) | the ringing screen opens over the lock screen | `ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT` |
+
+The screen also shows whether this phone is registered on the server (only the
+last six characters of the token are displayed) and offers «Обновить
+регистрацию». `USE_FULL_SCREEN_INTENT`, `ACCESS_NOTIFICATION_POLICY`,
+`VIBRATE` and `FOREGROUND_SERVICE_MEDIA_PLAYBACK` are declared by the push
+module's manifest; `POST_NOTIFICATIONS` and `MODIFY_AUDIO_SETTINGS` by the app.
+A Robolectric screenshot of the screen in the dark theme is written to the
+`settings_screenshot_test` test outputs (`push-settings-dark.png`).
+
 ## Firebase (Crashlytics and Remote Config)
 
-Firebase provides crash reporting and Remote Config. There is no FCM,
-Analytics, or phone-side scheduling. Remote Config supplies only connection
-settings; it never supplies the bearer token.
+Firebase provides crash reporting, Remote Config and Cloud Messaging (FCM).
+There is no Analytics or phone-side scheduling. Remote Config supplies only
+connection settings; it never supplies the bearer token.
 
 **What is sent to Google:** Crashlytics sends crash stack traces, device model
-and OS version, and the app version. Remote Config requests carry the app's
+and OS version, and the app version. FCM carries no Home credentials: the
+registration token is sent to the *home server*, and Google receives only the
+notification/data payload the home server sends (a find-phone request or a
+title/body). Remote Config requests carry the app's
 Firebase installation id and app metadata. The app does not send the bearer
 token, Home catalog contents, or any custom keys; the scheduler/control
 addresses arrive in the Remote Config response and are not reported back.
@@ -678,6 +732,7 @@ projects/mobile/android/
     reminders/{api,impl}
     timers/{api,impl}
     call/{api,impl}       intercom state machine, WebRTC, Telecom, call screen
+    push/{api,impl}       FCM service, find-phone ring, permission screen
     control/{api,impl}    Home catalog, filters, scenario/device/profile actions
     scenarios/{api,impl}  scenario list/editor, draft codec and validation
     connection/{api,impl}
@@ -730,7 +785,8 @@ catalog reads use `GET /v1/catalog`.
 
 ## Known limitations
 
-- No phone-side notifications/FCM, no background execution, no offline cache.
+- No offline cache and no generic task UI. Push delivery and the find-phone
+  ring are implemented; their on-device acceptance is still pending.
 - Scenario execution still depends on the server-side `ha-scenario` executor;
   the app only edits definitions and queues manual runs.
 - Full interactive acceptance on a device (filters, scenario taps, device

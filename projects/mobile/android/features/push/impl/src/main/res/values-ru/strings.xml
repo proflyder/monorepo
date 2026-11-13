@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="push_title">Уведомления и поиск телефона</string>
+    <string name="push_intro">Рикардо может присылать сюда уведомления и громко звонить на этот телефон по просьбе «где телефон». Звонок идёт в обход беззвучного режима и режима «Не беспокоить», открывается поверх экрана блокировки и останавливается кнопкой «Нашёл» или сам через минуту.</string>
+    <string name="push_notifications_title">Уведомления</string>
+    <string name="push_dnd_title">Доступ к режиму «Не беспокоить»</string>
+    <string name="push_full_screen_title">Полноэкранные уведомления</string>
+    <string name="push_permission_granted">Разрешено</string>
+    <string name="push_permission_missing">Не разрешено</string>
+    <string name="push_permission_grant">Разрешить</string>
+    <string name="push_permission_open">Открыть</string>
+    <string name="push_ring_ready">Поиск телефона работает: звонок будет громким даже в беззвучном режиме и в режиме «Не беспокоить».</string>
+    <string name="push_ring_incomplete">Поиск телефона не будет звонить громко, пока не разрешены все пункты выше. Уведомление о запросе всё равно придёт.</string>
+    <string name="push_register_title">Этот телефон на сервере</string>
+    <string name="push_not_registered">Ещё не зарегистрирован. Проверьте настройки подключения и обновите.</string>
+    <string name="push_registering">Регистрирую…</string>
+    <string name="push_registered_hint">Зарегистрирован, токен заканчивается на %1$s</string>
+    <string name="push_register">Обновить регистрацию</string>
+    <string name="push_registered">Регистрация обновлена.</string>
+    <string name="push_register_failed">Не удалось зарегистрировать: проверьте адрес сервера и токен доступа.</string>
+    <string name="push_settings_missing">Эта страница настроек недоступна на этом устройстве.</string>
+    <string name="push_channel_notifications_name">Уведомления дома</string>
+    <string name="push_channel_notifications_description">Сообщения от Рикардо: напоминания, статус и ответы.</string>
+    <string name="push_channel_find_name">Звонок «Поиск телефона»</string>
+    <string name="push_channel_find_description">Громкий звонок в обход беззвучного режима и режима «Не беспокоить».</string>
+    <string name="push_find_title">Поиск телефона</string>
+    <string name="push_find_default_reason">Рикардо ищет этот телефон</string>
+    <string name="push_find_found">Нашёл</string>
+    <string name="push_find_stop">Остановить</string>
+</resources>

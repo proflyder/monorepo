@@ -13,6 +13,8 @@ import dev.proflyder.home.core.network.ConnectIntercomClient
 import dev.proflyder.home.core.network.ControlCatalogClient
 import dev.proflyder.home.core.network.HttpControlCatalogClient
 import dev.proflyder.home.core.network.IntercomClient
+import dev.proflyder.home.core.network.HttpPushDevicesClient
+import dev.proflyder.home.core.network.PushDevicesApi
 import dev.proflyder.home.core.network.ScenarioClient
 import dev.proflyder.home.core.network.SchedulerClient
 import dev.proflyder.home.core.settings.HomeDataStore
@@ -25,6 +27,9 @@ import dev.proflyder.home.feature.call.CallCoordinator
 import dev.proflyder.home.feature.call.CallLauncher
 import dev.proflyder.home.feature.call.CallNotificationController
 import dev.proflyder.home.feature.call.telecom.CallTelecomBridge
+import dev.proflyder.home.feature.push.FindPhoneController
+import dev.proflyder.home.feature.push.FirebasePushRegistrar
+import dev.proflyder.home.feature.push.PushNotifier
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.BindingContainer
 import dev.zacsweers.metro.DependencyGraph
@@ -58,6 +63,11 @@ interface AppGraph {
     val callNotifications: CallNotificationController
     val callLauncher: CallLauncher
     val callTelecomBridge: CallTelecomBridge
+
+    /** Push delivery: FCM registration, notifications and the ringing state. */
+    val pushRegistrar: FirebasePushRegistrar
+    val pushNotifier: PushNotifier
+    val findPhoneController: FindPhoneController
 
     @DependencyGraph.Factory
     fun interface Factory {
@@ -136,6 +146,18 @@ object AppBindings {
         httpClient: OkHttpClient,
         interceptors: NetworkInterceptors,
     ): ControlCatalogClient = HttpControlCatalogClient(
+        settings = settings,
+        baseClient = httpClient,
+        interceptors = interceptors.list,
+    )
+
+    @Provides
+    @SingleIn(AppScope::class)
+    fun providePushDevicesClient(
+        settings: ConnectionSettingsStore,
+        httpClient: OkHttpClient,
+        interceptors: NetworkInterceptors,
+    ): PushDevicesApi = HttpPushDevicesClient(
         settings = settings,
         baseClient = httpClient,
         interceptors = interceptors.list,

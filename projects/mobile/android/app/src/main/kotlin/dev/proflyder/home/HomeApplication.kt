@@ -5,6 +5,7 @@ import com.google.firebase.FirebaseApp
 import com.google.firebase.crashlytics.FirebaseCrashlytics
 import dev.proflyder.home.di.AppGraph
 import dev.proflyder.home.feature.call.CallEntryPoint
+import dev.proflyder.home.feature.push.PushEntryPoint
 import dev.zacsweers.metro.createGraphFactory
 
 class HomeApplication : Application() {
@@ -28,6 +29,17 @@ class HomeApplication : Application() {
             ),
         )
         graph.callNotifications.start()
+        // Framework-instantiated push components (FCM service, ringing service
+        // and screen) read their collaborators from this entry point.
+        PushEntryPoint.install(
+            PushEntryPoint.Dependencies(
+                registrar = graph.pushRegistrar,
+                notifications = graph.pushNotifier,
+                findPhone = graph.findPhoneController,
+            ),
+        )
+        // Registers the FCM token (again) on every start and creates channels.
+        graph.pushRegistrar.start()
         configureCrashReporting()
     }
 

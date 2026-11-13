@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_settings">Настройки</string>
+    <string name="app_push">Уведомления и поиск</string>
     <string name="app_time_title">Время</string>
     <string name="app_time_alarms">Будильники</string>
     <string name="app_time_timers">Таймеры</string>
