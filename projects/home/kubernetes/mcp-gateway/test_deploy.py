@@ -416,7 +416,10 @@ class ManifestTests(unittest.TestCase):
             "spec"
         ]["containers"][0]
         env = {entry["name"]: entry.get("value") for entry in container["env"]}
-        self.assertEqual(env["MCP_GROUPS"], "infra.read,infra.fix,infra.report,bb.read,bb.act,time")
+        self.assertEqual(
+            env["MCP_GROUPS"],
+            "infra.read,infra.fix,infra.report,bb.read,bb.act,time,phone",
+        )
         self.assertEqual(env["MCP_TIMEZONE"], "Asia/Almaty")
         self.assertEqual(env["MCP_AUTH_TOKEN_FILE"], "/run/secrets/mcp-gateway-auth/token")
         self.assertEqual(env["MCP_INFRA_CATALOG_FILE"], "/etc/mcp-gateway/catalog.yaml")
@@ -439,6 +442,14 @@ class ManifestTests(unittest.TestCase):
         )
         self.assertEqual(
             env["MCP_SCHEDULER_TOKEN_FILE"], "/run/secrets/mcp-gateway-scheduler/token"
+        )
+        # Phone push: the FCM credential stays in the phone-push pod, so the
+        # gateway only points at the service and reuses the app bearer.
+        self.assertEqual(
+            env["MCP_PUSH_URL"], "http://phone-push.home-assistant.svc.cluster.local:8095"
+        )
+        self.assertEqual(
+            env["MCP_PUSH_TOKEN_FILE"], "/run/secrets/mcp-gateway-scheduler/token"
         )
         # Secrets only as files; no secret value and no *_TOKEN env.
         self.assertNotIn("TELEGRAM_BOT_TOKEN", env)
