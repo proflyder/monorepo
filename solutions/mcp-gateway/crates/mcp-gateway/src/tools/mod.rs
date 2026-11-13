@@ -15,6 +15,7 @@ pub mod bb;
 pub mod infra_fix;
 pub mod infra_read;
 pub mod infra_report;
+pub mod phone;
 pub mod time;
 
 use std::collections::BTreeMap;
@@ -390,6 +391,8 @@ pub struct Deps {
     pub timezone_name: String,
     /// Durable home scheduler.
     pub scheduler: Option<Arc<dyn crate::scheduler::SchedulerApi>>,
+    /// Phone push service (find-phone and notifications).
+    pub push: Option<Arc<dyn crate::push::PushApi>>,
     /// Restart cooldown.
     pub cooldown: Duration,
     /// Delay before a self-disrupting restart.
@@ -474,6 +477,12 @@ impl Deps {
         self.scheduler
             .as_deref()
             .filter(|backend| backend.configured())
+    }
+
+    /// The configured phone push service.
+    #[must_use]
+    pub fn push(&self) -> Option<&dyn crate::push::PushApi> {
+        self.push.as_deref().filter(|backend| backend.configured())
     }
 
     /// Register an action metric.

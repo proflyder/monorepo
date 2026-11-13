@@ -279,12 +279,25 @@ event-insert и advance источника в одной транзакции. `
 Schema version проверяется: БД новее бинарника отвергается.
 
 Схема v2 добавляет таблицу `scenarios(id, body_json, enabled, revision,
-created_unix, updated_unix)`. База v1 (в том числе созданная прежним Go- или
-Rust-бинарём) мигрирует на месте при старте без изменения schedules, timers,
-events и idempotency. Обратный откат бинарника после миграции требует
-восстановить v1-копию БД: старый бинарник отвергает v2. `backup.sh`
-копирует файл целиком и schema-проверок не делает, поэтому менять его не
-требуется.
+created_unix, updated_unix)`, схема v3 — `push_devices(token, platform,
+app_version, device_name, created_unix, updated_unix)`. База v1/v2 (в том
+числе созданная прежним Go- или Rust-бинарём) мигрирует на месте при старте
+без изменения schedules, timers, events и idempotency. Обратный откат
+бинарника после миграции требует восстановить копию БД предыдущей версии:
+старый бинарник отвергает более новую схему. `backup.sh` копирует файл
+целиком и schema-проверок не делает, поэтому менять его не требуется.
+
+### Push-устройства (`/v1/push/devices`)
+
+Телефон регистрирует FCM-токен на том же endpoint'е и тем же bearer'ом, что и
+Connect RPC: `POST /v1/push/devices` (upsert, ≤16 устройств),
+`POST /v1/push/devices/remove`, `GET /v1/push/devices` (читает
+`solutions/phone-push`). Это не часть `SchedulerService`: регистрация — plain
+JSON рядом с Connect-fallback'ом, чтобы телефону не понадобился второй адрес
+или второй токен. Scheduler хранит токены и ничего не отправляет; FCM
+service account и сама отправка — в `phone-push`, поэтому доставка не
+попадает в планировщик. Ответы содержат token (нужен реестру), но токен
+никогда не пишется в лог и не попадает в речь MCP-инструментов.
 
 ## Конфигурация
 

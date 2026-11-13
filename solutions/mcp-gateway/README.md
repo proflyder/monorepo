@@ -134,6 +134,22 @@ standalone GET-потока, кэшируется (до 16 кадров) и пр
 технических деталей. Токен — `MCP_SCHEDULER_TOKEN_FILE`
 (`k8s/home-assistant/scheduler-auth`), URL — `MCP_SCHEDULER_URL`.
 
+### `phone` (Hermes: найти телефон, уведомление)
+
+| Инструмент | Что делает |
+|---|---|
+| `phone_find(reason?)` | «Где телефон», «найди телефон»: `solutions/phone-push` отправляет **data-only** FCM-сообщение высокого приоритета без `notification`-блока. Приложение запускает foreground-сервис: громкий звонок через `USAGE_ALARM` в обход беззвучного режима и DND, вибрация, экран поверх блокировки с кнопкой «Нашёл», автостоп через 60 с. Поведение одинаково при выключенном экране, в фоне и в убитом приложении: high-priority FCM разрешает старт FGS, а трей не рисуется. |
+| `phone_notify(title, body)` | Обычное уведомление: заголовок, текст и необязательный `deep_link` (`home://…`), канал `home_notifications`. Подписи кнопок и каналов — из ресурсов приложения; сервер присылает только текст. |
+
+Ответ — только счётчики `{sent, failed, devices}`: токены устройств не
+попадают ни в речь, ни в `details`, поэтому модель не может перечислить
+телефоны. Оба инструмента — `destructiveHint`: они действуют на реальное
+устройство.
+
+Токены хранит scheduler (`POST/GET /v1/push/devices`, схема v3), а FCM
+service account — единственный секрет `phone-push`; gateway и Hermes его не
+видят. `MCP_GROUPS` должен включать `phone`.
+
 ### Голосовой вход (`/v1/voice/*`)
 
 Отдельный Bearer-токен, только для voice proxy в том же namespace.
@@ -189,7 +205,7 @@ hint, не конфигурация).
 | Переменная | Обязательна | По умолчанию | Назначение |
 |---|---|---|---|
 | `MCP_AUTH_TOKEN_FILE` | да | — | Bearer-токен для `/mcp`. |
-| `MCP_GROUPS` | нет | `infra.read` | Включённые группы: `infra.read`, `infra.fix`, `infra.report`, `bb.read`, `bb.act`, `time`. |
+| `MCP_GROUPS` | нет | `infra.read` | Включённые группы: `infra.read`, `infra.fix`, `infra.report`, `bb.read`, `bb.act`, `time`, `phone`. |
 | `MCP_INFRA_CATALOG_FILE` | для read/fix | — | YAML-каталог сервисов. |
 | `MCP_HTTP_ADDR` | нет | `:8080` | Адрес HTTP-сервера. |
 | `MCP_TIMEZONE` | нет | `UTC` | IANA-зона для человекочитаемого времени в текстах инструментов (заголовок отчёта). Проверяется при загрузке; для distroless-образа IANA tzdata встроена в бинарник. |
@@ -215,6 +231,8 @@ hint, не конфигурация).
 | `MCP_VOICE_TOKEN_FILE` | нет | — | Включает `/v1/voice/*`; токен обязан отличаться от MCP-токена. |
 | `MCP_SCHEDULER_URL` | для `time` | — | База `home.v1.SchedulerService`, например `http://scheduler.home-assistant.svc.cluster.local:8098`. |
 | `MCP_SCHEDULER_TOKEN_FILE` | для `time` | — | Bearer планировщика (`secret/k8s/home-assistant/scheduler-auth`, ключ `token`). |
+| `MCP_PUSH_URL` | для `phone` | — | База `solutions/phone-push`, например `http://phone-push.home-assistant.svc.cluster.local:8095`. |
+| `MCP_PUSH_TOKEN_FILE` | для `phone` | — | Bearer push-сервиса: тот же общий токен приложения (`scheduler-auth`). |
 | `MCP_PENDING_TTL` | нет | `90s` | Время жизни отложенного действия. |
 | `MCP_RESTART_COOLDOWN` | нет | `5m` | Минимальный интервал между перезапусками одного workload'а. |
 | `MCP_SELF_RESTART_DELAY` | нет | `20s` | Задержка перезапуска `self_disrupting` сервиса. |

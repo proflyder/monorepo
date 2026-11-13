@@ -56,6 +56,7 @@ fn deps() -> Arc<Deps> {
         location: jiff::tz::TimeZone::UTC,
         timezone_name: "UTC".to_owned(),
         scheduler: None,
+        push: None,
         cooldown: Duration::from_secs(300),
         self_restart_delay: Duration::from_secs(20),
         query_timeout: Duration::from_secs(1),

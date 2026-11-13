@@ -1,6 +1,6 @@
 {
   "name": "mcp_tools_list_all",
-  "description": "MCP tools/list with every group enabled: 30 tools, sorted by name. Semantic comparison still pins the exact tool set, descriptions, schemas and annotations.",
+  "description": "MCP tools/list with every group enabled: 32 tools, sorted by name. Semantic comparison still pins the exact tool set, descriptions, schemas and annotations.",
   "compare": "semantic",
   "steps": [
     {
@@ -555,6 +555,56 @@
                   "type": "object"
                 },
                 "name": "infra_status"
+              },
+              {
+                "annotations": {
+                  "destructiveHint": true,
+                  "openWorldHint": false,
+                  "readOnlyHint": false
+                },
+                "description": "Найти телефон: громко звонит как будильник, в обход беззвучного режима и режима «Не беспокоить», даже если экран выключен или приложение закрыто. Вызывай на «где телефон», «найди телефон», «позвони на телефон», «где мой мобильник». reason — необязательная короткая фраза для экрана телефона, не текст команды. Звонок останавливается кнопкой «Нашёл» и сам через минуту.",
+                "inputSchema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "reason": {
+                      "description": "Необязательная короткая причина, которую телефон покажет на экране, например «Рикардо». Не передавай сюда текст команды.",
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                },
+                "name": "phone_find"
+              },
+              {
+                "annotations": {
+                  "destructiveHint": true,
+                  "openWorldHint": false,
+                  "readOnlyHint": false
+                },
+                "description": "Отправить обычное уведомление на телефон: title и body обязательны, deep_link — только по явной просьбе владельца (например home://alarms). Используй, когда просят «напомни на телефон», «пришли уведомление», «напиши на телефон». Это не звонок: чтобы найти телефон, используй phone_find.",
+                "inputSchema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "body": {
+                      "description": "Текст уведомления, до 500 символов.",
+                      "type": "string"
+                    },
+                    "deep_link": {
+                      "description": "Необязательный внутренний адрес экрана приложения, например home://alarms. Только из явной просьбы владельца.",
+                      "type": "string"
+                    },
+                    "title": {
+                      "description": "Заголовок уведомления, короткий, до 120 символов.",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "title",
+                    "body"
+                  ],
+                  "type": "object"
+                },
+                "name": "phone_notify"
               },
               {
                 "annotations": {

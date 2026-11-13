@@ -1,6 +1,6 @@
 {
   "name": "get_status_shape",
-  "description": "GetStatus is an honest snapshot: version, schemaVersion, nowUnix, pending/leased counters, enabled schedules, running timers, consumers with alive, and the built-in home/tasks/scenario queues. scenarioExecutionSupported and other false/zero fields are omitted by protojson until they become true/non-zero; scenarioStoreSupported is true because v2 stores scenario definitions.",
+  "description": "GetStatus is an honest snapshot: version, schemaVersion, nowUnix, pending/leased counters, enabled schedules, running timers, consumers with alive, and the built-in home/tasks/scenario queues. scenarioExecutionSupported and other false/zero fields are omitted by protojson until they become true/non-zero; scenarioStoreSupported is true because v2 stores scenario definitions; schemaVersion is 3 because v3 adds the push device registry.",
   "steps": [
     {
       "request": {
@@ -193,7 +193,7 @@
           "ready": true,
           "runningTimers": 1,
           "scenarioStoreSupported": true,
-          "schemaVersion": 2,
+          "schemaVersion": 3,
           "version": "test"
         }
       }

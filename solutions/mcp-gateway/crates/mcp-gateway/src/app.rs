@@ -22,6 +22,7 @@ use crate::tools::bb::{BbActGroup, BbReadGroup};
 use crate::tools::infra_fix::FixGroup;
 use crate::tools::infra_read::ReadGroup;
 use crate::tools::infra_report::ReportGroup;
+use crate::tools::phone::PhoneGroup;
 use crate::tools::{
     AlertLister, Deps, LogQuerier, PromQuerier, Registry, ReportSender, TimerScheduler,
 };
@@ -104,6 +105,20 @@ pub async fn run() -> anyhow::Result<()> {
             None
         };
 
+    let push: Option<Arc<dyn crate::push::PushApi>> =
+        if config.groups.iter().any(|name| name == "phone") {
+            Some(Arc::new(
+                crate::push::Client::new(
+                    &config.push_url,
+                    config.push_token.clone(),
+                    config.query_timeout,
+                )
+                .map_err(anyhow::Error::msg)?,
+            ))
+        } else {
+            None
+        };
+
     let bb_targets = if config.bb_targets_file.is_empty() {
         None
     } else {
@@ -153,6 +168,7 @@ pub async fn run() -> anyhow::Result<()> {
         location: config.location.clone(),
         timezone_name: config.timezone.clone(),
         scheduler,
+        push,
         cooldown: config.cooldown,
         self_restart_delay: config.self_restart_delay,
         query_timeout: config.query_timeout,
@@ -195,6 +211,7 @@ pub async fn run() -> anyhow::Result<()> {
         Arc::new(BbReadGroup::new(Arc::clone(&deps))),
         Arc::new(BbActGroup::new(Arc::clone(&deps))),
         Arc::new(crate::tools::time::TimeGroup::new(Arc::clone(&deps))),
+        Arc::new(PhoneGroup::new(Arc::clone(&deps))),
     ]);
     let groups = registry
         .select(&config.groups)

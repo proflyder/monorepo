@@ -10,6 +10,7 @@ mod alarm;
 mod auth;
 mod convert;
 mod error;
+pub mod push;
 mod service;
 mod text;
 
@@ -74,6 +75,7 @@ impl tower::Service<Request<Body>> for ConnectFallback {
 
 /// Builds the axum router with all services behind one bearer interceptor.
 pub fn router(service: Service, alarms: AlarmFacade, token: &str) -> axum::Router {
+    let store = Arc::clone(service.store());
     let routes = ConnectRouter::new();
     let routes = <Service as SchedulerServiceExt>::register(Arc::new(service.clone()), routes);
     let routes = <Service as ScenarioServiceExt>::register(Arc::new(service), routes);
@@ -86,5 +88,19 @@ pub fn router(service: Service, alarms: AlarmFacade, token: &str) -> axum::Route
                 .with_max_request_body_size(MAX_BODY_BYTES),
         )
         .with_interceptor_arc(Arc::new(BearerAuth::new(token)));
-    axum::Router::new().fallback_service(ConnectFallback { methods, service })
+    // Push device registration is plain JSON next to the Connect fallback: it
+    // has its own path and the same bearer, so the phone needs no second
+    // endpoint or credential. Unknown paths still get the Connect `404`.
+    let push = push::PushState {
+        store,
+        auth: Arc::new(BearerAuth::new(token)),
+    };
+    axum::Router::new()
+        .route(
+            "/v1/push/devices",
+            axum::routing::get(push::list).post(push::register),
+        )
+        .route("/v1/push/devices/remove", axum::routing::post(push::remove))
+        .with_state(push)
+        .fallback_service(ConnectFallback { methods, service })
 }

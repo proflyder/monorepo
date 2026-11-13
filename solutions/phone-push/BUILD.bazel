@@ -1,0 +1,17 @@
+load("//platform/bazel/oci:service_image.bzl", "rust_service_image")
+
+package(default_visibility = ["//visibility:public"])
+
+# Static x86_64-unknown-linux-musl binary on the shared digest-pinned
+# distroless static base.
+rust_service_image(
+    name = "phone-push",
+    crate_binary = "//solutions/phone-push/crates/phone-push:phone-push",
+    repo = "ghcr.io/proflyder/phone-push",
+)
+
+filegroup(
+    name = "images",
+    srcs = [":phone-push_image"],
+    visibility = ["//visibility:public"],
+)

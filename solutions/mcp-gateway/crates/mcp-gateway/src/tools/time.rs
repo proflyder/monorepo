@@ -1266,6 +1266,7 @@ mod tests {
             )),
             bb_mode: Arc::new(AgentMode::new()),
             scheduler: Some(scheduler),
+            push: None,
         }
     }
 

@@ -1114,6 +1114,7 @@ fn contract_groups(scenario: &str) -> Vec<String> {
             "bb.read".to_owned(),
             "bb.act".to_owned(),
             "time".to_owned(),
+            "phone".to_owned(),
         ],
         other if other.starts_with("tools_call_bb_") => vec![
             "infra.read".to_owned(),
@@ -1150,6 +1151,7 @@ fn build_deps(catalog: Arc<Catalog>, world: &Arc<World>) -> Arc<Deps> {
         location: jiff::tz::TimeZone::get("Asia/Almaty").expect("timezone"),
         timezone_name: "Asia/Almaty".to_owned(),
         scheduler: None,
+        push: None,
         cooldown: std::time::Duration::from_secs(300),
         self_restart_delay: std::time::Duration::from_secs(20),
         query_timeout: std::time::Duration::from_secs(1),
@@ -1194,6 +1196,9 @@ fn tools_router(scenario: &str, worlds: &Worlds) -> Router {
         Arc::new(mcp_gateway::tools::bb::BbReadGroup::new(Arc::clone(&deps))),
         Arc::new(mcp_gateway::tools::bb::BbActGroup::new(Arc::clone(&deps))),
         Arc::new(mcp_gateway::tools::time::TimeGroup::new(Arc::clone(&deps))),
+        Arc::new(mcp_gateway::tools::phone::PhoneGroup::new(Arc::clone(
+            &deps,
+        ))),
     ];
     let names = contract_groups(scenario);
     let groups: Vec<Arc<dyn ToolGroup>> = all
@@ -1234,6 +1239,7 @@ fn server_router(_scenario: &str, _worlds: &Worlds) -> Router {
         location: jiff::tz::TimeZone::UTC,
         timezone_name: "UTC".to_owned(),
         scheduler: None,
+        push: None,
         cooldown: std::time::Duration::from_secs(300),
         self_restart_delay: std::time::Duration::from_secs(20),
         query_timeout: std::time::Duration::from_secs(1),

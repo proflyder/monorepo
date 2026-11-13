@@ -16,12 +16,25 @@ pub struct BearerAuth {
     expected: [u8; 32],
 }
 
+impl std::fmt::Debug for BearerAuth {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // The digest is derived from the secret and never printed.
+        formatter.debug_struct("BearerAuth").finish_non_exhaustive()
+    }
+}
+
 impl BearerAuth {
     pub fn new(token: &str) -> Self {
         let digest = Sha256::digest(token.as_bytes());
         let mut expected = [0_u8; 32];
         expected.copy_from_slice(&digest);
         Self { expected }
+    }
+
+    /// Whether this request carries the expected bearer token. Shared with the
+    /// plain JSON push routes, which are outside the Connect interceptor.
+    pub fn authorized(&self, header: Option<&http::HeaderValue>) -> bool {
+        self.matches(header)
     }
 
     fn matches(&self, header: Option<&http::HeaderValue>) -> bool {

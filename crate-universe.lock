@@ -1,5 +1,5 @@
 {
-  "checksum": "091641f7a3344da17b6fbe43cf45930fa0a29513279503125cb17c8c86651c8a",
+  "checksum": "00d3c4e2f84f8e2db64da28d8551d77fc43ab083f51cc7c11e31202b87ede6ff",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -12319,6 +12319,87 @@
         }
       ],
       "version": "0.6.1"
+    },
+    "phone-push 0.1.0": {
+      "common_attrs": {
+        "deps": [
+          {
+            "id": "anyhow 1.0.104",
+            "target": "anyhow"
+          },
+          {
+            "id": "axum 0.8.9",
+            "target": "axum"
+          },
+          {
+            "id": "base64 0.23.1",
+            "target": "base64"
+          },
+          {
+            "id": "http 1.5.0",
+            "target": "http"
+          },
+          {
+            "id": "jiff 0.2.41",
+            "target": "jiff"
+          },
+          {
+            "id": "reqwest 0.13.5",
+            "target": "reqwest"
+          },
+          {
+            "id": "ring 0.17.14",
+            "target": "ring"
+          },
+          {
+            "id": "serde 1.0.229",
+            "target": "serde"
+          },
+          {
+            "id": "serde_json 1.0.154",
+            "target": "serde_json"
+          },
+          {
+            "id": "thiserror 2.0.21",
+            "target": "thiserror"
+          },
+          {
+            "id": "tokio 1.54.1",
+            "target": "tokio"
+          },
+          {
+            "id": "tokio-util 0.7.20",
+            "target": "tokio_util"
+          },
+          {
+            "id": "tracing 0.1.44",
+            "target": "tracing"
+          }
+        ],
+        "deps_dev": [
+          {
+            "id": "tempfile 3.27.0",
+            "target": "tempfile"
+          }
+        ],
+        "edition": "2024"
+      },
+      "library_target_name": "phone_push",
+      "license": "AGPL-3.0-only",
+      "license_ids": [
+        "AGPL-3.0"
+      ],
+      "name": "phone-push",
+      "repository": null,
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "phone_push",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.1.0"
     },
     "pin-project 1.1.13": {
       "common_attrs": {
@@ -25316,6 +25397,7 @@
     "intercom 0.1.0": "solutions/intercom/crates/intercom",
     "logon_provider 0.1.0": "solutions/windows-logon-provider/crates/provider",
     "mcp-gateway 0.1.0": "solutions/mcp-gateway/crates/mcp-gateway",
+    "phone-push 0.1.0": "solutions/phone-push/crates/phone-push",
     "pulsar 0.0.0": "projects/station/pulsar/satellite/crates/pulsar",
     "pulsar-alsa 0.0.0": "projects/station/pulsar/satellite/crates/pulsar-alsa",
     "pulsar-arbiter 0.0.0": "projects/station/pulsar/satellite/crates/pulsar-arbiter",
