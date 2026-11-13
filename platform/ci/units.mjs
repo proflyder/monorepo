@@ -409,6 +409,55 @@ export const config = {
     },
 
     {
+      id: "phone-push",
+      platform: "bazel",
+      title: "solutions/phone-push (Rust FCM HTTP v1 sender) + home deployment",
+      paths: [
+        "solutions/phone-push/**",
+        "projects/home/kubernetes/phone-push/**",
+        // The deploy tooling that renders this unit's manifests.
+        "platform/deploy/**",
+        "platform/deploy-rs/**",
+      ],
+      // One stateless image and Deployment. The FCM service account is an ESO
+      // Secret owned by the owner, so it is declared in the unit's manifests
+      // but never written by CI.
+      deploy: {
+        builder: "bazel",
+        // Flux owns phone-push: Kustomization/app-phone-push applies the digest
+        // from the pins branch.
+        target_root: "//solutions/phone-push",
+        images: ["phone-push"],
+        workloads: ["phone-push"],
+        namespace: "home-assistant",
+      },
+      rollback: {
+        kind: "flux-pins",
+        note:
+          "Stateless: revert the `deploy/home-apps` commit that changed " +
+          "PHONE_PUSH_IMAGE and let Flux re-apply the previous digest.",
+        source: "DECISIONS 54 and projects/home/kubernetes/phone-push/README.md",
+      },
+      bazel: {
+        roots: [
+          "//solutions/phone-push",
+          "//packages/rust",
+          "//projects/home/kubernetes/phone-push",
+        ],
+        test_targets: [
+          "//solutions/phone-push/crates/phone-push:unit_tests",
+          "//solutions/phone-push/crates/phone-push:sender_tests",
+          "//solutions/phone-push/crates/phone-push:clippy",
+          "//solutions/phone-push/crates/phone-push:rustfmt",
+        ],
+        build_targets: [
+          "//solutions/phone-push/...",
+          "//projects/home/kubernetes/phone-push/...",
+        ],
+      },
+    },
+
+    {
       id: "currency-bot",
       platform: "bazel",
       title: "solutions/currency-bot (Rust Telegram currency bot) + home deployment",

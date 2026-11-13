@@ -75,6 +75,7 @@
 | `k8s/home-assistant/mcp-gateway-auth` | MCP gateway bearer | ESO → home-assistant |
 | `k8s/home-assistant/mcp-gateway-bb-ssh` | SSH key + known_hosts for bb dispatch from the MCP gateway | ESO → home-assistant |
 | `k8s/home-assistant/mcp-gateway-voice` | voice tool bearer of the MCP gateway | ESO → home-assistant |
+| `k8s/home-assistant/phone-push` | FCM service account (Firebase Cloud Messaging API Admin) for phone-push | ESO → home-assistant |
 | `k8s/home-assistant/scheduler-auth` | scheduler API bearer | ESO → home-assistant |
 | `k8s/home-assistant/wakegrant` | wakegrant issuer token and per-machine keys | ESO → home-assistant |
 | `k8s/monitoring/grafana-admin` | Grafana admin login | ESO → monitoring |

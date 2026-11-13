@@ -55,6 +55,7 @@ test("deploy images and native publish repositories of units.mjs are considered"
     "home-deploy",
     "intercom",
     "mcp-gateway",
+    "phone-push",
     "pulsar-firmware",
     "scheduler",
     "voice-proxy",

@@ -93,6 +93,10 @@ export const PUBLIC_TEST_KEY_FIXTURES = new Set([
   "projects/station/pulsar/satellite/crates/pulsar-update/tests/data/server.key",
   // home-tls loopback HTTPS test server key (synthetic, generated for the test).
   "packages/rust/home-tls/testdata/server-key.pem",
+  // phone-push sender tests: a throwaway RSA key that belongs to no Google
+  // project and signs nothing real. It lets the test verify the RS256
+  // assertion locally, without a network call to Google.
+  "solutions/phone-push/crates/phone-push/testdata/service-account.pem",
 ]);
 
 export const CREDENTIAL_PATTERN =

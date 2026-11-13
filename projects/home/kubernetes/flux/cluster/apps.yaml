@@ -124,6 +124,41 @@ spec:
       name: intercom
       namespace: home-assistant
 ---
+# FCM delivery for the owner's phone (find-phone + notifications). Stateless:
+# CI pins the verified digest and Flux applies the live Deployment. The FCM
+# service account is an ESO Secret, so this Kustomization substitutes only the
+# image and the node address for the NetworkPolicy.
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: app-phone-push
+  namespace: flux-system
+spec:
+  interval: 1m
+  retryInterval: 1m
+  timeout: 5m
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  path: ./projects/home/kubernetes/phone-push/manifests
+  prune: true
+  wait: true
+  suspend: false
+  dependsOn:
+    - name: platform
+    - name: home-app-pins
+  postBuild:
+    substituteFrom:
+      - kind: ConfigMap
+        name: home-app-images
+      - kind: Secret
+        name: flux-app-settings
+  healthChecks:
+    - apiVersion: apps/v1
+      kind: Deployment
+      name: phone-push
+      namespace: home-assistant
+---
 # Currency bot, its Cloudflare Tunnel and the currency-bot namespace objects
 # (решение 54), cut over to Flux. The namespace itself stays
 # admin-owned; the tunnel route and host nftables rule remain manual.

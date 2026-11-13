@@ -201,6 +201,23 @@ initContainer merges them into the PVC before the gateway starts, and a merge
 into `develop` (plus the image pins) is enough. Do not hand-edit the PVC; the
 manual render in «Emergency manual render» is only the fallback.
 
+## Phone tools (mcp-gateway `phone`)
+
+The same `infra` MCP server carries the `phone` group: `phone_find(reason?)`
+and `phone_notify(title, body, deep_link?)`. «Где телефон», «найди телефон»,
+«позвони на телефон» → `phone_find`: the phone rings like an alarm through
+`USAGE_ALARM`, ignores silent mode and Do Not Disturb, opens over the lock
+screen and stops on «Нашёл» or after 60 seconds. The message is data-only and
+high-priority, so it also works with the screen off and the app killed.
+Ordinary messages («напомни на телефон») → `phone_notify`; the app renders the
+title and body, and every button/channel label comes from its own resources.
+
+`MCP_GROUPS` must include `phone`; the gateway needs `MCP_PUSH_URL` and
+`MCP_PUSH_TOKEN_FILE` (the shared app bearer, `scheduler-auth`). The FCM
+service account lives only in the `phone-push` pod. The phone registers its
+token with the scheduler on the endpoint it already has, so no Remote Config
+change is needed for push.
+
 ## Agents (bb tools)
 
 The same `infra` MCP server carries the `bb.read`/`bb.act` group, so no

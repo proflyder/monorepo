@@ -1,0 +1,26 @@
+# Flux-rendered manifest set for phone-push.
+#
+# Deployment, Service, NetworkPolicy and the ExternalSecret are the workload.
+# The service has no node-local state, so the pod template only follows the
+# image digest.
+#
+# Substituted by Kustomization/app-phone-push:
+#   ${PHONE_PUSH_IMAGE}  from ConfigMap/home-app-images (pins branch)
+#   ${BUILD_ID}          from ConfigMap/home-app-images (pins branch)
+#   ${NODE_LAN_IP}       from Secret/flux-app-settings (ESO)
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - phone-push.yaml
+  - network-policies.yaml
+  - external-secrets.yaml
+patches:
+  # The image itself changes the pod template, so the annotation follows the
+  # digest instead of the CI-only `ROLLOUT_ID`.
+  - target:
+      kind: Deployment
+      name: phone-push
+    patch: |-
+      - op: replace
+        path: /spec/template/metadata/annotations/proflyder.dev~1rollout
+        value: ${PHONE_PUSH_IMAGE}

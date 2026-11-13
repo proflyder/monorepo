@@ -1,0 +1,76 @@
+# phone-push network policy.
+#
+# K3s (kube-router) enforces NetworkPolicies. Paths:
+#
+#   mcp-gateway (namespace home-assistant) -> phone-push:8095
+#   phone-push -> scheduler.home-assistant.svc:8098   (device registry)
+#   phone-push -> oauth2.googleapis.com:443, fcm.googleapis.com:443
+#   kubelet probes                          -> phone-push:8095 (/healthz, /readyz)
+#
+# Nothing else reaches the service: it is ClusterIP only and never published
+# through Traefik, so the phone cannot call it and the FCM credential stays a
+# server-side secret.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: phone-push-ingress
+  namespace: home-assistant
+  labels:
+    app.kubernetes.io/name: phone-push
+    app.kubernetes.io/part-of: home
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: phone-push
+  policyTypes:
+    - Ingress
+  ingress:
+    # The MCP gateway is the only caller; kubelet probes arrive from the node.
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: mcp-gateway
+        - ipBlock:
+            cidr: ${NODE_LAN_IP}/32
+      ports:
+        - protocol: TCP
+          port: 8095
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: phone-push-egress
+  namespace: home-assistant
+  labels:
+    app.kubernetes.io/name: phone-push
+    app.kubernetes.io/part-of: home
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: phone-push
+  policyTypes:
+    - Egress
+  egress:
+    # Device registry.
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: scheduler
+      ports:
+        - protocol: TCP
+          port: 8098
+    # CoreDNS.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # Google OAuth and FCM over HTTPS. The cluster has no DNS-based egress
+    # filter here, so the port is pinned and the host is enforced by the client.
+    - ports:
+        - protocol: TCP
+          port: 443

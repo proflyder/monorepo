@@ -1,0 +1,133 @@
+# phone-push: FCM delivery for the owner's phone (find-phone + notifications).
+#
+# TEMPLATE. `deploy.sh` renders it for a manual rollout; Flux renders the same
+# objects through `manifests/kustomization.yaml` (Kustomization/app-phone-push).
+# Rendered manifests are never committed.
+#
+#   PHONE_PUSH_IMAGE  digest-pinned image built by Bazel
+#   BUILD_ID          Deployment annotation (traceability, never rolls pods)
+#   ROLLOUT_ID        content-addressed pod-template annotation
+#
+# No node-local state and no in-memory registry: every request is one FCM send,
+# so the Deployment can be rolled with maxUnavailable=0. The service is
+# ClusterIP only — the MCP gateway is its single caller and it is never
+# published through Traefik.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: phone-push
+  namespace: home-assistant
+  labels:
+    app.kubernetes.io/name: phone-push
+    app.kubernetes.io/part-of: home
+  annotations:
+    proflyder.dev/build: ${BUILD_ID}
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: phone-push
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: phone-push
+      annotations:
+        proflyder.dev/rollout: ${ROLLOUT_ID}
+    spec:
+      enableServiceLinks: false
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        fsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: phone-push
+          image: ${PHONE_PUSH_IMAGE}
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: PUSH_LISTEN
+              value: 0.0.0.0:8095
+            # The caller bearer: the MCP gateway only. Same app token as the
+            # scheduler, so the phone and the gateway share one credential.
+            - name: PUSH_TOKEN_FILE
+              value: /run/secrets/phone-push/token
+            # Device registry: the scheduler owns the tokens.
+            - name: PUSH_SCHEDULER_URL
+              value: http://scheduler.home-assistant.svc.cluster.local:8098
+            - name: PUSH_SCHEDULER_TOKEN_FILE
+              value: /run/secrets/phone-push/token
+            # FCM service account (owner-created, secret/k8s/home-assistant/phone-push).
+            - name: PUSH_FCM_SERVICE_ACCOUNT_FILE
+              value: /run/secrets/phone-push/service_account_json
+            - name: LOG_LEVEL
+              value: info
+          ports:
+            - name: http
+              containerPort: 8095
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            exec:
+              command: ["/usr/local/bin/phone-push", "-healthcheck"]
+            initialDelaySeconds: 20
+            periodSeconds: 60
+            timeoutSeconds: 7
+            failureThreshold: 5
+          resources:
+            requests:
+              cpu: 10m
+              memory: 24Mi
+            limits:
+              memory: 96Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: secrets
+              mountPath: /run/secrets/phone-push
+              readOnly: true
+      volumes:
+        - name: secrets
+          secret:
+            secretName: phone-push
+            defaultMode: 0440
+            items:
+              - key: token
+                path: token
+              - key: service_account_json
+                path: service_account_json
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: phone-push
+  namespace: home-assistant
+  labels:
+    app.kubernetes.io/name: phone-push
+    app.kubernetes.io/part-of: home
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: phone-push
+  ports:
+    - name: http
+      port: 8095
+      targetPort: http
+      protocol: TCP
