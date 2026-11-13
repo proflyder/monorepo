@@ -124,6 +124,13 @@ pub struct Config {
     /// Durable scheduler bearer token.
     pub scheduler_token: String,
 
+    /// Phone push service base URL.
+    pub push_url: String,
+    /// Phone push token file.
+    pub push_token_file: String,
+    /// Phone push bearer token.
+    pub push_token: String,
+
     /// IANA timezone name.
     pub timezone: String,
     /// Loaded timezone.
@@ -180,6 +187,9 @@ impl Config {
             scheduler_url: trimmed(getenv, "MCP_SCHEDULER_URL"),
             scheduler_token_file: trimmed(getenv, "MCP_SCHEDULER_TOKEN_FILE"),
             scheduler_token: String::new(),
+            push_url: trimmed(getenv, "MCP_PUSH_URL"),
+            push_token_file: trimmed(getenv, "MCP_PUSH_TOKEN_FILE"),
+            push_token: String::new(),
             timezone: value_or(getenv, "MCP_TIMEZONE", DEFAULT_TIMEZONE),
             location: TimeZone::UTC,
         };
@@ -259,6 +269,7 @@ impl Config {
         load_telegram_files(&mut cfg, getenv, read_file)?;
         load_ha_files(&mut cfg, read_file)?;
         load_scheduler_files(&mut cfg, read_file)?;
+        load_push_files(&mut cfg, read_file)?;
         load_bb_files(&mut cfg, read_file)?;
         Ok(cfg)
     }
@@ -335,6 +346,17 @@ fn load_bb_files(cfg: &mut Config, read_file: &ReadFile<'_>) -> Result<(), Strin
     Ok(())
 }
 
+fn load_push_files(cfg: &mut Config, read_file: &ReadFile<'_>) -> Result<(), String> {
+    if !cfg.groups.iter().any(|name| name == "phone") {
+        return Ok(());
+    }
+    if cfg.push_url.is_empty() || cfg.push_token_file.is_empty() {
+        return Err("group phone requires MCP_PUSH_URL and MCP_PUSH_TOKEN_FILE".to_owned());
+    }
+    cfg.push_token = read_secret(read_file, &cfg.push_token_file, "MCP_PUSH_TOKEN_FILE")?;
+    Ok(())
+}
+
 fn load_scheduler_files(cfg: &mut Config, read_file: &ReadFile<'_>) -> Result<(), String> {
     if !cfg.groups.iter().any(|name| name == "time") {
         return Ok(());
@@ -378,7 +400,7 @@ fn validate_groups(cfg: &Config) -> Result<(), String> {
                     );
                 }
             }
-            "bb.read" | "bb.act" | "time" => {}
+            "bb.read" | "bb.act" | "time" | "phone" => {}
             other => return Err(format!("unknown tool group {other:?}")),
         }
     }
@@ -536,6 +558,24 @@ mod tests {
         let config = Config::load_from(&env(&pairs), &read).expect("config");
         assert_eq!(config.scheduler_token, "secret");
         assert_eq!(config.groups, vec!["time"]);
+    }
+
+    #[test]
+    fn phone_group_requires_the_push_url_and_token() {
+        let pairs = [("MCP_AUTH_TOKEN_FILE", "/token"), ("MCP_GROUPS", "phone")];
+        let read = |_path: &str| Ok(b"secret\n".to_vec());
+        let error = Config::load_from(&env(&pairs), &read).expect_err("missing push");
+        assert!(error.contains("MCP_PUSH_URL"), "{error}");
+
+        let pairs = [
+            ("MCP_AUTH_TOKEN_FILE", "/token"),
+            ("MCP_GROUPS", "phone"),
+            ("MCP_PUSH_URL", "http://phone-push:8095"),
+            ("MCP_PUSH_TOKEN_FILE", "/push-token"),
+        ];
+        let config = Config::load_from(&env(&pairs), &read).expect("config");
+        assert_eq!(config.push_token, "secret");
+        assert_eq!(config.groups, vec!["phone"]);
     }
 
     #[test]

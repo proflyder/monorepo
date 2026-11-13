@@ -1,0 +1,126 @@
+load("@rules_kotlin//kotlin:android.bzl", "kt_android_local_test")
+load("//platform/android:defs.bzl", "metro_android_library")
+load(":robolectric_android_all.bzl", "android_all_dir")
+
+package(default_visibility = ["//visibility:public"])
+
+metro_android_library(
+    name = "impl",
+    srcs = glob(["src/main/kotlin/**/*.kt"]),
+    custom_package = "dev.proflyder.home.feature.push.impl",
+    manifest = "src/main/AndroidManifest.xml",
+    # rules_android does not merge a library manifest into the APK unless the
+    # library exports it: this module declares the FCM service, the ringing
+    # foreground service and the ringing activity.
+    exports_manifest = 1,
+    resource_files = glob(["src/main/res/**"]),
+    view_binding = True,
+    deps = [
+        "//packages/kotlin/core",
+        "//projects/mobile/android/core/config",
+        "//projects/mobile/android/core/model",
+        "//projects/mobile/android/core/navigation",
+        "//projects/mobile/android/core/network",
+        "//projects/mobile/android/core/ui",
+        "//projects/mobile/android/features/push/api",
+        "@maven//:androidx_appcompat_appcompat",
+        "@maven//:androidx_core_core_ktx",
+        "@maven//:androidx_datastore_datastore_preferences",
+        "@maven//:androidx_fragment_fragment_ktx",
+        "@maven//:androidx_lifecycle_lifecycle_runtime_ktx",
+        "@maven//:androidx_lifecycle_lifecycle_viewmodel_ktx",
+        "@maven//:com_google_android_material_material",
+        "@maven//:com_google_firebase_firebase_messaging",
+        "@maven//:dev_zacsweers_metro_runtime_jvm",
+        "@maven//:org_jetbrains_kotlinx_kotlinx_coroutines_android",
+        "@maven//:org_jetbrains_kotlinx_kotlinx_coroutines_play_services",
+    ],
+)
+
+# Pure JVM tests: payload contract with the server and the ring timing.
+kt_android_local_test(
+    name = "impl_test",
+    srcs = [
+        "src/test/kotlin/dev/proflyder/home/feature/push/AllPushImplTests.kt",
+    ],
+    associates = [":impl"],
+    custom_package = "dev.proflyder.home.feature.push.impl",
+    manifest = "src/test/AndroidManifest.xml",
+    test_class = "dev.proflyder.home.feature.push.PushPayloadsTest",
+    deps = [
+        "//projects/mobile/android/features/push/api",
+        "@maven//:junit_junit",
+    ],
+)
+
+# Robolectric resolves SDK 35 to this pinned preinstrumented jar.
+android_all_dir(
+    name = "robolectric_android_all_sdk35",
+    jar = "@maven//:org_robolectric_android_all_instrumented",
+    jar_name = "android-all-instrumented-15-robolectric-13954326-i7.jar",
+)
+
+# The channels are the loud path: a wrong importance would silently mute the
+# ring, so the real NotificationManager is inspected on Robolectric.
+kt_android_local_test(
+    name = "channels_test",
+    srcs = ["src/test/kotlin/dev/proflyder/home/feature/push/PushChannelsTest.kt"],
+    associates = [":impl"],
+    custom_package = "dev.proflyder.home.feature.push.impl",
+    data = [
+        "robolectric-deps.properties",
+        ":robolectric_android_all_sdk35",
+    ],
+    jvm_flags = [
+        "-Drobolectric.offline=true",
+        "--add-opens=java.base/java.lang=ALL-UNNAMED",
+        "--add-opens=java.base/java.io=ALL-UNNAMED",
+        "--add-opens=java.base/java.net=ALL-UNNAMED",
+        "--add-opens=java.base/java.security=ALL-UNNAMED",
+        "--add-opens=java.base/java.text=ALL-UNNAMED",
+        "--add-opens=java.base/java.util=ALL-UNNAMED",
+        "--add-opens=java.base/java.util.concurrent=ALL-UNNAMED",
+        "--add-opens=java.base/jdk.internal.util=ALL-UNNAMED",
+    ],
+    manifest = "src/test/AndroidManifest.xml",
+    robolectric_properties_file = "robolectric-deps.properties",
+    test_class = "dev.proflyder.home.feature.push.PushChannelsTest",
+    deps = [
+        "//projects/mobile/android/features/push/api",
+        "@maven//:androidx_core_core_ktx",
+        "@maven//:junit_junit",
+        "@maven//:org_robolectric_robolectric",
+    ],
+)
+
+# The permission screen in the dark theme. The rendered PNG is review evidence.
+kt_android_local_test(
+    name = "settings_screenshot_test",
+    srcs = ["src/test/kotlin/dev/proflyder/home/feature/push/presentation/PushSettingsScreenshotTest.kt"],
+    associates = [":impl"],
+    custom_package = "dev.proflyder.home.feature.push.impl",
+    data = [
+        "robolectric-deps.properties",
+        ":robolectric_android_all_sdk35",
+    ],
+    jvm_flags = [
+        "-Drobolectric.offline=true",
+        "--add-opens=java.base/java.lang=ALL-UNNAMED",
+        "--add-opens=java.base/java.io=ALL-UNNAMED",
+        "--add-opens=java.base/java.net=ALL-UNNAMED",
+        "--add-opens=java.base/java.security=ALL-UNNAMED",
+        "--add-opens=java.base/java.text=ALL-UNNAMED",
+        "--add-opens=java.base/java.util=ALL-UNNAMED",
+        "--add-opens=java.base/java.util.concurrent=ALL-UNNAMED",
+        "--add-opens=java.base/jdk.internal.util=ALL-UNNAMED",
+    ],
+    manifest = "src/test/AndroidManifest.xml",
+    robolectric_properties_file = "robolectric-deps.properties",
+    test_class = "dev.proflyder.home.feature.push.presentation.PushSettingsScreenshotTest",
+    deps = [
+        "@maven//:androidx_appcompat_appcompat",
+        "@maven//:com_google_android_material_material",
+        "@maven//:junit_junit",
+        "@maven//:org_robolectric_robolectric",
+    ],
+)

@@ -173,6 +173,7 @@ class Cluster(unittest.TestCase):
             # решение 54: application units applied by Flux.
             "app-intercom", "app-currency-bot", "app-mcp-gateway",
             "app-ha-executors", "app-ha-config-sync", "app-hermes",
+            "app-phone-push",
         })
         sources = {
             "home-app-pins": ("GitRepository", "flux-pins"),
@@ -270,6 +271,7 @@ class Cluster(unittest.TestCase):
             "scheduler": K8S / "scheduler/manifests",
             "ha-bridge": K8S / "scheduler/manifests",
             "ha-config-sync": K8S / "ha-config-sync/manifests",
+            "phone-push": K8S / "phone-push/manifests",
             "hermes": ROOT / "projects/home-assistant/deploy/flux",
             # Phase 2 adds the `${HERMES_CONFIG_IMAGE}` reference to the same
             # rendered set (init container + drift sidecar).

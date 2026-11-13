@@ -58,7 +58,7 @@ spec:
           imagePullPolicy: IfNotPresent
           env:
             - name: MCP_GROUPS
-              value: infra.read,infra.fix,infra.report,bb.read,bb.act,time
+              value: infra.read,infra.fix,infra.report,bb.read,bb.act,time,phone
             - name: MCP_HTTP_ADDR
               value: ":8080"
             # Human-facing clock times in report/alert texts. IANA zone; the
@@ -114,6 +114,13 @@ spec:
             - name: MCP_SCHEDULER_URL
               value: http://scheduler.home-assistant.svc.cluster.local:8098
             - name: MCP_SCHEDULER_TOKEN_FILE
+              value: /run/secrets/mcp-gateway-scheduler/token
+            # Phone push (find-phone, notifications). The push service owns the
+            # FCM service account; the gateway only presents the shared app
+            # bearer, which is already mounted for the scheduler.
+            - name: MCP_PUSH_URL
+              value: http://phone-push.home-assistant.svc.cluster.local:8095
+            - name: MCP_PUSH_TOKEN_FILE
               value: /run/secrets/mcp-gateway-scheduler/token
             - name: LOG_LEVEL
               value: info

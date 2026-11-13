@@ -9,6 +9,7 @@
 //! argument so tick scenarios stay deterministic.
 
 mod event;
+mod push;
 mod scenario;
 mod schedule;
 mod status;
@@ -29,14 +30,16 @@ pub use crate::domain::{
     ScenarioStep, ScenarioTimeTrigger, ScenarioTrigger, Schedule, ScheduleKind, SourceKind, Timer,
     TimerState,
 };
+pub use push::{PushDevice, PushDeviceInput};
 pub use status::{ConsumerStatus, QueueInfo, Status};
 pub use tick::TickStats;
 
 use crate::domain::ScheduleKind as DomainScheduleKind;
 
-/// Schema version written to `schema_meta`. v2 adds the scenario table; a v1
-/// database migrates in place, and an older binary rejects v2.
-pub const SCHEMA_VERSION: i64 = 2;
+/// Schema version written to `schema_meta`. v2 adds the scenario table and v3
+/// the push device registry; an older database migrates in place, and an older
+/// binary rejects a newer one.
+pub const SCHEMA_VERSION: i64 = 3;
 
 /// Queue names used by the built-in domains.
 pub const QUEUE_HOME: &str = "home";
@@ -137,6 +140,20 @@ const V2: &[&str] = &[
     "CREATE INDEX IF NOT EXISTS scenarios_enabled ON scenarios(enabled)",
 ];
 
+/// v3 adds the push device registry: FCM tokens of the owner's phones. The
+/// scheduler stores them only; `solutions/phone-push` sends.
+const V3: &[&str] = &[
+    "CREATE TABLE IF NOT EXISTS push_devices (
+			token TEXT PRIMARY KEY,
+			platform TEXT NOT NULL,
+			app_version TEXT NOT NULL,
+			device_name TEXT NOT NULL,
+			created_unix INTEGER NOT NULL,
+			updated_unix INTEGER NOT NULL
+		)",
+    "CREATE INDEX IF NOT EXISTS push_devices_updated ON push_devices(updated_unix)",
+];
+
 /// One ordered schema step.
 pub const MIGRATIONS: &[Migration] = &[
     Migration {
@@ -145,9 +162,14 @@ pub const MIGRATIONS: &[Migration] = &[
         statements: V1,
     },
     Migration {
-        version: SCHEMA_VERSION,
+        version: 2,
         description: "scheduler v2 scenarios",
         statements: V2,
+    },
+    Migration {
+        version: SCHEMA_VERSION,
+        description: "scheduler v3 push devices",
+        statements: V3,
     },
 ];
 

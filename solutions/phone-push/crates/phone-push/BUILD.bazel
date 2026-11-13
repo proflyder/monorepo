@@ -1,0 +1,103 @@
+load("@rules_rust//cargo:defs.bzl", "extract_cargo_lints")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_clippy_test", "rust_library", "rust_test", "rustfmt_test")
+
+package(default_visibility = ["//visibility:public"])
+
+# Kept in sync with [package].version in Cargo.toml. Bazel does not derive
+# env!("CARGO_PKG_VERSION"); without this the deployed binary reports 0.0.0.
+PACKAGE_VERSION = "0.1.0"
+
+LIB_DEPS = [
+    "//packages/rust/home-config:home_config",
+    "//packages/rust/home-http:home_http",
+    "//packages/rust/home-runtime:home_runtime",
+    "//packages/rust/home-secret:home_secret",
+    "//packages/rust/home-telemetry:home_telemetry",
+    "//packages/rust/home-tls:home_tls",
+    "@crates//:anyhow",
+    "@crates//:axum",
+    "@crates//:base64",
+    "@crates//:http",
+    "@crates//:jiff",
+    "@crates//:reqwest",
+    "@crates//:ring",
+    "@crates//:serde",
+    "@crates//:serde_json",
+    "@crates//:thiserror",
+    "@crates//:tokio",
+    "@crates//:tokio-util",
+    "@crates//:tracing",
+]
+
+rust_library(
+    name = "phone_push_lib",
+    crate_name = "phone_push",
+    srcs = glob(
+        ["src/**/*.rs"],
+        exclude = ["src/main.rs"],
+    ),
+    edition = "2024",
+    lint_config = ":workspace_lints",
+    version = PACKAGE_VERSION,
+    deps = LIB_DEPS,
+)
+
+rust_binary(
+    name = "phone-push",
+    srcs = ["src/main.rs"],
+    rustc_flags = ["-C", "strip=symbols"],
+    edition = "2024",
+    lint_config = ":workspace_lints",
+    version = PACKAGE_VERSION,
+    deps = LIB_DEPS + [":phone_push_lib"],
+)
+
+rust_test(
+    name = "unit_tests",
+    size = "small",
+    crate = ":phone_push_lib",
+    edition = "2024",
+    lint_config = ":workspace_lints",
+    deps = LIB_DEPS + ["@crates//:tempfile"],
+)
+
+# The sender integration test starts fake OAuth/FCM servers and signs with a
+# throwaway key from testdata (see the Gitleaks allowlist).
+rust_test(
+    name = "sender_tests",
+    size = "small",
+    srcs = ["tests/sender.rs"],
+    compile_data = ["testdata/service-account.pem"],
+    edition = "2024",
+    lint_config = ":workspace_lints",
+    deps = LIB_DEPS + [
+        ":phone_push_lib",
+        "@crates//:http-body-util",
+    ],
+)
+
+extract_cargo_lints(
+    name = "workspace_lints",
+    manifest = "Cargo.toml",
+    workspace = "//:Cargo.toml",
+)
+
+rustfmt_test(
+    name = "rustfmt",
+    size = "small",
+    targets = [
+        ":phone_push_lib",
+        ":phone-push",
+        ":sender_tests",
+    ],
+)
+
+rust_clippy_test(
+    name = "clippy",
+    size = "small",
+    targets = [
+        ":phone_push_lib",
+        ":phone-push",
+        ":sender_tests",
+    ],
+)

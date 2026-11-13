@@ -197,6 +197,10 @@
    "purpose": "voice tool bearer of the MCP gateway",
    "consumer": "ESO → home-assistant"
   },
+  "k8s/home-assistant/phone-push": {
+   "purpose": "FCM service account (Firebase Cloud Messaging API Admin) for phone-push",
+   "consumer": "ESO → home-assistant"
+  },
   "k8s/home-assistant/scheduler-auth": {
    "purpose": "scheduler API bearer",
    "consumer": "ESO → home-assistant"

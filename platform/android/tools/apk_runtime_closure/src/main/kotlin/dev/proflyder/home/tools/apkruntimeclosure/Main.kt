@@ -70,6 +70,14 @@ private val OPTIONAL_PREFIXES = listOf(
 private val OPTIONAL_CLASSES = setOf(
     "com.google.firebase.components.Component\$ComponentType",
     "com.google.firebase.components.Component\$Instantiation",
+    // firebase-messaging is published R8-minified and these two nested helper
+    // types are absent from classes.jar while MessagingAnalytics and
+    // TopicsSubscriber still name them in their constant pools. Both are class
+    // constants used inside signature/metadata positions, so ART resolves them
+    // lazily; the app never runs the Firelog analytics or topic-subscription
+    // code paths. Documented here instead of loosening the whole check.
+    "com.google.firebase.messaging.Constants\$FirelogAnalytics\$MessagePriority",
+    "com.google.firebase.messaging.TopicOperation\$TopicOperations",
 )
 
 private val DEX_NAME_PATTERN = Regex("^classes\\d*\\.dex$")

@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="push_title">Notifications and find phone</string>
+    <string name="push_intro">Ricardo can send notifications here and ring this phone loudly when asked «where is the phone». The ring ignores silent mode and Do Not Disturb, opens over the lock screen and stops on «Found» or after a minute.</string>
+    <string name="push_notifications_title">Notifications</string>
+    <string name="push_dnd_title">Do Not Disturb access</string>
+    <string name="push_full_screen_title">Full-screen notifications</string>
+    <string name="push_permission_granted">Allowed</string>
+    <string name="push_permission_missing">Not allowed</string>
+    <string name="push_permission_grant">Allow</string>
+    <string name="push_permission_open">Open</string>
+    <string name="push_ring_ready">Find phone works: the ring will be loud even in silent mode and Do Not Disturb.</string>
+    <string name="push_ring_incomplete">Find phone will not ring loudly until every permission above is allowed. The notification about the request still arrives.</string>
+    <string name="push_register_title">This phone on the server</string>
+    <string name="push_not_registered">Not registered yet. Check the connection settings and update.</string>
+    <string name="push_registering">Registering…</string>
+    <string name="push_registered_hint">Registered, token ends with %1$s</string>
+    <string name="push_register">Update registration</string>
+    <string name="push_registered">Registration updated.</string>
+    <string name="push_register_failed">Could not register: check the server address and the access token.</string>
+    <string name="push_settings_missing">This settings page is not available on this device.</string>
+    <string name="push_channel_notifications_name">Home notifications</string>
+    <string name="push_channel_notifications_description">Messages from Ricardo: reminders, status and answers.</string>
+    <string name="push_channel_find_name">Find phone ring</string>
+    <string name="push_channel_find_description">Loud ring that ignores silent mode and Do Not Disturb.</string>
+    <string name="push_find_title">Find phone</string>
+    <string name="push_find_default_reason">Ricardo is looking for this phone</string>
+    <string name="push_find_found">Found</string>
+    <string name="push_find_stop">Stop</string>
+</resources>

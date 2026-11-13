@@ -402,8 +402,19 @@ maven.install(
         "com.google.firebase:firebase-encoders-json:19.0.0",
         "com.google.firebase:firebase-installations:20.0.0",
         "com.google.firebase:firebase-installations-interop:18.0.0",
-        "com.google.firebase:firebase-measurement-connector:18.0.0",
+        "com.google.firebase:firebase-measurement-connector:19.0.0",
         "com.google.firebase:firebase-sessions:4.0.1",
+        # Push (FCM) and its pinned runtime dependencies. Same Firebase BoM
+        # 35.1.0: firebase-messaging needs the higher
+        # firebase-measurement-connector, datatransport, encoders-proto and
+        # iid-interop, plus Play Services base/cloud-messaging (the transport
+        # to Google's push backend).
+        "com.google.firebase:firebase-messaging:26.0.1",
+        "com.google.firebase:firebase-datatransport:21.0.0",
+        "com.google.firebase:firebase-encoders-proto:17.0.0",
+        "com.google.firebase:firebase-iid-interop:17.1.0",
+        "com.google.android.gms:play-services-base:18.9.0",
+        "com.google.android.gms:play-services-cloud-messaging:17.4.0",
         # Guava is only a Robolectric (test) dependency. Without an explicit
         # pin, Maven selects Guava's empty `9999.0-empty-to-avoid-conflict-with-guava`
         # placeholder for androidx.concurrent.futures, leaving ListenableFuture

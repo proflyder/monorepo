@@ -2711,6 +2711,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "phone-push"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "axum",
+ "base64 0.23.1",
+ "home-config",
+ "home-http",
+ "home-runtime",
+ "home-secret",
+ "home-telemetry",
+ "home-tls",
+ "http",
+ "jiff",
+ "reqwest",
+ "ring",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "tokio-util",
+ "tracing",
+]
+
+[[package]]
 name = "pin-project"
 version = "1.1.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"

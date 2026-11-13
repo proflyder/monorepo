@@ -22,6 +22,7 @@ members = [
     "solutions/mcp-gateway/crates/*",
     "solutions/currency-bot/crates/*",
     "solutions/intercom/crates/*",
+    "solutions/phone-push/crates/*",
 ]
 resolver = "3"
 

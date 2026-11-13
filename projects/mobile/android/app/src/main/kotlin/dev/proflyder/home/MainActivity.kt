@@ -1,5 +1,6 @@
 package dev.proflyder.home
 
+import android.content.Intent
 import android.os.Bundle
 import android.view.Menu
 import android.view.View
@@ -26,6 +27,8 @@ import dev.proflyder.home.core.model.PowerState
 import dev.proflyder.home.core.ui.ViewModelFactoryProvider
 import dev.proflyder.home.databinding.ActivityMainBinding
 import dev.proflyder.home.feature.connection.ConnectionDestination
+import dev.proflyder.home.feature.push.PushIntents
+import dev.proflyder.home.feature.push.PushSettingsDestination
 import dev.proflyder.home.feature.control.presentation.ControlUiState
 import dev.proflyder.home.feature.control.presentation.ControlViewModel
 import kotlinx.coroutines.CoroutineScope
@@ -69,6 +72,7 @@ class MainActivity : AppCompatActivity(), NavigatorHost, ViewModelFactoryProvide
         )
         setupBottomNavigation()
         setupToolbar()
+        applyDeepLink(intent)
 
         onBackPressedDispatcher.addCallback(
             this,
@@ -119,6 +123,24 @@ class MainActivity : AppCompatActivity(), NavigatorHost, ViewModelFactoryProvide
         super.onPause()
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        applyDeepLink(intent)
+    }
+
+    /**
+     * A notification tap carries an in-app route (`home://alarms`). Only a
+     * registered feature id is honoured: an unknown or foreign route just opens
+     * the app on the current tab.
+     */
+    private fun applyDeepLink(intent: Intent?) {
+        val route = intent?.getStringExtra(PushIntents.EXTRA_DEEP_LINK)?.trim().orEmpty()
+        if (route.isEmpty()) return
+        intent?.removeExtra(PushIntents.EXTRA_DEEP_LINK)
+        if (features.entry(route) != null) router.selectTab(route)
+    }
+
     override fun onSaveInstanceState(outState: Bundle) {
         router.onHostSaveState(outState)
         super.onSaveInstanceState(outState)
@@ -166,6 +188,11 @@ class MainActivity : AppCompatActivity(), NavigatorHost, ViewModelFactoryProvide
                     // Settings opens as an overlay over the current tab, so Back
                     // returns to that tab instead of leaving the app.
                     router.navigate(ConnectionDestination)
+                    true
+                }
+                R.id.action_push -> {
+                    // Notifications and find-phone permissions; also an overlay.
+                    router.navigate(PushSettingsDestination)
                     true
                 }
                 R.id.action_call -> {

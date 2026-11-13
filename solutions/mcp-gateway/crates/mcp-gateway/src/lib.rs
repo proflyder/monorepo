@@ -29,6 +29,7 @@ pub mod health;
 pub mod kubernetes;
 pub mod mcp;
 pub mod metrics;
+pub mod push;
 pub mod scheduler;
 pub mod server;
 pub mod ssh;

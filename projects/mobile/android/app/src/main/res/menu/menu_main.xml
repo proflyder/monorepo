@@ -6,6 +6,11 @@
         android:showAsAction="ifRoom"
         android:title="@string/app_call" />
     <item
+        android:id="@+id/action_push"
+        android:icon="@drawable/app_ic_notifications"
+        android:showAsAction="ifRoom"
+        android:title="@string/app_push" />
+    <item
         android:id="@+id/action_settings"
         android:icon="@drawable/app_ic_settings"
         android:showAsAction="ifRoom"

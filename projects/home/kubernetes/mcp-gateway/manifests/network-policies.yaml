@@ -90,6 +90,15 @@ spec:
           port: 9093
         - protocol: TCP
           port: 3100
+    # Phone push (:8095) for `phone_find` / `phone_notify`. The service is
+    # ClusterIP only, so this pod-to-pod rule is its whole exposure.
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: phone-push
+      ports:
+        - protocol: TCP
+          port: 8095
     # Durable scheduler Connect JSON (:8098) for the `time` voice tools.
     - to:
         - namespaceSelector:
