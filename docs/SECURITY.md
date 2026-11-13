@@ -138,11 +138,12 @@
 - CI: `jwt` mount `github`, только GitHub OIDC (без статических токенов):
   issuer `https://token.actions.githubusercontent.com`, audience = адрес
   OpenBao, TTL 10/15 мин. Остались роли `deploy-station` (Environment
-  `Station`, политика `ci-station` — только `secret/ci/deploy-station`) и
+  `Station`, политика `ci-station` — только `secret/ci/deploy-station`),
   `android-distribute` (Environment `Android` на PR, политика `ci-android` —
-  только `secret/ci/android-distribute`). Роль `deploy-home`/политика
-  `ci-deploy` удалены: home-сервисы применяет Flux, CI в OpenBao за ними не
-  ходит.
+  только `secret/ci/android-distribute`) и `android-cleanup` (та же политика и
+  Environment, но для ежедневной чистки App Distribution из `develop`). Роль
+  `deploy-home`/политика `ci-deploy` удалены: home-сервисы применяет Flux, CI в
+  OpenBao за ними не ходит.
 - Поды: `kubernetes` auth через TokenReview (`system:auth-delegator` на SA
   `openbao`); политика `k8s-read` — read только `secret/k8s/*`. Роль
   `external-secrets` используется External Secrets Operator (namespace

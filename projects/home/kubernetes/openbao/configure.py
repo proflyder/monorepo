@@ -33,9 +33,17 @@ GITHUB_ANDROID_ENVIRONMENT = "Android"
 # Android App Distribution runs from PR CI, so every subject is the merge ref of
 # a pull request. Only `android-distribute` (ci.yml) reads secrets: it signs the
 # APK built by the secret-free `android-app` check and uploads it to Firebase.
+# The daily `android-cleanup` role reads the same record from `cleanup.yml` on
+# `develop` to delete releases older than a day.
 GITHUB_ANDROID_REF = "refs/pull/*/merge"
 GITHUB_ANDROID_WORKFLOW = ".github/workflows/ci.yml"
 GITHUB_ANDROID_EVENT = "pull_request"
+# The scheduled App Distribution cleanup runs from `develop` (the default
+# branch), never from a PR, so it needs its own role on the same policy: the
+# `android-distribute` role is bound to PR merge refs and cannot assume it.
+GITHUB_ANDROID_CLEANUP_REF = "refs/heads/develop"
+GITHUB_ANDROID_CLEANUP_WORKFLOW = ".github/workflows/cleanup.yml"
+GITHUB_ANDROID_CLEANUP_EVENTS = ["schedule", "workflow_dispatch"]
 
 ADMIN_POLICY = """\
 # Full administration, minus operations that can destroy availability or
@@ -283,7 +291,8 @@ def ensure_github(bao: Bao, audience: str, repository: str,
     # `repository`, `environment`, `ref=refs/pull/*/merge`, `job_workflow_ref`
     # and `event_name=pull_request`. The APK is built without secrets by the
     # reusable `_android.yml`; only `android-distribute` in `ci.yml` signs and
-    # uploads it.
+    # uploads it. The `android-cleanup` role below reads the same record from the
+    # scheduled `cleanup.yml` workflow on `develop`.
     # A fork PR never receives an OIDC token (its run has read-only permissions
     # and no Environment secrets), so only same-repository branches of
     # collaborators can assume the role. The policy still exposes one KV
@@ -310,6 +319,32 @@ def ensure_github(bao: Bao, audience: str, repository: str,
             "clock_skew": 60,
         })
         print(f"role: auth/github/role/{role} (audience %s)" % audience)
+    # The daily `cleanup.yml` job that trims old App Distribution releases runs
+    # from `develop` on a schedule or a manual dispatch, so it cannot use the
+    # PR-bound role above. It reads the same single KV record (`ci-android`) and
+    # is bound to exactly that workflow file on `develop`, the `Android`
+    # Environment and the two non-PR events.
+    bao.expect("POST", "/v1/auth/github/role/android-cleanup", {
+        "role_type": "jwt",
+        "user_claim": "job_workflow_ref",
+        "bound_audiences": [audience],
+        "bound_claims_type": "glob",
+        "bound_claims": {
+            "repository": repository,
+            "environment": GITHUB_ANDROID_ENVIRONMENT,
+            "ref": GITHUB_ANDROID_CLEANUP_REF,
+            "job_workflow_ref": (
+                f"{repository}/{GITHUB_ANDROID_CLEANUP_WORKFLOW}"
+                f"@{GITHUB_ANDROID_CLEANUP_REF}"
+            ),
+            "event_name": GITHUB_ANDROID_CLEANUP_EVENTS,
+        },
+        "token_policies": ["ci-android"],
+        "token_ttl": "10m",
+        "token_max_ttl": "15m",
+        "clock_skew": 60,
+    })
+    print(f"role: auth/github/role/android-cleanup (audience %s)" % audience)
     if not station_repository:
         return
     # The station deploy runs from a tag through a reusable workflow, so it

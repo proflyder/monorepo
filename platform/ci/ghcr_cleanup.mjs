@@ -407,7 +407,8 @@ function isNotFound(error) {
 }
 
 /**
- * Entry point for `actions/github-script` in `.github/workflows/ghcr-cleanup.yml`.
+ * Entry point for `actions/github-script` in the `ghcr` job of
+ * `.github/workflows/cleanup.yml`.
  * `env`: `DRY_RUN` ("true"/"false") and `TOKEN_SOURCE` (informational).
  */
 export async function runGithubScript({ core, github, context, env = process.env }) {
