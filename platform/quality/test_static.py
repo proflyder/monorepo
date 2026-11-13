@@ -121,3 +121,21 @@ class SecretHygieneTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class AndroidManifestPermissionTests(unittest.TestCase):
+    """rules_android drops <uses-permission> from library manifests, so every
+    permission a feature library declares must also be in the app manifest."""
+
+    PATTERN = __import__("re").compile(r'<uses-permission\s+android:name="([^"]+)"')
+
+    def test_library_permissions_are_declared_by_the_app(self) -> None:
+        android = ROOT / "projects/mobile/android"
+        app = android / "app/src/main/AndroidManifest.xml"
+        declared = set(self.PATTERN.findall(app.read_text(encoding="utf-8")))
+        for manifest in sorted(android.glob("**/src/main/AndroidManifest.xml")):
+            if manifest == app:
+                continue
+            for permission in self.PATTERN.findall(manifest.read_text(encoding="utf-8")):
+                with self.subTest(manifest=str(manifest.relative_to(ROOT)), permission=permission):
+                    self.assertIn(permission, declared)
