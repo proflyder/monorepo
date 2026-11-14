@@ -16,6 +16,14 @@ interface Navigator {
     val currentTitleRes: StateFlow<Int>
     val canGoBack: StateFlow<Boolean>
 
+    /**
+     * True while the visible screen is a non-tab overlay (Settings, Connection,
+     * Notifications). Such screens are entered from a tab and keep the tab
+     * selection, but the host shows only Back and the title there: the profile
+     * chip and the toolbar actions belong to the main tabs.
+     */
+    val currentIsOverlay: StateFlow<Boolean>
+
     fun selectTab(featureId: String)
 
     fun navigate(destination: Destination)
@@ -67,6 +75,9 @@ class FragmentRouter(
 
     private val mutableCanGoBack = MutableStateFlow(false)
     override val canGoBack: StateFlow<Boolean> = mutableCanGoBack.asStateFlow()
+
+    private val mutableIsOverlay = MutableStateFlow(false)
+    override val currentIsOverlay: StateFlow<Boolean> = mutableIsOverlay.asStateFlow()
 
     init {
         mutableTitle.value = initialEntry.titleRes(initialEntry.rootDestination)
@@ -204,6 +215,7 @@ class FragmentRouter(
         mutableTab.value = entry.id
         mutableTitle.value = titlesByRoute[routeState.currentRoute()] ?: entry.titleRes(entry.rootDestination)
         mutableCanGoBack.value = routeState.currentStack().size > 1
+        mutableIsOverlay.value = currentRouteOverlay()
     }
 
     /**
@@ -437,6 +449,13 @@ class FragmentRouter(
         mutableTitle.value = titlesByRoute[routeState.currentRoute()]
             ?: entry.titleRes(entry.rootDestination)
         mutableCanGoBack.value = fragmentManager.backStackEntryCount > 0
+        mutableIsOverlay.value = currentRouteOverlay()
+    }
+
+    /** The visible route is an overlay when its owning feature is not a tab. */
+    private fun currentRouteOverlay(): Boolean {
+        val entry = registry.entryForRoute(routeState.currentRoute()) ?: return false
+        return !entry.isTab
     }
 
     private sealed interface Command {

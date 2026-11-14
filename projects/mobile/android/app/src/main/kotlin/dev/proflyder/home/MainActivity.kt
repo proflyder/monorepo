@@ -3,6 +3,7 @@ package dev.proflyder.home
 import android.content.Intent
 import android.os.Bundle
 import android.view.Menu
+import android.view.MenuItem
 import android.view.View
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.viewModels
@@ -37,6 +38,7 @@ class MainActivity : AppCompatActivity(), NavigatorHost, ViewModelFactoryProvide
     internal lateinit var router: FragmentRouter
     private lateinit var binding: ActivityMainBinding
     private lateinit var features: FeatureRegistry
+    internal lateinit var actionsMenu: ToolbarActionsMenu
 
     private val bottomNavigation: BottomNavigationView get() = binding.homeNoticeAnchor
     private val toolbar: MaterialToolbar get() = binding.toolbar
@@ -59,6 +61,7 @@ class MainActivity : AppCompatActivity(), NavigatorHost, ViewModelFactoryProvide
         WindowCompat.setDecorFitsSystemWindows(window, false)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        actionsMenu = ToolbarActionsMenu(this, ::runMenuAction)
         applySystemBarInsets()
 
         // FragmentRouter inspects the actual restored FragmentManager state;
@@ -95,10 +98,17 @@ class MainActivity : AppCompatActivity(), NavigatorHost, ViewModelFactoryProvide
             router.currentTitleRes.collect { binding.toolbarTitle.setText(it) }
         }
         launch {
-            controlViewModel.state.collect { renderProfileChip(it, router.currentTabId.value) }
+            controlViewModel.state.collect {
+                renderProfileChip(it, router.currentTabId.value, router.currentIsOverlay.value)
+            }
         }
         launch {
-            router.currentTabId.collect { renderProfileChip(controlViewModel.state.value, it) }
+            router.currentTabId.collect {
+                renderProfileChip(controlViewModel.state.value, it, router.currentIsOverlay.value)
+            }
+        }
+        launch {
+            router.currentIsOverlay.collect(::renderToolbarMode)
         }
         launch {
             router.canGoBack.collect { canGoBack ->
@@ -110,6 +120,11 @@ class MainActivity : AppCompatActivity(), NavigatorHost, ViewModelFactoryProvide
                 }
             }
         }
+    }
+
+    override fun onDestroy() {
+        if (::actionsMenu.isInitialized) actionsMenu.dismiss()
+        super.onDestroy()
     }
 
     override fun onResume() {
@@ -180,25 +195,43 @@ class MainActivity : AppCompatActivity(), NavigatorHost, ViewModelFactoryProvide
     private fun setupToolbar() {
         toolbar.title = null
         toolbar.inflateMenu(R.menu.menu_main)
-        // Both icons are always visible; their spoken labels come from resources.
-        toolbar.menu.findItem(R.id.action_call)?.contentDescription = getString(R.string.app_call)
-        toolbar.menu.findItem(R.id.action_settings)?.contentDescription = getString(R.string.app_settings)
+        // One actions button; its spoken label comes from resources. The menu
+        // it opens is our own card (ToolbarActionsMenu), not an overflow list.
+        toolbar.menu.findItem(R.id.action_menu)?.contentDescription = getString(R.string.app_actions)
         toolbar.setNavigationOnClickListener { onBackPressedDispatcher.onBackPressed() }
-        toolbar.setOnMenuItemClickListener { item ->
-            when (item.itemId) {
-                R.id.action_settings -> {
-                    // Settings opens as an overlay over the current tab, so Back
-                    // returns to that tab instead of leaving the app.
-                    router.navigate(SettingsDestination)
-                    true
-                }
-                R.id.action_call -> {
-                    (application as HomeApplication).graph.callLauncher.openCallScreen()
-                    true
-                }
-                else -> false
-            }
+        toolbar.setOnMenuItemClickListener(::onToolbarMenuItem)
+    }
+
+    private fun onToolbarMenuItem(item: MenuItem): Boolean = when (item.itemId) {
+        R.id.action_menu -> {
+            showActionsMenu()
+            true
         }
+        else -> false
+    }
+
+    private fun showActionsMenu() {
+        val anchor = toolbar.findViewById<View>(R.id.action_menu) ?: return
+        actionsMenu.toggle(anchor)
+    }
+
+    private fun runMenuAction(actionId: Int) {
+        when (actionId) {
+            R.id.menu_action_call -> (application as HomeApplication).graph.callLauncher.openCallScreen()
+            R.id.menu_action_settings -> router.navigate(SettingsDestination)
+            else -> Unit
+        }
+    }
+
+    /**
+     * Overlays (Settings and the screens it opens) keep only Back and the
+     * title: the profile is switched from the main tabs, and the actions menu
+     * is hidden so the toolbar does not compete with the screen itself.
+     */
+    private fun renderToolbarMode(overlay: Boolean) {
+        toolbar.menu.findItem(R.id.action_menu)?.isVisible = !overlay
+        actionsMenu.dismiss()
+        renderProfileChip(controlViewModel.state.value, router.currentTabId.value, overlay)
     }
 
     /**
@@ -206,10 +239,10 @@ class MainActivity : AppCompatActivity(), NavigatorHost, ViewModelFactoryProvide
      * title shows the current side and toggles it. It exists only on the Home
      * tab and only while the catalog exposes the profile switch.
      */
-    private fun renderProfileChip(state: ControlUiState, tabId: String) {
+    private fun renderProfileChip(state: ControlUiState, tabId: String, overlay: Boolean) {
         val profile = state.entries.firstOrNull { it.isProfile }
         val chip = binding.profileChip
-        chip.visibility = if (tabId == CONTROL_TAB && profile != null) View.VISIBLE else View.GONE
+        chip.visibility = if (tabId == CONTROL_TAB && !overlay && profile != null) View.VISIBLE else View.GONE
         profile ?: return
         val work = profile.power == PowerState.ON
         chip.setText(if (work) R.string.app_profile_work else R.string.app_profile_personal)
