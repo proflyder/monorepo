@@ -300,6 +300,22 @@ class FragmentRouterTest {
     }
 
     @Test
+    fun openRouteHonoursRegisteredFeaturesAndIgnoresUnknownRoutes() {
+        val activity = launch()
+
+        assertTrue(activity.router.openRoute("timers"))
+        assertFragment(activity, "timers/list")
+
+        // A non-tab feature opens as an overlay, like a notification tap does.
+        assertTrue(activity.router.openRoute(" settings "))
+        assertFragment(activity, "settings")
+
+        assertFalse(activity.router.openRoute("ghost"))
+        assertFalse(activity.router.openRoute("  "))
+        assertFragment(activity, "settings")
+    }
+
+    @Test
     fun overlayOpenedFromEditorReturnsToEditor() {
         val activity = launch()
         activity.router.navigate(AlarmEditorDestination("7"))

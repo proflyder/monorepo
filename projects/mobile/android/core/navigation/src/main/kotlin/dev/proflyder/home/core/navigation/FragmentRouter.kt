@@ -20,6 +20,13 @@ interface Navigator {
 
     fun navigate(destination: Destination)
 
+    /**
+     * Opens a deep-link route (`alarms`, `time/timers`, `connection/settings`).
+     * Only a registered feature id or owned route is honoured; unknown or
+     * foreign routes are ignored and return false.
+     */
+    fun openRoute(route: String): Boolean
+
     /** Returns false when the current tab is at its root (Activity should exit). */
     fun back(): Boolean
 }
@@ -116,6 +123,23 @@ class FragmentRouter(
         }
         if (enqueue(Command.Push(destination))) return
         Log.w(TAG, "navigation queue full; dropped new destination")
+    }
+
+    /**
+     * A notification tap and a history row both carry a route string, so this
+     * is the one place that decides what a route means: an exact feature id
+     * selects that tab/overlay, an owned route (`time/timers`) opens its owning
+     * feature, and anything unregistered is ignored.
+     */
+    override fun openRoute(route: String): Boolean {
+        val normalized = route.trim().trim('/')
+        if (normalized.isEmpty()) return false
+        val entry = registry.entry(normalized) ?: registry.entryForRoute(normalized) ?: return false
+        when {
+            entry.isTab -> selectTab(entry.id)
+            else -> navigate(entry.rootDestination)
+        }
+        return true
     }
 
     override fun back(): Boolean {

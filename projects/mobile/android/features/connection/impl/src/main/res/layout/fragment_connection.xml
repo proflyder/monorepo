@@ -43,6 +43,8 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:text="@string/connection_remote_title"
+                        android:drawableStart="@drawable/connection_ic_link"
+                        android:drawablePadding="@dimen/connection_section_icon_gap"
                         android:textAppearance="?attr/textAppearanceTitleLarge" />
 
                     <TextView
@@ -148,6 +150,8 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:text="@string/connection_token_title"
+                        android:drawableStart="@drawable/connection_ic_token"
+                        android:drawablePadding="@dimen/connection_section_icon_gap"
                         android:textAppearance="?attr/textAppearanceTitleLarge" />
 
                     <com.google.android.material.textfield.TextInputLayout
@@ -236,6 +240,8 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:text="@string/connection_status"
+                        android:drawableStart="@drawable/connection_ic_status"
+                        android:drawablePadding="@dimen/connection_section_icon_gap"
                         android:textAppearance="?attr/textAppearanceTitleLarge" />
 
                     <TextView

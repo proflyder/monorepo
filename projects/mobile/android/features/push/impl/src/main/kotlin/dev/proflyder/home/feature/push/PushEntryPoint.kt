@@ -15,6 +15,8 @@ object PushEntryPoint {
         val registrar: FirebasePushRegistrar,
         val notifications: PushNotifier,
         val findPhone: FindPhoneController,
+        /** Records every received message for the history screen. */
+        val history: NotificationHistoryRecorder,
     )
 
     fun install(value: Dependencies) {

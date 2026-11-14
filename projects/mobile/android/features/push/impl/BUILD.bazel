@@ -93,6 +93,40 @@ kt_android_local_test(
     ],
 )
 
+# The local received-message log: order, retention, clear and the message
+# mapping the FCM service writes. The real DataStore file is used.
+kt_android_local_test(
+    name = "history_test",
+    srcs = ["src/test/kotlin/dev/proflyder/home/feature/push/NotificationHistoryStoreTest.kt"],
+    associates = [":impl"],
+    custom_package = "dev.proflyder.home.feature.push.impl",
+    data = [
+        "robolectric-deps.properties",
+        ":robolectric_android_all_sdk35",
+    ],
+    jvm_flags = [
+        "-Drobolectric.offline=true",
+        "--add-opens=java.base/java.lang=ALL-UNNAMED",
+        "--add-opens=java.base/java.io=ALL-UNNAMED",
+        "--add-opens=java.base/java.net=ALL-UNNAMED",
+        "--add-opens=java.base/java.security=ALL-UNNAMED",
+        "--add-opens=java.base/java.text=ALL-UNNAMED",
+        "--add-opens=java.base/java.util=ALL-UNNAMED",
+        "--add-opens=java.base/java.util.concurrent=ALL-UNNAMED",
+        "--add-opens=java.base/jdk.internal.util=ALL-UNNAMED",
+    ],
+    manifest = "src/test/AndroidManifest.xml",
+    robolectric_properties_file = "robolectric-deps.properties",
+    test_class = "dev.proflyder.home.feature.push.NotificationHistoryStoreTest",
+    deps = [
+        "//projects/mobile/android/features/push/api",
+        "@maven//:androidx_datastore_datastore_preferences",
+        "@maven//:junit_junit",
+        "@maven//:org_jetbrains_kotlinx_kotlinx_coroutines_android",
+        "@maven//:org_robolectric_robolectric",
+    ],
+)
+
 # Robolectric resolves SDK 35 to this pinned preinstrumented jar.
 android_all_dir(
     name = "robolectric_android_all_sdk35",

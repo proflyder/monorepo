@@ -55,10 +55,21 @@ class HomeMessagingService : FirebaseMessagingService() {
         )
         PushChannels.ensure(this)
         when (decoded) {
-            is PushMessage.Find -> dependencies.findPhone.start(decoded.reason)
-            is PushMessage.Notify -> dependencies.notifications.notify(decoded)
+            is PushMessage.Find -> {
+                dependencies.findPhone.start(decoded.reason)
+                remember(dependencies, decoded)
+            }
+            is PushMessage.Notify -> {
+                dependencies.notifications.notify(decoded)
+                remember(dependencies, decoded)
+            }
             null -> Unit
         }
+    }
+
+    /** History is written off the main thread; a kept message never blocks the ring. */
+    private fun remember(dependencies: PushEntryPoint.Dependencies, message: PushMessage) {
+        scope.launch { dependencies.history.record(message) }
     }
 
     override fun onDestroy() {

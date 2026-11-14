@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Section cards and rows share the app's spacing rhythm. -->
+    <dimen name="push_card_padding">20dp</dimen>
+    <dimen name="push_row_gap">12dp</dimen>
+    <dimen name="push_row_action_min_height">40dp</dimen>
+    <dimen name="push_section_icon_gap">8dp</dimen>
+    <!-- Status text starts under the section title, past its icon. -->
+    <dimen name="push_section_text_indent">32dp</dimen>
+</resources>

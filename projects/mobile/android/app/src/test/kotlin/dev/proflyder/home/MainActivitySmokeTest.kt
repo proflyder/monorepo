@@ -32,7 +32,7 @@ class MainActivitySmokeTest {
     }
 
     @Test
-    fun bottomBarHasThreeContentTabsAndSettingsLiveInTheToolbar() {
+    fun bottomBarHasThreeContentTabsAndTwoToolbarIcons() {
         val controller = Robolectric.buildActivity(MainActivity::class.java).setup()
         val activity = controller.get()
         shadowOf(activity.mainLooper).idle()
@@ -42,8 +42,33 @@ class MainActivitySmokeTest {
         val titles = (0 until bottom.menu.size()).map { bottom.menu.getItem(it).title.toString() }
         assertEquals(listOf("Home", "Scenarios", "Time"), titles)
 
+        // Two explicit actions, no overflow: the bell and connection screens
+        // moved into Settings, so a three-dot menu must not come back.
         val toolbar = activity.findViewById<MaterialToolbar>(R.id.toolbar)
-        assertNotNull(toolbar.menu.findItem(R.id.action_settings))
+        assertEquals(2, toolbar.menu.size())
+        val call = toolbar.menu.findItem(R.id.action_call)
+        val settings = toolbar.menu.findItem(R.id.action_settings)
+        assertNotNull(call)
+        assertNotNull(settings)
+        assertEquals("Call", call.contentDescription)
+        assertEquals("Settings", settings.contentDescription)
+    }
+
+    @Test
+    fun theSettingsIconOpensTheSettingsList() {
+        val controller = Robolectric.buildActivity(MainActivity::class.java).setup()
+        val activity = controller.get()
+        shadowOf(activity.mainLooper).idle()
+
+        val toolbar = activity.findViewById<MaterialToolbar>(R.id.toolbar)
+        toolbar.menu.performIdentifierAction(R.id.action_settings, 0)
+        shadowOf(activity.mainLooper).idle()
+        activity.supportFragmentManager.executePendingTransactions()
+
+        assertNotNull(
+            "the gear must open the settings list",
+            activity.supportFragmentManager.findFragmentByTag("settings/hub"),
+        )
     }
 
     @Test

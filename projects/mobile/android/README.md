@@ -22,9 +22,17 @@ Current device acceptance and remaining work are tracked in
   container with a segmented **Alarms** / **Timers** / **Reminders** switch;
   a horizontal swipe and the pills drive the same page, the existing feature
   screens are reused unchanged, and deep links such as `selectTab("alarms")`
-  open the Time tab on the matching section. **Connection**
-  is not a tab; the settings icon (⚙) in the top app bar opens it as an overlay
-  over the current tab, and Back returns to that tab.
+  open the Time tab on the matching section.
+- Top app bar: exactly two actions, no overflow menu — **Call** (phone icon) and
+  **Settings** (gear), both always visible with content descriptions from
+  resources. **Settings** is not a tab: it opens as an overlay over the current
+  tab and Back returns there. It is one list of navigation rows (icon, title,
+  subtitle, chevron) over the app's tonal cards:
+  - **Connection** → the server/token screen ([Connection](#connection));
+  - **Phone notifications and find** → the push permission and registration
+    screen ([Push and find phone](#push-and-find-phone));
+  - **Notification history** → the local log of received messages
+    ([Notification history](#notification-history)).
 - Call: the phone icon in the top app bar and the pinned **Call the station**
   tile in Home's Quick actions place a real audio call to the station through the
   intercom signaling service and Android Telecom. See
@@ -208,8 +216,9 @@ placed by tests or CI.
 
 
 
-The Connection screen is reached from the settings icon (⚙) in the top app bar.
-It opens as an overlay on the current bottom tab; Back returns to that tab.
+The Connection screen is reached from **Settings → Connection** (top app bar ⚙).
+Both open as overlays on the current bottom tab; Back returns to the settings
+list and then to that tab.
 
 - Three base URLs, no paths, supplied by Remote Config:
   - **Server address** (scheduler): LAN `http://<node>:30098` or the home
@@ -524,9 +533,9 @@ FCM rejected. Without `google-services.json` (Firebase uninitialized) or
 without a configured server, registration is skipped and the app starts
 normally.
 
-**Permissions screen.** «Уведомления и поиск телефона» (top app bar → bell)
-shows the real state of the three permissions the loud path needs and opens
-the matching system page for each:
+**Permissions screen.** «Уведомления и поиск телефона» (top app bar ⚙ →
+Settings) shows the real state of the three permissions the loud path needs and
+opens the matching system page for each:
 
 | Permission | Why | Where it is granted |
 | --- | --- | --- |
@@ -548,6 +557,43 @@ Russian cases and diminutives, when several phones are registered.
 screenshot of the screen in the dark theme is written to the
 `settings_screenshot_test` test outputs (`push-settings-dark.png`); the
 device-identity and name-persistence contract runs in `identity_test`.
+
+## Notification history
+
+Every FCM message the phone receives is also written to a local log, so the
+owner can see what Ricardo sent or asked even after the tray notification is
+gone. Both shapes are recorded: `phone_notify` (server title, body and validated
+`home://` deep link) and `phone_find` (the localized find-phone title and the
+reason the ringing screen shows; no deep link). Nothing is fetched from the
+server: the history is what reached this phone, and it works offline.
+
+- **Storage** — `NotificationHistoryStore` (`features/push/api`, pure rules) is
+  backed by the app's single DataStore file
+  (`DataStoreNotificationHistoryStore`, key `push_notification_history`,
+  JSON). Writes read, prepend and trim inside one `edit` transaction, so the FCM
+  service cannot overwrite entries recorded before any screen loaded the log.
+  Retention is the newest **200** messages; a repeated id replaces its copy.
+- **Writing** — `HomeMessagingService` records off the main thread through
+  `NotificationHistoryRecorder` after handing the message to the ring or the
+  notification; a storage failure never blocks the ring.
+- **Screen** — **Settings → Notification history**: newest first, an icon per
+  type (`NOTIFY` bell, `FIND` phone), title, up to two body lines, a relative
+  time from `DateUtils` in the device locale, and a chevron only when the row has
+  a deep link. A tap follows the message route through `Navigator.openRoute`
+  (the same path a notification tap uses); an unregistered route is ignored.
+  «Очистить» asks for confirmation, then removes the whole log. The empty state
+  explains what will appear.
+- **No secrets** — the log holds decoded message text only: no FCM token, no
+  server address. `allowBackup` is off, so it stays on the device.
+
+Tests: `//projects/mobile/android/features/push/api:api_test`
+(`NotificationHistoryRules`) and
+`//projects/mobile/android/features/push/impl:history_test` (real DataStore:
+order, restart, unloaded writer, 200-entry bound, clear, message mapping). The
+settings list, the history list and its empty state are rendered in the dark
+theme by `//projects/mobile/android/features/settings/impl:screens_screenshot_test`
+(`settings-hub-dark.png`, `notification-history-dark.png`,
+`notification-history-empty-dark.png`).
 
 ## Firebase (Crashlytics and Remote Config)
 

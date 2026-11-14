@@ -36,6 +36,7 @@ class HomeApplication : Application() {
                 registrar = graph.pushRegistrar,
                 notifications = graph.pushNotifier,
                 findPhone = graph.findPhoneController,
+                history = graph.pushHistory,
             ),
         )
         // Registers the FCM token (again) on every start and creates channels.

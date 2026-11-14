@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:ignore="DuplicateStrings">
+    <string name="settings_title">Settings</string>
+    <string name="settings_intro">The server connection, phone notifications and what this phone has received.</string>
+    <string name="settings_connection_title">Connection</string>
+    <string name="settings_connection_subtitle">Home server address and access token</string>
+    <string name="settings_notifications_title">Phone notifications and find</string>
+    <string name="settings_notifications_subtitle">Permissions for notifications and the loud ring</string>
+    <string name="settings_history_title">Notification history</string>
+    <string name="settings_history_subtitle">The last messages this phone received</string>
+    <string name="history_count">Saved: %1$d</string>
+    <string name="history_clear">Clear</string>
+    <string name="history_clear_message">Every saved notification will be removed from this phone. The notifications already shown in the status bar are not affected.</string>
+    <string name="history_cleared">History cleared.</string>
+    <string name="history_empty">Nothing here yet</string>
+    <string name="history_empty_hint">Notifications from Ricardo and find-phone requests this phone receives will appear here.</string>
+    <string name="history_type_notify">Notification</string>
+    <string name="history_type_find">Find phone request</string>
+</resources>
