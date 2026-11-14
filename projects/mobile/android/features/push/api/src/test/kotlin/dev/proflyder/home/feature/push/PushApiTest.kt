@@ -10,7 +10,10 @@ import org.junit.runners.Suite
 
 /** All push API tests, run as one Bazel target. */
 @RunWith(Suite::class)
-@Suite.SuiteClasses(PushApiTest::class)
+@Suite.SuiteClasses(
+    PushApiTest::class,
+    NotificationHistoryRulesTest::class,
+)
 class AllPushApiTests
 
 class PushApiTest {

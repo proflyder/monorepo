@@ -26,11 +26,10 @@ import dev.proflyder.home.core.navigation.NavigatorHost
 import dev.proflyder.home.core.model.PowerState
 import dev.proflyder.home.core.ui.ViewModelFactoryProvider
 import dev.proflyder.home.databinding.ActivityMainBinding
-import dev.proflyder.home.feature.connection.ConnectionDestination
-import dev.proflyder.home.feature.push.PushIntents
-import dev.proflyder.home.feature.push.PushSettingsDestination
 import dev.proflyder.home.feature.control.presentation.ControlUiState
 import dev.proflyder.home.feature.control.presentation.ControlViewModel
+import dev.proflyder.home.feature.push.PushIntents
+import dev.proflyder.home.feature.settings.SettingsDestination
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
@@ -130,15 +129,15 @@ class MainActivity : AppCompatActivity(), NavigatorHost, ViewModelFactoryProvide
     }
 
     /**
-     * A notification tap carries an in-app route (`home://alarms`). Only a
-     * registered feature id is honoured: an unknown or foreign route just opens
-     * the app on the current tab.
+     * A notification tap carries an in-app route (`home://alarms`). The router
+     * accepts only registered features and owned routes; an unknown or foreign
+     * route just opens the app on the current tab.
      */
     private fun applyDeepLink(intent: Intent?) {
         val route = intent?.getStringExtra(PushIntents.EXTRA_DEEP_LINK)?.trim().orEmpty()
         if (route.isEmpty()) return
         intent?.removeExtra(PushIntents.EXTRA_DEEP_LINK)
-        if (features.entry(route) != null) router.selectTab(route)
+        router.openRoute(route)
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -181,18 +180,16 @@ class MainActivity : AppCompatActivity(), NavigatorHost, ViewModelFactoryProvide
     private fun setupToolbar() {
         toolbar.title = null
         toolbar.inflateMenu(R.menu.menu_main)
+        // Both icons are always visible; their spoken labels come from resources.
+        toolbar.menu.findItem(R.id.action_call)?.contentDescription = getString(R.string.app_call)
+        toolbar.menu.findItem(R.id.action_settings)?.contentDescription = getString(R.string.app_settings)
         toolbar.setNavigationOnClickListener { onBackPressedDispatcher.onBackPressed() }
         toolbar.setOnMenuItemClickListener { item ->
             when (item.itemId) {
                 R.id.action_settings -> {
                     // Settings opens as an overlay over the current tab, so Back
                     // returns to that tab instead of leaving the app.
-                    router.navigate(ConnectionDestination)
-                    true
-                }
-                R.id.action_push -> {
-                    // Notifications and find-phone permissions; also an overlay.
-                    router.navigate(PushSettingsDestination)
+                    router.navigate(SettingsDestination)
                     true
                 }
                 R.id.action_call -> {

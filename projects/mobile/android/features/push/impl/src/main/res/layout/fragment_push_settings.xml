@@ -1,8 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Settings screen: three permission rows, a ring summary and the device
-     registration. Every visible string comes from resources. -->
+     registration, each section a tonal card with its own icon. Every visible
+     string comes from resources. -->
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:fillViewport="true">
@@ -11,8 +13,10 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:paddingHorizontal="16dp"
-        android:paddingVertical="16dp">
+        android:paddingStart="@dimen/ui_screen_padding"
+        android:paddingTop="@dimen/ui_screen_padding"
+        android:paddingEnd="@dimen/ui_screen_padding"
+        android:paddingBottom="@dimen/ui_section_gap">
 
         <TextView
             android:id="@+id/push_intro"
@@ -20,175 +24,255 @@
             android:layout_height="wrap_content"
             android:text="@string/push_intro"
             android:textIsSelectable="true"
-            android:textAppearance="?attr/textAppearanceBodyMedium" />
+            android:textAppearance="?attr/textAppearanceBodyMedium"
+            android:textColor="?attr/colorOnSurfaceVariant" />
 
-        <TextView
+        <com.google.android.material.card.MaterialCardView
+            style="@style/Widget.Home.Card"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="24dp"
-            android:text="@string/push_notifications_title"
-            android:textAppearance="?attr/textAppearanceTitleSmall"
-            android:id="@+id/push_notifications_title" />
+            android:layout_marginTop="@dimen/ui_screen_padding">
 
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:gravity="center_vertical"
-            android:orientation="horizontal">
-
-            <TextView
-                android:id="@+id/push_notifications_status"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:textIsSelectable="true"
-                android:textAppearance="?attr/textAppearanceBodyMedium" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/push_notifications_action"
-                style="@style/Widget.Material3.Button.TextButton"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content" />
-        </LinearLayout>
-
-        <TextView
-            android:id="@+id/push_dnd_title"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:text="@string/push_dnd_title"
-            android:textAppearance="?attr/textAppearanceTitleSmall" />
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:gravity="center_vertical"
-            android:orientation="horizontal">
-
-            <TextView
-                android:id="@+id/push_dnd_status"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:textIsSelectable="true"
-                android:textAppearance="?attr/textAppearanceBodyMedium" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/push_dnd_action"
-                style="@style/Widget.Material3.Button.TextButton"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content" />
-        </LinearLayout>
-
-        <TextView
-            android:id="@+id/push_full_screen_title"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:text="@string/push_full_screen_title"
-            android:textAppearance="?attr/textAppearanceTitleSmall" />
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:gravity="center_vertical"
-            android:orientation="horizontal">
-
-            <TextView
-                android:id="@+id/push_full_screen_status"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:textIsSelectable="true"
-                android:textAppearance="?attr/textAppearanceBodyMedium" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/push_full_screen_action"
-                style="@style/Widget.Material3.Button.TextButton"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content" />
-        </LinearLayout>
-
-        <TextView
-            android:id="@+id/push_ring_summary"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="20dp"
-            android:textIsSelectable="true"
-            android:textAppearance="?attr/textAppearanceBodyMedium" />
-
-        <TextView
-            android:id="@+id/push_device_name_title"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="24dp"
-            android:text="@string/push_device_name_title"
-            android:textAppearance="?attr/textAppearanceTitleSmall" />
-
-        <com.google.android.material.textfield.TextInputLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:hint="@string/push_device_name_hint"
-            app:hintEnabled="false"
-            style="@style/Widget.Material3.TextInputLayout.OutlinedBox">
-
-            <com.google.android.material.textfield.TextInputEditText
-                android:id="@+id/push_device_name"
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:imeOptions="actionDone"
-                android:inputType="textPersonName"
-                android:maxLength="64"
-                android:maxLines="1" />
-        </com.google.android.material.textfield.TextInputLayout>
+                android:orientation="vertical"
+                android:padding="@dimen/push_card_padding">
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/push_device_name_save"
-            style="@style/Widget.Material3.Button.TonalButton"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="@string/push_device_name_save" />
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
 
-        <TextView
-            android:id="@+id/push_device_name_help"
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:id="@+id/push_notifications_title"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:drawableStart="@drawable/push_ic_section_notifications"
+                            android:drawablePadding="@dimen/push_section_icon_gap"
+                            android:text="@string/push_notifications_title"
+                            android:textAppearance="?attr/textAppearanceTitleSmall" />
+
+                        <TextView
+                            android:id="@+id/push_notifications_status"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:paddingStart="@dimen/push_section_text_indent"
+                            android:textIsSelectable="true"
+                            android:textAppearance="?attr/textAppearanceBodyMedium"
+                            android:textColor="?attr/colorOnSurfaceVariant" />
+                    </LinearLayout>
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/push_notifications_action"
+                        style="@style/Widget.Material3.Button.TextButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:minHeight="@dimen/push_row_action_min_height" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/push_row_gap"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:id="@+id/push_dnd_title"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:drawableStart="@drawable/push_ic_dnd"
+                            android:drawablePadding="@dimen/push_section_icon_gap"
+                            android:text="@string/push_dnd_title"
+                            android:textAppearance="?attr/textAppearanceTitleSmall" />
+
+                        <TextView
+                            android:id="@+id/push_dnd_status"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:paddingStart="@dimen/push_section_text_indent"
+                            android:textIsSelectable="true"
+                            android:textAppearance="?attr/textAppearanceBodyMedium"
+                            android:textColor="?attr/colorOnSurfaceVariant" />
+                    </LinearLayout>
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/push_dnd_action"
+                        style="@style/Widget.Material3.Button.TextButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:minHeight="@dimen/push_row_action_min_height" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/push_row_gap"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:id="@+id/push_full_screen_title"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:drawableStart="@drawable/push_ic_fullscreen"
+                            android:drawablePadding="@dimen/push_section_icon_gap"
+                            android:text="@string/push_full_screen_title"
+                            android:textAppearance="?attr/textAppearanceTitleSmall" />
+
+                        <TextView
+                            android:id="@+id/push_full_screen_status"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:paddingStart="@dimen/push_section_text_indent"
+                            android:textIsSelectable="true"
+                            android:textAppearance="?attr/textAppearanceBodyMedium"
+                            android:textColor="?attr/colorOnSurfaceVariant" />
+                    </LinearLayout>
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/push_full_screen_action"
+                        style="@style/Widget.Material3.Button.TextButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:minHeight="@dimen/push_row_action_min_height" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/push_ring_summary"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/push_row_gap"
+                    android:textIsSelectable="true"
+                    android:textAppearance="?attr/textAppearanceBodySmall"
+                    android:textColor="?attr/colorOnSurfaceVariant" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <com.google.android.material.card.MaterialCardView
+            style="@style/Widget.Home.Card"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="@string/push_device_name_help"
-            android:textIsSelectable="true"
-            android:textAppearance="?attr/textAppearanceBodySmall" />
+            android:layout_marginTop="@dimen/ui_tile_gap">
 
-        <TextView
-            android:id="@+id/push_register_title"
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="@dimen/push_card_padding">
+
+                <TextView
+                    android:id="@+id/push_device_name_title"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:drawableStart="@drawable/push_ic_device"
+                    android:drawablePadding="@dimen/push_section_icon_gap"
+                    android:text="@string/push_device_name_title"
+                    android:textAppearance="?attr/textAppearanceTitleSmall" />
+
+                <com.google.android.material.textfield.TextInputLayout
+                    style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/ui_tile_gap"
+                    android:hint="@string/push_device_name_hint"
+                    app:hintEnabled="false">
+
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/push_device_name"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:imeOptions="actionDone"
+                        android:inputType="textPersonName"
+                        android:maxLength="64"
+                        android:maxLines="1" />
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/push_device_name_save"
+                    style="@style/Widget.Material3.Button.TonalButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/ui_tile_gap"
+                    android:text="@string/push_device_name_save" />
+
+                <TextView
+                    android:id="@+id/push_device_name_help"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/ui_tile_gap"
+                    android:text="@string/push_device_name_help"
+                    android:textIsSelectable="true"
+                    android:textAppearance="?attr/textAppearanceBodySmall"
+                    android:textColor="?attr/colorOnSurfaceVariant" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <com.google.android.material.card.MaterialCardView
+            style="@style/Widget.Home.Card"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="24dp"
-            android:text="@string/push_register_title"
-            android:textAppearance="?attr/textAppearanceTitleSmall" />
+            android:layout_marginTop="@dimen/ui_tile_gap">
 
-        <TextView
-            android:id="@+id/push_registration"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:textIsSelectable="true"
-            android:textAppearance="?attr/textAppearanceBodyMedium" />
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="@dimen/push_card_padding">
 
-        <com.google.android.material.progressindicator.LinearProgressIndicator
-            android:id="@+id/push_progress"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:indeterminate="true"
-            android:visibility="gone" />
+                <TextView
+                    android:id="@+id/push_register_title"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:drawableStart="@drawable/push_ic_device_register"
+                    android:drawablePadding="@dimen/push_section_icon_gap"
+                    android:text="@string/push_register_title"
+                    android:textAppearance="?attr/textAppearanceTitleSmall" />
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/push_register"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="@string/push_register"
-            app:icon="@drawable/push_ic_notification" />
+                <TextView
+                    android:id="@+id/push_registration"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/ui_tile_gap"
+                    android:textIsSelectable="true"
+                    android:textAppearance="?attr/textAppearanceBodyMedium" />
+
+                <com.google.android.material.progressindicator.LinearProgressIndicator
+                    android:id="@+id/push_progress"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/ui_tile_gap"
+                    android:indeterminate="true"
+                    android:visibility="gone" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/push_register"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/ui_tile_gap"
+                    android:text="@string/push_register"
+                    app:icon="@drawable/push_ic_notification" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
     </LinearLayout>
 </ScrollView>

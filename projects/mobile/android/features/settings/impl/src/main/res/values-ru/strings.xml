@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:ignore="DuplicateStrings">
+    <string name="settings_title">Настройки</string>
+    <string name="settings_intro">Подключение к серверу, уведомления телефона и то, что этот телефон получил.</string>
+    <string name="settings_connection_title">Соединение</string>
+    <string name="settings_connection_subtitle">Адрес домашнего сервера и токен доступа</string>
+    <string name="settings_notifications_title">Уведомления телефона и поиск</string>
+    <string name="settings_notifications_subtitle">Разрешения для уведомлений и громкого звонка</string>
+    <string name="settings_history_title">История уведомлений</string>
+    <string name="settings_history_subtitle">Последние сообщения, полученные этим телефоном</string>
+    <string name="history_count">Сохранено: %1$d</string>
+    <string name="history_clear">Очистить</string>
+    <string name="history_clear_message">Все сохранённые уведомления будут удалены с этого телефона. Уведомления, уже показанные в шторке, останутся.</string>
+    <string name="history_cleared">История очищена.</string>
+    <string name="history_empty">Здесь пока пусто</string>
+    <string name="history_empty_hint">Здесь появятся уведомления от Рикардо и запросы «где телефон», которые получит этот телефон.</string>
+    <string name="history_type_notify">Уведомление</string>
+    <string name="history_type_find">Запрос поиска телефона</string>
+</resources>

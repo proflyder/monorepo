@@ -25,11 +25,13 @@ DETEKT_TEST_TARGETS = [
     "//projects/mobile/android/features/control/impl:speak_use_case_test",
     "//projects/mobile/android/features/push/api:api_test",
     "//projects/mobile/android/features/push/impl:channels_test",
+    "//projects/mobile/android/features/push/impl:history_test",
     "//projects/mobile/android/features/push/impl:impl_test",
     "//projects/mobile/android/features/push/impl:settings_screenshot_test",
     "//projects/mobile/android/features/reminders/api:api_test",
     "//projects/mobile/android/features/scenarios/api:api_test",
     "//projects/mobile/android/features/scenarios/impl:scenario_use_cases_test",
+    "//projects/mobile/android/features/settings/impl:screens_screenshot_test",
 ]
 
 # Convenience entry points for the Android client.
@@ -88,11 +90,13 @@ test_suite(
         "//projects/mobile/android/features/control/impl:speak_use_case_test",
         "//projects/mobile/android/features/push/api:api_test",
         "//projects/mobile/android/features/push/impl:channels_test",
+        "//projects/mobile/android/features/push/impl:history_test",
         "//projects/mobile/android/features/push/impl:impl_test",
         "//projects/mobile/android/features/push/impl:settings_screenshot_test",
         "//projects/mobile/android/features/reminders/api:api_test",
         "//projects/mobile/android/features/scenarios/api:api_test",
         "//projects/mobile/android/features/scenarios/impl:scenario_use_cases_test",
+        "//projects/mobile/android/features/settings/impl:screens_screenshot_test",
         "//projects/mobile/android/app:main_activity_smoke_test",
         "//projects/mobile/android/core/navigation:navigation_test",
         # Bazel build tools live under platform/android and are routed to the

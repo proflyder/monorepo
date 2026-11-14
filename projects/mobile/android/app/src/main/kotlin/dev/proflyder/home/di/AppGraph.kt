@@ -29,6 +29,7 @@ import dev.proflyder.home.feature.call.CallNotificationController
 import dev.proflyder.home.feature.call.telecom.CallTelecomBridge
 import dev.proflyder.home.feature.push.FindPhoneController
 import dev.proflyder.home.feature.push.FirebasePushRegistrar
+import dev.proflyder.home.feature.push.NotificationHistoryRecorder
 import dev.proflyder.home.feature.push.PushNotifier
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.BindingContainer
@@ -68,6 +69,9 @@ interface AppGraph {
     val pushRegistrar: FirebasePushRegistrar
     val pushNotifier: PushNotifier
     val findPhoneController: FindPhoneController
+
+    /** Local log of received messages, written by the FCM service. */
+    val pushHistory: NotificationHistoryRecorder
 
     @DependencyGraph.Factory
     fun interface Factory {

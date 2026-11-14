@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Settings rows share the app's tonal card rhythm. -->
+    <dimen name="settings_row_min_height">72dp</dimen>
+    <dimen name="settings_row_padding">20dp</dimen>
+    <dimen name="settings_row_padding_vertical">16dp</dimen>
+    <dimen name="settings_row_padding_chevron">16dp</dimen>
+    <dimen name="settings_row_icon">24dp</dimen>
+    <dimen name="settings_row_icon_gap">16dp</dimen>
+    <dimen name="settings_row_chevron">20dp</dimen>
+    <dimen name="settings_empty_padding">32dp</dimen>
+    <dimen name="settings_empty_icon">48dp</dimen>
+</resources>

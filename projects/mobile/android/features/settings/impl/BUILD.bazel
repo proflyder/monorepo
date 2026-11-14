@@ -1,0 +1,72 @@
+load("@rules_kotlin//kotlin:android.bzl", "kt_android_local_test")
+load("//platform/android:defs.bzl", "metro_android_library")
+load(":robolectric_android_all.bzl", "android_all_dir")
+
+package(default_visibility = ["//visibility:public"])
+
+metro_android_library(
+    name = "impl",
+    srcs = glob(["src/main/kotlin/**/*.kt"]),
+    custom_package = "dev.proflyder.home.feature.settings.impl",
+    manifest = "src/main/AndroidManifest.xml",
+    resource_files = glob(["src/main/res/**"]),
+    view_binding = True,
+    deps = [
+        "//packages/kotlin/core",
+        "//projects/mobile/android/core/navigation",
+        "//projects/mobile/android/core/ui",
+        "//projects/mobile/android/features/push/api",
+        "@maven//:androidx_appcompat_appcompat",
+        "@maven//:androidx_core_core_ktx",
+        "@maven//:androidx_fragment_fragment_ktx",
+        "@maven//:androidx_lifecycle_lifecycle_runtime_ktx",
+        "@maven//:androidx_lifecycle_lifecycle_viewmodel_ktx",
+        "@maven//:androidx_recyclerview_recyclerview",
+        "@maven//:com_google_android_material_material",
+        "@maven//:dev_zacsweers_metro_runtime_jvm",
+        "@maven//:org_jetbrains_kotlinx_kotlinx_coroutines_android",
+    ],
+)
+
+# Robolectric resolves SDK 35 to this pinned preinstrumented jar.
+android_all_dir(
+    name = "robolectric_android_all_sdk35",
+    jar = "@maven//:org_robolectric_android_all_instrumented",
+    jar_name = "android-all-instrumented-15-robolectric-13954326-i7.jar",
+)
+
+# Both settings screens in the dark theme. The rendered PNGs are review
+# evidence for the settings hub (icons, subtitles) and the history list
+# (type icon, relative time, deep-link marker) plus its empty state.
+kt_android_local_test(
+    name = "screens_screenshot_test",
+    srcs = ["src/test/kotlin/dev/proflyder/home/feature/settings/presentation/SettingsScreensScreenshotTest.kt"],
+    associates = [":impl"],
+    custom_package = "dev.proflyder.home.feature.settings.impl",
+    data = [
+        "robolectric-deps.properties",
+        ":robolectric_android_all_sdk35",
+    ],
+    jvm_flags = [
+        "-Drobolectric.offline=true",
+        "--add-opens=java.base/java.lang=ALL-UNNAMED",
+        "--add-opens=java.base/java.io=ALL-UNNAMED",
+        "--add-opens=java.base/java.net=ALL-UNNAMED",
+        "--add-opens=java.base/java.security=ALL-UNNAMED",
+        "--add-opens=java.base/java.text=ALL-UNNAMED",
+        "--add-opens=java.base/java.util=ALL-UNNAMED",
+        "--add-opens=java.base/java.util.concurrent=ALL-UNNAMED",
+        "--add-opens=java.base/jdk.internal.util=ALL-UNNAMED",
+    ],
+    manifest = "src/test/AndroidManifest.xml",
+    robolectric_properties_file = "robolectric-deps.properties",
+    test_class = "dev.proflyder.home.feature.settings.presentation.SettingsScreensScreenshotTest",
+    deps = [
+        "//projects/mobile/android/features/push/api",
+        "@maven//:androidx_appcompat_appcompat",
+        "@maven//:androidx_recyclerview_recyclerview",
+        "@maven//:com_google_android_material_material",
+        "@maven//:junit_junit",
+        "@maven//:org_robolectric_robolectric",
+    ],
+)
