@@ -505,14 +505,24 @@ service, triggered by the `phone_find` / `phone_notify` MCP tools):
   tab, anything else just opens the current tab. Every label and button is a
   string resource; the server only supplies the text.
 
-**Token registration.** The app registers its FCM token with the home server
-on the scheduler base URL and bearer it already uses
-(`POST /v1/push/devices`, and `/v1/push/devices/remove` on rotation), so no
-fourth endpoint and no second credential exist. Registration runs at start and
-again on every token change (`onRegistered`/`onNewToken`); a failure is only
-shown on the settings screen and retried on the next start. Without
-`google-services.json` (Firebase uninitialized) or without a configured
-server, registration is skipped and the app starts normally.
+**Device identity and registration.** The server keys a phone by the app's
+stable `deviceId`, not by the FCM token, because Google rotates tokens while
+the phone stays the same. The identity is a SHA-256 digest of the app-scoped
+`Settings.Secure.ANDROID_ID` (salted with the app package); the raw platform id
+never leaves the phone. It survives FCM token rotation and app reinstall
+without a factory reset. If a device reports no `ANDROID_ID`, the app generates
+a random UUID once and persists it in DataStore. A factory reset produces a new
+identity, which is correct: the old installation is gone.
+
+The app registers on the scheduler base URL and bearer it already uses
+(`POST /v1/push/devices`), so no fourth endpoint and no second credential
+exist. A new token updates the row of the same `deviceId`; the scheduler keeps
+one token per device. Registration runs at start and again on every token
+change (`onRegistered`/`onNewToken`); a failure is only shown on the settings
+screen and retried on the next start. `/v1/push/devices/remove` forgets a token
+FCM rejected. Without `google-services.json` (Firebase uninitialized) or
+without a configured server, registration is skipped and the app starts
+normally.
 
 **Permissions screen.** «Уведомления и поиск телефона» (top app bar → bell)
 shows the real state of the three permissions the loud path needs and opens
@@ -525,12 +535,19 @@ the matching system page for each:
 | full-screen intent (14+) | the ringing screen opens over the lock screen | `ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT` |
 
 The screen also shows whether this phone is registered on the server (only the
-last six characters of the token are displayed) and offers «Обновить
-регистрацию». `USE_FULL_SCREEN_INTENT`, `ACCESS_NOTIFICATION_POLICY`,
-`VIBRATE` and `FOREGROUND_SERVICE_MEDIA_PLAYBACK` are declared by the push
-module's manifest; `POST_NOTIFICATIONS` and `MODIFY_AUDIO_SETTINGS` by the app.
-A Robolectric screenshot of the screen in the dark theme is written to the
-`settings_screenshot_test` test outputs (`push-settings-dark.png`).
+last six characters of the token are displayed), offers «Обновить
+регистрацию», and has a **phone name** field. The name defaults to the phone
+model; the owner can set a family name such as «Стас». Saving the name calls
+`POST /v1/push/devices/rename`, so the server updates the existing row without
+re-registering the token, and the name is persisted in DataStore. Ricardo's
+`phone_find` / `phone_notify` / `phone_list` tools match that name, including
+Russian cases and diminutives, when several phones are registered.
+`USE_FULL_SCREEN_INTENT`, `ACCESS_NOTIFICATION_POLICY`, `VIBRATE` and
+`FOREGROUND_SERVICE_MEDIA_PLAYBACK` are declared by the push module's manifest;
+`POST_NOTIFICATIONS` and `MODIFY_AUDIO_SETTINGS` by the app. A Robolectric
+screenshot of the screen in the dark theme is written to the
+`settings_screenshot_test` test outputs (`push-settings-dark.png`); the
+device-identity and name-persistence contract runs in `identity_test`.
 
 ## Firebase (Crashlytics and Remote Config)
 

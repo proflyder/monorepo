@@ -53,6 +53,46 @@ kt_android_local_test(
     ],
 )
 
+# The device identity is what keeps one server row across FCM token
+# rotations; the publisher test pins that contract, and the store test pins the
+# persisted owner-visible name.
+kt_android_local_test(
+    name = "identity_test",
+    srcs = [
+        "src/test/kotlin/dev/proflyder/home/feature/push/AllPushIdentityTests.kt",
+        "src/test/kotlin/dev/proflyder/home/feature/push/PushDeviceIdentityTest.kt",
+    ],
+    associates = [":impl"],
+    custom_package = "dev.proflyder.home.feature.push.impl",
+    data = [
+        "robolectric-deps.properties",
+        ":robolectric_android_all_sdk35",
+    ],
+    jvm_flags = [
+        "-Drobolectric.offline=true",
+        "--add-opens=java.base/java.lang=ALL-UNNAMED",
+        "--add-opens=java.base/java.io=ALL-UNNAMED",
+        "--add-opens=java.base/java.net=ALL-UNNAMED",
+        "--add-opens=java.base/java.security=ALL-UNNAMED",
+        "--add-opens=java.base/java.text=ALL-UNNAMED",
+        "--add-opens=java.base/java.util=ALL-UNNAMED",
+        "--add-opens=java.base/java.util.concurrent=ALL-UNNAMED",
+        "--add-opens=java.base/jdk.internal.util=ALL-UNNAMED",
+    ],
+    manifest = "src/test/AndroidManifest.xml",
+    robolectric_properties_file = "robolectric-deps.properties",
+    test_class = "dev.proflyder.home.feature.push.AllPushIdentityTests",
+    deps = [
+        "//projects/mobile/android/core/model",
+        "//projects/mobile/android/core/network",
+        "//projects/mobile/android/features/push/api",
+        "@maven//:androidx_datastore_datastore_preferences",
+        "@maven//:junit_junit",
+        "@maven//:org_jetbrains_kotlinx_kotlinx_coroutines_android",
+        "@maven//:org_robolectric_robolectric",
+    ],
+)
+
 # Robolectric resolves SDK 35 to this pinned preinstrumented jar.
 android_all_dir(
     name = "robolectric_android_all_sdk35",

@@ -15,12 +15,14 @@ import dev.zacsweers.metro.Inject
 /** One-shot confirmations the screen shows and then forgets. */
 enum class PushNotice {
     REGISTERED,
+    NAME_SAVED,
     FAILED,
 }
 
 data class PushSettingsUiState(
     val permissions: PushPermissionStatus = PushPermissionStatus(),
     val registration: PushRegistration = PushRegistration(),
+    val deviceName: String = "",
     val notice: PushNotice? = null,
 ) {
     /** The loud path is only honest when every permission is granted. */
@@ -38,12 +40,15 @@ class PushSettingsViewModel(
     PushSettingsUiState(
         permissions = registrar.permissions(),
         registration = store.registration.value,
+        deviceName = store.registration.value.deviceName,
     ),
 ) {
     init {
         launch {
             store.registration.collect { registration ->
-                updateState { copy(registration = registration) }
+                updateState {
+                    copy(registration = registration, deviceName = registration.deviceName)
+                }
             }
         }
     }
@@ -59,6 +64,15 @@ class PushSettingsViewModel(
             registrar.registerNow()
             val failed = store.registration.value.failed
             updateState { copy(notice = if (failed) PushNotice.FAILED else PushNotice.REGISTERED) }
+        }
+    }
+
+    /** Stores the name locally and syncs it to the server without a token re-registration. */
+    fun saveDeviceName(name: String) {
+        launch {
+            val saved = registrar.saveDeviceName(name)
+            val notice = if (saved) PushNotice.NAME_SAVED else PushNotice.FAILED
+            updateState { copy(notice = notice) }
         }
     }
 

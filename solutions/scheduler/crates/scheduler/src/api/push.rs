@@ -32,6 +32,9 @@ pub struct PushState {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RegisterBody {
+    /// Stable device identity chosen by the app (never the FCM token).
+    #[serde(default)]
+    pub device_id: String,
     /// FCM registration token.
     #[serde(default)]
     pub token: String,
@@ -55,10 +58,23 @@ pub struct RemoveBody {
     pub token: String,
 }
 
+/// Rename body: the name is server-side metadata, no token re-registration.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RenameBody {
+    /// Stable device identity.
+    #[serde(default)]
+    pub device_id: String,
+    /// New owner-visible name.
+    #[serde(default)]
+    pub device_name: String,
+}
+
 /// One device as the wire contract exposes it.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DeviceView {
+    pub device_id: String,
     pub token: String,
     pub platform: String,
     pub app_version: String,
@@ -72,6 +88,7 @@ pub struct DeviceView {
 impl From<&PushDevice> for DeviceView {
     fn from(device: &PushDevice) -> Self {
         Self {
+            device_id: device.device_id.clone(),
             token: device.token.clone(),
             platform: device.platform.clone(),
             app_version: device.app_version.clone(),
@@ -112,6 +129,7 @@ pub async fn register(
         return error(StatusCode::UNAUTHORIZED, "unauthenticated");
     }
     let input = PushDeviceInput {
+        device_id: body.device_id,
         token: body.token,
         platform: body.platform,
         app_version: body.app_version,
@@ -120,6 +138,29 @@ pub async fn register(
     let now = now_unix();
     let result = blocking(Arc::clone(&state.store), move |store| {
         store.register_push_device(&input, now)
+    })
+    .await;
+    match result {
+        Ok(device) => Json(DeviceResponse {
+            device: DeviceView::from(&device),
+        })
+        .into_response(),
+        Err(response) => *response,
+    }
+}
+
+/// `POST /v1/push/devices/rename` — changes the owner-visible name only.
+pub async fn rename(
+    State(state): State<PushState>,
+    headers: HeaderMap,
+    Json(body): Json<RenameBody>,
+) -> Response {
+    if !state.auth.authorized(headers.get(header::AUTHORIZATION)) {
+        return error(StatusCode::UNAUTHORIZED, "unauthenticated");
+    }
+    let now = now_unix();
+    let result = blocking(Arc::clone(&state.store), move |store| {
+        store.rename_push_device(&body.device_id, &body.device_name, now)
     })
     .await;
     match result {
@@ -198,6 +239,7 @@ fn store_error(failure: &StoreError) -> Response {
         Some(crate::domain::ErrorKind::LimitExceeded) => {
             error(StatusCode::TOO_MANY_REQUESTS, "limit exceeded")
         }
+        Some(crate::domain::ErrorKind::NotFound) => error(StatusCode::NOT_FOUND, "not found"),
         _ => error(StatusCode::INTERNAL_SERVER_ERROR, "internal error"),
     }
 }
@@ -230,6 +272,7 @@ mod tests {
         let router = Router::new()
             .route("/v1/push/devices", get(list).post(register))
             .route("/v1/push/devices/remove", post(remove))
+            .route("/v1/push/devices/rename", post(rename))
             .with_state(state);
         (router, store)
     }
@@ -291,6 +334,76 @@ mod tests {
         let (router, _store) = app();
         let (status, _) = call(router, register_request(r#"{"token":"short"}"#)).await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn a_rotated_token_updates_the_same_device() {
+        let (router, store) = app();
+        let first = r#"{"deviceId":"device-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "token":"token-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "platform":"android","deviceName":"Pixel"}"#;
+        let (status, _) = call(router.clone(), register_request(first)).await;
+        assert_eq!(status, StatusCode::OK);
+        let rotated = r#"{"deviceId":"device-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "token":"token-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "platform":"android","deviceName":""}"#;
+        let (status, response) = call(router, register_request(rotated)).await;
+        assert_eq!(status, StatusCode::OK, "{response}");
+        assert!(
+            response.contains("token-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"),
+            "{response}"
+        );
+        let devices = store.list_push_devices().expect("list");
+        assert_eq!(devices.len(), 1);
+        assert_eq!(
+            devices[0].device_id,
+            "device-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        );
+        assert_eq!(devices[0].device_name, "Pixel");
+    }
+
+    #[tokio::test]
+    async fn renaming_a_device_keeps_its_token() {
+        let (router, store) = app();
+        let body = r#"{"deviceId":"device-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "token":"token-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "platform":"android","deviceName":"Pixel"}"#;
+        let (status, _) = call(router.clone(), register_request(body)).await;
+        assert_eq!(status, StatusCode::OK);
+        let request = Request::builder()
+            .method("POST")
+            .uri("/v1/push/devices/rename")
+            .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(
+                r#"{"deviceId":"device-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","deviceName":"Стас"}"#,
+            ))
+            .expect("request");
+        let (status, response) = call(router, request).await;
+        assert_eq!(status, StatusCode::OK, "{response}");
+        assert!(response.contains("\"deviceName\":\"Стас\""), "{response}");
+        let devices = store.list_push_devices().expect("list");
+        assert_eq!(devices[0].device_name, "Стас");
+        assert_eq!(
+            devices[0].token,
+            "token-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        );
+    }
+
+    #[tokio::test]
+    async fn renaming_an_unknown_device_is_not_found() {
+        let (router, _store) = app();
+        let request = Request::builder()
+            .method("POST")
+            .uri("/v1/push/devices/rename")
+            .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(
+                r#"{"deviceId":"device-missing","deviceName":"Стас"}"#,
+            ))
+            .expect("request");
+        let (status, _) = call(router, request).await;
+        assert_eq!(status, StatusCode::NOT_FOUND);
     }
 
     #[tokio::test]

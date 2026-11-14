@@ -13,12 +13,18 @@ use serde::Deserialize;
 /// One registered phone.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct Device {
-    /// FCM registration token. Never logged.
+    /// Stable device identity chosen by the app.
+    #[serde(default, rename = "deviceId")]
+    pub device_id: String,
+    /// FCM registration token. Never logged or exposed outside this process.
     #[serde(default)]
     pub token: String,
     /// `android` today.
     #[serde(default)]
     pub platform: String,
+    /// Owner-visible name set in the app.
+    #[serde(default, rename = "deviceName")]
+    pub device_name: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -138,8 +144,9 @@ mod tests {
         let _ = fake;
         Json(serde_json::json!({
             "devices": [
-                {"token": "token-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "platform": "android"},
-                {"token": "", "platform": "android"}
+                {"deviceId": "device-a", "token": "token-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                 "platform": "android", "deviceName": "Стас"},
+                {"deviceId": "device-b", "token": "", "platform": "android", "deviceName": ""}
             ]
         }))
         .into_response()
@@ -179,6 +186,8 @@ mod tests {
         let devices = registry.list().await.expect("list");
         assert_eq!(devices.len(), 1);
         assert_eq!(devices[0].platform, "android");
+        assert_eq!(devices[0].device_id, "device-a");
+        assert_eq!(devices[0].device_name, "Стас");
         registry.forget("token-a").await.expect("forget");
         assert_eq!(fake.removed.lock().expect("lock").as_slice(), ["token-a"]);
     }

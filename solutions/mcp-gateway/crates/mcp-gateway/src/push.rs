@@ -26,6 +26,27 @@ pub struct Delivery {
     pub devices: usize,
 }
 
+/// One phone as the push service describes it: no token, only identity and
+/// owner-visible name.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Device {
+    /// Stable device identity chosen by the app.
+    #[serde(default)]
+    pub id: String,
+    /// Owner-visible name set in the app.
+    #[serde(default)]
+    pub name: String,
+    /// `android` today.
+    #[serde(default)]
+    pub platform: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct DevicesResponse {
+    #[serde(default)]
+    devices: Vec<Device>,
+}
+
 /// The push endpoints the tools need.
 pub trait PushApi: Send + Sync {
     /// Whether the backend is configured.
@@ -33,8 +54,15 @@ pub trait PushApi: Send + Sync {
         true
     }
 
+    /// Every registered phone (identity and name; never a token).
+    fn devices<'a>(&'a self) -> BoxFuture<'a, Result<Vec<Device>, String>>;
+
     /// Data-only high-priority find-phone message.
-    fn find<'a>(&'a self, reason: &'a str) -> BoxFuture<'a, Result<Delivery, String>>;
+    fn find<'a>(
+        &'a self,
+        reason: &'a str,
+        device_id: Option<&'a str>,
+    ) -> BoxFuture<'a, Result<Delivery, String>>;
 
     /// Normal notification with a title, a body and an optional deep link.
     fn notify<'a>(
@@ -42,6 +70,7 @@ pub trait PushApi: Send + Sync {
         title: &'a str,
         body: &'a str,
         deep_link: Option<&'a str>,
+        device_id: Option<&'a str>,
     ) -> BoxFuture<'a, Result<Delivery, String>>;
 }
 
@@ -77,6 +106,31 @@ impl Client {
         })
     }
 
+    /// Lists registered phones. Called before a send so the tool can match the
+    /// owner's spoken name deterministically and report which phone rang.
+    pub async fn list_devices(&self) -> Result<Vec<Device>, String> {
+        let response = self
+            .http
+            .get(format!("{}/v1/push/devices", self.base_url))
+            .bearer_auth(self.token.as_str())
+            .send()
+            .await
+            .map_err(|_| "push request failed".to_owned())?;
+        if !response.status().is_success() {
+            return Err(format!(
+                "push service returned HTTP {}",
+                response.status().as_u16()
+            ));
+        }
+        let text = response
+            .text()
+            .await
+            .map_err(|_| "push response".to_owned())?;
+        let parsed: DevicesResponse = serde_json::from_str(&text)
+            .map_err(|_| "push service returned invalid JSON".to_owned())?;
+        Ok(parsed.devices)
+    }
+
     async fn post(&self, path: &str, body: serde_json::Value) -> Result<Delivery, String> {
         let payload = serde_json::to_vec(&body).map_err(|_| "push request body".to_owned())?;
         let response = self
@@ -101,8 +155,22 @@ impl Client {
 }
 
 impl PushApi for Client {
-    fn find<'a>(&'a self, reason: &'a str) -> BoxFuture<'a, Result<Delivery, String>> {
-        Box::pin(async move { self.post("/v1/push/find", json!({"reason": reason})).await })
+    fn devices<'a>(&'a self) -> BoxFuture<'a, Result<Vec<Device>, String>> {
+        Box::pin(async move { self.list_devices().await })
+    }
+
+    fn find<'a>(
+        &'a self,
+        reason: &'a str,
+        device_id: Option<&'a str>,
+    ) -> BoxFuture<'a, Result<Delivery, String>> {
+        Box::pin(async move {
+            self.post(
+                "/v1/push/find",
+                json!({"reason": reason, "deviceId": device_id.unwrap_or_default()}),
+            )
+            .await
+        })
     }
 
     fn notify<'a>(
@@ -110,11 +178,17 @@ impl PushApi for Client {
         title: &'a str,
         body: &'a str,
         deep_link: Option<&'a str>,
+        device_id: Option<&'a str>,
     ) -> BoxFuture<'a, Result<Delivery, String>> {
         Box::pin(async move {
             self.post(
                 "/v1/push/notify",
-                json!({"title": title, "body": body, "deepLink": deep_link.unwrap_or_default()}),
+                json!({
+                    "title": title,
+                    "body": body,
+                    "deepLink": deep_link.unwrap_or_default(),
+                    "deviceId": device_id.unwrap_or_default()
+                }),
             )
             .await
         })
@@ -168,12 +242,25 @@ mod tests {
         (StatusCode::OK, r#"{"sent":1,"failed":1,"devices":2}"#).into_response()
     }
 
+    async fn devices(State(fake): State<Fake>) -> impl IntoResponse {
+        fake.bodies
+            .lock()
+            .expect("lock")
+            .push(("devices".to_owned(), serde_json::json!({})));
+        (
+            StatusCode::OK,
+            r#"{"devices":[{"id":"device-a","name":"Стас","platform":"android"}]}"#,
+        )
+            .into_response()
+    }
+
     #[tokio::test]
     async fn find_and_notify_reach_the_expected_paths() {
         let fake = Fake::default();
         let app = Router::new()
             .route("/v1/push/find", post(find))
             .route("/v1/push/notify", post(notify))
+            .route("/v1/push/devices", axum::routing::get(devices))
             .with_state(fake.clone());
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
             .await
@@ -189,19 +276,32 @@ mod tests {
         )
         .expect("client");
 
-        let delivery = client.find("где телефон").await.expect("find");
+        let devices = client.devices().await.expect("devices");
+        assert_eq!(devices.len(), 1);
+        assert_eq!(devices[0].name, "Стас");
+        let delivery = client
+            .find("где телефон", Some("device-a"))
+            .await
+            .expect("find");
         assert_eq!(delivery.sent, 1);
         let delivery = client
-            .notify("Дом", "Дверь открыта", Some("home://alarms"))
+            .notify(
+                "Дом",
+                "Дверь открыта",
+                Some("home://alarms"),
+                Some("device-a"),
+            )
             .await
             .expect("notify");
         assert_eq!(delivery.failed, 1);
         assert_eq!(delivery.devices, 2);
 
         let bodies = fake.bodies.lock().expect("lock").clone();
-        assert_eq!(bodies[0].0, "find");
-        assert_eq!(bodies[0].1["reason"], "где телефон");
-        assert_eq!(bodies[1].1["deepLink"], "home://alarms");
+        assert_eq!(bodies[0].0, "devices");
+        assert_eq!(bodies[1].0, "find");
+        assert_eq!(bodies[1].1["reason"], "где телефон");
+        assert_eq!(bodies[1].1["deviceId"], "device-a");
+        assert_eq!(bodies[2].1["deepLink"], "home://alarms");
     }
 
     #[tokio::test]
@@ -222,6 +322,6 @@ mod tests {
             Duration::from_secs(5),
         )
         .expect("client");
-        assert!(client.find("").await.is_err());
+        assert!(client.find("", None).await.is_err());
     }
 }

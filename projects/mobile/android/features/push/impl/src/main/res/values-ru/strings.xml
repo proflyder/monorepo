@@ -27,4 +27,11 @@
     <string name="push_find_default_reason">Рикардо ищет этот телефон</string>
     <string name="push_find_found">Нашёл</string>
     <string name="push_find_stop">Остановить</string>
+    <string name="push_device_name_title">Имя телефона</string>
+    <string name="push_device_name_hint">Например, Стас</string>
+    <string name="push_device_name_save">Сохранить имя</string>
+    <string name="push_device_name_help">Рикардо использует это имя, чтобы найти телефон или отправить уведомление, когда телефонов в семье несколько. Смена имени не требует повторной регистрации телефона.</string>
+    <string name="push_device_name_saved">Имя телефона сохранено.</string>
+    <string name="push_default_device_name">Мой телефон</string>
+    <string name="push_device_name_sample">Стас</string>
 </resources>

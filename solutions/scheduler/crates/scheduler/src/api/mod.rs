@@ -101,6 +101,7 @@ pub fn router(service: Service, alarms: AlarmFacade, token: &str) -> axum::Route
             axum::routing::get(push::list).post(push::register),
         )
         .route("/v1/push/devices/remove", axum::routing::post(push::remove))
+        .route("/v1/push/devices/rename", axum::routing::post(push::rename))
         .with_state(push)
         .fallback_service(ConnectFallback { methods, service })
 }

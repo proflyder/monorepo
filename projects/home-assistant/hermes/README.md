@@ -203,14 +203,25 @@ manual render in «Emergency manual render» is only the fallback.
 
 ## Phone tools (mcp-gateway `phone`)
 
-The same `infra` MCP server carries the `phone` group: `phone_find(reason?)`
-and `phone_notify(title, body, deep_link?)`. «Где телефон», «найди телефон»,
-«позвони на телефон» → `phone_find`: the phone rings like an alarm through
-`USAGE_ALARM`, ignores silent mode and Do Not Disturb, opens over the lock
-screen and stops on «Нашёл» or after 60 seconds. The message is data-only and
-high-priority, so it also works with the screen off and the app killed.
-Ordinary messages («напомни на телефон») → `phone_notify`; the app renders the
-title and body, and every button/channel label comes from its own resources.
+The same `infra` MCP server carries the `phone` group:
+`phone_find(reason?, name?)`, `phone_notify(title, body, deep_link?, name?)`
+and `phone_list()`. «Где телефон», «найди телефон», «позвони на телефон» →
+`phone_find`: the phone rings like an alarm through `USAGE_ALARM`, ignores
+silent mode and Do Not Disturb, opens over the lock screen and stops on
+«Нашёл» or after 60 seconds. The message is data-only and high-priority, so it
+also works with the screen off and the app killed. Ordinary messages
+(«напомни на телефон») → `phone_notify`; the app renders the title and body,
+and every button/channel label comes from its own resources.
+
+A family can register several phones, each with a name set in the app
+(«Стас»). Hermes forwards the spoken name verbatim in `name`; the gateway
+matches Russian cases and diminutives («Стаса», «телефон Стаса», «Стасику»)
+and sends `deviceId`. With one phone it never asks; with several and no
+unambiguous match it returns the list of names so Hermes asks exactly one
+short question. The reply names the phone that rang. The voice prompt,
+`telegram_prompt.txt` and `SOUL.md` all route these commands, and
+`test_hermes_config.py` pins that both the voice and Telegram channels keep
+the phone group.
 
 `MCP_GROUPS` must include `phone`; the gateway needs `MCP_PUSH_URL` and
 `MCP_PUSH_TOKEN_FILE` (the shared app bearer, `scheduler-auth`). The FCM

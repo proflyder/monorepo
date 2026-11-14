@@ -36,10 +36,10 @@ pub use tick::TickStats;
 
 use crate::domain::ScheduleKind as DomainScheduleKind;
 
-/// Schema version written to `schema_meta`. v2 adds the scenario table and v3
-/// the push device registry; an older database migrates in place, and an older
-/// binary rejects a newer one.
-pub const SCHEMA_VERSION: i64 = 3;
+/// Schema version written to `schema_meta`. v2 adds the scenario table, v3 the
+/// push device registry and v4 re-keys it by stable `device_id`; an older
+/// database migrates in place, and an older binary rejects a newer one.
+pub const SCHEMA_VERSION: i64 = 4;
 
 /// Queue names used by the built-in domains.
 pub const QUEUE_HOME: &str = "home";
@@ -154,6 +154,31 @@ const V3: &[&str] = &[
     "CREATE INDEX IF NOT EXISTS push_devices_updated ON push_devices(updated_unix)",
 ];
 
+/// v4 re-keys the registry by the phone's own stable identity: an FCM token
+/// rotates, a device does not. Existing v3 rows are kept with the token as a
+/// provisional `device_id`; the first registration from an upgraded app sends
+/// the real identity and collapses that row (same token, new key) instead of
+/// leaving a duplicate. A token is unique, so a token moved between device
+/// identities cannot fan out to two rows.
+const V4: &[&str] = &[
+    "ALTER TABLE push_devices RENAME TO push_devices_v3",
+    "CREATE TABLE IF NOT EXISTS push_devices (
+			device_id TEXT PRIMARY KEY,
+			token TEXT NOT NULL,
+			platform TEXT NOT NULL,
+			app_version TEXT NOT NULL,
+			device_name TEXT NOT NULL,
+			created_unix INTEGER NOT NULL,
+			updated_unix INTEGER NOT NULL
+		)",
+    "INSERT INTO push_devices (device_id, token, platform, app_version, device_name, created_unix, updated_unix)
+		SELECT token, token, platform, app_version, device_name, created_unix, updated_unix
+		FROM push_devices_v3",
+    "DROP TABLE push_devices_v3",
+    "CREATE UNIQUE INDEX IF NOT EXISTS push_devices_token ON push_devices(token)",
+    "CREATE INDEX IF NOT EXISTS push_devices_updated ON push_devices(updated_unix)",
+];
+
 /// One ordered schema step.
 pub const MIGRATIONS: &[Migration] = &[
     Migration {
@@ -167,9 +192,14 @@ pub const MIGRATIONS: &[Migration] = &[
         statements: V2,
     },
     Migration {
-        version: SCHEMA_VERSION,
+        version: 3,
         description: "scheduler v3 push devices",
         statements: V3,
+    },
+    Migration {
+        version: SCHEMA_VERSION,
+        description: "scheduler v4 push device identity",
+        statements: V4,
     },
 ];
 
