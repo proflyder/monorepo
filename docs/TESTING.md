@@ -399,7 +399,9 @@ matrix секретов не читает.
 `android-distribute` (Environment `Android`, роль OpenBao `android-distribute`)
 скачивает artifact, подписывает его `platform/android/sign-release.sh`,
 обновляет `release-info.json` (`release_info.py resign`) и вызывает
-`distribute.sh --upload-only`.
+`distribute.sh --upload-only`. Удаление старых сборок — отдельная ежедневная
+джоба `fad` workflow `.github/workflows/cleanup.yml` (24-часовое окно, роль
+OpenBao `android-cleanup`); она не входит в PR-проверки.
 
 
 Android-платформа состоит из трёх юнитов с одними и теми же `paths` и
@@ -661,6 +663,10 @@ node --test platform/ci/promote.test.mjs
 node --test platform/ci/ghcr_cleanup.test.mjs
 node platform/ci/ghcr_cleanup.mjs --fixture platform/ci/testdata/ghcr-versions.json \
   --now 2026-11-04T00:00:00Z
+# окно хранения App Distribution (24 ч, новейший релиз, пагинация, batchDelete)
+node --test platform/ci/fad_cleanup.test.mjs
+node platform/ci/fad_cleanup.mjs --fixture platform/ci/testdata/fad-releases.json \
+  --now 2026-11-04T12:00:00Z
 mise run test                                   # герметичный gate (включает CI-тесты)
 mise run test:deploy-control                    # регрессия deploy control
 

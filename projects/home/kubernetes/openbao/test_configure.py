@@ -142,15 +142,63 @@ class AndroidRole(unittest.TestCase):
                     "example/home/.github/workflows/_android.yml@refs/pull/42/merge",
                     workflow))
 
+    def test_android_cleanup_role_payload(self):
+        """The scheduled cleanup assumes its own develop-bound role."""
+        bao = Recorder()
+        with redirect_stdout(StringIO()):
+            configure.ensure_github(bao, AUDIENCE, HOME_REPOSITORY)
+        self.assertEqual(bao.payload("/v1/auth/github/role/android-cleanup"), {
+            "role_type": "jwt",
+            "user_claim": "job_workflow_ref",
+            "bound_audiences": [AUDIENCE],
+            "bound_claims_type": "glob",
+            "bound_claims": {
+                "repository": HOME_REPOSITORY,
+                "environment": "Android",
+                "ref": "refs/heads/develop",
+                "job_workflow_ref":
+                    "example/home/.github/workflows/cleanup.yml@refs/heads/develop",
+                "event_name": ["schedule", "workflow_dispatch"],
+            },
+            "token_policies": ["ci-android"],
+            "token_ttl": "10m",
+            "token_max_ttl": "15m",
+            "clock_skew": 60,
+        })
+
+    def test_android_cleanup_globs_only_match_the_scheduled_workflow(self):
+        """The cleanup role accepts only cleanup.yml on develop."""
+        import fnmatch
+
+        bao = Recorder()
+        with redirect_stdout(StringIO()):
+            configure.ensure_github(bao, AUDIENCE, HOME_REPOSITORY)
+        bound = bao.payload("/v1/auth/github/role/android-cleanup")["bound_claims"]
+        self.assertEqual(bound["ref"], "refs/heads/develop")
+        self.assertEqual(bound["event_name"], ["schedule", "workflow_dispatch"])
+        workflow = bound["job_workflow_ref"]
+        self.assertTrue(fnmatch.fnmatch(
+            "example/home/.github/workflows/cleanup.yml@refs/heads/develop",
+            workflow))
+        for other in (
+            "example/home/.github/workflows/ci.yml@refs/heads/develop",
+            "example/home/.github/workflows/cleanup.yml@refs/pull/42/merge",
+            "example/other/.github/workflows/cleanup.yml@refs/heads/develop",
+        ):
+            self.assertFalse(fnmatch.fnmatch(other, workflow), other)
+
     def test_no_home_deploy_role_is_created(self):
         bao = Recorder()
         with redirect_stdout(StringIO()):
             configure.ensure_github(bao, AUDIENCE, HOME_REPOSITORY)
         self.assertNotIn("/v1/auth/github/role/deploy-home", bao.paths())
-        # Only the Android PR role exists without a station repository.
+        # Only the Android roles exist without a station repository.
         self.assertEqual(
             [path for path in bao.paths() if path.startswith("/v1/auth/github/role/")],
-            ["/v1/auth/github/role/android-distribute"],
+            [
+                "/v1/auth/github/role/android-distribute",
+                "/v1/auth/github/role/android-cleanup",
+            ],
         )
 
     def test_android_policy_is_scoped_to_its_entry(self):

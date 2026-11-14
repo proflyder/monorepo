@@ -175,6 +175,7 @@ recovery keys → `operator generate-root` → `admin-destroy` + `admin-generate
 |---|---|---|---|
 | `userpass` | человек | имя из `secrets/openbao/username` | `admin` |
 | `github` (`jwt`) | GitHub Actions, Android APK sign + App Distribution | `android-distribute` | `ci-android` |
+| `github` (`jwt`) | GitHub Actions, nightly App Distribution cleanup | `android-cleanup` | `ci-android` |
 | `github` (`jwt`) | GitHub Actions, station deploy | `deploy-station` | `ci-station` |
 | `kubernetes` | External Secrets Operator | `external-secrets` | `k8s-read` |
 | `kubernetes` | smoke-под | `k8s-smoke` | `k8s-read` |
@@ -202,7 +203,7 @@ delete, `sys/*`, `auth/*` запрещены. `secret/infra/*` — секрет�
 `ci-android`: read ровно `secret/data/ci/android-distribute` и
 `secret/metadata/ci/android-distribute`; `secret/ci/test`,
 `secret/ci/deploy-station`, `secret/k8s/*` и запись запрещены. Политика
-создаётся всегда вместе с ролью `android-distribute`.
+создаётся всегда вместе с ролями `android-distribute` и `android-cleanup`.
 
 `backup`: только `read sys/storage/raft/snapshot`.
 
@@ -241,6 +242,15 @@ matrix-запись `android / android-app` (`_android.yml`), а подписы�
 - токен может выпустить только этот job на merge-ref конкретного PR;
 - `user_claim=job_workflow_ref`, `token_policies=["ci-android"]`, TTL 10 мин,
   max 15 мин, `clock_skew=60`.
+
+Роль `android-cleanup` читает ту же запись для ежедневной чистки App
+Distribution (`fad` в `.github/workflows/cleanup.yml`): расписание и ручной
+запуск идут из `develop`, а не из PR, поэтому роль `android-distribute` для них
+не подходит. Привязка: `repository`, `environment=Android`,
+`ref=refs/heads/develop`, `event_name` ∈ {`schedule`, `workflow_dispatch`} и
+`job_workflow_ref=<owner>/<repo>/.github/workflows/cleanup.yml@refs/heads/develop`;
+политика та же `ci-android`. Роль создаётся вместе с `android-distribute` при
+повторном запуске `configure.py`.
 
 Модель доверия: OIDC получают только PR из веток этого же репозитория — у PR
 из форка прогон read-only, без Environment-секретов и без права на роль, поэтому
@@ -314,11 +324,11 @@ values Hermes — в `secret/k8s/flux-system/runtime-values` (поле `values`)
 их читает ESO через Kubernetes auth, не GitHub OIDC.
 
 Environment `Android` (matrix-запись `android-app` в
-`.github/workflows/_android.yml` и job `android-distribute` в `ci.yml`) хранит
-те же четыре значения доступа: `VPN_SERVER`, `VPN_CERT_P12_B64`,
-`VPN_CERT_PASSWORD`, `OPENBAO_ADDR`; роль выбирается в workflow
-(`android-distribute`), отдельного `OPENBAO_ROLE` нет. Environment объявляет
-только job `android-distribute` в `ci.yml`.
+`.github/workflows/_android.yml`, job `android-distribute` в `ci.yml` и джоба
+`fad` в `.github/workflows/cleanup.yml`) хранит те же четыре значения доступа:
+`VPN_SERVER`, `VPN_CERT_P12_B64`, `VPN_CERT_PASSWORD`, `OPENBAO_ADDR`; роль
+выбирается в workflow (`android-distribute` для PR, `android-cleanup` для
+чистки), отдельного `OPENBAO_ROLE` нет.
 
 Deployment branch policy этого Environment **должна разрешать PR-head-ветки**:
 правила вида `*` и `*/*` (protected branches и теги — как удобно). Ограничение
@@ -326,12 +336,15 @@ ref'а делает роль OpenBao (`refs/pull/*/merge` + `job_workflow_ref`),
 Environment: если оставить политику только на `develop`, job упадёт ещё до
 получения OIDC-токена. Секреты и роль доступны и PR-прогонам, но только из
 этого репозитория: форки не получают ни секретов Environment, ни OIDC-токена
-(сборка и тесты у них идут без подписи, с явным notice).
+(сборка и тесты у них идут без подписи, с явным notice). Та же политика должна
+разрешать `develop` — с неё запускается ежедневная чистка (правило `*` это уже
+покрывает).
 
 ### Android-секреты (App Distribution)
 
-`secret/ci/android-distribute` читает роль `android-distribute` (ключ подписи и
-Firebase service account) с политикой `ci-android`; `google-services.json` CI
+`secret/ci/android-distribute` читают роли `android-distribute` (ключ подписи и
+Firebase service account) и `android-cleanup` (только service account) с
+политикой `ci-android`; `google-services.json` CI
 берёт из переменной репозитория `GOOGLE_SERVICES_JSON_B64`. Подпись APK делает
 `platform/android/sign-release.sh`
 поверх собранного Bazel APK; ключ и пароли в CI не попадают в Bazel и в env
