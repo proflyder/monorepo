@@ -1,5 +1,8 @@
 package dev.proflyder.home
 
+import android.view.View
+import android.widget.ImageView
+import android.widget.TextView
 import androidx.viewpager2.widget.ViewPager2
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.bottomnavigation.BottomNavigationView
@@ -32,7 +35,7 @@ class MainActivitySmokeTest {
     }
 
     @Test
-    fun bottomBarHasThreeContentTabsAndTwoToolbarIcons() {
+    fun bottomBarHasThreeContentTabsAndOneToolbarAction() {
         val controller = Robolectric.buildActivity(MainActivity::class.java).setup()
         val activity = controller.get()
         shadowOf(activity.mainLooper).idle()
@@ -42,32 +45,81 @@ class MainActivitySmokeTest {
         val titles = (0 until bottom.menu.size()).map { bottom.menu.getItem(it).title.toString() }
         assertEquals(listOf("Home", "Scenarios", "Time"), titles)
 
-        // Two explicit actions, no overflow: the bell and connection screens
-        // moved into Settings, so a three-dot menu must not come back.
+        // A single actions button: the framework overflow list must never exist.
         val toolbar = activity.findViewById<MaterialToolbar>(R.id.toolbar)
-        assertEquals(2, toolbar.menu.size())
-        val call = toolbar.menu.findItem(R.id.action_call)
-        val settings = toolbar.menu.findItem(R.id.action_settings)
-        assertNotNull(call)
-        assertNotNull(settings)
-        assertEquals("Call", call.contentDescription)
-        assertEquals("Settings", settings.contentDescription)
+        assertEquals(1, toolbar.menu.size())
+        val actions = toolbar.menu.getItem(0)
+        assertEquals(R.id.action_menu, actions.itemId)
+        assertEquals("Actions", actions.contentDescription)
+        val actionView = toolbar.findViewById<View>(R.id.action_menu)
+        assertNotNull("the actions button must have a visible view", actionView)
+        assertEquals(View.VISIBLE, actionView.visibility)
     }
 
     @Test
-    fun theSettingsIconOpensTheSettingsList() {
+    fun theActionsButtonOpensTheCustomMenuWithIconRows() {
         val controller = Robolectric.buildActivity(MainActivity::class.java).setup()
         val activity = controller.get()
         shadowOf(activity.mainLooper).idle()
 
         val toolbar = activity.findViewById<MaterialToolbar>(R.id.toolbar)
-        toolbar.menu.performIdentifierAction(R.id.action_settings, 0)
+        toolbar.menu.performIdentifierAction(R.id.action_menu, 0)
+        shadowOf(activity.mainLooper).idle()
+
+        val opened = activity.actionsMenu.contentView
+        assertNotNull("the actions button must open the custom menu", opened)
+        val content = requireNotNull(opened)
+        val call = content.findViewById<View>(R.id.menu_action_call)
+        val settings = content.findViewById<View>(R.id.menu_action_settings)
+        assertNotNull(call)
+        assertNotNull(settings)
+        assertEquals(View.VISIBLE, call.visibility)
+        assertEquals(View.VISIBLE, settings.visibility)
+
+        val callIcon = content.findViewById<ImageView>(R.id.menu_action_call_icon)
+        val settingsIcon = content.findViewById<ImageView>(R.id.menu_action_settings_icon)
+        assertNotNull("call row must carry a phone icon", callIcon.drawable)
+        assertNotNull("settings row must carry a gear icon", settingsIcon.drawable)
+
+        val callLabel = content.findViewById<TextView>(R.id.menu_action_call_label)
+        val settingsLabel = content.findViewById<TextView>(R.id.menu_action_settings_label)
+        assertEquals(activity.getString(R.string.app_call), callLabel.text.toString())
+        assertEquals(activity.getString(R.string.app_settings), settingsLabel.text.toString())
+    }
+
+    @Test
+    fun pickingSettingsOpensItAndLeavesOnlyBackAndTitle() {
+        val controller = Robolectric.buildActivity(MainActivity::class.java).setup()
+        val activity = controller.get()
+        shadowOf(activity.mainLooper).idle()
+
+        val toolbar = activity.findViewById<MaterialToolbar>(R.id.toolbar)
+        toolbar.menu.performIdentifierAction(R.id.action_menu, 0)
+        shadowOf(activity.mainLooper).idle()
+        val opened = requireNotNull(activity.actionsMenu.contentView)
+        opened.findViewById<View>(R.id.menu_action_settings).performClick()
         shadowOf(activity.mainLooper).idle()
         activity.supportFragmentManager.executePendingTransactions()
 
         assertNotNull(
-            "the gear must open the settings list",
+            "the settings row must open the settings list",
             activity.supportFragmentManager.findFragmentByTag("settings/hub"),
+        )
+        assertFalse(
+            "inside settings the actions button must hide",
+            toolbar.menu.findItem(R.id.action_menu).isVisible,
+        )
+        assertEquals(
+            "the profile chip belongs to the main tabs only",
+            View.GONE,
+            activity.findViewById<View>(R.id.profile_chip).visibility,
+        )
+
+        activity.router.back()
+        shadowOf(activity.mainLooper).idle()
+        assertTrue(
+            "back to a tab must restore the actions button",
+            toolbar.menu.findItem(R.id.action_menu).isVisible,
         )
     }
 

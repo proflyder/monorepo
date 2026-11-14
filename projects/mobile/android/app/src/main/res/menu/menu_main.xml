@@ -1,20 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Two actions, never an overflow: the bell and connection screens now live
-     inside Settings. Each title doubles as the spoken label. -->
+<!-- One visible actions button. Tapping it opens the app's own rounded menu
+     (app_toolbar_menu.xml); the framework overflow list is never used. -->
 <menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools">
     <item
-        android:id="@+id/action_call"
-        android:contentDescription="@string/app_call"
-        android:icon="@drawable/app_ic_call"
-        android:showAsAction="always"
-        tools:ignore="AlwaysShowAction"
-        android:title="@string/app_call" />
-    <item
-        android:id="@+id/action_settings"
-        android:contentDescription="@string/app_settings"
-        android:icon="@drawable/app_ic_settings"
-        android:showAsAction="always"
-        tools:ignore="AlwaysShowAction"
-        android:title="@string/app_settings" />
+        android:id="@+id/action_menu"
+        android:icon="@drawable/app_ic_more_vert"
+        android:title="@string/app_actions"
+        app:showAsAction="always"
+        tools:ignore="AlwaysShowAction,AppCompatResource" />
 </menu>

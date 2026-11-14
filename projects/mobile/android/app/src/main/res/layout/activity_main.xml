@@ -16,8 +16,7 @@
             android:id="@+id/toolbar"
             android:layout_width="match_parent"
             android:layout_height="?attr/actionBarSize"
-                    app:titleCentered="false"
-            app:popupTheme="@style/ThemeOverlay.Home.Toolbar">
+            app:titleCentered="false">
 
             <LinearLayout
                 android:id="@+id/toolbar_title_row"

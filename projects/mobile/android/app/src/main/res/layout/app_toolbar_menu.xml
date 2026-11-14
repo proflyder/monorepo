@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The toolbar's custom actions menu: a rounded tonal card with one icon and
+     label per row. It replaces the framework overflow list entirely. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:background="@drawable/app_popup_menu_background"
+    android:minWidth="@dimen/app_menu_min_width"
+    android:orientation="vertical"
+    android:padding="@dimen/ui_popup_inset">
+
+    <LinearLayout
+        android:id="@+id/menu_action_call"
+        android:layout_width="match_parent"
+        android:layout_height="@dimen/app_menu_row_height"
+        android:background="@drawable/app_popup_menu_item_background"
+        android:clickable="true"
+        android:focusable="true"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="@dimen/app_menu_row_padding"
+        android:paddingEnd="@dimen/app_menu_row_padding">
+
+        <ImageView
+            android:id="@+id/menu_action_call_icon"
+            android:layout_width="@dimen/app_menu_icon_size"
+            android:layout_height="@dimen/app_menu_icon_size"
+            android:importantForAccessibility="no"
+            android:src="@drawable/app_ic_call"
+            app:tint="?attr/colorOnSurface"
+            tools:ignore="ContentDescription" />
+
+        <TextView
+            android:id="@+id/menu_action_call_label"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="@dimen/app_menu_label_gap"
+            android:layout_weight="1"
+            android:maxLines="1"
+            android:text="@string/app_call"
+            android:textAppearance="@style/TextAppearance.Home.ToolbarMenuItem" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/menu_action_settings"
+        android:layout_width="match_parent"
+        android:layout_height="@dimen/app_menu_row_height"
+        android:background="@drawable/app_popup_menu_item_background"
+        android:clickable="true"
+        android:focusable="true"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="@dimen/app_menu_row_padding"
+        android:paddingEnd="@dimen/app_menu_row_padding">
+
+        <ImageView
+            android:id="@+id/menu_action_settings_icon"
+            android:layout_width="@dimen/app_menu_icon_size"
+            android:layout_height="@dimen/app_menu_icon_size"
+            android:importantForAccessibility="no"
+            android:src="@drawable/app_ic_settings"
+            app:tint="?attr/colorOnSurface"
+            tools:ignore="ContentDescription" />
+
+        <TextView
+            android:id="@+id/menu_action_settings_label"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="@dimen/app_menu_label_gap"
+            android:layout_weight="1"
+            android:maxLines="1"
+            android:text="@string/app_settings"
+            android:textAppearance="@style/TextAppearance.Home.ToolbarMenuItem" />
+    </LinearLayout>
+</LinearLayout>

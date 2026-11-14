@@ -274,6 +274,7 @@ class FragmentRouterTest {
         assertEquals("alarms", activity.router.currentTabId.value)
         assertEquals(SETTINGS_TITLE, activity.router.currentTitleRes.value)
         assertTrue(activity.router.canGoBack.value)
+        assertTrue("settings is a non-tab overlay", activity.router.currentIsOverlay.value)
         assertEquals(1, activity.supportFragmentManager.backStackEntryCount)
 
         assertTrue(activity.router.back())
@@ -282,6 +283,7 @@ class FragmentRouterTest {
         assertEquals("alarms", activity.router.currentTabId.value)
         assertEquals(ALARMS_TITLE, activity.router.currentTitleRes.value)
         assertFalse(activity.router.canGoBack.value)
+        assertFalse("a tab root is not an overlay", activity.router.currentIsOverlay.value)
     }
 
     @Test
