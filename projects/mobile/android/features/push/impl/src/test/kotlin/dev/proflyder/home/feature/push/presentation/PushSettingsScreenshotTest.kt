@@ -21,8 +21,8 @@ import org.robolectric.annotation.GraphicsMode
  * PNG is written to Bazel's undeclared outputs as review evidence.
  *
  * The state shown is the one the owner sees before granting anything, which is
- * the case that must be understandable: three "not allowed" rows and an honest
- * warning that the loud ring will not start.
+ * the case that must be understandable: three "not allowed" rows, the phone
+ * name field and an honest warning that the loud ring will not start.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35], qualifiers = "w411dp-h891dp-night-xxhdpi")
@@ -43,6 +43,8 @@ class PushSettingsScreenshotTest {
         binding.pushDndAction.text = themed.getString(R.string.push_permission_grant)
         binding.pushFullScreenAction.text = themed.getString(R.string.push_permission_grant)
         binding.pushRingSummary.text = themed.getString(R.string.push_ring_incomplete)
+        binding.pushDeviceName.setText(themed.getString(R.string.push_device_name_sample))
+        binding.pushDeviceNameSave.isEnabled = true
         binding.pushRegistration.text = themed.getString(R.string.push_not_registered)
         savePng(binding.root, "push-settings-dark.png")
     }

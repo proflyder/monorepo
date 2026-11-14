@@ -34,6 +34,9 @@ class PushSettingsFragment :
         binding.pushDndAction.setOnClickListener { open(permissions.dnd()) }
         binding.pushFullScreenAction.setOnClickListener { open(permissions.fullScreen()) }
         binding.pushRegister.setOnClickListener { viewModel.registerNow() }
+        binding.pushDeviceNameSave.setOnClickListener {
+            viewModel.saveDeviceName(binding.pushDeviceName.text.toString())
+        }
         viewModel.state.observe { render(it) }
     }
 
@@ -69,11 +72,16 @@ class PushSettingsFragment :
             }
             pushRegistration.text = registrationText(state.registration)
             pushRegister.isEnabled = !state.registration.busy
+            pushDeviceNameSave.isEnabled = !state.registration.busy
             pushProgress.setVisible(state.registration.busy)
+            if (!pushDeviceName.hasFocus() && pushDeviceName.text.toString() != state.deviceName) {
+                pushDeviceName.setText(state.deviceName)
+            }
         }
         state.notice?.let { notice ->
             when (notice) {
                 PushNotice.REGISTERED -> showMessage(R.string.push_registered)
+                PushNotice.NAME_SAVED -> showMessage(R.string.push_device_name_saved)
                 PushNotice.FAILED -> showError(R.string.push_register_failed)
             }
             viewModel.consumeNotice()

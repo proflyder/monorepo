@@ -34,6 +34,8 @@ data class PushRegistration(
     val token: String? = null,
     /** When the server last accepted it (unix millis); 0 = never. */
     val registeredAtMillis: Long = 0,
+    /** Owner-visible name sent to the server; blank means the model default. */
+    val deviceName: String = "",
     /** True while a registration request is in flight. */
     val busy: Boolean = false,
     /** Last failure, already localized by the screen. */
@@ -56,6 +58,9 @@ interface PushRegistrationStore {
 
     suspend fun saved(token: String, registeredAtMillis: Long)
 
+    /** Persists the owner-visible name before the server confirms it. */
+    suspend fun savedName(name: String)
+
     suspend fun busy(busy: Boolean)
 
     suspend fun failed(failed: Boolean)
@@ -66,8 +71,26 @@ interface PushRegistrar {
     /** Fetches the current token and registers it with the home server. */
     suspend fun registerNow()
 
+    /** Stores the name and syncs it to the server without re-registering. */
+    suspend fun saveDeviceName(name: String): Boolean
+
     /** Triggers the in-app flow that shows the missing permissions. */
     fun permissions(): PushPermissionStatus
+}
+
+/**
+ * Stable identity of this installation and the default owner-visible name.
+ *
+ * The identity must survive FCM token rotation and app reinstall: the phone is
+ * the same phone even when Google issues a new token. It is a digest, not a
+ * raw hardware identifier.
+ */
+interface PushDeviceIdentity {
+    /** Stable per-installation identity. */
+    suspend fun deviceId(): String
+
+    /** Model-based fallback until the owner sets a name. */
+    fun defaultName(): String
 }
 
 /**

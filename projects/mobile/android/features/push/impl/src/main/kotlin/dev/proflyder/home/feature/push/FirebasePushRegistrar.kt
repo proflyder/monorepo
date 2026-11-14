@@ -1,7 +1,6 @@
 package dev.proflyder.home.feature.push
 
 import android.content.Context
-import android.os.Build
 import com.google.firebase.FirebaseApp
 import com.google.firebase.messaging.FirebaseMessaging
 import dev.proflyder.home.core.config.ConnectionSettingsStore
@@ -38,6 +37,8 @@ class FirebasePushRegistrar(
     private val context: Context,
     private val store: PushRegistrationStore,
     private val client: PushDevicesApi,
+    private val publisher: PushRegistrationPublisher,
+    private val identity: PushDeviceIdentity,
     private val settings: ConnectionSettingsStore,
     private val scope: CoroutineScope,
 ) : PushRegistrar {
@@ -78,22 +79,35 @@ class FirebasePushRegistrar(
         if (!firebaseReady()) return
         val config = settings.config.value
         if (!config.isConfigured || !config.hasToken) return
+        val name = currentDeviceName()
         store.busy(true)
         val result = suspendRunCatching {
-            client.register(
-                token = token,
-                appVersion = appVersion(),
-                deviceName = deviceName(),
-            )
+            publisher.publish(token = token, appVersion = appVersion(), deviceName = name)
         }.getOrNull()
         store.busy(false)
         when (result) {
             is Outcome.Success -> {
                 store.failed(false)
+                store.savedName(name)
                 store.saved(token, System.currentTimeMillis())
             }
             else -> store.failed(true)
         }
+    }
+
+    override suspend fun saveDeviceName(name: String): Boolean {
+        val clean = name.trim().takeUtf8Bytes(NAME_BYTES).trim()
+            .ifEmpty { identity.defaultName() }
+        store.savedName(clean)
+        val config = settings.config.value
+        if (!config.isConfigured || !config.hasToken) return true
+        if (store.registration.value.token.isNullOrBlank()) return true
+        store.busy(true)
+        val result = suspendRunCatching { publisher.rename(clean) }.getOrNull()
+        store.busy(false)
+        val renamed = result is Outcome.Success
+        store.failed(!renamed)
+        return renamed
     }
 
     override fun permissions(): PushPermissionStatus = permissions.status()
@@ -101,15 +115,16 @@ class FirebasePushRegistrar(
     /** Firebase is optional: a build without `google-services.png` starts anyway. */
     private fun firebaseReady(): Boolean = FirebaseApp.getApps(context).isNotEmpty()
 
-    private fun deviceName(): String = Build.MODEL.orEmpty().take(NAME_CHARS)
-        .ifEmpty { Build.MANUFACTURER.orEmpty().take(NAME_CHARS) }
+    /** The name the owner set, or the model until one is set. */
+    private fun currentDeviceName(): String = store.registration.value.deviceName
+        .trim().takeUtf8Bytes(NAME_BYTES).ifEmpty { identity.defaultName() }
 
     private fun appVersion(): String = runCatching {
         context.packageManager.getPackageInfo(context.packageName, 0).versionName.orEmpty()
-    }.getOrDefault("").take(NAME_CHARS)
+    }.getOrDefault("").takeUtf8Bytes(NAME_BYTES)
 
     private companion object {
-        /** Matches the server's metadata bound. */
-        const val NAME_CHARS = 64
+        /** Matches the server's metadata bound (UTF-8 bytes). */
+        const val NAME_BYTES = 64
     }
 }

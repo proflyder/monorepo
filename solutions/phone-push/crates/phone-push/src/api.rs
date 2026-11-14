@@ -1,9 +1,11 @@
-//! HTTP surface: `POST /v1/push/find` and `POST /v1/push/notify`.
+//! HTTP surface: `POST /v1/push/find`, `POST /v1/push/notify` and
+//! `GET /v1/push/devices`.
 //!
-//! Both routes require `Authorization: Bearer <PUSH_TOKEN_FILE>`, compared in
-//! constant time. One call fans out to every registered device and reports
-//! counts only: a token is never logged or returned, so a caller (the MCP
-//! gateway, and through it the model) cannot enumerate pushed-to handsets.
+//! Every route requires `Authorization: Bearer <PUSH_TOKEN_FILE>`, compared in
+//! constant time. A send fans out to every registered device unless the caller
+//! names one by its stable `deviceId`, and reports counts only. The device
+//! listing exposes identities and owner-visible names for name matching in the
+//! MCP gateway, but never a token: the model cannot enumerate FCM credentials.
 
 use std::sync::Arc;
 
@@ -53,6 +55,9 @@ pub struct FindBody {
     /// Optional short reason, e.g. the phrase that triggered it.
     #[serde(default)]
     pub reason: String,
+    /// Optional stable device identity; absent means every device.
+    #[serde(default)]
+    pub device_id: Option<String>,
 }
 
 /// `POST /v1/push/notify` body.
@@ -66,6 +71,9 @@ pub struct NotifyBody {
     /// Optional in-app destination, e.g. `home://alarms`.
     #[serde(default)]
     pub deep_link: Option<String>,
+    /// Optional stable device identity; absent means every device.
+    #[serde(default)]
+    pub device_id: Option<String>,
 }
 
 /// Delivery summary. Counts only — no tokens.
@@ -89,7 +97,23 @@ pub fn router(state: PushState) -> Router {
     Router::new()
         .route("/v1/push/find", axum::routing::post(find))
         .route("/v1/push/notify", axum::routing::post(notify))
+        .route("/v1/push/devices", axum::routing::get(devices))
         .with_state(state)
+}
+
+/// A device as the gateway sees it: identity, owner-visible name, platform.
+/// The FCM token stays inside this process; the gateway only picks a target.
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeviceView {
+    pub id: String,
+    pub name: String,
+    pub platform: String,
+}
+
+#[derive(Debug, serde::Serialize)]
+struct DevicesBody {
+    devices: Vec<DeviceView>,
 }
 
 /// Invokes one message on every registered device.
@@ -98,6 +122,7 @@ pub async fn deliver(
     sender: &Sender,
     registry: &Registry,
     now: i64,
+    device_id: Option<&str>,
 ) -> Delivery {
     let devices = match registry.list().await {
         Ok(devices) => devices,
@@ -110,6 +135,7 @@ pub async fn deliver(
             };
         }
     };
+    let devices = select_devices(devices, device_id);
     let total = devices.len();
     let mut sent = 0;
     let mut failed = 0;
@@ -158,7 +184,16 @@ async fn find(
     let message = Message::Find {
         reason: reason.to_owned(),
     };
-    respond(deliver(&message, &state.sender, &state.registry, now()).await)
+    respond(
+        deliver(
+            &message,
+            &state.sender,
+            &state.registry,
+            now(),
+            body.device_id.as_deref(),
+        )
+        .await,
+    )
 }
 
 async fn notify(
@@ -190,7 +225,55 @@ async fn notify(
         body: text.to_owned(),
         deep_link: deep_link.map(str::to_owned),
     };
-    respond(deliver(&message, &state.sender, &state.registry, now()).await)
+    respond(
+        deliver(
+            &message,
+            &state.sender,
+            &state.registry,
+            now(),
+            body.device_id.as_deref(),
+        )
+        .await,
+    )
+}
+
+/// `GET /v1/push/devices` — names for deterministic matching in the gateway.
+async fn devices(State(state): State<PushState>, headers: HeaderMap) -> Response {
+    if !authorized(&state.token, &headers) {
+        return error(StatusCode::UNAUTHORIZED, "unauthenticated");
+    }
+    match state.registry.list().await {
+        Ok(list) => Json(DevicesBody {
+            devices: list
+                .into_iter()
+                .map(|device| DeviceView {
+                    id: device.device_id,
+                    name: device.device_name,
+                    platform: device.platform,
+                })
+                .collect(),
+        })
+        .into_response(),
+        Err(failure) => {
+            tracing::warn!(error = %failure, "push registry unavailable");
+            error(StatusCode::BAD_GATEWAY, "registry unavailable")
+        }
+    }
+}
+
+/// Applies the gateway's explicit choice. An unknown id selects nothing,
+/// which the caller reports as "the phone did not ring".
+fn select_devices(
+    devices: Vec<crate::devices::Device>,
+    device_id: Option<&str>,
+) -> Vec<crate::devices::Device> {
+    let Some(target) = device_id.map(str::trim).filter(|value| !value.is_empty()) else {
+        return devices;
+    };
+    devices
+        .into_iter()
+        .filter(|device| device.device_id == target)
+        .collect()
 }
 
 fn authorized(token: &Token, headers: &HeaderMap) -> bool {
@@ -244,6 +327,36 @@ mod tests {
             "Bearer push-token".parse().expect("value"),
         );
         assert!(authorized(&token, &headers));
+    }
+
+    fn device(id: &str) -> crate::devices::Device {
+        crate::devices::Device {
+            device_id: id.to_owned(),
+            token: format!("token-{id}-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+            platform: "android".to_owned(),
+            device_name: id.to_owned(),
+        }
+    }
+
+    #[test]
+    fn an_explicit_device_id_selects_exactly_one_phone() {
+        let devices = vec![device("one"), device("two")];
+        let selected = select_devices(devices, Some("two"));
+        assert_eq!(selected.len(), 1);
+        assert_eq!(selected[0].device_id, "two");
+        assert!(select_devices(vec![device("one")], Some("missing")).is_empty());
+    }
+
+    #[test]
+    fn a_missing_or_blank_device_id_fans_out_to_every_phone() {
+        assert_eq!(
+            select_devices(vec![device("one"), device("two")], None).len(),
+            2
+        );
+        assert_eq!(
+            select_devices(vec![device("one"), device("two")], Some("  ")).len(),
+            2
+        );
     }
 
     #[test]

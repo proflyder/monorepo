@@ -625,8 +625,9 @@
   живой конфигурации; оставшиеся недоступные записи реестра очищены.
   Повторного исполнителя нет. HA остаётся исполнителем звука
   (`alarm_start`, `schedule_announce`, `alarm_stop`).
-- Схема scheduler — v3: `scenarios` (v2) и `push_devices` (v3, реестр
-  FCM-токенов телефона); база v1/v2 мигрирует на месте. `home.v1.ScenarioService` хранит определения сценариев
+- Схема scheduler — v4: `scenarios` (v2), `push_devices` (v3) и реестр
+  телефонов по стабильному `device_id` с уникальным FCM-токеном (v4); база
+  v1/v2/v3 мигрирует на месте, записи v3, ключённые по токену, сохраняются. `home.v1.ScenarioService` хранит определения сценариев
   (manual/time-триггеры, условия, шаги, revision), time-триггеры
   материализуются строками `schedules` (`kind=SCHEDULE_KIND_SCENARIO`) и
   событиями `scenario.fire` в очереди `scenario`; `RunScenario` ставит
@@ -748,16 +749,24 @@
 
 - Push на телефон: `solutions/phone-push` (stateless, ClusterIP `:8095`,
   Flux `Kustomization/app-phone-push`) отправляет FCM HTTP v1 с
-  сервис-аккаунтом из `secret/k8s/home-assistant/phone-push`. Токены устройств
-  хранит scheduler (схема v3, `POST/GET /v1/push/devices` тем же bearer'ом,
-  что Connect API): телефон регистрируется при старте и при смене токена, без
-  нового адреса в Remote Config. MCP-группа `phone` в `mcp-gateway`:
-  `phone_find` (data-only high-priority → громкий звонок в обход DND, экран
-  поверх блокировки, стоп «Нашёл»/60 с) и `phone_notify(title, body,
-  deep_link?)`; Hermes-промпт и `SOUL.md` маршрутизируют «где телефон» в
-  `phone_find`. Android: `features/push`, канал `home_phone_find`
-  (`USAGE_ALARM`, `bypassDnd`), экран разрешений. Живая приёмка на устройстве
-  ещё не пройдена: нужен сервис-аккаунт FCM от владельца.
+  сервис-аккаунтом из `secret/k8s/home-assistant/phone-push`. Телефоны
+  хранит scheduler (схема v4, `POST/GET /v1/push/devices` и
+  `/v1/push/devices/rename` тем же bearer'ом, что Connect API): ключ —
+  стабильный `deviceId` приложения (SHA-256 от app-scoped `ANDROID_ID`, не
+  сам идентификатор), поэтому ротация FCM-токена обновляет ту же запись.
+  Имя телефона задаётся в приложении («Стас»), хранится на сервере и
+  меняется без перерегистрации. MCP-группа `phone` в `mcp-gateway`:
+  `phone_find(reason?, name?)` (data-only high-priority → громкий звонок в
+  обход DND, экран поверх блокировки, стоп «Нашёл»/60 с),
+  `phone_notify(title, body, deep_link?, name?)` и `phone_list`; шлюз
+  детерминированно сопоставляет русские падежи и уменьшительные, при
+  нескольких телефонах без однозначного имени возвращает список имён для
+  одного уточняющего вопроса, ответ называет телефон. Hermes-промпт,
+  `telegram_prompt.txt` и `SOUL.md` маршрутизируют телефон и в голос, и в
+  Telegram. Android: `features/push`, канал `home_phone_find`
+  (`USAGE_ALARM`, `bypassDnd`), экран разрешений и имя телефона. Живая
+  приёмка на устройстве ещё не пройдена: нужен сервис-аккаунт FCM от
+  владельца.
 
 ## Currency bot
 

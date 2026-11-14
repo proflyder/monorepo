@@ -20,7 +20,8 @@ import kotlinx.coroutines.flow.update
 /**
  * Last accepted registration in the app-wide DataStore.
  *
- * Only the token and its timestamp are stored: the token is not a credential
+ * The token, its timestamp and the owner-visible name are stored: the token is
+ * not a credential
  * for the home server (the bearer token is), but it is still never logged or
  * shown in full, and `allowBackup` is off, so it never leaves the device.
  */
@@ -41,6 +42,7 @@ class DataStorePushRegistrationStore(
                 it.copy(
                     token = preferences[KEY_TOKEN],
                     registeredAtMillis = preferences[KEY_REGISTERED_AT] ?: 0,
+                    deviceName = preferences[KEY_DEVICE_NAME].orEmpty(),
                 )
             }
         }.onFailure { failure ->
@@ -60,6 +62,15 @@ class DataStorePushRegistrationStore(
         state.update { it.copy(token = token, registeredAtMillis = registeredAtMillis) }
     }
 
+    override suspend fun savedName(name: String) {
+        suspendRunCatching {
+            dataStore.edit { it[KEY_DEVICE_NAME] = name }
+        }.onFailure { failure ->
+            if (failure !is IOException) throw failure
+        }
+        state.update { it.copy(deviceName = name) }
+    }
+
     override suspend fun busy(busy: Boolean) {
         state.update { it.copy(busy = busy) }
     }
@@ -71,5 +82,6 @@ class DataStorePushRegistrationStore(
     private companion object {
         val KEY_TOKEN = stringPreferencesKey("push_token")
         val KEY_REGISTERED_AT = longPreferencesKey("push_registered_at")
+        val KEY_DEVICE_NAME = stringPreferencesKey("push_device_name")
     }
 }

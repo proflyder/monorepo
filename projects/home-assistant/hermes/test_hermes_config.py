@@ -178,6 +178,22 @@ class HermesConfigTests(unittest.TestCase):
         assert "без переспроса" in prompt
         assert "проект не найден" in prompt
 
+    def test_phone_tools_reach_voice_and_telegram(self):
+        # phone_find / phone_notify / phone_list live in the shared mcp-infra
+        # gateway group. Neither channel filters them out, so the same phone
+        # surface works by voice and from Telegram.
+        for platform in ("api_server", "telegram"):
+            assert "mcp-infra" in self.data["platform_toolsets"][platform]
+        tools = self.data["mcp_servers"]["infra"]["tools"]
+        assert "include" not in tools, "tools.include would hide the phone group"
+        for name in ("voice_prompt.txt", "telegram_prompt.txt", "SOUL.md"):
+            text = (ROOT / "projects" / "home-assistant" / "hermes" / name).read_text()
+            for marker in ("phone_find", "phone_notify", "phone_list", "дословно", "список имён"):
+                assert marker in text, f"{name}: {marker}"
+        telegram = (ROOT / "projects" / "home-assistant" / "hermes" / "telegram_prompt.txt").read_text()
+        assert "один короткий вопрос" in telegram
+        assert "name" in telegram
+
     def test_telegram_prompt_covers_bb_agent_spawn(self):
         prompt = (ROOT / "projects" / "home-assistant" / "hermes" / "telegram_prompt.txt").read_text()
         for marker in ("bb_status", "bb_prepare_spawn", "bb_confirm", "bb_cancel",
