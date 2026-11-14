@@ -196,8 +196,10 @@ CRL достаточно reload. Проверка конфигурации — `
 CI больше не входит в K3s: приложения применяет Flux, поэтому `ci-deploy`,
 его RBAC, `secret/ci/deploy-home`, роль OpenBao `deploy-home` и сертификат
 `ci-github` удалены (решение 55 (этап 6.7)). Группа VPN `ci` и `443` нужны
-`deploy-station` (сертификат `ci-pulsar`) и `android-distribute`
-(сертификат `ci-android`, Environment `Android` на PR): маршрут ведёт до
+`deploy-station` (сертификат `ci-pulsar`), `android-distribute`
+(сертификат `ci-android`, Environment `Android` на PR) и ежедневная чистка App
+Distribution `fad` (тот же сертификат и Environment, `develop` по расписанию):
+маршрут ведёт до
 узла, nft разрешает лишь `tcp/443` (Traefik → HA/OpenBao). Правило
 `tcp/6443` (K3s API) снято; SSH и root-helper у CI нет.
 
@@ -1180,8 +1182,14 @@ job падает с понятной ошибкой; автосборки на �
 mise run deploy -- scheduler --yes      # workflow_dispatch units=scheduler
 ```
 
-Чистка GHCR — `.github/workflows/ghcr-cleanup.yml`, ежедневно по расписанию.
-Пакеты — образы деплой-юнитов и `native.publish_repository` из
+Ежедневная уборка — один workflow `.github/workflows/cleanup.yml` (расписание
+раз в сутки + ручной `workflow_dispatch` с `dry_run` по умолчанию) с двумя
+независимыми параллельными джобами: `ghcr` (образы) и `fad` (сборки в Firebase
+App Distribution). Падение одной не влияет на другую и на `ci-ok`.
+
+### Чистка GHCR
+
+Джоба `ghcr`. Пакеты — образы деплой-юнитов и `native.publish_repository` из
 `units.mjs`, включая `pulsar-firmware` и `windows-logon-provider`. Политика по
 каждому пакету: не удаляются новейшая версия, теги `develop`, `latest`, semver
 и native `sha-<12>`, digest'ы из `PROTECTED_DIGESTS` (сейчас пусто) и версии
@@ -1197,11 +1205,42 @@ node platform/ci/ghcr_cleanup.mjs \
   --fixture platform/ci/testdata/ghcr-versions.json --now 2026-11-04T00:00:00Z
 ```
 
-Реальный ручной прогон: Actions → `ghcr-cleanup` → Run workflow,
+Реальный ручной прогон: Actions → `cleanup` → Run workflow,
 `dry_run` по умолчанию `true` (снять галочку — удалять). Если `GITHUB_TOKEN`
 не может удалять версии user-owned пакетов, job падает с подсказкой: нужен
 секрет `GHCR_CLEANUP_TOKEN` (токен с правом удаления пакетов и доступом к
 репозиторию).
+
+### Чистка Firebase App Distribution
+
+Джоба `fad`. Каждый Android-PR загружает сборку в App Distribution, поэтому
+окно хранения — сутки на приложение: релизы старше 24 часов удаляются,
+новейший релиз не удаляется никогда (именно его ставят тестеры), более свежие
+остаются. Список — `projects.apps.releases.list` (пагинация,
+`orderBy=createTime desc`), удаление — `releases:batchDelete`; OAuth-токен со
+scope `cloud-platform` получает тот же сервис-аккаунт, что и загрузка
+(`secret/ci/android-distribute`, Environment `Android`, роль OpenBao
+`android-cleanup`). ID приложения и проекта берутся из той же переменной
+репозитория `GOOGLE_SERVICES_JSON_B64`, что и при сборке APK, поэтому уборка и
+загрузка не могут разойтись. Каждое решение с причиной — в логе и job summary.
+
+```bash
+# локальный dry-run отбора на фикстуре (без кредов и сети)
+node platform/ci/fad_cleanup.mjs \
+  --fixture platform/ci/testdata/fad-releases.json --now 2026-11-04T12:00:00Z
+```
+
+Ручной прогон — Actions → `cleanup` → Run workflow (`dry_run` по умолчанию
+`true`). Для удаления сервис-аккаунту нужна роль **Firebase App Distribution
+Admin** (`roles/firebaseappdistro.admin`) в проекте Firebase; без неё джоба
+падает с этой подсказкой, ничего не удалив. Роль OpenBao `android-cleanup`
+создаётся `projects/home/kubernetes/openbao/configure.py` и привязана к
+`cleanup.yml` на `refs/heads/develop` для событий `schedule` и
+`workflow_dispatch`; Environment `Android` должен разрешать ветку `develop`.
+Роль применяется идемпотентно повторным запуском
+`mise run admin:openbao-bootstrap` с admin-токеном в `BAO_TOKEN` (см.
+`projects/home/kubernetes/openbao/README.md`); до этого джоба падает на логине
+в OpenBao.
 
 ## Планировщик / HA bridge
 

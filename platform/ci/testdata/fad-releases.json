@@ -1,0 +1,29 @@
+{
+  "releases": [
+    {
+      "name": "projects/1234567890/apps/1:1234567890:android:abc123def456/releases/r7f2c1",
+      "displayName": "13 (0.1.0-7f2c1aa)",
+      "createTime": "2026-11-04T09:30:00Z"
+    },
+    {
+      "name": "projects/1234567890/apps/1:1234567890:android:abc123def456/releases/r64b90",
+      "displayName": "12 (0.1.0-64b90cd)",
+      "createTime": "2026-11-04T03:00:00Z"
+    },
+    {
+      "name": "projects/1234567890/apps/1:1234567890:android:abc123def456/releases/r5aa47",
+      "displayName": "11 (0.1.0-5aa47e1)",
+      "createTime": "2026-11-02T12:00:00Z"
+    },
+    {
+      "name": "projects/1234567890/apps/1:1234567890:android:abc123def456/releases/r4e0b3",
+      "displayName": "10 (0.1.0-4e0b3f9)",
+      "createTime": "2026-11-01T08:15:00Z"
+    },
+    {
+      "name": "projects/1234567890/apps/1:1234567890:android:abc123def456/releases/r39c8d",
+      "displayName": "9 (0.1.0-39c8d02)",
+      "createTime": "2026-10-30T17:45:00Z"
+    }
+  ]
+}

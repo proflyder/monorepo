@@ -393,8 +393,10 @@
       `ghcr.io` до первой записи. Публичные пакеты читаются анонимно, поэтому
       без логина падает только PUT манифеста с `UNAUTHORIZED`.
       `check_units.mjs` проверяет это по workflow-файлам.
-    * `ghcr-cleanup.yml` (ежедневно по расписанию; ручной запуск — dry-run по
-      умолчанию) через REST API применяет политику хранения по пакету:
+    * `.github/workflows/cleanup.yml` — ежедневный housekeeping (расписание +
+      ручной `workflow_dispatch` с `dry_run` по умолчанию); джобы `ghcr` и `fad`
+      независимы, падение одной не влияет на другую и на `ci-ok`.
+    * Джоба `ghcr` через REST API применяет политику хранения по пакету:
       никогда не удаляются новейшая версия, версии с тегами `develop`/`latest`
       и semver, версии с `sha-<commit>` (native-релизы), digest'ы из явного
       `PROTECTED_DIGESTS` в модуле и версии моложе 7 дней. Deploy-версии (есть
@@ -409,6 +411,20 @@
       `pulsar-firmware` и `windows-logon-provider` это означает: релизные теги
       (`latest`, `vX.Y.Z`/`X.Y.Z`, `sha-<12>`) сохраняются, устаревшие
       `tree-*`-only удаляются через 7 дней.
+    * Джоба `fad` того же workflow чистит Firebase App Distribution: каждый
+      Android-PR загружает туда сборку, поэтому окно хранения — 24 часа на
+      приложение. Новейший релиз не удаляется никогда (его ставят тестеры),
+      релизы старше 24 часов удаляются через `releases:batchDelete`, более
+      свежие остаются; релиз без разбираемого `createTime` сохраняется.
+      Источник OAuth — тот же сервис-аккаунт `secret/ci/android-distribute`
+      (scope `cloud-platform`), но отдельная роль OpenBao `android-cleanup`:
+      она привязана к `cleanup.yml` на `refs/heads/develop` для `schedule` и
+      `workflow_dispatch`, а роль `android-distribute` остаётся PR-only. ID
+      приложения и проекта берутся из той же переменной репозитория
+      `GOOGLE_SERVICES_JSON_B64`, что и при сборке APK. Удаление требует роли
+      **Firebase App Distribution Admin** у сервис-аккаунта; без неё джоба
+      падает с явной подсказкой. Уборка не входит в `ci-ok` и не блокирует
+      загрузку.
     * Docker-образы тоже обязаны быть воспроизводимыми: одинаковые входы —
       один digest, иначе две сборки одной ревизии разойдутся, и деплой
       промоутнутого PR-образа будет отличаться от локальной проверки. Hermes
@@ -434,7 +450,8 @@
       выпускается следующая версия; тот же digest — no-op.
     * `proflyder/pulsar-firmware` — публичный пакет, созданный workflow из
       `GITHUB_TOKEN` (`packages: write`); имя зашито в
-      `pulsar_update::UPDATE_REPO` установленной прошивки. `ghcr-cleanup`:
+      `pulsar_update::UPDATE_REPO` установленной прошивки. `cleanup.yml`
+      (джоба `ghcr`):
       `latest` и версии защищены, устаревшие `tree-*`-only удаляются через
       7 дней.
 

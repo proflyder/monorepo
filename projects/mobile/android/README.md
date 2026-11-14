@@ -691,6 +691,33 @@ the workflow run URL (number and title arrive as environment variables, never
 as script source). The signing material, the certificate check and the
 `admins` tester group are identical to a local run.
 
+### Retention
+
+Every uploaded build stays in App Distribution, so old PR builds are removed by
+the daily `fad` job of `.github/workflows/cleanup.yml` (schedule plus a manual
+`workflow_dispatch`, `dry_run` on by default). The window is **24 hours per
+app**: releases older than that are deleted, the newest release is always kept
+(that is the build testers install), and a release without a parseable
+`createTime` is kept. It uses `projects.apps.releases.list` (paginated,
+`orderBy=createTime desc`) and `releases:batchDelete` with the same service
+account as the upload, exchanged for an OAuth token with the `cloud-platform`
+scope; the app and project ids come from the same repository variable
+(`GOOGLE_SERVICES_JSON_B64`) the APK build uses.
+
+The cleanup reads `secret/ci/android-distribute` through the `Android`
+Environment and the OpenBao role `android-cleanup` (bound to `cleanup.yml` on
+`develop`, events `schedule`/`workflow_dispatch`; the PR-only
+`android-distribute` role is not reused). The service account needs the
+**Firebase App Distribution Admin** role (`roles/firebaseappdistro.admin`) in
+the Firebase project to delete; without it the job fails with that hint and
+deletes nothing.
+
+```sh
+# local selection dry run on a fixture: no credentials, no network
+node platform/ci/fad_cleanup.mjs \
+  --fixture platform/ci/testdata/fad-releases.json --now 2026-11-04T12:00:00Z
+```
+
 Local:
 
 ```sh
