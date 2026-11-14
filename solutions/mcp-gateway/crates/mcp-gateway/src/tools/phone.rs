@@ -849,7 +849,7 @@ mod tests {
             outcome.speech,
             "Телефоны: «Стас», «Аня». Чтобы позвонить или написать, назови имя."
         );
-        let details = outcome.details.clone().unwrap_or_default();
+        let details = outcome.details.as_deref().unwrap_or_default();
         assert!(
             details.contains("«Стас»") || details.contains("Стас"),
             "{details}"

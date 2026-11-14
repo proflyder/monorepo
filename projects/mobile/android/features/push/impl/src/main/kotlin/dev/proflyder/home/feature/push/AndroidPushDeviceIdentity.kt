@@ -1,5 +1,6 @@
 package dev.proflyder.home.feature.push
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.os.Build
 import android.provider.Settings
@@ -50,6 +51,10 @@ class AndroidPushDeviceIdentity(
         .takeUtf8Bytes(NAME_BYTES)
         .ifEmpty { context.getString(R.string.push_default_device_name) }
 
+    // The raw ANDROID_ID never leaves the phone: it is hashed with an app
+    // salt below, and only the digest is registered. The lint warning targets
+    // code that reports hardware identifiers as-is.
+    @SuppressLint("HardwareIds")
     private fun generate(): String {
         val secure = Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID)
         val seed = secure?.takeIf { it.isNotBlank() } ?: UUID.randomUUID().toString()
