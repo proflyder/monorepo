@@ -6,6 +6,7 @@ import org.junit.runners.Suite
 @RunWith(Suite::class)
 @Suite.SuiteClasses(
     AlarmSelectionAnimationTest::class,
+    AlarmEditorDefaultsTest::class,
     AlarmQuickOffsetStateTest::class,
     dev.proflyder.home.feature.alarms.domain.SaveAlarmLabelTest::class,
 )

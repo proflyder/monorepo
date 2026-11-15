@@ -9,7 +9,8 @@ import java.time.LocalDateTime
  * no token, endpoint credentials, or schedule payload.
  *
  * A fresh draft defaults to [defaultAlarmTime] so a new alarm never starts in
- * the past; restored drafts keep the persisted hour/minute unchanged.
+ * the past, and to a one-shot alarm dated today. Restored drafts keep the
+ * persisted values unchanged.
  */
 data class AlarmEditorDraft(
     val existingId: String? = null,
@@ -18,10 +19,10 @@ data class AlarmEditorDraft(
     val hour: Int = defaultAlarmTime(LocalDateTime.now()).hour,
     val minute: Int = defaultAlarmTime(LocalDateTime.now()).minute,
     val timezone: String = java.time.ZoneId.systemDefault().id,
-    val repeat: RepeatKind = RepeatKind.DAILY,
+    val repeat: RepeatKind = RepeatKind.ONCE,
     val weekdays: List<Int> = emptyList(),
     val enabled: Boolean = true,
-    val onceDate: LocalDate? = null,
+    val onceDate: LocalDate? = LocalDate.now(java.time.ZoneId.of(timezone)),
 )
 
 /**

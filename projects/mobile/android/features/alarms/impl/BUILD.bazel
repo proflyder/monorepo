@@ -20,6 +20,7 @@ metro_android_library(
         "//projects/mobile/android/core/ui",
         "//projects/mobile/android/features/alarms/api",
         "@maven//:androidx_appcompat_appcompat",
+        "@maven//:androidx_constraintlayout_constraintlayout",
         "@maven//:androidx_fragment_fragment_ktx",
         "@maven//:androidx_lifecycle_lifecycle_runtime_ktx",
         "@maven//:androidx_lifecycle_lifecycle_viewmodel_ktx",
@@ -37,6 +38,7 @@ kt_android_local_test(
     name = "selection_animation_test",
     srcs = [
         "src/test/kotlin/dev/proflyder/home/feature/alarms/domain/SaveAlarmLabelTest.kt",
+        "src/test/kotlin/dev/proflyder/home/feature/alarms/presentation/AlarmEditorDefaultsTest.kt",
         "src/test/kotlin/dev/proflyder/home/feature/alarms/presentation/AlarmQuickOffsetStateTest.kt",
         "src/test/kotlin/dev/proflyder/home/feature/alarms/presentation/AlarmSelectionAnimationTest.kt",
         "src/test/kotlin/dev/proflyder/home/feature/alarms/presentation/AllAlarmImplTests.kt",
@@ -59,6 +61,42 @@ android_all_dir(
     name = "robolectric_android_all_sdk35",
     jar = "@maven//:org_robolectric_android_all_instrumented",
     jar_name = "android-all-instrumented-15-robolectric-13954326-i7.jar",
+)
+
+# The narrow-card row wraps instead of pushing the delete button past the card
+# outline. The rendered PNG documents the wrapped layout for the pull request.
+kt_android_local_test(
+    name = "item_layout_test",
+    srcs = ["src/test/kotlin/dev/proflyder/home/feature/alarms/presentation/AlarmItemLayoutTest.kt"],
+    associates = [":impl"],
+    custom_package = "dev.proflyder.home.feature.alarms.impl",
+    data = [
+        "robolectric-deps.properties",
+        ":robolectric_android_all_sdk35",
+    ],
+    jvm_flags = [
+        "-Drobolectric.offline=true",
+        "--add-opens=java.base/java.lang=ALL-UNNAMED",
+        "--add-opens=java.base/java.io=ALL-UNNAMED",
+        "--add-opens=java.base/java.net=ALL-UNNAMED",
+        "--add-opens=java.base/java.security=ALL-UNNAMED",
+        "--add-opens=java.base/java.text=ALL-UNNAMED",
+        "--add-opens=java.base/java.util=ALL-UNNAMED",
+        "--add-opens=java.base/java.util.concurrent=ALL-UNNAMED",
+        "--add-opens=java.base/jdk.internal.util=ALL-UNNAMED",
+    ],
+    manifest = "src/test/AndroidManifest.xml",
+    robolectric_properties_file = "robolectric-deps.properties",
+    test_class = "dev.proflyder.home.feature.alarms.presentation.AlarmItemLayoutTest",
+    deps = [
+        "//projects/mobile/android/core/model",
+        "//projects/mobile/android/features/alarms/api",
+        "@maven//:androidx_appcompat_appcompat",
+        "@maven//:androidx_constraintlayout_constraintlayout",
+        "@maven//:com_google_android_material_material",
+        "@maven//:junit_junit",
+        "@maven//:org_robolectric_robolectric",
+    ],
 )
 
 # The editor is real Material UI: only an inflated layout proves the label

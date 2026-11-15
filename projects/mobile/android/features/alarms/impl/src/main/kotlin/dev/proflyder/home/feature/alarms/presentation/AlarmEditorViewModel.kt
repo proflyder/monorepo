@@ -44,10 +44,10 @@ data class AlarmEditorUiState(
     val hour: Int = defaultAlarmTime(LocalDateTime.now()).hour,
     val minute: Int = defaultAlarmTime(LocalDateTime.now()).minute,
     val timezone: String = ZoneId.systemDefault().id,
-    val repeat: RepeatKind = RepeatKind.DAILY,
+    val repeat: RepeatKind = RepeatKind.ONCE,
     val weekdays: Set<Int> = emptySet(),
     val enabled: Boolean = true,
-    val onceDate: LocalDate? = null,
+    val onceDate: LocalDate? = LocalDate.now(ZoneId.of(timezone)),
     val error: RemoteFailure? = null,
     val loadFailed: Boolean = false,
 )
