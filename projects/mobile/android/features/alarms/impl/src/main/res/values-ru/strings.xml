@@ -22,7 +22,10 @@
     <string name="alarms_repeat_weekdays">Будни</string>
     <string name="alarms_repeat_weekends">Выходные</string>
     <string name="alarms_repeat_custom">Выбранные дни</string>
-    <string name="alarms_repeat_once">Однократный будильник</string>
+    <!-- Подпись чипа повтора, рядом с «Ежедневно» / «Будни» / «Выходные». -->
+    <string name="alarms_repeat_once">Однократно</string>
+    <!-- Сводка однократного будильника в карточке: другая, полная фраза. -->
+    <string name="alarms_repeat_once_summary">Однократный будильник</string>
     <string name="alarms_repeat_once_on">Однократно %1$s</string>
     <string name="alarms_repeat_unknown">Неподдерживаемый повтор</string>
     <string name="alarms_timezone_default">Asia/Almaty</string>

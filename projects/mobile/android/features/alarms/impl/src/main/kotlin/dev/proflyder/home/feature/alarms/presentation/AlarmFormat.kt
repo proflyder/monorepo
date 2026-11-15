@@ -21,7 +21,7 @@ internal object AlarmFormat {
         RepeatKind.ONCE -> {
             val date = runCatching { LocalDate.parse(schedule.onceDate) }.getOrNull()
             if (date == null) {
-                context.getString(R.string.alarms_repeat_once)
+                context.getString(R.string.alarms_repeat_once_summary)
             } else {
                 context.getString(R.string.alarms_repeat_once_on, date.format(dayFormatter()))
             }

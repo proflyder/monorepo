@@ -76,9 +76,10 @@
             android:textAppearance="?attr/textAppearanceLabelLarge"
             android:textColor="?attr/colorPrimary" />
 
-        <!-- Wraps to a second line on narrow screens or with a large font
-             instead of pushing the last button past the card edge, where the
-             card outline would clip it (and its ripple). -->
+        <!-- One row on every supported phone (>= 360dp, font scale <= 1.15):
+             the compact left pair never wraps, and the icon delete button keeps
+             a 4dp inset on top of the card padding so its circular ripple stays
+             inside the rounded outline instead of being clipped. -->
         <androidx.constraintlayout.widget.ConstraintLayout
             android:id="@+id/alarm_actions"
             android:layout_width="match_parent"
@@ -87,44 +88,37 @@
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/alarm_snooze"
-                style="@style/Widget.Material3.Button.TonalButton"
+                style="@style/Widget.Alarms.SnoozeButton"
                 android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:minHeight="44dp"
-                android:text="@string/alarms_snooze" />
+                android:layout_height="44dp"
+                android:text="@string/alarms_snooze"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/alarm_stop"
-                style="@style/Widget.Material3.Button.TextButton"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:minHeight="44dp"
-                android:text="@string/alarms_stop" />
+                style="@style/Widget.Alarms.StopButton"
+                android:layout_width="0dp"
+                android:layout_height="44dp"
+                android:layout_marginStart="4dp"
+                android:text="@string/alarms_stop"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintEnd_toStartOf="@id/alarm_delete"
+                app:layout_constraintStart_toEndOf="@id/alarm_snooze"
+                app:layout_constraintTop_toTopOf="parent" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/alarm_delete"
-                style="@style/Widget.Home.DangerTextButton"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:minHeight="44dp"
-                android:text="@string/alarms_delete"
-                app:layout_constraintBottom_toBottomOf="@id/alarm_actions_flow"
-                app:layout_constraintEnd_toEndOf="parent" />
-
-            <androidx.constraintlayout.helper.widget.Flow
-                android:id="@+id/alarm_actions_flow"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                app:constraint_referenced_ids="alarm_snooze,alarm_stop"
-                app:flow_firstHorizontalBias="0"
-                app:flow_firstHorizontalStyle="packed"
-                app:flow_horizontalBias="0"
-                app:flow_horizontalGap="4dp"
-                app:flow_horizontalStyle="packed"
-                app:flow_verticalGap="4dp"
-                app:flow_wrapMode="chain"
-                app:layout_constraintEnd_toStartOf="@id/alarm_delete"
-                app:layout_constraintStart_toStartOf="parent"
+                style="@style/Widget.Material3.Button.IconButton"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:layout_marginEnd="4dp"
+                android:contentDescription="@string/alarms_delete"
+                app:icon="@drawable/alarms_ic_delete"
+                app:iconTint="?attr/colorError"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintTop_toTopOf="parent" />
         </androidx.constraintlayout.widget.ConstraintLayout>
     </LinearLayout>
