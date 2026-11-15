@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Compact card actions: the snooze label ("Отложить на 9 мин") is long,
+         so the default 24dp horizontal padding would push the row past one
+         line at 360dp with a 1.15 font scale. -->
+    <style name="Widget.Alarms.SnoozeButton" parent="Widget.Material3.Button.TonalButton">
+        <item name="android:insetLeft">0dp</item>
+        <item name="android:insetRight">0dp</item>
+        <item name="android:paddingLeft">12dp</item>
+        <item name="android:paddingRight">12dp</item>
+        <item name="android:minWidth">0dp</item>
+    </style>
+
+    <style name="Widget.Alarms.StopButton" parent="Widget.Material3.Button.TextButton">
+        <item name="android:insetLeft">0dp</item>
+        <item name="android:insetRight">0dp</item>
+        <item name="android:paddingLeft">12dp</item>
+        <item name="android:paddingRight">12dp</item>
+        <item name="android:minWidth">0dp</item>
+    </style>
+</resources>

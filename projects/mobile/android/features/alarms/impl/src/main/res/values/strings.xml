@@ -23,7 +23,10 @@
     <string name="alarms_repeat_weekdays">Weekdays</string>
     <string name="alarms_repeat_weekends">Weekends</string>
     <string name="alarms_repeat_custom">Custom days</string>
-    <string name="alarms_repeat_once">One-shot alarm</string>
+    <!-- Repeat chip label, next to "Every day" / "Weekdays" / "Weekends". -->
+    <string name="alarms_repeat_once">Once</string>
+    <!-- Card summary of a one-shot alarm; a different, fuller sentence. -->
+    <string name="alarms_repeat_once_summary">One-shot alarm</string>
     <string name="alarms_repeat_once_on">Once on %1$s</string>
     <string name="alarms_repeat_unknown">Unsupported repeat</string>
     <string name="alarms_timezone_default">Asia/Almaty</string>
