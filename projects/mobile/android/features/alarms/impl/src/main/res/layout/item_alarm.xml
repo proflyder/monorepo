@@ -76,12 +76,14 @@
             android:textAppearance="?attr/textAppearanceLabelLarge"
             android:textColor="?attr/colorPrimary" />
 
-        <LinearLayout
+        <!-- Wraps to a second line on narrow screens or with a large font
+             instead of pushing the last button past the card edge, where the
+             card outline would clip it (and its ripple). -->
+        <androidx.constraintlayout.widget.ConstraintLayout
             android:id="@+id/alarm_actions"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:orientation="horizontal">
+            android:layout_marginTop="8dp">
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/alarm_snooze"
@@ -96,14 +98,8 @@
                 style="@style/Widget.Material3.Button.TextButton"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="4dp"
                 android:minHeight="44dp"
                 android:text="@string/alarms_stop" />
-
-            <Space
-                android:layout_width="0dp"
-                android:layout_height="1dp"
-                android:layout_weight="1" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/alarm_delete"
@@ -111,7 +107,25 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:minHeight="44dp"
-                android:text="@string/alarms_delete" />
-        </LinearLayout>
+                android:text="@string/alarms_delete"
+                app:layout_constraintBottom_toBottomOf="@id/alarm_actions_flow"
+                app:layout_constraintEnd_toEndOf="parent" />
+
+            <androidx.constraintlayout.helper.widget.Flow
+                android:id="@+id/alarm_actions_flow"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                app:constraint_referenced_ids="alarm_snooze,alarm_stop"
+                app:flow_firstHorizontalBias="0"
+                app:flow_firstHorizontalStyle="packed"
+                app:flow_horizontalBias="0"
+                app:flow_horizontalGap="4dp"
+                app:flow_horizontalStyle="packed"
+                app:flow_verticalGap="4dp"
+                app:flow_wrapMode="chain"
+                app:layout_constraintEnd_toStartOf="@id/alarm_delete"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent" />
+        </androidx.constraintlayout.widget.ConstraintLayout>
     </LinearLayout>
 </com.google.android.material.card.MaterialCardView>
