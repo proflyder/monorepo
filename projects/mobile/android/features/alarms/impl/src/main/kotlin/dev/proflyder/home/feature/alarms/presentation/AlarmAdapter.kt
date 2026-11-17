@@ -9,8 +9,8 @@ import dev.proflyder.home.core.ui.AdapterCallback
 import dev.proflyder.home.core.ui.BaseListAdapter
 import dev.proflyder.home.core.ui.BaseViewHolder
 import dev.proflyder.home.core.ui.HomeMotion
-import dev.proflyder.home.core.ui.setVisible
 import dev.proflyder.home.feature.alarms.impl.databinding.ItemAlarmBinding
+import java.time.Instant
 import kotlin.math.roundToInt
 
 /** One list row: the alarm plus its multi-select presentation. */
@@ -89,10 +89,13 @@ internal class AlarmAdapter(
         override fun bind(item: AlarmRow) {
             val schedule = item.alarm
             val context = binding.root.context
-            binding.alarmTime.text = AlarmFormat.time(schedule)
-            binding.alarmLabel.text = schedule.label
-            binding.alarmRepeat.text = AlarmFormat.repeatSummary(context, schedule)
-            binding.alarmNext.text = AlarmFormat.nextDue(context, schedule)
+            bindAlarmCard(
+                binding = binding,
+                schedule = schedule,
+                context = context,
+                nowUnix = Instant.now().epochSecond,
+                actionsAllowed = !item.selectionMode,
+            )
 
             binding.root.alpha = if (schedule.enabled) 1f else 0.6f
             binding.root.isChecked = item.selected
@@ -109,7 +112,6 @@ internal class AlarmAdapter(
             previousSelected = item.selected
 
             // While selecting, a tap picks the card; per-card controls are inert.
-            binding.alarmActions.setVisible(!item.selectionMode)
             binding.alarmEnabled.isEnabled = !item.selectionMode
             binding_ = true
             binding.alarmEnabled.isChecked = schedule.enabled

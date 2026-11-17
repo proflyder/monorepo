@@ -5,6 +5,7 @@ import org.junit.runners.Suite
 
 @RunWith(Suite::class)
 @Suite.SuiteClasses(
+    AlarmCardModeTest::class,
     AlarmSelectionAnimationTest::class,
     AlarmEditorDefaultsTest::class,
     AlarmQuickOffsetStateTest::class,
