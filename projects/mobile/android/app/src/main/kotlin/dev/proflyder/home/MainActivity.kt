@@ -25,6 +25,7 @@ import dev.proflyder.home.core.navigation.FragmentRouter
 import dev.proflyder.home.core.navigation.Navigator
 import dev.proflyder.home.core.navigation.NavigatorHost
 import dev.proflyder.home.core.model.PowerState
+import dev.proflyder.home.core.ui.AppForeground
 import dev.proflyder.home.core.ui.ViewModelFactoryProvider
 import dev.proflyder.home.databinding.ActivityMainBinding
 import dev.proflyder.home.feature.control.presentation.ControlUiState
@@ -51,6 +52,11 @@ class MainActivity : AppCompatActivity(), NavigatorHost, ViewModelFactoryProvide
     private val itemIdByFeature = mutableMapOf<String, Int>()
     private val featureByItemId = mutableMapOf<Int, String>()
     private var syncingSelection = false
+
+    /** Elapsed time when the activity left the foreground; 0 before the first start. */
+    private var leftForegroundAtNanos = 0L
+
+    private val graph get() = (application as HomeApplication).graph
 
     override val navigator: Navigator get() = router
 
@@ -130,6 +136,22 @@ class MainActivity : AppCompatActivity(), NavigatorHost, ViewModelFactoryProvide
     override fun onResume() {
         super.onResume()
         router.onHostResumed()
+    }
+
+    override fun onStart() {
+        super.onStart()
+        val leftAt = leftForegroundAtNanos
+        when {
+            leftAt == 0L -> Unit
+            System.nanoTime() - leftAt >= STALE_CONNECTION_NANOS -> graph.httpClient.connectionPool.evictAll()
+            else -> Unit
+        }
+        AppForeground.onResumed()
+    }
+
+    override fun onStop() {
+        leftForegroundAtNanos = System.nanoTime()
+        super.onStop()
     }
 
     override fun onPause() {
@@ -272,5 +294,12 @@ class MainActivity : AppCompatActivity(), NavigatorHost, ViewModelFactoryProvide
 
     private companion object {
         const val CONTROL_TAB = "control"
+
+        /**
+         * A socket that survived longer than this in the background is almost
+         * certainly dead after Doze; dropping the pool makes the first resume
+         * request open a fresh connection instead of failing and retrying.
+         */
+        const val STALE_CONNECTION_NANOS = 15_000_000_000L
     }
 }

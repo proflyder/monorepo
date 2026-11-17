@@ -65,6 +65,7 @@ class ConnectIntercomClient(
     baseClient: OkHttpClient,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
     interceptors: List<Interceptor> = emptyList(),
+    networkWaiter: NetworkWaiter = NetworkWaiter.Online,
 ) : IntercomClient {
 
     private val api: IntercomApi = HomeRetrofit.create(
@@ -73,6 +74,7 @@ class ConnectIntercomClient(
         baseClient,
         Target.INTERCOM,
         interceptors,
+        networkWaiter,
     )
 
     private val streamClient: OkHttpClient = baseClient.newBuilder()

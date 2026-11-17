@@ -9,6 +9,7 @@ import java.net.SocketTimeoutException
 import java.net.UnknownHostException
 import javax.net.ssl.SSLException
 import javax.net.ssl.SSLHandshakeException
+import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import okhttp3.ResponseBody
@@ -53,10 +54,15 @@ internal fun sanitizeMessage(message: String?): String? = message
  * Failure of a unary Connect call before a decoded response: transport errors
  * keep their [toRemoteFailure] mapping, malformed JSON becomes a protocol
  * failure, and anything else is a bug the caller should rethrow.
+ *
+ * Cancellation is rethrown, never mapped: leaving a screen, switching tabs or a
+ * cancelled refresh is not a failure the user should see or the log should
+ * report as an error.
  */
-internal fun Throwable.toCallFailure(): RemoteFailure = when (this) {
-    is IOException -> toRemoteFailure()
-    is SerializationException -> RemoteFailure.ProtocolFailure("invalid JSON response")
+internal fun Throwable.toCallFailure(): RemoteFailure = when {
+    isCallCancellation() -> throw CancellationException(message ?: "call canceled", this)
+    this is IOException -> toRemoteFailure()
+    this is SerializationException -> RemoteFailure.ProtocolFailure("invalid JSON response")
     else -> RemoteFailure.ProtocolFailure(sanitizeMessage(message) ?: "unexpected response shape")
 }
 
