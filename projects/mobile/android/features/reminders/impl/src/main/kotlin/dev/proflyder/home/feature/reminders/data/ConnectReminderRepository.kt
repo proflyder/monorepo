@@ -31,7 +31,6 @@ class ConnectReminderRepository(
     override suspend fun update(existing: Schedule, draft: ReminderDraft): Outcome<Schedule> {
         val updated = existing.copy(
             label = draft.label.trim(),
-            timezone = draft.timezone.trim(),
             at = WallTime(draft.hour, draft.minute),
             onceDate = draft.date.toString(),
             repeat = RepeatKind.ONCE,
@@ -49,7 +48,6 @@ class ConnectReminderRepository(
     private fun ReminderDraft.toScheduleDraft(idempotencyKey: String): ScheduleDraft = ScheduleDraft(
         label = label.trim(),
         kind = ScheduleKind.REMINDER,
-        timezone = timezone.trim(),
         at = WallTime(hour, minute),
         onceDate = date.toString(),
         repeat = RepeatKind.ONCE,

@@ -15,7 +15,6 @@ class ReminderEditorDraftCodecTest {
             date = LocalDate.of(2026, 12, 1),
             hour = 18,
             minute = 45,
-            timezone = "Europe/Berlin",
             enabled = false,
         )
         assertEquals(draft, ReminderEditorDraftCodec.fromMap(ReminderEditorDraftCodec.toMap(draft)))

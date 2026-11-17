@@ -621,13 +621,23 @@
   `testdata/events`, `testdata/ledger` и `testdata/catalog` — замороженные
   данные для Rust-тестов.
 - Действующий владелец будильников, таймеров и напоминаний — scheduler.
+  Сервер хранит и считает только UTC; каждый клиент (`Time-Zone: <IANA>`)
+  получает и отправляет локальное время, конверсия — в scheduler
+  (`api/zone.rs`, `domain/rule.rs`). Нет заголовка — UTC с warning,
+  неизвестная зона — 400. `SCHEDULER_TIMEZONE` больше не используется;
+  `MCP_TIMEZONE=Asia/Almaty` — зона заголовка mcp-gateway; Hermes получает
+  `TZ=Asia/Almaty`, образ ставит `tzdata`.
   Старые HA-планировщики и их вспомогательные поля удалены из исходников и
   живой конфигурации; оставшиеся недоступные записи реестра очищены.
   Повторного исполнителя нет. HA остаётся исполнителем звука
   (`alarm_start`, `schedule_announce`, `alarm_stop`).
-- Схема scheduler — v4: `scenarios` (v2), `push_devices` (v3) и реестр
-  телефонов по стабильному `device_id` с уникальным FCM-токеном (v4); база
-  v1/v2/v3 мигрирует на месте, записи v3, ключённые по токену, сохраняются. `home.v1.ScenarioService` хранит определения сценариев
+- Схема scheduler — v5: `scenarios` (v2), `push_devices` (v3), реестр
+  телефонов по стабильному `device_id` с уникальным FCM-токеном (v4) и
+  UTC-only расписания (v5). v5 добавляет `once_unix`, переводит старые
+  локальные `at`/`weekdays`/`once_date` в UTC по их IANA-зоне и удаляет
+  колонки `timezone`/`once_date`; `Asia/Almaty` (UTC+5, без DST) сдвигает
+  «будни 03:00» в вс–чт 22:00 UTC. База v1/v2/v3/v4 мигрирует на месте,
+  записи v3, ключённые по токену, сохраняются. `home.v1.ScenarioService` хранит определения сценариев
   (manual/time-триггеры, условия, шаги, revision), time-триггеры
   материализуются строками `schedules` (`kind=SCHEDULE_KIND_SCENARIO`) и
   событиями `scenario.fire` в очереди `scenario`; `RunScenario` ставит

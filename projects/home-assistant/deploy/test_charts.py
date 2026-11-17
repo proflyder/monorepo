@@ -72,6 +72,16 @@ class ChartContracts(unittest.TestCase):
         # No Python source is shipped by the chart any more.
         self.assertFalse((HERE / "chart/files/health_exporter.py").exists())
 
+    def test_hermes_gateway_runs_in_the_home_timezone(self):
+        # `TZ` is not set in the container image: the Flux post-renderer must
+        # give the gateway the home zone so Hermes' own clock labels match the
+        # owner's day. The runtime image installs tzdata for the name to exist.
+        text = (HERE / "flux/helmrelease.yaml").read_text(encoding="utf-8")
+        self.assertIn("name: TZ", text)
+        self.assertIn("value: Asia/Almaty", text)
+        dockerfile = (HERE / "images/hermes/Dockerfile").read_text(encoding="utf-8")
+        self.assertIn("tzdata", dockerfile)
+
     def test_hermes_config_drift_service_is_opt_in(self):
         # The drift Service is rendered only for the Flux release; the admin
         # `helm upgrade` path without the sidecar must stay valid.

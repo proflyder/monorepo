@@ -13,6 +13,7 @@ mod error;
 pub mod push;
 mod service;
 mod text;
+mod zone;
 
 use std::collections::HashSet;
 use std::convert::Infallible;

@@ -19,8 +19,7 @@
           "idempotencyKey": "wake-key",
           "kind": "SCHEDULE_KIND_ALARM",
           "label": "wake",
-          "repeat": "REPEAT_KIND_DAILY",
-          "timezone": "UTC"
+          "repeat": "REPEAT_KIND_DAILY"
         }
       },
       "response": {
@@ -43,7 +42,6 @@
             "payloadJson": "{}",
             "repeat": "REPEAT_KIND_DAILY",
             "revision": "1",
-            "timezone": "UTC",
             "updatedUnix": "1767268800"
           }
         }
@@ -69,8 +67,7 @@
           "idempotencyKey": "wake-key",
           "kind": "SCHEDULE_KIND_ALARM",
           "label": "wake",
-          "repeat": "REPEAT_KIND_DAILY",
-          "timezone": "UTC"
+          "repeat": "REPEAT_KIND_DAILY"
         }
       },
       "response": {
@@ -93,7 +90,6 @@
             "payloadJson": "{}",
             "repeat": "REPEAT_KIND_DAILY",
             "revision": "1",
-            "timezone": "UTC",
             "updatedUnix": "1767268800"
           }
         }
@@ -116,8 +112,7 @@
           "idempotencyKey": "wake-key",
           "kind": "SCHEDULE_KIND_ALARM",
           "label": "gym",
-          "repeat": "REPEAT_KIND_DAILY",
-          "timezone": "UTC"
+          "repeat": "REPEAT_KIND_DAILY"
         }
       },
       "response": {

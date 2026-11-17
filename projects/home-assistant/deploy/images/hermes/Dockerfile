@@ -132,7 +132,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
         apt-get $apt_opts install -y --fix-missing --no-install-recommends "$@"; \
     }; \
     apt-get $apt_opts update; \
-    install_packages ca-certificates curl git ffmpeg libatomic1 tini; \
+    install_packages ca-certificates curl git ffmpeg libatomic1 tini tzdata; \
     rm -rf /var/log/apt /var/log/dpkg.log /var/log/alternatives.log \
         /var/cache/fontconfig /var/cache/ldconfig
 COPY --from=uv /uv /usr/local/bin/uv

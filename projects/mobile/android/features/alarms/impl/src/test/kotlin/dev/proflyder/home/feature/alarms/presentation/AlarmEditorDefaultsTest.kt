@@ -4,7 +4,6 @@ import dev.proflyder.home.core.model.RepeatKind
 import dev.proflyder.home.feature.alarms.AlarmEditorDraft
 import dev.proflyder.home.feature.alarms.AlarmEditorDraftCodec
 import java.time.LocalDate
-import java.time.ZoneId
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -14,14 +13,14 @@ class AlarmEditorDefaultsTest {
     fun newAlarmEditorStateDefaultsToSingleOccurrence() {
         val state = AlarmEditorUiState()
         assertEquals(RepeatKind.ONCE, state.repeat)
-        assertEquals(LocalDate.now(ZoneId.of(state.timezone)), state.onceDate)
+        assertEquals(LocalDate.now(), state.onceDate)
     }
 
     @Test
     fun newAlarmDraftDefaultsToSingleOccurrence() {
         val draft = AlarmEditorDraft()
         assertEquals(RepeatKind.ONCE, draft.repeat)
-        assertEquals(LocalDate.now(ZoneId.of(draft.timezone)), draft.onceDate)
+        assertEquals(LocalDate.now(), draft.onceDate)
     }
 
     @Test

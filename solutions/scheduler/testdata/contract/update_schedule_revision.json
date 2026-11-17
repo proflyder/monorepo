@@ -18,8 +18,7 @@
           "enabled": true,
           "kind": "SCHEDULE_KIND_ALARM",
           "label": "wake",
-          "repeat": "REPEAT_KIND_DAILY",
-          "timezone": "UTC"
+          "repeat": "REPEAT_KIND_DAILY"
         }
       },
       "response": {
@@ -42,7 +41,6 @@
             "payloadJson": "{}",
             "repeat": "REPEAT_KIND_DAILY",
             "revision": "1",
-            "timezone": "UTC",
             "updatedUnix": "1767268800"
           }
         }
@@ -70,8 +68,7 @@
             "id": "{{scheduleId}}",
             "kind": "SCHEDULE_KIND_ALARM",
             "label": "wake up",
-            "repeat": "REPEAT_KIND_DAILY",
-            "timezone": "UTC"
+            "repeat": "REPEAT_KIND_DAILY"
           }
         }
       },
@@ -95,7 +92,6 @@
             "payloadJson": "{}",
             "repeat": "REPEAT_KIND_DAILY",
             "revision": "2",
-            "timezone": "UTC",
             "updatedUnix": "1767268800"
           }
         }
@@ -120,8 +116,7 @@
             "id": "{{scheduleId}}",
             "kind": "SCHEDULE_KIND_ALARM",
             "label": "stale write",
-            "repeat": "REPEAT_KIND_DAILY",
-            "timezone": "UTC"
+            "repeat": "REPEAT_KIND_DAILY"
           }
         }
       },

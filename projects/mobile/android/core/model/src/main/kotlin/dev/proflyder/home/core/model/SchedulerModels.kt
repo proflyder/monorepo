@@ -41,7 +41,6 @@ data class Schedule(
     val id: String,
     val label: String,
     val kind: ScheduleKind,
-    val timezone: String,
     val at: WallTime,
     val onceDate: String,
     val repeat: RepeatKind,
@@ -100,7 +99,6 @@ data class SchedulerStatus(
 data class ScheduleDraft(
     val label: String,
     val kind: ScheduleKind,
-    val timezone: String,
     val at: WallTime,
     val onceDate: String = "",
     val repeat: RepeatKind,

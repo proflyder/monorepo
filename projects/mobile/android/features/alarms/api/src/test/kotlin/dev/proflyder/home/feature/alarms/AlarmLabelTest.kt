@@ -9,7 +9,6 @@ class AlarmLabelTest {
         label = label,
         hour = 7,
         minute = 30,
-        timezone = "Asia/Almaty",
         repeat = RepeatKind.DAILY,
         weekdays = emptyList(),
         enabled = true,

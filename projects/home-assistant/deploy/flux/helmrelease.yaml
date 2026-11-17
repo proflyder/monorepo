@@ -116,6 +116,11 @@ spec:
                     containers:
                       - name: gateway
                         image: ${HERMES_IMAGE}
+                        # Hermes runs with the home zone so its own timestamps
+                        # and "today/tomorrow" context match the owner's clock.
+                        env:
+                          - name: TZ
+                            value: Asia/Almaty
                         lifecycle:
                           preStop:
                             exec:

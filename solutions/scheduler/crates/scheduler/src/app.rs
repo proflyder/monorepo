@@ -111,7 +111,6 @@ pub async fn run() -> anyhow::Result<()> {
 
 fn store_config(config: &Config) -> StoreConfig {
     StoreConfig {
-        default_timezone: config.timezone.clone(),
         missed_grace: seconds(config.missed_grace),
         ring_window: seconds(config.ring_window),
         max_timers: config.max_timers,
@@ -138,14 +137,12 @@ mod tests {
         let config = Config::load_from(
             &|key| match key {
                 "SCHEDULER_TOKEN" => Some("t".to_owned()),
-                "SCHEDULER_TIMEZONE" => Some("Asia/Almaty".to_owned()),
                 _ => None,
             },
             &|_path| Ok(Vec::new()),
         )
         .expect("config");
         let store = store_config(&config);
-        assert_eq!(store.default_timezone, "Asia/Almaty");
         assert_eq!(store.missed_grace, 600);
         assert_eq!(store.ring_window, 900);
         assert_eq!(store.max_timers, 64);

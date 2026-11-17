@@ -54,18 +54,18 @@
   "hashes": [
     {
       "name": "canonical daily alarm",
-      "canonical": "schedule|wake|1|UTC||7|30|0|2||true|{}",
-      "sha1": "b9add2e9dd506dd05051ebbc84f6754c847203f7"
+      "canonical": "schedule|wake|1|0|7|30|0|2||true|{}",
+      "sha1": "6977661e122ba3c4868097646f07cfa1ebab9dab"
     },
     {
       "name": "canonical custom weekdays sorted",
-      "canonical": "schedule|gym|1|Asia/Almaty||6|15|5|5|1,3,5|false|{\"source\":\"test\"}",
-      "sha1": "b12ba56ff9a4e6e28de52314022e7a324b06fa3c"
+      "canonical": "schedule|gym|1|0|6|15|5|5|1,3,5|false|{\"source\":\"test\"}",
+      "sha1": "fc5148543effcf3d42e5ff0022f07efd9fbe83c6"
     },
     {
       "name": "canonical once reminder",
-      "canonical": "schedule|call mom|2|Europe/Berlin|2026-02-01|9|0|0|1||true|{}",
-      "sha1": "6c0e889f97819c1efd540a87040976b809bc9272"
+      "canonical": "schedule|call mom|2|1769932800|9|0|0|1||true|{}",
+      "sha1": "63b9953a6e1db3b7ac20191e0909b2fb8311108d"
     },
     {
       "name": "canonical timer",

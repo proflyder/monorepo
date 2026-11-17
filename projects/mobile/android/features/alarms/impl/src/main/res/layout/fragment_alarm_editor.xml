@@ -1,288 +1,302 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:fillViewport="true">
+    android:layout_height="match_parent">
 
+    <androidx.core.widget.NestedScrollView
+        android:id="@+id/alarm_editor_scroll"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:clipToPadding="false"
+        android:fillViewport="true">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingStart="@dimen/ui_screen_padding"
+            android:paddingTop="@dimen/ui_screen_padding"
+            android:paddingEnd="@dimen/ui_screen_padding"
+            android:paddingBottom="@dimen/alarms_editor_scroll_bottom">
+
+            <!-- Large time display: the primary action, tap opens the Material
+                 time picker. A new alarm is pre-filled with the next full hour. -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/alarm_editor_time"
+                style="@style/Widget.Alarms.TimeButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:contentDescription="@string/alarms_editor_time"
+                android:textAllCaps="false" />
+
+            <!-- A single horizontally scrolling row, one chip per preset. The
+                 order matches ALARM_QUICK_OFFSETS_MINUTES. -->
+            <HorizontalScrollView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:clipToPadding="false"
+                android:scrollbars="none">
+
+                <com.google.android.material.chip.ChipGroup
+                    android:id="@+id/alarm_editor_quick_offsets"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    app:singleLine="true"
+                    app:singleSelection="false">
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/quick_offset_15"
+                        style="@style/Widget.Material3.Chip.Assist"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/alarms_quick_offset_15" />
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/quick_offset_30"
+                        style="@style/Widget.Material3.Chip.Assist"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/alarms_quick_offset_30" />
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/quick_offset_60"
+                        style="@style/Widget.Material3.Chip.Assist"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/alarms_quick_offset_60" />
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/quick_offset_90"
+                        style="@style/Widget.Material3.Chip.Assist"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/alarms_quick_offset_90" />
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/quick_offset_120"
+                        style="@style/Widget.Material3.Chip.Assist"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/alarms_quick_offset_120" />
+                </com.google.android.material.chip.ChipGroup>
+            </HorizontalScrollView>
+
+            <TextView
+                style="@style/Widget.Alarms.SectionTitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/alarms_editor_section_gap"
+                android:text="@string/alarms_editor_name" />
+
+            <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/alarm_editor_label_layout"
+                style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:hint="@string/alarms_label_default"
+                app:helperText="@string/alarms_label_default_hint">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/alarm_editor_label"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:imeOptions="actionDone"
+                    android:inputType="textCapSentences"
+                    android:maxLength="120" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <TextView
+                style="@style/Widget.Alarms.SectionTitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/alarms_editor_section_gap"
+                android:text="@string/alarms_editor_repeat" />
+
+            <com.google.android.material.chip.ChipGroup
+                android:id="@+id/alarm_editor_repeat_group"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                app:singleLine="false"
+                app:singleSelection="true">
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/repeat_once"
+                    style="@style/Widget.Material3.Chip.Filter"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:checkable="true"
+                    android:text="@string/alarms_repeat_once" />
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/repeat_daily"
+                    style="@style/Widget.Material3.Chip.Filter"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:checkable="true"
+                    android:text="@string/alarms_repeat_daily" />
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/repeat_weekdays"
+                    style="@style/Widget.Material3.Chip.Filter"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:checkable="true"
+                    android:text="@string/alarms_repeat_weekdays" />
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/repeat_weekends"
+                    style="@style/Widget.Material3.Chip.Filter"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:checkable="true"
+                    android:text="@string/alarms_repeat_weekends" />
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/repeat_custom"
+                    style="@style/Widget.Material3.Chip.Filter"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:checkable="true"
+                    android:text="@string/alarms_repeat_custom" />
+            </com.google.android.material.chip.ChipGroup>
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/alarm_editor_date"
+                style="@style/Widget.Material3.Button.OutlinedButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:minHeight="56dp"
+                android:textAllCaps="false"
+                android:visibility="gone" />
+
+            <com.google.android.material.chip.ChipGroup
+                android:id="@+id/alarm_editor_days_group"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:visibility="gone"
+                app:singleLine="true"
+                app:singleSelection="false">
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/day_1"
+                    style="@style/Widget.Alarms.DayChip"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:checkable="true"
+                    android:text="@string/alarms_day_mon" />
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/day_2"
+                    style="@style/Widget.Alarms.DayChip"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:checkable="true"
+                    android:text="@string/alarms_day_tue" />
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/day_3"
+                    style="@style/Widget.Alarms.DayChip"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:checkable="true"
+                    android:text="@string/alarms_day_wed" />
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/day_4"
+                    style="@style/Widget.Alarms.DayChip"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:checkable="true"
+                    android:text="@string/alarms_day_thu" />
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/day_5"
+                    style="@style/Widget.Alarms.DayChip"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:checkable="true"
+                    android:text="@string/alarms_day_fri" />
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/day_6"
+                    style="@style/Widget.Alarms.DayChip"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:checkable="true"
+                    android:text="@string/alarms_day_sat" />
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/day_7"
+                    style="@style/Widget.Alarms.DayChip"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:checkable="true"
+                    android:text="@string/alarms_day_sun" />
+            </com.google.android.material.chip.ChipGroup>
+
+            <com.google.android.material.materialswitch.MaterialSwitch
+                android:id="@+id/alarm_editor_enabled"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/alarms_editor_section_gap"
+                android:minHeight="48dp"
+                android:text="@string/alarms_enabled" />
+
+            <TextView
+                android:id="@+id/alarm_editor_error"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:textColor="?attr/colorError"
+                android:visibility="gone" />
+
+            <ProgressBar
+                android:id="@+id/alarm_editor_progress"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="12dp"
+                android:visibility="gone" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/alarm_editor_delete"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:minHeight="48dp"
+                android:text="@string/alarms_editor_delete"
+                android:textColor="?attr/colorError"
+                android:visibility="gone" />
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+
+    <!-- Sticky action bar: visible before any scroll, above the bottom
+         navigation; the fragment container already applies the keyboard inset. -->
     <LinearLayout
+        android:id="@+id/alarm_editor_save_bar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:background="?attr/colorSurfaceContainer"
+        android:elevation="3dp"
         android:orientation="vertical"
-        android:padding="@dimen/alarms_screen_margin">
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/alarms_editor_hint"
-            android:textAppearance="?attr/textAppearanceBodyMedium"
-            android:textColor="?attr/colorOnSurfaceVariant" />
-
-        <com.google.android.material.textfield.TextInputLayout
-            android:id="@+id/alarm_editor_label_layout"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:hint="@string/alarms_label_default"
-            app:helperText="@string/alarms_label_default_hint"
-            style="@style/Widget.Material3.TextInputLayout.OutlinedBox">
-
-            <com.google.android.material.textfield.TextInputEditText
-                android:id="@+id/alarm_editor_label"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:imeOptions="actionNext"
-                android:inputType="textCapSentences"
-                android:maxLength="120" />
-        </com.google.android.material.textfield.TextInputLayout>
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/alarm_editor_time"
-            style="@style/Widget.Material3.Button.OutlinedButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:minHeight="56dp"
-            android:textAllCaps="false" />
-
-        <!-- Order matches ALARM_QUICK_OFFSETS_MINUTES in the feature API. -->
-        <com.google.android.material.chip.ChipGroup
-            android:id="@+id/alarm_editor_quick_offsets"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            app:singleLine="false">
-
-            <com.google.android.material.chip.Chip
-                android:id="@+id/quick_offset_15"
-                style="@style/Widget.Material3.Chip.Assist"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/alarms_quick_offset_15" />
-
-            <com.google.android.material.chip.Chip
-                android:id="@+id/quick_offset_30"
-                style="@style/Widget.Material3.Chip.Assist"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/alarms_quick_offset_30" />
-
-            <com.google.android.material.chip.Chip
-                android:id="@+id/quick_offset_60"
-                style="@style/Widget.Material3.Chip.Assist"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/alarms_quick_offset_60" />
-
-            <com.google.android.material.chip.Chip
-                android:id="@+id/quick_offset_90"
-                style="@style/Widget.Material3.Chip.Assist"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/alarms_quick_offset_90" />
-
-            <com.google.android.material.chip.Chip
-                android:id="@+id/quick_offset_120"
-                style="@style/Widget.Material3.Chip.Assist"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/alarms_quick_offset_120" />
-        </com.google.android.material.chip.ChipGroup>
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/alarm_editor_date"
-            style="@style/Widget.Material3.Button.OutlinedButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:minHeight="56dp"
-            android:textAllCaps="false"
-            android:visibility="gone" />
-
-        <com.google.android.material.textfield.TextInputLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:hint="@string/alarms_editor_timezone"
-            style="@style/Widget.Material3.TextInputLayout.OutlinedBox">
-
-            <com.google.android.material.textfield.TextInputEditText
-                android:id="@+id/alarm_editor_timezone"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:inputType="textNoSuggestions" />
-        </com.google.android.material.textfield.TextInputLayout>
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:text="@string/alarms_editor_repeat"
-            android:textAppearance="?attr/textAppearanceTitleMedium" />
-
-        <com.google.android.material.chip.ChipGroup
-            android:id="@+id/alarm_editor_repeat_group"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            app:singleLine="false"
-            app:singleSelection="true">
-
-            <com.google.android.material.chip.Chip
-                android:id="@+id/repeat_once"
-                style="@style/Widget.Material3.Chip.Filter"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:checkable="true"
-                android:text="@string/alarms_repeat_once" />
-
-            <com.google.android.material.chip.Chip
-                android:id="@+id/repeat_daily"
-                style="@style/Widget.Material3.Chip.Filter"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:checkable="true"
-                android:text="@string/alarms_repeat_daily" />
-
-            <com.google.android.material.chip.Chip
-                android:id="@+id/repeat_weekdays"
-                style="@style/Widget.Material3.Chip.Filter"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:checkable="true"
-                android:text="@string/alarms_repeat_weekdays" />
-
-            <com.google.android.material.chip.Chip
-                android:id="@+id/repeat_weekends"
-                style="@style/Widget.Material3.Chip.Filter"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:checkable="true"
-                android:text="@string/alarms_repeat_weekends" />
-
-            <com.google.android.material.chip.Chip
-                android:id="@+id/repeat_custom"
-                style="@style/Widget.Material3.Chip.Filter"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:checkable="true"
-                android:text="@string/alarms_repeat_custom" />
-        </com.google.android.material.chip.ChipGroup>
-
-        <TextView
-            android:id="@+id/alarm_editor_days_label"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:text="@string/alarms_editor_days"
-            android:textAppearance="?attr/textAppearanceTitleMedium"
-            android:visibility="gone" />
-
-        <com.google.android.material.chip.ChipGroup
-            android:id="@+id/alarm_editor_days_group"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            app:singleLine="false"
-            app:singleSelection="false"
-            android:visibility="gone">
-
-            <com.google.android.material.chip.Chip
-                android:id="@+id/day_1"
-                style="@style/Widget.Material3.Chip.Filter"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:checkable="true"
-                android:text="@string/alarms_day_mon" />
-
-            <com.google.android.material.chip.Chip
-                android:id="@+id/day_2"
-                style="@style/Widget.Material3.Chip.Filter"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:checkable="true"
-                android:text="@string/alarms_day_tue" />
-
-            <com.google.android.material.chip.Chip
-                android:id="@+id/day_3"
-                style="@style/Widget.Material3.Chip.Filter"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:checkable="true"
-                android:text="@string/alarms_day_wed" />
-
-            <com.google.android.material.chip.Chip
-                android:id="@+id/day_4"
-                style="@style/Widget.Material3.Chip.Filter"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:checkable="true"
-                android:text="@string/alarms_day_thu" />
-
-            <com.google.android.material.chip.Chip
-                android:id="@+id/day_5"
-                style="@style/Widget.Material3.Chip.Filter"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:checkable="true"
-                android:text="@string/alarms_day_fri" />
-
-            <com.google.android.material.chip.Chip
-                android:id="@+id/day_6"
-                style="@style/Widget.Material3.Chip.Filter"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:checkable="true"
-                android:text="@string/alarms_day_sat" />
-
-            <com.google.android.material.chip.Chip
-                android:id="@+id/day_7"
-                style="@style/Widget.Material3.Chip.Filter"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:checkable="true"
-                android:text="@string/alarms_day_sun" />
-        </com.google.android.material.chip.ChipGroup>
-
-        <com.google.android.material.materialswitch.MaterialSwitch
-            android:id="@+id/alarm_editor_enabled"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:minHeight="48dp"
-            android:text="@string/alarms_enabled" />
-
-        <TextView
-            android:id="@+id/alarm_editor_error"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:textColor="?attr/colorError"
-            android:visibility="gone" />
+        android:paddingStart="@dimen/ui_screen_padding"
+        android:paddingTop="8dp"
+        android:paddingEnd="@dimen/ui_screen_padding"
+        android:paddingBottom="8dp">
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/alarm_editor_save"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
             android:minHeight="52dp"
             android:text="@string/alarms_editor_save" />
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/alarm_editor_delete"
-            style="@style/Widget.Material3.Button.TextButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:minHeight="48dp"
-            android:text="@string/alarms_editor_delete"
-            android:textColor="?attr/colorError"
-            android:visibility="gone" />
-
-        <ProgressBar
-            android:id="@+id/alarm_editor_progress"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="center_horizontal"
-            android:layout_marginTop="12dp"
-            android:visibility="gone" />
     </LinearLayout>
-</androidx.core.widget.NestedScrollView>
+</FrameLayout>

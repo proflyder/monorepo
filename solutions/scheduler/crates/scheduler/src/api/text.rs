@@ -6,7 +6,7 @@
 
 use home_proto::{localized, localized_with, v1::LocalizedText};
 
-use crate::domain::ErrorKind;
+use crate::domain::{DomainError, ErrorKind};
 use crate::store::StoreError;
 
 /// Attaches a localization detail to an error built directly by an API handler.
@@ -25,6 +25,13 @@ fn kind_key(kind: ErrorKind) -> &'static str {
         ErrorKind::LimitExceeded => "scheduler.error.limit_exceeded",
         ErrorKind::ConsumerDenied => "scheduler.error.consumer_denied",
     }
+}
+
+/// Localized error for a domain failure raised during request conversion.
+pub fn domain_error(error: &DomainError) -> connectrpc::ConnectError {
+    let text = error_text(&StoreError::Domain(error.clone()));
+    connectrpc::ConnectError::invalid_argument(error.to_string())
+        .with_detail(home_proto::error_detail(&text))
 }
 
 /// Localized text for a store failure.

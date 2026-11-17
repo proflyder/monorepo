@@ -24,7 +24,6 @@ object SchedulerJson {
         CreateScheduleRequestDto(
             label = draft.label,
             kind = draft.kind.dto(),
-            timezone = draft.timezone,
             at = draft.at.dto(),
             onceDate = draft.onceDate.takeIf { it.isNotBlank() },
             repeat = draft.repeat.dto(),
@@ -40,7 +39,6 @@ object SchedulerJson {
                 id = schedule.id,
                 label = schedule.label,
                 kind = schedule.kind.dto(),
-                timezone = schedule.timezone,
                 at = schedule.at.dto(),
                 onceDate = schedule.onceDate.takeIf { it.isNotBlank() },
                 repeat = schedule.repeat.dto(),
@@ -66,7 +64,6 @@ internal fun ScheduleDto.toDomain(): Schedule = Schedule(
     id = id,
     label = label,
     kind = kind.toDomain(),
-    timezone = timezone,
     at = (at ?: WallTimeDto()).toDomain(),
     onceDate = onceDate,
     repeat = repeat.toDomain(),

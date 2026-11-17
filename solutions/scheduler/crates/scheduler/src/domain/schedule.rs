@@ -53,9 +53,8 @@ pub struct Schedule {
     pub id: String,
     pub label: String,
     pub kind: ScheduleKind,
-    pub timezone: String,
     pub at: WallTime,
-    pub once_date: String,
+    pub once_unix: i64,
     pub repeat: Repeat,
     pub weekdays: Vec<i32>,
     pub next_due_unix: i64,
@@ -77,11 +76,10 @@ impl Schedule {
     #[must_use]
     pub fn rule(&self) -> Rule {
         Rule {
-            timezone: self.timezone.clone(),
             at: self.at,
             repeat: self.repeat,
             weekdays: self.weekdays.clone(),
-            once_date: self.once_date.clone(),
+            once_unix: self.once_unix,
         }
     }
 
@@ -113,8 +111,7 @@ impl Schedule {
         canonical_schedule(
             &self.label,
             self.kind,
-            &self.timezone,
-            &self.once_date,
+            self.once_unix,
             self.at,
             self.repeat,
             &self.weekdays,

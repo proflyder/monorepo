@@ -38,7 +38,6 @@ class HomeHubTest {
         id = id,
         label = id,
         kind = ScheduleKind.ALARM,
-        timezone = "UTC",
         at = WallTime(7, 30),
         onceDate = "",
         repeat = RepeatKind.DAILY,

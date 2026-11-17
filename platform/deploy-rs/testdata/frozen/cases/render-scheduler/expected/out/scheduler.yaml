@@ -72,10 +72,7 @@ spec:
               value: /data/scheduler.db
             - name: SCHEDULER_LISTEN
               value: 0.0.0.0:8098
-            # Home wall clock. Asia/Almaty has no DST; IANA data is embedded
-            # in the binary via time/tzdata.
-            - name: SCHEDULER_TIMEZONE
-              value: Asia/Almaty
+            # Every request carries its own Time-Zone; the server stores UTC.
             - name: SCHEDULER_TOKEN_FILE
               value: /run/secrets/scheduler/token
             # Consumer allowlist for ListDueEvents (global, not a per-queue ACL):

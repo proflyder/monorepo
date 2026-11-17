@@ -19,6 +19,5 @@ data class ReminderDraft(
     val date: LocalDate,
     val hour: Int,
     val minute: Int,
-    val timezone: String,
     val enabled: Boolean,
 )

@@ -10,7 +10,6 @@ import dev.proflyder.home.core.model.WallTime
 fun AlarmDraft.toScheduleDraft(idempotencyKey: String): ScheduleDraft = ScheduleDraft(
     label = label.trim(),
     kind = ScheduleKind.ALARM,
-    timezone = timezone.trim(),
     at = WallTime(hour, minute),
     onceDate = if (repeat == RepeatKind.ONCE) onceDate?.toString().orEmpty() else "",
     repeat = repeat,
@@ -22,7 +21,6 @@ fun AlarmDraft.toScheduleDraft(idempotencyKey: String): ScheduleDraft = Schedule
 /** Applies editable fields to an existing server schedule without changing its id/revision. */
 fun Schedule.withAlarmDraft(draft: AlarmDraft): Schedule = copy(
     label = draft.label.trim(),
-    timezone = draft.timezone.trim(),
     at = WallTime(draft.hour, draft.minute),
     onceDate = if (draft.repeat == RepeatKind.ONCE) draft.onceDate?.toString().orEmpty() else "",
     repeat = draft.repeat,

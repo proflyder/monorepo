@@ -19,7 +19,7 @@ use crate::tools::BoxFuture;
 const SERVICE: &str = "home.v1.SchedulerService";
 const MAX_BODY_BYTES: usize = 8 << 20;
 
-/// Wall-clock time of day in the schedule timezone.
+/// Wall-clock time of day in the request's `Time-Zone`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct WallTime {
     /// Hour, 0..23.
@@ -45,9 +45,6 @@ pub struct Schedule {
     /// `SCHEDULE_KIND_*`.
     #[serde(default)]
     pub kind: String,
-    /// IANA timezone.
-    #[serde(default)]
-    pub timezone: String,
     /// Local time of day.
     #[serde(default)]
     pub at: WallTime,
@@ -180,6 +177,7 @@ pub struct Client {
     http: reqwest::Client,
     base_url: String,
     token: String,
+    timezone: String,
 }
 
 impl std::fmt::Debug for Client {
@@ -194,7 +192,12 @@ impl std::fmt::Debug for Client {
 impl Client {
     /// Build a client. `base_url` is the scheduler root, for example
     /// `http://scheduler.home-assistant.svc.cluster.local:8098`.
-    pub fn new(base_url: &str, token: String, timeout: Duration) -> Result<Self, String> {
+    pub fn new(
+        base_url: &str,
+        token: String,
+        timezone: &str,
+        timeout: Duration,
+    ) -> Result<Self, String> {
         let http = home_tls::public_https_client()
             .map_err(|error| format!("scheduler TLS: {error}"))?
             .timeout(timeout)
@@ -205,6 +208,7 @@ impl Client {
             http,
             base_url: base_url.trim().trim_end_matches('/').to_owned(),
             token,
+            timezone: timezone.to_owned(),
         })
     }
 
@@ -220,6 +224,7 @@ impl Client {
             )
             .header(reqwest::header::CONTENT_TYPE, "application/json")
             .header("Connect-Protocol-Version", "1")
+            .header("Time-Zone", &self.timezone)
             .body(payload)
             .send()
             .await

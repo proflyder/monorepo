@@ -122,6 +122,10 @@ impl Service {
     }
 }
 
+fn rule_error(error: &crate::domain::DomainError) -> ConnectError {
+    super::text::domain_error(error)
+}
+
 fn response<T>(message: T) -> ServiceResult<T> {
     Response::ok(message)
 }
@@ -129,62 +133,70 @@ fn response<T>(message: T) -> ServiceResult<T> {
 impl SchedulerService for Service {
     async fn create_schedule<'a>(
         &'a self,
-        _ctx: RequestContext,
+        ctx: RequestContext,
         request: ServiceRequest<'_, proto::CreateScheduleRequest>,
     ) -> ServiceResult<impl connectrpc::Encodable<proto::CreateScheduleResponse> + Send + use<'a>>
     {
+        let zone = super::zone::ClientZone::from_request(&ctx)?;
         let message = request.to_owned_message();
-        let schedule = create_view_to_schedule(&message);
+        let schedule =
+            create_view_to_schedule(&message, &zone).map_err(|error| rule_error(&error))?;
         let now = self.now_unix();
         let key = message.idempotency_key.clone();
         let created = self
             .store_call(move |store| store.create_schedule(&schedule, &key, now))
             .await?;
         response(proto::CreateScheduleResponse {
-            schedule: schedule_to_proto(&created).into(),
+            schedule: schedule_to_proto(&created, &zone).into(),
             ..proto::CreateScheduleResponse::default()
         })
     }
 
     async fn get_schedule<'a>(
         &'a self,
-        _ctx: RequestContext,
+        ctx: RequestContext,
         request: ServiceRequest<'_, proto::GetScheduleRequest>,
     ) -> ServiceResult<impl connectrpc::Encodable<proto::GetScheduleResponse> + Send + use<'a>>
     {
+        let zone = super::zone::ClientZone::from_request(&ctx)?;
         let id = request.id.to_owned();
         let schedule = self
             .store_call(move |store| store.get_schedule(&id))
             .await?;
         response(proto::GetScheduleResponse {
-            schedule: schedule_to_proto(&schedule).into(),
+            schedule: schedule_to_proto(&schedule, &zone).into(),
             ..proto::GetScheduleResponse::default()
         })
     }
 
     async fn list_schedules<'a>(
         &'a self,
-        _ctx: RequestContext,
+        ctx: RequestContext,
         request: ServiceRequest<'_, proto::ListSchedulesRequest>,
     ) -> ServiceResult<impl connectrpc::Encodable<proto::ListSchedulesResponse> + Send + use<'a>>
     {
+        let zone = super::zone::ClientZone::from_request(&ctx)?;
         let kind = super::convert::schedule_kind(request.kind.to_i32());
         let include_disabled = request.include_disabled;
         let schedules = self
             .store_call(move |store| store.list_schedules(include_disabled, kind))
             .await?;
         response(proto::ListSchedulesResponse {
-            schedules: schedules.iter().map(schedule_to_proto).collect(),
+            schedules: schedules
+                .iter()
+                .map(|schedule| schedule_to_proto(schedule, &zone))
+                .collect(),
             ..proto::ListSchedulesResponse::default()
         })
     }
 
     async fn update_schedule<'a>(
         &'a self,
-        _ctx: RequestContext,
+        ctx: RequestContext,
         request: ServiceRequest<'_, proto::UpdateScheduleRequest>,
     ) -> ServiceResult<impl connectrpc::Encodable<proto::UpdateScheduleResponse> + Send + use<'a>>
     {
+        let zone = super::zone::ClientZone::from_request(&ctx)?;
         let message = request.to_owned_message();
         let Some(view) = message.schedule.as_option() else {
             return Err(super::text::connect(
@@ -198,14 +210,14 @@ impl SchedulerService for Service {
                 "scheduler.error.expected_revision_negative",
             ));
         }
-        let schedule = view_to_schedule(view);
+        let schedule = view_to_schedule(view, &zone).map_err(|error| rule_error(&error))?;
         let expected_revision = message.expected_revision;
         let now = self.now_unix();
         let updated = self
             .store_call(move |store| store.update_schedule(&schedule, expected_revision, now))
             .await?;
         response(proto::UpdateScheduleResponse {
-            schedule: schedule_to_proto(&updated).into(),
+            schedule: schedule_to_proto(&updated, &zone).into(),
             ..proto::UpdateScheduleResponse::default()
         })
     }
@@ -229,10 +241,11 @@ impl SchedulerService for Service {
 
     async fn set_schedule_enabled<'a>(
         &'a self,
-        _ctx: RequestContext,
+        ctx: RequestContext,
         request: ServiceRequest<'_, proto::SetScheduleEnabledRequest>,
     ) -> ServiceResult<impl connectrpc::Encodable<proto::SetScheduleEnabledResponse> + Send + use<'a>>
     {
+        let zone = super::zone::ClientZone::from_request(&ctx)?;
         let id = request.id.to_owned();
         let enabled = request.enabled;
         let now = self.now_unix();
@@ -240,17 +253,18 @@ impl SchedulerService for Service {
             .store_call(move |store| store.set_schedule_enabled(&id, enabled, now))
             .await?;
         response(proto::SetScheduleEnabledResponse {
-            schedule: schedule_to_proto(&schedule).into(),
+            schedule: schedule_to_proto(&schedule, &zone).into(),
             ..proto::SetScheduleEnabledResponse::default()
         })
     }
 
     async fn snooze_schedule<'a>(
         &'a self,
-        _ctx: RequestContext,
+        ctx: RequestContext,
         request: ServiceRequest<'_, proto::SnoozeScheduleRequest>,
     ) -> ServiceResult<impl connectrpc::Encodable<proto::SnoozeScheduleResponse> + Send + use<'a>>
     {
+        let zone = super::zone::ClientZone::from_request(&ctx)?;
         let id = request.id.to_owned();
         let minutes = request.minutes;
         let now = self.now_unix();
@@ -258,7 +272,7 @@ impl SchedulerService for Service {
             .store_call(move |store| store.snooze_schedule(&id, minutes, now))
             .await?;
         response(proto::SnoozeScheduleResponse {
-            schedule: schedule_to_proto(&schedule).into(),
+            schedule: schedule_to_proto(&schedule, &zone).into(),
             event: event_to_proto(&event).into(),
             ..proto::SnoozeScheduleResponse::default()
         })
@@ -266,35 +280,37 @@ impl SchedulerService for Service {
 
     async fn stop_schedule<'a>(
         &'a self,
-        _ctx: RequestContext,
+        ctx: RequestContext,
         request: ServiceRequest<'_, proto::StopScheduleRequest>,
     ) -> ServiceResult<impl connectrpc::Encodable<proto::StopScheduleResponse> + Send + use<'a>>
     {
+        let zone = super::zone::ClientZone::from_request(&ctx)?;
         let id = request.id.to_owned();
         let now = self.now_unix();
         let schedule = self
             .store_call(move |store| store.stop_schedule(&id, now))
             .await?;
         response(proto::StopScheduleResponse {
-            schedule: schedule_to_proto(&schedule).into(),
+            schedule: schedule_to_proto(&schedule, &zone).into(),
             ..proto::StopScheduleResponse::default()
         })
     }
 
     async fn skip_schedule_occurrence<'a>(
         &'a self,
-        _ctx: RequestContext,
+        ctx: RequestContext,
         request: ServiceRequest<'_, proto::SkipScheduleOccurrenceRequest>,
     ) -> ServiceResult<
         impl connectrpc::Encodable<proto::SkipScheduleOccurrenceResponse> + Send + use<'a>,
     > {
+        let zone = super::zone::ClientZone::from_request(&ctx)?;
         let id = request.id.to_owned();
         let now = self.now_unix();
         let schedule = self
             .store_call(move |store| store.skip_next_occurrence(&id, now))
             .await?;
         response(proto::SkipScheduleOccurrenceResponse {
-            schedule: schedule_to_proto(&schedule).into(),
+            schedule: schedule_to_proto(&schedule, &zone).into(),
             ..proto::SkipScheduleOccurrenceResponse::default()
         })
     }

@@ -16,7 +16,10 @@ pub struct LocalizedTextView<'a> {
     ///
     /// Field 1: `key`
     pub key: &'a str,
-    /// Arguments substituted into the client's template for `key`.
+    /// Arguments substituted into the client's template for `key`. Android
+    /// formats positionally, so the client applies values ordered by sorted
+    /// argument name: a template's `%1$s`, `%2$s`, ... must follow that order.
+    /// Prefer one argument per template; keep argument names stable.
     ///
     /// Field 2: `args` (map)
     pub args: ::buffa::MapView<'a, &'a str, &'a str>,
@@ -324,7 +327,10 @@ impl LocalizedTextOwnedView {
     pub fn key(&self) -> &'_ str {
         self.0.reborrow().key
     }
-    /// Arguments substituted into the client's template for `key`.
+    /// Arguments substituted into the client's template for `key`. Android
+    /// formats positionally, so the client applies values ordered by sorted
+    /// argument name: a template's `%1$s`, `%2$s`, ... must follow that order.
+    /// Prefer one argument per template; keep argument names stable.
     ///
     /// Field 2: `args` (map)
     #[must_use]

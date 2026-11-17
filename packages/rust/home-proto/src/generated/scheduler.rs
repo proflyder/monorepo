@@ -187,11 +187,11 @@ pub enum RepeatKind {
     REPEAT_KIND_UNSPECIFIED = 0i32,
     REPEAT_KIND_ONCE = 1i32,
     REPEAT_KIND_DAILY = 2i32,
-    /// ISO weekdays 1..5
+    /// local ISO weekdays 1..5
     REPEAT_KIND_WEEKDAYS = 3i32,
-    /// ISO weekdays 6..7
+    /// local ISO weekdays 6..7
     REPEAT_KIND_WEEKENDS = 4i32,
-    /// explicit ISO weekdays in Schedule.weekdays
+    /// explicit local ISO weekdays in Schedule.weekdays
     REPEAT_KIND_CUSTOM = 5i32,
 }
 impl RepeatKind {
@@ -1203,7 +1203,8 @@ impl ::buffa::Enumeration for AckOutcome {
         ]
     }
 }
-/// WallTime is a local wall-clock time of day in Schedule.timezone.
+/// WallTime is a time of day in the caller's `Time-Zone` (UTC when absent).
+/// The server converts it to and from UTC storage in one place.
 #[derive(Clone, PartialEq, Default)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(default)]
@@ -1380,7 +1381,9 @@ pub const __WALL_TIME_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buffa::
     from_json: ::buffa::type_registry::any_from_json::<WallTime>,
     is_wkt: false,
 };
-/// Schedule is a durable recurring or one-shot schedule.
+/// Schedule is a durable recurring or one-shot schedule. The database stores
+/// UTC only; `at`, `once_date` and `weekdays` are in the zone of the request's
+/// `Time-Zone` header, and the same header selects the response zone.
 #[derive(Clone, PartialEq, Default)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(default)]
@@ -1406,16 +1409,7 @@ pub struct Schedule {
         skip_serializing_if = "::buffa::json_helpers::skip_if::is_default_enum_value"
     )]
     pub kind: ::buffa::EnumValue<ScheduleKind>,
-    /// IANA zone, required
-    ///
-    /// Field 4: `timezone`
-    #[serde(
-        rename = "timezone",
-        with = "::buffa::json_helpers::proto_string",
-        skip_serializing_if = "::buffa::json_helpers::skip_if::is_empty_str"
-    )]
-    pub timezone: ::buffa::alloc::string::String,
-    /// local time of day
+    /// time of day in the request Time-Zone
     ///
     /// Field 5: `at`
     #[serde(
@@ -1423,7 +1417,7 @@ pub struct Schedule {
         skip_serializing_if = "::buffa::json_helpers::skip_if::is_unset_message_field"
     )]
     pub at: ::buffa::MessageField<WallTime, ::buffa::Inline<WallTime>>,
-    /// YYYY-MM-DD; required for REPEAT_KIND_ONCE
+    /// local YYYY-MM-DD in the request Time-Zone
     ///
     /// Field 6: `once_date`
     #[serde(
@@ -1440,7 +1434,7 @@ pub struct Schedule {
         skip_serializing_if = "::buffa::json_helpers::skip_if::is_default_enum_value"
     )]
     pub repeat: ::buffa::EnumValue<RepeatKind>,
-    /// ISO 1=Mon..7=Sun; REPEAT_KIND_CUSTOM only
+    /// UTC ISO 1=Mon..7=Sun; REPEAT_KIND_CUSTOM only
     ///
     /// Field 8: `weekdays`
     #[serde(
@@ -1560,7 +1554,6 @@ impl ::core::fmt::Debug for Schedule {
             .field("id", &self.id)
             .field("label", &self.label)
             .field("kind", &self.kind)
-            .field("timezone", &self.timezone)
             .field("at", &self.at)
             .field("once_date", &self.once_date)
             .field("repeat", &self.repeat)
@@ -1617,9 +1610,6 @@ impl ::buffa::Message for Schedule {
             if val != 0 {
                 size += 1u64 + ::buffa::types::int32_encoded_len(val) as u64;
             }
-        }
-        if !self.timezone.is_empty() {
-            size += 1u64 + ::buffa::types::string_encoded_len(&self.timezone) as u64;
         }
         if self.at.is_set() {
             let __slot = __cache.reserve();
@@ -1708,9 +1698,6 @@ impl ::buffa::Message for Schedule {
             if val != 0 {
                 ::buffa::types::put_int32_field(3u32, val, buf);
             }
-        }
-        if !self.timezone.is_empty() {
-            ::buffa::types::put_string_field(4u32, &self.timezone, buf);
         }
         if self.at.is_set() {
             ::buffa::types::put_len_delimited_header(
@@ -1806,13 +1793,6 @@ impl ::buffa::Message for Schedule {
                     ::buffa::encoding::WireType::Varint,
                 )?;
                 self.kind = ::buffa::EnumValue::from(::buffa::types::decode_int32(buf)?);
-            }
-            4u32 => {
-                ::buffa::encoding::check_wire_type(
-                    tag,
-                    ::buffa::encoding::WireType::LengthDelimited,
-                )?;
-                ::buffa::types::merge_string(&mut self.timezone, buf)?;
             }
             5u32 => {
                 ::buffa::encoding::check_wire_type(
@@ -1969,7 +1949,6 @@ impl ::buffa::Message for Schedule {
         self.id.clear();
         self.label.clear();
         self.kind = ::buffa::EnumValue::from(0);
-        self.timezone.clear();
         self.at = ::buffa::MessageField::none();
         self.once_date.clear();
         self.repeat = ::buffa::EnumValue::from(0);
@@ -2969,19 +2948,16 @@ pub struct CreateScheduleRequest {
         skip_serializing_if = "::buffa::json_helpers::skip_if::is_default_enum_value"
     )]
     pub kind: ::buffa::EnumValue<ScheduleKind>,
-    /// Field 3: `timezone`
-    #[serde(
-        rename = "timezone",
-        with = "::buffa::json_helpers::proto_string",
-        skip_serializing_if = "::buffa::json_helpers::skip_if::is_empty_str"
-    )]
-    pub timezone: ::buffa::alloc::string::String,
+    /// time of day in the request Time-Zone
+    ///
     /// Field 4: `at`
     #[serde(
         rename = "at",
         skip_serializing_if = "::buffa::json_helpers::skip_if::is_unset_message_field"
     )]
     pub at: ::buffa::MessageField<WallTime, ::buffa::Inline<WallTime>>,
+    /// local YYYY-MM-DD in the request Time-Zone
+    ///
     /// Field 5: `once_date`
     #[serde(
         rename = "onceDate",
@@ -3040,7 +3016,6 @@ impl ::core::fmt::Debug for CreateScheduleRequest {
         f.debug_struct("CreateScheduleRequest")
             .field("label", &self.label)
             .field("kind", &self.kind)
-            .field("timezone", &self.timezone)
             .field("at", &self.at)
             .field("once_date", &self.once_date)
             .field("repeat", &self.repeat)
@@ -3086,9 +3061,6 @@ impl ::buffa::Message for CreateScheduleRequest {
             if val != 0 {
                 size += 1u64 + ::buffa::types::int32_encoded_len(val) as u64;
             }
-        }
-        if !self.timezone.is_empty() {
-            size += 1u64 + ::buffa::types::string_encoded_len(&self.timezone) as u64;
         }
         if self.at.is_set() {
             let __slot = __cache.reserve();
@@ -3144,9 +3116,6 @@ impl ::buffa::Message for CreateScheduleRequest {
             if val != 0 {
                 ::buffa::types::put_int32_field(2u32, val, buf);
             }
-        }
-        if !self.timezone.is_empty() {
-            ::buffa::types::put_string_field(3u32, &self.timezone, buf);
         }
         if self.at.is_set() {
             ::buffa::types::put_len_delimited_header(
@@ -3211,13 +3180,6 @@ impl ::buffa::Message for CreateScheduleRequest {
                     ::buffa::encoding::WireType::Varint,
                 )?;
                 self.kind = ::buffa::EnumValue::from(::buffa::types::decode_int32(buf)?);
-            }
-            3u32 => {
-                ::buffa::encoding::check_wire_type(
-                    tag,
-                    ::buffa::encoding::WireType::LengthDelimited,
-                )?;
-                ::buffa::types::merge_string(&mut self.timezone, buf)?;
             }
             4u32 => {
                 ::buffa::encoding::check_wire_type(
@@ -3317,7 +3279,6 @@ impl ::buffa::Message for CreateScheduleRequest {
     fn clear(&mut self) {
         self.label.clear();
         self.kind = ::buffa::EnumValue::from(0);
-        self.timezone.clear();
         self.at = ::buffa::MessageField::none();
         self.once_date.clear();
         self.repeat = ::buffa::EnumValue::from(0);

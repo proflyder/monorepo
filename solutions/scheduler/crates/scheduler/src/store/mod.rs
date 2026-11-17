@@ -9,6 +9,7 @@
 //! argument so tick scenarios stay deterministic.
 
 mod event;
+mod migrate;
 mod push;
 mod scenario;
 mod schedule;
@@ -37,9 +38,10 @@ pub use tick::TickStats;
 use crate::domain::ScheduleKind as DomainScheduleKind;
 
 /// Schema version written to `schema_meta`. v2 adds the scenario table, v3 the
-/// push device registry and v4 re-keys it by stable `device_id`; an older
+/// push device registry, v4 re-keys it by stable `device_id`, and v5 makes
+/// schedules UTC-only (`once_unix`, no timezone/once_date columns); an older
 /// database migrates in place, and an older binary rejects a newer one.
-pub const SCHEMA_VERSION: i64 = 4;
+pub const SCHEMA_VERSION: i64 = 5;
 
 /// Queue names used by the built-in domains.
 pub const QUEUE_HOME: &str = "home";
@@ -179,6 +181,11 @@ const V4: &[&str] = &[
     "CREATE INDEX IF NOT EXISTS push_devices_updated ON push_devices(updated_unix)",
 ];
 
+/// v5 adds the UTC one-shot instant. The legacy `timezone`/`once_date` columns
+/// are converted and dropped by [`migrate::legacy_schedules_to_utc`] once the
+/// static step has run, because only Rust carries the IANA database.
+const V5: &[&str] = &["ALTER TABLE schedules ADD COLUMN once_unix INTEGER NOT NULL DEFAULT 0"];
+
 /// One ordered schema step.
 pub const MIGRATIONS: &[Migration] = &[
     Migration {
@@ -197,16 +204,20 @@ pub const MIGRATIONS: &[Migration] = &[
         statements: V3,
     },
     Migration {
-        version: SCHEMA_VERSION,
+        version: 4,
         description: "scheduler v4 push device identity",
         statements: V4,
+    },
+    Migration {
+        version: SCHEMA_VERSION,
+        description: "scheduler v5 UTC-only schedules",
+        statements: V5,
     },
 ];
 
 /// Operational bounds; zero values are replaced by [`Config::default`].
 #[derive(Debug, Clone)]
 pub struct Config {
-    pub default_timezone: String,
     pub missed_grace: i64,
     pub ring_window: i64,
     pub max_timers: i64,
@@ -222,7 +233,6 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         Self {
-            default_timezone: "UTC".to_owned(),
             missed_grace: 600,
             ring_window: 900,
             max_timers: 64,
@@ -241,11 +251,6 @@ impl Config {
     fn normalized(self) -> Self {
         let default = Self::default();
         Self {
-            default_timezone: if self.default_timezone.is_empty() {
-                default.default_timezone
-            } else {
-                self.default_timezone
-            },
             missed_grace: if self.missed_grace <= 0 {
                 default.missed_grace
             } else {
@@ -397,6 +402,7 @@ impl Store {
     /// Opens (creating if needed) the database and applies migrations.
     pub fn open(path: impl AsRef<std::path::Path>, config: Config) -> Result<Self, StoreError> {
         let db = Db::open(path, MIGRATIONS)?;
+        migrate::legacy_schedules_to_utc(&db)?;
         Ok(Self {
             db: Mutex::new(db),
             config: config.normalized(),
@@ -406,6 +412,7 @@ impl Store {
     /// Opens an in-memory database with the same pragmas and migrations.
     pub fn open_in_memory(config: Config) -> Result<Self, StoreError> {
         let db = Db::open_in_memory(MIGRATIONS)?;
+        migrate::legacy_schedules_to_utc(&db)?;
         Ok(Self {
             db: Mutex::new(db),
             config: config.normalized(),

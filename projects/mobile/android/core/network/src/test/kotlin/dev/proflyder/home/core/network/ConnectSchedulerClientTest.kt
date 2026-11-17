@@ -11,6 +11,7 @@ import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.core.model.ScheduleKind
 import dev.proflyder.home.core.model.ServerClock
+import java.time.ZoneId
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -103,6 +104,7 @@ class ConnectSchedulerClientTest {
         assertEquals("application/json", request.getHeader("Content-Type"))
         assertEquals("1", request.getHeader("Connect-Protocol-Version"))
         assertEquals("Bearer test-token", request.getHeader("Authorization"))
+        assertEquals(ZoneId.systemDefault().id, request.getHeader("Time-Zone"))
         assertEquals("{}", request.body.readUtf8())
         assertFalse(request.path!!.contains("test-token"))
     }
@@ -117,7 +119,6 @@ class ConnectSchedulerClientTest {
         val draft = dev.proflyder.home.core.model.ScheduleDraft(
             label = "Wake up",
             kind = ScheduleKind.ALARM,
-            timezone = "Asia/Almaty",
             at = dev.proflyder.home.core.model.WallTime(7, 30),
             repeat = dev.proflyder.home.core.model.RepeatKind.CUSTOM,
             weekdays = listOf(5, 1, 3),
@@ -135,7 +136,7 @@ class ConnectSchedulerClientTest {
         val body = json.parseToJsonElement(server.takeRequest().body.readUtf8()).jsonObject
         assertEquals("SCHEDULE_KIND_ALARM", body["kind"]!!.jsonPrimitive.content)
         assertEquals("REPEAT_KIND_CUSTOM", body["repeat"]!!.jsonPrimitive.content)
-        assertEquals("Asia/Almaty", body["timezone"]!!.jsonPrimitive.content)
+        assertNull(body["timezone"])
         assertEquals(listOf(1, 3, 5), body["weekdays"]!!.jsonArray.map { it.jsonPrimitive.content.toInt() })
         assertEquals(7, body["at"]!!.jsonObject["hour"]!!.jsonPrimitive.content.toInt())
         assertEquals("key-1", body["idempotencyKey"]!!.jsonPrimitive.content)
@@ -215,7 +216,6 @@ class ConnectSchedulerClientTest {
             id = "s1",
             label = "Wake up",
             kind = ScheduleKind.ALARM,
-            timezone = "Asia/Almaty",
             at = dev.proflyder.home.core.model.WallTime(7, 0),
             onceDate = "",
             repeat = dev.proflyder.home.core.model.RepeatKind.DAILY,

@@ -3,5 +3,8 @@
     <dimen name="alarms_screen_margin">16dp</dimen>
     <!-- Fallback before the bottom bar is measured; matches its real height. -->
     <dimen name="alarms_action_bar_height">64dp</dimen>
+    <!-- Space reserved under the scrolling content for the sticky Save bar. -->
+    <dimen name="alarms_editor_scroll_bottom">88dp</dimen>
+    <dimen name="alarms_editor_section_gap">20dp</dimen>
     <integer name="alarms_columns">1</integer>
 </resources>

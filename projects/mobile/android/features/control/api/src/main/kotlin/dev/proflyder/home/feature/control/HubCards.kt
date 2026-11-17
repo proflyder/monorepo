@@ -68,9 +68,6 @@ object HubFormat {
         }
     }
 
-    fun zoneOf(timezone: String): ZoneId =
-        runCatching { ZoneId.of(timezone) }.getOrDefault(ZoneId.systemDefault())
-
     /** True while the scheduler reports a live occurrence for this alarm. */
     fun isRinging(schedule: Schedule, nowUnix: Long): Boolean =
         schedule.activeOccurrenceUnix > 0 &&

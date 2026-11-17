@@ -16,7 +16,6 @@
     <string name="reminders_editor_label">Label</string>
     <string name="reminders_editor_date">Date</string>
     <string name="reminders_editor_time">Time</string>
-    <string name="reminders_editor_timezone">IANA timezone</string>
     <string name="reminders_editor_save">Save on server</string>
     <string name="reminders_editor_delete">Delete reminder</string>
     <string name="reminders_editor_hint">The home server stores this reminder and delivers one DueEvent at the chosen local date and time. This phone does not schedule it locally.</string>

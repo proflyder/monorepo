@@ -39,24 +39,6 @@ fn go_database_opens_and_reads_identically() {
         .expect("schema version");
     assert_eq!(version, 1, "fixture is a v1 database");
 
-    let idempotency = {
-        let mut statement = connection
-            .prepare("SELECT key, resource_kind, request_hash FROM idempotency ORDER BY key")
-            .expect("prepare idempotency");
-        statement
-            .query_map([], |row| {
-                Ok(IdempotencyRow {
-                    key: row.get(0)?,
-                    kind: row.get(1)?,
-                    hash: row.get(2)?,
-                })
-            })
-            .expect("query idempotency")
-            .collect::<Result<Vec<_>, _>>()
-            .expect("collect idempotency")
-    };
-    assert_eq!(idempotency.len(), 3);
-
     let event_pairs = {
         let mut statement = connection
             .prepare("SELECT id, dedupe_key FROM events ORDER BY id")
@@ -99,7 +81,6 @@ fn go_database_opens_and_reads_identically() {
         .find(|schedule| schedule.label == "wake")
         .expect("wake");
     assert_eq!(wake.kind, ScheduleKind::Alarm);
-    assert_eq!(wake.timezone, "UTC");
     assert_eq!(
         wake.at,
         WallTime {
@@ -127,7 +108,7 @@ fn go_database_opens_and_reads_identically() {
         .expect("reminder");
     assert_eq!(reminder.kind, ScheduleKind::Reminder);
     assert_eq!(reminder.repeat, Repeat::Once);
-    assert_eq!(reminder.once_date, "2026-02-01");
+    assert_eq!(reminder.once_unix, 1_769_936_400);
     assert_eq!(reminder.next_due_unix, 1_769_936_400);
     assert_eq!(reminder.revision, 1);
 
@@ -140,7 +121,14 @@ fn go_database_opens_and_reads_identically() {
         .find(|schedule| schedule.label == "evening")
         .expect("scenario");
     assert_eq!(evening.kind, ScheduleKind::Scenario);
-    assert_eq!(evening.timezone, "Europe/Berlin");
+    assert_eq!(
+        evening.at,
+        WallTime {
+            hour: 19,
+            minute: 15,
+            second: 0
+        }
+    );
     assert!(!evening.enabled);
     assert_eq!(evening.next_due_unix, 0);
 
@@ -207,8 +195,7 @@ fn go_database_opens_and_reads_identically() {
     let schedule_hash = sha1_hex(&canonical_schedule(
         "wake",
         ScheduleKind::Alarm,
-        "UTC",
-        "",
+        0,
         WallTime {
             hour: 7,
             minute: 30,
@@ -221,6 +208,24 @@ fn go_database_opens_and_reads_identically() {
     ));
     let timer_hash = sha1_hex(&canonical_timer("tea", 300));
     let task_hash = sha1_hex(&canonical_task("notify.push", "tasks", "{}", 0));
+    let idempotency = {
+        let migrated = Connection::open(&path).expect("open migrated sqlite");
+        let mut statement = migrated
+            .prepare("SELECT key, resource_kind, request_hash FROM idempotency ORDER BY key")
+            .expect("prepare idempotency");
+        statement
+            .query_map([], |row| {
+                Ok(IdempotencyRow {
+                    key: row.get(0)?,
+                    kind: row.get(1)?,
+                    hash: row.get(2)?,
+                })
+            })
+            .expect("query idempotency")
+            .collect::<Result<Vec<_>, _>>()
+            .expect("collect idempotency")
+    };
+    assert_eq!(idempotency.len(), 3);
     let idempotency_row = |key: &str| {
         idempotency
             .iter()
@@ -242,7 +247,7 @@ fn go_database_opens_and_reads_identically() {
             row.get(0)
         })
         .expect("schema version");
-    assert_eq!(version, 4, "v1 fixture migrates to v4");
+    assert_eq!(version, 5, "v1 fixture migrates to v5");
     let scenarios: i64 = migrated
         .query_row("SELECT COUNT(*) FROM scenarios", [], |row| row.get(0))
         .expect("scenarios table exists");

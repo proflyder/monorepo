@@ -117,7 +117,7 @@ standalone GET-потока, кэшируется (до 16 кадров) и пр
 
 | Инструмент | Что делает |
 |---|---|
-| `time_now()` | Текущее локальное время дома (`MCP_TIMEZONE`), RFC3339 с офсетом, человеческая строка и IANA-пояс. Первый вызов для любой фразы про время. |
+| `time_now()` | Текущее локальное время дома (`MCP_TIMEZONE`), RFC3339 с офсетом, человеческая строка и IANA-пояс. Первый вызов для любой фразы про время. `alarm_*`/`reminder_*` пишут в scheduler с заголовком `Time-Zone: MCP_TIMEZONE`; сервер хранит UTC, поэтому шлюз сам время не пересчитывает. |
 | `alarm_set(at, label?, repeat?)` | Абсолютное время RFC3339 **с офсетом**. `repeat`: `once`/`daily`/`weekdays`/`weekends`. Однократный — не дальше 7 дней, прошедшее время отклоняется без создания. Создаёт тот же `CreateSchedule`, что HA: `kind=SCHEDULE_KIND_ALARM`, `payloadJson="{}"`, метка по умолчанию «Будильник HH:MM». |
 | `alarm_list(include_disabled?)` | Ближайшее срабатывание, метка, повтор; id для остальных операций. |
 | `alarm_cancel(id?, all?)` | Выключить (`SetScheduleEnabled=false`), не удаляя. |
@@ -218,7 +218,7 @@ hint, не конфигурация).
 | `MCP_GROUPS` | нет | `infra.read` | Включённые группы: `infra.read`, `infra.fix`, `infra.report`, `bb.read`, `bb.act`, `time`, `phone`. |
 | `MCP_INFRA_CATALOG_FILE` | для read/fix | — | YAML-каталог сервисов. |
 | `MCP_HTTP_ADDR` | нет | `:8080` | Адрес HTTP-сервера. |
-| `MCP_TIMEZONE` | нет | `UTC` | IANA-зона для человекочитаемого времени в текстах инструментов (заголовок отчёта). Проверяется при загрузке; для distroless-образа IANA tzdata встроена в бинарник. |
+| `MCP_TIMEZONE` | нет | `Asia/Almaty` | IANA-зона дома: заголовок `Time-Zone` для scheduler и человекочитаемое время в текстах инструментов. Проверяется при загрузке; для distroless-образа IANA tzdata встроена в бинарник. |
 | `MCP_PROMETHEUS_URL` | нет | — | База Prometheus API, например `http://prometheus.example:9090`. |
 | `MCP_ALERTMANAGER_URL` | нет | — | База Alertmanager, без `/api/v2`. |
 | `MCP_LOKI_URL` | нет | — | База Loki, например `http://loki.example:3100`. |

@@ -189,8 +189,9 @@ private class PlainJsonBody(
  * Builds the Retrofit instances. Each gets its own OkHttpClient derived from
  * [baseClient] (shared connection pool and dispatcher) with:
  *  1. [ConnectionInterceptor] (endpoint, auth, timeouts from settings),
- *  2. [TokenRefreshAuthenticator] (one retry when the stored token rotated),
- *  3. the caller's [extraInterceptors] (logging, inspection, ...), which
+ *  2. [TimeZoneInterceptor] (the phone's IANA zone on every request),
+ *  3. [TokenRefreshAuthenticator] (one retry when the stored token rotated),
+ *  4. the caller's [extraInterceptors] (logging, inspection, ...), which
  *     therefore see the final request.
  * Redirects are never followed: a bearer token must not follow a Location.
  * Responses are decoded by kotlinx serialization and adapted to [Outcome] so an
@@ -213,6 +214,7 @@ internal object HomeRetrofit {
             .followSslRedirects(false)
             .retryOnConnectionFailure(false)
             .addInterceptor(ConnectionInterceptor(settings, target))
+            .addInterceptor(TimeZoneInterceptor())
             .authenticator(TokenRefreshAuthenticator(settings))
             .apply { extraInterceptors.forEach(::addInterceptor) }
             .build()

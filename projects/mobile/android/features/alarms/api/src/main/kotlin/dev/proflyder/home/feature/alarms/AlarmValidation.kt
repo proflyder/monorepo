@@ -3,10 +3,8 @@ package dev.proflyder.home.feature.alarms
 import dev.proflyder.home.core.model.Field
 import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.core.model.RepeatKind
-import dev.proflyder.home.core.time.TimeText
 import dev.proflyder.home.core.time.Weekdays
 import java.time.LocalDate
-import java.time.ZoneId
 
 /** Android-free alarm input rules, unit-tested next to the feature API. */
 object AlarmValidation {
@@ -28,13 +26,9 @@ object AlarmValidation {
         if (draft.repeat == RepeatKind.CUSTOM && !Weekdays.isValid(draft.weekdays)) {
             return RemoteFailure.Validation(Field.WEEKDAYS)
         }
-        val zone = when (val parsed = TimeText.parseZone(draft.timezone)) {
-            is TimeText.ParseResult.Valid -> parsed.value
-            is TimeText.ParseResult.Invalid -> return RemoteFailure.Validation(Field.TIMEZONE)
-        }
         if (draft.repeat == RepeatKind.ONCE) {
             val date = draft.onceDate ?: return RemoteFailure.Validation(Field.DATE)
-            if (date.isBefore(LocalDate.now(ZoneId.of(zone.id)))) {
+            if (date.isBefore(LocalDate.now())) {
                 return RemoteFailure.Validation(Field.DATE)
             }
         }

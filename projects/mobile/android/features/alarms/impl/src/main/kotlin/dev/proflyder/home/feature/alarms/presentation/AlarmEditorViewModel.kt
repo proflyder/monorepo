@@ -32,7 +32,6 @@ import dev.zacsweers.metro.ContributesIntoSet
 import dev.zacsweers.metro.Inject
 import java.time.LocalDate
 import java.time.LocalDateTime
-import java.time.ZoneId
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
@@ -43,11 +42,10 @@ data class AlarmEditorUiState(
     val label: String = "",
     val hour: Int = defaultAlarmTime(LocalDateTime.now()).hour,
     val minute: Int = defaultAlarmTime(LocalDateTime.now()).minute,
-    val timezone: String = ZoneId.systemDefault().id,
     val repeat: RepeatKind = RepeatKind.ONCE,
     val weekdays: Set<Int> = emptySet(),
     val enabled: Boolean = true,
-    val onceDate: LocalDate? = LocalDate.now(ZoneId.of(timezone)),
+    val onceDate: LocalDate? = LocalDate.now(),
     val error: RemoteFailure? = null,
     val loadFailed: Boolean = false,
 )
@@ -129,20 +127,18 @@ class AlarmEditorViewModel(
 
     /**
      * Applies a quick "now + N" preset from [dev.proflyder.home.feature.alarms.ALARM_QUICK_OFFSETS_MINUTES].
-     * The offset is measured from the current time in the alarm's timezone, matching
-     * a manual time pick for repeat days and the one-shot date.
+     * The offset is measured from the phone's current time; the server renders
+     * the stored alarm back in the phone's zone.
      */
     fun applyQuickOffset(offsetMinutes: Int) = edit {
-        it.withQuickOffset(LocalDateTime.now(zoneOrSystem(it.timezone)), offsetMinutes)
+        it.withQuickOffset(LocalDateTime.now(), offsetMinutes)
     }
-
-    fun setTimezone(value: String) = edit { it.copy(timezone = value) }
 
     fun setRepeat(repeat: RepeatKind) = edit {
         it.copy(
             repeat = repeat,
             onceDate = when {
-                repeat == RepeatKind.ONCE -> it.onceDate ?: LocalDate.now(zoneOrSystem(it.timezone))
+                repeat == RepeatKind.ONCE -> it.onceDate ?: LocalDate.now()
                 else -> null
             },
         )
@@ -239,7 +235,6 @@ class AlarmEditorViewModel(
         label = label,
         hour = hour,
         minute = minute,
-        timezone = timezone,
         repeat = repeat,
         weekdays = weekdays.sorted(),
         enabled = enabled,
@@ -250,7 +245,6 @@ class AlarmEditorViewModel(
         label = label,
         hour = hour,
         minute = minute,
-        timezone = timezone,
         repeat = repeat,
         weekdays = weekdays.sorted(),
         enabled = enabled,
@@ -270,7 +264,6 @@ class AlarmEditorViewModel(
             label = current.label,
             hour = current.hour,
             minute = current.minute,
-            timezone = current.timezone,
             repeat = current.repeat,
             weekdays = current.weekdays.sorted(),
             enabled = current.enabled,
@@ -285,7 +278,6 @@ class AlarmEditorViewModel(
         label = label,
         hour = at.hour,
         minute = at.minute,
-        timezone = timezone,
         repeat = repeat,
         weekdays = weekdays.toSet(),
         enabled = enabled,
@@ -295,9 +287,6 @@ class AlarmEditorViewModel(
             null
         },
     )
-
-    private fun zoneOrSystem(timezone: String): ZoneId =
-        runCatching { ZoneId.of(timezone) }.getOrDefault(ZoneId.systemDefault())
 
     companion object {
         private const val KEY_COMPLETION = "alarm_completion"
@@ -350,7 +339,6 @@ private fun AlarmEditorDraft.toUiState(): AlarmEditorUiState = AlarmEditorUiStat
     label = label,
     hour = hour,
     minute = minute,
-    timezone = timezone,
     repeat = repeat,
     weekdays = weekdays.toSet(),
     enabled = enabled,
@@ -363,7 +351,6 @@ private fun AlarmEditorDraft.restoredExisting(): Schedule? {
         id = id,
         label = label,
         kind = ScheduleKind.ALARM,
-        timezone = timezone,
         at = WallTime(hour, minute),
         onceDate = if (repeat == RepeatKind.ONCE) onceDate?.toString().orEmpty() else "",
         repeat = repeat,

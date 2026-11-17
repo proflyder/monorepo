@@ -33,9 +33,6 @@ class ReminderEditorFragment :
         binding.reminderEditorLabel.doAfterTextChanged {
             if (!rendering) viewModel.setLabel(it?.toString().orEmpty())
         }
-        binding.reminderEditorTimezone.doAfterTextChanged {
-            if (!rendering) viewModel.setTimezone(it?.toString().orEmpty())
-        }
         binding.reminderEditorEnabled.setOnCheckedChangeListener { _, checked ->
             if (!rendering) viewModel.setEnabled(checked)
         }
@@ -64,7 +61,6 @@ class ReminderEditorFragment :
     private fun render(state: ReminderEditorUiState) = with(binding) {
         rendering = true
         if (reminderEditorLabel.text?.toString() != state.label) reminderEditorLabel.setText(state.label)
-        if (reminderEditorTimezone.text?.toString() != state.timezone) reminderEditorTimezone.setText(state.timezone)
         reminderEditorDate.text = ReminderFormat.dateLabel(state.date)
         reminderEditorTime.text = ReminderFormat.timeLabel(state.hour, state.minute)
         reminderEditorEnabled.isChecked = state.enabled

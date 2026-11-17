@@ -12,12 +12,15 @@ enum Repeat {
   CUSTOM = 5;
 }
 
+// Alarm is the legacy facade over a UTC schedule. hour/minute and once_date
+// are in the request's `Time-Zone`; the server converts them to UTC storage.
 message Alarm {
   string id = 1;
   string label = 2;
-  int32 hour = 3;              // local wall-clock hour, 0..23
-  int32 minute = 4;            // local wall-clock minute, 0..59
-  string timezone = 5;         // IANA, e.g. Asia/Almaty
+  int32 hour = 3;              // local hour in the request Time-Zone, 0..23
+  int32 minute = 4;            // local minute in the request Time-Zone, 0..59
+  reserved 5;                  // was timezone (IANA)
+  reserved "timezone";
   Repeat repeat = 6;
   repeated int32 weekdays = 7; // ISO weekday: 1=Mon .. 7=Sun; only CUSTOM
   bool enabled = 8;
@@ -25,16 +28,19 @@ message Alarm {
   int64 snooze_until_unix = 10; // 0 when not snoozed
   int64 last_ring_unix = 11;    // last emitted occurrence, not proof of sound
   int64 revision = 12;          // optimistic concurrency for UpdateAlarm
+  string once_date = 13;        // local YYYY-MM-DD for ONCE; empty otherwise
 }
 
 message CreateAlarmRequest {
   string label = 1;
-  int32 hour = 2;
-  int32 minute = 3;
-  string timezone = 4;
+  int32 hour = 2;              // local hour in the request Time-Zone
+  int32 minute = 3;            // local minute in the request Time-Zone
+  reserved 4;                  // was timezone
+  reserved "timezone";
   Repeat repeat = 5;
-  repeated int32 weekdays = 6;
+  repeated int32 weekdays = 6; // UTC ISO weekdays
   bool enabled = 7;
+  string once_date = 8;        // local YYYY-MM-DD for ONCE
 }
 
 message CreateAlarmResponse {

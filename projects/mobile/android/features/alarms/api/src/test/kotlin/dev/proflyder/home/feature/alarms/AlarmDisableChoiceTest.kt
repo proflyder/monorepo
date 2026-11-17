@@ -12,7 +12,6 @@ class AlarmDisableChoiceTest {
         id = "alarm-1",
         label = "Wake up",
         kind = ScheduleKind.ALARM,
-        timezone = "UTC",
         at = WallTime(7, 30),
         onceDate = "",
         repeat = repeat,

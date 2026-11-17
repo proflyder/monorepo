@@ -482,7 +482,7 @@ mod tests {
 
     #[tokio::test]
     async fn a_v3_token_keyed_row_survives_and_collapses_on_the_first_device_registration() {
-        let (directory, path) = temp_database("collapse");
+        let (_directory, path) = temp_database("collapse");
         {
             let db = home_sqlite::Db::open(&path, &MIGRATIONS[..3]).expect("v3 database");
             db.call(|connection| {

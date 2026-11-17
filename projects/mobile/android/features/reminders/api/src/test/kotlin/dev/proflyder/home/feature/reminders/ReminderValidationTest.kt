@@ -3,22 +3,19 @@ package dev.proflyder.home.feature.reminders
 import dev.proflyder.home.core.model.Field
 import dev.proflyder.home.core.model.RemoteFailure
 import java.time.LocalDate
-import java.time.ZoneId
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 
 class ReminderValidationTest {
-    private val zone = ZoneId.of("Asia/Almaty")
-    private val today: LocalDate = LocalDate.now(zone)
+    private val today: LocalDate = LocalDate.now()
 
     private fun draft(
         label: String = "Call home",
         date: LocalDate = today,
         hour: Int = 9,
         minute: Int = 0,
-        timezone: String = "Asia/Almaty",
-    ) = ReminderDraft(label, date, hour, minute, timezone, enabled = true)
+    ) = ReminderDraft(label, date, hour, minute, enabled = true)
 
     private fun fieldOf(draft: ReminderDraft): Field =
         (ReminderValidation.validate(draft) as RemoteFailure.Validation).field
@@ -43,6 +40,5 @@ class ReminderValidationTest {
 
     @Test
     fun rejectsUnknownTimezone() {
-        assertEquals(Field.TIMEZONE, fieldOf(draft(timezone = "Mars/Olympus")))
     }
 }

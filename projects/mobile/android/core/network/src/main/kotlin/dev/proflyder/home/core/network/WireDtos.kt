@@ -111,7 +111,6 @@ data class ScheduleDto(
     val id: String = "",
     val label: String = "",
     val kind: ScheduleKindDto = ScheduleKindDto.UNSPECIFIED,
-    val timezone: String = "",
     val at: WallTimeDto? = null,
     val onceDate: String = "",
     val repeat: RepeatKindDto = RepeatKindDto.UNSPECIFIED,
@@ -134,7 +133,6 @@ data class ScheduleInputDto(
     val id: String? = null,
     val label: String,
     val kind: ScheduleKindDto,
-    val timezone: String,
     val at: WallTimeDto,
     val onceDate: String? = null,
     val repeat: RepeatKindDto,
@@ -222,7 +220,6 @@ data class SnoozeScheduleRequestDto(val id: String, val minutes: Int)
 data class CreateScheduleRequestDto(
     val label: String,
     val kind: ScheduleKindDto,
-    val timezone: String,
     val at: WallTimeDto,
     val onceDate: String? = null,
     val repeat: RepeatKindDto,

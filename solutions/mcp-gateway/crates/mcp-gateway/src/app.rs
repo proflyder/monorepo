@@ -97,6 +97,7 @@ pub async fn run() -> anyhow::Result<()> {
                 crate::scheduler::Client::new(
                     &config.scheduler_url,
                     config.scheduler_token.clone(),
+                    &config.timezone,
                     config.query_timeout,
                 )
                 .map_err(anyhow::Error::msg)?,

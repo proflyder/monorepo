@@ -67,15 +67,21 @@ TLS/проксирование наружу — задача deployment-слоя
 - имена полей — lowerCamelCase (`nextDueUnix`, `consumerId`);
 - `int64` — decimal string; `int32` — число;
 - enum — строковое имя (`SCHEDULE_KIND_ALARM`, `REPEAT_KIND_DAILY`);
-- поля с дефолтным значением могут отсутствовать в ответе.
+- поля с дефолтным значением могут отсутствовать в ответе;
+- `Time-Zone: <IANA>` на каждом запросе `SchedulerService` и
+  `AlarmService` — зона, в которой клиент присылает и читает `at`,
+  `onceDate` и `weekdays`. Сервер хранит UTC и конвертирует в одном месте;
+  без заголовка времена считаются UTC (warning в логе), неизвестная зона —
+  `400 invalid Time-Zone header`. Поля `timezone` в теле и БД нет.
 
 Пример (loopback, тестовый токен подставляется из окружения; не логируется):
 
 ```bash
 curl -sS http://127.0.0.1:8098/home.v1.SchedulerService/CreateSchedule \
   -H 'Content-Type: application/json' \
+  -H 'Time-Zone: Asia/Almaty' \
   -H "Authorization: Bearer $SCHEDULER_TOKEN" \
-  -d '{"label":"wake","kind":"SCHEDULE_KIND_ALARM","timezone":"UTC",
+  -d '{"label":"wake","kind":"SCHEDULE_KIND_ALARM",
        "at":{"hour":7,"minute":30},"repeat":"REPEAT_KIND_DAILY","enabled":true}'
 ```
 

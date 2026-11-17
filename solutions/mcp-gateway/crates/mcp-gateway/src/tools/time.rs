@@ -350,7 +350,6 @@ async fn alarm_set(deps: &Deps, arguments: Value) -> ToolOutcome {
     let request = json!({
         "label": label,
         "kind": KIND_ALARM,
-        "timezone": deps.timezone_name,
         "at": {"hour": wall.hour, "minute": wall.minute, "second": wall.second},
         "onceDate": if repeat_mode == "once" { once_date } else { String::new() },
         "repeat": target.repeat,
@@ -532,7 +531,6 @@ async fn alarm_update(deps: &Deps, arguments: Value) -> ToolOutcome {
         "id": schedule.id,
         "label": schedule.label,
         "kind": schedule.kind,
-        "timezone": deps.timezone_name,
         "at": {"hour": wall.hour, "minute": wall.minute, "second": wall.second},
         "onceDate": if schedule.repeat == "REPEAT_KIND_ONCE" { once_date } else { schedule.once_date.clone() },
         "repeat": schedule.repeat,
@@ -860,7 +858,6 @@ async fn reminder_set(deps: &Deps, arguments: Value) -> ToolOutcome {
     let request = json!({
         "label": text,
         "kind": KIND_REMINDER,
-        "timezone": deps.timezone_name,
         "at": {"hour": wall.hour, "minute": wall.minute, "second": wall.second},
         "onceDate": once_date,
         "repeat": "REPEAT_KIND_ONCE",
@@ -1057,7 +1054,6 @@ mod tests {
                 id: "s1".to_owned(),
                 label: request["label"].as_str().unwrap_or_default().to_owned(),
                 kind: request["kind"].as_str().unwrap_or_default().to_owned(),
-                timezone: request["timezone"].as_str().unwrap_or_default().to_owned(),
                 at: WallTime {
                     hour: request["at"]["hour"].as_i64().unwrap_or(0) as i32,
                     minute: request["at"]["minute"].as_i64().unwrap_or(0) as i32,
@@ -1288,7 +1284,6 @@ mod tests {
         let created = fake.created.lock().unwrap().clone();
         assert_eq!(created.len(), 1);
         assert_eq!(created[0]["kind"], KIND_ALARM);
-        assert_eq!(created[0]["timezone"], "Asia/Almaty");
         assert_eq!(created[0]["at"]["hour"], 22);
         assert_eq!(created[0]["onceDate"], "2026-11-12");
         assert_eq!(created[0]["repeat"], "REPEAT_KIND_ONCE");

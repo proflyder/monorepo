@@ -44,10 +44,10 @@ internal object AlarmFormat {
     fun nextDue(context: Context, schedule: Schedule): String {
         if (!schedule.enabled) return context.getString(R.string.alarms_off)
         if (schedule.snoozeUntilUnix > 0) {
-            return context.getString(R.string.alarms_snoozed, instant(schedule.snoozeUntilUnix, schedule.timezone))
+            return context.getString(R.string.alarms_snoozed, instant(schedule.snoozeUntilUnix))
         }
         if (schedule.nextDueUnix <= 0) return context.getString(R.string.alarms_off)
-        val zone = runCatching { ZoneId.of(schedule.timezone) }.getOrDefault(ZoneId.systemDefault())
+        val zone = ZoneId.systemDefault()
         val due = Instant.ofEpochSecond(schedule.nextDueUnix).atZone(zone).toLocalDateTime()
         val today = LocalDate.now(zone)
         val datePart = when (due.toLocalDate()) {
@@ -58,8 +58,8 @@ internal object AlarmFormat {
         return context.getString(R.string.alarms_next, datePart)
     }
 
-    private fun instant(epochSeconds: Long, timezone: String): String {
-        val zone = runCatching { ZoneId.of(timezone) }.getOrDefault(ZoneId.systemDefault())
+    private fun instant(epochSeconds: Long): String {
+        val zone = ZoneId.systemDefault()
         return LocalDateTime.ofInstant(Instant.ofEpochSecond(epochSeconds), zone).format(dayTime())
     }
 

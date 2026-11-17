@@ -19,8 +19,7 @@
           "kind": "SCHEDULE_KIND_REMINDER",
           "label": "call mom",
           "onceDate": "2026-02-01",
-          "repeat": "REPEAT_KIND_DAILY",
-          "timezone": "UTC"
+          "repeat": "REPEAT_KIND_DAILY"
         }
       },
       "response": {
@@ -48,7 +47,8 @@
         "path": "/home.v1.SchedulerService/CreateSchedule",
         "headers": {
           "Authorization": "Bearer contract-test-token",
-          "Content-Type": "application/json"
+          "Content-Type": "application/json",
+          "Time-Zone": "Mars/Olympus"
         },
         "body": {
           "at": {
@@ -58,8 +58,7 @@
           "enabled": true,
           "kind": "SCHEDULE_KIND_ALARM",
           "label": "wake",
-          "repeat": "REPEAT_KIND_DAILY",
-          "timezone": "Mars/Olympus"
+          "repeat": "REPEAT_KIND_DAILY"
         }
       },
       "response": {
@@ -69,12 +68,12 @@
         },
         "body": {
           "code": "invalid_argument",
-          "message": "invalid argument: invalid schedule rule: unknown timezone \"Mars/Olympus\"",
+          "message": "invalid Time-Zone header",
           "details": [
             {
               "type": "home.v1.LocalizedText",
               "debug": {
-                "key": "scheduler.error.invalid_schedule_rule"
+                "key": "scheduler.error.invalid_argument"
               }
             }
           ]
@@ -98,7 +97,6 @@
           "kind": "SCHEDULE_KIND_ALARM",
           "label": "weekday zero",
           "repeat": "REPEAT_KIND_CUSTOM",
-          "timezone": "UTC",
           "weekdays": [
             0
           ]
@@ -140,7 +138,6 @@
           "kind": "SCHEDULE_KIND_ALARM",
           "label": "weekday eight",
           "repeat": "REPEAT_KIND_CUSTOM",
-          "timezone": "UTC",
           "weekdays": [
             8
           ]
@@ -182,8 +179,7 @@
           "kind": "SCHEDULE_KIND_ALARM",
           "label": "bad payload",
           "payloadJson": "{",
-          "repeat": "REPEAT_KIND_DAILY",
-          "timezone": "UTC"
+          "repeat": "REPEAT_KIND_DAILY"
         }
       },
       "response": {
@@ -221,8 +217,7 @@
           "enabled": true,
           "kind": "SCHEDULE_KIND_ALARM",
           "label": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
-          "repeat": "REPEAT_KIND_DAILY",
-          "timezone": "UTC"
+          "repeat": "REPEAT_KIND_DAILY"
         }
       },
       "response": {
@@ -294,8 +289,7 @@
           "enabled": true,
           "kind": "SCHEDULE_KIND_ALARM",
           "label": "late hour",
-          "repeat": "REPEAT_KIND_DAILY",
-          "timezone": "UTC"
+          "repeat": "REPEAT_KIND_DAILY"
         }
       },
       "response": {

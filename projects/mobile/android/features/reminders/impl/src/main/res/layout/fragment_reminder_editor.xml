@@ -61,20 +61,6 @@
                 android:textAllCaps="false" />
         </LinearLayout>
 
-        <com.google.android.material.textfield.TextInputLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:hint="@string/reminders_editor_timezone"
-            style="@style/Widget.Material3.TextInputLayout.OutlinedBox">
-
-            <com.google.android.material.textfield.TextInputEditText
-                android:id="@+id/reminder_editor_timezone"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:inputType="textNoSuggestions" />
-        </com.google.android.material.textfield.TextInputLayout>
-
         <com.google.android.material.materialswitch.MaterialSwitch
             android:id="@+id/reminder_editor_enabled"
             android:layout_width="match_parent"
