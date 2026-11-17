@@ -115,6 +115,7 @@ pub trait Clock {
     fn set_brightness(&self, b: f32);
     fn set_ambient_lux(&self, lux: f32);
     fn set_auto_brightness(&self, on: bool);
+    fn set_colon_blink(&self, on: bool);
     fn set_timer(&self, ms_left: i64, running: bool);
     fn flash_number(&self, value: i32);
     fn show_code(&self, digits: String);
@@ -458,6 +459,10 @@ impl Clock for ClockHandle {
 
     fn set_auto_brightness(&self, on: bool) {
         Self::set_auto_brightness(self, on);
+    }
+
+    fn set_colon_blink(&self, on: bool) {
+        Self::set_colon_blink(self, on);
     }
 
     fn set_timer(&self, ms_left: i64, running: bool) {

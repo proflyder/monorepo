@@ -76,10 +76,12 @@ impl Publisher {
     /// publish and its order is an external contract.
     pub fn on_client_connected(&self, ha: &dyn HaLink, s: &ClientSnapshot) {
         ha.publish_switch(SwitchId::Clock, s.st.clock_on);
+        ha.publish_switch(SwitchId::ClockColonBlink, s.st.clock_colon_blink);
         ha.publish_switch(SwitchId::ClockAutoBrightness, s.st.clock_auto_brightness);
         ha.publish_switch(SwitchId::AutoUpdate, s.st.auto_update);
         ha.publish_switch(SwitchId::NearestAnswers, s.st.nearest_answers);
         ha.publish_switch(SwitchId::VoiceIndication, s.st.voice_indication);
+        ha.publish_switch(SwitchId::WakeSound, s.st.wake_sound);
         ha.publish_switch(SwitchId::WakePreroll, s.st.wake_preroll);
         ha.publish_switch(SwitchId::WakeEventRecording, s.st.wake_recording);
         ha.publish_switch(SwitchId::WakeDryRun, s.st.wake_dry_run);
@@ -269,6 +271,11 @@ impl Controller {
                 self.st.clock_auto_brightness = state;
                 self.deps.display.clock.set_auto_brightness(state);
             }
+            SwitchId::ClockColonBlink => {
+                self.st.clock_colon_blink = state;
+                self.deps.display.clock.set_colon_blink(state);
+            }
+            SwitchId::WakeSound => self.st.wake_sound = state,
             SwitchId::AutoUpdate => self.st.auto_update = state,
             SwitchId::NearestAnswers => self.st.nearest_answers = state,
             SwitchId::VoiceIndication => {

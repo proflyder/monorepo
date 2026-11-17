@@ -31,3 +31,5 @@ wake_event_recording=1
 wake_dry_run=0
 announce_volume=1
 mic_gain_db=40
+wake_sound=1
+clock_colon_blink=1

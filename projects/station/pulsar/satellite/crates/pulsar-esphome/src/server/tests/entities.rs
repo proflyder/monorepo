@@ -694,15 +694,18 @@ async fn mini_has_no_clock_lux_mute_case_or_button_entities() {
             p.hello("HA").await;
             event(&mut rx).await;
             let keys = list_keys(&mut p).await;
-            // 22 сущности плюс сервис led_show; без часов, Lux, wake pre-roll, аппаратного
-            // MUTE, цвета корпуса и кнопок Button, но с follow-up duration и microphone gain.
-            // Два switch и две кнопки wake-event и select голосового цвета есть всегда.
-            assert_eq!(keys.len(), 23, "keys: {keys:?}");
+            // 23 сущности плюс сервис led_show; без часов, Lux, wake pre-roll, аппаратного
+            // MUTE, цвета корпуса и кнопок Button, но с follow-up duration, microphone gain и
+            // wake sound. Два switch и две кнопки wake-event и select голосового цвета есть
+            // всегда.
+            assert_eq!(keys.len(), 24, "keys: {keys:?}");
             assert!(keys.contains(&key::NUMBER_FOLLOWUP_DURATION.get()));
             assert!(keys.contains(&key::NUMBER_MIC_GAIN.get()));
             assert!(keys.contains(&key::ACTION_LED_SHOW.get()));
+            assert!(keys.contains(&key::SW_WAKE_SOUND.get()));
             let absent = [
                 key::SW_CLOCK,
+                key::SW_CLOCK_COLON_BLINK,
                 key::SW_CLOCK_AUTO_BRI,
                 key::SW_WAKE_PREROLL,
                 key::NUMBER_CLOCK_BRI,
@@ -741,6 +744,7 @@ async fn mini_has_no_clock_lux_mute_case_or_button_entities() {
             }
             // Контроллер может публиковать эти значения; сервер обязан их отбросить.
             h.publish_switch(SwitchId::Clock, true);
+            h.publish_switch(SwitchId::ClockColonBlink, true);
             h.publish_switch(SwitchId::ClockAutoBrightness, true);
             h.publish_switch(SwitchId::WakePreroll, true);
             h.publish_number(NumberId::ClockBrightness, 50.0);
@@ -943,6 +947,83 @@ async fn followup_duration_is_universal_config_and_replays_its_state() {
                         .find(|(_, m)| state_key(m) == Some(key::NUMBER_FOLLOWUP_DURATION.get()))
                         .unwrap();
                     assert_eq!(field(m, 2).map_or(0.0, Field::flt), value);
+                }
+            })
+            .await;
+    }
+}
+
+#[tokio::test]
+async fn wake_sound_and_colon_blink_switches_are_config_and_replay_both_states() {
+    for (sw, k, oid, name, has_clock) in [
+        (
+            SwitchId::WakeSound,
+            key::SW_WAKE_SOUND,
+            "wake_sound",
+            "Wake sound",
+            false,
+        ),
+        (
+            SwitchId::ClockColonBlink,
+            key::SW_CLOCK_COLON_BLINK,
+            "clock_colon_blink",
+            "Clock colon blink",
+            true,
+        ),
+    ] {
+        local()
+            .run_until(async {
+                let mut cfg = selftest_config(None);
+                cfg.capabilities.clock = has_clock;
+                let mut ts = TestServer::start(cfg);
+                let h = ts.api.clone();
+                let mut rx = ts.take_events();
+                let mut p = ts.connect();
+                p.hello("HA").await;
+                event(&mut rx).await;
+                p.send(msg::LIST_ENTITIES_REQ, &[]).await;
+                let mut found = false;
+                let mut keys = std::collections::HashSet::new();
+                loop {
+                    let (t, m) = p.recv().await.unwrap();
+                    if t == msg::LIST_DONE {
+                        break;
+                    }
+                    assert!(
+                        keys.insert(entity_keys(&m).unwrap()),
+                        "duplicate entity key"
+                    );
+                    if t == msg::LIST_SWITCH && entity_keys(&m) == Some(k.get()) {
+                        found = true;
+                        assert_eq!(field(&m, 1).unwrap().str(), oid);
+                        assert_eq!(field(&m, 3).unwrap().str(), name);
+                        assert_eq!(field(&m, 8).unwrap().u32(), 1); // категория config
+                    }
+                }
+                assert!(found, "{name}");
+                p.send(msg::SUBSCRIBE_STATES_REQ, &[]).await;
+                p.sync().await;
+                for on in [false, true] {
+                    p.send_msg(
+                        msg::SWITCH_CMD,
+                        &SwitchCommandRequest {
+                            key: Some(k.get()),
+                            state: Some(on),
+                        },
+                    )
+                    .await;
+                    assert_eq!(drain(&mut p, &mut rx).await, [ApiEvent::Switch(sw, on)]);
+                    h.publish_switch(sw, on);
+                    let pushed = p.sync().await;
+                    p.send(msg::SUBSCRIBE_STATES_REQ, &[]).await;
+                    let replayed = p.sync().await;
+                    for states in [pushed, replayed] {
+                        let (_, m) = states
+                            .iter()
+                            .find(|(t, m)| *t == msg::SWITCH_STATE && state_key(m) == Some(k.get()))
+                            .unwrap();
+                        assert_eq!(field(m, 2).is_some_and(|f| f.u32() != 0), on);
+                    }
                 }
             })
             .await;
