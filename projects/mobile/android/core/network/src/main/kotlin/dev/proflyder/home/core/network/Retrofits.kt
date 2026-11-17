@@ -188,9 +188,10 @@ private class PlainJsonBody(
 /**
  * Builds the Retrofit instances. Each gets its own OkHttpClient derived from
  * [baseClient] (shared connection pool and dispatcher) with:
- *  1. [ConnectionInterceptor] (endpoint, auth, timeouts from settings),
- *  2. [TokenRefreshAuthenticator] (one retry when the stored token rotated),
- *  3. the caller's [extraInterceptors] (logging, inspection, ...), which
+ *  1. [ReadRetryInterceptor] (retry idempotent reads after wake-up failures),
+ *  2. [ConnectionInterceptor] (endpoint, auth, timeouts from settings),
+ *  3. [TokenRefreshAuthenticator] (one retry when the stored token rotated),
+ *  4. the caller's [extraInterceptors] (logging, inspection, ...), which
  *     therefore see the final request.
  * Redirects are never followed: a bearer token must not follow a Location.
  * Responses are decoded by kotlinx serialization and adapted to [Outcome] so an
@@ -207,11 +208,15 @@ internal object HomeRetrofit {
         baseClient: OkHttpClient,
         target: Target,
         extraInterceptors: List<Interceptor>,
+        networkWaiter: NetworkWaiter = NetworkWaiter.Online,
     ): T {
         val client = baseClient.newBuilder()
             .followRedirects(false)
             .followSslRedirects(false)
-            .retryOnConnectionFailure(false)
+            // A stale keep-alive socket after Doze must be replaced by OkHttp
+            // itself, before an application-level retry is needed.
+            .retryOnConnectionFailure(true)
+            .addInterceptor(ReadRetryInterceptor(networkWaiter, baseClient.connectionPool))
             .addInterceptor(ConnectionInterceptor(settings, target))
             .authenticator(TokenRefreshAuthenticator(settings))
             .apply { extraInterceptors.forEach(::addInterceptor) }

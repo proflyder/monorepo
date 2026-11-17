@@ -68,6 +68,7 @@ class ConnectSchedulerClient(
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
     /** Extra application interceptors (logging, inspection); they run after the connection interceptor. */
     interceptors: List<Interceptor> = emptyList(),
+    networkWaiter: NetworkWaiter = NetworkWaiter.Online,
 ) : SchedulerClient {
 
     private val api: SchedulerApi = HomeRetrofit.create(
@@ -76,6 +77,7 @@ class ConnectSchedulerClient(
         baseClient,
         Target.SCHEDULER,
         interceptors,
+        networkWaiter,
     )
 
     override suspend fun getStatus(): Outcome<SchedulerStatus> = io {

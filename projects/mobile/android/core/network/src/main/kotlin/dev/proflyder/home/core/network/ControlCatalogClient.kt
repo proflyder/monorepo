@@ -157,6 +157,7 @@ class HttpControlCatalogClient(
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
     /** Extra application interceptors (logging, inspection); they run after the connection interceptor. */
     interceptors: List<Interceptor> = emptyList(),
+    networkWaiter: NetworkWaiter = NetworkWaiter.Online,
 ) : ControlCatalogClient {
     private val api: ControlApi = HomeRetrofit.create(
         ControlApi::class.java,
@@ -164,6 +165,7 @@ class HttpControlCatalogClient(
         baseClient,
         Target.CONTROL,
         interceptors,
+        networkWaiter,
     )
 
     override suspend fun fetch(): Outcome<ControlCatalog> =

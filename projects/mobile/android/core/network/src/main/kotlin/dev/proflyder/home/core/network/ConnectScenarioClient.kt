@@ -40,6 +40,7 @@ class ConnectScenarioClient(
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
     /** Extra application interceptors (logging, inspection); they run after the connection interceptor. */
     interceptors: List<Interceptor> = emptyList(),
+    networkWaiter: NetworkWaiter = NetworkWaiter.Online,
 ) : ScenarioClient {
 
     private val api: ScenarioApi = HomeRetrofit.create(
@@ -48,6 +49,7 @@ class ConnectScenarioClient(
         baseClient,
         Target.SCHEDULER,
         interceptors,
+        networkWaiter,
     )
 
     override suspend fun listScenarios(includeDisabled: Boolean): Outcome<List<Scenario>> {

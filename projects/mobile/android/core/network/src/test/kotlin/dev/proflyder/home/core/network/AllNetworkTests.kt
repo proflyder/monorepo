@@ -13,6 +13,7 @@ import org.junit.runners.Suite
     ScenarioJsonTest::class,
     ConnectErrorLocalizationTest::class,
     OutcomeCallAdapterTest::class,
+    ReadRetryTest::class,
     TokenRefreshAuthenticatorTest::class,
     WireDtosTest::class,
 )
