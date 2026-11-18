@@ -48,7 +48,10 @@
  * squash subject), route the delta between H and the deploy commit through
  * `affected.compute`, and use `tree-<tree(H)>` only when that delta does not
  * select this unit. A delta that touches the unit is a refusal: the bytes CI
- * validated are not the bytes that would be deployed.
+ * validated are not the bytes that would be deployed. The PR lookup always uses
+ * the GitHub repository (`--github-repository` or `GITHUB_REPOSITORY`); for
+ * native units `--repository` is the GHCR publish repository, so it can never
+ * identify a PR.
  *
  * Pure decision logic (`planPromotion`/`planNativePromotion`) takes an injected
  * `exec`, so it is tested without a registry. The CLI writes the action outputs:
@@ -263,6 +266,27 @@ export function pullRequestForCommit(exec, { repository, commit, message = "" })
 }
 
 /**
+ * The GitHub repository (`owner/repo`) used for PR lookups and provenance.
+ *
+ * `--repository` means two different things by mode: for images it is already
+ * the GitHub repository (the signer identity), for native units it is the GHCR
+ * publish repository (`ghcr.io/owner/name`) that the artifact lives in. The PR
+ * API and `git fetch refs/pull/<n>/head` only work against the GitHub
+ * repository, so native mode must take it from `--github-repository` or
+ * `GITHUB_REPOSITORY` and never from `--repository`.
+ */
+export function githubRepositoryFor(args = {}, env = process.env) {
+  const explicit = String(args.githubRepository || "").trim();
+  if (explicit) {
+    return explicit;
+  }
+  if (!args.native) {
+    return String(args.repository || env.GITHUB_REPOSITORY || "").trim();
+  }
+  return String(env.GITHUB_REPOSITORY || "").trim();
+}
+
+/**
  * Resolve the PR head of the deploy commit and decide whether the delta between
  * that head and the merge commit touches `unit`.
  *
@@ -285,6 +309,13 @@ export async function resolvePrHeadDelta({
   unit,
   commitMessage = "",
 }) {
+  // Only a GitHub `owner/repo` identifies a pull request. Refuse anything else
+  // (a GHCR publish repository, an empty value) before a doomed API call.
+  try {
+    signerIdentityPattern(repository);
+  } catch (error) {
+    return { error: message(error) };
+  }
   const pull = pullRequestForCommit(exec, { repository, commit, message: commitMessage });
   if (!pull) {
     return { error: `no pull request found for ${String(commit).slice(0, 12)}` };
@@ -365,14 +396,20 @@ export async function resolvePrHeadDelta({
 /**
  * Resolve the PR-head fallback for a CLI run. Never throws: a failure becomes
  * `{error}`, which only matters when the current tree has no verified build.
+ *
+ * The lookup always runs against the GitHub repository from
+ * `githubRepositoryFor` — in native mode `args.repository` is the GHCR publish
+ * repository and would turn every PR query into a 404.
  */
-export async function preparePrHead({ args, exec, compute = computeAffected, unit = "" }) {
+export async function preparePrHead({ args, exec, compute = computeAffected, unit = "", env = process.env }) {
   try {
+    const repository = githubRepositoryFor(args, env);
+    signerIdentityPattern(repository); // fail on a missing/malformed repository, not with a 404
     const commitMessage = exec("git", ["log", "-1", "--format=%B", args.commit]);
     return await resolvePrHeadDelta({
       exec,
       compute,
-      repository: args.repository,
+      repository,
       commit: args.commit,
       unit: args.unit || unit,
       commitMessage,
@@ -1018,7 +1055,7 @@ export function runNativePromotion({
     commit: args.commit,
     version: args.version,
     tags: args.tags,
-    githubRepository: args.githubRepository || env.GITHUB_REPOSITORY,
+    githubRepository: githubRepositoryFor({ ...args, native: true }, env),
     exec,
     allowPrHead: Boolean(args.allowPrHead),
     prHead,
@@ -1204,10 +1241,14 @@ export async function main(argv = process.argv.slice(2)) {
     console.log(
       "usage: promote.mjs --images 'a b' [--optional-images 'c d'] " +
         "[--allow-history] [--allow-pr-head --unit <id>] [--history-limit N] " +
-        "--tree <40-hex> --commit <sha> [--repository owner/repo]\n" +
+        "--tree <40-hex> --commit <sha> [--repository owner/repo] [--github-repository owner/repo]\n" +
         "   or: promote.mjs --native --repository ghcr.io/owner/name --tree <40-hex> " +
         "--commit <sha> --version <vX.Y.Z> --tags '{version} latest' " +
-        "[--allow-pr-head --unit <id>]",
+        "[--allow-pr-head --unit <id>] --github-repository owner/repo\n" +
+        "\n" +
+        "--repository is where the artifact lives (images: GitHub owner/repo; native: the " +
+        "GHCR publish repository). PR lookups always use --github-repository or " +
+        "GITHUB_REPOSITORY, never a native publish repository.",
     );
     return 0;
   }
