@@ -175,6 +175,10 @@ class AlarmsFragment : BaseFragment<FragmentAlarmsBinding>(FragmentAlarmsBinding
         binding.alarmsSelectionAll.setText(
             if (state.allSelected) R.string.alarms_select_none else R.string.alarms_select_all,
         )
+        val selectionActions = alarmSelectionActions(state.alarms, state.selectedIds)
+        binding.alarmsSelectionEnable.setVisible(selectionActions.canEnable)
+        binding.alarmsSelectionDisable.setVisible(selectionActions.canDisable)
+
         val actionsEnabled = !state.busy
         binding.alarmsSelectionEnable.isEnabled = actionsEnabled
         binding.alarmsSelectionDisable.isEnabled = actionsEnabled

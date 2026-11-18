@@ -95,9 +95,12 @@ internal class AlarmAdapter(
                 context = context,
                 nowUnix = Instant.now().epochSecond,
                 actionsAllowed = !item.selectionMode,
+                selected = item.selected,
             )
 
-            binding.root.alpha = if (schedule.enabled) 1f else 0.6f
+            // A disabled alarm is dimmed only at rest: while selecting, the
+            // selection outline must read the same on every picked card.
+            binding.root.alpha = if (schedule.enabled || item.selectionMode) 1f else 0.6f
             binding.root.isChecked = item.selected
             applySelection(
                 selected = item.selected,
@@ -111,8 +114,8 @@ internal class AlarmAdapter(
             previousAlarmId = schedule.id
             previousSelected = item.selected
 
-            // While selecting, a tap picks the card; per-card controls are inert.
-            binding.alarmEnabled.isEnabled = !item.selectionMode
+            // While selecting, a tap picks the card; the hidden switch still
+            // mirrors the server state so leaving selection mode is instant.
             binding_ = true
             binding.alarmEnabled.isChecked = schedule.enabled
             binding_ = false
@@ -125,7 +128,8 @@ internal class AlarmAdapter(
          */
         private fun applySelection(selected: Boolean, animate: Boolean) {
             val context = binding.root.context
-            val targetStroke = if (selected) SELECTED_STROKE_PX else 0
+            val selectedStroke = (SELECTED_STROKE_DP * context.resources.displayMetrics.density).roundToInt()
+            val targetStroke = if (selected) selectedStroke else 0
             val targetScrimAlpha = if (selected) SELECTED_SCRIM_ALPHA else 0f
 
             strokeAnimator?.cancel()
@@ -159,7 +163,8 @@ internal class AlarmAdapter(
     }
 
     private companion object {
-        const val SELECTED_STROKE_PX = 4
+        /** A 2dp outline stays fully visible inside the card's rounded clip. */
+        const val SELECTED_STROKE_DP = 2f
         const val SELECTED_SCRIM_ALPHA = 0.12f
     }
 }

@@ -141,57 +141,64 @@
             android:textColor="?attr/colorOnSecondaryContainer" />
     </LinearLayout>
 
-    <!-- Bulk actions: overlaid on the list, slides up from below. -->
+    <!-- Bulk actions: a contextual bar overlaid on the list, sliding up from
+         below. Each action is an icon with a one-line label underneath, so the
+         three equal cells keep their labels intact on 360dp at a 1.15 font
+         scale instead of wrapping "Включ-ить" into two lines. -->
     <com.google.android.material.card.MaterialCardView
         android:id="@+id/alarms_action_bar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom"
         android:visibility="gone"
+        app:cardBackgroundColor="?attr/colorSurfaceContainer"
         app:cardCornerRadius="0dp"
         app:cardElevation="8dp">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:baselineAligned="false"
+            android:gravity="center_vertical"
             android:orientation="horizontal"
-            android:paddingStart="@dimen/alarms_screen_margin"
-            android:paddingTop="8dp"
-            android:paddingEnd="@dimen/alarms_screen_margin"
-            android:paddingBottom="8dp">
+            android:paddingStart="8dp"
+            android:paddingTop="6dp"
+            android:paddingEnd="8dp"
+            android:paddingBottom="6dp">
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/alarms_selection_enable"
-                style="@style/Widget.Material3.Button.TonalButton"
+                style="@style/Widget.Alarms.SelectionAction"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:minHeight="48dp"
                 android:text="@string/alarms_selection_enable"
+                android:tooltipText="@string/alarms_selection_enable"
                 app:icon="@drawable/alarms_ic_check" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/alarms_selection_disable"
-                style="@style/Widget.Material3.Button.TonalButton"
+                style="@style/Widget.Alarms.SelectionAction"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="8dp"
+                android:layout_marginStart="4dp"
                 android:layout_weight="1"
-                android:minHeight="48dp"
                 android:text="@string/alarms_selection_disable"
+                android:tooltipText="@string/alarms_selection_disable"
                 app:icon="@drawable/alarms_ic_close" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/alarms_selection_delete"
-                style="@style/Widget.Material3.Button"
+                style="@style/Widget.Alarms.SelectionAction"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="8dp"
+                android:layout_marginStart="4dp"
                 android:layout_weight="1"
-                android:minHeight="48dp"
                 android:text="@string/alarms_selection_delete"
-                app:backgroundTint="?attr/colorError"
-                app:icon="@drawable/alarms_ic_delete" />
+                android:textColor="?attr/colorError"
+                android:tooltipText="@string/alarms_selection_delete"
+                app:icon="@drawable/alarms_ic_delete"
+                app:iconTint="?attr/colorError" />
         </LinearLayout>
     </com.google.android.material.card.MaterialCardView>
 </FrameLayout>

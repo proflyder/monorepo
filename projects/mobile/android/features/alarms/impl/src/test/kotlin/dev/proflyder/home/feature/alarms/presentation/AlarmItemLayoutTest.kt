@@ -62,6 +62,19 @@ class AlarmItemLayoutTest {
     fun activeCardShowsOneActionsRowAt411dp() =
         assertActiveCard(1f, "alarm-card-active-411dp-ru.png")
 
+    @Test
+    fun selectionCardReplacesSwitchWithIndicatorAt360dp() =
+        assertSelectionCard(1f, "alarm-card-selection-360dp-ru.png")
+
+    @Test
+    fun selectionCardReplacesSwitchWithIndicatorAt360dpWithLargeFont() =
+        assertSelectionCard(1.15f, null)
+
+    @Test
+    @Config(qualifiers = "ru-rRU-w411dp-h891dp-night-xxhdpi")
+    fun selectionCardReplacesSwitchWithIndicatorAt411dp() =
+        assertSelectionCard(1f, "alarm-card-selection-411dp-ru.png")
+
     private fun assertIdleCard(fontScale: Float, pngName: String?) {
         val binding = inflateAndBind(fontScale, schedule(active = false))
         val cardWidth = cardWidth(binding.root)
@@ -107,6 +120,51 @@ class AlarmItemLayoutTest {
         }
     }
 
+    /**
+     * In selection mode the card drops its switch and delete: a dimmed switch
+     * would read as the alarm's real state. The right edge belongs to the
+     * circular check, which the card padding keeps clear of the rounded
+     * corner, and the labels still fit on one line.
+     */
+    private fun assertSelectionCard(fontScale: Float, pngName: String?) {
+        val binding = inflateAndBind(
+            fontScale = fontScale,
+            schedule = schedule(active = false),
+            actionsAllowed = false,
+            selected = true,
+        )
+        val cardWidth = cardWidth(binding.root)
+
+        assertEquals("font scale not applied to the inflated card", fontScale, appliedFontScale(binding), 0.001f)
+        assertEquals("switch must be gone while selecting", View.GONE, binding.alarmEnabled.visibility)
+        assertEquals("delete must be gone while selecting", View.GONE, binding.alarmDelete.visibility)
+        assertEquals(
+            "selection indicator must be visible",
+            View.VISIBLE,
+            binding.alarmSelectionIndicator.visibility,
+        )
+        assertEquals("label wrapped: ${binding.alarmLabel.lineCount}", 1, binding.alarmLabel.lineCount)
+        assertEquals("summary wrapped: ${binding.alarmSummary.lineCount}", 1, binding.alarmSummary.lineCount)
+
+        // The card is checkable for accessibility, but its built-in corner
+        // check is off: the only selection mark is the circular indicator.
+        binding.root.isChecked = true
+        assertEquals("card must not draw its own corner check", null, binding.root.checkedIcon)
+
+        val indicator = binding.alarmSelectionIndicator
+        val endGap = cardWidth - indicator.right
+        assertTrue("indicator left ${indicator.left} outside card", indicator.left >= 0)
+        assertTrue("indicator bottom ${indicator.bottom} > card ${binding.root.height}", indicator.bottom <= binding.root.height)
+        assertTrue(
+            "indicator touches the rounded corner: end gap $endGap < radius ${binding.root.radius}",
+            endGap >= binding.root.radius,
+        )
+        when (pngName) {
+            null -> Unit
+            else -> savePng(binding.root, pngName)
+        }
+    }
+
     /** The ripple is a circle bounded by the square button, so the gap to the
      * card edge must cover its radius: then no part of it reaches the rounded
      * corner, which the card outline would clip. */
@@ -119,7 +177,12 @@ class AlarmItemLayoutTest {
         assertTrue("delete ripple clipped: end gap $endGap < radius $radius", endGap >= radius)
     }
 
-    private fun inflateAndBind(fontScale: Float, schedule: Schedule): ItemAlarmBinding {
+    private fun inflateAndBind(
+        fontScale: Float,
+        schedule: Schedule,
+        actionsAllowed: Boolean = true,
+        selected: Boolean = false,
+    ): ItemAlarmBinding {
         RuntimeEnvironment.setFontScale(fontScale)
         val themed = ContextThemeWrapper(
             RuntimeEnvironment.getApplication(),
@@ -131,7 +194,8 @@ class AlarmItemLayoutTest {
             schedule = schedule,
             context = themed,
             nowUnix = schedule.activeOccurrenceUnix.coerceAtLeast(Instant.now().epochSecond),
-            actionsAllowed = true,
+            actionsAllowed = actionsAllowed,
+            selected = selected,
         )
 
         val width = cardWidth(binding.root)
