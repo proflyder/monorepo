@@ -327,6 +327,7 @@ enum Cmd {
     ShowTemporaryFace(ClockFace, i32),
     SetUiState(UiState),
     SetVoiceIndication(bool),
+    SetColonBlink(bool),
     Play(ClockShot),
     SetUpdating(bool),
     SetMusicStyle(ClockMusicStyle),
@@ -411,6 +412,7 @@ impl Clock {
             Cmd::ShowTemporaryFace(face, secs) => l.show_temporary_face(face, secs, now),
             Cmd::SetUiState(s) => l.set_ui_state(s, now),
             Cmd::SetVoiceIndication(on) => l.set_voice_indication(on, now),
+            Cmd::SetColonBlink(on) => l.set_colon_blink(on),
             Cmd::Play(s) => l.play(s, now),
             Cmd::SetUpdating(on) => l.set_updating(on),
             Cmd::SetMusicStyle(style) => l.set_music_style(style),
@@ -591,6 +593,11 @@ impl ClockHandle {
 
     pub fn set_voice_indication(&self, on: bool) {
         self.send(Cmd::SetVoiceIndication(on));
+    }
+
+    /// Мигание двоеточия при показе времени; выключено — двоеточие горит постоянно.
+    pub fn set_colon_blink(&self, on: bool) {
+        self.send(Cmd::SetColonBlink(on));
     }
 
     /// Restarts / replaces a running one-shot.

@@ -25,10 +25,35 @@ internal fun alarmCardMode(schedule: Schedule, nowUnix: Long): AlarmCardMode = w
 }
 
 /**
+ * Which bulk enable actions make sense for the picked alarms: turning on is
+ * only offered while at least one picked alarm is off, and turning off only
+ * while at least one is on. The bar then shows one action for a uniform
+ * selection and both for a mixed one.
+ */
+internal data class AlarmSelectionActions(
+    val canEnable: Boolean,
+    val canDisable: Boolean,
+)
+
+internal fun alarmSelectionActions(
+    alarms: List<Schedule>,
+    selectedIds: Set<String>,
+): AlarmSelectionActions {
+    val selected = alarms.filter { it.id in selectedIds }
+    return AlarmSelectionActions(
+        canEnable = selected.any { !it.enabled },
+        canDisable = selected.any { it.enabled },
+    )
+}
+
+/**
  * Shared by the adapter and the layout tests: text always comes from
  * resources, and the actions row is the single place that decides whether the
- * dense card grows. Multi-select ([actionsAllowed] false) hides the trailing
- * delete too, as the old actions row did.
+ * dense card grows.
+ *
+ * Multi-select ([actionsAllowed] false) replaces the row controls with the
+ * selection indicator: the switch and delete are gone instead of disabled, so
+ * the dimmed switch cannot be mistaken for the alarm's real state.
  */
 internal fun bindAlarmCard(
     binding: ItemAlarmBinding,
@@ -36,11 +61,17 @@ internal fun bindAlarmCard(
     context: Context,
     nowUnix: Long,
     actionsAllowed: Boolean,
+    selected: Boolean = false,
 ) {
     binding.alarmTime.text = AlarmFormat.time(schedule)
     binding.alarmLabel.text = schedule.label.ifBlank { context.getString(R.string.alarms_label_default) }
     binding.alarmSummary.text = AlarmFormat.summary(context, schedule, nowUnix)
+    binding.alarmEnabled.setVisible(actionsAllowed)
     binding.alarmDelete.setVisible(actionsAllowed)
+    binding.alarmSelectionIndicator.setVisible(!actionsAllowed)
+    binding.alarmSelectionCheck.setImageResource(
+        if (selected) R.drawable.alarms_ic_selection_on else R.drawable.alarms_ic_selection_off,
+    )
     binding.alarmActions.setVisible(
         actionsAllowed && alarmCardMode(schedule, nowUnix) == AlarmCardMode.ACTIVE,
     )

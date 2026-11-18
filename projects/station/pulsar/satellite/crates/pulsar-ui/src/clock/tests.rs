@@ -374,3 +374,17 @@ fn meters_cycle_with_the_time_and_fall() {
     l.media = false;
     assert_eq!(l.compose(NOW + 40_010, wall).0, time_frame());
 }
+
+#[test]
+fn colon_stays_lit_when_blink_is_off() {
+    let mut l = ClockLayers::new();
+    let second_half = || Wall {
+        first_half: false,
+        ..wall()
+    };
+    assert_eq!(l.compose(NOW, wall).0.colon, 255);
+    assert_eq!(l.compose(NOW + 500, second_half).0.colon, 0);
+    l.set_colon_blink(false);
+    assert_eq!(l.compose(NOW, wall).0, time_frame());
+    assert_eq!(l.compose(NOW + 500, second_half).0, time_frame());
+}

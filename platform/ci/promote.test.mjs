@@ -14,12 +14,14 @@ import {
   formatNativeSummary,
   formatPrebuilt,
   formatSummary,
+  githubRepositoryFor,
   imageRef,
   manifestContent,
   nativeSignerIdentityPattern,
   parseDigest,
   planNativePromotion,
   planPromotion,
+  preparePrHead,
   pullRequestForCommit,
   pullRequestNumber,
   readHistory,
@@ -1301,4 +1303,197 @@ test("a sibling image uses history first, then the PR head", () => {
   assert.match(decision.detail, /from PR head/);
   // Siblings are handed to the renderer, never retagged.
   assert.equal(tagsWritten(calls).filter((call) => String(call[2]).includes("ha-bridge")).length, 0);
+});
+
+// --------------------------------------------------------------------------
+// PR lookups always use the GitHub repository: a native promote passes the GHCR
+// publish repository in `--repository`, which identifies no pull request.
+// --------------------------------------------------------------------------
+
+test("githubRepositoryFor separates the PR repository from the publish repository", () => {
+  // Images already pass the GitHub repository in --repository.
+  assert.equal(githubRepositoryFor({ repository: REPO }, {}), REPO);
+  assert.equal(githubRepositoryFor({ repository: REPO, native: true }, {}), "");
+  // Native: the publish registry must never stand in for the GitHub repository.
+  assert.equal(
+    githubRepositoryFor({ native: true, repository: "ghcr.io/proflyder/pulsar-firmware" }, {}),
+    "",
+  );
+  assert.equal(
+    githubRepositoryFor(
+      { native: true, repository: "ghcr.io/proflyder/pulsar-firmware" },
+      { GITHUB_REPOSITORY: REPO },
+    ),
+    REPO,
+  );
+  // An explicit argument wins over the environment.
+  assert.equal(
+    githubRepositoryFor(
+      { native: true, repository: "ghcr.io/proflyder/pulsar-firmware", githubRepository: REPO },
+      { GITHUB_REPOSITORY: "acme/other" },
+    ),
+    REPO,
+  );
+  assert.equal(githubRepositoryFor({}, { GITHUB_REPOSITORY: REPO }), REPO);
+});
+
+/**
+ * `exec` for a PR-head resolution keyed by the repository it may query: any
+ * `gh api` path outside the expected GitHub repository fails the test.
+ */
+const PULSAR_PR = [{ number: 329, head: { sha: PR_HEAD, repo: { full_name: REPO } } }];
+
+function prExecFor(apiRepository, { pulls = PULSAR_PR, diff = "" } = {}) {
+  return (command, args) => {
+    if (command === "gh") {
+      const apiPath = String(args[1] || "");
+      if (!apiPath.startsWith(`repos/${apiRepository}/`)) {
+        throw new Error(`gh api query for the wrong repository: ${apiPath}`);
+      }
+      return JSON.stringify(pulls);
+    }
+    if (command === "git" && args[0] === "log") {
+      return "feat(pulsar): upstream sync (#329)\n";
+    }
+    if (command === "git" && args[0] === "fetch") {
+      return "";
+    }
+    if (command === "git" && args[0] === "rev-parse" && args[1] === "FETCH_HEAD^{commit}") {
+      return `${PR_HEAD}\n`;
+    }
+    if (command === "git" && args[0] === "rev-parse" && args[1] === `${PR_HEAD}^{tree}`) {
+      return `${PR_HEAD_TREE}\n`;
+    }
+    if (command === "git" && args[0] === "diff") {
+      return diff;
+    }
+    throw new Error(`unexpected command: ${command} ${args.join(" ")}`);
+  };
+}
+
+test("native promotion finds the PR through the GitHub repository, not the publish one", async () => {
+  const ref = "ghcr.io/proflyder/pulsar-firmware";
+  const { calls, exec } = recorder([
+    [isGhVerify, ""],
+    ...nativeHandlers({ ref, tree: PR_HEAD_TREE, digest: DIGEST_A }),
+  ]);
+  // `gh api` and `git` go through the PR-aware executor; registry calls fall
+  // through to the recorder.
+  const gitAndGh = prExecFor(REPO, { diff: "docs/STATE.md\n" });
+  const routed = (command, args) => {
+    if (command === "gh" && args[0] === "api") {
+      calls.push([command, ...args]);
+      return gitAndGh(command, args);
+    }
+    if (command === "git") {
+      calls.push([command, ...args]);
+      return gitAndGh(command, args);
+    }
+    return exec(command, args);
+  };
+  const args = {
+    native: true,
+    repository: ref,
+    githubRepository: REPO,
+    tree: TREE,
+    commit: COMMIT,
+    version: "v0.6.2",
+    tags: ["{version}", "latest"],
+    allowPrHead: true,
+    unit: "pulsar",
+  };
+  const prHead = await preparePrHead({
+    args,
+    exec: routed,
+    // The delta is docs-only, so the PR-head artifact may be promoted.
+    compute: async () => ({
+      result: { deploySelected: new Set(["quality"]), changed: ["docs/STATE.md"] },
+      entries: { native: [] },
+    }),
+    env: { GITHUB_REPOSITORY: "acme/other" },
+  });
+  assert.equal(prHead.error, undefined);
+  assert.equal(prHead.number, 329);
+  assert.equal(prHead.tree, PR_HEAD_TREE);
+  assert.equal(prHead.affectsUnit, false);
+  // The PR was looked up in the GitHub repository, never in the registry.
+  const queries = calls.filter(([command, action]) => command === "gh" && action === "api");
+  assert.deepEqual(
+    queries.map((call) => call[2]),
+    [`repos/${REPO}/commits/${COMMIT}/pulls`],
+  );
+  assert.ok(!calls.some((call) => call.some((part) => String(part).includes("repos/ghcr.io"))));
+
+  const result = runNativePromotion({
+    args,
+    exec: routed,
+    env: { GITHUB_REPOSITORY: "acme/other" },
+    log: () => {},
+    prHead,
+  });
+  assert.equal(result.mode, "promoted");
+  assert.equal(result.digest, DIGEST_A);
+  // Provenance is verified against the GitHub repository as well.
+  const verify = calls.find(([command, action]) => command === "gh" && action === "attestation");
+  assert.deepEqual(verify.slice(4, 6), ["--repo", REPO]);
+});
+
+test("native promotion takes the GitHub repository from the environment when not passed", async () => {
+  const ref = "ghcr.io/proflyder/pulsar-firmware";
+  const { exec } = recorder(nativeHandlers({ ref, tree: PR_HEAD_TREE, digest: DIGEST_A }));
+  const gitAndGh = prExecFor(REPO, { diff: "" });
+  const routed = (command, args) =>
+    command === "gh" && args[0] === "api" ? gitAndGh(command, args) : command === "git" ? gitAndGh(command, args) : exec(command, args);
+  const prHead = await preparePrHead({
+    args: {
+      native: true,
+      repository: ref,
+      tree: TREE,
+      commit: COMMIT,
+      version: "v0.6.2",
+      tags: ["{version}"],
+      allowPrHead: true,
+      unit: "pulsar",
+    },
+    exec: routed,
+    env: { GITHUB_REPOSITORY: REPO },
+  });
+  assert.equal(prHead.error, undefined);
+  assert.equal(prHead.number, 329);
+});
+
+test("native promotion without any GitHub repository fails closed before querying anything", async () => {  const exec = () => {
+    throw new Error("no command may run");
+  };
+  const prHead = await preparePrHead({
+    args: {
+      native: true,
+      repository: "ghcr.io/proflyder/pulsar-firmware",
+      tree: TREE,
+      commit: COMMIT,
+      version: "v0.6.2",
+      tags: ["{version}"],
+      allowPrHead: true,
+      unit: "pulsar",
+    },
+    exec,
+    env: {},
+  });
+  assert.match(prHead.error, /invalid GitHub repository/);
+});
+
+test("resolvePrHeadDelta refuses a publish repository instead of calling the PR API", async () => {
+  const exec = () => {
+    throw new Error("no command may run");
+  };
+  const result = await resolvePrHeadDelta({
+    exec,
+    compute: async () => {
+      throw new Error("compute must not run");
+    },
+    repository: "ghcr.io/proflyder/pulsar-firmware",
+    commit: COMMIT,
+    unit: "pulsar",
+  });
+  assert.match(result.error, /invalid GitHub repository/);
 });

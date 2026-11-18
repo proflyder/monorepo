@@ -143,6 +143,8 @@ pub struct ClockLayers {
     scroll_ms: i64,
     ui: UiState,
     voice_indication: bool,
+    /// Двоеточие времени мигает раз в секунду; выключено — горит постоянно.
+    colon_blink: bool,
     /// Voice state / ringing.
     voice: Option<Anim>,
     voice_t0: i64,
@@ -185,6 +187,7 @@ impl ClockLayers {
             scroll_ms: 400,
             ui: UiState::Idle,
             voice_indication: true,
+            colon_blink: true,
             voice: None,
             voice_t0: 0,
             shot: None,
@@ -316,6 +319,11 @@ impl ClockLayers {
     pub fn set_voice_indication(&mut self, on: bool, now: i64) {
         self.voice_indication = on;
         self.update_voice(now);
+    }
+
+    /// Мигание двоеточия при показе времени; выключено — двоеточие горит постоянно.
+    pub fn set_colon_blink(&mut self, on: bool) {
+        self.colon_blink = on;
     }
 
     pub fn play(&mut self, s: ClockShot, now: i64) {
@@ -460,9 +468,12 @@ impl ClockLayers {
             (clock_fx::levels(&self.mus_shown), MUSIC_FRAME_MS)
         } else {
             let w = wall();
-            // Colon on for the first half of every second.
+            // Двоеточие горит первую половину каждой секунды; при выключенном мигании — постоянно.
             (
-                glyph_frame(font::time_glyphs(w.hour, w.min), w.first_half),
+                glyph_frame(
+                    font::time_glyphs(w.hour, w.min),
+                    !self.colon_blink || w.first_half,
+                ),
                 0,
             )
         }

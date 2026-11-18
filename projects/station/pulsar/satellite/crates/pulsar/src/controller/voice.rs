@@ -316,10 +316,14 @@ impl Controller {
         });
         self.run_result = None;
         self.update_duck();
-        if earcon {
-            let sound = earcons::path(self.model.earcons.wake);
-            self.set_announce_speech(false);
-            self.deps.player.play(Channel::Announce, vec![sound]);
+        match logic::wake_cue(earcon, self.st.wake_sound) {
+            logic::WakeCue::Keep => {}
+            logic::WakeCue::Sound => {
+                let sound = earcons::path(self.model.earcons.wake);
+                self.set_announce_speech(false);
+                self.deps.player.play(Channel::Announce, vec![sound]);
+            }
+            logic::WakeCue::Cut => self.deps.player.stop(Channel::Announce),
         }
         // HA applies AnnounceFinished by forcing idle: an answer's report must not arrive over
         // the new dialog's listening state.
@@ -814,8 +818,12 @@ impl Controller {
         // only pause the music and cancel the pipeline. This also covers a callback
         // queued just before update_commands() switched the spotter off.
         if self.session.in_voice_request() || self.wake.is_claiming() {
-            let after_wake =
-                logic::after_wake(self.session.phase(), now, self.session.listen_started_ms());
+            let after_wake = logic::after_wake(
+                self.session.phase(),
+                self.session.wake_dialog(),
+                now,
+                self.session.listen_started_ms(),
+            );
             info!(
                 "voice command '{word}' left to Home Assistant during a voice request{}",
                 if after_wake { " (after wake word)" } else { "" }

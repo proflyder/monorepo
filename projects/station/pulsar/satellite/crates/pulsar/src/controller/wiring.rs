@@ -260,6 +260,7 @@ impl Boot {
         clock.set_enabled(self.store.clock_on);
         clock.set_brightness(self.store.clock_brightness);
         clock.set_auto_brightness(self.store.clock_auto_brightness);
+        clock.set_colon_blink(self.store.clock_colon_blink);
         clock.set_scroll_ms(self.store.clock_scroll_ms);
         clock.set_voice_indication(self.store.voice_indication);
         clock.set_music_style(super::clock_music(&self.store));

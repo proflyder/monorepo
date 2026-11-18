@@ -203,6 +203,7 @@ jobs:
           fi
           node platform/ci/promote.mjs --native \
             --repository "${{ inputs.publish_repository }}" \
+            --github-repository "${{ github.repository }}" \
             --tree "$tree" \
             --commit "$GITHUB_SHA" \
             --version "$version" \
