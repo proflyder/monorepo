@@ -91,6 +91,8 @@ fn switch_id(key: u32) -> Option<SwitchId> {
         k if k == key::SW_WAKE_PREROLL.get() => SwitchId::WakePreroll,
         k if k == key::SW_WAKE_EVENT_RECORDING.get() => SwitchId::WakeEventRecording,
         k if k == key::SW_WAKE_DRY_RUN.get() => SwitchId::WakeDryRun,
+        k if k == key::SW_WAKE_SOUND.get() => SwitchId::WakeSound,
+        k if k == key::SW_CLOCK_COLON_BLINK.get() => SwitchId::ClockColonBlink,
         _ => return None,
     })
 }

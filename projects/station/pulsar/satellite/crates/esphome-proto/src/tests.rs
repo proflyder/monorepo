@@ -428,7 +428,7 @@ fn entity_key_of(msg_type: u32, payload: &[u8]) -> Option<u32> {
 
 /// Сущности, которые форк добавил к захвату C++-референса.
 fn fork_only(msg_type: u32, payload: &[u8]) -> bool {
-    const KEYS: [u32; 7] = [
+    const KEYS: [u32; 9] = [
         key::SW_WAKE_EVENT_RECORDING.get(),
         key::SW_WAKE_DRY_RUN.get(),
         key::BUTTON_WAKE_FALSE_ALARM.get(),
@@ -436,6 +436,8 @@ fn fork_only(msg_type: u32, payload: &[u8]) -> bool {
         key::SELECT_VOICE_COLOR.get(),
         key::NUMBER_ANNOUNCE_VOLUME.get(),
         key::NUMBER_MIC_GAIN.get(),
+        key::SW_WAKE_SOUND.get(),
+        key::SW_CLOCK_COLON_BLINK.get(),
     ];
     matches!(
         msg_type,
@@ -516,24 +518,24 @@ fn entity_table_snapshot() {
     assert_eq!(
         keys(&full),
         [
-            1, 2, 3, 33, 20, 25, 28, 32, 36, 37, 27, 39, 40, 41, 26, 29, 38, 31, 19, 4, 5, 6, 7, 8,
-            9, 34, 35, 10, 11, 12, 13, 16, 14, 15, 21, 22, 23, 24, 17, 18, 30
+            1, 2, 3, 43, 33, 20, 25, 28, 42, 32, 36, 37, 27, 39, 40, 41, 26, 29, 38, 31, 19, 4, 5,
+            6, 7, 8, 9, 34, 35, 10, 11, 12, 13, 16, 14, 15, 21, 22, 23, 24, 17, 18, 30
         ]
     );
     let minimal = Capabilities::default();
     assert_eq!(
         keys(&minimal),
         [
-            1, 2, 20, 25, 28, 36, 37, 27, 39, 40, 41, 26, 19, 7, 9, 34, 35, 10, 11, 12, 13, 30
+            1, 2, 20, 25, 28, 42, 36, 37, 27, 39, 40, 41, 26, 19, 7, 9, 34, 35, 10, 11, 12, 13, 30
         ]
     );
 }
 
 #[test]
-fn table_keys_are_unique_and_cover_1_to_41() {
+fn table_keys_are_unique_and_cover_1_to_43() {
     let mut keys: Vec<u32> = ENTITIES.iter().map(|d| d.key.get()).collect();
     keys.sort_unstable();
-    assert_eq!(keys, (1..=41).collect::<Vec<_>>());
+    assert_eq!(keys, (1..=43).collect::<Vec<_>>());
 }
 
 #[test]
@@ -555,6 +557,8 @@ fn typed_ids_map_to_table_entries() {
             SwitchId::ClockAutoBrightness,
             SwitchId::WakeEventRecording,
             SwitchId::WakeDryRun,
+            SwitchId::WakeSound,
+            SwitchId::ClockColonBlink,
         ],
         SwitchId::key,
         EntityKindTag::Switch,

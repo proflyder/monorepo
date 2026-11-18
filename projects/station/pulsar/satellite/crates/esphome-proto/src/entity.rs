@@ -25,7 +25,7 @@ impl EntityKey {
     }
 }
 
-/// Ключи сущностей C++-референса и этого форка (1..=41).
+/// Ключи сущностей C++-референса и этого форка (1..=43).
 pub mod key {
     use super::EntityKey;
 
@@ -70,6 +70,10 @@ pub mod key {
     pub const NUMBER_FOLLOWUP_DURATION: EntityKey = EntityKey(39);
     pub const NUMBER_ANNOUNCE_VOLUME: EntityKey = EntityKey(40);
     pub const NUMBER_MIC_GAIN: EntityKey = EntityKey(41);
+    // Ключи upstream 39/40 заняты сущностями форка (Follow-up duration, «Громкость
+    // объявлений»), поэтому upstream-переключатели получают следующие свободные.
+    pub const SW_WAKE_SOUND: EntityKey = EntityKey(42);
+    pub const SW_CLOCK_COLON_BLINK: EntityKey = EntityKey(43);
 }
 
 /// aioesphomeapi VoiceAssistantFeature: голосовой ассистент, API-аудио, таймеры, анонсы,
@@ -322,6 +326,8 @@ id_enum!(SwitchId {
     ClockAutoBrightness = 7 => SW_CLOCK_AUTO_BRI,
     WakeEventRecording = 8 => SW_WAKE_EVENT_RECORDING,
     WakeDryRun = 9 => SW_WAKE_DRY_RUN,
+    WakeSound = 10 => SW_WAKE_SOUND,
+    ClockColonBlink = 11 => SW_CLOCK_COLON_BLINK,
 });
 
 id_enum!(SensorId {
@@ -436,6 +442,16 @@ pub const ENTITIES: &[EntityDef] = &[
         Capability::Clock,
     ),
     ent(
+        key::SW_CLOCK_COLON_BLINK,
+        EntityKind::Switch {
+            category: Category::Config,
+        },
+        "clock_colon_blink",
+        "Clock colon blink",
+        Some("mdi:dots-vertical"),
+        Capability::Clock,
+    ),
+    ent(
         key::SW_CLOCK_AUTO_BRI,
         EntityKind::Switch {
             category: Category::Config,
@@ -473,6 +489,16 @@ pub const ENTITIES: &[EntityDef] = &[
         "voice_indication",
         "Voice indication",
         Some("mdi:led-on"),
+        Capability::Always,
+    ),
+    ent(
+        key::SW_WAKE_SOUND,
+        EntityKind::Switch {
+            category: Category::Config,
+        },
+        "wake_sound",
+        "Wake sound",
+        Some("mdi:volume-high"),
         Capability::Always,
     ),
     ent(
@@ -858,10 +884,12 @@ pub const REPLAY_ORDER: &[EntityKey] = &[
     key::MEDIA,
     key::SW_MICROPHONES,
     key::SW_CLOCK,
+    key::SW_CLOCK_COLON_BLINK,
     key::SW_CLOCK_AUTO_BRI,
     key::SW_AUTO_UPDATE,
     key::SW_NEAREST_ANSWERS,
     key::SW_VOICE_INDICATION,
+    key::SW_WAKE_SOUND,
     key::SW_WAKE_PREROLL,
     key::SW_WAKE_EVENT_RECORDING,
     key::SW_WAKE_DRY_RUN,

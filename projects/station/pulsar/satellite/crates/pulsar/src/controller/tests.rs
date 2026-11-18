@@ -406,6 +406,10 @@ impl Clock for FakeClock {
         self.rec.push(format!("clock.auto_brightness {on}"));
     }
 
+    fn set_colon_blink(&self, on: bool) {
+        self.rec.push(format!("clock.colon_blink {on}"));
+    }
+
     fn set_timer(&self, ms_left: i64, running: bool) {
         self.rec.push(format!("clock.timer {ms_left} {running}"));
     }
@@ -797,10 +801,12 @@ async fn client_connected_publishes_entities_in_the_cpp_order() {
             "publish_media Idle 0.5 false",
             "publish_switch Microphones true",
             "publish_switch Clock true",
+            "publish_switch ClockColonBlink true",
             "publish_switch ClockAutoBrightness true",
             "publish_switch AutoUpdate false",
             "publish_switch NearestAnswers false",
             "publish_switch VoiceIndication true",
+            "publish_switch WakeSound true",
             "publish_switch WakePreroll true",
             "publish_switch WakeEventRecording true",
             "publish_switch WakeDryRun false",

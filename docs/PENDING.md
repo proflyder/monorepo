@@ -28,6 +28,13 @@
 
 ### Станция и голос
 
+- [ ] **Pulsar `v0.5.1019` (upstream `v0.6.2`).** Ветка `feat/pulsar-upstream-0.6.2`:
+      переключатели «Wake sound» и «Clock colon blink» (ключи 42/43) и окно
+      `after_wake` только для диалога от wake word. На колонке стоит `v0.5.1018`.
+      Следующий шаг после merge: approve `deploy-station`, проверить в HA новые
+      переключатели и живо «Рикардо, стоп» в диалоге от wake word (уходит в HA) и
+      от кнопки (отменяет локально). Откат — `rollback` юнита `pulsar` в
+      `platform/ci/units.mjs` (`pulsar.prev` + `ctl.sh reload`).
 - [ ] **Ricardo pre-roll 256 ms.** `Fixed(8)` в текущей сборке
       (`docs/STATE.md`); база n=3, риск среза первого слога.
       Следующий шаг: живая проверка «Рикардо отмена/который час/сколько
