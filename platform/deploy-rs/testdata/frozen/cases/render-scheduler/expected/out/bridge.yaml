@@ -50,7 +50,7 @@ spec:
         app.kubernetes.io/name: ha-bridge
       annotations:
         # Content-addressed: identical rendered content keeps the pod template.
-        proflyder.dev/rollout: 7fc55108ba21
+        proflyder.dev/rollout: 81dd9c317c08
     spec:
       enableServiceLinks: false
       securityContext:

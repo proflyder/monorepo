@@ -52,7 +52,7 @@ spec:
         # Content-addressed: changes only when the rendered unit (images,
         # config) changes, so an identical deploy keeps the pod template and
         # does not restart anything.
-        proflyder.dev/rollout: 7fc55108ba21
+        proflyder.dev/rollout: 81dd9c317c08
     spec:
       enableServiceLinks: false
       securityContext:
