@@ -7,4 +7,14 @@
     <dimen name="alarms_editor_scroll_bottom">88dp</dimen>
     <dimen name="alarms_editor_section_gap">20dp</dimen>
     <integer name="alarms_columns">1</integer>
+
+    <!-- Dense alarm card: one time/text line, at most one extra actions line. -->
+    <dimen name="alarms_card_min_height">88dp</dimen>
+    <dimen name="alarms_card_padding_start">14dp</dimen>
+    <!-- At least one 40dp delete-button radius, so its ripple is not clipped. -->
+    <dimen name="alarms_card_padding_end">20dp</dimen>
+    <dimen name="alarms_card_padding_vertical">10dp</dimen>
+    <dimen name="alarms_card_time_gap">8dp</dimen>
+    <dimen name="alarms_card_text_gap">4dp</dimen>
+    <dimen name="alarms_card_actions_gap">8dp</dimen>
 </resources>

@@ -1,5 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- Card clock: still the strongest element, sized for one dense row. -->
+    <style name="TextAppearance.Alarms.CardTime" parent="TextAppearance.Material3.HeadlineMedium">
+        <item name="android:fontFamily">sans-serif-light</item>
+        <item name="android:textSize">32sp</item>
+        <item name="android:letterSpacing">-0.02</item>
+        <item name="android:fontFeatureSettings">"tnum"</item>
+        <item name="android:textColor">?attr/colorOnSurface</item>
+    </style>
+
     <!-- Compact card actions: the snooze label ("Отложить на 9 мин") is long,
          so the default 24dp horizontal padding would push the row past one
          line at 360dp with a 1.15 font scale. -->

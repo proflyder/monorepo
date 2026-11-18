@@ -41,27 +41,38 @@ internal object AlarmFormat {
         }
     }
 
-    fun nextDue(context: Context, schedule: Schedule): String {
-        if (!schedule.enabled) return context.getString(R.string.alarms_off)
-        if (schedule.snoozeUntilUnix > 0) {
-            return context.getString(R.string.alarms_snoozed, instant(schedule.snoozeUntilUnix))
+    /**
+     * One secondary line for the dense card: "Будни · далее завтра 10:00".
+     * It replaces the old separate repeat and "Next:" rows, so the reason for
+     * the alarm and its nearest moment read as one sentence.
+     */
+    fun summary(context: Context, schedule: Schedule, nowUnix: Long): String {
+        val repeat = repeatSummary(context, schedule)
+        return when {
+            isAlarmRinging(schedule, nowUnix) -> context.getString(R.string.alarms_card_ringing, repeat)
+            schedule.isSnoozed -> context.getString(
+                R.string.alarms_card_snoozed,
+                repeat,
+                instant(schedule.snoozeUntilUnix),
+            )
+            !schedule.enabled || schedule.nextDueUnix <= 0 -> context.getString(R.string.alarms_card_off, repeat)
+            else -> context.getString(R.string.alarms_card_next, repeat, nextDay(context, schedule))
         }
-        if (schedule.nextDueUnix <= 0) return context.getString(R.string.alarms_off)
+    }
+
+    private fun nextDay(context: Context, schedule: Schedule): String {
         val zone = ZoneId.systemDefault()
         val due = Instant.ofEpochSecond(schedule.nextDueUnix).atZone(zone).toLocalDateTime()
         val today = LocalDate.now(zone)
-        val datePart = when (due.toLocalDate()) {
+        return when (due.toLocalDate()) {
             today -> context.getString(R.string.alarms_today, due.format(timeOnly))
             today.plusDays(1) -> context.getString(R.string.alarms_tomorrow, due.format(timeOnly))
             else -> due.format(dayFormatter()) + " " + due.format(timeOnly)
         }
-        return context.getString(R.string.alarms_next, datePart)
     }
 
-    private fun instant(epochSeconds: Long): String {
-        val zone = ZoneId.systemDefault()
-        return LocalDateTime.ofInstant(Instant.ofEpochSecond(epochSeconds), zone).format(dayTime())
-    }
+    private fun instant(epochSeconds: Long): String =
+        LocalDateTime.ofInstant(Instant.ofEpochSecond(epochSeconds), ZoneId.systemDefault()).format(dayTime())
 
     private val timeOnly: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm", Locale.ROOT)
     private fun dayTime() = DateTimeFormatter.ofPattern("d MMM HH:mm", Locale.getDefault())

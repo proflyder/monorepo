@@ -38,6 +38,7 @@ kt_android_local_test(
     name = "selection_animation_test",
     srcs = [
         "src/test/kotlin/dev/proflyder/home/feature/alarms/domain/SaveAlarmLabelTest.kt",
+        "src/test/kotlin/dev/proflyder/home/feature/alarms/presentation/AlarmCardModeTest.kt",
         "src/test/kotlin/dev/proflyder/home/feature/alarms/presentation/AlarmEditorDefaultsTest.kt",
         "src/test/kotlin/dev/proflyder/home/feature/alarms/presentation/AlarmQuickOffsetStateTest.kt",
         "src/test/kotlin/dev/proflyder/home/feature/alarms/presentation/AlarmSelectionAnimationTest.kt",
@@ -63,9 +64,10 @@ android_all_dir(
     jar_name = "android-all-instrumented-15-robolectric-13954326-i7.jar",
 )
 
-# The card actions stay on one line at 360dp and 411dp, with a 1.15 font scale
-# too, and the icon delete ripple stays inside the rounded outline. The rendered
-# PNGs document both widths for the pull request.
+# The dense idle card stays under 112dp at 360dp and 411dp, with a 1.15 font
+# scale too; the actions row exists only for a live occurrence and stays on one
+# line; the icon delete ripple stays inside the rounded outline. The rendered
+# PNGs document idle and active states at both widths for the pull request.
 kt_android_local_test(
     name = "item_layout_test",
     srcs = ["src/test/kotlin/dev/proflyder/home/feature/alarms/presentation/AlarmItemLayoutTest.kt"],

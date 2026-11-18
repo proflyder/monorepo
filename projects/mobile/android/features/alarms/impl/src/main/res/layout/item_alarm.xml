@@ -22,98 +22,85 @@
         android:clickable="false"
         android:focusable="false" />
 
+    <!-- Dense card: the time stays the anchor, the name and one summary line
+         sit next to it, and the trailing switch/delete pair keeps the row at a
+         single glance. The 88dp minimum keeps idle rows airy without the old
+         stacked title/repeat/next block. End padding is one delete-button
+         radius (20dp) so its circular ripple stays inside the rounded
+         outline. -->
     <LinearLayout
+        android:id="@+id/alarm_card_content"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:minHeight="@dimen/alarms_card_min_height"
         android:orientation="vertical"
-        android:paddingStart="24dp"
-        android:paddingTop="16dp"
-        android:paddingEnd="20dp"
-        android:paddingBottom="8dp">
+        android:paddingStart="@dimen/alarms_card_padding_start"
+        android:paddingTop="@dimen/alarms_card_padding_vertical"
+        android:paddingEnd="@dimen/alarms_card_padding_end"
+        android:paddingBottom="@dimen/alarms_card_padding_vertical">
 
-        <LinearLayout
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:id="@+id/alarm_main_row"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:gravity="center_vertical"
-            android:orientation="horizontal">
+            android:layout_height="wrap_content">
 
             <TextView
                 android:id="@+id/alarm_time"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:maxLines="1"
+                android:textAppearance="@style/TextAppearance.Alarms.CardTime"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent" />
+
+            <LinearLayout
+                android:id="@+id/alarm_texts"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:textAppearance="@style/TextAppearance.Home.Time" />
+                android:layout_marginStart="@dimen/alarms_card_time_gap"
+                android:layout_marginEnd="@dimen/alarms_card_text_gap"
+                android:orientation="vertical"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintEnd_toStartOf="@id/alarm_enabled"
+                app:layout_constraintStart_toEndOf="@id/alarm_time"
+                app:layout_constraintTop_toTopOf="parent">
+
+                <TextView
+                    android:id="@+id/alarm_label"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:ellipsize="end"
+                    android:maxLines="1"
+                    android:textAppearance="?attr/textAppearanceTitleMedium"
+                    android:textColor="?attr/colorOnSurface" />
+
+                <TextView
+                    android:id="@+id/alarm_summary"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:ellipsize="end"
+                    android:maxLines="1"
+                    android:textAppearance="?attr/textAppearanceBodySmall"
+                    android:textColor="?attr/colorOnSurfaceVariant" />
+            </LinearLayout>
 
             <com.google.android.material.materialswitch.MaterialSwitch
                 android:id="@+id/alarm_enabled"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:contentDescription="@string/alarms_enabled" />
-        </LinearLayout>
-
-        <TextView
-            android:id="@+id/alarm_label"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:ellipsize="end"
-            android:maxLines="2"
-            android:textAppearance="?attr/textAppearanceTitleMedium"
-            android:textColor="?attr/colorOnSurface" />
-
-        <TextView
-            android:id="@+id/alarm_repeat"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="2dp"
-            android:textAppearance="?attr/textAppearanceBodyMedium"
-            android:textColor="?attr/colorOnSurfaceVariant" />
-
-        <TextView
-            android:id="@+id/alarm_next"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="2dp"
-            android:textAppearance="?attr/textAppearanceLabelLarge"
-            android:textColor="?attr/colorPrimary" />
-
-        <!-- One row on every supported phone (>= 360dp, font scale <= 1.15):
-             the compact left pair never wraps, and the icon delete button keeps
-             a 4dp inset on top of the card padding so its circular ripple stays
-             inside the rounded outline instead of being clipped. -->
-        <androidx.constraintlayout.widget.ConstraintLayout
-            android:id="@+id/alarm_actions"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp">
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/alarm_snooze"
-                style="@style/Widget.Alarms.SnoozeButton"
-                android:layout_width="wrap_content"
-                android:layout_height="44dp"
-                android:text="@string/alarms_snooze"
-                app:layout_constraintBottom_toBottomOf="parent"
-                app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toTopOf="parent" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/alarm_stop"
-                style="@style/Widget.Alarms.StopButton"
-                android:layout_width="0dp"
-                android:layout_height="44dp"
-                android:layout_marginStart="4dp"
-                android:text="@string/alarms_stop"
+                android:contentDescription="@string/alarms_enabled"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toStartOf="@id/alarm_delete"
-                app:layout_constraintStart_toEndOf="@id/alarm_snooze"
                 app:layout_constraintTop_toTopOf="parent" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/alarm_delete"
                 style="@style/Widget.Material3.Button.IconButton"
-                android:layout_width="44dp"
-                android:layout_height="44dp"
-                android:layout_marginEnd="4dp"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
                 android:contentDescription="@string/alarms_delete"
                 app:icon="@drawable/alarms_ic_delete"
                 app:iconTint="?attr/colorError"
@@ -121,5 +108,31 @@
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintTop_toTopOf="parent" />
         </androidx.constraintlayout.widget.ConstraintLayout>
+
+        <!-- Snooze/stop exist only while the server reports a live occurrence:
+             an idle alarm row is just time, name, summary and the switch. -->
+        <LinearLayout
+            android:id="@+id/alarm_actions"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/alarms_card_actions_gap"
+            android:orientation="horizontal"
+            android:visibility="gone">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/alarm_snooze"
+                style="@style/Widget.Alarms.SnoozeButton"
+                android:layout_width="wrap_content"
+                android:layout_height="40dp"
+                android:text="@string/alarms_snooze" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/alarm_stop"
+                style="@style/Widget.Alarms.StopButton"
+                android:layout_width="wrap_content"
+                android:layout_height="40dp"
+                android:layout_marginStart="4dp"
+                android:text="@string/alarms_stop" />
+        </LinearLayout>
     </LinearLayout>
 </com.google.android.material.card.MaterialCardView>

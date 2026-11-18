@@ -72,16 +72,21 @@ private class OutcomeCallAdapter<T>(
     override fun responseType(): Type = delegate.responseType()
 
     override fun adapt(call: Call<T>): Outcome<T> {
-        val response = runCatching { delegate.adapt(call).execute() }.getOrElse { failure ->
-            return Outcome.Failure(failure.toCallFailure())
+        val executed = runCatching { delegate.adapt(call).execute() }
+        return when (val failure = executed.exceptionOrNull()) {
+            // toCallFailure rethrows cancellation: a cancelled call is not a
+            // user-visible network error.
+            null -> executed.getOrThrow().toOutcome()
+            else -> Outcome.Failure(failure.toCallFailure())
         }
-        return when {
-            response.isSuccessful -> success(response)
-            response.code() in 300..399 ->
-                Outcome.Failure(RemoteFailure.ProtocolFailure("HTTP ${response.code()} redirect refused"))
-            response.code() == 401 || response.code() == 403 -> Outcome.Failure(RemoteFailure.Unauthorized)
-            else -> Outcome.Failure(parseConnectFailure(response.code(), errorText(response), json))
-        }
+    }
+
+    private fun Response<T>.toOutcome(): Outcome<T> = when {
+        isSuccessful -> success(this)
+        code() in 300..399 ->
+            Outcome.Failure(RemoteFailure.ProtocolFailure("HTTP ${code()} redirect refused"))
+        code() == 401 || code() == 403 -> Outcome.Failure(RemoteFailure.Unauthorized)
+        else -> Outcome.Failure(parseConnectFailure(code(), errorText(this), json))
     }
 
     private fun success(response: Response<T>): Outcome<T> {

@@ -8,9 +8,11 @@
     <string name="alarms_stop">Стоп</string>
     <string name="alarms_delete">Удалить</string>
     <string name="alarms_enabled">Включён</string>
-    <string name="alarms_next">Далее: %1$s</string>
-    <string name="alarms_snoozed">Отложен до %1$s</string>
-    <string name="alarms_off">Выключен</string>
+    <!-- Компактная строка карточки: повтор слева, состояние справа. -->
+    <string name="alarms_card_next">%1$s · далее %2$s</string>
+    <string name="alarms_card_ringing">%1$s · сейчас</string>
+    <string name="alarms_card_snoozed">%1$s · отложен до %2$s</string>
+    <string name="alarms_card_off">%1$s · выключен</string>
     <string name="alarms_delete_confirm">Удалить этот будильник с домашнего сервера?</string>
     <string name="alarms_delete_yes">Удалить</string>
     <string name="alarms_cancel">Отмена</string>
@@ -52,8 +54,8 @@
     <string name="alarms_day_fri">Пт</string>
     <string name="alarms_day_sat">Сб</string>
     <string name="alarms_day_sun">Вс</string>
-    <string name="alarms_today">Сегодня %1$s</string>
-    <string name="alarms_tomorrow">Завтра %1$s</string>
+    <string name="alarms_today">сегодня %1$s</string>
+    <string name="alarms_tomorrow">завтра %1$s</string>
     <string name="alarms_in_days">%1$s %2$s</string>
     <string name="alarms_saved">Будильник сохранён</string>
     <string name="alarms_deleted">Будильник удалён</string>

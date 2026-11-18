@@ -14,6 +14,7 @@ import dev.proflyder.home.core.network.ControlCatalogClient
 import dev.proflyder.home.core.network.HttpControlCatalogClient
 import dev.proflyder.home.core.network.IntercomClient
 import dev.proflyder.home.core.network.HttpPushDevicesClient
+import dev.proflyder.home.core.network.NetworkWaiter
 import dev.proflyder.home.core.network.PushDevicesApi
 import dev.proflyder.home.core.network.ScenarioClient
 import dev.proflyder.home.core.network.SchedulerClient
@@ -58,6 +59,9 @@ interface AppGraph {
     /** Resolved at launch so Remote Config starts fetching on app start. */
     val connectionSettings: ConnectionSettingsStore
 
+    /** The shared client; the activity evicts its pool when the app wakes up. */
+    val httpClient: OkHttpClient
+
     val callController: CallController
     val callAudioController: CallAudioController
     val callCoordinator: CallCoordinator
@@ -95,8 +99,14 @@ object AppBindings {
         // A bearer token must never be forwarded to a redirect target.
         .followRedirects(false)
         .followSslRedirects(false)
-        .retryOnConnectionFailure(false)
+        // A pooled socket from before Doze is dead; let OkHttp replace it.
+        .retryOnConnectionFailure(true)
         .build()
+
+    /** Waits for Wi-Fi/VPN while the phone wakes up instead of failing the first read. */
+    @Provides
+    @SingleIn(AppScope::class)
+    fun provideNetworkWaiter(context: Context): NetworkWaiter = AndroidNetworkWaiter(context)
 
     /** App-lifetime scope for the permanent intercom Watch and call state observers. */
     @Provides
@@ -124,11 +134,13 @@ object AppBindings {
         httpClient: OkHttpClient,
         serverClock: ServerClock,
         interceptors: NetworkInterceptors,
+        networkWaiter: NetworkWaiter,
     ): SchedulerClient = ConnectSchedulerClient(
         settings = settings,
         baseClient = httpClient,
         serverClock = serverClock,
         interceptors = interceptors.list,
+        networkWaiter = networkWaiter,
     )
 
     @Provides
@@ -137,10 +149,12 @@ object AppBindings {
         settings: ConnectionSettingsStore,
         httpClient: OkHttpClient,
         interceptors: NetworkInterceptors,
+        networkWaiter: NetworkWaiter,
     ): ScenarioClient = ConnectScenarioClient(
         settings = settings,
         baseClient = httpClient,
         interceptors = interceptors.list,
+        networkWaiter = networkWaiter,
     )
 
     @Provides
@@ -149,10 +163,12 @@ object AppBindings {
         settings: ConnectionSettingsStore,
         httpClient: OkHttpClient,
         interceptors: NetworkInterceptors,
+        networkWaiter: NetworkWaiter,
     ): ControlCatalogClient = HttpControlCatalogClient(
         settings = settings,
         baseClient = httpClient,
         interceptors = interceptors.list,
+        networkWaiter = networkWaiter,
     )
 
     @Provides
@@ -173,10 +189,12 @@ object AppBindings {
         settings: ConnectionSettingsStore,
         httpClient: OkHttpClient,
         interceptors: NetworkInterceptors,
+        networkWaiter: NetworkWaiter,
     ): IntercomClient = ConnectIntercomClient(
         settings = settings,
         baseClient = httpClient,
         interceptors = interceptors.list,
+        networkWaiter = networkWaiter,
     )
 
     @Provides

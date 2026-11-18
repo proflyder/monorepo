@@ -9,9 +9,11 @@
     <string name="alarms_stop">Stop</string>
     <string name="alarms_delete">Delete</string>
     <string name="alarms_enabled">Enabled</string>
-    <string name="alarms_next">Next: %1$s</string>
-    <string name="alarms_snoozed">Snoozed until %1$s</string>
-    <string name="alarms_off">Disabled</string>
+    <!-- Compact card summary: repeat on the left, the live state on the right. -->
+    <string name="alarms_card_next">%1$s · next %2$s</string>
+    <string name="alarms_card_ringing">%1$s · now</string>
+    <string name="alarms_card_snoozed">%1$s · snoozed until %2$s</string>
+    <string name="alarms_card_off">%1$s · off</string>
     <string name="alarms_delete_confirm">Delete this alarm from the home server?</string>
     <string name="alarms_delete_yes">Delete</string>
     <string name="alarms_cancel">Cancel</string>
@@ -53,8 +55,8 @@
     <string name="alarms_day_fri">Fri</string>
     <string name="alarms_day_sat">Sat</string>
     <string name="alarms_day_sun">Sun</string>
-    <string name="alarms_today">Today %1$s</string>
-    <string name="alarms_tomorrow">Tomorrow %1$s</string>
+    <string name="alarms_today">today %1$s</string>
+    <string name="alarms_tomorrow">tomorrow %1$s</string>
     <string name="alarms_in_days">%1$s %2$s</string>
     <string name="alarms_saved">Alarm saved</string>
     <string name="alarms_deleted">Alarm deleted</string>
