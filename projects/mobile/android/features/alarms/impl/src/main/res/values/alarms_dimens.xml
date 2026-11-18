@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <dimen name="alarms_screen_margin">16dp</dimen>
-    <!-- Fallback before the bottom bar is measured; matches its real height. -->
-    <dimen name="alarms_action_bar_height">64dp</dimen>
+    <!-- Fallback before the bottom bar is measured; matches its real height:
+         a 64dp icon+label action plus the 6dp bar padding on both sides. -->
+    <dimen name="alarms_action_bar_height">76dp</dimen>
     <integer name="alarms_columns">1</integer>
 
     <!-- Dense alarm card: one time/text line, at most one extra actions line. -->

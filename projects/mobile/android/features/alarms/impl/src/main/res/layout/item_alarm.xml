@@ -10,7 +10,8 @@
     android:layout_height="wrap_content"
     android:layout_marginBottom="12dp"
     android:clickable="true"
-    android:focusable="true">
+    android:focusable="true"
+    app:checkedIcon="@null">
 
     <!-- Selection tint: behind the content, crossfaded when the row is picked. -->
     <View
@@ -63,7 +64,7 @@
                 android:layout_marginEnd="@dimen/alarms_card_text_gap"
                 android:orientation="vertical"
                 app:layout_constraintBottom_toBottomOf="parent"
-                app:layout_constraintEnd_toStartOf="@id/alarm_enabled"
+                app:layout_constraintEnd_toStartOf="@id/alarm_trailing"
                 app:layout_constraintStart_toEndOf="@id/alarm_time"
                 app:layout_constraintTop_toTopOf="parent">
 
@@ -87,26 +88,50 @@
                     android:textColor="?attr/colorOnSurfaceVariant" />
             </LinearLayout>
 
-            <com.google.android.material.materialswitch.MaterialSwitch
-                android:id="@+id/alarm_enabled"
+            <!-- Idle: switch plus delete. Selection mode: both are gone and the
+                 circular check indicator takes their place, inset by the card
+                 padding so it never touches the rounded corner. -->
+            <LinearLayout
+                android:id="@+id/alarm_trailing"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:contentDescription="@string/alarms_enabled"
-                app:layout_constraintBottom_toBottomOf="parent"
-                app:layout_constraintEnd_toStartOf="@id/alarm_delete"
-                app:layout_constraintTop_toTopOf="parent" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/alarm_delete"
-                style="@style/Widget.Material3.Button.IconButton"
-                android:layout_width="40dp"
-                android:layout_height="40dp"
-                android:contentDescription="@string/alarms_delete"
-                app:icon="@drawable/alarms_ic_delete"
-                app:iconTint="?attr/colorError"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toEndOf="parent"
-                app:layout_constraintTop_toTopOf="parent" />
+                app:layout_constraintTop_toTopOf="parent">
+
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/alarm_enabled"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:contentDescription="@string/alarms_enabled" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/alarm_delete"
+                    style="@style/Widget.Material3.Button.IconButton"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:contentDescription="@string/alarms_delete"
+                    app:icon="@drawable/alarms_ic_delete"
+                    app:iconTint="?attr/colorError" />
+
+                <FrameLayout
+                    android:id="@+id/alarm_selection_indicator"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:importantForAccessibility="no"
+                    android:visibility="gone">
+
+                    <ImageView
+                        android:id="@+id/alarm_selection_check"
+                        android:layout_width="24dp"
+                        android:layout_height="24dp"
+                        android:layout_gravity="center"
+                        android:contentDescription="@null"
+                        android:src="@drawable/alarms_ic_selection_off" />
+                </FrameLayout>
+            </LinearLayout>
         </androidx.constraintlayout.widget.ConstraintLayout>
 
         <!-- Snooze/stop exist only while the server reports a live occurrence:

@@ -27,4 +27,27 @@
         <item name="android:paddingRight">12dp</item>
         <item name="android:minWidth">0dp</item>
     </style>
+
+    <!-- Contextual bulk action: the icon sits above a small one-line label, so
+         the three cells stay readable at 360dp with a 1.15 font scale. The
+         button never wraps its text; a longer translation is ellipsized. -->
+    <style name="Widget.Alarms.SelectionAction" parent="Widget.Material3.Button.TextButton">
+        <item name="android:insetLeft">0dp</item>
+        <item name="android:insetRight">0dp</item>
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+        <item name="android:minWidth">0dp</item>
+        <item name="android:minHeight">64dp</item>
+        <item name="android:paddingLeft">4dp</item>
+        <item name="android:paddingRight">4dp</item>
+        <item name="android:paddingTop">8dp</item>
+        <item name="android:paddingBottom">8dp</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:ellipsize">end</item>
+        <item name="android:textAppearance">?attr/textAppearanceLabelSmall</item>
+        <item name="android:gravity">center</item>
+        <item name="iconGravity">textTop</item>
+        <item name="iconPadding">4dp</item>
+        <item name="iconSize">24dp</item>
+    </style>
 </resources>
