@@ -294,7 +294,6 @@ def run(verbose: bool) -> None:
                 {
                     "SCHEDULER_LISTEN": "127.0.0.1:0",
                     "SCHEDULER_DB_PATH": str(tmp / "scheduler.db"),
-                    "SCHEDULER_TIMEZONE": "UTC",
                     "SCHEDULER_TOKEN": SCHEDULER_TOKEN,
                     "SCHEDULER_TICK_MS": "100",
                 }

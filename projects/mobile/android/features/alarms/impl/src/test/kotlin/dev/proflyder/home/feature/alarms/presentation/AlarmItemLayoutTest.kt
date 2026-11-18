@@ -208,7 +208,6 @@ class AlarmItemLayoutTest {
         id = "alarm-1",
         label = "Работа",
         kind = ScheduleKind.ALARM,
-        timezone = "Asia/Almaty",
         at = WallTime(10, 0),
         onceDate = "",
         repeat = RepeatKind.WEEKDAYS,

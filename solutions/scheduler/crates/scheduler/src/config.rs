@@ -21,8 +21,6 @@ use thiserror::Error;
 pub const DEFAULT_LISTEN: &str = "127.0.0.1:8098";
 /// Default SQLite file name.
 pub const DEFAULT_DB_PATH: &str = "scheduler.db";
-/// Default time zone.
-pub const DEFAULT_TIMEZONE: &str = "UTC";
 /// Default grace for a missed occurrence.
 pub const DEFAULT_MISSED_GRACE: Duration = Duration::from_secs(600);
 /// Default ringing window.
@@ -45,7 +43,6 @@ pub const DEFAULT_TICK_INTERVAL: Duration = Duration::from_secs(1);
 pub struct Config {
     pub db_path: PathBuf,
     pub listen: String,
-    pub timezone: String,
     pub token: Secret,
     pub missed_grace: Duration,
     pub ring_window: Duration,
@@ -68,7 +65,6 @@ impl std::fmt::Debug for Config {
             .debug_struct("Config")
             .field("db_path", &self.db_path)
             .field("listen", &self.listen)
-            .field("timezone", &self.timezone)
             .field("missed_grace", &self.missed_grace)
             .field("ring_window", &self.ring_window)
             .field("event_retention", &self.event_retention)
@@ -87,8 +83,6 @@ impl std::fmt::Debug for Config {
 /// contain a secret value.
 #[derive(Debug, Error)]
 pub enum ConfigError {
-    #[error("SCHEDULER_TIMEZONE: unknown IANA timezone {0:?}")]
-    Timezone(String),
     #[error("SCHEDULER_TOKEN or SCHEDULER_TOKEN_FILE is required")]
     TokenRequired,
     #[error("SCHEDULER_TOKEN_FILE: cannot read token file")]
@@ -112,11 +106,9 @@ impl Config {
             .unwrap_or_else(|| DEFAULT_DB_PATH.to_owned());
         let listen = first(getenv, &["SCHEDULER_LISTEN", "ALARM_LISTEN"])
             .unwrap_or_else(|| DEFAULT_LISTEN.to_owned());
-        let timezone = first(getenv, &["SCHEDULER_TIMEZONE", "ALARM_TIMEZONE"])
-            .unwrap_or_else(|| DEFAULT_TIMEZONE.to_owned());
-        if jiff::tz::TimeZone::get(&timezone).is_err() {
-            return Err(ConfigError::Timezone(timezone));
-        }
+        // SCHEDULER_TIMEZONE/ALARM_TIMEZONE are deliberately ignored: every
+        // schedule request carries its own `Time-Zone`, and background work is
+        // UTC by contract.
 
         let token = load_token(getenv, read_file)?;
 
@@ -175,7 +167,6 @@ impl Config {
         let config = Self {
             db_path: PathBuf::from(db_path),
             listen,
-            timezone,
             token,
             missed_grace,
             ring_window,
@@ -366,7 +357,6 @@ mod tests {
             Config::load_from(&env(&[("SCHEDULER_TOKEN", "secret")]), &no_file).expect("load");
         assert_eq!(config.listen, "127.0.0.1:8098");
         assert_eq!(config.db_path, PathBuf::from("scheduler.db"));
-        assert_eq!(config.timezone, "UTC");
         assert_eq!(config.missed_grace, Duration::from_secs(600));
         assert_eq!(config.ring_window, Duration::from_secs(900));
         assert_eq!(config.tick_interval, Duration::from_secs(1));
@@ -413,7 +403,6 @@ mod tests {
                 ("SCHEDULER_TOKEN", "t"),
                 ("ALARM_DB_PATH", "/legacy/alarm.db"),
                 ("ALARM_LISTEN", "127.0.0.1:9000"),
-                ("ALARM_TIMEZONE", "Asia/Almaty"),
                 ("SCHEDULER_DB_PATH", "/new/scheduler.db"),
             ]),
             &no_file,
@@ -421,7 +410,6 @@ mod tests {
         .expect("load");
         assert_eq!(config.db_path, PathBuf::from("/new/scheduler.db"));
         assert_eq!(config.listen, "127.0.0.1:9000");
-        assert_eq!(config.timezone, "Asia/Almaty");
     }
 
     #[test]
@@ -460,10 +448,6 @@ mod tests {
     #[test]
     fn invalid_configuration_is_rejected() {
         let cases: &[&[(&str, &str)]] = &[
-            &[
-                ("SCHEDULER_TOKEN", "t"),
-                ("SCHEDULER_TIMEZONE", "Mars/Olympus"),
-            ],
             &[
                 ("SCHEDULER_TOKEN", "t"),
                 ("SCHEDULER_MISSED_GRACE_SECONDS", "-5"),

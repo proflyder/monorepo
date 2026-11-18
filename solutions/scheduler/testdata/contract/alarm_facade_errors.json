@@ -19,8 +19,7 @@
           "kind": "SCHEDULE_KIND_REMINDER",
           "label": "call mom",
           "onceDate": "2026-02-01",
-          "repeat": "REPEAT_KIND_ONCE",
-          "timezone": "UTC"
+          "repeat": "REPEAT_KIND_ONCE"
         }
       },
       "response": {
@@ -43,7 +42,6 @@
             "payloadJson": "{}",
             "repeat": "REPEAT_KIND_ONCE",
             "revision": "1",
-            "timezone": "UTC",
             "updatedUnix": "1767268800"
           }
         }
@@ -96,8 +94,7 @@
           "hour": 7,
           "label": "wake",
           "minute": 30,
-          "repeat": "DAILY",
-          "timezone": "UTC"
+          "repeat": "DAILY"
         }
       },
       "response": {
@@ -114,8 +111,7 @@
             "minute": 30,
             "nextRunUnix": "1767339000",
             "repeat": "DAILY",
-            "revision": "1",
-            "timezone": "UTC"
+            "revision": "1"
           }
         }
       },
@@ -139,8 +135,7 @@
             "label": "wake up",
             "minute": 0,
             "repeat": "DAILY",
-            "revision": "99",
-            "timezone": "UTC"
+            "revision": "99"
           }
         }
       },

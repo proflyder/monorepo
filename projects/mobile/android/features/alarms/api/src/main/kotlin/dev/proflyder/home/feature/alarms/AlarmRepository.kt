@@ -24,7 +24,6 @@ data class AlarmDraft(
     val label: String,
     val hour: Int,
     val minute: Int,
-    val timezone: String,
     val repeat: RepeatKind,
     val weekdays: List<Int>,
     val enabled: Boolean,

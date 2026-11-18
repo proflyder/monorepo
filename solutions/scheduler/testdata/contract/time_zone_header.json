@@ -1,0 +1,148 @@
+{
+  "name": "time_zone_header",
+  "description": "Every request carries its own Time-Zone. The scheduler stores UTC only and renders the same alarm in the caller's zone: Almaty weekdays 03:00 is stored as Sunday-Thursday 22:00 UTC, Moscow reads it back as weekdays 01:00, and a request without the header sees UTC.",
+  "steps": [
+    {
+      "request": {
+        "method": "POST",
+        "path": "/home.v1.SchedulerService/CreateSchedule",
+        "headers": {
+          "Authorization": "Bearer contract-test-token",
+          "Content-Type": "application/json",
+          "Time-Zone": "Asia/Almaty"
+        },
+        "body": {
+          "label": "weekdays",
+          "kind": "SCHEDULE_KIND_ALARM",
+          "at": {
+            "hour": 3,
+            "minute": 0
+          },
+          "repeat": "REPEAT_KIND_WEEKDAYS",
+          "weekdays": [],
+          "enabled": true
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "schedule": {
+            "at": {
+              "hour": 3
+            },
+            "createdUnix": "1767268800",
+            "enabled": true,
+            "id": "{{scheduleId}}",
+            "kind": "SCHEDULE_KIND_ALARM",
+            "label": "weekdays",
+            "nextDueUnix": "1767304800",
+            "payloadJson": "{}",
+            "repeat": "REPEAT_KIND_WEEKDAYS",
+            "revision": "1",
+            "updatedUnix": "1767268800",
+            "weekdays": [
+              1,
+              2,
+              3,
+              4,
+              5
+            ]
+          }
+        }
+      },
+      "capture": {
+        "scheduleId": "schedule.id"
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/home.v1.SchedulerService/GetSchedule",
+        "headers": {
+          "Authorization": "Bearer contract-test-token",
+          "Content-Type": "application/json",
+          "Time-Zone": "Europe/Moscow"
+        },
+        "body": {
+          "id": "{{scheduleId}}"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "schedule": {
+            "at": {
+              "hour": 1
+            },
+            "createdUnix": "1767268800",
+            "enabled": true,
+            "id": "{{scheduleId}}",
+            "kind": "SCHEDULE_KIND_ALARM",
+            "label": "weekdays",
+            "nextDueUnix": "1767304800",
+            "payloadJson": "{}",
+            "repeat": "REPEAT_KIND_WEEKDAYS",
+            "revision": "1",
+            "updatedUnix": "1767268800",
+            "weekdays": [
+              1,
+              2,
+              3,
+              4,
+              5
+            ]
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/home.v1.SchedulerService/GetSchedule",
+        "headers": {
+          "Authorization": "Bearer contract-test-token",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "id": "{{scheduleId}}"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "schedule": {
+            "at": {
+              "hour": 22
+            },
+            "createdUnix": "1767268800",
+            "enabled": true,
+            "id": "{{scheduleId}}",
+            "kind": "SCHEDULE_KIND_ALARM",
+            "label": "weekdays",
+            "nextDueUnix": "1767304800",
+            "payloadJson": "{}",
+            "repeat": "REPEAT_KIND_CUSTOM",
+            "revision": "1",
+            "updatedUnix": "1767268800",
+            "weekdays": [
+              1,
+              2,
+              3,
+              4,
+              7
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

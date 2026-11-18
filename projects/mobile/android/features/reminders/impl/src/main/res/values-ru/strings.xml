@@ -15,7 +15,6 @@
     <string name="reminders_editor_label">Название</string>
     <string name="reminders_editor_date">Дата</string>
     <string name="reminders_editor_time">Время</string>
-    <string name="reminders_editor_timezone">Часовой пояс IANA</string>
     <string name="reminders_editor_save">Сохранить на сервере</string>
     <string name="reminders_editor_delete">Удалить напоминание</string>
     <string name="reminders_editor_hint">Домашний сервер хранит это напоминание и отправляет одно событие DueEvent в выбранные местные дату и время. Телефон не планирует его локально.</string>

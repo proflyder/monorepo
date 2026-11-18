@@ -5,11 +5,15 @@
 
 use home_proto::v1 as proto;
 
+use crate::domain::DomainError;
+use crate::domain::rule::{local_to_utc, utc_to_local, validate_local_rule};
 use crate::domain::{
     AckOutcome, Event, EventAction, EventState, Repeat, Scenario, ScenarioCondition, ScenarioStep,
     ScenarioTimeTrigger, ScenarioTrigger, Schedule, ScheduleKind, SourceKind, Timer, TimerState,
     WallTime,
 };
+
+use super::zone::ClientZone;
 
 pub fn schedule_kind(code: i32) -> ScheduleKind {
     ScheduleKind::from_code(code).unwrap_or(ScheduleKind::Unspecified)
@@ -92,22 +96,29 @@ pub fn proto_ack_outcome(outcome: AckOutcome) -> proto::AckOutcome {
     }
 }
 
-pub fn schedule_to_proto(schedule: &Schedule) -> proto::Schedule {
+pub fn schedule_to_proto(schedule: &Schedule, zone: &ClientZone) -> proto::Schedule {
+    let local = utc_to_local(
+        zone.name(),
+        schedule.at,
+        schedule.repeat,
+        &schedule.weekdays,
+        schedule.once_unix,
+    );
+    let (repeat, weekdays) = local_repeat(schedule.repeat, &local.weekdays);
     proto::Schedule {
         id: schedule.id.clone(),
         label: schedule.label.clone(),
         kind: proto_schedule_kind(schedule.kind).into(),
-        timezone: schedule.timezone.clone(),
         at: proto::WallTime {
-            hour: schedule.at.hour,
-            minute: schedule.at.minute,
-            second: schedule.at.second,
+            hour: local.at.hour,
+            minute: local.at.minute,
+            second: local.at.second,
             ..proto::WallTime::default()
         }
         .into(),
-        once_date: schedule.once_date.clone(),
-        repeat: proto_repeat(schedule.repeat).into(),
-        weekdays: schedule.weekdays.clone(),
+        once_date: local.once_date,
+        repeat: proto_repeat(repeat).into(),
+        weekdays: weekdays.to_vec(),
         next_due_unix: schedule.next_due_unix,
         enabled: schedule.enabled,
         snooze_until_unix: schedule.snooze_until_unix,
@@ -169,23 +180,25 @@ pub fn event_to_proto(event: &Event) -> proto::DueEvent {
     }
 }
 
-pub fn view_to_schedule(view: &proto::Schedule) -> Schedule {
-    Schedule {
+pub fn view_to_schedule(
+    view: &proto::Schedule,
+    zone: &ClientZone,
+) -> Result<Schedule, DomainError> {
+    let (at, repeat, once_unix, weekdays) = stored_rule(
+        view.repeat.to_i32(),
+        view.at.as_option(),
+        &view.weekdays,
+        &view.once_date,
+        zone,
+    )?;
+    Ok(Schedule {
         id: view.id.to_owned(),
         label: view.label.to_owned(),
         kind: schedule_kind(view.kind.to_i32()),
-        timezone: view.timezone.to_owned(),
-        at: view
-            .at
-            .as_option()
-            .map_or_else(WallTime::default, |at| WallTime {
-                hour: at.hour,
-                minute: at.minute,
-                second: at.second,
-            }),
-        once_date: view.once_date.to_owned(),
-        repeat: repeat_kind(view.repeat.to_i32()),
-        weekdays: view.weekdays.to_vec(),
+        at,
+        once_unix,
+        repeat,
+        weekdays,
         next_due_unix: view.next_due_unix,
         enabled: view.enabled,
         payload_json: view.payload_json.to_owned(),
@@ -198,65 +211,77 @@ pub fn view_to_schedule(view: &proto::Schedule) -> Schedule {
         active_occurrence_unix: view.active_occurrence_unix,
         active_until_unix: view.active_until_unix,
         ..Schedule::default()
-    }
+    })
 }
 
-pub fn create_view_to_schedule(view: &proto::CreateScheduleRequest) -> Schedule {
-    Schedule {
+pub fn create_view_to_schedule(
+    view: &proto::CreateScheduleRequest,
+    zone: &ClientZone,
+) -> Result<Schedule, DomainError> {
+    let kind = schedule_kind(view.kind.to_i32());
+    let repeat = repeat_kind(view.repeat.to_i32());
+    if kind == ScheduleKind::Reminder && repeat != Repeat::Once {
+        return Err(DomainError::invalid("reminders must use REPEAT_KIND_ONCE"));
+    }
+    let (at, stored_repeat, once_unix, weekdays) = stored_rule(
+        view.repeat.to_i32(),
+        view.at.as_option(),
+        &view.weekdays,
+        &view.once_date,
+        zone,
+    )?;
+    let repeat = stored_repeat;
+    Ok(Schedule {
         label: view.label.to_owned(),
         kind: schedule_kind(view.kind.to_i32()),
-        timezone: view.timezone.to_owned(),
-        at: view
-            .at
-            .as_option()
-            .map_or_else(WallTime::default, |at| WallTime {
-                hour: at.hour,
-                minute: at.minute,
-                second: at.second,
-            }),
-        once_date: view.once_date.to_owned(),
-        repeat: repeat_kind(view.repeat.to_i32()),
-        weekdays: view.weekdays.to_vec(),
+        at,
+        once_unix,
+        repeat,
+        weekdays,
         enabled: view.enabled,
         payload_json: view.payload_json.to_owned(),
         ..Schedule::default()
-    }
+    })
 }
 
-pub fn alarm_to_schedule(view: &proto::Alarm) -> Result<Schedule, &'static str> {
-    let repeat = match view.repeat.to_i32() {
-        1 => Repeat::Once,
-        2 => Repeat::Daily,
-        3 => Repeat::Weekdays,
-        4 => Repeat::Weekends,
-        5 => Repeat::Custom,
-        _ => return Err("unsupported repeat"),
-    };
+pub fn alarm_to_schedule(view: &proto::Alarm, zone: &ClientZone) -> Result<Schedule, DomainError> {
+    let repeat = repeat_kind(view.repeat.to_i32());
+    let at = Some(&proto::WallTime {
+        hour: view.hour,
+        minute: view.minute,
+        ..proto::WallTime::default()
+    });
+    let stored = stored_rule(repeat.code(), at, &view.weekdays, &view.once_date, zone)?;
+    let (at, repeat, once_unix, weekdays) = stored;
     Ok(Schedule {
         id: view.id.to_owned(),
         label: view.label.to_owned(),
         kind: ScheduleKind::Alarm,
-        timezone: view.timezone.to_owned(),
-        at: WallTime {
-            hour: view.hour,
-            minute: view.minute,
-            second: 0,
-        },
+        at,
+        once_unix,
         repeat,
-        weekdays: view.weekdays.to_vec(),
+        weekdays,
         enabled: view.enabled,
         ..Schedule::default()
     })
 }
 
-pub fn schedule_to_alarm(schedule: &Schedule) -> proto::Alarm {
+pub fn schedule_to_alarm(schedule: &Schedule, zone: &ClientZone) -> proto::Alarm {
+    let local = utc_to_local(
+        zone.name(),
+        schedule.at,
+        schedule.repeat,
+        &schedule.weekdays,
+        schedule.once_unix,
+    );
+    let (repeat, weekdays) = local_repeat(schedule.repeat, &local.weekdays);
     proto::Alarm {
         id: schedule.id.clone(),
         label: schedule.label.clone(),
-        hour: schedule.at.hour,
-        minute: schedule.at.minute,
-        timezone: schedule.timezone.clone(),
-        repeat: match schedule.repeat {
+        hour: local.at.hour,
+        minute: local.at.minute,
+        once_date: local.once_date,
+        repeat: match repeat {
             Repeat::Once => proto::Repeat::ONCE,
             Repeat::Daily => proto::Repeat::DAILY,
             Repeat::Weekdays => proto::Repeat::WEEKDAYS,
@@ -265,13 +290,49 @@ pub fn schedule_to_alarm(schedule: &Schedule) -> proto::Alarm {
             Repeat::Unspecified => proto::Repeat::REPEAT_UNSPECIFIED,
         }
         .into(),
-        weekdays: schedule.weekdays.clone(),
+        weekdays: weekdays.to_vec(),
         enabled: schedule.enabled,
         next_run_unix: schedule.next_due_unix,
         snooze_until_unix: schedule.snooze_until_unix,
         last_ring_unix: schedule.last_fired_unix,
         revision: schedule.revision,
         ..proto::Alarm::default()
+    }
+}
+
+/// Converts wire-local recurrence fields to the stored UTC rule.
+///
+/// Returns `(at_utc, repeat, once_unix, weekdays_utc)`. A local weekday or
+/// weekend selection becomes an explicit UTC mask; daily stays daily.
+fn stored_rule(
+    repeat_code: i32,
+    at: Option<&proto::WallTime>,
+    weekdays: &[i32],
+    once_date: &str,
+    zone: &ClientZone,
+) -> Result<(WallTime, Repeat, i64, Vec<i32>), DomainError> {
+    let repeat = repeat_kind(repeat_code);
+    let at = at.map_or_else(WallTime::default, |at| WallTime {
+        hour: at.hour,
+        minute: at.minute,
+        second: at.second,
+    });
+    validate_local_rule(at, repeat, weekdays, once_date)
+        .map_err(|error| DomainError::invalid_rule(&error))?;
+    let stored = local_to_utc(zone.name(), at, repeat, weekdays, once_date);
+    Ok((stored.at, stored.repeat, stored.once_unix, stored.weekdays))
+}
+
+/// Reconstructs the local repeat kind and weekday list from a stored mask.
+fn local_repeat(stored: Repeat, local_weekdays: &[i32]) -> (Repeat, &[i32]) {
+    match stored {
+        Repeat::Once => (Repeat::Once, &[]),
+        Repeat::Daily => (Repeat::Daily, &[]),
+        Repeat::Weekdays | Repeat::Weekends => (stored, local_weekdays),
+        Repeat::Custom if local_weekdays == [1, 2, 3, 4, 5] => (Repeat::Weekdays, local_weekdays),
+        Repeat::Custom if local_weekdays == [6, 7] => (Repeat::Weekends, local_weekdays),
+        Repeat::Custom => (Repeat::Custom, local_weekdays),
+        Repeat::Unspecified => (Repeat::Unspecified, &[]),
     }
 }
 

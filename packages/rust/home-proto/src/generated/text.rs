@@ -23,7 +23,10 @@ pub struct LocalizedText {
         skip_serializing_if = "::buffa::json_helpers::skip_if::is_empty_str"
     )]
     pub key: ::buffa::alloc::string::String,
-    /// Arguments substituted into the client's template for `key`.
+    /// Arguments substituted into the client's template for `key`. Android
+    /// formats positionally, so the client applies values ordered by sorted
+    /// argument name: a template's `%1$s`, `%2$s`, ... must follow that order.
+    /// Prefer one argument per template; keep argument names stable.
     ///
     /// Field 2: `args`
     #[serde(

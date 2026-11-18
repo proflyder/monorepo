@@ -4,6 +4,9 @@
     <!-- Fallback before the bottom bar is measured; matches its real height:
          a 64dp icon+label action plus the 6dp bar padding on both sides. -->
     <dimen name="alarms_action_bar_height">76dp</dimen>
+    <!-- Space reserved under the scrolling content for the sticky Save bar. -->
+    <dimen name="alarms_editor_scroll_bottom">88dp</dimen>
+    <dimen name="alarms_editor_section_gap">20dp</dimen>
     <integer name="alarms_columns">1</integer>
 
     <!-- Dense alarm card: one time/text line, at most one extra actions line. -->

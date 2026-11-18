@@ -229,19 +229,19 @@ fn materialize_schedules(
         })
         .to_string();
         let id = schedule_id(&scenario.id, index);
+        let rule = time.rule();
         tx.execute(
-            &format!("INSERT INTO schedules ({SCHEDULE_COLS}) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"),
+            &format!("INSERT INTO schedules ({SCHEDULE_COLS}) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"),
             params![
                 id,
                 kind_code(crate::domain::ScheduleKind::Scenario),
                 scenario.label,
-                time.timezone,
-                i64::from(time.at.hour),
-                i64::from(time.at.minute),
-                i64::from(time.at.second),
-                time.once_date,
-                i64::from(time.repeat.code()),
-                weekdays_text(&time.weekdays),
+                i64::from(rule.at.hour),
+                i64::from(rule.at.minute),
+                i64::from(rule.at.second),
+                rule.once_unix,
+                i64::from(rule.repeat.code()),
+                weekdays_text(&rule.weekdays),
                 next,
                 bool_to_int(scenario.enabled),
                 payload,
@@ -908,7 +908,6 @@ mod tests {
         let direct = Schedule {
             label: "direct".to_owned(),
             kind: ScheduleKind::Scenario,
-            timezone: "UTC".to_owned(),
             at: WallTime {
                 hour: 7,
                 minute: 0,

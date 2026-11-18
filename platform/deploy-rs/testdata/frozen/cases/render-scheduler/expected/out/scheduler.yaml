@@ -52,7 +52,7 @@ spec:
         # Content-addressed: changes only when the rendered unit (images,
         # config) changes, so an identical deploy keeps the pod template and
         # does not restart anything.
-        proflyder.dev/rollout: 7fc55108ba21
+        proflyder.dev/rollout: 81dd9c317c08
     spec:
       enableServiceLinks: false
       securityContext:
@@ -72,10 +72,7 @@ spec:
               value: /data/scheduler.db
             - name: SCHEDULER_LISTEN
               value: 0.0.0.0:8098
-            # Home wall clock. Asia/Almaty has no DST; IANA data is embedded
-            # in the binary via time/tzdata.
-            - name: SCHEDULER_TIMEZONE
-              value: Asia/Almaty
+            # Every request carries its own Time-Zone; the server stores UTC.
             - name: SCHEDULER_TOKEN_FILE
               value: /run/secrets/scheduler/token
             # Consumer allowlist for ListDueEvents (global, not a per-queue ACL):

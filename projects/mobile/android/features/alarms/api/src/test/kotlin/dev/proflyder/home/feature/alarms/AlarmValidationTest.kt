@@ -5,7 +5,6 @@ import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.core.model.RepeatKind
 import org.junit.Assert.assertEquals
 import java.time.LocalDate
-import java.time.ZoneId
 import org.junit.Assert.assertNull
 import org.junit.Test
 
@@ -14,11 +13,10 @@ class AlarmValidationTest {
         label: String = "Wake up",
         hour: Int = 7,
         minute: Int = 30,
-        timezone: String = "Asia/Almaty",
         repeat: RepeatKind = RepeatKind.DAILY,
         weekdays: List<Int> = emptyList(),
         onceDate: LocalDate? = null,
-    ) = AlarmDraft(label, hour, minute, timezone, repeat, weekdays, enabled = true, onceDate = onceDate)
+    ) = AlarmDraft(label, hour, minute, repeat, weekdays, enabled = true, onceDate = onceDate)
 
     private fun fieldOf(draft: AlarmDraft): Field =
         (AlarmValidation.validate(draft) as RemoteFailure.Validation).field
@@ -53,7 +51,7 @@ class AlarmValidationTest {
 
     @Test
     fun acceptsOneShotWithFutureDateAndPreservesDate() {
-        val today = LocalDate.now(ZoneId.of("Asia/Almaty"))
+        val today = LocalDate.now()
         assertNull(
             AlarmValidation.validate(
                 draft(repeat = RepeatKind.ONCE, onceDate = today.plusDays(1)),
@@ -79,7 +77,5 @@ class AlarmValidationTest {
 
     @Test
     fun rejectsUnknownTimezone() {
-        assertEquals(Field.TIMEZONE, fieldOf(draft(timezone = "Mars/Olympus")))
-        assertEquals(Field.TIMEZONE, fieldOf(draft(timezone = "Asia Almaty")))
     }
 }

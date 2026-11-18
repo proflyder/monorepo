@@ -78,11 +78,6 @@ fn planner_vectors_match_go() {
                 .and_then(Value::as_str)
                 .expect("repeat");
             let rule = Rule {
-                timezone: raw_rule
-                    .get("timezone")
-                    .and_then(Value::as_str)
-                    .expect("timezone")
-                    .to_owned(),
                 at: WallTime {
                     hour: i32::try_from(field_i64(raw_rule, "hour")).expect("hour"),
                     minute: i32::try_from(field_i64(raw_rule, "minute")).expect("minute"),
@@ -101,11 +96,10 @@ fn planner_vectors_match_go() {
                             .collect()
                     })
                     .unwrap_or_default(),
-                once_date: raw_rule
-                    .get("onceDate")
-                    .and_then(Value::as_str)
-                    .unwrap_or_default()
-                    .to_owned(),
+                once_unix: raw_rule
+                    .get("onceUnix")
+                    .and_then(Value::as_i64)
+                    .unwrap_or_default(),
             };
             rule.validate()
                 .unwrap_or_else(|error| panic!("{} / {name}: {error}", file.display()));
@@ -194,8 +188,7 @@ fn canonical_hashes_match_go() {
             "canonical daily alarm" => canonical_schedule(
                 "wake",
                 ScheduleKind::Alarm,
-                "UTC",
-                "",
+                0,
                 WallTime {
                     hour: 7,
                     minute: 30,
@@ -209,8 +202,7 @@ fn canonical_hashes_match_go() {
             "canonical custom weekdays sorted" => canonical_schedule(
                 "gym",
                 ScheduleKind::Alarm,
-                "Asia/Almaty",
-                "",
+                0,
                 WallTime {
                     hour: 6,
                     minute: 15,
@@ -224,8 +216,7 @@ fn canonical_hashes_match_go() {
             "canonical once reminder" => canonical_schedule(
                 "call mom",
                 ScheduleKind::Reminder,
-                "Europe/Berlin",
-                "2026-02-01",
+                1769932800,
                 WallTime {
                     hour: 9,
                     minute: 0,
@@ -252,7 +243,6 @@ fn canonical_hashes_match_go() {
 #[test]
 fn rule_validation_messages_match_go() {
     let valid = Rule {
-        timezone: "UTC".to_owned(),
         at: WallTime {
             hour: 7,
             minute: 0,
@@ -260,25 +250,11 @@ fn rule_validation_messages_match_go() {
         },
         repeat: Repeat::Daily,
         weekdays: Vec::new(),
-        once_date: String::new(),
+        once_unix: 0,
     };
     assert!(valid.validate().is_ok());
 
     let cases = [
-        (
-            Rule {
-                timezone: String::new(),
-                ..valid.clone()
-            },
-            "invalid schedule rule: timezone is required",
-        ),
-        (
-            Rule {
-                timezone: "Mars/Olympus".to_owned(),
-                ..valid.clone()
-            },
-            "invalid schedule rule: unknown timezone \"Mars/Olympus\"",
-        ),
         (
             Rule {
                 at: WallTime {
@@ -295,7 +271,7 @@ fn rule_validation_messages_match_go() {
                 repeat: Repeat::Once,
                 ..valid.clone()
             },
-            "invalid schedule rule: once_date is required for REPEAT_KIND_ONCE",
+            "invalid schedule rule: once_unix is required for REPEAT_KIND_ONCE",
         ),
         (
             Rule {
@@ -322,10 +298,11 @@ fn rule_validation_messages_match_go() {
         ),
         (
             Rule {
-                once_date: "2026-01-05".to_owned(),
+                repeat: Repeat::Daily,
+                once_unix: 1_767_339_000,
                 ..valid.clone()
             },
-            "invalid schedule rule: once_date is only valid for REPEAT_KIND_ONCE",
+            "invalid schedule rule: once_unix is only valid for REPEAT_KIND_ONCE",
         ),
         (
             Rule {
@@ -341,17 +318,9 @@ fn rule_validation_messages_match_go() {
 }
 
 #[test]
-fn once_date_rejects_non_iso_dates() {
-    for date in [
-        "2026-1-05",
-        "2026-01-5",
-        "2026-1-005",
-        "2026-02-30",
-        "05.01.2026",
-        "",
-    ] {
+fn once_rules_accept_only_positive_instants() {
+    for instant in [0, -1, i64::MIN] {
         let rule = Rule {
-            timezone: "UTC".to_owned(),
             at: WallTime {
                 hour: 9,
                 minute: 0,
@@ -359,8 +328,8 @@ fn once_date_rejects_non_iso_dates() {
             },
             repeat: Repeat::Once,
             weekdays: Vec::new(),
-            once_date: date.to_owned(),
+            once_unix: instant,
         };
-        assert!(rule.validate().is_err(), "{date} must be rejected");
+        assert!(rule.validate().is_err(), "{instant} must be rejected");
     }
 }

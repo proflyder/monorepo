@@ -158,6 +158,10 @@ and a separate `/data/scenario-ledger.json` on PVC `ha-scenario-data`.
 
 - Starts with `SCENARIO_EXECUTE=true`, 1 replica. There are no scenarios at
   roll-out time, so the queue is idle.
+- Schedule requests: every `SchedulerService`/`AlarmService` call carries
+  `Time-Zone: <IANA>`; the server stores UTC only and converts times to and
+  from that zone. Without the header times are UTC; an unknown zone is 400.
+  `SCHEDULER_TIMEZONE` is ignored.
 - Conditions: `entity_state` (exact HA state) and `time_window` (timezone of
   the first time trigger or `SCENARIO_TIMEZONE`, window across midnight,
   ISO weekdays). Not met → `SKIPPED`.

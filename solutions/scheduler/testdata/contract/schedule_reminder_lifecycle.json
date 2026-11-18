@@ -19,8 +19,7 @@
           "kind": "SCHEDULE_KIND_REMINDER",
           "label": "call mom",
           "onceDate": "2026-02-01",
-          "repeat": "REPEAT_KIND_ONCE",
-          "timezone": "UTC"
+          "repeat": "REPEAT_KIND_ONCE"
         }
       },
       "response": {
@@ -43,7 +42,6 @@
             "payloadJson": "{}",
             "repeat": "REPEAT_KIND_ONCE",
             "revision": "1",
-            "timezone": "UTC",
             "updatedUnix": "1767268800"
           }
         }
@@ -84,7 +82,6 @@
             "payloadJson": "{}",
             "repeat": "REPEAT_KIND_ONCE",
             "revision": "1",
-            "timezone": "UTC",
             "updatedUnix": "1767268800"
           }
         }
@@ -123,7 +120,6 @@
               "payloadJson": "{}",
               "repeat": "REPEAT_KIND_ONCE",
               "revision": "1",
-              "timezone": "UTC",
               "updatedUnix": "1767268800"
             }
           ]
@@ -150,8 +146,7 @@
             "kind": "SCHEDULE_KIND_REMINDER",
             "label": "call dad",
             "onceDate": "2026-02-01",
-            "repeat": "REPEAT_KIND_ONCE",
-            "timezone": "UTC"
+            "repeat": "REPEAT_KIND_ONCE"
           }
         }
       },
@@ -176,7 +171,6 @@
             "payloadJson": "{}",
             "repeat": "REPEAT_KIND_ONCE",
             "revision": "2",
-            "timezone": "UTC",
             "updatedUnix": "1767268800"
           }
         }

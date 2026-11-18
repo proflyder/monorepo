@@ -33,9 +33,9 @@ enum RepeatKind {
   REPEAT_KIND_UNSPECIFIED = 0;
   REPEAT_KIND_ONCE = 1;
   REPEAT_KIND_DAILY = 2;
-  REPEAT_KIND_WEEKDAYS = 3; // ISO weekdays 1..5
-  REPEAT_KIND_WEEKENDS = 4; // ISO weekdays 6..7
-  REPEAT_KIND_CUSTOM = 5;   // explicit ISO weekdays in Schedule.weekdays
+  REPEAT_KIND_WEEKDAYS = 3; // local ISO weekdays 1..5
+  REPEAT_KIND_WEEKENDS = 4; // local ISO weekdays 6..7
+  REPEAT_KIND_CUSTOM = 5;   // explicit local ISO weekdays in Schedule.weekdays
 }
 
 // SourceKind identifies what produced an event. It distinguishes timers from
@@ -83,23 +83,27 @@ enum AckOutcome {
   ACK_OUTCOME_SKIPPED = 3;
 }
 
-// WallTime is a local wall-clock time of day in Schedule.timezone.
+// WallTime is a time of day in the caller's `Time-Zone` (UTC when absent).
+// The server converts it to and from UTC storage in one place.
 message WallTime {
   int32 hour = 1;   // 0..23
   int32 minute = 2; // 0..59
   int32 second = 3; // 0..59
 }
 
-// Schedule is a durable recurring or one-shot schedule.
+// Schedule is a durable recurring or one-shot schedule. The database stores
+// UTC only; `at`, `once_date` and `weekdays` are in the zone of the request's
+// `Time-Zone` header, and the same header selects the response zone.
 message Schedule {
   string id = 1;
   string label = 2;
   ScheduleKind kind = 3;
-  string timezone = 4;        // IANA zone, required
-  WallTime at = 5;            // local time of day
-  string once_date = 6;       // YYYY-MM-DD; required for REPEAT_KIND_ONCE
+  reserved 4;                 // was timezone (IANA); zones live on clients
+  reserved "timezone";
+  WallTime at = 5;            // time of day in the request Time-Zone
+  string once_date = 6;       // local YYYY-MM-DD in the request Time-Zone
   RepeatKind repeat = 7;
-  repeated int32 weekdays = 8; // ISO 1=Mon..7=Sun; REPEAT_KIND_CUSTOM only
+  repeated int32 weekdays = 8; // UTC ISO 1=Mon..7=Sun; REPEAT_KIND_CUSTOM only
   int64 next_due_unix = 9;     // 0 when disabled or exhausted
   bool enabled = 10;
   int64 snooze_until_unix = 11; // 0 when not snoozed
@@ -170,9 +174,10 @@ message DueEvent {
 message CreateScheduleRequest {
   string label = 1;
   ScheduleKind kind = 2;
-  string timezone = 3;
-  WallTime at = 4;
-  string once_date = 5;
+  reserved 3;                 // was timezone
+  reserved "timezone";
+  WallTime at = 4;            // time of day in the request Time-Zone
+  string once_date = 5;       // local YYYY-MM-DD in the request Time-Zone
   RepeatKind repeat = 6;
   repeated int32 weekdays = 7;
   bool enabled = 8;

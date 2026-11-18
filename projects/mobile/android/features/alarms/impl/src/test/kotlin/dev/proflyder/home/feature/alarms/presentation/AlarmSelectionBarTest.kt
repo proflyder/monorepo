@@ -153,7 +153,6 @@ class AlarmSelectionBarTest {
         id = "alarm-$label",
         label = label,
         kind = ScheduleKind.ALARM,
-        timezone = "Asia/Almaty",
         at = WallTime(10, 0),
         onceDate = "",
         repeat = RepeatKind.WEEKDAYS,

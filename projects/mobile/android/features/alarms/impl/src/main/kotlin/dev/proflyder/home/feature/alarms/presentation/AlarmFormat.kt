@@ -53,7 +53,7 @@ internal object AlarmFormat {
             schedule.isSnoozed -> context.getString(
                 R.string.alarms_card_snoozed,
                 repeat,
-                instant(schedule.snoozeUntilUnix, schedule.timezone),
+                instant(schedule.snoozeUntilUnix),
             )
             !schedule.enabled || schedule.nextDueUnix <= 0 -> context.getString(R.string.alarms_card_off, repeat)
             else -> context.getString(R.string.alarms_card_next, repeat, nextDay(context, schedule))
@@ -61,7 +61,7 @@ internal object AlarmFormat {
     }
 
     private fun nextDay(context: Context, schedule: Schedule): String {
-        val zone = zoneOf(schedule.timezone)
+        val zone = ZoneId.systemDefault()
         val due = Instant.ofEpochSecond(schedule.nextDueUnix).atZone(zone).toLocalDateTime()
         val today = LocalDate.now(zone)
         return when (due.toLocalDate()) {
@@ -71,15 +71,8 @@ internal object AlarmFormat {
         }
     }
 
-    private fun instant(epochSeconds: Long, timezone: String): String =
-        LocalDateTime.ofInstant(Instant.ofEpochSecond(epochSeconds), zoneOf(timezone)).format(dayTime())
-
-    /** Invalid persisted zones fall back to the phone zone without exceptions. */
-    private fun zoneOf(timezone: String): ZoneId =
-        when (timezone) {
-            in ZoneId.getAvailableZoneIds() -> ZoneId.of(timezone)
-            else -> ZoneId.systemDefault()
-        }
+    private fun instant(epochSeconds: Long): String =
+        LocalDateTime.ofInstant(Instant.ofEpochSecond(epochSeconds), ZoneId.systemDefault()).format(dayTime())
 
     private val timeOnly: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm", Locale.ROOT)
     private fun dayTime() = DateTimeFormatter.ofPattern("d MMM HH:mm", Locale.getDefault())

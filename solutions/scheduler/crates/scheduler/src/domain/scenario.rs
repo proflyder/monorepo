@@ -8,9 +8,10 @@
 //! fields (`id`, `revision`, timestamps and the computed `next_due_unix`) live
 //! in SQLite columns and never in the body.
 
+use jiff::tz::TimeZone;
 use serde::{Deserialize, Serialize};
 
-use crate::domain::rule::{Repeat, Rule, WallTime};
+use crate::domain::rule::{Repeat, Rule, RuleError, WallTime, parse_iso_date};
 use crate::domain::validation::DomainError;
 
 /// Maximum label length in bytes.
@@ -56,17 +57,110 @@ pub struct ScenarioTimeTrigger {
 }
 
 impl ScenarioTimeTrigger {
-    /// The recurrence rule described by this trigger.
+    /// The trigger's recurrence translated to the scheduler's UTC rule.
+    ///
+    /// The definition keeps its IANA zone because the executor evaluates
+    /// local time windows; the materialized schedule is UTC-only like every
+    /// other schedule. The weekday mask is shifted to the UTC weekdays the
+    /// local occurrences land on.
     #[must_use]
     pub fn rule(&self) -> Rule {
-        Rule {
-            timezone: self.timezone.clone(),
-            at: self.at,
-            repeat: self.repeat,
-            weekdays: self.weekdays.clone(),
-            once_date: self.once_date.clone(),
+        crate::domain::rule::local_to_utc(
+            &self.timezone,
+            self.at,
+            self.repeat,
+            &self.weekdays,
+            &self.once_date,
+        )
+    }
+}
+
+/// Validates the local recurrence shape of a scenario time trigger.
+fn validate_time_trigger(time: &ScenarioTimeTrigger) -> Result<(), RuleError> {
+    if time.timezone.is_empty() {
+        return Err(RuleError::new("timezone is required"));
+    }
+    if TimeZone::get(&time.timezone).is_err() {
+        return Err(RuleError::new(format!(
+            "unknown timezone {:?}",
+            time.timezone
+        )));
+    }
+    if !(0..=23).contains(&time.at.hour) {
+        return Err(RuleError::new(format!(
+            "hour {} outside 0..23",
+            time.at.hour
+        )));
+    }
+    if !(0..=59).contains(&time.at.minute) {
+        return Err(RuleError::new(format!(
+            "minute {} outside 0..59",
+            time.at.minute
+        )));
+    }
+    if !(0..=59).contains(&time.at.second) {
+        return Err(RuleError::new(format!(
+            "second {} outside 0..59",
+            time.at.second
+        )));
+    }
+    match time.repeat {
+        Repeat::Once => {
+            if time.once_date.is_empty() {
+                return Err(RuleError::new("once_date is required for REPEAT_KIND_ONCE"));
+            }
+            if parse_iso_date(&time.once_date).is_none() {
+                return Err(RuleError::new("once_date must be YYYY-MM-DD"));
+            }
+            if !time.weekdays.is_empty() {
+                return Err(RuleError::new(
+                    "weekdays are only valid for REPEAT_KIND_CUSTOM",
+                ));
+            }
+        }
+        Repeat::Daily | Repeat::Weekdays | Repeat::Weekends => {
+            if !time.once_date.is_empty() {
+                return Err(RuleError::new(
+                    "once_date is only valid for REPEAT_KIND_ONCE",
+                ));
+            }
+            if !time.weekdays.is_empty() {
+                return Err(RuleError::new(
+                    "weekdays are only valid for REPEAT_KIND_CUSTOM",
+                ));
+            }
+        }
+        Repeat::Custom => {
+            if !time.once_date.is_empty() {
+                return Err(RuleError::new(
+                    "once_date is only valid for REPEAT_KIND_ONCE",
+                ));
+            }
+            if time.weekdays.is_empty() {
+                return Err(RuleError::new("REPEAT_KIND_CUSTOM needs weekdays"));
+            }
+            let mut seen: Vec<i32> = Vec::with_capacity(time.weekdays.len());
+            for &weekday in &time.weekdays {
+                if !(1..=7).contains(&weekday) {
+                    return Err(RuleError::new(format!("weekday {weekday} outside 1..7")));
+                }
+                if seen.contains(&weekday) {
+                    return Err(RuleError::new(format!("duplicate weekday {weekday}")));
+                }
+                seen.push(weekday);
+            }
+        }
+        Repeat::Unspecified => {
+            return Err(RuleError::new(format!(
+                "unsupported repeat {}",
+                time.repeat.name()
+            )));
         }
     }
+    if time.repeat == Repeat::Once && time.rule().once_unix <= 0 {
+        return Err(RuleError::new("once_date must be YYYY-MM-DD"));
+    }
+    Ok(())
 }
 
 /// A condition the executor evaluates before running steps.
@@ -212,9 +306,7 @@ impl Scenario {
         }
         for trigger in &definition.triggers {
             if let ScenarioTrigger::Time(time) = trigger {
-                time.rule()
-                    .validate()
-                    .map_err(|error| DomainError::invalid_rule(&error))?;
+                validate_time_trigger(time).map_err(|error| DomainError::invalid_rule(&error))?;
             }
         }
         for condition in &definition.conditions {

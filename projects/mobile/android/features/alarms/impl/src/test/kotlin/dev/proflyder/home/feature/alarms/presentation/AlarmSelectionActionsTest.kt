@@ -60,7 +60,6 @@ class AlarmSelectionActionsTest {
         id = id,
         label = id,
         kind = ScheduleKind.ALARM,
-        timezone = "UTC",
         at = WallTime(10, 0),
         onceDate = "",
         repeat = RepeatKind.WEEKDAYS,

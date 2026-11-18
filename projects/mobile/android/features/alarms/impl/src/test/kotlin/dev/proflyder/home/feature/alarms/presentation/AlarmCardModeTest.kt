@@ -61,7 +61,6 @@ class AlarmCardModeTest {
         id = "alarm-1",
         label = "Work",
         kind = ScheduleKind.ALARM,
-        timezone = "UTC",
         at = WallTime(10, 0),
         onceDate = "",
         repeat = RepeatKind.WEEKDAYS,

@@ -85,13 +85,14 @@ constant-time по SHA-256; токен не логируется. `SCHEDULER_CON
 ### Env и образ
 
 Переменные окружения и их приоритеты — 1:1 с Go: `SCHEDULER_DB_PATH`,
-`SCHEDULER_LISTEN`, `SCHEDULER_TIMEZONE`, `SCHEDULER_TOKEN(_FILE)`,
+`SCHEDULER_LISTEN`, `SCHEDULER_TOKEN(_FILE)`,
 `SCHEDULER_CONSUMERS`, `SCHEDULER_MISSED_GRACE_SECONDS`,
 `SCHEDULER_RING_WINDOW_SECONDS`, `SCHEDULER_EVENT_RETENTION_SECONDS`,
 `SCHEDULER_MAX_TIMER_SECONDS`, `SCHEDULER_MAX_TIMERS`,
 `SCHEDULER_MAX_PAYLOAD_BYTES`, `SCHEDULER_EVENT_MAX_ATTEMPTS`,
 `SCHEDULER_TICK_MS`, `SCENARIO_EXECUTION`; legacy
-`ALARM_DB_PATH/LISTEN/TIMEZONE` — fallback.
+`ALARM_DB_PATH/LISTEN` — fallback. `SCHEDULER_TIMEZONE`/`ALARM_TIMEZONE`
+больше не читаются: зона приходит в заголовке каждого запроса.
 `SCHEDULER_TOKEN` побеждает `SCHEDULER_TOKEN_FILE`.
 
 Образ `//projects/home/kubernetes/scheduler:scheduler_image` — static musl
@@ -101,23 +102,27 @@ constant-time по SHA-256; токен не логируется. `SCHEDULER_CON
 открывается без миграции. `scheduler -healthcheck` и `scheduler -status`
 читают токен из файла и не кладут его в аргументы.
 
-## Recurrence и DST
+## Recurrence, UTC и заголовок Time-Zone
 
-Правило хранится как локальное wall time + IANA timezone + repeat:
+Сервер хранит и считает **только UTC**: `at_*` — UTC time-of-day,
+`weekdays` — UTC-маска ISO 1=Mon..7=Sun, `once_unix` — UTC instant.
+Поля `timezone` в protobuf и в БД нет.
+
+Клиент обязан присылать `Time-Zone: <IANA>` на **каждом** запросе
+(`home.v1.SchedulerService` и `home.v1.AlarmService`). По нему API
+переводит `at`/`once_date`/`weekdays` из зоны клиента в UTC при записи и
+обратно при чтении; `nextDueUnix`/`nextRunUnix` — UTC epoch, клиент
+рендерит его в своей зоне. Нет заголовка — времена трактуются как UTC и
+пишется warning; неизвестная зона — `400 invalid Time-Zone header`.
+Конверсия живёт в одном месте: `api/zone.rs` + `domain/rule.rs`
+(`local_to_utc`/`utc_to_local`), включая сдвиг маски дней через полночь
+UTC. Пример: Алматы «будни 03:00» хранится как вс–чт 22:00 UTC и
+отдаётся Москве как пн–пт 01:00.
+
 `REPEAT_KIND_ONCE/DAILY/WEEKDAYS/WEEKENDS/CUSTOM` (ISO 1=Mon..7=Sun).
 Reminder — `SCHEDULE_KIND_REMINDER`, обязательно `REPEAT_KIND_ONCE` с
-`once_date`.
-
-Детерминированная политика (реализована и покрыта тестами):
-
-- несуществующее local time (spring-forward gap) **пропускается**: в этот
-  день occurrence нет, берётся следующий подходящий день;
-- неоднозначное local time (fall-back overlap) — берётся **ранний** UTC
-  instant;
-- `time.Date` normalization не используется как решение: кандидат
-  проверяется чтением компонент в зоне;
-- даты перебираются по UTC-календарю, поэтому пропущенная civil date
-  (например `Pacific/Apia` 2011-12-30) не зацикливает планировщик.
+`once_date`. Для повторяющихся правил next-fire — календарный расчёт по
+UTC, без tzdb и DST; DST-переходы остаются заботой клиента.
 
 ## Политика опозданий и повторов
 
@@ -314,7 +319,6 @@ MCP-инструментов.
 ```text
 SCHEDULER_DB_PATH=scheduler.db              (ALARM_DB_PATH)
 SCHEDULER_LISTEN=127.0.0.1:8098             (ALARM_LISTEN; loopback default)
-SCHEDULER_TIMEZONE=UTC                      (ALARM_TIMEZONE; default для пустого tz)
 SCHEDULER_TOKEN=...                         (или SCHEDULER_TOKEN_FILE)
 SCHEDULER_MISSED_GRACE_SECONDS=600
 SCHEDULER_RING_WINDOW_SECONDS=900

@@ -30,8 +30,8 @@ pub const DEFAULT_REPORT_TIMEOUT: Duration = Duration::from_secs(9);
 pub const DEFAULT_LOG_BYTE_CAP: usize = 64 << 10;
 /// Default Telegram Bot API root.
 pub const DEFAULT_TELEGRAM_API_URL: &str = "https://api.telegram.org";
-/// Default report timezone.
-pub const DEFAULT_TIMEZONE: &str = "UTC";
+/// Default home timezone (the zone sent as `Time-Zone` to the scheduler).
+pub const DEFAULT_TIMEZONE: &str = "Asia/Almaty";
 /// Default bb bridge timeout.
 pub const DEFAULT_BB_TIMEOUT: Duration = Duration::from_secs(15);
 /// Default bb SSH user.
@@ -539,7 +539,7 @@ mod tests {
         assert_eq!(config.pending_ttl, DEFAULT_PENDING_TTL);
         assert_eq!(config.log_byte_cap, 64 << 10);
         assert_eq!(config.auth_token, "secret");
-        assert_eq!(config.timezone, "UTC");
+        assert_eq!(config.timezone, "Asia/Almaty");
     }
 
     #[test]

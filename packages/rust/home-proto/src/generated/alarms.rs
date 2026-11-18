@@ -173,6 +173,8 @@ impl ::buffa::Enumeration for Repeat {
         ]
     }
 }
+/// Alarm is the legacy facade over a UTC schedule. hour/minute and once_date
+/// are in the request's `Time-Zone`; the server converts them to UTC storage.
 #[derive(Clone, PartialEq, Default)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(default)]
@@ -191,7 +193,7 @@ pub struct Alarm {
         skip_serializing_if = "::buffa::json_helpers::skip_if::is_empty_str"
     )]
     pub label: ::buffa::alloc::string::String,
-    /// local wall-clock hour, 0..23
+    /// local hour in the request Time-Zone, 0..23
     ///
     /// Field 3: `hour`
     #[serde(
@@ -200,7 +202,7 @@ pub struct Alarm {
         skip_serializing_if = "::buffa::json_helpers::skip_if::is_zero_i32"
     )]
     pub hour: i32,
-    /// local wall-clock minute, 0..59
+    /// local minute in the request Time-Zone, 0..59
     ///
     /// Field 4: `minute`
     #[serde(
@@ -209,15 +211,6 @@ pub struct Alarm {
         skip_serializing_if = "::buffa::json_helpers::skip_if::is_zero_i32"
     )]
     pub minute: i32,
-    /// IANA, e.g. Asia/Almaty
-    ///
-    /// Field 5: `timezone`
-    #[serde(
-        rename = "timezone",
-        with = "::buffa::json_helpers::proto_string",
-        skip_serializing_if = "::buffa::json_helpers::skip_if::is_empty_str"
-    )]
-    pub timezone: ::buffa::alloc::string::String,
     /// Field 6: `repeat`
     #[serde(
         rename = "repeat",
@@ -280,6 +273,16 @@ pub struct Alarm {
         skip_serializing_if = "::buffa::json_helpers::skip_if::is_zero_i64"
     )]
     pub revision: i64,
+    /// local YYYY-MM-DD for ONCE; empty otherwise
+    ///
+    /// Field 13: `once_date`
+    #[serde(
+        rename = "onceDate",
+        alias = "once_date",
+        with = "::buffa::json_helpers::proto_string",
+        skip_serializing_if = "::buffa::json_helpers::skip_if::is_empty_str"
+    )]
+    pub once_date: ::buffa::alloc::string::String,
     #[serde(skip)]
     #[doc(hidden)]
     pub __buffa_unknown_fields: ::buffa::UnknownFields,
@@ -291,7 +294,6 @@ impl ::core::fmt::Debug for Alarm {
             .field("label", &self.label)
             .field("hour", &self.hour)
             .field("minute", &self.minute)
-            .field("timezone", &self.timezone)
             .field("repeat", &self.repeat)
             .field("weekdays", &self.weekdays)
             .field("enabled", &self.enabled)
@@ -299,6 +301,7 @@ impl ::core::fmt::Debug for Alarm {
             .field("snooze_until_unix", &self.snooze_until_unix)
             .field("last_ring_unix", &self.last_ring_unix)
             .field("revision", &self.revision)
+            .field("once_date", &self.once_date)
             .finish()
     }
 }
@@ -341,9 +344,6 @@ impl ::buffa::Message for Alarm {
         if self.minute != 0i32 {
             size += 1u64 + ::buffa::types::int32_encoded_len(self.minute) as u64;
         }
-        if !self.timezone.is_empty() {
-            size += 1u64 + ::buffa::types::string_encoded_len(&self.timezone) as u64;
-        }
         {
             let val = self.repeat.to_i32();
             if val != 0 {
@@ -375,6 +375,9 @@ impl ::buffa::Message for Alarm {
         if self.revision != 0i64 {
             size += 1u64 + ::buffa::types::int64_encoded_len(self.revision) as u64;
         }
+        if !self.once_date.is_empty() {
+            size += 1u64 + ::buffa::types::string_encoded_len(&self.once_date) as u64;
+        }
         size += self.__buffa_unknown_fields.encoded_len() as u64;
         ::buffa::saturate_size(size)
     }
@@ -396,9 +399,6 @@ impl ::buffa::Message for Alarm {
         }
         if self.minute != 0i32 {
             ::buffa::types::put_int32_field(4u32, self.minute, buf);
-        }
-        if !self.timezone.is_empty() {
-            ::buffa::types::put_string_field(5u32, &self.timezone, buf);
         }
         {
             let val = self.repeat.to_i32();
@@ -431,6 +431,9 @@ impl ::buffa::Message for Alarm {
         }
         if self.revision != 0i64 {
             ::buffa::types::put_int64_field(12u32, self.revision, buf);
+        }
+        if !self.once_date.is_empty() {
+            ::buffa::types::put_string_field(13u32, &self.once_date, buf);
         }
         self.__buffa_unknown_fields.write_to(buf);
     }
@@ -472,13 +475,6 @@ impl ::buffa::Message for Alarm {
                     ::buffa::encoding::WireType::Varint,
                 )?;
                 self.minute = ::buffa::types::decode_int32(buf)?;
-            }
-            5u32 => {
-                ::buffa::encoding::check_wire_type(
-                    tag,
-                    ::buffa::encoding::WireType::LengthDelimited,
-                )?;
-                ::buffa::types::merge_string(&mut self.timezone, buf)?;
             }
             6u32 => {
                 ::buffa::encoding::check_wire_type(
@@ -564,6 +560,13 @@ impl ::buffa::Message for Alarm {
                 )?;
                 self.revision = ::buffa::types::decode_int64(buf)?;
             }
+            13u32 => {
+                ::buffa::encoding::check_wire_type(
+                    tag,
+                    ::buffa::encoding::WireType::LengthDelimited,
+                )?;
+                ::buffa::types::merge_string(&mut self.once_date, buf)?;
+            }
             _ => {
                 self.__buffa_unknown_fields
                     .push(::buffa::encoding::decode_unknown_field(tag, buf, ctx)?);
@@ -576,7 +579,6 @@ impl ::buffa::Message for Alarm {
         self.label.clear();
         self.hour = 0i32;
         self.minute = 0i32;
-        self.timezone.clear();
         self.repeat = ::buffa::EnumValue::from(0);
         self.weekdays.clear();
         self.enabled = false;
@@ -584,6 +586,7 @@ impl ::buffa::Message for Alarm {
         self.snooze_until_unix = 0i64;
         self.last_ring_unix = 0i64;
         self.revision = 0i64;
+        self.once_date.clear();
         self.__buffa_unknown_fields.clear();
     }
 }
@@ -627,6 +630,8 @@ pub struct CreateAlarmRequest {
         skip_serializing_if = "::buffa::json_helpers::skip_if::is_empty_str"
     )]
     pub label: ::buffa::alloc::string::String,
+    /// local hour in the request Time-Zone
+    ///
     /// Field 2: `hour`
     #[serde(
         rename = "hour",
@@ -634,6 +639,8 @@ pub struct CreateAlarmRequest {
         skip_serializing_if = "::buffa::json_helpers::skip_if::is_zero_i32"
     )]
     pub hour: i32,
+    /// local minute in the request Time-Zone
+    ///
     /// Field 3: `minute`
     #[serde(
         rename = "minute",
@@ -641,13 +648,6 @@ pub struct CreateAlarmRequest {
         skip_serializing_if = "::buffa::json_helpers::skip_if::is_zero_i32"
     )]
     pub minute: i32,
-    /// Field 4: `timezone`
-    #[serde(
-        rename = "timezone",
-        with = "::buffa::json_helpers::proto_string",
-        skip_serializing_if = "::buffa::json_helpers::skip_if::is_empty_str"
-    )]
-    pub timezone: ::buffa::alloc::string::String,
     /// Field 5: `repeat`
     #[serde(
         rename = "repeat",
@@ -655,6 +655,8 @@ pub struct CreateAlarmRequest {
         skip_serializing_if = "::buffa::json_helpers::skip_if::is_default_enum_value"
     )]
     pub repeat: ::buffa::EnumValue<Repeat>,
+    /// UTC ISO weekdays
+    ///
     /// Field 6: `weekdays`
     #[serde(
         rename = "weekdays",
@@ -669,6 +671,16 @@ pub struct CreateAlarmRequest {
         skip_serializing_if = "::buffa::json_helpers::skip_if::is_false"
     )]
     pub enabled: bool,
+    /// local YYYY-MM-DD for ONCE
+    ///
+    /// Field 8: `once_date`
+    #[serde(
+        rename = "onceDate",
+        alias = "once_date",
+        with = "::buffa::json_helpers::proto_string",
+        skip_serializing_if = "::buffa::json_helpers::skip_if::is_empty_str"
+    )]
+    pub once_date: ::buffa::alloc::string::String,
     #[serde(skip)]
     #[doc(hidden)]
     pub __buffa_unknown_fields: ::buffa::UnknownFields,
@@ -679,10 +691,10 @@ impl ::core::fmt::Debug for CreateAlarmRequest {
             .field("label", &self.label)
             .field("hour", &self.hour)
             .field("minute", &self.minute)
-            .field("timezone", &self.timezone)
             .field("repeat", &self.repeat)
             .field("weekdays", &self.weekdays)
             .field("enabled", &self.enabled)
+            .field("once_date", &self.once_date)
             .finish()
     }
 }
@@ -722,9 +734,6 @@ impl ::buffa::Message for CreateAlarmRequest {
         if self.minute != 0i32 {
             size += 1u64 + ::buffa::types::int32_encoded_len(self.minute) as u64;
         }
-        if !self.timezone.is_empty() {
-            size += 1u64 + ::buffa::types::string_encoded_len(&self.timezone) as u64;
-        }
         {
             let val = self.repeat.to_i32();
             if val != 0 {
@@ -741,6 +750,9 @@ impl ::buffa::Message for CreateAlarmRequest {
         }
         if self.enabled {
             size += 1u64 + ::buffa::types::BOOL_ENCODED_LEN as u64;
+        }
+        if !self.once_date.is_empty() {
+            size += 1u64 + ::buffa::types::string_encoded_len(&self.once_date) as u64;
         }
         size += self.__buffa_unknown_fields.encoded_len() as u64;
         ::buffa::saturate_size(size)
@@ -761,9 +773,6 @@ impl ::buffa::Message for CreateAlarmRequest {
         if self.minute != 0i32 {
             ::buffa::types::put_int32_field(3u32, self.minute, buf);
         }
-        if !self.timezone.is_empty() {
-            ::buffa::types::put_string_field(4u32, &self.timezone, buf);
-        }
         {
             let val = self.repeat.to_i32();
             if val != 0 {
@@ -783,6 +792,9 @@ impl ::buffa::Message for CreateAlarmRequest {
         }
         if self.enabled {
             ::buffa::types::put_bool_field(7u32, self.enabled, buf);
+        }
+        if !self.once_date.is_empty() {
+            ::buffa::types::put_string_field(8u32, &self.once_date, buf);
         }
         self.__buffa_unknown_fields.write_to(buf);
     }
@@ -817,13 +829,6 @@ impl ::buffa::Message for CreateAlarmRequest {
                     ::buffa::encoding::WireType::Varint,
                 )?;
                 self.minute = ::buffa::types::decode_int32(buf)?;
-            }
-            4u32 => {
-                ::buffa::encoding::check_wire_type(
-                    tag,
-                    ::buffa::encoding::WireType::LengthDelimited,
-                )?;
-                ::buffa::types::merge_string(&mut self.timezone, buf)?;
             }
             5u32 => {
                 ::buffa::encoding::check_wire_type(
@@ -881,6 +886,13 @@ impl ::buffa::Message for CreateAlarmRequest {
                 )?;
                 self.enabled = ::buffa::types::decode_bool(buf)?;
             }
+            8u32 => {
+                ::buffa::encoding::check_wire_type(
+                    tag,
+                    ::buffa::encoding::WireType::LengthDelimited,
+                )?;
+                ::buffa::types::merge_string(&mut self.once_date, buf)?;
+            }
             _ => {
                 self.__buffa_unknown_fields
                     .push(::buffa::encoding::decode_unknown_field(tag, buf, ctx)?);
@@ -892,10 +904,10 @@ impl ::buffa::Message for CreateAlarmRequest {
         self.label.clear();
         self.hour = 0i32;
         self.minute = 0i32;
-        self.timezone.clear();
         self.repeat = ::buffa::EnumValue::from(0);
         self.weekdays.clear();
         self.enabled = false;
+        self.once_date.clear();
         self.__buffa_unknown_fields.clear();
     }
 }

@@ -27,6 +27,36 @@
         <item name="android:paddingRight">12dp</item>
         <item name="android:minWidth">0dp</item>
     </style>
+    <style name="Widget.Alarms.TimeButton" parent="Widget.Material3.Button.TextButton">
+        <item name="android:insetLeft">0dp</item>
+        <item name="android:insetRight">0dp</item>
+        <item name="android:minHeight">96dp</item>
+        <item name="android:textSize">48sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:letterSpacing">0.04</item>
+        <item name="android:gravity">center</item>
+    </style>
+
+    <style name="Widget.Alarms.SectionTitle" parent="TextAppearance.Material3.TitleMedium">
+        <item name="android:textColor">?attr/colorOnSurfaceVariant</item>
+    </style>
+
+    <!-- Seven round day toggles on one row at 360dp. -->
+    <style name="Widget.Alarms.DayChip" parent="Widget.Material3.Chip.Filter">
+        <item name="android:minWidth">38dp</item>
+        <item name="android:minHeight">38dp</item>
+        <item name="chipMinHeight">38dp</item>
+        <item name="chipStartPadding">0dp</item>
+        <item name="chipEndPadding">0dp</item>
+        <item name="textStartPadding">0dp</item>
+        <item name="textEndPadding">0dp</item>
+        <item name="shapeAppearanceOverlay">@style/ShapeAppearanceOverlay.Alarms.Circle</item>
+    </style>
+
+    <style name="ShapeAppearanceOverlay.Alarms.Circle" parent="">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">50%</item>
+    </style>
 
     <!-- Contextual bulk action: the icon sits above a small one-line label, so
          the three cells stay readable at 360dp with a 1.15 font scale. The

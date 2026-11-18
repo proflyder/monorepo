@@ -13,8 +13,7 @@ use super::event::{EventInsert, insert_event, skip_fire_events};
 use super::{Store, StoreError, bool_to_int, kind_code, weekdays_from_text, weekdays_text};
 use crate::domain::Event;
 
-pub const SCHEDULE_COLS: &str =
-    "id, kind, label, timezone, at_hour, at_minute, at_second, once_date,
+pub const SCHEDULE_COLS: &str = "id, kind, label, at_hour, at_minute, at_second, once_unix,
 	repeat_kind, weekdays, next_due_unix, enabled, payload_json, revision,
 	created_unix, updated_unix, deleted_unix, last_fired_unix, snooze_until_unix,
 	snooze_count, active_occurrence_unix, active_until_unix";
@@ -24,34 +23,33 @@ pub const DETAIL_RULE_CHANGED: &str = "rule_changed";
 
 pub fn scan_schedule(row: &Row<'_>) -> rusqlite::Result<Schedule> {
     let kind: i64 = row.get(1)?;
-    let repeat: i64 = row.get(8)?;
-    let weekdays: String = row.get(9)?;
-    let enabled: i64 = row.get(11)?;
+    let repeat: i64 = row.get(7)?;
+    let weekdays: String = row.get(8)?;
+    let enabled: i64 = row.get(10)?;
     Ok(Schedule {
         id: row.get(0)?,
         kind: ScheduleKind::from_code(i32::try_from(kind).unwrap_or(0)).unwrap_or_default(),
         label: row.get(2)?,
-        timezone: row.get(3)?,
         at: WallTime {
-            hour: i32::try_from(row.get::<_, i64>(4)?).unwrap_or(0),
-            minute: i32::try_from(row.get::<_, i64>(5)?).unwrap_or(0),
-            second: i32::try_from(row.get::<_, i64>(6)?).unwrap_or(0),
+            hour: i32::try_from(row.get::<_, i64>(3)?).unwrap_or(0),
+            minute: i32::try_from(row.get::<_, i64>(4)?).unwrap_or(0),
+            second: i32::try_from(row.get::<_, i64>(5)?).unwrap_or(0),
         },
-        once_date: row.get(7)?,
+        once_unix: row.get(6)?,
         repeat: Repeat::from_code(i32::try_from(repeat).unwrap_or(0)).unwrap_or_default(),
         weekdays: weekdays_from_text(&weekdays),
-        next_due_unix: row.get(10)?,
+        next_due_unix: row.get(9)?,
         enabled: enabled != 0,
-        payload_json: row.get(12)?,
-        revision: row.get(13)?,
-        created_unix: row.get(14)?,
-        updated_unix: row.get(15)?,
-        deleted_unix: row.get(16)?,
-        last_fired_unix: row.get(17)?,
-        snooze_until_unix: row.get(18)?,
-        snooze_count: row.get(19)?,
-        active_occurrence_unix: row.get(20)?,
-        active_until_unix: row.get(21)?,
+        payload_json: row.get(11)?,
+        revision: row.get(12)?,
+        created_unix: row.get(13)?,
+        updated_unix: row.get(14)?,
+        deleted_unix: row.get(15)?,
+        last_fired_unix: row.get(16)?,
+        snooze_until_unix: row.get(17)?,
+        snooze_count: row.get(18)?,
+        active_occurrence_unix: row.get(19)?,
+        active_until_unix: row.get(20)?,
     })
 }
 
@@ -68,7 +66,7 @@ fn get_schedule_any_tx(tx: &Transaction<'_>, id: &str) -> Result<(Schedule, i64)
     let sql = format!("SELECT {SCHEDULE_COLS} FROM schedules WHERE id = ?");
     match tx.query_row(&sql, params![id], |row| {
         let schedule = scan_schedule(row)?;
-        let deleted: i64 = row.get(16)?;
+        let deleted: i64 = row.get(15)?;
         Ok((schedule, deleted))
     }) {
         Ok(value) => Ok(value),
@@ -84,8 +82,7 @@ fn prepare_schedule(store: &Store, input: &Schedule) -> Result<Schedule, StoreEr
         id: input.id.trim().to_owned(),
         label: input.label.clone(),
         kind: input.kind,
-        timezone: input.timezone.trim().to_owned(),
-        once_date: input.once_date.trim().to_owned(),
+        once_unix: input.once_unix.max(0),
         repeat: input.repeat,
         weekdays: input.weekdays.clone(),
         enabled: input.enabled,
@@ -95,8 +92,8 @@ fn prepare_schedule(store: &Store, input: &Schedule) -> Result<Schedule, StoreEr
     };
     validate_label(&out.label)?;
     validate_schedule_kind(out.kind)?;
-    if out.timezone.is_empty() {
-        out.timezone.clone_from(&store.config().default_timezone);
+    if out.repeat == Repeat::Once {
+        out.at = WallTime::default();
     }
     validate_reminder_repeat(out.kind, out.repeat)?;
     if out.payload_json.is_empty() {
@@ -155,9 +152,7 @@ impl Store {
         if prepared.enabled {
             let next = next_occurrence(&prepared, now_unix)?;
             if next == 0 {
-                return Err(StoreError::invalid(
-                    "one-shot date is in the past or does not exist",
-                ));
+                return Err(StoreError::invalid("one-shot instant is in the past"));
             }
             prepared.next_due_unix = next;
         }
@@ -186,18 +181,17 @@ impl Store {
                     })?;
                     return Ok(schedule);
             }
-            let sql = format!("INSERT INTO schedules ({SCHEDULE_COLS}) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
+            let sql = format!("INSERT INTO schedules ({SCHEDULE_COLS}) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
             tx.execute(
                 &sql,
                 params![
                     row.id,
                     kind_code(row.kind),
                     row.label,
-                    row.timezone,
                     i64::from(row.at.hour),
                     i64::from(row.at.minute),
                     i64::from(row.at.second),
-                    row.once_date,
+                    row.once_unix,
                     i64::from(row.repeat.code()),
                     weekdays_text(&row.weekdays),
                     row.next_due_unix,
@@ -312,9 +306,7 @@ impl Store {
             if prepared.enabled {
                 let next = next_occurrence(&prepared, now_unix)?;
                 if next == 0 {
-                    return Err(StoreError::invalid(
-                        "one-shot date is in the past or does not exist",
-                    ));
+                    return Err(StoreError::invalid("one-shot instant is in the past"));
                 }
                 prepared.next_due_unix = next;
             }
@@ -335,7 +327,7 @@ impl Store {
             prepared.active_until_unix = 0;
             tx.execute(
                 "UPDATE schedules SET
-                    kind=?, label=?, timezone=?, at_hour=?, at_minute=?, at_second=?, once_date=?,
+                    kind=?, label=?, at_hour=?, at_minute=?, at_second=?, once_unix=?,
                     repeat_kind=?, weekdays=?, next_due_unix=?, enabled=?, payload_json=?,
                     revision=?, updated_unix=?, last_fired_unix=?, snooze_until_unix=?,
                     snooze_count=?, active_occurrence_unix=?, active_until_unix=?
@@ -343,11 +335,10 @@ impl Store {
                 params![
                     kind_code(prepared.kind),
                     prepared.label,
-                    prepared.timezone,
                     i64::from(prepared.at.hour),
                     i64::from(prepared.at.minute),
                     i64::from(prepared.at.second),
-                    prepared.once_date,
+                    prepared.once_unix,
                     i64::from(prepared.repeat.code()),
                     weekdays_text(&prepared.weekdays),
                     prepared.next_due_unix,
@@ -387,7 +378,7 @@ impl Store {
                 next = next_occurrence(&current, now_unix)?;
                 if next == 0 {
                     return Err(StoreError::invalid(
-                        "one-shot date is in the past or does not exist",
+                        "one-shot instant is in the past",
                     ));
                 }
             }
@@ -784,7 +775,6 @@ mod tests {
         Schedule {
             label: "wake up".to_owned(),
             kind: ScheduleKind::Alarm,
-            timezone: "UTC".to_owned(),
             at: WallTime {
                 hour: 7,
                 minute: 30,
@@ -887,7 +877,7 @@ mod tests {
         assert!(once.is_err());
 
         let mut one_shot = alarm(Repeat::Once, true);
-        one_shot.once_date = "2026-01-02".to_owned();
+        one_shot.once_unix = FIRST_DUE;
         let one_shot = store.create_schedule(&one_shot, "", BASE).expect("create");
         assert!(store.skip_next_occurrence(&one_shot.id, BASE).is_err());
 

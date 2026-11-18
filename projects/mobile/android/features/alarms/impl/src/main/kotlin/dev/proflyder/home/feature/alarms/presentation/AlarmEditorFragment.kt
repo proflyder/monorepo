@@ -19,7 +19,6 @@ import dev.proflyder.home.feature.alarms.AlarmEditorDestination
 import dev.proflyder.home.feature.alarms.impl.R
 import dev.proflyder.home.feature.alarms.impl.databinding.FragmentAlarmEditorBinding
 import java.time.LocalDate
-import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
@@ -47,9 +46,6 @@ class AlarmEditorFragment :
         binding.alarmEditorDelete.setVisible(alarmId != null)
 
         binding.alarmEditorLabel.doAfterTextChanged { if (!rendering) viewModel.setLabel(it?.toString().orEmpty()) }
-        binding.alarmEditorTimezone.doAfterTextChanged {
-            if (!rendering) viewModel.setTimezone(it?.toString().orEmpty())
-        }
         binding.alarmEditorEnabled.setOnCheckedChangeListener { _, checked ->
             if (!rendering) viewModel.setEnabled(checked)
         }
@@ -91,14 +87,12 @@ class AlarmEditorFragment :
     private fun render(state: AlarmEditorUiState) = with(binding) {
         rendering = true
         if (alarmEditorLabel.text?.toString() != state.label) alarmEditorLabel.setText(state.label)
-        if (alarmEditorTimezone.text?.toString() != state.timezone) alarmEditorTimezone.setText(state.timezone)
         alarmEditorTime.text = String.format(Locale.ROOT, "%02d:%02d", state.hour, state.minute)
         alarmEditorDate.setVisible(state.repeat == RepeatKind.ONCE)
-        val date = state.onceDate ?: LocalDate.now(zoneOrSystem(state.timezone))
+        val date = state.onceDate ?: LocalDate.now()
         alarmEditorDate.text = date.format(DateTimeFormatter.ofPattern("EEE d MMM yyyy", Locale.getDefault()))
         alarmEditorEnabled.isChecked = state.enabled
         alarmEditorRepeatGroup.check(repeatChipId(state.repeat))
-        alarmEditorDaysLabel.setVisible(state.repeat == RepeatKind.CUSTOM)
         alarmEditorDaysGroup.setVisible(state.repeat == RepeatKind.CUSTOM)
         dayChips.forEachIndexed { index, chip -> chip.isChecked = state.weekdays.contains(index + 1) }
         val idle = !state.saving && !state.loading && !state.loadFailed
@@ -123,12 +117,9 @@ class AlarmEditorFragment :
 
     private fun pickDate() {
         val state = viewModel.state.value
-        val today = LocalDate.now(zoneOrSystem(state.timezone))
+        val today = LocalDate.now()
         childFragmentManager.showDatePicker(state.onceDate ?: today, today, viewModel::setDate)
     }
-
-    private fun zoneOrSystem(timezone: String): ZoneId =
-        runCatching { ZoneId.of(timezone) }.getOrDefault(ZoneId.systemDefault())
 
     private fun repeatFor(chipId: Int): RepeatKind = when (chipId) {
         R.id.repeat_once -> RepeatKind.ONCE

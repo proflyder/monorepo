@@ -533,7 +533,6 @@
               "id": "<uuid>",
               "label": "evening",
               "kind": "SCHEDULE_KIND_SCENARIO",
-              "timezone": "UTC",
               "at": {
                 "hour": 7,
                 "minute": 30

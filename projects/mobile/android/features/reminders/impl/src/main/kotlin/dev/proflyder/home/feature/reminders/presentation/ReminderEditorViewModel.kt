@@ -26,7 +26,6 @@ import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesIntoSet
 import dev.zacsweers.metro.Inject
 import java.time.LocalDate
-import java.time.ZoneId
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
@@ -38,7 +37,6 @@ data class ReminderEditorUiState(
     val date: LocalDate = LocalDate.now(),
     val hour: Int = 9,
     val minute: Int = 0,
-    val timezone: String = ZoneId.systemDefault().id,
     val enabled: Boolean = true,
     val error: RemoteFailure? = null,
     val loadFailed: Boolean = false,
@@ -117,8 +115,6 @@ class ReminderEditorViewModel(
     fun setDate(value: LocalDate) = edit { it.copy(date = value) }
 
     fun setTime(hour: Int, minute: Int) = edit { it.copy(hour = hour, minute = minute) }
-
-    fun setTimezone(value: String) = edit { it.copy(timezone = value) }
 
     fun setEnabled(value: Boolean) = edit { it.copy(enabled = value) }
 
@@ -204,7 +200,6 @@ class ReminderEditorViewModel(
         date = date,
         hour = hour,
         minute = minute,
-        timezone = timezone,
         enabled = enabled,
     )
 
@@ -213,7 +208,6 @@ class ReminderEditorViewModel(
         date = date,
         hour = hour,
         minute = minute,
-        timezone = timezone,
         enabled = enabled,
     )
 
@@ -231,7 +225,6 @@ class ReminderEditorViewModel(
             date = current.date,
             hour = current.hour,
             minute = current.minute,
-            timezone = current.timezone,
             enabled = current.enabled,
         )
         ReminderEditorDraftCodec.toMap(draft).forEach { (key, value) -> savedState[key] = value }
@@ -244,7 +237,6 @@ class ReminderEditorViewModel(
         date = runCatching { LocalDate.parse(onceDate) }.getOrDefault(LocalDate.now()),
         hour = at.hour,
         minute = at.minute,
-        timezone = timezone,
         enabled = enabled,
     )
 
@@ -280,7 +272,6 @@ private fun ReminderEditorDraft.toUiState(): ReminderEditorUiState = ReminderEdi
     date = date,
     hour = hour,
     minute = minute,
-    timezone = timezone,
     enabled = enabled,
 )
 
@@ -290,7 +281,6 @@ private fun ReminderEditorDraft.restoredExisting(): Schedule? {
         id = id,
         label = label,
         kind = ScheduleKind.REMINDER,
-        timezone = timezone,
         at = WallTime(hour, minute),
         onceDate = date.toString(),
         repeat = dev.proflyder.home.core.model.RepeatKind.ONCE,

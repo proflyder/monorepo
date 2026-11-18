@@ -18,11 +18,10 @@ data class AlarmEditorDraft(
     val label: String = "",
     val hour: Int = defaultAlarmTime(LocalDateTime.now()).hour,
     val minute: Int = defaultAlarmTime(LocalDateTime.now()).minute,
-    val timezone: String = java.time.ZoneId.systemDefault().id,
     val repeat: RepeatKind = RepeatKind.ONCE,
     val weekdays: List<Int> = emptyList(),
     val enabled: Boolean = true,
-    val onceDate: LocalDate? = LocalDate.now(java.time.ZoneId.of(timezone)),
+    val onceDate: LocalDate? = LocalDate.now(),
 )
 
 /**
@@ -35,7 +34,6 @@ object AlarmEditorDraftCodec {
     private const val KEY_LABEL = "alarm_label"
     private const val KEY_HOUR = "alarm_hour"
     private const val KEY_MINUTE = "alarm_minute"
-    private const val KEY_TIMEZONE = "alarm_timezone"
     private const val KEY_REPEAT = "alarm_repeat"
     private const val KEY_WEEKDAYS = "alarm_weekdays"
     private const val KEY_ENABLED = "alarm_enabled"
@@ -47,7 +45,6 @@ object AlarmEditorDraftCodec {
         KEY_LABEL to draft.label,
         KEY_HOUR to draft.hour,
         KEY_MINUTE to draft.minute,
-        KEY_TIMEZONE to draft.timezone,
         KEY_REPEAT to draft.repeat.name,
         KEY_WEEKDAYS to ArrayList(draft.weekdays),
         KEY_ENABLED to draft.enabled,
@@ -60,8 +57,6 @@ object AlarmEditorDraftCodec {
         val hour = (values[KEY_HOUR] as? Number)?.toInt() ?: return null
         val minute = (values[KEY_MINUTE] as? Number)?.toInt() ?: return null
         if (hour !in 0..23 || minute !in 0..59) return null
-        val timezone = values[KEY_TIMEZONE] as? String ?: return null
-        if (timezone.isBlank()) return null
         val repeat = (values[KEY_REPEAT] as? String)
             ?.let { name -> RepeatKind.entries.firstOrNull { it.name == name } }
             ?: return null
@@ -77,7 +72,6 @@ object AlarmEditorDraftCodec {
             label = values[KEY_LABEL] as? String ?: "",
             hour = hour,
             minute = minute,
-            timezone = timezone,
             repeat = repeat,
             weekdays = weekdays,
             enabled = values[KEY_ENABLED] as? Boolean ?: true,

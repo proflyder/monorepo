@@ -11,15 +11,14 @@ use crate::domain::schedule::ScheduleKind;
 
 /// Canonical schedule request.
 ///
-/// The nine fields are the Go format arguments; grouping them would hide the
-/// exact layout that the persisted SHA-1 depends on.
+/// The fields are ordered deliberately: the layout is part of the persisted
+/// SHA-1 used for idempotency conflict detection.
 #[allow(clippy::too_many_arguments)]
 #[must_use]
 pub fn canonical_schedule(
     label: &str,
     kind: ScheduleKind,
-    timezone: &str,
-    once_date: &str,
+    once_unix: i64,
     at: WallTime,
     repeat: Repeat,
     weekdays: &[i32],
@@ -27,7 +26,7 @@ pub fn canonical_schedule(
     payload_json: &str,
 ) -> String {
     format!(
-        "schedule|{label}|{}|{timezone}|{once_date}|{}|{}|{}|{}|{}|{enabled}|{payload_json}",
+        "schedule|{label}|{}|{once_unix}|{}|{}|{}|{}|{}|{enabled}|{payload_json}",
         kind.code(),
         at.hour,
         at.minute,
@@ -76,8 +75,7 @@ mod tests {
         let canonical = canonical_schedule(
             "wake",
             ScheduleKind::Alarm,
-            "UTC",
-            "",
+            0,
             WallTime {
                 hour: 7,
                 minute: 30,
@@ -88,10 +86,10 @@ mod tests {
             true,
             "{}",
         );
-        assert_eq!(canonical, "schedule|wake|1|UTC||7|30|0|2||true|{}");
+        assert_eq!(canonical, "schedule|wake|1|0|7|30|0|2||true|{}");
         assert_eq!(
             sha1_hex(&canonical),
-            "b9add2e9dd506dd05051ebbc84f6754c847203f7"
+            "6977661e122ba3c4868097646f07cfa1ebab9dab"
         );
     }
 
@@ -100,8 +98,7 @@ mod tests {
         let canonical = canonical_schedule(
             "gym",
             ScheduleKind::Alarm,
-            "Asia/Almaty",
-            "",
+            0,
             WallTime {
                 hour: 6,
                 minute: 15,
@@ -114,7 +111,7 @@ mod tests {
         );
         assert_eq!(
             canonical,
-            "schedule|gym|1|Asia/Almaty||6|15|5|5|1,3,5|false|{\"source\":\"test\"}"
+            "schedule|gym|1|0|6|15|5|5|1,3,5|false|{\"source\":\"test\"}"
         );
     }
 }

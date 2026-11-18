@@ -2,7 +2,6 @@
   {
     "name": "daily",
     "rule": {
-      "timezone": "UTC",
       "hour": 7,
       "minute": 30,
       "second": 0,
@@ -14,12 +13,11 @@
   {
     "name": "once",
     "rule": {
-      "timezone": "UTC",
       "hour": 9,
       "minute": 0,
       "second": 0,
       "repeat": "REPEAT_KIND_ONCE",
-      "onceDate": "2026-01-05"
+      "onceUnix": 1767603600
     },
     "afterUnix": 1767268800,
     "expectedUnix": 1767603600
@@ -27,12 +25,11 @@
   {
     "name": "once exhausted",
     "rule": {
-      "timezone": "UTC",
       "hour": 9,
       "minute": 0,
       "second": 0,
       "repeat": "REPEAT_KIND_ONCE",
-      "onceDate": "2025-12-31"
+      "onceUnix": 1767171600
     },
     "afterUnix": 1767268800,
     "expectedUnix": null
@@ -40,7 +37,6 @@
   {
     "name": "weekdays from friday",
     "rule": {
-      "timezone": "UTC",
       "hour": 6,
       "minute": 15,
       "second": 0,
@@ -52,7 +48,6 @@
   {
     "name": "weekends from friday",
     "rule": {
-      "timezone": "UTC",
       "hour": 8,
       "minute": 0,
       "second": 0,
@@ -64,7 +59,6 @@
   {
     "name": "custom mon wed fri",
     "rule": {
-      "timezone": "UTC",
       "hour": 6,
       "minute": 15,
       "second": 0,
@@ -81,7 +75,6 @@
   {
     "name": "last second",
     "rule": {
-      "timezone": "UTC",
       "hour": 23,
       "minute": 59,
       "second": 59,

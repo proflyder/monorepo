@@ -6,6 +6,7 @@ import dev.proflyder.home.core.model.Schedule
 import dev.proflyder.home.core.time.DurationText
 import dev.proflyder.home.feature.control.HubCard
 import dev.proflyder.home.feature.control.HubFormat
+import java.time.ZoneId
 import dev.proflyder.home.feature.control.HubScheduleStrings
 import dev.proflyder.home.feature.control.impl.R
 
@@ -64,7 +65,7 @@ internal class HubCardTexts(private val context: Context) : HubScheduleStrings {
         )
         is HubCard.Reminder -> HubFormat.whenText(
             card.schedule.nextDueUnix,
-            HubFormat.zoneOf(card.schedule.timezone),
+            ZoneId.systemDefault(),
             nowUnix,
             this,
         )
@@ -74,7 +75,7 @@ internal class HubCardTexts(private val context: Context) : HubScheduleStrings {
         val due = if (card.ringing) card.schedule.activeOccurrenceUnix else card.schedule.nextDueUnix
         return HubFormat.whenText(
             due,
-            HubFormat.zoneOf(card.schedule.timezone),
+            ZoneId.systemDefault(),
             nowUnix,
             this,
         )

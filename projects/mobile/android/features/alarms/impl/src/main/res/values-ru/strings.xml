@@ -30,7 +30,6 @@
     <string name="alarms_repeat_once_summary">Однократный будильник</string>
     <string name="alarms_repeat_once_on">Однократно %1$s</string>
     <string name="alarms_repeat_unknown">Неподдерживаемый повтор</string>
-    <string name="alarms_timezone_default">Asia/Almaty</string>
     <string name="alarms_editor_title_new">Новый будильник</string>
     <string name="alarms_editor_title_edit">Изменить будильник</string>
     <string name="alarms_label_default">Будильник</string>
@@ -42,10 +41,10 @@
     <string name="alarms_quick_offset_90">+1,5 ч</string>
     <string name="alarms_quick_offset_120">+2 ч</string>
     <string name="alarms_editor_date">Дата (однократно)</string>
-    <string name="alarms_editor_timezone">Часовой пояс IANA</string>
     <string name="alarms_editor_repeat">Повтор</string>
     <string name="alarms_editor_days">Дни</string>
-    <string name="alarms_editor_save">Сохранить на сервере</string>
+    <string name="alarms_editor_name">Название</string>
+    <string name="alarms_editor_save">Сохранить</string>
     <string name="alarms_editor_delete">Удалить будильник</string>
     <string name="alarms_editor_hint">Домашний сервер хранит этот будильник и решает, когда его запускать. Телефон не планирует локальные будильники.</string>
     <string name="alarms_day_mon">Пн</string>

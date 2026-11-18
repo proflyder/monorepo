@@ -15,7 +15,6 @@ class AlarmEditorDraftCodecTest {
             label = "Wake",
             hour = 7,
             minute = 30,
-            timezone = "Asia/Almaty",
             repeat = RepeatKind.CUSTOM,
             weekdays = listOf(1, 3, 5),
             enabled = false,
@@ -57,7 +56,6 @@ class AlarmEditorDraftCodecTest {
             mapOf(
                 "alarm_hour" to 7,
                 "alarm_minute" to 0,
-                "alarm_timezone" to "UTC",
                 "alarm_repeat" to "CUSTOM",
                 "alarm_weekdays" to arrayListOf(0, 2, 9),
             ),

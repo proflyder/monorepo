@@ -18,8 +18,7 @@
           "enabled": true,
           "kind": "SCHEDULE_KIND_ALARM",
           "label": "wake",
-          "repeat": "REPEAT_KIND_DAILY",
-          "timezone": "UTC"
+          "repeat": "REPEAT_KIND_DAILY"
         }
       },
       "response": {
@@ -42,7 +41,6 @@
             "payloadJson": "{}",
             "repeat": "REPEAT_KIND_DAILY",
             "revision": "1",
-            "timezone": "UTC",
             "updatedUnix": "1767268800"
           }
         }
@@ -187,7 +185,6 @@
             "revision": "3",
             "snoozeCount": "1",
             "snoozeUntilUnix": "1767425400",
-            "timezone": "UTC",
             "updatedUnix": "1767339000"
           }
         }
@@ -372,7 +369,6 @@
             "repeat": "REPEAT_KIND_DAILY",
             "revision": "5",
             "snoozeCount": "1",
-            "timezone": "UTC",
             "updatedUnix": "1767425400"
           }
         }
