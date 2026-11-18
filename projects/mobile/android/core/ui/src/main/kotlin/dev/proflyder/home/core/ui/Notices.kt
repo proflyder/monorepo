@@ -16,9 +16,15 @@ enum class NoticeKind { Info, Error }
 /**
  * The single way the app shows transient feedback: a rounded tonal pill with a status icon,
  * floating above the view tagged [R.id.home_notice_anchor] so it never covers navigation.
+ * A sideways or downward swipe dismisses it; a tap never does.
  */
 object Notices {
-    fun show(view: View, message: CharSequence, kind: NoticeKind = NoticeKind.Info, long: Boolean = false) {
+    fun show(
+        view: View,
+        message: CharSequence,
+        kind: NoticeKind = NoticeKind.Info,
+        long: Boolean = false,
+    ): Snackbar {
         val context = view.context
         val snackbar = Snackbar.make(
             view,
@@ -48,7 +54,11 @@ object Notices {
         text.compoundDrawablePadding = (context.resources.displayMetrics.density * 12).toInt()
         view.rootView.findViewById<View>(R.id.home_notice_anchor)?.let { snackbar.anchorView = it }
         snackbar.animationMode = BaseTransientBottomBar.ANIMATION_MODE_SLIDE
+        // The activity root is not a CoordinatorLayout, so Material never
+        // installs a SwipeDismissBehavior: the notice must own the gesture.
+        NoticeSwipeDismiss(container, snackbar::dismiss).attach()
         snackbar.show()
+        return snackbar
     }
 
     private fun icon(kind: NoticeKind, accent: Int, view: View) = ContextCompat.getDrawable(
