@@ -40,6 +40,7 @@ use crate::tools::{Deps, ToolGroup};
 pub const MCP_REALM: &str = "mcp-gateway";
 /// The voice bearer realm.
 pub const VOICE_REALM: &str = "mcp-gateway-voice";
+pub const APP_REALM: &str = "home-app";
 
 const MAX_MCP_BODY: usize = 4 << 20;
 
@@ -51,6 +52,7 @@ pub struct Options {
     pub voice_token: Option<String>,
     /// Voice routes mounted behind the separate bearer; `None` keeps a stub.
     pub voice: Option<Router<ObserveState>>,
+    pub system: Option<(String, Arc<crate::system::Dashboard>)>,
     /// Enabled tool groups.
     pub groups: Vec<Arc<dyn ToolGroup>>,
     /// Shared tool dependencies.
@@ -114,6 +116,17 @@ pub fn router(options: Options) -> Router {
             require_bearer,
         ));
         app = app.merge(voice);
+    }
+
+    if let Some((token, dashboard)) = options.system {
+        let system = crate::system::router(dashboard).route_layer(middleware::from_fn_with_state(
+            Auth {
+                token,
+                realm: APP_REALM,
+            },
+            require_bearer,
+        ));
+        app = app.merge(system);
     }
 
     app.layer(middleware::from_fn_with_state(state.clone(), observe))
@@ -268,6 +281,10 @@ fn route_of(path: &str) -> &str {
         "/v1/voice/result" => "/v1/voice/result",
         "/v1/voice/updates" => "/v1/voice/updates",
         "/v1/voice/state" => "/v1/voice/state",
+        "/v1/system/summary" => "/v1/system/summary",
+        "/v1/system/hosts" => "/v1/system/hosts",
+        "/v1/system/k8s" => "/v1/system/k8s",
+        "/v1/system/devices" => "/v1/system/devices",
         "/healthz" => "/healthz",
         "/readyz" => "/readyz",
         "/metrics" => "/metrics",

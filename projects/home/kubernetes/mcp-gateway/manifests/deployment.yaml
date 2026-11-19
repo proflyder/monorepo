@@ -122,6 +122,8 @@ spec:
               value: http://phone-push.home-assistant.svc.cluster.local:8095
             - name: MCP_PUSH_TOKEN_FILE
               value: /run/secrets/mcp-gateway-scheduler/token
+            - name: MCP_APP_TOKEN_FILE
+              value: /run/secrets/mcp-gateway-scheduler/token
             - name: LOG_LEVEL
               value: info
           ports:

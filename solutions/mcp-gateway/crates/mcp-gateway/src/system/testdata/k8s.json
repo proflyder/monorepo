@@ -1,0 +1,400 @@
+{
+ "phase": {
+  "status": "success",
+  "data": {
+   "resultType": "vector",
+   "result": [
+    {
+     "metric": {
+      "namespace": "home-assistant",
+      "pod": "scheduler-7d9",
+      "phase": "Running"
+     },
+     "value": [
+      1795129665.4,
+      "1"
+     ]
+    },
+    {
+     "metric": {
+      "namespace": "home-assistant",
+      "pod": "mcp-gateway-5f",
+      "phase": "Running"
+     },
+     "value": [
+      1795129665.4,
+      "1"
+     ]
+    },
+    {
+     "metric": {
+      "namespace": "monitoring",
+      "pod": "loki-0",
+      "phase": "Running"
+     },
+     "value": [
+      1795129665.4,
+      "1"
+     ]
+    },
+    {
+     "metric": {
+      "namespace": "currency-bot",
+      "pod": "currency-bot-6c",
+      "phase": "Running"
+     },
+     "value": [
+      1795129665.4,
+      "1"
+     ]
+    },
+    {
+     "metric": {
+      "namespace": "flux-system",
+      "pod": "backup-29001",
+      "phase": "Succeeded"
+     },
+     "value": [
+      1795129665.4,
+      "1"
+     ]
+    }
+   ]
+  }
+ },
+ "containers": {
+  "status": "success",
+  "data": {
+   "resultType": "vector",
+   "result": [
+    {
+     "metric": {
+      "namespace": "home-assistant",
+      "pod": "scheduler-7d9"
+     },
+     "value": [
+      1795129665.4,
+      "1"
+     ]
+    },
+    {
+     "metric": {
+      "namespace": "home-assistant",
+      "pod": "mcp-gateway-5f"
+     },
+     "value": [
+      1795129665.4,
+      "1"
+     ]
+    },
+    {
+     "metric": {
+      "namespace": "monitoring",
+      "pod": "loki-0"
+     },
+     "value": [
+      1795129665.4,
+      "2"
+     ]
+    },
+    {
+     "metric": {
+      "namespace": "currency-bot",
+      "pod": "currency-bot-6c"
+     },
+     "value": [
+      1795129665.4,
+      "1"
+     ]
+    }
+   ]
+  }
+ },
+ "ready": {
+  "status": "success",
+  "data": {
+   "resultType": "vector",
+   "result": [
+    {
+     "metric": {
+      "namespace": "home-assistant",
+      "pod": "scheduler-7d9"
+     },
+     "value": [
+      1795129665.4,
+      "1"
+     ]
+    },
+    {
+     "metric": {
+      "namespace": "home-assistant",
+      "pod": "mcp-gateway-5f"
+     },
+     "value": [
+      1795129665.4,
+      "1"
+     ]
+    },
+    {
+     "metric": {
+      "namespace": "monitoring",
+      "pod": "loki-0"
+     },
+     "value": [
+      1795129665.4,
+      "2"
+     ]
+    },
+    {
+     "metric": {
+      "namespace": "currency-bot",
+      "pod": "currency-bot-6c"
+     },
+     "value": [
+      1795129665.4,
+      "0"
+     ]
+    }
+   ]
+  }
+ },
+ "restarts": {
+  "status": "success",
+  "data": {
+   "resultType": "vector",
+   "result": [
+    {
+     "metric": {
+      "namespace": "home-assistant",
+      "pod": "scheduler-7d9"
+     },
+     "value": [
+      1795129665.4,
+      "0"
+     ]
+    },
+    {
+     "metric": {
+      "namespace": "home-assistant",
+      "pod": "mcp-gateway-5f"
+     },
+     "value": [
+      1795129665.4,
+      "2"
+     ]
+    },
+    {
+     "metric": {
+      "namespace": "monitoring",
+      "pod": "loki-0"
+     },
+     "value": [
+      1795129665.4,
+      "16"
+     ]
+    },
+    {
+     "metric": {
+      "namespace": "currency-bot",
+      "pod": "currency-bot-6c"
+     },
+     "value": [
+      1795129665.4,
+      "9"
+     ]
+    }
+   ]
+  }
+ },
+ "recent_restarts": {
+  "status": "success",
+  "data": {
+   "resultType": "vector",
+   "result": [
+    {
+     "metric": {
+      "namespace": "home-assistant",
+      "pod": "scheduler-7d9"
+     },
+     "value": [
+      1795129665.4,
+      "0"
+     ]
+    },
+    {
+     "metric": {
+      "namespace": "home-assistant",
+      "pod": "mcp-gateway-5f"
+     },
+     "value": [
+      1795129665.4,
+      "0"
+     ]
+    },
+    {
+     "metric": {
+      "namespace": "monitoring",
+      "pod": "loki-0"
+     },
+     "value": [
+      1795129665.4,
+      "0"
+     ]
+    },
+    {
+     "metric": {
+      "namespace": "currency-bot",
+      "pod": "currency-bot-6c"
+     },
+     "value": [
+      1795129665.4,
+      "3"
+     ]
+    }
+   ]
+  }
+ },
+ "waiting": {
+  "status": "success",
+  "data": {
+   "resultType": "vector",
+   "result": [
+    {
+     "metric": {
+      "namespace": "currency-bot",
+      "pod": "currency-bot-6c",
+      "reason": "CrashLoopBackOff"
+     },
+     "value": [
+      1795129665.4,
+      "1"
+     ]
+    }
+   ]
+  }
+ },
+ "cpu": {
+  "status": "success",
+  "data": {
+   "resultType": "vector",
+   "result": [
+    {
+     "metric": {
+      "namespace": "home-assistant",
+      "pod": "scheduler-7d9"
+     },
+     "value": [
+      1795129665.4,
+      "0.004"
+     ]
+    },
+    {
+     "metric": {
+      "namespace": "home-assistant",
+      "pod": "mcp-gateway-5f"
+     },
+     "value": [
+      1795129665.4,
+      "0.002"
+     ]
+    },
+    {
+     "metric": {
+      "namespace": "monitoring",
+      "pod": "loki-0"
+     },
+     "value": [
+      1795129665.4,
+      "0.05"
+     ]
+    }
+   ]
+  }
+ },
+ "mem": {
+  "status": "success",
+  "data": {
+   "resultType": "vector",
+   "result": [
+    {
+     "metric": {
+      "namespace": "home-assistant",
+      "pod": "scheduler-7d9"
+     },
+     "value": [
+      1795129665.4,
+      "21000000.0"
+     ]
+    },
+    {
+     "metric": {
+      "namespace": "home-assistant",
+      "pod": "mcp-gateway-5f"
+     },
+     "value": [
+      1795129665.4,
+      "30000000.0"
+     ]
+    },
+    {
+     "metric": {
+      "namespace": "monitoring",
+      "pod": "loki-0"
+     },
+     "value": [
+      1795129665.4,
+      "180000000.0"
+     ]
+    }
+   ]
+  }
+ },
+ "age": {
+  "status": "success",
+  "data": {
+   "resultType": "vector",
+   "result": [
+    {
+     "metric": {
+      "namespace": "home-assistant",
+      "pod": "scheduler-7d9"
+     },
+     "value": [
+      1795129665.4,
+      "86400"
+     ]
+    },
+    {
+     "metric": {
+      "namespace": "home-assistant",
+      "pod": "mcp-gateway-5f"
+     },
+     "value": [
+      1795129665.4,
+      "3600"
+     ]
+    },
+    {
+     "metric": {
+      "namespace": "monitoring",
+      "pod": "loki-0"
+     },
+     "value": [
+      1795129665.4,
+      "1987200"
+     ]
+    },
+    {
+     "metric": {
+      "namespace": "currency-bot",
+      "pod": "currency-bot-6c"
+     },
+     "value": [
+      1795129665.4,
+      "600"
+     ]
+    }
+   ]
+  }
+ }
+}

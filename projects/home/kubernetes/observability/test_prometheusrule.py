@@ -124,7 +124,15 @@ class BackupRuleTests(unittest.TestCase):
             config["job_name"]: config
             for config in values["prometheus"]["prometheusSpec"]["additionalScrapeConfigs"]
         }
-        self.assertEqual(set(configs), {"pve-node", "station"})
+        self.assertEqual(set(configs), {"pve-node", "pve-guests", "station"})
+        self.assertEqual(
+            configs["pve-guests"]["static_configs"][0]["targets"], ["${PVE_NODE_TARGET}"]
+        )
+        self.assertEqual(configs["pve-guests"]["metrics_path"], "/pve")
+        self.assertEqual(
+            configs["pve-guests"]["relabel_configs"][1]["replacement"],
+            "pve-exporter.monitoring.svc:9221",
+        )
         # The real host:port stays out of Git.
         self.assertEqual(
             configs["pve-node"]["static_configs"][0]["targets"], ["${PVE_NODE_TARGET}"]

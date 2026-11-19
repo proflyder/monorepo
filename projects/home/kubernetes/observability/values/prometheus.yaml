@@ -108,6 +108,24 @@ prometheus:
             labels:
               instance: station
               role: speaker
+      - job_name: pve-guests
+        scrape_interval: 30s
+        scrape_timeout: 20s
+        metrics_path: /pve
+        params:
+          module: [default]
+          cluster: ["1"]
+          node: ["1"]
+        static_configs:
+          - targets: ["${PVE_NODE_TARGET}"]
+        relabel_configs:
+          - source_labels: [__address__]
+            regex: '(.+):\d+'
+            target_label: __param_target
+          - target_label: __address__
+            replacement: pve-exporter.monitoring.svc:9221
+          - target_label: instance
+            replacement: pve
 prometheusOperator:
   resources:
     requests: {cpu: 50m, memory: 128Mi}

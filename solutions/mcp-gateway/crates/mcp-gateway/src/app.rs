@@ -219,10 +219,22 @@ pub async fn run() -> anyhow::Result<()> {
         .map_err(anyhow::Error::msg)
         .context("select tool groups")?;
 
+    let system = (!config.app_token.is_empty()).then(|| {
+        (
+            config.app_token.clone(),
+            Arc::new(crate::system::Dashboard::new(crate::system::Sources {
+                prom: deps.prom.clone(),
+                alerts: deps.alerts.clone(),
+                push: deps.push.clone(),
+            })),
+        )
+    });
+
     let router = server::router(server::Options {
         auth_token: config.auth_token.clone(),
         voice_token: (!config.voice_token.is_empty()).then(|| config.voice_token.clone()),
         voice,
+        system,
         groups,
         deps: Arc::clone(&deps),
         metrics: Arc::clone(&metrics),

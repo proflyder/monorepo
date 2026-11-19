@@ -1206,6 +1206,7 @@ fn tools_router(scenario: &str, worlds: &Worlds) -> Router {
         .filter(|group| names.iter().any(|name| name == group.name()))
         .collect();
     server::router(server::Options {
+        system: None,
         auth_token: "mcp-contract-token".to_owned(),
         voice_token: Some("voice-contract-token".to_owned()),
         voice: None,
@@ -1256,6 +1257,7 @@ fn server_router(_scenario: &str, _worlds: &Worlds) -> Router {
     });
     let groups: Vec<Arc<dyn ToolGroup>> = vec![Arc::new(ReadGroup::new(deps.clone()))];
     server::router(server::Options {
+        system: None,
         auth_token: "mcp-contract-token".to_owned(),
         voice_token: Some("voice-contract-token".to_owned()),
         voice: None,

@@ -1,0 +1,122 @@
+{
+ "up": {
+  "status": "success",
+  "data": {
+   "resultType": "vector",
+   "result": [
+    {
+     "metric": {},
+     "value": [
+      1795129665.4,
+      "1"
+     ]
+    }
+   ]
+  }
+ },
+ "cpu": {
+  "status": "success",
+  "data": {
+   "resultType": "vector",
+   "result": [
+    {
+     "metric": {},
+     "value": [
+      1795129665.4,
+      "0.234"
+     ]
+    }
+   ]
+  }
+ },
+ "mem_total": {
+  "status": "success",
+  "data": {
+   "resultType": "vector",
+   "result": [
+    {
+     "metric": {},
+     "value": [
+      1795129665.4,
+      "16000000000.0"
+     ]
+    }
+   ]
+  }
+ },
+ "mem_available": {
+  "status": "success",
+  "data": {
+   "resultType": "vector",
+   "result": [
+    {
+     "metric": {},
+     "value": [
+      1795129665.4,
+      "6000000000.0"
+     ]
+    }
+   ]
+  }
+ },
+ "disk_total": {
+  "status": "success",
+  "data": {
+   "resultType": "vector",
+   "result": [
+    {
+     "metric": {},
+     "value": [
+      1795129665.4,
+      "100000000000.0"
+     ]
+    }
+   ]
+  }
+ },
+ "disk_available": {
+  "status": "success",
+  "data": {
+   "resultType": "vector",
+   "result": [
+    {
+     "metric": {},
+     "value": [
+      1795129665.4,
+      "40000000000.0"
+     ]
+    }
+   ]
+  }
+ },
+ "temp": {
+  "status": "success",
+  "data": {
+   "resultType": "vector",
+   "result": [
+    {
+     "metric": {},
+     "value": [
+      1795129665.4,
+      "61"
+     ]
+    }
+   ]
+  }
+ },
+ "uptime": {
+  "status": "success",
+  "data": {
+   "resultType": "vector",
+   "result": [
+    {
+     "metric": {},
+     "value": [
+      1795129665.4,
+      "1491534"
+     ]
+    }
+   ]
+  }
+ }
+}
