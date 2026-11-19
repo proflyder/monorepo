@@ -1,0 +1,65 @@
+load("@rules_kotlin//kotlin:android.bzl", "kt_android_local_test")
+load("//platform/android:defs.bzl", "metro_android_library")
+load(":robolectric_android_all.bzl", "android_all_dir")
+
+package(default_visibility = ["//visibility:public"])
+
+# App themes as code: the registry (AppTheme), palette data for every Material 3
+# colour role, the ThemeOverlay resources built from it, Material You, and the
+# DataStore-backed choice applied to every activity before its first frame.
+metro_android_library(
+    name = "theme",
+    srcs = glob(["src/main/kotlin/**/*.kt"]),
+    custom_package = "dev.proflyder.home.core.theme",
+    manifest = "src/main/AndroidManifest.xml",
+    resource_files = glob(["src/main/res/**"]),
+    deps = [
+        "@maven//:androidx_annotation_annotation_jvm",
+        "@maven//:androidx_appcompat_appcompat",
+        "@maven//:androidx_datastore_datastore_preferences",
+        "@maven//:com_google_android_material_material",
+        "@maven//:dev_zacsweers_metro_runtime_jvm",
+        "@maven//:org_jetbrains_kotlinx_kotlinx_coroutines_android",
+    ],
+)
+
+# Robolectric resolves SDK 35 to this pinned preinstrumented jar.
+android_all_dir(
+    name = "robolectric_android_all_sdk35",
+    jar = "@maven//:org_robolectric_android_all_instrumented",
+    jar_name = "android-all-instrumented-15-robolectric-13954326-i7.jar",
+)
+
+# Registry contract: every theme defines every role in both brightnesses, the
+# text pairs meet WCAG AA, and each ThemeOverlay resolves to exactly the
+# palette data (light and night).
+kt_android_local_test(
+    name = "theme_test",
+    srcs = glob(["src/test/kotlin/**/*.kt"]),
+    associates = [":theme"],
+    custom_package = "dev.proflyder.home.core.theme",
+    data = [
+        "robolectric-deps.properties",
+        ":robolectric_android_all_sdk35",
+    ],
+    jvm_flags = [
+        "-Drobolectric.offline=true",
+        "--add-opens=java.base/java.lang=ALL-UNNAMED",
+        "--add-opens=java.base/java.io=ALL-UNNAMED",
+        "--add-opens=java.base/java.net=ALL-UNNAMED",
+        "--add-opens=java.base/java.security=ALL-UNNAMED",
+        "--add-opens=java.base/java.text=ALL-UNNAMED",
+        "--add-opens=java.base/java.util=ALL-UNNAMED",
+        "--add-opens=java.base/java.util.concurrent=ALL-UNNAMED",
+        "--add-opens=java.base/jdk.internal.util=ALL-UNNAMED",
+    ],
+    manifest = "src/test/AndroidManifest.xml",
+    robolectric_properties_file = "robolectric-deps.properties",
+    test_class = "dev.proflyder.home.core.theme.ThemeTestSuite",
+    deps = [
+        "@maven//:androidx_appcompat_appcompat",
+        "@maven//:com_google_android_material_material",
+        "@maven//:junit_junit",
+        "@maven//:org_robolectric_robolectric",
+    ],
+)

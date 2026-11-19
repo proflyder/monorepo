@@ -17,4 +17,11 @@
     <string name="history_empty_hint">Notifications from Ricardo and find-phone requests this phone receives will appear here.</string>
     <string name="history_type_notify">Notification</string>
     <string name="history_type_find">Find phone request</string>
+    <string name="settings_appearance_title">Appearance</string>
+    <string name="settings_appearance_subtitle">Theme and light or dark mode</string>
+    <string name="settings_appearance_mode">Mode</string>
+    <string name="settings_appearance_themes">Theme</string>
+    <string name="settings_appearance_mode_system">System</string>
+    <string name="settings_appearance_mode_light">Light</string>
+    <string name="settings_appearance_mode_dark">Dark</string>
 </resources>

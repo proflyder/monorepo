@@ -32,7 +32,8 @@ Current device acceptance and remaining work are tracked in
   - **Phone notifications and find** → the push permission and registration
     screen ([Push and find phone](#push-and-find-phone));
   - **Notification history** → the local log of received messages
-    ([Notification history](#notification-history)).
+    ([Notification history](#notification-history));
+  - **Appearance** → theme and light/dark mode ([Themes](#themes)).
 - Call: the phone icon in the top app bar and the pinned **Call the station**
   tile in Home's Quick actions place a real audio call to the station through the
   intercom signaling service and Android Telecom. See
@@ -898,3 +899,39 @@ catalog reads use `GET /v1/catalog`.
   HyperOS.
 - `EnqueueTask` is one-shot; recurring generic tasks and event-trigger rules are
   not implemented.
+
+## Themes
+
+Themes are code in `core/theme`:
+
+- `AppTheme` is the registry: key, title/summary, `ThemeOverlay.Home.*` style
+  and a `ThemePalette` (a `ColorScheme` with every Material 3 role for light
+  and dark; no defaults, so a missing role does not compile). Bundled:
+  **Current** (the original emerald palette, unchanged), **System (Material
+  You)** and **Neon** (near-black violet night, neon violet primary, electric
+  cyan secondary, magenta tertiary, primary-coloured FAB glow on Android 9+).
+- Applying: the View system takes colours from theme attributes, so each
+  theme is a static `ThemeOverlay` applied with `Theme.applyStyle` in
+  `onActivityPreCreated` (`onActivityCreated` below Android 10), before any
+  view is inflated. Material You applies the Current overlay and then
+  `DynamicColors.applyToActivityIfAvailable` in the same callback, so the
+  wallpaper colours win on Android 12+ and older systems keep Current. A
+  content-based `DynamicColorsOptions` seed was rejected: it regenerates the
+  palette and cannot keep exact colours.
+- The choice (`appearance_theme`, `appearance_mode`) lives in the app
+  DataStore. `HomeApplication` reads it once before the first activity and sets
+  `AppCompatDelegate` night mode, so the first frame is already themed. A theme
+  change recreates the activity; a mode change is applied by AppCompat.
+- Adding a theme: one `AppTheme` entry, its palette in `Palettes`, the
+  `@color/theme_<key>_*` resources (values + values-night) and the overlay.
+  Screens and the Appearance list need no changes.
+- Screens use only theme attributes (`?attr/colorPrimary`,
+  `MaterialColors.getColor`). `platform/quality/test_static.py`
+  (`AndroidThemeColorTests`) rejects literal or palette colours in layouts,
+  drawables, colour selectors and styles, and `Color.parseColor`/`rgb` in
+  Kotlin. Push notifications use the chosen theme's primary as accent.
+- Tests: `//projects/mobile/android/core/theme:theme_test` (every role opaque,
+  WCAG AA for on-X/X pairs and text on surfaces, overlays resolve to exactly
+  the palette data in light and night); `//projects/mobile/android/app:theme_screenshot_test`
+  writes `theme-<key>-{home,time,appearance}-dark.png` and requires the
+  theme's surface to fill the frame.

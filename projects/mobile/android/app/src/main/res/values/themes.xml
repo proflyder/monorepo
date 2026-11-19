@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- Base theme = the "Current" palette. The chosen AppTheme overlay
+         (core/theme) is applied on top before the first frame. -->
     <style name="Theme.Home" parent="Theme.Material3.DayNight.NoActionBar">
         <item name="colorPrimary">@color/home_primary</item>
         <item name="colorOnPrimary">@color/home_on_primary</item>
@@ -31,8 +33,8 @@
         <item name="shapeAppearanceMediumComponent">@style/ShapeAppearance.Home.Medium</item>
         <item name="shapeAppearanceLargeComponent">@style/ShapeAppearance.Home.Large</item>
 
-        <item name="android:statusBarColor">@color/home_surface</item>
-        <item name="android:navigationBarColor">@color/home_surface_container</item>
+        <item name="android:statusBarColor">?attr/colorSurface</item>
+        <item name="android:navigationBarColor">?attr/colorSurfaceContainer</item>
         <item name="android:windowLightStatusBar">@bool/home_light_bars</item>
         <!-- Ignored below API 27; the status bar equivalent has a lower API. -->
         <item name="android:windowLightNavigationBar" tools:targetApi="27">@bool/home_light_bars</item>

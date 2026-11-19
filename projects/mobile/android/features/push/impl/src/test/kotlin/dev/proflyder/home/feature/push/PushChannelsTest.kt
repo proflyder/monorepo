@@ -4,6 +4,10 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import androidx.core.app.NotificationManagerCompat
+import androidx.datastore.preferences.core.PreferenceDataStoreFactory
+import dev.proflyder.home.core.theme.AppTheme
+import dev.proflyder.home.core.theme.AppearanceController
+import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -77,13 +81,19 @@ class PushChannelsTest {
         val context = RuntimeEnvironment.getApplication()
         PushChannels.ensure(context)
 
-        val notification = PushNotifier(context).ring("Рикардо")
+        val notification = PushNotifier(context, appearance(context)).ring("Рикардо")
 
         assertEquals(PushChannels.FIND, notification.channelId)
         assertNull(notification.sound)
         assertNull(notification.vibrate)
         assertTrue(notification.flags and Notification.FLAG_ONLY_ALERT_ONCE != 0)
+        // The accent follows the chosen theme instead of a fixed colour.
+        assertEquals(AppTheme.CURRENT.palette.light.primary, notification.color)
     }
+
+    private fun appearance(context: android.content.Context) = AppearanceController(
+        PreferenceDataStoreFactory.create { File(context.filesDir, "push-appearance.preferences_pb") },
+    )
 
     private fun manager(context: android.content.Context): NotificationManager =
         context.getSystemService(NotificationManager::class.java)

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Neon glow: the FAB elevation shadow is tinted with the primary neon. The
+     shadow only colours the halo, so the button and its label keep their
+     contrast. -->
+<resources>
+    <style name="Widget.Home.Neon.FloatingActionButton" parent="Widget.Material3.FloatingActionButton.Primary">
+        <item name="android:outlineAmbientShadowColor">?attr/colorPrimary</item>
+        <item name="android:outlineSpotShadowColor">?attr/colorPrimary</item>
+        <item name="elevation">@dimen/theme_neon_glow_elevation</item>
+    </style>
+
+    <style name="Widget.Home.Neon.ExtendedFloatingActionButton" parent="Widget.Material3.ExtendedFloatingActionButton.Icon.Primary">
+        <item name="android:outlineAmbientShadowColor">?attr/colorPrimary</item>
+        <item name="android:outlineSpotShadowColor">?attr/colorPrimary</item>
+        <item name="elevation">@dimen/theme_neon_glow_elevation</item>
+    </style>
+</resources>

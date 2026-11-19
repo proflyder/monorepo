@@ -751,6 +751,11 @@
   таймауты — Firebase Remote Config (`home_connection`), фильтр Home и
   зашифрованные токены — Jetpack DataStore с миграцией из SharedPreferences;
   idempotency keys, redirects выключены.
+  Темы — код в `core/theme` (реестр `AppTheme` + палитры всех ролей M3 +
+  `ThemeOverlay`): «Текущая» (исходная изумрудная), «Системная (Material
+  You)» (Android 12+, иначе «Текущая») и «Неон»; Настройки → «Оформление»
+  выбирают тему и режим Системный/Светлый/Тёмный, выбор в DataStore,
+  применяется до первого кадра.
   Звонок на колонку — `features/call` + `home.v1.IntercomService`:
   server-streaming `Watch` по Connect/HTTP/1.1, аудио-only libwebrtc
   (`io.getstream:stream-webrtc-android` 1.3.10, Opus), self-managed Telecom

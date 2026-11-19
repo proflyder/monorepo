@@ -4,6 +4,7 @@ import androidx.fragment.app.Fragment
 import dev.proflyder.home.core.navigation.Destination
 import dev.proflyder.home.core.navigation.FeatureEntry
 import dev.proflyder.home.feature.settings.impl.R
+import dev.proflyder.home.feature.settings.presentation.AppearanceFragment
 import dev.proflyder.home.feature.settings.presentation.NotificationHistoryFragment
 import dev.proflyder.home.feature.settings.presentation.SettingsFragment
 import dev.zacsweers.metro.AppScope
@@ -20,6 +21,12 @@ object SettingsDestination : Destination {
 object NotificationHistoryDestination : Destination {
     override val featureId: String = "settings"
     override val route: String = "settings/history"
+}
+
+/** Theme and light/dark mode, opened from the settings list. */
+object AppearanceDestination : Destination {
+    override val featureId: String = "settings"
+    override val route: String = "settings/appearance"
 }
 
 /**
@@ -39,14 +46,18 @@ class SettingsFeatureEntry : FeatureEntry {
 
     override fun titleRes(destination: Destination): Int = when (destination) {
         NotificationHistoryDestination -> R.string.settings_history_title
+        AppearanceDestination -> R.string.settings_appearance_title
         else -> titleRes
     }
 
     override fun supports(destination: Destination): Boolean =
-        destination is SettingsDestination || destination is NotificationHistoryDestination
+        destination is SettingsDestination ||
+            destination is NotificationHistoryDestination ||
+            destination is AppearanceDestination
 
     override fun createFragment(destination: Destination): Fragment = when (destination) {
         NotificationHistoryDestination -> NotificationHistoryFragment()
+        AppearanceDestination -> AppearanceFragment()
         else -> SettingsFragment()
     }
 }

@@ -1,0 +1,133 @@
+package dev.proflyder.home.core.theme
+
+/**
+ * Palette data of the bundled themes. Each value must equal the matching
+ * `@color/` resource its overlay applies; `ThemeOverlayConsistencyTest`
+ * resolves every overlay and compares it with these schemes.
+ */
+internal object Palettes {
+    /**
+     * "Evening emerald", the app's original palette, kept exactly. The error
+     * container roles were never overridden, so they mirror the Material 3
+     * baseline the app has always shown.
+     */
+    val current = ThemePalette(
+        light = ColorScheme(
+            primary = rgb(0x0E7C66),
+            onPrimary = rgb(0xFFFFFF),
+            primaryContainer = rgb(0xBDF2E0),
+            onPrimaryContainer = rgb(0x00201A),
+            secondary = rgb(0x4A635B),
+            onSecondary = rgb(0xFFFFFF),
+            secondaryContainer = rgb(0xCCE8DE),
+            onSecondaryContainer = rgb(0x05201A),
+            tertiary = rgb(0x8A5100),
+            onTertiary = rgb(0xFFFFFF),
+            tertiaryContainer = rgb(0xFFDDB6),
+            onTertiaryContainer = rgb(0x2C1600),
+            error = rgb(0xBA1A1A),
+            onError = rgb(0xFFFFFF),
+            errorContainer = rgb(0xF9DEDC),
+            onErrorContainer = rgb(0x8C1D18),
+            surface = rgb(0xF5FBF7),
+            onSurface = rgb(0x171D1A),
+            onSurfaceVariant = rgb(0x3F4945),
+            surfaceContainerLow = rgb(0xEFF5F1),
+            surfaceContainer = rgb(0xE9F0EC),
+            surfaceContainerHigh = rgb(0xE3EAE6),
+            surfaceContainerHighest = rgb(0xDDE4E0),
+            outline = rgb(0x6F7975),
+            outlineVariant = rgb(0xBFC9C4),
+        ),
+        dark = ColorScheme(
+            primary = rgb(0x6FDBC0),
+            onPrimary = rgb(0x00382E),
+            primaryContainer = rgb(0x005144),
+            onPrimaryContainer = rgb(0x8CF8DC),
+            secondary = rgb(0xB1CCC1),
+            onSecondary = rgb(0x1C352D),
+            secondaryContainer = rgb(0x334B43),
+            onSecondaryContainer = rgb(0xCCE8DE),
+            tertiary = rgb(0xFFB866),
+            onTertiary = rgb(0x4A2800),
+            tertiaryContainer = rgb(0x6A3C00),
+            onTertiaryContainer = rgb(0xFFDDB6),
+            error = rgb(0xFFB4AB),
+            onError = rgb(0x601410),
+            errorContainer = rgb(0x8C1D18),
+            onErrorContainer = rgb(0xF9DEDC),
+            surface = rgb(0x0E1512),
+            onSurface = rgb(0xDEE4E0),
+            onSurfaceVariant = rgb(0xBFC9C4),
+            surfaceContainerLow = rgb(0x161D1A),
+            surfaceContainer = rgb(0x1A211E),
+            surfaceContainerHigh = rgb(0x252B28),
+            surfaceContainerHighest = rgb(0x2F3633),
+            outline = rgb(0x89938E),
+            outlineVariant = rgb(0x3F4945),
+        ),
+    )
+
+    /**
+     * Cyberpunk night city: near-black blue-violet surfaces, neon violet
+     * primary, electric cyan secondary and hot magenta tertiary. The bright
+     * accents carry dark "on" colours so labels stay readable (WCAG AA).
+     * The light variant keeps the hues as deep inks on a lavender paper.
+     */
+    val neon = ThemePalette(
+        light = ColorScheme(
+            primary = rgb(0x8A00D4),
+            onPrimary = rgb(0xFFFFFF),
+            primaryContainer = rgb(0xF1DBFF),
+            onPrimaryContainer = rgb(0x2E004E),
+            secondary = rgb(0x006874),
+            onSecondary = rgb(0xFFFFFF),
+            secondaryContainer = rgb(0x9EF0FF),
+            onSecondaryContainer = rgb(0x001F24),
+            tertiary = rgb(0xB0005E),
+            onTertiary = rgb(0xFFFFFF),
+            tertiaryContainer = rgb(0xFFD9E4),
+            onTertiaryContainer = rgb(0x3E001D),
+            error = rgb(0xBA1A1A),
+            onError = rgb(0xFFFFFF),
+            errorContainer = rgb(0xFFDAD6),
+            onErrorContainer = rgb(0x410002),
+            surface = rgb(0xF8F5FF),
+            onSurface = rgb(0x1A1530),
+            onSurfaceVariant = rgb(0x4A4366),
+            surfaceContainerLow = rgb(0xF1ECFC),
+            surfaceContainer = rgb(0xEAE4F8),
+            surfaceContainerHigh = rgb(0xE3DCF3),
+            surfaceContainerHighest = rgb(0xDCD4EE),
+            outline = rgb(0x7A7296),
+            outlineVariant = rgb(0xCBC3E0),
+        ),
+        dark = ColorScheme(
+            primary = rgb(0xBF4DFF),
+            onPrimary = rgb(0x1A0033),
+            primaryContainer = rgb(0x3B0A63),
+            onPrimaryContainer = rgb(0xF0D6FF),
+            secondary = rgb(0x00E5FF),
+            onSecondary = rgb(0x00363D),
+            secondaryContainer = rgb(0x003F47),
+            onSecondaryContainer = rgb(0xA6F5FF),
+            tertiary = rgb(0xFF2E97),
+            onTertiary = rgb(0x3D0021),
+            tertiaryContainer = rgb(0x5C0035),
+            onTertiaryContainer = rgb(0xFFD9E8),
+            error = rgb(0xFFB4AB),
+            onError = rgb(0x690005),
+            errorContainer = rgb(0x93000A),
+            onErrorContainer = rgb(0xFFDAD6),
+            surface = rgb(0x0B0A1A),
+            onSurface = rgb(0xEDE7FF),
+            onSurfaceVariant = rgb(0xC4BCDB),
+            surfaceContainerLow = rgb(0x13112A),
+            surfaceContainer = rgb(0x1A1735),
+            surfaceContainerHigh = rgb(0x231F42),
+            surfaceContainerHighest = rgb(0x2D2850),
+            outline = rgb(0x8E86B0),
+            outlineVariant = rgb(0x3F3A5E),
+        ),
+    )
+}

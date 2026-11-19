@@ -139,3 +139,57 @@ class AndroidManifestPermissionTests(unittest.TestCase):
             for permission in self.PATTERN.findall(manifest.read_text(encoding="utf-8")):
                 with self.subTest(manifest=str(manifest.relative_to(ROOT)), permission=permission):
                     self.assertIn(permission, declared)
+
+
+class AndroidThemeColorTests(unittest.TestCase):
+    """Screens read colour roles from the theme (?attr/colorPrimary, ...), so
+    every AppTheme renders them. A literal colour or a palette @color/ in a
+    layout, drawable, colour selector or style bypasses the theme registry.
+
+    Allowed: palette files of core/theme and the launcher icon; vector
+    `fillColor`/`strokeColor` of icons (always tinted); ripple masks
+    (alpha-only); transparent; the speed-dial scrim and its label, which are
+    deliberately the same dark veil in every theme.
+    """
+
+    ANDROID = ROOT / "projects/mobile/android"
+    COLOR = __import__("re").compile(r'"(#[0-9A-Fa-f]{3,8}|@color/[a-z0-9_]+|@android:color/(?!transparent)[a-z_]+)"')
+    ALLOWED_REFS = {"@color/ui_pill_text", "@color/alarms_day_toggle_text", "@color/alarms_day_toggle_background",
+                    "@color/alarms_day_toggle_stroke", "@color/alarms_delete_ripple",
+                    "@color/control_scrim", "@color/control_speed_dial_label",
+                    "@color/home_launcher_bg", "@color/home_launcher_fg"}
+
+    def _problems(self, path: Path) -> list[str]:
+        text = path.read_text(encoding="utf-8")
+        is_vector = "<vector" in text
+        problems = []
+        for number, line in enumerate(text.splitlines(), 1):
+            for value in self.COLOR.findall(line):
+                if value in self.ALLOWED_REFS:
+                    continue
+                if is_vector and ("fillColor" in line or "strokeColor" in line):
+                    continue
+                if "@android:id/mask" in text and value == "@android:color/white":
+                    continue
+                if path.name == "control_bg_swatch.xml":
+                    continue  # tinted at runtime with the bulb colour
+                problems.append(f"{path.relative_to(ROOT)}:{number}: {value}")
+        return problems
+
+    def test_layouts_drawables_and_styles_use_theme_attributes(self) -> None:
+        files = []
+        for pattern in ("**/src/main/res/layout*/*.xml", "**/src/main/res/drawable*/*.xml",
+                        "**/src/main/res/color*/*.xml", "**/src/main/res/values*/styles.xml"):
+            files.extend(self.ANDROID.glob(pattern))
+        self.assertGreater(len(files), 50)
+        problems = [p for f in sorted(set(files)) for p in self._problems(f)]
+        self.assertEqual(problems, [], "hard-coded colours outside the theme palette:\n" + "\n".join(problems))
+
+    def test_kotlin_does_not_parse_or_build_colours(self) -> None:
+        pattern = __import__("re").compile(r"Color\.(parseColor|rgb|argb)\(|0xFF[0-9A-Fa-f]{6}")
+        problems = []
+        for path in sorted(self.ANDROID.glob("**/src/main/kotlin/**/*.kt")):
+            for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+                if pattern.search(line):
+                    problems.append(f"{path.relative_to(ROOT)}:{number}")
+        self.assertEqual(problems, [], "\n".join(problems))

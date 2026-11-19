@@ -3,12 +3,13 @@ package dev.proflyder.home.feature.settings.presentation
 import android.os.Bundle
 import dev.proflyder.home.core.navigation.requireNavigator
 import dev.proflyder.home.core.ui.BaseFragment
+import dev.proflyder.home.feature.settings.AppearanceDestination
 import dev.proflyder.home.feature.settings.NotificationHistoryDestination
 import dev.proflyder.home.feature.settings.impl.databinding.FragmentSettingsBinding
 
 /**
- * One settings list: server connection, phone notifications and the notification
- * history. The first two rows open the existing feature screens as overlays;
+ * One settings list: server connection, phone notifications, the notification
+ * history and the app appearance. The first two rows open the existing feature screens as overlays;
  * the history is a screen of this feature.
  *
  * Rows are feature ids, not destination objects, so this aggregator does not
@@ -19,6 +20,7 @@ class SettingsFragment : BaseFragment<FragmentSettingsBinding>(FragmentSettingsB
         binding.settingsConnection.setOnClickListener { openFeature(CONNECTION_FEATURE) }
         binding.settingsNotifications.setOnClickListener { openFeature(PUSH_FEATURE) }
         binding.settingsHistory.setOnClickListener { requireNavigator().navigate(NotificationHistoryDestination) }
+        binding.settingsAppearance.setOnClickListener { requireNavigator().navigate(AppearanceDestination) }
     }
 
     private fun openFeature(featureId: String) = requireNavigator().selectTab(featureId)
