@@ -183,11 +183,12 @@ jobs:
       # what the binary prints (the station updater compares the two).
       version: ${{ steps.promote.outputs.version || steps.version.outputs.version }}
     steps:
-      # Full history only matters for the PR-head fallback; the computed version
-      # needs the first-parent commit count on every path.
+      # Full history on both paths: the PR-head fallback needs it, and so does
+      # the computed version (the first-parent commit count of the unit's paths;
+      # a shallow clone has no parent and the step fails instead of guessing).
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: ${{ inputs.promote && '0' || '1' }}
+          fetch-depth: 0
 
       # Deterministic and monotone: VERSION holds only major.minor and the
       # patch is the number of commits touching the unit (see

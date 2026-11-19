@@ -11,6 +11,7 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
@@ -91,20 +92,40 @@ test("version: the counter reads the first parent and the unit paths", () => {
   ]);
 });
 
-test("version: the counter revision falls back to a root commit", () => {
+test("version: a shallow clone without a parent fails instead of guessing", () => {
   const seen = [];
   const exec = (command, args) => {
     seen.push([command, ...args]);
-    if (args.includes("HEAD^1^{commit}")) {
-      throw new Error("no parent");
-    }
-    return "abc\n";
+    throw new Error("fatal: ambiguous argument 'HEAD^1'");
   };
-  assert.equal(version.counterRevision(exec), "HEAD");
+  assert.throws(() => version.counterRevision(exec), /fetch-depth: 0/);
   assert.deepEqual(
     seen.map((call) => call.at(-1)),
-    ["HEAD^1^{commit}", "HEAD^{commit}"],
+    ["HEAD^1^{commit}"],
   );
+});
+
+test("version: --github-output appends the step outputs to the file", () => {
+  const dir = fs.mkdtempSync(path.join(require_tmpdir(), "version-out-"));
+  const file = path.join(dir, "out");
+  const saved = process.env.GITHUB_OUTPUT;
+  process.env.GITHUB_OUTPUT = file;
+  const out = [];
+  const write = process.stdout.write.bind(process.stdout);
+  process.stdout.write = (chunk) => {
+    out.push(String(chunk));
+    return true;
+  };
+  try {
+    version.emit(["version=v0.6.50", "count=50"].join("\n"), { githubOutput: true });
+    assert.equal(fs.readFileSync(file, "utf8"), "version=v0.6.50\ncount=50\n");
+    assert.match(out.join(""), /version=v0\.6\.50/);
+  } finally {
+    process.stdout.write = write;
+    if (saved === undefined) delete process.env.GITHUB_OUTPUT;
+    else process.env.GITHUB_OUTPUT = saved;
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test("version: the published annotation is the authority", () => {
@@ -155,6 +176,10 @@ test("version: VERSION holds only the major.minor base", () => {
 });
 
 /** The unit map is the one source of `paths` and `workdir`, so read it here. */
+function require_tmpdir() {
+  return os.tmpdir();
+}
+
 function nativeUnit(id) {
   const unit = config.units.find((entry) => entry.platform === "native" && entry.id === id);
   assert.ok(unit, `unknown native unit '${id}'`);

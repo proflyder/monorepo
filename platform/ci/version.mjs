@@ -109,17 +109,24 @@ export function readCommitCount(exec, { rev, paths }) {
   return count;
 }
 
-/** First-parent revision of HEAD, falling back to HEAD for a root commit. */
+/**
+ * The first-parent revision of HEAD.
+ *
+ * A shallow checkout (`actions/checkout` defaults to depth 1) has no parent, and
+ * silently counting from HEAD would produce a plausible but wrong patch number
+ * — the PR binary and the release tag would then disagree. Fail loudly and let
+ * the caller fetch full history.
+ */
 export function counterRevision(exec) {
-  for (const rev of ["HEAD^1", "HEAD"]) {
-    try {
-      exec("git", ["rev-parse", "--verify", "--quiet", `${rev}^{commit}`]);
-      return rev;
-    } catch {
-      // try the next candidate
-    }
+  try {
+    exec("git", ["rev-parse", "--verify", "--quiet", "HEAD^1^{commit}"]);
+    return "HEAD^1";
+  } catch {
+    throw new Error(
+      "HEAD has no parent: the version counter needs the first-parent history " +
+        "(fetch-depth: 0 in actions/checkout)",
+    );
   }
-  throw new Error("cannot resolve HEAD^1 or HEAD");
 }
 
 /** Resolve the version of a native unit from the working tree. */
@@ -214,11 +221,7 @@ export async function main(argv = process.argv.slice(2)) {
   const exec = realExec;
   if (args.published) {
     const version = publishedVersion(exec, args.published);
-    if (args.githubOutput) {
-      process.stdout.write(`version=${version}\n`);
-    } else {
-      process.stdout.write(`${version}\n`);
-    }
+    emit(`version=${version}`, args);
     return 0;
   }
   const unit = await nativeUnit(args.unit);
@@ -235,13 +238,38 @@ export async function main(argv = process.argv.slice(2)) {
       })}\n`,
     );
   } else if (args.githubOutput) {
-    process.stdout.write(
-      `version=${result.version}\nbase=${result.baseText}\npatch=${result.patch}\ncount=${result.count}\n`,
+    emit(
+      [
+        `version=${result.version}`,
+        `base=${result.baseText}`,
+        `patch=${result.patch}`,
+        `count=${result.count}`,
+      ].join("\n"),
+      args,
     );
   } else {
     process.stdout.write(`${result.version}\n`);
   }
   return 0;
+}
+
+/**
+ * `--github-output` appends to `$GITHUB_OUTPUT` (a step output) and echoes the
+ * same lines to the log. Without the flag the bare version is printed, which is
+ * what the station audit and shell callers read.
+ */
+export function emit(lines, args) {
+  const text = String(lines);
+  if (!args.githubOutput) {
+    process.stdout.write(`${text}\n`);
+    return;
+  }
+  const file = process.env.GITHUB_OUTPUT;
+  if (!file) {
+    throw new Error("--github-output needs GITHUB_OUTPUT");
+  }
+  fs.appendFileSync(file, `${text}\n`);
+  process.stdout.write(`${text}\n`);
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
