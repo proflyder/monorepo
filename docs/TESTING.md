@@ -323,6 +323,29 @@ protection и `platform/ci/safe-merge.mjs`; проверка `/`-префикс�
 одного события, если `_*.yml` имеет не `workflow_call` или если файл без `_`
 объявлен как reusable.
 
+### Правило: caller выдаёт права reusable
+
+GitHub требует, чтобы права вызывающего job были не меньше прав, запрошенных
+любым job вызываемого reusable — рекурсивно. Иначе прогон падает на
+`startup_failure` ещё до старта job'ов (инцидент #338/#339: `deploy-home.yml`
+job `release` наследовал workflow-level `contents: read`, а `_native.yml`
+публиковал образы с `packages: write`). `actionlint` этого не ловит.
+
+- Эффективные права caller-job: job-level `permissions`, иначе workflow-level,
+  иначе «нет прав».
+- Требуемые права reusable: union его workflow-level и job-level `permissions`
+  по всем job'ам, плюс рекурсивно всё, что запрашивают вложенные
+  `uses: ./.github/workflows/_*.yml`.
+- Сравнение по уровню `none < read < write` для каждого scope; `read-all` не
+  покрывает `write`.
+
+Правило проверяет `workflowCallerPermissionProblems` в
+`platform/ci/check_units.mjs` (`mise run ci:units`): проблема называет файл,
+job, scope, выданный и требуемый уровень и reusable (с путём вложенного файла).
+Поэтому job, который вызывает reusable, перечисляет полный union его прав, а
+не только «свои»: комментарий с объяснением, зачем нужен каждый scope, живёт
+рядом с `permissions:`.
+
 **Как добавить новый триггер.** Не добавляйте событие в существующий файл.
 Создайте `<name>.yml` с одним `on:` и job, который вызывает уже существующий
 `_*.yml` с нужными inputs. Если общей логики ещё нет — вынесите job в новый
@@ -665,7 +688,10 @@ lock-diff; `[workspace] members`, `[profile]`, `[workspace.lints]`, правка
   принадлежит ни одному юниту** — новый тест не может молча выпасть из CI;
 * job workflow пишет в registry (`crane tag`/`crane push`, `oras push`/`oras
   tag`, `platform/ci/promote.mjs`, `push-to-registry: true`) без логина в
-  `ghcr.io` до первой записи.
+  `ghcr.io` до первой записи;
+* job с `uses: ./.github/workflows/_*.yml` выдаёт меньше прав, чем требует
+  вызываемый reusable (рекурсивно, включая workflow-level `permissions`), —
+  GitHub упал бы на `startup_failure`.
 
 Тесты маршрутизатора: `platform/ci/affected.test.mjs` (включая фикстуру
 `testdata/units-two-apps.mjs` с двумя Android-приложениями и общим

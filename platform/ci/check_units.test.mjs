@@ -306,3 +306,187 @@ test("check_units: nested keys inside on: are not events", () => {
 test("check_units: every committed workflow has exactly one trigger", () => {
   assert.deepEqual(checkUnits.workflowTriggerProblems(), []);
 });
+
+// -------------------------------------------- caller/reusable permissions ----
+test("check_units: a caller job granting the reusable's union is accepted", () => {
+  const root = workflowFixture({
+    "_release.yml": [
+      "on: workflow_call",
+      "permissions:",
+      "  contents: read",
+      "jobs:",
+      "  pins:",
+      "    permissions:",
+      "      contents: write",
+      "      packages: write",
+      "      attestations: read",
+      "      pull-requests: read",
+      "    runs-on: ubuntu-24.04",
+      "    steps:",
+      "      - run: true",
+      "",
+    ].join("\n"),
+    "deploy.yml": [
+      "on: push",
+      "permissions:",
+      "  contents: read",
+      "jobs:",
+      "  release:",
+      "    permissions:",
+      "      contents: write",
+      "      packages: write",
+      "      attestations: read",
+      "      pull-requests: read",
+      "    uses: ./.github/workflows/_release.yml",
+      "",
+    ].join("\n"),
+  });
+  assert.deepEqual(checkUnits.workflowCallerPermissionProblems(root), []);
+});
+
+test("check_units: a caller job inheriting read-only contents is rejected", () => {
+  // The #338/#339 incident: the caller job had no permissions block, so it
+  // inherited workflow-level `contents: read` while the reusable pinned with
+  // `contents: write`.
+  const root = workflowFixture({
+    "_release.yml": [
+      "on: workflow_call",
+      "jobs:",
+      "  pins:",
+      "    permissions:",
+      "      contents: write",
+      "      packages: write",
+      "    runs-on: ubuntu-24.04",
+      "    steps:",
+      "      - run: true",
+      "",
+    ].join("\n"),
+    "deploy-home.yml": [
+      "on: push",
+      "permissions:",
+      "  contents: read",
+      "jobs:",
+      "  release:",
+      "    uses: ./.github/workflows/_release.yml",
+      "",
+    ].join("\n"),
+  });
+  const problems = checkUnits.workflowCallerPermissionProblems(root);
+  assert.equal(problems.length, 2);
+  assert.ok(problems.every((problem) => problem.includes("deploy-home.yml job 'release'")));
+  assert.ok(problems.some((problem) => problem.includes("contents=read")));
+  assert.ok(problems.some((problem) => problem.includes("packages=none")));
+  assert.ok(problems.some((problem) => problem.includes("startup_failure")));
+});
+
+test("check_units: requirements of nested reusables are checked recursively", () => {
+  const root = workflowFixture({
+    "_inner.yml": [
+      "on: workflow_call",
+      "jobs:",
+      "  publish:",
+      "    permissions:",
+      "      id-token: write",
+      "      packages: write",
+      "      checks: write",
+      "    runs-on: ubuntu-24.04",
+      "    steps:",
+      "      - run: true",
+      "",
+    ].join("\n"),
+    "_outer.yml": [
+      "on: workflow_call",
+      "permissions:",
+      "  contents: read",
+      "jobs:",
+      "  inner:",
+      "    permissions:",
+      "      contents: read",
+      "      packages: write",
+      "      id-token: write",
+      "    uses: ./.github/workflows/_inner.yml",
+      "",
+    ].join("\n"),
+    "entry.yml": [
+      "on: workflow_dispatch",
+      "permissions:",
+      "  contents: read",
+      "jobs:",
+      "  call:",
+      "    uses: ./.github/workflows/_outer.yml",
+      "",
+    ].join("\n"),
+  });
+  const problems = checkUnits.workflowCallerPermissionProblems(root);
+  const fromEntry = problems.filter((problem) => problem.includes("entry.yml job 'call'"));
+  assert.equal(fromEntry.length, 3);
+  assert.ok(fromEntry.some((problem) => problem.includes("id-token=none")));
+  assert.ok(fromEntry.some((problem) => problem.includes("packages=none")));
+  assert.ok(fromEntry.some((problem) => problem.includes("checks=none")));
+  assert.ok(
+    fromEntry.some((problem) =>
+      problem.includes("checks=none but ./.github/workflows/_outer.yml requires checks=write (via .github/workflows/_inner.yml)"),
+    ),
+  );
+  // `_outer.yml`'s own caller job must cover `_inner.yml` as well.
+  assert.ok(problems.some((problem) => problem.includes("_outer.yml job 'inner'")));
+});
+
+test("check_units: job-level permissions replace the workflow level", () => {
+  const root = workflowFixture({
+    "_shared.yml": [
+      "on: workflow_call",
+      "jobs:",
+      "  write:",
+      "    permissions:",
+      "      contents: write",
+      "    runs-on: ubuntu-24.04",
+      "    steps:",
+      "      - run: true",
+      "",
+    ].join("\n"),
+    "entry.yml": [
+      "on: push",
+      "permissions:",
+      "  contents: write",
+      "jobs:",
+      "  call:",
+      "    permissions:",
+      "      contents: read",
+      "    uses: ./.github/workflows/_shared.yml",
+      "",
+    ].join("\n"),
+  });
+  const problems = checkUnits.workflowCallerPermissionProblems(root);
+  assert.equal(problems.length, 1);
+  assert.ok(problems[0].includes("contents=read"));
+  assert.ok(problems[0].includes("contents=write"));
+});
+
+test("check_units: read-all cannot satisfy a write requirement", () => {
+  const root = workflowFixture({
+    "_shared.yml": [
+      "on: workflow_call",
+      "permissions:",
+      "  packages: write",
+      "jobs: {}",
+      "",
+    ].join("\n"),
+    "entry.yml": [
+      "on: push",
+      "permissions: read-all",
+      "jobs:",
+      "  call:",
+      "    uses: ./.github/workflows/_shared.yml",
+      "",
+    ].join("\n"),
+  });
+  const problems = checkUnits.workflowCallerPermissionProblems(root);
+  assert.equal(problems.length, 1);
+  assert.ok(problems[0].includes("packages=read"));
+  assert.ok(problems[0].includes("packages=write"));
+});
+
+test("check_units: every committed caller grants its reusable workflows' permissions", () => {
+  assert.deepEqual(checkUnits.workflowCallerPermissionProblems(), []);
+});

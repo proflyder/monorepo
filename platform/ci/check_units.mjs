@@ -483,6 +483,229 @@ export function workflowTriggerProblems(root = DEFAULT_ROOT) {
   return problems;
 }
 
+// ------------------------------------------------- caller permissions ----
+// GitHub refuses to start a run (`startup_failure`) when a caller job grants
+// less than any job of the reusable workflow it calls, recursively. GitHub
+// itself only reports this after the push, so the rule is checked statically.
+
+// Scopes accepted in a `permissions:` map; `read-all`/`write-all` expand over
+// all of them, so a narrow caller still fails a broad requirement.
+export const PERMISSION_SCOPES = [
+  "actions",
+  "attestations",
+  "checks",
+  "contents",
+  "deployments",
+  "discussions",
+  "id-token",
+  "issues",
+  "models",
+  "packages",
+  "pages",
+  "pull-requests",
+  "security-events",
+  "statuses",
+];
+
+// `none < read < write`; anything unrecognized is treated as `write` so a
+// malformed grant fails loudly instead of silently satisfying a requirement.
+export const PERMISSION_LEVELS = { none: 0, read: 1, write: 2 };
+const PERMISSION_LEVEL_NAMES = ["none", "read", "write"];
+
+function permissionLevel(value) {
+  return PERMISSION_LEVELS[value] ?? PERMISSION_LEVELS.write;
+}
+
+function stripInlineComment(value) {
+  return String(value).replace(/\s+#.*$/, "").trim();
+}
+
+function permissionMap(inline) {
+  const permissions = new Map();
+  if (!inline || inline === "{}") {
+    return permissions;
+  }
+  if (inline === "read-all" || inline === "write-all") {
+    const level = inline === "read-all" ? "read" : "write";
+    for (const scope of PERMISSION_SCOPES) {
+      permissions.set(scope, PERMISSION_LEVELS[level]);
+    }
+    return permissions;
+  }
+  if (inline.startsWith("{") && inline.endsWith("}")) {
+    for (const entry of inline.slice(1, -1).split(",")) {
+      const match = /^\s*([A-Za-z0-9_-]+)\s*:\s*([a-z-]+)\s*$/.exec(entry);
+      if (match) {
+        permissions.set(match[1], permissionLevel(match[2]));
+      }
+    }
+  }
+  return permissions;
+}
+
+/** Parse one `permissions:` block (scalar, flow map or indented mapping). */
+function parsePermissions(lines, start) {
+  const key = /^(\s*)permissions:(.*)$/.exec(lines[start]);
+  const indent = key[1].length;
+  const inline = stripInlineComment(key[2]);
+  if (inline) {
+    return permissionMap(inline);
+  }
+  const permissions = new Map();
+  for (let index = start + 1; index < lines.length; index += 1) {
+    const line = lines[index];
+    if (!line.trim() || /^\s*#/.test(line)) {
+      continue;
+    }
+    if (/^(\s*)/.exec(line)[1].length <= indent) {
+      break;
+    }
+    const entry = /^\s+([A-Za-z0-9_-]+):\s*(.*)$/.exec(line);
+    if (entry) {
+      permissions.set(entry[1], permissionLevel(stripInlineComment(entry[2])));
+    }
+  }
+  return permissions;
+}
+
+/**
+ * Minimal model of the two blocks the rule needs: the workflow-level
+ * `permissions:` and, per job, its own `permissions:` (`null` when absent, so
+ * the job inherits the workflow level) and a local reusable `uses:` target.
+ */
+export function workflowPermissionModel(text) {
+  const lines = String(text || "").split(/\r?\n/);
+  const workflowLine = lines.findIndex((line) => /^permissions:/.test(line));
+  const workflow = workflowLine === -1 ? null : parsePermissions(lines, workflowLine);
+  const jobs = new Map();
+  const jobsLine = lines.findIndex((line) => /^jobs:\s*$/.test(line));
+  if (jobsLine === -1) {
+    return { workflow, jobs };
+  }
+  const starts = [];
+  for (let index = jobsLine + 1; index < lines.length; index += 1) {
+    const match = /^ {2}([A-Za-z0-9_-]+):\s*$/.exec(lines[index]);
+    if (match) {
+      starts.push({ job: match[1], index });
+    }
+  }
+  for (let position = 0; position < starts.length; position += 1) {
+    const { job, index: start } = starts[position];
+    const end = position + 1 < starts.length ? starts[position + 1].index : lines.length;
+    let permissions = null;
+    let uses = null;
+    for (let index = start; index < end; index += 1) {
+      if (permissions === null && /^ {4}permissions:/.test(lines[index])) {
+        permissions = parsePermissions(lines, index);
+      }
+      const use = /^ {4}uses:\s*(.+)$/.exec(lines[index]);
+      if (use && uses === null) {
+        uses = stripInlineComment(use[1]);
+      }
+    }
+    jobs.set(job, { permissions, uses });
+  }
+  return { workflow, jobs };
+}
+
+function localWorkflowPath(uses, root) {
+  if (!uses || !uses.startsWith("./.github/workflows/")) {
+    return null;
+  }
+  if (!/\.ya?ml$/.test(uses)) {
+    return null;
+  }
+  return path.resolve(root, uses);
+}
+
+function relativeWorkflowPath(root, file) {
+  return path.relative(root, file).split(path.sep).join("/");
+}
+
+function mergePermissions(target, source, via) {
+  if (!source) {
+    return;
+  }
+  for (const [scope, level] of source) {
+    const current = target.get(scope);
+    if (!current || level > current.level) {
+      target.set(scope, { level, via });
+    }
+  }
+}
+
+/**
+ * Union of every `permissions:` a reusable workflow asks for: its workflow
+ * level, each job's level, and, recursively, everything the reusables it calls
+ * ask for. A caller job must cover the union.
+ */
+function collectRequiredPermissions(file, root, seen, required) {
+  const relative = relativeWorkflowPath(root, file);
+  const { workflow, jobs } = workflowPermissionModel(fs.readFileSync(file, "utf8"));
+  mergePermissions(required, workflow, relative);
+  for (const spec of jobs.values()) {
+    mergePermissions(required, spec.permissions, relative);
+    const target = localWorkflowPath(spec.uses, root);
+    if (target && !seen.has(target)) {
+      seen.add(target);
+      if (fs.existsSync(target)) {
+        collectRequiredPermissions(target, root, seen, required);
+      }
+    }
+  }
+}
+
+/**
+ * A caller job's effective token is its job-level `permissions:` when present,
+ * otherwise the workflow-level block, otherwise nothing at all. Each local
+ * reusable call is then compared against the recursive requirement union.
+ */
+export function workflowCallerPermissionProblems(root = DEFAULT_ROOT) {
+  const problems = [];
+  const directory = path.resolve(root, ".github/workflows");
+  if (!isDirectory(directory)) {
+    return problems;
+  }
+  const files = fs
+    .readdirSync(directory)
+    .filter((name) => name.endsWith(".yml") || name.endsWith(".yaml"))
+    .sort();
+  for (const name of files) {
+    const relative = `.github/workflows/${name}`;
+    const { workflow, jobs } = workflowPermissionModel(
+      fs.readFileSync(path.join(directory, name), "utf8"),
+    );
+    for (const [job, spec] of jobs) {
+      const target = localWorkflowPath(spec.uses, root);
+      if (!target || !fs.existsSync(target)) {
+        continue;
+      }
+      const required = new Map();
+      collectRequiredPermissions(target, root, new Set([target]), required);
+      const granted = spec.permissions ?? workflow ?? new Map();
+      for (const [scope, requirement] of required) {
+        const level = granted.get(scope) ?? PERMISSION_LEVELS.none;
+        if (level >= requirement.level) {
+          continue;
+        }
+        const callee = relativeWorkflowPath(root, target);
+        const via =
+          requirement.via && requirement.via !== callee
+            ? ` (via ${requirement.via})`
+            : "";
+        problems.push(
+          `${relative} job '${job}' grants ${scope}=` +
+            `${PERMISSION_LEVEL_NAMES[level]} but ${spec.uses} requires ` +
+            `${scope}=${PERMISSION_LEVEL_NAMES[requirement.level]}${via}; ` +
+            "grant the union of the reusable workflow's permissions at job level " +
+            "or GitHub fails the run with startup_failure",
+        );
+      }
+    }
+  }
+  return problems;
+}
+
 function isRegistryLogin(line) {
   return REGISTRY_LOGIN_PATTERNS.some((pattern) => pattern.test(line));
 }
@@ -608,6 +831,7 @@ export async function check(argv) {
       ...coverageProblems(config, trackedFiles(root)),
       ...workflowRegistryProblems(root),
       ...workflowTriggerProblems(root),
+      ...workflowCallerPermissionProblems(root),
     ],
   };
 }

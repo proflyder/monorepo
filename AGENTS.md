@@ -62,6 +62,14 @@
 - Правило проверяет `platform/ci/check_units.mjs`
   (`workflowTriggerProblems`, `mise run ci:units`): больше одного события,
   `_*.yml` без `workflow_call` или reusable без `_` — красный CI.
+- Вызывающий job обязан выдать права, которые запрашивает reusable. Его
+  эффективные права — job-level `permissions`, иначе workflow-level, иначе
+  ничего; требуемые права reusable — union job-level и workflow-level
+  `permissions` всех его job'ов и вложенных `uses: ./.github/workflows/_*.yml`
+  рекурсивно. Уровни `none < read < write`; если caller меньше — GitHub падает
+  на `startup_failure` ещё до запуска (инцидент #338/#339), поэтому
+  `workflowCallerPermissionProblems` (`mise run ci:units`) делает это красным
+  CI. `actionlint` такого не ловит.
 - Паттерн и таблица «триггер → обёртка → reusable» — `docs/TESTING.md` (CI).
 
 ## Home platform architecture
