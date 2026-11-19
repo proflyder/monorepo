@@ -20,6 +20,29 @@
         <item name="android:minWidth">0dp</item>
     </style>
 
+    <!-- Card trash action: the standard Material3 icon button at its full 48dp
+         touch target, with a 24dp glyph (the MaterialSwitch track is 32dp) and
+         a transparent container. The 24dp corner radius turns the button into
+         the ripple circle, so the state layer is bounded by the button and is
+         tinted from the error color instead of the neutral surface. -->
+    <style name="Widget.Alarms.CardIconButton" parent="Widget.Material3.Button.IconButton">
+        <item name="android:minWidth">@dimen/alarms_card_icon_button_size</item>
+        <item name="android:minHeight">@dimen/alarms_card_icon_button_size</item>
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+        <item name="android:insetLeft">0dp</item>
+        <item name="android:insetRight">0dp</item>
+        <item name="android:padding">12dp</item>
+        <item name="android:clickable">true</item>
+        <item name="android:focusable">true</item>
+        <item name="iconSize">@dimen/alarms_card_icon_size</item>
+        <item name="iconPadding">0dp</item>
+        <item name="iconGravity">textStart</item>
+        <item name="iconTint">?attr/colorError</item>
+        <item name="cornerRadius">24dp</item>
+        <item name="rippleColor">@color/alarms_delete_ripple</item>
+    </style>
+
     <style name="Widget.Alarms.StopButton" parent="Widget.Material3.Button.TextButton">
         <item name="android:insetLeft">0dp</item>
         <item name="android:insetRight">0dp</item>

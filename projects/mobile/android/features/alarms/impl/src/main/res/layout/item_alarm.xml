@@ -26,9 +26,9 @@
     <!-- Dense card: the time stays the anchor, the name and one summary line
          sit next to it, and the trailing switch/delete pair keeps the row at a
          single glance. The 88dp minimum keeps idle rows airy without the old
-         stacked title/repeat/next block. End padding is one delete-button
-         radius (20dp) so its circular ripple stays inside the rounded
-         outline. -->
+         stacked title/repeat/next block. The switch and the 48dp delete button
+         are vertically centred together, 4dp apart; the card end padding
+         (12dp) keeps the round delete ripple off the rounded outline. -->
     <LinearLayout
         android:id="@+id/alarm_card_content"
         android:layout_width="match_parent"
@@ -109,24 +109,24 @@
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/alarm_delete"
-                    style="@style/Widget.Material3.Button.IconButton"
-                    android:layout_width="40dp"
-                    android:layout_height="40dp"
+                    style="@style/Widget.Alarms.CardIconButton"
+                    android:layout_width="@dimen/alarms_card_icon_button_size"
+                    android:layout_height="@dimen/alarms_card_icon_button_size"
+                    android:layout_marginStart="@dimen/alarms_card_trailing_gap"
                     android:contentDescription="@string/alarms_delete"
-                    app:icon="@drawable/alarms_ic_delete"
-                    app:iconTint="?attr/colorError" />
+                    app:icon="@drawable/alarms_ic_delete" />
 
                 <FrameLayout
                     android:id="@+id/alarm_selection_indicator"
-                    android:layout_width="40dp"
-                    android:layout_height="40dp"
+                    android:layout_width="@dimen/alarms_card_icon_button_size"
+                    android:layout_height="@dimen/alarms_card_icon_button_size"
                     android:importantForAccessibility="no"
                     android:visibility="gone">
 
                     <ImageView
                         android:id="@+id/alarm_selection_check"
-                        android:layout_width="24dp"
-                        android:layout_height="24dp"
+                        android:layout_width="@dimen/alarms_card_icon_size"
+                        android:layout_height="@dimen/alarms_card_icon_size"
                         android:layout_gravity="center"
                         android:contentDescription="@null"
                         android:src="@drawable/alarms_ic_selection_off" />

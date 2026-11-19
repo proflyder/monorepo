@@ -2,9 +2,13 @@ package dev.proflyder.home.feature.alarms.presentation
 
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.graphics.Color
+import android.os.Looper
 import android.view.LayoutInflater
 import android.view.View
 import androidx.appcompat.view.ContextThemeWrapper
+import com.google.android.material.button.MaterialButton
+import com.google.android.material.color.MaterialColors
 import dev.proflyder.home.core.model.RepeatKind
 import dev.proflyder.home.core.model.Schedule
 import dev.proflyder.home.core.model.ScheduleKind
@@ -12,6 +16,7 @@ import dev.proflyder.home.core.model.WallTime
 import dev.proflyder.home.feature.alarms.impl.R
 import dev.proflyder.home.feature.alarms.impl.databinding.ItemAlarmBinding
 import java.io.File
+import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -23,14 +28,17 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 /**
  * The dense card is one time/text line at rest: the snooze/stop row appears
  * only while the server reports a live occurrence. At 360dp and 411dp, with
- * the 1.15 large font too, the idle card stays under 112dp, and the delete
- * icon keeps its circular ripple inside the rounded card outline.
+ * the 1.15 large font too, the idle card stays under 112dp. The delete action
+ * is a standard 48dp Material icon button with a 24dp glyph, vertically
+ * centred with the switch and 4dp away from it; its round ripple stays inside
+ * the rounded card outline.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35], qualifiers = "ru-rRU-w360dp-h800dp-night-xxhdpi")
@@ -63,6 +71,15 @@ class AlarmItemLayoutTest {
         assertActiveCard(1f, "alarm-card-active-411dp-ru.png")
 
     @Test
+    fun pressedDeleteDrawsRoundStateLayerAt360dp() =
+        assertPressedDelete(1f, "alarm-card-delete-pressed-360dp-ru.png")
+
+    @Test
+    @Config(qualifiers = "ru-rRU-w411dp-h891dp-night-xxhdpi")
+    fun pressedDeleteDrawsRoundStateLayerAt411dp() =
+        assertPressedDelete(1f, "alarm-card-delete-pressed-411dp-ru.png")
+
+    @Test
     fun selectionCardReplacesSwitchWithIndicatorAt360dp() =
         assertSelectionCard(1f, "alarm-card-selection-360dp-ru.png")
 
@@ -89,7 +106,7 @@ class AlarmItemLayoutTest {
         assertEquals("summary must stay on one line", 1, binding.alarmSummary.maxLines)
         assertEquals("label wrapped: ${binding.alarmLabel.lineCount}", 1, binding.alarmLabel.lineCount)
         assertEquals("summary wrapped: ${binding.alarmSummary.lineCount}", 1, binding.alarmSummary.lineCount)
-        assertDeleteRippleInsideCard(binding, cardWidth)
+        assertDeleteButton(binding, cardWidth)
         when (pngName) {
             null -> Unit
             else -> savePng(binding.root, pngName)
@@ -113,7 +130,7 @@ class AlarmItemLayoutTest {
             "snooze does not fit into one row: ${binding.alarmSnooze.right} > $cardWidth",
             binding.alarmSnooze.right <= cardWidth,
         )
-        assertDeleteRippleInsideCard(binding, cardWidth)
+        assertDeleteButton(binding, cardWidth)
         when (pngName) {
             null -> Unit
             else -> savePng(binding.root, pngName)
@@ -123,8 +140,9 @@ class AlarmItemLayoutTest {
     /**
      * In selection mode the card drops its switch and delete: a dimmed switch
      * would read as the alarm's real state. The right edge belongs to the
-     * circular check, which the card padding keeps clear of the rounded
-     * corner, and the labels still fit on one line.
+     * circular check, which reuses the delete footprint and the card padding
+     * so the glyph lands on the same centre line, and the labels still fit on
+     * one line.
      */
     private fun assertSelectionCard(fontScale: Float, pngName: String?) {
         val binding = inflateAndBind(
@@ -152,12 +170,22 @@ class AlarmItemLayoutTest {
         assertEquals("card must not draw its own corner check", null, binding.root.checkedIcon)
 
         val indicator = binding.alarmSelectionIndicator
-        val endGap = cardWidth - indicator.right
-        assertTrue("indicator left ${indicator.left} outside card", indicator.left >= 0)
-        assertTrue("indicator bottom ${indicator.bottom} > card ${binding.root.height}", indicator.bottom <= binding.root.height)
+        val check = binding.alarmSelectionCheck
+        val (indicatorLeft, indicatorTop) = offsetInRoot(binding.root, indicator)
+        assertTrue("indicator left $indicatorLeft outside card", indicatorLeft >= 0)
+        assertTrue("indicator top $indicatorTop is above the card", indicatorTop >= 0)
         assertTrue(
-            "indicator touches the rounded corner: end gap $endGap < radius ${binding.root.radius}",
-            endGap >= binding.root.radius,
+            "indicator bottom ${indicatorTop + indicator.height} > card ${binding.root.height}",
+            indicatorTop + indicator.height <= binding.root.height,
+        )
+        assertEquals(
+            "selection check must match the delete glyph size",
+            dp(check, R.dimen.alarms_card_icon_size),
+            check.width,
+        )
+        assertTrue(
+            "selection check touches the card edge: end gap ${cardWidth - indicatorLeft - indicator.width}",
+            cardWidth - indicatorLeft - indicator.width >= dp(indicator, R.dimen.alarms_card_ripple_gap),
         )
         when (pngName) {
             null -> Unit
@@ -165,16 +193,101 @@ class AlarmItemLayoutTest {
         }
     }
 
-    /** The ripple is a circle bounded by the square button, so the gap to the
-     * card edge must cover its radius: then no part of it reaches the rounded
-     * corner, which the card outline would clip. */
-    private fun assertDeleteRippleInsideCard(binding: ItemAlarmBinding, cardWidth: Int) {
+    /**
+     * The trailing controls share one vertical centre and one baseline of
+     * card padding. The delete action is the standard Material icon button at
+     * its full 48dp touch target: a 24dp glyph (the switch track is 32dp),
+     * 12dp insets, and a state layer that is exactly the button, so the
+     * circle stays at least 8dp inside the card outline.
+     */
+    private fun assertDeleteButton(binding: ItemAlarmBinding, cardWidth: Int) {
         val delete = binding.alarmDelete
-        val radius = delete.width / 2
-        val endGap = cardWidth - delete.right
-        assertTrue("delete bottom ${delete.bottom} > card ${binding.root.height}", delete.bottom <= binding.root.height)
-        assertTrue("delete left ${delete.left} outside card", delete.left >= 0)
-        assertTrue("delete ripple clipped: end gap $endGap < radius $radius", endGap >= radius)
+        val switch = binding.alarmEnabled
+        val buttonSize = dp(delete, R.dimen.alarms_card_icon_button_size)
+        val iconSize = dp(delete, R.dimen.alarms_card_icon_size)
+        val gap = dp(delete, R.dimen.alarms_card_trailing_gap)
+
+        assertEquals("delete touch target width is not 48dp", buttonSize, delete.width)
+        assertEquals("delete touch target height is not 48dp", buttonSize, delete.height)
+        assertEquals("delete glyph must be 24dp", iconSize, delete.icon?.bounds?.width())
+        assertEquals("delete glyph must be 24dp", iconSize, delete.icon?.bounds?.height())
+        assertEquals("delete glyph is not centred in the button", buttonSize / 4, delete.paddingTop)
+        assertEquals("delete glyph is not centred in the button", buttonSize / 4, delete.paddingStart)
+        assertEquals(
+            "switch and delete are not on one vertical centre",
+            switch.top + switch.height / 2,
+            delete.top + delete.height / 2,
+        )
+        assertEquals("switch and delete gap is not 4dp", gap, delete.left - switch.right)
+
+        val margin = dp(delete, R.dimen.alarms_card_ripple_gap)
+        val (deleteLeft, deleteTop) = offsetInRoot(binding.root, delete)
+        val rippleLeft = deleteLeft - margin
+        val rippleTop = deleteTop - margin
+        val rippleRight = deleteLeft + delete.width + margin
+        val rippleBottom = deleteTop + delete.height + margin
+        assertTrue("delete ripple starts at $rippleLeft, outside the card", rippleLeft >= 0)
+        assertTrue("delete ripple top $rippleTop is above the card", rippleTop >= 0)
+        assertTrue("delete ripple ends at $rippleRight, past the card width $cardWidth", rippleRight <= cardWidth)
+        assertTrue(
+            "delete ripple bottom $rippleBottom is below the card height ${binding.root.height}",
+            rippleBottom <= binding.root.height,
+        )
+    }
+
+    /** Walks up to the card so the ripple bounds compare in card coordinates. */
+    private fun offsetInRoot(root: View, view: View): Pair<Int, Int> {
+        var left = 0
+        var top = 0
+        var current: View? = view
+        while (current != null && current !== root) {
+            left += current.left
+            top += current.top
+            current = current.parent as? View
+        }
+        return left to top
+    }
+
+    /**
+     * Pressed state for review. Robolectric does not rasterise a
+     * RippleDrawable, so the PNG documents the pressed layout and the state
+     * layer is asserted on the button itself: the ripple color is the theme
+     * error color with a state-layer alpha, and pressing turns the pressed
+     * state on for the round 48dp background.
+     */
+    private fun assertPressedDelete(fontScale: Float, pngName: String) {
+        val binding = inflateAndBind(fontScale, schedule(active = false))
+        assertDeleteButton(binding, cardWidth(binding.root))
+
+        val delete = binding.alarmDelete
+        assertRippleColor(delete)
+        delete.isPressed = true
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(RIPPLE_SETTLE_MS))
+        assertTrue(
+            "delete is not in the pressed state",
+            delete.drawableState.contains(android.R.attr.state_pressed),
+        )
+        savePng(binding.root, pngName)
+    }
+
+    /** The ripple is the theme error color, not the neutral surface tint. */
+    private fun assertRippleColor(delete: MaterialButton) {
+        val ripple = delete.rippleColor
+        assertTrue("delete has no ripple color", ripple != null)
+        when (ripple) {
+            null -> Unit
+            else -> {
+                val error = MaterialColors.getColor(delete, com.google.android.material.R.attr.colorError)
+                assertEquals(
+                    "ripple hue must match the error color",
+                    error and RGB_MASK,
+                    ripple.defaultColor and RGB_MASK,
+                )
+                val alpha = Color.alpha(ripple.defaultColor)
+                assertTrue("ripple alpha $alpha is not a state layer", alpha in 1 until 0xFF)
+            }
+        }
+        assertEquals("delete shape must be a circle", delete.width / 2, delete.cornerRadius)
     }
 
     private fun inflateAndBind(
@@ -234,6 +347,8 @@ class AlarmItemLayoutTest {
     private fun appliedFontScale(binding: ItemAlarmBinding): Float =
         binding.root.resources.configuration.fontScale
 
+    private fun dp(view: View, id: Int): Int = view.resources.getDimensionPixelSize(id)
+
     private fun heightDp(view: View): Float = view.measuredHeight / view.resources.displayMetrics.density
 
     private fun cardWidth(root: View): Int {
@@ -255,5 +370,7 @@ class AlarmItemLayoutTest {
 
     private companion object {
         const val MAX_IDLE_HEIGHT_DP = 112f
+        const val RIPPLE_SETTLE_MS = 200L
+        const val RGB_MASK = 0x00FFFFFF
     }
 }
