@@ -11,11 +11,6 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import com.google.android.material.R as MaterialR
 
-/**
- * The XML overlays are what the View system actually uses; the palette data is
- * what the registry, previews and contrast checks use. This proves both say
- * the same thing for every role, in light and in night resources.
- */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class ThemeOverlayConsistencyTest {
@@ -42,7 +37,6 @@ class ThemeOverlayConsistencyTest {
         }
     }
 
-    /** Static overlay only: Robolectric has no wallpaper colours. */
     private fun themed(theme: AppTheme): Context {
         val base = ContextThemeWrapper(
             RuntimeEnvironment.getApplication(),

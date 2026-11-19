@@ -1,5 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Theme "Current" (evening emerald): the original app palette, unchanged. -->
 <resources>
     <color name="home_primary">#0E7C66</color>
     <color name="home_on_primary">#FFFFFF</color>

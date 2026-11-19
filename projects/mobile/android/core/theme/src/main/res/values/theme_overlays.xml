@@ -1,9 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- One overlay per AppTheme entry. Each sets every colour role, so applying
-     it on top of the activity theme replaces the whole palette. -->
 <resources>
-    <!-- "Current": the original palette. The error containers stay on the
-         Material 3 baseline, exactly as the app has always rendered them. -->
     <style name="ThemeOverlay.Home.Current" parent="">
         <item name="colorPrimary">@color/home_primary</item>
         <item name="colorOnPrimary">@color/home_on_primary</item>
@@ -29,10 +25,9 @@
         <item name="colorOutlineVariant">@color/home_outline_variant</item>
         <item name="android:colorBackground">@color/home_surface</item>
         <item name="colorOnBackground">@color/home_on_surface</item>
+        <item name="homeSelectedContentColor">?attr/colorPrimary</item>
     </style>
 
-    <!-- "Neon": the floating action buttons get a primary-coloured glow
-         (see Widget.Home.Neon.*; the glow itself needs Android 9+). -->
     <style name="ThemeOverlay.Home.Neon" parent="">
         <item name="colorPrimary">@color/theme_neon_primary</item>
         <item name="colorOnPrimary">@color/theme_neon_on_primary</item>
@@ -61,11 +56,15 @@
         <item name="colorOutlineVariant">@color/theme_neon_outline_variant</item>
         <item name="android:colorBackground">@color/theme_neon_surface</item>
         <item name="colorOnBackground">@color/theme_neon_on_surface</item>
+        <item name="homeSelectedContentColor">@color/theme_neon_on_secondary_container</item>
         <item name="floatingActionButtonStyle">@style/Widget.Home.Neon.FloatingActionButton</item>
         <item name="extendedFloatingActionButtonStyle">@style/Widget.Home.Neon.ExtendedFloatingActionButton</item>
     </style>
 
     <style name="Widget.Home.Neon.FloatingActionButton" parent="Widget.Material3.FloatingActionButton.Primary" />
 
-    <style name="Widget.Home.Neon.ExtendedFloatingActionButton" parent="Widget.Material3.ExtendedFloatingActionButton.Icon.Primary" />
+    <style name="Widget.Home.Neon.ExtendedFloatingActionButton" parent="Widget.Material3.ExtendedFloatingActionButton.Icon.Primary">
+        <item name="strokeColor">?attr/colorSecondary</item>
+        <item name="strokeWidth">@dimen/theme_neon_stroke</item>
+    </style>
 </resources>

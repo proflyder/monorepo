@@ -1,5 +1,3 @@
-"""Pins Robolectric's android-all runtime jar into a directory for offline tests."""
-
 def _android_all_dir_impl(ctx):
     out = ctx.actions.declare_directory(ctx.label.name)
     jar = ctx.file.jar

@@ -6,7 +6,6 @@ import android.view.LayoutInflater
 import android.view.View
 import androidx.core.view.ViewCompat
 import androidx.fragment.app.viewModels
-import com.google.android.material.button.MaterialButtonToggleGroup
 import dev.proflyder.home.core.theme.AppTheme
 import dev.proflyder.home.core.theme.AppThemes
 import dev.proflyder.home.core.theme.Appearance
@@ -14,19 +13,12 @@ import dev.proflyder.home.core.theme.ColorRole
 import dev.proflyder.home.core.theme.R as ThemeR
 import dev.proflyder.home.core.theme.ThemeMode
 import dev.proflyder.home.core.ui.BaseFragment
+import dev.proflyder.home.core.ui.PillSegments
 import dev.proflyder.home.core.ui.viewModelFactory
 import dev.proflyder.home.feature.settings.impl.R
 import dev.proflyder.home.feature.settings.impl.databinding.FragmentAppearanceBinding
 import dev.proflyder.home.feature.settings.impl.databinding.ItemAppearanceThemeBinding
 
-/**
- * Light/dark mode plus one preview card per registry entry. Each card is
- * inflated in its own theme, so it shows that palette's real surface, text and
- * swatches; a new [AppTheme] entry appears here without touching this screen.
- *
- * A theme change recreates the activity (the overlay is applied before the
- * first frame); a mode change is applied by AppCompat itself.
- */
 class AppearanceFragment : BaseFragment<FragmentAppearanceBinding>(FragmentAppearanceBinding.Companion::inflate) {
     private val viewModel: AppearanceViewModel by viewModels {
         viewModelFactory(AppearanceViewModel::class.java)
@@ -59,10 +51,10 @@ class AppearanceFragment : BaseFragment<FragmentAppearanceBinding>(FragmentAppea
     }
 }
 
-private val MODE_BUTTONS = mapOf(
-    ThemeMode.SYSTEM to R.id.appearance_mode_system,
-    ThemeMode.LIGHT to R.id.appearance_mode_light,
-    ThemeMode.DARK to R.id.appearance_mode_dark,
+private val MODE_LABELS = mapOf(
+    ThemeMode.SYSTEM to R.string.settings_appearance_mode_system,
+    ThemeMode.LIGHT to R.string.settings_appearance_mode_light,
+    ThemeMode.DARK to R.string.settings_appearance_mode_dark,
 )
 
 private val SWATCH_ROLES = listOf(
@@ -73,7 +65,6 @@ private val SWATCH_ROLES = listOf(
     ColorRole.SURFACE,
 )
 
-/** One preview card, inflated in the theme it previews. */
 internal fun addThemeCard(
     binding: FragmentAppearanceBinding,
     theme: AppTheme,
@@ -103,10 +94,9 @@ private fun tint(view: View, color: Int) {
     ViewCompat.setBackgroundTintList(view, ColorStateList.valueOf(color))
 }
 
-internal fun bindModeButtons(group: MaterialButtonToggleGroup, onSelect: (ThemeMode) -> Unit) {
-    group.addOnButtonCheckedListener { _, id, checked ->
-        MODE_BUTTONS.entries.firstOrNull { it.value == id && checked }?.let { onSelect(it.key) }
-    }
+internal fun bindModeButtons(pills: PillSegments, onSelect: (ThemeMode) -> Unit) {
+    pills.setLabels(ThemeMode.entries.map { pills.context.getString(MODE_LABELS.getValue(it)) })
+    pills.onSelected = { onSelect(ThemeMode.entries[it]) }
 }
 
 internal fun renderAppearance(
@@ -114,7 +104,7 @@ internal fun renderAppearance(
     cards: Map<AppTheme, ItemAppearanceThemeBinding>,
     appearance: Appearance,
 ) {
-    MODE_BUTTONS[appearance.mode]?.let { binding.appearanceMode.check(it) }
+    binding.appearanceMode.select(appearance.mode.ordinal)
     cards.forEach { (theme, card) -> renderCard(card, theme == appearance.theme) }
 }
 

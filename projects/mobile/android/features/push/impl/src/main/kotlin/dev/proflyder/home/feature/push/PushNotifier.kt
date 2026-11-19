@@ -39,7 +39,6 @@ class PushNotifier(
     private val context: Context,
     private val appearance: AppearanceController,
 ) {
-    /** The small icon and actions use the chosen theme's primary colour. */
     private val accent: Int
         get() = AppThemes.color(context, appearance.state.value.theme, ColorRole.PRIMARY)
 

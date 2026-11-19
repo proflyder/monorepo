@@ -909,7 +909,14 @@ Themes are code in `core/theme`:
   and dark; no defaults, so a missing role does not compile). Bundled:
   **Current** (the original emerald palette, unchanged), **System (Material
   You)** and **Neon** (near-black violet night, neon violet primary, electric
-  cyan secondary, magenta tertiary, primary-coloured FAB glow on Android 9+).
+  cyan secondary, magenta tertiary; selected pills, chips and the navigation
+  indicator are cyan on a deep violet `secondaryContainer`; FABs get a 1dp
+  cyan outline and, on Android 9+, a cyan elevation glow).
+- No segmented buttons anywhere (`MaterialButtonToggleGroup`, bordered
+  segments): a choice between a few options is `core/ui` `PillSegments`
+  (Time sections, Appearance mode). `AndroidThemeColorTests` enforces it.
+- `?attr/homeSelectedContentColor` (core/theme) is the text colour of a
+  selected pill: `colorPrimary` in Current, cyan in Neon.
 - Applying: the View system takes colours from theme attributes, so each
   theme is a static `ThemeOverlay` applied with `Theme.applyStyle` in
   `onActivityPreCreated` (`onActivityCreated` below Android 10), before any

@@ -87,7 +87,6 @@ class PushChannelsTest {
         assertNull(notification.sound)
         assertNull(notification.vibrate)
         assertTrue(notification.flags and Notification.FLAG_ONLY_ALERT_ONCE != 0)
-        // The accent follows the chosen theme instead of a fixed colour.
         assertEquals(AppTheme.CURRENT.palette.light.primary, notification.color)
     }
 

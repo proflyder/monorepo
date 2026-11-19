@@ -3,9 +3,7 @@ package dev.proflyder.home.core.theme
 import androidx.annotation.ColorInt
 import kotlin.math.pow
 
-/** WCAG 2.x contrast between two opaque colours. */
 object Contrast {
-    /** Minimum ratio for normal-size text at level AA. */
     const val AA_TEXT = 4.5
 
     fun ratio(@ColorInt first: Int, @ColorInt second: Int): Double {

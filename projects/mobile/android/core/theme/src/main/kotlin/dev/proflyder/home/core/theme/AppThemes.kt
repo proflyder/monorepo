@@ -9,20 +9,9 @@ import com.google.android.material.color.DynamicColorsOptions
 import com.google.android.material.color.MaterialColors
 import com.google.android.material.R as MaterialR
 
-/**
- * Applies a registry entry to the View system.
- *
- * A static theme is a `ThemeOverlay` style applied on top of the activity's
- * base theme before its views are inflated. The dynamic (Material You) theme
- * first applies the same fallback overlay and then Material's
- * [DynamicColors] overlay, which only takes effect on Android 12+; older
- * systems keep the fallback. Both steps run in one place so their order is
- * fixed: the wallpaper colours always win over the fallback.
- */
 object AppThemes {
     private val dynamicOptions: DynamicColorsOptions = DynamicColorsOptions.Builder().build()
 
-    /** Material You is offered only where the system provides it. */
     val isDynamicAvailable: Boolean get() = DynamicColors.isDynamicColorAvailable()
 
     fun applyTo(activity: Activity, theme: AppTheme) {
@@ -30,7 +19,6 @@ object AppThemes {
         if (theme.dynamic) DynamicColors.applyToActivityIfAvailable(activity, dynamicOptions)
     }
 
-    /** A context that renders in [theme]; used by previews and tests. */
     fun wrap(context: Context, theme: AppTheme): Context {
         val themed = ContextThemeWrapper(context, theme.overlayRes)
         return when {
@@ -39,7 +27,6 @@ object AppThemes {
         }
     }
 
-    /** The resolved colour of [role] in [theme] (wallpaper colours included). */
     @ColorInt
     fun color(context: Context, theme: AppTheme, role: ColorRole): Int {
         val base = ContextThemeWrapper(context, MaterialR.style.Theme_Material3_DayNight_NoActionBar)

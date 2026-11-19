@@ -1,5 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Theme "Neon", light: deep neon inks on lavender paper. Mirrors Palettes.neon. -->
 <resources>
     <color name="theme_neon_primary">#8A00D4</color>
     <color name="theme_neon_on_primary">#FFFFFF</color>
@@ -7,8 +6,8 @@
     <color name="theme_neon_on_primary_container">#2E004E</color>
     <color name="theme_neon_secondary">#006874</color>
     <color name="theme_neon_on_secondary">#FFFFFF</color>
-    <color name="theme_neon_secondary_container">#9EF0FF</color>
-    <color name="theme_neon_on_secondary_container">#001F24</color>
+    <color name="theme_neon_secondary_container">#E6D6FF</color>
+    <color name="theme_neon_on_secondary_container">#004F58</color>
     <color name="theme_neon_tertiary">#B0005E</color>
     <color name="theme_neon_on_tertiary">#FFFFFF</color>
     <color name="theme_neon_tertiary_container">#FFD9E4</color>

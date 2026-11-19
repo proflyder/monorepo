@@ -23,7 +23,6 @@ object NotificationHistoryDestination : Destination {
     override val route: String = "settings/history"
 }
 
-/** Theme and light/dark mode, opened from the settings list. */
 object AppearanceDestination : Destination {
     override val featureId: String = "settings"
     override val route: String = "settings/appearance"

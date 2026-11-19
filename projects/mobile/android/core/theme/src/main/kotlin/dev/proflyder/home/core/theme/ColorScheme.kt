@@ -2,11 +2,6 @@ package dev.proflyder.home.core.theme
 
 import androidx.annotation.ColorInt
 
-/**
- * One brightness of a theme: an opaque ARGB value for every [ColorRole].
- * The constructor has no defaults, so a palette cannot compile with a role
- * missing.
- */
 data class ColorScheme(
     @ColorInt val primary: Int,
     @ColorInt val onPrimary: Int,
@@ -64,10 +59,8 @@ data class ColorScheme(
     }
 }
 
-/** Both brightnesses of a theme; the night-mode setting picks one. */
 data class ThemePalette(val light: ColorScheme, val dark: ColorScheme)
 
-/** Six-digit RGB as written in design specs, made opaque. */
 @ColorInt
 internal fun rgb(hex: Int): Int = hex or OPAQUE
 

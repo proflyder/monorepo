@@ -4,7 +4,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** Pure registry contract: no resources, only the palette data. */
 class ThemeRegistryTest {
     @Test
     fun everyThemeDefinesEveryRoleAsAnOpaqueColourInBothBrightnesses() {
@@ -71,7 +70,6 @@ class ThemeRegistryTest {
             ColorRole.SURFACE_CONTAINER_HIGHEST,
         )
 
-        /** Foreground/background pairs the screens draw text with. */
         val TEXT_PAIRS: List<Pair<ColorRole, ColorRole>> = listOf(
             ColorRole.ON_PRIMARY to ColorRole.PRIMARY,
             ColorRole.ON_PRIMARY_CONTAINER to ColorRole.PRIMARY_CONTAINER,
@@ -81,8 +79,6 @@ class ThemeRegistryTest {
             ColorRole.ON_TERTIARY_CONTAINER to ColorRole.TERTIARY_CONTAINER,
             ColorRole.ON_ERROR to ColorRole.ERROR,
             ColorRole.ON_ERROR_CONTAINER to ColorRole.ERROR_CONTAINER,
-            // Primary as a text colour (countdowns, selected pills) sits on the
-            // screen background; on tonal cards primary marks icons and strokes.
             ColorRole.PRIMARY to ColorRole.SURFACE,
         ) + SURFACES.flatMap { surface ->
             listOf(ColorRole.ON_SURFACE, ColorRole.ON_SURFACE_VARIANT).map { it to surface }

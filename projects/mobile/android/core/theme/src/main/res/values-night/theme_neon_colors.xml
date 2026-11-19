@@ -1,5 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Theme "Neon", dark: near-black blue-violet night with violet, cyan and magenta neon. Mirrors Palettes.neon. -->
 <resources>
     <color name="theme_neon_primary">#BF4DFF</color>
     <color name="theme_neon_on_primary">#1A0033</color>
@@ -7,8 +6,8 @@
     <color name="theme_neon_on_primary_container">#F0D6FF</color>
     <color name="theme_neon_secondary">#00E5FF</color>
     <color name="theme_neon_on_secondary">#00363D</color>
-    <color name="theme_neon_secondary_container">#003F47</color>
-    <color name="theme_neon_on_secondary_container">#A6F5FF</color>
+    <color name="theme_neon_secondary_container">#3A1466</color>
+    <color name="theme_neon_on_secondary_container">#00E5FF</color>
     <color name="theme_neon_tertiary">#FF2E97</color>
     <color name="theme_neon_on_tertiary">#3D0021</color>
     <color name="theme_neon_tertiary_container">#5C0035</color>
@@ -19,7 +18,7 @@
     <color name="theme_neon_on_error_container">#FFDAD6</color>
     <color name="theme_neon_surface">#0B0A1A</color>
     <color name="theme_neon_on_surface">#EDE7FF</color>
-    <color name="theme_neon_on_surface_variant">#C4BCDB</color>
+    <color name="theme_neon_on_surface_variant">#CDB8FF</color>
     <color name="theme_neon_surface_container_low">#13112A</color>
     <color name="theme_neon_surface_container">#1A1735</color>
     <color name="theme_neon_surface_container_high">#231F42</color>

@@ -19,17 +19,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 
-/**
- * Owns the theme and light/dark choice. The choice lives in the app DataStore;
- * the in-memory [state] is what activities are themed with, so a change is
- * visible on the very next `recreate()` while the write finishes in the
- * background.
- *
- * [install] reads the stored choice synchronously once, in
- * `Application.onCreate`: one small Preferences file, read before any activity
- * exists, is what lets the first frame already use the chosen theme instead of
- * flashing the default one.
- */
 @SingleIn(AppScope::class)
 @Inject
 class AppearanceController(private val dataStore: DataStore<Preferences>) {
@@ -44,7 +33,6 @@ class AppearanceController(private val dataStore: DataStore<Preferences>) {
         application.registerActivityLifecycleCallbacks(ThemeApplier { state.value.theme })
     }
 
-    /** Returns true when the theme changed and open activities must be recreated. */
     fun selectTheme(theme: AppTheme): Boolean {
         if (state.value.theme == theme) return false
         mutableState.value = state.value.copy(theme = theme)
@@ -52,7 +40,6 @@ class AppearanceController(private val dataStore: DataStore<Preferences>) {
         return true
     }
 
-    /** AppCompat recreates the open activities itself when the night mode changes. */
     fun selectMode(mode: ThemeMode) {
         if (state.value.mode == mode) return
         mutableState.value = state.value.copy(mode = mode)
@@ -73,7 +60,6 @@ class AppearanceController(private val dataStore: DataStore<Preferences>) {
         scope.launch { write(key, value) }
     }
 
-    /** A failed write only means the choice is not remembered after a restart. */
     internal suspend fun write(key: Preferences.Key<String>, value: String) {
         runCatching { dataStore.edit { it[key] = value } }
     }

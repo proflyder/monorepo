@@ -3,11 +3,6 @@ package dev.proflyder.home.core.theme
 import androidx.annotation.AttrRes
 import com.google.android.material.R as MaterialR
 
-/**
- * The Material 3 colour roles every app theme defines. Screens never name a
- * colour: they read one of these roles through its theme attribute
- * (`?attr/colorPrimary`, `MaterialColors.getColor(view, attr)`).
- */
 enum class ColorRole(@AttrRes val attr: Int) {
     PRIMARY(androidx.appcompat.R.attr.colorPrimary),
     ON_PRIMARY(MaterialR.attr.colorOnPrimary),

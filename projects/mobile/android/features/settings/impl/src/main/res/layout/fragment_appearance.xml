@@ -1,6 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Appearance: light/dark mode, then one preview card per theme in the
-     registry. The cards are added in code, each inflated in its own theme. -->
 <androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
@@ -23,38 +21,11 @@
             android:textAppearance="?attr/textAppearanceTitleSmall"
             android:textColor="?attr/colorOnSurfaceVariant" />
 
-        <com.google.android.material.button.MaterialButtonToggleGroup
+        <dev.proflyder.home.core.ui.PillSegments
             android:id="@+id/appearance_mode"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="@dimen/ui_tile_gap"
-            app:selectionRequired="true"
-            app:singleSelection="true">
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/appearance_mode_system"
-                style="?attr/materialButtonOutlinedStyle"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="@string/settings_appearance_mode_system" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/appearance_mode_light"
-                style="?attr/materialButtonOutlinedStyle"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="@string/settings_appearance_mode_light" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/appearance_mode_dark"
-                style="?attr/materialButtonOutlinedStyle"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="@string/settings_appearance_mode_dark" />
-        </com.google.android.material.button.MaterialButtonToggleGroup>
+            android:layout_marginTop="@dimen/ui_tile_gap" />
 
         <TextView
             android:layout_width="match_parent"

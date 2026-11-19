@@ -57,7 +57,6 @@ interface AppGraph {
     val featureRegistry: FeatureRegistry
     val viewModelFactories: ViewModelFactoryRegistry
 
-    /** Theme and light/dark choice; installed before the first activity. */
     val appearance: AppearanceController
 
     /** Resolved at launch so Remote Config starts fetching on app start. */

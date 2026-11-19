@@ -276,8 +276,6 @@ kt_android_local_test(
     ],
 )
 
-# Every bundled theme in the dark mode on the real activity: Home, the Time tab
-# and Appearance. The PNGs are review evidence for each palette.
 kt_android_local_test(
     name = "theme_screenshot_test",
     srcs = ["src/test/kotlin/dev/proflyder/home/ThemeScreenshotTest.kt"],

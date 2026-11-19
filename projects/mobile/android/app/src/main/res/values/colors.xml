@@ -1,5 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Launcher icon colours; the app palette lives in core/theme. -->
 <resources>
     <color name="home_launcher_bg">#0B3D33</color>
     <color name="home_launcher_fg">#8CF8DC</color>

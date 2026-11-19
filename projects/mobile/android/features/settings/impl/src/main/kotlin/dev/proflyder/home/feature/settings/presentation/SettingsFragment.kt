@@ -7,14 +7,6 @@ import dev.proflyder.home.feature.settings.AppearanceDestination
 import dev.proflyder.home.feature.settings.NotificationHistoryDestination
 import dev.proflyder.home.feature.settings.impl.databinding.FragmentSettingsBinding
 
-/**
- * One settings list: server connection, phone notifications, the notification
- * history and the app appearance. The first two rows open the existing feature screens as overlays;
- * the history is a screen of this feature.
- *
- * Rows are feature ids, not destination objects, so this aggregator does not
- * depend on the implementation modules it links to.
- */
 class SettingsFragment : BaseFragment<FragmentSettingsBinding>(FragmentSettingsBinding.Companion::inflate) {
     override fun onBindingCreated(binding: FragmentSettingsBinding, savedInstanceState: Bundle?) {
         binding.settingsConnection.setOnClickListener { openFeature(CONNECTION_FEATURE) }

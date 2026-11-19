@@ -19,17 +19,6 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
-/**
- * Every bundled theme on the real activity in the dark mode: Home, the Time
- * tab and the Appearance screen. The theme is chosen through the app's own
- * controller before the activity exists, so the PNG proves the production path
- * (overlay applied before the first frame), not a test-only theme.
- *
- * Colours are read from the activity, not the decor view: the decor context is
- * built from the manifest theme id and never sees a runtime overlay. Since an
- * attribute check alone could pass on a default-coloured window, each shot also
- * requires the theme's surface colour to fill a large part of the frame.
- */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35], qualifiers = "w411dp-h891dp-night-xxhdpi")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)

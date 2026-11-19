@@ -4,9 +4,6 @@ load(":robolectric_android_all.bzl", "android_all_dir")
 
 package(default_visibility = ["//visibility:public"])
 
-# App themes as code: the registry (AppTheme), palette data for every Material 3
-# colour role, the ThemeOverlay resources built from it, Material You, and the
-# DataStore-backed choice applied to every activity before its first frame.
 metro_android_library(
     name = "theme",
     srcs = glob(["src/main/kotlin/**/*.kt"]),
@@ -23,16 +20,12 @@ metro_android_library(
     ],
 )
 
-# Robolectric resolves SDK 35 to this pinned preinstrumented jar.
 android_all_dir(
     name = "robolectric_android_all_sdk35",
     jar = "@maven//:org_robolectric_android_all_instrumented",
     jar_name = "android-all-instrumented-15-robolectric-13954326-i7.jar",
 )
 
-# Registry contract: every theme defines every role in both brightnesses, the
-# text pairs meet WCAG AA, and each ThemeOverlay resolves to exactly the
-# palette data (light and night).
 kt_android_local_test(
     name = "theme_test",
     srcs = glob(["src/test/kotlin/**/*.kt"]),

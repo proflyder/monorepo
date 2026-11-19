@@ -10,7 +10,6 @@
     <dimen name="settings_row_chevron">20dp</dimen>
     <dimen name="settings_empty_padding">32dp</dimen>
     <dimen name="settings_empty_icon">48dp</dimen>
-    <!-- Appearance screen. -->
     <dimen name="settings_appearance_swatch">20dp</dimen>
     <dimen name="settings_appearance_swatch_gap">8dp</dimen>
     <dimen name="settings_appearance_selected_stroke">2dp</dimen>

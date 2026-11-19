@@ -1,7 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
-    <!-- Base theme = the "Current" palette. The chosen AppTheme overlay
-         (core/theme) is applied on top before the first frame. -->
     <style name="Theme.Home" parent="Theme.Material3.DayNight.NoActionBar">
         <item name="colorPrimary">@color/home_primary</item>
         <item name="colorOnPrimary">@color/home_on_primary</item>
@@ -27,6 +25,7 @@
         <item name="colorSurfaceContainerHighest">@color/home_surface_container_highest</item>
         <item name="colorOutline">@color/home_outline</item>
         <item name="colorOutlineVariant">@color/home_outline_variant</item>
+        <item name="homeSelectedContentColor">?attr/colorPrimary</item>
 
         <!-- Rounder than stock M3: friendly, home-appliance feel. -->
         <item name="shapeAppearanceSmallComponent">@style/ShapeAppearance.Home.Small</item>

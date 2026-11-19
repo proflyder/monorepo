@@ -12,11 +12,9 @@ import dev.zacsweers.metro.ContributesIntoSet
 import dev.zacsweers.metro.Inject
 import kotlinx.coroutines.flow.StateFlow
 
-/** The Appearance screen reads and changes the app-wide choice directly. */
 class AppearanceViewModel(private val controller: AppearanceController) : ViewModel() {
     val state: StateFlow<Appearance> = controller.state
 
-    /** True when the activity must be recreated to show the new palette. */
     fun selectTheme(theme: AppTheme): Boolean = controller.selectTheme(theme)
 
     fun selectMode(mode: ThemeMode) = controller.selectMode(mode)

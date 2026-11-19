@@ -3,15 +3,6 @@ package dev.proflyder.home.core.theme
 import androidx.annotation.StringRes
 import androidx.annotation.StyleRes
 
-/**
- * The theme registry. Adding a theme is one entry here plus its
- * `ThemeOverlay.Home.*` style and `@color/theme_*` resources; screens only read
- * theme attributes, so none of them changes.
- *
- * Every entry has a full static [palette]. A [dynamic] theme replaces it with
- * the wallpaper colours (Material You) where the system supports them and
- * shows the static palette everywhere else.
- */
 enum class AppTheme(
     val key: String,
     @StringRes val titleRes: Int,
@@ -51,7 +42,6 @@ enum class AppTheme(
     }
 }
 
-/** Light/dark choice, independent of the palette. */
 enum class ThemeMode(val key: String) {
     SYSTEM("system"),
     LIGHT("light"),
@@ -65,7 +55,6 @@ enum class ThemeMode(val key: String) {
     }
 }
 
-/** What the owner picked on the Appearance screen. */
 data class Appearance(
     val theme: AppTheme = AppTheme.DEFAULT,
     val mode: ThemeMode = ThemeMode.DEFAULT,

@@ -1,16 +1,6 @@
 package dev.proflyder.home.core.theme
 
-/**
- * Palette data of the bundled themes. Each value must equal the matching
- * `@color/` resource its overlay applies; `ThemeOverlayConsistencyTest`
- * resolves every overlay and compares it with these schemes.
- */
 internal object Palettes {
-    /**
-     * "Evening emerald", the app's original palette, kept exactly. The error
-     * container roles were never overridden, so they mirror the Material 3
-     * baseline the app has always shown.
-     */
     val current = ThemePalette(
         light = ColorScheme(
             primary = rgb(0x0E7C66),
@@ -68,12 +58,6 @@ internal object Palettes {
         ),
     )
 
-    /**
-     * Cyberpunk night city: near-black blue-violet surfaces, neon violet
-     * primary, electric cyan secondary and hot magenta tertiary. The bright
-     * accents carry dark "on" colours so labels stay readable (WCAG AA).
-     * The light variant keeps the hues as deep inks on a lavender paper.
-     */
     val neon = ThemePalette(
         light = ColorScheme(
             primary = rgb(0x8A00D4),
@@ -82,8 +66,8 @@ internal object Palettes {
             onPrimaryContainer = rgb(0x2E004E),
             secondary = rgb(0x006874),
             onSecondary = rgb(0xFFFFFF),
-            secondaryContainer = rgb(0x9EF0FF),
-            onSecondaryContainer = rgb(0x001F24),
+            secondaryContainer = rgb(0xE6D6FF),
+            onSecondaryContainer = rgb(0x004F58),
             tertiary = rgb(0xB0005E),
             onTertiary = rgb(0xFFFFFF),
             tertiaryContainer = rgb(0xFFD9E4),
@@ -109,8 +93,8 @@ internal object Palettes {
             onPrimaryContainer = rgb(0xF0D6FF),
             secondary = rgb(0x00E5FF),
             onSecondary = rgb(0x00363D),
-            secondaryContainer = rgb(0x003F47),
-            onSecondaryContainer = rgb(0xA6F5FF),
+            secondaryContainer = rgb(0x3A1466),
+            onSecondaryContainer = rgb(0x00E5FF),
             tertiary = rgb(0xFF2E97),
             onTertiary = rgb(0x3D0021),
             tertiaryContainer = rgb(0x5C0035),
@@ -121,7 +105,7 @@ internal object Palettes {
             onErrorContainer = rgb(0xFFDAD6),
             surface = rgb(0x0B0A1A),
             onSurface = rgb(0xEDE7FF),
-            onSurfaceVariant = rgb(0xC4BCDB),
+            onSurfaceVariant = rgb(0xCDB8FF),
             surfaceContainerLow = rgb(0x13112A),
             surfaceContainer = rgb(0x1A1735),
             surfaceContainerHigh = rgb(0x231F42),
