@@ -11,6 +11,9 @@ import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
+import dev.proflyder.home.core.theme.AppThemes
+import dev.proflyder.home.core.theme.AppearanceController
+import dev.proflyder.home.core.theme.ColorRole
 import dev.proflyder.home.feature.push.impl.R
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.Inject
@@ -32,13 +35,19 @@ import dev.zacsweers.metro.SingleIn
  */
 @SingleIn(AppScope::class)
 @Inject
-class PushNotifier(private val context: Context) {
+class PushNotifier(
+    private val context: Context,
+    private val appearance: AppearanceController,
+) {
+    private val accent: Int
+        get() = AppThemes.color(context, appearance.state.value.theme, ColorRole.PRIMARY)
 
     /** Shows an ordinary notification; the deep link is an in-app route. */
     fun notify(message: PushMessage.Notify) {
         val content = openAppIntent(message.deepLink)
         val notification = NotificationCompat.Builder(context, PushChannels.NOTIFICATIONS)
             .setSmallIcon(R.drawable.push_ic_notification)
+            .setColor(accent)
             .setContentTitle(message.title)
             .setContentText(message.body)
             .setStyle(NotificationCompat.BigTextStyle().bigText(message.body))
@@ -56,6 +65,7 @@ class PushNotifier(private val context: Context) {
         val full = findScreenIntent()
         return NotificationCompat.Builder(context, PushChannels.FIND)
             .setSmallIcon(R.drawable.push_ic_notification)
+            .setColor(accent)
             .setContentTitle(context.getString(R.string.push_find_title))
             .setContentText(
                 reason.ifBlank { context.getString(R.string.push_find_default_reason) },

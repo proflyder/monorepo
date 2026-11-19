@@ -1,5 +1,21 @@
 # Работа с yandex-station-lab
 
+## Сначала документация, в конце уборка
+
+- Перед любым ответом или действием про инфраструктуру, устройства, сервисы или
+  процессы сначала читать документацию репозитория: `docs/README.md` (индекс),
+  `docs/STATE.md`, `docs/NETWORK.md`, `docs/ARCHITECTURE.md`, профильный README
+  и `docs/SECRETS.md` для доступов. Не угадывать инвентарь (хосты, VM/CT
+  Proxmox, адреса, версии) и не спрашивать владельца о том, что уже записано.
+- После завершения всех работ по задаче убрать за собой: удалить неактуальные
+  worktree и их ветки (только `^bb/` и свои временные), остановленные/лишние
+  Docker-контейнеры, образы и тома, созданные для задачи, Bazel output base и
+  кэши отработавших worktree (`bazel clean --expunge` или удаление output base),
+  временные файлы в `/tmp` и `$BB_THREAD_STORAGE`, тестовые bb-треды и
+  завершённые треды воркеров. Не трогать `local-history`, бэкапы
+  (`local-data/local/backups`) и данные других сессий. В отчёте перечислить, что
+  удалено и сколько места освобождено.
+
 ## Agent orchestration and model policy
 
 - The primary Codex thread owns planning, architecture, task decomposition,

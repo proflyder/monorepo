@@ -25,14 +25,15 @@
         <item name="colorSurfaceContainerHighest">@color/home_surface_container_highest</item>
         <item name="colorOutline">@color/home_outline</item>
         <item name="colorOutlineVariant">@color/home_outline_variant</item>
+        <item name="homeSelectedContentColor">?attr/colorPrimary</item>
 
         <!-- Rounder than stock M3: friendly, home-appliance feel. -->
         <item name="shapeAppearanceSmallComponent">@style/ShapeAppearance.Home.Small</item>
         <item name="shapeAppearanceMediumComponent">@style/ShapeAppearance.Home.Medium</item>
         <item name="shapeAppearanceLargeComponent">@style/ShapeAppearance.Home.Large</item>
 
-        <item name="android:statusBarColor">@color/home_surface</item>
-        <item name="android:navigationBarColor">@color/home_surface_container</item>
+        <item name="android:statusBarColor">?attr/colorSurface</item>
+        <item name="android:navigationBarColor">?attr/colorSurfaceContainer</item>
         <item name="android:windowLightStatusBar">@bool/home_light_bars</item>
         <!-- Ignored below API 27; the status bar equivalent has a lower API. -->
         <item name="android:windowLightNavigationBar" tools:targetApi="27">@bool/home_light_bars</item>

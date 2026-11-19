@@ -139,3 +139,57 @@ class AndroidManifestPermissionTests(unittest.TestCase):
             for permission in self.PATTERN.findall(manifest.read_text(encoding="utf-8")):
                 with self.subTest(manifest=str(manifest.relative_to(ROOT)), permission=permission):
                     self.assertIn(permission, declared)
+
+
+class AndroidThemeColorTests(unittest.TestCase):
+    ANDROID = ROOT / "projects/mobile/android"
+    COLOR = __import__("re").compile(r'"(#[0-9A-Fa-f]{3,8}|@color/[a-z0-9_]+|@android:color/(?!transparent)[a-z_]+)"')
+    ALLOWED_REFS = {"@color/ui_pill_text", "@color/alarms_day_toggle_text", "@color/alarms_day_toggle_background",
+                    "@color/alarms_day_toggle_stroke", "@color/alarms_delete_ripple",
+                    "@color/control_scrim", "@color/control_speed_dial_label",
+                    "@color/home_launcher_bg", "@color/home_launcher_fg"}
+
+    def _problems(self, path: Path) -> list[str]:
+        text = path.read_text(encoding="utf-8")
+        is_vector = "<vector" in text
+        problems = []
+        for number, line in enumerate(text.splitlines(), 1):
+            for value in self.COLOR.findall(line):
+                if value in self.ALLOWED_REFS:
+                    continue
+                if is_vector and ("fillColor" in line or "strokeColor" in line):
+                    continue
+                if "@android:id/mask" in text and value == "@android:color/white":
+                    continue
+                if path.name == "control_bg_swatch.xml":
+                    continue
+                problems.append(f"{path.relative_to(ROOT)}:{number}: {value}")
+        return problems
+
+    def test_layouts_drawables_and_styles_use_theme_attributes(self) -> None:
+        files = []
+        for pattern in ("**/src/main/res/layout*/*.xml", "**/src/main/res/drawable*/*.xml",
+                        "**/src/main/res/color*/*.xml", "**/src/main/res/values*/styles.xml"):
+            files.extend(self.ANDROID.glob(pattern))
+        self.assertGreater(len(files), 50)
+        problems = [p for f in sorted(set(files)) for p in self._problems(f)]
+        self.assertEqual(problems, [], "hard-coded colours outside the theme palette:\n" + "\n".join(problems))
+
+    def test_no_segmented_button_groups(self) -> None:
+        banned = ("MaterialButtonToggleGroup", "SegmentedButton")
+        problems = []
+        for path in sorted(self.ANDROID.glob("**/src/main/**/*")):
+            if path.suffix not in {".xml", ".kt"}:
+                continue
+            text = path.read_text(encoding="utf-8")
+            problems.extend(f"{path.relative_to(ROOT)}: {name}" for name in banned if name in text)
+        self.assertEqual(problems, [], "use core/ui PillSegments instead:\n" + "\n".join(problems))
+
+    def test_kotlin_does_not_parse_or_build_colours(self) -> None:
+        pattern = __import__("re").compile(r"Color\.(parseColor|rgb|argb)\(|0xFF[0-9A-Fa-f]{6}")
+        problems = []
+        for path in sorted(self.ANDROID.glob("**/src/main/kotlin/**/*.kt")):
+            for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+                if pattern.search(line):
+                    problems.append(f"{path.relative_to(ROOT)}:{number}")
+        self.assertEqual(problems, [], "\n".join(problems))

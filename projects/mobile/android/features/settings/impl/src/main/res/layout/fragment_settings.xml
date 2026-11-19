@@ -1,6 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Settings hub: three navigation rows over tonal cards, one per settings
-     area. Every visible string comes from resources. -->
 <androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
@@ -182,6 +180,63 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="@dimen/ui_tile_gap_half"
                         android:text="@string/settings_history_subtitle"
+                        android:textAppearance="?attr/textAppearanceBodySmall"
+                        android:textColor="?attr/colorOnSurfaceVariant" />
+                </LinearLayout>
+
+                <ImageView
+                    android:layout_width="@dimen/settings_row_chevron"
+                    android:layout_height="@dimen/settings_row_chevron"
+                    android:importantForAccessibility="no"
+                    android:src="@drawable/settings_ic_chevron" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/settings_appearance"
+            style="@style/Widget.Home.Card"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/ui_tile_gap"
+            android:clickable="true"
+            android:focusable="true">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:minHeight="@dimen/settings_row_min_height"
+                android:orientation="horizontal"
+                android:paddingStart="@dimen/settings_row_padding"
+                android:paddingTop="@dimen/settings_row_padding_vertical"
+                android:paddingEnd="@dimen/settings_row_padding_chevron"
+                android:paddingBottom="@dimen/settings_row_padding_vertical">
+
+                <ImageView
+                    android:layout_width="@dimen/settings_row_icon"
+                    android:layout_height="@dimen/settings_row_icon"
+                    android:importantForAccessibility="no"
+                    android:src="@drawable/settings_ic_palette" />
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="@dimen/settings_row_icon_gap"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/settings_appearance_title"
+                        android:textAppearance="?attr/textAppearanceTitleMedium"
+                        android:textColor="?attr/colorOnSurface" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/ui_tile_gap_half"
+                        android:text="@string/settings_appearance_subtitle"
                         android:textAppearance="?attr/textAppearanceBodySmall"
                         android:textColor="?attr/colorOnSurfaceVariant" />
                 </LinearLayout>

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="theme_neon_primary">#8A00D4</color>
+    <color name="theme_neon_on_primary">#FFFFFF</color>
+    <color name="theme_neon_primary_container">#F1DBFF</color>
+    <color name="theme_neon_on_primary_container">#2E004E</color>
+    <color name="theme_neon_secondary">#006874</color>
+    <color name="theme_neon_on_secondary">#FFFFFF</color>
+    <color name="theme_neon_secondary_container">#E6D6FF</color>
+    <color name="theme_neon_on_secondary_container">#004F58</color>
+    <color name="theme_neon_tertiary">#B0005E</color>
+    <color name="theme_neon_on_tertiary">#FFFFFF</color>
+    <color name="theme_neon_tertiary_container">#FFD9E4</color>
+    <color name="theme_neon_on_tertiary_container">#3E001D</color>
+    <color name="theme_neon_error">#BA1A1A</color>
+    <color name="theme_neon_on_error">#FFFFFF</color>
+    <color name="theme_neon_error_container">#FFDAD6</color>
+    <color name="theme_neon_on_error_container">#410002</color>
+    <color name="theme_neon_surface">#F8F5FF</color>
+    <color name="theme_neon_on_surface">#1A1530</color>
+    <color name="theme_neon_on_surface_variant">#4A4366</color>
+    <color name="theme_neon_surface_container_low">#F1ECFC</color>
+    <color name="theme_neon_surface_container">#EAE4F8</color>
+    <color name="theme_neon_surface_container_high">#E3DCF3</color>
+    <color name="theme_neon_surface_container_highest">#DCD4EE</color>
+    <color name="theme_neon_outline">#7A7296</color>
+    <color name="theme_neon_outline_variant">#CBC3E0</color>
+</resources>

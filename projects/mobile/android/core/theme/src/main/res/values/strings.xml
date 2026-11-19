@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="theme_current_title">Current</string>
+    <string name="theme_current_summary">Evening emerald: the original green palette</string>
+    <string name="theme_system_title">System (Material You)</string>
+    <string name="theme_system_summary">Colours from your wallpaper</string>
+    <string name="theme_system_unavailable">Needs Android 12; the Current palette is used instead</string>
+    <string name="theme_neon_title">Neon</string>
+    <string name="theme_neon_summary">Night city: violet and cyan neon on near-black</string>
+</resources>

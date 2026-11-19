@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="ThemeOverlay.Home.Current" parent="">
+        <item name="colorPrimary">@color/home_primary</item>
+        <item name="colorOnPrimary">@color/home_on_primary</item>
+        <item name="colorPrimaryContainer">@color/home_primary_container</item>
+        <item name="colorOnPrimaryContainer">@color/home_on_primary_container</item>
+        <item name="colorSecondary">@color/home_secondary</item>
+        <item name="colorOnSecondary">@color/home_on_secondary</item>
+        <item name="colorSecondaryContainer">@color/home_secondary_container</item>
+        <item name="colorOnSecondaryContainer">@color/home_on_secondary_container</item>
+        <item name="colorTertiary">@color/home_tertiary</item>
+        <item name="colorOnTertiary">@color/home_on_tertiary</item>
+        <item name="colorTertiaryContainer">@color/home_tertiary_container</item>
+        <item name="colorOnTertiaryContainer">@color/home_on_tertiary_container</item>
+        <item name="colorError">@color/home_error</item>
+        <item name="colorSurface">@color/home_surface</item>
+        <item name="colorOnSurface">@color/home_on_surface</item>
+        <item name="colorOnSurfaceVariant">@color/home_on_surface_variant</item>
+        <item name="colorSurfaceContainerLow">@color/home_surface_container_low</item>
+        <item name="colorSurfaceContainer">@color/home_surface_container</item>
+        <item name="colorSurfaceContainerHigh">@color/home_surface_container_high</item>
+        <item name="colorSurfaceContainerHighest">@color/home_surface_container_highest</item>
+        <item name="colorOutline">@color/home_outline</item>
+        <item name="colorOutlineVariant">@color/home_outline_variant</item>
+        <item name="android:colorBackground">@color/home_surface</item>
+        <item name="colorOnBackground">@color/home_on_surface</item>
+        <item name="homeSelectedContentColor">?attr/colorPrimary</item>
+    </style>
+
+    <style name="ThemeOverlay.Home.Neon" parent="">
+        <item name="colorPrimary">@color/theme_neon_primary</item>
+        <item name="colorOnPrimary">@color/theme_neon_on_primary</item>
+        <item name="colorPrimaryContainer">@color/theme_neon_primary_container</item>
+        <item name="colorOnPrimaryContainer">@color/theme_neon_on_primary_container</item>
+        <item name="colorSecondary">@color/theme_neon_secondary</item>
+        <item name="colorOnSecondary">@color/theme_neon_on_secondary</item>
+        <item name="colorSecondaryContainer">@color/theme_neon_secondary_container</item>
+        <item name="colorOnSecondaryContainer">@color/theme_neon_on_secondary_container</item>
+        <item name="colorTertiary">@color/theme_neon_tertiary</item>
+        <item name="colorOnTertiary">@color/theme_neon_on_tertiary</item>
+        <item name="colorTertiaryContainer">@color/theme_neon_tertiary_container</item>
+        <item name="colorOnTertiaryContainer">@color/theme_neon_on_tertiary_container</item>
+        <item name="colorError">@color/theme_neon_error</item>
+        <item name="colorOnError">@color/theme_neon_on_error</item>
+        <item name="colorErrorContainer">@color/theme_neon_error_container</item>
+        <item name="colorOnErrorContainer">@color/theme_neon_on_error_container</item>
+        <item name="colorSurface">@color/theme_neon_surface</item>
+        <item name="colorOnSurface">@color/theme_neon_on_surface</item>
+        <item name="colorOnSurfaceVariant">@color/theme_neon_on_surface_variant</item>
+        <item name="colorSurfaceContainerLow">@color/theme_neon_surface_container_low</item>
+        <item name="colorSurfaceContainer">@color/theme_neon_surface_container</item>
+        <item name="colorSurfaceContainerHigh">@color/theme_neon_surface_container_high</item>
+        <item name="colorSurfaceContainerHighest">@color/theme_neon_surface_container_highest</item>
+        <item name="colorOutline">@color/theme_neon_outline</item>
+        <item name="colorOutlineVariant">@color/theme_neon_outline_variant</item>
+        <item name="android:colorBackground">@color/theme_neon_surface</item>
+        <item name="colorOnBackground">@color/theme_neon_on_surface</item>
+        <item name="homeSelectedContentColor">@color/theme_neon_on_secondary_container</item>
+        <item name="floatingActionButtonStyle">@style/Widget.Home.Neon.FloatingActionButton</item>
+        <item name="extendedFloatingActionButtonStyle">@style/Widget.Home.Neon.ExtendedFloatingActionButton</item>
+    </style>
+
+    <style name="Widget.Home.Neon.FloatingActionButton" parent="Widget.Material3.FloatingActionButton.Primary" />
+
+    <style name="Widget.Home.Neon.ExtendedFloatingActionButton" parent="Widget.Material3.ExtendedFloatingActionButton.Icon.Primary">
+        <item name="strokeColor">?attr/colorSecondary</item>
+        <item name="strokeWidth">@dimen/theme_neon_stroke</item>
+    </style>
+</resources>

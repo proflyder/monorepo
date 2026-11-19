@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <dimen name="theme_neon_glow_elevation">16dp</dimen>
+    <dimen name="theme_neon_stroke">1dp</dimen>
+</resources>
