@@ -1,10 +1,13 @@
 package dev.proflyder.home.feature.push
 
+import android.app.Notification
+import android.app.NotificationChannel
 import android.app.NotificationManager
-import android.media.AudioAttributes
 import androidx.core.app.NotificationManagerCompat
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -13,27 +16,45 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 
 /**
- * Both channels must be created with the properties the loud path depends on:
- * the find channel is high-importance, uses the alarm audio usage and bypasses
- * Do Not Disturb. A later change of importance would silently mute the ring, so
- * this is pinned by a test rather than by a comment.
+ * The find channel is the silent carrier of a loud request.
+ *
+ * Its importance and DND bypass let the full-screen request through, but it
+ * must have no sound and no vibration: the ring itself is the `MediaPlayer` in
+ * the foreground service, and a channel sound would play the melody a second
+ * time and repeat on every notification update.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class PushChannelsTest {
     @Test
-    fun theFindChannelBypassesDndAndUsesTheAlarmStream() {
+    fun theFindChannelIsSilentAndBypassesDnd() {
         val context = RuntimeEnvironment.getApplication()
         PushChannels.ensure(context)
 
-        val manager = NotificationManagerCompat.from(context)
-        val find = manager.getNotificationChannel(PushChannels.FIND)
+        val find = manager(context).getNotificationChannel(PushChannels.FIND)
         assertNotNull(find)
         assertEquals(NotificationManager.IMPORTANCE_HIGH, find!!.importance)
         assertTrue(find.canBypassDnd())
-        val usage = find.audioAttributes?.usage
-        assertEquals(AudioAttributes.USAGE_ALARM, usage)
-        assertNotNull(find.sound)
+        assertNull(find.sound)
+        assertFalse(find.shouldVibrate())
+    }
+
+    @Test
+    fun theOldLoudChannelIsDeleted() {
+        val context = RuntimeEnvironment.getApplication()
+        val manager = manager(context)
+        manager.createNotificationChannel(
+            NotificationChannel(
+                PushChannels.LEGACY_FIND,
+                "legacy",
+                NotificationManager.IMPORTANCE_HIGH,
+            ),
+        )
+
+        PushChannels.ensure(context)
+
+        assertNull(manager.getNotificationChannel(PushChannels.LEGACY_FIND))
+        assertNotNull(manager.getNotificationChannel(PushChannels.FIND))
     }
 
     @Test
@@ -45,6 +66,25 @@ class PushChannelsTest {
             .getNotificationChannel(PushChannels.NOTIFICATIONS)
         assertNotNull(notifications)
         assertEquals(NotificationManager.IMPORTANCE_DEFAULT, notifications!!.importance)
-        assertEquals(false, notifications.canBypassDnd())
+        assertFalse(notifications.canBypassDnd())
     }
+
+    @Test
+    // The legacy fields are deprecated in favour of channels; they are read to
+    // prove that setSilent cleared the sound and vibration on the notification.
+    @Suppress("DEPRECATION")
+    fun theRingNotificationIsSilentAndAlertsOnce() {
+        val context = RuntimeEnvironment.getApplication()
+        PushChannels.ensure(context)
+
+        val notification = PushNotifier(context).ring("Рикардо")
+
+        assertEquals(PushChannels.FIND, notification.channelId)
+        assertNull(notification.sound)
+        assertNull(notification.vibrate)
+        assertTrue(notification.flags and Notification.FLAG_ONLY_ALERT_ONCE != 0)
+    }
+
+    private fun manager(context: android.content.Context): NotificationManager =
+        context.getSystemService(NotificationManager::class.java)
 }

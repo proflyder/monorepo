@@ -21,11 +21,14 @@ import dev.zacsweers.metro.SingleIn
  * resources; a server message supplies the title and body of an ordinary
  * notification and nothing else.
  *
- * The find-phone notification is the loud one: the `home_phone_find` channel
- * (alarm usage, bypass-DND) with a full-screen intent that opens the ringing
- * screen even over the lock screen. On Android 14+ this only becomes a
- * full-screen intent once the owner granted the allowance; otherwise the
- * notification is still high-importance and the service still rings.
+ * The find-phone notification is silent and belongs to the silent
+ * `home_phone_find_v2` channel: the sound comes only from [FindPhoneAudio] in
+ * the foreground service, so a notification update can never start a second
+ * copy of the melody. `setOnlyAlertOnce` and `setSilent` keep reposts quiet as
+ * well. The full-screen intent opens the ringing screen even over the lock
+ * screen; on Android 14+ this only becomes a full-screen intent once the owner
+ * granted the allowance, otherwise the notification is still high-importance
+ * and the service still rings.
  */
 @SingleIn(AppScope::class)
 @Inject
@@ -61,6 +64,7 @@ class PushNotifier(private val context: Context) {
             .setFullScreenIntent(full, true)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
+            .setSilent(true)
             .setCategory(NotificationCompat.CATEGORY_ALARM)
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)

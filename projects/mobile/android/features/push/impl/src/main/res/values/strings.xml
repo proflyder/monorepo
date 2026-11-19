@@ -22,7 +22,7 @@
     <string name="push_channel_notifications_name">Home notifications</string>
     <string name="push_channel_notifications_description">Messages from Ricardo: reminders, status and answers.</string>
     <string name="push_channel_find_name">Find phone ring</string>
-    <string name="push_channel_find_description">Loud ring that ignores silent mode and Do Not Disturb.</string>
+    <string name="push_channel_find_description">The request to ring this phone. The app plays the alarm itself, so the notification is silent.</string>
     <string name="push_find_title">Find phone</string>
     <string name="push_find_default_reason">Ricardo is looking for this phone</string>
     <string name="push_find_found">Found</string>

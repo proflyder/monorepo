@@ -501,10 +501,20 @@ service, triggered by the `phone_find` / `phone_notify` MCP tools):
   `type=phone_find`. Nothing is drawn by the system; `HomeMessagingService`
   starts the `mediaPlayback` foreground service, which rings and vibrates.
   The ring uses `AudioAttributes.USAGE_ALARM`, raises the alarm stream volume
-  to its maximum for the duration and restores it afterwards, bypasses silent
-  mode and Do Not Disturb (channel `home_phone_find`, `bypassDnd`), opens the
+  to its maximum for the duration and restores it afterwards. The ringer mode is
+  never changed: the alarm stream is already audible in silent and vibrate
+  modes, and switching the mode to normal used to leave the phone loud after
+  the ring. The request notification lives on a separate silent channel
+  (`home_phone_find_v2`: no sound, no channel vibration, `bypassDnd`), because
+  the `MediaPlayer` in the service is the only sound source; the old
+  `home_phone_find` channel had its own alarm sound, so it is deleted on every
+  start (channel settings are immutable). The notification uses
+  `setOnlyAlertOnce`/`setSilent`, and a repeated start or refresh reuses the
+  same player instead of layering a second melody. It opens the
   `FindPhoneActivity` over the lock screen through a full-screen intent, and
-  stops on «Нашёл» or after 60 seconds. A high-priority FCM message is exactly
+  stops — sound, vibration, notification and volume restore — on «Нашёл»,
+  after 60 seconds, on notification dismiss or when the service is destroyed. A
+  high-priority FCM message is exactly
   the case Android allows a background/killed app to start a foreground
   service from, so the behaviour is the same with the screen off, the app in
   the background and the app killed.
@@ -556,7 +566,11 @@ Russian cases and diminutives, when several phones are registered.
 `POST_NOTIFICATIONS` and `MODIFY_AUDIO_SETTINGS` by the app. A Robolectric
 screenshot of the screen in the dark theme is written to the
 `settings_screenshot_test` test outputs (`push-settings-dark.png`); the
-device-identity and name-persistence contract runs in `identity_test`.
+device-identity and name-persistence contract runs in `identity_test`. The ring
+contract — silent and vibrate modes survive start/stop, the alarm volume is
+restored, a repeated start reuses one player, and the find channel is silent
+with the legacy channel deleted — is pinned by
+`//projects/mobile/android/features/push/impl:audio_test` and `:channels_test`.
 
 ## Notification history
 

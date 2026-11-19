@@ -13,8 +13,13 @@ import android.os.IBinder
  * Started by [FindPhoneController] from a **high-priority FCM data message**,
  * which is exactly the case Android allows a background app to start a
  * foreground service from. It has no logic of its own: it plays the alarm
- * ([FindPhoneAudio]), posts the loud notification ([PushNotifier.ring]) and
+ * ([FindPhoneAudio]), posts the silent notification ([PushNotifier.ring]) and
  * stops when the controller says so, on «Нашёл» or after the 60-second timeout.
+ *
+ * There is exactly one sound source: this service's [FindPhoneAudio]. Repeated
+ * starts and refreshes update the reason of the same notification and never
+ * create a second `MediaPlayer`; [stopRinging] always stops the player,
+ * cancels vibration and restores the alarm volume, including on `onDestroy`.
  *
  * The service type is `mediaPlayback`: the ring is a looping audio stream, and
  * the type requires no extra runtime permission beyond the declared
@@ -34,12 +39,10 @@ class FindPhoneService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent?.action == ACTION_STOP) {
-            stopRinging()
-            return START_NOT_STICKY
+        when (intent?.action) {
+            ACTION_STOP -> stopRinging()
+            else -> startRinging(intent?.getStringExtra(EXTRA_REASON).orEmpty())
         }
-        val reason = intent?.getStringExtra(EXTRA_REASON).orEmpty()
-        startRinging(reason)
         return START_NOT_STICKY
     }
 
@@ -68,14 +71,13 @@ class FindPhoneService : Service() {
     }
 
     private fun stopRinging() {
-        if (!ringing) {
-            stopSelf()
-            return
-        }
+        val wasRinging = ringing
         ringing = false
         audio.stop()
         notifier.cancelRing()
-        stopForeground(STOP_FOREGROUND_REMOVE)
+        if (wasRinging) {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+        }
         stopSelf()
     }
 
