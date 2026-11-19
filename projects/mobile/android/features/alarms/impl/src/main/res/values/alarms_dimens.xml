@@ -12,9 +12,18 @@
     <!-- Dense alarm card: one time/text line, at most one extra actions line. -->
     <dimen name="alarms_card_min_height">88dp</dimen>
     <dimen name="alarms_card_padding_start">14dp</dimen>
-    <!-- At least one 40dp delete-button radius, so its ripple is not clipped. -->
-    <dimen name="alarms_card_padding_end">20dp</dimen>
+    <!-- The delete ripple is the 48dp icon button itself, so the card keeps a
+         12dp gap to the circle: the round state layer stays inside the card
+         and clear of the 24dp rounded corners. -->
+    <dimen name="alarms_card_padding_end">12dp</dimen>
     <dimen name="alarms_card_padding_vertical">10dp</dimen>
+    <!-- Trailing controls: a 48dp touch target with a 24dp glyph, separated
+         from the switch by 4dp. -->
+    <dimen name="alarms_card_icon_button_size">48dp</dimen>
+    <dimen name="alarms_card_icon_size">24dp</dimen>
+    <dimen name="alarms_card_trailing_gap">4dp</dimen>
+    <!-- Minimum clearance between the delete ripple circle and the card edge. -->
+    <dimen name="alarms_card_ripple_gap">8dp</dimen>
     <dimen name="alarms_card_time_gap">8dp</dimen>
     <dimen name="alarms_card_text_gap">4dp</dimen>
     <dimen name="alarms_card_actions_gap">8dp</dimen>
