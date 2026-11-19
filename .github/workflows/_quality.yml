@@ -26,7 +26,12 @@ jobs:
     env:
       MISE_TASK_RUN_AUTO_INSTALL: "false"
     steps:
+      # Full history: `platform/ci/version.mjs` counts the commits that touch a
+      # native unit along the first-parent history, and the committed-workflow
+      # tests run against this checkout.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
 
       # Tool versions and checksums: mise.toml + mise.lock (one source with the
       # workstation). Only the tools this job needs are installed.
