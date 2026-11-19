@@ -27,9 +27,9 @@ docs/WAKE-WORD.md
 
 Исходники Pulsar — first-party в этом монорепозитории. PR CI собирает обе
 архитектуры и публикует `ghcr.io/proflyder/pulsar-firmware:tree-<hash>` с
-provenance; merge в `develop` с новым `projects/station/pulsar/VERSION`
-(`publish_when` по VERSION) только продвигает этот digest на теги `<version>`
-и `:latest` (`native-release`). После approve в Environment `Station` job
+provenance; merge в `develop` только продвигает этот digest на теги `<version>`
+и `:latest` (`native-release`). Версия вычисляется (`platform/ci/version.mjs`:
+`VERSION` — только major.minor), поэтому отдельного PR с бампом нет. После approve в Environment `Station` job
 `deploy-station` катит его на станцию через HA updater. GitHub Releases и
 теги не используются. Upstream
 `Morvex885/pulsar` вливается вручную патчем. Процедура —

@@ -26,19 +26,22 @@ Skill `pre-publish-review` по диапазону PR.
 
 ## 3. Версия
 
-Версия — содержимое `projects/station/pulsar/VERSION` (`vMAJOR.MINOR.PATCH`, продолжение
-нумерации upstream: `v<major.minor>.<1000+N>`). Изменить файл в рабочей ветке; сравнить с прошлым
-значением и предложить версию пользователю.
+Версию вычисляет CI, руками её не менять: `projects/station/pulsar/VERSION` хранит только базу
+`vMAJOR.MINOR`, а patch = число коммитов, затрагивающих `projects/station/pulsar/**` в истории
+`HEAD^1` (`node platform/ci/version.mjs --unit pulsar`). Отдельного коммита «поднять версию» нет:
+смерженное изменение Pulsar само является релизом. `VERSION` правится только при смене
+major.minor.
 
 ## 4. PR и публикация
 
 1. Обычный PR в `develop`; merge — squash после зелёного `ci-ok`.
-2. PR CI (`_native.yml`, `promote: false`) собирает `aarch64` и `armhf` с этой версией, radio
-   и `SHA256SUMS`, проверяет `--version` под qemu и делает `oras push` в
-   `ghcr.io/proflyder/pulsar-firmware:tree-<hash>` с provenance. Push в `develop` с изменённым
-   `VERSION` (`native.publish_when`) запускает `native-release`: он проверяет `tree-<hash>` и
-   provenance и ставит на тот же digest теги `<version>` и `:latest`; повторной сборки нет.
-   Прочие изменения Pulsar релиз не запускают.
+2. PR CI (`_native.yml`, `promote: false`) собирает `aarch64` и `armhf` с вычисленной версией,
+   radio и `SHA256SUMS`, проверяет `--version` под qemu и делает `oras push` в
+   `ghcr.io/proflyder/pulsar-firmware:tree-<hash>` с provenance и аннотацией
+   `org.opencontainers.image.version`. Push в `develop` запускает `native-release`: он проверяет
+   `tree-<hash>` и provenance, берёт версию из аннотации и ставит на тот же digest теги
+   `<version>` и `:latest`; повторной сборки нет. Сломанный релиз пересобирается вручную
+   (`deploy-services.yml`, галочка `pulsar`).
 3. Тег версии неизменяем по содержимому: повторная публикация того же артефакта — no-op, другого
    содержимого под тем же тегом — ошибка. Уже опубликованную версию не перезаписывать, а
    выпускать следующую.

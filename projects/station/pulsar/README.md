@@ -13,7 +13,7 @@
 
 > **Ricardo fork:** этот checkout — отдельный Rust-профиль для нашей Midi.
 > База — upstream `v0.6.2` (ранее `v0.6.1` и `v0.5.4`); на колонке стоят релизы
-> форка `v0.5.10NN`.
+> форка `v0.5.10NN`, далее вычисляемые `v0.6.NNN` (см. `RICARDO.md`).
 > Из upstream `v0.6.2` взяты переключатели «Wake sound» и «Clock colon blink»
 > (`wake_sound` / `clock_colon_blink` в `state.conf`) и окно локальных команд
 > только для диалога от wake word (#61); стоп-слова из текста STT в форке
@@ -505,7 +505,7 @@ pulsar отдаёт модуль по протоколу deCONZ (ConBee/RaspBee)
 ```sh
 bazel test //projects/station/pulsar/satellite/...    # rustfmt, clippy, тесты на компьютере
 bazel build -c opt --platforms=//platform/bazel/zig:armhf_linux \
-  --define=pulsar_version="$(tr -d '[:space:]' < projects/station/pulsar/VERSION)" \
+  --define=pulsar_version="$(node platform/ci/version.mjs --unit pulsar)" \
   //projects/station/pulsar/satellite:station_binary  # одна архитектура
 cd projects/station/pulsar
 cargo run -p pulsar-installer -- 192.0.2.10  # установщик; сам собирает Bazel

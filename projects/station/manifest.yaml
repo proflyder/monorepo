@@ -87,9 +87,12 @@ components:
         compare: version
         version_command: /data/pulsar/pulsar --version
         expected:
-          repo: projects/station/pulsar/VERSION
+          # The release version is computed, not stored: VERSION holds only
+          # major.minor, the patch is the number of commits touching the unit
+          # (platform/ci/version.mjs). The audit invokes the same source.
+          command: node platform/ci/version.mjs --unit pulsar
           prefix: "pulsar "
-        note: build artifact, compare version string
+        note: build artifact, compare the computed release version
       - device: /data/pulsar/boot.sh
         repo: projects/station/pulsar/satellite/deploy/boot.sh
         compare: sha256
