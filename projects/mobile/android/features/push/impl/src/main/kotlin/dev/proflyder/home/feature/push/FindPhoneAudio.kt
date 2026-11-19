@@ -24,7 +24,8 @@ import android.os.VibratorManager
  * stay exactly as the owner set them.
  *
  * Vibration repeats with the same pattern on every API level the app supports.
- * Everything is best-effort and failure-tolerant: a device without an alarm
+ * Everything is best-effort and failure-tolerant (the ringer mode is never
+ * touched): a device without an alarm
  * ringtone or vibrator still shows the ringing screen, so the owner can press
  * «Нашёл» rather than facing a silent, broken alert.
  */
