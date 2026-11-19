@@ -2408,36 +2408,17 @@ export function matrixEntries(route_, config) {
   // CI-harness change still runs the checks but must not push every image).
   // A unit without images gets empty values and the `unit` workflow skips the
   // image/attestation steps.
-  const deployFields = (unit) => {
-    if (!unit.deployImages.length || !route_.deploySelected.has(unit.id)) {
-      return {
-        images: "",
-        image_list: "[]",
-        image_count: 0,
-        builder: unit.deployBuilder,
-        target_root: "",
-        bazel_images: "{}",
-      };
-    }
-    // `build-images.sh` publishes home-deploy for every bazel/mixed unit that
-    // does not own it; include it in the attestation list so deploy-home can
-    // verify the CLI image too.
-    const imageList = [...unit.deployImages];
-    if (
-      (unit.deployBuilder === "bazel" || unit.deployBuilder === "mixed") &&
-      !imageList.includes("home-deploy")
-    ) {
-      imageList.push("home-deploy");
-    }
-    return {
-      images: space(unit.deployImages),
-      image_list: JSON.stringify(imageList),
-      image_count: imageList.length,
-      builder: unit.deployBuilder,
-      target_root: unit.deployTargetRoot,
-      bazel_images: JSON.stringify(unit.deployBazelImages),
-    };
-  };
+  const deployFields = (unit) =>
+    route_.deploySelected.has(unit.id)
+      ? deployImageFields(unit)
+      : {
+          images: "",
+          image_list: "[]",
+          image_count: 0,
+          builder: unit.deployBuilder,
+          target_root: "",
+          bazel_images: "{}",
+        };
   const bazel = route_.routes.bazel.units.map((unit) => ({
     id: unit.id,
     kind: "bazel",
@@ -2503,6 +2484,42 @@ export function matrixEntries(route_, config) {
     toolchain_root: unit.nativeToolchainRoot,
   }));
   return { android, bazel, unit: unit_, python, js, native };
+}
+
+/**
+ * Image fields of one deployable unit, in the shape `_unit.yml` and `_pin.yml`
+ * consume. Shared with the manual rebuild workflow (`platform/ci/rebuild.mjs`),
+ * which selects the same units explicitly instead of by diff.
+ */
+export function deployImageFields(unit) {
+  if (!unit.deployImages.length) {
+    return {
+      images: "",
+      image_list: "[]",
+      image_count: 0,
+      builder: unit.deployBuilder,
+      target_root: "",
+      bazel_images: "{}",
+    };
+  }
+  // `build-images.sh` publishes home-deploy for every bazel/mixed unit that
+  // does not own it; include it in the attestation list so deploy-home can
+  // verify the CLI image too.
+  const imageList = [...unit.deployImages];
+  if (
+    (unit.deployBuilder === "bazel" || unit.deployBuilder === "mixed") &&
+    !imageList.includes("home-deploy")
+  ) {
+    imageList.push("home-deploy");
+  }
+  return {
+    images: space(unit.deployImages),
+    image_list: JSON.stringify(imageList),
+    image_count: imageList.length,
+    builder: unit.deployBuilder,
+    target_root: unit.deployTargetRoot,
+    bazel_images: JSON.stringify(unit.deployBazelImages),
+  };
 }
 
 /**

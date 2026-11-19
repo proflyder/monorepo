@@ -1327,11 +1327,17 @@ export const config = {
     // contract; `publish_attest_glob` is the artifact file (or glob)
     // whose build provenance is attested next to the pushed manifest.
     //
+    // Native units no longer use `publish_when`: the version is computed from
+    // `VERSION` (major.minor) plus the commits touching the unit's paths
+    // (`platform/ci/version.mjs`), so any merged change of the unit is a
+    // release and no version bump PR is needed.
+    //
     // `publish_repository` is the artifact's full GHCR reference and
     // `publish_tags` are the tags deploy-home attaches when it promotes the
     // PR-built `tree-<hash>` digest (DECISIONS 36). `{version}` and
-    // `{commit12}` expand from the deployed VERSION and commit. A PR publishes
-    // the same artifact under `tree-<hash>` only.
+    // `{commit12}` expand from the version recorded on the artifact (the same
+    // bytes the updater verifies) and the deploy commit. A PR publishes the
+    // same artifact under `tree-<hash>` only.
     {
       id: "logon-provider",
       platform: "native",
@@ -1363,9 +1369,9 @@ export const config = {
         checksums: "out/SHA256SUMS",
         publish_script: "solutions/windows-logon-provider/publish-oci.sh",
         publish_repository: "ghcr.io/proflyder/windows-logon-provider",
-        // Only a VERSION change is a release. Every other source or toolchain
-        // change is still built, tested and verified by PR CI.
-        publish_when: ["solutions/windows-logon-provider/VERSION"],
+        // A release is any merged change of the unit: the version is computed
+        // (`platform/ci/version.mjs`) from VERSION + the commits touching the
+        // unit, so no separate bump PR exists.
         publish_tags: ["{version}", "sha-{commit12}"],
         publish_attest_glob: "HomeKompLogon.dll",
       },
@@ -1373,9 +1379,10 @@ export const config = {
 
     // The Rust station daemon and its surrounding builds (radio firmware,
     // Rust installer, dropbear). Both station ABIs are built with Bazel; host
-    // fmt/clippy/tests are the `pulsar-bazel` unit. Any Pulsar change is PR CI;
-    // only a VERSION change publishes the release OCI artifact, and
-    // deploy-home's `deploy-station` job then rolls it out through HA.
+    // fmt/clippy/tests are the `pulsar-bazel` unit. Any Pulsar change is PR CI
+    // and, once merged, a release: the version is computed from `VERSION`
+    // (major.minor) plus the commits touching the unit, and deploy-home's
+    // `deploy-station` job rolls it out through HA.
     {
       id: "pulsar",
       platform: "native",
@@ -1390,8 +1397,6 @@ export const config = {
       native: {
         kind: "pulsar",
         workdir: "projects/station/pulsar",
-        // The version is the release trigger and the artifact tag.
-        publish_when: ["projects/station/pulsar/VERSION"],
         publish_script: "projects/station/pulsar/publish-oci.sh",
         publish_repository: "ghcr.io/proflyder/pulsar-firmware",
         // `latest` moves with every promoted version; the version tag itself

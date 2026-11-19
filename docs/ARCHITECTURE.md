@@ -124,7 +124,8 @@
 
 ```text
 GitHub Actions ──OIDC──► OpenBao jwt роли deploy-station (Environment
-                              │  Station) и android-distribute (Environment Android)
+                              │  Station), android-distribute / android-release /
+                              │  android-cleanup (Environment Android)
                               │  secret/ci/deploy-station, secret/ci/android-distribute
                               ▼
                          VPN группа ci → Traefik 443 → HA/OpenBao
@@ -149,9 +150,9 @@ OpenBao KV v2 secret/k8s/* ──► ESO ClusterSecretStore/openbao
 ### CI/CD
 
 ```text
-ветка <type>/<name> → PR → CI (units.mjs, reusable workflows) → ci-ok
+ветка <type>/<name> → PR → ci.yml (обёртка) → _ci.yml (units.mjs, reusable) → ci-ok
    → squash merge в develop
-   → deploy-home plan (units.mjs)
+   → deploy-home.yml (push, обёртка) → _deploy-home.yml plan (units.mjs)
         → pins job: verified digest → машинная ветка deploy/home-apps
              → Flux: ConfigMap/home-app-images → применяет workload из develop
         → deploy-station: Pulsar через HA (Environment Station)
@@ -162,10 +163,12 @@ OpenBao KV v2 secret/k8s/* ──► ESO ClusterSecretStore/openbao
   читает OpenBao и не вызывает kubectl/helm. Откат — pins revert (или manifest
   revert), не `kubectl rollout undo`; аварийная заморозка — `flux suspend`.
 - `deploy-home` содержит только `plan`, `pins`, `warm-*`, `native-release` и
-  `deploy-station`. Прежний job `deploy` (VPN группа `ci`, OIDC, `ci-deploy`)
+  `deploy-station` (pins и станция — общие reusable `_pin.yml` /
+  `_station-deploy.yml`, их же использует ручной `deploy-services.yml`).
+  Прежний job `deploy` (VPN группа `ci`, OIDC, `ci-deploy`)
   удалён вместе с RBAC и сертификатом `ci-github`; правило `6443` снято,
   `443` и группа `ci` остаются для `deploy-station` (`ci-pulsar`) и
-  `android-distribute` (`ci-android`).
+  `android-distribute` / `android-release` / `android-cleanup` (`ci-android`).
 
 - Прямой push в `develop` запрещён; merge PR = деплой затронутых юнитов.
 - CI-скачивания Maven/Google Maven/PyPI/npm у Bazel идут напрямую с раннеров,

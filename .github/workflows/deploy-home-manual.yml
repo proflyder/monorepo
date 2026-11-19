@@ -1,0 +1,39 @@
+name: deploy-home (вручную)
+
+# Manual twin of `deploy-home.yml`: re-pin the current `develop` and, if asked,
+# re-deploy the station. Same reusable pipeline (`_deploy-home.yml`,
+# `mode: manual`), one trigger only.
+#
+# Use it when a push-time release failed and the images are already published:
+# promotion walks the first-parent history for the newest image whose
+# `tree-<hash>` tag exists and whose provenance verifies, so a manual run can
+# finish a deploy that never happened. `units=pulsar` re-installs the currently
+# published `latest` through Home Assistant without rebuilding anything.
+#
+# This workflow never builds. To build from scratch and deploy, use
+# `deploy-services.yml`.
+on:
+  workflow_dispatch:
+    inputs:
+      units:
+        description: >-
+          `all` (every deployable unit, including the station release) or a
+          comma separated list of unit ids from platform/ci/units.mjs
+        required: false
+        type: string
+        default: all
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-home-plan
+  cancel-in-progress: false
+
+jobs:
+  release:
+    uses: ./.github/workflows/_deploy-home.yml
+    with:
+      mode: manual
+      units: ${{ inputs.units }}
+    secrets: inherit

@@ -278,15 +278,56 @@ CI (платформа `native`, `_native.yml`) ставит pinned Bazelisk, к
 ## CI (GitHub Actions)
 
 `.github/workflows/ci.yml` — hermetic-проверки без деплоя и без секретов.
-Триггеры: pull request в `develop` и ручной `workflow_dispatch` (он прогоняет
-все юниты). Push в `develop` CI не запускает: он меняется только через PR с
-зелёным `ci-ok`, повторный прогон после squash-merge избыточен.
+Сам он только вызывает reusable `_ci.yml`; триггер у него ровно один —
+pull request в `develop`. Ручной полный прогон — отдельный файл
+`ci-manual.yml` (`workflow_dispatch`), который вызывает тот же reusable
+с `mode: all`. Push в `develop` CI не запускает: он меняется только через PR
+с зелёным `ci-ok`, повторный прогон после squash-merge избыточен.
 `permissions: contents: read`, `concurrency` отменяет устаревший прогон только
 для PR. Выкладка — отдельный `.github/workflows/deploy-home.yml` на push в
 `develop` (см. ниже); его job-ы `warm-android` и `warm-rust` после merge —
 единственные писатели develop-стороны кэшей. Кэши разделены по семействам,
 потому что Android и host-Rust скачивают и компилируют разное, а лимит GitHub
 (10 ГБ) общий:
+
+### Правило: один триггер на воркфлоу
+
+У каждого файла в `.github/workflows/` ровно одно событие в `on:` — либо
+`workflow_dispatch`, либо `workflow_call`, либо `pull_request`, либо `push`,
+либо `schedule`. Причина: несколько событий в одном файле размазывают
+триггерную обвязку и провоцируют ветвление по `github.event_name` внутри
+общей логики. Если нужны и PR, и ручной запуск — это два тонких файла-обёртки,
+которые вызывают один reusable workflow (`_*.yml`, `on: workflow_call`).
+
+| Триггер | Тонкая обёртка | Общая логика |
+|---|---|---|
+| `pull_request` в `develop` | `ci.yml` (он же публикует required check `ci-ok`) | `_ci.yml` |
+| `workflow_dispatch` (все юниты) | `ci-manual.yml` | `_ci.yml` |
+| `workflow_dispatch` (Android-релиз) | `android-release.yml` | `_android.yml` + `_android-release.yml` |
+| `push` в `develop` | `deploy-home.yml` | `_deploy-home.yml` → `_pin.yml`, `_native.yml`, `_station-deploy.yml` |
+| `workflow_dispatch` (допин текущего develop) | `deploy-home-manual.yml` | `_deploy-home.yml` |
+| `workflow_dispatch` (честная пересборка) | `deploy-services.yml` | `_unit.yml`, `_pin.yml`, `_native.yml`, `_station-deploy.yml` |
+| `schedule` (ежедневная уборка) | `cleanup.yml` | `_cleanup.yml` |
+| `workflow_dispatch` (уборка, dry run по умолчанию) | `cleanup-manual.yml` | `_cleanup.yml` |
+
+Правила для reusable (`_*.yml`): только `on: workflow_call`, никаких
+`github.event_name` для ветвления — вызывающий передаёт явный input
+(`mode`, `dry_run`, `same_repository`, `distribution`, `save_cache`). Имя
+required check `ci-ok` и имя файла `deploy-home.yml` — часть контракта branch
+protection и `platform/ci/safe-merge.mjs`; проверка `/`-префикса не появляется,
+потому что job `ci-ok` остаётся в `ci.yml` (вызывается только reusable
+`_ci.yml`, а его агрегат приходит как output `ok`/`failing`).
+
+Правило проверяется автоматически: `platform/ci/check_units.mjs`
+(`workflowTriggerProblems`, `mise run ci:units`) падает, если в `on:` больше
+одного события, если `_*.yml` имеет не `workflow_call` или если файл без `_`
+объявлен как reusable.
+
+**Как добавить новый триггер.** Не добавляйте событие в существующий файл.
+Создайте `<name>.yml` с одним `on:` и job, который вызывает уже существующий
+`_*.yml` с нужными inputs. Если общей логики ещё нет — вынесите job в новый
+`_<name>.yml` (`on: workflow_call`) и сделайте обёртками оба файла. Общие
+шаги (не job) — composite action в `.github/actions/<name>/action.yml`.
 
 * Android: `bazel-android-<os>-warm-<hash>` (disk cache). `warm-android`
   собирает все build/test-цели юнитов платформы `android` из
@@ -372,8 +413,11 @@ matrix одного платформенного workflow.
 | native | `_native.yml` | pinned toolchain download + sha256, host tests, cross-build, `SHA256SUMS` artifact; same-repo PR публикует release-shaped `tree-<hash>` с provenance |
 | quality | `_quality.yml` | audit, static gates, unit-map, actionlint, shellcheck, Gitleaks |
 
-`ci.yml` содержит только координацию: `changes` → matrix-вызовы reusable
-workflow → `ci-ok`. Исключение — `android-distribute`.
+`_ci.yml` содержит только координацию: `changes` → matrix-вызовы reusable
+workflow → `gate` (агрегат результатов). Обёртки `ci.yml` и `ci-manual.yml`
+передают событие inputs и не дублируют ни одного job; required check `ci-ok`
+публикует `ci.yml` по output `ok`/`failing` от `_ci.yml`. Исключение —
+`android-distribute`.
 `android-distribute` ждёт весь `android` matrix и при
 PR (не из форка) с `android_distribute` = true скачивает готовый
 `android-app-apk`, подписывает его релизным ключом и загружает в Firebase: он
@@ -396,12 +440,15 @@ Maven/APK-замыкание. Прочие глобальные инвалида
 `apk_abi_test` проверяют ровно публикуемый APK → неподписанный artifact
 `android-app-apk` (`app.apk` + `release-info.json`). Ни одна запись Android
 matrix секретов не читает.
-`android-distribute` (Environment `Android`, роль OpenBao `android-distribute`)
-скачивает artifact, подписывает его `platform/android/sign-release.sh`,
-обновляет `release-info.json` (`release_info.py resign`) и вызывает
-`distribute.sh --upload-only`. Удаление старых сборок — отдельная ежедневная
-джоба `fad` workflow `.github/workflows/cleanup.yml` (24-часовое окно, роль
-OpenBao `android-cleanup`); она не входит в PR-проверки.
+`android-distribute` (job `_ci.yml` → reusable `_android-release.yml`,
+Environment `Android`, роль OpenBao `android-distribute`) скачивает artifact,
+подписывает его `platform/android/sign-release.sh`, обновляет
+`release-info.json` (`release_info.py resign`) и вызывает
+`distribute.sh --upload-only`. Тот же `_android-release.yml` использует ручной
+`android-release.yml` (роль `android-release`, ветка `develop`) — сборка,
+подпись и дистрибуция живут только там. Удаление старых сборок — отдельная
+ежедневная джоба `fad` reusable `_cleanup.yml` (24-часовое окно, роль OpenBao
+`android-cleanup`); она не входит в PR-проверки.
 
 
 Android-платформа состоит из трёх юнитов с одними и теми же `paths` и

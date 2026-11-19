@@ -67,6 +67,7 @@ import process from "node:process";
 import { pathToFileURL } from "node:url";
 
 import { compute as computeAffected } from "./affected.mjs";
+import { VERSION_ANNOTATION } from "./version.mjs";
 
 /** Public GHCR namespace of the monorepo service images. */
 export const REGISTRY = "ghcr.io/proflyder";
@@ -775,6 +776,13 @@ export function expandTags(templates, { version, commit }) {
 
 /** Layer/descriptor title annotation used by `oras push` for a file name. */
 const TITLE_ANNOTATION = "org.opencontainers.image.title";
+/**
+ * Version annotation the publish scripts write next to a native release; the
+ * promote path reads it so the release tag and the binary's `--version` (which
+ * the station updater compares) can never disagree. Defined once, in
+ * `version.mjs`, and re-exported here for the promotion callers.
+ */
+export { VERSION_ANNOTATION };
 
 /**
  * Reduce an OCI manifest/index to the fields that define artifact identity:
@@ -822,6 +830,24 @@ function readManifest(exec, reference) {
   return manifestContent(exec("crane", ["manifest", reference]));
 }
 
+/** The manifest-level annotations of one reference (e.g. the artifact version). */
+export function manifestAnnotations(text) {
+  let parsed;
+  try {
+    parsed = JSON.parse(String(text || ""));
+  } catch (error) {
+    throw new Error(`manifest is not valid JSON: ${message(error)}`);
+  }
+  const annotations = parsed?.annotations;
+  return annotations && typeof annotations === "object" ? annotations : {};
+}
+
+/** Read a manifest once and return both its content identity and annotations. */
+function readManifestWithAnnotations(exec, reference) {
+  const text = exec("crane", ["manifest", reference]);
+  return { content: manifestContent(text), annotations: manifestAnnotations(text) };
+}
+
 /**
  * Promote a PR-built native artifact from `tree-<hash>` to the unit's release
  * tags. Releases are immutable by content: an existing `<version>` or
@@ -841,10 +867,16 @@ export function planNativePromotion({
   allowPrHead = false,
   prHead = null,
   unit = "",
-}) {
+  allowRetag = false,
+} = {}) {
   const tag = treeTag(tree);
   const ref = nativeRepository(repository);
-  const destinations = expandTags(tags, { version, commit });
+  // The version may arrive empty: the artifact's own annotation is then the
+  // authority (`publish-oci.sh` recorded the version the binary was built
+  // with). Destination tags are expanded once the candidate is known.
+  const expand = (value) =>
+    VERSION.test(String(value || "")) ? expandTags(tags, { version: value, commit }) : [];
+  let destinations = expand(version);
   const signer = nativeSignerIdentityPattern(githubRepository);
   const decisions = [];
 
@@ -932,12 +964,36 @@ export function planNativePromotion({
   // Content identity of the candidate, read once. Immutable tags are compared
   // against this instead of their manifest digest: a rebuild of the same files
   // produces different manifest annotations but the same layers.
-  const candidate = readManifest(exec, `${ref}@${digest}`);
+  const candidateRead = readManifestWithAnnotations(exec, `${ref}@${digest}`);
+  const candidate = candidateRead.content;
+
+  // The version travels with the artifact: the annotation is what the binary
+  // prints, so a release tag can never disagree with the updater's check. An
+  // explicit `--version` is a legacy override and must agree when both exist.
+  const annotated = String(candidateRead.annotations[VERSION_ANNOTATION] || "").trim();
+  const explicit = String(version || "").trim();
+  if (annotated && explicit && annotated !== explicit) {
+    throw new Error(
+      `${ref}@${digest} is annotated ${annotated} but the caller asked for ${explicit}; ` +
+        "the release tag must match the version the binary prints",
+    );
+  }
+  const effectiveVersion = annotated || explicit;
+  if (!VERSION.test(effectiveVersion)) {
+    throw new Error(
+      `${ref}@${digest} has no usable ${VERSION_ANNOTATION} annotation (got '${annotated}') ` +
+        "and no --version was given",
+    );
+  }
+  destinations = expand(effectiveVersion);
+  if (!destinations.length) {
+    throw new Error("no publish tags to attach");
+  }
 
   // The tag whose digest `latest` must follow: the version tag, whether it was
   // created now or kept from an earlier push. Without a version tag, `latest`
   // tracks the candidate itself.
-  const versionTag = expandTags(["{version}"], { version, commit })[0];
+  const versionTag = expandTags(["{version}"], { version: effectiveVersion, commit })[0];
   let releaseDigest = null;
 
   /** Keep/tag one immutable release tag and return the digest it now points to. */
@@ -963,9 +1019,29 @@ export function planNativePromotion({
         });
         return existing;
       }
+      if (allowRetag) {
+        // Explicit manual-rebuild path only (deploy-services): the same tree
+        // was rebuilt because the published bytes were broken. The version tag
+        // moves to the freshly verified digest and the move is reported.
+        exec("crane", ["tag", `${ref}@${digest}`, destination]);
+        const moved = parseDigest(exec("crane", ["digest", `${ref}:${destination}`]));
+        if (moved !== digest) {
+          throw new Error(
+            `${ref}:${destination} resolves to ${moved || "an unknown digest"}, not ${digest}`,
+          );
+        }
+        decisions.push({
+          tag: destination,
+          status: "retagged",
+          digest,
+          detail: `rebuilt the same tree; moved from ${existing}`,
+        });
+        return digest;
+      }
       throw new Error(
         `${ref}:${destination} already exists with ${existing}, not ${digest}; ` +
-          "release tags are immutable by content — bump the version",
+          "release tags are immutable by content — a merged change computes a new version, " +
+          "and re-pointing one is only the explicit deploy-services rebuild path",
       );
     }
     exec("crane", ["tag", `${ref}@${digest}`, destination]);
@@ -1017,6 +1093,7 @@ export function planNativePromotion({
     repository: ref,
     digest: releaseDigest || digest,
     tags: destinations,
+    version: effectiveVersion,
     source,
     decisions,
   };
@@ -1025,6 +1102,9 @@ export function planNativePromotion({
 export function formatNativeSummary(result) {
   const lines = [`### native promotion (${result.tag})`, ""];
   lines.push(`- repository: \`${result.repository}\``);
+  if (result.version) {
+    lines.push(`- version: \`${result.version}\``);
+  }
   for (const decision of result.decisions) {
     const digest = decision.digest ? ` \`${decision.digest}\`` : "";
     const detail = decision.detail ? ` — ${decision.detail}` : "";
@@ -1060,11 +1140,13 @@ export function runNativePromotion({
     allowPrHead: Boolean(args.allowPrHead),
     prHead,
     unit: args.unit || "",
+    allowRetag: Boolean(args.retag),
   });
   log(formatNativeSummary(result));
   if (env.GITHUB_OUTPUT) {
     appendFile(env.GITHUB_OUTPUT, `mode=${result.mode}\n`);
     appendFile(env.GITHUB_OUTPUT, `digest=${result.digest || ""}\n`);
+    appendFile(env.GITHUB_OUTPUT, `version=${result.version || ""}\n`);
   }
   if (env.GITHUB_ENV) {
     appendFile(env.GITHUB_ENV, `NATIVE_PROMOTION=${result.mode}\n`);
@@ -1092,6 +1174,7 @@ function parseArgs(argv) {
     optionalImages: [],
     allowHistory: false,
     allowPrHead: false,
+    retag: false,
     historyLimit: 200,
     unit: "",
     tree: "",
@@ -1134,6 +1217,9 @@ function parseArgs(argv) {
         break;
       case "--allow-pr-head":
         args.allowPrHead = true;
+        break;
+      case "--retag":
+        args.retag = true;
         break;
       case "--unit":
         args.unit = String(value || "");

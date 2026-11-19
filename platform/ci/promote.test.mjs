@@ -1497,3 +1497,128 @@ test("resolvePrHeadDelta refuses a publish repository instead of calling the PR 
   });
   assert.match(result.error, /invalid GitHub repository/);
 });
+
+// ------------------------------------------------- computed version ------
+// A native release no longer takes its version from an argument computed by the
+// caller: `publish-oci.sh` records it on the artifact and the promotion reads it,
+// so the release tag can never disagree with the binary the updater compares.
+test("native promotion reads the version from the artifact annotation", () => {
+  const ref = "ghcr.io/proflyder/pulsar-firmware";
+  const candidate = artifactManifest({
+    annotations: {
+      "org.opencontainers.image.version": "v0.6.50",
+      "org.opencontainers.image.created": "2026-01-01T00:00:00Z",
+    },
+  });
+  const { calls, exec } = recorder(
+    nativeHandlers({ ref, tree: TREE, digest: DIGEST_A, candidate }),
+  );
+  const result = planNativePromotion({
+    repository: ref,
+    tree: TREE,
+    commit: COMMIT,
+    version: "",
+    tags: ["{version}", "latest"],
+    githubRepository: REPO,
+    exec,
+  });
+  assert.equal(result.mode, "promoted");
+  assert.equal(result.version, "v0.6.50");
+  assert.deepEqual(result.tags, ["v0.6.50", "latest"]);
+  assert.deepEqual(tagsWritten(calls), [
+    ["crane", "tag", `${ref}@${DIGEST_A}`, "v0.6.50"],
+    ["crane", "tag", `${ref}@${DIGEST_A}`, "latest"],
+  ]);
+});
+
+test("an annotation that disagrees with an explicit version is refused", () => {
+  const ref = "ghcr.io/proflyder/pulsar-firmware";
+  const candidate = artifactManifest({
+    annotations: { "org.opencontainers.image.version": "v0.6.50" },
+  });
+  const { exec } = recorder(nativeHandlers({ ref, tree: TREE, digest: DIGEST_A, candidate }));
+  assert.throws(
+    () =>
+      planNativePromotion({
+        repository: ref,
+        tree: TREE,
+        commit: COMMIT,
+        version: "v0.6.51",
+        tags: ["{version}"],
+        githubRepository: REPO,
+        exec,
+      }),
+    /must match the version the binary prints/,
+  );
+});
+
+test("a native artifact without a version annotation and no override fails", () => {
+  const ref = "ghcr.io/proflyder/pulsar-firmware";
+  const { exec } = recorder(nativeHandlers({ ref, tree: TREE, digest: DIGEST_A }));
+  assert.throws(
+    () =>
+      planNativePromotion({
+        repository: ref,
+        tree: TREE,
+        commit: COMMIT,
+        version: "",
+        tags: ["{version}"],
+        githubRepository: REPO,
+        exec,
+      }),
+    /no usable org\.opencontainers\.image\.version annotation/,
+  );
+});
+
+test("an existing version tag with different bytes is retagged only on request", () => {
+  const ref = "ghcr.io/proflyder/pulsar-firmware";
+  const candidate = artifactManifest({
+    annotations: { "org.opencontainers.image.version": "v0.6.50" },
+  });
+  const changed = artifactManifest({
+    layerDigests: { ...LAYER_DIGESTS, "HomeKompLogon.dll": `sha256:${"9".repeat(64)}` },
+    annotations: { "org.opencontainers.image.version": "v0.6.50" },
+  });
+  const build = () =>
+    recorder(
+      nativeHandlers({
+        ref,
+        tree: TREE,
+        digest: DIGEST_A,
+        existing: { "v0.6.50": DIGEST_B },
+        manifests: { "v0.6.50": changed },
+        candidate,
+      }),
+    );
+
+  const refused = build();
+  assert.throws(
+    () =>
+      planNativePromotion({
+        repository: ref,
+        tree: TREE,
+        commit: COMMIT,
+        version: "",
+        tags: ["{version}"],
+        githubRepository: REPO,
+        exec: refused.exec,
+      }),
+    /release tags are immutable by content/,
+  );
+
+  const allowed = build();
+  const result = planNativePromotion({
+    repository: ref,
+    tree: TREE,
+    commit: COMMIT,
+    version: "",
+    tags: ["{version}"],
+    githubRepository: REPO,
+    exec: allowed.exec,
+    allowRetag: true,
+  });
+  assert.equal(result.mode, "promoted");
+  const decision = result.decisions.find((item) => item.tag === "v0.6.50");
+  assert.equal(decision.status, "retagged");
+  assert.equal(decision.digest, DIGEST_A);
+});

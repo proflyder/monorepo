@@ -9,8 +9,14 @@
  *
  * Reads the `${{ toJSON(needs) }}` payload from the `NEEDS` environment
  * variable, or from the `needs` object passed by `actions/github-script`.
+ *
+ * `--github-output` is the reusable-pipeline mode: the gate lives in the called
+ * workflow (only it sees every job's `needs`), writes `ok` and `failing` for the
+ * caller and never fails the step itself. The caller's `ci-ok` job is the
+ * required check and fails on `ok=false`.
  */
 
+import fs from "node:fs";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
@@ -52,13 +58,24 @@ export function gate(needs) {
   return { ok, lines, results, failing };
 }
 
-export function main() {
+export function main(argv = process.argv.slice(2)) {
+  const writeOutput = argv.includes("--github-output");
   let needs;
   try {
     needs = parseNeeds(process.env.NEEDS ?? "");
   } catch (error) {
     console.error(error.message);
+    if (writeOutput) {
+      // The pipeline was cancelled or never produced results: report red so the
+      // required check cannot pass, and let the caller's ci-ok job fail.
+      writeGithubOutput({ needs: {}, file: process.env.GITHUB_OUTPUT, log: () => {} });
+      return 0;
+    }
     return 1;
+  }
+  if (writeOutput) {
+    writeGithubOutput({ needs, file: process.env.GITHUB_OUTPUT, log: console.log });
+    return 0;
   }
   const outcome = gate(needs);
   if (!outcome.ok) {
@@ -81,6 +98,30 @@ export function runGithubScript({ core, needs }) {
   if (!outcome.ok) {
     throw new Error(`failing jobs: ${JSON.stringify(outcome.failing)}`);
   }
+}
+
+/**
+ * Reusable-pipeline entry point: write the aggregate answer to `$GITHUB_OUTPUT`
+ * for the caller's `ci-ok` job instead of failing this step.
+ */
+export function writeGithubOutput({ needs, file, log = console.log }) {
+  const outcome = gate(needs);
+  for (const line of outcome.lines) {
+    log(line);
+  }
+  if (!file) {
+    throw new Error("GITHUB_OUTPUT is not set");
+  }
+  const failing = Object.entries(outcome.failing)
+    .map(([name, result]) => `${name}=${result}`)
+    .join(" ");
+  append(file, `ok=${outcome.ok ? "true" : "false"}\n`);
+  append(file, `failing=${failing}\n`);
+  return outcome;
+}
+
+function append(file, text) {
+  fs.appendFileSync(file, text, "utf8");
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {

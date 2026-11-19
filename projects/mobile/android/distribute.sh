@@ -224,9 +224,12 @@ fi
 if [[ "$CI_MODE" -eq 1 ]]; then
   # Release notes for a GitHub Actions run. On a PR the job exports PR_NUMBER
   # and PR_TITLE (the title is untrusted text, so it arrives through the
-  # environment, never as shell source). A push to develop is a squash merge:
-  # its commit subject is the PR title.
-  if [[ -n "${PR_NUMBER:-}" ]]; then
+  # environment, never as shell source). A manual release may pass its own text
+  # in EXTRA_RELEASE_NOTES (`.github/workflows/android-release.yml`). A push to
+  # develop is a squash merge: its commit subject is the PR title.
+  if [[ -n "${EXTRA_RELEASE_NOTES:-}" ]]; then
+    SUBJECT="$EXTRA_RELEASE_NOTES"
+  elif [[ -n "${PR_NUMBER:-}" ]]; then
     SUBJECT="PR #${PR_NUMBER}: ${PR_TITLE:-$(git -C "$ROOT" log -1 --pretty=%s)}"
   else
     SUBJECT="$(git -C "$ROOT" log -1 --pretty=%s)"

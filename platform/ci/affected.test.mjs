@@ -386,7 +386,7 @@ test("real repo: every known platform has a unit", () => {
   }
 });
 
-test("real repo: native provider change routes to its unit without publishing", () => {
+test("real repo: a native provider change routes to its unit and is a release", () => {
   const config = affected.loadConfig();
   const result = withDeps({}, () =>
     affected.route(config, ["solutions/windows-logon-provider/crates/provider/src/worker.rs"], {
@@ -403,7 +403,7 @@ test("real repo: native provider change routes to its unit without publishing", 
     {
       id: "logon-provider",
       kind: "script",
-      publish: false,
+      publish: true,
       publish_script: "solutions/windows-logon-provider/publish-oci.sh",
       publish_attest_glob: "HomeKompLogon.dll",
       publish_repository: "ghcr.io/proflyder/windows-logon-provider",
@@ -448,7 +448,7 @@ test("real repo: pulsar change routes to the native pulsar unit", () => {
     {
       id: "pulsar",
       kind: "pulsar",
-      publish: false,
+      publish: true,
       publish_script: "projects/station/pulsar/publish-oci.sh",
       publish_attest_glob: "*",
       publish_repository: "ghcr.io/proflyder/pulsar-firmware",
@@ -467,7 +467,7 @@ test("real repo: pulsar change routes to the native pulsar unit", () => {
   ]);
 });
 
-test("real repo: pulsar and the logon provider publish only when VERSION changed", () => {
+test("real repo: every affected native change is a release (computed version)", () => {
   const config = affected.loadConfig();
   const entryFor = (changed, id) => {
     const result = withDeps({}, () =>
@@ -475,24 +475,23 @@ test("real repo: pulsar and the logon provider publish only when VERSION changed
     );
     return affected.matrixEntries(result, config).native.find((item) => item.id === id);
   };
-  // A source change is PR CI only: the unit is built, but not published.
-  assert.equal(entryFor(["projects/station/pulsar/satellite/crates/pulsar/src/main.rs"], "pulsar").publish, false);
+  // The version is computed from VERSION (major.minor) plus the commits
+  // touching the unit, so a merged source change is a releasable version by
+  // itself and no separate version-bump PR exists.
+  assert.equal(entryFor(["projects/station/pulsar/satellite/crates/pulsar/src/main.rs"], "pulsar").publish, true);
   assert.equal(entryFor(["projects/station/pulsar/VERSION"], "pulsar").publish, true);
-  // A global invalidation does not turn an unchanged VERSION into a release.
-  assert.equal(entryFor(["MODULE.bazel"], "pulsar").publish, false);
+  assert.equal(entryFor(["MODULE.bazel"], "pulsar").publish, true);
 
-  // The logon provider follows the same release rule: source changes are
-  // verified in the PR, only a VERSION bump publishes.
   assert.equal(
     entryFor(["solutions/windows-logon-provider/crates/provider/src/worker.rs"], "logon-provider")
       .publish,
-    false,
+    true,
   );
   assert.equal(
     entryFor(["solutions/windows-logon-provider/VERSION"], "logon-provider").publish,
     true,
   );
-  assert.equal(entryFor(["MODULE.bazel"], "logon-provider").publish, false);
+  assert.equal(entryFor(["MODULE.bazel"], "logon-provider").publish, true);
 });
 
 test("real repo: js worker change routes to its unit", () => {

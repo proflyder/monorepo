@@ -39,6 +39,31 @@
   or take over implementation. The primary may directly edit orchestration
   instructions and perform review/integration checks.
 
+## CI: один триггер на воркфлоу
+
+- У каждого файла `.github/workflows/*.yml` ровно одно событие в `on:`
+  (`workflow_dispatch`, `workflow_call`, `pull_request`, `push` или
+  `schedule`). Нужны два события — два тонких файла-обёртки, вызывающих один
+  reusable `_*.yml` (`on: workflow_call`); общие шаги — composite action в
+  `.github/actions/<name>/`.
+- Вся логика живёт в reusable (`_ci.yml`, `_deploy-home.yml`, `_pin.yml`,
+  `_station-deploy.yml`, `_android.yml`, `_android-release.yml`, `_cleanup.yml`,
+  `_unit.yml`, `_native.yml`, ...). Внутри reusable нельзя ветвиться по
+  `github.event_name` (это событие вызывающего файла) — вызывающий передаёт
+  явные inputs: `mode`, `dry_run`, `same_repository`, `distribution`,
+  `save_cache`.
+- Names, от которых зависят внешние контракты, не меняются: required check
+  `ci-ok` (branch protection и `platform/ci/safe-merge.mjs`) и файл
+  `deploy-home.yml` (деплой после merge ждётся по нему). Поэтому `ci-ok`
+  остаётся job в `ci.yml`, а `_ci.yml` отдаёт ему агрегат `ok`/`failing`.
+- Одна точка правды для Android-релиза: сборка — `_android.yml`, подпись и
+  выкладка в Firebase — `_android-release.yml`; их вызывают PR CI
+  (`_ci.yml`) и ручной `android-release.yml`.
+- Правило проверяет `platform/ci/check_units.mjs`
+  (`workflowTriggerProblems`, `mise run ci:units`): больше одного события,
+  `_*.yml` без `workflow_call` или reusable без `_` — красный CI.
+- Паттерн и таблица «триггер → обёртка → reusable» — `docs/TESTING.md` (CI).
+
 ## Home platform architecture
 
 - Build the scheduler as a reusable task scheduling and delivery service.

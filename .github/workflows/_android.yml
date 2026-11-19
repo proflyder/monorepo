@@ -2,7 +2,7 @@ name: _android
 
 # Reusable Android platform workflow: one matrix entry per affected application
 # (or shared Kotlin library) unit, plus the dedicated Android Lint and detekt
-# units. The unit is selected by the Bazel reverse dependency graph in ci.yml
+# units. The unit is selected by the Bazel reverse dependency graph in `_ci.yml`
 # and runs every declared target (Bazel's cache skips unaffected tests). Build runs before
 # test, so a test failure cannot hide a build error and a lint/detekt finding
 # only fails its own entry.
@@ -11,7 +11,7 @@ name: _android
 # the app once with the release versionCode/versionName and google-services.json
 # (repository variable, not a secret), runs the tests against that same APK
 # and uploads it unsigned as `android-app-apk`. No entry reads a secret or an
-# Environment. `android-distribute` in ci.yml signs that artifact with the
+# Environment. The `android-distribute` call of `_android-release.yml` signs
 # release key and uploads it to Firebase, so the APK is built once per PR.
 
 on:
@@ -45,6 +45,14 @@ on:
         required: false
         default: ""
         type: string
+      save_cache:
+        description: >-
+          Write the Bazel caches after the run. The caller states it (not a PR
+          and allowed to warm the shared entries); a pull request never writes.
+        required: false
+        default: false
+        type: boolean
+
     secrets:
       # Read-only Nexus cache credential; absent on forks (cache stays off).
       NEXUS_CI_PASSWORD:
@@ -65,7 +73,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     # No Environment and no secrets: this check runs for every PR (forks too).
-    # The release key is applied only by `android-distribute` (ci.yml).
+    # The release key is applied only by `_android-release.yml`.
     permissions:
       contents: read
     # Build/test use the same mise tasks as a workstation; the selected target
@@ -90,7 +98,7 @@ jobs:
           bazelisk-version: "1.30.0"
           bazelisk-cache: true
           repository-cache: false
-          cache-save: ${{ github.event_name != 'pull_request' }}
+          cache-save: ${{ inputs.save_cache }}
 
       # Optional read-through cache for GitHub release archives and Maven.
       # The action is a no-op when NEXUS_HOST/NEXUS_CI_PASSWORD are absent or
@@ -310,7 +318,7 @@ jobs:
       # once, so the save key carries the run id; the restore prefix is what PRs
       # (and the next develop run) actually resolve to.
       - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/develop'
+        if: inputs.save_cache && github.ref == 'refs/heads/develop'
         with:
           path: ~/.cache/bazel-disk
           key: bazel-android-${{ runner.os }}-${{ inputs.unit }}-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'projects/mobile/android/maven_install.json') }}-${{ github.run_id }}-${{ github.run_attempt }}

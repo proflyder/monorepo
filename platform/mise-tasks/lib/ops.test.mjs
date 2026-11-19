@@ -116,7 +116,7 @@ test("ops: deployCommand sends only the unit list", () => {
   assert.deepEqual(command.args, [
     "workflow",
     "run",
-    "deploy-home.yml",
+    "deploy-home-manual.yml",
     "--ref",
     "develop",
     "-f",
@@ -129,7 +129,7 @@ test("ops: deploy plan names the namespace and the exact gh command", () => {
   assert.ok(text.includes("namespace home-assistant"));
   assert.ok(text.includes("Flux workloads scheduler"));
   assert.ok(text.includes("pins → Flux"));
-  assert.ok(text.includes("gh workflow run deploy-home.yml --ref develop -f units=scheduler"));
+  assert.ok(text.includes("gh workflow run deploy-home-manual.yml --ref develop -f units=scheduler"));
 });
 
 test("ops: deploy --dry-run prints the command and never dispatches", async () => {
@@ -138,7 +138,7 @@ test("ops: deploy --dry-run prints the command and never dispatches", async () =
   const code = await runDeploy(["scheduler", "--dry-run"], { spawn, stdout, stderr: buffer() });
   assert.equal(code, 0);
   assert.equal(spawn.calls.length, 0);
-  assert.ok(stdout.text().includes("gh workflow run deploy-home.yml"));
+  assert.ok(stdout.text().includes("gh workflow run deploy-home-manual.yml"));
   assert.ok(stdout.text().includes("dry-run: not dispatching"));
 });
 
@@ -155,7 +155,11 @@ test("ops: deploy --yes dispatches and resolves the run id", async () => {
   const code = await runDeploy(["scheduler", "--yes"], { spawn, stdout, stderr: buffer() });
   assert.equal(code, 0);
   assert.equal(spawn.calls[0].command, "gh");
-  assert.deepEqual(spawn.calls[0].args.slice(0, 3), ["workflow", "run", "deploy-home.yml"]);
+  assert.deepEqual(spawn.calls[0].args.slice(0, 3), [
+    "workflow",
+    "run",
+    "deploy-home-manual.yml",
+  ]);
   assert.ok(stdout.text().includes("run 42: queued"));
 });
 

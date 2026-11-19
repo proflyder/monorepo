@@ -273,7 +273,8 @@ cert-manager с ACME DNS-01 Cloudflare. Wildcard-сертификат
   допускает LAN/VPN (включая узел с Traefik в `hostNetwork`) и pod CIDR.
 - Группа VPN `ci` (CI) маршрутизируется только до `192.0.2.27`; nft
   `forward` разрешает лишь `tcp/443`: Traefik → HA (`deploy-station`) и
-  OpenBao API/UI для GitHub OIDC (`deploy-station`, `android-distribute`).
+  OpenBao API/UI для GitHub OIDC (`deploy-station`, `android-distribute`,
+  `android-release`, `android-cleanup`).
   Остальные адреса и порты для пула `10.77.1.0/24` закрыты; правило
   `6443` снято вместе с CI-деплоем.
 

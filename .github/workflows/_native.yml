@@ -68,8 +68,9 @@ on:
         type: number
       release_version:
         description: >-
-          Optional release version override for the `pulsar` kind. Empty uses
-          `projects/station/pulsar/VERSION`; every run is release-shaped.
+          Deprecated no-op. Kept for callers from before the computed version;
+          the version now comes from `platform/ci/version.mjs` and the artifact
+          annotation.
         required: false
         default: ""
         type: string
@@ -108,10 +109,35 @@ on:
         required: false
         default: false
         type: boolean
+      replace_artifact:
+        description: >-
+          Explicit rebuild: publish rebuilt bytes under an already existing
+          tree tag instead of keeping the first published artifact
+          (deploy-services.yml only).
+        required: false
+        default: false
+        type: boolean
+      save_cache:
+        description: >-
+          Write the Bazel caches after the run. The caller states it (not a PR
+          and allowed to warm the shared entries); a pull request never writes.
+        required: false
+        default: false
+        type: boolean
+
     secrets:
       # Read-only Nexus cache credential; absent on forks (cache stays off).
       NEXUS_CI_PASSWORD:
         required: false
+    outputs:
+      version:
+        description: >-
+          The release version: computed from VERSION + the unit's commits on the
+          build path, read from the artifact annotation when promoting.
+        value: ${{ jobs.promote.outputs.version }}
+      digest:
+        description: The promoted (or built) artifact digest
+        value: ${{ jobs.promote.outputs.digest }}
 permissions:
   contents: read
 
@@ -152,13 +178,23 @@ jobs:
     outputs:
       mode: ${{ steps.select.outputs.mode }}
       digest: ${{ steps.promote.outputs.digest }}
+      # Build path: the version computed from VERSION + the unit's commits.
+      # Promoted path: the version recorded on the verified artifact, which is
+      # what the binary prints (the station updater compares the two).
+      version: ${{ steps.promote.outputs.version || steps.version.outputs.version }}
     steps:
-      # Full history: the PR-head fallback fetches `refs/pull/<n>/head` and
-      # diffs it against the merge commit.
+      # Full history only matters for the PR-head fallback; the computed version
+      # needs the first-parent commit count on every path.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        if: inputs.promote && inputs.publish_repository != ''
         with:
-          fetch-depth: 0
+          fetch-depth: ${{ inputs.promote && '0' || '1' }}
+
+      # Deterministic and monotone: VERSION holds only major.minor and the
+      # patch is the number of commits touching the unit (see
+      # platform/ci/version.mjs). No release needs a version-bump pull request.
+      - name: Compute the release version
+        id: version
+        run: node platform/ci/version.mjs --unit "${{ inputs.unit }}" --github-output
 
       - name: Install pinned crane
         if: inputs.promote && inputs.publish_repository != ''
@@ -187,7 +223,6 @@ jobs:
         if: inputs.promote && inputs.publish_repository != ''
         env:
           GH_TOKEN: ${{ github.token }}
-          VERSION_OVERRIDE: ${{ inputs.release_version }}
           WORKDIR: ${{ inputs.workdir }}
           TAGS: ${{ inputs.publish_tags }}
         run: |
@@ -197,18 +232,23 @@ jobs:
             echo "could not resolve HEAD^{tree}: '$tree'" >&2
             exit 1
           fi
-          version="$VERSION_OVERRIDE"
-          if [[ -z "$version" ]]; then
-            version=$(tr -d '[:space:]' < "$WORKDIR/VERSION")
+          # No --version: the artifact's own annotation is the authority, so the
+          # release tag always matches the binary's `--version` even when the
+          # artifact came from an earlier PR-head tree.
+          retag_args=()
+          if [[ "${{ inputs.replace_artifact }}" == "true" ]]; then
+            # Explicit rebuild (deploy-services.yml): re-point an already
+            # published immutable tag at the freshly verified bytes.
+            retag_args=(--retag)
           fi
           node platform/ci/promote.mjs --native \
             --repository "${{ inputs.publish_repository }}" \
             --github-repository "${{ github.repository }}" \
             --tree "$tree" \
             --commit "$GITHUB_SHA" \
-            --version "$version" \
             --tags "$TAGS" \
             --allow-pr-head \
+            "${retag_args[@]}" \
             --unit "${{ inputs.unit }}"
 
       - name: Select build or promoted path
@@ -245,7 +285,7 @@ jobs:
           bazelisk-version: "1.30.0"
           bazelisk-cache: true
           repository-cache: false
-          cache-save: ${{ github.event_name != 'pull_request' }}
+          cache-save: ${{ inputs.save_cache }}
 
       # Restore-only: the host-Rust family archive covers the common crates and
       # toolchains this cross-build also resolves. Nothing on develop saves a
@@ -366,7 +406,7 @@ jobs:
           bazelisk-version: "1.30.0"
           bazelisk-cache: true
           repository-cache: false
-          cache-save: ${{ github.event_name != 'pull_request' }}
+          cache-save: ${{ inputs.save_cache }}
 
       # Restore-only: the host-Rust family archive covers the common crates and
       # toolchains this cross-build also resolves. Nothing on develop saves a
@@ -405,12 +445,13 @@ jobs:
       # a rebuild of the same commit does not change option_env! and relink.
       - name: Release identity
         env:
-          RELEASE_VERSION: ${{ inputs.release_version }}
+          RELEASE_VERSION: ${{ needs.promote.outputs.version }}
         run: |
           set -euo pipefail
-          version=$(tr -d '[:space:]' < projects/station/pulsar/VERSION)
-          if [[ -n "$RELEASE_VERSION" ]]; then
-            version="$RELEASE_VERSION"
+          version="$RELEASE_VERSION"
+          if [[ -z "$version" ]]; then
+            echo "::error::no release version from the promote job" >&2
+            exit 1
           fi
           build_time=$(TZ=UTC0 LC_ALL=C git log -1 --format=%cd --date=format-local:'%b %e %Y, %H:%M:%S')
           {
@@ -483,7 +524,7 @@ jobs:
           bazelisk-version: "1.30.0"
           bazelisk-cache: true
           repository-cache: false
-          cache-save: ${{ github.event_name != 'pull_request' }}
+          cache-save: ${{ inputs.save_cache }}
 
       # Restore-only: the host-Rust family archive covers the common crates and
       # toolchains this cross-build also resolves. Nothing on develop saves a
@@ -577,7 +618,7 @@ jobs:
   # The single release-shaped artifact `publish` uploads with
   # `projects/station/pulsar/publish-oci.sh` under the PR `tree-<hash>` tag.
   pulsar-release:
-    name: native / pulsar-release (${{ inputs.release_version || 'VERSION' }})
+    name: native / pulsar-release (${{ needs.promote.outputs.version }})
     if: inputs.kind == 'pulsar' && needs.promote.outputs.mode != 'promoted'
     needs: [promote, pulsar-build, pulsar-radio]
     runs-on: ubuntu-24.04
@@ -713,15 +754,20 @@ jobs:
           PUBLISH_SCRIPT: ${{ inputs.publish_script }}
           TREE_TAG: ${{ steps.tree.outputs.tag }}
           PUSH_TREE_TAG: ${{ inputs.push_tree_tag }}
+          VERSION: ${{ needs.promote.outputs.version }}
+          REPLACE: ${{ inputs.replace_artifact }}
         run: |
           set -euo pipefail
           [[ -n "$PUBLISH_SCRIPT" ]] || {
             echo "unit ${{ inputs.unit }} has no publish_script" >&2
             exit 1
           }
-          args=(--source-dir "$RUNNER_TEMP/artifact")
+          args=(--source-dir "$RUNNER_TEMP/artifact" --version "$VERSION")
           if [[ "$PUSH_TREE_TAG" == "true" ]]; then
             args+=(--tag "$TREE_TAG")
+          fi
+          if [[ "$REPLACE" == "true" ]]; then
+            args+=(--replace)
           fi
           "$PUBLISH_SCRIPT" "${args[@]}"
 

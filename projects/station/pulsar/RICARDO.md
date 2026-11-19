@@ -168,7 +168,7 @@ bazel test //projects/station/pulsar/satellite/...
 # Deployable daemon for one station ABI (glibc 2.36 / 2.23).
 bazel build -c opt \
   --platforms=//platform/bazel/zig:armhf_linux \
-  --define=pulsar_version="$(cat projects/station/pulsar/VERSION)" \
+  --define=pulsar_version="$(node platform/ci/version.mjs --unit pulsar)" \
   //projects/station/pulsar/satellite:station_binary
 ```
 
@@ -201,24 +201,29 @@ missing; it does not silently fall back to «Алиса».
 (`projects/station/pulsar/`). GitHub Releases и теги в монорепозитории запрещены; источник
 обновлений станции — OCI-пакет `ghcr.io/proflyder/pulsar-firmware`.
 
-Версия форка — `v0.5.10NN`: major.minor 0.5 сохраняется, чтобы patch-номер 1000+ был больше любого
-upstream-патча; `v0.6.1001` появится только при полном переходе на upstream 0.6.x. Патч-номер 1000+
-больше любого upstream-патча, поэтому сравнение версий (`vMAJOR.MINOR.PATCH`) считает релиз новее.
+Версию вычисляет CI, руками её править не нужно: `projects/station/pulsar/VERSION` хранит только
+базу `v0.6`, а patch = число коммитов, затрагивающих `projects/station/pulsar/**` в истории
+`HEAD^1` (`platform/ci/version.mjs`). Первый релиз новой схемы — `v0.6.50` и далее; он новее
+последнего ручного `v0.5.1020`, поэтому сравнение версий (`vMAJOR.MINOR.PATCH`) считает релиз
+новее. Смену major.minor достаточно записать в `VERSION` одной строкой.
 
-1. Изменить `projects/station/pulsar/VERSION` в рабочей ветке и открыть обычный PR в `develop`.
-2. Каждый PR, затрагивающий Pulsar, уже собирает release-shaped артефакт: обе архитектуры с
-   версией из `VERSION` (`--define`), radio `.ybl`, `SHA256SUMS`, проверка `--version` под qemu.
-   Из этого репозитория PR публикует его как `tree-<git tree hash>` с build provenance.
-3. Merge PR (squash) проводит юнит `pulsar` через общий `.github/workflows/deploy-home.yml`:
-   `native.publish_when` пускает его в план только при изменении VERSION. `native-release`
-   сначала считает tree деплоимого коммита, проверяет `tree-<hash>` и provenance и ставит на
-   тот же digest `ghcr.io/proflyder/pulsar-firmware:<version>` и `:latest` — байты, прошедшие
-   PR, не пересобираются. Если tree-тега нет или provenance не сходится, job падает:
-   `deploy-home` ничего не собирает и не публикует; нужно перезапустить PR CI и заново
-   смержить. История для native не используется — старый tree нельзя выдать за текущий
-   `VERSION`. Тег версии неизменяем:
-   другой digest — отказ, тот же — no-op; двигается только `latest`. Прочие изменения Pulsar
-   идут только через PR CI и релизные теги не двигают.
+1. Обычный PR в `develop`. Отдельный PR «поднять версию» не нужен: смерженное изменение Pulsar
+   само является релизом.
+2. Каждый PR, затрагивающий Pulsar, собирает release-shaped артефакт: обе архитектуры с
+   вычисленной версией (`--define`), radio `.ybl`, `SHA256SUMS`, проверка `--version` под qemu.
+   Из этого репозитория PR публикует его как `tree-<git tree hash>` с build provenance и
+   аннотацией `org.opencontainers.image.version`.
+3. Merge PR (squash) проводит юнит `pulsar` через `deploy-home` (reusable `_deploy-home.yml` →
+   `_native.yml`). `native-release` считает tree деплоимого коммита, проверяет `tree-<hash>` и
+   provenance, берёт версию из аннотации артефакта и ставит на тот же digest
+   `ghcr.io/proflyder/pulsar-firmware:<version>` и `:latest` — байты, прошедшие PR, не
+   пересобираются. Если tree-тега нет или provenance не сходится, job падает: `deploy-home`
+   ничего не собирает и не публикует; нужно перезапустить PR CI и заново смержить. История для
+   native не используется. Тег версии неизменяем по содержимому: другой digest — отказ, тот же —
+   no-op; двигается только `latest`.
+4. Сломанный или недоснятый релиз пересобирается вручную: Actions → «Пересобрать и задеплоить
+   сервисы» (`deploy-services.yml`) с галочкой `pulsar`. Это единственный путь, который
+   собирает Pulsar с нуля и может заменить опубликованные байты (`replace_artifacts`).
 4. Job `deploy-station` ждёт одобрения в Environment `Station` (required reviewer).
 5. После одобрения job поднимает VPN (группа `ci`), затем `hashicorp/vault-action` по
    GitHub OIDC (роль `deploy-station`) читает `secret/data/ci/deploy-station` и вызывает
@@ -241,10 +246,10 @@ upstream-патча; `v0.6.1001` появится только при полно
 на такую станцию бинарник ставится вручную (`pulsar-install` или замена `pulsar` + `.prev` и
 `ctl.sh restart`).
 
-Повторный деплой уже опубликованной версии — `workflow_dispatch` для `deploy-home`
-с `units=pulsar`: job `deploy-station` катит текущий VERSION, ничего не собирая и не
-перезаписывая OCI-тег, либо повторный approve существующего run. Если версия уже стоит,
-скрипт печатает `already installed` и выходит успешно.
+Повторный деплой уже опубликованной версии — `workflow_dispatch` для
+`deploy-home (вручную)` с `units=pulsar`: job `deploy-station` ставит версию из аннотации
+опубликованного `latest`, ничего не собирая и не перезаписывая OCI-тег, либо повторный approve
+существующего run. Если версия уже стоит, скрипт печатает `already installed` и выходит успешно.
 
 Откат через dispatch **невозможен**: обновлятор предлагает только более новые версии, поэтому
 старая версия не появится в `latest_version`. Откат делается на станции: `.prev` (или резервная

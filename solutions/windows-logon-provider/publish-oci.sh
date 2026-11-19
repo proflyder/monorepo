@@ -8,6 +8,12 @@
 #
 #   ./publish-oci.sh --source-dir /path/to/artifact
 #   ./publish-oci.sh --source-dir /path/to/artifact --tag tree-<git tree hash>
+#   ./publish-oci.sh --source-dir /path/to/artifact --tag tree-<hash> --version 1.4.61
+#
+# `--version` overrides the version read from `VERSION`: CI computes it from
+# `VERSION` (major.minor) plus the commits touching the unit
+# (`platform/ci/version.mjs`). `--replace` lets the explicit rebuild workflow
+# (`deploy-services.yml`) publish rebuilt bytes under an existing tag.
 #
 # Repository and tags:
 #   ghcr.io/<owner>/windows-logon-provider:<VERSION>
@@ -30,10 +36,12 @@ REPOSITORY="${OCI_REPOSITORY:-$DEFAULT_REPOSITORY}"
 VERSION_FILE="${VERSION_FILE:-$HERE/VERSION}"
 SOURCE_DIR=""
 TAG=""
+VERSION_OVERRIDE=""
+REPLACE=0
 OUTPUT_SUMMARY="${GITHUB_STEP_SUMMARY:-}"
 
 usage() {
-  echo "usage: $0 --source-dir DIR [--repository REPOSITORY] [--tag TAG]" >&2
+  echo "usage: $0 --source-dir DIR [--repository REPOSITORY] [--tag TAG] [--version VERSION] [--replace]" >&2
 }
 
 die() {
@@ -55,6 +63,14 @@ while [[ $# -gt 0 ]]; do
       TAG="${2:?--tag needs a value}"
       shift 2
       ;;
+    --version)
+      VERSION_OVERRIDE="${2:?--version needs a value}"
+      shift 2
+      ;;
+    --replace)
+      REPLACE=1
+      shift
+      ;;
     -h|--help)
       usage
       exit 0
@@ -70,9 +86,9 @@ done
 [[ -d "$SOURCE_DIR" ]] || die "source directory not found: $SOURCE_DIR"
 command -v oras >/dev/null 2>&1 || die "oras CLI is required on PATH"
 
-version="$(tr -d '[:space:]' < "$VERSION_FILE")"
+version="${VERSION_OVERRIDE:-$(tr -d '[:space:]' < "$VERSION_FILE")}"
 [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] ||
-  die "VERSION must be semver MAJOR.MINOR.PATCH, got '$version'"
+  die "version must be semver MAJOR.MINOR.PATCH, got '$version'"
 
 commit="${GITHUB_SHA:-}"
 [[ "$commit" =~ ^[0-9a-f]{40}$ ]] || die "GITHUB_SHA must be a full commit id"
@@ -146,7 +162,11 @@ check_existing_tag() {
     return 0
   fi
   rm -rf "$tmp"
-  die "tag $tag already exists with different content; bump VERSION to release"
+  if [[ "$REPLACE" -eq 1 ]]; then
+    echo "publish-oci: replacing $tag with the rebuilt artifact"
+    return 1
+  fi
+  die "tag $tag already exists with different content; the computed version must increase (or use --replace to rebuild it on purpose)"
 }
 
 push_artifact() {

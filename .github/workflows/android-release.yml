@@ -1,0 +1,104 @@
+name: "Android: собрать и выложить"
+
+# Manual Android release, run by the owner from `develop`.
+#
+# It builds the Home Android app from the checked-out branch through the same
+# reusable Android platform workflow PR CI uses (`_android.yml`: build, APK
+# self-tests, release versionCode/versionName), then signs and uploads the
+# built artifact through `_android-release.yml` — the same job PR CI uses. No
+# logic is duplicated: this file only states "build the app unit, then release
+# it" and carries the optional release note.
+#
+# Run it from https://github.com/<owner>/<repo>/actions/workflows/android-release.yml
+# ("Run workflow", branch `develop`). The run needs the `Android` Environment
+# and the OpenBao role `android-release` (bound to `refs/heads/develop` on this
+# workflow); see docs/OPERATIONS.md → «Ручной релиз Android».
+on:
+  workflow_dispatch:
+    inputs:
+      release_notes:
+        description: Необязательный текст release notes (по умолчанию — тема коммита и SHA)
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-release
+  cancel-in-progress: false
+
+env:
+  # Set Git's default branch for actions/checkout's `git init` (it warns when unset;
+  # it runs under a throwaway HOME, so only an env-provided config reaches it).
+  GIT_CONFIG_COUNT: "1"
+  GIT_CONFIG_KEY_0: init.defaultBranch
+  GIT_CONFIG_VALUE_0: main
+
+jobs:
+  # The Android app unit's targets come from `platform/ci/units.mjs`, the same
+  # map PR CI routes on, so a new test target cannot be missing from a release
+  # build. This is routing only; the build itself is `_android.yml`.
+  plan:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      unit: ${{ steps.unit.outputs.unit }}
+      test_targets: ${{ steps.unit.outputs.test_targets }}
+      build_targets: ${{ steps.unit.outputs.build_targets }}
+      sdk_packages: ${{ steps.unit.outputs.sdk_packages }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Read the Android app unit
+        id: unit
+        run: |
+          set -euo pipefail
+          # shellcheck disable=SC2016 # the single-quoted block is JS source
+          node --input-type=module -e '
+            const { config } = await import(process.cwd() + "/platform/ci/units.mjs");
+            const unit = config.units.find(
+              (entry) => entry.platform === "android" && entry.bazel?.release,
+            );
+            if (!unit) {
+              throw new Error("no android release unit in platform/ci/units.mjs");
+            }
+            const space = (list) => (list ?? []).join(" ");
+            console.log(`unit=${unit.id}`);
+            console.log(`test_targets=${space(unit.bazel.test_targets)}`);
+            console.log(`build_targets=${space(unit.bazel.build_targets)}`);
+            console.log(`sdk_packages=${space(unit.bazel.sdk_packages)}`);
+          ' >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: plan
+    permissions:
+      contents: read
+    uses: ./.github/workflows/_android.yml
+    with:
+      unit: ${{ needs.plan.outputs.unit }}
+      test_targets: ${{ needs.plan.outputs.test_targets }}
+      build_targets: ${{ needs.plan.outputs.build_targets }}
+      sdk_packages: ${{ needs.plan.outputs.sdk_packages }}
+      # A release run from develop may warm the develop-side cache family.
+      save_cache: true
+    secrets:
+      NEXUS_CI_PASSWORD: ${{ secrets.NEXUS_CI_PASSWORD }}
+
+  distribute:
+    needs: [plan, build]
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/_android-release.yml
+    with:
+      openbao_role: android-release
+      release_notes: ${{ inputs.release_notes }}
+      label: ручной релиз с ${{ github.ref_name }}
+    secrets:
+      VPN_SERVER: ${{ secrets.VPN_SERVER }}
+      VPN_CERT_P12_B64: ${{ secrets.VPN_CERT_P12_B64 }}
+      VPN_CERT_PASSWORD: ${{ secrets.VPN_CERT_PASSWORD }}
+      OPENBAO_ADDR: ${{ secrets.OPENBAO_ADDR }}
