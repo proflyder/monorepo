@@ -5,6 +5,7 @@ import android.graphics.Canvas
 import android.view.LayoutInflater
 import android.view.View
 import androidx.appcompat.view.ContextThemeWrapper
+import dev.proflyder.home.core.model.RepeatKind
 import dev.proflyder.home.feature.alarms.impl.R
 import dev.proflyder.home.feature.alarms.impl.databinding.FragmentAlarmEditorBinding
 import java.io.File
@@ -43,12 +44,27 @@ class AlarmEditorScreenshotTest {
         val binding = inflate()
         binding.alarmEditorLabel.setText(themed().getString(R.string.alarms_label_default))
         binding.alarmEditorTime.text = String.format(Locale.ROOT, "%02d:%02d", 6, 15)
-        binding.alarmEditorRepeatGroup.check(R.id.repeat_custom)
-        listOf(binding.day1, binding.day3, binding.day5).forEach { it.isChecked = true }
-        binding.alarmEditorDaysGroup.visibility = View.VISIBLE
+        binding.alarmEditorRepeatValue.text = AlarmFormat.repeatValue(
+            themed(),
+            RepeatKind.CUSTOM,
+            setOf(1, 3, 5),
+        )
+        binding.alarmEditorDateRow.visibility = View.GONE
         binding.alarmEditorEnabled.isChecked = true
         binding.alarmEditorDelete.visibility = View.VISIBLE
         savePng(binding.root, "alarm-editor-edit-dark.png", 411, 891)
+    }
+
+    @Test
+    fun repeatRowShowsThePresetValueAndHidesTheDate() {
+        val binding = inflate()
+        binding.alarmEditorRepeatValue.text = themed().getString(R.string.alarms_repeat_weekdays)
+        binding.alarmEditorDateRow.visibility = View.GONE
+        assertEquals(
+            themed().getString(R.string.alarms_repeat_weekdays),
+            binding.alarmEditorRepeatValue.text,
+        )
+        assertEquals(View.GONE, binding.alarmEditorDateRow.visibility)
     }
 
     @Test
@@ -77,7 +93,8 @@ class AlarmEditorScreenshotTest {
 
     private fun configureNew(binding: FragmentAlarmEditorBinding) {
         binding.alarmEditorTime.text = String.format(Locale.ROOT, "%02d:%02d", 7, 30)
-        binding.alarmEditorRepeatGroup.check(R.id.repeat_daily)
+        binding.alarmEditorRepeatValue.text = themed().getString(R.string.alarms_repeat_daily)
+        binding.alarmEditorDateRow.visibility = View.GONE
         binding.alarmEditorEnabled.isChecked = true
     }
 

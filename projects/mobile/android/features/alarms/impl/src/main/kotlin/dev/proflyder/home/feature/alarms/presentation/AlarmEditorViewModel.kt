@@ -134,20 +134,27 @@ class AlarmEditorViewModel(
         it.withQuickOffset(LocalDateTime.now(), offsetMinutes)
     }
 
-    fun setRepeat(repeat: RepeatKind) = edit {
-        it.copy(
-            repeat = repeat,
-            onceDate = when {
-                repeat == RepeatKind.ONCE -> it.onceDate ?: LocalDate.now()
-                else -> null
+    /**
+     * Applies the sheet's choice. A custom day set that covers a preset is
+     * stored as that preset, so "Пн–Пт" never lingers as a custom list.
+     */
+    fun setRepeatAndDays(repeat: RepeatKind, days: Set<Int>) = edit { state ->
+        val normalized = when (repeat) {
+            RepeatKind.CUSTOM -> AlarmRepeatRules.presetFor(days)
+            else -> repeat
+        }
+        val weekdays = when (normalized) {
+            RepeatKind.CUSTOM -> days
+            else -> AlarmRepeatRules.daysForPreset(normalized).ifEmpty { state.weekdays }
+        }
+        state.copy(
+            repeat = normalized,
+            weekdays = weekdays,
+            onceDate = when (normalized == RepeatKind.ONCE) {
+                true -> state.onceDate ?: LocalDate.now()
+                false -> null
             },
         )
-    }
-
-    fun setWeekday(day: Int, selected: Boolean) = edit {
-        val days = it.weekdays.toMutableSet()
-        if (selected) days.add(day) else days.remove(day)
-        it.copy(weekdays = days)
     }
 
     fun setEnabled(value: Boolean) = edit { it.copy(enabled = value) }

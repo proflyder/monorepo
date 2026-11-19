@@ -40,8 +40,9 @@
     <string name="alarms_quick_offset_60">+1 ч</string>
     <string name="alarms_quick_offset_90">+1,5 ч</string>
     <string name="alarms_quick_offset_120">+2 ч</string>
-    <string name="alarms_editor_date">Дата (однократно)</string>
+    <string name="alarms_editor_date">Дата</string>
     <string name="alarms_editor_repeat">Повтор</string>
+    <string name="alarms_repeat_done">Готово</string>
     <string name="alarms_editor_days">Дни</string>
     <string name="alarms_editor_name">Название</string>
     <string name="alarms_editor_save">Сохранить</string>
