@@ -111,7 +111,7 @@ class SystemDashboardClientTest {
 
     @Test
     fun unknownLevelsAndMissingFieldsAreTolerated() = runBlocking {
-        server.enqueue(MockResponse().setBody("""{"status":"purple","extra":1}"""))
+        server.enqueue(MockResponse().setBody(fixture("summary_unknown")))
         val summary = (client().summary() as Outcome.Success).value
         assertEquals(HealthLevel.UNKNOWN, summary.status)
         assertEquals(HealthLevel.UNKNOWN, summary.sections.k8s)

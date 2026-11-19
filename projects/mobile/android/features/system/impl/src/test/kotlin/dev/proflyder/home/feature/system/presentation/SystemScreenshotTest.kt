@@ -78,7 +78,7 @@ class SystemScreenshotTest {
     }
 
     @Test
-    @Config(qualifiers = "ru-night-w411dp-h891dp-xxhdpi")
+    @Config(qualifiers = "ru-w411dp-h891dp-night-xxhdpi")
     fun guestsDetailDark() {
         val list = render("system-guests-dark") { it.detail(SystemSection.GUESTS, SystemFixtures.snapshot) }
         assertEquals(4, list.adapter?.itemCount)

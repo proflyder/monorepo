@@ -16,7 +16,7 @@
     <string name="system_alerts_unavailable">Алерты недоступны</string>
     <string name="system_updated_at">обновлено в %1$s</string>
     <string name="system_since">с %1$s</string>
-    <string name="system_separator"> · </string>
+    <string name="system_separator">\u0020·\u0020</string>
     <string name="system_no_data_host">Нет данных: node exporter хоста не опрашивается</string>
     <string name="system_host_down">Хост не отвечает</string>
     <string name="system_cpu_short">CPU %1$d%%</string>
@@ -60,9 +60,9 @@
     <string name="system_pod_age">возраст %1$s</string>
     <string name="system_pulsar_version">Pulsar %1$s</string>
     <string name="system_rssi">Wi‑Fi %1$.0f дБм</string>
-    <string name="system_duration_days">%1$d д %2$d ч</string>
-    <string name="system_duration_hours">%1$d ч %2$d мин</string>
-    <string name="system_duration_minutes">%1$d мин</string>
+    <string name="system_duration_days">%1$d\u00A0д\u00A0%2$d\u00A0ч</string>
+    <string name="system_duration_hours">%1$d\u00A0ч\u00A0%2$d\u00A0мин</string>
+    <string name="system_duration_minutes">%1$d\u00A0мин</string>
     <plurals name="system_alert_count">
         <item quantity="one">%1$d активный алерт</item>
         <item quantity="few">%1$d активных алерта</item>

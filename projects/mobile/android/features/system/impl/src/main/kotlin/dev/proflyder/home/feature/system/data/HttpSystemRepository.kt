@@ -12,6 +12,7 @@ import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 
@@ -21,12 +22,14 @@ import kotlinx.coroutines.coroutineScope
 class HttpSystemRepository(
     private val client: SystemDashboardClient,
 ) : SystemRepository {
-    override suspend fun load(): Outcome<SystemSnapshot> = coroutineScope {
-        val summary = async { client.summary() }
-        val hosts = async { client.hosts() }
-        val cluster = async { client.cluster() }
-        val devices = async { client.devices() }
-        combine(summary.await(), hosts.await(), cluster.await(), devices.await())
+    override suspend fun load(): Outcome<SystemSnapshot> = coroutineScope { loadAll(this) }
+
+    private suspend fun loadAll(scope: CoroutineScope): Outcome<SystemSnapshot> {
+        val summary = scope.async { client.summary() }
+        val hosts = scope.async { client.hosts() }
+        val cluster = scope.async { client.cluster() }
+        val devices = scope.async { client.devices() }
+        return combine(summary.await(), hosts.await(), cluster.await(), devices.await())
     }
 }
 

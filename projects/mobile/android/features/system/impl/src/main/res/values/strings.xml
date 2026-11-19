@@ -16,7 +16,7 @@
     <string name="system_alerts_unavailable">Alerts unavailable</string>
     <string name="system_updated_at">updated %1$s</string>
     <string name="system_since">since %1$s</string>
-    <string name="system_separator"> · </string>
+    <string name="system_separator">\u0020·\u0020</string>
     <string name="system_no_data_host">No data: the host node exporter is not scraped</string>
     <string name="system_host_down">Host is not responding</string>
     <string name="system_cpu_short">CPU %1$d%%</string>
@@ -60,9 +60,9 @@
     <string name="system_pod_age">age %1$s</string>
     <string name="system_pulsar_version">Pulsar %1$s</string>
     <string name="system_rssi">Wi-Fi %1$.0f dBm</string>
-    <string name="system_duration_days">%1$d d %2$d h</string>
-    <string name="system_duration_hours">%1$d h %2$d min</string>
-    <string name="system_duration_minutes">%1$d min</string>
+    <string name="system_duration_days">%1$d\u00A0d\u00A0%2$d\u00A0h</string>
+    <string name="system_duration_hours">%1$d\u00A0h\u00A0%2$d\u00A0min</string>
+    <string name="system_duration_minutes">%1$d\u00A0min</string>
     <plurals name="system_alert_count">
         <item quantity="one">%1$d active alert</item>
         <item quantity="other">%1$d active alerts</item>

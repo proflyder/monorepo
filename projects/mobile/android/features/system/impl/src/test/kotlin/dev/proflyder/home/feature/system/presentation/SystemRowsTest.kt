@@ -27,7 +27,7 @@ class SystemRowsTest {
         assertEquals("Problems detected", status.title)
         assertTrue(status.subtitle.startsWith("2 active alerts · updated "))
         val host = overview[3] as SystemRow.Card
-        assertEquals("CPU 23% · RAM 63% · Disk 60%\n61 °C · up 17 d 6 h", host.lines)
+        assertEquals("CPU 23% · RAM 63% · Disk 60%\n61 °C · up 17\u00A0d\u00A06\u00A0h", host.lines)
         val guests = overview[4] as SystemRow.Card
         assertEquals("Running 3 of 4\nStopped: vpn", guests.lines)
         assertEquals(HealthLevel.CRITICAL, guests.level)
@@ -59,7 +59,7 @@ class SystemRowsTest {
             detail.map { it.key },
         )
         val crashing = detail[1] as SystemRow.Item
-        assertEquals("CrashLoopBackOff · ready 0/1 · restarts 9 · 4m CPU · 21 MB · age 1 d 0 h", crashing.subtitle)
+        assertEquals("CrashLoopBackOff · ready 0/1 · restarts 9 · 4m CPU · 21 MB · age 1\u00A0d\u00A00\u00A0h", crashing.subtitle)
     }
 
     @Test

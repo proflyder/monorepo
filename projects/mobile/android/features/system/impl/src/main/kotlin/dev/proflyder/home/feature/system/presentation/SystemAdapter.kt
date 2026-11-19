@@ -49,7 +49,7 @@ internal fun levelLabel(level: HealthLevel): Int = when (level) {
     HealthLevel.UNKNOWN -> R.string.system_level_unknown
 }
 
-private fun View.tintLevel(level: HealthLevel) {
+internal fun View.tintLevel(level: HealthLevel) {
     backgroundTintList = ColorStateList.valueOf(MaterialColors.getColor(this, levelColorAttr(level)))
     contentDescription = context.getString(levelLabel(level))
 }
