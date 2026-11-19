@@ -18,7 +18,8 @@ Current device acceptance and remaining work are tracked in
 
 ## Features
 
-- Bottom tabs: **Home**, **Scenarios**, **Time**. **Time** is a `ViewPager2`
+- Bottom tabs: **Home**, **Scenarios**, **Time**, **System** (see
+  [System dashboard](#system-dashboard)). **Time** is a `ViewPager2`
   container with a segmented **Alarms** / **Timers** / **Reminders** switch;
   a horizontal swipe and the pills drive the same page, the existing feature
   screens are reused unchanged, and deep links such as `selectTab("alarms")`
@@ -57,6 +58,29 @@ Current device acceptance and remaining work are tracked in
   never cleared by a failed request.
 - Loading/empty/error/content states; existing data stays visible during refresh
   or transient errors. Lists never silently become empty.
+
+## System dashboard
+
+- `features/system`: the **System** tab reads `GET /v1/system/{summary,hosts,
+  k8s,devices}` from `mcp-gateway` through the **Home control** address (Traefik
+  sends `/v1/system/` on that host to the gateway) with the same bearer token.
+  Without a control address the screen shows the connection error state.
+- Overview: a traffic-light card (worst level of the sections and active
+  alerts, alert count, update time), the active alerts, then four cards —
+  **Nettop (Proxmox)**, **Guests (VM/CT)**, **Cluster**, **Devices**. Tapping a
+  card opens its detail list: host metrics; every VM/CT; namespaces → pods with
+  problems first; the speaker and the phones registered for push.
+- Pull-to-refresh plus an automatic refresh every 30 s while the screen is
+  started (`repeatOnLifecycle(STARTED)`); the server caches each section 15 s.
+  A failed refresh keeps the last data and shows a notice; with no data the
+  error state has a Retry button. A missing source is «No data», never zero.
+- Levels use theme attributes only: ok `?colorPrimary`, warning
+  `?colorTertiary`, critical `?colorError`, no data `?colorOutline`.
+- Tests: `core/network:network_test` parses the server's golden responses
+  (`fixtures/system/*.json`, copied from the Rust contract);
+  `features/system/impl:system_test` covers the row mapping, the ViewModel and
+  Robolectric PNGs (`system-overview`, `system-overview-no-data`,
+  `system-cluster`, `system-guests-dark`) in `TEST_UNDECLARED_OUTPUTS_DIR`.
 
 ## Home hub (devices, live cards, quick actions)
 

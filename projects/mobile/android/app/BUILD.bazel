@@ -40,6 +40,8 @@ metro_android_library(
         "//projects/mobile/android/features/scenarios/api",
         "//projects/mobile/android/features/scenarios/impl",
         "//projects/mobile/android/features/settings/impl",
+        "//projects/mobile/android/features/system/api",
+        "//projects/mobile/android/features/system/impl",
         "//projects/mobile/android/features/timers/api",
         "//projects/mobile/android/features/timers/impl",
         "@maven//:androidx_activity_activity_ktx",

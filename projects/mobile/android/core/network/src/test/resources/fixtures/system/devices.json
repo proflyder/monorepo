@@ -1,0 +1,20 @@
+{
+  "phones": [
+    {
+      "id": "pixel",
+      "name": "Pixel",
+      "platform": "android"
+    }
+  ],
+  "phonesAvailable": true,
+  "station": {
+    "latencyMs": 32.0,
+    "model": "Yandex Station Midi",
+    "status": "ok",
+    "tempCelsius": 58.5,
+    "up": true,
+    "uptimeSeconds": 4000.0,
+    "version": "v0.5.1020"
+  },
+  "status": "ok"
+}

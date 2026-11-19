@@ -34,6 +34,7 @@ DETEKT_TEST_TARGETS = [
     "//projects/mobile/android/features/scenarios/api:api_test",
     "//projects/mobile/android/features/scenarios/impl:scenario_use_cases_test",
     "//projects/mobile/android/features/settings/impl:screens_screenshot_test",
+    "//projects/mobile/android/features/system/impl:system_test",
 ]
 
 # Convenience entry points for the Android client.
@@ -99,6 +100,7 @@ test_suite(
         "//projects/mobile/android/features/scenarios/api:api_test",
         "//projects/mobile/android/features/scenarios/impl:scenario_use_cases_test",
         "//projects/mobile/android/features/settings/impl:screens_screenshot_test",
+        "//projects/mobile/android/features/system/impl:system_test",
         "//projects/mobile/android/app:main_activity_smoke_test",
         "//projects/mobile/android/app:toolbar_menu_screenshot_test",
         "//projects/mobile/android/core/navigation:navigation_test",

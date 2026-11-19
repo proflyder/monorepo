@@ -1,0 +1,73 @@
+{
+  "available": true,
+  "namespaces": [
+    {
+      "name": "currency-bot",
+      "pods": [
+        {
+          "ageSeconds": 600.0,
+          "containers": 1,
+          "name": "currency-bot-6c",
+          "phase": "Running",
+          "ready": 0,
+          "reason": "CrashLoopBackOff",
+          "recentRestarts": 3,
+          "restarts": 9,
+          "status": "critical"
+        }
+      ],
+      "status": "critical"
+    },
+    {
+      "name": "home-assistant",
+      "pods": [
+        {
+          "ageSeconds": 3600.0,
+          "containers": 1,
+          "cpuCores": 0.002,
+          "memBytes": 30000000.0,
+          "name": "mcp-gateway-5f",
+          "phase": "Running",
+          "ready": 1,
+          "recentRestarts": 0,
+          "restarts": 2,
+          "status": "ok"
+        },
+        {
+          "ageSeconds": 86400.0,
+          "containers": 1,
+          "cpuCores": 0.004,
+          "memBytes": 21000000.0,
+          "name": "scheduler-7d9",
+          "phase": "Running",
+          "ready": 1,
+          "recentRestarts": 0,
+          "restarts": 0,
+          "status": "ok"
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "name": "monitoring",
+      "pods": [
+        {
+          "ageSeconds": 1987200.0,
+          "containers": 2,
+          "cpuCores": 0.05,
+          "memBytes": 180000000.0,
+          "name": "loki-0",
+          "phase": "Running",
+          "ready": 2,
+          "recentRestarts": 0,
+          "restarts": 16,
+          "status": "ok"
+        }
+      ],
+      "status": "ok"
+    }
+  ],
+  "podCount": 4,
+  "problemCount": 1,
+  "status": "critical"
+}

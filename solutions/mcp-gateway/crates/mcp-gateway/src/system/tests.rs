@@ -471,3 +471,33 @@ fn empty_deps() -> crate::tools::Deps {
         push: None,
     }
 }
+
+fn golden(name: &str, body: &Value) {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("src/system/testdata/contract")
+        .join(format!("{name}.json"));
+    let rendered = format!("{}\n", serde_json::to_string_pretty(body).expect("json"));
+    if std::env::var_os("UPDATE_SYSTEM_GOLDEN").is_some() {
+        std::fs::create_dir_all(path.parent().expect("dir")).expect("mkdir");
+        std::fs::write(&path, &rendered).expect("write golden");
+    }
+    let expected = match name {
+        "summary" => include_str!("testdata/contract/summary.json"),
+        "hosts" => include_str!("testdata/contract/hosts.json"),
+        "k8s" => include_str!("testdata/contract/k8s.json"),
+        _ => include_str!("testdata/contract/devices.json"),
+    };
+    assert_eq!(rendered, expected, "{name}");
+}
+
+#[tokio::test]
+async fn responses_match_the_app_contract_fixtures() {
+    let prom = Arc::new(FixtureProm::new());
+    let app: Router = super::router(dashboard(prom, Duration::from_secs(60)));
+    let mut summary = get(&app, "/v1/system/summary").await;
+    summary["generatedAt"] = json!(1_795_129_665);
+    golden("summary", &summary);
+    golden("hosts", &get(&app, "/v1/system/hosts").await);
+    golden("k8s", &get(&app, "/v1/system/k8s").await);
+    golden("devices", &get(&app, "/v1/system/devices").await);
+}

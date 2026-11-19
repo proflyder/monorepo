@@ -163,6 +163,19 @@ is rejected in the same test.
 - Hermes keeps `automountServiceAccountToken: false`; all cluster access goes
   through this pod.
 
+## System dashboard route
+
+- `MCP_APP_TOKEN_FILE` points at the already mounted `scheduler-auth` token
+  (`/run/secrets/mcp-gateway-scheduler/token`), so `/v1/system/*` accepts the
+  Android app bearer and nothing else.
+- Traefik routes `Host(control.${HOME_DOMAIN}) && PathPrefix(/v1/system/)`
+  to `mcp-gateway:8080` (`ingress/routes/routes.yaml`, IngressRoute
+  `ha-control`); every other path of that host still goes to `ha-control`.
+  `/mcp` and `/v1/voice/*` stay cluster-internal. Traefik pods are in the pod
+  CIDR, which the ingress policy already allows.
+- Guest metrics come from `projects/home/kubernetes/pve-exporter`. Contract and
+  levels: `solutions/mcp-gateway/README.md` (section «Дашборд системы»).
+
 ## Network
 
 - Ingress to 8080: the node address (`NODE_LAN_IP`), the LAN CIDR, the pod CIDR
