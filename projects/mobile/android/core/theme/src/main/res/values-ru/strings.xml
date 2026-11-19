@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="theme_current_title">Текущая</string>
+    <string name="theme_current_summary">Вечерний изумруд: исходная зелёная палитра</string>
+    <string name="theme_system_title">Системная (Material You)</string>
+    <string name="theme_system_summary">Цвета из обоев телефона</string>
+    <string name="theme_system_unavailable">Нужен Android 12; пока используется «Текущая»</string>
+    <string name="theme_neon_title">Неон</string>
+    <string name="theme_neon_summary">Ночной город: фиолетовый и циан на почти чёрном</string>
+</resources>

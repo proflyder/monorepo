@@ -21,6 +21,7 @@ import dev.proflyder.home.core.network.SchedulerClient
 import dev.proflyder.home.core.settings.HomeDataStore
 import dev.proflyder.home.core.settings.KeystoreTokenCipher
 import dev.proflyder.home.core.settings.TokenCipher
+import dev.proflyder.home.core.theme.AppearanceController
 import dev.proflyder.home.core.ui.ViewModelFactoryRegistry
 import dev.proflyder.home.feature.call.CallAudioController
 import dev.proflyder.home.feature.call.CallController
@@ -55,6 +56,8 @@ import okhttp3.OkHttpClient
 interface AppGraph {
     val featureRegistry: FeatureRegistry
     val viewModelFactories: ViewModelFactoryRegistry
+
+    val appearance: AppearanceController
 
     /** Resolved at launch so Remote Config starts fetching on app start. */
     val connectionSettings: ConnectionSettingsStore

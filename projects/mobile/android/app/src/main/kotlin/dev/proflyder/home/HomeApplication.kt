@@ -15,6 +15,7 @@ class HomeApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         graph = createGraphFactory<AppGraph.Factory>().create(this)
+        graph.appearance.install(this)
         // Instantiate the connection store at launch so the Remote Config
         // source sets defaults and starts its first fetch.
         graph.connectionSettings

@@ -21,6 +21,7 @@ metro_android_library(
         "//projects/mobile/android/core/model",
         "//projects/mobile/android/core/navigation",
         "//projects/mobile/android/core/network",
+        "//projects/mobile/android/core/theme",
         "//projects/mobile/android/core/ui",
         "//projects/mobile/android/features/push/api",
         "@maven//:androidx_appcompat_appcompat",
@@ -192,8 +193,10 @@ kt_android_local_test(
     robolectric_properties_file = "robolectric-deps.properties",
     test_class = "dev.proflyder.home.feature.push.PushChannelsTest",
     deps = [
+        "//projects/mobile/android/core/theme",
         "//projects/mobile/android/features/push/api",
         "@maven//:androidx_core_core_ktx",
+        "@maven//:androidx_datastore_datastore_preferences",
         "@maven//:junit_junit",
         "@maven//:org_robolectric_robolectric",
     ],

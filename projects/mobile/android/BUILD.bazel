@@ -8,11 +8,13 @@ package(default_visibility = ["//visibility:public"])
 DETEKT_TEST_TARGETS = [
     "//projects/mobile/android/app:main_activity_smoke_test",
     "//projects/mobile/android/app:toolbar_menu_screenshot_test",
+    "//projects/mobile/android/app:theme_screenshot_test",
     "//projects/mobile/android/core/config:config_test",
     "//projects/mobile/android/core/config:remote_connection_source_test",
     "//projects/mobile/android/core/model:model_test",
     "//projects/mobile/android/core/navigation:navigation_test",
     "//projects/mobile/android/core/network:network_test",
+    "//projects/mobile/android/core/theme:theme_test",
     "//projects/mobile/android/core/ui:motion_test",
     "//projects/mobile/android/features/alarms/api:api_test",
     "//projects/mobile/android/features/alarms/impl:editor_screenshot_test",
@@ -79,6 +81,7 @@ test_suite(
         "//projects/mobile/android/core/config:remote_connection_source_test",
         "//projects/mobile/android/core/model:model_test",
         "//projects/mobile/android/core/network:network_test",
+        "//projects/mobile/android/core/theme:theme_test",
         "//projects/mobile/android/core/ui:motion_test",
         "//projects/mobile/android/features/alarms/api:api_test",
         "//projects/mobile/android/features/alarms/impl:editor_screenshot_test",
@@ -101,6 +104,7 @@ test_suite(
         "//projects/mobile/android/features/settings/impl:screens_screenshot_test",
         "//projects/mobile/android/app:main_activity_smoke_test",
         "//projects/mobile/android/app:toolbar_menu_screenshot_test",
+        "//projects/mobile/android/app:theme_screenshot_test",
         "//projects/mobile/android/core/navigation:navigation_test",
         # Bazel build tools live under platform/android and are routed to the
         # android platform by the units map; run their unit tests here so the
