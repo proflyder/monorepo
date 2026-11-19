@@ -30,10 +30,6 @@ class AlarmEditorFragment :
 
     private var rendering = false
 
-    /** Day chips in ISO order: index 0 is Monday (day 1). */
-    private val dayChips: List<Chip>
-        get() = with(binding) { listOf(day1, day2, day3, day4, day5, day6, day7) }
-
     /** Quick offset chips in the same order as [ALARM_QUICK_OFFSETS_MINUTES]. */
     private val quickOffsetChips: List<Chip>
         get() = with(binding) {
@@ -54,19 +50,14 @@ class AlarmEditorFragment :
             val minutes = ALARM_QUICK_OFFSETS_MINUTES.getOrNull(index) ?: return@forEachIndexed
             chip.setOnClickListener { viewModel.applyQuickOffset(minutes) }
         }
-        binding.alarmEditorDate.setOnClickListener { pickDate() }
+        binding.alarmEditorRepeatRow.setOnClickListener { openRepeatSheet() }
+        binding.alarmEditorDateRow.setOnClickListener { pickDate() }
         binding.alarmEditorSave.setOnClickListener { viewModel.save() }
         binding.alarmEditorDelete.setOnClickListener { confirmDelete() }
-
-        binding.alarmEditorRepeatGroup.setOnCheckedStateChangeListener { _, checkedIds ->
-            if (rendering) return@setOnCheckedStateChangeListener
-            if (checkedIds.isNotEmpty()) viewModel.setRepeat(repeatFor(checkedIds.first()))
-        }
-        dayChips.forEachIndexed { index, chip ->
-            chip.setOnCheckedChangeListener { _, checked ->
-                if (!rendering) viewModel.setWeekday(index + 1, checked)
-            }
-        }
+        childFragmentManager.setFragmentResultListener(
+            AlarmRepeatSheet.REQUEST_KEY,
+            viewLifecycleOwner,
+        ) { _, result -> applyRepeatResult(result) }
 
         viewModel.state.observe { render(it) }
         viewModel.completion.observe(Lifecycle.State.RESUMED) { completion -> handleCompletion(completion) }
@@ -88,13 +79,11 @@ class AlarmEditorFragment :
         rendering = true
         if (alarmEditorLabel.text?.toString() != state.label) alarmEditorLabel.setText(state.label)
         alarmEditorTime.text = String.format(Locale.ROOT, "%02d:%02d", state.hour, state.minute)
-        alarmEditorDate.setVisible(state.repeat == RepeatKind.ONCE)
+        alarmEditorRepeatValue.text = AlarmFormat.repeatValue(requireContext(), state.repeat, state.weekdays)
+        alarmEditorDateRow.setVisible(state.repeat == RepeatKind.ONCE)
         val date = state.onceDate ?: LocalDate.now()
-        alarmEditorDate.text = date.format(DateTimeFormatter.ofPattern("EEE d MMM yyyy", Locale.getDefault()))
+        alarmEditorDateValue.text = date.format(DateTimeFormatter.ofPattern("EEE d MMM yyyy", Locale.getDefault()))
         alarmEditorEnabled.isChecked = state.enabled
-        alarmEditorRepeatGroup.check(repeatChipId(state.repeat))
-        alarmEditorDaysGroup.setVisible(state.repeat == RepeatKind.CUSTOM)
-        dayChips.forEachIndexed { index, chip -> chip.isChecked = state.weekdays.contains(index + 1) }
         val idle = !state.saving && !state.loading && !state.loadFailed
         alarmEditorSave.isEnabled = idle
         alarmEditorDelete.isEnabled = idle
@@ -121,19 +110,20 @@ class AlarmEditorFragment :
         childFragmentManager.showDatePicker(state.onceDate ?: today, today, viewModel::setDate)
     }
 
-    private fun repeatFor(chipId: Int): RepeatKind = when (chipId) {
-        R.id.repeat_once -> RepeatKind.ONCE
-        R.id.repeat_weekdays -> RepeatKind.WEEKDAYS
-        R.id.repeat_weekends -> RepeatKind.WEEKENDS
-        R.id.repeat_custom -> RepeatKind.CUSTOM
-        else -> RepeatKind.DAILY
+    private fun openRepeatSheet() {
+        val state = viewModel.state.value
+        when (childFragmentManager.findFragmentByTag(AlarmRepeatSheet.TAG) != null) {
+            true -> Unit
+            false -> AlarmRepeatSheet.create(state.repeat, state.weekdays)
+                .show(childFragmentManager, AlarmRepeatSheet.TAG)
+        }
     }
 
-    private fun repeatChipId(repeat: RepeatKind): Int = when (repeat) {
-        RepeatKind.ONCE -> R.id.repeat_once
-        RepeatKind.WEEKDAYS -> R.id.repeat_weekdays
-        RepeatKind.WEEKENDS -> R.id.repeat_weekends
-        RepeatKind.CUSTOM -> R.id.repeat_custom
-        else -> R.id.repeat_daily
+    private fun applyRepeatResult(result: Bundle) {
+        val repeat = RepeatKind.entries
+            .firstOrNull { it.name == result.getString(AlarmRepeatSheet.RESULT_REPEAT) }
+            ?: return
+        val days = result.getIntArray(AlarmRepeatSheet.RESULT_DAYS)?.toSet().orEmpty()
+        viewModel.setRepeatAndDays(repeat, days)
     }
 }

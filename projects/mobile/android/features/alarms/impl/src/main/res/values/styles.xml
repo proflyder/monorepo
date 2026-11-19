@@ -64,21 +64,29 @@
         <item name="android:textColor">?attr/colorOnSurfaceVariant</item>
     </style>
 
-    <!-- Seven round day toggles on one row at 360dp. -->
-    <style name="Widget.Alarms.DayChip" parent="Widget.Material3.Chip.Filter">
-        <item name="android:minWidth">38dp</item>
-        <item name="android:minHeight">38dp</item>
-        <item name="chipMinHeight">38dp</item>
-        <item name="chipStartPadding">0dp</item>
-        <item name="chipEndPadding">0dp</item>
-        <item name="textStartPadding">0dp</item>
-        <item name="textEndPadding">0dp</item>
-        <item name="shapeAppearanceOverlay">@style/ShapeAppearanceOverlay.Alarms.Circle</item>
-    </style>
-
-    <style name="ShapeAppearanceOverlay.Alarms.Circle" parent="">
-        <item name="cornerFamily">rounded</item>
-        <item name="cornerSize">50%</item>
+    <!-- Seven round day toggles on one row. The size is fixed, not weighted:
+         each toggle keeps a 44dp circle while the equal cells spread them
+         across the sheet width, so a two-letter label never gets clipped. -->
+    <style name="Widget.Alarms.DayToggle" parent="Widget.Material3.Button.OutlinedButton">
+        <item name="android:insetLeft">0dp</item>
+        <item name="android:insetRight">0dp</item>
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+        <item name="android:minWidth">0dp</item>
+        <item name="android:minHeight">0dp</item>
+        <item name="android:paddingLeft">0dp</item>
+        <item name="android:paddingRight">0dp</item>
+        <item name="android:paddingTop">0dp</item>
+        <item name="android:paddingBottom">0dp</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:includeFontPadding">false</item>
+        <item name="android:textSize">14sp</item>
+        <item name="android:checkable">true</item>
+        <item name="android:textColor">@color/alarms_day_toggle_text</item>
+        <item name="backgroundTint">@color/alarms_day_toggle_background</item>
+        <item name="strokeColor">@color/alarms_day_toggle_stroke</item>
+        <item name="strokeWidth">1dp</item>
+        <item name="cornerRadius">22dp</item>
     </style>
 
     <!-- Contextual bulk action: the icon sits above a small one-line label, so

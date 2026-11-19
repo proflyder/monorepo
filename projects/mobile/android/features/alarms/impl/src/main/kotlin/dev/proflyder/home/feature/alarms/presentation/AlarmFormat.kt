@@ -35,6 +35,27 @@ internal object AlarmFormat {
 
     fun customDays(context: Context, days: List<Int>): String {
         if (days.isEmpty()) return context.getString(R.string.alarms_repeat_unknown)
+        return dayList(context, days)
+    }
+
+    /**
+     * The editor's repeat row: a preset name, or "Пн, Ср, Пт" for a custom
+     * selection. An empty custom set still reads as the option's own name
+     * instead of the card's "unsupported repeat" error.
+     */
+    fun repeatValue(context: Context, repeat: RepeatKind, weekdays: Set<Int>): String = when (repeat) {
+        RepeatKind.ONCE -> context.getString(R.string.alarms_repeat_once)
+        RepeatKind.DAILY -> context.getString(R.string.alarms_repeat_daily)
+        RepeatKind.WEEKDAYS -> context.getString(R.string.alarms_repeat_weekdays)
+        RepeatKind.WEEKENDS -> context.getString(R.string.alarms_repeat_weekends)
+        RepeatKind.CUSTOM -> when (weekdays.isEmpty()) {
+            true -> context.getString(R.string.alarms_repeat_custom)
+            false -> dayList(context, weekdays.toList())
+        }
+        else -> context.getString(R.string.alarms_repeat_unknown)
+    }
+
+    private fun dayList(context: Context, days: List<Int>): String {
         val labels = context.resources.getStringArray(R.array.alarms_day_short)
         return days.sorted().joinToString(", ") { day ->
             labels.getOrElse(day - 1) { day.toString() }

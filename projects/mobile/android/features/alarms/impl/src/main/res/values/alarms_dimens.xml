@@ -7,6 +7,14 @@
     <!-- Space reserved under the scrolling content for the sticky Save bar. -->
     <dimen name="alarms_editor_scroll_bottom">88dp</dimen>
     <dimen name="alarms_editor_section_gap">20dp</dimen>
+    <!-- Editor repeat row: a Material list item, tall enough to tap. -->
+    <dimen name="alarms_repeat_row_min_height">56dp</dimen>
+    <dimen name="alarms_repeat_row_gap">12dp</dimen>
+    <!-- Modal repeat sheet: 44dp round day toggles, seven per row, and a
+         48dp-tall radio option for each preset. -->
+    <dimen name="alarms_sheet_padding">24dp</dimen>
+    <dimen name="alarms_repeat_option_height">48dp</dimen>
+    <dimen name="alarms_day_toggle_size">44dp</dimen>
     <integer name="alarms_columns">1</integer>
 
     <!-- Dense alarm card: one time/text line, at most one extra actions line. -->

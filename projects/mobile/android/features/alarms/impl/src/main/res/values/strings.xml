@@ -41,8 +41,9 @@
     <string name="alarms_quick_offset_60">+1 h</string>
     <string name="alarms_quick_offset_90">+1.5 h</string>
     <string name="alarms_quick_offset_120">+2 h</string>
-    <string name="alarms_editor_date">Date (one-shot)</string>
+    <string name="alarms_editor_date">Date</string>
     <string name="alarms_editor_repeat">Repeat</string>
+    <string name="alarms_repeat_done">Done</string>
     <string name="alarms_editor_days">Days</string>
     <string name="alarms_editor_name">Name</string>
     <string name="alarms_editor_save">Save</string>
