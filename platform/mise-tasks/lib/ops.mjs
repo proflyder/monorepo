@@ -35,7 +35,12 @@ import { loadConfig } from "../../ci/affected.mjs";
 export const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const ROOT = path.resolve(HERE, "../../..");
 
-export const WORKFLOW = "deploy-home.yml";
+// The manual dispatcher: `deploy-home.yml` is the push trigger and has no
+// inputs, `deploy-home-manual.yml` is the `workflow_dispatch` wrapper over the
+// same reusable `_deploy-home.yml` (one trigger per workflow file).
+export const WORKFLOW = "deploy-home-manual.yml";
+// The post-merge workflow to read status from: the push entry point.
+export const PUSH_WORKFLOW = "deploy-home.yml";
 export const REF = "develop";
 export const KUBECONFIG_PATH = "secrets/kubernetes-research/kubeconfig";
 
@@ -578,7 +583,7 @@ export async function runStatus(argv, options = {}) {
       "run",
       "list",
       "--workflow",
-      WORKFLOW,
+      PUSH_WORKFLOW,
       "--limit",
       String(parsed.limit),
       "--json",

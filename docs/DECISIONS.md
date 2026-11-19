@@ -867,3 +867,37 @@
     экспоненциальным backoff до 6 ч. Решение не даёт доступа к
     `configuration.yaml`, `secrets.yaml` и `scenes.yaml` ни контроллеру, ни
     агенту.
+59. **Один триггер на воркфлоу, логика — в reusable.** У каждого файла
+    `.github/workflows/*.yml` ровно одно событие в `on:`; PR и ручной запуск —
+    два тонких файла-обёртки (`ci.yml`, `ci-manual.yml`), вызывающих общий
+    `_ci.yml` (`on: workflow_call`). Причина: `github.event_name` внутри
+    reusable описывает событие вызывающего файла, поэтому ветвление по нему
+    давало неверные ветки (`deploy-home` отличал push от dispatch только пока
+    жил в одном файле). Теперь вызывающий передаёт явные inputs (`mode`,
+    `dry_run`, `same_repository`, `distribution`, `save_cache`). Контракты
+    сохранены: required check `ci-ok` остаётся job в `ci.yml` (вызываемый job
+    получил бы префикс `<caller> / <job>`, и branch protection с
+    `platform/ci/safe-merge.mjs` сломались бы), а `_ci.yml` отдаёт агрегат
+    `ok`/`failing`. Имя файла `deploy-home.yml` тоже не меняется: по нему
+    `safe-merge.mjs` ждёт деплой после merge. Правило проверяет
+    `platform/ci/check_units.mjs` (`workflowTriggerProblems`).
+60. **Версия native-юнитов вычисляется, а не бампается.** `VERSION` содержит
+    только базу `major.minor`; patch = число коммитов, затрагивающих пути юнита
+    в истории `HEAD^1` (`platform/ci/version.mjs`). PR merge-ref и squash-commit
+    имеют один первый родитель, поэтому версия, вшитая в собранный PR бинарник,
+    совпадает с версией релизного тега; отдельный PR с бампом больше не нужен.
+    Опубликованный артефакт несёт аннотацию `org.opencontainers.image.version`,
+    и promotion берёт версию оттуда — тег и `--version` не могут разойтись.
+    Переход с ручных `v0.5.1020` сделан сменой базы на `v0.6`, поэтому
+    последовательность монотонна для updater'а колонки. Отдельного триггера
+    релиза больше нет: выпускается любое смерженное изменение юнита, публикация
+    идёт при деплое (push в `develop`), а станция по-прежнему требует approve
+    Environment `Station`.
+61. **Ручная пересборка — отдельный workflow, а не «пересобрать в деплое».**
+    `deploy-services.yml` (`workflow_dispatch`) собирает выбранные юниты с нуля
+    и проводит их через те же reusable-пути, что и `deploy-home`
+    (`_pin.yml`, `_native.yml` с `promote`, `_station-deploy.yml`), поэтому
+    promote-контракт `tree-<hash>` + provenance и пин-ветка `deploy/home-apps`
+    остаются единственными. Автоматический деплой продолжает работать только на
+    байтах PR («build once»); пересборка — осознанное исключение с явным
+    `replace_artifacts`, иначе сломанный immutable-тег нельзя было бы исправить.

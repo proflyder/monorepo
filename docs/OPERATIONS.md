@@ -26,7 +26,9 @@ mise run rollback scheduler --dry-run   # план: kind, что восстан�
 mise run rollback scheduler --yes       # выполняет документированную команду
 ```
 
-`deploy` вызывает `gh workflow run deploy-home.yml --ref develop -f units=…`
+`deploy` вызывает `gh workflow run deploy-home-manual.yml --ref develop -f units=…`
+(один триггер на файл: `deploy-home.yml` — только push, ручной вход — его
+обёртка `deploy-home-manual.yml`)
 (единственный input workflow). `deploy:status` только читает `gh run list`;
 `--live` делает read-only `kubectl get deploy`: admin kubeconfig приходит из
 OpenBao через fnox (профиль `kube`), туннель к API поднимается на время
@@ -922,15 +924,18 @@ adb -s 192.0.2.13:5555 shell 'cd /data/pulsar && cp -p pulsar.prev pulsar.rollba
 Полная процедура — `projects/station/pulsar/RICARDO.md`, «Релизы и деплой». Кратко:
 
 ```bash
-# 1. в рабочей ветке изменить версию (v<major.minor>.<1000+N>)
-$EDITOR projects/station/pulsar/VERSION
-# 2. обычный PR в develop, squash после зелёного ci-ok;
-#    PR уже собрал release-shaped артефакт (обе архитектуры с версией из
-#    VERSION, radio .ybl, SHA256SUMS, проверка --version под qemu) и
-#    опубликовал его как tree-<git tree hash> с build provenance;
-#    merge проводит pulsar через deploy-home (publish_when по VERSION):
+# 1. Обычный PR в develop, squash после зелёного ci-ok. Версию НЕ правим:
+#    её вычисляет CI (platform/ci/version.mjs) детерминированно и монотонно:
+#      version = <VERSION major.minor>.<число коммитов, затрагивающих pulsar
+#      в истории HEAD^1>
+#    VERSION содержит только базу (v0.6). merge сам является релизом:
+#    PR уже собрал release-shaped артефакт (обе архитектуры с этой версией,
+#    radio .ybl, SHA256SUMS, проверка --version под qemu) и опубликовал его
+#    как tree-<git tree hash> с build provenance и аннотацией
+#    org.opencontainers.image.version;
 #    native-release проверяет tree-тег и provenance и ставит на тот же
-#    digest ghcr.io/proflyder/pulsar-firmware:<version> и :latest.
+#    digest ghcr.io/proflyder/pulsar-firmware:<version> и :latest, беря
+#    версию из аннотации артефакта (не пересчитывая её).
 #    Если tree-тега нет или provenance не сходится — job падает:
 #    deploy-home ничего не собирает и не публикует. Если develop ушёл
 #    вперёд до squash-merge, берётся head PR, но только когда дельта
@@ -938,16 +943,23 @@ $EDITOR projects/station/pulsar/VERSION
 #    дождаться CI и смержить заново.
 #    Тот же tree-тег с другими SHA256SUMS не перезаписывается: publish-oci
 #    оставляет первый артефакт и берёт его digest (сборка не бит-воспроизводима).
-# 3. approve в GitHub Environment `Station` (job deploy-station)
+# 2. approve в GitHub Environment `Station` (job deploy-station)
 #    → VPN группа ci → OIDC в OpenBao (deploy-station)
 #    → HA update_entity + update.install
-# 4. повторный запуск уже опубликованной версии — workflow_dispatch
-#    deploy-home с units=pulsar: катится только deploy-station, текущий
-#    VERSION без сборки и push; units=all тоже включает deploy-station.
-#    Если OCI-тег версии уже существует с другим digest, promotion/publish
-#    падает: выпускается следующая версия; тот же digest — no-op
-# 5. прочие изменения Pulsar — только PR CI, релизные теги не двигаются
+# 3. повторный запуск уже опубликованного `latest` — workflow_dispatch
+#    `deploy-home (вручную)` с units=pulsar: катится только deploy-station,
+#    версия читается из аннотации опубликованного артефакта; units=all тоже
+#    включает deploy-station.
+# 4. сломанный/недоснятый релиз — workflow_dispatch `Пересобрать и задеплоить
+#    сервисы` с галочкой pulsar: честная сборка с текущего develop,
+#    публикация tree-тега и (при replace_artifacts) замена байтов, затем
+#    promotion и deploy-station.
 ```
+
+Версия станции растёт по числу коммитов pulsar, поэтому после перехода с
+ручных `v0.5.10NN` база стала `v0.6`: `v0.6.50` и далее всегда новее
+`v0.5.1020`, и updater не откажется от релиза. `VERSION` руками не меняется
+никогда; при необходимости сменить major/minor достаточно исправить базу.
 
 После approve job `deploy-station` входит в VPN группой `ci` (отдельный клиентский сертификат
 `ci-pulsar`, выпускается `vpncerts.py`) и по GitHub OIDC в OpenBao роль
@@ -1070,6 +1082,40 @@ provenance; `deploy-home` проверяет тег и provenance:
   для logon provider `<version>` и `sha-<12>`. Версия неизменяема: тот же
   digest — no-op, другой — отказ; двигается только `latest`.
 
+### Пересборка сервисов вручную (честная сборка)
+
+Если опубликованные байты неверны, отсутствуют или собраны из уехавшего
+tree, есть отдельный ручной путь: Actions → **«Пересобрать и задеплоить
+сервисы»** (`deploy-services.yml`) → *Run workflow* → ветка **`develop`**.
+Он собирает выбранные юниты **с нуля** из текущего `develop`, публикует их под
+`tree-<hash>` с provenance и дальше идёт той же дорогой, что и `deploy-home`:
+`_pin.yml` (promotion + pins для Flux), `_native.yml` с `promote: true`
+(релизные теги native-юнитов) и `_station-deploy.yml` (станция, Environment
+`Station`).
+
+Выбор — галочки групп из `platform/ci/rebuild.mjs` (GitHub разрешает не больше
+10 inputs, поэтому юниты сгруппированы; поле `units` принимает точные id):
+
+| Галочка | Юниты |
+|---|---|
+| `all` | все деплойные и native-юниты + станция |
+| `scheduler` | `scheduler` (с родственными `ha-bridge`/`ha-control` образами) |
+| `ha_bridge` | `ha-bridge` (`ha-bridge`, `ha-control`, `ha-scenario`) |
+| `home_services` | `wakegrant`, `intercom`, `phone-push`, `currency-bot`, `mcp-gateway` |
+| `ha_config` | `ha-config-sync`, `hermes-config` |
+| `hermes` | `hermes` (`hermes`, `voice-proxy`, `health-exporter`) |
+| `pulsar` | `pulsar` (пересборка прошивки, публикация, promotion, станция) |
+| `logon_provider` | `logon-provider` |
+| `units` | точный список id через запятую (перекрывает галочки) |
+
+`replace_artifacts` (по умолчанию включён) позволяет пересобранным native-байтам
+заменить уже опубликованный `tree-<hash>` и перевести immutable version-тег на
+новый digest — это и есть смысл ручной пересборки. Повторный запуск того же
+коммита безопасен: теги публикуются заново, provenance проверяется снова, pins
+записывают те же digest'ы. Контракт promotion (`tree-<hash>`, provenance,
+`deploy/home-apps`) не меняется — меняется только источник байтов (сборка
+этого запуска вместо PR-артефакта).
+
 `deploy-home` — только promotion и pins: он не запускает `bazel build`/`bazel run`
 и не собирает Docker-образы; применение делает Flux. Native-юниты (Pulsar, logon provider) тоже
 только продвигаются: если `tree-<hash>` не опубликован или provenance не
@@ -1182,10 +1228,11 @@ job падает с понятной ошибкой; автосборки на �
 mise run deploy -- scheduler --yes      # workflow_dispatch units=scheduler
 ```
 
-Ежедневная уборка — один workflow `.github/workflows/cleanup.yml` (расписание
-раз в сутки + ручной `workflow_dispatch` с `dry_run` по умолчанию) с двумя
+Ежедневная уборка — reusable `.github/workflows/_cleanup.yml` с двумя
 независимыми параллельными джобами: `ghcr` (образы) и `fad` (сборки в Firebase
-App Distribution). Падение одной не влияет на другую и на `ci-ok`.
+App Distribution). Триггеры — два тонких файла: `cleanup.yml` (расписание раз в
+сутки) и `cleanup-manual.yml` (`workflow_dispatch` с `dry_run` по умолчанию).
+Падение одной джобы не влияет на другую и на `ci-ok`.
 
 ### Чистка GHCR
 
@@ -1205,7 +1252,7 @@ node platform/ci/ghcr_cleanup.mjs \
   --fixture platform/ci/testdata/ghcr-versions.json --now 2026-11-04T00:00:00Z
 ```
 
-Реальный ручной прогон: Actions → `cleanup` → Run workflow,
+Реальный ручной прогон: Actions → `cleanup (вручную)` → Run workflow,
 `dry_run` по умолчанию `true` (снять галочку — удалять). Если `GITHUB_TOKEN`
 не может удалять версии user-owned пакетов, job падает с подсказкой: нужен
 секрет `GHCR_CLEANUP_TOKEN` (токен с правом удаления пакетов и доступом к
@@ -1230,12 +1277,12 @@ node platform/ci/fad_cleanup.mjs \
   --fixture platform/ci/testdata/fad-releases.json --now 2026-11-04T12:00:00Z
 ```
 
-Ручной прогон — Actions → `cleanup` → Run workflow (`dry_run` по умолчанию
-`true`). Для удаления сервис-аккаунту нужна роль **Firebase App Distribution
+Ручной прогон — Actions → `cleanup (вручную)` → Run workflow (`dry_run` по
+умолчанию `true`). Для удаления сервис-аккаунту нужна роль **Firebase App Distribution
 Admin** (`roles/firebaseappdistro.admin`) в проекте Firebase; без неё джоба
 падает с этой подсказкой, ничего не удалив. Роль OpenBao `android-cleanup`
 создаётся `projects/home/kubernetes/openbao/configure.py` и привязана к
-`cleanup.yml` на `refs/heads/develop` для событий `schedule` и
+`_cleanup.yml` на `refs/heads/develop` для событий `schedule` и
 `workflow_dispatch`; Environment `Android` должен разрешать ветку `develop`.
 Роль применяется идемпотентно повторным запуском
 `mise run admin:openbao-bootstrap` с admin-токеном в `BAO_TOKEN` (см.
@@ -1485,7 +1532,8 @@ APK ровно один раз matrix-запись `android / android-app`
 (это не секрет: идентификаторы Firebase лежат открытым текстом в любом APK),
 прогоняет тесты на том же `--define`-варианте APK и публикует неподписанный
 artifact `android-app-apk` (`app.apk` + `release-info.json`). Затем job
-`android-distribute` в `.github/workflows/ci.yml` (Environment `Android`, VPN
+`android-distribute` (`_ci.yml` → reusable `.github/workflows/_android-release.yml`)
+(Environment `Android`, VPN
 группа `ci` сертификатом `ci-android`, роль OpenBao `android-distribute` → `secret/ci/android-distribute`),
 дождавшись зелёного всего `android` matrix, скачивает artifact, подписывает его
 `platform/android/sign-release.sh` (`zipalign -P 16`, `apksigner` v2/v3,
@@ -1513,6 +1561,25 @@ PR, но не блокирует merge; новый push в тот же PR отм
 команду без загрузки; подпись — тем же `sign-release.sh`). Секреты и запись
 KV — README `projects/home/kubernetes/openbao`; статус — вкладка Actions
 прогона PR (`android / android-app` и `android-distribute`).
+
+#### Ручной релиз Android
+
+Собрать и выложить приложение без PR:
+
+1. Actions → **«Android: собрать и выложить»** (`android-release.yml`) →
+   *Run workflow* → ветка **`develop`** → необязательный текст release notes →
+   *Run workflow*.
+2. Воркфлоу собирает APK с текущего `develop` через тот же `_android.yml`
+   (build → APK-тесты → release `versionCode`/`versionName`), затем
+   `_android-release.yml` подписывает и загружает его в Firebase App
+   Distribution (группа `admins`) — тем же кодом, что PR CI. Локальной сборки
+   нет, `google-services.json` приходит из переменной репозитория
+   `GOOGLE_SERVICES_JSON_B64`.
+3. Гейт — Environment `Android` (approve) и OIDC-роль OpenBao
+   `android-release` (`refs/heads/develop`, `workflow_dispatch`,
+   `job_workflow_ref=…/_android-release.yml@refs/heads/develop`). Роль создаёт
+   `projects/home/kubernetes/openbao/configure.py`; после смены имени workflow
+   её надо применить повторно.
 
 ## Currency bot
 

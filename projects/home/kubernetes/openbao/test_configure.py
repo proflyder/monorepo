@@ -97,7 +97,8 @@ class AndroidRole(unittest.TestCase):
                 "environment": "Android",
                 "ref": "refs/pull/*/merge",
                 "job_workflow_ref":
-                    "example/home/.github/workflows/ci.yml@refs/pull/*/merge",
+                    "example/home/.github/workflows/_android-release.yml"
+                    "@refs/pull/*/merge",
                 "event_name": "pull_request",
             },
             "token_policies": ["ci-android"],
@@ -115,7 +116,7 @@ class AndroidRole(unittest.TestCase):
         with redirect_stdout(StringIO()):
             claims(bao, AUDIENCE, HOME_REPOSITORY)
         roles = {
-            "android-distribute": ".github/workflows/ci.yml",
+            "android-distribute": ".github/workflows/_android-release.yml",
         }
         for role, own_workflow in roles.items():
             bound = bao.payload(f"/v1/auth/github/role/{role}")["bound_claims"]
@@ -142,6 +143,46 @@ class AndroidRole(unittest.TestCase):
                     "example/home/.github/workflows/_android.yml@refs/pull/42/merge",
                     workflow))
 
+    def test_android_release_role_payload(self):
+        """The manual release assumes its own develop-bound role."""
+        bao = Recorder()
+        with redirect_stdout(StringIO()):
+            configure.ensure_github(bao, AUDIENCE, HOME_REPOSITORY)
+        self.assertEqual(bao.payload("/v1/auth/github/role/android-release"), {
+            "role_type": "jwt",
+            "user_claim": "job_workflow_ref",
+            "bound_audiences": [AUDIENCE],
+            "bound_claims_type": "glob",
+            "bound_claims": {
+                "repository": HOME_REPOSITORY,
+                "environment": "Android",
+                "ref": "refs/heads/develop",
+                "job_workflow_ref":
+                    "example/home/.github/workflows/_android-release.yml@refs/heads/develop",
+                "event_name": "workflow_dispatch",
+            },
+            "token_policies": ["ci-android"],
+            "token_ttl": "10m",
+            "token_max_ttl": "15m",
+            "clock_skew": 60,
+        })
+
+    def test_android_release_role_is_not_a_pr_role(self):
+        """The manual role must not accept a pull request merge ref."""
+        import fnmatch
+
+        bao = Recorder()
+        with redirect_stdout(StringIO()):
+            configure.ensure_github(bao, AUDIENCE, HOME_REPOSITORY)
+        bound = bao.payload("/v1/auth/github/role/android-release")["bound_claims"]
+        self.assertEqual(bound["ref"], "refs/heads/develop")
+        self.assertEqual(bound["event_name"], "workflow_dispatch")
+        self.assertFalse(fnmatch.fnmatch(
+            "refs/pull/42/merge", bound["ref"]))
+        self.assertFalse(fnmatch.fnmatch(
+            "example/home/.github/workflows/_android-release.yml@refs/pull/42/merge",
+            bound["job_workflow_ref"]))
+
     def test_android_cleanup_role_payload(self):
         """The scheduled cleanup assumes its own develop-bound role."""
         bao = Recorder()
@@ -157,7 +198,7 @@ class AndroidRole(unittest.TestCase):
                 "environment": "Android",
                 "ref": "refs/heads/develop",
                 "job_workflow_ref":
-                    "example/home/.github/workflows/cleanup.yml@refs/heads/develop",
+                    "example/home/.github/workflows/_cleanup.yml@refs/heads/develop",
                 "event_name": ["schedule", "workflow_dispatch"],
             },
             "token_policies": ["ci-android"],
@@ -178,12 +219,12 @@ class AndroidRole(unittest.TestCase):
         self.assertEqual(bound["event_name"], ["schedule", "workflow_dispatch"])
         workflow = bound["job_workflow_ref"]
         self.assertTrue(fnmatch.fnmatch(
-            "example/home/.github/workflows/cleanup.yml@refs/heads/develop",
+            "example/home/.github/workflows/_cleanup.yml@refs/heads/develop",
             workflow))
         for other in (
             "example/home/.github/workflows/ci.yml@refs/heads/develop",
-            "example/home/.github/workflows/cleanup.yml@refs/pull/42/merge",
-            "example/other/.github/workflows/cleanup.yml@refs/heads/develop",
+            "example/home/.github/workflows/_cleanup.yml@refs/pull/42/merge",
+            "example/other/.github/workflows/_cleanup.yml@refs/heads/develop",
         ):
             self.assertFalse(fnmatch.fnmatch(other, workflow), other)
 
@@ -197,6 +238,7 @@ class AndroidRole(unittest.TestCase):
             [path for path in bao.paths() if path.startswith("/v1/auth/github/role/")],
             [
                 "/v1/auth/github/role/android-distribute",
+                "/v1/auth/github/role/android-release",
                 "/v1/auth/github/role/android-cleanup",
             ],
         )

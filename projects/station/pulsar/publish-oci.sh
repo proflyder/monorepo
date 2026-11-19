@@ -8,6 +8,14 @@
 #
 #   ./publish-oci.sh --source-dir /path/to/artifact
 #   ./publish-oci.sh --source-dir /path/to/artifact --tag tree-<git tree hash>
+#   ./publish-oci.sh --source-dir /path/to/artifact --tag tree-<hash> --version v0.6.50
+#
+# `--version` overrides the version read from `VERSION`: CI computes it from
+# `VERSION` (major.minor) plus the commits touching the unit
+# (`platform/ci/version.mjs`), so the file no longer carries a patch number.
+# `--replace` lets the explicit rebuild workflow (`deploy-services.yml`) publish
+# a rebuilt artifact under an existing `tree-<hash>` tag; the default keeps the
+# first published bytes and warns.
 #
 # `--tag` публикует тот же release-артефакт под ровно одним тегом (PR-путь
 # build once использует `tree-<git tree hash>`) и не трогает `<VERSION>` и
@@ -41,10 +49,12 @@ SOURCE_URL="${OCI_SOURCE_URL:-$DEFAULT_SOURCE}"
 VERSION_FILE="${VERSION_FILE:-$HERE/VERSION}"
 SOURCE_DIR=""
 TAG=""
+VERSION_OVERRIDE=""
+REPLACE=0
 OUTPUT_SUMMARY="${GITHUB_STEP_SUMMARY:-}"
 
 usage() {
-  echo "usage: $0 --source-dir DIR [--repository REPOSITORY] [--tag TAG]" >&2
+  echo "usage: $0 --source-dir DIR [--repository REPOSITORY] [--tag TAG] [--version VERSION] [--replace]" >&2
 }
 
 die() {
@@ -66,6 +76,14 @@ while [[ $# -gt 0 ]]; do
       TAG="${2:?--tag needs a value}"
       shift 2
       ;;
+    --version)
+      VERSION_OVERRIDE="${2:?--version needs a value}"
+      shift 2
+      ;;
+    --replace)
+      REPLACE=1
+      shift
+      ;;
     -h|--help)
       usage
       exit 0
@@ -81,9 +99,9 @@ done
 [[ -d "$SOURCE_DIR" ]] || die "source directory not found: $SOURCE_DIR"
 command -v oras >/dev/null 2>&1 || die "oras CLI is required on PATH"
 
-version="$(tr -d '[:space:]' < "$VERSION_FILE")"
+version="${VERSION_OVERRIDE:-$(tr -d '[:space:]' < "$VERSION_FILE")}"
 [[ "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] ||
-  die "VERSION must be vMAJOR.MINOR.PATCH, got '$version'"
+  die "version must be vMAJOR.MINOR.PATCH, got '$version'"
 
 # `_native.yml` uploads a flat artifact; accept the files either at the top
 # level or inside a directory named after the unit.
@@ -144,6 +162,13 @@ if [[ -n "$TAG" ]]; then
     if cmp -s "$stage/SHA256SUMS" "$tmp/SHA256SUMS"; then
       rm -rf "$tmp"
       echo "tag $TAG is already published with identical content; not rebuilding"
+    elif [[ "$REPLACE" -eq 1 ]]; then
+      rm -rf "$tmp"
+      # Explicit rebuild path (`deploy-services.yml --replace`): the operator
+      # asked for a fresh build of this tree, so the rebuilt artifact replaces
+      # the published bytes under the same tag.
+      echo "publish-oci: replacing $TAG with the rebuilt artifact"
+      push_artifact "$REPOSITORY:$TAG"
     else
       rm -rf "$tmp"
       # Пересборка того же дерева исходников не бит-воспроизводима (другие
@@ -163,7 +188,7 @@ else
   # safe to publish; any other registry/auth error fails the job instead of
   # risking an overwrite.
   if output="$(oras manifest fetch "$REPOSITORY:$version" 2>&1)"; then
-    die "$REPOSITORY:$version already exists; bump projects/station/pulsar/VERSION"
+    die "$REPOSITORY:$version already exists; the computed version must increase"
   elif ! grep -qiE 'not found|manifest_unknown|name unknown|404' <<< "$output"; then
     die "cannot check $REPOSITORY:$version: $output"
   fi

@@ -173,8 +173,14 @@
 
 - GitHub-hosted runners. Карта юнитов — `platform/ci/units.mjs`, запуск —
   платформенные reusable workflows (`.github/workflows/_*.yml`),
-  обязательный итог — `ci-ok`. Прямой push в `develop` запрещён; `develop`
-  обновляется только squash-merge PR.
+  обязательный итог — `ci-ok`. У каждого workflow ровно один триггер
+  (проверяет `platform/ci/check_units.mjs`); PR/ручной вход, push-релиз и
+  уборка — тонкие обёртки над общими reusable (`_ci.yml`, `_deploy-home.yml`,
+  `_cleanup.yml`), Android-релиз — `_android.yml` + `_android-release.yml`.
+  Прямой push в `develop` запрещён; `develop` обновляется только squash-merge
+  PR. Версия native-юнитов вычисляется (`platform/ci/version.mjs`, аннотация
+  артефакта), ручного бампа `VERSION` нет; ручная честная пересборка —
+  `deploy-services.yml`.
 - Версии инструментов CI и рабочего места — один `mise.toml` (+ `mise.lock`
   с sha256 linux-x64/macos-arm64): Python 3.15.2, Node 26.13.0, Bazelisk,
   gitleaks, actionlint, shellcheck, kubectl, helm, oras, bao, gh, protoc, bw.

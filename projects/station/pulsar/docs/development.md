@@ -38,7 +38,7 @@ bazel test //projects/station/pulsar/satellite/... //projects/station/pulsar/ins
 Кросс-сборка на одну архитектуру; release передаёт версию и дату коммита:
 
 ```sh
-version=$(tr -d '[:space:]' < projects/station/pulsar/VERSION)
+version=$(node platform/ci/version.mjs --unit pulsar)
 build_time=$(TZ=UTC0 LC_ALL=C git log -1 --format=%cd --date=format-local:'%b %e %Y, %H:%M:%S')
 bazel build -c opt \
   --platforms=//platform/bazel/zig:aarch64_linux \
@@ -90,12 +90,13 @@ CI Pulsar разделён на два юнита. `pulsar-bazel` (`.github/work
 обеих архитектур и установщика (`pulsar-install`), `radio/build.sh` и `ssh/build.sh`.
 Версии инструментов — как в «Сборке» выше; `make check` больше не дублируется.
 
-Релиз — изменение `projects/station/pulsar/VERSION` (`v<major.minor>.<1000+N>`) в PR в
-`develop`. PR CI (`_native.yml`, `promote: false`) собирает обе архитектуры с этой версией и
-radio, проверяет `--version` под qemu, складывает `pulsar-<arch>.bin`, `SHA256SUMS` и
-`zigbee-*.ybl` в OCI-артефакт и публикует его как `tree-<git hash>` с build provenance
-(`publish-oci.sh`). Merge в `develop` (`native.publish_when` по VERSION) запускает
-`native-release`: он проверяет `tree-<hash>` и provenance, ставит на тот же digest теги
+Релиз — смерженное изменение Pulsar: версию считает CI (`VERSION` хранит только
+`v<major.minor>`, patch = число коммитов юнита, `platform/ci/version.mjs`). PR CI
+(`_native.yml`, `promote: false`) собирает обе архитектуры с этой версией и radio, проверяет
+`--version` под qemu, складывает `pulsar-<arch>.bin`, `SHA256SUMS` и `zigbee-*.ybl` в
+OCI-артефакт и публикует его как `tree-<git hash>` с build provenance (`publish-oci.sh`).
+Merge в `develop` запускает `native-release`: он проверяет `tree-<hash>` и provenance, берёт
+версию из аннотации артефакта и ставит на тот же digest теги
 `ghcr.io/proflyder/pulsar-firmware:<version>` и `:latest` и ничего не собирает. Затем
 `deploy-station` после approve в Environment `Station` катит этот digest на станцию. GitHub
 Releases и теги в монорепо не используются; изменение исходников без бампа VERSION — только

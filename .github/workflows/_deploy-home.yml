@@ -1,0 +1,586 @@
+name: _deploy-home
+
+# Home application release from `develop`. Every deployable unit is applied by
+# Flux: this workflow only promotes the digests the merged PR built and
+# attested and commits them to the machine branch `deploy/home-apps`, which
+# Flux reads. The unit map is `platform/ci/units.mjs`, so adding a
+# deployable unit does not need a workflow edit.
+#
+# Reusable release pipeline (`workflow_call`), called by two thin wrappers with
+# one trigger each: `deploy-home.yml` (`push` to develop) and
+# `deploy-home-manual.yml` (`workflow_dispatch`). The caller states its event
+# through `mode`; `github.event_name` inside a called workflow describes the
+# caller's file and must not be used to branch.
+#
+# A push also promotes affected `native` units as public OCI artifacts: the
+# Windows logon provider and Pulsar, each on any affected change (the version is
+# computed — no version-bump PR). `native-release` reuses `_native.yml`, which
+# only promotes the `tree-<hash>` artifact the merged PR built and attested and
+# reads the release version from the artifact's annotation. A missing or
+# unverified tree tag fails the job: this workflow never builds or publishes a
+# native artifact. Pull requests never reach this workflow, so they never
+# publish release tags. A Pulsar release then rolls out through
+# `deploy-station` (`_station-deploy.yml`, Environment `Station`); that job is
+# independent and installs the published image through HA.
+#
+# A push to `develop` is a squash-merge of a PR, so it runs in the base
+# repository context. The `plan` job routes the change range (`before..sha`)
+# through the same unit map as CI and selects exactly the affected deployable
+# units; documentation-only pushes deploy nothing.
+#
+# Build once (DECISIONS 36): this workflow never builds. The `pins` job promotes
+# the digests the merged PR built and attested under `tree-<hash>`. Their
+# provenance must verify against this repository's CI workflows; only then are
+# the usual tags attached and the digest written to the pins file. A missing or
+# unverified image fails the job with the promotion decisions in the summary —
+# there is no "build as before" path (it would deploy bytes CI never tested and
+# made every deploy slow).
+#
+# The pins job has no VPN, OpenBao or kubeconfig; it only needs
+# `contents: write` on the pins branch. `develop` is never written, and a failed
+# promotion keeps the previous pin in force. The former `deploy` job (VPN group
+# `ci`, OpenBao OIDC role `deploy-home`, `kubectl`/`helm` under the `ci-deploy`
+# ServiceAccount) is gone: merge → pins → Flux is the only deploy path, and a
+# rollback is a revert of the pins commit or a `flux suspend`.
+#
+# A manual run (`mode: manual`) pins the current `develop`, whose tree has no CI build for
+# units the last merged PR did not touch (the tree changes on every merge).
+# Promotion therefore walks the first-parent lineage (~200 commits) of the
+# deploy commit and picks the newest image whose `tree-<hash>` tag exists AND
+# whose provenance verifies; the summary names that commit. That is correct
+# because CI builds an image whenever its inputs change, so a change after the
+# found commit would have produced a later, found-first tree.
+#
+# On a push the unit's own images must match this tree exactly; history is only
+# used for sibling images of the shared scheduler unit
+# (units.mjs `deploy.optional_images`, ha-bridge/ha-control while rolling the
+# scheduler and the reverse). A required image with no verified tree still
+# fails the job instead of building.
+#
+# The push also runs `warm-android` and `warm-rust`, which save the disk cache
+# of their family plus (for Rust) its repository cache under the keys the
+# matching PR jobs restore (CI itself no longer runs on develop). They only
+# populate caches; they are not part of the release and never publish.
+#
+# Mode changes for the executors and cutovers stay manual: Flux holds the
+# steady state from Git, and a drill uses `flux suspend` plus the admin
+# `projects/home/kubernetes/scheduler/deploy.sh` (fail-closed preflight). CI
+# never bypasses preflight and never force-enables a writer.
+on:
+  workflow_call:
+    inputs:
+      mode:
+        description: >-
+          `push` is the post-merge release (a squash merge on develop);
+          `manual` re-pins the current develop and re-deploys an already
+          published station release. The caller states it — a called workflow
+          cannot trust `github.event_name`, which describes the caller.
+        required: true
+        type: string
+      units:
+        description: >-
+          `all` or a comma separated list of deployable unit ids (manual mode
+          only; a push always pins exactly the routed set).
+        required: false
+        default: all
+        type: string
+    # Declared for documentation; the caller passes `secrets: inherit`.
+    secrets:
+      VPN_SERVER:
+        required: false
+      VPN_CERT_P12_B64:
+        required: false
+      VPN_CERT_PASSWORD:
+        required: false
+      OPENBAO_ADDR:
+        required: false
+      OPENBAO_ROLE:
+        required: false
+    outputs:
+      units:
+        value: ${{ jobs.plan.outputs.units }}
+      native_units:
+        value: ${{ jobs.plan.outputs.native_units }}
+      station:
+        value: ${{ jobs.plan.outputs.station }}
+      pulsar_version:
+        value: ${{ jobs.plan.outputs.pulsar_version }}
+
+permissions:
+  contents: read
+
+env:
+  # Set Git's default branch for actions/checkout's `git init` (it warns when unset;
+  # it runs under a throwaway HOME, so only an env-provided config reaches it).
+  GIT_CONFIG_COUNT: "1"
+  GIT_CONFIG_KEY_0: init.defaultBranch
+  GIT_CONFIG_VALUE_0: main
+  BAZELISK_VERSION: "1.30.0"
+  # Official crane (google/go-containerregistry): resolves and re-tags a digest
+  # without pulling it. sha256 is the GitHub release asset digest for
+  # Linux_x86_64.
+  CRANE_VERSION: "v0.22.1"
+  CRANE_SHA256: "0ab7a1d6932a213aed964ce97666c3077fe691c8606413674a8b3e0b9ec4cda0"
+
+jobs:
+  # Save the caches that PR jobs restore. `ci.yml` does not run on push to
+  # `develop`, so this is the only place where a develop-side cache is written.
+  # It runs on push only, in parallel with `plan`, with no Environment, no
+  # secrets and no VPN; it never runs on workflow_dispatch.
+  #
+  # The caches are split by family because the two target spaces download and
+  # compile different things and the GitHub budget is shared:
+  #   * android: `bazel-android-<os>-warm-<hash>` (disk only).
+  #   * rust:    `bazel-repo-rust-<os>-<hash>` (repository archives) and
+  #     `bazel-rust-<os>-warm-<hash>` (disk).
+  # Android deliberately has no develop-side repository cache: its downloads
+  # are almost entirely Maven/PyPI/npm artifacts (hundreds of MB of JARs) that a
+  # runner fetches directly from its own IP (Nexus is only a fallback), so
+  # caching them spent the budget on data a download gets quickly anyway.
+  # `_android.yml` and the routing jobs therefore download directly (or through
+  # Nexus on a 429/5xx). `_unit.yml`,
+  # `_native.yml`, `_deploy-control.yml` restore the Rust family archive; no job
+  # falls back to another family's disk cache.
+  #
+  # Only the repository *archives* are cached (`content_addressable/`, see
+  # `.github/actions/bazel-repository-cache`); Bazel re-extracts them locally.
+  # `warm-rust` restores its repository cache by exact key only, so a lockfile
+  # change starts from an empty directory instead of growing the archive with
+  # stale downloads forever. The disk cache is a snapshot restored through its
+  # stable prefix and re-saved under a run-specific key.
+  #
+  # Nothing here runs `bazel fetch`: it resolves *every* registered toolchain
+  # (Android NDK, zig, Windows, musl) even for a Rust-only target set, which is
+  # what made the old shared repository cache 8 GB. `bazel build` fetches only
+  # the external repositories the family's targets actually need.
+  #
+  # `_deploy-control.yml` and the native units stay PR/restore-only: nothing on
+  # develop produces their outputs.
+  warm-android:
+    if: inputs.mode == 'push'
+    runs-on: ubuntu-24.04
+    # A cold Android app build is the bulk of this job (the deploy itself only
+    # starts after `plan`, so the extra minutes do not delay a roll-out).
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Node enumerates the Android build/test targets from units.mjs so the
+      # warm list cannot drift from the PR unit map.
+      - uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b # v5.2.7
+        with:
+          version: 2026.11.3
+          install_args: "node"
+          cache: true
+
+      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
+
+      - name: Install Android SDK packages
+        run: |
+          sdkmanager --install "platforms;android-36" "build-tools;36.0.0" "cmdline-tools;23.0" "ndk;28.2.13676358"
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358" >> "$GITHUB_ENV"
+
+      # Same action/inputs as `_android.yml`. No repository cache: the Android
+      # downloads are Maven artifacts Nexus already serves (see the job comment).
+      - uses: bazel-contrib/setup-bazel@104e3eea9447cdaa4b00d0fb46191a3985d26ab3 # v0.19.1
+        with:
+          bazelisk-version: "1.30.0"
+          bazelisk-cache: true
+          repository-cache: false
+          cache-save: true
+
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/bazel-disk
+          key: bazel-android-${{ runner.os }}-warm-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'projects/mobile/android/maven_install.json') }}
+          restore-keys: |
+            bazel-android-${{ runner.os }}-warm-
+
+      # One build in one server warms the compiled Android actions consumed by
+      # the PR jobs. No secrets are involved: without
+      # `platform/android/keys/google-services.json` the app still builds and
+      # Firebase stays inert. `--experimental_disk_cache_gc_max_size` keeps the
+      # uncompressed cache bounded before it is archived; the server evicts in
+      # the background while idle, before the save below.
+      - name: Warm the Android Bazel caches
+        run: |
+          set -euo pipefail
+          mapfile -t android_targets < <(node --input-type=module -e '
+            const { config } = await import(process.cwd() + "/platform/ci/units.mjs");
+            const seen = new Set();
+            for (const unit of config.units) {
+              if (unit.platform !== "android" || !unit.bazel) continue;
+              for (const t of [...(unit.bazel.build_targets ?? []), ...(unit.bazel.test_targets ?? [])]) seen.add(t);
+            }
+            console.log([...seen].join("\n"));
+          ')
+          echo "warming ${#android_targets[@]} Android targets"
+          bazel build --config=android --keep_going \
+            "${android_targets[@]}" \
+            --experimental_disk_cache_gc_max_size=5G
+
+      # Closes the cache files and lets the idle GC finish before archiving.
+      - name: Stop the Bazel server
+        run: bazel shutdown
+
+      - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/bazel-disk
+          key: bazel-android-${{ runner.os }}-warm-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'projects/mobile/android/maven_install.json') }}-${{ github.run_id }}-${{ github.run_attempt }}
+
+  warm-rust:
+    if: inputs.mode == 'push'
+    runs-on: ubuntu-24.04
+    # Every host Rust build/test target; the deploy itself only starts after
+    # `plan`, so the extra minutes do not delay a roll-out.
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Node enumerates the Rust build/test targets of the `bazel` units from
+      # platform/ci/units.mjs (the same list `_unit.yml` builds and tests).
+      - uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b # v5.2.7
+        with:
+          version: 2026.11.3
+          install_args: "node"
+          cache: true
+
+      # Same action/inputs as `_unit.yml`; no Android SDK is needed because a
+      # `build` only resolves the toolchains its targets use (unlike `fetch`).
+      - uses: bazel-contrib/setup-bazel@104e3eea9447cdaa4b00d0fb46191a3985d26ab3 # v0.19.1
+        with:
+          bazelisk-version: "1.30.0"
+          bazelisk-cache: true
+          repository-cache: false
+          cache-save: true
+
+      - name: Restore the host-Rust repository cache
+        id: bazel-repo
+        uses: ./.github/actions/bazel-repository-cache
+        with:
+          key: bazel-repo-rust-${{ runner.os }}-${{ hashFiles('MODULE.bazel', 'MODULE.bazel.lock', '.bazelversion', 'Cargo.lock', 'crate-universe.lock', 'rust-toolchain.toml') }}
+
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/bazel-disk
+          key: bazel-rust-${{ runner.os }}-warm-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'Cargo.lock', 'crate-universe.lock', 'rust-toolchain.toml') }}
+          restore-keys: |
+            bazel-rust-${{ runner.os }}-warm-
+
+      # No `--config=android`: `_unit.yml` runs the same `bazel build/test` with
+      # only the unit flags, and the Android config would change the
+      # configuration checksum (the version defines) for no benefit.
+      - name: Warm the host-Rust Bazel caches
+        run: |
+          set -euo pipefail
+          mapfile -t rust_targets < <(node --input-type=module -e '
+            const { config } = await import(process.cwd() + "/platform/ci/units.mjs");
+            const seen = new Set();
+            for (const unit of config.units) {
+              if (unit.platform !== "bazel" || !unit.bazel) continue;
+              for (const t of [...(unit.bazel.build_targets ?? []), ...(unit.bazel.test_targets ?? [])]) seen.add(t);
+            }
+            console.log([...seen].join("\n"));
+          ')
+          echo "warming ${#rust_targets[@]} Rust targets"
+          bazel build --keep_going \
+            "${rust_targets[@]}" \
+            --experimental_disk_cache_gc_max_size=3G
+
+      # Closes the cache files and lets the idle GC finish before archiving.
+      - name: Stop the Bazel server
+        run: bazel shutdown
+
+      - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/bazel-disk
+          key: bazel-rust-${{ runner.os }}-warm-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'Cargo.lock', 'crate-universe.lock', 'rust-toolchain.toml') }}-${{ github.run_id }}-${{ github.run_attempt }}
+
+      - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        if: steps.bazel-repo.outputs.cache-hit != 'true'
+        with:
+          path: ~/.cache/bazel-repo/content_addressable
+          key: bazel-repo-rust-${{ runner.os }}-${{ hashFiles('MODULE.bazel', 'MODULE.bazel.lock', '.bazelversion', 'Cargo.lock', 'crate-universe.lock', 'rust-toolchain.toml') }}
+
+  # Route the change onto deployable units. Unknown/zero `before`, or any
+  # routing failure, falls back to "deploy everything" rather than skipping a
+  # deploy silently.
+  plan:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      units: ${{ steps.filter.outputs.units }}
+      native_units: ${{ steps.filter.outputs.native_units }}
+      # `true` when the station release should run (a Pulsar change was
+      # released on push, or a manual run asked for the station).
+      station: ${{ steps.filter.outputs.station }}
+      pulsar_version: ${{ steps.pulsar-version.outputs.version }}
+      pr_url: ${{ steps.pr.outputs.url }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      # Pinned Bazelisk on PATH (`bazel`) plus its own Bzlmod/repository caches:
+      # routing runs Bazel loading queries; the Rust repositories come from the
+      # develop archive, the Android graph loads BUILD files only (its JARs are
+      # downloaded directly; Nexus is only a fallback). Restore-only.
+      - uses: bazel-contrib/setup-bazel@104e3eea9447cdaa4b00d0fb46191a3985d26ab3 # v0.19.1
+        with:
+          bazelisk-version: ${{ env.BAZELISK_VERSION }}
+          bazelisk-cache: true
+          repository-cache: false
+          cache-save: false
+
+      - uses: ./.github/actions/bazel-repository-cache
+        with:
+          key: bazel-repo-rust-${{ runner.os }}-${{ hashFiles('MODULE.bazel', 'MODULE.bazel.lock', '.bazelversion', 'Cargo.lock', 'crate-universe.lock', 'rust-toolchain.toml') }}
+          restore-prefix: bazel-repo-rust-${{ runner.os }}-
+
+      - name: Ensure base branch history
+        if: inputs.mode == 'push'
+        run: git fetch --no-tags origin "+refs/heads/develop:refs/remotes/origin/develop"
+
+      # A push promotes the release the merged PR built; the version is
+      # recorded on that artifact and `_native.yml` exports it as
+      # `native-release.outputs.version` (the station job reads it from there).
+      # A manual re-deploy has no promoted artifact of this run, so it installs
+      # the version of the currently published `latest`, read from the
+      # artifact's own annotation — the file no longer carries a patch number.
+      - name: Install pinned crane
+        if: inputs.mode == 'manual'
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/crane_${CRANE_VERSION}_linux_amd64.tar.gz"
+          curl -fsSL --retry 3 --retry-delay 5 -o "$archive" \
+            "https://github.com/google/go-containerregistry/releases/download/${CRANE_VERSION}/go-containerregistry_Linux_x86_64.tar.gz"
+          echo "${CRANE_SHA256}  ${archive}" | sha256sum -c -
+          tar -xzf "$archive" -C "$RUNNER_TEMP" crane
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+
+      - name: Read the published Pulsar release version
+        id: pulsar-version
+        if: inputs.mode == 'manual'
+        run: |
+          set -euo pipefail
+          repository=$(node --input-type=module -e '
+            const { config } = await import(process.cwd() + "/platform/ci/units.mjs");
+            const unit = config.units.find((entry) => entry.id === "pulsar");
+            console.log(unit.native.publish_repository);
+          ')
+          version=$(node platform/ci/version.mjs --published "${repository}:latest")
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "station re-deploy target: ${version}"
+
+      - name: Route affected deployable units
+        id: route
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          MODE: ${{ inputs.mode }}
+          BEFORE_SHA: ${{ github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+        with:
+          script: |
+            const affected = await import(`${process.env.GITHUB_WORKSPACE}/platform/ci/affected.mjs`);
+            let computed;
+            if (process.env.MODE === 'manual') {
+              computed = await affected.compute(['--all', '--format', 'github']);
+            } else {
+              try {
+                computed = await affected.compute([
+                  '--base', process.env.BEFORE_SHA,
+                  '--head', process.env.HEAD_SHA,
+                  '--format', 'github',
+                ]);
+              } catch (error) {
+                core.warning(`routing failed; falling back to every deployable unit: ${error.message}`);
+                computed = await affected.compute(['--all', '--format', 'github']);
+              }
+            }
+            const outputs = affected.githubOutputs(computed);
+            core.setOutput('deploy_units', outputs.deploy_units);
+            core.setOutput('native_units', outputs.native_units);
+
+      # A dispatch may narrow the list explicitly (comma separated ids); a push
+      # always pins exactly the routed set.
+      - name: Filter dispatched deployable units
+        id: filter
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          MODE: ${{ inputs.mode }}
+          DEPLOY_UNITS: ${{ steps.route.outputs.deploy_units }}
+          NATIVE_UNITS: ${{ steps.route.outputs.native_units }}
+          WANTED: ${{ inputs.mode == 'manual' && inputs.units || '' }}
+        with:
+          script: |
+            const affected = await import(`${process.env.GITHUB_WORKSPACE}/platform/ci/affected.mjs`);
+            const units = JSON.parse(process.env.DEPLOY_UNITS || '[]');
+            const allNative = JSON.parse(process.env.NATIVE_UNITS || '[]');
+            const dispatch = process.env.MODE === 'manual';
+            const wantedRaw = (process.env.WANTED || '').trim();
+            const isPulsar = (entry) => entry.id === 'pulsar';
+            let selected = units;
+            let station = false;
+            if (dispatch && wantedRaw && wantedRaw !== 'all') {
+              const wanted = new Set(wantedRaw.split(',').map((item) => item.trim()).filter(Boolean));
+              const known = new Set([
+                ...units.map((entry) => entry.id),
+                ...allNative.map((entry) => entry.id),
+              ]);
+              const unknown = [...wanted].filter((id) => !known.has(id)).sort();
+              if (unknown.length) {
+                throw new Error(`unknown deployable unit(s): [${unknown.map((id) => `'${id}'`).join(', ')}]`);
+              }
+              selected = units.filter((entry) => wanted.has(entry.id));
+              // A dispatch with units=pulsar re-deploys the already published
+              // VERSION through `deploy-station`; it never rebuilds or pushes.
+              station = wanted.has('pulsar');
+            } else if (dispatch) {
+              // `all` includes every unit, including the station release.
+              station = allNative.some(isPulsar);
+            } else {
+              // Push: `publish` is true only when the unit's `publish_when`
+              // release path (Pulsar VERSION) changed.
+              station = allNative.some((entry) => isPulsar(entry) && entry.publish !== false);
+            }
+            const json = affected.jsonDumps(selected);
+            core.setOutput('units', json);
+            // Native units whose release trigger did not fire are PR CI only:
+            // they are built by `_ci.yml`, never by deploy-home.
+            const natives = allNative.filter((entry) => entry.publish !== false);
+            const nativeJson = affected.jsonDumps(natives);
+            core.setOutput('native_units', nativeJson);
+            core.setOutput('station', String(station));
+            core.summary.addRaw(`### deploy-home plan\n\n\`\`\`json\n${json}\n\`\`\`\n`);
+            core.summary
+              .addRaw(`\nnative units: \`${nativeJson}\`\nstation release: \`${station}\`\n`)
+              .write();
+
+      - name: Resolve pull request link
+        id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          url=$(gh api "repos/${{ github.repository }}/commits/${{ github.sha }}/pulls" \
+            --jq '.[0].html_url' 2>/dev/null || true)
+          echo "url=${url}" >> "$GITHUB_OUTPUT"
+
+  # Native units build once too (DECISIONS 36). `_native.yml` promotes the
+  # digest the merged PR built and attested under `tree-<hash>`: it checks the
+  # tag exists, verifies provenance against this repository's CI workflows, then
+  # attaches the unit's release tags (`{version}`, `latest`, `sha-<commit12>`) to
+  # the same digest. A missing or unverified tree tag fails the job — this
+  # workflow never builds or publishes a native artifact, and there is no
+  # history search: an older tree must never be re-tagged as the current VERSION.
+  #
+  # Every native unit the change routed reaches this matrix: since the version
+  # is computed, any merged change of a native unit is a release. Push-only: a
+  # manual re-deploy installs an already published release and never publishes
+  # (the honest rebuild lives in `deploy-services.yml`). The version tag comes
+  # from the artifact's annotation, so it always matches the binary the updater
+  # checks. Registry/OIDC/attestation permissions are needed only by the promote
+  # job inside `_native.yml`.
+  native-release:
+    name: native / ${{ matrix.id }}
+    needs: plan
+    if: >-
+      inputs.mode == 'push' &&
+      needs.plan.result == 'success' &&
+      needs.plan.outputs.native_units != '[]' &&
+      needs.plan.outputs.native_units != ''
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+      # `_native.yml` promote reads the merged PR (PR-head fallback); a called
+      # workflow cannot request more than its caller grants.
+      pull-requests: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.native_units) }}
+    uses: ./.github/workflows/_native.yml
+    with:
+      unit: ${{ matrix.id }}
+      kind: ${{ matrix.kind }}
+      workdir: ${{ matrix.workdir }}
+      build: ${{ matrix.build }}
+      test: ${{ matrix.test }}
+      artifacts: ${{ matrix.artifacts }}
+      checksums: ${{ matrix.checksums }}
+      publish_repository: ${{ matrix.publish_repository }}
+      publish_tags: ${{ matrix.publish_tags }}
+      publish_script: ${{ matrix.publish_script }}
+      publish_attest_glob: ${{ matrix.publish_attest_glob }}
+      promote: true
+      push_tree_tag: false
+      save_cache: true
+
+  # Promote the PR-built digest of every selected unit and commit its pins.
+  # The steps (and the correctness gate) live in `_pin.yml`, shared with the
+  # manual rebuild workflow; a push accepts the merged PR head when `develop`
+  # moved, a manual run walks history for the newest verified tree.
+  pins:
+    name: pins ${{ matrix.id }}
+    needs: plan
+    if: needs.plan.outputs.units != '[]' && needs.plan.outputs.units != ''
+    permissions:
+      contents: write
+      packages: write
+      attestations: read
+      pull-requests: read
+    strategy:
+      fail-fast: false
+      # One writer at a time inside a run (see `_pin.yml`).
+      max-parallel: 1
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.units) }}
+    uses: ./.github/workflows/_pin.yml
+    with:
+      unit: ${{ matrix.id }}
+      images: ${{ matrix.images }}
+      optional_images: ${{ matrix.optional_images }}
+      allow_history: ${{ inputs.mode == 'manual' }}
+      allow_pr_head: ${{ inputs.mode == 'push' }}
+
+  # The station release, installed through Home Assistant by the shared
+  # `_station-deploy.yml` (Environment `Station` is the only gate). A push runs
+  # it only when the Pulsar release was promoted; a manual dispatch installs the
+  # currently published `latest` without rebuilding or pushing.
+  deploy-station:
+    name: deploy station
+    needs: [plan, native-release]
+    if: >-
+      !cancelled() &&
+      needs.plan.result == 'success' &&
+      needs.plan.outputs.station == 'true' &&
+      (inputs.mode == 'manual' || needs.native-release.result == 'success')
+    permissions:
+      contents: read
+      id-token: write
+    concurrency:
+      group: deploy-home-station
+      cancel-in-progress: false
+    uses: ./.github/workflows/_station-deploy.yml
+    with:
+      version: ${{ needs.native-release.outputs.version || needs.plan.outputs.pulsar_version }}
+      label: ${{ inputs.mode }}
+    secrets:
+      VPN_SERVER: ${{ secrets.VPN_SERVER }}
+      VPN_CERT_P12_B64: ${{ secrets.VPN_CERT_P12_B64 }}
+      VPN_CERT_PASSWORD: ${{ secrets.VPN_CERT_PASSWORD }}
+      OPENBAO_ADDR: ${{ secrets.OPENBAO_ADDR }}
+      OPENBAO_ROLE: ${{ secrets.OPENBAO_ROLE }}

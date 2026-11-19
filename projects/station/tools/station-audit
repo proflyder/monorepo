@@ -193,8 +193,19 @@ def validate_manifest(data: dict, repo_root: pathlib.Path = ROOT) -> None:
                 if pinned is not None and expected is None:
                     # The pinned hash is authoritative; a version string is optional.
                     continue
-                if not isinstance(expected, dict) or not isinstance(expected.get("repo"), str):
-                    errors.append(f"{fwhere}.expected.repo is required for compare: version")
+                expected_command = (
+                    expected.get("command") if isinstance(expected, dict) else None
+                )
+                if expected_command is not None:
+                    if not isinstance(expected_command, str) or not expected_command.strip():
+                        errors.append(f"{fwhere}.expected.command must be a command string")
+                elif not isinstance(expected, dict) or not isinstance(
+                    expected.get("repo"), str
+                ):
+                    errors.append(
+                        f"{fwhere}.expected.repo or expected.command is required "
+                        "for compare: version"
+                    )
                 elif not _safe_repo_file(repo_root, expected["repo"]):
                     errors.append(
                         f"{fwhere}.expected.repo does not exist inside the repository: "
@@ -240,6 +251,29 @@ def repo_hash(repo_root: pathlib.Path, relative: str, normalize: str | None = No
 
 def expected_version(spec: dict, repo_root: pathlib.Path) -> str:
     expected = spec["expected"]
+    command = expected.get("command")
+    if command:
+        # A computed version cannot be read from a literal file: the native
+        # release version is derived from VERSION + the unit's commits
+        # (platform/ci/version.mjs), so the audit invokes the same source.
+        result = subprocess.run(
+            shlex.split(command),
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if result.returncode != 0:
+            raise ManifestError(
+                f"expected.command failed ({result.returncode}): {command}\n"
+                f"{result.stderr.strip()}"
+            )
+        value = next(
+            (line.strip() for line in result.stdout.splitlines() if line.strip()), ""
+        )
+        if not value:
+            raise ManifestError(f"expected.command printed nothing: {command}")
+        return str(expected.get("prefix", "")) + value
     text = (repo_root / expected["repo"]).read_text(encoding="utf-8")
     pattern = expected.get("regex")
     if pattern:

@@ -234,23 +234,33 @@ delete, `sys/*`, `auth/*` запрещены. `secret/infra/*` — секрет�
 Роль `android-distribute` (`auth/github/role/…`) обслуживает подпись и загрузку
 Android APK в Firebase App Distribution внутри PR CI: APK без секретов собирает
 matrix-запись `android / android-app` (`_android.yml`), а подписывает и
-загружает job `android-distribute` файла `ci.yml`. Привязка по claims
+загружает reusable `_android-release.yml` (его вызывают `ci.yml` из PR CI и
+`android-release.yml` из ручного релиза). Привязка по claims
 `repository`, `environment=Android`, `ref=refs/pull/*/merge`,
 `event_name=pull_request` и
-`job_workflow_ref=<owner>/<repo>/.github/workflows/ci.yml@refs/pull/*/merge`:
+`job_workflow_ref=<owner>/<repo>/.github/workflows/_android-release.yml@refs/pull/*/merge`.
+OIDC-claim называет именно вызванный (reusable) файл, поэтому смена имени
+`_android-release.yml` требует повторного `configure.py`:
 
 - токен может выпустить только этот job на merge-ref конкретного PR;
 - `user_claim=job_workflow_ref`, `token_policies=["ci-android"]`, TTL 10 мин,
   max 15 мин, `clock_skew=60`.
 
+Роль `android-release` обслуживает ручной релиз Android из `develop`
+(`android-release.yml` → `_android-release.yml`): подпись и загрузка те же,
+но событие не PR. Привязка: `repository`, `environment=Android`,
+`ref=refs/heads/develop`, `event_name=workflow_dispatch` и
+`job_workflow_ref=<owner>/<repo>/.github/workflows/_android-release.yml@refs/heads/develop`;
+политика `ci-android`.
+
 Роль `android-cleanup` читает ту же запись для ежедневной чистки App
-Distribution (`fad` в `.github/workflows/cleanup.yml`): расписание и ручной
-запуск идут из `develop`, а не из PR, поэтому роль `android-distribute` для них
-не подходит. Привязка: `repository`, `environment=Android`,
+Distribution (`fad` в reusable `.github/workflows/_cleanup.yml`): расписание и
+ручной запуск идут из `develop`, а не из PR, поэтому роль `android-distribute`
+для них не подходит. Привязка: `repository`, `environment=Android`,
 `ref=refs/heads/develop`, `event_name` ∈ {`schedule`, `workflow_dispatch`} и
-`job_workflow_ref=<owner>/<repo>/.github/workflows/cleanup.yml@refs/heads/develop`;
-политика та же `ci-android`. Роль создаётся вместе с `android-distribute` при
-повторном запуске `configure.py`.
+`job_workflow_ref=<owner>/<repo>/.github/workflows/_cleanup.yml@refs/heads/develop`;
+политика та же `ci-android`. Все три роли создаются вместе при повторном запуске
+`configure.py`.
 
 Модель доверия: OIDC получают только PR из веток этого же репозитория — у PR
 из форка прогон read-only, без Environment-секретов и без права на роль, поэтому

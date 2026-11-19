@@ -21,9 +21,12 @@ INSTALL = HERE / "install.ps1"
 
 
 class VersionTests(unittest.TestCase):
-    def test_version_is_semver(self):
+    def test_version_is_a_major_minor_base(self):
+        # The patch is computed by CI (`platform/ci/version.mjs`): VERSION holds
+        # only the base, so a release needs no version-bump commit.
         text = VERSION.read_text(encoding="utf-8").strip()
-        self.assertRegex(text, r"^\d+\.\d+\.\d+$")
+        self.assertRegex(text, r"^\d+\.\d+$")
+        self.assertIn("--version", PUBLISH.read_text(encoding="utf-8"))
 
 
 class ReproducibleBuildTests(unittest.TestCase):
@@ -48,7 +51,10 @@ class PublishScriptTests(unittest.TestCase):
     def test_existing_tag_with_different_content_fails(self):
         self.assertIn("check_existing_tag", self.text)
         self.assertIn("cmp -s", self.text)
-        self.assertIn("already exists with different content; bump VERSION", self.text)
+        self.assertIn("already exists with different content", self.text)
+        self.assertIn("the computed version must increase", self.text)
+        # An explicit rebuild may replace the published bytes on purpose.
+        self.assertIn('if [[ "$REPLACE" -eq 1 ]]', self.text)
 
     def test_files_and_media_types_match_the_artifact_contract(self):
         for name in (

@@ -1,0 +1,300 @@
+name: Пересобрать и задеплоить сервисы
+
+# Manual rebuild-and-deploy of the home units from the current `develop`.
+#
+# `deploy-home.yml` deploys the bytes the merged pull request already built
+# (build once, DECISIONS 36). When those bytes are wrong, missing or built from a
+# tree that never got a `tree-<hash>` tag, this workflow is the honest path: it
+# rebuilds the selected units FROM SOURCE, publishes them under `tree-<hash>`
+# with build provenance, and then pins/promotes them through the exact same
+# reusable workflows a push uses — `_pin.yml` for Flux, `_native.yml` for the
+# OCI releases, `_station-deploy.yml` for the station (Environment `Station`).
+#
+# Selection: checkboxes for the groups in `platform/ci/rebuild.mjs` (every
+# deployable unit belongs to exactly one group; `units` is the exact-id escape
+# hatch). GitHub allows ten `workflow_dispatch` inputs, so the groups exist
+# instead of one checkbox per unit — see `platform/ci/rebuild.mjs`.
+#
+# It is safe to run twice: a second rebuild of the same commit re-publishes the
+# same `tree-<hash>` tags, the promotion verifies provenance again, and the pins
+# write the same digests (Flux sees no change). Release tags are immutable by
+# content; `replace_artifacts` is the explicit "re-point this tree" switch for a
+# broken native release.
+on:
+  workflow_dispatch:
+    inputs:
+      all:
+        description: "Всё: каждый деплойный юнит, нативные релизы и станция"
+        type: boolean
+        default: false
+      scheduler:
+        description: scheduler (образы scheduler/dev + родственные ha-bridge/ha-control)
+        type: boolean
+        default: false
+      ha_bridge:
+        description: ha-bridge (ha-bridge, ha-control, ha-scenario)
+        type: boolean
+        default: false
+      home_services:
+        description: home-services (wakegrant, intercom, phone-push, currency-bot, mcp-gateway)
+        type: boolean
+        default: false
+      ha_config:
+        description: ha-config (ha-config-sync, hermes-config)
+        type: boolean
+        default: false
+      hermes:
+        description: hermes (hermes, voice-proxy, health-exporter)
+        type: boolean
+        default: false
+      pulsar:
+        description: "pulsar — честная пересборка прошивки, публикация и деплой на станцию"
+        type: boolean
+        default: false
+      logon_provider:
+        description: "logon-provider — пересборка Windows credential provider"
+        type: boolean
+        default: false
+      units:
+        description: Точный список id через запятую (перекрывает галочки)
+        type: string
+        default: ""
+      replace_artifacts:
+        description: Заменить уже опубликованный tree-тег пересобранными байтами
+        type: boolean
+        default: true
+
+# One rebuild at a time: two runs would race on the same tree tags and pins.
+concurrency:
+  group: deploy-services
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  GIT_CONFIG_COUNT: "1"
+  GIT_CONFIG_KEY_0: init.defaultBranch
+  GIT_CONFIG_VALUE_0: main
+
+jobs:
+  # Checkboxes -> unit ids and the matrix payloads. The grouping and the shapes
+  # live in `platform/ci/rebuild.mjs` (tested), so this job is a thin call.
+  select:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      image_units: ${{ steps.select.outputs.image_units }}
+      native_units: ${{ steps.select.outputs.native_units }}
+      station: ${{ steps.select.outputs.station }}
+      selected: ${{ steps.select.outputs.selected }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Resolve the requested units
+        id: select
+        env:
+          ALL: ${{ inputs.all }}
+          UNITS: ${{ inputs.units }}
+          INPUT_SCHEDULER: ${{ inputs.scheduler }}
+          INPUT_HA_BRIDGE: ${{ inputs.ha_bridge }}
+          INPUT_HOME_SERVICES: ${{ inputs.home_services }}
+          INPUT_HA_CONFIG: ${{ inputs.ha_config }}
+          INPUT_HERMES: ${{ inputs.hermes }}
+          INPUT_PULSAR: ${{ inputs.pulsar }}
+          INPUT_LOGON_PROVIDER: ${{ inputs.logon_provider }}
+        run: |
+          set -euo pipefail
+          args=()
+          if [[ "$ALL" == "true" ]]; then args+=(--all); fi
+          if [[ "$UNITS" != "" ]]; then args+=(--units "$UNITS"); fi
+          for group in scheduler ha_bridge home_services ha_config hermes pulsar logon_provider; do
+            value="$(printenv "INPUT_${group^^}")"
+            if [[ "$value" == "true" ]]; then args+=("--${group//_/-}"); fi
+          done
+          node platform/ci/rebuild.mjs "${args[@]}" --github-output
+
+  # Rebuild the images of every selected unit from source and (re)publish them
+  # under this commit's `tree-<hash>` with provenance. Same workflow, same
+  # targets and same attestation as PR CI.
+  build-images:
+    needs: select
+    if: needs.select.outputs.image_units != '[]'
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.select.outputs.image_units) }}
+    uses: ./.github/workflows/_unit.yml
+    with:
+      unit: ${{ matrix.id }}
+      kind: ${{ matrix.kind }}
+      test_targets: ${{ matrix.test_targets }}
+      build_targets: ${{ matrix.build_targets }}
+      artifact: ${{ matrix.artifact }}
+      artifact_name: ${{ matrix.artifact_name }}
+      suites: ${{ matrix.suites }}
+      compile: ${{ matrix.compile }}
+      deploy_tool: ${{ matrix.deploy_tool }}
+      images: ${{ matrix.images }}
+      image_list: ${{ matrix.image_list }}
+      image_count: ${{ matrix.image_count }}
+      builder: ${{ matrix.builder }}
+      target_root: ${{ matrix.target_root }}
+      bazel_images: ${{ matrix.bazel_images }}
+      push_tree_tag: true
+      save_cache: true
+    secrets:
+      NEXUS_CI_PASSWORD: ${{ secrets.NEXUS_CI_PASSWORD }}
+
+  # Pin the freshly built digests exactly like a push does: verify the
+  # provenance of this run's `tree-<hash>` and commit to `deploy/home-apps`.
+  # No history search and no PR-head fallback — the artifact of this very run
+  # is the one that must be pinned.
+  pin-images:
+    needs: [select, build-images]
+    if: needs.select.outputs.image_units != '[]'
+    permissions:
+      contents: write
+      packages: write
+      attestations: read
+      pull-requests: read
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        include: ${{ fromJSON(needs.select.outputs.image_units) }}
+    uses: ./.github/workflows/_pin.yml
+    with:
+      unit: ${{ matrix.id }}
+      images: ${{ matrix.images }}
+      optional_images: ${{ matrix.optional_images }}
+      allow_history: false
+      allow_pr_head: false
+
+  # Rebuild the native release artifacts (Pulsar cross-build, Windows provider),
+  # publish them under the tree tag and then promote that verified digest to the
+  # release tags. Two calls of the same reusable keep the build and the promote
+  # contract in one place.
+  build-native:
+    needs: select
+    if: needs.select.outputs.native_units != '[]'
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+      pull-requests: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.select.outputs.native_units) }}
+    uses: ./.github/workflows/_native.yml
+    with:
+      unit: ${{ matrix.id }}
+      kind: ${{ matrix.kind }}
+      workdir: ${{ matrix.workdir }}
+      build: ${{ matrix.build }}
+      test: ${{ matrix.test }}
+      artifacts: ${{ matrix.artifacts }}
+      checksums: ${{ matrix.checksums }}
+      publish_repository: ${{ matrix.publish_repository }}
+      publish_tags: ${{ matrix.publish_tags }}
+      publish_script: ${{ matrix.publish_script }}
+      publish_attest_glob: ${{ matrix.publish_attest_glob }}
+      promote: false
+      push_tree_tag: true
+      replace_artifact: ${{ inputs.replace_artifacts }}
+      save_cache: true
+    secrets:
+      NEXUS_CI_PASSWORD: ${{ secrets.NEXUS_CI_PASSWORD }}
+
+  promote-native:
+    needs: [select, build-native]
+    if: needs.select.outputs.native_units != '[]'
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+      pull-requests: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.select.outputs.native_units) }}
+    uses: ./.github/workflows/_native.yml
+    with:
+      unit: ${{ matrix.id }}
+      kind: ${{ matrix.kind }}
+      workdir: ${{ matrix.workdir }}
+      publish_repository: ${{ matrix.publish_repository }}
+      publish_tags: ${{ matrix.publish_tags }}
+      publish_script: ${{ matrix.publish_script }}
+      promote: true
+      push_tree_tag: false
+      # A rebuild of an already released tree re-points the immutable version
+      # tag on purpose (that is the reason this workflow exists).
+      replace_artifact: ${{ inputs.replace_artifacts }}
+
+  # The station installs the release that `promote-native` just tagged. The
+  # version is read back from the published artifact, so it is exactly what the
+  # updater compares — no local recomputation.
+  station-version:
+    needs: [select, promote-native]
+    if: needs.select.outputs.station == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: platform/ci
+      - name: Install pinned crane
+        run: |
+          set -euo pipefail
+          version="v0.22.1"
+          sha256="0ab7a1d6932a213aed964ce97666c3077fe691c8606413674a8b3e0b9ec4cda0"
+          archive="$RUNNER_TEMP/crane_${version}_linux_amd64.tar.gz"
+          curl -fsSL --retry 3 --retry-delay 5 -o "$archive" \
+            "https://github.com/google/go-containerregistry/releases/download/${version}/go-containerregistry_Linux_x86_64.tar.gz"
+          echo "${sha256}  ${archive}" | sha256sum -c -
+          tar -xzf "$archive" -C "$RUNNER_TEMP" crane
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+      - name: Read the promoted version
+        id: version
+        run: |
+          set -euo pipefail
+          repository=$(node --input-type=module -e '
+            const { config } = await import(process.cwd() + "/platform/ci/units.mjs");
+            const unit = config.units.find((entry) => entry.id === "pulsar");
+            console.log(unit.native.publish_repository);
+          ')
+          node platform/ci/version.mjs --published "${repository}:latest" --github-output
+
+  station:
+    needs: [select, station-version]
+    if: needs.select.outputs.station == 'true'
+    permissions:
+      contents: read
+      id-token: write
+    concurrency:
+      group: deploy-home-station
+      cancel-in-progress: false
+    uses: ./.github/workflows/_station-deploy.yml
+    with:
+      version: ${{ needs.station-version.outputs.version }}
+      label: rebuild
+    secrets:
+      VPN_SERVER: ${{ secrets.VPN_SERVER }}
+      VPN_CERT_P12_B64: ${{ secrets.VPN_CERT_P12_B64 }}
+      VPN_CERT_PASSWORD: ${{ secrets.VPN_CERT_PASSWORD }}
+      OPENBAO_ADDR: ${{ secrets.OPENBAO_ADDR }}
+      OPENBAO_ROLE: ${{ secrets.OPENBAO_ROLE }}

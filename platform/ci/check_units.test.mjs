@@ -231,3 +231,78 @@ test("check_units: committed rollback blocks are documented and valid", () => {
   }
   assert.ok(withRollback.some((unit) => unit.id === "pulsar" && unit.rollbackKind === "pulsar"));
 });
+
+// --------------------------------------------------------- one trigger ----
+test("check_units: one event per workflow is accepted", () => {
+  const root = workflowFixture({
+    "ci.yml": ["on:", "  pull_request:", "    branches: [develop]", "jobs: {}"].join("\n"),
+    "push.yml": ["on: push", "jobs: {}"].join("\n"),
+    "flow.yml": ["on: [schedule]", "jobs: {}"].join("\n"),
+    "_shared.yml": ["on:", "  workflow_call:", "    inputs: {}", "jobs: {}"].join("\n"),
+  });
+  assert.deepEqual(checkUnits.workflowTriggerProblems(root), []);
+});
+
+test("check_units: two events in one workflow are rejected", () => {
+  const root = workflowFixture({
+    "ci.yml": [
+      "on:",
+      "  pull_request:",
+      "    branches: [develop]",
+      "  workflow_dispatch:",
+      "jobs: {}",
+    ].join("\n"),
+  });
+  const problems = checkUnits.workflowTriggerProblems(root);
+  assert.equal(problems.length, 1);
+  assert.match(problems[0], /exactly one trigger/);
+  assert.match(problems[0], /pull_request, workflow_dispatch/);
+  assert.match(problems[0], /thin wrappers/);
+});
+
+test("check_units: a flow list with two events is rejected", () => {
+  const root = workflowFixture({
+    "ci.yml": ["on: [push, pull_request]", "jobs: {}"].join("\n"),
+  });
+  assert.match(checkUnits.workflowTriggerProblems(root)[0], /exactly one trigger/);
+});
+
+test("check_units: a reusable workflow may only be called", () => {
+  const root = workflowFixture({
+    "_shared.yml": ["on:", "  push:", "    branches: [develop]", "jobs: {}"].join("\n"),
+  });
+  const problems = checkUnits.workflowTriggerProblems(root);
+  assert.equal(problems.length, 1);
+  assert.match(problems[0], /must only have 'on: workflow_call'/);
+});
+
+test("check_units: a workflow_call entry point must be a _*.yml reusable", () => {
+  const root = workflowFixture({
+    "ci.yml": ["on:", "  workflow_call:", "jobs: {}"].join("\n"),
+  });
+  assert.match(checkUnits.workflowTriggerProblems(root)[0], /must be named _\*\.yml/);
+});
+
+test("check_units: a workflow without an on block is rejected", () => {
+  const root = workflowFixture({ "ci.yml": "jobs: {}\n" });
+  assert.match(checkUnits.workflowTriggerProblems(root)[0], /no top-level 'on:'/);
+});
+
+test("check_units: nested keys inside on: are not events", () => {
+  const text = [
+    "on:",
+    "  workflow_dispatch:",
+    "    inputs:",
+    "      units:",
+    "        type: string",
+    "  # a comment that mentions push:",
+    "jobs:",
+    "  x:",
+    "    on: y",
+  ].join("\n");
+  assert.deepEqual(checkUnits.workflowTriggers(text), ["workflow_dispatch"]);
+});
+
+test("check_units: every committed workflow has exactly one trigger", () => {
+  assert.deepEqual(checkUnits.workflowTriggerProblems(), []);
+});

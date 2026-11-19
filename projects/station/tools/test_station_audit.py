@@ -305,6 +305,23 @@ class CompareTests(unittest.TestCase):
             spec = {"expected": {"repo": "VERSION", "prefix": "pulsar "}}
             self.assertEqual(audit.expected_version(spec, root), "pulsar v0.5.1015")
 
+    def test_expected_version_from_command(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            spec = {
+                "expected": {
+                    "command": "python3 -c 'print(\"v0.6.50\")'",
+                    "prefix": "pulsar ",
+                }
+            }
+            self.assertEqual(audit.expected_version(spec, root), "pulsar v0.6.50")
+
+    def test_expected_version_from_a_failing_command(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            spec = {"expected": {"command": "python3 -c 'import sys; sys.exit(3)'"}}
+            with self.assertRaises(audit.ManifestError):
+                audit.expected_version(spec, pathlib.Path(tmp))
+
     def test_expected_version_from_regex(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = pathlib.Path(tmp)

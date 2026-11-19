@@ -107,6 +107,14 @@ on:
         required: false
         default: false
         type: boolean
+      save_cache:
+        description: >-
+          Write the Bazel caches after the run. The caller states it (not a PR
+          and allowed to warm the shared entries); a pull request never writes.
+        required: false
+        default: false
+        type: boolean
+
     secrets:
       # Read-only Nexus cache credential; absent on forks (cache stays off).
       NEXUS_CI_PASSWORD:
@@ -162,7 +170,7 @@ jobs:
           bazelisk-version: "1.30.0"
           bazelisk-cache: true
           repository-cache: false
-          cache-save: ${{ github.event_name != 'pull_request' }}
+          cache-save: ${{ inputs.save_cache }}
 
       - uses: ./.github/actions/bazel-repository-cache
         if: inputs.kind == 'bazel' || inputs.images != ''
@@ -364,7 +372,7 @@ jobs:
       - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         if: >-
           (inputs.kind == 'bazel' || inputs.images != '') &&
-          github.event_name != 'pull_request' &&
+          inputs.save_cache &&
           github.ref == 'refs/heads/develop'
         with:
           path: ~/.cache/bazel-disk

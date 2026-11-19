@@ -23,7 +23,7 @@ Assistant через ESPHome Native API, Music Assistant через Sendspin, н
 | `add-station-model` | новая модель станции: сбор данных read-only, измерения, `Model`, установщик, `boot.sh`, docs |
 | `zigbee-radio` | сборка и прошивка образов радио Миди, `zigbee_probe`, чтение через `tools/deconz_read.py` |
 | `crash-decode` | расшифровка `=== CRASH` из лога через `addr2line` и `pulsar.debug` |
-| `release` | изменение `VERSION`, публикация OCI-артефакта в GHCR — только по явной просьбе пользователя |
+| `release` | публикация OCI-артефакта в GHCR (версия вычисляется CI; `VERSION` — только major.minor) — только по явной просьбе пользователя |
 | `pre-publish-review` | обязательно перед `git push`, `gh pr create` и тегом `v*` |
 
 ## Куда смотреть
@@ -49,7 +49,7 @@ Assistant через ESPHome Native API, Music Assistant через Sendspin, н
 bazel test //projects/station/pulsar/satellite/... //projects/station/pulsar/installer/... # fmt, clippy -D warnings, тесты
 bazel build //projects/station/pulsar/satellite/crates/... # все утилиты src/bin
 bazel build -c opt --platforms=//platform/bazel/zig:armhf_linux \
-  --define=pulsar_version="$(tr -d '[:space:]' < VERSION)" \
+  --define=pulsar_version="$(node platform/ci/version.mjs --unit pulsar)" \
   //projects/station/pulsar/satellite:station_binary  # одна архитектура
 bazel test //projects/station/pulsar/installer/...  # установщик: тесты, fmt, clippy
 radio/build.sh
@@ -109,8 +109,9 @@ ssh/build.sh
 - Рабочая ветка `<type>/<name>` от свежего `origin/develop`; PR в `develop` только squash-merge
   с зелёным `ci-ok`. Прямой push в `develop` и push тегов запрещены (pre-push hook).
 - Монорепозиторий не публикует GitHub Releases и не пушит теги. Релиз Pulsar — изменение
-  `projects/station/pulsar/VERSION`: PR CI собирает обе архитектуры и публикует `tree-<hash>` с
-  provenance, merge в `develop` (`publish_when` по VERSION) только продвигает этот digest на
+  изменение Pulsar: PR CI собирает обе архитектуры с вычисленной версией (`VERSION` хранит
+  только major.minor, patch считает `platform/ci/version.mjs`) и публикует `tree-<hash>` с
+  provenance, merge в `develop` только продвигает этот digest на
   версионные теги `ghcr.io/proflyder/pulsar-firmware`, а `deploy-station` катит его на станцию;
   повторной сборки нет.
 - Upstream `Morvex885/pulsar` вливается вручную патчем (`git diff vA..vB` → `git apply -3

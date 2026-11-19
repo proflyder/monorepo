@@ -1,0 +1,26 @@
+name: cleanup (вручную)
+
+# Manual twin of the daily `cleanup.yml`, and a dry run by default: both jobs
+# report what they would delete and delete nothing. Same reusable pipeline
+# (`_cleanup.yml`), one trigger only.
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Только показать, что будет удалено, ничего не удаляя
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cleanup
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    uses: ./.github/workflows/_cleanup.yml
+    with:
+      dry_run: ${{ inputs.dry_run }}
+    secrets: inherit

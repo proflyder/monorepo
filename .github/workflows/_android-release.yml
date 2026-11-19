@@ -1,0 +1,263 @@
+name: _android-release
+
+# Sign and distribute the Home Android APK to Firebase App Distribution.
+#
+# This is the one place the release key is used. It is called by both Android
+# delivery paths and never builds anything:
+#
+#   * `_ci.yml` (`android-distribute`): on every same-repository PR that changes
+#     the app, and only when the whole `android` matrix is green. The APK comes
+#     from the `android-app-apk` artifact the `android` job built and tested
+#     once, so a tester installs exactly the bytes CI checked.
+#   * `android-release.yml` (`workflow_dispatch`): the owner's manual release —
+#     it builds from the checked-out `develop` through `_android.yml`, then calls
+#     this workflow with the same artifact name and a release note.
+#
+# `distribute.sh --ci --upload-only` reads the APK name, its SHA-256 and the
+# Firebase app id from `release-info.json`, verifies the digest and uploads; it
+# never builds, signs nothing else and never reads `google-services.json`.
+# `sign-release.sh` applies the release key and refuses an unexpected signer.
+
+on:
+  workflow_call:
+    inputs:
+      openbao_role:
+        description: >-
+          OpenBao `auth/github` role: `android-distribute` for PR CI (bound to
+          a PR merge ref), `android-release` for the manual release on develop.
+        required: false
+        default: android-distribute
+        type: string
+      pr_number:
+        description: Pull request number for the release note (empty = commit subject)
+        required: false
+        default: ""
+        type: string
+      pr_title:
+        description: Pull request title for the release note
+        required: false
+        default: ""
+        type: string
+      release_notes:
+        description: >-
+          Optional release note text for a manual release. Ignored when
+          `pr_number` is set (a PR release names the PR).
+        required: false
+        default: ""
+        type: string
+      label:
+        description: Short human label for the job summary (for example `PR #123`)
+        required: false
+        default: ""
+        type: string
+    secrets:
+      VPN_SERVER:
+        required: true
+      VPN_CERT_P12_B64:
+        required: true
+      VPN_CERT_PASSWORD:
+        required: true
+      OPENBAO_ADDR:
+        required: true
+
+permissions:
+  contents: read
+  # Request the OIDC token that OpenBao's auth/github role trusts.
+  id-token: write
+
+env:
+  # Set Git's default branch for actions/checkout's `git init` (it warns when unset;
+  # it runs under a throwaway HOME, so only an env-provided config reaches it).
+  GIT_CONFIG_COUNT: "1"
+  GIT_CONFIG_KEY_0: init.defaultBranch
+  GIT_CONFIG_VALUE_0: main
+
+jobs:
+  release:
+    name: android release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    # OIDC `environment` claim keeps this exact casing; OpenBao binds "Android".
+    environment: Android
+    env:
+      # Release-note inputs for `distribute.sh --ci --upload-only`. Passed as
+      # environment data, never interpolated into the script body, so a PR title
+      # cannot inject shell.
+      PR_NUMBER: ${{ inputs.pr_number }}
+      PR_TITLE: ${{ inputs.pr_title }}
+      EXTRA_RELEASE_NOTES: ${{ inputs.release_notes }}
+    steps:
+      # The script and the release notes need the repository (git metadata).
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # The APK and its metadata, uploaded once by the `android-app` build of
+      # the same run (PR CI or the manual release).
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: android-app-apk
+          path: ${{ runner.temp }}/release
+
+      # No official action exists for openconnect; the runner image has none.
+      # The VPN steps mirror deploy-home's minimal connect/health-check
+      # sequence; they are duplicated rather than extracted so a change here
+      # cannot alter the working home deployment job.
+      - name: Install VPN client
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends openconnect vpnc-scripts curl
+
+      - name: Materialise VPN credentials
+        env:
+          IN_VPN_CERT_P12_B64: ${{ secrets.VPN_CERT_P12_B64 }}
+          IN_VPN_CERT_PASSWORD: ${{ secrets.VPN_CERT_PASSWORD }}
+        run: |
+          set +x
+          set -euo pipefail
+          umask 077
+          CI_DIR="$RUNNER_TEMP/ci"
+          rm -rf "$CI_DIR"
+          mkdir -p "$CI_DIR"
+          chmod 700 "$CI_DIR"
+          printf '%s' "$IN_VPN_CERT_P12_B64" | base64 -d > "$CI_DIR/ci.p12"
+          printf '%s' "$IN_VPN_CERT_PASSWORD" > "$CI_DIR/ci.pass"
+          chmod 600 "$CI_DIR"/*
+          echo "VPN credentials prepared"
+
+      - name: Connect VPN (group ci)
+        env:
+          VPN_SERVER: ${{ secrets.VPN_SERVER }}
+          OPENBAO_ADDR: ${{ secrets.OPENBAO_ADDR }}
+        run: |
+          set -euo pipefail
+          CI_DIR="$RUNNER_TEMP/ci"
+          test -n "$OPENBAO_ADDR"
+          # shellcheck disable=SC2024 # the log is user-writable; only openconnect is root
+          sudo openconnect \
+            --no-dtls \
+            --certificate "$CI_DIR/ci.p12" \
+            --passwd-on-stdin \
+            --authgroup ci \
+            --pid-file "$RUNNER_TEMP/openconnect.pid" \
+            "${VPN_SERVER%/}" \
+            < "$CI_DIR/ci.pass" > "$RUNNER_TEMP/openconnect.log" 2>&1 &
+          for _ in $(seq 1 30); do
+            code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 \
+              "$OPENBAO_ADDR/v1/sys/health" || true)
+            if [[ -n "$code" && "$code" != "000" ]]; then
+              echo "OpenBao reachable over the VPN"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "OpenBao is not reachable over the VPN" >&2
+          tail -n 40 "$RUNNER_TEMP/openconnect.log" >&2 || true
+          exit 1
+
+      # Only the Firebase service account and the signing material are read;
+      # nothing else in the KV tree is reachable with this policy.
+      - name: Read the release key and Firebase service account from OpenBao
+        id: openbao
+        uses: hashicorp/vault-action@892a26828f195e65540a40b4768ae4571f51ebfc # v4.0.0
+        with:
+          url: ${{ secrets.OPENBAO_ADDR }}
+          method: jwt
+          path: github
+          role: ${{ inputs.openbao_role }}
+          jwtGithubAudience: ${{ secrets.OPENBAO_ADDR }}
+          exportEnv: false
+          secrets: |
+            secret/data/ci/android-distribute signing_keystore_b64 | SIGNING_KEYSTORE_B64 ;
+            secret/data/ci/android-distribute signing_store_password | SIGNING_STORE_PASSWORD ;
+            secret/data/ci/android-distribute signing_key_password | SIGNING_KEY_PASSWORD ;
+            secret/data/ci/android-distribute signing_cert_sha256 | SIGNING_CERT_SHA256 ;
+            secret/data/ci/android-distribute firebase_service_account_json_b64 | FIREBASE_SERVICE_ACCOUNT_JSON_B64
+
+      # Passwords land in files with mode 600; only paths reach later steps.
+      - name: Materialise the release key and Firebase credentials
+        env:
+          SIGNING_KEYSTORE_B64: ${{ steps.openbao.outputs.SIGNING_KEYSTORE_B64 }}
+          SIGNING_STORE_PASSWORD: ${{ steps.openbao.outputs.SIGNING_STORE_PASSWORD }}
+          SIGNING_KEY_PASSWORD: ${{ steps.openbao.outputs.SIGNING_KEY_PASSWORD }}
+          SIGNING_CERT_SHA256: ${{ steps.openbao.outputs.SIGNING_CERT_SHA256 }}
+          FIREBASE_SERVICE_ACCOUNT_JSON_B64: ${{ steps.openbao.outputs.FIREBASE_SERVICE_ACCOUNT_JSON_B64 }}
+        run: |
+          set +x
+          set -euo pipefail
+          umask 077
+          CI_DIR="$RUNNER_TEMP/ci"
+          SIGNING_DIR="$CI_DIR/signing"
+          for value in SIGNING_KEYSTORE_B64 SIGNING_STORE_PASSWORD SIGNING_KEY_PASSWORD \
+                       SIGNING_CERT_SHA256 FIREBASE_SERVICE_ACCOUNT_JSON_B64; do
+            if [[ -z "${!value:-}" ]]; then
+              echo "OpenBao returned an empty $value" >&2
+              exit 1
+            fi
+          done
+          mkdir -p "$SIGNING_DIR"
+          chmod 700 "$SIGNING_DIR"
+          printf '%s' "$SIGNING_KEYSTORE_B64" | base64 -d > "$SIGNING_DIR/home-release.keystore"
+          printf '%s' "$SIGNING_STORE_PASSWORD" > "$SIGNING_DIR/store.password"
+          printf '%s' "$SIGNING_KEY_PASSWORD" > "$SIGNING_DIR/key.password"
+          printf '%s' "$FIREBASE_SERVICE_ACCOUNT_JSON_B64" | base64 -d > "$CI_DIR/firebase-sa.json"
+          chmod 600 "$SIGNING_DIR"/* "$CI_DIR/firebase-sa.json"
+          {
+            echo "SIGNING_KEYSTORE=$SIGNING_DIR/home-release.keystore"
+            echo "SIGNING_STORE_PASSWORD_FILE=$SIGNING_DIR/store.password"
+            echo "SIGNING_KEY_PASSWORD_FILE=$SIGNING_DIR/key.password"
+            # The expected certificate digest is public (it is in every APK).
+            echo "SIGNING_CERT_SHA256=$SIGNING_CERT_SHA256"
+            echo "GOOGLE_APPLICATION_CREDENTIALS=$CI_DIR/firebase-sa.json"
+          } >> "$GITHUB_ENV"
+          echo "release key and Firebase credentials prepared"
+
+      - name: Disconnect VPN
+        run: |
+          set +e
+          if [[ -f "$RUNNER_TEMP/openconnect.pid" ]]; then
+            sudo kill "$(sudo cat "$RUNNER_TEMP/openconnect.pid")" 2>/dev/null
+          fi
+          sudo pkill -f 'openconnect --no-dtls' 2>/dev/null
+          rm -f "$RUNNER_TEMP/ci/ci.p12" "$RUNNER_TEMP/ci/ci.pass"
+          rm -f "$RUNNER_TEMP/openconnect.log" "$RUNNER_TEMP/openconnect.pid"
+          echo "VPN disconnected"
+
+      # Upload-only: the script verifies the APK digest against
+      # release-info.json and never builds or signs anything.
+      # The release key is applied to the already-tested APK; release-info.json
+      # is rewritten for the signed bytes and the upload verifies that digest.
+      - name: Sign and distribute the prebuilt APK
+        run: |
+          set -euo pipefail
+          rel="$RUNNER_TEMP/release"
+          platform/android/sign-release.sh "$rel/app.apk" "$rel/app-release.apk"
+          python3 projects/mobile/android/release_info.py resign \
+            --input "$rel/release-info.json" \
+            --apk "$rel/app-release.apk" \
+            --output "$rel/release-info.json"
+          projects/mobile/android/distribute.sh --ci --upload-only \
+            --release-info "$rel/release-info.json"
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### android release"
+            echo
+            echo "- context: \`${{ inputs.label }}\`"
+            echo "- commit: \`$GITHUB_SHA\`"
+            echo "- branch: \`$GITHUB_REF\`"
+            echo "- APK: built and tested once by \`_android.yml\`, signed here"
+            echo "- run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove credentials and disconnect VPN
+        if: always()
+        run: |
+          set +e
+          rm -rf "$RUNNER_TEMP/ci"
+          if [[ -f "$RUNNER_TEMP/openconnect.pid" ]]; then
+            sudo kill "$(sudo cat "$RUNNER_TEMP/openconnect.pid")" 2>/dev/null
+          fi
+          sudo pkill -f 'openconnect --no-dtls' 2>/dev/null
+          rm -f "$RUNNER_TEMP/openconnect.log" "$RUNNER_TEMP/openconnect.pid"
+          echo "temporary credentials removed"

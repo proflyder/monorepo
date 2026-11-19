@@ -384,6 +384,105 @@ function isRegistryWrite(line) {
   return REGISTRY_WRITE_PATTERNS.some((pattern) => pattern.test(line));
 }
 
+/**
+ * Extract the events of the top-level `on:` block without a YAML dependency.
+ *
+ * Only the immediate keys of the block are events: nested entries (`branches:`,
+ * `inputs:`) are indented deeper. A flow list (`on: [push, pull_request]`) and a
+ * scalar (`on: push`) are accepted too, so the rule cannot be dodged by syntax.
+ */
+export function workflowTriggers(text) {
+  const lines = String(text || "").split(/\r?\n/);
+  const start = lines.findIndex((line) => /^on:/.test(line));
+  if (start === -1) {
+    return null;
+  }
+  const inline = /^on:\s*(.*)$/.exec(lines[start])?.[1]?.trim() ?? "";
+  if (inline) {
+    if (inline.startsWith("[")) {
+      return inline
+        .replace(/^\[/, "")
+        .replace(/\]$/, "")
+        .split(",")
+        .map((item) => item.trim().split(/\s+/)[0])
+        .filter(Boolean);
+    }
+    return [inline.split(/\s+/)[0]];
+  }
+  const events = [];
+  for (let index = start + 1; index < lines.length; index += 1) {
+    const line = lines[index];
+    if (!line.trim() || /^\s*#/.test(line)) {
+      continue;
+    }
+    const match = /^ {2}([A-Za-z_][A-Za-z0-9_-]*):/.exec(line);
+    if (match) {
+      events.push(match[1]);
+      continue;
+    }
+    if (/^\s/.test(line)) {
+      continue;
+    }
+    break;
+  }
+  return events;
+}
+
+/**
+ * One trigger per workflow.
+ *
+ * A workflow that reacts to several events duplicates its trigger wiring and
+ * makes "what starts this?" unanswerable; it also lets `github.event_name`
+ * branch inside shared logic. The rule is therefore: exactly one event, and a
+ * second event means a second thin file that calls a shared reusable workflow.
+ * `_*.yml` are the reusables and may only be called (`on: workflow_call`).
+ */
+export function workflowTriggerProblems(root = DEFAULT_ROOT) {
+  const problems = [];
+  const directory = path.resolve(root, ".github/workflows");
+  if (!isDirectory(directory)) {
+    return problems;
+  }
+  const files = fs
+    .readdirSync(directory)
+    .filter((name) => name.endsWith(".yml") || name.endsWith(".yaml"))
+    .sort();
+  for (const name of files) {
+    const relative = `.github/workflows/${name}`;
+    const events = workflowTriggers(fs.readFileSync(path.join(directory, name), "utf8"));
+    const reusable = name.startsWith("_");
+    if (!events) {
+      problems.push(`${relative}: no top-level 'on:' block`);
+      continue;
+    }
+    if (events.length === 0) {
+      problems.push(`${relative}: 'on:' declares no event`);
+      continue;
+    }
+    if (events.length > 1) {
+      problems.push(
+        `${relative}: exactly one trigger is allowed, found ${events.length} ` +
+          `(${events.join(", ")}); split it into thin wrappers that call a shared ` +
+          "_*.yml reusable workflow",
+      );
+      continue;
+    }
+    if (reusable && events[0] !== "workflow_call") {
+      problems.push(
+        `${relative}: a reusable workflow must only have 'on: workflow_call', ` +
+          `found '${events[0]}'`,
+      );
+    }
+    if (!reusable && events[0] === "workflow_call") {
+      problems.push(
+        `${relative}: a workflow_call entry point must be named _*.yml ` +
+          "(the convention that marks a file as a reusable, not a trigger)",
+      );
+    }
+  }
+  return problems;
+}
+
 function isRegistryLogin(line) {
   return REGISTRY_LOGIN_PATTERNS.some((pattern) => pattern.test(line));
 }
@@ -508,6 +607,7 @@ export async function check(argv) {
       ...validateSchema(config, root),
       ...coverageProblems(config, trackedFiles(root)),
       ...workflowRegistryProblems(root),
+      ...workflowTriggerProblems(root),
     ],
   };
 }
