@@ -14,11 +14,16 @@ import android.os.VibratorManager
 /**
  * The loud part of find-phone.
  *
- * `USAGE_ALARM` audio ignores the notification volume and silent mode, and the
- * stream volume is raised to its maximum for the duration of the ring, then
- * restored exactly as it was. Vibration repeats with the same pattern on every
- * API level the app supports.
+ * `USAGE_ALARM` audio plays through the alarm stream, which is exempt from the
+ * silent and vibrate ringer modes, and the stream volume is raised to its
+ * maximum for the duration of the ring, then restored exactly as it was.
  *
+ * The ringer mode itself is never changed. Switching it to normal used to leave
+ * the phone loud after the ring: restoring the alarm volume does not restore
+ * silent mode. The alarm stream is enough to be heard, so silent and vibrate
+ * stay exactly as the owner set them.
+ *
+ * Vibration repeats with the same pattern on every API level the app supports.
  * Everything is best-effort and failure-tolerant: a device without an alarm
  * ringtone or vibrator still shows the ringing screen, so the owner can press
  * «Нашёл» rather than facing a silent, broken alert.
@@ -28,6 +33,9 @@ class FindPhoneAudio(private val context: Context) {
     private var player: MediaPlayer? = null
     private var vibrator: Vibrator? = null
     private var previousVolume: Int? = null
+
+    /** The player of the active ring; null when nothing is playing. */
+    internal val activePlayer: MediaPlayer? get() = player
 
     /** Starts the alarm tone and the repeating vibration. Idempotent. */
     @SuppressLint("MissingPermission") // VIBRATE is install-time and declared here.
@@ -70,12 +78,11 @@ class FindPhoneAudio(private val context: Context) {
 
     private fun raiseAlarmVolume() {
         val manager = audioManager ?: return
+        if (previousVolume == null) {
+            previousVolume = manager.getStreamVolume(AudioManager.STREAM_ALARM)
+        }
         val maximum = manager.getStreamMaxVolume(AudioManager.STREAM_ALARM)
-        previousVolume = manager.getStreamVolume(AudioManager.STREAM_ALARM)
         runCatching { manager.setStreamVolume(AudioManager.STREAM_ALARM, maximum, 0) }
-        // The channel also asks the system to bypass silent mode; this is the
-        // second, explicit request for the ringing window.
-        runCatching { manager.ringerMode = AudioManager.RINGER_MODE_NORMAL }
     }
 
     private fun restoreAlarmVolume() {

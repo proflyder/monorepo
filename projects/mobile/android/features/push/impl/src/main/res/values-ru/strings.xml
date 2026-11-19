@@ -22,7 +22,7 @@
     <string name="push_channel_notifications_name">Уведомления дома</string>
     <string name="push_channel_notifications_description">Сообщения от Рикардо: напоминания, статус и ответы.</string>
     <string name="push_channel_find_name">Звонок «Поиск телефона»</string>
-    <string name="push_channel_find_description">Громкий звонок в обход беззвучного режима и режима «Не беспокоить».</string>
+    <string name="push_channel_find_description">Запрос позвонить на этот телефон. Звук воспроизводит само приложение, поэтому уведомление беззвучное.</string>
     <string name="push_find_title">Поиск телефона</string>
     <string name="push_find_default_reason">Рикардо ищет этот телефон</string>
     <string name="push_find_found">Нашёл</string>

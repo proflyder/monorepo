@@ -3,35 +3,43 @@ package dev.proflyder.home.feature.push
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
-import android.media.AudioAttributes
-import android.provider.Settings
 import dev.proflyder.home.feature.push.impl.R
 
 /**
  * The app's two notification channels.
  *
- * Channels are created once and their importance/sound cannot be raised later,
- * so `home_phone_find` is created as an alarm channel: maximum importance, the
- * alarm audio usage (the phone keeps ringing in silent mode) and
- * `bypassDnd` (Do Not Disturb is overridden only while the owner granted the
- * app notification-policy access).
+ * Channels are created once and their properties cannot be changed later, so a
+ * channel id must never be reused with different settings: Android keeps the
+ * original sound and vibration of `home_phone_find`, which is why the silent
+ * replacement is a new id, `home_phone_find_v2`, and the old channel is
+ * deleted on every start.
+ *
+ * The find channel carries no sound and no vibration of its own. The ring has
+ * exactly one source, the [FindPhoneAudio] `MediaPlayer` in the foreground
+ * service; a channel sound would play the same melody a second time, with an
+ * offset, and would repeat on every notification update. `bypassDnd` is kept so
+ * the request still reaches the owner when Do Not Disturb is on (the owner has
+ * granted notification-policy access).
  *
  * The platform API is used directly: minSdk is 26, so `NotificationChannel`
- * exists everywhere, and the compat builder cannot express `bypassDnd` or a
- * per-channel sound with an explicit audio usage.
+ * exists everywhere, and the compat builder cannot express `bypassDnd`.
  */
 object PushChannels {
     /** Ordinary notifications: title, body, deep link. */
     const val NOTIFICATIONS: String = "home_notifications"
 
-    /** Find-phone: bypasses DND and uses the alarm audio stream. */
-    const val FIND: String = "home_phone_find"
+    /** Find-phone: silent, bypasses DND; the ring itself is the MediaPlayer. */
+    const val FIND: String = "home_phone_find_v2"
 
-    /** Creates or updates both channels; safe to call on every start. */
+    /** The old channel that had an alarm sound; deleted because it is immutable. */
+    const val LEGACY_FIND: String = "home_phone_find"
+
+    /** Creates both channels and drops the legacy find channel. Safe on every start. */
     fun ensure(context: Context) {
         val manager = context.getSystemService(NotificationManager::class.java) ?: return
         manager.createNotificationChannel(notifications(context))
         manager.createNotificationChannel(find(context))
+        manager.deleteNotificationChannel(LEGACY_FIND)
     }
 
     private fun notifications(context: Context): NotificationChannel =
@@ -51,16 +59,9 @@ object PushChannels {
             NotificationManager.IMPORTANCE_HIGH,
         ).apply {
             description = context.getString(R.string.push_channel_find_description)
-            enableVibration(true)
-            vibrationPattern = Vibration.PATTERN
+            enableVibration(false)
+            setSound(null, null)
             setBypassDnd(true)
-            setSound(
-                Settings.System.DEFAULT_ALARM_ALERT_URI,
-                AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_ALARM)
-                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                    .build(),
-            )
             lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
         }
 }
