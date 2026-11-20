@@ -158,15 +158,17 @@ git -c credential.helper= \
 
 ## Версии и публикация артефактов
 
-- Native-юнит с `native.publish_when` (Pulsar, Windows logon provider)
+- Publishable native-юнит (Pulsar, Windows logon provider)
   собирается и проверяется PR CI на любое изменение своих путей и общих
   входов (Cargo workspace/lock, используемые `packages/rust/*`, тулчейны,
   `MODULE.bazel`) и публикует артефакт как `tree-<hash>` с provenance.
-  Релизные теги `VERSION` ставятся только при изменении файла версии:
-  изменение исходников без бампа `VERSION` — проверка, а не релиз. На push
+  Версию вычисляет CI (`VERSION` — только major.minor, patch — число
+  коммитов юнита, `platform/ci/version.mjs`, решение 60): каждое смерженное
+  изменение юнита — релиз. На push
   `deploy-home` только продвигает опубликованный `tree-<hash>`; если его нет
   или provenance не сходится, job падает — деплой ничего не собирает.
-- Релиз — осознанный бамп `VERSION`; тег версии в GHCR неизменяем по
+- Отдельного PR с бампом нет; `VERSION` меняется только при смене
+  major.minor. Тег версии в GHCR неизменяем по
   содержимому, поэтому повторная публикация того же артефакта — no-op, а
   другого содержимого под тем же тегом — ошибка.
 

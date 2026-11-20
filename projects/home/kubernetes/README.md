@@ -24,7 +24,7 @@ BLE gateway остаются на станции. Версии зафиксир�
 существующие данные приложений — static local PV с Retain. Это локальное
 хранение, не репликация. VM `lab-k3s` — 12 GiB, `192.0.2.27`;
 HAOS — 4 GiB, `192.0.2.28`; host Proxmox — `192.0.2.26`.
-MA/Matter add-ons: `core_matter_server 9.2.0`, `d5369777_music_assistant 2.10.8`.
+MA/Matter add-ons: `core_matter_server 9.3.0`, `d5369777_music_assistant 2.10.9`.
 
 ## Обновление
 

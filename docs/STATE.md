@@ -22,7 +22,7 @@
 - Power-loss тест 2026-11-02 (выдернуто питание): PVE, HAOS, K3s (30/30 подов),
   VPN, OpenBao auto-unseal, scheduler со всеми consumer, backup SSD и таймеры
   поднялись сами за ~4 минуты; станция видна в HA.
-- VM `100 haos`: 2 vCPU / 4 GiB / 32 GiB, HAOS `2026.10.4`, `192.0.2.28`.
+- VM `100 haos`: 2 vCPU / 4 GiB / 32 GiB, HAOS `18.4` (HA Core `2026.11.0`), `192.0.2.28`.
 - VM `101 lab-k3s`: 8 vCPU / 12 GiB / 200 GiB, Ubuntu 24.04.5, K3s,
   `192.0.2.27`; startup order 1/2.
 - CT `102 vpn`: unprivileged Debian 13, 1 vCPU / 512 MiB / 4 GiB,
@@ -59,8 +59,8 @@
 
 - HA: `http://192.0.2.28:8123`; `internal_url` и trusted proxy обновлены.
 - Add-ons:
-  - Music Assistant `2.10.8`: UI/API `8095`, stream `8097`, Sendspin `8927`.
-  - Matter Server `9.2.0`: `ws://127.0.0.1:5580/ws`; paired 1 узел —
+  - Music Assistant `2.10.9`: UI/API `8095`, stream `8097`, Sendspin `8927`.
+  - Matter Server `9.3.0`: `ws://127.0.0.1:5580/ws`; paired 1 узел —
     Yandex LED strip `YNDX-00544` («Лента», `light.spalnia_lenta`), on/off,
     яркость и цвет проверены. Дублирующий набор сущностей от повторного
     интервью остался неактивным.
@@ -79,16 +79,19 @@
   `openbao`, `external-secrets`, `currency-bot`, `vaultwarden`, `nexus`,
   `flux-system`.
 - Приложения: GigaAM `10305`, Whisper `10300`, Piper `10200`,
-  Hermes gateway `127.0.0.1:8642` + voice proxy `8643`, health exporter `9116`,
-  sidecar дрейфа конфига Hermes `9118` (закрыт от LAN),
+  Hermes gateway `127.0.0.1:8642` + voice proxy `8643` и chat relay `8644`,
+  health exporter `9116`, sidecar дрейфа конфига Hermes `9118` (закрыт от LAN),
   currency-bot + cloudflared, mcp-gateway (ClusterIP `:8080`),
+  phone-push (ClusterIP `:8095`), wakegrant (NodePort `30130`),
+  pve-exporter (ns `monitoring`),
   ha-config-sync (ClusterIP `:9119`, доставляет `projects/home-assistant/ha-voice`
   на HAOS по SSH и откатывает неудачные изменения),
   intercom (signaling, NodePort `30097`), Nexus (`:8081`, кэш артефактов CI)
   и Flux (`flux-system`). Под Flux — платформа (ESO, cert-manager, Traefik,
   маршруты), observability, Vaultwarden, Nexus и деплой-юниты приложений
-  (`wakegrant`, `intercom`, `currency-bot`, `mcp-gateway`, `scheduler` +
-  executors, `hermes`, `hermes-config`, `ha-config-sync`); OpenBao,
+  (`wakegrant`, `intercom`, `phone-push`, `currency-bot`, `mcp-gateway`,
+  `scheduler` + executors, `hermes`, `hermes-config`, `ha-config-sync`,
+  `pve-exporter`); OpenBao,
   host-firewall и Cloudflare DNS остаются ручными.
 - `8643` доступен только HAOS/K3s/loopback через nftables.
 - Observability: kube-prometheus-stack `92.14.0`, Loki `20.0.2`,
@@ -114,7 +117,8 @@
   `https://grafana.home.example.com/`.
 - HTTPS ingress `*.home.example.com` (Traefik `42.2.0` + cert-manager
   `v1.21.3`, ACME DNS-01 Cloudflare, wildcard Let's Encrypt prod до
-  2027-01-28): `ha`, `grafana`, `alarms`, `control`, `vault` → узел `.27`,
+  2027-01-28): `ha`, `grafana`, `alarms`, `control`, `currency`, `intercom`,
+  `vault`, `passwords`, `nexus` → узел `.27`,
   Cloudflare DNS only. Traefik в `hostNetwork` (`80/443`), редирект на HTTPS,
   IP allow-list LAN + pod CIDR; HA-источник остаётся `.27`
   (`trusted_proxies /32`). WebSocket HA и Grafana проверены.
@@ -143,7 +147,7 @@
   values Hermes — `secret/k8s/flux-system/runtime-values`, ESO создаёт
   `flux-app-settings`/`runtime-values` в `flux-system`; в GitHub значений нет.
 - Ночной CronJob raft snapshot в `/srv/k3s/volumes/openbao-backups`
-  (7 файлов). Root-токен отозван, recovery keys — только `secrets/openbao/`.
+  (7 файлов). Root-токен отозван; recovery keys — у владельца (см. ниже).
 - Restore OpenBao snapshot и SQLite scheduler проверен на локальном стенде
   2026-11-02 (`REBUILD.md` §6, `openbao/restore_drill.py`).
 - External Secrets Operator `2.14.0` (chart `2.14.0`, образ по digest) в
@@ -165,7 +169,7 @@
   Файлы — `projects/home/kubernetes/vaultwarden/`.
 - Доступ с рабочих мест: у каждой машины свой periodic operator token
   (`workstation-<host>`, политика `operator-kv`, `mise run secrets:login`);
-  каталог путей — `docs/SECRETS.md` (52 пути, `mise run secrets:check`).
+  каталог путей — `docs/SECRETS.md` (62 пути, `mise run secrets:check`).
   Recovery keys и seal key на диске не хранятся — у владельца в Bitwarden и
   Vaultwarden (`openbao:bootstrap`).
 
@@ -263,11 +267,10 @@
   `pulsar-core`, записи сторонних крейтов идут мостом `tracing-log`. BLE gateway
   переписан на них: нативный control-сокет `wpa_supplicant`, `zbus` proxies,
   `watch`-статус и сериализованные Commit'ы. Pulsar — publishable
-  native-юнит общего `deploy-home` с
-  `publish_when` по `projects/station/pulsar/VERSION`: любое изменение Pulsar
+  native-юнит общего `deploy-home`: любое изменение Pulsar
   собирается и публикуется PR CI из этого репозитория как `tree-<hash>` с
   provenance, а на `develop` `native-release` продвигает проверенный digest на
-  релизные теги; `publish_when` ограничивает только релиз. Затем job
+  релизные теги с вычисленной версией. Затем job
   `deploy-station` после
   approve в Environment `Station` входит в VPN группой `ci` (отдельный
   сертификат `ci-pulsar`) и по OIDC в OpenBao роль `deploy-station` (политика
@@ -276,7 +279,7 @@
   `installed_version == version` и 90 с стабильности; откат `supervise.sh` на
   `.prev` валит job. GitHub Releases и теги в монорепо не используются.
   Повторный запуск — `workflow_dispatch` deploy-home с `units=pulsar` (катит
-  уже опубликованный VERSION, тег не перезаписывается). Откат — не через CI,
+  уже опубликованную версию, тег не перезаписывается). Откат — не через CI,
   а на станции (`.prev` + `ctl.sh reload`).
 
 ## Remote / VPN
@@ -300,10 +303,10 @@
   стоит до accept. Ручное продление и TXT-записи не нужны.
 - Лимит `max-same-clients = 10`; встроенный бан неудачных попыток.
 - HTTPS-имена LAN/VPN:
-  `https://{ha,grafana,alarms,control,currency,intercom,vault,passwords}.home.example.com`
+  `https://{ha,grafana,alarms,control,currency,intercom,vault,passwords,nexus}.home.example.com`
   через Traefik + cert-manager. Публичного HA нет;
   `8123/8095/8099/6053/6638` наружу не проброшены.
-- K3s management/metrics `6443/10250/9100/9116/9118/8472` закрыты от обычного LAN;
+- K3s management/metrics `6443/10250/9100/9116/9118/8644/8472` закрыты от обычного LAN;
   SSH — LAN, K3s API — через туннель. Аварийный доступ к Proxmox — LAN/Wi-Fi.
 - Исходники: `projects/home/proxmox/vpn/`; приватные учётные данные —
   `secrets/home/vpn/`.
@@ -324,17 +327,18 @@
   после следующей переустановки `--version` станет `ble-gateway 0.2.0`.
   Сейчас gateway не обновляется; порядок — `docs/STATION-SOFTWARE.md`
   «Обновление BLE gateway» (проверка BLE с телефона, откат `ble-gateway.prev`).
-- Pulsar Rust `v0.5.1018` — armhf-сборка из `projects/station/pulsar/`
+- Pulsar Rust `v0.5.1020` — armhf-сборка из `projects/station/pulsar/`
   (Bazel); артефакт продвинут из PR-сборки без пересборки (build-once,
-  digest из `tree-<hash>`). Синхронизирован с upstream `v0.6.1`: канал
-  распознавания, усилитель Mini 1 и #76; намеренно не взяты #66, #64, #34,
-  аппаратная поддержка Mini 3 Pro/Станции 2 и prune (#303). В репозитории
-  готовится `v0.5.1020` с базой upstream `v0.6.2`: переключатели «Wake sound»
+  digest из `tree-<hash>`), выкачен `deploy-station` 2026-11-18 (#334).
+  База upstream `v0.6.2` (до этого `v0.6.1`: канал распознавания, усилитель
+  Mini 1 и #76; намеренно не взяты #66, #64, #34, аппаратная поддержка
+  Mini 3 Pro/Станции 2 и prune, #303): переключатели «Wake sound»
   и «Clock colon blink» (ключи 42/43, потому что 39/40 заняты «Follow-up
   duration» и «Громкость объявлений») и окно локальных команд `after_wake`
   только для диалога от wake word (#61; стоп-слова из текста STT — по правилу
-  форка, см. `projects/station/pulsar/RICARDO.md`). На колонку `v0.5.1020`
-  не выкатывался. wake→answer измеряется до старта TTS (#301). «Громкость
+  форка, см. `projects/station/pulsar/RICARDO.md`). Первый релиз с
+  вычисляемой версией `v0.6.51` опубликован в GHCR 2026-11-20, но на колонку
+  не выкачен: `deploy-station` упал (см. `PENDING.md`). wake→answer измеряется до старта TTS (#301). «Громкость
   объявлений» (`number.…_gromkost_obiavlenii`, 0–100 %, по умолчанию 100) — абсолютная
   громкость только речевых анонсов и TTS-ответов на кривой модели, не громче
   текущей общей (100 % = «как основная») (#302); ANNOUNCING уходит в HA как
@@ -366,10 +370,10 @@
   уходит в HA — локальной отмены/паузы нет, поэтому «Рикардо, стоп» доходит
   до HA. Для диалогов по кнопке, follow-up и `start_conversation` отдельное
   «стоп»/«хватит» отменяет диалог локально и останавливает звонящий таймер.
-- Версия форка — `v0.5.10NN`: major.minor 0.5 сохраняется, чтобы patch
-  1000+ был больше любого upstream-патча, а updater ставит только строго
-  большую `MAJOR.MINOR.PATCH`. Полный переход на upstream 0.6.x даст
-  `v0.6.1001`. Релиз, публикация и
+- Версию вычисляет CI: `VERSION` хранит базу `v0.6`, patch — число коммитов
+  Pulsar (решение 60); `v0.6.50` и далее новее последнего ручного
+  `v0.5.1020`, а updater ставит только строго большую `MAJOR.MINOR.PATCH`.
+  Релиз, публикация и
   деплой — `projects/station/pulsar/RICARDO.md` «Релизы и деплой»; репозиторий
   обновлений — константа `pulsar_update::UPDATE_REPO`.
 - Upstream `Morvex885/pulsar` вливается вручную патчем (`git diff vA..vB` →
@@ -602,11 +606,10 @@
   PE-таймстемп обнуляется, поэтому релизный тег содержит те же байты), принята
   вживую 2026-11-07: холодный вход по grant, разблокировка по grant,
   недоступный `wakegrant` (одна строка `send_failed`, затем backoff).
-  Последний релиз в GHCR — `1.3.16` (кода с `1.3.15` не менялось, на ПК не
-  ставился). В `VERSION` поднято `1.3.17`: эта сборка делается уже после
-  переименования модуля, поэтому внутри лежит `HomeKompLogon.dll` (в `1.3.16`
-  ещё было имя `RicardoKompLogon.dll`). CI опубликует `1.3.17` после merge;
-  установка на ПК — **ожидает установки** владельцем.
+  Версия теперь вычисляется CI (`VERSION` = `1.4`, решение 60); последний
+  релиз в GHCR — `1.4.62` (продвинут `deploy-home` 2026-11-20), внутри
+  `HomeKompLogon.dll` (в `1.3.16` и раньше — `RicardoKompLogon.dll`).
+  На ПК его не ставили — установка **ожидает** владельца.
   Прежние сборки лежат рядом для отката: `1.3.14`, `1.3.0`, `1.2.0` (Rust)
   и C++ `1.0.0`. HA-файлы `ha-voice` выложены в HAOS вручную (копия прежних —
   `/mnt/data/ha-voice-backup-*.tar`).

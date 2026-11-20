@@ -10,15 +10,12 @@
 
 ## P2 — проверки и улучшения инфраструктуры
 
-- [ ] **Приёмка Flux-конфига Hermes.** Перед merge владелец копирует
-      `hermes_private_yaml` из `secret/infra/kubernetes/values-private` в
-      `secret/k8s/home-assistant/hermes-config#private.yaml` (GET→merge→POST с
-      `cas`; команда — `docs/KUBERNETES-OPERATIONS.md`, раздел «Автодеплой
-      Hermes»). После merge: init-логи `render-config` без ошибок, на `:9118`
-      `hermes_config_drift_files 0` и `hermes_config_check_success 1`, плановый
-      rollout без «shutting down» в Telegram; применить `9118` в
-      `projects/home/kubernetes/management-firewall/rules.nft` и переустановить
-      правило. Затем удалить старое поле `hermes_private_yaml`.
+- [ ] **Удалить старое поле `hermes_private_yaml`.** Flux-конфиг Hermes
+      принят (2026-11-21: `render-config` без ошибок, `:9118`
+      `hermes_config_drift_files 0`, `hermes_config_check_success 1`, `9118`
+      закрыт в nftables K3s). Осталось владельцу удалить
+      `secret/infra/kubernetes/values-private#hermes_private_yaml` (поле ещё
+      есть; новый источник — `secret/k8s/home-assistant/hermes-config#private.yaml`).
 - [ ] **Вход `gh` и Codex на CT 103.** Нужен только для агентов, запускаемых
       на самом сервере bb; треды на Mac работают без него. Следующий шаг:
       авторизовать `gh` и Codex под пользователем `bb` перед первым таким
@@ -28,11 +25,15 @@
 
 ### Станция и голос
 
-- [ ] **Pulsar `v0.5.1020` (upstream `v0.6.2`).** Ветка `feat/pulsar-upstream-0.6.2`:
-      переключатели «Wake sound» и «Clock colon blink» (ключи 42/43) и окно
-      `after_wake` только для диалога от wake word. На колонке стоит `v0.5.1018`.
-      Следующий шаг после merge: approve `deploy-station`, проверить в HA новые
-      переключатели и живо «Рикардо, стоп» в диалоге от wake word (уходит в HA) и
+- [ ] **Выкатка Pulsar `v0.6.51` на колонку.** Первый релиз с вычисляемой
+      версией опубликован 2026-11-20, но job `deploy station` в `deploy-home`
+      получил версию юнита `logon-provider` (`1.4.62`) вместо `v0.6.51` и упал;
+      на колонке `v0.5.1020` (выкачен 2026-11-18). Следующий шаг: исправить
+      передачу версии Pulsar в `_station-deploy.yml`, перезапустить
+      `deploy-home` с `units=pulsar`, approve.
+- [ ] **Приёмка `v0.5.1020` (upstream `v0.6.2`).** Проверить в HA
+      переключатели «Wake sound» и «Clock colon blink» (ключи 42/43) и живо
+      «Рикардо, стоп» в диалоге от wake word (уходит в HA) и
       от кнопки (отменяет локально). Откат — `rollback` юнита `pulsar` в
       `platform/ci/units.mjs` (`pulsar.prev` + `ctl.sh reload`).
 - [ ] **Ricardo pre-roll 256 ms.** `Fixed(8)` в текущей сборке
@@ -136,10 +137,9 @@
       действий пользователем; автоматические нажатия блокирует HyperOS.
       Следующий шаг: согласовать окно и проверить на реальном телефоне, не
       трогая production-устройства без согласования.
-- [ ] **Первый релиз в Firebase App Distribution и первый тестовый краш.**
-      Следующий шаг: первый успешный PR, где `android / android-app` собирает
-      APK, а `android-distribute` подписывает и загружает его; установка через
-      App Tester, краш через `adb shell am crash dev.proflyder.home` и отчёт в
+- [ ] **Первый тестовый краш в Crashlytics.** Выкладка в Firebase App
+      Distribution работает (`android-distribute` в PR CI, например #364).
+      Следующий шаг: краш через `adb shell am crash dev.proflyder.home` и отчёт в
       Crashlytics.
 - [ ] **Живой звонок на колонку.** Клиент и станционный `pulsar-call` (#231)
       готовы; нужна проверка на устройстве: микрофон, Opus, AEC, маршруты,
@@ -148,12 +148,10 @@
 - [ ] **Входящие звонки.** Контракт симметричен, `Watch` уже распознаёт
       входящий `RINGING`, но UI и `addNewIncomingCall` — заглушка (сейчас
       отклоняется).
-- [ ] **Push и «Найди телефон»: живая приёмка.** Код и тесты готовы (FCM,
-      foreground-звонок, экран разрешений). Следующий шаг по порядку: владелец
-      создаёт сервис-аккаунт FCM и кладёт его в
-      `secret/k8s/home-assistant/phone-push` (`service_account_json`,
-      инструкция — `projects/home/kubernetes/phone-push/README.md`); merge и
-      деплой; на телефоне выдать три разрешения, открыть приложение и
+- [ ] **Push и «Найди телефон»: живая приёмка.** FCM сервис-аккаунт лежит в
+      `secret/k8s/home-assistant/phone-push`, `phone-push` раскатан Flux
+      (healthcheck исправлен #350, full-screen intent — #352). Следующий шаг:
+      на телефоне выдать три разрешения, открыть приложение и
       проверить: «где телефон» при включённом экране, при выключенном, в фоне
       и с убитым приложением, плюс стоп «Нашёл» и автостоп через минуту.
 - [ ] **Android-приёмка.** Остальные экраны на реальном устройстве.

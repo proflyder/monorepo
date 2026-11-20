@@ -18,7 +18,7 @@ configs/, patches/  PVE/Wi-Fi-драйвер и сетевые примеры (�
 
 ## Текущий контур
 
-- HAOS: `192.0.2.28:8123`; add-ons MA `2.10.8`, Matter `9.2.0`.
+- HAOS: `192.0.2.28:8123`; add-ons MA `2.10.9`, Matter `9.3.0`.
 - K3s: GigaAM `10305`, Whisper `10300`, Piper `10200`, Hermes `8642`,
   voice proxy `8643`.
 - Pipeline «Рикардо»: GigaAM → local intents → Hermes → Puriso.

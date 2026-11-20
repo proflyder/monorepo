@@ -165,11 +165,12 @@ git -C <upstream-checkout> diff vOLD..vNEW > /tmp/pulsar-upstream.patch
 git apply -3 --directory=projects/station/pulsar /tmp/pulsar-upstream.patch
 ```
 
-затем обычный squash PR. Релиз Pulsar — изменение
-`projects/station/pulsar/VERSION`: PR CI собирает обе архитектуры и публикует
+затем обычный squash PR. Релиз Pulsar — любое смерженное изменение
+`projects/station/pulsar/**`: версию вычисляет CI (`VERSION` хранит только
+major.minor, patch — число коммитов юнита, `platform/ci/version.mjs`,
+решение 60). PR CI собирает обе архитектуры и публикует
 `ghcr.io/proflyder/pulsar-firmware:tree-<hash>` с provenance; merge в
-`develop` (`publish_when` — только VERSION) только продвигает этот digest на
-теги `<version>` и `:latest`, затем `deploy-station` после approve в
+`develop` только продвигает этот digest на теги `<version>` и `:latest`, затем `deploy-station` после approve в
 Environment `Station` катит его на колонку. Повторной сборки в деплое нет.
 GitHub Releases и теги в монорепо запрещены. Процедуры —
 `docs/OPERATIONS.md` и `projects/station/pulsar/RICARDO.md`. Правила самого

@@ -91,11 +91,9 @@
 
 `k8s/home-assistant/hermes-config#private.yaml` заменяет старый
 `infra/kubernetes/values-private#hermes_private_yaml` после перевода Hermes на
-init container. Перенос — один раз перед merge PR: GET старого поля → merge в
-новый путь → POST с `options.cas` (без печати значений); подробная команда —
-`docs/KUBERNETES-OPERATIONS.md`, раздел «Автодеплой Hermes». Старое поле остаётся
-только как источник для копирования и после проверки может быть удалено
-владельцем.
+init container. Перенос выполнен (GET → merge → POST с `options.cas`, команда —
+`docs/KUBERNETES-OPERATIONS.md`, раздел «Автодеплой Hermes»); старое поле ещё
+лежит в OpenBao и не читается, его удаляет владелец (`PENDING.md`).
 
 Поля `ci/android-distribute` для release-подписи APK: `signing_keystore_b64`
 (base64 PKCS12-ключа), `signing_store_password`, `signing_key_password`,

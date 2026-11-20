@@ -185,34 +185,34 @@ solutions/windows-logon-provider/regen-bindings.sh
 
 ## Публикация и установка из GHCR
 
-Версия решения — `VERSION` (semver). Любое изменение путей провайдера,
+Версию вычисляет CI: `VERSION` хранит базу major.minor, patch — число
+коммитов юнита (`platform/ci/version.mjs`, решение 60). Любое изменение путей провайдера,
 общих `Cargo.lock`/`Cargo.toml`/`crate-universe.lock`, используемых крейтов
 `packages/rust/*` или тулчейнов Windows/zig попадает в PR CI: юнит
 `logon-provider` собирает DLL и `cp-selftest`, гоняет `run-tests.sh`,
 проверки `pe_artifacts.py` и `SHA256SUMS`, и из этого репозитория публикует их
 под `tree-<hash>` с provenance (build once). На push в `develop`
-`native-release` продвигает этот digest на теги `VERSION`/`sha-<12>`, ничего не
+`native-release` продвигает этот digest на теги `<version>`/`sha-<12>`, ничего не
 собирая: если `tree-<hash>` не опубликован или provenance не сходится, job
-падает с подсказкой перезапустить PR CI. `publish_when` по
-`solutions/windows-logon-provider/VERSION` ограничивает релиз. Публичный
+падает с подсказкой перезапустить PR CI. Каждое смерженное изменение юнита —
+релиз. Публичный
 OCI-артефакт:
 
 ```text
-ghcr.io/proflyder/windows-logon-provider:<VERSION>
+ghcr.io/proflyder/windows-logon-provider:<version>
 ghcr.io/proflyder/windows-logon-provider:sha-<12 hex коммита>
 ```
 
 Тип артефакта — `application/vnd.<owner>.windows-logon-provider.v1`; файлы:
-`HomeKompLogon.dll`, `cp-selftest.exe` и `SHA256SUMS`. Тег `<VERSION>` неизменяем по содержимому: повторная публикация
-с тем же `SHA256SUMS` — успешный no-op, с другим — ошибка. Поэтому релиз
-делается сменой `VERSION`. Provenance attestation создаётся для digest
+`HomeKompLogon.dll`, `cp-selftest.exe` и `SHA256SUMS`. Тег `<version>` неизменяем по содержимому: повторная публикация
+с тем же `SHA256SUMS` — успешный no-op, с другим — ошибка. Provenance attestation создаётся для digest
 опубликованного артефакта (`push-to-registry`) и для файла DLL.
 
 Оператор на Mac/Linux получает артефакт по версии или digest:
 
 ```bash
 # нужны oras и авторизованный gh (оба — из `mise install`)
-solutions/windows-logon-provider/fetch.sh <VERSION>
+solutions/windows-logon-provider/fetch.sh <version>
 solutions/windows-logon-provider/fetch.sh sha256:<digest>   # рекомендуемый pin
 ```
 
