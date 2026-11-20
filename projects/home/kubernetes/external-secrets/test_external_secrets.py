@@ -62,6 +62,7 @@ class ExternalSecretsContracts(unittest.TestCase):
         refs = {(d["remoteRef"]["key"], d["remoteRef"]["property"]) for d in spec["data"]}
         self.assertEqual(refs, {("k8s/home-assistant/hermes-environment", "TELEGRAM_BOT_TOKEN"),
                                 ("k8s/home-assistant/hermes-environment", "TELEGRAM_ALLOWED_USERS"),
+                                ("k8s/home-assistant/chat-alerts", "token"),
                                 ("k8s/monitoring/heartbeat", "url"),
                                 ("k8s/monitoring/heartbeat", "token")})
         config = yaml.safe_load(spec["target"]["template"]["data"]["alertmanager.yaml"]
@@ -89,6 +90,14 @@ class ExternalSecretsContracts(unittest.TestCase):
         self.assertIn('{{ `{{ template "telegram.home.message" . }}` }}', raw)
         self.assertIn("/etc/alertmanager/configmaps/alertmanager-templates/*.tmpl", raw)
         self.assertIn('index (splitList "," .chat_ids) 0', raw)
+        chat = receivers["telegram"]["webhook_configs"]
+        self.assertEqual(len(chat), 1)
+        self.assertEqual(chat[0]["url"], "http://mcp-gateway.home-assistant.svc.cluster.local:8080/v1/chat/alerts")
+        self.assertIs(chat[0]["send_resolved"], True)
+        self.assertEqual(chat[0]["http_config"]["authorization"]["type"], "Bearer")
+        self.assertEqual(len(receivers["telegram"]["telegram_configs"]), 1)
+        self.assertIn("credentials: '{{ .chat_alerts_token | trim }}'", raw)
+        self.assertEqual(raw.count(".heartbeat_token"), 1)
         tmpl = (ROOT / "projects/home/kubernetes/observability/alertmanager/telegram.tmpl").read_text()
         self.assertIn('{{ define "telegram.home.message" -}}', tmpl)
         self.assertIn('{{ .Fingerprint | reReplaceAll "^(.{12}).*$" "$1" }}', tmpl)
