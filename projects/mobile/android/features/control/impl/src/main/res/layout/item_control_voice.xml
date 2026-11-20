@@ -14,9 +14,9 @@
         android:layout_height="wrap_content"
         android:orientation="vertical"
         android:paddingStart="16dp"
-        android:paddingTop="@dimen/ui_tile_gap"
+        android:paddingTop="@dimen/ds_space_s"
         android:paddingEnd="16dp"
-        android:paddingBottom="@dimen/ui_tile_gap">
+        android:paddingBottom="@dimen/ds_space_s">
 
         <LinearLayout
             android:id="@+id/control_voice_profile_row"
@@ -61,11 +61,11 @@
                 android:textAppearance="?attr/textAppearanceTitleMedium"
                 android:textColor="?attr/colorOnSurface" />
 
-            <dev.proflyder.home.core.ui.PillSegments
+            <dev.proflyder.home.core.designsystem.PillSegments
                 android:id="@+id/control_voice_profile_tabs"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="@dimen/ui_tile_gap" />
+                android:layout_marginStart="@dimen/ds_space_s" />
         </LinearLayout>
 
         <LinearLayout
@@ -73,7 +73,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:paddingTop="@dimen/ui_tile_gap">
+            android:paddingTop="@dimen/ds_space_s">
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/control_wake_false_alarm"

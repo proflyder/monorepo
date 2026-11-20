@@ -5,11 +5,13 @@ import dev.proflyder.home.core.navigation.Destination
 import dev.proflyder.home.core.navigation.FeatureEntry
 import dev.proflyder.home.feature.settings.impl.R
 import dev.proflyder.home.feature.settings.presentation.AppearanceFragment
+import dev.proflyder.home.feature.settings.presentation.DesignCatalogFragment
 import dev.proflyder.home.feature.settings.presentation.NotificationHistoryFragment
 import dev.proflyder.home.feature.settings.presentation.SettingsFragment
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesIntoSet
 import dev.zacsweers.metro.Inject
+import dev.proflyder.home.core.designsystem.R as DesignR
 
 object SettingsDestination : Destination {
     override val featureId: String = "settings"
@@ -26,6 +28,11 @@ object AppearanceDestination : Destination {
     override val route: String = "settings/appearance"
 }
 
+object DesignSystemDestination : Destination {
+    override val featureId: String = "settings"
+    override val route: String = "settings/design-system"
+}
+
 @ContributesIntoSet(AppScope::class)
 @Inject
 class SettingsFeatureEntry : FeatureEntry {
@@ -39,17 +46,20 @@ class SettingsFeatureEntry : FeatureEntry {
     override fun titleRes(destination: Destination): Int = when (destination) {
         NotificationHistoryDestination -> R.string.settings_history_title
         AppearanceDestination -> R.string.settings_appearance_title
+        DesignSystemDestination -> DesignR.string.ds_catalog_title
         else -> titleRes
     }
 
     override fun supports(destination: Destination): Boolean =
         destination is SettingsDestination ||
             destination is NotificationHistoryDestination ||
-            destination is AppearanceDestination
+            destination is AppearanceDestination ||
+            destination is DesignSystemDestination
 
     override fun createFragment(destination: Destination): Fragment = when (destination) {
         NotificationHistoryDestination -> NotificationHistoryFragment()
         AppearanceDestination -> AppearanceFragment()
+        DesignSystemDestination -> DesignCatalogFragment()
         else -> SettingsFragment()
     }
 }

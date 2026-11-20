@@ -36,7 +36,7 @@ import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import dev.proflyder.home.core.ui.BaseFragment
-import dev.proflyder.home.core.ui.HomePopupMenu
+import dev.proflyder.home.core.designsystem.HomePopupMenu
 import dev.proflyder.home.core.ui.pinAboveKeyboard
 import dev.proflyder.home.core.ui.setVisible
 import dev.proflyder.home.core.ui.userMessage

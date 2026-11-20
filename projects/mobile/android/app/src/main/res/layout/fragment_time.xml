@@ -5,14 +5,14 @@
     android:layout_height="match_parent"
     android:orientation="vertical">
 
-    <dev.proflyder.home.core.ui.PillSegments
+    <dev.proflyder.home.core.designsystem.PillSegments
         android:id="@+id/time_tabs"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="@dimen/ui_tile_gap"
-        android:layout_marginBottom="@dimen/ui_tile_gap"
-        android:paddingStart="@dimen/ui_screen_padding"
-        android:paddingEnd="@dimen/ui_screen_padding" />
+        android:layout_marginTop="@dimen/ds_space_s"
+        android:layout_marginBottom="@dimen/ds_space_s"
+        android:paddingStart="@dimen/ds_space_l"
+        android:paddingEnd="@dimen/ds_space_l" />
 
     <androidx.viewpager2.widget.ViewPager2
         android:id="@+id/time_pager"

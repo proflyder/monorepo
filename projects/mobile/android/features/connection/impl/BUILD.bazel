@@ -15,6 +15,7 @@ metro_android_library(
         "//projects/mobile/android/core/model",
         "//projects/mobile/android/core/navigation",
         "//projects/mobile/android/core/network",
+        "//projects/mobile/android/core/designsystem",
         "//projects/mobile/android/core/ui",
         "//projects/mobile/android/features/connection/api",
         "@maven//:androidx_appcompat_appcompat",

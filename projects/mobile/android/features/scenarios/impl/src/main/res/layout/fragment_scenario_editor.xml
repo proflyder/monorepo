@@ -178,7 +178,8 @@
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/scenario_editor_save"
-            style="@style/Widget.Home.SaveBarButton"
+            style="@style/Widget.Home.Button.Filled.L"
+            android:layout_width="match_parent"
             android:layout_marginTop="16dp"
             android:text="@string/scenarios_editor_save" />
 

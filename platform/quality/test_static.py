@@ -109,10 +109,6 @@ class SecretHygieneTests(unittest.TestCase):
         self.assertEqual(hits, [])
 
 
-if __name__ == "__main__":
-    unittest.main(verbosity=2)
-
-
 class AndroidManifestPermissionTests(unittest.TestCase):
 
     PATTERN = __import__("re").compile(r'<uses-permission\s+android:name="([^"]+)"')
@@ -132,7 +128,7 @@ class AndroidManifestPermissionTests(unittest.TestCase):
 class AndroidThemeColorTests(unittest.TestCase):
     ANDROID = ROOT / "projects/mobile/android"
     COLOR = __import__("re").compile(r'"(#[0-9A-Fa-f]{3,8}|@color/[a-z0-9_]+|@android:color/(?!transparent)[a-z_]+)"')
-    ALLOWED_REFS = {"@color/ui_pill_text", "@color/alarms_day_toggle_text", "@color/alarms_day_toggle_background",
+    ALLOWED_REFS = {"@color/ds_pill_text", "@color/alarms_day_toggle_text", "@color/alarms_day_toggle_background",
                     "@color/alarms_day_toggle_stroke", "@color/alarms_delete_ripple",
                     "@color/control_scrim", "@color/control_speed_dial_label",
                     "@color/home_launcher_bg", "@color/home_launcher_fg"}
@@ -171,7 +167,7 @@ class AndroidThemeColorTests(unittest.TestCase):
                 continue
             text = path.read_text(encoding="utf-8")
             problems.extend(f"{path.relative_to(ROOT)}: {name}" for name in banned if name in text)
-        self.assertEqual(problems, [], "use core/ui PillSegments instead:\n" + "\n".join(problems))
+        self.assertEqual(problems, [], "use core/designsystem PillSegments instead:\n" + "\n".join(problems))
 
     def test_kotlin_does_not_parse_or_build_colours(self) -> None:
         pattern = __import__("re").compile(r"Color\.(parseColor|rgb|argb)\(|0xFF[0-9A-Fa-f]{6}")
@@ -181,3 +177,7 @@ class AndroidThemeColorTests(unittest.TestCase):
                 if pattern.search(line):
                     problems.append(f"{path.relative_to(ROOT)}:{number}")
         self.assertEqual(problems, [], "\n".join(problems))
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)

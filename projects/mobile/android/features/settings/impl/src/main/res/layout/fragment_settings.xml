@@ -9,10 +9,10 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:paddingStart="@dimen/ui_screen_padding"
-        android:paddingTop="@dimen/ui_screen_padding"
-        android:paddingEnd="@dimen/ui_screen_padding"
-        android:paddingBottom="@dimen/ui_section_gap">
+        android:paddingStart="@dimen/ds_space_l"
+        android:paddingTop="@dimen/ds_space_l"
+        android:paddingEnd="@dimen/ds_space_l"
+        android:paddingBottom="@dimen/ds_space_xl">
 
         <TextView
             android:layout_width="match_parent"
@@ -26,7 +26,7 @@
             style="@style/Widget.Home.Card"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="@dimen/ui_screen_padding"
+            android:layout_marginTop="@dimen/ds_space_l"
             android:clickable="true"
             android:focusable="true">
 
@@ -64,7 +64,7 @@
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="@dimen/ui_tile_gap_half"
+                        android:layout_marginTop="@dimen/ds_space_xs"
                         android:text="@string/settings_connection_subtitle"
                         android:textAppearance="?attr/textAppearanceBodySmall"
                         android:textColor="?attr/colorOnSurfaceVariant" />
@@ -83,7 +83,7 @@
             style="@style/Widget.Home.Card"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="@dimen/ui_tile_gap"
+            android:layout_marginTop="@dimen/ds_space_s"
             android:clickable="true"
             android:focusable="true">
 
@@ -121,7 +121,7 @@
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="@dimen/ui_tile_gap_half"
+                        android:layout_marginTop="@dimen/ds_space_xs"
                         android:text="@string/settings_notifications_subtitle"
                         android:textAppearance="?attr/textAppearanceBodySmall"
                         android:textColor="?attr/colorOnSurfaceVariant" />
@@ -140,7 +140,7 @@
             style="@style/Widget.Home.Card"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="@dimen/ui_tile_gap"
+            android:layout_marginTop="@dimen/ds_space_s"
             android:clickable="true"
             android:focusable="true">
 
@@ -178,7 +178,7 @@
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="@dimen/ui_tile_gap_half"
+                        android:layout_marginTop="@dimen/ds_space_xs"
                         android:text="@string/settings_history_subtitle"
                         android:textAppearance="?attr/textAppearanceBodySmall"
                         android:textColor="?attr/colorOnSurfaceVariant" />
@@ -197,7 +197,7 @@
             style="@style/Widget.Home.Card"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="@dimen/ui_tile_gap"
+            android:layout_marginTop="@dimen/ds_space_s"
             android:clickable="true"
             android:focusable="true">
 
@@ -235,7 +235,7 @@
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="@dimen/ui_tile_gap_half"
+                        android:layout_marginTop="@dimen/ds_space_xs"
                         android:text="@string/settings_appearance_subtitle"
                         android:textAppearance="?attr/textAppearanceBodySmall"
                         android:textColor="?attr/colorOnSurfaceVariant" />
@@ -247,6 +247,26 @@
                     android:importantForAccessibility="no"
                     android:src="@drawable/settings_ic_chevron" />
             </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/settings_design_system"
+            style="@style/Widget.Home.Card"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/ds_space_s"
+            android:clickable="true"
+            android:focusable="true"
+            android:visibility="gone">
+
+            <dev.proflyder.home.core.designsystem.ListRow
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingStart="@dimen/ds_space_l"
+                android:paddingEnd="@dimen/ds_space_l"
+                app:rowChevron="true"
+                app:rowIcon="@drawable/settings_ic_palette"
+                app:rowSubtitle="@string/ds_catalog_entry_summary"
+                app:rowTitle="@string/ds_catalog_entry" />
         </com.google.android.material.card.MaterialCardView>
     </LinearLayout>
 </androidx.core.widget.NestedScrollView>

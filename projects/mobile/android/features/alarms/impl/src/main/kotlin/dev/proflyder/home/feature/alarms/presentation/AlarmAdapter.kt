@@ -8,7 +8,7 @@ import dev.proflyder.home.core.model.Schedule
 import dev.proflyder.home.core.ui.AdapterCallback
 import dev.proflyder.home.core.ui.BaseListAdapter
 import dev.proflyder.home.core.ui.BaseViewHolder
-import dev.proflyder.home.core.ui.HomeMotion
+import dev.proflyder.home.core.designsystem.HomeMotion
 import dev.proflyder.home.feature.alarms.impl.databinding.ItemAlarmBinding
 import java.time.Instant
 import kotlin.math.roundToInt

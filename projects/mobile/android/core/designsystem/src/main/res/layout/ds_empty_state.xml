@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<merge xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    tools:parentTag="android.widget.LinearLayout">
+
+    <ImageView
+        android:id="@+id/ds_empty_icon"
+        android:layout_width="@dimen/ds_empty_icon"
+        android:layout_height="@dimen/ds_empty_icon"
+        android:layout_marginBottom="@dimen/ds_space_l"
+        android:importantForAccessibility="no"
+        android:visibility="gone"
+        app:tint="?attr/colorOnSurfaceVariant" />
+
+    <TextView
+        android:id="@+id/ds_empty_text"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:textAppearance="?attr/textAppearanceBodyLarge"
+        android:textColor="?attr/colorOnSurface"
+        tools:ignore="SelectableText" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/ds_empty_action"
+        style="@style/Widget.Home.Button.Filled.M"
+        android:layout_width="wrap_content"
+        android:layout_marginTop="@dimen/ds_space_l"
+        android:visibility="gone" />
+</merge>

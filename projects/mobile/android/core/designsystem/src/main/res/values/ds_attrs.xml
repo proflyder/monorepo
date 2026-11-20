@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <attr name="homeDeviceTileStyle" format="reference" />
+
+    <declare-styleable name="ListRow">
+        <attr name="rowIcon" format="reference" />
+        <attr name="rowTitle" format="string" />
+        <attr name="rowSubtitle" format="string" />
+        <attr name="rowValue" format="string" />
+        <attr name="rowChevron" format="boolean" />
+        <attr name="rowSwitch" format="boolean" />
+    </declare-styleable>
+
+    <declare-styleable name="EmptyState">
+        <attr name="emptyIcon" format="reference" />
+        <attr name="emptyText" format="string" />
+        <attr name="emptyAction" format="string" />
+    </declare-styleable>
+
+    <declare-styleable name="DeviceTile">
+        <attr name="tileIcon" format="reference" />
+        <attr name="tileTitle" format="string" />
+        <attr name="tileStatus" format="string" />
+        <attr name="tileOn" format="boolean" />
+    </declare-styleable>
+</resources>

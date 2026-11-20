@@ -1,0 +1,349 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Widget.Home.Button.Filled" parent="Widget.Material3.Button">
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:textAllCaps">false</item>
+    </style>
+
+    <style name="Widget.Home.Button.Filled.S" parent="Widget.Home.Button.Filled">
+        <item name="android:layout_height">@dimen/ds_control_s</item>
+        <item name="android:minHeight">@dimen/ds_control_s</item>
+        <item name="android:minWidth">0dp</item>
+        <item name="android:paddingStart">@dimen/ds_space_m</item>
+        <item name="android:paddingEnd">@dimen/ds_space_m</item>
+        <item name="cornerRadius">@dimen/ds_radius_m</item>
+        <item name="iconSize">@dimen/ds_icon_s</item>
+        <item name="android:textAppearance">?attr/textAppearanceLabelMedium</item>
+    </style>
+
+    <style name="Widget.Home.Button.Filled.M" parent="Widget.Home.Button.Filled">
+        <item name="android:layout_height">@dimen/ds_control_m</item>
+        <item name="android:minHeight">@dimen/ds_control_m</item>
+        <item name="android:minWidth">@dimen/ds_button_min_width</item>
+        <item name="android:paddingStart">@dimen/ds_space_l</item>
+        <item name="android:paddingEnd">@dimen/ds_space_l</item>
+        <item name="cornerRadius">@dimen/ds_radius_l</item>
+        <item name="iconSize">@dimen/ds_icon_s</item>
+        <item name="android:textAppearance">?attr/textAppearanceLabelLarge</item>
+    </style>
+
+    <style name="Widget.Home.Button.Filled.L" parent="Widget.Home.Button.Filled">
+        <item name="android:layout_height">@dimen/ds_control_l</item>
+        <item name="android:minHeight">@dimen/ds_control_l</item>
+        <item name="android:minWidth">@dimen/ds_button_min_width</item>
+        <item name="android:paddingStart">@dimen/ds_space_xl</item>
+        <item name="android:paddingEnd">@dimen/ds_space_xl</item>
+        <item name="cornerRadius">@dimen/ds_radius_l</item>
+        <item name="iconSize">@dimen/ds_icon_s</item>
+        <item name="android:textAppearance">?attr/textAppearanceLabelLarge</item>
+    </style>
+
+    <style name="Widget.Home.Button.Tonal" parent="Widget.Material3.Button.TonalButton">
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:textAllCaps">false</item>
+    </style>
+
+    <style name="Widget.Home.Button.Tonal.S" parent="Widget.Home.Button.Tonal">
+        <item name="android:layout_height">@dimen/ds_control_s</item>
+        <item name="android:minHeight">@dimen/ds_control_s</item>
+        <item name="android:minWidth">0dp</item>
+        <item name="android:paddingStart">@dimen/ds_space_m</item>
+        <item name="android:paddingEnd">@dimen/ds_space_m</item>
+        <item name="cornerRadius">@dimen/ds_radius_m</item>
+        <item name="iconSize">@dimen/ds_icon_s</item>
+        <item name="android:textAppearance">?attr/textAppearanceLabelMedium</item>
+    </style>
+
+    <style name="Widget.Home.Button.Tonal.M" parent="Widget.Home.Button.Tonal">
+        <item name="android:layout_height">@dimen/ds_control_m</item>
+        <item name="android:minHeight">@dimen/ds_control_m</item>
+        <item name="android:minWidth">@dimen/ds_button_min_width</item>
+        <item name="android:paddingStart">@dimen/ds_space_l</item>
+        <item name="android:paddingEnd">@dimen/ds_space_l</item>
+        <item name="cornerRadius">@dimen/ds_radius_l</item>
+        <item name="iconSize">@dimen/ds_icon_s</item>
+        <item name="android:textAppearance">?attr/textAppearanceLabelLarge</item>
+    </style>
+
+    <style name="Widget.Home.Button.Tonal.L" parent="Widget.Home.Button.Tonal">
+        <item name="android:layout_height">@dimen/ds_control_l</item>
+        <item name="android:minHeight">@dimen/ds_control_l</item>
+        <item name="android:minWidth">@dimen/ds_button_min_width</item>
+        <item name="android:paddingStart">@dimen/ds_space_xl</item>
+        <item name="android:paddingEnd">@dimen/ds_space_xl</item>
+        <item name="cornerRadius">@dimen/ds_radius_l</item>
+        <item name="iconSize">@dimen/ds_icon_s</item>
+        <item name="android:textAppearance">?attr/textAppearanceLabelLarge</item>
+    </style>
+
+    <style name="Widget.Home.Button.Outlined" parent="Widget.Material3.Button.OutlinedButton">
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="strokeWidth">@dimen/ds_stroke_thin</item>
+    </style>
+
+    <style name="Widget.Home.Button.Outlined.S" parent="Widget.Home.Button.Outlined">
+        <item name="android:layout_height">@dimen/ds_control_s</item>
+        <item name="android:minHeight">@dimen/ds_control_s</item>
+        <item name="android:minWidth">0dp</item>
+        <item name="android:paddingStart">@dimen/ds_space_m</item>
+        <item name="android:paddingEnd">@dimen/ds_space_m</item>
+        <item name="cornerRadius">@dimen/ds_radius_m</item>
+        <item name="iconSize">@dimen/ds_icon_s</item>
+        <item name="android:textAppearance">?attr/textAppearanceLabelMedium</item>
+    </style>
+
+    <style name="Widget.Home.Button.Outlined.M" parent="Widget.Home.Button.Outlined">
+        <item name="android:layout_height">@dimen/ds_control_m</item>
+        <item name="android:minHeight">@dimen/ds_control_m</item>
+        <item name="android:minWidth">@dimen/ds_button_min_width</item>
+        <item name="android:paddingStart">@dimen/ds_space_l</item>
+        <item name="android:paddingEnd">@dimen/ds_space_l</item>
+        <item name="cornerRadius">@dimen/ds_radius_l</item>
+        <item name="iconSize">@dimen/ds_icon_s</item>
+        <item name="android:textAppearance">?attr/textAppearanceLabelLarge</item>
+    </style>
+
+    <style name="Widget.Home.Button.Outlined.L" parent="Widget.Home.Button.Outlined">
+        <item name="android:layout_height">@dimen/ds_control_l</item>
+        <item name="android:minHeight">@dimen/ds_control_l</item>
+        <item name="android:minWidth">@dimen/ds_button_min_width</item>
+        <item name="android:paddingStart">@dimen/ds_space_xl</item>
+        <item name="android:paddingEnd">@dimen/ds_space_xl</item>
+        <item name="cornerRadius">@dimen/ds_radius_l</item>
+        <item name="iconSize">@dimen/ds_icon_s</item>
+        <item name="android:textAppearance">?attr/textAppearanceLabelLarge</item>
+    </style>
+
+    <style name="Widget.Home.Button.Text" parent="Widget.Material3.Button.TextButton">
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:textAllCaps">false</item>
+    </style>
+
+    <style name="Widget.Home.Button.Text.S" parent="Widget.Home.Button.Text">
+        <item name="android:layout_height">@dimen/ds_control_s</item>
+        <item name="android:minHeight">@dimen/ds_control_s</item>
+        <item name="android:minWidth">0dp</item>
+        <item name="android:paddingStart">@dimen/ds_space_m</item>
+        <item name="android:paddingEnd">@dimen/ds_space_m</item>
+        <item name="cornerRadius">@dimen/ds_radius_m</item>
+        <item name="iconSize">@dimen/ds_icon_s</item>
+        <item name="android:textAppearance">?attr/textAppearanceLabelMedium</item>
+    </style>
+
+    <style name="Widget.Home.Button.Text.M" parent="Widget.Home.Button.Text">
+        <item name="android:layout_height">@dimen/ds_control_m</item>
+        <item name="android:minHeight">@dimen/ds_control_m</item>
+        <item name="android:minWidth">0dp</item>
+        <item name="android:paddingStart">@dimen/ds_space_l</item>
+        <item name="android:paddingEnd">@dimen/ds_space_l</item>
+        <item name="cornerRadius">@dimen/ds_radius_l</item>
+        <item name="iconSize">@dimen/ds_icon_s</item>
+        <item name="android:textAppearance">?attr/textAppearanceLabelLarge</item>
+    </style>
+
+    <style name="Widget.Home.Button.Text.L" parent="Widget.Home.Button.Text">
+        <item name="android:layout_height">@dimen/ds_control_l</item>
+        <item name="android:minHeight">@dimen/ds_control_l</item>
+        <item name="android:minWidth">0dp</item>
+        <item name="android:paddingStart">@dimen/ds_space_xl</item>
+        <item name="android:paddingEnd">@dimen/ds_space_xl</item>
+        <item name="cornerRadius">@dimen/ds_radius_l</item>
+        <item name="iconSize">@dimen/ds_icon_s</item>
+        <item name="android:textAppearance">?attr/textAppearanceLabelLarge</item>
+    </style>
+
+    <style name="Widget.Home.Button.Destructive" parent="Widget.Material3.Button.OutlinedButton">
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="backgroundTint">@android:color/transparent</item>
+        <item name="strokeColor">@color/ds_destructive_stroke</item>
+        <item name="strokeWidth">@dimen/ds_stroke_thin</item>
+        <item name="android:textColor">@color/ds_destructive_content</item>
+        <item name="iconTint">@color/ds_destructive_content</item>
+        <item name="rippleColor">?attr/colorError</item>
+    </style>
+
+    <style name="Widget.Home.Button.Destructive.S" parent="Widget.Home.Button.Destructive">
+        <item name="android:layout_height">@dimen/ds_control_s</item>
+        <item name="android:minHeight">@dimen/ds_control_s</item>
+        <item name="android:minWidth">0dp</item>
+        <item name="android:paddingStart">@dimen/ds_space_m</item>
+        <item name="android:paddingEnd">@dimen/ds_space_m</item>
+        <item name="cornerRadius">@dimen/ds_radius_m</item>
+        <item name="iconSize">@dimen/ds_icon_s</item>
+        <item name="android:textAppearance">?attr/textAppearanceLabelMedium</item>
+    </style>
+
+    <style name="Widget.Home.Button.Destructive.M" parent="Widget.Home.Button.Destructive">
+        <item name="android:layout_height">@dimen/ds_control_m</item>
+        <item name="android:minHeight">@dimen/ds_control_m</item>
+        <item name="android:minWidth">@dimen/ds_button_min_width</item>
+        <item name="android:paddingStart">@dimen/ds_space_l</item>
+        <item name="android:paddingEnd">@dimen/ds_space_l</item>
+        <item name="cornerRadius">@dimen/ds_radius_l</item>
+        <item name="iconSize">@dimen/ds_icon_s</item>
+        <item name="android:textAppearance">?attr/textAppearanceLabelLarge</item>
+    </style>
+
+    <style name="Widget.Home.Button.Destructive.L" parent="Widget.Home.Button.Destructive">
+        <item name="android:layout_height">@dimen/ds_control_l</item>
+        <item name="android:minHeight">@dimen/ds_control_l</item>
+        <item name="android:minWidth">@dimen/ds_button_min_width</item>
+        <item name="android:paddingStart">@dimen/ds_space_xl</item>
+        <item name="android:paddingEnd">@dimen/ds_space_xl</item>
+        <item name="cornerRadius">@dimen/ds_radius_l</item>
+        <item name="iconSize">@dimen/ds_icon_s</item>
+        <item name="android:textAppearance">?attr/textAppearanceLabelLarge</item>
+    </style>
+
+    <style name="Widget.Home.IconButton.Standard" parent="Widget.Material3.Button.IconButton">
+        <item name="android:layout_width">@dimen/ds_touch_target</item>
+        <item name="android:layout_height">@dimen/ds_touch_target</item>
+        <item name="android:minWidth">@dimen/ds_touch_target</item>
+        <item name="android:minHeight">@dimen/ds_touch_target</item>
+        <item name="android:padding">0dp</item>
+        <item name="iconPadding">0dp</item>
+        <item name="iconGravity">textStart</item>
+        <item name="shapeAppearance">@style/ShapeAppearance.Material3.Corner.Full</item>
+    </style>
+
+    <style name="Widget.Home.IconButton.Standard.S" parent="Widget.Home.IconButton.Standard">
+        <item name="android:insetLeft">@dimen/ds_icon_button_inset_s</item>
+        <item name="android:insetRight">@dimen/ds_icon_button_inset_s</item>
+        <item name="android:insetTop">@dimen/ds_icon_button_inset_s</item>
+        <item name="android:insetBottom">@dimen/ds_icon_button_inset_s</item>
+        <item name="iconSize">@dimen/ds_icon_s</item>
+    </style>
+
+    <style name="Widget.Home.IconButton.Standard.M" parent="Widget.Home.IconButton.Standard">
+        <item name="android:insetLeft">@dimen/ds_icon_button_inset_m</item>
+        <item name="android:insetRight">@dimen/ds_icon_button_inset_m</item>
+        <item name="android:insetTop">@dimen/ds_icon_button_inset_m</item>
+        <item name="android:insetBottom">@dimen/ds_icon_button_inset_m</item>
+        <item name="iconSize">@dimen/ds_icon_m</item>
+    </style>
+
+    <style name="Widget.Home.IconButton.Standard.L" parent="Widget.Home.IconButton.Standard">
+        <item name="android:insetLeft">0dp</item>
+        <item name="android:insetRight">0dp</item>
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+        <item name="iconSize">@dimen/ds_icon_m</item>
+    </style>
+
+    <style name="Widget.Home.IconButton.Filled" parent="Widget.Material3.Button.IconButton.Filled">
+        <item name="android:layout_width">@dimen/ds_touch_target</item>
+        <item name="android:layout_height">@dimen/ds_touch_target</item>
+        <item name="android:minWidth">@dimen/ds_touch_target</item>
+        <item name="android:minHeight">@dimen/ds_touch_target</item>
+        <item name="android:padding">0dp</item>
+        <item name="iconPadding">0dp</item>
+        <item name="iconGravity">textStart</item>
+        <item name="shapeAppearance">@style/ShapeAppearance.Material3.Corner.Full</item>
+    </style>
+
+    <style name="Widget.Home.IconButton.Filled.S" parent="Widget.Home.IconButton.Filled">
+        <item name="android:insetLeft">@dimen/ds_icon_button_inset_s</item>
+        <item name="android:insetRight">@dimen/ds_icon_button_inset_s</item>
+        <item name="android:insetTop">@dimen/ds_icon_button_inset_s</item>
+        <item name="android:insetBottom">@dimen/ds_icon_button_inset_s</item>
+        <item name="iconSize">@dimen/ds_icon_s</item>
+    </style>
+
+    <style name="Widget.Home.IconButton.Filled.M" parent="Widget.Home.IconButton.Filled">
+        <item name="android:insetLeft">@dimen/ds_icon_button_inset_m</item>
+        <item name="android:insetRight">@dimen/ds_icon_button_inset_m</item>
+        <item name="android:insetTop">@dimen/ds_icon_button_inset_m</item>
+        <item name="android:insetBottom">@dimen/ds_icon_button_inset_m</item>
+        <item name="iconSize">@dimen/ds_icon_m</item>
+    </style>
+
+    <style name="Widget.Home.IconButton.Filled.L" parent="Widget.Home.IconButton.Filled">
+        <item name="android:insetLeft">0dp</item>
+        <item name="android:insetRight">0dp</item>
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+        <item name="iconSize">@dimen/ds_icon_m</item>
+    </style>
+
+    <style name="Widget.Home.IconButton.Tonal" parent="Widget.Material3.Button.IconButton.Filled.Tonal">
+        <item name="android:layout_width">@dimen/ds_touch_target</item>
+        <item name="android:layout_height">@dimen/ds_touch_target</item>
+        <item name="android:minWidth">@dimen/ds_touch_target</item>
+        <item name="android:minHeight">@dimen/ds_touch_target</item>
+        <item name="android:padding">0dp</item>
+        <item name="iconPadding">0dp</item>
+        <item name="iconGravity">textStart</item>
+        <item name="shapeAppearance">@style/ShapeAppearance.Material3.Corner.Full</item>
+    </style>
+
+    <style name="Widget.Home.IconButton.Tonal.S" parent="Widget.Home.IconButton.Tonal">
+        <item name="android:insetLeft">@dimen/ds_icon_button_inset_s</item>
+        <item name="android:insetRight">@dimen/ds_icon_button_inset_s</item>
+        <item name="android:insetTop">@dimen/ds_icon_button_inset_s</item>
+        <item name="android:insetBottom">@dimen/ds_icon_button_inset_s</item>
+        <item name="iconSize">@dimen/ds_icon_s</item>
+    </style>
+
+    <style name="Widget.Home.IconButton.Tonal.M" parent="Widget.Home.IconButton.Tonal">
+        <item name="android:insetLeft">@dimen/ds_icon_button_inset_m</item>
+        <item name="android:insetRight">@dimen/ds_icon_button_inset_m</item>
+        <item name="android:insetTop">@dimen/ds_icon_button_inset_m</item>
+        <item name="android:insetBottom">@dimen/ds_icon_button_inset_m</item>
+        <item name="iconSize">@dimen/ds_icon_m</item>
+    </style>
+
+    <style name="Widget.Home.IconButton.Tonal.L" parent="Widget.Home.IconButton.Tonal">
+        <item name="android:insetLeft">0dp</item>
+        <item name="android:insetRight">0dp</item>
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+        <item name="iconSize">@dimen/ds_icon_m</item>
+    </style>
+
+    <style name="Widget.Home.IconButton.Outlined" parent="Widget.Material3.Button.IconButton.Outlined">
+        <item name="android:layout_width">@dimen/ds_touch_target</item>
+        <item name="android:layout_height">@dimen/ds_touch_target</item>
+        <item name="android:minWidth">@dimen/ds_touch_target</item>
+        <item name="android:minHeight">@dimen/ds_touch_target</item>
+        <item name="android:padding">0dp</item>
+        <item name="iconPadding">0dp</item>
+        <item name="iconGravity">textStart</item>
+        <item name="shapeAppearance">@style/ShapeAppearance.Material3.Corner.Full</item>
+    </style>
+
+    <style name="Widget.Home.IconButton.Outlined.S" parent="Widget.Home.IconButton.Outlined">
+        <item name="android:insetLeft">@dimen/ds_icon_button_inset_s</item>
+        <item name="android:insetRight">@dimen/ds_icon_button_inset_s</item>
+        <item name="android:insetTop">@dimen/ds_icon_button_inset_s</item>
+        <item name="android:insetBottom">@dimen/ds_icon_button_inset_s</item>
+        <item name="iconSize">@dimen/ds_icon_s</item>
+    </style>
+
+    <style name="Widget.Home.IconButton.Outlined.M" parent="Widget.Home.IconButton.Outlined">
+        <item name="android:insetLeft">@dimen/ds_icon_button_inset_m</item>
+        <item name="android:insetRight">@dimen/ds_icon_button_inset_m</item>
+        <item name="android:insetTop">@dimen/ds_icon_button_inset_m</item>
+        <item name="android:insetBottom">@dimen/ds_icon_button_inset_m</item>
+        <item name="iconSize">@dimen/ds_icon_m</item>
+    </style>
+
+    <style name="Widget.Home.IconButton.Outlined.L" parent="Widget.Home.IconButton.Outlined">
+        <item name="android:insetLeft">0dp</item>
+        <item name="android:insetRight">0dp</item>
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+        <item name="iconSize">@dimen/ds_icon_m</item>
+    </style>
+</resources>

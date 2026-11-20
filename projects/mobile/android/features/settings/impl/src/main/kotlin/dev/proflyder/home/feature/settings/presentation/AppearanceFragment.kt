@@ -13,7 +13,7 @@ import dev.proflyder.home.core.theme.ColorRole
 import dev.proflyder.home.core.theme.R as ThemeR
 import dev.proflyder.home.core.theme.ThemeMode
 import dev.proflyder.home.core.ui.BaseFragment
-import dev.proflyder.home.core.ui.PillSegments
+import dev.proflyder.home.core.designsystem.PillSegments
 import dev.proflyder.home.core.ui.applyScrollBottomInset
 import dev.proflyder.home.core.ui.viewModelFactory
 import dev.proflyder.home.feature.settings.impl.R

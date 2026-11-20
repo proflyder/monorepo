@@ -1,0 +1,945 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/ds_catalog_scroll"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <LinearLayout
+        android:id="@+id/ds_catalog_content"
+        tools:ignore="TooManyViews"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <LinearLayout
+            android:id="@+id/ds_catalog_buttons"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="?attr/colorSurface"
+            android:orientation="vertical"
+            android:paddingStart="@dimen/ds_space_l"
+            android:paddingEnd="@dimen/ds_space_l"
+            android:paddingBottom="@dimen/ds_space_l">
+
+            <TextView
+                style="@style/Widget.Home.SectionHeader"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/ds_catalog_buttons" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/ds_space_s"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/ds_catalog_button_filled_s"
+                    style="@style/Widget.Home.Button.Filled.S"
+                    android:layout_width="wrap_content"
+                    android:layout_marginEnd="@dimen/ds_space_s"
+                    android:text="@string/ds_catalog_action" />
+                <com.google.android.material.button.MaterialButton
+                    style="@style/Widget.Home.Button.Filled.S"
+                    android:layout_width="wrap_content"
+                    android:layout_marginEnd="@dimen/ds_space_s"
+                    android:text="@string/ds_catalog_disabled"
+                    android:enabled="false" />
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/ds_catalog_loading_filled_s"
+                    style="@style/Widget.Home.Button.Filled.S"
+                    android:layout_width="wrap_content"
+                    android:layout_marginEnd="@dimen/ds_space_s"
+                    android:text="@string/ds_catalog_loading" />
+            </LinearLayout>
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/ds_space_s"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/ds_catalog_button_filled_m"
+                    style="@style/Widget.Home.Button.Filled.M"
+                    android:layout_width="wrap_content"
+                    android:layout_marginEnd="@dimen/ds_space_s"
+                    android:text="@string/ds_catalog_action" />
+                <com.google.android.material.button.MaterialButton
+                    style="@style/Widget.Home.Button.Filled.M"
+                    android:layout_width="wrap_content"
+                    android:layout_marginEnd="@dimen/ds_space_s"
+                    android:text="@string/ds_catalog_disabled"
+                    android:enabled="false" />
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/ds_catalog_loading_filled_m"
+                    style="@style/Widget.Home.Button.Filled.M"
+                    android:layout_width="wrap_content"
+                    android:layout_marginEnd="@dimen/ds_space_s"
+                    android:text="@string/ds_catalog_loading" />
+            </LinearLayout>
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/ds_space_s"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/ds_catalog_button_filled_l"
+                    style="@style/Widget.Home.Button.Filled.L"
+                    android:layout_width="wrap_content"
+                    android:layout_marginEnd="@dimen/ds_space_s"
+                    android:text="@string/ds_catalog_action" />
+                <com.google.android.material.button.MaterialButton
+                    style="@style/Widget.Home.Button.Filled.L"
+                    android:layout_width="wrap_content"
+                    android:layout_marginEnd="@dimen/ds_space_s"
+                    android:text="@string/ds_catalog_disabled"
+                    android:enabled="false" />
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/ds_catalog_loading_filled_l"
+                    style="@style/Widget.Home.Button.Filled.L"
+                    android:layout_width="wrap_content"
+                    android:layout_marginEnd="@dimen/ds_space_s"
+                    android:text="@string/ds_catalog_loading" />
+            </LinearLayout>
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/ds_space_s"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/ds_catalog_button_tonal_s"
+                    style="@style/Widget.Home.Button.Tonal.S"
+                    android:layout_width="wrap_content"
+                    android:layout_marginEnd="@dimen/ds_space_s"
+                    android:text="@string/ds_catalog_action" />
+                <com.google.android.material.button.MaterialButton
+                    style="@style/Widget.Home.Button.Tonal.S"
+                    android:layout_width="wrap_content"
+                    android:layout_marginEnd="@dimen/ds_space_s"
+                    android:text="@string/ds_catalog_disabled"
+                    android:enabled="false" />
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/ds_catalog_loading_tonal_s"
+                    style="@style/Widget.Home.Button.Tonal.S"
+                    android:layout_width="wrap_content"
+                    android:layout_marginEnd="@dimen/ds_space_s"
+                    android:text="@string/ds_catalog_loading" />
+            </LinearLayout>
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/ds_space_s"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/ds_catalog_button_tonal_m"
+                    style="@style/Widget.Home.Button.Tonal.M"
+                    android:layout_width="wrap_content"
+                    android:layout_marginEnd="@dimen/ds_space_s"
+                    android:text="@string/ds_catalog_action" />
+                <com.google.android.material.button.MaterialButton
+                    style="@style/Widget.Home.Button.Tonal.M"
+                    android:layout_width="wrap_content"
+                    android:layout_marginEnd="@dimen/ds_space_s"
+                    android:text="@string/ds_catalog_disabled"
+                    android:enabled="false" />
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/ds_catalog_loading_tonal_m"
+                    style="@style/Widget.Home.Button.Tonal.M"
+                    android:layout_width="wrap_content"
+                    android:layout_marginEnd="@dimen/ds_space_s"
+                    android:text="@string/ds_catalog_loading" />
+            </LinearLayout>
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/ds_space_s"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/ds_catalog_button_tonal_l"
+                    style="@style/Widget.Home.Button.Tonal.L"
+                    android:layout_width="wrap_content"
+                    android:layout_marginEnd="@dimen/ds_space_s"
+                    android:text="@string/ds_catalog_action" />
+                <com.google.android.material.button.MaterialButton
+                    style="@style/Widget.Home.Button.Tonal.L"
+                    android:layout_width="wrap_content"
+                    android:layout_marginEnd="@dimen/ds_space_s"
+                    android:text="@string/ds_catalog_disabled"
+                    android:enabled="false" />
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/ds_catalog_loading_tonal_l"
+                    style="@style/Widget.Home.Button.Tonal.L"
+                    android:layout_width="wrap_content"
+                    android:layout_marginEnd="@dimen/ds_space_s"
+                    android:text="@string/ds_catalog_loading" />
+            </LinearLayout>
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/ds_space_s"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/ds_catalog_button_outlined_s"
+                    style="@style/Widget.Home.Button.Outlined.S"
+                    android:layout_width="wrap_content"
+                    android:layout_marginEnd="@dimen/ds_space_s"
+                    android:text="@string/ds_catalog_action" />
+                <com.google.android.material.button.MaterialButton
+                    style="@style/Widget.Home.Button.Outlined.S"
+                    android:layout_width="wrap_content"
+                    android:layout_marginEnd="@dimen/ds_space_s"
+                    android:text="@string/ds_catalog_disabled"
+                    android:enabled="false" />
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/ds_catalog_loading_outlined_s"
+                    style="@style/Widget.Home.Button.Outlined.S"
+                    android:layout_width="wrap_content"
+                    android:layout_marginEnd="@dimen/ds_space_s"
+                    android:text="@string/ds_catalog_loading" />
+            </LinearLayout>
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/ds_space_s"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/ds_catalog_button_outlined_m"
+                    style="@style/Widget.Home.Button.Outlined.M"
+                    android:layout_width="wrap_content"
+                    android:layout_marginEnd="@dimen/ds_space_s"
+                    android:text="@string/ds_catalog_action" />
+                <com.google.android.material.button.MaterialButton
+                    style="@style/Widget.Home.Button.Outlined.M"
+                    android:layout_width="wrap_content"
+                    android:layout_marginEnd="@dimen/ds_space_s"
+                    android:text="@string/ds_catalog_disabled"
+                    android:enabled="false" />
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/ds_catalog_loading_outlined_m"
+                    style="@style/Widget.Home.Button.Outlined.M"
+                    android:layout_width="wrap_content"
+                    android:layout_marginEnd="@dimen/ds_space_s"
+                    android:text="@string/ds_catalog_loading" />
+            </LinearLayout>
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/ds_space_s"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/ds_catalog_button_outlined_l"
+                    style="@style/Widget.Home.Button.Outlined.L"
+                    android:layout_width="wrap_content"
+                    android:layout_marginEnd="@dimen/ds_space_s"
+                    android:text="@string/ds_catalog_action" />
+                <com.google.android.material.button.MaterialButton
+                    style="@style/Widget.Home.Button.Outlined.L"
+                    android:layout_width="wrap_content"
+                    android:layout_marginEnd="@dimen/ds_space_s"
+                    android:text="@string/ds_catalog_disabled"
+                    android:enabled="false" />
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/ds_catalog_loading_outlined_l"
+                    style="@style/Widget.Home.Button.Outlined.L"
+                    android:layout_width="wrap_content"
+                    android:layout_marginEnd="@dimen/ds_space_s"
+                    android:text="@string/ds_catalog_loading" />
+            </LinearLayout>
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/ds_space_s"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/ds_catalog_button_text_s"
+                    style="@style/Widget.Home.Button.Text.S"
+                    android:layout_width="wrap_content"
+                    android:layout_marginEnd="@dimen/ds_space_s"
+                    android:text="@string/ds_catalog_action" />
+                <com.google.android.material.button.MaterialButton
+                    style="@style/Widget.Home.Button.Text.S"
+                    android:layout_width="wrap_content"
+                    android:layout_marginEnd="@dimen/ds_space_s"
+                    android:text="@string/ds_catalog_disabled"
+                    android:enabled="false" />
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/ds_catalog_loading_text_s"
+                    style="@style/Widget.Home.Button.Text.S"
+                    android:layout_width="wrap_content"
+                    android:layout_marginEnd="@dimen/ds_space_s"
+                    android:text="@string/ds_catalog_loading" />
+            </LinearLayout>
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/ds_space_s"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/ds_catalog_button_text_m"
+                    style="@style/Widget.Home.Button.Text.M"
+                    android:layout_width="wrap_content"
+                    android:layout_marginEnd="@dimen/ds_space_s"
+                    android:text="@string/ds_catalog_action" />
+                <com.google.android.material.button.MaterialButton
+                    style="@style/Widget.Home.Button.Text.M"
+                    android:layout_width="wrap_content"
+                    android:layout_marginEnd="@dimen/ds_space_s"
+                    android:text="@string/ds_catalog_disabled"
+                    android:enabled="false" />
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/ds_catalog_loading_text_m"
+                    style="@style/Widget.Home.Button.Text.M"
+                    android:layout_width="wrap_content"
+                    android:layout_marginEnd="@dimen/ds_space_s"
+                    android:text="@string/ds_catalog_loading" />
+            </LinearLayout>
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/ds_space_s"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/ds_catalog_button_text_l"
+                    style="@style/Widget.Home.Button.Text.L"
+                    android:layout_width="wrap_content"
+                    android:layout_marginEnd="@dimen/ds_space_s"
+                    android:text="@string/ds_catalog_action" />
+                <com.google.android.material.button.MaterialButton
+                    style="@style/Widget.Home.Button.Text.L"
+                    android:layout_width="wrap_content"
+                    android:layout_marginEnd="@dimen/ds_space_s"
+                    android:text="@string/ds_catalog_disabled"
+                    android:enabled="false" />
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/ds_catalog_loading_text_l"
+                    style="@style/Widget.Home.Button.Text.L"
+                    android:layout_width="wrap_content"
+                    android:layout_marginEnd="@dimen/ds_space_s"
+                    android:text="@string/ds_catalog_loading" />
+            </LinearLayout>
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/ds_space_s"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/ds_catalog_button_destructive_s"
+                    style="@style/Widget.Home.Button.Destructive.S"
+                    android:layout_width="wrap_content"
+                    android:layout_marginEnd="@dimen/ds_space_s"
+                    android:text="@string/ds_catalog_delete" />
+                <com.google.android.material.button.MaterialButton
+                    style="@style/Widget.Home.Button.Destructive.S"
+                    android:layout_width="wrap_content"
+                    android:layout_marginEnd="@dimen/ds_space_s"
+                    android:text="@string/ds_catalog_disabled"
+                    android:enabled="false" />
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/ds_catalog_loading_destructive_s"
+                    style="@style/Widget.Home.Button.Destructive.S"
+                    android:layout_width="wrap_content"
+                    android:layout_marginEnd="@dimen/ds_space_s"
+                    android:text="@string/ds_catalog_loading" />
+            </LinearLayout>
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/ds_space_s"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/ds_catalog_button_destructive_m"
+                    style="@style/Widget.Home.Button.Destructive.M"
+                    android:layout_width="wrap_content"
+                    android:layout_marginEnd="@dimen/ds_space_s"
+                    android:text="@string/ds_catalog_delete" />
+                <com.google.android.material.button.MaterialButton
+                    style="@style/Widget.Home.Button.Destructive.M"
+                    android:layout_width="wrap_content"
+                    android:layout_marginEnd="@dimen/ds_space_s"
+                    android:text="@string/ds_catalog_disabled"
+                    android:enabled="false" />
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/ds_catalog_loading_destructive_m"
+                    style="@style/Widget.Home.Button.Destructive.M"
+                    android:layout_width="wrap_content"
+                    android:layout_marginEnd="@dimen/ds_space_s"
+                    android:text="@string/ds_catalog_loading" />
+            </LinearLayout>
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/ds_space_s"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/ds_catalog_button_destructive_l"
+                    style="@style/Widget.Home.Button.Destructive.L"
+                    android:layout_width="wrap_content"
+                    android:layout_marginEnd="@dimen/ds_space_s"
+                    android:text="@string/ds_catalog_delete" />
+                <com.google.android.material.button.MaterialButton
+                    style="@style/Widget.Home.Button.Destructive.L"
+                    android:layout_width="wrap_content"
+                    android:layout_marginEnd="@dimen/ds_space_s"
+                    android:text="@string/ds_catalog_disabled"
+                    android:enabled="false" />
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/ds_catalog_loading_destructive_l"
+                    style="@style/Widget.Home.Button.Destructive.L"
+                    android:layout_width="wrap_content"
+                    android:layout_marginEnd="@dimen/ds_space_s"
+                    android:text="@string/ds_catalog_loading" />
+            </LinearLayout>
+
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/ds_catalog_icon_buttons"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="?attr/colorSurface"
+            android:orientation="vertical"
+            android:paddingStart="@dimen/ds_space_l"
+            android:paddingEnd="@dimen/ds_space_l"
+            android:paddingBottom="@dimen/ds_space_l">
+
+            <TextView
+                style="@style/Widget.Home.SectionHeader"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/ds_catalog_icon_buttons" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/ds_space_s"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/ds_catalog_icon_standard_s"
+                    style="@style/Widget.Home.IconButton.Standard.S"
+                    android:layout_width="wrap_content"
+                    android:contentDescription="@string/ds_catalog_icon_action"
+                    app:icon="@drawable/ds_ic_add" />
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/ds_catalog_icon_standard_m"
+                    style="@style/Widget.Home.IconButton.Standard.M"
+                    android:layout_width="wrap_content"
+                    android:contentDescription="@string/ds_catalog_icon_action"
+                    app:icon="@drawable/ds_ic_add" />
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/ds_catalog_icon_standard_l"
+                    style="@style/Widget.Home.IconButton.Standard.L"
+                    android:layout_width="wrap_content"
+                    android:contentDescription="@string/ds_catalog_icon_action"
+                    app:icon="@drawable/ds_ic_add" />
+                <com.google.android.material.button.MaterialButton
+                    style="@style/Widget.Home.IconButton.Standard.M"
+                    android:layout_width="wrap_content"
+                    android:contentDescription="@string/ds_catalog_icon_action"
+                    android:enabled="false"
+                    app:icon="@drawable/ds_ic_add" />
+            </LinearLayout>
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/ds_space_s"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/ds_catalog_icon_filled_s"
+                    style="@style/Widget.Home.IconButton.Filled.S"
+                    android:layout_width="wrap_content"
+                    android:contentDescription="@string/ds_catalog_icon_action"
+                    app:icon="@drawable/ds_ic_add" />
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/ds_catalog_icon_filled_m"
+                    style="@style/Widget.Home.IconButton.Filled.M"
+                    android:layout_width="wrap_content"
+                    android:contentDescription="@string/ds_catalog_icon_action"
+                    app:icon="@drawable/ds_ic_add" />
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/ds_catalog_icon_filled_l"
+                    style="@style/Widget.Home.IconButton.Filled.L"
+                    android:layout_width="wrap_content"
+                    android:contentDescription="@string/ds_catalog_icon_action"
+                    app:icon="@drawable/ds_ic_add" />
+                <com.google.android.material.button.MaterialButton
+                    style="@style/Widget.Home.IconButton.Filled.M"
+                    android:layout_width="wrap_content"
+                    android:contentDescription="@string/ds_catalog_icon_action"
+                    android:enabled="false"
+                    app:icon="@drawable/ds_ic_add" />
+            </LinearLayout>
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/ds_space_s"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/ds_catalog_icon_tonal_s"
+                    style="@style/Widget.Home.IconButton.Tonal.S"
+                    android:layout_width="wrap_content"
+                    android:contentDescription="@string/ds_catalog_icon_action"
+                    app:icon="@drawable/ds_ic_add" />
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/ds_catalog_icon_tonal_m"
+                    style="@style/Widget.Home.IconButton.Tonal.M"
+                    android:layout_width="wrap_content"
+                    android:contentDescription="@string/ds_catalog_icon_action"
+                    app:icon="@drawable/ds_ic_add" />
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/ds_catalog_icon_tonal_l"
+                    style="@style/Widget.Home.IconButton.Tonal.L"
+                    android:layout_width="wrap_content"
+                    android:contentDescription="@string/ds_catalog_icon_action"
+                    app:icon="@drawable/ds_ic_add" />
+                <com.google.android.material.button.MaterialButton
+                    style="@style/Widget.Home.IconButton.Tonal.M"
+                    android:layout_width="wrap_content"
+                    android:contentDescription="@string/ds_catalog_icon_action"
+                    android:enabled="false"
+                    app:icon="@drawable/ds_ic_add" />
+            </LinearLayout>
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/ds_space_s"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/ds_catalog_icon_outlined_s"
+                    style="@style/Widget.Home.IconButton.Outlined.S"
+                    android:layout_width="wrap_content"
+                    android:contentDescription="@string/ds_catalog_icon_action"
+                    app:icon="@drawable/ds_ic_add" />
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/ds_catalog_icon_outlined_m"
+                    style="@style/Widget.Home.IconButton.Outlined.M"
+                    android:layout_width="wrap_content"
+                    android:contentDescription="@string/ds_catalog_icon_action"
+                    app:icon="@drawable/ds_ic_add" />
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/ds_catalog_icon_outlined_l"
+                    style="@style/Widget.Home.IconButton.Outlined.L"
+                    android:layout_width="wrap_content"
+                    android:contentDescription="@string/ds_catalog_icon_action"
+                    app:icon="@drawable/ds_ic_add" />
+                <com.google.android.material.button.MaterialButton
+                    style="@style/Widget.Home.IconButton.Outlined.M"
+                    android:layout_width="wrap_content"
+                    android:contentDescription="@string/ds_catalog_icon_action"
+                    android:enabled="false"
+                    app:icon="@drawable/ds_ic_add" />
+            </LinearLayout>
+
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/ds_catalog_fabs"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="?attr/colorSurface"
+            android:orientation="vertical"
+            android:paddingStart="@dimen/ds_space_l"
+            android:paddingEnd="@dimen/ds_space_l"
+            android:paddingBottom="@dimen/ds_space_l">
+
+            <TextView
+                style="@style/Widget.Home.SectionHeader"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/ds_catalog_fabs" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/ds_space_s"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+                <dev.proflyder.home.core.designsystem.OutlinedFloatingActionButton
+                    android:id="@+id/ds_catalog_fab"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_margin="@dimen/ds_space_s"
+                    android:contentDescription="@string/ds_catalog_icon_action"
+                    android:src="@drawable/ds_ic_add" />
+
+                <dev.proflyder.home.core.designsystem.OutlinedFloatingActionButton
+                    android:id="@+id/ds_catalog_fab_small"
+                    style="@style/Widget.Home.FloatingActionButton.Small"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_margin="@dimen/ds_space_s"
+                    android:contentDescription="@string/ds_catalog_icon_action"
+                    android:src="@drawable/ds_ic_add" />
+            </LinearLayout>
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/ds_space_s"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+                <com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
+                    android:id="@+id/ds_catalog_fab_extended"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_margin="@dimen/ds_space_s"
+                    android:text="@string/ds_catalog_fab_extended"
+                    app:icon="@drawable/ds_ic_add" />
+            </LinearLayout>
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/ds_space_s"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+                <TextView
+                    style="@style/Widget.Home.FabLabel"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="@dimen/ds_space_m"
+                    android:text="@string/ds_catalog_fab_label" />
+
+                <dev.proflyder.home.core.designsystem.OutlinedFloatingActionButton
+                    android:id="@+id/ds_catalog_fab_quick"
+                    style="@style/Widget.Home.FloatingActionButton.SmallSecondary"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_margin="@dimen/ds_space_s"
+                    android:contentDescription="@string/ds_catalog_fab_label"
+                    android:src="@drawable/ds_ic_add" />
+            </LinearLayout>
+
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/ds_catalog_fields"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="?attr/colorSurface"
+            android:orientation="vertical"
+            android:paddingStart="@dimen/ds_space_l"
+            android:paddingEnd="@dimen/ds_space_l"
+            android:paddingBottom="@dimen/ds_space_l">
+
+            <TextView
+                style="@style/Widget.Home.SectionHeader"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/ds_catalog_fields" />
+
+            <com.google.android.material.textfield.TextInputLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/ds_space_s"
+                android:hint="@string/ds_catalog_field_label"
+                app:endIconMode="clear_text"
+                app:helperText="@string/ds_catalog_field_helper"
+                app:placeholderText="@string/ds_catalog_field_placeholder">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="text" />
+            </com.google.android.material.textfield.TextInputLayout>
+            <com.google.android.material.textfield.TextInputLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/ds_space_s"
+                android:hint="@string/ds_catalog_field_label"
+                app:errorEnabled="true"
+                android:id="@+id/ds_catalog_field_error">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="text" />
+            </com.google.android.material.textfield.TextInputLayout>
+            <com.google.android.material.textfield.TextInputLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/ds_space_s"
+                android:hint="@string/ds_catalog_field_label"
+                android:enabled="false">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="text" />
+            </com.google.android.material.textfield.TextInputLayout>
+            <com.google.android.material.textfield.TextInputLayout
+                style="@style/Widget.Home.TextInput.Chat"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/ds_space_s">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:hint="@string/ds_catalog_chat_hint"
+                    android:inputType="textMultiLine" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/ds_catalog_cards"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="?attr/colorSurface"
+            android:orientation="vertical"
+            android:paddingStart="@dimen/ds_space_l"
+            android:paddingEnd="@dimen/ds_space_l"
+            android:paddingBottom="@dimen/ds_space_l">
+
+            <TextView
+                style="@style/Widget.Home.SectionHeader"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/ds_catalog_cards" />
+
+            <com.google.android.material.card.MaterialCardView
+                style="@style/Widget.Home.Card"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/ds_space_s">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:padding="@dimen/ds_space_l"
+                    android:text="@string/ds_catalog_card_filled"
+                    android:textAppearance="?attr/textAppearanceTitleMedium" />
+            </com.google.android.material.card.MaterialCardView>
+            <com.google.android.material.card.MaterialCardView
+                style="@style/Widget.Home.Card.Selected"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/ds_space_s">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:padding="@dimen/ds_space_l"
+                    android:text="@string/ds_catalog_card_selected"
+                    android:textAppearance="?attr/textAppearanceTitleMedium" />
+            </com.google.android.material.card.MaterialCardView>
+            <com.google.android.material.card.MaterialCardView
+                style="@style/Widget.Home.Card.StateOn"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/ds_space_s">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:padding="@dimen/ds_space_l"
+                    android:text="@string/ds_catalog_card_state_on"
+                    android:textAppearance="?attr/textAppearanceTitleMedium" />
+            </com.google.android.material.card.MaterialCardView>
+
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/ds_catalog_chips"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="?attr/colorSurface"
+            android:orientation="vertical"
+            android:paddingStart="@dimen/ds_space_l"
+            android:paddingEnd="@dimen/ds_space_l"
+            android:paddingBottom="@dimen/ds_space_l">
+
+            <TextView
+                style="@style/Widget.Home.SectionHeader"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/ds_catalog_chips" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/ds_space_s"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+                <com.google.android.material.chip.Chip
+                    style="@style/Widget.Home.Chip.Filter"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="@dimen/ds_space_s"
+                    android:checked="true"
+                    android:text="@string/ds_catalog_chip_filter" />
+
+                <com.google.android.material.chip.Chip
+                    style="@style/Widget.Home.Chip.Filter"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="@dimen/ds_space_s"
+                    android:text="@string/ds_catalog_chip_filter" />
+
+                <com.google.android.material.chip.Chip
+                    style="@style/Widget.Home.Chip.Assist"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/ds_catalog_chip_assist"
+                    app:chipIcon="@drawable/ds_ic_add" />
+            </LinearLayout>
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/ds_space_s"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+                <TextView
+                    android:id="@+id/ds_catalog_status_error"
+                    style="@style/Widget.Home.StatusChip.Error"
+                    android:layout_width="wrap_content"
+                    android:layout_marginEnd="@dimen/ds_space_s"
+                    android:text="@string/ds_catalog_status_error" />
+                <TextView
+                    android:id="@+id/ds_catalog_status_warning"
+                    style="@style/Widget.Home.StatusChip.Warning"
+                    android:layout_width="wrap_content"
+                    android:layout_marginEnd="@dimen/ds_space_s"
+                    android:text="@string/ds_catalog_status_warning" />
+                <TextView
+                    android:id="@+id/ds_catalog_status_success"
+                    style="@style/Widget.Home.StatusChip.Success"
+                    android:layout_width="wrap_content"
+                    android:layout_marginEnd="@dimen/ds_space_s"
+                    android:text="@string/ds_catalog_status_success" />
+                <TextView
+                    android:id="@+id/ds_catalog_status_neutral"
+                    style="@style/Widget.Home.StatusChip.Neutral"
+                    android:layout_width="wrap_content"
+                    android:layout_marginEnd="@dimen/ds_space_s"
+                    android:text="@string/ds_catalog_status_neutral" />
+            </LinearLayout>
+            <dev.proflyder.home.core.designsystem.PillSegments
+                android:id="@+id/ds_catalog_pills"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/ds_space_s" />
+
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/ds_catalog_lists"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="?attr/colorSurface"
+            android:orientation="vertical"
+            android:paddingStart="@dimen/ds_space_l"
+            android:paddingEnd="@dimen/ds_space_l"
+            android:paddingBottom="@dimen/ds_space_l">
+
+            <TextView
+                style="@style/Widget.Home.SectionHeader"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/ds_catalog_lists" />
+
+            <com.google.android.material.card.MaterialCardView
+                style="@style/Widget.Home.Card"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:paddingStart="@dimen/ds_space_l"
+                    android:paddingEnd="@dimen/ds_space_l">
+
+                    <dev.proflyder.home.core.designsystem.ListRow
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        app:rowChevron="true"
+                        app:rowIcon="@drawable/ds_ic_add"
+                        app:rowSubtitle="@string/ds_catalog_row_subtitle"
+                        app:rowTitle="@string/ds_catalog_row_title" />
+
+                    <dev.proflyder.home.core.designsystem.ListRow
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        app:rowTitle="@string/ds_catalog_row_title"
+                        app:rowValue="@string/ds_catalog_row_value" />
+
+                    <dev.proflyder.home.core.designsystem.ListRow
+                        android:id="@+id/ds_catalog_row_switch"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        app:rowSubtitle="@string/ds_catalog_row_subtitle"
+                        app:rowSwitch="true"
+                        app:rowTitle="@string/ds_catalog_row_title" />
+
+                    <dev.proflyder.home.core.designsystem.ListRow
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        app:rowSwitch="true"
+                        app:rowTitle="@string/ds_catalog_row_title" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/ds_catalog_states"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="?attr/colorSurface"
+            android:orientation="vertical"
+            android:paddingStart="@dimen/ds_space_l"
+            android:paddingEnd="@dimen/ds_space_l"
+            android:paddingBottom="@dimen/ds_space_l">
+
+            <TextView
+                style="@style/Widget.Home.SectionHeader"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/ds_catalog_states" />
+
+            <dev.proflyder.home.core.designsystem.EmptyState
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                app:emptyAction="@string/ds_catalog_action"
+                app:emptyIcon="@drawable/ds_ic_add"
+                app:emptyText="@string/ds_catalog_empty_text" />
+
+            <dev.proflyder.home.core.designsystem.DeviceTile
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/ds_space_s"
+                app:tileIcon="@drawable/ds_ic_add"
+                app:tileOn="true"
+                app:tileStatus="@string/ds_catalog_tile_on"
+                app:tileTitle="@string/ds_catalog_tile_title" />
+
+            <dev.proflyder.home.core.designsystem.DeviceTile
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/ds_space_s"
+                app:tileIcon="@drawable/ds_ic_add"
+                app:tileOn="false"
+                app:tileStatus="@string/ds_catalog_tile_off"
+                app:tileTitle="@string/ds_catalog_tile_title" />
+
+        </LinearLayout>
+    </LinearLayout>
+</androidx.core.widget.NestedScrollView>

@@ -10,10 +10,10 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:paddingStart="@dimen/ui_screen_padding"
-        android:paddingTop="@dimen/ui_screen_padding"
-        android:paddingEnd="@dimen/ui_screen_padding"
-        android:paddingBottom="@dimen/ui_section_gap">
+        android:paddingStart="@dimen/ds_space_l"
+        android:paddingTop="@dimen/ds_space_l"
+        android:paddingEnd="@dimen/ds_space_l"
+        android:paddingBottom="@dimen/ds_space_xl">
 
         <TextView
             android:id="@+id/push_intro"
@@ -28,7 +28,7 @@
             style="@style/Widget.Home.Card"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="@dimen/ui_screen_padding">
+            android:layout_marginTop="@dimen/ds_space_l">
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -67,8 +67,9 @@
 
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/push_notifications_action"
-                        style="@style/Widget.Home.CardButton.Tonal"
-                        android:layout_marginTop="@dimen/ui_tile_gap" />
+                        style="@style/Widget.Home.Button.Tonal.M"
+                        android:layout_width="wrap_content"
+                        android:layout_marginTop="@dimen/ds_space_s" />
                 </LinearLayout>
 
                 <LinearLayout
@@ -103,8 +104,9 @@
 
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/push_dnd_action"
-                        style="@style/Widget.Home.CardButton.Tonal"
-                        android:layout_marginTop="@dimen/ui_tile_gap" />
+                        style="@style/Widget.Home.Button.Tonal.M"
+                        android:layout_width="wrap_content"
+                        android:layout_marginTop="@dimen/ds_space_s" />
                 </LinearLayout>
 
                 <LinearLayout
@@ -139,8 +141,9 @@
 
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/push_full_screen_action"
-                        style="@style/Widget.Home.CardButton.Tonal"
-                        android:layout_marginTop="@dimen/ui_tile_gap" />
+                        style="@style/Widget.Home.Button.Tonal.M"
+                        android:layout_width="wrap_content"
+                        android:layout_marginTop="@dimen/ds_space_s" />
                 </LinearLayout>
 
                 <TextView
@@ -158,7 +161,7 @@
             style="@style/Widget.Home.Card"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="@dimen/ui_tile_gap">
+            android:layout_marginTop="@dimen/ds_space_s">
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -187,15 +190,16 @@
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/push_device_name_save"
-                    style="@style/Widget.Home.CardButton.Tonal"
-                    android:layout_marginTop="@dimen/ui_tile_gap"
+                    style="@style/Widget.Home.Button.Tonal.M"
+                    android:layout_width="wrap_content"
+                    android:layout_marginTop="@dimen/ds_space_s"
                     android:text="@string/push_device_name_save" />
 
                 <TextView
                     android:id="@+id/push_device_name_help"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="@dimen/ui_tile_gap"
+                    android:layout_marginTop="@dimen/ds_space_s"
                     android:text="@string/push_device_name_help"
                     android:textIsSelectable="true"
                     android:textAppearance="?attr/textAppearanceBodySmall"
@@ -207,7 +211,7 @@
             style="@style/Widget.Home.Card"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="@dimen/ui_tile_gap">
+            android:layout_marginTop="@dimen/ds_space_s">
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -228,7 +232,7 @@
                     android:id="@+id/push_registration"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="@dimen/ui_tile_gap"
+                    android:layout_marginTop="@dimen/ds_space_s"
                     android:textIsSelectable="true"
                     android:textAppearance="?attr/textAppearanceBodyMedium" />
 
@@ -236,14 +240,15 @@
                     android:id="@+id/push_progress"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="@dimen/ui_tile_gap"
+                    android:layout_marginTop="@dimen/ds_space_s"
                     android:indeterminate="true"
                     android:visibility="gone" />
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/push_register"
-                    style="@style/Widget.Home.CardButton.Tonal"
-                    android:layout_marginTop="@dimen/ui_tile_gap"
+                    style="@style/Widget.Home.Button.Tonal.M"
+                    android:layout_width="wrap_content"
+                    android:layout_marginTop="@dimen/ds_space_s"
                     android:text="@string/push_register"
                     app:icon="@drawable/push_ic_notification" />
             </LinearLayout>

@@ -26,7 +26,7 @@
                 android:id="@+id/control_scenario_icon"
                 android:layout_width="48dp"
                 android:layout_height="48dp"
-                android:background="@drawable/ui_bg_pill"
+                android:background="@drawable/ds_bg_pill"
                 android:importantForAccessibility="no"
                 android:padding="12dp"
                 app:tint="?attr/colorOnPrimaryContainer" />

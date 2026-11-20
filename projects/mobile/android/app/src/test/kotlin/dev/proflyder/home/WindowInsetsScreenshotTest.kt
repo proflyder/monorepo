@@ -19,7 +19,7 @@ import com.google.android.material.color.MaterialColors
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
 import com.google.android.material.textfield.TextInputLayout
-import dev.proflyder.home.core.ui.CardTextInputLayout
+import dev.proflyder.home.core.designsystem.CardTextInputLayout
 import dev.proflyder.home.core.theme.AppTheme
 import dev.proflyder.home.feature.alarms.AlarmEditorDestination
 import dev.proflyder.home.feature.chat.ChatRoute
@@ -154,7 +154,7 @@ class WindowInsetsScreenshotTest {
         val bar = root.findViewById<View>(AlarmsR.id.alarm_editor_save_bar)
         assertEquals("save bar is not on the keyboard", root.height - keyboard, bar.windowBottom())
         val save = root.findViewById<View>(AlarmsR.id.alarm_editor_save)
-        assertEquals("save button height", root.resources.getDimensionPixelSize(UiR.dimen.ui_save_bar_button_height), save.height)
+        assertEquals("save button height", root.resources.getDimensionPixelSize(UiR.dimen.ds_control_l), save.height)
         val nav = root.findViewById<View>(R.id.home_notice_anchor)
         assertFalse("bottom navigation stays above the keyboard", nav.isShown)
         assertTrue("field hides behind the save bar", field.windowBottom() <= bar.windowTop())
@@ -255,7 +255,7 @@ class WindowInsetsScreenshotTest {
 
     private fun assertHomeStyle(field: TextInputLayout) {
         val name = field.resources.getResourceEntryName(checkNotNull(field.editText).id)
-        val radius = field.resources.getDimension(UiR.dimen.ui_text_input_radius)
+        val radius = field.resources.getDimension(UiR.dimen.ds_radius_l)
         assertTrue("$name is not the card field", field is CardTextInputLayout)
         assertEquals(name, TextInputLayout.BOX_BACKGROUND_FILLED, field.boxBackgroundMode)
         assertEquals("$name has an underline", 0, field.boxStrokeWidth)
@@ -276,8 +276,8 @@ class WindowInsetsScreenshotTest {
         val card = field as CardTextInputLayout
         val res = field.resources
         val width = when {
-            focused -> res.getDimensionPixelSize(UiR.dimen.ui_text_input_focus_stroke)
-            else -> res.getDimensionPixelSize(UiR.dimen.ui_text_input_stroke)
+            focused -> res.getDimensionPixelSize(UiR.dimen.ds_stroke_thick)
+            else -> res.getDimensionPixelSize(UiR.dimen.ds_stroke_thin)
         }
         val color = when {
             focused -> MaterialColors.getColor(field, R.attr.colorStateOn)
@@ -298,7 +298,7 @@ class WindowInsetsScreenshotTest {
         assertTrue("no cards", cards.isNotEmpty())
         val color = MaterialColors.getColor(content, com.google.android.material.R.attr.colorSurfaceContainer)
         cards.forEach { assertCard(it, color) }
-        val height = content.resources.getDimensionPixelSize(UiR.dimen.ui_card_button_height)
+        val height = content.resources.getDimensionPixelSize(UiR.dimen.ds_control_m)
         cards.forEach { card -> card.all<MaterialButton>().filter { it.isShown }.forEach { assertCardButton(card, it, height) } }
     }
 
@@ -311,11 +311,11 @@ class WindowInsetsScreenshotTest {
         val content = card.getChildAt(0)
         val name = button.resources.getResourceEntryName(button.id)
         val room = content.width - content.paddingLeft - content.paddingRight
-        val minWidth = button.resources.getDimensionPixelSize(UiR.dimen.ui_card_button_min_width)
+        val minWidth = button.resources.getDimensionPixelSize(UiR.dimen.ds_button_min_width)
         assertTrue("$name is full width", button.width < room)
         assertTrue("$name narrower than the minimum", button.width >= minWidth)
         assertEquals("$name height", height, button.height)
-        assertEquals("$name corner", button.resources.getDimensionPixelSize(UiR.dimen.ui_card_button_radius), button.cornerRadius)
+        assertEquals("$name corner", button.resources.getDimensionPixelSize(UiR.dimen.ds_radius_l), button.cornerRadius)
         assertTrue("$name starts before the content edge", button.windowLeft() - content.windowLeft() >= content.paddingLeft)
     }
 

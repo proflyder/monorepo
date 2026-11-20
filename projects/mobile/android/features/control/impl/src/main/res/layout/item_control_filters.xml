@@ -4,7 +4,7 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:clipToPadding="false"
-    android:paddingTop="@dimen/ui_tile_gap"
+    android:paddingTop="@dimen/ds_space_s"
     android:scrollbars="none">
 
     <com.google.android.material.chip.ChipGroup

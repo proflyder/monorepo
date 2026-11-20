@@ -11,6 +11,7 @@ metro_android_library(
     manifest = "src/main/AndroidManifest.xml",
     resource_files = glob(["src/main/res/**"]),
     deps = [
+        "//projects/mobile/android/core/designsystem",
         "//projects/mobile/android/core/model",
         "//projects/mobile/android/core/theme",
         "@maven//:androidx_appcompat_appcompat",

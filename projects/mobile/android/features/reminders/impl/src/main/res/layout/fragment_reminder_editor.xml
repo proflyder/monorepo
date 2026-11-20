@@ -79,7 +79,8 @@
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/reminder_editor_save"
-            style="@style/Widget.Home.SaveBarButton"
+            style="@style/Widget.Home.Button.Filled.L"
+            android:layout_width="match_parent"
             android:layout_marginTop="16dp"
             android:text="@string/reminders_editor_save" />
 

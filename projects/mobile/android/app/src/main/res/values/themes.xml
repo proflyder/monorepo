@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
-    <style name="Theme.Home" parent="Theme.Material3.DayNight.NoActionBar">
+    <style name="Theme.Home" parent="Base.Theme.Home">
         <item name="colorPrimary">@color/home_primary</item>
         <item name="colorOnPrimary">@color/home_on_primary</item>
         <item name="colorPrimaryContainer">@color/home_primary_container</item>
@@ -29,46 +29,15 @@
         <item name="colorStateOn">?attr/colorPrimary</item>
         <item name="colorOnStateOn">?attr/colorOnPrimary</item>
         <item name="colorStateOnText">@color/home_state_on_text</item>
-        <item name="materialSwitchStyle">@style/Widget.Home.Switch</item>
         <item name="homeFabStrokeWidth">@dimen/theme_fab_stroke</item>
         <item name="homeFabStrokeColor">?attr/colorPrimary</item>
         <item name="homeFabGlowColor">?attr/colorPrimary</item>
         <item name="homeFabElevation">@dimen/theme_fab_elevation</item>
-        <item name="floatingActionButtonStyle">@style/Widget.Home.FloatingActionButton</item>
-        <item name="extendedFloatingActionButtonStyle">@style/Widget.Home.ExtendedFloatingActionButton</item>
-
-        <item name="shapeAppearanceSmallComponent">@style/ShapeAppearance.Home.Small</item>
-        <item name="shapeAppearanceMediumComponent">@style/ShapeAppearance.Home.Medium</item>
-        <item name="shapeAppearanceLargeComponent">@style/ShapeAppearance.Home.Large</item>
-
-        <item name="popupMenuStyle">@style/Widget.Home.PopupMenu</item>
-        <item name="listPopupWindowStyle">@style/Widget.Home.ListPopupWindow</item>
-        <item name="textAppearanceLargePopupMenu">@style/TextAppearance.Home.PopupMenuItem</item>
-        <item name="textAppearanceSmallPopupMenu">@style/TextAppearance.Home.PopupMenuItem</item>
-
-        <item name="textInputStyle">@style/Widget.Home.TextInput</item>
-        <item name="viewInflaterClass">dev.proflyder.home.core.ui.HomeViewInflater</item>
         <item name="bottomSheetDialogTheme">@style/ThemeOverlay.Home.BottomSheetDialog</item>
-
         <item name="android:statusBarColor">?attr/colorSurface</item>
         <item name="android:navigationBarColor">?attr/colorSurfaceContainer</item>
         <item name="android:windowLightStatusBar">@bool/home_light_bars</item>
         <item name="android:windowLightNavigationBar" tools:targetApi="27">@bool/home_light_bars</item>
-    </style>
-
-    <style name="ShapeAppearance.Home.Small" parent="ShapeAppearance.Material3.SmallComponent">
-        <item name="cornerFamily">rounded</item>
-        <item name="cornerSize">14dp</item>
-    </style>
-
-    <style name="ShapeAppearance.Home.Medium" parent="ShapeAppearance.Material3.MediumComponent">
-        <item name="cornerFamily">rounded</item>
-        <item name="cornerSize">22dp</item>
-    </style>
-
-    <style name="ShapeAppearance.Home.Large" parent="ShapeAppearance.Material3.LargeComponent">
-        <item name="cornerFamily">rounded</item>
-        <item name="cornerSize">28dp</item>
     </style>
 
     <style name="ThemeOverlay.Home.BottomSheetDialog" parent="ThemeOverlay.Material3.BottomSheetDialog">

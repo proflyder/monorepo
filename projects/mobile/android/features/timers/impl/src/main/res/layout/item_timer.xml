@@ -39,7 +39,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="12dp"
-                android:background="@drawable/ui_bg_pill"
+                android:background="@drawable/ds_bg_pill"
                 android:paddingStart="12dp"
                 android:paddingTop="4dp"
                 android:paddingEnd="12dp"
@@ -79,11 +79,9 @@
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/timer_cancel"
-                style="@style/Widget.Home.DangerTextButton"
+                style="@style/Widget.Home.Button.Destructive.M"
                 android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
                 android:layout_marginStart="4dp"
-                android:minHeight="44dp"
                 android:text="@string/timers_cancel" />
         </LinearLayout>
     </LinearLayout>

@@ -59,11 +59,9 @@
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/reminder_delete"
-            style="@style/Widget.Home.DangerTextButton"
+            style="@style/Widget.Home.Button.Destructive.M"
             android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
             android:layout_gravity="end"
-            android:minHeight="44dp"
             android:text="@string/reminders_delete" />
     </LinearLayout>
 </com.google.android.material.card.MaterialCardView>

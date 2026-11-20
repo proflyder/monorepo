@@ -20,9 +20,9 @@ import dev.proflyder.home.core.model.TimerState
 import dev.proflyder.home.core.ui.AdapterCallback
 import dev.proflyder.home.core.ui.BaseListAdapter
 import dev.proflyder.home.core.ui.BaseViewHolder
-import dev.proflyder.home.core.ui.DeviceStateViews
+import dev.proflyder.home.core.designsystem.DeviceStateViews
 import dev.proflyder.home.core.ui.PayloadSet
-import dev.proflyder.home.core.ui.PillSegments
+import dev.proflyder.home.core.designsystem.PillSegments
 import dev.proflyder.home.core.ui.ViewBinding
 import dev.proflyder.home.core.ui.setVisible
 import dev.proflyder.home.feature.control.ControlFilter

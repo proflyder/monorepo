@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:padding="@dimen/ds_space_l">
+
+    <ImageView
+        android:id="@+id/ds_tile_icon"
+        android:layout_width="@dimen/ds_control_m"
+        android:layout_height="@dimen/ds_control_m"
+        android:background="@drawable/ds_bg_tile_icon"
+        android:importantForAccessibility="no"
+        android:padding="@dimen/ds_space_s" />
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="@dimen/ds_space_m"
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/ds_tile_title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:maxLines="2"
+            android:textAppearance="?attr/textAppearanceTitleSmall"
+            android:textColor="?attr/colorOnSurface"
+            tools:ignore="SelectableText" />
+
+        <TextView
+            android:id="@+id/ds_tile_status"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:maxLines="1"
+            android:textAppearance="?attr/textAppearanceBodySmall"
+            tools:ignore="SelectableText" />
+    </LinearLayout>
+</LinearLayout>

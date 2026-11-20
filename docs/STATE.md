@@ -758,6 +758,12 @@
   все всплывающие меню — один компонент `HomePopupMenu`; Настройки → «Оформление»
   выбирают тему и режим Системный/Светлый/Тёмный, выбор в DataStore,
   применяется до первого кадра.
+  Дизайн-система — модуль `core/designsystem` (токены отступов/радиусов/высот,
+  кнопки `Widget.Home.Button.<Filled|Tonal|Outlined|Text|Destructive>.<S|M|L>`,
+  IconButton, FAB, поля, карточки, чипы, ListRow, EmptyState, StatusChip,
+  DeviceTile; цвета только из атрибутов темы); `core/ui` — не визуальные
+  утилиты. В debug-сборке Настройки → «Дизайн-система» — каталог всех
+  компонентов.
   Звонок на колонку — `features/call` + `home.v1.IntercomService`:
   server-streaming `Watch` по Connect/HTTP/1.1, аудио-only libwebrtc
   (`io.getstream:stream-webrtc-android` 1.3.10, Opus), self-managed Telecom

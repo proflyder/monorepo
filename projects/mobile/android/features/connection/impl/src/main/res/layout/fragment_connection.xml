@@ -125,7 +125,8 @@
 
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/connection_refresh_config"
-                        style="@style/Widget.Home.CardButton.Tonal"
+                        style="@style/Widget.Home.Button.Tonal.M"
+                        android:layout_width="wrap_content"
                         android:layout_marginTop="12dp"
                         android:text="@string/connection_remote_refresh" />
                 </LinearLayout>
@@ -195,13 +196,15 @@
 
                         <com.google.android.material.button.MaterialButton
                             android:id="@+id/connection_clear_token"
-                            style="@style/Widget.Home.CardButton.Danger"
-                            android:layout_marginEnd="@dimen/ui_tile_gap"
+                            style="@style/Widget.Home.Button.Destructive.M"
+                            android:layout_width="wrap_content"
+                            android:layout_marginEnd="@dimen/ds_space_s"
                             android:text="@string/connection_clear_token" />
 
                         <com.google.android.material.button.MaterialButton
                             android:id="@+id/connection_test"
-                            style="@style/Widget.Home.CardButton"
+                            style="@style/Widget.Home.Button.Filled.M"
+                            android:layout_width="wrap_content"
                             android:text="@string/connection_test" />
                     </LinearLayout>
 
