@@ -4,6 +4,11 @@ import android.app.Activity
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Paint
+import android.widget.ImageView
+import dev.proflyder.home.core.model.ChatAttachmentKind
+import dev.proflyder.home.feature.chat.data.LocalAttachment
 import android.view.LayoutInflater
 import android.view.View
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -43,15 +48,31 @@ class ChatScreenshotTest {
         return AppThemes.wrap(base, theme)
     }
 
-    private fun render(name: String, theme: AppTheme, timeline: ChatTimeline): FragmentChatBinding {
+    private class LocalImages : ChatAdapterCallbacks() {
+        override fun bindImage(media: BubbleMedia, target: ImageView) {
+            media.path?.let { target.setImageBitmap(decodeThumbnail(File(it), PHOTO_WIDTH)) }
+        }
+
+        override fun bindWave(media: BubbleMedia, target: VoiceWaveView) {
+            target.setLevels(FloatArray(VoiceWaveView.BARS) { 0.2f + 0.8f * kotlin.math.abs(kotlin.math.sin(it * 0.45f)) })
+        }
+    }
+
+    private fun render(
+        name: String,
+        theme: AppTheme,
+        timeline: ChatTimeline,
+        playback: VoicePlayback? = null,
+        prepare: (FragmentChatBinding) -> Unit = ::showReply,
+    ): FragmentChatBinding {
         val context = themed(theme)
         val binding = FragmentChatBinding.inflate(LayoutInflater.from(context))
-        val adapter = ChatAdapter(ChatAdapterCallbacks())
+        val adapter = ChatAdapter(LocalImages())
         binding.chatList.layoutManager = LinearLayoutManager(context).apply { stackFromEnd = true }
         binding.chatList.adapter = adapter
         binding.root.setBackgroundColor(com.google.android.material.color.MaterialColors.getColor(binding.root, MaterialR.attr.colorSurface))
-        adapter.submitList(ChatItems.build(timeline, ZoneOffset.ofHours(5)))
-        showReply(binding)
+        adapter.submitList(ChatItems.build(timeline, ZoneOffset.ofHours(5), playback))
+        prepare(binding)
         Robolectric.buildActivity(Activity::class.java).setup().get().setContentView(binding.root)
         binding.chatPanel.pinAboveKeyboard(binding.chatList)
         layout(binding.root)
@@ -61,6 +82,52 @@ class ChatScreenshotTest {
         shadowOf(android.os.Looper.getMainLooper()).idle()
         save(name, binding.root)
         return binding
+    }
+
+    private fun photo(): File {
+        val bitmap = Bitmap.createBitmap(PHOTO_WIDTH, PHOTO_HEIGHT, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        canvas.drawColor(Color.rgb(46, 125, 160))
+        canvas.drawCircle(PHOTO_WIDTH * 0.7f, PHOTO_HEIGHT * 0.35f, PHOTO_HEIGHT * 0.2f, Paint().apply { color = Color.rgb(255, 213, 79) })
+        val file = File.createTempFile("photo", ".jpg")
+        file.outputStream().use { bitmap.compress(Bitmap.CompressFormat.JPEG, PNG_QUALITY, it) }
+        return file
+    }
+
+    private fun media(): ChatTimeline {
+        val image = photo()
+        val outgoing = Outgoing(
+            "c13",
+            ChatFixtures.conversation[1].text,
+            null,
+            ChatFixtures.NOON + 13 * 60_000,
+            attachments = listOf(LocalAttachment(image.path, ChatAttachmentKind.IMAGE, "image/jpeg", image.name, image.length())),
+        )
+        val answer = ChatFixtures.message("m11", 11, ChatRole.ASSISTANT, ChatFixtures.conversation[1].text)
+        return ChatTimeline(
+            messages = listOf(ChatFixtures.voice, answer, ChatFixtures.log),
+            outbox = listOf(outgoing),
+            loaded = true,
+        )
+    }
+
+    private fun recording(binding: FragmentChatBinding) {
+        binding.chatRecording.visibility = View.VISIBLE
+        binding.chatCompose.visibility = View.GONE
+        binding.chatRecordingTime.text = android.text.format.DateUtils.formatElapsedTime(RECORDED_SECONDS)
+    }
+
+    @Test
+    fun mediaInCurrent() {
+        val playback = VoicePlayback("a-f_v", 2_600, 7_400, playing = true)
+        val binding = render("chat-media-current", AppTheme.CURRENT, media(), playback, prepare = {})
+        assertEquals(5, binding.chatList.adapter?.itemCount)
+    }
+
+    @Test
+    @Config(qualifiers = "ru-w411dp-h891dp-night-xxhdpi")
+    fun mediaInNeonDark() {
+        render("chat-media-neon-dark", AppTheme.NEON, media(), prepare = ::recording)
     }
 
     private fun showReply(binding: FragmentChatBinding) {
@@ -130,5 +197,8 @@ class ChatScreenshotTest {
         const val WIDTH_DP = 411
         const val HEIGHT_DP = 891
         const val PNG_QUALITY = 100
+        const val PHOTO_WIDTH = 640
+        const val PHOTO_HEIGHT = 480
+        const val RECORDED_SECONDS = 4L
     }
 }

@@ -8,4 +8,5 @@
     <style name="TextAppearance.Home.ChatMeta" parent="TextAppearance.Material3.LabelSmall">
         <item name="android:textColor">?attr/colorOnSurfaceVariant</item>
     </style>
+
 </resources>

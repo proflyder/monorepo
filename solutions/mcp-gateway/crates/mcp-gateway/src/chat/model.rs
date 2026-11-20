@@ -1,9 +1,12 @@
 use serde::{Deserialize, Serialize};
 
+pub use super::media::Attachment;
+
 pub const MAX_TEXT_CHARS: usize = 4000;
 pub const MAX_CLIENT_ID_CHARS: usize = 64;
 pub const DEFAULT_PAGE: usize = 50;
 pub const MAX_PAGE: usize = 200;
+pub const MAX_ATTACHMENTS: usize = 4;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -38,6 +41,9 @@ impl Role {
 pub enum Kind {
     Text,
     Alert,
+    Voice,
+    Image,
+    File,
 }
 
 impl Kind {
@@ -46,6 +52,9 @@ impl Kind {
         match self {
             Self::Text => "text",
             Self::Alert => "alert",
+            Self::Voice => "voice",
+            Self::Image => "image",
+            Self::File => "file",
         }
     }
 
@@ -53,6 +62,9 @@ impl Kind {
     pub fn parse(raw: &str) -> Self {
         match raw {
             "alert" => Self::Alert,
+            "voice" => Self::Voice,
+            "image" => Self::Image,
+            "file" => Self::File,
             _ => Self::Text,
         }
     }
@@ -102,6 +114,12 @@ pub enum ErrorKey {
     ChatUpstreamFailed,
     ChatInterrupted,
     ChatStorageFailed,
+    ChatAttachmentTooLarge,
+    ChatAttachmentUnsupported,
+    ChatAttachmentNotFound,
+    ChatTooManyAttachments,
+    ChatVoiceFormat,
+    ChatSttFailed,
 }
 
 impl ErrorKey {
@@ -118,6 +136,12 @@ impl ErrorKey {
             Self::ChatUpstreamFailed => "chat_upstream_failed",
             Self::ChatInterrupted => "chat_interrupted",
             Self::ChatStorageFailed => "chat_storage_failed",
+            Self::ChatAttachmentTooLarge => "chat_attachment_too_large",
+            Self::ChatAttachmentUnsupported => "chat_attachment_unsupported",
+            Self::ChatAttachmentNotFound => "chat_attachment_not_found",
+            Self::ChatTooManyAttachments => "chat_too_many_attachments",
+            Self::ChatVoiceFormat => "chat_voice_format",
+            Self::ChatSttFailed => "chat_stt_failed",
         }
     }
 
@@ -134,6 +158,12 @@ impl ErrorKey {
             Self::ChatUpstreamFailed,
             Self::ChatInterrupted,
             Self::ChatStorageFailed,
+            Self::ChatAttachmentTooLarge,
+            Self::ChatAttachmentUnsupported,
+            Self::ChatAttachmentNotFound,
+            Self::ChatTooManyAttachments,
+            Self::ChatVoiceFormat,
+            Self::ChatSttFailed,
         ]
         .into_iter()
         .find(|key| key.as_str() == raw)
@@ -164,6 +194,10 @@ pub struct Message {
     pub status: Status,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<ErrorKey>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub attachments: Vec<Attachment>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transcript: Option<String>,
     pub created_at: i64,
     pub updated_at: i64,
 }
@@ -180,9 +214,12 @@ pub struct Page {
 #[serde(rename_all = "camelCase")]
 pub struct SendRequest {
     pub client_id: String,
+    #[serde(default)]
     pub text: String,
     #[serde(default)]
     pub reply_to: Option<String>,
+    #[serde(default)]
+    pub attachments: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

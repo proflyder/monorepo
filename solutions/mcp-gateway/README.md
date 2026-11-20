@@ -277,6 +277,36 @@ Android ──HTTPS control.<домен>/v1/chat/*──► Traefik ──► mc
 | `POST /v1/chat/messages/{id}/retry` | Повтор упавшего ответа (`assistant` + `failed`), иначе `409 chat_not_retryable`. |
 | `GET /v1/chat/events?after=<version>` | SSE. Сначала все сообщения с `version > after`, затем живые события: `message` (полная версия сообщения, `id:` = `version`) и `delta` `{id, offset, text}`. `offset` — длина уже показанного текста в UTF-16 (как `String.length` в Kotlin): клиент применяет дельту, только если она продолжает его текст, иначе ждёт следующего `message`. Keepalive 15 с; при отставании подписчика поток закрывается, клиент переподключается со своим `after`. |
 
+### Голос и вложения
+
+| Маршрут | Назначение |
+|---|---|
+| `POST /v1/chat/attachments?name=<имя>` | Тело — сырые байты, тип — `Content-Type`. Ответ — `{id, kind, mime, size, name, durationMs?}`. Лимит тела 6 МБ + запас. |
+| `GET /v1/chat/attachments/{id}` | Байты вложения с исходным `Content-Type` (кэшируется телефоном). |
+
+- `kind=voice` — только `audio/wav` PCM 16 кГц, моно, 16 бит (приложение пишет
+  его само), до 4 МБ (~2 мин); иначе `chat_voice_format`. Шлюз не
+  перекодирует звук: те же байты уходят в Wyoming.
+- `kind=image` — `image/jpeg|png|webp` (проверяется сигнатура), до 6 МБ;
+  Hermes получает их тем же путём, что фото из Telegram: частью
+  `image_url` (data URL) мультимодального сообщения, подпись — текстом.
+- `kind=file` — UTF-8 текст (`text/plain|markdown|csv|x-log`,
+  `application/json`) до 256 КБ; встраивается в сообщение блоком
+  «[Файл имя]» с кодом. Остальное — `chat_attachment_unsupported`
+  (sessions API Hermes не принимает файловые части).
+- В `POST /v1/chat/messages` вложения передаются `attachments: [id]` (до 4;
+  голосовое — только одно и без других вложений); текст при вложениях может
+  быть пустым. `kind` сообщения: `voice`, `image`, `file` или `text`.
+- Голосовое распознаёт тот же STT, что голосовой путь станции:
+  `MCP_CHAT_STT_ADDRS` — Wyoming GigaAM `:10305`, затем Whisper `:10300`
+  (по очереди, таймаут 60 с). Расшифровка сохраняется в поле `transcript`
+  сообщения пользователя (событие `message` с новой версией, приложение
+  показывает её под голосовым), Hermes получает «[Голосовое сообщение]:
+  <текст>». Ошибка/пустая речь — ответ `failed` с `chat_stt_failed`
+  (повтор перезапускает распознавание).
+- Файлы — на PVC `mcp-gateway-media` (`MCP_CHAT_MEDIA_DIR`,
+  `<id>.bin` + `<id>.json`); история — на `mcp-gateway-chat`.
+
 Сообщение: `id`, `seq` (порядок в ленте), `version` (монотонная версия
 изменения), `clientId?`, `role` (`user`/`assistant`/`system`), `kind`
 (`text`; дальше — `alert`), `text` (Markdown), `replyTo? {id, role, text}`
@@ -295,7 +325,7 @@ Android ──HTTPS control.<домен>/v1/chat/*──► Traefik ──► mc
 снимок для нового подписчика берёт актуальный текст из памяти.
 
 Эталоны — `crates/mcp-gateway/src/chat/testdata/contract/*.json`
-(`send`, `page`, `events`, `error`); их же читает Android-тест
+(`send`, `page`, `events`, `error`, `attachment`, `voice`); их же читает Android-тест
 `core/network` (`ChatClientTest`: `events.json` собирается в SSE-поток). Пересборка: `UPDATE_CHAT_GOLDEN=1 cargo test -p mcp-gateway
 --lib chat`, затем скопировать в
 `projects/mobile/android/core/network/src/test/resources/fixtures/chat/`.
@@ -356,6 +386,8 @@ Android ──HTTPS control.<домен>/v1/chat/*──► Traefik ──► mc
 | `MCP_CHAT_PROMPT_FILE` | для чата | — | Системный промпт беседы приложения (`chat-prompt.txt` из ConfigMap). |
 | `MCP_CHAT_SESSION` | нет | `home-app` | Id сессии Hermes; должен совпадать с `HERMES_CHAT_RELAY_SESSION`. |
 | `MCP_CHAT_DB` | нет | `/var/lib/mcp-gateway/chat.db` | SQLite истории чата (PVC `mcp-gateway-chat`). |
+| `MCP_CHAT_MEDIA_DIR` | нет | `/var/lib/mcp-gateway/media` | Каталог вложений (в деплое — PVC `mcp-gateway-media`). |
+| `MCP_CHAT_STT_ADDRS` | нет | — | Wyoming STT `host:port` через запятую, по порядку (GigaAM, затем Whisper). Без него голосовые получают `chat_stt_failed`. |
 | `MCP_PENDING_TTL` | нет | `90s` | Время жизни отложенного действия. |
 | `MCP_RESTART_COOLDOWN` | нет | `5m` | Минимальный интервал между перезапусками одного workload'а. |
 | `MCP_SELF_RESTART_DELAY` | нет | `20s` | Задержка перезапуска `self_disrupting` сервиса. |

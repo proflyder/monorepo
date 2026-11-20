@@ -2,7 +2,18 @@ package dev.proflyder.home.core.model
 
 enum class ChatRole { USER, ASSISTANT, SYSTEM }
 
-enum class ChatKind { TEXT, ALERT }
+enum class ChatKind { TEXT, ALERT, VOICE, IMAGE, FILE }
+
+enum class ChatAttachmentKind { VOICE, IMAGE, FILE }
+
+data class ChatAttachment(
+    val id: String,
+    val kind: ChatAttachmentKind,
+    val mime: String,
+    val size: Long,
+    val name: String,
+    val durationMs: Long?,
+)
 
 enum class ChatStatus { PENDING, STREAMING, DONE, FAILED }
 
@@ -25,6 +36,8 @@ data class ChatMessage(
     val errorKey: String?,
     val createdAtMillis: Long,
     val updatedAtMillis: Long,
+    val attachments: List<ChatAttachment> = emptyList(),
+    val transcript: String? = null,
 )
 
 data class ChatPage(

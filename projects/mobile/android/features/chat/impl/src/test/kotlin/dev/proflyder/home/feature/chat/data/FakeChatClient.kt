@@ -1,5 +1,7 @@
 package dev.proflyder.home.feature.chat.data
 
+import dev.proflyder.home.core.model.ChatAttachment
+import dev.proflyder.home.core.model.ChatAttachmentKind
 import dev.proflyder.home.core.model.ChatEvent
 import dev.proflyder.home.core.model.ChatMessage
 import dev.proflyder.home.core.model.ChatPage
@@ -20,8 +22,21 @@ internal class FakeChatClient : ChatClient {
 
     override suspend fun page(before: Long?, limit: Int): Outcome<ChatPage> = page
 
-    override suspend fun send(clientId: String, text: String, replyTo: String?): Outcome<ChatSent> {
+    val uploads = mutableListOf<String>()
+    val sentAttachments = mutableListOf<List<String>>()
+    val uploadResults = ArrayDeque<Outcome<ChatAttachment>>()
+
+    override suspend fun upload(bytes: ByteArray, mime: String, name: String): Outcome<ChatAttachment> {
+        uploads += name
+        return uploadResults.removeFirstOrNull()
+            ?: Outcome.Success(ChatAttachment("f_$name", ChatAttachmentKind.VOICE, mime, bytes.size.toLong(), name, 1000))
+    }
+
+    override suspend fun download(id: String): Outcome<ByteArray> = Outcome.Success(ByteArray(0))
+
+    override suspend fun send(clientId: String, text: String, replyTo: String?, attachments: List<String>): Outcome<ChatSent> {
         sentIds += clientId
+        sentAttachments += attachments
         return sendResults.removeFirstOrNull() ?: Outcome.Success(accepted(clientId, text))
     }
 

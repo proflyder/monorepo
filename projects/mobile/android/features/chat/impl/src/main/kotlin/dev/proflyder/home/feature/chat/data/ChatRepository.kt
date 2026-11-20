@@ -1,5 +1,6 @@
 package dev.proflyder.home.feature.chat.data
 
+import dev.proflyder.home.core.model.ChatAttachment
 import dev.proflyder.home.core.model.ChatMessage
 import dev.proflyder.home.core.model.ChatPage
 import dev.proflyder.home.core.model.ChatQuote
@@ -13,6 +14,7 @@ import dev.proflyder.home.core.operation.suspendRunCatching
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
+import java.io.File
 import java.util.UUID
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -50,11 +52,18 @@ private val PERMANENT_SEND_CODES = setOf(
     "chat_text_too_long",
     "chat_client_id_invalid",
     "chat_reply_not_found",
+    "chat_attachment_too_large",
+    "chat_attachment_unsupported",
+    "chat_attachment_not_found",
+    "chat_too_many_attachments",
+    "chat_voice_format",
 )
+
+internal const val FAILURE_FILE_MISSING = "chat_attachment_missing"
 
 internal fun RemoteFailure.sendFailureKey(): String? = when (this) {
     is RemoteFailure.Offline, RemoteFailure.Timeout, is RemoteFailure.Tls, is RemoteFailure.ProtocolFailure -> null
-    is RemoteFailure.Server -> code.takeIf { it in PERMANENT_SEND_CODES }
+    is RemoteFailure.Server -> code.takeIf { it in PERMANENT_SEND_CODES || it == FAILURE_FILE_MISSING }
     RemoteFailure.Unauthorized -> FAILURE_UNAUTHORIZED
     RemoteFailure.NotConfigured, is RemoteFailure.Validation, is RemoteFailure.Storage -> FAILURE_NOT_SENT
 }
@@ -100,10 +109,10 @@ class ChatRepository(
         }
     }
 
-    fun send(text: String, replyTo: ChatQuote?) {
+    internal fun send(text: String, replyTo: ChatQuote?, attachments: List<LocalAttachment> = emptyList()) {
         val trimmed = text.trim()
-        if (trimmed.isEmpty()) return
-        val outgoing = Outgoing(clock.newClientId(), trimmed, replyTo, clock.now())
+        if (trimmed.isEmpty() && attachments.isEmpty()) return
+        val outgoing = Outgoing(clock.newClientId(), trimmed, replyTo, clock.now(), attachments = attachments)
         state.update { it.enqueue(outgoing) }
         persistAndKick()
     }
@@ -161,11 +170,33 @@ class ChatRepository(
         }
     }
 
-    private suspend fun deliver(next: Outgoing, wait: Long): Long =
-        when (val result = client.send(next.clientId, next.text, next.replyTo?.id)) {
+    private suspend fun deliver(next: Outgoing, wait: Long): Long {
+        val pending = next.attachments.firstOrNull { it.uploadedId == null }
+            ?: return sendUploaded(next, wait)
+        return when (val result = upload(pending)) {
+            is Outcome.Success -> wait.also { attached(next, pending, result.value.id) }
+            is Outcome.Failure -> undelivered(next, result.failure, wait)
+        }
+    }
+
+    private suspend fun sendUploaded(next: Outgoing, wait: Long): Long {
+        val ids = next.attachments.mapNotNull { it.uploadedId }
+        return when (val result = client.send(next.clientId, next.text, next.replyTo?.id, ids)) {
             is Outcome.Success -> clock.initialBackoffMillis.also { delivered(result.value) }
             is Outcome.Failure -> undelivered(next, result.failure, wait)
         }
+    }
+
+    private suspend fun upload(attachment: LocalAttachment): Outcome<ChatAttachment> {
+        val bytes = withContext(clock.io) { File(attachment.path).takeIf { it.isFile }?.readBytes() }
+            ?: return Outcome.Failure(RemoteFailure.Server(FAILURE_FILE_MISSING, attachment.path))
+        return client.upload(bytes, attachment.mime, attachment.name)
+    }
+
+    private suspend fun attached(next: Outgoing, attachment: LocalAttachment, id: String) {
+        state.update { it.uploaded(next.clientId, attachment.path, id) }
+        persist()
+    }
 
     private suspend fun delivered(sent: ChatSent) {
         state.update { it.accept(sent) }

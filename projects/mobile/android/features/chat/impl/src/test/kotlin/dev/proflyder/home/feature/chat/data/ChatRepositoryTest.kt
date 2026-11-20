@@ -1,8 +1,10 @@
 package dev.proflyder.home.feature.chat.data
 
+import dev.proflyder.home.core.model.ChatAttachmentKind
 import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.core.network.NetworkWaiter
+import java.io.File
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
@@ -63,6 +65,31 @@ class ChatRepositoryTest {
         assertNull(repository.timeline.value.failure)
         assertTrue(repository.timeline.value.loaded)
     }
+
+    @Test
+    fun attachmentsAreUploadedOnceBeforeTheMessageIsSent() = runTest {
+        val repository = repository()
+        val voice = File.createTempFile("voice", ".wav").apply { writeBytes(ByteArray(64)) }
+        client.uploadResults += Outcome.Failure(RemoteFailure.Offline("no network"))
+        repository.send("", replyTo = null, attachments = listOf(voiceAttachment(voice)))
+        advanceUntilIdle()
+        assertEquals(listOf(voice.name, voice.name), client.uploads)
+        assertEquals(listOf(listOf("f_${voice.name}")), client.sentAttachments)
+        assertTrue(repository.timeline.value.outbox.isEmpty())
+    }
+
+    @Test
+    fun aVanishedFileFailsTheMessageInsteadOfLooping() = runTest {
+        val repository = repository()
+        val missing = File("/nonexistent/voice.wav")
+        repository.send("", replyTo = null, attachments = listOf(voiceAttachment(missing)))
+        advanceUntilIdle()
+        assertEquals(FAILURE_FILE_MISSING, repository.timeline.value.outbox.single().failureKey)
+        assertTrue(client.uploads.isEmpty())
+    }
+
+    private fun voiceAttachment(file: File) =
+        LocalAttachment(file.path, ChatAttachmentKind.VOICE, "audio/wav", file.name, file.length(), 1000)
 
     @Test
     fun aFailedFirstPageIsReported() = runTest {

@@ -1,5 +1,6 @@
 package dev.proflyder.home.feature.chat.data
 
+import dev.proflyder.home.core.model.ChatAttachmentKind
 import dev.proflyder.home.core.model.ChatEvent
 import dev.proflyder.home.core.model.ChatMessage
 import dev.proflyder.home.core.model.ChatPage
@@ -8,12 +9,23 @@ import dev.proflyder.home.core.model.ChatSent
 import dev.proflyder.home.core.model.ChatStatus
 import dev.proflyder.home.core.model.RemoteFailure
 
+internal data class LocalAttachment(
+    val path: String,
+    val kind: ChatAttachmentKind,
+    val mime: String,
+    val name: String,
+    val size: Long,
+    val durationMs: Long? = null,
+    val uploadedId: String? = null,
+)
+
 internal data class Outgoing(
     val clientId: String,
     val text: String,
     val replyTo: ChatQuote?,
     val createdAtMillis: Long,
     val failureKey: String? = null,
+    val attachments: List<LocalAttachment> = emptyList(),
 ) {
     val failed: Boolean get() = failureKey != null
 }
@@ -78,6 +90,12 @@ internal data class ChatTimeline(
     fun clearFailure(clientId: String): ChatTimeline =
         copy(outbox = outbox.map { if (it.clientId == clientId) it.copy(failureKey = null) else it })
 
+    fun uploaded(clientId: String, path: String, id: String): ChatTimeline = copy(
+        outbox = outbox.map { item ->
+            if (item.clientId == clientId) item.withUploaded(path, id) else item
+        },
+    )
+
     fun remove(clientId: String): ChatTimeline = copy(outbox = outbox.filterNot { it.clientId == clientId })
 
     private fun dropDelivered(): ChatTimeline {
@@ -85,3 +103,6 @@ internal data class ChatTimeline(
         return copy(outbox = outbox.filterNot { it.clientId in delivered })
     }
 }
+
+internal fun Outgoing.withUploaded(path: String, id: String): Outgoing =
+    copy(attachments = attachments.map { if (it.path == path) it.copy(uploadedId = id) else it })

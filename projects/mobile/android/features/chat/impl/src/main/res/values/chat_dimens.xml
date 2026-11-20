@@ -8,4 +8,5 @@
     <dimen name="chat_bubble_gap">4dp</dimen>
     <dimen name="chat_list_indent">16dp</dimen>
     <dimen name="chat_swipe_reply_distance">72dp</dimen>
+    <dimen name="chat_image_radius">12dp</dimen>
 </resources>

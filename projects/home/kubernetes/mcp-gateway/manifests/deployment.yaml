@@ -14,6 +14,22 @@ spec:
     requests:
       storage: 1Gi
 ---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mcp-gateway-media
+  namespace: home-assistant
+  labels:
+    app.kubernetes.io/name: mcp-gateway
+    app.kubernetes.io/part-of: home
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-retain
+  resources:
+    requests:
+      storage: 5Gi
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -109,6 +125,10 @@ spec:
               value: /etc/mcp-gateway/chat-prompt.txt
             - name: MCP_CHAT_DB
               value: /var/lib/mcp-gateway/chat.db
+            - name: MCP_CHAT_MEDIA_DIR
+              value: /var/lib/mcp-gateway-media
+            - name: MCP_CHAT_STT_ADDRS
+              value: "${NODE_LAN_IP}:10305,${NODE_LAN_IP}:10300"
             - name: LOG_LEVEL
               value: info
           ports:
@@ -168,6 +188,8 @@ spec:
               readOnly: true
             - name: chat-data
               mountPath: /var/lib/mcp-gateway
+            - name: chat-media
+              mountPath: /var/lib/mcp-gateway-media
             - name: tmp
               mountPath: /tmp
       volumes:
@@ -237,6 +259,9 @@ spec:
         - name: chat-data
           persistentVolumeClaim:
             claimName: mcp-gateway-chat
+        - name: chat-media
+          persistentVolumeClaim:
+            claimName: mcp-gateway-media
         - name: tmp
           emptyDir:
             sizeLimit: 16Mi
