@@ -71,6 +71,7 @@
 | `k8s/home-assistant/ha-config-sync` | HAOS forced-command agent key and pinned host key for ha-config-sync | ESO → home-assistant |
 | `k8s/home-assistant/hermes-config` | Hermes renderer private values: `private.yaml` (real HA/MA endpoints, Telegram owner chat id) | ESO → home-assistant (`hermes-config-private`) |
 | `k8s/home-assistant/hermes-environment` | Hermes agent environment (HA/MA/Telegram/API keys) | ESO → home-assistant |
+| `k8s/home-assistant/hermes-chat-relay` | bearer between mcp-gateway and the app chat relay in voice-proxy (Hermes sessions API) | ESO → home-assistant (`mcp-gateway-chat`, `hermes-chat-relay`) |
 | `k8s/home-assistant/intercom` | intercom signaling: station device token; `phone_token` is taken from `scheduler-auth` (`token`) | ESO → home-assistant |
 | `k8s/home-assistant/mcp-gateway-auth` | MCP gateway bearer | ESO → home-assistant |
 | `k8s/home-assistant/mcp-gateway-bb-ssh` | SSH key + known_hosts for bb dispatch from the MCP gateway | ESO → home-assistant |

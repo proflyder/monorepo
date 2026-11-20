@@ -1,0 +1,75 @@
+[
+  {
+    "data": {
+      "clientId": "c-1",
+      "createdAt": 1795129665000,
+      "id": "m_0001",
+      "kind": "text",
+      "role": "user",
+      "seq": 1,
+      "status": "done",
+      "text": "Включи свет",
+      "updatedAt": 1795129665000,
+      "version": 1
+    },
+    "event": "message"
+  },
+  {
+    "data": {
+      "createdAt": 1795129665000,
+      "id": "m_0002",
+      "kind": "text",
+      "role": "assistant",
+      "seq": 2,
+      "status": "pending",
+      "text": "",
+      "updatedAt": 1795129665000,
+      "version": 2
+    },
+    "event": "message"
+  },
+  {
+    "data": {
+      "createdAt": 1795129665000,
+      "id": "m_0002",
+      "kind": "text",
+      "role": "assistant",
+      "seq": 2,
+      "status": "streaming",
+      "text": "",
+      "updatedAt": 1795129665000,
+      "version": 3
+    },
+    "event": "message"
+  },
+  {
+    "data": {
+      "id": "m_0002",
+      "offset": 0,
+      "text": "Свет "
+    },
+    "event": "delta"
+  },
+  {
+    "data": {
+      "id": "m_0002",
+      "offset": 5,
+      "text": "включён."
+    },
+    "event": "delta"
+  },
+  {
+    "data": {
+      "createdAt": 1795129665000,
+      "id": "m_0002",
+      "kind": "text",
+      "role": "assistant",
+      "seq": 2,
+      "status": "done",
+      "text": "Свет **включён**.",
+      "updatedAt": 1795129665000,
+      "version": 4
+    },
+    "event": "message"
+  }
+]

@@ -1,5 +1,5 @@
 {
-  "checksum": "fab7c6a0f272e0a37a63add72d1ba611b221b74f05dc03502c40952bbb915f18",
+  "checksum": "d7ee9d168db3270df380ddc1c004d2174ac862b75010ce3a38dc4aacaa5f4ed8",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -10669,6 +10669,10 @@
             "target": "rmcp"
           },
           {
+            "id": "rusqlite 0.41.1",
+            "target": "rusqlite"
+          },
+          {
             "id": "russh 0.65.1",
             "target": "russh"
           },
@@ -10711,6 +10715,10 @@
           {
             "id": "tracing 0.1.44",
             "target": "tracing"
+          },
+          {
+            "id": "uuid 1.29.1",
+            "target": "uuid"
           }
         ],
         "deps_dev": [

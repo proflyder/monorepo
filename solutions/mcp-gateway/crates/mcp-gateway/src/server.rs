@@ -34,6 +34,7 @@ pub struct Options {
     pub voice_token: Option<String>,
     pub voice: Option<Router<ObserveState>>,
     pub system: Option<(String, Arc<crate::system::Dashboard>)>,
+    pub chat: Option<Arc<crate::chat::Chat>>,
     pub groups: Vec<Arc<dyn ToolGroup>>,
     pub deps: Arc<Deps>,
     pub metrics: SharedMetrics,
@@ -94,14 +95,18 @@ pub fn router(options: Options) -> Router {
     }
 
     if let Some((token, dashboard)) = options.system {
-        let system = crate::system::router(dashboard).route_layer(middleware::from_fn_with_state(
+        let mut surface = crate::system::router(dashboard);
+        if let Some(chat) = options.chat {
+            surface = surface.merge(crate::chat::router(chat));
+        }
+        let surface = surface.route_layer(middleware::from_fn_with_state(
             Auth {
                 token,
                 realm: APP_REALM,
             },
             require_bearer,
         ));
-        app = app.merge(system);
+        app = app.merge(surface);
     }
 
     app.layer(middleware::from_fn_with_state(state.clone(), observe))

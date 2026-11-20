@@ -278,6 +278,18 @@ the currency bot keeps its own bot for rate alerts.  Reply to an alert message
 to quote its fingerprint into the model, then ask `infra_alert` about it.
 
 
+## App chat
+
+The Android «Чат» tab talks to this same agent through Hermes' sessions API
+(`/api/sessions/home-app/chat/stream`): same memory, skills and MCP toolsets
+as Telegram (`platform_toolsets.api_server` equals `telegram`). The app
+session has its own transcript; Telegram is unaffected. The prompt is
+`projects/home/kubernetes/mcp-gateway/manifests/chat-prompt.txt` (the
+Telegram prompt adapted to the app), passed per turn as `system_message` by
+`mcp-gateway`. Transport and storage — `solutions/mcp-gateway/README.md`
+(«Чат приложения»); the loopback relay — `solutions/voice-proxy/README.md`
+(«App chat relay»).
+
 ## Telegram-промпт и `/report`
 
 Hermes applies `display.personality: voice` to every platform, so Telegram

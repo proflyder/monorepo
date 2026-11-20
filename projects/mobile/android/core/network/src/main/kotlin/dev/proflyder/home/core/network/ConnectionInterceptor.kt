@@ -47,6 +47,7 @@ internal class ConnectionInterceptor(
         val streaming = original.header(STREAM_REQUEST_HEADER) != null
         val url = base.newBuilder()
             .addPathSegments(original.url.encodedPath.removePrefix("/"))
+            .encodedQuery(original.url.encodedQuery)
             .build()
         val request = original.newBuilder()
             .url(url)

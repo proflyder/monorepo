@@ -1,0 +1,45 @@
+{
+  "cursor": 8,
+  "hasMore": true,
+  "messages": [
+    {
+      "createdAt": 1795129665000,
+      "id": "m_0002",
+      "kind": "text",
+      "role": "assistant",
+      "seq": 2,
+      "status": "done",
+      "text": "Свет **включён**.",
+      "updatedAt": 1795129665000,
+      "version": 4
+    },
+    {
+      "clientId": "c-2",
+      "createdAt": 1795129665000,
+      "id": "m_0005",
+      "kind": "text",
+      "replyTo": {
+        "id": "m_0002",
+        "role": "assistant",
+        "text": "Свет **включён**."
+      },
+      "role": "user",
+      "seq": 3,
+      "status": "done",
+      "text": "Где?",
+      "updatedAt": 1795129665000,
+      "version": 5
+    },
+    {
+      "createdAt": 1795129665000,
+      "id": "m_0006",
+      "kind": "text",
+      "role": "assistant",
+      "seq": 4,
+      "status": "done",
+      "text": "Да, в гостиной.",
+      "updatedAt": 1795129665000,
+      "version": 8
+    }
+  ]
+}

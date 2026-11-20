@@ -665,7 +665,7 @@ class MigratedApps(unittest.TestCase):
                           "NetworkPolicy", "ServiceMonitor", "ExternalSecret"},
                          {"CURRENCY_BOT_IMAGE", "BUILD_ID", "CURRENCY_BOT_NODE_PORT",
                           "CURRENCY_WEBHOOK_URL", "LAN_CIDR", "NODE_LAN_IP"}),
-        "mcp-gateway": ({"Deployment", "Service", "NetworkPolicy", "ServiceMonitor",
+        "mcp-gateway": ({"PersistentVolumeClaim", "Deployment", "Service", "NetworkPolicy", "ServiceMonitor",
                          "ConfigMap", "ServiceAccount", "Role", "RoleBinding",
                          "ClusterRole", "ClusterRoleBinding", "ExternalSecret"},
                         {"MCP_GATEWAY_IMAGE", "BUILD_ID", "LAN_CIDR", "NODE_LAN_IP",
@@ -755,7 +755,7 @@ class MigratedApps(unittest.TestCase):
         self.assertNotEqual(names[0], "mcp-gateway-catalog")
         catalog = configmaps[names[0]]
         self.assertEqual(catalog["metadata"]["namespace"], "home-assistant")
-        self.assertEqual(set(catalog["data"]), {"catalog.yaml", "bb-targets.yaml"})
+        self.assertEqual(set(catalog["data"]), {"catalog.yaml", "bb-targets.yaml", "chat-prompt.txt"})
         deployment = by_name(docs, "Deployment")["mcp-gateway"]
         volumes = {v["name"]: v for v in deployment["spec"]["template"]["spec"]["volumes"]}
         self.assertEqual(volumes["catalog"]["configMap"]["name"], names[0])
@@ -814,6 +814,31 @@ class HermesApp(unittest.TestCase):
     def gateway_container(self):
         containers = self.hermes_patch()["spec"]["template"]["spec"]["containers"]
         return next(c for c in containers if c["name"] == "gateway")
+
+    def test_voice_proxy_exposes_only_the_app_chat_relay(self):
+        spec = self.hermes_patch()["spec"]["template"]["spec"]
+        proxy = next(c for c in spec["containers"] if c["name"] == "voice-proxy")
+        env = {item["name"]: item for item in proxy["env"]}
+        self.assertEqual(env["HERMES_CHAT_RELAY_LISTEN"]["value"], "0.0.0.0:8644")
+        self.assertEqual(env["HERMES_CHAT_RELAY_SESSION"]["value"], "home-app")
+        self.assertEqual(
+            env["HERMES_CHAT_RELAY_TOKEN_FILE"]["value"], "/run/hermes-chat-relay/token"
+        )
+        self.assertEqual(
+            env["HERMES_API_KEY"]["valueFrom"]["secretKeyRef"],
+            {"name": "hermes-environment", "key": "API_SERVER_KEY"},
+        )
+        relay = next(v for v in spec["volumes"] if v["name"] == "hermes-chat-relay")
+        self.assertEqual(relay["secret"]["secretName"], "hermes-chat-relay")
+        secret = next(
+            d for d in yaml.safe_load_all(
+                (ROOT / "projects/home-assistant/deploy/flux/external-secret-hermes-chat-relay.yaml")
+                .read_text())
+            if d)
+        self.assertEqual(
+            secret["spec"]["data"][0]["remoteRef"],
+            {"key": "k8s/home-assistant/hermes-chat-relay", "property": "token"},
+        )
 
     def test_render_config_is_a_fail_closed_init_container(self):
         init = self.hermes_patch()["spec"]["template"]["spec"]["initContainers"]

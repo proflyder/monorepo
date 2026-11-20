@@ -119,6 +119,7 @@ HAOS и K3s используют статические адреса внутр�
 | `10305/tcp` | GigaAM STT | LAN/HA |
 | `8643/tcp` | Hermes voice proxy | только HAOS/K3s/loopback |
 | `8642/tcp` | Hermes API | loopback |
+| `8644/tcp` | chat relay в voice-proxy (Hermes sessions API для `mcp-gateway`) | pod/node; не обычный LAN, Bearer |
 | `6443/tcp` | K3s API | localhost/pod/node; не обычный LAN |
 | `10250/tcp` | kubelet | localhost/pod/node; не обычный LAN |
 | `9100/tcp` | node-exporter | не обычный LAN |

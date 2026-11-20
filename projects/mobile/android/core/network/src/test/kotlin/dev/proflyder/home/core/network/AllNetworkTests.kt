@@ -17,5 +17,6 @@ import org.junit.runners.Suite
     TokenRefreshAuthenticatorTest::class,
     WireDtosTest::class,
     SystemDashboardClientTest::class,
+    ChatClientTest::class,
 )
 class AllNetworkTests

@@ -107,6 +107,20 @@ spec:
                                       pass
                       - name: voice-proxy
                         image: ${VOICE_PROXY_IMAGE}
+                        env:
+                          - name: HERMES_CHAT_RELAY_LISTEN
+                            value: 0.0.0.0:8644
+                          - name: HERMES_CHAT_RELAY_SESSION
+                            value: home-app
+                          - name: HERMES_CHAT_RELAY_TOKEN_FILE
+                            value: /run/hermes-chat-relay/token
+                          - name: HERMES_API_KEY
+                            valueFrom:
+                              secretKeyRef:
+                                name: hermes-environment
+                                key: API_SERVER_KEY
+                        volumeMounts:
+                          - {name: hermes-chat-relay, mountPath: /run/hermes-chat-relay, readOnly: true}
                       # Read-only drift view of the same plan the init container
                       # applied; never writes to the PVC.
                       - name: config-drift
@@ -142,6 +156,10 @@ spec:
                       - name: hermes-config-private
                         secret:
                           secretName: hermes-config-private
+                          defaultMode: 0440
+                      - name: hermes-chat-relay
+                        secret:
+                          secretName: hermes-chat-relay
                           defaultMode: 0440
           - target:
               kind: Deployment
