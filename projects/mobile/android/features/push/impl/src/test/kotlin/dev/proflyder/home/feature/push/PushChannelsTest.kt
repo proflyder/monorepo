@@ -77,6 +77,9 @@ class PushChannelsTest {
         assertNull(notification.sound)
         assertNull(notification.vibrate)
         assertTrue(notification.flags and Notification.FLAG_ONLY_ALERT_ONCE != 0)
+        assertNotNull(notification.fullScreenIntent)
+        assertNull(notification.group)
+        assertEquals(Notification.GROUP_ALERT_ALL, notification.groupAlertBehavior)
         assertEquals(AppTheme.CURRENT.palette.light.primary, notification.color)
     }
 
