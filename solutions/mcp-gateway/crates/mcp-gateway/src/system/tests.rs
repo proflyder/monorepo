@@ -416,6 +416,7 @@ async fn server_requires_the_app_bearer() {
         voice: None,
         system: Some(("app".to_owned(), dashboard(prom, Duration::from_secs(60)))),
         chat: None,
+        chat_alerts_token: None,
         groups: Vec::new(),
         deps: Arc::new(empty_deps()),
         metrics: Arc::new(crate::metrics::Metrics::new()),

@@ -1,6 +1,7 @@
 package dev.proflyder.home.core.network
 
 import dev.proflyder.home.core.config.ConnectionSettingsStore
+import dev.proflyder.home.core.model.ChatAlert
 import dev.proflyder.home.core.model.ChatAttachment
 import dev.proflyder.home.core.model.ChatAttachmentKind
 import dev.proflyder.home.core.model.ChatEvent
@@ -67,6 +68,21 @@ internal data class ChatAttachmentDto(
 )
 
 @Serializable
+internal data class ChatAlertDto(
+    val fingerprint: String = "",
+    val name: String = "",
+    val severity: String = "",
+    val status: String = "",
+    val summary: String = "",
+    val description: String = "",
+    val namespace: String = "",
+    @kotlinx.serialization.SerialName("object") val target: String = "",
+    val startsAt: Long = 0,
+    val endsAt: Long? = null,
+    val runbookUrl: String = "",
+)
+
+@Serializable
 internal data class ChatMessageDto(
     val id: String = "",
     val seq: Long = 0,
@@ -82,6 +98,7 @@ internal data class ChatMessageDto(
     val updatedAt: Long = 0,
     val attachments: List<ChatAttachmentDto> = emptyList(),
     val transcript: String? = null,
+    val alert: ChatAlertDto? = null,
 )
 
 @Serializable
@@ -178,6 +195,21 @@ internal fun ChatMessageDto.toDomain(): ChatMessage = ChatMessage(
     updatedAtMillis = updatedAt,
     attachments = attachments.map { it.toDomain() },
     transcript = transcript,
+    alert = alert?.let {
+        ChatAlert(
+            fingerprint = it.fingerprint,
+            name = it.name,
+            severity = it.severity,
+            resolved = it.status == "resolved",
+            summary = it.summary,
+            description = it.description,
+            namespace = it.namespace,
+            target = it.target,
+            startsAtMillis = it.startsAt,
+            endsAtMillis = it.endsAt,
+            runbookUrl = it.runbookUrl,
+        )
+    },
 )
 
 internal fun ChatPageDto.toDomain(): ChatPage =

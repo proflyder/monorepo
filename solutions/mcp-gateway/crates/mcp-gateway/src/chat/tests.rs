@@ -90,6 +90,8 @@ fn chat_with_media(
         hermes,
         media,
         stt: Some(Arc::new(FixedStt("включи свет в гостиной"))),
+        push: None,
+        notify: super::Notify::default(),
         now: Arc::new(|| NOW),
         new_id: sequential_ids(),
     })
@@ -132,6 +134,7 @@ fn golden(name: &str, body: &Value) {
         "events" => include_str!("testdata/contract/events.json"),
         "voice" => include_str!("testdata/contract/voice.json"),
         "attachment" => include_str!("testdata/contract/attachment.json"),
+        "alert" => include_str!("testdata/contract/alert.json"),
         _ => include_str!("testdata/contract/error.json"),
     };
     assert_eq!(rendered, expected, "{name}");
@@ -341,6 +344,8 @@ async fn a_restart_fails_interrupted_turns_and_resumes_pending_ones() {
         hermes,
         media: None,
         stt: None,
+        push: None,
+        notify: super::Notify::default(),
         now: Arc::new(|| NOW),
         new_id: Arc::new(|| "m_x".to_owned()),
     })
@@ -663,5 +668,160 @@ async fn the_wyoming_client_streams_audio_and_reads_the_transcript() {
             "audio-chunk",
             "audio-stop"
         ]
+    );
+}
+
+#[derive(Default)]
+struct RecordingPush {
+    sent: Mutex<Vec<(String, String, Option<String>)>>,
+}
+
+impl crate::push::PushApi for RecordingPush {
+    fn devices<'a>(&'a self) -> BoxFuture<'a, Result<Vec<crate::push::Device>, String>> {
+        Box::pin(async { Ok(Vec::new()) })
+    }
+
+    fn find<'a>(
+        &'a self,
+        _reason: &'a str,
+        _device: Option<&'a str>,
+    ) -> BoxFuture<'a, Result<crate::push::Delivery, String>> {
+        Box::pin(async { Ok(crate::push::Delivery::default()) })
+    }
+
+    fn notify<'a>(
+        &'a self,
+        title: &'a str,
+        body: &'a str,
+        deep_link: Option<&'a str>,
+        _device: Option<&'a str>,
+    ) -> BoxFuture<'a, Result<crate::push::Delivery, String>> {
+        self.sent.lock().expect("sent").push((
+            title.to_owned(),
+            body.to_owned(),
+            deep_link.map(str::to_owned),
+        ));
+        Box::pin(async { Ok(crate::push::Delivery::default()) })
+    }
+}
+
+fn alerting_chat(hermes: Arc<ScriptedHermes>, push: Arc<RecordingPush>) -> Arc<Chat> {
+    Chat::start(Options {
+        store: Arc::new(Store::in_memory().expect("store")),
+        hermes,
+        media: None,
+        stt: None,
+        push: Some(push),
+        notify: super::Notify {
+            zone: jiff::tz::TimeZone::get("Asia/Almaty").expect("zone"),
+            ..super::Notify::default()
+        },
+        now: Arc::new(|| NOW),
+        new_id: sequential_ids(),
+    })
+    .expect("chat")
+}
+
+fn webhook(status: &str) -> Value {
+    json!({
+        "status": status,
+        "alerts": [{
+            "status": status,
+            "labels": {"alertname": "KubePodCrashLooping", "severity": "critical", "namespace": "home-assistant", "pod": "scheduler-7d9"},
+            "annotations": {"summary": "scheduler перезапускается", "runbook_url": "https://runbooks.example.com/crash"},
+            "startsAt": "2026-11-20T08:00:00Z",
+            "endsAt": if status == "resolved" { "2026-11-20T08:30:00Z" } else { "0001-01-01T00:00:00Z" },
+            "fingerprint": "a1b2c3d4e5f60718"
+        }]
+    })
+}
+
+async fn settle_tasks() {
+    for _ in 0..20 {
+        tokio::task::yield_now().await;
+    }
+}
+
+#[tokio::test]
+async fn alerts_become_cards_that_resolve_in_place_and_push_once() {
+    let push = Arc::new(RecordingPush::default());
+    let hermes = ScriptedHermes::with(vec![vec![TurnEvent::Completed(
+        "Разбираюсь: OOMKilled.".to_owned(),
+    )]]);
+    let chat = alerting_chat(Arc::clone(&hermes), Arc::clone(&push));
+    let alerts: Router = super::alerts_router(Arc::clone(&chat));
+    let (status, body) = call(&alerts, "POST", "/v1/chat/alerts", Some(webhook("firing"))).await;
+    assert_eq!(
+        (status, body["accepted"].clone()),
+        (StatusCode::OK, json!(1))
+    );
+    let (_, again) = call(&alerts, "POST", "/v1/chat/alerts", Some(webhook("firing"))).await;
+    assert_eq!(again["accepted"], 1);
+    let (_, _) = call(
+        &alerts,
+        "POST",
+        "/v1/chat/alerts",
+        Some(webhook("resolved")),
+    )
+    .await;
+    let card = chat.store.get("m_0001").expect("get").expect("alert");
+    golden("alert", &serde_json::to_value(&card).expect("json"));
+    assert_eq!(chat.page(None, None).expect("page").messages.len(), 1);
+
+    let app: Router = super::router(Arc::clone(&chat));
+    let (_, sent) = call(
+        &app,
+        "POST",
+        "/v1/chat/messages",
+        Some(json!({"clientId": "r-1", "text": "Что случилось?", "replyTo": "m_0001"})),
+    )
+    .await;
+    settled(&chat, sent["reply"]["id"].as_str().expect("reply")).await;
+    let prompt = hermes.seen.lock().expect("seen")[0]
+        .as_str()
+        .expect("text")
+        .to_owned();
+    assert!(prompt.contains("🔎 a1b2c3d4e5f6"), "{prompt}");
+    assert!(prompt.ends_with("Что случилось?"), "{prompt}");
+
+    settle_tasks().await;
+    let pushes = push.sent.lock().expect("sent").clone();
+    assert_eq!(
+        pushes,
+        vec![
+            (
+                "🔴 KubePodCrashLooping".to_owned(),
+                "scheduler перезапускается".to_owned(),
+                Some("home://chat/message/m_0001".to_owned())
+            ),
+            (
+                "Рикардо".to_owned(),
+                "Разбираюсь: OOMKilled.".to_owned(),
+                Some(format!(
+                    "home://chat/message/{}",
+                    sent["reply"]["id"].as_str().expect("id")
+                ))
+            ),
+        ]
+    );
+}
+
+#[tokio::test]
+async fn an_invalid_webhook_is_rejected() {
+    let chat = alerting_chat(
+        ScriptedHermes::with(vec![]),
+        Arc::new(RecordingPush::default()),
+    );
+    let alerts: Router = super::alerts_router(chat);
+    let (status, body) = call(
+        &alerts,
+        "POST",
+        "/v1/chat/alerts",
+        Some(json!({"alerts": "nope"})),
+    )
+    .await;
+    assert_eq!(
+        (status, body["code"].clone()),
+        (StatusCode::BAD_REQUEST, json!("chat_alert_invalid"))
     );
 }

@@ -26,6 +26,7 @@ use crate::tools::{Deps, ToolGroup};
 pub const MCP_REALM: &str = "mcp-gateway";
 pub const VOICE_REALM: &str = "mcp-gateway-voice";
 pub const APP_REALM: &str = "home-app";
+pub const ALERTS_REALM: &str = "home-alerts";
 
 const MAX_MCP_BODY: usize = 4 << 20;
 
@@ -35,6 +36,7 @@ pub struct Options {
     pub voice: Option<Router<ObserveState>>,
     pub system: Option<(String, Arc<crate::system::Dashboard>)>,
     pub chat: Option<Arc<crate::chat::Chat>>,
+    pub chat_alerts_token: Option<String>,
     pub groups: Vec<Arc<dyn ToolGroup>>,
     pub deps: Arc<Deps>,
     pub metrics: SharedMetrics,
@@ -92,6 +94,17 @@ pub fn router(options: Options) -> Router {
             require_bearer,
         ));
         app = app.merge(voice);
+    }
+
+    if let (Some(token), Some(chat)) = (options.chat_alerts_token, options.chat.clone()) {
+        let alerts = crate::chat::alerts_router(chat).route_layer(middleware::from_fn_with_state(
+            Auth {
+                token,
+                realm: ALERTS_REALM,
+            },
+            require_bearer,
+        ));
+        app = app.merge(alerts);
     }
 
     if let Some((token, dashboard)) = options.system {

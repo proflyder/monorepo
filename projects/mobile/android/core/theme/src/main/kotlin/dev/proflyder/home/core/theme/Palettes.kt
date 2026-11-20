@@ -31,6 +31,10 @@ internal object Palettes {
             stateOn = rgb(0x0E7C66),
             onStateOn = rgb(0xFFFFFF),
             stateOnText = rgb(0x0A6B58),
+            warning = rgb(0x8A5100),
+            onWarning = rgb(0xFFFFFF),
+            success = rgb(0x1B6E35),
+            onSuccess = rgb(0xFFFFFF),
         ),
         dark = ColorScheme(
             primary = rgb(0x6FDBC0),
@@ -61,6 +65,10 @@ internal object Palettes {
             stateOn = rgb(0x6FDBC0),
             onStateOn = rgb(0x00382E),
             stateOnText = rgb(0x6FDBC0),
+            warning = rgb(0xFFB95C),
+            onWarning = rgb(0x452B00),
+            success = rgb(0x7DDB8F),
+            onSuccess = rgb(0x00391A),
         ),
     )
 
@@ -94,6 +102,10 @@ internal object Palettes {
             stateOn = rgb(0x006874),
             onStateOn = rgb(0xFFFFFF),
             stateOnText = rgb(0x006874),
+            warning = rgb(0x8A5100),
+            onWarning = rgb(0xFFFFFF),
+            success = rgb(0x1B6E35),
+            onSuccess = rgb(0xFFFFFF),
         ),
         dark = ColorScheme(
             primary = rgb(0xBF4DFF),
@@ -124,6 +136,10 @@ internal object Palettes {
             stateOn = rgb(0x00E5FF),
             onStateOn = rgb(0x00363D),
             stateOnText = rgb(0x00E5FF),
+            warning = rgb(0xFFC14D),
+            onWarning = rgb(0x3F2A00),
+            success = rgb(0x5CF2A0),
+            onSuccess = rgb(0x00391C),
         ),
     )
 }

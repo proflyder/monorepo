@@ -1,5 +1,6 @@
 package dev.proflyder.home.feature.chat.presentation
 
+import dev.proflyder.home.core.model.ChatAlert
 import dev.proflyder.home.core.model.ChatAttachmentKind
 import dev.proflyder.home.core.model.ChatKind
 import dev.proflyder.home.core.model.ChatMessage
@@ -33,8 +34,33 @@ internal data class VoicePlayback(
     val progress: Float get() = if (durationMs <= 0) 0f else (positionMs.toFloat() / durationMs).coerceIn(0f, 1f)
 }
 
+internal interface Dated {
+    val atMillis: Long
+}
+
 internal sealed interface ChatItem {
     val key: String
+
+    data class Alert(
+        override val key: String,
+        val messageId: String,
+        val alert: ChatAlert,
+        val text: String,
+        override val atMillis: Long,
+    ) : ChatItem, Dated {
+        fun asBubble(): Bubble = Bubble(
+            key = key,
+            messageId = messageId,
+            clientId = null,
+            mine = false,
+            kind = ChatKind.ALERT,
+            text = text,
+            atMillis = atMillis,
+            state = BubbleState.DONE,
+            quote = null,
+            errorKey = null,
+        )
+    }
 
     data class Day(val date: LocalDate) : ChatItem {
         override val key: String = "day-$date"
@@ -47,14 +73,14 @@ internal sealed interface ChatItem {
         val mine: Boolean,
         val kind: ChatKind,
         val text: String,
-        val atMillis: Long,
+        override val atMillis: Long,
         val state: BubbleState,
         val quote: ChatQuote?,
         val errorKey: String?,
         val media: List<BubbleMedia> = emptyList(),
         val transcript: String? = null,
         val playback: VoicePlayback? = null,
-    ) : ChatItem {
+    ) : ChatItem, Dated {
         val quotable: Boolean get() = messageId != null && text.isNotEmpty()
     }
 
@@ -69,8 +95,7 @@ internal sealed interface ChatItem {
 
 internal object ChatItems {
     fun build(timeline: ChatTimeline, zone: ZoneId, playback: VoicePlayback? = null): List<ChatItem> {
-        val bubbles = (timeline.messages.mapNotNull { it.toBubble() } + timeline.outbox.map { it.toBubble() })
-            .map { it.withPlayback(playback) }
+        val bubbles = (timeline.messages.mapNotNull { it.toItem(playback) } + timeline.outbox.map { it.toBubble() })
         val items = mutableListOf<ChatItem>()
         if (timeline.loadingOlder) items += ChatItem.Older
         bubbles.fold(null as LocalDate?) { day, bubble -> items.addBubble(day, bubble, zone) }
@@ -78,11 +103,16 @@ internal object ChatItems {
         return items
     }
 
-    private fun MutableList<ChatItem>.addBubble(day: LocalDate?, bubble: ChatItem.Bubble, zone: ZoneId): LocalDate {
-        val date = Instant.ofEpochMilli(bubble.atMillis).atZone(zone).toLocalDate()
+    private fun MutableList<ChatItem>.addBubble(day: LocalDate?, bubble: ChatItem, zone: ZoneId): LocalDate {
+        val date = Instant.ofEpochMilli((bubble as Dated).atMillis).atZone(zone).toLocalDate()
         if (date != day) add(ChatItem.Day(date))
         add(bubble)
         return date
+    }
+
+    private fun ChatMessage.toItem(playback: VoicePlayback?): ChatItem? {
+        val card = alert ?: return toBubble()?.withPlayback(playback)
+        return ChatItem.Alert("m-$id", id, card, text, createdAtMillis)
     }
 
     private fun ChatTimeline.isTyping(): Boolean = messages.any { it.awaitingFirstWords() }

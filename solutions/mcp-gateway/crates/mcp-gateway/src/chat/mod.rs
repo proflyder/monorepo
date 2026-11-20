@@ -1,3 +1,4 @@
+pub mod alerts;
 pub mod hermes;
 pub mod media;
 pub mod model;
@@ -32,10 +33,14 @@ use serde_json::{Value, json};
 use store::{NewTurn, Store, StoreError, Update};
 use stt::SpeechToText;
 
+use crate::push::PushApi;
+
 pub const PERSIST_EVERY: Duration = Duration::from_secs(2);
 pub const KEEPALIVE: Duration = Duration::from_secs(15);
 pub const SNAPSHOT_LIMIT: usize = 500;
 pub const QUOTE_FOR_MODEL_CHARS: usize = 1500;
+pub const PUSH_BODY_CHARS: usize = 300;
+pub const DEFAULT_ASSISTANT_TITLE: &str = "Рикардо";
 const EVENTS_CAPACITY: usize = 512;
 
 pub type Now = Arc<dyn Fn() -> i64 + Send + Sync>;
@@ -43,7 +48,7 @@ pub type NewId = Arc<dyn Fn() -> String + Send + Sync>;
 
 #[derive(Debug, Clone)]
 pub enum Event {
-    Message(Message),
+    Message(Box<Message>),
     Delta(Delta),
 }
 
@@ -52,11 +57,30 @@ pub struct Options {
     pub hermes: Arc<dyn HermesApi>,
     pub media: Option<Arc<MediaStore>>,
     pub stt: Option<Arc<dyn SpeechToText>>,
+    pub push: Option<Arc<dyn PushApi>>,
+    pub notify: Notify,
     pub now: Now,
     pub new_id: NewId,
 }
 
+#[derive(Debug, Clone)]
+pub struct Notify {
+    pub assistant_title: String,
+    pub zone: jiff::tz::TimeZone,
+}
+
+impl Default for Notify {
+    fn default() -> Self {
+        Self {
+            assistant_title: DEFAULT_ASSISTANT_TITLE.to_owned(),
+            zone: jiff::tz::TimeZone::UTC,
+        }
+    }
+}
+
 pub struct Chat {
+    push: Option<Arc<dyn PushApi>>,
+    notify: Notify,
     store: Arc<Store>,
     hermes: Arc<dyn HermesApi>,
     media: Option<Arc<MediaStore>>,
@@ -96,6 +120,8 @@ impl Chat {
             hermes: options.hermes,
             media: options.media,
             stt: options.stt,
+            push: options.push,
+            notify: options.notify,
             now: options.now,
             new_id: options.new_id,
             events,
@@ -105,7 +131,7 @@ impl Chat {
         let (pending, failed) = chat.store.recover((chat.now)())?;
         failed
             .into_iter()
-            .for_each(|message| chat.publish(Event::Message(message)));
+            .for_each(|message| chat.publish(Event::Message(Box::new(message))));
         pending.into_iter().for_each(|id| chat.enqueue(id));
         let worker = Arc::clone(&chat);
         tokio::spawn(async move {
@@ -152,11 +178,71 @@ impl Chat {
         };
         let (message, reply, created) = self.store.insert_turn(&turn).map_err(storage_key)?;
         if created {
-            self.publish(Event::Message(message.clone()));
-            self.publish(Event::Message(reply.clone()));
+            self.publish(Event::Message(Box::new(message.clone())));
+            self.publish(Event::Message(Box::new(reply.clone())));
             self.enqueue(reply.id.clone());
         }
         Ok(SendResponse { message, reply })
+    }
+
+    pub fn ingest(&self, webhook: &alerts::Webhook) -> usize {
+        webhook
+            .alerts
+            .iter()
+            .take(alerts::MAX_ALERTS)
+            .filter_map(alerts::WebhookAlert::card)
+            .filter(|card| self.ingest_card(card))
+            .count()
+    }
+
+    fn ingest_card(&self, card: &alerts::AlertCard) -> bool {
+        let text = card.text(&self.notify.zone);
+        match self
+            .store
+            .upsert_alert(&(self.new_id)(), card, &text, (self.now)())
+        {
+            Ok((message, created)) => {
+                self.publish(Event::Message(Box::new(message.clone())));
+                if created && card.status == alerts::AlertStatus::Firing {
+                    self.push_alert(card, &message.id);
+                }
+                true
+            }
+            Err(error) => {
+                tracing::warn!(%error, "chat: alert not stored");
+                false
+            }
+        }
+    }
+
+    fn push_alert(&self, card: &alerts::AlertCard, id: &str) {
+        let icon = if card.severity == "critical" {
+            "🔴"
+        } else {
+            "🟠"
+        };
+        let body = if card.summary.is_empty() {
+            card.name.clone()
+        } else {
+            card.summary.clone()
+        };
+        self.push_message(format!("{icon} {}", card.name), &body, id);
+    }
+
+    fn push_message(&self, title: String, body: &str, id: &str) {
+        let Some(push) = self.push.clone() else {
+            return;
+        };
+        let body = store::truncate(body.trim(), PUSH_BODY_CHARS);
+        if body.is_empty() {
+            return;
+        }
+        let link = format!("home://chat/message/{id}");
+        tokio::spawn(async move {
+            if let Err(error) = push.notify(&title, &body, Some(&link), None).await {
+                tracing::warn!(%error, "chat: push failed");
+            }
+        });
     }
 
     fn resolve(&self, ids: &[String]) -> Result<Vec<Attachment>, ErrorKey> {
@@ -219,7 +305,7 @@ impl Chat {
                 },
             )
             .map_err(storage_key)?;
-        self.publish(Event::Message(reset.clone()));
+        self.publish(Event::Message(Box::new(reset.clone())));
         self.enqueue(id.to_owned());
         Ok(reset)
     }
@@ -282,7 +368,7 @@ impl Chat {
             now: (self.now)(),
         };
         match self.store.update(id, &update) {
-            Ok(message) => self.publish(Event::Message(self.with_live(message))),
+            Ok(message) => self.publish(Event::Message(Box::new(self.with_live(message)))),
             Err(error) => tracing::warn!(%error, "chat: update failed"),
         }
     }
@@ -359,7 +445,7 @@ impl Chat {
             .store
             .set_transcript(&request.id, &transcript, (self.now)())
         {
-            Ok(message) => self.publish(Event::Message(message)),
+            Ok(message) => self.publish(Event::Message(Box::new(message))),
             Err(error) => tracing::warn!(%error, "chat: transcript not saved"),
         }
         Ok(transcript)
@@ -424,6 +510,7 @@ impl Chat {
         match terminal {
             TurnEvent::Completed(final_text) => {
                 self.update(reply_id, Some(&final_text), Status::Done, None);
+                self.push_message(self.notify.assistant_title.clone(), &final_text, reply_id);
             }
             TurnEvent::Failed(key) => self.update(reply_id, Some(&text), Status::Failed, Some(key)),
             TurnEvent::Delta(_) => {}
@@ -495,6 +582,24 @@ pub fn router<S: Clone + Send + Sync + 'static>(chat: Arc<Chat>) -> Router<S> {
         )
         .route("/v1/chat/attachments/{id}", get(download))
         .with_state(chat)
+}
+
+pub fn alerts_router<S: Clone + Send + Sync + 'static>(chat: Arc<Chat>) -> Router<S> {
+    Router::new()
+        .route("/v1/chat/alerts", post(alert_webhook))
+        .with_state(chat)
+}
+
+async fn alert_webhook(State(chat): State<Arc<Chat>>, body: axum::body::Bytes) -> Response<Body> {
+    serde_json::from_slice::<alerts::Webhook>(&body).map_or_else(
+        |_| {
+            json(
+                StatusCode::BAD_REQUEST,
+                &json!({"code": "chat_alert_invalid"}),
+            )
+        },
+        |webhook| json(StatusCode::OK, &json!({"accepted": chat.ingest(&webhook)})),
+    )
 }
 
 #[derive(Debug, Deserialize)]

@@ -15,6 +15,20 @@ data class ChatAttachment(
     val durationMs: Long?,
 )
 
+data class ChatAlert(
+    val fingerprint: String,
+    val name: String,
+    val severity: String,
+    val resolved: Boolean,
+    val summary: String,
+    val description: String,
+    val namespace: String,
+    val target: String,
+    val startsAtMillis: Long,
+    val endsAtMillis: Long?,
+    val runbookUrl: String,
+)
+
 enum class ChatStatus { PENDING, STREAMING, DONE, FAILED }
 
 data class ChatQuote(
@@ -38,6 +52,7 @@ data class ChatMessage(
     val updatedAtMillis: Long,
     val attachments: List<ChatAttachment> = emptyList(),
     val transcript: String? = null,
+    val alert: ChatAlert? = null,
 )
 
 data class ChatPage(

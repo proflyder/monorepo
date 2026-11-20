@@ -50,4 +50,12 @@
     <string name="chat_error_chat_too_many_attachments">Слишком много вложений в одном сообщении.</string>
     <string name="chat_error_chat_voice_format">Неподдерживаемый формат записи.</string>
     <string name="chat_error_chat_stt_failed">Не удалось распознать голосовое.</string>
+    <string name="chat_alert_firing">Сработал</string>
+    <string name="chat_alert_resolved">Решено</string>
+    <string name="chat_alert_critical">Критичный алерт</string>
+    <string name="chat_alert_warning">Внимание</string>
+    <string name="chat_alert_since">🕒 с %1$s</string>
+    <string name="chat_alert_span">🕒 %1$s → %2$s</string>
+    <string name="chat_alert_reply">Разобраться</string>
+    <string name="chat_alert_runbook">Runbook</string>
 </resources>

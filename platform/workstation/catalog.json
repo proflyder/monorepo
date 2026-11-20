@@ -181,6 +181,10 @@
    "purpose": "Hermes agent environment (HA/MA/Telegram/API keys)",
    "consumer": "ESO → home-assistant"
   },
+  "k8s/home-assistant/chat-alerts": {
+   "purpose": "bearer of the Alertmanager webhook into the app chat (mcp-gateway /v1/chat/alerts)",
+   "consumer": "ESO → home-assistant (mcp-gateway-chat-alerts), monitoring (alertmanager-telegram)"
+  },
   "k8s/home-assistant/hermes-chat-relay": {
    "purpose": "bearer between mcp-gateway and the app chat relay in voice-proxy (Hermes sessions API)",
    "consumer": "ESO → home-assistant (mcp-gateway-chat, hermes-chat-relay)"

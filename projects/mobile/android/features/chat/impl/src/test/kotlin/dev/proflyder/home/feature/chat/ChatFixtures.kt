@@ -1,5 +1,6 @@
 package dev.proflyder.home.feature.chat
 
+import dev.proflyder.home.core.model.ChatAlert
 import dev.proflyder.home.core.model.ChatAttachment
 import dev.proflyder.home.core.model.ChatAttachmentKind
 import dev.proflyder.home.core.model.ChatKind
@@ -47,6 +48,28 @@ internal object ChatFixtures {
         kind = ChatKind.FILE,
         attachments = listOf(ChatAttachment("f_l", ChatAttachmentKind.FILE, "text/plain", 18_432, "scheduler.log", null)),
     )
+
+    fun alert(id: String, seq: Long, severity: String, resolved: Boolean): ChatMessage =
+        message(id, seq, ChatRole.SYSTEM, "🔴 KubePodCrashLooping\n🔎 a1b2c3d4e5f6").copy(
+            kind = ChatKind.ALERT,
+            alert = ChatAlert(
+                fingerprint = "a1b2c3d4e5f60718",
+                name = if (severity == "critical") "KubePodCrashLooping" else "PinsStale",
+                severity = severity,
+                resolved = resolved,
+                summary = if (severity == "critical") "scheduler перезапускается" else "Пины образов старше суток",
+                description = when {
+                    resolved -> ""
+                    severity == "critical" -> "3 рестарта за 10 минут, последний — OOMKilled"
+                    else -> "Последний успешный pins-job был 26 часов назад"
+                },
+                namespace = if (severity == "critical") "home-assistant" else "flux-system",
+                target = if (severity == "critical") "scheduler-7d9" else "home-app-pins",
+                startsAtMillis = NOON + seq * MINUTE,
+                endsAtMillis = if (resolved) NOON + (seq + 30) * MINUTE else null,
+                runbookUrl = "https://runbooks.example.com/crash",
+            ),
+        )
 
     val conversation: List<ChatMessage> = listOf(
         message("m1", 1, ChatRole.USER, "Включи свет в гостиной", clientId = "c1"),

@@ -254,6 +254,11 @@ pub async fn run() -> anyhow::Result<()> {
                 hermes: Arc::new(hermes),
                 media: Some(Arc::new(media)),
                 stt,
+                push: deps.push.clone(),
+                notify: crate::chat::Notify {
+                    zone: config.location.clone(),
+                    ..crate::chat::Notify::default()
+                },
                 now: Arc::new(crate::chat::system_now),
                 new_id: Arc::new(crate::chat::random_id),
             })
@@ -266,6 +271,8 @@ pub async fn run() -> anyhow::Result<()> {
         voice_token: (!config.voice_token.is_empty()).then(|| config.voice_token.clone()),
         voice,
         system,
+        chat_alerts_token: (!config.chat_alerts_token.is_empty())
+            .then(|| config.chat_alerts_token.clone()),
         chat,
         groups,
         deps: Arc::clone(&deps),

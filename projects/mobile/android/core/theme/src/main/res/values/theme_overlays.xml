@@ -29,6 +29,10 @@
         <item name="colorStateOn">?attr/colorPrimary</item>
         <item name="colorOnStateOn">?attr/colorOnPrimary</item>
         <item name="colorStateOnText">@color/home_state_on_text</item>
+        <item name="colorWarning">@color/home_warning</item>
+        <item name="colorOnWarning">@color/home_on_warning</item>
+        <item name="colorSuccess">@color/home_success</item>
+        <item name="colorOnSuccess">@color/home_on_success</item>
         <item name="materialSwitchStyle">@style/Widget.Home.Switch</item>
         <item name="homeFabStrokeWidth">@dimen/theme_fab_no_stroke</item>
         <item name="homeFabStrokeColor">?attr/colorPrimary</item>
@@ -68,6 +72,10 @@
         <item name="colorStateOn">?attr/colorSecondary</item>
         <item name="colorOnStateOn">?attr/colorOnSecondary</item>
         <item name="colorStateOnText">?attr/colorSecondary</item>
+        <item name="colorWarning">@color/theme_neon_warning</item>
+        <item name="colorOnWarning">@color/theme_neon_on_warning</item>
+        <item name="colorSuccess">@color/theme_neon_success</item>
+        <item name="colorOnSuccess">@color/theme_neon_on_success</item>
         <item name="materialSwitchStyle">@style/Widget.Home.Switch</item>
         <item name="homeFabStrokeWidth">@dimen/theme_neon_stroke</item>
         <item name="homeFabStrokeColor">?attr/colorSecondary</item>

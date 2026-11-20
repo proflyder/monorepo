@@ -1197,6 +1197,7 @@ fn tools_router(scenario: &str, worlds: &Worlds) -> Router {
     server::router(server::Options {
         system: None,
         chat: None,
+        chat_alerts_token: None,
         auth_token: "mcp-contract-token".to_owned(),
         voice_token: Some("voice-contract-token".to_owned()),
         voice: None,
@@ -1249,6 +1250,7 @@ fn server_router(_scenario: &str, _worlds: &Worlds) -> Router {
     server::router(server::Options {
         system: None,
         chat: None,
+        chat_alerts_token: None,
         auth_token: "mcp-contract-token".to_owned(),
         voice_token: Some("voice-contract-token".to_owned()),
         voice: None,

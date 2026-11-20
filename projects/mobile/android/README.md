@@ -144,6 +144,17 @@ Current device acceptance and remaining work are tracked in
   saved in the outbox so a retry never uploads twice. A file that disappeared
   from the phone fails the message with its own key. Received media are cached
   under `files/chat-media/<id>`; a photo opens in a dialog on tap.
+- Alerts: Alertmanager alerts arrive as cards (name, severity chip, summary,
+  description, namespace / object, since → resolved time, Runbook). Firing
+  critical uses `?colorErrorContainer`, warning `?colorTertiaryContainer`, a
+  resolved card turns neutral with «✅ Resolved» in place. «Investigate» (or
+  long press → Reply) quotes the card, whose text carries the fingerprint, so
+  Hermes runs the same `infra_alert` investigation as a Telegram reply.
+- Push: the gateway sends `home://chat/message/<id>` for a new alert and for a
+  finished reply. `PushChatGate` skips the notification while the Chat tab is
+  started (`ChatFocus.isVisible`); a tap — from the in-app notification or the
+  system tray (`deepLink` data extra) — opens the tab and scrolls to that
+  message (`ChatFocus.request`).
 - Server error keys map to string resources in `ChatTexts.kt`; the server never
   sends user-facing text.
 - Tests: `features/chat/impl:chat_test` (timeline reducers, outbox codec,
@@ -151,7 +162,8 @@ Current device acceptance and remaining work are tracked in
   uploads, feed items, Markdown, Robolectric PNGs `chat-current`,
   `chat-current-dark`, `chat-neon`, `chat-neon-dark`, `chat-neon-typing`,
   `chat-media-current` (voice with transcript and playback, file, photo) and
-  `chat-media-neon-dark` (the recording panel)) and
+  `chat-media-neon-dark` (the recording panel), `chat-alerts-current`,
+  `chat-alerts-neon-dark`) and
   `app:window_insets_screenshot_test` (`insets-{neon,current}-chat-keyboard`:
   the panel sits on the keyboard and the bottom bar hides).
 

@@ -3,6 +3,8 @@ package dev.proflyder.home.feature.chat.presentation
 import dev.proflyder.home.core.model.ChatRole
 import dev.proflyder.home.core.model.ChatStatus
 import dev.proflyder.home.feature.chat.ChatFixtures
+import dev.proflyder.home.feature.chat.ChatFocus
+import dev.proflyder.home.feature.chat.ChatRoute
 import dev.proflyder.home.feature.chat.data.ChatTimeline
 import dev.proflyder.home.feature.chat.data.Outgoing
 import java.time.ZoneOffset
@@ -22,6 +24,20 @@ class ChatItemsTest {
         assertEquals(listOf(true, false, true, false, true, false), bubbles.map { it.mine })
         assertEquals(BubbleState.FAILED, bubbles.last().state)
         assertEquals("m2", bubbles[2].quote?.id)
+    }
+
+    @Test
+    fun alertsBecomeCardsAndRoutesFocusAMessage() {
+        val items = ChatItems.build(ChatTimeline(messages = listOf(ChatFixtures.alert("m1", 1, "critical", resolved = false))), zone)
+        val card = items.filterIsInstance<ChatItem.Alert>().single()
+        assertEquals("m1", card.asBubble().messageId)
+        assertTrue(card.asBubble().quotable)
+        assertEquals("m_7", ChatRoute.messageId("chat/message/m_7"))
+        assertEquals(null, ChatRoute.messageId("chat"))
+        assertTrue(ChatRoute.isChat("chat/message/m_7"))
+        ChatFocus.request("m_7")
+        assertEquals("m_7", ChatFocus.take())
+        assertEquals(null, ChatFocus.take())
     }
 
     @Test

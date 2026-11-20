@@ -3,6 +3,7 @@ use std::sync::{Mutex, PoisonError};
 
 use rusqlite::{Connection, OptionalExtension as _, Row, params};
 
+use super::alerts::AlertCard;
 use super::model::{Attachment, ErrorKey, Kind, Message, Quote, Role, Status};
 
 pub const QUOTE_CHARS: usize = 200;
@@ -23,16 +24,26 @@ CREATE TABLE IF NOT EXISTS chat_messages (
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL,
     attachments TEXT,
-    transcript TEXT
+    transcript TEXT,
+    alert TEXT,
+    alert_key TEXT
 );
 CREATE INDEX IF NOT EXISTS chat_messages_version ON chat_messages(version);
 CREATE INDEX IF NOT EXISTS chat_messages_request ON chat_messages(request_id);
 ";
 
-const COLUMNS: &str = "m.seq, m.id, m.version, m.client_id, m.role, m.kind, m.text, m.status, \
-     m.error, m.created_at, m.updated_at, q.id, q.role, q.text, m.attachments, m.transcript";
+const ALERT_INDEX: &str =
+    "CREATE UNIQUE INDEX IF NOT EXISTS chat_messages_alert ON chat_messages(alert_key)";
 
-const ADDED_COLUMNS: [(&str, &str); 2] = [("attachments", "TEXT"), ("transcript", "TEXT")];
+const COLUMNS: &str = "m.seq, m.id, m.version, m.client_id, m.role, m.kind, m.text, m.status, \
+     m.error, m.created_at, m.updated_at, q.id, q.role, q.text, m.attachments, m.transcript, m.alert";
+
+const ADDED_COLUMNS: [(&str, &str); 4] = [
+    ("attachments", "TEXT"),
+    ("transcript", "TEXT"),
+    ("alert", "TEXT"),
+    ("alert_key", "TEXT"),
+];
 
 const FROM: &str = "chat_messages m LEFT JOIN chat_messages q ON q.id = m.reply_to";
 
@@ -85,6 +96,7 @@ impl Store {
         connection.pragma_update(None, "synchronous", "NORMAL")?;
         connection.execute_batch(SCHEMA)?;
         migrate(&connection)?;
+        connection.execute_batch(ALERT_INDEX)?;
         Ok(Self {
             connection: Mutex::new(connection),
         })
@@ -168,6 +180,45 @@ impl Store {
                 version,
                 limit,
             )
+        })
+    }
+
+    pub fn upsert_alert(
+        &self,
+        id: &str,
+        card: &AlertCard,
+        text: &str,
+        now: i64,
+    ) -> Result<(Message, bool), StoreError> {
+        let encoded = serde_json::to_string(card).unwrap_or_default();
+        let key = card.key();
+        self.with(|connection| {
+            let transaction = connection.transaction()?;
+            let existing: Option<String> = transaction
+                .query_row(
+                    "SELECT id FROM chat_messages WHERE alert_key = ?1",
+                    params![key],
+                    |row| row.get(0),
+                )
+                .optional()?;
+            let version = next_version(&transaction)?;
+            let target = existing.clone().unwrap_or_else(|| id.to_owned());
+            match existing {
+                Some(_) => transaction.execute(
+                    "UPDATE chat_messages SET text = ?2, alert = ?3, version = ?4, updated_at = ?5 \
+                     WHERE id = ?1",
+                    params![target, text, encoded, version, now],
+                )?,
+                None => transaction.execute(
+                    "INSERT INTO chat_messages (id, version, role, kind, text, status, created_at, \
+                     updated_at, alert, alert_key) \
+                     VALUES (?1, ?2, 'system', 'alert', ?3, 'done', ?4, ?4, ?5, ?6)",
+                    params![target, version, text, now, encoded, key],
+                )?,
+            };
+            let message = fetch(&transaction, &target)?.ok_or(StoreError::NotFound)?;
+            transaction.commit()?;
+            Ok((message, existing.is_none()))
         })
     }
 
@@ -385,6 +436,9 @@ fn read_message(row: &Row<'_>) -> rusqlite::Result<Message> {
             .and_then(|raw| serde_json::from_str(&raw).ok())
             .unwrap_or_default(),
         transcript: row.get(15)?,
+        alert: row
+            .get::<_, Option<String>>(16)?
+            .and_then(|raw| serde_json::from_str(&raw).ok()),
         seq: row.get(0)?,
         id: row.get(1)?,
         version: row.get(2)?,

@@ -31,6 +31,10 @@ data class ColorScheme(
     @ColorInt val stateOn: Int,
     @ColorInt val onStateOn: Int,
     @ColorInt val stateOnText: Int,
+    @ColorInt val warning: Int,
+    @ColorInt val onWarning: Int,
+    @ColorInt val success: Int,
+    @ColorInt val onSuccess: Int,
 ) {
     @ColorInt
     operator fun get(role: ColorRole): Int = when (role) {
@@ -62,6 +66,10 @@ data class ColorScheme(
         ColorRole.STATE_ON -> stateOn
         ColorRole.ON_STATE_ON -> onStateOn
         ColorRole.STATE_ON_TEXT -> stateOnText
+        ColorRole.WARNING -> warning
+        ColorRole.ON_WARNING -> onWarning
+        ColorRole.SUCCESS -> success
+        ColorRole.ON_SUCCESS -> onSuccess
     }
 }
 

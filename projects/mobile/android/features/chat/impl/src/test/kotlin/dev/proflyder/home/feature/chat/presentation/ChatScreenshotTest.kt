@@ -117,6 +117,27 @@ class ChatScreenshotTest {
         binding.chatRecordingTime.text = android.text.format.DateUtils.formatElapsedTime(RECORDED_SECONDS)
     }
 
+    private fun alerts(): ChatTimeline = ChatTimeline(
+        messages = listOf(
+            ChatFixtures.alert("m20", 20, "critical", resolved = false),
+            ChatFixtures.alert("m21", 21, "warning", resolved = false),
+            ChatFixtures.alert("m22", 22, "critical", resolved = true),
+        ),
+        loaded = true,
+    )
+
+    @Test
+    fun alertsInCurrent() {
+        val binding = render("chat-alerts-current", AppTheme.CURRENT, alerts(), prepare = {})
+        assertEquals(4, binding.chatList.adapter?.itemCount)
+    }
+
+    @Test
+    @Config(qualifiers = "ru-w411dp-h891dp-night-xxhdpi")
+    fun alertsInNeonDark() {
+        render("chat-alerts-neon-dark", AppTheme.NEON, alerts(), prepare = {})
+    }
+
     @Test
     fun mediaInCurrent() {
         val playback = VoicePlayback("a-f_v", 2_600, 7_400, playing = true)
