@@ -6,11 +6,11 @@ import android.view.Menu
 import android.view.MenuItem
 import android.view.View
 import androidx.activity.OnBackPressedCallback
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
-import androidx.core.view.WindowCompat
-import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.isVisible
 import androidx.core.view.updatePadding
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModel
@@ -26,6 +26,12 @@ import dev.proflyder.home.core.navigation.Navigator
 import dev.proflyder.home.core.navigation.NavigatorHost
 import dev.proflyder.home.core.model.PowerState
 import dev.proflyder.home.core.ui.AppForeground
+import dev.proflyder.home.core.ui.applyNavigationInset
+import dev.proflyder.home.core.ui.doOnApplyInsets
+import dev.proflyder.home.core.ui.forContentBetweenBars
+import dev.proflyder.home.core.ui.horizontalInsets
+import dev.proflyder.home.core.ui.keyboardVisible
+import dev.proflyder.home.core.ui.topInset
 import dev.proflyder.home.core.ui.ViewModelFactoryProvider
 import dev.proflyder.home.databinding.ActivityMainBinding
 import dev.proflyder.home.feature.control.presentation.ControlUiState
@@ -64,7 +70,7 @@ class MainActivity : AppCompatActivity(), NavigatorHost, ViewModelFactoryProvide
         super.onCreate(savedInstanceState)
         val graph = (application as HomeApplication).graph
         features = graph.featureRegistry
-        WindowCompat.setDecorFitsSystemWindows(window, false)
+        enableEdgeToEdge()
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
         actionsMenu = ToolbarActionsMenu(this, ::runMenuAction)
@@ -274,21 +280,19 @@ class MainActivity : AppCompatActivity(), NavigatorHost, ViewModelFactoryProvide
     }
 
     private fun applySystemBarInsets() {
-        val appBar = binding.appbar
-        ViewCompat.setOnApplyWindowInsetsListener(appBar) { view, insets ->
-            val top = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top
-            view.updatePadding(top = top)
+        binding.appbar.doOnApplyInsets { view, insets, initial ->
+            val sides = insets.horizontalInsets()
+            view.updatePadding(left = sides.left, top = initial.top + insets.topInset(), right = sides.right)
+        }
+        ViewCompat.setOnApplyWindowInsetsListener(binding.root) { _, insets ->
+            bottomNavigation.isVisible = !insets.keyboardVisible()
             insets
         }
-        ViewCompat.setOnApplyWindowInsetsListener(bottomNavigation) { view, insets ->
-            val bottom = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom
-            view.updatePadding(bottom = bottom)
-            insets
-        }
-        val content = binding.fragmentContainer
-        ViewCompat.setOnApplyWindowInsetsListener(content) { view, insets ->
-            view.updatePadding(bottom = insets.getInsets(WindowInsetsCompat.Type.ime()).bottom)
-            insets
+        bottomNavigation.applyNavigationInset()
+        ViewCompat.setOnApplyWindowInsetsListener(binding.fragmentContainer) { view, insets ->
+            val sides = insets.horizontalInsets()
+            view.updatePadding(left = sides.left, right = sides.right)
+            insets.forContentBetweenBars(bottomCovered = !insets.keyboardVisible())
         }
     }
 

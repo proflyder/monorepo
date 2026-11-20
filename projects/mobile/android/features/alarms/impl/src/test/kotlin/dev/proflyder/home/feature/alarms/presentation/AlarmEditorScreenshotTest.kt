@@ -34,7 +34,8 @@ class AlarmEditorScreenshotTest {
     fun emptyLabelShowsDefaultPlaceholderInDarkTheme() {
         val binding = inflate()
         val labelField = binding.alarmEditorLabelLayout
-        assertEquals(themed().getString(R.string.alarms_label_default), labelField.hint)
+        assertEquals(themed().getString(R.string.alarms_editor_name), labelField.hint)
+        assertEquals(themed().getString(R.string.alarms_label_default), labelField.placeholderText)
         configureNew(binding)
         savePng(binding.root, "alarm-editor-new-dark.png", 411, 891)
     }

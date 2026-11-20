@@ -24,7 +24,6 @@
     <string name="connection_remote_timeouts">Соединение %1$d с, чтение %2$d с</string>
     <string name="connection_http_warning">HTTP не шифруется. Используйте HTTPS, когда сервер предоставляет доверенный сертификат; HTTP предназначен только для явно локальной настройки.</string>
     <string name="connection_token_title">Bearer-токен</string>
-    <string name="connection_token">Bearer-токен</string>
     <string name="connection_token_helper">Оставьте пустым, чтобы сохранить текущий токен. Он шифруется неэкспортируемым ключом Android Keystore и никогда не попадает в логи или URL. Токен никогда не читается из Remote Config.</string>
     <string name="connection_clear_token">Удалить сохранённый токен</string>
     <string name="connection_test">Сохранить и проверить подключение</string>
@@ -47,4 +46,5 @@
     <string name="connection_remote_intercom_label">Адрес intercom (звонки)</string>
     <string name="connection_remote_not_set_calls">Не задан (звонки выключены)</string>
     <string name="connection_remote_invalid_intercom">В Remote Config неверный адрес intercom. Используйте полный URL http:// или https:// либо оставьте поле пустым.</string>
+    <string name="connection_token_placeholder">Вставьте токен</string>
 </resources>

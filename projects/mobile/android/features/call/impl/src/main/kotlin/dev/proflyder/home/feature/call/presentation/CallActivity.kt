@@ -7,6 +7,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.PowerManager
 import android.view.View
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
@@ -30,6 +31,7 @@ import java.util.Locale
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import dev.proflyder.home.core.ui.applySystemBarsPadding
 
 /**
  * Lock-screen call screen. It is a separate Activity (not a Fragment) because a
@@ -57,8 +59,10 @@ class CallActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         dependencies = CallEntryPoint.require()
+        enableEdgeToEdge()
         binding = ActivityCallBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        binding.root.applySystemBarsPadding()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
             setShowWhenLocked(true)
             setTurnScreenOn(true)

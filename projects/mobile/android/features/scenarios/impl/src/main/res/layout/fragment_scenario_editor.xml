@@ -35,7 +35,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
             android:hint="@string/scenarios_editor_label"
-            style="@style/Widget.Material3.TextInputLayout.OutlinedBox">
+            style="@style/Widget.Home.TextInput">
 
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/scenario_editor_label"
@@ -51,7 +51,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="12dp"
             android:hint="@string/scenarios_editor_description"
-            style="@style/Widget.Material3.TextInputLayout.OutlinedBox">
+            style="@style/Widget.Home.TextInput">
 
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/scenario_editor_description"

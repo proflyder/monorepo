@@ -8,6 +8,7 @@ import com.google.android.material.chip.Chip
 import dev.proflyder.home.core.model.RepeatKind
 import dev.proflyder.home.core.navigation.requireNavigator
 import dev.proflyder.home.core.ui.BaseFragment
+import dev.proflyder.home.core.ui.pinAboveKeyboard
 import dev.proflyder.home.core.ui.setVisible
 import dev.proflyder.home.core.ui.showDatePicker
 import dev.proflyder.home.core.ui.showTimePicker
@@ -37,6 +38,7 @@ class AlarmEditorFragment :
         }
 
     override fun onBindingCreated(binding: FragmentAlarmEditorBinding, savedInstanceState: Bundle?) {
+        binding.alarmEditorSaveBar.pinAboveKeyboard(binding.alarmEditorScroll)
         val alarmId = arguments?.getString(AlarmEditorDestination.ARG_ALARM_ID)
         viewModel.start(alarmId)
         binding.alarmEditorDelete.setVisible(alarmId != null)

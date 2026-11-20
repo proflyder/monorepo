@@ -7,6 +7,8 @@ import dev.proflyder.home.core.config.RemoteConnectionState
 import dev.proflyder.home.core.config.TokenStatus
 import dev.proflyder.home.core.model.Field
 import dev.proflyder.home.core.ui.BaseFragment
+import dev.proflyder.home.core.ui.applyScrollBottomInset
+import dev.proflyder.home.core.ui.keepFocusedVisible
 import dev.proflyder.home.core.ui.setVisible
 import dev.proflyder.home.core.ui.setupPullToRefresh
 import dev.proflyder.home.core.ui.userMessage
@@ -27,6 +29,8 @@ class ConnectionFragment :
     private var rendering = false
 
     override fun onBindingCreated(binding: FragmentConnectionBinding, savedInstanceState: Bundle?) {
+        binding.connectionScroll.applyScrollBottomInset()
+        binding.connectionScroll.keepFocusedVisible()
         binding.connectionToken.doAfterTextChanged {
             if (!rendering) viewModel.setToken(it?.toString().orEmpty())
         }

@@ -4,6 +4,7 @@ import android.os.Bundle
 import androidx.activity.OnBackPressedCallback
 import androidx.fragment.app.activityViewModels
 import androidx.recyclerview.widget.GridLayoutManager
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.core.model.Schedule
 import dev.proflyder.home.core.navigation.requireNavigator
@@ -12,16 +13,18 @@ import dev.proflyder.home.core.ui.BaseFragment
 import dev.proflyder.home.core.ui.ListStateViews
 import dev.proflyder.home.core.ui.animateBar
 import dev.proflyder.home.core.ui.animateVerticalPadding
+import dev.proflyder.home.core.ui.applyScrollBottomInset
+import dev.proflyder.home.core.ui.fabClearance
+import dev.proflyder.home.core.ui.liftAboveBottomInsets
 import dev.proflyder.home.core.ui.setVisible
 import dev.proflyder.home.core.ui.setupPullToRefresh
 import dev.proflyder.home.core.ui.userMessage
 import dev.proflyder.home.core.ui.viewModelFactory
-import dev.proflyder.home.feature.alarms.AlarmEditorDestination
 import dev.proflyder.home.feature.alarms.AlarmDisableChoice
+import dev.proflyder.home.feature.alarms.AlarmEditorDestination
 import dev.proflyder.home.feature.alarms.alarmDisableChoice
 import dev.proflyder.home.feature.alarms.impl.R
 import dev.proflyder.home.feature.alarms.impl.databinding.FragmentAlarmsBinding
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
 
 class AlarmsFragment : BaseFragment<FragmentAlarmsBinding>(FragmentAlarmsBinding.Companion::inflate) {
     internal val viewModel: AlarmsViewModel by activityViewModels {
@@ -53,6 +56,9 @@ class AlarmsFragment : BaseFragment<FragmentAlarmsBinding>(FragmentAlarmsBinding
     }
 
     override fun onBindingCreated(binding: FragmentAlarmsBinding, savedInstanceState: Bundle?) {
+        binding.alarmsList.applyScrollBottomInset(binding.alarmsList.fabClearance())
+        binding.alarmsAdd.liftAboveBottomInsets()
+        binding.alarmsActionBar.liftAboveBottomInsets()
         adapter = AlarmAdapter(adapterCallback)
         binding.alarmsList.layoutManager =
             GridLayoutManager(requireContext(), resources.getInteger(R.integer.alarms_columns))

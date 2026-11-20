@@ -25,7 +25,6 @@
     <string name="connection_remote_timeouts">Connect %1$d s, read %2$d s</string>
     <string name="connection_http_warning">HTTP is not encrypted. Use HTTPS when the server provides a trusted certificate; HTTP is intended only for an explicit local setup.</string>
     <string name="connection_token_title">Bearer token</string>
-    <string name="connection_token">Bearer token</string>
     <string name="connection_token_helper">Leave blank to keep the stored token. It is encrypted with a non-exportable Android Keystore key and is never logged or put in a URL. The token is never read from Remote Config.</string>
     <string name="connection_clear_token">Remove stored token</string>
     <string name="connection_test">Save and test connection</string>
@@ -48,4 +47,5 @@
     <string name="connection_remote_intercom_label">Intercom address (calls)</string>
     <string name="connection_remote_not_set_calls">Not set (calls disabled)</string>
     <string name="connection_remote_invalid_intercom">Remote Config has an invalid intercom address. Use a full http:// or https:// URL, or leave it empty.</string>
+    <string name="connection_token_placeholder">Paste the token</string>
 </resources>

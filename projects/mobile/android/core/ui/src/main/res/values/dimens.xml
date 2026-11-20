@@ -11,4 +11,6 @@
     <dimen name="ui_pill_padding_horizontal">14dp</dimen>
     <dimen name="ui_pill_height">32dp</dimen>
     <dimen name="ui_pill_gap">4dp</dimen>
+    <dimen name="ui_fab_clearance">88dp</dimen>
+    <dimen name="ui_text_input_focus_stroke">2dp</dimen>
 </resources>

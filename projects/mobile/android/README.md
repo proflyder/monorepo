@@ -900,6 +900,54 @@ catalog reads use `GET /v1/catalog`.
 - `EnqueueTask` is one-shot; recurring generic tasks and event-trigger rules are
   not implemented.
 
+## Window insets and text fields
+
+All screens are edge-to-edge (`enableEdgeToEdge()` in `MainActivity`,
+`CallActivity`, `FindPhoneActivity`; manifest keeps `adjustResize`). One
+mechanism in `core/ui` (`WindowInsets.kt`, no third-party library) applies
+`systemBars()`, `displayCutout()` and `ime()`; no layout hard-codes status or
+navigation bar sizes.
+
+- `MainActivity`: the app bar takes the top inset, the bottom navigation takes
+  the navigation-bar inset. The fragment container sits between them and its
+  children receive insets without the status bar and, while the bottom
+  navigation is shown, without the navigation bar and keyboard
+  (`forContentBetweenBars`), so a screen never pads twice.
+- While the keyboard is open the bottom navigation is hidden (GONE) on every
+  screen. The keyboard covers it anyway; keeping it would lift editor panels by
+  its height and leave an empty band between the panel and the keyboard. It
+  returns when the keyboard closes.
+- Scrolling lists and forms: `applyScrollBottomInset(extra)` — `clipToPadding
+  = false` and bottom padding = initial + max(ime, navigation bar) + extra.
+  Screens with a FAB pass `fabClearance()` so the last row stays above it;
+  FABs, banners and the alarm selection bar use `liftAboveBottomInsets()`.
+- Pinned bottom panels (the alarm editor **Save** bar): `pinAboveKeyboard(content)`
+  sets the panel's bottom margin to max(ime, navigation bar), so it rests
+  exactly on the keyboard with no gap; the content gets bottom padding = panel
+  height + that inset. A `WindowInsetsAnimationCompat` callback translates the
+  panel with the keyboard animation.
+- Forms keep the focused field visible: `keepFocusedVisible()` scrolls a
+  `NestedScrollView` so the focused field, together with its whole
+  `TextInputLayout` (helper/error), is above the padding/panel.
+- Bottom sheets use `ThemeOverlay.Home.BottomSheetDialog` (edge-to-edge,
+  `adjustResize`); Material sheets pad themselves for the navigation bar.
+  Alert dialogs are floating windows and are positioned by the system.
+
+Text fields share `Widget.Home.TextInput` (also the theme's `textInputStyle`):
+filled box on `colorSurfaceContainerHigh`, the card corner radius, no underline
+or outline at rest, a 2dp `colorPrimary` outline only while focused (a focus
+foreground on the edit text), label/hint/helper/error from the theme. A field
+has either a section title or a floating label, never both: the alarm editor
+uses the label **Name** with the default name as placeholder; the token field
+keeps its card title and shows a placeholder instead of a duplicate label.
+
+`//projects/mobile/android/app:window_insets_screenshot_test` runs the real
+activity with status/navigation/keyboard insets in the Neon and Current themes:
+the Save bar bottom equals window height minus the keyboard and does not cover
+the name field, the bottom navigation is hidden with the keyboard, the last
+Home row ends above the FAB and the bottom navigation, and the fields use the
+shared style. It writes `insets-<theme>-{alarm-editor-keyboard,home-end,connection}.png`.
+
 ## Themes
 
 Themes are code in `core/theme`:

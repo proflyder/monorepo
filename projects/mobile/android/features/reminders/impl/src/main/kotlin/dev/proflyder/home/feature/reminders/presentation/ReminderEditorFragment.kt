@@ -6,6 +6,8 @@ import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
 import dev.proflyder.home.core.navigation.requireNavigator
 import dev.proflyder.home.core.ui.BaseFragment
+import dev.proflyder.home.core.ui.applyScrollBottomInset
+import dev.proflyder.home.core.ui.keepFocusedVisible
 import dev.proflyder.home.core.ui.setVisible
 import dev.proflyder.home.core.ui.showDatePicker
 import dev.proflyder.home.core.ui.showTimePicker
@@ -26,6 +28,8 @@ class ReminderEditorFragment :
     private var rendering = false
 
     override fun onBindingCreated(binding: FragmentReminderEditorBinding, savedInstanceState: Bundle?) {
+        binding.root.applyScrollBottomInset()
+        binding.root.keepFocusedVisible()
         val reminderId = arguments?.getString(ReminderEditorDestination.ARG_REMINDER_ID)
         viewModel.start(reminderId)
         binding.reminderEditorDelete.setVisible(reminderId != null)

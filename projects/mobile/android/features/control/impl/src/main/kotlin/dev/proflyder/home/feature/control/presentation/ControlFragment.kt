@@ -15,10 +15,15 @@ import dev.proflyder.home.core.ui.BaseAdapterCallback
 import dev.proflyder.home.core.ui.BaseFragment
 import dev.proflyder.home.core.ui.ListStateViews
 import dev.proflyder.home.core.ui.Notices
+import dev.proflyder.home.core.ui.applyScrollBottomInset
+import dev.proflyder.home.core.ui.fabClearance
+import dev.proflyder.home.core.ui.liftAboveBottomInsets
 import dev.proflyder.home.core.ui.setVisible
 import dev.proflyder.home.core.ui.setupPullToRefresh
 import dev.proflyder.home.core.ui.userMessage
 import dev.proflyder.home.core.ui.viewModelFactory
+import dev.proflyder.home.feature.alarms.AlarmDisableChoice
+import dev.proflyder.home.feature.alarms.alarmDisableChoice
 import dev.proflyder.home.feature.control.ControlFilter
 import dev.proflyder.home.feature.control.ControlItem
 import dev.proflyder.home.feature.control.ControlItems
@@ -31,8 +36,6 @@ import dev.proflyder.home.feature.control.SpeedDialItems
 import dev.proflyder.home.feature.control.WakeFeedback
 import dev.proflyder.home.feature.control.WakeFeedbackAction
 import dev.proflyder.home.feature.control.WakeFeedbackKind
-import dev.proflyder.home.feature.alarms.AlarmDisableChoice
-import dev.proflyder.home.feature.alarms.alarmDisableChoice
 import dev.proflyder.home.feature.control.impl.R
 import dev.proflyder.home.feature.control.impl.databinding.FragmentControlBinding
 import kotlinx.coroutines.delay
@@ -165,6 +168,9 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
     }
 
     override fun onBindingCreated(binding: FragmentControlBinding, savedInstanceState: Bundle?) {
+        binding.controlList.applyScrollBottomInset(binding.controlList.fabClearance())
+        binding.controlQuickFab.liftAboveBottomInsets()
+        binding.controlStatesBanner.liftAboveBottomInsets()
         adapter = ControlAdapter(adapterCallback)
         val spanCount = resources.getInteger(R.integer.control_columns)
         val deviceSpan = spanCount / resources.getInteger(R.integer.control_device_columns)

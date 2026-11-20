@@ -1,8 +1,8 @@
 package dev.proflyder.home.feature.scenarios.presentation
 
-import androidx.appcompat.app.AlertDialog
 import android.os.Bundle
 import android.widget.ProgressBar
+import androidx.appcompat.app.AlertDialog
 import androidx.core.widget.doAfterTextChanged
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
@@ -14,6 +14,8 @@ import dev.proflyder.home.core.model.ScenarioStep
 import dev.proflyder.home.core.model.ScenarioTrigger
 import dev.proflyder.home.core.navigation.requireNavigator
 import dev.proflyder.home.core.ui.BaseFragment
+import dev.proflyder.home.core.ui.applyScrollBottomInset
+import dev.proflyder.home.core.ui.keepFocusedVisible
 import dev.proflyder.home.core.ui.setVisible
 import dev.proflyder.home.core.ui.userMessage
 import dev.proflyder.home.core.ui.viewModelFactory
@@ -44,6 +46,8 @@ class ScenarioEditorFragment :
     private var catalogWaitDialog: AlertDialog? = null
 
     override fun onBindingCreated(binding: FragmentScenarioEditorBinding, savedInstanceState: Bundle?) {
+        binding.root.applyScrollBottomInset()
+        binding.root.keepFocusedVisible()
         val scenarioId = arguments?.getString(ScenarioEditorDestination.ARG_SCENARIO_ID)
         viewModel.start(scenarioId)
         binding.scenarioEditorDelete.setVisible(scenarioId != null)

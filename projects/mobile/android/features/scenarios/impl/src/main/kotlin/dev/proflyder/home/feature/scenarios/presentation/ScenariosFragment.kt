@@ -12,6 +12,9 @@ import dev.proflyder.home.core.ui.BaseAdapterCallback
 import dev.proflyder.home.core.ui.BaseFragment
 import dev.proflyder.home.core.ui.ListStateViews
 import dev.proflyder.home.core.ui.Notices
+import dev.proflyder.home.core.ui.applyScrollBottomInset
+import dev.proflyder.home.core.ui.fabClearance
+import dev.proflyder.home.core.ui.liftAboveBottomInsets
 import dev.proflyder.home.core.ui.setVisible
 import dev.proflyder.home.core.ui.setupPullToRefresh
 import dev.proflyder.home.core.ui.userMessage
@@ -36,6 +39,8 @@ class ScenariosFragment : BaseFragment<FragmentScenariosBinding>(FragmentScenari
     }
 
     override fun onBindingCreated(binding: FragmentScenariosBinding, savedInstanceState: Bundle?) {
+        binding.scenariosList.applyScrollBottomInset(binding.scenariosList.fabClearance())
+        binding.scenariosAdd.liftAboveBottomInsets()
         adapter = ScenarioAdapter(adapterCallback)
         binding.scenariosList.layoutManager =
             GridLayoutManager(requireContext(), resources.getInteger(R.integer.scenarios_columns))

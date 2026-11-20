@@ -6,6 +6,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import dev.proflyder.home.core.navigation.requireNavigator
 import dev.proflyder.home.core.ui.BaseAdapterCallback
 import dev.proflyder.home.core.ui.BaseFragment
+import dev.proflyder.home.core.ui.applyScrollBottomInset
 import dev.proflyder.home.core.ui.setVisible
 import dev.proflyder.home.core.ui.viewModelFactory
 import dev.proflyder.home.feature.push.NotificationHistoryEntry
@@ -33,6 +34,7 @@ class NotificationHistoryFragment :
     }
 
     override fun onBindingCreated(binding: FragmentNotificationHistoryBinding, savedInstanceState: Bundle?) {
+        binding.historyList.applyScrollBottomInset()
         adapter = NotificationHistoryAdapter(callback)
         binding.historyList.layoutManager = LinearLayoutManager(requireContext())
         binding.historyList.adapter = adapter

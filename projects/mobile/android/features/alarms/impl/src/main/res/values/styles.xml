@@ -60,9 +60,6 @@
         <item name="android:gravity">center</item>
     </style>
 
-    <style name="Widget.Alarms.SectionTitle" parent="TextAppearance.Material3.TitleMedium">
-        <item name="android:textColor">?attr/colorOnSurfaceVariant</item>
-    </style>
 
     <!-- Seven round day toggles on one row. The size is fixed, not weighted:
          each toggle keeps a 44dp circle while the equal cells spread them

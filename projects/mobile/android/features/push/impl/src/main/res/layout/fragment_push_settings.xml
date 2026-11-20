@@ -2,7 +2,7 @@
 <!-- Settings screen: three permission rows, a ring summary and the device
      registration, each section a tonal card with its own icon. Every visible
      string comes from resources. -->
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
@@ -191,7 +191,7 @@
                     android:textAppearance="?attr/textAppearanceTitleSmall" />
 
                 <com.google.android.material.textfield.TextInputLayout
-                    style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                    style="@style/Widget.Home.TextInput"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="@dimen/ui_tile_gap"
@@ -275,4 +275,4 @@
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
     </LinearLayout>
-</ScrollView>
+</androidx.core.widget.NestedScrollView>
