@@ -5,7 +5,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** DTO codec round-trips and the int64-as-string contract. */
 class WireDtosTest {
 
     @Test

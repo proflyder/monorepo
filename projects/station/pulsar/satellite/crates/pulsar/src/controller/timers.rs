@@ -1,5 +1,3 @@
-//! HA-таймеры, показ на часах и звонок (controller.cpp "timers", ring).
-
 use std::collections::BTreeMap;
 
 use pulsar_core::now_ms;
@@ -11,22 +9,15 @@ use super::logic::{self, HaTimer, Phase};
 use super::ports::Display;
 use super::{Controller, Pending, Tk};
 
-/// A ringing timer stops by itself after this long (C++ TIMER_RING_MAX_MS).
 pub const TIMER_RING_MAX_MS: i64 = 15 * 60 * 1000;
 
-/// Что делать на очередном тике звонка.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RingStep {
-    /// Потолок 15 мин: звонок заканчивается.
     Stop,
-    /// Играет ответ/объявление: звонок уступает канал и продолжится после.
     Yield,
-    /// Играть очередной круг.
     Play,
 }
 
-/// The ring: one alarm sound every 300 ms, giving the ANNOUNCE channel to speech and resuming
-/// after it.
 #[derive(Debug, Default)]
 pub struct Ring {
     ringing: bool,
@@ -50,7 +41,6 @@ impl Ring {
         self.yielded = false;
     }
 
-    /// The C++ `Controller::ring_timer` decision. None: not ringing.
     pub fn next(&mut self, now: i64, busy: bool) -> Option<RingStep> {
         if !self.ringing {
             return None;
@@ -65,28 +55,21 @@ impl Ring {
         Some(RingStep::Play)
     }
 
-    /// The ring yielded to speech and has to continue now; false when it did not yield.
     pub fn take_yield(&mut self) -> bool {
         std::mem::take(&mut self.yielded)
     }
 }
 
-/// Что случилось при разборе события HA-таймера.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct TimerEffects {
-    /// A new timer appeared (the C++ hook showed a ring animation).
     pub started: bool,
-    /// A timer finished: start ringing unless one already rings.
     pub finished: bool,
 }
 
-/// HA timers by id, the one shown on the clock, and the ring.
 #[derive(Debug, Default)]
 pub struct HaTimers {
     timers: BTreeMap<String, HaTimer>,
-    /// Id on the clock, "" = none.
     shown_timer: String,
-    /// Its data when it was put there.
     shown: HaTimer,
     ring: Ring,
 }
@@ -100,7 +83,6 @@ impl HaTimers {
         self.ring.ringing()
     }
 
-    /// Applies a HA timer event; the caller reports `effects` to the UI.
     pub fn on_event(&mut self, t: TimerInfo, now: i64) -> TimerEffects {
         let mut effects = TimerEffects::default();
         let data = HaTimer {
@@ -127,9 +109,6 @@ impl HaTimers {
         effects
     }
 
-    /// The clock counts a running timer down by itself, so it is set only when the choice or the
-    /// timer's data changes, and looked at again when the shown one runs out. Returns the tick
-    /// to re-arm for a running timer.
     pub fn show(&mut self, display: &Display, now: i64) -> Option<u64> {
         let Some((id, best, left)) = logic::pick_timer(&self.timers, now) else {
             if !self.shown_timer.is_empty() {
@@ -201,8 +180,6 @@ impl Controller {
         }
     }
 
-    /// The ring gives the ANNOUNCE channel to speech (TTS answer, HA announcement) and resumes
-    /// after it.
     pub(super) fn ring_timer(&mut self) {
         self.timers.cancel(Tk::RingTick);
         let busy = self.session.announcing() || self.session.phase() == Phase::Speaking;
@@ -225,7 +202,7 @@ impl Controller {
     pub(super) fn stop_timer_ring(&mut self) {
         self.timers_ha.stop_ring();
         self.timers.cancel(Tk::RingTick);
-        self.interrupt_speech(); // the ring, or the speech it yielded to
+        self.interrupt_speech();
         self.update_duck();
         self.update_ui();
     }
@@ -260,7 +237,6 @@ mod tests {
             }
         );
         assert_eq!(t.timers.get("a").unwrap().end_ms, now + 10_000);
-        // A repeated Started for a known timer is not a new one.
         let e = t.on_event(timer(TimerEvent::Started, "a", 9, true), now);
         assert!(!e.started);
         let e = t.on_event(timer(TimerEvent::Finished, "a", 0, false), now);
@@ -283,12 +259,10 @@ mod tests {
         t.start_ring(t0);
         assert!(t.ringing());
         assert_eq!(t.ring(t0, false), Some(RingStep::Play));
-        // An answer or announcement: the ring yields, then continues.
         assert_eq!(t.ring(t0 + 100, true), Some(RingStep::Yield));
         assert!(t.take_yield());
         assert!(!t.take_yield());
         assert_eq!(t.ring(t0 + 200, false), Some(RingStep::Play));
-        // The ceiling, strictly after 15 min as the C++ comparison.
         assert_eq!(t.ring(t0 + TIMER_RING_MAX_MS, false), Some(RingStep::Play));
         assert_eq!(
             t.ring(t0 + TIMER_RING_MAX_MS + 1, false),

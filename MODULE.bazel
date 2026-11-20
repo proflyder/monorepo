@@ -5,10 +5,6 @@ module(
 
 bazel_dep(name = "rules_rust", version = "0.75.0")
 
-# rules_rust omits the *-windows-gnu triples because Bazel cannot distinguish
-# them from *-windows-msvc through @platforms constraints. The credential
-# provider builds only the gnu ABI, so two small patches add the triple back and
-# gate the MSVC-only cdylib import library; see the patch headers.
 single_version_override(
     module_name = "rules_rust",
     patch_strip = 1,
@@ -21,17 +17,10 @@ single_version_override(
 
 bazel_dep(name = "rules_proto", version = "7.1.0")
 
-# Target constraints for the Linux-only Pulsar Rust targets.
 bazel_dep(name = "platforms", version = "1.1.0")
 
-# Direct dep only to name its build setting in .bazelrc (`@protobuf//...`);
-# same version the graph already resolves.
 bazel_dep(name = "protobuf", version = "36.2")
 
-# Container images for the home K3s services. Images are assembled
-# hermetically (no Docker daemon, no RUN steps) from the Rust service binaries
-# and a digest-pinned distroless base; the same targets build on macOS and on
-# the GitHub runner.
 bazel_dep(name = "rules_oci", version = "2.3.0")
 bazel_dep(name = "rules_pkg", version = "1.3.0")
 bazel_dep(name = "aspect_bazel_lib", version = "2.22.5")
@@ -39,31 +28,16 @@ bazel_dep(name = "aspect_bazel_lib", version = "2.22.5")
 oci = use_extension("@rules_oci//oci:extensions.bzl", "oci")
 oci.pull(
     name = "distroless_static",
-    # Multi-arch index digest of the tag `nonroot`; the amd64 child below is
-    # what the linux/amd64 images actually build on. `bazel run
-    # @distroless_static//:digest` re-prints the pinned index digest.
     digest = "sha256:afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab",
     image = "gcr.io/distroless/static-debian12",
     platforms = ["linux/amd64"],
 )
 use_repo(oci, "distroless_static", "distroless_static_linux_amd64")
 
-# Rust: one Cargo workspace for every first-party crate (Pulsar, BLE gateway,
-# Windows logon provider, station helper; see /Cargo.toml). The toolchain
-# version is the one pinned in /rust-toolchain.toml; edition per crate comes
-# from Cargo.toml (workspace edition 2024).
 rust = use_extension("@rules_rust//rust:extensions.bzl", "rust")
 rust.toolchain(
     edition = "2024",
     extra_rustc_flags_triples = {
-        # The former Makefile/cargo-zigbuild flags: non-PIE keeps crash-report addresses
-        # absolute, frame pointers feed the aarch64 fp: chain, and cortex-a53 is
-        # the same core as the C++ build (hardware vfma for mul_add).
-        #
-        # `-c opt` defaults to strip=debuginfo/debuginfo=0; the Cargo release
-        # profile keeps line tables for `addr2line -e pulsar.debug`, so the
-        # station triples restore them (these flags are appended after the
-        # compilation-mode ones).
         "aarch64-unknown-linux-gnu": [
             "-C",
             "relocation-model=static",
@@ -73,16 +47,9 @@ rust.toolchain(
             "debuginfo=1",
             "-C",
             "strip=none",
-            # Bitcode for the binary's `-C lto=thin`. panic stays at the
-            # default unwind: the same triple builds host tests, and tests
-            # cannot use panic=abort (see the station size note in
-            # docs/development.md).
             "-C",
             "embed-bitcode=yes",
         ],
-        # Linux x86_64 services/tests (CI images use --platforms=linux_amd64):
-        # the auto-configured cc toolchain may pick GNU gold, which rustc warns
-        # is deprecated; use binutils ld like the exec config below.
         "x86_64-unknown-linux-gnu": [
             "-C",
             "link-arg=-fuse-ld=bfd",
@@ -102,11 +69,6 @@ rust.toolchain(
             "embed-bitcode=yes",
         ],
     },
-    # Host tools (process_wrapper, lint runners, build-script runners) are
-    # linked through the auto-configured cc toolchain. On Linux that toolchain
-    # may select GNU gold, which rustc 1.97+ warns is deprecated and buggy with
-    # Rust. Force binutils ld (bfd) for exec/host links only; the station
-    # triples keep the hermetic zig linker from platform/bazel/zig.
     extra_exec_rustc_flags_triples = {
         "x86_64-unknown-linux-gnu": [
             "-C",
@@ -116,29 +78,16 @@ rust.toolchain(
     extra_target_triples = [
         "aarch64-unknown-linux-gnu",
         "armv7-unknown-linux-gnueabihf",
-        # Windows credential provider (solutions/windows-logon-provider); the
-        # platform that selects it is //platform/bazel/windows:x86_64_windows.
         "x86_64-pc-windows-gnu",
     ],
     versions = ["1.99.1"],
 )
 
-# Static musl service images (wakegrant and the other home services).
-# rules_rust gives x86_64-unknown-linux-musl the same constraints as the glibc
-# host triple (os:linux + cpu:x86_64), so on a Linux exec host the glibc
-# toolchain also matched //platform/bazel/zig:x86_64_musl_linux and won by
-# registration order (glibc std, undefined `gnu_get_libc_version`). These
-# repository sets require the zig `musl` constraint, so host builds never see
-# them, and they are registered before `@rust_toolchains//:all` so the musl
-# platform always resolves to them. One set per exec host: CI (Linux x86_64)
-# and the Mac (Apple silicon).
 [
     rust.repository_set(
         name = "rust_musl_" + exec_name,
         edition = "2024",
         exec_triple = exec_triple,
-        # The zig cc driver owns the musl crt/libc; telling rustc not to add
-        # its self-contained copy avoids a duplicate `_start`.
         extra_rustc_flags = [
             "-C",
             "link-self-contained=no",
@@ -165,12 +114,6 @@ register_toolchains(
     "@rust_toolchains//:all",
 )
 
-# Third-party C/C++ of the station's Sendspin player, pinned to the revisions in
-# satellite/third_party/fetch.sh (sendspin-cpp's own host build). The archives
-# come from GitHub (tags resolve to the same commit as before); BUILD overlays
-# live in satellite/third_party/bazel and reproduce third_party/CMakeLists.txt.
-# Opus and micro-ogg-demuxer are separate archives: GitHub tarballs do not
-# include submodules.
 http_archive = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 
 _SENDSPIN_BAZEL = "//projects/station/pulsar/satellite/third_party/bazel"
@@ -241,9 +184,6 @@ http_archive(
     url = "https://github.com/xiph/opus/archive/22244de5a79bd1d6d623c32e72bf1954b56235be.tar.gz",
 )
 
-# Hermetic zig 0.14.1 cc toolchains for the two station ABIs and the Windows
-# provider. Only these target-constrained toolchains are registered, so host
-# builds keep using the host compiler. See platform/bazel/zig/.
 bazel_dep(name = "rules_cc", version = "0.2.28")
 
 zig_sdk_repository = use_repo_rule("//platform/bazel/zig:repositories.bzl", "zig_sdk_repository")
@@ -257,12 +197,6 @@ register_toolchains(
     "@zig_0_14_1//:x86_64_musl_toolchain",
 )
 
-# External crates of the single first-party Cargo workspace (/Cargo.toml).
-# Cargo.lock stays the source of truth: a Cargo.toml/Cargo.lock change repins
-# the generated Bazel lock `//:crate-universe.lock` (see
-# projects/station/pulsar/docs/development.md, «Bazel»). Host triples keep the
-# portable tests buildable on macOS/Linux; the station triples build the
-# deployed daemons and the windows triple builds the credential-provider DLL.
 crate = use_extension("@rules_rust//crate_universe:extensions.bzl", "crate")
 crate.from_cargo(
     name = "crates",
@@ -281,32 +215,18 @@ crate.from_cargo(
 )
 use_repo(crate, "crates")
 
-# ---------------------------------------------------------------------------
-# Android / Kotlin (projects/mobile/android)
-#
-# The Android SDK is discovered from ANDROID_HOME. It is deliberately not
-# committed as a machine-specific path; see projects/mobile/android/README.md.
-# ---------------------------------------------------------------------------
 bazel_dep(name = "rules_android", version = "0.8.1")
 
-# Direct dep only to load `JavaInfo` in platform/android/lint.bzl; it is the
-# version rules_android already resolves.
 bazel_dep(name = "rules_java", version = "9.9.0")
 bazel_dep(name = "rules_kotlin", version = "2.4.21")
 bazel_dep(name = "rules_jvm_external", version = "7.2")
 
-# The coursier lock file normally lists every configured repository for every
-# artifact, so a cold build probes Google Maven for Central-only artifacts and
-# logs a 404 WARNING per artifact. The patch records only the repository that
-# actually served each artifact; see the patch header.
 single_version_override(
     module_name = "rules_jvm_external",
     patch_strip = 1,
     patches = ["//platform/bazel:rules_jvm_external_primary_repository.patch"],
 )
 
-# Packaging gate (platform/android) is a shell test; Bazel 9 no longer ships
-# native sh_test.
 bazel_dep(name = "rules_shell", version = "0.8.0")
 
 remote_android_extensions = use_extension(
@@ -330,21 +250,6 @@ register_toolchains(
     "@androidsdk//:all",
 )
 
-# C++ toolchain for the target Android platform. `android_binary` always
-# resolves `@rules_cc//cc:current_cc_toolchain` for every platform in
-# `--android_platforms` (rules_android links client native deps and, even
-# without cc_library deps, needs the toolchain for the split config). Without an
-# NDK toolchain, the `build:android
-# --android_platforms=//platform/android:android_arm64` flag in
-# platform/android/android.bazelrc fails analysis with "Unable to find a CC
-# toolchain".
-#
-# The repository rule reads the NDK from the ANDROID_NDK_HOME environment
-# variable; install it from the official SDK with
-# `sdkmanager "ndk;28.2.13676358"` (CI installs it via sdk_packages of the
-# android-app/android-lint units in `_android.yml`, and in deploy-home
-# `warm-caches`). `api_level` matches the app's minSdkVersion (26); see
-# projects/mobile/android/app/src/main/AndroidManifest.xml.
 bazel_dep(name = "rules_android_ndk", version = "0.1.5")
 
 android_ndk_repository_extension = use_extension(
@@ -378,23 +283,15 @@ maven.install(
         "androidx.lifecycle:lifecycle-viewmodel:2.11.0",
         "androidx.lifecycle:lifecycle-viewmodel-ktx:2.11.0",
         "androidx.lifecycle:lifecycle-viewmodel-savedstate:2.11.0",
-        # Referenced by Room (via Chucker); pinned so the APK runtime closure is complete.
         "androidx.paging:paging-common:3.5.3",
         "androidx.recyclerview:recyclerview:1.4.0",
-        # activity 1.13 wants savedstate 1.2.1 while lifecycle 2.11 resolves
-        # 1.4.0; the pinned conflict policy needs an explicit pin.
         "androidx.savedstate:savedstate:1.4.0",
         "androidx.swiperefreshlayout:swiperefreshlayout:1.2.0",
         "com.google.android.material:material:1.14.0",
-        # Firebase Crashlytics, pinned from Firebase BoM 35.1.0 (Gradle BOMs
-        # cannot be consumed by rules_jvm_external, so versions are explicit).
         "com.google.firebase:firebase-annotations:18.0.0",
         "com.google.firebase:firebase-common:23.0.0",
         "com.google.firebase:firebase-components:20.0.0",
         "com.google.firebase:firebase-config-interop:17.0.0",
-        # Remote Config (endpoints/timeouts): firebase-config is pinned from the
-        # same BoM; abt is its A/B-testing runtime dependency (from the
-        # firebase-config POM) and must ship in the APK closure.
         "com.google.firebase:firebase-abt:24.0.0",
         "com.google.firebase:firebase-config:24.0.1",
         "com.google.firebase:firebase-crashlytics:21.0.1",
@@ -404,24 +301,13 @@ maven.install(
         "com.google.firebase:firebase-installations-interop:18.0.0",
         "com.google.firebase:firebase-measurement-connector:19.0.0",
         "com.google.firebase:firebase-sessions:4.0.1",
-        # Push (FCM) and its pinned runtime dependencies. Same Firebase BoM
-        # 35.1.0: firebase-messaging needs the higher
-        # firebase-measurement-connector, datatransport, encoders-proto and
-        # iid-interop, plus Play Services base/cloud-messaging (the transport
-        # to Google's push backend).
         "com.google.firebase:firebase-messaging:26.0.1",
         "com.google.firebase:firebase-datatransport:21.0.0",
         "com.google.firebase:firebase-encoders-proto:17.0.0",
         "com.google.firebase:firebase-iid-interop:17.1.0",
         "com.google.android.gms:play-services-base:18.9.0",
         "com.google.android.gms:play-services-cloud-messaging:17.4.0",
-        # Guava is only a Robolectric (test) dependency. Without an explicit
-        # pin, Maven selects Guava's empty `9999.0-empty-to-avoid-conflict-with-guava`
-        # placeholder for androidx.concurrent.futures, leaving ListenableFuture
-        # out of the APK while AbstractResolvableFuture ships. Pin the real
-        # standalone artifact so the runtime closure is self-contained.
         "com.google.guava:listenablefuture:1.0",
-        # Runtime dependencies of firebase-crashlytics not otherwise pinned.
         "com.google.android.datatransport:transport-api:5.0.0",
         "com.google.android.datatransport:transport-backend-cct:5.0.0",
         "com.google.android.datatransport:transport-runtime:5.0.0",
@@ -433,15 +319,10 @@ maven.install(
         "com.squareup.okhttp3:okhttp:5.5.1",
         "com.squareup.retrofit2:retrofit:3.0.0",
         "com.squareup.retrofit2:converter-kotlinx-serialization:3.0.0",
-        # Detekt static analysis for the Android client: CLI + formatting rules
-        # run as //projects/mobile/android:detekt; api/test back the first-party
-        # `home-rules` ruleset under platform/android/detekt-rules.
         "io.gitlab.arturbosch.detekt:detekt-api:1.23.8",
         "io.gitlab.arturbosch.detekt:detekt-cli:1.23.8",
         "io.gitlab.arturbosch.detekt:detekt-formatting:1.23.8",
         "io.gitlab.arturbosch.detekt:detekt-test:1.23.8",
-        # Prebuilt libwebrtc for Android (audio-only PeerConnection, Opus,
-        # hardware AEC/NS/AGC through JavaAudioDeviceModule). Apache-2.0.
         "io.getstream:stream-webrtc-android:1.3.10",
         "dev.zacsweers.metro:compiler:1.5.2",
         "dev.zacsweers.metro:runtime-jvm:1.5.2",
@@ -456,9 +337,6 @@ maven.install(
         "org.robolectric:android-all-instrumented:15-robolectric-13954326-i7",
         "org.robolectric:robolectric:4.17",
     ],
-    # datastore 1.3.0 is a KMP module whose root artifact is published as an
-    # AAR; the root jar cannot be fetched (the Android variant
-    # datastore-android is used instead), so exclude the metadata-only root.
     excluded_artifacts = ["androidx.datastore:datastore"],
     known_contributing_modules = ["protobuf"],
     lock_file = "//projects/mobile/android:maven_install.json",
@@ -470,8 +348,6 @@ maven.install(
     version_conflict_policy = "pinned",
 )
 
-# OkHttp 5 is a Kotlin-multiplatform module: the root `okhttp` jar only
-# carries metadata, the real classes are in `okhttp-jvm`.
 maven.override(
     name = "maven",
     coordinates = "com.squareup.okhttp3:okhttp",

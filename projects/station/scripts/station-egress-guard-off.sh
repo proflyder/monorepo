@@ -1,6 +1,4 @@
 #!/bin/sh
-# FORTRESS-EGRESS-GUARD-OFF v1
-# Remove only the egress guard; keep the existing Yandex block/OTA fortress.
 
 while iptables -D OUTPUT -j EGRESS_GUARD 2>/dev/null; do :; done
 iptables -F EGRESS_GUARD 2>/dev/null || true

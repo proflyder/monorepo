@@ -1,12 +1,3 @@
-//! Composition root of `ha-scenario`: the definition reader, the control
-//! catalog and the `scenario` queue executor.
-//!
-//! `SCENARIO_EXECUTE=false` (the default) loads configuration and validates the
-//! definition/token wiring but leases nothing. `true` starts the durable loop.
-//! A FIRE runs in its own task and acknowledges itself, so a STOP in a later
-//! lease can cancel a long delay immediately; the executor registry guarantees
-//! one instance per scenario.
-
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -24,12 +15,10 @@ use crate::scenario::executor::{Executor, ScenarioSource};
 use crate::scenario::ledger::ScenarioLedger;
 use crate::scenario_config::ScenarioConfig;
 
-/// Reported implementation version, matching the crate.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(10);
 
-/// Start `ha-scenario` and block until SIGTERM/SIGINT.
 pub async fn run() -> anyhow::Result<()> {
     let offset = home_telemetry::local_offset();
     let config = ScenarioConfig::load().context("configuration")?;
@@ -90,7 +79,6 @@ pub async fn run() -> anyhow::Result<()> {
         () = shutdown_signal() => info!("shutdown requested"),
         () = cancel.cancelled() => {}
     }
-    // Interrupt delays and stop tasks before the supervisor waits for them.
     executor.cancel_all();
     let unfinished = supervisor.shutdown(SHUTDOWN_TIMEOUT).await;
     if !unfinished.is_empty() {
@@ -184,7 +172,6 @@ async fn ack_with(queue: &SchedulerQueue, consumer_id: &str, event: &Event, outc
         Outcome::Delivered(detail) => (QueueOutcome::Delivered, detail),
         Outcome::Failed(detail) => (QueueOutcome::Failed, detail),
         Outcome::Skipped(detail) => (QueueOutcome::Skipped, detail),
-        // No ack: the lease expires and the scheduler returns the event.
         Outcome::Retry => return,
     };
     let ack = Ack {
@@ -194,13 +181,10 @@ async fn ack_with(queue: &SchedulerQueue, consumer_id: &str, event: &Event, outc
         detail,
     };
     if let Err(error) = queue.ack(ack).await {
-        // A concurrent STOP or an expired lease may have finalized the event
-        // already; the terminal state is what matters, not this ack.
         warn!(%error, event_id = %event.id, "scenario ack was rejected");
     }
 }
 
-/// Sleep unless shutdown interrupts it. Returns false when cancelled.
 async fn sleep(duration: Duration, cancel: &CancellationToken) -> bool {
     tokio::select! {
         () = tokio::time::sleep(duration) => true,

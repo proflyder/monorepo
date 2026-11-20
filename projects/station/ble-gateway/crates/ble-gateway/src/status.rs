@@ -1,9 +1,5 @@
-//! Status values shared by the GATT status characteristic, the status file and
-//! the HTTP control API.
-
 use std::fmt;
 
-/// Explicit daemon status. The wire form is the `Display` implementation.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Status {
     Idle,
@@ -15,7 +11,6 @@ pub enum Status {
 }
 
 impl Status {
-    /// `ERROR:<CODE>` with a short machine-readable code.
     pub fn error(code: impl Into<String>) -> Self {
         Self::Error(format!("ERROR:{}", code.into()))
     }

@@ -1,5 +1,3 @@
-//! Protocol vectors and fail-closed branches from `PROTOCOL.md`.
-
 use std::fmt::Write as _;
 
 use wakegrant_protocol::{
@@ -125,7 +123,6 @@ fn protocol_vectors() {
         ClaimOutcome::InvalidMac
     );
 
-    // Replay against another nonce, another machine or another key is rejected.
     assert_eq!(
         verify_claim_response(
             &make_claim_body(true, vector.grant_id, granted_mac),
@@ -170,7 +167,6 @@ fn protocol_vectors() {
     );
 }
 
-/// The purpose-aware vectors pinned in `PROTOCOL.md`, byte for byte.
 #[test]
 fn purpose_aware_protocol_vectors() {
     let vector = TestVector::new();
@@ -263,8 +259,6 @@ fn purpose_aware_protocol_vectors() {
         assert_eq!(denied.outcome, ClaimOutcome::Denied, "{purpose:?}");
     }
 
-    // A response MAC of the other purpose is rejected: a logon grant can never
-    // unlock and an unlock grant can never log on.
     let logon_granted = "kmFSwXXu4g4wylTSIf9DSYht1v28pG4jboomTnocI0k=";
     let unlock_granted = "55kYSfTNqLYnhU6jg+WfuZaUkThoZehudbJPPuP/JH0=";
     assert_eq!(
@@ -332,18 +326,10 @@ fn base64() {
     assert_eq!(b64_decode(""), Ok(Vec::new()));
 
     for rejected in [
-        "Zg=",      // wrong length
-        "Z===",     // too much padding
-        "=Zg=",     // padding first
-        "Zg==Zg==", // padding inside
-        "Zm9v\n",   // whitespace
-        "Zm9v!",    // bad character
-        "Zg==x",    // trailing data
+        "Zg=", "Z===", "=Zg=", "Zg==Zg==", "Zm9v\n", "Zm9v!", "Zg==x",
     ] {
         assert!(b64_decode(rejected).is_err(), "accepted {rejected:?}");
     }
-    // Valid base64 that is not canonical: trailing bits are ignored, exactly
-    // as the decoder contract requires.
     assert_eq!(b64_decode("ZZ=="), Ok(vec![0x65]));
 }
 
@@ -366,7 +352,6 @@ fn challenge_parsing() {
 
     assert!(parse_challenge_response("{}").is_err());
 
-    // Malformed shapes: none may be accepted.
     let nonce = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=";
     let bad = [
         "".to_owned(),
@@ -457,7 +442,6 @@ fn secret_file() {
     assert_eq!(secret.password(), "p@ss\"word");
     assert_eq!(secret.key(), byte_range(0x00, 0x1f).as_slice());
 
-    // version is optional and ignored when absent.
     parse_secret_json(&format!("{{\"password\":\"x\",\"key\":\"{key}\"}}")).expect("valid secret");
 
     let bad = [
@@ -480,8 +464,6 @@ fn secret_file() {
     }
 }
 
-/// Server responses are tolerant readers: a new field in wakegrant must not
-/// lock the machine out, and the MAC still decides.
 #[test]
 fn response_unknown_fields_are_ignored() {
     let vector = TestVector::new();

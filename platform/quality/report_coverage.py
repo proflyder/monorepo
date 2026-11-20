@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-"""Generate a human-readable coverage/area report from measured artifacts."""
 from __future__ import annotations
 
 import json
@@ -85,7 +84,7 @@ def percent(value: float | None) -> str:
 
 
 def main() -> int:
-    installer = None  # Rust line coverage is not collected by the hermetic suite.
+    installer = None
     pairing = pairing_total()
     tests = count_tests()
     ha = ha_metrics()
@@ -102,13 +101,10 @@ def main() -> int:
     ble_loc, ha_loc, shell_loc, script_loc = (loc(x) for x in (ble_files, ha_files, shell_files, script_files))
     pairing_loc, installer_loc, rust_loc = (loc(x) for x in (pairing_files, installer_files, rust_files))
 
-    # Transparent weighted estimate: HA is structural (100% of artifacts parsed
-    # and cross-checked), not runtime line coverage.  This number is deliberately
-    # labelled as an estimate, not as a Codecov-style percentage.
     covered_weight = (
         ha_loc * 1.0
         + shell_loc * 0.95
-        + script_loc * 0.60  # egress + pairing CLI are tested; legacy ops scripts are static-only
+        + script_loc * 0.60
         + pairing_loc * ((pairing or 0) / 100)
         + installer_loc * ((installer or 0) / 100)
         + rust_loc * 0.0

@@ -1,15 +1,3 @@
-"""Shared Bazel macros for the Android client.
-
-The root build contract is MODULE.bazel + Bazelisk. Android application code
-lives under projects/mobile/android; this package only carries toolchain and
-macro wiring that can be reused by a future Android project.
-
-Metro's compiler plugin is added to every Kotlin compilation by these macros;
-the kotlinx serialization compiler plugin is added as well so any module can
-declare `@Serializable` DTOs. A module can still pass extra plugins with
-`plugins = [...]`.
-"""
-
 load("@rules_kotlin//kotlin:android.bzl", "kt_android_library")
 load("@rules_kotlin//kotlin:jvm.bzl", "kt_jvm_library", "kt_jvm_test")
 load("@rules_android//android:rules.bzl", "android_binary")
@@ -21,7 +9,6 @@ SERIALIZATION_COMPILER_PLUGIN = "//platform/android:serialization_compiler_plugi
 JVM17_OPTIONS = "//platform/android:jvm17_options"
 
 def metro_jvm_library(name, srcs, deps = [], plugins = [], **kwargs):
-    """Kotlin/JVM library with the Metro compiler plugin enabled."""
     kt_jvm_library(
         name = name,
         srcs = srcs,
@@ -41,13 +28,6 @@ def metro_android_library(
         plugins = [],
         view_binding = False,
         **kwargs):
-    """Kotlin Android library with real Android resources and Metro DI.
-
-    With `view_binding = True` a `<Layout>Binding` class is generated for every
-    `res/layout/*.xml` in `resource_files` (package `<custom_package>.databinding`).
-    The module must depend on //projects/mobile/android/core/ui:ui, which owns
-    the `ViewBinding` interface the generated classes implement.
-    """
     if view_binding:
         layouts = [f for f in resource_files if "/res/layout/" in f and f.endswith(".xml")]
         if not custom_package:
@@ -74,7 +54,6 @@ def metro_android_library(
     )
 
 def metro_jvm_test(name, srcs, deps = [], plugins = [], **kwargs):
-    """JUnit4 Kotlin test with the Metro compiler plugin enabled."""
     kt_jvm_test(
         name = name,
         srcs = srcs,
@@ -85,10 +64,6 @@ def metro_jvm_test(name, srcs, deps = [], plugins = [], **kwargs):
     )
 
 def home_jvm_library(name, srcs, deps = [], plugins = [], **kwargs):
-    """Plain Kotlin/JVM library with the serialization compiler plugin.
-
-    Used by infrastructure modules that do not use Metro DI.
-    """
     kt_jvm_library(
         name = name,
         srcs = srcs,
@@ -99,7 +74,6 @@ def home_jvm_library(name, srcs, deps = [], plugins = [], **kwargs):
     )
 
 def home_jvm_test(name, srcs, deps = [], plugins = [], **kwargs):
-    """Plain Kotlin/JVM test with the serialization compiler plugin."""
     kt_jvm_test(
         name = name,
         srcs = srcs,
@@ -110,7 +84,6 @@ def home_jvm_test(name, srcs, deps = [], plugins = [], **kwargs):
     )
 
 def home_android_lint(name, deps, app_module, config, **kwargs):
-    """Android Lint over every module reachable from `deps` (one project)."""
     _android_lint(
         name = name,
         deps = deps,
@@ -120,7 +93,6 @@ def home_android_lint(name, deps, app_module, config, **kwargs):
     )
 
 def home_detekt(name, deps, config, **kwargs):
-    """detekt over every Kotlin source reachable from `deps`."""
     _home_detekt(
         name = name,
         deps = deps,
@@ -133,13 +105,6 @@ def home_google_services_resources(
         package_name,
         version_name = "$(home_version_name)",
         version_code = "$(home_version_code)"):
-    """Values resources derived from the optional google-services.json.
-
-    The private file is reached through the gitignored symlink
-    `platform/android/keys/google-services.json`. The generator warns and emits
-    an empty values file when the link is absent, so clean checkouts and CI
-    build without Firebase configuration.
-    """
     native.genrule(
         name = name,
         srcs = ["//platform/android:google_services_json"],
@@ -178,19 +143,6 @@ def home_android_binary(
         version_code = "$(home_version_code)",
         version_name = "$(home_version_name)",
         **kwargs):
-    """debug-signed application APK for the home client.
-
-    `versionCode`/`versionName` come from the `home_version_code` and
-    `home_version_name` build settings (`--define`), defaulted in `.bazelrc` to
-    1 and 0.1.0; `projects/mobile/android/distribute.sh` overrides them so each
-    App Distribution build has a higher versionCode. rules_android expands
-    `$(...)` in manifest_values. The APK is signed with
-    //platform/android:home_debug_keystore, which uses the local personal key
-    when it is present and the public rules_android debug keystore otherwise.
-    This output is an intermediate: distribution re-signs it with
-    `platform/android/sign-release.sh` and the release key. A caller can
-    override this with `debug_key = ...`.
-    """
     if "debug_key" not in kwargs:
         kwargs["debug_key"] = "//platform/android:home_debug_keystore"
     android_binary(

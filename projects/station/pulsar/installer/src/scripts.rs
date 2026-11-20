@@ -1,24 +1,10 @@
-//! Pure shell text the installer produces or inspects: the init script, the
-//! rootfs guard, `/proc/mounts` parsing and the old `rootkeeper.sh` hooks.
-//!
-//! These functions do no I/O: every input is a string read by the caller and
-//! every output is compared against the Go installer's golden fixtures in
-//! `testdata/`.
-
-/// Lines that start pulsar / dropbear at boot: the body of S99zpulsar. Older installers
-/// put the same lines into /data/quasar/rootkeeper.sh (removed by `unhook_rootkeeper`).
 pub const HOOK_SAT: &str =
     "[ -x /data/pulsar/boot.sh ] && /data/pulsar/boot.sh </dev/null >/dev/null 2>&1 &";
 pub const HOOK_SSH: &str =
     "[ -x /data/dropbear/start.sh ] && /data/dropbear/start.sh </dev/null >/dev/null 2>&1 &";
 
-/// rcS runs /etc/init.d/S??* in order with "start" and waits for each. The name sorts after
-/// the firmware's S97quasar / S99quasar (S99pulsar would sort before S99quasar). The only
-/// file pulsar writes outside /data.
 pub const INIT_PATH: &str = "/etc/init.d/S99zpulsar";
 
-/// Content of `INIT_PATH`. rcS has no controlling tty (inittab ::sysinit:), so the
-/// background hooks get no SIGHUP when it exits.
 pub fn init_script(with_ssh: bool) -> String {
     let mut s = String::new();
     s.push_str("#!/bin/sh\n");
@@ -38,10 +24,6 @@ fn has_verity_token(tok: &str) -> bool {
     lower.contains("verity") || lower.contains("dm=")
 }
 
-/// `""` if the root filesystem may be written, else the reason it must not be:
-/// dm-verity or any device-mapper target (writing under it corrupts the verified image), or
-/// /etc not on the filesystem mounted at / together with the firmware. `cmdline` =
-/// /proc/cmdline, `mapper` = `ls /dev/mapper`, `df` = `df /etc /system/vendor/quasar`.
 pub fn rootfs_guard(cmdline: &str, mapper: &str, df: &str) -> String {
     for tok in cmdline.split_whitespace() {
         if has_verity_token(tok) {
@@ -61,7 +43,6 @@ pub fn rootfs_guard(cmdline: &str, mapper: &str, df: &str) -> String {
             Some((_, rest)) => rest,
             None => "",
         });
-    // Fields also joins the lines df wraps after a long device name.
     let f: Vec<&str> = rest.split_whitespace().collect();
     if f.len() != 12 {
         return "cannot parse df output".to_string();
@@ -78,8 +59,6 @@ pub fn rootfs_guard(cmdline: &str, mapper: &str, df: &str) -> String {
     String::new()
 }
 
-/// Whether `/` is mounted read-write according to /proc/mounts. The last entry for / wins:
-/// an initramfs "rootfs / rootfs rw" line can come before the real one.
 pub fn root_mount_rw(mounts: &str) -> (bool, bool) {
     let mut rw = false;
     let mut found = false;
@@ -95,9 +74,6 @@ pub fn root_mount_rw(mounts: &str) -> (bool, bool) {
     (rw, found)
 }
 
-/// One device command, so the read-write window never spans two adb calls. The ignored HUP
-/// lets it finish if adb drops; the dot name keeps rcS's S??* glob from running a partial
-/// file. The subshell keeps exit from skipping `sh_raw`'s status echo.
 pub fn write_init_cmd(src: &str, sum: &str, remount: bool) -> String {
     let mut l = vec!["( trap '' HUP INT".to_string()];
     if remount {
@@ -136,8 +112,6 @@ fn join_lines(lines: &[String]) -> String {
     b
 }
 
-/// The script is shared with other tooling and ends in an endless `while` loop: code after
-/// it never runs.
 fn is_loop(l: &str) -> bool {
     l.starts_with("while ") || l.starts_with("while\t")
 }
@@ -146,10 +120,6 @@ fn is_hook(l: &str) -> bool {
     l == HOOK_SAT || l == HOOK_SSH
 }
 
-/// `rk` without the hook lines older installers added, and the number removed. Hook lines go
-/// wherever they are, including dead ones after the loop. Blank lines go only in the two
-/// shapes older installers wrote: hooks then a blank line right before the first loop, or a
-/// blank line then hooks at the end of the file. Every other byte stays.
 pub fn unhook_rootkeeper(rk: &str) -> (String, usize) {
     let lines = split_lines(rk);
     let mut drop = vec![false; lines.len()];
@@ -193,8 +163,6 @@ pub fn unhook_rootkeeper(rk: &str) -> (String, usize) {
     (out, removed)
 }
 
-/// Whether `rk` starts pulsar: a hook line before the endless loop (code after it never
-/// runs).
 pub fn hook_active(rk: &str) -> bool {
     for l in split_lines(rk) {
         if is_loop(&l) {
@@ -207,8 +175,6 @@ pub fn hook_active(rk: &str) -> bool {
     false
 }
 
-/// `""` if `with` is `without` plus only hook lines and blank lines, else a description of
-/// the first difference ("- <line of without>\n+ <line of with>").
 pub fn check_rootkeeper(without: &str, with: &str) -> String {
     let a = split_lines(without);
     let b = split_lines(with);

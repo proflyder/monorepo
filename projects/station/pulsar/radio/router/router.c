@@ -1,15 +1,3 @@
-/********************************************************************************************************
- * Zigbee router for the Yandex Station Midi radio. Licensed under the Apache License 2.0 (see
- * common/board_cfg.h); derived from the Telink Zigbee SDK sample gateway (sampleGateway.c,
- * zb_appCb.c, sampleGatewayEpCfg.c).
- *
- * The router does nothing on its own: pulsar tells it over zbhci when to join (0x0002, network
- * steering) and to leave (0x0005, broadcasts a Leave and erases its network). Messages to the
- * host besides the stock zbhci replies and the common ones (common/pulsar_hci.h):
- *   0x8906 [23 bytes]         joined / rejoined a network; layout of the 0x8045 reply
- *   0x8920 [event][status]    event 1: start-up (status 0 = on a network, else none);
- *                             2: commissioning failed (BDB status); 3: left the network
- *******************************************************************************************************/
 #include "tl_common.h"
 #include "zb_api.h"
 #include "zcl_include.h"
@@ -24,9 +12,6 @@
 #define EVENT_COMMISSIONING 2
 #define EVENT_LEFT          3
 
-/**********************************************************************
- * ZCL: Basic and Identify.
- */
 typedef struct {
     u8 zclVersion;
     u8 appVersion;
@@ -90,17 +75,12 @@ static const af_simple_descriptor_t simpleDesc = {
 
 static void zclIncoming(zclIncoming_t *msg) { (void)msg; }
 
-/**********************************************************************
- * Host messages.
- */
 static void hciEvent(u8 event, u8 status)
 {
     u8 b[2] = {event, status};
     zbhciTx(HCI_EVENT, sizeof b, b);
 }
 
-// Same layout as the stock 0x8045 reply (zbhciCmdProcess.c), without the channel byte the
-// gateway firmware leaves out too.
 static void hciNetworkUp(void)
 {
     u8 b[23];
@@ -118,7 +98,6 @@ static void hciNetworkUp(void)
     zbhciTx(HCI_NETWORK_UP, sizeof b, b);
 }
 
-// zbhciCmdHandler ACKs the stock commands itself.
 static void hciCmd(u16 type, u16 len, u8 *p)
 {
     if (type == HCI_APP_INFO_REQ) {
@@ -128,12 +107,8 @@ static void hciCmd(u16 type, u16 len, u8 *p)
     zbhciCmdHandler(type, len, p);
 }
 
-/**********************************************************************
- * Stack callbacks.
- */
 static void bdbInitCb(u8 status, u8 joinedNetwork)
 {
-    // Factory new: wait for the host's 0x0002. On a network: the stack rejoins by itself.
     hciEvent(EVENT_STARTED, (status == BDB_INIT_STATUS_SUCCESS && joinedNetwork) ? 0 : 1);
 }
 

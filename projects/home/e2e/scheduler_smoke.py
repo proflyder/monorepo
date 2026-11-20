@@ -1,23 +1,4 @@
 #!/usr/bin/env python3
-"""Local process E2E: real scheduler + real ha-bridge + fake Home Assistant.
-
-This test is hermetic: it builds the Rust scheduler and the Rust bridge into a
-temporary directory, starts the scheduler with a temporary SQLite database and
-dummy bearer tokens, and serves a fake HA on loopback. It never contacts live
-HA, ADB or the station, and it never touches a production scheduler database.
-
-What it verifies end to end:
-
-* scheduler rejects a missing and a wrong bearer token;
-* bridge dry-run makes only a read-only HA probe and leases nothing;
-* a real timer FIRE travels scheduler -> bridge -> fake HA script and is
-  acknowledged as DELIVERED;
-* CancelTimer produces STOP (not snooze) and is delivered;
-* a generic task stays on the ``tasks`` queue: the bridge leases only ``home``;
-* both processes shut down gracefully on SIGTERM.
-
-Audible/live acceptance and HA shadow import are explicitly out of scope.
-"""
 from __future__ import annotations
 
 import argparse
@@ -44,10 +25,6 @@ WRONG_TOKEN = "e2e-wrong-token"
 HA_TOKEN = "e2e-ha-token"
 CONSUMER = "e2e-ha-bridge"
 POLL = 0.05
-# Deployment configuration must never leak into this hermetic test: a local
-# *_TOKEN_FILE, consumer allowlist, DB path or bridge queue would change what
-# is being exercised. Keep the normal process environment (PATH, cargo caches,
-# proxies, locale) and drop only scheduler/bridge/HA settings.
 CONFIG_PREFIXES = ("SCHEDULER_", "ALARM_", "BRIDGE_", "HA_")
 
 
@@ -103,7 +80,6 @@ def rpc(base: str, method: str, payload: dict, token: str | None = SCHEDULER_TOK
 
 
 class FakeHA:
-    """Minimal HA REST surface: read-only probe and script.turn_on."""
 
     def __init__(self) -> None:
         self.records: list[dict] = []
@@ -116,7 +92,7 @@ class FakeHA:
         owner = self
 
         class Handler(BaseHTTPRequestHandler):
-            def log_message(self, *_args) -> None:  # keep test output clean
+            def log_message(self, *_args) -> None:
                 pass
 
             def _authorized(self) -> bool:
@@ -180,7 +156,6 @@ class FakeHA:
 
 
 class Process:
-    """Subprocess with a bounded log buffer and process-group cleanup."""
 
     def __init__(self, name: str, argv: list[str], env: dict[str, str]) -> None:
         self.name = name
@@ -220,7 +195,6 @@ class Process:
 
 
 def build_binaries(target: Path) -> tuple[Path, Path]:
-    """Builds the Rust scheduler and the Rust HA bridge."""
     target_dir = target / "cargo-target"
     env = clean_env()
     env["CARGO_TARGET_DIR"] = str(target_dir)
@@ -252,7 +226,6 @@ def build_binaries(target: Path) -> tuple[Path, Path]:
 
 
 def scheduler_base(process: Process, timeout: float = 30.0) -> str:
-    # The Rust service logs JSON (`"addr":"127.0.0.1:port"`).
     patterns = (re.compile(r'"addr":"([0-9.]+:\d+)"'),)
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
@@ -331,7 +304,6 @@ def run(verbose: bool) -> None:
                 }
             )
 
-            # 1. Dry-run: only the read-only probe, no lease, no script call.
             dry_env = dict(bridge_env)
             dry_env.pop("BRIDGE_EXECUTE", None)
             dry_run = subprocess.run(
@@ -343,7 +315,6 @@ def run(verbose: bool) -> None:
             )
             check(not fake.script_calls(), "bridge dry-run called an HA script")
 
-            # 2. Execute: a real timer must ring through the fake HA script.
             bridge_env["BRIDGE_EXECUTE"] = "true"
             bridge_env["BRIDGE_LEDGER_PATH"] = str(tmp / "ledger.json")
             bridge = Process("ha-bridge", [str(bridge_bin)], bridge_env)
@@ -353,8 +324,6 @@ def run(verbose: bool) -> None:
                 if code != 200:
                     return False
                 pending, leased = queue_state(state, "home")
-                # No pending *and* no leased event: an earlier FIRE ack must not
-                # mask a still-leased STOP.
                 return pending == 0 and leased == 0
 
             def home_idle_after(ack_floor: int) -> bool:
@@ -392,23 +361,15 @@ def run(verbose: bool) -> None:
             if verbose:
                 print("timer FIRE delivered and acknowledged")
 
-            # 3. Cancel the fired timer: backend state is cancelled, but a
-            # one-shot announcement has no safe global audio stop, so the
-            # bridge must not call alarm_stop.
             ack_floor = ack_now()
             code, response = rpc(base, "CancelTimer", {"id": timer_id})
             check(code == 200, f"CancelTimer returned HTTP {code}: {response}")
-            # ACK timestamps have second granularity, so for a STOP the proof is
-            # that the queued event is consumed (pending=0, leased=0) and no
-            # audio stop was sent; an earlier FIRE ack cannot satisfy a lease.
             wait_until(home_idle, 20, "timer STOP consumed without audio stop")
             check(
                 fake.find_script("script.alarm_stop") is None,
                 "timer cancellation called the global alarm stop; it may silence an unrelated alarm",
             )
 
-            # 4. A real one-shot alarm: FIRE starts the alarm script, then
-            # StopSchedule must stop exactly that active alarm.
             ack_floor = ack_now()
             now = datetime.now(timezone.utc)
             target = (now + timedelta(seconds=60)).replace(second=0, microsecond=0)
@@ -454,7 +415,6 @@ def run(verbose: bool) -> None:
             if verbose:
                 print("one-shot alarm fired and StopSchedule stopped it")
 
-            # 4. Generic task must stay on the tasks queue.
             run_at = int(time.time()) + 1
             code, response = rpc(base, "EnqueueTask", {
                 "taskType": "e2e.noop",
@@ -473,8 +433,6 @@ def run(verbose: bool) -> None:
                     return False
                 now = int(state.get("nowUnix") or 0)
                 _, last_seen = consumer_status(state)
-                # The bridge must have completed a lease poll strictly after
-                # the task's due second, so it had a real chance to steal it.
                 return now >= run_at and last_seen >= run_at + 1
 
             wait_until(bridge_saw_due_task, 25, "task due and bridge polling after it")
@@ -496,7 +454,6 @@ def run(verbose: bool) -> None:
             if verbose:
                 print("generic task stayed on tasks; bridge leased only home")
 
-            # 5. Graceful shutdown.
             code = bridge.stop()
             check(code == 0, f"bridge exited with {code}:\n{bridge.output()}")
             bridge = None
@@ -522,7 +479,7 @@ def main() -> int:
     except Failure as failure:
         print(f"E2E FAILED: {failure}", file=sys.stderr)
         return 1
-    except Exception:  # noqa: BLE001 - report any unexpected error as a test failure
+    except Exception:
         traceback.print_exc()
         return 1
     print("scheduler + ha-bridge E2E passed")

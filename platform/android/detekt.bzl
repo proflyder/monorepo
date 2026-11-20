@@ -1,12 +1,3 @@
-"""Bazel-driven detekt for the Home Android client.
-
-`rules_android`/`rules_kotlin` have no detekt rule, so this wraps the detekt CLI
-from Maven. An aspect walks the target graph once and collects every first-party
-Kotlin source file; the `detekt` rule writes that list and runs the CLI with the
-project config and the first-party `home-rules` plug-in. A finding fails the
-test, mirroring `android_lint`, so CI treats both checks the same way.
-"""
-
 DetektSourcesInfo = provider(
     doc = "Kotlin sources of a target and everything it depends on.",
     fields = {
@@ -18,8 +9,6 @@ def _kotlin_srcs(ctx):
     files = []
     for src in getattr(ctx.rule.attr, "srcs", []):
         for file in src[DefaultInfo].files.to_list():
-            # Generated sources (for example view binding) mirror XML layouts;
-            # scanning them would report findings in code nobody wrote.
             if not file.is_source:
                 continue
             if file.extension in ("kt", "kts"):
@@ -130,7 +119,6 @@ def home_detekt(
         config,
         plugins = "//platform/android/detekt-rules:detekt-rules",
         source_prefix = ""):
-    """Run detekt over every Kotlin source reachable from `deps`."""
     _detekt_test(
         name = name,
         deps = deps,

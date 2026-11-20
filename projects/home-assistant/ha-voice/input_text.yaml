@@ -13,8 +13,6 @@ scheduler_endpoint:
   max: 255
   initial: !secret scheduler_endpoint
 
-# wakegrant LAN NodePort base URL (no trailing slash). Non-secret value, but
-# deployment-specific, so the tracked tree holds only the `!secret` reference.
 wakegrant_endpoint:
   name: "wakegrant endpoint"
   max: 255
@@ -40,24 +38,16 @@ scheduler_active_kind:
   max: 32
   initial: ""
 
-# Station HTTP control base URL. Non-secret value, but kept out of Git via
-# secrets.yaml so the tracked file never contains a real address.
 station_base_url:
   name: "Station HTTP control base URL"
   max: 255
   initial: !secret station_base_url
 
-# Currency bot LAN NodePort base URL (no trailing slash, no /api path).
-# Non-secret but deployment-specific, so it is kept in secrets.yaml.
 currency_bot_endpoint:
   name: "Currency bot API endpoint"
   max: 255
   initial: !secret currency_bot_endpoint
 
-# SSH destination for the wired desktop: `user@host`. Non-secret in meaning but
-# deployment-specific, so the tracked tree only holds the `!secret` reference.
-# `shell_command` templates cannot read secrets.yaml directly; they read this
-# helper, which Home Assistant resets to the secret after every restart.
 komp_ssh_target:
   name: "Комп: SSH-адрес"
   max: 128

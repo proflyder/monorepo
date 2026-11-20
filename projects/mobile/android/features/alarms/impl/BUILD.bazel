@@ -32,8 +32,6 @@ metro_android_library(
     ],
 )
 
-# Impl unit decisions and the editor's quick-offset state mapping. Plain JUnit,
-# no Android runtime needed.
 kt_android_local_test(
     name = "selection_animation_test",
     srcs = [
@@ -58,18 +56,12 @@ kt_android_local_test(
     ],
 )
 
-# Robolectric resolves SDK 35 to this pinned preinstrumented jar. Keeping it as
-# a data dependency avoids a runtime Maven download.
 android_all_dir(
     name = "robolectric_android_all_sdk35",
     jar = "@maven//:org_robolectric_android_all_instrumented",
     jar_name = "android-all-instrumented-15-robolectric-13954326-i7.jar",
 )
 
-# The dense idle card stays under 112dp at 360dp and 411dp, with a 1.15 font
-# scale too; the actions row exists only for a live occurrence and stays on one
-# line; the icon delete ripple stays inside the rounded outline. The rendered
-# PNGs document idle and active states at both widths for the pull request.
 kt_android_local_test(
     name = "item_layout_test",
     srcs = ["src/test/kotlin/dev/proflyder/home/feature/alarms/presentation/AlarmItemLayoutTest.kt"],
@@ -104,9 +96,6 @@ kt_android_local_test(
     ],
 )
 
-# The contextual bar keeps every action label on one line at 360dp with a
-# 1.15 font scale and at 411dp, "Delete" stays on the error color, and the
-# rendered PNGs show the whole selection screen at both widths.
 kt_android_local_test(
     name = "selection_bar_test",
     srcs = ["src/test/kotlin/dev/proflyder/home/feature/alarms/presentation/AlarmSelectionBarTest.kt"],
@@ -140,9 +129,6 @@ kt_android_local_test(
     ],
 )
 
-# The repeat sheet is real Material UI: only an inflated layout proves the
-# seven round day toggles. Each one is a 44dp circle with a one-line label at
-# 360dp and 411dp with the 1.15 font scale; the PNGs are review evidence.
 kt_android_local_test(
     name = "repeat_sheet_test",
     srcs = ["src/test/kotlin/dev/proflyder/home/feature/alarms/presentation/AlarmRepeatSheetTest.kt"],
@@ -177,8 +163,6 @@ kt_android_local_test(
     ],
 )
 
-# The editor is real Material UI: only an inflated layout proves the label
-# placeholder in the dark theme. The rendered PNG is review evidence.
 kt_android_local_test(
     name = "editor_screenshot_test",
     srcs = ["src/test/kotlin/dev/proflyder/home/feature/alarms/presentation/AlarmEditorScreenshotTest.kt"],

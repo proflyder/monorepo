@@ -1,22 +1,10 @@
-//! Typed OpenAI chat/completions shapes plus the error normalisation HA's
-//! `llama_cpp` adapter requires.
-//!
-//! Unknown fields travel through `#[serde(flatten)]`, so a request or response
-//! the proxy does not model is forwarded unchanged instead of being stripped.
-//!
-//! The error shape is not cosmetic: the adapter calls `.get` on the error
-//! value, so it is **always** a JSON object.
-
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 
 use crate::domain::sanitize::trim_space;
 
-/// The default model name used when the client did not send one.
 pub const DEFAULT_MODEL: &str = "hermes-agent";
 
-/// One chat message. `content` stays a [`Value`] because a tool result or a
-/// multi-part content array must be forwarded unchanged.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct Message {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -27,7 +15,6 @@ pub struct Message {
     pub extra: Map<String, Value>,
 }
 
-/// A `POST /v1/chat/completions` request.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct ChatRequest {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -43,7 +30,6 @@ pub struct ChatRequest {
 }
 
 impl ChatRequest {
-    /// Parses a JSON object; a non-object or invalid body is `None`.
     #[must_use]
     pub fn parse(raw: &[u8]) -> Option<Self> {
         if raw.is_empty() {
@@ -52,8 +38,6 @@ impl ChatRequest {
         serde_json::from_slice(raw).ok()
     }
 
-    /// The text of the final message when it is a plain user turn: no tool
-    /// result, no assistant text, no multi-part content.
     #[must_use]
     pub fn last_user_text(&self) -> Option<&str> {
         let last = self.messages.last()?;
@@ -64,8 +48,6 @@ impl ChatRequest {
         (!trim_space(content).is_empty()).then_some(content)
     }
 
-    /// Injects `model_options.reasoning_effort` without mutating the caller's
-    /// payload.
     #[must_use]
     pub fn with_reasoning_effort(&self, effort: &str) -> Self {
         let mut out = self.clone();
@@ -77,7 +59,6 @@ impl ChatRequest {
         out
     }
 
-    /// The model name, or [`DEFAULT_MODEL`].
     #[must_use]
     pub fn model_name(&self) -> &str {
         self.model
@@ -86,15 +67,12 @@ impl ChatRequest {
             .unwrap_or(DEFAULT_MODEL)
     }
 
-    /// `payload.stream is true`: only the JSON literal `true` selects the
-    /// streaming reply shape.
     #[must_use]
     pub fn is_stream(&self) -> bool {
         self.stream == Some(true)
     }
 }
 
-/// The delta of one streamed choice.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct Delta {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -105,7 +83,6 @@ pub struct Delta {
     pub extra: Map<String, Value>,
 }
 
-/// One streamed choice. `finish_reason` is `Some` only for a non-null value.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct ChunkChoice {
     #[serde(default)]
@@ -118,7 +95,6 @@ pub struct ChunkChoice {
     pub extra: Map<String, Value>,
 }
 
-/// One decoded `chat.completion.chunk`.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct ChatChunk {
     #[serde(default)]
@@ -136,15 +112,12 @@ pub struct ChatChunk {
 }
 
 impl ChunkChoice {
-    /// The choice index, defaulting to `0` when absent (like Go's
-    /// `choice.get("index", 0)`).
     #[must_use]
     pub fn index(&self) -> i64 {
         value_to_i64(self.index.as_ref()).unwrap_or(0)
     }
 }
 
-/// Reads a JSON number as an integer, matching the Go helper.
 #[must_use]
 pub fn value_to_i64(value: Option<&Value>) -> Option<i64> {
     let value = value?;
@@ -157,8 +130,6 @@ pub fn value_to_i64(value: Option<&Value>) -> Option<i64> {
     value.as_f64().map(|number| number as i64)
 }
 
-/// A buffered `chat.completion` response. `choices[].message.content` is the
-/// only field the proxy may rewrite.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct ChatResponse {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -177,7 +148,6 @@ pub struct ChatResponse {
     pub extra: Map<String, Value>,
 }
 
-/// One buffered choice.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct ResponseChoice {
     #[serde(default)]
@@ -190,7 +160,6 @@ pub struct ResponseChoice {
     pub extra: Map<String, Value>,
 }
 
-/// The OpenAI-shaped error body. It is always an object.
 #[must_use]
 pub fn error_body(message: &str) -> Vec<u8> {
     serde_json::to_vec(&json!({
@@ -206,7 +175,6 @@ pub fn error_body(message: &str) -> Vec<u8> {
     })
 }
 
-/// Builds the local `chat.completion` object for a proxy-generated reply.
 #[must_use]
 pub fn local_completion(completion_id: &str, model: &str, created: i64, speech: &str) -> Vec<u8> {
     serde_json::to_vec(&json!({
@@ -224,7 +192,6 @@ pub fn local_completion(completion_id: &str, model: &str, created: i64, speech: 
     .unwrap_or_default()
 }
 
-/// Builds one local `chat.completion.chunk`.
 #[must_use]
 pub fn local_chunk(
     completion_id: &str,
@@ -246,7 +213,6 @@ pub fn local_chunk(
     })
 }
 
-/// The single SSE error record emitted after a mid-stream failure.
 #[must_use]
 pub fn error_frame() -> Value {
     json!({
@@ -257,8 +223,6 @@ pub fn error_frame() -> Value {
     })
 }
 
-/// Maps an upstream error response onto something HA can parse. Successful
-/// responses pass through untouched.
 #[must_use]
 pub fn normalize_error(status: u16, body: Vec<u8>, content_type: &str) -> (Vec<u8>, String) {
     if status < 400 {

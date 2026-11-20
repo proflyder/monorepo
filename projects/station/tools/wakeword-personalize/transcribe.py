@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-"""GPU transcription cache for screening background audio. Outputs contain private transcripts; never commit them."""
 import json,os,time,wave
 from pathlib import Path
 import numpy as np
@@ -21,7 +20,6 @@ def main():
      dest=out/(m['id']+'.json')
      if dest.exists():continue
      with wave.open(str(p.with_suffix('.wav'))) as w:x=np.frombuffer(w.readframes(w.getnframes()),dtype='<i2').astype(np.float32)/32768
-     # ASR-only gain; saved training PCM remains untouched.
      x=x*min(12.,.9/max(.001,float(np.max(np.abs(x)))))
      print('START',m['split'],m['block'],flush=True)
      segs,info=model.transcribe(x,language='ru',beam_size=5,word_timestamps=True,condition_on_previous_text=False,vad_filter=True,vad_parameters=dict(threshold=.25,min_silence_duration_ms=450,speech_pad_ms=180),temperature=0)

@@ -1,5 +1,3 @@
-//! `infra.read`: status, service, alert, logs, query, overview and report.
-
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::Write as _;
 use std::sync::Arc;
@@ -24,13 +22,11 @@ use crate::domain::status::{
 use crate::domain::{alert, redact};
 use crate::kubernetes;
 
-/// The `infra.read` group.
 pub struct ReadGroup {
     deps: Arc<Deps>,
 }
 
 impl ReadGroup {
-    /// Build the group.
     #[must_use]
     pub fn new(deps: Arc<Deps>) -> Self {
         Self { deps }
@@ -145,8 +141,6 @@ impl ToolGroup for ReadGroup {
         })
     }
 }
-
-// --- shared serializable details -----------------------------------------
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -341,8 +335,6 @@ struct LabeledSample {
     raw: String,
 }
 
-// --- infra_status ---------------------------------------------------------
-
 async fn infra_status(deps: &Deps) -> ToolOutcome {
     let Some(catalog) = deps.catalog.as_ref() else {
         return failure("Каталог сервисов не загружен.", None::<Value>);
@@ -516,8 +508,6 @@ async fn infra_status(deps: &Deps) -> ToolOutcome {
     detail.verdict = status::status_verdict(&detail, &issues);
     respond(detail.verdict.clone(), Some(&detail))
 }
-
-// --- infra_service --------------------------------------------------------
 
 async fn infra_service(deps: &Deps, arguments: &Value) -> ToolOutcome {
     let name = string_arg(arguments, "name");
@@ -693,8 +683,6 @@ fn service_speech(display: &str, service: &Service, detail: &ServiceDetail) -> S
     format!("{display}: {}.", issues.join("; "))
 }
 
-// --- infra_alert ----------------------------------------------------------
-
 async fn infra_alert(deps: &Deps, arguments: &Value) -> ToolOutcome {
     let reference = string_arg(arguments, "ref").trim().to_owned();
     if reference.is_empty() {
@@ -805,8 +793,6 @@ fn alert_speech(reference: &str, matches: &[&alert::Alert], services: &[ServiceD
     text.push('.');
     text
 }
-
-// --- infra_logs -----------------------------------------------------------
 
 async fn infra_logs(deps: &Deps, arguments: &Value) -> ToolOutcome {
     let name = string_arg(arguments, "name");
@@ -1005,8 +991,6 @@ async fn pod_logs(
     Ok(body)
 }
 
-// --- infra_query ----------------------------------------------------------
-
 async fn infra_query(deps: &Deps, arguments: &Value) -> ToolOutcome {
     let promql = string_arg(arguments, "promql").trim().to_owned();
     if promql.is_empty() {
@@ -1050,8 +1034,6 @@ async fn infra_query(deps: &Deps, arguments: &Value) -> ToolOutcome {
     respond(speech, Some(&detail))
 }
 
-// --- infra_overview -------------------------------------------------------
-
 fn infra_overview(deps: &Deps) -> ToolOutcome {
     let Some(catalog) = deps.catalog.as_ref() else {
         return failure("Каталог сервисов не загружен.", None::<Value>);
@@ -1067,8 +1049,6 @@ fn infra_overview(deps: &Deps) -> ToolOutcome {
         })),
     )
 }
-
-// --- infra_report ---------------------------------------------------------
 
 async fn infra_report(deps: &Deps, arguments: &Value) -> ToolOutcome {
     let Some(catalog) = deps.catalog.as_ref() else {
@@ -1090,8 +1070,6 @@ async fn infra_report(deps: &Deps, arguments: &Value) -> ToolOutcome {
         errors.push("алерты: Alertmanager не настроен".to_owned());
     }
 
-    // The three cluster-wide reads are independent: run them together so the
-    // report budget is not spent on serial round trips.
     let (workloads, flux, checks) = tokio::join!(
         fetch_workloads(deps),
         fetch_flux(deps),
@@ -1121,7 +1099,6 @@ async fn infra_report(deps: &Deps, arguments: &Value) -> ToolOutcome {
 
 type ChecksByService = Option<HashMap<String, Vec<CheckResult>>>;
 
-/// Every Deployment, StatefulSet and DaemonSet in the cluster.
 async fn fetch_workloads(deps: &Deps) -> Option<Result<Vec<report::WorkloadRef>, String>> {
     let kube = deps.kube()?;
     Some(kube.list_workloads().await.map(|items| {
@@ -1136,7 +1113,6 @@ async fn fetch_workloads(deps: &Deps) -> Option<Result<Vec<report::WorkloadRef>,
     }))
 }
 
-/// Every Flux Kustomization and HelmRelease, read-only through the API.
 async fn fetch_flux(deps: &Deps) -> Option<Result<Vec<report::FluxResource>, String>> {
     let kube = deps.kube()?;
     Some(kube.list_flux().await.map(|items| {
@@ -1154,7 +1130,6 @@ async fn fetch_flux(deps: &Deps) -> Option<Result<Vec<report::FluxResource>, Str
     }))
 }
 
-/// Runs every catalog check exactly once and groups the results by service.
 async fn run_catalog_checks(deps: &Deps, catalog: &Catalog) -> ChecksByService {
     let checks = deps.checks()?;
     if catalog
@@ -1214,9 +1189,6 @@ async fn collect_service_probe(
             .and_then(|by_service| by_service.get(&service.id))
             .cloned()
             .unwrap_or_else(|| {
-                // A service that declares checks but has no runner reports them
-                // as skipped, exactly like an unconfigured Home Assistant
-                // endpoint.
                 service
                     .checks
                     .iter()
@@ -1274,8 +1246,6 @@ fn pod_state(pod: kubernetes::Pod) -> PodState {
     }
 }
 
-// --- helpers --------------------------------------------------------------
-
 fn string_arg(arguments: &Value, key: &str) -> String {
     arguments
         .get(key)
@@ -1330,6 +1300,5 @@ fn truncate_utf8(text: &str, limit: usize) -> String {
     text[..cut].to_owned()
 }
 
-// Keep unused imports intentional while the group is assembled.
 #[allow(dead_code)]
 fn _types(_: &Sample, _: &LogLine) {}

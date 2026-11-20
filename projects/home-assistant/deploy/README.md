@@ -170,3 +170,28 @@ Health exporter проверяет только TCP connect и экспорти�
 Полные live проверки — `e2e/kubernetes_runtime.py`, `e2e/wyoming_smoke.py`
 и существующие HA/Hermes E2E. Пути приведены относительно проекта home-assistant.
 [Эксплуатация](../../../docs/KUBERNETES-OPERATIONS.md).
+
+## Заметки к коду
+
+Пояснения, перенесённые из комментариев исходников (код комментариев не содержит, см. `AGENTS.md`).
+
+- `chart/templates/hermes-config-drift.yaml` — Opt-in scrape target for the `config-drift` sidecar. The sidecar runs in the hostNetwork Hermes Pod, so Prometheus reaches it through the Pod IP; this ClusterIP Service only gives the ServiceMonitor a stable port name.
+- `chart/templates/runtime.yaml`
+  - Storage is applied by apply-runtime.sh with kubectl and deliberately kept out of the Helm release so a CI `helm upgrade` never needs cluster-scoped RBAC. Keep also protects the data if it is still tracked by an older release.
+- `chart/templates/smoke-hook.yaml` — Post-upgrade smoke hook (решение 54).
+- `flux/external-secret-hermes-config.yaml` — Hermes private render values (real HA/MA endpoints and the Telegram owner chat id). The reviewed overlay itself ships in the `hermes-config` image; this Secret supplies only the values the renderer deep-merges after the fragment.
+- `flux/helmrelease.yaml` — Flux entry point for the Hermes runtime Helm release (решение 54).
+- `flux/kustomization.yaml` — Manifest set for Kustomization/app-hermes (решение 54).
+- `health-exporter/crates/health-exporter/src/lib.rs` — Runtime chart's TCP health exporter.
+- `health-exporter/crates/health-exporter/src/main.rs` — Command-line entry point: serve `/metrics`, or fetch it with `-query` for the rollout's exec probe. Everything reusable lives in the library.
+- `images/build-and-push.sh` — Build and push the Hermes gateway and voice-proxy images to GHCR.
+- `images/hermes/Dockerfile` — Debian 13 still ships SQLite 3.46.1, which contains the upstream WAL-reset corruption bug. Build a pinned shared library for the runtime image instead of relying on a distro backport that trixie does not currently provide. See #70480 and https://sqlite.org/wal.html#walresetbug.
+  - apt, dpkg, alternatives and fontconfig keep wall-clock state; leaving their logs/caches in the layer would make every build a different image.
+  - Build context is a git archive of the pinned, reviewed Hermes revision, never HOME.
+- `images/hermes/build.sh` — Build the Hermes gateway image reproducibly (DECISIONS 36).
+- `images/hermes/verify-reproducible.sh` — Prove the Hermes image is reproducible (DECISIONS 36).
+- `manifests/external-secrets.yaml` — Hermes environment (API key, HA/MA tokens and runtime flags).
+- `rebase_hermes_state.py` — Rebase persisted Hermes profile references after relocating HERMES_HOME.
+- `rollout.sh` — Deploy entry point for the `hermes` unit (deploy-home.yml matrix `script`).
+- `test_build_and_push.py` — build-and-push.sh: the prebuilt-digest path used by deploy-home (DECISIONS 36).
+- `test_voice_routing_contract.py` — Contract for the private voice-routing values of the Hermes Deployment.

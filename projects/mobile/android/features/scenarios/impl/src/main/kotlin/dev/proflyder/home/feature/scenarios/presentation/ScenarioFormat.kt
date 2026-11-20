@@ -21,7 +21,6 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 
-/** Resource-backed presentation text for scenario rows and editor cards. */
 internal class ResourceTriggerStrings(private val context: Context) : ScenarioTriggerStrings {
     override fun manual(): String = context.getString(R.string.scenarios_trigger_manual)
     override fun daily(): String = context.getString(R.string.scenarios_trigger_daily)
@@ -44,7 +43,6 @@ internal class ResourceTriggerStrings(private val context: Context) : ScenarioTr
         String.format(Locale.ROOT, "%02d:%02d", hour, minute)
 }
 
-/** Two lines of a step card: a human-readable title and an actionable details line. */
 internal data class StepDescription(val title: String, val details: String)
 
 internal object ScenarioFormat {
@@ -92,11 +90,6 @@ internal object ScenarioFormat {
         is ScenarioCondition.Unknown -> context.getString(R.string.scenarios_condition_unsupported)
     }
 
-    /**
-     * Step card text. The title is the catalog entry title (or its id when the
-     * entry is gone); details carry the localized action, room/device and a
-     * short parameter summary.
-     */
     fun describeStep(
         context: Context,
         step: ScenarioStep,
@@ -125,8 +118,6 @@ internal object ScenarioFormat {
         catalogLoaded: Boolean,
     ): StepDescription {
         val entry = catalog.firstOrNull { it.id == step.entryId }
-        // Prefer the human device name when HA only sent a technical entity
-        // title ("Light", "Switch"); never repeat the same name twice.
         val localized = entry?.let { serverText(context, it.titleKey, it.titleArgs) }
         val title = localized ?: entry?.displayName?.ifBlank { entry.id } ?: step.entryId
         val parts = mutableListOf(actionLabel(context, step.action))
@@ -165,7 +156,6 @@ internal object ScenarioFormat {
     fun shortDate(): DateTimeFormatter =
         DateTimeFormatter.ofPattern("d MMM yyyy", Locale.getDefault())
 
-    /** Parsed light/speak parameters in a stable, human-readable order. */
     private fun paramsSummary(context: Context, raw: String): List<String> {
         val obj = runCatching {
             Json.parseToJsonElement(raw.ifBlank { "{}" }) as? JsonObject
@@ -201,6 +191,5 @@ internal object ScenarioFormat {
     private fun dev.proflyder.home.core.model.WallTime.display(): String =
         String.format(Locale.ROOT, "%02d:%02d", hour, minute)
 
-    /** Separator between the action, room/device and parameter summaries. */
     const val SEPARATOR = " · "
 }

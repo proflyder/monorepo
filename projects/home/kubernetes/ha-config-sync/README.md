@@ -89,3 +89,18 @@ move. A restart-only change (`shell_commands.yaml`) is deferred while
 `manifests/prometheusrule.yaml` (namespace `home-assistant`, warning, component
 `ha-config`): `HaConfigDrift` (15 m), `HaConfigSyncFailing` (30 m),
 `HaConfigSyncRolledBack` (1 h increase), `HaConfigSyncDown` (15 m absent).
+
+## Заметки к коду
+
+Пояснения, перенесённые из комментариев исходников (код комментариев не содержит, см. `AGENTS.md`).
+
+- `bootstrap.sh` — Owner bootstrap for ha-config-sync (idempotent, --dry-run supported).
+- `manifests/deployment.yaml` — ha-config-sync: delivers projects/home-assistant/ha-voice to HAOS and keeps it in sync (DECISIONS 58).
+  - Never restart Home Assistant while the alarm is ringing.
+- `manifests/external-secrets.yaml` — Credentials for ha-config-sync, materialised from OpenBao KV v2 by ESO.
+- `manifests/kustomization.yaml` — Flux-rendered manifest set for ha-config-sync (PR-3).
+- `manifests/network-policy.yaml` — ha-config-sync is LAN-local: it only needs DNS, HAOS SSH (22222) and the Home Assistant REST API (8123). Prometheus scrapes 9119; kubelet probes arrive from the node address, and the mcp-gateway NetworkPolicy documents the same kube-router trade-off.
+- `manifests/prometheusrule.yaml` — Alerts for the ha-voice delivery loop.
+- `manifests/servicemonitor.yaml` — kube-prometheus-stack runs with ruleSelectorNilUsesHelmValues=false, so a ServiceMonitor in any namespace is picked up. The selector matches only this Service.
+- `openbao_kv.py` — OpenBao KV helper for the ha-config-sync bootstrap.
+- `test_manifests.py` — Structural contracts for the ha-config-sync deployment (no cluster needed).

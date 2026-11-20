@@ -1,12 +1,3 @@
-//! HTTP surface: `POST /v1/push/find`, `POST /v1/push/notify` and
-//! `GET /v1/push/devices`.
-//!
-//! Every route requires `Authorization: Bearer <PUSH_TOKEN_FILE>`, compared in
-//! constant time. A send fans out to every registered device unless the caller
-//! names one by its stable `deviceId`, and reports counts only. The device
-//! listing exposes identities and owner-visible names for name matching in the
-//! MCP gateway, but never a token: the model cannot enumerate FCM credentials.
-
 use std::sync::Arc;
 
 use axum::extract::State;
@@ -21,16 +12,11 @@ use serde_json::{Value, json};
 use crate::devices::Registry;
 use crate::fcm::{self, Message, Sender};
 
-/// Longest accepted reason; it is spoken by the phone, not stored.
 pub const MAX_REASON_CHARS: usize = 200;
-/// Longest notification title.
 pub const MAX_TITLE_CHARS: usize = 120;
-/// Longest notification body.
 pub const MAX_BODY_CHARS: usize = 500;
-/// Longest deep link; the app validates it again.
 pub const MAX_DEEP_LINK_CHARS: usize = 512;
 
-/// Everything a route needs.
 #[derive(Clone)]
 pub struct PushState {
     pub sender: Arc<Sender>,
@@ -48,19 +34,15 @@ impl std::fmt::Debug for PushState {
     }
 }
 
-/// `POST /v1/push/find` body.
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FindBody {
-    /// Optional short reason, e.g. the phrase that triggered it.
     #[serde(default)]
     pub reason: String,
-    /// Optional stable device identity; absent means every device.
     #[serde(default)]
     pub device_id: Option<String>,
 }
 
-/// `POST /v1/push/notify` body.
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct NotifyBody {
@@ -68,22 +50,16 @@ pub struct NotifyBody {
     pub title: String,
     #[serde(default)]
     pub body: String,
-    /// Optional in-app destination, e.g. `home://alarms`.
     #[serde(default)]
     pub deep_link: Option<String>,
-    /// Optional stable device identity; absent means every device.
     #[serde(default)]
     pub device_id: Option<String>,
 }
 
-/// Delivery summary. Counts only — no tokens.
 #[derive(Debug, serde::Serialize, PartialEq, Eq)]
 pub struct Delivery {
-    /// Devices the message reached.
     pub sent: usize,
-    /// Devices that failed for a transient reason.
     pub failed: usize,
-    /// Devices that were registered for this send.
     pub devices: usize,
 }
 
@@ -92,7 +68,6 @@ struct ErrorBody {
     error: &'static str,
 }
 
-/// Builds the push router.
 pub fn router(state: PushState) -> Router {
     Router::new()
         .route("/v1/push/find", axum::routing::post(find))
@@ -101,8 +76,6 @@ pub fn router(state: PushState) -> Router {
         .with_state(state)
 }
 
-/// A device as the gateway sees it: identity, owner-visible name, platform.
-/// The FCM token stays inside this process; the gateway only picks a target.
 #[derive(Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DeviceView {
@@ -116,7 +89,6 @@ struct DevicesBody {
     devices: Vec<DeviceView>,
 }
 
-/// Invokes one message on every registered device.
 pub async fn deliver(
     message: &Message,
     sender: &Sender,
@@ -143,7 +115,6 @@ pub async fn deliver(
         match sender.send(&device.token, message, now).await {
             Ok(()) => sent += 1,
             Err(fcm::Error::Unregistered) => {
-                // Dead token: forget it so the next send is not wasted.
                 if let Err(error) = registry.forget(&device.token).await {
                     tracing::warn!(error = %error, "could not forget an unregistered token");
                 }
@@ -237,7 +208,6 @@ async fn notify(
     )
 }
 
-/// `GET /v1/push/devices` — names for deterministic matching in the gateway.
 async fn devices(State(state): State<PushState>, headers: HeaderMap) -> Response {
     if !authorized(&state.token, &headers) {
         return error(StatusCode::UNAUTHORIZED, "unauthenticated");
@@ -261,8 +231,6 @@ async fn devices(State(state): State<PushState>, headers: HeaderMap) -> Response
     }
 }
 
-/// Applies the gateway's explicit choice. An unknown id selects nothing,
-/// which the caller reports as "the phone did not ring".
 fn select_devices(
     devices: Vec<crate::devices::Device>,
     device_id: Option<&str>,
@@ -305,7 +273,6 @@ fn error(status: StatusCode, message: &'static str) -> Response {
     (status, Json(ErrorBody { error: message })).into_response()
 }
 
-/// A small JSON summary for the MCP tool speech: never includes a token.
 #[must_use]
 pub fn summary(detail: &Delivery) -> Value {
     json!({"sent": detail.sent, "failed": detail.failed, "devices": detail.devices})

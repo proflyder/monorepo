@@ -26,7 +26,6 @@ class RemindersFragment :
 
     private lateinit var adapter: ReminderAdapter
 
-    /** The single callback instance shared with the adapter. */
     private val adapterCallback = object : BaseAdapterCallback<Schedule>(), ReminderAdapterCallback {
         override fun onItemClick(item: Schedule) = requireNavigator().navigate(ReminderEditorDestination(item.id))
         override fun onToggle(reminder: Schedule, enabled: Boolean) = viewModel.toggle(reminder, enabled)
@@ -80,7 +79,6 @@ class RemindersFragment :
         }
         state.actionError?.let { failure ->
             showFailure(failure)
-            // A switch may have moved optimistically; re-render server-confirmed values.
             adapter.notifyItemRangeChanged(0, adapter.itemCount)
             viewModel.consumeActionError()
         }

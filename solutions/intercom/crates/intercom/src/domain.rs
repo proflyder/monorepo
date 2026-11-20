@@ -1,14 +1,3 @@
-//! In-memory call registry and state machine.
-//!
-//! The service is deliberately ephemeral: a call exists only while both peers
-//! are reachable through their Watch streams. There is no store and no
-//! replay after a restart. Every transition happens under one mutex and is
-//! followed by a broadcast to the affected endpoints' Watch subscribers.
-//!
-//! Signaling details: SDP and ICE payloads are opaque to the state machine.
-//! The only SDP facts used are the direction (offer from the caller, answer
-//! from the callee) and the transition to ACTIVE once both halves were seen.
-
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -19,16 +8,12 @@ use tokio::sync::broadcast;
 
 use crate::config::{EndpointConfig, IceServerConfig};
 
-/// Capacity of one endpoint's Watch broadcast. ICE trickle can be bursty, but
-/// a slow client is a broken client: overflow surfaces as a stream error.
 const EVENT_CAPACITY: usize = 256;
 
-/// Wall-clock source; tests use a manual clock.
 pub trait Clock: Send + Sync {
     fn now_unix(&self) -> i64;
 }
 
-/// The process clock.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct SystemClock;
 
@@ -43,7 +28,6 @@ impl Clock for SystemClock {
     }
 }
 
-/// Call time limits and retention.
 #[derive(Debug, Clone, Copy)]
 pub struct Timeouts {
     pub ring: Duration,
@@ -58,14 +42,12 @@ impl Timeouts {
     }
 }
 
-/// The role of an endpoint.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EndpointKind {
     Phone,
     Station,
 }
 
-/// A registered endpoint snapshot.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Endpoint {
     pub id: String,
@@ -76,7 +58,6 @@ pub struct Endpoint {
     pub last_seen_unix: i64,
 }
 
-/// A call snapshot.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Call {
     pub id: String,
@@ -90,7 +71,6 @@ pub struct Call {
     pub ended_unix: i64,
 }
 
-/// Live state of a call.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CallState {
     Ringing,
@@ -105,7 +85,6 @@ impl CallState {
     }
 }
 
-/// Why a call ended.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EndReason {
     Unspecified,
@@ -118,21 +97,18 @@ pub enum EndReason {
     Error,
 }
 
-/// Direction of an SDP blob.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SdpType {
     Offer,
     Answer,
 }
 
-/// One SDP signal.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SdpSignal {
     pub kind: SdpType,
     pub sdp: String,
 }
 
-/// One trickled ICE candidate.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IceCandidate {
     pub candidate: String,
@@ -140,7 +116,6 @@ pub struct IceCandidate {
     pub sdp_mline_index: i32,
 }
 
-/// A signaling payload sent by one endpoint.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Signal {
     Sdp(SdpSignal),
@@ -148,7 +123,6 @@ pub enum Signal {
     IceEnd,
 }
 
-/// A Watch event.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Event {
     Call {
@@ -171,7 +145,6 @@ pub enum Event {
     },
 }
 
-/// Error classes mapped to Connect codes at the API boundary.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ErrorKind {
     InvalidArgument,
@@ -182,7 +155,6 @@ pub enum ErrorKind {
     Unavailable,
 }
 
-/// A rejected operation. Messages never contain tokens or SDP bodies.
 #[derive(Debug, Clone, Copy)]
 pub struct DomainError {
     pub kind: ErrorKind,
@@ -195,7 +167,6 @@ impl DomainError {
     }
 }
 
-/// Server-computed status for GetStatus and metrics.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Status {
     pub endpoints_registered: usize,
@@ -203,7 +174,6 @@ pub struct Status {
     pub active_calls: usize,
 }
 
-/// An authenticated endpoint identity derived from its token.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Identity {
     pub endpoint_id: String,
@@ -240,7 +210,6 @@ struct Inner {
     idempotency: BTreeMap<String, String>,
 }
 
-/// Counters rendered at `/metrics`; gauges are computed from live state.
 #[derive(Debug, Default)]
 pub struct Metrics {
     started: AtomicU64,
@@ -256,7 +225,6 @@ impl Metrics {
     }
 }
 
-/// The shared call registry.
 pub struct Intercom {
     inner: Mutex<Inner>,
     timeouts: Timeouts,
@@ -266,7 +234,6 @@ pub struct Intercom {
 }
 
 impl Intercom {
-    /// Creates the registry with exactly the two configured identities.
     pub fn new(
         phone: &EndpointConfig,
         station: &EndpointConfig,
@@ -318,27 +285,22 @@ impl Intercom {
         }
     }
 
-    /// Registered ICE servers (empty means host candidates only).
     pub fn ice_servers(&self) -> &[IceServerConfig] {
         &self.ice_servers
     }
 
-    /// Current time of the injected clock.
     pub fn now_unix(&self) -> i64 {
         self.clock.now_unix()
     }
 
-    /// Ring timeout reported by GetStatus.
     pub fn ring_timeout_seconds(&self) -> i32 {
         i32::try_from(self.timeouts.ring.as_secs()).unwrap_or(i32::MAX)
     }
 
-    /// Connect timeout reported by GetStatus.
     pub fn connect_timeout_seconds(&self) -> i32 {
         i32::try_from(self.timeouts.connect.as_secs()).unwrap_or(i32::MAX)
     }
 
-    /// Increments the rejected-transition counter when an RPC fails.
     pub fn note_rejected(&self) {
         Metrics::inc(&self.metrics.rejected);
     }
@@ -347,7 +309,6 @@ impl Intercom {
         self.inner.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
-    /// Updates the descriptive fields of an authenticated endpoint.
     pub fn register(
         &self,
         identity: &Identity,
@@ -378,7 +339,6 @@ impl Intercom {
         Ok(endpoint)
     }
 
-    /// All known endpoints in stable id order.
     pub fn list_endpoints(&self) -> Vec<Endpoint> {
         self.lock()
             .endpoints
@@ -387,7 +347,6 @@ impl Intercom {
             .collect()
     }
 
-    /// Starts a call. `actor` is the authenticated caller.
     pub fn start_call(
         &self,
         actor: &Identity,
@@ -475,7 +434,6 @@ impl Intercom {
         Ok(snapshot)
     }
 
-    /// Answers a ringing call. Only the callee may answer.
     pub fn answer(&self, actor: &Identity, call_id: &str) -> Result<Call, DomainError> {
         let now = self.now_unix();
         let mut inner = self.lock();
@@ -507,7 +465,6 @@ impl Intercom {
         Ok(snapshot)
     }
 
-    /// Hangs up or declines the call from either participant.
     pub fn hangup(
         &self,
         actor: &Identity,
@@ -552,7 +509,6 @@ impl Intercom {
         Ok(snapshot)
     }
 
-    /// Returns a call visible to one of its participants.
     pub fn get_call(&self, actor: &Identity, call_id: &str) -> Result<Call, DomainError> {
         let inner = self.lock();
         let record = inner
@@ -568,9 +524,6 @@ impl Intercom {
         Ok(call_view(record, &inner.endpoints))
     }
 
-    /// Routes one signaling payload to the other participant.
-    ///
-    /// Returns whether the peer currently has at least one Watch subscriber.
     pub fn send_signal(
         &self,
         actor: &Identity,
@@ -650,12 +603,6 @@ impl Intercom {
         Ok(delivered)
     }
 
-    /// Opens a Watch stream and marks the endpoint online.
-    ///
-    /// The returned guard marks the endpoint offline when the stream is
-    /// dropped; losing the last stream during a live call ends it as
-    /// UNREACHABLE, because the service has no out-of-band way to reach the
-    /// endpoint.
     pub fn watch(
         self: &Arc<Self>,
         identity: &Identity,
@@ -712,7 +659,6 @@ impl Intercom {
         drop(inner);
     }
 
-    /// Expires ring/connect/max-call deadlines and purges old ended calls.
     pub fn tick(&self) {
         let now = self.now_unix();
         let mut inner = self.lock();
@@ -755,7 +701,6 @@ impl Intercom {
         drop(inner);
     }
 
-    /// Server-computed status.
     pub fn status(&self) -> Status {
         let inner = self.lock();
         Status {
@@ -773,7 +718,6 @@ impl Intercom {
         }
     }
 
-    /// Prometheus text exposition. Gauges are read from live state.
     pub fn render_metrics(&self) -> String {
         let status = self.status();
         let mut out = String::new();
@@ -837,7 +781,6 @@ impl Intercom {
     }
 }
 
-/// Marks an endpoint offline when its Watch stream is dropped.
 pub struct WatchGuard {
     intercom: Arc<Intercom>,
     endpoint_id: String,
@@ -1024,7 +967,6 @@ fn missing_endpoint(id: &str, kind: EndpointKind) -> Endpoint {
     }
 }
 
-/// A manual clock for deterministic tests.
 #[cfg(test)]
 pub(crate) struct TestClock {
     now: AtomicU64,
@@ -1221,7 +1163,6 @@ mod tests {
         h.clock.advance(61);
         h.intercom.tick();
         assert!(h.intercom.get_call(&h.phone, &call.id).is_err());
-        // The same key is free again after the ended call was purged.
         let next = h
             .intercom
             .start_call(&h.phone, "station", "once")
@@ -1329,8 +1270,6 @@ mod tests {
             .expect_err("callee offer");
         assert_eq!(error.kind, ErrorKind::PermissionDenied);
 
-        // ICE may be trickled while the callee is still ringing: candidates
-        // can arrive before the answer. It is routed to the peer.
         let delivered = h
             .intercom
             .send_signal(
@@ -1363,7 +1302,6 @@ mod tests {
         assert_eq!(station_view.caller.id, "phone");
 
         h.intercom.answer(&h.station, &call.id).expect("answer");
-        // Both sides observe the state change.
         h.next_call(&mut phone_events);
         h.next_call(&mut station_events);
 
@@ -1379,7 +1317,6 @@ mod tests {
             )
             .expect("offer");
         assert!(delivered);
-        // Only the callee receives the offer, the caller receives no echo.
         match station_events.try_recv().expect("offer event") {
             Event::Sdp {
                 call_id,
@@ -1430,7 +1367,6 @@ mod tests {
             .expect("hangup");
         h.clock.advance(61);
         h.intercom.tick();
-        // After purge the key is free; before purge a different callee conflicts.
         let h2 = harness();
         let (_events2, _guard2) = h2.online(&h2.station);
         h2.intercom

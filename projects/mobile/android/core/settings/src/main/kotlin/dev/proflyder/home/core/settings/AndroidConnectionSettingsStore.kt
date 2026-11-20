@@ -31,16 +31,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 
-/**
- * Stores the bearer token as Keystore-encrypted ciphertext and composes it with
- * the endpoints/timeouts supplied by [RemoteConnectionSource]. The manifest
- * disables Android backup, so the token never leaves the device.
- *
- * Remote Config is authoritative for endpoints and timeouts: the legacy DataStore
- * fields are no longer read or written (the migration and keys remain so an
- * upgrade keeps the encrypted token). Requests read [config] synchronously
- * (interceptors run on I/O threads), so [config] keeps a synchronous snapshot.
- */
 @SingleIn(AppScope::class)
 @ContributesBinding(AppScope::class)
 @Inject
@@ -124,7 +114,6 @@ class AndroidConnectionSettingsStore(
         return Outcome.Success(Unit)
     }
 
-    /** Endpoints/timeouts come only from Remote Config; the token is device-local. */
     private fun compose(
         state: RemoteConnectionState,
         token: String?,
@@ -151,11 +140,6 @@ class AndroidConnectionSettingsStore(
     }
 
     internal companion object {
-        /**
-         * Legacy key names copied from the pre-DataStore SharedPreferences file.
-         * They are kept only so the migration remains compatible; endpoints and
-         * timeouts are no longer read from or written to DataStore.
-         */
         val KEY_ENDPOINT = stringPreferencesKey("endpoint")
         val KEY_CONTROL_ENDPOINT = stringPreferencesKey("control_endpoint")
         val KEY_CONNECT_TIMEOUT = longPreferencesKey("connect_timeout_millis")

@@ -1,4 +1,2 @@
-# The trained model and its manifest are local artifacts until the voice/data
-# licenses are reviewed for public distribution.
 *.tflite
 *.json

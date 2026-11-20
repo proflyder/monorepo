@@ -1,9 +1,3 @@
-//! End-to-end contract test over the real Connect HTTP/1.1 listener.
-//!
-//! This is the regression that pins the transport decision: unary calls and
-//! the server-streaming `Watch` RPC work through the same client the Android
-//! app uses, without HTTP/2 or bidi streams.
-
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -114,7 +108,6 @@ async fn registration_listing_and_ice_config() {
         .register_endpoint_with_options(
             proto::RegisterEndpointRequest {
                 endpoint: Some(proto::Endpoint {
-                    // Server-substituted from the token.
                     id: "spoofed".into(),
                     display_name: "My phone".into(),
                     ..Default::default()
@@ -188,7 +181,6 @@ async fn watch_events_reach_both_endpoints_and_streaming_works() {
     let call = started.call.as_option().expect("call").clone();
     assert_eq!(call.state, proto::CallState::Ringing);
 
-    // Both Watch streams receive the incoming call over HTTP/1.1.
     let station_event = station_watch
         .message::<proto::WatchEvent>()
         .await
@@ -212,8 +204,6 @@ async fn watch_events_reach_both_endpoints_and_streaming_works() {
         }
     }
 
-    // Answer from the station and exchange SDP: offer from caller, answer from
-    // callee; the server promotes the call to ACTIVE once both halves arrived.
     let answered = client
         .answer_with_options(
             proto::AnswerRequest {
@@ -229,7 +219,6 @@ async fn watch_events_reach_both_endpoints_and_streaming_works() {
         answered.call.as_option().expect("call").state,
         proto::CallState::Connecting
     );
-    // Both Watch streams see the state change before the SDP exchange.
     for watch in [&mut station_watch, &mut phone_watch] {
         let event = watch
             .message::<proto::WatchEvent>()
@@ -298,7 +287,6 @@ async fn watch_events_reach_both_endpoints_and_streaming_works() {
         .await
         .expect("answer sdp");
 
-    // The phone receives the answer and then the ACTIVE state change.
     let answer = phone_watch
         .message::<proto::WatchEvent>()
         .await
@@ -340,8 +328,6 @@ async fn watch_rejects_a_foreign_endpoint_id() {
         )
         .await
         .expect("stream headers");
-    // A server-streaming handler error arrives in the stream envelope, not at
-    // header time.
     let error = stream
         .message::<proto::WatchEvent>()
         .await

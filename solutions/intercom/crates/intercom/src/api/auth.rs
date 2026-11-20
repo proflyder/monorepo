@@ -1,11 +1,3 @@
-//! Bearer authentication shared by unary and streaming RPCs.
-//!
-//! Two tokens are accepted: the phone bearer and the station device token.
-//! The endpoint identity is taken from the matching token and inserted into
-//! the request extensions; a handler never trusts an endpoint id from the
-//! request body. Both comparisons run on every request, so a mismatch does not
-//! reveal which token kind was closer.
-
 use connectrpc::interceptor::StreamResponse;
 use connectrpc::interceptor::{
     Interceptor, Next, NextStream, StreamRequest, UnaryRequest, UnaryResponse,
@@ -18,14 +10,12 @@ use crate::domain::{EndpointKind, Identity};
 
 const BEARER_PREFIX: &str = "bearer ";
 
-/// One token-to-identity pair.
 #[derive(Clone)]
 struct Device {
     token: Token,
     identity: Identity,
 }
 
-/// Resolves the bearer token to the phone or station identity.
 #[derive(Clone)]
 pub struct TokenAuth {
     phone: Device,

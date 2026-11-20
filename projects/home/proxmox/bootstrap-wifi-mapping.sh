@@ -1,8 +1,4 @@
 #!/usr/bin/env bash
-# Preparation only: creates an isolated PCI mapping for the RTL8821CE.
-# It does NOT attach the card to a VM and does NOT change networking.
-# Do not run until a routed/NAT or external Wi-Fi bridge design exists.
-# Hardware bootstrap; never relax IOMMU isolation or use unsafe interrupts.
 set -euo pipefail
 [[ $(id -u) == 0 ]]
 DEVICE=/sys/bus/pci/devices/0000:04:00.0

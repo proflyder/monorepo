@@ -1,14 +1,3 @@
-# Home Assistant executor for the durable scheduler.
-#
-# This file is a TEMPLATE. deploy.sh renders it with private values and the
-# digest-pinned container images; rendered manifests must never be committed.
-#
-#   HA_URL   base URL of the live Home Assistant (no credentials, no query)
-#
-# The deployment starts with 0 replicas. deploy.sh runs a one-shot dry-run
-# validation first, then sets BRIDGE_EXECUTE=true and scales to 1 only at the
-# controlled ownership switch. Dry-run mode is a finite diagnostic pass, so it
-# must not run as a long-lived deployment.
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -34,11 +23,9 @@ metadata:
     app.kubernetes.io/name: ha-bridge
     app.kubernetes.io/part-of: home
   annotations:
-    # Traceability only: a Deployment metadata change never rolls pods.
     proflyder.dev/build: ${BUILD_ID}
 spec:
   replicas: 0
-  # One executor per queue. A second replica would duplicate HA side effects.
   strategy:
     type: Recreate
   selector:
@@ -49,7 +36,6 @@ spec:
       labels:
         app.kubernetes.io/name: ha-bridge
       annotations:
-        # Content-addressed: identical rendered content keeps the pod template.
         proflyder.dev/rollout: ${ROLLOUT_ID}
     spec:
       enableServiceLinks: false
@@ -78,7 +64,6 @@ spec:
               value: ha-bridge-home
             - name: BRIDGE_QUEUE
               value: home
-            # Flipped to true only at the controlled cutover.
             - name: BRIDGE_EXECUTE
               value: "false"
             - name: BRIDGE_LEDGER_PATH
@@ -89,15 +74,10 @@ spec:
               value: "300"
             - name: BRIDGE_POLL_INTERVAL
               value: 1s
-            # Home alarms/timers must resume within seconds after a scheduler
-            # outage; the generic solution default (5m) is too slow for this
-            # deployment.
             - name: BRIDGE_MAX_BACKOFF
               value: 5s
           readinessProbe:
             exec:
-              # Authenticated scheduler readiness; the token comes from the
-              # mounted file, never from probe arguments.
               command: ["/usr/local/bin/ha-bridge", "-healthcheck"]
             initialDelaySeconds: 3
             periodSeconds: 15

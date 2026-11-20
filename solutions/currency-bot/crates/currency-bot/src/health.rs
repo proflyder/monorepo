@@ -1,9 +1,3 @@
-//! Distroless `-healthcheck`: GET the public `/readyz` probe.
-//!
-//! The image has no shell, curl or wget, so the binary is its own probe. It
-//! loads the same configuration as the server (a broken Secret mount fails the
-//! probe) and asks its loopback address.
-
 use std::process::ExitCode;
 use std::time::Duration;
 
@@ -11,7 +5,6 @@ use crate::config::Config;
 
 const TIMEOUT: Duration = Duration::from_secs(4);
 
-/// `currency-bot -healthcheck`: `/readyz` must return HTTP 200.
 pub async fn run_healthcheck() -> ExitCode {
     let config = match Config::load() {
         Ok(config) => config,
@@ -34,9 +27,7 @@ pub async fn run_healthcheck() -> ExitCode {
     ExitCode::SUCCESS
 }
 
-/// GET `/readyz` and require 200.
 pub async fn check_ready(url: &str) -> Result<(), String> {
-    // Loopback HTTP, but the workspace `reqwest` still needs a provider.
     home_tls::install_crypto_provider();
     let client = reqwest::Client::builder()
         .timeout(TIMEOUT)

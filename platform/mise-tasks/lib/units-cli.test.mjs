@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-// Unit tests for the mise unit dispatcher; run with `node --test`.
 
 import assert from "node:assert/strict";
 import os from "node:os";
@@ -129,8 +128,6 @@ test("findUnit explains an unknown unit with suggestions", () => {
 });
 
 test("buildCommands builds every target without a unit", () => {
-  // `//...` includes the Android targets, so the Android config must be active
-  // exactly as it was when these flags lived in the root `.bazelrc`.
   assert.deepEqual(buildCommands(null), [
     { command: "bazel", args: ["build", "--config=android", "//..."], cwd: ROOT },
   ]);
@@ -156,7 +153,6 @@ test("android units build and test with --config=android", () => {
     "//apps/one:one_test",
     "--test_output=errors",
   ]);
-  // Non-Android Bazel units must not get the Android-only flags.
   assert.ok(!testCommands(byId("proto"))[0].args.includes("--config=android"));
 });
 
@@ -193,8 +189,6 @@ test("testCommands honours BAZEL_TARGETS narrowed by CI", () => {
 });
 
 test("build and test append BAZEL_EXTRA_ARGS so the tested APK is the signed one", () => {
-  // `_android.yml` sets the release versionCode/versionName this way; the same
-  // defines must reach both commands or Bazel builds two different APKs.
   process.env.BAZEL_EXTRA_ARGS =
     "--define home_version_code=1700000000 --define home_version_name=0.1.0-abc1234";
   try {

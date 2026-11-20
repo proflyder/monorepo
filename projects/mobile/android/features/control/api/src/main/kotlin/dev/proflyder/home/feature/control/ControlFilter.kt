@@ -1,6 +1,5 @@
 package dev.proflyder.home.feature.control
 
-/** What the Home screen shows; chosen with the chips above the list. */
 sealed interface ControlFilter {
     data object All : ControlFilter
     data object Scenarios : ControlFilter
@@ -11,7 +10,6 @@ sealed interface ControlFilter {
     companion object {
         private const val ROOM_PREFIX = "room:"
 
-        /** Stable text form used for persistence. */
         fun encode(filter: ControlFilter): String = when (filter) {
             All -> "all"
             Scenarios -> "scenarios"
@@ -20,7 +18,6 @@ sealed interface ControlFilter {
             is Room -> ROOM_PREFIX + filter.name
         }
 
-        /** Inverse of [encode]; null for unknown or malformed values. */
         fun decode(value: String?): ControlFilter? = when {
             value == null -> null
             value == "all" -> All
@@ -33,9 +30,7 @@ sealed interface ControlFilter {
     }
 }
 
-/** Remembers UI choices of the Home screen across app restarts. */
 interface ControlPreferences {
-    /** The last selected filter, or null when none was saved (or it cannot be read). */
     suspend fun loadFilter(): ControlFilter?
 
     suspend fun saveFilter(filter: ControlFilter)

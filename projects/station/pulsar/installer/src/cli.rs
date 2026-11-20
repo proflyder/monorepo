@@ -1,11 +1,5 @@
-//! Command line: flags and the usage text. Behaviour is the Go installer's: unknown
-//! options and bad choices exit 1, `-h` prints the full usage on stdout and exits 0.
-
-/// The usage text captured from the Go installer (`testdata/usage.txt`), embedded so the
-/// binary and the golden fixture cannot diverge.
 pub const USAGE: &str = include_str!("../testdata/usage.txt");
 
-/// The usage the binary prints for `-h`; embedded from the Go fixture.
 pub fn usage() -> &'static str {
     USAGE
 }
@@ -26,8 +20,6 @@ pub enum ParseOutcome {
     Help,
 }
 
-/// Parses argv without the program name, one-to-one with the Go loop: `-h`/`--help` is
-/// reported as `Help`, every other option starting with `-` is "unknown option …".
 pub fn parse_args(args: &[String]) -> Result<ParseOutcome, String> {
     let mut o = Options::default();
     for a in args {

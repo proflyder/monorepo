@@ -230,3 +230,23 @@ rm -rf /data/quasar/ble-gateway
 ```
 
 Wi-Fi-профили не удаляются. Rootfs/OTA не меняются.
+
+## Заметки к коду
+
+Пояснения, перенесённые из комментариев исходников (код комментариев не содержит, см. `AGENTS.md`).
+
+- `crates/ble-gateway/src/bin/bletest.rs` — Small D-Bus client for exercising the gateway on the station: `bletest --destination :1.4 3 1` writes Commit, `bletest --destination :1.4 --status 4` reads Status.
+- `crates/ble-gateway/src/bluetooth.rs` — Classic Bluetooth A2DP-sink mode ("mute x4").
+- `crates/ble-gateway/src/button.rs` — Passive `/dev/input/eventN` reader and the short-press/hold gesture machine.
+- `crates/ble-gateway/src/control.rs` — LAN-only HTTP control for Home Assistant voice intents.
+- `crates/ble-gateway/src/credentials.rs` — SSID/PSK/token buffers written by the GATT characteristics.
+- `crates/ble-gateway/src/gateway.rs` — Daemon state and the behaviours shared by GATT, HTTP, the button and auto mode.
+- `crates/ble-gateway/src/gatt.rs` — BlueZ GATT application, advertisement and characteristic interfaces.
+- `crates/ble-gateway/src/lib.rs` — Station BLE provisioning gateway.
+- `crates/ble-gateway/src/status.rs` — Status values shared by the GATT status characteristic, the status file and the HTTP control API.
+- `crates/ble-gateway/src/test_support.rs` — Shared helpers for the unit tests: temporary directories, a fake `wpa_supplicant` control socket and a recording Bluetooth adapter.
+- `crates/ble-gateway/src/wifi.rs` — Native `wpa_supplicant` control-interface client and the Wi-Fi apply / rollback sequence.
+  - `SET_NETWORK <id> <field> <value>` may carry the Wi-Fi password. Every error stores only the verb, id and field; the value is never formatted.
+- `station/stop.sh`
+  - Kill all gateway processes by exact comm name (never matches this shell).
+- `version.bzl` — Build-time identity for the station BLE gateway.

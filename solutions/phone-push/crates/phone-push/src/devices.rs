@@ -1,28 +1,16 @@
-//! Client for the scheduler's push device registry (`/v1/push/devices`).
-//!
-//! The tokens belong to the phone's one authenticating endpoint; this service
-//! only reads them and forgets a token FCM rejected. Keeping the registry out
-//! of this process means there is no second database to back up and no second
-//! credential to rotate.
-
 use std::time::Duration;
 
 use home_secret::Token;
 use serde::Deserialize;
 
-/// One registered phone.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct Device {
-    /// Stable device identity chosen by the app.
     #[serde(default, rename = "deviceId")]
     pub device_id: String,
-    /// FCM registration token. Never logged or exposed outside this process.
     #[serde(default)]
     pub token: String,
-    /// `android` today.
     #[serde(default)]
     pub platform: String,
-    /// Owner-visible name set in the app.
     #[serde(default, rename = "deviceName")]
     pub device_name: String,
 }
@@ -33,7 +21,6 @@ struct DevicesResponse {
     devices: Vec<Device>,
 }
 
-/// The device registry behind the scheduler bearer.
 #[derive(Clone)]
 pub struct Registry {
     http: reqwest::Client,
@@ -51,7 +38,6 @@ impl std::fmt::Debug for Registry {
 }
 
 impl Registry {
-    /// Builds a registry client for `base_url` (scheduler root).
     pub fn new(base_url: &str, token: Token, timeout: Duration) -> Result<Self, String> {
         let http = home_tls::public_https_client()
             .map_err(|error| format!("registry TLS: {error}"))?
@@ -65,7 +51,6 @@ impl Registry {
         })
     }
 
-    /// Every registered device.
     pub async fn list(&self) -> Result<Vec<Device>, String> {
         let response = self
             .http
@@ -93,8 +78,6 @@ impl Registry {
             .collect())
     }
 
-    /// Forgets one dead token. Failures are reported but never retried here:
-    /// the next send just fails again and the token is forgotten then.
     pub async fn forget(&self, token: &str) -> Result<(), String> {
         let payload = serde_json::to_vec(&serde_json::json!({"token": token}))
             .map_err(|_| "registry request body".to_owned())?;

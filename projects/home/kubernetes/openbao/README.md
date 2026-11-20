@@ -539,3 +539,28 @@ mise run kubectl -- get externalsecret -A
   конфиг его отключит. Затем убрать `emptyDir` и перезапустить ещё раз.
 - `cannot enable audit device via API`: используйте декларативный `audit`
   в конфиге (2.7+).
+
+## Заметки к коду
+
+Пояснения, перенесённые из комментариев исходников (код комментариев не содержит, см. `AGENTS.md`).
+
+- `bootstrap.sh` — Initialise a fresh OpenBao server and apply the repository configuration.
+  - The human login name is a private value: never hard-code it in the repo.
+- `configure.py` — Idempotent OpenBao configuration for the home deployment.
+  - The App Distribution cleanup runs from `develop` (the default branch), never from a PR, so it needs its own role on the same policy: the `android-distribute` role is bound to PR merge refs and cannot assume it.
+  - Android App Distribution runs inside PR CI from the `Android` Environment. Glob claims pin a role to a PR merge ref and to exactly one workflow file: `repository`, `environment`, `ref=refs/pull/*/merge`, `job_workflow_ref` and `event_name=pull_request`.
+  - Never removes an existing enforcement; only reports the live state.
+  - Non-secret probe kept as a negative-path fixture for the Kubernetes auth smoke (`secret/ci/*` must never be readable by a workload policy).
+- `deploy.sh` — Deploy OpenBao (single node, raft, static auto-unseal, UI) on the home K3s node and publish it as https://vault.<home-domain>/ behind Traefik.
+  - ----- seal key and namespace --------------------------------------------- The live seal key is the Secret openbao-seal; the owner keeps the only other copy in Bitwarden (`Home recovery`).
+- `manifests/backup.yaml` — Nightly raft snapshot to the local `openbao-backups` volume.
+- `manifests/ingressroute.yaml` — Public template. deploy.sh substitutes ${VAULT_HOST} (private suffix).
+- `manifests/smoke-kubernetes.yaml` — Acceptance probe for the Kubernetes auth method.
+- `manifests/storage.yaml` — Static local volumes for OpenBao. Applied by deploy.sh as a cluster admin (the CI ServiceAccount never touches cluster-scoped objects).
+- `restore_drill.py` — OpenBao restore drill on a throwaway local stand.
+- `test_configure.py` — Contracts for the optional station (firmware) deploy identity.
+  - The manual role must not accept a pull request merge ref.
+  - A rerun without --enforce-totp must not touch nor misreport enforcement.
+- `values/openbao.yaml` — OpenBao server for the home K3s node (single node, integrated raft storage).
+  - The seal key is a Secret, not a ConfigMap: it is never rendered into the Helm release or written to the repository.
+- `verify.sh` — Acceptance checks for the home OpenBao deployment.

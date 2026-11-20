@@ -10,7 +10,6 @@ import kotlinx.coroutines.withContext
 import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 
-/** Transport-level contract used by the scenario feature repository. */
 interface ScenarioClient {
     suspend fun listScenarios(includeDisabled: Boolean): Outcome<List<Scenario>>
     suspend fun getScenario(id: String): Outcome<Scenario>
@@ -19,26 +18,13 @@ interface ScenarioClient {
     suspend fun deleteScenario(id: String): Outcome<Boolean>
     suspend fun setScenarioEnabled(id: String, enabled: Boolean): Outcome<Scenario>
 
-    /**
-     * Queues one manual run. Returns the durable `scenario.fire` event id once
-     * the scheduler accepted it; this is "queued", not "executed".
-     */
     suspend fun runScenario(id: String, idempotencyKey: String): Outcome<String>
 }
 
-/**
- * Connect unary JSON/HTTP client for home.v1.ScenarioService.
- *
- * It uses the scheduler endpoint and bearer token, with the same security
- * properties as [ConnectSchedulerClient]: redirects are refused (the token must
- * never follow a Location), the token travels only in the Authorization header,
- * and the system TLS trust store is used.
- */
 class ConnectScenarioClient(
     settings: ConnectionSettingsStore,
     baseClient: OkHttpClient,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
-    /** Extra application interceptors (logging, inspection); they run after the connection interceptor. */
     interceptors: List<Interceptor> = emptyList(),
     networkWaiter: NetworkWaiter = NetworkWaiter.Online,
 ) : ScenarioClient {

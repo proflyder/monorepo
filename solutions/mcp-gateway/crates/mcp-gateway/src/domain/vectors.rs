@@ -1,9 +1,3 @@
-//! Golden-vector tests of the pure domain.
-//!
-//! The JSON files are read from `solutions/mcp-gateway/testdata/vectors` (the
-//! same files the Go implementation used), never copied. `expected` is the
-//! full result of a case, so a port that changes any byte fails here.
-
 use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 
@@ -88,8 +82,6 @@ fn speech_vectors_match_go() {
     }
 }
 
-// The secret values are assembled from parts so the repository scanner never
-// sees a contiguous credential. The vector file only names them.
 fn redact_vector_text(raw: &str) -> String {
     let replacements = [
         ("{{token}}", ["abcdefgh", "ijklmnop", "qrstuvwx"].concat()),

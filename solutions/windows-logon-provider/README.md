@@ -311,3 +311,76 @@ purpose=unlock` — всегда. Пароль, ключ и MAC в журнал 
 Собственный код — под лицензией репозитория. Файлы, производные от
 Microsoft Windows-classic-samples (MIT), сохраняют уведомление об авторских
 правах; полный текст — `THIRD-PARTY-NOTICES.md`.
+
+## Заметки к коду
+
+Пояснения, перенесённые из комментариев исходников (код комментариев не содержит, см. `AGENTS.md`).
+
+- `build.sh` — Cross-build the Windows credential provider with Bazel on macOS or Linux.
+- `crates/cp-selftest/src/main.rs` — `cp-selftest.exe`: loads the credential provider outside LogonUI. It changes nothing on the machine, but `SetUsageScenario(CPUS_LOGON)` starts the poller for a moment: run it only when no wake grant is pending.
+- `crates/cp-selftest/src/main_windows.rs` — Windows half of `cp-selftest.exe`: tries the registered CLSID, otherwise loads `HomeKompLogon.dll` next to the executable. Output is `PASS`/`FAIL`; exit codes are 0/1.
+  - Stop the poller immediately: the self-test must not consume a grant.
+- `crates/provider/src/config.rs` — Registry configuration and the DPAPI-protected secret file.
+  - `SecureZeroMemory` for memory we do not own as a Rust slice (CoTaskMem buffers, DPAPI output). # Safety `ptr` must be valid for writes of `len` bytes, and `len` must describe the allocation that is wiped (the caller owns it and is about to free it).
+  - Absent `Disabled` means 0. A present but unreadable value is still an error: it must not silently change the operator's switch.
+  - Reads, DPAPI-decrypts and parses the secret file. `Err` carries a short log-safe phrase (never the secret or the decrypted plaintext).
+  - Parses `http://host[:port][/path]` or `https://...`. Rejects userinfo, queries, fragments, whitespace and control characters.
+- `crates/provider/src/credential.rs` — The single auto-logon tile.
+  - LogonUI deselects tiles during re-enumeration; that must not cancel a fresh arming before the automatic submission.
+  - Fail closed: no credential, no status text, no dialog. Re-enumerate so LogonUI drops the tile instead of showing a dead one.
+  - LogonUI owns the CoTaskMem copy; the local one must not linger in the Rust heap with the protected password inside.
+- `crates/provider/src/dll.rs` — COM in-proc server entry points: exactly `DllGetClassObject` and `DllCanUnloadNow` (`#[unsafe(no_mangle)]`, no `.def`).
+- `crates/provider/src/ffi_guard.rs` — `catch_unwind` for every `extern "system"` boundary.
+  - `AssertUnwindSafe` is deliberate: a panicking COM call leaves the provider fail-closed (no tile, no armed session) and the shared locks tolerate poisoning, so continuing after the unwind is safe.
+  - RAII cleanup step. Its `Drop` catches a panic so a failing cleanup can never unwind out of an `extern "system"` function.
+- `crates/provider/src/gate.rs` — Mode decision: logon after a cold boot, unlock of a running locked PC, or off.
+  - A WTS call failed: fail closed.
+  - `CPUS_UNLOCK_WORKSTATION` without a session of the configured user: never start a claim in that state.
+  - The whole decision as one pure function: scenario, session existence, uptime and whether the WTS query succeeded. A `logon` scenario with an existing session of the configured user is the lock screen, not a cold boot, so it selects `unlock` instead.
+  - Runs the decision against the live system. Call it before starting the worker, so an off mode never reaches the network.
+- `crates/provider/src/http.rs` — Minimal WinHTTP JSON POST client.
+  - TLS 1.2+ for https, as decided by the owner; plain `http://` is still accepted for the LAN and pinning is deliberately not done. WinHTTP keeps its normal certificate validation. The option only applies to the session handle, not to the request handle.
+  - Belt and braces: a redirect must never carry the mac to another host.
+  - `POST path` with a JSON body and an explicit receive timeout (4 s by default, 35 s for the unlock long-poll claim). The send timeout stays at 4 s: the claim body is tiny. Never panics; every failure is a log-safe `Transport` value.
+- `crates/provider/src/kerb.rs` — Packing of `KERB_INTERACTIVE_UNLOCK_LOGON`.
+- `crates/provider/src/lib.rs` — Windows Credential Provider (in-proc COM server) for Home Komp Logon.
+- `crates/provider/src/log.rs` — Append-only diagnostic log for the logon provider.
+  - Idempotent: ERROR_ALREADY_EXISTS is expected. The installer owns the ACL; if the directory is missing we simply cannot log.
+  - Appends one line. Never panics for I/O reasons and never blocks the caller longer than a single small `WriteFile`.
+  - attributes and no template file are passed, and `log_path` is NUL-terminated. The handle is closed on every path. Logging must never break logon: a failed open is ignored.
+- `crates/provider/src/provider.rs` — `ICredentialProvider` and the state shared with the credential and the worker.
+  - `{9459CCEA-4CCC-4435-89BF-E0E132E0C27F}`. Install/uninstall scripts and tests pin this value; it must never change.
+  - Claims the claim loop for `generation`. Returns `false` when that same generation already owns it. A stale, cancelled generation never blocks a newer one: the old worker cannot arm anything because [`arm_session`] checks the generation.
+  - LogonUI has not advised us yet: retry shortly, never re-claim.
+  - One grant, one attempt: the worker must not arm again.
+  - "." means the local SAM: qualify with the computer name so a domain account with the same name can never be picked instead.
+  - A verified grant that is waiting for `GetSerialization` needs no second claim; a later `Advise` must not add one.
+  - `Ref` is the COM ABI's borrowed-interface wrapper and is `Copy`; taking it by reference would deviate from the vtable signature this helper mirrors and from the `windows-core` conventions.
+  - The credential keeps its own Session reference and never calls back into the provider, so releasing it here is safe.
+- `crates/provider/src/sync.rs` — Poison-tolerant mutex access.
+- `crates/provider/src/wide.rs` — UTF-16 helpers for the Win32 `...W` entry points.
+- `crates/provider/src/worker.rs` — The single background poller: `POST /v1/challenge` -> `POST /v1/claim`.
+  - Posts on a separate module-pinned thread and returns `None` as soon as the session is cancelled. This is deliberately not implemented by closing the WinHTTP request handle from another thread: Microsoft documents that closing a handle of a *synchronous* …
+  - Worker thread procedure. Owns `parameter` and never returns. The whole body — the loop and its cleanup — is contained. A panic cancels the session (fail closed), `finish_worker` and the worker count are released exactly once, and the module pin is always …
+  - Two independent steps: a panic in the first must not skip the worker-count decrement.
+  - The thread never started, so it did not take the argument.
+  - An error back-off is never shortened by the minimum.
+- `crates/provider/src/worker_core.rs` — Portable challenge/claim exchange.
+  - LogonUI has not advised the provider yet; retry shortly, never re-claim.
+  - The grant is already consumed, so never claim again: only wait a moment for Advise() and then give up.
+  - The grant is never claimed twice.
+- `fetch.sh` — Fetch and verify a published provider artifact on the operator's Mac/Linux.
+- `install.ps1` — <# .SYNOPSIS Устанавливает провайдер входа Home для ПК «комп».
+  - --- LogonUI registration (credential provider, never a filter) --------------
+- `pe_artifacts.py` — PE checks for the Windows logon provider artifacts.
+- `publish-oci.sh` — Publish the built provider as a public OCI artifact in GHCR with ORAS.
+  - Verify the checksums before publishing, so a broken artifact never reaches the registry.
+  - Only a definitively missing tag means "safe to publish". Any other failure (auth, network, registry error) must not silently fall through to a push that could overwrite an existing version tag.
+- `regen-bindings.sh` — Regenerate crates/provider/src/bindings.rs and crates/cp-selftest/src/bindings.rs from the filters in each crate's bindings.txt. Generation is manual and not part of the build.
+- `run-tests.sh` — Host tests, rustfmt and clippy for host and Windows targets.
+- `set-secret.ps1` — <# .SYNOPSIS Записывает DPAPI-защищённый секрет провайдера входа Home.
+- `status.ps1` — <# .SYNOPSIS Показывает состояние провайдера входа Home (без секретов).
+- `test_install_scripts.py` — Static contract tests for the Windows logon provider scripts.
+- `test_oci_scripts.py` — Static contract tests for the OCI distribution scripts.
+  - The home NodePort and machine name must not be defaults here.
+- `uninstall.ps1` — <# .SYNOPSIS Удаляет провайдер входа Home с ПК «комп».

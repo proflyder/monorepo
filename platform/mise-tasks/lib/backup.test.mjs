@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-// Unit tests for the backup front door and its registry; run with `node --test`.
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -37,7 +36,6 @@ function buffer() {
   };
 }
 
-/** Fake spawn: answers are consumed in call order, calls are recorded. */
 function fakeSpawn(answers = []) {
   const calls = [];
   const spawn = (command, args, options = {}) => {
@@ -340,7 +338,6 @@ test("backup: verify executes only documented checks after --yes", async () => {
     }),
     1,
   );
-  // Registry order: offsite-restic first, then bb-db.
   assert.equal(spawn.calls.length, 2);
   assert.equal(spawn.calls[0].command, "ssh");
   assert.match(spawn.calls[0].args.at(-1), /restic check/);

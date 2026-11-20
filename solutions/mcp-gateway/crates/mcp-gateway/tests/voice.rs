@@ -1,11 +1,3 @@
-//! Golden replays of `/v1/voice/*` plus a real `voice-proxy` client.
-//!
-//! The eight files in `testdata/contract/voice` are replayed against
-//! this crate's voice router through `home-contracttest` with a fake bb
-//! dispatcher and a deterministic clock. The final test drives the real
-//! `voice_proxy::services::Gateway` over TCP and checks the `completedSeq`
-//! idempotency key the proxy depends on.
-
 use std::collections::{BTreeMap, VecDeque};
 use std::sync::atomic::{AtomicI64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
@@ -28,7 +20,6 @@ use voice_contract::Route;
 use voice_proxy::domain::profile::Profile;
 use voice_proxy::services::Gateway;
 
-/// Starts at the fixture clock and advances one second per read.
 struct StepClock {
     nanos: AtomicI64,
 }

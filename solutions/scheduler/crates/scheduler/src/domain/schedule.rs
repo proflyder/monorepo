@@ -1,11 +1,8 @@
-//! Durable schedule rows.
-
 use crate::domain::event::SourceKind;
 use crate::domain::hash::canonical_schedule;
 use crate::domain::occurrence::{Occurrence, RingWindow};
 use crate::domain::rule::{Repeat, Rule, WallTime};
 
-/// What a schedule produces when it fires.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
 #[repr(i32)]
 pub enum ScheduleKind {
@@ -17,13 +14,11 @@ pub enum ScheduleKind {
 }
 
 impl ScheduleKind {
-    /// Numeric wire/storage code (`kind`).
     #[must_use]
     pub const fn code(self) -> i32 {
         self as i32
     }
 
-    /// Reconstructs a kind from its numeric code.
     #[must_use]
     pub const fn from_code(code: i32) -> Option<Self> {
         match code {
@@ -35,7 +30,6 @@ impl ScheduleKind {
         }
     }
 
-    /// Event source kind that this schedule produces.
     #[must_use]
     pub const fn source_kind(self) -> SourceKind {
         match self {
@@ -47,7 +41,6 @@ impl ScheduleKind {
     }
 }
 
-/// A schedule row, including the server-derived ring-window columns.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Schedule {
     pub id: String,
@@ -72,7 +65,6 @@ pub struct Schedule {
 }
 
 impl Schedule {
-    /// The recurrence rule described by the wall-time columns.
     #[must_use]
     pub fn rule(&self) -> Rule {
         Rule {
@@ -83,7 +75,6 @@ impl Schedule {
         }
     }
 
-    /// Persisted ring window of this row.
     #[must_use]
     pub const fn ring_window(&self) -> RingWindow {
         RingWindow {
@@ -93,19 +84,16 @@ impl Schedule {
         }
     }
 
-    /// Occurrence eligible for stop/snooze at `now_unix`.
     #[must_use]
     pub fn active_occurrence(&self, now_unix: i64) -> Option<Occurrence> {
         self.ring_window().active_occurrence(now_unix)
     }
 
-    /// Occurrence a rule change must close at `now_unix`.
     #[must_use]
     pub fn occurrence_to_close(&self, now_unix: i64) -> Option<Occurrence> {
         self.ring_window().occurrence_to_close(now_unix)
     }
 
-    /// Canonical request string used for idempotency conflict detection.
     #[must_use]
     pub fn canonical(&self) -> String {
         canonical_schedule(

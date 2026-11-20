@@ -7,7 +7,6 @@ import java.time.LocalDate
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
-/** A brand-new alarm is a one-shot for today; editing an existing alarm is untouched. */
 class AlarmEditorDefaultsTest {
     @Test
     fun newAlarmEditorStateDefaultsToSingleOccurrence() {

@@ -1,9 +1,3 @@
-//! Main-loop event handling and the service actor. The callbacks of sendspin-cpp run on its main
-//! loop thread; [`EventHandler`] is their single handler: it applies the sink request, logs the
-//! event, publishes the protocol state and records the stream edges whose 1 s hold the actor
-//! applies. The actor itself only runs the library loop, the timers and the handle commands, so
-//! it is testable without sendspin-cpp (the tests use [`FakeLink`] and a scripted edge queue).
-
 use std::rc::Rc;
 
 use pulsar_core::Timers;
@@ -17,8 +11,6 @@ use crate::state::{Key, Status, StreamHold};
 use crate::visualizer::Visualizer;
 use crate::{Transport, volume_percent};
 
-/// sendspin-cpp's client surface the actor uses. Implemented by `ffi::Client<Ctx>` on the
-/// stations, by a fake in the tests.
 pub trait Link {
     fn run_loop(&self) -> bool;
     fn is_connected(&self) -> bool;
@@ -30,14 +22,11 @@ pub trait Link {
     fn confirm_pairing_window(&self);
 }
 
-/// Sink operations the stream callbacks must perform before the library's sync task writes
-/// (see [`sink_request`]). `sink::Sink` implements it on the stations.
 pub trait SinkPort: Send + Sync {
     fn configure(&self, rate: u32, channels: u8, bits: u8);
     fn release(&self);
 }
 
-/// One edge of the stream state the actor applies to [`StreamHold`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum StreamEdge {
     Start,
@@ -45,22 +34,17 @@ pub enum StreamEdge {
     Group(bool),
 }
 
-/// One item of the single event queue the callbacks fill and the actor drains in order. Pairing,
-/// volume and mute events and stream edges keep the order the library delivered them in.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Outgoing {
     Event(SendspinEvent),
     Stream(StreamEdge),
 }
 
-/// The handler's ordered queue and the channel the published `SendspinEvent`s go to.
 pub trait StreamEvents: Send + Sync {
     fn take(&self) -> Vec<Outgoing>;
     fn send(&self, ev: SendspinEvent);
 }
 
-/// One place for every library event: sink request, log, published protocol state and the stream
-/// edges. Called from the callback threads; none of its methods calls back into the library.
 pub struct EventHandler {
     pub status: std::sync::Arc<Status>,
     sink: std::sync::Arc<dyn SinkPort>,
@@ -91,8 +75,6 @@ impl EventHandler {
     }
 
     fn edge(&self, e: StreamEdge) {
-        // Edges are kept even while the owner tears the service down: the actor still finishes
-        // the held stream end (log, streaming=false).
         self.push(Outgoing::Stream(e));
     }
 
@@ -103,7 +85,6 @@ impl EventHandler {
             .push(item);
     }
 
-    /// A main loop event from the library.
     pub fn event(&self, ev: LibEvent) {
         match sink_request(&ev) {
             Some(crate::event::SinkRequest::Configure {
@@ -210,7 +191,6 @@ impl EventHandler {
         self.visualizer.beat();
     }
 
-    /// Visualizer drain thread: one `Music` event at the LED rate when the service is enabled.
     pub fn spectrum(&self, bins: &[u16]) {
         let Some(frame) = self.visualizer.frame(bins) else {
             return;
@@ -258,7 +238,6 @@ fn log_stream_start(p: StreamParams) {
     );
 }
 
-/// The first `n` characters of an id, "…" if cut.
 fn hex_tail(s: &str, n: usize) -> String {
     match s.char_indices().nth(n) {
         Some((i, _)) => format!("{}…", &s[..i]),
@@ -270,7 +249,6 @@ fn codec_name(codec: u8) -> &'static str {
     ["flac", "opus", "pcm", "?"][usize::from(codec.min(3))]
 }
 
-/// sendspin::SendspinPairAbortReason.
 fn abort_reason(r: u8) -> &'static str {
     match r {
         0 => "attempt_timeout",
@@ -282,14 +260,12 @@ fn abort_reason(r: u8) -> &'static str {
     }
 }
 
-/// Handle commands handled by the actor.
 #[derive(Clone, Copy)]
 pub enum Cmd {
     ReportVolume { volume: f32, muted: bool },
     ConfirmPairingWindow,
 }
 
-/// The service actor (runtime thread).
 pub struct Actor<L: Link, E: StreamEvents> {
     link: Rc<L>,
     edges: E,
@@ -395,8 +371,6 @@ impl<L: Link, E: StreamEvents> Actor<L, E> {
         }
     }
 
-    /// The owner is gone: goodbye to the server and the library's threads joined (inside the
-    /// client's drop).
     fn teardown(self) {
         let Self {
             link,
@@ -408,8 +382,6 @@ impl<L: Link, E: StreamEvents> Actor<L, E> {
         } = self;
         status.disable();
         drop(link);
-        // The client's stop() delivers its last stream edges inside the drop: finish the held
-        // end (log, streaming=false) as before, without publishing events.
         for item in edges.take() {
             if let Outgoing::Stream(edge) = item {
                 match edge {
@@ -430,7 +402,6 @@ impl<L: Link, E: StreamEvents> Actor<L, E> {
 
 pub const TICK_MS: u64 = 10;
 
-/// The handle's local surface for `transport` (kept here to avoid a busy import in the service).
 pub fn transport_command(t: Transport) -> (Command, &'static str) {
     match t {
         Transport::Play => (Command::Play, "play"),
@@ -480,8 +451,6 @@ mod tests {
         (h, rx, sink)
     }
 
-    // The library's sync task writes its priming silence right after on_stream_start returns,
-    // before the actor runs: the sink must take it by then.
     #[test]
     fn stream_callbacks_configure_the_sink_before_the_actor_runs() {
         let (h, _rx, sink) = handler();
@@ -495,7 +464,6 @@ mod tests {
         assert!(sink.configured.load(Ordering::SeqCst));
         h.event(LibEvent::StreamEnd);
         assert!(sink.released.load(Ordering::SeqCst));
-        // Incomplete parameters leave the sink alone, as in C++.
         h.event(LibEvent::StreamStart(None));
         assert_eq!(
             h.take(),
@@ -524,7 +492,6 @@ mod tests {
         assert!(h.take().is_empty());
     }
 
-    // `Mutex` is used by the edge queue; the test imports it to prove the handler is Sync.
     #[test]
     fn event_handler_is_sync() {
         fn assert_sync<T: Sync>() {}
@@ -567,8 +534,6 @@ mod tests {
         }
     }
 
-    // The callback queue keeps the library's event order, so the controller sees PairingCode /
-    // Volume / Mute and Stream(..) in exactly the order they arrived.
     #[test]
     fn the_actor_delivers_callbacks_in_library_order() {
         let (h, mut rx, _sink) = handler();

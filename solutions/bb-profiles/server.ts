@@ -1,10 +1,3 @@
-// bb-plugin-profiles — isolated work/personal profiles for bb.
-//
-// A profile is a named set of environment variables per provider (for example
-// CLAUDE_CONFIG_DIR for Claude Code). Every project is assigned to one profile
-// (default: "work"); bb.providers.experimental_contributeEnv applies the
-// project's profile to each provider command, so logins, memory, MCP servers
-// and history never mix between profiles.
 import { execFile } from "node:child_process";
 import { mkdir } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -31,7 +24,6 @@ import {
   resolveProviderEnv,
 } from "./lib/policy.js";
 
-/** Env vars per provider id; "*" applies to every provider of the profile. */
 export type ProfileEnv = Record<string, Record<string, string>>;
 export type Profiles = Record<string, ProfileEnv>;
 
@@ -54,7 +46,6 @@ export const rpcContract = defineRpcContract({
       folderPicker: z.boolean(),
     }),
   },
-  // The profile whose projects the sidebar shows; shared by every window.
   setActive: {
     input: z.object({ name: z.string() }),
     output: z.object({ active: z.string() }),
@@ -87,15 +78,10 @@ export const rpcContract = defineRpcContract({
     input: z.object({ name: z.string(), path: z.string(), profile: z.string() }),
     output: z.object({ projectId: z.string() }),
   },
-  // Native Finder folder dialog on the machine the server runs on; path is
-  // null when the user cancels. Non-macOS servers refuse with a clear message
-  // and the app falls back to manual path entry.
   pickFolder: {
     input: z.null(),
     output: z.object({ path: z.string().nullable() }),
   },
-  // Read-only policy views for other plugins (for example a dispatcher).
-  // A null list means "no restriction".
   allowedProviders: {
     input: z.object({ profile: z.string() }),
     output: z.array(z.string()).nullable(),
@@ -130,7 +116,7 @@ function pickFolder(): Promise<string | null> {
           const path = stdout.trim().replace(/\/$/, "");
           resolve(path === "" ? null : path);
         } else if (stderr.includes("-128")) {
-          resolve(null); // user cancelled
+          resolve(null);
         } else {
           reject(new Error(stderr.trim() || error.message));
         }
@@ -140,9 +126,6 @@ function pickFolder(): Promise<string | null> {
 }
 
 function defaultProfiles(): Profiles {
-  // "work" keeps the existing ~/.claude, ~/.codex, ...: no overrides.
-  // "personal" shares ~/.codex (existing Codex login, history, memory):
-  // Codex is only allowed there, so there is nothing to isolate it from.
   const { codex: _codex, ...personal } = profileEnv("personal");
   return { work: {}, personal };
 }
@@ -168,7 +151,6 @@ export default async function plugin(bb: BbPluginApi) {
   async function readProfiles(): Promise<Profiles> {
     return (await bb.storage.kv.get<Profiles>("profiles")) ?? defaultProfiles();
   }
-  // Providers a profile may run; a profile without an entry allows all.
   async function readAllowed(): Promise<Record<string, string[] | null>> {
     return (
       (await bb.storage.kv.get<Record<string, string[] | null>>("allowed")) ?? {
@@ -176,17 +158,12 @@ export default async function plugin(bb: BbPluginApi) {
       }
     );
   }
-  // Machines a profile may run on; a profile without an entry allows all.
   async function readMachines(): Promise<Record<string, string[] | null>> {
     return (await bb.storage.kv.get<Record<string, string[] | null>>("machines")) ?? {};
   }
   async function readAssignments(): Promise<Record<string, string>> {
     return (await bb.storage.kv.get<Record<string, string>>("assignments")) ?? {};
   }
-  // The provider runs on `hostId`, which may be another machine. Only an
-  // explicit hostHomes entry knows its home; the server's home is the safe
-  // default for same-machine installs. Existing absolute profile values never
-  // consult this.
   async function profileHome(hostId: string): Promise<string> {
     const { hostHomes } = await settings.get();
     return parseHostHomes(hostHomes)[hostId] ?? homedir();
@@ -220,9 +197,6 @@ export default async function plugin(bb: BbPluginApi) {
       : await defaultProfile();
   }
 
-  // The built-in thread list shows every project, so projects of the other
-  // profiles are hidden through its `hiddenGroups` preference. Only the groups
-  // this plugin hid earlier are replaced; the user's own hidden groups stay.
   async function applyHiddenProjects(): Promise<void> {
     const active = await activeProfile();
     const projects = await bb.sdk.projects.list({ includePersonal: true });
@@ -233,8 +207,6 @@ export default async function plugin(bb: BbPluginApi) {
     const managed = new Set(
       (await bb.storage.kv.get<string[]>("hiddenManaged")) ?? [],
     );
-    // The built-in thread list keeps its own preferences; `bb settings ui` is
-    // only a one-time import for it, so write through its rpc.
     const { preferences } = await bb.sdk.plugins.callRpc({
       pluginId: "thread-list",
       method: "listPreferences",
@@ -282,7 +254,6 @@ export default async function plugin(bb: BbPluginApi) {
     bb.realtime.publish(CHANGED, { profile: name });
     return Object.keys(profiles);
   }
-  // The new project lives on the host the existing local projects use.
   async function addProject(
     name: string,
     path: string,
@@ -321,10 +292,6 @@ export default async function plugin(bb: BbPluginApi) {
     return rows;
   }
 
-  // Apply the project's profile to every provider command. Values are only
-  // paths (they show up in diagnostics), never secrets. `context.hostId`
-  // names the machine that runs the provider; its home comes from the
-  // hostHomes setting (or the server's own home on an all-in-one install).
   const profilesRoot = join(homedir(), PROFILES_DIRNAME);
   const providerIds = new Set([
     ...KNOWN_PROVIDERS,
@@ -339,9 +306,6 @@ export default async function plugin(bb: BbPluginApi) {
       const merged = resolveProviderEnv(profile, providerId, home);
       const entries = Object.entries(merged).slice(0, 32);
       for (const [, value] of entries) {
-        // Config directories must exist before the provider starts. Only a
-        // path on this server can be created here; a remote machine's home
-        // is created by its own provider or by the operator.
         if (value.startsWith(profilesRoot)) {
           await mkdir(value, { recursive: true });
         }
@@ -354,14 +318,8 @@ export default async function plugin(bb: BbPluginApi) {
     });
   }
 
-  // Hard isolation: the provider picker cannot be filtered by plugins, so a
-  // message to a provider or machine the project's profile does not allow is
-  // rejected. `ctx.host` is resolved from the thread's environment, or from
-  // its start intent before the environment exists.
   bb.experimental_hooks.on("message.dispatch", async (ctx) => {
     const name = await profileFor(ctx.project.id);
-    // Resolve the raw maps: a hook must not throw an RPC refusal, and a
-    // profile missing from kv simply means "no restriction".
     const policy = resolvePolicy(await readAllowed(), await readMachines(), name);
     return dispatchDecision({
       profile: name,

@@ -1,11 +1,3 @@
-//! The HTTP surface: GET passthrough and the `POST /v1/chat/completions`
-//! pipeline.
-//!
-//! The pipeline order is part of the contract: cancel guard first (before any
-//! profile read or routing call), then the optional voice router, then the
-//! `reasoning_effort` injection, then either the streaming relay or the
-//! buffered sanitising relay.
-
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -31,21 +23,11 @@ use crate::relay::sse;
 use crate::relay::{MAX_BODY, Upstream};
 use crate::services::VoiceRouter;
 
-/// The id of a proxy-generated local reply.
 pub const DEFAULT_COMPLETION_ID: &str = "chatcmpl-voice-local";
-/// The id of the local reply that answers a cancel phrase.
-///
-/// Wire value: rename together with `testdata/contract/cancel_short_circuit.json`.
 pub const CANCEL_COMPLETION_ID: &str = "chatcmpl-ricardo-cancel";
-/// Cancelled speech: never spoken and never sent upstream. HA's llama_cpp
-/// adapter drops an empty assistant message and then raises "Unable to get
-/// response"; a whitespace-only body keeps it valid while `tts_input.strip()`
-/// still skips TTS.
 pub const CANCEL_SILENCE: &str = " ";
-/// Message of the OpenAI-shaped upstream error.
 pub const UPSTREAM_UNAVAILABLE: &str = "Hermes upstream is unavailable";
 
-/// Options of the proxy handler.
 pub struct Options {
     pub upstream: Upstream,
     pub reasoning_effort: String,
@@ -55,7 +37,6 @@ pub struct Options {
     pub clock: Arc<dyn Clock>,
 }
 
-/// The proxy HTTP handler.
 pub struct Proxy {
     upstream: Upstream,
     reasoning_effort: String,
@@ -67,7 +48,6 @@ pub struct Proxy {
 }
 
 impl Proxy {
-    /// Builds the handler with the documented defaults.
     #[must_use]
     pub fn new(options: Options) -> Self {
         let phrases: Vec<&str> = options.cancel_phrases.iter().map(String::as_str).collect();
@@ -90,21 +70,17 @@ impl Proxy {
         }
     }
 
-    /// The axum router. Every path and method lands in one fallback, exactly
-    /// like the Go `BaseHTTPRequestHandler` subclass.
     pub fn router(self: &Arc<Self>) -> Router {
         Router::new()
             .fallback(dispatch)
             .with_state(Arc::clone(self))
     }
 
-    /// The normalised upstream base URL.
     #[must_use]
     pub fn upstream_base(&self) -> &str {
         self.upstream.base()
     }
 
-    /// How many cancel phrases were answered locally.
     #[must_use]
     pub fn cancel_count(&self) -> u64 {
         self.cancel_count.load(Ordering::Relaxed)
@@ -244,7 +220,6 @@ impl Proxy {
 
     fn send_cancel_completion(&self, payload: &ChatRequest) -> Response {
         let count = self.cancel_count.fetch_add(1, Ordering::Relaxed) + 1;
-        // Structural evidence only: never the recognised text or payload.
         tracing::info!(
             event = "cancel_guarded",
             count,
@@ -350,7 +325,6 @@ impl Proxy {
     }
 }
 
-/// Drains the whole relay into the client.
 async fn relay_stream(
     mut response: reqwest::Response,
     upstream: Upstream,
@@ -442,7 +416,6 @@ impl StreamState {
                 return Ok(Pump::Done);
             }
             if !event.name.is_empty() && event.name != "message" {
-                // Hermes tool progress, approvals and status are not speech.
                 continue;
             }
             let chunk: ChatChunk = match serde_json::from_str(&event.data) {
@@ -475,8 +448,6 @@ impl StreamState {
                 let content = delta.content.clone().unwrap_or_default();
                 let mut text = sanitizer.feed(&content, has_finish).map_err(|_| ())?;
                 if !text.is_empty() && !has_finish {
-                    // Piper's sentence_stream waits for the next capitalized
-                    // word; a paragraph boundary flushes the sentence now.
                     text.push_str("\n\n");
                 }
                 if !text.is_empty() && self.first_content.is_none() {
@@ -559,8 +530,6 @@ fn send_frame(sender: &mpsc::UnboundedSender<Bytes>, frame: &str) -> Result<(), 
     sender.send(Bytes::from(frame.to_owned())).map_err(|_| ())
 }
 
-/// The response body backed by the relay task. Dropping it cancels the
-/// upstream request, so a closed HA connection interrupts the Hermes turn.
 struct RelayBody {
     receiver: mpsc::UnboundedReceiver<Bytes>,
     cancel: CancellationToken,
@@ -610,7 +579,6 @@ fn upstream_unavailable() -> Response {
     )
 }
 
-/// Relays a buffered response with the shared error normalisation.
 fn send(status: u16, body: Vec<u8>, content_type: &str) -> Response {
     let (body, content_type) = openai::normalize_error(status, body, content_type);
     let status = StatusCode::from_u16(status).unwrap_or(StatusCode::BAD_GATEWAY);

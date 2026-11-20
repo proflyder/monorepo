@@ -1,6 +1,3 @@
-# kube-prometheus-stack runs with *SelectorNilUsesHelmValues=false, so any
-# ServiceMonitor in the cluster is picked up. Keep the selector disjoint from
-# other services and label the target port name explicitly.
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:

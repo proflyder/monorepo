@@ -1,15 +1,4 @@
 #!/usr/bin/env bash
-# Initialise a fresh OpenBao server and apply the repository configuration.
-#
-# With the `static` seal configured, `operator init` returns recovery keys (no
-# unseal keys) and the server unseals itself. The response is written to
-# secrets/openbao/init.json (mode 600) exactly once, because recovery keys can
-# generate a new root token and therefore must be backed up offline.
-#
-# After configure.py succeeds the initial root token is revoked and removed
-# from init.json. Re-running on an initialised server needs an admin token in
-# BAO_TOKEN (for example a root token generated from recovery keys) and does
-# not rotate anything.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
 # shellcheck disable=SC1091
@@ -32,7 +21,6 @@ fi
 NODE_IP="${NODE_IP:-192.0.2.27}"
 ADDR="https://vault.$HOME_DOMAIN"
 POD=openbao-0
-# The human login name is a private value: never hard-code it in the repo.
 HUMAN_USER="${OPENBAO_USER:-$(cat "$SECRETS_DIR/username" 2>/dev/null || true)}"
 if [[ -z "$HUMAN_USER" ]]; then
   echo "set OPENBAO_USER or write the login name to $SECRETS_DIR/username" >&2
@@ -101,7 +89,6 @@ OPENBAO_NODE_IP="$NODE_IP" BAO_TOKEN="$TOKEN" \
   python3 "$ROOT/projects/home/kubernetes/openbao/configure.py" \
   --addr "$ADDR" --resolve-ip "$NODE_IP" --user "$HUMAN_USER" ${1+"$@"}
 
-# Revoke the initial root token and drop it from disk. Recovery keys stay.
 if [[ -s "$INIT_FILE" ]]; then
   root=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("root_token") or "")' "$INIT_FILE")
   if [[ -n "$root" && "$root" == "$ROOT_TOKEN" ]]; then

@@ -15,7 +15,6 @@ paths = ['''^packages/rust/home-tls/testdata/.*\.(key|pem)$''']
 
 [[allowlists]]
 description = "Deliberately synthetic authentication fixture"
-# The Go gateway is gone, but the pre-push scan still walks its history.
 paths = [
   '''projects/station/ble-gateway/crates/ble-gateway/src/control\.rs$''',
   '''projects/station/ble-gateway/control_test\.go$''',

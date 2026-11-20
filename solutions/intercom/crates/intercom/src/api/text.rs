@@ -1,10 +1,7 @@
-//! Stable localization keys for intercom errors.
-
 use home_proto::{localized, v1::LocalizedText};
 
 use crate::domain::ErrorKind;
 
-/// Key for an error message with no more specific mapping.
 pub fn kind_key(kind: ErrorKind) -> &'static str {
     match kind {
         ErrorKind::InvalidArgument => "intercom.error.invalid_argument",
@@ -16,7 +13,6 @@ pub fn kind_key(kind: ErrorKind) -> &'static str {
     }
 }
 
-/// Localized text for a domain error.
 #[must_use]
 pub fn error_text(kind: ErrorKind, message: &str) -> LocalizedText {
     localized(message_key(message).unwrap_or_else(|| kind_key(kind)))

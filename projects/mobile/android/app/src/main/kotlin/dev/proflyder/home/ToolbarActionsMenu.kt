@@ -10,21 +10,12 @@ import android.widget.PopupWindow
 import androidx.core.graphics.drawable.toDrawable
 import dev.proflyder.home.databinding.AppToolbarMenuBinding
 
-/**
- * The toolbar's single actions button opens this custom menu instead of a
- * framework overflow list: a rounded tonal card with one icon and label per
- * row, animated out of the button and dismissed by a touch outside.
- *
- * Row ids double as action ids, so the host maps a row to its behaviour with a
- * single `when`.
- */
 internal class ToolbarActionsMenu(
     private val context: Context,
     private val onAction: (Int) -> Unit,
 ) {
     private var popup: PopupWindow? = null
 
-    /** The open menu card, or null while it is closed; tests inspect the rows. */
     internal val contentView: View?
         get() = popup?.contentView
 

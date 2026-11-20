@@ -1,21 +1,10 @@
-//! Устойчивая таблица сущностей: одна [`EntityDef`] на сущность, её ключ, `object_id` и
-//! метаданные.
-//!
-//! Home Assistant хранит реестр сущностей по fixed32-ключу, поэтому ключи, `object_id`, имена
-//! и порядок ответов ListEntities — контракт провода. Какие сущности есть у модели, решают
-//! [`Capabilities`]; [`listed`] — единственное место этого решения.
-
 use prost::Message;
 
 use crate::pb::msg;
 use crate::pb::*;
 
-/// Счётчик «Follow-up duration», с: с запасом меньше 15 с, после которых HA сам заканчивает
-/// ожидание речи.
-// см. docs/voice.md, «Голосовой ассистент HA (ESPHome)»
 pub const FOLLOWUP_DURATION_MAX_S: u32 = 10;
 
-/// Fixed32-ключ сущности; не меняется между перезапусками.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct EntityKey(pub u32);
 
@@ -25,7 +14,6 @@ impl EntityKey {
     }
 }
 
-/// Ключи сущностей C++-референса и этого форка (1..=43).
 pub mod key {
     use super::EntityKey;
 
@@ -70,17 +58,11 @@ pub mod key {
     pub const NUMBER_FOLLOWUP_DURATION: EntityKey = EntityKey(39);
     pub const NUMBER_ANNOUNCE_VOLUME: EntityKey = EntityKey(40);
     pub const NUMBER_MIC_GAIN: EntityKey = EntityKey(41);
-    // Ключи upstream 39/40 заняты сущностями форка (Follow-up duration, «Громкость
-    // объявлений»), поэтому upstream-переключатели получают следующие свободные.
     pub const SW_WAKE_SOUND: EntityKey = EntityKey(42);
     pub const SW_CLOCK_COLON_BLINK: EntityKey = EntityKey(43);
 }
 
-/// aioesphomeapi VoiceAssistantFeature: голосовой ассистент, API-аудио, таймеры, анонсы,
-/// старт разговора.
 pub const VOICE_FEATURES: u32 = 1 | 4 | 8 | 16 | 32;
-/// HA MediaPlayerEntityFeature: пауза, громкость / mute / шаг, play media, стоп, play,
-/// media announce.
 pub const MEDIA_FEATURES: u32 = 1 | 4 | 8 | 512 | 1024 | 4096 | 16384 | 1_048_576;
 pub const ENTITY_CATEGORY_CONFIG: u32 = 1;
 pub const ENTITY_CATEGORY_DIAGNOSTIC: u32 = 2;
@@ -90,9 +72,7 @@ pub const STATE_CLASS_TOTAL_INCREASING: u32 = 2;
 pub const NUMBER_MODE_SLIDER: u32 = 2;
 pub const SERVICE_ARG_INT: u32 = 1;
 pub const SERVICE_ARG_STRING: u32 = 3;
-/// Максимальная длина текста «Clock text» в символах UTF-8.
 pub const CLOCK_TEXT_MAX: u32 = 64;
-/// Границы числа «LED speed».
 pub const LED_SPEED_MIN: f32 = 0.25;
 pub const LED_SPEED_MAX: f32 = 4.0;
 
@@ -113,7 +93,6 @@ impl Category {
     }
 }
 
-/// Какой список опций из [`EntityOptions`] заполняет select (или эффекты света).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum OptionSet {
     ClockFaces,
@@ -183,8 +162,6 @@ pub enum EntityKind {
     },
 }
 
-/// Тип сущности без данных: для проверок «id → правильная запись таблицы» и диспетчеризации
-/// состояний.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum EntityKindTag {
     MediaPlayer,
@@ -222,7 +199,6 @@ impl EntityKind {
     }
 }
 
-/// Что должно быть у модели, чтобы сущность существовала.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Capability {
     Always,
@@ -247,7 +223,6 @@ pub struct EntityDef {
     pub requires: Capability,
 }
 
-/// Какие сущности есть у модели. Заполняется контроллером один раз при сборке сервисов.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Capabilities {
     pub clock: bool,
@@ -256,7 +231,6 @@ pub struct Capabilities {
     pub wake_preroll: bool,
     pub hw_mic_mute: bool,
     pub buttons: bool,
-    /// Больше одной опции: select с единственной опцией не публикуется.
     pub case_colors: bool,
     pub voice_colors: bool,
     pub zigbee: bool,
@@ -279,12 +253,10 @@ impl Capabilities {
     }
 }
 
-/// Единственный гейт: перечисляет ли модель эту сущность.
 pub fn listed(def: &EntityDef, caps: &Capabilities) -> bool {
     caps.has(def.requires)
 }
 
-/// Списки опций, которые нужны ListEntities. Только они, без остального конфига сервера.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct EntityOptions<'a> {
     pub light_effects: &'a [String],
@@ -295,8 +267,6 @@ pub struct EntityOptions<'a> {
     pub voice_colors: &'a [String],
     pub zigbee_modes: &'a [String],
 }
-
-// Типизированные id сущностей: единственное отображение на ключ таблицы.
 
 macro_rules! id_enum {
     ($name:ident { $($variant:ident = $value:literal => $key:ident),* $(,)? }) => {
@@ -410,8 +380,6 @@ const fn ent(
     }
 }
 
-/// Список сущностей в порядке C++ (HA хранит его по устройству; ключи и `object_id` не должны
-/// двигаться). Добавленные форком сущности отмечены в golden-захвате.
 pub const ENTITIES: &[EntityDef] = &[
     ent(
         key::MEDIA,
@@ -878,8 +846,6 @@ pub const ENTITIES: &[EntityDef] = &[
     ),
 ];
 
-/// Порядок replay состояний (исторический порядок C++ `send_all_states`, не порядок списка).
-/// Golden-захват сравнивает состояния по порядку, поэтому таблица списка здесь не подходит.
 pub const REPLAY_ORDER: &[EntityKey] = &[
     key::MEDIA,
     key::SW_MICROPHONES,
@@ -917,12 +883,10 @@ pub const REPLAY_ORDER: &[EntityKey] = &[
     key::NUMBER_MIC_GAIN,
 ];
 
-/// Запись таблицы по ключу.
 pub fn find(key: EntityKey) -> Option<&'static EntityDef> {
     ENTITIES.iter().find(|def| def.key == key)
 }
 
-/// Одно сообщение ListEntities, готовое для фрейминга.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct EntityMessage {
     pub msg_type: u32,
@@ -1109,7 +1073,6 @@ fn light_message(def: &EntityDef, opts: &EntityOptions<'_>) -> EntityMessage {
     }
 }
 
-/// Все ответы ListEntities этой конфигурации по порядку, затем ListEntitiesDone.
 pub fn list_entities(caps: &Capabilities, opts: &EntityOptions<'_>) -> Vec<EntityMessage> {
     let mut out = Vec::with_capacity(ENTITIES.len() + 1);
     for def in ENTITIES.iter().filter(|d| listed(d, caps)) {

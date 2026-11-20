@@ -1,17 +1,3 @@
-# phone-push: FCM delivery for the owner's phone (find-phone + notifications).
-#
-# TEMPLATE. `deploy.sh` renders it for a manual rollout; Flux renders the same
-# objects through `manifests/kustomization.yaml` (Kustomization/app-phone-push).
-# Rendered manifests are never committed.
-#
-#   PHONE_PUSH_IMAGE  digest-pinned image built by Bazel
-#   BUILD_ID          Deployment annotation (traceability, never rolls pods)
-#   ROLLOUT_ID        content-addressed pod-template annotation
-#
-# No node-local state and no in-memory registry: every request is one FCM send,
-# so the Deployment can be rolled with maxUnavailable=0. The service is
-# ClusterIP only — the MCP gateway is its single caller and it is never
-# published through Traefik.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -55,16 +41,12 @@ spec:
           env:
             - name: PUSH_LISTEN
               value: 0.0.0.0:8095
-            # The caller bearer: the MCP gateway only. Same app token as the
-            # scheduler, so the phone and the gateway share one credential.
             - name: PUSH_TOKEN_FILE
               value: /run/secrets/phone-push/token
-            # Device registry: the scheduler owns the tokens.
             - name: PUSH_SCHEDULER_URL
               value: http://scheduler.home-assistant.svc.cluster.local:8098
             - name: PUSH_SCHEDULER_TOKEN_FILE
               value: /run/secrets/phone-push/token
-            # FCM service account (owner-created, secret/k8s/home-assistant/phone-push).
             - name: PUSH_FCM_SERVICE_ACCOUNT_FILE
               value: /run/secrets/phone-push/service_account_json
             - name: LOG_LEVEL

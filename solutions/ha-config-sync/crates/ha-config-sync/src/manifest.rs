@@ -1,20 +1,3 @@
-//! The project-owned manifest: which desired globs are delivered and what Home
-//! Assistant must reload (or restart) after they change.
-//!
-//! ```yaml
-//! files:
-//!   - glob: "scripts.yaml"
-//!     reload: ["script.reload"]
-//!   - glob: "custom_sentences/ru/*.yaml"
-//!     reload: ["conversation.reload"]
-//!   - glob: "shell_commands.yaml"
-//!     restart: true
-//! ```
-//!
-//! Every desired file must be covered by exactly one entry; overlapping globs,
-//! an empty manifest, an unmanaged path, a denied file and an empty match are
-//! errors.
-
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
@@ -22,55 +5,40 @@ use serde::Deserialize;
 
 use crate::protocol::DesiredFile;
 
-/// One manifest line after validation.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Entry {
-    /// The glob exactly as written.
     pub glob: String,
-    /// Desired paths this glob resolves to, sorted.
     pub paths: Vec<String>,
-    /// Services called after a drifted file from this entry changes.
     pub reload: Vec<String>,
-    /// Whether a change needs a Home Assistant restart after the reloads.
     pub restart: bool,
 }
 
-/// A validated manifest bound to one desired file set.
 #[derive(Debug, Clone)]
 pub struct Plan {
     entries: Vec<Entry>,
     by_path: BTreeMap<String, usize>,
 }
 
-/// A manifest validation failure.
 #[derive(Debug, thiserror::Error)]
 pub enum ManifestError {
-    /// The file could not be read.
     #[error("read manifest {path}: {source}")]
     Read {
         path: String,
         #[source]
         source: std::io::Error,
     },
-    /// The YAML is malformed.
     #[error("parse manifest: {0}")]
     Parse(String),
-    /// `files` is missing or empty.
     #[error("manifest contains no file entries")]
     Empty,
-    /// A glob is malformed.
     #[error("invalid glob {glob}: {reason}")]
     InvalidGlob { glob: String, reason: String },
-    /// A glob matched nothing in the desired directory.
     #[error("glob {0} matched no desired file")]
     EmptyGlob(String),
-    /// No entry covers a desired file.
     #[error("desired file {0} is not covered by the manifest")]
     Uncovered(String),
-    /// More than one entry covers a desired file.
     #[error("desired file {0} is covered by more than one manifest entry")]
     Overlapping(String),
-    /// A reload service is not `<domain>.<service>`.
     #[error("invalid reload service {0}")]
     InvalidReload(String),
 }
@@ -92,7 +60,6 @@ struct RawEntry {
 }
 
 impl Plan {
-    /// Read, parse and validate a manifest against the desired files.
     pub fn load(
         path: &Path,
         desired: &BTreeMap<String, DesiredFile>,
@@ -104,7 +71,6 @@ impl Plan {
         Self::parse(&content, desired)
     }
 
-    /// Validate manifest YAML against the desired files.
     pub fn parse(
         content: &str,
         desired: &BTreeMap<String, DesiredFile>,
@@ -149,22 +115,16 @@ impl Plan {
         Ok(Self { entries, by_path })
     }
 
-    /// Every entry, in manifest order.
     #[must_use]
     pub fn entries(&self) -> &[Entry] {
         &self.entries
     }
 
-    /// The entry covering `path`.
     #[must_use]
     pub fn entry_for(&self, path: &str) -> Option<&Entry> {
         self.by_path.get(path).map(|index| &self.entries[*index])
     }
 
-    /// Distinct reload services for a set of changed paths, in manifest order.
-    ///
-    /// A service needed by several files is called once; ordering is stable so
-    /// a log and a rollback repeat the same plan.
     #[must_use]
     pub fn reload_services(&self, changed: &BTreeSet<String>) -> Vec<String> {
         let mut services = Vec::new();
@@ -181,7 +141,6 @@ impl Plan {
         services
     }
 
-    /// Whether any changed file requires a restart.
     #[must_use]
     pub fn needs_restart(&self, changed: &BTreeSet<String>) -> bool {
         self.entries
@@ -229,7 +188,6 @@ fn validate_reload(service: &str) -> Result<(), ManifestError> {
     }
 }
 
-/// Segment-aware glob: `*` and `?` never cross `/`.
 fn glob_matches(glob: &str, path: &str) -> bool {
     let glob_segments: Vec<&str> = glob.split('/').collect();
     let path_segments: Vec<&str> = path.split('/').collect();
@@ -388,8 +346,6 @@ files:
 
     #[test]
     fn a_denied_file_can_never_be_desired() {
-        // `load_desired` already refuses it; a manifest can only see managed
-        // paths, so a glob for a denied path matches nothing.
         let result = Plan::parse(
             "files:\n  - glob: \"secrets.yaml\"\n",
             &desired(&["scripts.yaml"]),

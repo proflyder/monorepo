@@ -1,6 +1,3 @@
-//! Сервер на `LocalSet` с клиентами через `tokio::io::duplex`: golden-захват C++-референса,
-//! plaintext и Noise, владение голосом и вытеснение, backlog, ключ, таймауты.
-
 use std::cell::Cell;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -87,7 +84,6 @@ fn config(key_path: Option<PathBuf>) -> ApiConfig {
     }
 }
 
-/// Временный каталог, удаляется на drop.
 struct TmpDir(PathBuf);
 
 impl TmpDir {
@@ -132,7 +128,6 @@ impl TestServer {
         self.connect_buf(1 << 20)
     }
 
-    /// Соединение с маленьким буфером: клиент, который не читает, упирается в него быстро.
     fn connect_buf(&self, capacity: usize) -> Peer {
         let (server, client) = tokio::io::duplex(capacity);
         self.tx
@@ -141,7 +136,6 @@ impl TestServer {
         Peer::with(client)
     }
 
-    /// Noise-клиент: server hello, обмен NNpsk0; Err — текст отказа сервера.
     async fn connect_noise(&self, psk: &Psk) -> Result<Peer, String> {
         let (server, client) = tokio::io::duplex(1 << 20);
         self.tx
@@ -576,9 +570,7 @@ async fn selftest_matches_cxx_golden_bytes() {
             }
             p.send(msg::SUBSCRIBE_STATES_REQ, &[]).await;
             got.extend(p.sync().await);
-            // Hello и GetTimeRequest уже сверены p.hello; golden начинается с них.
             got.retain(|(t, m)| !fork_only(*t, m));
-            // Первые два golden — HelloResponse и GetTimeRequest; сравнение с ними отдельно.
             assert_eq!(golden[0].0, msg::HELLO_RESP);
             assert_eq!(golden[1].0, msg::GET_TIME_REQ);
             assert_eq!(got.len(), golden.len() - 2);
@@ -668,7 +660,6 @@ async fn plaintext_session() {
             );
             assert!(h.connected());
 
-            // GetTimeResponse: строка TZ главнее разобранной зоны, та — запасной вариант.
             let parsed = ParsedTimezone {
                 std_offset_seconds: Some(-10_800),
                 dst_start: None,
@@ -692,7 +683,6 @@ async fn plaintext_session() {
                 },
             )
             .await;
-            // Epoch 0 — не время.
             p.send_msg(
                 msg::GET_TIME_RESP,
                 &GetTimeResponse {
@@ -702,7 +692,6 @@ async fn plaintext_session() {
                 },
             )
             .await;
-            // Неизвестные сообщения игнорируются, сессия продолжается.
             p.send(200, &[]).await;
             p.send(msg::PING_RESP, &[]).await;
             assert!(p.sync().await.is_empty());
@@ -722,7 +711,6 @@ async fn plaintext_session() {
             );
             assert!(rx.try_recv().is_err());
 
-            // Второй hello на том же соединении получает ответ, но никого не подключает.
             p.send_msg(
                 msg::HELLO_REQ,
                 &HelloRequest {
@@ -742,7 +730,6 @@ async fn plaintext_session() {
             assert_eq!(event(&mut rx).await, ApiEvent::ClientDisconnected);
             assert!(!h.connected());
 
-            // Собственный DisconnectRequest сервера клиент подтверждает.
             let mut p = ts.connect();
             p.hello("probe").await;
             event(&mut rx).await;
@@ -760,7 +747,6 @@ async fn protocol_violations_drop_the_client() {
         .run_until(async {
             let mut ts = TestServer::start(config(None));
             let mut rx = ts.take_events();
-            // Ping и disconnect до hello разрешены, остальное — нет.
             let mut p = ts.connect();
             assert!(p.sync().await.is_empty());
             p.subscribe_voice(true).await;
@@ -771,17 +757,14 @@ async fn protocol_violations_drop_the_client() {
                 p.write(garbage).await;
                 assert!(p.closed().await.is_empty(), "{garbage:?}");
             }
-            // Заголовок, который никогда не кончится.
             let mut p = ts.connect();
             p.write(&[0x00]).await;
             p.write(&[0xff; 21]).await;
             assert!(p.closed().await.is_empty());
-            // EOF посреди кадра.
             let mut p = ts.connect();
             p.write(b"\x00\x05\x01ab").await;
             p.s.shutdown().await.unwrap();
             assert!(p.closed().await.is_empty());
-            // Битый payload логируется, сообщение всё равно обработано.
             let mut p = ts.connect();
             p.write(b"\x00\x03\x01\x0a\x05x").await;
             p.expect(msg::HELLO_RESP).await;
@@ -811,7 +794,6 @@ async fn frames_split_across_reads_are_reassembled() {
                 }
                 .encode_to_vec(),
             );
-            // TCP режет кадр произвольно: хвост первого чтения — начало второго.
             let (head, tail) = frame.split_at(4);
             p.write(head).await;
             tokio::task::yield_now().await;
@@ -866,7 +848,6 @@ async fn voice_owner_hands_over() {
             assert_eq!(event(&mut rx).await, ApiEvent::VoiceSubscribed(true));
             assert!(h.voice_subscribed());
 
-            // Более свежий подписчик забирает пайплайн: false перед true.
             let mut b = ts.connect();
             b.hello("probe").await;
             event(&mut rx).await;
@@ -885,7 +866,6 @@ async fn voice_owner_hands_over() {
             h.voice_send_audio(vec![1, -2]);
             let m = b.expect(msg::VA_AUDIO).await;
             assert_eq!(field(&m, 1).unwrap().data, [1, 0, 0xfe, 0xff]);
-            // Мягкий конец: VoiceAssistantAudio.end = true без данных, не stop-запрос.
             h.voice_send_audio_end();
             let m = b.expect(msg::VA_AUDIO).await;
             assert!(field(&m, 1).is_none());
@@ -895,10 +875,8 @@ async fn voice_owner_hands_over() {
             assert!(field(&m, 1).unwrap().boolean());
             h.voice_request_stop();
             assert!(b.expect(msg::VA_REQUEST).await.is_empty());
-            // Старый владелец не получил ничего.
             assert!(a.sync().await.is_empty());
 
-            // HA отвечает за тот run, который её попросили начать; чужие ответы игнорируются.
             a.send_msg(
                 msg::VA_RESPONSE,
                 &VoiceAssistantResponse {
@@ -920,7 +898,6 @@ async fn voice_owner_hands_over() {
             assert_eq!(event(&mut rx).await, ApiEvent::VoiceStartFailed { run: 2 });
             assert!(rx.try_recv().is_err());
 
-            // Новый клиент уходит: пайплайн возвращается предыдущему подписчику.
             drop(b);
             assert_eq!(event(&mut rx).await, ApiEvent::VoiceSubscribed(false));
             assert_eq!(event(&mut rx).await, ApiEvent::VoiceSubscribed(true));
@@ -928,20 +905,17 @@ async fn voice_owner_hands_over() {
             let req = a.expect(msg::VA_REQUEST).await;
             assert!(field(&req, 5).is_none());
 
-            // Отписка отдаёт его окончательно.
             a.subscribe_voice(false).await;
             a.sync().await;
             assert_eq!(event(&mut rx).await, ApiEvent::VoiceSubscribed(false));
             assert!(!h.voice_subscribed() && h.connected());
             assert!(rx.try_recv().is_err());
-            // Без владельца голосовые вызовы ничего не шлют.
             h.voice_request_start("x");
             h.voice_send_audio(vec![1]);
             h.voice_send_audio_end();
             h.voice_request_stop();
             assert!(a.sync().await.is_empty());
 
-            // Владелец отключается: false, затем последний клиент ушёл.
             a.subscribe_voice(true).await;
             a.sync().await;
             assert_eq!(event(&mut rx).await, ApiEvent::VoiceSubscribed(true));
@@ -969,7 +943,6 @@ async fn full_server_evicts_the_least_useful_client() {
             peers[0].subscribe_voice(true).await;
             peers[0].sync().await;
             assert_eq!(event(&mut rx).await, ApiEvent::VoiceSubscribed(true));
-            // «subscriber» тоже хочет пайплайн, поэтому «owner» подписывается снова.
             peers[2].subscribe_voice(true).await;
             peers[2].sync().await;
             peers[0].subscribe_voice(true).await;
@@ -979,7 +952,6 @@ async fn full_server_evicts_the_least_useful_client() {
             }
             peers[3].sync().await;
 
-            // Пятый клиент: уходит «idle» (без интереса к голосу, дольше всех молчит).
             let mut e = ts.connect();
             e.hello("new").await;
             assert!(matches!(
@@ -991,7 +963,6 @@ async fn full_server_evicts_the_least_useful_client() {
                 peers[i].sync().await;
             }
 
-            // Дальше — подписчик, не владеющий пайплайном; владелец не уходит никогда.
             peers[3].subscribe_voice(true).await;
             peers[3].sync().await;
             peers[0].subscribe_voice(true).await;
@@ -1009,7 +980,6 @@ async fn full_server_evicts_the_least_useful_client() {
             let mut f = ts.connect();
             f.hello("newer").await;
             event(&mut rx).await;
-            // «subscriber» (ранг 1) слышали раньше «chatty» и «new».
             assert!(peers[2].closed().await.is_empty());
             peers[0].sync().await;
             assert!(rx.try_recv().is_err());
@@ -1024,7 +994,6 @@ async fn audio_backlog_ends_the_run() {
             let mut ts = TestServer::start(config(None));
             let h = ts.api.clone();
             let mut rx = ts.take_events();
-            // Маленький буфер: ядро не поглощает поток, клиент его не читает.
             let mut p = ts.connect_buf(4096);
             p.hello("slow").await;
             event(&mut rx).await;
@@ -1046,7 +1015,6 @@ async fn audio_backlog_ends_the_run() {
             };
             assert_eq!(overflow, ApiEvent::VoiceAudioOverflow { run });
             assert!(h.voice_subscribed());
-            // Отброшено до следующего start.
             h.voice_send_audio(chunk.clone());
 
             let before = p.sync().await;
@@ -1081,9 +1049,7 @@ async fn client_not_reading_is_dropped() {
             p.sync().await;
             event(&mut rx).await;
             h.voice_request_start("");
-            // Одно сообщение больше 8 MiB backlog ещё до отправки: клиента отдают.
             h.voice_send_audio(vec![0; (MAX_BACKLOG / 2) + (1 << 20)]);
-            // I/O делает актор: сразу после вызова геттеры не изменились.
             assert!(h.connected() && h.voice_subscribed());
             assert_eq!(event(&mut rx).await, ApiEvent::VoiceSubscribed(false));
             assert_eq!(event(&mut rx).await, ApiEvent::ClientDisconnected);
@@ -1106,7 +1072,6 @@ async fn noise_provisioning_and_key_change() {
                 h.mdns_txt()[8],
                 "api_encryption_supported=Noise_NNpsk0_25519_ChaChaPoly_SHA256"
             );
-            // Без ключа: plaintext и Noise на нулевом ключе (провижининг).
             let mut plain = ts.connect();
             plain.hello("plain").await;
             event(&mut rx).await;
@@ -1119,7 +1084,6 @@ async fn noise_provisioning_and_key_change() {
             event(&mut rx).await;
             assert!(p.sync().await.is_empty());
 
-            // Отвергнутый ключ ничего не меняет.
             p.send_msg(
                 msg::NOISE_SET_KEY_REQ,
                 &NoiseEncryptionSetKeyRequest {
@@ -1143,7 +1107,6 @@ async fn noise_provisioning_and_key_change() {
                 std::fs::read_to_string(&key_path).unwrap(),
                 format!("{KEY_B64}\n")
             );
-            // Через 100 мс: новые TXT, затем каждого клиента просят уйти.
             let txt = event(&mut rx).await;
             let ApiEvent::MdnsTxtChanged(txt) = txt else {
                 panic!("{txt:?}")
@@ -1159,7 +1122,6 @@ async fn noise_provisioning_and_key_change() {
             assert!(plain.closed().await.is_empty());
             assert_eq!(event(&mut rx).await, ApiEvent::ClientDisconnected);
 
-            // Теперь пускает только ключ.
             let mut plain = ts.connect();
             plain
                 .send_msg(
@@ -1181,7 +1143,6 @@ async fn noise_provisioning_and_key_change() {
             p.hello("HA").await;
             event(&mut rx).await;
 
-            // Тот же ключ снова: успех, никого не отключают.
             p.send_msg(
                 msg::NOISE_SET_KEY_REQ,
                 &NoiseEncryptionSetKeyRequest {
@@ -1197,7 +1158,6 @@ async fn noise_provisioning_and_key_change() {
             tokio::time::sleep(Duration::from_millis(300)).await;
             assert!(p.sync().await.is_empty());
 
-            // Очистка: назад в plaintext.
             p.send_msg(
                 msg::NOISE_SET_KEY_REQ,
                 &NoiseEncryptionSetKeyRequest { key: None },
@@ -1265,7 +1225,6 @@ async fn noise_frame_errors() {
                 p.write(input).await;
                 assert_eq!(p.closed().await, want, "{input:?}");
             }
-            // Мусор после handshake: расшифровка не проходит, клиент уходит.
             let key = esphome_proto::api_key::decode_psk(KEY_B64.as_bytes()).unwrap();
             let mut p = ts.connect_noise(&key).await.unwrap();
             p.write(b"\x01\x00\x20").await;
@@ -1318,7 +1277,6 @@ async fn shutdown_asks_clients_to_disconnect() {
         .run_until(async {
             assert!(a.expect(msg::DISCONNECT_REQ).await.is_empty());
             assert!(a.closed().await.is_empty());
-            // Соединение до hello просто закрывают.
             assert!(b.closed().await.is_empty());
         })
         .await;
@@ -1340,9 +1298,6 @@ fn bind_failure_is_an_error() {
     );
 }
 
-/// В пределах нескольких тиков от `d`. С остановленными часами tokio двигает их к следующему
-/// таймеру, когда runtime паркуется (в том числе между сетевыми round trip), поэтому часы
-/// клиента и сервера расходятся на несколько 5-секундных тиков.
 fn about(x: Duration, d: Duration) -> bool {
     let slack = Duration::from_secs(15);
     x + slack > d && x <= d + slack
@@ -1365,15 +1320,12 @@ async fn hello_timeout_ping_and_keepalive_drop() {
             p.hello("HA").await;
             event(&mut rx).await;
             let t0 = Instant::now();
-            // Простой: сервер пингует один раз.
             p.expect(msg::PING_REQ).await;
             assert!(about(t0.elapsed(), IDLE_PING), "{:?}", t0.elapsed());
-            // Без ответа: отключает.
             assert!(p.closed().await.is_empty());
             assert!(about(t0.elapsed(), IDLE_DROP), "{:?}", t0.elapsed());
             assert_eq!(event(&mut rx).await, ApiEvent::ClientDisconnected);
 
-            // Клиент, который отвечает, остаётся и снова получает время каждые 6 ч.
             let mut p = ts.connect();
             p.wait = Duration::from_secs(600);
             p.hello("HA").await;
@@ -1396,8 +1348,6 @@ async fn hello_timeout_ping_and_keepalive_drop() {
         .await;
 }
 
-/// Слушатель, который умеет отвечать ошибкой accept (нехватка дескрипторов), как настоящий
-/// `TcpListener`.
 struct FlakyListener {
     rx: UnboundedReceiver<Incoming>,
     fail: Rc<Cell<bool>>,
@@ -1440,15 +1390,12 @@ async fn accept_errors_pause_accepting_without_starving_clients() {
             p.wait = Duration::from_secs(600);
             p.hello("HA").await;
             event(&mut rx_ev).await;
-            // Дескрипторы кончились: слушатель всегда готов, каждый accept падает. Без паузы
-            // актор закрутился бы и остановленные часы не сдвинулись бы.
             fail.set(true);
             for _ in 0..5 {
                 assert!(p.sync().await.is_empty());
             }
             tokio::time::sleep(Duration::from_secs(5)).await;
             let n = errors.get();
-            // Одна попытка на 500 мс паузы (плюс до сна), а не спин.
             assert!((5..40).contains(&n), "{n}");
             assert!(p.sync().await.is_empty());
             fail.set(false);
@@ -1486,8 +1433,6 @@ async fn hand_over_drops_audio_stop_and_answer_report_of_the_old_run() {
             event(&mut rx).await;
             b.subscribe_voice(true).await;
             b.sync().await;
-            // Контроллер ещё не видел передачи: аудио, stop и отчёт ответа старого run.
-            // Отчёт анонса всё равно идёт владельцу.
             h.voice_send_audio(vec![2]);
             h.voice_request_stop();
             h.voice_answer_finished(true);
@@ -1498,7 +1443,6 @@ async fn hand_over_drops_audio_stop_and_answer_report_of_the_old_run() {
             assert_eq!(event(&mut rx).await, ApiEvent::VoiceSubscribed(false));
             assert_eq!(event(&mut rx).await, ApiEvent::VoiceSubscribed(true));
 
-            // Новый run у нового владельца получает всё снова.
             h.voice_request_start("");
             b.expect(msg::VA_REQUEST).await;
             h.voice_send_audio(vec![3]);
@@ -1522,8 +1466,6 @@ async fn amplified_replies_still_meet_the_backlog_limit() {
             let mut p = ts.connect_buf(4096);
             p.hello("flood").await;
             event(&mut rx).await;
-            // 3-байтовые HelloRequest, каждый с ответом ~40 байт, без чтения: одна пачка
-            // чтения даёт ~1 MiB ответов. Проверяется лимит и закрытие «клиент не читает».
             let chunk = b"\x00\x00\x01".repeat(20_000);
             for _ in 0..200 {
                 if p.s.write_all(&chunk).await.is_err() {

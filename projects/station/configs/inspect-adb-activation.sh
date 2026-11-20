@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# Collect read-only evidence showing how network ADB is activated.
 set -euo pipefail
 
 ADB="${ADB:-${HOME}/Library/Android/sdk/platform-tools/adb}"

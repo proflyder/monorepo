@@ -1,44 +1,12 @@
-//! The single background poller: `POST /v1/challenge` -> `POST /v1/claim`.
-//!
-//! Two modes share the same exchange:
-//!
-//! - `logon` — purpose `logon`, 2 s poll, no long-poll, 90 s budget from
-//!   provider load;
-//! - `unlock` — purpose `unlock`, 25 s server long-poll with a 35 s receive
-//!   timeout, no budget: the loop runs until the tile is armed or the session
-//!   is cancelled.
-//!
-//! The exchange itself is portable and host-tested in [`crate::worker_core`];
-//! this module owns only the WinHTTP, clock, log and thread adapters. Neither
-//! mode blocks a LogonUI thread. Both stop promptly on `UnAdvise`: every
-//! request checks the session before and after it, and the unlock claim runs on
-//! a short-lived module-pinned thread so the worker does not have to wait for a
-//! long-poll answer. Every thread-procedure body, including its cleanup, is
-//! wrapped in [`crate::ffi_guard::guard_thread`].
-
-/// Poll interval between rounds in logon mode.
 pub const POLL_INTERVAL_MS: u32 = 2000;
-/// Back-off for `429`/`5xx` in logon mode, as documented in `README.md`.
 pub const BACKOFF_INTERVAL_MS: u32 = 4000;
 
-/// Server long-poll for the unlock claim.
 pub const UNLOCK_WAIT_SECONDS: u32 = 25;
-/// WinHTTP receive timeout for the unlock claim; must exceed
-/// [`UNLOCK_WAIT_SECONDS`] plus network latency.
 pub const UNLOCK_RECEIVE_TIMEOUT_MS: i32 = 35_000;
-/// First pause after a network error, `429` or `5xx` in unlock mode.
 pub const UNLOCK_BACKOFF_START_MS: u32 = 5_000;
-/// Back-off cap in unlock mode.
 pub const UNLOCK_BACKOFF_MAX_MS: u32 = 30_000;
-/// Minimum duration of one unlock round, measured from the challenge request
-/// to the claim answer. A healthy server holds the claim for
-/// [`UNLOCK_WAIT_SECONDS`], so this only paces a broken or misconfigured
-/// server that denies instantly; otherwise the loop would create a claim
-/// thread per round without pause. Two seconds matches the logon poll and caps
-/// the client at 30 claims/min, inside the server's documented 60/min limit.
 pub const UNLOCK_MIN_ROUND_MS: u32 = 2_000;
 
-/// Exponential back-off for the unlock loop: 5, 10, 20, 30, 30, ... seconds.
 pub fn unlock_backoff_delay(attempt: u32) -> u32 {
     let shift = attempt.min(3);
     UNLOCK_BACKOFF_START_MS
@@ -46,18 +14,13 @@ pub fn unlock_backoff_delay(attempt: u32) -> u32 {
         .min(UNLOCK_BACKOFF_MAX_MS)
 }
 
-/// Pause before the next unlock round. `retry_ms` is the error back-off, or
-/// `None` for a plain denial, where the long-poll itself is the pause. A round
-/// shorter than [`UNLOCK_MIN_ROUND_MS`] is padded to the minimum.
 pub fn unlock_round_delay(round_ms: u64, retry_ms: Option<u32>) -> u32 {
     let remaining = UNLOCK_MIN_ROUND_MS.saturating_sub(round_ms.min(u64::from(u32::MAX)) as u32);
     retry_ms.map_or(remaining, |delay| delay.max(remaining))
 }
 
-/// How a round ended.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RoundKind {
-    /// The tile is armed; the worker stops.
     Armed,
     Retry,
     Fatal,
@@ -67,9 +30,6 @@ pub enum RoundKind {
 pub struct RoundOutcome {
     pub kind: RoundKind,
     pub delay_ms: u32,
-    /// True when the round failed (network, `429`, `5xx`, bad answer); the
-    /// unlock loop turns this into a growing back-off. A plain denial is not
-    /// an error: the long-poll already paced the next round.
     pub error: bool,
 }
 
@@ -107,8 +67,6 @@ impl RoundOutcome {
     }
 }
 
-/// A non-200 status is a back-off only for 429 and 5xx; every other status is
-/// fatal (`None`), as documented in `README.md`.
 pub fn retry_delay_for_status(status: i32) -> Option<u32> {
     if status == 429 || status >= 500 {
         Some(BACKOFF_INTERVAL_MS)
@@ -290,7 +248,7 @@ mod windows_impl {
         };
         let end = run_exchange(&context, &target, &transport, &SystemClock, &WindowsLog);
 
-        drop(secret); // `MachineSecret` zeroizes the key and the password.
+        drop(secret);
         let phase = match end {
             LoopEnd::Armed => "phase=armed",
             LoopEnd::Cancelled => "phase=cancelled",
@@ -299,25 +257,16 @@ mod windows_impl {
         log_event("worker", phase);
     }
 
-    /// Pins this DLL for as long as a thread may execute its code.
-    ///
-    /// The only exit is [`ModulePin::exit`]. There is deliberately no `Drop`:
-    /// a destructor could only run on an unwind that is already an abort, and
-    /// releasing the pin then would unmap code that is still executing. On that
-    /// impossible path the reference leaks, which is harmless.
     struct ModulePin(HMODULE);
 
     impl ModulePin {
         fn exit(self) -> ! {
             let Self(module) = self;
-            // SAFETY: the pin was taken by `GetModuleHandleExW(FROM_ADDRESS)` in
-            // `start_worker_thread`/`cancellable_post`; this releases it and
-            // exits the thread, so no code from this module runs afterwards.
+            // SAFETY: the pin was taken by `GetModuleHandleExW(FROM_ADDRESS)` in `start_worker_thread`/`cancellable_post`; this releases it and exits the thread, so no code from this module runs afterwards.
             unsafe { FreeLibraryAndExitThread(module, 0) }
         }
     }
 
-    /// Arguments moved into the claim request thread.
     struct ClaimJob {
         endpoint: ServiceEndpoint,
         path: String,
@@ -327,15 +276,8 @@ mod windows_impl {
         module: HMODULE,
     }
 
-    /// Short-lived thread that performs one long-poll claim.
-    ///
-    /// The module is pinned for exactly this thread's lifetime, so the DLL
-    /// cannot unload under a request that outlives the worker. A panic in the
-    /// request, the send or the cleanup is contained; the pin and the worker
-    /// count are still released exactly once.
     unsafe extern "system" fn claim_thread_proc(parameter: *mut c_void) -> u32 {
-        // SAFETY: `parameter` comes from `Box::into_raw` in `cancellable_post`
-        // and this thread owns it.
+        // SAFETY: `parameter` comes from `Box::into_raw` in `cancellable_post` and this thread owns it.
         let ClaimJob {
             endpoint,
             path,
@@ -349,8 +291,6 @@ mod windows_impl {
         let result = guard_thread(
             || post_json_with_receive_timeout(&endpoint, &path, &body, receive_timeout_ms),
             || {
-                // Bookkeeping for DllCanUnloadNow; the pin above is what
-                // actually makes unloading safe.
                 ACTIVE_WORKERS.fetch_sub(1, Ordering::SeqCst);
             },
             || {},
@@ -365,7 +305,6 @@ mod windows_impl {
                         error: "panic",
                         elapsed_ms: 0,
                     });
-                    // A send to a dropped receiver only discards the result.
                     let _ = sender.send(outcome);
                 }
             },
@@ -373,21 +312,11 @@ mod windows_impl {
             || {},
         );
 
-        // Every Rust object with a `Drop` impl is gone before the module is
-        // released.
         let mut leftovers = Some((endpoint, path, body));
         let _ = guard_thread(|| drop(leftovers.take()), || {}, || {});
         pin.exit()
     }
 
-    /// Posts on a separate module-pinned thread and returns `None` as soon as
-    /// the session is cancelled.
-    ///
-    /// This is deliberately not implemented by closing the WinHTTP request
-    /// handle from another thread: Microsoft documents that closing a handle
-    /// of a *synchronous* request is unsafe and creates a race. Abandoning a
-    /// bounded (35 s) request thread is safe — it cannot arm anything and does
-    /// not touch the session — and the worker stops within 100 ms.
     fn cancellable_post(
         session: &Arc<Session>,
         generation: u32,
@@ -396,10 +325,8 @@ mod windows_impl {
         body: &[u8],
         receive_timeout_ms: i32,
     ) -> Option<HttpOutcome> {
-        // +1 module reference for as long as the request thread may run.
         let mut module = HMODULE::default();
-        // SAFETY: `claim_thread_proc` is an address inside this DLL, so
-        // GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS resolves to this module.
+        // SAFETY: `claim_thread_proc` is an address inside this DLL, so GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS resolves to this module.
         let pinned = unsafe {
             GetModuleHandleExW(
                 GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
@@ -409,7 +336,6 @@ mod windows_impl {
         };
         let direct = || post_json_with_receive_timeout(endpoint, path, body, receive_timeout_ms);
         if pinned.is_err() {
-            // Degraded but still bounded: cancel is checked right after.
             return Some(direct());
         }
 
@@ -424,8 +350,7 @@ mod windows_impl {
         });
         let parameter = Box::into_raw(job).cast::<c_void>();
         ACTIVE_WORKERS.fetch_add(1, Ordering::SeqCst);
-        // SAFETY: the procedure has the LPTHREAD_START_ROUTINE signature, and
-        // on success the new thread takes ownership of `parameter`.
+        // SAFETY: the procedure has the LPTHREAD_START_ROUTINE signature, and on success the new thread takes ownership of `parameter`.
         let thread = unsafe {
             CreateThread(
                 None,
@@ -437,8 +362,7 @@ mod windows_impl {
             )
         };
         if let Ok(handle) = thread {
-            // SAFETY: `handle` is open and owned here; closing it does not
-            // stop the thread.
+            // SAFETY: `handle` is open and owned here; closing it does not stop the thread.
             unsafe {
                 let _ = CloseHandle(handle);
             }
@@ -465,11 +389,6 @@ mod windows_impl {
         }
     }
 
-    /// Arguments moved into the worker thread.
-    ///
-    /// The last `Arc<Session>` is owned here, so the session outlives the
-    /// thread's use of it; `module` is the pinned DLL handle released with
-    /// `FreeLibraryAndExitThread`.
     struct StartArgs {
         session: Arc<Session>,
         module: HMODULE,
@@ -477,15 +396,8 @@ mod windows_impl {
         generation: u32,
     }
 
-    /// Worker thread procedure. Owns `parameter` and never returns.
-    ///
-    /// The whole body — the loop and its cleanup — is contained. A panic
-    /// cancels the session (fail closed), `finish_worker` and the worker count
-    /// are released exactly once, and the module pin is always released by
-    /// `ModulePin::exit`.
     unsafe extern "system" fn worker_thread_proc(parameter: *mut c_void) -> u32 {
-        // SAFETY: `parameter` comes from `Box::into_raw(StartArgs)` in
-        // `start_worker_thread` and this thread owns it.
+        // SAFETY: `parameter` comes from `Box::into_raw(StartArgs)` in `start_worker_thread` and this thread owns it.
         let StartArgs {
             session,
             module,
@@ -497,8 +409,6 @@ mod windows_impl {
         let _ = guard_thread(
             || run_worker(&session, generation, mode),
             || {
-                // Two independent steps: a panic in the first must not skip
-                // the worker-count decrement.
                 let _ = guard_thread(|| session.finish_worker(generation), || {}, || {});
                 let _ = guard_thread(
                     || {
@@ -509,35 +419,20 @@ mod windows_impl {
                 );
             },
             || {
-                // Existing journal line.
                 guard(|| log_event("worker", "phase=exception"), || {});
                 cancel_session(&session);
             },
         );
 
-        // The only remaining Rust object is the session reference itself; drop
-        // it before the module can disappear. A panic in its destructor is
-        // contained as well.
         let mut session = Some(session);
         let _ = guard_thread(|| drop(session.take()), || {}, || {});
 
         pin.exit()
     }
 
-    /// Creates the single worker thread with a raw `CreateThread`.
-    ///
-    /// This deliberately does not use `std::thread`. A `std::thread` keeps
-    /// running std's thread epilogue (`thread_start`, `Packet`, TLS
-    /// destructors) after the closure returns, i.e. after `ACTIVE_WORKERS` has
-    /// been decremented. LogonUI could then call `DllCanUnloadNow`, get `S_OK`
-    /// and `FreeLibrary` while that epilogue is still executing our code. A raw
-    /// thread plus `GetModuleHandleExW(FROM_ADDRESS)` pins the module until the
-    /// very last instruction of this module has run.
     pub fn start_worker_thread(session: &Arc<Session>, mode: Mode, generation: u32) {
-        // +1 module reference for as long as the thread may execute our code.
         let mut module = HMODULE::default();
-        // SAFETY: `worker_thread_proc` is an address inside this DLL, so
-        // GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS resolves to this module.
+        // SAFETY: `worker_thread_proc` is an address inside this DLL, so GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS resolves to this module.
         let pinned = unsafe {
             GetModuleHandleExW(
                 GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
@@ -559,8 +454,7 @@ mod windows_impl {
         });
         let parameter = Box::into_raw(args).cast::<c_void>();
         ACTIVE_WORKERS.fetch_add(1, Ordering::SeqCst);
-        // SAFETY: the procedure has the LPTHREAD_START_ROUTINE signature, and
-        // on success the new thread takes ownership of `parameter`.
+        // SAFETY: the procedure has the LPTHREAD_START_ROUTINE signature, and on success the new thread takes ownership of `parameter`.
         let thread = unsafe {
             CreateThread(
                 None,
@@ -572,14 +466,12 @@ mod windows_impl {
             )
         };
         if let Ok(handle) = thread {
-            // SAFETY: `handle` is open and owned here; closing it does not
-            // stop the thread.
+            // SAFETY: `handle` is open and owned here; closing it does not stop the thread.
             unsafe {
                 let _ = CloseHandle(handle);
             }
         } else {
             ACTIVE_WORKERS.fetch_sub(1, Ordering::SeqCst);
-            // The thread never started, so it did not take the argument.
             // SAFETY: `parameter` came from `Box::into_raw` above.
             drop(unsafe { Box::from_raw(parameter.cast::<StartArgs>()) });
             // SAFETY: balances the successful GetModuleHandleExW above.
@@ -634,9 +526,7 @@ mod tests {
         assert_eq!(unlock_round_delay(500, None), 1500);
         assert_eq!(unlock_round_delay(1999, None), 1);
         assert_eq!(unlock_round_delay(2000, None), 0);
-        // A real long-poll already outlasts the minimum.
         assert_eq!(unlock_round_delay(25_000, None), 0);
-        // An error back-off is never shortened by the minimum.
         assert_eq!(unlock_round_delay(0, Some(5000)), 5000);
         assert_eq!(unlock_round_delay(1000, Some(500)), 1000);
     }

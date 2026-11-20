@@ -1,118 +1,73 @@
-//! Deployment catalog: YAML schema, validation and spoken-name resolution.
-//!
-//! Ports `internal/catalog/catalog.go` one-to-one, including the exact
-//! validation messages: the catalog is deployment data, never solution data,
-//! and a rejected catalog must explain itself the same way it did in Go.
-
 use std::fmt::Write as _;
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-/// Workload kinds. The only mutation the gateway performs is a rollout
-/// restart, so these three are the complete set.
 pub const KIND_DEPLOYMENT: &str = "Deployment";
-/// See [`KIND_DEPLOYMENT`].
 pub const KIND_STATEFUL_SET: &str = "StatefulSet";
-/// See [`KIND_DEPLOYMENT`].
 pub const KIND_DAEMON_SET: &str = "DaemonSet";
 
-/// Kubernetes-backed service kind.
 pub const SERVICE_K8S: &str = "k8s";
-/// Read-only service outside Kubernetes.
 pub const SERVICE_EXTERNAL: &str = "external";
 
-/// Logs come from Loki.
 pub const LOGS_LOKI: &str = "loki";
-/// Logs come from `pods/log`.
 pub const LOGS_PODS: &str = "pods";
-/// Logs are not available.
 pub const LOGS_NONE: &str = "none";
 
-/// TCP check type.
 pub const CHECK_TCP: &str = "tcp";
-/// HTTP check type.
 pub const CHECK_HTTP: &str = "http";
-/// Home Assistant state check type.
 pub const CHECK_HA_STATE: &str = "ha_state";
-/// Home Assistant template check type.
 pub const CHECK_HA_TEMPLATE: &str = "ha_template";
-/// Home Assistant unavailable-entity summary check type.
 pub const CHECK_HA_UNAVAILABLE: &str = "ha_unavailable_summary";
 
-/// HTTP check without authentication.
 pub const AUTH_NONE: &str = "none";
-/// HTTP check with the Home Assistant token.
 pub const AUTH_HA: &str = "ha";
 
-/// Validation failure of a catalog document.
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum CatalogError {
-    /// The YAML itself could not be decoded.
     #[error("parse catalog: {0}")]
     Parse(String),
-    /// The decoded document breaks one or more schema rules.
     #[error("invalid catalog: {0}")]
     Invalid(String),
 }
 
-/// Spoken-name resolution failure.
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum ResolveError {
-    /// The spoken name was empty.
     #[error("empty service name")]
     Empty,
-    /// No service matched the spoken name.
     #[error("unknown service {0:?}")]
     Unknown(String),
 }
 
-/// One typed external probe for a service. Only the fields relevant to the
-/// selected type are used; validation rejects everything else.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Check {
-    /// Check type: `tcp`, `http`, `ha_state`, `ha_template` or
-    /// `ha_unavailable_summary`.
     #[serde(rename = "type", default)]
     pub check_type: String,
-    /// Human label shown in reports.
     #[serde(default)]
     pub label: String,
-    /// TCP host.
     #[serde(default)]
     pub host: String,
-    /// TCP port.
     #[serde(default)]
     pub port: i64,
-    /// HTTP URL.
     #[serde(default)]
     pub url: String,
-    /// Expected HTTP status; `0` means any 2xx/3xx.
     #[serde(default)]
     pub expect_status: i64,
-    /// HTTP authentication mode: `none` or `ha`.
     #[serde(default)]
     pub auth: String,
-    /// Home Assistant entity id for `ha_state`.
     #[serde(default)]
     pub entity_id: String,
-    /// Entity states that count as a failure for `ha_state`.
     #[serde(default)]
     pub bad_states: Vec<String>,
-    /// Home Assistant template for `ha_template`.
     #[serde(default)]
     pub template: String,
-    /// Whether the check must succeed.
     #[serde(default)]
     pub required: bool,
-    /// Domains included in `ha_unavailable_summary`.
     #[serde(default)]
     pub domains: Vec<String>,
 }
 
 impl Check {
-    /// The human label used in reports: the configured label, otherwise a
-    /// type-specific fallback.
     #[must_use]
     pub fn display_label(&self) -> String {
         let label = self.label.trim();
@@ -130,20 +85,15 @@ impl Check {
     }
 }
 
-/// Spoken names for a service. Both languages are optional, but at least one
-/// alias across both lists is required.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Aliases {
-    /// Russian aliases.
     #[serde(default)]
     pub ru: Vec<String>,
-    /// English aliases.
     #[serde(default)]
     pub en: Vec<String>,
 }
 
 impl Aliases {
-    /// Every alias, Russian first.
     #[must_use]
     pub fn all(&self) -> Vec<String> {
         let mut out = Vec::with_capacity(self.ru.len() + self.en.len());
@@ -153,115 +103,81 @@ impl Aliases {
     }
 }
 
-/// One Kubernetes workload.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Workload {
-    /// Deployment, StatefulSet or DaemonSet.
     #[serde(default)]
     pub kind: String,
-    /// Object name.
     #[serde(default)]
     pub name: String,
 }
 
-/// One Prometheus query used as a health signal for the service.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Signal {
-    /// Instant PromQL query.
     #[serde(default)]
     pub promql: String,
-    /// Short human explanation spoken in a verdict.
     #[serde(default)]
     pub meaning: String,
-    /// Whether the signal participates in the `infra_status` aggregate.
     #[serde(default)]
     pub status: bool,
 }
 
-/// Where logs for the service come from.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LogSource {
-    /// One of `loki`, `pods`, `none`.
     #[serde(default)]
     pub source: String,
-    /// LogQL selector used when `source` is `loki`.
     #[serde(default)]
     pub selector: String,
-    /// Containers used by `pods/log`.
     #[serde(default)]
     pub containers: Vec<String>,
 }
 
-/// Restart policy of the service.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Restart {
-    /// Enables `infra_prepare_restart`/`infra_confirm` for this service.
     #[serde(default)]
     pub allowed: bool,
-    /// Defers the restart so the reply can be spoken first.
     #[serde(default)]
     pub self_disrupting: bool,
-    /// Spoken inside the confirmation question.
     #[serde(default)]
     pub warning: String,
 }
 
-/// One catalog entry.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Service {
-    /// Stable identifier and dedupe key.
     #[serde(default)]
     pub id: String,
-    /// Human display name used in reports, status and speech.
     #[serde(default)]
     pub title: String,
-    /// Report section this service belongs to.
     #[serde(default)]
     pub group: String,
-    /// Human display name of the external host.
     #[serde(default)]
     pub host_title: String,
-    /// Spoken names.
     #[serde(default)]
     pub aliases: Aliases,
-    /// `k8s` or `external`.
     #[serde(default)]
     pub kind: String,
-    /// Kubernetes namespace for `k8s`.
     #[serde(default)]
     pub namespace: String,
-    /// Kubernetes workload for `k8s`.
     #[serde(default)]
     pub workload: Workload,
-    /// Containers used for logs and image selection.
     #[serde(default)]
     pub containers: Vec<String>,
-    /// Prometheus health signals.
     #[serde(default)]
     pub signals: Vec<Signal>,
-    /// Typed external probes.
     #[serde(default)]
     pub checks: Vec<Check>,
-    /// Log source.
     #[serde(default)]
     pub logs: LogSource,
-    /// Restart policy.
     #[serde(default)]
     pub restart: Restart,
-    /// Free-form description shown in `infra://catalog`.
     #[serde(default)]
     pub description: String,
-    /// Aliases in catalog order (ru then en); built by [`Catalog::parse`].
     #[serde(skip)]
     pub alias_index: Vec<String>,
-    /// Normalized aliases; built by [`Catalog::parse`].
     #[serde(skip)]
     pub normalized: Vec<String>,
 }
 
 impl Service {
-    /// Best spoken name: the title, then the first Russian alias, then the
-    /// first English alias, then the id.
     #[must_use]
     pub fn display_name(&self) -> String {
         let title = self.title.trim();
@@ -278,35 +194,21 @@ impl Service {
     }
 }
 
-/// The whole catalog file.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Catalog {
-    /// Sanitized free-form markdown about the topology.
     #[serde(default)]
     pub overview: String,
-    /// Alert names that are expected to fire permanently.
     #[serde(default)]
     pub ignore_alerts: Vec<String>,
-    /// Workloads that exist on purpose but are not catalog services, written
-    /// as `namespace/Kind/name`. The report coverage check names everything
-    /// else that runs in the cluster, so a new service cannot stay invisible.
     #[serde(default)]
     pub ignore_workloads: Vec<String>,
-    /// Fixed report group order.
     #[serde(default)]
     pub group_order: Vec<String>,
-    /// Allow-list of services.
     #[serde(default)]
     pub services: Vec<Service>,
 }
 
 impl Catalog {
-    /// Decodes and validates catalog YAML.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`CatalogError::Parse`] for malformed YAML and
-    /// [`CatalogError::Invalid`] for a document that breaks a schema rule.
     pub fn parse(data: &str) -> Result<Self, CatalogError> {
         let mut catalog: Self =
             serde_saphyr::from_str(data).map_err(|error| CatalogError::Parse(error.to_string()))?;
@@ -315,11 +217,6 @@ impl Catalog {
         Ok(catalog)
     }
 
-    /// Returns every schema problem it can find, joined into one error.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`CatalogError::Invalid`] when at least one rule is broken.
     pub fn validate(&self) -> Result<(), CatalogError> {
         let mut problems: Vec<String> = Vec::new();
         if self.services.is_empty() {
@@ -522,8 +419,6 @@ impl Catalog {
         }
     }
 
-    /// Reports whether `infra_status` should treat the named alert as expected
-    /// background noise. Matching ignores surrounding spaces and case.
     #[must_use]
     pub fn ignores_alert(&self, name: &str) -> bool {
         let name = name.trim();
@@ -536,15 +431,11 @@ impl Catalog {
             .any(|ignored| ignored.trim().to_lowercase() == lowered)
     }
 
-    /// Returns the service with the given id.
     #[must_use]
     pub fn find(&self, id: &str) -> Option<&Service> {
         self.services.iter().find(|service| service.id == id)
     }
 
-    /// Reports whether a workload is deliberately outside the catalog. The
-    /// report coverage check lists every cluster workload except the catalog
-    /// services and these entries.
     #[must_use]
     pub fn ignores_workload(&self, namespace: &str, kind: &str, name: &str) -> bool {
         self.ignore_workloads.iter().any(|entry| {
@@ -553,15 +444,6 @@ impl Catalog {
         })
     }
 
-    /// Maps a spoken name to exactly one service.
-    ///
-    /// Matching is tolerant: case, ё/е and punctuation are ignored, then an
-    /// exact normalized match wins, then a unique substring match, then a
-    /// unique one-edit-distance match for names long enough to make that safe.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`ResolveError`] for an empty, ambiguous or unknown name.
     pub fn resolve(&self, name: &str) -> Result<&Service, ResolveError> {
         let query = normalize(name);
         if query.is_empty() {
@@ -597,7 +479,6 @@ impl Catalog {
         Err(ResolveError::Unknown(name.trim().to_owned()))
     }
 
-    /// The overview markdown, or a short fallback.
     #[must_use]
     pub fn overview_text(&self) -> String {
         if !self.overview.trim().is_empty() {
@@ -606,7 +487,6 @@ impl Catalog {
         "Каталог сервисов без описания топологии.".to_owned()
     }
 
-    /// Renders the catalog as human-readable markdown for the model.
     #[must_use]
     pub fn catalog_text(&self) -> String {
         let mut out = String::from("# Каталог сервисов\n\n");
@@ -666,7 +546,6 @@ impl Catalog {
         out
     }
 
-    /// Only the Kubernetes-backed services.
     #[must_use]
     pub fn k8s_services(&self) -> Vec<&Service> {
         self.services
@@ -730,7 +609,6 @@ fn validate_check(prefix: &str, index: usize, check: &Check) -> Vec<String> {
     problems
 }
 
-/// Splits `namespace/Kind/name` and validates the kind.
 fn split_workload_key(raw: &str) -> Option<(&str, &str, &str)> {
     let mut parts = raw.split('/');
     let namespace = parts.next()?.trim();
@@ -754,8 +632,6 @@ fn unique_match(services: &[Service], matches: impl Fn(&Service) -> bool) -> Opt
     Some(first)
 }
 
-/// Lowercases a spoken name, folds ё to е and replaces any run of
-/// non-alphanumeric runes with a single space.
 #[must_use]
 pub fn normalize(raw: &str) -> String {
     let mut out = String::with_capacity(raw.len());

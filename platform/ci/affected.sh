@@ -1,12 +1,4 @@
 #!/usr/bin/env bash
-# Local reproduction of the CI routing decision. See docs/TESTING.md.
-#
-#   platform/ci/affected.sh --base origin/develop --format text
-#   platform/ci/affected.sh --changed-file solutions/scheduler/crates/scheduler/src/store/tick.rs
-#   platform/ci/affected.sh --base HEAD~5 --format json
-#
-# The script only reads Git and the Bazel loading graph; it never builds,
-# deploys or touches a device.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 exec node "$ROOT/platform/ci/affected.mjs" --root "$ROOT" "$@"

@@ -416,3 +416,30 @@ mise run kubectl -- delete -f projects/home/kubernetes/mcp-gateway/manifests/ext
 - The catalog assumes Alloy ingests `monitoring|currency-bot|openbao`; if the
   live Alloy keep-regex is narrower, Loki-backed log queries return nothing and
   the pods/log fallback must be used per service.
+
+## Заметки к коду
+
+Пояснения, перенесённые из комментариев исходников (код комментариев не содержит, см. `AGENTS.md`).
+
+- `BUILD.bazel` — Plain-file package: Flux renders these templates (postBuild substitution), and the deploy contracts/tests read them as data. The catalog and bb allow-list are validated by the real Rust validators in //solutions/mcp-gateway/crates/mcp-gateway:deploy_contract_tests, which consumes these templates as data.
+- `manifests/bb-targets.yaml` — Personal-only agent targets for the bb tool group and the voice path.
+- `manifests/catalog.yaml` — Infra service catalog for the home cluster.
+  - Alerts that always fire by design and must never be spoken as a problem: Watchdog proves the alerting pipeline is alive; InfoInhibitor is its alertmanager-side suppressor. Both stay reachable through infra_alert.
+- `manifests/deployment.yaml` — MCP infra gateway: one Deployment, one ClusterIP Service.
+  - Traceability only: a Deployment metadata change never rolls pods.
+  - KUBERNETES_API_URL/TOKEN_FILE/CA_FILE are left at their in-cluster defaults: https://kubernetes.default.svc and the projected ServiceAccount volume. Home Assistant REST for ha_* catalog checks.
+  - Voice entry point: a separate bearer token, never the MCP token.
+  - ClusterIP only: the gateway is reachable from Hermes (hostNetwork, node address) and from Prometheus; it is never published through Traefik.
+- `manifests/external-secrets.yaml` — Gateway secrets, materialised from OpenBao KV v2 by ESO.
+- `manifests/kustomization.yaml` — Flux-rendered manifest set for mcp-gateway (решение 54).
+- `manifests/network-policies.yaml` — NetworkPolicy for the MCP gateway pod.
+- `manifests/rbac.yaml` — RBAC for the MCP gateway pod itself. Applied by Flux, never by hand:
+- `manifests/servicemonitor.yaml` — kube-prometheus-stack runs with *SelectorNilUsesHelmValues=false, so any ServiceMonitor in the cluster is picked up. The selector matches only this Service, and the port name is explicit.
+- `test_deploy.py` — Deploy contracts for projects/home/kubernetes/mcp-gateway.
+  - Workloads the gateway may read but never restart: K3s' own components and the Flux bootstrap.
+  - Public files must not carry real addresses or secret-looking values.
+  - Never print a raw address in a group header when a host name exists.
+  - K3s and Flux own these; the gateway must never write here.
+  - The personal profile is fixed; a provider pin must be explicit so the gateway never silently picks a Pro model.
+  - The allowlist must not expose work project names: Hermes resolves names only among personal targets, and a work alias would be misleading.
+  - This is the security contract: RBAC cannot grant more than the catalog lists, and a catalog entry without RBAC would fail at runtime.

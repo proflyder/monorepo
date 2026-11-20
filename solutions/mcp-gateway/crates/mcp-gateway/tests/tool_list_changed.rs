@@ -1,14 +1,3 @@
-//! Contract for `notifications/tools/list_changed` on a fresh MCP session.
-//!
-//! A client that reconnects after a gateway restart keeps its old tool registry
-//! unless the server announces a change, so every initialized session must
-//! receive exactly one `notifications/tools/list_changed` on the standalone GET
-//! stream — no matter whether the client opens that stream before or after it
-//! posts `notifications/initialized`.
-//!
-//! The test drives the real router in-process (no socket) and reads the GET
-//! response body as the client would: an SSE frame stream.
-
 use std::sync::Arc;
 use std::sync::atomic::AtomicUsize;
 use std::time::{Duration, Instant};
@@ -143,7 +132,6 @@ async fn notify_initialized(app: &Router, session: &str) {
     let _ = axum::body::to_bytes(response.into_body(), 1 << 20).await;
 }
 
-/// Opens the standalone SSE stream and returns its response.
 async fn open_stream(app: &Router, session: &str) -> Response<Body> {
     let response = app
         .clone()
@@ -163,11 +151,6 @@ async fn open_stream(app: &Router, session: &str) -> Response<Body> {
     response
 }
 
-/// Reads the SSE stream and counts `notifications/tools/list_changed` frames.
-///
-/// The first frame has to arrive within [`FIRST_FRAME_WAIT`]; after that the
-/// stream is watched for [`DUPLICATE_WAIT`] more to prove the notification was
-/// sent once.
 async fn count_list_changed(body: Body) -> usize {
     const FIRST_FRAME_WAIT: Duration = Duration::from_secs(3);
     const DUPLICATE_WAIT: Duration = Duration::from_millis(500);

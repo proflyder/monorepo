@@ -29,7 +29,6 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import okio.BufferedSource
 
-/** Transport-level contract for the intercom signaling service. */
 interface IntercomClient {
     suspend fun registerEndpoint(displayName: String, capabilities: List<String>): Outcome<IntercomEndpoint>
     suspend fun listEndpoints(): Outcome<List<IntercomEndpoint>>
@@ -40,26 +39,9 @@ interface IntercomClient {
     suspend fun getIceConfig(): Outcome<List<IntercomIceServer>>
     suspend fun getStatus(): Outcome<IntercomStatus>
 
-    /**
-     * Opens the long-lived server-streaming `Watch` RPC and reconnects with a
-     * bounded backoff when it drops. The flow never completes on its own; the
-     * caller cancels it. The first connection marks this endpoint online.
-     */
     fun watch(): Flow<IntercomWatchEvent>
 }
 
-/**
- * Connect JSON client for home.v1.IntercomService.
- *
- * Unary RPCs use `application/json`; `Watch` is server streaming and therefore
- * uses the Connect streaming envelope framing over HTTP/1.1
- * (`application/connect+json`): a 1-byte flags word, a 4-byte big-endian
- * message length, then the JSON message. This avoids HTTP/2 and WebSockets.
- *
- * Security properties match the scheduler client: redirects are refused, the
- * token is only in the Authorization header, and the system TLS trust store is
- * used.
- */
 class ConnectIntercomClient(
     settings: ConnectionSettingsStore,
     baseClient: OkHttpClient,
@@ -82,9 +64,6 @@ class ConnectIntercomClient(
         .followSslRedirects(false)
         .retryOnConnectionFailure(false)
         .addInterceptor(ConnectionInterceptor(settings, Target.INTERCOM))
-        // No diagnostic interceptors here: HttpLoggingInterceptor(BODY) and Chucker
-        // read the whole response before returning it, and Watch never ends — the
-        // phone would never see RINGING -> CONNECTING and never send its offer.
         .build()
 
     override suspend fun registerEndpoint(
@@ -145,13 +124,10 @@ class ConnectIntercomClient(
                     streamWatch { event -> send(event) }
                 }
             }.onSuccess {
-                // A clean end is unusual for a permanent Watch; reconnect too.
                 backoffMillis = INITIAL_BACKOFF_MILLIS
             }.onFailure { failure ->
                 when (failure) {
                     is CancellationException -> throw failure
-                    // Offline/TLS/stream reset, or a malformed frame: drop this
-                    // stream and reconnect with backoff.
                     is IOException, is SerializationException -> Unit
                     else -> throw failure
                 }
@@ -171,8 +147,6 @@ class ConnectIntercomClient(
             .build()
 
         val call = streamClient.newCall(request)
-        // A blocking stream read does not react to coroutine cancellation by
-        // itself; cancel the OkHttp call so the Watch socket closes promptly.
         val cancellation = currentCoroutineContext()[Job]?.invokeOnCompletion { call.cancel() }
         runCatching { readStream(call, onEvent) }
             .also { cancellation?.dispose() }
@@ -216,7 +190,6 @@ class ConnectIntercomClient(
     }
 }
 
-/** Connect streaming framing: 1 flag byte + 4-byte big-endian length. */
 object ConnectFrames {
     private const val FLAG_END_STREAM = 0x01
     private const val MAX_FRAME_BYTES = 8 * 1024 * 1024
@@ -235,7 +208,6 @@ object ConnectFrames {
         return out
     }
 
-    /** Returns null on a clean end of input. */
     fun read(source: BufferedSource): Frame? {
         if (source.exhausted()) return null
         val header = source.readByteArray(5L)

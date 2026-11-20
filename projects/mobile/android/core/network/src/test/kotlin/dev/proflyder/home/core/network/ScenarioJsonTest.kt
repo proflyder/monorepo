@@ -72,7 +72,6 @@ class ScenarioJsonTest {
         assertEquals("120", steps[2].jsonObject.getValue("delay").jsonObject["seconds"]!!.jsonPrimitive.content)
 
         val parsed = ScenarioJson.parseScenario(encoded)
-        // UpdateRequest carries only client-controlled fields; server fields stay on the server.
         assertEquals(sample().copy(createdUnix = 0, updatedUnix = 0, nextDueUnix = 0), parsed)
         assertEquals("4", requestJson["expectedRevision"]!!.jsonPrimitive.content)
     }
@@ -108,7 +107,6 @@ class ScenarioJsonTest {
             Json.parseToJsonElement((parsed.steps.single() as ScenarioStep.Unknown).rawJson),
         )
 
-        // Saving the same scenario again must not drop the retained objects.
         val again = WireJson.encodeToJsonElement(
             UpdateScenarioRequestDto.serializer(),
             ScenarioJson.updateRequest(parsed, 1),

@@ -1,13 +1,5 @@
 import { DispatchError } from "./errors.js";
 
-// Strict, dependency-free boundary validation. The plugin runs inside the bb
-// server and must not pull an npm dependency only to reject malformed JSON;
-// the rules below are intentionally small and explicit.
-
-// The exact params each method accepts, split into required and optional.
-// `contract/params.json` pins the same table: the gateway's Go contract test
-// and the plugin's JS test both read it, so a field added on one side alone
-// fails on the other. Keep the two in sync in the same change.
 export const METHOD_PARAMS = {
   targets: { required: [], optional: [] },
   status: { required: [], optional: ["limit"] },
@@ -113,9 +105,6 @@ function parseParams(method, params) {
         ),
       };
     case "updates": {
-      // No afterSeq is the bootstrap call: only the current cursor is
-      // returned, never history. waitSeconds is capped at the 25 s budget of
-      // the voice long-poll.
       const afterSeq =
         params.afterSeq === undefined
           ? undefined
@@ -176,7 +165,6 @@ function expectParams(value, method) {
   }
 }
 
-// The request envelope is fixed: exactly `method` and `params`.
 function expectOnlyKeys(value, allowed, name) {
   for (const key of Object.keys(value)) {
     if (!allowed.includes(key)) {
@@ -215,11 +203,6 @@ function invalid(message) {
   return new DispatchError("invalid_request", message, { httpStatus: 400 });
 }
 
-// `bb.sdk.plugins.callRpc` accepts a zod schema and calls `outputSchema.parse`
-// on the other plugin's result. A Standard Schema object is not enough: it has
-// only `~standard.validate`, so `callRpc` fails before the dispatcher sees any
-// data. These are minimal parse-compatible schemas; like the rest of this
-// module they stay dependency-free and treat cross-plugin data as untrusted.
 export function outputSchema(validate) {
   return {
     parse(value) {

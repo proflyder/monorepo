@@ -1,0 +1,13 @@
+#!/usr/bin/env node
+"use strict";
+
+const { spawnSync } = require("node:child_process");
+const path = require("node:path");
+const process = require("node:process");
+
+const root = path.resolve(__dirname, "..");
+const scan = spawnSync(process.execPath, [path.join(root, "platform", "quality", "no_comments.mjs"), "--staged"], {
+  cwd: root,
+  stdio: "inherit",
+});
+process.exit(scan.error ? 1 : (scan.status ?? 1));

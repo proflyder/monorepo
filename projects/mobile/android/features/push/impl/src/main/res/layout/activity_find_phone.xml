@@ -1,6 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The ringing screen: one button, the reason, and nothing else that could be
-     misread at 3 a.m. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"

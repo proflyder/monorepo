@@ -1,8 +1,3 @@
-//! Актор API-сервера: TCP-транспорт (plaintext или Noise по первому байту клиента), лимиты
-//! соединений и keepalive, владелец голосового пайплайна среди нескольких клиентов, поток
-//! логов, ключ шифрования. Сообщения сущностей — в `server/entities.rs`, разбор команд — в
-//! `server/commands.rs`.
-
 use std::cell::{Cell, RefCell};
 use std::future::poll_fn;
 use std::io;
@@ -34,30 +29,19 @@ use entities::{EntityState, parse_wireless};
 
 pub use esphome_proto::{ESPHOME_VERSION, PROJECT_NAME};
 
-/// Завершить голосовой run, если сокет отстал настолько: дыра в фразе заставит HA
-/// транскрибировать мусор.
 const AUDIO_BACKLOG_LIMIT: usize = 256 << 10;
-/// Отказаться от клиента, который перестал читать.
 const MAX_BACKLOG: usize = 8 << 20;
-/// На одно пробуждение и клиента: потоковый пир не должен морить голодом runtime.
 const READ_CHUNK: usize = 16 << 10;
-/// HA плюс, например, просмотрщик логов ESPHome dashboard или aioesphomeapi.
 const MAX_CLIENTS: usize = 4;
-/// Соединения, ещё не приславшие валидный hello.
 const MAX_PENDING: usize = 4;
 const HELLO_TIMEOUT: Duration = Duration::from_secs(15);
 const IDLE_PING: Duration = Duration::from_secs(45);
 const IDLE_DROP: Duration = Duration::from_secs(100);
 const TIME_RESYNC: Duration = Duration::from_secs(6 * 3600);
 const TICK_MS: u64 = 5000;
-/// Ответ SetKey уходит в старую сессию до перечитывания файла ключа.
 const KEY_RELOAD_MS: u64 = 100;
-/// Пауза accept после ошибки (EMFILE, ENFILE, ENOBUFS, ENOMEM): слушатель остаётся готовым,
-/// повтор сразу закрутил бы цикл.
 const ACCEPT_RETRY_MS: u64 = 500;
 
-/// Accept не удался из-за нехватки дескрипторов или памяти (слушатель остаётся готовым), а не
-/// из-за одного принимаемого соединения.
 fn accept_exhausted(e: &io::Error) -> bool {
     matches!(
         e.raw_os_error(),
@@ -65,50 +49,30 @@ fn accept_exhausted(e: &io::Error) -> bool {
     )
 }
 
-/// Состояние, которое читают геттеры handle; актор обновляет его до отправки события.
-///
-/// Это минимальное зеркало, а не второй источник истины: актор владеет им, геттеры обязаны
-/// быть синхронными и неблокирующими.
 pub struct Shared {
     pub connected: Cell<bool>,
     pub voice_subscribed: Cell<bool>,
     pub mdns_txt: RefCell<Vec<String>>,
-    /// Последний выданный id голосового run (пишет только handle).
     pub run_seq: Cell<u64>,
 }
 
 pub enum Cmd {
-    VoiceRequestStart {
-        run: u64,
-        phrase: String,
-    },
+    VoiceRequestStart { run: u64, phrase: String },
     VoiceRequestStop,
     VoiceSendAudio(Vec<i16>),
-    /// VoiceAssistantAudio{end=true}: мягкий конец аудио, не abort.
     VoiceAudioEnd,
     VoiceAnnounceFinished(bool),
     VoiceAnswerFinished(bool),
     SetActiveWakeWords(Vec<String>),
     Publish(Publish),
-    /// Последний `ApiHandle` упал: закрыть порт и попросить клиентов отключиться.
     Shutdown,
-    ClientData {
-        id: u64,
-        bytes: Vec<u8>,
-    },
-    ClientEof {
-        id: u64,
-    },
-    ClientError {
-        id: u64,
-        kind: io::ErrorKind,
-    },
+    ClientData { id: u64, bytes: Vec<u8> },
+    ClientEof { id: u64 },
+    ClientError { id: u64, kind: io::ErrorKind },
     RefreshDiagnostics,
     Diagnostics(Diagnostics),
 }
 
-/// Привязывает порт (все IPv4-интерфейсы), читает ключ шифрования и запускает актор в текущем
-/// `LocalSet`.
 pub fn spawn(
     id: DeviceIdentity,
     cfg: ApiConfig,
@@ -123,7 +87,6 @@ pub fn spawn_with(
     mut cfg: ApiConfig,
 ) -> Result<(crate::ApiHandle, UnboundedReceiver<ApiEvent>), crate::SpawnError> {
     info!("api: listening on :{} as '{}'", cfg.port, id.name);
-    // Пустой путь означает «без шифрования», как в C++-конфигурации.
     cfg.key_path = cfg.key_path.filter(|p| !p.as_os_str().is_empty());
     let key = key::load_key(cfg.key_path.as_deref());
     let shared = Rc::new(Shared {
@@ -164,7 +127,6 @@ pub fn spawn_with(
         stop: false,
     };
     pulsar_core::supervisor().spawn_local("api", server.run());
-    // Первичные диагностики приходят из blocking-пула, не из цикла актора.
     let _ = cmds.send(Cmd::RefreshDiagnostics);
     Ok((
         crate::ApiHandle {
@@ -176,7 +138,6 @@ pub fn spawn_with(
     ))
 }
 
-/// "aabbccddeeff", как ESPHome кладёт в mDNS TXT и Noise server hello.
 pub fn mac_plain(mac: &str) -> String {
     mac.chars()
         .filter(|&c| c != ':')
@@ -190,7 +151,6 @@ pub fn mac_plain(mac: &str) -> String {
         .collect()
 }
 
-/// TXT-записи `_esphomelib._tcp`.
 pub fn txt_records(id: &DeviceIdentity, key_supported: bool, has_key: bool) -> Vec<String> {
     let mut txt = vec![
         format!("friendly_name={}", id.friendly_name),
@@ -202,7 +162,6 @@ pub fn txt_records(id: &DeviceIdentity, key_supported: bool, has_key: bool) -> V
         format!("project_name={PROJECT_NAME}"),
         format!("project_version={}", id.project_version),
     ];
-    // HA читает их, чтобы попросить ключ / предложить провижининг до подключения.
     if key_supported {
         let field = if has_key {
             "api_encryption"
@@ -214,7 +173,6 @@ pub fn txt_records(id: &DeviceIdentity, key_supported: bool, has_key: bool) -> V
     txt
 }
 
-/// Наши уровни <-> ESPHome LogLevel (DEBUG 5, INFO 3, WARN 2, ERROR 1).
 fn esphome_level(level: Level) -> u32 {
     match level {
         Level::ERROR => 1,
@@ -238,18 +196,14 @@ pub struct Client {
     out: UnboundedSender<Vec<u8>>,
     backlog: Rc<Cell<usize>>,
     session: Session,
-    /// Неполный кадр, оставшийся от прошлого чтения: TCP режет кадры произвольно.
     rbuf: Vec<u8>,
     hello: bool,
-    /// Подписан на состояния сущностей.
     states: bool,
-    /// Порядок его SubscribeVoiceAssistant(true), 0 = не подписан.
     voice_wanted: u64,
     connected_at: Instant,
     last_rx: Instant,
     ping_outstanding: bool,
     last_time_req: Instant,
-    /// Уровень SubscribeLogsRequest (ESPHome LogLevel), 0 = нет.
     log_level: u32,
 }
 
@@ -283,39 +237,26 @@ struct Server {
     cmd_handle: Handle<Cmd>,
     listener: Box<dyn Listener>,
     timers: Timers<Timer>,
-    /// Строки логов приходят из любого потока; sink только будит актор через это.
     log_notify: Arc<Notify>,
-    /// Все соединения в порядке accept. Соединение считается в MAX_CLIENTS только после
-    /// валидного HelloRequest (после Noise handshake при шифровании), и только тогда может
-    /// вытеснить установленного клиента: сканеры портов и мусор не сбивают HA.
     clients: Vec<Client>,
     next_client: u64,
     key: Key,
-    /// Упорядочивает голосовые подписки (`Client::voice_wanted`).
     voice_seq: u64,
-    /// Run id последнего voice_request_start: к какому run относятся голосовые события.
     run: u64,
-    /// Микрофонное аудио остановлено для этого run (backlog).
     audio_overflowed: bool,
-    /// Открытый текст Noise-кадра при шифровании.
     tx_scratch: Vec<u8>,
-    /// Ветка accept выключена до Timer::AcceptResume.
     accept_paused: bool,
-    /// Ошибка accept уже залогирована; сбрасывается следующим принятым соединением.
     accept_failing: bool,
     voice: VoiceOwnership,
-    /// Единственный источник истины состояний сущностей; replay обходит таблицу.
     states: std::collections::BTreeMap<EntityKey, EntityState>,
     diagnostics: Diagnostics,
     started: Instant,
-    /// Пришёл `Cmd::Shutdown`: цикл завершается, клиенты получают DisconnectRequest.
     stop: bool,
 }
 
 impl Server {
     async fn run(mut self) {
         loop {
-            // Таймеры первыми (контракт порядка pulsar_core::Timers); команды раньше сокетов.
             let wake = tokio::select! {
                 biased;
                 t = self.timers.next() => Wake::Timer(t),
@@ -366,7 +307,6 @@ impl Server {
         }
     }
 
-    /// Обновляет то, что читают геттеры handle, затем отправляет событие.
     fn emit(&self, ev: ApiEvent) {
         self.shared.connected.set(self.ready());
         self.shared
@@ -459,8 +399,6 @@ impl Server {
         }
     }
 
-    /// Передаёт пайплайн клиенту `voice_choice`; при каждом переходе события видят false
-    /// перед true.
     fn update_voice_owner(&mut self) {
         let want = voice::voice_choice(
             self.clients
@@ -511,11 +449,8 @@ impl Server {
         }
     }
 
-    // ------------------------------------------------------------ input
-
     fn command(&mut self, cmd: Cmd) {
         match cmd {
-            // Обрабатывает цикл: здесь только флаг, чтобы teardown был в одном месте.
             Cmd::Shutdown => self.stop = true,
             Cmd::ClientData { id, bytes } => self.client_data(id, &bytes),
             Cmd::ClientEof { id } => self.close_client(id, "connection closed by peer"),
@@ -525,8 +460,6 @@ impl Server {
             Cmd::RefreshDiagnostics => self.spawn_diagnostics(false),
             Cmd::Diagnostics(d) => self.apply_diagnostics(d),
             Cmd::VoiceRequestStart { run, phrase } => self.voice_request_start(run, &phrase),
-            // Устаревшие команды, адресованные run предыдущего владельца. Отчёт об анонсе
-            // относится к анонсу, а не к run, и уходит владельцу всегда.
             Cmd::VoiceRequestStop
             | Cmd::VoiceSendAudio(_)
             | Cmd::VoiceAudioEnd
@@ -548,8 +481,6 @@ impl Server {
         c.last_rx = Instant::now();
         c.ping_outstanding = false;
         c.rbuf.extend_from_slice(bytes);
-        // Верхняя граница буфера — максимальный кадр плюс два чтения (кадр мог закончиться, а
-        // следующее чтение уже принесло начало нового); больше в неполном кадре быть не может.
         if c.rbuf.len() > esphome_proto::frame::MAX_FRAME + 2 * READ_CHUNK {
             self.close_client(id, "frame too large");
             return;
@@ -557,11 +488,9 @@ impl Server {
         let input = std::mem::take(&mut c.rbuf);
         let mut out = Vec::new();
         let feed = c.session.feed(&input, &mut out);
-        // Протокольный вывод (server hello, ответ handshake, отказ) — до ответов на сообщения.
         if !out.is_empty() {
             self.send_raw(id, out);
         }
-        // Неполный хвост возвращаем до обработки: она может закрыть клиента.
         if feed.consumed < input.len()
             && let Some(c) = self.client(id)
         {
@@ -578,8 +507,6 @@ impl Server {
         }
     }
 
-    // ------------------------------------------------------------ output
-
     fn send_raw(&mut self, id: u64, bytes: Vec<u8>) {
         let Some(c) = self.client(id) else { return };
         let pending = c.backlog.get() + bytes.len();
@@ -587,8 +514,6 @@ impl Server {
             self.close_client(id, "client not reading");
             return;
         }
-        // Счётчик уменьшает клиентская задача после записи в сокет: он и есть объём вывода,
-        // который ещё не ушёл, включая то, что лежит в канале.
         c.backlog.set(pending);
         if c.out.send(bytes).is_err() {
             self.close_client(id, "connection gone");
@@ -623,8 +548,6 @@ impl Server {
         }
         self.send_raw(id, frame);
     }
-
-    // ------------------------------------------------------------ timers
 
     fn tick(&mut self) {
         let now = Instant::now();
@@ -695,9 +618,6 @@ impl Server {
         self.send_diagnostics(None, ip_changed);
     }
 
-    /// NoiseEncryptionSetKeyRequest: пустой ключ очищает. Как в ESPHome, ответ уходит в старую
-    /// сессию, затем все соединения закрываются, чтобы вернулись только клиенты с новым ключом
-    /// (или plaintext-клиенты после очистки).
     fn set_key(&mut self, b64: &[u8]) -> bool {
         match key::set_key(self.cfg.key_path.as_deref(), b64, &self.key) {
             Err(e) => {
@@ -727,8 +647,6 @@ impl Server {
             s.close_client(id, "encryption key changed");
         });
     }
-
-    // ------------------------------------------------------------ logs
 
     fn update_log_sink(&self) {
         let want = self
@@ -766,8 +684,6 @@ impl Server {
         }
     }
 
-    // ------------------------------------------------------------ voice (handle commands)
-
     fn voice_request_start(&mut self, run: u64, phrase: &str) {
         self.run = run;
         self.voice.start_run();
@@ -798,7 +714,6 @@ impl Server {
         self.send_msg(vc, msg::VA_REQUEST, &prost::Message::encode_to_vec(&m));
     }
 
-    /// 16 кГц моно S16LE, пока пайплайн слушает.
     fn voice_send_audio(&mut self, pcm: &[i16]) {
         let Some(vc) = self.voice_client() else {
             return;
@@ -806,7 +721,6 @@ impl Server {
         if pcm.is_empty() || self.audio_overflowed {
             return;
         }
-        // Дыра во фразе заставит HA транскрибировать мусор: лучше завершить run.
         if self
             .client(vc)
             .is_some_and(|c| c.backlog.get() > AUDIO_BACKLOG_LIMIT)
@@ -825,9 +739,6 @@ impl Server {
         self.send_msg(vc, msg::VA_AUDIO, &prost::Message::encode_to_vec(&m));
     }
 
-    /// `VoiceAssistantAudio{end = true}` без данных: мягкий «говорящий закончил»
-    /// (aioesphomeapi `handle_stop(False)`), в отличие от abort-запроса
-    /// `VoiceAssistantRequest{start = false}` в [`Self::voice_request_stop`].
     fn voice_send_audio_end(&mut self) {
         let Some(vc) = self.voice_client() else {
             return;
@@ -852,8 +763,6 @@ impl Server {
             &prost::Message::encode_to_vec(&m),
         );
     }
-
-    // ------------------------------------------------------------ dispatch
 
     fn handle(&mut self, id: u64, msg_type: u32, p: &[u8]) {
         let Some(c) = self.client(id) else { return };
@@ -966,7 +875,6 @@ impl Server {
     }
 
     fn on_voice_response(&mut self, id: u64, p: &[u8]) {
-        // Ответы на наши запросы приходят только от владельца пайплайна.
         if self.voice.current() != Some(id) {
             return;
         }
@@ -988,7 +896,6 @@ impl Server {
         let m: esphome_proto::pb::NoiseEncryptionSetKeyRequest = decode(p);
         let b64 = m.key.unwrap_or_default();
         let ok = self.set_key(esphome_proto::api_key::trim(&b64));
-        // Как C++-сервер: false не пишется на провод (поле отсутствует).
         let resp = esphome_proto::pb::NoiseEncryptionSetKeyResponse {
             success: ok.then_some(true),
         };
@@ -999,9 +906,6 @@ impl Server {
         );
     }
 
-    // ------------------------------------------------------------ teardown
-
-    /// Handle'ы кончились (выход демона): событий отсюда больше нет.
     fn teardown(&mut self) {
         pulsar_core::set_log_sink(None, None);
         for id in self
@@ -1011,8 +915,6 @@ impl Server {
             .map(|c| c.id)
             .collect::<Vec<_>>()
         {
-            // Best effort: с DisconnectRequest HA считает закрытие ожидаемым и тихо
-            // переподключается, когда демон вернётся. Клиентская задача дочитает очередь.
             self.send_msg(id, msg::DISCONNECT_REQ, &[]);
         }
         self.clients.clear();
@@ -1025,9 +927,6 @@ fn decode<M: prost::Message + Default>(p: &[u8]) -> M {
     m
 }
 
-/// Клиентская задача: читатель и писатель сокета гоняются в одном `select!`. Чтение не
-/// останавливается, пока писатель ждёт медленного клиента: иначе сервер не увидел бы, что
-/// клиент не читает, и не закрыл его по лимиту backlog.
 async fn run_client(
     transport: Box<dyn Transport>,
     mut out_rx: UnboundedReceiver<Vec<u8>>,
@@ -1047,8 +946,6 @@ async fn run_client(
         let _ = write.shutdown().await;
         true
     });
-    // После EOF/ошибки чтения писатель дочитывает очередь: ответы на уже полученные
-    // сообщения актор положит раньше, чем закроет клиента.
     loop {
         tokio::select! {
             r = read.read(&mut buf) => match r {
@@ -1069,7 +966,6 @@ async fn run_client(
                 }
             },
             clean = &mut writer => {
-                // Сокет закрыт или актор ушёл: читать больше некуда.
                 if !clean {
                     let _ = cmds.send(Cmd::ClientError {
                         id,

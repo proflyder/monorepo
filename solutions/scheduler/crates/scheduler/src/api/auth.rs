@@ -1,8 +1,3 @@
-//! Bearer authentication as a Connect interceptor.
-//!
-//! The token is compared through fixed-size SHA-256 digests, so the comparison
-//! is constant-time and the secret never enters a log line.
-
 use connectrpc::interceptor::{UnaryRequest, UnaryResponse};
 use connectrpc::{ConnectError, Interceptor, Next, async_trait};
 use http::header::AUTHORIZATION;
@@ -11,14 +6,12 @@ use subtle::ConstantTimeEq;
 
 const BEARER_PREFIX: &str = "bearer ";
 
-/// Rejects every RPC without a valid `Authorization: Bearer <token>` header.
 pub struct BearerAuth {
     expected: [u8; 32],
 }
 
 impl std::fmt::Debug for BearerAuth {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        // The digest is derived from the secret and never printed.
         formatter.debug_struct("BearerAuth").finish_non_exhaustive()
     }
 }
@@ -31,8 +24,6 @@ impl BearerAuth {
         Self { expected }
     }
 
-    /// Whether this request carries the expected bearer token. Shared with the
-    /// plain JSON push routes, which are outside the Connect interceptor.
     pub fn authorized(&self, header: Option<&http::HeaderValue>) -> bool {
         self.matches(header)
     }

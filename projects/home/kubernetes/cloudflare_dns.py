@@ -1,12 +1,4 @@
 #!/usr/bin/env python3
-"""Ensure a DNS-only Cloudflare A record for a private home host.
-
-    cloudflare_dns.py <token-env-file> <name> <address>
-
-The token is read from CLOUDFLARE_API_TOKEN=... in the env file, so it never
-appears in argv. The record is created, corrected (content/proxied) or left
-alone; the zone is the longest Cloudflare zone that contains the name.
-"""
 from __future__ import annotations
 
 import json

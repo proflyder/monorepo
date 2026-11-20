@@ -1,12 +1,3 @@
-// Cloudflare Worker: external dead-man switch for home alerting.
-//
-// Alertmanager routes the always-firing Watchdog alert here every 5 minutes.
-// The Worker records the ping in KV; a Cron Trigger notices silence and sends
-// a Telegram message through the same infra bot Alertmanager already uses.
-// It sends a recovery message when pings resume.
-//
-// This module has no runtime dependencies beyond the Workers runtime.
-
 import {
   configFromEnv,
   constantTimeEqual,
@@ -23,7 +14,6 @@ export const KV_KEYS = Object.freeze({
   lastReminder: "last_reminder_unix",
 });
 
-// Decision objects use camelCase fields; KV uses the documented snake_case keys.
 const WRITE_KEYS = Object.freeze({
   lastPingUnix: KV_KEYS.lastPing,
   status: KV_KEYS.status,
@@ -64,7 +54,6 @@ async function sendTelegram(env, text, fetchImpl) {
     throw new Error("telegram is not configured (TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID)");
   }
 
-  // The token is part of the Bot API URL. Never log the URL or the response body.
   const response = await fetchImpl(`https://api.telegram.org/bot${token}/sendMessage`, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -102,7 +91,6 @@ export async function handleFetch(request, env, deps = {}) {
   const fetchImpl = deps.fetchImpl ?? fetch;
   const url = new URL(request.url);
 
-  // Minimal liveness probe without auth and without exposing state.
   if (url.pathname === "/health") {
     if (request.method !== "GET") return plainText("not found", 404);
     return plainText("ok", 200);
@@ -113,8 +101,6 @@ export async function handleFetch(request, env, deps = {}) {
   }
 
   if (!env.PING_TOKEN) {
-    // Fail closed on a missing secret; a misconfigured deploy must not accept
-    // unauthenticated heartbeats.
     return plainText("not configured", 503);
   }
   if (!constantTimeEqual(bearerToken(request), env.PING_TOKEN)) {
@@ -133,8 +119,6 @@ export async function handleFetch(request, env, deps = {}) {
         await sendTelegram(env, action.text, fetchImpl);
       }
     } catch (error) {
-      // Keep the liveness timestamp current so the cron does not declare a
-      // second outage, then let Alertmanager retry the ping (and recovery).
       await applyWrites(env.HEARTBEAT, { lastPingUnix: now });
       console.error(
         "heartbeat: recovery delivery failed:",
@@ -156,9 +140,6 @@ export async function handleScheduled(env, deps = {}) {
 
   if (!decision.action) return;
 
-  // Send first: if Telegram fails, the state stays unchanged and the next cron
-  // tick retries. A KV failure after a successful send can duplicate one
-  // message, which is preferable to silently losing an outage alert.
   await sendTelegram(env, decision.action.text, fetchImpl);
   await applyWrites(env.HEARTBEAT, decision.writes);
 }

@@ -1,16 +1,3 @@
-//! HTTP surface: authenticated MCP, the separate voice bearer, health,
-//! readiness and the Prometheus endpoint.
-//!
-//! `rmcp`'s Streamable HTTP transport is wrapped in a thin compatibility
-//! layer for the two observable Go-SDK behaviours the frozen fixtures pin:
-//!
-//! * every SSE frame carries the explicit `event: message` line (rmcp writes
-//!   the implicit-event form `data: …`), and
-//! * the Go error envelopes for a missing session, a wrong content type and a
-//!   non-initialize request without a session.
-//!
-//! Everything else (tool results, resources, auth) is the SDK's own output.
-
 use std::collections::BTreeMap;
 use std::convert::Infallible;
 use std::future::Future;
@@ -36,32 +23,21 @@ use crate::mcp::GatewayHandler;
 use crate::metrics::SharedMetrics;
 use crate::tools::{Deps, ToolGroup};
 
-/// The MCP bearer realm.
 pub const MCP_REALM: &str = "mcp-gateway";
-/// The voice bearer realm.
 pub const VOICE_REALM: &str = "mcp-gateway-voice";
 pub const APP_REALM: &str = "home-app";
 
 const MAX_MCP_BODY: usize = 4 << 20;
 
-/// Everything the HTTP surface needs.
 pub struct Options {
-    /// MCP bearer token.
     pub auth_token: String,
-    /// Voice bearer token; `None` disables `/v1/voice/*` like the Go server.
     pub voice_token: Option<String>,
-    /// Voice routes mounted behind the separate bearer; `None` keeps a stub.
     pub voice: Option<Router<ObserveState>>,
     pub system: Option<(String, Arc<crate::system::Dashboard>)>,
-    /// Enabled tool groups.
     pub groups: Vec<Arc<dyn ToolGroup>>,
-    /// Shared tool dependencies.
     pub deps: Arc<Deps>,
-    /// Gateway metrics.
     pub metrics: SharedMetrics,
-    /// Reported implementation version.
     pub version: String,
-    /// Readiness flag.
     pub ready: bool,
 }
 
@@ -71,7 +47,6 @@ struct Auth {
     realm: &'static str,
 }
 
-/// Builds the complete axum router.
 pub fn router(options: Options) -> Router {
     let handler = GatewayHandler::new(Arc::clone(&options.deps), &options.groups, options.version);
     let config = StreamableHttpServerConfig::default()
@@ -133,7 +108,6 @@ pub fn router(options: Options) -> Router {
         .with_state(state)
 }
 
-/// Shared middleware state of the HTTP surface.
 #[derive(Clone)]
 pub struct ObserveState {
     metrics: SharedMetrics,
@@ -223,7 +197,6 @@ async fn require_bearer(
     next.run(request).await
 }
 
-/// Constant-time byte comparison without an extra dependency.
 fn constant_time_eq(left: &str, right: &str) -> bool {
     let left = left.as_bytes();
     let right = right.as_bytes();
@@ -291,8 +264,6 @@ fn route_of(path: &str) -> &str {
         _ => "other",
     }
 }
-
-// --- Streamable HTTP compatibility wrapper --------------------------------
 
 #[derive(Clone)]
 struct McpService {
@@ -398,9 +369,6 @@ impl Service<Request<Body>> for McpService {
                 ));
             }
 
-            // The standalone GET stream carries server-initiated messages
-            // (including `notifications/tools/list_changed`); it must stay
-            // unbuffered so the notification reaches the client immediately.
             let mut request = request;
             if !request.headers().contains_key(header::HOST) {
                 request
@@ -427,11 +395,6 @@ fn is_event_stream(headers: &HeaderMap) -> bool {
         .is_some_and(|value| value.starts_with("text/event-stream"))
 }
 
-/// Adds the explicit `event: message` line the Go SDK writes.
-///
-/// The SDK also emits a `id:`/`retry:` primed keep-alive frame on POST
-/// responses; the Go SDK sends only the message frame, so metadata-only frames
-/// are dropped and a trailing `id:` line is not forwarded.
 fn explicit_event_message(body: &str) -> String {
     let mut out = String::with_capacity(body.len() + 16);
     for frame in body.split_inclusive("\n\n") {
@@ -468,7 +431,6 @@ fn sse_response(body: String) -> Response<Body> {
         .expect("valid response")
 }
 
-/// Unused import guard for `BTreeMap`; kept out of the public surface.
 #[allow(dead_code)]
 fn _unused(_: &BTreeMap<String, String>) {}
 

@@ -1,8 +1,5 @@
-# Real deployment values are private. Every application is single-instance.
 nodeName: ""
 storage: {}
 workloads: {}
-# The Flux release enables the drift Service; the CI/admin path keeps it off so
-# `helm upgrade` without the sidecar stays valid.
 hermesConfigDrift:
   enabled: false

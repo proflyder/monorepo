@@ -1,13 +1,4 @@
 #!/bin/sh
-# Builds static (musl) dropbear + OpenSSH sftp-server with zig into ssh/out/<arch>/ for
-# aarch64 (Station Midi) and armhf (Station Lite 2).
-# Usage: ssh/build.sh            (host tools: zig >= 0.13, curl, make; ZIG=/path/to/zig to override)
-#
-# LEGACY for the live Midi station. The device runs the rootfs prebuilt
-# /usr/sbin/dropbear 2026.94 started by /etc/init.d/S99dropbear (see
-# projects/station/configs/station-applied/S99dropbear and docs/STATION-SOFTWARE.md).
-# This script stays only for `pulsar-install --ssh`, which installs another
-# dropbear into /data/dropbear; do not run it on a station that uses S99dropbear.
 set -eu
 DROPBEAR_VER=2025.88
 DROPBEAR_SHA256=783f50ea27b17c16da89578fafdb6decfa44bb8f6590e5698a4e4d3672dc53d4
@@ -19,7 +10,7 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 DL=$HERE/out/src
 mkdir -p "$DL"
 
-fetch() { # url sha256 file
+fetch() {
   [ -f "$3" ] || { curl -fsSL -o "$3.part" "$1" && mv "$3.part" "$3"; }
   echo "$2  $3" | sha256sum -c --quiet -
 }
@@ -31,14 +22,12 @@ fetch "https://cdn.openbsd.org/pub/OpenBSD/OpenSSH/portable/openssh-$OPENSSH_VER
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
 
-build() { # arch zig-target autoconf-host [cpu flags]
+build() {
   arch=$1 host=$3
   out=$HERE/out/$arch
   mkdir -p "$out" "$WORK/$arch"
   export CC="$ZIG cc -target $2 ${4:-}" AR="$ZIG ar" RANLIB="$ZIG ranlib"
 
-  # dropbear: one multi-call binary; start.sh creates the dropbear/dropbearkey/scp/dbclient links.
-  # Everything lives in /data/dropbear (rootfs is read-only).
   tar -xjf "$DL/dropbear-$DROPBEAR_VER.tar.bz2" -C "$WORK/$arch"
   cd "$WORK/$arch/dropbear-$DROPBEAR_VER"
   cat >localoptions.h <<'EOF'
@@ -53,7 +42,6 @@ EOF
     || { tail -20 build.log; exit 1; }
   cp dropbearmulti "$out/dropbearmulti"
 
-  # sftp-server (scp in modern OpenSSH clients and sftp need it); no OpenSSL/zlib required.
   tar -xzf "$DL/openssh-$OPENSSH_VER.tar.gz" -C "$WORK/$arch"
   cd "$WORK/$arch"/openssh-*/
   LDFLAGS="-static -s" ./configure --host="$host" --without-openssl --without-zlib \

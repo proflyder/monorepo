@@ -4,7 +4,6 @@ import dev.proflyder.home.core.model.RepeatKind
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
-/** Day set <-> preset mapping: the editor and the sheet share these rules. */
 class AlarmRepeatRulesTest {
     @Test
     fun weekdaysMapToTheWeekdaysPreset() {

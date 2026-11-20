@@ -1,13 +1,3 @@
-//! The mcp-gateway voice client: ask where an utterance belongs, long-poll a
-//! routed turn's result and the dispatcher updates.
-//!
-//! The request bodies, paths and timeouts are the wire contract:
-//!
-//! * utterance: 5 s (`HERMES_VOICE_GATEWAY_TIMEOUT`);
-//! * result/updates: the gateway timeout plus the long-poll wait, because the
-//!   server only answers when the wait expires;
-//! * a non-object JSON response is treated as an empty object.
-
 use std::time::Duration;
 
 use serde_json::Value;
@@ -19,12 +9,10 @@ use voice_contract::{
 use super::TokenProvider;
 use crate::domain::profile::Profile;
 
-/// Paths of the voice API.
 pub const UTTERANCE_PATH: &str = "/v1/voice/utterance";
 pub const RESULT_PATH: &str = "/v1/voice/result";
 pub const UPDATES_PATH: &str = "/v1/voice/updates";
 
-/// One gateway call failure. It never contains the bearer or a response body.
 #[derive(Debug, thiserror::Error)]
 pub enum GatewayError {
     #[error("gateway URL is not configured")]
@@ -37,7 +25,6 @@ pub enum GatewayError {
     Decode,
 }
 
-/// Calls the mcp-gateway voice routes.
 pub struct Gateway {
     base_url: String,
     timeout: Duration,
@@ -56,12 +43,6 @@ impl std::fmt::Debug for Gateway {
 }
 
 impl Gateway {
-    /// Builds a client. See [`crate::relay::Upstream::new`] for the ring
-    /// provider requirement.
-    ///
-    /// # Errors
-    ///
-    /// Returns a request error when the HTTP client cannot be built.
     pub fn new(
         base_url: &str,
         token: TokenProvider,
@@ -85,11 +66,6 @@ impl Gateway {
         })
     }
 
-    /// Asks the gateway where one phrase belongs.
-    ///
-    /// # Errors
-    ///
-    /// Returns a transport, status or decode failure.
     pub async fn utterance(
         &self,
         text: &str,
@@ -111,11 +87,6 @@ impl Gateway {
             }))
     }
 
-    /// Long-polls the answer of a routed turn.
-    ///
-    /// # Errors
-    ///
-    /// Returns a transport, status or decode failure.
     pub async fn result(
         &self,
         thread_id: &str,
@@ -141,11 +112,6 @@ impl Gateway {
             }))
     }
 
-    /// Long-polls the dispatcher updates. `None` bootstraps without a cursor.
-    ///
-    /// # Errors
-    ///
-    /// Returns a transport, status or decode failure.
     pub async fn updates(
         &self,
         after_seq: Option<i64>,

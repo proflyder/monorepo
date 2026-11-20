@@ -1,6 +1,5 @@
 package dev.proflyder.home.core.model
 
-/** Domain models mirroring the frozen home.v1 scheduler contract. */
 enum class ScheduleKind {
     UNSPECIFIED,
     ALARM,
@@ -95,7 +94,6 @@ data class SchedulerStatus(
     val scenarioExecutionSupported: Boolean,
 )
 
-/** Input for CreateSchedule/UpdateSchedule. */
 data class ScheduleDraft(
     val label: String,
     val kind: ScheduleKind,
@@ -108,10 +106,6 @@ data class ScheduleDraft(
     val idempotencyKey: String = "",
 )
 
-/**
- * Expected failures are values, not thrown exceptions, so the UI can present
- * honest offline/auth/storage states without parsing exception messages.
- */
 sealed interface RemoteFailure {
     data object NotConfigured : RemoteFailure
     data object Unauthorized : RemoteFailure
@@ -121,9 +115,7 @@ sealed interface RemoteFailure {
     data class Server(
         val code: String,
         val message: String,
-        /** Stable localization key from the server; empty for older servers. */
         val textKey: String = "",
-        /** Typed arguments for [textKey]. */
         val textArgs: Map<String, String> = emptyMap(),
     ) : RemoteFailure
     data class ProtocolFailure(val detail: String) : RemoteFailure
@@ -153,12 +145,6 @@ enum class Field {
     UNSUPPORTED,
 }
 
-/**
- * True when the request may have reached the server even though no success
- * response was observed. Retrying such a create/start must reuse its
- * idempotency key. Validation/auth/configuration failures were definitely not
- * applied and may start a new operation.
- */
 fun RemoteFailure.isAmbiguousRetryable(): Boolean = when (this) {
     is RemoteFailure.Offline,
     RemoteFailure.Timeout,

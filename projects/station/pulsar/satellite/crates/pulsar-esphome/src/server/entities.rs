@@ -1,6 +1,3 @@
-//! Сущности: DeviceInfo, ListEntities, типизированные состояния (replay при SubscribeStates,
-//! отправка подписчикам при publish) и 60-секундные диагностики.
-
 use esphome_proto::entity::{
     self, COLOR_MODE_RGB, EntityKey, EntityKind, REPLAY_ORDER, VOICE_FEATURES, listed,
 };
@@ -15,16 +12,13 @@ use crate::types::{
 
 use super::{ESPHOME_VERSION, PROJECT_NAME, Server};
 
-/// Снимок блокирующих диагностик, собранный вне цикла актора.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Diagnostics {
     pub rssi: Option<f32>,
     pub ip: Option<std::net::Ipv4Addr>,
-    /// Публиковать ли снимок подписчикам (таймер) или только заполнить кэш (старт).
     pub publish: bool,
 }
 
-/// Состояние сущности; единственный источник истины для replay.
 #[derive(Clone, Debug, PartialEq)]
 pub enum EntityState {
     Bool {
@@ -48,7 +42,6 @@ pub enum EntityState {
     Update(UpdateState),
 }
 
-/// Вызов publish_* handle, применяемый актором.
 pub enum Publish {
     Media(MediaState, f32, bool),
     Switch(SwitchId, bool),
@@ -63,12 +56,10 @@ pub enum Publish {
     Update(Box<UpdateState>),
 }
 
-/// Приводит к 0..1; NaN проходит, как в C++-сервере.
 pub(super) fn clamp01(v: f32) -> f32 {
     v.clamp(0.0, 1.0)
 }
 
-/// Уровень wlan0 в dBm из /proc/net/wireless ("wlan0: 0000   58.  -52.  -256 ...").
 pub(super) fn parse_wireless(text: &str) -> Option<f32> {
     text.lines().find_map(|l| {
         let mut w = l.split_whitespace();
@@ -81,7 +72,6 @@ pub(super) fn parse_wireless(text: &str) -> Option<f32> {
     })
 }
 
-/// `None`: всем подписчикам состояний; `Some(id)`: только этому клиенту (начальные состояния).
 type To = Option<u64>;
 
 impl Server {
@@ -93,7 +83,6 @@ impl Server {
         (!zero).then_some(v)
     }
 
-    /// Отправляет состояние одной сущности; `to = None` — всем подписчикам.
     pub(super) fn send_state(&mut self, key: EntityKey, to: To) {
         let Some(def) = entity::find(key) else { return };
         if !listed(def, &self.cfg.capabilities) {
@@ -235,7 +224,6 @@ impl Server {
         }
     }
 
-    /// Обновления состояний идут каждому клиенту, подписанному на состояния.
     pub(super) fn broadcast(&mut self, msg_type: u32, payload: &[u8]) {
         let ids: Vec<u64> = self
             .clients
@@ -327,7 +315,6 @@ impl Server {
     }
 
     fn send_light(&mut self, key: EntityKey, l: LightState, to: To) {
-        // HA ждёт rgb, нормированный к максимуму 1, а масштаб — в color_brightness.
         let m = l.r.max(l.g).max(l.b);
         let norm = |v: f32| if m > 0.0 { v / m } else { 1.0 };
         let msg = LightStateResponse {
@@ -431,8 +418,6 @@ impl Server {
             self.send_state(entity::key::TEXT_IP, to);
         }
     }
-
-    // ------------------------------------------------------------ publish (handle commands)
 
     pub(super) fn publish(&mut self, p: Publish) {
         let on = self.states_on();

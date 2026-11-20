@@ -7,11 +7,6 @@ import dev.proflyder.home.core.model.WallTime
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
-/**
- * The bulk bar only offers actions that would change something: "Turn off"
- * for an all-on selection, "Turn on" for an all-off one, and both when the
- * picked alarms disagree.
- */
 class AlarmSelectionActionsTest {
     private val on = alarm("a", enabled = true)
     private val off = alarm("b", enabled = false)

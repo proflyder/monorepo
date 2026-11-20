@@ -1,11 +1,3 @@
-//! Glue between Home Assistant (ESPHome API), the microphone front-end, playback and the hardware
-//! UI (C++ controller.cpp). Voice-satellite behaviour follows OHF linux-voice-assistant
-//! (satellite.py). The controller owns its state and every service handle; the services report
-//! through channels, which `run` serves one event at a time (no re-entrant hooks as in C++).
-//!
-//! Everything the controller calls into is a port (`ports`); `wiring` starts the services and
-//! builds `Deps`. The controller itself knows nothing about paths, FFI or the start-up order.
-
 mod call;
 mod earcons;
 mod entities;
@@ -45,68 +37,42 @@ pub use wiring::prepare_process;
 const MODELS: &str = "/system/vendor/quasar/spotter_models/activation/";
 const COMMAND_MODEL: &str = "/system/vendor/quasar/spotter_models/command";
 const RICARDO_MODEL: &str = "/data/pulsar/wakewords/ru_ricardo_mww.tflite";
-/// Recorded wake events, beside `state.conf`.
 const WAKE_EVENTS_DIR: &str = "wake-events";
 
 const LISTEN_TIMEOUT_MS: u64 = 30_000;
 const PROCESS_TIMEOUT_MS: u64 = 120_000;
-// Updates: releases of this fork on GitHub, never upstream. The first check waits for the
-// network after boot; auto_update stays off by default, so a custom binary is not replaced
-// silently; an automatic install waits until the speaker is idle (it restarts the daemon).
 const UPDATE_FIRST_CHECK_MS: u64 = 60_000;
 const UPDATE_CHECK_PERIOD_MS: u64 = 6 * 3_600_000;
 const UPDATE_IDLE_RETRY_MS: u64 = 10 * 60_000;
-// The C++ LightSensor::on_lux default.
 const LUX_PERIOD_MS: u64 = 2000;
 
-/// Why `run` returned; the daemon exits 0 for each (supervise.sh starts it again).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ExitReason {
-    /// SIGTERM / SIGINT.
     Signal,
-    /// Home Assistant's Restart button.
     Restart,
-    /// Another Zigbee role was chosen: it starts with the daemon.
     ZigbeeRoleChanged,
-    /// A new release replaced the binary.
     Updated,
 }
 
-/// Loop timers of the C++ controller. Intended difference: C++ armed an independent timer on
-/// every call, so with two error rings pending update_ui ran at the earlier deadline (and again
-/// at the later one); here a re-arm of `UiAfterNotSubscribed` / `UiAfterError` moves the
-/// deadline. Each firing runs the same idempotent update, so the final state is identical.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Tk {
-    /// The error ring of a wake word without a voice subscriber ends.
     UiAfterNotSubscribed,
-    /// The error ring of a failed dialog ends.
     UiAfterError,
-    /// Ends a LISTENING / PROCESSING phase HA never advances.
     Watchdog,
-    /// В follow-up-реплике речь не началась за окно.
     FollowupWait,
-    /// The shown running HA timer runs out.
     TimerTick,
-    /// Next round of the timer ring.
     RingTick,
     UpdateCheck,
-    /// An automatic install waits for idle.
     UpdateRetry,
-    /// Exit after an installed update.
     UpdateExit,
 }
 
-/// The recorded Ricardo hit behind the current dialog, or behind a pending wake arbitration.
-/// The sidecar's outcome is filled from it when the dialog ends (contract v1).
 #[derive(Clone, Debug, Default)]
 struct WakeRecord {
     id: String,
-    /// STT_END text of the dialog; Some("") when HA recognized nothing.
     stt: Option<String>,
     cancelled: bool,
     error: bool,
-    /// Another station answered this wake word.
     arbiter_lost: bool,
 }
 
@@ -134,7 +100,6 @@ impl WakeRecord {
     }
 }
 
-/// Id of one dialog: a completion or a sidecar outcome belongs to the dialog it started in.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 struct DialogId(u64);
 
@@ -144,7 +109,6 @@ impl DialogId {
     }
 }
 
-/// Id of one HA announcement (assist or media player).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 struct AnnounceId(u64);
 
@@ -154,7 +118,6 @@ impl AnnounceId {
     }
 }
 
-/// Id of one closing earcon.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 struct EarconSeq(u64);
 
@@ -164,18 +127,12 @@ impl EarconSeq {
     }
 }
 
-/// What a `play()` was for: the C++ completion callback and the values it captured.
 #[derive(Clone, Copy, Debug)]
 enum Pending {
-    /// Pipeline TTS of dialog `dialog`.
     Tts { dialog: DialogId },
-    /// Error / cancel earcon number `seq`.
     Earcon { seq: EarconSeq },
-    /// HA (assist satellite) announcement number `seq`.
     Announce { conv: bool, seq: AnnounceId },
-    /// Media player announcement number `seq`.
     MediaAnnounce { seq: AnnounceId },
-    /// A round of the timer ring.
     Ring,
 }
 
@@ -192,7 +149,6 @@ impl Pending {
     }
 }
 
-/// Event channels of the services; a closed one is dropped.
 struct Rx {
     api: Option<UnboundedReceiver<ApiEvent>>,
     frontend: Option<UnboundedReceiver<FrontendEvent>>,
@@ -206,7 +162,6 @@ struct Rx {
     call: Option<UnboundedReceiver<CallEvent>>,
 }
 
-/// Next event of an optional channel; never ready without one.
 async fn recv<T>(rx: &mut Option<UnboundedReceiver<T>>) -> Option<T> {
     match rx {
         Some(rx) => rx.recv().await,
@@ -214,7 +169,6 @@ async fn recv<T>(rx: &mut Option<UnboundedReceiver<T>>) -> Option<T> {
     }
 }
 
-/// Один готовый источник `select!`; разбор — в `run`.
 enum Trigger {
     Timer(Tk),
     StateDue,
@@ -231,21 +185,14 @@ enum Trigger {
     Lux(Option<f32>),
 }
 
-/// One pipeline run as the metrics see it; the counters close it once.
 #[derive(Clone, Copy, Debug)]
 struct RunMetric {
     started_ms: i64,
-    /// Opened by a wake word (not by a button, follow-up or Home Assistant).
     wake: bool,
-    /// The wake→TTS-start histogram already got its one sample for this run.
     answer_started: bool,
 }
 
 impl RunMetric {
-    /// Wake→TTS-start latency, once per wake run. `None` for a run opened
-    /// without a wake word and for every TTS start after the first: a follow-up
-    /// answer in the same run must not add a second sample, and playback time is
-    /// deliberately excluded (the sample is taken before the player starts).
     fn answer_latency(&mut self, now_ms: i64) -> Option<f64> {
         if !self.wake || self.answer_started {
             return None;
@@ -256,10 +203,6 @@ impl RunMetric {
 }
 
 pub struct Controller {
-    // Service handles first: fields drop in declaration order, which is the C++ members'
-    // reverse declaration order (Sendspin first, the API server last). Dropping the last handle
-    // of a service stops it; the front-end joins its threads (up to ~200 ms of snd_pcm_wait plus
-    // the chunk in progress), inside the teardown watchdog that main arms before the drop.
     deps: ports::Deps,
     rx: Rx,
     term: Signal,
@@ -271,40 +214,26 @@ pub struct Controller {
     entity: entities::Publisher,
     timers_ha: timers::HaTimers,
     timers: Timers<Tk>,
-    /// Completion of each `play()` whose end matters.
     pending: HashMap<PlayId, Pending>,
     exit: Option<ExitReason>,
-    /// TZ last given to libc ("" = none yet).
     applied_tz: String,
 
     session: Session,
-    /// Арбитраж wake word: своё окно решения или проигранный turn.
     wake: Arbitration,
     hw_mic_muted: bool,
-    /// `PULSAR_LOCAL_ENDPOINTING=1` at start: experimental local end-of-utterance detector.
     local_endpointing: bool,
     error_shown: bool,
-    /// A check whose `Checked` has not been handled yet (C++ `Updater::busy()` until its
-    /// callback ran).
     pending_check: Option<pulsar_update::RequestId>,
-    /// An install whose `Installed` has not been handled yet.
     install_id: Option<pulsar_update::RequestId>,
-    /// Version being installed (for the messages of its outcome).
     install_version: String,
     sendspin_pairing_prompt: bool,
-    /// Метрики текущего run пайплайна: время старта, был ли он по wake word, уже посчитан.
     run_metric: Option<RunMetric>,
-    /// Итог run, если он закончился не штатно (ошибка HA или watchdog).
     run_result: Option<pulsar_metrics::PipelineResult>,
-    /// Начало текущего звонка для длительности.
     call_started_ms: i64,
-    /// Идёт звонок: спотеры выключены, музыка на паузе.
     call_active: bool,
-    /// Музыка/Sendspin играли до звонка и должны продолжить после.
     call_paused_music: bool,
 }
 
-/// Uncalibrated energy heuristic: opt-in only, off unless explicitly enabled.
 fn local_endpointing_enabled() -> bool {
     matches!(
         std::env::var("PULSAR_LOCAL_ENDPOINTING").as_deref(),
@@ -312,12 +241,10 @@ fn local_endpointing_enabled() -> bool {
     )
 }
 
-/// Face from the option text; "None" / "" / unknown clear it (the stock "no face").
 fn clock_face(name: &str) -> pulsar_clock::ClockFace {
     name.parse().unwrap_or(pulsar_clock::ClockFace::None)
 }
 
-/// Effect from `state.conf` / HA; unknown or "" is the plain colour.
 fn light_effect(name: &str) -> Effect {
     name.parse().unwrap_or_default()
 }
@@ -330,7 +257,6 @@ fn model_dir(id: &str) -> std::path::PathBuf {
     }
 }
 
-/// C++ `uint8_t(x * 255)`.
 fn light_rgb(r: f32, g: f32, b: f32) -> Rgb {
     Rgb {
         r: (r * 255.0) as u8,
@@ -339,8 +265,6 @@ fn light_rgb(r: f32, g: f32, b: f32) -> Rgb {
     }
 }
 
-/// `state.conf` option text → domain type, unknown text → the shipped default. One copy for the
-/// controller and `wiring`.
 fn music_viz(st: &settings::Settings) -> MusicStyle {
     st.music_viz.parse().unwrap_or(MusicStyle::All)
 }
@@ -358,8 +282,6 @@ fn zigbee_role(st: &settings::Settings) -> pulsar_zigbee::Mode {
 }
 
 impl Controller {
-    /// Loads the settings and starts every service. Err (to be logged by the caller, exit 1):
-    /// an invalid `PULSAR_PORT_OFFSET`, or the API server could not bind its port.
     pub fn start(
         model: &'static DeviceProfile,
         state_path: std::path::PathBuf,
@@ -368,7 +290,6 @@ impl Controller {
         Ok(Self::new(wired))
     }
 
-    /// Builds the controller from the wired services: no paths, no FFI, no start-up order.
     fn new(wired: wiring::Wired) -> Self {
         let wiring::Wired {
             deps,
@@ -411,13 +332,10 @@ impl Controller {
             call_active: false,
             call_paused_music: false,
         };
-        // The rest of the C++ start(), in its order: every call below only queues commands to
-        // the services, which run once `run` is awaited.
         c.on_start(persist_on_start);
         c
     }
 
-    /// The C++ tail of `start()`: published state, update schedule, gains, ring, boot shot.
     fn on_start(&mut self, persist_on_start: bool) {
         self.publish_update();
         self.timers.set_repeating(
@@ -426,7 +344,7 @@ impl Controller {
             UPDATE_CHECK_PERIOD_MS,
         );
         self.update_detection();
-        self.apply_gains(); // a saved mute
+        self.apply_gains();
         self.update_ui();
         self.deps.display.clock.play(ClockShot::Boot);
         if persist_on_start {
@@ -434,12 +352,6 @@ impl Controller {
         }
     }
 
-    /// Serves the services' events until the daemon should exit. Leaving while an update
-    /// installs: the updater cancels the install when its handle goes (the binary stays as it
-    /// was, whereas C++ finished it), so `update_attempt` is cleared; left set, automatic
-    /// updates would skip that release. An install that already succeeded (its `Installed` still
-    /// queued) keeps it: the new binary clears it. A settings change still pending is written by
-    /// `flush_settings` afterwards.
     pub async fn run(&mut self) -> ExitReason {
         let reason = loop {
             if let Some(r) = self.exit.take() {
@@ -468,8 +380,6 @@ impl Controller {
         reason
     }
 
-    /// Timers first (biased): keys due at one wake-up fire back to back (pulsar_core Timers
-    /// contract), then the pending settings write, signals, and the services' events.
     async fn next_event(&mut self) -> Trigger {
         tokio::select! {
             biased;
@@ -558,8 +468,6 @@ impl Controller {
         }
     }
 
-    /// An install cut short by the exit: the binary stays as it was, clear the marker so
-    /// automatic updates try that release again.
     fn settle_interrupted_update(&mut self) {
         let Some(id) = self.install_id else {
             return;
@@ -599,14 +507,12 @@ impl Controller {
             Tk::RingTick => self.ring_timer(),
             Tk::UpdateCheck => self.check_update(),
             Tk::UpdateRetry => self.maybe_auto_update(),
-            // exit 0: supervise.sh starts the new binary
             Tk::UpdateExit => self.exit = Some(ExitReason::Updated),
         }
     }
 
     fn on_player(&mut self, ev: PlayerEvent) {
         match ev {
-            // HA media state follows playback (C++ Player::on_state hook).
             PlayerEvent::State(ch, s) => {
                 if ch == Channel::Music {
                     self.session.on_music_state(s, now_ms());
@@ -624,7 +530,6 @@ impl Controller {
     fn on_frontend(&mut self, ev: FrontendEvent) {
         match ev {
             FrontendEvent::Wake { .. } if self.call_active => {
-                // Во время звонка спотеры выключены; позднее событие не открывает диалог.
                 self.deps.frontend.wake_handled();
             }
             FrontendEvent::Wake {
@@ -635,7 +540,6 @@ impl Controller {
                 event_id,
             } => {
                 self.on_wake(&phrase, level_db, preroll, endpoint_prior, event_id);
-                // After on_wake has switched streaming on where the wake word starts a request.
                 self.deps.frontend.wake_handled();
             }
             FrontendEvent::Command { word } => self.on_command(&word),
@@ -645,7 +549,6 @@ impl Controller {
                 } else if self.session.is_listening() {
                     self.on_listening_audio(pcm);
                 } else {
-                    // The request goes on with what was said right after the wake word.
                     self.wake.push_audio(&pcm);
                 }
             }
@@ -656,31 +559,21 @@ impl Controller {
         }
     }
 
-    /// `st` changed: written a moment after the last change (`Store`). `volume=` follows
-    /// `volume2=` on the curve of earlier builds.
     fn persist(&mut self) {
         self.st.volume_legacy = pulsar_core::volume::to_legacy(&self.model.volume, self.st.volume);
         self.st.changed();
     }
 
-    /// `st` changed in a way that must survive a power cut or a crash right away: before a
-    /// restart or a binary swap, or the microphone mute. True = on disk; on false the change
-    /// stays pending (`Store`).
     #[must_use = "a write that must be on disk has to check it"]
     fn persist_now(&mut self) -> bool {
         self.st.volume_legacy = pulsar_core::volume::to_legacy(&self.model.volume, self.st.volume);
         self.st.write_now()
     }
 
-    /// Writes a pending change now: main calls it once after `run`, when nothing changes any
-    /// more.
     pub fn flush_settings(&mut self) {
         self.st.flush();
     }
 
-    /// The supervisor will start this daemon again (the `enabled` file exists): promise the
-    /// Sendspin server a reconnect before the client stops, otherwise its stop() sends
-    /// `shutdown` and Music Assistant deliberately stops redialing this player.
     pub fn promise_sendspin_restart(&self) {
         if let Some(ss) = &self.deps.sendspin {
             ss.goodbye_restart();
@@ -691,7 +584,6 @@ impl Controller {
         self.st.mic_muted || self.hw_mic_muted
     }
 
-    /// Текущая фаза станции: звонок перекрывает диалог (спотеры на это время выключены).
     fn phase(&self) -> logic::Phase {
         if self.call_active {
             logic::Phase::Call
@@ -708,7 +600,6 @@ impl Controller {
         self.deps.radio.as_ref().is_some_and(|z| z.flashing())
     }
 
-    /// The stored light as the ESPHome entity shows it.
     fn light_state(&self) -> LightState {
         let l = &self.st.light;
         LightState {
@@ -721,7 +612,6 @@ impl Controller {
         }
     }
 
-    /// HA command → the stored light (`settings::Light` has no foreign domain types).
     fn store_light(&mut self, l: LightState) {
         self.st.light = settings::Light {
             on: l.on,
@@ -738,7 +628,6 @@ impl Controller {
         pulsar_metrics::set_volume(f64::from(self.st.volume));
         self.deps.display.leds.set_muted(self.mic_muted());
         self.update_commands();
-        // Мут колонки во время звонка глушит uplink; состояние шлём только при изменении.
         if self.call_active && self.deps.call.muted() != self.mic_muted() {
             self.deps.call.set_muted(self.mic_muted());
         }
@@ -758,7 +647,6 @@ impl Controller {
         self.show_ui(s);
     }
 
-    /// Ring and clock.
     fn show_ui(&self, s: UiState) {
         self.deps.display.leds.set_ui_state(s);
         self.deps.display.clock.set_ui_state(s);

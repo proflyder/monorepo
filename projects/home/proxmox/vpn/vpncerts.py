@@ -1,21 +1,4 @@
 #!/usr/bin/env python3
-"""Issue and revoke client certificates for the home ocserv VPN.
-
-The client CA lives only on the workstation, under
-``secrets/home/vpn/client-ca/`` (mode 700, private key 600). The VPN container
-receives only the CA certificate (``client-ca.pem``) and a CRL
-(``client-ca.crl``); it never sees the CA private key.
-
-Commands:
-
-    init-ca              create the private client CA and the first CRL
-    issue USER           issue a client certificate and an importable .p12
-    revoke TARGET        revoke by serial number or certificate file
-    list                 show the certificate database
-
-Passwords, keys and certificate contents are never printed. The import
-password is written to a mode-600 file next to each .p12.
-"""
 from __future__ import annotations
 
 import argparse
@@ -50,12 +33,9 @@ CA_CONF = "openssl.cnf"
 
 
 class CertError(RuntimeError):
-    """A user-facing certificate operation failed."""
+    pass
 
 
-# --------------------------------------------------------------------------
-# pure helpers (unit tested)
-# --------------------------------------------------------------------------
 def validate_user(user: str) -> str:
     if not USER_RE.match(user):
         raise CertError("user must match ^[a-z_][a-z0-9_-]{0,31}$")
@@ -83,7 +63,6 @@ def parse_groups(value: str) -> list[str]:
 
 
 def cert_subject(user: str, groups: list[str]) -> str:
-    """CN is the ocserv username; each OU is a group (cert-group-oid)."""
     subject = f"/CN={validate_user(user)}"
     for group in groups:
         if not GROUP_RE.match(group):
@@ -93,7 +72,6 @@ def cert_subject(user: str, groups: list[str]) -> str:
 
 
 def normalize_serial(value: str) -> str:
-    """Return an uppercase hex serial without a leading 0x, or raise."""
     match = SERIAL_RE.match(value.strip())
     if not match:
         raise CertError(f"not a serial number: {value}")
@@ -101,7 +79,6 @@ def normalize_serial(value: str) -> str:
 
 
 def openssl_config(ca_dir: Path, org: str = DEFAULT_ORG, days: int = CLIENT_DAYS) -> str:
-    """Render the openssl ca configuration used for every operation."""
     return f"""\
 # Managed by projects/home/proxmox/vpn/vpncerts.py. Do not edit by hand.
 [ ca ]
@@ -159,10 +136,6 @@ nsComment = "{org} client CA"
 
 
 def parse_index(text: str) -> list[dict[str, str]]:
-    """Parse an openssl ``index.txt`` database.
-
-    Each entry has: status (V/R/E), serial, expiry, revocation, subject.
-    """
     entries = []
     for line in text.splitlines():
         if not line.strip():
@@ -191,11 +164,10 @@ def index_common_name(subject: str) -> str:
 
 
 def asn1_time_to_date(value: str) -> str:
-    """Convert ``YYMMDDHHMMSSZ`` / ``YYYYMMDDHHMMSSZ`` to ``YYYY-MM-DD``."""
     value = value.strip()
     if value.endswith("Z"):
         value = value[:-1]
-    if len(value) == 12:  # UTCTime: 2-digit year
+    if len(value) == 12:
         year = int(value[:2])
         year += 2000 if year < 50 else 1900
         value = f"{year:04d}" + value[2:]
@@ -204,9 +176,6 @@ def asn1_time_to_date(value: str) -> str:
     return f"{value[0:4]}-{value[4:6]}-{value[6:8]}"
 
 
-# --------------------------------------------------------------------------
-# openssl wrapper
-# --------------------------------------------------------------------------
 class Openssl:
     def __init__(self, binary: str = "openssl", verbose: bool = False):
         self.binary = binary
@@ -232,7 +201,6 @@ class Openssl:
 
     def x509_field(self, path: Path, field: str) -> str:
         out = self.run(["x509", "-in", str(path), "-noout", "-" + field]).stdout.strip()
-        # openssl prints "serial=AB12" / "notAfter=..." for these options.
         return out.split("=", 1)[1].strip() if "=" in out else out
 
     def genrsa(self, path: Path, bits: int) -> None:
@@ -264,7 +232,6 @@ class Openssl:
 
 
 def _p12_pem(ssl: Openssl, archive: Path, password: str) -> str:
-    """Extract the leaf certificate from a .p12, tolerating legacy providers."""
     args = [
         "pkcs12",
         "-in",
@@ -282,7 +249,7 @@ def _p12_pem(ssl: Openssl, archive: Path, password: str) -> str:
     for attempt in attempts:
         try:
             return ssl.run(attempt, input_text=password + "\n").stdout
-        except CertError as exc:  # older openssl has no -provider flags
+        except CertError as exc:
             last_error = exc
     raise CertError(f"cannot read {archive}: {last_error}")
 
@@ -345,9 +312,6 @@ def _random_serial() -> str:
     return value.lstrip("0") or "1"
 
 
-# --------------------------------------------------------------------------
-# CA / certificate operations
-# --------------------------------------------------------------------------
 def ensure_ca(ca_dir: Path, org: str, ssl: Openssl, force: bool = False) -> None:
     if (ca_dir / CA_KEY).exists() and not force:
         raise CertError(f"client CA already exists in {ca_dir}; use --force to replace")
@@ -394,7 +358,6 @@ def ensure_ca(ca_dir: Path, org: str, ssl: Openssl, force: bool = False) -> None
 
 
 def _write_next_serial(ca_dir: Path, serial: str) -> None:
-    """Replace the CA serial file so the next certificate gets ``serial``."""
     (ca_dir / "serial").write_text(normalize_serial(serial) + "\n", encoding="utf-8")
 
 
@@ -504,7 +467,6 @@ def issue(
         os.chmod(legacy, 0o600)
         _write_password(password_path, password)
 
-        # Verify the archives open with the stored password and hold this cert.
         for archive in (modern, legacy):
             exported = _p12_pem(ssl, archive, password)
             check = ssl.run(["x509", "-noout", "-serial"], input_text=exported)
@@ -593,9 +555,6 @@ def list_entries(ca_dir: Path) -> list[dict[str, str]]:
     return entries
 
 
-# --------------------------------------------------------------------------
-# Proxmox transport
-# --------------------------------------------------------------------------
 class Pve:
     def __init__(
         self,
@@ -650,9 +609,6 @@ def pve_from_args(args: argparse.Namespace) -> Pve | None:
     return Pve(args.pve, args.ctid, args.ssh_key, args.known_hosts)
 
 
-# --------------------------------------------------------------------------
-# CLI
-# --------------------------------------------------------------------------
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter

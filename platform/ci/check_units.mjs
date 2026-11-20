@@ -1,18 +1,4 @@
 #!/usr/bin/env node
-/**
- * Validate the CI unit map and prove no source/test file falls out of CI.
- *
- * Checks:
- * 1. schema: unique ids, known platforms, non-empty paths, required sections;
- * 2. android units declare Bazel roots and every test/build target lives under
- *    one of those roots;
- * 3. `depends_on` edges point at existing units;
- * 4. every tracked test/source/build file is owned by at least one unit path or
- *    an explicit invalidation rule, so a new test cannot silently stop running.
- *
- * Run locally with `node platform/ci/check_units.mjs`; CI runs it in the
- * quality job and `mise run test` runs it through the unit tests.
- */
 
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
@@ -38,12 +24,8 @@ export const KNOWN_PLATFORMS = new Set([
   "quality",
 ]);
 
-// `_unit.yml` attests each pushed image with one static step per index; the
-// unit map must not exceed that bound (today the maximum is Hermes' four).
 export const MAX_UNIT_IMAGES = 4;
 
-// Rollback kinds backed by `mise run rollback`. `forward-only` is an explicit
-// "no documented procedure"; `pulsar` only prints the on-device instruction.
 export const ROLLBACK_KINDS = new Set([
   "deploy-state",
   "helm",
@@ -53,8 +35,6 @@ export const ROLLBACK_KINDS = new Set([
   "forward-only",
 ]);
 
-// Suffixes/names that must be routed somewhere: compiled sources, tests, build
-// files and shell entry points.
 export const OWNED_SUFFIXES = [
   ".rs",
   ".py",
@@ -160,8 +140,6 @@ export function validateSchema(config, root = DEFAULT_ROOT) {
     if (unit.deployImages.length && !["bazel", "docker", "mixed"].includes(unit.deployBuilder)) {
       problems.push(`${prefix}: unknown deploy.builder '${unit.deployBuilder}'`);
     }
-    // `_unit.yml` has one static attestation step per index; include the
-    // automatically published home-deploy image in the bound.
     const attestImages = [...unit.deployImages];
     if (
       (unit.deployBuilder === "bazel" || unit.deployBuilder === "mixed") &&
@@ -359,13 +337,6 @@ export function validateSchema(config, root = DEFAULT_ROOT) {
   return problems;
 }
 
-/**
- * Registry writes in a workflow job need credentials even when the package is
- * publicly readable: anonymous reads succeed and only the manifest PUT fails
- * with UNAUTHORIZED. Match the commands that write, including
- * `platform/ci/promote.mjs`, which re-tags with crane internally and cannot be
- * found by looking for literal `crane tag` text.
- */
 export const REGISTRY_WRITE_PATTERNS = [
   /\bcrane\s+(?:tag|push)\b/,
   /\boras\s+(?:tag|push|manifest\s+push)\b/,
@@ -384,13 +355,6 @@ function isRegistryWrite(line) {
   return REGISTRY_WRITE_PATTERNS.some((pattern) => pattern.test(line));
 }
 
-/**
- * Extract the events of the top-level `on:` block without a YAML dependency.
- *
- * Only the immediate keys of the block are events: nested entries (`branches:`,
- * `inputs:`) are indented deeper. A flow list (`on: [push, pull_request]`) and a
- * scalar (`on: push`) are accepted too, so the rule cannot be dodged by syntax.
- */
 export function workflowTriggers(text) {
   const lines = String(text || "").split(/\r?\n/);
   const start = lines.findIndex((line) => /^on:/.test(line));
@@ -428,15 +392,6 @@ export function workflowTriggers(text) {
   return events;
 }
 
-/**
- * One trigger per workflow.
- *
- * A workflow that reacts to several events duplicates its trigger wiring and
- * makes "what starts this?" unanswerable; it also lets `github.event_name`
- * branch inside shared logic. The rule is therefore: exactly one event, and a
- * second event means a second thin file that calls a shared reusable workflow.
- * `_*.yml` are the reusables and may only be called (`on: workflow_call`).
- */
 export function workflowTriggerProblems(root = DEFAULT_ROOT) {
   const problems = [];
   const directory = path.resolve(root, ".github/workflows");
@@ -483,13 +438,6 @@ export function workflowTriggerProblems(root = DEFAULT_ROOT) {
   return problems;
 }
 
-// ------------------------------------------------- caller permissions ----
-// GitHub refuses to start a run (`startup_failure`) when a caller job grants
-// less than any job of the reusable workflow it calls, recursively. GitHub
-// itself only reports this after the push, so the rule is checked statically.
-
-// Scopes accepted in a `permissions:` map; `read-all`/`write-all` expand over
-// all of them, so a narrow caller still fails a broad requirement.
 export const PERMISSION_SCOPES = [
   "actions",
   "attestations",
@@ -507,8 +455,6 @@ export const PERMISSION_SCOPES = [
   "statuses",
 ];
 
-// `none < read < write`; anything unrecognized is treated as `write` so a
-// malformed grant fails loudly instead of silently satisfying a requirement.
 export const PERMISSION_LEVELS = { none: 0, read: 1, write: 2 };
 const PERMISSION_LEVEL_NAMES = ["none", "read", "write"];
 
@@ -543,7 +489,6 @@ function permissionMap(inline) {
   return permissions;
 }
 
-/** Parse one `permissions:` block (scalar, flow map or indented mapping). */
 function parsePermissions(lines, start) {
   const key = /^(\s*)permissions:(.*)$/.exec(lines[start]);
   const indent = key[1].length;
@@ -568,11 +513,6 @@ function parsePermissions(lines, start) {
   return permissions;
 }
 
-/**
- * Minimal model of the two blocks the rule needs: the workflow-level
- * `permissions:` and, per job, its own `permissions:` (`null` when absent, so
- * the job inherits the workflow level) and a local reusable `uses:` target.
- */
 export function workflowPermissionModel(text) {
   const lines = String(text || "").split(/\r?\n/);
   const workflowLine = lines.findIndex((line) => /^permissions:/.test(line));
@@ -634,11 +574,6 @@ function mergePermissions(target, source, via) {
   }
 }
 
-/**
- * Union of every `permissions:` a reusable workflow asks for: its workflow
- * level, each job's level, and, recursively, everything the reusables it calls
- * ask for. A caller job must cover the union.
- */
 function collectRequiredPermissions(file, root, seen, required) {
   const relative = relativeWorkflowPath(root, file);
   const { workflow, jobs } = workflowPermissionModel(fs.readFileSync(file, "utf8"));
@@ -655,11 +590,6 @@ function collectRequiredPermissions(file, root, seen, required) {
   }
 }
 
-/**
- * A caller job's effective token is its job-level `permissions:` when present,
- * otherwise the workflow-level block, otherwise nothing at all. Each local
- * reusable call is then compared against the recursive requirement union.
- */
 export function workflowCallerPermissionProblems(root = DEFAULT_ROOT) {
   const problems = [];
   const directory = path.resolve(root, ".github/workflows");
@@ -710,12 +640,6 @@ function isRegistryLogin(line) {
   return REGISTRY_LOGIN_PATTERNS.some((pattern) => pattern.test(line));
 }
 
-/**
- * Every job that writes to a registry must log in before the first write.
- * Jobs are delimited by their two-space keys under the top-level `jobs:` map;
- * a nested `steps:` list never uses that indentation, so a line scan is enough
- * and needs no YAML dependency.
- */
 export function workflowRegistryProblems(root = DEFAULT_ROOT) {
   const problems = [];
   const directory = path.resolve(root, ".github/workflows");
@@ -746,7 +670,6 @@ export function workflowRegistryProblems(root = DEFAULT_ROOT) {
       let firstWrite = -1;
       let firstLogin = -1;
       for (let index = start; index < end; index += 1) {
-        // A comment that mentions `crane tag` is prose, not a write.
         if (/^\s*#/.test(lines[index])) {
           continue;
         }
@@ -859,7 +782,6 @@ export async function main(argv = process.argv.slice(2)) {
   return 0;
 }
 
-/** Entry point for `actions/github-script`: fail the step on any problem. */
 export async function runGithubScript({ core, argv = [] }) {
   const args = parseArgs(argv);
   const { config, problems } = await check(argv);

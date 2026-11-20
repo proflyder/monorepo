@@ -1,14 +1,3 @@
-//! Process configuration, loaded 1:1 from the Go bridge's environment.
-//!
-//! * `HA_TOKEN_FILE` / `SCHEDULER_TOKEN_FILE` win over the direct variables
-//!   (the Go bridge's file-first priority; the scheduler service is the
-//!   opposite, so the two loaders must not be unified silently).
-//! * Durations accept Go syntax (`1s`, `5m`, `1h30m`) through
-//!   [`home_config::parse_go_duration`].
-//! * Defaults, bounds and the lease budget match `internal/config/config.go`.
-//!
-//! The token value never appears in an error message.
-
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -16,9 +5,7 @@ use home_config::parse_go_duration;
 use home_secret::Token;
 use thiserror::Error;
 
-/// The queue carrying alarms, reminders and timers.
 pub const QUEUE_HOME: &str = "home";
-/// The scheduler's generic task queue: the HA executor must never lease it.
 pub const QUEUE_TASKS: &str = "tasks";
 
 const MIN_BATCH_SIZE: u32 = 1;
@@ -28,12 +15,9 @@ const MAX_LEASE_SECONDS: u32 = 3600;
 const MAX_ATTEMPTS_MIN: u32 = 1;
 const MAX_ATTEMPTS_MAX: u32 = 1000;
 
-/// Worst-case time spent writing the receipt ledger for one event.
 const LEDGER_BUDGET: Duration = Duration::from_secs(1);
-/// Keeps the lease valid a little beyond the modelled processing time.
 const LEASE_CUSHION: Duration = Duration::from_secs(15);
 
-/// A fully validated bridge configuration.
 #[derive(Clone)]
 pub struct Config {
     pub ha_url: String,
@@ -84,8 +68,6 @@ impl std::fmt::Debug for Config {
     }
 }
 
-/// Why the environment was rejected. Messages keep the Go loader's shape and
-/// never contain a secret value.
 #[derive(Debug, Error)]
 pub enum ConfigError {
     #[error("config: {0} is required")]
@@ -101,12 +83,10 @@ pub enum ConfigError {
 }
 
 impl Config {
-    /// Read and validate the process environment.
     pub fn load() -> Result<Self, ConfigError> {
         Self::load_from(&|key| std::env::var(key).ok(), &|path| std::fs::read(path))
     }
 
-    /// Load from injected environment and file readers (used by tests).
     pub fn load_from(
         getenv: &dyn Fn(&str) -> Option<String>,
         read_file: &dyn Fn(&str) -> std::io::Result<Vec<u8>>,
@@ -233,8 +213,6 @@ impl Config {
         })
     }
 
-    /// Smallest lease that still covers a full batch of sequential executions
-    /// with the configured per-request timeouts.
     #[must_use]
     pub fn required_lease_seconds(&self) -> u32 {
         required_lease_seconds(
@@ -255,7 +233,6 @@ fn required_lease_seconds(
     u32::try_from(total.as_secs() + u64::from(total.subsec_nanos() > 0)).unwrap_or(u32::MAX)
 }
 
-/// Resolve `NAME_FILE` first, then `NAME`. `Ok(None)` means neither is set.
 pub(crate) fn token(
     getenv: &dyn Fn(&str) -> Option<String>,
     read_file: &dyn Fn(&str) -> std::io::Result<Vec<u8>>,
@@ -338,7 +315,6 @@ pub(crate) fn bool_value(
     let Some(raw) = non_empty(getenv(name)) else {
         return Ok(default);
     };
-    // The Go loader uses strconv.ParseBool, which also accepts 1/t/T/0/f/F.
     match raw.as_str() {
         "1" | "t" | "T" | "TRUE" | "true" | "True" => Ok(true),
         "0" | "f" | "F" | "FALSE" | "false" | "False" => Ok(false),
@@ -394,8 +370,6 @@ pub(crate) fn non_empty(raw: Option<String>) -> Option<String> {
         .filter(|value| !value.is_empty())
 }
 
-/// `[A-Za-z0-9._-]{1,64}`, matching the Go patterns for consumer, queue and
-/// script names.
 fn valid_identifier(value: &str) -> bool {
     !value.is_empty()
         && value.len() <= 64

@@ -53,33 +53,20 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
     private var volumeSheet: VolumeSheet? = null
     private var speakDialog: SpeakDialog? = null
 
-    /**
-     * The live rows arrive after the first content frame. Their item stays in
-     * the list from the start (with a stable key), so that arrival inserts no
-     * row above the device sections; this flag additionally pulls the list to
-     * the top when the user has not scrolled yet.
-     */
     private var hubWasEmpty = true
 
-    /** The single callback instance shared with the adapter. */
     private val adapterCallback = object : BaseAdapterCallback<ControlItem>(), ControlAdapterCallback {
         override fun onItemClick(item: ControlItem) {
             when (item) {
-                // A native/HA scenario tile runs at once; a device-level action
-                // (speak) needs its text first.
                 is ControlItem.Scenario ->
                     if (item.entry.kind == ControlKind.ACTION) openSpeakDialog(item.entry)
                     else viewModel.run(item.entry)
-                // An adjustable light opens its sheet; anything else flips on a row tap.
-                // The switch itself always reports its own target state.
                 is ControlItem.Device ->
                     when {
                         item.entry.isVolume && item.entry.available -> openVolumeSheet(item.entry)
                         item.entry.light != null && item.entry.available -> openLightSheet(item.entry)
                         else -> viewModel.setPower(item.entry, !item.entry.isOn())
                     }
-                // A device group itself does nothing: its rows forward their taps.
-                // The profile is a mode: only its segmented buttons act.
                 is ControlItem.Header, is ControlItem.Voice, is ControlItem.DeviceGroup,
                 is ControlItem.Hub, is ControlItem.QuickActions,
                 is ControlItem.Filters,
@@ -89,8 +76,6 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
 
         override fun onItemLongClick(item: ControlItem) {
             if (item !is ControlItem.Device) return
-            // A binary tile with extra light controls opens its sheet on a
-            // long press; everything else keeps the pin/unpin dialog.
             if (item.entry.light != null && item.entry.available) {
                 openLightSheet(item.entry)
             } else {
@@ -137,7 +122,6 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
 
         override fun onQuickTileLongClick(tile: QuickTile) {
             when (tile) {
-                // A light's long press is reserved for its adjustment sheet.
                 is QuickTile.Device ->
                     when {
                         tile.entry.isVolume -> openVolumeSheet(tile.entry)
@@ -157,7 +141,6 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
                         FavoriteRef(FavoriteKind.SCENARIO, tile.scenario.id),
                         tile.scenario.label,
                     )
-                // The call tile is built in and cannot be unpinned.
                 QuickTile.Call -> Unit
             }
         }
@@ -233,14 +216,8 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
             .also { it.show() }
     }
 
-    /**
-     * Opens the station volume sheet. Either volume row opens the same sheet:
-     * the media player row is the main slider, the announcement row the second.
-     */
     internal fun openVolumeSheet(entry: ControlEntry) {
         volumeSheet?.dismiss()
-        // The list already merges the device's announcement volume into this
-        // row; the state entries remain the source for older unmerged data.
         val announce = entry.volumeCompanion
             ?: viewModel.state.value.entries.firstOrNull {
                 it.isVolume && it.deviceId == entry.deviceId && it.id != entry.id
@@ -260,7 +237,6 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
             .also { it.show() }
     }
 
-    /** A dial device flips on/off; the other items run their existing actions. */
     private fun runSpeedDialItem(item: SpeedDialItem) {
         when (item) {
             is SpeedDialItem.Tile -> runQuickTileFromDial(item.tile)
@@ -277,7 +253,6 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
         }
     }
 
-    /** Long press keeps the old quick-tile pin/unpin path for all favourites. */
     private fun pinSpeedDialItem(item: SpeedDialItem) {
         when (item) {
             is SpeedDialItem.Tile -> pinQuickTile(item.tile)
@@ -410,7 +385,6 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
         }
     }
 
-    /** Long press in a room group: pin the device to Quick actions or unpin it. */
     internal fun showPinDialog(entry: ControlEntry) {
         val ref = FavoriteRef(FavoriteKind.DEVICE, entry.id)
         val pinned = ref in viewModel.state.value.favorites
@@ -422,7 +396,6 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
         ) { viewModel.toggleFavorite(entry) }
     }
 
-    /** Tapping a live row jumps to the section that owns it. */
     internal fun openHubSection(card: HubCard) {
         val featureId = when (card) {
             is HubCard.Alarm -> "alarms"
@@ -432,7 +405,6 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
         requireNavigator().selectTab(featureId)
     }
 
-    /** True when the hub's "turn off" must ask skip-once vs disable-completely. */
     internal fun hubAlarmNeedsChoice(card: HubCard.Alarm): Boolean =
         !card.ringing &&
             card.schedule.enabled &&

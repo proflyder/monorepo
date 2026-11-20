@@ -1,44 +1,4 @@
 #!/usr/bin/env bash
-# Publish the station release as a public OCI artifact in GHCR with ORAS.
-#
-# Runs on a push to `develop` from deploy-home, never on a pull request. The
-# caller supplies the release artifact downloaded from the `_native.yml`
-# `pulsar` artifact, authenticates `oras` to GHCR (docker/login-action or
-# `oras login`) and has `oras` on PATH.
-#
-#   ./publish-oci.sh --source-dir /path/to/artifact
-#   ./publish-oci.sh --source-dir /path/to/artifact --tag tree-<git tree hash>
-#   ./publish-oci.sh --source-dir /path/to/artifact --tag tree-<hash> --version v0.6.50
-#
-# `--version` overrides the version read from `VERSION`: CI computes it from
-# `VERSION` (major.minor) plus the commits touching the unit
-# (`platform/ci/version.mjs`), so the file no longer carries a patch number.
-# `--replace` lets the explicit rebuild workflow (`deploy-services.yml`) publish
-# a rebuilt artifact under an existing `tree-<hash>` tag; the default keeps the
-# first published bytes and warns.
-#
-# `--tag` публикует тот же release-артефакт под ровно одним тегом (PR-путь
-# build once использует `tree-<git tree hash>`) и не трогает `<VERSION>` и
-# `:latest`. Идентичное содержимое — no-op. Другое содержимое под уже
-# существующим тегом не перезаписывается: пересборка того же дерева исходников
-# не бит-воспроизводима, проверенным считается первый опубликованный артефакт.
-# deploy-home позже продвигает этот digest на релизные теги без пересборки.
-#
-# The station updater reads this exact contract, so the names are frozen:
-#   repository  ghcr.io/proflyder/pulsar-firmware
-#   tags        <VERSION> and :latest
-#   type        application/vnd.proflyder.pulsar.release.v1
-#   annotations org.opencontainers.image.version=<VERSION>
-#               org.opencontainers.image.source=https://github.com/proflyder/monorepo
-#   layers      pulsar-aarch64.bin, pulsar-armhf.bin, SHA256SUMS,
-#               zigbee-coordinator.ybl, zigbee-router.ybl
-#
-# The version tag is immutable: an existing tag is a hard failure, never an
-# overwrite. A re-deploy of the current VERSION is a deploy-home
-# `workflow_dispatch` with units=pulsar, which stops after `deploy-station` and
-# does not run this script.
-#
-# Step outputs (when GITHUB_OUTPUT is set): repository, version, digest.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -103,8 +63,6 @@ version="${VERSION_OVERRIDE:-$(tr -d '[:space:]' < "$VERSION_FILE")}"
 [[ "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] ||
   die "version must be vMAJOR.MINOR.PATCH, got '$version'"
 
-# `_native.yml` uploads a flat artifact; accept the files either at the top
-# level or inside a directory named after the unit.
 file_path() {
   local name="$1"
   if [[ -f "$SOURCE_DIR/$name" ]]; then
@@ -125,8 +83,6 @@ files=(
 )
 stage="$(dirname "${files[0]}")"
 
-# Verify every layer against the uploaded SHA256SUMS before publishing, so a
-# broken artifact never reaches the registry.
 (
   cd "$stage"
   if command -v sha256sum >/dev/null 2>&1; then
@@ -138,7 +94,6 @@ stage="$(dirname "${files[0]}")"
 
 push_artifact() {
   local destination="$1"
-  # `cd` keeps the layer titles bare (the updater finds them by exact name).
   (
     cd "$stage"
     oras push "$destination" \
@@ -152,7 +107,6 @@ push_artifact() {
 
 published_tags=""
 if [[ -n "$TAG" ]]; then
-  # Build-once PR path: exactly one tag, no release-tag side effects.
   if output="$(oras manifest fetch "$REPOSITORY:$TAG" 2>&1)"; then
     tmp="$(mktemp -d "${TMPDIR:-/tmp}/pulsar-tree-tag.XXXXXX")"
     if ! oras pull "$REPOSITORY:$TAG" -o "$tmp" >/dev/null 2>&1; then
@@ -164,16 +118,10 @@ if [[ -n "$TAG" ]]; then
       echo "tag $TAG is already published with identical content; not rebuilding"
     elif [[ "$REPLACE" -eq 1 ]]; then
       rm -rf "$tmp"
-      # Explicit rebuild path (`deploy-services.yml --replace`): the operator
-      # asked for a fresh build of this tree, so the rebuilt artifact replaces
-      # the published bytes under the same tag.
       echo "publish-oci: replacing $TAG with the rebuilt artifact"
       push_artifact "$REPOSITORY:$TAG"
     else
       rm -rf "$tmp"
-      # Пересборка того же дерева исходников не бит-воспроизводима (другие
-      # SHA256SUMS), а проверенным остаётся первый артефакт: тег не трогаем и
-      # продолжаем с его digest, чтобы merge не блокировался.
       echo "publish-oci: warning: tag $TAG already published for this source tree; keeping the existing artifact (build is not bit-reproducible)" >&2
     fi
   elif ! grep -qiE 'not found|manifest_unknown|name unknown|404' <<< "$output"; then

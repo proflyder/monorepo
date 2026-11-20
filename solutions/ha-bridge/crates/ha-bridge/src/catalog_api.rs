@@ -1,14 +1,3 @@
-//! `GET /v1/catalog` and `GET /healthz`.
-//!
-//! The catalog is read-only: it has no write surface, because commands go
-//! through the scheduler (the phone enqueues a task) and never through this
-//! server. The catalog route requires the configured bearer token; `healthz`
-//! is the only unauthenticated answer and is deliberately empty (`204`).
-//!
-//! The wire shape is the Go `EntryView`/`LightView` contract: field order,
-//! `omitempty` behaviour and the exact body of the error responses are pinned
-//! by `testdata/catalog/catalog.json`.
-
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
@@ -25,39 +14,15 @@ use crate::discovery::CatalogSource;
 
 const CACHE_CONTROL: &str = "no-store";
 
-/// One catalog entry on the wire.
-///
-/// `device_id`, `device` and `role` are additive: an older server never sends
-/// them, an older client ignores them, and they are omitted while empty (the
-/// Home Assistant device registry could not be read). `role` is `"primary"` or
-/// `"setting"`; a setting is a `config`/`diagnostic` entity of the device, or a
-/// switch next to the device's light on a device that marks no categories.
-///
-/// A future device-level action (for example "speak this text on the speaker"
-/// or "call the speaker") is expected to appear as an entry with
-/// `kind: "action"`, the same `device_id`/`device` as its device, a
-/// human-readable `title`, and its own allowlisted action name; commands keep
-/// travelling as `{"entry", "action"}` tasks, so this shape stays additive.
-/// A Home Assistant `button` entity is a `kind: "button"` entry with the
-/// one-shot action `press`; it may carry no `device_id`, and clients group it
-/// with its device by the shared entity-id prefix. A station volume control is
-/// a `kind: "volume"` entry with the actions `set`, `mute` and `unmute`; its
-/// fixed entity and the live `volume` object keep the phone away from arbitrary
-/// media players.
 #[derive(Debug, Serialize)]
 struct EntryView {
     id: String,
     kind: &'static str,
     title: String,
-    /// Stable key of a server-generated title; omitted for Home Assistant
-    /// user data, which is shown verbatim.
     #[serde(rename = "titleKey", skip_serializing_if = "String::is_empty")]
     title_key: String,
-    /// Typed arguments for `titleKey`; omitted when there are none.
     #[serde(rename = "titleArgs", skip_serializing_if = "BTreeMap::is_empty")]
     title_args: BTreeMap<String, String>,
-    /// Stable key of a device status shown under the title (for example the
-    /// PC lock state); omitted when the device has no status.
     #[serde(rename = "detailKey", skip_serializing_if = "String::is_empty")]
     detail_key: String,
     #[serde(skip_serializing_if = "String::is_empty")]
@@ -76,10 +41,8 @@ struct EntryView {
     available: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     light: Option<LightView>,
-    /// Live station volume; omitted for every other entry.
     #[serde(skip_serializing_if = "Option::is_none")]
     volume: Option<VolumeView>,
-    /// Server-side visibility condition; omitted when unconditional.
     #[serde(rename = "visibleWhen", skip_serializing_if = "Option::is_none")]
     visible_when: Option<VisibleWhenView>,
 }
@@ -90,15 +53,12 @@ struct VisibleWhenView {
     state: String,
 }
 
-/// A station volume entry: the level in percent and whether the device is
-/// muted. Additive: an older client ignores it and keeps the plain row.
 #[derive(Debug, Serialize)]
 struct VolumeView {
     level: i32,
     muted: bool,
 }
 
-/// What a light can do and its current values.
 #[derive(Debug, Serialize)]
 struct LightView {
     brightness: bool,
@@ -119,12 +79,10 @@ struct LightView {
     saturation: i32,
     #[serde(skip_serializing_if = "str::is_empty")]
     mode: &'static str,
-    /// Effects the bulb advertises (`effect_list`); omitted when unknown.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     effects: Vec<String>,
 }
 
-/// The wire shape of `GET /v1/catalog`.
 #[derive(Debug, Serialize)]
 struct CatalogResponse {
     entries: Vec<EntryView>,
@@ -138,7 +96,6 @@ struct AppState {
     token: Token,
 }
 
-/// Build the HTTP router. `token` is the control bearer and must be non-empty.
 pub fn router(source: Arc<dyn CatalogSource>, token: Token) -> Router {
     let state = AppState { source, token };
     Router::new()
@@ -176,12 +133,6 @@ async fn catalog(State(state): State<AppState>, headers: HeaderMap) -> Response 
     response
 }
 
-/// Serialize the exact `GET /v1/catalog` body. Shared with the golden test so
-/// the byte contract is asserted without a live listener.
-///
-/// Go's `json.Encoder` escapes `<`, `>` and `&` (and U+2028/U+2029); serde does
-/// not. The replacements only ever occur inside strings, so escaping the whole
-/// document keeps the bytes identical to the Go server for every input.
 #[must_use]
 pub fn catalog_body(catalog: &Catalog, states_ok: bool) -> String {
     let body = serde_json::to_string(&CatalogResponse::from_catalog(catalog, states_ok))
@@ -283,7 +234,6 @@ fn text(status: StatusCode, body: &'static str) -> Response {
         .into_response()
 }
 
-/// `401` answer matching Go's `http.Error` plus the `WWW-Authenticate` hint.
 pub fn unauthorized() -> Response {
     let mut response = text(StatusCode::UNAUTHORIZED, "unauthorized\n");
     response
@@ -292,8 +242,6 @@ pub fn unauthorized() -> Response {
     response
 }
 
-/// Whether a request header carries the configured bearer token. An empty
-/// configured token never authorizes.
 #[must_use]
 pub fn authorized(header: Option<&HeaderValue>, token: &Token) -> bool {
     if token.expose().is_empty() {
@@ -434,7 +382,6 @@ mod tests {
             body.contains("\"titleKey\":\"catalog.action.speak_title\""),
             "{body}"
         );
-        // Home Assistant user data stays verbatim, without a key.
         assert!(body.contains("\"title\":\"Лампа\""), "{body}");
         assert_eq!(body.matches("\"titleKey\"").count(), 1, "{body}");
     }
@@ -468,7 +415,6 @@ mod tests {
             body.contains("\"detailKey\":\"catalog.status.locked\""),
             "{body}"
         );
-        // The lock binary sensor is not an entry of its own.
         assert_eq!(body.matches("\"id\":\"switch.komp\"").count(), 1, "{body}");
         assert!(!body.contains("komp_razblokirovan"), "{body}");
     }

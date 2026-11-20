@@ -16,7 +16,6 @@ private fun putU4(data: ByteArray, offset: Int, value: Int) {
     data[offset + 3] = ((value ushr 24) and 0xff).toByte()
 }
 
-/** Creates the smallest DEX that defines the given descriptors. */
 private fun buildDex(descriptors: List<String>): ByteArray {
     val count = descriptors.size
     val stringIdsOff = 0x70
@@ -37,8 +36,6 @@ private fun buildDex(descriptors: List<String>): ByteArray {
     var cursor = dataOff
     for ((index, bytes) in encoded.withIndex()) {
         putU4(data, stringIdsOff + 4 * index, cursor)
-        // UTF-16 length is skipped by the parser; ASCII descriptors fit in one
-        // uleb128 byte.
         data[cursor] = bytes.size.toByte()
         cursor += 1
         bytes.copyInto(data, cursor)
@@ -61,10 +58,6 @@ private fun writeZip(path: File, files: Map<String, ByteArray>) {
     }
 }
 
-/**
- * Writes a class file with a constant pool that names the class and every
- * reference. The parser only reads the constant pool.
- */
 private fun buildClass(name: String, refs: List<String>): ByteArray {
     val pool = ByteArrayOutputStream()
     var count = 1

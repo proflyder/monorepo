@@ -1,23 +1,4 @@
 #!/usr/bin/env bash
-# Install the Flux toolkit and hand reconciliation over to Git.
-#
-# Run from the owner's workstation, never from CI:
-#
-#   mise run admin:flux-bootstrap
-#
-# Idempotent: the toolkit, the ExternalSecrets (deploy key + settings) and the
-# GitRepository/root Kustomization are all applied with kubectl apply. The
-# script never reads or prints secret values; it only waits for the ESO-owned
-# Secrets to become Ready.
-#
-# Prerequisites:
-#   * External Secrets Operator and ClusterSecretStore/openbao are installed;
-#   * OpenBao holds `secret/k8s/flux-system/git-deploy-key` (identity,
-#     known_hosts) and `secret/k8s/flux-system/settings` (NEXUS_HOST,
-#     NEXUS_PUBLIC_HOST, NODE_LAN_IP, HOME_DOMAIN, LAN_CIDR, HAOS_ADDRESS,
-#     PVE_NODE_TARGET);
-#   * the matching public key is registered as a read-only deploy key on
-#     github.com/proflyder/monorepo (see README).
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
 DIR="$ROOT/projects/home/kubernetes/flux"

@@ -1,27 +1,3 @@
-//! Buttons via evdev (devices matched by name in /proc/bus/input/devices, names per Model).
-//! Station Midi: touch keys "awinic_sar", mute switch "mute"; Station Lite 2: touch keys
-//! "aw9610x", mute switch "gpio-keys"; Station Mini 3: touch keys "aw933xx", mute switch
-//! "gpio-keys"; Station Mini 2: touch keys "sar0_pad0", no mute switch device: the latched mute
-//! line is a GPIO (`Model::mute_gpio`, low = muted), sampled every 100 ms; Station Mini: keypad
-//! "adc_keypad" with only the momentary mute button. The others use the same key codes and
-//! switch:
-//!
-//! touch keys (capacitive, EV_KEY only; Midi KEY bitmap "40 0 0 0 0 0 0 0 c000000000000 0"):
-//!   Model::action_key (KEY_VOICECOMMAND 582) -> Action
-//!   KEY_VOLUMEUP     (115) -> VolumeUp
-//!   KEY_VOLUMEDOWN   (114) -> VolumeDown
-//!   Model::mute_key  (the Mini's KEY_MUTE 113 on adc_keypad) -> MuteToggle (the mic mute is
-//!   software there)
-//! mute switch (gpio-keys, KEY bitmap bit 113 KEY_MUTE, SW bitmap 0x4000 = SW_MUTE_DEVICE (14)):
-//!   the hardware microphone mute slider/toggle; SW_MUTE_DEVICE=1 means muted. Its KEY_MUTE
-//!   press/release events are ignored, the switch state is authoritative (initial value via
-//!   EVIOCGSW).
-//! Action: Short on release before 800 ms, Long as soon as it has been held for 800 ms.
-//! Volume*: Short on press, auto-repeated every 200 ms after being held for 500 ms, for at most
-//! 10 s.
-//! Devices that disappear (ENODEV) are looked up again every 3 s; SYN_DROPPED triggers a state
-//! resync.
-
 use std::cell::Cell;
 use std::fs::File;
 use std::io;
@@ -51,20 +27,13 @@ const KEY_VOLUMEUP: u16 = 115;
 const LONG_PRESS_MS: u64 = 800;
 const REPEAT_DELAY_MS: u64 = 500;
 const REPEAT_MS: u64 = 200;
-/// A key held longer than this is taken as stuck.
 const MAX_HOLD_MS: u64 = 10000;
-/// Retry period for missing/vanished input devices.
 const REOPEN_MS: u64 = 3000;
 const GPIO_DIR: &str = "/sys/class/gpio";
-/// Sampling period of the mute GPIO (maind polls it too).
 const GPIO_POLL_MS: u64 = 100;
-// maind's buttonsClickLimiter for "activate" (quasar.cfg): touches shorter than 56 ms and clicks
-// closer than 300 ms to the previous one are dropped.
 const MIN_ACTION_PRESS_MS: i64 = 56;
 const MIN_ACTION_GAP_MS: i64 = 300;
 
-/// Ошибка запуска ввода: ни одного устройства кнопок/мьюта не открылось; актор потом сам
-/// повторяет поиск каждые 3 с.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum InputError {
     #[error("input devices unavailable")]
@@ -87,14 +56,10 @@ pub enum Press {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum InputEvent {
     Button(Button, Press),
-    /// Hardware mic mute switch changed (true = muted).
     Mute(bool),
-    /// Momentary mute button that does not latch the microphone itself (the Mini's KEY_MUTE):
-    /// the controller toggles its software mute.
     MuteToggle,
 }
 
-/// Keeps the input actor alive; the actor stops when the last clone is dropped.
 #[derive(Clone)]
 pub struct InputHandle {
     muted: Rc<Cell<bool>>,
@@ -102,16 +67,11 @@ pub struct InputHandle {
 }
 
 impl InputHandle {
-    /// State of the mute switch: read at spawn (without a `Mute` event), then kept by the
-    /// actor before each `Mute` event and on every reopen.
     pub fn hw_muted(&self) -> bool {
         self.muted.get()
     }
 }
 
-/// Opens the touch keys (`Model::keys_input`) and the mute switch (`Model::mute_input`, or the
-/// GPIO `Model::mute_gpio`); Err when none opened. Missing or vanished devices are looked up
-/// again every 3 s.
 pub fn spawn_input(
     input: &'static Input,
 ) -> Result<(InputHandle, UnboundedReceiver<InputEvent>), InputError> {
@@ -134,7 +94,6 @@ pub fn spawn_input(
         _ => None,
     };
     let mut m = Machine::new(Rc::clone(&muted), tx, input.action_key, mute_key);
-    // The state the controller starts from: no event for it.
     if let Some(fd) = &mute {
         m.read_mute_state(fd.get_ref().switch_state(), false);
     }
@@ -170,7 +129,6 @@ pub fn spawn_input(
     ))
 }
 
-/// /dev/input/eventN of the device with the given name in a /proc/bus/input/devices listing.
 fn find_event_dev_in(devices: &str, name: &str) -> Option<String> {
     let want = format!("N: Name=\"{name}\"");
     let mut matched = false;
@@ -219,10 +177,6 @@ fn open_dev(name: &str, quiet: bool) -> Option<AsyncFd<Evdev>> {
     }
 }
 
-/// The value file of mute line `gpio` under `dir` (/sys/class/gpio), exported if nobody did. A
-/// global GPIO number only names this pin on the kernel it was read from (on the Midi, 475 is
-/// Wi-Fi SDIO), so the line is never configured: no `direction`, no `edge` write, and it is used
-/// only when it already is an input.
 fn open_mute_gpio(dir: &str, gpio: u32, quiet: bool) -> Option<File> {
     let line = format!("{dir}/gpio{gpio}");
     if !Path::new(&line).exists() {
@@ -239,7 +193,6 @@ fn open_mute_gpio(dir: &str, gpio: u32, quiet: bool) -> Option<File> {
         return None;
     }
     let path = format!("{line}/value");
-    // A value file that opens but cannot be read is no switch either.
     let opened = File::open(&path).and_then(|f| gpio_muted(&f).map(|_| f));
     match opened {
         Ok(f) => {
@@ -255,7 +208,6 @@ fn open_mute_gpio(dir: &str, gpio: u32, quiet: bool) -> Option<File> {
     }
 }
 
-/// Mute line level: pulled up, held low by the mic circuit while the microphones are cut.
 fn gpio_muted(f: &File) -> io::Result<bool> {
     let mut b = [0u8; 1];
     if f.read_at(&mut b, 0)? == 0 {
@@ -272,12 +224,10 @@ fn test_bit(bits: &[u8], n: u16) -> bool {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(usize)]
 enum Tick {
-    /// Long press, then the stuck-key guard.
     Action,
     RepeatDelay,
     Repeat,
     Reopen,
-    /// Sampling of the mute GPIO.
     MuteGpio,
 }
 
@@ -287,27 +237,20 @@ enum Dev {
     Mute,
 }
 
-/// Key and switch state machine, fed with evdev events and its own timers.
 struct Machine {
     timers: Timers<Tick>,
     epoch: Instant,
     muted: Rc<Cell<bool>>,
     tx: UnboundedSender<InputEvent>,
-    /// KEY_VOICECOMMAND of this model; None: no action button.
     action_key: Option<u16>,
-    /// Momentary mic mute button of this model; None: none.
     mute_key: Option<u16>,
-    /// Press time; None = not pressed.
     action_down: Option<i64>,
     last_action_ms: Option<i64>,
     action_long_sent: bool,
     repeat_code: Option<u16>,
     repeat_since: i64,
-    // After SYN_DROPPED the kernel discards events up to the next SYN_REPORT; the state is then
-    // read back from the device.
     keys_dropped: bool,
     mute_dropped: bool,
-    /// Per `Tick`: bumped whenever the timer is armed or cancelled.
     generation: [u64; 5],
 }
 
@@ -359,9 +302,6 @@ impl Machine {
         self.timers.cancel(t);
     }
 
-    /// A due key timer. The C++ loop handled fd events before the timers of the same wake-up,
-    /// so `queued` first takes the events the devices already have (without waiting); a timer
-    /// they cancelled or re-armed (a release, a new press) does not fire.
     fn on_tick(&mut self, t: Tick, queued: impl FnOnce(&mut Self)) {
         let generation = self.generation[t as usize];
         queued(self);
@@ -388,7 +328,6 @@ impl Machine {
         let _ = self.tx.send(InputEvent::Button(b, p));
     }
 
-    /// Forgets every pressed key (device lost or events dropped): no release will ever arrive.
     fn release_all(&mut self) {
         self.disarm(Tick::Action);
         self.disarm(Tick::RepeatDelay);
@@ -402,7 +341,6 @@ impl Machine {
         if let Some(k) = self.mute_key
             && code == k
         {
-            // value 1 is the press; 2 is autorepeat and 0 the release.
             if value == 1 {
                 info!("input: mute button");
                 let _ = self.tx.send(InputEvent::MuteToggle);
@@ -425,8 +363,6 @@ impl Machine {
                 if self.action_long_sent {
                     return;
                 }
-                // Capacitive noise (a hand near the top, flipping the mute switch) produces very
-                // short touches, often in bursts; maind's "buttonsClickLimiter" drops the same.
                 if held < MIN_ACTION_PRESS_MS
                     || self
                         .last_action_ms
@@ -457,7 +393,6 @@ impl Machine {
         }
     }
 
-    /// Handles a key timer (`Tick::Reopen` and `Tick::MuteGpio` belong to the actor).
     fn on_timer(&mut self, t: Tick) {
         match t {
             Tick::Action => {
@@ -471,7 +406,6 @@ impl Machine {
                 }
                 self.action_long_sent = true;
                 self.emit(Button::Action, Press::Long);
-                // Stuck-key guard: a release that never arrives must not block later presses.
                 self.arm(Tick::Action, MAX_HOLD_MS - LONG_PRESS_MS);
             }
             Tick::RepeatDelay => {
@@ -496,7 +430,6 @@ impl Machine {
         }
     }
 
-    /// `notify`: send `Mute` on a change (false only for the state read at spawn).
     fn set_muted(&mut self, m: bool, notify: bool) {
         if m == self.muted.get() {
             return;
@@ -515,8 +448,6 @@ impl Machine {
         }
     }
 
-    /// Key state after lost events: synthesize the releases we missed (presses are not
-    /// invented).
     fn resync_keys(&mut self, bits: io::Result<KeyBits>) {
         let b = match bits {
             Ok(b) => b,
@@ -539,8 +470,6 @@ impl Machine {
         }
     }
 
-    /// Events read from `dev` (fd for the log); the state queries run on SYN_REPORT after a
-    /// SYN_DROPPED.
     fn process(
         &mut self,
         dev: Dev,
@@ -590,7 +519,6 @@ struct Devices {
     input: &'static Input,
     keys: Option<AsyncFd<Evdev>>,
     mute: Option<AsyncFd<Evdev>>,
-    /// Value file of `MuteSwitch::Gpio`.
     mute_gpio: Option<File>,
 }
 
@@ -602,7 +530,6 @@ impl Devices {
         }
     }
 
-    /// Drops a device for the reopen timer; keys still held will never be released.
     fn close(&mut self, dev: Dev, m: &mut Machine) {
         match dev {
             Dev::Keys => {
@@ -613,7 +540,6 @@ impl Devices {
         }
     }
 
-    /// Devices that were missing at start or vanished (ENODEV) are looked up again.
     fn reopen_missing(&mut self, m: &mut Machine) {
         if self.keys.is_none() {
             self.keys = open_dev(self.input.keys_device, true);
@@ -639,9 +565,6 @@ impl Devices {
         }
     }
 
-    /// Samples the mute line (sysfs value files are always readable: waiting for POLLPRI would
-    /// need an `edge` written to the pin, which stays as found). A read error drops the file and
-    /// stops the sampling until the reopen timer finds the line readable again.
     fn poll_mute_gpio(&mut self, m: &mut Machine) {
         let Some(f) = &self.mute_gpio else { return };
         match gpio_muted(f) {
@@ -659,8 +582,6 @@ impl Devices {
     }
 }
 
-/// Resolves when `fd` is readable, Err when the reactor cannot poll it (the device is then
-/// closed for the reopen timer); never without a device.
 async fn readable(fd: Option<&AsyncFd<Evdev>>) -> io::Result<()> {
     match fd {
         Some(fd) => fd.readable().await.map(drop),
@@ -706,20 +627,16 @@ fn ready(
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Read {
-    /// After the reactor reported the device readable; EAGAIN clears that.
     Ready,
-    /// Whatever is queued now, regardless of the reactor (before a due timer).
     Now,
 }
 
-/// Reads everything `dev` has (until EAGAIN); a read error closes it for the reopen timer.
 fn drain(m: &mut Machine, devs: &mut Devices, dev: Dev, buf: &mut [RawInputEvent], how: Read) {
     let no_dev = || io::Error::from(io::ErrorKind::NotFound);
     loop {
         let Some(fd) = devs.get(dev) else { return };
         let r = match how {
             Read::Ready => fd.try_io(Interest::READABLE, |d| d.read_events(buf)),
-            // A readiness flag left set by this read only costs one EAGAIN later.
             Read::Now => fd.get_ref().read_events(buf),
         };
         match r {

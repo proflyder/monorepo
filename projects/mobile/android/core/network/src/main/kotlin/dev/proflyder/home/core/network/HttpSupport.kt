@@ -14,20 +14,12 @@ import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import okhttp3.ResponseBody
 
-/** HTTP plumbing shared by the scheduler and control-catalog clients. */
-
 internal const val MAX_RESPONSE_BYTES = 8L * 1024L * 1024L
 
 internal class ResponseTooLargeException : IOException("response exceeds 8 MiB limit")
 
-/**
- * A request failed before reaching the network for a reason the user can fix
- * (no endpoint, bad token). Thrown by [ConnectionInterceptor] so it travels
- * through OkHttp as an [IOException] and is mapped back by [toRemoteFailure].
- */
 internal class RemoteFailureException(val failure: RemoteFailure) : IOException("request not sent: $failure")
 
-/** Transport failure -> honest, non-secret domain failure. */
 internal fun IOException.toRemoteFailure(): RemoteFailure = when (this) {
     is RemoteFailureException -> failure
     is ResponseTooLargeException -> RemoteFailure.ProtocolFailure("response exceeds 8 MiB limit")
@@ -50,15 +42,6 @@ internal fun sanitizeMessage(message: String?): String? = message
     ?.replace(Regex("[\\p{Cntrl}]"), " ")
     ?.replace(Regex("(?i)bearer\\s+\\S+"), "Bearer <redacted>")
 
-/**
- * Failure of a unary Connect call before a decoded response: transport errors
- * keep their [toRemoteFailure] mapping, malformed JSON becomes a protocol
- * failure, and anything else is a bug the caller should rethrow.
- *
- * Cancellation is rethrown, never mapped: leaving a screen, switching tabs or a
- * cancelled refresh is not a failure the user should see or the log should
- * report as an error.
- */
 internal fun Throwable.toCallFailure(): RemoteFailure = when {
     isCallCancellation() -> throw CancellationException(message ?: "call canceled", this)
     this is IOException -> toRemoteFailure()
@@ -66,7 +49,6 @@ internal fun Throwable.toCallFailure(): RemoteFailure = when {
     else -> RemoteFailure.ProtocolFailure(sanitizeMessage(message) ?: "unexpected response shape")
 }
 
-/** Reads at most [MAX_RESPONSE_BYTES]; larger bodies fail with [ResponseTooLargeException]. */
 internal fun ResponseBody.readBounded(): String {
     if (contentLength() > MAX_RESPONSE_BYTES) throw ResponseTooLargeException()
     val source = source()
@@ -74,11 +56,6 @@ internal fun ResponseBody.readBounded(): String {
     return source.readUtf8()
 }
 
-/**
- * Parses a Connect error envelope. The standard `message` stays on the domain
- * failure for older servers; new servers attach a `home.v1.LocalizedText`
- * detail whose JSON `debug` carries a stable key and typed arguments.
- */
 fun parseConnectFailure(httpCode: Int, text: String, json: Json): RemoteFailure {
     val parsed = runCatching {
         if (text.isBlank()) null else json.decodeFromString(ConnectErrorDto.serializer(), text)

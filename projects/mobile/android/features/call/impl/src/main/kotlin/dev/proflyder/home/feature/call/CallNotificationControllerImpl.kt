@@ -10,7 +10,6 @@ import dev.zacsweers.metro.SingleIn
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
-/** Starts the `phoneCall` foreground service when a call becomes live. */
 @SingleIn(AppScope::class)
 @ContributesBinding(AppScope::class)
 @Inject

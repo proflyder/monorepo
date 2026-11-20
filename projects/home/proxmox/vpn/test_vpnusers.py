@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-"""Unit tests for the pure helpers in vpnusers.py."""
 import base64
 import unittest
 

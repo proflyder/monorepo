@@ -1,8 +1,3 @@
-//! Identity and pairing storage behind [`IdentityStore`]. The file implementation keeps the C++
-//! daemon's exact format (one file per persistence key, raw bytes, the `unpaired_access` switch),
-//! so a pairing made by either binary keeps working under the other; the in-memory one is for
-//! tests.
-
 #[cfg(test)]
 use std::collections::HashMap;
 use std::ffi::{OsStr, OsString};
@@ -17,21 +12,15 @@ use tracing::{error, warn};
 
 use home_linux::io_error_text as errstr;
 
-/// File whose first non-blank character `0` turns unpaired access off (pairing required).
 pub const UNPAIRED_ACCESS: &str = "unpaired_access";
 
-/// Persistence provider the sendspin-cpp client calls from its main loop thread.
 pub trait IdentityStore: Send + Sync {
-    /// Creates the storage directory if needed; false when identity will not persist.
     fn ensure(&self) -> bool;
     fn load(&self, key: &OsStr) -> Option<Vec<u8>>;
-    /// true once durable.
     fn save(&self, key: &OsStr, data: &[u8]) -> bool;
-    /// Music Assistant may use the speaker without a pairing record.
     fn unpaired_access(&self) -> bool;
 }
 
-/// `<dir>/<key>`, byte for byte as the C++ daemon built it.
 fn path(dir: &Path, key: &OsStr) -> PathBuf {
     let mut p = OsString::from(dir.as_os_str());
     p.push("/");
@@ -39,7 +28,6 @@ fn path(dir: &Path, key: &OsStr) -> PathBuf {
     PathBuf::from(p)
 }
 
-/// mkdir 0700, not recursive; an existing entry counts as success.
 pub fn ensure_dir(dir: &Path) -> bool {
     match DirBuilder::new().mode(0o700).create(dir) {
         Ok(()) => true,
@@ -70,8 +58,6 @@ impl IdentityStore for FileStore {
         fs::read(path(&self.dir, key)).ok()
     }
 
-    /// Atomic and durable: `<key>.tmp` (0600) written and fsynced, renamed over `<key>`, then the
-    /// directory fsynced.
     fn save(&self, key: &OsStr, data: &[u8]) -> bool {
         let p = path(&self.dir, key);
         let mut tmp = OsString::from(p.as_os_str());
@@ -116,12 +102,10 @@ impl IdentityStore for FileStore {
     }
 }
 
-/// Pure in-memory keep for tests.
 #[cfg(test)]
 #[derive(Default)]
 pub struct MemoryStore {
     map: Mutex<HashMap<OsString, Vec<u8>>>,
-    /// None: the stored switch is absent (on).
     unpaired: Mutex<Option<bool>>,
 }
 
@@ -167,7 +151,6 @@ impl IdentityStore for MemoryStore {
     }
 }
 
-/// C++ `f >> c` (skips C-locale white space), then `c != '0'`; nothing to read = on.
 fn unpaired_from(content: &[u8]) -> bool {
     content
         .iter()
@@ -213,7 +196,6 @@ mod tests {
         assert!(ensure_dir(&t.0));
         assert_eq!(mode(&t.0), 0o700);
         assert!(ensure_dir(&t.0));
-        // Not recursive, like mkdir(2).
         assert!(!ensure_dir(&t.0.join("a/b")));
     }
 
@@ -233,13 +215,11 @@ mod tests {
         assert!(!t.0.join("keypair.tmp").exists());
         assert_eq!(store.load(key), Some(blob));
 
-        // Overwrite with a shorter blob; an empty one is a valid stored value.
         assert!(store.save(key, &[7, 8]));
         assert_eq!(store.load(key), Some(vec![7, 8]));
         assert!(store.save(OsStr::new("rec_0"), &[]));
         assert_eq!(store.load(OsStr::new("rec_0")), Some(vec![]));
 
-        // A file written by the C++ daemon is read back as is.
         fs::write(t.0.join("output_delay"), [0x2c, 0x01]).unwrap();
         assert_eq!(
             store.load(OsStr::new("output_delay")),

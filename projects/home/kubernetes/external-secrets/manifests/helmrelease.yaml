@@ -1,9 +1,3 @@
-# External Secrets Operator, adopted from the live `external-secrets` release.
-#
-# Same release name and namespace as `helm list -A`; values are the chart
-# values used by the former deploy script (digest-pinned image, one replica).
-# The CRDs are rendered by the chart (`installCRDs: true`), so they follow the
-# normal Helm upgrade path exactly as before.
 apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:

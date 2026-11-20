@@ -518,3 +518,19 @@ failed call. A healthy check: `hermes mcp test homeassistant`.
 Title-generation warnings about a missing Codex OAuth token are separate from
 the main chat/tool path; main `openai-codex` inference still works through the
 credential pool.
+
+## Заметки к коду
+
+Пояснения, перенесённые из комментариев исходников (код комментариев не содержит, см. `AGENTS.md`).
+
+- `config.fragment.yaml` — Hermes Agent overlay for the Station Midi voice cascade.
+  - The bot token is read from TELEGRAM_BOT_TOKEN (hermes-environment) and TELEGRAM_ALLOWED_USERS restricts the chat to the owner. Long polling is the default transport; do not configure a webhook for this bot.
+  - The /report skill is a Telegram/CLI command that calls infra_report. On the voice api_server surface it is unnecessary (free text already works) and the voice path must not gain a slash entry point.
+  - Alarms, timers and reminders are owned by the durable scheduler through the mcp-gateway `time` group (`time_now`, `alarm_*`, `timer_*`, `reminder_*`).
+- `hermes-private.example.yaml` — Example private values for home-deploy hermes render-config — copy, fill with the real endpoints and keep the copy in secrets/ (for example secrets/home/hermes-private.yaml). Never commit the filled file.
+  - Owner's numeric Telegram chat id (a private chat id equals the user id from TELEGRAM_ALLOWED_USERS). The renderer installs telegram_prompt.txt as platforms.telegram.channel_overrides[<id>].system_prompt and never writes this key into config.yaml.
+- `test_hermes_config.py`
+  - Telegram is enabled by TELEGRAM_BOT_TOKEN from hermes-environment and limited by TELEGRAM_ALLOWED_USERS; a webhook would move it off polling and needs a public ingress, which this bot must not have.
+  - Live regression 2026-11-12: Hermes called schedule_alarm_create_relative(hours=0, minutes=0, name="через час") and the voice path announced a one-minute alarm.
+  - Nothing is invented, but the spoken project goes to the gateway as is: the gateway owns the alias matching, so Hermes must not re-ask first.
+  - The stale copy in the fragment caused drift; the personality is now rendered from voice_prompt.txt and the fragment must not repeat it.

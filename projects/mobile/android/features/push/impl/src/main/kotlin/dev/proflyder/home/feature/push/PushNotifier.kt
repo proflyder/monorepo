@@ -19,20 +19,6 @@ import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 
-/**
- * Draws the two notification shapes. All user-visible text comes from
- * resources; a server message supplies the title and body of an ordinary
- * notification and nothing else.
- *
- * The find-phone notification is silent and belongs to the silent
- * `home_phone_find_v2` channel: the sound comes only from [FindPhoneAudio] in
- * the foreground service, so a notification update can never start a second
- * copy of the melody. `setOnlyAlertOnce` and `setSilent` keep reposts quiet as
- * well. The full-screen intent opens the ringing screen even over the lock
- * screen; on Android 14+ this only becomes a full-screen intent once the owner
- * granted the allowance, otherwise the notification is still high-importance
- * and the service still rings.
- */
 @SingleIn(AppScope::class)
 @Inject
 class PushNotifier(
@@ -42,7 +28,6 @@ class PushNotifier(
     private val accent: Int
         get() = AppThemes.color(context, appearance.state.value.theme, ColorRole.PRIMARY)
 
-    /** Shows an ordinary notification; the deep link is an in-app route. */
     fun notify(message: PushMessage.Notify) {
         val content = openAppIntent(message.deepLink)
         val notification = NotificationCompat.Builder(context, PushChannels.NOTIFICATIONS)
@@ -59,8 +44,7 @@ class PushNotifier(
         post(NOTIFY_ID, notification)
     }
 
-    /** The ongoing ringing notification with the full-screen intent. */
-    @Suppress("MissingPermission") // only posted by the foreground service
+    @Suppress("MissingPermission")
     fun ring(reason: String): Notification {
         val full = findScreenIntent()
         return NotificationCompat.Builder(context, PushChannels.FIND)
@@ -87,12 +71,10 @@ class PushNotifier(
             .build()
     }
 
-    /** Removes the ringing notification (the service also drops its own). */
     fun cancelRing() {
         NotificationManagerCompat.from(context).cancel(FIND_ID)
     }
 
-    /** Deep link `home://alarms` selects the alarms tab; unknown routes open the app. */
     private fun openAppIntent(link: PushDeepLink?): PendingIntent {
         val intent = Intent(context, mainActivityClass())
             .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
@@ -126,13 +108,8 @@ class PushNotifier(
         )
     }
 
-    // The POST_NOTIFICATIONS guard lives in canPostNotifications(); lint cannot
-    // see through the helper, so the suppression is scoped to this call.
     @SuppressLint("MissingPermission")
     private fun post(id: Int, notification: Notification) {
-        // POST_NOTIFICATIONS is a runtime permission on Android 13+; without it
-        // the system drops the notification, so the request is skipped instead
-        // of crashing with a SecurityException.
         if (!canPostNotifications()) return
         runCatching {
             NotificationManagerCompat.from(context).notify(id, notification)
@@ -161,10 +138,8 @@ class PushNotifier(
         const val REQUEST_FIND = 2
         const val REQUEST_STOP = 3
 
-        /** The app shell; resolved by name so this module stays independent of `app`. */
         const val MAIN_ACTIVITY = "dev.proflyder.home.MainActivity"
     }
 
-    /** The id the foreground service starts with; the same record is updated. */
     fun findNotificationId(): Int = FIND_ID
 }

@@ -1,13 +1,3 @@
-//! Announces the final answer of a routed bb turn.
-//!
-//! The immediate acknowledgement was already spoken by the router, so this
-//! background worker long-polls `/v1/voice/result` for up to 900 s and then
-//! either enqueues the answer (durable queue) or announces it directly.
-//!
-//! Two behaviours are deliberate: a timeout, a gateway error or a still-running
-//! turn speaks nothing at all; an empty successful answer becomes "Готово.", an
-//! explicitly failed turn becomes "Агент завершил работу с ошибкой.".
-
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -20,7 +10,6 @@ use crate::domain::announce::answer_text;
 use crate::domain::profile::Profile;
 use crate::domain::routing::Announcement;
 
-/// Tuning of the late-answer poller.
 #[derive(Debug, Clone)]
 pub struct ResultsOptions {
     pub max_chars: usize,
@@ -40,7 +29,6 @@ impl Default for ResultsOptions {
     }
 }
 
-/// Starts one background announcer per routed turn.
 pub struct Results {
     gateway: Arc<Gateway>,
     announcer: Arc<HaAnnouncer>,
@@ -77,7 +65,6 @@ impl Results {
         }
     }
 
-    /// Spawns one background announcer; it outlives the HTTP request.
     pub fn start(self: &Arc<Self>, announcement: &Announcement, profile: Profile) {
         let this = Arc::clone(self);
         let cancel = self.supervisor.token();
@@ -87,7 +74,6 @@ impl Results {
         });
     }
 
-    /// Long-polls one turn and speaks or enqueues its answer.
     pub async fn poll(
         &self,
         announcement: &Announcement,
@@ -133,8 +119,6 @@ impl Results {
                 }
             }
         }
-        // Reaching the deadline without an answer is a timeout, even when the
-        // last poll said "running".
         if !finished {
             status.clear();
             status.push_str("timeout");
@@ -196,7 +180,6 @@ fn status_or_unknown(status: &str) -> &str {
     if status.is_empty() { "unknown" } else { status }
 }
 
-/// Sleeps unless cancelled; returns `false` when cancelled.
 pub async fn sleep(cancel: &CancellationToken, delay: Duration) -> bool {
     if delay.is_zero() {
         return !cancel.is_cancelled();

@@ -3,9 +3,6 @@ load("//platform/bazel/oci:service_image.bzl", "rust_service_image")
 
 package(default_visibility = ["//visibility:public"])
 
-# Reviewed renderer inputs. The renderer is the Rust crate
-# (//platform/deploy-rs:home-deploy, `hermes render-config`); these are the files
-# it installs and merges into HERMES_HOME.
 filegroup(
     name = "render_sources",
     srcs = glob(
@@ -19,9 +16,6 @@ filegroup(
     ),
 )
 
-# The image overlay: exactly the files the renderer installs, at the same
-# relative layout under /opt/hermes-overlay. README, tests, BUILD files and the
-# private values example stay out of the image.
 pkg_tar(
     name = "hermes-config_overlay",
     srcs = [
@@ -42,11 +36,6 @@ pkg_tar(
     mode = "0644",
 )
 
-# Reproducible image: the static `home-deploy` binary is the entrypoint (the
-# init container runs `hermes render-config`, the sidecar `hermes
-# drift-exporter`) and the reviewed overlay ships read-only in the same digest.
-# A pins update therefore restarts Hermes only when the overlay or renderer
-# changed.
 rust_service_image(
     name = "hermes-config",
     crate_binary = "//platform/deploy-rs:home-deploy",

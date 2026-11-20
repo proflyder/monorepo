@@ -1,9 +1,4 @@
 #!/usr/bin/env bash
-# Install and configure ocserv inside the VPN container.
-#
-# Run as root inside the CT (create-lxc.sh creates the container). The script
-# is idempotent: existing users, OTP secrets and a generated certificate are
-# preserved. Public examples use RFC 5737 addresses; real values are passed in.
 set -euo pipefail
 umask 077
 
@@ -19,7 +14,6 @@ CLIENT_CA=
 CLIENT_CRL=
 CLIENT_CA_DEST=/etc/ocserv/ssl/client-ca.pem
 CLIENT_CRL_DEST=/etc/ocserv/ssl/client-ca.crl
-# Optional restricted "ci" group: its own pool and a single allowed target.
 CI_CIDR=10.77.1.0/24
 CI_HOST=
 
@@ -92,9 +86,6 @@ apt-get update
 apt-get install -y --no-install-recommends \
   ca-certificates gnutls-bin nftables ocserv openssh-server
 
-# ----- optional client certificate authentication --------------------------
-# A re-run without --client-ca keeps an already installed CA, so the script
-# stays idempotent. A fresh container without a CA keeps password + TOTP only.
 if [[ -z $CLIENT_CA && -s $CLIENT_CA_DEST ]]; then
   CLIENT_CA=$CLIENT_CA_DEST
   [[ -n $CLIENT_CRL ]] || CLIENT_CRL=$CLIENT_CRL_DEST
@@ -112,10 +103,6 @@ if [[ -n $CLIENT_CA ]]; then
   if [[ $CLIENT_CRL != "$CLIENT_CRL_DEST" ]]; then
     install -m 644 "$CLIENT_CRL" "$CLIENT_CRL_DEST"
   fi
-  # ocserv 1.3 resolves the certificate method through the security module;
-  # it only works as the primary method. Password + TOTP therefore becomes
-  # the alternative method: clients with a valid certificate skip it, clients
-  # without one still log in with password + TOTP.
   CERT_AUTH_CONF=$(cat <<EOF
 auth = "certificate"
 enable-auth = "plain[passwd=/etc/ocserv/ocpasswd,otp=/etc/ocserv/users.oath]"
@@ -131,7 +118,6 @@ fi
 install -d -m 755 /etc/ocserv /etc/ocserv/ssl /etc/ocserv/config-per-group \
   /etc/ocserv/defaults
 
-# ----- TLS certificate (self-signed for stage 1) ---------------------------
 if [[ ! -s /etc/ocserv/ssl/server-cert.pem || ! -s /etc/ocserv/ssl/server-key.pem ]]; then
   tmp=$(mktemp -d)
   trap 'rm -rf "$tmp"' EXIT
@@ -155,9 +141,6 @@ EOF
   install -m 644 "$tmp/server-cert.pem" /etc/ocserv/ssl/server-cert.pem
 fi
 
-# ----- ocserv configuration ------------------------------------------------
-# Authentication directives are non-reloadable in ocserv: compare them so the
-# service is restarted only when they actually change.
 old_auth=$(grep -E '^(auth|enable-auth|ca-cert|crl|cert-user-oid|cert-group-oid) =' \
   /etc/ocserv/ocserv.conf 2>/dev/null || true)
 cat >/etc/ocserv/ocserv.conf <<EOF
@@ -240,10 +223,6 @@ EOF
 
 cp /etc/ocserv/config-per-group/lan /etc/ocserv/defaults/group.conf
 
-# ----- restricted "ci" group ----------------------------------------------
-# A machine client (CI runner) gets its own pool so the general accept rule for
-# $VPN_CIDR never covers it. It is routed only to the K3s node and no DNS is
-# pushed, so even a leaked certificate cannot reach other home services.
 if [[ -n $CI_HOST ]]; then
   cat >/etc/ocserv/config-per-group/ci <<EOF
 # Restricted CI profile: own pool, one route, no DNS.
@@ -256,11 +235,9 @@ fi
 [[ -e /etc/ocserv/ocpasswd ]] || install -m 600 /dev/null /etc/ocserv/ocpasswd
 [[ -e /etc/ocserv/users.oath ]] || install -m 600 /dev/null /etc/ocserv/users.oath
 
-# ----- forwarding + nftables ----------------------------------------------
 cat >/etc/sysctl.d/90-vpn.conf <<EOF
 net.ipv4.ip_forward = 1
 EOF
-# Unprivileged containers cannot apply every key from sysctl --system.
 sysctl -w net.ipv4.ip_forward=1 >/dev/null 2>&1 || true
 [[ $(cat /proc/sys/net/ipv4/ip_forward) == 1 ]] || die "IPv4 forwarding is disabled"
 
@@ -320,7 +297,6 @@ EOF
 
 nft -c -f /etc/nftables.conf
 
-# ----- SSH: only key-based root login; firewall limits it to LAN -----------
 install -d -m 755 /etc/ssh/sshd_config.d
 cat >/etc/ssh/sshd_config.d/10-vpn.conf <<EOF
 PermitRootLogin prohibit-password
@@ -338,10 +314,8 @@ new_auth=$(grep -E '^(auth|enable-auth|ca-cert|crl|cert-user-oid|cert-group-oid)
   /etc/ocserv/ocserv.conf)
 if systemctl is-active --quiet ocserv; then
   if [[ $old_auth == "$new_auth" ]]; then
-    # Reloading keeps established sessions; everything else is re-read.
     systemctl reload ocserv
   else
-    # Authentication methods cannot be changed with reload.
     systemctl restart ocserv
     echo "authentication methods changed; ocserv restarted"
   fi

@@ -1,23 +1,4 @@
 #!/usr/bin/env bash
-# Build and optionally publish the container images of one deploy unit.
-#
-# Called from the unit job (`_unit.yml`) after its Bazel tests, in the same
-# Bazel server, so the `<image>_image` actions are analysis/action cache hits.
-# The docker/mixed branch (Hermes Buildx) lives here as well, keeping one job
-# per unit.
-#
-#   build-images.sh --unit scheduler --builder bazel \
-#     --images "scheduler home-deploy" --target-root //projects/home/kubernetes/scheduler \
-#     --push true --tree-tag tree-<hash> --pushed-file "$RUNNER_TEMP/pushed.txt"
-#
-#   build-images.sh --unit hermes --builder mixed \
-#     --images "hermes voice-proxy health-exporter home-deploy" \
-#     --bazel-images '{"voice-proxy":"//solutions/voice-proxy",...}' \
-#     --push true --tree-tag tree-<hash> --pushed-file "$RUNNER_TEMP/pushed.txt"
-#
-# The pushed digests are appended as `image=sha256:...` lines for the
-# attestation matrix. Pushing is the caller's decision (`--push true` only on a
-# same-repository pull request with registry credentials).
 set -euo pipefail
 
 REGISTRY="ghcr.io/proflyder"

@@ -1,13 +1,7 @@
-//! Batch ordering: source, then due time, then `STOP` before `FIRE`.
-//!
-//! The ordering only removes races inside one leased batch; events that arrive
-//! in different batches keep the server order.
-
 use std::cmp::Ordering;
 
 use home_worker::{Action, Event};
 
-/// Order one leased batch in place.
 pub fn order_events(events: &mut [Event]) {
     events.sort_by(compare);
 }

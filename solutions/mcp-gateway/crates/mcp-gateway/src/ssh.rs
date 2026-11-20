@@ -1,40 +1,22 @@
-//! SSH bridge to the bb home-dispatcher.
-//!
-//! Ports `solutions/mcp-gateway/internal/bb/{ssh,hostkey}.go`. Every call is one
-//! SSH session running the forced command `bb-dispatch`: one JSON object on
-//! stdin, one JSON answer on stdout (bounded at 1 MiB). The gateway owns only an
-//! ed25519 key restricted to that bridge and a pinned `known_hosts` file.
-//!
-//! The transport itself lives in the shared [`forced_ssh`] crate; this module
-//! keeps the gateway's fixed command, limits and [`crate::ErrorKind`] mapping so
-//! its callers and logs are unchanged.
-
 use std::fmt;
 use std::path::PathBuf;
 use std::time::Duration;
 
 pub use forced_ssh::{Answer, ErrorClass, check_host_key, host_key_algorithms};
 
-/// Default bound for one bridge call, including the SSH handshake.
 pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(15);
-/// Upper bound for the bridge answer. The bridge itself limits responses to
-/// 1 MiB; a longer answer is truncated at the same boundary.
 pub const MAX_ANSWER_BYTES: usize = 1 << 20;
 const COMMAND: &str = "bb-dispatch";
 
-/// One bridge call failure. It never contains key material or a payload.
 #[derive(Debug)]
 pub struct Error(forced_ssh::Error);
 
 impl Error {
-    /// The failed phase.
     #[must_use]
     pub fn class(&self) -> ErrorClass {
         self.0.class()
     }
 
-    /// Whether a retry may succeed. A timeout, dial, handshake and session
-    /// failure is transient; a rejected host key, key or file is not.
     #[must_use]
     pub fn kind(&self) -> crate::ErrorKind {
         match self.0.kind() {
@@ -57,29 +39,21 @@ impl fmt::Display for Error {
 
 impl std::error::Error for Error {}
 
-/// Options for one bridge runner.
 #[derive(Debug, Clone)]
 pub struct Options {
-    /// `host:port` of the bb host.
     pub address: String,
-    /// The user that owns the restricted key (normally `bb`).
     pub user: String,
-    /// An unencrypted ed25519 private key.
     pub key_file: PathBuf,
-    /// Pins the bb host key.
     pub known_hosts_file: PathBuf,
-    /// Per-call timeout; [`DEFAULT_TIMEOUT`] when `None`.
     pub timeout: Option<Duration>,
 }
 
-/// Executes one forced command per call.
 #[derive(Debug, Clone)]
 pub struct SshRunner {
     inner: forced_ssh::SshRunner,
 }
 
 impl SshRunner {
-    /// Build a runner. Files are read on every call, like the Go client.
     #[must_use]
     pub fn new(options: Options) -> Self {
         Self {
@@ -96,7 +70,6 @@ impl SshRunner {
         }
     }
 
-    /// Run one bridge call.
     pub async fn run(&self, payload: &[u8]) -> Result<Answer, Error> {
         self.inner.run(payload).await.map_err(Error)
     }

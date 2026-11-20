@@ -3,8 +3,6 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
-# axum middleware/layers used by the home services: bearer auth, health,
-# body-size limit, request timeout and graceful serving.
 DEPS = [
     "@crates//:axum",
     "@crates//:http",
@@ -34,7 +32,6 @@ rust_test(
     deps = DEPS,
 )
 
-# Mirrors the root [workspace.lints] through the crate's `[lints] workspace = true`.
 extract_cargo_lints(
     name = "workspace_lints",
     manifest = "Cargo.toml",

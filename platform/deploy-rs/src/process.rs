@@ -1,37 +1,22 @@
-//! Subprocess runner for `kubectl` (and later `helm`).
-//!
-//! The Go helpers keep the exact argv the Python scripts used, so a fake
-//! kubectl can record a trace and compare it against the fixture. The runner is
-//! injectable so unit tests never need a cluster. A failed start is reported as
-//! exit status 1 with the start error on stderr, like the shell would.
-
 use std::io::Write;
 use std::process::{Command as Process, Stdio};
 
-/// What one kubectl invocation produced.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Output {
-    /// Captured stdout.
     pub stdout: String,
-    /// Captured stderr.
     pub stderr: String,
-    /// Exit status, or 1 when the process could not start.
     pub code: i32,
 }
 
-/// Executes a command with arguments (without the binary name).
 pub trait Runner {
-    /// Runs one command.
     fn run(&self, args: &[String]) -> Output;
 }
 
-/// Runs the real binary named by the deploy script.
 pub struct SystemRunner {
     program: String,
 }
 
 impl SystemRunner {
-    /// Creates a runner for `program`.
     #[must_use]
     pub fn new(program: &str) -> Self {
         Self {
@@ -57,24 +42,17 @@ impl Runner for SystemRunner {
     }
 }
 
-/// One subprocess invocation for the Hermes rollout (kubectl or helm).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Invocation {
-    /// Binary name.
     pub program: String,
-    /// Arguments.
     pub args: Vec<String>,
-    /// Optional stdin.
     pub stdin: Option<String>,
 }
 
-/// Executes a full [`Invocation`].
 pub trait CommandRunner {
-    /// Runs one command.
     fn run(&self, command: &Invocation) -> Output;
 }
 
-/// Runs the real binary named by the command.
 pub struct SystemCommandRunner;
 
 impl CommandRunner for SystemCommandRunner {
@@ -121,7 +99,6 @@ pub mod testing {
 
     use super::{Output, Runner};
 
-    /// Records every argv and answers from an injected handler.
     pub struct FakeRunner<F> {
         handler: F,
         calls: RefCell<Vec<Vec<String>>>,
@@ -131,7 +108,6 @@ pub mod testing {
     where
         F: Fn(&[String]) -> Output,
     {
-        /// Creates a fake runner.
         pub fn new(handler: F) -> Self {
             Self {
                 handler,
@@ -139,12 +115,10 @@ pub mod testing {
             }
         }
 
-        /// Returns the recorded calls.
         pub fn calls(&self) -> Vec<Vec<String>> {
             self.calls.borrow().clone()
         }
 
-        /// Returns the verb (third argv element) of every call.
         pub fn verbs(&self) -> Vec<String> {
             self.calls
                 .borrow()
@@ -164,7 +138,6 @@ pub mod testing {
         }
     }
 
-    /// Records every [`super::Invocation`] and answers from an injected handler.
     pub struct FakeCommandRunner<F> {
         handler: F,
         calls: RefCell<Vec<super::Invocation>>,
@@ -174,7 +147,6 @@ pub mod testing {
     where
         F: Fn(&super::Invocation) -> Output,
     {
-        /// Creates a fake command runner.
         pub fn new(handler: F) -> Self {
             Self {
                 handler,
@@ -182,7 +154,6 @@ pub mod testing {
             }
         }
 
-        /// Returns the recorded invocations.
         pub fn calls(&self) -> Vec<super::Invocation> {
             self.calls.borrow().clone()
         }

@@ -1,43 +1,22 @@
-//! Framing of the Midi's Zigbee co-processor: Telink zbhci.
-//!
-//! `0x55 | type BE16 | length BE16 | XOR of type, length and payload | payload | 0xAA`. Same on
-//! all three firmwares (`radio/`). The firmware DMA-receives exactly one frame per buffer and
-//! answers every frame with an ACK (type 0x8000, payload `[type BE16][status][0]`); a second
-//! frame sent before that ACK is merged into the same buffer and rejected, so frames go out
-//! stop-and-wait ([`link`]).
-//!
-//! [`FrameCodec`] is the [`tokio_util::codec`] form for a stream; [`scan_frames`] stays the pure
-//! scanner the golden test pins to the C++ output (it takes a batch and reports how much was
-//! used, which the byte-stream decoder cannot).
-//!
-//! [`link`]: crate::link
-
 use std::collections::VecDeque;
 
 use tokio_util::bytes::{Buf, BufMut, BytesMut};
 use tokio_util::codec::{Decoder, Encoder};
 
 pub const ACK: u16 = 0x8000;
-/// Sent by the application once it runs.
 pub const BOOT_IND: u16 = 0x8907;
-/// Crash report, then a restart.
 pub const CRASH_IND: u16 = 0x8909;
-/// Payload limit of the firmware's transmit path.
 pub const MAX_FRAME: usize = 0xF9;
-/// The crash report carries up to 4 KiB of RAM.
 pub const MAX_PAYLOAD: usize = 0x1100;
 
-/// A decoded zbhci frame.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Frame {
     pub ty: u16,
     pub payload: Vec<u8>,
 }
 
-/// A zbhci frame around `payload`.
 pub fn build_frame(ty: u16, payload: &[u8]) -> Vec<u8> {
     let [t0, t1] = ty.to_be_bytes();
-    // The length field is 16 bits; payloads never come near it (the radio takes 0xF9).
     let [n0, n1] = (payload.len() as u16).to_be_bytes();
     let mut f = Vec::with_capacity(payload.len() + 7);
     f.extend_from_slice(&[0x55, t0, t1, n0, n1]);
@@ -47,8 +26,6 @@ pub fn build_frame(ty: u16, payload: &[u8]) -> Vec<u8> {
     f
 }
 
-/// Finds the frames in `rx`, calling `on_frame` for each; returns how many bytes are used up
-/// (frames and garbage before them; an incomplete frame at the end stays).
 pub fn scan_frames(rx: &[u8], mut on_frame: impl FnMut(u16, &[u8])) -> usize {
     let mut pos = 0;
     while rx.len() - pos >= 7 {
@@ -59,8 +36,6 @@ pub fn scan_frames(rx: &[u8], mut on_frame: impl FnMut(u16, &[u8])) -> usize {
         let h = &rx[pos..];
         let ty = u16::from_be_bytes([h[1], h[2]]);
         let len = usize::from(u16::from_be_bytes([h[3], h[4]]));
-        // Normal frames carry at most 0xF9 bytes; only the crash report is longer. A stray 0x55
-        // with a bogus length must not hold back the frames behind it.
         if len
             > if ty == CRASH_IND {
                 MAX_PAYLOAD
@@ -86,10 +61,8 @@ pub fn scan_frames(rx: &[u8], mut on_frame: impl FnMut(u16, &[u8])) -> usize {
     pos
 }
 
-/// `tokio_util::codec` framing of a zbhci byte stream.
 #[derive(Default)]
 pub struct FrameCodec {
-    /// Frames of the last scan not handed out yet.
     ready: VecDeque<Frame>,
 }
 
@@ -145,7 +118,6 @@ mod tests {
         assert_eq!(got.len(), want.len(), "line count differs");
     }
 
-    /// The C++ scanner's output on the same streams (tests/golden/link_frames.txt).
     #[test]
     fn frames_match_cxx_golden() {
         let mut out = Vec::new();
@@ -167,7 +139,7 @@ mod tests {
                 rx.extend_from_slice(&c);
                 let used = scan_frames(&rx, |ty, p| match ty {
                     BOOT_IND => out.push("boot".into()),
-                    ACK => {} // nothing in flight: ignored
+                    ACK => {}
                     _ => out.push(format!("frame {ty:04x} {} {}", p.len(), hex(p))),
                 });
                 rx.drain(..used);
@@ -270,7 +242,6 @@ mod tests {
         );
     }
 
-    /// The decoder hands out the same frames in chunks as the batch scanner.
     #[test]
     fn codec_decodes_across_chunks() {
         let mut codec = FrameCodec::default();

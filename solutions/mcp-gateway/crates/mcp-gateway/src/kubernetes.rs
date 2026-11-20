@@ -1,12 +1,3 @@
-//! Small read-mostly Kubernetes REST client.
-//!
-//! Ports `solutions/mcp-gateway/internal/kubernetes/client.go`. It talks to the
-//! API server with the in-cluster ServiceAccount token and CA and performs
-//! exactly one mutation: the rollout restart annotation patch.
-//!
-//! The projected ServiceAccount token rotates, so it is read from disk on every
-//! request, not once at startup. The CA bundle is read at construction time.
-
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::time::Duration;
@@ -19,18 +10,13 @@ use time::format_description::well_known::Rfc3339;
 
 use crate::ErrorKind;
 
-/// In-cluster API server root.
 pub const DEFAULT_API_URL: &str = "https://kubernetes.default.svc";
-/// In-cluster projected ServiceAccount token.
 pub const DEFAULT_TOKEN_FILE: &str = "/var/run/secrets/kubernetes.io/serviceaccount/token";
-/// In-cluster CA bundle.
 pub const DEFAULT_CA_FILE: &str = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt";
 
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(10);
-/// The Go client reads at most 4 MiB of any response.
 const MAX_BODY_BYTES: usize = 4 << 20;
 
-/// One Kubernetes REST call failure.
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("{detail}")]
@@ -59,7 +45,6 @@ pub enum Error {
 }
 
 impl Error {
-    /// Whether a retry may succeed.
     #[must_use]
     pub fn kind(&self) -> ErrorKind {
         match self {
@@ -77,23 +62,15 @@ impl Error {
     }
 }
 
-/// Client options. Empty fields take the in-cluster defaults.
 #[derive(Debug, Clone, Default)]
 pub struct Options {
-    /// API server root. Empty means [`DEFAULT_API_URL`].
     pub base_url: Option<String>,
-    /// Static bearer token. When empty, `token_file` is read on every call.
     pub token: Option<String>,
-    /// Projected token file. Defaults to [`DEFAULT_TOKEN_FILE`] when neither
-    /// `token` nor `token_file` is set.
     pub token_file: Option<PathBuf>,
-    /// CA bundle. Defaults to [`DEFAULT_CA_FILE`] when it exists.
     pub ca_file: Option<PathBuf>,
-    /// Per-request timeout. Defaults to 10 s.
     pub timeout: Option<Duration>,
 }
 
-/// A Kubernetes REST client.
 #[derive(Debug, Clone)]
 pub struct Client {
     http: reqwest::Client,
@@ -103,10 +80,7 @@ pub struct Client {
 }
 
 impl Client {
-    /// Build a client from options.
     pub fn new(options: Options) -> Result<Self, Error> {
-        // The workspace `reqwest` has no default crypto provider; install it
-        // before the first client. A provider installed earlier is kept.
         let _already_installed = rustls::crypto::ring::default_provider().install_default();
         let base_url = options
             .base_url
@@ -125,10 +99,6 @@ impl Client {
         let ca_file = options
             .ca_file
             .unwrap_or_else(|| PathBuf::from(DEFAULT_CA_FILE));
-        // The ServiceAccount CA is the only trust anchor: the workspace
-        // `reqwest` verifies against the platform store by default, and relying
-        // on the node's bundle would accept any publicly trusted certificate
-        // for the API server. `tls_certs_only` replaces that store entirely.
         let certificates = if ca_file.exists() {
             let pem = std::fs::read(&ca_file).map_err(|_| Error::Certificate {
                 operation: "read Kubernetes CA",
@@ -162,7 +132,6 @@ impl Client {
         })
     }
 
-    /// Read one workload object (`Deployment`, `StatefulSet` or `DaemonSet`).
     pub async fn get_workload(
         &self,
         namespace: &str,
@@ -215,7 +184,6 @@ impl Client {
         Ok(workload)
     }
 
-    /// List pods in a namespace, optionally filtered by labels.
     pub async fn list_pods(
         &self,
         namespace: &str,
@@ -278,9 +246,6 @@ impl Client {
                 };
                 statuses.insert(status.name, container);
             }
-            // Keep the pod template order instead of the API's alphabetical
-            // containerStatuses order: reports pick the workload's own
-            // container, not a sidecar that happens to sort first.
             for container in item.spec.containers {
                 let mut status =
                     statuses
@@ -307,7 +272,6 @@ impl Client {
         Ok(pods)
     }
 
-    /// Recent events for one object, newest first, capped at `limit`.
     pub async fn list_events(
         &self,
         namespace: &str,
@@ -341,12 +305,6 @@ impl Client {
         Ok(events)
     }
 
-    /// List every Deployment, StatefulSet and DaemonSet in the cluster.
-    ///
-    /// Used by the report coverage check: a workload that exists in the
-    /// cluster but not in the catalog must become visible instead of silently
-    /// disappearing from the report. Requires the cluster-wide read
-    /// ClusterRole; the result is sorted by namespace, kind and name.
     pub async fn list_workloads(&self) -> Result<Vec<WorkloadRef>, Error> {
         let mut workloads = Vec::new();
         for (kind, resource) in [
@@ -374,11 +332,6 @@ impl Client {
         Ok(workloads)
     }
 
-    /// List Flux Kustomizations and HelmReleases in every namespace.
-    ///
-    /// The report treats a missing `Ready=True` condition as a problem; a
-    /// `suspend: true` resource is reported separately and is never an error,
-    /// because a deliberately paused Kustomization is a normal state.
     pub async fn list_flux(&self) -> Result<Vec<FluxResource>, Error> {
         let mut resources = Vec::new();
         for (kind, path) in [
@@ -431,7 +384,6 @@ impl Client {
         Ok(resources)
     }
 
-    /// Read the tail of one container's log.
     pub async fn pod_logs(
         &self,
         namespace: &str,
@@ -463,9 +415,6 @@ impl Client {
         Ok(String::from_utf8_lossy(&body).into_owned())
     }
 
-    /// The only mutation the gateway supports: a strategic merge patch of the
-    /// pod template's `restartedAt` annotation plus a cooldown marker on the
-    /// object itself.
     pub async fn patch_restart(
         &self,
         namespace: &str,
@@ -580,7 +529,6 @@ impl Client {
     }
 }
 
-/// A normalized Deployment/StatefulSet/DaemonSet view.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Workload {
     pub namespace: String,
@@ -598,7 +546,6 @@ pub struct Workload {
 }
 
 impl Workload {
-    /// Whether the workload has all desired replicas available.
     #[must_use]
     pub fn available_ok(&self) -> bool {
         if self.desired == 0 {
@@ -607,8 +554,6 @@ impl Workload {
         self.available >= self.desired && self.ready >= self.desired
     }
 
-    /// Whether the controller has not observed the current generation or not
-    /// all replicas are updated.
     #[must_use]
     pub fn rollout_in_progress(&self) -> bool {
         if self.observed_generation != 0
@@ -621,7 +566,6 @@ impl Workload {
     }
 }
 
-/// One container's state in a pod.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct ContainerStatus {
     pub name: String,
@@ -632,7 +576,6 @@ pub struct ContainerStatus {
     pub last_terminated_at: Option<OffsetDateTime>,
 }
 
-/// A normalized pod view.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Pod {
     pub namespace: String,
@@ -645,7 +588,6 @@ pub struct Pod {
     pub start_time: Option<OffsetDateTime>,
 }
 
-/// One workload that exists in the cluster, used by the report coverage check.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct WorkloadRef {
     pub namespace: String,
@@ -653,7 +595,6 @@ pub struct WorkloadRef {
     pub name: String,
 }
 
-/// One Flux Kustomization or HelmRelease as seen by the report.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct FluxResource {
     pub kind: String,
@@ -664,7 +605,6 @@ pub struct FluxResource {
     pub message: String,
 }
 
-/// A normalized Kubernetes event.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Event {
     pub event_type: String,
@@ -674,7 +614,6 @@ pub struct Event {
     pub last_seen: Option<OffsetDateTime>,
 }
 
-/// Read the gateway cooldown annotation from a workload.
 #[must_use]
 pub fn last_restart(workload: &Workload) -> Option<OffsetDateTime> {
     let raw = workload.annotations.get("mcp-gateway/last-restart")?.trim();
@@ -725,8 +664,6 @@ fn parse_time(
         })
 }
 
-/// Percent-encode one URL path segment. Kubernetes names and namespaces are
-/// DNS labels, so only the unreserved characters stay literal.
 fn escape_segment(value: &str) -> String {
     let mut escaped = String::with_capacity(value.len());
     for byte in value.bytes() {
@@ -742,8 +679,6 @@ fn escape_segment(value: &str) -> String {
     escaped
 }
 
-/// Percent-encode a query value the way Go's `url.QueryEscape` does for the
-/// characters a label selector and a field selector use.
 fn query_escape(value: &str) -> String {
     let mut escaped = String::with_capacity(value.len());
     for byte in value.bytes() {
@@ -759,8 +694,6 @@ fn query_escape(value: &str) -> String {
     }
     escaped
 }
-
-// Wire structures: only the fields the gateway reads.
 
 #[derive(Debug, Default, Deserialize)]
 struct ObjectJson {

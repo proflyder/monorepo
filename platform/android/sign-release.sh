@@ -1,30 +1,4 @@
 #!/usr/bin/env bash
-# Sign a Bazel-built APK with the personal release key and verify the result.
-#
-# Bazel (rules_android) can only produce debug-signed APKs: it always signs
-# with `--ks-pass pass:android` and no alias. The release key therefore lives
-# outside Bazel and is applied here, on the final artifact, with apksigner.
-#
-# Usage:
-#   platform/android/sign-release.sh <in.apk> <out.apk>
-#
-# Environment:
-#   SIGNING_KEYSTORE             keystore file (required, never committed)
-#   SIGNING_STORE_PASSWORD_FILE  file with the keystore password (required
-#                                unless SIGNING_STORE_PASSWORD is set)
-#   SIGNING_STORE_PASSWORD       keystore password (avoid; prefer the file)
-#   SIGNING_KEY_PASSWORD_FILE    file with the key password (default: the
-#                                store password; PKCS12 uses one password)
-#   SIGNING_KEY_PASSWORD         key password (avoid; prefer the file)
-#   SIGNING_KEY_ALIAS            key alias (default: the only alias)
-#   SIGNING_CERT_SHA256          expected signer certificate SHA-256, hex,
-#                                colons optional (required; fail closed)
-#   ANDROID_HOME / ANDROID_BUILD_TOOLS
-#                                SDK root / build-tools directory (default
-#                                $ANDROID_HOME/build-tools/36.0.0)
-#
-# Passwords travel to apksigner/keytool only as `file:` references to private
-# temporary files; they never appear in argv or logs.
 set -euo pipefail
 
 usage() {
@@ -53,8 +27,6 @@ OUT_APK="$2"
 : "${SIGNING_KEYSTORE:?SIGNING_KEYSTORE must point at the release keystore}"
 [[ -f "$SIGNING_KEYSTORE" ]] || die "keystore not found: $SIGNING_KEYSTORE"
 
-# The expected signer is mandatory: a build signed by any other key must never
-# be published, so a missing expectation is an error, not a warning.
 EXPECTED_CERT="${SIGNING_CERT_SHA256:-}"
 [[ -n "$EXPECTED_CERT" ]] || die "SIGNING_CERT_SHA256 must be set (fail closed)"
 EXPECTED_CERT="$(printf '%s' "$EXPECTED_CERT" | tr -d ':' | tr '[:upper:]' '[:lower:]')"
@@ -75,8 +47,6 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# Copy a password into a private file without its trailing newline. Command
-# substitution strips newlines, so `printf '%s'` yields the exact value.
 password_file() {
   local label="$1" from_file="$2" from_env="$3" target="$4"
   local value=""
@@ -104,8 +74,6 @@ fi
 
 ALIAS="${SIGNING_KEY_ALIAS:-}"
 if [[ -z "$ALIAS" ]]; then
-  # A PKCS12 keystore normally holds one key entry. Refuse to guess when the
-  # keystore holds several, so the published build cannot silently switch key.
   aliases=()
   while IFS= read -r line; do
     case "$line" in
@@ -139,7 +107,6 @@ echo "apksigner: alias $ALIAS"
   --out "$SIGNED_APK" \
   "$ALIGNED_APK"
 
-# Full integrity check of the produced artifact before it is published.
 "$BUILD_TOOLS/apksigner" verify "$SIGNED_APK"
 
 ACTUAL_CERT="$("$BUILD_TOOLS/apksigner" verify --print-certs "$SIGNED_APK" \

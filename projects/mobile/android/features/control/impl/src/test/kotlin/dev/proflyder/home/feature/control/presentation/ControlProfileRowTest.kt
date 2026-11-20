@@ -34,12 +34,6 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 
-/**
- * Robolectric smoke test of the voice card profile row: it must inflate with
- * real resources, show the current side, hide the row when there is no profile,
- * and report only *user* choices — the programmatic selection during binding
- * must never send a command.
- */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class ControlProfileRowTest {
@@ -146,7 +140,6 @@ class ControlProfileRowTest {
         assertEquals("Personal", off.personal.text)
         assertEquals("Work", off.work.text)
         assertEquals(0, off.tabs.selectedIndex)
-        // Binding is not a user choice.
         assertEquals(emptyList<Boolean>(), changes)
 
         off.work.performClick()
@@ -156,7 +149,6 @@ class ControlProfileRowTest {
 
         val on = bind(voice(PowerState.ON))
         assertEquals(1, on.tabs.selectedIndex)
-        // Re-binding a row never replays a command.
         assertEquals(listOf(true, false), changes)
     }
 
@@ -187,8 +179,6 @@ class ControlProfileRowTest {
 
     @Test
     fun theRowItselfDoesNothing() {
-        // There is no "toggle": the card is not clickable and only the two
-        // explicit pills send a command.
         val row = bind(voice(PowerState.OFF))
         row.root.performClick()
         assertEquals(emptyList<ControlItem>(), rowClicks)
@@ -212,8 +202,6 @@ class ControlProfileRowTest {
         val switch = holder.itemView.findViewById<MaterialSwitch>(R.id.control_device_switch)
         assertFalse(switch.isChecked)
 
-        // The diff reports a typed payload, so the list animator reuses this
-        // holder and only the changed views are rebound.
         val payload = requireNotNull(ControlDiff.getChangePayload(off, on))
         val after = ControlAdapter(callback)
         after.submitList(listOf(on))
@@ -222,7 +210,6 @@ class ControlProfileRowTest {
         assertTrue(switch.isChecked)
         val state = holder.itemView.findViewById<android.widget.TextView>(R.id.control_device_state)
         assertEquals("On", state.text.toString())
-        // Payload binding is programmatic and must never look like a user toggle.
         assertEquals(emptyList<Boolean>(), powerChanges)
     }
 
@@ -284,7 +271,6 @@ class ControlProfileRowTest {
             mainId = "light.desk",
         )
         val root = bindAny(group)
-        // A single-primary card has no separate header: its row is the title.
         assertEquals(
             View.GONE,
             root.findViewById<android.widget.TextView>(R.id.control_group_title).visibility,
@@ -304,7 +290,6 @@ class ControlProfileRowTest {
         assertEquals(listOf("dev.desk"), settingsToggles)
 
         val expanded = bindAny(group.copy(expanded = true))
-        // A binary setting is a compact tile, not a full row.
         val settingsTiles = expanded.findViewById<LinearLayout>(R.id.control_group_settings_tiles)
         assertEquals(View.VISIBLE, settingsTiles.visibility)
         val tileRow = settingsTiles.getChildAt(0) as LinearLayout
@@ -349,7 +334,6 @@ class ControlProfileRowTest {
         val header = root.findViewById<android.widget.TextView>(R.id.control_group_title)
         assertEquals(View.VISIBLE, header.visibility)
         assertEquals("Колонка", header.text.toString())
-        // Plain binary controls of a multi-element card are tiles, not rows.
         assertEquals(View.GONE, root.findViewById<LinearLayout>(R.id.control_group_primary).visibility)
         val tiles = root.findViewById<LinearLayout>(R.id.control_group_tiles)
         assertEquals(View.VISIBLE, tiles.visibility)
@@ -365,8 +349,6 @@ class ControlProfileRowTest {
 
     @Test
     fun rebindingAGroupKeepsTheRowViews() {
-        // A press flips the row to busy; the same view must stay on screen so
-        // its ripple and progress are visible (no remove-and-inflate).
         val group = ControlItem.DeviceGroup(
             deviceId = "dev.desk",
             title = "Desk lamp",
@@ -386,8 +368,6 @@ class ControlProfileRowTest {
         val settingsList = holder.itemView.findViewById<LinearLayout>(R.id.control_group_settings_list)
         val before = settingsList.getChildAt(0)
 
-        // The first submitList of an adapter is applied synchronously; a second
-        // adapter carries the busy state into the same holder.
         val busy = ControlAdapter(callback)
         busy.submitList(
             listOf(

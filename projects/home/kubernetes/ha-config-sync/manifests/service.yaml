@@ -1,4 +1,3 @@
-# ClusterIP only: Prometheus scrapes it, nothing outside the cluster reaches it.
 apiVersion: v1
 kind: Service
 metadata:

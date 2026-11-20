@@ -160,7 +160,6 @@ async fn check_finds_the_latest_release() {
         assert!(!updater.busy());
         assert_eq!(updater.check(), Some(RequestId(1)));
         assert!(updater.busy());
-        // Занят: отказ без события.
         assert_eq!(updater.check(), None);
         assert_eq!(
             updater.install(release("v1.0.0", vec![]), PathBuf::from("/nonexistent/pulsar")),
@@ -173,7 +172,6 @@ async fn check_finds_the_latest_release() {
         assert_eq!(id, RequestId(1));
         let release = result.expect("release");
         assert_eq!(release.version().as_str(), "v1.2.3");
-        // Счётчик продолжается.
         assert_eq!(updater.check(), Some(RequestId(2)));
         let Some(UpdateEvent::Checked { id, result }) = events.recv().await else {
             panic!("no Checked");
@@ -230,8 +228,6 @@ async fn install(
     }
 }
 
-/// Тесты установки запускают только что записанные файлы: fork параллельного теста, пока
-/// файл открыт на запись, дал бы ETXTBSY.
 static EXEC: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
 #[tokio::test]
@@ -265,7 +261,6 @@ async fn install_reads_oci_layers() {
             std::fs::read(dir.join("zigbee-router.ybl")).expect("router"),
             router
         );
-        // Загрузки слоёв идут с токеном, запрос токена — без.
         for head in server.requests() {
             if head.starts_with("GET /token?") {
                 assert!(
@@ -295,7 +290,6 @@ async fn install_swaps_binary_and_extras() {
         let new = big_script("v9.9.9");
         let router = b"router image".to_vec();
         server.route("/v2/owner/repo/blobs/sha256:router", ok(&router));
-        // Ассеты релиза на GitHub редиректят на другой хост; здесь — на тот же.
         server.route("/v2/owner/repo/blobs/sha256:sums", redirect("/cdn/sums"));
         server.route(
             "/cdn/sums",
@@ -324,7 +318,6 @@ async fn install_swaps_binary_and_extras() {
         )
         .await;
         assert_eq!(done.result, Ok(()));
-        // got * 95 / total, каждое значение один раз.
         assert!(done.progress.len() > 3, "{:?}", done.progress);
         assert_eq!(done.progress.last(), Some(&95.0));
         assert!(done.progress.windows(2).all(|w| w[0] < w[1]));
@@ -369,13 +362,11 @@ async fn dropping_the_handles_stops_a_download() {
                 .is_empty()
         );
         assert!(start.elapsed() < Duration::from_secs(1));
-        // Отменённая установка ничего не сообщает.
         assert!(events.recv().await.is_none());
     })
     .await;
 }
 
-/// Запускает установку, ждёт `ready`, закрывает handle и проверяет, что ничего не тронуто.
 async fn cancel_after_download(
     bin: Vec<u8>,
     extra: Option<Reply>,
@@ -425,7 +416,6 @@ async fn cancel_after_download(
 #[tokio::test]
 async fn cancel_stops_install_during_version_run() {
     let _exec = EXEC.lock().await;
-    // Отвечает --version только через 5 с: отмена во время пробы (pulsar.new уже записан).
     let slow = b"#!/bin/sh\nsleep 5\necho 'pulsar v9.9.9'\n".to_vec();
     local(cancel_after_download(slow, None, |_, dir| {
         dir.names().contains(&"pulsar.new".to_owned())
@@ -436,7 +426,6 @@ async fn cancel_stops_install_during_version_run() {
 #[tokio::test]
 async fn cancel_stops_install_before_swap() {
     let _exec = EXEC.lock().await;
-    // Бинарь проходит --version; дополнительный ассет не приходит, отмена до подмены.
     let hang = Reply {
         bytes: b"HTTP/1.1 200 OK\r\nContent-Length: 6\r\n\r\nro".to_vec(),
         end: End::Hang,

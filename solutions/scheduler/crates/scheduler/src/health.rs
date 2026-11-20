@@ -1,22 +1,12 @@
-//! Distroless probes: `-healthcheck` and `-status`.
-//!
-//! The image has no shell, curl or wget, so the binary is its own probe. Both
-//! commands load the same configuration as the server (a broken Secret mount
-//! fails the probe), read the bearer from `SCHEDULER_TOKEN_FILE` and never put
-//! the token on a command line or in an error message.
-
 use std::process::ExitCode;
 use std::time::Duration;
 
 use crate::config::Config;
 
-/// Bounds a single probe. Kubernetes gives the probe a slightly larger
-/// timeout; keeping the client lower avoids overlapping calls.
 const TIMEOUT: Duration = Duration::from_secs(4);
 
 const GET_STATUS_PATH: &str = "/home.v1.SchedulerService/GetStatus";
 
-/// `scheduler -healthcheck`: authenticated `GetStatus` must report ready.
 pub async fn run_healthcheck() -> ExitCode {
     let config = match Config::load() {
         Ok(config) => config,
@@ -39,7 +29,6 @@ pub async fn run_healthcheck() -> ExitCode {
     ExitCode::SUCCESS
 }
 
-/// `scheduler -status`: prints the raw authenticated `GetStatus` JSON body.
 pub async fn run_status() -> ExitCode {
     let config = match Config::load() {
         Ok(config) => config,
@@ -67,7 +56,6 @@ pub async fn run_status() -> ExitCode {
     }
 }
 
-/// Performs the authenticated `GetStatus` call and returns the body.
 pub async fn get_status_body(base_url: &str, token: &str) -> Result<String, String> {
     let client = client()?;
     let response = client
@@ -92,7 +80,6 @@ pub async fn get_status_body(base_url: &str, token: &str) -> Result<String, Stri
     Ok(body)
 }
 
-/// Evaluates readiness from an authenticated `GetStatus` response.
 pub async fn check_ready(base_url: &str, token: &str) -> Result<(), String> {
     let body = get_status_body(base_url, token).await?;
     let status: serde_json::Value = serde_json::from_str(&body)
@@ -109,9 +96,6 @@ pub async fn check_ready(base_url: &str, token: &str) -> Result<(), String> {
 }
 
 fn client() -> Result<reqwest::Client, String> {
-    // The workspace builds reqwest with rustls but without a default crypto
-    // provider; building a client without one panics. Install the process-wide
-    // ring provider first, keeping one installed earlier.
     let _already_installed = rustls::crypto::ring::default_provider().install_default();
     reqwest::Client::builder()
         .timeout(TIMEOUT)

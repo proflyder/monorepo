@@ -255,8 +255,6 @@ StationMusicPrevious:
           target:
             entity_id: media_player.iandeks_stantsiia_midi
 StationCancel:
-  # Local intent: the request is recognized and ends here. No speech means no TTS answer, and
-  # prefer_local_intents keeps "отмена" away from Hermes.
   action: []
 StationPlayFavorites:
   speech:
@@ -298,7 +296,6 @@ StationMusicRouteMA:
     - service: script.music_route_ma
 
 StationTimeRouteAlarm:
-  # Time routing only: see custom_sentences/ru/station_time.yaml.
   speech: &time_route_speech
     text: >-
       {% set result = action_response if action_response is mapping else {} %}
@@ -319,7 +316,6 @@ StationTimeRouteAlarm:
       response_variable: hermes_time_reply
 
 StationTimeRouteTimer:
-  # Time routing only: see custom_sentences/ru/station_time.yaml.
   speech: *time_route_speech
   action:
     - variables:
@@ -334,7 +330,6 @@ StationTimeRouteTimer:
       response_variable: hermes_time_reply
 
 StationTimeRouteReminder:
-  # Time routing only: see custom_sentences/ru/station_time.yaml.
   speech: *time_route_speech
   action:
     - variables:
@@ -349,7 +344,6 @@ StationTimeRouteReminder:
       response_variable: hermes_time_reply
 
 StationTimeRouteWake:
-  # Time routing only: see custom_sentences/ru/station_time.yaml.
   speech: *time_route_speech
   action:
     - variables:
@@ -364,7 +358,6 @@ StationTimeRouteWake:
       response_variable: hermes_time_reply
 
 StationTimeRouteRemind:
-  # Time routing only: see custom_sentences/ru/station_time.yaml.
   speech: *time_route_speech
   action:
     - variables:
@@ -535,10 +528,6 @@ StationNoteDelete:
         query: "{{ query }}"
 
 KompOn:
-  # The ping sensor lags 1–2 minutes behind Windows shutdown, so a recent
-  # `script.komp_shutdown` request means «выключается», not «уже включён».
-  # `switch.komp.turn_on` is the only path that issues the wakegrant and then
-  # Wake-on-LAN: sending WoL here directly skipped the one-time logon grant.
   speech:
     text: >-
       {% set off_at = states('input_datetime.komp_off_requested') %}
@@ -566,8 +555,6 @@ KompOn:
             entity_id: switch.komp
 
 KompOff:
-  # A second request inside the 60 s window would reschedule the Windows timer
-  # and restart the wait; answer it and leave the pending shutdown alone.
   speech:
     text: >-
       {% set off_at = states('input_datetime.komp_off_requested') %}
@@ -601,8 +588,6 @@ KompCancelOff:
     - service: script.komp_cancel_shutdown
 
 KompUnlock:
-  # A running but locked PC: issue a one-time unlock grant. Nothing is sent to
-  # a powered-off PC, and this intent never wakes it (that is KompOn).
   speech:
     text: >-
       {% if is_state('binary_sensor.komp_v_seti', 'on') %}
@@ -618,8 +603,6 @@ KompUnlock:
         - service: script.komp_unlock
 
 KompLock:
-  # A running PC: lock its interactive desktop through the SSH wrapper and the
-  # \Home\KompLock scheduled task. A powered-off PC has nothing to lock.
   speech:
     text: >-
       {% if is_state('binary_sensor.komp_v_seti', 'on') %}

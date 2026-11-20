@@ -1,9 +1,3 @@
-# kube-prometheus-stack, adopted from the live `monitoring` release.
-#
-# The chart version and values match the live release; the private Grafana root
-# URL and PVE scrape target are substituted from flux-settings by the
-# `observability` Kustomization. Prometheus/Alertmanager/Grafana PVCs and their
-# local-retain volumes already exist, so a reconcile does not recreate them.
 apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:

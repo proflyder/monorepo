@@ -1,33 +1,4 @@
 #!/usr/bin/env python3
-"""Read-only reconciliation of the station against projects/station/manifest.yaml.
-
-The station (Yandex Station Midi) runs more than the OTA-managed Pulsar binary:
-BLE gateway, dropbear, egress guard, yandex-block, OTA fortress, rootkeeper and
-a few config files were installed by hand. This tool answers "what is actually
-installed and does it still match the repository?" without changing anything on
-the device.
-
-It opens one SSH connection and runs only read operations: `sha256sum`,
-`ls`, and the `--version` of a few binaries. It never writes to the station,
-never prints file contents and never prints secrets.
-
-Build artifacts can be pinned with `deployed_sha256`: the audit then compares
-the installed hash (OK/DRIFT) and prints the `--version` output as information.
-This covers builds that predate a version fix and binaries that come from the
-firmware rootfs rather than from this repository.
-
-Usage:
-    python3 projects/station/tools/station-audit
-    mise run station:audit -- --ip 192.0.2.13
-    python3 projects/station/tools/station-audit --json
-
-Statuses:
-    OK      installed state matches the repository or the pinned `deployed_sha256`
-    DRIFT   present, but content/version/hash differs
-    MISSING expected path is absent on the device
-    EXTRA   stale backup/candidate sibling (.bak/.prev/.new/...) next to a
-            managed directory, unless the exact path is in `audit.extra_allow`
-"""
 
 from __future__ import annotations
 
@@ -45,7 +16,7 @@ from dataclasses import dataclass, field
 
 try:
     import yaml
-except ImportError:  # pragma: no cover - reported as a clear usage error
+except ImportError:
     yaml = None
 
 ROOT = pathlib.Path(__file__).resolve().parents[3]
@@ -61,7 +32,7 @@ _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 
 
 class ManifestError(Exception):
-    """The manifest is malformed or refers to a missing repository file."""
+    pass
 
 
 @dataclass
@@ -74,15 +45,11 @@ class Row:
 
 @dataclass
 class Remote:
-    """Parsed output of the single read-only SSH probe."""
 
     files: dict[str, tuple[str, str | None]] = field(default_factory=dict)
     versions: dict[int, str] = field(default_factory=dict)
     listings: dict[str, list[str]] = field(default_factory=dict)
 
-
-# --------------------------------------------------------------------------
-# Manifest
 
 
 def load_manifest(path: pathlib.Path, repo_root: pathlib.Path = ROOT) -> dict:
@@ -191,7 +158,6 @@ def validate_manifest(data: dict, repo_root: pathlib.Path = ROOT) -> None:
                         )
                 expected = spec.get("expected")
                 if pinned is not None and expected is None:
-                    # The pinned hash is authoritative; a version string is optional.
                     continue
                 expected_command = (
                     expected.get("command") if isinstance(expected, dict) else None
@@ -231,12 +197,8 @@ def _safe_repo_file(repo_root: pathlib.Path, relative: str) -> bool:
     return candidate.is_file()
 
 
-# --------------------------------------------------------------------------
-# Comparison helpers
-
 
 def normalize_ipv4(text: str) -> str:
-    """Mask IPv4 addresses so environment-specific LAN values do not drift."""
     return _IPV4_RE.sub("<ip>", text)
 
 
@@ -253,9 +215,6 @@ def expected_version(spec: dict, repo_root: pathlib.Path) -> str:
     expected = spec["expected"]
     command = expected.get("command")
     if command:
-        # A computed version cannot be read from a literal file: the native
-        # release version is derived from VERSION + the unit's commits
-        # (platform/ci/version.mjs), so the audit invokes the same source.
         result = subprocess.run(
             shlex.split(command),
             cwd=repo_root,
@@ -288,12 +247,8 @@ def expected_version(spec: dict, repo_root: pathlib.Path) -> str:
     return str(expected.get("prefix", "")) + value
 
 
-# --------------------------------------------------------------------------
-# Remote probe
-
 
 def _device_files(manifest: dict) -> list[tuple[str, str]]:
-    """Unique (device path, normalizer) pairs in manifest order."""
     seen: set[str] = set()
     result: list[tuple[str, str]] = []
     for component in manifest["components"]:
@@ -322,7 +277,6 @@ def _version_commands(manifest: dict) -> list[str]:
 
 
 def build_remote_script(manifest: dict) -> str:
-    """One POSIX shell script: hashes, versions and directory listings."""
     lines = [
         "# station-audit: generated read-only probe",
         "set -u",
@@ -436,9 +390,6 @@ def run_ssh(ip: str, script: str, manifest: dict, ssh_key: str | None, timeout: 
         raise ManifestError(f"ssh probe failed: {message}")
     return result.stdout
 
-
-# --------------------------------------------------------------------------
-# Evaluation and report
 
 
 def resolve_address(

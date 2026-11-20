@@ -1,5 +1,3 @@
-//! `home.v1.AlarmService` wire-compatible facade over alarm schedules.
-
 use connectrpc::{ConnectError, RequestContext, Response, ServiceRequest, ServiceResult};
 use home_proto::v1 as proto;
 use proto::AlarmService;
@@ -10,14 +8,12 @@ use super::convert::{alarm_to_schedule, schedule_to_alarm};
 use super::service::Service;
 use super::zone::ClientZone;
 
-/// Legacy alarm facade over the shared schedule store.
 #[derive(Debug)]
 pub struct AlarmFacade {
     inner: Service,
 }
 
 impl AlarmFacade {
-    /// Wraps the scheduler service.
     #[must_use]
     pub const fn new(inner: Service) -> Self {
         Self { inner }

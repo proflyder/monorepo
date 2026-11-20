@@ -1,9 +1,3 @@
-//! Golden vectors shared with the former Go implementation.
-//!
-//! The JSON files are read from `solutions/scheduler/testdata`, never copied:
-//! `testdata/planner/*.json` proves recurrence/DST parity and `ids.json`
-//! proves every dedupe-key format and canonical SHA-1.
-
 use std::path::{Path, PathBuf};
 
 use serde_json::Value;

@@ -1,10 +1,4 @@
 #!/usr/bin/env python3
-"""Rebase persisted Hermes profile references after relocating HERMES_HOME.
-
-Stop the gateway before use. Changes only structured profile_id fields in
-state_meta JSON; conversations, authentication, and plain text are untouched.
-A SQLite backup is created before the transaction. Caller supplies private paths.
-"""
 import argparse
 import json
 from pathlib import Path

@@ -1,5 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Rounded tonal card behind the toolbar actions menu; the inset hosts its shadow. -->
 <inset xmlns:android="http://schemas.android.com/apk/res/android"
     android:insetLeft="@dimen/ui_popup_inset"
     android:insetTop="@dimen/ui_popup_inset"

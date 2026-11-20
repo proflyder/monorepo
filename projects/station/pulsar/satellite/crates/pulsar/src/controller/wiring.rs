@@ -1,12 +1,3 @@
-//! Сборка контроллера: загрузка настроек, порядок спавна сервисов и сборка `Deps`.
-//!
-//! Порядок старта — это порядок вызовов шагов в [`wire`], а не комментарий: каждый шаг
-//! возвращает уже созданный сервис (типизированный результат), и следующий шаг не может
-//! выполниться раньше. `pulsar_alsa::init` и `ALSA_CONFIG_PATH` — в [`prepare_process`], до
-//! рантайма и любых потоков. `SSL_CERT_FILE` ставит `pulsar_media::spawn` (`set_var`), поэтому
-//! плеер поднимается до любых других потоков — вторым шагом после bind'а API (актор API живёт в
-//! `LocalSet` и потоков не создаёт).
-
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -36,15 +27,12 @@ use super::{RICARDO_MODEL, Rx, WAKE_EVENTS_DIR, media, model_dir};
 use crate::settings::Store;
 use crate::version::{BUILD_TIME, VERSION};
 
-/// Намеренная конфигурация форка: станция — только ESPHome/Sendspin-эндпойнт, радио Яндекса не
-/// трогаем (координатор Zigbee живёт в Home Assistant). Единственное место, где это решается.
 pub struct Features {
     pub zigbee: bool,
 }
 
 pub const FEATURES: Features = Features { zigbee: false };
 
-/// Why the controller could not be built; `main` logs it and exits 1.
 #[derive(Debug, Error)]
 pub enum StartError {
     #[error("signals: {0}")]
@@ -55,13 +43,11 @@ pub enum StartError {
     Api(#[source] pulsar_esphome::SpawnError),
 }
 
-/// Профиль до рантайма: ALSA-окружение и загрузка libasound до потоков и библиотек.
 pub fn prepare_process(model: &DeviceProfile) {
     model.audio.playback.apply_env();
     pulsar_alsa::init(model.audio.playback.alsa_lib());
 }
 
-/// Zigbee-план, посчитанный один раз: роль есть, только если её включили в [`FEATURES`].
 struct ZigbeePlan {
     radio: &'static ZigbeeRadio,
     labels: Vec<String>,
@@ -69,9 +55,6 @@ struct ZigbeePlan {
 
 impl ZigbeePlan {
     fn new(model: &'static DeviceProfile) -> Option<Self> {
-        // A constant check on the spawn path: with Zigbee off the compiler drops the whole
-        // `pulsar_zigbee`/`deconz`/`zbhci` call graph from the binary (it was ~5 KB of symbols
-        // in HEAD, and an `Option` in a field alone does not let LLVM prove it unreachable).
         if !FEATURES.zigbee {
             return None;
         }
@@ -95,7 +78,6 @@ fn read_line(path: &str) -> String {
         .unwrap_or_default()
 }
 
-/// Всё, что нужно собрать до первого сервиса.
 struct Boot {
     model: &'static DeviceProfile,
     ports: Ports,
@@ -106,7 +88,6 @@ struct Boot {
     case_colors: Vec<String>,
     voice_colors: Vec<String>,
     zigbee: Option<ZigbeePlan>,
-    /// Настройки, исправленные при старте, надо записать (`Store` через 1 с).
     changed: bool,
     media: media::Policy,
     term: Signal,
@@ -114,9 +95,7 @@ struct Boot {
 }
 
 impl Boot {
-    /// Signals, ports, settings, TZ, identity. Any failure here exits before services start.
     fn load(model: &'static DeviceProfile, state_path: PathBuf) -> Result<Self, StartError> {
-        // Before anything starts: a SIGTERM during the start-up still ends the daemon cleanly.
         let term = signal(SignalKind::terminate()).map_err(StartError::Signals)?;
         let int = signal(SignalKind::interrupt()).map_err(StartError::Signals)?;
         let ports = logic::ports(std::env::var_os("PULSAR_PORT_OFFSET").as_deref())
@@ -125,11 +104,9 @@ impl Boot {
         let mut store = Store::load(state_path);
         let mut applied_tz = String::new();
         if !store.tz.is_empty() {
-            // The clock shows local time before HA connects.
             pulsar_core::tz::set_tz(&store.tz);
             applied_tz.clone_from(&store.tz);
         }
-        // After the TZ: the log's timestamps are local time.
         if ports.offset != 0 {
             info!(
                 "PULSAR_PORT_OFFSET={}: API {}, Sendspin {}, deCONZ {}, arbiter {}, metrics {}, no mDNS",
@@ -168,9 +145,6 @@ impl Boot {
         })
     }
 
-    /// Light sensor before the entity list: the Clock auto brightness switch exists only when the
-    /// sensor opened, and where the model makes the sensor optional, so does the Illuminance
-    /// entity.
     fn open_sensor(&mut self) -> Option<UnboundedReceiver<f32>> {
         match pulsar_clock::spawn_light_sensor(super::LUX_PERIOD_MS) {
             Ok(rx) => Some(rx),
@@ -185,8 +159,6 @@ impl Boot {
         }
     }
 
-    /// Binds the ESPHome port first: a failure exits before the hardware starts. Nothing reaches
-    /// the server before `run`.
     fn bind_api(
         &self,
         lux_present: bool,
@@ -242,8 +214,6 @@ impl Boot {
         pulsar_esphome::spawn(self.id.clone(), cfg).map_err(StartError::Api)
     }
 
-    /// Before any other thread exists: the player's spawn sets `SSL_CERT_FILE` (`set_var`), which
-    /// C code on another thread could be reading.
     fn spawn_player(&self) -> (PlayerHandle, UnboundedReceiver<PlayerEvent>) {
         pulsar_media::spawn(&self.model.audio.playback)
     }
@@ -252,10 +222,8 @@ impl Boot {
         pulsar_arbiter::spawn(self.id.name.clone(), self.ports.arbiter)
     }
 
-    /// Hardware first: UI feedback should work even if HA is not connected.
     fn start_hardware(&mut self) -> (Box<dyn MixerPort>, ClockHandle, LedsHandle) {
         let leds = pulsar_hw::spawn_leds(&self.model.leds);
-        // spawn handles a missing panel (None) with a no-op handle.
         let clock = pulsar_clock::spawn(self.model.clock.as_ref());
         clock.set_enabled(self.store.clock_on);
         clock.set_brightness(self.store.clock_brightness);
@@ -296,7 +264,6 @@ impl Boot {
             |v| pulsar_core::volume::from_legacy(&self.model.volume, v),
         );
         self.store.volume = volume;
-        // Changes made while starting are written like any other (Store, 1 s later).
         self.changed |= migrated;
         if migrated {
             info!(
@@ -307,7 +274,6 @@ impl Boot {
         mixer.set_volume(self.store.volume);
         mixer.set_muted(self.store.muted);
         if !self.store.led_case_color.is_empty() {
-            // After the volume: the write covers it too.
             let listed = self.case_colors.contains(&self.store.led_case_color);
             if !listed {
                 warn!(
@@ -316,7 +282,6 @@ impl Boot {
                 );
             }
             if listed {
-                // The actor reads the file; an unreadable one leaves the correction off.
                 leds.set_case_color(pulsar_hw::CaseColor::new(&self.store.led_case_color));
             } else {
                 self.store.led_case_color.clear();
@@ -358,7 +323,6 @@ impl Boot {
             &self.model.audio.capture,
             self.model.wake_preroll.as_ref(),
             &if custom_wake {
-                // Native spotters stay available for a rollback to «Алиса»/«Яндекс».
                 model_dir("alisa")
             } else {
                 model_dir(&self.store.wake_word)
@@ -390,7 +354,6 @@ impl Boot {
             playback: &self.model.audio.playback,
             port: self.ports.sendspin,
         };
-        // The one master-gain formula: the same value `Policy` applies to both channels.
         let master = self.media.master_gain(self.store.volume);
         match pulsar_sendspin::spawn(&cfg, self.store.volume, self.store.muted, master) {
             Ok((h, rx)) => Some((h, rx)),
@@ -402,7 +365,6 @@ impl Boot {
         }
     }
 
-    /// A test instance (port offset) stays invisible to HA and Music Assistant.
     fn advertise(&self, api: &ApiHandle, sendspin: bool) -> Option<MdnsHandle> {
         if self.ports.offset != 0 {
             return None;
@@ -440,7 +402,6 @@ impl Boot {
         updater: &dyn Updater,
         mdns: Option<&MdnsHandle>,
     ) -> Option<(ZigbeeHandle, UnboundedReceiver<ZigbeeEvent>)> {
-        // See `ZigbeePlan::new`: the gate is a constant, not an `Option` read.
         if !FEATURES.zigbee {
             return None;
         }
@@ -460,8 +421,6 @@ impl Boot {
         updater.add_extra_asset("zigbee-router.ybl", zcfg.router_image.clone());
         let mode = super::zigbee_role(&self.store);
         let (h, rx) = pulsar_zigbee::spawn(zcfg, mode);
-        // ZHA discovers the coordinator (radio_type selects zigpy-deconz, serial_number
-        // is its unique id).
         if mode == pulsar_zigbee::Mode::Coordinator
             && let Some(m) = mdns
         {
@@ -480,7 +439,6 @@ impl Boot {
     }
 }
 
-/// Вывод голоса собеседника: отдельный PCM-канал `Call` с малым буфером.
 struct CallSink(pulsar_playback::CallOut);
 
 impl Downlink for CallSink {
@@ -504,8 +462,6 @@ impl Downlink for CallSink {
     }
 }
 
-/// Звонок: URL и токен из [`pulsar_call::CALL_DIR`]. Без них модуль выключен и станция
-/// остаётся обычной колонкой.
 fn start_call(model: &'static DeviceProfile) -> (CallHandle, UnboundedReceiver<CallEvent>) {
     let config = match CallConfig::load_dir(Path::new(pulsar_call::CALL_DIR)) {
         Ok(config) => config,
@@ -525,7 +481,6 @@ fn start_call(model: &'static DeviceProfile) -> (CallHandle, UnboundedReceiver<C
     pulsar_call::spawn(config, downlink)
 }
 
-/// Everything `Controller` needs, built once the services are up.
 pub struct Wired {
     pub deps: super::ports::Deps,
     pub rx: Rx,
@@ -536,11 +491,9 @@ pub struct Wired {
     pub media: media::Policy,
     pub applied_tz: String,
     pub hw_mic_muted: bool,
-    /// Startup fixed a setting (volume migration, case colour, update_attempt): write it.
     pub persist_on_start: bool,
 }
 
-/// Starts every service in the C++ `start()` order and returns the controller's dependencies.
 pub fn wire(model: &'static DeviceProfile, state_path: PathBuf) -> Result<Wired, StartError> {
     let mut boot = Boot::load(model, state_path)?;
     pulsar_metrics::init(VERSION, model.identity.model_name);

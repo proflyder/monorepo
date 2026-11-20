@@ -1,9 +1,3 @@
-//! Writes an application image into the Midi's Zigbee radio through its resident bootloader
-//! ("Yandex Bootloader v1.0.02": boot line held while reset is pulsed, then a text menu on the
-//! same UART at 115200: "1. upload ybl", "2. run", prompt "BL > "; the image goes over XMODEM,
-//! 128-byte blocks, CRC-16 or checksum as the receiver asks). This is maind's own update path
-//! (ncp_manager.cpp updateFirmware); the bootloader itself (flash 0..0x7FFF) is never written.
-
 use std::io::{self, Read as _, Write as _};
 use std::path::Path;
 use std::thread::sleep;
@@ -19,14 +13,10 @@ const EOT: u8 = 0x04;
 const ACK: u8 = 0x06;
 const NAK: u8 = 0x15;
 const CAN: u8 = 0x18;
-/// Yandex, as in gateway.ybl.
 const MANUFACTURER: u16 = 0x140A;
-/// B91, gateway, bootloader layout.
 const IMAGE_TYPE: u16 = 0x0580;
-/// Application slot below the gateway's OTA area.
 const MAX_IMAGE: usize = 0x77000 - 0x8000;
 
-/// Header of a .ybl (Telink image + zlib CRC-32 trailer, see radio/ybl.c).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct YblInfo {
     pub version: u32,
@@ -34,7 +24,6 @@ pub struct YblInfo {
     pub image_type: u16,
 }
 
-/// Why an image was not written. The text is what the daemon logs and the probe prints.
 #[derive(Debug, thiserror::Error)]
 pub enum FlashError {
     #[error("cannot read {path}")]
@@ -63,7 +52,6 @@ fn le32(p: &[u8]) -> u32 {
     u32::from_le_bytes([p[0], p[1], p[2], p[3]])
 }
 
-/// zlib's CRC-32 (reflected 0xEDB88320).
 pub(crate) fn crc32(p: &[u8]) -> u32 {
     let mut c = 0xFFFF_FFFFu32;
     for &b in p {
@@ -75,7 +63,6 @@ pub(crate) fn crc32(p: &[u8]) -> u32 {
     !c
 }
 
-/// XMODEM's CRC-16 (CCITT 0x1021, initial 0).
 pub(crate) fn crc16_xmodem(p: &[u8]) -> u16 {
     let mut c = 0u16;
     for &b in p {
@@ -91,8 +78,6 @@ pub(crate) fn crc16_xmodem(p: &[u8]) -> u16 {
     c
 }
 
-/// Checks a .ybl the way maind does before uploading (size field, Telink start flag, CRC-32,
-/// manufacturer 0x140A, image type 0x0580).
 pub fn ybl_parse(f: &[u8]) -> Result<YblInfo, &'static str> {
     if f.len() < 0x40 + 4 {
         return Err("file too short");
@@ -121,15 +106,12 @@ pub fn ybl_parse(f: &[u8]) -> Result<YblInfo, &'static str> {
     Ok(i)
 }
 
-/// Reads and checks an image file. Errors name the path.
 pub fn ybl_load(path: &Path) -> Result<(Vec<u8>, YblInfo), FlashError> {
     let Ok(mut f) = std::fs::File::open(path) else {
         return Err(FlashError::Read {
             path: path.display().to_string(),
         });
     };
-    // What a failing read left is checked as it is (a directory reads as empty), as the C++
-    // stream did.
     let mut file = Vec::new();
     let _ = f.read_to_end(&mut file);
     match ybl_parse(&file) {
@@ -152,9 +134,7 @@ impl Port {
             errno: io_error_text(&e),
         };
         let tty = Tty::open(tty, false).map_err(open)?;
-        // Never write menu keys or an image into a regular file.
         tty.ensure_tty().map_err(open)?;
-        // As the C++ flasher: a port that refuses the settings is still tried.
         let _ = tty.configure_raw_115200(false);
         tty.flush_io();
         Ok(Self { tty })
@@ -171,7 +151,6 @@ impl Port {
         true
     }
 
-    /// Next byte within `ms`.
     fn get(&mut self, ms: i32) -> Option<u8> {
         if !self.tty.wait_readable(ms) {
             return None;
@@ -183,8 +162,6 @@ impl Port {
         }
     }
 
-    /// Reads until `token` shows up (true) or nothing arrives for `quiet_ms`; printable bytes
-    /// and newlines go to `seen`.
     fn expect(&mut self, token: &[u8], quiet_ms: i32, seen: &mut Vec<u8>) -> bool {
         loop {
             let Some(c) = self.get(quiet_ms) else {
@@ -193,7 +170,6 @@ impl Port {
             if c >= 0x20 || c == b'\n' {
                 seen.push(c);
             }
-            // Only the byte just added can complete the token.
             if seen.ends_with(token) {
                 return true;
             }
@@ -210,12 +186,6 @@ fn fail(why: FlashError) -> Result<(), FlashError> {
     Err(why)
 }
 
-/// Blocking (~25 s for an image), with no way to stop it: run it off the runtime thread, with
-/// nothing else holding the tty. `progress` gets 0..1. Errors are logged. After an upload, or
-/// when XMODEM does not start, the radio is told to run its application (menu item 2); without
-/// a bootloader prompt it gets a reset. After a cancel by the bootloader, a block or the EOT
-/// that is never acknowledged, it stays in the bootloader until the next reset (the service's
-/// next bring-up).
 pub fn radio_flash(
     tty: &str,
     lines: &mut dyn RadioLines,
@@ -227,8 +197,6 @@ pub fn radio_flash(
         Err(e) => return fail(e),
     };
 
-    // Bootloader entry exactly as maind (zb_control): boot and reset asserted, reset released
-    // after 100 ms, boot 100 ms later.
     if !lines.set_boot(true) || !lines.set_reset(true) {
         return fail(FlashError::Lines);
     }
@@ -249,7 +217,6 @@ pub fn radio_flash(
         menu = port.expect(b"BL >", 1000, &mut seen);
     }
     if !menu {
-        // Not in the bootloader: the application keeps running (or a reset brings it back).
         lines.set_reset(true);
         sleep(Duration::from_millis(100));
         lines.set_reset(false);
@@ -257,7 +224,6 @@ pub fn radio_flash(
     }
     info!("zigbee flash: bootloader: {}", printable(&seen));
 
-    // "1. upload ybl", then XMODEM: the receiver asks with 'C' (CRC-16) or NAK (checksum).
     port.put(b"1");
     let deadline = Instant::now() + Duration::from_secs(10);
     let use_crc = loop {
@@ -276,13 +242,12 @@ pub fn radio_flash(
     let mut pkt = [0u8; 133];
     for (b, chunk) in image.chunks(128).enumerate() {
         pkt[0] = SOH;
-        // XMODEM block numbers start at 1 and wrap at 256.
         pkt[1] = (b + 1) as u8;
         pkt[2] = !pkt[1];
         pkt[3..3 + chunk.len()].copy_from_slice(chunk);
         pkt[3 + chunk.len()..131].fill(0);
         if chunk.len() < 128 {
-            pkt[3 + chunk.len()] = 0x1A; // as maind pads the last block
+            pkt[3 + chunk.len()] = 0x1A;
         }
         let len = if use_crc {
             let crc = crc16_xmodem(&pkt[3..131]);
@@ -329,7 +294,7 @@ pub fn radio_flash(
     seen.clear();
     port.expect(b"BL >", 5000, &mut seen);
     info!("zigbee flash: upload done: {}", printable(&seen));
-    port.put(b"2"); // run
+    port.put(b"2");
     Ok(())
 }
 

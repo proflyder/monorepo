@@ -105,3 +105,20 @@ bw lock
 `vaultwarden/files.tar` распаковать рядом, в корень PVC `vaultwarden-data`
 при остановленном Deployment (`kubectl scale --replicas=0`), затем
 `--replicas=1`.
+
+## Заметки к коду
+
+Пояснения, перенесённые из комментариев исходников (код комментариев не содержит, см. `AGENTS.md`).
+
+- `kustomization.yaml` — Vaultwarden, reconciled by Flux.
+- `manifests/external-secrets.yaml` — Vaultwarden secrets, materialised from OpenBao KV v2 by ESO.
+- `manifests/ingressroute.yaml` — Host suffix is substituted from the flux-settings Secret (`HOME_DOMAIN`).
+- `manifests/network-policies.yaml` — TEMPLATE: NODE_LAN_IP and LAN_CIDR come from the private ingress env.
+- `manifests/vaultwarden.yaml` — Vaultwarden: Bitwarden-compatible password manager (official Bitwarden apps, browser extensions and `bw` CLI point at https://passwords.<home-domain>/).
+  - Never let Kustomize pruning or a Helm uninstall delete the SQLite volume.
+  - SQLite is single-writer: never two pods against the same volume.
+- `sync_openbao.py` — Copy every OpenBao KV secret into Vaultwarden (one-way, idempotent).
+  - Recovery keys and the seal key now live only with the owner. Without them on disk the item is left alone, never rewritten without the keys.
+- `test_deploy.py` — Static contracts for the Vaultwarden manifests (no cluster needed).
+- `test_sync_openbao.py`
+  - Split so repository scanners do not mistake the fixture for a real key.

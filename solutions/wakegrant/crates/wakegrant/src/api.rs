@@ -1,9 +1,3 @@
-//! axum HTTP API for the wakegrant protocol.
-//!
-//! Routes, auth, error shapes and long-poll behaviour follow
-//! `packages/contracts/wakegrant/PROTOCOL.md`; the bearer check, body limit,
-//! request timeout and health route come from `home-http`.
-
 use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
 use std::time::Duration;
@@ -34,16 +28,10 @@ use crate::domain::{
 };
 use crate::store::{Grant, Store};
 
-/// Maximum request body: the protocol only carries short JSON objects.
 pub const MAX_BODY_BYTES: usize = 4 * 1024;
-/// Long-poll claims may wait 25 s, so the request timeout comfortably exceeds
-/// it, matching the Go service's 40 s write deadline.
 pub const REQUEST_TIMEOUT: Duration = Duration::from_secs(40);
-/// Health check budget.
 pub const HEALTH_TIMEOUT: Duration = Duration::from_secs(2);
 
-/// Peer address captured by [`peer_ip`]; `None` in tests that call the router
-/// directly without `ConnectInfo`.
 #[derive(Debug, Clone, Copy)]
 pub struct PeerIp(pub Option<IpAddr>);
 
@@ -56,7 +44,6 @@ async fn peer_ip(mut request: Request, next: Next) -> Response {
     next.run(request).await
 }
 
-/// Construction options.
 pub struct Options {
     pub keys: Keys,
     pub issuer_token: Token,
@@ -73,7 +60,6 @@ enum LongPollError {
     Storage,
 }
 
-/// The wakegrant HTTP service.
 pub struct Service {
     keys: Keys,
     token: Token,
@@ -105,7 +91,6 @@ impl Service {
         &self.nonces
     }
 
-    /// Full router with health, body limit and timeout.
     pub fn router(self: &Arc<Self>) -> Router {
         let grants = Router::new()
             .route("/v1/grants", post(handle_grant))
@@ -136,8 +121,6 @@ impl Service {
         ip.is_none_or(|ip| self.limiter.allow(&format!("{prefix}ip:{ip}"), now))
     }
 
-    /// Emits exactly event, outcome, machine and grantId — never nonces, MACs,
-    /// tokens, IPs or keys.
     fn log_outcome(&self, event: &str, machine: &str, outcome: &str, grant_id: &str) {
         let valid_machine = is_valid_machine(machine);
         match (valid_machine, grant_id.is_empty()) {
@@ -162,8 +145,6 @@ impl Service {
                 .ok_or(LongPollError::TooManyWaiters)?;
             let notified = waiter.notified();
             tokio::pin!(notified);
-            // Register before re-reading the store so a grant committed
-            // between the first lookup and this point cannot be missed.
             notified.as_mut().enable();
 
             match self
@@ -308,8 +289,6 @@ async fn handle_grant(State(service): State<Arc<Service>>, body: Bytes) -> Respo
             return error(StatusCode::INTERNAL_SERVER_ERROR);
         }
     };
-    // Wake long-poll claims only after the grant is committed, so a waiter
-    // that re-reads the store is guaranteed to see it.
     service.waiters.broadcast(&request.machine, purpose);
     service.log_outcome("grant", &request.machine, "issued", &grant.id);
     let Ok(expires_at) = grant.expires_at.format(&Rfc3339) else {
@@ -382,7 +361,6 @@ async fn handle_claim(
         return error(StatusCode::BAD_REQUEST);
     };
     let Some(key) = service.keys.get(&request.machine) else {
-        // Never reveal whether the machine exists.
         service.log_outcome("claim", "", "unauthorized", "");
         return error(StatusCode::UNAUTHORIZED);
     };
@@ -391,7 +369,6 @@ async fn handle_claim(
         return error(StatusCode::TOO_MANY_REQUESTS);
     }
 
-    // The nonce is consumed first: a forged MAC cannot be retried with it.
     if service
         .nonces
         .consume(&request.machine, &request.nonce, now)

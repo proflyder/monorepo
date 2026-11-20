@@ -2,7 +2,6 @@ package dev.proflyder.home.feature.reminders
 
 import java.time.LocalDate
 
-/** Non-secret reminder editor draft persisted in SavedStateHandle. */
 data class ReminderEditorDraft(
     val existingId: String? = null,
     val existingRevision: Long? = null,

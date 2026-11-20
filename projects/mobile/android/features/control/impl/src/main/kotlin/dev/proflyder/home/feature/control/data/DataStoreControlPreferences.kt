@@ -14,7 +14,6 @@ import dev.zacsweers.metro.SingleIn
 import java.io.IOException
 import kotlinx.coroutines.flow.first
 
-/** Keeps the Home screen's choices in the app-wide DataStore under its own keys. */
 @SingleIn(AppScope::class)
 @ContributesBinding(AppScope::class)
 @Inject
@@ -30,7 +29,6 @@ class DataStoreControlPreferences(
             dataStore.edit { it[KEY_FILTER] = ControlFilter.encode(filter) }
         }.onFailure { failure ->
             if (failure !is IOException) throw failure
-            // The choice just is not remembered; the screen keeps working.
         }
     }
 

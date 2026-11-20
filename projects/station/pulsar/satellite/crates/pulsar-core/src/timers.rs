@@ -1,21 +1,10 @@
-//! Per-actor timers keyed by the actor's own enum, with the firing order of the C++ `Loop`:
-//! every wake-up takes a snapshot of the due keys and returns them in the order they were last
-//! armed; a key cancelled or re-armed by the handling of an earlier key of the same snapshot is
-//! skipped. Actors rely on this order where two timers come due on the same tick.
-//!
-//! The C++ loop ran one snapshot's callbacks back to back. Here that holds only if the actor
-//! polls `timers.next()` as the FIRST branch of a `biased;` `tokio::select!`: otherwise another
-//! ready branch (a command, an event) can run between two keys of the same snapshot.
-
 use std::collections::VecDeque;
 use std::time::Duration;
 
 use tokio::time::Instant;
 
-/// Stand-in for a deadline past the end of `Instant`: never, for a daemon.
 const FAR_FUTURE: Duration = Duration::from_secs(86_400 * 365 * 30);
 
-/// `t + d`, saturating to ~30 years ahead: an overflow panic would abort the daemon.
 fn after(t: Instant, d: Duration) -> Instant {
     t.checked_add(d)
         .or_else(|| t.checked_add(FAR_FUTURE))
@@ -26,14 +15,12 @@ struct Entry<K> {
     key: K,
     due: Instant,
     period: Option<Duration>,
-    /// Arming order; a repeating timer keeps its number across periods, like a C++ timer id.
     seq: u64,
 }
 
 pub struct Timers<K: Copy + Eq> {
     entries: Vec<Entry<K>>,
     next_seq: u64,
-    /// Due keys of the last wake-up not yet returned, with the arming they were due under.
     snapshot: VecDeque<(K, u64)>,
     snapshot_at: Instant,
 }
@@ -54,13 +41,10 @@ impl<K: Copy + Eq> Timers<K> {
         }
     }
 
-    /// (Re)arms `key` to fire once after `delay_ms`.
     pub fn set(&mut self, key: K, delay_ms: u64) {
         self.arm(key, delay_ms, None);
     }
 
-    /// (Re)arms `key` to fire after `delay_ms`, then every `period_ms` (counted from the wake-up
-    /// that fired it). `period_ms == 0` is a one-shot, as in the C++ loop.
     pub fn set_repeating(&mut self, key: K, delay_ms: u64, period_ms: u64) {
         let period = (period_ms > 0).then(|| Duration::from_millis(period_ms));
         self.arm(key, delay_ms, period);
@@ -74,8 +58,6 @@ impl<K: Copy + Eq> Timers<K> {
         self.entries.iter().any(|e| e.key == key)
     }
 
-    /// Waits for the next due key; pending forever while nothing is armed. Cancel-safe: state
-    /// only changes between the wake-up and the return, with no await in between.
     pub async fn next(&mut self) -> K {
         loop {
             if let Some(key) = self.pop_due() {
@@ -158,9 +140,8 @@ mod tests {
         t.set(K::A, 10);
         t.set(K::B, 5);
         t.set(K::C, 20);
-        t.set(K::A, 1); // re-armed: last, though due first
+        t.set(K::A, 1);
         advance(Duration::from_millis(30)).await;
-        // Not by due time (A, B, C) but by arming (B, C, A).
         assert_eq!(t.next().await, K::B);
         assert_eq!(t.next().await, K::C);
         assert_eq!(t.next().await, K::A);
@@ -176,7 +157,6 @@ mod tests {
         t.set(K::B, 10);
         t.set(K::C, 10);
         assert_eq!(t.next().await, K::A);
-        // Handling A cancels B and re-arms C: neither fires from this snapshot.
         t.cancel(K::B);
         t.set(K::C, 50);
         assert_eq!(t.next().await, K::C);
@@ -190,7 +170,6 @@ mod tests {
         t.set(K::A, 10);
         t.set(K::B, 10);
         assert_eq!(t.next().await, K::A);
-        // Due at once, but not part of the running snapshot: B still comes first.
         t.set(K::C, 0);
         assert_eq!(t.next().await, K::B);
         assert_eq!(t.next().await, K::C);
@@ -206,8 +185,7 @@ mod tests {
             assert_eq!(ms(start), expected);
             assert!(t.is_set(K::A));
         }
-        // A late handler does not shift the period's base: the wake-up time does.
-        advance(Duration::from_millis(70)).await; // now 180, due was 160
+        advance(Duration::from_millis(70)).await;
         assert_eq!(t.next().await, K::A);
         assert_eq!(ms(start), 180);
         assert_eq!(t.next().await, K::A);

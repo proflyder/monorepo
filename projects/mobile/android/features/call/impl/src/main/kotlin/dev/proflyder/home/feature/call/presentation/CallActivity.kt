@@ -33,10 +33,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import dev.proflyder.home.core.ui.applySystemBarsPadding
 
-/**
- * Lock-screen call screen. It is a separate Activity (not a Fragment) because a
- * call must survive the main task being backgrounded or the device locked.
- */
 class CallActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityCallBinding

@@ -1,5 +1,3 @@
-//! Фейковый источник релизов для хостовых тестов установщика и актора.
-
 use std::collections::HashMap;
 
 use tokio_util::sync::CancellationToken;
@@ -68,12 +66,10 @@ impl ReleaseSource for Fake {
     }
 }
 
-/// digest OCI-слоя: `sha256:<hex>`.
 pub fn sha256_digest(data: &[u8]) -> String {
     Digest::of(data).to_string()
 }
 
-/// Голый hex для `SHA256SUMS`.
 pub fn sha_hex(data: &[u8]) -> String {
     let digest = sha256_digest(data);
     digest["sha256:".len()..].to_owned()

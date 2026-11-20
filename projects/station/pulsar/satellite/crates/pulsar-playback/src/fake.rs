@@ -1,12 +1,8 @@
-//! In-memory [`PcmDevice`] for policy tests: it plays what the writer queues and exposes the
-//! operations the tests need to drive (play out, fail the next open / write).
-
 use crate::device::{PcmDevice, PcmError, PcmInfo, PcmRequest, Step};
 
 pub struct FakeDevice {
     pub buffer: usize,
     pub period: usize,
-    /// Frames queued in the "device".
     pub queued: usize,
     pub open: bool,
     pub info: Option<PcmInfo>,
@@ -14,7 +10,6 @@ pub struct FakeDevice {
     pub prepared: u32,
     pub resumed: u32,
     pub closed: u32,
-    /// One-shot failure of the next open / write (errno).
     pub fail_open: Option<Step>,
     pub fail_write: Option<i32>,
 }
@@ -36,7 +31,6 @@ impl FakeDevice {
         }
     }
 
-    /// Plays out up to `frames` queued frames (normally `usize::MAX`).
     pub fn play(&mut self, frames: usize) {
         self.queued = self.queued.saturating_sub(frames);
     }

@@ -1,15 +1,3 @@
-// Command gen_view_binding generates Kotlin ViewBinding classes from Android
-// layout XML files.
-//
-// rules_android has no ViewBinding support and the androidx.viewbinding
-// artifact is not part of the pinned Maven closure, so Bazel modules use this
-// generator (through `view_binding = True` in `metro_android_library`). The
-// output mirrors the AGP shape: `<LayoutName>Binding` in `<package>.databinding`
-// with typed `val`s per `android:id`, plus `inflate(...)` and `bind(...)`.
-// Bindings implement `dev.proflyder.home.core.ui.ViewBinding` instead of
-// `androidx.viewbinding.ViewBinding`.
-//
-// Usage: gen_view_binding --package PKG --output FILE LAYOUT.xml...
 package dev.proflyder.home.tools.genviewbinding
 
 import java.io.File
@@ -29,7 +17,6 @@ private val VIEW_PACKAGE = setOf(
 
 private val WEBKIT = setOf("WebView")
 
-/** A view id and the tag that declares it. */
 internal data class ViewRef(val name: String, val tag: String)
 
 private fun Appendable.line(text: String) {
@@ -37,8 +24,6 @@ private fun Appendable.line(text: String) {
     append('\n')
 }
 
-// camel mirrors the Python splitting rule: [_\W]+ separates words, where the
-// class is "underscore or not a word character".
 internal fun camel(name: String, upperFirst: Boolean): String {
     val builder = StringBuilder()
     for (part in splitWords(name)) {
@@ -95,7 +80,6 @@ internal fun tagName(namespace: String?, local: String): String {
     return "{$namespace}$local"
 }
 
-/** Returns (rootTag, views) in document order, deduplicated by id name. */
 internal fun collect(reader: XMLStreamReader): Pair<String, List<ViewRef>> {
     var rootTag = ""
     var haveRoot = false
@@ -166,7 +150,6 @@ internal fun render(layoutPath: String): String {
         try {
             reader.close()
         } catch (_: Exception) {
-            // Keep the primary failure; a failing close cannot change it.
         }
     }
     if (rootTag == "merge") {

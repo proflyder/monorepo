@@ -1,9 +1,5 @@
 language: ru
 intents:
-  # Only the two parameterless "the alarm is ringing right now" commands stay
-  # local: they must stop or snooze sound even if Hermes/the network is down.
-  # Creating, moving, listing and cancelling alarms lives in Hermes through the
-  # mcp-gateway `time` tools (durable scheduler), never in HA sentence templates.
   StationAlarmStop:
     data:
     - sentences:

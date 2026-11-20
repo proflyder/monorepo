@@ -16,13 +16,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
-/**
- * Self-managed Telecom connection for the station call.
- *
- * Telecom owns the call session (audio focus, system call UI, lock-screen
- * surface); the app owns the media and tells Telecom when the call becomes
- * active or ends by observing [CallController.state].
- */
 class HomeConnection(
     private val controller: CallController,
     private val bridge: CallTelecomBridge,
@@ -41,7 +34,6 @@ class HomeConnection(
         bridge.attach(this)
     }
 
-    /** Called by the ConnectionService: start dialing and mirror the state. */
     fun startOutgoing() {
         setInitialized()
         controller.placeCall()

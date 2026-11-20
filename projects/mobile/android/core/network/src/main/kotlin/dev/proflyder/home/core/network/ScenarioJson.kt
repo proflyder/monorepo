@@ -14,13 +14,6 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.put
 
-/**
- * Maps home.v1.ScenarioService DTOs to domain models and builds typed requests.
- *
- * The oneof active variant is a field of the message object (`{"time":{...}}`).
- * A variant this client does not know is retained verbatim as its original JSON
- * object so an older app round-trips a newer definition without data loss.
- */
 object ScenarioJson {
     const val SERVICE = "home.v1.ScenarioService"
 
@@ -168,7 +161,6 @@ object ScenarioJson {
         }
     }
 
-    /** Re-emits a retained unknown variant object exactly as received. */
     private fun unknown(rawJson: String): JsonObject = WireJson.decodeFromString(
         JsonObject.serializer(),
         rawJson.ifBlank { "{}" },

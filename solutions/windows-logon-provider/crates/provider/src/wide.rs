@@ -1,52 +1,30 @@
-//! UTF-16 helpers for the Win32 `...W` entry points.
-//!
-//! Most Win32 wide-char APIs take a `PCWSTR`, i.e. a pointer to a
-//! NUL-terminated UTF-16 string. A pointer into a `Vec<u16>` that was built
-//! without a terminator makes them read past the allocation, so [`WideNul`]
-//! makes the terminator part of the type: every `WideNul` ends with exactly one
-//! NUL and cannot be built from anything else. Code that needs the length
-//! without a terminator (KERB packing, comparisons) uses [`widen`] directly.
-//!
-//! The module is host-portable: it uses `str::encode_utf16`, not Win32.
-
-/// UTF-16 without a terminating NUL, for explicit-length uses.
 pub fn widen(text: &str) -> Vec<u16> {
     text.encode_utf16().collect()
 }
 
-/// UTF-16 with exactly one terminating NUL, ready for `PCWSTR`.
-///
-/// Input NUL units are dropped while converting, so the result always has a
-/// single terminator at the very end (and no interior one).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct WideNul(Vec<u16>);
 
 impl WideNul {
-    /// Converts `text`; the result always ends with one NUL.
     pub fn new(text: &str) -> Self {
         Self::from_wide(&widen(text))
     }
 
-    /// Wraps already-widened text, adding the terminator and dropping any NUL
-    /// units at or after the first one.
     pub fn from_wide(wide: &[u16]) -> Self {
         let mut units: Vec<u16> = wide.iter().copied().take_while(|&unit| unit != 0).collect();
         units.push(0);
         Self(units)
     }
 
-    /// The text without the terminator.
     pub fn text(&self) -> &[u16] {
         let end = self.0.len().saturating_sub(1);
         &self.0[..end]
     }
 
-    /// Bypasses the `PCWSTR` and gives up the buffer, e.g. to a wiper.
     pub fn into_vec(self) -> Vec<u16> {
         self.0
     }
 
-    /// A `PCWSTR` over the NUL-terminated buffer.
     #[cfg(windows)]
     pub fn as_pcwstr(&self) -> windows_core::PCWSTR {
         windows_core::PCWSTR(self.0.as_ptr())
@@ -55,7 +33,6 @@ impl WideNul {
 
 #[cfg(test)]
 impl WideNul {
-    /// The buffer including its single trailing NUL; only assertions need it.
     pub fn as_slice(&self) -> &[u16] {
         &self.0
     }

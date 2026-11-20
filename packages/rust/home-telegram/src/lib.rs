@@ -1,40 +1,18 @@
-//! Telegram Bot API `sendMessage` delivery for the home services.
-//!
-//! The crate stays project-agnostic: it knows one bot token and one chat id,
-//! sends HTML messages, and splits long text at the Bot API limit. Reports,
-//! redaction and recipients belong to the caller.
-//!
-//! [`chunk`] mirrors the Go gateway's `telegram.Chunk`: the title and body are
-//! HTML-escaped, joined, and split into messages of at most [`MAX_MESSAGE_RUNES`]
-//! runes. Splitting prefers a newline boundary so words and tags stay intact; a
-//! single over-long line is hard-wrapped.
-//!
-//! [`Error::kind`] is [`ErrorKind::Transient`] for network failures, timeouts,
-//! `408`, `425`, `429` and `5xx`, and [`ErrorKind::Permanent`] for every other
-//! `4xx`, an `ok:false` answer and a malformed answer.
-
 use std::fmt;
 
 use home_secret::{Secret, Token};
 use serde::{Deserialize, Serialize};
 
-/// The Bot API limit for one message, in runes.
 pub const MAX_MESSAGE_RUNES: usize = 4096;
 
 const MAX_RESPONSE_BYTES: usize = 64 << 10;
 
-/// How a failed call may be retried.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ErrorKind {
-    /// A network failure, timeout, throttling or a `5xx`: retrying later may
-    /// succeed.
     Transient,
-    /// A `4xx`, a rejected message or an invalid argument: retrying the same
-    /// call cannot succeed.
     Permanent,
 }
 
-/// One Bot API call failure. It never contains the bot token or a message body.
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("{detail}")]
@@ -70,7 +48,6 @@ pub enum Error {
 }
 
 impl Error {
-    /// Whether a retry may succeed.
     #[must_use]
     pub fn kind(&self) -> ErrorKind {
         match self {
@@ -86,14 +63,12 @@ impl Error {
         }
     }
 
-    /// Convenience predicate for a worker loop.
     #[must_use]
     pub fn is_transient(&self) -> bool {
         self.kind() == ErrorKind::Transient
     }
 }
 
-/// A sender for one bot and one fixed chat.
 #[derive(Clone)]
 pub struct Sender {
     http: reqwest::Client,
@@ -114,16 +89,12 @@ impl fmt::Debug for Sender {
 }
 
 impl Sender {
-    /// Build a sender. `api_url` is the Bot API root (`https://api.telegram.org`
-    /// or a local fake); `token` and `chat_id` are trimmed of whitespace.
     pub fn new(
         api_url: impl Into<String>,
         token: Token,
         chat_id: impl Into<String>,
         timeout: std::time::Duration,
     ) -> Result<Self, Error> {
-        // The Bot API is public HTTPS: the shared builder installs the ring
-        // provider and trusts the operating system's root bundle.
         let http = home_tls::public_https_client()
             .map_err(|source| Error::Tls {
                 operation: "sendMessage",
@@ -144,7 +115,6 @@ impl Sender {
         })
     }
 
-    /// Escape and deliver a title + text report in as many chunks as needed.
     pub async fn send(&self, title: &str, text: &str) -> Result<(), Error> {
         if self.token.expose().is_empty() || self.chat_id.is_empty() {
             return Err(Error::Invalid {
@@ -157,10 +127,6 @@ impl Sender {
         Ok(())
     }
 
-    /// Send one already-formatted HTML message.
-    ///
-    /// The caller is responsible for escaping user text and for staying under
-    /// [`MAX_MESSAGE_RUNES`].
     pub async fn send_message(&self, text: &str) -> Result<(), Error> {
         if self.token.expose().is_empty() || self.chat_id.is_empty() {
             return Err(Error::Invalid {
@@ -214,12 +180,6 @@ impl Sender {
     }
 }
 
-/// A stateless Bot API client for a caller that addresses several chats.
-///
-/// [`Sender`] is bound to one chat and is the right tool for a fixed report
-/// recipient. The currency bot talks to an allowlist of chats and echoes the
-/// chat that sent a command, so it needs the chat id per message. This client
-/// also owns `setWebhook`.
 #[derive(Clone)]
 pub struct Bot {
     http: reqwest::Client,
@@ -238,14 +198,11 @@ impl fmt::Debug for Bot {
 }
 
 impl Bot {
-    /// Build a bot client. `api_url` is the Bot API root; `token` is trimmed.
     pub fn new(
         api_url: impl Into<String>,
         token: Token,
         timeout: std::time::Duration,
     ) -> Result<Self, Error> {
-        // The Bot API is public HTTPS: the shared builder installs the ring
-        // provider and trusts the operating system's root bundle.
         let http = home_tls::public_https_client()
             .map_err(|source| Error::Tls {
                 operation: "sendMessage",
@@ -265,11 +222,6 @@ impl Bot {
         })
     }
 
-    /// Send one already-formatted HTML message to `chat_id`.
-    ///
-    /// The body is JSON (`chat_id` is a string, as in the Kotlin contract) and
-    /// deliberately omits `disable_web_page_preview`, matching the currency
-    /// bot's current wire behaviour.
     pub async fn send_message(&self, chat_id: &str, text: &str) -> Result<(), Error> {
         if self.token.expose().is_empty() || chat_id.trim().is_empty() {
             return Err(Error::Invalid {
@@ -288,7 +240,6 @@ impl Bot {
         self.post_json("sendMessage", "sendMessage", &body).await
     }
 
-    /// Register the webhook with its secret token and the allowed update kinds.
     pub async fn set_webhook(
         &self,
         url: &str,
@@ -369,7 +320,6 @@ struct SetWebhookJson {
     allowed_updates: Vec<String>,
 }
 
-/// Incoming Bot API update with the four message variants the bot accepts.
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct Update {
     #[serde(default)]
@@ -385,9 +335,6 @@ pub struct Update {
 }
 
 impl Update {
-    /// The first present message carrier, in the same precedence as the Go
-    /// webhook: `message`, `edited_message`, `channel_post`,
-    /// `edited_channel_post`.
     #[must_use]
     pub fn message(&self) -> Option<&Message> {
         self.message
@@ -398,7 +345,6 @@ impl Update {
     }
 }
 
-/// The fields of a Bot API message that the bot inspects.
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct Message {
     #[serde(default)]
@@ -407,7 +353,6 @@ pub struct Message {
     pub chat: Chat,
 }
 
-/// The originating chat.
 #[derive(Debug, Clone, Copy, Default, Deserialize)]
 pub struct Chat {
     #[serde(default)]
@@ -422,10 +367,6 @@ struct SendResponse {
     description: String,
 }
 
-/// Escape a title and text as Telegram HTML and split the result into messages
-/// no longer than `limit` runes.
-///
-/// `limit` outside `1..=MAX_MESSAGE_RUNES` becomes [`MAX_MESSAGE_RUNES`].
 #[must_use]
 pub fn chunk(title: &str, text: &str, limit: usize) -> Vec<String> {
     let limit = if limit == 0 || limit > MAX_MESSAGE_RUNES {
@@ -458,8 +399,6 @@ fn split(full: &str, limit: usize) -> Vec<String> {
     let mut remaining = full;
     while remaining.chars().count() > limit {
         let mut cut = rune_offset(remaining, limit);
-        // Prefer the last newline before the limit so HTML tags and words stay
-        // intact; HTML entities introduce no raw '<' so this is safe.
         if let Some(index) = remaining[..cut].rfind('\n')
             && index > 0
         {
@@ -670,7 +609,6 @@ mod tests {
         assert_eq!(message.text.as_deref(), Some("/start"));
         assert_eq!(message.chat.id, 123);
 
-        // Every non-message update is still a valid update with no carrier.
         let empty: Update = serde_json::from_str(r#"{"update_id": 8}"#).expect("empty update");
         assert!(empty.message().is_none());
         assert_eq!(empty.update_id, 8);

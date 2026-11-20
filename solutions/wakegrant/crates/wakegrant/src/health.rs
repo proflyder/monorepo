@@ -1,8 +1,5 @@
-//! The `-healthcheck` probe of the distroless image: `GET /healthz` on loopback.
-
 use std::time::Duration;
 
-/// Errors of one probe. No secret or response body is included.
 #[derive(Debug, thiserror::Error)]
 pub enum ProbeError {
     #[error("healthcheck: http client: {0}")]
@@ -13,12 +10,6 @@ pub enum ProbeError {
     Status(reqwest::StatusCode),
 }
 
-/// Calls `<base_url>/healthz` and succeeds only on HTTP 200.
-///
-/// The workspace builds reqwest with rustls but without a default crypto
-/// provider, and reqwest panics ("No provider set") when it builds a client
-/// without one, even for plain HTTP. The process-wide ring provider is
-/// installed first; a provider installed earlier is kept.
 pub async fn probe(base_url: &str) -> Result<(), ProbeError> {
     let _already_installed = rustls::crypto::ring::default_provider().install_default();
     let client = reqwest::Client::builder()
@@ -52,7 +43,6 @@ mod tests {
         format!("http://{address}")
     }
 
-    // Regression: the first Rust deploy panicked here with "No provider set".
     #[tokio::test]
     async fn probe_accepts_a_healthy_server() {
         let url = serve(StatusCode::OK).await;

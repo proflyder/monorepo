@@ -1,14 +1,9 @@
-//! Байт-совместимость контракта v1: файл `golden/contract_v1.txt` — вывод прежнего
-//! самописного JSON-писателя (снят с `git show HEAD` до замены на serde) на наборе фикстур,
-//! включая формат чисел, порядок полей, экранирование и завершающий перевод строки.
-
 use pulsar_wake_events::contract::{
     Sidecar, Stats, contract_json, parse_sidecar, parse_stats, sidecar_json, stats_json,
 };
 
 const GOLDEN: &str = include_str!("golden/contract_v1.txt");
 
-/// Текст секции `name` вместе с завершающим переводом строки.
 fn section(name: &str) -> &'static str {
     let head = format!("== {name}\n");
     let start = GOLDEN
@@ -107,7 +102,6 @@ fn stats_bytes_match_the_previous_writer() {
         let want = section(&format!("stats {name}"));
         let got = stats_json(&stats(name), "deadbeef");
         assert_eq!(got, want, "stats {name}");
-        // Разбор старого файла даёт те же значения, и повторная запись — те же байты.
         let parsed = parse_stats(want).unwrap_or_else(|| panic!("stats {name} does not parse"));
         assert_eq!(
             stats_json(&parsed, "deadbeef"),

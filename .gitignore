@@ -1,11 +1,8 @@
-# Bazel output symlinks and local caches
 /bazel-*
 /.bazel-cache/
 
-# Root Cargo workspace build output (one target/ for every Rust crate).
 /target/
 
-# Private and historical machine data
 /snapshots/
 /secrets/
 /local-data/
@@ -15,7 +12,6 @@
 .env
 .env.*
 *.env
-# Frozen home-deploy contract fixtures: synthetic TEST-NET values, no secrets.
 !platform/deploy-rs/testdata/frozen/**/*.env
 *.env.*
 !*.env.example
@@ -38,24 +34,20 @@
 *.gz
 *.xz
 *.bin
-# Byte-exact OCI archive goldens for the Rust parity fixtures (10-20 KiB).
 !platform/deploy-rs/testdata/frozen/**/*.tar
 *.debug
 *.bak
 *.bak-*
 
-# Third-party checkouts keep their own Git metadata. Active changes: patches/.
 /resources/*
 !/resources/README.md
 
-# Recovery artifacts stay on disk; version compact wake-word assets only.
 /artifacts/*
 !/artifacts/README.md
 !/artifacts/wakeword/
 /artifacts/wakeword/*
 !/artifacts/wakeword/ricardo-v1/
 
-# Build outputs / dependencies / editor and OS metadata
 __pycache__/
 *.py[cod]
 .venv/
@@ -72,15 +64,12 @@ dist/
 .DS_Store
 ._*
 *.log
-# IDE-generated project metadata is local (Android Studio/IntelliJ), not source.
 .idea/
 *.iml
-# Local scheduler/bridge runtime state; deployed data lives on hosts, not Git.
 /scheduler.db
 /scheduler.db-shm
 /scheduler.db-wal
 *.ledger.json
-# Android build outputs.
 *.apk
 *.aab
 *.apks
@@ -88,25 +77,18 @@ dist/
 /projects/station/ble-gateway/ble-gateway-armhf*
 /projects/station/ble-gateway/bletest-armhf
 
-# Reproducible generated configuration
 *.generated
 
-# Windows logon provider build outputs (Bazel artifacts stay on disk).
 /solutions/windows-logon-provider/out/
 /solutions/windows-logon-provider/target/
 /projects/station/ble-gateway/target/
-# Rendered Cloudflare Worker config contains private account/KV ids.
 /projects/home/cloudflare/heartbeat/wrangler.generated.toml
 
-# Station upstream checkouts and built binaries
 /projects/station/upstream/
 /projects/station/resources/
 /projects/station/ble-gateway/ble-gateway*
 /projects/station/ble-gateway/bletest*
 
-# Pulsar (projects/station/pulsar) build outputs, fetched dependencies and
-# generated toolchains. The Pulsar tree keeps its own .gitignore; these root
-# rules keep the same paths out of the monorepo index as well.
 /projects/station/pulsar/satellite/build/
 /projects/station/pulsar/satellite/target/
 /projects/station/pulsar/satellite/third_party/src/
@@ -118,23 +100,17 @@ dist/
 /projects/station/pulsar/installer/dist/
 /projects/station/pulsar/platform-tools/
 
-# Pulsar's updater tests ship a throwaway test key pair, not a real secret.
 !/projects/station/pulsar/satellite/crates/pulsar-update/tests/data/server.key
 
-# Private local compatibility links (targets live under secrets/local/).
 /projects/home-assistant/ha-voice/www/alarm_ringtone.wav
 
-# Personal Android debug keystore; the file lives under secrets/ and appears
-# here only as a symlink so Bazel can read it.
 /platform/android/keys/
 
-# Ignore directory symlinks as well as real private directories.
 /archive
 /backups
 /logs
 /snapshots
 
-# Terraform credentials, state, plans and provider cache; keep provider lock tracked.
 .terraform/
 *.tfstate
 *.tfstate.*

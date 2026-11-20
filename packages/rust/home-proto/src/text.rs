@@ -1,15 +1,8 @@
-//! Builders for `home.v1.LocalizedText`.
-//!
-//! The server sends stable snake_case keys, never a user-visible sentence.
-//! Clients resolve the key through their own resources and fall back to the
-//! legacy text field when they do not know it.
-
 use connectrpc::ErrorDetail;
 use serde_json::{Map, Value};
 
 use crate::v1::LocalizedText;
 
-/// A localized text with no arguments.
 #[must_use]
 pub fn localized(key: &str) -> LocalizedText {
     LocalizedText {
@@ -18,7 +11,6 @@ pub fn localized(key: &str) -> LocalizedText {
     }
 }
 
-/// A localized text with `(name, value)` arguments.
 #[must_use]
 pub fn localized_with<I, K, V>(key: &str, args: I) -> LocalizedText
 where
@@ -36,11 +28,6 @@ where
     }
 }
 
-/// The `home.v1.LocalizedText` error detail for a Connect error.
-///
-/// The detail carries a JSON `debug` representation so a JSON client (the
-/// Android app) can read the key and arguments without decoding protobuf.
-/// The legacy `message` stays on the error for older clients.
 #[must_use]
 pub fn error_detail(text: &LocalizedText) -> ErrorDetail {
     let mut debug = Map::new();

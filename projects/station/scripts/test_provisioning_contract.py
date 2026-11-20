@@ -1,4 +1,3 @@
-"""Keep retired QR/DPP provisioning out of the deployed boot path."""
 from pathlib import Path
 import unittest
 

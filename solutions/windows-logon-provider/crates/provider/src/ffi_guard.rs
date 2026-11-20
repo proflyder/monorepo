@@ -1,25 +1,9 @@
-//! `catch_unwind` for every `extern "system"` boundary.
-//!
-//! A Rust panic must not unwind into LogonUI: the COM ABI is not
-//! unwind-aware. Platform independent so the panic path is host-tested.
-
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
-///
-/// `AssertUnwindSafe` is deliberate: a panicking COM call leaves the provider
-/// fail-closed (no tile, no armed session) and the shared locks tolerate
-/// poisoning, so continuing after the unwind is safe.
 pub fn guard<T>(body: impl FnOnce() -> T, on_panic: impl FnOnce() -> T) -> T {
     catch_unwind(AssertUnwindSafe(body)).unwrap_or_else(|_| on_panic())
 }
 
-/// Runs `body` and guarantees that `teardown` runs exactly once, even when
-/// `body` panics. A panic inside `teardown` itself is swallowed, so no unwind
-/// can cross the FFI boundary.
-///
-/// `teardown` and `on_panic` must be allocation-free: they run on a failure
-/// path where allocating again could double-panic. Both closures only touch
-/// atomics or already-owned state in the thread procedures.
 pub fn guard_thread<T>(
     body: impl FnOnce() -> T,
     teardown: impl FnOnce(),
@@ -34,8 +18,6 @@ pub fn guard_thread<T>(
     result
 }
 
-/// RAII cleanup step. Its `Drop` catches a panic so a failing cleanup can
-/// never unwind out of an `extern "system"` function.
 struct Teardown<F: FnOnce()> {
     action: Option<F>,
 }

@@ -4,12 +4,8 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
-# Крейт зависит от pulsar-core (Linux-only: ALSA/FFI), поэтому и сам собирается только под
-# станцию. Хостовые тесты гоняются `cargo test -p pulsar-call`; в CI — armhf/aarch64 сборка.
 LINUX = ["@platforms//os:linux"]
 
-# `@opus//:opus` — тот же libopus, что уже линкуется в Pulsar через micro-opus: encoder
-# звонка моно 48 кГц и стерео-декодер с даунмиксом. Новых внешних зависимостей нет.
 cc_library(
     name = "static_link_group",
     linkopts = ["-Wl,-Bstatic"],
@@ -32,8 +28,6 @@ DEPS = [
     "//projects/station/pulsar/satellite/crates/pulsar-metrics:pulsar_metrics",
 ]
 
-# C/C++ libraries are link-only here (the crate declares the opus FFI itself);
-# rules_rust requires them in `link_deps`, not `deps`.
 LINK_DEPS = [
     ":static_link_group",
     "@opus//:opus",
@@ -59,7 +53,6 @@ rust_test(
     deps = DEPS,
 )
 
-# Mirrors the root [workspace.lints] through the crate's `[lints] workspace = true`.
 extract_cargo_lints(
     name = "workspace_lints",
     manifest = "Cargo.toml",

@@ -1,23 +1,7 @@
-"""Hermetic zig cc_toolchain config.
-
-This file is copied into the zig SDK repository by `zig_sdk_repository`, so
-every tool path is relative to that repository's package and the toolchain has
-no host-absolute paths. It is not loaded from the main repository.
-
-Targets: aarch64-linux-gnu (glibc 2.36), arm-linux-gnueabihf (glibc 2.23,
-cortex-a53 / VFPv4) and x86_64-windows-gnu (mingw-w64/UCRT), matching the
-former satellite/Makefile and cargo-zigbuild, and the Windows credential
-provider.
-"""
-
 load("@bazel_tools//tools/cpp:cc_toolchain_config_lib.bzl", "feature", "flag_group", "flag_set")
 load("@rules_cc//cc:defs.bzl", "CcToolchainConfigInfo", "cc_common", "cc_toolchain")
 
 def _zig_cc_toolchain_config_impl(ctx):
-    # `%crosstool_top%` resolves to the package of this cc_toolchain (the zig
-    # Absolute path of the fetched SDK. Bazel's include checker compares the
-    # compiler's absolute header paths against these, so they cannot be
-    # execroot-relative.
     base = ctx.attr.sdk_root
 
     if ctx.attr.libc == "musl":
@@ -32,9 +16,6 @@ def _zig_cc_toolchain_config_impl(ctx):
         ]
         target_libc = "musl"
     elif ctx.attr.target_os == "windows":
-        # mingw-w64/UCRT headers plus zig's libc++ for C++ sources. The
-        # Windows provider itself is pure Rust; these paths keep a future C/C++
-        # dependency compilable with the same toolchain.
         include_dirs = [
             base + "/lib/libc/include/any-windows-any",
             base + "/lib/libc/mingw/include",
@@ -59,12 +40,6 @@ def _zig_cc_toolchain_config_impl(ctx):
         target_libc = "glibc"
 
     prefix = ctx.attr.prefix
-    # rules_rust derives `-C dlltool=<linker dir>/dlltool` for windows targets
-    # and rustc runs dlltool from its temporary codegen directory, so a
-    # relative path is not resolvable there. The windows tool paths are
-    # therefore absolute (the SDK lives in the external repository, which Bazel
-    # maps into the sandbox as a declared input). Station toolchains keep the
-    # relative paths they always used.
     tool_prefix = (base + "/" + prefix) if ctx.attr.target_os == "windows" else prefix
     tool_paths = [
         struct(name = "gcc", path = tool_prefix + "_cc"),
@@ -80,9 +55,6 @@ def _zig_cc_toolchain_config_impl(ctx):
         struct(name = "dwp", path = "noop"),
     ]
 
-    # The CMake Release build of the sendspin libraries is -O3 -DNDEBUG. The
-    # bare toolchain config otherwise passes no -O flag and zig compiles all
-    # C/C++ at -O0 (roughly twice the deployed binary size).
     def compile_flags_feature(name, flags):
         return feature(
             name = name,
@@ -128,7 +100,6 @@ _zig_cc_toolchain_config = rule(
 )
 
 def zig_cc_toolchain(name, cpu, includes_arch, sdk_root, target_compatible_with, libc = "glibc", target_os = "linux"):
-    """Declares the config, cc_toolchain and Bazel toolchain for one target."""
     triple = {
         "aarch64": "aarch64-linux-gnu.2.36",
         "armv7": "arm-linux-gnueabihf.2.23",
@@ -153,8 +124,6 @@ def zig_cc_toolchain(name, cpu, includes_arch, sdk_root, target_compatible_with,
             ":headers",
             ":noop_file",
             ":zig_bin",
-            # rules_rust derives the dlltool path from the linker directory for
-            # every windows compile, so the wrapper must be an action input.
             ":dlltool_file",
         ] + native.glob(["tool_" + name + "_*"]),
     )
@@ -166,9 +135,6 @@ def zig_cc_toolchain(name, cpu, includes_arch, sdk_root, target_compatible_with,
         as_files = ":" + name + "_files",
         compiler_files = ":" + name + "_files",
         dwp_files = ":" + name + "_files",
-        # rules_rust passes `-C dlltool=<linker dir>/dlltool` for windows
-        # targets and derives it from this toolchain's linker path, so the
-        # wrapper must travel with the linker files.
         linker_files = ":" + name + "_files",
         objcopy_files = ":" + name + "_files",
         strip_files = ":" + name + "_files",

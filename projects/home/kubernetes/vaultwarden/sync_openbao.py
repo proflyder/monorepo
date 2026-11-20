@@ -1,27 +1,4 @@
 #!/usr/bin/env python3
-"""Copy every OpenBao KV secret into Vaultwarden (one-way, idempotent).
-
-    BW_SESSION=... mise run vault:sync [-- --dry-run]
-
-Layout in the vault (folder ``OpenBao``):
-  * one Secure Note per KV path, named ``openbao:<path>`` (e.g.
-    ``openbao:infra/ssh/proxmox-admin``); short values are hidden custom
-    fields, long ones (> FIELD_LIMIT chars: p12, archives, kubeconfigs) are
-    attachments named after the field;
-  * one SSH key item per private key found in ``secret/infra/ssh/*``
-    (``ssh:<path>/<field>``), usable by the Bitwarden SSH agent;
-  * ``openbao:bootstrap``: operator token, recovery keys, seal key and
-    username/TOTP id from ``secrets/openbao/`` (what OpenBao itself needs).
-
-Every managed item carries a hidden ``_digest`` field (sha256 of its content):
-unchanged items are skipped, changed ones are rewritten in place. Items in the
-folder that no longer exist in OpenBao are reported, never deleted.
-
-Auth: BW_SESSION from ``bw unlock`` (the CLI must already point at the
-Vaultwarden server and be logged in); OpenBao: BAO_TOKEN or
-``secrets/openbao/operator.token``. Values never reach stdout or argv: JSON
-goes to ``bw`` on stdin, attachments through a private temp directory.
-"""
 from __future__ import annotations
 
 import argparse
@@ -43,9 +20,6 @@ ROOTS = ("ci/", "k8s/", "infra/")
 HIDDEN = 1
 
 
-# --------------------------------------------------------------------------
-# OpenBao
-# --------------------------------------------------------------------------
 class Bao:
     def __init__(self, addr: str, token: str):
         self.addr, self.token = addr.rstrip("/"), token
@@ -77,15 +51,11 @@ class Bao:
         return {path: self.read(path) for root in ROOTS for path in self.walk(root)}
 
 
-# --------------------------------------------------------------------------
-# Desired vault content
-# --------------------------------------------------------------------------
 def digest(payload) -> str:
     return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
 
 
 def note(name: str, values: dict[str, str], description: str) -> dict:
-    """A Secure Note spec: short values as fields, long ones as attachments."""
     fields = {k: v for k, v in values.items() if len(v) <= FIELD_LIMIT}
     attachments = {k: v for k, v in values.items() if len(v) > FIELD_LIMIT}
     return {"kind": "note", "name": name, "notes": description,
@@ -94,7 +64,6 @@ def note(name: str, values: dict[str, str], description: str) -> dict:
 
 
 def public_and_fingerprint(private: str, public: str) -> tuple[str, str]:
-    """Derive the public key when absent and its SHA256 fingerprint (ssh-keygen)."""
     if not public:
         with tempfile.TemporaryDirectory(prefix="bw-ssh-") as tmp:
             key = pathlib.Path(tmp) / "key"
@@ -126,8 +95,6 @@ def ssh_keys(path: str, values: dict[str, str]) -> list[dict]:
 
 def bootstrap(secrets_dir: pathlib.Path, bao_addr: str) -> dict | None:
     base = secrets_dir / "openbao"
-    # Recovery keys and the seal key now live only with the owner. Without them
-    # on disk the item is left alone, never rewritten without the keys.
     if not ((base / "init.json").is_file() or (base / "seal.key").is_file()):
         return None
     values: dict[str, str] = {"bao_addr": bao_addr}
@@ -165,9 +132,6 @@ def desired(snapshot: dict[str, dict[str, str]], boot: dict | None) -> list[dict
     return specs
 
 
-# --------------------------------------------------------------------------
-# Vaultwarden through the bw CLI
-# --------------------------------------------------------------------------
 class BwError(RuntimeError):
     pass
 
@@ -180,7 +144,6 @@ class Bw:
         result = subprocess.run([self.binary, *args, "--nointeraction"],
                                 input=stdin, capture_output=True, text=True)
         if result.returncode != 0:
-            # bw errors name the failing object, not values.
             raise BwError(f"bw {args[0]} {args[1] if len(args) > 1 else ''} failed: "
                           f"{result.stderr.strip()[:300]}")
         return result.stdout
@@ -290,7 +253,7 @@ def main(argv: list[str] | None = None) -> int:
     if not os.environ.get("BW_SESSION"):
         ap.error("BW_SESSION is not set: run `bw unlock` first")
     sys.path.insert(0, str(ROOT / "platform" / "workstation"))
-    import workstation  # same address/token resolution as `mise run secrets:*`
+    import workstation
     addr = workstation.address(args.secrets_dir) or ap.error(
         "no OpenBao address: run `mise run secrets:login`")
     token = workstation.token(args.secrets_dir)

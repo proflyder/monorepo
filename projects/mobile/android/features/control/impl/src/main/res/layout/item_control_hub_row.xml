@@ -1,5 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- One live row: icon, time, label and a compact trailing action/toggle. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
     tools:ignore="SelectableText"

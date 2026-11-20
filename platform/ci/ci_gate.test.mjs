@@ -1,7 +1,4 @@
 #!/usr/bin/env node
-/**
- * Tests for the aggregate `ci-ok` gate.
- */
 
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -112,9 +109,6 @@ test("gate: failed unit reports the name", () => {
   assert.ok(result.err.includes("failure"));
 });
 
-// `ci.yml` is now a thin caller: the aggregate answer is computed in the
-// reusable pipeline (`--github-output`) and the caller's `ci-ok` check fails on
-// `ok=false`. The failing job names must still reach the operator.
 function runOutput(needs) {
   const saved = process.env.NEEDS;
   const outputFile = `${os.tmpdir()}/ci-gate-${process.pid}-${Math.random().toString(16).slice(2)}`;

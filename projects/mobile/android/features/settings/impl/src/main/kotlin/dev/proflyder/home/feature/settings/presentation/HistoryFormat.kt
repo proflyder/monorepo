@@ -2,7 +2,6 @@ package dev.proflyder.home.feature.settings.presentation
 
 import android.text.format.DateUtils
 
-/** Relative "5 minutes ago" text in the device locale; no extra timestamp format. */
 internal object HistoryFormat {
     fun relative(
         receivedAtMillis: Long,

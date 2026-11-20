@@ -1,17 +1,3 @@
-//! Player/Mixer probe. Run with the daemon stopped.
-//! usage: player_probe <music_uri> <announce_file> <http_base> [https_url]
-//!  0. Mixer: set_volume(v) / mute / unmute with v = min(current volume, 0.2), each read back
-//!     with amixer; playback below runs at v (0.2 = raw 82 on the stock curve, the port's test
-//!     cap). Nothing plays while the master is muted (raw 0). The original raw values are
-//!     written back at the end, on SIGINT / SIGTERM / SIGHUP and on a panic. On models with
-//!     software volume (the Mini) there is no ALSA master; the probe applies the same 60 dB
-//!     curve to the player channels and the amixer checks are skipped.
-//!  1. MUSIC plays <music_uri> (gain 0.3)
-//!  2. at +1.5 s ANNOUNCE plays [<announce_file>, <http_base>/announce.flac] (gain 0.3) with
-//!     MUSIC ducked to 0.08; restored when the announcement is done
-//!  3. MUSIC paused for 1 s and resumed
-//!  4. after MUSIC done: MUSIC plays <http_base>/tone.mp3, then <http_base>/missing.flac (expect
-//!     done ok=0), then [https_url] for 5 s (state must reach PLAYING; then stop())
 #![deny(unsafe_code)]
 #![deny(unsafe_op_in_unsafe_fn)]
 
@@ -24,14 +10,10 @@ use pulsar_media::{Channel, Mixer, PlayId, PlayState, PlayerEvent, spawn};
 use tokio::signal::unix::{SignalKind, signal};
 
 const MASTER: &str = "Master Playback Volume";
-/// Mixer scale: the port's cap for test sounds.
 const MAX_TEST_VOLUME: f32 = 0.2;
-/// The control and its original raw values, written back once (normal exit, signal, panic).
 static RESTORE: Mutex<Option<(pulsar_alsa::Ctl, [i64; 2])>> = Mutex::new(None);
 
 fn restore() {
-    // try_lock: a panic while the lock is held must not deadlock the hook; a poisoned lock
-    // still holds the values to write back.
     let mut g = match RESTORE.try_lock() {
         Ok(g) => g,
         Err(std::sync::TryLockError::Poisoned(e)) => e.into_inner(),
@@ -76,7 +58,6 @@ fn amixer() {
     }
 }
 
-/// Both raw values of the master control, read past the Mixer (which keeps no raw value).
 fn read_raw(ctl: &pulsar_alsa::Ctl) -> Option<[i64; 2]> {
     Some([
         ctl.read_integer(MASTER, 0).ok()?,
@@ -94,8 +75,6 @@ struct Probe {
     timers: Timers<Key>,
     music_id: Option<PlayId>,
     announce_id: Option<PlayId>,
-    /// Channel gains: the master is already reduced by the mixer on hardware models, while
-    /// software-volume models need it here.
     gain: f32,
     duck: f32,
     tone_id: Option<PlayId>,
@@ -203,8 +182,6 @@ impl Probe {
             PlayerEvent::Done { id, ok } => (Some(id), u8::from(ok)),
         };
         if id == self.music_id {
-            // A working player reports LOADING before any list ends; the degraded one (dlopen or
-            // gst_init failed, logged) fails every play() at once.
             if !self.saw_state {
                 println!("player init failed");
                 return Step::InitFailed;
@@ -252,7 +229,6 @@ fn main() -> ExitCode {
     };
     model.audio.playback.apply_env();
     pulsar_alsa::init(model.audio.playback.alsa_lib());
-    // Test sounds only with the volume capped: without the control there is no cap.
     let mut mx = match Mixer::open(&model.audio.playback, &model.volume) {
         Ok(mixer) => mixer,
         Err(e) => {
@@ -288,7 +264,6 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    // From here on these signals end the run (volume restored) instead of killing the process.
     let signals = {
         let _rt = rt.enter();
         [
@@ -361,8 +336,6 @@ fn main() -> ExitCode {
     }
 
     let (player, mut rx) = spawn(&model.audio.playback);
-    // The mixer's master is already in the signal on hardware models; a software master has to
-    // go into the channel gains the same way the controller does it.
     let master = if software {
         pulsar_core::volume::master_gain(&model.volume, volume)
     } else {
@@ -403,7 +376,6 @@ fn main() -> ExitCode {
             }
         }
     });
-    // Stops the GLib thread (pipelines to NULL) before the volume goes back.
     drop(probe);
     drop(rt);
     restore();

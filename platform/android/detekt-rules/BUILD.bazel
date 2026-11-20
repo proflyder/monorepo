@@ -2,9 +2,6 @@ load("@rules_kotlin//kotlin:jvm.bzl", "kt_jvm_library", "kt_jvm_test")
 
 package(default_visibility = ["//visibility:public"])
 
-# First-party detekt ruleset (`home-rules`). The ServiceLoader descriptor under
-# resources makes detekt discover HomeRuleSetProvider when this jar is passed
-# with `--plugins`.
 kt_jvm_library(
     name = "detekt-rules",
     srcs = glob(["src/main/kotlin/**/*.kt"]),

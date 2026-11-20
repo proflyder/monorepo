@@ -14,13 +14,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-/**
- * Connects the live self-managed [Connection] with the audio router.
- *
- * On API 34+ Telecom reports the endpoints that can carry the call and applies
- * a change through the [Connection]. Older platforms have no such API, so the
- * audio router falls back to `AudioManager`.
- */
 @SingleIn(AppScope::class)
 @Inject
 class CallTelecomBridge {
@@ -29,7 +22,6 @@ class CallTelecomBridge {
     private val mutableEndpoints = MutableStateFlow<List<Int>>(emptyList())
     private val mutableSelectedEndpoint = MutableStateFlow<Int?>(null)
 
-    /** Endpoint types (`CallEndpoint.TYPE_*`) currently offered by Telecom. */
     val endpointTypes: StateFlow<List<Int>> = mutableEndpoints.asStateFlow()
 
     val selectedEndpointType: StateFlow<Int?> = mutableSelectedEndpoint.asStateFlow()
@@ -56,11 +48,6 @@ class CallTelecomBridge {
         mutableSelectedEndpoint.value = endpoint.endpointType
     }
 
-    /**
-     * Requests an endpoint change through Telecom. Returns false when the
-     * platform or the connection cannot honour it, so the caller can fall back
-     * to `AudioManager`.
-     */
     @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
     fun requestEndpoint(type: Int, executor: Executor, onResult: (Boolean) -> Unit): Boolean {
         val current = connection ?: return false

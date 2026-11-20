@@ -1,9 +1,3 @@
-//! Distroless probe: `mcp-gateway -healthcheck`.
-//!
-//! The image has no shell, curl or wget, so the binary is its own probe. It
-//! loads the same configuration as the server (a broken Secret mount fails the
-//! probe) and asks the loopback `/healthz`.
-
 use std::process::ExitCode;
 use std::time::Duration;
 
@@ -11,7 +5,6 @@ use crate::config::Config;
 
 const TIMEOUT: Duration = Duration::from_secs(4);
 
-/// `mcp-gateway -healthcheck`: a `200 /healthz` is success.
 pub fn run_healthcheck() -> ExitCode {
     let config = match Config::load() {
         Ok(config) => config,
@@ -76,7 +69,6 @@ mod tests {
         let app = Router::new().route("/healthz", get(|| async { "{\"status\":\"ok\"}" }));
         tokio::spawn(async move { axum::serve(listener, app).await.expect("serve") });
 
-        // `check` builds its own runtime, so run it on a blocking thread.
         let url = format!("http://{address}");
         tokio::task::spawn_blocking(move || check(&url))
             .await

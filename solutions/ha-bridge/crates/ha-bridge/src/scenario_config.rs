@@ -1,10 +1,3 @@
-//! `ha-scenario` process configuration.
-//!
-//! Same environment shape and secret priority as `ha-control`: HA and scheduler
-//! endpoints/tokens, a stable consumer id, a dedicated queue and the execute
-//! switch. On top of that it needs the condition timezone fallback and the
-//! scenario ledger path. Tokens never appear in an error message.
-
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -14,16 +7,12 @@ use thiserror::Error;
 
 use crate::config::{base_url, bool_value, non_empty, token};
 
-/// The dedicated queue carrying `scenario.fire` / `scenario.stop`.
 pub const DEFAULT_QUEUE: &str = "scenario";
-/// Fallback timezone for time-window conditions without a time trigger.
 pub const DEFAULT_TIMEZONE: &str = "Asia/Almaty";
-/// A scenario run must finish inside one lease to be acknowledged.
 const DEFAULT_LEASE_SECONDS: i32 = 3600;
 const DEFAULT_BATCH_SIZE: i32 = 10;
 const DEFAULT_MAX_ATTEMPTS: i32 = 10;
 
-/// A fully validated `ha-scenario` configuration.
 #[derive(Clone)]
 pub struct ScenarioConfig {
     pub ha_url: String,
@@ -72,7 +61,6 @@ impl std::fmt::Debug for ScenarioConfig {
     }
 }
 
-/// Why the environment was rejected. Messages never contain a secret value.
 #[derive(Debug, Error)]
 pub enum ScenarioConfigError {
     #[error("config: {name} (or {name}_FILE) is required")]
@@ -86,9 +74,6 @@ pub enum ScenarioConfigError {
 }
 
 impl ScenarioConfig {
-    /// Catalog discovery rules. The scenario executor uses the same catalog as
-    /// `ha-control`, so a scenario can only reference entries that the phone
-    /// catalog also exposes. The label defaults match the home deployment.
     #[must_use]
     pub fn rules(&self) -> crate::catalog::Rules {
         crate::catalog::Rules {
@@ -98,12 +83,10 @@ impl ScenarioConfig {
         }
     }
 
-    /// Read and validate the process environment.
     pub fn load() -> Result<Self, ScenarioConfigError> {
         Self::load_from(&|key| std::env::var(key).ok(), &|path| std::fs::read(path))
     }
 
-    /// Load from injected environment and file readers (used by tests).
     pub fn load_from(
         getenv: &dyn Fn(&str) -> Option<String>,
         read_file: &dyn Fn(&str) -> std::io::Result<Vec<u8>>,

@@ -1,6 +1,3 @@
-# The namespace is applied once by an admin (Kubernetes namespaces are
-# cluster-scoped and admin-owned). Flux applies only the namespaced objects and
-# never creates or prunes the namespace.
 apiVersion: v1
 kind: Namespace
 metadata:

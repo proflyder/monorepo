@@ -1,7 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Modal repeat sheet. The rounded top and the drag handle live on the sheet
-     content itself, so the sheet keeps the app's dark surface when the dialog
-     window is transparent. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/sheet_repeat"
@@ -89,8 +86,6 @@
                     android:textAppearance="?attr/textAppearanceBodyLarge" />
             </RadioGroup>
 
-            <!-- One equal cell per day keeps the seven round toggles the same
-                 size at every width; the first cell is Monday. -->
             <LinearLayout
                 android:id="@+id/repeat_days_group"
                 android:layout_width="match_parent"

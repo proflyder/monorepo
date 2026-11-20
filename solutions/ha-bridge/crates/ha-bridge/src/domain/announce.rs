@@ -1,10 +1,5 @@
-//! The message an announcement event speaks.
-
 use home_worker::{Event, Source};
 
-/// A label wins; otherwise the announcement falls back to its kind.
-///
-/// The Go bridge used the same defaults (`Timer`, `Reminder`, `Alarm`).
 #[must_use]
 pub fn announce_message(event: &Event) -> String {
     let label = event.label.trim();

@@ -1,4 +1,3 @@
-# Publication example: replace MAC/address/interface for your host before applying.
 network:
   version: 2
   ethernets:

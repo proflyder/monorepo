@@ -21,28 +21,20 @@ import kotlinx.serialization.json.put
 import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 
-/** Reads the controllable scenarios/devices from the home control service. */
 interface ControlCatalogClient {
     suspend fun fetch(): Outcome<ControlCatalog>
 }
 
-/** Wire format of GET /v1/catalog and of the scheduler task that carries a command. */
 object ControlJson {
-    /** Scheduler queue and task type the home control executor consumes. */
     const val QUEUE = "control"
     const val TASK_TYPE = "home.control"
 
-    /** Task payload: a catalog id and an action only, never an HA service or entity. */
     fun commandPayload(entryId: String, action: ControlAction): String =
         buildJsonObject {
             put("entry", entryId)
             put("action", action.wire)
         }.toString()
 
-    /**
-     * Payload of a speak action. The text is user content: it travels only in
-     * the task payload and is never put in a URL, a log line or an error.
-     */
     fun speakPayload(entryId: String, text: String): String =
         buildJsonObject {
             put("entry", entryId)
@@ -50,7 +42,6 @@ object ControlJson {
             put("text", text)
         }.toString()
 
-    /** Payload of a light adjustment: only the fields that are set are sent. */
     fun adjustPayload(entryId: String, adjust: LightAdjust): String =
         buildJsonObject {
             put("entry", entryId)
@@ -61,7 +52,6 @@ object ControlJson {
             adjust.saturation?.let { put("saturation", it) }
         }.toString()
 
-    /** Payload of a station volume level: the server validates range and step. */
     fun volumePayload(entryId: String, level: Int): String =
         buildJsonObject {
             put("entry", entryId)
@@ -69,7 +59,6 @@ object ControlJson {
             put("level", level)
         }.toString()
 
-    /** Payload of a mute toggle: `mute` silences, `unmute` restores. */
     fun mutePayload(entryId: String, muted: Boolean): String =
         buildJsonObject {
             put("entry", entryId)
@@ -135,8 +124,6 @@ private fun String.toControlKind(): ControlKind = when (this) {
     "profile" -> ControlKind.PROFILE
     "action" -> ControlKind.ACTION
     "volume" -> ControlKind.VOLUME
-    // An unknown kind stays OTHER, so an older app never drives a command it
-    // does not understand.
     else -> ControlKind.OTHER
 }
 
@@ -146,16 +133,10 @@ private fun String?.toPowerState(): PowerState? = when (this) {
     else -> null
 }
 
-/**
- * Retrofit implementation ([ControlApi]). Same safety rules as
- * [ConnectSchedulerClient]: no redirects (the bearer token must never follow a
- * Location), token only in the Authorization header, system trust store.
- */
 class HttpControlCatalogClient(
     settings: ConnectionSettingsStore,
     baseClient: OkHttpClient,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
-    /** Extra application interceptors (logging, inspection); they run after the connection interceptor. */
     interceptors: List<Interceptor> = emptyList(),
     networkWaiter: NetworkWaiter = NetworkWaiter.Online,
 ) : ControlCatalogClient {

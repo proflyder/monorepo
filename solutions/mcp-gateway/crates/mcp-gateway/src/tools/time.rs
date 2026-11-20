@@ -1,11 +1,3 @@
-//! `time` tool group: alarms, timers and reminders through the home scheduler.
-//!
-//! Hermes never parses spoken clock times into HA scripts: it asks `time_now`,
-//! computes one absolute RFC3339 instant and calls `alarm_set` / `timer_set`.
-//! The group talks to the durable `home.v1.SchedulerService`, exactly like the
-//! HA voice scripts and the Android app, so the existing `ha-bridge` executor
-//! still rings the station through `script.alarm_start`.
-
 use std::sync::Arc;
 
 use jiff::Timestamp;
@@ -18,24 +10,17 @@ use crate::tools::{
     Annotations, BoxFuture, Deps, ToolGroup, ToolOutcome, ToolSpec, empty_schema, failure, respond,
 };
 
-/// Scheduler kind for alarms.
 pub const KIND_ALARM: &str = "SCHEDULE_KIND_ALARM";
-/// Scheduler kind for reminders.
 pub const KIND_REMINDER: &str = "SCHEDULE_KIND_REMINDER";
-/// Hard scheduler limit for one timer.
 pub const MAX_TIMER_SECONDS: i64 = 604_800;
-/// Hard scheduler limit for a one-shot alarm horizon.
 pub const MAX_ONCE_SECONDS: i64 = 7 * 24 * 3600;
-/// Snooze duration used by the HA client.
 pub const SNOOZE_MINUTES: i64 = 9;
 
-/// The `time` group.
 pub struct TimeGroup {
     deps: Arc<Deps>,
 }
 
 impl TimeGroup {
-    /// Build the group.
     #[must_use]
     pub fn new(deps: Arc<Deps>) -> Self {
         Self { deps }
@@ -266,8 +251,6 @@ impl ToolGroup for TimeGroup {
     }
 }
 
-// --- time_now -------------------------------------------------------------
-
 #[derive(Debug, Serialize)]
 struct NowDetail {
     rfc3339: String,
@@ -288,8 +271,6 @@ fn time_now(deps: &Deps) -> ToolOutcome {
         }),
     )
 }
-
-// --- alarms ---------------------------------------------------------------
 
 #[derive(Debug, Serialize)]
 struct ScheduleDetail {
@@ -618,8 +599,6 @@ fn repeat_name(kind: &str) -> &'static str {
     }
 }
 
-// --- timers ---------------------------------------------------------------
-
 #[derive(Debug, Serialize)]
 struct TimerDetail {
     id: String,
@@ -833,8 +812,6 @@ async fn timer_id(api: &dyn SchedulerApi, arguments: Value) -> Result<Option<Str
     Ok(None)
 }
 
-// --- reminders ------------------------------------------------------------
-
 async fn reminder_set(deps: &Deps, arguments: Value) -> ToolOutcome {
     let Some(api) = deps.scheduler() else {
         return failure(SPEECH_SCHEDULER_MISSING, None::<Value>);
@@ -909,8 +886,6 @@ async fn reminder_list(deps: &Deps, arguments: Value) -> ToolOutcome {
         })),
     )
 }
-
-// --- shared helpers -------------------------------------------------------
 
 fn label(arguments: &Value, key: &str, fallback: &str) -> Result<String, String> {
     let value = arguments

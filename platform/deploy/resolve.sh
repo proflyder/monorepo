@@ -1,36 +1,11 @@
 #!/usr/bin/env bash
-# Resolve and run the `home-deploy` CLI (the Rust port) from the deploy scripts.
-#
-# Source this file after ROOT is known:
-#
-#   # shellcheck source=platform/deploy/resolve.sh
-#   source "$ROOT/platform/deploy/resolve.sh"
-#   home_deploy render --unit scheduler --env "$PRIVATE_ENV" --out "$RENDER_DIR" ...
-#
-# Resolution order:
-#   1. $HOME_DEPLOY (deploy-home extracts it from the promoted `home-deploy`
-#      OCI image built by PR CI, or a caller sets it)
-#   2. `home-deploy` on PATH (an installed/operator binary)
-#   3. bazel-bin output of an earlier `bazel build` in this checkout
-#   4. bazel run //platform/deploy-rs:home-deploy --, when Bazel is available
-#      (Bazelisk comes from mise: `mise install`, see mise.toml)
-#
-# In CI (`DEPLOY_NO_BUILD=1`) steps 3 and 4 are skipped: a deployment runner
-# must never compile the tool.
-#
-# Every step is optional, so the manual macOS workstation flow and the CI runner
-# use the same scripts. Compatible with macOS bash 3.2 (no associative arrays).
-#
 # shellcheck shell=bash
 
-# home_deploy_root prints the repository root that contains this file.
 home_deploy_root() {
   local source=${BASH_SOURCE[0]:-}
   ( cd "$(dirname "$source")/../.." && pwd )
 }
 
-# home_deploy_bazel prints the Bazel binary to use (BAZELISK, or bazel/bazelisk
-# on PATH — mise provides both) or fails.
 home_deploy_bazel() {
   if [ -n "${BAZELISK:-}" ]; then
     printf '%s\n' "$BAZELISK"
@@ -46,7 +21,6 @@ home_deploy_bazel() {
   return 1
 }
 
-# home_deploy runs the tool with the given arguments.
 home_deploy() {
   local root bazel candidate
   if [ -n "${HOME_DEPLOY:-}" ]; then

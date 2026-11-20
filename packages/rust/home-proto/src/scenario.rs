@@ -1,9 +1,3 @@
-//! Minimal Connect-JSON client for `home.v1.ScenarioService`.
-//!
-//! The scenario executor only reads definitions: it never creates, edits or
-//! enables a scenario. `RunScenario` is a producer-side call and stays out of
-//! this client on purpose, so an executor cannot queue more work for itself.
-
 use std::time::Duration;
 
 use connectrpc::client::ClientConfig;
@@ -14,8 +8,6 @@ use http::Uri;
 use crate::transport::ReqwestTransport;
 use crate::v1::{GetScenarioRequest, Scenario, ScenarioServiceClient};
 
-/// A scenario call failure. `Debug` and `Display` never print the bearer: the
-/// Connect message is redacted against the configured token and bounded.
 #[derive(Debug, thiserror::Error)]
 pub enum ScenarioError {
     #[error("scenario: invalid base URL")]
@@ -29,7 +21,6 @@ pub enum ScenarioError {
 }
 
 impl ScenarioError {
-    /// Whether a retry after a lease expiry can reasonably succeed.
     #[must_use]
     pub fn is_transient(&self) -> bool {
         match self {
@@ -46,13 +37,11 @@ impl ScenarioError {
         }
     }
 
-    /// Convenience predicate for the executor loop.
     #[must_use]
     pub fn is_permanent(&self) -> bool {
         !self.is_transient()
     }
 
-    /// `GetScenario` returned `NOT_FOUND`.
     #[must_use]
     pub fn is_not_found(&self) -> bool {
         matches!(
@@ -65,7 +54,6 @@ impl ScenarioError {
     }
 }
 
-/// Thin typed scenario client with a fixed bearer and timeout.
 #[derive(Clone)]
 pub struct ScenarioClient {
     inner: ScenarioServiceClient<ReqwestTransport>,
@@ -82,16 +70,12 @@ impl std::fmt::Debug for ScenarioClient {
 }
 
 impl ScenarioClient {
-    /// Build a client. `base_url` is the scheduler base
-    /// (`http://127.0.0.1:8098`); a trailing service suffix is tolerated.
     pub fn new(base_url: &str, token: Token, timeout: Duration) -> Result<Self, ScenarioError> {
         Self::build(base_url, token, timeout, || {
             ReqwestTransport::plaintext().map_err(|_| ScenarioError::Transport)
         })
     }
 
-    /// Build a client that trusts the given PEM bundle in addition to the
-    /// transport's roots (the workspace reqwest compiles none in).
     pub fn new_with_ca_pem(
         base_url: &str,
         token: Token,
@@ -103,8 +87,6 @@ impl ScenarioClient {
         })
     }
 
-    /// Like [`ScenarioClient::new_with_ca_pem`], but reads the bundle from
-    /// `path`. The file content is never logged.
     pub fn new_with_ca_file(
         base_url: &str,
         token: Token,
@@ -142,8 +124,6 @@ impl ScenarioClient {
         })
     }
 
-    /// Read one definition. `NOT_FOUND` maps to `Ok(None)` so the executor can
-    /// acknowledge a stale `scenario.fire` without treating it as an outage.
     pub async fn get_scenario(&self, id: &str) -> Result<Option<Scenario>, ScenarioError> {
         let response = self
             .inner
@@ -280,8 +260,6 @@ mod tests {
             .expect("bind");
         let address = listener.local_addr().expect("address");
         tokio::spawn(async move { axum::serve(listener, app).await.expect("serve") });
-        // A plain HTTP 404 is not a Connect NOT_FOUND envelope, so the client
-        // reports an RPC error instead of inventing an empty definition.
         let error = client(&format!("http://{address}"))
             .get_scenario("sc_1")
             .await

@@ -1,15 +1,4 @@
 #!/usr/bin/env bash
-# Self-test for platform/android/sign-release.sh.
-#
-# Creates a throwaway keystore with a strong password, takes any small APK
-# (SIGN_RELEASE_TEST_APK, an existing Bazel build, or a minimal APK built here
-# with aapt2), signs it through sign-release.sh, and checks that:
-#   * the output verifies and carries the expected signer certificate,
-#   * v2/v3 signatures are present,
-#   * signing fails closed when SIGNING_CERT_SHA256 is wrong or missing.
-#
-# Exits 0 with a "SKIP" message when the Android build-tools are unavailable,
-# because the script under test cannot run without them.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -41,14 +30,10 @@ fail() {
   exit 1
 }
 
-# --- Throwaway release keystore -------------------------------------------
-
 KEYSTORE="$WORK_DIR/home-release.keystore"
 STORE_PASS_FILE="$WORK_DIR/store.pass"
 KEY_PASS_FILE="$WORK_DIR/key.pass"
 ALIAS="home-release"
-# Files end with a newline on purpose: sign-release.sh must trim it rather
-# than feed it to apksigner.
 printf '%s\n' "$TEST_PASSWORD" > "$STORE_PASS_FILE"
 printf '%s\n' "$TEST_PASSWORD" > "$KEY_PASS_FILE"
 keytool -genkeypair \
@@ -64,8 +49,6 @@ keytool -genkeypair \
 EXPECTED_CERT="$(keytool -list -v -keystore "$KEYSTORE" -storepass:file "$STORE_PASS_FILE" \
   | sed -n 's/^[[:space:]]*SHA256: //p' | head -n 1 | tr -d ':' | tr '[:upper:]' '[:lower:]')"
 [[ "$EXPECTED_CERT" =~ ^[0-9a-f]{64}$ ]] || fail "could not read the test certificate digest"
-
-# --- Input APK -------------------------------------------------------------
 
 INPUT_APK=""
 if [[ -n "${SIGN_RELEASE_TEST_APK:-}" ]]; then
@@ -107,8 +90,6 @@ sign() {
     "$SIGN_SCRIPT" "$INPUT_APK" "$WORK_DIR/signed.apk"
 }
 
-# --- Happy path: alias discovered from the keystore (no SIGNING_KEY_ALIAS) --
-
 sign "$EXPECTED_CERT" >/dev/null || fail "sign-release.sh failed for a valid keystore"
 [[ -f "$WORK_DIR/signed.apk" ]] || fail "sign-release.sh produced no APK"
 
@@ -127,11 +108,8 @@ ACTUAL_CERT="$("$BUILD_TOOLS/apksigner" verify --print-certs "$WORK_DIR/signed.a
   | grep -q '^Verified using v3 scheme (APK Signature Scheme v3): true$' \
   || fail "the signed APK has no v3 signature"
 
-# An explicit alias must work too.
 sign "$EXPECTED_CERT" SIGNING_KEY_ALIAS="$ALIAS" >/dev/null \
   || fail "sign-release.sh failed with an explicit SIGNING_KEY_ALIAS"
-
-# --- Fail closed ----------------------------------------------------------
 
 WRONG_CERT="$(printf '0%.0s' $(seq 1 64))"
 if sign "$WRONG_CERT" >/dev/null 2>&1; then

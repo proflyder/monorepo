@@ -1,15 +1,8 @@
-//! Timestamp formatting and parsing with Go's exact layouts.
-//!
-//! `time.RFC3339Nano` trims trailing zeros in the fraction (and the dot when
-//! the fraction is zero); jiff's `Display` keeps a time-zone annotation or a
-//! fixed width, so both are rendered explicitly here.
-
 use jiff::Timestamp;
 use jiff::Zoned;
 use jiff::civil::Date;
 use jiff::tz::TimeZone;
 
-/// Render an instant as UTC `RFC3339Nano`, e.g. `2026-03-17T23:59:59.999Z`.
 #[must_use]
 pub fn rfc3339_nano(timestamp: Timestamp) -> String {
     let zoned = timestamp.to_zoned(TimeZone::UTC);
@@ -36,8 +29,6 @@ pub fn rfc3339_nano(timestamp: Timestamp) -> String {
     out
 }
 
-/// Render a zoned wall-clock as `RFC3339` (seconds precision) with its offset,
-/// matching `time.Time.Format(time.RFC3339)` in a local location.
 #[must_use]
 pub fn rfc3339_zoned(zoned: &Zoned) -> String {
     let datetime = zoned.datetime();
@@ -60,7 +51,6 @@ pub fn rfc3339_zoned(zoned: &Zoned) -> String {
     )
 }
 
-/// Parse the strict `YYYY-MM-DD` date accepted by `?date=`.
 #[must_use]
 pub fn parse_date(value: &str) -> Option<Date> {
     let bytes = value.as_bytes();
@@ -80,8 +70,6 @@ pub fn parse_date(value: &str) -> Option<Date> {
     Date::new(year, month, day).ok()
 }
 
-/// Parse an RFC3339 instant. Go's `time.Parse(time.RFC3339, …)` also accepts a
-/// fractional second after the seconds field.
 #[must_use]
 pub fn parse_rfc3339(value: &str) -> Option<Timestamp> {
     value.parse::<Timestamp>().ok()

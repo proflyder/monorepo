@@ -26,15 +26,12 @@ rust_test(
     deps = DEPS,
 )
 
-# Mirrors the root [workspace.lints] through the crate's `[lints] workspace = true`.
 extract_cargo_lints(
     name = "workspace_lints",
     manifest = "Cargo.toml",
     workspace = "//:Cargo.toml",
 )
 
-# The same sources with the test-only helpers (a pty pair). Only test targets depend on it, so a
-# production build never compiles them.
 rust_library(
     name = "home_linux_testing",
     srcs = glob(["src/**/*.rs"]),

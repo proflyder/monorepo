@@ -1,5 +1,3 @@
-//! pulsar: Home Assistant voice satellite for Yandex Stations (Midi, Lite 2, Mini 2, Mini).
-//! usage: pulsar [--version | state_file]
 #![deny(unsafe_code)]
 #![deny(unsafe_op_in_unsafe_fn)]
 #![deny(clippy::undocumented_unsafe_blocks)]
@@ -25,8 +23,6 @@ use version::VERSION;
 
 const DEFAULT_STATE: &str = "/data/pulsar/state.conf";
 
-// Teardown (Sendspin threads, GStreamer, ALSA) has hung before: give it a few seconds, then
-// leave with the status main was about to return (0 = deliberate exit for supervise.sh).
 const TEARDOWN_SECS: u64 = 5;
 
 fn arm_teardown_watchdog(status: i32) {
@@ -45,11 +41,9 @@ fn arm_teardown_watchdog(status: i32) {
 fn main() -> ExitCode {
     let arg = std::env::args_os().nth(1);
     if arg.as_deref() == Some(OsStr::new("--version")) {
-        // println! would panic (abort) on a closed pipe.
         let _ = writeln!(std::io::stdout(), "pulsar {VERSION}");
         return ExitCode::SUCCESS;
     }
-    // The controller persists its settings there.
     let state = arg.map_or_else(|| PathBuf::from(DEFAULT_STATE), PathBuf::from);
 
     pulsar_core::init_logger();
@@ -57,7 +51,6 @@ fn main() -> ExitCode {
     let Some(model) = pulsar_model::detect_profile() else {
         return ExitCode::from(1);
     };
-    // Before the runtime, threads and any audio library: ALSA_CONFIG_PATH and libasound.
     prepare_process(model);
 
     let rt = match tokio::runtime::Builder::new_current_thread()
@@ -73,7 +66,6 @@ fn main() -> ExitCode {
     };
     let local = tokio::task::LocalSet::new();
     let status = local.block_on(&rt, async {
-        // Sampled at exit, not here: `ctl.sh disable` removes the marker before stopping us.
         let restart_marker = state
             .parent()
             .unwrap_or_else(|| Path::new("."))
@@ -91,17 +83,11 @@ fn main() -> ExitCode {
             model.identity.model_name, model.identity.codename
         );
         ctl.run().await;
-        // `enabled` is what supervise.sh restarts on: promise MA a reconnect only when this is
-        // a restart, not a deliberate ctl.sh disable (it removes enabled first) or a manual run.
         if supervisor_restarts(&restart_marker) {
             ctl.promise_sendspin_restart();
         }
         arm_teardown_watchdog(0);
-        // Nothing changes the settings after run: a change still pending is written once, here.
-        // Inside the watchdog, so a hung fsync cannot keep the daemon from exiting (a write cut
-        // short leaves the previous state.conf).
         ctl.flush_settings();
-        // The services stop as their handles go (the front-end joins its threads here).
         drop(ctl);
         0
     });
@@ -114,16 +100,13 @@ fn main() -> ExitCode {
         tracing::warn!("actor {name} did not stop");
     }
     {
-        // Actors still running are dropped inside the runtime, which their resources belong to.
         let _rt = rt.enter();
         drop(local);
     }
-    // A plain drop would wait for spawn_blocking work without limit.
     rt.shutdown_timeout(Duration::from_secs(1));
     ExitCode::from(status)
 }
 
-/// Whether supervise.sh will start this daemon again (`<state dir>/enabled` exists at exit).
 fn supervisor_restarts(enabled: &Path) -> bool {
     enabled.is_file()
 }
@@ -141,10 +124,8 @@ mod tests {
         assert!(!supervisor_restarts(&marker));
         std::fs::write(&marker, b"").unwrap();
         assert!(supervisor_restarts(&marker));
-        // `ctl.sh disable`: enabled removed before the signal, so the daemon sends `shutdown`.
         std::fs::remove_file(&marker).unwrap();
         assert!(!supervisor_restarts(&marker));
-        // The same state path derives the marker the supervisor reads.
         assert_eq!(
             state.parent().unwrap().join("enabled"),
             marker,

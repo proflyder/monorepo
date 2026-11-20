@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-"""Offline streaming replay; never contacts the station. Results are private."""
 import argparse
 from collections import deque
 import hashlib
@@ -58,7 +57,6 @@ def replay(model, pcm, cutoff=.9, window=10):
         scores.append([round(when, 3), round(mean, 5)])
         if mean >= cutoff:
             hits.append(round(when, 3))
-            # The deployed C++ shim recreates interpreter + frontend after a hit.
             obj, inp, out = interpreter()
             front = MicroFrontend()
             frames.clear()

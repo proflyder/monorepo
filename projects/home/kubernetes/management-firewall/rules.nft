@@ -1,6 +1,3 @@
-# Replace NODE_IPV4 and POD_CIDR before installing; single-node K3s only.
-# CI has no K3s API access (Flux applies workloads in-cluster), so only the node
-# and pod ranges are accepted.
 table inet home_k3s {
   chain input {
     type filter hook input priority -20; policy accept;

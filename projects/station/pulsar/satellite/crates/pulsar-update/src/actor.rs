@@ -1,6 +1,3 @@
-//! Актор обновлений: команды из handle, одна проверка или установка за раз, события в
-//! контроллер. Задание — отдельная задача супервизора с собственным `CancellationToken`.
-
 use std::cell::Cell;
 use std::path::PathBuf;
 use std::rc::Rc;
@@ -14,10 +11,8 @@ use crate::installer::{Extra, Installer};
 use crate::release::Release;
 use crate::source::{OciConfig, ReleaseSource, Source};
 
-/// Репозиторий обновлений: публичный OCI-пакет в GHCR, который публикует монорепозиторий.
 pub const UPDATE_REPO: &str = "ghcr.io/proflyder/pulsar-firmware";
 
-/// Идентификатор запроса `check()` / `install()` в событиях.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct RequestId(u64);
 
@@ -28,28 +23,25 @@ impl RequestId {
     }
 }
 
-/// События актора.
 #[derive(Debug)]
 pub enum UpdateEvent {
     Checked {
         id: RequestId,
         result: Result<Release, UpdateError>,
     },
-    /// Прогресс загрузки бинарника, 0..95 (остальное — подмена).
-    Progress { id: RequestId, value: f32 },
-    /// Итог установки; `fatal` смотрится через `UpdateError::fatal`.
+    Progress {
+        id: RequestId,
+        value: f32,
+    },
     Installed {
         id: RequestId,
         result: Result<(), UpdateError>,
     },
 }
 
-/// Неблокирующая сторона актора (все методы `&self`).
 #[derive(Clone)]
 pub struct UpdaterHandle {
     commands: Handle<Cmd>,
-    /// Единственный экземпляр: ставится здесь при приёме запроса, снимается заданием
-    /// непосредственно перед итоговым событием.
     busy: Rc<Cell<bool>>,
     next_id: Rc<Cell<u64>>,
 }
@@ -67,18 +59,15 @@ enum Cmd {
 }
 
 impl UpdaterHandle {
-    /// Синхронно: `check()` / `install()` ставят флаг сразу.
     #[must_use]
     pub fn busy(&self) -> bool {
         self.busy.get()
     }
 
-    /// Последний стабильный релиз. `None` — занят, запрос не принят, события не будет.
     pub fn check(&self) -> Option<RequestId> {
         self.start(|id| Cmd::Check { id })
     }
 
-    /// Заменяет `binary` релизом `release`. `None` — занят.
     pub fn install(&self, release: Release, binary: PathBuf) -> Option<RequestId> {
         self.start(|id| Cmd::Install {
             id,
@@ -87,9 +76,6 @@ impl UpdaterHandle {
         })
     }
 
-    /// Другой ассет релиза, устанавливаемый вместе с бинарником (образы радио): `name` из
-    /// того же релиза, проверенный по `SHA256SUMS` и записанный в `path`. Действует со
-    /// следующего `install()`.
     pub fn add_extra_asset(&self, name: &str, path: PathBuf) {
         let _ = self.commands.send(Cmd::AddExtra(Extra {
             name: name.into(),
@@ -111,7 +97,6 @@ impl UpdaterHandle {
     }
 }
 
-/// Суффикс ассета этой сборки.
 #[must_use]
 pub fn arch() -> &'static str {
     if cfg!(target_arch = "aarch64") {
@@ -123,7 +108,6 @@ pub fn arch() -> &'static str {
     }
 }
 
-/// `repo`: `ghcr.io/owner/name`. Вызывать внутри LocalSet контроллера.
 pub fn spawn(
     repo: String,
     current_version: &str,
@@ -136,7 +120,6 @@ fn spawn_with(config: &OciConfig) -> (UpdaterHandle, UnboundedReceiver<UpdateEve
     spawn_source(source, config.arch)
 }
 
-/// `arch` — суффикс ассета сборки; в тестах `"host"` с фейковым источником.
 fn spawn_source<S: ReleaseSource + 'static>(
     source: S,
     arch: &'static str,
@@ -168,9 +151,7 @@ async fn run<S: ReleaseSource + 'static>(
 ) {
     let source = Rc::new(source);
     let installer = Rc::new(installer);
-    // Копия в каждую установку: поздний add_extra_asset() не меняет идущую.
     let mut extras: Vec<Extra> = Vec::new();
-    // Не больше одного задания: handle не принимает запрос, пока busy.
     let mut active: Option<CancellationToken> = None;
     while let Some(command) = commands.recv().await {
         match command {
@@ -201,7 +182,6 @@ async fn run<S: ReleaseSource + 'static>(
             }
         }
     }
-    // Все handle закрыты (выход демона): задание останавливается, событие не отправляется.
     if let Some(token) = active {
         token.cancel();
     }
@@ -276,7 +256,6 @@ fn spawn_install<S: ReleaseSource + 'static>(
     token
 }
 
-/// Снимает busy и шлёт итоговое событие, если задание не отменено выходом демона.
 fn finish(cancel: &CancellationToken, reset_busy: impl FnOnce(), send: impl FnOnce()) {
     if cancel.is_cancelled() {
         return;

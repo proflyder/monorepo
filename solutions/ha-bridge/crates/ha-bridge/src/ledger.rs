@@ -1,16 +1,3 @@
-//! Durable receipt ledger for events whose Home Assistant side effect already
-//! succeeded.
-//!
-//! The file is the version-1 JSON contract the Go bridge writes on the same
-//! PVC (`/data/ledger.json`): `{"version":1,"receipts":{...},"activeAlarm":{...}}`.
-//! Writes are atomic (`temp + fsync + rename + fsync(dir)`), the retention
-//! window is 30 days and the ledger never exceeds 20 000 receipts.
-//!
-//! The ledger narrows the duplicate window in at-least-once delivery; it cannot
-//! make delivery exactly once, because a crash between the HA call and the
-//! ledger write (or between the ledger write and the scheduler ack) still
-//! re-delivers the event.
-
 use std::collections::BTreeMap;
 use std::fs::{self, File, OpenOptions};
 use std::io::Write as _;
@@ -22,18 +9,14 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 
-/// How long receipts are kept for deduplication.
 pub const DEFAULT_RETENTION: Duration = Duration::from_secs(30 * 24 * 60 * 60);
-/// Hard cap even without pruning.
 pub const MAX_RECEIPTS: usize = 20_000;
-/// The only supported on-disk version.
 pub const FILE_VERSION: i64 = 1;
 
 static TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 type Clock = Arc<dyn Fn() -> i64 + Send + Sync>;
 
-/// One successfully executed event. It never contains tokens or payloads.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Receipt {
     #[serde(rename = "eventId", default)]
@@ -48,11 +31,6 @@ pub struct Receipt {
     pub completed_unix: i64,
 }
 
-/// The alarm occurrence whose sound this bridge started and may stop.
-///
-/// Occurrence and due time come from the scheduler event, not bridge wall-clock
-/// time, so a late STOP for an older occurrence (or one before a snoozed
-/// re-fire) is refused even when the source id still matches.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ActiveAlarm {
     #[serde(rename = "sourceId", default)]
@@ -85,7 +63,6 @@ struct FileFormat {
     active_alarm: Option<ActiveAlarm>,
 }
 
-/// A ledger failure. Messages never echo a token or a payload.
 #[derive(Debug, thiserror::Error)]
 pub enum LedgerError {
     #[error("ledger: read {path}: {source}")]
@@ -123,7 +100,6 @@ impl Inner {
     }
 }
 
-/// A concurrency-safe receipt ledger.
 pub struct Ledger {
     path: Option<PathBuf>,
     inner: Mutex<Inner>,
@@ -144,16 +120,11 @@ impl std::fmt::Debug for Ledger {
 }
 
 impl Ledger {
-    /// Open a file-backed ledger, creating it on the first write.
-    ///
-    /// A corrupt or newer file is an error: silently starting empty could
-    /// duplicate a Home Assistant side effect.
     pub fn open(path: impl AsRef<Path>) -> Result<Self, LedgerError> {
         let clock = system_clock();
         Self::open_with_clock(path, move || (clock.as_ref())())
     }
 
-    /// Open with an injected clock (tests and golden vectors).
     pub fn open_with_clock(
         path: impl AsRef<Path>,
         clock: impl Fn() -> i64 + Send + Sync + 'static,
@@ -168,7 +139,6 @@ impl Ledger {
         Ok(ledger)
     }
 
-    /// An in-memory ledger: deduplication lasts only for this process.
     #[must_use]
     pub fn memory() -> Self {
         Self {
@@ -178,7 +148,6 @@ impl Ledger {
         }
     }
 
-    /// An in-memory ledger with an injected clock.
     #[must_use]
     pub fn memory_with_clock(clock: impl Fn() -> i64 + Send + Sync + 'static) -> Self {
         Self {
@@ -188,13 +157,11 @@ impl Ledger {
         }
     }
 
-    /// Backing file, or `None` for an in-memory ledger.
     #[must_use]
     pub fn path(&self) -> Option<&Path> {
         self.path.as_deref()
     }
 
-    /// Whether the event side effect was already recorded.
     #[must_use]
     pub fn seen(&self, event_id: &str) -> bool {
         if event_id.is_empty() {
@@ -203,8 +170,6 @@ impl Ledger {
         self.lock().receipts.contains_key(event_id)
     }
 
-    /// Store one receipt and persist atomically. The in-memory entry is kept
-    /// even when persistence fails so this process still deduplicates.
     pub fn record(&self, receipt: Receipt) -> Result<(), LedgerError> {
         if receipt.event_id.is_empty() {
             return Err(LedgerError::EmptyEventId);
@@ -218,7 +183,6 @@ impl Ledger {
         self.persist_format(&format)
     }
 
-    /// The alarm source marked as the active sound, if any.
     #[must_use]
     pub fn active_alarm(&self) -> Option<ActiveAlarm> {
         self.lock()
@@ -228,8 +192,6 @@ impl Ledger {
             .cloned()
     }
 
-    /// Atomically store an accepted alarm FIRE receipt and mark the source as
-    /// the active alarm.
     pub fn record_start(&self, receipt: Receipt, active: ActiveAlarm) -> Result<(), LedgerError> {
         if receipt.event_id.is_empty() {
             return Err(LedgerError::EmptyEventId);
@@ -251,11 +213,6 @@ impl Ledger {
         self.persist_format(&format)
     }
 
-    /// Store an accepted alarm STOP receipt and clear the active marker only
-    /// when it still refers to `expect_source_id`.
-    ///
-    /// Returns whether the marker was cleared; a concurrent newer alarm keeps
-    /// its marker.
     pub fn record_stop(
         &self,
         receipt: Receipt,
@@ -281,7 +238,6 @@ impl Ledger {
         Ok(cleared)
     }
 
-    /// Remove receipts older than the retention window.
     pub fn prune(&self) -> Result<(), LedgerError> {
         if self.path.is_none() {
             return Ok(());
@@ -295,19 +251,16 @@ impl Ledger {
         Ok(())
     }
 
-    /// Current clock value used for receipts and the active marker.
     #[must_use]
     pub fn now_unix(&self) -> i64 {
         (self.clock.as_ref())()
     }
 
-    /// Number of stored receipts.
     #[must_use]
     pub fn len(&self) -> usize {
         self.lock().receipts.len()
     }
 
-    /// Whether no receipt is stored.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.len() == 0
@@ -437,7 +390,6 @@ fn trim(inner: &mut Inner) {
     }
 }
 
-/// Create a mode-0600 temp file in `directory` and return its handle and name.
 fn create_temp(directory: &Path) -> Result<(File, PathBuf), LedgerError> {
     for _ in 0..100 {
         let counter = TEMP_COUNTER.fetch_add(1, Ordering::Relaxed);

@@ -219,7 +219,6 @@ class ConditionalVisibilityTest {
             filter = ControlFilter.All,
             texts = texts,
         )
-        // The hidden lock is not a row, not an unavailable row and not counted.
         assertFalse(ids(items).contains("toggle.komp_lock"))
         val allChip = items.filterIsInstance<ControlItem.Filters>()
             .single()

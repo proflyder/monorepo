@@ -1,6 +1,3 @@
-//! The installed logger end to end: the process-wide sink queue and its notification. One test
-//! per binary, since the logger is global.
-
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -20,12 +17,10 @@ async fn sink_queue_and_notify() {
     init_logger();
     let notify = Arc::new(Notify::new());
     set_log_sink(Some(Level::DEBUG), Some(notify.clone()));
-    // ... while stderr keeps PULSAR_LOG_LEVEL's (default Info), the sink opens the early filter.
     if std::env::var_os("PULSAR_LOG_LEVEL").is_none() {
         assert_eq!(stderr_level(), LevelFilter::INFO);
     }
 
-    // Debug keeps stderr quiet at the default level; targets must be pulsar's to reach the sink.
     let line = line!() + 1;
     tracing::debug!(target: "pulsar_test", "first {}", 1);
     assert!(notified(&notify).await);

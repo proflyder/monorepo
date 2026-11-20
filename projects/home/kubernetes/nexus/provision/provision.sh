@@ -1,19 +1,4 @@
 #!/bin/sh
-# Provision the Nexus repositories, the read-only CI user and the security
-# settings through the Nexus REST API.
-#
-# Runs inside the `nexus-provision` Job. Flux recreates the Job whenever this
-# script changes (the ConfigMap content hash changes the mounted name); every
-# step is idempotent: an existing object is updated with PUT instead of being
-# created again, so a second run changes nothing.
-#
-# Inputs (environment, supplied by the Job from the `nexus-secrets` Secret):
-#   NEXUS_URL             in-cluster base URL, for example http://nexus.nexus.svc:8081
-#   NEXUS_ADMIN_PASSWORD  current `admin` password
-#   NEXUS_CI_PASSWORD     desired password of the `ci-reader` user
-#
-# Secrets are never printed: curl runs without `-v`/`-x`, and errors carry only
-# HTTP status codes and object names.
 set -eu
 
 BASE="${NEXUS_URL:?NEXUS_URL is required}"
@@ -23,12 +8,8 @@ ADMIN_USER="admin"
 
 BLOB_STORE=ci-cache
 
-# `curl` wrapper: prints the HTTP status code, writes the body to /tmp/body.
-# Authentication is passed through a config file so the password never lands
-# in argv (and therefore never in a process listing or a crash dump).
 umask 077
 AUTH_CONFIG="$(mktemp)"
-# curl config quoting: a backslash and a double quote must be escaped.
 credential="$(printf '%s:%s' "$ADMIN_USER" "$NEXUS_ADMIN_PASSWORD" |
   sed -e 's/\\/\\\\/g' -e 's/"/\\"/g')"
 printf 'user = "%s"\n' "$credential" > "$AUTH_CONFIG"
@@ -51,7 +32,6 @@ expect() {
     200|201|204) ;;
     *)
       echo "provisioning failed for $what: HTTP $code" >&2
-      # The body is a Nexus error message, not a secret; trim it for the log.
       head -c 400 /tmp/body >&2 || true
       echo >&2
       exit 1
@@ -88,10 +68,6 @@ ensure_blob_store() {
   echo "created blob store $BLOB_STORE"
 }
 
-# A fresh Nexus ships sample repositories (maven-central, maven-public, ...) on
-# the `default` blob store, and the API refuses to move a repository between
-# blob stores. These are pure caches, so a repository on another store is
-# dropped and recreated on ours.
 drop_if_foreign_store() {
   format="$1"
   type="$2"
@@ -106,7 +82,6 @@ drop_if_foreign_store() {
   echo "removed $name (was on another blob store)"
 }
 
-# ensure_repo FORMAT TYPE NAME PAYLOAD
 ensure_repo() {
   format="$1"
   type="$2"
@@ -127,8 +102,6 @@ ensure_repo() {
   fi
 }
 
-# Optional repository: some formats are absent or differ between Nexus
-# releases. A failure is reported and does not abort provisioning.
 optional_repo() {
   format="$1"
   type="$2"
@@ -152,17 +125,11 @@ optional_repo() {
 }
 
 common_storage='{"blobStoreName":"ci-cache","strictContentTypeValidation":true,"writePolicy":"ALLOW"}'
-# Upstreams (GitHub release downloads above all) return transient 5xx. With
-# auto-blocking one such answer took the whole repository offline and Nexus
-# answered 404/503 for every path; a long negative cache then kept those 404s
-# for a day. Never auto-block, retry upstream calls, keep misses briefly.
 common_negative='{"enabled":true,"timeToLive":5}'
 common_http='{"blocked":false,"autoBlock":false,"connection":{"retries":3,"timeout":60}}'
 
 wait_ready
 ensure_blob_store
-# The shipped maven-public group references maven-central; drop the group
-# first so its members can be recreated on our blob store.
 drop_if_foreign_store maven group maven-public
 
 maven_central="$(cat <<JSON
@@ -273,8 +240,6 @@ JSON
 )"
 ensure_repo pypi proxy pypi "$pypi_proxy"
 
-# Cargo support varies by Nexus edition and release. Try it, but never fail the
-# whole provisioning run when this install does not expose the format.
 cargo_proxy="$(cat <<JSON
 {
   "name": "crates",
@@ -289,7 +254,6 @@ JSON
 )"
 optional_repo cargo proxy crates "$cargo_proxy"
 
-# Anonymous access is off: every repository request must authenticate.
 code="$(request PUT /service/rest/v1/security/anonymous \
   -H 'Content-Type: application/json' \
   -d '{"enabled":false,"userId":"anonymous","realmName":"NexusAuthorizingRealm"}')"
@@ -317,8 +281,6 @@ fi
 expect "$code" "role ci-reader"
 echo "configured role ci-reader"
 
-# The user record carries no password; the password is set separately and
-# streamed on stdin, so it never appears in argv or in the job log.
 reader_user='{"userId":"ci-reader","firstName":"CI","lastName":"Reader","emailAddress":"ci-reader@home.invalid","source":"default","status":"active","roles":["ci-reader"]}'
 request GET '/service/rest/v1/security/users?userId=ci-reader' >/dev/null
 if grep -q '"userId" *: *"ci-reader"' /tmp/body; then
@@ -326,7 +288,6 @@ if grep -q '"userId" *: *"ci-reader"' /tmp/body; then
     -H 'Content-Type: application/json' -d "$reader_user")"
   expect "$code" "user ci-reader"
 else
-  # Creation requires a password: send the record with it on stdin.
   code="$(printf '%s' "$reader_user" | sed 's/}$//' | {
     cat
     printf ',"password":"%s"}' "$(printf '%s' "$NEXUS_CI_PASSWORD" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g')"

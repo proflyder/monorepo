@@ -1,13 +1,9 @@
-//! The rtnetlink socket, the only part of the responder that socket2 and tokio do not cover.
-
 use std::io;
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
 
 use tokio::io::Interest;
 use tokio::io::unix::AsyncFd;
 
-/// socket(AF_NETLINK, SOCK_RAW | SOCK_NONBLOCK | SOCK_CLOEXEC, NETLINK_ROUTE) bound to the
-/// multicast `groups` (RTMGRP_* bits) and registered with the runtime for reading.
 pub fn open_netlink(groups: u32) -> io::Result<AsyncFd<OwnedFd>> {
     // SAFETY: plain syscall with constant arguments; the result is checked below.
     let fd = unsafe {
@@ -37,12 +33,10 @@ pub fn open_netlink(groups: u32) -> io::Result<AsyncFd<OwnedFd>> {
     if r != 0 {
         return Err(io::Error::last_os_error());
     }
-    // SAFETY: the AsyncFd takes the OwnedFd itself, so the descriptor stays open and refers to
-    // the same socket until the AsyncFd (and with it the registration) is dropped.
+    // SAFETY: the AsyncFd takes the OwnedFd itself, so the descriptor stays open and refers to the same socket until the AsyncFd (and with it the registration) is dropped.
     unsafe { AsyncFd::register_with_interest(fd, Interest::READABLE) }.map_err(io::Error::from)
 }
 
-/// recv(2) without flags.
 pub fn recv(fd: std::os::fd::BorrowedFd<'_>, buf: &mut [u8]) -> io::Result<usize> {
     // SAFETY: `buf` is valid for writes of `buf.len()` bytes during the call.
     let n = unsafe { libc::recv(fd.as_raw_fd(), buf.as_mut_ptr().cast(), buf.len(), 0) };

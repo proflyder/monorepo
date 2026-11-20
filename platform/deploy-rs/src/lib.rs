@@ -1,15 +1,3 @@
-//! Home deployment tooling.
-//!
-//! This crate is the Rust replacement for the Go `platform/deploy` command. It
-//! is being built next to the Go implementation (`platform/deploy-rs` until the
-//! cutover) so a parity harness can compare both binaries against the frozen
-//! contract fixtures in `testdata/frozen`.
-//!
-//! Every subcommand is ported: `env get`, `build-id`, `render`, `oci`,
-//! `converge`, `state`, `preflight`, `runtime split`, `eso names`,
-//! `secret opaque`, `hermes rollout`, `hermes render-config`,
-//! `hermes drift-exporter` and `hermes assist-smoke`.
-
 pub mod buildid;
 pub mod cli;
 pub mod converge;
@@ -29,9 +17,6 @@ pub mod runtimevalues;
 pub mod state;
 pub mod yaml;
 
-/// Usage text shared with the Go binary. The commands, flag names and wording
-/// are part of the CLI contract; keep them byte-identical while both
-/// implementations exist.
 pub const USAGE: &str = r#"home-deploy <command> [options]
 
 Commands:

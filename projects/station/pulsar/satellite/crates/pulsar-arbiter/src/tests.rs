@@ -55,7 +55,6 @@ fn datagrams_match_cxx() {
     }
 }
 
-/// %.1f on quarter steps (exact ties round to even), every 0.1 dB step and near-ties.
 #[test]
 fn level_text_matches_cxx() {
     let lines = golden("level");
@@ -68,7 +67,6 @@ fn level_text_matches_cxx() {
     }
 }
 
-/// Field widths, white space, numbers, range, magic, own station, NUL bytes and size.
 #[test]
 fn parsing_matches_cxx() {
     let lines = golden("parse");
@@ -93,13 +91,11 @@ fn hexadecimal_levels_are_not_taken() {
     assert_eq!(d.level_db.to_bits(), (-0.0f32).to_bits());
 }
 
-/// The arbiter actor driven step by step on paused time; its claims go to a loopback socket.
 struct Rig {
     a: Arbiter,
     events: UnboundedReceiver<ArbiterEvent>,
     trace: UnboundedReceiver<Claim>,
     wire: std::net::UdpSocket,
-    /// The arbiter's own socket.
     addr: SocketAddrV4,
     start: Instant,
 }
@@ -147,7 +143,6 @@ impl Rig {
         self.a.on_datagram(Ok(d.len()), d.as_bytes());
     }
 
-    /// Lets `ms` pass, firing the actor's timers on the way.
     async fn run_for(&mut self, ms: u64) {
         let until = Instant::now() + Duration::from_millis(ms);
         loop {
@@ -217,7 +212,6 @@ async fn level_decides_within_the_window() {
     r.run_for(240).await;
     assert_eq!(r.decided(), Some((1, true, "st-me".into(), 1)));
 
-    // st-b's claim, 240 ms before this one, still counts; the louder st-c wins.
     r.claim(2, -20.0, false, true);
     r.run_for(100).await;
     r.peer("st-c", "alisa", false, -10.0);
@@ -263,7 +257,6 @@ async fn a_claim_older_than_the_window_wins_outright() {
     r.run_for(250).await;
     assert_eq!(r.decided(), Some((1, false, "st-b".into(), 2)));
 
-    // Exactly one window before ours: still within it, the louder claim wins.
     let mut r = Rig::new("st-me");
     r.peer("st-b", "alisa", false, -30.0);
     r.run_for(250).await;
@@ -310,14 +303,12 @@ async fn resent_copies_count_once() {
         r.run_for(40).await;
     }
     assert_eq!(r.traced(), [claim("st-b", "alisa", false, -30.0)]);
-    // The same claim 240 ms after the first copy is a copy; 241 ms after, a new claim.
     r.run_for(120).await;
     r.peer("st-b", "alisa", false, -30.0);
     assert!(r.traced().is_empty());
     r.run_for(1).await;
     r.peer("st-b", "alisa", false, -30.0);
     assert_eq!(r.traced().len(), 1);
-    // A different claim of the same station replaces the earlier one at once.
     r.peer("st-b", "alisa", true, -30.0);
     assert_eq!(r.traced(), [claim("st-b", "alisa", true, -30.0)]);
     assert_eq!(r.a.recent.len(), 1);
@@ -346,7 +337,6 @@ async fn claims_queued_on_the_socket_count_before_the_decision() {
     let mut r = Rig::new("st-me");
     r.claim(1, -20.0, false, true);
     r.run_for(200).await;
-    // Arrives on the socket; only the timer path sees it (no on_datagram call here).
     let d = wire::format(&claim("st-b", "alisa", false, -10.0)).unwrap();
     r.wire.send_to(d.as_bytes(), r.addr).unwrap();
     r.run_for(50).await;
@@ -469,7 +459,6 @@ async fn handle_numbers_claims_and_reports_decisions() {
 async fn without_a_socket_every_claim_wins_alone() {
     LocalSet::new()
         .run_until(async {
-            // Held without SO_REUSEADDR: the arbiter cannot bind the port.
             let holder = std::net::UdpSocket::bind("0.0.0.0:0").unwrap();
             let port = holder.local_addr().unwrap().port();
             let (h, mut events) = spawn("st-me".to_owned(), port);

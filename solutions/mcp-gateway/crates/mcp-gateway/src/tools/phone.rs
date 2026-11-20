@@ -1,21 +1,3 @@
-//! `phone` tool group: find a phone, send it a notification, list the phones.
-//!
-//! `phone_find` answers «где телефон» / «найди телефон» with a data-only
-//! high-priority FCM message: the app rings like an alarm even when the screen
-//! is off, Do Not Disturb is on or the app was killed, and stops on its own
-//! after a minute or when the owner presses «Нашёл».
-//!
-//! `phone_notify(title, body)` is the ordinary channel: a normal notification
-//! with a title, a body and an optional deep link, rendered from the app's own
-//! resources.
-//!
-//! `phone_list` shows the registered phones. A family can have several: the
-//! owner says a name («Стас», «телефон Стаса», «Стасику»), Hermes forwards it
-//! verbatim, and this module matches it deterministically against device names.
-//! A single phone is rung without a question; with several phones and no
-//! unambiguous name the tool returns the names so Hermes asks exactly one
-//! question. The push service never exposes an FCM token.
-
 use std::sync::Arc;
 
 use serde::Serialize;
@@ -26,24 +8,17 @@ use crate::tools::{
     Annotations, BoxFuture, Deps, ToolGroup, ToolOutcome, ToolSpec, failure, respond,
 };
 
-/// Longest accepted reason (the phone speaks it, so it stays short).
 pub const MAX_REASON_CHARS: usize = 200;
-/// Longest notification title.
 pub const MAX_TITLE_CHARS: usize = 120;
-/// Longest notification body.
 pub const MAX_BODY_CHARS: usize = 500;
-/// Longest deep link accepted from the model.
 pub const MAX_DEEP_LINK_CHARS: usize = 512;
-/// Longest spoken device name forwarded to the registry.
 pub const MAX_NAME_CHARS: usize = 64;
 
-/// The `phone` group.
 pub struct PhoneGroup {
     deps: Arc<Deps>,
 }
 
 impl PhoneGroup {
-    /// Build the group.
     #[must_use]
     pub fn new(deps: Arc<Deps>) -> Self {
         Self { deps }
@@ -124,7 +99,6 @@ impl ToolGroup for PhoneGroup {
     }
 }
 
-/// What the owner asked for: exactly one phone, or a question with names.
 enum Choice<'a> {
     One(&'a Device),
     Ask(Vec<&'a Device>),
@@ -317,7 +291,6 @@ async fn phone_list(deps: &Deps) -> ToolOutcome {
     respond(list_speech(&devices), Some(detail))
 }
 
-/// The optional name as Hermes heard it, trimmed. `None` means it was too long.
 fn requested_name(arguments: &Value) -> Option<&str> {
     let name = arguments
         .get("name")
@@ -330,9 +303,6 @@ fn requested_name(arguments: &Value) -> Option<&str> {
     Some(name)
 }
 
-/// Deterministic resolution: one phone never needs a name, several phones need
-/// an unambiguous match. Unmatched or ambiguous input returns the candidates so
-/// Hermes can ask one question instead of guessing.
 fn choose<'a>(devices: &'a [Device], name: &str) -> Choice<'a> {
     if devices.len() == 1 {
         return Choice::One(&devices[0]);
@@ -422,8 +392,6 @@ fn display_name(device: &Device) -> String {
     }
 }
 
-/// Names that refer to the handset itself rather than its owner. They are
-/// dropped before matching, so «телефон Стаса» matches the phone named «Стас».
 const PHONE_WORDS: &[&str] = &[
     "телефон",
     "телефона",
@@ -462,22 +430,16 @@ const PHONE_WORDS: &[&str] = &[
     "мою",
 ];
 
-/// Russian case endings, longest first, so «Стаса»/«Стасу»/«Стасом» share the
-/// stem «стас» with the nominative «Стас».
 const CASE_ENDINGS: &[&str] = &[
     "ями", "ами", "его", "ого", "ему", "ому", "ими", "ыми", "ей", "ой", "ый", "ий", "ая", "яя",
     "ое", "ее", "ые", "ие", "ов", "ев", "ах", "ях", "ом", "ем", "ам", "ям", "ью", "ию", "а", "я",
     "у", "ю", "е", "и", "ы", "о", "ь",
 ];
 
-/// Diminutive suffixes: «Стасик», «Машенька», «Сашенька» reduce to the same
-/// stem as «Стас», «Маша», «Саша». A strip that would leave fewer than three
-/// characters is skipped, so «Вика» never collapses to «в».
 const DIMINUTIVES: &[&str] = &[
     "еньк", "оньк", "ечк", "очк", "ик", "чик", "ок", "ек", "ша", "ня", "уля", "юля", "уня", "юша",
 ];
 
-/// Splits a spoken name into lowercase meaningful words.
 fn tokens(value: &str) -> Vec<String> {
     value
         .to_lowercase()
@@ -488,7 +450,6 @@ fn tokens(value: &str) -> Vec<String> {
         .collect()
 }
 
-/// Whether one spoken name refers to one device name.
 fn matches_name(query: &[String], device_name: &str) -> bool {
     let device_tokens = tokens(device_name);
     query.iter().any(|spoken| {
@@ -687,8 +648,6 @@ mod tests {
         (PhoneGroup::new(deps(Some(Arc::clone(&fake)))), fake)
     }
 
-    /// `Arc<FakePush>` does not implement `PushApi`; keep the fake behind one
-    /// shared handle so a test can inspect the calls.
     struct Shared(Arc<FakePush>);
 
     impl PushApi for Shared {

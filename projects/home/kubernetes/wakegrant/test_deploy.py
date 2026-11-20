@@ -1,13 +1,4 @@
 #!/usr/bin/env python3
-"""Manifest contracts for projects/home/kubernetes/wakegrant.
-
-Flux applies the manifests from `deploy/home-apps` digests, so there is no
-deploy script left to exercise. These tests keep the parts only the deployment
-knows: the Secret is mounted as files (never as env values), the ExternalSecret
-targets the documented OpenBao key and never deletes the live Secret, and the
-Kustomization keeps the digest/pin contract. The protocol itself is covered by
-the Rust tests in solutions/wakegrant.
-"""
 from __future__ import annotations
 
 import unittest
@@ -30,7 +21,6 @@ def load_docs(path: Path) -> list[dict]:
 class ManifestTests(unittest.TestCase):
     def test_manifest_keeps_secrets_out_of_environment_values(self):
         text = MANIFEST.read_text()
-        # Tokens and keys arrive as files from the ESO-owned Secret.
         self.assertIn("WAKE_GRANT_ISSUER_TOKEN_FILE", text)
         self.assertIn("WAKE_GRANT_MACHINES_FILE", text)
         self.assertNotIn("WAKE_GRANT_ISSUER_TOKEN\n", text)
@@ -58,8 +48,6 @@ class ManifestTests(unittest.TestCase):
         self.assertIn("kustomize.toolkit.fluxcd.io/prune", text)
 
     def test_no_deploy_script_or_private_env_is_left(self):
-        # The CI deploy path is gone: Flux owns the workload and the private
-        # values live in OpenBao `k8s/flux-system/app-settings`.
         self.assertFalse(DEPLOY.exists())
         self.assertFalse(ENV_EXAMPLE.exists())
 

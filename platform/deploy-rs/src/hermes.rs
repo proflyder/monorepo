@@ -1,11 +1,3 @@
-//! Promotes Hermes/voice-proxy/health-exporter digests into the `runtime` Helm
-//! release.
-//!
-//! Ported from `platform/deploy/internal/hermes`: the same argv, the same
-//! no-op detection, the same smoke checks (health exporter, Assist turn,
-//! voice-proxy probe, log scan) and the same rollback/exit contract (0 healthy,
-//! 1 failure, 2 rollback verification failed).
-
 use std::collections::BTreeMap;
 use std::fs;
 use std::io::Write;
@@ -20,24 +12,15 @@ use crate::gojson;
 use crate::process::{CommandRunner, Invocation, Output};
 use crate::yaml::{self, Value as YamlValue};
 
-/// Helm release name.
 pub const RELEASE: &str = "runtime";
-/// Kubernetes namespace.
 pub const NAMESPACE: &str = "home-assistant";
-/// In-cluster Home Assistant URL used by the smoke Job.
 pub const HA_URL: &str = "http://home-assistant-external.monitoring.svc.cluster.local:8123";
-/// Secret mounted into the smoke Job.
 pub const HA_SECRET: &str = "ha-bridge-ha";
-/// Conversation agent used by the smoke turn.
 pub const HA_AGENT: &str = "conversation.hermes_agent";
-/// Text sent to Assist.
 pub const SMOKE_TEXT: &str = "Представься одним коротким предложением. Ничего не изменяй.";
-/// Health exporter Deployment.
 pub const EXPORTER_DEPLOYMENT: &str = "runtime-health-exporter";
-/// Default Helm timeout.
 pub const DEFAULT_TIMEOUT: &str = "8m";
 
-/// Health exporter endpoints that must be up.
 pub const EXPECTED_ENDPOINTS: &[&str] = &[
     "ha",
     "music_assistant",
@@ -67,46 +50,26 @@ const TRANSIENT_WORDS: &[&str] = &[
     "connection refused",
 ];
 
-/// One rollout request.
 #[derive(Clone)]
 pub struct Options {
-    /// Private runtime values file.
     pub values_file: String,
-    /// Pushed Hermes digest.
     pub hermes_digest: String,
-    /// Pushed voice-proxy digest.
     pub voice_proxy_digest: String,
-    /// Pushed health-exporter digest.
     pub exporter_digest: String,
-    /// Digest-pinned home-deploy image for the smoke Job.
     pub smoke_image: String,
-    /// Helm release.
     pub release: String,
-    /// Hermes Deployment.
     pub deployment: String,
-    /// Health exporter Deployment.
     pub exporter_deployment: String,
-    /// Kubernetes namespace.
     pub namespace: String,
-    /// Runtime chart directory.
     pub chart: String,
-    /// Rollback state directory.
     pub state_dir: String,
-    /// Helm timeout.
     pub timeout: String,
-    /// Upgrade even when the digests are unchanged.
     pub force: bool,
-    /// Fail after the upgrade (rollback test).
     pub simulate_failure: bool,
-    /// Roll back the recorded revision.
     pub rollback_only: bool,
-    /// kubectl binary.
     pub kubectl: String,
-    /// helm binary.
     pub helm: String,
-    /// Assist warm-up retry window in seconds.
     pub retry_window_secs: u64,
-    /// Delay between Assist retries in seconds.
     pub retry_delay_secs: u64,
 }
 
@@ -136,7 +99,6 @@ impl Default for Options {
     }
 }
 
-/// Returns a digest-pinned image reference for `name` (hermes/voice-proxy/health-exporter).
 pub fn normalize_digest(name: &str, value: &str) -> Result<String, String> {
     let repository = match name {
         "hermes" => "ghcr.io/proflyder/hermes",
@@ -159,14 +121,11 @@ pub fn normalize_digest(name: &str, value: &str) -> Result<String, String> {
     ))
 }
 
-/// Returns the `sha256:…` part of a pinned image reference.
 #[must_use]
 pub fn image_digest(image: &str) -> &str {
     image.split_once('@').map_or("", |(_, digest)| digest)
 }
 
-/// Reads the private values and requires at least two containers under
-/// `workloads.hermes` (gateway and voice-proxy).
 pub fn load_values(path: &str) -> Result<YamlValue, String> {
     let raw = fs::read_to_string(path).map_err(|error| error.to_string())?;
     let values = if raw.trim().is_empty() {
@@ -191,14 +150,12 @@ pub fn load_values(path: &str) -> Result<YamlValue, String> {
     Ok(values)
 }
 
-/// Drops the cluster-scoped storage block.
 #[must_use]
 pub fn workload_values(mut values: YamlValue) -> YamlValue {
     values.remove("storage");
     values
 }
 
-/// Writes the workload values to a mode-600 temporary file.
 pub fn write_values(values: &YamlValue) -> Result<TempValues, String> {
     let raw = yaml::to_string(values);
     let path = std::env::temp_dir().join(format!(
@@ -215,11 +172,9 @@ pub fn write_values(values: &YamlValue) -> Result<TempValues, String> {
     Ok(TempValues(path))
 }
 
-/// Temporary values file removed on drop.
 pub struct TempValues(std::path::PathBuf);
 
 impl TempValues {
-    /// Returns the file path.
     #[must_use]
     pub fn path(&self) -> &Path {
         &self.0
@@ -232,7 +187,6 @@ impl Drop for TempValues {
     }
 }
 
-/// Returns the container name to image map of one Deployment.
 pub fn live_images(
     runner: &dyn CommandRunner,
     kubectl: &str,
@@ -275,14 +229,12 @@ pub fn live_images(
     Ok(images)
 }
 
-/// Reports whether any live image differs from the requested digest.
 #[must_use]
 pub fn rollout_needed(current: &BTreeMap<String, String>, hermes: &str, voice_proxy: &str) -> bool {
     current.get("gateway").map(String::as_str) != Some(hermes)
         || current.get("voice-proxy").map(String::as_str) != Some(voice_proxy)
 }
 
-/// Returns the `--set` arguments that pin the Hermes containers.
 #[must_use]
 pub fn set_args(hermes: &str, voice_proxy: &str) -> Vec<String> {
     vec![
@@ -293,7 +245,6 @@ pub fn set_args(hermes: &str, voice_proxy: &str) -> Vec<String> {
     ]
 }
 
-/// Pins the health exporter and drops the old ConfigMap script mount.
 #[must_use]
 pub fn exporter_set_args(exporter_deployment: &str, image: &str) -> Vec<String> {
     let container = format!("workloads.{exporter_deployment}.containers[0]");
@@ -310,7 +261,6 @@ pub fn exporter_set_args(exporter_deployment: &str, image: &str) -> Vec<String> 
     ]
 }
 
-/// Returns the newest Helm revision, or 0 when history is unavailable.
 #[must_use]
 pub fn latest_revision(
     runner: &dyn CommandRunner,
@@ -346,7 +296,6 @@ pub fn latest_revision(
         .unwrap_or(0)
 }
 
-/// Runs the Helm upgrade with the digests pinned by `--set`.
 #[must_use]
 pub fn upgrade(
     runner: &dyn CommandRunner,
@@ -382,7 +331,6 @@ pub fn upgrade(
     })
 }
 
-/// Restores one Helm revision.
 pub fn rollback(
     runner: &dyn CommandRunner,
     options: &Options,
@@ -407,7 +355,6 @@ pub fn rollback(
     Ok(())
 }
 
-/// Reads the exporter's `/metrics` through the API server's service proxy.
 pub fn health_metrics(runner: &dyn CommandRunner, options: &Options) -> Result<String, String> {
     checked(
         runner,
@@ -423,13 +370,11 @@ pub fn health_metrics(runner: &dyn CommandRunner, options: &Options) -> Result<S
     )
 }
 
-/// Service-proxy path of the exporter's `/metrics`.
 #[must_use]
 pub fn exporter_metrics_path(namespace: &str, service: &str) -> String {
     format!("/api/v1/namespaces/{namespace}/services/{service}:9116/proxy/metrics")
 }
 
-/// Parses `home_endpoint_up{endpoint="…"} N` (and the deprecated `ricardo_` alias).
 #[must_use]
 pub fn parse_health(text: &str) -> BTreeMap<String, i64> {
     let mut values = BTreeMap::new();
@@ -448,7 +393,6 @@ pub fn parse_health(text: &str) -> BTreeMap<String, i64> {
     values
 }
 
-/// Requires every expected endpoint to be present and up.
 pub fn check_health(text: &str) -> Result<(), String> {
     let values = parse_health(text);
     let missing: Vec<&str> = EXPECTED_ENDPOINTS
@@ -476,7 +420,6 @@ pub fn check_health(text: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// Returns the log lines matching the error pattern.
 #[must_use]
 pub fn voice_proxy_log_errors(text: &str) -> Vec<String> {
     text.split('\n')
@@ -485,7 +428,6 @@ pub fn voice_proxy_log_errors(text: &str) -> Vec<String> {
         .collect()
 }
 
-/// Fails when the voice-proxy log contains errors.
 pub fn check_voice_logs(text: &str) -> Result<(), String> {
     let errors = voice_proxy_log_errors(text);
     if errors.is_empty() {
@@ -498,7 +440,6 @@ pub fn check_voice_logs(text: &str) -> Result<(), String> {
     ))
 }
 
-/// The hardened Assist smoke Job manifest.
 #[must_use]
 pub fn smoke_job(name: &str, namespace: &str, image: &str) -> Value {
     json!({
@@ -615,7 +556,6 @@ fn smoke_result(output: &str) -> Option<BTreeMap<String, Value>> {
         })
 }
 
-/// Runs one smoke Job and returns the JSON result it printed.
 pub fn assist_attempt(
     runner: &dyn CommandRunner,
     options: &Options,
@@ -701,7 +641,6 @@ pub fn assist_attempt(
     outcome
 }
 
-/// Reports whether a failed Assist result may succeed once Hermes warms up.
 #[must_use]
 pub fn transient_smoke_result(result: &BTreeMap<String, Value>) -> bool {
     if result.get("ok").and_then(Value::as_bool) == Some(true) {
@@ -721,7 +660,6 @@ pub fn transient_smoke_result(result: &BTreeMap<String, Value>) -> bool {
         .any(|marker| error_text.contains(marker))
 }
 
-/// Asks Hermes one Assist turn, retrying a bounded transient window.
 pub fn assist_smoke(
     options: &Options,
     attempt: &mut dyn FnMut() -> Result<BTreeMap<String, Value>, String>,
@@ -761,7 +699,6 @@ pub fn assist_smoke(
     }
 }
 
-/// Runs the distroless proxy's own probe inside the live container.
 pub fn voice_proxy_healthcheck(
     runner: &dyn CommandRunner,
     options: &Options,
@@ -787,7 +724,6 @@ pub fn voice_proxy_healthcheck(
     Ok(())
 }
 
-/// Waits for the rollout and runs every post-upgrade check.
 pub fn run_smoke(
     runner: &dyn CommandRunner,
     options: &Options,
@@ -848,7 +784,6 @@ fn write_state(state_dir: &str, name: &str, value: &str) -> Result<(), String> {
     fs::write(Path::new(state_dir).join(name), value).map_err(|error| error.to_string())
 }
 
-/// Restores the recorded revision only when this job applied an upgrade.
 pub fn rollback_only(
     runner: &dyn CommandRunner,
     options: &Options,
@@ -891,7 +826,6 @@ pub fn rollback_only(
     Ok(0)
 }
 
-/// Performs the rollout and returns the process exit status.
 pub fn run(
     runner: &dyn CommandRunner,
     options: &Options,
@@ -1094,12 +1028,6 @@ fn display_map(result: &BTreeMap<String, Value>) -> String {
     format!("map[{}]", entries.join(" "))
 }
 
-/// Performs one Assist turn through the in-cluster HA API and prints the JSON
-/// result line the rollout parses.
-///
-/// The token is read from the mounted Secret file and is never printed. The
-/// exit status is 1 on every failure; the structured result lets the caller
-/// decide whether a 5xx is a transient Hermes warm-up.
 pub fn assist_smoke_client(
     ha_url: &str,
     agent: &str,
@@ -1294,7 +1222,6 @@ mod tests {
     #[test]
     fn health_checks_all_endpoints() {
         assert!(check_health(&all_up_metrics()).is_ok());
-        // The deprecated ricardo_* alias from an older exporter still parses.
         let legacy = all_up_metrics().replace("home_endpoint_up", "ricardo_endpoint_up");
         assert!(check_health(&legacy).is_ok());
         let down = all_up_metrics().replace("endpoint=\"ha\"} 1", "endpoint=\"ha\"} 0");

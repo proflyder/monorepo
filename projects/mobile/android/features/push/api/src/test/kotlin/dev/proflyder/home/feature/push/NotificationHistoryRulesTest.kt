@@ -4,7 +4,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** The history keeps the newest messages, replaces a repeated id and stays bounded. */
 class NotificationHistoryRulesTest {
     @Test
     fun aNewMessageGoesToTheTop() {

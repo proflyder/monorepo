@@ -1,16 +1,4 @@
 ﻿#Requires -RunAsAdministrator
-<#
-.SYNOPSIS
-    Удаляет провайдер входа Home с ПК «комп».
-
-.DESCRIPTION
-    Сначала снимает обе регистрации в реестре (LogonUI перестаёт загружать
-    провайдера сразу, без перезагрузки), затем удаляет DLL и секрет. Логи
-    остаются на месте.
-
-.EXAMPLE
-    powershell -NoProfile -ExecutionPolicy Bypass -File uninstall.ps1
-#>
 [CmdletBinding()]
 param(
     [switch]$KeepSecret
@@ -27,7 +15,6 @@ $ClassesKey = "HKLM:\SOFTWARE\Classes\CLSID\$ProviderClsid"
 $CredentialProvidersKey = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Authentication\Credential Providers'
 $ProviderKey = "$CredentialProvidersKey\$ProviderClsid"
 
-# --- deregister first: takes effect for the next logon screen ----------------
 if (Test-Path -LiteralPath $ProviderKey) {
     Remove-Item -LiteralPath $ProviderKey -Recurse -Force
     Write-Output "Removed $ProviderKey"
@@ -42,10 +29,8 @@ if (Test-Path -LiteralPath $ClassesKey) {
     Write-Output "Not registered: $ClassesKey"
 }
 
-# --- then the files -----------------------------------------------------------
 $installedDll = Join-Path $InstallDir $DllName
 if (Test-Path -LiteralPath $installedDll) {
-    # A running LogonUI may hold the image; it is not in the way of logon.
     try {
         Remove-Item -LiteralPath $installedDll -Force -ErrorAction Stop
         Write-Output "Removed $installedDll"
@@ -62,6 +47,4 @@ if (-not $KeepSecret) {
     }
 }
 
-# Configuration (ServiceUrl/Machine/UserName/Domain) stays so a reinstall keeps
-# the same values. Logs stay for diagnostics.
 Write-Output 'Uninstalled. Logs kept in C:\ProgramData\Home\KompLogon.'

@@ -1,10 +1,3 @@
-//! Literal `${KEY}` substitution for the private deploy templates.
-//!
-//! This is not `text/template`: every placeholder is a literal value from the
-//! unit allowlist, every declared placeholder needs a non-empty value, and a
-//! leftover placeholder is a hard error. The port keeps the Go error text and
-//! the content fingerprint (`--rollout-key`) byte-identical.
-
 use std::collections::BTreeMap;
 use std::fs;
 use std::io::Write;
@@ -14,12 +7,9 @@ use regex::Regex;
 
 use crate::{buildid, envfile};
 
-/// Placeholder filled with the content fingerprint of the rendered unit.
 pub const ROLLOUT_KEY: &str = "ROLLOUT_ID";
 
-/// Value masked while hashing: the fingerprint itself.
 const ROLLOUT_MASK: &str = "rollout-fingerprint";
-/// Value masked while hashing: the git revision.
 const BUILD_MASK: &str = "build-traceability";
 
 const SCHEDULER_PLACEHOLDERS: &[&str] = &[
@@ -69,14 +59,10 @@ const WAKEGRANT_EXTRA: &[&str] = &["WAKE_GRANT_IMAGE", "WAKE_GRANT_NODE_PORT"];
 
 const INTERCOM_EXTRA: &[&str] = &["INTERCOM_IMAGE", "INTERCOM_NODE_PORT"];
 
-/// One unit's placeholder policy.
 #[derive(Debug)]
 pub struct Preset {
-    /// `--unit` value.
     pub name: &'static str,
-    /// Exact, case-sensitive allowlist.
     pub allowed: Vec<&'static str>,
-    /// Switches the leftover check from `${KEY}` to any `${`.
     pub contains_leftover: bool,
 }
 
@@ -86,7 +72,6 @@ impl Preset {
     }
 }
 
-/// Returns the placeholder policy for `unit`.
 pub fn preset_for(unit: &str) -> Result<Preset, String> {
     let base = || Preset {
         name: "scheduler",
@@ -138,7 +123,6 @@ pub fn preset_for(unit: &str) -> Result<Preset, String> {
     }
 }
 
-/// Supported `--unit` values in stable order.
 pub fn unit_names() -> Vec<&'static str> {
     let mut names = vec![
         "scheduler",
@@ -157,7 +141,6 @@ fn placeholder_regex() -> &'static Regex {
     PLACEHOLDER.get_or_init(|| Regex::new(r"\$\{([A-Z0-9_]+)\}").expect("valid regex"))
 }
 
-/// Substitutes placeholders in `text`; `origin` is used in error messages.
 pub fn render(
     text: &str,
     values: &BTreeMap<String, String>,
@@ -208,23 +191,15 @@ pub fn render(
     Ok(rendered)
 }
 
-/// One `render` invocation.
 pub struct Options<'a> {
-    /// Private `KEY=VALUE` file; empty means `sets` only.
     pub env_file: &'a str,
-    /// `KEY=VALUE` overrides applied after the env file, in order.
     pub sets: &'a [String],
-    /// Output directory.
     pub out_dir: &'a str,
-    /// Templates to render.
     pub files: &'a [String],
-    /// Unit selecting the preset.
     pub unit: &'a str,
-    /// Placeholder replaced by the content fingerprint, when non-empty.
     pub rollout_key: &'a str,
 }
 
-/// Renders every file in `options`, writing progress to `stdout`.
 pub fn run(options: &Options<'_>, stdout: &mut dyn Write) -> Result<(), String> {
     let preset = preset_for(options.unit)?;
 
@@ -292,7 +267,6 @@ struct Source {
     raw: String,
 }
 
-/// Hashes the rendered unit with `ROLLOUT_ID` and `BUILD_ID` masked out.
 fn content_fingerprint(
     sources: &[Source],
     values: &BTreeMap<String, String>,

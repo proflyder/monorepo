@@ -1,5 +1,4 @@
 #!/bin/sh
-# Start the local BLE Wi-Fi gateway. Safe no-op if already running.
 DIR=/data/quasar/ble-gateway
 BIN="$DIR/ble-gateway"
 LOG="$DIR/ble-gateway.log"
@@ -17,7 +16,6 @@ if pidof ble-gateway >/dev/null 2>&1; then
     exit 0
 fi
 
-# keep one log backup, max ~1 MiB
 if [ -f "$LOG" ] && [ "$(wc -c < "$LOG" 2>/dev/null || echo 0)" -gt 1048576 ]; then
     mv -f "$LOG" "$LOG.1"
 fi

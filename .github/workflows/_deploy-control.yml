@@ -1,9 +1,5 @@
 name: _deploy-control
 
-# Mocked-kubectl regression for deploy.sh control mode. It needs the Rust
-# home-deploy CLI (the script resolves HOME_DEPLOY) and pre-resolved image
-# digests, so no image build or cluster access is involved.
-
 on:
   workflow_call:
     inputs:
@@ -20,8 +16,6 @@ permissions:
   contents: read
 
 env:
-  # Set Git's default branch for actions/checkout's `git init` (it warns when unset;
-  # it runs under a throwaway HOME, so only an env-provided config reaches it).
   GIT_CONFIG_COUNT: "1"
   GIT_CONFIG_KEY_0: init.defaultBranch
   GIT_CONFIG_VALUE_0: main
@@ -31,13 +25,12 @@ jobs:
     name: deploy-control
     runs-on: ubuntu-24.04
     timeout-minutes: 20
-    # Same entry point as a workstation; Bazel comes from setup-bazel.
     env:
       MISE_TASK_RUN_AUTO_INSTALL: "false"
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
 
-      - uses: bazel-contrib/setup-bazel@104e3eea9447cdaa4b00d0fb46191a3985d26ab3 # v0.19.1
+      - uses: bazel-contrib/setup-bazel@104e3eea9447cdaa4b00d0fb46191a3985d26ab3
         with:
           bazelisk-version: "1.30.0"
           bazelisk-cache: true
@@ -49,8 +42,7 @@ jobs:
           key: bazel-repo-rust-${{ runner.os }}-${{ hashFiles('MODULE.bazel', 'MODULE.bazel.lock', '.bazelversion', 'Cargo.lock', 'crate-universe.lock', 'rust-toolchain.toml') }}
           restore-prefix: bazel-repo-rust-${{ runner.os }}-
 
-      # Restore-only, same family as `_unit.yml`'s Rust units.
-      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: ~/.cache/bazel-disk
           key: bazel-rust-${{ runner.os }}-deploy-control-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'Cargo.lock', 'crate-universe.lock', 'rust-toolchain.toml') }}
@@ -58,7 +50,7 @@ jobs:
             bazel-rust-${{ runner.os }}-warm-
             bazel-rust-${{ runner.os }}-
 
-      - uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b # v5.2.7
+      - uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b
         with:
           version: 2026.11.4
           install: false

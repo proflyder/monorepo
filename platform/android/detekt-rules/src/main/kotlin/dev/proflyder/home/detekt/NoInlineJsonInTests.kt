@@ -12,14 +12,6 @@ import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.psi.KtLiteralStringTemplateEntry
 import org.jetbrains.kotlin.psi.KtStringTemplateExpression
 
-/**
- * Reports JSON literals embedded in test sources; fixtures live in the
- * `src/test/resources/fixtures` directory and are loaded by a shared helper.
- *
- * Inline JSON hides the payload from both tooling and reviewers and makes a
- * test read like a serialization dump. The rule only looks at files under a
- * `src/test/` directory.
- */
 class NoInlineJsonInTests(config: Config = Config.empty) : Rule(config) {
     override val issue: Issue = Issue(
         id = javaClass.simpleName,

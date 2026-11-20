@@ -1,6 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Full-window speed dial: scrim above the bottom navigation, item FABs and
-     a copy of the root FAB. Nothing here paints a panel background. -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/control_dial_root"

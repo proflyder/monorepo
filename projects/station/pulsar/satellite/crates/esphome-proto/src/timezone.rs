@@ -1,14 +1,9 @@
-//! ParsedTimezone из GetTimeResponse в виде POSIX TZ-строки, которую хранит демон.
-
 use std::fmt::Write as _;
 
 use prost::Message;
 
 use crate::pb::ParsedTimezone;
 
-/// POSIX TZ-строка для ParsedTimezone (поле 3 GetTimeResponse) без правил DST, например
-/// "<+0300>-3". std_offset_seconds использует знак POSIX (секунды к западу от UTC: MSK-3 =
-/// -10800). "" — если у зоны есть DST (здесь не представимо) или сообщение битое.
 pub fn posix_tz_from_parsed(p: &[u8]) -> String {
     let Ok(tz) = ParsedTimezone::decode(p) else {
         return String::new();
@@ -25,7 +20,6 @@ pub fn posix_tz_from_parsed(p: &[u8]) -> String {
     let a = east.unsigned_abs();
     let sign = if east < 0 { '-' } else { '+' };
     let mut out = format!("<{sign}{:02}{:02}>", a / 3600, a / 60 % 60);
-    // Смещение POSIX: часы на запад [:mm[:ss]].
     let w = std_off.unsigned_abs();
     let west = if std_off < 0 { "-" } else { "" };
     let _ = if !w.is_multiple_of(60) {

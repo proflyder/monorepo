@@ -1,6 +1,3 @@
-//! Command entry point: the intercom service plus the distroless
-//! `-healthcheck` and `-status` probes used by the deployment.
-
 use std::process::ExitCode;
 
 #[tokio::main]

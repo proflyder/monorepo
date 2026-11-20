@@ -438,3 +438,17 @@ node platform/quality/audit_repository.mjs
 `solutions/bb-home-dispatcher/lib/hmac.js`), лимит 16 KiB, неразрешённый
 метод, мусорный ввод, транспортную ошибку, отсутствие токена/секрета в выводе
 и идемпотентность `authorized_keys`. Живой CT и сеть не нужны.
+
+## Заметки к коду
+
+Пояснения, перенесённые из комментариев исходников (код комментариев не содержит, см. `AGENTS.md`).
+
+- `authorized-key.sh` — authorized_keys helper shared by install-bb.sh and its hermetic tests.
+  - Idempotent by key body: re-running with a different `from` does not add a second copy of the same key.
+- `bb-db-backup.sh` — Consistent online copy of the bb SQLite database plus a full server export.
+- `create-lxc.sh` — Create the unprivileged Debian LXC used by the bb server (CT 103).
+- `install-bb.sh` — Install the bb prerequisites and the consistent database backup timer.
+  - The bridge runs as user bb, never root: the key may only execute the forced command that reads one JSON request from stdin. The plugin token and HMAC secret are not created here; they are written after `bb plugin token` and `bb plugin config ...
+- `bb-dispatch` — SSH forced-command bridge from mcp-gateway (K3s) to the home-dispatcher plugin. The gateway owns the SSH key; the bridge owns the bb plugin token and HMAC secret (`/home/bb/.config/home-dispatcher/{token,hmac}`, 0600, owner bb). It reads exactly one JSON request from stdin (one of the seven allowed `method`s, at most 16 KiB), signs it and POSTs it to `http://127.0.0.1:<bb-port>/api/v1/plugins/home-dispatcher/http/rpc`, then prints the plugin answer or `{"ok": false, "code": ..., "speech": ...}`.
+  - Exit codes: 0 the plugin answered (even HTTP 4xx/5xx with `ok: false`); 1 transport/config failure (`bridge_error`); 2 bad request (size, JSON, method), refused without contacting bb; 3 bridge not configured (missing token/secret, unsafe permissions).
+  - Secrets and request/response bodies are never printed or logged; exception text never contains them. `SSH_ORIGINAL_COMMAND` is ignored by design. Reading one byte past the limit detects an oversized body without buffering an attacker-controlled stream. Token/secret files must be printable ASCII without spaces (safe as an HTTP header). Credentials in the plugin URL are refused.

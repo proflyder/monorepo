@@ -1,13 +1,4 @@
 #!/usr/bin/env python3
-"""Static contract tests for the Windows logon provider scripts.
-
-The scripts run elevated on the owner's PC, so what matters here is the shape:
-one fixed CLSID everywhere, registration of exactly one credential provider and
-of no filters, exact-key removal on uninstall, machine-scope DPAPI with the same
-entropy as the Rust code, and no secret ever printed.
-
-Run: python3 -m unittest discover -s solutions/windows-logon-provider
-"""
 from __future__ import annotations
 
 import re
@@ -50,8 +41,6 @@ def clsid_from_source() -> str:
 
 class ScriptBasicsTests(unittest.TestCase):
     def test_scripts_are_utf8_with_bom(self):
-        # Windows PowerShell 5.1 reads .ps1 without a BOM as ANSI and would
-        # mangle the Russian prompts and messages.
         for name in ("install.ps1", "set-secret.ps1", "uninstall.ps1", "status.ps1"):
             with self.subTest(script=name):
                 raw, _ = read_ps1(name)
@@ -117,7 +106,6 @@ class InstallScriptTests(unittest.TestCase):
                 self.assertIn(f'w!("{value}")', config_rs)
                 self.assertIn(f"-Name '{value}'", self.text)
         self.assertIn(f"$ConfigKey = '{CONFIG_KEY}'", self.text)
-        # Reinstall resets the disable latch.
         self.assertIn("-Name 'FailCount' -Value 0 -Type DWord", self.text)
         self.assertIn("-Name 'Disabled' -Value 0 -Type DWord", self.text)
 
@@ -126,17 +114,13 @@ class InstallScriptTests(unittest.TestCase):
         self.assertIn("Copy-Item -LiteralPath $sourceDll -Destination $installedDll -Force", self.text)
         build = (HERE / "build.sh").read_text(encoding="utf-8")
         self.assertIn(DLL_NAME, build)
-        # The exported names are the COM contract; the PE verifier enforces
-        # exactly these two exports.
         self.assertIn('"DllGetClassObject", "DllCanUnloadNow"', (HERE / "pe_artifacts.py").read_text(encoding="utf-8"))
 
     def test_directory_acls_are_system_and_administrators_only(self):
-        # Program Files: SYSTEM + Administrators write, Users read/execute.
         self.assertIn("*S-1-5-18:(OI)(CI)F", self.text)
         self.assertIn("*S-1-5-32-544:(OI)(CI)F", self.text)
         self.assertIn("*S-1-5-32-545:(OI)(CI)RX", self.text)
-        # Data dir (secret + log): only SYSTEM and Administrators, no Users.
-        data_block = self.text.split("# --- data directory", 1)[1].split("# --- configuration", 1)[0]
+        data_block = self.text.split("-Path $DataDir -Arguments", 1)[1].split("New-Item -Path $ConfigKey", 1)[0]
         self.assertNotIn("S-1-5-32-545", data_block)
         for broad in ("S-1-1-0", "S-1-5-11", "Everyone", "Authenticated Users", "BUILTIN\\Users:F"):
             self.assertNotIn(broad, self.text, f"broad ACL grant: {broad}")
@@ -173,7 +157,6 @@ class UninstallScriptTests(unittest.TestCase):
         self.assertIn("Remove-Item -LiteralPath $secretPath -Force", self.text)
 
     def test_no_broad_registry_or_file_deletion(self):
-        # Only two exact CLSID keys and the installed files may be touched.
         removals = re.findall(r"Remove-Item\s+-LiteralPath\s+(\$\w+|\"[^\"]*\")", self.text)
         self.assertGreaterEqual(len(removals), 3)
         for target in removals:
@@ -250,8 +233,6 @@ class ProviderSourceTests(unittest.TestCase):
         scenario = provider.split("fn set_usage_scenario(", 1)[1].split("\n        fn advise", 1)[0]
         self.assertIn("cpus != CPUS_LOGON && cpus != CPUS_UNLOCK_WORKSTATION", scenario)
         self.assertIn("return Err(E_NOTIMPL.into());", scenario)
-        # Both logon and unlock are gated by the mode decision and may start
-        # the challenge/claim worker.
         self.assertIn("self.start_worker_once();", scenario)
         self.assertIn("cancel_session(&self.session);", scenario)
         for unsupported in ("CPUS_CHANGE_PASSWORD", "CPUS_CREDUI", "CPUS_PLAP"):
@@ -265,7 +246,6 @@ class ProviderSourceTests(unittest.TestCase):
         self.assertIn("crate::gate::evaluate(purpose)", start)
         self.assertIn("cpus={} mode={}", start)
         self.assertIn("cpus={} mode=off reason={}", start)
-        # A denied gate must return before the network thread is created.
         gate_at = start.index("crate::gate::evaluate(purpose)")
         self.assertLess(
             gate_at, start.index("start_worker_thread(&self.session, mode, generation)")
@@ -305,12 +285,9 @@ class ProviderSourceTests(unittest.TestCase):
         self.assertNotIn("thread::sleep(Duration::from_millis(2000))", worker)
         self.assertIn("sleep_interruptible", worker)
         self.assertIn("CreateThread", worker)
-        # The unlock long-poll is abandoned after cancellation instead of
-        # closing a synchronous WinHTTP handle from another thread.
         self.assertIn("cancellable_post", worker)
         self.assertIn("UNLOCK_RECEIVE_TIMEOUT_MS", worker)
         self.assertIn("session.cancelled(generation)", worker)
-        # The DLL must stay mapped while the worker or a claim runs.
         self.assertIn("ACTIVE_WORKERS", (PROVIDER / "dll.rs").read_text(encoding="utf-8"))
 
 

@@ -1,5 +1,3 @@
-//! Store replay against `testdata/vectors/store.json` and the Go schema dump.
-
 use serde_json::Value;
 
 use super::Store;
@@ -188,8 +186,6 @@ fn a_go_schema_v1_database_opens_in_place() {
         .expect("schema_v1.sql");
 
     {
-        // Exactly what the Go binary leaves behind: tables, indexes and rows,
-        // without `schema_meta`.
         let connection = rusqlite::Connection::open(&path).expect("create");
         connection.execute_batch(&schema).expect("apply Go schema");
     }
@@ -209,7 +205,6 @@ fn a_go_schema_v1_database_opens_in_place() {
         .expect("version");
     assert_eq!(version, super::SCHEMA_VERSION);
 
-    // The Rust store can write to the same file, and the Go rows survive.
     store
         .save_record(&Record {
             timestamp: timestamp("2026-11-01T00:00:00Z"),

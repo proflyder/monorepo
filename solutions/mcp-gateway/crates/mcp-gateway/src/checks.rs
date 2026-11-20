@@ -1,9 +1,3 @@
-//! Typed external catalog probes (`tcp`, `http`, `ha_state`, `ha_template`,
-//! `ha_unavailable_summary`), ported from `internal/checks/checks.go`.
-//!
-//! A probe is bounded by [`DEFAULT_TIMEOUT`], never keeps a response body and
-//! returns the fixed [`CheckResult`] shape the report and status details use.
-
 use std::collections::BTreeSet;
 use std::time::Duration;
 
@@ -12,11 +6,9 @@ use serde::Deserialize;
 use crate::domain::catalog::{self, Check};
 use crate::domain::status::CheckResult;
 
-/// Bounds one external check.
 pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(3);
 const MAX_BODY: usize = 4 << 20;
 
-/// Executes checks against the configured Home Assistant endpoint.
 #[derive(Debug, Clone)]
 pub struct Runner {
     base_url: String,
@@ -25,12 +17,6 @@ pub struct Runner {
     timeout: Duration,
 }
 
-/// Build the shared HTTP client with the workspace rustls provider.
-///
-/// The workspace `reqwest` trusts only explicitly pinned roots, so an `https://`
-/// Home Assistant or external endpoint verifies only when the operating
-/// system's bundle is added explicitly (`home_tls`). Without this a probe that
-/// looks healthy over HTTP would fail with `request failed` on TLS.
 fn client(timeout: Duration) -> Result<reqwest::Client, String> {
     home_tls::public_https_client()
         .map_err(|error| format!("http TLS roots: {error}"))?
@@ -41,8 +27,6 @@ fn client(timeout: Duration) -> Result<reqwest::Client, String> {
 }
 
 impl Runner {
-    /// Build a runner. An empty base URL or token disables `ha_*` checks; they
-    /// are reported as skipped rather than failed.
     pub fn new(base_url: &str, token: &str) -> Result<Self, String> {
         let timeout = DEFAULT_TIMEOUT;
         Ok(Self {
@@ -53,8 +37,6 @@ impl Runner {
         })
     }
 
-    /// Runs every declared check of every service and returns results in
-    /// catalog order.
     pub async fn run_all(&self, services: &[catalog::Service]) -> Vec<CheckResult> {
         let mut results = Vec::new();
         for service in services {
@@ -65,7 +47,6 @@ impl Runner {
         results
     }
 
-    /// Runs one check.
     pub async fn run(&self, service_id: &str, check: &Check) -> CheckResult {
         let mut result = CheckResult {
             service: service_id.to_owned(),

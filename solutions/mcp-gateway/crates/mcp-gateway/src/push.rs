@@ -1,10 +1,3 @@
-//! Client for the phone push service (`solutions/phone-push`).
-//!
-//! The gateway never talks to Google: it only asks the push service to ring the
-//! owner's phone or to show a notification. Device tokens and the FCM service
-//! account stay in that service, so the MCP surface cannot enumerate handsets
-//! and Hermes never sees a Google credential.
-
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
@@ -12,31 +5,22 @@ use serde_json::json;
 
 use crate::tools::BoxFuture;
 
-/// Delivery counts returned by the push service. Tokens are never included.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Delivery {
-    /// Devices the message reached.
     #[serde(default)]
     pub sent: usize,
-    /// Devices that failed for a transient reason.
     #[serde(default)]
     pub failed: usize,
-    /// Devices that were registered for the send.
     #[serde(default)]
     pub devices: usize,
 }
 
-/// One phone as the push service describes it: no token, only identity and
-/// owner-visible name.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Device {
-    /// Stable device identity chosen by the app.
     #[serde(default)]
     pub id: String,
-    /// Owner-visible name set in the app.
     #[serde(default)]
     pub name: String,
-    /// `android` today.
     #[serde(default)]
     pub platform: String,
 }
@@ -47,24 +31,19 @@ struct DevicesResponse {
     devices: Vec<Device>,
 }
 
-/// The push endpoints the tools need.
 pub trait PushApi: Send + Sync {
-    /// Whether the backend is configured.
     fn configured(&self) -> bool {
         true
     }
 
-    /// Every registered phone (identity and name; never a token).
     fn devices<'a>(&'a self) -> BoxFuture<'a, Result<Vec<Device>, String>>;
 
-    /// Data-only high-priority find-phone message.
     fn find<'a>(
         &'a self,
         reason: &'a str,
         device_id: Option<&'a str>,
     ) -> BoxFuture<'a, Result<Delivery, String>>;
 
-    /// Normal notification with a title, a body and an optional deep link.
     fn notify<'a>(
         &'a self,
         title: &'a str,
@@ -74,7 +53,6 @@ pub trait PushApi: Send + Sync {
     ) -> BoxFuture<'a, Result<Delivery, String>>;
 }
 
-/// The real HTTP client.
 #[derive(Clone)]
 pub struct Client {
     http: reqwest::Client,
@@ -92,7 +70,6 @@ impl std::fmt::Debug for Client {
 }
 
 impl Client {
-    /// Builds a client for the push service root URL.
     pub fn new(base_url: &str, token: String, timeout: Duration) -> Result<Self, String> {
         let http = home_tls::public_https_client()
             .map_err(|error| format!("push TLS: {error}"))?
@@ -106,8 +83,6 @@ impl Client {
         })
     }
 
-    /// Lists registered phones. Called before a send so the tool can match the
-    /// owner's spoken name deterministically and report which phone rang.
     pub async fn list_devices(&self) -> Result<Vec<Device>, String> {
         let response = self
             .http

@@ -13,13 +13,6 @@ import dev.proflyder.home.core.ui.setVisible
 import dev.proflyder.home.feature.alarms.impl.R
 import dev.proflyder.home.feature.alarms.impl.databinding.SheetAlarmRepeatBinding
 
-/**
- * Modal repeat editor: one list of presets plus an optional week of round day
- * toggles, replacing the cramped chips that used to live in the alarm editor.
- * The choice is applied only on "Done"; the editor receives it through the
- * Fragment Result API. The selected option and days are mirrored into the
- * ViewModel's [androidx.lifecycle.SavedStateHandle], so a rotation keeps them.
- */
 internal class AlarmRepeatSheet : BottomSheetDialogFragment() {
     private var sheetBinding: SheetAlarmRepeatBinding? = null
 
@@ -32,7 +25,6 @@ internal class AlarmRepeatSheet : BottomSheetDialogFragment() {
 
     private var rendering = false
 
-    /** Round day toggles in ISO order: index 0 is Monday (day 1). */
     private val dayToggles: List<MaterialButton>
         get() = with(binding) {
             listOf(repeatDay1, repeatDay2, repeatDay3, repeatDay4, repeatDay5, repeatDay6, repeatDay7)

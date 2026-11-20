@@ -1,14 +1,3 @@
-//! Потоковый вывод голоса собеседника: маленький буфер вместо `Announce`-политики.
-//!
-//! ANNOUNCE — это элемент (TTS/объявление): prime 200 мс, pad, drain. Звонку нужен
-//! непрерывный поток с минимальной задержкой, поэтому здесь отдельный writer: 5 мс период,
-//! короткий буфер, тишина вместо недоигранного при голоде и без «объявления» конца.
-//! Писатель никогда не ждёт полного кадра: что есть в очереди, то и уходит, остаток
-//! добивается тишиной, иначе dmix получает xrun и слышимый щелчок.
-//!
-//! Задержка складывается из буфера dmix (он же `speakers`), периода и очереди канала;
-//! период и буфер запрашиваются маленькими, как позволяет профиль модели.
-
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
@@ -24,24 +13,16 @@ use crate::device::{AlsaDevice, PcmDevice, PcmInfo, PcmRequest, Recovery, recove
 const CHANNELS: u32 = 2;
 const FRAME_BYTES: usize = 4;
 
-/// Настройки канала звонка.
 #[derive(Clone, Copy, Debug)]
 pub struct CallTuning {
-    /// Период ALSA, мс.
     pub period_ms: u32,
-    /// Буфер ALSA, мс: главный вклад в задержку downlink.
     pub buffer_ms: u32,
-    /// Сколько ждать готовности устройства, мс.
     pub wait_ms: u32,
-    /// Сколько PCM держать в очереди, мс (переполнение отбрасывает самое старое).
     pub queue_ms: u32,
-    /// Готовность к записи: столько мс в очереди.
     pub prime_ms: u32,
 }
 
 impl CallTuning {
-    /// Маленький буфер: 5 мс период, 50 мс буфер. Меньше буфер — чаще xruns на dmix,
-    /// больше — растёт задержка разговора; 40–60 мс перекрывает джиттер сети и тик 20 мс.
     pub const CALL: Self = Self {
         period_ms: 5,
         buffer_ms: 50,
@@ -51,18 +32,12 @@ impl CallTuning {
     };
 }
 
-/// Счётчики канала звонка.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct CallStats {
-    /// Сколько мс звука ждёт в очереди.
     pub queued_ms: u32,
-    /// Сколько мс реального звука записано в устройство.
     pub written_ms: u64,
-    /// Периодов записано меньше `avail` (реальный звук без добивки тишиной).
     pub partial: u64,
-    /// Кадров выброшено контролем дрейфа.
     pub overflow: u64,
-    /// Ошибок/переполнений ALSA, после которых канал восстанавливался.
     pub xrun: u64,
 }
 
@@ -76,25 +51,16 @@ fn frames(rate: u32, ms: u32) -> usize {
     (rate as usize * ms as usize) / 1000
 }
 
-/// Состояние живого канала.
 struct Shared {
-    /// Моно 48 кГц, ещё не записанные в устройство.
     queue: Mutex<VecDeque<i16>>,
-    /// Будит писатель, когда появились сэмплы; без данных поток спит, а не опрашивает.
     doorbell: Condvar,
-    /// Поколение сброса: писатель выбрасывает всё, что было до него.
     flush_epoch: AtomicU32,
     stop: AtomicBool,
     rate: u32,
-    /// Предел очереди в сэмплах (из [`CallTuning::queue_ms`]).
     capacity: usize,
-    /// Сколько сэмплов реального звука записано (диагностика).
     written_frames: AtomicU32,
-    /// Неполные периоды: реальный звук без добивки тишиной.
     partial: AtomicU64,
-    /// Выброшенные кадры контроля дрейфа.
     overflow: AtomicU64,
-    /// Восстановления после ошибок ALSA.
     xrun: AtomicU64,
 }
 
@@ -104,14 +70,12 @@ impl Shared {
     }
 }
 
-/// Писатель канала звонка; держит поток и общий буфер.
 pub struct CallOut {
     shared: Arc<Shared>,
     thread: Option<JoinHandle<()>>,
 }
 
 impl CallOut {
-    /// Запустить писатель на PCM модели. `None` — не удалось создать поток.
     pub fn spawn(playback: &'static Playback, tuning: CallTuning) -> Option<Self> {
         let rate = 48_000;
         let shared = Arc::new(Shared {
@@ -138,11 +102,6 @@ impl CallOut {
         })
     }
 
-    /// Дописать моно 48 кГц.
-    ///
-    /// Дрейф выравнивается одним кадром: при переполнении выбрасывается ровно столько же
-    /// сэмплов, сколько пришло, а не весь хвост. Иначе разовое опоздание рвёт очередь и
-    /// слышимо режет речь.
     pub fn write(&self, pcm: &[i16]) {
         let mut queue = self.shared.lock();
         if queue.len() + pcm.len() > self.shared.capacity {
@@ -164,14 +123,12 @@ impl CallOut {
         self.shared.doorbell.notify_one();
     }
 
-    /// Сколько мс звука ждёт в очереди.
     #[must_use]
     pub fn queued_ms(&self) -> u32 {
         u32::try_from(self.shared.lock().len() * 1000 / self.shared.rate as usize)
             .unwrap_or(u32::MAX)
     }
 
-    /// Накопленные счётчики канала.
     #[must_use]
     pub fn stats(&self) -> CallStats {
         CallStats {
@@ -183,14 +140,12 @@ impl CallOut {
         }
     }
 
-    /// Сбросить непригранное (звонок завершён или переподключение).
     pub fn flush(&self) {
         self.shared.flush_epoch.fetch_add(1, Ordering::Relaxed);
         self.shared.lock().clear();
         self.shared.doorbell.notify_all();
     }
 
-    /// Сколько мс звука уже ушло в устройство.
     #[must_use]
     pub fn played_ms(&self) -> u64 {
         u64::from(self.shared.written_frames.load(Ordering::Relaxed)) * 1000
@@ -236,11 +191,9 @@ fn writer(shared: Arc<Shared>, mut device: AlsaDevice, tuning: CallTuning) {
                 let _ = device.drop_frames();
             }
         }
-        // Устройство открывается только на время звонка: вне звонка dmix-клиент не нужен.
         if !primed {
             let queue = shared.lock();
             if queue.len() < prime_frames {
-                // Вне звонка устройство закрыто, поток спит до первых сэмплов.
                 let (queue, _) = shared
                     .doorbell
                     .wait_timeout(queue, Duration::from_millis(250))
@@ -290,8 +243,6 @@ fn writer(shared: Arc<Shared>, mut device: AlsaDevice, tuning: CallTuning) {
             continue;
         }
 
-        // Собираем реальный звук. Неполный период не добиваем тишиной: иначе посреди
-        // речи появляется провал, а следующий кадр начинается с середины периода.
         let mut buffer = vec![0u8; avail * FRAME_BYTES];
         let taken = {
             let mut queue = shared.lock();
@@ -308,7 +259,6 @@ fn writer(shared: Arc<Shared>, mut device: AlsaDevice, tuning: CallTuning) {
             n
         };
         let to_write = if taken == 0 {
-            // Совсем пусто: тишина держит устройство открытым, задержка не растёт.
             buffer.copy_from_slice(&silence[..avail * FRAME_BYTES]);
             avail
         } else {
@@ -366,7 +316,6 @@ mod tests {
     use super::*;
     use crate::{PcmDevice, PcmError, PcmInfo};
 
-    /// Устройство с ограниченным буфером, как dmix: пишет, пока есть место.
     struct TestDevice {
         buffer: usize,
         queued: usize,
@@ -487,7 +436,6 @@ mod tests {
         out.write(&vec![4i16; 960]);
         let queue = out.shared.lock();
         assert_eq!(queue.len(), 3 * 960);
-        // Ушёл ровно один старый кадр, остальные два сохранили порядок.
         assert_eq!(
             queue.iter().copied().take(960).collect::<Vec<_>>(),
             vec![2; 960]

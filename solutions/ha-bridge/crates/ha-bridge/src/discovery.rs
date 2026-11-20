@@ -1,22 +1,3 @@
-//! Build the control catalog from Home Assistant itself.
-//!
-//! Entities (name, icon, state) come from `/api/states`; areas, hidden flags
-//! and the scenario/profile role labels come from read-only template rendering.
-//! Results are cached briefly. If Home Assistant becomes unreachable the last
-//! good catalog is served flagged as stale instead of inventing or hardcoding
-//! anything.
-//!
-//! The scenario label decides which scripts are exposed, so an unreadable
-//! scenario label fails closed (no scripts). An unreadable profile label only
-//! loses the profile role: the entity stays a plain switch, which still works.
-//!
-//! Device metadata is read best effort: `device_id` and the device name come
-//! from one more read-only template, the entity category comes from the
-//! WebSocket entity registry (`config/entity_registry/list`, see
-//! [`home_ha::Client::entity_registry`]). If either read fails, the fields stay
-//! empty, entities are kept, and a warning is logged; a catalog refresh retries
-//! on the next TTL expiry. Missing device metadata never removes an entity.
-
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex, PoisonError};
@@ -26,22 +7,13 @@ use home_ha::{Entity, Error, RegistryEntity};
 
 use crate::catalog::{self, Catalog, Light, LightInput, Raw, Rules, ToggleRule};
 
-/// Domains discovery reads. `assist_satellite` is not an entry of its own;
-/// it supplies the device and room of the synthetic speak action. `button`
-/// entries are one-shot `press` actions (for example lock/unlock a PC).
-/// `binary_sensor` entities are not entries either: a `lock` binary sensor
-/// attached to a device-less base becomes that device's status detail.
 const DOMAINS: &str = "['script','scene','light','switch','button','binary_sensor','assist_satellite','media_player','number']";
 
-/// The Home Assistant read surface discovery needs.
 pub trait HomeAssistant: Send + Sync {
     fn entities(&self) -> impl Future<Output = Result<Vec<Entity>, Error>> + Send;
     fn render_template(&self, template: &str)
     -> impl Future<Output = Result<String, Error>> + Send;
 
-    /// Entity registry records (entity id, device id, category). The default
-    /// returns nothing so fakes and older test doubles keep device names and
-    /// titles without categories.
     fn entity_registry(&self) -> impl Future<Output = Result<Vec<RegistryEntity>, Error>> + Send {
         async { Ok(Vec::new()) }
     }
@@ -78,32 +50,22 @@ impl<T: HomeAssistant + ?Sized> HomeAssistant for Arc<T> {
     }
 }
 
-/// A discovered catalog.
 #[derive(Debug, Clone)]
 pub struct Snapshot {
     pub catalog: Arc<Catalog>,
-    /// False when Home Assistant could not be read and this is the last known
-    /// catalog; every entry is then reported unavailable.
     pub states_ok: bool,
 }
 
-/// Why a catalog is unavailable.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum DiscoveryError {
     #[error("home assistant is not reachable")]
     Unavailable,
 }
 
-/// A catalog source. The HTTP server and the control executor share it.
-///
-/// The boxed future keeps the trait object-safe, so [`crate::catalog_api`] can
-/// hold `Arc<dyn CatalogSource>` without a generic parameter leaking into every
-/// type.
 pub trait CatalogSource: Send + Sync {
     fn get(&self) -> Pin<Box<dyn Future<Output = Result<Snapshot, DiscoveryError>> + Send + '_>>;
 }
 
-/// Discovers and caches the catalog.
 pub struct Provider<H: HomeAssistant> {
     ha: H,
     rules: Rules,
@@ -124,7 +86,6 @@ impl<H: HomeAssistant> std::fmt::Debug for Provider<H> {
 }
 
 impl<H: HomeAssistant> Provider<H> {
-    /// Build a provider. `ttl` bounds how often Home Assistant is queried.
     #[must_use]
     pub fn new(ha: H, rules: Rules, toggles: Vec<ToggleRule>, ttl: Duration) -> Self {
         Self {
@@ -143,8 +104,6 @@ impl<H: HomeAssistant> Provider<H> {
             .await
             .map_err(|_error| DiscoveryError::Unavailable)?;
 
-        // Areas and hidden flags are nice-to-have. Labels are best effort too,
-        // with the fail-closed rule for scripts.
         let rooms = self.rooms().await.unwrap_or_else(|| {
             tracing::warn!("could not read areas; rooms will be empty");
             Vec::new()
@@ -268,12 +227,6 @@ impl<H: HomeAssistant> Provider<H> {
         )
     }
 
-    /// Device id and device name of every exposed entity.
-    ///
-    /// The entity registry has no REST endpoint, so the device link goes
-    /// through a template; the category itself comes from the WebSocket
-    /// registry. A template error yields `None` and discovery keeps the
-    /// entities without a device instead of failing.
     async fn devices(&self) -> Option<Vec<DeviceRow>> {
         let text = self
             .ha
@@ -289,7 +242,6 @@ impl<H: HomeAssistant> Provider<H> {
         Some(
             text.lines()
                 .filter_map(|line| {
-                    // The device name is last and may itself contain '|'.
                     let mut fields = line.trim().splitn(3, '|');
                     let entity = fields.next()?.trim();
                     if entity.is_empty() {
@@ -317,8 +269,6 @@ impl<H: HomeAssistant> Provider<H> {
     }
 
     async fn label_entities(&self, label: &str) -> Option<Vec<String>> {
-        // Rules::validate guarantees the label is [a-z0-9_-], so inlining it is
-        // safe.
         let text = self
             .ha
             .render_template(&format!(
@@ -338,8 +288,6 @@ impl<H: HomeAssistant> CatalogSource for Provider<H> {
 
 impl<H: HomeAssistant> Provider<H> {
     async fn get_cached(&self) -> Result<Snapshot, DiscoveryError> {
-        // Never hold the std mutex across the discovery await: the future must
-        // stay Send for the worker and the axum handler.
         let previous = {
             let last = self.last.lock().unwrap_or_else(PoisonError::into_inner);
             if let Some((catalog, expires)) = last.as_ref()
@@ -376,7 +324,6 @@ impl<H: HomeAssistant> Provider<H> {
     }
 }
 
-/// One row of the device-metadata template.
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct DeviceRow {
     entity: String,
@@ -384,12 +331,6 @@ struct DeviceRow {
     name: String,
 }
 
-/// Map a registry record to the catalog role.
-///
-/// `config` and `diagnostic` entities are device settings (the station's
-/// `Clock`/`Wake`/`Microphone` switches); a `null` category is a primary
-/// control. An entity that is not in the registry at all gets an empty role
-/// instead, so the catalog never guesses from missing data.
 fn role_from_category(entry: &RegistryEntity) -> &'static str {
     match entry.entity_category.as_deref() {
         Some(category)
@@ -435,7 +376,6 @@ fn light_of(entity: &Entity) -> Option<Light> {
     })
 }
 
-/// `int()` of the Go client: absent is 0, values truncate toward zero.
 fn int_of(value: Option<f64>) -> i32 {
     #[allow(clippy::cast_possible_truncation)]
     value.map_or(0, |value| value as i32)
@@ -560,7 +500,6 @@ mod tests {
         assert_eq!(delay.title, "yl-light delay-off");
         assert_eq!(delay.role, "setting");
 
-        // A null category on a device without a light stays primary.
         let mute = entries
             .iter()
             .find(|entry| entry.id == "switch.mute")
@@ -601,7 +540,6 @@ mod tests {
             assert!(entry.device_id.is_empty());
             assert!(entry.device.is_empty());
         }
-        // Roles do not depend on the device template.
         assert_eq!(
             entries
                 .iter()
@@ -619,7 +557,6 @@ mod tests {
         for entry in &entries {
             assert!(entry.role.is_empty(), "{} got a role", entry.id);
         }
-        // Titles still use the device template.
         assert_eq!(
             entries
                 .iter()

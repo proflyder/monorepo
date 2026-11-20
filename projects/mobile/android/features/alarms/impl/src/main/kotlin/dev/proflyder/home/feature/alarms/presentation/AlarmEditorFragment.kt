@@ -31,7 +31,6 @@ class AlarmEditorFragment :
 
     private var rendering = false
 
-    /** Quick offset chips in the same order as [ALARM_QUICK_OFFSETS_MINUTES]. */
     private val quickOffsetChips: List<Chip>
         get() = with(binding) {
             listOf(quickOffset15, quickOffset30, quickOffset60, quickOffset90, quickOffset120)

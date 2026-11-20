@@ -1,9 +1,3 @@
-//! The fetch → save → threshold → send → record pipeline.
-//!
-//! This is the Go `internal/service` flow with the alert pass delegated to the
-//! pure [`crate::domain::alerts::plan`]. Threshold and history-save failures are
-//! logged and ignored, exactly as before.
-
 use std::fmt;
 use std::future::Future;
 use std::pin::Pin;
@@ -17,21 +11,16 @@ use crate::domain::model::{Rates, Record, SentAlert};
 use crate::metrics::Metrics;
 use crate::store::Store;
 
-/// A boxed send future used by the two I/O traits below.
 pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
-/// Fetches the current rates.
 pub trait RatesSource: Send + Sync {
     fn fetch(&self) -> BoxFuture<'_, Result<Rates, String>>;
 }
 
-/// Delivers one Telegram message to a chat.
 pub trait MessageSender: Send + Sync {
     fn send<'a>(&'a self, chat_id: &'a str, text: &'a str) -> BoxFuture<'a, Result<(), String>>;
 }
 
-/// A pipeline failure. `Display` is the raw cause used in the HTTP 502
-/// envelope and the `/trigger` reply.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PipelineError(pub String);
 
@@ -43,7 +32,6 @@ impl fmt::Display for PipelineError {
 
 impl std::error::Error for PipelineError {}
 
-/// The pipeline dependencies.
 pub struct Pipeline {
     pub source: Arc<dyn RatesSource>,
     pub store: Arc<Store>,
@@ -65,10 +53,6 @@ impl fmt::Debug for Pipeline {
 }
 
 impl Pipeline {
-    /// Execute one invocation.
-    ///
-    /// `force_notification` is the manual-trigger contract: skip dedup reads,
-    /// always send. `save_to_history` is false for a manual trigger.
     pub async fn run(
         &self,
         job: &str,
@@ -118,9 +102,6 @@ impl Pipeline {
                 &rates,
                 force_notification,
                 move |period| {
-                    // Records are stored with millisecond precision; cut the
-                    // cutoff at the same resolution so the boundary matches
-                    // the Go `now.Add(-duration)` comparison.
                     let cutoff_ms = now
                         .as_millisecond()
                         .saturating_sub(period.seconds.saturating_mul(1_000));
@@ -164,8 +145,6 @@ impl Pipeline {
             tracing::error!(chat_id, error = %cause, "failed to send message to telegram");
             return Err(PipelineError(cause));
         }
-        // The message is delivered; recording must not be lost. The store call
-        // is synchronous and cannot be cancelled like a Go request context.
         for alert in &plan.alerts {
             let record = SentAlert {
                 key: alert.key(),

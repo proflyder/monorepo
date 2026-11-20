@@ -1,10 +1,3 @@
-//! Manifest helpers used by the deploy scripts.
-//!
-//! `eso names` lists the ExternalSecrets of multi-document manifests so
-//! `external-secrets/deploy.sh` can `kubectl wait` for them, and
-//! `secret opaque` builds the one-key bootstrap Secret from a private dotenv
-//! file. Both are byte-compatible with `platform/deploy/internal/manifests`.
-
 use std::fmt::Write as _;
 use std::fs;
 use std::path::Path;
@@ -14,8 +7,6 @@ use base64::Engine;
 use crate::envfile;
 use crate::yaml::{self, Value};
 
-/// Reads multi-document manifests and returns every ExternalSecret as
-/// `<namespace>/<name>`, in file and document order.
 pub fn external_secret_names(paths: &[String]) -> Result<Vec<String>, String> {
     let mut names = Vec::new();
     for path in paths {
@@ -44,18 +35,12 @@ pub fn external_secret_names(paths: &[String]) -> Result<Vec<String>, String> {
     Ok(names)
 }
 
-/// Writes one name per line to `path` (mode 0644).
 pub fn write_names(path: &str, names: &[String]) -> Result<(), String> {
     let mut output = names.join("\n");
     output.push('\n');
     fs::write(path, output).map_err(|error| write_error(path, &error))
 }
 
-/// Builds a `type: Opaque` Secret JSON document with one key whose value is
-/// read from a dotenv-style file.
-///
-/// `encoding/json` sorts map keys and HTML-escapes `<`, `>` and `&`, so the
-/// document is assembled field by field in that order instead of using a map.
 pub fn opaque_secret(
     name: &str,
     namespace: &str,
@@ -85,7 +70,6 @@ fn json_member(key: &str, value: &str) -> String {
     format!("{}:{}", json_string(key), json_string(value))
 }
 
-/// Encodes a string exactly like Go's `encoding/json` (HTML-safe escaping).
 fn json_string(value: &str) -> String {
     let mut output = String::with_capacity(value.len() + 2);
     output.push('"');

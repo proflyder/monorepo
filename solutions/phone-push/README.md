@@ -90,3 +90,19 @@ Gitleaks). Реальная отправка в CI не выполняется.
 
 Создание сервис-аккаунта и роль — в
 `projects/home/kubernetes/phone-push/README.md`.
+
+## Заметки к коду
+
+Пояснения, перенесённые из комментариев исходников (код комментариев не содержит, см. `AGENTS.md`).
+
+- `crates/phone-push/src/api.rs` — HTTP surface: `POST /v1/push/find`, `POST /v1/push/notify` and `GET /v1/push/devices`.
+  - A small JSON summary for the MCP tool speech: never includes a token.
+- `crates/phone-push/src/config.rs` — Process configuration.
+  - Why the environment was rejected. Messages never contain a secret value.
+- `crates/phone-push/src/devices.rs` — Client for the scheduler's push device registry (`/v1/push/devices`).
+  - FCM registration token. Never logged or exposed outside this process.
+  - Forgets one dead token. Failures are reported but never retried here: the next send just fails again and the token is forgotten then.
+- `crates/phone-push/src/fcm.rs` — FCM HTTP v1 sender with service-account OAuth.
+- `crates/phone-push/src/health.rs` — Distroless probes: `/healthz`, `/readyz` and `-healthcheck`.
+- `crates/phone-push/src/lib.rs` — FCM HTTP v1 delivery for the owner's phone.
+- `crates/phone-push/tests/sender.rs` — End-to-end sender test against a fake OAuth + FCM pair.

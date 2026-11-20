@@ -1,14 +1,7 @@
-//! Whether a global `alarm_stop` may silence the active alarm.
-//!
-//! Both identities come from scheduler events, never from bridge wall-clock
-//! time: a late `STOP` for an older occurrence, or one before a snoozed
-//! re-fire, must not silence the alarm that is ringing now.
-
 use home_worker::Event;
 
 use crate::ledger::ActiveAlarm;
 
-/// `true` when `event` may stop the alarm recorded in `active`.
 #[must_use]
 pub fn stop_matches_active(event: &Event, active: &ActiveAlarm) -> bool {
     if active.source_id.is_empty() || event.source_id != active.source_id {

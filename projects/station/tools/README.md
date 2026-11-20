@@ -41,3 +41,9 @@ wake-событий, сравнение и model-only deploy персональ�
 **Использование сейчас:** брать оттуда логику `--ota-off` и `--fortress`
 (или запускать функции через ADB), пути маркеров
 `/data/quasar/activate_adb_*` совпадают с текущей прошивкой.
+
+## Заметки к коду
+
+Пояснения, перенесённые из комментариев исходников (код комментариев не содержит, см. `AGENTS.md`).
+
+- `test_station_audit.py` — Hermetic tests for projects/station/tools/station-audit.

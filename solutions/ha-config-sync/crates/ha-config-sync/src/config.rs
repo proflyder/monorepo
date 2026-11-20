@@ -1,32 +1,20 @@
-//! Environment configuration.
-//!
-//! Every deployment-specific value (URL, token file, SSH target, paths) comes
-//! from the process environment; the solution itself has no project defaults.
-
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::time::Duration;
 
 use home_secret::Token;
 
-/// Default period between sync cycles.
 pub const DEFAULT_SYNC_INTERVAL: Duration = Duration::from_secs(300);
-/// Default Prometheus listen address.
 pub const DEFAULT_METRICS_ADDR: &str = "0.0.0.0:9119";
-/// How many backups the agent keeps after a successful cycle.
 pub const DEFAULT_PRUNE_KEEP: u32 = 10;
 
-/// What a cycle may do.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Mode {
-    /// Deliver changes and roll them back on failure.
     Apply,
-    /// Only measure and report drift.
     Observe,
 }
 
 impl Mode {
-    /// The metric label value.
     #[must_use]
     pub fn as_str(self) -> &'static str {
         match self {
@@ -36,68 +24,42 @@ impl Mode {
     }
 }
 
-/// SSH parameters for the forced-command agent.
 #[derive(Debug, Clone)]
 pub struct SshSettings {
-    /// `host:port` of the Home Assistant OS host.
     pub address: String,
-    /// The user whose key is restricted to the agent.
     pub user: String,
-    /// The unencrypted private key.
     pub key_file: PathBuf,
-    /// Pinned host keys for `address`.
     pub known_hosts_file: PathBuf,
 }
 
-/// Validated process configuration.
 #[derive(Debug, Clone)]
 pub struct Config {
-    /// Home Assistant base URL, without a path.
     pub ha_url: String,
-    /// Long-lived Home Assistant bearer token.
     pub ha_token: Token,
-    /// SSH transport settings.
     pub ssh: SshSettings,
-    /// Directory holding the exact files to deliver.
     pub desired_dir: PathBuf,
-    /// YAML manifest binding globs to reload actions.
     pub manifest_file: PathBuf,
-    /// Period between cycles.
     pub sync_interval: Duration,
-    /// Apply or observe.
     pub mode: Mode,
-    /// Prometheus/health listen address.
     pub metrics_addr: String,
-    /// Optional entity that must be `off` before a restart.
     pub restart_guard_entity: Option<String>,
 }
 
-/// A configuration error; the message never contains the token.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum ConfigError {
-    /// A required variable is absent or empty.
     #[error("missing required environment variable {0}")]
     Missing(&'static str),
-    /// A variable has an unsupported value.
     #[error("invalid environment variable {name}: {reason}")]
-    Invalid {
-        /// Variable name.
-        name: &'static str,
-        /// Why the value was rejected.
-        reason: String,
-    },
-    /// The token file could not be read.
+    Invalid { name: &'static str, reason: String },
     #[error("read HA_TOKEN_FILE: {0}")]
     TokenFile(String),
 }
 
-/// Read configuration from the process environment.
 pub fn from_env() -> Result<Config, ConfigError> {
     let pairs: BTreeMap<String, String> = std::env::vars().collect();
     from_map(&pairs)
 }
 
-/// Validate configuration from a map. Used by tests and by [`from_env`].
 pub fn from_map(pairs: &BTreeMap<String, String>) -> Result<Config, ConfigError> {
     let required = |name: &'static str| -> Result<String, ConfigError> {
         pairs

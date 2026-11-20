@@ -6,7 +6,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** Connect error details carry the server's stable localization key. */
 class ConnectErrorLocalizationTest {
     private val json = Json { ignoreUnknownKeys = true }
 

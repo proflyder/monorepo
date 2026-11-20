@@ -1,8 +1,3 @@
-//! Replay of `solutions/currency-bot/testdata/contract/*.json`.
-//!
-//! Each scenario gets a fresh in-memory store, a fake rates source and sender;
-//! the fixture files are the frozen Go HTTP contract and are not modified.
-
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -189,8 +184,6 @@ fn new_router(scenario: &str) -> Router {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn contract_fixtures() {
-    // The fixture directory is repository-relative; Bazel exports TEST_SRCDIR
-    // and cargo runs from the package directory.
     let dir = if std::env::var_os("TEST_SRCDIR").is_some() {
         "solutions/currency-bot/testdata/contract".to_owned()
     } else {

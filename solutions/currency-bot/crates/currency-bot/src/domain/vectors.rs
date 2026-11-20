@@ -1,9 +1,3 @@
-//! Replay of `solutions/currency-bot/testdata/vectors/*.json`.
-//!
-//! The files are the frozen contract emitted by the Go implementation. The
-//! Rust domain must reproduce them byte for byte; the JSON is read from the
-//! repository (or Bazel runfiles), never copied into the crate.
-
 use serde_json::Value;
 
 use super::alerts::{evaluate, plan, should_send};

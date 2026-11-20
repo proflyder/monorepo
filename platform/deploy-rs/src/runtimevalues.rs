@@ -1,15 +1,7 @@
-//! Splits a `helm template` render and the private runtime values into the two
-//! ownership domains of the runtime chart.
-//!
-//! Storage (PersistentVolume/PersistentVolumeClaim) is applied by kubectl;
-//! everything else is the Helm release. Byte-compatible with
-//! `platform/deploy/internal/runtimevalues`.
-
 use std::fs;
 
 use crate::yaml::{self, Value};
 
-/// Reports whether `document` belongs to the kubectl-applied storage half.
 #[must_use]
 pub fn storage_kind(document: &Value) -> bool {
     matches!(
@@ -18,8 +10,6 @@ pub fn storage_kind(document: &Value) -> bool {
     )
 }
 
-/// Reads a multi-document Helm render and returns the storage documents as a
-/// standalone YAML stream.
 pub fn split_render(path: &str) -> Result<Vec<u8>, String> {
     let raw = fs::read_to_string(path).map_err(|error| read_error(path, &error))?;
     let documents = yaml::parse_documents(&raw).map_err(|error| format!("{path}: {error}"))?;
@@ -27,7 +17,6 @@ pub fn split_render(path: &str) -> Result<Vec<u8>, String> {
     Ok(yaml::to_string_multiple(&storage).into_bytes())
 }
 
-/// Reads the private values and drops the cluster-scoped storage block.
 pub fn workload_values(path: &str) -> Result<Value, String> {
     let raw = fs::read_to_string(path).map_err(|error| read_error(path, &error))?;
     if raw.trim().is_empty() {
@@ -38,9 +27,6 @@ pub fn workload_values(path: &str) -> Result<Value, String> {
     Ok(values)
 }
 
-/// Rewrites the exporter workload so the chart no longer needs the Python
-/// ConfigMap: it pins the image, sets the binary as the command and removes the
-/// script volume mount. The rest of the container is preserved.
 pub fn pin_health_exporter(
     values: Value,
     image: &str,
@@ -58,8 +44,6 @@ pub fn pin_health_exporter(
     }
     let mut workloads = workloads_value;
     let Some(workload_value) = workloads.get(workload_name).cloned() else {
-        // No exporter workload in these values (for example a cluster that does
-        // not run it yet): nothing to pin, keep the document unchanged.
         return Ok(values);
     };
     if !workload_value.is_mapping() {
@@ -100,12 +84,10 @@ pub fn pin_health_exporter(
     Ok(values)
 }
 
-/// Writes data to `path` with mode 0600.
 pub fn write(path: &str, data: &[u8]) -> Result<(), String> {
     fs::write(path, data).map_err(|error| read_error(path, &error))
 }
 
-/// Serializes the runtime values.
 pub fn marshal(values: &Value) -> Vec<u8> {
     yaml::to_string(values).into_bytes()
 }

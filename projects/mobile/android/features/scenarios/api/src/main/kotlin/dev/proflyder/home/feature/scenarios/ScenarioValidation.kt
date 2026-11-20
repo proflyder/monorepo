@@ -15,11 +15,6 @@ import java.time.LocalDate
 import java.time.ZoneId
 import kotlinx.serialization.json.Json
 
-/**
- * Local mirror of the scheduler's scenario validation. The server remains the
- * authority; this keeps Save disabled for input the server would reject and
- * gives the user a concrete field instead of a generic server error.
- */
 object ScenarioValidation {
     private val supportedRepeats = setOf(
         RepeatKind.ONCE,

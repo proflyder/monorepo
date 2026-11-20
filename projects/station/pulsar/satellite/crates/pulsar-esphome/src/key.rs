@@ -1,6 +1,3 @@
-//! Файл ключа Noise `api_key` (base64 из 32 байт, как `api: encryption: key` ESPHome):
-//! пишется авто-провижинингом HA (NoiseEncryptionSetKeyRequest) или `ctl.sh api-key`.
-
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Read, Write};
 use std::os::unix::fs::OpenOptionsExt;
@@ -14,20 +11,13 @@ use crate::error::KeyError;
 
 pub use home_linux::io_error_text as os_error_text;
 
-/// Действующий ключ. Без ключа Noise-сессии идут на нулевом ключе: так ESPHome даёт HA
-/// провижинить ключ, не отправляя его открытым текстом (защита только от прослушивания).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Key {
     pub psk: Psk,
     pub has_key: bool,
-    /// Fail-closed без случайного ключа (getrandom не сработал): каждый Noise handshake
-    /// отвергается как неверный ключ, plaintext — как «requires encryption» (`has_key`).
     pub reject_all: bool,
 }
 
-/// Читает файл ключа. Нет файла / пусто / нулевой ключ — ключа нет. Нечитаемый файл или не
-/// base64 из 32 байт — fail-closed: кто-то хотел включить шифрование, отката в plaintext нет;
-/// случайный ключ не пускает никого, пока файл не исправят (или не удалят).
 pub fn load_key(path: Option<&Path>) -> Key {
     let Some(path) = path else {
         return Key::default();
@@ -72,7 +62,6 @@ fn fail_closed() -> Key {
     let mut raw = [0u8; 32];
     let reject_all = getrandom::fill(&mut raw).is_err();
     if reject_all {
-        // Фиксированный резервный ключ был бы известным ключом: лучше отказывать всем.
         error!("api: getrandom failed; rejecting every client");
     }
     Key {
@@ -82,18 +71,13 @@ fn fail_closed() -> Key {
     }
 }
 
-/// Итог NoiseEncryptionSetKeyRequest.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SetKey {
-    /// Отвечено success = false.
     Rejected,
-    /// Действующий ключ отправлен снова: success, ничего не меняется.
     Unchanged,
-    /// Файл изменился: перечитать его и отключить всех клиентов.
     Changed,
 }
 
-/// Пишет (или при пустом `b64` удаляет) файл ключа. `b64` уже обрезан.
 pub fn set_key(path: Option<&Path>, b64: &[u8], current: &Key) -> Result<SetKey, KeyError> {
     let Some(path) = path else {
         return Ok(SetKey::Rejected);
@@ -133,14 +117,10 @@ pub fn set_key(path: Option<&Path>, b64: &[u8], current: &Key) -> Result<SetKey,
     Ok(SetKey::Changed)
 }
 
-/// Атомарная замена: отключение питания во время ротации ключа HA должно оставить либо старый,
-/// либо новый ключ, но не порванный файл.
 fn write_file_atomic(path: &Path, data: &[u8]) -> io::Result<()> {
     let mut tmp = path.as_os_str().to_owned();
     tmp.push(".tmp");
     let tmp = PathBuf::from(tmp);
-    // Оставшийся временный файл (питание пропало посреди записи) не должен одалживать свой
-    // режим или владельца: ключ пишется в созданный сейчас файл 0600.
     if let Err(e) = fs::remove_file(&tmp)
         && e.kind() != io::ErrorKind::NotFound
     {
@@ -154,8 +134,6 @@ fn write_file_atomic(path: &Path, data: &[u8]) -> io::Result<()> {
             .open(&tmp)?;
         f.write_all(data)?;
         f.sync_all()?;
-        // close(2) не проверяется (drop File игнорирует результат): fsync выше уже сообщил
-        // ошибку записи, а на локальных ФС /data close сообщать нечего.
         drop(f);
         fs::rename(&tmp, path)
     };
@@ -164,8 +142,6 @@ fn write_file_atomic(path: &Path, data: &[u8]) -> io::Result<()> {
         let _ = fs::remove_file(&tmp);
         return r;
     }
-    // rename переживает отключение питания только после sync каталога. Это не ошибка запроса:
-    // новый ключ уже на месте и действует.
     let dir = match path.parent() {
         Some(p) if !p.as_os_str().is_empty() => p,
         _ => Path::new("."),

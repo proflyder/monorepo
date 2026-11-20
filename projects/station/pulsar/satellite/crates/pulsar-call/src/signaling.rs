@@ -1,10 +1,3 @@
-//! Клиент сигналинга intercom: Connect JSON поверх HTTP/1.1 (`home-proto`).
-//!
-//! `Watch` — server-streaming: одно долгоживущее соединение на endpoint, сервер присылает
-//! снимок звонка на каждое изменение. Исходящие действия (Answer/Hangup/SendSignal) —
-//! отдельные unary-вызовы. SDP и ICE-кандидаты передаются как есть и не логируются: в логах
-//! только имена методов и коды ошибок.
-
 use connectrpc::client::ClientConfig;
 use connectrpc::{CodecFormat, ConnectError, Protocol};
 use home_proto::ReqwestTransport;
@@ -18,7 +11,6 @@ use http::Uri;
 use crate::CallConfig;
 use crate::machine::{HangupReason, SignalEvent};
 
-/// Ошибка сигналинга. Не содержит ни токена, ни SDP, ни кандидатов.
 #[derive(Debug, thiserror::Error)]
 pub enum SignalError {
     #[error("call: invalid intercom URL")]
@@ -35,7 +27,6 @@ fn map_err(error: &ConnectError) -> SignalError {
     SignalError::Rpc(format!("{:?}", error.code))
 }
 
-/// Клиент одного endpoint. `Watch` открывается один раз и переоткрывается при обрыве.
 pub struct Signaling {
     client: IntercomServiceClient<ReqwestTransport>,
 }
@@ -71,8 +62,6 @@ impl Signaling {
         })
     }
 
-    /// Зарегистрировать/обновить описание endpoint. Необязательно: `Watch` уже помечает
-    /// endpoint online, но имя и capabilities видит телефон.
     pub async fn register(&self, display_name: &str) -> Result<(), SignalError> {
         let request = RegisterEndpointRequest {
             endpoint: Some(home_proto::v1::Endpoint {
@@ -90,7 +79,6 @@ impl Signaling {
         Ok(())
     }
 
-    /// Открыть поток событий.
     pub async fn watch(&self) -> Result<WatchStream, SignalError> {
         let stream = self
             .client
@@ -146,8 +134,6 @@ impl Signaling {
     }
 
     async fn send(&self, request: SendSignalRequest) -> Result<(), SignalError> {
-        // `delivered == false` не ошибка: событие могло не дойти до телефона, а ICE всё равно
-        // живёт по peer-reflexive кандидату.
         self.client
             .send_signal(request)
             .await
@@ -155,7 +141,6 @@ impl Signaling {
         Ok(())
     }
 
-    /// STUN/TURN серверы из конфигурации сервиса; пустой список — только host-кандидаты.
     pub async fn ice_config(&self) -> Result<GetIceConfigResponse, SignalError> {
         let response = self
             .client
@@ -166,7 +151,6 @@ impl Signaling {
     }
 }
 
-/// Поток `Watch`: снимки и сигналы.
 pub struct WatchStream {
     inner: connectrpc::client::ServerStream<
         reqwest::Body,
@@ -175,7 +159,6 @@ pub struct WatchStream {
 }
 
 impl WatchStream {
-    /// Следующее событие; `None` — поток закрыт сервером.
     pub async fn next(&mut self) -> Result<Option<WatchMessage>, SignalError> {
         let item = self
             .inner
@@ -190,7 +173,6 @@ fn signal_map_err(error: &ConnectError) -> SignalError {
     SignalError::Rpc(format!("{:?}", error.code))
 }
 
-/// Декодированное событие потока. SDP и кандидат — непрозрачные строки.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum WatchMessage {
     Call(SignalEvent),
@@ -210,7 +192,6 @@ pub enum WatchMessage {
     Other,
 }
 
-/// Перевод proto-события в домен. Ничего не логирует: SDP и кандидаты — приватные данные.
 #[must_use]
 pub fn decode(event: &WatchEvent) -> WatchMessage {
     match &event.event {
@@ -237,7 +218,6 @@ pub fn decode(event: &WatchEvent) -> WatchMessage {
         }
         Some(watch_event::Event::Sdp(sdp)) => {
             if sdp.signal.r#type != SdpType::Offer {
-                // Ответ колонке не присылают: она callee.
                 return WatchMessage::Other;
             }
             WatchMessage::Offer {

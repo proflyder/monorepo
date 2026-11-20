@@ -1,48 +1,27 @@
-//! Wire protocol shared with `agent/ha-config-agent.sh`.
-//!
-//! The agent is a forced command on the Home Assistant OS host. The controller
-//! and the agent agree on one protocol version, one path allowlist and the
-//! `hashes`/`apply`/`restore`/`prune` verbs. Any change here must change the
-//! script too; [`tests`] asserts that the protocol constant is present in the
-//! shell source.
-
 use std::collections::BTreeMap;
 use std::fmt;
 use std::path::{Path, PathBuf};
 
 use sha2::{Digest as _, Sha256};
 
-/// The protocol both sides speak. Bump when a verb or a line format changes.
 pub const PROTOCOL_VERSION: u32 = 1;
 
-/// First token of the agent `version` answer.
 pub const AGENT_NAME: &str = "ha-config-agent";
 
-/// The only relative paths that may be delivered.
-///
-/// Root-level `*.yaml` and `custom_sentences/<lang>/*.yaml` only. A path is
-/// always relative to the Home Assistant config directory and to
-/// `DESIRED_DIR`.
 pub const MANAGED_PATH_PATTERN: &str = r"^(custom_sentences/[a-z]{2}/)?[a-z0-9_]+\.yaml$";
 
-/// Files that must never be written, even if the pattern would allow them.
 pub const DENIED_PATHS: [&str; 3] = ["configuration.yaml", "secrets.yaml", "scenes.yaml"];
 
-/// Why a path or an agent answer was rejected.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum ProtocolError {
-    /// A path escapes the allowlist or names a denied file.
     #[error("path is not managed: {0}")]
     Path(String),
-    /// The agent answered with an unknown or malformed line.
     #[error("invalid agent answer: {0}")]
     Answer(String),
-    /// The agent speaks a different protocol version.
     #[error("agent protocol {found}, expected {expected}")]
     Version { found: String, expected: u32 },
 }
 
-/// Whether `path` is a relative managed Home Assistant YAML path.
 #[must_use]
 pub fn is_managed_path(path: &str) -> bool {
     if DENIED_PATHS.contains(&path) {
@@ -58,10 +37,6 @@ fn managed_path_regex() -> &'static regex::Regex {
     })
 }
 
-/// Whether `id` is a timestamp backup id produced by the agent.
-///
-/// `YYYYMMDDTHHMMSSZ` with an optional `-N` suffix used when two applies land in
-/// the same second. No slash, dot or whitespace can appear in an id.
 #[must_use]
 pub fn is_backup_id(id: &str) -> bool {
     let (stamp, suffix) = match id.split_once('-') {
@@ -86,7 +61,6 @@ fn is_stamp(value: &str) -> bool {
             .all(|(index, byte)| index == 8 || index == 15 || byte.is_ascii_digit())
 }
 
-/// Parse the `version` answer: `ha-config-agent <n>`.
 pub fn parse_version(stdout: &[u8]) -> Result<u32, ProtocolError> {
     let text = std::str::from_utf8(stdout)
         .map_err(|_| ProtocolError::Answer("version is not UTF-8".to_owned()))?;
@@ -103,38 +77,26 @@ pub fn parse_version(stdout: &[u8]) -> Result<u32, ProtocolError> {
     })
 }
 
-/// One managed file as the controller wants it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DesiredFile {
-    /// Lowercase hex SHA-256 of [`Self::content`].
     pub sha256: String,
-    /// Exact bytes to deliver.
     pub content: Vec<u8>,
 }
 
-/// Why a desired directory could not be loaded.
 #[derive(Debug, thiserror::Error)]
 pub enum DesiredError {
-    /// A directory could not be read.
     #[error("read {path}: {source}")]
     Read {
         path: PathBuf,
         #[source]
         source: std::io::Error,
     },
-    /// A relative path is outside the managed allowlist.
     #[error("desired file is not a managed path: {0}")]
     Unmanaged(String),
-    /// The directory contains no managed files.
     #[error("desired directory {0} contains no managed YAML files")]
     Empty(PathBuf),
 }
 
-/// Load every managed file under `directory`.
-///
-/// Only regular files are accepted. A symlink, an unexpected directory entry or
-/// a file outside [`is_managed_path`] is an error: the image must bake exactly
-/// the files this service may write.
 pub fn load_desired(directory: &Path) -> Result<BTreeMap<String, DesiredFile>, DesiredError> {
     let mut files = BTreeMap::new();
     walk(directory, "", &mut files)?;
@@ -199,16 +161,11 @@ fn walk(
     Ok(())
 }
 
-/// Lowercase hex SHA-256 of `bytes`.
 #[must_use]
 pub fn sha256_hex(bytes: &[u8]) -> String {
     hex::encode(Sha256::digest(bytes))
 }
 
-/// Canonical digest of a desired set, used for metrics and retry backoff.
-///
-/// The digest covers sorted `path`/`sha256` pairs, so changing one byte or one
-/// path changes it and a new desired state resets the failure backoff.
 #[must_use]
 pub fn desired_digest(files: &BTreeMap<String, DesiredFile>) -> String {
     let mut hasher = Sha256::new();
@@ -221,16 +178,12 @@ pub fn desired_digest(files: &BTreeMap<String, DesiredFile>) -> String {
     hex::encode(hasher.finalize())
 }
 
-/// One path/hash pair read from the agent `hashes` answer.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AgentHash {
-    /// The file exists with this SHA-256.
     Present(String),
-    /// The file does not exist on the host.
     Missing,
 }
 
-/// Parse the `hashes` answer: one `<sha256|MISSING> <path>` line per file.
 pub fn parse_hashes(
     stdout: &[u8],
     expected: &[String],

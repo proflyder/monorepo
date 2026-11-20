@@ -2,11 +2,6 @@ load("//platform/bazel/oci:service_image.bzl", "rust_service_image")
 
 package(default_visibility = ["//visibility:public"])
 
-# Static x86_64-unknown-linux-musl binary on the digest-pinned distroless
-# static base, built hermetically without a Docker daemon. The name, repo,
-# entrypoint and uid match the former Go image, so the manifests need no
-# change. Distroless has no shell: the liveness probe is
-# `mcp-gateway -healthcheck`.
 rust_service_image(
     name = "mcp-gateway",
     crate_binary = "//solutions/mcp-gateway/crates/mcp-gateway:mcp-gateway",

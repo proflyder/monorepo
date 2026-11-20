@@ -1,75 +1,22 @@
 #!/usr/bin/env node
-/**
- * Merge a pull request only when its CI result matches the tree that lands.
- *
- * A squash merge keeps the PR's tree only while `develop` does not move. If
- * another PR landed after the pull-request CI run, the merge commit has a tree
- * CI never tested and `deploy-home` fails closed for the affected units (PR
- * #218 after #217). The ruleset is not strict, so nothing on GitHub prevents
- * that race; this script closes it locally:
- *
- *   1. read the PR (`state`, `baseRefName`, `headRefOid`, `mergeable`);
- *   2. compare the current `origin/develop` with the PR head
- *      (`compare/develop...<head>`): `behind_by > 0` means CI ran on an older
- *      base. Refreshing the branch (`gh pr update-branch`) costs a full CI run,
- *      so the refresh is skipped when it is provably safe to land the PR on
- *      the newer base: `ci-ok` is green on the current head, GitHub reports the
- *      PR as `MERGEABLE`, the files changed by the PR and by the new `develop`
- *      commits are disjoint, and none of those `develop` commits touches a
- *      CI-global path (workflows, CI scripts, Bazel/toolchain config, lock
- *      files). Otherwise merge `develop` into the branch and wait for the new
- *      head. A conflict is a hard error — nothing is merged;
- *   3. wait for `ci-ok` on the current head (check-runs API, configurable
- *      timeout, 90 min by default). A non-success conclusion stops before merge;
- *   4. re-check `behind_by` right before merging; if `develop` moved again,
- *      apply the same disjointness/CI-global test, otherwise restart from
- *      step 2 (bounded number of attempts);
- *   5. merge with `--match-head-commit`, so a head that moved between the check
- *      and the merge is refused by GitHub instead of merged;
- *   6. print the merge sha and the `deploy-home` run URL for it.
- *
- * `--dry-run` performs every read and reports what it would do without
- * updating or merging. `--no-update` is a pure check: it refuses a PR whose
- * head lacks `develop` and never merges. `--always-refresh` restores the old
- * behaviour of always updating the branch when `develop` moved.
- *
- * All `gh` calls go through the injected `exec` command runner, so the decision
- * logic and the full flow are tested without a network (safe-merge.test.mjs).
- * Authentication is whatever `gh` already uses; `GH_TOKEN` is honoured by `gh`
- * and never printed.
- */
 
 import { spawnSync } from "node:child_process";
 import process from "node:process";
 import { pathToFileURL } from "node:url";
 
-/** The only base branch that may be merged into. */
 export const BASE_BRANCH = "develop";
-/** Aggregate required check published by `.github/workflows/ci.yml`. */
 export const REQUIRED_CHECK = "ci-ok";
 export const DEFAULT_TIMEOUT_MIN = 90;
-// Two independent budgets. `--max-updates` bounds how often the branch is
-// refreshed; the move budget only grows when `develop` really got a new commit
-// (a stale compare right after `update-branch` must not consume it).
 export const DEFAULT_MAX_UPDATES = 3;
 export const DEFAULT_MAX_MOVES = 3;
 export const DEFAULT_POLL_MS = 30_000;
 export const DEFAULT_UPDATE_WAIT_MS = 120_000;
-// GitHub's compare endpoint can lag a few seconds behind a branch update.
 export const DEFAULT_COMPARE_WAIT_MS = 60_000;
 export const DEFAULT_DEPLOY_WAIT_MS = 60_000;
 export const DEFAULT_DEPLOY_POLL_MS = 5_000;
 export const DEPLOY_WORKFLOW = "deploy-home.yml";
-// GitHub's compare API caps the `files` array; a capped list cannot prove that
-// the two changesets are disjoint, so it disables the refresh-free merge.
 export const MAX_COMPARE_FILES = 300;
 
-/**
- * Paths whose change on `develop` makes a cached `ci-ok` unreliable for a
- * squash merge: workflows, CI tooling, Bazel/toolchain configuration, the
- * mise/tool versions and dependency lock files. Glob syntax supports `*`
- * (within one segment), `**` (across segments) and `?`.
- */
 export const CI_GLOBAL_PATHS = [
   ".github/**",
   "platform/ci/**",
@@ -114,16 +61,10 @@ function globToRegExp(glob) {
   return new RegExp(`${pattern}$`);
 }
 
-/** True when `path` is one of the CI-global paths above. */
 export function isCiGlobalPath(path) {
   return CI_GLOBAL_MATCHERS.some((matcher) => matcher.test(path));
 }
 
-/**
- * Collect the paths a compare response says are changed, including the old
- * side of a rename. `known` is false when the API returned no `files` array:
- * an absent list proves nothing and must not be read as "no changed files".
- */
 export function changedFiles(compare) {
   const files = Array.isArray(compare?.files) ? compare.files : null;
   if (files === null) {
@@ -145,16 +86,6 @@ export function changedFiles(compare) {
   };
 }
 
-/**
- * Decide whether `develop` may stay ahead of the PR head at merge time.
- *
- * The squash merge then produces a tree that was never tested as a whole, but
- * which differs from the tested PR tree only by `develop` commits that touch
- * other files and no CI-global path — so the green `ci-ok` still describes the
- * relevant code. `structural` reports the file/mergeability checks alone, so
- * the caller can wait for a pending `ci-ok` before deciding; `allowed` is the
- * final answer and also requires a green check.
- */
 export function decideFastPath({
   behindBy,
   mergeable,
@@ -216,7 +147,6 @@ export function decideFastPath({
   return { allowed: true, structural: true, reason };
 }
 
-/** Parse CLI arguments: `<N> [--dry-run] [--timeout <min>] [--no-update] [--always-refresh]`. */
 export function parseArgs(argv) {
   const args = {
     pr: null,
@@ -266,14 +196,6 @@ export function parseArgs(argv) {
   return args;
 }
 
-/**
- * Validate the PR as read from `gh pr view`.
- *
- * Only an OPEN PR into `develop` may be merged. A PR GitHub already reports as
- * `CONFLICTING` cannot be refreshed from `develop`, so it fails early with a
- * message that points at the local resolution. `mergeable: UNKNOWN` is allowed:
- * GitHub computes it lazily and the compare call decides.
- */
 export function checkPull(pull) {
   if (!pull || typeof pull !== "object") {
     throw new Error("cannot read the pull request");
@@ -306,13 +228,6 @@ export function checkPull(pull) {
   };
 }
 
-/**
- * Decide what to do with the PR head given `behind_by` from the compare API.
- *
- * `behindBy` is the number of commits on `develop` that the head does not
- * contain. Non-zero means the merge tree is unverified; `--no-update` turns
- * that into a refusal instead of an update.
- */
 export function decideBehind({ behindBy, noUpdate = false }) {
   if (!Number.isInteger(behindBy) || behindBy < 0) {
     throw new Error(`compare did not return a valid behind_by (${JSON.stringify(behindBy)})`);
@@ -333,14 +248,6 @@ export function decideBehind({ behindBy, noUpdate = false }) {
   return { action: "update", behindBy };
 }
 
-/**
- * Reduce the check-runs of one commit to the state of `ci-ok`.
- *
- * A re-run leaves several check runs with the same name on the same commit;
- * the newest id is the effective one. `pass` needs a completed `success`;
- * any other completed conclusion is a failure, and an absent or in-progress
- * check keeps the caller waiting.
- */
 export function decideChecks(checkRuns, name = REQUIRED_CHECK) {
   const runs = (Array.isArray(checkRuns) ? checkRuns : []).filter(
     (run) => run && run.name === name,
@@ -368,9 +275,6 @@ export function decideChecks(checkRuns, name = REQUIRED_CHECK) {
   return { state: "pass", reason: `${name} is green`, url: latest.html_url || "" };
 }
 
-/**
- * Turn a check-runs API response into the bare array the decision works on.
- */
 export function checkRunsOf(response) {
   if (Array.isArray(response)) {
     return response;
@@ -412,7 +316,6 @@ function behindBy(exec, repository, head) {
   return compareWithDevelop(exec, repository, head)?.behind_by;
 }
 
-/** Full compare response for `develop...<head>`, including the merge base. */
 function compareWithDevelop(exec, repository, head) {
   return ghJson(
     exec,
@@ -421,7 +324,6 @@ function compareWithDevelop(exec, repository, head) {
   );
 }
 
-/** Files changed between two refs, as reported by the compare API. */
 function compareFiles(exec, repository, base, head) {
   return changedFiles(
     ghJson(
@@ -444,7 +346,6 @@ function readChecks(exec, repository, head) {
   );
 }
 
-/** Current commit of `develop`, used to tell a real move from a stale compare. */
 function readDevelopSha(exec, repository) {
   const ref = ghJson(
     exec,
@@ -458,15 +359,6 @@ function readDevelopSha(exec, repository) {
   return String(sha);
 }
 
-/**
- * Wait for a compare that lagged a branch update to catch up.
- *
- * `update-branch` changes the head immediately, but `compare` can keep
- * reporting the old `behind_by` for a few seconds. Poll until the head contains
- * `develop` (`behind_by === 0`) or `develop` really moves away from
- * `baselineSha`; never treat the stale value as a reason to update again.
- * Returns the last observation, with `timedOut` when neither happened.
- */
 export async function waitForCompareSettled({
   exec,
   repository,
@@ -499,9 +391,6 @@ export async function waitForCompareSettled({
   }
 }
 
-/**
- * Poll `ci-ok` on one commit until it passes, fails or the timeout expires.
- */
 async function waitForCi({ exec, repository, head, timeoutMin, pollMs, now, sleep, log }) {
   const deadline = now() + timeoutMin * 60_000;
   for (;;) {
@@ -558,7 +447,6 @@ async function waitForMergeSha({ exec, pr, waitMs, pollMs, now, sleep }) {
   }
 }
 
-/** Find the `deploy-home` run for the merge commit, or return null. */
 export async function findDeployRun({
   exec,
   repository,
@@ -579,7 +467,6 @@ export async function findDeployRun({
         `deploy-home runs for ${sha}`,
       );
     } catch (error) {
-      // A missing run is not fatal; the hint below is still useful.
       log(`cannot list deploy-home runs yet: ${error.message}`);
     }
     if (Array.isArray(runs) && runs.length > 0 && runs[0].url) {
@@ -592,10 +479,6 @@ export async function findDeployRun({
   }
 }
 
-/**
- * Full flow: validate, refresh from `develop` when needed, wait for `ci-ok`,
- * re-check the base, merge by exact head, then report the deploy run.
- */
 export async function runSafeMerge(options) {
   const {
     pr,
@@ -629,8 +512,6 @@ export async function runSafeMerge(options) {
   let developSha = readDevelopSha(exec, repository);
   let updates = 0;
   let moves = 0;
-  // True right after our own update-branch: until compare catches up, a
-  // non-zero behind_by is not a reason to update the branch again.
   let refreshed = false;
 
   const staleCompareError = (behind) =>
@@ -643,12 +524,6 @@ export async function runSafeMerge(options) {
 
   const logPath = (message) => log(dryRun ? `[dry-run] ${message}` : message);
 
-  /**
-   * Check the refresh-free merge conditions against the current API state:
-   * mergeability, the files of the PR and of the new `develop` commits, and
-   * `ci-ok` on the current head. `structural` ignores the check state, so a
-   * pending run can be awaited instead of being thrown away.
-   */
   async function evaluateFastPath(behind, headCompare) {
     if (alwaysRefresh) {
       return {
@@ -706,8 +581,6 @@ export async function runSafeMerge(options) {
       }
 
       if (refreshed) {
-        // The head changed, but GitHub's compare can lag. Wait for it to catch
-        // up before deciding whether another refresh is actually needed.
         const settled = await waitForCompareSettled({
           exec,
           repository,
@@ -746,8 +619,6 @@ export async function runSafeMerge(options) {
       if (!alwaysRefresh) {
         let candidate = await evaluateFastPath(behind, compared);
         if (candidate.structural && candidate.ciState === "pending" && !dryRun) {
-          // The current CI run already covers the PR tree; wait for it instead
-          // of discarding it with an update-branch.
           log(
             `${candidate.reason}; waiting for ${REQUIRED_CHECK} on the current head ` +
               `instead of refreshing the branch`,
@@ -868,10 +739,6 @@ export async function runSafeMerge(options) {
     if (recheck !== 0) {
       const shaNow = readDevelopSha(exec, repository);
       if (shaNow === developSha && !merging) {
-        // `develop` did not move and the head was up to date before this
-        // check, so a non-zero value is a lagging compare. Give it the same
-        // grace period instead of merging on it. (A fast-path merge expects
-        // the head to stay behind, so it is not treated as lag.)
         const settled = await waitForCompareSettled({
           exec,
           repository,
@@ -896,8 +763,6 @@ export async function runSafeMerge(options) {
         developSha = shaNow;
       }
       if (recheck !== 0) {
-        // The compare may have been read before `develop` moved; read it again
-        // right before deciding, so the file sets describe the real base.
         recheckCompare = compareWithDevelop(exec, repository, pull.head);
         recheck = recheckCompare?.behind_by;
       }

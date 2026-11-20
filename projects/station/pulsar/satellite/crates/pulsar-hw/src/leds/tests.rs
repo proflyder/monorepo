@@ -16,18 +16,15 @@ fn matrix_parser_takes_the_key_and_nine_numbers() {
         parse_matrix(stock),
         Some([[0.95, 0.05, 0.0], [0.0, 0.9, -0.1], [0.1, 0.2, 0.75]])
     );
-    // Whitespace before the colon; a "matrix" value is not the key.
     let spaced = "{\"name\": \"matrix\", \"matrix\"\n\t : [1,2,3,4,5,6,7,8,9,10]}";
     assert_eq!(
         parse_matrix(spaced),
         Some([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0], [7.0, 8.0, 9.0]])
     );
-    // Fewer than nine numbers before the closing brace.
     assert_eq!(
         parse_matrix(r#"{"matrix": [[1,2,3],[4,5,6]]} [7,8,9]"#),
         None
     );
-    // A lone '-' or '.' is no number; NaN / infinity are rejected.
     assert_eq!(parse_matrix(r#"{"matrix": [- 1,2,3,4,5,6,7,8,9]}"#), None);
     assert_eq!(parse_matrix(r#"{"matrix": [-nan,2,3,4,5,6,7,8,9]}"#), None);
     assert_eq!(parse_matrix(r#"{"matrix": [1e999,2,3,4,5,6,7,8,9]}"#), None);
@@ -35,8 +32,6 @@ fn matrix_parser_takes_the_key_and_nine_numbers() {
     assert_eq!(parse_matrix(r#"{"matrix": 5}"#), None);
 }
 
-/// The fallback path for the stock file: broken JSON but the first nine numbers after the
-/// "matrix" key are still read.
 #[test]
 fn matrix_fallback_reads_the_broken_stock_file() {
     let broken = r#"{"matrix": [[0.95, 0.05, 0], [0.0, .9, -0.1], [1e-1, 0.2, 7.5E-1"#;
@@ -44,7 +39,6 @@ fn matrix_fallback_reads_the_broken_stock_file() {
         parse_matrix(broken),
         Some([[0.95, 0.05, 0.0], [0.0, 0.9, -0.1], [0.1, 0.2, 0.75]])
     );
-    // Valid JSON with another shape still uses the same nine numbers.
     assert_eq!(
         parse_matrix(r#"{"matrix": {"rows": [1,2,3,4,5,6,7,8,9]}}"#),
         Some([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0], [7.0, 8.0, 9.0]])
@@ -71,10 +65,8 @@ fn case_colors_are_sorted_json_stems() {
     assert!(case_colors_in("/nonexistent/").is_empty());
 }
 
-/// (time, pixels) of the writes a test sink saw.
 type Captured = Rc<RefCell<Vec<(i64, Vec<u8>)>>>;
 
-/// Тестовый приёмник: записывает каждый кадр (RGB) и время от своего старта.
 struct Recording {
     frames: Captured,
     epoch: Instant,
@@ -89,7 +81,6 @@ impl LedSink for Recording {
     }
 }
 
-/// Приёмник с переключаемым отказом; `attempts` считает все попытки.
 struct Flaky {
     inner: Recording,
     fail: Rc<Cell<bool>>,
@@ -113,7 +104,6 @@ fn spawn_with_sink(n: usize, nlogo: usize, sink: Box<dyn LedSink>) -> (LedsHandl
     (LedsHandle { tx }, task)
 }
 
-/// The actor on a recording sink.
 fn spawn_capture(n: usize, nlogo: usize) -> (LedsHandle, Captured, JoinHandle<()>) {
     let frames = Rc::new(RefCell::new(Vec::new()));
     let sink = Recording {
@@ -128,7 +118,6 @@ async fn sleep_ms(ms: u64) {
     tokio::time::sleep(Duration::from_millis(ms)).await;
 }
 
-/// A failed static write is retried after 1 s even though nothing changes.
 #[tokio::test(start_paused = true)]
 async fn failed_static_frame_is_retried_after_a_second() {
     let frames = Rc::new(RefCell::new(Vec::new()));
@@ -217,8 +206,6 @@ async fn volume_overlay_cuts_in_and_its_expiry_restores_the_light() {
             let f = frames.borrow().clone();
             let (t, px) = f.last().unwrap();
             assert_eq!(*px, red);
-            // The expiry timer woke the static overlay up after 1.5 s (the fade's first frame
-            // still equals the overlay), then the 250 ms fade.
             let first_after = f.iter().find(|(t, _)| *t > t0).unwrap().0;
             assert_eq!(
                 first_after,
@@ -244,7 +231,6 @@ async fn exit_clears_and_case_matrix_rewrites() {
             leds.set_user_light(true, Rgb { r: 255, g: 0, b: 0 }, 1.0, Effect::Solid, 0);
             sleep_ms(500).await;
             let before = frames.borrow().len();
-            // Same pixels under the identity matrix: written again anyway.
             leds.tx
                 .send(Msg::Ui(LedCommand::CaseMatrix(Some([
                     [1.0, 0.0, 0.0],
@@ -265,8 +251,6 @@ async fn exit_clears_and_case_matrix_rewrites() {
         .await;
 }
 
-/// The case colour is read by the actor; a missing file leaves the correction off and does not
-/// block the handle.
 #[tokio::test(start_paused = true)]
 async fn case_color_file_is_read_by_the_actor() {
     LocalSet::new()
@@ -274,7 +258,6 @@ async fn case_color_file_is_read_by_the_actor() {
             let (leds, frames, task) = spawn_capture(3, 0);
             leds.set_case_color(CaseColor::new("missing"));
             sleep_ms(10).await;
-            // The start frame and the repaint after the command.
             assert_eq!(frames.borrow().len(), 2, "one repaint, no correction");
             drop(leds);
             task.await.unwrap();

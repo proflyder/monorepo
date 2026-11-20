@@ -1,9 +1,3 @@
-# Public template. `deploy.sh` substitutes ${HAOS_ADDRESS} (private HAOS IPv4).
-#
-# HAOS is not a Kubernetes workload, so it is wired in as a headless Service
-# with a manually managed EndpointSlice. The Traefik ingress route
-# `ha.${HOME_DOMAIN}` targets this Service; HA continues to see the node address
-# (192.0.2.27 in the public example) as the client and keeps trusting it.
 apiVersion: v1
 kind: Service
 metadata:

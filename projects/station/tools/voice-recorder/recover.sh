@@ -1,5 +1,4 @@
 #!/bin/sh
-# Explicit recovery for this temporary tool only. Never edits service configuration.
 set -eu
 BASE=/tmp/voice-recorder
 LOCK=/tmp/voice-recorder.lock

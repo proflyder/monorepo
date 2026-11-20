@@ -679,3 +679,50 @@ python3 -m unittest discover -s projects/home-assistant/ha-voice -p 'test_*.py' 
 Тесты не обращаются к живому HA/scheduler: Jinja рендерится с фиксированным
 `Asia/Almaty`, ответы Connect подменяются словарями. Live-проверки и
 включение executor — задача deployment worker.
+
+## Заметки к коду
+
+Пояснения, перенесённые из комментариев исходников (код комментариев не содержит, см. `AGENTS.md`).
+
+- `BUILD.bazel`
+  - Exactly the files ha-config-sync delivers. Kept explicit (not `glob("*.yaml")`) so configuration.yaml/secrets.yaml/scenes.yaml, tests and README can never enter the image by accident; test_sync_manifest.py checks the same set.
+- `command_line.yaml` — `ping` integration is UI-only now (YAML ping is not supported), so the wired desktop «комп» reachability is one command_line binary sensor.
+  - HA templates only the arguments of a command_line command, never the program itself, so the condition lives inside `sh -c`.
+- `custom_sentences/ru/station_alarm.yaml` — Only the two parameterless "the alarm is ringing right now" commands stay local: they must stop or snooze sound even if Hermes/the network is down. Creating, moving, listing and cancelling alarms lives in Hermes through the mcp-gateway `time` tools (durable scheduler), never in HA sentence templates.
+- `custom_sentences/ru/station_komp.yaml` — Voice control of the wired Windows desktop «комп» (alias «мой комп»).
+- `custom_sentences/ru/station_schedules.yaml` — Notes stay in Home Assistant (`todo.notes`). Everything about time — alarms, timers and reminders — is routed to Hermes by `station_time.yaml` and handled by the mcp-gateway `time` tools on the durable scheduler; no timer or reminder sentence templates live here any more.
+- `custom_sentences/ru/station_time.yaml` — Voice routing for everything time-related.
+- `input_datetime.yaml` — Timestamp of the last voice/app shutdown request for the wired desktop. The ping sensor stays `on` for 1–2 minutes after Windows accepts `shutdown /s /t 60`, so «включи комп» must treat a recent request as «выключается» instead of «уже включён». `script.komp_shutdown` writes the value right before the SSH call; the intents read it.
+- `input_text.yaml`
+  - Station HTTP control base URL. Non-secret value, but kept out of Git via secrets.yaml so the tracked file never contains a real address.
+- `intent_scripts.yaml`
+  - A running but locked PC: issue a one-time unlock grant. Nothing is sent to a powered-off PC, and this intent never wakes it (that is KompOn).
+- `scripts.yaml`
+  - Local volume is authoritative. Spotify Web API is an optional mirror: a 429/expired token must never prevent the station from changing volume.
+  - A scheduler STOP that arrives after the ring already ended (for example a retried lease) must not run the global media stop/restore: by then the user may have resumed music. With no expectation (manual/emergency stop) the cleanup still runs.
+  - Never talk over a ringing alarm: the wake phrase and the chime own the speaker then, and a spoken text would cut the ringtone.
+  - Fail closed: «через непонятно что» must not become a one-minute alarm.
+  - --- Legacy rollback-only dispatchers --------------------------------------- These still write the old HA todo/timer helpers. Their automations are disabled (initial_state: false) so they never compete with the canonical scheduler.
+- `shell_commands.yaml` — Restricted SSH into the wired Windows desktop («комп»).
+- `sync.yaml` — Deliverable Home Assistant YAML for ha-voice and what each change needs.
+- `templates.yaml` — Home Assistant template entities.
+  - Issue a one-time logon grant only when the PC is down (or is already shutting down): a logon grant must not exist for an already running session.
+- `test_custom_sentences.py` — Sentence-routing contract for the Russian voice intents.
+- `test_ha_config.py` — Static, fast tests for the Home Assistant voice package.
+  - Live incident: the chime/ringtone URL used a documentation TEST-NET host, so the ESPHome ffmpeg proxy timed out and the alarm was silent. HA must fetch its own local media from loopback.
+  - Definitions live in the scheduler: HA must not edit or create them.
+  - An unknown label is a warning, never a guess or a silent HA action.
+  - Pin the wired desktop «комп»: WoL, ping state and restricted SSH. Real host/MAC/user never appear in tracked files: they only live in HA `secrets.yaml`, so every assertion here uses the `__SECRET__` placeholder.
+  - The grant is issued only when the PC is down or shutting down, never for an already running session: a second line of defence after the KompOn intent.
+  - Empty/missing target secret must not launch a half-built ssh command.
+  - Locking also refuses an unset SSH target, like the shutdown script; unlock never depends on the SSH target at all.
+  - A second request inside the 60 s window must not reschedule shutdown.
+- `test_scheduler_contract.py` — Contract tests for the canonical SchedulerService voice integration.
+  - A retried scheduler STOP must not media_stop/restore/resume later music.
+  - Regression: HA script variables are rendered to strings. `relative_due: "{{ now() + timedelta(...) }}"` becomes a string in a real HA variables step, so calling `.date()` on it raised "UndefinedError: 'str object' has no attribute 'date'" and the live …
+  - The fail-closed template that rejects a non-positive duration.
+  - Live regression 2026-11-12: Hermes called this script with hours=0, minutes=0 and the silent `max(1, ...)` floor created an alarm one minute later. The script must refuse and explain.
+  - Live regression: Hermes passed name="через час".
+  - Live incident: the ringtone/chime URL used the sanitized TEST-NET host. `http://192.0.2.28:8123/local/...` is unreachable from HA, so the ESPHome ffmpeg proxy timed out and the alarm stayed silent even though the service call returned 2xx and the bridge ACKed …
+- `test_sync_manifest.py` — Contract for the ha-voice file set delivered by ha-config-sync.
+  - `*` and `?` never cross `/`, like the Rust and shell validators.

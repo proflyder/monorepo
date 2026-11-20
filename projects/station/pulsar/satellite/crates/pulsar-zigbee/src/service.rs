@@ -1,21 +1,3 @@
-//! The Midi's Zigbee radio in one of its roles:
-//!   off:         pulsar leaves the radio alone (whatever firmware it has keeps running); the
-//!                default, so an install never writes the radio on its own;
-//!   coordinator: pulsar's coordinator firmware (radio/coordinator, installed next to the daemon),
-//!                a deCONZ coordinator for ZHA and Zigbee2MQTT (Coordinator + DeconzServer);
-//!   router:      pulsar's router firmware (radio/router), a repeater in another network (Router).
-//! At start the running firmware is identified (0x0900) before the role object is built. When it
-//! is not the role's image (another role, another build: a pulsar update brought a new image), or
-//! the radio is silent (an interrupted upload), the role's image is written through the radio's
-//! bootloader (flasher). At most two uploads per start; an image the radio did not take is
-//! reported (`FlashOutcome`, persisted by the controller as `failed_version`) and not written
-//! again on later starts. Each firmware keeps its own network in its own flash area, so
-//! switching back and forth keeps them.
-//!
-//! The actor's state is an explicit enum: every phase owns its data (the starting link, the
-//! running role, the progress of an upload), so no branch has to guess what the other fields
-//! hold.
-
 use std::cell::{Cell, RefCell};
 use std::fmt;
 use std::path::{Path, PathBuf};
@@ -37,34 +19,24 @@ use crate::flasher::{FlashError, radio_flash, ybl_load};
 use crate::router::Router;
 use crate::{Mode, RadioPaths, role};
 
-/// Reset + boot + 0x0900 normally take < 1 s.
 const ANSWER_TIMEOUT_MS: u64 = 10_000;
-/// A silent radio is asked again.
 const RETRY_MS: u64 = 60_000;
-/// Per start: the image, and one retry.
 const MAX_FLASHES: u32 = 2;
 const APP_INFO_REQ: u16 = 0x0900;
 const APP_INFO_RSP: u16 = 0x8900;
-/// Yandex's gateway.ybl.
 const GATEWAY_FAMILY: u8 = 0x15;
 
 pub struct ZigbeeConfig {
     pub lines: RadioPaths,
-    /// zigbee-coordinator.ybl
     pub coordinator_image: PathBuf,
-    /// zigbee-router.ybl
     pub router_image: PathBuf,
     pub deconz_port: u16,
-    /// Image version given up on in an earlier start (0: none).
     pub failed_version: u32,
 }
 
-/// C++ `changed()` and `outcome(failed)`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ZigbeeEvent {
-    /// `status()` / `flashing()` may have changed.
     Changed,
-    /// The role runs (0), or the radio did not take image version `failed_version`: persist it.
     FlashOutcome { failed_version: u32 },
 }
 
@@ -74,7 +46,6 @@ enum Cmd {
     Leave,
 }
 
-/// One line for Home Assistant. The text is the Home Assistant status sensor's contract.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Status {
     Off,
@@ -87,7 +58,6 @@ pub enum Status {
         error: String,
     },
     Coordinator {
-        /// The radio reported its network state.
         ready: bool,
         forming: bool,
         formed: bool,
@@ -101,7 +71,6 @@ pub enum Status {
         pan: u16,
         nwk: u16,
         channel: u8,
-        /// Last failure, "" = none.
         error: String,
     },
 }
@@ -177,40 +146,31 @@ pub struct ZigbeeHandle {
 }
 
 impl ZigbeeHandle {
-    /// Constant: a role change restarts the daemon.
     pub fn mode(&self) -> Mode {
         self.mode
     }
 
-    /// An image is being written (the actor starts it on the radio's answer or its timeout).
     pub fn flashing(&self) -> bool {
         self.shared.flashing.get()
     }
 
-    /// Одна строка для Home Assistant, например «router: in network 0x1A2B as 0x0001, channel 15».
-    /// Начальный статус задан синхронно в `spawn`, дальше его меняет актор.
     pub fn status(&self) -> Status {
         self.shared.status.borrow().clone()
     }
 
-    /// Router role only: join the network that currently allows joining. The status changes
-    /// once the actor ran the command (then `Changed`), not inside this call as in C++.
     pub fn join(&self) {
         let _ = self.cmds.send(Cmd::Join);
     }
 
-    /// Router role only: leave the current network (no `Changed`, as in C++).
     pub fn leave(&self) {
         let _ = self.cmds.send(Cmd::Leave);
     }
 }
 
-/// Opens the radio's link. Tests replace it.
 pub trait Radio {
     fn open(&mut self, lines: &RadioPaths) -> Result<Link, RadioError>;
 }
 
-/// Writes an image through the bootloader. Runs on its own thread, so it must be shareable.
 pub trait Flasher: Send + Sync {
     fn flash(
         &self,
@@ -220,7 +180,6 @@ pub trait Flasher: Send + Sync {
     ) -> Result<(), FlashError>;
 }
 
-/// The real tty and sysfs lines.
 pub struct HardwareRadio;
 
 impl Radio for HardwareRadio {
@@ -250,8 +209,6 @@ impl Flasher for HardwareFlasher {
     }
 }
 
-/// Starts the role. The initial status ("off", "starting" or "error: cannot open the radio") is
-/// there when this returns, with its `Changed` already queued.
 pub fn spawn(cfg: ZigbeeConfig, mode: Mode) -> (ZigbeeHandle, UnboundedReceiver<ZigbeeEvent>) {
     spawn_with(
         cfg,
@@ -299,18 +256,12 @@ pub fn spawn_with(
     )
 }
 
-/// What the actor owns at this moment.
 enum State {
     Off,
-    /// The radio is open and is being asked which firmware runs.
     Starting(Box<Link>),
     Running(Role),
-    Flashing {
-        progress: f32,
-    },
-    Failed {
-        error: String,
-    },
+    Flashing { progress: f32 },
+    Failed { error: String },
 }
 
 enum Role {
@@ -323,9 +274,7 @@ enum Role {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Timer {
-    /// The radio must identify its firmware in time.
     Answer,
-    /// A silent radio is asked again.
     Retry,
 }
 
@@ -352,14 +301,12 @@ struct Service {
     shared: Rc<Shared>,
     events: UnboundedSender<ZigbeeEvent>,
     state: State,
-    /// Images written since start.
     flashes: u32,
     timers: Timers<Timer>,
     thread: Option<std::thread::JoinHandle<()>>,
     flash_tx: UnboundedSender<FlashMsg>,
 }
 
-/// The coordinator's hooks: the deCONZ server's, plus the service's `changed()`.
 struct CoordHooks<'a> {
     deconz: &'a mut DeconzServer,
     changed: bool,
@@ -384,22 +331,14 @@ impl Hooks for CoordHooks<'_> {
     }
 }
 
-/// What to do with the firmware the radio reported (C++ `on_firmware`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Decision {
-    /// The role's image runs: `FlashOutcome { 0 }`, then the role.
     Run,
-    /// Same family, but the role's image was not taken earlier: keep what runs.
     Keep,
-    /// Write the role's image.
     Flash,
 }
 
-/// `want`: the role's image version, None without a readable image (then only the family
-/// counts).
 pub fn decide(version: u32, want: Option<u32>, mode: Mode, failed_version: u32) -> Decision {
-    // The role's image decides, as maind does it for the gateway: another version of the same
-    // firmware is replaced too (a pulsar update brings a new build).
     let same_family = (version >> 24) as u8 == role(mode).family;
     let matches = want.map_or(same_family, |w| version == w);
     if matches {
@@ -429,7 +368,6 @@ impl Service {
         }
     }
 
-    /// C++ `changed()`: publish the state, then tell the controller.
     fn changed(&mut self) {
         self.publish();
         let _ = self.events.send(ZigbeeEvent::Changed);
@@ -441,7 +379,6 @@ impl Service {
             .send(ZigbeeEvent::FlashOutcome { failed_version });
     }
 
-    /// The getters' state, as C++ `status()` / `flashing()` would answer now.
     fn publish(&self) {
         let status = self.status();
         if *self.shared.status.borrow() != status {
@@ -463,8 +400,6 @@ impl Service {
         self.bring_up();
     }
 
-    /// Opens the radio and asks which firmware runs; the role object comes once it is the
-    /// right one.
     fn bring_up(&mut self) {
         match self.radio.open(&self.cfg.lines) {
             Ok(link) => {
@@ -485,8 +420,6 @@ impl Service {
         };
         match ev {
             LinkEvent::Boot => link.send(APP_INFO_REQ, &[], None),
-            // [version BE32][manufacturer BE16][image type BE16][size BE32], the same from
-            // every firmware
             LinkEvent::Frame { ty, payload } if ty == APP_INFO_RSP && payload.len() >= 12 => {
                 let version = get_be32(&payload);
                 self.on_firmware(version);
@@ -509,7 +442,6 @@ impl Service {
                 self.run();
             }
             Decision::Keep => {
-                // The radio did not take the new build.
                 warn!(
                     "zigbee: keeping radio firmware 0x{version:08x} (0x{:08x} was not taken)",
                     want.unwrap_or(0)
@@ -556,7 +488,6 @@ impl Service {
             coord: Box::new(coord),
             deconz: Box::new(deconz),
         });
-        // One Changed, whether or not the start already reported one.
         self.changed();
     }
 
@@ -564,7 +495,6 @@ impl Service {
         if self.is_flashing() {
             return;
         }
-        // The link must be gone before the bootloader drives the same port.
         self.state = State::Off;
         let path = self.image_path().to_path_buf();
         let (image, info) = match ybl_load(&path) {
@@ -572,8 +502,6 @@ impl Service {
             Err(e) => return self.fail(e.to_string()),
         };
         if info.version == self.cfg.failed_version {
-            // Given up on in an earlier start: not written on every restart. A new image
-            // (update) or a role change tries again.
             return self.fail(format!(
                 "the radio did not take firmware 0x{:08x}; not written again",
                 info.version
@@ -603,7 +531,6 @@ impl Service {
             .spawn(move || {
                 let mut last = -1i32;
                 let r = flash.flash(&lines, &image, &mut |p| {
-                    // Steps of 5 %: a status change per step is enough for Home Assistant.
                     let pct = (p * 100.0) as i32;
                     if pct / 5 == last / 5 {
                         return;
@@ -639,7 +566,6 @@ impl Service {
                     Ok(()) => info!("zigbee: radio firmware written"),
                     Err(e) => error!("zigbee: writing the radio failed: {e}"),
                 }
-                // Either way the radio runs some application again (or none): identify it.
                 self.state = State::Off;
                 self.bring_up();
             }
@@ -659,11 +585,8 @@ impl Service {
                     return;
                 }
                 warn!("zigbee: the radio does not identify its firmware");
-                // Most likely an interrupted upload left no application, which only writing the
-                // image fixes.
                 self.flash();
                 if matches!(self.state, State::Failed { .. }) {
-                    // Writing refused: maybe it answers later.
                     self.timers.set(Timer::Retry, RETRY_MS);
                 }
             }
@@ -761,8 +684,6 @@ impl Service {
     }
 
     fn handle(&mut self, w: Wake) {
-        // Firmware identification and the deCONZ host do not change the status by themselves
-        // (what they change goes through changed()).
         let republish = !matches!(w, Wake::Link(_) | Wake::Deconz(_));
         match w {
             Wake::Timer(t) => self.on_timer(t),
@@ -798,8 +719,6 @@ impl Service {
             Wake::Cmd(Some(c)) => self.on_cmd(c),
             Wake::Cmd(None) => {}
         }
-        // The getters also follow changes C++ reported without changed() (a leave, the
-        // router's state on a frame that is not news); no Changed for them, as in C++.
         if republish {
             self.publish();
         }
@@ -815,16 +734,11 @@ impl Service {
                 Wake::Cmd(None) => break,
                 w @ Wake::Deconz(_) => {
                     self.handle(w);
-                    // A flooding LAN client must not starve the other actors.
                     tokio::task::coop::consume_budget().await;
                 }
                 w => self.handle(w),
             }
         }
-        // radio_flash cannot be stopped: an upload still running is left to its detached thread
-        // (dropping the JoinHandle), which the process exit ends. That leaves the radio without
-        // an application; the next start finds it silent and writes the image again (C++ joined
-        // it in the destructor, and the 5 s teardown watchdog cut it the same way).
         self.thread = None;
         self.state = State::Off;
     }

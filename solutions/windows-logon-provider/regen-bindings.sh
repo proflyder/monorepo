@@ -1,11 +1,4 @@
 #!/usr/bin/env bash
-# Regenerate crates/provider/src/bindings.rs and
-# crates/cp-selftest/src/bindings.rs from the filters in each crate's
-# bindings.txt. Generation is manual and not part of the build.
-#
-# windows-bindgen 0.63.0 is pinned because it emits code for windows-core
-# 0.62.x (`Error::from_thread`) and is installed in a temporary project, not in
-# the workspace.
 set -euo pipefail
 
 cd "$(dirname "$0")"

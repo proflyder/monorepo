@@ -1,8 +1,4 @@
 #!/usr/bin/env bash
-# Create the unprivileged Debian LXC used by the home VPN (ocserv).
-#
-# Run as root on the Proxmox host. Addresses and storage are parameters; the
-# defaults below are documentation examples only (RFC 5737), never live values.
 set -euo pipefail
 
 CTID=102
@@ -79,12 +75,10 @@ done
 [[ $PREFIX =~ ^[0-9]+$ ]] || die "invalid prefix"
 [[ -n $SSH_PUBKEY ]] && [[ -r $SSH_PUBKEY ]] || [[ -z $SSH_PUBKEY ]] || die "cannot read SSH key"
 
-# Refuse to touch an existing guest.
 if pct status "$CTID" >/dev/null 2>&1; then
   die "CT $CTID already exists"
 fi
 
-# An address that answers ping or has a live neighbour entry is not free.
 if ping -c1 -W1 "$IP" >/dev/null 2>&1; then
   die "$IP is already answering ping"
 fi
@@ -97,7 +91,6 @@ if command -v arping >/dev/null 2>&1; then
   fi
 fi
 
-# Locate or download a Debian 13 amd64 template.
 if [[ -z $TEMPLATE ]]; then
   pveam update >/dev/null
   TEMPLATE=$(pveam available --section system \
@@ -123,7 +116,6 @@ pct create "$CTID" "$TEMPLATE_STORAGE:vztmpl/$TEMPLATE" \
   --ostype debian \
   --description "Home VPN (ocserv), managed from projects/home/proxmox/vpn"
 
-# /dev/net/tun for ocserv. PVE nesting usually adds it; keep this idempotent.
 CONF=/etc/pve/lxc/$CTID.conf
 if ! grep -q '^lxc.mount.entry: /dev/net/tun ' "$CONF"; then
   {

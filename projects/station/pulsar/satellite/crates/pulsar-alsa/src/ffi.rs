@@ -1,6 +1,3 @@
-//! libasound through dlopen: every symbol is resolved once into [`Lib`]; the safe wrappers below
-//! are the only callers of those pointers.
-
 use std::error::Error as _;
 use std::ffi::{CStr, CString, c_char, c_int, c_long, c_uint, c_ulong, c_void};
 use std::ptr::{self, NonNull};
@@ -18,7 +15,6 @@ pub const FORMAT_S16_LE: c_int = 2;
 pub const FORMAT_S32_LE: c_int = 10;
 pub const FORMAT_S24_3LE: c_int = 32;
 const CTL_ELEM_IFACE_MIXER: c_int = 2;
-// snd_ctl_elem_value_t holds 128 integers; alsa-lib asserts (aborts) on a larger index.
 pub const CTL_MAX_INTEGERS: usize = 128;
 
 type Pcm = c_void;
@@ -31,10 +27,6 @@ type ElemValue = c_void;
 type Uframes = c_ulong;
 type Sframes = c_long;
 
-// alsa-lib calls the handler as `(file, line, function, err, fmt, ...)`. It is declared here
-// without the variadic tail: on the AAPCS (arm, aarch64 Linux) and SysV x86_64 ABIs the named
-// arguments of a variadic call are passed exactly like those of a plain call, and the handler
-// never reads the tail.
 type ErrorHandler = unsafe extern "C" fn(*const c_char, c_int, *const c_char, c_int, *const c_char);
 
 pub struct Lib {
@@ -98,47 +90,25 @@ pub struct Lib {
 }
 
 fn dl_error(e: &libloading::Error) -> String {
-    // The source carries dlerror()'s text ("<file>: cannot open shared object file: ...").
     e.source()
         .map_or_else(|| e.to_string(), ToString::to_string)
 }
 
-/// Resolves `name` (NUL-terminated) as a function pointer of type `T`.
-///
-/// # Safety
-/// `T` must be the function pointer type matching the C prototype of `name`.
 unsafe fn sym<T: Copy>(lib: &Library, name: &CStr) -> Result<T, String> {
-    // SAFETY: the caller guarantees T matches the symbol's prototype; the pointer is only used
-    // while `lib` stays loaded (Lib keeps it for the life of the process).
+    // SAFETY: the caller guarantees T matches the symbol's prototype; the pointer is only used while `lib` stays loaded (Lib keeps it for the life of the process).
     unsafe { lib.get::<T>(name).map(|s| *s).map_err(|e| dl_error(&e)) }
 }
 
-/// The current hw_params ABI: the `__snd_*` alias where the library exports one, else the plain
-/// name.
-///
-/// # Safety
-/// As [`sym`], for both names.
 unsafe fn modern<T: Copy>(lib: &Library, alias: &CStr, plain: &CStr) -> Result<T, String> {
     // SAFETY: forwarded caller guarantee; alias and plain name share the prototype.
     unsafe { sym(lib, alias).or_else(|_| sym(lib, plain)) }
 }
 
 pub fn load_from(soname: &str) -> Result<Lib, String> {
-    // Midi firmware images with a 32-bit userland ship a versioned libasound (ALSA_0.9 +
-    // ALSA_0.9.0rc4). There the plain names of the hw_params get / set_*_near functions can bind
-    // to the ALSA_0.9 compat entries, which take values instead of pointers (period / buffer
-    // read back as 0, wake word dead). The __snd_* aliases are the current ABI; a library without
-    // them (the Lite 2's unversioned one) has only that ABI under the plain name.
-    //
-    // RTLD_GLOBAL: libasound is shared with the GStreamer alsasink of the same process, as the
-    // directly linked C++ daemon did.
-    //
     // SAFETY: libasound's initialisers have no preconditions; it is never unloaded.
     let lib =
         unsafe { Library::open(Some(soname), RTLD_NOW | RTLD_GLOBAL) }.map_err(|e| dl_error(&e))?;
-    // SAFETY: every `sym`/`modern` type below is the prototype from alsa/pcm.h, alsa/control.h
-    // and alsa/error.h, with snd_pcm_uframes_t = unsigned long, snd_pcm_sframes_t = long and the
-    // enums as int.
+    // SAFETY: every `sym`/`modern` type below is the prototype from alsa/pcm.h, alsa/control.h and alsa/error.h, with snd_pcm_uframes_t = unsigned long, snd_pcm_sframes_t = long and the enums as int.
     unsafe {
         let modern_aliases =
             sym::<unsafe extern "C" fn()>(&lib, c"__snd_pcm_hw_params_set_rate_near").is_ok();
@@ -219,15 +189,12 @@ pub fn load_from(soname: &str) -> Result<Lib, String> {
     }
 }
 
-/// Set by pulsar_alsa::init before the first load; empty = the loader's soname lookup.
 static LIB_PATH: OnceLock<&'static str> = OnceLock::new();
 
 pub fn set_library_path(path: &'static str) {
-    // First setting wins: a later call would be too late for the already-loaded library.
     let _ = LIB_PATH.set(path);
 }
 
-// Logged once: later calls only see -ENOENT.
 static LIB: OnceLock<Result<Lib, String>> = OnceLock::new();
 
 pub fn lib() -> Result<&'static Lib, &'static str> {
@@ -276,8 +243,7 @@ impl Lib {
     }
 
     pub(crate) fn set_quiet_error_handler(&'static self) {
-        // SAFETY: the handler matches the named arguments of snd_lib_error_handler_t (see
-        // ErrorHandler) and stays valid for the life of the process.
+        // SAFETY: the handler matches the named arguments of snd_lib_error_handler_t (see ErrorHandler) and stays valid for the life of the process.
         unsafe { (self.lib_error_set_handler)(Some(quiet_handler)) };
     }
 
@@ -314,11 +280,6 @@ unsafe extern "C" fn quiet_handler(
     err: c_int,
     _fmt: *const c_char,
 ) {
-    // alsa-lib diagnostics (alsasink's IEC958 probe "Unknown PCM speakers:{AES0 ...}", "Cannot
-    // read Channel Map ctl") are noise on this device; real failures surface as errors of the
-    // calls themselves.
-    // Only when stderr itself logs at debug level (as the C++ daemon); otherwise nothing reaches
-    // the sink.
     if pulsar_core::stderr_level() < tracing::level_filters::LevelFilter::DEBUG {
         return;
     }
@@ -338,14 +299,12 @@ unsafe extern "C" fn quiet_handler(
     }
 }
 
-/// An open snd_pcm_t; closed on drop.
 pub struct RawPcm {
     lib: &'static Lib,
     pcm: NonNull<Pcm>,
 }
 
-// SAFETY: a snd_pcm_t may be used from any thread, one at a time; RawPcm is not Sync and every
-// call takes &mut self or happens on its owner's thread.
+// SAFETY: a snd_pcm_t may be used from any thread, one at a time; RawPcm is not Sync and every call takes &mut self or happens on its owner's thread.
 unsafe impl Send for RawPcm {}
 
 impl Drop for RawPcm {
@@ -355,7 +314,6 @@ impl Drop for RawPcm {
     }
 }
 
-/// snd_pcm_hw_params_t from snd_pcm_hw_params_malloc.
 pub struct HwParams {
     lib: &'static Lib,
     p: NonNull<HwP>,
@@ -396,7 +354,6 @@ impl Drop for HwParams {
     }
 }
 
-/// snd_pcm_sw_params_t from snd_pcm_sw_params_malloc.
 pub struct SwParams {
     lib: &'static Lib,
     p: NonNull<SwP>,
@@ -421,8 +378,6 @@ impl Drop for SwParams {
     }
 }
 
-// SAFETY (all RawPcm methods): `self.pcm` is an open PCM, params objects are live allocations of
-// the same library, out-pointers point to locals; return codes are passed through unchanged.
 impl RawPcm {
     pub(crate) fn lib(&self) -> &'static Lib {
         self.lib
@@ -526,8 +481,6 @@ impl RawPcm {
         unsafe { (self.lib.pcm_resume)(self.pcm.as_ptr()) }
     }
 
-    /// `frame_bytes`: bytes per frame of the configured format and channel count (0 = not
-    /// configured).
     pub(crate) fn readi(
         &mut self,
         buf: &mut [i16],
@@ -552,7 +505,6 @@ impl RawPcm {
         sframes(n)
     }
 
-    /// [`RawPcm::readi`] for an S32_LE PCM; the caller converts the samples to S16.
     pub(crate) fn readi_s32(
         &mut self,
         buf: &mut [i32],
@@ -636,7 +588,6 @@ fn sframes(n: Sframes) -> Result<usize, i32> {
     }
 }
 
-/// An open snd_ctl_t; closed on drop.
 pub struct RawCtl {
     lib: &'static Lib,
     ctl: NonNull<Ctl>,
@@ -652,7 +603,6 @@ impl Drop for RawCtl {
     }
 }
 
-/// A snd_ctl_elem_value_t naming a mixer element; freed on drop.
 pub struct MixerValue {
     lib: &'static Lib,
     v: NonNull<ElemValue>,
@@ -675,14 +625,12 @@ impl MixerValue {
         Ok(Self { lib, v })
     }
 
-    /// `index` < [`CTL_MAX_INTEGERS`] (checked by the caller; alsa-lib aborts otherwise).
     pub(crate) fn integer(&self, index: usize) -> i64 {
         debug_assert!(index < CTL_MAX_INTEGERS);
         // SAFETY: live value; index within the value's 128 integers.
         from_long(unsafe { (self.lib.value_get_integer)(self.v.as_ptr(), index as c_uint) })
     }
 
-    /// `index` < [`CTL_MAX_INTEGERS`] (checked by the caller; alsa-lib aborts otherwise).
     pub(crate) fn set_integer(&mut self, index: usize, v: i64) {
         debug_assert!(index < CTL_MAX_INTEGERS);
         let v = c_long::try_from(v).unwrap_or(if v < 0 { c_long::MIN } else { c_long::MAX });
@@ -698,14 +646,11 @@ impl Drop for MixerValue {
     }
 }
 
-// SAFETY (all RawCtl methods): `self.ctl` is an open control handle, the element objects are
-// live allocations of the same library and are freed before returning.
 impl RawCtl {
     pub(crate) fn lib(&self) -> &'static Lib {
         self.lib
     }
 
-    /// snd_ctl_elem_info of the mixer element `name` (0 = it exists).
     pub(crate) fn mixer_info(&self, name: &CStr) -> i32 {
         let lib = self.lib;
         let (mut id, mut info) = (ptr::null_mut(), ptr::null_mut());
@@ -744,7 +689,6 @@ impl RawCtl {
     }
 }
 
-/// NUL-terminated copy of a device / element name (Err for an interior NUL).
 pub fn c_name(name: &str) -> Result<CString, i32> {
     CString::new(name).map_err(|_| -libc::EINVAL)
 }

@@ -3,15 +3,6 @@ package dev.proflyder.home.core.time
 import java.util.Locale
 import kotlin.math.max
 
-/**
- * Parses user-entered timer durations and formats countdowns.
- *
- * Accepted forms:
- *  - unit forms: `30s`, `5m`, `2h`, `1h 30m`, `1h30m`, `2m 15s`
- *  - clock forms: `mm:ss`, `hh:mm:ss`
- *
- * A duration must be from 1 second through 7 days (the scheduler contract).
- */
 object DurationText {
     const val MIN_SECONDS = 1L
     const val MAX_SECONDS = 7L * 24L * 60L * 60L
@@ -80,7 +71,6 @@ object DurationText {
         return if (sawPart) total else null
     }
 
-    /** `mm:ss` below one hour, `h:mm:ss` otherwise. Never negative. */
     fun format(totalSeconds: Long): String {
         val safe = max(0L, totalSeconds)
         val hours = safe / 3600L
@@ -93,7 +83,6 @@ object DurationText {
         }
     }
 
-    /** Compact human label for presets, e.g. `1 h 30 min`. */
     fun describe(totalSeconds: Long): String {
         val safe = max(0L, totalSeconds)
         if (safe == 0L) return "0 s"

@@ -1,13 +1,3 @@
-"""Bazel driven Android Lint for the Home Android client.
-
-rules_android 0.7.x has no lint rule, so this uses the standalone Android Lint
-CLI from the SDK `cmdline-tools` package. An aspect walks the Bazel dependency
-graph once and records every module's sources, resources, manifest, dependency
-edges and compile classpath; `android_lint` turns those records into lint's
-`project.xml` model and runs lint over the whole project. Cross-module resource
-usage is therefore analysed as one build instead of unrelated modules.
-"""
-
 load("@rules_android//providers:providers.bzl", "StarlarkAndroidResourcesInfo")
 load("@rules_java//java:defs.bzl", "JavaInfo")
 
@@ -42,8 +32,6 @@ def _lint_aspect_impl(target, ctx):
         if LintModuleInfo in dep:
             modules.extend(dep[LintModuleInfo].modules)
 
-    # Only real modules (sources or an Android manifest) get a descriptor;
-    # Maven aar_import/jar targets only contribute classpath entries.
     if srcs or manifest != None:
         jars = depset()
         if JavaInfo in target:
@@ -156,7 +144,6 @@ _android_lint_test = rule(
 )
 
 def android_lint(name, deps, app_module, config, **kwargs):
-    """Lint every module reachable from `deps` as one Android project."""
     _android_lint_test(
         name = name,
         deps = deps,

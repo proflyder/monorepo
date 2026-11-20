@@ -1,6 +1,3 @@
-//! Shared helpers for the unit tests: temporary directories, a fake
-//! `wpa_supplicant` control socket and a recording Bluetooth adapter.
-
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -26,7 +23,6 @@ pub fn temp_dir(tag: &str) -> PathBuf {
     dir
 }
 
-/// A unix-datagram server that answers one command per datagram.
 pub struct FakeWpa {
     path: PathBuf,
     task: JoinHandle<()>,
@@ -73,8 +69,6 @@ where
     FakeWpa { path, task }
 }
 
-/// Records adapter operations so tests can assert on the BlueZ calls without a
-/// system bus.
 #[derive(Default)]
 pub struct RecordingAdapter {
     calls: Mutex<Vec<String>>,
@@ -133,7 +127,6 @@ impl AdapterOps for RecordingAdapter {
     }
 }
 
-/// Gateway wired to a fake wpa_supplicant socket and a recording adapter.
 pub struct TestGateway {
     pub gateway: Arc<Gateway>,
     pub dir: PathBuf,

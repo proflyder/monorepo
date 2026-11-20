@@ -1,12 +1,9 @@
-//! Honest scheduler status counters and retention purge.
-
 use rusqlite::params;
 
 use crate::domain::{EventState, TimerState};
 
 use super::{QUEUE_HOME, QUEUE_SCENARIO, QUEUE_TASKS, SCHEMA_VERSION, Store, StoreError};
 
-/// Liveness of one event consumer.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ConsumerStatus {
     pub consumer_id: String,
@@ -15,7 +12,6 @@ pub struct ConsumerStatus {
     pub alive: bool,
 }
 
-/// Durable backlog of one queue.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct QueueInfo {
     pub name: String,
@@ -23,7 +19,6 @@ pub struct QueueInfo {
     pub leased: i32,
 }
 
-/// Snapshot of scheduler state. It never asserts that sound was audible.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Status {
     pub schema_version: i64,
@@ -36,7 +31,6 @@ pub struct Status {
 }
 
 impl Store {
-    /// Collects counters and consumer liveness at `now_unix`.
     pub fn status(&self, now_unix: i64) -> Result<Status, StoreError> {
         let liveness = self.config().consumer_liveness;
         self.read(move |connection| {
@@ -106,7 +100,6 @@ impl Store {
         })
     }
 
-    /// Removes terminal events and idempotency rows older than retention.
     pub fn purge(&self, now_unix: i64) -> Result<i64, StoreError> {
         let cutoff = now_unix.saturating_sub(self.config().event_retention);
         self.with_tx(move |tx| {
@@ -133,7 +126,5 @@ fn count(connection: &rusqlite::Connection, query: &str) -> Result<i32, StoreErr
     Ok(i32::try_from(value).unwrap_or(i32::MAX))
 }
 
-// Keep the state/timer codes referenced so the status SQL and the domain enum
-// stay visibly coupled.
 const _: i32 = EventState::Pending.code();
 const _: i32 = TimerState::Running.code();

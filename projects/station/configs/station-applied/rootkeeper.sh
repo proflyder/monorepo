@@ -1,6 +1,4 @@
 #!/bin/sh
-# FORTRESS-KEEPER v5: markers + network adbd; start adbd explicitly because
-# yandex-debugctl says "already configured" and does not spawn it again.
 M=/data/quasar/activate_adb_quasmodrom
 N=/data/quasar/activate_network_adb
 listening() { awk '$2 ~ /:15B3$/ && $4=="0A" {f=1} END{exit !f}' /proc/net/tcp 2>/dev/null; }

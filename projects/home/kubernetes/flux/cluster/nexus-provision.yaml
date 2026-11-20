@@ -1,9 +1,3 @@
-# Nexus REST provisioning.
-#
-# Separate from the workload Kustomization because the provisioning script
-# contains shell expansions that must not be touched by Flux substitution.
-# `force: true` lets Flux recreate the immutable Job when its spec changes;
-# a script change already changes the Job name (configMapGenerator hash).
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
 metadata:

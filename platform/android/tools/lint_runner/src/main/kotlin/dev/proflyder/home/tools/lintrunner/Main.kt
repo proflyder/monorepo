@@ -1,16 +1,3 @@
-// Command lint_runner runs Android Lint over the Bazel modules of the Home
-// Android client.
-//
-// The Bazel rule (`android_lint` in lint.bzl) writes one JSON record per module
-// with the runfiles-relative paths of its sources, resources and manifest. This
-// tool turns those records into the `project.xml` layout descriptor understood
-// by the standalone Android Lint CLI and runs lint once over the whole project,
-// so cross-module resource usage is analysed as a single build rather than as
-// unrelated modules.
-//
-// The lint tool is not a Bazel input: it ships with the Android SDK
-// `cmdline-tools` package. The Bazel rule sets ANDROID_HOME/ANDROID_SDK_ROOT in
-// the test environment; CI installs the pinned `cmdline-tools;23.0`.
 package dev.proflyder.home.tools.lintrunner
 
 import java.io.ByteArrayOutputStream
@@ -35,7 +22,6 @@ private const val ANDROID_NS = "http://schemas.android.com/apk/res/android"
 
 private val PACKAGE_PATTERN = Regex("(?m)^package\\s+([\\w.]+)")
 
-/** Environment access seam so tests never mutate the JVM process environment. */
 interface Env {
     fun get(key: String): String?
     fun entries(): List<Pair<String, String>>
@@ -47,7 +33,6 @@ object SystemEnvironment : Env {
     override fun entries(): List<Pair<String, String>> = System.getenv().map { it.key to it.value }
 }
 
-/** Mutable isolated environment for tests and embedded runs. */
 class MapEnvironment : Env {
     private val values = LinkedHashMap<String, String>()
 
@@ -65,7 +50,6 @@ class MapEnvironment : Env {
     override fun entries(): List<Pair<String, String>> = values.map { it.key to it.value }
 }
 
-/** One module record written by the Bazel lint aspect. */
 data class LintModule(
     val label: String,
     val name: String,
@@ -114,7 +98,6 @@ private fun escapeAttr(value: String): String {
     return builder.toString()
 }
 
-/** Separates ElementTree-style `{uri}local` names. */
 private fun splitQName(name: String): Pair<String, String> {
     if (name.startsWith("{")) {
         val end = name.indexOf('}')
@@ -125,10 +108,6 @@ private fun splitQName(name: String): Pair<String, String> {
     return "" to name
 }
 
-/**
- * Assigns ns0, ns1, ... to namespaced attributes in document order, mirroring
- * ElementTree's serialization of the lint model.
- */
 private fun collectNamespaces(
     element: Element,
     prefixes: MutableMap<String, String>,
@@ -202,10 +181,6 @@ private fun writeDocument(path: String, root: Element) {
     File(path).writeText(builder.toString(), Charsets.UTF_8)
 }
 
-// joinPath mirrors os.path.join: it concatenates without cleaning `..`.
-// The lint records contain runfiles-relative paths such as
-// `../rules_jvm_external++maven+maven/...`; normalising them would produce a
-// different (but equivalent) project model.
 private fun joinPath(base: String, name: String): String {
     if (File(name).isAbsolute) {
         return name
@@ -294,13 +269,6 @@ fun safeName(name: String): String {
     return builder.toString()
 }
 
-/**
- * Copies a generated source into a directory matching its package. Lint warns
- * when a generated file's path does not match its package (the ViewBinding
- * generator emits files into the Bazel package, not the Kotlin package tree).
- * Staging a copy keeps the analysis output clean without changing build
- * outputs.
- */
 fun stagedGeneratedSource(item: LintModule, path: String, workdir: String): String {
     val payload = File(path).readBytes()
     val match = PACKAGE_PATTERN.find(String(payload, Charsets.UTF_8)) ?: return path
@@ -319,13 +287,6 @@ fun stagedGeneratedSource(item: LintModule, path: String, workdir: String): Stri
     return dest.path
 }
 
-/**
- * Writes a merged manifest carrying the SDK levels Bazel configures. Library
- * source manifests are intentionally empty; the application manifest declares
- * minSdk/targetSdk. Lint reads SDK levels from the merged manifest, so every
- * module gets one. The application module also needs the version fields that
- * android_binary injects through manifest_values.
- */
 private fun mergedManifest(item: LintModule, workdir: String): String {
     val manifest = Element("manifest")
     manifest.attr("package", item.packageName)
@@ -571,8 +532,6 @@ fun run(
         ),
     )
 
-    // Rebuild the environment in a deterministic order: inherited entries keep
-    // their order, then the two defaults (only when absent).
     val inherited = env.entries()
     val environment = LinkedHashMap<String, String>()
     for ((key, value) in inherited) {

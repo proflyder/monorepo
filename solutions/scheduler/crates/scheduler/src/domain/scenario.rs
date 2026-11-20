@@ -1,52 +1,27 @@
-//! Durable scenario definitions.
-//!
-//! A scenario is a named, ordered list of steps gated by triggers and
-//! conditions. The scheduler owns definitions and emits `scenario.fire`
-//! events; a separate executor evaluates conditions and runs the steps.
-//!
-//! The stored body is the [`ScenarioDefinition`] serialized as JSON. Server
-//! fields (`id`, `revision`, timestamps and the computed `next_due_unix`) live
-//! in SQLite columns and never in the body.
-
 use jiff::tz::TimeZone;
 use serde::{Deserialize, Serialize};
 
 use crate::domain::rule::{Repeat, Rule, RuleError, WallTime, parse_iso_date};
 use crate::domain::validation::DomainError;
 
-/// Maximum label length in bytes.
 pub const MAX_SCENARIO_LABEL_BYTES: usize = 80;
-/// Maximum description length in bytes.
 pub const MAX_SCENARIO_DESCRIPTION_BYTES: usize = 512;
-/// Maximum number of triggers.
 pub const MAX_SCENARIO_TRIGGERS: usize = 8;
-/// Maximum number of conditions.
 pub const MAX_SCENARIO_CONDITIONS: usize = 8;
-/// Maximum number of steps.
 pub const MAX_SCENARIO_STEPS: usize = 32;
-/// Maximum spoken text length in characters.
 pub const MAX_SPEAK_CHARS: usize = 500;
-/// Maximum delay step.
 pub const MAX_DELAY_SECONDS: i32 = 3600;
-/// Maximum entity id length.
 pub const MAX_ENTITY_ID_BYTES: usize = 255;
-/// Maximum entity state length.
 pub const MAX_ENTITY_STATE_BYTES: usize = 255;
-/// Maximum catalog entry id length.
 pub const MAX_ENTRY_ID_BYTES: usize = 200;
-/// Maximum catalog action length.
 pub const MAX_ACTION_BYTES: usize = 64;
 
-/// What starts a scenario.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ScenarioTrigger {
-    /// Only RunScenario starts it.
     Manual,
-    /// A wall-clock trigger with the same recurrence policy as a Schedule.
     Time(ScenarioTimeTrigger),
 }
 
-/// Local wall-clock recurrence of a time trigger.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ScenarioTimeTrigger {
     pub timezone: String,
@@ -57,12 +32,6 @@ pub struct ScenarioTimeTrigger {
 }
 
 impl ScenarioTimeTrigger {
-    /// The trigger's recurrence translated to the scheduler's UTC rule.
-    ///
-    /// The definition keeps its IANA zone because the executor evaluates
-    /// local time windows; the materialized schedule is UTC-only like every
-    /// other schedule. The weekday mask is shifted to the UTC weekdays the
-    /// local occurrences land on.
     #[must_use]
     pub fn rule(&self) -> Rule {
         crate::domain::rule::local_to_utc(
@@ -75,7 +44,6 @@ impl ScenarioTimeTrigger {
     }
 }
 
-/// Validates the local recurrence shape of a scenario time trigger.
 fn validate_time_trigger(time: &ScenarioTimeTrigger) -> Result<(), RuleError> {
     if time.timezone.is_empty() {
         return Err(RuleError::new("timezone is required"));
@@ -163,12 +131,12 @@ fn validate_time_trigger(time: &ScenarioTimeTrigger) -> Result<(), RuleError> {
     Ok(())
 }
 
-/// A condition the executor evaluates before running steps.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ScenarioCondition {
-    /// Matches a Home Assistant entity state.
-    EntityState { entity_id: String, state: String },
-    /// Matches a local time window; `end < start` wraps over midnight.
+    EntityState {
+        entity_id: String,
+        state: String,
+    },
     TimeWindow {
         start: WallTime,
         end: WallTime,
@@ -176,22 +144,21 @@ pub enum ScenarioCondition {
     },
 }
 
-/// One ordered scenario step.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ScenarioStep {
-    /// A `home.control`-shaped catalog call.
     Catalog {
         entry_id: String,
         action: String,
         params_json: String,
     },
-    /// Speak text on the station.
-    Speak { text: String },
-    /// Wait before the next step.
-    Delay { seconds: i32 },
+    Speak {
+        text: String,
+    },
+    Delay {
+        seconds: i32,
+    },
 }
 
-/// Client-controlled part of a scenario; this is the stored JSON body.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ScenarioDefinition {
     pub label: String,
@@ -202,7 +169,6 @@ pub struct ScenarioDefinition {
     pub steps: Vec<ScenarioStep>,
 }
 
-/// A durable scenario row plus its computed next occurrence.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Scenario {
     pub id: String,
@@ -220,7 +186,6 @@ pub struct Scenario {
 }
 
 impl Scenario {
-    /// Client-controlled definition stored as JSON.
     #[must_use]
     pub fn definition(&self) -> ScenarioDefinition {
         ScenarioDefinition {
@@ -233,7 +198,6 @@ impl Scenario {
         }
     }
 
-    /// Rebuilds a scenario from its stored body and server columns.
     #[must_use]
     pub fn from_definition(
         id: String,
@@ -259,7 +223,6 @@ impl Scenario {
         }
     }
 
-    /// Time triggers in declaration order.
     pub fn time_triggers(&self) -> impl Iterator<Item = (usize, &ScenarioTimeTrigger)> {
         self.triggers
             .iter()
@@ -270,8 +233,6 @@ impl Scenario {
             })
     }
 
-    /// Validates a client definition. `max_body_bytes` bounds the serialized
-    /// body, matching the payload limit of the rest of the scheduler.
     pub fn validate(
         definition: &ScenarioDefinition,
         max_body_bytes: usize,
@@ -325,7 +286,6 @@ impl Scenario {
         Ok(())
     }
 
-    /// Serialized definition used as the stored body and idempotency input.
     pub fn body_json(&self) -> Result<String, DomainError> {
         serde_json::to_string(&self.definition())
             .map_err(|_| DomainError::invalid("scenario body is not serializable"))

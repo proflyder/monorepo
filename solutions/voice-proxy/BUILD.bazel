@@ -2,9 +2,6 @@ load("//platform/bazel/oci:service_image.bzl", "rust_service_image")
 
 package(default_visibility = ["//visibility:public"])
 
-# Static x86_64-unknown-linux-musl binary on the digest-pinned distroless base,
-# built hermetically without a Docker daemon. Distroless has no shell, so the
-# container is diagnosed with `voice-proxy -healthcheck` / `-status`.
 rust_service_image(
     name = "voice-proxy",
     crate_binary = "//solutions/voice-proxy/crates/voice-proxy:voice-proxy",

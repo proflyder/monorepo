@@ -1,14 +1,3 @@
-//! Process configuration, loaded 1:1 from the Go scheduler's environment.
-//!
-//! `SCHEDULER_*` names take precedence; the legacy `ALARM_*` names remain
-//! accepted as fallbacks so an older deployment keeps working. The token is a
-//! mounted Secret: `SCHEDULER_TOKEN` wins over `SCHEDULER_TOKEN_FILE`, and its
-//! value never appears in an error message.
-//!
-//! Duration variables keep the Go service's whole-second (and millisecond for
-//! the tick) values; they are parsed by [`home_config`] instead of duplicating
-//! Go's integer-to-`time.Duration` conversion.
-
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::time::Duration;
@@ -17,28 +6,17 @@ use home_config::parse_duration_seconds;
 use home_secret::Secret;
 use thiserror::Error;
 
-/// Default listen address.
 pub const DEFAULT_LISTEN: &str = "127.0.0.1:8098";
-/// Default SQLite file name.
 pub const DEFAULT_DB_PATH: &str = "scheduler.db";
-/// Default grace for a missed occurrence.
 pub const DEFAULT_MISSED_GRACE: Duration = Duration::from_secs(600);
-/// Default ringing window.
 pub const DEFAULT_RING_WINDOW: Duration = Duration::from_secs(900);
-/// Default terminal-event retention.
 pub const DEFAULT_RETENTION: Duration = Duration::from_secs(30 * 24 * 60 * 60);
-/// Default number of live timers.
 pub const DEFAULT_MAX_TIMERS: i64 = 64;
-/// Default longest timer.
 pub const DEFAULT_MAX_TIMER_DURATION: Duration = Duration::from_secs(7 * 24 * 60 * 60);
-/// Default payload cap.
 pub const DEFAULT_MAX_PAYLOAD_BYTES: usize = 16 * 1024;
-/// Default delivery attempts.
 pub const DEFAULT_MAX_ATTEMPTS: i64 = 5;
-/// Default engine tick.
 pub const DEFAULT_TICK_INTERVAL: Duration = Duration::from_secs(1);
 
-/// A fully validated process configuration.
 #[derive(Clone)]
 pub struct Config {
     pub db_path: PathBuf,
@@ -53,9 +31,6 @@ pub struct Config {
     pub max_attempts: i64,
     pub tick_interval: Duration,
     pub allowed_consumers: Vec<String>,
-    /// Advertise `GetStatus.scenario_execution_supported`. The scheduler never
-    /// executes scenarios; `ha-scenario` does. This is a deployment flag so the
-    /// status only claims support when that executor is actually rolled out.
     pub scenario_execution: bool,
 }
 
@@ -79,8 +54,6 @@ impl std::fmt::Debug for Config {
     }
 }
 
-/// Why the environment was rejected. Messages match the Go loader and never
-/// contain a secret value.
 #[derive(Debug, Error)]
 pub enum ConfigError {
     #[error("SCHEDULER_TOKEN or SCHEDULER_TOKEN_FILE is required")]
@@ -92,12 +65,10 @@ pub enum ConfigError {
 }
 
 impl Config {
-    /// Reads and validates the process environment.
     pub fn load() -> Result<Self, ConfigError> {
         Self::load_from(&|key| std::env::var(key).ok(), &|path| std::fs::read(path))
     }
 
-    /// Loads from injected environment and file readers (used by tests).
     pub fn load_from(
         getenv: &dyn Fn(&str) -> Option<String>,
         read_file: &dyn Fn(&str) -> std::io::Result<Vec<u8>>,
@@ -106,9 +77,6 @@ impl Config {
             .unwrap_or_else(|| DEFAULT_DB_PATH.to_owned());
         let listen = first(getenv, &["SCHEDULER_LISTEN", "ALARM_LISTEN"])
             .unwrap_or_else(|| DEFAULT_LISTEN.to_owned());
-        // SCHEDULER_TIMEZONE/ALARM_TIMEZONE are deliberately ignored: every
-        // schedule request carries its own `Time-Zone`, and background work is
-        // UTC by contract.
 
         let token = load_token(getenv, read_file)?;
 
@@ -235,15 +203,11 @@ impl Config {
         Ok(())
     }
 
-    /// Loopback address for the probe: a wildcard bind becomes `127.0.0.1`.
     pub fn healthcheck_address(&self) -> Result<SocketAddr, String> {
         healthcheck_address(&self.listen)
     }
 }
 
-/// Turns a listen address into a loopback probe address. An empty host, an
-/// unspecified IPv4 address or an unspecified IPv6 address becomes
-/// `127.0.0.1`, matching `scheduler -healthcheck` in Go.
 pub fn healthcheck_address(listen: &str) -> Result<SocketAddr, String> {
     let Some((host, port)) = listen.rsplit_once(':') else {
         return Err(format!("invalid listen address: {listen}"));
@@ -281,7 +245,6 @@ fn load_token(
     Ok(Secret::new(token))
 }
 
-/// The first non-blank value of `keys`, trimmed.
 fn first(getenv: &dyn Fn(&str) -> Option<String>, keys: &[&str]) -> Option<String> {
     keys.iter().find_map(|key| {
         let value = getenv(key)?;

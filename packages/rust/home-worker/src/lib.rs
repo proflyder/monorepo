@@ -1,27 +1,3 @@
-//! The shared executor loop: lease → handle → ack.
-//!
-//! The home services used to repeat the same loop three times (ha-bridge,
-//! ha-control, the voice-proxy consumer). This crate owns the reusable part
-//! and leaves the domain decisions to a [`Handler`]:
-//!
-//! * [`Queue`] leases due events and reports a terminal outcome;
-//! * [`Handler`] answers [`Outcome::Delivered`], [`Outcome::Failed`],
-//!   [`Outcome::Skipped`] or [`Outcome::Retry`]. `Failed` acks the event as
-//!   terminal `FAILED` (a structural error that a retry cannot fix), `Skipped`
-//!   acks `SKIPPED`, and `Retry` does **not** ack: the lease expires and the
-//!   scheduler returns the event to `PENDING`, exactly like voice-proxy on a
-//!   failed announcement;
-//! * [`Handler::order`] may reorder one leased batch before it is handled;
-//!   ha-bridge uses it for "stop before fire" inside a batch;
-//! * an optional [`Gate`] ("may this executor take work right now?") is
-//!   checked before every lease — voice-proxy uses it for an idle station;
-//! * queue errors back off exponentially (with a ceiling) and cancellation is
-//!   cooperative through [`CancellationToken`].
-//!
-//! [`SchedulerQueue`] implements [`Queue`] over the Connect client of
-//! `home-proto`; there is no cycle because `home-proto` knows nothing about
-//! the loop.
-
 use std::future::Future;
 use std::pin::Pin;
 use std::time::Duration;
@@ -33,19 +9,13 @@ mod scheduler_queue;
 
 pub use scheduler_queue::SchedulerQueue;
 
-/// One leased event, normalized from the wire `DueEvent`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Event {
     pub id: String,
-    /// Scheduler source identity (schedule/timer/task id).
     pub source_id: String,
     pub task_type: String,
     pub queue: String,
-    /// Human-facing label of the occurrence (alarm name, reminder text). It is
-    /// display data, not an identifier.
     pub label: String,
-    /// Opaque `payload_json`. Treat it as data only, never as a service call
-    /// or entity identifier.
     pub payload: String,
     pub action: Action,
     pub source: Source,
@@ -55,18 +25,13 @@ pub struct Event {
     pub lease_until_unix: i64,
 }
 
-/// What an executor should do for an event.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Action {
-    /// Start the occurrence. Legacy `UNSPECIFIED` rows also map here.
     Fire,
-    /// Cancel sound for the occurrence.
     Stop,
-    /// A wire value this version does not know.
     Other(i32),
 }
 
-/// What produced the event.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Source {
     Unspecified,
@@ -78,7 +43,6 @@ pub enum Source {
     Other(i32),
 }
 
-/// Terminal outcome reported to the queue.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AckOutcome {
     Delivered,
@@ -86,22 +50,14 @@ pub enum AckOutcome {
     Skipped,
 }
 
-/// The handler's decision for one event.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Outcome {
-    /// The event was handled; ack `DELIVERED` with an optional detail.
     Delivered(String),
-    /// The event is structurally unusable; ack `FAILED` with an optional
-    /// detail. The scheduler records `FAILED` as terminal, so the lease is not
-    /// retried.
     Failed(String),
-    /// The event is not applicable; ack `SKIPPED` with an optional detail.
     Skipped(String),
-    /// Leave the event leased and unacked; expiry returns it to `PENDING`.
     Retry,
 }
 
-/// One lease request. The worker keeps a template and clones it per call.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LeaseRequest {
     pub consumer_id: String,
@@ -110,7 +66,6 @@ pub struct LeaseRequest {
     pub limit: i32,
 }
 
-/// One terminal ack.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Ack {
     pub event_id: String,
@@ -119,7 +74,6 @@ pub struct Ack {
     pub detail: String,
 }
 
-/// A queue failure. The worker retries with exponential backoff.
 #[derive(Debug, thiserror::Error)]
 pub enum QueueError {
     #[error("queue: {0}")]
@@ -129,8 +83,6 @@ pub enum QueueError {
 }
 
 impl QueueError {
-    /// Build an implementation-specific error without pulling a new error
-    /// crate into the trait.
     #[must_use]
     pub fn other(detail: impl Into<String>) -> Self {
         Self::Other {
@@ -139,43 +91,25 @@ impl QueueError {
     }
 }
 
-/// A durable event queue.
 pub trait Queue: Send + Sync {
-    /// Lease up to `request.limit` due events. An empty vector means "nothing
-    /// due", not an error.
     fn lease(
         &self,
         request: LeaseRequest,
     ) -> impl Future<Output = Result<Vec<Event>, QueueError>> + Send;
 
-    /// Report a terminal outcome. `Outcome::Retry` never reaches this method.
     fn ack(&self, ack: Ack) -> impl Future<Output = Result<(), QueueError>> + Send;
 }
 
-/// The domain action for one event.
 pub trait Handler: Send + Sync {
     fn handle(&self, event: &Event) -> impl Future<Output = Outcome> + Send;
 
-    /// Reorder or filter one leased batch before any event is handled.
-    ///
-    /// The default is a no-op, so the batch keeps the server order. The hook
-    /// runs once per non-empty lease and may not block: it is synchronous
-    /// because the only intended use is ordering (for example source order,
-    /// then `due_unix`, with `STOP` ahead of `FIRE`).
     fn order(&self, _events: &mut Vec<Event>) {}
 }
 
-/// An optional "can this executor take work now?" predicate.
-///
-/// The boxed future keeps the trait object-safe: [`Worker`] stores
-/// `Option<Box<dyn Gate>>` so a solution can install a runtime-specific gate
-/// (for example the voice-proxy station-idle check) without a generic parameter
-/// leaking into every type.
 pub trait Gate: Send + Sync {
     fn ready(&self) -> Pin<Box<dyn Future<Output = bool> + Send + '_>>;
 }
 
-/// A gate that is always open (the default).
 #[derive(Debug, Clone, Copy, Default)]
 pub struct AlwaysReady;
 
@@ -185,16 +119,11 @@ impl Gate for AlwaysReady {
     }
 }
 
-/// Worker tuning.
 #[derive(Debug, Clone)]
 pub struct WorkerConfig {
-    /// Lease template; `consumer_id` and `queue` are the executor identity.
     pub lease: LeaseRequest,
-    /// Pause between empty leases and while the gate is closed.
     pub poll_interval: Duration,
-    /// First retry delay after a queue error.
     pub retry_min: Duration,
-    /// Ceiling of the exponential retry delay.
     pub retry_max: Duration,
 }
 
@@ -214,7 +143,6 @@ impl Default for WorkerConfig {
     }
 }
 
-/// Lease → handle → ack loop.
 pub struct Worker<Q, H> {
     queue: Q,
     handler: H,
@@ -237,15 +165,12 @@ where
         }
     }
 
-    /// Install the "may take work now" predicate.
     #[must_use]
     pub fn with_gate(mut self, gate: impl Gate + 'static) -> Self {
         self.gate = Some(Box::new(gate));
         self
     }
 
-    /// Run until `cancel` is cancelled. It never returns an error: a queue
-    /// failure is retried with backoff, matching the Go executors.
     pub async fn run(&self, cancel: CancellationToken) {
         let mut retry = backoff(self.config.retry_min, self.config.retry_max);
         loop {
@@ -319,8 +244,6 @@ where
                         outcome: AckOutcome::Skipped,
                         detail,
                     },
-                    // No ack: the lease expires and the scheduler returns the
-                    // event to PENDING.
                     Outcome::Retry => continue,
                 };
                 let acked = tokio::select! {
@@ -331,8 +254,6 @@ where
                     if !wait_retry(&mut retry, self.config.retry_max, &cancel).await {
                         return;
                     }
-                    // The event may still be leased; do not spin on the rest
-                    // of this batch.
                     break;
                 }
             }
@@ -359,7 +280,6 @@ async fn wait_retry(
     wait(delay, cancel).await
 }
 
-/// Sleep unless cancelled; returns `false` when cancelled.
 async fn wait(delay: Duration, cancel: &CancellationToken) -> bool {
     if delay.is_zero() {
         return !cancel.is_cancelled();
@@ -712,7 +632,6 @@ mod tests {
         let mut retry = backoff(Duration::from_millis(10), Duration::from_millis(60));
         let delays: Vec<Duration> = std::iter::from_fn(|| retry.next()).take(6).collect();
         assert_eq!(delays.len(), 6);
-        // Jitter adds (0, current); the base sequence is 10, 20, 40, 60, 60.
         assert!(delays[0] >= Duration::from_millis(10));
         assert!(delays[0] <= Duration::from_millis(20));
         assert!(delays[1] >= Duration::from_millis(20));

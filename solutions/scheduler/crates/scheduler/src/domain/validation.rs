@@ -1,15 +1,9 @@
-//! Input validation shared by the future store and API layers.
-//!
-//! Messages are the Go store's exact strings: they are part of the observable
-//! contract because clients and golden fixtures assert on them.
-
 use std::fmt;
 use std::fmt::Write as _;
 
 use crate::domain::rule::{Repeat, RuleError};
 use crate::domain::schedule::ScheduleKind;
 
-/// Transport-neutral classification of a domain error.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ErrorKind {
     InvalidArgument,
@@ -22,7 +16,6 @@ pub enum ErrorKind {
 }
 
 impl ErrorKind {
-    /// Go error prefix for this kind.
     #[must_use]
     pub const fn prefix(self) -> &'static str {
         match self {
@@ -37,8 +30,6 @@ impl ErrorKind {
     }
 }
 
-/// A domain failure with the Go-compatible rendered message
-/// (`<kind>: <detail>`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DomainError {
     kind: ErrorKind,
@@ -46,7 +37,6 @@ pub struct DomainError {
 }
 
 impl DomainError {
-    /// Builds an error with an explicit kind and detail.
     #[must_use]
     pub fn new(kind: ErrorKind, detail: impl Into<String>) -> Self {
         Self {
@@ -55,43 +45,36 @@ impl DomainError {
         }
     }
 
-    /// `invalid argument: <detail>`.
     #[must_use]
     pub fn invalid(detail: impl Into<String>) -> Self {
         Self::new(ErrorKind::InvalidArgument, detail)
     }
 
-    /// `invalid argument: invalid schedule rule: <rule detail>`.
     #[must_use]
     pub fn invalid_rule(error: &RuleError) -> Self {
         Self::invalid(error.to_string())
     }
 
-    /// `not found: <detail>`.
     #[must_use]
     pub fn not_found(detail: impl Into<String>) -> Self {
         Self::new(ErrorKind::NotFound, detail)
     }
 
-    /// `precondition failed: <detail>`.
     #[must_use]
     pub fn precondition(detail: impl Into<String>) -> Self {
         Self::new(ErrorKind::Precondition, detail)
     }
 
-    /// `limit exceeded: <detail>`.
     #[must_use]
     pub fn limit_exceeded(detail: impl Into<String>) -> Self {
         Self::new(ErrorKind::LimitExceeded, detail)
     }
 
-    /// Error kind for transport mapping.
     #[must_use]
     pub const fn kind(&self) -> ErrorKind {
         self.kind
     }
 
-    /// Detail without the kind prefix.
     #[must_use]
     pub fn detail(&self) -> &str {
         &self.detail
@@ -106,19 +89,14 @@ impl fmt::Display for DomainError {
 
 impl std::error::Error for DomainError {}
 
-/// Label length limit shared by schedules and timers (bytes).
 pub const MAX_LABEL_BYTES: usize = 200;
 
-/// Idempotency key length limit (bytes).
 pub const MAX_IDEMPOTENCY_KEY_BYTES: usize = 200;
 
-/// Ack detail length limit (bytes).
 pub const MAX_DETAIL_BYTES: usize = 1024;
 
-/// Maximum generic task delay: 10 * 365 days, like the Go constant.
 pub const MAX_TASK_DELAY_SECONDS: i64 = 10 * 365 * 24 * 60 * 60;
 
-/// Validates a schedule or timer label.
 pub fn validate_label(label: &str) -> Result<(), DomainError> {
     if label.len() > MAX_LABEL_BYTES {
         return Err(DomainError::invalid(format!(
@@ -128,7 +106,6 @@ pub fn validate_label(label: &str) -> Result<(), DomainError> {
     Ok(())
 }
 
-/// Validates a required schedule or timer id.
 pub fn validate_id(id: &str) -> Result<(), DomainError> {
     if id.trim().is_empty() {
         return Err(DomainError::invalid("id is required"));
@@ -136,7 +113,6 @@ pub fn validate_id(id: &str) -> Result<(), DomainError> {
     Ok(())
 }
 
-/// Validates a required event id.
 pub fn validate_event_id(event_id: &str) -> Result<(), DomainError> {
     if event_id.trim().is_empty() {
         return Err(DomainError::invalid("event_id is required"));
@@ -144,7 +120,6 @@ pub fn validate_event_id(event_id: &str) -> Result<(), DomainError> {
     Ok(())
 }
 
-/// Validates an optional idempotency key.
 pub fn validate_idempotency_key(key: &str) -> Result<(), DomainError> {
     if key.len() > MAX_IDEMPOTENCY_KEY_BYTES {
         return Err(DomainError::invalid(format!(
@@ -154,7 +129,6 @@ pub fn validate_idempotency_key(key: &str) -> Result<(), DomainError> {
     Ok(())
 }
 
-/// Validates a JSON payload and its size.
 pub fn validate_payload(payload_json: &str, max_payload_bytes: usize) -> Result<(), DomainError> {
     if payload_json.len() > max_payload_bytes {
         return Err(DomainError::invalid(format!(
@@ -167,7 +141,6 @@ pub fn validate_payload(payload_json: &str, max_payload_bytes: usize) -> Result<
     Ok(())
 }
 
-/// Validates a generic task type: `^[a-z][a-z0-9._-]{0,63}$`.
 pub fn validate_task_type(task_type: &str) -> Result<(), DomainError> {
     let mut chars = task_type.chars();
     let valid = chars.next().is_some_and(|first| first.is_ascii_lowercase())
@@ -185,7 +158,6 @@ pub fn validate_task_type(task_type: &str) -> Result<(), DomainError> {
     Ok(())
 }
 
-/// Validates a task queue: `^[a-z][a-z0-9._-]{0,31}$`.
 pub fn validate_queue(queue: &str) -> Result<(), DomainError> {
     let mut chars = queue.chars();
     let valid = chars.next().is_some_and(|first| first.is_ascii_lowercase())
@@ -203,7 +175,6 @@ pub fn validate_queue(queue: &str) -> Result<(), DomainError> {
     Ok(())
 }
 
-/// Validates a timer duration against the configured maximum.
 pub fn validate_duration(duration_seconds: i64, max_seconds: i64) -> Result<(), DomainError> {
     if duration_seconds <= 0 {
         return Err(DomainError::invalid("duration_seconds must be positive"));
@@ -217,10 +188,6 @@ pub fn validate_duration(duration_seconds: i64, max_seconds: i64) -> Result<(), 
     Ok(())
 }
 
-/// Validates a requested task run time and returns the effective due second.
-///
-/// Like Go, a zero or past `run_at_unix` means "now"; the maximum delay is
-/// measured from `now_unix` on the effective due time.
 pub fn validate_run_at(
     run_at_unix: i64,
     now_unix: i64,
@@ -243,7 +210,6 @@ pub fn validate_run_at(
     Ok(due)
 }
 
-/// Validates an ack detail string.
 pub fn validate_detail(detail: &str) -> Result<(), DomainError> {
     if detail.len() > MAX_DETAIL_BYTES {
         return Err(DomainError::invalid(format!(
@@ -253,7 +219,6 @@ pub fn validate_detail(detail: &str) -> Result<(), DomainError> {
     Ok(())
 }
 
-/// Validates a schedule kind.
 pub fn validate_schedule_kind(kind: ScheduleKind) -> Result<(), DomainError> {
     match kind {
         ScheduleKind::Alarm | ScheduleKind::Reminder | ScheduleKind::Scenario => Ok(()),
@@ -261,7 +226,6 @@ pub fn validate_schedule_kind(kind: ScheduleKind) -> Result<(), DomainError> {
     }
 }
 
-/// Reminders are one-shot only.
 pub fn validate_reminder_repeat(kind: ScheduleKind, repeat: Repeat) -> Result<(), DomainError> {
     if kind == ScheduleKind::Reminder && repeat != Repeat::Once {
         return Err(DomainError::invalid("reminders must use REPEAT_KIND_ONCE"));
@@ -269,7 +233,6 @@ pub fn validate_reminder_repeat(kind: ScheduleKind, repeat: Repeat) -> Result<()
     Ok(())
 }
 
-/// Renders a whole number of seconds the way Go's `time.Duration.String` does.
 #[must_use]
 pub fn format_go_duration(total_seconds: i64) -> String {
     if total_seconds == 0 {

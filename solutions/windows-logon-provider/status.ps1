@@ -1,15 +1,4 @@
 ﻿#Requires -RunAsAdministrator
-<#
-.SYNOPSIS
-    Показывает состояние провайдера входа Home (без секретов).
-
-.DESCRIPTION
-    Печатает конфигурацию, состояние регистрации, DLL, FailCount/Disabled и
-    последние строки logon.log. Пароль и ключ не читаются и не печатаются.
-
-.EXAMPLE
-    powershell -NoProfile -ExecutionPolicy Bypass -File status.ps1
-#>
 [CmdletBinding()]
 param(
     [int]$Tail = 30

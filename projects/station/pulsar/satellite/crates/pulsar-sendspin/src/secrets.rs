@@ -1,15 +1,7 @@
-//! Redaction of pairing secrets in log lines. The sendspin-cpp host log writes directly to
-//! stderr (`fprintf`). Only the Bazel station build compiles sendspin-cpp, and it does so with
-//! `-Dfprintf=pulsar_filtered_fprintf`, so the shim passes every line through [`redact`]. The
-//! legacy `build.rs` path links prebuilt sendspin libraries made elsewhere and does not filter
-//! them; a cargo host build without sendspin-cpp has no library log at all.
-
 use std::borrow::Cow;
 
-/// Marker for a removed value.
 const HIDDEN: &str = "<redacted>";
 
-/// Masks `SP:` pairing tokens and the value of a `… Pairing PSK: <value>` line.
 pub fn redact(line: &str) -> Cow<'_, str> {
     let without_token = redact_tokens(line);
     redact_psk(without_token)
@@ -60,7 +52,6 @@ fn redact_tokens(line: &str) -> Cow<'_, str> {
             rest = &token[3..];
             continue;
         }
-        // Short tokens are hidden entirely; long ones keep a recognisable head and tail.
         if len <= 12 {
             out.push_str("SP:");
             out.push_str(HIDDEN);
@@ -109,9 +100,7 @@ mod tests {
         let out = redact(line);
         assert!(!out.contains("ABCDEFGHIJKLMNOP"), "{out}");
         assert!(out.contains("SP:ABCD…4567"), "{out}");
-        // A short token gives away nothing.
         assert_eq!(redact("token SP:ABCDEF").as_ref(), "token SP:<redacted>");
-        // Ordinary lines pass unchanged.
         let plain = "sendspin: stream start flac 48000 Hz/2 ch/16 bit";
         assert_eq!(redact(plain), plain);
     }

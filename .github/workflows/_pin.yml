@@ -1,24 +1,5 @@
 name: _pin
 
-# Promote the PR-built digest of one deployable unit and commit its pins.
-#
-# Build once (DECISIONS 36): this workflow never builds. It resolves the
-# `tree-<hash>` digest the merged PR built and attested, verifies its
-# provenance, attaches the release tags, and writes the digest to the
-# `deploy/home-apps` branch, which Flux applies.
-#
-# Two callers share the exact same steps, differing only in flags:
-#
-#   * `_deploy-home.yml` — after a squash merge (`allow_pr_head`, the tree must
-#     match this deploy commit) or a manual dispatch (`allow_history`, which
-#     walks the first-parent lineage for the newest verified tree).
-#   * `deploy-services.yml` — after an honest rebuild of the current `develop`
-#     (neither flag: the tree tag was just produced by that run).
-#
-# No VPN, OpenBao or kubeconfig: `contents: write` on the pins branch is all it
-# needs, `develop` is never written, and a failed promotion leaves the previous
-# pin in force.
-
 on:
   workflow_call:
     inputs:
@@ -50,52 +31,27 @@ permissions:
   contents: read
 
 env:
-  # Official crane (google/go-containerregistry): resolves and re-tags a digest
-  # without pulling it. sha256 is the GitHub release asset digest for
-  # Linux_x86_64.
   CRANE_VERSION: "v0.22.1"
   CRANE_SHA256: "0ab7a1d6932a213aed964ce97666c3077fe691c8606413674a8b3e0b9ec4cda0"
-  # Set Git's default branch for actions/checkout's `git init` (it warns when unset;
-  # it runs under a throwaway HOME, so only an env-provided config reaches it).
   GIT_CONFIG_COUNT: "1"
   GIT_CONFIG_KEY_0: init.defaultBranch
   GIT_CONFIG_VALUE_0: main
 
 jobs:
-  # Every deployable unit is Flux-owned: Flux applies the workload from
-  # `deploy/home-apps`, so CI only has to publish the verified digest there.
-  # This job therefore has no VPN, no OpenBao, no kubeconfig and no `kubectl`:
-  # it promotes the PR-built digest and commits the pins file with
-  # `GITHUB_TOKEN` (`contents: write`). The branch is not code; `develop` is
-  # never touched and Flux never writes to Git.
-  #
-  # Matrix jobs can race on the branch, so the writer refetches, reapplies only
-  # this unit's keys and retries the push (platform/ci/pins.mjs). A missing or
-  # unverified digest fails closed and leaves the previous pin in place.
   pins:
     name: pins ${{ inputs.unit }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
-      # Push the pins commit (fast-forward only: the ruleset forbids force-push).
       contents: write
-      # Re-tag the promoted digest (`crane tag`).
       packages: write
-      # Read the PR build provenance before pinning the digest.
       attestations: read
       pull-requests: read
-    # One caller job per unit. The caller runs them with `max-parallel: 1`
-    # (a job-level `concurrency` group must not be used: GitHub keeps only one
-    # pending job per group and cancels the rest of a matrix). Races between runs
-    # are handled by the refetch/reapply/retry loop in platform/ci/pins.mjs.
     steps:
-      # Full history: promotion may fall back to the PR head, and the pins
-      # annotation records the deploy commit's tree.
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           fetch-depth: 0
 
-      # Official crane release, pinned by sha256 like oras/kubectl/helm.
       - name: Install pinned crane
         run: |
           set -euo pipefail
@@ -106,16 +62,13 @@ jobs:
           tar -xzf "$archive" -C "$RUNNER_TEMP" crane
           echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
 
-      # The Docker config written here is what `crane tag` reads.
       - name: Log in to GHCR
-        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # The correctness gate: a digest whose `tree-<hash>` tag or provenance
-      # does not verify is never written to the branch.
       - name: Promote PR-built images by tree hash
         id: promote
         env:
@@ -159,8 +112,6 @@ jobs:
             exit 1
           fi
 
-      # Rewrites only this unit's keys plus the provenance annotations. The
-      # previous pin stays in force if anything here fails.
       - name: Commit ${{ inputs.unit }} digests to deploy/home-apps
         env:
           UNIT: ${{ inputs.unit }}

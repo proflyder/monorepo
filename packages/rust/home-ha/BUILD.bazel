@@ -3,8 +3,6 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
-# Shared Home Assistant client: state/script/service/template/ping and the
-# WebSocket entity registry.
 DEPS = [
     "@crates//:futures-util",
     "@crates//:reqwest",
@@ -39,7 +37,6 @@ rust_test(
     ],
 )
 
-# Mirrors the root [workspace.lints] through the crate's `[lints] workspace = true`.
 extract_cargo_lints(
     name = "workspace_lints",
     manifest = "Cargo.toml",

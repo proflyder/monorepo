@@ -9,11 +9,6 @@ import dev.proflyder.home.feature.control.SpeakText
 import dev.proflyder.home.feature.control.impl.R
 import dev.proflyder.home.feature.control.impl.databinding.DialogSpeakBinding
 
-/**
- * The "say on the station" dialog: a multiline text with a 500-character
- * counter. "Say" stays disabled until the text is speakable; the text itself
- * is never logged, only put into the queued command.
- */
 internal class SpeakDialog(
     context: Context,
     private val onSpeak: (String) -> Unit,
@@ -27,8 +22,6 @@ internal class SpeakDialog(
         .create()
 
     init {
-        // The positive button is installed by hand so an invalid text cannot
-        // dismiss the dialog and "succeed" silently.
         dialog.setOnShowListener { installSendButton() }
     }
 

@@ -1,12 +1,3 @@
-//! Read-only Hermes config drift exporter.
-//!
-//! The exporter rebuilds the render plan on a timer and publishes the result as
-//! Prometheus text on `GET /metrics`. It never writes to `HERMES_HOME`: the plan
-//! is the same one `hermes render-config` applies, only inspected. A failed
-//! plan (placeholder refusal, unreadable private values) keeps the process up
-//! and reports `hermes_config_check_success 0`, so the alert fires instead of
-//! the sidecar crash-looping on a bad overlay.
-
 use std::fmt::Write as _;
 use std::fs;
 use std::io::{BufRead, BufReader, Write};
@@ -19,20 +10,14 @@ use sha2::{Digest, Sha256};
 
 use crate::hermesconfig::{self, Options};
 
-/// One completed drift check, ready to render as Prometheus text.
 #[derive(Clone, Debug, Default)]
 pub struct CheckResult {
-    /// Paths (relative to `HERMES_HOME`) the plan would rewrite.
     pub drifted: Vec<String>,
-    /// Whether the plan was built without an error.
     pub success: bool,
-    /// Unix time of the check.
     pub timestamp_seconds: u64,
-    /// Digest of the overlay inputs the plan was built from.
     pub overlay_digest: String,
 }
 
-/// Escapes a Prometheus label value.
 fn escape_label(value: &str) -> String {
     let mut escaped = String::with_capacity(value.len());
     for character in value.chars() {
@@ -46,7 +31,6 @@ fn escape_label(value: &str) -> String {
     escaped
 }
 
-/// Renders one check result as Prometheus text exposition.
 #[must_use]
 pub fn render_metrics(result: &CheckResult) -> String {
     let mut out = String::new();
@@ -104,8 +88,6 @@ pub fn render_metrics(result: &CheckResult) -> String {
     out
 }
 
-/// Appends every file below `directory` to `inputs`, labelled by its relative
-/// path under `prefix`.
 fn collect_files(directory: &Path, prefix: &str, inputs: &mut Vec<(String, PathBuf)>) {
     let Ok(entries) = fs::read_dir(directory) else {
         return;
@@ -124,11 +106,6 @@ fn collect_files(directory: &Path, prefix: &str, inputs: &mut Vec<(String, PathB
     }
 }
 
-/// Returns the SHA-256 hex digest of the reviewed overlay inputs.
-///
-/// The digest covers the files baked into the `hermes-config` image (fragment,
-/// context, identity, prompts and skills), not the private values Secret, which
-/// changes independently of the image.
 #[must_use]
 pub fn overlay_digest(options: &Options) -> String {
     let mut inputs: Vec<(String, PathBuf)> = [
@@ -159,7 +136,6 @@ pub fn overlay_digest(options: &Options) -> String {
     hex::encode(hasher.finalize())
 }
 
-/// Returns the path relative to `home`, with forward slashes.
 fn relative_path(home: &str, path: &Path) -> String {
     path.strip_prefix(home)
         .unwrap_or(path)
@@ -167,10 +143,6 @@ fn relative_path(home: &str, path: &Path) -> String {
         .replace('\\', "/")
 }
 
-/// Builds one read-only plan and converts it into a metric result.
-///
-/// The second element carries the unredacted error text for the caller to log;
-/// metrics never include it.
 #[must_use]
 pub fn check(options: &Options) -> (CheckResult, Option<String>) {
     let timestamp_seconds = SystemTime::now()
@@ -202,7 +174,6 @@ pub fn check(options: &Options) -> (CheckResult, Option<String>) {
     }
 }
 
-/// Locks the shared state, recovering from a poisoned mutex.
 fn lock(state: &Mutex<CheckResult>) -> std::sync::MutexGuard<'_, CheckResult> {
     match state.lock() {
         Ok(guard) => guard,
@@ -210,8 +181,6 @@ fn lock(state: &Mutex<CheckResult>) -> std::sync::MutexGuard<'_, CheckResult> {
     }
 }
 
-/// Answers one HTTP request; `/metrics` and `/healthz` are served, the rest is
-/// a 404. The connection is closed after the response.
 pub fn handle_connection(mut stream: TcpStream, state: &Mutex<CheckResult>) -> std::io::Result<()> {
     let mut reader = BufReader::new(stream.try_clone()?);
     let mut request_line = String::new();
@@ -250,7 +219,6 @@ pub fn handle_connection(mut stream: TcpStream, state: &Mutex<CheckResult>) -> s
     stream.flush()
 }
 
-/// Serves the metrics endpoint forever, one short-lived thread per connection.
 fn serve(listener: &TcpListener, state: &Arc<Mutex<CheckResult>>) {
     for stream in listener.incoming().flatten() {
         let state = Arc::clone(state);
@@ -260,7 +228,6 @@ fn serve(listener: &TcpListener, state: &Arc<Mutex<CheckResult>>) {
     }
 }
 
-/// Runs the periodic check forever. The first check happens immediately.
 pub fn run(
     options: &Options,
     listen: &str,
@@ -309,7 +276,6 @@ fn log_error(stderr: &mut dyn Write, error: &Option<String>) {
     }
 }
 
-// `Read` is imported for tests that drain a response body.
 #[allow(unused_imports)]
 use std::io::Read as _;
 
@@ -425,7 +391,6 @@ mod tests {
         fs::write(&fragment, "agent: {}\n").expect("fragment");
         assert_eq!(first, overlay_digest(&options));
         options.skills.clear();
-        // An empty skills path is simply absent from the digest.
         let _ = overlay_digest(&options);
     }
 }

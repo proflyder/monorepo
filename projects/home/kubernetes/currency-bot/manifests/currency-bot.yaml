@@ -1,14 +1,3 @@
-# Currency bot: one static Rust binary, one SQLite writer, one persistent volume.
-#
-# TEMPLATE. deploy.sh renders it with private values from an ignored env file
-# (or from the CI job's OpenBao-backed env); rendered manifests must never be
-# committed.
-#
-#   CURRENCY_BOT_IMAGE    digest-pinned image built by Bazel
-#   CURRENCY_WEBHOOK_URL  public Cloudflare Tunnel host, e.g.
-#                         https://<public webhook host>/telegram/webhook
-#   BUILD_ID              Deployment annotation (traceability, never rolls pods)
-#   ROLLOUT_ID            content-addressed pod-template annotation
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -34,11 +23,9 @@ metadata:
     app.kubernetes.io/name: currency-bot
     app.kubernetes.io/part-of: home
   annotations:
-    # Traceability only: a Deployment metadata change never rolls pods.
     proflyder.dev/build: ${BUILD_ID}
 spec:
   replicas: 1
-  # SQLite is single-writer: never two pods against the same volume.
   strategy:
     type: Recreate
   selector:
@@ -49,7 +36,6 @@ spec:
       labels:
         app.kubernetes.io/name: currency-bot
       annotations:
-        # Content-addressed: identical rendered content keeps the pod template.
         proflyder.dev/rollout: ${ROLLOUT_ID}
     spec:
       enableServiceLinks: false
@@ -147,11 +133,6 @@ metadata:
     app.kubernetes.io/name: currency-bot
     app.kubernetes.io/part-of: home
 spec:
-  # NodePort is the LAN path for HA Assist (`GET /api/latest`). The port is a
-  # private deploy value; the K3s node nftables filter
-  # (projects/home/kubernetes/currency-bot/nft) admits only the home LAN and
-  # pod CIDR, like the scheduler NodePort. The same Service still backs the
-  # Traefik IngressRoute and in-cluster clients as a normal ClusterIP.
   type: NodePort
   selector:
     app.kubernetes.io/name: currency-bot
@@ -162,9 +143,6 @@ spec:
       protocol: TCP
       nodePort: ${CURRENCY_BOT_NODE_PORT}
 ---
-# Separate Service for the Telegram webhook: the Cloudflare Tunnel ingress
-# targets http://currency-bot-webhook.currency-bot.svc.cluster.local:8081 and
-# the NetworkPolicy only opens 8081 to cloudflared pods.
 apiVersion: v1
 kind: Service
 metadata:

@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-"""Install the pinned Puriso Piper voice; never starts or restarts services."""
 
 import argparse
 import hashlib

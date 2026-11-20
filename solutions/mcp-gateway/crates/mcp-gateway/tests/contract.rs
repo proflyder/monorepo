@@ -1,12 +1,3 @@
-//! Golden contract replay for the MCP surface and the infra tool groups.
-//!
-//! The format is `packages/rust/home-contracttest`; the frozen
-//! `testdata/contract/{server,tools}/*.json` files captured from the former Go
-//! implementation are replayed against this server.
-//!
-//! The `bb_*` calls run against a fake dispatcher; the voice fixtures are
-//! replayed in `tests/voice.rs` through the same fake.
-
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 
@@ -410,8 +401,6 @@ impl KubeApi for FakeKube {
     }
 
     fn list_workloads<'a>(&'a self) -> BoxFuture<'a, Result<Vec<kubernetes::WorkloadRef>, String>> {
-        // The contract scenarios pin per-service behaviour; an empty cluster
-        // listing keeps the report coverage entry out of their totals.
         Box::pin(async move { Ok(Vec::new()) })
     }
 

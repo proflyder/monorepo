@@ -1,9 +1,3 @@
-//! MCP server on the official Rust SDK (`rmcp`).
-//!
-//! Only the server + Streamable HTTP transport features are enabled. The
-//! dynamic [`ToolGroup`] registry is exposed through [`ServerHandler`]; input
-//! schemas are hand-written JSON, never `schemars`.
-
 use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -20,7 +14,6 @@ use rmcp::{RoleServer, ServerHandler};
 
 use crate::tools::{Annotations, Deps, ToolGroup, ToolSpec};
 
-/// The single MCP resource of `infra.read`.
 pub const CATALOG_URI: &str = "infra://catalog";
 
 const INSTRUCTIONS: &str = "Инфраструктурный шлюз домашнего кластера.
@@ -34,22 +27,16 @@ infra_confirm после подтверждения человеком. Нико
 Рабочие проекты и треды недоступны и не обсуждаются.
 Отвечай коротко; длинные отчёты отправляй через infra_send_report.";
 
-/// The dynamic MCP server.
 #[derive(Clone)]
 pub struct GatewayHandler {
     deps: Arc<Deps>,
     version: String,
     tools: BTreeMap<&'static str, (Arc<dyn ToolGroup>, ToolSpec)>,
     resources: bool,
-    /// Latch for the once-per-session `notifications/tools/list_changed`.
-    ///
-    /// It is intentionally per session: [`Self::new_session`] gives every
-    /// transport session its own copy.
     tool_list_notified: Arc<AtomicBool>,
 }
 
 impl GatewayHandler {
-    /// Build a handler from the enabled groups.
     #[must_use]
     pub fn new(deps: Arc<Deps>, groups: &[Arc<dyn ToolGroup>], version: impl Into<String>) -> Self {
         let mut tools = BTreeMap::new();
@@ -71,11 +58,6 @@ impl GatewayHandler {
         }
     }
 
-    /// A handler instance bound to one MCP session.
-    ///
-    /// The Streamable HTTP transport calls the service factory once per
-    /// session, so the once-per-session notification latch must start fresh
-    /// here instead of being shared by every session.
     #[must_use]
     pub fn new_session(&self) -> Self {
         Self {
@@ -139,33 +121,12 @@ impl ServerHandler for GatewayHandler {
             .with_instructions(INSTRUCTIONS)
     }
 
-    /// Announces the freshly assembled tool list once per MCP session.
-    ///
-    /// Clients keep their MCP tool registry across a gateway restart and only
-    /// re-read `tools/list` when the server says the list changed, so the
-    /// gateway emits `notifications/tools/list_changed` as soon as a session is
-    /// initialized.
-    ///
-    /// Delivery is safe in both orders of `notifications/initialized` and the
-    /// standalone stream. In rmcp 3.9.0 the session's common channel is created
-    /// with its receiver already dropped, so a notification sent before the
-    /// client opens the GET stream fails the `mpsc::Sender::send` inside
-    /// `LocalSessionWorker::handle_server_message` but is still cached by
-    /// `CachedTx::cache_and_send` (a `VecDeque` of `channel_capacity` = 16
-    /// frames). When the GET stream attaches, `establish_common_channel` sees
-    /// the dead primary, replaces it in `resume_or_shadow_common` and replays
-    /// the cache from `sync(0)`; if the GET stream is already attached, the
-    /// notification goes straight to it. No retry loop is needed: one send is
-    /// either delivered or buffered for the stream that is about to open.
     async fn on_initialized(&self, context: NotificationContext<RoleServer>) {
         if self.tool_list_notified.swap(true, Ordering::SeqCst) {
             return;
         }
         let peer = context.peer;
         let metrics = Arc::clone(&self.deps.metrics);
-        // Peer messages travel back through the session worker that is awaiting
-        // this handler, so send from a task: initialization and a concurrently
-        // opening GET stream must not wait on the notification.
         tokio::spawn(async move {
             match peer.notify_tool_list_changed().await {
                 Ok(()) => {
@@ -280,8 +241,6 @@ impl ServerHandler for GatewayHandler {
     }
 }
 
-/// Unused marker that keeps the `JsonObject` import meaningful for schema
-/// construction in tests.
 #[allow(dead_code)]
 fn _empty_schema() -> JsonObject {
     JsonObject::new()

@@ -87,3 +87,13 @@ curl -sS -N --http1.1 --max-time 120 \
 Стрим держится открытым до `--max-time` (или до события), без ответа
 `504`/обрыва через 60 секунд. Резервный путь:
 `curl -H "Authorization: Bearer $TOKEN" http://<NODE_IP>:30097/healthz`.
+
+## Заметки к коду
+
+Пояснения, перенесённые из комментариев исходников (код комментариев не содержит, см. `AGENTS.md`).
+
+- `BUILD.bazel` — Plain-file package: Flux renders these templates (postBuild substitution), and the deploy contract tests read them as data.
+- `manifests/external-secrets.yaml` — Intercom credentials, materialised from OpenBao KV v2 by ESO.
+- `manifests/intercom.yaml` — intercom signaling: phone <-> station WebRTC call control.
+  - Role endpoints are configuration, never request fields.
+- `manifests/kustomization.yaml` — Flux-rendered manifest set for intercom (решение 54).

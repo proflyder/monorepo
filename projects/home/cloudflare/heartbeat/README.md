@@ -58,3 +58,10 @@ bash -n projects/home/cloudflare/heartbeat/deploy.sh
 After deploy, `GET /health` returns `ok`; `POST /ping` without a token must be
 `401`. Полный outage-тест (остановить Alertmanager/сеть и дождаться алерта) —
 ручной, см. `docs/OPERATIONS.md`.
+
+## Заметки к коду
+
+Пояснения, перенесённые из комментариев исходников (код комментариев не содержит, см. `AGENTS.md`).
+
+- `deploy.sh` — Deploy the home heartbeat Worker from the reusable solutions/heartbeat source.
+  - Value goes through stdin only; it is never printed or passed as an argv.

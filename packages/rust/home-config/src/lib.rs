@@ -1,21 +1,3 @@
-//! Typed service configuration built on `clap` derive with the `env` feature.
-//!
-//! Services derive their configuration from [`clap::Parser`]; this crate adds
-//! the value parsers that every home service needs and keeps the error
-//! messages safe:
-//!
-//! * [`secret_from_env`] reads a secret from `NAME`, falling back to
-//!   `NAME_FILE` (a mounted Secret). [`secret_from_env_file_first`] is the
-//!   opposite priority used by ha-bridge/ha-control: `NAME_FILE` wins when it
-//!   is set. Errors name the variable and never contain the value.
-//! * [`secret_file`] is the `clap` value parser for a `*_FILE` path.
-//! * [`parse_listen`], [`parse_duration_seconds`], [`parse_go_duration`] and
-//!   [`u64_in_range`] bound an address, a duration or an integer before the
-//!   service starts.
-//!
-//! There is no project-specific path or endpoint here: a solution supplies
-//! its own variable names and defaults.
-
 use std::fmt;
 use std::net::SocketAddr;
 use std::time::Duration;
@@ -24,8 +6,6 @@ use clap::builder::RangedU64ValueParser;
 use home_secret::Secret;
 use thiserror::Error;
 
-/// Why a configuration value was rejected. Every variant names the variable
-/// (or file) and never echoes a secret.
 #[derive(Debug, Error)]
 pub enum ConfigError {
     #[error("{name}: {detail}")]
@@ -38,35 +18,20 @@ pub enum ConfigError {
     Missing { name: String },
 }
 
-/// Reads a required secret from `NAME`, or from the file named by
-/// `NAME_FILE`. A directly set variable wins. Surrounding whitespace is
-/// trimmed, matching the Go services' `TrimSpace` on mounted Secret files.
 pub fn secret_from_env(name: &str) -> Result<Secret, ConfigError> {
     secret_from_env_with(name, SecretPriority::EnvFirst)
 }
 
-/// Reads a secret with the `NAME_FILE`-first priority of ha-bridge and
-/// ha-control.
-///
-/// If `NAME_FILE` is set (and not blank), its contents are authoritative: a
-/// read or empty-file error is returned instead of falling back to `NAME`, so
-/// a broken mounted Secret never silently uses an older env value. When
-/// `NAME_FILE` is unset, this behaves like [`secret_from_env`].
 pub fn secret_from_env_file_first(name: &str) -> Result<Secret, ConfigError> {
     secret_from_env_with(name, SecretPriority::FileFirst)
 }
 
-/// Which variable wins when both `NAME` and `NAME_FILE` are set.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SecretPriority {
-    /// The directly set variable wins over the mounted file.
     EnvFirst,
-    /// The mounted file wins over the directly set variable.
     FileFirst,
 }
 
-/// Reads a required secret with an explicit priority. See
-/// [`secret_from_env`] and [`secret_from_env_file_first`].
 pub fn secret_from_env_with(name: &str, priority: SecretPriority) -> Result<Secret, ConfigError> {
     let env = std::env::var_os(name);
     let file = std::env::var_os(format!("{name}_FILE"));
@@ -109,7 +74,6 @@ pub fn secret_from_env_with(name: &str, priority: SecretPriority) -> Result<Secr
     })
 }
 
-/// `clap` value parser: reads a secret from the given file path.
 pub fn secret_file(path: &str) -> Result<Secret, ConfigError> {
     let name = path.to_owned();
     let bytes = std::fs::read(path).map_err(|_| ConfigError::SecretFile { name: name.clone() })?;
@@ -121,14 +85,12 @@ pub fn secret_file(path: &str) -> Result<Secret, ConfigError> {
     Ok(Secret::new(trimmed))
 }
 
-/// `clap` value parser for `host:port`, including `0.0.0.0` and `[::]`.
 pub fn parse_listen(value: &str) -> Result<SocketAddr, String> {
     value
         .parse()
         .map_err(|_| "expected a numeric host:port listen address".to_owned())
 }
 
-/// `clap` value parser for whole seconds, returned as a [`Duration`].
 pub fn parse_duration_seconds(value: &str) -> Result<Duration, String> {
     let seconds: u64 = value
         .parse()
@@ -136,13 +98,6 @@ pub fn parse_duration_seconds(value: &str) -> Result<Duration, String> {
     Ok(Duration::from_secs(seconds))
 }
 
-/// `clap` value parser for a Go-style duration (`1s`, `5m`, `1h30m`,
-/// `250ms`, `1.5s`).
-///
-/// The units are the ones accepted by Go's `time.ParseDuration`: `ns`, `us`,
-/// `µs`, `μs`, `ms`, `s`, `m` and `h`, combined in any order without
-/// separators. `0` is the only unit-less value. Negative durations are
-/// rejected because [`Duration`] is non-negative.
 pub fn parse_go_duration(value: &str) -> Result<Duration, String> {
     let text = value.trim();
     if text.is_empty() {
@@ -187,7 +142,6 @@ pub fn parse_go_duration(value: &str) -> Result<Duration, String> {
     Ok(Duration::new(seconds, subsecond))
 }
 
-/// Split the decimal prefix of `text` into its integer and fraction digits.
 fn split_number(text: &str) -> Option<(u128, &str, &str)> {
     let bytes = text.as_bytes();
     let mut index = 0;
@@ -216,8 +170,6 @@ fn split_number(text: &str) -> Option<(u128, &str, &str)> {
     Some((int, fraction, &text[index..]))
 }
 
-/// Return the nanosecond multiplier of the Go duration unit at the start of
-/// `text` and the remaining text.
 fn split_unit(text: &str) -> Option<(u128, &str)> {
     for (unit, nanos) in [
         ("ns", 1_u128),
@@ -236,13 +188,11 @@ fn split_unit(text: &str) -> Option<(u128, &str)> {
     None
 }
 
-/// `clap` value parser for an inclusive integer range.
 #[must_use]
 pub fn u64_in_range(min: u64, max: u64) -> RangedU64ValueParser<u64> {
     clap::value_parser!(u64).range(min..=max)
 }
 
-/// A log level parsed from `LOG_LEVEL`, defaulting to `info`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LogLevel {
     Debug,
@@ -252,8 +202,6 @@ pub enum LogLevel {
 }
 
 impl LogLevel {
-    /// Case-insensitive parse; unknown values fall back to `info`, matching
-    /// the Go services.
     #[must_use]
     pub fn parse(value: &str) -> Self {
         match value.trim().to_ascii_lowercase().as_str() {
@@ -264,7 +212,6 @@ impl LogLevel {
         }
     }
 
-    /// Values accepted by [`LogLevel::parse`].
     #[must_use]
     pub fn as_str(self) -> &'static str {
         match self {
@@ -398,7 +345,6 @@ mod tests {
             "from-file"
         );
 
-        // A broken file must not fall back to a stale env value.
         unsafe {
             std::env::set_var(format!("{file_first}_FILE"), "/definitely/not/a/secret");
         }

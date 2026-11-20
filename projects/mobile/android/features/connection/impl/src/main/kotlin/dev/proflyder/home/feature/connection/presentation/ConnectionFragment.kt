@@ -34,7 +34,6 @@ class ConnectionFragment :
         binding.connectionToken.doAfterTextChanged {
             if (!rendering) viewModel.setToken(it?.toString().orEmpty())
         }
-        // Pull to re-check the server with the current settings.
         binding.connectionRefresh.setupPullToRefresh {
             viewModel.test()
             binding.connectionRefresh.isRefreshing = viewModel.state.value.busy

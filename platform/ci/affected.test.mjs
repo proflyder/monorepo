@@ -1,7 +1,4 @@
 #!/usr/bin/env node
-/**
- * Unit tests for the CI affected-unit router and the unit-map validator.
- */
 
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -214,10 +211,6 @@ test("android fixture: matrix entries are flat strings", () => {
 });
 
 test("android distribution always includes the unit that owns the APK", () => {
-  // A change can route only a shared Kotlin unit (a new package the app does
-  // not import yet) while still counting as an application input. The upload
-  // job downloads `android-app-apk` instead of rebuilding, so the release
-  // unit must be in the matrix whenever distribution is selected.
   const config = affected.loadConfig(fixtureConfig);
   const shared = config.get("shared-kotlin");
   const synthetic = (androidDistribute) => ({
@@ -475,9 +468,6 @@ test("real repo: every affected native change is a release (computed version)", 
     );
     return affected.matrixEntries(result, config).native.find((item) => item.id === id);
   };
-  // The version is computed from VERSION (major.minor) plus the commits
-  // touching the unit, so a merged source change is a releasable version by
-  // itself and no separate version-bump PR exists.
   assert.equal(entryFor(["projects/station/pulsar/satellite/crates/pulsar/src/main.rs"], "pulsar").publish, true);
   assert.equal(entryFor(["projects/station/pulsar/VERSION"], "pulsar").publish, true);
   assert.equal(entryFor(["MODULE.bazel"], "pulsar").publish, true);
@@ -572,9 +562,6 @@ test("real repo: shared kotlin change selects the lint unit through the graph", 
 });
 
 test("real repo: the Android-only bazelrc selects only android units", () => {
-  // Android-specific flags live in platform/android/android.bazelrc, activated
-  // with --config=android. A change there must not invalidate every unit the
-  // way a root `.bazelrc` change does.
   const result = routeReal(["platform/android/android.bazelrc"]);
   assert.equal(result.routes.android.mode, "all");
   assert.deepEqual(
@@ -679,8 +666,6 @@ test("deploy: platform/deploy-rs change runs the Rust unit and routes deploy uni
     "ha-bridge",
     "hermes-config",
   ]);
-  // A tooling change reaches every unit that runs a deploy script, including
-  // the renderer image that ships this binary.
   const entries = affected.deployEntries(result, config);
   assert.deepEqual(entries.map((entry) => entry.id).sort(), [
     "currency-bot",
@@ -803,8 +788,6 @@ test("deploy: Rust ha-control crate change deploys both services", () => {
 });
 
 test("deploy: shared proto package deploys scheduler and ha-bridge", () => {
-  // Both Rust services are generated from the shared home.v1 schema, so both
-  // units declare the proto path explicitly.
   const config = affected.loadConfig();
   const result = routeReal(
     ["packages/proto/home/v1/scheduler.proto"],
@@ -914,8 +897,6 @@ test("deploy: a shared rust crate change reaches the hermes deploy unit", () => 
     {
       root: REPO,
       base: "b",
-      // A real reverse-dependency closure reaches voice-proxy, which is one of
-      // hermes' Bazel images; home_ha alone is not enough to select a deploy.
       graph: {
         affectedRules: () =>
           new Set([
@@ -947,9 +928,6 @@ test("rust cutover: a shared crate change also runs the bazel unit", () => {
   assert.ok(bazelIds.includes("currency-bot"), bazelIds.join(","));
 });
 
-// --------------------------------------------------------------------------
-// Precise Rust routing (shared crates, Cargo.lock, crate_universe)
-// --------------------------------------------------------------------------
 function routeRust(changed, graph, deps = {}) {
   const config = affected.loadConfig();
   return withDeps(deps, () =>
@@ -973,7 +951,6 @@ test("rust routing: home-ha change selects its consumers, not pulsar/provider", 
   assert.deepEqual(nativeIds, []);
   assert.ok(!nativeIds.includes("pulsar"));
   assert.ok(!nativeIds.includes("logon-provider"));
-  // The voice-proxy image is deployed through `hermes`.
   assert.deepEqual(result.routes.python.units.map((unit) => unit.id), ["hermes"]);
 });
 
@@ -1177,7 +1154,6 @@ version = "1.0.11"
 checksum = "one"
 `;
   const changes = affected.cargoLockChanges(base, head);
-  // ureq resolves to the same webpki-roots 1.0.11 in both locks.
   assert.ok(!changes.has("ureq 3.5.1"), [...changes].join(","));
   assert.ok(changes.has("webpki-roots 0.26.11"));
 });
@@ -1520,8 +1496,6 @@ test("workflow invalidation: ci entrypoint runs everything", () => {
   }
 });
 
-// Modelled on the real 49937f5..54a0fe3 diff (PR #90): two Firebase artifacts
-// and a comment were added inside `maven.install(...)`; everything else stayed.
 const MODULE_BAZEL_MAVEN_OLD = `module(name = "home")
 
 bazel_dep(name = "rules_jvm_external", version = "6.6")
@@ -1614,7 +1588,6 @@ test("module bazel: string change outside maven is global", () => {
 });
 
 test("module bazel: comment change outside maven is scoped", () => {
-  // Comments never reach the build, so a comment-only edit is Maven-safe.
   const updated = MODULE_BAZEL_MAVEN_OLD.replace(
     "# A `#` and parentheses in a string",
     "# A comment mentioning maven.install( outside the call",
@@ -1717,9 +1690,6 @@ test("module routing: missing revision keeps the global invalidation", () => {
   assert.deepEqual(result.changed, ["MODULE.bazel"]);
 });
 
-// --------------------------------------------------------------------------
-// .bazelrc scoping
-// --------------------------------------------------------------------------
 const BAZELRC_BASE = `common --enable_bzlmod
 
 build --announce_rc
@@ -1787,7 +1757,6 @@ test("bazelrc: a line mixing cache and real flags is global when edited", () => 
   const base = `${BAZELRC_BASE}common --disk_cache=~/.cache/bazel-disk --config=strict\n`;
   const updated = base.replace("--config=strict", "--config=other");
   assert.equal(affected.bazelrcIsCacheOnly(base, updated), false);
-  // Unchanged mixed lines do not block a cache-only edit elsewhere.
   assert.equal(affected.bazelrcIsCacheOnly(base, withCacheFlags(base)), true);
 });
 
@@ -1856,9 +1825,6 @@ test("bazelrc routing: a deleted file keeps the global invalidation", () => {
   assert.deepEqual(result.changed, [affected.BAZELRC]);
 });
 
-// --------------------------------------------------------------------------
-// MODULE.bazel native scope
-// --------------------------------------------------------------------------
 const MODULE_BAZEL_NATIVE_OLD = `module(name = "home")
 
 bazel_dep(name = "rules_rust", version = "0.75.0")
@@ -2061,8 +2027,6 @@ test("module routing: native-only edit reaches native and every Rust Bazel unit"
     "hermes-config",
   ]);
   assert.deepEqual(result.routes.quality.units.map((unit) => unit.id), ["repository"]);
-  // A Rust toolchain pin change legitimately rebuilds and pins the deployable
-  // units; the native-only units are not deployed.
   assert.deepEqual(
     affected.deployEntries(result, config).map((entry) => entry.id).sort(),
     ["currency-bot", "ha-bridge", "ha-config-sync", "hermes-config", "intercom",
@@ -2108,9 +2072,6 @@ test("module routing: the lock alone keeps the global invalidation", () => {
   assert.equal(result.routes.android.mode, "all");
 });
 
-// --------------------------------------------------------------------------
-// platform/bazel toolchain scoping
-// --------------------------------------------------------------------------
 test("platform bazel routing: zig toolchain change reaches only native", () => {
   const result = routeReal(["platform/bazel/zig/toolchain.bzl"]);
   assert.deepEqual(result.changed, [affected.BAZEL_CONFIG_NATIVE]);
@@ -2188,7 +2149,6 @@ test("MODULE.bazel: rules_android/NDK edits scope to android (#maven)", () => {
     affected.moduleBazelScope(base, base.replace('"0.7.3"', '"0.7.4"')),
     "maven",
   );
-  // Non-Android edits keep the global rule.
   assert.equal(
     affected.moduleBazelScope(base, base + 'bazel_dep(name = "rules_oci", version = "2.0.0")\n'),
     null,

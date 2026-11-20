@@ -1,51 +1,4 @@
 #!/usr/bin/env bash
-# Deploy the durable scheduler and the Home Assistant executors to the home K3s
-# cluster as digest-pinned container images.
-#
-# Mode handling is explicit and idempotent:
-#   (default)   build/push images and roll the selected workloads; PRESERVE the
-#               bridge/control execute modes and replica counts exactly as they are
-#   --shadow    force bridge dry-run: BRIDGE_EXECUTE=false, replicas=0
-#   --execute   run cutover preflight, then BRIDGE_EXECUTE=true, replicas=1
-#
-# Re-running without --execute/--shadow must never stop a live executor.
-#
-# Images:
-#   * built hermetically with Bazel (`//projects/home/kubernetes/scheduler:*_image`)
-#     from the Rust binaries and a digest-pinned distroless base;
-#   * referenced by digest only (`ghcr.io/proflyder/<name>@sha256:...`), never by
-#     a moving tag, so a rollback is an exact image;
-#   * PUSH_IMAGES=1 pushes them to GHCR with `docker` (CI); otherwise they are
-#     imported into the node's containerd over SSH (manual workstation flow).
-#
-# Prerequisites (External Secrets Operator, values never live in Git):
-#   Secret/scheduler-auth and Secret/ha-bridge-ha are materialised by the
-#   ExternalSecrets in manifests/external-secrets.yaml from OpenBao
-#   secret/k8s/home-assistant/{scheduler-auth,ha-bridge-ha}. Apply them with
-#   projects/home/kubernetes/external-secrets/deploy.sh. This script only
-#   verifies that they are present and Ready; it never writes their values.
-#
-# Environment:
-#   PRIVATE_ENV     private values file (default secrets/home/scheduler.env)
-#   ONLY            comma list of groups: scheduler, ha-bridge, ha-control, all
-#                   (the ha-bridge group also rolls ha-scenario)
-#   PUSH_IMAGES=1   push new images to GHCR with docker before deploying
-#   IMAGE_TAG       git tag/commit used for the pushed tags (default HEAD sha)
-#   NODE_SSH        ssh target used to import images when PUSH_IMAGES != 1
-#   SSH_KEY/SSH_OPTS  ssh transport for NODE_SSH
-#   PREFLIGHT_IN_CLUSTER=1  run the cutover preflight as an in-cluster Job
-#   HA_TOKEN_FILE, SCHEDULER_TOKEN_FILE  local preflight tokens
-#   SCHEDULER_IMAGE/HA_BRIDGE_IMAGE/HA_CONTROL_IMAGE/HA_SCENARIO_IMAGE/PREFLIGHT_IMAGE
-#                   pre-resolved refs (skip building that image; used by the
-#                   regression test). PREFLIGHT_IMAGE is the distroless
-#                   `home-deploy` image that runs the in-cluster preflight Job.
-#   PREBUILT_DIGESTS / PREBUILT_DIGESTS_FILE  verified digests promoted from the
-#                   pull-request build (DECISIONS 36); an explicit *_IMAGE wins
-#   DEPLOY_NO_BUILD=1  CI mode: never build or push. Every image comes from
-#                   deploy-home's promotion: this unit's images from the current
-#                   tree, the sibling workloads from the newest verified build
-#                   in history; a missing digest fails the deploy.
-#   SKIP_FIREWALL=1 no longer needed: the NodePort filter is host configuration
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
@@ -61,33 +14,20 @@ RENDER_DIR="$ROOT/secrets/local/rendered/scheduler"
 MODE=preserve
 CONTROL_MODE=preserve
 BUILD=true
-# CI sets DEPLOY_NO_BUILD=1: the artifacts come from PR CI (promoted digests or
-# the live Deployment), never from a build on the deployment runner.
 DEPLOY_NO_BUILD=${DEPLOY_NO_BUILD:-0}
 if [[ "$DEPLOY_NO_BUILD" == "1" ]]; then
   BUILD=false
 fi
 ONLY=${ONLY:-all}
 PUSH_IMAGES=${PUSH_IMAGES:-0}
-# Registry namespace for PUSH_IMAGES. Overridable so the push path can be
-# exercised against a throwaway local registry.
 IMAGE_REGISTRY=${IMAGE_REGISTRY:-"ghcr.io/proflyder"}
-# Stop after building/pushing (used by the local push/digest verification).
 PUSH_ONLY=${PUSH_ONLY:-0}
 PREFLIGHT_IN_CLUSTER=${PREFLIGHT_IN_CLUSTER:-0}
 SCHEDULER_TOKEN_FILE=${SCHEDULER_TOKEN_FILE:-"$ROOT/secrets/home/scheduler.token"}
 PREFLIGHT_JOB=scheduler-preflight
-# Pre-deploy state for a safe rollback: deploy.sh records each Deployment it is
-# about to change and marks it only after a successful apply. CI restores from
-# this, never with a blind `kubectl rollout undo`.
 DEPLOY_STATE_DIR=${DEPLOY_STATE_DIR:-"$RENDER_DIR/state"}
-# Image for the in-cluster preflight Job: the `home-deploy` binary on
-# distroless. Resolved from an explicit PREFLIGHT_IMAGE, a promoted PR digest or
-# the Bazel build, exactly like the service images below.
 PREFLIGHT_IMAGE=${PREFLIGHT_IMAGE:-}
 
-# ssh/scp transport. CI passes a dedicated key and IdentityFile-only use; the
-# manual flow keeps using ssh-agent.
 SSH_CMD=(ssh)
 SCP_CMD=(scp)
 if [[ -n "${SSH_KEY:-}" ]]; then
@@ -95,7 +35,6 @@ if [[ -n "${SSH_KEY:-}" ]]; then
   SCP_CMD+=(-i "$SSH_KEY" -o IdentitiesOnly=yes)
 fi
 if [[ -n "${SSH_OPTS:-}" ]]; then
-  # Intentional word splitting: SSH_OPTS is a list of options, not one argument.
   # shellcheck disable=SC2206
   SSH_CMD+=($SSH_OPTS)
   # shellcheck disable=SC2206

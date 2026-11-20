@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-"""Append-only local model snapshots. Registry data must remain outside public Git."""
 import argparse
 from datetime import datetime, timezone
 import fcntl

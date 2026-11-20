@@ -6,8 +6,6 @@
 #USAGE flag "--dry-run" help="Print the plan and exit without executing"
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-# --yes talks to the cluster: the admin kubeconfig comes from OpenBao through
-# fnox (profile kube, temp file removed on exit). Without it nothing secret runs.
 for arg in "$@"; do
   if [[ "$arg" == "--yes" && -z "${KUBECONFIG:-}" ]]; then
     exec "$ROOT/platform/workstation/fnox.sh" -P kube exec -- \

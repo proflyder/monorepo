@@ -1,5 +1,3 @@
-# Plain-file package: the route templates are consumed by static tests and by
-# the Flux `ingress-routes` Kustomization.
 package(default_visibility = ["//visibility:public"])
 
 filegroup(

@@ -1,9 +1,3 @@
-// Pure decision logic for the external heartbeat Worker.
-//
-// The Worker itself only talks to KV, Telegram and HTTP; every branch that
-// decides "send an alert or stay quiet" lives here so it can be unit-tested
-// with a fake clock and fake state, without a Workers runtime.
-
 export const DEFAULT_CONFIG = Object.freeze({
   graceSeconds: 900,
   remindSeconds: 21600,
@@ -28,7 +22,6 @@ export function configFromEnv(env = {}) {
   };
 }
 
-// KV stores integers as text. Missing, empty or malformed values become null.
 export function toUnix(value) {
   if (value === null || value === undefined || value === "") return null;
   const parsed = Number(value);
@@ -103,8 +96,6 @@ function recoveryText(siteName, downSeconds) {
   );
 }
 
-// A ping always refreshes `last_ping_unix`. The state is written only when it
-// actually changes, so the steady 5-minute ping costs exactly one KV write.
 export function decidePing(state, now, cfg) {
   const current = normalizeState(state);
   const writes = { lastPingUnix: now };
@@ -121,8 +112,6 @@ export function decidePing(state, now, cfg) {
   return { actions, writes };
 }
 
-// Cron never alerts before the first ping: a freshly deployed Worker must not
-// page anyone until Alertmanager has had a chance to send Watchdog.
 export function decideCron(state, now, cfg) {
   const current = normalizeState(state);
   if (current.lastPingUnix === null) {
@@ -149,17 +138,12 @@ export function decideCron(state, now, cfg) {
     action: { type: "down", text: downText(cfg.siteName, silentFor) },
     writes: {
       status: "down",
-      // Silence started at the last received ping, so a recovery message can
-      // report the real outage length, not just the detection delay.
       downSinceUnix: current.lastPingUnix,
       lastReminderUnix: now,
     },
   };
 }
 
-// Alertmanager sends `{"status":"firing"|"resolved", ...}`. Watchdog is routed
-// with send_resolved:false, but ignore an explicit resolved payload anyway so
-// a stray one cannot masquerade as proof of life.
 export function parseAlertmanagerPayload(body) {
   if (!body) return { resolved: false };
   try {
@@ -170,8 +154,6 @@ export function parseAlertmanagerPayload(body) {
   }
 }
 
-// Length and content are compared with byte-wise XOR. This is not a substitute
-// for a MAC, but it avoids leaking the matching prefix through early exits.
 export function constantTimeEqual(left, right) {
   const a = encoder.encode(String(left));
   const b = encoder.encode(String(right));

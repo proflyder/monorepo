@@ -1,31 +1,17 @@
-//! The subset of Server-Sent Events the voice proxy needs: an incremental
-//! reader that joins multiline data, tolerates CRLF and forwards comment lines
-//! as keepalives.
-//!
-//! The reader accepts both `\n` and `\r\n`; the protocol itself only requires
-//! one line ending.
-
 use std::collections::VecDeque;
 
-/// One decoded SSE record.
-///
-/// `name` is the `event:` field (default `message`). A comment line becomes
-/// [`KEEPALIVE`] with empty data.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Event {
     pub name: String,
     pub data: String,
 }
 
-/// The pseudo event name for a comment line.
 pub const KEEPALIVE: &str = "keepalive";
 
-/// A record that is not valid UTF-8.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 #[error("sse: data is not valid utf-8")]
 pub struct InvalidUtf8;
 
-/// Incremental SSE decoder.
 #[derive(Debug)]
 pub struct Reader {
     buffer: Vec<u8>,
@@ -53,33 +39,20 @@ impl Reader {
         }
     }
 
-    /// Feeds one network chunk.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`InvalidUtf8`] when a complete line is not valid UTF-8.
     pub fn push(&mut self, chunk: &[u8]) -> Result<(), InvalidUtf8> {
         self.buffer.extend_from_slice(chunk);
         self.consume(false)
     }
 
-    /// Declares the stream finished, flushing a final record that has no
-    /// trailing blank line.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`InvalidUtf8`] when a complete line is not valid UTF-8.
     pub fn finish(&mut self) -> Result<(), InvalidUtf8> {
         self.finished = true;
         self.consume(true)
     }
 
-    /// Pops the next decoded record.
     pub fn next_event(&mut self) -> Option<Event> {
         self.pending.pop_front()
     }
 
-    /// Whether the reader has produced every record it can.
     #[must_use]
     pub fn is_exhausted(&self) -> bool {
         self.pending.is_empty() && self.finished && self.buffer.is_empty()
@@ -137,13 +110,11 @@ impl Reader {
     }
 }
 
-/// One SSE data frame, terminated by a blank line.
 #[must_use]
 pub fn data_frame(payload: &str) -> String {
     format!("data: {payload}\n\n")
 }
 
-/// The keepalive comment frame.
 pub const KEEPALIVE_FRAME: &str = ": keepalive\n\n";
 
 #[cfg(test)]

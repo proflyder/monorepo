@@ -181,10 +181,8 @@ class ControlItemsTest {
         val gone = ControlFilter.Room("Garage")
         assertEquals(ControlFilter.All, ControlItems.effectiveFilter(sample, gone))
         assertEquals(build(filter = ControlFilter.All).describe(), build(filter = gone).describe())
-        // A category that no longer exists also falls back.
         val onlyLights = listOf(entry("light.a"), entry("light.b"))
         assertEquals(ControlFilter.All, ControlItems.effectiveFilter(onlyLights, ControlFilter.Switches))
-        // Still-valid choices are kept, and so is any choice while nothing is loaded yet.
         assertEquals(ControlFilter.Lights, ControlItems.effectiveFilter(sample, ControlFilter.Lights))
         assertEquals(gone, ControlItems.effectiveFilter(emptyList(), gone))
     }
@@ -207,8 +205,6 @@ class ControlItemsTest {
         )
     }
 
-    // --- the voice profile selector -----------------------------------------
-
     private val profile = entry("switch.voice_profile", ControlKind.PROFILE, power = PowerState.OFF)
     private val withProfile = listOf(profile) + sample
 
@@ -224,7 +220,6 @@ class ControlItemsTest {
             ),
             build(withProfile).describe(),
         )
-        // Its section and key never collide with a room or another section.
         val keys = build(withProfile).map { it.key }
         assertEquals(keys.size, keys.toSet().size)
         assertEquals(listOf("voice", "room:Bedroom", "room:Workspace", "other", "unavailable"),
@@ -233,9 +228,7 @@ class ControlItemsTest {
 
     @Test
     fun profileIsNotAFilterableCategoryAndNotCounted() {
-        // Chips describe content only: the profile adds no chip and no count.
         assertEquals(ControlItems.options(sample), ControlItems.options(withProfile))
-        // It stays visible whatever the filter is.
         assertEquals(
             listOf("# Voice", "V profile=switch.voice_profile wake=", "# Workspace (0 of 1 on)", "D switch.fan"),
             build(withProfile, filter = ControlFilter.Switches).describe(),
@@ -254,10 +247,7 @@ class ControlItemsTest {
     fun profileAloneIsNotAnEmptyList() {
         val items = build(listOf(profile))
         assertEquals(listOf("# Voice", "V profile=switch.voice_profile wake="), items.describe())
-        // Nothing filterable: only the "All" chip exists, with a zero count.
         assertEquals(listOf(ControlFilterOption(ControlFilter.All, 0)), ControlItems.options(listOf(profile)))
-        // A stored category with nothing to show falls back to All; with no
-        // entries at all the stored choice is kept for validation later.
         assertEquals(ControlFilter.All, ControlItems.effectiveFilter(listOf(profile), ControlFilter.Scenarios))
         assertEquals(ControlFilter.Scenarios, ControlItems.effectiveFilter(emptyList(), ControlFilter.Scenarios))
     }
@@ -269,11 +259,8 @@ class ControlItemsTest {
         val busy = build(withProfile, pending = setOf("switch.voice_profile"))
             .filterIsInstance<ControlItem.Voice>().single().profile
         assertTrue(requireNotNull(busy).busy)
-        // Devices are unaffected by the voice block.
         assertTrue(build(withProfile, statesOk = false).filterIsInstance<ControlItem.Device>().all { !it.statesKnown })
     }
-
-    // --- device grouping ------------------------------------------------------
 
     private val ceilingLamp = listOf(
         entry("light.ceiling", room = "Bedroom", power = PowerState.ON, deviceId = "dev.ceiling", device = "Ceiling lamp"),
@@ -306,8 +293,6 @@ class ControlItemsTest {
             entry("light.desk", room = "Office", deviceId = "dev.desk", device = "Desk lamp"),
         )
         assertEquals(listOf("# Office (0 of 1 on)", "D light.desk"), build(single).describe())
-        // A standalone row is titled by its device, never by the short entity
-        // title or the id fallback.
         listOf("", "Light", "light.desk").forEach { shortTitle ->
             val row = build(listOf(entry("light.desk", title = shortTitle, deviceId = "dev.desk", device = "Desk lamp")))
                 .filterIsInstance<ControlItem.Device>()
@@ -340,8 +325,6 @@ class ControlItemsTest {
 
     @Test
     fun aLampRowTakesTheDeviceName() {
-        // The server's entity title is the short "Light"; a standalone device
-        // row is titled by the device instead.
         val lamp = listOf(entry("light.lamp", title = "Light", deviceId = "dev.lamp", device = "Лампа"))
         assertEquals("Лампа", build(lamp).filterIsInstance<ControlItem.Device>().single().entry.title)
     }
@@ -362,10 +345,7 @@ class ControlItemsTest {
         val group = build(entries).filterIsInstance<ControlItem.DeviceGroup>().single()
         assertEquals("Светильник", group.title)
         assertEquals(1, group.primary.size)
-        // The lone primary is the card's main row, so its title is the device,
-        // not the duplicated short "Light".
         assertEquals("Светильник", group.primary.single().entry.title)
-        // Settings keep the short names the server sent.
         assertEquals(settings.map { it.id }, group.settings.map { it.entry.id })
         assertEquals((1..6).map { "Setting $it" }, group.settings.map { it.entry.title })
     }
@@ -384,14 +364,10 @@ class ControlItemsTest {
 
     @Test
     fun settingsDoNotAddChipsOrCounts() {
-        // One primary light and one setting switch: no "Switches" chip appears
-        // and the light is counted once.
         assertEquals(
             listOf(ControlFilterOption(ControlFilter.All, 2), ControlFilterOption(ControlFilter.Lights, 2)),
             ControlItems.options(ceilingLamp),
         )
-        // The settings follow their visible device even when that chip matches
-        // only the primary controls.
         assertEquals(
             listOf(
                 "# Bedroom (1 of 2 on)",
@@ -429,8 +405,6 @@ class ControlItemsTest {
 
     @Test
     fun prefixGroupingNeedsABaseEntityAndTheSameRoom() {
-        // No base entity: `lamp_a`/`lamp_b` have no `lamp` anchor, so they stay
-        // separate rows even though they share a prefix.
         val withoutAnchor = listOf(
             entry("switch.lamp_a", ControlKind.SWITCH, room = "Office"),
             entry("button.lamp_b", ControlKind.BUTTON, room = "Office"),
@@ -439,7 +413,6 @@ class ControlItemsTest {
             listOf("# Office (0 of 2 on)", "D switch.lamp_a", "D button.lamp_b"),
             build(withoutAnchor).describe(),
         )
-        // A base entity in a different room is not the same device.
         val acrossRooms = listOf(
             entry("switch.komp", ControlKind.SWITCH, room = "Office"),
             entry("button.komp_lock", ControlKind.BUTTON, room = "Bedroom"),
@@ -452,7 +425,6 @@ class ControlItemsTest {
 
     @Test
     fun entriesWithoutADeviceIdAreEachTheirOwnDevice() {
-        // An older server omits device_id, so the flat rows stay exactly as before.
         assertEquals(
             listOf("# Bedroom (1 of 2 on)", "D light.a", "D light.b"),
             build(

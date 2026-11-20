@@ -11,7 +11,6 @@ import dev.zacsweers.metro.Inject
 @Inject class LoadTimers(
     private val repository: TimerRepository,
 ) {
-    /** Syncs server time first so remaining values are not derived from a wrong phone clock. */
     suspend operator fun invoke(): Outcome<List<Timer>> {
         when (val sync = repository.syncClock()) {
             is Outcome.Failure -> return sync

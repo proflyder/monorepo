@@ -1,13 +1,4 @@
 #!/usr/bin/env python3
-"""Contract for the private voice-routing values of the Hermes Deployment.
-
-The routing env lives in the private `runtime_values` (OpenBao), not in the
-tracked chart. The deploy README is therefore the reviewed contract: this test
-keeps its snippet parseable, placeholder-only, wired to existing Secrets, and
-in sync with the variables the Rust proxy actually reads
-(`solutions/voice-proxy/crates/voice-proxy/src/config.rs`) and documents
-(`solutions/voice-proxy/README.md`).
-"""
 from __future__ import annotations
 
 import re
@@ -87,7 +78,6 @@ class VoiceRoutingValuesContract(unittest.TestCase):
     def test_routing_gate_is_documented_and_off_by_default(self):
         source = PROXY_CONFIG.read_text(encoding="utf-8")
         self.assertIn("pub fn routing_enabled(&self) -> bool", source)
-        # Empty defaults are what makes the rollout safe before the values land.
         for name in ("HERMES_VOICE_GATEWAY_URL", "HERMES_HA_URL"):
             self.assertRegex(
                 source,

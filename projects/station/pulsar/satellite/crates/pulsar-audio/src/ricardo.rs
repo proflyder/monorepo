@@ -1,9 +1,3 @@
-//! Safe wrapper around the C++ microWakeWord detector (`ricardo/microwakeword.cpp`).
-//!
-//! The detector is fed the same 16 kHz, VQE-cleaned `VQE_OMNI_WITH_GAIN` stream
-//! that the native Yandex spotter uses. It owns its streaming feature state and
-//! resets it after a hit; callers only add the 0.5 s pre-roll.
-
 use std::ffi::{CString, c_char, c_void};
 use std::os::unix::ffi::OsStrExt as _;
 use std::path::Path;
@@ -17,7 +11,6 @@ unsafe extern "C" {
     fn mww_configure(handle: *mut c_void, cutoff: f32, window: i32);
 }
 
-/// Почему детектор не создался или отказал.
 #[derive(Debug, thiserror::Error)]
 pub enum DetectorError {
     #[error("{path}: NUL in path")]
@@ -30,20 +23,17 @@ pub enum DetectorError {
     ResetFailed,
 }
 
-/// The on-device "Рикардо" detector. Use only from the audio processing thread.
 pub struct RicardoWake {
     raw: NonNull<c_void>,
 }
 
 impl RicardoWake {
-    /// Loads the model and opens the firmware's `libtflite.so`.
     pub fn new(model: &Path) -> Result<Self, DetectorError> {
         let path =
             CString::new(model.as_os_str().as_bytes()).map_err(|_| DetectorError::NulPath {
                 path: model.to_owned(),
             })?;
-        // SAFETY: the C++ function copies/reads the NUL-terminated path and
-        // returns an opaque handle owned by this wrapper.
+        // SAFETY: the C++ function copies/reads the NUL-terminated path and returns an opaque handle owned by this wrapper.
         let raw = unsafe { mww_create(path.as_ptr()) };
         let raw = NonNull::new(raw).ok_or_else(|| DetectorError::Load {
             path: model.to_owned(),
@@ -51,9 +41,6 @@ impl RicardoWake {
         Ok(Self { raw })
     }
 
-    /// Thresholds from the model manifest: a hit needs `cutoff` as the mean of the last `window`
-    /// inference results. Call before feeding; outside cutoff in (0,1) / window 1..50 the loaded
-    /// defaults stay.
     pub fn configure(&mut self, cutoff: f32, window: usize) {
         let Ok(window) = i32::try_from(window) else {
             return;
@@ -62,13 +49,9 @@ impl RicardoWake {
         unsafe { mww_configure(self.raw.as_ptr(), cutoff, window) };
     }
 
-    /// Feeds one VQE chunk. Ok((true, score)) on a detection, Ok((false, score)) otherwise, where
-    /// `score` is the windowed mean probability of this chunk (-1 while the window fills or the
-    /// 1 s warm-up runs); Err after the detector disabled itself.
     pub fn feed(&mut self, pcm: &[i16]) -> Result<(bool, f32), DetectorError> {
         let mut score = -1.0f32;
-        // SAFETY: `raw` is a live handle from mww_create; `pcm` is valid for
-        // the call and `score` points to a local.
+        // SAFETY: `raw` is a live handle from mww_create; `pcm` is valid for the call and `score` points to a local.
         let rc = unsafe { mww_feed(self.raw.as_ptr(), pcm.as_ptr(), pcm.len(), &mut score) };
         match rc {
             0 => Ok((false, score)),
@@ -77,7 +60,6 @@ impl RicardoWake {
         }
     }
 
-    /// Resets the streaming state (normally the detector does this after a hit).
     #[allow(dead_code, reason = "kept for diagnostics and future reconfiguration")]
     pub fn reset(&mut self) -> Result<(), DetectorError> {
         // SAFETY: live handle, no aliasing.
@@ -89,12 +71,7 @@ impl RicardoWake {
     }
 }
 
-// The detector is constructed on the main thread and moved once to the audio
-// processing thread before it is fed; after that only that thread touches it.
-// The C++ object has no thread-local state of its own.
-//
-// SAFETY: the handle is not shared: ownership moves to exactly one processing
-// thread before any mww_feed call, and mww_destroy runs after that thread stops.
+// SAFETY: the handle is not shared: ownership moves to exactly one processing thread before any mww_feed call, and mww_destroy runs after that thread stops.
 unsafe impl Send for RicardoWake {}
 
 impl Drop for RicardoWake {
@@ -110,8 +87,6 @@ mod tests {
 
     #[test]
     fn missing_model_is_an_error() {
-        // No libtflite.so or model on the build host: the C++ bridge must
-        // report failure instead of returning a dangling handle.
         assert!(RicardoWake::new(Path::new("/nonexistent/ricardo.tflite")).is_err());
     }
 }

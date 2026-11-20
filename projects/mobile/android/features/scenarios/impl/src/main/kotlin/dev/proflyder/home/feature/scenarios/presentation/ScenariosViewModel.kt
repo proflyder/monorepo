@@ -26,11 +26,8 @@ data class ScenariosUiState(
     val scenarios: List<Scenario> = emptyList(),
     val loadError: RemoteFailure? = null,
     val actionError: RemoteFailure? = null,
-    /** True while any single server mutation is in flight. */
     val busy: Boolean = false,
-    /** Label of the scenario whose manual run was just queued. */
     val queuedLabel: String? = null,
-    /** Ordered pinned scenario/device refs, so the list can offer Pin/Unpin. */
     val favorites: List<FavoriteRef> = emptyList(),
     val favoriteNotice: FavoriteNotice? = null,
 )
@@ -47,7 +44,6 @@ class ScenariosViewModel(
     private var refreshJob: Job? = null
     private var generation = 0
 
-    /** [silent] keeps already loaded data on screen without a spinner (tab returns, resume). */
     fun refresh(silent: Boolean = false) {
         refreshJob?.cancel()
         val requested = ++generation
@@ -93,10 +89,6 @@ class ScenariosViewModel(
         }
     }
 
-    /**
-     * One tap is one logical run, so the key is generated per tap. A transport
-     * retry of the same tap would reuse it; a second tap is a new run.
-     */
     fun run(scenario: Scenario) {
         if (currentState.busy) return
         updateState { copy(busy = true, actionError = null, queuedLabel = null) }
@@ -123,7 +115,6 @@ class ScenariosViewModel(
 
     fun consumeQueued() = updateState { copy(queuedLabel = null) }
 
-    /** Pins or unpins a native scenario from a long press in the list. */
     fun toggleFavorite(scenario: Scenario) {
         val ref = FavoriteRef(FavoriteKind.SCENARIO, scenario.id)
         val updated = Favorites.toggle(currentState.favorites, ref)

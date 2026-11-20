@@ -1,6 +1,3 @@
-//! Test harness of the link: an in-memory radio on a duplex, recording reset/boot lines and a
-//! pseudo-terminal for the real tty path.
-
 use std::cell::Cell;
 use std::pin::{Pin, pin};
 use std::rc::Rc;
@@ -12,8 +9,6 @@ use super::*;
 use crate::frame::{CRASH_IND, build_frame};
 use home_linux::testing::open_pty;
 
-/// Polls `f` once; None if it is not ready. Runs the link and the radio in lock-step from a
-/// single task, so that paused time only moves when the test says so.
 pub fn poll_once<F: Future>(f: F) -> Option<F::Output> {
     let mut f = pin!(f);
     match f.as_mut().poll(&mut Context::from_waker(Waker::noop())) {
@@ -29,14 +24,12 @@ fn hex(p: &[u8]) -> String {
     p.iter().map(|b| format!("{b:02x}")).collect()
 }
 
-/// The chip's end of an in-memory link.
 pub struct Radio {
     io: DuplexStream,
     rx: Vec<u8>,
 }
 
 impl Radio {
-    /// The next complete frame the link wrote, if one is there.
     fn read_frame(&mut self) -> Option<(u16, Vec<u8>)> {
         let mut buf = [0u8; 512];
         let mut cx = Context::from_waker(Waker::noop());
@@ -84,7 +77,6 @@ impl Radio {
     }
 }
 
-/// Reset and boot value files in memory.
 #[derive(Clone)]
 pub struct Lines {
     boot: Rc<Cell<bool>>,
@@ -112,7 +104,6 @@ impl Lines {
         Box::new(self)
     }
 
-    /// (boot, reset) as last written.
     fn get(&self) -> (String, String) {
         let s = |v: bool| if v { "1" } else { "0" };
         (s(self.boot.get()).into(), s(self.reset.get()).into())
@@ -139,7 +130,6 @@ impl RadioLines for Lines {
     }
 }
 
-/// A link (reset as at open) and the radio's end of its wire.
 fn link_pair(lines: &Lines) -> (Link, Radio) {
     let (a, b) = tokio::io::duplex(1 << 16);
     (
@@ -160,7 +150,6 @@ fn pattern(n: usize, seed: u8) -> Vec<u8> {
     (0..n).map(|i| seed.wrapping_add((i * 13) as u8)).collect()
 }
 
-/// Runs the link until it waits for input or time.
 fn settle(link: &mut Link) -> Vec<LinkEvent> {
     let mut evs = Vec::new();
     while let Some(ev) = poll_once(link.next()) {
@@ -174,12 +163,11 @@ async fn ms(link: &mut Link, n: u64) -> Vec<LinkEvent> {
     settle(link)
 }
 
-/// A link whose application has started (reset lines driven, boot indication answered).
 async fn booted() -> (Link, Radio, Lines) {
     let lines = Lines::new();
     let (mut link, mut radio) = link_pair(&lines);
     assert_eq!(lines.get(), ("0".into(), "1".into()));
-    radio.send(BOOT_IND, &[]); // predates the pulse's end: ignored
+    radio.send(BOOT_IND, &[]);
     assert!(ms(&mut link, 199).await.is_empty());
     assert!(ms(&mut link, 1).await.is_empty());
     assert_eq!(lines.get(), ("0".into(), "0".into()));
@@ -204,7 +192,6 @@ async fn reset_waits_for_boot_then_sends() {
         "nothing goes out during the reset"
     );
     assert!(ms(&mut link, 200).await.is_empty());
-    // No boot indication: after 3 s the link carries on.
     assert!(ms(&mut link, 2999).await.is_empty());
     assert_eq!(ms(&mut link, 1).await, [LinkEvent::Boot]);
     assert_eq!(radio.read_frame(), Some((0x0900, vec![])));
@@ -229,25 +216,24 @@ async fn stop_and_wait_with_ack_matching() {
     link.send(0x0A05, &[3], Some(AckTag::Leave));
     assert_eq!(radio.read_frame(), Some((0x0A00, vec![1])));
     assert_eq!(radio.read_frame(), None, "second frame waits for the ACK");
-    radio.ack(0x0A99, 0); // another type: not this frame's
-    radio.send(ACK, &[0x0A, 0x00]); // too short
+    radio.ack(0x0A99, 0);
+    radio.send(ACK, &[0x0A, 0x00]);
     assert!(settle(&mut link).is_empty());
     assert_eq!(radio.read_frame(), None);
     radio.ack(0x0A00, 0);
     assert_eq!(settle(&mut link), [ack(AckTag::Form, 0)]);
     assert_eq!(radio.read_frame(), Some((0x0A03, vec![2])));
-    radio.ack(0xFFFF, 2); // concerns the frame in flight
+    radio.ack(0xFFFF, 2);
     assert_eq!(settle(&mut link), [ack(AckTag::Steer, 2)]);
     assert_eq!(radio.read_frame(), Some((0x0A05, vec![3])));
     radio.ack(0x0A05, 0);
-    radio.ack(0x0A05, 0); // nothing in flight any more
+    radio.ack(0x0A05, 0);
     assert_eq!(settle(&mut link), [ack(AckTag::Leave, 0)]);
 }
 
 #[tokio::test(start_paused = true)]
 async fn retries_then_gives_up_then_resets() {
     let (mut link, mut radio, lines) = booted().await;
-    // Two frames without ACK: three tries each, -1, failures counted.
     for (i, ty) in [0x0A01u16, 0x0A02].into_iter().enumerate() {
         link.send(ty, &[], Some(AckTag::Data(i as u8)));
         for _ in 0..2 {
@@ -259,7 +245,6 @@ async fn retries_then_gives_up_then_resets() {
         assert_eq!(radio.read_frame(), Some((ty, vec![])));
         assert_eq!(ms(&mut link, 300).await, [ack(AckTag::Data(i as u8), -1)]);
     }
-    // The third in a row resets the radio; what was queued fails with -1.
     link.send(0x0A03, &[], Some(AckTag::Form));
     link.send(0x0A04, &[], Some(AckTag::EdScan));
     link.send(0x0A05, &[], None);
@@ -274,7 +259,6 @@ async fn retries_then_gives_up_then_resets() {
     );
     assert_eq!(lines.get(), ("0".into(), "1".into()));
     assert_eq!(radio.read_frame(), None);
-    // Frames sent during the reset wait for the boot.
     link.send(0x0A06, &[], Some(AckTag::Steer));
     assert!(ms(&mut link, 200).await.is_empty());
     assert_eq!(lines.get().1, "0");
@@ -296,7 +280,7 @@ async fn a_success_clears_the_failure_count() {
         }
         link.send(0x0A03, &[], None);
         assert_eq!(radio.read_frame(), Some((0x0A03, vec![])), "round {round}");
-        radio.ack(0x0A03, 7); // a rejection still is an answer
+        radio.ack(0x0A03, 7);
         settle(&mut link);
     }
     assert_eq!(lines.get().1, "0", "never reset");
@@ -310,7 +294,7 @@ async fn hold_until_awaited_frame_or_timeout() {
     assert_eq!(radio.read_frame(), Some((0x0A06, vec![9])));
     radio.ack(0x0A06, 0);
     assert_eq!(settle(&mut link), [ack(AckTag::EdScan, 0)]);
-    radio.send(0x8A11, &[5]); // other frames pass, the hold stays
+    radio.send(0x8A11, &[5]);
     assert_eq!(
         settle(&mut link),
         [LinkEvent::Frame {
@@ -331,7 +315,6 @@ async fn hold_until_awaited_frame_or_timeout() {
     radio.ack(0x0A10, 0);
     settle(&mut link);
 
-    // Timed out: released after hold_ms.
     link.send_and_hold(0x0A06, &[], None, 0x8A06, 1000);
     link.send(0x0A10, &[2], None);
     assert_eq!(radio.read_frame(), Some((0x0A06, vec![])));
@@ -344,7 +327,6 @@ async fn hold_until_awaited_frame_or_timeout() {
     radio.ack(0x0A10, 0);
     settle(&mut link);
 
-    // A refused command does not hold.
     link.send_and_hold(0x0A06, &[], None, 0x8A06, 1000);
     link.send(0x0A10, &[3], None);
     assert_eq!(radio.read_frame(), Some((0x0A06, vec![])));
@@ -361,11 +343,9 @@ async fn spontaneous_boot_resends_what_was_in_flight() {
     assert_eq!(radio.read_frame(), Some((0x0A06, vec![])));
     radio.ack(0x0A06, 0);
     settle(&mut link);
-    // Held; the radio restarts: the hold is gone, the queue goes out again.
     radio.send(BOOT_IND, &[]);
     assert_eq!(settle(&mut link), [LinkEvent::Boot]);
     assert_eq!(radio.read_frame(), Some((0x0A10, vec![1])));
-    // In flight when the radio restarts: sent again with a fresh set of tries.
     ms(&mut link, 299).await;
     radio.send(BOOT_IND, &[]);
     assert_eq!(settle(&mut link), [LinkEvent::Boot]);
@@ -420,9 +400,6 @@ fn open_reports_a_missing_tty() {
     });
 }
 
-/// A tty whose other end is gone (pty master closed: hangup, EIO) must not spin: reading
-/// stops, timers go on (the ACK times out), then next() just waits. Run on its own thread
-/// so a regression fails on the deadline instead of hanging the test run.
 #[test]
 fn hangup_stops_reading_without_spinning() {
     let (tx, rx) = std::sync::mpsc::channel();
@@ -456,11 +433,9 @@ async fn next_within_2s(link: &mut Link) -> LinkEvent {
         .expect("no event from the link")
 }
 
-/// Reads a frame the link wrote to the pty, waiting up to 2 s.
 fn read_pty_frame(master: &mut home_linux::Tty) -> (u16, Vec<u8>) {
     let mut buf = Vec::new();
     loop {
-        // Poll the master through a plain blocking read after a readiness wait.
         assert!(master.wait_readable(2000), "no frame from the link");
         let mut b = [0u8; 64];
         let n = master.read(&mut b).unwrap();
@@ -474,9 +449,6 @@ fn read_pty_frame(master: &mut home_linux::Tty) -> (u16, Vec<u8>) {
     }
 }
 
-/// A real tty through Link::open: an empty non-blocking read with VMIN = VTIME = 0 returns
-/// 0 bytes, which must not count as a hangup. Input arriving in separate chunks keeps being
-/// read; only closing the pty's master ends reading, once, without spinning.
 #[test]
 fn tty_keeps_reading_across_chunks_then_detects_hangup() {
     let (tx, rx) = std::sync::mpsc::channel();
@@ -495,7 +467,6 @@ fn tty_keeps_reading_across_chunks_then_detects_hangup() {
             pause().await;
             master.write_all(&build_frame(BOOT_IND, &[])).unwrap();
             assert_eq!(next_within_2s(&mut link).await, LinkEvent::Boot);
-            // Restarted: what was in flight goes out again.
             assert_eq!(read_pty_frame(&mut master), (0x0900, vec![]));
             pause().await;
             let mut chunk = build_frame(ACK, &[0x09, 0x00, 0x00, 0x00]);

@@ -22,7 +22,6 @@ internal interface TimerAdapterCallback : AdapterCallback<TimerRow> {
     fun onCancel(timer: Timer)
 }
 
-/** Only the countdown text changed; everything else on the card stays as is. */
 private data class RemainingChanged(val seconds: Long)
 
 private object TimerDiff : DiffUtil.ItemCallback<TimerRow>() {
@@ -81,7 +80,6 @@ internal class TimerAdapter(
             }
         }
 
-        /** Remaining share of the timer in 0..1000 (the indicator's max). */
         private fun progressOf(row: TimerRow): Int {
             val total = row.timer.durationSeconds
             if (total <= 0) return 0

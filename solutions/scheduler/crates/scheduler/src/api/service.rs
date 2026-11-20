@@ -1,5 +1,3 @@
-//! `home.v1.SchedulerService` implementation.
-
 use std::sync::Arc;
 
 use connectrpc::{ConnectError, RequestContext, Response, ServiceRequest, ServiceResult};
@@ -16,7 +14,6 @@ use super::convert::{
     scenario_to_proto, schedule_to_proto, timer_to_proto, view_to_scenario, view_to_schedule,
 };
 
-/// Engine readiness and last-tick facts reported by `GetStatus`.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct EngineStatus {
     pub ready: bool,
@@ -26,7 +23,6 @@ pub struct EngineStatus {
     pub last_tick_error: String,
 }
 
-/// Shared scheduler API state.
 #[derive(Clone)]
 pub struct Service {
     store: Arc<Store>,
@@ -48,7 +44,6 @@ impl std::fmt::Debug for Service {
 }
 
 impl Service {
-    /// Builds the scheduler API.
     #[must_use]
     pub fn new(
         store: Arc<Store>,
@@ -72,21 +67,17 @@ impl Service {
         }
     }
 
-    /// Advertise the scenario executor in `GetStatus`. Deployment-controlled:
-    /// the scheduler stores definitions but `ha-scenario` runs them.
     #[must_use]
     pub fn with_scenario_execution(mut self, supported: bool) -> Self {
         self.scenario_execution = supported;
         self
     }
 
-    /// The durable store behind this service.
     #[must_use]
     pub fn store(&self) -> &Arc<Store> {
         &self.store
     }
 
-    /// Current server clock.
     #[must_use]
     pub fn now_unix(&self) -> i64 {
         self.clock.now_unix()
@@ -103,12 +94,6 @@ impl Service {
         result.map_err(ConnectError::from)
     }
 
-    /// Runs one store operation on the blocking pool.
-    ///
-    /// The store talks to a single SQLite writer thread and can block on the
-    /// connection mutex; calling it directly from a handler would stall the
-    /// async runtime. `spawn_blocking` keeps every RPC (and the engine's
-    /// tick/purge) off the reactor threads.
     pub async fn store_call<T, F>(&self, call: F) -> Result<T, ConnectError>
     where
         T: Send + 'static,
@@ -551,9 +536,6 @@ impl SchedulerService for Service {
     }
 }
 
-/// Rejects a request that contains an unknown oneof variant. The domain
-/// conversion drops unknown kinds, so a length mismatch means the client sent
-/// a trigger/condition/step this server does not understand.
 fn check_scenario_kinds(
     scenario: &crate::domain::Scenario,
     triggers: usize,

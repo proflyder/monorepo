@@ -22,9 +22,6 @@ station_bluetooth_off:
   headers:
     Authorization: !secret station_control_bearer
   timeout: 8
-# Canonical home.v1.SchedulerService Connect JSON. The endpoint is a
-# non-secret base URL kept in input_text.scheduler_endpoint; the bearer value
-# (including the "Bearer " prefix) stays in secrets.yaml.
 scheduler_rpc:
   url: "{{ states('input_text.scheduler_endpoint') | trim | regex_replace('/+$', '') }}/home.v1.SchedulerService/{{ method }}"
   method: POST
@@ -36,9 +33,6 @@ scheduler_rpc:
   content_type: "application/json"
   timeout: 10
 
-# Same scheduler endpoint and bearer, different Connect service. Scenario
-# definitions live in home.v1.ScenarioService; HA only lists them and queues a
-# manual run.
 scenario_rpc:
   url: "{{ states('input_text.scheduler_endpoint') | trim | regex_replace('/+$', '') }}/home.v1.ScenarioService/{{ method }}"
   method: POST
@@ -50,11 +44,6 @@ scenario_rpc:
   content_type: "application/json"
   timeout: 10
 
-# wakegrant issuer (packages/contracts/wakegrant/PROTOCOL.md). Called right
-# before Wake-on-LAN so the machine can sign the owner in once, and before an
-# unlock so a running, locked PC can be unlocked once. The endpoint is a
-# non-secret LAN base URL in input_text.wakegrant_endpoint; the bearer value
-# (including the "Bearer " prefix) stays in secrets.yaml.
 wakegrant_issue:
   url: "{{ states('input_text.wakegrant_endpoint') | trim | regex_replace('/+$', '') }}/v1/grants"
   method: POST
@@ -75,9 +64,6 @@ wakegrant_issue_unlock:
   content_type: "application/json"
   timeout: 5
 
-# Currency bot LAN NodePort. The endpoint is a non-secret base URL kept in
-# input_text.currency_bot_endpoint; the bearer value (including "Bearer ")
-# stays in secrets.yaml.
 currency_latest:
   url: "{{ states('input_text.currency_bot_endpoint') | trim | regex_replace('/+$', '') }}/api/latest"
   method: GET

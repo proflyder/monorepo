@@ -89,3 +89,10 @@ VM и host сохранят прежние адреса. При ручном for
 
 Источники: [Linux Wireless 4-address](https://wireless.docs.kernel.org/en/latest/en/users/documentation/iw.html),
 [Music Assistant Sendspin settings](https://www.music-assistant.io/player-support/sendspin/).
+
+## Заметки к коду
+
+Пояснения, перенесённые из комментариев исходников (код комментариев не содержит, см. `AGENTS.md`).
+
+- `uplink.py`
+  - Do not print command outputs: wireless diagnostics may contain SSIDs.

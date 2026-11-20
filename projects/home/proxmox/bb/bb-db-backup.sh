@@ -1,23 +1,4 @@
 #!/usr/bin/env bash
-# Consistent online copy of the bb SQLite database plus a full server export.
-#
-# Installed by install-bb.sh as /usr/local/sbin/bb-db-backup and run by
-# bb-db-backup.timer at 03:30, before the 04:00 vzdump. The data directory is
-# configured in /etc/bb-backup/env after enrollment:
-#
-#   BB_DATA_DIR=/home/bb/.bb-machines/<server-host>
-#
-# The run writes two artefacts into /var/backups/bb:
-#
-#   bb.db                  consistent SQLite copy (online backup + integrity check)
-#   bb-server-export.tgz   `bb server export` archive (bb.db, auth secret,
-#                          plugin data, attachments); the only officially
-#                          restorable bb artefact (`bb server import`)
-#
-# Without a configured database the run is a successful no-op with a warning,
-# so the timer stays useful before the server is moved onto this host. The
-# SQLite copy is kept even when the export fails; a failed export makes the
-# whole run exit non-zero so the timer reports it.
 set -euo pipefail
 umask 077
 
@@ -60,7 +41,6 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# ----- consistent SQLite copy ----------------------------------------------
 sqlite3 "$DB" ".timeout 5000" ".backup '$tmp'"
 
 result=$(sqlite3 "$tmp" 'PRAGMA integrity_check;')
@@ -74,9 +54,6 @@ chmod 600 "$tmp"
 mv -f "$tmp" "$DEST/bb.db"
 echo "bb database backup written to $DEST/bb.db"
 
-# ----- full, restorable server export --------------------------------------
-# `bb server export` must run as the service user: the CLI and its data live
-# below $BB_HOME. Resolve both the CLI and the uid instead of hard-coding them.
 if [[ -n ${BB_CLI:-} ]]; then
   CLI=$BB_CLI
 elif [[ -x $BB_HOME/.local/bin/bb ]]; then
@@ -97,7 +74,6 @@ runtime=${XDG_RUNTIME_DIR:-/run/user/$uid}
 
 export_tmpdir=$(mktemp -d "$DEST/bb-export.tmp.XXXXXX")
 export_file=$export_tmpdir/$EXPORT_NAME
-# The tmp dir is created by root; let the service user write the export there.
 if [[ $(id -u) == 0 && $uid != 0 ]]; then
   chown "$BB_USER" "$export_tmpdir"
 fi
@@ -109,8 +85,6 @@ if [[ $(id -u) == "$uid" ]]; then
     exit 1
   fi
 else
-  # /var/backups/bb is 0700 root, so the service user cannot traverse into the
-  # export tmp dir. Allow traversal (not listing) only while the export runs.
   chmod 711 "$DEST"
   dest_widened=1
   export_status=0

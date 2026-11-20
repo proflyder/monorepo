@@ -1,4 +1,3 @@
-"""Static contracts for the Nexus manifests (no cluster needed)."""
 import pathlib
 import re
 import subprocess
@@ -155,7 +154,6 @@ class Provisioning(unittest.TestCase):
         ):
             self.assertIn(needle, script)
         self.assertIn("optional_repo cargo proxy crates", script)
-        # Upstream 5xx must not auto-block a repository or poison the cache.
         self.assertIn('"autoBlock":false', script)
         self.assertIn('"retries":3', script)
         self.assertIn('"timeout":60', script)

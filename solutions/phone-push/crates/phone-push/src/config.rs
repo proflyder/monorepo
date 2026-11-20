@@ -1,43 +1,23 @@
-//! Process configuration.
-//!
-//! Secrets come only from mounted files (`*_FILE`) so no credential ever
-//! appears in a manifest, an argument list or a log line. A missing backend is
-//! a startup error: the service has exactly one job.
-
 use std::time::Duration;
 
 use home_secret::Token;
 use thiserror::Error;
 
-/// Default listen address.
 pub const DEFAULT_LISTEN: &str = "0.0.0.0:8095";
-/// Default OAuth token endpoint.
 pub const DEFAULT_TOKEN_URL: &str = "https://oauth2.googleapis.com/token";
-/// Default FCM API root.
 pub const DEFAULT_FCM_URL: &str = "https://fcm.googleapis.com";
-/// Default per-request timeout.
 pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(10);
-/// Scope required to send FCM messages.
 pub const FCM_SCOPE: &str = "https://www.googleapis.com/auth/firebase.messaging";
 
-/// A validated process configuration.
 #[derive(Clone)]
 pub struct Config {
-    /// HTTP listen address.
     pub listen: String,
-    /// Bearer token every caller must present.
     pub token: Token,
-    /// Scheduler base URL that holds the device registry.
     pub scheduler_url: String,
-    /// Scheduler bearer token.
     pub scheduler_token: Token,
-    /// FCM service-account JSON (already read from its file).
     pub service_account: String,
-    /// OAuth token endpoint.
     pub token_url: String,
-    /// FCM API root.
     pub fcm_url: String,
-    /// Per-request timeout.
     pub timeout: Duration,
 }
 
@@ -54,7 +34,6 @@ impl std::fmt::Debug for Config {
     }
 }
 
-/// Why the environment was rejected. Messages never contain a secret value.
 #[derive(Debug, Error)]
 pub enum ConfigError {
     #[error("{0} is required")]
@@ -68,12 +47,10 @@ pub enum ConfigError {
 }
 
 impl Config {
-    /// Reads and validates the process environment.
     pub fn load() -> Result<Self, ConfigError> {
         Self::load_from(&|key| std::env::var(key).ok(), &|path| std::fs::read(path))
     }
 
-    /// Loads from injected environment and file readers (used by tests).
     pub fn load_from(
         getenv: &dyn Fn(&str) -> Option<String>,
         read_file: &dyn Fn(&str) -> std::io::Result<Vec<u8>>,
@@ -110,7 +87,6 @@ impl Config {
         })
     }
 
-    /// Loopback `/healthz` URL for the distroless probe.
     pub fn healthcheck_url(&self) -> Result<String, String> {
         let (host, port) = self
             .listen

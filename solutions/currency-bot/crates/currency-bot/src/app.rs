@@ -1,10 +1,3 @@
-//! Composition root: configuration, telemetry, SQLite store, the two HTTP
-//! listeners and the two periodic jobs.
-//!
-//! Shutdown is ordered: both listeners stop accepting and drain, background
-//! webhook work is drained, the jobs are cancelled, then the SQLite writer
-//! thread is closed.
-
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -26,7 +19,6 @@ use crate::store::Store;
 use crate::telegram::TelegramSender;
 use home_config::LogLevel;
 
-/// Reported implementation version.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(10);
@@ -37,7 +29,6 @@ const WEBHOOK_ATTEMPT_TIMEOUT: Duration = Duration::from_secs(15);
 const JOB_HOURLY: &str = "hourly";
 const JOB_CLEANUP: &str = "cleanup";
 
-/// Starts the service and blocks until SIGTERM/SIGINT or a listener failure.
 pub async fn run() -> anyhow::Result<()> {
     let config = Config::load().context("configuration")?;
     TelemetryBuilder::new()
@@ -275,7 +266,6 @@ async fn cleanup_job(
     }
 }
 
-/// Sleep until `deadline`; `false` means the service is shutting down.
 async fn sleep_until(deadline: jiff::Timestamp, cancel: &CancellationToken) -> bool {
     let now = SystemClock.now();
     let delay_ms = deadline
@@ -289,9 +279,6 @@ async fn sleep_until(deadline: jiff::Timestamp, cancel: &CancellationToken) -> b
     }
 }
 
-/// Retry `setWebhook` with exponential backoff in `[1s, 60s]` until it
-/// succeeds or the process shuts down. A Telegram outage at start-up must not
-/// crashloop the pod or affect readiness.
 async fn register_webhook(
     sender: Arc<TelegramSender>,
     url: String,

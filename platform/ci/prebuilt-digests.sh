@@ -1,28 +1,4 @@
 #!/usr/bin/env bash
-# Prebuilt image digests for the deploy scripts (CI promotion path).
-#
-# `deploy-home` promotes the images a pull request already built, verified and
-# published under `tree-<git tree hash>` tags instead of rebuilding them after
-# merge (DECISIONS 36). It passes the verified digests to the existing deploy
-# entrypoints:
-#
-#   PREBUILT_DIGESTS="scheduler=sha256:…,ha-bridge=sha256:…"
-#   PREBUILT_DIGESTS_FILE=/path/to/digests   # one `image=sha256:…` per line
-#
-# Both forms may be combined; a file may contain `#` comments and blank lines.
-# The scripts then skip their own build/push for those images and reference the
-# digest directly. Local/manual runs set neither variable, so their behaviour is
-# unchanged.
-#
-# Fail closed: a malformed or duplicate entry aborts the deploy at source time.
-# A typo must never silently fall back to an unverified image, and a digest that
-# was not produced by the promotion step must never be deployed.
-#
-# Usage (after `ROOT` is known):
-#   # shellcheck source=platform/ci/prebuilt-digests.sh
-#   source "$ROOT/platform/ci/prebuilt-digests.sh"
-#   digest=$(prebuilt_digest scheduler)   # empty when nothing was prebuilt
-#
 # shellcheck shell=bash
 
 PREBUILT_DIGESTS_NORMALIZED=""

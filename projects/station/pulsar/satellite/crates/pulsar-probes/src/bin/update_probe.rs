@@ -1,13 +1,3 @@
-//! Пробник обновлений: проверяет OCI-источник и апдейтер без демона.
-//! usage: update_probe versions
-//!          таблица release_newer() для нескольких describe-строк (без сети)
-//!        update_probe check [owner/repo | ghcr.io/owner/name]
-//!          последний релиз и его слои так, как их видит демон
-//!        update_probe download <title> [repo]
-//!          скачивает слой последнего релиза и проверяет его digest
-//!        update_probe install --binary <path> [repo]
-//!          проверяет последний релиз и ставит его в <path> (как демон)
-
 #![deny(unsafe_code)]
 #![deny(unsafe_op_in_unsafe_fn)]
 
@@ -28,20 +18,16 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Таблица сравнения версий (без сети).
     Versions,
-    /// Последний релиз и его слои.
     Check {
         #[arg(default_value = pulsar_update::UPDATE_REPO)]
         repo: String,
     },
-    /// Скачать слой последнего релиза и проверить digest.
     Download {
         title: String,
         #[arg(default_value = pulsar_update::UPDATE_REPO)]
         repo: String,
     },
-    /// Проверить и установить последний релиз в бинарь.
     Install {
         #[arg(long)]
         binary: PathBuf,
@@ -60,7 +46,6 @@ fn main() -> ExitCode {
     }
 }
 
-/// Строки в stdout; закрытый pipe не повод для паники.
 fn out(bytes: &[u8]) {
     let _ = std::io::stdout().write_all(bytes);
 }
@@ -88,7 +73,6 @@ fn versions() -> ExitCode {
     ExitCode::SUCCESS
 }
 
-/// Апдейтер — актор current-thread рантайма в LocalSet, как в демоне.
 fn run(future: impl Future<Output = ExitCode>) -> ExitCode {
     let runtime = match tokio::runtime::Builder::new_current_thread()
         .enable_all()

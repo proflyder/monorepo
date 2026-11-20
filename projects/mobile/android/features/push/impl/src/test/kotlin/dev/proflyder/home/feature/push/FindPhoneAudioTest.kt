@@ -16,15 +16,6 @@ import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowMediaPlayer
 import org.robolectric.shadows.util.DataSource
 
-/**
- * The ring must be audible without leaving the phone loud.
- *
- * `USAGE_ALARM` already plays through silent and vibrate modes, so the ringer
- * mode is never changed: the old code switched it to normal and restored only
- * the alarm volume, which permanently took the phone out of silent mode. The
- * alarm volume is still raised for the ring and restored exactly afterwards,
- * and a repeated start reuses the same player.
- */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class FindPhoneAudioTest {

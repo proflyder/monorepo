@@ -1,8 +1,3 @@
-//! Home Assistant access: profile reads, entity states and announcements.
-//!
-//! Secrets are resolved through a [`TokenProvider`] on every call, so a rotated
-//! mounted token is picked up without a restart.
-
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
@@ -14,7 +9,6 @@ use crate::domain::clock::Clock;
 use crate::domain::profile::{Profile, map_state};
 use crate::domain::sanitize::ends_with_question;
 
-/// A Home Assistant REST endpoint plus its rotatable bearer.
 pub struct HaAccess {
     base_url: String,
     timeout: Duration,
@@ -42,7 +36,6 @@ impl HaAccess {
         }
     }
 
-    /// Builds or reuses the client for the current token value.
     fn client(&self) -> Option<Client> {
         if self.base_url.is_empty() {
             return None;
@@ -70,7 +63,6 @@ impl HaAccess {
         Some(client)
     }
 
-    /// Reads one entity state; anything unreadable is `None`.
     pub async fn state(&self, entity: &str) -> Option<String> {
         if entity.is_empty() {
             return None;
@@ -78,13 +70,10 @@ impl HaAccess {
         self.client()?.state(entity).await.ok()
     }
 
-    /// Reads the routing profile without any cache.
     pub async fn profile(&self, entity: &str) -> Option<Profile> {
         map_state(&self.state(entity).await?)
     }
 
-    /// Calls one Home Assistant service with the satellite entity as
-    /// `entity_id`.
     pub async fn call_service(
         &self,
         domain: &str,
@@ -97,7 +86,6 @@ impl HaAccess {
         client.call_service(domain, service, data).await.is_ok()
     }
 
-    /// Runs one script with variables.
     pub async fn call_script(&self, script: &str, variables: Map<String, Value>) -> bool {
         let Some(client) = self.client() else {
             return false;
@@ -106,8 +94,6 @@ impl HaAccess {
     }
 }
 
-/// Reads the profile entity, caching only a fresh *successful* read. A failed
-/// read is unknown and clears the cache, so a stale profile is never used.
 pub struct ProfileReader {
     access: Arc<HaAccess>,
     entity: String,
@@ -143,7 +129,6 @@ impl ProfileReader {
         }
     }
 
-    /// The cached profile when it is still fresh.
     pub async fn profile(&self) -> Option<Profile> {
         {
             let cached = self.cached.lock().unwrap_or_else(PoisonError::into_inner);
@@ -153,7 +138,6 @@ impl ProfileReader {
                 return Some(*profile);
             }
         }
-        // A stale cache is never used: a read error makes the profile unknown.
         {
             let mut cached = self.cached.lock().unwrap_or_else(PoisonError::into_inner);
             *cached = None;
@@ -165,24 +149,15 @@ impl ProfileReader {
         Some(profile)
     }
 
-    /// Reads the profile fresh, without touching the cache.
     pub async fn fetch(&self) -> Option<Profile> {
         self.access.profile(&self.entity).await
     }
 
-    /// Reads one entity state fresh.
     pub async fn state(&self, entity: &str) -> Option<String> {
         self.access.state(entity).await
     }
 }
 
-/// Speaks late answers through Home Assistant.
-///
-/// * a statement runs the announcement script and leaves the satellite alone;
-/// * a question uses `assist_satellite.start_conversation`, which speaks and
-///   then keeps listening;
-/// * when that call fails the script is still tried, so the answer is never
-///   lost silently.
 #[derive(Debug, Clone)]
 pub struct HaAnnouncer {
     access: Arc<HaAccess>,
@@ -204,7 +179,6 @@ impl HaAnnouncer {
         }
     }
 
-    /// Speaks `text` and reports `(announced, listening)`.
     pub async fn announce(&self, text: &str) -> (bool, bool) {
         if text.is_empty() {
             return (false, false);
@@ -215,7 +189,6 @@ impl HaAnnouncer {
         (self.via_script(text).await, false)
     }
 
-    /// Runs the announcement script with `{message, chime:false}`.
     pub async fn via_script(&self, text: &str) -> bool {
         if self.script.is_empty() {
             return false;
@@ -226,7 +199,6 @@ impl HaAnnouncer {
         self.access.call_script(&self.script, variables).await
     }
 
-    /// Speaks a question and leaves the satellite microphone open.
     pub async fn start_conversation(&self, text: &str) -> bool {
         if self.satellite.is_empty() {
             return false;

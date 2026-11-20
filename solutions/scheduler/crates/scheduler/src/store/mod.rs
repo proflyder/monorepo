@@ -1,13 +1,3 @@
-//! Durable scheduler store on `home-sqlite`.
-//!
-//! The schema, SQL conditions, error texts and event identities are the former
-//! Go store's, byte for byte. A database created by the Go service opens here
-//! and is migrated in place: [`MIGRATIONS`] carries the identical v1 DDL and
-//! then adds the v2 scenario table. An older binary rejects a newer database.
-//!
-//! Every mutation runs on the single SQLite writer thread; `now` is always an
-//! argument so tick scenarios stay deterministic.
-
 mod event;
 mod migrate;
 mod push;
@@ -37,18 +27,12 @@ pub use tick::TickStats;
 
 use crate::domain::ScheduleKind as DomainScheduleKind;
 
-/// Schema version written to `schema_meta`. v2 adds the scenario table, v3 the
-/// push device registry, v4 re-keys it by stable `device_id`, and v5 makes
-/// schedules UTC-only (`once_unix`, no timezone/once_date columns); an older
-/// database migrates in place, and an older binary rejects a newer one.
 pub const SCHEMA_VERSION: i64 = 5;
 
-/// Queue names used by the built-in domains.
 pub const QUEUE_HOME: &str = "home";
 pub const QUEUE_TASKS: &str = "tasks";
 pub const QUEUE_SCENARIO: &str = "scenario";
 
-/// DDL copied from the Go `applyV1` statements in the same order.
 const V1: &[&str] = &[
     "CREATE TABLE IF NOT EXISTS schedules (
 			id TEXT PRIMARY KEY,
@@ -127,9 +111,6 @@ const V1: &[&str] = &[
 		)",
 ];
 
-/// v2 adds durable scenario definitions. Time triggers are materialized as
-/// `schedules` rows (kind=SCENARIO), so recurrence, DST, dedupe and the outbox
-/// stay shared with alarms and reminders.
 const V2: &[&str] = &[
     "CREATE TABLE IF NOT EXISTS scenarios (
 			id TEXT PRIMARY KEY,
@@ -142,8 +123,6 @@ const V2: &[&str] = &[
     "CREATE INDEX IF NOT EXISTS scenarios_enabled ON scenarios(enabled)",
 ];
 
-/// v3 adds the push device registry: FCM tokens of the owner's phones. The
-/// scheduler stores them only; `solutions/phone-push` sends.
 const V3: &[&str] = &[
     "CREATE TABLE IF NOT EXISTS push_devices (
 			token TEXT PRIMARY KEY,
@@ -156,12 +135,6 @@ const V3: &[&str] = &[
     "CREATE INDEX IF NOT EXISTS push_devices_updated ON push_devices(updated_unix)",
 ];
 
-/// v4 re-keys the registry by the phone's own stable identity: an FCM token
-/// rotates, a device does not. Existing v3 rows are kept with the token as a
-/// provisional `device_id`; the first registration from an upgraded app sends
-/// the real identity and collapses that row (same token, new key) instead of
-/// leaving a duplicate. A token is unique, so a token moved between device
-/// identities cannot fan out to two rows.
 const V4: &[&str] = &[
     "ALTER TABLE push_devices RENAME TO push_devices_v3",
     "CREATE TABLE IF NOT EXISTS push_devices (
@@ -181,12 +154,8 @@ const V4: &[&str] = &[
     "CREATE INDEX IF NOT EXISTS push_devices_updated ON push_devices(updated_unix)",
 ];
 
-/// v5 adds the UTC one-shot instant. The legacy `timezone`/`once_date` columns
-/// are converted and dropped by [`migrate::legacy_schedules_to_utc`] once the
-/// static step has run, because only Rust carries the IANA database.
 const V5: &[&str] = &["ALTER TABLE schedules ADD COLUMN once_unix INTEGER NOT NULL DEFAULT 0"];
 
-/// One ordered schema step.
 pub const MIGRATIONS: &[Migration] = &[
     Migration {
         version: 1,
@@ -215,7 +184,6 @@ pub const MIGRATIONS: &[Migration] = &[
     },
 ];
 
-/// Operational bounds; zero values are replaced by [`Config::default`].
 #[derive(Debug, Clone)]
 pub struct Config {
     pub missed_grace: i64,
@@ -305,42 +273,31 @@ impl Config {
     }
 }
 
-/// A store failure: a domain error rendered exactly like the Go store, the
-/// bare `not found` sentinel, or an internal SQLite failure.
 #[derive(Debug)]
 pub enum StoreError {
-    /// Domain failure with a Go-compatible `<kind>: <detail>` message.
     Domain(DomainError),
-    /// Bare `not found`, matching `store.ErrNotFound`.
     NotFound,
-    /// Bare `consumer not allowed`, matching `store.ErrConsumerDenied`.
     ConsumerDenied,
-    /// SQLite failure. The API maps it to `internal error`.
     Sqlite(SqliteError),
 }
 
 impl StoreError {
-    /// `invalid argument: <detail>`.
     pub fn invalid(detail: impl Into<String>) -> Self {
         Self::Domain(DomainError::invalid(detail))
     }
 
-    /// `precondition failed: <detail>`.
     pub fn precondition(detail: impl Into<String>) -> Self {
         Self::Domain(DomainError::precondition(detail))
     }
 
-    /// `limit exceeded: <detail>`.
     pub fn limit(detail: impl Into<String>) -> Self {
         Self::Domain(DomainError::limit_exceeded(detail))
     }
 
-    /// Domain error of an explicit kind.
     pub fn domain(kind: ErrorKind, detail: impl Into<String>) -> Self {
         Self::Domain(DomainError::new(kind, detail))
     }
 
-    /// Classifies the error for transport mapping.
     #[must_use]
     pub fn kind(&self) -> Option<ErrorKind> {
         match self {
@@ -383,7 +340,6 @@ impl From<rusqlite::Error> for StoreError {
     }
 }
 
-/// SQLite-backed scheduler store.
 pub struct Store {
     db: Mutex<Db>,
     config: Config,
@@ -399,7 +355,6 @@ impl fmt::Debug for Store {
 }
 
 impl Store {
-    /// Opens (creating if needed) the database and applies migrations.
     pub fn open(path: impl AsRef<std::path::Path>, config: Config) -> Result<Self, StoreError> {
         let db = Db::open(path, MIGRATIONS)?;
         migrate::legacy_schedules_to_utc(&db)?;
@@ -409,7 +364,6 @@ impl Store {
         })
     }
 
-    /// Opens an in-memory database with the same pragmas and migrations.
     pub fn open_in_memory(config: Config) -> Result<Self, StoreError> {
         let db = Db::open_in_memory(MIGRATIONS)?;
         migrate::legacy_schedules_to_utc(&db)?;
@@ -419,7 +373,6 @@ impl Store {
         })
     }
 
-    /// Normalized operational bounds.
     #[must_use]
     pub const fn config(&self) -> &Config {
         &self.config
@@ -468,7 +421,6 @@ impl Store {
         })?
     }
 
-    /// Stops the writer thread and closes the connection.
     pub fn close(self) -> Result<(), StoreError> {
         let db = self.db.into_inner().unwrap_or_else(PoisonError::into_inner);
         db.shutdown().map_err(StoreError::from)

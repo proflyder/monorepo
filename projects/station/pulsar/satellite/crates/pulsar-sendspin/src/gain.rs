@@ -1,21 +1,13 @@
-//! Software duck gain of the Sendspin output: a linear ramp over 80 ms for a full-scale change,
-//! applied per frame to 16-bit PCM (the only depth the player advertises). Float operations in
-//! the order of the C++ sink, so both produce the same samples.
-
-/// Full-scale ramp duration.
 const RAMP_SEC: f32 = 0.08;
 
-/// C++ `std::min`: `b < a ? b : a` (keeps `a` for NaN).
 fn min(a: f32, b: f32) -> f32 {
     if b < a { b } else { a }
 }
 
-/// C++ `std::max`: `a < b ? b : a`.
 fn max(a: f32, b: f32) -> f32 {
     if a < b { b } else { a }
 }
 
-/// Gain after `frames` frames of the ramp from `gain` toward `target` (rate 0 counts as 48 kHz).
 pub fn ramp_end_gain(gain: f32, target: f32, rate: u32, frames: u32) -> f32 {
     let rate = if rate != 0 { rate } else { 48000 };
     let step = 1.0 / (RAMP_SEC * rate as f32);
@@ -27,8 +19,6 @@ pub fn ramp_end_gain(gain: f32, target: f32, rate: u32, frames: u32) -> f32 {
     }
 }
 
-/// Scales `frames` interleaved S16_LE frames of `data` into `out`, ramping from `gain` toward
-/// `target` one step per frame (`rate` must not be 0). Samples round to nearest even, as lrintf.
 pub fn scale_s16(
     data: &[u8],
     frames: usize,
@@ -59,7 +49,6 @@ pub fn scale_s16(
             .zip(dst.as_chunks_mut::<2>().0)
         {
             let v = f32::from(i16::from_le_bytes(*s)) * g;
-            // |v| <= 32768 with g <= 1: the cast does not saturate.
             *d = (v.round_ties_even() as i16).to_le_bytes();
         }
     }
@@ -125,7 +114,6 @@ mod tests {
 
     #[test]
     fn full_scale_ramp_takes_80_ms() {
-        // 48 kHz: 3840 frames from 1 to 0.
         assert!(ramp_end_gain(1.0, 0.0, 48000, 3840) < 1e-6);
         assert!(ramp_end_gain(1.0, 0.0, 48000, 3800) > 0.01);
         assert_eq!(ramp_end_gain(1.0, 0.0, 48000, 3841), 0.0);

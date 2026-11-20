@@ -50,17 +50,13 @@ import java.util.UUID
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 
-/** One-shot message for the screen. */
 sealed interface ControlNotice {
     data class ScenarioQueued(val title: String) : ControlNotice
 
-    /** A shortcut was pinned or unpinned from a long press. */
     data class FavoriteChanged(val title: String, val pinned: Boolean) : ControlNotice
 
-    /** A wake event was marked for the wake-word statistics. */
     data class WakeMarked(val kind: WakeFeedbackKind) : ControlNotice
 
-    /** A one-shot device button was accepted by the scheduler. */
     data object CommandSent : ControlNotice
 }
 
@@ -68,32 +64,22 @@ data class ControlUiState(
     val configured: Boolean = true,
     val refreshing: Boolean = true,
     val entries: List<ControlEntry> = emptyList(),
-    /** False when the server could not read Home Assistant; device states are then unknown. */
     val statesOk: Boolean = true,
-    /** Entry ids with a command in flight. */
     val pending: Set<String> = emptySet(),
     val loadError: RemoteFailure? = null,
     val actionError: RemoteFailure? = null,
     val notice: ControlNotice? = null,
     val filter: ControlFilter = ControlFilter.All,
-    /** Device ids whose "Settings (N)" row is open; UI state only, not persisted. */
     val expandedDevices: Set<String> = emptySet(),
-    /** Room section ids the user collapsed. */
     val collapsedRooms: Set<String> = emptySet(),
-    /** Compact live rows ("nothing right now" is an empty list). */
     val hubCards: List<HubCard> = emptyList(),
-    /** Server-accurate timer seconds per timer card key, refreshed by [ControlViewModel.tick]. */
     val hubRemaining: Map<String, Long> = emptyMap(),
-    /** Native scenarios, used for pinned scenario tiles and their busy state. */
     val scenarios: List<Scenario> = emptyList(),
-    /** Ordered pinned shortcuts. */
     val favorites: List<FavoriteRef> = emptyList(),
     val pendingScenarios: Set<String> = emptySet(),
     val pendingTimers: Set<String> = emptySet(),
     val pendingAlarms: Set<String> = emptySet(),
-    /** Forces one render per countdown tick. */
     val tick: Long = 0,
-    /** Server time captured with the hub data, used for "today/tomorrow" text. */
     val nowUnix: Long = 0,
 )
 
@@ -122,12 +108,9 @@ class ControlViewModel(
     private var hubGeneration = 0
     private var filterChosenByUser = false
     private val expectedPower = HashMap<String, Pair<PowerState, Long>>()
-    /** Optimistic volume values until the server confirms them. */
     private val expectedVolume = HashMap<String, Pair<VolumeControls, Long>>()
 
     init {
-        // Restore the last selected filter. A tap that happens before this
-        // returns wins; an unknown room is reset to All once the catalog loads.
         launch {
             val saved = preferences.loadFilter() ?: return@launch
             if (!filterChosenByUser) updateState { copy(filter = ControlItems.effectiveFilter(entries, saved)) }
@@ -138,7 +121,6 @@ class ControlViewModel(
         }
     }
 
-    /** [silent] refreshes without the pull-to-refresh spinner (used to reconcile after a command). */
     fun refresh(silent: Boolean = false) {
         if (!loadCatalog.isConfigured) {
             updateState { copy(configured = false, refreshing = false, entries = emptyList(), loadError = null) }
@@ -162,7 +144,6 @@ class ControlViewModel(
                     refreshing = false,
                     entries = withExpectations(result.value.entries),
                     statesOk = result.value.statesOk,
-                    // A room or category that vanished falls back to everything.
                     filter = ControlItems.effectiveFilter(result.value.entries, filter),
                 )
             }
@@ -171,11 +152,6 @@ class ControlViewModel(
         loadHub(catalogOk = result is Outcome.Success, requested = ++hubGeneration)
     }
 
-    /**
-     * Loads the live rows and pinned shortcuts. A failing source simply
-     * contributes no rows: the hub is optional decoration over the catalog,
-     * so one unreachable feature must not replace the whole Home screen.
-     */
     private suspend fun loadHub(catalogOk: Boolean, requested: Int) {
         timers.syncClock()
         val alarmsResult = alarms.list()
@@ -184,8 +160,6 @@ class ControlViewModel(
         val remindersResult = reminders.list()
         if (requested != hubGeneration) return
         val now = clock.nowUnix()
-        // A failed source keeps its previous cards on screen instead of making
-        // a card disappear and reappear on the next successful refresh.
         val cards = HubCards.buildOrKeep(
             alarms = alarmsResult.getOrNull(),
             timers = timersResult.getOrNull(),
@@ -210,7 +184,6 @@ class ControlViewModel(
         }
     }
 
-    /** Never persist defaults computed from a catalog that failed to load. */
     private suspend fun resolveFavorites(
         entries: List<ControlEntry>,
         scenarioList: List<Scenario>,
@@ -223,13 +196,11 @@ class ControlViewModel(
         return defaults
     }
 
-    /** Re-reads only the hub sources (after a card action), keeping the catalog as is. */
     private fun refreshHub() {
         hubJob?.cancel()
         hubJob = launch { loadHub(catalogOk = currentState.entries.isNotEmpty(), requested = ++hubGeneration) }
     }
 
-    /** Countdown tick: recomputes the timer cards' remaining seconds once a second. */
     fun tick() {
         val timers = currentState.hubCards.filterIsInstance<HubCard.TimerCard>()
         if (timers.isEmpty()) return
@@ -256,12 +227,6 @@ class ControlViewModel(
         }
     }
 
-    /**
-     * Marks a live wake event (false alarm or missed wake). It is one tap and
-     * sends at once — especially for a missed wake the ring buffer only holds
-     * the last ~20 seconds. The call goes through the same scenario run path
-     * as any other catalog script, so failures reuse [actionError].
-     */
     fun markWake(action: WakeFeedbackAction) {
         val entry = action.entry
         if (action.busy || !entry.available || entry.id in currentState.pending) return
@@ -276,11 +241,6 @@ class ControlViewModel(
         }
     }
 
-    /**
-     * Presses a stateless device button (lock/unlock the PC). It is a one-shot
-     * command: a button has no on/off state to optimistically update, so the
-     * catalog is only re-read afterwards to pick up side effects.
-     */
     fun press(entry: ControlEntry) {
         if (entry.id in currentState.pending || !entry.available) return
         updateState { copy(pending = pending + entry.id, actionError = null) }
@@ -300,10 +260,6 @@ class ControlViewModel(
         }
     }
 
-    /**
-     * Queues a spoken text. An invalid or empty text is ignored (the dialog
-     * keeps its Say button disabled), and the executor re-validates it again.
-     */
     fun speak(entry: ControlEntry, text: String) {
         val message = SpeakText.normalize(text) ?: return
         if (entry.id in currentState.pending || !entry.available) return
@@ -318,20 +274,9 @@ class ControlViewModel(
         }
     }
 
-    /**
-     * The executor applies commands asynchronously, so a refresh right after a
-     * tap can still return the old state. The tapped value is therefore kept
-     * (see [expectedPower]) until the server confirms it or [EXPECT_TTL_MS] passes;
-     * the switch never flickers back, and it is not disabled while the command is in flight.
-     */
     fun setPower(entry: ControlEntry, on: Boolean) =
         changePower(entry, on) { target, value -> setDevicePower(target, value) }
 
-    /**
-     * Switches the assistant profile. It is the profile switch entity's on/off,
-     * so it reuses the device path: optimistic update, then re-read until the
-     * server agrees. `work = true` sends turn_on (the named profile).
-     */
     fun setProfile(entry: ControlEntry, work: Boolean) =
         changePower(entry, work) { target, value -> setVoiceProfile(target, value) }
 
@@ -358,7 +303,6 @@ class ControlViewModel(
         }
     }
 
-    /** Re-reads the catalog until the server shows the expected state (or the wait expires). */
     private suspend fun reconcile(id: String) {
         repeat(RECONCILE_ATTEMPTS) {
             if (!reconcileStep(id)) return
@@ -373,7 +317,6 @@ class ControlViewModel(
         return true
     }
 
-    /** Applies still-unconfirmed taps on top of freshly loaded [entries]. */
     private fun withExpectations(entries: List<ControlEntry>): List<ControlEntry> {
         if (expectedPower.isEmpty() && expectedVolume.isEmpty()) return entries
         val now = SystemClock.elapsedRealtime()
@@ -403,11 +346,6 @@ class ControlViewModel(
         }
     }
 
-    /**
-     * Applies a light adjustment. Unlike [setPower] it does not mark the row busy
-     * (the user keeps dragging sliders); the optimistic values are replaced by the
-     * real ones once the executor has applied the command.
-     */
     fun adjust(entry: ControlEntry, adjust: LightAdjust) {
         if (!entry.available || entry.light == null) return
         expectedPower[entry.id] = PowerState.ON to SystemClock.elapsedRealtime() + EXPECT_TTL_MS
@@ -429,11 +367,6 @@ class ControlViewModel(
         }
     }
 
-    /**
-     * Sets a station volume level. The slider keeps its value while the
-     * executor applies the command; the catalog is re-read after a short
-     * settle delay, and the optimistic value wins until the server agrees.
-     */
     fun setVolume(entry: ControlEntry, level: Int) {
         val current = entry.volume ?: return
         if (!entry.available) return
@@ -446,7 +379,6 @@ class ControlViewModel(
         }
     }
 
-    /** Mutes or unmutes the station without changing the level. */
     fun setVolumeMuted(entry: ControlEntry, muted: Boolean) {
         val current = entry.volume ?: return
         if (!entry.available) return
@@ -475,7 +407,6 @@ class ControlViewModel(
         refresh(silent = true)
     }
 
-    /** Re-reads the catalog once the executor had time to apply the level. */
     private suspend fun reconcileVolume(id: String) {
         delay(VOLUME_SETTLE_DELAY_MS)
         if (expectedVolume[id] == null) return
@@ -489,17 +420,13 @@ class ControlViewModel(
         launch { preferences.saveFilter(filter) }
     }
 
-    /** Opens or closes the settings rows of one device card. */
     fun toggleDeviceSettings(deviceId: String) = updateState {
         copy(expandedDevices = if (deviceId in expandedDevices) expandedDevices - deviceId else expandedDevices + deviceId)
     }
 
-    /** Folds or unfolds a room section. */
     fun toggleRoom(section: String) = updateState {
         copy(collapsedRooms = if (section in collapsedRooms) collapsedRooms - section else collapsedRooms + section)
     }
-
-    // --- pinned quick actions ---------------------------------------------
 
     fun toggleFavorite(entry: ControlEntry) =
         toggleFavoriteRef(FavoriteRef(FavoriteKind.DEVICE, entry.id), entry.displayName)
@@ -519,8 +446,6 @@ class ControlViewModel(
         launch { favorites.save(updated) }
     }
 
-    // --- live hub row actions ---------------------------------------------
-
     fun hubPrimary(card: HubCard) {
         when (card) {
             is HubCard.Alarm -> if (card.ringing) stopAlarm(card.schedule) else toggleAlarm(card)
@@ -531,10 +456,8 @@ class ControlViewModel(
 
     private fun toggleAlarm(card: HubCard.Alarm) = changeAlarmEnabled(card, !card.schedule.enabled)
 
-    /** Explicit "turn off completely" from the recurring-alarm choice dialog. */
     fun disableAlarm(card: HubCard.Alarm) = changeAlarmEnabled(card, false)
 
-    /** Skip only the nearest occurrence; the alarm stays enabled and repeats. */
     fun skipAlarmOccurrence(card: HubCard.Alarm) {
         val alarm = card.schedule
         if (alarm.id in currentState.pendingAlarms) return
@@ -602,7 +525,6 @@ class ControlViewModel(
         }
     }
 
-    /** Queues a native scenario run (one tap = one logical run, so one key per tap). */
     fun runScenarioNow(scenario: Scenario) {
         if (scenario.id in currentState.pendingScenarios) return
         updateState { copy(pendingScenarios = pendingScenarios + scenario.id, actionError = null) }
@@ -621,7 +543,6 @@ class ControlViewModel(
         }
     }
 
-    /** Pinned quick action: open the call screen and dial the station. */
     fun callStation() = callLauncher.openCallScreen()
 
     fun consumeNotice() = updateState { copy(notice = null) }
@@ -630,11 +551,6 @@ class ControlViewModel(
 
     fun consumeLoadError() = updateState { copy(loadError = null) }
 
-    /**
-     * A button usually changes state a few seconds later (the PC lock sensor
-     * is re-read ~3 s after the press), so the catalog is read again once the
-     * server had time to see it; the user does not have to pull to refresh.
-     */
     private suspend fun refreshAfterPress() {
         delay(PRESS_SETTLE_DELAY_MS)
         refresh(silent = true)
@@ -695,7 +611,6 @@ class ControlViewModelFactoryContributor(
     }
 }
 
-/** The entry as it will look once [adjust] is applied: any adjustment also turns the light on. */
 internal fun ControlEntry.withAdjust(adjust: LightAdjust): ControlEntry {
     val current = light ?: return this
     return copy(

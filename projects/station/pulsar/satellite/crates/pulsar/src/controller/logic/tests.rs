@@ -29,8 +29,6 @@ fn port_offset() {
     for bad in ["", "abc", "-1", "65536", "1e4", " 5", "60000"] {
         assert_eq!(ports(Some(OsStr::new(bad))), None, "{bad:?}");
     }
-    // The metrics port (9101) is the highest base: 9101 + 56434 = 65535 still
-    // fits, one more overflows it.
     assert!(ports(Some(OsStr::new("56434"))).is_some());
     assert_eq!(ports(Some(OsStr::new("56435"))), None);
     assert_eq!(ports(Some(OsStr::from_bytes(b"1\xff"))), None);
@@ -87,7 +85,6 @@ fn identity_from_mac() {
         (id.name.as_str(), id.board.as_str()),
         ("yandex-lite2-334455", "plum")
     );
-    // No wlan0: the prefix alone, an empty MAC.
     let id = identity(&lite.identity, "", "v1", "t");
     assert_eq!((id.name.as_str(), id.mac.as_str()), ("yandex-lite2-", ""));
     assert_eq!(
@@ -99,17 +96,14 @@ fn identity_from_mac() {
 #[test]
 fn volume_migration() {
     let from_legacy = |v: f32| v * 2.0;
-    // volume2= is authoritative.
     assert_eq!(
         initial_volume(true, 0.4, 0.9, false, 0.7, from_legacy),
         (0.4, false)
     );
-    // volume= of an earlier build: the same raw level on the stock curve, persisted.
     assert_eq!(
         initial_volume(false, 0.5, 0.2, false, 0.7, from_legacy),
         (0.4, true)
     );
-    // volume_curve=2: volume= was already on the stock curve (at most 1).
     assert_eq!(
         initial_volume(false, 0.5, 0.2, true, 0.7, from_legacy),
         (0.2, true)
@@ -118,7 +112,6 @@ fn volume_migration() {
         initial_volume(false, 0.5, 1.5, true, 0.7, from_legacy),
         (1.0, true)
     );
-    // Neither: the mixer's volume, never above 0.3.
     assert_eq!(
         initial_volume(false, 0.5, -1.0, false, 0.7, from_legacy),
         (0.3, false)
@@ -160,20 +153,16 @@ fn timer_choice() {
     t.insert("b".to_owned(), paused(30));
     t.insert("a".to_owned(), paused(60));
     assert_eq!(pick_timer(&t, now), Some(("b", paused(30), 30_000)));
-    // A running timer beats any paused one, even with more time left.
     t.insert("c".to_owned(), run(now + 90_000));
     assert_eq!(pick_timer(&t, now), Some(("c", run(now + 90_000), 90_000)));
     t.insert("d".to_owned(), run(now + 10_000));
     assert_eq!(pick_timer(&t, now), Some(("d", run(now + 10_000), 10_000)));
-    // Ran out locally: skipped until HA's FINISHED removes it.
     t.insert("0".to_owned(), run(now));
     assert_eq!(pick_timer(&t, now).unwrap().0, "d");
-    // Ties: the smallest id (std::map order).
     t.insert("e".to_owned(), run(now + 10_000));
     assert_eq!(pick_timer(&t, now).unwrap().0, "d");
     t.insert("1".to_owned(), run(now + 10_000));
     assert_eq!(pick_timer(&t, now).unwrap().0, "1");
-    // Paused with nothing left counts as run out too.
     let mut p = BTreeMap::new();
     p.insert("x".to_owned(), paused(0));
     assert_eq!(pick_timer(&p, now), None);
@@ -250,16 +239,10 @@ fn stt_stop_words() {
 
 #[test]
 fn stt_stop_in_a_wake_dialog_is_left_to_ha() {
-    // Диалог открыт wake word: «Рикардо, стоп» должно дойти до Home Assistant (оно выключает
-    // будильник и возвращает музыку), а не отменить диалог и не поставить музыку на паузу.
     assert_eq!(stt_stop_action("стоп", true), SttStopAction::None);
     assert_eq!(stt_stop_action("хватит", true), SttStopAction::None);
-    // Остальные диалоги (кнопка, продолжение разговора, start_conversation): стоп-слово действует
-    // локально — звонок таймера выключается, если звонит, и диалог завершается (в voice.rs это
-    // stop_timer_ring(), затем cancel_dialog()); диалог не остаётся в LISTENING до watchdog.
     assert_eq!(stt_stop_action("стоп", false), SttStopAction::Cancel);
     assert_eq!(stt_stop_action("хватит", false), SttStopAction::Cancel);
-    // Не стоп-слово — обычный запрос.
     assert_eq!(stt_stop_action("включи свет", false), SttStopAction::None);
     assert_eq!(
         stt_stop_action("хватит ли времени", false),
@@ -269,14 +252,12 @@ fn stt_stop_in_a_wake_dialog_is_left_to_ha() {
 
 #[test]
 fn command_gating() {
-    // Окно wake word: 2,5 с в LISTENING / PROCESSING.
     assert!(after_wake(Phase::Listening, true, 12_499, 10_000));
     assert!(!after_wake(Phase::Listening, true, 12_500, 10_000));
     assert!(after_wake(Phase::Processing, true, 12_499, 10_000));
     assert!(!after_wake(Phase::Processing, true, 12_500, 10_000));
     assert!(!after_wake(Phase::Idle, true, 10_001, 10_000));
     assert!(!after_wake(Phase::Speaking, true, 10_001, 10_000));
-    // Кнопка, продолжение диалога и HA открывают диалог без wake word: окна нет.
     assert!(!after_wake(Phase::Listening, false, 10_000, 10_000));
     assert!(!after_wake(Phase::Processing, false, 10_000, 10_000));
 }
@@ -298,7 +279,6 @@ fn music_ownership() {
     assert!(own(P::Loading, None, false, false, None));
     assert!(own(P::Idle, None, true, true, None));
     assert!(!own(P::Idle, None, false, true, None));
-    // Paused / ended music stays this station's for PAUSED_MUSIC_MS.
     assert!(own(
         P::Paused,
         Some(now - PAUSED_MUSIC_MS + 1),
@@ -328,9 +308,7 @@ fn music_ownership() {
         true,
         Some(now - PAUSED_MUSIC_MS)
     ));
-    // An ended Sendspin stream counts only while its server is connected.
     assert!(!own(P::Idle, None, false, false, Some(now - 1000)));
-    // A pause time does not make a stopped player's music its own.
     assert!(!own(P::Idle, Some(now - 1000), false, false, None));
 }
 
@@ -346,19 +324,16 @@ fn command_permission() {
             command_allowed(c, false, false, false, true),
             "{c:?} with own music"
         );
-        // Silent, no music of its own: only "стоп".
         assert_eq!(
             command_allowed(c, false, false, false, false),
             c == Stop,
             "{c:?} silent"
         );
-        // Answer / announcement / ring, no music: "стоп" and volume.
         assert_eq!(
             command_allowed(c, false, false, true, false),
             matches!(c, Stop | Louder | Quieter),
             "{c:?} sounding"
         );
-        // A dialog past the window: only "стоп", whatever sounds or plays.
         assert_eq!(
             command_allowed(c, false, true, true, true),
             c == Stop,
@@ -412,20 +387,15 @@ fn volume_click_gating() {
     let click =
         |before, after, phase| want_volume_click(before, after, phase, false, false, false, false);
     let step = ((0.15, false), (0.1, false));
-    // Outside the microphone's STT window and with ANNOUNCE free.
     for phase in [Phase::Idle, Phase::Processing] {
         assert!(click(step.0, step.1, phase), "{phase:?}");
     }
-    // LISTENING streams to STT (and plays the wake earcon), SPEAKING plays the answer.
     for phase in [Phase::Listening, Phase::Speaking] {
         assert!(!click(step.0, step.1, phase), "{phase:?}");
     }
-    // A held key at the top or bottom; older builds saved 7.45e-9 for 0 to state.conf.
     assert!(!click((1.0, false), (1.0, false), Phase::Idle));
     assert!(!click((7.45e-9, false), (0.0, false), Phase::Idle));
-    // A key at 0 while muted unmutes: that is a change.
     assert!(click((0.0, true), (0.0, false), Phase::Idle));
-    // Arbitrating, announcement, timer ring, closing earcon.
     let (b, a, idle) = (step.0, step.1, Phase::Idle);
     assert!(!want_volume_click(b, a, idle, true, false, false, false));
     assert!(!want_volume_click(b, a, idle, false, true, false, false));
@@ -518,13 +488,11 @@ fn idle_and_auto_update() {
     assert_eq!(auto_update(true, "v1.1.0", true, cur, "", true), No);
     assert_eq!(auto_update(true, "v1.0.0", false, cur, "", true), No);
     assert_eq!(auto_update(true, "v0.9.0", false, cur, "", true), No);
-    // Rolled back by supervise.sh: that tag is skipped, a newer one is not.
     assert_eq!(auto_update(true, "v1.1.0", false, cur, "v1.1.0", true), No);
     assert_eq!(
         auto_update(true, "v1.2.0", false, cur, "v1.1.0", true),
         Install
     );
-    // A build whose version does not parse never updates itself.
     assert_eq!(auto_update(true, "v1.1.0", false, "unknown", "", true), No);
     assert_eq!(
         auto_update(true, "v1.1.0", false, "v1.0.0-3-gabcdef0", "", true),
@@ -549,22 +517,20 @@ fn cxx_min_max_clamp() {
     assert!(cxx_clamp(f32::NAN, 0.25, 4.0).is_nan());
     assert_eq!(cxx_clamp(9.0, 0.25, 4.0), 4.0);
     assert_eq!(cxx_clamp(0.0, 0.25, 4.0), 0.25);
-    // set_volume: a NaN from HA ends at 0, as std::min(1, std::max(0, v)).
     assert_eq!(cxx_min(1.0, cxx_max(0.0, f32::NAN)), 0.0);
 }
 
 #[test]
 fn lux_throttle() {
-    assert!(publish_lux(0.0, -1.0, 0, 0)); // first reading
-    assert!(!publish_lux(5.9, 5.0, 0, 1000)); // within 1 lx
+    assert!(publish_lux(0.0, -1.0, 0, 0));
+    assert!(!publish_lux(5.9, 5.0, 0, 1000));
     assert!(publish_lux(6.1, 5.0, 0, 1000));
-    assert!(!publish_lux(109.0, 100.0, 0, 1000)); // within 10 %
+    assert!(!publish_lux(109.0, 100.0, 0, 1000));
     assert!(publish_lux(111.0, 100.0, 0, 1000));
     assert!(!publish_lux(100.0, 100.0, 0, 60_000));
-    assert!(publish_lux(100.0, 100.0, 0, 60_001)); // 60 s after the last one
+    assert!(publish_lux(100.0, 100.0, 0, 60_001));
 }
 
-/// Event binding to the dialog's run: (action, event, accepted, binding after).
 #[test]
 fn run_binding_table() {
     use VaEvent::*;
@@ -654,7 +620,6 @@ fn run_binding_table() {
 
 #[test]
 fn microphones_mutes() {
-    // (on, software mute, button mute) -> software mute
     for (on, sw, hw, want) in [
         (false, false, false, true),
         (false, true, false, true),
@@ -662,7 +627,6 @@ fn microphones_mutes() {
         (false, true, true, true),
         (true, true, false, false),
         (true, false, false, false),
-        // The button's mute: HA's "on" changes nothing.
         (true, true, true, true),
         (true, false, true, false),
     ] {
@@ -672,10 +636,8 @@ fn microphones_mutes() {
             "on={on} sw={sw} hw={hw}"
         );
     }
-    // Muted from HA only: the first press adds the button's mute, the second lifts both.
     assert!(sw_mute_after_button(true, true));
     assert!(!sw_mute_after_button(true, false));
-    // The button never sets the software mute.
     assert!(!sw_mute_after_button(false, true));
 }
 
@@ -687,7 +649,7 @@ fn followup_needs_ha_request_success_and_nonzero_duration() {
     assert!(f.should_continue(true, 10, false));
     assert!(!f.should_continue(true, 0, false));
     assert!(!f.should_continue(false, 10, false));
-    assert!(!f.should_continue(true, 10, true)); // звонит таймер или микрофон выключен
+    assert!(!f.should_continue(true, 10, true));
     f.on_event(VaEvent::IntentEnd, false);
     assert!(!f.should_continue(true, 10, false));
 }
@@ -698,7 +660,7 @@ fn followup_error_after_true_cannot_reopen_after_successful_tts() {
     f.on_event(VaEvent::IntentEnd, true);
     f.on_event(VaEvent::Error, false);
     assert!(!f.should_continue(true, 10, false));
-    f.on_event(VaEvent::IntentEnd, true); // поздний INTENT_END ошибку не отменяет
+    f.on_event(VaEvent::IntentEnd, true);
     assert!(!f.should_continue(true, 10, false));
     f.on_event(VaEvent::RunStart, false);
     f.on_event(VaEvent::IntentEnd, true);
@@ -733,7 +695,6 @@ fn followup_window_needs_ha_speech_events() {
     assert_eq!(f.window_ms(7), None);
     assert!(!f.awaiting_speech());
 
-    // Распознаватель со своим VAD: STT_VAD_START не было, окно не ограничивается.
     let mut f = Followup::default();
     run(
         &mut f,
@@ -756,8 +717,6 @@ fn followup_silence_is_quiet_only_before_speech() {
     assert!(!f.silent("stt-no-text-recognized"));
 }
 
-/// Снимок ключевых решений для каждой из пяти моделей: какие сущности HA получает при пустом
-/// пробе железа (`panel_present`/`lux_present` = false).
 #[test]
 fn capabilities_per_model() {
     let mini = pulsar_model::profile_from_dt_id(b"axg_s420_v03\0").unwrap();
@@ -769,7 +728,6 @@ fn capabilities_per_model() {
         pulsar_model::profile_from_compatible(b"yandex,bergamot\0").unwrap(),
     ];
     let want = [
-        // codename, clock, lux, wake_preroll, hw_mic_mute, buttons, zigbee
         ("cucumber", true, true, true, true, true, true),
         ("plum", true, true, true, true, true, false),
         ("station-mini2", false, false, true, true, true, false),
@@ -790,11 +748,9 @@ fn capabilities_per_model() {
             ),
             want
         );
-        // auto_brightness follows the sensor that actually opened.
         assert!(!c.auto_brightness);
         assert!(c.case_colors && c.voice_colors);
     }
-    // Optional panel/sensor that did open: the entities appear.
     let mini3 = pulsar_model::profile_from_compatible(b"yandex,bergamot\0").unwrap();
     let c = capabilities(mini3, true, true, false, false, true);
     assert!(c.clock && c.lux && c.auto_brightness);

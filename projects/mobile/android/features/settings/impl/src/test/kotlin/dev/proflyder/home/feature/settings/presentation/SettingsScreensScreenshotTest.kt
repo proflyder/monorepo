@@ -20,11 +20,6 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
-/**
- * The two new screens are real Material UI: only an inflated layout proves the
- * settings rows, the type icons and the relative time render in the dark theme.
- * The PNGs are written to Bazel's undeclared outputs as review evidence.
- */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35], qualifiers = "w411dp-h891dp-night-xxhdpi")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)

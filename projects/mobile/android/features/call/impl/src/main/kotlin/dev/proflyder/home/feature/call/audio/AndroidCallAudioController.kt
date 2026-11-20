@@ -30,14 +30,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
-/**
- * Routes call audio.
- *
- * API 34+ prefers Telecom `CallEndpoint` selection (the self-managed connection
- * is the owner of the call). Everywhere else — or when Telecom cannot honour the
- * request — it falls back to `AudioManager.setCommunicationDevice` (API 31+)
- * and, on older releases, speakerphone/Bluetooth SCO flags.
- */
 @SingleIn(AppScope::class)
 @ContributesBinding(AppScope::class)
 @Inject
@@ -138,7 +130,6 @@ class AndroidCallAudioController(
                     it.kind() == AudioDeviceKind.WIRED_HEADPHONES ||
                     it.kind() == AudioDeviceKind.USB_HEADSET
             }
-            // A call always uses SCO; prefer it over a media-only A2DP device.
             CallAudioRoute.BLUETOOTH -> devices.firstOrNull { it.kind() == AudioDeviceKind.BLUETOOTH_SCO }
                 ?: devices.firstOrNull { it.kind() == AudioDeviceKind.BLUETOOTH_A2DP }
         } ?: return

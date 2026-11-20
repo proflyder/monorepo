@@ -1,14 +1,3 @@
-# Durable scheduler: one process, one SQLite writer, one persistent volume.
-#
-# This file is a TEMPLATE. deploy.sh renders it with private values from an
-# ignored env file; rendered manifests must never be committed.
-#
-#   SCHEDULER_NODE_PORT   NodePort exposed to the home LAN (default 30098)
-#
-# The binary is delivered as a distroless container image built by Bazel
-# (//projects/home/kubernetes/scheduler:scheduler_image) and referenced by
-# digest only. There is no hostPath and no shell in the image: probes run the
-# binary itself.
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -34,11 +23,9 @@ metadata:
     app.kubernetes.io/name: scheduler
     app.kubernetes.io/part-of: home
   annotations:
-    # Traceability only: a Deployment metadata change never rolls pods.
     proflyder.dev/build: ${BUILD_ID}
 spec:
   replicas: 1
-  # SQLite is single-writer: never run two pods against the same volume.
   strategy:
     type: Recreate
   selector:
@@ -49,9 +36,6 @@ spec:
       labels:
         app.kubernetes.io/name: scheduler
       annotations:
-        # Content-addressed: changes only when the rendered unit (images,
-        # config) changes, so an identical deploy keeps the pod template and
-        # does not restart anything.
         proflyder.dev/rollout: ${ROLLOUT_ID}
     spec:
       enableServiceLinks: false
@@ -72,29 +56,20 @@ spec:
               value: /data/scheduler.db
             - name: SCHEDULER_LISTEN
               value: 0.0.0.0:8098
-            # Every request carries its own Time-Zone; the server stores UTC.
             - name: SCHEDULER_TOKEN_FILE
               value: /run/secrets/scheduler/token
-            # Consumer allowlist for ListDueEvents (global, not a per-queue ACL):
-            # the alarm bridge, the control executor, the scenario executor and
-            # the voice-proxy announcement consumer.
             - name: SCHEDULER_CONSUMERS
               value: ha-bridge-home,ha-control-home,ha-scenario-home,voice-proxy-home
             - name: SCHEDULER_RING_WINDOW_SECONDS
               value: "900"
             - name: SCHEDULER_MISSED_GRACE_SECONDS
               value: "600"
-            # Advertise the scenario executor in GetStatus. The scheduler stores
-            # definitions; `ha-scenario` runs them.
             - name: SCENARIO_EXECUTION
               value: "true"
           ports:
             - name: api
               containerPort: 8098
               protocol: TCP
-          # Authenticated functional readiness: the probe runs the binary it
-          # guards, reads the token from its file and calls GetStatus. No token
-          # appears in probe arguments or Kubernetes events.
           readinessProbe:
             exec:
               command: ["/usr/local/bin/scheduler", "-healthcheck"]

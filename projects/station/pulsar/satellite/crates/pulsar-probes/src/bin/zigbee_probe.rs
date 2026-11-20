@@ -1,10 +1,3 @@
-//! Zigbee probe: the Midi's radio without the daemon.
-//! usage: zigbee_probe [port]             the coordinator (pulsar's coordinator firmware must be
-//!                                        in the radio) and its deCONZ server (default 6639; the
-//!                                        daemon serves 6638), for zigpy / Zigbee2MQTT
-//!        zigbee_probe info               the running firmware (0x0900)
-//!        zigbee_probe flash <image.ybl>  write a radio firmware image
-//! The daemon must not run its Zigbee role at the same time: both would drive /dev/ttyS2.
 #![deny(unsafe_code)]
 #![deny(unsafe_op_in_unsafe_fn)]
 
@@ -24,7 +17,6 @@ use tracing::{debug, error, info};
 
 const APP_INFO_REQ: u16 = 0x0900;
 const APP_INFO_RSP: u16 = 0x8900;
-/// Reset + boot + 0x0900 normally take < 1 s (the daemon waits as long).
 const ANSWER_TIMEOUT: Duration = Duration::from_secs(10);
 
 fn main() -> ExitCode {
@@ -51,7 +43,6 @@ fn main() -> ExitCode {
 #[derive(Parser)]
 #[command(about = "Zigbee radio without the daemon")]
 struct Cli {
-    /// deCONZ server port (default 6639).
     port: Option<u16>,
     #[command(subcommand)]
     cmd: Option<Cmd>,
@@ -59,9 +50,7 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Cmd {
-    /// The running firmware (0x0900).
     Info,
-    /// Write a radio firmware image.
     Flash { image: PathBuf },
 }
 
@@ -72,7 +61,6 @@ fn open_link(lines: &RadioPaths) -> Result<Link, pulsar_zbhci::RadioError> {
     )
 }
 
-/// The coordinator's hooks: log, then the deCONZ server's.
 struct ProbeHooks<'a> {
     server: &'a mut Server,
 }
@@ -118,7 +106,6 @@ impl Hooks for ProbeHooks<'_> {
     }
 }
 
-/// Runs the link, the coordinator and a deCONZ server on `port` until killed.
 fn server_mode(lines: &RadioPaths, port: u16) -> ExitCode {
     let rt = match tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -131,10 +118,8 @@ fn server_mode(lines: &RadioPaths, port: u16) -> ExitCode {
         }
     };
     rt.block_on(async {
-        // The port first: without it the radio is not touched (as the C++ probe).
         let mut server = Server::new(port);
         if !server.start() {
-            // start() logged the bind/listen failure.
             return ExitCode::FAILURE;
         }
         let link = match open_link(lines) {
@@ -158,8 +143,6 @@ fn server_mode(lines: &RadioPaths, port: u16) -> ExitCode {
     })
 }
 
-/// Resets the radio and asks its application which firmware it is; prints
-/// `version=… family=… manufacturer=… image_type=… size=…`.
 fn info_mode(lines: &RadioPaths) -> ExitCode {
     let rt = match tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -185,8 +168,6 @@ fn info_mode(lines: &RadioPaths) -> ExitCode {
             tokio::select! {
                 ev = link.next() => match ev {
                     LinkEvent::Boot => link.send(APP_INFO_REQ, &[], None),
-                    // [version BE32][manufacturer BE16][image type BE16][size BE32], the same
-                    // from every firmware
                     LinkEvent::Frame { ty: APP_INFO_RSP, payload } if payload.len() >= 12 => {
                         let version = get_be32(&payload);
                         let line = format!(
@@ -196,7 +177,6 @@ fn info_mode(lines: &RadioPaths) -> ExitCode {
                             get_be16(&payload[6..]),
                             get_be32(&payload[8..])
                         );
-                        // println! would panic (abort) on a closed pipe.
                         let _ = writeln!(std::io::stdout(), "{line}");
                         return ExitCode::SUCCESS;
                     }
@@ -232,7 +212,6 @@ fn flash_mode(lines: &RadioPaths, path: &Path) -> ExitCode {
     ) {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
-            // radio_flash already logged `zigbee flash: …`.
             error!("{e}");
             ExitCode::FAILURE
         }

@@ -9,7 +9,6 @@ import dev.proflyder.home.core.text.SpeakText
 import dev.proflyder.home.feature.scenarios.impl.R
 import dev.proflyder.home.feature.scenarios.impl.databinding.DialogScenarioSpeakBinding
 
-/** Speak step text with the shared 500-character normalization rules. */
 internal class SpeakStepDialog(
     context: Context,
     initial: String,

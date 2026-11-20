@@ -12,7 +12,6 @@ import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesIntoSet
 import dev.zacsweers.metro.Inject
 
-/** One-shot confirmations the screen shows and then forgets. */
 enum class PushNotice {
     REGISTERED,
     NAME_SAVED,
@@ -25,14 +24,9 @@ data class PushSettingsUiState(
     val deviceName: String = "",
     val notice: PushNotice? = null,
 ) {
-    /** The loud path is only honest when every permission is granted. */
     val canRing: Boolean get() = permissions.canRing
 }
 
-/**
- * Reads the real permission state on every resume (the owner changes it in
- * system settings, not in the app) and triggers a token re-registration.
- */
 class PushSettingsViewModel(
     private val registrar: PushRegistrar,
     private val store: PushRegistrationStore,
@@ -53,12 +47,10 @@ class PushSettingsViewModel(
         }
     }
 
-    /** Re-reads the permissions; called from `onResume`. */
     fun refreshPermissions() {
         updateState { copy(permissions = registrar.permissions()) }
     }
 
-    /** Asks for a fresh registration and reports the outcome once. */
     fun registerNow() {
         launch {
             registrar.registerNow()
@@ -67,7 +59,6 @@ class PushSettingsViewModel(
         }
     }
 
-    /** Stores the name locally and syncs it to the server without a token re-registration. */
     fun saveDeviceName(name: String) {
         launch {
             val saved = registrar.saveDeviceName(name)

@@ -6,8 +6,6 @@
 #USAGE flag "--limit <limit>" default="5" help="How many deploy-home runs to list"
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
-# --live talks to the cluster: the admin kubeconfig comes from OpenBao through
-# fnox (profile kube, temp file removed on exit). Without it nothing secret runs.
 for arg in "$@"; do
   if [[ "$arg" == "--live" && -z "${KUBECONFIG:-}" ]]; then
     exec "$ROOT/platform/workstation/fnox.sh" -P kube exec -- \

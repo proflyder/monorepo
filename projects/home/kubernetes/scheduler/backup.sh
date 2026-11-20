@@ -1,18 +1,4 @@
 #!/usr/bin/env bash
-# Consistent backup of the scheduler SQLite database and the bridge ledger.
-#
-# SQLite in WAL mode cannot be copied safely while the writer is running. This
-# script:
-#   1. records the real replica counts of both deployments;
-#   2. installs the cleanup trap BEFORE scaling anything;
-#   3. scales both writers to 0 and fails closed if a pod remains;
-#   4. copies the volumes with a short-lived helper pod;
-#   5. restores the recorded replica counts (not a hard-coded 1).
-#
-# The default destination is private and git-ignored. Never back up into the
-# repository working tree.
-#
-# Usage: ./backup.sh [output-dir]
 set -euo pipefail
 
 NS=home-assistant
@@ -53,7 +39,6 @@ SCALED=true
 $KUBECTL -n "$NS" scale deployment/scheduler --replicas=0
 $KUBECTL -n "$NS" scale deployment/ha-bridge --replicas=0
 
-# Fail closed: never copy WAL files while a writer still exists.
 for dep in "${DEPS[@]}"; do
   if ! $KUBECTL -n "$NS" wait --for=delete pod -l "app.kubernetes.io/name=$dep" --timeout=120s; then
     echo "writer $dep did not stop; refusing to copy SQLite" >&2
@@ -103,7 +88,6 @@ $KUBECTL -n "$NS" wait --for=condition=Ready "pod/$HELPER" --timeout=120s
 echo "== copying state"
 $KUBECTL -n "$NS" cp "$HELPER:/scheduler-data" "$OUT/scheduler-data"
 $KUBECTL -n "$NS" cp "$HELPER:/bridge-data" "$OUT/bridge-data"
-# The redirect creates SHA256SUMS before find runs: exclude it explicitly.
 ( cd "$OUT" && find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 shasum -a 256 > SHA256SUMS )
 cat "$OUT/SHA256SUMS"
 

@@ -10,7 +10,6 @@ import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesIntoSet
 import dev.zacsweers.metro.Inject
 
-/** One-shot confirmations the history screen shows and then forgets. */
 enum class HistoryNotice {
     CLEARED,
 }
@@ -22,10 +21,6 @@ data class NotificationHistoryUiState(
     val isEmpty: Boolean get() = entries.isEmpty()
 }
 
-/**
- * Reads the local log only: the history is what the phone received, so it never
- * asks the server (which may well be unreachable right now).
- */
 class NotificationHistoryViewModel(
     private val store: NotificationHistoryStore,
 ) : BaseViewModel<NotificationHistoryUiState>(

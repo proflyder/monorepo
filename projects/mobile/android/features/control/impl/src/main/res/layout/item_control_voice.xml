@@ -1,6 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- One compact voice card: the profile switch and the two wake marks. Rows
-     are hidden independently; the whole card exists only when one of them is. -->
 <com.google.android.material.card.MaterialCardView
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
@@ -20,7 +18,6 @@
         android:paddingEnd="16dp"
         android:paddingBottom="@dimen/ui_tile_gap">
 
-        <!-- Profile row: icon + label, pills on the right. -->
         <LinearLayout
             android:id="@+id/control_voice_profile_row"
             android:layout_width="match_parent"
@@ -64,7 +61,6 @@
                 android:textAppearance="?attr/textAppearanceTitleMedium"
                 android:textColor="?attr/colorOnSurface" />
 
-            <!-- The same pills as the Time sections. -->
             <dev.proflyder.home.core.ui.PillSegments
                 android:id="@+id/control_voice_profile_tabs"
                 android:layout_width="wrap_content"
@@ -72,7 +68,6 @@
                 android:layout_marginStart="@dimen/ui_tile_gap" />
         </LinearLayout>
 
-        <!-- Wake marks: two one-line chips, same height, same width. -->
         <LinearLayout
             android:id="@+id/control_voice_actions"
             android:layout_width="match_parent"

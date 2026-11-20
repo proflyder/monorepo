@@ -1,9 +1,3 @@
-//! Prometheus text exposition for one sync worker.
-//!
-//! The families are rendered by hand: the drift family must contain only the
-//! currently drifted files (a `Family` would keep stale label sets), and the
-//! exact series names are part of the alert contract.
-
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
 use std::sync::Mutex;
@@ -11,21 +5,15 @@ use std::sync::atomic::{AtomicI64, AtomicU64, Ordering};
 
 use crate::config::Mode;
 
-/// The four values of `ha_config_sync_apply_total`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ApplyResult {
-    /// Applied, validated, reloaded and verified.
     Success,
-    /// Applied, then rolled back after a failure.
     RolledBack,
-    /// The rollback itself (or the apply) failed; manual attention needed.
     Failed,
-    /// Restart was postponed because the guard entity was not `off`.
     Deferred,
 }
 
 impl ApplyResult {
-    /// The metric label value.
     #[must_use]
     pub fn as_str(self) -> &'static str {
         match self {
@@ -44,7 +32,6 @@ struct Labels {
     desired_digest: String,
 }
 
-/// All instruments of one worker.
 #[derive(Debug)]
 pub struct Metrics {
     labels: Mutex<Labels>,
@@ -61,7 +48,6 @@ pub struct Metrics {
 }
 
 impl Metrics {
-    /// Build instruments for one mode.
     #[must_use]
     pub fn new(mode: Mode) -> Self {
         Self {
@@ -83,33 +69,28 @@ impl Metrics {
         }
     }
 
-    /// Replace the drifted-file set.
     pub fn set_drift(&self, files: &BTreeSet<String>) {
         if let Ok(mut labels) = self.labels.lock() {
             labels.drift.clone_from(files);
         }
     }
 
-    /// Set the managed-file count.
     pub fn set_managed(&self, count: usize) {
         self.managed.store(count as u64, Ordering::Relaxed);
     }
 
-    /// Record the agent's reported protocol version.
     pub fn set_agent_version(&self, version: &str) {
         if let Ok(mut labels) = self.labels.lock() {
             version.clone_into(&mut labels.agent_version);
         }
     }
 
-    /// Record the desired-set digest.
     pub fn set_desired_digest(&self, digest: &str) {
         if let Ok(mut labels) = self.labels.lock() {
             digest.clone_into(&mut labels.desired_digest);
         }
     }
 
-    /// Record one check outcome and its Unix timestamp.
     pub fn record_check(&self, success: bool, timestamp: i64) {
         self.last_check_success
             .store(u64::from(success), Ordering::Relaxed);
@@ -117,13 +98,11 @@ impl Metrics {
             .store(timestamp, Ordering::Relaxed);
     }
 
-    /// Record that an apply attempt finished at `timestamp`.
     pub fn record_apply_timestamp(&self, timestamp: i64) {
         self.last_apply_timestamp
             .store(timestamp, Ordering::Relaxed);
     }
 
-    /// Count one apply result.
     pub fn count_apply(&self, result: ApplyResult) {
         let counter = match result {
             ApplyResult::Success => &self.apply_success,
@@ -134,13 +113,11 @@ impl Metrics {
         counter.fetch_add(1, Ordering::Relaxed);
     }
 
-    /// Record whether a deferred restart is still outstanding.
     pub fn set_restart_pending(&self, pending: bool) {
         self.restart_pending
             .store(u64::from(pending), Ordering::Relaxed);
     }
 
-    /// Render the Prometheus text body.
     #[must_use]
     pub fn render(&self) -> String {
         let labels = match self.labels.lock() {

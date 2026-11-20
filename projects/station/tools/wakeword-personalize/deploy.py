@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-"""Model-only deploy with backup and HA/MA recovery checks. No binary/config upgrade."""
 import argparse
 import os
 from datetime import datetime, timezone
@@ -66,7 +65,6 @@ def main():
               "backup": backup, "before_hashes": before, "status": "preparing", "live_voice_acceptance": "pending"}
     def save(): (journal / "deployment.json").write_text(json.dumps(record, ensure_ascii=False, indent=2))
     save()
-    # This lock spans upload, switch, and reconnect verification, not only the shell command.
     remote("umask 077; mkdir /tmp/ricardo-model-deploy.lock || exit 1; "
            "if ! mkdir " + shlex.quote(stage) + "; then rmdir /tmp/ricardo-model-deploy.lock; exit 1; fi")
     switched = False

@@ -1,4 +1,2 @@
 #!/bin/sh
-# fnox's vault provider calls the HashiCorp `vault` CLI; OpenBao's `bao` is
-# command-compatible for the KV operations it uses.
 exec bao "$@"

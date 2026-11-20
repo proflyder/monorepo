@@ -23,8 +23,6 @@ spotify_connect_set_volume:
   sequence:
     - variables:
         volume_clamped: "{{ [[volume_percent | int(0), 0] | max, 100] | min }}"
-    # Local volume is authoritative. Spotify Web API is an optional mirror:
-    # a 429/expired token must never prevent the station from changing volume.
     - service: media_player.volume_set
       target:
         entity_id: media_player.iandeks_stantsiia_midi
@@ -50,8 +48,6 @@ spotify_connect_previous:
   alias: "Spotify Connect: previous track"
   mode: single
   sequence:
-    # MA does not offer a previous-track transport for Spotify Connect, so use
-    # the Spotify Web API for the active device when the route is Spotify.
     - service: rest_command.spotify_token
       response_variable: spotify_auth
       continue_on_error: true
@@ -115,8 +111,6 @@ komp_cancel_shutdown:
                not in ['', 'unknown', 'unavailable'] }}
       then:
         - service: shell_command.komp_cancel_shutdown
-    # The PC stays on: forget the off request so KompOn/KompStatus stop
-    # treating it as «выключается».
     - service: input_datetime.set_datetime
       target:
         entity_id: input_datetime.komp_off_requested
@@ -142,8 +136,6 @@ komp_lock:
                    not in ['', 'unknown', 'unavailable'] }}
       then:
         - service: shell_command.komp_lock
-        # The scheduled task starts asynchronously; refresh the lock sensor
-        # shortly after so the app subtitle does not wait for the 30 s poll.
         - delay: 3
         - service: homeassistant.update_entity
           target:
@@ -164,8 +156,6 @@ komp_unlock:
       then:
         - service: rest_command.wakegrant_issue_unlock
           continue_on_error: true
-        # The logon provider unlocks the session shortly after the grant; give
-        # it a moment and refresh the lock sensor before the next poll.
         - delay: 3
         - service: homeassistant.update_entity
           target:
@@ -173,8 +163,6 @@ komp_unlock:
 
 wake_false_alarm:
   alias: "Рикардо: ложное срабатывание"
-  # Display only. Being a personal scenario is declared with the HA label
-  # "scenario" (entity registry), see solutions/ha-bridge/README.md.
   icon: mdi:ear-hearing-off
   description: >-
     Mark the last Ricardo wake hit within the last 10 minutes as a false alarm.
@@ -188,8 +176,6 @@ wake_false_alarm:
 
 wake_missed:
   alias: "Рикардо: не услышала"
-  # Display only. Being a personal scenario is declared with the HA label
-  # "scenario" (entity registry), see solutions/ha-bridge/README.md.
   icon: mdi:ear-hearing
   description: >-
     Save the last 30 seconds of the station microphone as a missed wake for
@@ -405,9 +391,6 @@ alarm_announce:
       target:
         entity_id: tts.piper
       data:
-        # Use the ESPHome/Sendspin endpoint, not the universal MA player:
-        # TTS on the universal player changes its source to MA Queue and makes
-        # alarm_stop unable to resume the previous Spotify Connect session.
         media_player_entity_id: media_player.iandeks_stantsiia_midi_media_player
         message: "Доброе утро. Пора вставать."
         cache: true
@@ -433,7 +416,6 @@ alarm_loop:
               media_content_id: "http://127.0.0.1:8123/local/alarm_ringtone.wav"
               media_content_type: music
             continue_on_error: true
-          # Full track is 294.8 s; keep a small gap between loops.
           - delay: "00:04:55"
 
 alarm_ramp:
@@ -533,11 +515,6 @@ alarm_stop:
       description: "Scheduler FIRE event id that must still own the ringing alarm"
       example: "019a..."
   sequence:
-    # A scheduler-driven STOP carries the identity of the FIRE the executor
-    # started. If Home Assistant stored a different (newer) FIRE, or cannot
-    # prove which occurrence is ringing while sound is still on, stopping and
-    # restoring would silence or disturb an unknown/next call. Manual and
-    # emergency stops pass no expectation and always run.
     - variables:
         stop_expected_source: "{{ expected_source_id | default('') | string | trim }}"
         stop_expected_event: "{{ expected_event_id | default('') | string | trim }}"
@@ -558,10 +535,6 @@ alarm_stop:
              and stop_stored_source not in ['', 'None', 'unknown', 'unavailable']
              and stop_stored_event not in ['', 'None', 'unknown', 'unavailable'] }}
         stop_identity_unproven: "{{ stop_identity_required and not stop_identity_match and stop_ringing_now }}"
-        # A scheduler STOP that arrives after the ring already ended (for
-        # example a retried lease) must not run the global media stop/restore:
-        # by then the user may have resumed music. With no expectation
-        # (manual/emergency stop) the cleanup still runs.
         stop_identity_noop: "{{ stop_identity_required and not stop_ringing_now }}"
         stop_identity_skip: "{{ stop_identity_unproven or stop_identity_noop }}"
         stop_identity_reason: >-
@@ -1311,7 +1284,6 @@ music_play_candidate:
     - stop: "music_play_candidate"
       response_variable: result
 
-# --- Currency: kurs.kz rates for voice (currency-bot LAN NodePort) ---
 currency_rates:
   alias: "Currency: latest KZT rates text"
   description: >-
@@ -1385,15 +1357,6 @@ currency_rates:
         currency_result: "{{ {'status': currency_status, 'text': currency_text | trim | replace('\\n', ' ') | replace('  ', ' ')} }}"
     - stop: "currency rates"
       response_variable: currency_result
-
-# --- Schedules: canonical home.v1.SchedulerService client (2026-10-29) ---
-# Authoritative alarm/reminder/timer state lives in the durable scheduler.
-# Home Assistant only speaks, executes audio through ha-bridge, and calls the
-# Connect JSON API. Notes stay in HA todo and are unchanged.
-#
-# Legacy alarm_* audio scripts above are still the sound executor. The legacy
-# todo/timer dispatchers below are kept for rollback but their automations are
-# disabled with initial_state: false; only the scheduler is authoritative.
 
 scenario_run:
   alias: "Scenarios: run a native scheduler scenario by label"
@@ -1831,8 +1794,6 @@ speak_text:
   variables:
     speak_satellite: assist_satellite.iandeks_stantsiia_midi_assist_satellite
   sequence:
-    # Never talk over a ringing alarm: the wake phrase and the chime own the
-    # speaker then, and a spoken text would cut the ringtone.
     - condition: template
       value_template: "{{ not is_state('input_boolean.alarm_ringing', 'on') }}"
     - condition: template
@@ -1854,9 +1815,6 @@ speak_text:
                 message: "{{ speak_message }}"
               continue_on_error: true
       default:
-        # announce goes through the Assist pipeline, so Pulsar ducks music
-        # instead of leaving the Sendspin group as tts.speak on a plain media
-        # player would.
         - service: assist_satellite.announce
           target:
             entity_id: "{{ speak_satellite }}"
@@ -1864,8 +1822,6 @@ speak_text:
             message: "{{ speak_message }}"
             preannounce: false
           continue_on_error: true
-        # continue_on_error hides the failure, so the satellite state is the
-        # only observable signal: a failed announce leaves it unavailable.
         - if:
             - condition: template
               value_template: >-
@@ -2024,23 +1980,16 @@ schedule_alarm_create_relative:
     - variables:
         hours_num: "{{ hours | default(0) | float(0) }}"
         minutes_num: "{{ minutes | default(0) | float(0) }}"
-        # Fractional hours («через полтора часа» = 1.5) become whole minutes.
         total_minutes: "{{ ((hours_num * 60) + minutes_num) | round(0) | int }}"
-        # Hermes used to pass name="через час"; a command phrase is not a label.
         name_text: "{{ name | default('') | string | trim }}"
         name_lower: "{{ name_text | lower }}"
         name_looks_like_command: >-
           {{ 'через' in name_lower or 'будильник' in name_lower or 'таймер' in name_lower }}
         relative_label: "{{ '' if name_looks_like_command else name_text }}"
-        # HA (2026.10) cannot represent a datetime as a script variable value:
-        # the native value is rendered to str, so `.date()` on it fails.
-        # Numbers/dicts/lists keep their type. Keep one epoch integer and derive
-        # every field from it instead.
         relative_target_ts: "{{ (now().timestamp() + (total_minutes | int) * 60) | int }}"
         relative_today: "{{ now().timestamp() | timestamp_custom('%Y-%m-%d', true) }}"
         relative_day_date: "{{ relative_target_ts | timestamp_custom('%Y-%m-%d', true) }}"
         relative_day: "{{ 'завтра' if relative_day_date != relative_today else '' }}"
-    # Fail closed: «через непонятно что» must not become a one-minute alarm.
     - if:
         - condition: template
           value_template: >-
@@ -2452,12 +2401,6 @@ schedule_alarm_stop:
               response_variable: stop_confirm
             - variables:
                 stop_outcome: "{{ stop_confirm.outcome | default('other') if stop_confirm is mapping else 'other' }}"
-                # The scheduler expires its ringing window while the HA alarm
-                # loop keeps sounding. failed_precondition then means "no
-                # scheduler window", not a failed local stop. Accept it only
-                # when the pre-RPC captured schedule/event is still the current
-                # source and the local stop was confirmed for that same
-                # occurrence. Transport/auth/other API errors stay errors.
                 stop_expired_local_ok: >-
                   {{ stop_rpc is mapping
                      and stop_rpc.code == 'failed_precondition'
@@ -3051,8 +2994,3 @@ schedule_note_delete:
               entity_id: todo.notes
             data:
               item: "{{ repeat.item }}"
-
-# --- Legacy rollback-only dispatchers ---------------------------------------
-# These still write the old HA todo/timer helpers. Their automations are
-# disabled (initial_state: false) so they never compete with the canonical
-# scheduler. Kept so a cutover can be reverted without reconstructing code.

@@ -1,5 +1,3 @@
-# Plain-file package: Flux renders these templates (postBuild substitution), and
-# the deploy contract tests read them as data.
 package(default_visibility = ["//visibility:public"])
 
 filegroup(

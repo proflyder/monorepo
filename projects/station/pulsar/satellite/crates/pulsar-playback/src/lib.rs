@@ -1,6 +1,3 @@
-//! The playback output shared by the ANNOUNCE writer (`pulsar-media`) and the Sendspin sink:
-//! one PCM device port ([`PcmDevice`]), xrun recovery, the reopen backoff, statistics and the
-//! ANNOUNCE priming / padding / drain policy ([`Announce`]).
 #![deny(unsafe_code)]
 #![deny(unsafe_op_in_unsafe_fn)]
 #![deny(clippy::undocumented_unsafe_blocks)]

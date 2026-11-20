@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# Run as root once on a fresh PVE 9 host. Leaves Debian sources untouched.
 set -euo pipefail
 [[ $(id -u) == 0 ]] && command -v pveversion >/dev/null
 [[ $(dpkg-query -W -f='${Version}' pve-manager) == 9.* ]]
@@ -9,7 +8,6 @@ chmod 700 "$BACKUP"
 if [[ ! -e "$BACKUP/apt-sources.tar" ]]; then
   tar -C /etc/apt -cpf "$BACKUP/apt-sources.tar" sources.list.d
 fi
-# Single-node lab uses LVM-thin, not Ceph. Subscription-only feeds return 401.
 for source in /etc/apt/sources.list.d/pve-enterprise.sources /etc/apt/sources.list.d/ceph.sources; do
   if [[ -f "$source" ]]; then
     sed -i '/^Enabled:/d; /^$/d' "$source"

@@ -1,9 +1,5 @@
-//! Machine identifier grammar from `PROTOCOL.md`.
-
-/// Longest valid machine identifier.
 pub const MACHINE_MAX_LEN: usize = 32;
 
-/// `^[a-z0-9-]{1,32}$`.
 #[must_use]
 pub fn is_valid_machine(machine: &str) -> bool {
     !machine.is_empty()

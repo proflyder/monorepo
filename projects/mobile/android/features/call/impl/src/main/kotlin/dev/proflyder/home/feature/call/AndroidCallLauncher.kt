@@ -11,7 +11,6 @@ import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 
-/** Opens the lock-screen call screen from the Home quick action. */
 @SingleIn(AppScope::class)
 @ContributesBinding(AppScope::class)
 @Inject

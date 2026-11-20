@@ -1,6 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- A compact quick action: accent icon on the left, a label of up to two
-     lines next to it. Two tiles share a row; every tile has the same height. -->
 <com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
     style="@style/Widget.Home.Card"
@@ -21,7 +19,6 @@
         android:paddingStart="12dp"
         android:paddingEnd="12dp">
 
-        <!-- The same active icon container as a smart-home device row. -->
         <FrameLayout
             android:id="@+id/quick_tile_icon_bg"
             android:layout_width="40dp"

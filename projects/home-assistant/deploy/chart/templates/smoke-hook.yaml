@@ -1,15 +1,3 @@
-# Post-upgrade smoke hook (решение 54).
-#
-# `home-deploy hermes rollout` runs the Assist smoke after the upgrade and
-# rolls back on failure. Under Flux the same check is a Helm post-upgrade hook:
-# a failed hook fails the upgrade, and `HelmRelease` remediation
-# (`strategy: rollback`) restores the previous revision.
-#
-# Disabled by default so the CI/admin `helm upgrade` path and the chart
-# contracts are unchanged; the Flux HelmRelease enables it and pins the
-# `home-deploy` image by digest. The check itself (`hermes assist-smoke`) is
-# the same binary and the same endpoint/agent/text defaults as
-# `platform/deploy-rs/src/hermes.rs`.
 {{- $smoke := .Values.smoke | default dict }}
 {{- if $smoke.enabled }}
 apiVersion: batch/v1
@@ -38,7 +26,6 @@ spec:
         runAsNonRoot: true
         runAsUser: 65534
         runAsGroup: 65534
-        # Secret files are root-owned; fsGroup makes the 0440 token readable.
         fsGroup: 65534
         seccompProfile:
           type: RuntimeDefault
@@ -46,7 +33,6 @@ spec:
         - name: smoke
           image: {{ required "smoke.image is required when the hook is enabled" $smoke.image | quote }}
           imagePullPolicy: IfNotPresent
-          # Hermes restarts on a config change: retry while its Pod starts.
           command: ["/usr/local/bin/home-deploy", "hermes", "assist-smoke", "--timeout", "90s", "--retry-window", "180s"]
           env:
             - name: HA_URL

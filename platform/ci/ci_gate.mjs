@@ -1,20 +1,4 @@
 #!/usr/bin/env node
-/**
- * Decide whether the aggregate `ci-ok` job passes.
- *
- * `ci-ok` is the single required status check. It must be green when every
- * dispatched job succeeded *or was legitimately skipped* (docs-only change, or
- * no unit of that platform was affected), and red for any failure or
- * cancellation.
- *
- * Reads the `${{ toJSON(needs) }}` payload from the `NEEDS` environment
- * variable, or from the `needs` object passed by `actions/github-script`.
- *
- * `--github-output` is the reusable-pipeline mode: the gate lives in the called
- * workflow (only it sees every job's `needs`), writes `ok` and `failing` for the
- * caller and never fails the step itself. The caller's `ci-ok` job is the
- * required check and fails on `ok=false`.
- */
 
 import fs from "node:fs";
 import process from "node:process";
@@ -66,8 +50,6 @@ export function main(argv = process.argv.slice(2)) {
   } catch (error) {
     console.error(error.message);
     if (writeOutput) {
-      // The pipeline was cancelled or never produced results: report red so the
-      // required check cannot pass, and let the caller's ci-ok job fail.
       writeGithubOutput({ needs: {}, file: process.env.GITHUB_OUTPUT, log: () => {} });
       return 0;
     }
@@ -89,7 +71,6 @@ export function main(argv = process.argv.slice(2)) {
   return 0;
 }
 
-/** Entry point for `actions/github-script`: throw on a red gate. */
 export function runGithubScript({ core, needs }) {
   const outcome = gate(needs);
   for (const line of outcome.lines) {
@@ -100,10 +81,6 @@ export function runGithubScript({ core, needs }) {
   }
 }
 
-/**
- * Reusable-pipeline entry point: write the aggregate answer to `$GITHUB_OUTPUT`
- * for the caller's `ci-ok` job instead of failing this step.
- */
 export function writeGithubOutput({ needs, file, log = console.log }) {
   const outcome = gate(needs);
   for (const line of outcome.lines) {

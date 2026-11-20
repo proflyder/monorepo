@@ -1,38 +1,3 @@
-# GitOps delivery alerts for the Flux-managed applications.
-#
-# Sources:
-#   gotk_resource_info    kube-state-metrics customResourceState
-#                         (values/prometheus.yaml, `kube-state-metrics`)
-#   kube_configmap_info   kube-state-metrics configmap collector
-#
-# Flux 2.x controllers do not export reconcile status: the `gotk_*` series they
-# publish are `gotk_reconcile_duration_seconds_*` and `gotk_token_*` only, so the
-# former `gotk_reconcile_condition` alert expressions could never fire (and the
-# `absent()` in PinsStale fired forever). Everything below reads the info metric
-# that kube-state-metrics builds from the Flux CRDs instead.
-#
-# Label contract of `gotk_resource_info` (value 1 per object):
-#   customresource_kind   Kustomization / HelmRelease / GitRepository / ...
-#                         (kube-state-metrics reserves this name for the CRD kind;
-#                         there is no plain `kind` label)
-#   exported_namespace    metadata.namespace. kube-state-metrics adds no bare
-#                         `namespace` label to custom-resource metrics, hence the
-#                         `exported_` prefix from the upstream recipe.
-#   name                  metadata.name
-#   ready                 status.conditions[type=Ready].status: "True"/"False"
-#   suspended             spec.suspend: "true"/"false"
-#   revision              last applied revision / chart version
-#
-# A label whose path is missing on the object is omitted entirely, so `ready`
-# is absent until the first Ready condition exists and `suspended` is absent
-# unless the manifest sets `spec.suspend`. The rules therefore compare with
-# `!=` instead of equality: `ready!="True"` also matches "no Ready condition
-# yet" and `suspended!="true"` also matches "not suspended explicitly".
-#
-# These alerts replace the "job failed" signal that `deploy-home` used to give:
-# Flux has no automatic rollback for an application rollout, so a Kustomization
-# stuck in Ready=False is the operator's cue to revert the pins or manifest
-# commit (решение 54).
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
@@ -45,8 +10,6 @@ spec:
     - name: home-flux
       rules:
         - alert: FluxKustomizationNotReady
-          # Suspended Kustomizations are skipped on purpose (drills, rollback);
-          # `suspended` is absent when the manifest never set `spec.suspend`.
           expr: >-
             gotk_resource_info{
               customresource_kind="Kustomization",
@@ -88,16 +51,6 @@ spec:
               values-коммита.
 
         - alert: PinsStale
-          # Three machine-checkable forms of "pins не доставляются": the
-          # `home-app-images` ConfigMap is missing, the pins source is not
-          # Ready, or kube-state-metrics stopped publishing the pins source at
-          # all (customResourceState broken — that also freezes every app at its
-          # last digest unnoticed). The develop-vs-pins lag still needs the
-          # timestamp that the future `pins` CI job will publish.
-          #
-          # Healthy steady state is an empty result: the ConfigMap exists, so the
-          # first `absent()` is silent, `ready="True"` fails `ready!="True"`, and
-          # the third branch is silent because the series exists.
           expr: >-
             absent(kube_configmap_info{
               namespace="flux-system", configmap="home-app-images"

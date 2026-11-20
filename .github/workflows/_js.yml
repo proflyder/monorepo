@@ -1,9 +1,5 @@
 name: _js
 
-# Reusable JavaScript platform workflow: one matrix entry per unit. Edge
-# Workers in this repository have no package manager and no build step, so the
-# job only needs an official Node distribution and the built-in test runner.
-
 on:
   workflow_call:
     inputs:
@@ -21,8 +17,6 @@ permissions:
   contents: read
 
 env:
-  # Set Git's default branch for actions/checkout's `git init` (it warns when unset;
-  # it runs under a throwaway HOME, so only an env-provided config reaches it).
   GIT_CONFIG_COUNT: "1"
   GIT_CONFIG_KEY_0: init.defaultBranch
   GIT_CONFIG_VALUE_0: main
@@ -35,11 +29,9 @@ jobs:
     env:
       MISE_TASK_RUN_AUTO_INSTALL: "false"
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
 
-      # Tool versions and checksums: mise.toml + mise.lock (one source with the
-      # workstation). Only the tools this job needs are installed.
-      - uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b # v5.2.7
+      - uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b
         with:
           version: 2026.11.4
           install_args: "node"

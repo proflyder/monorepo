@@ -1,23 +1,4 @@
 #!/usr/bin/env python3
-"""Opt-in end-to-end tests against the real Home Assistant.
-
-Default mode is read-only: it checks API health, required entities (including
-the Hermes conversation agent), and safe conversation intents. A real model turn
-through that HA agent is opt-in with HA_HERMES_AGENT_TEST=1.  Mutating/audio tests require explicit flags:
-
-    STATION_E2E=1 HA_TOKEN=... python3 projects/home-assistant/e2e/live_ha.py -v
-    STATION_E2E=1 STATION_E2E_MUTATE=1 HA_TOKEN=... ...
-    STATION_E2E=1 STATION_E2E_AUDIO=1 HA_TOKEN=... ...
-    STATION_E2E=1 HA_INFRA_E2E=1 HA_TOKEN=... ...   # mcp-gateway voice turns
-
-The alarm test is deliberately small (low volume, a few seconds) and always
-restores the pre-test alarm volume, source, volume and flags.  If the user has
-an alarm enabled, it skips rather than overwrite it.
-
-The infra tests (HA_INFRA_E2E=1) ask real questions through the model.  They
-never send the confirmation turn, so no rollout restart is requested: the
-"restart" test only proves that the first reply is still a question.
-"""
 from __future__ import annotations
 
 import json
@@ -124,7 +105,6 @@ class LiveReadOnlyTests(unittest.TestCase):
             "automation.music_route_follows_player_source",
             "media_player.iandeks_stantsiia_midi",
             "event.iandeks_stantsiia_midi_button",
-            # Direct Hermes health/intent tests miss a failed HA agent setup.
             "conversation.hermes_agent",
         ]
         for entity_id in required:
@@ -159,20 +139,15 @@ class LiveHermesAgentTests(unittest.TestCase):
 @unittest.skipUnless(INFRA and HA_TOKEN,
                      "set HA_INFRA_E2E=1 (with STATION_E2E=1) to run infra voice turns")
 class LiveInfraVoiceTests(unittest.TestCase):
-    """Real voice turns through Hermes and mcp-gateway.  Read-only by design."""
 
     AGENT = "conversation.hermes_agent"
 
     def test_status_question_returns_speech(self):
-        # "проверь сервисы" must reach infra_status and come back as a spoken
-        # verdict; an empty reply means the MCP toolset or the gateway is down.
         reply = conversation("проверь сервисы", agent_id=self.AGENT)
         self.assertTrue(reply.strip(), "infra status turn returned no speech")
         self.assertGreater(len(reply.strip()), 3)
 
     def test_restart_asks_before_acting(self):
-        # The confirmation turn is deliberately NOT sent: the gateway must keep
-        # the action pending and answer with a question, never restart by itself.
         reply = conversation("перезапусти планировщик", agent_id=self.AGENT)
         self.assertTrue(reply.strip(), "restart preparation returned no speech")
         self.assertIn("?", reply, f"expected a confirmation question, got: {reply!r}")
@@ -189,8 +164,6 @@ class LiveMutationTests(unittest.TestCase):
             self.skipTest("no active playback to verify non-destructive volume command")
 
     def tearDown(self):
-        # Prefer Spotify Web API when Connect is active; it is the source that
-        # actually owns the app-side gain. Fall back to the MA player.
         if (self.old_source or "").startswith("Spotify Connect"):
             call("script", "spotify_connect_set_volume", {"volume_percent": round(self.old_volume * 100)})
         else:
@@ -215,9 +188,6 @@ class LiveAudioAlarmTests(unittest.TestCase):
         call("input_number", "set_value", {"entity_id": "input_number.alarm_volume", "value": 0.10})
 
     def tearDown(self):
-        # Only stop when this test actually left an alarm ringing or paused
-        # playback.  Calling alarm_stop/cancel unconditionally would stop a
-        # healthy Spotify session (they intentionally media_stop first).
         try:
             if (
                 state_value("input_boolean.alarm_ringing") == "on"
@@ -242,15 +212,11 @@ class LiveAudioAlarmTests(unittest.TestCase):
     def test_alarm_start_stop_and_voice_stop_resume(self):
         call("script", "alarm_start", {})
         wait_for("input_boolean.alarm_ringing", "on")
-        # alarm_start is a multi-step script.  Do not race its source/volume
-        # capture with the stop request: ring goes on before the sequence ends.
         time.sleep(1.0)
         expected_flag = "on" if self.was_playing else "off"
         self.assertEqual(state_value("input_boolean.alarm_music_was_playing"), expected_flag)
-        # The user's real phrase is wake word + "стоп"; the intent text itself is "стоп".
         conversation("стоп")
         wait_for("input_boolean.alarm_ringing", "off")
-        # Let the queued announce/TTS teardown and resume settle.
         time.sleep(2.0)
         self.assertEqual(state_value("input_boolean.alarm_music_was_playing"), "off")
         if self.was_playing:

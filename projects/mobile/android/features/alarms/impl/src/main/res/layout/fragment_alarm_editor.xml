@@ -22,8 +22,6 @@
             android:paddingEnd="@dimen/ui_screen_padding"
             android:paddingBottom="@dimen/ui_screen_padding">
 
-            <!-- Large time display: the primary action, tap opens the Material
-                 time picker. A new alarm is pre-filled with the next full hour. -->
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/alarm_editor_time"
                 style="@style/Widget.Alarms.TimeButton"
@@ -32,8 +30,6 @@
                 android:contentDescription="@string/alarms_editor_time"
                 android:textAllCaps="false" />
 
-            <!-- A single horizontally scrolling row, one chip per preset. The
-                 order matches ALARM_QUICK_OFFSETS_MINUTES. -->
             <HorizontalScrollView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -105,9 +101,6 @@
                     android:maxLength="120" />
             </com.google.android.material.textfield.TextInputLayout>
 
-            <!-- Repeat is one list item: the value on the right is the
-                 current preset ("Будни") or the day summary ("Пн, Ср, Пт").
-                 The full choice is edited in a modal sheet. -->
             <LinearLayout
                 android:id="@+id/alarm_editor_repeat_row"
                 android:layout_width="match_parent"
@@ -156,7 +149,6 @@
                     android:tint="?attr/colorOnSurfaceVariant" />
             </LinearLayout>
 
-            <!-- One-shot alarms keep the date right under the repeat row. -->
             <LinearLayout
                 android:id="@+id/alarm_editor_date_row"
                 android:layout_width="match_parent"

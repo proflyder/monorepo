@@ -1,5 +1,3 @@
-//! Schedule CRUD, recurrence advancement and ringing-window control.
-
 use rusqlite::{Row, Transaction, params};
 
 use crate::domain::{
@@ -75,8 +73,6 @@ fn get_schedule_any_tx(tx: &Transaction<'_>, id: &str) -> Result<(Schedule, i64)
     }
 }
 
-/// Validates and normalizes client input, never trusting server-derived
-/// fields present in the request.
 fn prepare_schedule(store: &Store, input: &Schedule) -> Result<Schedule, StoreError> {
     let mut out = Schedule {
         id: input.id.trim().to_owned(),
@@ -114,7 +110,6 @@ fn next_occurrence(schedule: &Schedule, now_unix: i64) -> Result<i64, StoreError
     }
 }
 
-/// Scenario-owned rows are managed only through `ScenarioService`.
 fn reject_scenario_schedule(schedule: &Schedule) -> Result<(), StoreError> {
     if schedule.kind != ScheduleKind::Scenario {
         return Ok(());
@@ -129,8 +124,6 @@ fn reject_scenario_schedule(schedule: &Schedule) -> Result<(), StoreError> {
 }
 
 impl Store {
-    /// Creates a durable schedule. A non-empty idempotency key replays the
-    /// original resource when the canonical request matches.
     pub fn create_schedule(
         &self,
         input: &Schedule,
@@ -221,7 +214,6 @@ impl Store {
         })
     }
 
-    /// Returns a live schedule.
     pub fn get_schedule(&self, id: &str) -> Result<Schedule, StoreError> {
         validate_id(id)?;
         let id = id.to_owned();
@@ -236,7 +228,6 @@ impl Store {
         })
     }
 
-    /// Live schedules ordered by creation time.
     pub fn list_schedules(
         &self,
         include_disabled: bool,
@@ -249,9 +240,6 @@ impl Store {
                 query.push_str(" AND enabled = 1");
             }
             if kind == ScheduleKind::Unspecified {
-                // Scenario rows are internal trigger materialization. They are
-                // returned only by an explicit kind=SCENARIO query so alarm and
-                // reminder clients never render them as schedules.
                 query.push_str(" AND kind != ?");
                 values.push(Box::new(kind_code(ScheduleKind::Scenario)));
             } else {
@@ -270,8 +258,6 @@ impl Store {
         })
     }
 
-    /// Replaces a schedule rule; `expected_revision = 0` disables the
-    /// optimistic concurrency check.
     pub fn update_schedule(
         &self,
         input: &Schedule,
@@ -358,7 +344,6 @@ impl Store {
         })
     }
 
-    /// Toggles a schedule. Enabling recomputes the next occurrence after now.
     pub fn set_schedule_enabled(
         &self,
         id: &str,
@@ -422,12 +407,6 @@ impl Store {
         })
     }
 
-    /// Skips the next occurrence of a recurring schedule without disabling it.
-    ///
-    /// The pending FIRE of that occurrence is marked skipped (an executor may
-    /// still hold a lease, so it must not ring), and a currently active
-    /// occurrence is closed. The following occurrence is computed from the
-    /// skipped one, so the schedule keeps its wall-clock rule.
     pub fn skip_next_occurrence(&self, id: &str, now_unix: i64) -> Result<Schedule, StoreError> {
         let id = id.to_owned();
         let ring_window = self.config().ring_window;
@@ -488,8 +467,6 @@ impl Store {
         })
     }
 
-    /// Soft-deletes a schedule, stops pending triggers and queues a STOP when
-    /// an occurrence is active.
     pub fn delete_schedule(&self, id: &str, now_unix: i64) -> Result<bool, StoreError> {
         let id = id.to_owned();
         self.with_tx(move |tx| {
@@ -532,7 +509,6 @@ impl Store {
         })
     }
 
-    /// Queues an immediate STOP and a delayed FIRE occurrence.
     pub fn snooze_schedule(
         &self,
         id: &str,
@@ -632,8 +608,6 @@ impl Store {
         })
     }
 
-    /// Queues an immediate STOP, cancels pending triggers and clears the
-    /// active window without touching recurrence.
     pub fn stop_schedule(&self, id: &str, now_unix: i64) -> Result<Schedule, StoreError> {
         let id = id.to_owned();
         let ring_window = self.config().ring_window;
@@ -763,9 +737,9 @@ mod tests {
     use crate::store::Config;
     use crate::store::event::{EventInsert, insert_event};
 
-    const BASE: i64 = 1_767_268_800; // 2026-01-01T12:00:00Z
-    const FIRST_DUE: i64 = 1_767_339_000; // 2026-01-02T07:30:00Z
-    const FOLLOWING_DUE: i64 = 1_767_425_400; // 2026-01-03T07:30:00Z
+    const BASE: i64 = 1_767_268_800;
+    const FIRST_DUE: i64 = 1_767_339_000;
+    const FOLLOWING_DUE: i64 = 1_767_425_400;
 
     fn store() -> Store {
         Store::open_in_memory(Config::default()).expect("store")
@@ -873,7 +847,6 @@ mod tests {
     fn skip_rejects_one_shot_and_disabled_schedules() {
         let store = store();
         let once = store.create_schedule(&alarm(Repeat::Once, true), "", BASE);
-        // A one-shot without a date is invalid; give it a date instead.
         assert!(once.is_err());
 
         let mut one_shot = alarm(Repeat::Once, true);

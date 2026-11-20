@@ -1,43 +1,3 @@
-/********************************************************************************************************
- * Zigbee coordinator (network co-processor) for the Yandex Station Midi radio. Licensed under the
- * Apache License 2.0 (see common/board_cfg.h); derived from the Telink Zigbee SDK sample gateway
- * (sampleGateway.c, zb_appCb.c).
- *
- * The chip runs the Zigbee stack (formation, trust center, routing, ZDO answers for itself); the
- * host chooses the network and handles everything above APS. Framing, ACK rule and the 0x0900 /
- * 0x8907 messages: common/pulsar_hci.h. Multi-byte fields of the 0x0Axx / 0x8Axx messages are
- * little endian, as on air.
- *
- * Host -> chip:
- *   0x0A00                    → 0x8A00 network state
- *   0x0A01 [channel][PAN][ext PAN 8][key 16][IEEE 8][frame counter 4][update id]
- *                             form a network with these (no network may exist: 0x0A02 first);
- *                             IEEE 0 = the chip's own, PAN 0xFFFF / ext PAN 0 / key 0 = chosen by
- *                             the stack; the stack moves past a PAN ID it hears on the channel.
- *                             Accepted: 0x8A00 follows at once (state 1, or 0 with the BDB status
- *                             when the stack refused), then the result (state 2, or 0).
- *   0x0A02                    erase the network (NV), then 0x8A00
- *   0x0A03 [seconds]          permit joining on the coordinator itself (0 closes)
- *   0x0A04 [ep][profile][device][version][n in][in…][n out][out…]   add / replace an endpoint
- *   0x0A04 [ep][0xFF]         remove an endpoint
- *   0x0A05 [channel][update id]   move the network: broadcast Mgmt_NWK_Update_req, switch after 10 s
- *   0x0A06 [channel mask 4][duration exponent]   energy scan → 0x8A06 [count]([channel][energy])…
- *   0x0A10 [handle][dst mode][dst 2|8][dst ep unless group][profile][cluster][src ep][tx options]
- *          [radius][length][asdu]   APS data request (dst mode 1 group, 2 NWK, 3 IEEE; source
- *                             endpoint 0 or a registered one; tx options as APS: 0x04 ACK);
- *                             → exactly one 0x8A10 [handle][status]
- * Chip -> host:
- *   0x8A00 [state][status][channel][PAN][ext PAN 8][IEEE 8][NWK][update id][key 16][key seq]
- *          [frame counter 4]  state 0 none, 1 forming, 2 on the network; status: last BDB result.
- *                             Sent on request and on every change.
- *   0x8A11 [dst mode][dst][dst ep][src mode][src 2|8][src ep][profile][cluster][lqi][rssi]
- *          [security][length][asdu]   APS data indication: every frame for a registered endpoint,
- *                             every groupcast, and every ZDO frame (the stack answers ZDO
- *                             requests itself too)
- *   0x8A20 [event]...         1 device joined / rejoined [NWK][IEEE 8][parent IEEE 8][status],
- *                             2 device left [IEEE 8][rejoin], 3 joining permitted [seconds]
- *                             (requested by the host or by a Mgmt_Permit_Joining_req)
- *******************************************************************************************************/
 #include "tl_common.h"
 #include "zb_api.h"
 #include "zcl_include.h"
@@ -70,13 +30,9 @@
 #define MAX_ENDPOINTS       (MAX_ACTIVE_EP_NUMBER)
 #define MAX_EP_CLUSTERS     32
 #define MAX_PENDING         16
-#define PENDING_MAX_AGE_US  (60 * 1000 * 1000)  /* the host gives up after 50 s */
-#define NV_ITEM_IEEE        0x40    /* NV_MODULE_APP: host-chosen coordinator IEEE address */
+#define PENDING_MAX_AGE_US  (60 * 1000 * 1000)
+#define NV_ITEM_IEEE        0x40
 
-// Stack library (no header): store a network key in material slot i / make slot i the active one.
-// zb_preConfigNwkKey calls these too, but also flags the key as pre-configured
-// (ss_ib.preConfiguredKeyType |= SS_PRECONFIGURED_NWKKEY): the trust center then never transports
-// it, and joining devices never get it.
 void ss_zdoNwkKeyConfigure(u8 *key, u8 i, u8 keyType);
 void ss_zdoUseKey(u8 i);
 
@@ -101,12 +57,9 @@ static void hciEvent(u8 event, const u8 *p, u8 n)
     zbhciTx(HCI_EVENT, 1 + n, b);
 }
 
-/**********************************************************************
- * Network state.
- */
-static u8 lastStatus;   // last BDB init / commissioning status
+static u8 lastStatus;
 static bool forming;
-static u8 scanChannel;  // channel under energy scan, 0: none
+static u8 scanChannel;
 static u8 scanSavedChannel;
 
 static void sendState(void)
@@ -132,9 +85,6 @@ static void sendState(void)
     zbhciTx(HCI_NET_STATE, p - b, b);
 }
 
-/**********************************************************************
- * Endpoints: descriptors live here, in fixed slots (the stack keeps pointers to them).
- */
 typedef struct {
     bool used;
     af_simple_descriptor_t desc;
@@ -214,8 +164,6 @@ static u8 setEndpoint(const u8 *p, u16 len)
     return ACK_OK;
 }
 
-// Called by aps_group.c (sdk.patch, APS_GROUP_HOST_FALLBACK) for a group no endpoint is a member
-// of: one endpoint gets it, so the host sees every groupcast once.
 u8 *aps_groupHostFallbackEp(u8 *epNum)
 {
     for (u8 i = 0; i < MAX_ENDPOINTS; i++) {
@@ -227,11 +175,6 @@ u8 *aps_groupHostFallbackEp(u8 *epNum)
     return NULL;
 }
 
-/**********************************************************************
- * APS data: requests in flight are matched to their confirm by (source endpoint, APS counter).
- * The stack confirms only to endpoint 0 and registered endpoints; entries whose confirm never came
- * are reused after a minute.
- */
 typedef struct {
     bool used;
     u8 handle;
@@ -283,7 +226,6 @@ static pending_t *freePending(void)
 
 static void dataRequest(const u8 *p, u16 len)
 {
-    // [handle][mode][dst 2|8][ep unless group] then 8 bytes, then the ASDU
     const u8 mode = len >= 2 ? p[1] : 0;
     const u16 head = mode == APS_SHORT_GROUPADDR_NOEP ? 4 : mode == APS_SHORT_DSTADDR_WITHEP ? 5 : 11;
     if (len < 2 || mode < APS_SHORT_GROUPADDR_NOEP || mode > APS_LONG_DSTADDR_WITHEP || len < head + 8 ||
@@ -364,7 +306,6 @@ static void sendIndication(const aps_data_ind_t *ind, const u8 *asdu, u16 len)
     zbhciTx(HCI_DATA_IND, p - b, b);
 }
 
-// Endpoints other than ZDO: an ev_buf apsdeDataInd_t, owned here.
 static void epRx(void *arg)
 {
     apsdeDataInd_t *ind = (apsdeDataInd_t *)arg;
@@ -372,7 +313,6 @@ static void epRx(void *arg)
     ev_buf_free((u8 *)arg);
 }
 
-// ZDO: a zb_buf aps_data_ind_t, passed on to the stack's ZDO handler, which frees it.
 static af_endpoint_cb_t zdoRxOrig;
 static void zdoRx(void *arg)
 {
@@ -381,9 +321,6 @@ static void zdoRx(void *arg)
     zdoRxOrig(arg);
 }
 
-/**********************************************************************
- * Network.
- */
 typedef struct {
     u8 channel;
     u16 pan;
@@ -430,13 +367,11 @@ static void formNetwork(const u8 *p, u16 len)
         nv_flashSingleItemRemove(NV_MODULE_APP, NV_ITEM_IEEE, 8);
         applyIeee(factoryIeee);
     }
-    // Formation takes the NIB's PAN ID unless it is 0xFFFF (then random), moving past PAN IDs it
-    // hears on the channel (nwk_formationScanCnfHandler in the stack library).
     NWK_NIB().panId = form.pan;
     zb_apsExtPanidSet(form.extPan);
     NWK_NIB().updateId = form.updateId;
     static const u8 noKey[16] = {0};
-    if (memcmp(form.key, noKey, 16)) {  // all zero: the stack generates one
+    if (memcmp(form.key, noKey, 16)) {
         ss_zdoNwkKeyConfigure(form.key, 0, 1);
         ss_zdoUseKey(0);
     }
@@ -447,7 +382,6 @@ static void formNetwork(const u8 *p, u16 len)
     const u32 mask = 1u << form.channel;
     g_bdbAttrs.primaryChannelSet = mask & BDBC_TL_PRIMARY_CHANNEL_SET;
     g_bdbAttrs.secondaryChannelSet = mask & BDBC_TL_SECONDARY_CHANNEL_SET;
-    // Returns the BDB state: formation under way, or idle when the stack refused (busy).
     forming = bdb_networkFormationStart() == BDB_STATE_COMMISSIONING_NETWORK_FORMATION;
     if (!forming) {
         lastStatus = BDB_COMMISSION_STA_FORMATION_FAILURE;
@@ -462,10 +396,7 @@ static void eraseNetwork(void)
     if (channelTimer) {
         TL_ZB_TIMER_CANCEL(&channelTimer);
     }
-    // The stack restarts its APS counter: confirms of the old network will not come.
     memset(pending, 0, sizeof pending);
-    // NV erased (the outgoing frame counter is kept), the stack and BDB restarted: bdbInitCb
-    // reports the empty state.
     zb_resetDevice2FN();
 }
 
@@ -477,7 +408,7 @@ static void permitJoin(const u8 *p, u16 len)
     }
     hciAck(HCI_PERMIT_JOIN, ACK_OK);
     zb_nlmePermitJoiningRequest(p[0]);
-    hciEvent(EVENT_PERMIT, p, 1);  // the request is applied by the stack's task queue afterwards
+    hciEvent(EVENT_PERMIT, p, 1);
 }
 
 static u8 newChannel;
@@ -512,18 +443,12 @@ static void changeChannel(const u8 *p, u16 len)
     req.nwk_update_id = p[1];
     u8 sn = 0;
     zb_mgmtNwkUpdateReq(NWK_BROADCAST_RX_ON_WHEN_IDLE, &req, &sn, NULL);
-    // Devices switch after the network's broadcast delivery time.
     if (channelTimer) {
         TL_ZB_TIMER_CANCEL(&channelTimer);
     }
     channelTimer = TL_ZB_TIMER_SCHEDULE(channelSwitch, NULL, 10 * 1000);
 }
 
-/**********************************************************************
- * Energy scan: the radio leaves the network channel for the scan (the Yandex gateway firmware does
- * the same), frames sent meanwhile go out on the scanned channel and are lost. rf_setChannel also
- * sets the MAC's current channel, which the stack saves to NV: it is put back right away.
- */
 static u32 scanMask;
 static u32 scanMs;
 static u8 scanResult[1 + 2 * 16];
@@ -572,7 +497,6 @@ static void energyScan(const u8 *p, u16 len)
     }
     hciAck(HCI_ED_SCAN, ACK_OK);
     scanMask = BUILD_U32(p[0], p[1], p[2], p[3]) & 0x07FFF800;
-    // aBaseSuperframeDuration (15.36 ms) * (2^n + 1)
     scanMs = (1536 * ((1u << p[4]) + 1)) / 100;
     scanResult[0] = 0;
     scanSavedChannel = MAC_IB()->phyChannelCur;
@@ -620,15 +544,9 @@ static void hciCmd(u16 type, u16 len, u8 *p)
     }
 }
 
-/**********************************************************************
- * Stack callbacks.
- */
 static void bdbInitCb(u8 status, u8 joinedNetwork)
 {
     (void)joinedNetwork;
-    // A Zigbee 3.0 trust center may require a joined device to replace the global link key within
-    // 15 s and drop it otherwise; Zigbee 1.2 devices (e.g. Xiaomi) never do. deCONZ does not
-    // require it either. BDB restores its default on every init (start, erase).
     g_bdbAttrs.tcRequireKeyExchange = 0;
     lastStatus = status;
     sendState();
@@ -658,7 +576,7 @@ static bdb_appCb_t bdbCb = {bdbInitCb, bdbCommissioningCb, NULL, NULL};
 static bool nwkUpdateInd(u16 newPanId)
 {
     (void)newPanId;
-    return FALSE;  // PAN ID conflicts: the PAN ID stays the one the host chose
+    return FALSE;
 }
 
 static bool tcJoinInd(zdo_tc_join_ind_t *p)
@@ -669,7 +587,7 @@ static bool tcJoinInd(zdo_tc_join_ind_t *p)
     memcpy(b + 10, p->parentIeeeAddr, 8);
     b[18] = p->sta;
     hciEvent(EVENT_JOINED, b, sizeof b);
-    return TRUE;  // joining is gated by permit join alone
+    return TRUE;
 }
 
 static void leaveInd(nlme_leave_ind_t *p)
@@ -695,7 +613,6 @@ void user_init(bool isRetention)
     zb_init();
     zb_zdoCbRegister((zdo_appIndCb_t *)&zdoCb);
 
-    // The IEEE address: the chip's own (flash), unless the host chose another for its network.
     generateIEEEAddr();
     memcpy(factoryIeee, g_zbMacPib.extAddress, 8);
     addrExt_t ieee;
@@ -710,7 +627,6 @@ void user_init(bool isRetention)
     zdoCnfOrig = zdo->cb_cnf;
     zdo->cb_cnf = zdoCnf;
 
-    // Endpoint 1 (Home Automation) until the host describes its endpoints; BDB needs one.
     static const u8 ep1[] = {1, 0x04, 0x01, 0x05, 0x00, 0, 0, 0};
     setEndpoint(ep1, sizeof ep1);
 

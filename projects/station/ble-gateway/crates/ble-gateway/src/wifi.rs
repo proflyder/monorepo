@@ -1,10 +1,3 @@
-//! Native `wpa_supplicant` control-interface client and the Wi-Fi apply /
-//! rollback sequence.
-//!
-//! The daemon talks to `/var/run/wpa_supplicant/wlan0` over a unix datagram
-//! socket instead of forking `wpa_cli`. Replies are typed in [`WpaStatus`] and
-//! [`Network`]; every other command returns [`WpaError`].
-
 use std::io;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -52,13 +45,10 @@ pub fn validate_wifi(ssid: &[u8], psk: &[u8]) -> Result<(), &'static str> {
     Ok(())
 }
 
-/// Quote an SSID/PSK for `SET_NETWORK`, escaping `\` and `"`.
 pub fn wpa_quote(value: &str) -> String {
     format!("\"{}\"", value.replace('\\', "\\\\").replace('"', "\\\""))
 }
 
-/// `SET_NETWORK <id> <field> <value>` may carry the Wi-Fi password. Every
-/// error stores only the verb, id and field; the value is never formatted.
 #[must_use]
 pub fn safe_command(command: &str) -> String {
     let mut parts = command.split_whitespace();
@@ -116,7 +106,6 @@ impl Network {
     }
 }
 
-/// Client for one `wpa_supplicant` control socket.
 #[derive(Clone, Debug)]
 pub struct WpaClient {
     ctrl: PathBuf,
@@ -131,7 +120,6 @@ impl WpaClient {
         }
     }
 
-    /// Override the reply-socket directory (tests).
     pub fn with_socket_dir(mut self, directory: impl Into<PathBuf>) -> Self {
         self.socket_dir = directory.into();
         self
@@ -194,7 +182,6 @@ impl WpaClient {
         Ok(WpaStatus::parse(&self.request("STATUS").await?))
     }
 
-    /// State for the UI/auto loop; a broken socket reads as `UNKNOWN`.
     pub async fn state(&self) -> String {
         match self.status().await {
             Ok(status) => status.state,
@@ -273,8 +260,6 @@ impl WpaClient {
         self.expect_ok("RECONNECT").await
     }
 
-    /// Add, fill and remove a temporary network. Every failure, including a
-    /// failed cleanup, is an error so the process exit code reflects reality.
     pub async fn test_wpa(&self) -> Result<String, WpaError> {
         let id = self.add_network().await?;
         let result = async {
@@ -307,8 +292,6 @@ impl Drop for SocketCleanup {
     }
 }
 
-/// Unix socket paths are limited to `SUN_LEN`; the default temp directory is
-/// already too deep on macOS, so the reply socket lives in `/tmp`.
 fn short_socket_directory() -> PathBuf {
     let short = PathBuf::from("/tmp");
     if short.is_dir() {

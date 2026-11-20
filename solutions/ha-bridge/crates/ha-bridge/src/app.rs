@@ -1,11 +1,3 @@
-//! Composition root: configuration, telemetry, the executor worker and the
-//! distroless probe entry points.
-//!
-//! Default mode is dry-run: [`run`] describes the configuration, reads the
-//! scheduler status and optionally probes Home Assistant, then exits without
-//! leasing, executing or acknowledging anything. `BRIDGE_EXECUTE=true` starts
-//! the long-lived worker.
-
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -20,14 +12,11 @@ use crate::config::Config;
 use crate::health::scheduler_client;
 use crate::ledger::Ledger;
 
-/// Reported implementation version, matching the crate.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(10);
 
-/// Start the bridge and block until SIGTERM/SIGINT.
 pub async fn run() -> anyhow::Result<()> {
-    // Capture the local offset before the multi-thread runtime starts.
     let offset = home_telemetry::local_offset();
     let config = Config::load().context("configuration")?;
     TelemetryBuilder::new()

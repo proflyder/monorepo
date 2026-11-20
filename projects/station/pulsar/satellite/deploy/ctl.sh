@@ -1,18 +1,7 @@
 #!/bin/sh
-# pulsar control: enable | disable | restart | reload | status | log | api-key
-#   enable  - stop the Yandex stack, run pulsar now and on every boot
-#   disable - stop pulsar, start the Yandex stack again (also after reboot)
-#   reload  - restart the supervisor and the daemon (after supervise.sh was replaced); never starts
-#             the Yandex stack
-#   api-key [base64|clear] - ESPHome Noise key ($D/api_key, base64 of 32 bytes, mode 0600): no
-#             argument shows whether one is set; a value sets it, `clear` removes it; both restart.
-#             recent Home Assistant (mid-2026+) provisions a key automatically over the API on first
-#             connect; setting or clearing a different key by hand makes HA ask to re-authenticate.
-#             A corrupt file makes the daemon fail closed, hence the validation below.
 D=${PULSAR_DIR:-/data/pulsar}
 Q=${PULSAR_Q:-/system/vendor/quasar/q}
 
-# SIGTERM, wait up to 10 s for the process to go, then SIGKILL. Returns 1 if it is still there.
 stop_daemon() {
   pidof pulsar >/dev/null 2>&1 || return 0
   killall pulsar 2>/dev/null
@@ -27,8 +16,6 @@ stop_daemon() {
   ! pidof pulsar >/dev/null 2>&1
 }
 
-# Starts supervise.sh unless one runs; waits until it does. Ignores SIGHUP: when called through
-# `adb shell`, the session ends right after this script and would otherwise kill it before setsid().
 start_supervisor() {
   pidof supervise.sh >/dev/null 2>&1 && return 0
   (trap '' HUP; exec setsid "$D/supervise.sh" </dev/null >/dev/null 2>&1) &
@@ -39,7 +26,6 @@ start_supervisor() {
   done
 }
 
-# After stopping the daemon: the supervisor restarts it; start one if `enabled` but none runs.
 restarted() {
   if [ -f "$D/enabled" ] && [ -x "$D/supervise.sh" ] && ! pidof supervise.sh >/dev/null 2>&1; then
     start_supervisor
@@ -49,8 +35,6 @@ restarted() {
   fi
 }
 
-# SIGTERM to every supervise.sh (incl. its log-rotation subshell); a supervisor only acts on it when
-# its child exits, so call this before stop_daemon. SIGKILL after the wait if one lingers.
 stop_supervisors() {
   pidof supervise.sh >/dev/null 2>&1 || return 0
   killall supervise.sh 2>/dev/null
@@ -63,7 +47,7 @@ wait_supervisors_gone() {
   return 0
 }
 
-valid_key() { # 44 base64 chars (32 bytes + one '='), and 32 bytes when a decoder exists
+valid_key() {
   case "$1" in
     *[!A-Za-z0-9+/=]*) return 1 ;;
   esac

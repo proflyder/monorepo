@@ -1,19 +1,9 @@
-//! Контракт v1 wake-событий: сайдкары `<id>.json`, `stats.json` и манифест модели.
-//!
-//! Формат читают тренировочные инструменты, поэтому он зафиксирован байт в байт: порядок полей,
-//! имена и запись чисел. Структуру и разбор даёт serde, числа пишутся сериализаторами
-//! [`Num6`] / [`Num3`], потому что формат контракта — `%.6` / `%.3` без экспоненты, а не
-//! кратчайшее представление `f64`. Строки пишет `serde_json`; его единственное расхождение с
-//! контрактом (`\b` и `\f` вместо `\u0008` / `\u000c`) правит [`contract_json`].
-
 use serde::{Deserialize, Serialize, Serializer};
 use serde_json::value::RawValue;
 
-/// Число контракта с точностью 6 знаков после запятой, без экспоненты.
 #[derive(Clone, Copy, Debug)]
 pub struct Num6(pub f64);
 
-/// Число контракта с точностью 3 знака после запятой, без экспоненты.
 #[derive(Clone, Copy, Debug)]
 pub struct Num3(pub f64);
 
@@ -29,13 +19,11 @@ impl Serialize for Num3 {
     }
 }
 
-/// Литерал числа как есть: `RawValue` не даёт `f64`-сериализатору переформатировать его.
 fn raw_number<S: Serializer>(text: String, s: S) -> Result<S::Ok, S::Error> {
     let raw = RawValue::from_string(text).map_err(serde::ser::Error::custom)?;
     raw.serialize(s)
 }
 
-/// `%.6`, хвостовые нули и точка убраны; «-» от отрицательного нуля остаётся как в v1.
 pub fn num6(v: f64) -> String {
     let s = format!("{v:.6}");
     let s = s.trim_end_matches('0').trim_end_matches('.');
@@ -46,14 +34,11 @@ pub fn num6(v: f64) -> String {
     }
 }
 
-/// `%.3`, хвостовые нули и точка убраны.
 pub fn num3(v: f64) -> String {
     let s = format!("{v:.3}");
     s.trim_end_matches('0').trim_end_matches('.').to_owned()
 }
 
-/// Сериализует значение в одну строку контракта с завершающим переводом строки и приводит
-/// экранирование управляющих символов к формату v1.
 pub fn contract_json<T: Serialize>(value: &T) -> String {
     let mut text = serde_json::to_string(value).expect("contract structs are always serializable");
     normalize_escapes(&mut text);
@@ -61,8 +46,6 @@ pub fn contract_json<T: Serialize>(value: &T) -> String {
     text
 }
 
-/// `serde_json` пишет backspace / form feed двумя буквами; контракт v1 — `\u0008` / `\u000c`.
-/// Вне строковых литералов замена невозможна, экранирование внутри — только через `\`.
 fn normalize_escapes(text: &mut String) {
     let bytes = text.as_bytes();
     let mut out = String::with_capacity(text.len());
@@ -80,7 +63,6 @@ fn normalize_escapes(text: &mut String) {
                 start = i;
                 continue;
             }
-            // Экранированный символ (`\"`, `\\`, `\uXXXX`) не переключает строку.
             i += 2;
             continue;
         }
@@ -93,8 +75,6 @@ fn normalize_escapes(text: &mut String) {
     *text = out;
 }
 
-/// Events of one long listening period, loaded from `stats.json` and extended by the counters of
-/// this run.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Stats {
     pub since_utc: String,
@@ -162,7 +142,6 @@ pub fn parse_stats(text: &str) -> Option<Stats> {
     })
 }
 
-/// `<id>.json`, the sidecar of contract v1.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Sidecar {
     pub schema: u32,
@@ -299,7 +278,6 @@ pub fn parse_sidecar(text: &str) -> Option<Sidecar> {
     })
 }
 
-/// Разбор JSON: None на любую синтаксическую или типовую ошибку (как прежний парсер).
 fn parse<T: serde::de::DeserializeOwned>(text: &str) -> Option<T> {
     serde_json::from_str(text).ok()
 }
@@ -315,7 +293,6 @@ struct MicroDoc {
     sliding_window_size: u64,
 }
 
-/// `micro.probability_cutoff` and `micro.sliding_window_size` of the model manifest.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Thresholds {
     pub cutoff: f32,
@@ -331,8 +308,6 @@ impl Default for Thresholds {
     }
 }
 
-/// The manifest next to the loaded `.tflite` (same stem, `.json`); None when it is missing or its
-/// values are outside the contract's ranges, so the loaded defaults stay.
 pub fn manifest_thresholds(text: &str) -> Option<Thresholds> {
     let doc: ManifestDoc = parse(text)?;
     let cutoff = doc.micro.probability_cutoff;
@@ -343,7 +318,6 @@ pub fn manifest_thresholds(text: &str) -> Option<Thresholds> {
     })
 }
 
-/// Reads the thresholds for `model`; the bool tells whether the manifest was used.
 pub fn thresholds_for(model: &std::path::Path) -> (Thresholds, bool) {
     let path = model.with_extension("json");
     std::fs::read_to_string(&path).map_or_else(

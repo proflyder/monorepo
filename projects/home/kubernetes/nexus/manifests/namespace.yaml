@@ -1,4 +1,3 @@
-# Reconciled by Flux from Git; CI never creates cluster-scoped objects.
 apiVersion: v1
 kind: Namespace
 metadata:

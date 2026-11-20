@@ -1,4 +1,3 @@
-"""Render contracts that protect state and dashboard delivery during upgrades."""
 import json
 from pathlib import Path
 import re
@@ -46,9 +45,6 @@ class ChartContracts(unittest.TestCase):
         self.assertEqual(volume["spec"]["local"]["path"], "/srv/example/data")
 
     def test_runtime_health_exporter_is_a_pinned_distroless_image(self):
-        # The Python script and its ConfigMap are gone: the exporter is a
-        # distroless image pinned by `hermes rollout`/apply-runtime.sh. The
-        # chart only owns the Service; the workload comes from private values.
         values = {"nodeName": "example-node", "storage": {}, "workloads": {
             "runtime-health-exporter": {"replicas": 1, "containers": [{
                 "name": "health-exporter",
@@ -69,13 +65,9 @@ class ChartContracts(unittest.TestCase):
         self.assertEqual(container["command"], ["/usr/local/bin/health-exporter"])
         self.assertNotIn("checksum/source",
                          deployment["spec"]["template"]["metadata"].get("annotations", {}))
-        # No Python source is shipped by the chart any more.
         self.assertFalse((HERE / "chart/files/health_exporter.py").exists())
 
     def test_hermes_gateway_runs_in_the_home_timezone(self):
-        # `TZ` is not set in the container image: the Flux post-renderer must
-        # give the gateway the home zone so Hermes' own clock labels match the
-        # owner's day. The runtime image installs tzdata for the name to exist.
         text = (HERE / "flux/helmrelease.yaml").read_text(encoding="utf-8")
         self.assertIn("name: TZ", text)
         self.assertIn("value: Asia/Almaty", text)
@@ -83,8 +75,6 @@ class ChartContracts(unittest.TestCase):
         self.assertIn("tzdata", dockerfile)
 
     def test_hermes_config_drift_service_is_opt_in(self):
-        # The drift Service is rendered only for the Flux release; the admin
-        # `helm upgrade` path without the sidecar must stay valid.
         base = {"nodeName": "example-node", "storage": {}, "workloads": {}}
         with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml") as f:
             yaml.safe_dump(base, f)
@@ -129,7 +119,6 @@ class ChartContracts(unittest.TestCase):
 
 
 def _hcl_unescape(value):
-    """Decode the small HCL string escape subset used by the Alloy config."""
     return re.sub(
         r"\\(.)",
         lambda m: {"n": "\n", "t": "\t", "r": "\r"}.get(m.group(1), m.group(1)),
@@ -138,7 +127,6 @@ def _hcl_unescape(value):
 
 
 class AlloyPrivacy(unittest.TestCase):
-    """Alloy redaction is the only privacy boundary for the collected pod logs."""
 
     @classmethod
     def setUpClass(cls):
@@ -156,8 +144,6 @@ class AlloyPrivacy(unittest.TestCase):
             )
 
     def redact(self, line):
-        # Alloy's stage.replace substitutes capture groups, not the whole match;
-        # an expression without a group would redact nothing.
         for expression, replacement in self.rules:
             pattern = re.compile(expression)
             self.assertGreater(pattern.groups, 0, expression)

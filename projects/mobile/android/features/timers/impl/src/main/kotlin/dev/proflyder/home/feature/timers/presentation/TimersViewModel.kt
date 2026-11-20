@@ -58,7 +58,6 @@ class TimersViewModel(
         val endpoint: String,
     )
 
-    /** [silent] keeps already loaded data on screen without a spinner (tab returns, resume). */
     fun refresh(silent: Boolean = false) {
         refreshJob?.cancel()
         val requested = ++generation

@@ -28,14 +28,6 @@ import org.webrtc.PeerConnectionFactory
 import org.webrtc.SdpObserver
 import org.webrtc.SessionDescription
 
-/**
- * Audio-only libwebrtc session for one call.
- *
- * Opus is negotiated by WebRTC's default audio codec set. Echo cancellation,
- * noise suppression and gain control are requested from
- * [JavaAudioDeviceModule]; hardware AEC/NS is used where the device reports
- * support and falls back to the software implementations otherwise.
- */
 @SingleIn(AppScope::class)
 @ContributesBinding(AppScope::class)
 @Inject

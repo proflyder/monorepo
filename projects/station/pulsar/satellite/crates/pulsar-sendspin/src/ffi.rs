@@ -1,10 +1,3 @@
-//! Bindings of shim/sendspin_shim.h and a safe `Client` over them. Every unsafe block of the
-//! crate is here.
-//!
-//! Panics: the callbacks are `extern "C"`, so a panic in one aborts the process instead of
-//! unwinding into C++ (and the release profile aborts on panic anyway). C++ exceptions never
-//! reach Rust: every `ss_*` function catches them.
-
 use std::ffi::{OsStr, c_char, c_void};
 use std::marker::{PhantomData, PhantomPinned};
 use std::mem::{offset_of, size_of};
@@ -108,7 +101,6 @@ struct SsCallbacks {
 
 type SsPut = unsafe extern "C" fn(*mut c_void, *const c_char, usize);
 
-// Same numbers as the static_asserts of sendspin_shim.cpp (P = pointer size).
 const P: usize = size_of::<usize>();
 const _: () = {
     assert!(size_of::<SsStr>() == 2 * P && offset_of!(SsStr, len) == P);
@@ -192,15 +184,10 @@ unsafe extern "C" {
     fn ss_blob_set(blob: *mut SsBlob, data: *const u8, len: usize) -> bool;
 }
 
-/// sendspin::LogLevel::INFO for the library's own log lines (stderr).
 pub fn set_log_level_info() {
     ss_set_log_level(3);
 }
 
-/// The C `fprintf` wrapper of the shim calls this for every line of the library's host log.
-///
-/// # Safety
-/// `input` holds `len` readable bytes; `out` holds `cap` writable bytes.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn pulsar_redact_line(
     input: *const u8,
@@ -219,7 +206,6 @@ pub unsafe extern "C" fn pulsar_redact_line(
     n
 }
 
-/// The library's clock in µs, any thread: deadlines and notify_audio_played timestamps.
 pub fn now_us() -> i64 {
     ss_now_us()
 }
@@ -231,45 +217,30 @@ pub struct Config<'a> {
     pub product_name: &'a str,
     pub manufacturer: &'a str,
     pub software_version: &'a str,
-    /// Empty: the library detects it.
     pub mac: &'a str,
     pub port: u16,
     pub formats: &'a [Format],
     pub visualizer: Visualizer<'a>,
-    /// Dynamic pairing code on the DISPLAY channel in the DIGITS format.
     pub pairing_code_display_digits: bool,
-    /// Where the operator finds the pairing token; empty: no hint.
     pub pairing_psk_location: &'a str,
     pub unpaired_access: bool,
 }
 
-/// Receiver of every library callback. None of its methods may call into the `Client`.
 pub trait Listener: Sync {
-    /// Main loop thread: from inside `Client::run_loop`, `Client::start` and the drop.
     fn event(&self, ev: LibEvent);
-    /// Persistence provider, main loop thread. None: not stored.
     fn load_blob(&self, key: &OsStr) -> Option<Vec<u8>>;
-    /// true once durable.
     fn save_blob(&self, key: &OsStr, data: &[u8]) -> bool;
-    /// Player sync task: (bytes consumed, frames played to report, their finish time in µs of
-    /// `now_us`). May block up to `timeout_ms`.
     fn audio_write(&self, data: &[u8], timeout_ms: u32) -> (usize, u32, i64);
-    /// Visualizer drain thread.
     fn loudness(&self, v: u16);
     fn beat(&self);
     fn spectrum(&self, bins: &[u16]);
 }
 
-/// # Safety
-/// `user` is the listener pointer `Client::new` registered for this `L`, and the client is not
-/// destroyed yet (it is kept alive by the `Client` until after `ss_destroy` returns).
 unsafe fn listener<'a, L: Listener>(user: User) -> &'a L {
     // SAFETY: see the function contract; only shared references are ever made.
     unsafe { &*user.cast_const().cast::<L>() }
 }
 
-/// # Safety
-/// `ptr` is NULL, or `len` elements from it are readable and stay unchanged for `'a`.
 unsafe fn slice<'a, T>(ptr: *const T, len: usize) -> &'a [T] {
     if ptr.is_null() || len == 0 {
         return &[];
@@ -278,22 +249,15 @@ unsafe fn slice<'a, T>(ptr: *const T, len: usize) -> &'a [T] {
     unsafe { std::slice::from_raw_parts(ptr, len) }
 }
 
-/// # Safety
-/// As `slice`.
 unsafe fn string(ptr: *const c_char, len: usize) -> String {
     // SAFETY: forwarded contract.
     String::from_utf8_lossy(unsafe { slice(ptr.cast::<u8>(), len) }).into_owned()
 }
 
-/// # Safety
-/// As `slice`; NULL = absent.
 unsafe fn opt_string(ptr: *const c_char, len: usize) -> Option<String> {
     // SAFETY: forwarded contract.
     (!ptr.is_null()).then(|| unsafe { string(ptr, len) })
 }
-
-// Callback trampolines. The shim passes valid strings / buffers for the duration of each call
-// (see sendspin_shim.h) and the `user` pointer of `Client::new`.
 
 unsafe extern "C" fn cb_group<L: Listener>(u: User, state: i8, name: *const c_char, len: usize) {
     // SAFETY: shim contract (see above).
@@ -534,24 +498,17 @@ fn callbacks<L: Listener>() -> SsCallbacks {
     }
 }
 
-/// `ss_put` target: `dst` is a `String`.
 unsafe extern "C" fn put_string(dst: *mut c_void, s: *const c_char, len: usize) {
-    // SAFETY: the callers below pass a `&mut String` that lives across the ss_* call, and the
-    // shim passes a live string.
+    // SAFETY: the callers below pass a `&mut String` that lives across the ss_* call, and the shim passes a live string.
     unsafe { *dst.cast::<String>() = string(s, len) };
 }
 
-/// One sendspin-cpp client with all its roles. Not `Send`: every call (and the drop, which stops
-/// the library and joins its threads) happens on the thread that created it, which is the
-/// library's main loop thread. The listener is never called back into from here.
 pub struct Client<L: Listener> {
     raw: NonNull<SsClient>,
-    // Dropped after `ss_destroy` (see Drop): the library's threads use it until then.
     _listener: Arc<L>,
 }
 
 impl<L: Listener> Client<L> {
-    /// None if the library could not build the client (allocation failure).
     pub(crate) fn new(cfg: &Config<'_>, listener: Arc<L>) -> Option<Self> {
         let formats: Vec<SsFormat> = cfg
             .formats
@@ -589,10 +546,7 @@ impl<L: Listener> Client<L> {
         };
         let cb = callbacks::<L>();
         let user: User = Arc::as_ptr(&listener).cast_mut().cast();
-        // SAFETY: `raw_cfg`, the strings and arrays it points to and `cb` outlive the call
-        // (ss_create copies all of them); `user` points into `listener`, which the Client keeps
-        // until after ss_destroy, and the trampolines only take shared references to it
-        // (`L: Sync`, as the library calls them from three threads).
+        // SAFETY: `raw_cfg`, the strings and arrays it points to and `cb` outlive the call (ss_create copies all of them); `user` points into `listener`, which the Client keeps until after ss_destroy, and the trampolines only take shared references to it (`L: Sync`, as the library calls them from three threads).
         let raw = unsafe { ss_create(&raw_cfg, &cb, user) };
         NonNull::new(raw).map(|raw| Self {
             raw,
@@ -600,7 +554,6 @@ impl<L: Listener> Client<L> {
         })
     }
 
-    /// SendspinClient::start(); None: it threw.
     pub(crate) fn start(&self) -> Option<bool> {
         // SAFETY: `raw` is live until drop; main loop thread (Client is not Send).
         match unsafe { ss_start(self.raw.as_ptr()) } {
@@ -609,8 +562,6 @@ impl<L: Listener> Client<L> {
         }
     }
 
-    /// SendspinClient::loop(): delivers the main loop callbacks to the listener. false: it
-    /// threw.
     pub(crate) fn run_loop(&self) -> bool {
         // SAFETY: as `start`.
         unsafe { ss_loop(self.raw.as_ptr()) }
@@ -621,7 +572,6 @@ impl<L: Listener> Client<L> {
         unsafe { ss_is_connected(self.raw.as_ptr()) }
     }
 
-    /// (name, server_id) of the active connection.
     pub(crate) fn server_info(&self) -> Option<(String, String)> {
         let (mut name, mut id) = (String::new(), String::new());
         // SAFETY: as `start`; `put_string` gets the two Strings, alive across the call.
@@ -675,20 +625,16 @@ impl<L: Listener> Client<L> {
         unsafe { ss_player_update_muted(self.raw.as_ptr(), muted) }
     }
 
-    /// false: not offered by the server (or not queued).
     pub(crate) fn send_command(&self, c: Command) -> bool {
         // SAFETY: as `start`.
         unsafe { ss_controller_send(self.raw.as_ptr(), c as u8) }
     }
 
-    /// client/leave.
     pub(crate) fn leave(&self) {
         // SAFETY: as `start`.
         unsafe { ss_leave(self.raw.as_ptr()) }
     }
 
-    /// Ask the next stop() to send client/goodbye `restart` instead of the shutdown pass's
-    /// `shutdown`: the server (Music Assistant) redials a restarting client.
     pub(crate) fn disconnect_restart(&self) {
         // SAFETY: as `start`.
         unsafe { ss_disconnect_restart(self.raw.as_ptr()) }
@@ -702,8 +648,7 @@ impl<L: Listener> Client<L> {
 
 impl<L: Listener> Drop for Client<L> {
     fn drop(&mut self) {
-        // SAFETY: `raw` came from ss_create and is freed only here; this stops the library
-        // (its last callbacks run inside this call) before the listener is released.
+        // SAFETY: `raw` came from ss_create and is freed only here; this stops the library (its last callbacks run inside this call) before the listener is released.
         unsafe { ss_destroy(self.raw.as_ptr()) }
     }
 }

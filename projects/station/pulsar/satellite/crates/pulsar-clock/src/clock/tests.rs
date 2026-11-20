@@ -13,37 +13,29 @@ fn level_math() {
     assert_eq!(level(0.0, 1.0), 0);
     assert_eq!(level(-1.0, 1.0), 0);
     assert_eq!(level(1.0, 1.0), 255);
-    assert_eq!(level(0.5, 1.0), 128); // 127.5 rounds away from zero
+    assert_eq!(level(0.5, 1.0), 128);
     assert_eq!(level(1.0, 0.02), 5);
-    // Never below the lowest level that still lights while the user wants it on.
     assert_eq!(level(0.001, 0.02), MIN_LEVEL);
     assert_eq!(level(1.0, 2.0), 255);
 }
 
 #[test]
 fn level_follows_the_light_perceptually() {
-    // Полная яркость через свежий диммер: первый отсчёт применяется сразу — то же, что станция
-    // показывает после скачка света.
     let at = |lux: f32| {
         let mut d = AmbientDimmer::new();
         d.update(lux);
         level(1.0, d.factor())
     };
     assert_eq!(at(0.0), 5);
-    // Один шаг датчика — всё ещё тьма: тот же уровень, что при 0 лк.
     assert_eq!(at(1.14), at(0.0));
     assert!(at(8.0) <= 40, "{}", at(8.0));
     assert!((at(22.8) - 70).abs() <= 10, "{}", at(22.8));
     assert!(at(58.0) <= 120, "{}", at(58.0));
     assert_eq!(at(500.0), 255);
-    // Квадрат применяется только к фактору освещённости: ручная яркость остаётся линейной.
     assert_eq!(level(0.5, 1.0), 128);
     assert_eq!(level(0.25, 1.0), 64);
 }
 
-// --- Output on a fake sysfs tree ---
-
-/// A per-test directory under the system temp dir, removed on drop.
 struct Root(PathBuf);
 
 impl Root {
@@ -77,8 +69,6 @@ fn base_panel(compatible: &[u8]) -> &'static PanelLayout {
     base_model(compatible).clock.as_ref().unwrap()
 }
 
-/// A stock model whose clock LEDs live under a fresh temp dir ("<root>/<prefix><led>"); one
-/// static pair per call site, since `spawn` takes a `&'static PanelLayout`.
 macro_rules! temp_model {
     ($name:literal, $compatible:literal, $prefix:literal) => {{
         static DIR: LazyLock<String> =
@@ -93,14 +83,12 @@ macro_rules! temp_model {
     }};
 }
 
-/// Contents written since the last call, which empties the file again; "" = no write.
 fn take(path: &Path) -> String {
     let s = std::fs::read_to_string(path).unwrap();
     std::fs::write(path, "").unwrap();
     s
 }
 
-/// Every clock LED of `m` (Lite 2 layout) created; the segment files per digit.
 fn create_lite2(m: &PanelLayout, root: &Root) -> Vec<Vec<PathBuf>> {
     let segs = (0..DIGITS)
         .map(|d| {
@@ -121,7 +109,6 @@ fn writes_only_changes_and_rescales_on_level() {
     let segs = create_lite2(m, &root);
     let mut leds = Leds::open(m).unwrap();
     let led = |name: &str| root.0.join(format!("clock{name}/brightness"));
-    // Aux LEDs are switched off once.
     assert_eq!(take(&led("DEGREE")), "0");
     assert_eq!(take(&led("H2")), "0");
 
@@ -132,17 +119,14 @@ fn writes_only_changes_and_rescales_on_level() {
     assert_eq!(take(&led("DH")), "255");
     assert_eq!(take(&led("DL")), "255");
     assert_eq!(take(&led("DM")), "0");
-    // Unchanged: nothing written.
     leds.draw(&one);
     assert_eq!(take(&segs[3][1]), "");
     assert_eq!(take(&led("DH")), "");
-    // The full rewrite.
     leds.forget_written();
     leds.draw(&one);
     assert_eq!(take(&segs[3][1]), "255");
     assert_eq!(take(&segs[0][0]), "0");
 
-    // No chip current on the Lite 2: the level is the value of a lit segment.
     assert!(leds.set_level(level(1.0, 0.02)));
     assert!(!leds.set_level(5));
     leds.draw(&one);
@@ -153,13 +137,12 @@ fn writes_only_changes_and_rescales_on_level() {
         ..Frame::default()
     };
     leds.draw(&half);
-    assert_eq!(take(&led("DM")), "3"); // (128 * 5 + 127) / 255
+    assert_eq!(take(&led("DM")), "3");
 }
 
 #[test]
 fn missing_leds_and_chip_current_dedup() {
     let (m, root) = temp_model!("dedup", b"yandex,cucumber\0", "clock-");
-    // No segment at all: unavailable.
     assert!(Leds::open(m).is_none());
     assert!(!panel_present(m));
 
@@ -178,7 +161,6 @@ fn missing_leds_and_chip_current_dedup() {
     let link = |seg: &str, chip: &Path| {
         std::os::unix::fs::symlink(chip, root.0.join(format!("clock-{seg}/device"))).unwrap();
     };
-    // Both outer digits on one chip: its current once.
     link("a1", &chip_a);
     link("a4", &chip_a);
     let leds = Leds::open(m).unwrap();
@@ -192,7 +174,6 @@ fn missing_leds_and_chip_current_dedup() {
     assert!(leds.set_level(77));
     assert_eq!(take(&chip_a.join("current")), "77");
     assert_eq!(take(&chip_b.join("current")), "77");
-    // Segments stay at full value; the chips dim.
     leds.draw(&glyph_frame([0x01, 0, 0, 0], false));
     assert_eq!(take(&root.0.join("clock-a1/brightness")), "255");
 }
@@ -234,8 +215,6 @@ async fn actor_draws_commands_and_stops_with_the_handles() {
 
 #[tokio::test]
 async fn auto_brightness_off_ignores_the_light() {
-    // Midi layout: the level is the chips' current, written only when it changes (the periodic
-    // full rewrite covers the segments alone).
     let (m, root) = temp_model!("auto_bri", b"yandex,cucumber\0", "clock-");
     for d in 0..DIGITS {
         for s in 0..SEGS {
@@ -247,7 +226,6 @@ async fn auto_brightness_off_ignores_the_light() {
     let current = chip.join("current");
     std::fs::write(&current, "").unwrap();
     std::os::unix::fs::symlink(&chip, root.0.join("clock-a1/device")).unwrap();
-    // The next level the actor writes while this task yields.
     let next = || async {
         for _ in 0..200 {
             let v = std::fs::read_to_string(&current).unwrap();
@@ -264,13 +242,10 @@ async fn auto_brightness_off_ignores_the_light() {
         .run_until(async {
             let clock = spawn(Some(m));
             assert_eq!(take(&current), "255");
-            // Dark room, auto brightness on: 0.02 of full.
             clock.set_ambient_lux(0.0);
             assert_eq!(next().await, "5");
             clock.set_auto_brightness(false);
             assert_eq!(next().await, "255");
-            // A reading while off writes nothing but still feeds the dimmer: switching back on
-            // applies the new light.
             let mut dimmer = AmbientDimmer::new();
             dimmer.update(0.0);
             assert!(dimmer.update(1000.0));
@@ -324,7 +299,6 @@ use std::rc::Rc;
 
 use tokio::task::LocalSet;
 
-/// Панель-запись: кадры, уровни и число полных перезаписей.
 #[derive(Clone, Default)]
 struct RecordingPanel {
     frames: Rc<RefCell<Vec<(Frame, i32)>>>,
@@ -367,7 +341,6 @@ async fn fixed_wall_draws_the_time_and_ticks_rewrite_every_20() {
                 glyph_frame([0x06, 0x5b, 0x4f, 0x66], true)
             );
             assert_eq!(frames.borrow()[0].1, 255);
-            // 19 ticks: no forced rewrite; the 20th forgets the cache.
             tokio::time::sleep(Duration::from_millis(19 * 250)).await;
             assert_eq!(*invalidations.borrow(), 0);
             tokio::time::sleep(Duration::from_millis(400)).await;

@@ -1,17 +1,3 @@
-//! The `/v1/voice/*` HTTP surface.
-//!
-//! Ports `solutions/mcp-gateway/internal/voice/voice.go`. The routes are:
-//!
-//! * `POST /v1/voice/utterance` — route one spoken phrase;
-//! * `POST /v1/voice/result` — long-poll the answer of a bb turn;
-//! * `POST /v1/voice/updates` — poll dispatcher turns the owner did not start;
-//! * `GET  /v1/voice/state` — debug view of the agent-conversation switch.
-//!
-//! The surface is authenticated by a dedicated voice bearer, never the MCP
-//! token, and is intentionally separate from `/mcp`. Bodies are decoded with
-//! unknown fields rejected, exactly like the Go server; the typed wire
-//! contract lives in `packages/rust/voice-contract`.
-
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
@@ -37,75 +23,48 @@ use crate::domain::clock::Clock;
 use crate::domain::state::AgentMode;
 use crate::metrics::SharedMetrics;
 
-/// Accepted profiles.
 pub const PROFILE_PERSONAL: &str = "personal";
-/// Accepted profiles.
 pub const PROFILE_WORK: &str = "work";
 
-/// Speech budget accepted from the proxy, in Unicode scalar values.
 pub const MAX_TEXT_RUNES: usize = 2000;
 
-/// The long-poll ceiling; the proxy must stay below the satellite watchdog.
 pub const DEFAULT_MAX_WAIT: Duration = Duration::from_secs(25);
 
-/// Default plugin wait: one bridge call must stay below the 15 s SSH timeout.
 pub const DEFAULT_UPDATES_WAIT: Duration = Duration::from_secs(10);
 
-/// Maximum accepted request body, matching the Go decoder.
 pub const MAX_BODY_BYTES: usize = 16 << 10;
 
-/// Phrases spoken by the proxy path.
 pub mod speech {
-    /// A phrase was delivered to the agent thread.
     pub const AGENT_SENT: &str = "Передал агенту.";
-    /// A phrase was delivered to the work thread.
     pub const WORK_SENT: &str = "Передал в рабочий тред.";
-    /// Agent mode was turned off.
     pub const MODE_OFF: &str = "Выключил режим агента.";
-    /// The work dispatcher thread is not configured.
     pub const WORK_MISSING: &str = "Рабочий тред не настроен.";
-    /// The utterance limiter rejected the phrase.
     pub const RATE_LIMITED: &str = "Слишком часто, подожди немного.";
-    /// The request could not be decoded.
     pub const BAD_REQUEST: &str = "Не понял запрос.";
-    /// The turn failed.
     pub const TURN_FAILED: &str = "Агент завершил работу с ошибкой.";
-    /// The agent waits for input.
     pub const WAITING_INPUT: &str = "Агент ждёт ответа.";
-    /// The turn is still running.
     pub const TURN_RUNNING: &str = "Агент ещё работает.";
-    /// The turn finished without a spoken line.
     pub const DONE: &str = "Готово.";
 }
 
-/// Exit phrases end agent conversation mode. They match a whole utterance.
 const EXIT_PHRASES: [&str; 3] = [
     "выйди из режима агента",
     "выключи режим агента",
     "закончи разговор с агентом",
 ];
 
-/// Derives the plugin wait from the SSH bridge timeout.
-///
-/// One `updates` call must finish before the bridge times out, otherwise every
-/// long-poll returns `status: "failed"` when `MCP_BB_TIMEOUT` is short. One
-/// second of headroom is left, capped at [`DEFAULT_UPDATES_WAIT`].
 #[must_use]
 pub fn updates_wait_for(bridge_timeout: Duration) -> Duration {
     let wait = bridge_timeout.saturating_sub(Duration::from_secs(1));
     wait.clamp(Duration::from_secs(1), DEFAULT_UPDATES_WAIT)
 }
 
-/// The bb subset the voice route needs.
 pub trait Dispatcher: Send + Sync {
-    /// Delivers one phrase.
     fn send(&self, request: SendRequest) -> BbFuture<'_, Result<SendResult, BbError>>;
-    /// Reads one turn's outcome.
     fn turn_result(
         &self,
         request: TurnResultRequest,
     ) -> BbFuture<'_, Result<TurnResultResult, BbError>>;
-    /// Polls dispatcher updates.
     fn updates(&self, request: BbUpdatesRequest) -> BbFuture<'_, Result<UpdatesResult, BbError>>;
 }
 
@@ -126,17 +85,12 @@ impl<T: BbApi + ?Sized> Dispatcher for T {
     }
 }
 
-/// Adapts a whole [`BbApi`] bridge to the voice [`Dispatcher`] subset.
-///
-/// Rust does not coerce between unrelated trait objects, so the composition
-/// root wraps the shared bridge in this zero-cost adapter.
 #[derive(Clone)]
 pub struct BbDispatcher {
     inner: Arc<dyn BbApi>,
 }
 
 impl BbDispatcher {
-    /// Wraps one bridge.
     #[must_use]
     pub fn new(inner: Arc<dyn BbApi>) -> Self {
         Self { inner }
@@ -160,13 +114,10 @@ impl Dispatcher for BbDispatcher {
     }
 }
 
-/// A global utterance limiter.
 pub trait Limiter: Send + Sync {
-    /// Whether the phrase may be accepted now.
     fn allow(&self) -> bool;
 }
 
-/// Accepts every phrase; used by tests and by disabled limits.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct AllowAll;
 
@@ -182,10 +133,6 @@ struct BucketState {
     last: Instant,
 }
 
-/// Token bucket: `interval` per token, up to `burst` tokens.
-///
-/// The default is 30 utterances per minute with burst 10 — enough for a
-/// conversation and far below anything that could spawn or spam threads.
 #[derive(Debug)]
 pub struct TokenBucket {
     interval: Duration,
@@ -194,7 +141,6 @@ pub struct TokenBucket {
 }
 
 impl TokenBucket {
-    /// Builds a bucket with a refill interval and a capacity.
     #[must_use]
     pub fn new(interval: Duration, burst: u32) -> Self {
         let burst = f64::from(burst.max(1));
@@ -208,7 +154,6 @@ impl TokenBucket {
         }
     }
 
-    /// The production limiter: one utterance per two seconds, burst 10.
     #[must_use]
     pub fn production() -> Self {
         Self::new(Duration::from_secs(2), 10)
@@ -234,25 +179,15 @@ impl Limiter for TokenBucket {
     }
 }
 
-/// Everything the voice routes need.
 pub struct Options {
-    /// bb dispatcher.
     pub dispatcher: Arc<dyn Dispatcher>,
-    /// Permanent work dispatcher thread; empty fails closed.
     pub work_thread_id: String,
-    /// Agent conversation switch.
     pub mode: Arc<AgentMode>,
-    /// Gateway metrics.
     pub metrics: SharedMetrics,
-    /// Wall clock.
     pub clock: Arc<dyn Clock>,
-    /// Utterance limiter.
     pub limiter: Arc<dyn Limiter>,
-    /// Result poll interval.
     pub poll_interval: Duration,
-    /// Result long-poll ceiling.
     pub max_wait: Duration,
-    /// One `updates` plugin wait.
     pub updates_wait: Duration,
 }
 
@@ -297,7 +232,6 @@ impl Handler {
 
     fn observe(&self, route: &str, profile: &str, outcome: &str, thread_id: &str, chars: usize) {
         self.metrics.observe_voice(route, outcome);
-        // Never log the spoken text: only its size and routing metadata.
         tracing::info!(
             event = "voice_utterance",
             route = route,
@@ -310,11 +244,6 @@ impl Handler {
     }
 }
 
-/// Builds the voice router. Authentication is applied by the HTTP surface.
-///
-/// The router is generic over the outer state so the composition root can
-/// merge it into the stateful gateway router; the handler is shared through an
-/// [`Extension`].
 pub fn router<S>(options: Options) -> Router<S>
 where
     S: Clone + Send + Sync + 'static,
@@ -399,8 +328,6 @@ async fn utterance(Extension(handler): Extension<Arc<Handler>>, body: Bytes) -> 
         .await;
     }
 
-    // Agent conversation mode is a personal-profile feature. Work phrases
-    // always go to the work dispatcher; the mode stays on.
     if let Some(thread_id) = handler.mode.active() {
         return send(
             &handler,
@@ -418,8 +345,6 @@ async fn utterance(Extension(handler): Extension<Arc<Handler>>, body: Bytes) -> 
     write(StatusCode::OK, UtteranceResponse::hermes())
 }
 
-/// Delivers one phrase to bb. Failures always stay on the bb route: a
-/// work-profile phrase must never fall through to Hermes.
 async fn send(
     handler: &Handler,
     thread_id: &str,
@@ -571,8 +496,6 @@ async fn updates(Extension(handler): Extension<Arc<Handler>>, body: Bytes) -> Re
     {
         wait = i64::from(requested).min(wait);
     }
-    // One SSH bridge call must stay below the bridge timeout; the proxy uses
-    // the returned cursor and calls again, so a shorter answer is fine.
     wait = wait.min(wait_seconds(handler.updates_wait));
 
     let outcome = handler
@@ -646,8 +569,6 @@ fn wait_seconds(duration: Duration) -> i64 {
     i64::try_from(duration.as_secs()).unwrap_or(i64::MAX)
 }
 
-/// Maps the proxy's Russian or English value onto the two profiles. An unknown
-/// value is rejected (fail closed).
 fn normalize_profile(raw: &str) -> Option<&'static str> {
     match bb::normalize(raw).as_str() {
         "" | "personal" | "личный" | "личный профиль" => Some(PROFILE_PERSONAL),
@@ -656,8 +577,6 @@ fn normalize_profile(raw: &str) -> Option<&'static str> {
     }
 }
 
-/// Matches a whole utterance, not a fragment, so a task that merely mentions
-/// agents is never mistaken for the exit command.
 fn is_exit(text: &str) -> bool {
     let normalized = bb::normalize(text);
     EXIT_PHRASES.contains(&normalized.as_str())

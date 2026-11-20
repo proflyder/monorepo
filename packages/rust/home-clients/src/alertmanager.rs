@@ -1,7 +1,3 @@
-//! Minimal read-only Alertmanager v2 API client.
-//!
-//! Wire-compatible with `solutions/mcp-gateway/internal/alertmanager/client.go`.
-
 use std::collections::BTreeMap;
 use std::time::Duration;
 
@@ -14,10 +10,8 @@ use crate::{Error, build_http, decode, normalize_base_url};
 const DEFAULT_LIMIT: usize = 20;
 const MAX_BODY_BYTES: usize = 1 << 20;
 
-/// The subset of an Alertmanager alert the gateway reports.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Alert {
-    /// Alertmanager's stable identifier for the alert.
     #[serde(default)]
     pub fingerprint: String,
     #[serde(default)]
@@ -49,8 +43,6 @@ pub struct AlertStatus {
 }
 
 impl Alert {
-    /// One-line human description, with the same fallback order as Go:
-    /// `summary`, then `description`, then `alertname`, then `alert`.
     #[must_use]
     pub fn summary(&self) -> String {
         if let Some(text) = self.annotations.get("summary").filter(|s| !s.is_empty()) {
@@ -69,14 +61,12 @@ impl Alert {
         "alert".to_owned()
     }
 
-    /// The alert severity label or an empty string.
     #[must_use]
     pub fn severity(&self) -> &str {
         self.labels.get("severity").map_or("", String::as_str)
     }
 }
 
-/// An Alertmanager client.
 #[derive(Debug, Clone)]
 pub struct Client {
     http: reqwest::Client,
@@ -84,7 +74,6 @@ pub struct Client {
 }
 
 impl Client {
-    /// Build a client. `base_url` is the Alertmanager root, without `/api/v2`.
     pub fn new(base_url: impl Into<String>, timeout: Duration) -> Result<Self, Error> {
         Ok(Self {
             http: build_http("alertmanager query", timeout)?,
@@ -92,9 +81,6 @@ impl Client {
         })
     }
 
-    /// Active, unsilenced, uninhibited alerts, capped at `limit`.
-    ///
-    /// A non-positive limit becomes `20`.
     pub async fn active(&self, limit: usize) -> Result<Vec<Alert>, Error> {
         const OP: &str = "alertmanager query";
         let limit = if limit == 0 { DEFAULT_LIMIT } else { limit };

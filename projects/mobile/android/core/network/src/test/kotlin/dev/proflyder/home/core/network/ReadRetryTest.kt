@@ -25,11 +25,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
-/**
- * Waking the phone after Doze kills pooled sockets and races the VPN tunnel;
- * the first read must be retried instead of alarming the user, while a real
- * outage and a cancelled call must stay distinguishable.
- */
 class ReadRetryTest {
     private lateinit var server: MockWebServer
 
@@ -54,10 +49,6 @@ class ReadRetryTest {
 
     private val body = TestFixtures.read("catalog_empty.json")
 
-    /**
-     * OkHttp's own auto-retry is disabled so the assertions prove that the
-     * application-level read retry is what recovered the request.
-     */
     private fun client(interceptors: List<Interceptor> = emptyList()): HttpControlCatalogClient =
         HttpControlCatalogClient(
             settings = Store(

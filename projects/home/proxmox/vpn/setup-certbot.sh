@@ -1,18 +1,4 @@
 #!/usr/bin/env bash
-# Configure automatic Let's Encrypt renewal via the Cloudflare DNS-01 plugin.
-#
-# Run as root inside the VPN container (CT 102), like install-ocserv.sh. The
-# script is idempotent: it installs the plugin, migrates the existing lineage
-# from manual DNS-01 to dns-cloudflare if needed, installs the ocserv deploy
-# hook, verifies the result with `certbot renew --dry-run` and enables the
-# certbot timer.
-#
-# The Cloudflare API token never lives in this repository. Pass the path to a
-# credentials file (mode 600, root) prepared inside the CT, for example:
-#
-#   dns_cloudflare_api_token = <token>
-#
-# The hook below is embedded so this script can be pushed as a single file.
 set -euo pipefail
 umask 077
 
@@ -66,10 +52,6 @@ apt-get update
 apt-get install -y --no-install-recommends \
   certbot python3-certbot-dns-cloudflare openssl
 
-# ----- deploy hook ---------------------------------------------------------
-# Copy the renewed certificate into ocserv, keeping the self-signed pair as a
-# fallback. The private key is validated against the certificate before it is
-# installed so a broken renewal never takes the VPN down.
 install -d -m 755 "$DEPLOY_DIR"
 cat >"$DEPLOY_HOOK" <<'HOOK'
 #!/usr/bin/env bash
@@ -102,11 +84,8 @@ systemctl restart ocserv
 HOOK
 chmod 700 "$DEPLOY_HOOK"
 
-# ----- certificate lineage -------------------------------------------------
 live=/etc/letsencrypt/live/$DOMAIN
 if [[ -d $live ]]; then
-  # Migrate the existing lineage from manual DNS-01 to dns-cloudflare without
-  # reissuing. Keep every unrelated option untouched.
   renewal=/etc/letsencrypt/renewal/$DOMAIN.conf
   [[ -f $renewal ]] || die "renewal config not found: $renewal"
   cp -p "$renewal" "$renewal.bak.$(date +%Y%m%d%H%M%S)"

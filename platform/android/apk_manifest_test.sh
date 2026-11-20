@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-# Verifies that the built APK actually carries the call feature's manifest:
-# library manifests are only merged when the library sets exports_manifest.
 set -euo pipefail
 aapt2="$1"
 apk="$2"

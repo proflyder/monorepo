@@ -19,10 +19,6 @@ import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/**
- * Exercises the real support FragmentManager, its saved state, and the real
- * Activity lifecycle. No emulator or instrumentation is used.
- */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class FragmentRouterTest {
@@ -151,8 +147,6 @@ class FragmentRouterTest {
         first.router.navigate(AlarmEditorDestination("7"))
         val bundle = Bundle()
         first.controller.saveInstanceState(bundle).pause().stop().destroy()
-        // Simulate an old/corrupt bundle that lost the router metadata while
-        // FragmentManager still restored the editor and its back stack.
         bundle.remove(KEY_SELECTED_TAB)
         bundle.remove(KEY_TABS)
         bundle.remove("${KEY_STACK_PREFIX}alarms")
@@ -308,7 +302,6 @@ class FragmentRouterTest {
         assertTrue(activity.router.openRoute("timers"))
         assertFragment(activity, "timers/list")
 
-        // A non-tab feature opens as an overlay, like a notification tap does.
         assertTrue(activity.router.openRoute(" settings "))
         assertFragment(activity, "settings")
 
@@ -494,7 +487,6 @@ private class TimersEntry : FeatureEntry {
     override fun createFragment(destination: Destination): Fragment = TestFragment()
 }
 
-/** A settings-style feature that is not a bottom tab. */
 private class SettingsEntry : FeatureEntry {
     override val id: String = "settings"
     override val order: Int = 9

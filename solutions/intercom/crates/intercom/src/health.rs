@@ -1,9 +1,3 @@
-//! Distroless probes: `-healthcheck` and `-status`.
-//!
-//! The image has no shell or curl, so the binary probes its own loopback
-//! `/healthz` and `/metrics`. No token is needed on these routes and no secret
-//! enters a command line or an error message.
-
 use std::process::ExitCode;
 use std::time::Duration;
 
@@ -11,7 +5,6 @@ use crate::config::Config;
 
 const TIMEOUT: Duration = Duration::from_secs(4);
 
-/// `intercom -healthcheck`: loopback `/healthz` must answer 200.
 pub async fn run_healthcheck() -> ExitCode {
     let config = match Config::load() {
         Ok(config) => config,
@@ -34,7 +27,6 @@ pub async fn run_healthcheck() -> ExitCode {
     ExitCode::SUCCESS
 }
 
-/// `intercom -status`: prints `GetIntercomStatus` JSON using the phone bearer.
 pub async fn run_status() -> ExitCode {
     let config = match Config::load() {
         Ok(config) => config,

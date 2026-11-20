@@ -1,12 +1,7 @@
-//! The playback PCM device port and its ALSA implementation: opening with the output gates on,
-//! the hardware/software parameters every first-party writer uses, xrun recovery and the
-//! reopen backoff shared by the writers.
-
 use std::fmt;
 
 use pulsar_alsa::{AlsaError, Format, HwRequest, HwStep, Pcm, PlaybackSpec};
 
-/// Where a device operation failed, for [`PcmError`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Step {
     Open,
@@ -40,12 +35,9 @@ impl Step {
     }
 }
 
-/// A failed PCM operation: the step and the negative errno (`-EAGAIN`, `-EPIPE`, …).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct PcmError {
-    /// The caller's step context (`hw_params` for any hw-parameter failure).
     pub step: Step,
-    /// The exact ALSA step, when the error came from a device call.
     pub detail: Option<HwStep>,
     pub code: i32,
 }
@@ -67,8 +59,6 @@ impl PcmError {
         }
     }
 
-    /// The step a writer names before `failed`: the exact hw step for `hw_params`, the outer step
-    /// otherwise (open / hw_params / …), matching the previous per-writer messages.
     pub fn context(&self) -> &'static str {
         if self.step == Step::HwParams {
             self.detail.map_or(Step::HwParams.as_str(), HwStep::as_str)
@@ -77,12 +67,10 @@ impl PcmError {
         }
     }
 
-    /// `EINTR` / `EAGAIN`: the same call can be retried as is.
     pub fn is_transient(self) -> bool {
         self.code == -libc::EINTR || self.code == -libc::EAGAIN
     }
 
-    /// `EPIPE` (underrun) or `ESTRPIPE` (suspend): the device needs prepare / resume.
     pub fn is_xrun(self) -> bool {
         self.code == -libc::EPIPE || self.code == -libc::ESTRPIPE
     }
@@ -101,21 +89,16 @@ impl fmt::Display for PcmError {
 
 impl std::error::Error for PcmError {}
 
-/// Format and geometry of one open playback PCM.
 #[derive(Clone, Copy)]
 pub struct PcmRequest {
     pub format: Format,
     pub channels: u32,
     pub rate: u32,
-    /// true: the rate must be supported as is; false: the nearest rate is accepted.
     pub rate_exact: bool,
-    /// Requested period in frames; `None` keeps the device default (dmix's own period).
     pub period_frames: Option<u64>,
-    /// Requested buffer in frames; `None` keeps the device default.
     pub buffer_frames: Option<u64>,
 }
 
-/// What the device reported after [`PcmDevice::open`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct PcmInfo {
     pub rate: u32,
@@ -123,18 +106,13 @@ pub struct PcmInfo {
     pub buffer_frames: usize,
 }
 
-/// A playback PCM the writers drive. Implemented by the firmware's ALSA (behind dlopen) and, for
-/// the policy tests, by an in-memory [`FakeDevice`](crate::FakeDevice).
 pub trait PcmDevice: Send {
-    /// The PCM name of the profile, for log lines.
     fn name(&self) -> &'static str;
     fn is_open(&self) -> bool;
     fn open(&mut self, req: &PcmRequest) -> Result<PcmInfo, PcmError>;
     fn info(&self) -> Option<PcmInfo>;
-    /// Writes whole frames; returns the frames taken.
     fn write(&mut self, data: &[u8], frames: usize) -> Result<usize, PcmError>;
     fn avail(&mut self) -> Result<usize, PcmError>;
-    /// Frames still queued ahead of the DAC; negative when the device has no such reading.
     fn delay(&mut self) -> Result<i64, PcmError>;
     fn wait(&mut self, timeout_ms: i32) -> Result<bool, PcmError>;
     fn resume(&mut self) -> Result<(), PcmError>;
@@ -143,7 +121,6 @@ pub trait PcmDevice: Send {
     fn close(&mut self);
 }
 
-/// The model's playback PCM: open_playback (output gates on) and the stock software parameters.
 pub struct AlsaDevice {
     spec: PlaybackSpec,
     pcm: Option<Pcm>,
@@ -173,7 +150,6 @@ impl AlsaDevice {
         self.pcm.is_some()
     }
 
-    /// The PCM name of the model profile (for log lines).
     pub fn name(&self) -> &'static str {
         self.spec.pcm
     }
@@ -191,8 +167,6 @@ impl PcmDevice for AlsaDevice {
     fn open(&mut self, req: &PcmRequest) -> Result<PcmInfo, PcmError> {
         let pcm = pulsar_alsa::open_playback(&self.spec)
             .map_err(|e| PcmError::from_alsa(Step::Open, e))?;
-        // Kept even when the parameters below fail: the caller has to close the device it just
-        // opened (and the sendspin sink logs that close, as before).
         self.pcm = Some(pcm);
         let pcm = self
             .pcm
@@ -288,21 +262,14 @@ impl PcmDevice for AlsaDevice {
     }
 }
 
-/// What [`recover`] did with a failed operation.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Recovery {
-    /// `EINTR` / `EAGAIN`: repeat the call.
     Retry,
-    /// The underrun was prepared away.
     Underrun,
-    /// The suspend was resumed.
     Suspend,
-    /// Fatal: the device is closed and must be reopened.
     Fatal(PcmError),
 }
 
-/// Retries a failed operation after an underrun (prepare) or a suspend (resume). The caller logs
-/// the outcome with its own prefix, so every writer keeps the text it had before.
 pub fn recover(dev: &mut dyn PcmDevice, err: PcmError, xruns: &mut u32) -> Recovery {
     if err.is_transient() {
         return Recovery::Retry;
@@ -331,7 +298,6 @@ pub fn recover(dev: &mut dyn PcmDevice, err: PcmError, xruns: &mut u32) -> Recov
     Recovery::Fatal(err)
 }
 
-/// A fixed-delay reopen gate: after a failed open / lost device the next attempt waits `retry_ms`.
 #[derive(Clone, Copy, Debug)]
 pub struct Backoff {
     retry_us: i64,
@@ -350,7 +316,6 @@ impl Backoff {
         now_us >= self.next_us
     }
 
-    /// The next attempt waits a full period.
     pub fn defer(&mut self, now_us: i64) {
         self.next_us = now_us + self.retry_us;
     }

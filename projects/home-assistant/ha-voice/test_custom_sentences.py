@@ -1,20 +1,4 @@
 #!/usr/bin/env python3
-"""Sentence-routing contract for the Russian voice intents.
-
-The time domain no longer parses phrases in Home Assistant. These tests load the
-real ``custom_sentences/ru/*.yaml`` and the real ``intent_scripts.yaml`` and
-prove the split that replaced the closed alarm/timer templates:
-
-1. 30+ Russian time phrases (absolute, relative, repeats, timers, reminders,
-   status and cancellation) resolve to ``StationTimeRoute`` and never to the
-   built-in ``HassMediaSearchAndPlay`` sentence;
-2. ``StationTimeRoute`` is a pure forwarder: it calls
-   ``conversation.hermes_agent`` and never a ``script.schedule_*`` writer;
-3. the only local time intents left are the parameterless ring commands
-   (``StationAlarmStop`` and ``StationAlarmSnooze``);
-4. music, lights and the plain "поставь queen" media request keep their own
-   paths, so the router does not steal unrelated commands.
-"""
 from __future__ import annotations
 
 import re
@@ -26,9 +10,6 @@ import yaml
 HA = Path(__file__).resolve().parent
 SENTENCES_DIR = HA / "custom_sentences" / "ru"
 
-# The built-in media search sentence that swallowed alarm phrases. Real
-# templates come from the home-assistant-intents package; this mirror is enough
-# to prove the ranking. `_common.yaml` in that package defines <play>.
 BUILTIN_PLAY = {
     "intent": "HassMediaSearchAndPlay",
     "template": "<play> {search_query}",
@@ -121,8 +102,6 @@ def compile_template(template: str) -> tuple[re.Pattern, list[str]]:
         elif char == "<":
             raise AssertionError(f"unexpanded expansion rule in {template!r}")
         elif char == " ":
-            # HassIL is token-based: an omitted optional word («[и]») also drops
-            # its separator, so a literal space must be allowed to collapse.
             pattern.append(r"\s*")
         else:
             pattern.append(re.escape(char))
@@ -166,10 +145,7 @@ def best_match(phrase: str) -> Match | None:
     return sorted(matches, key=lambda match: match.score)[0]
 
 
-# 35+ live STT formulations covering every time operation, including the
-# 2026-11-12 incidents «через час» and «на двадцать два ноль ноль».
 TIME_PHRASES: dict[str, dict[str, str]] = {
-    # Absolute alarms
     "поставь будильник на двадцать два ноль ноль": {},
     "поставь будильник на двадцать два ноль-ноль": {},
     "поставь будильник на 22:00": {},
@@ -181,7 +157,6 @@ TIME_PHRASES: dict[str, dict[str, str]] = {
     "поставь будильник на полночь": {},
     "поставь будильник пораньше": {},
     "сделай будильник в десять": {},
-    # Relative alarms
     "поставь будильник через час": {},
     "поставь будильник через полчаса": {},
     "поставь будильник через полтора часа": {},
@@ -190,11 +165,9 @@ TIME_PHRASES: dict[str, dict[str, str]] = {
     "разбуди меня через полчаса": {},
     "разбуди меня через пару часов": {},
     "будильник через 10 минут": {},
-    # Repeats
     "поставь будильник на семь по будням": {},
     "поставь будильник на 8:00 каждый день": {},
     "поставь будильник на девять по выходным": {},
-    # Status / list / cancel / move
     "какие будильники": {"command": "какие"},
     "какой у меня будильник": {"command": "какой"},
     "когда будильник": {"command": "когда"},
@@ -204,7 +177,6 @@ TIME_PHRASES: dict[str, dict[str, str]] = {
     "удали будильники": {"command": "удали"},
     "перенеси будильник на 8:00": {"command": "перенеси"},
     "выключи будильник на семь": {"command": "выключи"},
-    # Timers
     "поставь таймер на 5 минут": {"command": "поставь"},
     "поставь таймер пицца на 10 минут": {"command": "поставь"},
     "таймер на семь минут": {},
@@ -214,7 +186,6 @@ TIME_PHRASES: dict[str, dict[str, str]] = {
     "отмени таймер": {"command": "отмени"},
     "поставь таймер на паузу": {"command": "поставь"},
     "продолжи таймер": {"command": "продолжи"},
-    # Reminders
     "напомни завтра в 9:00 позвонить маме": {},
     "напомни мне через два часа выключить духовку": {},
     "какие напоминания": {"command": "какие"},
@@ -237,8 +208,6 @@ class TimeRouteTests(unittest.TestCase):
                     self.assertEqual(match.slots.get(key), value, phrase)
 
     def test_router_never_parses_a_clock_time(self) -> None:
-        # The router only captures the tail as free text; there are no hour,
-        # minute, period or repeat slots. Time parsing belongs to Hermes.
         for phrase in TIME_PHRASES:
             match = best_match(phrase)
             assert match is not None
@@ -273,15 +242,12 @@ class TimeRouteTests(unittest.TestCase):
                 assert match is not None
                 self.assertEqual(match.intent, intent)
 
-        # A plain media request still reaches the built-in play sentence.
         match = best_match("поставь queen")
         assert match is not None
         self.assertEqual(match.intent, BUILTIN_PLAY["intent"])
 
 
 def time_intent_matches(phrase: str) -> list[str]:
-    """Every time-router template that matches: real HA prefers custom intents
-    over built-ins, so any match here would steal the phrase from music."""
     text = normalize(phrase)
     return [
         intent
@@ -360,7 +326,6 @@ class TimeRouterScriptTests(unittest.TestCase):
 
 
 class SharedSentenceListTests(unittest.TestCase):
-    """Home Assistant merges `lists` by name; later files win."""
 
     def test_lists_with_the_same_name_are_identical(self) -> None:
         seen: dict[str, tuple[str, object]] = {}

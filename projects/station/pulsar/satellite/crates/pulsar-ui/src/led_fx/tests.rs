@@ -1,11 +1,3 @@
-//! Golden frames of the C++ renderer (`hw/led_fx.cpp` of tag rust-port-base, compiled on the
-//! x86_64 host with `zig c++ -std=c++20 -O2 -mfma` and a one-off harness: clang's default
-//! -ffp-contract=on then fuses the same `a * b + c` sites as the station builds). Each line of
-//! tests/golden/led_fx.txt is `<kind> <params> | r g b ...` with every channel as the hex bits
-//! of its f32. Effects and music are sequences: each (kind, n) starts from fresh state and its
-//! frames come in order. Comparison is exact: both sides call the same glibc libm; an unfused
-//! build differs on ~1/6 of the lines.
-
 use super::*;
 
 use crate::Effect;
@@ -63,7 +55,6 @@ struct Seq {
 }
 
 impl Seq {
-    /// Resets the state when a new (kind, index, n) sequence starts.
     fn enter(&mut self, kind: &str, idx: i64, n: usize) {
         let key = Some((kind.to_owned(), idx, n));
         if self.key != key {
@@ -99,7 +90,6 @@ fn frames_match_the_cpp_renderer() {
                 let n = p[1] as usize;
                 seq.enter(kind, p[0], n);
                 let k = p[2];
-                // The harness's `k * 0.1 + 1000` is contracted too.
                 let t = (k as f64).mul_add(0.1, 1000.0);
                 let dt = if k > 0 { 0.1 } else { 0.0 };
                 let moving = effect(
@@ -151,8 +141,6 @@ fn hsv_wraps_hue_in_turns() {
     assert_eq!(hsv(-0.5, 1.0, 1.0), hsv(0.5, 1.0, 1.0));
 }
 
-/// The Blue table must stay the violet one with the red and green channels exchanged; a
-/// hand-edited entry would silently change the animation.
 #[test]
 fn blue_is_violet_with_red_and_green_exchanged() {
     fn swap(c: u32) -> u32 {
@@ -178,7 +166,6 @@ fn voice_color_labels_round_trip_and_default_to_the_stock_look() {
         assert_eq!(c.as_str().parse(), Ok(c));
     }
     assert_eq!(VoiceColor::default(), VoiceColor::Violet);
-    // An unknown or absent state.conf value keeps the stock violet.
     for s in ["", "violet", "Violet ", "red"] {
         assert_eq!(s.parse(), Ok(VoiceColor::Violet), "{s:?}");
     }
@@ -200,7 +187,6 @@ fn only_listening_thinking_and_speaking_take_the_colour() {
         voice_logo(v, 900, VoiceColor::Blue, &mut blue);
         assert_ne!(violet, blue, "{v:?} logo");
     }
-    // The error pulse and the timer ring keep their own colours.
     for v in [Voice::Error, Voice::TimerRing] {
         let mut violet = vec![Col::default(); 24];
         let mut blue = violet.clone();

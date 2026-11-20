@@ -1,8 +1,3 @@
-//! Android SDK Platform-Tools: find `adb`, or download and unpack Google's archive.
-//!
-//! Google's license forbids redistributing platform-tools, so they are downloaded on first
-//! use. Pins are from https://dl.google.com/android/repository/repository2-3.xml.
-
 use std::ffi::OsString;
 use std::io::{Cursor, Read, Write};
 use std::path::{Component, Path, PathBuf};
@@ -19,7 +14,6 @@ pub struct PtPackage {
     pub size: u64,
 }
 
-/// GOOS -> package; linux only on amd64 (Google builds no other).
 pub fn package_for(os: &str, arch: &str) -> Option<PtPackage> {
     match os {
         "windows" => Some(PtPackage {
@@ -63,7 +57,6 @@ fn is_executable(p: &Path) -> bool {
     }
 }
 
-/// `bazel`, then `bazelisk`: the repository only guarantees the mise shim.
 pub fn bazel_tool() -> Option<PathBuf> {
     std::env::var_os("PATH").and_then(|path| bazel_tool_in(&path))
 }
@@ -78,7 +71,6 @@ fn look_path(name: &str) -> Option<PathBuf> {
 }
 
 fn look_path_in(path: &std::ffi::OsStr, name: &str) -> Option<PathBuf> {
-    // Go's exec.LookPath: "." and empty entries do not search the current directory.
     let dirs =
         std::env::split_paths(&path).filter(|d| !d.as_os_str().is_empty() && d.as_os_str() != ".");
     #[cfg(windows)]
@@ -119,8 +111,6 @@ fn look_path_in(path: &std::ffi::OsStr, name: &str) -> Option<PathBuf> {
     None
 }
 
-/// Sets the adb path: `adb` from PATH, else `platform-tools/` next to the payload, else
-/// downloaded there.
 pub fn find_adb(root: &Path, err: &mut dyn Write) -> Option<PathBuf> {
     if let Some(p) = look_path("adb") {
         return Some(p);
@@ -152,8 +142,6 @@ pub fn find_adb(root: &Path, err: &mut dyn Write) -> Option<PathBuf> {
     Some(local)
 }
 
-/// Downloads `url`, checks size and SHA-1 and unpacks the zip's `platform-tools/` tree into
-/// `dest.tmp-<pid>`, then renames that to `dest`. On any error nothing is left behind.
 pub fn fetch_platform_tools(
     url: &str,
     size: u64,
@@ -191,7 +179,7 @@ pub fn fetch_platform_tools(
     if let Err(e) = std::fs::rename(&tmp, dest) {
         let _ = std::fs::remove_dir_all(&tmp);
         if dest.exists() {
-            return Ok(()); // another run got there first
+            return Ok(());
         }
         return Err(e.to_string());
     }
@@ -216,8 +204,6 @@ fn http_status(code: u16) -> String {
     )
 }
 
-/// `filepath.IsLocal` after `filepath.Join` cleaning: a relative path whose `..` never
-/// escapes its base. `a/../b` is local, `../b` is not.
 fn clean_local(p: &Path) -> Option<PathBuf> {
     if p.is_absolute() {
         return None;
@@ -281,8 +267,6 @@ fn unpack(archive: &mut zip::ZipArchive<Cursor<Vec<u8>>>, dir: &Path) -> Result<
             if let Some(parent) = out.parent() {
                 std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
             }
-            // Perm(): only the low nine bits; setuid/sticky are not kept. The mode goes to
-            // O_CREAT, so the process umask applies exactly as it did in Go.
             let perm = (entry.unix_mode().unwrap_or(0o644) & 0o777) | 0o600;
             let mut options = std::fs::OpenOptions::new();
             options.write(true).create_new(true);
@@ -375,7 +359,6 @@ mod tests {
         buf.into_inner()
     }
 
-    /// Minimal one-shot HTTP server; returns the URL and serves `body` once.
     fn serve(body: Vec<u8>) -> (String, thread::JoinHandle<()>) {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let addr = listener.local_addr().unwrap();

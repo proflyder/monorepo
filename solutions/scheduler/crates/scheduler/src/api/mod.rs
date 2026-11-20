@@ -1,11 +1,3 @@
-//! Connect transport: one axum fallback serving the scheduler, alarm and
-//! scenario protobuf services.
-//!
-//! Only the `json` feature of `connectrpc` is enabled: the crate builds the
-//! Tower service itself and does not pull `hyper/http2` into the station
-//! firmware. gRPC and gRPC-Web over HTTP/1.1 still work; gRPC over h2c is not
-//! offered yet (no live client used it).
-
 mod alarm;
 mod auth;
 mod convert;
@@ -32,8 +24,6 @@ pub use service::{EngineStatus, Service};
 
 use auth::BearerAuth;
 
-/// Bounds every unary request and response message, matching the Go server's
-/// `MaxBodyBytes`.
 pub const MAX_BODY_BYTES: usize = 1 << 20;
 
 #[derive(Clone)]
@@ -59,8 +49,6 @@ impl tower::Service<Request<Body>> for ConnectFallback {
         let mut service = self.service.clone();
         Box::pin(async move {
             if !known {
-                // connect-go's mux answers an unknown procedure with the
-                // plain-text `404`, not a Connect envelope.
                 let response = Response::builder()
                     .status(StatusCode::NOT_FOUND)
                     .header(header::CONTENT_TYPE, "text/plain; charset=utf-8")
@@ -74,7 +62,6 @@ impl tower::Service<Request<Body>> for ConnectFallback {
     }
 }
 
-/// Builds the axum router with all services behind one bearer interceptor.
 pub fn router(service: Service, alarms: AlarmFacade, token: &str) -> axum::Router {
     let store = Arc::clone(service.store());
     let routes = ConnectRouter::new();
@@ -89,9 +76,6 @@ pub fn router(service: Service, alarms: AlarmFacade, token: &str) -> axum::Route
                 .with_max_request_body_size(MAX_BODY_BYTES),
         )
         .with_interceptor_arc(Arc::new(BearerAuth::new(token)));
-    // Push device registration is plain JSON next to the Connect fallback: it
-    // has its own path and the same bearer, so the phone needs no second
-    // endpoint or credential. Unknown paths still get the Connect `404`.
     let push = push::PushState {
         store,
         auth: Arc::new(BearerAuth::new(token)),

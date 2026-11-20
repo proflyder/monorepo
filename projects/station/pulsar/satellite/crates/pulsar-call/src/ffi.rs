@@ -1,14 +1,6 @@
-//! Единственный модуль `unsafe` крейта: FFI к libopus из сборки прошивки (`@opus`).
-//!
-//! Кодек используется только для звонка: encoder — моно 48 кГц (вход апсемплирован с 16 кГц
-//! VQE), decoder — стерео 48 кГц с даунмиксом в моно (телефон вправе прислать стерео).
-//! Символы резолвятся линковкой, dlopen не нужен. Ошибки libopus логируются кодом, без аудио.
-
 use std::ptr::NonNull;
 
-/// 20 мс при 48 кГц.
 pub const FRAME: usize = 960;
-/// Максимум Opus — 120 мс.
 const MAX_FRAME: usize = 5760;
 
 const APPLICATION_VOIP: i32 = 2048;
@@ -18,7 +10,6 @@ const SET_INBAND_FEC: i32 = 4012;
 const SET_PACKET_LOSS: i32 = 4014;
 const SET_SIGNAL_VOICE: i32 = 4024;
 const SIGNAL_VOICE: i32 = 3001;
-/// 24 кбит/с моно — потолок разборчивой речи в узкополосном канале.
 const BITRATE: i32 = 24_000;
 
 #[repr(C)]
@@ -64,14 +55,12 @@ unsafe extern "C" {
     fn opus_strerror(error: i32) -> *const std::ffi::c_char;
 }
 
-/// Моно-энкодер 48 кГц.
 pub struct Encoder(NonNull<RawEncoder>);
 
 // SAFETY: libopus encoder owned exclusively by this wrapper; the structure is not shared.
 unsafe impl Send for Encoder {}
 
 impl Encoder {
-    /// `None` — libopus не смог создать энкодер (нет памяти / неподдерживаемая частота).
     pub fn new_mono() -> Option<Self> {
         let mut error = 0;
         // SAFETY: valid arguments; on failure the returned pointer is null and is not stored.
@@ -92,7 +81,6 @@ impl Encoder {
         Some(this)
     }
 
-    /// Один кадр [`FRAME`] сэмплов; пустой `Vec` при ошибке кодека.
     pub fn encode(&mut self, pcm: &[i16]) -> Option<Vec<u8>> {
         if pcm.len() != FRAME {
             return None;
@@ -124,7 +112,6 @@ impl Drop for Encoder {
     }
 }
 
-/// Стерео-декодер 48 кГц; выход всегда моно (среднее каналов).
 pub struct Decoder(NonNull<RawDecoder>);
 
 // SAFETY: libopus decoder owned exclusively by this wrapper; not shared.
@@ -142,20 +129,17 @@ impl Decoder {
         Some(Self(raw))
     }
 
-    /// Раскодировать пакет в моно 48 кГц; `None` — битый пакет или ошибка кодека.
     pub fn decode(&mut self, packet: &[u8]) -> Option<Vec<i16>> {
         self.decode_inner(packet, false)
     }
 
-    /// Восстановить пропущенный кадр из in-band FEC следующего пакета.
     pub fn decode_fec(&mut self, packet: &[u8]) -> Option<Vec<i16>> {
         self.decode_inner(packet, true)
     }
 
     fn decode_inner(&mut self, packet: &[u8], fec: bool) -> Option<Vec<i16>> {
         let mut stereo = vec![0i16; MAX_FRAME * 2];
-        // SAFETY: the packet pointer/length pair is valid and the output buffer holds
-        // MAX_FRAME stereo samples, which is the largest Opus frame.
+        // SAFETY: the packet pointer/length pair is valid and the output buffer holds MAX_FRAME stereo samples, which is the largest Opus frame.
         let n = unsafe {
             opus_decode(
                 self.0.as_ptr(),
@@ -173,11 +157,9 @@ impl Decoder {
         Some(mono(&stereo, n as usize))
     }
 
-    /// PLC: продолжить последний кадр на [`FRAME`] сэмплов.
     pub fn conceal(&mut self) -> Vec<i16> {
         let mut stereo = vec![0i16; FRAME * 2];
-        // SAFETY: null packet with length 0 is libopus' PLC entry point; the output buffer
-        // holds FRAME stereo samples.
+        // SAFETY: null packet with length 0 is libopus' PLC entry point; the output buffer holds FRAME stereo samples.
         let n = unsafe {
             opus_decode(
                 self.0.as_ptr(),
@@ -195,7 +177,6 @@ impl Decoder {
     }
 }
 
-/// Стерео-выборка libopus → моно (среднее каналов).
 fn mono(stereo: &[i16], frames: usize) -> Vec<i16> {
     stereo[..frames * 2]
         .as_chunks::<2>()
@@ -212,10 +193,6 @@ impl Drop for Decoder {
     }
 }
 
-/// Длительность Opus-пакета в сэмплах одного канала при 48 кГц.
-///
-/// RTP-таймлайн считается по этой длине, а не по 20 мс: телефон вправе прислать 10, 20
-/// или 60 мс. `None` — пакет не разбирается как Opus.
 #[must_use]
 pub fn packet_samples(packet: &[u8]) -> Option<usize> {
     if packet.is_empty() || packet.len() > i32::MAX as usize {
@@ -239,15 +216,10 @@ fn log_error(code: i32) {
     tracing::warn!("call: opus error {code}: {text}");
 }
 
-/// IPv4-адреса поднятых интерфейсов: по одному host-кандидату ICE на интерфейс.
-///
-/// Телефон приходит либо по LAN, либо по VPN, и какой адрес ему доступен, решает ICE. При
-/// отсутствии адресов (нестандартное окружение) вызывающий добавляет loopback.
 pub fn ipv4_addrs() -> Vec<std::net::Ipv4Addr> {
     let mut result = Vec::new();
     let mut list: *mut libc::ifaddrs = std::ptr::null_mut();
-    // SAFETY: getifaddrs fills a linked list owned by libc; every non-null node is valid
-    // until freeifaddrs, and `ifa_addr` is checked before the cast.
+    // SAFETY: getifaddrs fills a linked list owned by libc; every non-null node is valid until freeifaddrs, and `ifa_addr` is checked before the cast.
     unsafe {
         if libc::getifaddrs(&mut list) != 0 {
             return result;

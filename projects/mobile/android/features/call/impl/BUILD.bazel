@@ -7,10 +7,6 @@ metro_android_library(
     srcs = glob(["src/main/kotlin/**/*.kt"]),
     custom_package = "dev.proflyder.home.feature.call.impl",
     manifest = "src/main/AndroidManifest.xml",
-    # rules_android 0.7.3 does not merge a library manifest into the APK unless
-    # the library exports it. This module declares CallActivity, the Telecom and
-    # foreground services and the call permissions, so without this flag the
-    # launcher crashes with ActivityNotFoundException.
     exports_manifest = 1,
     resource_files = glob(["src/main/res/**"]),
     view_binding = True,

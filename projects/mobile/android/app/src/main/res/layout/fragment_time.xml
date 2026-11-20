@@ -5,7 +5,6 @@
     android:layout_height="match_parent"
     android:orientation="vertical">
 
-    <!-- Compact pills on the same grid as the screen title and the cards. -->
     <dev.proflyder.home.core.ui.PillSegments
         android:id="@+id/time_tabs"
         android:layout_width="match_parent"

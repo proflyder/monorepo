@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-"""Unit and integration tests for vpncerts.py (no network, no live VPN)."""
 import shutil
 import subprocess
 import tempfile
@@ -87,7 +86,6 @@ class HelpersTest(unittest.TestCase):
 
 @unittest.skipUnless(OPENSSL, "openssl is not installed")
 class LocalCaTest(unittest.TestCase):
-    """Real openssl CA in a temporary directory; nothing touches the network."""
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -138,7 +136,6 @@ class LocalCaTest(unittest.TestCase):
                  "-ext", "extendedKeyUsage"],
                 text=True, capture_output=True, check=True,
             ).stdout
-            # OpenSSL 3 prints "CN = alice", LibreSSL "CN=alice".
             subject = info.replace(" = ", "=")
             self.assertIn("CN=alice", subject)
             self.assertIn("OU=lan", subject)

@@ -3,8 +3,6 @@ load("@rules_rust//rust:defs.bzl", "rust_binary")
 
 package(default_visibility = ["//visibility:public"])
 
-# `cp-selftest.exe`: loads the provider by CLSID, or from the DLL next to the
-# executable when it is not registered.
 rust_binary(
     name = "cp-selftest",
     srcs = glob(["src/**/*.rs"]),
@@ -17,7 +15,6 @@ rust_binary(
     ],
 )
 
-# Mirrors the root [workspace.lints] through the crate's `[lints] workspace = true`.
 extract_cargo_lints(
     name = "workspace_lints",
     manifest = "Cargo.toml",

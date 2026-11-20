@@ -20,14 +20,6 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 
-/**
- * Non-secret editor draft persisted in SavedStateHandle. It intentionally holds
- * no token, endpoint credentials, or request payload.
- *
- * [hasUnsupportedParts] is derived from the retained unknown oneof variants: a
- * definition created by a newer server can be opened and read, but saving it
- * is blocked so the phone never overwrites fields it cannot represent.
- */
 data class ScenarioEditorDraft(
     val existingId: String? = null,
     val existingRevision: Long? = null,
@@ -49,11 +41,9 @@ object ScenarioEditorDraftCodec {
     private const val KEY_DRAFT = "scenario_draft"
     private val json = Json { ignoreUnknownKeys = true }
 
-    /** Stores the whole nested draft as one JSON string in SavedStateHandle. */
     fun toMap(draft: ScenarioEditorDraft): Map<String, Any?> =
         mapOf(KEY_DRAFT to encode(draft))
 
-    /** Returns null for an absent or unreadable draft. */
     fun fromMap(values: Map<String, Any?>): ScenarioEditorDraft? {
         val raw = values[KEY_DRAFT] as? String ?: return null
         return runCatching {
@@ -226,7 +216,6 @@ enum class ScenarioEditorCompletion {
     DELETED,
 }
 
-/** Maps the editor draft to the Create/Update payload, trimming free text. */
 fun ScenarioEditorDraft.toScenarioDraft(idempotencyKey: String = ""): ScenarioDraft = ScenarioDraft(
     label = label.trim(),
     description = description.trim(),

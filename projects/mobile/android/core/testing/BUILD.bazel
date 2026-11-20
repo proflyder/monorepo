@@ -2,8 +2,6 @@ load("@rules_kotlin//kotlin:jvm.bzl", "kt_jvm_library")
 
 package(default_visibility = ["//visibility:public"])
 
-# Test-only helpers shared by Android unit tests. Nothing here should be
-# referenced from production code.
 kt_jvm_library(
     name = "testing",
     testonly = True,

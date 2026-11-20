@@ -1,9 +1,3 @@
-//! Порты контроллера: то, что он вызывает у сервисов, и ничего больше.
-//!
-//! Сигнатуры повторяют handle-методы (sync, `&self`, те же id), поэтому продакшен-реализации —
-//! тонкие обёртки, а модель исполнения (один `LocalSet`, акторы, события) не меняется. Тесты
-//! подставляют фейки, которые записывают вызовы.
-
 use std::path::PathBuf;
 
 use pulsar_arbiter::ArbiterHandle;
@@ -23,7 +17,6 @@ use pulsar_zigbee::{Mode, ZigbeeHandle};
 
 use super::wake::ClaimToken;
 
-/// Воспроизведение: каналы Music / Announce.
 pub trait Player {
     fn play(&self, ch: Channel, urls: Vec<String>) -> PlayId;
     fn pause(&self, ch: Channel);
@@ -33,7 +26,6 @@ pub trait Player {
     fn set_channel_gain(&self, ch: Channel, gain: f32);
 }
 
-/// Мастер-громкость железа (softvol) и mute.
 pub trait Mixer {
     fn available(&self) -> bool;
     fn volume(&self) -> f32;
@@ -41,7 +33,6 @@ pub trait Mixer {
     fn set_muted(&mut self, m: bool);
 }
 
-/// ESPHome API: сущности и голосовой пайплайн.
 pub trait HaLink {
     fn voice_subscribed(&self) -> bool;
     fn voice_request_start(&self, wake_word_phrase: &str) -> u64;
@@ -65,7 +56,6 @@ pub trait HaLink {
     fn publish_update(&self, st: &UpdateState);
 }
 
-/// Микрофонный фронтенд: модели, детекторы, запись wake-событий.
 pub trait Frontend {
     fn set_model(&self, dir: PathBuf);
     fn set_detection(&self, on: bool);
@@ -83,14 +73,12 @@ pub trait Frontend {
     fn wake_event_false_alarm(&self);
 }
 
-/// Арбитраж wake word между станциями.
 pub trait Arbiter {
     fn ok(&self) -> bool;
     fn claim(&self, wake: &str, level_db: f32, busy: bool, decide: bool) -> ClaimToken;
     fn cancel(&self);
 }
 
-/// Кольцо (и логотип Миди).
 pub trait Leds {
     fn set_ui_state(&self, s: UiState);
     fn set_muted(&self, muted: bool);
@@ -109,7 +97,6 @@ pub trait Leds {
     fn set_case_color(&self, color: CaseColor);
 }
 
-/// Часы.
 pub trait Clock {
     fn set_enabled(&self, on: bool);
     fn set_brightness(&self, b: f32);
@@ -134,14 +121,11 @@ pub trait Clock {
     fn music_frame(&self, f: MusicFrame, from_sendspin: bool);
 }
 
-/// Визуальные выходы: кольцо и часы.
 pub struct Display {
-    /// Поля в порядке дропа сервисов: часы раньше кольца.
     pub clock: Box<dyn Clock>,
     pub leds: Box<dyn Leds>,
 }
 
-/// Обновления.
 pub trait Updater {
     fn busy(&self) -> bool;
     fn check(&self) -> Option<RequestId>;
@@ -149,7 +133,6 @@ pub trait Updater {
     fn add_extra_asset(&self, name: &str, path: PathBuf);
 }
 
-/// Zigbee-радио (роль и статус).
 pub trait Radio {
     fn mode(&self) -> Mode;
     fn flashing(&self) -> bool;
@@ -158,7 +141,6 @@ pub trait Radio {
     fn leave(&self);
 }
 
-/// Sendspin-плеер Music Assistant.
 pub trait Sendspin {
     fn streaming(&self) -> bool;
     fn connected(&self) -> bool;
@@ -170,17 +152,14 @@ pub trait Sendspin {
     fn goodbye_restart(&self);
 }
 
-/// Звонок на колонку (intercom): фаза и команды, без аудио.
 pub trait Call {
     fn phase(&self) -> pulsar_call::CallPhase;
     fn muted(&self) -> bool;
     fn set_muted(&self, muted: bool);
     fn hangup(&self);
-    /// Чанк очищенного VQE-потока 16 кГц.
     fn push_uplink(&self, pcm: &[i16]);
 }
 
-/// mDNS-реклама.
 pub trait Mdns {
     fn set_txt(&self, service: &str, txt: Vec<String>);
 }
@@ -610,14 +589,11 @@ impl Mdns for MdnsHandle {
     }
 }
 
-/// Everything the controller calls. Field order is the service teardown order of the C++
-/// members (Sendspin goes first, the API server last).
 pub struct Deps {
     pub sendspin: Option<Box<dyn Sendspin>>,
     pub radio: Option<Box<dyn Radio>>,
     pub updater: Box<dyn Updater>,
     pub arbiter: Box<dyn Arbiter>,
-    /// Held only: the input actor runs while its handle exists (nothing calls into it).
     pub _input: Option<InputHandle>,
     pub display: Display,
     pub mixer: Box<dyn Mixer>,
@@ -654,8 +630,6 @@ impl Call for pulsar_call::CallHandle {
 mod tests {
     use super::*;
 
-    /// The real handle behind the port: `Self::method` must reach the inherent method, not the
-    /// trait one (that would recurse). The host player is degraded, so `play` ends at once.
     #[test]
     fn player_port_calls_the_handle() {
         let profile = pulsar_model::profile_from_compatible(b"yandex,cucumber\0").unwrap();

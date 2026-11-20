@@ -1,5 +1,3 @@
-//! HMAC-SHA256 message shapes and constant-time comparison.
-
 use hmac::{Hmac, KeyInit, Mac};
 
 use crate::purpose::Purpose;
@@ -12,7 +10,6 @@ pub fn hmac_sha256_b64(key: &[u8], message: &str) -> String {
     crate::b64_encode(&mac.finalize().into_bytes())
 }
 
-/// Length-independent comparison; both inputs are compared in full.
 pub fn constant_time_equal<A: AsRef<[u8]>, B: AsRef<[u8]>>(a: A, b: B) -> bool {
     let a = a.as_ref();
     let b = b.as_ref();
@@ -22,18 +19,15 @@ pub fn constant_time_equal<A: AsRef<[u8]>, B: AsRef<[u8]>>(a: A, b: B) -> bool {
     a.ct_eq(b).into()
 }
 
-/// `<kind>\n<machine>\n<nonce>` with `kind = "claim"`.
 pub fn claim_mac_message(machine: &str, nonce: &str) -> String {
     format!("claim\n{machine}\n{nonce}")
 }
 
-/// `<kind>\n<machine>\n<nonce>\n<granted 0|1>\n<grantId>` with `kind = "grant"`.
 pub fn grant_mac_message(machine: &str, nonce: &str, granted: bool, grant_id: &str) -> String {
     let flag = if granted { '1' } else { '0' };
     format!("grant\n{machine}\n{nonce}\n{flag}\n{grant_id}")
 }
 
-/// Purpose-aware claim message: `<v1 claim>\n<purpose>`.
 pub fn claim_mac_message_for_purpose(machine: &str, nonce: &str, purpose: Purpose) -> String {
     format!(
         "{}\n{}",
@@ -42,7 +36,6 @@ pub fn claim_mac_message_for_purpose(machine: &str, nonce: &str, purpose: Purpos
     )
 }
 
-/// Purpose-aware grant message: `<v1 grant>\n<purpose>`.
 pub fn grant_mac_message_for_purpose(
     machine: &str,
     nonce: &str,

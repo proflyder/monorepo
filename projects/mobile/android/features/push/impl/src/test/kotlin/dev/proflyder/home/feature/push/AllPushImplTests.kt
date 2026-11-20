@@ -6,11 +6,6 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * Payload contract with the server: `phone_find` is data-only and wins over a
- * notification block, ordinary notifications need a title and a body, and a
- * foreign deep link is dropped instead of trusted.
- */
 class PushPayloadsTest {
     @Test
     fun aFindDataMessageIsDecodedWithItsReason() {
@@ -79,7 +74,6 @@ class PushPayloadsTest {
     }
 }
 
-/** One ring stops on «Нашёл» or after a minute, never later. */
 class FindPhoneTimingTest {
     @Test
     fun theRingLastsExactlyOneMinute() {

@@ -1,7 +1,3 @@
-//! DNS wire format of the responder: typed records, the codec and question answering.
-//! No I/O and no runtime; the packets are byte-identical to the C++ responder's
-//! (tests/golden/mdns.txt).
-
 use std::net::Ipv4Addr;
 
 pub const MDNS_PORT: u16 = 5353;
@@ -13,15 +9,10 @@ const T_PTR: u16 = 12;
 const T_TXT: u16 = 16;
 const T_SRV: u16 = 33;
 const T_ANY: u16 = 255;
-/// Legacy unicast (RFC 6762 6.7): a one-shot resolver gets short TTLs and no cache-flush bit.
 const LEGACY_TTL: u32 = 10;
-/// Compression pointers followed per name: more is a loop or garbage.
 const MAX_HOPS: u32 = 32;
-/// RFC 1035 3.1: a name takes at most 255 bytes on the wire (labels, length bytes, root).
 const MAX_NAME: usize = 255;
 
-/// Record selection bitmask: bit 0 = the host's A record; service i owns the four bits from
-/// 1 + 4 i (`Kind`). Seven services fit.
 pub const A: u32 = 1;
 
 #[derive(Clone, Copy)]
@@ -29,7 +20,6 @@ pub enum Kind {
     Ptr = 0,
     Srv = 1,
     Txt = 2,
-    /// The service type's PTR in "_services._dns-sd._udp.local".
     Enum = 3,
 }
 
@@ -37,18 +27,14 @@ pub fn bit(svc: usize, k: Kind) -> u32 {
     1 << (1 + 4 * svc + k as usize)
 }
 
-/// How a query was answered.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Reply {
-    /// Source port other than 5353: straight to the sender, question and id echoed.
     Legacy,
-    /// QU bit: to the sender.
     Unicast,
     Multicast,
 }
 
 impl Reply {
-    /// Stable name for `tracing` diagnostics of `lan_probe`.
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Legacy => "legacy",
@@ -59,9 +45,7 @@ impl Reply {
 }
 
 pub struct Service {
-    /// "_esphomelib._tcp.local"
     pub type_fqdn: String,
-    /// "<instance>._esphomelib._tcp.local"
     pub instance_fqdn: String,
     pub port: u16,
     pub txt: Vec<String>,
@@ -87,11 +71,9 @@ pub struct Response {
     pub dest: Dest,
     pub reply: Reply,
     pub packet: Vec<u8>,
-    /// (name, qtype) of the questions this packet answers; filled only when asked for.
     pub questions: Vec<(String, u16)>,
 }
 
-/// DNS record types this responder emits.
 #[derive(Clone, Copy)]
 enum RType {
     A,
@@ -111,7 +93,6 @@ impl RType {
     }
 }
 
-/// Typed RDATA of one record.
 enum RData<'a> {
     A(Ipv4Addr),
     Ptr(&'a str),
@@ -119,21 +100,17 @@ enum RData<'a> {
     Txt(&'a [String]),
 }
 
-/// One resource record before encoding.
 struct Record<'a> {
     name: &'a str,
     rtype: RType,
-    /// Cache-flush bit on the class field (unique records, not in legacy replies).
     unique: bool,
     ttl: u32,
     data: RData<'a>,
 }
 
 pub struct Records {
-    /// "<host>.local"
     pub host_fqdn: String,
     pub services: Vec<Service>,
-    /// Advertised address; UNSPECIFIED = none: no A record, no announcements.
     pub ip: Ipv4Addr,
 }
 
@@ -145,7 +122,6 @@ fn be16(p: &[u8], at: usize) -> u16 {
     u16::from_be_bytes([p[at], p[at + 1]])
 }
 
-/// Dotted name -> DNS labels without compression; a label is cut at 63 bytes.
 pub fn put_name(o: &mut Vec<u8>, dotted: &[u8]) {
     let mut start = 0;
     while start < dotted.len() {
@@ -161,15 +137,11 @@ pub fn put_name(o: &mut Vec<u8>, dotted: &[u8]) {
     o.push(0);
 }
 
-/// Reads the possibly compressed name at `p[*pos]` into `out`, ASCII-lowercased and dotted, and
-/// moves `*pos` past it. Bytes are kept as they are: names are compared byte-wise. Names longer
-/// than 255 bytes fail (the C++ parser had no limit; bounds the work per question).
 pub fn read_name(p: &[u8], pos: &mut usize, out: &mut Vec<u8>) -> bool {
     out.clear();
     let mut i = *pos;
     let mut jumped = false;
     let mut hops = 0;
-    // The root byte.
     let mut wire_len = 1;
     while hops < MAX_HOPS {
         let Some(&l) = p.get(i) else { return false };
@@ -220,15 +192,11 @@ impl Records {
         })
     }
 
-    /// Unsolicited announcement (or goodbye: TTL 0) of every record to the group; None when
-    /// there is no address to announce.
     pub fn announcement(&self, goodbye: bool) -> Option<Vec<u8>> {
         (goodbye || !self.ip.is_unspecified())
             .then(|| self.build(0, self.all(), 0, None, goodbye, &[]))
     }
 
-    /// Response packet. `ttl_cap` is set for legacy unicast replies: TTLs capped, no cache-flush
-    /// bit, `question` echoed.
     pub fn build(
         &self,
         id: u16,
@@ -249,7 +217,7 @@ impl Records {
         );
         let mut pkt = Vec::with_capacity(12 + question.len() + 512);
         put16(&mut pkt, id);
-        put16(&mut pkt, 0x8400); // response, authoritative
+        put16(&mut pkt, 0x8400);
         put16(&mut pkt, u16::from(!question.is_empty()));
         put16(&mut pkt, answers.len() as u16);
         put16(&mut pkt, 0);
@@ -260,7 +228,6 @@ impl Records {
         pkt
     }
 
-    /// Records of `mask` in the C++ order: A, then per service PTR, SRV, TXT, enumeration PTR.
     fn select_records(&self, mask: u32) -> Vec<Record<'_>> {
         let mut out = Vec::new();
         if mask & A != 0 {
@@ -316,10 +283,6 @@ impl Records {
         out
     }
 
-    /// Responses to a datagram from port `from_port`, in send order. A legacy resolver (source
-    /// port other than 5353) gets one reply per question; otherwise the questions with the QU
-    /// bit are answered in one unicast packet and the rest in one multicast packet. A malformed
-    /// question ends the parse: only the legacy replies made before it are sent.
     pub fn answer(&self, p: &[u8], from_port: u16, trace: bool) -> Vec<Response> {
         let mut out = Vec::new();
         if p.len() < 12 {
@@ -329,7 +292,7 @@ impl Records {
         let flags = be16(p, 2);
         let qd = be16(p, 4);
         if flags & 0x8000 != 0 {
-            return out; // a response, not a query
+            return out;
         }
         let legacy = from_port != MDNS_PORT;
         let mut pos = 12;
@@ -358,8 +321,6 @@ impl Records {
                 }
             };
             if legacy {
-                // A one-shot resolver (plain DNS client sending to 5353): reply directly,
-                // echoing the question.
                 let mut question = Vec::new();
                 put_name(&mut question, &name);
                 question.extend_from_slice(&p[pos - 4..pos - 2]);
@@ -399,7 +360,6 @@ impl Records {
         out
     }
 
-    /// Answer and additional records for one question; `name` is lowercase.
     fn select(&self, name: &[u8], qtype: u16) -> (u32, u32) {
         let (mut a, mut add) = (0, 0);
         let any = qtype == T_ANY;
@@ -428,7 +388,6 @@ impl Records {
     }
 }
 
-/// Appends the records in order: header, then RDATA and the record itself.
 fn encode_records(out: &mut Vec<u8>, records: &[Record<'_>], ttl_cap: Option<u32>, goodbye: bool) {
     let mut rd = Vec::new();
     for r in records {
@@ -437,8 +396,8 @@ fn encode_records(out: &mut Vec<u8>, records: &[Record<'_>], ttl_cap: Option<u32
             RData::A(ip) => rd.extend_from_slice(&ip.octets()),
             RData::Ptr(name) => put_name(&mut rd, name.as_bytes()),
             RData::Srv { port, target } => {
-                put16(&mut rd, 0); // priority
-                put16(&mut rd, 0); // weight
+                put16(&mut rd, 0);
+                put16(&mut rd, 0);
                 put16(&mut rd, *port);
                 put_name(&mut rd, target.as_bytes());
             }

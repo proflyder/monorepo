@@ -1,5 +1,3 @@
-//! Transport mapping of store failures.
-
 use connectrpc::ConnectError;
 
 use crate::domain::ErrorKind;
@@ -7,8 +5,6 @@ use crate::store::StoreError;
 
 use super::text::error_text;
 
-/// Converts a store failure into the exact Connect code and message the Go
-/// service produced, plus the stable localization key for new clients.
 impl From<StoreError> for ConnectError {
     fn from(error: StoreError) -> Self {
         let message = error.to_string();

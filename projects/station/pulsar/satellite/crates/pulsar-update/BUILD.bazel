@@ -22,7 +22,6 @@ DEPS = [
     "//projects/station/pulsar/satellite/crates/pulsar-core:pulsar_core",
 ]
 
-# tests/data вшит в тестовый бинарь через include_str! (сертификаты локального сервера).
 TEST_DATA = glob(["tests/data/**"])
 
 rust_library(
@@ -49,7 +48,6 @@ rust_test(
     deps = ["@crates//:tokio"],
 )
 
-# Mirrors the root [workspace.lints] through the crate's `[lints] workspace = true`.
 extract_cargo_lints(
     name = "workspace_lints",
     manifest = "Cargo.toml",

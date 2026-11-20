@@ -1,5 +1,3 @@
-//! Pure domain logic of the voice proxy: no I/O, time only through [`Clock`].
-
 pub mod announce;
 pub mod cancel;
 pub mod clock;

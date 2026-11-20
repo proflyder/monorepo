@@ -3,7 +3,6 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
-# Shared lease -> handle -> ack loop and its scheduler-backed queue.
 DEPS = [
     "@crates//:backon",
     "@crates//:buffa",
@@ -30,7 +29,6 @@ rust_test(
     deps = DEPS,
 )
 
-# Mirrors the root [workspace.lints] through the crate's `[lints] workspace = true`.
 extract_cargo_lints(
     name = "workspace_lints",
     manifest = "Cargo.toml",

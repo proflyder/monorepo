@@ -72,3 +72,13 @@ curl -fsS -X POST "$PHONE_PUSH_URL/v1/push/find" \
   scheduler `:8098`, CoreDNS `:53`, HTTPS `:443` (OAuth/FCM).
 - Откат — revert pins-коммита `PHONE_PUSH_IMAGE` или `flux suspend`
   Kustomization `app-phone-push`; своего состояния у сервиса нет.
+
+## Заметки к коду
+
+Пояснения, перенесённые из комментариев исходников (код комментариев не содержит, см. `AGENTS.md`).
+
+- `BUILD.bazel` — Plain-file package: Flux renders these templates (postBuild substitution), and the deploy contract tests read them as data.
+- `manifests/external-secrets.yaml` — phone-push credentials, materialised from OpenBao KV v2 by ESO.
+- `manifests/kustomization.yaml` — Flux-rendered manifest set for phone-push.
+- `manifests/network-policies.yaml` — phone-push network policy.
+- `manifests/phone-push.yaml` — phone-push: FCM delivery for the owner's phone (find-phone + notifications).

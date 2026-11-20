@@ -1,30 +1,21 @@
-//! Scenario definitions and the pure condition rules.
-//!
-//! The scheduler owns definitions and materializes time triggers; this module
-//! only converts the wire `home.v1.Scenario` into the small model the executor
-//! needs and evaluates conditions. Steps run in [`executor`].
-
 pub mod executor;
 pub mod ledger;
 
 use home_proto::v1;
 use jiff::Zoned;
 
-/// One trigger from the definition.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Trigger {
-    /// Only `RunScenario` starts it.
     Manual,
-    /// A wall-clock trigger; only its timezone matters for execution.
     Time { timezone: String },
 }
 
-/// A condition the executor evaluates before running any step.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Condition {
-    /// The Home Assistant entity state must equal this exact string.
-    EntityState { entity_id: String, state: String },
-    /// Local wall-clock window; `end < start` wraps over midnight.
+    EntityState {
+        entity_id: String,
+        state: String,
+    },
     TimeWindow {
         start: WallTime,
         end: WallTime,
@@ -32,7 +23,6 @@ pub enum Condition {
     },
 }
 
-/// Local hour/minute/second in the scenario timezone.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct WallTime {
     pub hour: i32,
@@ -46,22 +36,21 @@ impl WallTime {
     }
 }
 
-/// One ordered step.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Step {
-    /// A `home.control`-shaped catalog call resolved against the live catalog.
     Catalog {
         entry_id: String,
         action: String,
         params_json: String,
     },
-    /// Speak text on the station through the same path as `action.station_speak`.
-    Speak { text: String },
-    /// Wait before the next step; cancellation interrupts the wait.
-    Delay { seconds: i32 },
+    Speak {
+        text: String,
+    },
+    Delay {
+        seconds: i32,
+    },
 }
 
-/// The executor-side view of a stored definition.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Definition {
     pub id: String,
@@ -74,9 +63,6 @@ pub struct Definition {
 }
 
 impl Definition {
-    /// Convert the wire definition. Unknown oneof variants are dropped; the
-    /// scheduler rejects them on write, so a dropped variant never reaches a
-    /// step or condition by accident.
     #[must_use]
     pub fn from_proto(scenario: &v1::Scenario) -> Self {
         let triggers = scenario
@@ -132,8 +118,6 @@ impl Definition {
         }
     }
 
-    /// Timezone of the first time trigger, if any. Conditions use it, falling
-    /// back to the process timezone.
     #[must_use]
     pub fn timezone(&self) -> Option<&str> {
         self.triggers.iter().find_map(|trigger| match trigger {
@@ -142,7 +126,6 @@ impl Definition {
         })
     }
 
-    /// Whether this definition has at least one time trigger.
     #[must_use]
     pub fn has_time_trigger(&self) -> bool {
         self.timezone().is_some()
@@ -157,8 +140,6 @@ fn wall(at: &v1::WallTime) -> WallTime {
     }
 }
 
-/// Evaluate the pure time-window conditions. `now` must already be in the
-/// scenario timezone.
 #[must_use]
 pub fn time_windows_met(conditions: &[Condition], now: &Zoned) -> bool {
     conditions.iter().all(|condition| match condition {
@@ -178,7 +159,6 @@ fn window_met(start: WallTime, end: WallTime, weekdays: &[i32], now: &Zoned) -> 
     let end_seconds = end.seconds();
 
     let (inside, day) = if start_seconds == end_seconds {
-        // An empty window is the whole day: the common "00:00-00:00" intent.
         (true, now.clone())
     } else if end_seconds > start_seconds {
         (
@@ -186,11 +166,8 @@ fn window_met(start: WallTime, end: WallTime, weekdays: &[i32], now: &Zoned) -> 
             now.clone(),
         )
     } else if now_seconds >= start_seconds {
-        // Evening part of a window that wraps over midnight.
         (true, now.clone())
     } else if now_seconds < end_seconds {
-        // Morning part: the window started yesterday, so weekdays apply to
-        // the day the window began.
         (true, previous_day(now))
     } else {
         (false, now.clone())
@@ -257,7 +234,6 @@ mod tests {
 
     #[test]
     fn weekdays_apply_to_the_day_the_window_started() {
-        // 2026-11-09 is a Monday; the wrapped window starts on Sunday evening.
         let conditions = window(at(22, 0), at(6, 0), vec![7]);
         assert!(time_windows_met(&conditions, &zoned(2026, 11, 8, 23, 0)));
         assert!(time_windows_met(&conditions, &zoned(2026, 11, 9, 5, 0)));

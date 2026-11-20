@@ -1,9 +1,3 @@
-"""Contract for the ha-voice file set delivered by ha-config-sync.
-
-The manifest is deployment data: every YAML file in this directory must be
-covered by exactly one glob, and nothing else (configuration.yaml, secrets.yaml,
-scenes.yaml, tests, README, the manifest itself) may ever be delivered.
-"""
 from __future__ import annotations
 
 import fnmatch
@@ -16,8 +10,6 @@ import yaml
 HERE = Path(__file__).resolve().parent
 MANIFEST = HERE / "sync.yaml"
 
-# The exact deliverable set. A new file added to the directory must be listed
-# here and in sync.yaml in the same change.
 DELIVERED = {
     "automations.yaml",
     "command_line.yaml",
@@ -45,7 +37,6 @@ SERVICE = re.compile(r"^[a-z0-9_]+\.[a-z0-9_]+$")
 
 
 def segment_matches(pattern: str, path: str) -> bool:
-    """`*` and `?` never cross `/`, like the Rust and shell validators."""
     parts = pattern.split("/")
     values = path.split("/")
     return len(parts) == len(values) and all(

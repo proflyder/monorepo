@@ -1,19 +1,13 @@
-//! sendspin-cpp's main loop events as the service receives them from the shim, and the sink
-//! request each one makes inside its callback.
-
 #[derive(Clone, Copy, Debug)]
 pub struct StreamParams {
-    /// sendspin::SendspinCodecFormat value.
     pub codec: u8,
     pub rate: u32,
     pub channels: u8,
     pub bits: u8,
 }
 
-/// Library events of its main loop thread.
 #[derive(Debug)]
 pub enum LibEvent {
-    /// `playing`: None when the update carries no playback state.
     Group {
         playing: Option<bool>,
         name: Option<String>,
@@ -21,7 +15,6 @@ pub enum LibEvent {
     TimeSync(f32),
     PairingStarted(String),
     PairingSucceeded(String),
-    /// `reason`: sendspin::SendspinPairAbortReason value.
     PairingFailed {
         server_id: String,
         reason: u8,
@@ -32,7 +25,6 @@ pub enum LibEvent {
     PairingCode(String),
     PairingCodeCleared,
     PairingWindow(bool),
-    /// None: the stream parameters are incomplete.
     StreamStart(Option<StreamParams>),
     StreamEnd,
     Volume(u8),
@@ -60,11 +52,6 @@ pub enum SinkRequest {
     Release,
 }
 
-/// The sink request a callback makes before it returns: right after on_stream_start
-/// sendspin-cpp signals its sync task, which at once writes the priming silence
-/// (player_role.cpp signal_stream_start, sync_task.cpp). Audio written before the configure
-/// would be discarded unreported while the library counts it as buffered, shifting playback
-/// timing. As in the C++ callbacks; the actor only logs and holds.
 pub fn sink_request(ev: &LibEvent) -> Option<SinkRequest> {
     match ev {
         LibEvent::StreamStart(Some(p)) => Some(SinkRequest::Configure {
@@ -72,7 +59,6 @@ pub fn sink_request(ev: &LibEvent) -> Option<SinkRequest> {
             channels: p.channels,
             bits: p.bits,
         }),
-        // The audio stops at once; only the reported state is held.
         LibEvent::StreamEnd => Some(SinkRequest::Release),
         _ => None,
     }
@@ -102,7 +88,6 @@ mod tests {
             sink_request(&LibEvent::StreamEnd),
             Some(SinkRequest::Release)
         );
-        // Incomplete parameters leave the sink alone, as in C++.
         assert_eq!(sink_request(&LibEvent::StreamStart(None)), None);
         assert_eq!(sink_request(&LibEvent::Volume(20)), None);
         assert_eq!(

@@ -1,18 +1,3 @@
-//! The `scenario` queue executor.
-//!
-//! One `scenario.fire` event runs the stored definition: conditions first, then
-//! each step in order. The catalog and the Home Assistant service call path are
-//! the same as the `control` queue, so a scenario can only reach entities the
-//! live catalog exposes. A `scenario.stop` event cancels a running instance;
-//! the registry of running scenarios also prevents one scenario from running
-//! twice at the same time.
-//!
-//! Retries (no ack, lease expiry) happen only before the first step: an
-//! unavailable scheduler, Home Assistant or catalog. Once a step ran, a failure
-//! is terminal. The ledger records `started` before the first step, so a
-//! re-delivery of an interrupted run is acknowledged `FAILED "interrupted"`
-//! instead of replaying side effects.
-
 use std::collections::HashMap;
 use std::future::Future;
 use std::pin::Pin;
@@ -33,7 +18,6 @@ use crate::scenario::ledger::{ScenarioLedger, Start};
 use crate::scenario::{Condition, Definition, Step};
 use crate::scenario_config::ScenarioConfig;
 
-/// The Home Assistant surface the scenario executor needs.
 pub trait ScenarioHa: Send + Sync {
     fn state(&self, entity: &str) -> impl Future<Output = Result<String, home_ha::Error>> + Send;
 
@@ -78,14 +62,11 @@ impl<T: ScenarioHa + ?Sized> ScenarioHa for Arc<T> {
     }
 }
 
-/// Why a definition could not be read.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ScenarioLoadError {
-    /// A retry after a lease expiry can succeed.
     pub transient: bool,
 }
 
-/// The definition source (the scheduler `ScenarioService` in production).
 pub trait ScenarioSource: Send + Sync {
     fn get(
         &self,
@@ -113,7 +94,6 @@ impl ScenarioSource for home_proto::ScenarioClient {
 
 type Clock = Arc<dyn Fn() -> i64 + Send + Sync>;
 
-/// The executor. One instance owns the configured `scenario` queue.
 pub struct Executor<H: ScenarioHa> {
     config: Arc<ScenarioConfig>,
     scenarios: Arc<dyn ScenarioSource>,
@@ -138,7 +118,6 @@ impl<H: ScenarioHa> std::fmt::Debug for Executor<H> {
 }
 
 impl<H: ScenarioHa> Executor<H> {
-    /// Build the executor.
     #[must_use]
     pub fn new(
         config: Arc<ScenarioConfig>,
@@ -161,15 +140,12 @@ impl<H: ScenarioHa> Executor<H> {
         }
     }
 
-    /// Replace the clock (tests).
     #[must_use]
     pub fn with_clock(mut self, clock: impl Fn() -> i64 + Send + Sync + 'static) -> Self {
         self.clock = Arc::new(clock);
         self
     }
 
-    /// Claim a running slot for one scenario. `None` means an instance is
-    /// already running: the second FIRE must not run in parallel.
     pub fn begin(&self, scenario_id: &str) -> Option<CancellationToken> {
         let mut running = self.lock_running();
         if running.contains_key(scenario_id) {
@@ -181,12 +157,10 @@ impl<H: ScenarioHa> Executor<H> {
         Some(token)
     }
 
-    /// Release the running slot (always called by the fire task).
     pub fn finish(&self, scenario_id: &str) {
         self.lock_running().remove(scenario_id);
     }
 
-    /// Cancel a running instance. Returns whether one was running.
     pub fn cancel(&self, scenario_id: &str) -> bool {
         let running = self.lock_running();
         running.get(scenario_id).is_some_and(|token| {
@@ -195,15 +169,12 @@ impl<H: ScenarioHa> Executor<H> {
         })
     }
 
-    /// Cancel every running instance (graceful shutdown).
     pub fn cancel_all(&self) {
         for token in self.lock_running().values() {
             token.cancel();
         }
     }
 
-    /// Handle one event. A FIRE claims the running slot itself, so a
-    /// re-delivery while the first run is still active is `SKIPPED`.
     pub async fn handle(&self, event: &Event) -> Outcome {
         if event.id.is_empty() {
             tracing::error!("scheduler returned an event without id; ignoring it");
@@ -256,8 +227,6 @@ impl<H: ScenarioHa> Executor<H> {
             return Outcome::Failed("invalid scenario event payload".to_owned());
         }
 
-        // A second FIRE while this scenario runs never queues parallel work.
-        // The guard releases the slot on every return path.
         let Some(token) = self.begin(&payload.scenario_id) else {
             return Outcome::Skipped("already running".to_owned());
         };
@@ -266,7 +235,6 @@ impl<H: ScenarioHa> Executor<H> {
             scenario_id: payload.scenario_id.clone(),
         };
 
-        // Everything up to the first step is retryable without side effects.
         let scenario = match self.scenarios.get(&payload.scenario_id).await {
             Ok(Some(scenario)) => scenario,
             Ok(None) => {
@@ -380,8 +348,6 @@ impl<H: ScenarioHa> Executor<H> {
             };
             let actual = match self.ha.state(entity_id).await {
                 Ok(state) => state,
-                // A missing entity is a condition that does not hold, not an
-                // outage; retrying the same read cannot succeed.
                 Err(error) if error_status(&error) == Some(404) => return Ok(false),
                 Err(error) => {
                     tracing::warn!(
@@ -511,7 +477,6 @@ impl<H: ScenarioHa> Executor<H> {
             text: Some(text.to_owned()),
             ..Params::default()
         };
-        // ResolveError and SpeakError messages never contain the text.
         let call = entry
             .resolve(catalog::ACTION_SPEAK, &params)
             .map_err(|error| sanitize_detail(&error.to_string()))?;
@@ -552,7 +517,6 @@ impl<H: ScenarioHa> Executor<H> {
     }
 }
 
-/// Releases a running slot when the fire task ends, including an early return.
 struct RunningGuard<'a, H: ScenarioHa> {
     executor: &'a Executor<H>,
     scenario_id: String,
@@ -564,14 +528,11 @@ impl<H: ScenarioHa> Drop for RunningGuard<'_, H> {
     }
 }
 
-/// Why conditions could not be evaluated.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ConditionError {
     Unavailable,
 }
 
-/// The `scenario.fire` payload. A time trigger carries `trigger_index`; a
-/// manual run carries `"trigger": "manual"`.
 #[derive(Debug, Default, Deserialize)]
 struct FirePayload {
     #[serde(default)]
@@ -622,8 +583,6 @@ fn error_status(error: &home_ha::Error) -> Option<u16> {
     }
 }
 
-/// Render an HA failure like the control executor: operation and status only,
-/// never a response body.
 fn ha_error_detail(error: &home_ha::Error) -> String {
     match error {
         home_ha::Error::Status { op, status, .. } => format!("{op}: status={status}"),
@@ -635,7 +594,6 @@ fn ha_error_detail(error: &home_ha::Error) -> String {
     }
 }
 
-/// Collapse whitespace and bound the text by characters, never bytes.
 fn sanitize_detail(text: &str) -> String {
     let joined = text.split_whitespace().collect::<Vec<_>>().join(" ");
     if joined.chars().count() <= 200 {
@@ -1004,7 +962,6 @@ mod tests {
             Outcome::Failed(detail) => assert!(detail.starts_with("step 1: "), "{detail}"),
             other => panic!("{other:?}"),
         }
-        // The second step still ran.
         assert_eq!(ha.calls.lock().expect("lock").len(), 1);
     }
 
@@ -1015,7 +972,6 @@ mod tests {
         let event = fire("ev_1", &timed("sc_1"));
         let running = Arc::clone(&executor);
         let handle = tokio::spawn(async move { running.handle(&event).await });
-        // Wait until the run holds the slot, then stop it.
         for _ in 0..100 {
             if executor.running.lock().expect("lock").contains_key("sc_1") {
                 break;
@@ -1173,7 +1129,6 @@ mod tests {
 
     #[tokio::test]
     async fn time_window_conditions_use_the_scenario_timezone() {
-        // 2026-11-09 12:00 Asia/Almaty = 1_794_...; the clock is injected below.
         let mut definition = base(vec![catalog_step("scene.focus", "run", "")]);
         definition.conditions = vec![Condition::TimeWindow {
             start: WallTime {

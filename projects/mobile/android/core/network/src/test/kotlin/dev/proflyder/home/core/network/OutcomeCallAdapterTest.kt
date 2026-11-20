@@ -18,7 +18,6 @@ import retrofit2.converter.kotlinx.serialization.asConverterFactory
 import retrofit2.http.Body
 import retrofit2.http.POST
 
-/** The call adapter turns every HTTP/transport/decoding outcome into `Outcome`. */
 class OutcomeCallAdapterTest {
     private lateinit var server: MockWebServer
 

@@ -1,19 +1,11 @@
 #!/bin/sh
 
-# "start" is passed by init.d during boot-up run level
 if [ "$1" = "start" ]; then
     /data/quasar/yandex-block.sh >/dev/null 2>&1
     mkdir -p /bkupgrade/data/quasar
 
-    # quasar processes allocates a lot of virtual memory
-    # for anonymous and file mappings along with performing
-    # a lot of "system" functions calls.
-    #
-    # "system" calls "fork" which may fail with ENOMEM when
-    # heuristic overcommit policy is used. Hence, always allow overcommit.
     echo 1  > /proc/sys/vm/overcommit_memory
 
-    # On every boot remove old OTA artifacts just in case
     rm -f /bkupgrade/update_*
     rm -f /bkupgrade/ota/*
 
@@ -40,22 +32,17 @@ if [ "$1" = "start" ]; then
 
     /system/vendor/quasar/yio_iptables_init.sh
 
-    # FORTRESS-EGRESS-GUARD: deny all WAN except LAN/DHCP/NTP.
-    # Must run after yio_iptables_init.sh, before Quasar starts.
     /data/quasar/egress-guard.sh >/dev/null 2>&1
 
     /system/vendor/quasar/set_monotonic_time.sh
 
-    # Activate ADB if one of marker files exists
     /system/vendor/quasar/activate_adb.sh check
 
     route delete default gateway 10.10.10.254 wlan1
     cd /system/vendor/quasar
 
-    # remove dangling fluent-bit directory from older versions
     rm -rf /data/quasar/fluent-bit
 
-    # remove old adb markers remnants
     rm -f /data/quasar_activate_adb_sound
     rm -f /data/quasar_activate_adb_quasmodrom
     rm -f /data/quasar_activate_adb_glagol

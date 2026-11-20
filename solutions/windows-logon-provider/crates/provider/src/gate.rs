@@ -1,44 +1,17 @@
-//! Mode decision: logon after a cold boot, unlock of a running locked PC, or
-//! off.
-//!
-//! Windows 11 calls `SetUsageScenario(CPUS_LOGON)` both after a cold boot and
-//! after `LockWorkStation`, so the scenario alone cannot tell them apart. The
-//! decision therefore uses the WTS session table:
-//!
-//! - no session of the configured user and uptime under ten minutes — `logon`;
-//! - a session of the configured user (any state) — `unlock`, regardless of
-//!   uptime;
-//! - `CPUS_UNLOCK_WORKSTATION` without such a session (or with a failed WTS
-//!   query) — off.
-//!
-//! The decision itself is pure and host-tested; the WTS query is Windows-only.
-
 use wakegrant_protocol::Purpose;
 
-/// Cold-boot window from `GetTickCount64()`: a logon grant is considered only
-/// within the first 10 minutes after boot. Lives next to the worker budget in
-/// [`crate::provider`].
 pub use crate::provider::MAX_UPTIME_MS;
 
-/// Why the provider is inactive.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OffReason {
-    /// The machine has been up for longer than [`MAX_UPTIME_MS`] and no
-    /// session exists: not a cold boot.
     Uptime,
-    /// A WTS call failed: fail closed.
     QueryFailed,
-    /// `CPUS_UNLOCK_WORKSTATION` without a session of the configured user:
-    /// never start a claim in that state.
     UnlockWithoutSession,
-    /// The registry configuration is missing or invalid.
     ConfigUnavailable,
-    /// `Disabled=1`.
     Disabled,
 }
 
 impl OffReason {
-    /// Short log-safe label used in `scenario ... mode=off reason=<label>`.
     pub fn label(self) -> &'static str {
         match self {
             Self::Uptime => "uptime",
@@ -50,19 +23,14 @@ impl OffReason {
     }
 }
 
-/// What the provider should do for this scenario and machine state.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Mode {
-    /// Claim a `logon` grant within the 90 s budget.
     Logon,
-    /// Claim `unlock` grants with a long-poll for as long as the provider lives.
     Unlock,
-    /// No tile, no worker, no network.
     Off(OffReason),
 }
 
 impl Mode {
-    /// Short log-safe label used in `scenario cpus=<cpus> mode=<label>`.
     pub fn label(self) -> &'static str {
         match self {
             Self::Logon => "logon",
@@ -76,12 +44,6 @@ pub fn within_uptime(uptime_ms: u64) -> bool {
     uptime_ms < MAX_UPTIME_MS
 }
 
-/// The whole decision as one pure function: scenario, session existence,
-/// uptime and whether the WTS query succeeded.
-///
-/// A `logon` scenario with an existing session of the configured user is the
-/// lock screen, not a cold boot, so it selects `unlock` instead. Any failed
-/// query is `off`: fail closed.
 pub fn decide_mode(
     scenario: Purpose,
     session_exists: bool,
@@ -111,12 +73,6 @@ pub fn decide_mode(
     }
 }
 
-/// [`decide_mode`] over a WTS session table. Session 0 and entries with an
-/// empty user name are ignored, as is the session state: an `Active`,
-/// `Disconnected` or any other session of the user means the PC is already in
-/// use. Only the user name is compared (case-insensitively): the WTS domain may
-/// be a NetBIOS name, a full name or empty for a Microsoft account, so
-/// requiring it to match would be fail-open.
 pub fn mode_for_sessions(
     scenario: Purpose,
     configured_user: &str,
@@ -134,15 +90,12 @@ pub fn mode_for_sessions(
     )
 }
 
-/// One session as reported by `WTSEnumerateSessionsW` +
-/// `WTSQuerySessionInformationW`.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct WtsSession {
     pub session_id: u32,
     pub user: String,
 }
 
-/// Whether the configured account has a session in any state.
 pub fn session_exists(configured_user: &str, sessions: &[WtsSession]) -> bool {
     sessions.iter().any(|session| {
         session.session_id != 0
@@ -171,12 +124,10 @@ mod imp {
 
     use super::{Mode, OffReason, WtsSession, mode_for_sessions};
 
-    /// One `WTSQuerySessionInformationW` string, `None` when the call fails.
     fn query_string(session_id: u32, info_class: WTS_INFO_CLASS) -> Option<String> {
         let mut buffer = PWSTR::null();
         let mut bytes = 0u32;
-        // SAFETY: `buffer` and `bytes` are valid out-parameters; the WTS server
-        // handle is a documented constant. The returned buffer is freed below.
+        // SAFETY: `buffer` and `bytes` are valid out-parameters; the WTS server handle is a documented constant. The returned buffer is freed below.
         let result = unsafe {
             WTSQuerySessionInformationW(
                 Some(WTS_CURRENT_SERVER_HANDLE),
@@ -210,13 +161,10 @@ mod imp {
         Some(text)
     }
 
-    /// Enumerates every session except session 0. `None` on any WTS failure so
-    /// the caller fails closed.
     fn query_sessions() -> Option<Vec<WtsSession>> {
         let mut info: *mut WTS_SESSION_INFOW = ptr::null_mut();
         let mut count = 0u32;
-        // SAFETY: both out-parameters are valid; version 1 is the only
-        // supported WTS API version.
+        // SAFETY: both out-parameters are valid; version 1 is the only supported WTS API version.
         let result = unsafe {
             WTSEnumerateSessionsW(
                 Some(WTS_CURRENT_SERVER_HANDLE),
@@ -253,8 +201,6 @@ mod imp {
         sessions
     }
 
-    /// Runs the decision against the live system. Call it before starting the
-    /// worker, so an off mode never reaches the network.
     pub fn evaluate(scenario: Purpose) -> Mode {
         let config = match load_config() {
             Ok(config) => config,
@@ -325,8 +271,6 @@ mod tests {
 
     #[test]
     fn only_the_user_name_matters_not_the_domain() {
-        // The WTS domain may disagree with the configured domain (NetBIOS,
-        // full name, Microsoft account), so the same name must still match.
         let sessions = [session(1, "alice")];
         assert_eq!(logon("Alice", 1_000, Some(&sessions)), Mode::Unlock);
     }
@@ -374,7 +318,6 @@ mod tests {
 
     #[test]
     fn the_pure_decision_matches_the_table() {
-        // scenario, session_exists, uptime, query_ok -> mode
         assert_eq!(decide_mode(Purpose::Logon, false, 1_000, true), Mode::Logon);
         assert_eq!(decide_mode(Purpose::Logon, true, 1_000, true), Mode::Unlock);
         assert_eq!(

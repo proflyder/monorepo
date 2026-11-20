@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# Host operations only. Helm releases remain the deployment source of truth.
 set -euo pipefail
 KUBE=(sudo -n k3s kubectl)
 service_name() {

@@ -5,9 +5,6 @@ package(default_visibility = ["//visibility:public"])
 
 LINUX = ["@platforms//os:linux"]
 
-# Every local Rust target: fmt/clippy run once for the whole workspace, like
-# `cargo fmt --all` and `cargo clippy --workspace --all-targets`. External
-# crates are not linted (transitive = False), matching cargo.
 _CRATES = [
     "//projects/station/pulsar/satellite/crates/pulsar:pulsar",
     "//projects/station/pulsar/satellite/crates/pulsar-call:pulsar_call",
@@ -69,9 +66,6 @@ rustfmt_test(
     targets = _CRATES,
 )
 
-# clippy fails on warnings by default (rules_rust turns every warning into an
-# error unless capture_clippy_output is set), which is the `-D warnings` of
-# `make check`.
 rust_clippy_test(
     name = "clippy",
     size = "small",
@@ -79,13 +73,6 @@ rust_clippy_test(
     targets = _CRATES,
 )
 
-# Deployable station binary for the selected zig platform
-# (`--platforms=//platform/bazel/zig:aarch64_linux` or `:armhf_linux`).
-#
-# The former Makefile kept a full unstripped copy as pulsar.debug and stripped the
-# deployed binary; here pulsar.debug keeps only debug information and the
-# stripped binary carries a .gnu_debuglink, so `addr2line -f -e pulsar.debug`
-# still resolves the absolute (non-PIE) crash-report addresses.
 station_binary(
     name = "station_binary",
     binary = "//projects/station/pulsar/satellite/crates/pulsar:pulsar",

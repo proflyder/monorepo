@@ -1,17 +1,3 @@
-//! One-time conversion of legacy local-time schedule rows to UTC.
-//!
-//! Schema v5 adds `once_unix`; this pass rewrites every existing row so that
-//! `at_*` and `weekdays` are UTC and `once_unix` is the UTC instant of a
-//! one-shot occurrence, then rebuilds the table without the `timezone` and
-//! `once_date` columns. IANA conversion lives in Rust because SQLite has no
-//! time-zone database.
-//!
-//! The owner's live alarms are `Asia/Almaty` (UTC+5, no DST), so the expected
-//! result is an exact time-of-day shift by five hours with the weekday mask
-//! moved back one day where the local time crosses midnight UTC. Zones with
-//! DST use the offset of a reference week; a fixed UTC rule cannot represent
-//! a wall clock that moves twice a year.
-
 use home_sqlite::{Db, SqliteError};
 use rusqlite::{Connection, params};
 
@@ -19,8 +5,6 @@ use crate::domain::hash::{canonical_schedule, sha1_hex};
 use crate::domain::rule::{Repeat, WallTime, local_to_utc, weekdays_text};
 use crate::domain::schedule::ScheduleKind;
 
-/// Rewrites legacy rows and drops the time-zone columns. Idempotent: a
-/// database that already went through this pass has no `timezone` column.
 pub fn legacy_schedules_to_utc(db: &Db) -> Result<(), SqliteError> {
     db.call_blocking(migrate)
 }

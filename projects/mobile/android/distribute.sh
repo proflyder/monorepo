@@ -1,39 +1,4 @@
 #!/usr/bin/env bash
-# Build the Home Android app and distribute it to Firebase App Distribution.
-#
-# Two modes:
-#   * default — build, sign and upload. Runs locally through
-#     `mise run admin:android-distribute` (and any manual run).
-#   * `--upload-only` — upload an APK that was already built, tested and signed
-#     elsewhere. CI's `android-distribute` job uses this on the artifact of the
-#     `android-app` matrix entry, so the APK is built exactly once.
-#
-# The build mode requires the private files
-#   secrets/android/home-release.keystore        (and its password files)
-#   platform/android/keys/google-services.json
-# (see projects/mobile/android/README.md). Locally
-# `mise run admin:android-distribute` passes them from OpenBao (fnox). Bazel only
-# produces a debug-signed APK; the release key is applied to that artifact by
-# `platform/android/sign-release.sh`, which also refuses to publish a build
-# whose signer certificate is unexpected.
-#
-# Authentication uses an existing `npx firebase-tools login` session or
-# GOOGLE_APPLICATION_CREDENTIALS (a service-account JSON). Credentials are
-# never printed.
-#
-# Usage:
-#   projects/mobile/android/distribute.sh [--dry-run] [--ci]
-#   projects/mobile/android/distribute.sh [--dry-run] [--ci] \
-#     --upload-only --release-info <release-info.json>
-#
-# --upload-only reads the APK name, its SHA-256 and the Firebase app id from
-# `release-info.json` (written next to the APK by the building job; see
-# release_info.py), verifies the digest and uploads. It never builds, signs or
-# reads `google-services.json`.
-#
-# --ci formats release notes for a GitHub Actions run: for a pull request
-# `PR #<number>: <title>` (read from PR_NUMBER/PR_TITLE), otherwise the commit
-# subject; plus the short SHA and the run URL from the GitHub environment.
 set -euo pipefail
 
 FIREBASE_TOOLS_VERSION="15.34.2"
@@ -100,8 +65,6 @@ if [[ "$UPLOAD_ONLY" -eq 1 ]]; then
     echo "APK listed in $RELEASE_INFO not found: $UPLOAD_APK" >&2
     exit 1
   fi
-  # The artifact crossed a job boundary: refuse to upload bytes that are not
-  # the ones the building job tested and signed.
   EXPECTED_SHA256="$(python3 "$RELEASE_INFO_PY" read "$RELEASE_INFO" sha256)"
   ACTUAL_SHA256="$(sha256_of "$UPLOAD_APK")"
   if [[ "$EXPECTED_SHA256" != "$ACTUAL_SHA256" ]]; then
@@ -115,11 +78,6 @@ if [[ "$UPLOAD_ONLY" -eq 1 ]]; then
   fi
   echo "Uploading the prebuilt APK $UPLOAD_APK (sha256 $ACTUAL_SHA256)"
 else
-  # Release signing material. Locally `mise run admin:android-distribute` passes
-  # it from OpenBao through fnox (temp files, removed on exit). The keystore is
-  # stored base64-encoded, so SIGNING_KEYSTORE_B64_FILE is decoded into a
-  # private temp file here. Fallback: files in the gitignored secrets/android/
-  # (`mise run secrets:file`). Values are never printed.
   if [[ -z "${SIGNING_KEYSTORE:-}" && -n "${SIGNING_KEYSTORE_B64_FILE:-}" ]]; then
     decoded_keystore="$(mktemp "${TMPDIR:-/tmp}/release-keystore.XXXXXX")"
     trap 'rm -f "$decoded_keystore"' EXIT
@@ -169,8 +127,6 @@ else
     fi
   done
 
-  # Local worktrees use `bazelisk`; GitHub's setup-bazel exposes the same pinned
-  # Bazelisk as `bazel`.
   if command -v bazelisk >/dev/null 2>&1; then
     BAZEL=bazelisk
   elif command -v bazel >/dev/null 2>&1; then
@@ -180,18 +136,12 @@ else
     exit 1
   fi
 
-  # Each distribution needs a higher versionCode. UTC epoch seconds are
-  # strictly increasing per build, time-ordered, and fit int32 until 2038.
-  # A git commit count is not monotonic for dirty/uncommitted builds and can
-  # collide with unrelated repositories.
   VERSION_CODE="$(date -u +%s)"
   VERSION_NAME="0.1.0-$SHORT_SHA"
 
   echo "Building //projects/mobile/android:app (versionCode $VERSION_CODE, versionName $VERSION_NAME)"
   (
     cd "$ROOT"
-    # `--config=android` first: it activates platform/android/android.bazelrc, and
-    # the `--define` values below must win over the defaults defined there.
     "$BAZEL" build \
       --config=android \
       --define "home_version_code=$VERSION_CODE" \
@@ -222,11 +172,6 @@ else
 fi
 
 if [[ "$CI_MODE" -eq 1 ]]; then
-  # Release notes for a GitHub Actions run. On a PR the job exports PR_NUMBER
-  # and PR_TITLE (the title is untrusted text, so it arrives through the
-  # environment, never as shell source). A manual release may pass its own text
-  # in EXTRA_RELEASE_NOTES (`.github/workflows/android-release.yml`). A push to
-  # develop is a squash merge: its commit subject is the PR title.
   if [[ -n "${EXTRA_RELEASE_NOTES:-}" ]]; then
     SUBJECT="$EXTRA_RELEASE_NOTES"
   elif [[ -n "${PR_NUMBER:-}" ]]; then

@@ -25,3 +25,5 @@ sudo nft list table inet home_voice
 curl -sS -o /dev/null -w '%{http_code}\n' http://<K3S_VM_IP>:8643/v1/models
 # from another LAN host: connection should time out
 ```
+
+`voice-firewall` applies the Hermes voice-proxy source restriction; it is safe to rerun.

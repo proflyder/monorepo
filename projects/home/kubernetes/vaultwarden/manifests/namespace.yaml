@@ -1,4 +1,3 @@
-# Applied by deploy.sh (admin). Cluster-scoped, so never by CI.
 apiVersion: v1
 kind: Namespace
 metadata:

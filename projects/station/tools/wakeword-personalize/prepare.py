@@ -1,9 +1,4 @@
 #!/usr/bin/env python3
-"""Turn privately cached alignment into leakage-controlled training annotations.
-
-ASR is an aid, not ground truth: unmatched speech regions are retained for review.
-This script never edits recordings or changes their train/test labels.
-"""
 import argparse
 import hashlib
 import json
@@ -77,8 +72,6 @@ def prepare(recordings, alignments, full_asr):
             entry["partition_boundary"] = cut
         entries.append(entry)
     backgrounds = sorted((e for e in entries if e["block"] == "background"), key=lambda e: e["id"])
-    # Entire separate takes for negative validation and final evaluation, never
-    # random overlapping windows from the same recording in different splits.
     full = []
     seen = set()
     for e in backgrounds:

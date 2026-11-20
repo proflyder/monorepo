@@ -8,10 +8,6 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import dev.proflyder.home.feature.scenarios.impl.R
 import dev.proflyder.home.feature.scenarios.impl.databinding.DialogScenarioEntityConditionBinding
 
-/**
- * One entity-state condition. The entity is picked from the live catalog; the
- * value can be the common `on`/`off` or any exact Home Assistant state string.
- */
 internal class EntityConditionDialog(
     context: Context,
     initialEntityId: String,

@@ -204,3 +204,11 @@ ssh -i /config/.ssh/komp_ed25519 \
   «заблокируй комп», «разблокируй комп», «комп включён».
 
 Любая другая команда по SSH должна вернуть ошибку и код 1 — это ожидаемо.
+
+## Заметки к коду
+
+Пояснения, перенесённые из комментариев исходников (код комментариев не содержит, см. `AGENTS.md`).
+
+- `install-lock-task.ps1` — <# install-lock-task.ps1 - create the on-demand task that locks the desktop.
+- `komp-power.ps1` — <# komp-power.ps1 - forced-command wrapper for the home desktop («комп»).
+- `test_komp_power_script.py` — Static contract test for the Windows forced-command wrapper.

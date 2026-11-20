@@ -10,7 +10,6 @@ import dev.proflyder.home.feature.scenarios.impl.R
 import dev.proflyder.home.feature.scenarios.impl.databinding.DialogScenarioDelayBinding
 import java.util.Locale
 
-/** Delay step: seconds or minutes, always stored as seconds within 1..3600. */
 internal class DelayStepDialog(
     context: Context,
     initialSeconds: Int,

@@ -1,17 +1,8 @@
-//! The `voice.announce` wire payload.
-//!
-//! Field order, keys and value types are a compatibility contract between any
-//! producer and consumer of the durable queue; the golden test pins the exact
-//! bytes.
-
 use serde::{Deserialize, Serialize};
 
-/// The extra `queue` task type.
 pub const TASK_TYPE: &str = "voice.announce";
-/// Prefix of the per-profile queue name.
 pub const QUEUE_PREFIX: &str = "voice-";
 
-/// The payload keys of one announcement.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AnnouncePayload {
     pub text: String,
@@ -22,7 +13,6 @@ pub struct AnnouncePayload {
 }
 
 impl AnnouncePayload {
-    /// Builds the payload for one durable announcement.
     #[must_use]
     pub fn new(
         text: impl Into<String>,
@@ -40,17 +30,10 @@ impl AnnouncePayload {
         }
     }
 
-    /// Serialises with no HTML escaping and no trailing newline.
-    ///
-    /// # Errors
-    ///
-    /// Returns the serialiser error (the type is plain `String` fields, so this
-    /// cannot fail in practice).
     pub fn encode(&self) -> Result<String, serde_json::Error> {
         serde_json::to_string(self)
     }
 
-    /// Parses a consumer event; an invalid payload is the caller's `None`.
     #[must_use]
     pub fn decode(raw: &str) -> Option<Self> {
         if raw.is_empty() {
@@ -60,13 +43,11 @@ impl AnnouncePayload {
     }
 }
 
-/// The scheduler queue for one profile.
 #[must_use]
 pub fn queue_name(profile: &str) -> String {
     format!("{QUEUE_PREFIX}{profile}")
 }
 
-/// The idempotency key of one announcement.
 #[must_use]
 pub fn idempotency_key(thread_id: &str, seq: &str) -> String {
     format!("voice:{thread_id}:{seq}")
@@ -76,8 +57,6 @@ pub fn idempotency_key(thread_id: &str, seq: &str) -> String {
 mod tests {
     use super::{AnnouncePayload, TASK_TYPE, idempotency_key, queue_name};
 
-    /// The on-wire payload from the Go golden test. Its keys, order and value
-    /// types are pinned literally rather than derived from the encoder.
     const GOLDEN: &str = r#"{"text":"Готово.","profile":"work","thread_id":"thr_example","seq":"done:42","created_unix":1700000000}"#;
 
     #[test]

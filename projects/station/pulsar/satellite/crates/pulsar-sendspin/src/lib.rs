@@ -1,12 +1,3 @@
-//! Native Sendspin player (Music Assistant's synchronized streaming protocol) on the official
-//! sendspin-cpp client library, through the C shim in `shim/`. Roles: player (own ALSA sink on
-//! the playback dmix), metadata, controller (transport commands), visualizer (8 log bands
-//! 40 Hz–7.6 kHz, loudness, beats → `MusicFrame`).
-//!
-//! sendspin-cpp is only linked in the station builds (cfg `sendspin_ffi`, set by the Bazel
-//! station configuration; the host build script leaves it unset); elsewhere `spawn` fails with
-//! [`SendspinInitError::Unsupported`]. The event handler, the actor, the stream hold, the
-//! visualizer and the identity store build and are tested on the host without C++.
 #![deny(unsafe_code)]
 #![deny(unsafe_op_in_unsafe_fn)]
 #![deny(clippy::undocumented_unsafe_blocks)]
@@ -51,7 +42,6 @@ pub use stub::{SendspinHandle, spawn};
 
 pub use store::{FileStore, IdentityStore};
 
-/// Why the Sendspin player did not start.
 #[derive(Clone, Debug, Error, PartialEq, Eq)]
 pub enum SendspinInitError {
     #[error("sendspin: built without sendspin-cpp")]
@@ -61,21 +51,16 @@ pub enum SendspinInitError {
 }
 
 pub struct SendspinConfig {
-    /// Friendly name shown in Music Assistant.
     pub name: String,
     pub product_name: String,
     pub manufacturer: String,
     pub software_version: String,
-    /// "aa:bb:cc:dd:ee:ff"; empty: the library detects it.
     pub mac: String,
-    /// Identity / pairing persistence directory (created 0700 if missing, not recursively).
     pub state_dir: PathBuf,
-    /// Playback PCM and output gates of this station.
     pub playback: &'static pulsar_model::Playback,
     pub port: u16,
 }
 
-/// Group transport commands (controller role).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Transport {
     Play,
@@ -87,32 +72,22 @@ pub enum Transport {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum SendspinEvent {
-    /// A stream started (true) / ended (false); see `SendspinHandle::streaming`.
     Stream(bool),
-    /// The server set the player volume, 0..1.
     Volume(f32),
-    /// The server set the player mute.
     Mute(bool),
-    /// Show the pairing code; "" = clear it.
     PairingCode(String),
-    /// Ask the operator for the pairing gesture (`confirm_pairing_window`).
     PairingWindow(bool),
-    /// Visualizer data from the server.
     Music(pulsar_core::MusicFrame),
 }
 
-/// Player volume in percent as the protocol carries it (C++ `lround(clamp(v, 0, 1) * 100)`).
 fn volume_percent(v: f32) -> u8 {
     (v.clamp(0.0, 1.0) * 100.0).round() as u8
 }
 
-/// Vectors of the C++ reference's pure functions (tests/golden/cxx_reference.txt): one line per
-/// case, a tag, then the values; f32 as their bit pattern in hex.
 #[cfg(test)]
 mod golden {
     const TEXT: &str = include_str!("../tests/golden/cxx_reference.txt");
 
-    /// The fields after the tag of every line tagged `tag`.
     pub fn lines(tag: &str) -> Vec<Vec<&'static str>> {
         TEXT.lines()
             .filter_map(|l| {

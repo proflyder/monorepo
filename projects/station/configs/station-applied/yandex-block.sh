@@ -1,12 +1,8 @@
 #!/bin/sh
-# FORTRESS-YANDEX-BLOCK v1
-# Blocks real Yandex at the packet level and pins DNS to the local Mac.
-# Lives in /data (rw) and is re-applied by rootkeeper every 60s.
 
 LOG=/data/quasar/yandex-block.log
 log() { echo "$(date): $*" >> "$LOG"; }
 
-# 1) IPv4 Yandex netblocks (quasar/uniproxy/music/passport/NTP live here)
 for net in \
   5.255.0.0/16 \
   37.9.0.0/16 \
@@ -25,13 +21,11 @@ do
   iptables -I INPUT 1 -s "$net" -j DROP 2>/dev/null
 done
 
-# 2) Yandex IPv6
 while ip6tables -D OUTPUT -d 2a02:6b8::/32 -j REJECT 2>/dev/null; do :; done
 ip6tables -I OUTPUT 1 -d 2a02:6b8::/32 -j REJECT 2>/dev/null
 while ip6tables -D INPUT -s 2a02:6b8::/32 -j DROP 2>/dev/null; do :; done
 ip6tables -I INPUT 1 -s 2a02:6b8::/32 -j DROP 2>/dev/null
 
-# 3) unbound: only the Mac resolver, no Yandex DNS
 if ! grep -q 'forward-addr: "192.0.2.11"' /etc/unbound/unbound.conf 2>/dev/null; then
   mount -o remount,rw / 2>/dev/null
   cat > /etc/unbound/unbound.conf <<'EOC'
@@ -49,7 +43,6 @@ EOC
   log "unbound -> 192.0.2.11"
 fi
 
-# 4) /etc/hosts: exact Yandex names -> local Mac (authoritative for libc)
 if ! grep -q 'YANDEX-BLOCK' /etc/hosts 2>/dev/null; then
   cp /etc/hosts /data/opt/backup/hosts.before-yandex-block 2>/dev/null
   mount -o remount,rw / 2>/dev/null
@@ -62,7 +55,6 @@ EOC
   log "hosts block added"
 fi
 
-# 5) chrony: no Yandex NTP; use Google IPs (no DNS dependency)
 if grep -q 'ntp.yantp.net' /etc/chrony.conf 2>/dev/null; then
   mount -o remount,rw / 2>/dev/null
   cat > /etc/chrony.conf <<'EOC'
@@ -82,7 +74,6 @@ EOC
   log "chrony -> Google NTP"
 fi
 
-# 6) telemetry task removed from launch.json (persist across rootfs restores)
 if [ -f /data/quasar/launch.json.notel ]; then
   if ! cmp -s /data/quasar/launch.json.notel /system/vendor/quasar/launch.json 2>/dev/null; then
     mount -o remount,rw / 2>/dev/null

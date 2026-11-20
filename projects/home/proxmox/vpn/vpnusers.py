@@ -1,13 +1,4 @@
 #!/usr/bin/env python3
-"""Add an ocserv user with a strong password and a TOTP secret.
-
-Runs on the workstation. It generates the credentials locally, writes them to
-the container through the Proxmox host (`pct push`), and keeps a private copy
-plus a Google Authenticator QR code under secrets/home/vpn/.
-
-Secret values are never printed. The script only reports the username and the
-paths of the private files.
-"""
 from __future__ import annotations
 
 import argparse
@@ -41,7 +32,6 @@ def otpauth_url(user: str, secret_b32: str, issuer: str = ISSUER) -> str:
 
 
 def merge_ocpasswd(text: str, user: str, groups: str, password_hash: str) -> str:
-    """Replace or append one ocpasswd entry, keeping other users and comments."""
     kept = [
         line
         for line in text.splitlines()
@@ -52,7 +42,6 @@ def merge_ocpasswd(text: str, user: str, groups: str, password_hash: str) -> str
 
 
 def merge_otp(text: str, user: str, secret_hex: str) -> str:
-    """Replace or append one liboath usersfile entry (HOTP/T30 = TOTP, 30 s)."""
     pattern = re.compile(r"^\S+\s+" + re.escape(user) + r"(?:\s|$)")
     kept = [line for line in text.splitlines() if not pattern.match(line)]
     kept.append(f"HOTP/T30 {user} - {secret_hex}")
@@ -114,7 +103,7 @@ class Pve:
 
 def write_qr(url: str, path: Path) -> None:
     try:
-        import qrcode  # type: ignore
+        import qrcode
     except ImportError:
         qrcode = None
     if qrcode is not None:

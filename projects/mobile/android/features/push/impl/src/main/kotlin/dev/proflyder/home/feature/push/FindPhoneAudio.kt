@@ -11,35 +11,15 @@ import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
 
-/**
- * The loud part of find-phone.
- *
- * `USAGE_ALARM` audio plays through the alarm stream, which is exempt from the
- * silent and vibrate ringer modes, and the stream volume is raised to its
- * maximum for the duration of the ring, then restored exactly as it was.
- *
- * The ringer mode itself is never changed. Switching it to normal used to leave
- * the phone loud after the ring: restoring the alarm volume does not restore
- * silent mode. The alarm stream is enough to be heard, so silent and vibrate
- * stay exactly as the owner set them.
- *
- * Vibration repeats with the same pattern on every API level the app supports.
- * Everything is best-effort and failure-tolerant (the ringer mode is never
- * touched): a device without an alarm
- * ringtone or vibrator still shows the ringing screen, so the owner can press
- * «Нашёл» rather than facing a silent, broken alert.
- */
 class FindPhoneAudio(private val context: Context) {
     private val audioManager: AudioManager? = context.getSystemService(AudioManager::class.java)
     private var player: MediaPlayer? = null
     private var vibrator: Vibrator? = null
     private var previousVolume: Int? = null
 
-    /** The player of the active ring; null when nothing is playing. */
     internal val activePlayer: MediaPlayer? get() = player
 
-    /** Starts the alarm tone and the repeating vibration. Idempotent. */
-    @SuppressLint("MissingPermission") // VIBRATE is install-time and declared here.
+    @SuppressLint("MissingPermission")
     fun start() {
         if (player != null) return
         raiseAlarmVolume()
@@ -48,8 +28,7 @@ class FindPhoneAudio(private val context: Context) {
         vibrate()
     }
 
-    /** Stops sound and vibration and restores the alarm volume. */
-    @SuppressLint("MissingPermission") // VIBRATE is install-time and declared here.
+    @SuppressLint("MissingPermission")
     fun stop() {
         player?.runCatching { stop() }
         player?.release()
@@ -93,11 +72,10 @@ class FindPhoneAudio(private val context: Context) {
         runCatching { manager.setStreamVolume(AudioManager.STREAM_ALARM, previous, 0) }
     }
 
-    @SuppressLint("MissingPermission") // VIBRATE is install-time and declared here.
+    @SuppressLint("MissingPermission")
     private fun vibrate() {
         val device = vibrator ?: vibratorFor(context) ?: return
         vibrator = device
-        // minSdk is 26, so the waveform API is always available.
         val effect = VibrationEffect.createWaveform(Vibration.PATTERN, REPEAT_FROM_START)
         runCatching { device.vibrate(effect) }
     }

@@ -1,6 +1,3 @@
-//! Build without sendspin-cpp (host `cargo test`, clippy of the station targets): same API,
-//! `spawn` always fails, so no handle ever exists.
-
 use std::convert::Infallible;
 use std::marker::PhantomData;
 use std::rc::Rc;
@@ -12,7 +9,6 @@ use crate::{SendspinConfig, SendspinEvent, SendspinInitError, Transport};
 #[derive(Clone)]
 pub struct SendspinHandle {
     never: Infallible,
-    /// `!Send + !Sync` like the real handle.
     _not_send: PhantomData<Rc<()>>,
 }
 

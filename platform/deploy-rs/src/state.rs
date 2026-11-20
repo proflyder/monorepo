@@ -1,11 +1,3 @@
-//! Deploy rollback markers.
-//!
-//! `deploy.sh` records the live Deployment (`.before.json`) or its absence
-//! (`.absent`) immediately before applying a change and writes `.applied` only
-//! after the apply succeeded. Rollback restores from that record instead of
-//! running `kubectl rollout undo`; the marker contract is byte-identical with
-//! the Go implementation so a mixed run stays safe.
-
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -14,13 +6,6 @@ use serde_json::Value;
 use crate::gojson;
 use crate::process::Runner;
 
-/// Remembers the live Deployment name (or its absence) and clears the applied
-/// marker. `state_dir` must already exist.
-///
-/// The probe is fail-closed: only a NotFound answer from the API server means
-/// "the Deployment does not exist". A transient, authorization or transport
-/// error aborts the record without writing a marker, because an `.absent`
-/// marker written there would make a later rollback delete a live Deployment.
 pub fn record(
     state_dir: &str,
     namespace: &str,
@@ -61,18 +46,15 @@ pub fn record(
     remove_if_exists(&marker(state_dir, name, ".applied"))
 }
 
-/// Reports whether a failed `kubectl get` means the object is genuinely absent.
 fn not_found(stderr: &str) -> bool {
     let lower = stderr.to_lowercase();
     lower.contains("notfound") || lower.contains("not found")
 }
 
-/// Records that the Deployment change was applied by this job.
 pub fn mark(state_dir: &str, name: &str) -> Result<(), String> {
     fs::write(marker(state_dir, name, ".applied"), []).map_err(|error| error.to_string())
 }
 
-/// Restores every Deployment marked as applied and returns one message each.
 pub fn rollback(state_dir: &str, namespace: &str, runner: &dyn Runner) -> Vec<String> {
     let directory = Path::new(state_dir);
     if !directory.is_dir() {
@@ -192,7 +174,6 @@ fn restore_one(namespace: &str, state_dir: &str, name: &str, runner: &dyn Runner
     format!("{name}: restored to generation {before_generation}")
 }
 
-/// Strips read-only fields so the recorded object can be PUT back as-is.
 #[must_use]
 pub fn restore_object(before: &Value) -> Value {
     let mut object = before.clone();

@@ -1,26 +1,4 @@
 #!/usr/bin/env node
-/**
- * Commit verified image digests to the machine branch `deploy/home-apps`.
- *
- * Flux reads that branch through `GitRepository/flux-pins` and publishes the
- * `home-app-images` ConfigMap, so a unit that owns images
- * receives its image from here instead of from a `kubectl` rollout
- * (DECISIONS 54).
- *
- * The job that runs this script is deliberately small: it has no VPN, no
- * OpenBao and no kubeconfig. It only rewrites the keys of the unit it was
- * given (`BUILD_ID` and one `<IMAGE>_IMAGE` per image), records the provenance
- * annotations (`source-commit`, `source-tree`, `verified-at`, `run`) and
- * pushes one commit. `develop` is never touched.
- *
- * The branch may move between the fetch and the push (another unit's matrix
- * job commits concurrently), so the push is retried from a fresh fetch: the
- * update is recomputed against the new file and only the same keys change.
- *
- * Pure text handling (`updatePins`) is tested without Git in
- * `pins.test.mjs`; `main` takes an injected runner so the retry path is also
- * testable.
- */
 
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
@@ -29,11 +7,8 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
-/** Machine branch Flux reads; never `develop`. */
 export const PINS_BRANCH = "deploy/home-apps";
-/** File inside the branch that holds `ConfigMap/home-app-images`. */
 export const PINS_PATH = "pins/home-app-images.yaml";
-/** Keys owned by this script, in canonical order. */
 export const PINS_ANNOTATIONS = [
   "proflyder.dev/source-commit",
   "proflyder.dev/source-tree",
@@ -43,11 +18,6 @@ export const PINS_ANNOTATIONS = [
 
 const DIGEST = /^sha256:[0-9a-f]{64}$/;
 
-/**
- * ConfigMap key for an image: `ha-bridge` -> `HA_BRIDGE_IMAGE`. The pin names
- * never reveal a secret; they are the substitution variables the app manifests
- * already use.
- */
 export function imageKey(image) {
   const name = String(image || "").trim();
   if (!/^[a-z0-9][a-z0-9._-]*$/.test(name)) {
@@ -57,7 +27,6 @@ export function imageKey(image) {
   return `${key}_IMAGE`;
 }
 
-/** `sha256:…` values from `--digests image=sha256:…,image=sha256:…`. */
 export function parseDigests(value) {
   const digests = new Map();
   for (const part of String(value || "").split(",")) {
@@ -80,7 +49,6 @@ export function parseDigests(value) {
   return digests;
 }
 
-/** Full GHCR reference of a pinned image. */
 export function imageReference(image, digest) {
   return `ghcr.io/proflyder/${image}@${digest}`;
 }
@@ -119,13 +87,6 @@ function dataLines(lines) {
   return { start, end, values };
 }
 
-/**
- * Apply the unit's keys and the provenance annotations to the pins file.
- *
- * Only the keys in `values` and the four managed annotations are rewritten;
- * every other unit's digest is preserved verbatim. Returns the new text and
- * whether anything actually changed, so an unchanged run commits nothing.
- */
 export function updatePins(text, { values = {}, annotations = {} }) {
   if (!String(text || "").trim()) {
     throw new Error("pins file is empty");
@@ -151,7 +112,6 @@ export function updatePins(text, { values = {}, annotations = {} }) {
     }
   }
 
-  // Annotations: update in place, append the managed keys that are missing.
   const ann = annotationLines(lines);
   const annBlock = [...ann.values.entries()].map(([key, value]) => [
     key,
@@ -169,7 +129,6 @@ export function updatePins(text, { values = {}, annotations = {} }) {
     ...annBlock.map(([key, value]) => `    ${key}: "${value}"`),
   );
 
-  // Data: same treatment; the block stays sorted so diffs are minimal.
   const data = dataLines(lines);
   for (const [key, value] of Object.entries(values)) {
     data.values.set(key, value);
@@ -188,7 +147,6 @@ export function updatePins(text, { values = {}, annotations = {} }) {
   return { text: next, changed: next !== text };
 }
 
-/** Keys this unit contributes, from its image list and the deploy commit. */
 export function pinUpdates({ images, digests, commit }) {
   const values = {};
   if (!/^[0-9a-f]{7,40}$/.test(String(commit || ""))) {
@@ -205,7 +163,6 @@ export function pinUpdates({ images, digests, commit }) {
   return values;
 }
 
-/** Commit subject for the machine branch. */
 export function commitMessage(unit, commit) {
   return `chore(pins): ${unit} ${String(commit).slice(0, 12)}`;
 }
@@ -288,15 +245,10 @@ function parseArgs(argv) {
   return args;
 }
 
-/**
- * Fetch the branch into a detached worktree, apply the update and push once.
- * Returns `{ changed, commit }`.
- */
 export function syncOnce(args, options = {}) {
   const exec = options.exec ?? run;
   const repo = args.repo ?? process.cwd();
   const root = fs.mkdtempSync(path.join(options.tmpdir ?? os.tmpdir(), "home-pins-"));
-  // `git worktree add` needs a path it can create itself.
   const dir = path.join(root, "wt");
   let added = false;
   try {
@@ -345,14 +297,12 @@ export function syncOnce(args, options = {}) {
       try {
         exec("git", ["-C", repo, "worktree", "remove", "--force", dir]);
       } catch {
-        // A failed cleanup must not mask the real error or the push result.
       }
     }
     fs.rmSync(root, { recursive: true, force: true });
   }
 }
 
-/** Retry `syncOnce` on a race with another unit's pins commit. */
 export function syncPins(args, options = {}) {
   const log = options.log ?? console.log;
   const once = options.once ?? syncOnce;

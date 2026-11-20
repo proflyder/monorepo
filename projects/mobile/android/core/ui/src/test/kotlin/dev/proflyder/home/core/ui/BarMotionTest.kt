@@ -8,10 +8,6 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 
-/**
- * The bar motion must always end in a self-consistent state, including when a
- * running animation is interrupted or animations are disabled.
- */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class BarMotionTest {
@@ -36,8 +32,6 @@ class BarMotionTest {
     fun interruptedAnimationStillEndsHidden() {
         val view = view()
 
-        // Start entering, then interrupt with an exit while it is still running
-        // and animations are disabled: the result must be the exit end state.
         view.animateBar(visible = true, hiddenTranslationY = 200f, animate = true)
         view.animateBar(visible = false, hiddenTranslationY = 200f, animate = false)
 

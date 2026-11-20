@@ -1,16 +1,4 @@
 #!/usr/bin/env bash
-# Install the offsite backup on the K3s node from the operator's Mac.
-#
-#   ./install.sh [--dry-run] [--run-now] <ssh-target>
-#
-# Private inputs (git-ignored, never committed):
-#   secrets/home/offsite-backup.env        RESTIC_REPOSITORY, backend settings,
-#                                          HA_URL, HA_TOKEN_FILE, paths
-#   secrets/home/offsite-restic.password   restic repository password
-#
-# The env and password files are streamed over ssh stdin; they never appear in
-# argv or shell history. `restic init` runs only when the repository has no
-# config yet.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
@@ -18,10 +6,7 @@ HERE="$ROOT/projects/home/backup/offsite"
 LOCAL_ENV="${OFFSITE_ENV_FILE:-$ROOT/secrets/home/offsite-backup.env}"
 LOCAL_PASSWORD="${OFFSITE_RESTIC_PASSWORD_FILE:-$ROOT/secrets/home/offsite-restic.password}"
 LOCAL_HA_TOKEN="${OFFSITE_HA_TOKEN_FILE:-$ROOT/secrets/home/offsite-ha.token}"
-# Optional rclone backend config (e.g. Google Drive, scope drive.file). It is
-# placed under /var/lib/offsite-backup because rclone rewrites it on token refresh.
 LOCAL_RCLONE_CONF="${OFFSITE_RCLONE_CONF:-$ROOT/secrets/home/offsite-rclone.conf}"
-# Optional ssh material for pulling the bb server export from CT 103.
 LOCAL_BB_KEY="${OFFSITE_BB_KEY_FILE:-$ROOT/secrets/home/offsite-bb.key}"
 LOCAL_BB_KNOWN_HOSTS="${OFFSITE_BB_KNOWN_HOSTS_FILE:-$ROOT/secrets/home/offsite-bb.known_hosts}"
 DRY_RUN=false
@@ -56,8 +41,6 @@ done
 
 [[ -n "$TARGET" ]] || { usage >&2; exit 2; }
 
-# SSH_CONFIG selects a private ssh_config (e.g. ~/.ssh/home-lab/config).
-# A non-root login runs every remote command through `sudo -n`.
 SSH=(ssh)
 if [[ -n "${SSH_CONFIG:-}" ]]; then SSH+=(-F "$SSH_CONFIG"); fi
 SUDO=""
@@ -104,7 +87,6 @@ upload "$HERE/README.md" /usr/local/lib/offsite-backup/README.md 0644
 upload "$HERE/offsite-backup.service" /etc/systemd/system/offsite-backup.service 0644
 upload "$HERE/offsite-backup.timer" /etc/systemd/system/offsite-backup.timer 0644
 
-# Secrets are streamed over stdin and only readable by root.
 upload "$LOCAL_ENV" /etc/offsite-backup/env 0600
 upload "$LOCAL_PASSWORD" /etc/offsite-backup/restic.password 0600
 if [[ -f "$LOCAL_HA_TOKEN" ]]; then
@@ -122,8 +104,6 @@ fi
 
 remote "chown root:root /etc/offsite-backup/env /etc/offsite-backup/restic.password; for f in ha.token bb_ssh_key bb_known_hosts; do if [ -f /etc/offsite-backup/\$f ]; then chown root:root /etc/offsite-backup/\$f; fi; done"
 
-# Initialise the repository only once. The env file is sourced on the remote
-# host, so credentials never travel on a command line.
 if $DRY_RUN; then
   printf '+ ssh %s %s\n' "$TARGET" "source env; restic cat config >/dev/null 2>&1 || restic init"
 else

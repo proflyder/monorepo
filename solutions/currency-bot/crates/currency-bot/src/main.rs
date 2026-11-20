@@ -1,6 +1,3 @@
-//! Command entry point: the currency bot service and the distroless
-//! `-healthcheck` probe used by the deployment.
-
 use std::process::ExitCode;
 
 #[tokio::main]

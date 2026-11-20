@@ -1,6 +1,3 @@
-//! Golden-оракулы и тесты протокола. `proto.txt` и `selftest_raw.txt` — захват C++-референса;
-//! ожидаемые байты никогда не подгоняются под реализацию.
-
 use std::fmt::Write as _;
 
 use prost::Message;
@@ -45,9 +42,6 @@ fn cases(kind: &str) -> Vec<Vec<&'static str>> {
     assert!(!v.is_empty(), "нет golden-векторов для {kind}");
     v
 }
-
-// Примитивы провода из `proto.txt`. Это не production-энкодер (там prost): независимый
-// оракул тех же правил protobuf, чтобы golden-векторы продолжали доказывать байты derives.
 
 fn put_varint(out: &mut Vec<u8>, v: u64) {
     prost::encoding::encode_varint(v, out);
@@ -426,7 +420,6 @@ fn entity_key_of(msg_type: u32, payload: &[u8]) -> Option<u32> {
     }
 }
 
-/// Сущности, которые форк добавил к захвату C++-референса.
 fn fork_only(msg_type: u32, payload: &[u8]) -> bool {
     const KEYS: [u32; 9] = [
         key::SW_WAKE_EVENT_RECORDING.get(),
@@ -623,7 +616,6 @@ fn typed_ids_map_to_table_entries() {
         ActionId::key,
         EntityKindTag::Action,
     );
-    // Один ключ не описан двумя разными id.
     let mut keys = vec![
         SwitchId::Microphones.key(),
         SwitchId::Clock.key(),
@@ -693,7 +685,6 @@ fn plaintext_feed_and_encode() {
     append_plain(&mut input, 1, b"one");
     append_plain(&mut input, 300, b"two");
     let complete = input.len();
-    // Неполный третий кадр остаётся в буфере вызывающего.
     let mut tail = Vec::new();
     append_plain(&mut tail, 7, b"three");
     tail.truncate(4);
@@ -723,7 +714,6 @@ fn plaintext_feed_and_encode() {
     s.encode(8, b"pong", &mut out, &mut scratch).unwrap();
     assert_eq!(out, b"\x00\x04\x08pong");
 
-    // Остаток третьего кадра доходит отдельным feed.
     let mut rest = Vec::new();
     append_plain(&mut rest, 7, b"three");
     let feed = s.feed(&rest, &mut out);
@@ -770,7 +760,6 @@ fn noise_handshake_and_data() {
     assert!(s.handshake_done());
     client.finish(&bodies[1]).unwrap();
 
-    // Сервер → клиент.
     let mut scratch = Vec::new();
     let mut frame = Vec::new();
     s.encode(90, b"\x08\x01", &mut frame, &mut scratch).unwrap();
@@ -780,7 +769,6 @@ fn noise_handshake_and_data() {
     };
     assert_eq!(client.decrypt(body), (90, b"\x08\x01".to_vec()));
 
-    // Клиент → сервер.
     let mut client = client;
     let frame = client.encrypt(92, b"\x0a\x03abc");
     let mut out3 = Vec::new();
@@ -819,7 +807,6 @@ fn noise_incomplete_and_oversized_frames() {
 
     let mut s = Session::new(SessionConfig::new(NAME, MAC, Psk::new([0u8; 32]), false));
     let mut out = Vec::new();
-    // Во время handshake кадр длиннее 128 байт отвергается.
     let mut big = vec![0x01, 0x00, 0x81];
     big.resize(3 + 0x81, 0);
     let feed = s.feed(&big, &mut out);
@@ -831,8 +818,6 @@ fn noise_incomplete_and_oversized_frames() {
 
 #[test]
 fn reject_all_refuses_every_handshake() {
-    // Fail-closed: случайный ключ получить не удалось — не пускаем никого, даже с psk из
-    // конфигурации (он нулевой и известен).
     let psk = Psk::new([0u8; 32]);
     let mut cfg = SessionConfig::new(NAME, MAC, psk.clone(), false);
     cfg.reject_all = true;

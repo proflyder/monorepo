@@ -1,5 +1,3 @@
-//! Every libc call of the crate.
-
 use std::ffi::{CStr, CString};
 use std::net::Ipv4Addr;
 use std::sync::LazyLock;
@@ -18,7 +16,6 @@ pub fn monotonic_ms() -> i64 {
     i64::from(ts.tv_sec) * 1000 + i64::from(ts.tv_nsec) / 1_000_000
 }
 
-/// Local wall-clock hour, minute and second of a Unix time, in the process's TZ.
 pub fn local_hms(unix_secs: i64) -> (i32, i32, i32) {
     let t = unix_secs as libc::time_t;
     // SAFETY: an all-zero `tm` is a valid value (integers and a nullable `tm_zone` pointer).
@@ -30,8 +27,6 @@ pub fn local_hms(unix_secs: i64) -> (i32, i32, i32) {
     (tm.tm_hour, tm.tm_min, tm.tm_sec)
 }
 
-/// The "C" locale, created once; null if newlocale failed. Kept as an address: `locale_t` is a
-/// raw pointer, and the object is immutable and never freed.
 fn c_locale() -> libc::locale_t {
     static LOC: LazyLock<usize> = LazyLock::new(|| {
         // SAFETY: valid mask and NUL-terminated name; a null base asks for a fresh object.
@@ -42,8 +37,6 @@ fn c_locale() -> libc::locale_t {
     *LOC as libc::locale_t
 }
 
-/// Runs `f` with this thread on the "C" locale. GStreamer and the vendor libraries may call
-/// setlocale; state.conf must keep '.' as the decimal point for the C++ binary (`.prev`).
 fn in_c_locale<T>(f: impl FnOnce() -> T) -> T {
     let loc = c_locale();
     if loc.is_null() {
@@ -59,32 +52,23 @@ fn in_c_locale<T>(f: impl FnOnce() -> T) -> T {
     r
 }
 
-/// printf("%g", v) in the "C" locale.
 pub fn format_g(v: f64) -> String {
-    // "%g" is at most 6 significant digits plus sign, point and a 4-character exponent;
-    // "-nan" / "-inf" are shorter.
     let mut buf = [0u8; 32];
     let n = in_c_locale(|| {
-        // SAFETY: the buffer is writable for its full length, which is passed as the size
-        // limit; the format consumes exactly one double, which is passed.
+        // SAFETY: the buffer is writable for its full length, which is passed as the size limit; the format consumes exactly one double, which is passed.
         unsafe { libc::snprintf(buf.as_mut_ptr().cast(), buf.len(), c"%g".as_ptr(), v) }
     });
     let n = usize::try_from(n).unwrap_or(0).min(buf.len() - 1);
     String::from_utf8_lossy(&buf[..n]).into_owned()
 }
 
-/// strtof(s, nullptr) in the "C" locale: the longest numeric prefix (after leading white
-/// space), else 0.
 pub fn strtof(s: &str) -> f32 {
-    // strtof stops at a NUL anyway; cut there so the CString cannot fail.
     let s = s.split('\0').next().unwrap_or("");
     let Ok(c) = CString::new(s) else { return 0.0 };
     // SAFETY: `c` is a NUL-terminated string that outlives the call; a null endptr is allowed.
     in_c_locale(|| unsafe { libc::strtof(c.as_ptr(), std::ptr::null_mut()) })
 }
 
-/// One line to fd 2 with write(2), bypassing std's stderr lock. A log line is short enough
-/// for one write; short writes and EINTR are retried anyway.
 pub fn write_stderr(mut buf: &[u8]) {
     while !buf.is_empty() {
         // SAFETY: `buf` is valid for reads of `buf.len()` bytes.
@@ -99,28 +83,23 @@ pub fn write_stderr(mut buf: &[u8]) {
     }
 }
 
-// The libc crate does not bind tzset; glibc exports it.
 unsafe extern "C" {
     fn tzset();
 }
 
-/// Sets TZ and re-reads it for localtime_r.
 pub fn set_tz(posix_tz: &str) {
-    // SAFETY: the environment is not synchronized with other threads (GLib reads it). The
-    // caller only sets TZ when the value changes, which is the same exposure the C++ daemon had.
+    // SAFETY: the environment is not synchronized with other threads (GLib reads it). The caller only sets TZ when the value changes, which is the same exposure the C++ daemon had.
     unsafe { std::env::set_var("TZ", posix_tz) };
     // SAFETY: tzset has no preconditions.
     unsafe { tzset() };
 }
 
-/// One IPv4 entry of getifaddrs.
 pub struct IfAddr {
     pub name: String,
     pub flags: u32,
     pub addr: Ipv4Addr,
 }
 
-/// IPv4 addresses of all interfaces; None when getifaddrs fails.
 pub fn ipv4_ifaddrs() -> Option<Vec<IfAddr>> {
     let mut ifs: *mut libc::ifaddrs = std::ptr::null_mut();
     // SAFETY: `ifs` is a valid out-pointer; the list is freed below.
@@ -155,7 +134,6 @@ pub fn ipv4_ifaddrs() -> Option<Vec<IfAddr>> {
     Some(out)
 }
 
-/// if_nametoindex(3); 0 when the interface does not exist.
 pub fn if_nametoindex(name: &str) -> u32 {
     let Ok(c) = CString::new(name) else { return 0 };
     // SAFETY: `c` is a NUL-terminated string that outlives the call.
@@ -166,8 +144,6 @@ pub fn if_nametoindex(name: &str) -> u32 {
 mod tests {
     use super::*;
 
-    /// A decimal-comma locale on this test thread only (uselocale), as GStreamer's setlocale
-    /// would give the whole process. Skipped where ru_RU.UTF-8 is not installed.
     #[test]
     fn numbers_ignore_a_comma_locale() {
         // SAFETY: valid mask and NUL-terminated name; a null base asks for a fresh object.

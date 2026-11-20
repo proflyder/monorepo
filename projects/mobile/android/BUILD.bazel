@@ -2,9 +2,6 @@ load("//platform/android:defs.bzl", "home_android_lint", "home_detekt")
 
 package(default_visibility = ["//visibility:public"])
 
-# Targets whose sources are scanned by detekt. They mirror the
-# projects/mobile/android entries of `android_tests`: main sources arrive via
-# the app library's `deps`, test sources from these test targets.
 DETEKT_TEST_TARGETS = [
     "//projects/mobile/android/app:main_activity_smoke_test",
     "//projects/mobile/android/app:toolbar_menu_screenshot_test",
@@ -40,16 +37,11 @@ DETEKT_TEST_TARGETS = [
     "//projects/mobile/android/features/system/impl:system_test",
 ]
 
-# Convenience entry points for the Android client.
 alias(
     name = "app",
     actual = "//projects/mobile/android/app:app",
 )
 
-# Android Lint over every module reachable from the application library: the
-# app module plus all core/feature API and implementation modules. Runs as its
-# own CI unit (`android / android-lint`), with -Werror, so a finding fails that
-# job without aborting the app's tests.
 home_android_lint(
     name = "android_lint",
     app_module = "//projects/mobile/android/app:app_lib",
@@ -57,20 +49,13 @@ home_android_lint(
     deps = ["//projects/mobile/android/app:app_lib"],
 )
 
-# detekt over the same graph: app main sources plus test sources. It runs as
-# its own CI unit (`android / android-detekt`) next to Android Lint, so a style
-# finding fails only that job.
 home_detekt(
     name = "detekt",
     config = "//projects/mobile/android:detekt.yml",
     deps = ["//projects/mobile/android/app:app_lib"] + DETEKT_TEST_TARGETS,
-    # Shared `packages/kotlin` code has its own gate; this unit owns the
-    # Android client sources and tests only.
     source_prefix = "projects/mobile/android/",
 )
 
-# Unit tests only. `//projects/mobile/android:android_lint` is intentionally
-# absent: it is a separate CI unit so its findings do not hide test results.
 test_suite(
     name = "android_tests",
     tests = [
@@ -110,9 +95,6 @@ test_suite(
         "//projects/mobile/android/app:theme_screenshot_test",
         "//projects/mobile/android/app:window_insets_screenshot_test",
         "//projects/mobile/android/core/navigation:navigation_test",
-        # Bazel build tools live under platform/android and are routed to the
-        # android platform by the units map; run their unit tests here so the
-        # android unit exercises the toolchain it executes.
         "//platform/android/tools/apk_runtime_closure:apk_runtime_closure_test",
         "//platform/android/detekt-rules:detekt_rules_test",
         "//platform/android/tools/gen_view_binding:gen_view_binding_test",

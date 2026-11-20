@@ -1,6 +1,3 @@
-//! The routing service: read the profile, ask the gateway and turn the pair
-//! into a [`Decision`] plus the background announcement.
-
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex, PoisonError};
 
@@ -8,7 +5,6 @@ use super::{Gateway, ProfileReader, Results};
 use crate::domain::profile::Profile;
 use crate::domain::routing::{Decision, GatewayAnswer, decide};
 
-/// Resolves profile routing for the last user utterance.
 pub struct VoiceRouter {
     profile: Arc<ProfileReader>,
     gateway: Arc<Gateway>,
@@ -40,8 +36,6 @@ impl VoiceRouter {
         }
     }
 
-    /// Resolves profile and route for one utterance. It never fails: every
-    /// failure becomes an explicit decision so the fail-closed contract holds.
     pub async fn route(&self, utterance: &str) -> Decision {
         let profile = self.profile.profile().await;
         let answer = match profile {
@@ -67,7 +61,6 @@ impl VoiceRouter {
         *counts.entry(outcome).or_insert(0) += 1;
     }
 
-    /// One outcome counter, for diagnostics.
     #[must_use]
     pub fn count_of(&self, outcome: &str) -> u64 {
         self.counts
@@ -79,7 +72,6 @@ impl VoiceRouter {
     }
 }
 
-/// The profile as a structural log value.
 #[must_use]
 pub fn profile_or_unknown(profile: Option<Profile>) -> &'static str {
     profile.map_or("unknown", Profile::as_str)

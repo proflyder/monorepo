@@ -1,7 +1,5 @@
 package dev.proflyder.home.core.model
 
-/** Domain models mirroring the frozen home.v1.IntercomService contract. */
-
 enum class IntercomEndpointKind {
     UNSPECIFIED,
     PHONE,
@@ -33,7 +31,6 @@ enum class IntercomSdpType {
     ANSWER,
 }
 
-/** One registered device. `online` is true while the endpoint holds a Watch stream. */
 data class IntercomEndpoint(
     val id: String,
     val kind: IntercomEndpointKind,
@@ -43,7 +40,6 @@ data class IntercomEndpoint(
     val lastSeenUnix: Long = 0,
 )
 
-/** Point-in-time call snapshot; every event carries a full replacement. */
 data class IntercomCall(
     val id: String,
     val caller: IntercomEndpoint? = null,
@@ -86,14 +82,12 @@ data class IntercomStatus(
     val connectTimeoutSeconds: Int = 0,
 )
 
-/** Uplink signal for SendSignal; mirrors the proto oneof. */
 sealed interface IntercomOutgoingSignal {
     data class Sdp(val signal: IntercomSdpSignal) : IntercomOutgoingSignal
     data class IceCandidate(val candidate: IntercomIceCandidate) : IntercomOutgoingSignal
     data object IceEnd : IntercomOutgoingSignal
 }
 
-/** Downlink event from the server-streaming Watch RPC. */
 sealed interface IntercomWatchEvent {
     data class CallChanged(
         val call: IntercomCall,

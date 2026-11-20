@@ -1,6 +1,4 @@
 #!/bin/sh
-# Read-only, bounded network evidence. Logs may identify the LAN: keep private.
-# Arm the rootkeeper hook separately for a controlled reboot; no radio resets.
 ROOT=${DIAG_ROOT:-/data/quasar/network-diag}
 PID=/var/run/station-network-diagnostic.pid
 SELF=/data/quasar/station-network-diagnostic.sh

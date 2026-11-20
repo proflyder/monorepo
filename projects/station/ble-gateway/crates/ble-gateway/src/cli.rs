@@ -1,5 +1,3 @@
-//! Command-line interface (clap derive).
-
 use std::path::PathBuf;
 
 #[cfg(test)]
@@ -7,12 +5,10 @@ use clap::CommandFactory;
 use clap::Parser;
 use clap::builder::BoolishValueParser;
 
-/// Station BLE provisioning gateway.
 #[derive(Debug, Clone, Parser)]
 #[rustfmt::skip]
 #[command(name = "ble-gateway", version, about = "Local BLE and HTTP control gateway for the station Wi-Fi setup")]
 pub struct Config {
-    /// `--auto`, `--auto=true|false`, `--auto=1|0`.
     #[arg(long = "auto", value_name = "BOOL", num_args = 0..=1, default_missing_value = "true", default_value = "true", value_parser = BoolishValueParser::new(), action = clap::ArgAction::Set)]
     pub auto_wifi: bool,
     #[arg(long, value_name = "PATH")]
@@ -54,8 +50,6 @@ mod tests {
             .lines()
             .find_map(|line| line.strip_prefix("version = \"")?.strip_suffix('"'))
             .expect("Cargo.toml has a package version");
-        // Bazel injects this via the rules_rust `version` attribute; a plain
-        // cargo build takes it from the same manifest.
         assert_eq!(env!("CARGO_PKG_VERSION"), version);
         assert_eq!(Config::command().get_version(), Some(version));
     }

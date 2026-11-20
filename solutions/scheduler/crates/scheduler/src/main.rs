@@ -1,6 +1,3 @@
-//! Command entry point: the scheduler service, plus the distroless
-//! `-healthcheck` and `-status` probes used by the deployment and smoke tests.
-
 use std::process::ExitCode;
 
 #[tokio::main]

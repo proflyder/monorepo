@@ -246,3 +246,24 @@ mise run kubectl -- delete namespace nexus
 
 The internal A record is deleted separately through the Cloudflare API; the
 public tunnel hostname is owned by the tunnel configuration.
+
+## Заметки к коду
+
+Пояснения, перенесённые из комментариев исходников (код комментариев не содержит, см. `AGENTS.md`).
+
+- `manifests/external-secrets.yaml` — Nexus credentials, materialised from OpenBao KV v2 by ESO.
+- `manifests/ingressroute.yaml` — TEMPLATE. Flux substitutes ${NEXUS_HOST} (internal name under the home suffix) and ${NEXUS_PUBLIC_HOST} (Cloudflare Tunnel name used by CI) from the `flux-settings` Secret.
+- `manifests/kustomization.yaml` — Nexus workload, Sources and routes.
+- `manifests/network-policies.yaml` — NODE_LAN_IP is substituted by Flux from the `flux-settings` Secret (OpenBao); it is never committed to Git.
+- `manifests/nexus.yaml` — Nexus Repository OSS: a read-through cache for CI downloads (Maven, npm, PyPI, raw GitHub release assets and Node.js distributions).
+  - Seed the first-boot admin password, but only before the H2 database exists. Both files live on the same volume, so a crash between the two never leaves a half-initialised store behind.
+  - Nexus opens the HTTP port only after the OSGi bundles are active. A cold start on an empty volume takes a few minutes; the probe budget is deliberately generous so kubelet never restarts it.
+- `provision/job.yaml` — The `nexus-provision` ConfigMap is generated from `provision.sh` by kustomize; configMapGenerator puts the content hash in the generated name and the volume below mounts that generated name. A changed script changes the Job spec, so the Flux Kustomization (`force: true`) recreates the immutable Job and provisioning runs again; an unchanged script is a no-op.
+- `provision/kustomization.yaml` — Idempotent Nexus REST provisioning.
+- `provision/provision.sh` — Provision the Nexus repositories, the read-only CI user and the security settings through the Nexus REST API.
+  - `curl` wrapper: prints the HTTP status code, writes the body to /tmp/body. Authentication is passed through a config file so the password never lands in argv (and therefore never in a process listing or a crash dump).
+  - Upstreams (GitHub release downloads above all) return transient 5xx. With auto-blocking one such answer took the whole repository offline and Nexus answered 404/503 for every path; a long negative cache then kept those 404s for a day.
+  - Cargo support varies by Nexus edition and release. Try it, but never fail the whole provisioning run when this install does not expose the format.
+  - The user record carries no password; the password is set separately and streamed on stdin, so it never appears in argv or in the job log.
+- `test_deploy.py`
+  - Upstream 5xx must not auto-block a repository or poison the cache.

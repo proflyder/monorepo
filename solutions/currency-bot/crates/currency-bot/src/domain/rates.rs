@@ -1,21 +1,12 @@
-//! Pure kurs.kz extraction: the `var punkts` literal, the intentional IQR
-//! filter and the best-five average.
-//!
-//! This is a direct port of the Go `internal/rates` functions. Only USD and
-//! RUB are used; EUR and every other currency is ignored.
-
 use regex::Regex;
 use serde_json::Value;
 use std::sync::LazyLock;
 
 use super::model::{ExchangeRate, Rates};
 
-/// The Kotlin regex, lazy match included: the first `];` after the array
-/// opening bracket terminates the literal.
 static PUNKTS: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"(?s)var punkts = (\[.*?\]);").expect("valid punkts regex"));
 
-/// Why a document could not be turned into rates.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum RatesError {
     #[error("could not find 'var punkts' in HTML: kurs.kz parse error")]
@@ -28,14 +19,12 @@ pub enum RatesError {
     NoRub,
 }
 
-/// One exchange office's accepted USD or RUB quote.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Point {
     pub buy: f64,
     pub sell: f64,
 }
 
-/// Extract and aggregate the rates from a kurs.kz HTML document.
 pub fn parse(html: &str) -> Result<Rates, RatesError> {
     let Some(captures) = PUNKTS.captures(html) else {
         return Err(RatesError::MissingMarker);
@@ -54,7 +43,6 @@ pub fn parse(html: &str) -> Result<Rates, RatesError> {
             continue;
         };
         let Value::Object(data) = data else {
-            // Missing or not an object: skip silently, like Kotlin.
             continue;
         };
         if let Some(quote) = parse_point(data.get("USD")) {
@@ -106,9 +94,6 @@ fn parse_point(raw: Option<&Value>) -> Option<Point> {
     Some(Point { buy, sell })
 }
 
-/// Accept JSON numbers and numeric strings, matching kotlinx's
-/// `JsonPrimitive.doubleOrNull`. Empty strings, null, booleans, arrays,
-/// objects and non-finite values fail.
 fn parse_number(raw: &Value) -> Option<f64> {
     let value = match raw {
         Value::Number(number) => number.as_f64()?,
@@ -125,9 +110,6 @@ fn pluck(points: &[Point], field: impl Fn(&Point) -> f64) -> Vec<f64> {
     points.iter().map(field).collect()
 }
 
-/// The intentional non-textbook IQR filter from Kotlin: quartile indexes are
-/// `size/4` and `size*3/4` with no interpolation, and an empty filtered list
-/// falls back to the original values. The original order is preserved.
 #[must_use]
 pub fn remove_outliers(values: &[f64]) -> Vec<f64> {
     if values.len() < 4 {
@@ -153,8 +135,6 @@ pub fn remove_outliers(values: &[f64]) -> Vec<f64> {
     }
 }
 
-/// Average the best five quotes: ascending for sell (cheapest rate when buying
-/// currency), descending for buy (highest rate when selling).
 #[must_use]
 pub fn best_average(values: &[f64], ascending: bool) -> f64 {
     let mut sorted = values.to_vec();

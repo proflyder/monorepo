@@ -45,7 +45,6 @@ class MainActivitySmokeTest {
         val titles = (0 until bottom.menu.size()).map { bottom.menu.getItem(it).title.toString() }
         assertEquals(listOf("Home", "Scenarios", "Time", "System"), titles)
 
-        // A single actions button: the framework overflow list must never exist.
         val toolbar = activity.findViewById<MaterialToolbar>(R.id.toolbar)
         assertEquals(1, toolbar.menu.size())
         val actions = toolbar.menu.getItem(0)

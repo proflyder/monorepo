@@ -2,16 +2,13 @@ use std::time::Duration;
 
 use thiserror::Error;
 
-/// Protocol TTL bounds from `PROTOCOL.md`.
 pub const MIN_TTL: Duration = Duration::from_secs(30);
 pub const MAX_TTL: Duration = Duration::from_secs(600);
 pub const DEFAULT_TTL: Duration = Duration::from_secs(180);
 
-/// Long-poll bounds for a purpose-aware claim.
 pub const MIN_WAIT_SECONDS: u32 = 1;
 pub const MAX_WAIT_SECONDS: u32 = 25;
 
-/// Why a requested TTL cannot be issued.
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum TtlError {
     #[error("ttlSeconds must be between {min} and {max} seconds")]
@@ -20,9 +17,6 @@ pub enum TtlError {
     AboveOperatorMaximum,
 }
 
-/// Validates an optional `ttlSeconds` against the protocol bounds and the
-/// operator's `WAKE_GRANT_MAX_TTL_SECONDS`. A negative or non-integer value is
-/// rejected by the caller's deserializer, exactly like Go's `*int`.
 pub fn validate_ttl(requested: Option<i64>, operator_max: Duration) -> Result<Duration, TtlError> {
     let ttl = match requested {
         None => DEFAULT_TTL,
@@ -39,7 +33,6 @@ pub fn validate_ttl(requested: Option<i64>, operator_max: Duration) -> Result<Du
     Ok(ttl)
 }
 
-/// Why a long-poll request cannot be served.
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum WaitError {
     #[error("waitSeconds requires an explicit purpose")]
@@ -48,8 +41,6 @@ pub enum WaitError {
     OutOfRange,
 }
 
-/// `waitSeconds` is only defined together with an explicit purpose; omitting
-/// `purpose` keeps the v1 request byte for byte and is never delayed.
 pub fn validate_wait(
     wait_seconds: Option<i64>,
     purpose_aware: bool,

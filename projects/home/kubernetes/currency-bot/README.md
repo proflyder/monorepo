@@ -195,3 +195,23 @@ mise run kubectl -- delete namespace currency-bot
 ```
 
 Also remove the Cloudflare tunnel route and call Telegram `deleteWebhook`.
+
+## Заметки к коду
+
+Пояснения, перенесённые из комментариев исходников (код комментариев не содержит, см. `AGENTS.md`).
+
+- `BUILD.bazel` — Plain-file package: Flux renders these templates (postBuild substitution), and the deploy contracts/tests read them as data.
+- `manifests/cloudflared.yaml` — Cloudflare Tunnel for the Telegram webhook.
+  - Traceability only: a Deployment metadata change never rolls pods.
+- `manifests/currency-bot.yaml` — Currency bot: one static Rust binary, one SQLite writer, one persistent volume.
+  - Traceability only: a Deployment metadata change never rolls pods.
+  - SQLite is single-writer: never two pods against the same volume.
+  - Separate Service for the Telegram webhook: the Cloudflare Tunnel ingress targets http://currency-bot-webhook.currency-bot.svc.cluster.local:8081 and the NetworkPolicy only opens 8081 to cloudflared pods.
+- `manifests/external-secrets.yaml` — Currency bot secrets, materialised from OpenBao KV v2 by ESO.
+- `manifests/kustomization.yaml` — Flux-rendered manifest set for currency-bot (решение 54).
+  - `prune: true` must never delete the SQLite volume if a manifest is removed by mistake (решение 54).
+- `manifests/namespace.yaml` — The namespace is applied once by an admin (Kubernetes namespaces are cluster-scoped and admin-owned). Flux applies only the namespaced objects and never creates or prunes the namespace.
+- `manifests/network-policies.yaml` — K3s enforces NetworkPolicies (kube-router). Traffic paths:
+- `manifests/servicemonitor.yaml` — kube-prometheus-stack runs with *SelectorNilUsesHelmValues=false, so any ServiceMonitor in the cluster is picked up. Keep the selector disjoint from other services and label the target port name explicitly.
+- `nft/apply.sh` — Install or refresh the currency-bot NodePort source filter on the K3s node.
+- `nft/currency-bot-nodeport.nft` — Minimal exposure for the currency-bot API NodePort used by HA Assist.

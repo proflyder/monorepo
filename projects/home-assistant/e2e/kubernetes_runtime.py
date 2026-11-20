@@ -1,10 +1,4 @@
 #!/usr/bin/env python3
-"""Read-only acceptance of the migrated cluster and Git-owned dashboards.
-
-Set KUBECONFIG, GRAFANA_URL, GRAFANA_PASSWORD_FILE, PROMETHEUS_URL and
-LOKI_URL. Run port-forwards or use private authenticated routes. Does not
-run model requests, play audio, or mutate device state.
-"""
 import base64
 import json
 import os

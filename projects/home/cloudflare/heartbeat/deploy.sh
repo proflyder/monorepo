@@ -1,26 +1,4 @@
 #!/usr/bin/env bash
-# Deploy the home heartbeat Worker from the reusable solutions/heartbeat source.
-#
-# Private values live in secrets/home/heartbeat.env (ignored by Git); the
-# Cloudflare API token may instead live in secrets/home/cloudflare-workers.env
-# (CLOUDFLARE_ENV_FILE), which is sourced first when present:
-#
-#   CLOUDFLARE_ACCOUNT_ID   Cloudflare account id
-#   CLOUDFLARE_API_TOKEN    API token with Workers Scripts + KV edit
-#   KV_NAMESPACE_ID         KV namespace bound as HEARTBEAT
-#   PING_TOKEN              bearer token accepted by POST /ping
-#   TELEGRAM_BOT_TOKEN      existing infra bot token
-#   TELEGRAM_CHAT_ID        owner chat id
-#   WORKER_NAME             optional, default home-heartbeat
-#   GRACE_SECONDS           optional, default 900
-#   REMIND_SECONDS          optional, default 21600 (0 disables)
-#   SITE_NAME               optional, default "дом"
-#
-# Usage:
-#   ./deploy.sh             render config and deploy
-#   ./deploy.sh --secrets   push the three Worker secrets (stdin, never echoed)
-#
-# This script does not create the KV namespace, DNS route or Cloudflare token.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
@@ -77,8 +55,6 @@ SITE_NAME="${SITE_NAME:-дом}"
 [[ "$SITE_NAME" != *'"'* && "$SITE_NAME" != *'\'* && "$SITE_NAME" != *$'\n'* ]] \
   || die "SITE_NAME must not contain quotes, backslashes or newlines"
 
-# The rendered file carries private account/namespace ids (no secrets). It is
-# git-ignored and removed on exit.
 cleanup() {
   rm -f "$GENERATED"
 }
@@ -112,7 +88,6 @@ if [[ "$PUSH_SECRETS" == 1 ]]; then
     local name="$1"
     local value="${!name:-}"
     [[ -n "$value" ]] || die "missing $name in $ENV_FILE"
-    # Value goes through stdin only; it is never printed or passed as an argv.
     printf '%s' "$value" | "${WRANGLER[@]}" secret put "$name" \
       --name "$WORKER_NAME" --config "$GENERATED" >/dev/null
     echo "updated Worker secret: $name"

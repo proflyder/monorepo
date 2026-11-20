@@ -1,12 +1,6 @@
-//! Compiles the C shim over sendspin-cpp and links the library statically when the former Makefile
-//! provided its per-arch build (PULSAR_SS_SRC, PULSAR_SS_BUILD). Bazel host builds do not set
-//! them and leave cfg `sendspin_ffi` unset; the station Bazel build sets the cfg and links the
-//! `cc_library` shim in crates/pulsar-sendspin/BUILD.bazel instead of running this script.
-
 use std::env;
 use std::path::PathBuf;
 
-/// Static libraries of the CMake build, in link order (sendspin needs every one after it).
 const LIBS: [(&str, &str); 6] = [
     ("sendspin", "sendspin"),
     ("sendspin", "noise_c"),
@@ -19,8 +13,6 @@ const LIBS: [(&str, &str); 6] = [
     ("_deps/ixwebsocket-build", "ixwebsocket"),
 ];
 
-/// Must match the role options of third_party/CMakeLists.txt: they change the layout of
-/// sendspin::SendspinClient.
 const ROLES: [&str; 5] = [
     "SENDSPIN_ENABLE_PLAYER",
     "SENDSPIN_ENABLE_OPUS",
@@ -67,10 +59,6 @@ fn main() {
         println!("cargo:rustc-link-search=native={}", dir.display());
         println!("cargo:rustc-link-lib=static={lib}");
     }
-    // zig линкует свои libc++, libc++abi и libunwind статически (см. docs/architecture.md,
-    // «Линковка C++ (sendspin-cpp)»). cc уже выдаёт эту библиотеку сразу после шима, то есть до
-    // библиотек sendspin; повтор здесь после них фиксирует порядок статической линковки при
-    // любом выводе cc.
     println!("cargo:rustc-link-lib=c++");
     println!("cargo:rustc-cfg=sendspin_ffi");
 }

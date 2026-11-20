@@ -1,6 +1,3 @@
-//! Голосовая сессия: диалог с Home Assistant, follow-up, TTS-отчёт, объявления и earcons
-//! (controller.cpp "voice pipeline"). Фаза с данными вместо набора флагов.
-
 use std::mem;
 
 use pulsar_audio::endpoint::EndpointRun;
@@ -10,51 +7,33 @@ use pulsar_media::PlayState;
 use super::logic::{self, Followup, Phase, RunBinding};
 use super::{AnnounceId, DialogId, EarconSeq, LISTEN_TIMEOUT_MS, PROCESS_TIMEOUT_MS, WakeRecord};
 
-/// Фаза диалога с тем, что существует только в ней: локальный детектор конца фразы живёт лишь
-/// пока слушаем. `played` сбрасывается новым RUN_START: HA может прислать второй ответ в том же
-/// диалоге, и следующий TTS_END должен заиграть снова.
 pub enum DialogPhase {
     Listening { endpoint: Option<EndpointRun> },
     Processing,
     Speaking { played: bool },
 }
 
-/// Открытый диалог. Всё остальное в `Session` переживает его конец: привязка run, follow-up,
-/// долг отчёта и `stop_sent` относятся к моменту завершения и к следующему диалогу.
 pub struct Dialog {
     phase: DialogPhase,
     started_ms: i64,
-    /// Диалог открыт wake word (а не кнопкой, продолжением или HA).
     wake: bool,
     tts_url: String,
 }
 
-/// Одна голосовая сессия станции. `dialog` = None — покой.
 #[derive(Default)]
 pub struct Session {
-    /// Id последнего диалога; растёт и при старте, и при конце, поэтому completion старого
-    /// диалога не может сработать для нового.
     current_id: DialogId,
     dialog: Option<Dialog>,
-    /// Pipeline events не несут id run: связывает события с заменённым run.
     run: RunBinding,
     followup: Followup,
-    /// voice_request_stop уже отправлен для run этого диалога.
     stop_sent: bool,
-    /// Отчёт AnnounceFinished, который HA ждёт от TTS_START, ещё не отправлен.
     report_owed: bool,
-    /// Играет объявление HA (assist или media player); от диалога не зависит.
     announce: Option<AnnounceId>,
     announce_seq: AnnounceId,
-    /// Играет закрывающий earcon (ошибка/отмена); держит музыку приглушённой.
     earcon: Option<EarconSeq>,
     earcon_seq: EarconSeq,
-    /// Id последнего voice_request_start.
     voice_run: u64,
-    /// Записанное срабатывание, чей диалог открыт: живёт через follow-up-реплики до конца
-    /// разговора, а не только до смены диалога.
     record: Option<WakeRecord>,
-    /// Когда канал HA-медиа встал на паузу и когда кончился поток Sendspin.
     music_paused_ms: Option<i64>,
     sendspin_ended_ms: Option<i64>,
 }
@@ -73,7 +52,6 @@ impl Session {
         self.current_id
     }
 
-    /// Диалог слушает микрофон (wake word, кнопка, follow-up или HA).
     pub fn is_listening(&self) -> bool {
         matches!(
             self.dialog.as_ref().map(|d| &d.phase),
@@ -88,7 +66,6 @@ impl Session {
         )
     }
 
-    /// Ответ этого диалога уже начал играть (HEAD `tts_played`).
     pub fn tts_played(&self) -> bool {
         matches!(
             self.dialog.as_ref().map(|d| &d.phase),
@@ -96,7 +73,6 @@ impl Session {
         )
     }
 
-    /// LISTENING / PROCESSING: запрос ещё не дошёл до ответа.
     pub fn in_voice_request(&self) -> bool {
         matches!(self.phase(), Phase::Listening | Phase::Processing)
     }
@@ -117,7 +93,6 @@ impl Session {
         self.dialog.as_ref().map_or(0, |d| d.started_ms)
     }
 
-    /// Watchdog фазы: HA, не продвинувший run, не должен оставить микрофон включённым.
     pub fn watchdog_ms(&self) -> Option<u64> {
         match self.phase() {
             Phase::Listening => Some(LISTEN_TIMEOUT_MS),
@@ -126,13 +101,10 @@ impl Session {
         }
     }
 
-    // ---------------- run binding ----------------
-
     pub fn accept(&mut self, ev: VaEvent) -> bool {
         self.run.accept(ev)
     }
 
-    /// Событие завершило диалог, но run этого диалога ещё активен.
     pub fn stop_due(&self) -> bool {
         (self.run.run_active || self.run.awaiting_run_start) && !self.stop_sent
     }
@@ -145,7 +117,6 @@ impl Session {
         self.stop_sent
     }
 
-    /// HA отказался запускать run: ждать RUN_START больше нечего.
     pub fn no_run_follows(&mut self) {
         self.run.awaiting_run_start = false;
     }
@@ -162,9 +133,6 @@ impl Session {
         self.voice_run = run;
     }
 
-    // ---------------- диалог ----------------
-
-    /// Начало диалога: единственный вход в LISTENING.
     pub fn begin(&mut self, now: i64, wake: bool, endpoint: Option<EndpointRun>) {
         self.current_id = self.current_id.next();
         self.stop_sent = false;
@@ -178,7 +146,6 @@ impl Session {
         });
     }
 
-    /// Конец диалога.
     pub fn finish(&mut self) {
         self.run.awaiting_run_start = false;
         self.current_id = self.current_id.next();
@@ -186,8 +153,6 @@ impl Session {
         self.dialog = None;
     }
 
-    /// HA закончил фразу первым, диалог отменён или его заменили: детектор конца фразы
-    /// снимается, LISTENING становится PROCESSING.
     pub fn stop_listening(&mut self) {
         let Some(d) = &mut self.dialog else {
             return;
@@ -224,9 +189,6 @@ impl Session {
         }
     }
 
-    // ---------------- TTS ----------------
-
-    /// RUN_START: новый run сбрасывает «ответ уже играл», как `tts_played = false` в HEAD.
     pub fn set_tts_url(&mut self, url: &str) {
         let Some(d) = &mut self.dialog else {
             return;
@@ -237,7 +199,6 @@ impl Session {
         }
     }
 
-    /// TTS_END: URL ответа, без сброса уже сыгранного ответа.
     pub fn update_tts_url(&mut self, url: &str) {
         if url.is_empty() {
             return;
@@ -247,7 +208,6 @@ impl Session {
         }
     }
 
-    /// Ответ начинает играть; None — уже играет или URL ещё нет.
     pub fn take_tts(&mut self) -> Option<(DialogId, String)> {
         let Some(d) = &mut self.dialog else {
             return None;
@@ -263,7 +223,6 @@ impl Session {
         self.report_owed = true;
     }
 
-    /// Забирает долг отчёта; true — отправить AnnounceFinished.
     pub fn take_tts_report(&mut self) -> bool {
         mem::take(&mut self.report_owed)
     }
@@ -271,8 +230,6 @@ impl Session {
     pub fn drop_tts_report(&mut self) {
         self.report_owed = false;
     }
-
-    // ---------------- follow-up ----------------
 
     pub fn followup_on_event(&mut self, ev: VaEvent, continue_conversation: bool) {
         self.followup.on_event(ev, continue_conversation);
@@ -302,8 +259,6 @@ impl Session {
         self.followup = Followup::default();
     }
 
-    // ---------------- записанное срабатывание ----------------
-
     pub fn set_record(&mut self, record: Option<WakeRecord>) {
         self.record = record;
     }
@@ -332,12 +287,9 @@ impl Session {
         }
     }
 
-    /// Записанное срабатывание текущего разговора; None — диалог не от wake word.
     pub fn take_record(&mut self) -> Option<WakeRecord> {
         self.record.take()
     }
-
-    // ---------------- объявления и earcons ----------------
 
     #[cfg(test)]
     pub fn announce_id(&self) -> Option<AnnounceId> {
@@ -351,7 +303,6 @@ impl Session {
         seq
     }
 
-    /// Завершение объявления `seq`; false — это уже не текущее объявление.
     pub fn finish_announce(&mut self, seq: AnnounceId) -> bool {
         if self.announce == Some(seq) {
             self.announce = None;
@@ -372,7 +323,6 @@ impl Session {
         seq
     }
 
-    /// Конец earcon `seq`; false — играет уже другой.
     pub fn finish_earcon(&mut self, seq: EarconSeq) -> bool {
         if self.earcon == Some(seq) {
             self.earcon = None;
@@ -382,13 +332,9 @@ impl Session {
         }
     }
 
-    // ---------------- музыка этой станции ----------------
-
     pub fn on_music_state(&mut self, s: PlayState, now: i64) {
         match s {
             PlayState::Paused => self.music_paused_ms = Some(now),
-            // HA media took the speaker: an ended Sendspin stream is not this station's music
-            // any more, whichever of the two events came first.
             PlayState::Loading | PlayState::Playing => self.sendspin_ended_ms = None,
             _ => {}
         }

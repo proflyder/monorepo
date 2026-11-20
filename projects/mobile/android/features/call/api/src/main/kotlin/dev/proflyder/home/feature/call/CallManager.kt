@@ -22,17 +22,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
-/**
- * The phone-side call state machine.
- *
- * It owns exactly one live call at a time: `StartCall` -> `RINGING` ->
- * `CONNECTING` (offer/answer) -> `ACTIVE` -> `ENDED`, driven by the intercom
- * `Watch` event stream. Media (libwebrtc) and signaling (Connect) are behind
- * interfaces, so the whole transition set runs as a plain JVM test.
- *
- * The manager is app-scoped and keeps the `Watch` stream open permanently; the
- * server marks the phone online while that stream exists.
- */
 class CallManager(
     private val client: IntercomClient,
     private val mediaFactory: CallMediaFactory,
@@ -52,7 +41,6 @@ class CallManager(
     private var watchdog: Job? = null
     private var selfEndpointId: String? = null
     private var offerSent = false
-    /** True once this phone ended the call, so a late server event cannot add a failure. */
     private var endedLocally = false
 
     init {
@@ -99,8 +87,6 @@ class CallManager(
     }
 
     override fun acceptIncoming(callId: String) {
-        // TODO(incoming): no incoming-call screen. Keeping the method makes the
-        // contract symmetric for a future ring UI.
     }
 
     override fun declineIncoming(callId: String) {
@@ -126,8 +112,6 @@ class CallManager(
         if (state.value.phase == CallPhase.ENDED) return
         updatePeer(station)
 
-        // Registering is optional (Watch marks us online) but gives us the
-        // server-derived endpoint identity used to recognise our own events.
         val registration = client.registerEndpoint("Phone", listOf("audio"))
         if (registration is Outcome.Success) selfEndpointId = registration.value.id
 
@@ -140,7 +124,6 @@ class CallManager(
             is Outcome.Success -> result.value
         }
         if (state.value.phase == CallPhase.ENDED) {
-            // The user ended the call while StartCall was in flight.
             client.hangup(started.id, IntercomEndReason.CANCELED)
             return
         }
@@ -149,13 +132,9 @@ class CallManager(
         }
         startWatchdog()
 
-        // Media starts only after the server accepted the call, so a busy or
-        // offline station never opens the microphone.
         val iceServers = when (val config = client.getIceConfig()) {
             is Outcome.Success -> config.value
             is Outcome.Failure -> {
-                // Empty ICE config means host candidates only; a failure to read
-                // it is not fatal for the LAN/VPN case.
                 emptyList()
             }
         }
@@ -198,8 +177,6 @@ class CallManager(
             (current.callId == null && selfEndpointId != null && call.caller?.id == selfEndpointId)
 
         if (!mine) {
-            // TODO(incoming): a future ring screen accepts here. Today the phone
-            // declines any incoming call and stays IDLE.
             if (call.state == IntercomCallState.RINGING &&
                 selfEndpointId != null &&
                 call.callee?.id == selfEndpointId

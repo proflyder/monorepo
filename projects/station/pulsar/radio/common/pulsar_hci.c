@@ -1,12 +1,8 @@
-/********************************************************************************************************
- * Host-link pieces shared by pulsar's radio firmwares. Licensed under the Apache License 2.0 (see
- * board_cfg.h).
- *******************************************************************************************************/
 #include "pulsar_hci.h"
 #include "zb_api.h"
 #include "zbhci.h"
 
-extern u32 BIN_SIZE;  // linker symbol: image size
+extern u32 BIN_SIZE;
 
 void hciAck(u16 type, u8 status)
 {

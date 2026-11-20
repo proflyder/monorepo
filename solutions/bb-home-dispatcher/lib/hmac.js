@@ -4,9 +4,6 @@ export const SIGNATURE_HEADER = "x-bb-dispatch-signature";
 export const TIMESTAMP_HEADER = "x-bb-dispatch-timestamp";
 export const CLOCK_WINDOW_SECONDS = 30;
 
-// The signed string is "<unix-seconds>\n<exact body bytes as UTF-8>". Binding
-// the timestamp into the digest prevents replaying a captured body with a
-// fresher timestamp, and the caller's window is checked independently.
 export function signaturePayload(timestamp, body) {
   return `${timestamp}\n${body}`;
 }

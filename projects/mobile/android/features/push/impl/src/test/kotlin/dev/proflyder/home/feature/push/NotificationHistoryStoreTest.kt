@@ -19,11 +19,6 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 
-/**
- * The history is written by the FCM service, which can run before any screen
- * loaded the log. These tests use the real DataStore file, so a message is
- * never lost by an unbounded read-modify-write.
- */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class NotificationHistoryStoreTest {
@@ -50,7 +45,6 @@ class NotificationHistoryStoreTest {
         DataStoreNotificationHistoryStore(dataStore)
             .record(entry("earlier", NotificationHistoryType.NOTIFY, 1_000))
 
-        // The service process records without ever calling load().
         val writer = DataStoreNotificationHistoryStore(dataStore)
         writer.record(entry("later", NotificationHistoryType.NOTIFY, 2_000))
 

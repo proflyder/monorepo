@@ -18,3 +18,13 @@
 исходники.
 
 Восстановление — `docs/REBUILD.md`; OTA/ADB — `docs/OTA-FORTRESS.md`.
+
+## Заметки к коду
+
+Пояснения, перенесённые из комментариев исходников (код комментариев не содержит, см. `AGENTS.md`).
+
+- `dump-station.sh` — Dumps the Yandex Station Mini firmware and filesystem for offline study.
+- `find-station.sh` — Resolve the station's current LAN address via mDNS (the hostname embeds the device id and survives DHCP changes and factory resets).
+- `station-applied/activate_adb.sh` — FORTRESS-WRAPPER v2: 'deactivate' -> no-op (maind не может убить adbd), 'activate' -> всегда с --network (иначе оригинал снял бы network-маркер).
+- `station-applied/rootkeeper.sh` — FORTRESS-KEEPER v5: markers + network adbd; start adbd explicitly because yandex-debugctl says "already configured" and does not spawn it again.
+- `station-applied/yandex-block.sh` — FORTRESS-YANDEX-BLOCK v1 Blocks real Yandex at the packet level and pins DNS to the local Mac. Lives in /data (rw) and is re-applied by rootkeeper every 60s.

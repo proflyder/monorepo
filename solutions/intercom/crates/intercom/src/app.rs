@@ -1,9 +1,3 @@
-//! Composition root: configuration, telemetry, in-memory state and the
-//! authenticated Connect API.
-//!
-//! Shutdown is ordered: the listener stops accepting, then the expiry ticker is
-//! cancelled and joined by the supervisor.
-
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -17,13 +11,11 @@ use crate::api::{self, Api, TokenAuth};
 use crate::config::Config;
 use crate::domain::{Intercom, SystemClock, Timeouts};
 
-/// Reported implementation version.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(10);
 const EXPIRY_TICK: Duration = Duration::from_millis(500);
 
-/// Starts the service and blocks until SIGTERM/SIGINT or a listener failure.
 pub async fn run() -> anyhow::Result<()> {
     let config = Config::load().context("configuration")?;
     TelemetryBuilder::new()

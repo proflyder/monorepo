@@ -1,7 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The delete ripple is the theme's error color at the Material pressed
-     alpha, so the round state layer belongs to the red button rather than to
-     the neutral card. -->
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
     <item
         android:alpha="0.12"

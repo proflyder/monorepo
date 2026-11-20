@@ -1,9 +1,4 @@
 #!/usr/bin/env python3
-"""Synthesize and transcribe a fixed phrase without playback or HA mutations.
-
-Run with the Wyoming Python environment, e.g. inside the Piper Pod. Audio is
-kept in memory; no user recording is accessed or printed.
-"""
 import asyncio
 import array
 import time
@@ -33,7 +28,6 @@ async def check():
     assert fmt.width == 2 and fmt.channels == 1
     print(f"Puriso synthesis PASS: {len(data)} bytes, {time.monotonic()-start:.2f}s")
     samples = array.array("h", data)
-    # Linear resampling of signed PCM16 for ASR; no audio file or player needed.
     count = int(len(samples) * 16000 / fmt.rate)
     converted = array.array("h")
     for i in range(count):

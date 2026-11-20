@@ -1,19 +1,4 @@
 #!/usr/bin/env bash
-# Owner bootstrap for ha-config-sync (idempotent, --dry-run supported).
-#
-#   mise run admin:ha-config-sync-bootstrap [-- --dry-run]
-#
-# Does three things, never printing secret values:
-#   1. installs solutions/ha-config-sync/agent/ha-config-agent.sh as
-#      /mnt/data/ha-config-sync/agent.sh (root, 0755) and creates the state dirs;
-#   2. ensures secret/k8s/home-assistant/ha-config-sync holds an ed25519
-#      ssh_private_key plus a known_hosts line pinned as [<HAOS addr>]:22222;
-#   3. keeps exactly one authorized_keys line for ha-config-sync:
-#      restrict,command="HA_CONFIG_AGENT_ALLOWED_FROM=<node ip> /mnt/data/ha-config-sync/agent.sh"
-#      (dropbear has no host-restriction option; the agent enforces the source).
-#
-# The SSH connection is the owner's `ssh -F ~/.ssh/home-lab/config haos`. This
-# script is read-only on the controller except for its temporary directory.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"

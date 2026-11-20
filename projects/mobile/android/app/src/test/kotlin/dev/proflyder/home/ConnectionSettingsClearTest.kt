@@ -102,8 +102,6 @@ class ConnectionSettingsClearTest {
         assertFalse(store.config.value.hasToken)
         assertFalse(dataStore.data.first().hasToken())
 
-        // A subsequent request must fail with a controlled configuration error
-        // and must not reach OkHttp/server.
         val client = ConnectSchedulerClient(
             settings = store,
             baseClient = OkHttpClient(),
@@ -122,8 +120,6 @@ class ConnectionSettingsClearTest {
         val first = AndroidConnectionSettingsStore(dataStore, FakeCipher(), remote)
         first.updateToken("valid-token")
 
-        // A new store over the same DataStore (an app restart) sees the token
-        // and the Remote Config values, not any legacy endpoint fields.
         val second = AndroidConnectionSettingsStore(dataStore, FakeCipher(), remote)
         val config = second.config.value
         assertEquals("http://192.0.2.10:8080", config.endpoint?.baseUrl())
@@ -186,8 +182,6 @@ class ConnectionSettingsClearTest {
         val store = AndroidConnectionSettingsStore(dataStore(), FakeCipher(), FakeRemoteSource(loadedRemote()))
 
         val config = store.config.value
-        // Endpoints/timeouts are Remote Config-authoritative; only the encrypted
-        // token survives from the legacy DataStore.
         assertEquals("http://192.0.2.10:8080", config.endpoint?.baseUrl())
         assertEquals("http://192.0.2.10:8099", config.controlEndpoint?.baseUrl())
         assertEquals("legacy-token", config.bearerToken)

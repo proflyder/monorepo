@@ -1,12 +1,3 @@
-//! Sendspin-плеер без демона, для tools/sendspin_server.py (запускать при остановленном сервисе
-//! станции).
-//! usage: sendspin_probe [port=18928] [name=pulsar-test] [seconds=120] [state_dir=/tmp/pulsar-test/sendspin]
-//!
-//! Запускает сервис и печатает его события (stdout; сервис пишет лог в stderr). Через 3 с после
-//! подключения сервера один раз шлёт транспортную команду NEXT. На моделях с аппаратной громкостью
-//! «Master Playback Volume» устройства на время прогона ограничивается raw 82 (0.2 по шкале Mixer,
-//! см. AGENTS.md, «Безопасность станций») и затем восстанавливается; у Мини такого контрола нет, и
-//! та же программная громкость 0.2 идёт через dmix-sink модели.
 #![deny(unsafe_code)]
 #![deny(unsafe_op_in_unsafe_fn)]
 
@@ -39,14 +30,12 @@ struct Args {
     state_dir: PathBuf,
 }
 
-/// "Master Playback Volume" capped for the run, restored on drop.
 struct VolumeCap {
     ctl: Ctl,
     orig: [i64; 2],
 }
 
 impl VolumeCap {
-    /// Ok(None): no such control (the Mini's software volume), nothing to cap.
     fn apply(playback: &Playback, curve: &VolumeCurve) -> Result<Option<Self>, String> {
         if curve.software_volume {
             println!("volume: software (0.2)");
@@ -60,7 +49,6 @@ impl VolumeCap {
             }
         };
         if !ctl.mixer_exists(MASTER) {
-            // Opening the softvol PCM once creates the control.
             drop(Pcm::open(playback.pcm, Stream::Playback, true));
             if !ctl.mixer_exists(MASTER) {
                 println!("volume: no '{MASTER}' on hw:0, not capped");
@@ -114,7 +102,6 @@ fn main() -> ExitCode {
     };
     model.audio.playback.apply_env();
     pulsar_alsa::init(model.audio.playback.alsa_lib());
-    // As in the daemon (the player sets it): alsa-lib's own messages only at debug level.
     pulsar_alsa::quiet_error_handler();
     let cap = match VolumeCap::apply(&model.audio.playback, &model.volume) {
         Ok(cap) => cap,

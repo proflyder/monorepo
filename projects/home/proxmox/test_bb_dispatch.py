@@ -1,9 +1,3 @@
-"""Hermetic checks for the bb-dispatch SSH bridge (no CT, no live bb).
-
-The bridge is exercised as a real process: stdin carries the request and a
-local throw-away HTTP server plays the home-dispatcher plugin, so the test sees
-the exact headers and body that the bridge would send to the loopback route.
-"""
 import hashlib
 import hmac
 import importlib.util
@@ -26,7 +20,6 @@ INSTALL = ROOT / "install-bb.sh"
 
 
 def load_bridge_module():
-    """Import the extension-less bridge to test its signing primitive."""
     spec = importlib.util.spec_from_loader(
         "bb_dispatch", importlib.machinery.SourceFileLoader("bb_dispatch", str(BRIDGE))
     )
@@ -41,14 +34,13 @@ PUBKEY_BODY = "AAAAC3NzaC1lZDI1NTE5AAAAIEtest+dispatch+key+body"
 
 
 class Recorder(BaseHTTPRequestHandler):
-    """Minimal plugin double: records the request and answers from `plan`."""
 
     protocol_version = "HTTP/1.1"
     plan = {"status": 200, "body": b'{"ok":true,"result":{},"speech":"ok"}'}
     delay = 0.0
     requests = []
 
-    def do_POST(self):  # noqa: N802 - http.server API
+    def do_POST(self):
         length = int(self.headers.get("content-length") or "0")
         body = self.rfile.read(length)
         type(self).requests.append(
@@ -69,7 +61,7 @@ class Recorder(BaseHTTPRequestHandler):
         except (BrokenPipeError, ConnectionResetError):
             pass
 
-    def log_message(self, *args):  # keep the test output clean
+    def log_message(self, *args):
         return
 
 
@@ -124,8 +116,6 @@ class BridgeTest(unittest.TestCase):
         self.assertNotIn(TOKEN.encode(), output)
         self.assertNotIn(SECRET.encode(), output)
 
-    # ----- happy path and signature ---------------------------------------
-
     def test_forwards_one_request_with_plugin_signature(self):
         body = b'{"method":"targets","params":{}}'
         result = self.run_bridge(body)
@@ -147,11 +137,6 @@ class BridgeTest(unittest.TestCase):
         self.assert_no_secrets(result)
 
     def test_signature_matches_the_plugin_vector(self):
-        """Fixed vectors produced by solutions/bb-home-dispatcher/lib/hmac.js.
-
-        The second body contains Cyrillic text, so signing a re-encoded or
-        ASCII-escaped body instead of the exact request bytes fails here.
-        """
         bridge = load_bridge_module()
         vectors = [
             (
@@ -203,8 +188,6 @@ class BridgeTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(len(Recorder.requests), 1)
 
-    # ----- plugin answers are passed through ------------------------------
-
     def test_plugin_refusal_is_passed_through_with_exit_zero(self):
         answer = b'{"ok":false,"code":"invalid_signature","speech":"\xd0\x9d\xd0\xb5"}'
         Recorder.plan = {"status": 401, "body": answer}
@@ -226,8 +209,6 @@ class BridgeTest(unittest.TestCase):
             },
         )
         self.assert_no_secrets(result)
-
-    # ----- transport failures ---------------------------------------------
 
     def test_connection_refused_is_a_bridge_error(self):
         port = self.server.server_address[1]
@@ -251,8 +232,6 @@ class BridgeTest(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 1)
         self.assertEqual(json.loads(result.stdout)["code"], "bridge_error")
-
-    # ----- local refusals never reach bb ----------------------------------
 
     def test_request_over_the_body_limit_is_refused(self):
         body = b'{"method":"targets","params":{}}' + b" " * BODY_LIMIT
@@ -295,7 +274,6 @@ class BridgeTest(unittest.TestCase):
         self.assertEqual(Recorder.requests, [])
 
     def test_minimal_environment_keeps_utf8_output(self):
-        """sshd starts the forced command without a locale or HOME."""
         answer = '{"ok":false,"code":"invalid_request","speech":"Некорректный запрос."}'
         Recorder.plan = {"status": 400, "body": answer.encode("utf-8")}
         result = subprocess.run(
@@ -314,8 +292,6 @@ class BridgeTest(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout.decode("utf-8"), answer + "\n")
-
-    # ----- configuration ---------------------------------------------------
 
     def test_missing_credentials_are_not_configured(self):
         for name in ("token", "hmac"):

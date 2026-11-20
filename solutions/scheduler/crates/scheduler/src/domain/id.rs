@@ -1,21 +1,11 @@
-//! Stable identifiers.
-//!
-//! Resource ids are time-ordered UUIDv7; event ids are UUIDv5 over a dedupe
-//! identity. Both reproduce the former Go `idgen` byte for byte.
-
 use uuid::Uuid;
 use uuid::timestamp::{Timestamp, context::NoContext};
 
-/// Deterministic UUIDv5 (DNS namespace) of a dedupe key.
-///
-/// `Uuid::NAMESPACE_DNS` is the RFC 4122 namespace
-/// `6ba7b810-9dad-11d1-80b4-00c04fd430c8`, the same bytes the Go idgen used.
 #[must_use]
 pub fn event_id(dedupe_key: &str) -> String {
     Uuid::new_v5(&Uuid::NAMESPACE_DNS, dedupe_key.as_bytes()).to_string()
 }
 
-/// Time-ordered UUIDv7 for a schedule or timer created at `now_unix_millis`.
 #[must_use]
 pub fn resource_id(now_unix_millis: i64) -> String {
     let millis = now_unix_millis.max(0);
@@ -25,7 +15,6 @@ pub fn resource_id(now_unix_millis: i64) -> String {
     Uuid::new_v7(timestamp).to_string()
 }
 
-/// Opaque random id for identities that must stay unique within one second.
 #[must_use]
 pub fn random_id() -> String {
     Uuid::new_v4().to_string()
@@ -53,7 +42,6 @@ mod tests {
         assert_eq!(timestamp.to_unix().0, 1_767_268_800);
         assert_eq!(timestamp.to_unix().1, 123_000_000);
 
-        // Time ordering is the point of v7.
         assert!(resource_id(millis) < resource_id(millis + 1));
     }
 }

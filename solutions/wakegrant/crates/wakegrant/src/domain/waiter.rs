@@ -5,7 +5,6 @@ use tokio::sync::Notify;
 
 use super::Purpose;
 
-/// At most two concurrent waits per machine, across purposes.
 pub const MAX_WAITERS_PER_MACHINE: usize = 2;
 
 #[derive(Debug, Default)]
@@ -14,18 +13,11 @@ struct Inner {
     queues: HashMap<(String, Purpose), Arc<Notify>>,
 }
 
-/// Wakes long-poll claims when a matching grant is created.
-///
-/// Notifications are per `(machine, purpose)`: an unlock waiter must not wake
-/// for a logon grant and vice versa. The number of concurrent waits is capped
-/// per machine across purposes so one machine cannot pin unbounded HTTP
-/// requests.
 #[derive(Debug, Default)]
 pub struct Waiters {
     inner: Mutex<Inner>,
 }
 
-/// One registered wait. Dropping it releases the per-machine slot.
 pub struct Waiter {
     waiters: Arc<Waiters>,
     machine: String,
@@ -38,8 +30,6 @@ impl Waiters {
         Self::default()
     }
 
-    /// Registers a waiter, or returns `None` when the machine already has
-    /// [`MAX_WAITERS_PER_MACHINE`] active waits.
     #[allow(clippy::significant_drop_tightening)]
     pub fn acquire(self: &Arc<Self>, machine: &str, purpose: Purpose) -> Option<Waiter> {
         let mut inner = self.inner.lock().expect("waiter lock");
@@ -61,7 +51,6 @@ impl Waiters {
         })
     }
 
-    /// Wakes every waiter for `(machine, purpose)` after a grant is committed.
     pub fn broadcast(&self, machine: &str, purpose: Purpose) {
         let inner = self.inner.lock().expect("waiter lock");
         if let Some(notify) = inner.queues.get(&(machine.to_owned(), purpose)) {
@@ -82,9 +71,6 @@ impl Waiters {
 }
 
 impl Waiter {
-    /// A future that resolves on the next broadcast. Call
-    /// [`tokio::sync::futures::Notified::enable`] before re-checking the store
-    /// so a broadcast between the check and the wait cannot be lost.
     pub fn notified(&self) -> tokio::sync::futures::Notified<'_> {
         self.notify.notified()
     }
@@ -118,7 +104,6 @@ mod tests {
             let notified = first.notified();
             tokio::pin!(notified);
             notified.as_mut().enable();
-            // A logon broadcast must not wake an unlock waiter.
             waiters.broadcast("komp", Purpose::Logon);
             assert!(
                 tokio::time::timeout(std::time::Duration::from_millis(50), &mut notified)

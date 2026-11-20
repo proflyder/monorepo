@@ -21,13 +21,6 @@ import dev.proflyder.home.feature.scenarios.impl.databinding.ItemCatalogRowBindi
 import dev.proflyder.home.feature.scenarios.impl.databinding.ItemCatalogSettingsBinding
 import dev.proflyder.home.feature.scenarios.impl.databinding.SheetChoiceBinding
 
-/**
- * Catalog picker grouped by room and then by device.
- *
- * Group titles never contain raw entity ids: a missing device falls back to a
- * meaningful entry title or a localized "Scenarios HA"/"Other" label. Secondary
- * service entities (`role = SETTING`) are hidden behind a switch at the bottom.
- */
 internal class CatalogPickerDialog(
     private val context: Context,
     rawEntries: List<ControlEntry>,

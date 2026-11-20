@@ -1,10 +1,3 @@
-//! Prometheus exposition: only the `currency_bot_*` families.
-//!
-//! The Go service registered the default Go/process collectors as well; the
-//! Rust service exports exactly what the dashboard and ServiceMonitor use, with
-//! the same names, labels and `DefBuckets`. The registry is local, so tests can
-//! build independent instances.
-
 use std::sync::atomic::AtomicU64;
 
 use prometheus_client::encoding::text::encode;
@@ -14,7 +7,6 @@ use prometheus_client::metrics::gauge::Gauge;
 use prometheus_client::metrics::histogram::Histogram;
 use prometheus_client::registry::{Registry, Unit};
 
-/// Go's `prometheus.DefBuckets`.
 pub const DEF_BUCKETS: [f64; 11] = [
     0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0,
 ];
@@ -28,7 +20,6 @@ fn labels(pairs: &[(&str, &str)]) -> Labels {
         .collect()
 }
 
-/// The registry and every instrument.
 pub struct Metrics {
     registry: Registry,
     rates: Family<Labels, Gauge<f64, AtomicU64>>,
@@ -46,7 +37,6 @@ impl std::fmt::Debug for Metrics {
 }
 
 impl Metrics {
-    /// Build an isolated registry.
     #[must_use]
     pub fn new() -> Self {
         let mut registry = Registry::default();
@@ -100,7 +90,6 @@ impl Metrics {
         }
     }
 
-    /// Update the latest-rate gauges.
     pub fn set_rates(&self, usd_buy: f64, usd_sell: f64, rub_buy: f64, rub_sell: f64) {
         self.rates
             .get_or_create(&labels(&[("pair", "USD_TO_KZT"), ("type", "BUY")]))
@@ -116,31 +105,26 @@ impl Metrics {
             .set(rub_sell);
     }
 
-    /// Count a finished run.
     pub fn inc_job_run(&self, job: &str) {
         self.job_runs.get_or_create(&labels(&[("job", job)])).inc();
     }
 
-    /// Count a failed run.
     pub fn inc_job_failure(&self, job: &str) {
         self.job_failures
             .get_or_create(&labels(&[("job", job)]))
             .inc();
     }
 
-    /// Record a parse duration.
     pub fn observe_parse(&self, job: &str, seconds: f64) {
         self.parse_seconds
             .get_or_create(&labels(&[("job", job)]))
             .observe(seconds);
     }
 
-    /// Count a failed Telegram send.
     pub fn inc_telegram_failure(&self) {
         self.telegram_failures.inc();
     }
 
-    /// Count one HTTP request by matched route and status.
     pub fn observe_http(&self, route: &str, status: u16) {
         self.http_requests
             .get_or_create(&labels(&[
@@ -150,7 +134,6 @@ impl Metrics {
             .inc();
     }
 
-    /// Encode the whole registry in the OpenMetrics text format.
     #[must_use]
     pub fn encode(&self) -> String {
         let mut out = String::new();
@@ -205,7 +188,6 @@ mod tests {
             text.contains("# TYPE currency_bot_parse_duration_seconds histogram"),
             "{text}"
         );
-        // No Go/process collectors: only currency_bot_* sample lines.
         for line in text.lines() {
             if line.starts_with('#') || line.is_empty() {
                 continue;

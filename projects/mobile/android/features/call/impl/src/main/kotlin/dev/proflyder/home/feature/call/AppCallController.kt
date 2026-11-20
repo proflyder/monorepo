@@ -7,11 +7,6 @@ import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 import kotlinx.coroutines.CoroutineScope
 
-/**
- * Binds the JVM-testable [CallManager] into the Metro graph. [CallManager] lives
- * in the API module and deliberately has no DI annotations, so its constructor
- * stays a plain test seam.
- */
 @SingleIn(AppScope::class)
 @ContributesBinding(AppScope::class)
 @Inject

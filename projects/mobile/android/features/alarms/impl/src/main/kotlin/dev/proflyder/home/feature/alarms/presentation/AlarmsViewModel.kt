@@ -23,9 +23,7 @@ data class AlarmsUiState(
     val alarms: List<Schedule> = emptyList(),
     val loadError: RemoteFailure? = null,
     val actionError: RemoteFailure? = null,
-    /** True while any single or bulk server mutation is in flight. */
     val busy: Boolean = false,
-    /** Ids of alarms picked in multi-select mode; non-empty means selection mode. */
     val selectedIds: Set<String> = emptySet(),
 ) {
     val selectionMode: Boolean get() = selectedIds.isNotEmpty()
@@ -43,7 +41,6 @@ class AlarmsViewModel(
     private var refreshJob: Job? = null
     private var generation = 0
 
-    /** [silent] keeps already loaded data on screen without a spinner (tab returns, resume). */
     fun refresh(silent: Boolean = false) {
         refreshJob?.cancel()
         val requested = ++generation
@@ -54,7 +51,6 @@ class AlarmsViewModel(
             when (result) {
                 is Outcome.Success -> updateState {
                     val sorted = result.value.sortedWith(compareBy({ it.at.hour }, { it.at.minute }, { it.label }))
-                    // Drop selections of alarms that no longer exist on the server.
                     copy(
                         refreshing = false,
                         alarms = sorted,
@@ -69,7 +65,6 @@ class AlarmsViewModel(
 
     fun setEnabled(alarm: Schedule, enabled: Boolean) = mutate { setAlarmEnabled(alarm.id, enabled) }
 
-    /** Skips the next occurrence only; the alarm stays enabled on the server. */
     fun skipNextOccurrence(alarm: Schedule) = mutate { skipAlarmOccurrence(alarm.id) }
 
     fun snooze(alarm: Schedule) = mutate { snoozeAlarm(alarm.id) }
@@ -86,8 +81,6 @@ class AlarmsViewModel(
             }
         }
     }
-
-    // --- multi-select -----------------------------------------------------
 
     fun toggleSelection(id: String) = updateState {
         copy(selectedIds = if (id in selectedIds) selectedIds - id else selectedIds + id)
@@ -117,13 +110,9 @@ class AlarmsViewModel(
         }
     }
 
-    // --- one-shot error consumption ---------------------------------------
-
     fun consumeActionError() = updateState { copy(actionError = null) }
 
     fun consumeLoadError() = updateState { copy(loadError = null) }
-
-    // --- internals --------------------------------------------------------
 
     private fun mutate(action: suspend () -> Outcome<Schedule>) {
         if (currentState.busy) return
@@ -136,11 +125,6 @@ class AlarmsViewModel(
         }
     }
 
-    /**
-     * Applies [step] to each selected alarm in order. A step returns null on
-     * success (and has already updated state) or the failure that stops the
-     * run; alarms that were not processed stay selected so the user can retry.
-     */
     private fun runBulk(step: suspend (Schedule) -> RemoteFailure?) {
         if (currentState.busy) return
         val targets = currentState.alarms.filter { it.id in currentState.selectedIds }

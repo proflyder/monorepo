@@ -1,21 +1,3 @@
-//! FCM HTTP v1 sender with service-account OAuth.
-//!
-//! A service-account JSON is exchanged for a short-lived access token with a
-//! signed RS256 JWT assertion, exactly like the official client libraries:
-//! `POST {token_url}` with `grant_type=…jwt-bearer&assertion=<jwt>`. The token
-//! is cached in memory until shortly before it expires; nothing is written to
-//! disk.
-//!
-//! Two message shapes:
-//!
-//! * [`Message::notification`] carries a `notification` block, so the system
-//!   tray shows the text even if the app process is gone;
-//! * [`Message::find`] is data-only with `android.priority=high`, so the
-//!   device wakes the app instead of rendering a tray entry.
-//!
-//! Both set the Android channel id: the app owns the channels and their
-//! importance, the server only names them.
-
 use std::sync::Mutex;
 use std::time::Duration;
 
@@ -24,35 +6,24 @@ use ring::signature::{RSA_PKCS1_SHA256, RsaKeyPair};
 use serde::Serialize;
 use serde_json::{Value, json};
 
-/// Data key that marks a find-phone message.
 pub const FIND_TYPE: &str = "phone_find";
-/// Data key that marks a normal notification message.
 pub const NOTIFY_TYPE: &str = "phone_notify";
-/// Notification channel the app registers for normal notifications.
 pub const NOTIFICATION_CHANNEL: &str = "home_notifications";
 
-/// Why a send failed.
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-    /// The service account cannot be used (malformed or unsupported key).
     #[error("service account: {0}")]
     ServiceAccount(&'static str),
-    /// The OAuth assertion was rejected.
     #[error("oauth: {0}")]
     OAuth(String),
-    /// FCM rejected the message body.
     #[error("fcm: {0}")]
     Request(String),
-    /// FCM answered with a permanent per-token error; the caller should forget
-    /// the token.
     #[error("fcm rejected the token")]
     Unregistered,
-    /// FCM answered with a transient failure.
     #[error("fcm unavailable: HTTP {0}")]
     Unavailable(u16),
 }
 
-/// One parsed service account.
 #[derive(Debug, Clone)]
 pub struct ServiceAccount {
     pub project_id: String,
@@ -61,7 +32,6 @@ pub struct ServiceAccount {
 }
 
 impl ServiceAccount {
-    /// Parses the JSON a GCP service-account key file contains.
     pub fn parse(json: &str) -> Result<Self, Error> {
         let document: Value =
             serde_json::from_str(json).map_err(|_| Error::ServiceAccount("invalid JSON"))?;
@@ -86,7 +56,6 @@ impl ServiceAccount {
         })
     }
 
-    /// The PKCS#8 DER bytes behind the PEM block.
     fn private_key_der(&self) -> Result<Vec<u8>, Error> {
         let body: String = self
             .private_key_pem
@@ -104,14 +73,10 @@ impl ServiceAccount {
             .map_err(|_| Error::ServiceAccount("private_key is not a PKCS#8 RSA key"))
     }
 
-    /// The PKCS#1 RSA public key (DER) of the service account. Exposed so a
-    /// test can verify the signed assertion, and so a future rotation check can
-    /// compare the key that is actually mounted.
     pub fn public_key_der(&self) -> Result<Vec<u8>, Error> {
         Ok(self.signer()?.public().as_ref().to_vec())
     }
 
-    /// Builds the signed JWT assertion for one OAuth exchange.
     pub fn assertion(&self, token_url: &str, issued_at: i64) -> Result<String, Error> {
         let header = json!({"alg": "RS256", "typ": "JWT"});
         let claims = json!({
@@ -143,12 +108,11 @@ fn b64_json(value: &Value) -> String {
     base64::Engine::encode(&base64::engine::general_purpose::URL_SAFE_NO_PAD, bytes)
 }
 
-/// One message to deliver.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Message {
-    /// Data-only find-phone request.
-    Find { reason: String },
-    /// Notification with an optional deep link.
+    Find {
+        reason: String,
+    },
     Notification {
         title: String,
         body: String,
@@ -157,7 +121,6 @@ pub enum Message {
 }
 
 impl Message {
-    /// `type` value the app routes on.
     #[must_use]
     pub const fn kind(&self) -> &'static str {
         match self {
@@ -166,7 +129,6 @@ impl Message {
         }
     }
 
-    /// The FCM `message` object for one device token.
     #[must_use]
     pub fn payload(&self, token: &str) -> Value {
         match self {
@@ -213,7 +175,6 @@ struct CachedToken {
     expires_at: i64,
 }
 
-/// The FCM sender. Cloning is cheap: one HTTP client and a token cache.
 pub struct Sender {
     http: reqwest::Client,
     account: ServiceAccount,
@@ -234,7 +195,6 @@ impl std::fmt::Debug for Sender {
 }
 
 impl Sender {
-    /// Builds a sender from the service-account JSON.
     pub fn new(
         service_account: &str,
         token_url: &str,
@@ -256,13 +216,11 @@ impl Sender {
         })
     }
 
-    /// The project id the API path needs.
     #[must_use]
     pub fn project_id(&self) -> &str {
         &self.account.project_id
     }
 
-    /// Sends one message to one token.
     pub async fn send(&self, token: &str, message: &Message, now: i64) -> Result<(), Error> {
         let access = self.access_token(now).await?;
         let url = format!(
@@ -290,7 +248,6 @@ impl Sender {
         }
         let code = status.as_u16();
         if code == 401 {
-            // The cached token may have been revoked; drop it for the next call.
             self.clear_cache();
             return Err(Error::OAuth("access token rejected".to_owned()));
         }
@@ -300,7 +257,6 @@ impl Sender {
         Err(Error::Request(format!("HTTP {code}")))
     }
 
-    /// Returns a cached access token or exchanges a fresh assertion.
     async fn access_token(&self, now: i64) -> Result<String, Error> {
         if let Some(cached) = self.cached_token(now) {
             return Ok(cached);
@@ -371,7 +327,6 @@ impl Sender {
     }
 }
 
-/// Whether an FCM error body means "this token is dead".
 fn is_unregistered(body: &str) -> bool {
     body.contains("UNREGISTERED") || body.contains("registration-token-not-registered")
 }

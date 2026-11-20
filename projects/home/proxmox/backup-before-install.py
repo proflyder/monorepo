@@ -1,9 +1,4 @@
 #!/usr/bin/env python3
-"""Cold-copy local PVCs and host recovery files before a destructive OS install.
-
-Run as root on the current K3s host. The output contains credentials and must
-stay private. Workload replica counts are restored even if copying fails.
-"""
 import argparse
 import json
 import os
@@ -55,7 +50,6 @@ def main(output):
     selector = alloy["spec"]["template"]["spec"].get("nodeSelector", {})
     (output / "workload-replicas.json").write_text(json.dumps({"deployments": deployments, "statefulsets": stateful, "alloyNodeSelector": selector}, indent=2))
     try:
-        # Stop the operator before scaling the stateful sets that it reconciles.
         for ns, name, _ in deployments:
             kube("-n", ns, "scale", "deploy/" + name, "--replicas=0")
         wait_until(lambda: not any(any(o["kind"] == "ReplicaSet" for o in p["metadata"].get("ownerReferences", []))
@@ -88,7 +82,6 @@ def main(output):
             subprocess.run(["cp", "-a", str(source), str(destination)], check=True)
             copied += 1
         print(f"Cold-copied {copied} bound persistent volumes", flush=True)
-        # Filesystem metadata/recovery credentials, not a byte-for-byte disk image.
         host_paths = ["etc", "boot", "boot/efi", "root", "usr/local", "var/lib/shim-signed", "var/lib/dkms", "usr/src",
                       "var/backups/k3s-migration/native-hermes-home",
                       "var/backups/k3s-migration/native-compose"]
@@ -128,7 +121,6 @@ def main(output):
             shutil.copy2(src, cluster / item)
     (output / "secrets.json").write_text(kube("get", "secrets", "-A", "-o", "json"))
     (output / "configmaps.json").write_text(kube("get", "configmaps", "-A", "-o", "json"))
-    # Check each regular SQLite database; telemetry TSDB and ONNX are not SQLite.
     checked = 0
     for path in (output / "volumes").rglob("*"):
         if not path.is_file() or path.is_symlink():
@@ -142,8 +134,6 @@ def main(output):
     (output / "snapshot-summary.json").write_text(json.dumps({"bound_volumes": copied, "sqlite_databases_checked": checked,
         "created_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "scope": "Cold application/telemetry volumes and host recovery files; not a whole-disk image"}, indent=2))
-    # Preserve original UID/GID/modes in copied volumes. The outer directory is
-    # root-only; changing all inner permissions would corrupt restore fidelity.
     for path in output.iterdir():
         if path.is_file():
             path.chmod(0o600)

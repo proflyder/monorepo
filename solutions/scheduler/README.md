@@ -363,3 +363,75 @@ executor-ом и не гарантируется этим сервисом.
 - SQLite рассчитан на один процесс; горизонтальное масштабирование
   потребует другого storage/broker;
 - звук, громкость, рингтон и restore source остаются у HA/Pulsar.
+
+## Заметки к коду
+
+Пояснения, перенесённые из комментариев исходников (код комментариев не содержит, см. `AGENTS.md`).
+
+- `crates/scheduler/src/api/auth.rs` — Bearer authentication as a Connect interceptor.
+  - The digest is derived from the secret and never printed.
+- `crates/scheduler/src/api/convert.rs` — Conversions between the generated protobuf messages and the domain model.
+- `crates/scheduler/src/api/mod.rs` — Connect transport: one axum fallback serving the scheduler, alarm and scenario protobuf services.
+- `crates/scheduler/src/api/push.rs` — `POST /v1/push/devices` — the phone's push registration surface.
+  - Stable device identity chosen by the app (never the FCM token).
+  - Runs one store operation on the blocking pool: the store owns a single SQLite writer thread and must never block the reactor.
+- `crates/scheduler/src/api/text.rs` — Stable localization keys for scheduler responses and errors.
+  - Localized text for a store failure. Exact details whose wording is part of the client experience get a specific key; dynamic bounds carry typed arguments; everything else falls back to a generic per-kind key so a raw English detail never reaches the app.
+- `crates/scheduler/src/api/zone.rs` — Per-request client time zone.
+- `crates/scheduler/src/app.rs` — Composition root: configuration, telemetry, SQLite store, engine and the authenticated Connect API.
+- `crates/scheduler/src/config.rs` — Process configuration, loaded 1:1 from the Go scheduler's environment.
+  - Advertise `GetStatus.scenario_execution_supported`. The scheduler never executes scenarios; `ha-scenario` does. This is a deployment flag so the status only claims support when that executor is actually rolled out.
+  - Why the environment was rejected. Messages match the Go loader and never contain a secret value.
+- `crates/scheduler/src/domain/clock.rs` — Time source abstraction.
+- `crates/scheduler/src/domain/event.rs` — Outbox event model and stable dedupe identities.
+  - Terminal states are never leased again.
+  - Dedupe key of a manual scenario run. `run_id` is unique per call unless idempotency replays a stored event.
+- `crates/scheduler/src/domain/hash.rs` — Canonical idempotency strings and their SHA-1 digests.
+  - Canonical schedule request. The fields are ordered deliberately: the layout is part of the persisted SHA-1 used for idempotency conflict detection.
+  - Canonical scenario definition used for idempotent CreateScenario.
+- `crates/scheduler/src/domain/id.rs` — Stable identifiers.
+- `crates/scheduler/src/domain/occurrence.rs` — Occurrence math: the ringing window, missed-grace classification and snooze eligibility.
+  - The occurrence that is currently eligible for stop/snooze. There is intentionally no event fallback: `StopSchedule` clears the window, so a stale DELIVERED event must not resurrect snooze eligibility.
+- `crates/scheduler/src/domain/rule.rs` — Recurrence rules in UTC.
+- `crates/scheduler/src/domain/scenario.rs` — Durable scenario definitions.
+  - Serialized definition used as the stored body and idempotency input.
+- `crates/scheduler/src/domain/schedule.rs`
+  - Canonical request string used for idempotency conflict detection.
+- `crates/scheduler/src/domain/timer.rs`
+  - Canonical request string used for idempotency conflict detection.
+- `crates/scheduler/src/domain/validation.rs` — Input validation shared by the future store and API layers.
+  - Idempotency key length limit (bytes).
+  - Validates an optional idempotency key.
+- `crates/scheduler/src/domain/vectors.rs` — Golden vectors shared with the former Go implementation.
+- `crates/scheduler/src/engine.rs` — The durable engine loop: one tick per interval plus a periodic purge.
+  - Tick once immediately so readiness and due work do not wait a full interval after startup.
+- `crates/scheduler/src/health.rs` — Distroless probes: `-healthcheck` and `-status`.
+- `crates/scheduler/src/lib.rs` — Scheduler crate.
+- `crates/scheduler/src/main.rs` — Command entry point: the scheduler service, plus the distroless `-healthcheck` and `-status` probes used by the deployment and smoke tests.
+- `crates/scheduler/src/store/event.rs`
+  - Records a terminal outcome. Repeated acks are idempotent.
+- `crates/scheduler/src/store/migrate.rs` — One-time conversion of legacy local-time schedule rows to UTC.
+  - Rewrites legacy rows and drops the time-zone columns. Idempotent: a database that already went through this pass has no `timezone` column.
+- `crates/scheduler/src/store/mod.rs` — Durable scheduler store on `home-sqlite`.
+- `crates/scheduler/src/store/push.rs` — Push delivery devices (FCM registration tokens).
+  - Stable device identity chosen by the app, never the FCM token.
+  - FCM registration token. Never logged.
+  - Validates a registration request, never trusting server-derived fields.
+  - Inserts or refreshes one device, keyed by `device_id`. A rotated FCM token updates that device's row; a token that was previously attached to a legacy token-keyed row or to another device identity is detached from the old row, so every token maps to exactly …
+- `crates/scheduler/src/store/scenario.rs` — Scenario definitions, revision control and time-trigger materialization.
+  - Validates and copies client input, never trusting server-derived fields.
+  - Creates a scenario and materializes its time triggers. A non-empty idempotency key replays the original definition when the canonical request matches.
+  - Deletes a scenario and its materialized schedules. A repeated delete is idempotent and returns `false`.
+  - Queues a manual `scenario.fire` event. A non-empty idempotency key replays the stored event instead of queueing another run.
+- `crates/scheduler/src/store/schedule.rs`
+  - Validates and normalizes client input, never trusting server-derived fields present in the request.
+  - Creates a durable schedule. A non-empty idempotency key replays the original resource when the canonical request matches.
+  - Scenario rows are internal trigger materialization. They are returned only by an explicit kind=SCENARIO query so alarm and reminder clients never render them as schedules.
+  - Skips the next occurrence of a recurring schedule without disabling it. The pending FIRE of that occurrence is marked skipped (an executor may still hold a lease, so it must not ring), and a currently active occurrence is closed.
+- `crates/scheduler/src/store/status.rs`
+  - Snapshot of scheduler state. It never asserts that sound was audible.
+  - Removes terminal events and idempotency rows older than retention.
+- `crates/scheduler/src/store/timer.rs`
+  - Starts a durable countdown; a non-empty idempotency key replays the original timer when the request matches.
+- `crates/scheduler/tests/contract.rs` — Replays the frozen golden HTTP fixtures against the Rust Connect server.
+- `crates/scheduler/tests/go_database.rs` — Opens a SQL dump produced by the Go store and reads it through the Rust store. This is the rollback-compatibility test: the PVC format belongs to the Go service until cutover.

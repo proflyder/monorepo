@@ -1,11 +1,3 @@
-"""Contracts for the optional station (firmware) deploy identity.
-
-`configure.py` adds the `ci-station` policy plus the `deploy-station` JWT role
-only when a station repository is supplied. The Android App Distribution role
-is bound to PR CI runs, so its claims use a glob. The former home deploy role is
-gone: home services are applied by Flux and CI no longer reaches OpenBao for
-them. These tests record API calls, so no OpenBao is needed.
-"""
 import os
 import sys
 import re
@@ -18,7 +10,7 @@ from unittest import mock
 DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(DIR))
 
-import configure  # noqa: E402
+import configure
 
 AUDIENCE = "https://vault.example.test"
 HOME_REPOSITORY = "example/home"
@@ -108,7 +100,6 @@ class AndroidRole(unittest.TestCase):
         })
 
     def test_android_globs_only_match_pr_ci_runs(self):
-        """The bound globs must accept PR merge refs and nothing else."""
         import fnmatch
 
         claims = configure.ensure_github
@@ -144,7 +135,6 @@ class AndroidRole(unittest.TestCase):
                     workflow))
 
     def test_android_release_role_payload(self):
-        """The manual release assumes its own develop-bound role."""
         bao = Recorder()
         with redirect_stdout(StringIO()):
             configure.ensure_github(bao, AUDIENCE, HOME_REPOSITORY)
@@ -168,7 +158,6 @@ class AndroidRole(unittest.TestCase):
         })
 
     def test_android_release_role_is_not_a_pr_role(self):
-        """The manual role must not accept a pull request merge ref."""
         import fnmatch
 
         bao = Recorder()
@@ -184,7 +173,6 @@ class AndroidRole(unittest.TestCase):
             bound["job_workflow_ref"]))
 
     def test_android_cleanup_role_payload(self):
-        """The scheduled cleanup assumes its own develop-bound role."""
         bao = Recorder()
         with redirect_stdout(StringIO()):
             configure.ensure_github(bao, AUDIENCE, HOME_REPOSITORY)
@@ -208,7 +196,6 @@ class AndroidRole(unittest.TestCase):
         })
 
     def test_android_cleanup_globs_only_match_the_scheduled_workflow(self):
-        """The cleanup role accepts only cleanup.yml on develop."""
         import fnmatch
 
         bao = Recorder()
@@ -233,7 +220,6 @@ class AndroidRole(unittest.TestCase):
         with redirect_stdout(StringIO()):
             configure.ensure_github(bao, AUDIENCE, HOME_REPOSITORY)
         self.assertNotIn("/v1/auth/github/role/deploy-home", bao.paths())
-        # Only the Android roles exist without a station repository.
         self.assertEqual(
             [path for path in bao.paths() if path.startswith("/v1/auth/github/role/")],
             [
@@ -254,7 +240,6 @@ class AndroidRole(unittest.TestCase):
 
 
 def run_main(*extra_args, env=None):
-    """Run main() with the API surface replaced by recorders."""
     policies: list[tuple[str, str]] = []
     github: list[tuple[str, str, str | None]] = []
 
@@ -331,7 +316,6 @@ if __name__ == "__main__":
 
 
 class TotpState(unittest.TestCase):
-    """A rerun without --enforce-totp must not touch nor misreport enforcement."""
 
     def run_totp(self, enforcement_code):
         class Bao(Recorder):

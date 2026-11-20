@@ -1,13 +1,3 @@
-//! Актор звонка: сигналинг + медиа + сборка/выдача аудио.
-//!
-//! Контроллер владеет микрофоном и кольцом, поэтому uplink приходит сюда готовыми чанками
-//! VQE (16 кГц), а downlink уходит в [`Downlink`] (канал `Call` в pulsar-playback). Сам актор
-//! не знает ни про HA, ни про модель станции.
-//!
-//! Порядок звонка: `Incoming` → (сигнал [`RING_MS`]) → `Answer` → offer/answer → медиа →
-//! `Active`. Любая ошибка медиа или сигналинга завершает звонок событием `Ended`.
-//! Аудио никогда не пишется и не логируется.
-
 use std::cell::Cell;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -24,33 +14,21 @@ use crate::rtc::{Peer, PeerOutput};
 use crate::signaling::{SignalError, Signaling, WatchMessage};
 use crate::{CallConfig, CallEvent, FRAME_MS, RING_MS};
 
-/// Счётчики вывода для наблюдаемости звонка.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct SinkStats {
-    /// Сколько мс звука ждёт в очереди канала.
     pub queued_ms: u32,
-    /// Сколько мс реального звука уже ушло в устройство.
     pub written_ms: u64,
-    /// Сколько раз период записан неполным (без добивки тишиной).
     pub partial: u64,
-    /// Сколько кадров выброшено контролем дрейфа.
     pub overflow: u64,
-    /// Ошибки/переполнения ALSA, после которых канал восстанавливался.
     pub xrun: u64,
 }
 
-/// Куда писать downlink. Реализация — pulsar-media: отдельный PCM-канал `Call` с малым
-/// буфером, не Music/Announce.
 pub trait Downlink: Send + Sync {
-    /// Проиграть моно 48 кГц PCM.
     fn write(&self, pcm: &[i16]);
-    /// Выбросить всё непригранное (звонок закончился).
     fn flush(&self);
-    /// Текущая очередь канала и накопленные счётчики.
     fn stats(&self) -> SinkStats {
         SinkStats::default()
     }
-    /// Сколько мс звука ждёт в очереди канала.
     fn queued_ms(&self) -> u32 {
         self.stats().queued_ms
     }
@@ -62,7 +40,6 @@ enum Cmd {
     Uplink(Vec<i16>),
 }
 
-/// Команды контроллера. Все методы не блокируют; фаза и мут читаются синхронно.
 #[derive(Clone)]
 pub struct CallHandle {
     cmds: Handle<Cmd>,
@@ -72,7 +49,6 @@ pub struct CallHandle {
 }
 
 impl CallHandle {
-    /// Модуль включён (есть URL и токен) и готов принимать команды.
     #[must_use]
     pub fn available(&self) -> bool {
         self.enabled
@@ -88,18 +64,15 @@ impl CallHandle {
         self.muted.get()
     }
 
-    /// Мут микрофона: глушит только uplink, собеседник продолжает звучать.
     pub fn set_muted(&self, muted: bool) {
         self.muted.set(muted);
         let _ = self.cmds.send(Cmd::Mute(muted));
     }
 
-    /// Сбросить звонок (кнопка действия или HA).
     pub fn hangup(&self) {
         let _ = self.cmds.send(Cmd::Hangup);
     }
 
-    /// Чанк очищенного VQE-потока 16 кГц.
     pub fn push_uplink(&self, pcm: &[i16]) {
         if !self.muted.get() {
             let _ = self.cmds.send(Cmd::Uplink(pcm.to_vec()));
@@ -107,7 +80,6 @@ impl CallHandle {
     }
 }
 
-/// Запустить звонок. Без конфигурации или вывода модуль выключен: handle отвечает `Idle`.
 pub fn spawn(
     config: Option<CallConfig>,
     downlink: Option<Arc<dyn Downlink>>,
@@ -117,7 +89,6 @@ pub fn spawn(
     let phase = Rc::new(Cell::new(CallPhase::Idle));
     let muted = Rc::new(Cell::new(false));
     let (Some(config), Some(downlink)) = (config, downlink) else {
-        // Команды никто не читает: канал закрывается вместе с последним handle.
         return (
             CallHandle {
                 cmds: commands,
@@ -172,7 +143,6 @@ async fn run(
             Ok(()) => {}
             Err(error) => warn!("call: signaling: {error}"),
         }
-        // Обрыв: станция возвращается в обычное состояние, клиент переподключается.
         phase.set(CallPhase::Idle);
         downlink.flush();
         let _ = events.send(CallEvent::Ended);
@@ -188,7 +158,6 @@ async fn run(
     }
 }
 
-/// Всё, что нужно для побочных эффектов: сигналинг, события и выход звука.
 struct Ctx<'a> {
     signaling: &'a Signaling,
     events: &'a UnboundedSender<CallEvent>,
@@ -237,14 +206,8 @@ impl Ctx<'_> {
     }
 }
 
-/// Один кадр downlink: сырой Opus-пакет; декодирование идёт в порядке воспроизведения.
 type OpusPacket = Vec<u8>;
 
-/// Пересчёт RTP timestamp (48 кГц) в номер кадра для джиттер-буфера.
-///
-/// Длительность кадра берётся из предыдущего пакета, а не предполагается равной 20 мс:
-/// телефон вправе прислать 10, 20 или 60 мс, и тогда `time / 960` склеивает или теряет
-/// номера. Якорь — последний принятый пакет; сравнение идёт в его длительности.
 struct Timeline {
     anchor: Option<Anchor>,
 }
@@ -290,18 +253,10 @@ impl Timeline {
     }
 }
 
-/// Сколько мс держать в очереди канала, прежде чем выдать ещё кадр.
-///
-/// Один пропущенный тик (20 мс) должен восстанавливаться этим же вызовом: 60 мс — это три
-/// кадра, которые закрывают провал и оставляют запас до следующего тика. Устройство —
-/// мастер-часов, поэтому очередь проверяется перед каждым кадром, а не раз в тик.
 const DOWNLINK_TARGET_MS: u32 = 60;
-/// Предел кадров за один вызов: залп после долгого провала не должен забивать очередь.
 const MAX_FRAMES_PER_PUMP: usize = 5;
-/// Период строки наблюдаемости.
 const REPORT_EVERY: Duration = Duration::from_secs(5);
 
-/// Счётчики, которые меняются в порядке воспроизведения (декодер stateful).
 #[derive(Clone, Copy, Debug, Default)]
 struct PlayoutCounters {
     decode_errors: u64,
@@ -309,7 +264,6 @@ struct PlayoutCounters {
     fec: u64,
 }
 
-/// Декодирование кадров джиттер-буфера в порядке выдачи.
 struct DownlinkPlayback<'a, C: Codec> {
     codec: &'a mut C,
     counters: &'a mut PlayoutCounters,
@@ -322,7 +276,6 @@ impl<C: Codec> Playout<OpusPacket> for DownlinkPlayback<'_, C> {
         if let Some(pcm) = self.codec.decode(packet) {
             pcm
         } else {
-            // Битый пакет не должен ронять выдачу: место закрывает PLC декодера.
             self.counters.decode_errors += 1;
             pulsar_metrics::call_decode_error();
             self.codec.conceal()
@@ -330,8 +283,6 @@ impl<C: Codec> Playout<OpusPacket> for DownlinkPlayback<'_, C> {
     }
 
     fn lost(&mut self, next: Option<&OpusPacket>) -> Vec<i16> {
-        // Пропуск N и на месте N+1: in-band FEC восстанавливает N по следующему
-        // пакету. Если FEC нет — обычный PLC.
         if let Some(next) = next
             && let Some(pcm) = self.codec.decode_fec(next)
         {
@@ -345,10 +296,6 @@ impl<C: Codec> Playout<OpusPacket> for DownlinkPlayback<'_, C> {
     }
 }
 
-/// Докармливать очередь вывода кадрами, пока устройство не набрало цель.
-///
-/// Цикл, а не один кадр за тик: опоздавший тик иначе навсегда теряет 20 мс, и ALSA
-/// получает провал вместо речи. `active` проверяется вызывающим: вне звонка кадры копятся.
 fn playout<C: Codec>(
     jitter: &mut JitterBuffer<OpusPacket>,
     codec: &mut C,
@@ -385,12 +332,7 @@ struct Media {
 }
 
 impl Media {
-    /// Разобрать накопленное движком: соединение и входящие кадры.
-    /// Возвращает `false`, если медиа потеряно. Кадры только кладутся в джиттер-буфер:
-    /// выдача живёт по часам воспроизведения в [`Media::pump`].
     fn drive(&mut self) -> bool {
-        // Сначала время: только `handle_timeout` пакетирует записанные Opus-кадры и
-        // отправляет ICE/RTCP. Затем дренаж, который отдаёт `Transmit` в сокет.
         self.peer.handle_timeout(Instant::now());
         let Ok((outputs, _deadline)) = self.peer.drain() else {
             return false;
@@ -405,8 +347,6 @@ impl Media {
                 PeerOutput::Audio { data, time } => {
                     self.rx_rtp += 1;
                     pulsar_metrics::call_rx_packet();
-                    // Декодирование — при выдаче: декодер stateful, и FEC/PLC должны идти
-                    // в порядке воспроизведения, а не прихода. Здесь нужна только длина.
                     let Some(samples) = self.codec.packet_samples(&data) else {
                         self.counters.decode_errors += 1;
                         pulsar_metrics::call_decode_error();
@@ -432,7 +372,6 @@ impl Media {
         true
     }
 
-    /// Докармливать очередь вывода по часам воспроизведения.
     fn pump(&mut self, downlink: &Arc<dyn Downlink>, active: bool) {
         if active {
             playout(
@@ -484,7 +423,6 @@ impl Media {
                 let _ = self.peer.write_audio(&packet, Instant::now());
             }
         }
-        // Не ждать тика: кадр должен уйти сразу, задержка звонка важнее экономии пакетов.
         self.peer.handle_timeout(Instant::now());
         let _ = self.peer.drain();
     }
@@ -494,8 +432,6 @@ async fn session(ctx: &Ctx<'_>, commands: &mut UnboundedReceiver<Cmd>) -> Result
     let _ = ctx.signaling.register("Колонка").await;
     let mut watch = ctx.signaling.watch().await?;
     debug!("call: signaling stream open");
-    // STUN/TURN внутри LAN/VPN не нужны, но конфигурацию читаем один раз: если сервер её
-    // расширит, клиенту не понадобится правка.
     if let Ok(ice) = ctx.signaling.ice_config().await {
         debug!("call: {} ICE servers configured", ice.ice_servers.len());
     }
@@ -608,7 +544,6 @@ async fn session(ctx: &Ctx<'_>, commands: &mut UnboundedReceiver<Cmd>) -> Result
                     if !m.drive() {
                         return true;
                     }
-                    // Пакеты только наполняют буфер; кадр выходит здесь, по часам.
                     m.pump(ctx.downlink, active);
                     false
                 });
@@ -661,7 +596,6 @@ mod tests {
     use std::sync::Mutex;
     use std::sync::atomic::{AtomicU32, Ordering};
 
-    /// Выход с управляемой очередью: `drain` изображает проигранное устройством время.
     #[derive(Default)]
     struct FakeDownlink {
         written: Mutex<Vec<i16>>,
@@ -700,7 +634,6 @@ mod tests {
         }
     }
 
-    /// Декодер без libopus: кадр — один байт, PCM — его значение на весь кадр.
     struct FakeCodec;
 
     impl Codec for FakeCodec {
@@ -738,19 +671,15 @@ mod tests {
         for seq in 0..6u64 {
             jitter.push(seq, packet(seq as u8), 0);
         }
-        // Очередь устройства пуста: один вызов обязан выдать три кадра (60 мс),
-        // иначе опоздавший тик навсегда теряет 20 мс и ALSA недокармливается.
         playout(&mut jitter, &mut codec, &sink, &mut counters);
         assert_eq!(sink.frames(), 3);
         assert_eq!(sink.queued_ms(), DOWNLINK_TARGET_MS);
 
-        // Устройство проиграло 20 мс — на следующем тике выходит ровно один кадр.
         sink.drain(20);
         playout(&mut jitter, &mut codec, &sink, &mut counters);
         assert_eq!(sink.frames(), 4);
         assert_eq!(sink.queued_ms(), DOWNLINK_TARGET_MS);
 
-        // Очередь полна — новых кадров нет.
         playout(&mut jitter, &mut codec, &sink, &mut counters);
         assert_eq!(sink.frames(), 4);
 
@@ -770,7 +699,6 @@ mod tests {
         jitter.push(1, packet(1), 0);
         playout(&mut jitter, &mut codec, &sink, &mut counters);
         assert_eq!(sink.frames(), 2, "both frames must play out");
-        // Буфер пуст: PLC в пустоту не гонится.
         playout(&mut jitter, &mut codec, &sink, &mut counters);
         assert_eq!(sink.frames(), 2);
         assert_eq!(counters.plc, 0);
@@ -786,7 +714,6 @@ mod tests {
             jitter.push(seq, packet(seq as u8), 0);
         }
         playout(&mut jitter, &mut codec, &sink, &mut counters);
-        // 0 — звук, 1 — пропуск (PLC), 2 — звук; очередь набрала цель.
         assert_eq!(sink.frames(), 3);
         assert_eq!(counters.plc, 1);
         assert_eq!(counters.fec, 0);
@@ -795,14 +722,11 @@ mod tests {
     #[test]
     fn the_timeline_uses_the_actual_frame_duration() {
         let mut timeline = Timeline::new();
-        // 20 мс кадры.
         assert_eq!(timeline.seq(0, 960), 0);
         assert_eq!(timeline.seq(960, 960), 1);
         assert_eq!(timeline.seq(1920, 960), 2);
-        // 60 мс кадр — один номер, а не три.
         assert_eq!(timeline.seq(2880, 2880), 3);
         assert_eq!(timeline.seq(5760, 2880), 4);
-        // Переход на 10 мс: длина берётся из предыдущего пакета.
         assert_eq!(timeline.seq(8640, 480), 5);
         assert_eq!(timeline.seq(9120, 480), 6);
     }
@@ -811,11 +735,8 @@ mod tests {
     fn the_timeline_counts_lost_and_reordered_frames() {
         let mut timeline = Timeline::new();
         assert_eq!(timeline.seq(0, 960), 0);
-        // Потеряны кадры 1 и 2.
         assert_eq!(timeline.seq(2880, 960), 3);
-        // Опоздавший кадр 1.
         assert_eq!(timeline.seq(960, 960), 1);
-        // Дубликат того же timestamp.
         assert_eq!(timeline.seq(2880, 960), 3);
     }
 
@@ -824,7 +745,6 @@ mod tests {
         let (handle, _events) = spawn(None, None);
         assert!(!handle.available());
         assert_eq!(handle.phase(), CallPhase::Idle);
-        // Команды принимаются и не паникуют.
         handle.set_muted(true);
         handle.hangup();
         handle.push_uplink(&[0; 32]);

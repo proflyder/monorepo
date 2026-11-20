@@ -3,8 +3,6 @@ load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_clippy_test", "rust_libr
 
 package(default_visibility = ["//visibility:public"])
 
-# Kept in sync with [package].version in Cargo.toml. Bazel does not read the
-# Cargo manifest; the `version` attribute injects env!("CARGO_PKG_VERSION").
 PACKAGE_VERSION = "0.1.0"
 
 LIB_DEPS = [
@@ -52,8 +50,6 @@ rust_library(
     deps = LIB_DEPS,
 )
 
-# The static musl image target (PR 4 wires it into rust_service_image). This
-# PR only proves it builds; the Go image still deploys.
 rust_binary(
     name = "currency-bot",
     srcs = ["src/main.rs"],
@@ -64,8 +60,6 @@ rust_binary(
     deps = LIB_DEPS + [":currency_bot_lib"],
 )
 
-# Domain/store/client unit tests plus the frozen Go vectors and contract
-# fixtures. The files are read at runtime from the repository or runfiles.
 rust_test(
     name = "unit_tests",
     size = "small",
@@ -81,7 +75,6 @@ rust_test(
     deps = TEST_DEPS,
 )
 
-# Mirrors the root [workspace.lints] through the crate's `[lints] workspace = true`.
 extract_cargo_lints(
     name = "workspace_lints",
     manifest = "Cargo.toml",
@@ -98,7 +91,6 @@ rustfmt_test(
     ],
 )
 
-# rules_rust turns every clippy warning into an error, the `-D warnings` gate.
 rust_clippy_test(
     name = "clippy",
     size = "small",

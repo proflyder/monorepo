@@ -13,12 +13,6 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
-/**
- * The actions menu is the app's own card, not a framework list: only a rendered
- * PNG proves the tonal surface, the rounded corners and both icon rows read
- * correctly in the dark theme. The PNG is written to Bazel's undeclared
- * outputs as review evidence.
- */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35], qualifiers = "w411dp-h891dp-night-xxhdpi")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)

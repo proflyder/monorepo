@@ -1,9 +1,3 @@
-//! COM in-proc server entry points: exactly `DllGetClassObject` and
-//! `DllCanUnloadNow` (`#[unsafe(no_mangle)]`, no `.def`).
-//!
-//! `DllCanUnloadNow` keeps the DLL mapped while a provider object or worker
-//! thread is alive: a live worker can still run logon code.
-
 use std::ffi::c_void;
 use std::sync::atomic::{AtomicI32, Ordering};
 
@@ -87,13 +81,6 @@ impl IClassFactory_Impl for ClassFactory_Impl {
     }
 }
 
-/// `DllGetClassObject`: exactly the provider CLSID, otherwise
-/// `CLASS_E_CLASSNOTAVAILABLE`. The out pointer is always cleared first.
-///
-/// # Safety
-///
-/// COM calling convention: `ppv` is null or writable; `rclsid`/`riid` are null
-/// or point to valid GUIDs.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn DllGetClassObject(
     rclsid: *const GUID,
@@ -122,8 +109,6 @@ pub unsafe extern "system" fn DllGetClassObject(
     )
 }
 
-/// `DllCanUnloadNow`: `S_OK` only when no provider object is alive and no worker
-/// thread is running.
 #[unsafe(no_mangle)]
 pub extern "system" fn DllCanUnloadNow() -> HRESULT {
     guard(
@@ -134,7 +119,6 @@ pub extern "system" fn DllCanUnloadNow() -> HRESULT {
                 S_OK
             }
         },
-        // Safe value on panic: keep the DLL mapped.
         || S_FALSE,
     )
 }

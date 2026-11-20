@@ -1,5 +1,3 @@
-//! Service layer: every dependency that performs I/O behind a small type.
-
 mod gateway;
 mod ha;
 mod queue;
@@ -19,6 +17,4 @@ pub use results::{Results, ResultsOptions};
 pub use router::{VoiceRouter, profile_or_unknown};
 pub use updates::{Updates, UpdatesOptions, completed_unix};
 
-/// A token resolved on every use, so a rotated mounted secret is picked up
-/// without a restart.
 pub type TokenProvider = Arc<dyn Fn() -> String + Send + Sync>;

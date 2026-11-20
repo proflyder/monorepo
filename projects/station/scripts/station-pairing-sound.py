@@ -1,14 +1,4 @@
 #!/usr/bin/env python3
-"""Generate a Yandex Station sound pairing code locally (no Telegram, no cloud).
-
-Usage:
-  python3 scripts/station-pairing-sound.py \
-    --ssid 'MyWiFi' --password 'secret' --out /tmp/pair.wav
-  python3 scripts/station-pairing-sound.py \
-    --ssid 'MyWiFi' --password 'secret' --format ogg --out /tmp/pair.ogg
-
-The password is passed on the command line, so use a private terminal/history.
-"""
 from __future__ import annotations
 
 import argparse
@@ -19,7 +9,7 @@ LAB = Path(__file__).resolve().parents[1]
 REPO = LAB / "resources" / "quasar-connect-bot"
 sys.path.insert(0, str(REPO))
 
-import pairing  # noqa: E402
+import pairing
 
 
 def main() -> int:

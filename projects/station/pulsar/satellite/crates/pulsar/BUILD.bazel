@@ -29,10 +29,6 @@ DEPS = [
     "//projects/station/pulsar/satellite/crates/pulsar-zigbee:pulsar_zigbee",
 ]
 
-# PULSAR_VERSION / PULSAR_BUILD_TIME for src/version.rs, from
-# --define=pulsar_version=... --define=pulsar_build_time=... (see
-# satellite/version.bzl and docs/development.md). Releases pass the VERSION
-# file and HEAD's commit date; the host build defaults to "unknown".
 pulsar_version_env(name = "version_env")
 
 rust_binary(
@@ -43,11 +39,6 @@ rust_binary(
     edition = "2024",
     lint_config = ":workspace_lints",
     rustc_env_files = [":version_env"],
-    # The Cargo release profile: thin LTO, 4 codegen units and panic=abort.
-    # panic=abort is set on the station binary only: tests share the same Rust
-    # triple and cannot be built with it, but Rust allows linking unwind-built
-    # rlibs into an abort binary. The supervisor restarts a panic instead of a
-    # task catching it and leaving the daemon half-broken.
     rustc_flags = select({
         "@zig_0_14_1//:station": [
             "-C",
@@ -63,9 +54,6 @@ rust_binary(
     deps = DEPS,
 )
 
-# settings/tests.rs reads tests/golden/settings at runtime; the test environment
-# resolves it relative to the runfiles tree (see the PULSAR_MANIFEST_DIR use in
-# that file).
 rust_test(
     name = "pulsar_unit_tests",
     crate = ":pulsar",
@@ -79,7 +67,6 @@ rust_test(
     deps = ["@crates//:tokio"],
 )
 
-# Mirrors the root [workspace.lints] through the crate's `[lints] workspace = true`.
 extract_cargo_lints(
     name = "workspace_lints",
     manifest = "Cargo.toml",

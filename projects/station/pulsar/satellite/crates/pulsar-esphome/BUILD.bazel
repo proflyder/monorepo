@@ -51,7 +51,6 @@ rust_test(
     deps = ["@crates//:snow", "@crates//:tokio"],
 )
 
-# Mirrors the root [workspace.lints] through the crate's `[lints] workspace = true`.
 extract_cargo_lints(
     name = "workspace_lints",
     manifest = "Cargo.toml",

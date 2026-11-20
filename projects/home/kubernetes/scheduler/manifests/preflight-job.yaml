@@ -1,13 +1,3 @@
-# One-shot cutover preflight, run inside the cluster.
-#
-# The CI runner reaches the K3s API but neither Home Assistant nor the
-# scheduler NodePort, so the read-only preflight runs next to the scheduler
-# instead of on the deploy host. deploy.sh applies this Job, waits for
-# completion and prints the pod log.
-#
-# TEMPLATE: rendered by deploy.sh with the private HA URL and the digest-pinned
-# home-deploy image (the same Rust binary the deploy scripts use; distroless, no
-# shell, no Python). Both tokens are mounted, never passed on a command line.
 apiVersion: batch/v1
 kind: Job
 metadata:

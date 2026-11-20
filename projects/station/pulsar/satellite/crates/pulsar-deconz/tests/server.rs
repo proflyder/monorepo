@@ -62,7 +62,6 @@ fn read_available(io: &mut DuplexStream) -> Vec<u8> {
     }
 }
 
-/// Accepts connections the test queued up (a new duplex half per client).
 struct TestAcceptor {
     queue: Rc<RefCell<VecDeque<Conn>>>,
 }
@@ -80,7 +79,6 @@ impl Acceptor for TestAcceptor {
     }
 }
 
-/// A stub radio link for the coordinator: an in-memory duplex and the recording lines.
 fn link_pair() -> (Link, DuplexStream) {
     let (a, b) = tokio::io::duplex(1 << 16);
     let link = Link::with_io(
@@ -94,19 +92,13 @@ fn link_pair() -> (Link, DuplexStream) {
     (link, b)
 }
 
-/// The coordinator firmware as far as the server needs it: ACKs everything, answers 0x0A00,
-/// erases on 0x0A02 and forms on 0x0A01 (forming, then up with the requested parameters).
 struct Ncp {
     io: DuplexStream,
     rx: Vec<u8>,
     net: Network,
-    /// Payloads of 0x0A01 / 0x0A02 / 0x0A03 / 0x0A04 / 0x0A05 / 0x0A10 seen, in order.
     seen: Vec<(u16, Vec<u8>)>,
-    /// 0x0A02 erases without reporting the new state.
     hold_erase: bool,
-    /// 0x0A01 reports "forming" and stops there.
     hold_form: bool,
-    /// The status the radio puts into the ACK of the next frame.
     acks: VecDeque<u8>,
 }
 
@@ -129,7 +121,6 @@ impl Ncp {
         write_all_poll(&mut self.io, &pulsar_zbhci::frame::build_frame(ty, payload));
     }
 
-    /// Reads one frame if any, ACKs it and reacts. Returns the frame for the golden log.
     fn step(&mut self) -> Option<(u16, Vec<u8>)> {
         let mut buf = [0u8; 512];
         let mut cx = Context::from_waker(Waker::noop());
@@ -215,12 +206,10 @@ struct Bench {
     seq: u8,
     client: Option<DuplexStream>,
     queue: Rc<RefCell<VecDeque<Conn>>>,
-    /// Golden log of the frames the radio received.
     out: String,
     quiet: bool,
 }
 
-/// One reply: command, sequence, status, the bytes after the 5-byte header.
 type Reply = (u8, u8, u8, Vec<u8>);
 
 impl Bench {
@@ -233,7 +222,6 @@ impl Bench {
 
     async fn fresh(formed: bool) -> Self {
         let (mut link, io) = link_pair();
-        // The application started before the coordinator takes the link over.
         assert_eq!(link.next().await, LinkEvent::Boot);
         let mut coord = Coordinator::new(link);
         let queue: Rc<RefCell<VecDeque<Conn>>> = Rc::default();
@@ -284,7 +272,6 @@ impl Bench {
         bench
     }
 
-    /// Queues a new client and lets the server accept it.
     async fn connect(&mut self) {
         let (client, server_end) = tokio::io::duplex(1 << 15);
         self.queue.borrow_mut().push_back(Box::new(server_end));
@@ -343,7 +330,6 @@ impl Bench {
         self.replies()
     }
 
-    /// One reply to `cmd` with this sequence number, among possible state notifications.
     async fn ask(&mut self, cmd: u8, payload: &[u8]) -> (u8, Vec<u8>) {
         let rs = self.req(cmd, payload).await;
         let seq = self.seq;
@@ -362,7 +348,6 @@ impl Bench {
         p.push(id);
         p.extend_from_slice(extra);
         let (st, body) = self.ask(READ_PARAMETER, &p).await;
-        // [payload length][id][value]
         assert_eq!(usize::from(get_le16(&body)), body.len() - 2);
         assert_eq!(body[2], id);
         (st, body[3..].to_vec())
@@ -425,10 +410,8 @@ fn decode(bytes: &[u8]) -> Vec<Reply> {
 #[tokio::test(start_paused = true)]
 async fn slip_framing_escapes_and_rejects_noise() {
     let mut b = Bench::new(true).await;
-    // VERSION: [0D][seq][00][09 00][version LE32] + checksum.
     let r = b.req(VERSION, &[0, 0, 0, 0]).await;
     assert_eq!(r, [(VERSION, 1, SUCCESS, vec![0x00, 0x09, 0x78, 0x26])]);
-    // Exact bytes, framing included.
     b.write_client(&encode(VERSION, 2, &[0, 0, 0, 0]));
     b.settle().await;
     assert_eq!(
@@ -437,7 +420,6 @@ async fn slip_framing_escapes_and_rejects_noise() {
             0xC0, 0x0D, 0x02, 0x00, 0x09, 0x00, 0x00, 0x09, 0x78, 0x26, 0x41, 0xFF, 0xC0
         ]
     );
-    // Sequence numbers 0xC0 / 0xDB travel escaped both ways.
     let f = encode(VERSION, 0xC0, &[0, 0, 0, 0]);
     b.write_client(&f);
     b.settle().await;
@@ -446,7 +428,6 @@ async fn slip_framing_escapes_and_rejects_noise() {
     b.write_client(&f);
     b.settle().await;
     assert_eq!(b.replies()[0].1, 0xDB);
-    // Bad checksum, too short, empty frames: nothing.
     let mut bad = encode(VERSION, 3, &[0, 0, 0, 0]);
     let n = bad.len();
     bad[n - 2] ^= 1;
@@ -454,7 +435,6 @@ async fn slip_framing_escapes_and_rejects_noise() {
     b.write_client(&[0xC0, 0x0D, 0x01, 0x00, 0x05, 0xC0, 0xC0]);
     b.settle().await;
     assert!(b.read_client().is_empty());
-    // A frame split across reads; oversized garbage is cut at 1024 bytes and dropped.
     let f = encode(DEVICE_STATE, 4, &[0, 0, 0]);
     b.write_client(&f[..3]);
     b.settle().await;
@@ -465,7 +445,6 @@ async fn slip_framing_escapes_and_rejects_noise() {
     b.write_client(&[0xC0]);
     b.settle().await;
     assert!(b.read_client().is_empty());
-    // Unknown commands get no answer.
     assert!(b.req(0x20, &[0, 0]).await.is_empty());
 }
 
@@ -521,7 +500,6 @@ async fn read_parameters_formed() {
     for id in [WATCHDOG_TTL, 0x02, 0x99] {
         assert_eq!(b.read(id, &[]).await, (UNSUPPORTED, vec![]), "0x{id:02x}");
     }
-    // Shorter than [length][id]: no answer.
     assert!(b.req(READ_PARAMETER, &[1, 0]).await.is_empty());
 }
 
@@ -538,12 +516,10 @@ async fn read_parameters_without_network() {
     key.extend_from_slice(&[0xFF; 16]);
     assert_eq!(b.read(NETWORK_KEY, &[5]).await, (SUCCESS, key));
     assert_eq!(b.read(CURRENT_CHANNEL, &[]).await, (SUCCESS, vec![0]));
-    // Values the host wrote come back where the radio has none.
     assert_eq!(b.write(CHANNEL_MASK, &le(1 << 20, 4)).await, SUCCESS);
     assert_eq!(b.read(CHANNEL_MASK, &[]).await, (SUCCESS, le(1 << 20, 4)));
     assert_eq!(b.write(NWK_UPDATE_ID, &[9]).await, SUCCESS);
     assert_eq!(b.read(NWK_UPDATE_ID, &[]).await, (SUCCESS, vec![9]));
-    // Device state: offline, free slots.
     assert_eq!(
         b.ask(DEVICE_STATE, &[0, 0, 0]).await,
         (SUCCESS, vec![0x20, 0, 0])
@@ -591,14 +567,12 @@ async fn write_parameters_table() {
     }
     assert_eq!(b.write(0x99, &[1]).await, UNSUPPORTED);
     assert_eq!(b.write(CURRENT_CHANNEL, &[11]).await, UNSUPPORTED);
-    // The radio already has all of these: CONNECTED forms nothing.
     assert!(b.ncp.seen.is_empty());
     assert_eq!(
         b.ask(CHANGE_NETWORK_STATE, &[CONNECTED]).await,
         (SUCCESS, vec![CONNECTED])
     );
     assert!(b.ncp.seen.is_empty(), "{:?}", b.ncp.seen);
-    // Permit join goes to the radio.
     assert_eq!(b.write(PERMIT_JOIN, &[60]).await, SUCCESS);
     assert_eq!(b.write(PERMIT_JOIN, &[]).await, INVALID_VALUE);
     assert_eq!(b.ncp.seen, [(0x0A03, vec![60])]);
@@ -607,8 +581,6 @@ async fn write_parameters_table() {
 #[tokio::test(start_paused = true)]
 async fn endpoint_slots() {
     let mut b = Bench::new(true).await;
-    // zigbee-herdsman writes endpoint 0xF2 into slot 1: the ZLL endpoint 2 goes, 0xF2 stays
-    // (slot 2 still holds it) and is set again.
     let d = simple(0xF2, 0xA1E0, 0x0061, &[], &[0x0021]);
     let mut v = vec![1];
     put_descriptor(&mut v, &d);
@@ -617,21 +589,18 @@ async fn endpoint_slots() {
     put_descriptor(&mut want_ep, &d);
     assert_eq!(b.ncp.seen, [(0x0A04, vec![2, 0xFF]), (0x0A04, want_ep)]);
     b.ncp.seen.clear();
-    // Slot 2 moves to endpoint 3: 0xF2 is still in slot 1, nothing removed.
     let d3 = simple(3, 0x0104, 0x0100, &[0x0006], &[]);
     let mut v = vec![2];
     put_descriptor(&mut v, &d3);
     assert_eq!(b.write(CONFIGURE_ENDPOINT, &v).await, SUCCESS);
     assert_eq!(b.ncp.seen.len(), 1);
     assert_eq!(b.ncp.seen[0].1[0], 3);
-    // Bad slot or descriptor.
     v[0] = 4;
     assert_eq!(b.write(CONFIGURE_ENDPOINT, &v).await, INVALID_VALUE);
     assert_eq!(b.write(CONFIGURE_ENDPOINT, &[0, 1, 2]).await, INVALID_VALUE);
     assert_eq!(b.write(CONFIGURE_ENDPOINT, &[0]).await, INVALID_VALUE);
 }
 
-/// APS data request payload after [payload length]: req id, flags, dst mode, dst...
 fn aps(req_id: u8, mode: u8, dst: &[u8], rest: &[u8]) -> Vec<u8> {
     let mut v = vec![req_id, 0, mode];
     v.extend_from_slice(dst);
@@ -639,7 +608,6 @@ fn aps(req_id: u8, mode: u8, dst: &[u8], rest: &[u8]) -> Vec<u8> {
     v
 }
 
-/// [dst ep][profile][cluster][src ep][len][asdu][tx options][radius]
 const ONOFF: [u8; 12] = [
     1, 0x04, 0x01, 0x06, 0x00, 1, 0x02, 0x00, 0xAA, 0xBB, 0x04, 0x05,
 ];
@@ -656,36 +624,29 @@ impl Bench {
 #[tokio::test(start_paused = true)]
 async fn aps_data_requests_and_confirms() {
     let mut b = Bench::new(true).await;
-    // NWK.
     let body = aps(7, 0x02, &[0x34, 0x12], &ONOFF);
     let (st, r) = b.aps_request(&body, body.len()).await;
     assert_eq!((st, r), (SUCCESS, vec![2, 0, 0x22, 7]));
     let (ty, p) = b.ncp.seen.remove(0);
     assert_eq!(ty, 0x0A10);
-    // [handle][NWK][dst][ep][profile][cluster][src ep][tx & 0x0D][radius][len][asdu]
     assert_eq!(
         p,
         [
             0, 0x02, 0x34, 0x12, 1, 0x04, 0x01, 0x06, 0x00, 1, 0x04, 0x05, 2, 0xAA, 0xBB
         ]
     );
-    // Group: no destination endpoint.
     let body = aps(8, 0x01, &[0x05, 0x00], &ONOFF[1..]);
     assert_eq!(b.aps_request(&body, body.len()).await.0, SUCCESS);
     assert_eq!(&b.ncp.seen.remove(0).1[..5], [1, 0x01, 0x05, 0x00, 0x04]);
-    // IEEE.
     let ieee = 0x0015_8D00_01AB_CDEFu64.to_le_bytes();
     let body = aps(9, 0x03, &ieee, &ONOFF);
     assert_eq!(b.aps_request(&body, body.len()).await.0, SUCCESS);
     let p = b.ncp.seen.remove(0).1;
     assert_eq!(&p[..12], [&[2, 0x03][..], &ieee, &[1, 0x04]].concat());
-    // zigbee-herdsman's NWK_addr_req: NWK mode, IEEE in place of the NWK address, payload 6
-    // bytes longer than declared: a broadcast to 0xFFFD.
     let zdo = [0, 0x00, 0x00, 0x00, 0x00, 0, 3, 0x00, 0x10, 0x20, 0x30];
     let body = aps(10, 0x02, &ieee, &zdo);
     assert_eq!(b.aps_request(&body, body.len() - 6).await.0, SUCCESS);
     assert_eq!(&b.ncp.seen.remove(0).1[..5], [3, 0x02, 0xFD, 0xFF, 0]);
-    // Malformed: invalid value, request id echoed when known.
     for (body, id) in [
         (vec![1, 0], 0),
         (aps(11, 0x04, &[0, 0], &ONOFF), 11),
@@ -698,7 +659,6 @@ async fn aps_data_requests_and_confirms() {
         let (st, r) = b.aps_request(&body, body.len()).await;
         assert_eq!((st, r[3]), (INVALID_VALUE, id), "{body:?}");
     }
-    // Too long for the radio: failure.
     let mut big = ONOFF[..6].to_vec();
     put_le16(&mut big, 201);
     big.extend_from_slice(&[0; 201]);
@@ -709,20 +669,17 @@ async fn aps_data_requests_and_confirms() {
     );
     assert!(b.ncp.seen.is_empty());
 
-    // Confirm for request 7 (radio handle 0): queued, flagged, then read.
     b.ncp.send(0x8A10, &[0, 0x00]);
     b.settle().await;
     let r = b.replies();
     assert_eq!(r, [(DEVICE_STATE_CHANGED, 0, SUCCESS, vec![0x26, 0])]);
     let (st, r) = b.ask(APS_DATA_CONFIRM, &[0, 0]).await;
     assert_eq!(st, SUCCESS);
-    // [len][state][req id][mode][dst][ep][src ep][status][4 x 0]
     assert_eq!(r, [12, 0, 0x22, 7, 0x02, 0x34, 0x12, 1, 1, 0, 0, 0, 0, 0]);
     assert_eq!(
         b.ask(APS_DATA_CONFIRM, &[0, 0]).await,
         (FAILURE, vec![0, 0])
     );
-    // Group and IEEE confirms carry their address forms.
     b.ncp.send(0x8A10, &[1, 0xE9]);
     b.ncp.send(0x8A10, &[2, 0x00]);
     b.settle().await;
@@ -733,7 +690,6 @@ async fn aps_data_requests_and_confirms() {
     assert_eq!(&r[2..5], [0x22, 9, 0x03]);
     assert_eq!(&r[5..13], ieee);
 
-    // A new client: confirms of the previous one's requests are dropped.
     b.connect().await;
     b.ncp.send(0x8A10, &[3, 0x00]);
     b.settle().await;
@@ -766,8 +722,6 @@ async fn indications() {
     );
     let (st, r) = b.ask(APS_DATA_INDICATION, &[0, 0]).await;
     assert_eq!(st, SUCCESS);
-    // [len][state][dst mode][dst][dst ep][src mode][src][src ep][profile][cluster][len][asdu]
-    // [0 0 lqi 0 0 0 0 rssi]
     assert_eq!(
         r,
         [
@@ -775,7 +729,6 @@ async fn indications() {
             0, 0xAA, 0xBB, 0xCC, 0, 0, 0xC8, 0, 0, 0, 0, 0xC4
         ]
     );
-    // Offline host: indications are not queued. More than 64: the oldest go.
     assert_eq!(b.ask(CHANGE_NETWORK_STATE, &[OFFLINE]).await.0, SUCCESS);
     b.ncp.send(0x8A11, &ind);
     b.settle().await;
@@ -794,7 +747,6 @@ async fn indications() {
 #[tokio::test(start_paused = true)]
 async fn formation_erases_then_forms_the_written_network() {
     let mut b = Bench::new(true).await;
-    // zigpy: offline, write a new network, channel 20, then connected.
     assert_eq!(
         b.ask(CHANGE_NETWORK_STATE, &[OFFLINE]).await,
         (SUCCESS, vec![OFFLINE])
@@ -811,8 +763,6 @@ async fn formation_erases_then_forms_the_written_network() {
         r[0],
         (CHANGE_NETWORK_STATE, b.seq, SUCCESS, vec![CONNECTED])
     );
-    // Erased, then formed with the written PAN and channel, the radio's ext PAN, key and IEEE,
-    // the frame counter past the old one by the NV margin.
     let (ty, _) = &b.ncp.seen[0];
     assert_eq!(*ty, 0x0A02);
     let (ty, p) = &b.ncp.seen[1];
@@ -824,7 +774,6 @@ async fn formation_erases_then_forms_the_written_network() {
     put_le32(&mut want, 5000 + 1024);
     want.push(4);
     assert_eq!(p, &want);
-    // The host saw JOINING meanwhile, then CONNECTED on the new network.
     let states: Vec<u8> = r
         .iter()
         .filter(|r| r.0 == DEVICE_STATE_CHANGED)
@@ -839,10 +788,8 @@ async fn formation_erases_then_forms_the_written_network() {
 #[tokio::test(start_paused = true)]
 async fn formation_without_network_and_channel_change() {
     let mut b = Bench::new(false).await;
-    // No network and no channel mask: CONNECTED forms nothing (the host only erased).
     assert_eq!(b.ask(CHANGE_NETWORK_STATE, &[CONNECTED]).await.0, SUCCESS);
     assert!(b.ncp.seen.is_empty());
-    // With a mask: formed at once on the first channel of the mask (no erase).
     assert_eq!(
         b.write(CHANNEL_MASK, &((1u32 << 25) | (1 << 12)).to_le_bytes())
             .await,
@@ -854,7 +801,6 @@ async fn formation_without_network_and_channel_change() {
     assert_eq!(b.ncp.seen[0].1[0], 12);
     assert_eq!(get_le16(&b.ncp.seen[0].1[1..]), 0xFFFF);
     b.ncp.seen.clear();
-    // On the network: a single other channel in the mask moves it.
     assert_eq!(
         b.write(CHANNEL_MASK, &(1u32 << 25).to_le_bytes()).await,
         SUCCESS
@@ -884,15 +830,12 @@ async fn erase_only_without_channel_mask() {
     );
     assert_eq!(b.ncp.seen, [(0x0A02, vec![])]);
     assert!(!b.coord.network().formed);
-    // Nothing formed afterwards: OFFLINE, free slots.
     assert_eq!(
         b.ask(DEVICE_STATE, &[0, 0, 0]).await,
         (SUCCESS, vec![0x20, 0, 0])
     );
 }
 
-/// Writes one parameter, then CONNECTED with the current channel as mask: true if the radio's
-/// network was erased (a new network) rather than kept.
 async fn makes_new_network(id: u8, value: &[u8]) -> bool {
     let mut b = Bench::new(true).await;
     assert_eq!(b.write(id, value).await, SUCCESS);
@@ -904,7 +847,6 @@ async fn makes_new_network(id: u8, value: &[u8]) -> bool {
     let erased = b.ncp.seen.first().map(|s| s.0) == Some(0x0A02);
     assert_eq!(erased, !b.ncp.seen.is_empty(), "{:?}", b.ncp.seen);
     if erased {
-        // Then formed again on channel 15 with the written value.
         assert_eq!(b.ncp.seen[1].0, 0x0A01);
         assert_eq!(b.ncp.seen[1].1[0], 15);
     }
@@ -920,7 +862,6 @@ async fn each_new_parameter_alone_makes_a_new_network() {
     assert!(makes_new_network(APS_EXT_PAN_ID, &2u64.to_le_bytes()).await);
     assert!(makes_new_network(NETWORK_KEY, &other_key).await);
     assert!(makes_new_network(NWK_PAN_ID, &[0x63, 0x1A]).await);
-    // The radio's own values: the network stays.
     assert!(!makes_new_network(MAC_ADDRESS, &IEEE.to_le_bytes()).await);
     assert!(!makes_new_network(NWK_EXT_PAN_ID, &EXT.to_le_bytes()).await);
     assert!(!makes_new_network(NWK_EXT_PAN_ID, &EXT.to_le_bytes()).await);
@@ -936,14 +877,12 @@ async fn another_clients_parameters_do_not_erase() {
         b.write(CHANNEL_MASK, &(1u32 << 20).to_le_bytes()).await,
         SUCCESS
     );
-    // Client B: what A wrote is forgotten; its CONNECTED keeps the network.
     b.connect().await;
     assert_eq!(b.ask(CHANGE_NETWORK_STATE, &[CONNECTED]).await.0, SUCCESS);
     assert!(b.ncp.seen.is_empty(), "{:?}", b.ncp.seen);
     assert_eq!(b.coord.network().pan, 0x1A62);
 }
 
-/// A formed bench whose host asked for a new network on channel 20; the radio holds `hold`.
 async fn forming_bench(hold_erase: bool, hold_form: bool) -> Bench {
     let mut b = Bench::new(true).await;
     b.ncp.hold_erase = hold_erase;
@@ -964,7 +903,6 @@ async fn radio_restart_while_awaiting_the_erase_keeps_the_client_and_forms() {
     assert_eq!(b.ask(DEVICE_STATE, &[0, 0, 0]).await.1[0] & 3, JOINING);
     b.ncp.send(BOOT_IND, &[]);
     b.settle().await;
-    // The restart's state (no network) completes the erase: formed as asked.
     assert!(b.server.has_client());
     assert_eq!(b.ncp.seen.last().unwrap().0, 0x0A01);
     assert_eq!(b.coord.network().pan, 0x8899);
@@ -980,8 +918,6 @@ async fn radio_restart_while_forming_ends_the_formation_and_drops_the_client() {
     assert_eq!(b.ask(DEVICE_STATE, &[0, 0, 0]).await.1[0] & 3, JOINING);
     b.ncp.send(BOOT_IND, &[]);
     b.settle().await;
-    // As in C++: the restart fails the formation first (NONE), then the radio is not ready:
-    // the host is dropped and reconnects once the radio reported its state.
     assert!(!b.server.has_client());
 }
 
@@ -991,9 +927,7 @@ async fn repeated_connected_while_forming_stays_joining() {
     b.ncp.seen.clear();
     let r = b.req(CHANGE_NETWORK_STATE, &[CONNECTED]).await;
     assert_eq!(r[0].3, [CONNECTED]);
-    // Formed again (superseding the pending one), no erase: the radio has no network.
     assert_eq!(b.ncp.seen.iter().map(|s| s.0).collect::<Vec<_>>(), [0x0A01]);
-    // JOINING survives the superseded formation's formed(false) (C++ fell back to NONE).
     assert_eq!(b.ask(DEVICE_STATE, &[0, 0, 0]).await.1[0] & 3, JOINING);
 }
 
@@ -1007,7 +941,6 @@ async fn host_values_read_back_while_formed() {
         (SUCCESS, mask.to_le_bytes().to_vec())
     );
     assert_eq!(b.write(NWK_UPDATE_ID, &[9]).await, SUCCESS);
-    // Formed: the network's update id, not the written one.
     assert_eq!(b.read(NWK_UPDATE_ID, &[]).await, (SUCCESS, vec![3]));
 }
 
@@ -1027,11 +960,10 @@ async fn more_reads_without_network() {
 async fn aps_tx_options_drop_nwk_security_bit() {
     let mut b = Bench::new(true).await;
     let mut rest = ONOFF;
-    rest[10] = 0x06; // APS ACK + NWK security (deCONZ)
+    rest[10] = 0x06;
     let body = aps(1, 0x02, &[0x34, 0x12], &rest);
     assert_eq!(b.aps_request(&body, body.len()).await.0, SUCCESS);
     let p = &b.ncp.seen[0].1;
-    // [handle][mode][dst 2][ep][profile 2][cluster 2][src ep][tx options]
     assert_eq!(p[10], 0x04);
 }
 
@@ -1042,7 +974,6 @@ async fn aps_requests_refused_while_confirms_are_due() {
         let body = aps(id, 0x02, &[0x34, 0x12], &ONOFF);
         assert_eq!(b.aps_request(&body, body.len()).await.0, SUCCESS);
     }
-    // No free slots: flag off and the next request is refused.
     let body = aps(8, 0x02, &[0x34, 0x12], &ONOFF);
     assert_eq!(
         b.aps_request(&body, body.len()).await,
@@ -1056,7 +987,6 @@ async fn aps_requests_refused_while_confirms_are_due() {
 #[tokio::test(start_paused = true)]
 async fn slip_frames_longer_than_1024_bytes_are_cut() {
     let mut b = Bench::new(true).await;
-    // Frame bytes between the END markers: 5 header + payload + 2 checksum.
     let at = |len: usize| {
         let f = encode(VERSION, 0x11, &vec![0u8; len]);
         assert_eq!(f.len(), len + 7 + 2, "no escapes in this frame");
@@ -1068,7 +998,6 @@ async fn slip_frames_longer_than_1024_bytes_are_cut() {
     b.write_client(&at(1024 - 6));
     b.settle().await;
     assert!(b.replies().is_empty(), "1025 bytes: cut, checksum fails");
-    // The next frame is read normally.
     b.write_client(&at(4));
     b.settle().await;
     assert_eq!(b.replies().len(), 1);
@@ -1077,7 +1006,6 @@ async fn slip_frames_longer_than_1024_bytes_are_cut() {
 #[tokio::test(start_paused = true)]
 async fn client_not_reading_is_dropped() {
     let mut b = Bench::new(true).await;
-    // The test client never takes its output: replies pile up until 64 KiB.
     let f = encode(DEVICE_STATE, 1, &[0, 0, 0]);
     let mut n = 0;
     while b.server.has_client() {
@@ -1093,7 +1021,6 @@ const EXT: u64 = 0xDDDD_DDDD_DDDD_DDDD;
 
 #[tokio::test(start_paused = true)]
 async fn deconz_matches_cxx_golden() {
-    // The plain radio of the C++ harness: it only ACKs frames; the script injects the states.
     struct Golden {
         coord: Coordinator,
         server: Server,
@@ -1285,7 +1212,6 @@ fn tcp_clients_wait_for_the_radio_and_replace_each_other() {
         use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
 
         let (mut link, mut radio) = link_pair();
-        // Let the link boot.
         assert_eq!(link.next().await, LinkEvent::Boot);
         let mut coord = Coordinator::new(link);
         let mut server = Server::new(0);
@@ -1295,7 +1221,6 @@ fn tcp_clients_wait_for_the_radio_and_replace_each_other() {
         coord.start(&mut server);
         let mut radio_rx = Vec::new();
         let mut radio_buf = [0u8; 512];
-        // Not ready (no network state yet): the connection is closed at once.
         let mut c = tokio::net::TcpStream::connect(("127.0.0.1", port))
             .await
             .unwrap();
@@ -1310,7 +1235,6 @@ fn tcp_clients_wait_for_the_radio_and_replace_each_other() {
         .await;
         let mut buf = [0u8; 64];
         assert_eq!(c.read(&mut buf).await.unwrap(), 0);
-        // Ready: served.
         let mut st = vec![2, 0, 15, 0x62, 0x1A];
         st.extend_from_slice(&[0; 40]);
         write_all_poll(&mut radio, &pulsar_zbhci::frame::build_frame(0x8A00, &st));
@@ -1352,7 +1276,6 @@ fn tcp_clients_wait_for_the_radio_and_replace_each_other() {
             decode(&buf[..n]),
             [(VERSION, 1, SUCCESS, vec![0, 9, 0x78, 0x26])]
         );
-        // A second client replaces the first.
         let mut c2 = tokio::net::TcpStream::connect(("127.0.0.1", port))
             .await
             .unwrap();
@@ -1383,7 +1306,6 @@ fn tcp_clients_wait_for_the_radio_and_replace_each_other() {
             decode(&buf[..n]),
             [(DEVICE_STATE, 2, SUCCESS, vec![0x22, 0, 0])]
         );
-        // The client leaves: the server notices.
         drop(c2);
         run(
             &mut server,
@@ -1398,7 +1320,6 @@ fn tcp_clients_wait_for_the_radio_and_replace_each_other() {
     });
 }
 
-/// Runs the server, the coordinator and the radio for `ms`, the radio ACKing every frame.
 async fn run(
     server: &mut Server,
     coord: &mut Coordinator,
@@ -1414,7 +1335,6 @@ async fn run(
             w = coord.next() => coord.handle(w, server),
             () = tokio::time::sleep_until(end) => break,
         }
-        // Answer the radio's frames with a ready ACK.
         let mut cx = Context::from_waker(Waker::noop());
         loop {
             let mut rb = ReadBuf::new(buf);

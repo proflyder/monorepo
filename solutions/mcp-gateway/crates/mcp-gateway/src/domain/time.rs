@@ -1,38 +1,21 @@
-//! Pure time-tool domain: RFC3339 parsing, validation and spoken text.
-//!
-//! The tools accept one absolute instant (RFC3339 with an explicit offset)
-//! because the voice model is bad at local-time arithmetic. Everything that
-//! is shown to the owner is rendered in the home timezone from configuration,
-//! never in the model's guess.
-
 use jiff::Timestamp;
 use jiff::tz::TimeZone;
 
 use crate::scheduler::WallTime;
 
-/// Accepted repeat modes.
 pub const REPEAT_ONCE: &str = "once";
-/// Accepted repeat modes.
 pub const REPEAT_DAILY: &str = "daily";
-/// Accepted repeat modes.
 pub const REPEAT_WEEKDAYS: &str = "weekdays";
-/// Accepted repeat modes.
 pub const REPEAT_WEEKENDS: &str = "weekends";
 
-/// A validated absolute alarm target.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AlarmTarget {
-    /// Instant requested by the model.
     pub instant: Timestamp,
-    /// Local wall time of day.
     pub wall: WallTime,
-    /// `YYYY-MM-DD` for a one-shot alarm, empty for a repeating rule.
     pub once_date: String,
-    /// Scheduler `REPEAT_KIND_*` value.
     pub repeat: String,
 }
 
-/// Parse an RFC3339 instant and convert it to the home timezone.
 pub fn parse_instant(raw: &str) -> Result<Timestamp, String> {
     let raw = raw.trim();
     if raw.is_empty() {
@@ -45,8 +28,6 @@ pub fn parse_instant(raw: &str) -> Result<Timestamp, String> {
     })
 }
 
-/// Validate an alarm target. One-shot alarms must be in the future and no
-/// farther than seven days; repeating alarms only need a valid instant.
 pub fn alarm_target(
     raw: &str,
     repeat: Option<&str>,
@@ -75,7 +56,6 @@ pub fn alarm_target(
     })
 }
 
-/// Normalize the spoken repeat argument.
 pub fn normalize_repeat(raw: Option<&str>) -> Result<String, String> {
     let value = raw.unwrap_or(REPEAT_ONCE).trim().to_lowercase();
     let value = value.replace('_', "-");
@@ -94,7 +74,6 @@ pub fn normalize_repeat(raw: Option<&str>) -> Result<String, String> {
     }
 }
 
-/// Scheduler enum for a normalized repeat.
 pub fn scheduler_repeat(repeat: &str) -> &'static str {
     match repeat {
         REPEAT_DAILY => "REPEAT_KIND_DAILY",
@@ -104,7 +83,6 @@ pub fn scheduler_repeat(repeat: &str) -> &'static str {
     }
 }
 
-/// Human repeat text for speech.
 pub fn repeat_human(repeat: &str) -> &'static str {
     match repeat {
         REPEAT_DAILY => "каждый день",
@@ -114,7 +92,6 @@ pub fn repeat_human(repeat: &str) -> &'static str {
     }
 }
 
-/// Convert an instant to the home wall time and one-shot date.
 pub fn local_parts(instant: Timestamp, zone: &TimeZone) -> (WallTime, String) {
     let zoned = instant.to_zoned(zone.clone());
     let wall = WallTime {
@@ -126,7 +103,6 @@ pub fn local_parts(instant: Timestamp, zone: &TimeZone) -> (WallTime, String) {
     (wall, date)
 }
 
-/// `22:00` or `07:30:15` in the home timezone.
 pub fn clock_text(instant: Timestamp, zone: &TimeZone) -> String {
     let zoned = instant.to_zoned(zone.clone());
     if zoned.second() == 0 {
@@ -136,7 +112,6 @@ pub fn clock_text(instant: Timestamp, zone: &TimeZone) -> String {
     }
 }
 
-/// `12 ноября, 22:00` in the home timezone.
 pub fn human_instant(instant: Timestamp, zone: &TimeZone) -> String {
     let zoned = instant.to_zoned(zone.clone());
     format!(
@@ -151,7 +126,6 @@ pub fn human_instant(instant: Timestamp, zone: &TimeZone) -> String {
     )
 }
 
-/// Full `time_now` answer with weekday, date, clock and zone name.
 pub fn now_text(instant: Timestamp, zone: &TimeZone, zone_name: &str) -> String {
     let zoned = instant.to_zoned(zone.clone());
     format!(
@@ -164,7 +138,6 @@ pub fn now_text(instant: Timestamp, zone: &TimeZone, zone_name: &str) -> String 
     )
 }
 
-/// RFC3339 representation in the home offset.
 pub fn rfc3339_local(instant: Timestamp, zone: &TimeZone) -> String {
     instant
         .to_zoned(zone.clone())
@@ -172,12 +145,10 @@ pub fn rfc3339_local(instant: Timestamp, zone: &TimeZone) -> String {
         .to_string()
 }
 
-/// Default label used by the HA client today: `Будильник 07:30`.
 pub fn default_alarm_label(instant: Timestamp, zone: &TimeZone) -> String {
     format!("Будильник {}", clock_text(instant, zone))
 }
 
-/// Human duration: `10 минут`, `1 час 30 минут`, `45 секунд`.
 pub fn duration_text(seconds: i64) -> String {
     if seconds < 60 {
         return format!(

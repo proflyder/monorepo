@@ -1,7 +1,3 @@
-//! HTTPS-клиент обновлений на reqwest: rustls с провайдером ring и корнями из CA-бандла
-//! прошивки. Только HTTP/1; тело читается в память с пределом. Ошибка — типизированная,
-//! статус ответа отделён от транспорта.
-
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
@@ -13,33 +9,25 @@ use tokio_util::sync::CancellationToken;
 
 use crate::error::UpdateError;
 
-/// CA-бандл прошивки (обе модели станции).
 pub const CA_BUNDLE: &str = "/etc/ssl/certs/ca-certificates.crt";
 
-/// На адрес хоста.
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
-/// На одно чтение тела (прежний SO_RCVTIMEO).
 const READ_TIMEOUT: Duration = Duration::from_secs(20);
-/// Столько редиректов проходит клиент (ассеты GHCR уходят на подписанный хост).
 const REDIRECTS: usize = 5;
 
-/// Ошибка одного GET.
 #[derive(Debug, thiserror::Error)]
 pub enum HttpError {
     #[error("cancelled")]
     Cancelled,
-    /// Сеть, TLS или DNS.
     #[error("{0}")]
     Transport(String),
     #[error("response too large")]
     TooLarge,
-    /// Не-2xx ответ.
     #[error("HTTP {0}")]
     Status(u16),
 }
 
 impl HttpError {
-    /// `context: <текст>` для Home Assistant; отмена остаётся отменой.
     pub fn with_context(self, context: &str) -> UpdateError {
         match self {
             Self::Cancelled => UpdateError::Cancelled,
@@ -48,10 +36,8 @@ impl HttpError {
     }
 }
 
-/// Прогресс загрузки: `(получено, всего)`; всего 0, когда длина неизвестна.
 pub type Progress<'a> = &'a mut dyn FnMut(usize, usize);
 
-/// Клиент с корнями из PEM-бандла и заголовком `User-Agent`.
 pub fn client(ca_bundle: &Path, user_agent: &str) -> Result<reqwest::Client, String> {
     let tls = tls_config(ca_bundle)?;
     reqwest::Client::builder()
@@ -64,8 +50,6 @@ pub fn client(ca_bundle: &Path, user_agent: &str) -> Result<reqwest::Client, Str
         .map_err(|e| format!("TLS setup: {e}"))
 }
 
-/// TLS 1.2/1.3, проверка имени хоста; сертификаты бандла, которые webpki не разбирает,
-/// пропускаются (как у загрузчика OpenSSL).
 fn tls_config(ca_bundle: &Path) -> Result<rustls::ClientConfig, String> {
     let fail = || format!("cannot load {}", ca_bundle.display());
     let pem = std::fs::read(ca_bundle).map_err(|_| fail())?;
@@ -84,7 +68,6 @@ fn tls_config(ca_bundle: &Path) -> Result<rustls::ClientConfig, String> {
     Ok(config)
 }
 
-/// GET тела успешного ответа; не-2xx — `HttpError::Status`.
 pub async fn get(
     client: &reqwest::Client,
     url: &str,
@@ -151,7 +134,6 @@ async fn fetch(
     Ok(body)
 }
 
-/// Текст транспортной ошибки без URL: прежний клиент тоже не печатал адрес.
 fn transport(error: &reqwest::Error) -> String {
     if error.is_connect() && error.is_timeout() {
         "Connection timed out".into()

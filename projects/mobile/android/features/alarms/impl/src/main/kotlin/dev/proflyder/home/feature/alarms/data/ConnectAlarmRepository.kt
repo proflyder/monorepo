@@ -13,10 +13,6 @@ import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 
-/**
- * Remote-only repository. There is no offline mock: the home server owns alarm
- * state, and a network failure is surfaced as a failure.
- */
 @SingleIn(AppScope::class)
 @ContributesBinding(AppScope::class)
 @Inject

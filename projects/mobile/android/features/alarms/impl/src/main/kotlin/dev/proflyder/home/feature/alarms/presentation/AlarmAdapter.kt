@@ -13,18 +13,12 @@ import dev.proflyder.home.feature.alarms.impl.databinding.ItemAlarmBinding
 import java.time.Instant
 import kotlin.math.roundToInt
 
-/** One list row: the alarm plus its multi-select presentation. */
 internal data class AlarmRow(
     val alarm: Schedule,
     val selected: Boolean,
     val selectionMode: Boolean,
 )
 
-/**
- * Selection motion is only for the same alarm changing state. A recycled
- * holder bound to a different alarm must show that alarm's selection in its
- * end state, never animate the previous row's selection into the new one.
- */
 internal fun shouldAnimateSelection(
     previousAlarmId: String?,
     previousSelected: Boolean?,
@@ -33,7 +27,6 @@ internal fun shouldAnimateSelection(
 ): Boolean =
     previousAlarmId == alarmId && previousSelected != null && previousSelected != selected
 
-/** Row click / long click come from [AdapterCallback]; the rest are per-card actions. */
 internal interface AlarmAdapterCallback : AdapterCallback<AlarmRow> {
     fun onToggle(alarm: Schedule, enabled: Boolean)
     fun onSnooze(alarm: Schedule)
@@ -63,16 +56,12 @@ internal class AlarmAdapter(
         binding: ItemAlarmBinding,
         callback: AlarmAdapterCallback,
     ) : BaseViewHolder<AlarmRow, ItemAlarmBinding, AlarmAdapterCallback>(binding, callback) {
-        /** Programmatic `isChecked` must not be reported as a user toggle. */
         private var binding_ = false
 
-        /** Alarm shown by the previous bind; a recycled row is a new alarm. */
         private var previousAlarmId: String? = null
 
-        /** Selection state of the previous bind, for the crossfade on change. */
         private var previousSelected: Boolean? = null
 
-        /** Running stroke-width animator; cancel it before starting a new one. */
         private var strokeAnimator: ValueAnimator? = null
 
         init {
@@ -98,8 +87,6 @@ internal class AlarmAdapter(
                 selected = item.selected,
             )
 
-            // A disabled alarm is dimmed only at rest: while selecting, the
-            // selection outline must read the same on every picked card.
             binding.root.alpha = if (schedule.enabled || item.selectionMode) 1f else 0.6f
             binding.root.isChecked = item.selected
             applySelection(
@@ -114,18 +101,11 @@ internal class AlarmAdapter(
             previousAlarmId = schedule.id
             previousSelected = item.selected
 
-            // While selecting, a tap picks the card; the hidden switch still
-            // mirrors the server state so leaving selection mode is instant.
             binding_ = true
             binding.alarmEnabled.isChecked = schedule.enabled
             binding_ = false
         }
 
-        /**
-         * Crossfades the selection affordances: the tinted scrim fades in and
-         * the selected stroke grows/shrinks over a short motion curve instead
-         * of snapping with the checked state change.
-         */
         private fun applySelection(selected: Boolean, animate: Boolean) {
             val context = binding.root.context
             val selectedStroke = (SELECTED_STROKE_DP * context.resources.displayMetrics.density).roundToInt()
@@ -163,7 +143,6 @@ internal class AlarmAdapter(
     }
 
     private companion object {
-        /** A 2dp outline stays fully visible inside the card's rounded clip. */
         const val SELECTED_STROKE_DP = 2f
         const val SELECTED_SCRIM_ALPHA = 0.12f
     }

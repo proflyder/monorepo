@@ -6,25 +6,9 @@ import dev.proflyder.home.core.model.ControlKind
 import dev.proflyder.home.core.model.ControlRole
 import dev.proflyder.home.core.model.PowerState
 
-/*
- * Pure presentation logic of the Home screen (no Android types), kept here so it
- * is unit-tested: which filter chips exist and how entries become list rows.
- */
-
-/**
- * Rows of the Home screen: a section header, the profile selector, scenario
- * tiles, plain device rows and device groups (a device with several entries).
- */
 sealed interface ControlItem {
-    /** Stable identity for DiffUtil; unique across item types and sections. */
     val key: String
 
-    /**
-     * A section header. [section] identifies the section (not its title), so a
-     * room that happens to be called "Home" never collides with another
-     * section. [summary] is a short right-aligned note ("2 of 4 on").
-     * Room headers are [collapsible]: tapping them hides or shows the devices.
-     */
     data class Header(
         val section: String,
         val title: String,
@@ -43,12 +27,6 @@ sealed interface ControlItem {
         override val key: String get() = "entry:${entry.id}"
     }
 
-    /**
-     * One device with several controllable entries. [primary] are the rows shown
-     * on the card, [settings] sit behind the "Settings (N)" row when [expanded]
-     * (owned by the view model), and [actions] is reserved for action entries
-     * the server will add later (empty today).
-     */
     data class DeviceGroup(
         val deviceId: String,
         val title: String,
@@ -57,7 +35,6 @@ sealed interface ControlItem {
         val actions: List<Row> = emptyList(),
         val expanded: Boolean,
         val statesKnown: Boolean,
-        /** The control that names the device and keeps the main switch row. */
         val mainId: String? = null,
     ) : ControlItem {
         override val key: String get() = "device:$deviceId"
@@ -65,7 +42,6 @@ sealed interface ControlItem {
         data class Row(val entry: ControlEntry, val busy: Boolean)
     }
 
-    /** The compact live-rows block; [remaining] holds server-accurate timer seconds for this tick. */
     data class Hub(
         val cards: List<HubCard>,
         val remaining: Map<String, Long>,
@@ -74,27 +50,19 @@ sealed interface ControlItem {
         override val key: String get() = "hub"
     }
 
-    /** The pinned "Quick actions" tiles; [hint] shows the empty-state hint. */
     data class QuickActions(val tiles: List<QuickTile>, val hint: Boolean) : ControlItem {
         override val key: String get() = "quick_actions"
     }
 
-    /**
-     * The single compact "Voice" card: the assistant profile (a global mode,
-     * not a device) and the one-tap marks of a live wake event. Either part can
-     * be absent; the card itself exists only while one of them is.
-     */
     data class Voice(
         val profile: Profile? = null,
         val actions: List<WakeFeedbackAction> = emptyList(),
     ) : ControlItem {
         override val key: String get() = "voice"
 
-        /** The profile is a mode: only the segmented pills act, never a row tap. */
         data class Profile(val entry: ControlEntry, val busy: Boolean)
     }
 
-    /** Device filter chips, placed directly above the room sections they filter. */
     data class Filters(val chips: List<FilterChip>, val selected: ControlFilter) : ControlItem {
         override val key: String get() = "filters"
     }
@@ -102,14 +70,8 @@ sealed interface ControlItem {
     data class FilterChip(val filter: ControlFilter, val label: String, val count: Int)
 }
 
-/** A selectable chip: the filter plus how many entries it shows. */
 data class ControlFilterOption(val filter: ControlFilter, val count: Int)
 
-/**
- * The server's visibility condition resolved against the catalog: an entry is
- * hidden until the referenced entry is in the requested on/off state. Unknown
- * states hide it rather than guessing.
- */
 fun ControlEntry.isVisible(entries: List<ControlEntry>): Boolean {
     val condition = visibleWhen ?: return true
     val target = entries.firstOrNull { it.id == condition.entry } ?: return false
@@ -125,19 +87,15 @@ fun ControlEntry.isVisible(entries: List<ControlEntry>): Boolean {
     }
 }
 
-/** The catalog entries allowed by their `visibleWhen` conditions. */
 fun visibleEntries(entries: List<ControlEntry>): List<ControlEntry> =
     entries.filter { it.isVisible(entries) }
 
-/** Texts the list needs; the presentation layer supplies localized strings. */
 class ControlTexts(
     val otherDevices: String,
     val scenarios: String,
     val unavailable: String,
-    /** Section title of the combined voice card. */
     val voice: String,
     val onSummary: (on: Int, total: Int) -> String,
-    /** Header of the device-level action cards ("Say on the station"). */
     val actions: String = "Actions",
     val all: String = "All",
     val lights: String = "Lights",
@@ -163,26 +121,14 @@ object ControlItems {
 
     private fun ControlEntry.matches(filter: ControlFilter): Boolean = when (filter) {
         ControlFilter.All -> true
-        // HA scripts are gone from Home; the native scenarios live in their own tab.
         ControlFilter.Scenarios -> false
         ControlFilter.Lights -> kind == ControlKind.LIGHT
         ControlFilter.Switches -> kind == ControlKind.SWITCH
         is ControlFilter.Room -> room == filter.name
     }
 
-    /**
-     * The chip counts describe primary controls only: a device's settings are
-     * part of it and never add a chip or a count of their own.
-     */
     private fun ControlEntry.isCounted(): Boolean = (isDevice || isVolume) && role != ControlRole.SETTING
 
-    /**
-     * The chips: All, then the device categories that exist, then each room
-     * (only when there is more than one, otherwise rooms add nothing). The
-     * profile selector is pinned and always shown, so it is never a chip and
-     * never counted: the counts describe filterable content only. Native
-     * scenarios are not part of Home and have no chip.
-     */
     fun options(entries: List<ControlEntry>): List<ControlFilterOption> {
         if (entries.isEmpty()) return emptyList()
         val visible = visibleEntries(entries)
@@ -201,28 +147,9 @@ object ControlItems {
         return options
     }
 
-    /**
-     * The filter to actually apply: [filter] if its chip exists for [entries],
-     * otherwise [ControlFilter.All] (the selected room vanished, or a stored
-     * choice no longer matches). With no entries there is nothing to validate
-     * against yet, so [filter] is kept.
-     */
     fun effectiveFilter(entries: List<ControlEntry>, filter: ControlFilter): ControlFilter =
         if (entries.isEmpty() || options(entries).any { it.filter == filter }) filter else ControlFilter.All
 
-    /**
-     * [leading] items (the live rows and the pinned quick actions) come
-     * first, then the single voice card (a mode and wake marks, not content,
-     * shown whatever the filter is), then available devices grouped by room
-     * and, inside a room, by device, then unavailable devices in their own
-     * trailing section so dead entries do not interleave with working ones.
-     *
-     * [expandedDevices] holds the device ids whose "Settings (N)" row is open;
-     * [collapsedRooms] holds section ids of collapsed room groups;
-     * [wakeFeedback] holds the resolved wake-mark actions for the voice card;
-     * [voiceCard] is false when the screen renders the profile and wake marks
-     * elsewhere (a toolbar chip and a quick-actions dial).
-     */
     fun build(
         entries: List<ControlEntry>,
         pending: Set<String>,
@@ -235,9 +162,6 @@ object ControlItems {
         wakeFeedback: List<WakeFeedbackAction> = emptyList(),
         voiceCard: Boolean = true,
     ): List<ControlItem> {
-        // Visibility comes first: a conditional entry whose target is not in
-        // the requested state must never reach cards, chips, counters or the
-        // "Unavailable" section.
         val visible = visibleEntries(entries)
         val applied = effectiveFilter(visible, filter)
         val profile = visible.firstOrNull { it.isProfile }
@@ -245,7 +169,6 @@ object ControlItems {
         val items = mutableListOf<ControlItem>()
         items += leading
 
-        // One card for the whole voice block: profile and/or wake marks.
         if (voiceCard && (profile != null || wakeFeedback.isNotEmpty())) {
             items += ControlItem.Header(SECTION_VOICE, texts.voice)
             items += ControlItem.Voice(
@@ -254,8 +177,6 @@ object ControlItems {
             )
         }
 
-        // Chips filter devices only, so they sit directly above the rooms
-        // instead of floating over the live rows and quick actions.
         val filterOptions = options(visible)
         if (filterOptions.size > 1) {
             items += ControlItem.Filters(
@@ -272,8 +193,6 @@ object ControlItems {
 
         val devices = content.filter { it.isDevice || it.isButton || it.isVolume }
         val (working, deadEntries) = devices.partition { it.available }
-        // Dead rows keep the old behaviour: they follow the applied filter too,
-        // and a lone setting never shows up as its own unavailable device.
         val dead = deadEntries.filter { applied == ControlFilter.All || (it.role != ControlRole.SETTING && it.matches(applied)) }
         val byRoom = LinkedHashMap<String, MutableList<ControlEntry>>()
         working.forEach { byRoom.getOrPut(it.room) { mutableListOf() } += it }
@@ -306,8 +225,6 @@ object ControlItems {
         expandedDevices: Set<String>,
         collapsedRooms: Set<String>,
     ): List<ControlItem> {
-        // A group is shown when one of its primary controls matches the
-        // filter; its settings then follow the device, never the chip.
         val groups = groupByDevice(roomEntries).filter { it.matchesFilter(applied) }
         if (groups.isEmpty()) return emptyList()
         val on = groups.sumOf { bucket -> bucket.primary.count { it.power == PowerState.ON } }
@@ -332,16 +249,8 @@ object ControlItems {
 
     private fun localId(entry: ControlEntry): String = entry.id.substringAfter('.', entry.id)
 
-    /** The part of the entity id before the first `_`, e.g. `komp` in `button.komp_lock`. */
     private fun prefixOf(entry: ControlEntry): String = localId(entry).substringBefore('_')
 
-    /**
-     * Prefix groups present in [entries]: entities without a registry device id
-     * that share a room and the entity-id prefix of a base entity (`switch.komp`
-     * is the base of `button.komp_lock`/`button.komp_unlock`). Home Assistant
-     * template entities have no device registry entry, so this is how their
-     * buttons still join the device card.
-     */
     private fun prefixGroups(entries: List<ControlEntry>): Set<Pair<String, String>> =
         entries.filter { it.deviceId.isBlank() }
             .groupBy { it.room to prefixOf(it) }
@@ -350,12 +259,6 @@ object ControlItems {
             }
             .keys
 
-    /**
-     * Groups one room's entries by device. An entry with a server device id
-     * joins that device; entities without one join a prefix group when their
-     * shared prefix has a base entity, and are otherwise each their own device,
-     * so an older server keeps rendering as before.
-     */
     private fun groupByDevice(entries: List<ControlEntry>): List<DeviceBucket> {
         val prefixes = prefixGroups(entries)
         val buckets = LinkedHashMap<String, MutableList<ControlEntry>>()
@@ -375,11 +278,6 @@ object ControlItems {
         }
     }
 
-    /**
-     * One station volume row instead of two: every volume entry of a device is
-     * merged into the primary one (the entry that supports mute), and the
-     * others travel as its companion for the subtitle and the sheet.
-     */
     private fun mergeVolumes(members: List<ControlEntry>): List<ControlEntry> {
         val volumes = members.filter { it.isVolume }
         if (volumes.size < 2) return members
@@ -390,11 +288,6 @@ object ControlItems {
         return members.map { if (it.id == main.id) merged else it }.filter { it.id !in companionIds }
     }
 
-    /**
-     * A control that represents the device itself: its own name is the device
-     * name (or a technical title that falls back to it), or its entity id ends
-     * in a power suffix. Status details play no role here.
-     */
     private fun ControlEntry.namesDevice(deviceName: String?): Boolean {
         val target = deviceName?.trim().orEmpty()
         if (target.isEmpty()) return false
@@ -404,22 +297,12 @@ object ControlItems {
 
     private fun bucketOf(deviceId: String, members: List<ControlEntry>, prefix: String? = null): DeviceBucket {
         val entries = mergeVolumes(members)
-        // A base entity names a prefix group; it may not sort first (the catalog
-        // is ordered by title), so look it up explicitly.
         val anchor = prefix?.let { value -> entries.firstOrNull { localId(it) == value } }
         val hasPrimary = entries.any { it.role != ControlRole.SETTING && !it.isButton }
-        // Buttons are one-shot device actions: they live in the settings list
-        // next to the device's other options when that device has a primary row.
         val settings = entries.filter { it.role == ControlRole.SETTING || (it.isButton && hasPrimary) }
         val primary = entries.filter { entry -> settings.none { it.id == entry.id } }
         val name = entries.firstNotNullOfOrNull { it.device.takeIf(String::isNotBlank) }
             ?: anchor?.displayTitle()
-        // The main control names the device and stays a switch row instead of
-        // becoming a compact tile. A prefix group names it explicitly (the
-        // base entity); otherwise a control whose own name is the device name
-        // (or its power switch) is the main one; otherwise a card with a single
-        // primary control uses it. Everything else is a tile candidate, even
-        // when it carries a status detail such as the hardware mute.
         val main = anchor
             ?: primary.firstOrNull { it.namesDevice(name) }
             ?: primary.singleOrNull()
@@ -440,8 +323,6 @@ object ControlItems {
         val mainId: String?,
     ) {
         fun toItem(pending: Set<String>, statesOk: Boolean, expandedDevices: Set<String>): ControlItem =
-            // A lone primary control is still an ordinary device row; the device
-            // name only replaces the title when the entity has none of its own.
             if (primary.size == 1 && settings.isEmpty()) {
                 val entry = primary.single()
                 ControlItem.Device(entry.copy(title = entry.displayTitle()), entry.id in pending, statesOk)
@@ -449,8 +330,6 @@ object ControlItems {
                 ControlItem.DeviceGroup(
                     deviceId = deviceId,
                     title = title,
-                    // A lone primary is the card's main row: its title is the
-                    // device name (the card has no separate header above it).
                     primary = primary.map {
                         val entry = if (primary.size == 1) it.copy(title = title) else it
                         ControlItem.DeviceGroup.Row(entry, it.id in pending)
@@ -465,8 +344,4 @@ object ControlItems {
     }
 }
 
-/**
- * Title of a standalone device row: the human name, preferring the device name
- * when the server only sent a technical entity title ("Light", "Switch").
- */
 internal fun ControlEntry.displayTitle(): String = displayName

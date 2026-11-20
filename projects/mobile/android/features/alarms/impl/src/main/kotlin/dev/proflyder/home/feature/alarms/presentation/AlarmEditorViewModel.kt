@@ -56,7 +56,6 @@ class AlarmEditorViewModel(
     private val deleteAlarm: DeleteAlarm,
     private val settings: ConnectionSettingsStore,
     private val savedState: SavedStateHandle,
-    /** Localized name used when the user leaves the label empty. */
     private val defaultLabel: String,
 ) : BaseViewModel<AlarmEditorUiState>(restoreState(savedState)) {
     private val restoredDraft: AlarmEditorDraft? = AlarmEditorDraftCodec.fromMap(
@@ -125,19 +124,10 @@ class AlarmEditorViewModel(
 
     fun setTime(hour: Int, minute: Int) = edit { it.copy(hour = hour, minute = minute) }
 
-    /**
-     * Applies a quick "now + N" preset from [dev.proflyder.home.feature.alarms.ALARM_QUICK_OFFSETS_MINUTES].
-     * The offset is measured from the phone's current time; the server renders
-     * the stored alarm back in the phone's zone.
-     */
     fun applyQuickOffset(offsetMinutes: Int) = edit {
         it.withQuickOffset(LocalDateTime.now(), offsetMinutes)
     }
 
-    /**
-     * Applies the sheet's choice. A custom day set that covers a preset is
-     * stored as that preset, so "Пн–Пт" never lingers as a custom list.
-     */
     fun setRepeatAndDays(repeat: RepeatKind, days: Set<Int>) = edit { state ->
         val normalized = when (repeat) {
             RepeatKind.CUSTOM -> AlarmRepeatRules.presetFor(days)
@@ -329,10 +319,6 @@ internal fun restoreState(savedState: SavedStateHandle): AlarmEditorUiState =
     AlarmEditorDraftCodec.fromMap(savedState.keys().associateWith { key -> savedState.get<Any?>(key) })?.toUiState()
         ?: AlarmEditorUiState()
 
-/**
- * Applies a quick "now + offset" preset. Extracted from the ViewModel so the
- * "counted from now, not from the field" rule is unit-tested on the JVM.
- */
 internal fun AlarmEditorUiState.withQuickOffset(
     now: LocalDateTime,
     offsetMinutes: Int,

@@ -1,8 +1,3 @@
-"""Hermetic tests for the offsite backup script.
-
-No restic binary, network or real home state is used: restic is a stub script,
-HA is a local fake WebSocket/HTTP server, and every source is a temporary file.
-"""
 from __future__ import annotations
 
 import base64
@@ -196,7 +191,6 @@ def make_sqlite(path: Path, value: str) -> None:
 
 
 def make_ssh_stub(directory: Path) -> Path:
-    """Stub ssh: emit the prepared tar stream and ignore all options."""
     stub = directory / "ssh-stub"
     stub.write_text(
         "#!/bin/sh\n"
@@ -214,7 +208,6 @@ def make_bb_export(
     corrupt: bool = False,
     include_db: bool = True,
 ) -> Path:
-    """Build the forced-command tar stream containing bb-server-export.tgz."""
     tgz = directory / "bb-server-export.tgz"
     if corrupt:
         tgz.write_bytes(b"this is not gzip")
@@ -369,7 +362,6 @@ class OffsiteBackupTests(unittest.TestCase):
         self.assertIn("--prune", forget[0])
         self.assertTrue(any(line.startswith("check --read-data-subset=5%") for line in calls))
 
-        # Staging is removed and no seal/recovery key can appear in it.
         self.assertEqual(list(self.staging_root.iterdir()), [])
 
         metrics = self.metrics.read_text(encoding="utf-8")
@@ -394,7 +386,6 @@ class OffsiteBackupTests(unittest.TestCase):
         self.assertNotIn("password", json.dumps(manifest).lower())
 
     def _last_staged_manifest(self) -> dict:
-        # The stub restic copies MANIFEST.json before the run removes staging.
         return json.loads(
             Path(str(self.restic_log) + ".manifest").read_text(encoding="utf-8")
         )

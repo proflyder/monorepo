@@ -1,12 +1,3 @@
-//! Wake-event recording for the Ricardo detector (contract v1): the audio windows of confirmed
-//! hits, near-misses and user-reported misses, their WAV + JSON sidecars, retention and stats.
-//!
-//! The audio processing thread keeps the ring and the capture state ([`Capture`]) and hands
-//! finished buffers to one writer thread through a bounded channel (`try_send`: a stalled disk
-//! never blocks the microphone; the drop is counted). The writer owns all file I/O and the
-//! in-memory index; the controller reaches it through [`WakeEventsHandle`] for the dialog outcome
-//! and the «false alarm» label, and the processing thread through its own handle for the «miss»
-//! button.
 #![deny(unsafe_code)]
 #![deny(unsafe_op_in_unsafe_fn)]
 #![deny(clippy::undocumented_unsafe_blocks)]
@@ -28,16 +19,13 @@ use std::thread::JoinHandle;
 
 use tracing::{error, info, warn};
 
-/// Ring of the detector's input stream: the 30 s of a miss plus the 3 s before a hit.
 pub const RING_MS: u32 = 31_000;
 pub const HIT_PRE_MS: u32 = 3000;
 pub const POST_MS: u32 = 1000;
 pub const MISS_MS: u32 = 30_000;
 
-/// Finished windows waiting for the writer thread.
 const JOB_QUEUE: usize = 8;
 
-/// Ошибка записи файла контракта: путь и причина, без потери контекста шага.
 #[derive(Debug, thiserror::Error)]
 pub enum WakeStoreError {
     #[error("{path}: {source}")]
@@ -47,18 +35,13 @@ pub enum WakeStoreError {
     },
 }
 
-/// Where and for which build the events are recorded.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct WakeEventOptions {
-    /// `/data/pulsar/wake-events`.
     pub dir: PathBuf,
-    /// The daemon's `VERSION`.
     pub version: String,
-    /// The loaded `.tflite` (its sha256 goes into every sidecar).
     pub model: PathBuf,
 }
 
-/// One finished window on its way to the writer thread.
 #[derive(Debug)]
 pub struct Recording {
     pub id: String,
@@ -78,39 +61,30 @@ pub enum Job {
 }
 
 pub(crate) enum Command {
-    /// The dialog started by this hit ended.
     Outcome {
         id: String,
         outcome: Outcome,
         stt_text: Option<String>,
     },
-    /// «Wake: ложное срабатывание»: label the newest hit of the last 10 minutes.
     FalseAlarm,
 }
 
-/// Counters of this run; the writer adds them to the loaded `stats.json`.
 #[derive(Default)]
 pub struct Counters {
-    /// Audio actually fed to the detector (not muted, detector active).
     pub listening_ms: AtomicU64,
-    /// The subset while the dry-run switch was on.
     pub dry_run_ms: AtomicU64,
     pub hits: AtomicU64,
     pub near: AtomicU64,
     pub miss: AtomicU64,
-    /// Windows the writer queue had no room for.
     pub dropped: AtomicU64,
 }
 
-/// The controller's side of the writer thread.
 #[derive(Clone)]
 pub struct WakeEventsHandle {
     cmd: mpsc::Sender<Command>,
 }
 
 impl WakeEventsHandle {
-    /// Fills `outcome` (and `stt_text` when the dialog reported one) of a hit's sidecar. False
-    /// when the writer thread is gone (the file then keeps a null outcome).
     pub fn set_outcome(&self, id: &str, outcome: Outcome, stt_text: Option<&str>) -> bool {
         self.cmd
             .send(Command::Outcome {
@@ -121,13 +95,11 @@ impl WakeEventsHandle {
             .is_ok()
     }
 
-    /// Labels the newest hit of the last 10 minutes `false` / `user`.
     pub fn false_alarm(&self) -> bool {
         self.cmd.send(Command::FalseAlarm).is_ok()
     }
 }
 
-/// What the processing thread needs to create and save windows.
 pub struct WakeInput {
     pub jobs: SyncSender<Job>,
     pub counters: Arc<Counters>,
@@ -143,7 +115,6 @@ pub struct WakeEventsRuntime {
 }
 
 impl WakeEventsRuntime {
-    /// A clone for the processing thread; None once the runtime is shutting down.
     pub fn input(&self) -> Option<WakeInput> {
         Some(WakeInput {
             jobs: self.jobs.clone()?,
@@ -152,8 +123,6 @@ impl WakeEventsRuntime {
         })
     }
 
-    /// Stops the writer after the processing thread has stopped and its sender is gone; the final
-    /// `stats.json` is written on the way out.
     pub fn shutdown(&mut self) {
         self.jobs = None;
         if let Some(t) = self.writer.take() {
@@ -162,13 +131,10 @@ impl WakeEventsRuntime {
     }
 }
 
-/// Lower-case hex SHA-256.
 pub fn sha256_hex(data: &[u8]) -> String {
     hex::encode(ring::digest::digest(&ring::digest::SHA256, data).as_ref())
 }
 
-/// Starts the writer thread with the thresholds the detector was loaded with. None: the
-/// directory cannot be created (logged), so a run records nothing.
 pub fn start(
     opts: &WakeEventOptions,
     thresholds: Thresholds,

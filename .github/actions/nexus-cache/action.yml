@@ -1,21 +1,6 @@
 name: nexus-cache
 description: Configure the home Nexus cache as a Bazel download fallback (and pip/npm registry).
 
-# Single switch: the caller passes the repository variable NEXUS_HOST and the
-# repository secret NEXUS_CI_PASSWORD. An empty value, a missing secret (fork
-# PRs) or an unhealthy Nexus leaves the build on the direct upstream URLs, so
-# CI degrades to the normal path instead of failing.
-#
-# Bazel downloads go to the upstream first: `downloader.cfg` has two rewrite
-# rules per host, the direct URL and then Nexus. The home uplink is shared by
-# every runner, so Nexus is only the fallback for 429/5xx or a dropped
-# connection. pip/npm steps use the Nexus registries configured below.
-#
-# Side effects, all scoped to the runner:
-#   * ~/.netrc          Bazel/Maven basic auth for the repository paths
-#   * ~/.npmrc          npm registry + basic auth
-#   * ~/.config/pip/pip.conf
-#   * ~/.bazelrc        `common --downloader_config=<rendered>`
 inputs:
   host:
     description: Public Nexus hostname (no scheme, no path)
@@ -51,10 +36,6 @@ runs:
           "${NEXUS_HOST}" "${NEXUS_USER}" "${NEXUS_PASSWORD}" > "$HOME/.netrc"
         chmod 600 "$HOME/.netrc"
 
-        # Probe through the path the public ingress actually exposes (the
-        # admin `/service/rest` API is not routed there). npm ping is tiny and
-        # cached upstream. If the tunnel or the pod is down, do not rewrite
-        # anything: a rewrite replaces the original URL.
         code=$(curl -sS --netrc-file "$HOME/.netrc" -o /dev/null -w '%{http_code}' \
           --max-time 15 "https://${NEXUS_HOST}/repository/npmjs/-/ping" || true)
         if [[ "${code}" != "200" ]]; then
@@ -63,7 +44,6 @@ runs:
           exit 0
         fi
 
-        # npm needs an explicit auth line; it does not read ~/.netrc.
         auth=$(printf '%s:%s' "${NEXUS_USER}" "${NEXUS_PASSWORD}" | base64 | tr -d '\n')
         registry_path="//${NEXUS_HOST}/repository/npmjs/"
         {

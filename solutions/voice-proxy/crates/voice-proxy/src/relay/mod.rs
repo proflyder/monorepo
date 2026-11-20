@@ -1,5 +1,3 @@
-//! Upstream transport and the SSE protocol subset.
-
 pub mod sse;
 mod upstream;
 

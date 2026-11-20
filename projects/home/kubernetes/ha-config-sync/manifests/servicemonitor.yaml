@@ -1,6 +1,3 @@
-# kube-prometheus-stack runs with ruleSelectorNilUsesHelmValues=false, so a
-# ServiceMonitor in any namespace is picked up. The selector matches only this
-# Service.
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:

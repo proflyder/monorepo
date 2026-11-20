@@ -1,15 +1,3 @@
-//! Portable challenge/claim exchange.
-//!
-//! Everything a round decides — pacing, retries, back-off, budget, dedup and
-//! the arming step — lives here, behind small ports. The ports have Win32
-//! implementations in [`crate::worker`] and scripted fakes in the tests, so the
-//! exchange is exercised on the host without Windows, network or real sleeps.
-//!
-//! The wire format, request bodies and log lines are unchanged from the
-//! previous Windows-only implementation: only their composition is portable.
-
-// The production consumers of these ports are the `#[cfg(windows)]` adapters;
-// host builds exercise them through `cfg(test)`.
 #![cfg_attr(not(any(windows, test)), allow(dead_code))]
 
 use wakegrant_protocol::{
@@ -27,50 +15,40 @@ use crate::worker::{
     clamp_delay, unlock_backoff_delay, unlock_round_delay,
 };
 
-/// One HTTP POST the exchange wants to perform.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct PostRequest<'a> {
     pub(crate) endpoint: &'a ServiceEndpoint,
     pub(crate) path: &'a str,
     pub(crate) body: &'a [u8],
     pub(crate) receive_timeout_ms: i32,
-    /// True for the unlock claim, which runs on its own module-pinned thread so
-    /// a long-poll can be abandoned when the session is cancelled.
     pub(crate) cancellable: bool,
 }
 
-/// HTTP transport port. `None` means the request was cancelled in flight.
 pub(crate) trait Transport {
     fn post(&self, request: PostRequest<'_>) -> Option<HttpOutcome>;
 }
 
-/// Monotonic millisecond clock and sleep port.
 pub(crate) trait Clock {
     fn now_ms(&self) -> u64;
     fn sleep_ms(&self, milliseconds: u32);
 }
 
-/// Event journal port; production appends the documented log lines.
 pub(crate) trait EventLog {
     fn event(&self, event: &str, fields: &str);
 }
 
-/// What the tile did when the round tried to arm it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ArmOutcome {
     Armed,
     Cancelled,
-    /// LogonUI has not advised the provider yet; retry shortly, never re-claim.
     Unavailable,
 }
 
-/// The session and tile port.
 pub(crate) trait Target {
     fn cancelled(&self) -> bool;
     fn arm(&self) -> ArmOutcome;
 }
 
-/// Why the exchange loop ended.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum LoopEnd {
     Armed,
@@ -78,19 +56,14 @@ pub(crate) enum LoopEnd {
     Stopped,
 }
 
-/// Everything a loop needs besides its ports.
 pub(crate) struct LoopContext<'a> {
     pub(crate) config: &'a Config,
     pub(crate) endpoint: &'a ServiceEndpoint,
     pub(crate) secret: &'a MachineSecret,
     pub(crate) mode: Mode,
-    /// Clock value the provider was loaded at; the logon budget counts from it.
     pub(crate) origin_ms: u64,
 }
 
-/// Suppresses repeated identical error lines in the unlock loop, which can run
-/// all night. Every error kind is logged again at most every tenth repeat, and
-/// any different error is logged immediately.
 #[derive(Default)]
 struct ErrorDedup {
     last: String,
@@ -98,8 +71,6 @@ struct ErrorDedup {
 }
 
 impl ErrorDedup {
-    /// `key` identifies the error kind; `fields` may contain per-round timings,
-    /// so it cannot be the dedup key itself.
     fn log(&mut self, log: &dyn EventLog, event: &str, key: &str, fields: &str) {
         if self.last == key {
             self.repeats = self.repeats.saturating_add(1);
@@ -115,7 +86,6 @@ impl ErrorDedup {
     }
 }
 
-/// The unlock loop dedups identical errors; the short logon loop does not.
 struct ErrorReporter {
     dedup: ErrorDedup,
     enabled: bool,
@@ -138,8 +108,6 @@ impl ErrorReporter {
     }
 }
 
-/// Sleeps up to `milliseconds` in short steps, returning as soon as the
-/// session is cancelled.
 fn sleep_interruptible(target: &dyn Target, clock: &dyn Clock, milliseconds: u32) -> bool {
     let deadline = clock.now_ms() + u64::from(milliseconds);
     loop {
@@ -154,8 +122,6 @@ fn sleep_interruptible(target: &dyn Target, clock: &dyn Clock, milliseconds: u32
     }
 }
 
-/// Logs a transport failure or a non-200 status and turns it into the round
-/// outcome the loops expect; challenge and claim share it.
 fn http_response(
     outcome: HttpOutcome,
     request: &str,
@@ -210,8 +176,6 @@ fn post(
     })
 }
 
-/// One challenge/claim exchange. Any unexpected answer ends the round without
-/// arming; only a verified grant arms the session.
 fn one_round(
     context: &LoopContext<'_>,
     target: &dyn Target,
@@ -306,7 +270,6 @@ fn one_round(
         receive_timeout_ms,
         purpose == Purpose::Unlock,
     );
-    // Cancelled while the long-poll was in flight.
     let Some(claim) = claim else {
         return RoundOutcome::fatal();
     };
@@ -345,8 +308,6 @@ fn one_round(
                     result.grant_id
                 ),
             );
-            // The grant is already consumed, so never claim again: only wait a
-            // moment for Advise() and then give up.
             for _ in 0..20 {
                 match target.arm() {
                     ArmOutcome::Armed => {
@@ -375,8 +336,6 @@ fn one_round(
                     &format!("result=denied purpose=logon ms={claim_ms} {prefix}"),
                 );
             }
-            // Unlock denials are not logged: the long-poll is the pause, and a
-            // lock screen can stay up all night.
             RoundOutcome::retry(if purpose == Purpose::Unlock {
                 0
             } else {
@@ -404,8 +363,6 @@ fn one_round(
     }
 }
 
-/// Runs challenge/claim rounds until the tile is armed, the session is
-/// cancelled or the logon budget is exhausted.
 pub(crate) fn run_exchange(
     context: &LoopContext<'_>,
     target: &dyn Target,
@@ -421,7 +378,6 @@ pub(crate) fn run_exchange(
         }
         let now = clock.now_ms().saturating_sub(context.origin_ms);
         if context.mode == Mode::Logon && !within_budget(now) {
-            // A cancel racing the budget check must still log phase=cancelled.
             return if target.cancelled() {
                 LoopEnd::Cancelled
             } else {
@@ -448,9 +404,6 @@ pub(crate) fn run_exchange(
                         error_attempt = error_attempt.saturating_add(1);
                         unlock_round_delay(round_ms, Some(backoff))
                     } else {
-                        // A denial is the normal long-poll result; the server
-                        // already held the request. An instant denial is paced
-                        // by the minimum round interval.
                         error_attempt = 0;
                         unlock_round_delay(round_ms, None)
                     }
@@ -784,7 +737,6 @@ mod tests {
             clock.as_ref(),
             &log,
         );
-        // First claim ended at 10 ms; the second challenge starts 2 s later.
         assert_eq!(*transport.request_times.borrow(), vec![0, 0, 2010, 2010]);
         assert_eq!(target.armed.get(), 0);
         assert!(log.saw("grant result=denied"));
@@ -840,7 +792,6 @@ mod tests {
             clock.as_ref(),
             &log,
         );
-        // The 25 s long-poll is the pause; the next challenge is immediate.
         assert_eq!(
             *transport.request_times.borrow(),
             vec![0, 5, 25_005, 25_010]
@@ -930,7 +881,6 @@ mod tests {
             clock.as_ref(),
             &log,
         );
-        // 429 -> 5 s, transport -> 10 s; each round also takes 100 ms.
         assert_eq!(*transport.request_times.borrow(), vec![0, 0, 5_100, 5_100]);
         assert!(log.saw("status=429"));
         assert!(log.saw("error=receive_failed"));
@@ -959,7 +909,6 @@ mod tests {
             clock.as_ref(),
             &log,
         );
-        // 5xx waits BACKOFF_INTERVAL_MS (4 s), a denial waits POLL_INTERVAL_MS.
         assert_eq!(*transport.request_times.borrow(), vec![0, 0, 4_100, 4_100]);
     }
 
@@ -992,7 +941,6 @@ mod tests {
             .iter()
             .filter(|line| line.contains("error=receive_failed"))
             .count();
-        // The first error and every tenth repeat; the rest are suppressed.
         assert_eq!(logged, 2);
     }
 
@@ -1082,7 +1030,6 @@ mod tests {
             LoopEnd::Armed
         );
         assert_eq!(target.armed.get(), 1);
-        // The grant is never claimed twice.
         assert_eq!(transport.request_times.borrow().len(), 2);
     }
 }

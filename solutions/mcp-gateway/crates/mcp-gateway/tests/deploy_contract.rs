@@ -1,19 +1,8 @@
-//! Deploy-data contract: the tracked catalog and bb allow-list must load with
-//! the gateway's real validators.
-//!
-//! This replaces `projects/home/kubernetes/mcp-gateway/catalog_contract_test.go`,
-//! which built the former Go binary and waited for `/readyz`. The schema check
-//! itself never needed a process: startup parses and validates both files before
-//! the listener exists, so parsing them here with the same code is equivalent.
-//! The negative case proves the check is not vacuous.
-
 use std::path::{Path, PathBuf};
 
 use mcp_gateway::bb::BbResolver;
 use mcp_gateway::domain::catalog::Catalog;
 
-/// Resolve a repository-relative path from `CARGO_MANIFEST_DIR` (cargo) or the
-/// runfiles workspace root (Bazel).
 fn repo_path(relative: &str) -> PathBuf {
     let candidate = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../../..")

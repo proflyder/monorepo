@@ -1,10 +1,3 @@
-# ha-control: phone-facing catalog server and dedicated control-queue executor.
-#
-# Separate from ha-bridge on purpose: ha-bridge keeps the alarm `home` queue and
-# has no listener; ha-control serves GET /v1/catalog and leases only the
-# `control` queue (the binary refuses home/tasks).
-#
-# TEMPLATE: deploy.sh renders ${CONTROL_NODE_PORT} from the private env file.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -14,7 +7,6 @@ metadata:
     app.kubernetes.io/name: ha-control
     app.kubernetes.io/part-of: home
   annotations:
-    # Traceability only: a Deployment metadata change never rolls pods.
     proflyder.dev/build: ${BUILD_ID}
 spec:
   replicas: 1
@@ -28,7 +20,6 @@ spec:
       labels:
         app.kubernetes.io/name: ha-control
       annotations:
-        # Content-addressed: identical rendered content keeps the pod template.
         proflyder.dev/rollout: ${ROLLOUT_ID}
     spec:
       enableServiceLinks: false
@@ -53,28 +44,18 @@ spec:
               value: http://scheduler.home-assistant.svc.cluster.local:8098
             - name: SCHEDULER_TOKEN_FILE
               value: /run/secrets/scheduler/token
-            # Same bearer the phone already uses; the app has a single token.
             - name: CONTROL_TOKEN_FILE
               value: /run/secrets/scheduler/token
             - name: CONTROL_CONSUMER_ID
               value: ha-control-home
             - name: CONTROL_QUEUE
               value: control
-            # Native HA label id that marks a script as a personal scenario.
-            # Icons/areas/names are display only; scripts without this label
-            # are never exposed (infrastructure helpers stay hidden).
             - name: CONTROL_SCENARIO_LABEL
               value: scenario
-            # One binary control synthesized from a state sensor and a pair of
-            # buttons: the PC lock. The bridge maps it to the buttons, hides
-            # them, and shows the tile only while the PC is on. The mapping is
-            # data, so another such control needs no app release.
             - name: CONTROL_TOGGLES
               value: '[{"id":"toggle.komp_lock","title":"Блокировка","icon":"lock","state":"binary_sensor.komp_razblokirovan","on":"button.komp_lock","off":"button.komp_unlock","visibleWhen":{"entry":"switch.komp","state":"on"}}]'
             - name: CONTROL_LISTEN
               value: 0.0.0.0:8099
-            # Catalog-only until the control queue is reviewed; flipped by an
-            # explicit rollout step.
             - name: CONTROL_EXECUTE
               value: "false"
             - name: CONTROL_CACHE_TTL

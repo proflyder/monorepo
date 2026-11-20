@@ -1,11 +1,3 @@
-# Cloudflare Tunnel for the Telegram webhook.
-#
-# The tunnel lives in the currency-bot namespace (not a shared `cloudflared`
-# namespace) so the webhook NetworkPolicy can select its pods with a plain
-# same-namespace podSelector, the TUNNEL_TOKEN Secret is materialised by the
-# same ExternalSecret set, and the CI Role is the only cross-namespace grant.
-#
-# TEMPLATE: deploy.sh substitutes ${CLOUDFLARED_IMAGE} from versions.sh.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -15,7 +7,6 @@ metadata:
     app.kubernetes.io/name: cloudflared
     app.kubernetes.io/part-of: home
   annotations:
-    # Traceability only: a Deployment metadata change never rolls pods.
     proflyder.dev/build: ${BUILD_ID}
 spec:
   replicas: 1
@@ -29,7 +20,6 @@ spec:
       labels:
         app.kubernetes.io/name: cloudflared
       annotations:
-        # Content-addressed: identical rendered content keeps the pod template.
         proflyder.dev/rollout: ${ROLLOUT_ID}
     spec:
       enableServiceLinks: false
@@ -54,8 +44,6 @@ spec:
                 secretKeyRef:
                   name: cloudflared-tunnel
                   key: TUNNEL_TOKEN
-            # Expose the metrics/readiness listener on the pod network so it is
-            # reachable for probes and monitoring.
             - name: TUNNEL_METRICS
               value: 0.0.0.0:2000
             - name: TZ

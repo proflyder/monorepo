@@ -45,23 +45,17 @@ import dev.proflyder.home.feature.control.impl.databinding.ItemControlQuickTileB
 import dev.proflyder.home.feature.control.impl.databinding.ItemControlScenarioBinding
 import dev.proflyder.home.feature.control.impl.databinding.ItemControlVoiceBinding
 
-/** Row taps come from [AdapterCallback]; the switch reports an explicit target state. */
 internal interface ControlAdapterCallback : AdapterCallback<ControlItem> {
     fun onPowerChanged(entry: ControlEntry, on: Boolean)
 
-    /** Presses a stateless device button (lock/unlock). */
     fun onButtonPressed(entry: ControlEntry)
 
-    /** The profile selector reports the chosen side: `work = true` is the named profile. */
     fun onProfileChanged(entry: ControlEntry, work: Boolean)
 
-    /** Opens or closes the settings rows of a device card. */
     fun onToggleSettings(deviceId: String)
 
-    /** Folds or unfolds a room section (header tap). */
     fun onHeaderClick(header: ControlItem.Header)
 
-    /** Pins or unpins a device from a long press in its room group. */
     fun onPinToggle(entry: ControlEntry)
 
     fun onHubCardClick(card: HubCard)
@@ -72,60 +66,39 @@ internal interface ControlAdapterCallback : AdapterCallback<ControlItem> {
 
     fun onQuickTileLongClick(tile: QuickTile)
 
-    /** One-tap mark of a live wake event. */
     fun onWakeAction(action: WakeFeedbackAction)
 
-    /** A device filter chip was chosen. */
     fun onFilterSelected(filter: ControlFilter)
 }
 
-/**
- * Aspects of a Home row that [ControlDiff] can report as changed. A holder
- * updates only the views these map to, so an optimistic update or a server
- * re-read does not rebuild (and crossfade) the whole card.
- */
 internal enum class ControlChange {
-    /** Row title text. */
     TITLE,
 
-    /** Artwork selected from the entry kind/icon hint. */
     ICON,
 
-    /** On/off state: switch or profile side, icon tint/activation, state text. */
     POWER,
 
-    /** Command-in-flight indicator and the enabled state that depends on it. */
     BUSY,
 
-    /** Availability: dimming, enabled state and state text. */
     AVAILABILITY,
 
-    /** State text (power, availability, or a light's brightness reading). */
     STATE,
 
-    /** A section header's right-aligned summary. */
     SUMMARY,
 
-    /** Any visible change inside a device group; the holder rebuilds its dynamic rows. */
     GROUP,
 
-    /** The live-rows content changed; the holder rebuilds its rows in place. */
     HUB,
 
-    /** The voice card (profile side, busy state or wake marks) changed in place. */
     VOICE,
 
-    /** The filter chips or the selected chip changed. */
     FILTERS,
 
-    /** Quick tiles changed (a tile went busy, or the set of tiles changed). */
     QUICK,
 }
 
-/** Identity of the artwork an entry resolves to; see [ControlIcons]. */
 internal fun ControlEntry.iconIdentity(): Pair<Any, String> = kind to icon.lowercase()
 
-/** Typed payloads delivered for one bind, merged into a single aspect set. */
 internal fun controlChanges(payloads: List<Any>): PayloadSet<ControlChange>? =
     PayloadSet.merge(payloads, ControlChange::class.java)
 
@@ -134,11 +107,6 @@ internal object ControlDiff : DiffUtil.ItemCallback<ControlItem>() {
 
     override fun areContentsTheSame(oldItem: ControlItem, newItem: ControlItem): Boolean = oldItem == newItem
 
-    /**
-     * A typed set of changed aspects, or null when the difference has no view
-     * representation (or the row type changed), in which case the holder does a
-     * full bind.
-     */
     override fun getChangePayload(oldItem: ControlItem, newItem: ControlItem): Any? {
         val changed = when {
             oldItem is ControlItem.Header && newItem is ControlItem.Header -> headerChanges(oldItem, newItem)
@@ -188,28 +156,18 @@ internal object ControlDiff : DiffUtil.ItemCallback<ControlItem>() {
             add(ControlChange.STATE)
         }
         if (old.busy != new.busy) add(ControlChange.BUSY)
-        // Brightness and a device detail (for example the PC lock state) are
-        // part of the state line.
         if (before.light != after.light) add(ControlChange.STATE)
         if (before.volume != after.volume) add(ControlChange.STATE)
         if (before.detailKey != after.detailKey) add(ControlChange.STATE)
     }
 }
 
-/**
- * A compact tile clips its foreground ripple to the icon circle; the ripple
- * drawable itself also carries an oval mask.
- */
 internal object OvalTileOutlineProvider : ViewOutlineProvider() {
     override fun getOutline(view: View, outline: Outline) {
         outline.setOval(0, 0, view.width, view.height)
     }
 }
 
-/**
- * A live volume row is an active control, so it uses the same tint as a switch
- * that is on. A muted or unavailable row stays in the inactive colour.
- */
 internal fun bindVolumeIcon(icon: ImageView, root: View, entry: ControlEntry) {
     val active = entry.available && entry.volume?.muted != true
     icon.isActivated = active
@@ -222,7 +180,6 @@ internal fun bindVolumeIcon(icon: ImageView, root: View, entry: ControlEntry) {
     )
 }
 
-/** Artwork of one live row, shared with no new image per entity. */
 internal fun hubIcon(card: HubCard): Int = when (card) {
     is HubCard.Alarm -> R.drawable.control_ic_alarm
     is HubCard.TimerCard -> R.drawable.control_ic_timer
@@ -288,7 +245,6 @@ internal class ControlAdapter(
 
         private fun bindCollapsed(header: ControlItem.Header) {
             views.controlHeaderChevron.setVisible(header.collapsible)
-            // Expanded points up, collapsed points down.
             views.controlHeaderChevron.rotation = if (header.collapsed) 0f else 180f
             views.root.setOnClickListener {
                 if (header.collapsible) callback.onHeaderClick(header)
@@ -296,11 +252,6 @@ internal class ControlAdapter(
         }
     }
 
-    /**
-     * The single "Voice" card: the profile is a mode, not a device, so only an
-     * explicit pill acts (never a row tap); the two wake marks send at once.
-     * Programmatic selection during binding must never look like a user choice.
-     */
     private class VoiceHolder(
         private val views: ItemControlVoiceBinding,
         callback: ControlAdapterCallback,
@@ -316,7 +267,6 @@ internal class ControlAdapter(
             views.controlVoiceProfileTabs.onSelected = { chooseProfile(it) }
         }
 
-        /** Only a user tap reaches here; programmatic PillSegments.select does not. */
         internal fun chooseProfile(position: Int) {
             val profile = row?.profile ?: return
             when (canChoose) {
@@ -356,7 +306,6 @@ internal class ControlAdapter(
             )
             views.controlVoiceProfileIcon.setColorFilter(tint)
             views.controlVoiceProfileIcon.isActivated = work
-            // Neither side is claimed while the server state is unknown.
             val target = when (entry.power) {
                 PowerState.ON -> WORK_TAB
                 PowerState.OFF -> PERSONAL_TAB
@@ -442,12 +391,6 @@ internal class ControlAdapter(
         }
     }
 
-    /**
-     * The compact "next up" block: one line per live item, at most
-     * [dev.proflyder.home.feature.control.HubCards.MAX_ROWS] rows. There is no
-     * pager and no big button: the trailing control is a switch for alarms and
-     * a small pause/resume button for timers.
-     */
     private class HubHolder(
         private val views: ItemControlHubBinding,
         callback: ControlAdapterCallback,
@@ -495,11 +438,6 @@ internal class ControlAdapter(
             }
         }
 
-        /**
-         * A switch flip is optimistic; put it back until the server confirms.
-         * The recurring-alarm skip/disable dialog then decides what actually
-         * happens, so a cancelled dialog never leaves a false off state.
-         */
         internal fun toggleAlarmOff(row: ItemControlHubRowBinding, card: HubCard.Alarm) {
             row.hubRowSwitch.isChecked = true
             callback.onHubPrimary(card)
@@ -531,11 +469,6 @@ internal class ControlAdapter(
         private var renderedKeys: List<String> = emptyList()
         private val tileViews = mutableMapOf<String, View>()
 
-        /**
-         * The grid is rebuilt only when the set of tiles changes. A tile going
-         * busy after a tap updates in place, so its ripple is not cut off by a
-         * freshly inflated view.
-         */
         override fun bind(item: ControlItem) {
             val quick = item as ControlItem.QuickActions
             views.controlQuickHint.setVisible(quick.hint)
@@ -564,7 +497,6 @@ internal class ControlAdapter(
                 orientation = LinearLayout.HORIZONTAL
             }
             rowTiles.forEach { tile -> row.addView(tileView(row, tile)) }
-            // Keep the last row aligned with the grid instead of stretching.
             repeat(COLUMNS - rowTiles.size) {
                 row.addView(
                     View(views.root.context),
@@ -607,7 +539,6 @@ internal class ControlAdapter(
                     QuickTile.Call -> R.drawable.control_ic_call
                 },
             )
-            // A quick action is always an active accent icon, like a device that is on.
             views.quickTileIconBg.isActivated = true
             val busy = when (tile) {
                 is QuickTile.Device -> tile.busy
@@ -624,11 +555,6 @@ internal class ControlAdapter(
         }
     }
 
-    /**
-     * The compact "Voice" card binds profile and wake marks together; see
-     * [VoiceHolder]. Each mark sends at once: a missed wake must be reported
-     * while the ring buffer still holds the previous ~20 seconds.
-     */
     private class FiltersHolder(
         private val views: ItemControlFiltersBinding,
         callback: ControlAdapterCallback,
@@ -684,7 +610,6 @@ internal class ControlAdapter(
         private val views: ItemControlDeviceBinding,
         callback: ControlAdapterCallback,
     ) : ControlHolder(views, callback) {
-        /** Programmatic `isChecked` must not be reported as a user toggle. */
         private var binding_ = false
 
         init {
@@ -719,7 +644,6 @@ internal class ControlAdapter(
             bindEnabled(row)
         }
 
-        /** A station volume row: no toggle, the whole row opens the slider sheet. */
         private fun bindVolumeRow(row: ControlItem.Device) {
             views.controlDeviceSwitch.setVisible(false)
             views.controlDeviceState.setVisible(true)
@@ -733,10 +657,6 @@ internal class ControlAdapter(
             views.root.setOnClickListener { callback.onItemClick(row) }
         }
 
-        /**
-         * A standalone stateless button (an older server without device
-         * grouping still shows it): the card itself presses it.
-         */
         private fun bindButtonRow(row: ControlItem.Device) {
             bindBusy(row)
             val tint = MaterialColors.getColor(
@@ -788,7 +708,6 @@ internal class ControlAdapter(
             )
             views.controlDeviceIcon.setColorFilter(tint)
             views.controlDeviceIcon.isActivated = on
-            // Do not animate the thumb when the state is already the target one.
             if (views.controlDeviceSwitch.isChecked == on) return
             binding_ = true
             views.controlDeviceSwitch.isChecked = on
@@ -822,12 +741,6 @@ internal class ControlAdapter(
         }
     }
 
-    /**
-     * A device with several entries: one card whose rows are inflated from
-     * [ItemControlDeviceRowBinding]. The rows are dynamic, so any payload simply
-     * rebinds the card in place (the payload still keeps the holder, so no
-     * crossfade) and the settings list is toggled by the view model's state.
-     */
     private class DeviceGroupHolder(
         private val views: ItemControlDeviceGroupBinding,
         callback: ControlAdapterCallback,
@@ -836,8 +749,6 @@ internal class ControlAdapter(
 
         override fun bind(item: ControlItem) {
             val group = item as ControlItem.DeviceGroup
-            // A card with one primary has no header: that row itself is the
-            // device title (see ControlItems.DeviceGroup).
             views.controlGroupBody.setPadding(
                 views.controlGroupBody.paddingLeft,
                 views.controlGroupBody.paddingTop,
@@ -877,11 +788,6 @@ internal class ControlAdapter(
 
         override fun bindPayloads(item: ControlItem, payloads: List<Any>) = bind(item)
 
-        /**
-         * Rebinds the rows of [container] in place: a pressed row keeps its
-         * view, so its ripple and busy indicator survive the state update that
-         * the press itself triggers. Only the row count changes the hierarchy.
-         */
         private fun syncRows(
             container: LinearLayout,
             rows: List<ControlItem.DeviceGroup.Row>,
@@ -893,12 +799,6 @@ internal class ControlAdapter(
             rows.forEachIndexed { index, row -> bindRow(rowViews(container, index), row, statesKnown) }
         }
 
-        /**
-         * Compact binary toggles of the card: up to the configured number of
-         * round tiles per row, then the next row. Slots are reused so a tapped
-         * tile keeps its view (and ripple) across the optimistic state update;
-         * empty slots stay invisible to keep every tile the same width.
-         */
         internal fun syncTiles(
             container: LinearLayout,
             tiles: List<ControlItem.DeviceGroup.Row>,
@@ -948,10 +848,6 @@ internal class ControlAdapter(
                 ?: ItemControlDeviceTileBinding.inflate(LayoutInflater.from(row.context), row, false)
                     .also { row.addView(it.root) }
 
-        /**
-         * A tile is the same switch as a row's toggle: the tap sends the same
-         * optimistic power change, and an unavailable or busy tile ignores it.
-         */
         internal fun bindTile(
             tile: ItemControlDeviceTileBinding,
             row: ControlItem.DeviceGroup.Row,
@@ -990,7 +886,6 @@ internal class ControlAdapter(
             tile.controlTileRipple.setOnLongClickListener(hold)
         }
 
-        /** A light's long press opens its sheet; anything else keeps pinning. */
         internal fun longPressTile(entry: ControlEntry, busy: Boolean, statesKnown: Boolean): Boolean {
             callback.onItemLongClick(ControlItem.Device(entry, busy, statesKnown))
             return true
@@ -1013,7 +908,6 @@ internal class ControlAdapter(
             row: ControlItem.DeviceGroup.Row,
             statesKnown: Boolean,
         ) {
-            // A reused row may carry the previous entry's listeners.
             rowViews.controlRowSwitch.setOnCheckedChangeListener(null)
             rowViews.root.setOnLongClickListener(null)
             rowViews.controlRowSwitch.setVisible(true)
@@ -1040,8 +934,6 @@ internal class ControlAdapter(
             )
             rowViews.controlRowIcon.setColorFilter(tint)
             rowViews.controlRowIcon.isActivated = on
-            // Set the programmatic state before installing the listener, so
-            // binding a row can never look like a user toggle.
             rowViews.controlRowSwitch.isChecked = on
             rowViews.controlRowSwitch.setOnCheckedChangeListener { _, checked ->
                 callback.onPowerChanged(entry, checked)
@@ -1066,10 +958,6 @@ internal class ControlAdapter(
             }
         }
 
-        /**
-         * A station volume row has no switch: its subtitle is the live level or
-         * "Sound off", and the tap opens the volume sheet.
-         */
         private fun bindVolumeRow(
             rowViews: ItemControlDeviceRowBinding,
             entry: ControlEntry,
@@ -1088,10 +976,6 @@ internal class ControlAdapter(
             }
         }
 
-        /**
-         * A button row is stateless: no toggle, no on/off text. The whole row
-         * presses the button, and the tap is disabled while it is in flight.
-         */
         private fun bindButtonRow(rowViews: ItemControlDeviceRowBinding, entry: ControlEntry, busy: Boolean) {
             rowViews.controlRowSwitch.setVisible(false)
             rowViews.controlRowState.setVisible(false)

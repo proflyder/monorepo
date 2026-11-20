@@ -11,7 +11,6 @@ use home_linux::Tty;
 
 use crate::test_util::{Lines, assert_golden, hex, open_pty};
 
-/// The real flasher with the sysfs lines of `paths`.
 fn flash(
     paths: &RadioPaths,
     image: &[u8],
@@ -33,7 +32,6 @@ fn put32(v: &mut [u8], at: usize, x: u32) {
     v[at..at + 4].copy_from_slice(&x.to_le_bytes());
 }
 
-/// `size` bytes of image (header fields filled in) + CRC-32 trailer, as the C++ harness built it.
 fn ybl(size: usize, version: u32, manufacturer: u16, image_type: u16) -> Vec<u8> {
     let mut v = pattern(size, 7, 3);
     put32(&mut v, 2, version);
@@ -47,8 +45,6 @@ fn ybl(size: usize, version: u32, manufacturer: u16, image_type: u16) -> Vec<u8>
     v
 }
 
-/// CRC-32, CRC-16 and every `ybl_parse` branch against the C++ functions
-/// (tests/golden/crc_ybl.txt).
 #[test]
 fn crc_and_ybl_parse_match_cxx_golden() {
     let mut out = Vec::new();
@@ -112,7 +108,7 @@ fn crc_and_ybl_parse_match_cxx_golden() {
 
 #[test]
 fn ybl_load_names_the_path() {
-    let lines = Lines::new(); // a scratch directory
+    let lines = Lines::new();
     let dir = lines.dir().to_path_buf();
     let good = dir.join("good.ybl");
     std::fs::write(&good, ybl(0x200, 0x5001_0203, 0x140A, 0x0580)).unwrap();
@@ -130,7 +126,6 @@ fn ybl_load_names_the_path() {
         ybl_load(&missing).unwrap_err().to_string(),
         format!("cannot read {}", missing.display())
     );
-    // A directory opens and reads as nothing, as with the C++ stream.
     assert_eq!(
         ybl_load(&dir).unwrap_err().to_string(),
         format!("{}: file too short", dir.display())
@@ -183,7 +178,6 @@ const BASE: Script = Script {
     no_xmodem: false,
 };
 
-/// The bootloader as the C++ harness emulated it; returns every byte the flasher wrote.
 fn emulate(master: &Tty, s: &Script, done: &AtomicBool) -> Vec<u8> {
     let mut rx = Vec::new();
     let put = |t: &[u8]| {
@@ -212,7 +206,6 @@ fn emulate(master: &Tty, s: &Script, done: &AtomicBool) -> Vec<u8> {
             }
         }
     };
-    // Menu on every newline.
     loop {
         match get(&mut rx, 10_000) {
             None => return rx,
@@ -258,7 +251,7 @@ fn emulate(master: &Tty, s: &Script, done: &AtomicBool) -> Vec<u8> {
             break;
         }
         if c != SOH {
-            continue; // the sender's CAN
+            continue;
         }
         for _ in 1..pkt {
             if get(&mut rx, 1000).is_none() {
@@ -285,8 +278,6 @@ fn emulate(master: &Tty, s: &Script, done: &AtomicBool) -> Vec<u8> {
     }
 }
 
-/// radio_flash against the emulated bootloader on a pseudo-terminal: result, progress, the reset
-/// / boot lines and the byte stream must be those of the C++ flasher (tests/golden/flash.txt).
 fn flash_case(s: Script) {
     let (master, slave) = open_pty().unwrap();
     let lines = Lines::new();
@@ -404,7 +395,6 @@ fn flash_refuses_undrivable_lines() {
     };
     let err = flash(&l, &[1, 2, 3], &mut |_| {}).unwrap_err();
     assert_eq!(err.to_string(), "cannot drive the radio's reset/boot lines");
-    // Nothing reached the radio: the closed slave reads as EIO (or end), never as data.
     let mut buf = [0u8; 16];
     assert!(!matches!(io::Read::read(&mut master, &mut buf), Ok(n) if n > 0));
 }

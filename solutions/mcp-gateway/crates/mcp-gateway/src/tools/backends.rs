@@ -1,5 +1,3 @@
-//! Adapters from the shared HTTP clients to the object-safe tool traits.
-
 use std::collections::BTreeMap;
 use std::time::Duration;
 

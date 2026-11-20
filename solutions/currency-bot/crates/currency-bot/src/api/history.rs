@@ -1,5 +1,3 @@
-//! History, latest, delete and trigger handlers.
-
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 use std::time::Instant;
@@ -82,7 +80,6 @@ fn record_dto(record: &Record) -> RecordDto {
     }
 }
 
-/// `GET /api/history`: date wins, otherwise from+to, otherwise everything.
 pub async fn history(
     State(state): State<Arc<ApiState>>,
     Query(params): Query<HashMap<String, String>>,
@@ -107,8 +104,6 @@ pub async fn history(
         let start = format!("{day}T00:00:00Z")
             .parse::<jiff::Timestamp>()
             .unwrap_or(jiff::Timestamp::UNIX_EPOCH);
-        // Millisecond precision: ending one millisecond before the next
-        // midnight keeps 00:00:00.000 in exactly one day.
         let end =
             jiff::Timestamp::from_millisecond(start.as_millisecond().saturating_add(86_399_999))
                 .unwrap_or(start);
@@ -181,7 +176,6 @@ pub async fn history(
     .into_response()
 }
 
-/// `GET /api/latest`.
 pub async fn latest(State(state): State<Arc<ApiState>>) -> Response {
     match state.store.latest_record() {
         Ok(record) => Json(LatestResponse {
@@ -212,7 +206,6 @@ pub async fn latest(State(state): State<Arc<ApiState>>) -> Response {
     }
 }
 
-/// `DELETE /api/history`; `sent_alerts` is deliberately untouched.
 pub async fn delete_history(State(state): State<Arc<ApiState>>) -> Response {
     match state.store.delete_all() {
         Ok(deleted) => Json(DeleteResponse {
@@ -246,8 +239,6 @@ struct TriggerResponse {
     execution_time_ms: i64,
 }
 
-/// `POST /api/trigger`: force a send, do not save history (the Kotlin
-/// contract). An unparseable body is silently ignored.
 pub async fn trigger(State(state): State<Arc<ApiState>>, body: Bytes) -> Response {
     let request: TriggerRequest = if body.len() > 64 * 1024 {
         TriggerRequest { chat_id: None }

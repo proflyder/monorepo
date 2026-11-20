@@ -8,7 +8,6 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.junit.runners.Suite
 
-/** All push API tests, run as one Bazel target. */
 @RunWith(Suite::class)
 @Suite.SuiteClasses(
     PushApiTest::class,
@@ -44,8 +43,6 @@ class PushApiTest {
 
     @Test
     fun theRegistrationShowsOnlyTheTokenTail() {
-        // Built from parts so the literal can never look like a real credential
-        // to a secret scanner.
         val token = listOf("fcm", "registration", "tail123456").joinToString("-")
         val registration = PushRegistration(token = token)
         assertEquals("123456", registration.tokenHint())

@@ -26,7 +26,6 @@ fn token_parsing() {
         parse_token(b"token"),
         Err("ghcr.io token: response is not JSON".into())
     );
-    // Новые поля документа не мешают.
     assert_eq!(
         parse_token(br#"{"token":"tok","expires_in":300,"issued_at":"now"}"#),
         Ok("tok".into())
@@ -44,7 +43,6 @@ fn repositories_are_strict() {
     assert!(!safe_repo("Owner/pkg"));
     assert!(!safe_repo("owner/pkg?x"));
 
-    // Реестр из константы демона снимается, остальное — owner/name.
     let source = Oci::new(&OciConfig {
         repo: "ghcr.io/owner/pkg".into(),
         arch: "host",
@@ -234,7 +232,6 @@ async fn oci_reports_statuses_and_transport_errors() {
                 Err(UpdateError::Retry("ghcr.io: HTTP 404".into()))
             );
 
-            // Закрытое соединение до ответа: ошибка транспорта, не паника.
             server.route(
                 "/v2/owner/repo/manifests/latest",
                 Reply {

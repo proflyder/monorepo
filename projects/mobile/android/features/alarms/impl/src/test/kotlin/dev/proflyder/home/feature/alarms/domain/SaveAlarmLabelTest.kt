@@ -12,10 +12,6 @@ import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
-/**
- * The server must never see an empty alarm name: the editor field is optional
- * and [SaveAlarm] fills the localized default where the request is formed.
- */
 class SaveAlarmLabelTest {
     private val defaultLabel = "Будильник"
 

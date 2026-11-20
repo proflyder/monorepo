@@ -1,9 +1,3 @@
-# Station dashboards («Колонка») from the chart in this repository.
-#
-# Separate release from `ha-observability`: the Grafana sidecar groups
-# dashboards by the `grafana_folder` annotation, so the station lives in its
-# own folder without moving the Home Assistant dashboards. Same Git source and
-# `Revision` strategy as the other project chart.
 apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:

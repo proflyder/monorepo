@@ -1,33 +1,4 @@
 #!/usr/bin/env bash
-# Publish the built provider as a public OCI artifact in GHCR with ORAS.
-#
-# Runs on a push to `develop` from deploy-home, never on a pull request. The
-# caller supplies the build output downloaded from the `_native.yml` artifact,
-# authenticates `oras` to GHCR (docker/login-action or `oras login`) and has
-# `oras` on PATH.
-#
-#   ./publish-oci.sh --source-dir /path/to/artifact
-#   ./publish-oci.sh --source-dir /path/to/artifact --tag tree-<git tree hash>
-#   ./publish-oci.sh --source-dir /path/to/artifact --tag tree-<hash> --version 1.4.61
-#
-# `--version` overrides the version read from `VERSION`: CI computes it from
-# `VERSION` (major.minor) plus the commits touching the unit
-# (`platform/ci/version.mjs`). `--replace` lets the explicit rebuild workflow
-# (`deploy-services.yml`) publish rebuilt bytes under an existing tag.
-#
-# Repository and tags:
-#   ghcr.io/<owner>/windows-logon-provider:<VERSION>
-#   ghcr.io/<owner>/windows-logon-provider:sha-<12 hex of GITHUB_SHA>
-#
-# `--tag` publishes the same artifact under exactly one tag (the PR build-once
-# path uses `tree-<git tree hash>`); it does not touch the release tags. That
-# path is idempotent for identical content and refuses different content.
-#
-# A tag is immutable by content: if `<VERSION>` already exists with the same
-# SHA256SUMS this is a successful no-op; different content is a hard failure so
-# a release bump is explicit. The same rule protects the commit tag.
-#
-# Step outputs (when GITHUB_OUTPUT is set): repository, version, digest.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -94,9 +65,6 @@ commit="${GITHUB_SHA:-}"
 [[ "$commit" =~ ^[0-9a-f]{40}$ ]] || die "GITHUB_SHA must be a full commit id"
 sha_tag="sha-${commit:0:12}"
 
-# The artifact layout from `_native.yml` is flat (out/ is the least common
-# ancestor of the uploaded paths); accept an explicit out/ subdirectory too so a
-# local `out/` directory can be passed directly.
 file_path() {
   local name="$1"
   if [[ -f "$SOURCE_DIR/$name" ]]; then
@@ -112,8 +80,6 @@ file_path HomeKompLogon.dll >/dev/null
 file_path cp-selftest.exe >/dev/null
 CHECKSUMS="$(file_path SHA256SUMS)"
 
-# Verify the checksums before publishing, so a broken artifact never reaches
-# the registry.
 (
   cd "$(dirname "$CHECKSUMS")"
   if command -v sha256sum >/dev/null 2>&1; then
@@ -131,22 +97,15 @@ repo_ref() {
   fi
 }
 
-# The artifact type names this product, but its owner is taken from the
-# registry path instead of being duplicated in the source tree.
 owner="${REPOSITORY#*/}"
 owner="${owner%%/*}"
 ARTIFACT_TYPE="${OCI_ARTIFACT_TYPE:-application/vnd.${owner}.windows-logon-provider.v1}"
 source_url="${GITHUB_SERVER_URL:-https://github.com}/${GITHUB_REPOSITORY:-}"
 
-# Returns 0 when `tag` exists with identical SHA256SUMS, 1 when it does not
-# exist, and fails when it exists with different content.
 check_existing_tag() {
   local tag="$1" ref tmp output
   ref="$(repo_ref "$tag")"
   if ! output="$(oras manifest fetch "$ref" 2>&1)"; then
-    # Only a definitively missing tag means "safe to publish". Any other
-    # failure (auth, network, registry error) must not silently fall through
-    # to a push that could overwrite an existing version tag.
     if grep -qiE 'not found|manifest_unknown|name unknown|404' <<< "$output"; then
       return 1
     fi

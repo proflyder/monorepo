@@ -1,15 +1,4 @@
 #!/usr/bin/env python3
-"""Install a published pulsar release on a station through Home Assistant.
-
-The station's updater is driven entirely by HA: `homeassistant.update_entity`
-makes the "Firmware" entity re-read `releases/latest`, `update.install` makes
-the daemon download, verify, swap and restart. This tool performs those two
-steps from CI and then watches the entity until the new version is stable, so
-an approved workflow run fails on its own when the install or the restart does
-not take (the supervisor keeps the old binary as `.prev`).
-
-Standard library only: the workflow runner needs no extra packages.
-"""
 
 from __future__ import annotations
 
@@ -25,7 +14,7 @@ HTTP_TIMEOUT = 15.0
 
 
 class HaError(Exception):
-    """A Home Assistant request failed or the entity did not reach the goal."""
+    pass
 
 
 def log(message: str) -> None:
@@ -100,12 +89,6 @@ def wait_for_latest(
     retrigger_interval: float,
     timeout: float,
 ) -> None:
-    """Poll until HA advertises `tag` as the latest release.
-
-    The daemon finds `releases/latest` through GitHub's redirect, which can
-    trail the creation of the release by a little. `update_entity` is repeated
-    so a stale entity re-reads it instead of waiting for the 6 h timer.
-    """
     deadline = time.monotonic() + timeout
     next_trigger = 0.0
     last_seen = None
@@ -137,7 +120,6 @@ def wait_for_latest(
 
 
 def _install_tolerated(client: HaClient, entity: str) -> None:
-    """Call update.install; the station restarts, so a failed response is fine."""
     try:
         client.call_service("update", "install", {"entity_id": entity})
     except urllib.error.HTTPError as error:
@@ -162,7 +144,6 @@ def wait_for_install(
     poll_interval: float,
     timeout: float,
 ) -> None:
-    """Poll until the entity reports `tag` installed and is back online."""
     deadline = time.monotonic() + timeout
     last_seen = None
     while True:
@@ -192,12 +173,6 @@ def watch_stability(
     duration: float,
     unavailable_tolerance: float,
 ) -> None:
-    """Keep watching for a crash-loop rollback by `supervise.sh`.
-
-    A binary that starts and then exits is swapped back to `.prev` after a few
-    short crashes; the entity then reports the old version again or stays
-    unavailable.
-    """
     deadline = time.monotonic() + duration
     unavailable_since = None
     while True:

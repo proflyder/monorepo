@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-"""Cheap syntax/lint gates for first-party shell and Python."""
 from __future__ import annotations
 
 import shutil
@@ -8,7 +7,6 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-# Documented in resources/README.md: incomplete legacy copy, not in any active path.
 KNOWN_BROKEN_LEGACY = {ROOT / "resources" / "spotify-autostart" / "spotify.sh"}
 
 
@@ -49,21 +47,14 @@ def first_party_python() -> list[Path]:
 class ShellSyntaxTests(unittest.TestCase):
     def test_all_repo_shell_syntax_except_documented_broken_legacy(self):
         files = [p for p in all_repo_shell() if p not in KNOWN_BROKEN_LEGACY]
-        # A lower bound catches a broken glob or an accidental mass move. It is
-        # deliberately below the count of a fresh `git archive` checkout, where
-        # ignored checkouts (resources/, secrets/) are absent.
         self.assertGreaterEqual(len(files), 40)
         for path in files:
             with self.subTest(path=str(path)):
                 res = subprocess.run(["bash", "-n", str(path)], text=True, capture_output=True)
                 self.assertEqual(res.returncode, 0, f"{path}:\n{res.stderr}")
-        # Tracked first-party scripts must be part of the full-tree scan even on
-        # a clean checkout; only ignored third-party checkouts may be missing.
         self.assertTrue(set(first_party_shell()).issubset(files))
         for path in sorted(KNOWN_BROKEN_LEGACY):
             if not path.exists():
-                # resources/ is an ignored checkout; the exception only applies
-                # when the documented legacy copy is actually present.
                 continue
             self.assertIn("битый", (ROOT / "resources" / "README.md").read_text(), "legacy exception must stay documented")
 
@@ -96,7 +87,6 @@ class PythonSyntaxTests(unittest.TestCase):
 
 
 class SecretHygieneTests(unittest.TestCase):
-    """Docs and code must not contain obvious live credentials."""
 
     def test_no_known_secret_patterns_in_tracked_text(self):
         import re
@@ -124,8 +114,6 @@ if __name__ == "__main__":
 
 
 class AndroidManifestPermissionTests(unittest.TestCase):
-    """rules_android drops <uses-permission> from library manifests, so every
-    permission a feature library declares must also be in the app manifest."""
 
     PATTERN = __import__("re").compile(r'<uses-permission\s+android:name="([^"]+)"')
 

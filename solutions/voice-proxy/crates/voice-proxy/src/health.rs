@@ -1,12 +1,5 @@
-//! The `-healthcheck` probe of the distroless image: `GET <upstream>/v1/models`.
-//!
-//! The probe carries no credentials (real requests forward the caller's
-//! Authorization), so 401/403 from an API-key-protected Hermes still proves the
-//! gateway is up; only a transport error or a 5xx is unhealthy.
-
 use std::time::Duration;
 
-/// Errors of one probe. No secret or response body is included.
 #[derive(Debug, thiserror::Error)]
 pub enum ProbeError {
     #[error("healthcheck: http client: {0}")]
@@ -17,15 +10,7 @@ pub enum ProbeError {
     Status(u16),
 }
 
-/// Calls `<upstream>/v1/models` and succeeds on any status below 500.
-///
-/// # Errors
-///
-/// Returns a transport failure or a 5xx status.
 pub async fn probe(upstream: &str) -> Result<(), ProbeError> {
-    // The workspace builds reqwest with rustls but without a default crypto
-    // provider, and reqwest panics ("No provider set") when it builds a client
-    // without one, even for plain HTTP.
     let _already_installed = rustls::crypto::ring::default_provider().install_default();
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(4))

@@ -1,16 +1,3 @@
-//! The phone-facing control catalog: pure rules over discovered Home Assistant
-//! data.
-//!
-//! Nothing is listed by hand. Entities arrive in [`Raw`], [`build`] applies the
-//! [`Rules`] and [`Entry::resolve`] maps a catalog action back to one Home
-//! Assistant service call. Only entries that survive the rules can be shown or
-//! driven, so neither the phone nor a task payload can reach an arbitrary
-//! service or entity.
-//!
-//! The rules and the user-visible strings match the Go implementation in
-//! `internal/catalog`, with one deliberate fix: display text is bounded by
-//! characters, not bytes, so a Cyrillic title never splits into U+FFFD.
-
 mod light;
 mod volume;
 
@@ -22,30 +9,18 @@ use std::collections::{HashMap, HashSet};
 use serde::Deserialize;
 use serde_json::{Map, Value};
 
-/// The control model of an entry.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Kind {
-    /// A one-shot action: an HA script or scene. Action `run`.
     Scenario,
     Light,
     Switch,
-    /// The assistant's named profile; a plain switch where on is the
-    /// non-default profile.
     Profile,
-    /// A stateless push button (`button.<id>`). One-shot action `press`, for
-    /// example "lock the PC" or "unlock the PC" next to the PC's switch.
     Button,
-    /// A device-level one-shot action that is not an entity of its own, for
-    /// example speaking a text on the speaker. It carries the owning device
-    /// and resolves to its own allowlisted service call.
     Action,
-    /// A synthetic station volume control: main volume or announcement
-    /// volume. The entity is fixed by the catalog, never by the command.
     Volume,
 }
 
 impl Kind {
-    /// Wire name used by `GET /v1/catalog`.
     #[must_use]
     pub fn as_str(self) -> &'static str {
         match self {
@@ -60,46 +35,30 @@ impl Kind {
     }
 }
 
-/// Actions understood by the executor.
 pub const ACTION_RUN: &str = "run";
 pub const ACTION_TURN_ON: &str = "turn_on";
 pub const ACTION_TURN_OFF: &str = "turn_off";
 pub const ACTION_SET: &str = "set";
-/// A stateless Home Assistant `button` press.
 pub const ACTION_PRESS: &str = "press";
 pub const ACTION_SPEAK: &str = "speak";
 pub const ACTION_MUTE: &str = "mute";
 pub const ACTION_UNMUTE: &str = "unmute";
 
-/// The scheduler task type of a control command.
 pub const TASK_TYPE: &str = "home.control";
 
-/// Synthetic catalog id of the "speak on the speaker" action.
 pub const SPEAK_ENTRY_ID: &str = "action.station_speak";
-/// The Home Assistant script that performs the speech. The action entry only
-/// exists while Home Assistant exposes this script, so a server without the
-/// script never advertises the action.
 pub const SPEAK_SCRIPT: &str = "script.speak_text";
-/// The satellite entity whose device/room the action belongs to.
 const SPEAK_SATELLITE_DOMAIN: &str = "assist_satellite";
-/// Longest text the action accepts, in characters.
 pub const SPEAK_MAX_TEXT: usize = 500;
 
-/// Synthetic catalog id of the station volume control.
 pub const VOLUME_ENTRY_ID: &str = "volume.station";
-/// Synthetic catalog id of the station announcement volume control.
 pub const VOLUME_ANNOUNCE_ENTRY_ID: &str = "volume.station_announce";
-/// Legacy English title of the synthetic station volume entry.
 const VOLUME_TITLE: &str = "Volume";
-/// Stable localization key of the station volume title.
 pub const VOLUME_TITLE_KEY: &str = "catalog.volume.title";
 const VOLUME_ICON: &str = "volume-high";
-/// Legacy English title of the synthetic announcement volume entry.
 const VOLUME_ANNOUNCE_TITLE: &str = "Announcement volume";
-/// Stable localization key of the announcement volume title.
 pub const VOLUME_ANNOUNCE_TITLE_KEY: &str = "catalog.volume.announce_title";
 const VOLUME_ANNOUNCE_ICON: &str = "bullhorn";
-/// Stable localization key of the muted device status.
 pub const VOLUME_MUTED_DETAIL_KEY: &str = "catalog.volume.muted";
 
 const MAX_ENTRIES: usize = 200;
@@ -108,74 +67,49 @@ const MAX_ICON: usize = 32;
 const DEFAULT_MIN_KELVIN: i32 = 2000;
 const DEFAULT_MAX_KELVIN: i32 = 6500;
 
-/// One discovered Home Assistant entity before filtering.
 #[derive(Debug, Clone, Default)]
 pub struct Raw {
     pub entity: String,
     pub state: String,
     pub name: String,
     pub icon: String,
-    /// `device_class` reported by Home Assistant (`lock`, `connectivity`, …).
     pub device_class: String,
     pub room: String,
-    /// Home Assistant device registry id, empty when the entity has no device
-    /// or the registry could not be read.
     pub device_id: String,
-    /// Display name of the owning device, empty when unknown.
     pub device: String,
-    /// `"primary"` for a normal entity, `"setting"` for a config/diagnostic
-    /// entity of a device or for a device's switch next to a light, empty when
-    /// the entity registry could not be read.
     pub role: String,
     pub hidden: bool,
     pub scenario: bool,
     pub profile: bool,
     pub light: Option<Light>,
-    /// `volume_level` of a media player, `None` when Home Assistant does not
-    /// report it.
     pub volume_level: Option<f64>,
-    /// `is_volume_muted` of a media player.
     pub volume_muted: bool,
 }
 
-/// Which entities discovery exposes and under which role labels.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Rules {
     pub scenario_label: String,
     pub profile_label: String,
-    /// `path.Match` globs on the entity id, e.g. `switch.*_child_lock`.
     pub exclude: Vec<String>,
 }
 
-/// A server-side visibility condition for a catalog entry.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct VisibleWhen {
-    /// Catalog id of the entry that controls visibility.
     pub entry: String,
-    /// Required state of that entry: `"on"` or `"off"`.
     pub state: String,
 }
 
-/// A configured binary control synthesized from a state sensor and a pair of
-/// button entities. The app sees one ordinary on/off entry and never the
-/// source buttons; the mapping lives in the bridge configuration, not in the
-/// client.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ToggleRule {
-    /// Catalog id of the synthesized entry.
     pub id: String,
     pub title: String,
     #[serde(default)]
     pub title_key: String,
-    /// Icon hint; `lock` when empty.
     #[serde(default)]
     pub icon: String,
-    /// Home Assistant entity whose `on`/`off` state mirrors the toggle.
     pub state: String,
-    /// Entity pressed or turned on to switch the toggle on.
     pub on: String,
-    /// Entity pressed or turned off to switch the toggle off.
     pub off: String,
     #[serde(default)]
     pub room: String,
@@ -188,7 +122,6 @@ pub struct ToggleRule {
 }
 
 impl Rules {
-    /// Check rule syntax so a misconfiguration fails at startup.
     pub fn validate(&self) -> Result<(), RulesError> {
         if !valid_label(&self.scenario_label) {
             return Err(RulesError::ScenarioLabel);
@@ -203,7 +136,6 @@ impl Rules {
     }
 }
 
-/// A rejected rule set.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum RulesError {
     #[error("scenario label must be an HA label id: [a-z0-9_-]{{1,64}}")]
@@ -214,58 +146,34 @@ pub enum RulesError {
     Exclude(String),
 }
 
-/// One controllable thing with its live state at discovery time.
-///
-/// Entries are flat: one Home Assistant entity is one entry. A device groups
-/// its entries in the client through [`Entry::device_id`]. Device-level
-/// actions (for example "speak this text on the speaker" or "call the
-/// speaker"), once implemented, are expected to be further entries with
-/// `kind: "action"` that carry the same `device_id` and `device`, keep a
-/// human-readable `title`, and resolve to their own allowlisted service call.
-/// The executor contract (`{"entry", "action", ...}` in the `control` queue)
-/// does not change, so adding actions stays additive for the clients.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Entry {
     pub id: String,
     pub kind: Kind,
     pub title: String,
-    /// Stable localization key of a server-generated title. Empty for titles
-    /// that come from Home Assistant user data (they are already the user's
-    /// words and must not be translated).
     pub title_key: String,
-    /// Typed arguments for [`Entry::title_key`].
     pub title_args: std::collections::BTreeMap<String, String>,
-    /// Stable localization key of a device status shown under the title (for
-    /// example the PC lock state). Empty when the device has no status.
     pub detail_key: String,
     pub room: String,
     pub icon: String,
     pub entity: String,
     pub state: String,
     pub available: bool,
-    /// Home Assistant device registry id; empty when unknown.
     pub device_id: String,
-    /// Display name of the owning device; empty when unknown.
     pub device: String,
-    /// `"primary"`, `"setting"` or empty when unknown.
     pub role: String,
     pub light: Option<Light>,
-    /// Live volume state for a [`Kind::Volume`] entry.
     pub volume: Option<Volume>,
-    /// Show this entry only while another entry has the given state.
     pub visible_when: Option<VisibleWhen>,
-    /// On/off service calls of a configured synthetic toggle.
     pub toggle: Option<Toggle>,
 }
 
-/// The two service calls behind a configured synthetic toggle.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Toggle {
     pub on: ServiceCall,
     pub off: ServiceCall,
 }
 
-/// A resolved Home Assistant service invocation.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ServiceCall {
     pub domain: String,
@@ -274,7 +182,6 @@ pub struct ServiceCall {
     pub data: Map<String, Value>,
 }
 
-/// An entry with an immutable display order and id lookup.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Catalog {
     entries: Vec<Entry>,
@@ -282,7 +189,6 @@ pub struct Catalog {
 }
 
 impl Catalog {
-    /// Wrap already-validated entries (see [`build`]).
     #[must_use]
     pub fn new(entries: Vec<Entry>) -> Self {
         let by_id = entries
@@ -303,8 +209,6 @@ impl Catalog {
         self.by_id.get(id).map(|index| &self.entries[*index])
     }
 
-    /// Every entry flagged unavailable and stripped of state. The stale
-    /// fallback never pretends Home Assistant is reachable.
     #[must_use]
     pub fn mark_unavailable(&self) -> Self {
         let entries = self
@@ -322,7 +226,6 @@ impl Catalog {
 }
 
 impl Entry {
-    /// Actions this entry supports.
     #[must_use]
     pub fn actions(&self) -> Vec<&'static str> {
         if self.kind == Kind::Scenario {
@@ -349,9 +252,6 @@ impl Entry {
         vec![ACTION_TURN_ON, ACTION_TURN_OFF]
     }
 
-    /// Map `(entry, action)` to a Home Assistant service call. Unsupported
-    /// actions are rejected here, so the executor can only perform what the
-    /// catalog allows.
     pub fn resolve(&self, action: &str, params: &Params) -> Result<ServiceCall, ResolveError> {
         if let Some(toggle) = self.toggle.as_ref() {
             return match action {
@@ -497,7 +397,6 @@ impl Entry {
     }
 }
 
-/// A rejected catalog action.
 #[derive(Debug, Clone, PartialEq, thiserror::Error)]
 pub enum ResolveError {
     #[error("light {id:?} cannot be adjusted")]
@@ -516,8 +415,6 @@ pub enum ResolveError {
     Volume(#[from] VolumeError),
 }
 
-/// Why a `speak` text was rejected. Messages never contain the text itself:
-/// it is user content and must not reach logs or ack details.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum SpeakError {
     #[error("speak needs a text")]
@@ -530,11 +427,6 @@ pub enum SpeakError {
     ControlCharacters,
 }
 
-/// Validate and trim the text of a `speak` action.
-///
-/// The text is bounded by characters, must contain something after trimming
-/// and must not contain control characters (`\n`, `\t`, escape/format
-/// characters), so a task cannot smuggle terminal or log control sequences.
 fn speak_text(params: &Params) -> Result<String, SpeakError> {
     let text = params.text.as_deref().ok_or(SpeakError::Missing)?.trim();
     if text.is_empty() {
@@ -549,7 +441,6 @@ fn speak_text(params: &Params) -> Result<String, SpeakError> {
     Ok(text.to_owned())
 }
 
-/// Home Assistant domain of an entity id.
 #[must_use]
 pub fn domain_of(entity: &str) -> &str {
     entity.split_once('.').map_or(
@@ -558,19 +449,11 @@ pub fn domain_of(entity: &str) -> &str {
     )
 }
 
-/// Apply the rules to discovered entities.
-///
-/// Output order is stable: profile, then scenarios, then devices; within each,
-/// by room (unassigned last), title, id.
 #[must_use]
-/// The object id of an entity (`komp_lock` in `button.komp_lock`).
 fn object_id(entity: &str) -> &str {
     entity.split_once('.').map_or(entity, |(_, id)| id)
 }
 
-/// The base a button attaches to, with the base's room. A button is exposed
-/// only when it has no registry device and its object id starts with `<base>_`
-/// for a device-less non-button entity `<domain>.<base>`.
 fn button_base<'a>(raw: &Raw, bases: &HashMap<&'a str, &'a str>) -> Option<&'a str> {
     if !raw.device_id.trim().is_empty() {
         return None;
@@ -579,16 +462,9 @@ fn button_base<'a>(raw: &Raw, bases: &HashMap<&'a str, &'a str>) -> Option<&'a s
     bases.get(base).copied()
 }
 
-/// Stable localization key of a locked device status.
 pub const DETAIL_LOCKED: &str = "catalog.status.locked";
-/// Stable localization key of an unlocked device status.
 pub const DETAIL_UNLOCKED: &str = "catalog.status.unlocked";
 
-/// The status detail a device-less `binary_sensor` contributes to its base.
-///
-/// Home Assistant lock semantics are `on` = unlocked (open), `off` = locked
-/// (closed). The catalog never invents a state: an unknown, unavailable or
-/// non-lock sensor contributes nothing, and the key is localized by clients.
 fn lock_detail_key(raw: &Raw) -> Option<&'static str> {
     if domain_of(&raw.entity) != "binary_sensor"
         || !raw.device_id.trim().is_empty()
@@ -607,8 +483,6 @@ pub fn build(raws: &[Raw], rules: &Rules) -> Vec<Entry> {
     build_with_toggles(raws, rules, &[])
 }
 
-/// Build the catalog with configured synthetic toggles. The source button
-/// entities of an active toggle are consumed and never appear on their own.
 pub fn build_with_toggles(raws: &[Raw], rules: &Rules, toggles: &[ToggleRule]) -> Vec<Entry> {
     let active: Vec<&ToggleRule> = toggles
         .iter()
@@ -622,36 +496,17 @@ pub fn build_with_toggles(raws: &[Raw], rules: &Rules, toggles: &[ToggleRule]) -
         .flat_map(|rule| [rule.on.as_str(), rule.off.as_str()])
         .collect();
     let mut entries: Vec<Entry> = Vec::with_capacity(raws.len());
-    // Devices that expose a light control. Home Assistant reports a `null`
-    // category for Yeelight-style setting switches; the light sibling is the
-    // only signal that they are settings rather than independent switches.
     let light_devices: HashSet<&str> = raws.iter().filter_map(device_with_light).collect();
-    // Devices on which the integration itself marks categories. A device that
-    // already has a config/diagnostic entity is fully annotated in the
-    // registry, so its null-category switches are ordinary controls (the
-    // station has a "Ring" light but its Microphones/Clock display switches
-    // are still controls). Yeelight marks nothing, so the light heuristic
-    // applies there.
     let categorized_devices: HashSet<&str> = raws
         .iter()
         .filter(|raw| raw.role.trim().eq_ignore_ascii_case("setting"))
         .filter_map(device_key)
         .collect();
-    // Entity-id names (`komp` in `switch.komp`) that a device-less button may
-    // attach to. Only such buttons are exposed: integrations ship many
-    // maintenance buttons (identify, restart, Yeelight presets) that are not
-    // user controls.
-    // The value is the base's room: a template button usually has no area of
-    // its own, and the client groups by room + prefix.
     let button_bases: HashMap<&str, &str> = raws
         .iter()
         .filter(|raw| domain_of(&raw.entity) != "button" && raw.device_id.trim().is_empty())
         .map(|raw| (object_id(&raw.entity), raw.room.trim()))
         .collect();
-    // Status detail of a base entity, keyed by the base object id. Only an
-    // explicit lock binary sensor with the same `komp_`-style prefix and no
-    // registry device (a template entity) can attach; anything else stays an
-    // ordinary binary sensor and is never exposed.
     let statuses: HashMap<&str, &'static str> = raws
         .iter()
         .filter(|raw| !raw.hidden)
@@ -679,19 +534,14 @@ pub fn build_with_toggles(raws: &[Raw], rules: &Rules, toggles: &[ToggleRule]) -
         if raw.hidden || excluded(&rules.exclude, &raw.entity) {
             continue;
         }
-        // Scripts are exposed only as declared scenarios.
         if domain == "script" && !raw.scenario {
             continue;
         }
-        // A switch carrying the profile label is the profile selector, not a
-        // device. The role only means something for an on/off entity.
         if raw.profile && domain == "switch" {
             kind = Kind::Profile;
         }
 
         let state = raw.state.trim().to_lowercase();
-        // A button's state is the time of its last press: `unknown` only means
-        // it was never pressed, not that it cannot be pressed.
         let available = match kind {
             Kind::Button => !state.is_empty() && state != "unavailable",
             _ => !state.is_empty() && state != "unavailable" && state != "unknown",
@@ -766,12 +616,6 @@ fn rank(kind: Kind) -> u8 {
     }
 }
 
-/// The two synthetic station volume entries.
-///
-/// They exist only while Home Assistant exposes the fixed pulsar entities. A
-/// missing entity is simply not advertised; an unavailable one stays in the
-/// catalog flagged unavailable. Device and room come from the media player,
-/// falling back to the announcement number, so both rows join the station card.
 fn volume_entries(raws: &[Raw]) -> Vec<Entry> {
     let player = raws.iter().find(|raw| {
         raw.entity == volume::VOLUME_MEDIA_PLAYER && !raw.hidden && valid_entity(&raw.entity)
@@ -810,8 +654,6 @@ fn volume_entries(raws: &[Raw]) -> Vec<Entry> {
     }
     if let Some(raw) = announce {
         let state = raw.state.trim().to_lowercase();
-        // Home Assistant renders a number state as a decimal string ("100.0"),
-        // so an integer parser would drop the whole entry as unavailable.
         let known = !state.is_empty() && state != "unavailable" && state != "unknown";
         let parsed = state
             .parse::<f64>()
@@ -880,22 +722,10 @@ fn volume_entry(
     }
 }
 
-/// Title and icon of the synthetic speak action. They are fixed, because the
-/// action has no Home Assistant entity of its own to take a name from.
-/// Legacy English title of the synthetic speak action. Current clients render
-/// [`SPEAK_TITLE_KEY`] instead.
 const SPEAK_TITLE: &str = "Speak on the station";
-/// Stable localization key of the synthetic speak action title.
 pub const SPEAK_TITLE_KEY: &str = "catalog.action.speak_title";
 const SPEAK_ICON: &str = "message-text";
 
-/// The synthetic "speak this text on the speaker" entry.
-///
-/// It exists only while Home Assistant exposes [`SPEAK_SCRIPT`]. Its device
-/// and room come from the satellite entity when discovery saw one; without
-/// that metadata the action is still offered, just ungrouped. The script is
-/// looked up by its fixed id, so neither the payload nor an attacker-chosen
-/// entity can redirect the call.
 fn speak_entry(raws: &[Raw]) -> Option<Entry> {
     let script = raws
         .iter()
@@ -930,7 +760,6 @@ fn speak_entry(raws: &[Raw]) -> Option<Entry> {
     })
 }
 
-/// First non-blank value in priority order.
 fn first_text<'a>(values: &[&'a str]) -> &'a str {
     values
         .iter()
@@ -939,16 +768,10 @@ fn first_text<'a>(values: &[&'a str]) -> &'a str {
         .unwrap_or("")
 }
 
-/// One configured synthetic toggle: the state sensor provides the live
-/// boolean, the two buttons provide the on/off calls. Home Assistant lock
-/// sensors are `on` while unlocked, so the exposed tile is `on` while locked.
 fn toggle_entry(raws: &[Raw], rule: &ToggleRule) -> Option<Entry> {
     let state_raw = raws
         .iter()
         .find(|raw| raw.entity == rule.state && !raw.hidden)?;
-    // The visibleWhen base is the control this toggle belongs to (the PC
-    // switch), so inherit its device/room when the rule does not override
-    // them. The state sensor is the next fallback, exactly like buttons.
     let anchor = rule
         .visible_when
         .as_ref()
@@ -1004,7 +827,6 @@ fn toggle_entry(raws: &[Raw], rule: &ToggleRule) -> Option<Entry> {
     })
 }
 
-/// A button is pressed; any other configured entity is switched on/off.
 fn toggle_call(entity: &str, on: bool) -> ServiceCall {
     let domain = domain_of(entity).to_owned();
     let service = if domain == "button" {
@@ -1038,19 +860,6 @@ fn excluded(patterns: &[String], entity: &str) -> bool {
         .any(|pattern| glob_match(pattern, entity).unwrap_or(false))
 }
 
-/// Whether the entity is a device setting rather than a primary control.
-///
-/// Discovery fills [`Raw::role`] from the Home Assistant entity registry
-/// category (`config`/`diagnostic` → `setting`, a known `null` → `primary`,
-/// an unreadable registry → empty).
-///
-/// A `primary` switch whose device also has a light entity is a setting only
-/// when the integration marks no categories on that device at all: the light
-/// is then the control and the switches are its options (Yeelight). If the
-/// device already has a `config`/`diagnostic` entity, the registry is
-/// authoritative and its `null` switches stay primary (the station's
-/// Microphones and Clock display despite the "Ring" light). Unknown roles stay
-/// empty, so a registry outage never claims a category.
 fn role_of(raw: &Raw, device_has_light: bool, device_has_categories: bool) -> String {
     let role = raw.role.trim();
     if role.eq_ignore_ascii_case("setting") {
@@ -1065,7 +874,6 @@ fn role_of(raw: &Raw, device_has_light: bool, device_has_categories: bool) -> St
     String::new()
 }
 
-/// Grouping key of a device: its registry id, or the display name as fallback.
 fn device_key(raw: &Raw) -> Option<&str> {
     let id = raw.device_id.trim();
     if !id.is_empty() {
@@ -1083,12 +891,6 @@ fn device_with_light(raw: &Raw) -> Option<&str> {
     }
 }
 
-/// Human title of an entity.
-///
-/// Home Assistant builds `friendly_name` as `<device name> <entity name>`, so
-/// the device prefix is removed when it is present. The remainder then loses
-/// leading separators (`*`, `-`, `:` …) and repeated whitespace. When only the
-/// device prefix was there, the device name itself becomes the title.
 fn title_of(raw: &Raw) -> String {
     let name = raw.name.trim();
     let device = raw.device.trim();
@@ -1110,7 +912,6 @@ fn title_of(raw: &Raw) -> String {
     if !title.is_empty() {
         return truncate_chars(&title, MAX_TEXT);
     }
-    // "light.bedside_lamp" -> "Bedside lamp"
     let object = raw
         .entity
         .split_once('.')
@@ -1124,10 +925,6 @@ fn title_of(raw: &Raw) -> String {
     format!("{}{rest}", first.to_uppercase(), rest = characters.as_str())
 }
 
-/// Split a `friendly_name` that starts with the device name.
-///
-/// The comparison is case-insensitive and returns the remainder untouched, or
-/// `None` when the name does not start with the device.
 fn strip_device_prefix<'a>(name: &'a str, device: &str) -> Option<&'a str> {
     let head = name.get(..device.len())?;
     if head.to_lowercase() == device.to_lowercase() {
@@ -1137,7 +934,6 @@ fn strip_device_prefix<'a>(name: &'a str, device: &str) -> Option<&'a str> {
     }
 }
 
-/// Drop leading separators left after the device prefix and collapse spaces.
 fn strip_leading_separators(text: &str) -> String {
     clean_spaces(text.trim_start_matches(is_separator))
 }
@@ -1198,7 +994,6 @@ fn valid_label(label: &str) -> bool {
         })
 }
 
-/// Validate a `path.Match` pattern the way Go does before matching.
 fn validate_glob(pattern: &str) -> Result<(), ()> {
     let characters: Vec<char> = pattern.chars().collect();
     let mut index = 0;
@@ -1242,10 +1037,6 @@ fn validate_glob(pattern: &str) -> Result<(), ()> {
     Ok(())
 }
 
-/// Go `path.Match` for the entity ids this catalog uses. Entity ids never
-/// contain `/`, so the separator rule collapses to "`*` and `?` match any
-/// character". Malformed patterns are reported, matching `path.Match`'s
-/// `ErrBadPattern`.
 fn glob_match(pattern: &str, name: &str) -> Result<bool, ()> {
     validate_glob(pattern)?;
     let pattern: Vec<char> = pattern.chars().collect();
@@ -1315,9 +1106,6 @@ fn match_pattern(pattern: &[char], name: &[char]) -> Result<bool, ()> {
     }
 }
 
-/// Match one character class; returns whether the first name character matched
-/// and how many pattern characters the class spans. `None` means the class does
-/// not match.
 fn match_class(pattern: &[char], name: &[char]) -> Result<Option<(bool, usize)>, ()> {
     let Some(&character) = name.first() else {
         return Ok(None);
@@ -1449,10 +1237,8 @@ mod tests {
             .iter()
             .find(|entry| entry.id == "toggle.komp_lock")
             .expect("toggle");
-        // The lock sensor is on while unlocked, so the tile is off.
         assert_eq!(toggle.state, "off");
         assert!(toggle.available);
-        // Device and room come from the visibleWhen base (the PC switch).
         assert_eq!(toggle.room, "Кабинет");
         assert_eq!(toggle.device, "Комп");
         assert_eq!(
@@ -1608,8 +1394,6 @@ mod tests {
             },
         ];
         let mut raws = raws;
-        // Integration maintenance buttons (with a device, or without a base
-        // entity) are not user controls and stay out of the catalogue.
         raws.push(Raw {
             entity: "button.yl_light_set_default".to_owned(),
             state: "unknown".to_owned(),
@@ -1626,8 +1410,6 @@ mod tests {
         let entries = build(&raws, &rules());
         assert_eq!(entries.len(), 3);
         assert!(entries.iter().any(|entry| entry.id == "switch.komp"));
-        // Never pressed (`unknown`) is still pressable, and an area-less
-        // button takes its base's room so the client can group them.
         assert!(entries.iter().all(|entry| entry.available));
         assert!(entries.iter().all(|entry| entry.room == "Спальня"));
         let lock = entries
@@ -1636,8 +1418,6 @@ mod tests {
             .expect("lock button");
         assert_eq!(lock.kind, Kind::Button);
         assert_eq!(lock.actions(), vec![ACTION_PRESS]);
-        // Template buttons have no registry device, so the client groups them
-        // by the `komp` entity-id prefix they share with switch.komp.
         assert_eq!(lock.device_id, "");
         let call = lock
             .resolve(ACTION_PRESS, &Params::default())
@@ -1664,11 +1444,9 @@ mod tests {
             ..Raw::default()
         };
         let entries = build(&[base.clone(), locked.clone()], &rules());
-        // The sensor is never an entry of its own, only the switch's detail.
         assert_eq!(ids(&entries), vec!["switch.komp"]);
         assert_eq!(entries[0].detail_key, DETAIL_LOCKED);
 
-        // HA lock semantics: on = unlocked.
         let unlocked = Raw {
             state: "on".to_owned(),
             ..locked.clone()
@@ -1676,8 +1454,6 @@ mod tests {
         let entries = build(&[base.clone(), unlocked], &rules());
         assert_eq!(entries[0].detail_key, DETAIL_UNLOCKED);
 
-        // Unknown/unavailable sensors and sensors with a registry device or a
-        // non-lock class never invent a status.
         let unknown = Raw {
             state: "unknown".to_owned(),
             ..locked.clone()
@@ -1782,7 +1558,6 @@ mod tests {
         assert_eq!(setting.device_id, "dev-1");
         assert_eq!(setting.device, "Светильник");
         assert_eq!(setting.role, "setting");
-        // Without metadata the fields stay empty and nothing is lost.
         let lamp = entries
             .iter()
             .find(|entry| entry.id == "light.lamp")
@@ -1794,8 +1569,6 @@ mod tests {
     #[test]
     fn switches_next_to_a_light_are_settings_and_other_switches_stay_primary() {
         let raws = [
-            // Yeelight: the light is the control, null-category switches are
-            // its settings.
             Raw {
                 entity: "light.yeelight".to_owned(),
                 state: "on".to_owned(),
@@ -1814,8 +1587,6 @@ mod tests {
                 role: "primary".to_owned(),
                 ..Raw::default()
             },
-            // Station: config entities are settings, null-category controls
-            // stay primary because the device has no light entity.
             Raw {
                 entity: "switch.station_wake".to_owned(),
                 state: "off".to_owned(),
@@ -1834,7 +1605,6 @@ mod tests {
                 role: "primary".to_owned(),
                 ..Raw::default()
             },
-            // Registry outage: the role stays unknown even next to a light.
             Raw {
                 entity: "switch.yeelight_pomodoro".to_owned(),
                 state: "off".to_owned(),
@@ -1861,8 +1631,6 @@ mod tests {
 
     #[test]
     fn a_categorized_device_trusts_the_registry_even_with_a_light() {
-        // Live station: it has a "Ring" light and a few config entities, but
-        // the remaining null-category switches are ordinary controls.
         let raws = [
             Raw {
                 entity: "light.station_ring".to_owned(),
@@ -2029,7 +1797,6 @@ mod tests {
         assert_eq!(call.data["effect"], Value::from("Day"));
         assert_eq!(call.data["transition"], Value::from(0.5));
 
-        // turn_on carries the same parameters.
         let call = lamp
             .resolve(
                 ACTION_TURN_ON,
@@ -2043,7 +1810,6 @@ mod tests {
         assert_eq!(call.service, "turn_on");
         assert_eq!(call.data["effect"], Value::from("Day"));
 
-        // turn_off accepts a transition and nothing else.
         let call = lamp
             .resolve(
                 ACTION_TURN_OFF,
@@ -2066,7 +1832,6 @@ mod tests {
             .is_err()
         );
 
-        // An effect the bulb does not advertise is rejected.
         assert_eq!(
             lamp.resolve(
                 ACTION_SET,
@@ -2116,11 +1881,8 @@ mod tests {
         assert_eq!(speak.device, "Яндекс Станция Миди");
         assert_eq!(speak.room, "Гостиная");
         assert!(speak.available);
-        // The script itself is not a scenario (no label), so it adds no entry
-        // of its own.
         assert!(!entries.iter().any(|entry| entry.id == SPEAK_SCRIPT));
 
-        // Without the script the action is not advertised at all.
         let without: Vec<Raw> = speak_raws("off")
             .into_iter()
             .filter(|raw| raw.entity != SPEAK_SCRIPT)
@@ -2131,7 +1893,6 @@ mod tests {
                 .any(|entry| entry.id == SPEAK_ENTRY_ID)
         );
 
-        // A hidden script is disabled by the user, exactly like other entities.
         let mut hidden = speak_raws("off");
         if let Some(raw) = hidden.iter_mut().find(|raw| raw.entity == SPEAK_SCRIPT) {
             raw.hidden = true;
@@ -2142,7 +1903,6 @@ mod tests {
                 .any(|entry| entry.id == SPEAK_ENTRY_ID)
         );
 
-        // Unavailable script: the action stays but is reported unavailable.
         let unavailable = build(&speak_raws("unavailable"), &rules());
         assert!(
             !unavailable
@@ -2199,7 +1959,6 @@ mod tests {
         );
         assert_eq!(call.data.len(), 1);
 
-        // The action accepts only `speak`.
         assert!(
             speak
                 .resolve(ACTION_RUN, &Params::default())
@@ -2242,7 +2001,6 @@ mod tests {
             assert_eq!(error.to_string(), expected);
             assert!(!error.to_string().contains("привет"));
         }
-        // Exactly the limit is accepted.
         let limit = "ж".repeat(SPEAK_MAX_TEXT);
         assert!(
             speak

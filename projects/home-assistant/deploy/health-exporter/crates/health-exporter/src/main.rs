@@ -1,6 +1,3 @@
-//! Command-line entry point: serve `/metrics`, or fetch it with `-query` for the
-//! rollout's exec probe. Everything reusable lives in the library.
-
 use std::io::Write as _;
 use std::sync::Arc;
 use std::time::Duration;
@@ -17,8 +14,6 @@ struct Options {
     query: Option<String>,
 }
 
-/// Parses the Go `flag`-compatible subset: `-name value`, `--name value`,
-/// `-name=value` and `--name=value`. The rollout still calls `-query URL`.
 fn parse_args(args: impl Iterator<Item = String>) -> Result<Options, String> {
     let mut options = Options {
         listen: DEFAULT_LISTEN.to_owned(),
@@ -59,7 +54,6 @@ async fn main() -> anyhow::Result<()> {
     }
 }
 
-/// Fetches the metrics from `url` and prints them, then exits.
 async fn query(url: &str) -> anyhow::Result<()> {
     let client = home_tls::public_https_client()
         .context("tls")?
@@ -88,7 +82,6 @@ async fn query(url: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Serves `/metrics` until SIGTERM/SIGINT.
 async fn serve(listen: &str) -> anyhow::Result<()> {
     TelemetryBuilder::new()
         .with_max_level(LevelFilter::INFO)

@@ -1,11 +1,3 @@
-//! Minimal Connect-JSON client for `home.v1.SchedulerService`.
-//!
-//! It covers only the durable event surface used by executors and producers:
-//! `EnqueueTask`, `ListDueEvents`, `AckEvent` and `GetStatus`. It never owns
-//! schedule state, never mutates a due event itself and never interprets a
-//! payload. The generated request/response types are exposed unchanged so a
-//! caller sees exactly the proto fields.
-
 use std::time::Duration;
 
 use connectrpc::client::ClientConfig;
@@ -19,11 +11,8 @@ use crate::v1::{
     ListDueEventsRequest, SchedulerServiceClient,
 };
 
-/// The proto limit for `AckEventRequest.detail`.
 const MAX_ACK_DETAIL: usize = 1024;
 
-/// A scheduler call failure. `Debug` and `Display` never print the bearer:
-/// the Connect message is redacted against the configured token and bounded.
 #[derive(Debug, thiserror::Error)]
 pub enum SchedulerError {
     #[error("scheduler: invalid base URL")]
@@ -37,7 +26,6 @@ pub enum SchedulerError {
 }
 
 impl SchedulerError {
-    /// Whether a retry after a lease expiry can reasonably succeed.
     #[must_use]
     pub fn is_transient(&self) -> bool {
         match self {
@@ -54,14 +42,12 @@ impl SchedulerError {
         }
     }
 
-    /// Convenience predicate for the worker loop.
     #[must_use]
     pub fn is_permanent(&self) -> bool {
         !self.is_transient()
     }
 }
 
-/// Thin typed scheduler client with a fixed bearer and timeout.
 #[derive(Clone)]
 pub struct SchedulerClient {
     inner: SchedulerServiceClient<ReqwestTransport>,
@@ -78,17 +64,12 @@ impl std::fmt::Debug for SchedulerClient {
 }
 
 impl SchedulerClient {
-    /// Build a client. `base_url` is the scheduler base
-    /// (`http://127.0.0.1:8098`); a trailing `/home.v1.SchedulerService`
-    /// is tolerated, like the Go client.
     pub fn new(base_url: &str, token: Token, timeout: Duration) -> Result<Self, SchedulerError> {
         Self::build(base_url, token, timeout, || {
             ReqwestTransport::plaintext().map_err(|_| SchedulerError::Transport)
         })
     }
 
-    /// Build a client that trusts the given PEM bundle in addition to the
-    /// transport's roots (the workspace reqwest compiles none in).
     pub fn new_with_ca_pem(
         base_url: &str,
         token: Token,
@@ -100,8 +81,6 @@ impl SchedulerClient {
         })
     }
 
-    /// Like [`SchedulerClient::new_with_ca_pem`], but reads the bundle from
-    /// `path`. The file content is never logged.
     pub fn new_with_ca_file(
         base_url: &str,
         token: Token,
@@ -138,7 +117,6 @@ impl SchedulerClient {
         })
     }
 
-    /// Store one durable generic task event and return the stored event.
     pub async fn enqueue_task(
         &self,
         request: EnqueueTaskRequest,
@@ -152,8 +130,6 @@ impl SchedulerClient {
         Ok(owned.event.into_option().unwrap_or_default())
     }
 
-    /// Lease due events of one queue. The caller must always set `queue`: an
-    /// empty value means "all queues" on the server.
     pub async fn list_due_events(
         &self,
         request: ListDueEventsRequest,
@@ -166,10 +142,6 @@ impl SchedulerClient {
         Ok(response.into_owned().events)
     }
 
-    /// Report a terminal outcome. `detail` is truncated to the proto limit.
-    ///
-    /// A replay of a terminal ack is idempotent on the server: it returns the
-    /// already-known event instead of failing.
     pub async fn ack_event(
         &self,
         event_id: &str,
@@ -196,7 +168,6 @@ impl SchedulerClient {
             .unwrap_or_default())
     }
 
-    /// Read scheduler state without leasing anything.
     pub async fn get_status(&self) -> Result<GetStatusResponse, SchedulerError> {
         let response = self
             .inner
@@ -425,7 +396,6 @@ mod tests {
         assert!(!error.to_string().contains("sched-token"));
     }
 
-    // Throwaway self-signed test CA (no private key in the tree).
     const TEST_CA_PEM: &str = include_str!("../testdata/test-ca.pem");
 
     #[tokio::test]
@@ -503,8 +473,6 @@ mod tests {
         assert!(!format!("{client:?}").contains("sched-token"));
     }
 
-    // Keep the generated types compiled in this test target even when the
-    // integration tests are ignored.
     #[allow(dead_code)]
     fn _types(_: DueEvent, _: GetStatusRequest) {}
 }

@@ -1,27 +1,4 @@
 #!/usr/bin/env node
-/**
- * Deploy and rollback front door behind `mise run deploy`, `deploy:status` and
- * `rollback`.
- *
- * The CI unit map (`platform/ci/units.mjs`) is the single source of truth: a
- * unit is deployable when it owns images/workloads, and its documented rollback
- * procedure lives in the unit's `rollback` block. This module only turns that
- * data into `gh workflow run` dispatches, status reads and rollback commands.
- * It never guesses from a directory name.
- *
- * Nothing here talks to the cluster by default: a dispatch is a `gh` call and
- * `deploy:status` is read-only `gh run list`; `--live` adds read-only
- * `kubectl get deploy`. Rollback starts a `home-deploy`/`helm` command only
- * after an explicit `--yes`.
- *
- * No npm dependencies: Node built-ins plus the unit map only.
- *
- * Usage:
- *
- *     node platform/mise-tasks/lib/ops.mjs deploy <unit...|all> [flags]
- *     node platform/mise-tasks/lib/ops.mjs deploy-status [unit] [flags]
- *     node platform/mise-tasks/lib/ops.mjs rollback <unit> [flags]
- */
 
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
@@ -35,11 +12,7 @@ import { loadConfig } from "../../ci/affected.mjs";
 export const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const ROOT = path.resolve(HERE, "../../..");
 
-// The manual dispatcher: `deploy-home.yml` is the push trigger and has no
-// inputs, `deploy-home-manual.yml` is the `workflow_dispatch` wrapper over the
-// same reusable `_deploy-home.yml` (one trigger per workflow file).
 export const WORKFLOW = "deploy-home-manual.yml";
-// The post-merge workflow to read status from: the push entry point.
 export const PUSH_WORKFLOW = "deploy-home.yml";
 export const REF = "develop";
 export const KUBECONFIG_PATH = "secrets/kubernetes-research/kubeconfig";
@@ -48,15 +21,6 @@ export function units() {
   return loadConfig().units;
 }
 
-/**
- * What a manual `deploy-home` dispatch can address: every unit that owns
- * images (their digests are pinned for Flux), plus the Pulsar station release,
- * which `--dispatch units=pulsar` re-deploys through `deploy-station`.
- *
- * Native publication units without a station release (logon-provider) are
- * accepted by the workflow filter but a dispatch does not publish them: only a
- * push to `develop` does. They are deliberately not deploy targets here.
- */
 export function isDeployTarget(unit) {
   if (unit.deployImages.length > 0) {
     return true;
@@ -68,7 +32,6 @@ export function deployTargets(list = units()) {
   return list.filter(isDeployTarget);
 }
 
-/** Resolve `all`, a comma list or repeated arguments to deployable unit ids. */
 export function resolveDeployUnits(list, rawArgs) {
   const targets = deployTargets(list);
   const byId = new Map(targets.map((unit) => [unit.id, unit]));
@@ -100,7 +63,6 @@ export function resolveDeployUnits(list, rawArgs) {
     );
   }
 
-  // Keep the unit-map order so the printed plan is stable.
   return targets.filter((unit) => requested.includes(unit.id));
 }
 
@@ -115,7 +77,6 @@ function flagValue(argv, index, name) {
   return argv[index + 1];
 }
 
-/** Parse deploy flags; unknown flags fail instead of being silently ignored. */
 export function parseDeploy(argv) {
   const result = {
     units: [],
@@ -139,7 +100,6 @@ export function parseDeploy(argv) {
   return result;
 }
 
-/** The `gh workflow run` command for a resolved dispatch. */
 export function deployCommand(plan) {
   return {
     command: "gh",
@@ -166,7 +126,6 @@ export function formatCommand({ command, args }) {
   return [command, ...args].map(shellQuote).join(" ");
 }
 
-/** Human-readable plan: what deploy-home will pin and why. */
 export function deployPlanLines(plan) {
   const lines = [
     `deploy-home: ${plan.units.length} unit(s) → ref ${REF}`,
@@ -193,7 +152,6 @@ function defaultExec(command, args, options = {}) {
   });
 }
 
-/** Ask the operator before dispatching; non-interactive runs must pass --yes. */
 export async function defaultConfirm(question, stdin = process.stdin, stdout = process.stdout) {
   if (!stdin.isTTY) {
     return false;
@@ -207,7 +165,6 @@ export async function defaultConfirm(question, stdin = process.stdin, stdout = p
   }
 }
 
-/** Latest run id for the workflow, so `--watch` can follow the dispatch. */
 export function latestRun(spawn, env) {
   const result = spawn(
     "gh",
@@ -230,10 +187,6 @@ export function latestRun(spawn, env) {
   return runs.length ? runs[0] : null;
 }
 
-/**
- * Run the dispatch. Returns a process exit code. `--dry-run` prints the command
- * and never calls `gh`. Without `--yes` the operator must confirm.
- */
 export async function runDeploy(argv, options = {}) {
   const spawn = options.spawn ?? defaultExec;
   const stdout = options.stdout ?? process.stdout;
@@ -367,10 +320,6 @@ export function findRollbackUnit(list, id) {
   return unit;
 }
 
-/**
- * The documented rollback command for a unit, or null when the kind only
- * prints an instruction. Source of truth: the unit's `rollback` block.
- */
 export function rollbackCommand(unit) {
   const stateDir = unit.rollbackStateDir;
   switch (unit.rollbackKind) {
@@ -387,9 +336,6 @@ export function rollbackCommand(unit) {
         args: ["--namespace", unit.rollbackNamespace, "rollback", unit.rollbackRelease],
       };
     case "hermes":
-      // Flux writes no local revision state: the HelmRelease remediation
-      // rolls back automatically. Without a recorded state dir this is a
-      // print-only instruction.
       if (!stateDir) {
         return null;
       }
@@ -468,11 +414,6 @@ export function rollbackPlanLines(unit) {
   return lines;
 }
 
-/**
- * Print the plan, then execute the documented command only with `--yes`.
- * `forward-only` exits non-zero; `pulsar` prints the device instruction and
- * never executes it.
- */
 export async function runRollback(argv, options = {}) {
   const spawn = options.spawn ?? defaultExec;
   const stdout = options.stdout ?? process.stdout;
@@ -508,8 +449,6 @@ export async function runRollback(argv, options = {}) {
     return 0;
   }
   if (!rollbackCommand(unit)) {
-    // Instruction-only kinds (for example a Flux-managed Helm release with no
-    // local revision state): the plan above is the action.
     stdout.write("rollback: manual action only; nothing was executed\n");
     return 0;
   }

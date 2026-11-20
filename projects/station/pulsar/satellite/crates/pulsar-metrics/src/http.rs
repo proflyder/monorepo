@@ -1,9 +1,3 @@
-//! Minimal HTTP/1.1 endpoint: `GET /metrics` on the LAN interface.
-//!
-//! One thread, one connection at a time (Prometheus scrapes serially), no
-//! dependencies beyond `std`. The socket is read with a timeout, so a stalled
-//! client cannot keep the listener from the next scrape.
-
 use std::io::{Read as _, Write as _};
 use std::net::{TcpListener, TcpStream};
 use std::path::PathBuf;
@@ -18,10 +12,6 @@ const READ_TIMEOUT: Duration = Duration::from_secs(5);
 const WRITE_TIMEOUT: Duration = Duration::from_secs(5);
 const MAX_REQUEST: usize = 8192;
 
-/// Binds `0.0.0.0:port` and serves `/metrics` in a detached thread.
-///
-/// Err when the port cannot be bound; the daemon then runs without metrics
-/// (the caller logs it and continues).
 pub fn spawn(port: u16, metrics: &'static Metrics) -> std::io::Result<()> {
     let listener = TcpListener::bind(("0.0.0.0", port))?;
     std::thread::Builder::new()

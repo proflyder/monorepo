@@ -1,15 +1,3 @@
-//! Hardware probe, run with the daemon stopped.
-//! usage: hw_probe leds [state_ms=2000]   cycle LED states, effects, music styles (synthetic
-//!                                        music at 30 fps), dump sysfs; ring dark after exit
-//!        hw_probe input [seconds=15]      print buttons and the mute switch
-//!        hw_probe clock [state_ms=2000]   time, number, timer, levels, animations, text, face,
-//!                                        code, music levels; sysfs read back and checked
-//!                                        (state_ms >= 2000: the code pages every 2 s and the
-//!                                        1.5 s number is checked at 1/2 of its slot)
-//!        hw_probe light [seconds=10]      print the light sensor every second
-//!        hw_probe all [input_seconds=15] [state_ms=2000]
-//!                                        the LED and clock steps, then input and lux (the
-//!                                        whole C++ hw_probe)
 #![deny(unsafe_code)]
 #![deny(unsafe_op_in_unsafe_fn)]
 
@@ -40,27 +28,22 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Cmd {
-    /// Cycle LED states, effects, music styles and dump sysfs.
     Leds {
         #[arg(default_value_t = 2000)]
         state_ms: u64,
     },
-    /// Print buttons and the mute switch.
     Input {
         #[arg(default_value_t = 15)]
         seconds: u64,
     },
-    /// Time, number, timer, levels, animations, text, face, code, music levels.
     Clock {
         #[arg(default_value_t = 2000)]
         state_ms: u64,
     },
-    /// Print the light sensor every second.
     Light {
         #[arg(default_value_t = 10)]
         seconds: u64,
     },
-    /// The LED/clock steps, then input and lux (the whole C++ hw_probe).
     All {
         #[arg(default_value_t = 15)]
         input_seconds: u64,
@@ -69,10 +52,8 @@ enum Cmd {
     },
 }
 
-/// Output byte of a full-brightness channel without ambient dimming: 255 x the 80 % cap.
 const FULL_FB: u8 = 204;
 
-/// stdout without panicking on a closed pipe.
 fn say(line: &str) {
     let _ = writeln!(std::io::stdout(), "{line}");
 }
@@ -114,11 +95,9 @@ fn main() -> ExitCode {
             && ok
     });
     {
-        // Tasks still running are dropped inside the runtime, which their resources belong to.
         let _rt = rt.enter();
         drop(local);
     }
-    // A plain drop would wait for spawn_blocking work without limit.
     rt.shutdown_timeout(Duration::from_secs(1));
     if ok {
         ExitCode::SUCCESS
@@ -126,9 +105,6 @@ fn main() -> ExitCode {
         ExitCode::FAILURE
     }
 }
-
-// -------------------------------------------------------------------------------------------------
-// leds
 
 fn led_value(leds: &Leds, s: &StripLayout, color: &str, i: i32) -> i32 {
     let path = format!(
@@ -147,7 +123,6 @@ fn rgb_values(leds: &Leds, s: &StripLayout, i: i32) -> [i32; 3] {
     ["red", "green", "blue"].map(|c| led_value(leds, s, c, i))
 }
 
-/// Every LED of a short ring, every third of the Midi's; the first logo LED.
 fn ring_dump(model: &DeviceProfile) -> String {
     let leds = &model.leds;
     if matches!(leds.ring.backend, LedBackend::I2c { .. }) {
@@ -166,10 +141,6 @@ fn ring_dump(model: &DeviceProfile) -> String {
     s
 }
 
-/// Яркость в sysfs для байта фреймбуфера по каналу. led_ring_fb Лайт 2 масштабирует каждый канал
-/// по пути к светодиодам (см. docs/lite2.md, «Светодиоды и часы»), яркость упирается в 63
-/// (измерено при остановленном демоне: fb 26/100/150/204/255 -> красный 9/37/55/63/63, зелёный
-/// 6/24/36/49/62, синий 4/19/29/39/49); у Миди читается как записано.
 fn sysfs_expected(model: &DeviceProfile, fb: [u8; 3]) -> [i32; 3] {
     let lite2_ring = matches!(
         model.leds.ring.backend,
@@ -186,8 +157,6 @@ fn sysfs_expected(model: &DeviceProfile, fb: [u8; 3]) -> [i32; 3] {
     }
 }
 
-/// Whether the daemon would drive `s` through its framebuffer: the same test as pulsar-hw
-/// (trigger active on the first red LED, fb named as expected).
 fn fb_mode(leds: &Leds, s: &StripLayout) -> bool {
     let LedBackend::Framebuffer {
         dev: fb_dev,
@@ -210,7 +179,6 @@ fn fb_mode(leds: &Leds, s: &StripLayout) -> bool {
     trigger_now.contains(&format!("[{trigger}]")) && home_linux::trim(&name) == fb_name
 }
 
-/// The strip's framebuffer as RGB per LED; None when it cannot be read.
 fn strip_fb(s: &StripLayout) -> Option<Vec<[u8; 3]>> {
     let LedBackend::Framebuffer { dev, .. } = s.backend else {
         return None;
@@ -230,9 +198,6 @@ fn strip_fb(s: &StripLayout) -> Option<Vec<[u8; 3]>> {
     )
 }
 
-/// Checks that every pixel of the strip's framebuffer is `fb` (in framebuffer mode) and that
-/// every LED's sysfs brightness matches it as the model reads it back (within ±3). An I²C ring
-/// (the Mini's) has neither: the check is skipped.
 fn check_strip(model: &DeviceProfile, s: &StripLayout, what: &str, fb: [u8; 3]) -> bool {
     let leds = &model.leds;
     if matches!(s.backend, LedBackend::I2c { .. }) {
@@ -247,7 +212,6 @@ fn check_strip(model: &DeviceProfile, s: &StripLayout, what: &str, fb: [u8; 3]) 
         ok &= v.iter().zip(want).all(|(g, w)| (g - w).abs() <= 3);
         let _ = write!(got, " {},{},{}", v[0], v[1], v[2]);
     }
-    // pulsar-hw uses the framebuffers only if the ring's and the logo's both qualify.
     let logo_ok = model
         .leds
         .logo
@@ -283,7 +247,6 @@ fn check_strip(model: &DeviceProfile, s: &StripLayout, what: &str, fb: [u8; 3]) 
     ok
 }
 
-/// Raw framebuffer write rate (ring, 72 bytes).
 fn fb_rate() {
     let Ok(fb) = std::fs::OpenOptions::new()
         .read(true)
@@ -303,16 +266,13 @@ fn fb_rate() {
     ));
 }
 
-/// Clock check at the 3/4 dump; false = failed (it prints why).
 type ClockCheck = Box<dyn Fn(&DeviceProfile) -> bool>;
 
 struct Step {
     name: String,
     run: Box<dyn Fn()>,
-    /// Ring colour checked at the 3/4 dump.
     check: Option<[u8; 3]>,
     clock_check: Option<ClockCheck>,
-    /// Clock check at the 1/2 dump (content shorter than the slot).
     half_check: Option<ClockCheck>,
 }
 
@@ -326,8 +286,6 @@ fn step(name: impl Into<String>, run: impl Fn() + 'static) -> Step {
     }
 }
 
-/// Synthetic music features at 30 frames/s to the LEDs and / or the clock while `on`, until
-/// `done`.
 fn feed_music(
     leds: Option<LedsHandle>,
     clock: Option<ClockHandle>,
@@ -376,7 +334,6 @@ fn led_steps(leds: &LedsHandle, music: &Rc<Cell<bool>>) -> Vec<Step> {
         step("THINKING", st(UiState::Thinking)),
         step("SPEAKING", st(UiState::Speaking)),
         step("ERROR", st(UiState::Error)),
-        // IDLE during the error is ignored: it runs its 3.54 s to the end, then the ring is off.
         step(
             "IDLE requested during ERROR (off once it ends)",
             st(UiState::Idle),
@@ -477,10 +434,8 @@ fn led_steps(leds: &LedsHandle, music: &Rc<Cell<bool>>) -> Vec<Step> {
         l.set_user_light(false, Rgb { r: 0, g: 0, b: 0 }, 0.0, Effect::Solid, 0);
         l.set_case_color(CaseColor::new(""));
     }));
-    // Shown above the lamp and music for 15 s: last of the LED steps.
     let l = leds.clone();
     steps.push(step("timer started (15 s)", move || l.show_timer_started()));
-    // The 600 ms mute sweep shows over the countdown, which then goes on (green at the dumps).
     let l = leds.clone();
     steps.push(step("mic muted during the countdown", move || {
         l.set_muted(true);
@@ -492,15 +447,12 @@ fn led_steps(leds: &LedsHandle, music: &Rc<Cell<bool>>) -> Vec<Step> {
     steps
 }
 
-/// Which sysfs dumps the steps print.
 #[derive(Clone, Copy)]
 struct Dumps {
     ring: bool,
     clock: bool,
 }
 
-/// Runs step i at t0 + i·state_ms, dumping at 1/2 and 3/4 of its slot (one time base, like the
-/// C++ probe's timers) and checking at 3/4; false if a check failed.
 async fn run_steps(model: &DeviceProfile, steps: Vec<Step>, state_ms: u64, dumps: Dumps) -> bool {
     let t0 = tokio::time::Instant::now();
     let at = |ms: u64| tokio::time::sleep_until(t0 + Duration::from_millis(ms));
@@ -541,7 +493,6 @@ async fn run_steps(model: &DeviceProfile, steps: Vec<Step>, state_ms: u64, dumps
     ok
 }
 
-/// After the LED steps: every handle gone, the actor turns the ring and logo off.
 async fn leds_off_after_exit(model: &DeviceProfile) -> bool {
     let stopped = pulsar_core::supervisor()
         .shutdown(Duration::from_secs(3))
@@ -568,7 +519,6 @@ async fn leds(model: &'static DeviceProfile, state_ms: u64) -> bool {
         Rc::clone(&music),
         Rc::clone(&done),
     );
-    // Initial state, no indication.
     leds.set_muted(false);
     let steps = led_steps(&leds, &music);
     let dumps = Dumps {
@@ -580,9 +530,6 @@ async fn leds(model: &'static DeviceProfile, state_ms: u64) -> bool {
     drop(leds);
     leds_off_after_exit(model).await && ok
 }
-
-// -------------------------------------------------------------------------------------------------
-// input
 
 async fn input(model: &'static DeviceProfile, seconds: u64) -> bool {
     let (input, rx) = match pulsar_hw::spawn_input(&model.input) {
@@ -604,7 +551,6 @@ async fn input(model: &'static DeviceProfile, seconds: u64) -> bool {
     true
 }
 
-/// Prints buttons, mute and lux until `seconds` are up; the number of lux readings.
 async fn monitor(
     mut input: Option<UnboundedReceiver<InputEvent>>,
     mut light: Option<UnboundedReceiver<f32>>,
@@ -642,19 +588,13 @@ async fn monitor(
     readings
 }
 
-// -------------------------------------------------------------------------------------------------
-// clock
-
-/// The Midi's clock driver chips (C++ hw_probe: dumped and restored).
 const MIDI_CURRENT: [&str; 2] = [
     "/sys/bus/i2c/devices/3-0037/current",
     "/sys/bus/i2c/devices/3-0021/current",
 ];
 
-/// Segment masks the C++ probe reads back: digits 0..9, '-'.
 const FONT: [u8; 10] = [0x3f, 0x06, 0x5b, 0x4f, 0x66, 0x6d, 0x7d, 0x07, 0x7f, 0x6f];
 const MINUS: u8 = 0x40;
-/// "Smiley", the first face.
 const SMILEY: [u8; 4] = [0x40, 0x18, 0x0C, 0x40];
 
 fn read_trimmed(path: &str) -> Option<String> {
@@ -668,7 +608,6 @@ fn seg_name(panel: &ClockPanel, digit: usize, seg: usize) -> String {
     format!("{letter}{}", panel.pos_base + digit as i32)
 }
 
-/// Brightness of a clock LED, clamped to 0..255; 0 when unreadable.
 fn clock_led(panel: &ClockPanel, name: &str) -> i32 {
     read_trimmed(&format!("{}{name}/brightness", panel.dir))
         .and_then(|v| v.parse::<i32>().ok())
@@ -676,7 +615,6 @@ fn clock_led(panel: &ClockPanel, name: &str) -> i32 {
         .clamp(0, 255)
 }
 
-/// Lit segments per digit (bit i = segment 'a' + i) and the colon.
 fn clock_masks(model: &DeviceProfile) -> ([u8; 4], bool) {
     let Some(panel) = model.clock.as_ref() else {
         return ([0; 4], false);
@@ -708,7 +646,6 @@ fn masks_str(masks: [u8; 4], colon: bool) -> String {
     s
 }
 
-/// "[hh:mm]" as read back, plus the chip currents on the Midi.
 fn clock_dump(model: &DeviceProfile) -> String {
     let (masks, colon) = clock_masks(model);
     let s = format!("[{}]", masks_str(masks, colon));
@@ -723,7 +660,6 @@ fn clock_dump(model: &DeviceProfile) -> String {
     )
 }
 
-/// Brightness of every segment (a..g per digit, 2 hex digits each) and the centre LED.
 fn clock_values(model: &DeviceProfile) -> String {
     let Some(panel) = model.clock.as_ref() else {
         return String::new();
@@ -741,7 +677,6 @@ fn clock_values(model: &DeviceProfile) -> String {
     s
 }
 
-/// The probe sets no TZ, so the clock shows UTC (the stations have no /etc/localtime).
 fn utc_hhmm(secs: u64) -> [u8; 4] {
     let (h, m) = ((secs / 3600 % 24) as usize, (secs / 60 % 60) as usize);
     [FONT[h / 10], FONT[h % 10], FONT[m / 10], FONT[m % 10]]
@@ -762,13 +697,10 @@ fn expect_time(model: &DeviceProfile) -> bool {
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |d| d.as_secs());
-    // The minute may have turned between the refresh and the readback.
     let want = [utc_hhmm(now), utc_hhmm(now - 60)];
     if std::env::var_os("TZ").is_none() {
         return expect_masks(model, "time (UTC)", &want);
     }
-    // Local time under TZ: only the minutes are compared (zone offsets are whole hours or
-    // half hours; a half-hour zone fails here, so run without TZ).
     let (masks, colon) = clock_masks(model);
     let ok = want.iter().any(|w| w[2..] == masks[2..]);
     say(&format!(
@@ -790,8 +722,6 @@ fn expect_dark(model: &DeviceProfile) -> bool {
     ok
 }
 
-/// Output level the clock applies for brightness 1 and `ambient`: chip current on the Midi,
-/// value of every lit segment on the Lite 2.
 fn expect_level(model: &DeviceProfile, ambient: f32) -> bool {
     let Some(panel) = model.clock.as_ref() else {
         return false;
@@ -829,9 +759,7 @@ fn with_half_check(mut s: Step, check: impl Fn(&DeviceProfile) -> bool + 'static
     s
 }
 
-/// The C++ probe's clock steps, plus text, face and code read back.
 fn clock_steps(clock: &ClockHandle, music: &Rc<Cell<bool>>, leds: Option<LedsHandle>) -> Vec<Step> {
-    // The levels the clock reaches for lux 0, 10, 1000 at brightness 1 (same smoothing).
     let mut dim = AmbientDimmer::new();
     let ambient: Vec<f32> = [0.0, 10.0, 1000.0]
         .iter()
@@ -851,7 +779,6 @@ fn clock_steps(clock: &ClockHandle, music: &Rc<Cell<bool>>, leds: Option<LedsHan
         expect_level(m, 1.0)
     }));
     let c = clock.clone();
-    // Shown 1.5 s: checked at 1/2 of the slot.
     steps.push(with_half_check(
         step("clock flash_number 42", move || c.flash_number(42)),
         |m| expect_masks(m, "42", &[[0, 0, FONT[4], FONT[2]]]),
@@ -935,7 +862,6 @@ fn clock_steps(clock: &ClockHandle, music: &Rc<Cell<bool>>, leds: Option<LedsHan
             c.set_face(ClockFace::None);
             c.show_code("123456".into());
         }),
-        // Pages every 2 s: "123-", then "-456".
         |m| {
             expect_masks(
                 m,
@@ -987,8 +913,6 @@ fn clock_steps(clock: &ClockHandle, music: &Rc<Cell<bool>>, leds: Option<LedsHan
     steps
 }
 
-/// Midi: the chip currents before the probe, written back at the end (the daemon sets its own
-/// level when it starts).
 fn save_current(model: &DeviceProfile) -> Option<[String; 2]> {
     if !model.clock.as_ref().is_some_and(|p| p.chip_current) {
         return None;
@@ -1034,9 +958,6 @@ async fn clock(model: &'static DeviceProfile, state_ms: u64) -> bool {
     ok && stopped
 }
 
-// -------------------------------------------------------------------------------------------------
-// light
-
 async fn light(seconds: u64) -> bool {
     let rx = match pulsar_clock::spawn_light_sensor(1000) {
         Ok(rx) => rx,
@@ -1048,9 +969,6 @@ async fn light(seconds: u64) -> bool {
     say(&format!("== monitoring lux for {seconds} s"));
     monitor(None, Some(rx), seconds).await > 0
 }
-
-// -------------------------------------------------------------------------------------------------
-// all
 
 async fn all(model: &'static DeviceProfile, input_s: u64, state_ms: u64) -> bool {
     let saved = save_current(model);
@@ -1071,9 +989,6 @@ async fn all(model: &'static DeviceProfile, input_s: u64, state_ms: u64) -> bool
             None
         }
     };
-    // The handles do not report whether their device opened (the daemon does not need it): the
-    // ring's framebuffer, first sysfs LED or I²C bus, and any clock segment, stand in for C++
-    // open().
     let leds_cfg = &model.leds;
     let ring = &leds_cfg.ring;
     let leds_open = match ring.backend {
@@ -1127,7 +1042,6 @@ async fn all(model: &'static DeviceProfile, input_s: u64, state_ms: u64) -> bool
     say(&format!(
         "== monitoring input/lux for {input_s} s (press buttons, toggle mute)"
     ));
-    // Readings queued during the steps are dropped; the poll goes on every second.
     let mut light_rx = light_rx;
     if let Some(rx) = light_rx.as_mut() {
         while rx.try_recv().is_ok() {}
@@ -1141,7 +1055,6 @@ async fn all(model: &'static DeviceProfile, input_s: u64, state_ms: u64) -> bool
     drop(leds);
     let off = leds_off_after_exit(model).await;
     restore_current(saved);
-    // A model whose sensor may be absent (`LightSensor::optional`) passes without one.
     let light_ok = if light_opened {
         readings > 0
     } else {

@@ -1,4 +1,3 @@
-//! libasound loaded at runtime (the firmware's copy; nothing is linked at build time).
 #![deny(unsafe_code)]
 #![deny(unsafe_op_in_unsafe_fn)]
 #![deny(clippy::undocumented_unsafe_blocks)]
@@ -10,32 +9,21 @@ use std::fmt;
 
 use ffi::{HwParams, MixerValue, RawCtl, RawPcm, SwParams};
 
-/// Applies the process-wide ALSA settings before any thread or audio library starts: the absolute
-/// libasound path (the Mini's firmware keeps it outside the loader's search path). With such a
-/// path the library is loaded here, before GStreamer: dlopen with RTLD_GLOBAL makes
-/// libquasar_gstreamer's NEEDED `libasound.so.2` resolve to this copy by SONAME whether or not that
-/// library carries a RUNPATH (not checked on a Mini). The other models pass "" and keep the lazy
-/// SONAME lookup: an early `libasound.so.2` dlopen from the executable (no RUNPATH) could pick
-/// another copy than GStreamer's RUNPATH does. Must be called before the first [`load`].
 pub fn init(lib: &'static str) {
     ffi::set_library_path(lib);
     if !lib.is_empty() {
-        // A failed dlopen is logged by ffi::lib.
         let _ = ffi::lib();
     }
 }
 
-/// Loads libasound.so.2 once; every other call loads it on demand. Err = dlerror text.
 pub fn load() -> Result<(), String> {
     ffi::lib().map(|_| ()).map_err(str::to_owned)
 }
 
-/// Whether the library exports the `__snd_pcm_hw_params_*` aliases (versioned alsa-lib).
 pub fn has_modern_aliases() -> bool {
     ffi::lib().is_ok_and(ffi::Lib::modern_aliases)
 }
 
-/// snd_strerror; without libasound, the C library's text for the errno.
 pub fn strerror(err: i32) -> String {
     ffi::lib().map_or_else(
         |_| home_linux::errno_text(err.saturating_neg()),
@@ -43,14 +31,12 @@ pub fn strerror(err: i32) -> String {
     )
 }
 
-/// Process-wide: alsa-lib's own diagnostics go to the debug log (without their message text).
 pub fn quiet_error_handler() {
     if let Ok(lib) = ffi::lib() {
         lib.set_quiet_error_handler();
     }
 }
 
-/// Шаг ALSA-вызова, на котором произошла ошибка.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum HwStep {
     Load,
@@ -112,7 +98,6 @@ impl HwStep {
     }
 }
 
-/// Ошибка ALSA: шаг и отрицательный errno; текст — через [`strerror`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct AlsaError {
     pub op: HwStep,
@@ -176,8 +161,6 @@ pub struct HwRequest {
     pub format: Format,
     pub channels: u32,
     pub rate: u32,
-    /// true: snd_pcm_hw_params_set_rate (fails unless the rate is supported as is);
-    /// false: set_rate_near, the chosen rate is reported back.
     pub rate_exact: bool,
     pub period_frames: Option<u64>,
     pub buffer_frames: Option<u64>,
@@ -190,15 +173,10 @@ pub struct HwResult {
     pub buffer_frames: u64,
 }
 
-/// Every value of one [`Pcm::set_hw_params_traced`] run, for alsa_abi_probe.
 #[derive(Clone, Copy, Debug)]
 pub struct HwTrace {
-    /// The request, updated by each set_*_near call that ran (unrequested sizes stay 0).
     pub near: HwResult,
-    /// Period and buffer read back after the parameters were applied (0 until then); `rate` is
-    /// the applied one.
     pub actual: HwResult,
-    /// The failing step and its error.
     pub failed: Option<(HwStep, i32)>,
 }
 
@@ -208,7 +186,6 @@ pub struct Pcm {
 }
 
 impl Pcm {
-    /// Err = the failed step (open, or loading the library).
     pub fn open(name: &str, stream: Stream, nonblock: bool) -> Result<Self, AlsaError> {
         let lib = ffi::lib().map_err(|_| AlsaError::new(HwStep::Load, -libc::ENOENT))?;
         let name = ffi::c_name(name).map_err(|e| AlsaError::new(HwStep::Open, e))?;
@@ -226,8 +203,6 @@ impl Pcm {
         })
     }
 
-    /// Access RW_INTERLEAVED, then format, channels, rate, period, buffer, apply; returns the
-    /// rate and the period / buffer read back from the device.
     pub fn set_hw_params(&mut self, req: &HwRequest) -> Result<HwResult, AlsaError> {
         let t = self.set_hw_params_traced(req);
         match t.failed {
@@ -236,7 +211,6 @@ impl Pcm {
         }
     }
 
-    /// [`Pcm::set_hw_params`] with the values each step produced.
     pub fn set_hw_params_traced(&mut self, req: &HwRequest) -> HwTrace {
         let mut t = HwTrace {
             near: HwResult {
@@ -318,7 +292,6 @@ impl Pcm {
         AlsaError::of(HwStep::Prepare, self.raw.prepare())
     }
 
-    /// snd_pcm_drop.
     pub fn drop_frames(&mut self) -> Result<(), AlsaError> {
         AlsaError::of(HwStep::Drop, self.raw.drop_frames())
     }
@@ -327,28 +300,24 @@ impl Pcm {
         AlsaError::of(HwStep::Resume, self.raw.resume())
     }
 
-    /// `buf` must hold `frames` frames of the configured S16 format (else -EINVAL).
     pub fn readi(&mut self, buf: &mut [i16], frames: usize) -> Result<usize, AlsaError> {
         self.raw
             .readi(buf, frames, self.frame_bytes)
             .map_err(|e| AlsaError::new(HwStep::Read, e))
     }
 
-    /// `buf` must hold `frames` frames of the configured S32 format (else -EINVAL).
     pub fn readi_s32(&mut self, buf: &mut [i32], frames: usize) -> Result<usize, AlsaError> {
         self.raw
             .readi_s32(buf, frames, self.frame_bytes)
             .map_err(|e| AlsaError::new(HwStep::Read, e))
     }
 
-    /// `buf` must hold `frames` frames of the configured format (else -EINVAL).
     pub fn writei(&mut self, buf: &[u8], frames: usize) -> Result<usize, AlsaError> {
         self.raw
             .writei(buf, frames, self.frame_bytes)
             .map_err(|e| AlsaError::new(HwStep::Write, e))
     }
 
-    /// true = ready, false = timeout.
     pub fn wait(&mut self, timeout_ms: i32) -> Result<bool, AlsaError> {
         let rc = self.raw.wait(timeout_ms);
         AlsaError::of(HwStep::Wait, rc).map(|()| rc > 0)
@@ -371,31 +340,23 @@ impl Pcm {
     }
 }
 
-/// Writes an integer mixer element on card 0, e.g. the Mini's "SPK mute" switch (1 = on).
-/// Opens the control for every call, as the stock firmware does before each playback start.
 pub fn set_mixer_integer(name: &str, values: &[i64]) -> Result<(), AlsaError> {
     let ctl = Ctl::open("hw:0")?;
     ctl.write_integers(name, values)
 }
 
-/// Узкая часть профиля модели, нужная ALSA-фасаду: sysfs-затворы усилителя и ALSA-переключатель
-/// «SPK mute». Строится вызывающим из `pulsar_model::Playback`.
 #[derive(Clone, Copy, Debug)]
 pub struct OutputGates {
     pub amp_enable_paths: &'static [&'static str],
     pub spk_mute_ctl: Option<&'static str>,
 }
 
-/// Входы [`open_playback`].
 #[derive(Clone, Copy, Debug)]
 pub struct PlaybackSpec {
     pub pcm: &'static str,
     pub gates: OutputGates,
 }
 
-/// Switches the output on: the sysfs amplifier gates and the ALSA "SPK mute" mixer.
-/// Opening a PCM or dmix dropping its last client may switch the gates off again, so this runs
-/// both before and after a device is opened.
 pub fn enable_output(gates: &OutputGates) {
     for path in gates.amp_enable_paths {
         if !home_linux::write_file(path, "1\n") {
@@ -409,12 +370,6 @@ pub fn enable_output(gates: &OutputGates) {
     }
 }
 
-/// Opens the playback PCM with the output gates on. Gates are enabled before the open (a device
-/// must never start muted) and again afterwards: dmix turns the amplifier off when its last
-/// client closes, so another channel may have closed it between our two calls. All PCM openers in
-/// the daemon use this; the MUSIC pipeline, whose alsasink opens the device inside GStreamer,
-/// instead calls [`enable_output`] before it starts the pipeline and again when the pipeline
-/// reports PLAYING (the device is open by then).
 pub fn open_playback(spec: &PlaybackSpec) -> Result<Pcm, AlsaError> {
     enable_output(&spec.gates);
     let pcm = Pcm::open(spec.pcm, Stream::Playback, false)?;
@@ -427,7 +382,6 @@ pub struct Ctl {
 }
 
 impl Ctl {
-    /// `name`: a card, e.g. "hw:0".
     pub fn open(name: &str) -> Result<Self, AlsaError> {
         let lib = ffi::lib().map_err(|_| AlsaError::new(HwStep::Load, -libc::ENOENT))?;
         let name = ffi::c_name(name).map_err(|e| AlsaError::new(HwStep::CtlOpen, e))?;
@@ -437,12 +391,10 @@ impl Ctl {
         Ok(Self { raw })
     }
 
-    /// Whether a mixer element of that name exists.
     pub fn mixer_exists(&self, name: &str) -> bool {
         ffi::c_name(name).is_ok_and(|name| self.raw.mixer_info(&name) == 0)
     }
 
-    /// Integer `index` of mixer element `name`.
     pub fn read_integer(&self, name: &str, index: u32) -> Result<i64, AlsaError> {
         let index = index as usize;
         if index >= ffi::CTL_MAX_INTEGERS {
@@ -455,7 +407,6 @@ impl Ctl {
         Ok(v.integer(index))
     }
 
-    /// Writes `values` as integers 0.. of mixer element `name`.
     pub fn write_integers(&self, name: &str, values: &[i64]) -> Result<(), AlsaError> {
         if values.len() > ffi::CTL_MAX_INTEGERS {
             return Err(AlsaError::new(HwStep::MixerWrite, -libc::EINVAL));
@@ -483,7 +434,6 @@ mod tests {
 
     #[test]
     fn error_display_names_the_step() {
-        // No libasound on the build host: the code path without the library formats the errno.
         let e = super::AlsaError::new(super::HwStep::Channels, -22);
         let text = e.to_string();
         assert!(text.starts_with("set_channels: "), "{text}");

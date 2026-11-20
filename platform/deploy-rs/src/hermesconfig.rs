@@ -1,11 +1,3 @@
-//! Renders the reviewed Hermes overlay into a live HERMES_HOME.
-//!
-//! Ported from `platform/deploy/internal/hermesconfig`: fragment, private
-//! values and the voice prompt are merged in that order, TEST-NET/example
-//! placeholders are refused, `.prev` backups are kept, and `--dry-run`/`--check`
-//! behave like the Go implementation. The parsed tree is the contract; emitter
-//! style differences are allowed (as in Go).
-
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -28,40 +20,23 @@ static SECRET_LINE_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
 
 const PRIVATE_ONLY_KEYS: &[&str] = &["telegram_owner_chat_id"];
 
-/// One render request.
 pub struct Options {
-    /// HERMES_HOME.
     pub home: String,
-    /// Config fragment.
     pub fragment: String,
-    /// Infra context installed as `.hermes.md`.
     pub context: String,
-    /// Identity file installed as `SOUL.md`.
     pub soul: String,
-    /// Source for `agent.personalities.voice`.
     pub voice_prompt: String,
-    /// System prompt for the owner chat.
     pub telegram_prompt: String,
-    /// Skill directories installed under `<home>/skills`.
     pub skills: String,
-    /// Private values merged after the fragment (empty = none).
     pub private_values: String,
-    /// Allow TEST-NET/example placeholders (tests only).
     pub allow_placeholders: bool,
 }
 
-/// One planned write.
 pub struct File {
-    /// Destination path.
     pub path: PathBuf,
-    /// Complete file content.
     pub content: String,
 }
 
-/// Merges overlay into base: mappings merge, everything else replaces.
-///
-/// The owned signature mirrors the Go `interface{}` API and keeps callers from
-/// juggling borrows for a tree that is rebuilt anyway.
 #[must_use]
 #[allow(clippy::needless_pass_by_value)]
 pub fn deep_merge(base: Value, overlay: Value) -> Value {
@@ -79,7 +54,6 @@ pub fn deep_merge(base: Value, overlay: Value) -> Value {
     Value::Map(merged)
 }
 
-/// Yields `(dotted path, value)` for every non-mapping leaf.
 #[must_use]
 pub fn iter_leaves(data: &Value) -> Vec<(String, Value)> {
     let mut leaves = Vec::new();
@@ -99,8 +73,6 @@ fn walk(node: &Value, path: &mut Vec<String>, leaves: &mut Vec<(String, Value)>)
     leaves.push((path.join("."), node.clone()));
 }
 
-/// Returns the keys whose placeholder value differs from (or is absent in) the
-/// live config.
 #[must_use]
 pub fn placeholder_violations(merged: &Value, live: &Value) -> Vec<String> {
     let current: std::collections::BTreeMap<String, Value> =
@@ -120,17 +92,11 @@ pub fn placeholder_violations(merged: &Value, live: &Value) -> Vec<String> {
     bad.into_iter().collect()
 }
 
-/// Serializes the merged document.
 #[must_use]
 pub fn dump_config(data: &Value) -> String {
     yaml::to_string(data)
 }
 
-/// Compares parsed trees, ignoring mapping key order and emitter formatting.
-///
-/// Hermes rewrites `config.yaml` with its own emitter, so a byte comparison
-/// would schedule a rewrite (and a `.prev` rotation) on every restart even when
-/// the configuration is identical.
 #[must_use]
 pub fn trees_equal(left: &Value, right: &Value) -> bool {
     match (left, right) {
@@ -154,7 +120,6 @@ pub fn trees_equal(left: &Value, right: &Value) -> bool {
     }
 }
 
-/// Masks token-shaped values so a dry-run diff is safe to paste.
 #[must_use]
 pub fn redact(text: &str) -> String {
     SECRET_LINE_PATTERN
@@ -174,7 +139,6 @@ fn read_mapping(path: &str, what: &str) -> Result<Value, String> {
     Ok(value)
 }
 
-/// Returns every file a render would change.
 pub fn build_plan(options: &Options) -> Result<Vec<File>, String> {
     let config_path = Path::new(&options.home).join("config.yaml");
     let current = if config_path.exists() {
@@ -235,8 +199,6 @@ pub fn build_plan(options: &Options) -> Result<Vec<File>, String> {
     }
 
     let mut plan = Vec::new();
-    // Only a semantic change is a write: formatting-only differences (Hermes
-    // rewrites the file itself) must not churn the config or `.prev`.
     if !config_path.exists() || !trees_equal(&merged, &current) {
         plan.push(File {
             path: config_path,
@@ -421,7 +383,6 @@ fn pop_string(mapping: &mut Value, key: &str) -> String {
     }
 }
 
-/// Returns the redacted unified diff of one planned write.
 #[must_use]
 pub fn diff_for(path: &Path, new_text: &str) -> String {
     let old = fs::read_to_string(path).unwrap_or_default();
@@ -429,7 +390,6 @@ pub fn diff_for(path: &Path, new_text: &str) -> String {
     redact(&rendered)
 }
 
-/// Writes the plan, keeping at most one `.prev` copy (mode 600).
 pub fn apply_plan(plan: &[File], stdout: &mut dyn Write) -> Result<Vec<String>, String> {
     let mut written = Vec::new();
     let stamp = time::OffsetDateTime::now_utc()
@@ -457,7 +417,6 @@ pub fn apply_plan(plan: &[File], stdout: &mut dyn Write) -> Result<Vec<String>, 
     Ok(written)
 }
 
-/// Renders the overlay. Returns 1 for `--check` with pending changes.
 pub fn run(
     options: &Options,
     dry_run: bool,
@@ -583,7 +542,6 @@ mod tests {
         let root = tempfile::tempdir().expect("root");
         let options = render_options(root.path());
         let config = Path::new(&options.home).join("config.yaml");
-        // Hermes rewrote the file: quoted scalars, comments, wider indentation.
         fs::write(
             &config,
             "# managed by hermes\nagent:\n    name: 'hermes'\n    personalities:\n        voice: \"speak\"\n",

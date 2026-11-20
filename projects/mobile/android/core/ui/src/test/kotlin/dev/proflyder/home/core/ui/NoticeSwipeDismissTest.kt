@@ -14,11 +14,6 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
-/**
- * The notice gesture is the only way to get rid of a snackbar in this app
- * (the activity root is not a CoordinatorLayout), so it must dismiss on a
- * sideways or downward swipe, follow the finger, and ignore a tap.
- */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class NoticeSwipeDismissTest {

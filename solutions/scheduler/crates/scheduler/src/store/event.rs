@@ -1,5 +1,3 @@
-//! Outbox events, leases and acknowledgements.
-
 use rusqlite::{Row, Transaction, params};
 
 use crate::domain::{
@@ -83,7 +81,6 @@ fn select_event(tx: &Transaction<'_>, id: &str) -> Result<EventRow, StoreError> 
     }
 }
 
-/// Inserts an outbox row, ignoring an existing identical dedupe identity.
 pub fn insert_event(tx: &Transaction<'_>, mut input: EventInsert) -> Result<Event, StoreError> {
     if input.dedupe_key.is_empty() {
         return Err(StoreError::invalid("empty dedupe key"));
@@ -126,8 +123,6 @@ pub fn insert_event(tx: &Transaction<'_>, mut input: EventInsert) -> Result<Even
     Ok(select_event(tx, &id)?.event)
 }
 
-/// Cancels pending and leased FIRE deliveries for a source. A zero occurrence
-/// means every occurrence of that source.
 pub fn skip_fire_events(
     tx: &Transaction<'_>,
     source_id: &str,
@@ -228,8 +223,6 @@ fn validate_consumer(consumer_id: &str) -> Result<(), StoreError> {
 }
 
 impl Store {
-    /// Leases up to `limit` due events for a consumer, optionally restricted to
-    /// one queue. Expired leases from any consumer are released first.
     pub fn list_due_events(
         &self,
         consumer_id: &str,
@@ -307,7 +300,6 @@ impl Store {
         })
     }
 
-    /// Records a terminal outcome. Repeated acks are idempotent.
     pub fn ack_event(
         &self,
         event_id: &str,

@@ -1,13 +1,3 @@
-// Vendored reference copy of ESPHome's Native API schema, not compiled: the messages this
-// server uses are written by hand in src/proto.rs (no protoc at build time).
-//
-// Source: https://github.com/esphome/esphome/blob/995fac044a526a86cc873067843f712e5802c3f3/esphome/components/api/api.proto
-// License: MIT (the ESPHome project publishes api.proto under the MIT part of its license;
-// see https://github.com/esphome/esphome/blob/dev/LICENSE). The file also imports
-// api_options.proto, which only carries protobuf custom options and is not needed here.
-//
-// Keep this copy in sync with `src/proto.rs` and `src/msg.rs` when adding a message.
-
 syntax = "proto3";
 
 import "api_options.proto";
@@ -17,7 +7,6 @@ service APIConnection {
     option (needs_setup_connection) = false;
     option (needs_authentication) = false;
   }
-  // REMOVED in ESPHome 2026.1.0: rpc authenticate (AuthenticationRequest) returns (AuthenticationResponse)
   rpc disconnect (DisconnectRequest) returns (DisconnectResponse) {
     option (needs_setup_connection) = false;
     option (needs_authentication) = false;
@@ -98,72 +87,31 @@ service APIConnection {
 }
 
 
-// ==================== BASE PACKETS ====================
-
-// The Home Assistant protocol is structured as a simple
-// TCP socket with short binary messages encoded in the protocol buffers format
-// First, a message in this protocol has a specific format:
-//  * A zero byte.
-//  * VarInt denoting the size of the message object. (type is not part of this)
-//  * VarInt denoting the type of message.
-//  * The message object encoded as a ProtoBuf message
-
-// The connection is established in 2 steps:
-//  * First, the client connects to the server and sends a "Hello Request" identifying itself
-//  * The server responds with a "Hello Response" and the connection is authenticated
-// If anything in this initial process fails, the connection must immediately closed
-// by both sides and _no_ disconnection message is to be sent.
-// Note: Password authentication via AuthenticationRequest/AuthenticationResponse (message IDs 3, 4)
-// was removed in ESPHome 2026.1.0. Those message IDs are reserved and should not be reused.
-
-// Message sent at the beginning of each connection
-// Can only be sent by the client and only at the beginning of the connection
 message HelloRequest {
   option (id) = 1;
   option (source) = SOURCE_CLIENT;
   option (no_delay) = true;
 
-  // Description of client (like User Agent)
-  // For example "Home Assistant"
-  // Not strictly necessary to send but nice for debugging
-  // purposes.
   string client_info = 1;
   uint32 api_version_major = 2;
   uint32 api_version_minor = 3;
 
-  // Set by clients that can accept connections the device opens to them
-  // (see api: outgoing_connection:). The device remembers this client's
-  // address as the target to dial when no such client is connected.
   bool outgoing_connection_target = 4 [(field_ifdef) = "USE_API_OUTGOING_CONNECTION"];
 }
 
-// Confirmation of successful connection request.
-// Can only be sent by the server and only at the beginning of the connection
 message HelloResponse {
   option (id) = 2;
   option (source) = SOURCE_SERVER;
   option (no_delay) = true;
 
-  // The version of the API to use. The _client_ (for example Home Assistant) needs to check
-  // for compatibility and if necessary adopt to an older API.
-  // Major is for breaking changes in the base protocol - a mismatch will lead to immediate disconnect_client_
-  // Minor is for breaking changes in individual messages - a mismatch will lead to a warning message
   uint32 api_version_major = 1;
   uint32 api_version_minor = 2;
 
-  // A string identifying the server (ESP); like client info this may be empty
-  // and only exists for debugging/logging purposes.
-  // Currently set to ESPHOME_VERSION string literal.
   string server_info = 3 [(max_data_length) = 32, (force) = true, (progmem) = true];
 
-  // The name of the server (App.get_name() - device hostname)
-  // max_data_length matches ESPHOME_DEVICE_NAME_MAX_LEN (validated by validate_hostname)
   string name = 4 [(max_data_length) = 31, (force) = true];
 }
 
-// DEPRECATED in ESPHome 2026.1.0 - Password authentication is no longer supported.
-// These messages are kept for protocol documentation but are not processed by the server.
-// Use noise encryption instead: https://esphome.io/components/api/#configuration-variables
 message AuthenticationRequest {
   option (id) = 3;
   option (source) = SOURCE_CLIENT;
@@ -182,27 +130,16 @@ message AuthenticationResponse {
   bool invalid_password = 1;
 }
 
-// Reason a party is requesting the connection be closed.
 enum DisconnectReason {
-  // No specific reason / not provided (default for older peers).
   DISCONNECT_REASON_UNSPECIFIED = 0;
-  // The device's provisioning window has expired. The device must be reset
-  // (power-cycled) to reopen the provisioning window before it will accept a
-  // connection again.
   DISCONNECT_REASON_PROVISIONING_CLOSED = 1;
 }
 
-// Request to close the connection.
-// Can be sent by both the client and server
 message DisconnectRequest {
   option (id) = 5;
   option (source) = SOURCE_BOTH;
   option (no_delay) = true;
 
-  // Do not close the connection before the acknowledgement arrives
-
-  // Optional reason the connection is being closed. Older peers that do not
-  // send this field will report DISCONNECT_REASON_UNSPECIFIED (0).
   DisconnectReason reason = 1;
 }
 
@@ -210,32 +147,25 @@ message DisconnectResponse {
   option (id) = 6;
   option (source) = SOURCE_BOTH;
   option (no_delay) = true;
-
-  // Empty - Both parties are required to close the connection after this
-  // message has been received.
 }
 
 message PingRequest {
   option (id) = 7;
   option (source) = SOURCE_BOTH;
-  // Empty
 }
 
 message PingResponse {
   option (id) = 8;
   option (source) = SOURCE_BOTH;
-  // Empty
 }
 
 message DeviceInfoRequest {
   option (id) = 9;
   option (source) = SOURCE_CLIENT;
-  // Empty
 }
 
 message AreaInfo {
   uint32 area_id = 1;
-  // max_data_length matches core/config.FRIENDLY_NAME_MAX_LEN via AREA_SCHEMA
   string name = 2 [(max_data_length) = 120, (force) = true];
 }
 
@@ -246,7 +176,6 @@ enum DeviceRelation {
 
 message DeviceInfo {
   uint32 device_id = 1;
-  // max_data_length matches core/config.FRIENDLY_NAME_MAX_LEN via DEVICE_SCHEMA
   string name = 2 [(max_data_length) = 120, (force) = true];
   uint32 area_id = 3;
   DeviceRelation relation = 4;
@@ -256,184 +185,104 @@ enum SerialProxyPortType {
   SERIAL_PROXY_PORT_TYPE_TTL = 0;
   SERIAL_PROXY_PORT_TYPE_RS232 = 1;
   SERIAL_PROXY_PORT_TYPE_RS485 = 2;
-  SERIAL_PROXY_PORT_TYPE_USB_SERIAL = 3;  // since API 1.18
+  SERIAL_PROXY_PORT_TYPE_USB_SERIAL = 3;
 }
 
 message SerialProxyInfo {
-  string name = 1;                    // Human-readable port name
-  SerialProxyPortType port_type = 2;  // Port type (RS232, RS485)
-  uint32 configured_line_states = 3;  // Bitmask of SerialProxyLineStateFlags this instance can drive
+  string name = 1;
+  SerialProxyPortType port_type = 2;
+  uint32 configured_line_states = 3;
 }
 
-// DeviceInfoResponse max_data_length values:
-//   name = 31 (ESPHOME_DEVICE_NAME_MAX_LEN, validated by validate_hostname)
-//   friendly_name = 120 (core/config.FRIENDLY_NAME_MAX_LEN)
-//   mac_address/bluetooth_mac_address = 17 (MAC_ADDRESS_PRETTY_BUFFER_SIZE - 1, constexpr)
-//   esphome_version = 32 (ESPHOME_VERSION string literal)
-//   compilation_time = 25 (Application::BUILD_TIME_STR_SIZE - 1, constexpr)
-//   manufacturer = 20 (longest hardcoded literal: "Nordic Semiconductor")
-//   model = 127 (core/config.BOARD_MAX_LENGTH, validated in platform schemas)
-//   project_name/project_version = 127 (core/config.PROJECT_MAX_LENGTH)
-//   suggested_area = 120 (core/config.FRIENDLY_NAME_MAX_LEN via AREA_SCHEMA)
-//
-// Some fields below are marked "Superseded by DeviceCapabilitiesResponse". They
-// have moved to that message as of API 1.15, but are still sent here so that
-// older clients keep working. Do NOT mark them (deprecated) until the removal
-// release: in this repo (deprecated) makes the generator drop the field
-// entirely, so the device would stop sending it.
 message DeviceInfoResponse {
   option (id) = 10;
   option (source) = SOURCE_SERVER;
 
-  // Deprecated in ESPHome 2026.1.0, but kept for backward compatibility
-  // with older ESPHome versions that still send this field.
   bool uses_password = 1 [deprecated = true];
 
-  // The name of the node, given by "App.set_name()" - device hostname
   string name = 2 [(max_data_length) = 31, (force) = true];
 
-  // The mac address of the device. For example "AC:BC:32:89:0E:A9"
   string mac_address = 3 [(max_data_length) = 17, (force) = true];
 
-  // A string describing the ESPHome version. For example "1.10.0"
   string esphome_version = 4 [(max_data_length) = 32, (force) = true, (progmem) = true];
 
-  // A string describing the date of compilation, this is generated by the compiler
-  // and therefore may not be in the same format all the time.
-  // If the user isn't using ESPHome, this will also not be set.
   string compilation_time = 5 [(max_data_length) = 25, (force) = true];
 
-  // The model of the board. For example NodeMCU
-  // max_data_length matches core/config.BOARD_MAX_LENGTH (validated in platform schemas)
   string model = 6 [(max_data_length) = 127, (force) = true, (progmem) = true];
 
   bool has_deep_sleep = 7 [(field_ifdef) = "USE_DEEP_SLEEP"];
 
-  // The esphome project details if set
-  // max_data_length matches core/config.PROJECT_MAX_LENGTH
   string project_name = 8 [(max_data_length) = 127, (force) = true, (field_ifdef) = "ESPHOME_PROJECT_NAME", (progmem) = true];
   string project_version = 9 [(max_data_length) = 127, (force) = true, (field_ifdef) = "ESPHOME_PROJECT_NAME", (progmem) = true];
 
   uint32 webserver_port = 10 [(field_ifdef) = "USE_WEBSERVER"];
 
-  // Deprecated in API version 1.9
   uint32 legacy_bluetooth_proxy_version = 11 [deprecated=true, (field_ifdef) = "USE_BLUETOOTH_PROXY"];
 
-  // Superseded by DeviceCapabilitiesResponse.bluetooth_proxy as of API 1.15.
   uint32 bluetooth_proxy_feature_flags = 15 [(field_ifdef) = "USE_BLUETOOTH_PROXY"];
 
   string manufacturer = 12 [(max_data_length) = 20, (force) = true, (progmem) = true];
 
   string friendly_name = 13 [(max_data_length) = 120, (force) = true];
 
-  // Deprecated in API version 1.10
   uint32 legacy_voice_assistant_version = 14 [deprecated=true, (field_ifdef) = "USE_VOICE_ASSISTANT"];
 
-  // Superseded by DeviceCapabilitiesResponse.voice_assistant as of API 1.15.
   uint32 voice_assistant_feature_flags = 17 [(field_ifdef) = "USE_VOICE_ASSISTANT"];
 
   string suggested_area = 16 [(max_data_length) = 120, (force) = true, (field_ifdef) = "USE_AREAS"];
 
-  // The Bluetooth mac address of the device. For example "AC:BC:32:89:0E:AA"
-  // Superseded by DeviceCapabilitiesResponse.bluetooth_proxy.mac_address as of API 1.15.
   string bluetooth_mac_address = 18 [(max_data_length) = 17, (force) = true, (field_ifdef) = "USE_BLUETOOTH_PROXY"];
 
-  // Supports receiving and saving api encryption key
   bool api_encryption_supported = 19 [(field_ifdef) = "USE_API_NOISE"];
 
   repeated DeviceInfo devices = 20 [(field_ifdef) = "USE_DEVICES", (fixed_array_size_define) = "ESPHOME_DEVICE_COUNT"];
   repeated AreaInfo areas = 21 [(field_ifdef) = "USE_AREAS", (fixed_array_size_define) = "ESPHOME_AREA_COUNT"];
 
-  // Top-level area info to phase out suggested_area
   AreaInfo area = 22 [(field_ifdef) = "USE_AREAS"];
 
-  // Indicates if Z-Wave proxy support is available and features supported
-  // Superseded by DeviceCapabilitiesResponse.zwave_proxy as of API 1.15.
   uint32 zwave_proxy_feature_flags = 23 [(field_ifdef) = "USE_ZWAVE_PROXY"];
-  // Superseded by DeviceCapabilitiesResponse.zwave_proxy as of API 1.15.
   uint32 zwave_home_id = 24 [(field_ifdef) = "USE_ZWAVE_PROXY"];
 
-  // Serial proxy instance metadata
-  // Superseded by DeviceCapabilitiesResponse.serial_proxies as of API 1.15.
   repeated SerialProxyInfo serial_proxies = 25 [(field_ifdef) = "USE_SERIAL_PROXY", (fixed_array_size_define) = "SERIAL_PROXY_COUNT"];
 
-  // Device is unprovisioned and accepts Noise handshakes with the well-known
-  // all-zeros PSK, so the api encryption key can be provisioned without being
-  // sent in plaintext (protects against passive sniffing, not active MITM)
   bool api_encryption_provisionable = 26 [(field_ifdef) = "USE_API_NOISE"];
 
-  // Device is built with the api outgoing_connection option and can open
-  // the TCP connection to a dial-back target itself
   bool api_outgoing_connection_supported = 27 [(field_ifdef) = "USE_API_OUTGOING_CONNECTION"];
 }
 
-// ==================== DEVICE CAPABILITIES ====================
-
-// Asks the device which optional features it supports.
-//
-// This message exists so that DeviceInfoResponse does not have to keep growing
-// a flat list of feature flags. DeviceInfoResponse is served before
-// authentication, so it is limited to identity information. Capabilities are
-// only served on an authenticated connection (encrypted as well, when
-// encryption is configured).
-//
-// Clients that see api_version >= 1.15 should read these values from
-// DeviceCapabilitiesResponse and ignore the matching DeviceInfoResponse fields.
-// Older clients keep reading DeviceInfoResponse, which still carries the same
-// values, so this is not a breaking change.
 message DeviceCapabilitiesRequest {
   option (id) = 149;
   option (source) = SOURCE_CLIENT;
-  // Empty
 }
 
-// Each feature gets its own sub-message so that it can gain fields over time
-// without crowding the top-level field numbering.
-//
-// Note: a sub-message whose fields are all at their default value is not sent
-// at all, so the presence of a sub-message is not a reliable test for "this
-// feature is compiled in". Clients should test a value inside it, for example
-// a non-zero feature_flags, exactly as they do today with DeviceInfoResponse.
-
 message BluetoothProxyCapabilities {
-  // Bitmask of the features this proxy supports
   uint32 feature_flags = 1;
-  // The Bluetooth mac address of the device. For example "AC:BC:32:89:0E:AA"
   string mac_address = 2 [(max_data_length) = 17, (force) = true];
 }
 
 message VoiceAssistantCapabilities {
-  // Bitmask of the features this voice assistant supports
   uint32 feature_flags = 1;
 }
 
 message ZWaveProxyCapabilities {
-  // Bitmask of the features this proxy supports
   uint32 feature_flags = 1;
   uint32 home_id = 2;
 }
 
 message StoreYamlCapabilities {
-  // Firmware embeds its YAML, so clients can request it with get_yaml
   bool supported = 1;
 }
 
 message WizardCapabilities {
-  // True when the device has a wizard configured, so DeviceWizardRequest will be answered
   bool configured = 1;
 }
 
 message SendspinCapabilities {
-  // Bitmask of the Sendspin features this device supports
   uint32 feature_flags = 1;
-  // The Sendspin client_id: base64url of the client's static public key, 43 characters.
-  // Empty until the Sendspin client has started once since boot.
   string client_id = 2 [(max_data_length) = 43];
 }
 
 message CrashReportCapabilities {
-  // Bitmask of CrashReportFlag. ESP32 checks BUILD_MATCHES against the build time stored with the record;
-  // ESP8266, RP2 and LibreTiny store none and assume it.
   uint32 flags = 1;
 }
 
@@ -452,91 +301,20 @@ message DeviceCapabilitiesResponse {
   CrashReportCapabilities crash_report = 8 [(field_ifdef) = "USE_CRASH_REPORT"];
 }
 
-// ==================== DEVICE WIZARD ====================
-
-// Asks the device for the onboarding wizard that Home Assistant presents when the
-// device is added.
-//
-// The wizard is read once, when the device is added, whereas capabilities are read
-// on every connect, so it is a separate message rather than part of
-// DeviceCapabilitiesResponse. It is only served on an authenticated connection.
-//
-// A device without a wizard does not have this message at all and never answers it,
-// as a device ignores messages it does not know. Clients therefore check
-// DeviceCapabilitiesResponse.wizard.configured before sending it.
 message DeviceWizardRequest {
   option (id) = 156;
   option (source) = SOURCE_CLIENT;
   option (ifdef) = "USE_API_WIZARD";
-  // Empty
 }
 
-// The wizard, as UTF-8 JSON compressed into a single zstd frame. The device builds it
-// when it is compiled and sends it unchanged, so its size varies with the wizard and
-// its format can grow without new fields here. Clients decompress it, then read:
-//
-//   {"version": 1,
-//    "pages": [{"title": "...", "description": "...",
-//      "entities": [{"key": 123, "device_id": 456, "description": "..."}],
-//      "inputs": [{"key": 789, "description": "...", "multiple": true, "max_length": 1023,
-//        "entity_filters": [{"integration": "...", "domain": ["..."],
-//                            "device_class": ["..."], "supported_features": ["..."]}]}]}]}
-//
-// Values that are empty or unset are left out, and so are empty lists. Strings may be
-// Home Assistant translation placeholders such as "[%key:component::domain::name%]",
-// passed through verbatim. The pages are shown in the order listed. A client that does
-// not know the version must not use the wizard.
-//
-// An entity is an entity of this device that the page shows to the user (for example to
-// turn it on or off). Its key is the key ListEntitiesResponse sends for it. Its
-// device_id is the device_id ListEntitiesResponse sends, and is left out when that is 0.
-//
-// An input is filled in by the user with the id of a Home Assistant entity. It either
-// stands for one entity of the device's homeassistant platform (sensor, binary_sensor,
-// text_sensor, number, switch, text, select or button) that sets no entity_id of its own,
-// as Home Assistant supplies it, or it is a standalone input that only stores the entity
-// id for the device's own automations. Its key is the FNV-1 hash
-// of the input's ESPHome id, not an entity key. The client sends the chosen entity id to
-// the device with a WizardInputSetRequest. entity_filters says which Home Assistant
-// entities the user may choose, and mirrors Home Assistant's EntityFilterSelectorConfig:
-// an entity matches a filter when it satisfies every field that is set, and an entity
-// that matches any one of the filters is accepted.
-//
-// An input with "multiple": true lets the user pick several entities. The client sends
-// them in one WizardInputSetRequest as a comma separated list with no spaces
-// ("calendar.a,calendar.b"); the device also accepts spaces around each id and stores the
-// list without them. "max_length" (only on a multiple input, 255 when left out) is the
-// longest list in bytes the device accepts. The version stays 1: a client that does not
-// know "multiple" ignores it, shows a single picker and sends one entity id, which a
-// multiple input accepts.
-//
-// The device keeps the entity id of an input in RAM only and does not store it across
-// restarts. The client therefore stores the choice itself and, after every connection
-// and before it sends SubscribeHomeAssistantStatesRequest, sends a WizardInputSetRequest
-// for each input. It sends one again whenever the user changes the choice.
 message DeviceWizardResponse {
   option (id) = 157;
   option (source) = SOURCE_SERVER;
   option (ifdef) = "USE_API_WIZARD";
 
-  // The data is in flash, and the device sends it from there
   bytes data = 1 [(pointer_to_buffer) = true, (progmem) = true];
 }
 
-// Sets the entity id of a wizard input (see WizardInputField.key). Clients send
-// this only when DeviceCapabilitiesResponse.wizard.configured is set. There is no
-// reply. The device ignores a request whose key matches no input. A single input is
-// ignored when the entity_id is empty, longer than 255 bytes or has no '.'. A multiple
-// input takes a comma separated list ("calendar.a,calendar.b"); the client sends no
-// spaces, the device trims spaces around each id and stores the list without them. The
-// whole request is ignored when any id is empty or has no '.', or when the list without
-// spaces does not fit the input's max_length (255 by default). Otherwise it keeps the id
-// or list in RAM,
-// not across restarts, and when the input belongs to a homeassistant platform entity
-// it subscribes to that entity's state. Clients send this for every input right
-// after connecting, before SubscribeHomeAssistantStatesRequest. A request that
-// arrives later still works: the device then sends the affected state subscriptions
-// again.
 message WizardInputSetRequest {
   option (id) = 158;
   option (source) = SOURCE_CLIENT;
@@ -549,28 +327,21 @@ message WizardInputSetRequest {
 message ListEntitiesRequest {
   option (id) = 11;
   option (source) = SOURCE_CLIENT;
-  // Empty
 }
 message ListEntitiesDoneResponse {
   option (id) = 19;
   option (source) = SOURCE_SERVER;
   option (no_delay) = true;
-  // Empty
 }
 message SubscribeStatesRequest {
   option (id) = 20;
   option (source) = SOURCE_CLIENT;
-  // Empty
 }
 
-// ==================== CRASH REPORT ====================
-
-// Send only when crash_report.flags has PRESENT. The report is dropped once sent.
 message CrashReportRequest {
   option (id) = 163;
   option (source) = SOURCE_CLIENT;
   option (ifdef) = "USE_CRASH_REPORT";
-  // Empty
 }
 
 message CrashReportCore {
@@ -583,8 +354,8 @@ message CrashReportResponse {
   option (source) = SOURCE_SERVER;
   option (ifdef) = "USE_CRASH_REPORT";
 
-  uint32 flags = 1;  // Bitmask of CrashReportFlag
-  uint32 reason = 2;  // CrashReason
+  uint32 flags = 1;
+  uint32 reason = 2;
   uint32 pc = 3;
   uint32 cause = 4;
   uint32 fault_address = 5;
@@ -593,21 +364,12 @@ message CrashReportResponse {
   repeated CrashReportCore cores = 8 [(fixed_array_with_length_define) = "CRASH_REPORT_MAX_CORES"];
 }
 
-// ==================== COMMON =====================
-
 enum EntityCategory {
   ENTITY_CATEGORY_NONE = 0;
   ENTITY_CATEGORY_CONFIG = 1;
   ENTITY_CATEGORY_DIAGNOSTIC = 2;
 }
 
-// Entity field max_data_length values match Python validation constants:
-//   name/object_id = 120 (config_validation.NAME_MAX_LENGTH)
-//   icon = 63 (core/config.ICON_MAX_LENGTH)
-//   device_class = 47 (core/config.DEVICE_CLASS_MAX_LENGTH)
-//   unit_of_measurement = 63 (core/config.UNIT_OF_MEASUREMENT_MAX_LENGTH)
-
-// ==================== BINARY SENSOR ====================
 message ListEntitiesBinarySensorResponse {
   option (id) = 12;
   option (base_class) = "InfoResponseProtoMessage";
@@ -617,7 +379,7 @@ message ListEntitiesBinarySensorResponse {
   string object_id = 1 [(max_data_length) = 120, (force) = true];
   fixed32 key = 2 [(force) = true];
   string name = 3 [(max_data_length) = 120, (force) = true, (progmem) = true];
-  reserved 4; // Deprecated: was string unique_id
+  reserved 4;
 
   string device_class = 5 [(max_data_length) = 47, (progmem) = true];
   bool is_status_binary_sensor = 6;
@@ -635,13 +397,10 @@ message BinarySensorStateResponse {
 
   fixed32 key = 1 [(force) = true];
   bool state = 2;
-  // If the binary sensor does not have a valid state yet.
-  // Equivalent to `!obj->has_state()` - inverse logic to make state packets smaller
   bool missing_state = 3;
   uint32 device_id = 4 [(field_ifdef) = "USE_DEVICES"];
 }
 
-// ==================== COVER ====================
 message ListEntitiesCoverResponse {
   option (id) = 13;
   option (base_class) = "InfoResponseProtoMessage";
@@ -651,7 +410,7 @@ message ListEntitiesCoverResponse {
   string object_id = 1 [(max_data_length) = 120, (force) = true];
   fixed32 key = 2 [(force) = true];
   string name = 3 [(max_data_length) = 120, (force) = true, (progmem) = true];
-  reserved 4; // Deprecated: was string unique_id
+  reserved 4;
 
   bool assumed_state = 5;
   bool supports_position = 6;
@@ -666,7 +425,6 @@ message ListEntitiesCoverResponse {
   bool supports_toggle = 15;
 }
 
-// Deprecated in API version 1.1
 enum LegacyCoverState {
   option deprecated = true;
   LEGACY_COVER_STATE_OPEN = 0;
@@ -685,9 +443,6 @@ message CoverStateResponse {
   option (no_delay) = true;
 
   fixed32 key = 1 [(force) = true];
-  // legacy: state has been removed in 1.13
-  // clients/servers must still send/accept it until the next protocol change
-  // Deprecated in API version 1.1
   LegacyCoverState legacy_state = 2 [deprecated=true];
 
   float position = 3;
@@ -696,7 +451,6 @@ message CoverStateResponse {
   uint32 device_id = 6 [(field_ifdef) = "USE_DEVICES"];
 }
 
-// Deprecated in API version 1.1
 enum LegacyCoverCommand {
   option deprecated = true;
   LEGACY_COVER_COMMAND_OPEN = 0;
@@ -712,11 +466,7 @@ message CoverCommandRequest {
 
   fixed32 key = 1 [(force) = true];
 
-  // legacy: command has been removed in 1.13
-  // clients/servers must still send/accept it until the next protocol change
-  // Deprecated in API version 1.1
   bool has_legacy_command = 2 [deprecated=true];
-  // Deprecated in API version 1.1
   LegacyCoverCommand legacy_command = 3 [deprecated=true];
 
   bool has_position = 4;
@@ -729,7 +479,6 @@ message CoverCommandRequest {
   bool toggle = 11;
 }
 
-// ==================== FAN ====================
 message ListEntitiesFanResponse {
   option (id) = 14;
   option (base_class) = "InfoResponseProtoMessage";
@@ -739,7 +488,7 @@ message ListEntitiesFanResponse {
   string object_id = 1 [(max_data_length) = 120, (force) = true];
   fixed32 key = 2 [(force) = true];
   string name = 3 [(max_data_length) = 120, (force) = true, (progmem) = true];
-  reserved 4; // Deprecated: was string unique_id
+  reserved 4;
 
   bool supports_oscillation = 5;
   bool supports_speed = 6;
@@ -751,7 +500,6 @@ message ListEntitiesFanResponse {
   repeated string supported_preset_modes = 12 [(container_pointer_no_template) = "ConstVector<const char *, true>"];
   uint32 device_id = 13 [(field_ifdef) = "USE_DEVICES"];
 }
-// Deprecated in API version 1.6 - only used in deprecated fields
 enum FanSpeed {
   option deprecated = true;
   FAN_SPEED_LOW = 0;
@@ -772,7 +520,6 @@ message FanStateResponse {
   fixed32 key = 1 [(force) = true];
   bool state = 2;
   bool oscillating = 3;
-  // Deprecated in API version 1.6
   FanSpeed speed = 4 [deprecated=true];
   FanDirection direction = 5;
   int32 speed_level = 6;
@@ -789,9 +536,7 @@ message FanCommandRequest {
   fixed32 key = 1 [(force) = true];
   bool has_state = 2;
   bool state = 3;
-  // Deprecated in API version 1.6
   bool has_speed = 4 [deprecated=true];
-  // Deprecated in API version 1.6
   FanSpeed speed = 5 [deprecated=true];
   bool has_oscillating = 6;
   bool oscillating = 7;
@@ -804,7 +549,6 @@ message FanCommandRequest {
   uint32 device_id = 14 [(field_ifdef) = "USE_DEVICES"];
 }
 
-// ==================== LIGHT ====================
 enum ColorMode {
   COLOR_MODE_UNKNOWN = 0;
   COLOR_MODE_ON_OFF = 1;
@@ -827,17 +571,12 @@ message ListEntitiesLightResponse {
   string object_id = 1 [(max_data_length) = 120, (force) = true];
   fixed32 key = 2 [(force) = true];
   string name = 3 [(max_data_length) = 120, (force) = true, (progmem) = true];
-  reserved 4; // Deprecated: was string unique_id
+  reserved 4;
 
   repeated ColorMode supported_color_modes = 12 [(container_pointer_no_template) = "light::ColorModeMask"];
-  // next four supports_* are for legacy clients, newer clients should use color modes
-  // Deprecated in API version 1.6
   bool legacy_supports_brightness = 5 [deprecated=true];
-  // Deprecated in API version 1.6
   bool legacy_supports_rgb = 6 [deprecated=true];
-  // Deprecated in API version 1.6
   bool legacy_supports_white_value = 7 [deprecated=true];
-  // Deprecated in API version 1.6
   bool legacy_supports_color_temperature = 8 [deprecated=true];
   float min_mireds = 9;
   float max_mireds = 10;
@@ -906,7 +645,6 @@ message LightCommandRequest {
   uint32 device_id = 28 [(field_ifdef) = "USE_DEVICES"];
 }
 
-// ==================== SENSOR ====================
 enum SensorStateClass {
   STATE_CLASS_NONE = 0;
   STATE_CLASS_MEASUREMENT = 1;
@@ -915,7 +653,6 @@ enum SensorStateClass {
   STATE_CLASS_MEASUREMENT_ANGLE = 4;
 }
 
-// Deprecated in API version 1.5
 enum SensorLastResetType {
   option deprecated = true;
   LAST_RESET_NONE = 0;
@@ -932,7 +669,7 @@ message ListEntitiesSensorResponse {
   string object_id = 1 [(max_data_length) = 120, (force) = true];
   fixed32 key = 2 [(force) = true];
   string name = 3 [(max_data_length) = 120, (force) = true, (progmem) = true];
-  reserved 4; // Deprecated: was string unique_id
+  reserved 4;
 
   string icon = 5 [(field_ifdef) = "USE_ENTITY_ICON", (max_data_length) = 63, (progmem) = true];
   string unit_of_measurement = 6 [(max_data_length) = 63];
@@ -940,8 +677,6 @@ message ListEntitiesSensorResponse {
   bool force_update = 8;
   string device_class = 9 [(max_data_length) = 47, (progmem) = true];
   SensorStateClass state_class = 10;
-  // Last reset type removed in 2021.9.0
-  // Deprecated in API version 1.5
   SensorLastResetType legacy_last_reset_type = 11 [deprecated=true];
   bool disabled_by_default = 12;
   EntityCategory entity_category = 13;
@@ -957,13 +692,10 @@ message SensorStateResponse {
 
   fixed32 key = 1 [(force) = true];
   float state = 2;
-  // If the sensor does not have a valid state yet.
-  // Equivalent to `!obj->has_state()` - inverse logic to make state packets smaller
   bool missing_state = 3;
   uint32 device_id = 4 [(field_ifdef) = "USE_DEVICES"];
 }
 
-// ==================== SWITCH ====================
 message ListEntitiesSwitchResponse {
   option (id) = 17;
   option (base_class) = "InfoResponseProtoMessage";
@@ -973,7 +705,7 @@ message ListEntitiesSwitchResponse {
   string object_id = 1 [(max_data_length) = 120, (force) = true];
   fixed32 key = 2 [(force) = true];
   string name = 3 [(max_data_length) = 120, (force) = true, (progmem) = true];
-  reserved 4; // Deprecated: was string unique_id
+  reserved 4;
 
   string icon = 5 [(field_ifdef) = "USE_ENTITY_ICON", (max_data_length) = 63, (progmem) = true];
   bool assumed_state = 6;
@@ -992,8 +724,6 @@ message SwitchStateResponse {
   fixed32 key = 1 [(force) = true];
   bool state = 2;
   uint32 device_id = 3 [(field_ifdef) = "USE_DEVICES"];
-  // If the switch does not have a valid state yet.
-  // Equivalent to `!obj->has_state()` - inverse logic to make state packets smaller
   bool missing_state = 4;
 }
 message SwitchCommandRequest {
@@ -1008,7 +738,6 @@ message SwitchCommandRequest {
   uint32 device_id = 3 [(field_ifdef) = "USE_DEVICES"];
 }
 
-// ==================== TEXT SENSOR ====================
 message ListEntitiesTextSensorResponse {
   option (id) = 18;
   option (base_class) = "InfoResponseProtoMessage";
@@ -1018,7 +747,7 @@ message ListEntitiesTextSensorResponse {
   string object_id = 1 [(max_data_length) = 120, (force) = true];
   fixed32 key = 2 [(force) = true];
   string name = 3 [(max_data_length) = 120, (force) = true, (progmem) = true];
-  reserved 4; // Deprecated: was string unique_id
+  reserved 4;
 
   string icon = 5 [(field_ifdef) = "USE_ENTITY_ICON", (max_data_length) = 63, (progmem) = true];
   bool disabled_by_default = 6;
@@ -1035,13 +764,10 @@ message TextSensorStateResponse {
 
   fixed32 key = 1 [(force) = true];
   string state = 2;
-  // If the text sensor does not have a valid state yet.
-  // Equivalent to `!obj->has_state()` - inverse logic to make state packets smaller
   bool missing_state = 3;
   uint32 device_id = 4 [(field_ifdef) = "USE_DEVICES"];
 }
 
-// ==================== SUBSCRIBE LOGS ====================
 enum LogLevel {
   LOG_LEVEL_NONE = 0;
   LOG_LEVEL_ERROR = 1;
@@ -1069,7 +795,6 @@ message SubscribeLogsResponse {
   bytes message = 3 [(force) = true];
 }
 
-// ==================== NOISE ENCRYPTION ====================
 message NoiseEncryptionSetKeyRequest {
   option (id) = 124;
   option (source) = SOURCE_CLIENT;
@@ -1086,7 +811,6 @@ message NoiseEncryptionSetKeyResponse {
   bool success = 1;
 }
 
-// ==================== HOMEASSISTANT.SERVICE ====================
 message SubscribeHomeassistantServicesRequest {
   option (id) = 34;
   option (source) = SOURCE_CLIENT;
@@ -1114,23 +838,18 @@ message HomeassistantActionRequest {
   string response_template = 8 [(field_ifdef) = "USE_API_HOMEASSISTANT_ACTION_RESPONSES_JSON"];
 }
 
-// Message sent by Home Assistant to ESPHome with service call response data
 message HomeassistantActionResponse {
   option (id) = 130;
   option (source) = SOURCE_CLIENT;
   option (no_delay) = true;
   option (ifdef) = "USE_API_HOMEASSISTANT_ACTION_RESPONSES";
 
-  uint32 call_id = 1; // Matches the call_id from HomeassistantActionRequest
-  bool success = 2; // Whether the service call succeeded
-  string error_message = 3; // Error message if success = false
+  uint32 call_id = 1;
+  bool success = 2;
+  string error_message = 3;
   bytes response_data = 4 [(field_ifdef) = "USE_API_HOMEASSISTANT_ACTION_RESPONSES_JSON"];
 }
 
-// ==================== IMPORT HOME ASSISTANT STATES ====================
-// 1. Client sends SubscribeHomeAssistantStatesRequest
-// 2. Server responds with zero or more SubscribeHomeAssistantStateResponse (async)
-// 3. Client sends HomeAssistantStateResponse for state changes.
 message SubscribeHomeAssistantStatesRequest {
   option (id) = 38;
   option (source) = SOURCE_CLIENT;
@@ -1157,7 +876,6 @@ message HomeAssistantStateResponse {
   string attribute = 3;
 }
 
-// ==================== IMPORT TIME ====================
 message GetTimeRequest {
   option (id) = 36;
   option (source) = SOURCE_SERVER;
@@ -1196,15 +914,10 @@ message GetTimeResponse {
   option (no_delay) = true;
 
   fixed32 epoch_seconds = 1;
-  // Deprecated in 2026.9.0: clients still send this string for older firmware,
-  // but new firmware only reads parsed_timezone. Clients older than Home
-  // Assistant 2026.3.0 that send only the string leave the device on its
-  // codegen-configured timezone (or UTC).
   string timezone = 2 [deprecated = true];
   ParsedTimezone parsed_timezone = 3 [(track_presence) = true];
 }
 
-// ==================== USER-DEFINES SERVICES ====================
 enum ServiceArgType {
   SERVICE_ARG_TYPE_BOOL = 0;
   SERVICE_ARG_TYPE_INT = 1;
@@ -1219,8 +932,6 @@ enum SupportsResponseType {
   SUPPORTS_RESPONSE_NONE = 0;
   SUPPORTS_RESPONSE_OPTIONAL = 1;
   SUPPORTS_RESPONSE_ONLY = 2;
-  // Status-only response - reports success/error without data payload
-  // Value is higher to avoid conflicts with future Home Assistant values
   SUPPORTS_RESPONSE_STATUS = 100;
 }
 message ListEntitiesServicesArgument {
@@ -1229,9 +940,7 @@ message ListEntitiesServicesArgument {
   ServiceArgType type = 2;
   string description = 3 [(field_ifdef) = "USE_API_USER_DEFINED_ACTION_METADATA", (progmem) = true];
   string example = 4 [(field_ifdef) = "USE_API_USER_DEFINED_ACTION_METADATA", (progmem) = true];
-  // Advisory: ExecuteServiceRequest still requires every argument
   bool optional = 5 [(field_ifdef) = "USE_API_USER_DEFINED_ACTION_OPTIONAL_ARGS"];
-  // Always text: bool "true"/"false", numbers parseable as int/float; empty means no default
   string default_value = 6 [(field_ifdef) = "USE_API_USER_DEFINED_ACTION_OPTIONAL_ARGS", (progmem) = true];
 }
 message ListEntitiesServicesResponse {
@@ -1251,7 +960,6 @@ message ExecuteServiceArgument {
   int32 legacy_int = 2;
   float float_ = 3;
   string string_ = 4;
-  // ESPHome 1.14 (api v1.3) make int a signed value
   sint32 int_ = 5;
   repeated bool bool_array = 6 [packed=false, (fixed_vector) = true];
   repeated sint32 int_array = 7 [packed=false, (fixed_vector) = true];
@@ -1270,20 +978,18 @@ message ExecuteServiceRequest {
   bool return_response = 4 [(field_ifdef) = "USE_API_USER_DEFINED_ACTION_RESPONSES"];
 }
 
-// Message sent by ESPHome to Home Assistant with service execution response data
 message ExecuteServiceResponse {
   option (id) = 131;
   option (source) = SOURCE_SERVER;
   option (no_delay) = true;
   option (ifdef) = "USE_API_USER_DEFINED_ACTION_RESPONSES";
 
-  uint32 call_id = 1; // Matches the call_id from ExecuteServiceRequest
-  bool success = 2; // Whether the service execution succeeded
-  string error_message = 3; // Error message if success = false
+  uint32 call_id = 1;
+  bool success = 2;
+  string error_message = 3;
   bytes response_data = 4 [(pointer_to_buffer) = true, (field_ifdef) = "USE_API_USER_DEFINED_ACTION_RESPONSES_JSON"];
 }
 
-// ==================== CAMERA ====================
 message ListEntitiesCameraResponse {
   option (id) = 43;
   option (base_class) = "InfoResponseProtoMessage";
@@ -1293,7 +999,7 @@ message ListEntitiesCameraResponse {
   string object_id = 1 [(max_data_length) = 120, (force) = true];
   fixed32 key = 2 [(force) = true];
   string name = 3 [(max_data_length) = 120, (force) = true, (progmem) = true];
-  reserved 4; // Deprecated: was string unique_id
+  reserved 4;
   bool disabled_by_default = 5;
   string icon = 6 [(field_ifdef) = "USE_ENTITY_ICON", (max_data_length) = 63, (progmem) = true];
   EntityCategory entity_category = 7;
@@ -1321,14 +1027,12 @@ message CameraImageRequest {
   bool stream = 2;
 }
 
-// ==================== TEMPERATURE UNIT ====================
 enum TemperatureUnit {
   TEMPERATURE_UNIT_CELSIUS = 0;
   TEMPERATURE_UNIT_FAHRENHEIT = 1;
   TEMPERATURE_UNIT_KELVIN = 2;
 }
 
-// ==================== CLIMATE ====================
 enum ClimateMode {
   CLIMATE_MODE_OFF = 0;
   CLIMATE_MODE_HEAT_COOL = 1;
@@ -1358,7 +1062,6 @@ enum ClimateSwingMode {
 }
 enum ClimateAction {
   CLIMATE_ACTION_OFF = 0;
-  // values same as mode for readability
   CLIMATE_ACTION_COOLING = 2;
   CLIMATE_ACTION_HEATING = 3;
   CLIMATE_ACTION_IDLE = 4;
@@ -1385,19 +1088,16 @@ message ListEntitiesClimateResponse {
   string object_id = 1 [(max_data_length) = 120, (force) = true];
   fixed32 key = 2 [(force) = true];
   string name = 3 [(max_data_length) = 120, (force) = true, (progmem) = true];
-  reserved 4; // Deprecated: was string unique_id
+  reserved 4;
 
-  bool supports_current_temperature = 5; // Deprecated: use feature_flags
-  bool supports_two_point_target_temperature = 6; // Deprecated: use feature_flags
+  bool supports_current_temperature = 5;
+  bool supports_two_point_target_temperature = 6;
   repeated ClimateMode supported_modes = 7 [(container_pointer_no_template) = "climate::ClimateModeMask"];
   float visual_min_temperature = 8;
   float visual_max_temperature = 9;
   float visual_target_temperature_step = 10;
-  // for older peer versions - in new system this
-  // is if CLIMATE_PRESET_AWAY exists is supported_presets
-  // Deprecated in API version 1.5
   bool legacy_supports_away = 11 [deprecated=true];
-  bool supports_action = 12; // Deprecated: use feature_flags
+  bool supports_action = 12;
   repeated ClimateFanMode supported_fan_modes = 13 [(container_pointer_no_template) = "climate::ClimateFanModeMask"];
   repeated ClimateSwingMode supported_swing_modes = 14 [(container_pointer_no_template) = "climate::ClimateSwingModeMask"];
   repeated string supported_custom_fan_modes = 15 [(container_pointer_no_template) = "ConstVector<const char *, true>"];
@@ -1407,8 +1107,8 @@ message ListEntitiesClimateResponse {
   string icon = 19 [(field_ifdef) = "USE_ENTITY_ICON", (max_data_length) = 63, (progmem) = true];
   EntityCategory entity_category = 20;
   float visual_current_temperature_step = 21;
-  bool supports_current_humidity = 22; // Deprecated: use feature_flags
-  bool supports_target_humidity = 23; // Deprecated: use feature_flags
+  bool supports_current_humidity = 22;
+  bool supports_target_humidity = 23;
   float visual_min_humidity = 24;
   float visual_max_humidity = 25;
   uint32 device_id = 26 [(field_ifdef) = "USE_DEVICES"];
@@ -1428,8 +1128,6 @@ message ClimateStateResponse {
   float target_temperature = 4;
   float target_temperature_low = 5;
   float target_temperature_high = 6;
-  // For older peers, equal to preset == CLIMATE_PRESET_AWAY
-  // Deprecated in API version 1.5
   bool unused_legacy_away = 7 [deprecated=true];
   ClimateAction action = 8;
   ClimateFanMode fan_mode = 9;
@@ -1440,8 +1138,6 @@ message ClimateStateResponse {
   float current_humidity = 14;
   float target_humidity = 15;
   uint32 device_id = 16 [(field_ifdef) = "USE_DEVICES"];
-  // If the climate device does not have a valid state yet.
-  // Equivalent to `!obj->has_state()` - inverse logic to make state packets smaller
   bool missing_state = 17;
 }
 message ClimateCommandRequest {
@@ -1460,10 +1156,7 @@ message ClimateCommandRequest {
   float target_temperature_low = 7;
   bool has_target_temperature_high = 8;
   float target_temperature_high = 9;
-  // legacy, for older peers, newer ones should use CLIMATE_PRESET_AWAY in preset
-  // Deprecated in API version 1.5
   bool unused_has_legacy_away = 10 [deprecated=true];
-  // Deprecated in API version 1.5
   bool unused_legacy_away = 11 [deprecated=true];
   bool has_fan_mode = 12;
   ClimateFanMode fan_mode = 13;
@@ -1480,7 +1173,6 @@ message ClimateCommandRequest {
   uint32 device_id = 24 [(field_ifdef) = "USE_DEVICES"];
 }
 
-// ==================== WATER_HEATER ====================
 enum WaterHeaterMode {
   WATER_HEATER_MODE_OFF = 0;
   WATER_HEATER_MODE_ECO = 1;
@@ -1508,7 +1200,6 @@ message ListEntitiesWaterHeaterResponse {
   float max_temperature = 9;
   float target_temperature_step = 10;
   repeated WaterHeaterMode supported_modes = 11 [(container_pointer_no_template) = "water_heater::WaterHeaterModeMask"];
-  // Bitmask of WaterHeaterFeature flags
   uint32 supported_features = 12;
   TemperatureUnit temperature_unit = 13;
 }
@@ -1525,16 +1216,12 @@ message WaterHeaterStateResponse {
   float target_temperature = 3;
   WaterHeaterMode mode = 4;
   uint32 device_id = 5 [(field_ifdef) = "USE_DEVICES"];
-  // Bitmask of current state flags (bit 0 = away, bit 1 = on)
   uint32 state = 6;
   float target_temperature_low = 7;
   float target_temperature_high = 8;
-  // If the water heater does not have a valid state yet.
-  // Equivalent to `!obj->has_state()` - inverse logic to make state packets smaller
   bool missing_state = 9;
 }
 
-// Bitmask for WaterHeaterCommandRequest.has_fields
 enum WaterHeaterCommandHasField {
   WATER_HEATER_COMMAND_HAS_NONE = 0;
   WATER_HEATER_COMMAND_HAS_MODE = 1;
@@ -1554,18 +1241,15 @@ message WaterHeaterCommandRequest {
   option (base_class) = "CommandProtoMessage";
 
   fixed32 key = 1 [(force) = true];
-  // Bitmask of which fields are set (see WaterHeaterCommandHasField)
   uint32 has_fields = 2;
   WaterHeaterMode mode = 3;
   float target_temperature = 4;
   uint32 device_id = 5 [(field_ifdef) = "USE_DEVICES"];
-  // State flags bitmask (bit 0 = away, bit 1 = on)
   uint32 state = 6;
   float target_temperature_low = 7;
   float target_temperature_high = 8;
 }
 
-// ==================== NUMBER ====================
 enum NumberMode {
   NUMBER_MODE_AUTO = 0;
   NUMBER_MODE_BOX = 1;
@@ -1580,7 +1264,7 @@ message ListEntitiesNumberResponse {
   string object_id = 1 [(max_data_length) = 120, (force) = true];
   fixed32 key = 2 [(force) = true];
   string name = 3 [(max_data_length) = 120, (force) = true, (progmem) = true];
-  reserved 4; // Deprecated: was string unique_id
+  reserved 4;
 
   string icon = 5 [(field_ifdef) = "USE_ENTITY_ICON", (max_data_length) = 63, (progmem) = true];
   float min_value = 6;
@@ -1602,8 +1286,6 @@ message NumberStateResponse {
 
   fixed32 key = 1 [(force) = true];
   float state = 2;
-  // If the number does not have a valid state yet.
-  // Equivalent to `!obj->has_state()` - inverse logic to make state packets smaller
   bool missing_state = 3;
   uint32 device_id = 4 [(field_ifdef) = "USE_DEVICES"];
 }
@@ -1619,7 +1301,6 @@ message NumberCommandRequest {
   uint32 device_id = 3 [(field_ifdef) = "USE_DEVICES"];
 }
 
-// ==================== SELECT ====================
 message ListEntitiesSelectResponse {
   option (id) = 52;
   option (base_class) = "InfoResponseProtoMessage";
@@ -1629,7 +1310,7 @@ message ListEntitiesSelectResponse {
   string object_id = 1 [(max_data_length) = 120, (force) = true];
   fixed32 key = 2 [(force) = true];
   string name = 3 [(max_data_length) = 120, (force) = true, (progmem) = true];
-  reserved 4; // Deprecated: was string unique_id
+  reserved 4;
 
   string icon = 5 [(field_ifdef) = "USE_ENTITY_ICON", (max_data_length) = 63, (progmem) = true];
   repeated string options = 6 [(container_pointer_no_template) = "std::span<const char *const>"];
@@ -1646,8 +1327,6 @@ message SelectStateResponse {
 
   fixed32 key = 1 [(force) = true];
   string state = 2;
-  // If the select does not have a valid state yet.
-  // Equivalent to `!obj->has_state()` - inverse logic to make state packets smaller
   bool missing_state = 3;
   uint32 device_id = 4 [(field_ifdef) = "USE_DEVICES"];
 }
@@ -1663,7 +1342,6 @@ message SelectCommandRequest {
   uint32 device_id = 3 [(field_ifdef) = "USE_DEVICES"];
 }
 
-// ==================== SIREN ====================
 message ListEntitiesSirenResponse {
   option (id) = 55;
   option (base_class) = "InfoResponseProtoMessage";
@@ -1673,7 +1351,7 @@ message ListEntitiesSirenResponse {
   string object_id = 1 [(max_data_length) = 120, (force) = true];
   fixed32 key = 2 [(force) = true];
   string name = 3 [(max_data_length) = 120, (force) = true, (progmem) = true];
-  reserved 4; // Deprecated: was string unique_id
+  reserved 4;
 
   string icon = 5 [(field_ifdef) = "USE_ENTITY_ICON", (max_data_length) = 63, (progmem) = true];
   bool disabled_by_default = 6;
@@ -1713,7 +1391,6 @@ message SirenCommandRequest {
   uint32 device_id = 10 [(field_ifdef) = "USE_DEVICES"];
 }
 
-// ==================== LOCK ====================
 enum LockState {
   LOCK_STATE_NONE = 0;
   LOCK_STATE_LOCKED = 1;
@@ -1738,7 +1415,7 @@ message ListEntitiesLockResponse {
   string object_id = 1 [(max_data_length) = 120, (force) = true];
   fixed32 key = 2 [(force) = true];
   string name = 3 [(max_data_length) = 120, (force) = true, (progmem) = true];
-  reserved 4; // Deprecated: was string unique_id
+  reserved 4;
 
   string icon = 5 [(field_ifdef) = "USE_ENTITY_ICON", (max_data_length) = 63, (progmem) = true];
   bool disabled_by_default = 6;
@@ -1748,7 +1425,6 @@ message ListEntitiesLockResponse {
   bool supports_open = 9;
   bool requires_code = 10;
 
-  // Not yet implemented:
   string code_format = 11;
   uint32 device_id = 12 [(field_ifdef) = "USE_DEVICES"];
 }
@@ -1771,13 +1447,11 @@ message LockCommandRequest {
   fixed32 key = 1 [(force) = true];
   LockCommand command = 2;
 
-  // Not yet implemented:
   bool has_code = 3;
   string code = 4;
   uint32 device_id = 5 [(field_ifdef) = "USE_DEVICES"];
 }
 
-// ==================== BUTTON ====================
 message ListEntitiesButtonResponse {
   option (id) = 61;
   option (base_class) = "InfoResponseProtoMessage";
@@ -1787,7 +1461,7 @@ message ListEntitiesButtonResponse {
   string object_id = 1 [(max_data_length) = 120, (force) = true];
   fixed32 key = 2 [(force) = true];
   string name = 3 [(max_data_length) = 120, (force) = true, (progmem) = true];
-  reserved 4; // Deprecated: was string unique_id
+  reserved 4;
 
   string icon = 5 [(field_ifdef) = "USE_ENTITY_ICON", (max_data_length) = 63, (progmem) = true];
   bool disabled_by_default = 6;
@@ -1806,7 +1480,6 @@ message ButtonCommandRequest {
   uint32 device_id = 2 [(field_ifdef) = "USE_DEVICES"];
 }
 
-// ==================== MEDIA PLAYER ====================
 enum MediaPlayerState {
   MEDIA_PLAYER_STATE_NONE = 0;
   MEDIA_PLAYER_STATE_IDLE = 1;
@@ -1844,7 +1517,6 @@ message MediaPlayerSupportedFormat {
   uint32 num_channels = 3;
   MediaPlayerFormatPurpose purpose = 4;
   uint32 sample_bytes = 5;
-  // Constant bitrate in kbps for lossy formats; 0 means no preference
   uint32 bitrate = 6;
 }
 message ListEntitiesMediaPlayerResponse {
@@ -1856,13 +1528,12 @@ message ListEntitiesMediaPlayerResponse {
   string object_id = 1 [(max_data_length) = 120, (force) = true];
   fixed32 key = 2 [(force) = true];
   string name = 3 [(max_data_length) = 120, (force) = true, (progmem) = true];
-  reserved 4; // Deprecated: was string unique_id
+  reserved 4;
 
   string icon = 5 [(field_ifdef) = "USE_ENTITY_ICON", (max_data_length) = 63, (progmem) = true];
   bool disabled_by_default = 6;
   EntityCategory entity_category = 7;
 
-  // Deprecated in ESPHome 2026.9.0; use feature_flags instead.
   bool supports_pause = 8 [deprecated = true];
 
   repeated MediaPlayerSupportedFormat supported_formats = 9;
@@ -1906,7 +1577,6 @@ message MediaPlayerCommandRequest {
   uint32 device_id = 10 [(field_ifdef) = "USE_DEVICES"];
 }
 
-// ==================== BLUETOOTH ====================
 message SubscribeBluetoothLEAdvertisementsRequest {
   option (id) = 66;
   option (source) = SOURCE_CLIENT;
@@ -1915,15 +1585,12 @@ message SubscribeBluetoothLEAdvertisementsRequest {
   uint32 flags = 1;
 }
 
-// Deprecated - only used by deprecated BluetoothLEAdvertisementResponse
 message BluetoothServiceData {
   option deprecated = true;
   string uuid = 1;
-  // Deprecated in API version 1.7
-  repeated uint32 legacy_data = 2 [deprecated=true];  // Removed in api version 1.7
-  bytes data = 3;  // Added in api version 1.7
+  repeated uint32 legacy_data = 2 [deprecated=true];
+  bytes data = 3;
 }
-// Removed in ESPHome 2025.8.0 - use BluetoothLERawAdvertisementsResponse instead
 message BluetoothLEAdvertisementResponse {
   option deprecated = true;
   option (id) = 67;
@@ -1962,7 +1629,7 @@ message BluetoothLERawAdvertisementsResponse {
 }
 
 enum BluetoothDeviceRequestType {
-  BLUETOOTH_DEVICE_REQUEST_TYPE_CONNECT = 0 [deprecated = true]; // V1 removed, use V3 variants
+  BLUETOOTH_DEVICE_REQUEST_TYPE_CONNECT = 0 [deprecated = true];
   BLUETOOTH_DEVICE_REQUEST_TYPE_DISCONNECT = 1;
   BLUETOOTH_DEVICE_REQUEST_TYPE_PAIR = 2;
   BLUETOOTH_DEVICE_REQUEST_TYPE_UNPAIR = 3;
@@ -1978,7 +1645,7 @@ message BluetoothDeviceRequest {
 
   uint64 address = 1;
   BluetoothDeviceRequestType request_type = 2;
-  bool has_address_type = 3;  // Deprecated, should be removed in 2027.8 - https://github.com/esphome/esphome/pull/10318
+  bool has_address_type = 3;
   uint32 address_type = 4;
 }
 
@@ -2005,11 +1672,7 @@ message BluetoothGATTDescriptor {
   repeated uint64 uuid = 1 [(fixed_array_size) = 2, (fixed_array_skip_zero) = true];
   uint32 handle = 2;
 
-  // New field for efficient UUID (v1.12+)
-  // Only one of uuid or short_uuid will be set.
-  // short_uuid is used for both 16-bit and 32-bit UUIDs with v1.12+ clients.
-  // 128-bit UUIDs always use the uuid field for backwards compatibility.
-  uint32 short_uuid = 3;  // 16-bit or 32-bit UUID
+  uint32 short_uuid = 3;
 }
 
 message BluetoothGATTCharacteristic {
@@ -2018,11 +1681,7 @@ message BluetoothGATTCharacteristic {
   uint32 properties = 3;
   repeated BluetoothGATTDescriptor descriptors = 4 [(fixed_vector) = true];
 
-  // New field for efficient UUID (v1.12+)
-  // Only one of uuid or short_uuid will be set.
-  // short_uuid is used for both 16-bit and 32-bit UUIDs with v1.12+ clients.
-  // 128-bit UUIDs always use the uuid field for backwards compatibility.
-  uint32 short_uuid = 5;  // 16-bit or 32-bit UUID
+  uint32 short_uuid = 5;
 }
 
 message BluetoothGATTService {
@@ -2030,11 +1689,7 @@ message BluetoothGATTService {
   uint32 handle = 2;
   repeated BluetoothGATTCharacteristic characteristics = 3 [(fixed_vector) = true];
 
-  // New field for efficient UUID (v1.12+)
-  // Only one of uuid or short_uuid will be set.
-  // short_uuid is used for both 16-bit and 32-bit UUIDs with v1.12+ clients.
-  // 128-bit UUIDs always use the uuid field for backwards compatibility.
-  uint32 short_uuid = 4;  // 16-bit or 32-bit UUID
+  uint32 short_uuid = 4;
 }
 
 message BluetoothGATTGetServicesResponse {
@@ -2243,11 +1898,9 @@ message BluetoothScannerSetModeRequest {
   BluetoothScannerMode mode = 1;
 }
 
-// ==================== VOICE ASSISTANT ====================
 enum VoiceAssistantSubscribeFlag {
   VOICE_ASSISTANT_SUBSCRIBE_NONE = 0;
   VOICE_ASSISTANT_SUBSCRIBE_API_AUDIO = 1;
-  // Not 2 or 4: aioesphomeapi sends API audio as 1 << 2
   VOICE_ASSISTANT_SUBSCRIBE_WAKE_WORD_AUDIO = 8;
 }
 
@@ -2423,7 +2076,6 @@ message VoiceAssistantSetConfiguration {
   repeated string active_wake_words = 1;
 }
 
-// ==================== ALARM CONTROL PANEL ====================
 enum AlarmControlPanelState {
   ALARM_STATE_DISARMED = 0;
   ALARM_STATE_ARMED_HOME = 1;
@@ -2456,7 +2108,7 @@ message ListEntitiesAlarmControlPanelResponse {
   string object_id = 1 [(max_data_length) = 120, (force) = true];
   fixed32 key = 2 [(force) = true];
   string name = 3 [(max_data_length) = 120, (force) = true, (progmem) = true];
-  reserved 4; // Deprecated: was string unique_id
+  reserved 4;
   string icon = 5 [(field_ifdef) = "USE_ENTITY_ICON", (max_data_length) = 63, (progmem) = true];
   bool disabled_by_default = 6;
   EntityCategory entity_category = 7;
@@ -2489,7 +2141,6 @@ message AlarmControlPanelCommandRequest {
   uint32 device_id = 4 [(field_ifdef) = "USE_DEVICES"];
 }
 
-// ===================== TEXT =====================
 enum TextMode {
   TEXT_MODE_TEXT = 0;
   TEXT_MODE_PASSWORD = 1;
@@ -2503,7 +2154,7 @@ message ListEntitiesTextResponse {
   string object_id = 1 [(max_data_length) = 120, (force) = true];
   fixed32 key = 2 [(force) = true];
   string name = 3 [(max_data_length) = 120, (force) = true, (progmem) = true];
-  reserved 4; // Deprecated: was string unique_id
+  reserved 4;
   string icon = 5 [(field_ifdef) = "USE_ENTITY_ICON", (max_data_length) = 63, (progmem) = true];
   bool disabled_by_default = 6;
   EntityCategory entity_category = 7;
@@ -2523,8 +2174,6 @@ message TextStateResponse {
 
   fixed32 key = 1 [(force) = true];
   string state = 2;
-  // If the Text does not have a valid state yet.
-  // Equivalent to `!obj->has_state()` - inverse logic to make state packets smaller
   bool missing_state = 3;
   uint32 device_id = 4 [(field_ifdef) = "USE_DEVICES"];
 }
@@ -2541,7 +2190,6 @@ message TextCommandRequest {
 }
 
 
-// ==================== DATETIME DATE ====================
 message ListEntitiesDateResponse {
   option (id) = 100;
   option (base_class) = "InfoResponseProtoMessage";
@@ -2551,7 +2199,7 @@ message ListEntitiesDateResponse {
   string object_id = 1 [(max_data_length) = 120, (force) = true];
   fixed32 key = 2 [(force) = true];
   string name = 3 [(max_data_length) = 120, (force) = true, (progmem) = true];
-  reserved 4; // Deprecated: was string unique_id
+  reserved 4;
 
   string icon = 5 [(field_ifdef) = "USE_ENTITY_ICON", (max_data_length) = 63, (progmem) = true];
   bool disabled_by_default = 6;
@@ -2566,8 +2214,6 @@ message DateStateResponse {
   option (no_delay) = true;
 
   fixed32 key = 1 [(force) = true];
-  // If the date does not have a valid state yet.
-  // Equivalent to `!obj->has_state()` - inverse logic to make state packets smaller
   bool missing_state = 2;
   uint32 year = 3;
   uint32 month = 4;
@@ -2588,7 +2234,6 @@ message DateCommandRequest {
   uint32 device_id = 5 [(field_ifdef) = "USE_DEVICES"];
 }
 
-// ==================== DATETIME TIME ====================
 message ListEntitiesTimeResponse {
   option (id) = 103;
   option (base_class) = "InfoResponseProtoMessage";
@@ -2598,7 +2243,7 @@ message ListEntitiesTimeResponse {
   string object_id = 1 [(max_data_length) = 120, (force) = true];
   fixed32 key = 2 [(force) = true];
   string name = 3 [(max_data_length) = 120, (force) = true, (progmem) = true];
-  reserved 4; // Deprecated: was string unique_id
+  reserved 4;
 
   string icon = 5 [(field_ifdef) = "USE_ENTITY_ICON", (max_data_length) = 63, (progmem) = true];
   bool disabled_by_default = 6;
@@ -2613,8 +2258,6 @@ message TimeStateResponse {
   option (no_delay) = true;
 
   fixed32 key = 1 [(force) = true];
-  // If the time does not have a valid state yet.
-  // Equivalent to `!obj->has_state()` - inverse logic to make state packets smaller
   bool missing_state = 2;
   uint32 hour = 3;
   uint32 minute = 4;
@@ -2635,7 +2278,6 @@ message TimeCommandRequest {
   uint32 device_id = 5 [(field_ifdef) = "USE_DEVICES"];
 }
 
-// ==================== EVENT ====================
 message ListEntitiesEventResponse {
   option (id) = 107;
   option (base_class) = "InfoResponseProtoMessage";
@@ -2645,7 +2287,7 @@ message ListEntitiesEventResponse {
   string object_id = 1 [(max_data_length) = 120, (force) = true];
   fixed32 key = 2 [(force) = true];
   string name = 3 [(max_data_length) = 120, (force) = true, (progmem) = true];
-  reserved 4; // Deprecated: was string unique_id
+  reserved 4;
 
   string icon = 5 [(field_ifdef) = "USE_ENTITY_ICON", (max_data_length) = 63, (progmem) = true];
   bool disabled_by_default = 6;
@@ -2666,7 +2308,6 @@ message EventResponse {
   uint32 device_id = 3 [(field_ifdef) = "USE_DEVICES"];
 }
 
-// ==================== VALVE ====================
 message ListEntitiesValveResponse {
   option (id) = 109;
   option (base_class) = "InfoResponseProtoMessage";
@@ -2676,7 +2317,7 @@ message ListEntitiesValveResponse {
   string object_id = 1 [(max_data_length) = 120, (force) = true];
   fixed32 key = 2 [(force) = true];
   string name = 3 [(max_data_length) = 120, (force) = true, (progmem) = true];
-  reserved 4; // Deprecated: was string unique_id
+  reserved 4;
 
   string icon = 5 [(field_ifdef) = "USE_ENTITY_ICON", (max_data_length) = 63, (progmem) = true];
   bool disabled_by_default = 6;
@@ -2721,7 +2362,6 @@ message ValveCommandRequest {
   uint32 device_id = 5 [(field_ifdef) = "USE_DEVICES"];
 }
 
-// ==================== DATETIME DATETIME ====================
 message ListEntitiesDateTimeResponse {
   option (id) = 112;
   option (base_class) = "InfoResponseProtoMessage";
@@ -2731,7 +2371,7 @@ message ListEntitiesDateTimeResponse {
   string object_id = 1 [(max_data_length) = 120, (force) = true];
   fixed32 key = 2 [(force) = true];
   string name = 3 [(max_data_length) = 120, (force) = true, (progmem) = true];
-  reserved 4; // Deprecated: was string unique_id
+  reserved 4;
 
   string icon = 5 [(field_ifdef) = "USE_ENTITY_ICON", (max_data_length) = 63, (progmem) = true];
   bool disabled_by_default = 6;
@@ -2746,8 +2386,6 @@ message DateTimeStateResponse {
   option (no_delay) = true;
 
   fixed32 key = 1 [(force) = true];
-  // If the datetime does not have a valid state yet.
-  // Equivalent to `!obj->has_state()` - inverse logic to make state packets smaller
   bool missing_state = 2;
   fixed32 epoch_seconds = 3;
   uint32 device_id = 4 [(field_ifdef) = "USE_DEVICES"];
@@ -2764,7 +2402,6 @@ message DateTimeCommandRequest {
   uint32 device_id = 3 [(field_ifdef) = "USE_DEVICES"];
 }
 
-// ==================== UPDATE ====================
 message ListEntitiesUpdateResponse {
   option (id) = 116;
   option (base_class) = "InfoResponseProtoMessage";
@@ -2774,7 +2411,7 @@ message ListEntitiesUpdateResponse {
   string object_id = 1 [(max_data_length) = 120, (force) = true];
   fixed32 key = 2 [(force) = true];
   string name = 3 [(max_data_length) = 120, (force) = true, (progmem) = true];
-  reserved 4; // Deprecated: was string unique_id
+  reserved 4;
 
   string icon = 5 [(field_ifdef) = "USE_ENTITY_ICON", (max_data_length) = 63, (progmem) = true];
   bool disabled_by_default = 6;
@@ -2818,8 +2455,6 @@ message UpdateCommandRequest {
   uint32 device_id = 3 [(field_ifdef) = "USE_DEVICES"];
 }
 
-// ==================== Z-WAVE ====================
-
 message ZWaveProxyFrame {
   option (id) = 128;
   option (source) = SOURCE_BOTH;
@@ -2845,26 +2480,20 @@ message ZWaveProxyRequest {
 }
 
 enum ZWaveProxyStatus {
-  ZWAVE_PROXY_STATUS_OK = 0;             // Request completed successfully
-  ZWAVE_PROXY_STATUS_IN_USE = 1;         // Denied: another client is already subscribed
-  ZWAVE_PROXY_STATUS_NOT_SUPPORTED = 2;  // Request type not supported
+  ZWAVE_PROXY_STATUS_OK = 0;
+  ZWAVE_PROXY_STATUS_IN_USE = 1;
+  ZWAVE_PROXY_STATUS_NOT_SUPPORTED = 2;
 }
 
-// Acknowledges a ZWaveProxyRequest (subscribe/unsubscribe). Sent since API 1.16.
 message ZWaveProxyRequestResponse {
   option (id) = 151;
   option (source) = SOURCE_SERVER;
   option (ifdef) = "USE_ZWAVE_PROXY";
 
-  ZWaveProxyRequestType type = 1;  // Which request type this responds to
-  ZWaveProxyStatus status = 2;     // Result status
+  ZWaveProxyRequestType type = 1;
+  ZWaveProxyStatus status = 2;
 }
 
-// ==================== INFRARED ====================
-// Note: Feature and capability flag enums are defined in
-// esphome/components/infrared/infrared.h
-
-// Listing of infrared instances
 message ListEntitiesInfraredResponse {
   option (id) = 135;
   option (base_class) = "InfoResponseProtoMessage";
@@ -2878,25 +2507,23 @@ message ListEntitiesInfraredResponse {
   bool disabled_by_default = 5;
   EntityCategory entity_category = 6;
   uint32 device_id = 7 [(field_ifdef) = "USE_DEVICES"];
-  uint32 capabilities = 8;  // Bitfield of InfraredCapabilityFlags
-  uint32 receiver_frequency = 9;  // Demodulation frequency of the IR receiver in Hz (0 = unspecified)
+  uint32 capabilities = 8;
+  uint32 receiver_frequency = 9;
 }
 
-// Command to transmit infrared/RF data using raw timings
 message InfraredRFTransmitRawTimingsRequest {
   option (id) = 136;
   option (source) = SOURCE_CLIENT;
   option (ifdef) = "USE_IR_RF";
 
   uint32 device_id = 1 [(field_ifdef) = "USE_DEVICES"];
-  fixed32 key = 2 [(force) = true];     // Key identifying the transmitter instance
-  uint32 carrier_frequency = 3;         // Carrier frequency in Hz
-  uint32 repeat_count = 4;              // Number of times to transmit (1 = once, 2 = twice, etc.)
-  repeated sint32 timings = 5 [packed = true, (packed_buffer) = true];  // Raw timings in microseconds (zigzag-encoded): positive = mark (LED/TX on), negative = space (LED/TX off)
-  uint32 modulation = 6;  // RadioFrequencyModulation enum value (0 = OOK; ignored for IR entities)
+  fixed32 key = 2 [(force) = true];
+  uint32 carrier_frequency = 3;
+  uint32 repeat_count = 4;
+  repeated sint32 timings = 5 [packed = true, (packed_buffer) = true];
+  uint32 modulation = 6;
 }
 
-// Event message for received infrared/RF data
 message InfraredRFReceiveEvent {
   option (id) = 137;
   option (source) = SOURCE_SERVER;
@@ -2905,21 +2532,10 @@ message InfraredRFReceiveEvent {
   option (speed_optimized) = true;
 
   uint32 device_id = 1 [(field_ifdef) = "USE_DEVICES"];
-  fixed32 key = 2 [(force) = true];     // Key identifying the receiver instance
-  repeated sint32 timings = 3 [packed = true, (container_pointer_no_template) = "std::span<const int32_t>"];  // Raw timings in microseconds (zigzag-encoded): alternating mark/space periods
+  fixed32 key = 2 [(force) = true];
+  repeated sint32 timings = 3 [packed = true, (container_pointer_no_template) = "std::span<const int32_t>"];
 }
 
-// Sent only to the client that issued an InfraredRFTransmitRawTimingsRequest, once the
-// transmitter reports that the transmission (all repeats) has finished, or immediately with
-// success=false if it was refused before reaching the transmitter (unknown key, no transmitter,
-// no or invalid timings) or the transmitter could not send it (not set up, hardware error).
-// success=false also answers a request superseded by a newer request on the same entity, from
-// any client, and a transmit that reported nothing within 30 s past its expected air time, so a
-// client should not retry on it blindly. The device serializes transmits per transmitter and
-// several entities may share one, so a client should keep at most one transmit outstanding per
-// device, not per entity. A reply for an unknown key or a refused request is sent once and can be lost
-// when the device's send buffer is full, so a client should also stop waiting on its own after the
-// expected air time plus a margin. Lets clients pace requests instead of estimating durations (since API 1.18)
 message InfraredRFTransmitCompleteResponse {
   option (id) = 153;
   option (source) = SOURCE_SERVER;
@@ -2927,13 +2543,10 @@ message InfraredRFTransmitCompleteResponse {
   option (no_delay) = true;
 
   uint32 device_id = 1 [(field_ifdef) = "USE_DEVICES"];
-  fixed32 key = 2 [(force) = true];  // Key of the transmitter entity from the request
-  bool success = 3;                  // false if the request was refused, not sent, superseded, or never reported
+  fixed32 key = 2 [(force) = true];
+  bool success = 3;
 }
 
-// ==================== RADIO FREQUENCY ====================
-
-// Lists available radio frequency entity instances
 message ListEntitiesRadioFrequencyResponse {
   option (id) = 148;
   option (base_class) = "InfoResponseProtoMessage";
@@ -2947,13 +2560,11 @@ message ListEntitiesRadioFrequencyResponse {
   bool disabled_by_default = 5;
   EntityCategory entity_category = 6;
   uint32 device_id = 7 [(field_ifdef) = "USE_DEVICES"];
-  uint32 capabilities = 8;           // Bitmask of RadioFrequencyCapabilityFlags: bit 0 = transmitter, bit 1 = receiver
-  uint32 frequency_min = 9;          // Minimum tunable frequency in Hz; if min == max (non-zero): fixed frequency; 0 = unspecified
-  uint32 frequency_max = 10;         // Maximum tunable frequency in Hz; 0 = unspecified
-  uint32 supported_modulations = 11; // Bitmask of supported RadioFrequencyModulation values (bit N = modulation N supported)
+  uint32 capabilities = 8;
+  uint32 frequency_min = 9;
+  uint32 frequency_max = 10;
+  uint32 supported_modulations = 11;
 }
-
-// ==================== SERIAL PROXY ====================
 
 enum SerialProxyParity {
   SERIAL_PROXY_PARITY_NONE = 0;
@@ -2961,22 +2572,19 @@ enum SerialProxyParity {
   SERIAL_PROXY_PARITY_ODD = 2;
 }
 
-// Configure UART parameters for a serial proxy instance. Only the subscribed client may
-// configure the port; others are refused with PORT_IN_USE (since API 1.17).
 message SerialProxyConfigureRequest {
   option (id) = 138;
   option (source) = SOURCE_CLIENT;
   option (ifdef) = "USE_SERIAL_PROXY";
 
-  uint32 instance = 1;          // Instance index (0-based)
-  uint32 baudrate = 2;          // Baud rate in bits per second
-  bool flow_control = 3;        // Enable hardware flow control
-  SerialProxyParity parity = 4; // Parity setting
-  uint32 stop_bits = 5;         // Number of stop bits (1 or 2)
-  uint32 data_size = 6;         // Number of data bits (5-8)
+  uint32 instance = 1;
+  uint32 baudrate = 2;
+  bool flow_control = 3;
+  SerialProxyParity parity = 4;
+  uint32 stop_bits = 5;
+  uint32 data_size = 6;
 }
 
-// Data received from a serial device, forwarded to clients
 message SerialProxyDataReceived {
   option (id) = 139;
   option (source) = SOURCE_SERVER;
@@ -2984,114 +2592,91 @@ message SerialProxyDataReceived {
   option (no_delay) = true;
   option (speed_optimized) = true;
 
-  uint32 instance = 1;          // Instance index (0-based)
-  bytes data = 2;               // Raw data received from the serial device
+  uint32 instance = 1;
+  bytes data = 2;
 }
 
-// Write data to a serial device. Only the subscribed client may write; writes from
-// others are ignored (since API 1.17).
 message SerialProxyWriteRequest {
   option (id) = 140;
   option (source) = SOURCE_CLIENT;
   option (ifdef) = "USE_SERIAL_PROXY";
   option (no_delay) = true;
 
-  uint32 instance = 1;          // Instance index (0-based)
-  bytes data = 2;               // Raw data to write to the serial device
+  uint32 instance = 1;
+  bytes data = 2;
 }
 
-// Set modem control pin states (RTS and DTR). Only the subscribed client may set them;
-// others are refused with PORT_IN_USE (since API 1.17).
 message SerialProxySetModemPinsRequest {
   option (id) = 141;
   option (source) = SOURCE_CLIENT;
   option (ifdef) = "USE_SERIAL_PROXY";
 
-  uint32 instance = 1;          // Instance index (0-based)
-  uint32 line_states = 2;       // Bitmask of SerialProxyLineStateFlags
+  uint32 instance = 1;
+  uint32 line_states = 2;
 }
 
-// Request current modem control pin states
 message SerialProxyGetModemPinsRequest {
   option (id) = 142;
   option (source) = SOURCE_CLIENT;
   option (ifdef) = "USE_SERIAL_PROXY";
 
-  uint32 instance = 1;          // Instance index (0-based)
+  uint32 instance = 1;
 }
 
-// Response with current modem control pin states
 message SerialProxyGetModemPinsResponse {
   option (id) = 143;
   option (source) = SOURCE_SERVER;
   option (ifdef) = "USE_SERIAL_PROXY";
 
-  uint32 instance = 1;          // Instance index (0-based)
-  uint32 line_states = 2;       // Bitmask of SerialProxyLineStateFlags
-  SerialProxyStatus status = 3; // INVALID_ARGUMENT if the instance index is out of range (since API 1.16)
+  uint32 instance = 1;
+  uint32 line_states = 2;
+  SerialProxyStatus status = 3;
 }
 
 enum SerialProxyRequestType {
-  SERIAL_PROXY_REQUEST_TYPE_SUBSCRIBE = 0;   // Subscribe to receive data from this serial proxy instance
-  SERIAL_PROXY_REQUEST_TYPE_UNSUBSCRIBE = 1; // Unsubscribe from this serial proxy instance
-  SERIAL_PROXY_REQUEST_TYPE_FLUSH = 2;       // Flush the serial port (block until all TX data is sent)
-  // Values below are only valid in SerialProxyRequestResponse.type, identifying which
-  // operation is being acknowledged. Sending them in SerialProxyRequest.type is an
-  // error the device answers with INVALID_ARGUMENT.
-  SERIAL_PROXY_REQUEST_TYPE_CONFIGURE = 3;      // Acknowledges a SerialProxyConfigureRequest
-  SERIAL_PROXY_REQUEST_TYPE_SET_MODEM_PINS = 4; // Acknowledges a SerialProxySetModemPinsRequest
-  SERIAL_PROXY_REQUEST_TYPE_SET_MODE = 5;       // Acknowledges a SerialProxySetModeRequest (since API 1.17)
+  SERIAL_PROXY_REQUEST_TYPE_SUBSCRIBE = 0;
+  SERIAL_PROXY_REQUEST_TYPE_UNSUBSCRIBE = 1;
+  SERIAL_PROXY_REQUEST_TYPE_FLUSH = 2;
+  SERIAL_PROXY_REQUEST_TYPE_CONFIGURE = 3;
+  SERIAL_PROXY_REQUEST_TYPE_SET_MODEM_PINS = 4;
+  SERIAL_PROXY_REQUEST_TYPE_SET_MODE = 5;
 }
 
 enum SerialProxyStatus {
-  SERIAL_PROXY_STATUS_OK = 0;              // Completed successfully; TX drain confirmed
-  SERIAL_PROXY_STATUS_ASSUMED_SUCCESS = 1; // Platform cannot confirm TX drain; success assumed
-  SERIAL_PROXY_STATUS_ERROR = 2;           // Driver or hardware error
-  SERIAL_PROXY_STATUS_TIMEOUT = 3;         // Timed out before TX completed
-  SERIAL_PROXY_STATUS_NOT_SUPPORTED = 4;   // Request type not supported by this instance
-  SERIAL_PROXY_STATUS_PORT_IN_USE = 5;     // Denied: another client holds the port
-  SERIAL_PROXY_STATUS_INVALID_ARGUMENT = 6; // Invalid instance index or parameter value
+  SERIAL_PROXY_STATUS_OK = 0;
+  SERIAL_PROXY_STATUS_ASSUMED_SUCCESS = 1;
+  SERIAL_PROXY_STATUS_ERROR = 2;
+  SERIAL_PROXY_STATUS_TIMEOUT = 3;
+  SERIAL_PROXY_STATUS_NOT_SUPPORTED = 4;
+  SERIAL_PROXY_STATUS_PORT_IN_USE = 5;
+  SERIAL_PROXY_STATUS_INVALID_ARGUMENT = 6;
 }
 
-// Generic request message for simple serial proxy operations. FLUSH requires an active
-// subscription; it is refused with PORT_IN_USE otherwise (since API 1.17).
 message SerialProxyRequest {
   option (id) = 144;
   option (source) = SOURCE_CLIENT;
   option (ifdef) = "USE_SERIAL_PROXY";
 
-  uint32 instance = 1;                  // Instance index (0-based)
-  SerialProxyRequestType type = 2;      // Request type
+  uint32 instance = 1;
+  SerialProxyRequestType type = 2;
 }
 
-// Acknowledges a serial proxy operation; the type field identifies which
-// operation is being acknowledged. Flush has been acknowledged since the
-// message was introduced; all other acknowledgements are sent since API 1.16.
 message SerialProxyRequestResponse {
   option (id) = 147;
   option (source) = SOURCE_SERVER;
   option (ifdef) = "USE_SERIAL_PROXY";
 
-  uint32 instance = 1;                  // Instance index (0-based)
-  SerialProxyRequestType type = 2;      // Which request type this responds to
-  SerialProxyStatus status = 3;         // Result status
-  string error_message = 4;            // Additional detail on failure (optional)
+  uint32 instance = 1;
+  SerialProxyRequestType type = 2;
+  SerialProxyStatus status = 3;
+  string error_message = 4;
 }
 
-// How a port treats the bytes passing through it. RAW is a plain byte pipe; PROTOCOL
-// activates the port's protocol-aware tap (if one is configured), letting it observe
-// traffic and inject protocol bytes such as acknowledgements. Which protocol the tap
-// speaks is a property of the device configuration, discoverable from the tap
-// component's own API surface. A client that is about to flash firmware selects RAW
-// first, which definitively disables that injection.
 enum SerialProxyMode {
   SERIAL_PROXY_MODE_RAW = 0;
   SERIAL_PROXY_MODE_PROTOCOL = 1;
 }
 
-// Only the subscribed client may change the mode; any other caller -- including one that
-// never subscribed -- is refused with PORT_IN_USE. PROTOCOL is refused with NOT_SUPPORTED
-// when the port has no protocol-aware tap configured.
 message SerialProxySetModeRequest {
   option (id) = 152;
   option (source) = SOURCE_CLIENT;
@@ -3101,46 +2686,34 @@ message SerialProxySetModeRequest {
   SerialProxyMode mode = 2;
 }
 
-// Subscribe to the identity of every serial proxy port. The device answers with one
-// SerialProxyIdentity per port, then sends another whenever a port's identity changes,
-// for the life of the connection (since API 1.18).
 message SubscribeSerialProxyIdentityRequest {
   option (id) = 154;
   option (source) = SOURCE_CLIENT;
   option (ifdef) = "USE_SERIAL_PROXY";
 }
 
-// Where a port's identity comes from
 enum SerialProxyIdentitySource {
-  SERIAL_PROXY_IDENTITY_SOURCE_NONE = 0;        // The port carries no identity
-  SERIAL_PROXY_IDENTITY_SOURCE_CONFIGURED = 1;  // Reserved for identities stated in the device configuration; not sent yet
-  SERIAL_PROXY_IDENTITY_SOURCE_USB = 2;         // Read from the descriptors of the USB device behind the port;
-                                                // changes when a device is attached or removed
+  SERIAL_PROXY_IDENTITY_SOURCE_NONE = 0;
+  SERIAL_PROXY_IDENTITY_SOURCE_CONFIGURED = 1;
+  SERIAL_PROXY_IDENTITY_SOURCE_USB = 2;
 }
 
 enum SerialProxyIdentityFlag {
   SERIAL_PROXY_IDENTITY_FLAG_NONE = 0;
-  SERIAL_PROXY_IDENTITY_FLAG_CONNECTED = 1;  // The backend believes the device is present and usable on this port
-  SERIAL_PROXY_IDENTITY_FLAG_ERROR = 2;      // The USB host stack refused the descriptor query; the strings and
-                                             // IDs below are empty
+  SERIAL_PROXY_IDENTITY_FLAG_CONNECTED = 1;
+  SERIAL_PROXY_IDENTITY_FLAG_ERROR = 2;
 }
 
-// The descriptor fields of a USB device as seen by the host stack, and the port's index
-// among those a vendor driver exposes on the interface
 message UsbDeviceDescriptor {
   uint32 vendor_id = 1;
   uint32 product_id = 2;
   uint32 bcd_device = 3;
-  uint32 interface_number = 4;  // bInterfaceNumber the port is bound through
-  uint32 interface_class = 5;   // bInterfaceClass of that interface
+  uint32 interface_number = 4;
+  uint32 interface_class = 5;
   uint32 port_number = 6;
-  string interface_description = 7;  // iInterface string of that interface, empty when it has none
+  string interface_description = 7;
 }
 
-// The identity of the device behind a port. Identifies one physical device among others of
-// the same kind, so a client matches on manufacturer and product regardless of source. The
-// strings are empty for source NONE, and for source USB while nothing is connected
-// (since API 1.18).
 message SerialProxyIdentity {
   option (id) = 155;
   option (source) = SOURCE_SERVER;
@@ -3148,24 +2721,23 @@ message SerialProxyIdentity {
 
   uint32 instance = 1;
   SerialProxyIdentitySource source = 2;
-  uint32 flags = 3;               // Bitmask of SerialProxyIdentityFlag
+  uint32 flags = 3;
   string manufacturer = 4;
   string product = 5;
   string serial_number = 6;
-  UsbDeviceDescriptor usb = 7;    // Only sent for source USB
+  UsbDeviceDescriptor usb = 7;
 }
 
-// ==================== BLUETOOTH CONNECTION PARAMS ====================
 message BluetoothSetConnectionParamsRequest {
   option (id) = 145;
   option (source) = SOURCE_CLIENT;
   option (ifdef) = "USE_BLUETOOTH_PROXY_CONNECTIONS";
 
   uint64 address = 1;
-  uint32 min_interval = 2;  // units of 1.25ms
-  uint32 max_interval = 3;  // units of 1.25ms
+  uint32 min_interval = 2;
+  uint32 max_interval = 3;
   uint32 latency = 4;
-  uint32 timeout = 5;       // units of 10ms
+  uint32 timeout = 5;
 }
 
 message BluetoothSetConnectionParamsResponse {
@@ -3177,25 +2749,18 @@ message BluetoothSetConnectionParamsResponse {
   int32 error = 2;
 }
 
-// ==================== SENDSPIN ====================
 enum SendspinPairingTokenStatus {
-  // The Sendspin client has not started yet, so the token does not exist yet. Ask again later.
   SENDSPIN_PAIRING_TOKEN_STATUS_NOT_READY = 0;
   SENDSPIN_PAIRING_TOKEN_STATUS_OK = 1;
-  // The device has no API encryption key, so it will not send the token. Ask again once a key is set.
   SENDSPIN_PAIRING_TOKEN_STATUS_ENCRYPTION_REQUIRED = 2;
-  // Sendspin is turned off and has not started since boot, so the token does not exist yet.
   SENDSPIN_PAIRING_TOKEN_STATUS_DISABLED = 3;
-  // The Sendspin client failed to start, and will not start until the device reboots.
   SENDSPIN_PAIRING_TOKEN_STATUS_FAILED = 4;
 }
 
-// Requests the Sendspin pairing token, which a Sendspin server uses to pair with this device
 message SendspinPairingTokenRequest {
   option (id) = 159;
   option (source) = SOURCE_CLIENT;
   option (ifdef) = "USE_SENDSPIN";
-  // Empty
 }
 
 message SendspinPairingTokenResponse {
@@ -3204,13 +2769,9 @@ message SendspinPairingTokenResponse {
   option (ifdef) = "USE_SENDSPIN";
 
   SendspinPairingTokenStatus status = 1;
-  // The pairing token (Sendspin pairing.md "Pairing Token"). Set only when status is OK.
   string token = 2 [(max_data_length) = 127];
 }
 
-// ==================== STORE YAML ====================
-// Streams the compressed user YAML embedded in firmware; the client decompresses.
-// A GetYamlRequest during an active transfer is ignored; reconnect to restart.
 message GetYamlRequest {
   option (id) = 161;
   option (source) = SOURCE_CLIENT;
@@ -3223,9 +2784,7 @@ message GetYamlResponse {
   option (source) = SOURCE_SERVER;
   option (ifdef) = "USE_STORE_YAML";
 
-  // A zstd frame of the EHY1 file envelope, sent from flash
   bytes data = 1 [(force) = true, (pointer_to_buffer) = true, (progmem) = true];
   bool done = 2 [(force) = true];
-  // Set on the first chunk only
   uint32 total_size = 3;
 }

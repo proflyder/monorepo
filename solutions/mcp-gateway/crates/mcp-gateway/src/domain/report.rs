@@ -1,10 +1,3 @@
-//! The full `infra_report`: service classification and the Telegram text.
-//!
-//! Ports `internal/tools/fullreport.go`. The caller fetches workloads, pods,
-//! checks and alerts; this module derives every service status, the verdict and
-//! a ready-to-send plain-text message (problems first, header in the configured
-//! timezone, at most [`REPORT_TEXT_CAP`] runes).
-
 use std::fmt::Write as _;
 
 use jiff::Timestamp;
@@ -15,51 +8,32 @@ use super::alert::{self, Alert, AlertDetail};
 use super::catalog::{self, Catalog, Service};
 use super::status::{CheckResult, check_issue};
 
-/// Keeps the Telegram-ready report below the message budget.
 pub const REPORT_TEXT_CAP: usize = 3500;
 
-/// Report group for cluster-wide checks that are not catalog services.
 pub const PLATFORM_GROUP: &str = "Платформа";
-/// Report-only service id of the Flux consistency check.
 pub const SERVICE_FLUX: &str = "flux";
-/// Report-only service id of the catalog coverage check.
 pub const SERVICE_CATALOG: &str = "catalog";
 
-/// Healthy service.
 pub const STATUS_OK: &str = "ok";
-/// Partially working service.
 pub const STATUS_DEGRADED: &str = "degraded";
-/// Down service.
 pub const STATUS_DOWN: &str = "down";
-/// State could not be determined.
 pub const STATUS_UNKNOWN: &str = "unknown";
 
-/// One Kubernetes workload observation.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkloadState {
-    /// Namespace.
     pub namespace: String,
-    /// Workload kind.
     pub kind: String,
-    /// Workload name.
     pub name: String,
-    /// Metadata generation.
     pub generation: i64,
-    /// Observed generation.
     pub observed_generation: i64,
-    /// Desired replicas.
     pub desired: i64,
-    /// Updated replicas.
     pub updated: i64,
-    /// Ready replicas.
     pub ready: i64,
-    /// Available replicas.
     pub available: i64,
 }
 
 impl WorkloadState {
-    /// Whether the workload has all desired replicas available.
     #[must_use]
     pub fn available_ok(&self) -> bool {
         if self.desired == 0 {
@@ -68,8 +42,6 @@ impl WorkloadState {
         self.available >= self.desired && self.ready >= self.desired
     }
 
-    /// Whether the controller has not yet observed the current generation or
-    /// not all replicas are updated.
     #[must_use]
     pub fn rollout_in_progress(&self) -> bool {
         if self.observed_generation != 0
@@ -82,160 +54,103 @@ impl WorkloadState {
     }
 }
 
-/// One container of a pod.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ContainerState {
-    /// Container name.
     pub name: String,
-    /// Container image.
     #[serde(default)]
     pub image: String,
-    /// Whether the container is ready.
     #[serde(default)]
     pub ready: bool,
-    /// Restart count.
     #[serde(default)]
     pub restart_count: i32,
-    /// Container waiting reason.
     #[serde(default)]
     pub waiting_reason: String,
-    /// Last termination time.
     #[serde(skip)]
     pub last_terminated_at: Option<Timestamp>,
 }
 
-/// One normalized pod observation.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PodState {
-    /// Namespace.
     pub namespace: String,
-    /// Pod name.
     pub name: String,
-    /// Whether the pod is ready.
     #[serde(default)]
     pub ready: bool,
-    /// Pod start time.
     #[serde(skip)]
     pub start_time: Option<Timestamp>,
-    /// Containers.
     #[serde(default)]
     pub containers: Vec<ContainerState>,
 }
 
-/// What the caller managed to fetch for one catalog service.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ServiceProbe {
-    /// `None` means Kubernetes is not configured, `Some(Err)` a read error.
     pub workload: Option<Result<WorkloadState, String>>,
-    /// `None` means pods were not fetched, `Some(Err)` a read error.
     pub pods: Option<Result<Vec<PodState>, String>>,
-    /// Results of the catalog checks of this service.
     pub checks: Vec<CheckResult>,
-    /// Whether the external checker is configured at all.
     pub checks_configured: bool,
 }
 
-/// Everything `infra_report` needs, already fetched.
 #[derive(Debug, Clone)]
 pub struct ReportInput<'a> {
-    /// Validated catalog.
     pub catalog: &'a Catalog,
-    /// Check time.
     pub now: Timestamp,
-    /// Report timezone.
     pub timezone: TimeZone,
-    /// One probe per catalog service, in catalog order.
     pub probes: Vec<ServiceProbe>,
-    /// All active alerts.
     pub alerts: Vec<Alert>,
-    /// Errors that made the check partial.
     pub errors: Vec<String>,
-    /// Append the versions section.
     pub verbose: bool,
-    /// `None` when Kubernetes is not configured; used by the coverage check.
     pub workloads: Option<Result<Vec<WorkloadRef>, String>>,
-    /// `None` when Kubernetes is not configured; used by the Flux check.
     pub flux: Option<Result<Vec<FluxResource>, String>>,
 }
 
-/// One workload that exists in the cluster, used by the coverage check.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkloadRef {
-    /// Namespace.
     pub namespace: String,
-    /// Deployment, StatefulSet or DaemonSet.
     pub kind: String,
-    /// Object name.
     pub name: String,
 }
 
-/// One Flux Kustomization or HelmRelease as observed through the Kubernetes API.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FluxResource {
-    /// Kustomization or HelmRelease.
     pub kind: String,
-    /// Namespace.
     pub namespace: String,
-    /// Object name.
     pub name: String,
-    /// `Ready=True`.
     pub ready: bool,
-    /// Deliberately paused; never a problem.
     pub suspended: bool,
-    /// Ready condition reason and message.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub message: String,
 }
 
-/// One service in the structured report.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ServiceReport {
-    /// Catalog id.
     pub id: String,
-    /// Display name.
     pub name: String,
-    /// Report group.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub group: String,
-    /// Service kind.
     pub kind: String,
-    /// Namespace.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub namespace: String,
-    /// Health status.
     pub status: String,
-    /// Ready replicas.
     #[serde(default, skip_serializing_if = "is_zero")]
     pub ready: i64,
-    /// Desired replicas.
     #[serde(default, skip_serializing_if = "is_zero")]
     pub desired: i64,
-    /// Container restarts in the last hour.
     pub restarts_last_hour: i64,
-    /// Representative image.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub image: String,
-    /// Human age of the oldest pod.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub age: String,
-    /// Check results.
     pub checks: Vec<CheckResult>,
-    /// Versions collected from checks.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub versions: Vec<String>,
-    /// Related alert summaries.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub alerts: Vec<String>,
-    /// Human issues.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub issues: Vec<String>,
-    /// Short informational suffix, for example the number of suspended Flux
-    /// resources. Never a problem by itself.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub note: String,
 }
@@ -244,46 +159,26 @@ fn is_zero(value: &i64) -> bool {
     *value == 0
 }
 
-/// An empty successful list means there is nothing to check; the synthetic
-/// entry is omitted so a backend that has not been queried does not shift the
-/// report totals. Errors always become visible.
 fn is_empty_ok<T>(result: &Result<Vec<T>, String>) -> bool {
     matches!(result, Ok(items) if items.is_empty())
 }
 
-/// The whole `infra_report` detail.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ReportDetail {
-    /// Spoken verdict.
     pub verdict: String,
-    /// RFC3339 UTC check time.
     pub checked_at: String,
-    /// Total services.
     pub total: i64,
-    /// Healthy services.
     pub ok: i64,
-    /// Problem services.
     pub problems: i64,
-    /// Services whose state could not be determined.
     pub unknown: i64,
-    /// Active, non-ignored alerts.
     pub alerts: Vec<AlertDetail>,
-    /// Per-service reports.
     pub services: Vec<ServiceReport>,
-    /// Telegram-ready text.
     pub text: String,
-    /// Errors that made the check partial.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub errors: Vec<String>,
 }
 
-/// Builds the full report detail and its Telegram text.
-///
-/// # Panics
-///
-/// Panics when `probes` does not have exactly one entry per catalog service;
-/// that is a programming error of the caller, not deployment data.
 #[must_use]
 pub fn build_report(input: &ReportInput<'_>) -> ReportDetail {
     assert_eq!(
@@ -465,8 +360,6 @@ fn collect_workload_report(
     item
 }
 
-/// The Flux consistency entry: every Kustomization and HelmRelease must be
-/// `Ready=True`; a suspended resource is reported but is never a problem.
 fn collect_flux_report(flux: &Result<Vec<FluxResource>, String>) -> ServiceReport {
     let mut item = ServiceReport {
         id: SERVICE_FLUX.to_owned(),
@@ -514,10 +407,6 @@ fn collect_flux_report(flux: &Result<Vec<FluxResource>, String>) -> ServiceRepor
     item
 }
 
-/// The catalog coverage entry: every workload in the cluster must either be a
-/// catalog service or be listed in the catalog's `ignore_workloads`. This is
-/// what makes the report self-maintaining — a service deployed without a
-/// catalog entry shows up as a problem on the next run.
 fn collect_coverage_report(
     catalog: &Catalog,
     workloads: &Result<Vec<WorkloadRef>, String>,
@@ -566,7 +455,6 @@ fn collect_coverage_report(
     item
 }
 
-/// Merges check results into the workload-derived status.
 fn classify_service(item: &mut ServiceReport, service: &Service) {
     let mut evaluated = 0i64;
     let mut failed = 0i64;
@@ -627,8 +515,6 @@ fn report_verdict(detail: &ReportDetail) -> String {
     )
 }
 
-/// The second line of the Telegram text: a short verdict with an emoji. It
-/// never asks a question; the offered follow-up lives in speech.
 fn report_headline(detail: &ReportDetail) -> String {
     if detail.problems == 0 {
         let mut line = format!("✅ Всё работает: {} из {}", detail.ok, detail.total);
@@ -762,8 +648,6 @@ fn problem_facts(service: &ServiceReport, reason: &str) -> Vec<String> {
     for issue in &service.issues {
         push_fact(&mut facts, issue, reason);
     }
-    // Missing catalog entries must stay visible: cap them far above the usual
-    // five facts and let the report character budget bound the text.
     let limit = if service.kind == SERVICE_CATALOG {
         20
     } else {
@@ -783,8 +667,6 @@ fn push_fact(facts: &mut Vec<String>, value: &str, reason: &str) {
 
 type ReportGroup<'a> = (String, Vec<&'a ServiceReport>);
 
-/// Keeps the catalog group order: first `group_order`, then any group that only
-/// appears in services in first-appearance order.
 fn report_groups<'a>(detail: &'a ReportDetail, catalog: &Catalog) -> Vec<ReportGroup<'a>> {
     let mut groups: Vec<ReportGroup<'a>> = Vec::new();
     let mut index: Vec<(String, usize)> = Vec::new();
@@ -824,8 +706,6 @@ fn push_group<'a>(
     groups.push((name.to_owned(), vec![service]));
 }
 
-/// One short line per group of healthy services. Groups with more than five
-/// healthy services collapse to a count so the report stays scannable.
 fn normal_group_lines(detail: &ReportDetail, catalog: &Catalog) -> Vec<String> {
     let mut lines = Vec::new();
     for (name, services) in report_groups(detail, catalog) {
@@ -871,11 +751,6 @@ fn version_lines(detail: &ReportDetail) -> Vec<String> {
     lines
 }
 
-/// The catalog group of a service.
-///
-/// When the catalog does not set one, Kubernetes services fall back to their
-/// namespace and external services to their host title or address; a raw
-/// address is only a last resort for catalogs that predate the group field.
 #[must_use]
 pub fn service_group(service: &Service) -> String {
     let group = service.group.trim();
@@ -928,10 +803,6 @@ fn cap_report(text: &str) -> String {
     format!("{}\n… отчёт сокращён", cut.trim())
 }
 
-/// Chooses the image that represents the workload, not a sidecar.
-///
-/// Preference: the catalog `containers[0]`, then the container named after the
-/// workload (or its suffix after the last dash), then pod spec order.
 #[must_use]
 pub fn pick_image(pod: &PodState, service: &Service) -> String {
     if let Some(container) = service.containers.first()
@@ -968,7 +839,6 @@ fn image_of_container(pod: &PodState, name: &str) -> Option<String> {
         .map(|container| container.image.clone())
 }
 
-/// Shortens an image to its last path segment, keeping eight digest characters.
 #[must_use]
 pub fn short_image(image: &str) -> String {
     let image = image.trim();
@@ -1043,7 +913,6 @@ mod tests {
                 "HelmRelease flux-system/runtime: health check failed",
             ]
         );
-        // A suspended resource is shown but never reported as a problem.
         assert_eq!(entry.note, "приостановлено 1");
     }
 

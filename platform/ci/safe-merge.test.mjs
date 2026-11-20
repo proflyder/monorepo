@@ -1,8 +1,3 @@
-// Unit tests for the safe squash-merge flow.
-//
-// No network, no GitHub: every `gh` call is a scripted fake `exec`, and time
-// is an injected counter. The tests cover the decision functions (state,
-// behind, checks) and the whole flow (refresh, wait, re-check, merge, deploy).
 import assert from "node:assert/strict";
 import test from "node:test";
 
@@ -43,11 +38,6 @@ const passChecks = {
   check_runs: [{ id: 2, name: "ci-ok", status: "completed", conclusion: "success" }],
 };
 
-/**
- * Scripted `gh` fake. `compares` are successive compare responses, `checks`
- * successive check-runs responses, `runs` successive `gh run list` responses,
- * `developShas` successive `develop` refs; the last value repeats.
- */
 function fakeGh({
   view,
   compares = [0],
@@ -197,7 +187,6 @@ test("checkPull accepts only an OPEN PR into develop with a full head", () => {
   assert.throws(() => checkPull(pullView({ baseRefName: "main" })), /not 'develop'/);
   assert.throws(() => checkPull(pullView({ headRefOid: "abc" })), /full head commit/);
   assert.throws(() => checkPull(pullView({ mergeable: "CONFLICTING" })), /conflicts with develop/);
-  // UNKNOWN is fine: GitHub computes mergeability lazily.
   assert.equal(checkPull(pullView({ mergeable: "UNKNOWN" })).head, HEAD);
 });
 
@@ -223,12 +212,10 @@ test("decideChecks needs a completed success and keeps pending waiting", () => {
   ]);
   assert.equal(failed.state, "fail");
   assert.equal(failed.url, "https://x");
-  // Other checks are ignored: ci-ok is the aggregate.
   assert.equal(
     decideChecks([{ id: 1, name: "android", status: "completed", conclusion: "failure" }]).state,
     "pending",
   );
-  // A re-run is a newer check run with the same name.
   assert.equal(
     decideChecks([
       { id: 1, name: "ci-ok", status: "completed", conclusion: "failure" },
@@ -294,7 +281,6 @@ test("changedFiles keeps both sides of a rename and flags unknown or capped list
   assert.equal(parsed.known, true);
   assert.equal(parsed.truncated, false);
 
-  // No `files` array proves nothing; it must not read as "no changed files".
   assert.deepEqual(changedFiles({}), { paths: [], known: false, truncated: false });
   assert.equal(changedFiles(undefined).known, false);
 
@@ -373,7 +359,6 @@ test("updates a branch behind develop and waits for the new head", async () => {
   assert.ok(hasCall(calls, "pr", "update-branch"));
   const merge = calls.find((call) => call[1] === "pr" && call[2] === "merge");
   assert.equal(merge[merge.length - 1], HEAD2);
-  // compare before the update, after it and the pre-merge re-check
   const compares = calls.filter((call) => String(call[2]).includes("/compare/"));
   assert.equal(compares.length, 3);
   assert.match(compares[1][2], new RegExp(`${HEAD2}$`));
@@ -394,7 +379,6 @@ test("disjoint develop commits merge on green ci-ok without refreshing the branc
   assert.ok(!hasCall(calls, "pr", "update-branch"));
   const merge = calls.find((call) => call[1] === "pr" && call[2] === "merge");
   assert.equal(merge[merge.length - 1], HEAD);
-  // The files of the new develop commits were read from the PR's merge base.
   assert.ok(
     calls.some((call) => String(call[2]).includes(`/compare/${BASE_SHA}...develop`)),
   );
@@ -440,7 +424,6 @@ test("a CI-global change on develop falls back to updating the branch", async ()
 test("develop moving during CI merges without refresh when the changes are disjoint", async () => {
   const { calls, exec } = fakeGh({
     view: pullView(),
-    // head starts current, then develop gets a disjoint commit while CI runs
     compares: [0, 2],
     developShas: [DEVELOP, DEVELOP2],
     mergeBase: BASE_SHA,
@@ -591,7 +574,6 @@ test("pending ci-ok times out without merging", async () => {
 test("develop moving during CI triggers another refresh", async () => {
   const { calls, exec } = fakeGh({
     view: pullView(),
-    // head is current, ci runs, develop gets D2, then the refreshed head is current
     compares: [0, 2, 2, 2, 0, 0],
     developShas: [DEVELOP, DEVELOP2],
     checks: [passChecks],
@@ -606,8 +588,6 @@ test("develop moving during CI triggers another refresh", async () => {
 test("a stale compare after update-branch does not refresh again", async () => {
   const { calls, exec } = fakeGh({
     view: pullView(),
-    // behind -> update; the new head still reports behind for one poll while
-    // develop itself is unchanged, then compare catches up
     compares: [1, 1, 1, 0, 0],
     developShas: [DEVELOP],
     checks: [passChecks],
@@ -621,7 +601,6 @@ test("a stale compare after update-branch does not refresh again", async () => {
 test("a real develop move after update-branch spends a move, not a refresh", async () => {
   const { calls, exec } = fakeGh({
     view: pullView(),
-    // update, then compare reports behind while develop moves to D2 -> refresh again
     compares: [1, 1, 1, 1, 1, 0, 0],
     developShas: [DEVELOP, DEVELOP, DEVELOP2, DEVELOP2],
     checks: [passChecks],

@@ -7,7 +7,6 @@ license.workspace = true
 publish.workspace = true
 
 [features]
-# Test-only helpers (a pseudo-terminal pair); never enabled by a production build.
 testing = []
 
 [dependencies]

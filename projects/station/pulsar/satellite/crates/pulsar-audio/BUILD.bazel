@@ -6,10 +6,6 @@ package(default_visibility = ["//visibility:public"])
 
 LINUX = ["@platforms//os:linux"]
 
-# Compiles the Ricardo microWakeWord detector and its vendored microfrontend
-# through the `cc` crate (crates/pulsar-audio/build.rs). Host defaults:
-# PULSAR_VERSION / PULSAR_BUILD_TIME are not set, so the build script uses its
-# own fallbacks (same as a plain `cargo build`).
 cargo_build_script(
     name = "pulsar_audio_build_script",
     srcs = ["build.rs"],
@@ -55,7 +51,6 @@ rust_test(
     target_compatible_with = LINUX,
 )
 
-# Mirrors the root [workspace.lints] through the crate's `[lints] workspace = true`.
 extract_cargo_lints(
     name = "workspace_lints",
     manifest = "Cargo.toml",

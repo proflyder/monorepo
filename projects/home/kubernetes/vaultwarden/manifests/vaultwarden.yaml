@@ -1,20 +1,9 @@
-# Vaultwarden: Bitwarden-compatible password manager (official Bitwarden apps,
-# browser extensions and `bw` CLI point at https://passwords.<home-domain>/).
-#
-# Flux-rendered manifest. The image is pinned by digest (keep it equal to
-# `VAULTWARDEN_IMAGE_VERSION`/`_DIGEST` in versions.sh; the Flux tests check
-# it). `HOME_DOMAIN` is substituted from the flux-settings Secret.
-#
-# One SQLite writer on one local-retain volume (`vaultwarden-data`): database,
-# attachments, sends and the JWT signing key. The offsite backup picks the
-# volume up by its `_vaultwarden_vaultwarden-data` suffix.
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: vaultwarden-data
   namespace: vaultwarden
   annotations:
-    # Never let Kustomize pruning or a Helm uninstall delete the SQLite volume.
     kustomize.toolkit.fluxcd.io/prune: disabled
     helm.sh/resource-policy: keep
   labels:
@@ -38,7 +27,6 @@ metadata:
     app.kubernetes.io/part-of: home
 spec:
   replicas: 1
-  # SQLite is single-writer: never two pods against the same volume.
   strategy:
     type: Recreate
   selector:
@@ -69,11 +57,8 @@ spec:
               value: /data
             - name: ROCKET_ADDRESS
               value: 0.0.0.0
-            # Unprivileged port: the container runs as nobody.
             - name: ROCKET_PORT
               value: "8080"
-            # Accounts only by invitation from /admin; without SMTP an
-            # invited address may register directly.
             - name: SIGNUPS_ALLOWED
               value: "false"
             - name: INVITATIONS_ALLOWED
@@ -82,12 +67,10 @@ spec:
               value: "false"
             - name: SHOW_PASSWORD_HINT
               value: "false"
-            # No outbound traffic (see network-policies.yaml).
             - name: ICON_SERVICE
               value: internal
             - name: DISABLE_ICON_DOWNLOAD
               value: "true"
-            # /admin settings stay declarative: config.json is not used.
             - name: CONFIG_FILE
               value: /tmp/config.json
             - name: IP_HEADER

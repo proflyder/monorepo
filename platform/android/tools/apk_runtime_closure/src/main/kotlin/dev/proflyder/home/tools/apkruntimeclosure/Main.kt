@@ -1,25 +1,3 @@
-// Command apk_runtime_closure is the APK-level runtime closure gate for the
-// Android client.
-//
-// This test inspects build artifacts rather than the JVM test classpath, because
-// the Robolectric classpath contains Guava (as a test dependency) and therefore
-// cannot detect a missing runtime ListenableFuture in the APK.
-//
-// Two independent checks run:
-//
-//  1. DEX definition check: the packaged classes*.dex must *define* the classes
-//     that androidx.profileinstaller / androidx.concurrent.futures need at
-//     runtime. Parsing DEX class_defs proves a definition; searching the string
-//     table does not, because a missing class is still referenced by name there.
-//  2. Closure check: every class referenced from the deploy jar (the exact set of
-//     classes D8 receives) must be defined in that jar or be a platform/optional
-//     class. This catches *any* missing transitive runtime dependency, not only
-//     the one that caused the ProfileInstaller crash.
-//
-// The --self-test mode mutates a copy of the real DEX so that a required
-// descriptor remains referenced by the string table but loses its class_def.
-// The definition check must reject it. This runs as part of the Bazel test so
-// the gate cannot silently degrade into a reference-only check.
 package dev.proflyder.home.tools.apkruntimeclosure
 
 import java.io.File
@@ -61,21 +39,12 @@ private val OPTIONAL_PREFIXES = listOf(
     "org.bouncycastle.",
     "org.conscrypt.",
     "org.openjsse.",
-    // OkHttp 5's JVM artifact references the GraalVM native-image hooks from
-    // its optional native-image configuration; they are never loaded on
-    // Android.
     "org.graalvm.nativeimage.",
 )
 
 private val OPTIONAL_CLASSES = setOf(
     "com.google.firebase.components.Component\$ComponentType",
     "com.google.firebase.components.Component\$Instantiation",
-    // firebase-messaging is published R8-minified and these two nested helper
-    // types are absent from classes.jar while MessagingAnalytics and
-    // TopicsSubscriber still name them in their constant pools. Both are class
-    // constants used inside signature/metadata positions, so ART resolves them
-    // lazily; the app never runs the Firelog analytics or topic-subscription
-    // code paths. Documented here instead of loosening the whole check.
     "com.google.firebase.messaging.Constants\$FirelogAnalytics\$MessagePriority",
     "com.google.firebase.messaging.TopicOperation\$TopicOperations",
 )
@@ -182,10 +151,6 @@ private fun dexDefinedTypes(data: ByteArray): Set<String> {
     return defined
 }
 
-/**
- * Maps each defined descriptor to the offset of its class_def entry, preserving
- * class_def order.
- */
 private fun dexClassDefOffsets(data: ByteArray): Pair<Map<String, Int>, List<String>> {
     val stringIdsOff = readU4(data, 0x3c)
     val stringIdsSize = readU4(data, 0x38)
@@ -394,7 +359,7 @@ private fun constantPoolClasses(data: ByteArray): ConstantPool {
         val tag = data[offset].toInt() and 0xff
         offset += 1
         when (tag) {
-            1 -> { // CONSTANT_Utf8
+            1 -> {
                 val length = readU2Be(data, offset)
                 offset += 2
                 var end = offset + length
@@ -405,26 +370,26 @@ private fun constantPoolClasses(data: ByteArray): ConstantPool {
                 offset += length
                 utf8[index] = decodeUtf8(raw)
             }
-            3, 4 -> offset += 4 // Integer, Float
-            5, 6 -> { // Long, Double take two slots
+            3, 4 -> offset += 4
+            5, 6 -> {
                 offset += 8
                 index += 1
             }
-            7 -> { // Class
+            7 -> {
                 classNameIndices.add(readU2Be(data, offset))
                 offset += 2
             }
-            8 -> offset += 2 // String
-            9, 10, 11 -> offset += 4 // Fieldref, Methodref, InterfaceMethodref
-            12 -> { // NameAndType
+            8 -> offset += 2
+            9, 10, 11 -> offset += 4
+            12 -> {
                 offset += 2
                 descriptorIndices.add(readU2Be(data, offset))
                 offset += 2
             }
-            15 -> offset += 3 // MethodHandle
-            16 -> offset += 2 // MethodType
-            17, 18 -> offset += 4 // Dynamic, InvokeDynamic
-            19, 20 -> offset += 2 // Module, Package
+            15 -> offset += 3
+            16 -> offset += 2
+            17, 18 -> offset += 4
+            19, 20 -> offset += 2
             else -> throw ToolError("unknown constant pool tag $tag at $offset")
         }
         index += 1

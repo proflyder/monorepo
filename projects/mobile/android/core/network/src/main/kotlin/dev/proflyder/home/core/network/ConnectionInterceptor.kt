@@ -9,27 +9,10 @@ import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.Interceptor
 import okhttp3.Response
 
-/** Which configured server a client talks to. */
 internal enum class Target { SCHEDULER, CONTROL, INTERCOM }
 
-/**
- * Internal request marker: a long-lived server stream (connect `Watch`) must not
- * inherit the unary read timeout. The interceptor removes the header.
- */
 internal const val STREAM_REQUEST_HEADER = "X-Home-Connect-Stream"
 
-/**
- * Applies the *current* user settings to every request, so the Retrofit
- * interfaces only declare relative paths:
- *  - rewrites the URL onto the configured endpoint (including a path prefix),
- *  - adds the bearer token (header only, never in the URL) and fixed headers,
- *  - applies connect/read/write timeouts from the settings.
- *
- * Missing or unusable settings fail *before* any network I/O with a
- * [RemoteFailureException], which clients map to a controlled domain failure.
- * It is the first application interceptor, so logging and inspection
- * interceptors added after it see the final URL and headers.
- */
 internal class ConnectionInterceptor(
     private val settings: ConnectionSettingsStore,
     private val target: Target,
@@ -78,16 +61,12 @@ internal class ConnectionInterceptor(
             }
             .build()
 
-        // Defensive clamping: corrupted persisted settings must never make
-        // OkHttp reject a timeout.
         val connectMillis = config.connectTimeoutMillis
             .coerceIn(ConnectionConfig.MIN_TIMEOUT_MILLIS, ConnectionConfig.MAX_TIMEOUT_MILLIS)
         val readMillis = config.readTimeoutMillis
             .coerceIn(ConnectionConfig.MIN_TIMEOUT_MILLIS, ConnectionConfig.MAX_TIMEOUT_MILLIS)
         return chain
             .withConnectTimeout(connectMillis.toInt(), TimeUnit.MILLISECONDS)
-            // A Watch stream is intentionally idle between calls; 0 disables the
-            // read deadline for that request only.
             .withReadTimeout(if (streaming) 0 else readMillis.toInt(), TimeUnit.MILLISECONDS)
             .withWriteTimeout(readMillis.toInt(), TimeUnit.MILLISECONDS)
             .proceed(request)

@@ -4,11 +4,6 @@ import test from "node:test";
 
 import { METHOD_PARAMS, parseRpcRequest } from "../lib/schema.js";
 
-// The gateway (solutions/mcp-gateway) serializes requests for the same six
-// methods. `contract/params.json` is the shared hand-written source of truth:
-// this test pins `schema.js` to it, and the Go contract test in
-// `internal/bb/contract_test.go` pins the gateway's payloads to it. A field
-// added on one side alone fails one of the two suites.
 const CONTRACT = JSON.parse(
   readFileSync(new URL("../contract/params.json", import.meta.url), "utf8"),
 );
@@ -104,9 +99,6 @@ test("contract: required fields are enforced", () => {
 });
 
 function parseRpcRequestExtra(method, params) {
-  // "extra" is not a field of any method, so it is refused everywhere and
-  // would immediately resurface the live validate_spawn/title bug if a
-  // caller or the schema ever widened the contract by accident.
   assert.ok(!("extra" in SAMPLE_VALUES));
   return { ...params, extra: SAMPLE_VALUES.text };
 }

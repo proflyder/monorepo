@@ -1,7 +1,3 @@
-// ybl: turns a Telink B91 application binary into the .ybl container the Yandex Station Midi's
-// radio bootloader takes (the format of /system/vendor/quasar/zigbee/gateway.ybl): the image as
-// linked, whose header carries its size at 0x18, followed by the zlib CRC-32 of the image, LE.
-// usage: ybl <in.bin> <out.ybl>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>

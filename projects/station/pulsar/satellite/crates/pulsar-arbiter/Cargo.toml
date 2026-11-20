@@ -10,7 +10,6 @@ home-actor = { path = "../../../../../../packages/rust/home-actor" }
 home-linux = { path = "../../../../../../packages/rust/home-linux" }
 
 pulsar-core = { path = "../pulsar-core" }
-# Только для бинаря lan_probe: он проверяет оба LAN-сервиса.
 pulsar-mdns = { path = "../pulsar-mdns" }
 
 socket2 = { workspace = true }

@@ -1,14 +1,3 @@
-# Manifest set for Kustomization/app-hermes (решение 54).
-#
-# The Helm release and the renderer's private values live here. The PV/PVC stay
-# admin-owned (`projects/home/kubernetes/apply-runtime.sh`); the application
-# Secret (`hermes-environment`) is created by ESO from the manifest next to the
-# chart, and `hermes-config-private` from `external-secret-hermes-config.yaml`.
-# The values Secret (`runtime-values`) is declared with the other Flux bootstrap
-# ExternalSecrets.
-#
-# `helmrelease.yaml` keeps `${...}` image variables; Kustomization/app-hermes
-# substitutes them from ConfigMap/home-app-images (pins branch).
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:

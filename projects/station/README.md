@@ -48,3 +48,18 @@ provenance; merge в `develop` только продвигает этот digest
 
 First-party station-файлы: `pulsar`, `ble-gateway`, `configs`, `scripts`,
 `tools`. Прошивка/rootfs станции не менялись (только `/data` и OTA fortress).
+
+## Заметки к коду
+
+Пояснения, перенесённые из комментариев исходников (код комментариев не содержит, см. `AGENTS.md`).
+
+- `e2e/live_gateway.py` — Read-only live checks for the Station BLE gateway HTTP control.
+- `manifest.yaml` — Station software manifest — what actually runs on the Yandex Station Midi besides the OTA-managed Pulsar binary.
+- `scripts/restore-ota-fortress.sh` — Restore the original OTA/ADB files and remove fortress (revert the on-device protection). Reboots the station. Use with --yes in scripts.
+- `scripts/station-egress-guard-off.sh` — FORTRESS-EGRESS-GUARD-OFF v1 Remove only the egress guard; keep the existing Yandex block/OTA fortress.
+- `scripts/station-egress-guard-watchdog.sh` — FORTRESS-EGRESS-GUARD-WATCHDOG v1 Safety net for first deployment: if not confirmed within 180s, remove guard.
+- `scripts/station-egress-guard.sh` — FORTRESS-EGRESS-GUARD v1 Allow only loopback, local LAN, link-local, multicast/broadcast, DHCP, (optionally) Google NTP and (optionally) HTTPS to GitHub for Pulsar's updater. Drop all other IPv4/IPv6 egress. INPUT is untouched: ADB/SSH and LAN access keep working. Teardown: /data/quasar/egress-guard-off.sh
+- `scripts/station-network-diagnostic.sh` — Read-only, bounded network evidence. Logs may identify the LAN: keep private. Arm the rootkeeper hook separately for a controlled reboot; no radio resets.
+- `scripts/station-pairing-sound.py` — Generate a Yandex Station sound pairing code locally (no Telegram, no cloud).
+- `scripts/test_egress_guard.py` — Hermetic tests for the station egress-guard rule set.
+- `tools/station-audit` (`mise run station:audit -- --ip 192.0.2.13`, `--json`) — read-only reconciliation of the station against `projects/station/manifest.yaml`: BLE gateway, dropbear, egress guard, yandex-block, OTA fortress, rootkeeper and config files installed by hand. One SSH connection, only `sha256sum`, `ls` and `--version`; never writes to the station, never prints file contents or secrets. `deployed_sha256` pins build artifacts (the pinned hash is authoritative). Native release versions are computed by `platform/ci/version.mjs`, the same source CI uses. IPv4 addresses are masked so LAN values do not drift. Statuses: OK, DRIFT, MISSING, EXTRA (stale `.bak/.prev/.new` siblings unless in `audit.extra_allow`).

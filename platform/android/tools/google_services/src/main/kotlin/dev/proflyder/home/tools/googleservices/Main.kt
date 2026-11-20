@@ -1,29 +1,3 @@
-// Command google_services generates Android string resources from
-// google-services.json.
-//
-// The Firebase Gradle plugin normally turns `google-services.json` into
-// `res/values/google_services.xml` (and a few other resources) at build time.
-// The Home Android app is built with Bazel only, so this tool does the same
-// subset of that transformation:
-//
-//   - google_app_id                  <- mobilesdk_app_id
-//   - gcm_defaultSenderId            <- project_info.project_number
-//   - google_api_key                 <- client.api_key.current_key
-//   - google_crash_reporting_api_key <- client.api_key.current_key
-//   - google_storage_bucket          <- project_info.storage_bucket
-//   - project_id                     <- project_info.project_id
-//
-// It also emits the Crashlytics build id that the Crashlytics Gradle plugin
-// normally writes (`com.google.firebase.crashlytics.mapping_file_id`). The
-// Crashlytics SDK only needs this string at init: `AppData` reads
-// `com.google.firebase.crashlytics.mapping_file_id`, falling back to the legacy
-// `com.crashlytics.android.build_id`, and refuses to start when both are absent.
-// The value must be stable for one build and change when the build changes, so
-// it is derived from the app id, version name, and version code (32 hex chars).
-//
-// The JSON is optional in the repository: without it the output is a valid,
-// empty values file and a warning goes to stderr, so CI and clean checkouts keep
-// building. Firebase then stays uninitialized.
 package dev.proflyder.home.tools.googleservices
 
 import java.io.File
@@ -51,7 +25,6 @@ internal val EMPTY_VALUES = """<?xml version="1.0" encoding="utf-8"?>
 </resources>
 """
 
-/** google-services.json does not describe the requested package. */
 internal class ConfigError(val packageName: String) :
     Exception("google-services.json has no client for package '$packageName'")
 
@@ -83,7 +56,6 @@ internal fun buildId(appId: String, versionName: String, versionCode: String): S
     return digest.joinToString("") { "%02x".format(it) }.substring(0, 32)
 }
 
-// escapeXML mirrors xml.sax.saxutils.escape(value, {'"': "&quot;"}).
 internal fun escapeXml(value: String): String {
     val builder = StringBuilder()
     for (ch in value) {
@@ -101,10 +73,6 @@ internal fun escapeXml(value: String): String {
 private fun stringElement(name: String, value: String): String =
     """    <string name="$name" translatable="false">${escapeXml(value)}</string>"""
 
-/**
- * Returns the values XML for one package. An absent or empty input yields an
- * empty values file; a present input without the package is an error.
- */
 internal fun generate(
     inputPath: String,
     packageName: String,

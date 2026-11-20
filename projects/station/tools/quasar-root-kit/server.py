@@ -1,20 +1,4 @@
 #!/usr/bin/env python3
-"""Локальный HTTPS-прокси для Яндекс.Станции (прозрачный режим проброса).
-
-Что делает:
-- HTTPS на :443 (или порт из argv[1]) с нашим листовым сертом (chain.pem/leaf.key,
-  цепочка — своя, рядом со скриптом; подробности в README.md).
-- хосты из списка (rules.json) (rules.json: quasar.yandex.net) пробрасывает в НАСТОЯЩИЙ
-  бэкенд Яндекса и логирует всё: заголовки, тела, ответы. Это режим разведки.
-- Ответы /get_sync_info можно ПРАВИТЬ на лету (rules.json: rewrite) или заменять
-  целиком (sync_info_mode: static, файл sync_info.json).
-- ЛЕГИТНЫЕ ответы бэкенда складывает в captures/ — там же лежит реальный формат
-  конфига и его поля (adb/debug/develop ищем там).
-- Ошибки TLS-рукопожатия (колонка НЕ приняла серт) пишутся в лог отдельной строкой.
-
-Запуск:    sudo python3 server.py [порт]
-Дальше:    правила — rules.json; лог — mitm.log; захват — captures/.
-"""
 import http.server, http.client, ssl, json, sys, datetime, os, socket, struct, urllib.parse
 
 BASE    = os.path.dirname(os.path.abspath(__file__))
@@ -24,7 +8,6 @@ KEY     = os.path.join(BASE, "leaf.key")
 SYNC    = os.path.join(BASE, "sync_info.json")
 RULES_F = os.path.join(BASE, "rules.json")
 
-# --- правила (перечитываются на каждый запрос — можно править на живом стенде) ---
 def load_rules():
     try:
         with open(RULES_F, encoding="utf-8") as f:
@@ -38,11 +21,7 @@ def log(msg):
     with open(LOG, "a", encoding="utf-8") as f:
         f.write(f"{ts} {msg}\n")
 
-# --- upstream (настоящий бэкенд; IP-пин, чтобы не зациклиться на себя) ---
-# часть роутеров ПРОЗРАЧНО перехватывает 53/udp+tcp (запрос к любому DNS
-# возвращает наш локальный IP), поэтому реальный IP достаём ЧЕРЕЗ DoH
-# (dns.google), кэшируем, SNI/проверку серта оставляем по имени quasar.yandex.net.
-REAL_IP_FALLBACK = "213.180.193.230"               # снято 21.10.2026 (DoH dns.google)
+REAL_IP_FALLBACK = "213.180.193.230"
 _real_ip_cache = {"ip": None, "ts": 0}
 
 def real_ip():
@@ -56,7 +35,7 @@ def real_ip():
         try:
             u = doh + "?" + urllib.parse.urlencode({"name": "quasar.yandex.net", "type": "A"})
             req = urllib.request.Request(u, headers={"Accept": "application/dns-json"})
-            if "quad9" in doh: continue   # quad9 без JSON--api, не Morse
+            if "quad9" in doh: continue
             with urllib.request.urlopen(req, timeout=10) as r:
                 d = json.loads(r.read().decode())
             ips = [a.get("data") for a in d.get("Answer", []) if a.get("type") == 1]
@@ -71,7 +50,6 @@ def real_ip():
     return REAL_IP_FALLBACK
 
 class PinnedHTTPS(http.client.HTTPSConnection):
-    """HTTPS к РЕАЛЬНОМУ IP, но SNI и проверка серта — по имени quasar.yandex.net."""
     def __init__(self, host, real, **kw):
         super().__init__(host, **kw)
         self._real = real
@@ -83,7 +61,7 @@ class Upstream:
     def __init__(self, host, tc=15, tr=30):
         self.host, self.tc, self.tr = host, tc, tr
     def request(self, method, path, headers, body=b""):
-        ctx = ssl.create_default_context()          # системный CA -> настоящий серт Яндекса
+        ctx = ssl.create_default_context()
         conn = PinnedHTTPS(self.host, real_ip(), timeout=self.tc, context=ctx)
         try:
             conn.request(method, path, body=body, headers=headers)
@@ -94,7 +72,6 @@ class Upstream:
         finally:
             conn.close()
 
-# --- применение правил ---
 def dig_set(obj, path, val):
     keys = path.split(".")
     for k in keys[:-1]:
@@ -116,7 +93,6 @@ def apply_rules(obj, rules):
 class H(http.server.BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
-    # ---------- служебное ----------
     def _log(self, tag, body=b""):
         log(f"== {self.command} {self.path} from {self.client_address[0]} [{tag}]")
         for k, v in self.headers.items():
@@ -148,12 +124,10 @@ class H(http.server.BaseHTTPRequestHandler):
         open(fn, "wb").write(data)
         log(f"-> capture: {fn}")
 
-    # ---------- проброс ----------
     def _forward(self, method, body=b""):
         r = load_rules()
         up_host = (r.get("upstream") or {}).get("host", "quasar.yandex.net")
         my_host = self.headers.get("Host", "").split(":")[0]
-        # перекладываем заголовки колонки; то, что мешает, убираем
         h = {}
         for k, v in self.headers.items():
             kl = k.lower()
@@ -167,14 +141,12 @@ class H(http.server.BaseHTTPRequestHandler):
         is_sync = "/get_sync_info" in self.path
         is_check = "/check_updates" in self.path
         check_mode = r.get("check_updates_mode", "passthrough")
-        # --- static: вообще не ходим в интернет, отдаём файл ---
         if is_sync and mode == "static":
             try: data = open(SYNC, "rb").read()
             except FileNotFoundError: data = b"{}"
             self._log(f"static -> sync_info.json", body)
             self._reply(200, data)
             return
-        # --- проброс в настоящий бэкенд ---
         try:
             up = Upstream(up_host,
                          (r.get("upstream") or {}).get("timeout_connect", 15),
@@ -185,9 +157,6 @@ class H(http.server.BaseHTTPRequestHandler):
             log(f"   upstream ОШИБКА: {e!r}")
             self._reply(502, b"{}")
             return
-        # --- OTA-щит: /check_updates -> всегда {"hasUpdate":false} (rules.json: check_updates_mode) ---
-        # Препятствует прилетанию фикс-прошивки ДО того, как колонка отрутована и
-        # закрыта --ota-off (no-op в device_ota_update.sh). Что предлагал Яндекс — видно в captures/.
         if is_check and check_mode == "block":
             offered = "?"
             try:
@@ -202,7 +171,7 @@ class H(http.server.BaseHTTPRequestHandler):
             try:
                 q = urllib.parse.urlparse(self.path).query
                 obj = json.loads(udata)
-                self._save_capture(q, "legit", udata)          # оригинал — на сохранение
+                self._save_capture(q, "legit", udata)
                 apply_rules(obj, r.get("rewrite"))
                 udata = json.dumps(obj, separators=(",", ":")).encode()
                 self._save_capture(q, "patched", udata)
@@ -211,7 +180,6 @@ class H(http.server.BaseHTTPRequestHandler):
         elif is_sync and mode == "passthrough":
             q = urllib.parse.urlparse(self.path).query
             self._save_capture(q, "legit", udata)
-        # --- ответ колонке ---
         self.send_response(st)
         for k, v in uh.items():
             if k in ("transfer-encoding", "content-length", "connection", "keep-alive", "content-encoding"):
@@ -222,7 +190,6 @@ class H(http.server.BaseHTTPRequestHandler):
         self.wfile.write(udata)
         log(f"-> {st} ({len(udata)} байт) клиенту")
 
-    # ---------- методы ----------
     def do_GET(self):
         self._log("GET"); self._forward("GET")
 
@@ -232,7 +199,6 @@ class H(http.server.BaseHTTPRequestHandler):
 
     def log_message(self, *a): pass
 
-# --- сервер: TLS вручную, чтобы видеть отказы рукопожатия ---
 CTX = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
 CTX.load_cert_chain(CHAIN, KEY)
 CTX.minimum_version = ssl.TLSVersion.TLSv1_2

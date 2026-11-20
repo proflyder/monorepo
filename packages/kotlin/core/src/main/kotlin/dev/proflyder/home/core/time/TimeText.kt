@@ -7,7 +7,6 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
-/** Strict parsing for wall-clock time, date, and IANA timezone input. */
 object TimeText {
     private val dateFormatter: DateTimeFormatter = DateTimeFormatter.ISO_LOCAL_DATE
 
@@ -86,7 +85,6 @@ object TimeText {
     fun formatTime(hour: Int, minute: Int): String = String.format(Locale.ROOT, "%02d:%02d", hour, minute)
 }
 
-/** ISO weekday helpers: 1 = Monday ... 7 = Sunday. */
 object Weekdays {
     val ALL: List<Int> = (1..7).toList()
     val MONDAY_TO_FRIDAY: List<Int> = listOf(1, 2, 3, 4, 5)
@@ -102,7 +100,6 @@ object Weekdays {
         return list.isNotEmpty() && list.all { it in 1..7 } && list.distinct().size == list.size
     }
 
-    /** Parses strict `1,3,5` / `1 3 5` input. Returns null for invalid input. */
     fun parse(raw: String): List<Int>? {
         val tokens = raw.trim().split(',', ' ')
             .map { it.trim() }

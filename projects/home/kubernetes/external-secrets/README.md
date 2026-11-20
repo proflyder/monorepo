@@ -153,3 +153,16 @@ scheduler/HA-токены читаются при старте процесса,
 удаляет их). Аварийный `deploy.sh` проверяет `Ready` перед выкаткой и падает
 fail-closed, а не пересоздаёт значения из локальных файлов; Flux ждёт
 готовности workload'ов через `Kustomization.wait`/`healthChecks`.
+
+## Заметки к коду
+
+Пояснения, перенесённые из комментариев исходников (код комментариев не содержит, см. `AGENTS.md`).
+
+- `deploy.sh` — Apply the ExternalSecret manifests that belong to `deploy-home` services.
+- `kustomization.yaml` — Flux entry point for External Secrets Operator.
+- `manifests/clustersecretstore.yaml` — Cluster-wide bridge from External Secrets Operator to OpenBao.
+- `manifests/helmrelease.yaml` — External Secrets Operator, adopted from the live `external-secrets` release.
+- `test_external_secrets.py` — Contracts for the OpenBao -> External Secrets Operator migration.
+  - InfoInhibitor stays suppressed; it must not reach the heartbeat.
+  - The operator, the store and infrastructure ExternalSecrets are Flux-owned; the manual script must not touch them any more.
+- `values/external-secrets.yaml` — External Secrets Operator for the home K3s node.

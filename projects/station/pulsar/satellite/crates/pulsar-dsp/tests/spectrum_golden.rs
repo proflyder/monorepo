@@ -1,9 +1,3 @@
-//! SpectrumAnalyzer against the C++ analyzer (tests/golden/spectrum.txt): a sine scenario
-//! (three tones and noise, then a fade-out), silence (with a quiet tone fading through the
-//! silence threshold) and a beat sequence (80 Hz kicks, strong, weak and one too early), on the
-//! Lite 2 layout (48 kHz, chunk 1536, 1 speaker channel) and the Midi one (96 kHz, chunk 3072,
-//! 4 channels). The inputs are integer samples, generated here exactly as by the C++ generator.
-
 use std::f64::consts::PI;
 
 use pulsar_core::MusicFrame;
@@ -38,7 +32,6 @@ fn sat(v: i64) -> i16 {
     v.clamp(-32768, 32767) as i16
 }
 
-/// The C++ generator's LCG: uniform in [-range, range).
 struct Noise(u32);
 
 impl Noise {
@@ -130,8 +123,6 @@ fn matches_the_cxx_analyzer() {
                 let got = [f.loudness].into_iter().chain(f.bands);
                 for (j, (w, v)) in want.iter().zip(got).enumerate() {
                     let d = (w - v).abs();
-                    // Bit-exact on the host the data was made on (glibc 2.39); another glibc's
-                    // sinf / cosf / log10f may differ by an ulp.
                     assert!(d <= 1e-6, "{at}: column {j}: {v} vs C++ {w}");
                     max_diff = max_diff.max(d);
                 }

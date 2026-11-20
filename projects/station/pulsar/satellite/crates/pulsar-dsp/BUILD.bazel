@@ -39,7 +39,6 @@ rust_test(
     deps = [":pulsar_dsp"] + DEPS,
 )
 
-# Mirrors the root [workspace.lints] through the crate's `[lints] workspace = true`.
 extract_cargo_lints(
     name = "workspace_lints",
     manifest = "Cargo.toml",

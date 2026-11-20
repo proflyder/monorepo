@@ -1,40 +1,18 @@
-//! Push delivery devices (FCM registration tokens).
-//!
-//! The scheduler only *stores* the token: it never talks to Google and never
-//! decides what to deliver. The sender (`solutions/phone-push`) reads this
-//! registry and sends through FCM, so the scheduling core keeps its single
-//! responsibility while the phone keeps using the one endpoint and bearer it
-//! already has.
-//!
-//! A device is identified by its own stable `device_id`, not by the FCM token:
-//! Google rotates tokens (reinstall, app data restore, periodic rotation), and
-//! a rotation must update the same row instead of adding a second phone. The
-//! name is owner-visible metadata, so it can change without re-registering.
-
 use rusqlite::{Row, params};
 
 use super::{Store, StoreError};
 
-/// One registered push device.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PushDevice {
-    /// Stable device identity chosen by the app, never the FCM token.
     pub device_id: String,
-    /// FCM registration token. Never logged.
     pub token: String,
-    /// `android` today; the column stays free-form for future clients.
     pub platform: String,
-    /// App version reported at registration.
     pub app_version: String,
-    /// Owner-visible device name set in the app.
     pub device_name: String,
-    /// First registration (unix seconds).
     pub created_unix: i64,
-    /// Last registration or refresh (unix seconds).
     pub updated_unix: i64,
 }
 
-/// Validated registration input (server-derived fields stay out).
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct PushDeviceInput {
     pub device_id: String,
@@ -44,17 +22,11 @@ pub struct PushDeviceInput {
     pub device_name: String,
 }
 
-/// Upper bound on stored devices: a family, not a fleet.
 pub const MAX_PUSH_DEVICES: usize = 16;
-/// FCM tokens are long opaque strings; keep the bound tight but generous.
 pub const MAX_TOKEN_BYTES: usize = 4096;
-/// Shortest plausible FCM registration token.
 pub const MIN_TOKEN_BYTES: usize = 32;
-/// Bound for the free-form metadata fields.
 pub const MAX_META_BYTES: usize = 64;
-/// Bound for the stable device identity (a SHA-256 hex digest is 64 chars).
 pub const MIN_DEVICE_ID_BYTES: usize = 8;
-/// Bound for the stable device identity.
 pub const MAX_DEVICE_ID_BYTES: usize = 128;
 
 const COLS: &str =
@@ -87,9 +59,6 @@ fn clean_meta(value: &str, field: &str) -> Result<String, StoreError> {
 
 fn clean_device_id(input: &PushDeviceInput, token: &str) -> Result<String, StoreError> {
     let device_id = input.device_id.trim();
-    // Older builds registered by token only. Keeping the token as the
-    // provisional identity preserves those rows until the app upgrades and
-    // sends its real `device_id`, which then collapses the legacy row.
     if device_id.is_empty() {
         return Ok(token.to_owned());
     }
@@ -105,7 +74,6 @@ fn clean_device_id(input: &PushDeviceInput, token: &str) -> Result<String, Store
     Ok(device_id.to_owned())
 }
 
-/// Validates a registration request, never trusting server-derived fields.
 pub fn validate_device(input: &PushDeviceInput) -> Result<PushDeviceInput, StoreError> {
     let token = input.token.trim();
     if token.len() < MIN_TOKEN_BYTES || token.len() > MAX_TOKEN_BYTES {
@@ -131,25 +99,16 @@ pub fn validate_device(input: &PushDeviceInput) -> Result<PushDeviceInput, Store
 }
 
 impl Store {
-    /// Inserts or refreshes one device, keyed by `device_id`. A rotated FCM
-    /// token updates that device's row; a token that was previously attached
-    /// to a legacy token-keyed row or to another device identity is detached
-    /// from the old row, so every token maps to exactly one device. An empty
-    /// name keeps the stored one, so a token refresh never erases the name set
-    /// in the app.
     pub fn register_push_device(
         &self,
         input: &PushDeviceInput,
         now_unix: i64,
     ) -> Result<PushDevice, StoreError> {
         let mut device = validate_device(input)?;
-        if device.device_name.is_empty() {
-            // The first registration from an upgraded app collapses a
-            // token-keyed v3 row; carry that row's name so the owner does not
-            // have to set it again.
-            if let Some(legacy) = self.push_device_by_token(&device.token)? {
-                device.device_name = legacy.device_name;
-            }
+        if device.device_name.is_empty()
+            && let Some(legacy) = self.push_device_by_token(&device.token)?
+        {
+            device.device_name = legacy.device_name;
         }
         let count = self.list_push_devices()?.len();
         let known = self.push_device(&device.device_id)?.is_some();
@@ -186,7 +145,6 @@ impl Store {
         self.push_device(&device_id)?.ok_or(StoreError::NotFound)
     }
 
-    /// Renames one registered device without re-registering its token.
     pub fn rename_push_device(
         &self,
         device_id: &str,
@@ -215,7 +173,6 @@ impl Store {
             .and_then(|device| device.ok_or(StoreError::NotFound))
     }
 
-    /// Reads one device by its stable identity.
     pub fn push_device(&self, device_id: &str) -> Result<Option<PushDevice>, StoreError> {
         let device_id = device_id.to_owned();
         self.call(move |connection| {
@@ -230,7 +187,6 @@ impl Store {
         })
     }
 
-    /// Reads one device by its current FCM token.
     pub fn push_device_by_token(&self, token: &str) -> Result<Option<PushDevice>, StoreError> {
         let token = token.to_owned();
         self.call(move |connection| {
@@ -244,7 +200,6 @@ impl Store {
         })
     }
 
-    /// Every registered device, newest update first.
     pub fn list_push_devices(&self) -> Result<Vec<PushDevice>, StoreError> {
         self.call(|connection| {
             let mut statement = connection.prepare(&format!(
@@ -259,7 +214,6 @@ impl Store {
         })
     }
 
-    /// Removes one device by token; `false` means it was already gone.
     pub fn remove_push_device(&self, token: &str) -> Result<bool, StoreError> {
         let token = token.to_owned();
         self.call(move |connection| {
@@ -279,8 +233,6 @@ mod tests {
         Store::open_in_memory(Config::default()).expect("store")
     }
 
-    /// A throwaway database path; the scheduler crate has no `tempfile`
-    /// dependency, and Bazel tests run from a sandboxed working directory.
     fn temp_database(name: &str) -> (std::path::PathBuf, std::path::PathBuf) {
         let nanos = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -476,7 +428,6 @@ mod tests {
             ..input(TOKEN_B)
         };
         assert!(store.register_push_device(&extra, 1).is_err());
-        // Registering an existing device is still allowed at the cap.
         assert!(store.register_push_device(&input(TOKEN_A), 2).is_ok());
     }
 

@@ -1,13 +1,3 @@
-// Firebase App Distribution retention tests.
-//
-// `planReleaseCleanup` is pure, so these tests pin the retention contract
-// exactly: a release older than 24 hours is deleted, a release at the boundary
-// or younger is kept, and the newest release is never deleted even when it is
-// the only thing older than the window. Listing must follow `nextPageToken`,
-// and deletion must batch names without letting one refused batch hide the
-// others. OAuth is exercised with a real ephemeral RSA key so the assertion
-// signature is actually verified; every HTTP call is stubbed, so the suite
-// never reaches Google.
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import fs from "node:fs";

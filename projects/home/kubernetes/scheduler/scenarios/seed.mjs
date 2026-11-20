@@ -1,25 +1,4 @@
 #!/usr/bin/env node
-// Seed the durable home.v1.ScenarioService with the household scenarios that
-// used to be Home Assistant YAML scripts.
-//
-// The seed is intentionally additive and idempotent by label:
-//   * ListScenarios(includeDisabled) is read first;
-//   * a definition is created only when no scenario with the same label
-//     (case-insensitive, trimmed) exists;
-//   * an existing scenario is never overwritten, because the owner may have
-//     edited it in the Android app or through the API;
-//   * CreateScenario uses the stable idempotency key "seed-<slug>", so a
-//     retried run after a lost response returns the already created scenario
-//     instead of creating a duplicate.
-//
-// Usage (private values come from the environment, never from arguments):
-//   SCHEDULER_URL=http://<node>:30098 \
-//   SCHEDULER_TOKEN_FILE=/path/to/scheduler.token \
-//     node projects/home/kubernetes/scheduler/scenarios/seed.mjs [--dry-run]
-//
-// SCHEDULER_TOKEN may be used instead of SCHEDULER_TOKEN_FILE, but the file is
-// preferred so the value never reaches the process list. Tokens are never
-// printed.
 
 import { readFile, readdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -28,18 +7,10 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const DEF_DIR = dirname(fileURLToPath(import.meta.url));
 const SERVICE = "home.v1.ScenarioService";
 
-/** Label identity used by the seed: trimmed and case-insensitive. */
 export function normalizeLabel(label) {
   return String(label ?? "").trim().toLowerCase();
 }
 
-/**
- * Decide which definitions still need to be created.
- *
- * @param {Array<{slug: string, label: string}>} definitions
- * @param {Array<{label?: string}>} existing
- * @returns {Array<{slug: string, label: string}>} definitions to create
- */
 export function planSeed(definitions, existing) {
   const seen = new Set(
     (Array.isArray(existing) ? existing : []).map((row) => normalizeLabel(row?.label)),
@@ -59,7 +30,6 @@ export function planSeed(definitions, existing) {
   return planned;
 }
 
-/** idempotency_key shared by every retry of the same definition file. */
 export function seedKey(definition) {
   const slug = String(definition?.slug ?? "").trim();
   if (slug === "") {
@@ -68,7 +38,6 @@ export function seedKey(definition) {
   return `seed-${slug}`;
 }
 
-/** Read the checked-in definitions sorted by slug for a stable plan order. */
 export async function loadDefinitions(dir = DEF_DIR) {
   const files = (await readdir(dir)).filter((name) => name.endsWith(".json")).sort();
   const definitions = [];
@@ -215,7 +184,6 @@ function isEntrypoint() {
 
 if (isEntrypoint()) {
   main(process.argv).catch((error) => {
-    // The message is our own short reason: no token, URL or response body.
     console.error(`seed failed: ${error instanceof Error ? error.message : String(error)}`);
     process.exitCode = 1;
   });

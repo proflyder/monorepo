@@ -1,23 +1,9 @@
-//! Minimal WinHTTP JSON POST client.
-//!
-//! No proxy, no redirects, no cookies, no credential attachment: the wakegrant
-//! MAC is the only authenticator and it must not be relayed anywhere. Timeouts
-//! and limits are the ones documented in the README (2/2/4/4 s by default,
-//! 16 KiB body). The unlock claim raises only the receive timeout so it can
-//! outlast the server's 25 s long-poll.
-//!
-//! Only the argument construction is host-portable; the WinHTTP calls are
-//! behind `cfg(windows)`.
-
 use crate::config::ServiceEndpoint;
 
 use crate::wide::WideNul;
 
-/// Default receive timeout for challenge and logon claim requests.
 pub const DEFAULT_RECEIVE_TIMEOUT_MS: i32 = 4000;
 
-/// One HTTP exchange. `Response` means the transport succeeded; any HTTP
-/// status is still a response, while `Transport` carries a log-safe reason.
 #[derive(Debug)]
 pub enum HttpOutcome {
     Response {
@@ -31,8 +17,6 @@ pub enum HttpOutcome {
     },
 }
 
-/// The two NUL-terminated wide strings `WinHttpConnect`/`WinHttpOpenRequest`
-/// require.
 #[derive(Debug)]
 #[cfg_attr(not(any(windows, test)), allow(dead_code))]
 pub(crate) struct RequestTargets {
@@ -40,8 +24,6 @@ pub(crate) struct RequestTargets {
     pub(crate) target: WideNul,
 }
 
-/// Builds the WinHTTP arguments. Both are always NUL-terminated and non-empty;
-/// an empty host or path is rejected before any Win32 call.
 #[cfg_attr(not(any(windows, test)), allow(dead_code))]
 pub(crate) fn request_targets(
     endpoint: &ServiceEndpoint,
@@ -87,11 +69,8 @@ mod winhttp {
     const SEND_TIMEOUT_MS: i32 = 4000;
     const MAX_RESPONSE_BYTES: usize = 16 * 1024;
     const USER_AGENT: &str = "HomeKompLogon/1.0 (Windows LogonUI)";
-    // The headers are passed with an explicit character count, so (unlike the
-    // host and the target) they are not required to be NUL-terminated.
     const HEADERS: &str = "Content-Type: application/json\r\nAccept: application/json\r\n";
 
-    /// Closes a WinHTTP handle exactly once.
     struct WinHttpHandle(*mut c_void);
 
     impl Drop for WinHttpHandle {
@@ -105,15 +84,10 @@ mod winhttp {
         }
     }
 
-    /// Restricts an https session to TLS 1.2 and 1.3, falling back to TLS 1.2
-    /// alone. Older Windows 10 builds reject the TLS 1.3 flag with
-    /// `ERROR_INVALID_PARAMETER`; if even TLS 1.2 cannot be set, the request
-    /// fails closed with a log-safe reason.
     fn set_secure_protocols(session: *mut c_void) -> Result<(), &'static str> {
         let both = (WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_2 | WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_3)
             .to_le_bytes();
-        // SAFETY: `session` is an open WinHTTP session handle and the option
-        // buffer is a live DWORD.
+        // SAFETY: `session` is an open WinHTTP session handle and the option buffer is a live DWORD.
         if unsafe { WinHttpSetOption(Some(session), WINHTTP_OPTION_SECURE_PROTOCOLS, Some(&both)) }
             .is_ok()
         {
@@ -138,8 +112,7 @@ mod winhttp {
         let targets = request_targets(endpoint, path)?;
         let user_agent = WideNul::new(USER_AGENT);
 
-        // SAFETY: all arguments are valid; WINHTTP_ACCESS_TYPE_NO_PROXY forbids a
-        // proxy, as documented in `README.md`.
+        // SAFETY: all arguments are valid; WINHTTP_ACCESS_TYPE_NO_PROXY forbids a proxy, as documented in `README.md`.
         let session = WinHttpHandle(unsafe {
             WinHttpOpen(
                 user_agent.as_pcwstr(),
@@ -173,16 +146,11 @@ mod winhttp {
             );
         }
 
-        // TLS 1.2+ for https, as decided by the owner; plain `http://` is still
-        // accepted for the LAN and pinning is deliberately not done. WinHTTP
-        // keeps its normal certificate validation. The option only applies to
-        // the session handle, not to the request handle.
         if endpoint.tls {
             set_secure_protocols(session.0)?;
         }
 
-        // SAFETY: `targets.host` is NUL-terminated by construction; `session` is
-        // open.
+        // SAFETY: `targets.host` is NUL-terminated by construction; `session` is open.
         let connection = WinHttpHandle(unsafe {
             WinHttpConnect(session.0, targets.host.as_pcwstr(), endpoint.port, 0)
         });
@@ -195,8 +163,7 @@ mod winhttp {
         } else {
             WINHTTP_OPEN_REQUEST_FLAGS(0)
         };
-        // SAFETY: `targets.target` is NUL-terminated by construction; the
-        // connection handle is open.
+        // SAFETY: `targets.target` is NUL-terminated by construction; the connection handle is open.
         let request = WinHttpHandle(unsafe {
             WinHttpOpenRequest(
                 connection.0,
@@ -212,7 +179,6 @@ mod winhttp {
             return Err("request_open_failed");
         }
 
-        // Belt and braces: a redirect must never carry the mac to another host.
         let redirect_policy = WINHTTP_OPTION_REDIRECT_POLICY_NEVER.to_le_bytes();
         let disable = (WINHTTP_DISABLE_REDIRECTS | WINHTTP_DISABLE_COOKIES).to_le_bytes();
         // SAFETY: the request handle is open and the option buffers are live.
@@ -251,8 +217,7 @@ mod winhttp {
 
         let mut status = 0u32;
         let mut status_size = size_of::<u32>() as u32;
-        // SAFETY: `status` is a DWORD-sized out-parameter; the name and index are
-        // ignored for WINHTTP_QUERY_STATUS_CODE.
+        // SAFETY: `status` is a DWORD-sized out-parameter; the name and index are ignored for WINHTTP_QUERY_STATUS_CODE.
         let status_ok = unsafe {
             WinHttpQueryHeaders(
                 request.0,
@@ -309,10 +274,6 @@ mod winhttp {
         Ok((status as i32, response))
     }
 
-    /// `POST path` with a JSON body and an explicit receive timeout (4 s by
-    /// default, 35 s for the unlock long-poll claim). The send timeout stays at
-    /// 4 s: the claim body is tiny. Never panics; every failure is a log-safe
-    /// `Transport` value.
     pub fn post_json_with_receive_timeout(
         endpoint: &ServiceEndpoint,
         path: &str,

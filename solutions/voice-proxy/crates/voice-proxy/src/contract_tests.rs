@@ -1,11 +1,3 @@
-//! Replays the golden HTTP fixtures from `solutions/voice-proxy/testdata/contract`
-//! through the Rust proxy. The fixtures are the Go implementation's files,
-//! unchanged.
-//!
-//! The upstream double is a tiny blocking HTTP/1.1 server on loopback: the
-//! contract runner calls its router factory from inside an async runtime, so a
-//! `tokio` server cannot be spawned there (`block_on` would panic).
-
 use std::io::{Read as _, Write as _};
 use std::net::TcpListener;
 use std::sync::{Arc, OnceLock};
@@ -19,8 +11,6 @@ use crate::domain::clock::SystemClock;
 use crate::relay::Upstream;
 
 fn contract_dir() -> String {
-    // Bazel runs with TEST_SRCDIR/runfiles; cargo runs from the package dir and
-    // exports CARGO_MANIFEST_DIR at compile time.
     if std::env::var_os("TEST_SRCDIR").is_some() {
         "solutions/voice-proxy/testdata/contract".to_owned()
     } else {
@@ -31,7 +21,6 @@ fn contract_dir() -> String {
     }
 }
 
-/// Starts the deterministic Hermes double once and returns its base URL.
 fn upstream_url() -> &'static str {
     static URL: OnceLock<String> = OnceLock::new();
     URL.get_or_init(|| {
@@ -166,8 +155,6 @@ fn http_response(status: &str, content_type: &str, body: &str) -> String {
     )
 }
 
-/// Replaces the only non-deterministic field of a local completion: its
-/// wall-clock `created` timestamp.
 fn normalize_created(_scenario: &str, value: &mut Value) {
     match value {
         Value::Array(items) => {

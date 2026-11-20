@@ -54,7 +54,6 @@ import dev.zacsweers.metro.Inject
         repository.run(id, idempotencyKey)
 }
 
-/** Reads the catalog used to pick step entries and condition entities. */
 @Inject class LoadScenarioCatalog(
     private val catalogClient: ControlCatalogClient,
 ) {

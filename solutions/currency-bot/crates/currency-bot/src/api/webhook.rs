@@ -1,5 +1,3 @@
-//! The Telegram webhook listener.
-
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -15,8 +13,6 @@ use crate::pipeline::{MessageSender, Pipeline};
 const SECRET_HEADER: &str = "X-Telegram-Bot-Api-Secret-Token";
 const TRIGGER_TIMEOUT: Duration = Duration::from_secs(25);
 
-/// Validate the Telegram secret, enforce the chat allowlist, acknowledge first
-/// and dispatch `/start`, `/help` and `/trigger` by prefix match.
 pub async fn handle_webhook(State(state): State<Arc<ApiState>>, request: Request) -> Response {
     let secret = request
         .headers()
@@ -36,8 +32,6 @@ pub async fn handle_webhook(State(state): State<Arc<ApiState>>, request: Request
             .into_response();
     }
 
-    // A valid secret is enough to answer 200. Telegram retries every non-2xx
-    // response, which would re-run /trigger, so failures are logged only.
     let body = match axum::body::to_bytes(request.into_body(), MAX_WEBHOOK_BYTES).await {
         Ok(body) => body,
         Err(error) => {
@@ -78,9 +72,6 @@ pub async fn handle_webhook(State(state): State<Arc<ApiState>>, request: Request
     let chat_id = message.chat.id.to_string();
 
     if text.starts_with("/trigger") {
-        // A fetch plus send can take tens of seconds, close to Telegram's
-        // timeout. Acknowledge first and run the pipeline in the background;
-        // the update_id guard above makes a retried update a no-op.
         let pipeline = Arc::clone(&state.pipeline);
         let sender = Arc::clone(&state.sender);
         let cancel = state.cancel.clone();
@@ -136,8 +127,5 @@ async fn run_trigger(
 }
 
 fn ok() -> Response {
-    // The shared contract runner compares a string body byte for byte, while
-    // the Go fixture stores the decoded `"OK"`. Both encodings decode to the
-    // same JSON string; Telegram ignores the body.
     ([(header::CONTENT_TYPE, "application/json")], "OK").into_response()
 }

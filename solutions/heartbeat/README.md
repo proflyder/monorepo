@@ -87,3 +87,13 @@ node --test solutions/heartbeat/src/*.test.js
 Проверяются чистые решения `decidePing`/`decideCron`, разбор payload,
 constant-time сравнение токена, маршруты `/ping` и `/health`, запись KV,
 отправка Telegram и поведение при сбое доставки. KV и `fetch` замоканы.
+
+## Заметки к коду
+
+Пояснения, перенесённые из комментариев исходников (код комментариев не содержит, см. `AGENTS.md`).
+
+- `src/decide.js` — Pure decision logic for the external heartbeat Worker.
+  - Cron never alerts before the first ping: a freshly deployed Worker must not page anyone until Alertmanager has had a chance to send Watchdog.
+- `src/worker.js` — Cloudflare Worker: external dead-man switch for home alerting.
+  - The token is part of the Bot API URL. Never log the URL or the response body.
+  - Fail closed on a missing secret; a misconfigured deploy must not accept unauthenticated heartbeats.

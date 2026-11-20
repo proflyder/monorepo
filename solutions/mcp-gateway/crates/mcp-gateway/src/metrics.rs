@@ -1,9 +1,3 @@
-//! `mcp_gateway_*` Prometheus series.
-//!
-//! Ports `solutions/mcp-gateway/internal/metrics/metrics.go` without the dead
-//! `mcp_gateway_backend_up` series and without Go/process collectors: the Rust
-//! service exposes exactly the gateway metrics that are actually filled.
-
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -14,7 +8,6 @@ use prometheus_client::metrics::family::Family;
 use prometheus_client::metrics::histogram::Histogram;
 use prometheus_client::registry::Registry;
 
-/// Tool duration buckets, identical to the Go buckets.
 pub const TOOL_DURATION_BUCKETS: [f64; 11] =
     [0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.0, 4.0, 6.0, 8.0];
 
@@ -53,7 +46,6 @@ struct NotifyLabels {
     outcome: String,
 }
 
-/// The metric registry that is rendered at `/metrics`.
 #[derive(Debug)]
 pub struct Metrics {
     registry: Registry,
@@ -72,7 +64,6 @@ impl Default for Metrics {
 }
 
 impl Metrics {
-    /// Build and register every series.
     #[must_use]
     pub fn new() -> Self {
         let mut registry = Registry::default();
@@ -125,7 +116,6 @@ impl Metrics {
         }
     }
 
-    /// Counts one mutating action.
     pub fn observe_action(&self, action: &str, target: &str, outcome: &str) {
         self.actions
             .get_or_create(&ActionLabels {
@@ -136,7 +126,6 @@ impl Metrics {
             .inc();
     }
 
-    /// Counts and times one tool call.
     pub fn observe_tool(&self, tool: &str, outcome: &str, duration: Duration) {
         self.tool_calls
             .get_or_create(&ToolLabels {
@@ -151,7 +140,6 @@ impl Metrics {
             .observe(duration.as_secs_f64());
     }
 
-    /// Counts one HTTP request.
     pub fn observe_http(&self, route: &str, status: u16) {
         self.http_requests
             .get_or_create(&HttpLabels {
@@ -161,7 +149,6 @@ impl Metrics {
             .inc();
     }
 
-    /// Counts one voice utterance outcome.
     pub fn observe_voice(&self, route: &str, outcome: &str) {
         self.voice_utterances
             .get_or_create(&VoiceLabels {
@@ -171,7 +158,6 @@ impl Metrics {
             .inc();
     }
 
-    /// Counts one attempt to announce a changed MCP tool list.
     pub fn observe_tool_list_changed(&self, outcome: &str) {
         self.tool_list_changed
             .get_or_create(&NotifyLabels {
@@ -180,7 +166,6 @@ impl Metrics {
             .inc();
     }
 
-    /// Prometheus text exposition.
     #[must_use]
     pub fn render(&self) -> String {
         let mut body = String::new();
@@ -189,7 +174,6 @@ impl Metrics {
     }
 }
 
-/// A cloneable handle used by every handler.
 pub type SharedMetrics = Arc<Metrics>;
 
 #[allow(dead_code)]
@@ -208,8 +192,6 @@ mod tests {
         metrics.observe_voice("hermes", "ok");
         metrics.observe_tool_list_changed("sent");
         let body = metrics.render();
-        // `prometheus-client` appends `_total` to counters; the Go-era names
-        // already end in `_total`, so the registered names must not.
         assert!(body.contains("mcp_gateway_tool_calls_total{"));
         assert!(body.contains("mcp_gateway_tool_duration_seconds_bucket"));
         assert!(body.contains("mcp_gateway_http_requests_total{"));

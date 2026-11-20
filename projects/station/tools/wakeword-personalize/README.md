@@ -419,3 +419,22 @@ Batch 128 содержит: 16 личных позитивов, 32 исходн�
 Перед повторным обучением создайте новые run и registry version, проверьте
 checksums, сохраните происхождение данных и исходники. Локальный registry и
 Git не являются полным резервным образом сервера обучения.
+
+## Заметки к коду
+
+Пояснения, перенесённые из комментариев исходников (код комментариев не содержит, см. `AGENTS.md`).
+
+- `calibrate.py` — Calibrate cut-off and sliding window from streaming replay scores.
+- `finetune.py` — GPU-only bounded personalization or full training from random initialization.
+  - Merge extra manifests (e.g. station wake events) into the run manifest. Identifiers must be unique so a recording can never be counted twice with two different split decisions.
+  - Extract whole-track features once per augmentation, then slice windows. requests contain only train/val labels. Test recordings never enter here. The returned partition is authoritative; augmented validation is prohibited.
+  - Small speed variations; never fabricate whisper from normal speech.
+  - Validation uses held-out personal targets and a separate background take. The user's test recordings are never accessed by training or checkpoint selection.
+- `prepare.py` — Turn privately cached alignment into leakage-controlled training annotations.
+  - Entire separate takes for negative validation and final evaluation, never random overlapping windows from the same recording in different splits.
+- `station_events.py` — Collect, label and report real wake-word events recorded on the station.
+  - A sidecar without audio is a partial pull; collect() never commits one, so this cannot silently become a manifest entry.
+  - Pull new events into an immutable snapshot; never deletes by default.
+  - Deterministic UTC-day split so neighbouring clips never cross splits.
+  - Word position inside the clip is unknown (hit/near ~4 s, miss up to 30 s); never auto-positive.
+  - A near-miss followed by a hit or a "не услышала" press is likely a quiet real wake word the user repeated; it must not become a negative unless labelled false.

@@ -107,7 +107,6 @@ class ScenariosFragment : BaseFragment<FragmentScenariosBinding>(FragmentScenari
         }
     }
 
-    /** Long press pins the scenario to Home Quick actions, or unpins it. */
     internal fun showPinDialog(scenario: Scenario) {
         val ref = FavoriteRef(FavoriteKind.SCENARIO, scenario.id)
         val pinned = ref in viewModel.state.value.favorites

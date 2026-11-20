@@ -1,13 +1,4 @@
 #!/usr/bin/env python3
-"""Collect, label and report real wake-word events recorded on the station.
-
-The device writes `/data/pulsar/wake-events/` (contract: schema 1). This tool
-pulls an immutable snapshot over ssh, keeps local relabels separate, reports
-false positives per listening hour and turns confirmed events into a manifest
-that `finetune.py` can merge with `--extra-manifest`.
-
-Recordings, transcripts and metrics stay in `secrets/`; never commit them.
-"""
 import argparse
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
@@ -81,11 +72,6 @@ def _require(condition, message):
 
 
 def parse_sidecar(payload, name="<sidecar>"):
-    """Validate one event sidecar against contract schema 1.
-
-    Unknown schemas are rejected instead of being interpreted with a newer or
-    older field meaning. Extra keys are preserved for forward-compatible data.
-    """
     if not isinstance(payload, dict):
         raise ValueError(f"{name}: sidecar must be a JSON object")
     schema = payload.get("schema")
@@ -174,8 +160,6 @@ def parse_stats(payload, name="stats.json"):
     return payload
 
 
-# --- local snapshots -------------------------------------------------------
-
 def snapshot_dirs(root):
     root = Path(root)
     if not root.exists():
@@ -202,7 +186,6 @@ def read_sums(snapshot):
 
 
 def scan_events(root, verify_sums=True):
-    """Return every locally stored event; snapshots are immutable, labels are not."""
     records = []
     for snapshot in snapshot_dirs(root):
         sums = read_sums(snapshot)
@@ -211,8 +194,6 @@ def scan_events(root, verify_sums=True):
                 continue
             wav = path.with_suffix(".wav")
             if not wav.is_file():
-                # A sidecar without audio is a partial pull; collect() never
-                # commits one, so this cannot silently become a manifest entry.
                 continue
             sidecar = parse_sidecar(json.loads(path.read_text()), name=str(path))
             digest = sums.get(wav.name)
@@ -287,8 +268,6 @@ def review_queue(root):
     return sorted(rows, key=lambda row: row["utc"], reverse=True)
 
 
-# --- collect ---------------------------------------------------------------
-
 def ssh_argv(host, key=None):
     argv = ["ssh", "-T"]
     if key:
@@ -303,7 +282,6 @@ def subprocess_runner(argv, stdin=None):
 
 
 def read_tar(data):
-    """Return regular files from a tar stream, keyed by basename without ./."""
     files, skipped = {}, []
     with tarfile.open(fileobj=io.BytesIO(data), mode="r|") as archive:
         for member in archive:
@@ -323,7 +301,6 @@ def read_tar(data):
 
 
 def _sidecar_files(files):
-    """Pair WAV and sidecar by id; incomplete pairs are a transient device state."""
     sidecars, incomplete = {}, []
     for name, data in files.items():
         if not name.endswith(".json") or name == "stats.json":
@@ -352,7 +329,6 @@ def _unique_dir(parent, base):
     candidate = Path(parent) / base
     index = 2
     while candidate.exists():
-        # A plain "-2" suffix would sort before the unsuffixed name.
         candidate = Path(parent) / f"{base}{index:02d}"
         index += 1
     return candidate
@@ -378,7 +354,6 @@ def prune_script(idents):
 
 def collect(host, dest=DEFAULT_DEST, key=None, runner=subprocess_runner,
             moment=None, prune_labeled=False):
-    """Pull new events into an immutable snapshot; never deletes by default."""
     dest = Path(dest)
     dest.mkdir(parents=True, exist_ok=True, mode=0o700)
     existing = {event["id"]: event for event in scan_events(dest)} if snapshot_dirs(dest) else {}
@@ -478,8 +453,6 @@ def collect(host, dest=DEFAULT_DEST, key=None, runner=subprocess_runner,
     return summary
 
 
-# --- report ----------------------------------------------------------------
-
 def load_stats_history(root):
     root = Path(root)
     stats_dir = root if (root / "snapshot.json").is_file() else root / "stats"
@@ -496,11 +469,6 @@ def load_stats_history(root):
 
 
 def _cumulative(rows, field):
-    """Sum cumulative counters per model.
-
-    Counters survive restarts, so consecutive snapshots are differenced. A
-    lower value means the device reset its epoch; that value is added whole.
-    """
     groups = defaultdict(list)
     for row in rows:
         groups[row["stats"]["model_sha256"]].append(float(row["stats"][field]))
@@ -643,10 +611,7 @@ def report_text(report):
     return "\n".join(lines)
 
 
-# --- manifest --------------------------------------------------------------
-
 def assign_split(day, seed="station-events", train=0.70, val=0.15):
-    """Deterministic UTC-day split so neighbouring clips never cross splits."""
     if not day or not isinstance(day, str):
         raise ValueError("day must be a UTC yyyy-mm-dd string")
     total = train + val
@@ -681,8 +646,6 @@ def _positive_candidate(event, split):
         "id": event["id"], "source_split": split, "block": "station",
         "sha256": event["sha256"], "seconds": round(event["seconds"], 3),
         "interrupted": False, "review_only": True, "targets": [],
-        # Word position inside the clip is unknown (hit/near ~4 s, miss up to
-        # 30 s); never auto-positive.
         "review_regions": [[0.0, round(event["seconds"], 3)]],
         "station_label": sidecar.get("label"), "station_kind": sidecar["kind"],
         "station_outcome": sidecar.get("outcome"),
@@ -694,7 +657,6 @@ NEAR_FOLLOWUP_SECONDS = 15
 
 
 def followed_by(moment, followups, seconds=NEAR_FOLLOWUP_SECONDS):
-    """True when a hit/miss event starts within `seconds` after `moment`."""
     import bisect
     index = bisect.bisect_right(followups, moment)
     return index < len(followups) and (followups[index] - moment).total_seconds() <= seconds
@@ -709,8 +671,6 @@ def to_manifest(root, output, include_suspected=False, near_negatives=True,
     events = scan_events(root)
     overrides = load_overrides(root)
     records, skipped, counts = [], [], Counter()
-    # A near-miss followed by a hit or a "не услышала" press is likely a quiet real
-    # wake word the user repeated; it must not become a negative unless labelled false.
     followups = sorted(parse_utc(item["sidecar"]["utc"]) for item in events
                        if item["sidecar"]["kind"] in ("hit", "miss"))
     for event in sorted(events, key=lambda item: item["id"]):
@@ -788,8 +748,6 @@ def to_manifest(root, output, include_suspected=False, near_negatives=True,
     os.replace(temporary, output)
     return manifest
 
-
-# --- cli -------------------------------------------------------------------
 
 def cmd_collect(args):
     summary = collect(args.host, args.dest, args.ssh_key, moment=None,

@@ -1,4 +1,3 @@
-"""Hermetic checks for the bb Proxmox scripts (no Proxmox, no network)."""
 import getpass
 import io
 import os
@@ -240,12 +239,6 @@ class BackupTest(unittest.TestCase):
             self.assertFalse((base / "backups" / "bb-server-export.tgz").exists())
 
     def test_export_listing_is_not_truncated_by_early_grep_exit(self):
-        """Regression: `grep -q` + pipefail made tar die of SIGPIPE.
-
-        bsdtar on macOS ignores the closed pipe, so the listing is produced by
-        a small GNU-tar-like streamer: it writes every member and exits
-        non-zero when grep stops reading after the first match.
-        """
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp)
             source = base / "export.tgz"
@@ -253,8 +246,6 @@ class BackupTest(unittest.TestCase):
                 first = tarfile.TarInfo("files/bb.db")
                 first.size = len(b"sqlite-export")
                 archive.addfile(first, io.BytesIO(b"sqlite-export"))
-                # The first match is followed by far more listing output than a
-                # pipe buffer, so tar must keep writing after grep saw it.
                 for index in range(3000):
                     info = tarfile.TarInfo(f"files/{index:05d}-" + "x" * 120)
                     info.size = 0

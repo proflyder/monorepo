@@ -1,10 +1,3 @@
-//! The [`home_worker::Handler`] that executes one scheduled event.
-//!
-//! Lease → plan → ledger duplicate check → HA call → receipt → ack. A terminal
-//! `FAILED` is only for events a retry cannot fix; a transient HA failure
-//! leaves the event unacknowledged so lease expiry re-delivers it, and a
-//! `DELIVERED` ack is never written without a 2xx from Home Assistant.
-
 use std::future::Future;
 use std::sync::Arc;
 
@@ -16,7 +9,6 @@ use crate::config::Config;
 use crate::domain::{self, PlanError, PlannedAction, Scripts};
 use crate::ledger::{ActiveAlarm, Ledger, Receipt};
 
-/// The Home Assistant surface the bridge needs.
 pub trait HaClient: Send + Sync {
     fn call_script(
         &self,
@@ -55,7 +47,6 @@ impl<T: HaClient + ?Sized> HaClient for Arc<T> {
     }
 }
 
-/// The executor. One instance owns the configured queue and the receipt ledger.
 pub struct Bridge<H: HaClient> {
     config: Arc<Config>,
     ha: Arc<H>,
@@ -73,13 +64,11 @@ impl<H: HaClient> std::fmt::Debug for Bridge<H> {
 }
 
 impl<H: HaClient> Bridge<H> {
-    /// Build the executor.
     #[must_use]
     pub fn new(config: Arc<Config>, ha: Arc<H>, ledger: Arc<Ledger>) -> Self {
         Self { config, ha, ledger }
     }
 
-    /// `"execute"` or `"dry-run"`, matching the Go log line.
     #[must_use]
     pub fn mode(&self) -> &'static str {
         if self.config.execute {
@@ -89,7 +78,6 @@ impl<H: HaClient> Bridge<H> {
         }
     }
 
-    /// Effective script names.
     #[must_use]
     pub fn scripts(&self) -> Scripts {
         Scripts {
@@ -186,9 +174,6 @@ impl<H: HaClient> Handler for Bridge<H> {
             return Outcome::Skipped(reason.to_owned());
         }
 
-        // A global alarm_stop may only silence the alarm this bridge
-        // started. A stale STOP for an older occurrence, or a STOP that
-        // races a newer alarm, must never touch the ringing alarm.
         if event.action == Action::Stop {
             let active = self.ledger.active_alarm();
             let matches = active
@@ -199,11 +184,6 @@ impl<H: HaClient> Handler for Bridge<H> {
                 tracing::info!(reason, "event acknowledged without an HA call");
                 return Outcome::Skipped(reason.to_owned());
             };
-            // Home Assistant writes this identity synchronously inside
-            // alarm_start before returning 2xx, and one consumer handles
-            // one batch at a time, so a newer FIRE always owns a different
-            // stored id. The script fails closed when the id is unknown
-            // while the alarm is still ringing.
             plan.variables.insert(
                 "expected_source_id".to_owned(),
                 Value::String(active.source_id),
@@ -238,8 +218,6 @@ impl<H: HaClient> Handler for Bridge<H> {
                     sanitize_detail(&detail)
                 ));
             }
-            // Transient or auth/configuration error: leave the event
-            // unacknowledged so lease expiry re-delivers it.
             tracing::warn!(
                 %error,
                 attempts = event.attempts,
@@ -261,9 +239,6 @@ fn error_status(error: &home_ha::Error) -> Option<u16> {
     }
 }
 
-/// Render an HA failure the way `packages/go/httpapi.Error` does. Only the
-/// operation and a status are included: a response body may carry deployment
-/// detail and is never logged.
 fn ha_error_detail(error: &home_ha::Error) -> String {
     match error {
         home_ha::Error::Status { op, status, .. } => format!("{op}: status={status}"),
@@ -275,8 +250,6 @@ fn ha_error_detail(error: &home_ha::Error) -> String {
     }
 }
 
-/// Collapse whitespace and bound the ack detail. Truncation stays on a UTF-8
-/// boundary, unlike the Go byte slice which could split a Cyrillic character.
 fn sanitize_detail(text: &str) -> String {
     let joined = text.split_whitespace().collect::<Vec<_>>().join(" ");
     truncate_bytes(&joined, 300)
@@ -416,8 +389,6 @@ mod tests {
 
     #[tokio::test]
     async fn bridge_max_attempts_keeps_the_go_behaviour() {
-        // The scheduler already increments `attempts` when leasing, so the
-        // limit is reached when the delivered value equals the configured one.
         let ha = Arc::new(FakeHa {
             status: Some(401),
             ..FakeHa::default()

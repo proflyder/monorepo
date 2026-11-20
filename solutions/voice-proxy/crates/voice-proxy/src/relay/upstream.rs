@@ -1,22 +1,12 @@
-//! The upstream half: a small OpenAI-compatible passthrough client plus the
-//! error normalisation HA's `llama_cpp` adapter requires.
-//!
-//! There is no authentication of our own: the client's `Authorization` header
-//! is forwarded verbatim, because the proxy is not an auth boundary (the
-//! nftables rule in front of the Pod is).
-
 use std::time::Duration;
 
 use reqwest::header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE, HeaderValue};
 use reqwest::{Method, StatusCode};
 
-/// The request body cap (10 MiB).
 pub const MAX_BODY: usize = 10 << 20;
 
-/// The upstream timeout for the response headers and for every idle read.
 pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(180);
 
-/// One buffered upstream response.
 #[derive(Debug, Clone)]
 pub struct Fetch {
     pub status: StatusCode,
@@ -24,7 +14,6 @@ pub struct Fetch {
     pub content_type: String,
 }
 
-/// Why an upstream request failed.
 #[derive(Debug, thiserror::Error)]
 pub enum UpstreamError {
     #[error("upstream request failed: {0}")]
@@ -35,7 +24,6 @@ pub enum UpstreamError {
     Body(#[source] reqwest::Error),
 }
 
-/// Talks to the OpenAI-compatible upstream.
 #[derive(Clone)]
 pub struct Upstream {
     base: String,
@@ -54,12 +42,6 @@ impl std::fmt::Debug for Upstream {
 }
 
 impl Upstream {
-    /// Builds a client. The workspace `reqwest` has rustls without a default
-    /// crypto provider, so the process-wide ring provider is installed first.
-    ///
-    /// # Errors
-    ///
-    /// Returns the builder error for an invalid client configuration.
     pub fn new(base_url: &str, timeout: Duration) -> Result<Self, UpstreamError> {
         let _already_installed = rustls::crypto::ring::default_provider().install_default();
         let timeout = if timeout.is_zero() {
@@ -68,8 +50,6 @@ impl Upstream {
             timeout
         };
         let client = reqwest::Client::builder()
-            // Bounds the wait for response headers and every gap between body
-            // chunks, so a stalled stream fails while a long turn keeps going.
             .read_timeout(timeout)
             .build()
             .map_err(UpstreamError::Request)?;
@@ -80,18 +60,11 @@ impl Upstream {
         })
     }
 
-    /// The normalised upstream base URL.
     #[must_use]
     pub fn base(&self) -> &str {
         &self.base
     }
 
-    /// Performs one buffered request. A non-2xx status is not an error: the
-    /// caller relays it and normalises the body.
-    ///
-    /// # Errors
-    ///
-    /// Returns a transport or timeout failure.
     pub async fn buffered(
         &self,
         method: Method,
@@ -136,12 +109,6 @@ impl Upstream {
         })
     }
 
-    /// Opens a streaming request and leaves the response body to the caller,
-    /// who must drop it: dropping the body also cancels the upstream turn.
-    ///
-    /// # Errors
-    ///
-    /// Returns a transport or timeout failure while waiting for the headers.
     pub async fn open_stream(
         &self,
         path_and_query: &str,
@@ -163,7 +130,6 @@ impl Upstream {
             .map_err(UpstreamError::Request)
     }
 
-    /// The per-read timeout, also used by the relay loop.
     #[must_use]
     pub fn timeout(&self) -> Duration {
         self.timeout

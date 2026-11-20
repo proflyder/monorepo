@@ -1,10 +1,3 @@
-# NODE_LAN_IP is substituted by Flux from the `flux-settings`
-# Secret (OpenBao); it is never committed to Git.
-#
-# Traffic reaches the pod only through Traefik (hostNetwork, so its source is
-# the node address) and from the in-cluster provisioning Job (pod CIDR).
-# Egress is DNS plus the public HTTP(S) ports Nexus needs to fetch upstream
-# artifacts; nothing else on the LAN is reachable from a compromised proxy.
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy

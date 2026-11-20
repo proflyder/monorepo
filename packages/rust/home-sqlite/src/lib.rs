@@ -1,15 +1,3 @@
-//! One SQLite connection owned by one thread.
-//!
-//! Every query goes through [`Db::call`], which hands the closure to the
-//! writer thread and returns its result through a oneshot channel. That is the
-//! same serialization the Go services get from `SetMaxOpenConns(1)`: two
-//! concurrent claims cannot observe the same unconsumed row.
-//!
-//! Schema versions live in `schema_meta(version)` — the same table the Go
-//! `wakegrant` store uses. [`Migration`]s are applied in order and an existing
-//! database at a known version is left untouched, so a PVC created by the Go
-//! service opens in place.
-
 use std::path::Path;
 use std::sync::mpsc::{self, Sender};
 use std::thread::{self, JoinHandle};
@@ -18,7 +6,6 @@ use rusqlite::Connection;
 use thiserror::Error;
 use tokio::sync::oneshot;
 
-/// One ordered schema step. `version` must increase by one from 1.
 #[derive(Debug, Clone, Copy)]
 pub struct Migration {
     pub version: i64,
@@ -26,7 +13,6 @@ pub struct Migration {
     pub statements: &'static [&'static str],
 }
 
-/// SQLite failure around the actor boundary.
 #[derive(Debug, Error)]
 pub enum SqliteError {
     #[error("sqlite: {0}")]
@@ -52,15 +38,12 @@ pub enum SqliteError {
 
 type Job = Box<dyn FnOnce(&mut Connection) + Send + 'static>;
 
-/// Handle to the single writer thread.
 pub struct Db {
     jobs: Option<Sender<Job>>,
     thread: Option<JoinHandle<()>>,
 }
 
 impl Db {
-    /// Opens `path` (or an in-memory database for `:memory:`), applies the
-    /// Go-compatible pragmas and the pending migrations before returning.
     pub fn open(path: impl AsRef<Path>, migrations: &[Migration]) -> Result<Self, SqliteError> {
         let path = path.as_ref();
         let display = path.display().to_string();
@@ -73,7 +56,6 @@ impl Db {
         Ok(Self::from_connection(connection))
     }
 
-    /// In-memory database with the same pragmas and migrations.
     pub fn open_in_memory(migrations: &[Migration]) -> Result<Self, SqliteError> {
         let mut connection = Connection::open_in_memory()?;
         configure(&connection)?;
@@ -98,7 +80,6 @@ impl Db {
         }
     }
 
-    /// Runs `query` on the writer thread and awaits its result.
     pub async fn call<F, R>(&self, query: F) -> Result<R, SqliteError>
     where
         F: FnOnce(&mut Connection) -> rusqlite::Result<R> + Send + 'static,
@@ -119,7 +100,6 @@ impl Db {
             .map_err(SqliteError::from)
     }
 
-    /// Blocking variant of [`Db::call`] for migrations and test seeding.
     pub fn call_blocking<F, R>(&self, query: F) -> Result<R, SqliteError>
     where
         F: FnOnce(&mut Connection) -> rusqlite::Result<R> + Send + 'static,
@@ -140,13 +120,11 @@ impl Db {
             .map_err(SqliteError::from)
     }
 
-    /// Health check used by `/healthz`.
     pub async fn ping(&self) -> Result<(), SqliteError> {
         self.call(|connection| connection.query_row("SELECT 1", [], |_| Ok(())))
             .await
     }
 
-    /// Stops the writer thread and closes the connection.
     pub fn shutdown(mut self) -> Result<(), SqliteError> {
         self.jobs.take();
         if let Some(thread) = self.thread.take() {
@@ -158,8 +136,6 @@ impl Db {
 
 impl Drop for Db {
     fn drop(&mut self) {
-        // Dropping the sender ends the loop; joining keeps the connection from
-        // outliving the handle. Panics are already surfaced by shutdown().
         self.jobs.take();
         if let Some(thread) = self.thread.take() {
             let _ = thread.join();
@@ -175,7 +151,6 @@ fn configure(connection: &Connection) -> Result<(), SqliteError> {
     Ok(())
 }
 
-/// Applies every migration newer than the stored `schema_meta.version`.
 pub fn migrate(connection: &mut Connection, migrations: &[Migration]) -> Result<(), SqliteError> {
     for pair in migrations.windows(2) {
         debug_assert_eq!(
@@ -293,7 +268,6 @@ mod tests {
                 .as_nanos()
         ));
         {
-            // Exactly what the Go store's v2 migration leaves behind.
             let connection = Connection::open(&path).expect("create");
             connection
                 .execute("CREATE TABLE schema_meta (version INTEGER NOT NULL)", [])

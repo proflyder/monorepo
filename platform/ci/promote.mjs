@@ -1,65 +1,4 @@
 #!/usr/bin/env node
-/**
- * Promote the images a pull request already built (DECISIONS 36).
- *
- * `ci.yml` builds every affected deploy image on a pull request and publishes it
- * as `ghcr.io/<registry>/<image>:tree-<git tree hash>` with build provenance.
- * The squash merge of that PR keeps the tree, so `deploy-home` can deploy the
- * exact bytes that passed CI instead of rebuilding them:
- *
- *   1. resolve `<image>:tree-<tree>` to a digest (`crane digest`);
- *   2. verify its provenance (`gh attestation verify oci://…`) with the signer
- *      restricted to this repository and the CI workflows that produce it;
- *   3. add the usual `<commit sha>` and `develop` tags to the SAME digest
- *      (`crane tag`) and prove the tag resolves to it.
- *
- * If any image of the unit is missing, unverified or cannot be tagged, the whole
- * unit is reported as not deployable (mode `build`): `deploy-home` reads that as
- * a hard failure and stops instead of building. A partially promoted unit is
- * never deployed and never built on the deployment runner.
- *
- * The rule that matters: the tag itself is only a claim. Only a digest whose
- * provenance says "this repository's CI built this commit's tree" may be
- * deployed, so a wrong-tree image can never reach the cluster.
- *
- * Native units (Pulsar firmware, the Windows logon provider) follow the same
- * rule with one artifact instead of an image set: their PR build publishes the
- * release-shaped OCI artifact under `tree-<hash>`, and `planNativePromotion`
- * verifies it and attaches the unit's release tags (`{version}`, `latest`,
- * `sha-{commit12}`) to the same digest. The deploy path never builds: a missing
- * or unverified tag fails (no history search — the artifact *is* the release,
- * so an older tree must never be tagged as the current VERSION). The PR-head
- * delta fallback applies here too, because a squash merge may land on a newer
- * `develop` tree.
- *
- * Immutable tags (`{version}`, `sha-{commit12}`) are immutable by CONTENT, not
- * by manifest digest: two pushes of identical layers differ only in manifest
- * annotations (`created`, `revision`), so a digest comparison would report a
- * false conflict. An existing tag whose artifact type and ordered
- * `(title, digest, mediaType)` layers equal the candidate's is left where it
- * is (no retag) and the promotion succeeds. Different content is a hard
- * failure, never an overwrite. `latest` moves to the version tag's digest, so
- * `latest` and `<version>` always agree even when the version tag was kept.
- *
- * A squash merge keeps the PR's tree only while `develop` does not move. When
- * another PR lands first the merge commit has a different tree and no
- * `tree-<hash>` tag exists for it. On push the fallback is the PR head H: fetch
- * `refs/pull/N/head` (from `gh api …/commits/<sha>/pulls` or the `(#N)` in the
- * squash subject), route the delta between H and the deploy commit through
- * `affected.compute`, and use `tree-<tree(H)>` only when that delta does not
- * select this unit. A delta that touches the unit is a refusal: the bytes CI
- * validated are not the bytes that would be deployed. The PR lookup always uses
- * the GitHub repository (`--github-repository` or `GITHUB_REPOSITORY`); for
- * native units `--repository` is the GHCR publish repository, so it can never
- * identify a PR.
- *
- * Pure decision logic (`planPromotion`/`planNativePromotion`) takes an injected
- * `exec`, so it is tested without a registry. The CLI writes the action outputs:
- *   prebuilt_digests   `<image>=sha256:…,<image>=sha256:…` (empty when not deployable)
- *   mode               `prebuilt` or `build` (native: `promoted` or `build`)
- *   digest             the promoted native artifact digest
- *   IMAGE_PROMOTION / NATIVE_PROMOTION   same mode, for the deploy job summary
- */
 
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
@@ -69,14 +8,11 @@ import { pathToFileURL } from "node:url";
 import { compute as computeAffected } from "./affected.mjs";
 import { VERSION_ANNOTATION } from "./version.mjs";
 
-/** Public GHCR namespace of the monorepo service images. */
 export const REGISTRY = "ghcr.io/proflyder";
-/** Image name characters accepted from a unit map / CLI argument. */
 const IMAGE_NAME = /^[a-z0-9][a-z0-9._-]*$/;
 const DIGEST = /^sha256:[0-9a-f]{64}$/;
 const TREE = /^[0-9a-f]{40}$/;
 const COMMIT = /^[0-9a-f]{7,40}$/;
-/** Tags that must never be recreated from a promoted digest here. */
 export const PROMOTED_TAGS = ["develop"];
 
 export function treeTag(tree) {
@@ -93,21 +29,11 @@ export function imageRef(image) {
   return `${REGISTRY}/${image}`;
 }
 
-/** Normalise a digest string, or return null when it is not a sha256 digest. */
 export function parseDigest(value) {
   const text = String(value || "").trim();
   return DIGEST.test(text) ? text : null;
 }
 
-/**
- * Certificate identity of the workflows allowed to sign image provenance.
- *
- * The attestation is created inside the reusable `_unit.yml` job, so its SAN is
- * that workflow file. Older tree images were attested by `_images.yml`, and an
- * intermediate `_attest.yml` existed briefly; all stay allowed. Restricting the
- * workflow files and the repository keeps a manual push, a fork run or an
- * unrelated workflow from satisfying verification.
- */
 export function signerIdentityPattern(repository) {
   if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(String(repository || ""))) {
     throw new Error(`invalid GitHub repository '${repository}' (expected owner/repo)`);
@@ -116,10 +42,6 @@ export function signerIdentityPattern(repository) {
   return `^https://github\\.com/${escaped}/\\.github/workflows/(ci|_images|_unit|_python|_attest)\\.yml@`;
 }
 
-/**
- * Signer of a native artifact's provenance: the same reusable-workflow rule as
- * images, limited to `_native.yml` (the job that pushes and attests it).
- */
 export function nativeSignerIdentityPattern(repository) {
   if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(String(repository || ""))) {
     throw new Error(`invalid GitHub repository '${repository}' (expected owner/repo)`);
@@ -135,8 +57,6 @@ export function verifyArgs({ repository, reference, signerPattern = null }) {
     `oci://${reference}`,
     "--repo",
     repository,
-    // gh refuses --signer-repo together with --cert-identity-regex; the regex
-    // already pins both the repository and the signing workflow.
     "--cert-identity-regex",
     signerPattern || signerIdentityPattern(repository),
   ];
@@ -169,11 +89,6 @@ function uniqueImages(images) {
   return result;
 }
 
-/**
- * Validate a newest-first first-parent history entry (`{commit, tree}`).
- * `readHistory` builds the list from git; discovery accepts it as data so
- * `planPromotion` stays a pure decision function.
- */
 export function historyEntry(entry) {
   const commit = String(entry?.commit || "");
   const tree = String(entry?.tree || "");
@@ -183,10 +98,6 @@ export function historyEntry(entry) {
   return { commit, tree };
 }
 
-/**
- * Read `limit` newest-first first-parent commits of HEAD with their trees.
- * A squash-merged `develop` is linear, so this is the deployed lineage.
- */
 export function readHistory(exec, limit = 200) {
   const count = Number.isInteger(limit) && limit > 0 ? Math.min(limit, 1000) : 200;
   const output = exec("git", [
@@ -206,10 +117,6 @@ export function readHistory(exec, limit = 200) {
     });
 }
 
-/**
- * Pull request number from a squash-merge subject line: `feat(x): … (#204)`.
- * The API is authoritative; this is the offline/limited-token fallback.
- */
 export function pullRequestNumber(text) {
   const subject = String(text || "").split("\n")[0].trim();
   const match = /\(#([0-9]+)\)\s*$/.exec(subject);
@@ -232,17 +139,10 @@ function pullEntry(pull, repository) {
   return {
     number,
     head,
-    // Fork PRs never publish tree tags: their token is read-only in CI.
     fork: Boolean(headRepository && headRepository !== repository),
   };
 }
 
-/**
- * The pull request a commit came from. `gh api …/commits/<sha>/pulls` is
- * authoritative; when it returns nothing (a token without pull-requests read,
- * a rate limit) the `(#N)` of the squash subject is resolved through the PR
- * endpoint. Returns null when neither identifies a PR of this repository.
- */
 export function pullRequestForCommit(exec, { repository, commit, message = "" }) {
   try {
     const pulls = JSON.parse(exec("gh", ["api", `repos/${repository}/commits/${commit}/pulls`]));
@@ -253,7 +153,6 @@ export function pullRequestForCommit(exec, { repository, commit, message = "" })
       }
     }
   } catch {
-    // Fall through to the squash subject.
   }
   const number = pullRequestNumber(message);
   if (!number) {
@@ -266,16 +165,6 @@ export function pullRequestForCommit(exec, { repository, commit, message = "" })
   }
 }
 
-/**
- * The GitHub repository (`owner/repo`) used for PR lookups and provenance.
- *
- * `--repository` means two different things by mode: for images it is already
- * the GitHub repository (the signer identity), for native units it is the GHCR
- * publish repository (`ghcr.io/owner/name`) that the artifact lives in. The PR
- * API and `git fetch refs/pull/<n>/head` only work against the GitHub
- * repository, so native mode must take it from `--github-repository` or
- * `GITHUB_REPOSITORY` and never from `--repository`.
- */
 export function githubRepositoryFor(args = {}, env = process.env) {
   const explicit = String(args.githubRepository || "").trim();
   if (explicit) {
@@ -287,21 +176,6 @@ export function githubRepositoryFor(args = {}, env = process.env) {
   return String(env.GITHUB_REPOSITORY || "").trim();
 }
 
-/**
- * Resolve the PR head of the deploy commit and decide whether the delta between
- * that head and the merge commit touches `unit`.
- *
- * The delta is the TREE difference `git diff <head> <commit>`, not a range from
- * a merge base: the head already contains everything CI validated, so only the
- * files another merge added are new. Those names are fed to `affected.compute`
- * (with `--base <head> --head <commit>` so MODULE.bazel/.bazelrc scoping reads
- * the right revisions); the unit is affected when `affected` selects it.
- *
- * Returns `{error}` when the PR cannot be identified, the head cannot be
- * fetched/verified, or routing fails — every failure is a refusal, never a
- * permission to promote. `affectsUnit` is fail-closed: a routing failure is
- * reported as an error and the caller refuses.
- */
 export async function resolvePrHeadDelta({
   exec,
   compute,
@@ -310,8 +184,6 @@ export async function resolvePrHeadDelta({
   unit,
   commitMessage = "",
 }) {
-  // Only a GitHub `owner/repo` identifies a pull request. Refuse anything else
-  // (a GHCR publish repository, an empty value) before a doomed API call.
   try {
     signerIdentityPattern(repository);
   } catch (error) {
@@ -394,18 +266,10 @@ export async function resolvePrHeadDelta({
   return result;
 }
 
-/**
- * Resolve the PR-head fallback for a CLI run. Never throws: a failure becomes
- * `{error}`, which only matters when the current tree has no verified build.
- *
- * The lookup always runs against the GitHub repository from
- * `githubRepositoryFor` — in native mode `args.repository` is the GHCR publish
- * repository and would turn every PR query into a 404.
- */
 export async function preparePrHead({ args, exec, compute = computeAffected, unit = "", env = process.env }) {
   try {
     const repository = githubRepositoryFor(args, env);
-    signerIdentityPattern(repository); // fail on a missing/malformed repository, not with a 404
+    signerIdentityPattern(repository);
     const commitMessage = exec("git", ["log", "-1", "--format=%B", args.commit]);
     return await resolvePrHeadDelta({
       exec,
@@ -420,29 +284,6 @@ export async function preparePrHead({ args, exec, compute = computeAffected, uni
   }
 }
 
-/**
- * Decide and perform the promotion. `exec(command, args)` returns stdout and
- * throws on a non-zero exit; it is injected so tests never touch a registry.
- *
- * `optionalImages` are rendered by a deploy script but not applied by it (the
- * sibling workloads of the shared scheduler manifests). They are always
- * resolved from the newest verified build in `history`, because the unit that
- * owns them was not part of this change. `allowHistory` extends the same search
- * to required images; `deploy-home` sets it for `workflow_dispatch`, where the
- * current tree has no CI build (the tag only exists for units the last merged
- * PR touched).
- *
- * `history` is a newest-first list of `{commit, tree}` from `readHistory`. The
- * search is correct because CI builds an image whenever its inputs change: if
- * the inputs changed after the found commit, a later tree would have been built
- * and would be found first. Provenance is verified for the found commit, and
- * the summary names it.
- *
- * `prHead` is the resolved PR-head fallback (see `resolvePrHeadDelta`), used
- * only when `allowPrHead` is set and the current tree has no verified tag. It
- * is tried before history for this unit's own images and after history for
- * siblings. `prHead.affectsUnit` refuses instead of promoting.
- */
 export function planPromotion({
   images,
   optionalImages = [],
@@ -460,7 +301,7 @@ export function planPromotion({
   if (!COMMIT.test(String(commit || ""))) {
     throw new Error(`commit must be a git sha, got '${commit}'`);
   }
-  signerIdentityPattern(repository); // validate before any registry call
+  signerIdentityPattern(repository);
   const required = uniqueImages(images);
   const optional = (optionalImages.length ? uniqueImages(optionalImages) : []).filter(
     (image) => !required.includes(image),
@@ -468,7 +309,6 @@ export function planPromotion({
   const lineage = history.map(historyEntry);
   const decisions = [];
   const verified = [];
-  /** Memoised tag list per image for the history search. */
   const tagSets = new Map();
 
   const knownTags = (ref) => {
@@ -484,15 +324,12 @@ export function planPromotion({
           ),
         );
       } catch {
-        // Listing can be unavailable on an odd registry; probe candidates
-        // directly instead of failing the whole history search.
         tagSets.set(ref, null);
       }
     }
     return tagSets.get(ref);
   };
 
-  /** Resolve one tag to a verified digest, or a decision describing the failure. */
   const resolveTag = (ref, candidateTag) => {
     let digest;
     try {
@@ -515,12 +352,11 @@ export function planPromotion({
     return { digest };
   };
 
-  /** Walk the lineage newest-first for the first built and verified tree. */
   const resolveFromHistory = (ref) => {
     const tags = knownTags(ref);
     for (const entry of lineage) {
       if (entry.tree === tree) {
-        continue; // already probed as the current tree
+        continue;
       }
       const candidateTag = `tree-${entry.tree}`;
       if (tags && !tags.has(candidateTag)) {
@@ -534,7 +370,6 @@ export function planPromotion({
     return null;
   };
 
-  /** The deploy commit's PR head, when the delta to the merge does not touch this unit. */
   const usablePrHead = () =>
     prHead && !prHead.error && !prHead.affectsUnit ? prHead : null;
 
@@ -542,7 +377,6 @@ export function planPromotion({
     `from PR head ${String(head).slice(0, 12)}, delta to ${String(commit).slice(0, 12)} ` +
     `does not affect ${unit || "the unit"}`;
 
-  /** Probe `tree-<tree(PR head)>`: the bytes CI verified, before another merge. */
   const resolveFromPrHead = (ref) => {
     const state = usablePrHead();
     if (!state) {
@@ -565,8 +399,6 @@ export function planPromotion({
     };
   };
 
-  // Phase 1: resolve and verify every image before tagging anything, so a
-  // missing/unverified image cannot leave a half-promoted unit behind.
   for (const [image, isOptional] of [
     ...required.map((image) => [image, false]),
     ...optional.map((image) => [image, true]),
@@ -579,8 +411,6 @@ export function planPromotion({
     if (!current.error) {
       resolved = { digest: current.digest, source: commit, sourceTree: tree };
     } else {
-      // Own images prefer the PR head CI built; siblings were not part of this
-      // change, so the newest verified history build is tried first.
       const steps = isOptional ? ["history", "pr-head"] : ["pr-head", "history"];
       for (const step of steps) {
         if (step === "pr-head" && allowPrHead) {
@@ -658,9 +488,6 @@ export function planPromotion({
     };
   }
 
-  // Phase 2: attach the usual tags to the required images only (the optional
-  // siblings are not this unit's artifact; their digest is just handed to the
-  // renderer) and prove each tag still resolves to the same digest.
   for (const item of verified.filter((entry) => !entry.optional)) {
     for (const destination of [String(commit), ...PROMOTED_TAGS]) {
       try {
@@ -696,7 +523,6 @@ export function planPromotion({
   };
 }
 
-/** `name=sha256:…,name=sha256:…` (empty when not deployable). */
 export function formatPrebuilt(digests) {
   return Object.entries(digests)
     .map(([image, digest]) => `${image}=${digest}`)
@@ -707,9 +533,6 @@ export function formatSummary(result) {
   const lines = [`### image promotion (${result.tag})`, ""];
   for (const decision of result.decisions) {
     const digest = decision.digest ? ` \`${decision.digest}\`` : "";
-    // Name the commit each digest came from: on a manual dispatch a required
-    // image may come from the newest verified build in history, and a reused
-    // sibling always does.
     const source =
       decision.status === "verified" || decision.status === "promoted" || decision.status === "reused"
         ? decision.source
@@ -730,13 +553,7 @@ export function formatSummary(result) {
   return `${lines.join("\n")}\n`;
 }
 
-// --------------------------------------------------------------------------
-// Native artifact promotion (DECISIONS 36, native units)
-// --------------------------------------------------------------------------
-
-/** Full GHCR reference of a native publish repository. */
 const NATIVE_REPOSITORY = /^ghcr\.io\/[a-z0-9.-]+\/[a-z0-9._-]+$/;
-/** Destination tag characters accepted from units.mjs / CLI. */
 const TAG = /^[A-Za-z0-9_][A-Za-z0-9._-]{0,127}$/;
 const VERSION = /^v?[0-9]+\.[0-9]+\.[0-9]+$/;
 
@@ -748,7 +565,6 @@ export function nativeRepository(repository) {
   return text;
 }
 
-/** Expand `{version}` and `{commit12}` in the unit's publish tag templates. */
 export function expandTags(templates, { version, commit }) {
   if (!VERSION.test(String(version || ""))) {
     throw new Error(`version must be MAJOR.MINOR.PATCH or vMAJOR.MINOR.PATCH, got '${version}'`);
@@ -774,23 +590,9 @@ export function expandTags(templates, { version, commit }) {
   return expanded;
 }
 
-/** Layer/descriptor title annotation used by `oras push` for a file name. */
 const TITLE_ANNOTATION = "org.opencontainers.image.title";
-/**
- * Version annotation the publish scripts write next to a native release; the
- * promote path reads it so the release tag and the binary's `--version` (which
- * the station updater compares) can never disagree. Defined once, in
- * `version.mjs`, and re-exported here for the promotion callers.
- */
 export { VERSION_ANNOTATION };
 
-/**
- * Reduce an OCI manifest/index to the fields that define artifact identity:
- * its artifact type and the ordered `(title, digest, mediaType)` descriptors.
- * Manifest-level annotations (`created`, `revision`) are deliberately ignored:
- * a rebuild of the same layers must compare equal, as the publish scripts do
- * with `SHA256SUMS` content.
- */
 export function manifestContent(text) {
   let parsed;
   try {
@@ -820,17 +622,14 @@ export function manifestContent(text) {
   };
 }
 
-/** True when two manifests describe the same artifact content. */
 export function sameManifestContent(left, right) {
   return JSON.stringify(left) === JSON.stringify(right);
 }
 
-/** Read and normalise a manifest; a missing tag is reported by the caller. */
 function readManifest(exec, reference) {
   return manifestContent(exec("crane", ["manifest", reference]));
 }
 
-/** The manifest-level annotations of one reference (e.g. the artifact version). */
 export function manifestAnnotations(text) {
   let parsed;
   try {
@@ -842,20 +641,11 @@ export function manifestAnnotations(text) {
   return annotations && typeof annotations === "object" ? annotations : {};
 }
 
-/** Read a manifest once and return both its content identity and annotations. */
 function readManifestWithAnnotations(exec, reference) {
   const text = exec("crane", ["manifest", reference]);
   return { content: manifestContent(text), annotations: manifestAnnotations(text) };
 }
 
-/**
- * Promote a PR-built native artifact from `tree-<hash>` to the unit's release
- * tags. Releases are immutable by content: an existing `<version>` or
- * `sha-<commit>` tag with the same artifact type and layers is kept as-is
- * (no retag) even when its manifest digest differs, while different content is
- * a hard failure. `latest` is the only tag that moves; it follows the version
- * tag's digest so the station installs exactly that release.
- */
 export function planNativePromotion({
   repository,
   tree,
@@ -871,20 +661,12 @@ export function planNativePromotion({
 } = {}) {
   const tag = treeTag(tree);
   const ref = nativeRepository(repository);
-  // The version may arrive empty: the artifact's own annotation is then the
-  // authority (`publish-oci.sh` recorded the version the binary was built
-  // with). Destination tags are expanded once the candidate is known.
   const expand = (value) =>
     VERSION.test(String(value || "")) ? expandTags(tags, { version: value, commit }) : [];
   let destinations = expand(version);
   const signer = nativeSignerIdentityPattern(githubRepository);
   const decisions = [];
 
-  // The merged tree normally has the artifact CI built for the PR. When
-  // `develop` moved before the squash merge, the PR head H is the fallback —
-  // but only if the delta H..commit does not touch this native unit (see
-  // `resolvePrHeadDelta`). The artifact *is* the release, so an affected delta
-  // is a refusal, never a retag.
   let digest = null;
   let artifactTag = tag;
   let source = commit;
@@ -961,15 +743,9 @@ export function planNativePromotion({
   }
   decisions.push({ tag: artifactTag, status: "verified", digest, ...(deltaNote ? { detail: deltaNote } : {}) });
 
-  // Content identity of the candidate, read once. Immutable tags are compared
-  // against this instead of their manifest digest: a rebuild of the same files
-  // produces different manifest annotations but the same layers.
   const candidateRead = readManifestWithAnnotations(exec, `${ref}@${digest}`);
   const candidate = candidateRead.content;
 
-  // The version travels with the artifact: the annotation is what the binary
-  // prints, so a release tag can never disagree with the updater's check. An
-  // explicit `--version` is a legacy override and must agree when both exist.
   const annotated = String(candidateRead.annotations[VERSION_ANNOTATION] || "").trim();
   const explicit = String(version || "").trim();
   if (annotated && explicit && annotated !== explicit) {
@@ -990,13 +766,9 @@ export function planNativePromotion({
     throw new Error("no publish tags to attach");
   }
 
-  // The tag whose digest `latest` must follow: the version tag, whether it was
-  // created now or kept from an earlier push. Without a version tag, `latest`
-  // tracks the candidate itself.
   const versionTag = expandTags(["{version}"], { version: effectiveVersion, commit })[0];
   let releaseDigest = null;
 
-  /** Keep/tag one immutable release tag and return the digest it now points to. */
   const applyImmutable = (destination) => {
     let existing = null;
     try {
@@ -1020,9 +792,6 @@ export function planNativePromotion({
         return existing;
       }
       if (allowRetag) {
-        // Explicit manual-rebuild path only (deploy-services): the same tree
-        // was rebuilt because the published bytes were broken. The version tag
-        // moves to the freshly verified digest and the move is reported.
         exec("crane", ["tag", `${ref}@${digest}`, destination]);
         const moved = parseDigest(exec("crane", ["digest", `${ref}:${destination}`]));
         if (moved !== digest) {
@@ -1055,8 +824,6 @@ export function planNativePromotion({
     return digest;
   };
 
-  // Immutable tags first, so `latest` follows the version digest even when the
-  // version tag already existed with identical content but another digest.
   for (const destination of destinations) {
     if (destination === "latest") {
       continue;
@@ -1154,9 +921,6 @@ export function runNativePromotion({
   if (env.GITHUB_STEP_SUMMARY) {
     appendFile(env.GITHUB_STEP_SUMMARY, formatNativeSummary(result));
   }
-  // This entry point is only used by deploy-home: the merged PR must have
-  // published the artifact. It never builds and does not search history:
-  // an older tree must never be re-tagged as the current release.
   if (result.mode !== "promoted") {
     throw new Error(
       `native artifact for tree-${args.tree} is not published and verified (${result.reason}); ` +
@@ -1272,8 +1036,6 @@ export function runPromotion({
       `${optionalImages.length ? ` (+ siblings ${optionalImages.join(", ")})` : ""}` +
       ` for tree ${args.tree} (${repository})`,
   );
-  // Invalid input throws and fails the step; the history search only runs when
-  // a manual dispatch or a sibling image needs it.
   const wantsHistory = Boolean(args.allowHistory || optionalImages.length);
   const history = wantsHistory
     ? args.history || readHistory(exec, args.historyLimit)
@@ -1338,9 +1100,6 @@ export async function main(argv = process.argv.slice(2)) {
     );
     return 0;
   }
-  // The PR-head fallback is resolved up front (it is async because routing
-  // goes through `affected.compute`); a failure is reported to the decision
-  // logic and only matters when the current tree has no verified tag.
   const prHead = args.allowPrHead
     ? await preparePrHead({ args, exec: spawnExec, unit: args.unit })
     : null;

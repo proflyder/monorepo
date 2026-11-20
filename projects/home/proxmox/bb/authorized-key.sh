@@ -1,21 +1,10 @@
 #!/usr/bin/env bash
-# authorized_keys helper shared by install-bb.sh and its hermetic tests.
-#
-# One restricted line per public key, idempotent by key body. Callers pass the
-# target file so the test can use a temporary path instead of /home/bb.
 
-# Print the restricted line for one public key.
-#   authorized_key_line FROM COMMAND KEY
 authorized_key_line() {
   local from=$1 command=$2 key=$3
   printf 'from="%s",command="%s",restrict %s\n' "$from" "$command" "$key"
 }
 
-# Append KEYFILE as a restricted line to TARGET unless the key body is already
-# present. OWNER (may be empty) sets the owner of TARGET and of its .ssh parent;
-# an empty OWNER leaves ownership untouched, which is what the tests use when
-# they are not root.
-#   install_authorized_key TARGET OWNER KEYFILE FROM COMMAND
 install_authorized_key() {
   local target=$1 owner=$2 keyfile=$3 from=$4 command=$5
   local key body directory
@@ -42,8 +31,6 @@ install_authorized_key() {
   fi
   chmod 600 "$target"
 
-  # Idempotent by key body: re-running with a different `from` does not add a
-  # second copy of the same key.
   if grep -qF -- "$body" "$target"; then
     echo "restricted key already present in $target"
     return 0

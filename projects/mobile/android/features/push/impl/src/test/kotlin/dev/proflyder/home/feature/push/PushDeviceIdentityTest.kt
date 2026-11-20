@@ -21,7 +21,6 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 
-/** The stable device identity survives token rotation and is never the raw platform id. */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class PushDeviceIdentityTest {
@@ -64,7 +63,6 @@ class PushDeviceIdentityTest {
         )
 }
 
-/** Registration keeps one device id across FCM token rotations and name changes. */
 class PushRegistrationPublisherTest {
     private class FakeApi : PushDevicesApi {
         val registrations = mutableListOf<List<String>>()
@@ -118,7 +116,6 @@ class PushRegistrationPublisherTest {
     }
 }
 
-/** The owner-visible name is persisted locally so the screen survives a restart. */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class PushRegistrationStoreNameTest {

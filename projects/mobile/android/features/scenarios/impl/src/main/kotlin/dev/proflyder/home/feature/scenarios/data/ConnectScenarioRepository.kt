@@ -10,10 +10,6 @@ import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 
-/**
- * Remote-only repository. There is no offline copy: the scheduler owns the
- * definition and the phone only edits it.
- */
 @SingleIn(AppScope::class)
 @ContributesBinding(AppScope::class)
 @Inject

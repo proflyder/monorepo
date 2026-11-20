@@ -10,14 +10,8 @@ import com.google.android.material.shape.ShapeAppearanceModel
 import com.google.android.material.snackbar.BaseTransientBottomBar
 import com.google.android.material.snackbar.Snackbar
 
-/** How a [Notices] message is tinted: neutral confirmation or a problem. */
 enum class NoticeKind { Info, Error }
 
-/**
- * The single way the app shows transient feedback: a rounded tonal pill with a status icon,
- * floating above the view tagged [R.id.home_notice_anchor] so it never covers navigation.
- * A sideways or downward swipe dismisses it; a tap never does.
- */
 object Notices {
     fun show(
         view: View,
@@ -54,8 +48,6 @@ object Notices {
         text.compoundDrawablePadding = (context.resources.displayMetrics.density * 12).toInt()
         view.rootView.findViewById<View>(R.id.home_notice_anchor)?.let { snackbar.anchorView = it }
         snackbar.animationMode = BaseTransientBottomBar.ANIMATION_MODE_SLIDE
-        // The activity root is not a CoordinatorLayout, so Material never
-        // installs a SwipeDismissBehavior: the notice must own the gesture.
         NoticeSwipeDismiss(container, snackbar::dismiss).attach()
         snackbar.show()
         return snackbar

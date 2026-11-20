@@ -2,8 +2,6 @@ load("@rules_rust//rust:defs.bzl", "rust_clippy_test", "rustfmt_test")
 
 package(default_visibility = ["//visibility:public"])
 
-# The deployed binary keeps the historical target label used by the operations
-# docs: `//projects/station/ble-gateway:ble-gateway`.
 alias(
     name = "ble-gateway",
     actual = "//projects/station/ble-gateway/crates/ble-gateway:ble-gateway",
@@ -22,8 +20,6 @@ rustfmt_test(
     targets = _ALL_TARGETS,
 )
 
-# rules_rust turns every clippy warning into an error unless configured
-# otherwise, which is the `-D warnings` gate.
 rust_clippy_test(
     name = "clippy",
     size = "small",

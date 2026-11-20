@@ -20,11 +20,6 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowWindowManagerImpl
 
-/**
- * The root FAB lives in the Home fragment, but its speed dial is a window-level
- * popup. These tests drive the real MainActivity so a lost click listener or an
- * invisible overlay cannot pass unnoticed.
- */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class HomeFabActivityTest {
@@ -41,7 +36,6 @@ class HomeFabActivityTest {
     private fun fab(activity: MainActivity): FloatingActionButton =
         requireNotNull(home(activity).view).findViewById(R.id.control_quick_fab)
 
-    /** Give the dial one item without touching the network. */
     private fun seedCallItem(activity: MainActivity) {
         val overlay = home(activity).javaClass
             .getDeclaredField("speedDial")
@@ -69,15 +63,12 @@ class HomeFabActivityTest {
         val root = requireNotNull(popupRoot(activity))
         val earlyItems = root.findViewById<LinearLayout>(R.id.control_dial_items)
         assertEquals(1, earlyItems.childCount)
-        // The very first frame after showAtLocation is already hidden.
         assertEquals(0f, earlyItems.getChildAt(0).alpha, 0.001f)
         root.measure(
             View.MeasureSpec.makeMeasureSpec(1000, View.MeasureSpec.EXACTLY),
             View.MeasureSpec.makeMeasureSpec(2000, View.MeasureSpec.EXACTLY),
         )
         root.layout(0, 0, 1000, 2000)
-        // First pre-draw positions the clone FAB and gives every row its start
-        // state; it must not paint the expanded state in the meantime.
         root.viewTreeObserver.dispatchOnPreDraw()
 
         val items = root.findViewById<LinearLayout>(R.id.control_dial_items)

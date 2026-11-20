@@ -1,10 +1,3 @@
-//! Redacted secrets and token files for first-party home services.
-//!
-//! [`Secret`] and [`Token`] keep their contents in a [`Zeroize`]ing buffer,
-//! print `***` from `Debug`, and only compare through [`subtle`]'s
-//! constant-time equality. [`load_or_create`] owns the on-disk contract used
-//! by the station daemons: a `0600` file inside a `0700` directory.
-
 use std::fmt;
 use std::io;
 
@@ -20,10 +13,6 @@ use std::path::{Path, PathBuf};
 use subtle::ConstantTimeEq;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
-/// A secret string that never leaks through `Debug`, `Display` or `Clone`
-/// (cloning copies the value into another zeroizing buffer).
-///
-/// Call [`Secret::expose`] at the exact place a protocol needs the plaintext.
 #[derive(Clone, Zeroize, ZeroizeOnDrop)]
 pub struct Secret {
     value: String,
@@ -36,7 +25,6 @@ impl Secret {
         }
     }
 
-    /// Borrow the plaintext. Use it as narrowly as possible.
     #[must_use]
     pub fn expose(&self) -> &str {
         &self.value
@@ -46,7 +34,6 @@ impl Secret {
         self.value.as_bytes()
     }
 
-    /// Constant-time comparison against an untrusted candidate.
     #[must_use]
     pub fn ct_eq(&self, candidate: impl AsRef<[u8]>) -> bool {
         self.as_bytes().ct_eq(candidate.as_ref()).into()
@@ -67,8 +54,6 @@ impl PartialEq for Secret {
 
 impl Eq for Secret {}
 
-/// A protocol token (HTTP bearer, device token) with the same redaction and
-/// constant-time comparison rules as [`Secret`].
 #[derive(Clone, Zeroize, ZeroizeOnDrop)]
 pub struct Token {
     value: Secret,
@@ -106,11 +91,6 @@ impl PartialEq for Token {
 
 impl Eq for Token {}
 
-/// Read a token file or create it with `generate`.
-///
-/// The file is trimmed; an empty result is treated as missing. A generated
-/// value is written as `value\n` with mode `0600`, and the parent directory is
-/// created with mode `0700`.
 #[cfg(unix)]
 pub fn load_or_create<G>(path: &Path, generate: G) -> io::Result<Secret>
 where
@@ -119,9 +99,6 @@ where
     load_or_create_with(path, |value| Some(value.to_string()), generate)
 }
 
-/// Like [`load_or_create`], but lets the caller normalise the file contents
-/// before accepting them. Returning `None` (or an empty string) regenerates
-/// the token.
 #[cfg(unix)]
 pub fn load_or_create_with<R, G>(path: &Path, normalize: R, generate: G) -> io::Result<Secret>
 where
@@ -143,13 +120,11 @@ where
     Ok(secret)
 }
 
-/// Load or generate a hex token of `bytes` random bytes (`2 * bytes` chars).
 #[cfg(unix)]
 pub fn load_or_create_hex(path: &Path, bytes: usize) -> io::Result<Token> {
     load_or_create(path, || hex(bytes)).map(|secret| Token::new(secret.expose()))
 }
 
-/// Generate a decimal token with a non-zero leading digit.
 pub fn numeric(digits: usize) -> io::Result<Secret> {
     if digits == 0 {
         return Err(io::Error::new(
@@ -165,7 +140,6 @@ pub fn numeric(digits: usize) -> io::Result<Secret> {
     Ok(Secret::new(value))
 }
 
-/// Generate a lower-case hex token from `bytes` random bytes.
 pub fn hex(bytes: usize) -> io::Result<Secret> {
     let mut buffer = vec![0u8; bytes];
     getrandom::fill(&mut buffer)
@@ -173,7 +147,6 @@ pub fn hex(bytes: usize) -> io::Result<Secret> {
     Ok(Secret::new(hex::encode(buffer)))
 }
 
-/// Write `secret` to `path` as `secret\n` with mode `0600`.
 #[cfg(unix)]
 fn write_secret(path: &Path, secret: &Secret) -> io::Result<()> {
     let mut file = OpenOptions::new()
@@ -214,14 +187,11 @@ fn directory_of(path: &Path) -> PathBuf {
         .to_path_buf()
 }
 
-/// Uniform integer in `0..bound` without modulo bias.
 fn uniform_below(bound: u32) -> u32 {
     debug_assert!(bound > 0);
     let zone = u32::MAX - (u32::MAX % bound);
     loop {
         let mut bytes = [0u8; 4];
-        // getrandom failing is a broken platform, not a recoverable condition
-        // for a token that gates physical provisioning.
         getrandom::fill(&mut bytes).expect("getrandom");
         let value = u32::from_le_bytes(bytes);
         if value < zone {
@@ -284,7 +254,6 @@ mod tests {
             format!("{}\n", secret.expose())
         );
 
-        // A second call reuses the file, trims it and repairs its mode.
         fs::write(&path, " 654321 \n").expect("write");
         fs::set_permissions(&path, fs::Permissions::from_mode(0o644)).expect("chmod");
         let reused = load_or_create(&path, || numeric(6)).expect("reuse");

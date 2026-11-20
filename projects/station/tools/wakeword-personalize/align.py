@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-"""Energy-guided short-utterance alignment; uncertain regions remain unverified. Outputs contain private transcripts; never commit them."""
 import json,re,wave,os
 from pathlib import Path
 import numpy as np

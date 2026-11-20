@@ -12,33 +12,15 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.longOrNull
 
-/**
- * Endpoint and timeout state supplied by Firebase Remote Config.
- *
- * The bearer token is deliberately absent: it is a device-local secret and is
- * never read from or written to Remote Config.
- */
 sealed interface RemoteConnectionState {
-    /** Firebase is not configured in this build (no google-services resources). */
     data object Unavailable : RemoteConnectionState
 
-    /** A fetch is in flight and no usable value has been loaded yet. */
     data object Loading : RemoteConnectionState
 
-    /** The Remote Config parameter is absent or empty. */
     data object Missing : RemoteConnectionState
 
-    /**
-     * A Remote Config value is present but cannot be used. [field] identifies a
-     * bad URL/timeout; it is null for malformed JSON where no field can be
-     * determined.
-     */
     data class Invalid(val field: Field? = null, val detail: String = "") : RemoteConnectionState
 
-    /**
-     * The last fetch failed. [lastKnown] is the most recent successfully
-     * activated configuration, if any, and remains usable for requests.
-     */
     data class FetchFailed(val lastKnown: Loaded? = null) : RemoteConnectionState
 
     data class Loaded(
@@ -50,29 +32,10 @@ sealed interface RemoteConnectionState {
     ) : RemoteConnectionState
 }
 
-/** Remote Config parameter carrying the JSON connection document. */
 const val REMOTE_CONNECTION_KEY = "home_connection"
 
 private val remoteJson = Json { ignoreUnknownKeys = true }
 
-/**
- * Parses the single `home_connection` Remote Config string.
- *
- * Schema:
- * ```json
- * {
- *   "schedulerBaseUrl": "https://alarms.example.test",
- *   "controlBaseUrl": "https://control.example.test",
- *   "intercomBaseUrl": "https://intercom.example.test",
- *   "connectTimeoutMs": 5000,
- *   "readTimeoutMs": 20000
- * }
- * ```
- *
- * An empty string means "not configured". Unknown keys are ignored. Any
- * malformed value is reported as [RemoteConnectionState.Invalid] and never
- * throws.
- */
 fun parseRemoteConnection(raw: String): RemoteConnectionState {
     if (raw.isBlank()) return RemoteConnectionState.Missing
 
@@ -152,7 +115,6 @@ fun parseRemoteConnection(raw: String): RemoteConnectionState {
     )
 }
 
-/** A required string field; null when absent, JSON null, or not a primitive. */
 private fun JsonObject.stringValue(key: String): String? {
     val element = this[key] ?: return null
     if (element is JsonNull) return null
@@ -167,13 +129,8 @@ private fun JsonObject.longValue(key: String, default: Long): Long? {
     return primitive.longOrNull
 }
 
-/**
- * Provider of endpoint/timeout configuration. Implementations own the transport
- * (Firebase in production, a fake in tests); consumers only see states.
- */
 interface RemoteConnectionSource {
     val state: StateFlow<RemoteConnectionState>
 
-    /** Fetches and activates the latest values; errors are reflected in [state]. */
     suspend fun refresh()
 }

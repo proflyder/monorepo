@@ -1,12 +1,5 @@
-//! Версия релиза: тег `vMAJOR.MINOR.PATCH` и `git describe`-строка сборки
-//! (`v1.2.3-4-gabc1234`, `v1.2.3-dirty`) или голый хеш без тегов.
-
 use std::fmt;
 
-/// Разобранная версия: исходный текст тега и три числа для сравнения.
-///
-/// Числа читаются как C `sscanf("%d.%d.%d")` после необязательного `v` — этой же
-/// семантикой пользовался удалённый C++ пробник (`tests/golden/versions.txt`).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Version {
     text: String,
@@ -14,7 +7,6 @@ pub struct Version {
 }
 
 impl Version {
-    /// Тег или `describe`-строка; `None`, если первые три числа не читаются.
     #[must_use]
     pub fn parse(text: &str) -> Option<Self> {
         Some(Self {
@@ -23,7 +15,6 @@ impl Version {
         })
     }
 
-    /// Тег OCI-релиза: ровно `vX.Y.Z` из цифр, без суффиксов и ведущих пробелов.
     pub(crate) fn parse_tag(text: &str) -> Option<Self> {
         let rest = text.strip_prefix('v')?;
         let mut parts = rest.split('.');
@@ -39,15 +30,11 @@ impl Version {
         Self::parse(text)
     }
 
-    /// Тег или `describe`-строка как она пришла (для HA, `update_attempt` и `--version`).
     #[must_use]
     pub fn as_str(&self) -> &str {
         &self.text
     }
 
-    /// Это более новый релиз, чем `current`: `(newer, current_known)`. Неразобранная
-    /// текущая версия (голый хеш сборки) сравнивается как строка, и автообновление
-    /// такой сборке не предлагается.
     #[must_use]
     pub fn is_newer_than(&self, current: &str) -> (bool, bool) {
         match Self::parse(current) {
@@ -68,8 +55,6 @@ impl fmt::Display for Version {
     }
 }
 
-/// `latest` новее `current`: `(newer, current_known)`. Граница с Home Assistant: значение
-/// сенсора обновления приходит строкой и может быть мусором.
 #[must_use]
 pub fn release_newer(latest: &str, current: &str) -> (bool, bool) {
     Version::parse(latest).map_or_else(
@@ -78,7 +63,6 @@ pub fn release_newer(latest: &str, current: &str) -> (bool, bool) {
     )
 }
 
-/// MAJOR.MINOR.PATCH из `s`, у которой может быть `-`-суффикс.
 fn parse_numbers(s: &str) -> Option<[i32; 3]> {
     let s = s.as_bytes();
     let mut pos = usize::from(s.first() == Some(&b'v'));
@@ -98,7 +82,6 @@ fn parse_numbers(s: &str) -> Option<[i32; 3]> {
     }
 }
 
-/// `%d`: ведущие пробелы C, знак, хотя бы одна цифра; насыщение на границах `i32`.
 fn scan_int(s: &[u8], pos: &mut usize) -> Option<i32> {
     let mut p = *pos;
     while s
@@ -131,7 +114,6 @@ mod tests {
 
     #[test]
     fn versions_table_of_the_cxx_probe() {
-        // Строки C++ `update_probe versions` (tests/golden/versions.txt).
         let cases = [
             ("v1.2.4", "v1.2.3", (true, true)),
             ("v1.2.3", "v1.2.3", (false, true)),
@@ -154,7 +136,6 @@ mod tests {
         assert_eq!(numbers("1.2.3"), Some([1, 2, 3]));
         assert_eq!(numbers("v1.2.3-4-gabc"), Some([1, 2, 3]));
         assert_eq!(numbers("v1.2.3-dirty"), Some([1, 2, 3]));
-        // `%d` пропускает пробелы и принимает знак.
         assert_eq!(numbers("v 1.+2.\t-3"), Some([1, 2, -3]));
         assert_eq!(numbers("v1.2.3x"), None);
         assert_eq!(numbers("v1.2.3.4"), None);
@@ -163,7 +144,6 @@ mod tests {
         assert_eq!(numbers("v1..3"), None);
         assert_eq!(numbers(""), None);
         assert_eq!(numbers("v99999999999.0.0"), Some([i32::MAX, 0, 0]));
-        // Считается только тройка: сборка после тега не старше тега.
         assert_eq!(release_newer("v1.2.3", "v1.2.2-7-gdeadbee"), (true, true));
         assert_eq!(release_newer("v1.2.3", "6ac30be-dirty"), (true, false));
         assert_eq!(release_newer("6ac30be", "6ac30be"), (false, false));

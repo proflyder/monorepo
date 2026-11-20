@@ -1,17 +1,4 @@
 #!/usr/bin/env bash
-# Dumps the Yandex Station Mini firmware and filesystem for offline study.
-#
-#   ./scripts/dump-station.sh
-#
-# This adbd build has a broken `exec-out` service, so every binary stream is
-# wrapped in base64 on the device and decoded locally.
-#
-# Layout:
-#   dump/rootfs/rootfs.tar.gz    /bin /etc /lib /opt /root /sbin /system /usr /var
-#   dump/rootfs/bkupgrade.tar.gz /bkupgrade (data + CA backup)
-#   dump/rootfs/tee.tar.gz       /tee
-#   dump/mtd/mtdN.bin            raw NAND partitions, bad blocks padded with 0x00
-#   dump/meta/                   procfs, dmesg, mtdinfo, mount, ps, ...
 set -euo pipefail
 
 ADB="${ADB:-${HOME}/Library/Android/sdk/platform-tools/adb}"

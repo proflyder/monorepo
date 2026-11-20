@@ -1,51 +1,17 @@
-//! Packing of `KERB_INTERACTIVE_UNLOCK_LOGON`.
-//!
-//! Derived from the Microsoft sample (MIT, see `THIRD-PARTY-NOTICES.md`): the
-//! x86_64 layout is written by explicit offsets instead of stack pointers, so
-//! the packer is safe Rust and host-tested. [`abi_checks`] verifies the offsets
-//! against `ntsecapi.h` on the Windows target.
-//!
-//! All fields are little-endian:
-//!
-//! ```text
-//! +0   KERB_INTERACTIVE_LOGON
-//!        +0  MessageType: i32
-//!        +8  LogonDomainName: UNICODE_STRING
-//!        +24 UserName:        UNICODE_STRING
-//!        +40 Password:        UNICODE_STRING
-//! +56  LogonId: LUID (zeroed)
-//! +64  domain UTF-16 bytes, user UTF-16 bytes, password UTF-16 bytes
-//! ```
-//!
-//! Each `UNICODE_STRING` has `Length` and `MaximumLength` equal to the byte
-//! length without the NUL terminator (like the Microsoft sample), and `Buffer`
-//! holds a byte offset from the start of the packed buffer.
-
-/// Size of `KERB_INTERACTIVE_UNLOCK_LOGON` on x86_64.
 pub const UNLOCK_HEADER_BYTES: usize = 64;
-/// Offset of `KERB_INTERACTIVE_LOGON.LogonDomainName`.
 pub const DOMAIN_FIELD_OFFSET: usize = 8;
-/// Offset of `KERB_INTERACTIVE_LOGON.UserName`.
 pub const USER_FIELD_OFFSET: usize = 24;
-/// Offset of `KERB_INTERACTIVE_LOGON.Password`.
 pub const PASSWORD_FIELD_OFFSET: usize = 40;
-/// Offset of `UNICODE_STRING.Buffer` inside a `UNICODE_STRING`.
 pub const UNICODE_STRING_BUFFER_OFFSET: usize = 8;
 
-/// `KerbInteractiveLogon` from `ntsecapi.h`.
 pub const KERB_INTERACTIVE_LOGON: i32 = 2;
-/// `KerbWorkstationUnlockLogon` from `ntsecapi.h`.
 pub const KERB_WORKSTATION_UNLOCK_LOGON: i32 = 7;
 
-/// Total size of the packed buffer, or `None` when a string does not fit the
-/// `USHORT` byte length of `UNICODE_STRING` (the packer fails with
-/// `HRESULT_FROM_WIN32(ERROR_ARITHMETIC_OVERFLOW)`).
 pub fn packed_len(domain: &[u16], user: &[u16], password: &[u16]) -> Option<usize> {
     let domain_bytes = utf16_bytes(domain)?;
     let user_bytes = utf16_bytes(user)?;
     let password_bytes = utf16_bytes(password)?;
     let total = UNLOCK_HEADER_BYTES + domain_bytes + user_bytes + password_bytes;
-    // `CREDENTIAL_PROVIDER_CREDENTIAL_SERIALIZATION.cbSerialization` is a DWORD.
     u32::try_from(total).is_ok().then_some(total)
 }
 
@@ -54,14 +20,11 @@ fn utf16_bytes(text: &[u16]) -> Option<usize> {
     u16::try_from(bytes).is_ok().then_some(bytes)
 }
 
-/// Builds the buffer that LSA consumes. Returns `None` on the same overflow
-/// conditions as [`packed_len`].
 pub fn pack(domain: &[u16], user: &[u16], password: &[u16], message_type: i32) -> Option<Vec<u8>> {
     let total = packed_len(domain, user, password)?;
     let mut buffer = vec![0u8; total];
 
     put_i32(&mut buffer, 0, message_type);
-    // LogonId stays zeroed, exactly like `ZeroMemory(&pkiulOut->LogonId, ...)`.
 
     let mut cursor = UNLOCK_HEADER_BYTES;
     cursor = append_unicode_string(&mut buffer, DOMAIN_FIELD_OFFSET, domain, cursor);
@@ -73,9 +36,9 @@ pub fn pack(domain: &[u16], user: &[u16], password: &[u16], message_type: i32) -
 
 fn append_unicode_string(out: &mut [u8], field: usize, text: &[u16], cursor: usize) -> usize {
     let bytes = text.len() * 2;
-    put_u16(out, field, bytes as u16); // Length
-    put_u16(out, field + 2, bytes as u16); // MaximumLength (no NUL)
-    put_u64(out, field + UNICODE_STRING_BUFFER_OFFSET, cursor as u64); // Buffer offset
+    put_u16(out, field, bytes as u16);
+    put_u16(out, field + 2, bytes as u16);
+    put_u64(out, field + UNICODE_STRING_BUFFER_OFFSET, cursor as u64);
     for (index, unit) in text.iter().enumerate() {
         let at = cursor + index * 2;
         out[at..at + 2].copy_from_slice(&unit.to_le_bytes());
@@ -95,8 +58,6 @@ fn put_i32(out: &mut [u8], at: usize, value: i32) {
     out[at..at + 4].copy_from_slice(&value.to_le_bytes());
 }
 
-/// Compile-time proof that the explicit offsets above match `ntsecapi.h` on the
-/// real Windows target.
 #[cfg(windows)]
 mod abi_checks {
     use crate::bindings::Windows::Win32::Security::Authentication::Identity::{
@@ -149,12 +110,10 @@ mod tests {
 
     #[test]
     fn strings_cannot_overflow_the_ushort_length() {
-        // 0x8000 units = 0x1_0000 bytes, one past USHORT::MAX.
         let too_long = vec![0u16; 0x8000];
         assert_eq!(packed_len(&too_long, &[], &[]), None);
         assert!(pack(&too_long, &[], &[], KERB_INTERACTIVE_LOGON).is_none());
 
-        // Exactly USHORT::MAX bytes still fits.
         let longest = vec![0u16; 0x7fff];
         assert_eq!(
             packed_len(&longest, &[], &[]),

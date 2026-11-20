@@ -1,14 +1,3 @@
-//! Audio playback through the GStreamer build bundled with the Yandex firmware into the
-//! ALSA playback PCM (`Playback::pcm`: dmix + softvol). Two independent channels:
-//!   Music    - media_player content, can be paused / ducked.
-//!   Announce - TTS, announcements, earcons; plays over (ducked) music. Decoded by its playbin,
-//!              played by the ANNOUNCE writer of `pulsar-playback` instead of an alsasink.
-//!
-//! Threading: a dedicated thread runs a GMainLoop on the default GMainContext; the bus watches and
-//! timeouts live there, and so does the state machine ([`Machine`], in a thread-local). Handle
-//! methods marshal work into it with g_idle_add; events go back through the channel `spawn`
-//! returns. One player per process (it owns the default main context).
-
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::ffi::c_void;
@@ -73,45 +62,23 @@ impl PlayState {
     }
 }
 
-/// Identifies one `play()` call; its [`PlayerEvent::Done`] carries it.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
 pub struct PlayId(pub u64);
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum PlayerEvent {
     State(Channel, PlayState),
-    /// Exactly once per `play()`: ok = every url played to its end. A list cut short by `stop()`
-    /// or by a later `play()` on the same channel gets ok = false, sent by that call itself (so
-    /// it precedes anything the new playback reports). Intended difference from C++: a list that
-    /// already ended on the GLib thread before that `stop()` / `play()` gets its actual ok (C++
-    /// re-checked on the Loop and reported false), so ok = true can arrive for a list the
-    /// caller has meanwhile replaced; callers match the id against what is current.
-    Done {
-        id: PlayId,
-        ok: bool,
-    },
+    Done { id: PlayId, ok: bool },
 }
 
-// GstPlayFlags: AUDIO | SOFT_VOLUME (no video/text/visualisation). BUFFERING (1 << 8) is left out
-// on purpose: in this playbin (GStreamer 1.14.5) it only sets uridecodebin "use-buffering", which
-// reaches decodebin for non-stream uris (local files) alone. http(s) uris always get a queue2 with
-// use-buffering=TRUE and adaptive (HLS) ones decodebin buffering regardless, so MSG_BUFFERING
-// already arrives for every network source. Stock maind sets use-buffering because its own
-// souphttpsrc ! decodebin pipelines have no queue2.
 pub const PLAY_FLAGS: u32 = (1 << 1) | (1 << 4);
-// MUSIC retries of an http(s) uri after a network failure (1, 2, 4 s apart), and the playtime
-// after which a failure counts as a new outage rather than as another retry of the same one.
 const MAX_RETRIES: u32 = 3;
 const RETRY_RESET_MS: i64 = 60_000;
-// GstResourceError codes souphttpsrc (1.14) posts for connection/TLS failures, unexpected HTTP
-// statuses and transfers broken after its own reconnect attempts (OPEN_READ, READ).
 const RESOURCE_ERROR_OPEN_READ: i32 = 5;
 const RESOURCE_ERROR_READ: i32 = 9;
-// Linear gain ramp (0.05 per 20 ms, full scale in 400 ms) to avoid clicks when ducking.
 const RAMP_STEP: f64 = 0.05;
 const RAMP_MS: u32 = 20;
 
-/// GstState values the player sets or compares.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum GstState {
     Null = 1,
@@ -119,31 +86,24 @@ pub enum GstState {
     Playing = 4,
 }
 
-/// A bus message, as far as the player reads it.
 #[derive(Debug)]
 pub enum Msg {
     Eos,
     Error(ErrorInfo),
     Warning(String),
     Buffering(i32),
-    /// Of the pipeline itself; `new` is the GstState reached.
-    StateChanged {
-        new: i32,
-    },
+    StateChanged { new: i32 },
     ClockLost,
     Other,
 }
 
-/// A GError from an error / warning message.
 #[derive(Debug)]
 pub struct ErrorInfo {
     pub message: String,
     pub debug: Option<String>,
-    /// (domain quark, code); None when the message carried no GError.
     pub domain_code: Option<(u32, i32)>,
 }
 
-/// GLib timeouts of the state machine.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Timer {
     Retry(Channel),
@@ -168,7 +128,6 @@ impl Timer {
     }
 }
 
-/// http(s)://, file:// or other uris pass unchanged; an absolute path becomes file://.
 pub fn to_uri(u: &str) -> Cow<'_, str> {
     if u.contains("://") {
         Cow::Borrowed(u)
@@ -179,8 +138,6 @@ pub fn to_uri(u: &str) -> Cow<'_, str> {
     }
 }
 
-/// souphttpsrc (1.14) writes the libsoup status into the error's debug text as
-/// "<reason> (<status>), URL: <uri>, Redirect to: ..."; -1 when there is none.
 pub fn soup_status(dbg: Option<&str>) -> i32 {
     let Some(dbg) = dbg else { return -1 };
     let Some(p) = dbg.find("), URL: ") else {
@@ -194,14 +151,11 @@ pub fn soup_status(dbg: Option<&str>) -> i32 {
     if q == p || q == 0 || b[q - 1] != b'(' {
         return -1;
     }
-    // atoi of the digits; saturating where C's atoi would overflow.
     b[q..p].iter().fold(0i32, |n, d| {
         n.saturating_mul(10).saturating_add(i32::from(d - b'0'))
     })
 }
 
-/// MUSIC http(s) streams only: the network may come back, a local file or a TTS answer will not
-/// (and a late answer is worse than none). `url` as given to play().
 pub fn retryable(
     ch: Channel,
     url: &str,
@@ -214,8 +168,6 @@ pub fn retryable(
     if ch != Channel::Music || !(url.starts_with("http://") || url.starts_with("https://")) {
         return false;
     }
-    // Transport failures (libsoup status < 100: DNS, connect, TLS, broken transfer), 5xx, 408 and
-    // 429 may pass; other HTTP statuses (404, 403, ...) will not.
     let status = soup_status(err.debug.as_deref());
     if status >= 0 {
         return !(100..500).contains(&status) || status == 408 || status == 429;
@@ -226,8 +178,6 @@ pub fn retryable(
         && (code == RESOURCE_ERROR_OPEN_READ || code == RESOURCE_ERROR_READ)
 }
 
-/// The next retry of a url that failed `retries` times so far and last (re)started at
-/// `started_ms`: (retries including this one, delay in ms), None when they are used up.
 pub fn next_retry(retries: u32, started_ms: i64, now_ms: i64) -> Option<(u32, u32)> {
     let retries = if now_ms - started_ms >= RETRY_RESET_MS {
         0
@@ -237,43 +187,30 @@ pub fn next_retry(retries: u32, started_ms: i64, now_ms: i64) -> Option<(u32, u3
     (retries < MAX_RETRIES).then(|| (retries + 1, 1000 << retries))
 }
 
-/// Channel gain 0..1 (NaN = 0), as C++ `std::min(1.0, std::max(0.0, double(gain)))`.
 pub fn clamp_gain(gain: f32) -> f64 {
     let g = f64::from(gain);
     let g = if 0.0 < g { g } else { 0.0 };
     if g < 1.0 { g } else { 1.0 }
 }
 
-/// What the state machine does to GStreamer (and GLib timeouts); faked by the tests.
 pub trait Backend: Send {
-    /// false on GST_STATE_CHANGE_FAILURE.
     fn set_state(&mut self, ch: Channel, s: GstState) -> bool;
     fn set_uri(&mut self, ch: Channel, uri: &str);
     fn set_volume(&mut self, ch: Channel, v: f64);
-    /// ns; None without gst_element_query_position or when the query fails.
     fn query_position(&mut self, ch: Channel) -> Option<i64>;
-    /// Whether gst_element_seek_simple exists.
     fn can_seek(&self) -> bool;
     fn seek(&mut self, ch: Channel, pos_ns: i64) -> bool;
     fn resource_error_quark(&self) -> u32;
     fn timeout_add(&mut self, ms: u32, t: Timer) -> u32;
     fn source_remove(&mut self, id: u32);
     fn now_ms(&self) -> i64;
-    /// The pipeline's address (message sources are compared with it).
     fn element(&self, ch: Channel) -> *const c_void;
-    /// ANNOUNCE: item `item` of the PCM output starts (the pipeline is in NULL); false when its
-    /// output could not be set up.
     fn out_begin(&mut self, item: u64) -> bool;
-    /// ANNOUNCE reached EOS and its pipeline is in NULL: the output plays the rest, then reports
-    /// PlayedOut.
     fn out_end(&mut self);
-    /// ANNOUNCE's pipeline is in NULL: the output drops the current item and stops at once.
     fn out_flush(&mut self);
-    /// MUSIC's pipeline reached PLAYING: its alsasink has the device open.
     fn music_playing(&mut self);
 }
 
-/// Where handle commands run (the GLib thread; a queue in the tests).
 pub trait Exec {
     fn invoke(&self, call: Call);
 }
@@ -284,11 +221,8 @@ impl<T: Exec + ?Sized> Exec for &T {
     }
 }
 
-/// State shared by the handle (runtime thread) and the GLib thread.
 pub struct Shared {
-    /// PlayState per channel; written by the GLib thread only, before the State event.
     states: [AtomicU8; 2],
-    /// Per channel: the play() whose Done is still owed.
     pending: Mutex<[Option<PlayId>; 2]>,
     events: UnboundedSender<PlayerEvent>,
 }
@@ -307,12 +241,9 @@ impl Shared {
     }
 
     fn send(&self, ev: PlayerEvent) {
-        // The receiver may be gone at shutdown.
         let _ = self.events.send(ev);
     }
 
-    /// Caller side: `new` (a play()) or nothing (stop()) replaces the list whose Done is owed,
-    /// which gets Done(false) now.
     pub fn supersede(&self, ch: Channel, new: Option<PlayId>) {
         let mut p = self.pending.lock().unwrap_or_else(PoisonError::into_inner);
         if let Some(old) = std::mem::replace(&mut p[ch.index()], new) {
@@ -320,8 +251,6 @@ impl Shared {
         }
     }
 
-    /// Delivers the result of list `id` unless a later play() / stop() superseded it meanwhile
-    /// (that call already delivered false).
     pub fn complete(&self, ch: Channel, id: PlayId, ok: bool) {
         let mut p = self.pending.lock().unwrap_or_else(PoisonError::into_inner);
         if p[ch.index()] == Some(id) {
@@ -332,28 +261,19 @@ impl Shared {
     }
 }
 
-/// GLib-thread state of one channel.
 struct Chan {
     urls: Vec<String>,
     index: usize,
-    /// The play() that loaded `urls`.
     item: PlayId,
-    /// A url list is loaded.
     active: bool,
-    /// The user wants PLAYING (false = paused).
     want_play: bool,
     buffering: bool,
     reached_playing: bool,
-    /// ANNOUNCE: the output item of the current url (0 = none).
     out_gen: u64,
     all_ok: bool,
-    /// Network retries of the current url.
     retries: u32,
-    /// Last (re)start of the current url.
     started_ms: i64,
-    /// Position to seek to once a retried url has prerolled.
     resume_ns: i64,
-    /// GLib timeout of a pending retry.
     retry_src: u32,
     gain_cur: f64,
     gain_target: f64,
@@ -383,12 +303,10 @@ impl Chan {
     }
 }
 
-/// The player's state machine; runs on the GLib thread.
 pub struct Machine {
     backend: Box<dyn Backend>,
     shared: Arc<Shared>,
     chans: [Chan; 2],
-    /// Last ANNOUNCE output item.
     out_gen: u64,
 }
 
@@ -450,9 +368,6 @@ impl Machine {
         self.shared.complete(ch, item, ok);
     }
 
-    // Every (re)start passes through NULL: GstPipeline's auto-flush-bus (on by default) drops
-    // all queued bus messages on READY -> NULL, so an EOS/ERROR still pending from the previous
-    // uri cannot end this one.
     fn start_current(&mut self, ch: Channel) {
         let c = &self.chans[ch.index()];
         let uri = to_uri(&c.urls[c.index]).into_owned();
@@ -463,7 +378,6 @@ impl Machine {
             c.urls.len()
         );
         self.backend.set_state(ch, GstState::Null);
-        // After NULL: the fdsink no longer writes the fd the output closes.
         if ch == Channel::Announce {
             self.backend.out_flush();
         }
@@ -496,7 +410,6 @@ impl Machine {
         }
     }
 
-    /// Current url finished (ok) or failed; go to the next or finish the list.
     fn advance(&mut self, ch: Channel, ok: bool) {
         let c = &mut self.chans[ch.index()];
         c.all_ok = c.all_ok && ok;
@@ -511,8 +424,6 @@ impl Machine {
         }
     }
 
-    /// Restarts the current uri after a backoff, resuming at the position reached (live streams
-    /// refuse the seek and simply restart); false when the retries are used up.
     fn schedule_retry(&mut self, ch: Channel) -> bool {
         let now = self.backend.now_ms();
         let c = &mut self.chans[ch.index()];
@@ -552,7 +463,6 @@ impl Machine {
             return;
         }
         if c.retry_src != 0 {
-            // Waiting to retry: the pipeline stays in NULL until retry_tick.
             self.set_state(ch, self.loading_or_paused(ch));
             return;
         }
@@ -579,7 +489,6 @@ impl Machine {
             Msg::Eos => {
                 info!("player: ch{i} EOS");
                 if ch == Channel::Announce {
-                    // Done once the output has played the rest (OutEvent::PlayedOut).
                     self.backend.set_state(ch, GstState::Null);
                     self.backend.out_end();
                 } else {
@@ -602,9 +511,6 @@ impl Machine {
                 }
             }
             Msg::Warning(message) => warn!("player: ch{i} warning: {message}"),
-            // ANNOUNCE's output primes itself: queue2 drains into playsink's queue, so after the
-            // start its level does not show what is left to play, and pausing would cost what
-            // the output holds.
             Msg::Buffering(_) if ch == Channel::Announce => {}
             Msg::Buffering(pct) => {
                 let buf = pct < 100;
@@ -631,7 +537,6 @@ impl Machine {
                         pos / 1_000_000
                     );
                 }
-                // ANNOUNCE is PLAYING once its output started (OutEvent::Started).
                 if new == GstState::Playing as i32 && ch == Channel::Music {
                     self.backend.music_playing();
                     let c = &mut self.chans[i];
@@ -649,7 +554,6 @@ impl Machine {
         }
     }
 
-    /// Progress of the ANNOUNCE output; events of an item no longer current are dropped.
     fn on_out(&mut self, ev: OutEvent) {
         let ch = Channel::Announce;
         let (OutEvent::Started(item) | OutEvent::PlayedOut(item) | OutEvent::Failed(item)) = ev;
@@ -693,7 +597,6 @@ impl Machine {
         !done
     }
 
-    /// A GLib timeout fired; true keeps it.
     fn on_timer(&mut self, t: Timer) -> bool {
         match t {
             Timer::Retry(ch) => {
@@ -725,7 +628,6 @@ impl Machine {
 
     pub fn pause(&mut self, ch: Channel) {
         let c = &mut self.chans[ch.index()];
-        // ANNOUNCE's output plays on regardless, and after EOS its pipeline must stay in NULL.
         if ch == Channel::Announce || !c.active || !c.want_play {
             return;
         }
@@ -758,7 +660,6 @@ impl Machine {
         let c = &mut self.chans[ch.index()];
         c.gain_target = gain;
         if !c.active {
-            // Nothing audible: apply at once, no ramp.
             let src = std::mem::take(&mut c.ramp_src);
             c.gain_cur = gain;
             if src != 0 {
@@ -772,7 +673,6 @@ impl Machine {
         }
     }
 
-    /// After the main loop ended: no timeout may outlive the machine.
     pub fn teardown(&mut self) {
         for ch in [Channel::Music, Channel::Announce] {
             let src = std::mem::take(&mut self.chans[ch.index()].ramp_src);
@@ -785,11 +685,6 @@ impl Machine {
 }
 
 thread_local! {
-    // The GLib thread's machine: GLib dispatches every source of the default main context (bus
-    // watches, timeouts, idle commands) on that thread. GStreamer calls made by the machine never
-    // dispatch sources themselves, so the borrow is never re-entered. A panic in the machine
-    // unwinds into an extern "C" callback and aborts the process (release builds abort anyway):
-    // the supervisor restarts the daemon.
     pub static MACHINE: RefCell<Option<Machine>> = const { RefCell::new(None) };
 }
 
@@ -797,7 +692,6 @@ pub fn with_machine<R>(f: impl FnOnce(&mut Machine) -> R) -> Option<R> {
     MACHINE.with_borrow_mut(|m| m.as_mut().map(f))
 }
 
-/// Bus watch of channel `tag`.
 pub fn on_bus(tag: usize, msg: &gst::Message) {
     let Some(ch) = Channel::from_index(tag) else {
         return;
@@ -810,12 +704,10 @@ pub fn on_bus(tag: usize, msg: &gst::Message) {
     });
 }
 
-/// ANNOUNCE output event, delivered on the GLib thread.
 pub fn on_out(ev: OutEvent) {
     with_machine(|m| m.on_out(ev));
 }
 
-/// GLib timeout `tag`; true keeps it.
 pub fn on_timer(tag: usize) -> bool {
     Timer::from_tag(tag)
         .and_then(|t| with_machine(|m| m.on_timer(t)))
@@ -921,7 +813,6 @@ mod tests {
             );
             assert!(!retryable(Announce, http, &e, q), "announce status {s}");
         }
-        // No status: the resource-error domain with OPEN_READ / READ.
         assert!(retryable(Music, http, &err(None, Some((7, 5))), q));
         assert!(retryable(
             Music,
@@ -932,13 +823,11 @@ mod tests {
         assert!(!retryable(Music, http, &err(None, Some((7, 1))), q));
         assert!(!retryable(Music, http, &err(None, Some((8, 5))), q));
         assert!(!retryable(Music, http, &err(None, Some((0, 5))), || 0));
-        // Not a network url, or no GError at all.
         let e500 = err(Some(&status(500)), Some((7, 5)));
         assert!(!retryable(Music, "/data/a.mp3", &e500, q));
         assert!(!retryable(Music, "file:///data/a.mp3", &e500, q));
         assert!(!retryable(Music, "HTTP://x/a.mp3", &e500, q));
         assert!(!retryable(Music, http, &err(Some(&status(500)), None), q));
-        // The quark is looked up only when there is no status.
         assert!(retryable(Music, http, &e500, || unreachable!()));
     }
 
@@ -974,8 +863,6 @@ mod tests {
         }
         assert_eq!(Timer::from_tag(4), None);
     }
-
-    // ---- state machine on a fake GStreamer ----
 
     #[derive(Default)]
     struct Fake {
@@ -1062,8 +949,6 @@ mod tests {
         }
     }
 
-    /// A handle whose commands queue up until `pump` (the GLib thread's turn) and a machine on
-    /// a fake backend, both on the test thread.
     struct Rig {
         h: PlayerHandle,
         rx: UnboundedReceiver<PlayerEvent>,
@@ -1124,7 +1009,6 @@ mod tests {
             f.timers.iter().map(|&(_, ms, t)| (ms, t)).collect()
         }
 
-        /// Fires pending timeout `t` as GLib would; returns whether it stays armed.
         fn fire(&self, t: Timer) -> bool {
             let entry = {
                 let mut f = self.fake.lock().unwrap();
@@ -1163,7 +1047,6 @@ mod tests {
         r.h.set_channel_gain(Music, 0.3);
         let id = r.h.play(Music, urls(&["/a.mp3"]));
         assert_eq!(id, PlayId(1));
-        // Nothing changes before the GLib thread ran the commands.
         assert_eq!(r.h.state(Music), Idle);
         assert!(r.events().is_empty());
         r.pump();
@@ -1186,7 +1069,6 @@ mod tests {
         r.msg(Music, Msg::Eos);
         assert_eq!(r.calls(), ["ch0 Null"]);
         assert_eq!(r.events(), [State(Music, Idle), Done { id, ok: true }]);
-        // Messages of an idle channel are ignored.
         r.msg(Music, Msg::Eos);
         assert!(r.events().is_empty());
     }
@@ -1197,7 +1079,6 @@ mod tests {
         let id =
             r.h.play(Announce, urls(&["/a.wav", "http://192.168.1.50/b.flac"]));
         r.pump();
-        // The output's fd changes only while the pipeline is in NULL.
         assert_eq!(
             r.calls(),
             [
@@ -1212,7 +1093,6 @@ mod tests {
         r.out(OutEvent::Started(1));
         r.msg(Announce, Msg::Eos);
         assert_eq!(r.calls(), ["ch1 Null", "out end"]);
-        // The next url starts once the output has played this one out.
         assert_eq!(
             r.events(),
             [State(Announce, Loading), State(Announce, Playing)]
@@ -1229,7 +1109,6 @@ mod tests {
             ]
         );
         assert_eq!(r.events(), [State(Announce, Loading)]);
-        // ANNOUNCE never retries, even a 5xx.
         r.msg(
             Announce,
             Msg::Error(err(
@@ -1255,7 +1134,6 @@ mod tests {
         let a = r.h.play(Announce, urls(&["http://192.168.1.50/a.flac"]));
         r.pump();
         r.calls();
-        // queue2's level does not hold ANNOUNCE, and a PLAYING pipeline is not audible yet.
         r.msg(Announce, Msg::Buffering(10));
         r.state_changed(Announce, GstState::Playing);
         assert!(r.calls().is_empty());
@@ -1279,7 +1157,6 @@ mod tests {
                 Done { id: b, ok: false }
             ]
         );
-        // After the list ended, a late event of its item changes nothing.
         r.out(OutEvent::PlayedOut(2));
         assert!(r.events().is_empty());
     }
@@ -1292,7 +1169,6 @@ mod tests {
         r.msg(Announce, Msg::Eos);
         r.calls();
         r.events();
-        // After EOS the pipeline stays in NULL until the output played out.
         r.h.pause(Announce);
         r.h.resume(Announce);
         r.pump();
@@ -1309,7 +1185,6 @@ mod tests {
         r.events();
         let b = r.h.play(Music, urls(&["/b.mp3"]));
         assert_eq!(b, PlayId(2));
-        // Queued by play() itself; the state still shows the old playback.
         assert_eq!(r.events(), [Done { id: a, ok: false }]);
         assert_eq!(r.h.state(Music), Playing);
         r.pump();
@@ -1332,7 +1207,6 @@ mod tests {
         let a = r.h.play(Music, urls(&["/a.mp3"]));
         r.pump();
         let b = r.h.play(Music, urls(&["/b.mp3"]));
-        // The GLib thread ends `a` before it runs the second play().
         r.msg(Music, Msg::Eos);
         r.pump();
         assert_eq!(
@@ -1351,7 +1225,6 @@ mod tests {
     #[test]
     fn stop_delivers_false_once() {
         let mut r = Rig::new();
-        // Nothing owed, nothing playing: no event.
         r.h.stop(Music);
         r.pump();
         assert!(r.events().is_empty());
@@ -1390,7 +1263,6 @@ mod tests {
     #[test]
     fn pause_and_resume() {
         let mut r = Rig::new();
-        // An inactive channel ignores both.
         r.h.pause(Music);
         r.h.resume(Music);
         r.pump();
@@ -1456,7 +1328,6 @@ mod tests {
         assert_eq!(r.events(), [State(Music, Loading)]);
         r.msg(Music, Msg::Buffering(100));
         assert_eq!(r.calls(), ["ch0 Playing"]);
-        // PLAYING again only once the pipeline says so.
         assert!(r.events().is_empty());
         r.state_changed(Music, GstState::Playing);
         assert_eq!(r.events(), [State(Music, Playing)]);
@@ -1493,7 +1364,6 @@ mod tests {
         assert_eq!(r.calls(), ["ch0 seek 5000000000"]);
         r.state_changed(Music, GstState::Playing);
         assert_eq!(r.events(), [State(Music, Playing)]);
-        // Further failures of the same outage: 2 s, 4 s, then the url fails.
         r.fake.lock().unwrap().position = None;
         r.msg(Music, e500());
         assert_eq!(r.timers(), [(2000, Timer::Retry(Music))]);
@@ -1502,7 +1372,6 @@ mod tests {
         assert_eq!(r.timers(), [(4000, Timer::Retry(Music))]);
         r.fire(Timer::Retry(Music));
         r.calls();
-        // No seek without a position.
         r.state_changed(Music, GstState::Paused);
         assert!(r.calls().is_empty());
         r.msg(Music, e500());

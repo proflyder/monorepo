@@ -51,7 +51,6 @@ data class ScenarioEditorUiState(
     val catalogError: RemoteFailure? = null,
     val error: RemoteFailure? = null,
     val loadFailed: Boolean = false,
-    /** Set when UpdateScenario was rejected because the server has a newer revision. */
     val conflict: Boolean = false,
 ) {
     val hasUnsupportedParts: Boolean get() = draft.hasUnsupportedParts
@@ -117,9 +116,6 @@ class ScenarioEditorViewModel(
             when (val result = loadScenario(scenarioId)) {
                 is Outcome.Success -> {
                     val draft = ScenarioEditorDraftCodec.fromScenario(result.value)
-                    // Keep the independently loaded catalog: replacing the
-                    // whole state here used to erase catalog/catalogLoading/
-                    // catalogError and made step picking say "catalog empty".
                     mutableState.value = mutableState.value.copy(
                         loading = false,
                         existing = result.value,
@@ -210,7 +206,6 @@ class ScenarioEditorViewModel(
         else it.copy(steps = it.steps.filterIndexed { i, _ -> i != index })
     }
 
-    /** Moves a step one position up ([delta] = -1) or down ([delta] = 1). */
     fun moveStep(index: Int, delta: Int) = editDraft { moveStepIn(it, index, delta) }
 
     private fun moveStepIn(draft: ScenarioEditorDraft, index: Int, delta: Int): ScenarioEditorDraft {
@@ -285,7 +280,6 @@ class ScenarioEditorViewModel(
         }
     }
 
-    /** Re-reads the server definition after a revision conflict, discarding local edits. */
     fun reload() {
         val id = mutableState.value.existing?.id ?: mutableState.value.draft.existingId ?: return
         mutableState.value = mutableState.value.copy(loading = true, error = null, conflict = false)
@@ -365,7 +359,6 @@ class ScenarioEditorViewModel(
         private const val KEY_CREATE_KEY = "scenario_create_key"
         private const val KEY_CREATE_ENDPOINT = "scenario_create_endpoint"
 
-        /** Next full hour in the phone's IANA zone, a time that is not already past. */
         internal fun defaultTimeTrigger(now: LocalDateTime = LocalDateTime.now()): TimeTrigger {
             val next = now.plusHours(1)
             return TimeTrigger(
@@ -384,7 +377,6 @@ class ScenarioEditorViewModel(
     }
 }
 
-/** Reconstructs enough of the server object for an Update after process recreation. */
 internal fun ScenarioEditorDraft.restoredExisting(): Scenario? {
     val id = existingId ?: return null
     return Scenario(
@@ -403,7 +395,6 @@ internal fun ScenarioEditorDraft.restoredExisting(): Scenario? {
     )
 }
 
-/** Best-effort entry lookup for editor card titles. */
 internal fun List<ControlEntry>.titleOf(entryId: String): String? =
     firstOrNull { it.id == entryId }?.let { it.title.ifBlank { it.id } }
 

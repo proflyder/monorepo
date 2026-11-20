@@ -1,16 +1,5 @@
 package dev.proflyder.home.core.operation
 
-/**
- * Retains one non-secret idempotency key for a logical create/start operation.
- *
- * The key stays stable while the same payload is retried after an ambiguous
- * network outcome (the server may have accepted the request but the response
- * was lost). A success, a definite rejection, or an intentional payload change
- * starts a new logical operation with a new key.
- *
- * This class holds no secrets; callers keep it in the ViewModel or other
- * in-memory operation state.
- */
 class IdempotentRequestKey<T>(
     private val generate: () -> String = { java.util.UUID.randomUUID().toString() },
 ) {
@@ -27,7 +16,6 @@ class IdempotentRequestKey<T>(
         }
     }
 
-    /** Restores a pending key after process recreation for the same payload. */
     @Synchronized
     fun adopt(payload: T, key: String) {
         pendingPayload = payload
@@ -40,7 +28,6 @@ class IdempotentRequestKey<T>(
         pendingPayload = null
     }
 
-    /** Use for definite rejection or when the user changes the intended request. */
     @Synchronized
     fun reset() {
         pendingKey = null

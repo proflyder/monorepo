@@ -3,9 +3,6 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_shared_library", "rust_
 
 package(default_visibility = ["//visibility:public"])
 
-# Credential provider COM in-proc server. `crate_name` makes rustc emit
-# `HomeKompLogon.dll`, the name the install scripts, OCI artifact and
-# cp-selftest expect. Windows-only: `src/bindings.rs` is Win32.
 rust_shared_library(
     name = "provider",
     srcs = glob(["src/**/*.rs"]),
@@ -25,14 +22,11 @@ rust_shared_library(
     ],
 )
 
-# Host-portable core: log sanitising/rotation, KERB packing, retry/budget
-# decisions, FailCount arithmetic and panic containment.
 rust_library(
     name = "provider_host",
     srcs = glob(["src/**/*.rs"]),
     edition = "2024",
     lint_config = ":workspace_lints",
-    # `#[cfg(windows)]` would pull the Windows bindings into a host build.
     target_compatible_with = select({
         "@platforms//os:windows": ["@platforms//:incompatible"],
         "//conditions:default": [],
@@ -62,7 +56,6 @@ rust_test(
     ],
 )
 
-# Mirrors the root [workspace.lints] through the crate's `[lints] workspace = true`.
 extract_cargo_lints(
     name = "workspace_lints",
     manifest = "Cargo.toml",

@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-"""Compare a single held-out replay, keeping annotation coverage explicit."""
 import argparse
 import json
 from pathlib import Path

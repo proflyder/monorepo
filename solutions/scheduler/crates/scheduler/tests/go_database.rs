@@ -1,7 +1,3 @@
-//! Opens a SQL dump produced by the Go store and reads it through the Rust
-//! store. This is the rollback-compatibility test: the PVC format belongs to
-//! the Go service until cutover.
-
 use std::path::PathBuf;
 
 use rusqlite::Connection;

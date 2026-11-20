@@ -5,7 +5,6 @@ use super::*;
 use crate::test_util::{Radio, absent_lines, assert_golden, hex, link_pair, poll_once};
 use pulsar_zbhci::frame::BOOT_IND;
 
-/// The hooks print what the C++ harness printed.
 #[derive(Default)]
 struct Rec {
     out: String,
@@ -60,8 +59,6 @@ impl Hooks for Rec {
     }
 }
 
-/// Drives a coordinator and the radio in lock-step: the coordinator first (posted hooks, link
-/// events, the sweep), then the radio reads one frame and ACKs it.
 struct Run {
     c: Coordinator,
     radio: Radio,
@@ -191,9 +188,6 @@ fn desc(ep: u8, profile: u16, device: u16, version: u8, i: &[u16], o: &[u16]) ->
     }
 }
 
-/// Same script as the one-off C++ harness over the C++ coordinator (tests/golden/coordinator.txt):
-/// NCP request payloads, state / indication / scan parsing, local ZDO answers, confirms, the
-/// sweep and radio restarts.
 #[tokio::test(start_paused = true)]
 async fn coordinator_matches_cxx_golden() {
     let (mut link, radio) = link_pair(&absent_lines());
@@ -397,7 +391,7 @@ async fn coordinator_matches_cxx_golden() {
         0,
     )
     .await;
-    r.send(0x0302, onoff(0x5555, &[0x01]), 0).await; // held behind the scan
+    r.send(0x0302, onoff(0x5555, &[0x01]), 0).await;
     r.print("step scan-rsp");
     r.inject(0x8A06, &[0x03, 0x0B, 0x14, 0x0F, 0xC8, 0x1A, 0x05])
         .await;
@@ -428,7 +422,6 @@ async fn coordinator_matches_cxx_golden() {
     )
     .await;
     r.send(0x0313, onoff(0x5555, &[0x02]), 0).await;
-    // One channel at exponent 3: 138 ms + 3 s.
     r.advance(3000).await;
     r.advance(137).await;
     r.advance(1).await;
@@ -594,7 +587,7 @@ async fn coordinator_matches_cxx_golden() {
         0,
     )
     .await;
-    r.send(0x2003, f, 0).await; // held
+    r.send(0x2003, f, 0).await;
     r.inject(BOOT_IND, &[]).await;
     r.pending();
     r.print("step after-boot");
@@ -639,7 +632,6 @@ fn descriptors_round_trip_and_reject_truncation() {
     for n in 0..v.len() {
         assert_eq!(get_descriptor(&v[..n]), None, "{n} bytes");
     }
-    // Trailing bytes are ignored, as in C++.
     v.push(0xEE);
     assert!(get_descriptor(&v).is_some());
 }
@@ -660,7 +652,6 @@ async fn scan_holds_other_frames_for_the_computed_time() {
     r.inject(0x8A00, &state(2, 0, 15, 0x1A62, EXT, IEEE, 0, 0, 0, 0, 0))
         .await;
     r.rec.out.clear();
-    // 16 channels at exponent 2: 16 * 76 ms + 3 s.
     r.send(1, zdo(0, 0x0038, &[0x80, 0x00, 0xF8, 0xFF, 0x07, 0x02]), 0)
         .await;
     r.c.permit_join(1);

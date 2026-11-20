@@ -1,6 +1,3 @@
-//! Сценарные тесты контроллера на фейковых портах: настоящие `Controller`, `Store` и `select`
-//! не участвуют — только домены и вызовы портов.
-
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -28,7 +25,6 @@ use super::wake::ClaimToken;
 use super::{Controller, Pending, RunMetric, Tk, wiring};
 use crate::settings::Store;
 
-/// One ordered log of every port call.
 #[derive(Default)]
 struct Rec {
     calls: RefCell<Vec<String>>,
@@ -44,7 +40,6 @@ impl Rec {
     }
 }
 
-/// Звонок: фаза и мут, как у настоящего handle; вызовы пишутся в общий журнал.
 struct FakeCall {
     rec: Rc<Rec>,
     phase: Rc<Cell<pulsar_call::CallPhase>>,
@@ -570,7 +565,6 @@ impl Radio for FakeRadio {
     fn leave(&self) {}
 }
 
-/// Everything a test needs to inspect.
 struct Fixture {
     c: Controller,
     rec: Rc<Rec>,
@@ -717,7 +711,6 @@ async fn mute_zeroes_the_gains_and_is_written_after_a_second() {
         "{calls:?}"
     );
     assert!(calls.contains(&"sendspin.gain 0".to_owned()), "{calls:?}");
-    // Deferred: nothing on disk before the delay.
     assert!(!f.path().exists());
     f.c.flush_settings();
     let text = std::fs::read_to_string(f.path()).unwrap();
@@ -737,7 +730,6 @@ async fn volume_feedback_unmutes_and_shows_the_rounded_level() {
     assert!(calls.contains(&"mixer.volume 0.4".to_owned()), "{calls:?}");
     assert!(calls.contains(&"leds.volume 0.4".to_owned()), "{calls:?}");
     assert!(calls.contains(&"clock.flash 40".to_owned()), "{calls:?}");
-    // A click plays the volume earcon on ANNOUNCE.
     assert!(
         calls
             .iter()
@@ -760,7 +752,6 @@ async fn announce_ducks_music_and_its_end_restores_the_gain() {
     }));
     assert!(f.c.session.announcing());
     let calls = f.calls();
-    // Midi: hardware volume, so the master gain is 1 and the duck is exactly DUCK_GAIN.
     assert!(
         calls.contains(&"player.gain Music 0.15".to_owned()),
         "{calls:?}"
@@ -826,7 +817,6 @@ async fn client_connected_publishes_entities_in_the_cpp_order() {
             "publish_select VoiceColor 'Violet'",
         ]
     );
-    // No Zigbee service: neither entity is published.
     assert!(!calls.iter().any(|c| c.contains("Zigbee")), "{calls:?}");
 }
 
@@ -843,7 +833,6 @@ async fn client_connected_publishes_the_live_zigbee_status() {
         calls.contains(&"publish_select ZigbeeMode 'Off'".to_owned()),
         "{calls:?}"
     );
-    // HEAD published `z.status().to_string()` here, not the Changed-dedup cache.
     assert!(
         calls.contains(&"publish_text_sensor Zigbee 'router: joined 0x0001'".to_owned()),
         "{calls:?}"
@@ -875,7 +864,6 @@ async fn ha_commands_act_on_ports_and_are_written_late() {
         );
     }
     assert_eq!(f.c.st.music_viz, "Disco");
-    // All changes are one deferred write.
     assert!(!f.path().exists());
     f.c.flush_settings();
     let text = std::fs::read_to_string(f.path()).unwrap();
@@ -889,7 +877,6 @@ async fn mask_and_privacy_switches_write_at_once() {
     let mut f = controller();
     f.calls();
     f.c.on_api(ApiEvent::Switch(SwitchId::Microphones, false));
-    // Privacy: the mute is on disk immediately.
     assert!(f.path().exists());
     assert!(
         std::fs::read_to_string(f.path())
@@ -908,7 +895,6 @@ async fn mask_and_privacy_switches_write_at_once() {
 
 #[tokio::test]
 async fn hardware_mute_transition_table_publishes_the_real_state_and_led() {
-    // sw = the stored mute from HA, hw = the button's latch, muted = what the speaker does.
     #[derive(Clone, Copy)]
     enum Step {
         Button(bool),
@@ -994,7 +980,6 @@ async fn hardware_mute_transition_table_publishes_the_real_state_and_led() {
             let calls = f.calls();
             assert_eq!(f.c.st.mic_muted, want.sw, "{name}: step {i} stored mute");
             assert_eq!(f.c.hw_mic_muted, want.hw, "{name}: step {i} latch");
-            // Every HA command publishes the real state, even when the latch keeps it "off".
             let published = format!("publish_switch Microphones {}", !want.muted);
             assert!(
                 calls.contains(&published),
@@ -1079,9 +1064,7 @@ async fn ha_timer_shows_rings_and_yields_to_speech() {
             .any(|c| c.starts_with("player.play Announce") && c.contains("timer")),
         "{calls:?}"
     );
-    // Speech takes the channel: the ring yields, then resumes after the answer.
     f.subscribed.set(true);
-    // HA started the conversation (the wake word and the button would stop the ring).
     f.c.start_pipeline("", true, &[], &[], None);
     let mut data = HashMap::new();
     data.insert("url".to_owned(), "/a.mp3".to_owned());
@@ -1098,7 +1081,6 @@ async fn ha_timer_shows_rings_and_yields_to_speech() {
             .iter()
             .any(|c| c.starts_with("player.play Announce") && c.contains("timer"))
     );
-    // The wake word stops the ring.
     f.c.stop_timer_ring();
     assert!(!f.c.timers_ha.ringing());
 }
@@ -1106,7 +1088,6 @@ async fn ha_timer_shows_rings_and_yields_to_speech() {
 #[tokio::test]
 async fn owns_music_follows_sendspin_and_the_player() {
     let mut f = controller();
-    // Music Assistant streams: "пауза" is this station's and goes to the Sendspin server.
     f.streaming.set(true);
     f.calls();
     f.c.on_command("пауза");
@@ -1119,7 +1100,6 @@ async fn owns_music_follows_sendspin_and_the_player() {
         !calls.contains(&"player.pause Music".to_owned()),
         "{calls:?}"
     );
-    // Nothing plays and no stream ended recently: the word is not this station's.
     f.streaming.set(false);
     f.calls();
     f.c.on_command("пауза");
@@ -1130,8 +1110,6 @@ async fn owns_music_follows_sendspin_and_the_player() {
         "{calls:?}"
     );
 }
-
-// ---------------- сценарии голосовой сессии ----------------
 
 fn va(pairs: &[(&str, &str)]) -> HashMap<String, String> {
     pairs
@@ -1149,7 +1127,6 @@ fn claim(station: &str, busy: bool, level_db: f32) -> pulsar_arbiter::Claim {
     }
 }
 
-/// Включить арбитраж и HA: wake word проходит через claim/decided.
 fn with_arbitration(f: &mut Fixture) {
     f.subscribed.set(true);
     f.arb_ok.set(true);
@@ -1176,7 +1153,6 @@ async fn wake_claim_won_listens_and_answers_over_ha_endpoint() {
     f.calls();
     f.c.on_arbiter_decided(id, true, &claim("station-b", false, -12.0), 1);
     let calls = f.calls();
-    // Пре-ролл (4) и удержанная речь (3) уходят в HA после voice_request_start.
     assert!(
         calls.contains(&"ha.voice_start 1 'alice'".to_owned()),
         "{calls:?}"
@@ -1190,7 +1166,6 @@ async fn wake_claim_won_listens_and_answers_over_ha_endpoint() {
     f.c.on_voice_event(VaEvent::SttVadEnd, &HashMap::new());
     assert_eq!(f.c.session.phase(), super::logic::Phase::Processing);
     let calls = f.calls();
-    // HA закончил фразу сам: graceful audio.end не отправляется.
     assert!(!calls.iter().any(|c| c == "ha.audio_end"), "{calls:?}");
     f.c.on_voice_event(
         VaEvent::SttEnd,
@@ -1222,8 +1197,6 @@ async fn claim_shows_listening_and_holds_the_command_spotter_during_music() {
     f.calls();
     f.c.on_wake("alice", -12.0, vec![0; 2], None, None);
     let calls = f.calls();
-    // Claim уже активен: кольцо и часы показывают Listening, спотер команд выключен,
-    // хотя музыка играет.
     assert!(calls.contains(&"leds.ui Listening".to_owned()), "{calls:?}");
     assert!(
         calls.contains(&"clock.ui Listening".to_owned()),
@@ -1250,7 +1223,6 @@ async fn local_endpoint_end_is_reported_through_the_frontend_path() {
     };
     f.c.start_pipeline("", false, &[], &[], Some(prior));
     f.calls();
-    // Речь выше onset (-40 dB), затем пауза ниже release (-50 dB) на 31 чанк.
     for _ in 0..6 {
         f.c.on_frontend(pulsar_audio::FrontendEvent::Audio(vec![10_000; 512]));
     }
@@ -1272,7 +1244,6 @@ async fn run_start_while_speaking_lets_the_next_answer_play() {
     f.c.on_voice_event(VaEvent::TtsEnd, &first);
     assert!(f.c.session.is_speaking());
     assert!(f.c.session.tts_played());
-    // RUN_START в Speaking сбрасывает «ответ уже играл», как tts_played = false в HEAD.
     let second = va(&[("url", "/b.mp3")]);
     f.calls();
     f.c.on_voice_event(VaEvent::RunStart, &second);
@@ -1296,7 +1267,6 @@ async fn run_end_after_a_reset_run_start_closes_the_dialog() {
     f.c.on_voice_event(VaEvent::RunStart, &data);
     f.c.on_voice_event(VaEvent::TtsEnd, &data);
     assert!(f.c.session.is_speaking());
-    // Новый RUN_START не дошёл до TTS_END: RUN_END закрывает диалог, follow-up не открывается.
     f.c.on_voice_event(VaEvent::RunStart, &HashMap::new());
     f.c.on_voice_event(VaEvent::RunEnd, &HashMap::new());
     assert_eq!(f.c.session.phase(), super::logic::Phase::Idle);
@@ -1326,7 +1296,6 @@ async fn followup_continues_then_closes_its_window() {
         calls.contains(&"ha.voice_start 2 ''".to_owned()),
         "{calls:?}"
     );
-    // Окно follow-up-реплики: STT_START взводит таймер, его срабатывание закрывает диалог.
     f.c.on_voice_event(VaEvent::RunStart, &HashMap::new());
     f.c.on_voice_event(VaEvent::SttStart, &HashMap::new());
     assert!(f.c.timers.is_set(Tk::FollowupWait));
@@ -1351,7 +1320,6 @@ async fn stt_stop_word_cancels_a_button_dialog_but_not_a_wake_dialog() {
             .any(|c| c.starts_with("player.play Announce") && c.contains("cancel")),
         "{calls:?}"
     );
-    // В диалоге от wake word «стоп» остаётся HA.
     f.c.start_pipeline("alice", true, &[], &[], None);
     f.c.on_voice_event(VaEvent::RunStart, &HashMap::new());
     f.calls();
@@ -1374,7 +1342,6 @@ async fn lost_arbitration_blocks_commands_until_the_window_ends() {
         f.calls().contains(&"frontend.streaming false".to_owned()),
         "no dialog started"
     );
-    // Отмена «висящего» claim не снимает проигранный turn.
     f.c.cancel_arbitration();
     assert!(f.c.wake.blocked(pulsar_core::now_ms()));
     f.calls();
@@ -1384,7 +1351,6 @@ async fn lost_arbitration_blocks_commands_until_the_window_ends() {
         !calls.iter().any(|c| c.starts_with("mixer.")),
         "blocked: {calls:?}"
     );
-    // Новое wake word снимает блокировку и заменяет ожидающий claim.
     f.c.on_wake("alice", -12.0, vec![0; 2], None, None);
     assert!(f.c.wake.is_claiming());
     assert!(!f.c.wake.blocked(pulsar_core::now_ms()));
@@ -1460,7 +1426,6 @@ async fn announce_ducks_music_and_leaves_a_dialog_listening() {
         calls.contains(&"ha.announce_finished true".to_owned()),
         "{calls:?}"
     );
-    // Диалог продолжается и всё ещё держит музыку приглушённой.
     assert!(!f.c.session.announcing());
 }
 
@@ -1495,14 +1460,12 @@ async fn wake_during_the_timer_ring_takes_the_turn_without_a_dialog() {
 #[tokio::test]
 async fn wake_recording_reports_cancelled_and_answered_hits() {
     let mut f = controller();
-    // HA ещё не подписан: диалог не начался, срабатывание всё равно получает исход.
     f.c.on_wake("alice", -12.0, vec![], None, Some("hit-1".into()));
     let calls = f.calls();
     assert!(
         calls.contains(&"frontend.outcome hit-1 Cancelled None".to_owned()),
         "{calls:?}"
     );
-    // Полный диалог: исход Answered с текстом STT.
     f.subscribed.set(true);
     f.c.on_wake("alice", -12.0, vec![], None, Some("hit-2".into()));
     f.c.on_voice_event(VaEvent::RunStart, &HashMap::new());
@@ -1542,7 +1505,6 @@ async fn ha_disconnect_mid_dialog_ends_it_and_stops_the_run() {
     f.c.on_voice_subscribed(false);
     assert_eq!(f.c.session.phase(), super::logic::Phase::Idle);
     let calls = f.calls();
-    // The lost client's run is dropped without a stop: it would reach the next subscriber.
     assert!(!calls.contains(&"ha.voice_stop".to_owned()), "{calls:?}");
     assert!(
         calls.contains(&"frontend.streaming false".to_owned()),
@@ -1563,8 +1525,6 @@ async fn dry_run_switch_reaches_the_frontend() {
     assert!(f.c.st.wake_dry_run);
 }
 
-// ---------------- звонок ----------------
-
 #[tokio::test]
 async fn an_incoming_call_quiets_the_station_and_the_end_restores_it() {
     let mut f = controller();
@@ -1576,7 +1536,6 @@ async fn an_incoming_call_quiets_the_station_and_the_end_restores_it() {
     }));
     assert!(f.c.in_call());
     let calls = f.calls();
-    // Музыка и Sendspin на паузе, спотеры и стриминг переключены, кольцо показывает звонок.
     assert!(
         calls.contains(&"player.pause Music".to_owned()),
         "{calls:?}"
@@ -1595,23 +1554,19 @@ async fn an_incoming_call_quiets_the_station_and_the_end_restores_it() {
     );
     assert!(calls.contains(&"leds.ui Call".to_owned()), "{calls:?}");
     assert!(calls.contains(&"clock.ui Call".to_owned()), "{calls:?}");
-    // Короткий сигнал входящего на ANNOUNCE.
     assert!(
         calls
             .iter()
             .any(|c| c.starts_with("player.play Announce") && c.contains("timer")),
         "{calls:?}"
     );
-    // Ответ: сигнал вызова гасится, а не доигрывает поверх разговора.
     f.c.on_call_event(Some(pulsar_call::CallEvent::Active));
     assert!(
         f.calls().contains(&"player.stop Announce".to_owned()),
         "сигнал вызова не остановлен"
     );
-    // Игрок на паузе (настоящий FakePlayer состояние не меняет — моделируем вручную).
     f.music.set(PlayState::Paused);
 
-    // Завершение: всё как было.
     f.c.on_call_event(Some(pulsar_call::CallEvent::Ended));
     assert!(!f.c.in_call());
     let calls = f.calls();
@@ -1644,7 +1599,6 @@ async fn the_action_button_hangs_up_a_call() {
     ));
     let calls = f.calls();
     assert!(calls.contains(&"call.hangup".to_owned()), "{calls:?}");
-    // Кнопка не открывает обычное действие контроллера во время звонка.
     assert!(
         !calls.iter().any(|c| c.starts_with("ha.event")),
         "{calls:?}"
@@ -1666,7 +1620,6 @@ async fn muting_the_microphone_during_a_call_only_silences_the_uplink() {
         "{calls:?}"
     );
     assert!(f.call_muted.get(), "uplink mute must reach the call handle");
-    // Кольцо показывает мут, но звонок продолжается.
     assert!(f.c.in_call());
     assert!(!calls.iter().any(|c| c == "call.hangup"), "{calls:?}");
 }
@@ -1681,7 +1634,6 @@ async fn clean_vqe_audio_goes_to_the_uplink_during_a_call() {
     f.c.on_frontend(pulsar_audio::FrontendEvent::Audio(vec![1; 512]));
     let calls = f.calls();
     assert!(calls.contains(&"call.uplink 512".to_owned()), "{calls:?}");
-    // Во время звонка это не HA и не wake-пре-ролл.
     assert!(!calls.contains(&"ha.audio".to_owned()), "{calls:?}");
 }
 
@@ -1692,8 +1644,6 @@ fn answer_latency_is_once_per_wake_run_and_excludes_playback() {
         wake: true,
         answer_started: false,
     };
-    // The first sample is taken when playback starts; later TTS starts in the
-    // same run (a follow-up answer) must not add another.
     assert_eq!(wake.answer_latency(3_500), Some(2.5));
     assert_eq!(wake.answer_latency(20_000), None);
     let mut button = RunMetric {

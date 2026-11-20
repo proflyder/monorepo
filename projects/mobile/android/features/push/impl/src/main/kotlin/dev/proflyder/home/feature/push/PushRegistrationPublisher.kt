@@ -6,14 +6,6 @@ import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 
-/**
- * Sends registration and rename calls with the stable [PushDeviceIdentity].
- *
- * Kept apart from FCM and Firebase: this is the part whose contract matters
- * (one device row across token rotations, name changes without a new row), so
- * it can be tested with a fake HTTP client and does not depend on Play
- * services.
- */
 @SingleIn(AppScope::class)
 @Inject
 class PushRegistrationPublisher(

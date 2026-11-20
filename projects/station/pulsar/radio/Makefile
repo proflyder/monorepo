@@ -1,8 +1,3 @@
-# Zigbee firmware for the Midi's Telink B91 radio, from the Telink Zigbee SDK (Apache-2.0): router/
-# (a router in another network) and coordinator/ (network co-processor for pulsar's deCONZ server),
-# both with common/ (board configuration, host-link pieces). Run through build.sh, which fetches the
-# pinned SDK and toolchain and sets SDK / TC.
-# Output: out/zigbee-router.ybl, out/zigbee-coordinator.ybl
 SDK ?= src/telink_zigbee_sdk/tl_zigbee_sdk
 TC  ?= toolchain/nds32le-elf-mculib-v5f/bin/riscv32-elf-
 ZIG ?= zig
@@ -17,7 +12,6 @@ INC := $(SDK)/apps/common $(SDK)/apps/zigbee/sampleCommon $(SDK)/platform/chip_b
        $(SDK)/stack/ieee802154/phy $(SDK)/stack/zigbee/common/includes $(SDK)/stack/zigbee/mac $(SDK)/stack/zigbee/zbapi \
        $(SDK)/stack/zigbee/bdb/includes $(SDK)/stack/zigbee/gp $(SDK)/stack/zigbee/zcl $(SDK)/stack/zigbee/ota \
        $(SDK)/stack/zigbee/wwah $(SDK)/stack/hci $(SDK)/stack/zigbee/zb_hci
-# Flags of the SDK's own B91 projects (build/*/b91/.cproject).
 FLAGS := -mext-dsp -mabi=ilp32f -fomit-frame-pointer -fno-strict-aliasing -fuse-ld=bfd -fpack-struct -fshort-enums \
          -fshort-wchar -O2 -flto
 CFLAGS := $(FLAGS) -ffunction-sections -fdata-sections -std=gnu99 -Wall -Wno-nonnull-compare -DMCU_CORE_B91=1 \
@@ -29,8 +23,6 @@ $(OUT)/ybl: ybl.c
 	@mkdir -p $(OUT)
 	$(ZIG) cc -O2 -o $@ $<
 
-# $(1): application directory, $(2): role define, $(3): stack library. The SDK is compiled per
-# application: its sources depend on the role and on the application's configuration headers.
 define image
 $(1)_OBJS := $$(patsubst $$(SDK)/%,$$(OUT)/$(1)/sdk/%.o,$$(SDK_SRCS)) $$(patsubst %,$$(OUT)/%.o,$$(wildcard $(1)/*.c)) \
              $$(patsubst common/%,$$(OUT)/$(1)/common/%.o,$$(wildcard common/*.c))

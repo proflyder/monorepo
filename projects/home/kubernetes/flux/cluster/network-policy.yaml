@@ -1,10 +1,3 @@
-# Flux talks only to the Kubernetes API, DNS, and GitHub.
-#
-# `${NODE_LAN_IP}` is substituted by the root Kustomization from the
-# `flux-settings` Secret (the K3s API is the node itself; a service ClusterIP
-# would be DNATed to this address before the policy is evaluated). The GitHub
-# ranges are the published git/web ranges; update them if GitHub changes its
-# network and the source-controller starts failing to clone.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -14,9 +7,6 @@ spec:
   podSelector: {}
   policyTypes:
     - Ingress
-  # Prometheus scrapes the controller metrics (`gotk_*`) through
-  # PodMonitor/flux-controllers in the monitoring namespace. Everything
-  # else stays denied: this is the only ingress rule in the namespace.
   ingress:
     - from:
         - namespaceSelector:
@@ -26,8 +16,6 @@ spec:
         - protocol: TCP
           port: 8080
 ---
-# The kustomize and helm controllers download Git artifacts from the
-# source-controller (Service :80 -> pod :9090) inside this namespace.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -46,12 +34,6 @@ spec:
         - protocol: TCP
           port: 9090
 ---
-# Helm chart index and tarballs live on third-party CDNs whose addresses move
-# (charts.jetstack.io, charts.external-secrets.io, GitHub release assets).
-# Only the source-controller may reach HTTPS outside the private networks; the
-# other controllers stay limited by `flux-system-egress` below. NetworkPolicy
-# egress rules are additive, so this grants 443 to the source-controller in
-# addition to its DNS/API/artifact/GitHub rules.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -87,7 +69,6 @@ spec:
   policyTypes:
     - Egress
   egress:
-    # CoreDNS.
     - to:
         - namespaceSelector:
             matchLabels:
@@ -97,7 +78,6 @@ spec:
           port: 53
         - protocol: TCP
           port: 53
-    # Artifacts from the source-controller.
     - to:
         - podSelector:
             matchLabels:
@@ -105,7 +85,6 @@ spec:
       ports:
         - protocol: TCP
           port: 9090
-    # Kubernetes API: the node endpoint directly and the service ClusterIP.
     - to:
         - ipBlock:
             cidr: ${NODE_LAN_IP}/32
@@ -120,7 +99,6 @@ spec:
           port: 443
         - protocol: TCP
           port: 6443
-    # github.com (SSH clone and HTTPS redirects).
     - to:
         - ipBlock:
             cidr: 140.82.112.0/20
@@ -133,13 +111,9 @@ spec:
           port: 22
         - protocol: TCP
           port: 443
-    # raw content served by GitHub for release artifacts.
     - to:
         - ipBlock:
             cidr: 185.199.108.0/22
       ports:
         - protocol: TCP
           port: 443
-    # Helm chart repositories are fetched by the source-controller over
-    # arbitrary CDN addresses (Cloudflare, Google, Fastly); the dedicated
-    # policy below allows it HTTPS-only outside the private ranges.

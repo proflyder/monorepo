@@ -1,5 +1,3 @@
-//! `home-deploy` entry point.
-
 use std::io::Write;
 use std::process::ExitCode;
 
