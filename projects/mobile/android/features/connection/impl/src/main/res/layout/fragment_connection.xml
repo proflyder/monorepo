@@ -28,10 +28,10 @@
                 android:textColor="?attr/colorOnSurfaceVariant" />
 
             <com.google.android.material.card.MaterialCardView
+                style="@style/Widget.Home.Card"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="16dp"
-                app:cardCornerRadius="16dp">
+                android:layout_marginTop="16dp">
 
                 <LinearLayout
                     android:layout_width="match_parent"
@@ -45,7 +45,7 @@
                         android:text="@string/connection_remote_title"
                         android:drawableStart="@drawable/connection_ic_link"
                         android:drawablePadding="@dimen/connection_section_icon_gap"
-                        android:textAppearance="?attr/textAppearanceTitleLarge" />
+                        android:textAppearance="?attr/textAppearanceTitleMedium" />
 
                     <TextView
                         android:id="@+id/connection_remote_state"
@@ -125,20 +125,17 @@
 
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/connection_refresh_config"
-                        style="@style/Widget.Material3.Button.TonalButton"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="4dp"
-                        android:minHeight="48dp"
+                        style="@style/Widget.Home.CardButton.Tonal"
+                        android:layout_marginTop="12dp"
                         android:text="@string/connection_remote_refresh" />
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
             <com.google.android.material.card.MaterialCardView
+                style="@style/Widget.Home.Card"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="16dp"
-                app:cardCornerRadius="16dp">
+                android:layout_marginTop="16dp">
 
                 <LinearLayout
                     android:layout_width="match_parent"
@@ -148,7 +145,6 @@
 
                     <com.google.android.material.textfield.TextInputLayout
                         android:id="@+id/connection_token_layout"
-                        style="@style/Widget.Home.TextInput"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:hint="@string/connection_token_title"
@@ -169,10 +165,8 @@
 
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/connection_clear_token"
-                        style="@style/Widget.Material3.Button.TextButton"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:minHeight="48dp"
+                        style="@style/Widget.Home.CardButton.Danger"
+                        android:layout_marginTop="8dp"
                         android:text="@string/connection_clear_token" />
 
                     <TextView
@@ -201,10 +195,8 @@
 
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/connection_test"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
+                        style="@style/Widget.Home.CardButton"
                         android:layout_marginTop="8dp"
-                        android:minHeight="52dp"
                         android:text="@string/connection_test" />
 
                     <ProgressBar
@@ -217,11 +209,11 @@
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
-                        <com.google.android.material.card.MaterialCardView
+            <com.google.android.material.card.MaterialCardView
+                style="@style/Widget.Home.Card"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="16dp"
-                app:cardCornerRadius="16dp">
+                android:layout_marginTop="16dp">
 
                 <LinearLayout
                     android:layout_width="match_parent"
@@ -235,7 +227,7 @@
                         android:text="@string/connection_status"
                         android:drawableStart="@drawable/connection_ic_status"
                         android:drawablePadding="@dimen/connection_section_icon_gap"
-                        android:textAppearance="?attr/textAppearanceTitleLarge" />
+                        android:textAppearance="?attr/textAppearanceTitleMedium" />
 
                     <TextView
                         android:id="@+id/connection_status_text"

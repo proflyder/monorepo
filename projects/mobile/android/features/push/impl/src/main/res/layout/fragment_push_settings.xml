@@ -39,13 +39,11 @@
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal">
+                    android:orientation="vertical">
 
                     <LinearLayout
-                        android:layout_width="0dp"
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_weight="1"
                         android:orientation="vertical">
 
                         <TextView
@@ -69,23 +67,19 @@
 
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/push_notifications_action"
-                        style="@style/Widget.Material3.Button.TextButton"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:minHeight="@dimen/push_row_action_min_height" />
+                        style="@style/Widget.Home.CardButton.Tonal"
+                        android:layout_marginTop="@dimen/ui_tile_gap" />
                 </LinearLayout>
 
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="@dimen/push_row_gap"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal">
+                    android:orientation="vertical">
 
                     <LinearLayout
-                        android:layout_width="0dp"
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_weight="1"
                         android:orientation="vertical">
 
                         <TextView
@@ -109,23 +103,19 @@
 
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/push_dnd_action"
-                        style="@style/Widget.Material3.Button.TextButton"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:minHeight="@dimen/push_row_action_min_height" />
+                        style="@style/Widget.Home.CardButton.Tonal"
+                        android:layout_marginTop="@dimen/ui_tile_gap" />
                 </LinearLayout>
 
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="@dimen/push_row_gap"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal">
+                    android:orientation="vertical">
 
                     <LinearLayout
-                        android:layout_width="0dp"
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_weight="1"
                         android:orientation="vertical">
 
                         <TextView
@@ -149,10 +139,8 @@
 
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/push_full_screen_action"
-                        style="@style/Widget.Material3.Button.TextButton"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:minHeight="@dimen/push_row_action_min_height" />
+                        style="@style/Widget.Home.CardButton.Tonal"
+                        android:layout_marginTop="@dimen/ui_tile_gap" />
                 </LinearLayout>
 
                 <TextView
@@ -180,7 +168,6 @@
 
 
                 <com.google.android.material.textfield.TextInputLayout
-                    style="@style/Widget.Home.TextInput"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:hint="@string/push_device_name_title"
@@ -200,9 +187,7 @@
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/push_device_name_save"
-                    style="@style/Widget.Material3.Button.TonalButton"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
+                    style="@style/Widget.Home.CardButton.Tonal"
                     android:layout_marginTop="@dimen/ui_tile_gap"
                     android:text="@string/push_device_name_save" />
 
@@ -257,9 +242,7 @@
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/push_register"
-                    style="@style/Widget.Material3.Button.TonalButton"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
+                    style="@style/Widget.Home.CardButton.Tonal"
                     android:layout_marginTop="@dimen/ui_tile_gap"
                     android:text="@string/push_register"
                     app:icon="@drawable/push_ic_notification" />

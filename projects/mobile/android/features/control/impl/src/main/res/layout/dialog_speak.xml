@@ -9,7 +9,6 @@
 
     <com.google.android.material.textfield.TextInputLayout
         android:id="@+id/speak_input_layout"
-        style="@style/Widget.Home.TextInput"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:hint="@string/control_speak_hint"
