@@ -17,30 +17,30 @@
     tools:ignore="SelectableText">
 
     <FrameLayout
-        android:layout_width="40dp"
-        android:layout_height="40dp">
+        android:layout_width="@dimen/control_device_icon"
+        android:layout_height="@dimen/control_device_icon">
 
         <ImageView
             android:id="@+id/control_row_icon"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
+            android:layout_width="@dimen/control_device_icon"
+            android:layout_height="@dimen/control_device_icon"
             android:background="@drawable/control_bg_icon"
             android:importantForAccessibility="no"
-            android:padding="10dp" />
+            android:padding="@dimen/control_device_icon_padding" />
 
         <com.google.android.material.progressindicator.CircularProgressIndicator
             android:id="@+id/control_row_progress"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
+            android:layout_width="@dimen/control_device_icon"
+            android:layout_height="@dimen/control_device_icon"
             android:indeterminate="true"
             android:visibility="gone"
-            app:indicatorSize="26dp" />
+            app:indicatorSize="@dimen/control_device_progress" />
     </FrameLayout>
 
     <LinearLayout
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:layout_marginStart="12dp"
+        android:layout_marginStart="@dimen/control_device_text_gap"
         android:layout_weight="1"
         android:orientation="vertical">
 

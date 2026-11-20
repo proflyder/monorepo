@@ -987,6 +987,14 @@ Themes are code in `core/theme`:
   cyan secondary, magenta tertiary; selected pills, chips and the navigation
   indicator are cyan on a deep violet `secondaryContainer`; FABs get a 1dp
   cyan outline and, on Android 9+, a cyan elevation glow).
+- FABs share one style from `core/ui`: `Theme.Home` sets
+  `floatingActionButtonStyle` / `extendedFloatingActionButtonStyle` to
+  `Widget.Home.(Extended)FloatingActionButton`, which read the theme attrs
+  `homeFabStrokeWidth`, `homeFabStrokeColor`, `homeFabGlowColor` and
+  `homeFabElevation` (Current/System: no outline; Neon: outline and glow on
+  every FAB, including quick-action items and the close button). Speed-dial
+  labels use `Widget.Home.FabLabel` (a `surfaceContainerHigh` pill).
+  `FabStyleScreenshotTest` checks equal strokes and unclipped glow.
 - No segmented buttons anywhere (`MaterialButtonToggleGroup`, bordered
   segments): a choice between a few options is `core/ui` `PillSegments`
   (Time sections, Appearance mode). `AndroidThemeColorTests` enforces it.
@@ -1043,6 +1051,10 @@ Themes are code in `core/theme`:
 ## Заметки к коду
 
 Пояснения, перенесённые из комментариев исходников (код комментариев не содержит, см. `AGENTS.md`).
+
+- `core/ui/.../OutlinedFloatingActionButton.kt`
+  - Material `FloatingActionButton` has no stroke attributes (only `ExtendedFloatingActionButton` does), so this subclass reads `strokeWidth`/`strokeColor` from its style and paints them over the content rect with a `MaterialShapeDrawable` of the same shape. Every plain FAB in layouts uses it so the theme style applies one outline everywhere.
+- Device rows (`item_control_device.xml`, `item_control_device_row.xml`) share `control_device_icon*` and `control_device_text_gap`: the single card padding (16dp) equals group inset + row bleed (8dp + 8dp), so icons and titles line up across card kinds.
 
 - `BUILD.bazel`
   - Unit tests only. `//projects/mobile/android:android_lint` is intentionally absent: it is a separate CI unit so its findings do not hide test results.

@@ -12,4 +12,7 @@
     <dimen name="ui_fab_clearance">88dp</dimen>
     <dimen name="ui_text_input_focus_stroke">2dp</dimen>
     <dimen name="ui_device_state_card_stroke">1dp</dimen>
+    <dimen name="ui_fab_label_padding_horizontal">12dp</dimen>
+    <dimen name="ui_fab_label_padding_vertical">6dp</dimen>
+    <dimen name="ui_fab_label_radius">12dp</dimen>
 </resources>

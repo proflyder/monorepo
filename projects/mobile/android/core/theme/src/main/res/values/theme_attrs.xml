@@ -4,4 +4,8 @@
     <attr name="colorStateOn" format="color|reference" />
     <attr name="colorOnStateOn" format="color|reference" />
     <attr name="colorStateOnText" format="color|reference" />
+    <attr name="homeFabStrokeWidth" format="dimension|reference" />
+    <attr name="homeFabStrokeColor" format="color|reference" />
+    <attr name="homeFabGlowColor" format="color|reference" />
+    <attr name="homeFabElevation" format="dimension|reference" />
 </resources>

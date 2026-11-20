@@ -30,6 +30,12 @@
         <item name="colorOnStateOn">?attr/colorOnPrimary</item>
         <item name="colorStateOnText">@color/home_state_on_text</item>
         <item name="materialSwitchStyle">@style/Widget.Home.Switch</item>
+        <item name="homeFabStrokeWidth">@dimen/theme_fab_no_stroke</item>
+        <item name="homeFabStrokeColor">?attr/colorPrimary</item>
+        <item name="homeFabGlowColor">@android:color/black</item>
+        <item name="homeFabElevation">@dimen/theme_fab_elevation</item>
+        <item name="floatingActionButtonStyle">@style/Widget.Home.FloatingActionButton</item>
+        <item name="extendedFloatingActionButtonStyle">@style/Widget.Home.ExtendedFloatingActionButton</item>
 
         <item name="shapeAppearanceSmallComponent">@style/ShapeAppearance.Home.Small</item>
         <item name="shapeAppearanceMediumComponent">@style/ShapeAppearance.Home.Medium</item>

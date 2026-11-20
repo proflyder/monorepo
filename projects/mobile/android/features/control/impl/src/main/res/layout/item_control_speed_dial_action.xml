@@ -4,6 +4,8 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="wrap_content"
     android:layout_height="wrap_content"
+    android:clipChildren="false"
+    android:clipToPadding="false"
     android:gravity="center_vertical"
     android:orientation="horizontal"
     android:paddingTop="@dimen/control_speed_dial_row_gap"
@@ -12,15 +14,14 @@
 
     <TextView
         android:id="@+id/control_dial_label"
+        style="@style/Widget.Home.FabLabel"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginEnd="@dimen/control_speed_dial_item_gap"
         android:ellipsize="end"
-        android:maxLines="1"
-        android:textAppearance="?attr/textAppearanceBodyLarge"
-        android:textColor="@color/control_speed_dial_label" />
+        android:maxLines="1" />
 
-    <com.google.android.material.floatingactionbutton.FloatingActionButton
+    <dev.proflyder.home.core.ui.OutlinedFloatingActionButton
         android:id="@+id/control_dial_action"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"

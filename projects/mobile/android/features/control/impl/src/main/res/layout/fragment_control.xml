@@ -108,7 +108,7 @@
         </FrameLayout>
     </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
 
-    <com.google.android.material.floatingactionbutton.FloatingActionButton
+    <dev.proflyder.home.core.ui.OutlinedFloatingActionButton
         android:id="@+id/control_quick_fab"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"

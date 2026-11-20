@@ -33,7 +33,7 @@
             android:orientation="vertical" />
     </androidx.core.widget.NestedScrollView>
 
-    <com.google.android.material.floatingactionbutton.FloatingActionButton
+    <dev.proflyder.home.core.ui.OutlinedFloatingActionButton
         android:id="@+id/control_dial_fab"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
