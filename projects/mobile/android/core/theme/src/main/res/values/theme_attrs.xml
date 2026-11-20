@@ -1,4 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <attr name="homeSelectedContentColor" format="color|reference" />
+    <attr name="colorStateOn" format="color|reference" />
+    <attr name="colorOnStateOn" format="color|reference" />
+    <attr name="colorStateOnText" format="color|reference" />
 </resources>

@@ -22,4 +22,5 @@
     <color name="home_surface_container_highest">#DDE4E0</color>
     <color name="home_outline">#6F7975</color>
     <color name="home_outline_variant">#BFC9C4</color>
+    <color name="home_state_on_text">#0A6B58</color>
 </resources>

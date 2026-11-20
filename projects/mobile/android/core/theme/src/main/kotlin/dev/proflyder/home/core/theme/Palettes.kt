@@ -28,6 +28,9 @@ internal object Palettes {
             surfaceContainerHighest = rgb(0xDDE4E0),
             outline = rgb(0x6F7975),
             outlineVariant = rgb(0xBFC9C4),
+            stateOn = rgb(0x0E7C66),
+            onStateOn = rgb(0xFFFFFF),
+            stateOnText = rgb(0x0A6B58),
         ),
         dark = ColorScheme(
             primary = rgb(0x6FDBC0),
@@ -55,6 +58,9 @@ internal object Palettes {
             surfaceContainerHighest = rgb(0x2F3633),
             outline = rgb(0x89938E),
             outlineVariant = rgb(0x3F4945),
+            stateOn = rgb(0x6FDBC0),
+            onStateOn = rgb(0x00382E),
+            stateOnText = rgb(0x6FDBC0),
         ),
     )
 
@@ -85,6 +91,9 @@ internal object Palettes {
             surfaceContainerHighest = rgb(0xDCD4EE),
             outline = rgb(0x7A7296),
             outlineVariant = rgb(0xCBC3E0),
+            stateOn = rgb(0x006874),
+            onStateOn = rgb(0xFFFFFF),
+            stateOnText = rgb(0x006874),
         ),
         dark = ColorScheme(
             primary = rgb(0xBF4DFF),
@@ -112,6 +121,9 @@ internal object Palettes {
             surfaceContainerHighest = rgb(0x2D2850),
             outline = rgb(0x8E86B0),
             outlineVariant = rgb(0x3F3A5E),
+            stateOn = rgb(0x00E5FF),
+            onStateOn = rgb(0x00363D),
+            stateOnText = rgb(0x00E5FF),
         ),
     )
 }

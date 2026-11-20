@@ -989,6 +989,28 @@ Themes are code in `core/theme`:
   (Time sections, Appearance mode). `AndroidThemeColorTests` enforces it.
 - `?attr/homeSelectedContentColor` (core/theme) is the text colour of a
   selected pill: `colorPrimary` in Current, cyan in Neon.
+- On/off state has one colour everywhere: `?attr/colorStateOn` and
+  `?attr/colorOnStateOn` (core/theme, `ColorRole.STATE_ON`/`ON_STATE_ON`) are
+  `colorPrimary`/`colorOnPrimary` in Current and System and
+  `colorSecondary`/`colorOnSecondary` in Neon (cyan `#00E5FF` at night, the
+  AA-safe teal `#006874` by day). `?attr/colorStateOnText` is the status text
+  colour; Current light uses the darker `home_state_on_text` because
+  `colorPrimary` is only 4.43:1 on cards. In System with wallpaper colours the
+  fill follows the wallpaper while the text stays the Current value.
+- `Widget.Home.Switch` (core/theme) is the global `materialSwitchStyle` in
+  `Theme.Home` and in every theme overlay: checked track `colorStateOn`, thumb
+  `colorOnStateOn`; unchecked track `colorSurfaceContainerHighest`, thumb
+  `colorOnSurfaceVariant`, outline `colorOutline`.
+- `core/ui` `DeviceStateViews` styles every device icon, status and card
+  (Home device cards, group rows, station mini-tiles, volume rows): on is an
+  accent-filled icon with `colorOnStateOn` glyph, bold accent status and a
+  1dp accent card outline; off is `colorSurfaceContainerHighest` with
+  `colorOnSurfaceVariant` and regular weight. The fill change animates for
+  `HomeMotion.selectionDuration`. Buttons keep the neutral container look via
+  `clearIcon`. `ThemeRegistryTest` checks AA for the on-state pairs;
+  `DeviceStateScreenshotTest` renders on/off cards in every theme and mode,
+  checks that fill and status differ, that the checked switch track equals
+  the tile fill and that a titleless group row lines up with a device card.
 - Applying: the View system takes colours from theme attributes, so each
   theme is a static `ThemeOverlay` applied with `Theme.applyStyle` in
   `onActivityPreCreated` (`onActivityCreated` below Android 10), before any

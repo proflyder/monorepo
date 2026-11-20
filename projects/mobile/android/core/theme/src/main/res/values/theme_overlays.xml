@@ -26,6 +26,10 @@
         <item name="android:colorBackground">@color/home_surface</item>
         <item name="colorOnBackground">@color/home_on_surface</item>
         <item name="homeSelectedContentColor">?attr/colorPrimary</item>
+        <item name="colorStateOn">?attr/colorPrimary</item>
+        <item name="colorOnStateOn">?attr/colorOnPrimary</item>
+        <item name="colorStateOnText">@color/home_state_on_text</item>
+        <item name="materialSwitchStyle">@style/Widget.Home.Switch</item>
     </style>
 
     <style name="ThemeOverlay.Home.Neon" parent="">
@@ -57,8 +61,18 @@
         <item name="android:colorBackground">@color/theme_neon_surface</item>
         <item name="colorOnBackground">@color/theme_neon_on_surface</item>
         <item name="homeSelectedContentColor">@color/theme_neon_on_secondary_container</item>
+        <item name="colorStateOn">?attr/colorSecondary</item>
+        <item name="colorOnStateOn">?attr/colorOnSecondary</item>
+        <item name="colorStateOnText">?attr/colorSecondary</item>
+        <item name="materialSwitchStyle">@style/Widget.Home.Switch</item>
         <item name="floatingActionButtonStyle">@style/Widget.Home.Neon.FloatingActionButton</item>
         <item name="extendedFloatingActionButtonStyle">@style/Widget.Home.Neon.ExtendedFloatingActionButton</item>
+    </style>
+
+    <style name="Widget.Home.Switch" parent="Widget.Material3.CompoundButton.MaterialSwitch">
+        <item name="trackTint">@color/theme_switch_track</item>
+        <item name="thumbTint">@color/theme_switch_thumb</item>
+        <item name="trackDecorationTint">@color/theme_switch_decoration</item>
     </style>
 
     <style name="Widget.Home.Neon.FloatingActionButton" parent="Widget.Material3.FloatingActionButton.Primary" />

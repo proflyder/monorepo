@@ -29,4 +29,7 @@ enum class ColorRole(@AttrRes val attr: Int) {
     SURFACE_CONTAINER_HIGHEST(MaterialR.attr.colorSurfaceContainerHighest),
     OUTLINE(MaterialR.attr.colorOutline),
     OUTLINE_VARIANT(MaterialR.attr.colorOutlineVariant),
+    STATE_ON(R.attr.colorStateOn),
+    ON_STATE_ON(R.attr.colorOnStateOn),
+    STATE_ON_TEXT(R.attr.colorStateOnText),
 }

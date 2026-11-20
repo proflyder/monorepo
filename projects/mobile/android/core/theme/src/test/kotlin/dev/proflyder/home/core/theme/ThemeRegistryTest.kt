@@ -39,6 +39,15 @@ class ThemeRegistryTest {
     }
 
     @Test
+    fun onStateUsesTheThemeAccent() {
+        assertEquals(rgb(0x00E5FF), AppTheme.NEON.palette.dark.stateOn)
+        assertEquals(AppTheme.NEON.palette.light.secondary, AppTheme.NEON.palette.light.stateOn)
+        listOf(AppTheme.CURRENT.palette.light, AppTheme.CURRENT.palette.dark, AppTheme.SYSTEM.palette.dark).forEach {
+            assertEquals(it.primary, it.stateOn)
+        }
+    }
+
+    @Test
     fun contrastMatchesTheWcagReferenceValues() {
         assertEquals(21.0, Contrast.ratio(rgb(0x000000), rgb(0xFFFFFF)), DELTA)
         assertEquals(1.0, Contrast.ratio(rgb(0x777777), rgb(0x777777)), DELTA)
@@ -80,6 +89,9 @@ class ThemeRegistryTest {
             ColorRole.ON_ERROR to ColorRole.ERROR,
             ColorRole.ON_ERROR_CONTAINER to ColorRole.ERROR_CONTAINER,
             ColorRole.PRIMARY to ColorRole.SURFACE,
+            ColorRole.ON_STATE_ON to ColorRole.STATE_ON,
+            ColorRole.STATE_ON_TEXT to ColorRole.SURFACE,
+            ColorRole.STATE_ON_TEXT to ColorRole.SURFACE_CONTAINER,
         ) + SURFACES.flatMap { surface ->
             listOf(ColorRole.ON_SURFACE, ColorRole.ON_SURFACE_VARIANT).map { it to surface }
         }

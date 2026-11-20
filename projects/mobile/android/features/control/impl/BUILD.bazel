@@ -46,7 +46,10 @@ android_all_dir(
 
 kt_android_local_test(
     name = "profile_row_test",
-    srcs = glob(["src/test/kotlin/**/*.kt"]),
+    srcs = glob(
+        ["src/test/kotlin/**/*.kt"],
+        exclude = ["src/test/kotlin/dev/proflyder/home/feature/control/presentation/DeviceStateScreenshotTest.kt"],
+    ),
     associates = [":impl"],
     custom_package = "dev.proflyder.home.feature.control.impl",
     data = [
@@ -69,6 +72,43 @@ kt_android_local_test(
     test_class = "dev.proflyder.home.feature.control.presentation.ControlProfileRowTest",
     deps = [
         "//projects/mobile/android/core/model",
+        "//projects/mobile/android/core/theme",
+        "//projects/mobile/android/core/ui",
+        "//projects/mobile/android/features/call/api",
+        "//projects/mobile/android/features/control/api",
+        "@maven//:androidx_appcompat_appcompat",
+        "@maven//:com_google_android_material_material",
+        "@maven//:junit_junit",
+        "@maven//:org_robolectric_robolectric",
+    ],
+)
+
+kt_android_local_test(
+    name = "device_state_screenshot_test",
+    srcs = ["src/test/kotlin/dev/proflyder/home/feature/control/presentation/DeviceStateScreenshotTest.kt"],
+    associates = [":impl"],
+    custom_package = "dev.proflyder.home.feature.control.impl",
+    data = [
+        "robolectric-deps.properties",
+        ":robolectric_android_all_sdk35",
+    ],
+    jvm_flags = [
+        "-Drobolectric.offline=true",
+        "--add-opens=java.base/java.lang=ALL-UNNAMED",
+        "--add-opens=java.base/java.io=ALL-UNNAMED",
+        "--add-opens=java.base/java.net=ALL-UNNAMED",
+        "--add-opens=java.base/java.security=ALL-UNNAMED",
+        "--add-opens=java.base/java.text=ALL-UNNAMED",
+        "--add-opens=java.base/java.util=ALL-UNNAMED",
+        "--add-opens=java.base/java.util.concurrent=ALL-UNNAMED",
+        "--add-opens=java.base/jdk.internal.util=ALL-UNNAMED",
+    ],
+    manifest = "src/test/AndroidManifest.xml",
+    robolectric_properties_file = "robolectric-deps.properties",
+    test_class = "dev.proflyder.home.feature.control.presentation.DeviceStateScreenshotTest",
+    deps = [
+        "//projects/mobile/android/core/model",
+        "//projects/mobile/android/core/theme",
         "//projects/mobile/android/core/ui",
         "//projects/mobile/android/features/call/api",
         "//projects/mobile/android/features/control/api",
