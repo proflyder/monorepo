@@ -1,4 +1,3 @@
-"""Static contracts for the Flux GitOps bundle (no cluster needed)."""
 import json
 import pathlib
 import re
@@ -101,9 +100,6 @@ class Cluster(unittest.TestCase):
         cls.kustomizations = by_name(cls.docs, "Kustomization")
 
     def test_controllers_can_fetch_artifacts(self):
-        # Without these the kustomize/helm controllers cannot download the
-        # Git artifact from the source-controller and every Kustomization
-        # except the root one fails with "failed to download archive".
         policies = {d["metadata"]["name"]: d for d in of_kind(self.docs, "NetworkPolicy")}
         artifacts = policies["flux-system-artifacts"]["spec"]
         self.assertEqual(artifacts["podSelector"], {"matchLabels": {"app": "source-controller"}})
@@ -120,8 +116,6 @@ class Cluster(unittest.TestCase):
         ingress = policies["flux-system-ingress"]
         egress = policies["flux-system-egress"]
         self.assertEqual(ingress["spec"]["policyTypes"], ["Ingress"])
-        # The only allowed ingress is Prometheus scraping the controller
-        # metrics; every other connection into flux-system stays denied.
         self.assertEqual(ingress["spec"]["ingress"], [{
             "from": [{
                 "namespaceSelector": {
@@ -146,8 +140,6 @@ class Cluster(unittest.TestCase):
         rendered = yaml.safe_dump(egress)
         self.assertIn("${NODE_LAN_IP}/32", rendered)
         self.assertIn("140.82.112.0/20", rendered)
-        # Chart CDNs are not pinned by address; only the source-controller gets
-        # general HTTPS egress through a dedicated policy.
         self.assertNotIn("104.18.", rendered)
         self.assertNotIn("142.250.", rendered)
 
@@ -167,10 +159,7 @@ class Cluster(unittest.TestCase):
         self.assertEqual(set(self.kustomizations), {
             "platform", "observability", "observability-rules",
             "vaultwarden", "nexus", "nexus-provision",
-            # Applications consume the machine pins branch; their manifests
-            # still come from `develop` (GitRepository/flux-system).
             "home-app-pins", "app-wakegrant",
-            # решение 54: application units applied by Flux.
             "app-intercom", "app-currency-bot", "app-mcp-gateway",
             "app-ha-executors", "app-ha-config-sync", "app-hermes",
             "app-phone-push", "pve-exporter",
@@ -190,7 +179,6 @@ class Cluster(unittest.TestCase):
         self.assertEqual(pins["metadata"]["namespace"], "flux-system")
         self.assertEqual(pins["spec"]["url"], "ssh://git@github.com/proflyder/monorepo")
         self.assertEqual(pins["spec"]["ref"], {"branch": "deploy/home-apps"})
-        # Same read-only deploy key as flux-system: Flux never writes to Git.
         self.assertEqual(pins["spec"]["secretRef"]["name"], "flux-system")
         self.assertEqual(pins["spec"]["interval"], "1m")
 
@@ -204,8 +192,6 @@ class Cluster(unittest.TestCase):
         app = self.kustomizations["app-wakegrant"]
         spec = app["spec"]
         self.assertEqual(spec["path"], "./projects/home/kubernetes/wakegrant/manifests")
-        # Pilot cutover done (решение 54): Flux owns wakegrant and CI
-        # only commits its verified digest to `deploy/home-apps`.
         self.assertFalse(spec.get("suspend", False))
         self.assertTrue(spec["wait"])
         self.assertEqual(spec["timeout"], "5m")
@@ -236,8 +222,6 @@ class Cluster(unittest.TestCase):
             with self.subTest(app=name):
                 spec = self.kustomizations[name]["spec"]
                 self.assertEqual(spec["path"], path)
-                # Cut over (решение 54): Flux owns the live
-                # workload; a `suspend: true` here would silently freeze it.
                 self.assertFalse(spec.get("suspend", False))
                 self.assertTrue(spec["wait"])
                 self.assertEqual(spec["dependsOn"], [
@@ -250,10 +234,6 @@ class Cluster(unittest.TestCase):
                 self.assertTrue(spec["healthChecks"])
 
     def test_pins_cover_every_flux_unit_image(self):
-        # Every image a deployable unit pins must be referenced by its rendered
-        # manifests, with the ConfigMap key `pins.mjs` writes.
-        # The scheduler's `home-deploy` image is only used by the admin
-        # preflight Job, which is not part of the Flux set.
         script = (
             "const { config } = await import(process.argv[1] + '/platform/ci/units.mjs');\n"
             "console.log(JSON.stringify(config.units.filter((u) => u.deploy)"
@@ -273,8 +253,6 @@ class Cluster(unittest.TestCase):
             "ha-config-sync": K8S / "ha-config-sync/manifests",
             "phone-push": K8S / "phone-push/manifests",
             "hermes": ROOT / "projects/home-assistant/deploy/flux",
-            # Phase 2 adds the `${HERMES_CONFIG_IMAGE}` reference to the same
-            # rendered set (init container + drift sidecar).
             "hermes-config": ROOT / "projects/home-assistant/deploy/flux",
         }
         self.assertEqual({unit["id"] for unit in units}, set(paths))
@@ -293,8 +271,6 @@ class Cluster(unittest.TestCase):
         self.assertEqual(platform["spec"]["path"],
                          "./projects/home/kubernetes/flux/cluster/platform")
         self.assertTrue(platform["spec"]["wait"])
-        # Everything that needs platform internals depends on the umbrella,
-        # not on the individual children.
         self.assertEqual(self.kustomizations["observability"]["spec"]["dependsOn"],
                          [{"name": "platform"}])
         self.assertEqual(self.kustomizations["vaultwarden"]["spec"]["dependsOn"],
@@ -339,7 +315,6 @@ class Platform(unittest.TestCase):
 
 
 class HelmReleases(unittest.TestCase):
-    """The live releases must be adopted in place: same name/namespace/values."""
 
     @classmethod
     def setUpClass(cls):
@@ -376,8 +351,6 @@ class HelmReleases(unittest.TestCase):
             release = self.release(name)
             self.assertEqual(release["metadata"]["namespace"], "flux-system", name)
             self.assertEqual(release["spec"]["targetNamespace"], namespace, name)
-            # helm-controller must adopt the live release, not create
-            # `<targetNamespace>-<name>` with release secrets in flux-system.
             self.assertEqual(release["spec"]["releaseName"], name, name)
             self.assertEqual(release["spec"]["storageNamespace"], namespace, name)
 
@@ -420,8 +393,6 @@ class HelmReleases(unittest.TestCase):
             spec = self.release(name)["spec"]["chart"]["spec"]
             with self.subTest(release=name):
                 self.assertEqual(spec["chart"], chart)
-                # The in-repo charts keep version 0.1.0: without the Revision
-                # strategy template edits (dashboards) never reach the live release.
                 self.assertEqual(spec.get("reconcileStrategy"), "Revision")
                 self.assertEqual(spec["sourceRef"], {
                     "kind": "GitRepository", "name": "flux-system", "namespace": "flux-system",
@@ -457,7 +428,6 @@ class HelmReleases(unittest.TestCase):
 
 
 class Substitution(unittest.TestCase):
-    """Only the documented private variables may survive rendering."""
 
     def placeholders(self, path):
         rendered = subprocess.run(
@@ -549,8 +519,6 @@ class Secrets(unittest.TestCase):
             "flux-app-settings": "flux-app-settings",
             "flux-runtime-values": "runtime-values",
         })
-        # The live Secret survives removal of the ExternalSecret, so an ESO
-        # outage does not strip a running pod of its configuration.
         app = by_name(docs, "ExternalSecret")["flux-app-settings"]
         self.assertEqual(app["spec"]["target"]["deletionPolicy"], "Retain")
         runtime = by_name(docs, "ExternalSecret")["flux-runtime-values"]
@@ -653,7 +621,6 @@ class Provisioning(unittest.TestCase):
 
 
 class WakegrantApp(unittest.TestCase):
-    """The Flux manifest set for the wakegrant pilot (решение 54)."""
 
     @classmethod
     def setUpClass(cls):
@@ -669,8 +636,6 @@ class WakegrantApp(unittest.TestCase):
     def test_only_pins_and_app_settings_variables_remain(self):
         left = set(re.findall(r"\$\{([A-Z_]+)\}", self.rendered))
         self.assertEqual(left, {"WAKEGRANT_IMAGE", "BUILD_ID", "WAKE_GRANT_NODE_PORT"})
-        # ROLLOUT_ID is a CI-only variable; kustomize-controller would fail on
-        # an undefined one, so the Flux patch replaces it with the digest.
         self.assertNotIn("ROLLOUT_ID", left)
         self.assertNotIn("WAKE_GRANT_IMAGE", left)
 
@@ -692,7 +657,6 @@ class WakegrantApp(unittest.TestCase):
 
 
 class MigratedApps(unittest.TestCase):
-    """Flux manifest sets for решение 54."""
 
     EXPECTED = {
         "intercom": ({"Deployment", "Service", "ExternalSecret"},
@@ -713,8 +677,6 @@ class MigratedApps(unittest.TestCase):
                       {"SCHEDULER_IMAGE", "HA_BRIDGE_IMAGE", "HA_CONTROL_IMAGE",
                        "HA_SCENARIO_IMAGE", "BUILD_ID", "HA_URL",
                        "SCHEDULER_NODE_PORT", "CONTROL_NODE_PORT"}),
-        # Only app-settings keys exist for app Kustomizations: HAOS_IP, not
-        # the platform-only HAOS_ADDRESS.
         "ha-config-sync": ({"Deployment", "Service", "ServiceMonitor", "NetworkPolicy",
                             "PrometheusRule", "ExternalSecret"},
                            {"HA_CONFIG_SYNC_IMAGE", "BUILD_ID", "HAOS_IP", "NODE_LAN_IP"}),
@@ -751,12 +713,9 @@ class MigratedApps(unittest.TestCase):
                     )
 
     def test_namespace_manifest_is_not_in_the_flux_set(self):
-        # currency-bot's namespace is cluster-scoped and admin-owned.
         self.assertNotIn("kind: Namespace", self.rendered["currency-bot"])
 
     def test_the_deleted_ci_rbac_is_not_in_the_mcp_gateway_set(self):
-        # The CI-only RBAC (`home-assistant/ci-deploy` grants) is gone with the
-        # CI deploy path; the Flux set must never reintroduce it.
         self.assertNotIn("ci-deploy", self.rendered["mcp-gateway"])
 
     def test_executor_steady_state_is_pinned(self):
@@ -783,17 +742,12 @@ class MigratedApps(unittest.TestCase):
                 annotation = deployment["spec"]["template"]["metadata"]["annotations"][
                     "proflyder.dev/rollout"]
                 with self.subTest(unit=name, deployment=deployment["metadata"]["name"]):
-                    # cloudflared is a reviewed versions.sh literal, everything
-                    # else is the pins-branch placeholder.
                     if "cloudflared" in image:
                         self.assertIn("cloudflare/cloudflared:", annotation)
                     else:
                         self.assertEqual(annotation, image)
 
     def test_catalog_config_map_is_hashed_and_mounted(self):
-        # The gateway reads the catalog once at start: a content-hashed name
-        # makes every catalog change roll the pod (a stable name left the pod
-        # on the old catalog after #297).
         docs = kustomize(K8S / "mcp-gateway/manifests")
         configmaps = by_name(docs, "ConfigMap")
         names = [name for name in configmaps if name.startswith("mcp-gateway-catalog")]
@@ -812,7 +766,6 @@ class MigratedApps(unittest.TestCase):
 
 
 class HermesApp(unittest.TestCase):
-    """The Flux Helm release for the Hermes runtime (решение 54)."""
 
     @classmethod
     def setUpClass(cls):
@@ -850,8 +803,6 @@ class HermesApp(unittest.TestCase):
         remediation = self.release["spec"]["upgrade"]["remediation"]
         self.assertEqual(remediation["strategy"], "rollback")
         self.assertTrue(remediation["remediateLastFailure"])
-        # HelmRelease v2 has no `wait` field; only Kustomization does. A stray
-        # one fails the CRD dry-run and blocks the whole app Kustomization.
         self.assertNotIn("wait", self.release["spec"])
 
     def hermes_patch(self):
@@ -1007,11 +958,8 @@ class HermesApp(unittest.TestCase):
         template = (ROOT / "projects/home-assistant/deploy/chart/templates"
                     / "smoke-hook.yaml").read_text()
         self.assertIn("helm.sh/hook: post-upgrade", template)
-        self.assertIn("hermes assist-smoke", template)
-        # The HA token Secret is root-owned 0440; without fsGroup the
-        # non-root smoke user cannot read it (EACCES, failed upgrade).
+        self.assertIn('"hermes", "assist-smoke"', template)
         self.assertIn("fsGroup: 65534", template)
-        # Disabled by default: the CI/admin `helm upgrade` path is unchanged.
         self.assertIn("default dict", template)
         smoke = self.release["spec"]["values"]["smoke"]
         self.assertTrue(smoke["enabled"])
@@ -1019,7 +967,6 @@ class HermesApp(unittest.TestCase):
 
 
 class FluxAlerts(unittest.TestCase):
-    """Delivery alerts for Flux-managed applications."""
 
     RULES = K8S / "observability/rules"
 
@@ -1044,9 +991,6 @@ class FluxAlerts(unittest.TestCase):
                 self.assertEqual(rule["labels"]["severity"], "warning")
                 self.assertTrue(rule["annotations"]["summary"].strip())
                 self.assertTrue(rule["annotations"]["description"].strip())
-        # Flux 2.x controllers export no reconcile status, so readiness comes
-        # from kube-state-metrics customResourceState; the label contract is
-        # asserted in observability/test_prometheusrule.py.
         self.assertNotIn("gotk_reconcile_condition",
                          self.rules["FluxKustomizationNotReady"]["expr"])
         self.assertIn("gotk_resource_info", self.rules["FluxKustomizationNotReady"]["expr"])
@@ -1055,7 +999,6 @@ class FluxAlerts(unittest.TestCase):
                       self.rules["FluxKustomizationNotReady"]["expr"])
         self.assertIn('customresource_kind="HelmRelease"',
                       self.rules["HelmReleaseNotReady"]["expr"])
-        # Pins staleness is the missing ConfigMap or an unhealthy source.
         self.assertIn("home-app-images", self.rules["PinsStale"]["expr"])
         self.assertIn("flux-pins", self.rules["PinsStale"]["expr"])
 

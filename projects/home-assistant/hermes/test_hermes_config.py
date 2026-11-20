@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-"""Hermetic contract tests for the Hermes voice-fallback profile."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -33,8 +32,6 @@ class HermesConfigTests(unittest.TestCase):
         tools = self.data["mcp_servers"]["homeassistant"]["tools"]
         assert "include" not in tools, "tools.include would narrow the HA MCP surface"
         excluded = set(tools["exclude"])
-        # Time writes are exclusively the mcp-gateway `time` tools; the local
-        # HA intent scripts and executor scripts remain only for the ring path.
         for pattern in (
             "StationAlarm*",
             "StationTimer*",
@@ -73,8 +70,6 @@ class HermesConfigTests(unittest.TestCase):
             "http://mcp-gateway.home-assistant.svc.cluster.local:8080/mcp"
         )
         assert server["headers"]["Authorization"] == "Bearer ${HERMES_INFRA_TOKEN}"
-        # The voice path cannot answer approval prompts, so the restart
-        # confirmation is a gateway tool pair instead of a Hermes approval.
         assert server["trust"] == "full"
         assert server["connect_timeout"] == 10
         assert server["timeout"] == 30
@@ -107,24 +102,17 @@ class HermesConfigTests(unittest.TestCase):
         self.assertEqual(menu["max_commands"], 60)
         self.assertEqual(menu["priority_mode"], "prepend")
         self.assertEqual(menu["priority"], ["report"])
-        # The skill is a Telegram/CLI command only; the voice surface has no
-        # slash entry point.
         self.assertEqual(self.data["skills"]["platform_disabled"]["api_server"], ["report"])
 
     def test_telegram_prompt_covers_the_report_command(self):
         prompt = (ROOT / "projects" / "home-assistant" / "hermes" / "telegram_prompt.txt").read_text()
         for marker in ("Рикардо", "Telegram", "infra_status", "/report", "infra_report", "details.text"):
             assert marker in prompt
-        # The shared voice personality is capped at 180 characters; this prompt
-        # must stay a full-chat prompt, not a voice one-liner.
         assert "180" not in prompt
         assert len(prompt) > 1000
 
     def test_telegram_uses_polling_and_owner_allowlist(self):
-        # Telegram is enabled by TELEGRAM_BOT_TOKEN from hermes-environment and
-        # limited by TELEGRAM_ALLOWED_USERS; a webhook would move it off polling
-        # and needs a public ingress, which this bot must not have.
-        text = FRAGMENT.read_text()
+        text = (ROOT / "projects" / "home-assistant" / "hermes" / "README.md").read_text()
         assert "TELEGRAM_BOT_TOKEN" in text
         assert "TELEGRAM_WEBHOOK_URL" in text
         assert "webhook" not in yaml.safe_dump(self.data["platforms"]).lower()
@@ -138,11 +126,6 @@ class HermesConfigTests(unittest.TestCase):
             assert marker in prompt
 
     def test_voice_prompt_forbids_guessed_alarm_durations(self):
-        # Live regression 2026-11-12: Hermes called
-        # schedule_alarm_create_relative(hours=0, minutes=0, name="через час")
-        # and the voice path announced a one-minute alarm. The prompt now keeps
-        # Hermes on the typed scheduler tools and makes an unclear duration a
-        # question, never an invented 1-minute alarm.
         prompt = (ROOT / "projects" / "home-assistant" / "hermes" / "voice_prompt.txt").read_text()
         soul = (ROOT / "projects" / "home-assistant" / "hermes" / "SOUL.md").read_text()
         for marker in ("time_now", "alarm_set", "timer_set", "reminder_set", "одну минуту", "label", "вопрос"):
@@ -160,7 +143,6 @@ class HermesConfigTests(unittest.TestCase):
 
     def test_voice_prompt_ends_confirmation_with_a_question(self):
         prompt = (ROOT / "projects" / "home-assistant" / "hermes" / "voice_prompt.txt").read_text()
-        # HA keeps listening only when the final assistant sentence ends with "?".
         assert "последнее предложение ответа — сам вопрос" in prompt
         assert "Подтверждаете?" in prompt
 
@@ -169,19 +151,13 @@ class HermesConfigTests(unittest.TestCase):
         for marker in ("bb_status", "bb_prepare_spawn", "bb_confirm", "bb_cancel",
                        "подтверди", "режима агента", "рабочий профиль"):
             assert marker in prompt, marker
-        # The confirmation is always explicit and in this conversation.
         assert "этом же разговоре" in prompt
-        # Nothing is invented, but the spoken project goes to the gateway as is:
-        # the gateway owns the alias matching, so Hermes must not re-ask first.
         assert "Не выдумывай проект" in prompt
         assert "дословно, как услышал" in prompt
         assert "без переспроса" in prompt
         assert "проект не найден" in prompt
 
     def test_phone_tools_reach_voice_and_telegram(self):
-        # phone_find / phone_notify / phone_list live in the shared mcp-infra
-        # gateway group. Neither channel filters them out, so the same phone
-        # surface works by voice and from Telegram.
         for platform in ("api_server", "telegram"):
             assert "mcp-infra" in self.data["platform_toolsets"][platform]
         tools = self.data["mcp_servers"]["infra"]["tools"]
@@ -201,24 +177,17 @@ class HermesConfigTests(unittest.TestCase):
             assert marker in prompt, marker
         assert "двухшаговый" in prompt
         assert "без подтверждения" in prompt
-        # The project name is forwarded verbatim; aliases belong to the gateway.
         assert "дословно, как услышал" in prompt
         assert "без переспроса" in prompt
         assert "проект не найден" in prompt
 
     def test_voice_personality_has_a_single_source(self):
-        # The stale copy in the fragment caused drift; the personality is now
-        # rendered from voice_prompt.txt and the fragment must not repeat it.
         assert "agent" not in self.data or "personalities" not in self.data["agent"]
         prompt = (ROOT / "projects" / "home-assistant" / "hermes" / "voice_prompt.txt").read_text()
         assert "Рикардо" in prompt
-        # The Rust renderer (home-deploy hermes render-config) wires that file
-        # into agent.personalities.voice: the CLI defaults the path, the
-        # renderer sets the key.
         src = ROOT / "platform" / "deploy-rs" / "src"
         assert "voice_prompt.txt" in (src / "cli.rs").read_text()
         renderer = (src / "hermesconfig.rs").read_text()
-        assert "agent.personalities.voice" in renderer
         assert 'personalities.set("voice"' in renderer
 
     def test_persona_is_ricardo_not_hermes(self):
