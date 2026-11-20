@@ -1,14 +1,3 @@
-// Ricardo on-device wake word ("Рикардо") for the Rust daemon.
-//
-// This is the v0.4.1 C++ detector ported behind a small C ABI. It uses the
-// firmware's Yandex TFLite runtime (libtflite.so, loaded with dlopen) and the
-// vendored TensorFlow Lite microfrontend, so the trained model sees exactly the
-// features it was trained on. The model and the runtime are never distributed
-// in this repository.
-//
-// Only the audio processing thread calls mww_feed/mww_reset/mww_configure.
-// mww_destroy runs after that thread has stopped.
-
 #include <dlfcn.h>
 
 #include <algorithm>
@@ -30,11 +19,8 @@ struct Quantization {
   int32_t zero;
 };
 
-// The thresholds come from the model manifest (see wake_events::logic): the detector
-// defaults match the trained model when it has none.
 constexpr float kCutoff = 0.9f;
 constexpr size_t kWindow = 10;
-// Upper bound of a configurable sliding window (contract v1 allows 1..50).
 constexpr size_t kMaxWindow = 50;
 constexpr const char *kLibTflite = "/system/vendor/quasar/libs/libtflite.so";
 
@@ -111,8 +97,6 @@ struct Impl {
     B(invoke, "TfLiteInterpreterInvoke");
 #undef B
     model = model_create(path.c_str());
-    // Yandex's default interpreter resolver crashes; its named FULL resolver is
-    // required. Keep it loaded for the firmware's other users.
     static P full_resolver = nullptr;
     if (!full_resolver) full_resolver = resolver_create("FULL");
     resolver = full_resolver;
@@ -150,8 +134,6 @@ struct Impl {
     return true;
   }
 
-  // Sets the manifest thresholds; call before feeding. The history restarts so the
-  // windowed mean never mixes two window sizes.
   void configure(float c, size_t w) {
     if (c > 0 && c < 1) cutoff = c;
     if (w >= 1 && w <= kMaxWindow) window = w;
@@ -194,7 +176,6 @@ struct Impl {
     if (interpreter && interpreter_delete) interpreter_delete(interpreter);
     if (model && model_delete) model_delete(model);
     if (fe_ready) FrontendFreeStateContents(&fe);
-    // Keep the named resolver and library loaded for the firmware's other users.
   }
 
   bool feed(const int16_t *pcm, size_t samples, float &score) {
@@ -208,7 +189,6 @@ struct Impl {
       samples -= consumed;
       if (frame.size == 40) {
         for (size_t i = 0; i < 40; ++i) {
-          // pymicro_features uses the microfrontend's fixed-point output * 0.0390625.
           long q = std::lrint(frame.values[i] * 0.0390625f / iq.scale) + iq.zero;
           features[filled * 40 + i] = static_cast<int8_t>(std::clamp(q, -128L, 127L));
         }
@@ -231,8 +211,6 @@ struct Impl {
           if (count == window) {
             float mean = 0;
             for (size_t i = 0; i < window; ++i) mean += probs[i] / window;
-            // Also reported without a hit: near-miss recording needs the running mean
-            // of every chunk (contract v1).
             score = std::max(score, mean);
             hit = hit || mean >= cutoff;
           }
@@ -240,16 +218,15 @@ struct Impl {
       }
       if (!consumed) break;
     }
-    if (hit) reset();  // fresh streaming variables, gain estimates and a 1 s warm-up
+    if (hit) reset();
     return hit;
   }
 };
 
-}  // namespace
+}
 
 extern "C" {
 
-// NULL on error; the reason is logged to stderr.
 void *mww_create(const char *model_path) {
   if (!model_path || !*model_path) return nullptr;
   auto *impl = new (std::nothrow) Impl;
@@ -263,7 +240,6 @@ void *mww_create(const char *model_path) {
 
 void mww_destroy(void *handle) { delete static_cast<Impl *>(handle); }
 
-// 1 = detected, 0 = no detection, -1 = detector failed and was disabled.
 int mww_feed(void *handle, const int16_t *pcm, size_t samples, float *score) {
   if (!handle) return -1;
   float s = -1;
@@ -278,11 +254,9 @@ int mww_reset(void *handle) {
   return static_cast<Impl *>(handle)->reset() ? 0 : -1;
 }
 
-// Manifest thresholds from the wake-event contract: cutoff in (0,1), window 1..50.
-// Values outside the ranges are ignored (the loaded defaults stay).
 void mww_configure(void *handle, float cutoff, int window) {
   if (!handle || window <= 0) return;
   static_cast<Impl *>(handle)->configure(cutoff, static_cast<size_t>(window));
 }
 
-}  // extern "C"
+}

@@ -4,52 +4,31 @@ package home.v1;
 
 import "text.proto";
 
-// SchedulerService is the durable schedule/timer/event contract.
-//
-// Transport: the server exposes this service over Connect (unary JSON/HTTP),
-// gRPC (HTTP/2, including h2c) and gRPC-Web on the same listener. JSON field
-// names follow the standard protobuf JSON mapping (lowerCamelCase); int64
-// values are encoded as decimal strings. Authentication is a bearer token in
-// the `Authorization` header.
-//
-// This service never plays audio. It emits durable DueEvent rows that an
-// executor (HA bridge, Android, ...) leases and acknowledges. Event delivery
-// or acknowledgement is not proof that sound was audible.
-
-// ScheduleKind is the domain of a durable schedule.
 enum ScheduleKind {
   SCHEDULE_KIND_UNSPECIFIED = 0;
   SCHEDULE_KIND_ALARM = 1;
   SCHEDULE_KIND_REMINDER = 2;
-  // SCHEDULE_KIND_SCENARIO is reserved for time triggers materialized from a
-  // ScenarioService definition. Events carry the opaque payload for the
-  // scenario executor; scenario execution is NOT implemented and the server
-  // does not advertise it (GetStatus.scenario_execution_supported=false).
   SCHEDULE_KIND_SCENARIO = 3;
 }
 
-// RepeatKind controls how a schedule advances after an occurrence.
 enum RepeatKind {
   REPEAT_KIND_UNSPECIFIED = 0;
   REPEAT_KIND_ONCE = 1;
   REPEAT_KIND_DAILY = 2;
-  REPEAT_KIND_WEEKDAYS = 3; // local ISO weekdays 1..5
-  REPEAT_KIND_WEEKENDS = 4; // local ISO weekdays 6..7
-  REPEAT_KIND_CUSTOM = 5;   // explicit local ISO weekdays in Schedule.weekdays
+  REPEAT_KIND_WEEKDAYS = 3;
+  REPEAT_KIND_WEEKENDS = 4;
+  REPEAT_KIND_CUSTOM = 5;
 }
 
-// SourceKind identifies what produced an event. It distinguishes timers from
-// calendar schedules, which ScheduleKind cannot do.
 enum SourceKind {
   SOURCE_KIND_UNSPECIFIED = 0;
   SOURCE_KIND_ALARM = 1;
   SOURCE_KIND_REMINDER = 2;
   SOURCE_KIND_TIMER = 3;
   SOURCE_KIND_SCENARIO = 4;
-  SOURCE_KIND_TASK = 5; // generic queued task, see EnqueueTask
+  SOURCE_KIND_TASK = 5;
 }
 
-// TimerState is the durable state of a countdown timer.
 enum TimerState {
   TIMER_STATE_UNSPECIFIED = 0;
   TIMER_STATE_RUNNING = 1;
@@ -58,7 +37,6 @@ enum TimerState {
   TIMER_STATE_CANCELLED = 4;
 }
 
-// EventState is the durable outbox state of a DueEvent.
 enum EventState {
   EVENT_STATE_UNSPECIFIED = 0;
   EVENT_STATE_PENDING = 1;
@@ -68,14 +46,12 @@ enum EventState {
   EVENT_STATE_SKIPPED = 5;
 }
 
-// EventAction is what an executor should do for a DueEvent.
 enum EventAction {
-  EVENT_ACTION_UNSPECIFIED = 0; // legacy rows: treat as EVENT_ACTION_FIRE
-  EVENT_ACTION_FIRE = 1;        // start the occurrence
-  EVENT_ACTION_STOP = 2;        // stop/cancel sound for the occurrence
+  EVENT_ACTION_UNSPECIFIED = 0;
+  EVENT_ACTION_FIRE = 1;
+  EVENT_ACTION_STOP = 2;
 }
 
-// AckOutcome is the terminal outcome reported by an event consumer.
 enum AckOutcome {
   ACK_OUTCOME_UNSPECIFIED = 0;
   ACK_OUTCOME_DELIVERED = 1;
@@ -83,48 +59,35 @@ enum AckOutcome {
   ACK_OUTCOME_SKIPPED = 3;
 }
 
-// WallTime is a time of day in the caller's `Time-Zone` (UTC when absent).
-// The server converts it to and from UTC storage in one place.
 message WallTime {
-  int32 hour = 1;   // 0..23
-  int32 minute = 2; // 0..59
-  int32 second = 3; // 0..59
+  int32 hour = 1;
+  int32 minute = 2;
+  int32 second = 3;
 }
 
-// Schedule is a durable recurring or one-shot schedule. The database stores
-// UTC only; `at`, `once_date` and `weekdays` are in the zone of the request's
-// `Time-Zone` header, and the same header selects the response zone.
 message Schedule {
   string id = 1;
   string label = 2;
   ScheduleKind kind = 3;
-  reserved 4;                 // was timezone (IANA); zones live on clients
+  reserved 4;
   reserved "timezone";
-  WallTime at = 5;            // time of day in the request Time-Zone
-  string once_date = 6;       // local YYYY-MM-DD in the request Time-Zone
+  WallTime at = 5;
+  string once_date = 6;
   RepeatKind repeat = 7;
-  repeated int32 weekdays = 8; // UTC ISO 1=Mon..7=Sun; REPEAT_KIND_CUSTOM only
-  int64 next_due_unix = 9;     // 0 when disabled or exhausted
+  repeated int32 weekdays = 8;
+  int64 next_due_unix = 9;
   bool enabled = 10;
-  int64 snooze_until_unix = 11; // 0 when not snoozed
-  int64 last_fired_unix = 12;   // last emitted occurrence (not audible ring)
+  int64 snooze_until_unix = 11;
+  int64 last_fired_unix = 12;
   int64 snooze_count = 13;
   int64 revision = 14;
   int64 created_unix = 15;
   int64 updated_unix = 16;
-  string payload_json = 17;     // opaque action payload, max 16 KiB
-  // Active (ringing) occurrence, tracked independently of transport
-  // lease/ack state. 0 when idle. Stop and snooze stay available after a
-  // DELIVERED ack until active_until_unix passes; a one-shot schedule that is
-  // disabled/exhausted can still be snoozed while its window is active.
-  // RingWindow is the maximum ring duration: when it expires the scheduler
-  // queues a durable STOP for this occurrence and cancels its pending FIRE.
+  string payload_json = 17;
   int64 active_occurrence_unix = 18;
   int64 active_until_unix = 19;
 }
 
-// Timer is a durable countdown. While RUNNING, due_unix is authoritative;
-// while PAUSED, remaining_seconds is authoritative and due_unix is 0.
 message Timer {
   string id = 1;
   string label = 2;
@@ -137,15 +100,12 @@ message Timer {
   int64 updated_unix = 9;
 }
 
-// DueEvent is one durable occurrence waiting for an executor. Its id is the
-// stable UUIDv5 of its dedupe identity, so retries and restarts return the
-// same id. Trigger (FIRE) and control (STOP) events have distinct identities.
 message DueEvent {
-  string id = 1;            // deterministic UUIDv5 of dedupe identity
+  string id = 1;
   string source_id = 2;
   SourceKind source_kind = 3;
-  int64 due_unix = 4;       // when the executor should act
-  int64 occurrence_unix = 5; // original wall occurrence; 0 for timers
+  int64 due_unix = 4;
+  int64 occurrence_unix = 5;
   string label = 6;
   string payload_json = 7;
   EventState state = 8;
@@ -153,38 +113,26 @@ message DueEvent {
   int32 snooze_seq = 10;
   int64 created_unix = 11;
   int64 lease_until_unix = 12;
-  // Deprecated human-readable skip/failure reason, never contains secrets.
-  // New clients render `detail_text` instead.
   string detail = 13 [deprecated = true];
-  EventAction action = 14;  // FIRE for triggers, STOP for control events
-  AckOutcome ack_outcome = 15; // terminal outcome once acked
-  // task_type is the executor action for this event, for example
-  // "alarm.fire", "reminder.fire", "timer.fire" or a generic EnqueueTask type.
+  EventAction action = 14;
+  AckOutcome ack_outcome = 15;
   string task_type = 16;
-  // queue routes an event to one executor group. Convenience alarm/reminder/
-  // timer events use "home"; generic tasks default to "tasks". Executors lease
-  // only their own queue and never steal unknown queues.
   string queue = 17;
-  int64 acked_unix = 18; // 0 until a terminal ack
-  // Localized skip/failure reason. Empty for older rows and for events that
-  // have no reason; clients fall back to `detail`.
+  int64 acked_unix = 18;
   LocalizedText detail_text = 19;
 }
 
 message CreateScheduleRequest {
   string label = 1;
   ScheduleKind kind = 2;
-  reserved 3;                 // was timezone
+  reserved 3;
   reserved "timezone";
-  WallTime at = 4;            // time of day in the request Time-Zone
-  string once_date = 5;       // local YYYY-MM-DD in the request Time-Zone
+  WallTime at = 4;
+  string once_date = 5;
   RepeatKind repeat = 6;
   repeated int32 weekdays = 7;
   bool enabled = 8;
   string payload_json = 9;
-  // Optional idempotency key. Replaying the same key with an identical
-  // request returns the original schedule; a different payload is rejected
-  // with ALREADY_EXISTS.
   string idempotency_key = 10;
 }
 message CreateScheduleResponse {
@@ -200,9 +148,6 @@ message GetScheduleResponse {
 
 message ListSchedulesRequest {
   bool include_disabled = 1;
-  // UNSPECIFIED excludes SCHEDULE_KIND_SCENARIO so alarm/reminder clients never
-  // render scenario trigger rows as schedules. Only an explicit
-  // SCHEDULE_KIND_SCENARIO query returns them.
   ScheduleKind kind = 2;
 }
 message ListSchedulesResponse {
@@ -211,8 +156,6 @@ message ListSchedulesResponse {
 
 message UpdateScheduleRequest {
   Schedule schedule = 1;
-  // Revision the client last saw. A non-zero value must match the stored
-  // revision, otherwise the update fails with ABORTED. 0 disables the check.
   int64 expected_revision = 2;
 }
 message UpdateScheduleResponse {
@@ -236,11 +179,11 @@ message SetScheduleEnabledResponse {
 
 message SnoozeScheduleRequest {
   string id = 1;
-  int32 minutes = 2; // 1..1440; 0 => server default (9)
+  int32 minutes = 2;
 }
 message SnoozeScheduleResponse {
   Schedule schedule = 1;
-  DueEvent event = 2; // the delayed FIRE occurrence; a STOP control event is also queued
+  DueEvent event = 2;
 }
 
 message StopScheduleRequest {
@@ -250,11 +193,6 @@ message StopScheduleResponse {
   Schedule schedule = 1;
 }
 
-// SkipScheduleOccurrence advances a recurring schedule past its next
-// occurrence without disabling it. A pending FIRE for that occurrence is
-// marked skipped, and an active (ringing) occurrence is closed. One-shot
-// schedules have no following occurrence and are rejected; disabling them is
-// the client's "turn off" path.
 message SkipScheduleOccurrenceRequest {
   string id = 1;
 }
@@ -264,7 +202,7 @@ message SkipScheduleOccurrenceResponse {
 
 message StartTimerRequest {
   string label = 1;
-  int64 duration_seconds = 2; // 1..604800
+  int64 duration_seconds = 2;
   string idempotency_key = 3;
 }
 message StartTimerResponse {
@@ -307,20 +245,20 @@ message CancelTimerResponse {
 }
 
 message ListDueEventsRequest {
-  string consumer_id = 1; // 1..64 chars, [A-Za-z0-9._-]
-  int32 lease_seconds = 2; // 1..3600; 0 => 60
-  int32 limit = 3;         // 1..200; 0 => 50
-  string queue = 4;        // empty => all queues; "home" for the HA executor
+  string consumer_id = 1;
+  int32 lease_seconds = 2;
+  int32 limit = 3;
+  string queue = 4;
 }
 message ListDueEventsResponse {
   repeated DueEvent events = 1;
 }
 
 message EnqueueTaskRequest {
-  string task_type = 1;      // 1..64 chars, [a-z][a-z0-9._-]*
-  string payload_json = 2;   // opaque JSON, max 16 KiB
-  int64 run_at_unix = 3;     // 0 or past => now; bounded to 10 years ahead
-  string queue = 4;          // 1..32 chars, default "tasks"
+  string task_type = 1;
+  string payload_json = 2;
+  int64 run_at_unix = 3;
+  string queue = 4;
   string idempotency_key = 5;
 }
 message EnqueueTaskResponse {
@@ -331,14 +269,14 @@ message CancelTaskRequest {
   string event_id = 1;
 }
 message CancelTaskResponse {
-  DueEvent event = 1; // terminal state after cancellation or replay
+  DueEvent event = 1;
 }
 
 message AckEventRequest {
   string event_id = 1;
   string consumer_id = 2;
-  AckOutcome outcome = 3; // UNSPECIFIED is rejected
-  string detail = 4;      // max 1024 chars
+  AckOutcome outcome = 3;
+  string detail = 4;
 }
 message AckEventResponse {
   DueEvent event = 1;
@@ -348,30 +286,20 @@ message GetStatusRequest {}
 message GetStatusResponse {
   string version = 1;
   int32 schema_version = 2;
-  int64 now_unix = 3;       // authoritative server clock
+  int64 now_unix = 3;
   int64 last_tick_unix = 4;
   int32 pending_events = 5;
   int32 leased_events = 6;
   int32 enabled_schedules = 7;
   int32 running_timers = 8;
   repeated ConsumerStatus consumers = 9;
-  // False until a scenario executor exists. Events are still recorded.
   bool scenario_execution_supported = 10;
-  // Known queues and their durable backlog, so executors can discover what
-  // they may lease.
   repeated QueueInfo queues = 11;
-  // ready is true only when the last tick succeeded recently. A failing tick
-  // is never masked by a stale last_tick_unix.
   bool ready = 12;
   int64 last_tick_attempt_unix = 13;
   int64 last_tick_error_unix = 14;
-  // Deprecated bounded diagnostic text, no secrets. New clients render
-  // `last_tick_error_text` instead.
   string last_tick_error = 15 [deprecated = true];
-  // True when this server stores scenario definitions (ScenarioService).
-  // Independent of scenario_execution_supported.
   bool scenario_store_supported = 16;
-  // Localized last-tick failure. Empty when the tick is healthy.
   LocalizedText last_tick_error_text = 17;
 }
 
@@ -385,7 +313,7 @@ message ConsumerStatus {
   string consumer_id = 1;
   int64 last_seen_unix = 2;
   int64 last_ack_unix = 3;
-  bool alive = 4; // last_seen within 90 s
+  bool alive = 4;
 }
 
 service SchedulerService {

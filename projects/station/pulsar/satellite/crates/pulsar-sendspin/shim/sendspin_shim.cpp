@@ -1,5 +1,3 @@
-// See sendspin_shim.h. Policy (formats, pairing, visualizer layout, persistence, ALSA output)
-// lives in the Rust service; this file only maps the C ABI onto sendspin-cpp.
 #include "sendspin_shim.h"
 
 #include <cstdarg>
@@ -19,7 +17,6 @@
 
 namespace ss = ::sendspin;
 
-// The enum values of the header are the library's.
 static_assert(uint8_t(ss::SendspinCodecFormat::FLAC) == SS_CODEC_FLAC);
 static_assert(uint8_t(ss::SendspinCodecFormat::OPUS) == SS_CODEC_OPUS);
 static_assert(uint8_t(ss::SendspinCodecFormat::PCM) == SS_CODEC_PCM);
@@ -42,7 +39,6 @@ static_assert(uint8_t(ss::SendspinPlaybackState::STOPPED) == SS_PLAYBACK_STOPPED
 static_assert(uint8_t(ss::LogLevel::DEBUG) == SS_LOG_DEBUG);
 static_assert(uint8_t(ss::SendspinPairAbortReason::UNKNOWN) == 5);
 
-// Layout shared with src/ffi.rs, which asserts the same numbers (P = pointer size).
 constexpr size_t P = sizeof(void *);
 static_assert(sizeof(size_t) == P);
 static_assert(sizeof(ss_str) == 2 * P && offsetof(ss_str, len) == P);
@@ -85,11 +81,6 @@ namespace {
 
 std::string str(ss_str s) { return s.len ? std::string(s.ptr, s.len) : std::string(); }
 
-// Every listener and provider of the client. The callbacks are Rust functions and never unwind.
-// The overrides the library calls on its main loop thread run inside ss_loop / ss_start /
-// ss_destroy, whose catch(...) takes anything they throw (e.g. ss_blob's allocation). The ones on
-// the sync task (on_audio_write) and the drain thread (on_loudness, on_beat, on_spectrum) only
-// pass pointers and integers on and do not throw.
 class Bridge final : public ss::SendspinClientListener,
                      public ss::PlayerRoleListener,
                      public ss::MetadataRoleListener,
@@ -102,7 +93,6 @@ class Bridge final : public ss::SendspinClientListener,
 
   ss::PlayerRole *player = nullptr;
 
-  // --- SendspinClientListener (main loop) ---
   void on_group_update(const ss::GroupUpdateObject &g) override {
     const int8_t state = g.playback_state ? int8_t(*g.playback_state) : int8_t(SS_PLAYBACK_ABSENT);
     if (g.group_name) cb_.group_update(user_, state, g.group_name->data(), g.group_name->size());
@@ -122,8 +112,7 @@ class Bridge final : public ss::SendspinClientListener,
   void on_open_pairing_window() override { cb_.open_pairing_window(user_); }
   void on_close_pairing_window() override { cb_.close_pairing_window(user_); }
 
-  // --- PlayerRoleListener ---
-  size_t on_audio_write(uint8_t *data, size_t length, uint32_t timeout_ms) override {  // sync task
+  size_t on_audio_write(uint8_t *data, size_t length, uint32_t timeout_ms) override {
     uint32_t played = 0;
     int64_t finish_us = 0;
     const size_t n = cb_.audio_write(user_, data, length, timeout_ms, &played, &finish_us);
@@ -140,18 +129,15 @@ class Bridge final : public ss::SendspinClientListener,
   void on_mute_changed(bool m) override { cb_.mute_changed(user_, m); }
   void on_output_delay_changed(uint16_t ms) override { cb_.output_delay_changed(user_, ms); }
 
-  // --- ControllerRoleListener ---
   void on_controller_state(const ss::ServerStateControllerObject &s) override {
     cb_.controller_state(user_, s.supported_commands.size(), s.volume, s.muted);
   }
 
-  // --- MetadataRoleListener ---
   void on_metadata(const ss::ServerMetadataStateObject &m) override {
     cb_.metadata(user_, m.artist ? m.artist->data() : nullptr, m.artist ? m.artist->size() : 0,
                  m.title ? m.title->data() : nullptr, m.title ? m.title->size() : 0);
   }
 
-  // --- VisualizerRoleListener: data on the drain thread, stream start / end on the main loop ---
   void on_loudness(int64_t, uint16_t loudness) override { cb_.loudness(user_, loudness); }
   void on_beat(int64_t, bool) override { cb_.beat(user_); }
   void on_spectrum(int64_t, const std::vector<uint16_t> &bins) override {
@@ -162,7 +148,6 @@ class Bridge final : public ss::SendspinClientListener,
   }
   void on_visualizer_stream_end() override { cb_.visualizer_stream_end(user_); }
 
-  // --- SendspinPersistenceProvider (main loop) ---
   std::optional<std::vector<uint8_t>> load_blob(const std::string &key) override {
     ss_blob out;
     if (!cb_.load_blob(user_, key.data(), key.size(), &out)) return std::nullopt;
@@ -172,8 +157,6 @@ class Bridge final : public ss::SendspinClientListener,
     return cb_.save_blob(user_, key.data(), key.size(), data, len);
   }
 
-  // --- SendspinNetworkProvider ---
-  // The WebSocket server binds 0.0.0.0, so it is usable whenever any interface is up.
   bool is_network_ready() override { return true; }
 
  private:
@@ -197,9 +180,8 @@ ss::SendspinClientConfig client_config(const ss_config &c) {
   return k;
 }
 
-}  // namespace
+}
 
-// The bridge is declared first: the client (and its threads) must be gone before it.
 struct ss_client {
   ss_client(const ss_config &cfg, const ss_callbacks &cb, void *user) : bridge(cb, user), client(client_config(cfg)) {}
   Bridge bridge;
@@ -207,9 +189,6 @@ struct ss_client {
   ss::ControllerRole *controller = nullptr;
 };
 
-// sendspin-cpp is compiled with -Dfprintf=pulsar_filtered_fprintf: its host log writes every line
-// with fprintf(stderr, ...), and this redirects them through the Rust redactor first, so a pairing
-// PSK id or an SP: token never reaches the daemon log.
 extern "C" size_t pulsar_redact_line(const uint8_t *input, size_t len, uint8_t *out, size_t cap);
 
 extern "C" int pulsar_filtered_fprintf(FILE *stream, const char *fmt, ...) {
@@ -228,7 +207,6 @@ extern "C" int pulsar_filtered_fprintf(FILE *stream, const char *fmt, ...) {
   const size_t len = strnlen(input, sizeof(input));
   size_t m = pulsar_redact_line(reinterpret_cast<const uint8_t *>(input), len,
                                 reinterpret_cast<uint8_t *>(output), sizeof(output));
-  // A truncated line keeps its terminator so the daemon log stays line-oriented.
   if (m == sizeof(output) && output[m - 1] != '\n') {
     output[m - 1] = '\n';
   }
@@ -411,8 +389,6 @@ void ss_leave(ss_client *c) {
 void ss_disconnect_restart(ss_client *c) {
   if (!c) return;
   try {
-    // Posts the request; the client's stop() final tick applies it before its shutdown pass
-    // would send reason "shutdown" for every connection still open.
     c->client.disconnect(ss::SendspinGoodbyeReason::RESTART);
   } catch (...) {
   }
@@ -434,4 +410,4 @@ bool ss_blob_set(ss_blob *blob, const uint8_t *data, size_t len) {
   }
 }
 
-}  // extern "C"
+}
