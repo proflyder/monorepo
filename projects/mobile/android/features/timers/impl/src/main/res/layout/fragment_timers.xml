@@ -33,6 +33,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="12dp"
                     android:hint="@string/timers_label"
+                    app:endIconMode="clear_text"
                     style="@style/Widget.Home.TextInput">
 
                     <com.google.android.material.textfield.TextInputEditText
