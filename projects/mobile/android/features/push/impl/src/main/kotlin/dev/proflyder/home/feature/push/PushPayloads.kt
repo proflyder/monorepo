@@ -1,5 +1,8 @@
 package dev.proflyder.home.feature.push
 
+import dev.proflyder.home.feature.chat.ChatFocus
+import dev.proflyder.home.feature.chat.ChatRoute
+
 sealed interface PushMessage {
     data class Find(val reason: String) : PushMessage
 
@@ -41,4 +44,9 @@ object PushPayloads {
 
     private fun firstNonBlank(first: String?, second: String?): String =
         first?.trim()?.takeIf { it.isNotEmpty() } ?: second?.trim().orEmpty()
+}
+
+object PushChatGate {
+    fun shouldSkip(message: PushMessage.Notify, chatVisible: Boolean = ChatFocus.isVisible): Boolean =
+        chatVisible && message.deepLink?.route?.let(ChatRoute::isChat) == true
 }

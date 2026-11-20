@@ -40,12 +40,15 @@ class HomeMessagingService : FirebaseMessagingService() {
                 dependencies.findPhone.start(decoded.reason)
                 remember(dependencies, decoded)
             }
-            is PushMessage.Notify -> {
-                dependencies.notifications.notify(decoded)
-                remember(dependencies, decoded)
-            }
+            is PushMessage.Notify -> notify(dependencies, decoded)
             null -> Unit
         }
+    }
+
+    private fun notify(dependencies: PushEntryPoint.Dependencies, message: PushMessage.Notify) {
+        if (PushChatGate.shouldSkip(message)) return
+        dependencies.notifications.notify(message)
+        remember(dependencies, message)
     }
 
     private fun remember(dependencies: PushEntryPoint.Dependencies, message: PushMessage) {

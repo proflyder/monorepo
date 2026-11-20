@@ -458,6 +458,12 @@ class ManifestTests(unittest.TestCase):
         for claim in claims.values():
             self.assertEqual(claim["spec"]["storageClassName"], "local-retain")
         self.assertEqual(env["MCP_CHAT_MEDIA_DIR"], "/var/lib/mcp-gateway-media")
+        self.assertEqual(env["MCP_CHAT_ALERTS_TOKEN_FILE"], "/run/secrets/mcp-gateway-chat-alerts/token")
+        self.assertEqual(volumes["chat-alerts"]["secret"]["secretName"], "mcp-gateway-chat-alerts")
+        self.assertEqual(
+            {d["metadata"]["name"]: d for d in load_docs(EXTERNAL_SECRETS)}["mcp-gateway-chat-alerts"]["spec"]["data"][0]["remoteRef"],
+            {"key": "k8s/home-assistant/chat-alerts", "property": "token"},
+        )
         self.assertEqual(env["MCP_CHAT_STT_ADDRS"], "${NODE_LAN_IP}:10305,${NODE_LAN_IP}:10300")
         self.assertEqual(
             volumes["chat-media"]["persistentVolumeClaim"]["claimName"], "mcp-gateway-media"

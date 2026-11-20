@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 
+pub use super::alerts::AlertCard;
 pub use super::media::Attachment;
 
 pub const MAX_TEXT_CHARS: usize = 4000;
@@ -198,6 +199,8 @@ pub struct Message {
     pub attachments: Vec<Attachment>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub transcript: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub alert: Option<AlertCard>,
     pub created_at: i64,
     pub updated_at: i64,
 }

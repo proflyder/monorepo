@@ -1,0 +1,23 @@
+{
+  "alert": {
+    "endsAt": 1795163400000,
+    "fingerprint": "a1b2c3d4e5f60718",
+    "name": "KubePodCrashLooping",
+    "namespace": "home-assistant",
+    "object": "scheduler-7d9",
+    "runbookUrl": "https://runbooks.example.com/crash",
+    "severity": "critical",
+    "startsAt": 1795161600000,
+    "status": "resolved",
+    "summary": "scheduler перезапускается"
+  },
+  "createdAt": 1795129665000,
+  "id": "m_0001",
+  "kind": "alert",
+  "role": "system",
+  "seq": 1,
+  "status": "done",
+  "text": "✅ KubePodCrashLooping · critical\n▸ scheduler перезапускается\n📍 home-assistant / scheduler-7d9\n🕒 с 20.11 13:00\n✅ решено 20.11 13:30\n🔎 a1b2c3d4e5f6",
+  "updatedAt": 1795129665000,
+  "version": 3
+}

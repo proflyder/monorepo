@@ -307,6 +307,26 @@ Android ──HTTPS control.<домен>/v1/chat/*──► Traefik ──► mc
 - Файлы — на PVC `mcp-gateway-media` (`MCP_CHAT_MEDIA_DIR`,
   `<id>.bin` + `<id>.json`); история — на `mcp-gateway-chat`.
 
+### Алерты и push
+
+- Alertmanager шлёт тот же набор алертов, что в Telegram (маршрут `telegram`,
+  `warning|critical`), ещё и вебхуком `POST /v1/chat/alerts` (`send_resolved`,
+  отдельный Bearer `MCP_CHAT_ALERTS_TOKEN_FILE`, realm `home-alerts`;
+  OpenBao `k8s/home-assistant/chat-alerts`). Каждый алерт — сообщение
+  `role=system`, `kind=alert` с полем `alert` (`fingerprint`, `name`,
+  `severity`, `status` `firing|resolved`, `summary`, `description`,
+  `namespace`, `object`, `startsAt`, `endsAt?`, `runbookUrl`) и текстом как в
+  Telegram, включая «🔎 <12 символов отпечатка>». Ключ — отпечаток + `startsAt`:
+  повтор группы не плодит карточки, `resolved` обновляет ту же карточку новой
+  версией, повторное срабатывание после решения — новая карточка.
+- Ответ на алерт в приложении — обычный `replyTo`: Hermes получает цитату с
+  отпечатком и, как в Telegram, разбирает его через `infra_alert`.
+- Push через `phone-push` (`MCP_PUSH_URL`, группа `phone`), deep link
+  `home://chat/message/<id>`: один раз на новый алерт (`firing`) и один раз на
+  готовый ответ Рикардо. Решение алерта и сообщения пользователя push не
+  шлют. Отдельных push алертов в приложении раньше не было, поэтому дублей нет;
+  приложение само не показывает уведомление чата, пока вкладка «Чат» открыта.
+
 Сообщение: `id`, `seq` (порядок в ленте), `version` (монотонная версия
 изменения), `clientId?`, `role` (`user`/`assistant`/`system`), `kind`
 (`text`; дальше — `alert`), `text` (Markdown), `replyTo? {id, role, text}`
@@ -325,7 +345,7 @@ Android ──HTTPS control.<домен>/v1/chat/*──► Traefik ──► mc
 снимок для нового подписчика берёт актуальный текст из памяти.
 
 Эталоны — `crates/mcp-gateway/src/chat/testdata/contract/*.json`
-(`send`, `page`, `events`, `error`, `attachment`, `voice`); их же читает Android-тест
+(`send`, `page`, `events`, `error`, `attachment`, `voice`, `alert`); их же читает Android-тест
 `core/network` (`ChatClientTest`: `events.json` собирается в SSE-поток). Пересборка: `UPDATE_CHAT_GOLDEN=1 cargo test -p mcp-gateway
 --lib chat`, затем скопировать в
 `projects/mobile/android/core/network/src/test/resources/fixtures/chat/`.
@@ -387,6 +407,7 @@ Android ──HTTPS control.<домен>/v1/chat/*──► Traefik ──► mc
 | `MCP_CHAT_SESSION` | нет | `home-app` | Id сессии Hermes; должен совпадать с `HERMES_CHAT_RELAY_SESSION`. |
 | `MCP_CHAT_DB` | нет | `/var/lib/mcp-gateway/chat.db` | SQLite истории чата (PVC `mcp-gateway-chat`). |
 | `MCP_CHAT_MEDIA_DIR` | нет | `/var/lib/mcp-gateway/media` | Каталог вложений (в деплое — PVC `mcp-gateway-media`). |
+| `MCP_CHAT_ALERTS_TOKEN_FILE` | нет | — | Включает `POST /v1/chat/alerts` (вебхук Alertmanager); токен отличается от остальных. |
 | `MCP_CHAT_STT_ADDRS` | нет | — | Wyoming STT `host:port` через запятую, по порядку (GigaAM, затем Whisper). Без него голосовые получают `chat_stt_failed`. |
 | `MCP_PENDING_TTL` | нет | `90s` | Время жизни отложенного действия. |
 | `MCP_RESTART_COOLDOWN` | нет | `5m` | Минимальный интервал между перезапусками одного workload'а. |

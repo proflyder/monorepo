@@ -85,6 +85,8 @@ pub struct Config {
     pub chat_prompt: String,
     pub chat_media_dir: String,
     pub chat_stt_addrs: Vec<String>,
+    pub chat_alerts_token_file: String,
+    pub chat_alerts_token: String,
 
     pub timezone: String,
     pub location: TimeZone,
@@ -151,6 +153,8 @@ impl Config {
             chat_prompt: String::new(),
             chat_media_dir: value_or(getenv, "MCP_CHAT_MEDIA_DIR", DEFAULT_CHAT_MEDIA_DIR),
             chat_stt_addrs: split_list(&trimmed(getenv, "MCP_CHAT_STT_ADDRS")),
+            chat_alerts_token_file: trimmed(getenv, "MCP_CHAT_ALERTS_TOKEN_FILE"),
+            chat_alerts_token: String::new(),
             timezone: value_or(getenv, "MCP_TIMEZONE", DEFAULT_TIMEZONE),
             location: TimeZone::UTC,
         };
@@ -340,6 +344,17 @@ fn load_chat_files(cfg: &mut Config, read_file: &ReadFile<'_>) -> Result<(), Str
     )?;
     let prompt = read_file(&cfg.chat_prompt_file)
         .map_err(|error| format!("MCP_CHAT_PROMPT_FILE: {error}"))?;
+    if !cfg.chat_alerts_token_file.is_empty() {
+        let token = read_secret(
+            read_file,
+            &cfg.chat_alerts_token_file,
+            "MCP_CHAT_ALERTS_TOKEN_FILE",
+        )?;
+        if token == cfg.app_token || token == cfg.auth_token || token == cfg.voice_token {
+            return Err("MCP_CHAT_ALERTS_TOKEN_FILE must differ from the other tokens".to_owned());
+        }
+        cfg.chat_alerts_token = token;
+    }
     String::from_utf8_lossy(&prompt)
         .trim()
         .clone_into(&mut cfg.chat_prompt);

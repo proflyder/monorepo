@@ -127,6 +127,8 @@ spec:
               value: /var/lib/mcp-gateway/chat.db
             - name: MCP_CHAT_MEDIA_DIR
               value: /var/lib/mcp-gateway-media
+            - name: MCP_CHAT_ALERTS_TOKEN_FILE
+              value: /run/secrets/mcp-gateway-chat-alerts/token
             - name: MCP_CHAT_STT_ADDRS
               value: "${NODE_LAN_IP}:10305,${NODE_LAN_IP}:10300"
             - name: LOG_LEVEL
@@ -185,6 +187,9 @@ spec:
               readOnly: true
             - name: chat
               mountPath: /run/secrets/mcp-gateway-chat
+              readOnly: true
+            - name: chat-alerts
+              mountPath: /run/secrets/mcp-gateway-chat-alerts
               readOnly: true
             - name: chat-data
               mountPath: /var/lib/mcp-gateway
@@ -252,6 +257,13 @@ spec:
         - name: chat
           secret:
             secretName: mcp-gateway-chat
+            defaultMode: 0440
+            items:
+              - key: token
+                path: token
+        - name: chat-alerts
+          secret:
+            secretName: mcp-gateway-chat-alerts
             defaultMode: 0440
             items:
               - key: token

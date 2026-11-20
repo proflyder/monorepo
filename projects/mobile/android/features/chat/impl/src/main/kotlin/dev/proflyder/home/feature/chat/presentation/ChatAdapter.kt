@@ -1,6 +1,8 @@
 package dev.proflyder.home.feature.chat.presentation
 
+import android.content.res.ColorStateList
 import android.text.SpannableStringBuilder
+import dev.proflyder.home.core.model.ChatAlert
 import android.text.Spanned
 import android.text.method.LinkMovementMethod
 import android.text.style.URLSpan
@@ -26,6 +28,7 @@ import dev.proflyder.home.core.ui.BaseViewHolder
 import dev.proflyder.home.core.ui.ViewBinding
 import dev.proflyder.home.core.ui.setVisible
 import dev.proflyder.home.feature.chat.impl.R
+import dev.proflyder.home.feature.chat.impl.databinding.ItemChatAlertBinding
 import dev.proflyder.home.feature.chat.impl.databinding.ItemChatBubbleBinding
 import dev.proflyder.home.feature.chat.impl.databinding.ItemChatDayBinding
 import dev.proflyder.home.feature.chat.impl.databinding.ItemChatOlderBinding
@@ -44,6 +47,10 @@ internal open class ChatAdapterCallbacks : BaseAdapterCallback<ChatItem>() {
     open fun bindImage(media: BubbleMedia, target: ImageView) = Unit
 
     open fun bindWave(media: BubbleMedia, target: VoiceWaveView) = Unit
+
+    open fun onAlertReply(alert: ChatItem.Alert) = Unit
+
+    open fun onLink(url: String) = Unit
 }
 
 private typealias ChatHolder = BaseViewHolder<ChatItem, ViewBinding, ChatAdapterCallbacks>
@@ -60,6 +67,7 @@ internal class ChatAdapter(
 
     override fun viewTypeOf(item: ChatItem): Int = when (item) {
         is ChatItem.Bubble -> TYPE_BUBBLE
+        is ChatItem.Alert -> TYPE_ALERT
         is ChatItem.Day -> TYPE_DAY
         ChatItem.Typing -> TYPE_TYPING
         ChatItem.Older -> TYPE_OLDER
@@ -69,6 +77,7 @@ internal class ChatAdapter(
         when (viewType) {
             TYPE_DAY -> DayHolder(ItemChatDayBinding.inflate(inflater, parent, false), callback)
             TYPE_TYPING -> TypingHolder(ItemChatTypingBinding.inflate(inflater, parent, false), callback)
+            TYPE_ALERT -> AlertHolder(ItemChatAlertBinding.inflate(inflater, parent, false), callback)
             TYPE_OLDER -> OlderHolder(ItemChatOlderBinding.inflate(inflater, parent, false), callback)
             else -> BubbleHolder(ItemChatBubbleBinding.inflate(inflater, parent, false), callback)
         }
@@ -82,6 +91,40 @@ internal class ChatAdapter(
         override fun bind(item: ChatItem) {
             val day = item as ChatItem.Day
             views.chatDay.text = chatDay(views.root.context, day.date)
+        }
+    }
+
+    private class AlertHolder(
+        private val views: ItemChatAlertBinding,
+        callback: ChatAdapterCallbacks,
+    ) : ChatHolder(views, callback) {
+        init {
+            views.chatAlertReply.setOnClickListener { callback.onAlertReply(item as ChatItem.Alert) }
+            views.chatAlertRunbook.setOnClickListener { callback.onLink((item as ChatItem.Alert).alert.runbookUrl) }
+            views.chatAlertCard.setOnLongClickListener { openMenu() }
+        }
+
+        private fun openMenu(): Boolean {
+            callback.onBubbleMenu((item as ChatItem.Alert).asBubble(), views.chatAlertCard)
+            return true
+        }
+
+        override fun bind(item: ChatItem) {
+            val card = (item as ChatItem.Alert).alert
+            val context = views.root.context
+            val (background, foreground) = alertColors(card)
+            views.chatAlertCard.setCardBackgroundColor(MaterialColors.getColor(views.chatAlertCard, background))
+            views.chatAlertCard.strokeColor = MaterialColors.getColor(views.chatAlertCard, foreground)
+            views.chatAlertDot.backgroundTintList = ColorStateList.valueOf(MaterialColors.getColor(views.chatAlertDot, foreground))
+            views.chatAlertName.text = card.name
+            views.chatAlertState.text = context.getString(alertState(card))
+            views.chatAlertSummary.text = card.summary.ifEmpty { card.name }
+            views.chatAlertDescription.setVisible(card.description.isNotEmpty())
+            views.chatAlertDescription.text = card.description
+            views.chatAlertWhere.text = alertWhere(card)
+            views.chatAlertTime.text = alertTime(context, card)
+            views.chatAlertRunbook.setVisible(card.runbookUrl.isNotEmpty())
+            views.chatAlertReply.setVisible(!card.resolved)
         }
     }
 
@@ -241,6 +284,7 @@ internal class ChatAdapter(
         const val TYPE_DAY = 1
         const val TYPE_TYPING = 2
         const val TYPE_OLDER = 3
+        const val TYPE_ALERT = 4
         const val DIM_ALPHA = 0.25f
         const val PULSE_MILLIS = 450L
         const val PULSE_STEP_MILLIS = 150L
@@ -287,5 +331,30 @@ internal fun fileLabel(context: Context, media: BubbleMedia): String =
 internal class RoundedOutline(private val radius: Float) : android.view.ViewOutlineProvider() {
     override fun getOutline(view: View, outline: android.graphics.Outline) {
         outline.setRoundRect(0, 0, view.width, view.height, radius)
+    }
+}
+
+internal fun alertColors(card: ChatAlert): Pair<Int, Int> = when {
+    card.resolved -> MaterialR.attr.colorSurfaceContainerHigh to androidx.appcompat.R.attr.colorPrimary
+    card.severity == "critical" -> MaterialR.attr.colorErrorContainer to androidx.appcompat.R.attr.colorError
+    else -> MaterialR.attr.colorTertiaryContainer to MaterialR.attr.colorTertiary
+}
+
+internal fun alertState(card: ChatAlert): Int = when {
+    card.resolved -> R.string.chat_alert_resolved
+    card.severity == "critical" -> R.string.chat_alert_critical
+    card.severity == "warning" -> R.string.chat_alert_warning
+    else -> R.string.chat_alert_firing
+}
+
+internal fun alertWhere(card: ChatAlert): String =
+    listOf(card.namespace, card.target).filter { it.isNotEmpty() }.joinToString(" / ")
+
+internal fun alertTime(context: Context, card: ChatAlert): String {
+    val start = chatTime(context, card.startsAtMillis)
+    val end = card.endsAtMillis
+    return when (end) {
+        null -> context.getString(R.string.chat_alert_since, start)
+        else -> context.getString(R.string.chat_alert_span, start, chatTime(context, end))
     }
 }

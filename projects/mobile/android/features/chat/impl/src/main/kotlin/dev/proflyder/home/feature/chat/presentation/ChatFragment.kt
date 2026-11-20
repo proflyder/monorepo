@@ -1,6 +1,9 @@
 package dev.proflyder.home.feature.chat.presentation
 
 import android.Manifest
+import android.content.Intent
+import androidx.core.net.toUri
+import dev.proflyder.home.feature.chat.ChatFocus
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.content.ClipData
@@ -99,7 +102,34 @@ class ChatFragment : BaseFragment<FragmentChatBinding>(FragmentChatBinding.Compa
         renderPending(state)
         val follow = isAtEnd() || state.items.size > lastCount && state.items.lastOrNull().isMine()
         lastCount = state.items.size
-        adapter.submitList(state.items) { if (follow) scrollToEnd(smooth = false) }
+        adapter.submitList(state.items) { afterSubmit(follow) }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        ChatFocus.setVisible(true)
+    }
+
+    override fun onStop() {
+        ChatFocus.setVisible(false)
+        super.onStop()
+    }
+
+    private fun afterSubmit(follow: Boolean) {
+        val focused = ChatFocus.peek()?.let(::positionOf)
+        when {
+            focused != null -> layoutManager.scrollToPositionWithOffset(focused, 0).also { ChatFocus.take() }
+            follow -> scrollToEnd(smooth = false)
+            else -> Unit
+        }
+    }
+
+    private fun positionOf(messageId: String): Int? = adapter.currentList.indexOfFirst {
+        (it as? ChatItem.Bubble)?.messageId == messageId || (it as? ChatItem.Alert)?.messageId == messageId
+    }.takeIf { it >= 0 }
+
+    internal fun openLink(url: String) {
+        runCatching { startActivity(Intent(Intent.ACTION_VIEW, url.toUri())) }
     }
 
     override fun onBindingDestroyed() {
@@ -295,6 +325,13 @@ class ChatFragment : BaseFragment<FragmentChatBinding>(FragmentChatBinding.Compa
         override fun bindImage(media: BubbleMedia, target: ImageView) = loadImage(media, target)
 
         override fun bindWave(media: BubbleMedia, target: VoiceWaveView) = loadWave(media, target)
+
+        override fun onAlertReply(alert: ChatItem.Alert) {
+            viewModel.replyTo(alert.asBubble())
+            binding.chatInput.requestFocus()
+        }
+
+        override fun onLink(url: String) = openLink(url)
     }
 
     private inner class Recording : RecordGesture {

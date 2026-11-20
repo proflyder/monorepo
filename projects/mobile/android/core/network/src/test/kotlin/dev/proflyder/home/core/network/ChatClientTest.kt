@@ -155,6 +155,19 @@ class ChatClientTest {
     }
 
     @Test
+    fun anAlertCardCarriesItsStructuredFields() = runBlocking {
+        server.enqueue(MockResponse().setBody(Json.parseToJsonElement(fixture("alert")).toString()))
+        val message = (client().retry("m_0001") as Outcome.Success).value
+        val alert = checkNotNull(message.alert)
+        assertEquals(ChatKind.ALERT, message.kind)
+        assertEquals(ChatRole.SYSTEM, message.role)
+        assertTrue(alert.resolved)
+        assertEquals("scheduler-7d9", alert.target)
+        assertEquals(1_795_163_400_000L, alert.endsAtMillis)
+        assertTrue(message.text.contains("a1b2c3d4e5f6"))
+    }
+
+    @Test
     fun downloadReturnsTheBytes() = runBlocking {
         server.enqueue(MockResponse().setHeader("Content-Type", "image/jpeg").setBody(okio.Buffer().write(byteArrayOf(9, 8, 7))))
         val bytes = (client().download("f_1") as Outcome.Success).value

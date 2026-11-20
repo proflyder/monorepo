@@ -36,7 +36,11 @@ import dev.proflyder.home.core.ui.ViewModelFactoryProvider
 import dev.proflyder.home.databinding.ActivityMainBinding
 import dev.proflyder.home.feature.control.presentation.ControlUiState
 import dev.proflyder.home.feature.control.presentation.ControlViewModel
+import dev.proflyder.home.feature.chat.ChatFocus
+import dev.proflyder.home.feature.chat.ChatRoute
+import dev.proflyder.home.feature.push.PushDeepLink
 import dev.proflyder.home.feature.push.PushIntents
+import dev.proflyder.home.feature.push.PushPayloads
 import dev.proflyder.home.feature.settings.SettingsDestination
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -168,10 +172,18 @@ class MainActivity : AppCompatActivity(), NavigatorHost, ViewModelFactoryProvide
     }
 
     private fun applyDeepLink(intent: Intent?) {
-        val route = intent?.getStringExtra(PushIntents.EXTRA_DEEP_LINK)?.trim().orEmpty()
+        val route = deepLinkRoute(intent)
         if (route.isEmpty()) return
         intent?.removeExtra(PushIntents.EXTRA_DEEP_LINK)
+        intent?.removeExtra(PushPayloads.KEY_DEEP_LINK)
+        ChatRoute.messageId(route)?.let(ChatFocus::request)
         router.openRoute(route)
+    }
+
+    private fun deepLinkRoute(intent: Intent?): String {
+        val direct = intent?.getStringExtra(PushIntents.EXTRA_DEEP_LINK)?.trim().orEmpty()
+        val fromTray = PushDeepLink.parse(intent?.getStringExtra(PushPayloads.KEY_DEEP_LINK))?.route.orEmpty()
+        return direct.ifEmpty { fromTray }
     }
 
     override fun onSaveInstanceState(outState: Bundle) {

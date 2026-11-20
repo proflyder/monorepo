@@ -65,6 +65,7 @@ fn app() -> Router {
     server::router(server::Options {
         system: None,
         chat: None,
+        chat_alerts_token: None,
         auth_token: TOKEN.to_owned(),
         voice_token: None,
         voice: None,
