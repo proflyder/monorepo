@@ -117,12 +117,14 @@ Ruleset машинной ветки `deploy/home-apps` (`Deploy pins branch`):
 
 ## Локальная защита
 
-`core.hooksPath=.githooks`, `pre-push`:
+`core.hooksPath=.githooks`. `pre-commit` проверяет staged-файлы на
+комментарии в коде (`platform/quality/no_comments.mjs --staged`). `pre-push`:
 
 - разрешён только push текущей рабочей ветки `<type>/<name>` в одноимённую
   удалённую; `develop`, архивные refs и теги заблокированы;
 - удаление веток через push заблокировано (ветки удаляет GitHub после merge);
 - рабочее дерево чистое, Gitleaks по исходящим коммитам без находок,
+  `platform/quality/no_comments.mjs` и
   `platform/quality/audit_repository.mjs` без замечаний.
 
 Не обходить guard (`--no-verify`, смена `hooksPath`, mirror push). Если в

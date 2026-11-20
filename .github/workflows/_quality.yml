@@ -1,9 +1,5 @@
 name: _quality
 
-# Reusable repository gate: audit, static gates, unit-map invariants, workflow
-# linting and secret scanning. Cheap enough to run on every change, including
-# documentation-only ones, which is why it is never routed away.
-
 on:
   workflow_call:
 
@@ -11,8 +7,6 @@ permissions:
   contents: read
 
 env:
-  # Set Git's default branch for actions/checkout's `git init` (it warns when unset;
-  # it runs under a throwaway HOME, so only an env-provided config reaches it).
   GIT_CONFIG_COUNT: "1"
   GIT_CONFIG_KEY_0: init.defaultBranch
   GIT_CONFIG_VALUE_0: main
@@ -21,34 +15,25 @@ jobs:
   quality:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
-    # Every gate runs through the same mise task a workstation uses; tools come
-    # from mise-action's install_args, never from `mise run` itself.
     env:
       MISE_TASK_RUN_AUTO_INSTALL: "false"
     steps:
-      # Full history: `platform/ci/version.mjs` counts the commits that touch a
-      # native unit along the first-parent history, and the committed-workflow
-      # tests run against this checkout.
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           fetch-depth: 0
 
-      # Tool versions and checksums: mise.toml + mise.lock (one source with the
-      # workstation). Only the tools this job needs are installed.
-      - uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b # v5.2.7
+      - uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b
         with:
           version: 2026.11.4
           install_args: "python node shellcheck gitleaks actionlint"
           cache: true
 
-      # Python is kept only for the static gate that parses first-party Python
-      # product scripts (platform/quality/test_static.py); all CI/repo-quality
-      # glue is dependency-free Node ESM.
       - name: Repository audit (private data, links, gitlinks)
         run: mise run audit
 
-      # Python remains only for first-party Python product checks (the static
-      # gate). Deploy tooling is the Rust `platform-deploy` unit.
+      - name: No comments in code
+        run: mise run lint:comments
+
       - name: Python product gates (syntax, shellcheck, secret patterns)
         run: mise run test:static
 

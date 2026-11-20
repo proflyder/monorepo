@@ -856,3 +856,76 @@ mise run test
 поддомены, длинные хосты/пути и смешанные строки по-прежнему дают ошибку.
 Границы закреплены `platform/quality/audit_repository.test.mjs`. Общих
 исключений Gitleaks нет.
+
+## Код без комментариев
+
+В коде на любом языке нет комментариев: ни строчных, ни блочных, ни
+doc-комментариев (`//`, `/* */`, `///`, `//!`, KDoc, `#`, docstring,
+`<!-- -->`, `--`). Пояснения живут только в Markdown: README модуля
+(раздел «Заметки к коду»), `docs/`, `AGENTS.md`. Код, которому нужно
+инлайн-пояснение, переписывается: имя функции или константы вместо
+комментария.
+
+Единственная проверка — `platform/quality/no_comments.mjs`:
+
+```bash
+mise run lint:comments            # весь репозиторий, файл:строка на каждое нарушение
+node platform/quality/no_comments.mjs --staged   # то же для staged (pre-commit)
+node platform/quality/no_comments.mjs --fix      # удалить найденное (затем перенести смысл в docs)
+node platform/quality/no_comments.mjs --stats    # счёт по расширениям
+node --test platform/quality/no_comments.test.mjs
+```
+
+Где работает: хук `.githooks/pre-commit` (staged), `.githooks/pre-push`
+(весь репозиторий), шаг `No comments in code` в `_quality.yml` → job
+`quality` → `ci-ok`.
+
+Сканер — набор лексеров, а не regex по строкам: `#` и `//` внутри строк,
+URL, raw-строк Rust (`r#"…"#`), шаблонов Kotlin/JS (`${…}`), regex JS,
+YAML в кавычках, heredoc и `$#`/`${x#y}` в shell комментариями не считаются.
+Языки: Rust, Kotlin/Java, JS/TS, C/C++, proto, Python/Starlark (BUILD,
+`.bzl`, MODULE.bazel; docstring считается комментарием), shell, YAML
+(скрипты в блоках `run:`/`script:` и блоки с ключом-именем файла
+проверяются как код своего языка), TOML (в т.ч. `mise.toml`), Dockerfile,
+nftables, `.conf`/`.cfg`, `.bazelrc`, Makefile, ini/systemd/properties/env,
+`.gitignore`/`.gitattributes`/`.editorconfig`, XML (Android res/manifest),
+SQL, PowerShell; файлы без расширения — по shebang. Markdown и `.txt` не
+проверяются.
+
+Исключения (один список `EXCLUDED` в сканере): `testdata/`, `fixtures/`,
+`tests/golden/`, `third_party/`, `vendor/`, `generated/`, `resources/`,
+`artifacts/`, вендорные TensorFlow microfrontend и kissfft, `*.lock`,
+`*.patch`.
+
+Allowlist (`ALLOWED`) — только директивы, без которых не работает
+инструмент: shebang `#!` в первой строке; `#MISE`/`#USAGE` в
+`platform/mise-tasks/`; `# shellcheck disable|source|shell=`; директивы
+парсера Dockerfile (`# syntax=`, `# escape=`, `# check=`) в первой строке;
+`#cloud-config`; `#Requires` в PowerShell; однострочный `// SAFETY: …`
+в Rust (его требует `#![deny(clippy::undocumented_unsafe_blocks)]`).
+Doc-разделы `# Safety` удалены, поэтому в workspace
+`clippy::missing_safety_doc = "allow"`; контракт unsafe-функции описывается
+в README крейта. Новое исключение — только с обоснованием здесь и тестом в
+`no_comments.test.mjs`.
+
+Версии GitHub Actions, закреплённых по SHA (раньше были комментарием
+после SHA):
+
+| Action | Версия | SHA |
+| --- | --- | --- |
+| actions/attest-build-provenance | v4.2.2 | 4d101475d8b20a2381f78447822ac1eab6504dd8 |
+| actions/cache (restore, save) | v6.1.0 | 55cc8345863c7cc4c66a329aec7e433d2d1c52a9 |
+| actions/checkout | v7.0.1 | 3d3c42e5aac5ba805825da76410c181273ba90b1 |
+| actions/download-artifact | v8.0.2 | 9000827ccba6bdab643e8b6fd33ac0654aef8333 |
+| actions/github-script | v9.0.0 | 3a2844b7e9c422d3c10d287c895573f7108da1b3 |
+| actions/setup-java | v6.2.0 | 77dd5b2ce225ea11469928ac317850245a74ae78 |
+| actions/upload-artifact | v7.0.2 | cf430e030ddbb5b0abf93d22962f4752f3646cd9 |
+| android-actions/setup-android | v4.0.4 | be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd |
+| bazel-contrib/setup-bazel | v0.19.1 | 104e3eea9447cdaa4b00d0fb46191a3985d26ab3 |
+| docker/login-action | v4.8.0 | 8aa5831fb8d48d8f76594c7ddde61ae58019f550 |
+| docker/setup-buildx-action | v4.4.1 | f87e5991a6d7451dcb8d9637bfbc97413f497069 |
+| hashicorp/vault-action | v4.0.0 | 892a26828f195e65540a40b4768ae4571f51ebfc |
+| jdx/mise-action | v5.2.7 | b44d12e7d0d8ee7461bb893e1b1993500433185b |
+| mlugg/setup-zig | v2.2.1 | d1434d08867e3ee9daa34448df10607b98908d29 |
+
+При обновлении action менять SHA в workflow и строку здесь.

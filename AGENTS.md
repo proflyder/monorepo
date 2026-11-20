@@ -16,6 +16,22 @@
   (`local-data/local/backups`) и данные других сессий. В отчёте перечислить, что
   удалено и сколько места освобождено.
 
+## Код без комментариев
+
+- Всем агентам запрещено писать комментарии в коде на любом языке:
+  `//`, `/* */`, `///`, `//!`, KDoc/JSDoc, `#`, docstring, `<!-- -->`, `--`.
+  Код, которому нужно пояснение, переписывается (имя функции/константы).
+- Пояснения, инварианты, причины решений, протоколы и предупреждения —
+  только в Markdown: README модуля (раздел «Заметки к коду»),
+  `docs/DECISIONS.md`, `docs/ARCHITECTURE.md`, RICARDO.md и т.п.
+- Проверка — `platform/quality/no_comments.mjs` (`mise run lint:comments`):
+  хуки pre-commit/pre-push и шаг в `_quality.yml` внутри `ci-ok`.
+  Допустимы только машинные директивы из allowlist (shebang, `#MISE`,
+  `# shellcheck`, директивы парсеров, однострочный `// SAFETY:` для
+  `clippy::undocumented_unsafe_blocks`); список и исключения —
+  `docs/TESTING.md` («Код без комментариев»). Расширять allowlist — только
+  если без директивы не работает инструмент.
+
 ## Agent orchestration and model policy
 
 - The primary Codex thread owns planning, architecture, task decomposition,

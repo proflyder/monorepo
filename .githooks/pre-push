@@ -1,13 +1,4 @@
 #!/usr/bin/env node
-/**
- * Fail closed: publish only work branches, never develop, the archive or tags.
- *
- * `develop` changes only through pull requests (squash merge); the remote
- * ruleset enforces that too. Locally this guard allows pushing the checked-out
- * work branch `<type>/<name>` to the same name, after checking that its history
- * has no private ancestry, the working tree is clean, Gitleaks finds nothing in
- * the outgoing commits and the repository audit passes.
- */
 
 "use strict";
 
@@ -71,8 +62,6 @@ if (git("status", "--porcelain")) {
   process.stderr.write("Push blocked: commit or stash changes before the publication audit.\n");
   process.exit(1);
 }
-// gitleaks comes from mise.toml: on PATH when mise is activated, otherwise
-// resolved through `mise which` (hooks also run from non-interactive shells).
 const miseWhich = (tool) => {
   const found = spawnSync("mise", ["which", tool], { cwd: root, encoding: "utf8" });
   return found.status === 0 ? found.stdout.trim() : "";
@@ -110,6 +99,15 @@ for (const sha of pushed) {
     );
     process.exit(1);
   }
+}
+const comments = spawnSync(
+  process.execPath,
+  [path.join(root, "platform", "quality", "no_comments.mjs")],
+  { cwd: root, stdio: "inherit" },
+);
+if (comments.error || comments.status !== 0) {
+  process.stderr.write("Push blocked: code carries no comments; move explanations to Markdown.\n");
+  process.exit(1);
 }
 const audit = spawnSync(
   process.execPath,
