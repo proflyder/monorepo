@@ -28,6 +28,9 @@ data class ColorScheme(
     @ColorInt val surfaceContainerHighest: Int,
     @ColorInt val outline: Int,
     @ColorInt val outlineVariant: Int,
+    @ColorInt val stateOn: Int,
+    @ColorInt val onStateOn: Int,
+    @ColorInt val stateOnText: Int,
 ) {
     @ColorInt
     operator fun get(role: ColorRole): Int = when (role) {
@@ -56,6 +59,9 @@ data class ColorScheme(
         ColorRole.SURFACE_CONTAINER_HIGHEST -> surfaceContainerHighest
         ColorRole.OUTLINE -> outline
         ColorRole.OUTLINE_VARIANT -> outlineVariant
+        ColorRole.STATE_ON -> stateOn
+        ColorRole.ON_STATE_ON -> onStateOn
+        ColorRole.STATE_ON_TEXT -> stateOnText
     }
 }
 

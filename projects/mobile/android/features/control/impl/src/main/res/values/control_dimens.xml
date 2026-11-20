@@ -36,6 +36,8 @@
     <dimen name="control_settings_min_height">32dp</dimen>
     <dimen name="control_settings_vertical_padding">0dp</dimen>
     <dimen name="control_card_padding_top">16dp</dimen>
+    <dimen name="control_group_title_gap">8dp</dimen>
+    <dimen name="control_group_untitled_gap">-4dp</dimen>
     <dimen name="control_card_padding_bottom_with_settings">8dp</dimen>
     <dimen name="control_card_padding_bottom_plain">16dp</dimen>
 </resources>

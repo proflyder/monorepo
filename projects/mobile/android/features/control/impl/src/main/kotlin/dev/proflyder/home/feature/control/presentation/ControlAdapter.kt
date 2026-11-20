@@ -9,6 +9,7 @@ import android.view.ViewGroup
 import android.view.ViewOutlineProvider
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.TextView
 import androidx.recyclerview.widget.DiffUtil
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.color.MaterialColors
@@ -19,6 +20,7 @@ import dev.proflyder.home.core.model.TimerState
 import dev.proflyder.home.core.ui.AdapterCallback
 import dev.proflyder.home.core.ui.BaseListAdapter
 import dev.proflyder.home.core.ui.BaseViewHolder
+import dev.proflyder.home.core.ui.DeviceStateViews
 import dev.proflyder.home.core.ui.PayloadSet
 import dev.proflyder.home.core.ui.PillSegments
 import dev.proflyder.home.core.ui.ViewBinding
@@ -168,16 +170,10 @@ internal object OvalTileOutlineProvider : ViewOutlineProvider() {
     }
 }
 
-internal fun bindVolumeIcon(icon: ImageView, root: View, entry: ControlEntry) {
+internal fun bindVolumeIcon(icon: ImageView, status: TextView, entry: ControlEntry) {
     val active = entry.available && entry.volume?.muted != true
-    icon.isActivated = active
-    icon.setColorFilter(
-        MaterialColors.getColor(
-            root,
-            if (active) com.google.android.material.R.attr.colorOnPrimaryContainer
-            else com.google.android.material.R.attr.colorOnSurfaceVariant,
-        ),
-    )
+    DeviceStateViews.bindIcon(icon, active)
+    DeviceStateViews.bindStatus(status, active)
 }
 
 internal fun hubIcon(card: HubCard): Int = when (card) {
@@ -649,7 +645,8 @@ internal class ControlAdapter(
             views.controlDeviceState.setVisible(true)
             views.controlDeviceState.text =
                 row.entry.localizedVolumeText(views.root.context, R.string.control_state_unavailable)
-            bindVolumeIcon(views.controlDeviceIcon, views.root, row.entry)
+            bindVolumeIcon(views.controlDeviceIcon, views.controlDeviceState, row.entry)
+            DeviceStateViews.bindCard(views.root, false)
             views.controlDeviceProgress.setVisible(row.busy)
             views.root.alpha = if (row.entry.available) 1f else DISABLED_ALPHA
             val enabled = row.entry.available && !row.busy
@@ -663,6 +660,8 @@ internal class ControlAdapter(
                 views.root,
                 com.google.android.material.R.attr.colorOnPrimaryContainer,
             )
+            DeviceStateViews.clearIcon(views.controlDeviceIcon)
+            DeviceStateViews.bindCard(views.root, false)
             views.controlDeviceIcon.setColorFilter(tint)
             views.controlDeviceIcon.isActivated = true
             views.root.alpha = if (row.entry.available) 1f else DISABLED_ALPHA
@@ -701,13 +700,8 @@ internal class ControlAdapter(
 
         private fun bindPower(entry: ControlEntry) {
             val on = entry.power == PowerState.ON
-            val tint = MaterialColors.getColor(
-                views.root,
-                if (on) com.google.android.material.R.attr.colorOnPrimaryContainer
-                else com.google.android.material.R.attr.colorOnSurfaceVariant,
-            )
-            views.controlDeviceIcon.setColorFilter(tint)
-            views.controlDeviceIcon.isActivated = on
+            DeviceStateViews.bindIcon(views.controlDeviceIcon, on)
+            DeviceStateViews.bindCard(views.root, on)
             if (views.controlDeviceSwitch.isChecked == on) return
             binding_ = true
             views.controlDeviceSwitch.isChecked = on
@@ -720,6 +714,7 @@ internal class ControlAdapter(
             views.controlDeviceState.setText(
                 entry.localizedStateText(views.root.context, R.string.control_state_unavailable),
             )
+            DeviceStateViews.bindStatus(views.controlDeviceState, on && entry.available)
             val brightness = entry.light?.takeIf { on && entry.available && it.brightness && it.brightnessPct > 0 }?.brightnessPct
             if (brightness != null) {
                 views.controlDeviceState.text = views.root.context.getString(R.string.control_state_on_brightness, brightness)
@@ -763,6 +758,8 @@ internal class ControlAdapter(
             )
             views.controlGroupTitle.text = group.title
             views.controlGroupTitle.setVisible(group.primary.size != 1)
+            alignPrimary(group.primary.size != 1)
+            DeviceStateViews.bindCard(views.root, group.primary.any { it.entry.power == PowerState.ON })
             val controlCount = group.primary.size + group.settings.size + group.actions.size
             val (tiles, rowItems) = group.primary.partition {
                 it.entry.isCompactTile(controlCount, isMain = it.entry.id == group.mainId)
@@ -787,6 +784,17 @@ internal class ControlAdapter(
         }
 
         override fun bindPayloads(item: ControlItem, payloads: List<Any>) = bind(item)
+
+        private fun alignPrimary(titled: Boolean) {
+            val params = views.controlGroupPrimary.layoutParams as ViewGroup.MarginLayoutParams
+            params.topMargin = views.root.resources.getDimensionPixelSize(
+                when {
+                    titled -> R.dimen.control_group_title_gap
+                    else -> R.dimen.control_group_untitled_gap
+                },
+            )
+            views.controlGroupPrimary.layoutParams = params
+        }
 
         private fun syncRows(
             container: LinearLayout,
@@ -868,14 +876,8 @@ internal class ControlAdapter(
                 tileState(entry, context),
             )
             tile.controlTileIcon.setImageResource(ControlIcons.resolve(entry))
-            tile.controlTileIcon.isActivated = on
-            tile.controlTileIcon.setColorFilter(
-                MaterialColors.getColor(
-                    tile.root,
-                    if (on) com.google.android.material.R.attr.colorOnPrimaryContainer
-                    else com.google.android.material.R.attr.colorOnSurfaceVariant,
-                ),
-            )
+            DeviceStateViews.bindIcon(tile.controlTileIcon, on)
+            DeviceStateViews.bindStatus(tile.controlTileLabel, on && entry.available)
             tile.controlTileProgress.setVisible(row.busy)
             tile.controlTileLabel.text = entry.localizedTitle(context)
             val tap = View.OnClickListener { if (enabled) callback.onPowerChanged(entry, !on) }
@@ -927,13 +929,7 @@ internal class ControlAdapter(
                 return bindButtonRow(rowViews, entry, row.busy)
             }
             val on = entry.power == PowerState.ON
-            val tint = MaterialColors.getColor(
-                rowViews.root,
-                if (on) com.google.android.material.R.attr.colorOnPrimaryContainer
-                else com.google.android.material.R.attr.colorOnSurfaceVariant,
-            )
-            rowViews.controlRowIcon.setColorFilter(tint)
-            rowViews.controlRowIcon.isActivated = on
+            DeviceStateViews.bindIcon(rowViews.controlRowIcon, on)
             rowViews.controlRowSwitch.isChecked = on
             rowViews.controlRowSwitch.setOnCheckedChangeListener { _, checked ->
                 callback.onPowerChanged(entry, checked)
@@ -941,6 +937,7 @@ internal class ControlAdapter(
             rowViews.controlRowState.setText(
                 entry.localizedStateText(rowViews.root.context, R.string.control_state_unavailable),
             )
+            DeviceStateViews.bindStatus(rowViews.controlRowState, on && entry.available)
             val brightness = entry.light?.takeIf { on && entry.available && it.brightness && it.brightnessPct > 0 }?.brightnessPct
             if (brightness != null) {
                 rowViews.controlRowState.text =
@@ -968,7 +965,7 @@ internal class ControlAdapter(
             rowViews.controlRowState.setVisible(true)
             rowViews.controlRowState.text =
                 entry.localizedVolumeText(rowViews.root.context, R.string.control_state_unavailable)
-            bindVolumeIcon(rowViews.controlRowIcon, rowViews.root, entry)
+            bindVolumeIcon(rowViews.controlRowIcon, rowViews.controlRowState, entry)
             val enabled = entry.available && !busy
             rowViews.root.isEnabled = enabled
             rowViews.root.setOnClickListener {
@@ -983,6 +980,7 @@ internal class ControlAdapter(
                 rowViews.root,
                 com.google.android.material.R.attr.colorOnPrimaryContainer,
             )
+            DeviceStateViews.clearIcon(rowViews.controlRowIcon)
             rowViews.controlRowIcon.setColorFilter(tint)
             rowViews.controlRowIcon.isActivated = true
             rowViews.root.isEnabled = entry.available && !busy

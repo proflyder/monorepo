@@ -26,6 +26,10 @@
         <item name="colorOutline">@color/home_outline</item>
         <item name="colorOutlineVariant">@color/home_outline_variant</item>
         <item name="homeSelectedContentColor">?attr/colorPrimary</item>
+        <item name="colorStateOn">?attr/colorPrimary</item>
+        <item name="colorOnStateOn">?attr/colorOnPrimary</item>
+        <item name="colorStateOnText">@color/home_state_on_text</item>
+        <item name="materialSwitchStyle">@style/Widget.Home.Switch</item>
 
         <item name="shapeAppearanceSmallComponent">@style/ShapeAppearance.Home.Small</item>
         <item name="shapeAppearanceMediumComponent">@style/ShapeAppearance.Home.Medium</item>
