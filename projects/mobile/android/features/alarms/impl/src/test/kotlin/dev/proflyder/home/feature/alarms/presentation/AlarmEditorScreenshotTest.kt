@@ -98,7 +98,7 @@ class AlarmEditorScreenshotTest {
     private fun themed(): ContextThemeWrapper = ContextThemeWrapper(
         RuntimeEnvironment.getApplication(),
         com.google.android.material.R.style.Theme_Material3_Dark_NoActionBar,
-    )
+    ).apply { theme.applyStyle(dev.proflyder.home.core.theme.R.style.ThemeOverlay_Home_Neon, true) }
 
     private fun savePng(root: View, name: String, widthDp: Int, heightDp: Int) {
         val metrics = root.resources.displayMetrics

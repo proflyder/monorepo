@@ -45,27 +45,26 @@
 
     <style name="Widget.Home.TextInput" parent="Widget.Material3.TextInputLayout.FilledBox">
         <item name="boxBackgroundColor">?attr/colorSurfaceContainerHigh</item>
-        <item name="boxStrokeWidth">0dp</item>
-        <item name="boxStrokeWidthFocused">0dp</item>
-        <item name="boxCornerRadiusTopStart">@dimen/ui_card_radius</item>
-        <item name="boxCornerRadiusTopEnd">@dimen/ui_card_radius</item>
-        <item name="boxCornerRadiusBottomStart">@dimen/ui_card_radius</item>
-        <item name="boxCornerRadiusBottomEnd">@dimen/ui_card_radius</item>
-        <item name="shapeAppearance">@style/ShapeAppearance.Home.TextInput</item>
-        <item name="hintTextColor">?attr/colorPrimary</item>
+        <item name="boxStrokeWidth">@dimen/ui_text_input_stroke</item>
+        <item name="boxStrokeWidthFocused">@dimen/ui_text_input_focus_stroke</item>
+        <item name="boxStrokeColor">@color/ui_text_input_stroke</item>
+        <item name="boxCornerRadiusTopStart">@dimen/ui_text_input_radius</item>
+        <item name="boxCornerRadiusTopEnd">@dimen/ui_text_input_radius</item>
+        <item name="boxCornerRadiusBottomStart">@dimen/ui_text_input_bottom_radius</item>
+        <item name="boxCornerRadiusBottomEnd">@dimen/ui_text_input_bottom_radius</item>
+        <item name="hintEnabled">true</item>
+        <item name="hintTextColor">?attr/colorStateOn</item>
+        <item name="cursorColor">?attr/colorStateOn</item>
+        <item name="endIconTint">?attr/colorOnSurfaceVariant</item>
+        <item name="startIconTint">?attr/colorOnSurfaceVariant</item>
+        <item name="helperTextTextAppearance">?attr/textAppearanceBodySmall</item>
+        <item name="errorTextAppearance">?attr/textAppearanceBodySmall</item>
+        <item name="counterTextAppearance">?attr/textAppearanceBodySmall</item>
         <item name="materialThemeOverlay">@style/ThemeOverlay.Home.TextInput</item>
     </style>
 
-    <style name="ShapeAppearance.Home.TextInput" parent="">
-        <item name="cornerFamily">rounded</item>
-        <item name="cornerSize">@dimen/ui_card_radius</item>
-    </style>
-
     <style name="ThemeOverlay.Home.TextInput" parent="ThemeOverlay.Material3.TextInputEditText.FilledBox">
-        <item name="editTextStyle">@style/Widget.Home.TextInputEditText</item>
-    </style>
-
-    <style name="Widget.Home.TextInputEditText" parent="Widget.Material3.TextInputEditText.FilledBox">
-        <item name="android:foreground">@drawable/ui_text_input_focus</item>
+        <item name="colorControlActivated">?attr/colorStateOn</item>
+        <item name="android:colorControlActivated">?attr/colorStateOn</item>
     </style>
 </resources>
