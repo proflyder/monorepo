@@ -72,6 +72,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="@dimen/ds_space_m"
+                    app:autoEmphasis="true"
                     app:centered="true"
                     app:equalWidth="true">
 

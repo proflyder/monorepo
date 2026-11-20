@@ -6,6 +6,7 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.core.content.withStyledAttributes
 import androidx.core.view.isGone
+import com.google.android.material.button.MaterialButton
 
 class ButtonRow @JvmOverloads constructor(
     context: Context,
@@ -15,6 +16,7 @@ class ButtonRow @JvmOverloads constructor(
 
     var equalWidth: Boolean = false
     var centered: Boolean = false
+    var autoEmphasis: Boolean = false
 
     var isStacked: Boolean = false
         private set
@@ -25,6 +27,7 @@ class ButtonRow @JvmOverloads constructor(
         context.withStyledAttributes(attrs, R.styleable.ButtonRow) {
             equalWidth = getBoolean(R.styleable.ButtonRow_equalWidth, false)
             centered = getBoolean(R.styleable.ButtonRow_centered, false)
+            autoEmphasis = getBoolean(R.styleable.ButtonRow_autoEmphasis, false)
         }
     }
 
@@ -33,6 +36,7 @@ class ButtonRow @JvmOverloads constructor(
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         val available = MeasureSpec.getSize(widthMeasureSpec) - paddingLeft - paddingRight
         val buttons = shown
+        if (autoEmphasis) applyEmphasis(buttons)
         buttons.forEach { it.measure(UNBOUNDED, UNBOUNDED) }
         val widest = buttons.maxOfOrNull { it.measuredWidth } ?: 0
         val gaps = gap * (buttons.size - 1).coerceAtLeast(0)
@@ -67,6 +71,15 @@ class ButtonRow @JvmOverloads constructor(
             isStacked -> layoutStacked(shown.asReversed(), start)
             else -> layoutRow(shown, start)
         }
+    }
+
+    private fun applyEmphasis(buttons: List<View>) = buttons.filterIsInstance<MaterialButton>().forEachIndexed { index, button ->
+        button.setEmphasis(emphasisAt(index, buttons.lastIndex))
+    }
+
+    private fun emphasisAt(index: Int, last: Int): Emphasis = when (index) {
+        last -> Emphasis.FILLED
+        else -> Emphasis.TONAL
     }
 
     private fun offset(width: Int): Int = when {

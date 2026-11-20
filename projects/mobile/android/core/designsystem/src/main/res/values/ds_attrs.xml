@@ -16,6 +16,7 @@
     <declare-styleable name="ButtonRow">
         <attr name="equalWidth" format="boolean" />
         <attr name="centered" format="boolean" />
+        <attr name="autoEmphasis" format="boolean" />
     </declare-styleable>
 
     <declare-styleable name="EmptyState">

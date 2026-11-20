@@ -40,7 +40,7 @@ the colour roles.
 | Chip | `Chip` + `Widget.Home.Chip.Filter` / `.Assist` / `.Input` | From code: `Components.filterChip(parent)`, `Components.inputChip(parent)`. |
 | Switch | `MaterialSwitch` (theme default `Widget.Home.Switch` from core/theme) | Checked track `colorStateOn`. |
 | Pills | `PillSegments` | The only choice-between-options control; no segmented buttons. |
-| Popup menu | `HomePopupMenu(anchor, menuRes)` | Card with 48 dp rows and icons. |
+| Popup menu | `HomePopupMenu(anchor, menuRes)` | Card with 48 dp rows and icons. Opens below the anchor when it fits, otherwise above; stays inside the window insets (system bars, IME, cutout) and never covers a view marked with `HomePopupMenu.markObstacle` (the bottom navigation); scrolls inside when neither side fits. |
 | List row | `ListRow` (`app:rowIcon`, `rowTitle`, `rowSubtitle`, `rowValue`, `rowChevron`, `rowSwitch`); child views in XML become the trailing slot | Min height 56 dp; `subtitleTone` = `NEUTRAL`/`ERROR`/`WARNING`/`SUCCESS`; `app:rowIconTint` (default `colorOnSurfaceVariant`, `colorPrimary` for accent icons such as permissions); titles use a 20sp line height so a wrapped title stays compact. |
 | Section header | `TextView` + `Widget.Home.SectionHeader` | TitleSmall in `colorPrimary`. |
 | Empty state | `EmptyState` (`app:emptyIcon`, `emptyText`, `emptyAction`) | Main action Filled M (`action`, `app:emptyAction`), optional secondary Tonal M (`secondaryAction`, `app:emptySecondaryAction`) in a centred equal-width `ButtonRow`. |
@@ -140,5 +140,12 @@ the new theme automatically.
 - `ToolbarTitle.fits` checks every word against the width (a word never
   breaks), the balanced line count (at most two) and, when bounded, the
   height.
+- `HomePopupMenu` / `PopupPlacements.place`: the visible area is the root
+  minus `systemBars|ime|displayCutout` insets, cut at the nearest marked
+  obstacle below (or above) the anchor. The menu goes below when its height
+  fits, above when it fits there, else to the larger side with that side's
+  height (the list scrolls). The background drawable has an 8dp transparent
+  inset, so the window touches the anchor (`ANCHOR_GAP` 0) and the card sits
+  8dp from it.
 - `DeviceTile` reads its card style from `?attr/homeDeviceTileStyle`
   (`Widget.Home.Card` in `Base.Theme.Home`).
