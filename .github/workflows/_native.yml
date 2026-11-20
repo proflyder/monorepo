@@ -1,31 +1,5 @@
 name: _native
 
-# Reusable native platform workflow. Two kinds of non-Bazel build share it:
-#
-#   * `script` (default) — one repository-script build (the Windows logon
-#     provider). The unit supplies its working directory, host-test and
-#     cross-build commands and the artifacts it owns. The scripts drive Bazel
-#     themselves: the Rust toolchain comes from rules_rust and the Windows
-#     linker/libc from the hermetic zig cc_toolchain pinned in MODULE.bazel,
-#     so there is no extra toolchain download or host compiler setup here.
-#
-#   * `pulsar` — the Rust station daemon in `projects/station/pulsar`. Its host
-#     fmt/clippy/tests are the `pulsar-bazel` unit (`_unit.yml`); this workflow
-#     cross-builds both station ABIs and the Rust installer with Bazel, then the
-#     Zigbee radio and dropbear. Zig 0.14.1, Rust 1.99.1 and the sendspin C/C++
-#     are pinned by MODULE.bazel. Every run builds the release-shaped binaries:
-#     VERSION from `projects/station/pulsar/VERSION` (or `release_version`),
-#     radio `.ybl`, `SHA256SUMS`, and the `pulsar-release` OCI-ready artifact.
-#
-# Build once (DECISIONS 36): a pull request from this repository (never a fork)
-# publishes the release-shaped artifact as
-# `ghcr.io/proflyder/<repository>:tree-<git tree hash>` with build provenance.
-# On push to `develop`, deploy-home asks this workflow to `promote` that digest
-# instead of rebuilding; a missing or unverified tree tag fails the run — the
-# deploy path never builds or publishes. PR CI (`promote: false`) still builds
-# and, for a same-repo PR, publishes the tree tag. Fork PRs and manual dispatch
-# runs never reach the registry: their token is read-only.
-
 on:
   workflow_call:
     inputs:
@@ -126,7 +100,6 @@ on:
         type: boolean
 
     secrets:
-      # Read-only Nexus cache credential; absent on forks (cache stays off).
       NEXUS_CI_PASSWORD:
         required: false
     outputs:
@@ -142,57 +115,31 @@ permissions:
   contents: read
 
 env:
-  # Official crane (google/go-containerregistry): resolves and re-tags a digest
-  # without pulling it. Same pins as deploy-home.
   CRANE_VERSION: "v0.22.1"
   CRANE_SHA256: "0ab7a1d6932a213aed964ce97666c3077fe691c8606413674a8b3e0b9ec4cda0"
-  # actions/checkout runs `git init` under a throwaway HOME, so a global config
-  # cannot silence Git's default-branch hint. An environment-provided config is
-  # inherited by that git invocation and keeps the log clean.
   GIT_CONFIG_COUNT: "1"
   GIT_CONFIG_KEY_0: init.defaultBranch
   GIT_CONFIG_VALUE_0: main
 
 jobs:
-  # Build once, deploy the same bytes: on the deploy-home path, promote the
-  # artifact the merged PR already built and attested under `tree-<hash>` to the
-  # unit's release tags. A missing or unverified tree tag fails this job, which
-  # also stops every build job below; the deploy path never builds. Release tags
-  # are immutable by content: identical layers under an existing tag (different
-  # manifest annotations) is a no-op, different content fails.
-  #
-  # The job always runs so the build jobs can depend on `mode`; when `promote`
-  # is false (PR CI) it only publishes `mode=build`.
   promote:
     name: promote / ${{ inputs.unit }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
       contents: read
-      # Re-tag the promoted digest and read its attestation.
       packages: write
       attestations: read
-      # Identify the merged PR whose head is the fallback when `develop` moved
-      # while its CI ran (the PR-head delta check).
       pull-requests: read
     outputs:
       mode: ${{ steps.select.outputs.mode }}
       digest: ${{ steps.promote.outputs.digest }}
-      # Build path: the version computed from VERSION + the unit's commits.
-      # Promoted path: the version recorded on the verified artifact, which is
-      # what the binary prints (the station updater compares the two).
       version: ${{ steps.promote.outputs.version || steps.version.outputs.version }}
     steps:
-      # Full history on both paths: the PR-head fallback needs it, and so does
-      # the computed version (the first-parent commit count of the unit's paths;
-      # a shallow clone has no parent and the step fails instead of guessing).
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           fetch-depth: 0
 
-      # Deterministic and monotone: VERSION holds only major.minor and the
-      # patch is the number of commits touching the unit (see
-      # platform/ci/version.mjs). No release needs a version-bump pull request.
       - name: Compute the release version
         id: version
         run: node platform/ci/version.mjs --unit "${{ inputs.unit }}" --github-output
@@ -208,12 +155,9 @@ jobs:
           tar -xzf "$archive" -C "$RUNNER_TEMP" crane
           echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
 
-      # Re-tagging writes a manifest to GHCR. The package is publicly readable,
-      # so reads succeed anonymously and only the PUT fails with UNAUTHORIZED.
-      # The Docker config written here is what `crane tag` reads.
       - name: Log in to GHCR
         if: inputs.promote && inputs.publish_repository != ''
-        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -233,13 +177,8 @@ jobs:
             echo "could not resolve HEAD^{tree}: '$tree'" >&2
             exit 1
           fi
-          # No --version: the artifact's own annotation is the authority, so the
-          # release tag always matches the binary's `--version` even when the
-          # artifact came from an earlier PR-head tree.
           retag_args=()
           if [[ "${{ inputs.replace_artifact }}" == "true" ]]; then
-            # Explicit rebuild (deploy-services.yml): re-point an already
-            # published immutable tag at the freshly verified bytes.
             retag_args=(--retag)
           fi
           node platform/ci/promote.mjs --native \
@@ -266,7 +205,6 @@ jobs:
           fi
           echo "mode=${mode}" >> "$GITHUB_OUTPUT"
 
-  # ---------------------------------------------------------------- script ----
   native:
     name: native / ${{ inputs.unit }}
     needs: promote
@@ -277,40 +215,22 @@ jobs:
       run:
         working-directory: ${{ inputs.workdir }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
 
-      # Pinned Bazelisk plus the Bzlmod/repository caches, identical to the
-      # `pulsar` kind and the `_unit.yml` unit the Rust host checks use.
-      - uses: bazel-contrib/setup-bazel@104e3eea9447cdaa4b00d0fb46191a3985d26ab3 # v0.19.1
+      - uses: bazel-contrib/setup-bazel@104e3eea9447cdaa4b00d0fb46191a3985d26ab3
         with:
           bazelisk-version: "1.30.0"
           bazelisk-cache: true
           repository-cache: false
           cache-save: ${{ inputs.save_cache }}
 
-      # Restore-only: the host-Rust family archive covers the common crates and
-      # toolchains this cross-build also resolves. Nothing on develop saves a
-      # native-specific repository cache, so a miss just downloads the zig/
-      # Windows archives (and a PR never writes them back).
       - uses: ./.github/actions/bazel-repository-cache
         with:
           key: bazel-repo-rust-${{ runner.os }}-${{ hashFiles('MODULE.bazel', 'MODULE.bazel.lock', '.bazelversion', 'Cargo.lock', 'crate-universe.lock', 'rust-toolchain.toml') }}
           restore-prefix: bazel-repo-rust-${{ runner.os }}-
 
-      # Restore-only everywhere. These units have no develop-side builder
-      # (deploy-home only promotes the PR-built artifact), so there is no
-      # writer to seed a shared entry; a PR-written cache would stay invisible
-      # to every other PR and only spend the repository's 10 GB budget and the
-      # minutes of upload. If a develop warm build is ever added, save from it
-      # with a `-<run_id>` key and keep these prefixes.
-      #
-      # No platform-wide `bazel-<os>-` fallback: it also matches the host
-      # `_unit.yml` entries, and a cross-build restoring that cache would
-      # download gigabytes for no usable action.
-      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
-          # Action-output disk cache (.bazelrc only); the key tracks both the
-          # Rust workspace and the pinned zig/Windows toolchain platform.
           path: ~/.cache/bazel-disk
           key: bazel-logon-${{ runner.os }}-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'Cargo.lock', 'crate-universe.lock', 'rust-toolchain.toml', 'platform/bazel/windows/**', 'platform/bazel/zig/**') }}
           restore-keys: |
@@ -372,21 +292,13 @@ jobs:
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: ${{ inputs.unit }}
           path: ${{ steps.artifact-paths.outputs.paths }}
           if-no-files-found: error
           retention-days: ${{ inputs.retention_days }}
 
-  # ---------------------------------------------------------------- pulsar ----
-  # Host fmt/clippy/tests are the `pulsar-bazel` unit (`_unit.yml`); this unit
-  # only cross-builds the deployable station binaries with Bazel. The zig cc
-  # toolchain, Rust toolchain and sendspin C/C++ all come from MODULE.bazel, so
-  # no rustup/zig/cargo-zigbuild/CMake/ninja setup happens here.
-  #
-  # Both station ABIs: the daemon at -c opt (line tables kept for pulsar.debug,
-  # VERSION/BUILD_TIME passed as --define) for aarch64 and armhf.
   pulsar-build:
     name: native / pulsar-build (${{ matrix.arch }})
     needs: promote
@@ -398,52 +310,37 @@ jobs:
       matrix:
         arch: [aarch64, armhf]
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
 
-      # Pinned Bazelisk plus the Bzlmod/repository caches, identical to the
-      # `_unit.yml` unit the host checks use.
-      - uses: bazel-contrib/setup-bazel@104e3eea9447cdaa4b00d0fb46191a3985d26ab3 # v0.19.1
+      - uses: bazel-contrib/setup-bazel@104e3eea9447cdaa4b00d0fb46191a3985d26ab3
         with:
           bazelisk-version: "1.30.0"
           bazelisk-cache: true
           repository-cache: false
           cache-save: ${{ inputs.save_cache }}
 
-      # Restore-only: the host-Rust family archive covers the common crates and
-      # toolchains this cross-build also resolves. Nothing on develop saves a
-      # native-specific repository cache, so a miss just downloads the zig/
-      # Windows archives (and a PR never writes them back).
       - uses: ./.github/actions/bazel-repository-cache
         with:
           key: bazel-repo-rust-${{ runner.os }}-${{ hashFiles('MODULE.bazel', 'MODULE.bazel.lock', '.bazelversion', 'Cargo.lock', 'crate-universe.lock', 'rust-toolchain.toml') }}
           restore-prefix: bazel-repo-rust-${{ runner.os }}-
 
-      # Optional read-through cache; no-op without NEXUS_HOST or the password.
       - uses: ./.github/actions/nexus-cache
         with:
           host: ${{ vars.NEXUS_HOST }}
           password: ${{ secrets.NEXUS_CI_PASSWORD }}
 
-      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
-          # Action-output disk cache (.bazelrc only); keyed like the pulsar-bazel
-          # unit so both restore the same Rust/C++ objects. Restore-only: see
-          # the logon job above for why PRs never write these entries.
           path: ~/.cache/bazel-disk
           key: bazel-pulsar-${{ runner.os }}-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'Cargo.lock', 'crate-universe.lock', 'rust-toolchain.toml') }}
           restore-keys: |
             bazel-pulsar-${{ runner.os }}-
 
-      # Every run is release-shaped, so the cross-built binary is verified under
-      # qemu exactly as the station updater does before accepting a release.
       - name: Release verification prerequisites
         run: |
           sudo apt-get update -q
           sudo apt-get install -yq qemu-user libc6-arm64-cross libc6-armhf-cross
 
-      # VERSION is the release trigger and the value `pulsar --version` prints.
-      # BUILD_TIME is HEAD's commit date (the Makefile's reproducible value):
-      # a rebuild of the same commit does not change option_env! and relink.
       - name: Release identity
         env:
           RELEASE_VERSION: ${{ needs.promote.outputs.version }}
@@ -475,8 +372,6 @@ jobs:
           cp bazel-bin/projects/station/pulsar/satellite/pulsar "$out/pulsar"
           cp bazel-bin/projects/station/pulsar/satellite/pulsar.debug "$out/pulsar.debug"
 
-      # Glibc binaries run under qemu with the cross libc; the updater compares
-      # exactly this `--version` output against the OCI tag.
       - name: Verify pulsar --version
         env:
           ARCH: ${{ matrix.arch }}
@@ -495,7 +390,7 @@ jobs:
             exit 1
           fi
 
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: pulsar-${{ matrix.arch }}
           path: |
@@ -504,13 +399,6 @@ jobs:
           if-no-files-found: error
           retention-days: ${{ inputs.retention_days }}
 
-  # The installer is Rust in the root Cargo workspace. linux-amd64 is built statically
-  # with the existing zig musl repository set; there is no aarch64 musl platform in
-  # platform/bazel/zig, so linux-arm64 stays on the station glibc platform, and
-  # windows-amd64 uses the Windows provider platform. A darwin target
-  # cannot be built in CI: the hermetic toolchain has no macOS SDK/triple, so the
-  # macOS binary is built natively on a Mac (`bazel build -c opt
-  # //projects/station/pulsar/installer:pulsar-install`). `dist/` is only a check artifact.
   pulsar-installer:
     name: native / pulsar-installer
     needs: promote
@@ -518,33 +406,27 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
 
-      - uses: bazel-contrib/setup-bazel@104e3eea9447cdaa4b00d0fb46191a3985d26ab3 # v0.19.1
+      - uses: bazel-contrib/setup-bazel@104e3eea9447cdaa4b00d0fb46191a3985d26ab3
         with:
           bazelisk-version: "1.30.0"
           bazelisk-cache: true
           repository-cache: false
           cache-save: ${{ inputs.save_cache }}
 
-      # Restore-only: the host-Rust family archive covers the common crates and
-      # toolchains this cross-build also resolves. Nothing on develop saves a
-      # native-specific repository cache, so a miss just downloads the zig/
-      # Windows archives (and a PR never writes them back).
       - uses: ./.github/actions/bazel-repository-cache
         with:
           key: bazel-repo-rust-${{ runner.os }}-${{ hashFiles('MODULE.bazel', 'MODULE.bazel.lock', '.bazelversion', 'Cargo.lock', 'crate-universe.lock', 'rust-toolchain.toml') }}
           restore-prefix: bazel-repo-rust-${{ runner.os }}-
 
-      # Optional read-through cache; no-op without NEXUS_HOST or the password.
       - uses: ./.github/actions/nexus-cache
         with:
           host: ${{ vars.NEXUS_HOST }}
           password: ${{ secrets.NEXUS_CI_PASSWORD }}
 
-      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
-          # Restore-only; see the logon job above.
           path: ~/.cache/bazel-disk
           key: bazel-installer-${{ runner.os }}-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'Cargo.lock', 'crate-universe.lock', 'rust-toolchain.toml', 'platform/bazel/windows/**', 'platform/bazel/zig/**') }}
           restore-keys: |
@@ -577,7 +459,6 @@ jobs:
           build linux-arm64 "" --platforms=//platform/bazel/zig:aarch64_linux
           build windows-amd64 .exe --platforms=//platform/bazel/windows:x86_64_windows
 
-  # Zigbee firmware for the Midi radio (Telink B91).
   pulsar-radio:
     name: native / pulsar-radio
     needs: promote
@@ -585,10 +466,10 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
 
       - name: Set up zig
-        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29
         timeout-minutes: 5
         with:
           version: "0.14.1"
@@ -596,7 +477,7 @@ jobs:
       - name: i386 C library (the Telink toolchain is 32-bit x86)
         run: sudo dpkg --add-architecture i386 && sudo apt-get update -q && sudo apt-get install -yq libc6:i386
 
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: |
             ${{ inputs.workdir }}/radio/src
@@ -607,7 +488,7 @@ jobs:
         working-directory: ${{ inputs.workdir }}
         run: radio/build.sh
 
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: pulsar-radio
           path: |
@@ -616,8 +497,6 @@ jobs:
           if-no-files-found: error
           retention-days: ${{ inputs.retention_days }}
 
-  # The single release-shaped artifact `publish` uploads with
-  # `projects/station/pulsar/publish-oci.sh` under the PR `tree-<hash>` tag.
   pulsar-release:
     name: native / pulsar-release (${{ needs.promote.outputs.version }})
     if: inputs.kind == 'pulsar' && needs.promote.outputs.mode != 'promoted'
@@ -625,12 +504,10 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           path: ${{ runner.temp }}/artifacts
 
-      # Layer titles are the station updater's contract; SHA256SUMS covers the
-      # binaries and both radio images.
       - name: Stage the OCI release files
         env:
           ARTIFACTS: ${{ runner.temp }}/artifacts
@@ -648,14 +525,13 @@ jobs:
           )
           cat "$STAGE/SHA256SUMS"
 
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: ${{ inputs.unit }}
           path: ${{ runner.temp }}/release/*
           if-no-files-found: error
           retention-days: ${{ inputs.retention_days }}
 
-  # dropbear + sftp-server for `pulsar-install --ssh`.
   pulsar-ssh:
     name: native / pulsar-ssh
     needs: promote
@@ -663,15 +539,15 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
 
       - name: Set up zig
-        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29
         timeout-minutes: 5
         with:
           version: "0.14.1"
 
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: ${{ inputs.workdir }}/ssh/out/src
           key: pulsar-ssh-${{ hashFiles(format('{0}/ssh/build.sh', inputs.workdir)) }}
@@ -680,7 +556,7 @@ jobs:
         working-directory: ${{ inputs.workdir }}
         run: ssh/build.sh
 
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: pulsar-ssh
           path: |
@@ -689,11 +565,6 @@ jobs:
           if-no-files-found: error
           retention-days: ${{ inputs.retention_days }}
 
-  # Publish the artifact of the same-repo PR build:
-  #   `ghcr.io/proflyder/<repository>:tree-<git tree hash>` (build once).
-  # deploy-home only promotes that digest; it never builds, so this job does not
-  # run on the deploy path. Only this job needs registry/OIDC/attestation
-  # permissions; the caller grants them for this job alone.
   publish:
     name: publish / ${{ inputs.unit }}
     needs: [promote, native, pulsar-release]
@@ -713,22 +584,19 @@ jobs:
       id-token: write
       attestations: write
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
 
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: ${{ inputs.unit }}
           path: ${{ runner.temp }}/artifact
 
-      # oras publishes the OCI artifact; version and sha256 from mise.toml/mise.lock.
-      - uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b # v5.2.7
+      - uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b
         with:
           version: 2026.11.4
           install_args: "oras"
           cache: true
 
-      # The build-once identity is the git tree: a PR builds its merge ref, whose
-      # tree equals the squash commit's tree while `develop` did not move.
       - name: Compute the tree tag
         id: tree
         if: inputs.push_tree_tag
@@ -743,7 +611,7 @@ jobs:
           echo "- artifact identity: \`tree-${tree}\`" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Log in to GHCR
-        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -772,10 +640,8 @@ jobs:
           fi
           "$PUBLISH_SCRIPT" "${args[@]}"
 
-      # Provenance for the pushed OCI manifest digest, stored in the registry
-      # next to the artifact. deploy-home verifies it before promoting.
       - name: Attest pushed artifact
-        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8
         with:
           subject-name: ${{ steps.publish.outputs.repository }}
           subject-digest: ${{ steps.publish.outputs.digest }}
@@ -783,10 +649,9 @@ jobs:
           registry-username: ${{ github.actor }}
           registry-password: ${{ github.token }}
 
-      # Also attest the files an operator consumes, not just the manifest.
       - name: Attest unit files
         if: inputs.publish_attest_glob != ''
-        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8
         with:
           subject-path: ${{ runner.temp }}/artifact/${{ inputs.publish_attest_glob }}
 

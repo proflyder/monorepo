@@ -1,13 +1,5 @@
 name: "CI: полный прогон вручную"
 
-# Manual twin of `ci.yml`: the same reusable pipeline (`_ci.yml`), run on
-# demand over every unit instead of the diff of a pull request.
-#
-# This is the "run all checks now" button: useful before a risky merge, after a
-# CI configuration change, or to warm every cache. It publishes no Android
-# build (distribution is a PR side effect; use `android-release.yml` for that)
-# and no `tree-<hash>` artifact (nothing here may be deployed: this run is not
-# a pull request and its token is not part of the build-once contract).
 on:
   workflow_dispatch:
 
@@ -20,7 +12,6 @@ concurrency:
 
 jobs:
   pipeline:
-    # Same union as `ci.yml`; the pipeline's own jobs narrow their tokens.
     permissions:
       contents: read
       pull-requests: read

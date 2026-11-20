@@ -1,23 +1,5 @@
 name: _android-release
 
-# Sign and distribute the Home Android APK to Firebase App Distribution.
-#
-# This is the one place the release key is used. It is called by both Android
-# delivery paths and never builds anything:
-#
-#   * `_ci.yml` (`android-distribute`): on every same-repository PR that changes
-#     the app, and only when the whole `android` matrix is green. The APK comes
-#     from the `android-app-apk` artifact the `android` job built and tested
-#     once, so a tester installs exactly the bytes CI checked.
-#   * `android-release.yml` (`workflow_dispatch`): the owner's manual release —
-#     it builds from the checked-out `develop` through `_android.yml`, then calls
-#     this workflow with the same artifact name and a release note.
-#
-# `distribute.sh --ci --upload-only` reads the APK name, its SHA-256 and the
-# Firebase app id from `release-info.json`, verifies the digest and uploads; it
-# never builds, signs nothing else and never reads `google-services.json`.
-# `sign-release.sh` applies the release key and refuses an unexpected signer.
-
 on:
   workflow_call:
     inputs:
@@ -46,7 +28,7 @@ on:
         default: ""
         type: string
       label:
-        description: Short human label for the job summary (for example `PR #123`)
+        description: "Short human label for the job summary (for example `PR #123`)"
         required: false
         default: ""
         type: string
@@ -62,12 +44,9 @@ on:
 
 permissions:
   contents: read
-  # Request the OIDC token that OpenBao's auth/github role trusts.
   id-token: write
 
 env:
-  # Set Git's default branch for actions/checkout's `git init` (it warns when unset;
-  # it runs under a throwaway HOME, so only an env-provided config reaches it).
   GIT_CONFIG_COUNT: "1"
   GIT_CONFIG_KEY_0: init.defaultBranch
   GIT_CONFIG_VALUE_0: main
@@ -77,30 +56,19 @@ jobs:
     name: android release
     runs-on: ubuntu-24.04
     timeout-minutes: 20
-    # OIDC `environment` claim keeps this exact casing; OpenBao binds "Android".
     environment: Android
     env:
-      # Release-note inputs for `distribute.sh --ci --upload-only`. Passed as
-      # environment data, never interpolated into the script body, so a PR title
-      # cannot inject shell.
       PR_NUMBER: ${{ inputs.pr_number }}
       PR_TITLE: ${{ inputs.pr_title }}
       EXTRA_RELEASE_NOTES: ${{ inputs.release_notes }}
     steps:
-      # The script and the release notes need the repository (git metadata).
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
 
-      # The APK and its metadata, uploaded once by the `android-app` build of
-      # the same run (PR CI or the manual release).
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: android-app-apk
           path: ${{ runner.temp }}/release
 
-      # No official action exists for openconnect; the runner image has none.
-      # The VPN steps mirror deploy-home's minimal connect/health-check
-      # sequence; they are duplicated rather than extracted so a change here
-      # cannot alter the working home deployment job.
       - name: Install VPN client
         run: |
           sudo apt-get update
@@ -153,11 +121,9 @@ jobs:
           tail -n 40 "$RUNNER_TEMP/openconnect.log" >&2 || true
           exit 1
 
-      # Only the Firebase service account and the signing material are read;
-      # nothing else in the KV tree is reachable with this policy.
       - name: Read the release key and Firebase service account from OpenBao
         id: openbao
-        uses: hashicorp/vault-action@892a26828f195e65540a40b4768ae4571f51ebfc # v4.0.0
+        uses: hashicorp/vault-action@892a26828f195e65540a40b4768ae4571f51ebfc
         with:
           url: ${{ secrets.OPENBAO_ADDR }}
           method: jwt
@@ -172,7 +138,6 @@ jobs:
             secret/data/ci/android-distribute signing_cert_sha256 | SIGNING_CERT_SHA256 ;
             secret/data/ci/android-distribute firebase_service_account_json_b64 | FIREBASE_SERVICE_ACCOUNT_JSON_B64
 
-      # Passwords land in files with mode 600; only paths reach later steps.
       - name: Materialise the release key and Firebase credentials
         env:
           SIGNING_KEYSTORE_B64: ${{ steps.openbao.outputs.SIGNING_KEYSTORE_B64 }}
@@ -204,7 +169,6 @@ jobs:
             echo "SIGNING_KEYSTORE=$SIGNING_DIR/home-release.keystore"
             echo "SIGNING_STORE_PASSWORD_FILE=$SIGNING_DIR/store.password"
             echo "SIGNING_KEY_PASSWORD_FILE=$SIGNING_DIR/key.password"
-            # The expected certificate digest is public (it is in every APK).
             echo "SIGNING_CERT_SHA256=$SIGNING_CERT_SHA256"
             echo "GOOGLE_APPLICATION_CREDENTIALS=$CI_DIR/firebase-sa.json"
           } >> "$GITHUB_ENV"
@@ -221,10 +185,6 @@ jobs:
           rm -f "$RUNNER_TEMP/openconnect.log" "$RUNNER_TEMP/openconnect.pid"
           echo "VPN disconnected"
 
-      # Upload-only: the script verifies the APK digest against
-      # release-info.json and never builds or signs anything.
-      # The release key is applied to the already-tested APK; release-info.json
-      # is rewritten for the signed bytes and the upload verifies that digest.
       - name: Sign and distribute the prebuilt APK
         run: |
           set -euo pipefail

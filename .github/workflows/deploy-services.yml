@@ -1,25 +1,5 @@
 name: Пересобрать и задеплоить сервисы
 
-# Manual rebuild-and-deploy of the home units from the current `develop`.
-#
-# `deploy-home.yml` deploys the bytes the merged pull request already built
-# (build once, DECISIONS 36). When those bytes are wrong, missing or built from a
-# tree that never got a `tree-<hash>` tag, this workflow is the honest path: it
-# rebuilds the selected units FROM SOURCE, publishes them under `tree-<hash>`
-# with build provenance, and then pins/promotes them through the exact same
-# reusable workflows a push uses — `_pin.yml` for Flux, `_native.yml` for the
-# OCI releases, `_station-deploy.yml` for the station (Environment `Station`).
-#
-# Selection: checkboxes for the groups in `platform/ci/rebuild.mjs` (every
-# deployable unit belongs to exactly one group; `units` is the exact-id escape
-# hatch). GitHub allows ten `workflow_dispatch` inputs, so the groups exist
-# instead of one checkbox per unit — see `platform/ci/rebuild.mjs`.
-#
-# It is safe to run twice: a second rebuild of the same commit re-publishes the
-# same `tree-<hash>` tags, the promotion verifies provenance again, and the pins
-# write the same digests (Flux sees no change). Release tags are immutable by
-# content; `replace_artifacts` is the explicit "re-point this tree" switch for a
-# broken native release.
 on:
   workflow_dispatch:
     inputs:
@@ -64,7 +44,6 @@ on:
         type: boolean
         default: true
 
-# One rebuild at a time: two runs would race on the same tree tags and pins.
 concurrency:
   group: deploy-services
   cancel-in-progress: false
@@ -78,8 +57,6 @@ env:
   GIT_CONFIG_VALUE_0: main
 
 jobs:
-  # Checkboxes -> unit ids and the matrix payloads. The grouping and the shapes
-  # live in `platform/ci/rebuild.mjs` (tested), so this job is a thin call.
   select:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -91,7 +68,7 @@ jobs:
       station: ${{ steps.select.outputs.station }}
       selected: ${{ steps.select.outputs.selected }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       - name: Resolve the requested units
         id: select
         env:
@@ -115,9 +92,6 @@ jobs:
           done
           node platform/ci/rebuild.mjs "${args[@]}" --github-output
 
-  # Rebuild the images of every selected unit from source and (re)publish them
-  # under this commit's `tree-<hash>` with provenance. Same workflow, same
-  # targets and same attestation as PR CI.
   build-images:
     needs: select
     if: needs.select.outputs.image_units != '[]'
@@ -152,10 +126,6 @@ jobs:
     secrets:
       NEXUS_CI_PASSWORD: ${{ secrets.NEXUS_CI_PASSWORD }}
 
-  # Pin the freshly built digests exactly like a push does: verify the
-  # provenance of this run's `tree-<hash>` and commit to `deploy/home-apps`.
-  # No history search and no PR-head fallback — the artifact of this very run
-  # is the one that must be pinned.
   pin-images:
     needs: [select, build-images]
     if: needs.select.outputs.image_units != '[]'
@@ -177,10 +147,6 @@ jobs:
       allow_history: false
       allow_pr_head: false
 
-  # Rebuild the native release artifacts (Pulsar cross-build, Windows provider),
-  # publish them under the tree tag and then promote that verified digest to the
-  # release tags. Two calls of the same reusable keep the build and the promote
-  # contract in one place.
   build-native:
     needs: select
     if: needs.select.outputs.native_units != '[]'
@@ -237,13 +203,8 @@ jobs:
       publish_script: ${{ matrix.publish_script }}
       promote: true
       push_tree_tag: false
-      # A rebuild of an already released tree re-points the immutable version
-      # tag on purpose (that is the reason this workflow exists).
       replace_artifact: ${{ inputs.replace_artifacts }}
 
-  # The station installs the release that `promote-native` just tagged. The
-  # version is read back from the published artifact, so it is exactly what the
-  # updater compares — no local recomputation.
   station-version:
     needs: [select, promote-native]
     if: needs.select.outputs.station == 'true'
@@ -254,7 +215,7 @@ jobs:
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           sparse-checkout: platform/ci
       - name: Install pinned crane

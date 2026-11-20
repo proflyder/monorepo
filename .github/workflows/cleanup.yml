@@ -1,11 +1,7 @@
 name: cleanup
 
-# Daily housekeeping entry point. One trigger only: the jobs live in
-# `_cleanup.yml` (workflow_call), and `cleanup-manual.yml` is the
-# `workflow_dispatch` twin. A scheduled run is always real.
 on:
   schedule:
-    # Daily, off the deploy hours.
     - cron: "23 3 * * *"
 
 permissions:

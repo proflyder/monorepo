@@ -1,18 +1,5 @@
 name: _station-deploy
 
-# Install one published Pulsar release on the station through Home Assistant.
-#
-# The only CI path that touches the column. It builds and publishes nothing: the
-# version tag already points at the digest the promotion verified, and the
-# station updater checks the layer digests, `SHA256SUMS` and `--version` before
-# accepting the release.
-#
-# The `Station` Environment approval is the only gate; there is no ref claim in
-# the OpenBao role, the Environment restricts which refs may deploy. Called by
-# `_deploy-home.yml` (after a merge promotes the release, or a manual re-deploy
-# of the currently published `latest`) and by `deploy-services.yml` (after an
-# honest rebuild).
-
 on:
   workflow_call:
     inputs:
@@ -39,7 +26,7 @@ on:
 
 permissions:
   contents: read
-  id-token: write # OpenBao auth/github OIDC (audience = OPENBAO_ADDR)
+  id-token: write
 
 env:
   GIT_CONFIG_COUNT: "1"
@@ -47,25 +34,10 @@ env:
   GIT_CONFIG_VALUE_0: main
 
 jobs:
-  # The release job. `_deploy-home.yml` calls it after a merge promoted the
-  # release (push mode), after an explicit `units=pulsar` re-deploy of the
-  # currently published `latest` (manual mode), or `deploy-services.yml` after an
-  # honest rebuild. The Environment approval is the only gate before the column
-  # is touched; the promo job and the home pins are independent, so home units
-  # neither wait for it nor fail with it.
-  #
-  # The version tag points at the promoted digest: the promotion only succeeds
-  # with verified provenance and never publishes a fresh build here. This job
-  # only installs that tag through Home Assistant; it builds nothing. The
-  # station updater verifies the layer digests, SHA256SUMS and --version.
-  # Promotion keeps an existing version tag when its content is identical
-  # (manifest annotations only), so `latest` is moved to that tag's digest and
-  # the version installed here always matches the digest that was kept/created.
   station:
     name: deploy station ${{ inputs.version }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
-    # OIDC `environment` claim keeps this exact casing; OpenBao binds "Station".
     environment: Station
     concurrency:
       group: deploy-home-station
@@ -78,7 +50,7 @@ jobs:
       OPENBAO_ADDR: ${{ secrets.OPENBAO_ADDR }}
       OPENBAO_ROLE: ${{ secrets.OPENBAO_ROLE || 'deploy-station' }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
 
       - name: Install openconnect
         run: |
@@ -127,10 +99,9 @@ jobs:
           tail -n 40 "$RUNNER_TEMP/openconnect.log" >&2 || true
           exit 1
 
-      # GitHub OIDC -> OpenBao (auth/github, JWT audience = OPENBAO_ADDR).
       - name: Read deploy secrets from OpenBao
         id: openbao
-        uses: hashicorp/vault-action@892a26828f195e65540a40b4768ae4571f51ebfc # v4.0.0
+        uses: hashicorp/vault-action@892a26828f195e65540a40b4768ae4571f51ebfc
         with:
           url: ${{ env.OPENBAO_ADDR }}
           method: jwt

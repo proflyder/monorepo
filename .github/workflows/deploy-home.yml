@@ -1,16 +1,5 @@
 name: deploy-home
 
-# Post-merge release of the home units. This file is the `push` entry point
-# only: the pipeline lives in `_deploy-home.yml` (workflow_call), and
-# `deploy-home-manual.yml` is the `workflow_dispatch` twin that calls it with
-# `mode: manual`. The file name and the workflow name are part of the deploy
-# contract (`platform/ci/safe-merge.mjs` waits on `deploy-home.yml` for the
-# commit it merged) — do not rename either, and do not add a second event here.
-#
-# A push to `develop` is a squash merge. `plan` routes `before..sha` through
-# `platform/ci/units.mjs`; `pins` promotes exactly the digests that PR built and
-# committed to `deploy/home-apps`, which Flux applies. `warm-android` /
-# `warm-rust` save the caches PR jobs restore.
 on:
   push:
     branches: [develop]
@@ -18,7 +7,6 @@ on:
 permissions:
   contents: read
 
-# The same group as the manual wrapper: a release and a manual run never overlap.
 concurrency:
   group: deploy-home-plan
   cancel-in-progress: false

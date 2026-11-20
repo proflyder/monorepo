@@ -1,19 +1,5 @@
 name: _android
 
-# Reusable Android platform workflow: one matrix entry per affected application
-# (or shared Kotlin library) unit, plus the dedicated Android Lint and detekt
-# units. The unit is selected by the Bazel reverse dependency graph in `_ci.yml`
-# and runs every declared target (Bazel's cache skips unaffected tests). Build runs before
-# test, so a test failure cannot hide a build error and a lint/detekt finding
-# only fails its own entry.
-#
-# `android-app` is the one entry that owns the distributable APK: it builds
-# the app once with the release versionCode/versionName and google-services.json
-# (repository variable, not a secret), runs the tests against that same APK
-# and uploads it unsigned as `android-app-apk`. No entry reads a secret or an
-# Environment. The `android-distribute` call of `_android-release.yml` signs
-# release key and uploads it to Firebase, so the APK is built once per PR.
-
 on:
   workflow_call:
     inputs:
@@ -54,15 +40,12 @@ on:
         type: boolean
 
     secrets:
-      # Read-only Nexus cache credential; absent on forks (cache stays off).
       NEXUS_CI_PASSWORD:
         required: false
 permissions:
   contents: read
 
 env:
-  # Set Git's default branch for actions/checkout's `git init` (it warns when unset;
-  # it runs under a throwaway HOME, so only an env-provided config reaches it).
   GIT_CONFIG_COUNT: "1"
   GIT_CONFIG_KEY_0: init.defaultBranch
   GIT_CONFIG_VALUE_0: main
@@ -72,59 +55,39 @@ jobs:
     name: android / ${{ inputs.unit }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
-    # No Environment and no secrets: this check runs for every PR (forks too).
-    # The release key is applied only by `_android-release.yml`.
     permissions:
       contents: read
-    # Build/test use the same mise tasks as a workstation; the selected target
-    # list is passed through BAZEL_TARGETS. Tools come from install_args.
     env:
       MISE_TASK_RUN_AUTO_INSTALL: "false"
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
 
-      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78
         with:
           distribution: temurin
           java-version: "21"
 
-      - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
+      - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd
 
-      # Pinned Bazelisk on PATH, plus its Bzlmod cache. Android downloads
-      # (Maven/PyPI/npm) go directly from the runner; Nexus is only a fallback,
-      # so they are not worth a develop-side repository archive.
-      - uses: bazel-contrib/setup-bazel@104e3eea9447cdaa4b00d0fb46191a3985d26ab3 # v0.19.1
+      - uses: bazel-contrib/setup-bazel@104e3eea9447cdaa4b00d0fb46191a3985d26ab3
         with:
           bazelisk-version: "1.30.0"
           bazelisk-cache: true
           repository-cache: false
           cache-save: ${{ inputs.save_cache }}
 
-      # Optional read-through cache for GitHub release archives and Maven.
-      # The action is a no-op when NEXUS_HOST/NEXUS_CI_PASSWORD are absent or
-      # the cache is down, so forks and outages keep the direct URLs.
       - uses: ./.github/actions/nexus-cache
         with:
           host: ${{ vars.NEXUS_HOST }}
           password: ${{ secrets.NEXUS_CI_PASSWORD }}
 
-      # `mise run build|test <unit>` resolves the unit's targets; Bazel itself
-      # comes from setup-bazel above.
-      - uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b # v5.2.7
+      - uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b
         with:
           version: 2026.11.4
           install_args: "node"
           cache: true
 
-      # Restore-only in pull requests. GitHub scopes a cache to the ref that
-      # wrote it, so a PR-written cache is invisible to every other PR: it only
-      # burns the repository's 10 GB budget and the minutes spent uploading it.
-      # Only a develop push writes this family's entries (`warm-android` in
-      # deploy-home), under the stable `bazel-android-<os>-warm-` prefix. The key
-      # is ordered platform → unit → content so `restore-keys` form a real
-      # hierarchy: the exact key, the same unit with other lockfiles, then the
-      # develop-side warm cache. Nothing here can resolve a Rust family entry.
-      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: ~/.cache/bazel-disk
           key: bazel-android-${{ runner.os }}-${{ inputs.unit }}-${{ hashFiles('MODULE.bazel.lock', '.bazelversion', 'projects/mobile/android/maven_install.json') }}
@@ -133,12 +96,6 @@ jobs:
             bazel-android-${{ runner.os }}-warm-
             bazel-android-${{ runner.os }}-
 
-      # setup-android accepts the SDK licenses by default; install exactly the
-      # platform/build-tools pinned in MODULE.bazel plus the extra SDK packages
-      # the unit declares (for example the cmdline-tools release that provides
-      # the standalone Android Lint CLI, or the NDK that provides the C++
-      # toolchain for //platform/android:android_arm64). Keep the lint version
-      # in sync with platform/android/tools/lint_runner.
       - name: Install Android SDK packages
         env:
           SDK_PACKAGES: ${{ inputs.sdk_packages }}
@@ -161,10 +118,6 @@ jobs:
         if: inputs.unit == 'android-app'
         run: platform/android/sign-release_test.sh
 
-      # App Distribution needs a fresh, increasing versionCode; its versionName
-      # embeds the commit. Both are `--define` values (defaults live in
-      # platform/android/android.bazelrc) and are passed to build and test, so
-      # the tested APK is byte-for-byte the APK `android-distribute` signs.
       - name: Release version
         id: version
         if: inputs.unit == 'android-app'
@@ -179,12 +132,6 @@ jobs:
           } >> "$GITHUB_OUTPUT"
           echo "Release versionCode $version_code, versionName $version_name"
 
-      # google-services.json is not a secret: its Firebase identifiers ship in
-      # plain text inside every installed APK (access is guarded by Firebase
-      # rules and API-key restrictions). It comes from the repository variable
-      # GOOGLE_SERVICES_JSON_B64, so the APK is built once, without secrets.
-      # Without the variable (a fork) the app builds with Firebase disabled
-      # and no release artifact is produced.
       - name: Materialise google-services.json
         id: firebase
         if: inputs.unit == 'android-app'
@@ -202,7 +149,6 @@ jobs:
           echo "enabled=true" >> "$GITHUB_OUTPUT"
           echo "google-services.json prepared"
 
-      # Every declared target runs; Bazel's cache skips unaffected tests.
       - name: Select targets
         id: targets
         env:
@@ -214,10 +160,6 @@ jobs:
             echo "build_targets=${BUILD_CANDIDATES}"
           } >> "$GITHUB_OUTPUT"
 
-      # The app is always built from its declared target: this entry owns the
-      # distributable APK, so a narrowed (possibly empty) build list must not
-      # leave the artifact missing. BAZEL_EXTRA_ARGS carries the release
-      # versionCode/versionName.
       - name: bazel build android-app (release APK)
         if: inputs.unit == 'android-app'
         env:
@@ -230,12 +172,6 @@ jobs:
           BAZEL_TARGETS: ${{ steps.targets.outputs.build_targets }}
         run: mise run build ${{ inputs.unit }}
 
-      # The apk_abi_test log is only printed on failure (--test_output=errors),
-      # so repeat the ABI check on the built APK to show the packaged ABIs in
-      # the job log ("APK ABIs: arm64-v8a").
-      # Copy the APK out of bazel-bin right after the build: a later `bazel test`
-      # in another configuration repoints the bazel-bin convenience symlink
-      # (rules_android 0.8), so `bazel-bin/.../app.apk` would no longer exist.
       - name: Stash the release APK
         if: inputs.unit == 'android-app'
         run: |
@@ -247,9 +183,6 @@ jobs:
         if: inputs.unit == 'android-app'
         run: platform/android/apk_abi_test.sh "$RUNNER_TEMP/android-release/app.apk"
 
-      # Same `--config=android` and the same version defines as the build step,
-      # so `apk_runtime_closure_test` (and any APK-level test) inspects exactly
-      # the APK that gets signed below instead of building a second variant.
       - name: bazel test android-app (on the distributable APK)
         if: inputs.unit == 'android-app' && steps.targets.outputs.test_targets != ''
         env:
@@ -279,9 +212,6 @@ jobs:
           BAZEL_TARGETS: ${{ steps.targets.outputs.test_targets }}
         run: mise run test ${{ inputs.unit }}
 
-      # The tested, still debug-signed APK plus its release metadata. Only
-      # `android-distribute` applies the release key (sign-release.sh), so this
-      # job never sees signing secrets.
       - name: Describe the release APK
         if: inputs.unit == 'android-app' && steps.firebase.outputs.enabled == 'true'
         run: |
@@ -297,7 +227,7 @@ jobs:
 
       - name: Upload the release APK (unsigned)
         if: inputs.unit == 'android-app' && steps.firebase.outputs.enabled == 'true'
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: android-app-apk
           path: |
@@ -306,7 +236,7 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         if: inputs.unit != 'android-app' && inputs.artifact != '' && steps.targets.outputs.build_targets != ''
         with:
           name: ${{ inputs.artifact_name }}
@@ -314,10 +244,7 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-      # Develop-only writer for the cache restored above. A key can be written
-      # once, so the save key carries the run id; the restore prefix is what PRs
-      # (and the next develop run) actually resolve to.
-      - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         if: inputs.save_cache && github.ref == 'refs/heads/develop'
         with:
           path: ~/.cache/bazel-disk

@@ -1,8 +1,5 @@
 name: cleanup (вручную)
 
-# Manual twin of the daily `cleanup.yml`, and a dry run by default: both jobs
-# report what they would delete and delete nothing. Same reusable pipeline
-# (`_cleanup.yml`), one trigger only.
 on:
   workflow_dispatch:
     inputs:

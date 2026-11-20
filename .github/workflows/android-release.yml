@@ -1,18 +1,5 @@
 name: "Android: собрать и выложить"
 
-# Manual Android release, run by the owner from `develop`.
-#
-# It builds the Home Android app from the checked-out branch through the same
-# reusable Android platform workflow PR CI uses (`_android.yml`: build, APK
-# self-tests, release versionCode/versionName), then signs and uploads the
-# built artifact through `_android-release.yml` — the same job PR CI uses. No
-# logic is duplicated: this file only states "build the app unit, then release
-# it" and carries the optional release note.
-#
-# Run it from https://github.com/<owner>/<repo>/actions/workflows/android-release.yml
-# ("Run workflow", branch `develop`). The run needs the `Android` Environment
-# and the OpenBao role `android-release` (bound to `refs/heads/develop` on this
-# workflow); see docs/OPERATIONS.md → «Ручной релиз Android».
 on:
   workflow_dispatch:
     inputs:
@@ -30,16 +17,11 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  # Set Git's default branch for actions/checkout's `git init` (it warns when unset;
-  # it runs under a throwaway HOME, so only an env-provided config reaches it).
   GIT_CONFIG_COUNT: "1"
   GIT_CONFIG_KEY_0: init.defaultBranch
   GIT_CONFIG_VALUE_0: main
 
 jobs:
-  # The Android app unit's targets come from `platform/ci/units.mjs`, the same
-  # map PR CI routes on, so a new test target cannot be missing from a release
-  # build. This is routing only; the build itself is `_android.yml`.
   plan:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -51,7 +33,7 @@ jobs:
       build_targets: ${{ steps.unit.outputs.build_targets }}
       sdk_packages: ${{ steps.unit.outputs.sdk_packages }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       - name: Read the Android app unit
         id: unit
         run: |
@@ -82,7 +64,6 @@ jobs:
       test_targets: ${{ needs.plan.outputs.test_targets }}
       build_targets: ${{ needs.plan.outputs.build_targets }}
       sdk_packages: ${{ needs.plan.outputs.sdk_packages }}
-      # A release run from develop may warm the develop-side cache family.
       save_cache: true
     secrets:
       NEXUS_CI_PASSWORD: ${{ secrets.NEXUS_CI_PASSWORD }}
