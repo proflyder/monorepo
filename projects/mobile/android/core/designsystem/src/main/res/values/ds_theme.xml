@@ -4,6 +4,7 @@
         <item name="floatingActionButtonStyle">@style/Widget.Home.FloatingActionButton</item>
         <item name="extendedFloatingActionButtonStyle">@style/Widget.Home.ExtendedFloatingActionButton</item>
         <item name="homeDeviceTileStyle">@style/Widget.Home.Card</item>
+        <item name="homeToolbarTitleStyle">@style/Widget.Home.ToolbarTitle</item>
 
         <item name="shapeAppearanceSmallComponent">@style/ShapeAppearance.Home.Small</item>
         <item name="shapeAppearanceMediumComponent">@style/ShapeAppearance.Home.Medium</item>

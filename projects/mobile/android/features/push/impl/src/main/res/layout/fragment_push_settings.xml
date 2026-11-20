@@ -36,115 +36,61 @@
                 android:orientation="vertical"
                 android:padding="@dimen/push_card_padding">
 
-                <LinearLayout
+                <dev.proflyder.home.core.designsystem.ListRow
+                    android:id="@+id/push_notifications_row"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:orientation="vertical">
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="vertical">
-
-                        <TextView
-                            android:id="@+id/push_notifications_title"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:drawableStart="@drawable/push_ic_section_notifications"
-                            android:drawablePadding="@dimen/push_section_icon_gap"
-                            android:text="@string/push_notifications_title"
-                            android:textAppearance="?attr/textAppearanceTitleSmall" />
-
-                        <TextView
-                            android:id="@+id/push_notifications_status"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:paddingStart="@dimen/push_section_text_indent"
-                            android:textIsSelectable="true"
-                            android:textAppearance="?attr/textAppearanceBodyMedium"
-                            android:textColor="?attr/colorOnSurfaceVariant" />
-                    </LinearLayout>
+                    android:background="?attr/selectableItemBackground"
+                    android:clickable="true"
+                    android:focusable="true"
+                    app:rowIcon="@drawable/push_ic_section_notifications"
+                    app:rowTitle="@string/push_notifications_title">
 
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/push_notifications_action"
-                        style="@style/Widget.Home.Button.Tonal.M"
+                        style="@style/Widget.Home.IconButton.Tonal.M"
                         android:layout_width="wrap_content"
-                        android:layout_marginTop="@dimen/ds_space_s" />
-                </LinearLayout>
+                        android:layout_height="wrap_content"
+                        app:icon="@drawable/ds_ic_open_in_new" />
+                </dev.proflyder.home.core.designsystem.ListRow>
 
-                <LinearLayout
+                <dev.proflyder.home.core.designsystem.ListRow
+                    android:id="@+id/push_dnd_row"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="@dimen/push_row_gap"
-                    android:orientation="vertical">
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="vertical">
-
-                        <TextView
-                            android:id="@+id/push_dnd_title"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:drawableStart="@drawable/push_ic_dnd"
-                            android:drawablePadding="@dimen/push_section_icon_gap"
-                            android:text="@string/push_dnd_title"
-                            android:textAppearance="?attr/textAppearanceTitleSmall" />
-
-                        <TextView
-                            android:id="@+id/push_dnd_status"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:paddingStart="@dimen/push_section_text_indent"
-                            android:textIsSelectable="true"
-                            android:textAppearance="?attr/textAppearanceBodyMedium"
-                            android:textColor="?attr/colorOnSurfaceVariant" />
-                    </LinearLayout>
+                    android:layout_marginTop="@dimen/ds_space_xs"
+                    android:background="?attr/selectableItemBackground"
+                    android:clickable="true"
+                    android:focusable="true"
+                    app:rowIcon="@drawable/push_ic_dnd"
+                    app:rowTitle="@string/push_dnd_title">
 
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/push_dnd_action"
-                        style="@style/Widget.Home.Button.Tonal.M"
+                        style="@style/Widget.Home.IconButton.Tonal.M"
                         android:layout_width="wrap_content"
-                        android:layout_marginTop="@dimen/ds_space_s" />
-                </LinearLayout>
+                        android:layout_height="wrap_content"
+                        app:icon="@drawable/ds_ic_open_in_new" />
+                </dev.proflyder.home.core.designsystem.ListRow>
 
-                <LinearLayout
+                <dev.proflyder.home.core.designsystem.ListRow
+                    android:id="@+id/push_full_screen_row"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="@dimen/push_row_gap"
-                    android:orientation="vertical">
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="vertical">
-
-                        <TextView
-                            android:id="@+id/push_full_screen_title"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:drawableStart="@drawable/push_ic_fullscreen"
-                            android:drawablePadding="@dimen/push_section_icon_gap"
-                            android:text="@string/push_full_screen_title"
-                            android:textAppearance="?attr/textAppearanceTitleSmall" />
-
-                        <TextView
-                            android:id="@+id/push_full_screen_status"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:paddingStart="@dimen/push_section_text_indent"
-                            android:textIsSelectable="true"
-                            android:textAppearance="?attr/textAppearanceBodyMedium"
-                            android:textColor="?attr/colorOnSurfaceVariant" />
-                    </LinearLayout>
+                    android:layout_marginTop="@dimen/ds_space_xs"
+                    android:background="?attr/selectableItemBackground"
+                    android:clickable="true"
+                    android:focusable="true"
+                    app:rowIcon="@drawable/push_ic_fullscreen"
+                    app:rowTitle="@string/push_full_screen_title">
 
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/push_full_screen_action"
-                        style="@style/Widget.Home.Button.Tonal.M"
+                        style="@style/Widget.Home.IconButton.Tonal.M"
                         android:layout_width="wrap_content"
-                        android:layout_marginTop="@dimen/ds_space_s" />
-                </LinearLayout>
+                        android:layout_height="wrap_content"
+                        app:icon="@drawable/ds_ic_open_in_new" />
+                </dev.proflyder.home.core.designsystem.ListRow>
 
                 <TextView
                     android:id="@+id/push_ring_summary"

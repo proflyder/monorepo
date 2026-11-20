@@ -52,34 +52,29 @@
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/call_mute"
-            style="@style/Widget.Material3.Button.TonalButton"
+            style="@style/Widget.Home.Button.Tonal.M"
             android:layout_width="0dp"
-            android:layout_height="wrap_content"
             android:layout_marginEnd="8dp"
             android:layout_weight="1"
-            android:minHeight="56dp"
             android:text="@string/call_mute"
             app:icon="@drawable/call_ic_mic" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/call_route"
-            style="@style/Widget.Material3.Button.TonalButton"
+            style="@style/Widget.Home.Button.Tonal.M"
             android:layout_width="0dp"
-            android:layout_height="wrap_content"
             android:layout_marginStart="8dp"
             android:layout_weight="1"
-            android:minHeight="56dp"
             android:text="@string/call_output"
             app:icon="@drawable/call_ic_route" />
     </LinearLayout>
 
     <com.google.android.material.button.MaterialButton
+            style="@style/Widget.Home.Button.Filled.M"
         android:id="@+id/call_hangup"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
         android:layout_marginTop="20dp"
         android:layout_marginBottom="24dp"
-        android:minHeight="56dp"
         android:text="@string/call_hangup"
         app:backgroundTint="?attr/colorError"
         app:icon="@drawable/call_ic_hangup"

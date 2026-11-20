@@ -2,8 +2,10 @@ package dev.proflyder.home.feature.push.presentation
 
 import android.content.ActivityNotFoundException
 import android.os.Bundle
-import android.widget.TextView
 import androidx.fragment.app.viewModels
+import com.google.android.material.button.MaterialButton
+import dev.proflyder.home.core.designsystem.ListRow
+import dev.proflyder.home.core.designsystem.Tone
 import dev.proflyder.home.core.ui.BaseFragment
 import dev.proflyder.home.core.ui.applyScrollBottomInset
 import dev.proflyder.home.core.ui.keepFocusedVisible
@@ -25,9 +27,9 @@ class PushSettingsFragment :
     override fun onBindingCreated(binding: FragmentPushSettingsBinding, savedInstanceState: Bundle?) {
         binding.root.applyScrollBottomInset()
         binding.root.keepFocusedVisible()
-        binding.pushNotificationsAction.setOnClickListener { open(permissions.notifications()) }
-        binding.pushDndAction.setOnClickListener { open(permissions.dnd()) }
-        binding.pushFullScreenAction.setOnClickListener { open(permissions.fullScreen()) }
+        bindRow(binding.pushNotificationsRow, binding.pushNotificationsAction) { open(permissions.notifications()) }
+        bindRow(binding.pushDndRow, binding.pushDndAction) { open(permissions.dnd()) }
+        bindRow(binding.pushFullScreenRow, binding.pushFullScreenAction) { open(permissions.fullScreen()) }
         binding.pushRegister.setOnClickListener { viewModel.registerNow() }
         binding.pushDeviceNameSave.setOnClickListener {
             viewModel.saveDeviceName(binding.pushDeviceName.text.toString())
@@ -42,24 +44,9 @@ class PushSettingsFragment :
 
     private fun render(state: PushSettingsUiState) {
         with(binding) {
-            renderRow(
-                title = pushNotificationsTitle,
-                status = pushNotificationsStatus,
-                action = pushNotificationsAction,
-                granted = state.permissions.notifications,
-            )
-            renderRow(
-                title = pushDndTitle,
-                status = pushDndStatus,
-                action = pushDndAction,
-                granted = state.permissions.dndAccess,
-            )
-            renderRow(
-                title = pushFullScreenTitle,
-                status = pushFullScreenStatus,
-                action = pushFullScreenAction,
-                granted = state.permissions.fullScreenIntent,
-            )
+            renderRow(pushNotificationsRow, state.permissions.notifications)
+            renderRow(pushDndRow, state.permissions.dndAccess)
+            renderRow(pushFullScreenRow, state.permissions.fullScreenIntent)
             pushRingSummary.text = if (state.canRing) {
                 getString(R.string.push_ring_ready)
             } else {
@@ -83,14 +70,25 @@ class PushSettingsFragment :
         }
     }
 
-    private fun renderRow(title: TextView, status: TextView, action: android.widget.Button, granted: Boolean) {
-        status.text = getString(
-            if (granted) R.string.push_permission_granted else R.string.push_permission_missing,
-        )
-        action.text = getString(
-            if (granted) R.string.push_permission_open else R.string.push_permission_grant,
-        )
-        title.alpha = if (granted) 1f else 0.85f
+    private fun bindRow(row: ListRow, action: MaterialButton, open: () -> Unit) {
+        action.contentDescription = getString(R.string.push_permission_open_settings, row.title)
+        row.setOnClickListener { open() }
+        action.setOnClickListener { open() }
+    }
+
+    private fun renderRow(row: ListRow, granted: Boolean) {
+        row.subtitle = getString(permissionStatus(granted))
+        row.subtitleTone = permissionTone(granted)
+    }
+
+    private fun permissionStatus(granted: Boolean): Int = when {
+        granted -> R.string.push_permission_granted
+        else -> R.string.push_permission_missing
+    }
+
+    private fun permissionTone(granted: Boolean): Tone = when {
+        granted -> Tone.NEUTRAL
+        else -> Tone.ERROR
     }
 
     private fun registrationText(registration: PushRegistration): String = when {

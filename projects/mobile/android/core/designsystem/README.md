@@ -29,15 +29,19 @@ the colour roles.
 | Component | How to use | Notes |
 | --- | --- | --- |
 | Button | `MaterialButton` + `style="@style/Widget.Home.Button.<Variant>.<Size>"` | Variants `Filled`, `Tonal`, `Outlined`, `Text`, `Destructive`; sizes `S` 32, `M` 40, `L` 48 dp. One line, no insets. M/L (not Text) are at least 120 dp wide. Disabled: `android:enabled=false`. Loading: `button.setLoading(true)` replaces the text with a progress indicator and keeps the width. |
+| Button row | `ButtonRow` with the secondary action first and the main one last | Side by side (main on the right) when both fit at their natural width; otherwise stacked full width, main on top. Button text never wraps or gets cut (`maxLines=1` in every button style). |
+| Special buttons | `Widget.Home.Button.Pill` (tonal 32dp pill with icon), `.Pill.Outlined`, `.DayToggle` (checkable weekday circle), `.BarAction` (icon over label in a bottom bar), `.TimeDisplay` (large time in editors) | Use only for these roles. |
 | Icon button | `MaterialButton` + `Widget.Home.IconButton.<Standard\|Filled\|Tonal\|Outlined>.<S\|M\|L>` + `app:icon` + `contentDescription` | Visible 32/40/48 dp circle, always a 48 dp touch target (insets). |
 | FAB | `OutlinedFloatingActionButton` (theme default), `Widget.Home.FloatingActionButton.Small`, `ExtendedFloatingActionButton` (theme default), quick action `Widget.Home.FloatingActionButton.SmallSecondary` + label `Widget.Home.FabLabel` | Outline and glow come from `homeFab*` in every theme. |
+| Toolbar title | `ToolbarTitle` | Picks the largest size from 24sp down to 16sp at which the title fits in two lines without breaking a word (balanced breaks, no hyphenation, no ellipsis). AppCompat autoSize is not used: it does nothing with `wrap_content` width, which is what the toolbar gives its title. |
+| Field supporting text | `TextView` + `Widget.Home.FieldSupportingText` (`.Error`) | Status lines under a field: same 16dp indent as the field's helper, 8dp above. |
 | Text field | `TextInputLayout` without `style` (theme default `Widget.Home.TextInput`, card-like) | Chat message field: `Widget.Home.TextInput.Chat`. |
 | Card | `MaterialCardView` + `Widget.Home.Card` / `.Selected` / `.StateOn` | Filled `colorSurfaceContainer`, radius xl. |
-| Chip | `Chip` + `Widget.Home.Chip.Filter` / `Widget.Home.Chip.Assist` | |
+| Chip | `Chip` + `Widget.Home.Chip.Filter` / `.Assist` / `.Input` | From code: `Components.filterChip(parent)`, `Components.inputChip(parent)`. |
 | Switch | `MaterialSwitch` (theme default `Widget.Home.Switch` from core/theme) | Checked track `colorStateOn`. |
 | Pills | `PillSegments` | The only choice-between-options control; no segmented buttons. |
 | Popup menu | `HomePopupMenu(anchor, menuRes)` | Card with 48 dp rows and icons. |
-| List row | `ListRow` (`app:rowIcon`, `rowTitle`, `rowSubtitle`, `rowValue`, `rowChevron`, `rowSwitch`) | Min height 56 dp. |
+| List row | `ListRow` (`app:rowIcon`, `rowTitle`, `rowSubtitle`, `rowValue`, `rowChevron`, `rowSwitch`); child views in XML become the trailing slot | Min height 56 dp; `subtitleTone` = `NEUTRAL`/`ERROR`/`WARNING`/`SUCCESS`. |
 | Section header | `TextView` + `Widget.Home.SectionHeader` | TitleSmall in `colorPrimary`. |
 | Empty state | `EmptyState` (`app:emptyIcon`, `emptyText`, `emptyAction`) | The action is a Filled M button (`emptyState.action`). |
 | Status chip | `TextView` + `Widget.Home.StatusChip.<Error\|Warning\|Success\|Neutral>` | 24 dp pill. |
@@ -54,6 +58,34 @@ the colour roles.
 - Links and secondary actions: Text (size of the surrounding controls).
 - Small inline actions in dense rows: **S**.
 - Icon-only actions: Icon button **M** (S in dense rows, L for prominent ones).
+- Two actions of one card: `ButtonRow`, never a fixed horizontal row.
+- A permission or system-setting row: `ListRow` with the icon, the title and
+  the state as subtitle (`Tone.ERROR` while not allowed, neutral when
+  allowed) and a trailing Tonal Icon button **M** with `ds_ic_open_in_new`
+  («Открыть настройки: …» as content description). The whole row and the
+  button open the same settings screen in both states, so the row never
+  changes shape.
+- Buttons built in code: `Components.tonalButtonL(parent)`; no
+  `MaterialButton(context)`.
+
+## Static check
+
+`platform/quality/test_static.py`, class `AndroidDesignSystemTests`, runs in
+CI with the other static tests:
+
+- outside `core/designsystem` (and `core/theme`, which owns
+  `Widget.Home.Switch` for the theme overlays) no values file declares a
+  `Widget.*` style;
+- in every layout outside the module, `MaterialButton`/`Button` must have a
+  `Widget.Home.Button.*` or `Widget.Home.IconButton.*` style;
+  `TextInputLayout`, `FloatingActionButton`, `ExtendedFloatingActionButton`
+  and `OutlinedFloatingActionButton` either have no style (the theme default
+  is the design-system style) or a `Widget.Home.TextInput*`/
+  `Widget.Home.(Extended)FloatingActionButton*` one; `MaterialCardView` must
+  use `Widget.Home.Card*` and `Chip` `Widget.Home.Chip.*`;
+- Kotlin outside the module never calls the `MaterialButton(`,
+  `TextInputLayout(`, `FloatingActionButton(`, `ExtendedFloatingActionButton(`,
+  `MaterialCardView(` or `Chip(` constructors — use a layout or `Components`.
 
 ## Catalog
 
@@ -93,5 +125,12 @@ the new theme automatically.
   width, so the button does not change size while the indicator spins.
 - `IconButton` styles use `iconGravity=textStart` with no text so the icon is
   centred inside the inset circle.
+- `ButtonRow` measures every visible child at its natural width first; it
+  stacks when their sum plus 8dp gaps exceeds the available width, then
+  re-measures them at the full width and lays them out in reverse order so
+  the main action is on top.
+- `ToolbarTitle.fits` checks every word against the width (a word never
+  breaks), the balanced line count (at most two) and, when bounded, the
+  height.
 - `DeviceTile` reads its card style from `?attr/homeDeviceTileStyle`
   (`Widget.Home.Card` in `Base.Theme.Home`).

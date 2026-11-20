@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Widget.Home.IconButton.Destructive" parent="Widget.Home.IconButton.Standard">
+        <item name="iconTint">@color/ds_destructive_content</item>
+        <item name="rippleColor">@color/ds_destructive_ripple</item>
+    </style>
+
+    <style name="Widget.Home.IconButton.Destructive.S">
+        <item name="android:insetLeft">@dimen/ds_icon_button_inset_s</item>
+        <item name="android:insetRight">@dimen/ds_icon_button_inset_s</item>
+        <item name="android:insetTop">@dimen/ds_icon_button_inset_s</item>
+        <item name="android:insetBottom">@dimen/ds_icon_button_inset_s</item>
+        <item name="iconSize">@dimen/ds_icon_s</item>
+    </style>
+
+    <style name="Widget.Home.IconButton.Destructive.M">
+        <item name="android:insetLeft">@dimen/ds_icon_button_inset_m</item>
+        <item name="android:insetRight">@dimen/ds_icon_button_inset_m</item>
+        <item name="android:insetTop">@dimen/ds_icon_button_inset_m</item>
+        <item name="android:insetBottom">@dimen/ds_icon_button_inset_m</item>
+        <item name="iconSize">@dimen/ds_icon_m</item>
+    </style>
+
+    <style name="Widget.Home.IconButton.Destructive.L">
+        <item name="android:insetLeft">0dp</item>
+        <item name="android:insetRight">0dp</item>
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+        <item name="iconSize">@dimen/ds_icon_m</item>
+    </style>
+
+    <style name="Widget.Home.Button.Pill" parent="Widget.Material3.Button.TonalButton">
+        <item name="android:layout_height">@dimen/ds_control_s</item>
+        <item name="android:minHeight">@dimen/ds_control_s</item>
+        <item name="android:minWidth">0dp</item>
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+        <item name="android:paddingStart">@dimen/ds_pill_button_padding</item>
+        <item name="android:paddingEnd">@dimen/ds_pill_button_padding</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:gravity">center</item>
+        <item name="android:textAppearance">?attr/textAppearanceLabelLarge</item>
+        <item name="iconSize">@dimen/ds_icon_s</item>
+        <item name="iconPadding">@dimen/ds_pill_button_icon_gap</item>
+        <item name="iconGravity">textStart</item>
+        <item name="shapeAppearance">@style/ShapeAppearance.Material3.Corner.Full</item>
+    </style>
+
+    <style name="Widget.Home.Button.Pill.Outlined" parent="Widget.Material3.Button.OutlinedButton">
+        <item name="android:layout_height">@dimen/ds_control_s</item>
+        <item name="android:minHeight">@dimen/ds_control_s</item>
+        <item name="android:minWidth">0dp</item>
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+        <item name="android:paddingStart">@dimen/ds_pill_button_padding</item>
+        <item name="android:paddingEnd">@dimen/ds_pill_button_padding</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:textAppearance">?attr/textAppearanceLabelMedium</item>
+        <item name="shapeAppearance">@style/ShapeAppearance.Material3.Corner.Full</item>
+    </style>
+
+    <style name="Widget.Home.Button.TimeDisplay" parent="Widget.Material3.Button.TextButton">
+        <item name="android:insetLeft">0dp</item>
+        <item name="android:insetRight">0dp</item>
+        <item name="android:minHeight">@dimen/ds_time_display_height</item>
+        <item name="android:textSize">@dimen/ds_time_display_text</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:letterSpacing">0.04</item>
+        <item name="android:gravity">center</item>
+        <item name="android:maxLines">1</item>
+    </style>
+
+    <style name="Widget.Home.Button.DayToggle" parent="Widget.Material3.Button.OutlinedButton">
+        <item name="android:insetLeft">0dp</item>
+        <item name="android:insetRight">0dp</item>
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+        <item name="android:minWidth">0dp</item>
+        <item name="android:minHeight">0dp</item>
+        <item name="android:padding">0dp</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:includeFontPadding">false</item>
+        <item name="android:textAppearance">?attr/textAppearanceLabelLarge</item>
+        <item name="android:checkable">true</item>
+        <item name="android:textColor">@color/ds_day_toggle_text</item>
+        <item name="backgroundTint">@color/ds_day_toggle_background</item>
+        <item name="strokeColor">@color/ds_day_toggle_stroke</item>
+        <item name="strokeWidth">@dimen/ds_stroke_thin</item>
+        <item name="shapeAppearance">@style/ShapeAppearance.Material3.Corner.Full</item>
+    </style>
+
+    <style name="Widget.Home.Button.BarAction" parent="Widget.Material3.Button.TextButton">
+        <item name="android:insetLeft">0dp</item>
+        <item name="android:insetRight">0dp</item>
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+        <item name="android:minWidth">0dp</item>
+        <item name="android:minHeight">@dimen/ds_bar_action_height</item>
+        <item name="android:paddingLeft">@dimen/ds_space_xs</item>
+        <item name="android:paddingRight">@dimen/ds_space_xs</item>
+        <item name="android:paddingTop">@dimen/ds_space_s</item>
+        <item name="android:paddingBottom">@dimen/ds_space_s</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:ellipsize">end</item>
+        <item name="android:textAppearance">?attr/textAppearanceLabelSmall</item>
+        <item name="android:gravity">center</item>
+        <item name="iconGravity">textTop</item>
+        <item name="iconPadding">@dimen/ds_space_xs</item>
+        <item name="iconSize">@dimen/ds_icon_m</item>
+    </style>
+
+    <style name="Widget.Home.Chip.Input" parent="Widget.Material3.Chip.Input">
+        <item name="chipCornerRadius">@dimen/ds_radius_s</item>
+    </style>
+</resources>

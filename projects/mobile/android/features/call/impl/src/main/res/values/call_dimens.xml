@@ -2,5 +2,4 @@
 <resources>
     <dimen name="call_screen_margin">24dp</dimen>
     <dimen name="call_route_gap">8dp</dimen>
-    <dimen name="call_route_min_height">52dp</dimen>
 </resources>

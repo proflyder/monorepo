@@ -116,7 +116,7 @@
 
                         <com.google.android.material.button.MaterialButton
                             android:id="@+id/repeat_day_1"
-                            style="@style/Widget.Alarms.DayToggle"
+                            style="@style/Widget.Home.Button.DayToggle"
                             android:layout_width="@dimen/alarms_day_toggle_size"
                             android:layout_height="@dimen/alarms_day_toggle_size"
                             android:layout_gravity="center"
@@ -130,7 +130,7 @@
 
                         <com.google.android.material.button.MaterialButton
                             android:id="@+id/repeat_day_2"
-                            style="@style/Widget.Alarms.DayToggle"
+                            style="@style/Widget.Home.Button.DayToggle"
                             android:layout_width="@dimen/alarms_day_toggle_size"
                             android:layout_height="@dimen/alarms_day_toggle_size"
                             android:layout_gravity="center"
@@ -144,7 +144,7 @@
 
                         <com.google.android.material.button.MaterialButton
                             android:id="@+id/repeat_day_3"
-                            style="@style/Widget.Alarms.DayToggle"
+                            style="@style/Widget.Home.Button.DayToggle"
                             android:layout_width="@dimen/alarms_day_toggle_size"
                             android:layout_height="@dimen/alarms_day_toggle_size"
                             android:layout_gravity="center"
@@ -158,7 +158,7 @@
 
                         <com.google.android.material.button.MaterialButton
                             android:id="@+id/repeat_day_4"
-                            style="@style/Widget.Alarms.DayToggle"
+                            style="@style/Widget.Home.Button.DayToggle"
                             android:layout_width="@dimen/alarms_day_toggle_size"
                             android:layout_height="@dimen/alarms_day_toggle_size"
                             android:layout_gravity="center"
@@ -172,7 +172,7 @@
 
                         <com.google.android.material.button.MaterialButton
                             android:id="@+id/repeat_day_5"
-                            style="@style/Widget.Alarms.DayToggle"
+                            style="@style/Widget.Home.Button.DayToggle"
                             android:layout_width="@dimen/alarms_day_toggle_size"
                             android:layout_height="@dimen/alarms_day_toggle_size"
                             android:layout_gravity="center"
@@ -186,7 +186,7 @@
 
                         <com.google.android.material.button.MaterialButton
                             android:id="@+id/repeat_day_6"
-                            style="@style/Widget.Alarms.DayToggle"
+                            style="@style/Widget.Home.Button.DayToggle"
                             android:layout_width="@dimen/alarms_day_toggle_size"
                             android:layout_height="@dimen/alarms_day_toggle_size"
                             android:layout_gravity="center"
@@ -200,7 +200,7 @@
 
                         <com.google.android.material.button.MaterialButton
                             android:id="@+id/repeat_day_7"
-                            style="@style/Widget.Alarms.DayToggle"
+                            style="@style/Widget.Home.Button.DayToggle"
                             android:layout_width="@dimen/alarms_day_toggle_size"
                             android:layout_height="@dimen/alarms_day_toggle_size"
                             android:layout_gravity="center"
@@ -220,19 +220,16 @@
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/sheet_cancel"
-            style="@style/Widget.Material3.Button.TextButton"
+            style="@style/Widget.Home.Button.Text.M"
             android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:minHeight="48dp"
             android:text="@string/alarms_cancel"
             android:textAllCaps="false" />
 
         <com.google.android.material.button.MaterialButton
+            style="@style/Widget.Home.Button.Filled.M"
             android:id="@+id/sheet_done"
             android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
             android:layout_marginStart="8dp"
-            android:minHeight="48dp"
             android:text="@string/alarms_repeat_done"
             android:textAllCaps="false" />
     </LinearLayout>

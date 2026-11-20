@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <attr name="homeDeviceTileStyle" format="reference" />
+    <attr name="homeToolbarTitleStyle" format="reference" />
 
     <declare-styleable name="ListRow">
         <attr name="rowIcon" format="reference" />

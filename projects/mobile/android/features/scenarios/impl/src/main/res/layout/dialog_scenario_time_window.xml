@@ -11,19 +11,15 @@
 
     <com.google.android.material.button.MaterialButton
         android:id="@+id/window_start"
-        style="@style/Widget.Material3.Button.OutlinedButton"
+        style="@style/Widget.Home.Button.Outlined.M"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:minHeight="56dp"
         android:textAllCaps="false" />
 
     <com.google.android.material.button.MaterialButton
         android:id="@+id/window_end"
-        style="@style/Widget.Material3.Button.OutlinedButton"
+        style="@style/Widget.Home.Button.Outlined.M"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
-        android:minHeight="56dp"
         android:textAllCaps="false" />
 
     <TextView
@@ -42,7 +38,7 @@
 
         <com.google.android.material.chip.Chip
             android:id="@+id/window_day_1"
-            style="@style/Widget.Material3.Chip.Filter"
+            style="@style/Widget.Home.Chip.Filter"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:checkable="true"
@@ -50,7 +46,7 @@
 
         <com.google.android.material.chip.Chip
             android:id="@+id/window_day_2"
-            style="@style/Widget.Material3.Chip.Filter"
+            style="@style/Widget.Home.Chip.Filter"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:checkable="true"
@@ -58,7 +54,7 @@
 
         <com.google.android.material.chip.Chip
             android:id="@+id/window_day_3"
-            style="@style/Widget.Material3.Chip.Filter"
+            style="@style/Widget.Home.Chip.Filter"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:checkable="true"
@@ -66,7 +62,7 @@
 
         <com.google.android.material.chip.Chip
             android:id="@+id/window_day_4"
-            style="@style/Widget.Material3.Chip.Filter"
+            style="@style/Widget.Home.Chip.Filter"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:checkable="true"
@@ -74,7 +70,7 @@
 
         <com.google.android.material.chip.Chip
             android:id="@+id/window_day_5"
-            style="@style/Widget.Material3.Chip.Filter"
+            style="@style/Widget.Home.Chip.Filter"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:checkable="true"
@@ -82,7 +78,7 @@
 
         <com.google.android.material.chip.Chip
             android:id="@+id/window_day_6"
-            style="@style/Widget.Material3.Chip.Filter"
+            style="@style/Widget.Home.Chip.Filter"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:checkable="true"
@@ -90,7 +86,7 @@
 
         <com.google.android.material.chip.Chip
             android:id="@+id/window_day_7"
-            style="@style/Widget.Material3.Chip.Filter"
+            style="@style/Widget.Home.Chip.Filter"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:checkable="true"

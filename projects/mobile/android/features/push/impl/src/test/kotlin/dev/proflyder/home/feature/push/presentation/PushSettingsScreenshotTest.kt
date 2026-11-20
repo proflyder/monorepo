@@ -28,12 +28,9 @@ class PushSettingsScreenshotTest {
         themed.theme.applyStyle(dev.proflyder.home.core.theme.R.style.ThemeOverlay_Home_Neon, true)
         val binding = FragmentPushSettingsBinding.inflate(LayoutInflater.from(themed))
         val missing = themed.getString(R.string.push_permission_missing)
-        binding.pushNotificationsStatus.text = missing
-        binding.pushDndStatus.text = missing
-        binding.pushFullScreenStatus.text = missing
-        binding.pushNotificationsAction.text = themed.getString(R.string.push_permission_grant)
-        binding.pushDndAction.text = themed.getString(R.string.push_permission_grant)
-        binding.pushFullScreenAction.text = themed.getString(R.string.push_permission_grant)
+        binding.pushNotificationsRow.subtitle = missing
+        binding.pushDndRow.subtitle = missing
+        binding.pushFullScreenRow.subtitle = missing
         binding.pushRingSummary.text = themed.getString(R.string.push_ring_incomplete)
         binding.pushDeviceName.setText(themed.getString(R.string.push_device_name_sample))
         binding.pushDeviceNameSave.isEnabled = true

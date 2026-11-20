@@ -4,10 +4,10 @@ import android.content.Context
 import android.content.DialogInterface
 import android.view.LayoutInflater
 import androidx.core.widget.doAfterTextChanged
-import com.google.android.material.chip.Chip
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import dev.proflyder.home.core.model.ControlEntry
 import dev.proflyder.home.core.model.LightControls
+import dev.proflyder.home.core.designsystem.Components
 import dev.proflyder.home.core.ui.setVisible
 import dev.proflyder.home.feature.scenarios.impl.R
 import dev.proflyder.home.feature.scenarios.impl.databinding.DialogScenarioLightParamsBinding
@@ -101,7 +101,7 @@ internal class LightParamsDialog(
     }
 
     private fun buildEffectChips(context: Context, effects: List<String>) {
-        val none = Chip(context).apply {
+        val none = Components.filterChip(views.lightEffects).apply {
             text = context.getString(R.string.scenarios_light_effect_none)
             isCheckable = true
             isChecked = effect == null
@@ -109,7 +109,7 @@ internal class LightParamsDialog(
         none.setOnCheckedChangeListener { _, checked -> if (checked) effect = null }
         views.lightEffects.addView(none)
         effects.forEach { name ->
-            val chip = Chip(context).apply {
+            val chip = Components.filterChip(views.lightEffects).apply {
                 text = name
                 isCheckable = true
                 isChecked = effect == name

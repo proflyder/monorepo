@@ -85,12 +85,10 @@
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/scenario_editor_add_trigger"
-            style="@style/Widget.Material3.Button.TonalButton"
+            style="@style/Widget.Home.Button.Tonal.M"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
             android:maxLines="1"
-            android:minHeight="48dp"
             android:text="@string/scenarios_editor_add_trigger"
             app:icon="@drawable/scenarios_ic_add" />
 
@@ -110,12 +108,10 @@
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/scenario_editor_add_condition"
-            style="@style/Widget.Material3.Button.TonalButton"
+            style="@style/Widget.Home.Button.Tonal.M"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
             android:maxLines="1"
-            android:minHeight="48dp"
             android:text="@string/scenarios_editor_add_condition"
             app:icon="@drawable/scenarios_ic_add" />
 
@@ -135,12 +131,10 @@
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/scenario_editor_add_step"
-            style="@style/Widget.Material3.Button.TonalButton"
+            style="@style/Widget.Home.Button.Tonal.M"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
             android:maxLines="1"
-            android:minHeight="48dp"
             android:text="@string/scenarios_editor_add_step"
             app:icon="@drawable/scenarios_ic_add" />
 
@@ -185,11 +179,9 @@
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/scenario_editor_delete"
-            style="@style/Widget.Material3.Button.TextButton"
+            style="@style/Widget.Home.Button.Text.M"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
-            android:minHeight="48dp"
             android:text="@string/scenarios_editor_delete"
             android:textColor="?attr/colorError"
             android:visibility="gone" />

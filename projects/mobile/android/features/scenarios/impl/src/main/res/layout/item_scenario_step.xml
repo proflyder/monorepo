@@ -48,33 +48,25 @@
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/step_up"
-                style="@style/Widget.Material3.Button.IconButton"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
+                style="@style/Widget.Home.IconButton.Standard.M"
                 android:contentDescription="@string/scenarios_step_up"
                 app:icon="@drawable/scenarios_ic_up" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/step_down"
-                style="@style/Widget.Material3.Button.IconButton"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
+                style="@style/Widget.Home.IconButton.Standard.M"
                 android:contentDescription="@string/scenarios_step_down"
                 app:icon="@drawable/scenarios_ic_down" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/step_edit"
-                style="@style/Widget.Material3.Button.IconButton"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
+                style="@style/Widget.Home.IconButton.Standard.M"
                 android:contentDescription="@string/scenarios_edit"
                 app:icon="@drawable/scenarios_ic_edit" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/step_delete"
-                style="@style/Widget.Material3.Button.IconButton"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
+                style="@style/Widget.Home.IconButton.Standard.M"
                 android:contentDescription="@string/scenarios_remove"
                 app:icon="@drawable/scenarios_ic_delete"
                 app:iconTint="?attr/colorError" />

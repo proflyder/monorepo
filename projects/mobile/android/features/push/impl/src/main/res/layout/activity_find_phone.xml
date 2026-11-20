@@ -22,10 +22,9 @@
         android:textAppearance="?attr/textAppearanceBodyLarge" />
 
     <com.google.android.material.button.MaterialButton
+            style="@style/Widget.Home.Button.Filled.M"
         android:id="@+id/find_found"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
         android:layout_marginTop="32dp"
-        android:text="@string/push_find_found"
-        android:textAppearance="?attr/textAppearanceTitleMedium" />
+        android:text="@string/push_find_found" />
 </LinearLayout>

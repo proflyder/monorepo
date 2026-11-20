@@ -60,11 +60,10 @@
                 android:textColor="?attr/colorOnSurface" />
 
             <com.google.android.material.button.MaterialButton
+            style="@style/Widget.Home.Button.Filled.M"
                 android:id="@+id/chat_error_retry"
                 android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
-                android:minHeight="48dp"
                 android:text="@string/ui_retry" />
         </LinearLayout>
     </FrameLayout>
@@ -241,18 +240,14 @@
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/chat_send"
-                    style="@style/Widget.Material3.Button.IconButton.Filled"
-                    android:layout_width="48dp"
-                    android:layout_height="48dp"
+                    style="@style/Widget.Home.IconButton.Filled.M"
                     android:contentDescription="@string/chat_send"
                     android:visibility="gone"
                     app:icon="@drawable/chat_ic_send" />
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/chat_mic"
-                    style="@style/Widget.Material3.Button.IconButton.Filled"
-                    android:layout_width="48dp"
-                    android:layout_height="48dp"
+                    style="@style/Widget.Home.IconButton.Filled.M"
                     android:contentDescription="@string/chat_record"
                     app:icon="@drawable/chat_ic_mic" />
             </FrameLayout>

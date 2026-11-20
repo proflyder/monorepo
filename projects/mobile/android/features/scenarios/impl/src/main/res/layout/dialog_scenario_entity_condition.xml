@@ -11,10 +11,8 @@
 
     <com.google.android.material.button.MaterialButton
         android:id="@+id/condition_entity_button"
-        style="@style/Widget.Material3.Button.OutlinedButton"
+        style="@style/Widget.Home.Button.Outlined.M"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:minHeight="56dp"
         android:textAllCaps="false" />
 
     <com.google.android.material.chip.ChipGroup
@@ -27,7 +25,7 @@
 
         <com.google.android.material.chip.Chip
             android:id="@+id/condition_state_on"
-            style="@style/Widget.Material3.Chip.Filter"
+            style="@style/Widget.Home.Chip.Filter"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:checkable="true"
@@ -35,7 +33,7 @@
 
         <com.google.android.material.chip.Chip
             android:id="@+id/condition_state_off"
-            style="@style/Widget.Material3.Chip.Filter"
+            style="@style/Widget.Home.Chip.Filter"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:checkable="true"

@@ -11,6 +11,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.content.withStyledAttributes
 import androidx.core.view.isVisible
+import com.google.android.material.color.MaterialColors
 import com.google.android.material.materialswitch.MaterialSwitch
 
 class ListRow @JvmOverloads constructor(
@@ -60,6 +61,12 @@ class ListRow @JvmOverloads constructor(
         get() = valueView.text
         set(value) = showText(valueView, value)
 
+    var subtitleTone: Tone = Tone.NEUTRAL
+        set(value) {
+            field = value
+            subtitleView.setTextColor(MaterialColors.getColor(subtitleView, value.attr))
+        }
+
     var chevron: Boolean
         get() = chevronView.isVisible
         set(value) {
@@ -85,4 +92,11 @@ class ListRow @JvmOverloads constructor(
         view.text = text
         view.isVisible = !text.isNullOrEmpty()
     }
+}
+
+enum class Tone(val attr: Int) {
+    NEUTRAL(com.google.android.material.R.attr.colorOnSurfaceVariant),
+    ERROR(androidx.appcompat.R.attr.colorError),
+    WARNING(R.attr.colorWarning),
+    SUCCESS(R.attr.colorSuccess),
 }

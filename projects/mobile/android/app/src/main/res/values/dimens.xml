@@ -3,8 +3,5 @@
     <dimen name="app_profile_chip_height">32dp</dimen>
     <dimen name="app_profile_chip_padding">10dp</dimen>
     <dimen name="app_profile_chip_gap">8dp</dimen>
-    <dimen name="app_toolbar_title_max_size">24sp</dimen>
-    <dimen name="app_toolbar_title_min_size">16sp</dimen>
-    <dimen name="app_toolbar_title_size_step">1sp</dimen>
     <dimen name="app_profile_chip_text">12sp</dimen>
 </resources>

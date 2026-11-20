@@ -77,7 +77,7 @@
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/control_wake_false_alarm"
-                style="@style/Widget.Control.VoiceChip"
+                style="@style/Widget.Home.Button.Pill"
                 android:layout_width="0dp"
                 android:layout_height="@dimen/control_voice_chip_height"
                 android:layout_marginEnd="@dimen/control_voice_chip_gap"
@@ -88,7 +88,7 @@
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/control_wake_missed"
-                style="@style/Widget.Control.VoiceChip"
+                style="@style/Widget.Home.Button.Pill"
                 android:layout_width="0dp"
                 android:layout_height="@dimen/control_voice_chip_height"
                 android:layout_weight="1"

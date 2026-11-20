@@ -857,6 +857,15 @@ mise run test
 Границы закреплены `platform/quality/audit_repository.test.mjs`. Общих
 исключений Gitleaks нет.
 
+## Android: дизайн-система
+
+`platform/quality/test_static.py` (`AndroidDesignSystemTests`) запрещает вне
+`projects/mobile/android/core/designsystem` объявлять стили `Widget.*`,
+использовать в layout кнопки, поля, FAB, карточки и чипы без стиля
+дизайн-системы и создавать эти компоненты конструктором в Kotlin. Механизм и
+исключения — `projects/mobile/android/core/designsystem/README.md`
+(«Static check»).
+
 ## Код без комментариев
 
 В коде на любом языке нет комментариев: ни строчных, ни блочных, ни

@@ -72,10 +72,8 @@
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/timer_pause_resume"
-                style="@style/Widget.Material3.Button.TonalButton"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:minHeight="44dp" />
+                style="@style/Widget.Home.Button.Tonal.M"
+                android:layout_width="wrap_content" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/timer_cancel"
