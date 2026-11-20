@@ -157,13 +157,25 @@
    "purpose": "currency bot Telegram/API credentials",
    "consumer": "ESO → currency-bot"
   },
+  "k8s/flux-system/app-settings": {
+   "purpose": "non-secret app env for Flux postBuild (LAN IPs of PVE/HAOS/station/VPN/bb CT, NodePorts, HA URL, bb project/thread ids, currency webhook URL)",
+   "consumer": "ESO → flux-system (flux-app-settings)"
+  },
   "k8s/flux-system/git-deploy-key": {
    "purpose": "Flux GitRepository read-only deploy key and pinned github.com host key",
    "consumer": "ESO → flux-system (GitRepository)"
   },
+  "k8s/flux-system/runtime-values": {
+   "purpose": "Hermes HelmRelease values without tokens",
+   "consumer": "ESO → flux-system (runtime-values, valuesFrom)"
+  },
   "k8s/flux-system/settings": {
    "purpose": "Flux deployment settings (NEXUS_HOST, NEXUS_PUBLIC_HOST, NODE_LAN_IP, HOME_DOMAIN, LAN_CIDR, HAOS_ADDRESS, PVE_NODE_TARGET)",
    "consumer": "ESO → flux-system (postBuild substitution)"
+  },
+  "k8s/home-assistant/chat-alerts": {
+   "purpose": "bearer of the Alertmanager webhook into the app chat (mcp-gateway /v1/chat/alerts)",
+   "consumer": "ESO → home-assistant (mcp-gateway-chat-alerts), monitoring (alertmanager-telegram)"
   },
   "k8s/home-assistant/ha-bridge-ha": {
    "purpose": "HA long-lived token for ha-bridge",
@@ -173,6 +185,10 @@
    "purpose": "HAOS forced-command agent key and pinned host key for ha-config-sync",
    "consumer": "ESO → home-assistant"
   },
+  "k8s/home-assistant/hermes-chat-relay": {
+   "purpose": "bearer between mcp-gateway and the app chat relay in voice-proxy (Hermes sessions API)",
+   "consumer": "ESO → home-assistant (mcp-gateway-chat, hermes-chat-relay)"
+  },
   "k8s/home-assistant/hermes-config": {
    "purpose": "Hermes renderer private values (real HA/MA endpoints, Telegram owner chat id)",
    "consumer": "ESO → home-assistant (Secret hermes-config-private)"
@@ -180,14 +196,6 @@
   "k8s/home-assistant/hermes-environment": {
    "purpose": "Hermes agent environment (HA/MA/Telegram/API keys)",
    "consumer": "ESO → home-assistant"
-  },
-  "k8s/home-assistant/chat-alerts": {
-   "purpose": "bearer of the Alertmanager webhook into the app chat (mcp-gateway /v1/chat/alerts)",
-   "consumer": "ESO → home-assistant (mcp-gateway-chat-alerts), monitoring (alertmanager-telegram)"
-  },
-  "k8s/home-assistant/hermes-chat-relay": {
-   "purpose": "bearer between mcp-gateway and the app chat relay in voice-proxy (Hermes sessions API)",
-   "consumer": "ESO → home-assistant (mcp-gateway-chat, hermes-chat-relay)"
   },
   "k8s/home-assistant/intercom": {
    "purpose": "intercom signaling: phone bearer and station device token (created)",
