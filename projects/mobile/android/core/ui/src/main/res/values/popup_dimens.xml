@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <dimen name="ui_popup_inset">8dp</dimen>
+    <dimen name="ui_popup_elevation">8dp</dimen>
+    <dimen name="ui_popup_min_width">200dp</dimen>
+    <dimen name="ui_popup_row_height">48dp</dimen>
+    <dimen name="ui_popup_row_padding">16dp</dimen>
+    <dimen name="ui_popup_icon_size">24dp</dimen>
+    <dimen name="ui_popup_label_gap">12dp</dimen>
+</resources>

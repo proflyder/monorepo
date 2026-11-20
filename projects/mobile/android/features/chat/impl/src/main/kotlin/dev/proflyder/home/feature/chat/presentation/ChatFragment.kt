@@ -28,7 +28,6 @@ import kotlinx.coroutines.launch
 import android.content.ClipboardManager
 import android.os.Bundle
 import android.view.View
-import androidx.appcompat.widget.PopupMenu
 import androidx.core.content.getSystemService
 import androidx.core.view.updatePadding
 import androidx.core.widget.doAfterTextChanged
@@ -37,6 +36,7 @@ import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import dev.proflyder.home.core.ui.BaseFragment
+import dev.proflyder.home.core.ui.HomePopupMenu
 import dev.proflyder.home.core.ui.pinAboveKeyboard
 import dev.proflyder.home.core.ui.setVisible
 import dev.proflyder.home.core.ui.userMessage
@@ -165,19 +165,14 @@ class ChatFragment : BaseFragment<FragmentChatBinding>(FragmentChatBinding.Compa
     }
 
     private fun showAttachMenu(anchor: View) {
-        val popup = PopupMenu(requireContext(), anchor)
-        popup.menu.add(0, ATTACH_PHOTO, 0, R.string.chat_attach_photo)
-        popup.menu.add(0, ATTACH_FILE, 1, R.string.chat_attach_file)
-        popup.setOnMenuItemClickListener { item -> onAttachChoice(item.itemId) }
-        popup.show()
+        HomePopupMenu(anchor, R.menu.chat_attach, ::onAttachChoice).show()
     }
 
-    private fun onAttachChoice(itemId: Int): Boolean {
+    private fun onAttachChoice(itemId: Int) {
         when (itemId) {
-            ATTACH_PHOTO -> pickImage.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+            R.id.chat_attach_photo -> pickImage.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
             else -> pickFile.launch(FILE_TYPES)
         }
-        return true
     }
 
     internal fun startRecording(): Boolean {
@@ -284,17 +279,15 @@ class ChatFragment : BaseFragment<FragmentChatBinding>(FragmentChatBinding.Compa
     }
 
     internal fun showMenu(bubble: ChatItem.Bubble, anchor: View) {
-        val popup = PopupMenu(requireContext(), anchor)
-        popup.inflate(R.menu.chat_message_actions)
+        val popup = HomePopupMenu(anchor, R.menu.chat_message_actions) { onMenuAction(bubble, it) }
         popup.menu.findItem(R.id.chat_action_reply).isVisible = bubble.quotable
         popup.menu.findItem(R.id.chat_action_copy).isVisible = bubble.text.isNotEmpty()
         popup.menu.findItem(R.id.chat_action_retry).isVisible = bubble.retryable()
         popup.menu.findItem(R.id.chat_action_delete).isVisible = bubble.messageId == null
-        popup.setOnMenuItemClickListener { item -> onMenuAction(bubble, item.itemId) }
         popup.show()
     }
 
-    private fun onMenuAction(bubble: ChatItem.Bubble, itemId: Int): Boolean {
+    private fun onMenuAction(bubble: ChatItem.Bubble, itemId: Int) {
         when (itemId) {
             R.id.chat_action_reply -> viewModel.replyTo(bubble).also { binding.chatInput.requestFocus() }
             R.id.chat_action_copy -> copy(bubble.text)
@@ -302,7 +295,6 @@ class ChatFragment : BaseFragment<FragmentChatBinding>(FragmentChatBinding.Compa
             R.id.chat_action_delete -> viewModel.discard(bubble)
             else -> Unit
         }
-        return true
     }
 
     private fun copy(text: String) {
@@ -352,8 +344,6 @@ class ChatFragment : BaseFragment<FragmentChatBinding>(FragmentChatBinding.Compa
 
     private companion object {
         const val OLDER_THRESHOLD = 3
-        const val ATTACH_PHOTO = 1
-        const val ATTACH_FILE = 2
         const val RECORDING_TICK_MILLIS = 250L
         const val MILLIS_PER_SECOND = 1000L
         val FILE_TYPES = arrayOf("text/plain", "text/markdown", "text/csv", "application/json")

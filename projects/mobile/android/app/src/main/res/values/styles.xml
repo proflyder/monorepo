@@ -1,14 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Animation.Home.ToolbarMenu" parent="">
-        <item name="android:windowEnterAnimation">@anim/app_toolbar_menu_in</item>
-        <item name="android:windowExitAnimation">@anim/app_toolbar_menu_out</item>
-    </style>
-
-    <style name="TextAppearance.Home.ToolbarMenuItem" parent="TextAppearance.Material3.BodyLarge">
-        <item name="android:textColor">?attr/colorOnSurface</item>
-    </style>
-
     <style name="Widget.Home.ProfileChip" parent="Widget.Material3.Button.OutlinedButton">
         <item name="android:minHeight">@dimen/app_profile_chip_height</item>
         <item name="android:minWidth">0dp</item>

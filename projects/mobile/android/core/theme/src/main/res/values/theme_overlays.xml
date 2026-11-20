@@ -34,9 +34,9 @@
         <item name="colorSuccess">@color/home_success</item>
         <item name="colorOnSuccess">@color/home_on_success</item>
         <item name="materialSwitchStyle">@style/Widget.Home.Switch</item>
-        <item name="homeFabStrokeWidth">@dimen/theme_fab_no_stroke</item>
+        <item name="homeFabStrokeWidth">@dimen/theme_fab_stroke</item>
         <item name="homeFabStrokeColor">?attr/colorPrimary</item>
-        <item name="homeFabGlowColor">@android:color/black</item>
+        <item name="homeFabGlowColor">?attr/colorPrimary</item>
         <item name="homeFabElevation">@dimen/theme_fab_elevation</item>
     </style>
 
@@ -77,7 +77,7 @@
         <item name="colorSuccess">@color/theme_neon_success</item>
         <item name="colorOnSuccess">@color/theme_neon_on_success</item>
         <item name="materialSwitchStyle">@style/Widget.Home.Switch</item>
-        <item name="homeFabStrokeWidth">@dimen/theme_neon_stroke</item>
+        <item name="homeFabStrokeWidth">@dimen/theme_fab_stroke</item>
         <item name="homeFabStrokeColor">?attr/colorSecondary</item>
         <item name="homeFabGlowColor">?attr/colorSecondary</item>
         <item name="homeFabElevation">@dimen/theme_neon_glow_elevation</item>

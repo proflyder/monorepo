@@ -129,8 +129,10 @@ Current device acceptance and remaining work are tracked in
   (a delta is applied only when its `offset` equals the current text length),
   and reconnects with back-off; `401` stops the loop.
 - Insets: the input panel uses `pinAboveKeyboard`, the empty/error states follow
-  the list padding so they stay above the panel; `Widget.Home.TextInput.Chat`
-  is the shared input style without a floating hint.
+  the list padding so they stay above the panel; `Widget.Home.ChatInput`
+  is the message field: no underline, bubble radius (`chat_bubble_radius`) on
+  all corners, `colorSurfaceContainerHigh` fill, a 1dp `colorStateOn` outline
+  only while focused, no floating hint; the same in every theme.
 - Voice: with an empty input the send button is a microphone; hold to record
   (`AudioRecord`, 16 kHz mono PCM written as WAV — exactly what the server feeds
   to GigaAM), release to send, slide left to cancel, 2 minutes at most, shorter
@@ -1049,7 +1051,7 @@ and look like a small card: a rectangle with 16dp on all four corners
 (`ui_text_input_radius`, never a capsule) on `colorSurfaceContainerHigh`, one
 tone above the `colorSurfaceContainer` card it sits on, with no underline
 (`boxStrokeWidth` 0). A 1dp `colorOutlineVariant` outline follows the corners
-at rest; focused it becomes 2dp `colorStateOn` (primary in Current, cyan in
+at rest; focused it becomes 2dp `colorStateOn` (primary in Emerald, cyan in
 Neon), with an error 2dp `colorError`. The label stays small inside the box
 above the text (filled mode, so it never cuts the outline), and the floating
 label, cursor and selection handles use the accent. Material draws no outline
@@ -1069,8 +1071,11 @@ outline over the box; layouts keep the plain `TextInputLayout` tag and no
   keeps its 500-character counter.
 
 Buttons inside cards follow one rule (`core/ui` styles): every card action
-spans the card content (`match_parent`), is 56dp high
-(`ui_card_button_height`), has 16dp corners (`ui_card_button_radius`) and
+is 44dp high (`ui_card_button_height`, no insets), as wide as its text with
+20dp side padding but at least 120dp (`ui_card_button_min_width`), aligned to
+the start of the card content; two actions of one card sit in a row with the
+main one on the right (Connection: **Remove stored token**, then **Save and
+test connection**). It has 16dp corners (`ui_card_button_radius`) and
 `textAppearanceLabelLarge`. The action the screen exists for is
 `Widget.Home.CardButton` (filled: **Save and test connection**); other actions
 are `Widget.Home.CardButton.Tonal` (**Refresh config**, **Save name**,
@@ -1079,7 +1084,8 @@ are `Widget.Home.CardButton.Tonal` (**Refresh config**, **Save name**,
 stroke and `colorError` text: **Remove stored token**, shown only while a token
 is stored). Text buttons are not used inside cards, so nothing is indented away
 from the card's content edge. A screen of independent settings with no single
-main action («Phone notifications and find») has no filled button. Every
+main action («Phone notifications and find») has no filled button. Editor
+save bars use `Widget.Home.SaveBarButton` (full width, 48dp). Every
 settings card is `Widget.Home.Card` (filled `colorSurfaceContainer`, no
 stroke) and a card title uses `textAppearanceTitleMedium`.
 
@@ -1088,7 +1094,7 @@ and may wrap onto a second line at a word boundary (`breakStrategy=balanced`,
 no hyphenation).
 
 `//projects/mobile/android/app:window_insets_screenshot_test` runs the real
-activity with status/navigation/keyboard insets in the Neon and Current themes:
+activity with status/navigation/keyboard insets in the Neon and Emerald themes:
 the Save bar bottom equals window height minus the keyboard and does not cover
 the name field, the bottom navigation is hidden with the keyboard, the last
 Home row ends above the FAB and the bottom navigation, and the fields use the
@@ -1098,9 +1104,10 @@ every layout with a field (12+) to check the shared style: no underline,
 all four corners 16dp, a 1dp `colorOutlineVariant` outline at rest and 2dp
 `colorStateOn` focused, a non-empty label inside the box and text inside the
 field's vertical bounds. On Connection and «Phone notifications and find»
-every `MaterialButton` inside a card has the card's content width and 56dp
-height, and every card is a `Widget.Home.Card`. Alarm editor, connection and push screens run in
-Neon and Current, dark and light. It writes
+every `MaterialButton` inside a card has the same 44dp height and corner, a
+width from 120dp to less than the card, starts at the content edge, the alarm
+editor Save is 48dp, and every card is a `Widget.Home.Card`. Alarm editor, connection and push screens run in
+Neon and Emerald, dark and light. It writes
 `insets-<theme>-<dark|light>-{alarm-editor-keyboard,connection,push-settings}.png`
 and `insets-<theme>-home-end.png`.
 
@@ -1111,19 +1118,41 @@ Themes are code in `core/theme`:
 - `AppTheme` is the registry: key, title/summary, `ThemeOverlay.Home.*` style
   and a `ThemePalette` (a `ColorScheme` with every Material 3 role for light
   and dark; no defaults, so a missing role does not compile). Bundled:
-  **Current** (the original emerald palette, unchanged), **System (Material
-  You)** and **Neon** (near-black violet night, neon violet primary, electric
+  **Emerald** («Изумруд», key `current`, the original emerald palette,
+  unchanged), **System** («Системная», key `system`, Material You) and
+  **Neon** (near-black violet night, neon violet primary, electric
   cyan secondary, magenta tertiary; selected pills, chips and the navigation
-  indicator are cyan on a deep violet `secondaryContainer`; FABs get a 1dp
-  cyan outline and, on Android 9+, a cyan elevation glow).
+  indicator are cyan on a deep violet `secondaryContainer`). Only display
+  names changed in the rename; the stored keys stay, so a saved choice is kept
+  (`ThemeRegistryTest`, `ThemeNamesTest`).
+- No effect exists in only one theme: themes differ in colour, never in
+  whether an outline, glow or accent is present. Audit (core/theme, core/ui):
+  FAB outline was 0dp in Emerald/System and 1dp in Neon, and the FAB glow was
+  black in Emerald/System; now every theme has a 1dp outline
+  (`theme_fab_stroke`) and a glow in its accent (Emerald/System:
+  `colorPrimary` with the soft 6dp elevation; Neon: cyan with 16dp). Already
+  uniform: the on-device card outline (`DeviceStateViews`, `colorStateOn` in
+  all themes), selected Appearance card outline, switch, pills, section
+  labels. `ThemeEffectsTest` checks it.
 - FABs share one style from `core/ui`: `Theme.Home` sets
   `floatingActionButtonStyle` / `extendedFloatingActionButtonStyle` to
   `Widget.Home.(Extended)FloatingActionButton`, which read the theme attrs
   `homeFabStrokeWidth`, `homeFabStrokeColor`, `homeFabGlowColor` and
-  `homeFabElevation` (Current/System: no outline; Neon: outline and glow on
-  every FAB, including quick-action items and the close button). Speed-dial
+  `homeFabElevation` (outline and glow on every FAB in every theme,
+  including quick-action items, the close button and the chat scroll-down
+  FAB, `Widget.Home.FloatingActionButton.SmallSecondary`). Speed-dial
   labels use `Widget.Home.FabLabel` (a `surfaceContainerHigh` pill).
-  `FabStyleScreenshotTest` checks equal strokes and unclipped glow.
+  `FabStyleScreenshotTest` checks a 1dp stroke in every theme, equal strokes
+  and unclipped glow.
+- Popup menus share one component, `core/ui` `HomePopupMenu`: a menu resource
+  (items with icons) rendered as `ui_popup_menu` — a `colorSurfaceContainer`
+  card with the card radius, 48dp rows, 24dp icon on the left,
+  `TextAppearance.Home.PopupMenuItem`, `Animation.Home.PopupMenu`. Used by
+  the toolbar «⋮» menu, the chat attach menu (Photo, Text file) and the chat
+  message menu. `Theme.Home` also sets `popupMenuStyle`/`listPopupWindowStyle`
+  to `Widget.Home.PopupMenu`/`Widget.Home.ListPopupWindow` (same background,
+  radius and text) for any framework popup. `toolbar_menu_screenshot_test`
+  checks both menus and writes `menu-<key>-{actions,chat-attach,appearance}-dark.png`.
 - No segmented buttons anywhere (`MaterialButtonToggleGroup`, bordered
   segments): a choice between a few options is `core/ui` `PillSegments`
   (Time sections, Appearance mode). `AndroidThemeColorTests` enforces it.

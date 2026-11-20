@@ -249,9 +249,7 @@
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/alarm_editor_save"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:minHeight="52dp"
+            style="@style/Widget.Home.SaveBarButton"
             android:text="@string/alarms_editor_save" />
     </LinearLayout>
 </FrameLayout>
