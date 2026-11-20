@@ -45,13 +45,16 @@
 
     <style name="Widget.Home.TextInput" parent="Widget.Material3.TextInputLayout.FilledBox">
         <item name="boxBackgroundColor">?attr/colorSurfaceContainerHigh</item>
-        <item name="boxStrokeWidth">@dimen/ui_text_input_stroke</item>
-        <item name="boxStrokeWidthFocused">@dimen/ui_text_input_focus_stroke</item>
+        <item name="boxStrokeWidth">0dp</item>
+        <item name="boxStrokeWidthFocused">0dp</item>
         <item name="boxStrokeColor">@color/ui_text_input_stroke</item>
+        <item name="boxStrokeErrorColor">?attr/colorError</item>
         <item name="boxCornerRadiusTopStart">@dimen/ui_text_input_radius</item>
         <item name="boxCornerRadiusTopEnd">@dimen/ui_text_input_radius</item>
-        <item name="boxCornerRadiusBottomStart">@dimen/ui_text_input_bottom_radius</item>
-        <item name="boxCornerRadiusBottomEnd">@dimen/ui_text_input_bottom_radius</item>
+        <item name="boxCornerRadiusBottomStart">@dimen/ui_text_input_radius</item>
+        <item name="boxCornerRadiusBottomEnd">@dimen/ui_text_input_radius</item>
+        <item name="shapeAppearance">@style/ShapeAppearance.Home.TextInput</item>
+        <item name="shapeAppearanceOverlay">@null</item>
         <item name="hintEnabled">true</item>
         <item name="hintTextColor">?attr/colorStateOn</item>
         <item name="cursorColor">?attr/colorStateOn</item>
@@ -62,6 +65,49 @@
         <item name="counterTextAppearance">?attr/textAppearanceBodySmall</item>
         <item name="materialThemeOverlay">@style/ThemeOverlay.Home.TextInput</item>
     </style>
+
+    <style name="ShapeAppearance.Home.TextInput" parent="">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">@dimen/ui_text_input_radius</item>
+    </style>
+
+    <style name="Widget.Home.CardButton" parent="Widget.Material3.Button">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">@dimen/ui_card_button_height</item>
+        <item name="android:minHeight">@dimen/ui_card_button_height</item>
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+        <item name="cornerRadius">@dimen/ui_card_button_radius</item>
+        <item name="android:textAppearance">?attr/textAppearanceLabelLarge</item>
+    </style>
+
+    <style name="Widget.Home.CardButton.Tonal" parent="Widget.Material3.Button.TonalButton">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">@dimen/ui_card_button_height</item>
+        <item name="android:minHeight">@dimen/ui_card_button_height</item>
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+        <item name="cornerRadius">@dimen/ui_card_button_radius</item>
+        <item name="android:textAppearance">?attr/textAppearanceLabelLarge</item>
+    </style>
+
+    <style name="Widget.Home.CardButton.Danger" parent="Widget.Material3.Button.OutlinedButton">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">@dimen/ui_card_button_height</item>
+        <item name="android:minHeight">@dimen/ui_card_button_height</item>
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+        <item name="cornerRadius">@dimen/ui_card_button_radius</item>
+        <item name="android:textAppearance">?attr/textAppearanceLabelLarge</item>
+        <item name="backgroundTint">@android:color/transparent</item>
+        <item name="strokeColor">?attr/colorError</item>
+        <item name="strokeWidth">@dimen/ui_card_button_stroke</item>
+        <item name="android:textColor">?attr/colorError</item>
+        <item name="iconTint">?attr/colorError</item>
+        <item name="rippleColor">?attr/colorError</item>
+    </style>
+
+
 
     <style name="ThemeOverlay.Home.TextInput" parent="ThemeOverlay.Material3.TextInputEditText.FilledBox">
         <item name="colorControlActivated">?attr/colorStateOn</item>

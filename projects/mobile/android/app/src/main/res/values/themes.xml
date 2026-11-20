@@ -42,6 +42,7 @@
         <item name="shapeAppearanceLargeComponent">@style/ShapeAppearance.Home.Large</item>
 
         <item name="textInputStyle">@style/Widget.Home.TextInput</item>
+        <item name="viewInflaterClass">dev.proflyder.home.core.ui.HomeViewInflater</item>
         <item name="bottomSheetDialogTheme">@style/ThemeOverlay.Home.BottomSheetDialog</item>
 
         <item name="android:statusBarColor">?attr/colorSurface</item>

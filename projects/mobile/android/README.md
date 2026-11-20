@@ -1032,13 +1032,19 @@ navigation bar sizes.
   `adjustResize`); Material sheets pad themselves for the navigation bar.
   Alert dialogs are floating windows and are positioned by the system.
 
-Text fields share `Widget.Home.TextInput` (also the theme's `textInputStyle`):
-a Material 3 filled field on `colorSurfaceContainerHigh` with 12dp top corners
-(`ui_text_input_radius`, never a capsule) and a square bottom edge. At rest a
-1dp `colorOutlineVariant` underline marks it as editable; focused, the
-underline becomes 2dp `colorStateOn` (primary in Current, cyan in Neon), and
-the floating label, cursor and selection handles use the same accent.
-Helper, error and counter text use `textAppearanceBodySmall`.
+Text fields share `Widget.Home.TextInput` (also the theme's `textInputStyle`)
+and look like a small card: a rectangle with 16dp on all four corners
+(`ui_text_input_radius`, never a capsule) on `colorSurfaceContainerHigh`, one
+tone above the `colorSurfaceContainer` card it sits on, with no underline
+(`boxStrokeWidth` 0). A 1dp `colorOutlineVariant` outline follows the corners
+at rest; focused it becomes 2dp `colorStateOn` (primary in Current, cyan in
+Neon), with an error 2dp `colorError`. The label stays small inside the box
+above the text (filled mode, so it never cuts the outline), and the floating
+label, cursor and selection handles use the accent. Material draws no outline
+around a filled box, so the theme's `viewInflaterClass` (`HomeViewInflater`)
+inflates every `TextInputLayout` as `CardTextInputLayout`, which draws that
+outline over the box; layouts keep the plain `TextInputLayout` tag and no
+`style`. Helper, error and counter text use `textAppearanceBodySmall`.
 
 - Every field has a floating label from resources and the label is always
   enabled: the text sits under it, never pushed down by an empty label slot.
@@ -1050,14 +1056,20 @@ Helper, error and counter text use `textAppearanceBodySmall`.
   clear-text end icon; the token keeps the password toggle; the speak dialog
   keeps its 500-character counter.
 
-Buttons inside settings cards follow one rule: the action the screen exists
-for is the only filled button (**Save and test connection**, editor **Save**,
-**Start** timer); other card actions are tonal (**Save name**, **Update
-registration**, **Refresh config**, scenario **Add …**); per-row and reset
-actions (permission **Allow**, **Remove stored token**, **Delete**) are text
-buttons. A screen of independent settings with no single main action
-(«Phone notifications and find») has no filled button, so its card actions
-look the same.
+Buttons inside cards follow one rule (`core/ui` styles): every card action
+spans the card content (`match_parent`), is 56dp high
+(`ui_card_button_height`), has 16dp corners (`ui_card_button_radius`) and
+`textAppearanceLabelLarge`. The action the screen exists for is
+`Widget.Home.CardButton` (filled: **Save and test connection**); other actions
+are `Widget.Home.CardButton.Tonal` (**Refresh config**, **Save name**,
+**Update registration**, permission **Allow**); destructive ones are
+`Widget.Home.CardButton.Danger` (outlined: transparent, 1dp `colorError`
+stroke and `colorError` text: **Remove stored token**, shown only while a token
+is stored). Text buttons are not used inside cards, so nothing is indented away
+from the card's content edge. A screen of independent settings with no single
+main action («Phone notifications and find») has no filled button. Every
+settings card is `Widget.Home.Card` (filled `colorSurfaceContainer`, no
+stroke) and a card title uses `textAppearanceTitleMedium`.
 
 The toolbar title never clips a letter: it autosizes from 24sp down to 16sp
 and may wrap onto a second line at a word boundary (`breakStrategy=balanced`,
@@ -1070,9 +1082,12 @@ the name field, the bottom navigation is hidden with the keyboard, the last
 Home row ends above the FAB and the bottom navigation, and the fields use the
 shared style. The same test opens «Phone notifications and find» in Russian and checks the
 toolbar title is not ellipsized, clipped or broken inside a word, and inflates
-every layout with a field (12+) to check the shared style: 1dp/2dp strokes,
-corner radius below half the field height, a non-empty label and text inside
-the field's vertical bounds. Alarm editor, connection and push screens run in
+every layout with a field (12+) to check the shared style: no underline,
+all four corners 16dp, a 1dp `colorOutlineVariant` outline at rest and 2dp
+`colorStateOn` focused, a non-empty label inside the box and text inside the
+field's vertical bounds. On Connection and «Phone notifications and find»
+every `MaterialButton` inside a card has the card's content width and 56dp
+height, and every card is a `Widget.Home.Card`. Alarm editor, connection and push screens run in
 Neon and Current, dark and light. It writes
 `insets-<theme>-<dark|light>-{alarm-editor-keyboard,connection,push-settings}.png`
 and `insets-<theme>-home-end.png`.

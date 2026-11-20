@@ -16,7 +16,10 @@ import androidx.core.widget.NestedScrollView
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.color.MaterialColors
+import com.google.android.material.button.MaterialButton
+import com.google.android.material.card.MaterialCardView
 import com.google.android.material.textfield.TextInputLayout
+import dev.proflyder.home.core.ui.CardTextInputLayout
 import dev.proflyder.home.core.theme.AppTheme
 import dev.proflyder.home.feature.alarms.AlarmEditorDestination
 import dev.proflyder.home.feature.chat.ChatRoute
@@ -34,6 +37,7 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import dev.proflyder.home.core.ui.R as UiR
 import dev.proflyder.home.feature.alarms.impl.R as AlarmsR
 import dev.proflyder.home.feature.chat.impl.R as ChatR
 import dev.proflyder.home.feature.connection.impl.R as ConnectionR
@@ -134,7 +138,15 @@ class WindowInsetsScreenshotTest {
         idle(activity)
         val root = activity.window.decorView
         val label = root.findViewById<TextView>(AlarmsR.id.alarm_editor_label)
+        val field = root.findViewById<TextInputLayout>(AlarmsR.id.alarm_editor_label_layout)
+        label.text = ""
+        applyInsets(activity, 0)
+        assertOutline(field, focused = false)
+        shoot(activity, "insets-${theme.key}-${mode(root)}-alarm-editor-empty.png", 0)
         label.requestFocus()
+        applyInsets(activity, 0)
+        assertOutline(field, focused = true)
+        shoot(activity, "insets-${theme.key}-${mode(root)}-alarm-editor-empty-focused.png", 0)
         label.text = activity.getString(AlarmsR.string.alarms_label_default)
         val keyboard = dp(root, KEYBOARD_DP)
         applyInsets(activity, keyboard)
@@ -143,11 +155,15 @@ class WindowInsetsScreenshotTest {
         assertEquals("save bar is not on the keyboard", root.height - keyboard, bar.windowBottom())
         val nav = root.findViewById<View>(R.id.home_notice_anchor)
         assertFalse("bottom navigation stays above the keyboard", nav.isShown)
-        val field = root.findViewById<TextInputLayout>(AlarmsR.id.alarm_editor_label_layout)
         assertTrue("field hides behind the save bar", field.windowBottom() <= bar.windowTop())
         assertTrue("field went above the screen", field.windowTop() >= 0)
         assertHomeStyle(field)
+        assertOutline(field, focused = true)
         shoot(activity, "insets-${theme.key}-${mode(root)}-alarm-editor-keyboard.png", keyboard)
+        label.clearFocus()
+        applyInsets(activity, 0)
+        assertOutline(field, focused = false)
+        shoot(activity, "insets-${theme.key}-${mode(root)}-alarm-editor-filled.png", 0)
     }
 
     private fun homeScrolledToEnd(theme: AppTheme) {
@@ -187,6 +203,8 @@ class WindowInsetsScreenshotTest {
         assertHomeStyle(field)
         val scroll = root.findViewById<NestedScrollView>(ConnectionR.id.connection_scroll)
         assertFalse(scroll.clipToPadding)
+        assertCardsAndButtons(root.findViewById(ConnectionR.id.connection_scroll))
+        assertFalse("clear token shown without a token", root.findViewById<View>(ConnectionR.id.connection_clear_token).isShown)
         shoot(activity, "insets-${theme.key}-${mode(root)}-connection.png", 0)
     }
 
@@ -200,6 +218,7 @@ class WindowInsetsScreenshotTest {
         applyInsets(activity, 0)
         assertHomeStyle(name.parentField())
         assertTitleFits(root.findViewById(R.id.toolbar_title))
+        assertCardsAndButtons(root.findViewById<View>(PushR.id.push_intro).parent as View)
         shoot(activity, "insets-${theme.key}-${mode(root)}-push-settings.png", 0)
     }
 
@@ -233,15 +252,65 @@ class WindowInsetsScreenshotTest {
 
     private fun assertHomeStyle(field: TextInputLayout) {
         val name = field.resources.getResourceEntryName(checkNotNull(field.editText).id)
-        val stroke = field.resources.getDimensionPixelSize(dev.proflyder.home.core.ui.R.dimen.ui_text_input_stroke)
-        val focused = field.resources.getDimensionPixelSize(dev.proflyder.home.core.ui.R.dimen.ui_text_input_focus_stroke)
+        val radius = field.resources.getDimension(UiR.dimen.ui_text_input_radius)
+        assertTrue("$name is not the card field", field is CardTextInputLayout)
         assertEquals(name, TextInputLayout.BOX_BACKGROUND_FILLED, field.boxBackgroundMode)
-        assertEquals(name, stroke, field.boxStrokeWidth)
-        assertEquals(name, focused, field.boxStrokeWidthFocused)
-        assertTrue("$name is a capsule", field.boxCornerRadiusTopStart * 2 < field.height)
-        assertTrue("$name is a capsule", field.boxCornerRadiusTopEnd * 2 < field.height)
+        assertEquals("$name has an underline", 0, field.boxStrokeWidth)
+        assertEquals("$name has a focused underline", 0, field.boxStrokeWidthFocused)
+        val corners = listOf(
+            field.boxCornerRadiusTopStart,
+            field.boxCornerRadiusTopEnd,
+            field.boxCornerRadiusBottomStart,
+            field.boxCornerRadiusBottomEnd,
+        )
+        corners.forEach { assertEquals("$name corner", radius, it, CORNER_TOLERANCE) }
         assertTrue("$name has no label", field.isHintEnabled && !field.hint.isNullOrBlank())
+        assertLabelInside(name, field)
         assertTextInside(name, checkNotNull(field.editText))
+    }
+
+    private fun assertOutline(field: TextInputLayout, focused: Boolean) {
+        val card = field as CardTextInputLayout
+        val res = field.resources
+        val width = when {
+            focused -> res.getDimensionPixelSize(UiR.dimen.ui_text_input_focus_stroke)
+            else -> res.getDimensionPixelSize(UiR.dimen.ui_text_input_stroke)
+        }
+        val color = when {
+            focused -> MaterialColors.getColor(field, R.attr.colorStateOn)
+            else -> MaterialColors.getColor(field, com.google.android.material.R.attr.colorOutlineVariant)
+        }
+        assertEquals("outline width", width, card.outlineWidth)
+        assertEquals("outline color", color, card.outlineColor)
+    }
+
+    private fun assertLabelInside(name: String, field: TextInputLayout) {
+        val edit = checkNotNull(field.editText)
+        val labelTop = edit.paddingTop - field.resources.displayMetrics.density * LABEL_ROOM_DP
+        assertTrue("$name label crosses the outline", labelTop >= 0)
+    }
+
+    private fun assertCardsAndButtons(content: View) {
+        val cards = content.all<MaterialCardView>()
+        assertTrue("no cards", cards.isNotEmpty())
+        val color = MaterialColors.getColor(content, com.google.android.material.R.attr.colorSurfaceContainer)
+        cards.forEach { assertCard(it, color) }
+        val height = content.resources.getDimensionPixelSize(UiR.dimen.ui_card_button_height)
+        cards.forEach { card -> card.all<MaterialButton>().filter { it.isShown }.forEach { assertCardButton(card, it, height) } }
+    }
+
+    private fun assertCard(card: MaterialCardView, color: Int) {
+        assertEquals("card has a stroke", 0, card.strokeWidth)
+        assertEquals("card background", color, card.cardBackgroundColor.defaultColor)
+    }
+
+    private fun assertCardButton(card: MaterialCardView, button: MaterialButton, height: Int) {
+        val content = card.getChildAt(0)
+        val name = button.resources.getResourceEntryName(button.id)
+        val room = content.width - content.paddingLeft - content.paddingRight
+        assertEquals("$name width", room, button.width)
+        assertEquals("$name height", height, button.height)
+        assertEquals("$name starts off the content edge", content.paddingLeft, button.windowLeft() - content.windowLeft())
     }
 
     private fun assertTextInside(name: String, edit: TextView) {
@@ -328,6 +397,7 @@ class WindowInsetsScreenshotTest {
         const val RU_LIGHT = "ru-w411dp-h891dp-notnight-xxhdpi"
         const val FIELD_COUNT = 12
         const val LABEL_ROOM_DP = 20
+        const val CORNER_TOLERANCE = 0.5f
         val FIELD_LAYOUTS = listOf(
             AlarmsR.layout.fragment_alarm_editor,
             ConnectionR.layout.fragment_connection,
@@ -360,6 +430,19 @@ private fun View.windowTop(): Int {
     val location = IntArray(2)
     getLocationInWindow(location)
     return location[1]
+}
+
+private fun View.windowLeft(): Int {
+    val location = IntArray(2)
+    getLocationInWindow(location)
+    return location[0]
+}
+
+private inline fun <reified T : View> View.all(): List<T> = tree().filterIsInstance<T>()
+
+private fun View.tree(): List<View> = when (this) {
+    is ViewGroup -> listOf(this) + (0 until childCount).flatMap { getChildAt(it).tree() }
+    else -> listOf(this)
 }
 
 private fun View.windowBottom(): Int = windowTop() + height

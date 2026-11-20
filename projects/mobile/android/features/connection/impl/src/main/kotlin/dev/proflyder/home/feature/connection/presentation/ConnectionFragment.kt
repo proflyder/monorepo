@@ -81,6 +81,7 @@ class ConnectionFragment :
                 TokenStatus.ABSENT -> getString(R.string.connection_token_absent)
             }
             connectionTokenWarning.setVisible(state.tokenStatus == TokenStatus.UNREADABLE)
+            connectionClearToken.setVisible(state.tokenStatus != TokenStatus.ABSENT)
 
             connectionTest.isEnabled = !state.busy
             connectionRefreshConfig.isEnabled = !state.refreshingConfig

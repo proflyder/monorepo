@@ -3,6 +3,18 @@
     <style name="Widget.Home.TextInput.Chat">
         <item name="hintEnabled">false</item>
         <item name="boxCollapsedPaddingTop">0dp</item>
+        <item name="boxStrokeWidth">@dimen/ui_text_input_stroke</item>
+        <item name="boxStrokeWidthFocused">@dimen/ui_text_input_focus_stroke</item>
+        <item name="shapeAppearance">@style/ShapeAppearance.Home.ChatInput</item>
+        <item name="boxCornerRadiusTopStart">@dimen/chat_input_radius</item>
+        <item name="boxCornerRadiusTopEnd">@dimen/chat_input_radius</item>
+        <item name="boxCornerRadiusBottomStart">0dp</item>
+        <item name="boxCornerRadiusBottomEnd">0dp</item>
+    </style>
+
+    <style name="ShapeAppearance.Home.ChatInput" parent="">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">@dimen/chat_input_radius</item>
     </style>
 
     <style name="TextAppearance.Home.ChatMeta" parent="TextAppearance.Material3.LabelSmall">

@@ -13,8 +13,7 @@
     <com.google.android.material.textfield.TextInputLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:hint="@string/scenarios_editor_speak_hint"
-        style="@style/Widget.Home.TextInput">
+        android:hint="@string/scenarios_editor_speak_hint">
 
         <com.google.android.material.textfield.TextInputEditText
             android:id="@+id/speak_input"

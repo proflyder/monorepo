@@ -23,8 +23,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
             android:hint="@string/reminders_editor_label"
-            app:endIconMode="clear_text"
-            style="@style/Widget.Home.TextInput">
+            app:endIconMode="clear_text">
 
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/reminder_editor_label"
