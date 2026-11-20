@@ -22,10 +22,23 @@
         android:textColor="?attr/colorOnSurface"
         tools:ignore="SelectableText" />
 
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/ds_empty_action"
-        style="@style/Widget.Home.Button.Filled.M"
-        android:layout_width="wrap_content"
+    <dev.proflyder.home.core.designsystem.ButtonRow
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
         android:layout_marginTop="@dimen/ds_space_l"
-        android:visibility="gone" />
+        app:centered="true"
+        app:equalWidth="true">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/ds_empty_secondary"
+            style="@style/Widget.Home.Button.Tonal.M"
+            android:layout_width="wrap_content"
+            android:visibility="gone" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/ds_empty_action"
+            style="@style/Widget.Home.Button.Filled.M"
+            android:layout_width="wrap_content"
+            android:visibility="gone" />
+    </dev.proflyder.home.core.designsystem.ButtonRow>
 </merge>

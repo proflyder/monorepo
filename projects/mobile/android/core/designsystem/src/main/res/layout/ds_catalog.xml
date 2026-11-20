@@ -950,6 +950,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 app:emptyAction="@string/ds_catalog_action"
+                app:emptySecondaryAction="@string/ds_catalog_loading"
                 app:emptyIcon="@drawable/ds_ic_add"
                 app:emptyText="@string/ds_catalog_empty_text" />
 

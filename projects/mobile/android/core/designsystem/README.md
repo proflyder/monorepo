@@ -29,7 +29,7 @@ the colour roles.
 | Component | How to use | Notes |
 | --- | --- | --- |
 | Button | `MaterialButton` + `style="@style/Widget.Home.Button.<Variant>.<Size>"` | Variants `Filled`, `Tonal`, `Outlined`, `Text`, `Destructive`; sizes `S` 32, `M` 40, `L` 48 dp. One line, no insets. M/L (not Text) are at least 120 dp wide. Disabled: `android:enabled=false`. Loading: `button.setLoading(true)` replaces the text with a progress indicator and keeps the width. |
-| Button row | `ButtonRow` with the secondary action first and the main one last | Side by side (main on the right) when both fit at their natural width; otherwise stacked full width, main on top. Button text never wraps or gets cut (`maxLines=1` in every button style). |
+| Button row | `ButtonRow` with the secondary action first and the main one last | Side by side (main on the right) when both fit at their natural width; otherwise stacked full width, main on top. Button text never wraps or gets cut (`maxLines=1` in every button style). `app:equalWidth` gives every button the widest one's width, `app:centered` centres the group (empty states). At most one Filled button per row (static check). |
 | Special buttons | `Widget.Home.Button.Pill` (tonal 32dp pill with icon), `.Pill.Outlined`, `.DayToggle` (checkable weekday circle), `.BarAction` (icon over label in a bottom bar), `.TimeDisplay` (large time in editors) | Use only for these roles. |
 | Icon button | `MaterialButton` + `Widget.Home.IconButton.<Standard\|Filled\|Tonal\|Outlined>.<S\|M\|L>` + `app:icon` + `contentDescription` | Visible 32/40/48 dp circle, always a 48 dp touch target (insets). |
 | FAB | `OutlinedFloatingActionButton` (theme default), `Widget.Home.FloatingActionButton.Small`, `ExtendedFloatingActionButton` (theme default), quick action `Widget.Home.FloatingActionButton.SmallSecondary` + label `Widget.Home.FabLabel` | Outline and glow come from `homeFab*` in every theme. |
@@ -43,7 +43,7 @@ the colour roles.
 | Popup menu | `HomePopupMenu(anchor, menuRes)` | Card with 48 dp rows and icons. |
 | List row | `ListRow` (`app:rowIcon`, `rowTitle`, `rowSubtitle`, `rowValue`, `rowChevron`, `rowSwitch`); child views in XML become the trailing slot | Min height 56 dp; `subtitleTone` = `NEUTRAL`/`ERROR`/`WARNING`/`SUCCESS`; `app:rowIconTint` (default `colorOnSurfaceVariant`, `colorPrimary` for accent icons such as permissions); titles use a 20sp line height so a wrapped title stays compact. |
 | Section header | `TextView` + `Widget.Home.SectionHeader` | TitleSmall in `colorPrimary`. |
-| Empty state | `EmptyState` (`app:emptyIcon`, `emptyText`, `emptyAction`) | The action is a Filled M button (`emptyState.action`). |
+| Empty state | `EmptyState` (`app:emptyIcon`, `emptyText`, `emptyAction`) | Main action Filled M (`action`, `app:emptyAction`), optional secondary Tonal M (`secondaryAction`, `app:emptySecondaryAction`) in a centred equal-width `ButtonRow`. |
 | Status chip | `TextView` + `Widget.Home.StatusChip.<Error\|Warning\|Success\|Neutral>` | 24 dp pill. |
 | Device tile | `DeviceTile` (`app:tileIcon`, `tileTitle`, `tileStatus`, `tileOn`) | On/off via `DeviceStateViews`. |
 
@@ -59,6 +59,9 @@ the colour roles.
 - Small inline actions in dense rows: **S**.
 - Icon-only actions: Icon button **M** (S in dense rows, L for prominent ones).
 - Two actions of one card: `ButtonRow`, never a fixed horizontal row.
+- Empty and error states: one Filled main action (Open Connection), the other
+  Tonal (Retry), equal width, centred, side by side when they fit. A lone
+  Retry stays Tonal where it shares the row with Open Connection.
 - A permission or system-setting row: `ListRow` with the icon, the title and
   the state as subtitle (`Tone.ERROR` while not allowed, neutral when
   allowed) and a trailing Tonal Icon button **M** with `ds_ic_open_in_new`

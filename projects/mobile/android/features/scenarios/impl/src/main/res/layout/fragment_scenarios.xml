@@ -68,20 +68,26 @@
                     android:gravity="center"
                     android:textAppearance="?attr/textAppearanceBodyLarge" />
 
-                <com.google.android.material.button.MaterialButton
-            style="@style/Widget.Home.Button.Filled.M"
-                    android:id="@+id/scenarios_retry"
-                    android:layout_width="wrap_content"
-                    android:layout_marginTop="12dp"
-                    android:text="@string/ui_retry" />
+                <dev.proflyder.home.core.designsystem.ButtonRow
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/ds_space_m"
+                    app:centered="true"
+                    app:equalWidth="true">
 
-                <com.google.android.material.button.MaterialButton
-            style="@style/Widget.Home.Button.Filled.M"
-                    android:id="@+id/scenarios_open_connection"
-                    android:layout_width="wrap_content"
-                    android:layout_marginTop="@dimen/ds_space_s"
-                    android:text="@string/scenarios_open_connection"
-                    android:visibility="gone" />
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/scenarios_retry"
+                        style="@style/Widget.Home.Button.Tonal.M"
+                        android:layout_width="wrap_content"
+                        android:text="@string/ui_retry" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/scenarios_open_connection"
+                        style="@style/Widget.Home.Button.Filled.M"
+                        android:layout_width="wrap_content"
+                        android:text="@string/scenarios_open_connection"
+                        android:visibility="gone" />
+                </dev.proflyder.home.core.designsystem.ButtonRow>
             </LinearLayout>
 
             <com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton

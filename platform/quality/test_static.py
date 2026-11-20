@@ -230,6 +230,15 @@ class AndroidDesignSystemTests(unittest.TestCase):
                     problems.append(f"{path.relative_to(ROOT)}: <{match.group(1).rsplit('.', 1)[-1]}> {problem}")
         self.assertEqual(problems, [], "use core/designsystem styles:\n" + "\n".join(problems))
 
+    def test_one_filled_button_per_button_group(self) -> None:
+        group = self.RE.compile(r"<(dev\.proflyder\.home\.core\.designsystem\.ButtonRow)\b.*?</\1>", self.RE.S)
+        problems = []
+        for path in sorted(self.ANDROID.glob("**/src/main/res/layout*/*.xml")):
+            for match in group.finditer(path.read_text(encoding="utf-8")):
+                if match.group(0).count("Widget.Home.Button.Filled.") > 1:
+                    problems.append(str(path.relative_to(ROOT)))
+        self.assertEqual(problems, [], "one filled (main) action per ButtonRow/EmptyState:\n" + "\n".join(problems))
+
     def test_kotlin_does_not_build_components_by_hand(self) -> None:
         problems = []
         for path in self._outside("**/src/main/kotlin/**/*.kt"):

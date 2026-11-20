@@ -13,10 +13,16 @@
         <attr name="rowSwitch" format="boolean" />
     </declare-styleable>
 
+    <declare-styleable name="ButtonRow">
+        <attr name="equalWidth" format="boolean" />
+        <attr name="centered" format="boolean" />
+    </declare-styleable>
+
     <declare-styleable name="EmptyState">
         <attr name="emptyIcon" format="reference" />
         <attr name="emptyText" format="string" />
         <attr name="emptyAction" format="string" />
+        <attr name="emptySecondaryAction" format="string" />
     </declare-styleable>
 
     <declare-styleable name="DeviceTile">

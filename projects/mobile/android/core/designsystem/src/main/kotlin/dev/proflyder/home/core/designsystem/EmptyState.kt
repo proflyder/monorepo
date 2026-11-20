@@ -21,6 +21,7 @@ class EmptyState @JvmOverloads constructor(
     private val textView: TextView
 
     val action: MaterialButton
+    val secondaryAction: MaterialButton
 
     init {
         orientation = VERTICAL
@@ -31,6 +32,7 @@ class EmptyState @JvmOverloads constructor(
         iconView = findViewById(R.id.ds_empty_icon)
         textView = findViewById(R.id.ds_empty_text)
         action = findViewById(R.id.ds_empty_action)
+        secondaryAction = findViewById(R.id.ds_empty_secondary)
         context.withStyledAttributes(attrs, R.styleable.EmptyState) { readAttributes(this) }
     }
 
@@ -54,9 +56,17 @@ class EmptyState @JvmOverloads constructor(
             action.isVisible = !value.isNullOrEmpty()
         }
 
+    var secondaryActionText: CharSequence?
+        get() = secondaryAction.text
+        set(value) {
+            secondaryAction.text = value
+            secondaryAction.isVisible = !value.isNullOrEmpty()
+        }
+
     private fun readAttributes(array: TypedArray) {
         icon = array.getDrawable(R.styleable.EmptyState_emptyIcon)
         text = array.getText(R.styleable.EmptyState_emptyText)
         actionText = array.getText(R.styleable.EmptyState_emptyAction)
+        secondaryActionText = array.getText(R.styleable.EmptyState_emptySecondaryAction)
     }
 }
