@@ -1,0 +1,90 @@
+{
+ "up": {
+  "status": "success",
+  "data": {
+   "resultType": "vector",
+   "result": [
+    {
+     "metric": {},
+     "value": [
+      1795129665.4,
+      "1"
+     ]
+    }
+   ]
+  }
+ },
+ "info": {
+  "status": "success",
+  "data": {
+   "resultType": "vector",
+   "result": [
+    {
+     "metric": {
+      "__name__": "pulsar_info",
+      "job": "station",
+      "instance": "station",
+      "model": "Yandex Station Midi",
+      "version": "v0.5.1020"
+     },
+     "value": [
+      1795129665.4,
+      "1"
+     ]
+    }
+   ]
+  }
+ },
+ "latency": {
+  "status": "success",
+  "data": {
+   "resultType": "vector",
+   "result": [
+    {
+     "metric": {},
+     "value": [
+      1795129665.4,
+      "0.032268963"
+     ]
+    }
+   ]
+  }
+ },
+ "rssi": {
+  "status": "success",
+  "data": {
+   "resultType": "vector",
+   "result": []
+  }
+ },
+ "temp": {
+  "status": "success",
+  "data": {
+   "resultType": "vector",
+   "result": [
+    {
+     "metric": {},
+     "value": [
+      1795129665.4,
+      "58.5"
+     ]
+    }
+   ]
+  }
+ },
+ "uptime": {
+  "status": "success",
+  "data": {
+   "resultType": "vector",
+   "result": [
+    {
+     "metric": {},
+     "value": [
+      1795129665.4,
+      "4000"
+     ]
+    }
+   ]
+  }
+ }
+}

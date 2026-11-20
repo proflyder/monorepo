@@ -33,6 +33,7 @@ pub mod push;
 pub mod scheduler;
 pub mod server;
 pub mod ssh;
+pub mod system;
 pub mod tools;
 pub mod voice;
 

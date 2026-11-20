@@ -1,0 +1,25 @@
+{
+  "alerts": [
+    {
+      "name": "StationDown",
+      "severity": "critical",
+      "startedAt": 1795100000,
+      "summary": "station is down"
+    },
+    {
+      "name": "PinsStale",
+      "severity": "warning",
+      "startedAt": 1795000000,
+      "summary": "pins are stale"
+    }
+  ],
+  "alertsAvailable": true,
+  "generatedAt": 1795129665,
+  "sections": {
+    "devices": "ok",
+    "guests": "critical",
+    "host": "ok",
+    "k8s": "critical"
+  },
+  "status": "critical"
+}

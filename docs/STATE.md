@@ -988,6 +988,24 @@
   живая приёмка рабочего профиля через колонку ещё не пройдена
   (`PENDING.md`).
 
+## Дашборд «Система» (Android, этап 1)
+
+- API — `mcp-gateway` `GET /v1/system/{summary,hosts,k8s,devices}`
+  (read-only, кэш 15 с, bearer приложения `scheduler-auth` через
+  `MCP_APP_TOKEN_FILE`). Снаружи — Traefik `control.<домен>` +
+  `PathPrefix(/v1/system/)`; приложение берёт адрес Home control. Контракт и
+  уровни — `solutions/mcp-gateway/README.md`.
+- Источники: node exporter PVE (`job=pve-node`), prometheus-pve-exporter
+  (`job=pve-guests`, Flux Kustomization `pve-exporter`, ns `monitoring`),
+  kube-state-metrics + cAdvisor, Pulsar `:9101` (`job=station`), Alertmanager,
+  реестр `phone-push`. Wi-Fi RSSI Pulsar пока не экспортирует — поле пустое.
+- Токен PVE API `pve-exporter@pve!dashboard` (роль `PVEAuditor`, на `/`)
+  создан 2026-11-20 и лежит в OpenBao `secret/k8s/monitoring/pve-exporter`.
+- Android: вкладка «Система» (`features/system`), автообновление 30 с пока
+  экран открыт, pull-to-refresh, тап по карточке → детальный список.
+- До merge PR живого API нет; после деплоя проверить
+  `pve_up` в Prometheus и ответ `/v1/system/summary`.
+
 ## Приватное / backups
 
 - `secrets/NETWORK.md` — реальные IP/порты (из OpenBao `secret/infra/docs/network`).

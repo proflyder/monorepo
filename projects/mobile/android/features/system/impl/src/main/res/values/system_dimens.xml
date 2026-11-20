@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <dimen name="system_screen_margin">16dp</dimen>
+    <dimen name="system_light_large">20dp</dimen>
+    <dimen name="system_light_small">10dp</dimen>
+</resources>

@@ -1,0 +1,441 @@
+{
+ "info": {
+  "status": "success",
+  "data": {
+   "resultType": "vector",
+   "result": [
+    {
+     "metric": {
+      "__name__": "pve_guest_info",
+      "id": "qemu/100",
+      "name": "haos",
+      "node": "pve",
+      "type": "qemu",
+      "template": "0"
+     },
+     "value": [
+      1795129665.4,
+      "1"
+     ]
+    },
+    {
+     "metric": {
+      "__name__": "pve_guest_info",
+      "id": "qemu/101",
+      "name": "lab-k3s",
+      "node": "pve",
+      "type": "qemu",
+      "template": "0"
+     },
+     "value": [
+      1795129665.4,
+      "1"
+     ]
+    },
+    {
+     "metric": {
+      "__name__": "pve_guest_info",
+      "id": "lxc/102",
+      "name": "vpn",
+      "node": "pve",
+      "type": "lxc",
+      "template": "0"
+     },
+     "value": [
+      1795129665.4,
+      "1"
+     ]
+    },
+    {
+     "metric": {
+      "__name__": "pve_guest_info",
+      "id": "lxc/103",
+      "name": "bb",
+      "node": "pve",
+      "type": "lxc",
+      "template": "0"
+     },
+     "value": [
+      1795129665.4,
+      "1"
+     ]
+    },
+    {
+     "metric": {
+      "__name__": "pve_guest_info",
+      "id": "qemu/104",
+      "name": "sandbox",
+      "node": "pve",
+      "type": "qemu",
+      "template": "0"
+     },
+     "value": [
+      1795129665.4,
+      "1"
+     ]
+    }
+   ]
+  }
+ },
+ "up": {
+  "status": "success",
+  "data": {
+   "resultType": "vector",
+   "result": [
+    {
+     "metric": {
+      "id": "qemu/100"
+     },
+     "value": [
+      1795129665.4,
+      "1"
+     ]
+    },
+    {
+     "metric": {
+      "id": "qemu/101"
+     },
+     "value": [
+      1795129665.4,
+      "1"
+     ]
+    },
+    {
+     "metric": {
+      "id": "lxc/102"
+     },
+     "value": [
+      1795129665.4,
+      "0"
+     ]
+    },
+    {
+     "metric": {
+      "id": "lxc/103"
+     },
+     "value": [
+      1795129665.4,
+      "1"
+     ]
+    },
+    {
+     "metric": {
+      "id": "qemu/104"
+     },
+     "value": [
+      1795129665.4,
+      "0"
+     ]
+    }
+   ]
+  }
+ },
+ "onboot": {
+  "status": "success",
+  "data": {
+   "resultType": "vector",
+   "result": [
+    {
+     "metric": {
+      "id": "qemu/100"
+     },
+     "value": [
+      1795129665.4,
+      "1"
+     ]
+    },
+    {
+     "metric": {
+      "id": "qemu/101"
+     },
+     "value": [
+      1795129665.4,
+      "1"
+     ]
+    },
+    {
+     "metric": {
+      "id": "lxc/102"
+     },
+     "value": [
+      1795129665.4,
+      "1"
+     ]
+    },
+    {
+     "metric": {
+      "id": "lxc/103"
+     },
+     "value": [
+      1795129665.4,
+      "1"
+     ]
+    },
+    {
+     "metric": {
+      "id": "qemu/104"
+     },
+     "value": [
+      1795129665.4,
+      "0"
+     ]
+    }
+   ]
+  }
+ },
+ "cpu": {
+  "status": "success",
+  "data": {
+   "resultType": "vector",
+   "result": [
+    {
+     "metric": {
+      "id": "qemu/100"
+     },
+     "value": [
+      1795129665.4,
+      "0.05"
+     ]
+    },
+    {
+     "metric": {
+      "id": "qemu/101"
+     },
+     "value": [
+      1795129665.4,
+      "0.31"
+     ]
+    },
+    {
+     "metric": {
+      "id": "lxc/103"
+     },
+     "value": [
+      1795129665.4,
+      "0.02"
+     ]
+    }
+   ]
+  }
+ },
+ "mem_used": {
+  "status": "success",
+  "data": {
+   "resultType": "vector",
+   "result": [
+    {
+     "metric": {
+      "id": "qemu/100"
+     },
+     "value": [
+      1795129665.4,
+      "2100000000.0"
+     ]
+    },
+    {
+     "metric": {
+      "id": "qemu/101"
+     },
+     "value": [
+      1795129665.4,
+      "7500000000.0"
+     ]
+    },
+    {
+     "metric": {
+      "id": "lxc/103"
+     },
+     "value": [
+      1795129665.4,
+      "600000000.0"
+     ]
+    }
+   ]
+  }
+ },
+ "mem_total": {
+  "status": "success",
+  "data": {
+   "resultType": "vector",
+   "result": [
+    {
+     "metric": {
+      "id": "qemu/100"
+     },
+     "value": [
+      1795129665.4,
+      "4000000000.0"
+     ]
+    },
+    {
+     "metric": {
+      "id": "qemu/101"
+     },
+     "value": [
+      1795129665.4,
+      "10000000000.0"
+     ]
+    },
+    {
+     "metric": {
+      "id": "lxc/102"
+     },
+     "value": [
+      1795129665.4,
+      "500000000.0"
+     ]
+    },
+    {
+     "metric": {
+      "id": "lxc/103"
+     },
+     "value": [
+      1795129665.4,
+      "2000000000.0"
+     ]
+    },
+    {
+     "metric": {
+      "id": "qemu/104"
+     },
+     "value": [
+      1795129665.4,
+      "1000000000.0"
+     ]
+    }
+   ]
+  }
+ },
+ "disk_used": {
+  "status": "success",
+  "data": {
+   "resultType": "vector",
+   "result": [
+    {
+     "metric": {
+      "id": "qemu/100"
+     },
+     "value": [
+      1795129665.4,
+      "0"
+     ]
+    },
+    {
+     "metric": {
+      "id": "qemu/101"
+     },
+     "value": [
+      1795129665.4,
+      "0"
+     ]
+    },
+    {
+     "metric": {
+      "id": "lxc/102"
+     },
+     "value": [
+      1795129665.4,
+      "1200000000.0"
+     ]
+    },
+    {
+     "metric": {
+      "id": "lxc/103"
+     },
+     "value": [
+      1795129665.4,
+      "3000000000.0"
+     ]
+    }
+   ]
+  }
+ },
+ "disk_total": {
+  "status": "success",
+  "data": {
+   "resultType": "vector",
+   "result": [
+    {
+     "metric": {
+      "id": "qemu/100"
+     },
+     "value": [
+      1795129665.4,
+      "32000000000.0"
+     ]
+    },
+    {
+     "metric": {
+      "id": "qemu/101"
+     },
+     "value": [
+      1795129665.4,
+      "64000000000.0"
+     ]
+    },
+    {
+     "metric": {
+      "id": "lxc/102"
+     },
+     "value": [
+      1795129665.4,
+      "8000000000.0"
+     ]
+    },
+    {
+     "metric": {
+      "id": "lxc/103"
+     },
+     "value": [
+      1795129665.4,
+      "16000000000.0"
+     ]
+    },
+    {
+     "metric": {
+      "id": "qemu/104"
+     },
+     "value": [
+      1795129665.4,
+      "8000000000.0"
+     ]
+    }
+   ]
+  }
+ },
+ "uptime": {
+  "status": "success",
+  "data": {
+   "resultType": "vector",
+   "result": [
+    {
+     "metric": {
+      "id": "qemu/100"
+     },
+     "value": [
+      1795129665.4,
+      "1490000"
+     ]
+    },
+    {
+     "metric": {
+      "id": "qemu/101"
+     },
+     "value": [
+      1795129665.4,
+      "1490100"
+     ]
+    },
+    {
+     "metric": {
+      "id": "lxc/103"
+     },
+     "value": [
+      1795129665.4,
+      "200000"
+     ]
+    }
+   ]
+  }
+ }
+}

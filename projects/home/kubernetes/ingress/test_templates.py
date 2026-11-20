@@ -109,6 +109,17 @@ class Routes(unittest.TestCase):
             "intercom": "Host(`intercom.${HOME_DOMAIN}`)",
         })
 
+    def test_system_dashboard_shares_the_control_host(self):
+        route = by_name(self.routes, "IngressRoute", "ha-control")["spec"]["routes"][1]
+        self.assertEqual(
+            route["match"], "Host(`control.${HOME_DOMAIN}`) && PathPrefix(`/v1/system/`)"
+        )
+        self.assertEqual(route["middlewares"], [{"name": "home-allowlist"}])
+        self.assertEqual(
+            route["services"],
+            [{"name": "mcp-gateway", "namespace": "home-assistant", "port": 8080}],
+        )
+
     def test_only_documented_placeholders_remain(self):
         text = "\n".join(path.read_text() for path in ROUTES.glob("*.yaml"))
         left = set(re.findall(r"\$\{([A-Z_]+)\}", text))

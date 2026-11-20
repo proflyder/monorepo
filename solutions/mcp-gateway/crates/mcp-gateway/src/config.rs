@@ -117,6 +117,9 @@ pub struct Config {
     /// Voice bearer token.
     pub voice_token: String,
 
+    pub app_token_file: String,
+    pub app_token: String,
+
     /// Durable scheduler base URL.
     pub scheduler_url: String,
     /// Durable scheduler token file.
@@ -184,6 +187,8 @@ impl Config {
             bb_dispatcher_thread_id: trimmed(getenv, "MCP_BB_DISPATCHER_THREAD_ID"),
             voice_token_file: trimmed(getenv, "MCP_VOICE_TOKEN_FILE"),
             voice_token: String::new(),
+            app_token_file: trimmed(getenv, "MCP_APP_TOKEN_FILE"),
+            app_token: String::new(),
             scheduler_url: trimmed(getenv, "MCP_SCHEDULER_URL"),
             scheduler_token_file: trimmed(getenv, "MCP_SCHEDULER_TOKEN_FILE"),
             scheduler_token: String::new(),
@@ -271,6 +276,7 @@ impl Config {
         load_scheduler_files(&mut cfg, read_file)?;
         load_push_files(&mut cfg, read_file)?;
         load_bb_files(&mut cfg, read_file)?;
+        load_app_files(&mut cfg, read_file)?;
         Ok(cfg)
     }
 
@@ -343,6 +349,18 @@ fn load_bb_files(cfg: &mut Config, read_file: &ReadFile<'_>) -> Result<(), Strin
         }
         cfg.voice_token = token;
     }
+    Ok(())
+}
+
+fn load_app_files(cfg: &mut Config, read_file: &ReadFile<'_>) -> Result<(), String> {
+    if cfg.app_token_file.is_empty() {
+        return Ok(());
+    }
+    let token = read_secret(read_file, &cfg.app_token_file, "MCP_APP_TOKEN_FILE")?;
+    if token == cfg.auth_token || token == cfg.voice_token {
+        return Err("MCP_APP_TOKEN_FILE must differ from the MCP and voice tokens".to_owned());
+    }
+    cfg.app_token = token;
     Ok(())
 }
 
@@ -576,6 +594,27 @@ mod tests {
         let config = Config::load_from(&env(&pairs), &read).expect("config");
         assert_eq!(config.push_token, "secret");
         assert_eq!(config.groups, vec!["phone"]);
+    }
+
+    #[test]
+    fn app_token_enables_the_dashboard_and_must_be_distinct() {
+        let pairs = [
+            ("MCP_AUTH_TOKEN_FILE", "/token"),
+            ("MCP_INFRA_CATALOG_FILE", "/c"),
+            ("MCP_APP_TOKEN_FILE", "/app"),
+        ];
+        let read = |path: &str| {
+            Ok(if path == "/app" {
+                b"app\n".to_vec()
+            } else {
+                b"mcp".to_vec()
+            })
+        };
+        let config = Config::load_from(&env(&pairs), &read).expect("config");
+        assert_eq!(config.app_token, "app");
+        let same = |_: &str| Ok(b"mcp".to_vec());
+        let error = Config::load_from(&env(&pairs), &same).expect_err("same token");
+        assert!(error.contains("MCP_APP_TOKEN_FILE"), "{error}");
     }
 
     #[test]

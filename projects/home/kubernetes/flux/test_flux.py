@@ -173,7 +173,7 @@ class Cluster(unittest.TestCase):
             # решение 54: application units applied by Flux.
             "app-intercom", "app-currency-bot", "app-mcp-gateway",
             "app-ha-executors", "app-ha-config-sync", "app-hermes",
-            "app-phone-push",
+            "app-phone-push", "pve-exporter",
         })
         sources = {
             "home-app-pins": ("GitRepository", "flux-pins"),
