@@ -1011,8 +1011,25 @@
   создан 2026-11-20 и лежит в OpenBao `secret/k8s/monitoring/pve-exporter`.
 - Android: вкладка «Система» (`features/system`), автообновление 30 с пока
   экран открыт, pull-to-refresh, тап по карточке → детальный список.
-- До merge PR живого API нет; после деплоя проверить
-  `pve_up` в Prometheus и ответ `/v1/system/summary`.
+- Раскатано 2026-11-20: `/v1/system/*` отвечает 200 по всем секциям,
+  pve-exporter видит гостей (после фиксов `fsGroup` и `emptyDir /tmp`, #348/#349).
+
+## Чат с Hermes в приложении
+
+- Тот же Hermes, что в Telegram (память, skills, инструменты), отдельная
+  сессия `home-app`. API — `mcp-gateway` `/v1/chat/{messages,messages/{id}/retry,events,alerts}`
+  под bearer приложения; снаружи Traefik `control.<домен>` + `PathPrefix(/v1/chat/)`.
+- `mcp-gateway` ходит в Hermes через узкий chat relay в voice-proxy `:8644`
+  (токен OpenBao `k8s/home-assistant/hermes-chat-relay`); `8644` закрыт от LAN
+  правилом management-firewall на K3s-узле (применено вручную 2026-11-20).
+- История — SQLite шлюза на PVC (strategy Recreate); медиа — PVC
+  `mcp-gateway-media` 5 ГБ; STT голосовых — GigaAM `:10305`, fallback Whisper `:10300`.
+- Алерты: Alertmanager receiver `telegram` дополнительно шлёт вебхук в
+  `/v1/chat/alerts` (токен `k8s/home-assistant/chat-alerts`, `send_resolved`);
+  карточка обновляется на «решено», push через `phone-push` один раз на новый
+  алерт и на готовый ответ Рикардо. Живая доставка проверена 2026-11-20.
+- Android: вкладка «Чат» (`features/chat`): стрим, Markdown, reply,
+  офлайн-очередь, голос, фото, текстовые файлы ≤ 256 КБ.
 
 ## Приватное / backups
 
@@ -1036,6 +1053,11 @@
   textfile), scrape job `pve-node`; K3s node-exporter textfile; PrometheusRule
   `home-backup-alerts` (vzdump > 30 ч, offsite failed/stale, HA backup > 36 ч,
   PVE exporter down) → Telegram.
+- PrometheusRule `home-pod-alerts`: `PodRestartingFrequently` (> 3 рестартов
+  за час, 10 мин) — ловит циклы liveness-kill, которые не доходят до
+  CrashLoopBackOff (так 2026-11-20 был пойман phone-push: ~290 рестартов/сутки,
+  фикс #350). Telegram-шаблон показывает объект (deployment/statefulset/…), а
+  не под kube-state-metrics.
 
 ## Ограничения
 
