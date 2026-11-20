@@ -5,12 +5,12 @@ metadata:
   namespace: flux-system
   annotations:
     proflyder.dev/source: "initial pin from live cluster 2026-11-10"
-    proflyder.dev/source-commit: "d92dcb5bbeee6255ea72dde0a4d369d8a6c686e3"
-    proflyder.dev/source-tree: "10b71bd2523256aff0d0cc2313e33ba68e684705"
-    proflyder.dev/verified-at: "2026-11-20T09:33:48Z"
-    proflyder.dev/run: "https://github.com/proflyder/monorepo/actions/runs/44711458019"
+    proflyder.dev/source-commit: "e49751f9bac953a4c22a5abfc88bc7f3bf44b093"
+    proflyder.dev/source-tree: "3da882a486ae0978ca234ac2c997126f56caa507"
+    proflyder.dev/verified-at: "2026-11-20T11:21:01Z"
+    proflyder.dev/run: "https://github.com/proflyder/monorepo/actions/runs/44726708245"
 data:
-  BUILD_ID: "d92dcb5bbeee"
+  BUILD_ID: "e49751f9bac9"
   CURRENCY_BOT_IMAGE: "ghcr.io/proflyder/currency-bot@sha256:17ef9272818cb64e1047b63f111c2debac4162f8eec16627f57d2803c7a19ace"
   HA_BRIDGE_IMAGE: "ghcr.io/proflyder/ha-bridge@sha256:04b31c2efd4f832f0b31e5bef34ec444a4d54740a2265b0339e36ab3f6b5c3c7"
   HA_CONFIG_SYNC_IMAGE: "ghcr.io/proflyder/ha-config-sync@sha256:ed946277931faa385f957730d991587dc8fea397824a794b92a99dda3ddf09f9"
@@ -21,7 +21,7 @@ data:
   HERMES_IMAGE: "ghcr.io/proflyder/hermes@sha256:d07c039eb5a02b567a115b08e308d08d872512ef55b8895ecc0a7783be64b466"
   HOME_DEPLOY_IMAGE: "ghcr.io/proflyder/home-deploy@sha256:1dc177dfc2c40f04d21384974a4a4dbd81b9712b3df446cd7dea82e8a5848150"
   INTERCOM_IMAGE: "ghcr.io/proflyder/intercom@sha256:dbad77f78e805596cf49162edabf995ed104e3cfde1708434367d23d47c429e0"
-  MCP_GATEWAY_IMAGE: "ghcr.io/proflyder/mcp-gateway@sha256:73bb20f08b81bea2b92003aeceded42a63e046e631d696dfab2e1ceab28ddb5f"
+  MCP_GATEWAY_IMAGE: "ghcr.io/proflyder/mcp-gateway@sha256:6293c8cb3d02705f2876eda40c2ad6843ef2b552efae79a6dc1ad136dbde2b19"
   PHONE_PUSH_IMAGE: "ghcr.io/proflyder/phone-push@sha256:862a76377d857be10d73b1cfc4a970f2c511b60b72667e8ab927284540aa01dd"
   SCHEDULER_IMAGE: "ghcr.io/proflyder/scheduler@sha256:3bf13888f80a703b424b3764a9fb7bc48503745d588dd18fdd77804b839b1ee9"
   VOICE_PROXY_IMAGE: "ghcr.io/proflyder/voice-proxy@sha256:539ea1acddc1e269a69f268c56f79c648ec61736e461f2c7a11702ed82584688"
