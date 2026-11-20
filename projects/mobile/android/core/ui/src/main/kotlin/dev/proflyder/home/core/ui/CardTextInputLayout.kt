@@ -7,6 +7,7 @@ import android.graphics.Color
 import android.graphics.Rect
 import android.util.AttributeSet
 import android.view.ViewTreeObserver
+import android.widget.EditText
 import androidx.core.content.ContextCompat
 import androidx.core.view.doOnAttach
 import androidx.core.view.doOnDetach
@@ -52,7 +53,13 @@ class CardTextInputLayout @JvmOverloads constructor(
 
     override fun draw(canvas: Canvas) {
         super.draw(canvas)
-        val field = editText ?: return
+        val field = editText
+        when {
+            field != null && boxStrokeWidth == 0 -> drawOutline(canvas, field)
+        }
+    }
+
+    private fun drawOutline(canvas: Canvas, field: EditText) {
         field.getDrawingRect(boxBounds)
         offsetDescendantRectToMyCoords(field, boxBounds)
         outline.shapeAppearanceModel = shapeAppearanceModel
