@@ -5,12 +5,12 @@ metadata:
   namespace: flux-system
   annotations:
     proflyder.dev/source: "initial pin from live cluster 2026-11-10"
-    proflyder.dev/source-commit: "f395ddc752f532a80ed9e48d6bb6a41ab6e08233"
-    proflyder.dev/source-tree: "7353622ea63c03a5b28d36435582994f93d27f21"
-    proflyder.dev/verified-at: "2026-11-20T01:56:17Z"
-    proflyder.dev/run: "https://github.com/proflyder/monorepo/actions/runs/44656464834"
+    proflyder.dev/source-commit: "81c0b0005cc9b76b04f37360fc9a0b97495c5f64"
+    proflyder.dev/source-tree: "a8b9992a92c9d8753c5f18c0f7e85b0db7f919ff"
+    proflyder.dev/verified-at: "2026-11-20T06:18:33Z"
+    proflyder.dev/run: "https://github.com/proflyder/monorepo/actions/runs/44686757567"
 data:
-  BUILD_ID: "f395ddc752f5"
+  BUILD_ID: "81c0b0005cc9"
   CURRENCY_BOT_IMAGE: "ghcr.io/proflyder/currency-bot@sha256:17ef9272818cb64e1047b63f111c2debac4162f8eec16627f57d2803c7a19ace"
   HA_BRIDGE_IMAGE: "ghcr.io/proflyder/ha-bridge@sha256:04b31c2efd4f832f0b31e5bef34ec444a4d54740a2265b0339e36ab3f6b5c3c7"
   HA_CONFIG_SYNC_IMAGE: "ghcr.io/proflyder/ha-config-sync@sha256:ed946277931faa385f957730d991587dc8fea397824a794b92a99dda3ddf09f9"
@@ -22,7 +22,7 @@ data:
   HOME_DEPLOY_IMAGE: "ghcr.io/proflyder/home-deploy@sha256:1dc177dfc2c40f04d21384974a4a4dbd81b9712b3df446cd7dea82e8a5848150"
   INTERCOM_IMAGE: "ghcr.io/proflyder/intercom@sha256:dbad77f78e805596cf49162edabf995ed104e3cfde1708434367d23d47c429e0"
   MCP_GATEWAY_IMAGE: "ghcr.io/proflyder/mcp-gateway@sha256:dfeec66146943beaa61fc0b5b73d06057e552b9f0dbfa728b8b70fa9e4ffe17a"
-  PHONE_PUSH_IMAGE: "ghcr.io/proflyder/phone-push@sha256:ecb68251a22ef04867967d9aa5ef2bd09e37c31031465f3752bb369e2184b0bc"
+  PHONE_PUSH_IMAGE: "ghcr.io/proflyder/phone-push@sha256:862a76377d857be10d73b1cfc4a970f2c511b60b72667e8ab927284540aa01dd"
   SCHEDULER_IMAGE: "ghcr.io/proflyder/scheduler@sha256:3bf13888f80a703b424b3764a9fb7bc48503745d588dd18fdd77804b839b1ee9"
   VOICE_PROXY_IMAGE: "ghcr.io/proflyder/voice-proxy@sha256:1f0813f317f08be426b47456dd8deb8f14ffe925c6b212826c82d14b5ce4c5f0"
   WAKEGRANT_IMAGE: "ghcr.io/proflyder/wakegrant@sha256:f3116bc1ee516e500dc26b211ebd9482e29963f63dea23ad1f0a87ddb5c93635"
