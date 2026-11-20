@@ -75,7 +75,7 @@ class MainActivity : AppCompatActivity(), NavigatorHost, ViewModelFactoryProvide
         enableEdgeToEdge()
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
-        actionsMenu = ToolbarActionsMenu(this, ::runMenuAction)
+        actionsMenu = ToolbarActionsMenu(::runMenuAction)
         applySystemBarInsets()
 
         router = FragmentRouter(

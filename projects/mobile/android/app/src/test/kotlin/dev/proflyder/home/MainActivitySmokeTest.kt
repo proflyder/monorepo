@@ -18,6 +18,7 @@ import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
+import dev.proflyder.home.core.ui.R as UiR
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
@@ -75,13 +76,13 @@ class MainActivitySmokeTest {
         assertEquals(View.VISIBLE, call.visibility)
         assertEquals(View.VISIBLE, settings.visibility)
 
-        val callIcon = content.findViewById<ImageView>(R.id.menu_action_call_icon)
-        val settingsIcon = content.findViewById<ImageView>(R.id.menu_action_settings_icon)
+        val callIcon = call.findViewById<ImageView>(UiR.id.ui_popup_menu_icon)
+        val settingsIcon = settings.findViewById<ImageView>(UiR.id.ui_popup_menu_icon)
         assertNotNull("call row must carry a phone icon", callIcon.drawable)
         assertNotNull("settings row must carry a gear icon", settingsIcon.drawable)
 
-        val callLabel = content.findViewById<TextView>(R.id.menu_action_call_label)
-        val settingsLabel = content.findViewById<TextView>(R.id.menu_action_settings_label)
+        val callLabel = call.findViewById<TextView>(UiR.id.ui_popup_menu_label)
+        val settingsLabel = settings.findViewById<TextView>(UiR.id.ui_popup_menu_label)
         assertEquals(activity.getString(R.string.app_call), callLabel.text.toString())
         assertEquals(activity.getString(R.string.app_settings), settingsLabel.text.toString())
     }

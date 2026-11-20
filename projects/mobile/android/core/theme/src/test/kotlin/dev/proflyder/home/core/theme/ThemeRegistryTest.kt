@@ -23,6 +23,13 @@ class ThemeRegistryTest {
     }
 
     @Test
+    fun storedKeysStayTheSameAfterTheRename() {
+        assertEquals(listOf("current", "system", "neon"), AppTheme.entries.map { it.key })
+        assertEquals(AppTheme.CURRENT, AppTheme.fromKey("current"))
+        assertEquals(AppTheme.SYSTEM, AppTheme.fromKey("system"))
+    }
+
+    @Test
     fun theCurrentThemeKeepsTheOriginalPalette() {
         assertEquals(rgb(0x0E7C66), AppTheme.CURRENT.palette.light.primary)
         assertEquals(rgb(0x6FDBC0), AppTheme.CURRENT.palette.dark.primary)

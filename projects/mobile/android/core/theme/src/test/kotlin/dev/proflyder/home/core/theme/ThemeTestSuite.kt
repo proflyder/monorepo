@@ -7,5 +7,7 @@ import org.junit.runners.Suite
 @Suite.SuiteClasses(
     ThemeRegistryTest::class,
     ThemeOverlayConsistencyTest::class,
+    ThemeNamesTest::class,
+    ThemeEffectsTest::class,
 )
 class ThemeTestSuite

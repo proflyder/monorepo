@@ -44,19 +44,20 @@ import dev.proflyder.home.feature.scenarios.impl.R as ScenariosR
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class FabStyleScreenshotTest {
     @Test
-    fun neon() = check(AppTheme.NEON, expectStroke = true)
+    fun neon() = check(AppTheme.NEON)
 
     @Test
-    fun current() = check(AppTheme.CURRENT, expectStroke = false)
+    fun current() = check(AppTheme.CURRENT)
 
     @Test
-    fun system() = check(AppTheme.SYSTEM, expectStroke = false)
+    fun system() = check(AppTheme.SYSTEM)
 
-    private fun check(theme: AppTheme, expectStroke: Boolean) {
+    private fun check(theme: AppTheme) {
         val activity = launch(theme)
         val root = activity.window.decorView
         val fab = root.findViewById<OutlinedFloatingActionButton>(ControlR.id.control_quick_fab)
-        assertEquals(expectStroke, fab.strokeWidth > 0)
+        assertTrue("stroke in $theme", fab.strokeWidth > 0)
+        assertEquals("one stroke width in every theme", dp(root, STROKE_DP), fab.strokeWidth)
         showCards(activity)
         shoot("fab-${theme.key}-home.png", root)
 
@@ -238,6 +239,7 @@ class FabStyleScreenshotTest {
         const val WIDTH_DP = 411
         const val HEIGHT_DP = 891
         const val BAR_DP = 24
+        const val STROKE_DP = 1
         const val DIAL_ITEMS = 6
         const val SETTINGS = 6
         const val DIAL_SETTLE_MS = 800L

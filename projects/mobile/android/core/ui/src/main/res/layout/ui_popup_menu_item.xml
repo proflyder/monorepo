@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="@dimen/ui_popup_row_height"
+    android:background="@drawable/ui_bg_popup_menu_item"
+    android:clickable="true"
+    android:focusable="true"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:paddingStart="@dimen/ui_popup_row_padding"
+    android:paddingEnd="@dimen/ui_popup_row_padding">
+
+    <ImageView
+        android:id="@+id/ui_popup_menu_icon"
+        android:layout_width="@dimen/ui_popup_icon_size"
+        android:layout_height="@dimen/ui_popup_icon_size"
+        android:importantForAccessibility="no"
+        app:tint="?attr/colorOnSurface" />
+
+    <TextView
+        android:id="@+id/ui_popup_menu_label"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="@dimen/ui_popup_label_gap"
+        android:layout_weight="1"
+        android:maxLines="1"
+        android:textAppearance="@style/TextAppearance.Home.PopupMenuItem"
+        tools:ignore="SelectableText" />
+</LinearLayout>

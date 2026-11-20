@@ -243,9 +243,10 @@ class WindowInsetsScreenshotTest {
     }
 
     private fun assertComposerStyle(field: TextInputLayout) {
-        val stroke = field.resources.getDimensionPixelSize(dev.proflyder.home.core.ui.R.dimen.ui_text_input_stroke)
-        assertEquals(TextInputLayout.BOX_BACKGROUND_FILLED, field.boxBackgroundMode)
-        assertEquals(stroke, field.boxStrokeWidth)
+        assertEquals(TextInputLayout.BOX_BACKGROUND_OUTLINE, field.boxBackgroundMode)
+        assertEquals("no underline at rest", 0, field.boxStrokeWidth)
+        assertTrue("thin accent outline in focus", field.boxStrokeWidthFocused > 0)
+        assertEquals(field.boxCornerRadiusTopStart, field.boxCornerRadiusBottomEnd)
         assertFalse("the composer uses a placeholder, not a floating label", field.isHintEnabled)
         assertFalse(checkNotNull(field.editText).hint.isNullOrBlank())
     }

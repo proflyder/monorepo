@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:id="@+id/chat_attach_photo"
+        android:icon="@drawable/chat_ic_photo"
+        android:title="@string/chat_attach_photo" />
+    <item
+        android:id="@+id/chat_attach_file"
+        android:icon="@drawable/chat_ic_file"
+        android:title="@string/chat_attach_file" />
+</menu>

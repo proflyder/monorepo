@@ -8,6 +8,14 @@
         <item name="android:outlineSpotShadowColor">?attr/homeFabGlowColor</item>
     </style>
 
+    <style name="Widget.Home.FloatingActionButton.SmallSecondary" parent="Widget.Material3.FloatingActionButton.Small.Secondary">
+        <item name="elevation">?attr/homeFabElevation</item>
+        <item name="strokeWidth">?attr/homeFabStrokeWidth</item>
+        <item name="strokeColor">?attr/homeFabStrokeColor</item>
+        <item name="android:outlineAmbientShadowColor">?attr/homeFabGlowColor</item>
+        <item name="android:outlineSpotShadowColor">?attr/homeFabGlowColor</item>
+    </style>
+
     <style name="Widget.Home.ExtendedFloatingActionButton" parent="Widget.Material3.ExtendedFloatingActionButton.Icon.Primary">
         <item name="elevation">?attr/homeFabElevation</item>
         <item name="strokeWidth">?attr/homeFabStrokeWidth</item>

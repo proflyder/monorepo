@@ -9,6 +9,6 @@
     <dimen name="chat_list_indent">16dp</dimen>
     <dimen name="chat_swipe_reply_distance">72dp</dimen>
     <dimen name="chat_image_radius">12dp</dimen>
-    <dimen name="chat_input_radius">12dp</dimen>
     <dimen name="chat_alert_button_gap">20dp</dimen>
+    <dimen name="chat_input_focus_stroke">1dp</dimen>
 </resources>

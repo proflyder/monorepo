@@ -1,20 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Widget.Home.TextInput.Chat">
+    <style name="Widget.Home.ChatInput" parent="Widget.Material3.TextInputLayout.OutlinedBox">
+        <item name="boxBackgroundColor">?attr/colorSurfaceContainerHigh</item>
+        <item name="boxStrokeWidth">0dp</item>
+        <item name="boxStrokeWidthFocused">@dimen/chat_input_focus_stroke</item>
+        <item name="boxStrokeColor">@color/chat_input_stroke</item>
+        <item name="boxCornerRadiusTopStart">@dimen/chat_bubble_radius</item>
+        <item name="boxCornerRadiusTopEnd">@dimen/chat_bubble_radius</item>
+        <item name="boxCornerRadiusBottomStart">@dimen/chat_bubble_radius</item>
+        <item name="boxCornerRadiusBottomEnd">@dimen/chat_bubble_radius</item>
         <item name="hintEnabled">false</item>
-        <item name="boxCollapsedPaddingTop">0dp</item>
-        <item name="boxStrokeWidth">@dimen/ui_text_input_stroke</item>
-        <item name="boxStrokeWidthFocused">@dimen/ui_text_input_focus_stroke</item>
-        <item name="shapeAppearance">@style/ShapeAppearance.Home.ChatInput</item>
-        <item name="boxCornerRadiusTopStart">@dimen/chat_input_radius</item>
-        <item name="boxCornerRadiusTopEnd">@dimen/chat_input_radius</item>
-        <item name="boxCornerRadiusBottomStart">0dp</item>
-        <item name="boxCornerRadiusBottomEnd">0dp</item>
+        <item name="cursorColor">?attr/colorStateOn</item>
+        <item name="materialThemeOverlay">@style/ThemeOverlay.Home.ChatInput</item>
     </style>
 
-    <style name="ShapeAppearance.Home.ChatInput" parent="">
-        <item name="cornerFamily">rounded</item>
-        <item name="cornerSize">@dimen/chat_input_radius</item>
+    <style name="ThemeOverlay.Home.ChatInput" parent="ThemeOverlay.Material3.TextInputEditText.OutlinedBox">
+        <item name="colorControlActivated">?attr/colorStateOn</item>
+        <item name="android:colorControlActivated">?attr/colorStateOn</item>
     </style>
 
     <style name="TextAppearance.Home.ChatMeta" parent="TextAppearance.Material3.LabelSmall">

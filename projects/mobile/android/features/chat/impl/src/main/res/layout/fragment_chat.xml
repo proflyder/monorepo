@@ -81,9 +81,9 @@
         android:paddingEnd="@dimen/chat_screen_margin"
         android:paddingBottom="8dp">
 
-        <com.google.android.material.floatingactionbutton.FloatingActionButton
+        <dev.proflyder.home.core.ui.OutlinedFloatingActionButton
             android:id="@+id/chat_scroll_down"
-            style="?attr/floatingActionButtonSmallSecondaryStyle"
+            style="@style/Widget.Home.FloatingActionButton.SmallSecondary"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_gravity="end"
@@ -216,7 +216,7 @@
 
             <com.google.android.material.textfield.TextInputLayout
                 android:id="@+id/chat_input_layout"
-                style="@style/Widget.Home.TextInput.Chat"
+                style="@style/Widget.Home.ChatInput"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1">
