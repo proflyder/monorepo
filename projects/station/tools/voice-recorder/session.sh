@@ -1,5 +1,4 @@
 #!/bin/sh
-# Ephemeral /tmp-only session. Does not change enabled, state.conf, service scripts or binary.
 set -eu
 BASE=/tmp/voice-recorder
 ID=$1
@@ -15,8 +14,6 @@ DAEMON=$(pidof pulsar || true)
 WATCH=
 HELPER=
 daemon_alive() {
-  # A paused parent cannot reap its terminated child. Z has already released
-  # ALSA/file descriptors and is safe to leave until we resume that parent.
   [ -r /proc/$DAEMON/stat ] || return 1
   read -r _pid _name state _rest < /proc/$DAEMON/stat || return 1
   [ "$state" != Z ]
@@ -42,7 +39,6 @@ cleanup() {
   resume
   [ -z "$WATCH" ] || kill "$WATCH" 2>/dev/null || true
   echo restored > "$S/state"
-  # Only remove our own lock; preserve all diagnostics until explicit cleanup.
   if [ "$(cat /tmp/voice-recorder.lock/owner 2>/dev/null || true)" = "$ID" ]; then
     rm /tmp/voice-recorder.lock/owner
     rmdir /tmp/voice-recorder.lock
@@ -55,7 +51,6 @@ trap 'exit 143' HUP INT TERM
 printf '%s\n' "$SUP" > "$S/supervisors"
 echo 0 > "$S/heartbeat"
 echo preparing > "$S/state"
-# This independent watchdog survives a dead Mac, disconnected ADB or killed parent shell.
 (
   trap '' HUP
   last=0

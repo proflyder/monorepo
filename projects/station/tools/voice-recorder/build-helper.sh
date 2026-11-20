@@ -2,7 +2,6 @@
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$HERE/../../../.." && pwd)"
-# Pass ZIG explicitly if it is not installed in this project's local Python environment.
 ZIG="${ZIG:-$ROOT/.venv/lib/python3.14/site-packages/ziglang/zig}"
 [[ -x "$ZIG" ]] || { echo 'Set ZIG to zig 0.14.1' >&2; exit 1; }
 export CARGO_ZIGBUILD_ZIG_PATH="$ZIG" CARGO_ZIGBUILD_PYTHON_PATH=/nonexistent/python3

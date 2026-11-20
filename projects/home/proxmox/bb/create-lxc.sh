@@ -1,8 +1,4 @@
 #!/usr/bin/env bash
-# Create the unprivileged Debian LXC used by the bb server (CT 103).
-#
-# Run as root on the Proxmox host. Addresses and storage are parameters; the
-# examples in --help are documentation values (RFC 5737), never live values.
 set -euo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -146,13 +142,11 @@ fi
 
 [[ $(id -u) == 0 ]] || die "run on the Proxmox host as root"
 
-# Refuse to touch an existing guest, but treat that as success for re-runs.
 if pct status "$CTID" >/dev/null 2>&1; then
   echo "CT $CTID already exists; leaving it unchanged."
   exit 0
 fi
 
-# An address that answers ping or has a live neighbour entry is not free.
 if ping -c1 -W1 "$IP" >/dev/null 2>&1; then
   die "$IP is already answering ping"
 fi
@@ -165,7 +159,6 @@ if command -v arping >/dev/null 2>&1; then
   fi
 fi
 
-# Locate or download the pinned Debian 13 amd64 template.
 if ! pveam list "$TEMPLATE_STORAGE" | awk '{print $1}' |
   grep -qx "$TEMPLATE_STORAGE:vztmpl/$TEMPLATE"; then
   pveam update >/dev/null

@@ -1,11 +1,3 @@
-# ha-scenario: the durable `scenario` queue executor.
-#
-# Separate from ha-bridge (alarm `home` queue) and ha-control (phone catalog and
-# `control` queue): it leases only `scenario`, owns its own consumer id and
-# ledger, and never listens on a port. Definitions stay in the scheduler; this
-# process evaluates conditions and runs steps.
-#
-# TEMPLATE: deploy.sh renders the digest-pinned image.
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -31,11 +23,9 @@ metadata:
     app.kubernetes.io/name: ha-scenario
     app.kubernetes.io/part-of: home
   annotations:
-    # Traceability only: a Deployment metadata change never rolls pods.
     proflyder.dev/build: ${BUILD_ID}
 spec:
   replicas: 1
-  # One executor per queue. A second replica would run the same scenario twice.
   strategy:
     type: Recreate
   selector:
@@ -46,7 +36,6 @@ spec:
       labels:
         app.kubernetes.io/name: ha-scenario
       annotations:
-        # Content-addressed: identical rendered content keeps the pod template.
         proflyder.dev/rollout: ${ROLLOUT_ID}
     spec:
       enableServiceLinks: false
@@ -75,17 +64,12 @@ spec:
               value: ha-scenario-home
             - name: SCENARIO_QUEUE
               value: scenario
-            # Scenarios are user-created; there are none at roll-out time, so
-            # the executor starts enabled with an idle queue.
             - name: SCENARIO_EXECUTE
               value: "true"
             - name: SCENARIO_LEDGER_PATH
               value: /data/scenario-ledger.json
-            # Fallback for conditions when a scenario has no time trigger.
             - name: SCENARIO_TIMEZONE
               value: Asia/Almaty
-            # A run must finish inside one lease to be acknowledged; a single
-            # delay step is capped at 3600 s by the proto contract.
             - name: SCENARIO_LEASE_SECONDS
               value: "3600"
             - name: SCENARIO_BATCH_SIZE
@@ -98,8 +82,6 @@ spec:
               value: 3s
           readinessProbe:
             exec:
-              # Authenticated scheduler readiness; the token comes from the
-              # mounted file, never from probe arguments.
               command: ["/usr/local/bin/ha-scenario", "-healthcheck"]
             initialDelaySeconds: 3
             periodSeconds: 15

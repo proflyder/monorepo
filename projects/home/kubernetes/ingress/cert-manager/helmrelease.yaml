@@ -1,8 +1,3 @@
-# cert-manager, adopted from the live `cert-manager` release.
-#
-# Same release name/namespace as `helm list -A`. The chart installs CRDs from
-# its `crds/` directory; `upgrade.crds: CreateReplace` keeps them upgraded by
-# Flux (a plain `helm upgrade` skips that directory).
 apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:

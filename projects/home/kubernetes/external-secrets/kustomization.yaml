@@ -1,8 +1,3 @@
-# Flux entry point for External Secrets Operator.
-#
-# The release keeps its live name and namespace (`external-secrets`), and the
-# values keep the digest-pinned image, so helm-controller adopts the existing
-# Helm release instead of reinstalling it.
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:

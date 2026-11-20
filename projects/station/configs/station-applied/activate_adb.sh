@@ -1,6 +1,4 @@
 #!/bin/sh
-# FORTRESS-WRAPPER v2: 'deactivate' -> no-op (maind не может убить adbd),
-# 'activate' -> всегда с --network (иначе оригинал снял бы network-маркер).
 case " $* " in
   *" deactivate "*)
       echo "`date`: FORTRESS: deactivate blocked" >> /data/quasar/quasar_adb.log

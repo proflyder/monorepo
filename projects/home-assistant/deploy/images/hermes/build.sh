@@ -1,37 +1,4 @@
 #!/usr/bin/env bash
-# Build the Hermes gateway image reproducibly (DECISIONS 36).
-#
-# This is the single Docker build used by PR CI (`.github/workflows/_images.yml`)
-# and by deploy-home's fallback (`build-and-push.sh`). Both must pass the same
-# arguments: a pinned base, the Debian snapshot from the Dockerfile and
-# `SOURCE_DATE_EPOCH` = the upstream commit time. Buildx then rewrites layer
-# timestamps (`rewrite-timestamp=true`), so two builds of the same revision and
-# Dockerfile produce one manifest digest.
-#
-#   # CI: push straight under the tree tag and print the digest
-#   build.sh --context "$DIR" --source-repo "$SRC" --revision "$SHA" \
-#     --push --tag ghcr.io/proflyder/hermes:tree-<hash>
-#
-#   # Reproducibility check: two local OCI layouts in different directories
-#   build.sh --context "$DIR" --source-repo "$SRC" --revision "$SHA" \
-#     --oci-dir "$TMP/one"
-#
-# `--metadata-file` keeps Buildx's metadata (`containerimage.digest` and the
-# descriptor); the digest is also printed as the last line on stdout.
-#
-# `--cache-from` / `--cache-to` pass Buildx cache specs through unchanged
-# (`type=registry,ref=…`, `type=local,src=…`, …). CI reads the shared registry
-# cache on every build and writes it back only where the job holds a GHCR
-# token with `packages: write`. The cache only lets Buildx reuse an executor
-# result for a layer whose inputs hash the same: the layer content, the config
-# and `rewrite-timestamp` are still produced from the pinned inputs, so a cache
-# hit and a cold build of the same revision give the same manifest digest.
-# `verify-reproducible.sh` deliberately builds without cache; cached builds are
-# checked by comparing their printed digest with the PR-built one.
-#
-# Buildx's own provenance attestation is disabled: it would add a manifest to
-# the index (changing the digest) and duplicate the provenance that
-# `actions/attest-build-provenance` publishes for the same digest.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -138,8 +105,6 @@ digest=$(sed -n 's/^[[:space:]]*"containerimage.digest":[[:space:]]*"\(sha256:[0
 }
 
 if [[ "$push" == true ]]; then
-  # The registry must keep the built manifest: reading the tag back proves the
-  # digest the rollout will deploy is the digest this build produced.
   pushed=$(docker buildx imagetools inspect --format '{{.Manifest.Digest}}' "$tag") || {
     echo "could not inspect ${tag} after push" >&2
     exit 1

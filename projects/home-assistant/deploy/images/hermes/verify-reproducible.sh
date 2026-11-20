@@ -1,16 +1,4 @@
 #!/usr/bin/env bash
-# Prove the Hermes image is reproducible (DECISIONS 36).
-#
-# Builds the same upstream revision twice into two different OCI layouts, with
-# the layer cache disabled, and compares the manifest digests. Any difference
-# means a floating input (base tag, apt index, timestamp) slipped into the
-# Dockerfile and would cause a spurious rollout on every deploy.
-#
-# Needs `docker buildx` (any builder) and network access to GitHub, Docker Hub,
-# GHCR, snapshots and PyPI. Runs in minutes and is a manual/`workflow_dispatch`
-# check, not part of the default PR CI.
-#
-#   projects/home-assistant/deploy/images/hermes/verify-reproducible.sh
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -28,8 +16,6 @@ docker buildx version >/dev/null 2>&1 || { echo "docker buildx is required" >&2;
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
 
-# Reuse an existing upstream checkout for repeated local runs; otherwise clone
-# the full history (the pinned revision may be outside the default branch).
 if [[ -n "${HERMES_SRC:-}" ]]; then
   [[ -d "$HERMES_SRC/.git" ]] || { echo "HERMES_SRC is not a git checkout: $HERMES_SRC" >&2; exit 1; }
   SRC=$HERMES_SRC

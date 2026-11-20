@@ -1,5 +1,4 @@
 #!/bin/sh
-# Run as root: sudo ./verify.sh
 set -u
 
 echo "=== host ==="

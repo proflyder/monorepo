@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# Separate host bootstrap: startup ordering requires global Sys.Modify in PVE.
 set -euo pipefail
 [[ $(id -u) == 0 ]]
 qm config 100 | grep -q '^name: haos$'

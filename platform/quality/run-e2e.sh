@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# Repository convenience command; each project owns its live tests.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 "$ROOT/projects/home-assistant/scripts/test-e2e.sh"

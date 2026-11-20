@@ -1,22 +1,3 @@
-# Alertmanager delivery alerts.
-#
-# The chart's default AlertmanagerFailedToSendAlerts and
-# AlertmanagerClusterFailedToSendAlerts are disabled in values/prometheus.yaml
-# (defaultRules.disabled) and redeclared here with the same expressions,
-# severities and runbooks, except that the heartbeat webhook is excluded.
-#
-# Why: the Watchdog is re-sent to the external dead-man switch every 5 minutes.
-# A single webhook failure in that window is 33-50% of the rate the default
-# rules measure, so one transient error raises a critical page even though the
-# dead-man switch itself tolerates 900 s of silence. Delivery problems of the
-# heartbeat integration are covered separately by HeartbeatPingFailing, which
-# requires several failures and has a warning severity.
-#
-# The heartbeat receiver now has an explicit webhook timeout (see
-# manifests/external-secret-alertmanager-telegram.yaml), so Alertmanager can
-# retry inside the one-minute group interval instead of hitting the group
-# context deadline. Alertmanager 0.34 http_config has no option to disable
-# keep-alive, hence the timeout is the only client-side mitigation.
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:

@@ -1,22 +1,4 @@
 #!/usr/bin/env bash
-# Deploy OpenBao (single node, raft, static auto-unseal, UI) on the home K3s
-# node and publish it as https://vault.<home-domain>/ behind Traefik.
-#
-# Public inputs live here; private values come from untracked files:
-#   KUBECONFIG                 admin kubeconfig (required)
-#   secrets/home/ingress.env   HOME_DOMAIN, NODE_IP (same file as ingress/)
-#   secrets/home/vpn/cloudflare.env  CLOUDFLARE_API_TOKEN (DNS record)
-#   secrets/openbao/seal.key   optional: created on first install only; when
-#                              absent the live Secret openbao-seal is kept
-#
-# Optional environment:
-#   OPENBAO_NODE_SSH  full ssh command for the K3s node, used to create
-#                     /srv/k3s/volumes/openbao{,-backups}
-#   OPENBAO_NODE_NAME node name for PV nodeAffinity (default: the only node)
-#   OPENBAO_SKIP_DNS=1  do not touch the Cloudflare A record
-#
-# Idempotent: re-running upgrades the release, keeps the seal Secret and
-# the DNS record, and leaves an initialised/unsealed server untouched.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
 # shellcheck disable=SC1091
@@ -61,11 +43,6 @@ TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 chmod 700 "$TMP"
 
-# ----- seal key and namespace ---------------------------------------------
-# The live seal key is the Secret openbao-seal; the owner keeps the only other
-# copy in Bitwarden (`Home recovery`). A local seal.key is used only when it is
-# present (first install or deliberate restore). Never generate a key while
-# the Secret exists: a new random key would make the raft data unopenable.
 kubectl create namespace "$OPENBAO_NS" --dry-run=client -o yaml | kubectl apply -f -
 if kubectl -n "$OPENBAO_NS" get secret openbao-seal >/dev/null 2>&1; then
   seal_secret_exists=1
@@ -89,7 +66,6 @@ else
   echo "keeping the live Secret openbao-seal (no local seal.key)"
 fi
 
-# ----- local volume directories and PVs -----------------------------------
 NODE_NAME="${OPENBAO_NODE_NAME:-$(kubectl get nodes -o jsonpath='{.items[0].metadata.name}')}"
 if [[ -n "${OPENBAO_NODE_SSH:-}" ]]; then
   $OPENBAO_NODE_SSH 'sudo install -d -m 700 /srv/k3s/volumes/openbao /srv/k3s/volumes/openbao-backups'
@@ -98,13 +74,9 @@ else
 fi
 sed "s|__OPENBAO_NODE_NAME__|$NODE_NAME|g" "$MANIFESTS/storage.yaml" | kubectl apply -f -
 
-# ----- helm release --------------------------------------------------------
 sed "s|__OPENBAO_IMAGE_TAG__|$IMAGE_TAG|g" "$VALUES/openbao.yaml" > "$TMP/values.yaml"
 chmod 600 "$TMP/values.yaml"
 
-# StatefulSet volumeClaimTemplates are immutable. A release that still has the
-# old audit volume is removed with --cascade=orphan (the pod and data PVC stay)
-# so helm can recreate it without the audit claim.
 if kubectl -n "$OPENBAO_NS" get statefulset openbao \
     -o jsonpath='{.spec.volumeClaimTemplates[*].metadata.name}' 2>/dev/null \
     | tr ' ' '\n' | grep -qx audit; then
@@ -113,8 +85,6 @@ fi
 
 helm repo add openbao https://openbao.github.io/openbao-helm --force-update >/dev/null
 helm repo update openbao >/dev/null
-# --wait would block on the readiness probe: a fresh server is sealed until
-# bootstrap.sh initialises it.
 helm upgrade --install openbao openbao/openbao \
   --version "$OPENBAO_CHART_VERSION" -n "$OPENBAO_NS" \
   -f "$TMP/values.yaml"
@@ -122,7 +92,6 @@ helm upgrade --install openbao openbao/openbao \
 kubectl -n "$OPENBAO_NS" wait --for=jsonpath='{.status.phase}'=Running \
   pod/openbao-0 --timeout=180s
 
-# ----- DNS A record (Cloudflare, DNS only) --------------------------------
 if [[ "$SKIP_DNS" == 1 ]]; then
   echo "skipping the Cloudflare A record (--skip-dns)"
 else
@@ -134,11 +103,9 @@ else
     "$CLOUDFLARE_API_TOKEN_FILE" "$VAULT_HOST" "$NODE_IP"
 fi
 
-# ----- HTTPS route ---------------------------------------------------------
 sed "s|\${VAULT_HOST}|$VAULT_HOST|g" "$MANIFESTS/ingressroute.yaml" | kubectl apply -f -
 kubectl -n traefik get ingressroute openbao >/dev/null
 
-# ----- backup job and probe manifests -------------------------------------
 sed "s|__OPENBAO_IMAGE_TAG__|$IMAGE_TAG|g" "$MANIFESTS/backup.yaml" | kubectl apply -f -
 
 status=$(kubectl -n "$OPENBAO_NS" exec openbao-0 -- \

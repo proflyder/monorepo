@@ -1,9 +1,4 @@
 #!/usr/bin/env bash
-# Resolve the station's current LAN address via mDNS (the hostname embeds the
-# device id and survives DHCP changes and factory resets).
-#
-#   ./scripts/find-station.sh          # print ip + adb state
-#   ./scripts/find-station.sh --connect
 set -euo pipefail
 
 LAB_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"

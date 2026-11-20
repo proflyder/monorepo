@@ -1,19 +1,3 @@
-# TEMPLATE. Flux substitutes ${NEXUS_HOST} (internal name under the home
-# suffix) and ${NEXUS_PUBLIC_HOST} (Cloudflare Tunnel name used by CI) from the
-# `flux-settings` Secret.
-#
-# Two routes:
-#   * `/repository/*` on either host is the only public surface. GitHub-hosted
-#     runners reach it without the VPN and authenticate as the read-only
-#     `ci-reader` user (anonymous access is disabled). Request bodies and
-#     request rates are capped so the proxy cannot be used as an open upload or
-#     flood target.
-#   * every other path on the internal host (UI, `/service/rest/*` admin API)
-#     stays on the LAN/VPN allow-list; the public host has no catch-all route,
-#     so Traefik returns 404 there instead of exposing the UI.
-#
-# TLS is terminated here with the shared wildcard certificate; the pod speaks
-# plain HTTP on 8081.
 ---
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
@@ -21,9 +5,6 @@ metadata:
   name: nexus-public-limits
   namespace: traefik
 spec:
-  # Artifacts are large, but no legitimate CI request uploads more than a POM
-  # or an npm tarball; 8 MiB is far above a normal metadata upload and still
-  # bounds an abusive POST.
   buffering:
     maxRequestBodyBytes: 8388608
     memRequestBodyBytes: 1048576

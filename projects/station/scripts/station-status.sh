@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# One-shot status of the station + lab.
 set -u
 
 IP="${STATION_IP:-192.0.2.13}"

@@ -1,11 +1,4 @@
 #!/usr/bin/env bash
-# Acceptance checks for the home OpenBao deployment.
-#
-#   ./projects/home/kubernetes/openbao/verify.sh            # HTTPS, UI, login
-#   ./projects/home/kubernetes/openbao/verify.sh --kubernetes  # + pod auth probe
-#
-# Reads HOME_DOMAIN/NODE_IP from secrets/home/ingress.env and the temporary
-# human password from secrets/openbao/human.pass. Nothing secret is printed.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
 
@@ -81,7 +74,6 @@ check "health initialized" "True" \
 check "health sealed" "False" \
   "$(printf '%s' "$health" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("sealed"))' 2>/dev/null || echo bad)"
 
-# Human login through userpass, then prove the admin policy denies sealing.
 if [[ -r "$PASS_FILE" && -n "$HUMAN_USER" ]]; then
   password=$(tr -d '\r\n' <"$PASS_FILE")
   login=$(printf '%s' "{\"password\":\"$password\"}" | curl_host -X POST -d @- \
@@ -103,7 +95,6 @@ else
   echo "SKIP human login (need $PASS_FILE and $SECRETS_DIR/username)"
 fi
 
-# Policy preconditions for the machine identities.
 for policy in k8s-read; do
   body=$(curl_host "https://$HOST/v1/sys/policies/acl/$policy" || true)
   if [[ "$body" == *'"write"'* || "$body" == *'"update"'* ]]; then
@@ -113,7 +104,6 @@ for policy in k8s-read; do
   fi
 done
 
-# Kubernetes auth probe: real pod, real ServiceAccount, real TokenReview.
 if [[ "$RUN_KUBERNETES" == 1 ]]; then
   source "$ROOT/projects/home/kubernetes/versions.sh"
   image="${OPENBAO_IMAGE_VERSION}@${OPENBAO_IMAGE_DIGEST}"

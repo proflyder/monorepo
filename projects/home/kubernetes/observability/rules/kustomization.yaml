@@ -1,6 +1,3 @@
-# Backup freshness, Alertmanager delivery and Flux delivery rules, plus the
-# Flux controller PodMonitor. Split out because PrometheusRule/PodMonitor need
-# the Prometheus Operator CRDs that the `monitoring` release installs.
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:

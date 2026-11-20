@@ -1,4 +1,3 @@
-# Loki, adopted from the live `loki` release (same values file as before).
 apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:

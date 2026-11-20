@@ -1,18 +1,3 @@
-# `ping` integration is UI-only now (YAML ping is not supported), so the
-# wired desktop «комп» reachability is one command_line binary sensor.
-#
-# The whole command, including the host, comes from secrets.yaml on purpose:
-# Home Assistant resolves `!secret` only as a whole YAML scalar and cannot
-# concatenate it into a longer string. Keeping the complete command in the
-# secret is the only way to keep the real address out of Git and still run
-# busybox `ping -c 1 -W 1` plus the `&& echo 1 || echo 0` wrapper. The wrapper
-# is required: on a non-zero exit the integration returns no value and the
-# sensor would stay `unknown` instead of turning `off`.
-#
-# 10 s keeps voice answers close to reality: Windows needs 1–2 minutes to leave
-# the network after `shutdown /s /t 60`, and a 30 s poll made «включи комп»
-# answer «Комп уже включён» right after «выключи комп». A command_line sensor
-# has no config-entry reload; a scan_interval change needs an HA restart.
 - binary_sensor:
     name: "Комп в сети"
     unique_id: komp_online
@@ -23,28 +8,11 @@
     payload_off: "0"
     scan_interval: 10
 
-# Screen lock of the same wired desktop, over the restricted SSH wrapper's
-# read-only `status` word (projects/home/windows-pc/komp-power.ps1).
-#
-# Home Assistant lock semantics: `on` means unlocked/open, `off` means
-# locked/closed. The entity id keeps the owner's `komp_razblokirovan` name, but
-# the state follows the device class, so the HA card shows "Unlocked"/"Locked"
-# correctly; the Android control catalog maps the same state to its own
-# localized subtitle.
-#
-# `command` is a Jinja template. It runs SSH only while the ping sensor says
-# the PC is on; otherwise it prints `offline` locally. `availability` hides the
-# entity when the PC is offline, so no SSH attempt is made and the state is
-# `unavailable` instead of a stale lock state. The SSH target comes from
-# `input_text.komp_ssh_target` (the secret lives there), the same way as the
-# shell commands; `!secret` cannot be spliced into a longer version.
 - binary_sensor:
     name: "Комп разблокирован"
     unique_id: komp_unlocked
     device_class: lock
     icon: mdi:lock
-    # HA templates only the arguments of a command_line command, never the
-    # program itself, so the condition lives inside `sh -c`.
     command: >-
       sh -c "{% if is_state('binary_sensor.komp_v_seti', 'on') %}ssh
       -i /config/.ssh/komp_ed25519 -o BatchMode=yes -o ConnectTimeout=5

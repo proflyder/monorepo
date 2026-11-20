@@ -1,10 +1,4 @@
 #!/usr/bin/env bash
-# Read-only acceptance checks for the private home HTTPS suffix.
-#
-#   HOME_DOMAIN=home.example.com NODE_IP=192.0.2.27 ./verify.sh
-#
-# Optional bearer tokens (scheduler + HA) are read from private files; they are
-# never printed. WebSocket and issuer checks are included.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
 
@@ -33,7 +27,6 @@ check() {
   fi
 }
 
-# Accept any of a pipe-separated set, e.g. "200|204".
 check_any() {
   local label=$1 expected=$2 actual=$3
   if [[ "|$expected|" == *"|$actual|"* ]]; then

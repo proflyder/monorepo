@@ -1,12 +1,3 @@
-# Nightly raft snapshot to the local `openbao-backups` volume.
-#
-# The job authenticates with the Kubernetes auth method (ServiceAccount
-# `openbao-backup`, role `backup`, policy `backup`), so no long-lived token is
-# stored anywhere. Snapshots are integrity-protected by OpenBao and can be
-# restored with `bao operator raft snapshot restore`.
-#
-# Keeps the newest 7 snapshots. Offsite/encrypted copy is an open item
-# (docs/PENDING.md): the volume is on the same node as the data.
 apiVersion: v1
 kind: ServiceAccount
 metadata:

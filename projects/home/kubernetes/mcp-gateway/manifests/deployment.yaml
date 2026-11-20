@@ -1,16 +1,3 @@
-# MCP infra gateway: one Deployment, one ClusterIP Service.
-#
-# TEMPLATE. deploy.sh renders it with private values (NODE_LAN_IP is used by the
-# NetworkPolicy, the image digest comes from the Bazel build); rendered
-# manifests are never committed.
-#
-#   MCP_GATEWAY_IMAGE   digest-pinned image built by Bazel
-#   BUILD_ID            Deployment annotation (traceability, never rolls pods)
-#   ROLLOUT_ID          content-addressed pod-template annotation
-#
-# The pod runs as 65534 with a read-only root filesystem. It has a
-# ServiceAccount token on purpose: the only cluster access in the whole voice
-# path goes through this pod (Hermes itself has none).
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -20,12 +7,9 @@ metadata:
     app.kubernetes.io/name: mcp-gateway
     app.kubernetes.io/part-of: home
   annotations:
-    # Traceability only: a Deployment metadata change never rolls pods.
     proflyder.dev/build: ${BUILD_ID}
 spec:
   replicas: 1
-  # A second replica would double the pending-action store and the cooldown
-  # bookkeeping is per pod, so the gateway stays single-writer.
   strategy:
     type: RollingUpdate
     rollingUpdate:
@@ -39,7 +23,6 @@ spec:
       labels:
         app.kubernetes.io/name: mcp-gateway
       annotations:
-        # Content-addressed: identical rendered content keeps the pod template.
         proflyder.dev/rollout: ${ROLLOUT_ID}
     spec:
       enableServiceLinks: false
@@ -61,8 +44,6 @@ spec:
               value: infra.read,infra.fix,infra.report,bb.read,bb.act,time,phone
             - name: MCP_HTTP_ADDR
               value: ":8080"
-            # Human-facing clock times in report/alert texts. IANA zone; the
-            # binary embeds tzdata because the image is distroless.
             - name: MCP_TIMEZONE
               value: Asia/Almaty
             - name: MCP_AUTH_TOKEN_FILE
@@ -75,12 +56,6 @@ spec:
               value: http://monitoring-alertmanager.monitoring.svc:9093
             - name: MCP_LOKI_URL
               value: http://loki.monitoring.svc:3100
-            # KUBERNETES_API_URL/TOKEN_FILE/CA_FILE are left at their in-cluster
-            # defaults: https://kubernetes.default.svc and the projected
-            # ServiceAccount volume.
-            # Home Assistant REST for ha_* catalog checks. The token is the
-            # same long-lived token the scheduler's ha-bridge uses; the URL is
-            # rendered from the private deploy env (HAOS_IP).
             - name: MCP_HA_URL
               value: "http://${HAOS_IP}:8123"
             - name: MCP_HA_TOKEN_FILE
@@ -89,10 +64,6 @@ spec:
               value: /run/secrets/mcp-gateway-telegram/token
             - name: TELEGRAM_CHAT_ID_FILE
               value: /run/secrets/mcp-gateway-telegram/chat_id
-            # bb home-dispatcher: one SSH session per call through the
-            # forced-command bridge. The gateway owns only the restricted key
-            # and the pinned host key; the plugin token and HMAC secret stay on
-            # the bb host.
             - name: MCP_BB_SSH_ADDR
               value: "${BB_CT_IP}:22"
             - name: MCP_BB_SSH_USER
@@ -105,19 +76,12 @@ spec:
               value: /etc/mcp-gateway/bb-targets.yaml
             - name: MCP_BB_DISPATCHER_THREAD_ID
               value: "${BB_DISPATCHER_THREAD_ID}"
-            # Voice entry point: a separate bearer token, never the MCP token.
             - name: MCP_VOICE_TOKEN_FILE
               value: /run/secrets/mcp-gateway-voice/token
-            # Durable scheduler for the `time` tools (alarms/timers/reminders).
-            # The bearer is the scheduler's own OpenBao key; this is the same
-            # Connect JSON API Home Assistant and Android use.
             - name: MCP_SCHEDULER_URL
               value: http://scheduler.home-assistant.svc.cluster.local:8098
             - name: MCP_SCHEDULER_TOKEN_FILE
               value: /run/secrets/mcp-gateway-scheduler/token
-            # Phone push (find-phone, notifications). The push service owns the
-            # FCM service account; the gateway only presents the shared app
-            # bearer, which is already mounted for the scheduler.
             - name: MCP_PUSH_URL
               value: http://phone-push.home-assistant.svc.cluster.local:8095
             - name: MCP_PUSH_TOKEN_FILE
@@ -130,9 +94,6 @@ spec:
             - name: http
               containerPort: 8080
               protocol: TCP
-          # The image is distroless: the probe is the binary itself, which loads
-          # the configuration (token file, catalog, groups) and then calls
-          # /healthz on loopback.
           readinessProbe:
             httpGet:
               path: /readyz
@@ -242,8 +203,6 @@ spec:
           emptyDir:
             sizeLimit: 16Mi
 ---
-# ClusterIP only: the gateway is reachable from Hermes (hostNetwork, node
-# address) and from Prometheus; it is never published through Traefik.
 apiVersion: v1
 kind: Service
 metadata:

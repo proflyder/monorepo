@@ -1,7 +1,3 @@
-# Notes stay in Home Assistant (`todo.notes`). Everything about time — alarms,
-# timers and reminders — is routed to Hermes by `station_time.yaml` and handled
-# by the mcp-gateway `time` tools on the durable scheduler; no timer or reminder
-# sentence templates live here any more.
 lists:
   text:
     wildcard: true

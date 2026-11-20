@@ -1,18 +1,4 @@
 #!/usr/bin/env bash
-# Install or refresh the scheduler/control/intercom NodePort source filter on the K3s node.
-#
-# This is host configuration, not part of a CI deploy: the API deploy path never
-# touches nftables. Run it as root on the node (or over SSH) once, and again
-# when the LAN CIDR, node address or NodePorts change.
-#
-#   PRIVATE_ENV=secrets/home/scheduler.env ./apply.sh
-#   ./apply.sh --env /path/to/scheduler.env
-#
-# Rendering needs the Rust `home-deploy` binary on this node (an installed
-# /usr/local/bin/home-deploy, or set HOME_DEPLOY); see platform/deploy.
-#
-# The rendered ruleset replaces only `table inet home_scheduler`; the
-# Kubernetes and management tables are untouched.
 set -euo pipefail
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

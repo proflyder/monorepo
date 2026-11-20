@@ -1,6 +1,3 @@
-# Read-only operational Grafana UI for the home LAN.
-# Grafana remains a ClusterIP Service behind Traefik; this is a separate NodePort
-# Service so the monitoring Helm release can be upgraded independently.
 apiVersion: v1
 kind: Service
 metadata:

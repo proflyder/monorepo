@@ -1,14 +1,3 @@
-# Home Assistant template entities.
-#
-# `switch.ricardo_work_profile` is a catalogue/Android-friendly wrapper over
-# `input_select.ricardo_voice_profile`: on = Рабочий, off = Личный. The
-# input_select stays the single source of truth; the switch only maps it to
-# the switch domain understood by the device catalogue.
-#
-# `switch.komp` wraps the wired desktop: its state mirrors the ping binary
-# sensor, turning on sends Wake-on-LAN, turning off schedules the restricted
-# SSH shutdown. See the comment above the second switch.
-
 - switch:
     - name: "Рабочий профиль"
       unique_id: ricardo_work_profile
@@ -28,12 +17,6 @@
           data:
             option: "Личный"
 
-# `switch.komp` is the wired Windows desktop as a normal on/off control:
-# state mirrors the ping binary sensor; turn_on issues a one-time wakegrant
-# logon grant (best-effort) and sends Wake-on-LAN; turn_off asks the restricted
-# SSH wrapper to schedule a 60 s shutdown (cancellable from voice or the
-# dashboard). It is a plain `switch` domain entity without a role label, so the
-# ha-control catalogue exposes it as a device (kind "switch").
 - switch:
     - name: "Комп"
       unique_id: komp
@@ -46,11 +29,6 @@
             komp_going_off: >-
               {{ komp_off_at not in ['', 'unknown', 'unavailable', 'None']
                  and (as_timestamp(now()) - as_timestamp(komp_off_at)) < 300 }}
-        # Issue a one-time logon grant only when the PC is down (or is already
-        # shutting down): a logon grant must not exist for an already running
-        # session. The grant service must never block Wake-on-LAN: if it is
-        # down the PC still boots and shows its normal sign-in screen (fail
-        # closed).
         - if:
             - condition: template
               value_template: >-
@@ -65,11 +43,6 @@
       turn_off:
         - service: script.komp_shutdown
 
-# `button.komp_lock` / `button.komp_unlock` are the device-level actions of the
-# same «Комп» group: HA template buttons have no entity-registry device, so the
-# ha-control catalogue groups them with `switch.komp` by the shared `komp`
-# entity-id prefix and the app shows them under the device settings. Both call
-# the guarded scripts, so pressing them while the PC is offline does nothing.
 - button:
     - name: "Заблокировать"
       unique_id: komp_lock

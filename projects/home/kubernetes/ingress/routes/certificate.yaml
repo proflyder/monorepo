@@ -1,7 +1,3 @@
-# Public template. `deploy.sh` substitutes ${HOME_DOMAIN}.
-# Wildcard certificate for all names below the private home suffix. It lives in
-# the same namespace as the IngressRoutes and the Cloudflare API token Secret,
-# so one certificate covers every host without duplicating TLS Secrets.
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:

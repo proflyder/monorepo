@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# Explicit opt-in live tests; credentials come only from the environment.
 set -euo pipefail
 PROJECT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 : "${HA_TOKEN:?set HA_TOKEN (do not commit it)}"

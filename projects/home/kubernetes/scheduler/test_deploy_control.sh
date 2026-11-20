@@ -1,13 +1,4 @@
 #!/usr/bin/env bash
-# Regression test for deploy.sh control-mode handling with a mocked kubectl.
-#
-# Verifies:
-#   * default rerun preserves the existing ha-control execute mode and replicas
-#     (no apply of control.yaml, no set env, no scale);
-#   * --control-catalog disables execution;
-#   * --control-execute fails closed when the control queue has backlog and
-#     only then enables execution;
-#   * first install applies the control Deployment and Service.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
@@ -15,8 +6,6 @@ DIR="$ROOT/projects/home/kubernetes/scheduler"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
-# deploy.sh renders manifests and reads digests with the Rust `home-deploy` CLI
-# (platform/deploy/resolve.sh). Build it once here unless the caller supplied one.
 if [[ -z "${HOME_DEPLOY:-}" ]] && command -v cargo >/dev/null 2>&1; then
   ( cd "$ROOT" && cargo build -p home-deploy )
   HOME_DEPLOY="$ROOT/target/debug/home-deploy"
@@ -36,8 +25,6 @@ SCHEDULER_PUBLIC_URL=http://192.0.2.27:30098
 CONTROL_NODE_PORT=30099
 EOF
 
-# Pre-resolved digest-pinned images: the regression test must not build or
-# push anything.
 export SCHEDULER_IMAGE="ghcr.io/proflyder/scheduler@sha256:$(printf 'a%.0s' {1..64})"
 export HA_BRIDGE_IMAGE="ghcr.io/proflyder/ha-bridge@sha256:$(printf 'b%.0s' {1..64})"
 export HA_CONTROL_IMAGE="ghcr.io/proflyder/ha-control@sha256:$(printf 'c%.0s' {1..64})"
@@ -87,7 +74,6 @@ run() {
 
 fail() { echo "FAIL: $*"; echo "--- calls"; cat "$CALL_LOG"; exit 1; }
 
-# 1. Default rerun preserves mode/replicas.
 export MOCK_CONTROL_EXISTS=1
 run
 grep -q "apply -f .*control.yaml" "$CALL_LOG" || fail "first install did not apply control.yaml"
@@ -109,18 +95,15 @@ grep -q "scale deployment/ha-control" "$CALL_LOG" && fail "rerun changed control
 grep -q "set env deployment/ha-scenario" "$CALL_LOG" && fail "rerun changed SCENARIO_EXECUTE"
 grep -q "scale deployment/ha-scenario" "$CALL_LOG" && fail "rerun changed scenario replicas"
 
-# 2. Explicit catalog mode.
 export MOCK_CONTROL_EXISTS=0
 run --control-catalog
 grep -q "set env deployment/ha-control CONTROL_EXECUTE=false" "$CALL_LOG" || fail "catalog mode did not disable execution"
 
-# 3. Execute with empty queue.
 export CONTROL_QUEUE_STATUS='{"ready":true,"queues":[{"name":"home","pending":0,"leased":0},{"name":"tasks","pending":0,"leased":0}]}'
 run --control-execute
 grep -q "set env deployment/ha-control CONTROL_EXECUTE=true" "$CALL_LOG" || fail "execute mode did not enable execution"
 grep -q "exec deploy/scheduler.*status" "$CALL_LOG" || fail "execute mode skipped the queue preflight"
 
-# 4. Execute with backlog fails closed.
 set +e
 export CONTROL_QUEUE_STATUS='{"queues":[{"name":"control","pending":2,"leased":0}]}'
 : > "$CALL_LOG"
@@ -130,7 +113,6 @@ set -e
 [[ $rc -ne 0 ]] || fail "execute mode accepted a non-empty control queue"
 grep -q "set env deployment/ha-control CONTROL_EXECUTE=true" "$CALL_LOG" && fail "execute mode enabled despite backlog"
 
-# 5. Malformed or not-ready GetStatus must also fail closed.
 for bad in \
   '{}' \
   '{"ready":false,"queues":[{"name":"home","pending":0,"leased":0}]}' \
@@ -148,8 +130,6 @@ do
   grep -q "set env deployment/ha-control CONTROL_EXECUTE=true" "$CALL_LOG" && fail "enabled despite malformed status: $bad"
 done
 
-# 6. Prebuilt digests from deploy-home (DECISIONS 36) replace the local build.
-#    The Bazel stub fails, so any build attempt is a hard failure.
 mkdir -p "$TMP/bin"
 cat > "$TMP/bin/bazel" <<'EOF'
 #!/usr/bin/env bash
@@ -180,8 +160,6 @@ grep -q "image home-deploy: prebuilt ghcr.io/proflyder/home-deploy@sha256:1111" 
 grep -q "push" "$BAZEL_LOG" && fail "prebuilt images were pushed again"
 unset PREBUILT_DIGESTS
 
-# 7. DEPLOY_NO_BUILD=1 (deploy-home) never builds: every image, including the
-#    sibling workloads, arrives as a promoted digest.
 export DEPLOY_NO_BUILD=1
 export PREBUILT_DIGESTS="scheduler=sha256:$(printf 'd%.0s' {1..64}),ha-bridge=sha256:$(printf 'e%.0s' {1..64}),ha-control=sha256:$(printf 'f%.0s' {1..64}),ha-scenario=sha256:$(printf '2%.0s' {1..64}),home-deploy=sha256:$(printf '1%.0s' {1..64})"
 : > "$BAZEL_LOG"
@@ -194,15 +172,12 @@ PATH="$TMP/bin:$PATH" "$DIR/deploy.sh" >"$TMP/out" 2>&1 || {
 grep -q "image ha-bridge: prebuilt ghcr.io/proflyder/ha-bridge@sha256:eeee" "$TMP/out" \
   || fail "ha-bridge did not use its promoted digest"
 
-# 7b. deploy-home passes the unit's workloads as ONLY (every image name of the
-#     ha-bridge unit, including ha-scenario); each must be a known group.
 : > "$CALL_LOG"
 ONLY="ha-bridge,ha-control,ha-scenario" PATH="$TMP/bin:$PATH" "$DIR/deploy.sh" >"$TMP/out" 2>&1 || {
   cat "$TMP/out"
   fail "deploy.sh rejected the ha-bridge unit workloads as ONLY"
 }
 
-# 8. A missing promoted digest fails closed instead of building.
 : > "$CALL_LOG"
 set +e
 PREBUILT_DIGESTS="scheduler=sha256:$(printf 'd%.0s' {1..64}),ha-control=sha256:$(printf 'f%.0s' {1..64}),home-deploy=sha256:$(printf '1%.0s' {1..64})" \
@@ -215,7 +190,6 @@ grep -q "no promoted digest for 'ha-bridge'" "$TMP/out" \
 grep -q "replace -f" "$CALL_LOG" && fail "a failed resolution still touched the cluster"
 unset DEPLOY_NO_BUILD PREBUILT_DIGESTS
 
-# 9. A malformed or duplicated value must fail closed, before any cluster call.
 for bad in \
   "scheduler=sha256:short" \
   "scheduler=$(printf 'a%.0s' {1..64})" \

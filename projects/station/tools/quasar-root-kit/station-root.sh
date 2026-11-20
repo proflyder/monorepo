@@ -1,50 +1,12 @@
 #!/bin/bash
-# ============================================================================
-#  station-root.sh — автоматический РУТ Яндекс Станций на quasar
-#  ПУБЛИЧНАЯ СБОРКА: серты eMudhra-набора (eQuasar) — в комплекте; adb качается сам.
-#  НАЗНАЧЕНИЕ: root-доступ, бэкап и обслуживание СВОИХ умных колонок пользователя
-#  в его домашней сети (свои устройства, свой роутер, согласие владельца).
-#  Проверено живьём: Лайт 2 (YNDX-00026, mDNS platform=plum) и Миди (YNDX-00054,
-#  mDNS platform=cucumber, quasar/OTA=yandexmidi; рут на in-box 3.210.351.1.6,
-#  раскладка совпала с разобранной OTA 0.369.1.50); на обеих fortress + OTA-запрет.
-#  Пилот: Мини 3 Про (Amlogic A4/A113L2, Secure Boot, u-boot ENV под белым списком).
-#  Платформа определяется по mDNS (platform=...) — скрипт универсальный, но на
-#  НЕпроверенных прошивках предупреждает и собирает recon (--backup) для сверки.
-#  Вектор: локальный прозрачный HTTPS-прокси для syncd с валидной цепочкой сертов quasar.yandex.net
-#
-#  ЧТО ДЕЛАЕТ САМ:
-#   1. проверяет инструменты (качает adb если нет)
-#   2. проверяет серты/цепочку (leaf ↔ key ↔ AAA-корень)
-#   3. находит колонку в сети (mDNS) + её device_id/platform
-#   4. проверяет локальную DNS-запись; если нет — ПЕЧАТАЕТ команду под твой роутер (роутеры у всех разные)
-#   5. поднимает HTTPS-прокси :443 (sudo, спросит пароль) если ещё не running
-#   6. дописывает adbd.remoteActivation=true в ответы /get_sync_info (rules.json)
-#   7. ждёт открытия :5555 у колонки (если нет — попросит перегрузить её питанием)
-#   8. adb connect + проверка uid=0 → РУТ
-#   9. по флагам: --shell (интерактивный shell), --backup (бэкап + recon чужой прошивки),
-#      --export (переносный tar.gz стенда — передать знакомому для проверки у него)
-#
-#  ЧТО НЕ МОЖЕТ — ПИШЕТ ГАЙД (что делать юзеру руками).
-#
-#  ЗАПУСК:   bash station-root.sh            → ИНТЕРАКТИВНОЕ МЕНЮ (Enter = МАСТЕР — главный путь)
-#             bash station-root.sh --run     → МАСТЕР в терминале: ведёт до конца
-#                          (DNS-гайд с перепроверкой  -> прокси -> РУТ -> fortress -> OTA-запрет
-#                           -> статус -> напоминание убрать DNS-запись);
-#                          БЕЗ tty --run — прежний неинтерактивный путь, те же exit-коды
-#    тогглы:  --fortress / --fortress-off   самозащита adbd (deactivate->no-op + keeper)
-#             --ota-off / --ota-on          запрет/разрешение OTA-прошивки колонки
-#             --status                       состояние всех тогглов
-#    прочее:  --shell --backup --export --router-off --ota-shield --help
-#  Удалить локальную DNS-запись: bash station-root.sh --router-off
-# ============================================================================
 set -u
-BASE="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"        # ~/yndx/mitm
-Y="$(dirname "$BASE")"                                        # ~/yndx
+BASE="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
+Y="$(dirname "$BASE")"
 ADB="$Y/tools/platform-tools/adb"
 LOG="$BASE/mitm.log"
 RULES="$BASE/rules.json"
-LASTF="$BASE/.last_column_ip"   # прошлый выбор колонки — меню/мастер не переспрашивают
-ROUTER="${ROUTER:-$(ip route 2>/dev/null | awk '/^default/ {print $3; exit}')}"   # шлюз по умолчанию (или ROUTER=<ip> руками)
+LASTF="$BASE/.last_column_ip"
+ROUTER="${ROUTER:-$(ip route 2>/dev/null | awk '/^default/ {print $3; exit}')}"
 [ -n "$ROUTER" ] || ROUTER="192.168.1.1"
 COLUMN_IP="${COLUMN_IP:-}"
 QUASAR_HOST="quasar.yandex.net"
@@ -64,8 +26,6 @@ MODE="run"; for a in "$@"; do case "$a" in
   --ota-shield) MODE=otashield ;;
 esac; done
 
-# МАСТЕР: --run в интерактивном терминале ведёт до конца; БЕЗ tty --run — прежнее
-# неинтерактивное поведение (те же exit-коды, никаких read) — для вызовов из скриптов.
 INTERACTIVE=0
 [ -t 0 ] && INTERACTIVE=1
 
@@ -178,14 +138,12 @@ ok()   { echo -e "  ${C_G}[OK]${C_0} $*"; }
 bad()  { echo -e "  ${C_R}[НЕТ]${C_0} $*"; }
 info() { echo -e "  ${C_B}[..]${C_0} $*"; }
 step() { echo -e "\n${C_B}=== ${*} ===${C_0}"; }
-# платформы, проверенные живьём (рут + тогглы на реальных колонках)
 is_tested() {
   case "${1:-}" in
     plum|yandexmidi|cucumber) return 0 ;;
     *) return 1 ;;
   esac
 }
-# человечье имя платформы (mDNS ≠ quasar/OTA: Миди в mDNS = cucumber, в OTA = yandexmidi)
 plat_name() {
   case "$1" in
     plum)               echo "Лайт 2 (YNDX-00026)" ;;
@@ -200,8 +158,6 @@ plat_name() {
   esac
 }
 
-# ----------------------------------------------------------------------------
-# ИНТЕРАКТИВНОЕ МЕНЮ — запуск без аргументов (аргументы остаются для скриптов)
 if [ $# -eq 0 ]; then
   if [ ! -t 0 ]; then echo "нет аргументов и stdin не терминал — используй флаги (см. --help)"; exit 1; fi
   while :; do
@@ -251,7 +207,6 @@ if [ $# -eq 0 ]; then
   done
 fi
 
-# ----------------------------------------------------------------------------
 if [ "$MODE" = run ] && [ "$INTERACTIVE" = 1 ]; then
   echo -e "${C_G}МАСТЕР${C_0}: веду до конца — DNS-запись  -> прокси -> РУТ -> fortress -> OTA-запрет -> статус -> уборка DNS."
   echo "  На каждом шаге подскажу, что делать; прервать — Ctrl+C."
@@ -271,8 +226,7 @@ if [ ! -x "$ADB" ]; then
 fi
 ok "python3, openssl, dig, curl, adb ($("$ADB" version 2>/dev/null | head -1 | awk '{print $NF}'))"
 
-# ----------------------------------------------------------------------------
-if [ "$MODE" = run ]; then            # серты нужны только полному пути
+if [ "$MODE" = run ]; then
 step "2/7 Серты и цепочка (лист quasar.yandex.net, кросс от AAA Certificate Services)"
 for f in chain.pem leaf.key; do
   [ -s "$BASE/$f" ] || { bad "нет $BASE/$f — серты лежат в комплекте рядом со скриптом (README.md)"; exit 1; }
@@ -293,7 +247,6 @@ openssl x509 -in <(sed -n '1,/^-----END CERTIFICATE-----$/p' "$BASE/chain.pem") 
 ok "серт на $(openssl x509 -in <(sed -n '1,/^-----END CERTIFICATE-----$/p' "$BASE/chain.pem") -noout -subject | sed 's/.*= //')"
 fi
 
-# --- режим --ota-shield: роутер-щит от прошивки ДО рута (стенд/прокси/колонка не нужны) ---
 [ "$MODE" = otashield ] && {
   echo -e "\n${C_B}=== OTA-ЩИТ на РОУТЕРЕ: защита от фикс-прошивки ДО рута ===${C_0}"
   echo -e "  ${C_Y}Кейс:${C_0} колонка лежала выключенной / сброшена до завода → Яндекс выпустил фикс →"
@@ -365,16 +318,12 @@ fi
   echo "   и роутер-щит станет необязательным (но не лишним)."
   exit 0; }
 
-# ----------------------------------------------------------------------------
-# Шаг 3 нужен всем, КРОМЕ --export (переносный пакет собирается без колонки)
 if [ "$MODE" != export ]; then
 step "3/7 Локальный IP и поиск колонки (mDNS _yandexio._tcp — ЛЮБАЯ platform)"
 LOCAL_IP=$(ip -4 route get "$ROUTER" 2>/dev/null | grep -oP 'src \K[\d.]+' | head -1)
 [ -n "$LOCAL_IP" ] || LOCAL_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
 [ -n "$LOCAL_IP" ] && ok "этот ПК: $LOCAL_IP" || { bad "не нашёл свой IP"; exit 1; }
 
-# Один вызов avahi-browse: список всех quasar-колонок "ip platform device_id"
-# формат TXT у avahi-browse: txt = ["cluster=yes" "platform=plum" "deviceId=..."]
 MDNS_LIST=$(timeout 6 avahi-browse -d local -rt _yandexio._tcp 2>/dev/null | python3 -c '
 import sys, re
 devs = {}
@@ -401,10 +350,6 @@ if [ -n "$MDNS_LIST" ]; then
   done
 fi
 
-# ---- ВЫБОР КОЛОНКИ: в сети несколько — спрашиваем, с какой работаем ----
-# (работает для ЛЮБОГО режима в tty: run/status/backup/...; COLUMN_IP задаёт цель явно)
-# (mDNS-имена платформ НЕ совпадают с quasar/OTA-именами: Миди в mDNS = cucumber,
-#  в quasar/OTA = yandexmidi; и то и то — она. plum = Лайт 2.)
 if [ -z "$COLUMN_IP" ] && [ "$INTERACTIVE" = 1 ]; then
   NDEV=$(echo "$MDNS_LIST" | grep -c .)
   if [ "$NDEV" -gt 1 ]; then

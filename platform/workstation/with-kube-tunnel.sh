@@ -1,10 +1,4 @@
 #!/usr/bin/env bash
-# Run a command with the K3s API reachable at 127.0.0.1:16443, where the admin
-# kubeconfig points. The API (6443) is firewalled from the LAN, so an SSH
-# tunnel through the node is opened for the command and closed afterwards. An
-# already listening 16443 (a tunnel you keep open) is reused and left alone.
-#
-#   with-kube-tunnel.sh <command> [args...]
 set -euo pipefail
 port="${KUBE_TUNNEL_PORT:-16443}"
 config="${SSH_CONFIG:-$HOME/.ssh/home-lab/config}"

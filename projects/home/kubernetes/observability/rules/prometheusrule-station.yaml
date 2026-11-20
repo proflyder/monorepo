@@ -1,13 +1,3 @@
-# Alerts for the station (Yandex Station Midi running Pulsar).
-#
-# The station is an external Prometheus target (`job="station"`, port 9101);
-# metrics come from Pulsar's /metrics endpoint, not from node-exporter.
-#
-# Temperature threshold: the Amlogic S905 SoC of the station has Tj max
-# 125 °C and the stock firmware starts throttling around 90 °C. 85 °C for
-# ten minutes leaves headroom for a short spike while catching a blocked
-# vent or a runaway load. Disk pressure watches /data (the only writable
-# volume; / is the read-only rootfs).
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:

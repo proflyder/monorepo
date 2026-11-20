@@ -1,25 +1,4 @@
 #!/bin/sh
-# Keeps pulsar running while /data/pulsar/enabled exists.
-# Log: /tmp/pulsar.log (tmpfs, rotated at 1 MB, one .1 kept).
-#
-# Exit status of the daemon: 0 = deliberate exit (SIGTERM from ctl.sh restart, the "Restart" button
-# in Home Assistant): restart after 1 s, neither counted nor forgiven as a crash unless it ran
-# < MINUP seconds. Anything else (non-zero, killed by a signal, e.g. 139 = SIGSEGV) is a crash.
-# A "short crash" is one after a run of < LONG seconds. CRASHES consecutive short crashes: swap in
-# pulsar.prev (the bad binary is kept as .bad) and try again; if that crash-loops too,
-# remove `enabled` and give the speaker back to the Yandex stack (same as `ctl.sh disable`).
-# Only a run of >= LONG seconds resets the count. Restart delay after a crash: 3 s, doubling up
-# to 30 s.
-#
-# Stale ALSA dmix lock: the firmware's alsa-lib (patched by Yandex, Midi and Lite 2) does not start
-# the dmix slave PCM on open; the first client to start does, and the dmix shm segment (ipc_key
-# 1024 = 0x400 from the firmware's asound config, 0x401 = its mix buffer, semaphore 0x400) counts
-# the running clients. A client that dies while playing (crash, SIGKILL, a test's kill -SEGV) never
-# decrements the count, and nobody removes the segment: every later open reuses it, the slave stays
-# PREPARED (never triggered) and writers block forever on the dmix timer, i.e. silence until a
-# reboot. Before each launch (no pulsar running) segments nobody is attached to are removed.
-#
-# PULSAR_DIR, PULSAR_LOG, PULSAR_Q override the device paths (local dry runs).
 D=${PULSAR_DIR:-/data/pulsar}
 LOG=${PULSAR_LOG:-/tmp/pulsar.log}
 Q=${PULSAR_Q:-/system/vendor/quasar/q}
@@ -31,10 +10,8 @@ MINUP=5
 BACKOFF_MIN=3
 BACKOFF_MAX=30
 
-# Seconds since boot: unaffected by clock steps (NTP / time from Home Assistant).
 uptime_s() { read -r u _ < /proc/uptime; echo "${u%%.*}"; }
 
-# Copy-truncate: the daemon keeps its append-mode descriptor, so a rename would not stop growth.
 rotate() {
   if [ -f "$LOG" ] && [ "$(wc -c < "$LOG")" -gt $MAXLOG ]; then
     cp "$LOG" "$LOG.1" && : > "$LOG"
@@ -43,7 +20,7 @@ rotate() {
 
 say() { echo "=== supervise: $* $(date)" >> "$LOG"; }
 
-give_back() { # Yandex stack again, like ctl.sh disable
+give_back() {
   rm -f "$D/enabled"
   say "$1; disabled, starting the Yandex stack"
   pidof quasar_launcher2 >/dev/null 2>&1 || "$Q" start >/dev/null 2>&1
@@ -53,7 +30,6 @@ give_back() { # Yandex stack again, like ctl.sh disable
 clear_dmix() {
   segs=$(ipcs -m 2>/dev/null) || return 0
   removed= busy=0
-  # 0x400/0x401: the firmware's speakers dmix; 0x8e5/0x8e6: the Mini's minidmix.
   for k in 400 401 8e5 8e6; do
     n=$(echo "$segs" | awk -v k="0x00000$k" '$1 == k { print $6; exit }')
     if [ "$n" = 0 ]; then
@@ -72,7 +48,6 @@ clear_dmix() {
 
 ( while sleep 60; do rotate; done ) &
 ROT=$!
-# busybox ash does not run an EXIT trap on SIGTERM: clean up in the signal traps themselves.
 trap 'kill $ROT 2>/dev/null; exit 143' TERM INT HUP
 trap 'kill $ROT 2>/dev/null' EXIT
 

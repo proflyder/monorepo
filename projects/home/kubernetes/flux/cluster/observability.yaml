@@ -1,7 +1,3 @@
-# Prometheus, Alertmanager, Grafana, Loki, Alloy and the project dashboards.
-#
-# Depends on ESO for the Grafana/Alertmanager Secrets. The private Grafana root
-# URL and PVE scrape target come from the flux-settings Secret.
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
 metadata:
@@ -23,7 +19,5 @@ spec:
     substituteFrom:
       - kind: Secret
         name: flux-settings
-      # Application settings: the station scrape target is `${STATION_IP}`
-      # (ESO renders the Secret in the individual app Kustomizations too).
       - kind: Secret
         name: flux-app-settings

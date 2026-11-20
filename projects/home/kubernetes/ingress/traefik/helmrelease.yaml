@@ -1,7 +1,3 @@
-# Traefik, adopted from the live `traefik` release.
-#
-# Same release name/namespace as `helm list -A`; the values file is the live
-# configuration (hostNetwork, Recreate, allow-list provider settings).
 apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:

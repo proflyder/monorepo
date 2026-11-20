@@ -1,24 +1,4 @@
 ﻿#Requires -RunAsAdministrator
-<#
-.SYNOPSIS
-    Записывает DPAPI-защищённый секрет провайдера входа Home.
-
-.DESCRIPTION
-    Пароль Windows и ключ машины (32 байта, base64) шифруются DPAPI в машинной
-    области с фиксированной энтропией home-komp-logon-v1 и сохраняются в
-    C:\ProgramData\Home\KompLogon\secret.bin с ACL SYSTEM + Administrators.
-
-    Значения никогда не печатаются. Пароль запрашивается интерактивно или
-    передаётся SecureString; ключ передаётся параметром или одной строкой в
-    stdin.
-
-.EXAMPLE
-    $key = Get-Content .\komp-key.txt -Raw
-    powershell -NoProfile -ExecutionPolicy Bypass -File set-secret.ps1 -Key $key
-
-.EXAMPLE
-    'BASE64KEY' | powershell -NoProfile -ExecutionPolicy Bypass -File set-secret.ps1
-#>
 [CmdletBinding()]
 param(
     [System.Security.SecureString]$Password,
@@ -35,7 +15,6 @@ $Entropy = 'home-komp-logon-v1'
 try {
     Add-Type -AssemblyName System.Security -ErrorAction Stop
 } catch {
-    # PowerShell 7 already has the assembly loaded.
 }
 
 function Set-AclStrict {
@@ -60,7 +39,6 @@ if ($null -eq $Password) {
 }
 
 if ([string]::IsNullOrWhiteSpace($Key)) {
-    # One line from stdin: keeps the key out of the process command line.
     if (-not [Console]::IsInputRedirected) {
         throw 'Key is required: pass -Key <base64> or pipe one line into stdin'
     }

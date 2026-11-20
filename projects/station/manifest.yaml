@@ -1,35 +1,3 @@
-# Station software manifest — what actually runs on the Yandex Station Midi
-# besides the OTA-managed Pulsar binary.
-#
-# This file is the source of truth for `projects/station/tools/station-audit`
-# and for docs/STATION-SOFTWARE.md. It describes the *installed* state, so a
-# difference between the repository copy and the device is real drift, not a
-# bug in the manifest. The audit is read-only: it never writes to the station.
-#
-# compare modes:
-#   sha256  - exact bytes; `normalize: ipv4` ignores environment-specific IPv4
-#             addresses (repo copies use TEST-NET placeholders, the device uses
-#             the real LAN) and hashes everything else.
-#   version - the file is a build artifact; compare `version_command` output
-#             with the value derived from `expected` in the repository.
-#             Adding `deployed_sha256` pins the artifact that is actually
-#             installed: the audit then compares the device hash with that
-#             value (OK/DRIFT) and prints the version only as information.
-#             Use it when the installed build predates a version fix or comes
-#             from outside the repository (e.g. a prebuilt rootfs binary).
-#   presence - only existence is checked (firmware binaries and scripts whose
-#             content is owned by the firmware or written by an installer).
-#
-# update:
-#   ota           - Pulsar updater through Home Assistant.
-#   manual-rootfs - pushed/copied by hand over ADB/SSH to /data or the read-only
-#                   rootfs (the latter is remounted rw for the copy).
-#   firmware      - shipped by Yandex firmware; we do not replace it.
-#
-# recovery marks components needed to get back into the device after a failure
-# (SSH/BLE/ADB/root). Losing them does not stop audio but removes the repair
-# path.
-
 version: 1
 
 audit:
@@ -38,10 +6,8 @@ audit:
   connect_timeout_s: 10
   address:
     env: STATION_IP
-    # Private network map; not in Git. Fallback: `--ip` on the command line.
     file: secrets/NETWORK.md
     line_hint: Станция
-  # Directories scanned for stale siblings next to managed files.
   extra_dirs:
     - /data/pulsar
     - /data/quasar
@@ -56,8 +22,6 @@ audit:
     - "*.new"
     - "*.old"
     - "*~"
-  # Standard rollback slots kept on purpose (pulsar and gateway updaters leave
-  # them). Exact paths only; anything else matching extra_patterns is EXTRA.
   extra_allow:
     - /data/pulsar/pulsar.prev
     - /data/quasar/ble-gateway/ble-gateway.prev
@@ -87,9 +51,6 @@ components:
         compare: version
         version_command: /data/pulsar/pulsar --version
         expected:
-          # The release version is computed, not stored: VERSION holds only
-          # major.minor, the patch is the number of commits touching the unit
-          # (platform/ci/version.mjs). The audit invokes the same source.
           command: node platform/ci/version.mjs --unit pulsar
           prefix: "pulsar "
         note: build artifact, compare the computed release version
@@ -129,10 +90,6 @@ components:
     files:
       - device: /data/quasar/ble-gateway/ble-gateway
         compare: version
-        # The installed build predates the CARGO_PKG_VERSION fix in Bazel and
-        # still prints `0.0.0`; pin the artifact that is actually deployed.
-        # `version` stays informational until the gateway is rebuilt and
-        # redeployed (see docs/STATION-SOFTWARE.md).
         deployed_sha256: cdadac02b864b26fc6979965ebf5d2be3bc68c34e775aab1d6deff26e8a9377f
         version_command: /data/quasar/ble-gateway/ble-gateway --version
         expected:
@@ -177,8 +134,6 @@ components:
     files:
       - device: /usr/sbin/dropbear
         compare: version
-        # Prebuilt rootfs binary; the hash is the source of truth.
-        # origin: prebuilt dropbear 2026.94, rootfs.
         deployed_sha256: 374be9f85dabfab4d1f649d553f45e6238973e272b447fd2d81c2ab24a654db2
         version_command: /usr/sbin/dropbear -V
         note: >

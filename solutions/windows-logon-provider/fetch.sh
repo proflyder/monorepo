@@ -1,18 +1,4 @@
 #!/usr/bin/env bash
-# Fetch and verify a published provider artifact on the operator's Mac/Linux.
-#
-#   ./fetch.sh <version|sha256:...> [DESTINATION]
-#
-# Examples:
-#   ./fetch.sh 1.0.0
-#   ./fetch.sh sha256:0123...            # digest pin, the recommended form
-#
-# Requires `oras` and an authenticated `gh` (GitHub CLI). The reference is
-# pulled with ORAS, SHA256SUMS must verify locally, and `gh attestation verify`
-# must confirm the build provenance of HomeKompLogon.dll. Any mismatch,
-# missing tool or failed attestation aborts with a non-zero status. The resolved
-# OCI digest is printed at the end and the unpacked files are kept in
-# DESTINATION (a mktemp directory when omitted).
 set -euo pipefail
 
 DEFAULT_REPOSITORY="ghcr.io/proflyder/windows-logon-provider"
@@ -56,8 +42,6 @@ fi
   fi
 )
 
-# The attestation owner is the registry namespace from the repository path, so
-# the owner is not duplicated as a literal in this script.
 owner="${REPOSITORY#*/}"
 owner="${owner%%/*}"
 gh attestation verify "$destination/HomeKompLogon.dll" --owner "$owner"

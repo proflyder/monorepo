@@ -1,9 +1,3 @@
-# Git source and the root Kustomization.
-#
-# Applied once by `bootstrap.sh` after the toolkit and the deploy-key Secret
-# exist. Everything below this point is pull-based: the source-controller
-# clones the repository over SSH with the read-only deploy key, and no CI job
-# ever needs cluster credentials to deploy infrastructure.
 ---
 apiVersion: source.toolkit.fluxcd.io/v1
 kind: GitRepository

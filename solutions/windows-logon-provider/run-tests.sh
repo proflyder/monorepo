@@ -1,14 +1,10 @@
 #!/usr/bin/env bash
-# Host tests, rustfmt and clippy for host and Windows targets.
-#
-# CI runs this and ./build.sh (the actual cross-build).
 set -euo pipefail
 
 cd "$(dirname "$0")"
 
 ROOT="$(cd ../.. && pwd)"
 
-# Bazelisk comes from mise (`mise install`, see mise.toml).
 bazel_bin() {
   if [[ -n "${BAZELISK:-}" ]]; then
     printf '%s\n' "$BAZELISK"

@@ -1,11 +1,4 @@
 #!/usr/bin/env bash
-# Install vzdump freshness metrics on the Proxmox host from the operator's Mac.
-#
-#   ./install.sh [--dry-run] <ssh-target>
-#
-# Installs prometheus-node-exporter, enables its textfile collector, installs
-# the metrics script and runs it every 15 minutes. The node exporter listens on
-# :9100; Prometheus scrapes PVE through a private values file, never Git.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
@@ -39,8 +32,6 @@ done
 
 [[ -n "$TARGET" ]] || { usage >&2; exit 2; }
 
-# SSH_CONFIG selects a private ssh_config (e.g. ~/.ssh/home-lab/config).
-# A non-root login runs every remote command through `sudo -n`.
 SSH=(ssh)
 if [[ -n "${SSH_CONFIG:-}" ]]; then SSH+=(-F "$SSH_CONFIG"); fi
 SUDO=""
@@ -75,8 +66,6 @@ upload "$HERE/backup_metrics.py" /usr/local/lib/vzdump-metrics/backup_metrics.py
 upload "$HERE/vzdump-metrics.service" /etc/systemd/system/vzdump-metrics.service 0644
 upload "$HERE/vzdump-metrics.timer" /etc/systemd/system/vzdump-metrics.timer 0644
 
-# Enable the textfile collector on the stock Debian package. Keep any other
-# ARGS the operator already set; only replace the one textfile setting.
 remote 'touch /etc/default/prometheus-node-exporter; if grep -q -- "--collector.textfile.directory" /etc/default/prometheus-node-exporter; then sed -i "s#--collector.textfile.directory=[^\" ]*#--collector.textfile.directory=/var/lib/prometheus/node-exporter#" /etc/default/prometheus-node-exporter; else printf "%s\n" "ARGS=\"--collector.textfile.directory=/var/lib/prometheus/node-exporter\"" >> /etc/default/prometheus-node-exporter; fi'
 
 remote "systemctl daemon-reload && systemctl enable prometheus-node-exporter && systemctl restart prometheus-node-exporter && systemctl enable --now vzdump-metrics.timer"

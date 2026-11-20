@@ -1,30 +1,3 @@
-# Infra service catalog for the home cluster.
-#
-# This file is deployment data, not code: it is mounted into the gateway from
-# the ConfigMap `mcp-gateway-catalog` (key `catalog.yaml`). It contains only
-# allow-listed namespaces, workload names, spoken aliases and public PromQL;
-# no secret values, no real addresses.
-#
-# Contract (see solutions/mcp-gateway/README.md):
-#   * a signal with `status: true` is evaluated inside infra_status, and its
-#     PromQL must describe the BAD state: any non-empty result is a problem;
-#   * `ignore_alerts` names alerts that always fire by design; infra_status
-#     counts them separately as ignored and never speaks them as a problem;
-#   * `restart.allowed` is exactly what infra.fix may patch, and RBAC
-#     (manifests/rbac.yaml) restricts `patch` to the same workload names;
-#   * `restart.self_disrupting` defers the patch so the spoken reply survives;
-#   * logs: `loki` where Alloy ingests the namespace, otherwise `pods`
-#     (pods/log through the Kubernetes API), `none` for external targets;
-#   * every Deployment/StatefulSet/DaemonSet in the cluster must be a service
-#     above or be listed in `ignore_workloads` as `namespace/Kind/name`.
-#     infra_report lists everything else as «не в каталоге отчёта», so a new
-#     service cannot stay invisible just because nobody edited this file;
-#   * the report also requires every Flux Kustomization and HelmRelease to be
-#     Ready=True; `suspend: true` is shown but is not a problem.
-#
-# tests enforce the catalog/RBAC correspondence:
-#   cargo test -p mcp-gateway
-#   python3 projects/home/kubernetes/mcp-gateway/test_deploy.py
 overview: |
   # Домашний стенд
 
@@ -76,18 +49,13 @@ overview: |
   - Внешние цели (HAOS, Music Assistant, станция) только читаются; их
     перезапуск выполняется вручную вне шлюза.
 
-# Alerts that always fire by design and must never be spoken as a problem:
-# Watchdog proves the alerting pipeline is alive; InfoInhibitor is its
-# alertmanager-side suppressor. Both stay reachable through infra_alert.
 ignore_alerts:
   - Watchdog
   - InfoInhibitor
 
-# Report section order. Each service selects one of these with `group`.
 group_order: [Голос, Дом, Планировщик, Мониторинг, Секреты и сеть, Приложения, Платформа]
 
 services:
-  # ------------------------------------------------------ home-assistant ----
   - id: hermes
     title: Hermes
     group: Голос
@@ -369,7 +337,6 @@ services:
       warning: "Сценарии, уже запущенные, оборвутся и будут помечены как прерванные; повторного запуска не будет."
     description: Исполнитель очереди scenario (условия, шаги, журнал на PVC).
 
-  # ---------------------------------------------------------- monitoring ----
   - id: prometheus
     title: Prometheus
     group: Мониторинг
@@ -562,7 +529,6 @@ services:
       warning: "Сбор логов приостановится на время перезапуска, часть строк потеряется."
     description: DaemonSet Alloy, отправляет логи в Loki с редактированием секретов.
 
-  # --------------------------------------------------------- currency-bot ----
   - id: currency-bot
     title: Currency Bot
     group: Приложения
@@ -657,7 +623,6 @@ services:
       warning: "Выдача разрешений на пробуждение приостановится на время перезапуска; SQLite на PVC сохранится."
     description: Сертификаты пробуждения станции (SQLite на local-retain PVC).
 
-  # --------------------------------------------------------------- openbao ----
   - id: openbao
     title: OpenBao
     group: Секреты и сеть
@@ -682,7 +647,6 @@ services:
       warning: "Синхронизация секретов через ESO приостановится; если auto-unseal не сработает, потребуется распечатать OpenBao вручную."
     description: Сервер секретов (raft, auto-unseal, audit в stdout).
 
-  # ------------------------------------------------------ external-secrets ----
   - id: external-secrets
     title: External Secrets
     group: Секреты и сеть
@@ -751,7 +715,6 @@ services:
       warning: "Сертификаты webhook'а ESO не будут обновляться во время перезапуска."
     description: Обновляет сертификаты webhook'а ESO.
 
-  # --------------------------------------------------------------- traefik ----
   - id: traefik
     title: Traefik
     group: Секреты и сеть
@@ -775,7 +738,6 @@ services:
       warning: "Все HTTPS-сервисы дома, включая Home Assistant и Grafana, будут недоступны около тридцати секунд."
     description: HTTPS-ingress домашнего суффикса (hostNetwork 80/443).
 
-  # ---------------------------------------------------------- cert-manager ----
   - id: cert-manager
     title: cert-manager
     group: Секреты и сеть
@@ -868,9 +830,6 @@ services:
       warning: "Веб-интерфейс паролей и синхронизация клиентов будут недоступны около тридцати секунд."
     description: Менеджер паролей семьи (Rocket, data на PVC, вход через Traefik).
 
-  # -------------------------------------------------------------- platform ----
-  # Кластерная платформа: Flux, Nexus и системные компоненты K3s. Restart для
-  # них запрещён: ими управляют Flux и сам K3s, а не этот шлюз.
   - id: nexus
     title: Nexus
     group: Платформа
@@ -1029,7 +988,6 @@ services:
       allowed: false
     description: Метрики ресурсов для HPA и kubectl top.
 
-  # -------------------------------------------------------------- external ----
   - id: home-assistant
     title: Home Assistant
     group: Дом
@@ -1050,8 +1008,6 @@ services:
         auth: ha
       - type: ha_unavailable_summary
         label: недоступные сущности
-        # Только голосовой спутник и медиаплееры: диагностические сенсоры и
-        # отключённые устройства не должны делать отчёт «проблемным».
         domains: [assist_satellite, media_player]
     logs:
       source: none
@@ -1076,7 +1032,6 @@ services:
         label: API
         host: ${HAOS_IP}
         port: 8095
-      # Отдельного health-endpoint у MA нет; корень UI отвечает 200.
       - type: http
         label: веб-интерфейс
         url: "http://${HAOS_IP}:8095/"
@@ -1114,7 +1069,6 @@ services:
       - type: ha_state
         label: ESPHome media player
         entity_id: media_player.iandeks_stantsiia_midi_media_player
-      # Версия прошивки Pulsar из Device Registry: справочно, не влияет на статус.
       - type: ha_template
         label: Версия Pulsar
         template: "{{ device_attr(device_id('assist_satellite.iandeks_stantsiia_midi_assist_satellite'), 'sw_version') }}"
@@ -1133,9 +1087,6 @@ services:
       en: [proxmox, pve, hypervisor]
     kind: external
     checks:
-      # Веб-интерфейс PVE слушает только TLS с самоподписанным сертификатом,
-      # а публичный клиент проверок доверяет только публичным CA: проверяем
-      # доступность порта, а не HTTPS-ответ.
       - type: tcp
         label: веб-интерфейс 8006
         host: ${PVE_IP}

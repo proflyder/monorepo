@@ -1,5 +1,3 @@
-# Keep the three controllers small: the home node also runs every workload.
-# Flux defaults ask for 1 CPU / 1 GiB limits per controller.
 apiVersion: apps/v1
 kind: Deployment
 metadata:

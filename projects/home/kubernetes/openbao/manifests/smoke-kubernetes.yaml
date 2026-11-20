@@ -1,12 +1,3 @@
-# Acceptance probe for the Kubernetes auth method.
-#
-# Proves that a pod using a dedicated ServiceAccount can log in through
-# `auth/kubernetes` (TokenReview via system:auth-delegator), read
-# `secret/k8s/test`, and is denied everything outside `secret/k8s/`.
-#
-#   ./projects/home/kubernetes/openbao/verify.sh --kubernetes
-#
-# Values read here are non-secret probes; the job prints only pass/fail.
 apiVersion: v1
 kind: Namespace
 metadata:

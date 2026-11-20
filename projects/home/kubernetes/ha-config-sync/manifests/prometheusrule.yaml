@@ -1,9 +1,3 @@
-# Alerts for the ha-voice delivery loop.
-#
-# Drift means HAOS no longer matches projects/home-assistant/ha-voice; the
-# service is supposed to correct it within one 5-minute cycle. `last_check` is
-# 0 when a cycle failed (including a guard-deferred restart), so a stuck restart
-# is visible too. `rolled_back` is counted when the files were restored.
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:

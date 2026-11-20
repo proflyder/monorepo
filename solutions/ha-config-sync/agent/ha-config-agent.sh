@@ -1,30 +1,6 @@
 #!/bin/sh
-# Forced-command agent for ha-config-sync on the Home Assistant OS host.
-#
-# The SSH key that reaches this script is restricted in authorized_keys:
-#   restrict,command="HA_CONFIG_AGENT_ALLOWED_FROM=<node ip> /mnt/data/ha-config-sync/agent.sh"
-# so the client cannot run a shell or forward anything. HAOS dropbear does not
-# support an authorized_keys host restriction, so the source address is
-# enforced here instead: when
-# HA_CONFIG_AGENT_ALLOWED_FROM (space/comma separated addresses) is set, the
-# client address from $SSH_CLIENT (or $SSH_CONNECTION) must match. The requested
-# verb arrives in $SSH_ORIGINAL_COMMAND; stdin carries the request payload.
-#
-# Verbs (protocol 1):
-#   version                -> "ha-config-agent 1"
-#   hashes                 <- newline-separated relative paths
-#                          -> "<sha256|MISSING> <path>" per line
-#   apply                  <- "<path> <sha256> <base64 content>" per line
-#                          -> backup id
-#   restore <backup id>    -> empty
-#   prune <keep>           -> empty
-#
-# A failure prints "ERROR <reason>" on stderr and exits non-zero. The roots are
-# fixed for production and overridable only to run the tests locally.
 
 set -eu
-# No pathname expansion: a verb argument like `*` must stay a literal and be
-# rejected by validation, never expand to files in the agent's cwd.
 set -f
 
 PROTOCOL_VERSION=1
@@ -42,7 +18,6 @@ fail() {
   exit 1
 }
 
-# HAOS dropbear has no host-restriction option; enforce the source here.
 check_source() {
   [ -n "$ALLOWED_FROM" ] || return 0
   client=${SSH_CLIENT:-${SSH_CONNECTION:-}}
@@ -64,7 +39,6 @@ valid_path() {
   printf '%s\n' "$1" | grep -Eq "$MANAGED_PATH_PATTERN"
 }
 
-# Reject an escaping path, a symlink anywhere on the way and a non-file target.
 check_target() {
   path=$1
   valid_path "$path" || return 1
@@ -106,7 +80,6 @@ hash_file() {
 }
 
 decode_base64() {
-  # BusyBox and GNU accept -d. BSD base64 (macOS) accepts -D; try both.
   if base64 -d >"$2" 2>/dev/null <<EOF
 $1
 EOF
@@ -125,8 +98,6 @@ acquire_lock() {
     flock 9
     return 0
   fi
-  # Portable fallback for development hosts without flock (the HAOS host has
-  # busybox flock). mkdir is atomic.
   attempts=0
   while ! mkdir "$LOCK.d" 2>/dev/null; do
     attempts=$((attempts + 1))

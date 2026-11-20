@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-# Restore the original OTA/ADB files and remove fortress (revert the on-device
-# protection). Reboots the station. Use with --yes in scripts.
 set -euo pipefail
 
 IP="${STATION_IP:-192.0.2.13}"

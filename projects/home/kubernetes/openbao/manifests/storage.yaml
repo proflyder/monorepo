@@ -1,10 +1,3 @@
-# Static local volumes for OpenBao. Applied by deploy.sh as a cluster admin
-# (the CI ServiceAccount never touches cluster-scoped objects).
-#
-# The directories live on the K3s node under /srv/k3s/volumes/. claimRef pins
-# each PersistentVolume to one PersistentVolumeClaim so a smaller request can
-# never bind the (larger) backup volume. The data PVC is created by the chart's
-# StatefulSet (`data-openbao-0`). Audit goes to stdout, so there is no audit PV.
 ---
 apiVersion: v1
 kind: PersistentVolume

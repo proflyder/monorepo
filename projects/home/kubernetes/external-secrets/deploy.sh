@@ -1,22 +1,4 @@
 #!/usr/bin/env bash
-# Apply the ExternalSecret manifests that belong to `deploy-home` services.
-#
-# The External Secrets Operator itself, ClusterSecretStore/openbao and the
-# infrastructure ExternalSecrets (cert-manager, monitoring, vaultwarden) are
-# managed by Flux: `projects/home/kubernetes/flux/cluster/external-secrets.yaml`
-# and the component Kustomizations. This script only covers the application
-# secrets whose workloads remain on `deploy-home` (scheduler, Hermes,
-# currency-bot, mcp-gateway, wakegrant), so an operator/CRD change never needs
-# this manual step.
-#
-# It never writes secret values: values live only in OpenBao
-# (`secret/k8s/<namespace>/<secret-name>`). See README.md for the migration and
-# rotation procedure.
-#
-# Usage:
-#   export KUBECONFIG=/private/path/kubeconfig
-#   ./projects/home/kubernetes/external-secrets/deploy.sh
-#   ./projects/home/kubernetes/external-secrets/deploy.sh --skip-secrets
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
 # shellcheck source=platform/deploy/resolve.sh
@@ -47,8 +29,6 @@ TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 chmod 700 "$TMP"
 
-# ExternalSecret objects for applications still deployed by `deploy-home`.
-# Infrastructure ExternalSecrets are applied by their Flux Kustomization.
 manifests=(
   "$ROOT/projects/home/kubernetes/scheduler/manifests/external-secrets.yaml"
   "$ROOT/projects/home-assistant/deploy/manifests/external-secrets.yaml"
@@ -60,7 +40,6 @@ for manifest in "${manifests[@]}"; do
   kubectl apply -f "$manifest"
 done
 
-# `kubectl wait` needs explicit names, so resolve them from the applied files.
 home_deploy eso names --out "$TMP/names" "${manifests[@]}" >/dev/null
 while IFS= read -r item; do
   [[ -n "$item" ]] || continue

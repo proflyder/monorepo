@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# Run interactively on the operator's computer after a fresh PVE installation.
 set -euo pipefail
 HOST="${1:?Specify the installed Proxmox IPv4 address}"
 KEY="${2:?Specify the dedicated private SSH key file}"

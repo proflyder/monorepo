@@ -1,6 +1,4 @@
 #!/bin/sh
-# Station helper (docs/stations.md). Never commit station addresses.
-# PULSAR_TAG: free-form tag of the work holding the lock (one word, no spaces).
 set -eu
 usage() {
   echo "usage: PULSAR_TAG=<tag> $0 midi|lite2|mini lock MINUTES|unlock|break-lock|stop|start|push FILE...|test-start|test-stop|test-log [N]|swap BINARY|restore|cleanup|status|log [N]" >&2
@@ -20,7 +18,6 @@ L=/tmp/pulsar-agent.lock
 T=/tmp/pulsar-test
 D=/data/pulsar
 r() { ssh -o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 "$H" "$@"; }
-# up SRC DEST: upload to DEST.part, verify size and sha256 against SRC, then rename to DEST (mode 755).
 up() {
   src=$1 dest=$2
   size=$(wc -c < "$src" | tr -d ' ')
@@ -40,15 +37,10 @@ up() {
   [ "${2:-}" != none ] || echo "warning: no sha256sum on station, only size verified for $src" >&2
   r "chmod 755 '$dest.part' && mv '$dest.part' '$dest'"
 }
-# State-changing commands run only under this tag's own lock.
 own() {
   tag=${PULSAR_TAG:?PULSAR_TAG is not set}
   r "read o _ 2>/dev/null < $L/owner && [ \"\$o\" = '$tag' ]" || { echo "no lock held by $tag" >&2; exit 1; }
 }
-# Remote snippet: remove a stale ALSA dmix lock (shm 0x400/0x401 or the Mini's 0x8e5/0x8e6
-# nobody is attached to, then its semaphore) left by a process killed while playing; without it
-# the station stays silent until a reboot (satellite/deploy/supervise.sh header). Run where no
-# pulsar is playing.
 DMIX=$(cat <<'EOF'
 r= b=0 s=$(ipcs -m 2>/dev/null)
 for k in 400 401 8e5 8e6; do
@@ -70,7 +62,6 @@ case "$cmd" in
     case "$tag" in '' | *[[:space:]]*) echo "PULSAR_TAG must be one word" >&2; exit 2 ;; esac
     case "$1" in '' | *[!0-9]*) usage ;; esac
     { [ "$1" -ge 1 ] && [ "$1" -le 180 ]; } || usage
-    # The owner file appears complete or not at all (a lock dir without one is a crashed lock).
     r "mkdir $L 2>/dev/null && echo \"$tag \$(date +%s) $1\" > $L/owner.tmp && mv $L/owner.tmp $L/owner" \
       || { echo "station busy: $(r "cat $L/owner; echo now \$(date +%s)")" >&2; exit 1; } ;;
   unlock) own; r "rm -rf $L" ;;
@@ -96,9 +87,7 @@ case "$cmd" in
     for f; do b=$(basename "$f"); up "$f" "$T/$b"; done ;;
   test-start)
     own
-    # Один уровень для всех моделей: у Мини громкость программная, по той же шкале в дБ.
     vol=0.2
-    # A quoted heredoc: no local shell expansion and no nested quotes in the remote command.
     r sh -s -- "$T" "$D" "$vol" "$station" <<'EOF'
 T=$1
 D=$2
@@ -132,9 +121,6 @@ EOF
   swap)
     [ $# -eq 1 ] || usage
     own
-    # The installed binary is kept as pulsar.orig and serves as .prev meanwhile, so a rollback by
-    # supervise.sh lands on it; the owner's .prev waits in pulsar.prev.orig.
-    # df -P: busybox `df -k` переносит строку при длинном имени устройства.
     r "[ -f $D/enabled ] || { echo 'Yandex mode (no $D/enabled): refusing' >&2; exit 1; }
        [ \$(df -Pk $D | awk 'NR==2 {print \$4}') -gt 30000 ] || { echo 'less than 30 MB free in $D' >&2; exit 1; }
        cd $D && { [ -f pulsar.orig ] || cp -p pulsar pulsar.orig; } \
@@ -144,7 +130,6 @@ EOF
        && mv pulsar.new pulsar && sync && ./ctl.sh restart" ;;
   restore)
     own
-    # Если после краш-цикла supervise.sh удалил enabled (give_back), станцию возвращает ctl.sh enable.
     r "cd $D && [ -f pulsar.orig ] || { echo 'no pulsar.orig' >&2; exit 1; }
        cd $D && cp -p pulsar.orig pulsar.tmp && mv pulsar.tmp pulsar && rm -f pulsar.orig || exit 1
        if [ -f pulsar.prev.orig ]; then mv pulsar.prev.orig pulsar.prev; fi

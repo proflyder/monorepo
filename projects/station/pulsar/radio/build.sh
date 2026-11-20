@@ -1,10 +1,4 @@
 #!/bin/sh
-# Builds the Zigbee firmware for the Station Midi's radio: radio/out/zigbee-coordinator.ybl and
-# radio/out/zigbee-router.ybl.
-# Fetches (once) the pinned Telink Zigbee SDK into radio/src/ and applies sdk.patch, and the Telink
-# RISC-V toolchain (32-bit x86 Linux binaries: needs the i386 C library, e.g.
-# `dpkg --add-architecture i386 && apt-get install libc6:i386`) into radio/toolchain/, unless
-# TELINK_TC points to its bin/riscv32-elf- prefix. Needs git, curl, unzip, patch, make and zig.
 set -eu
 cd "$(dirname "$0")"
 
@@ -14,7 +8,6 @@ TC_URL=http://wiki.telink-semi.cn/tools_and_sdk/Tools/IDE/telink_riscv_linux_too
 TC_SHA256=bfe5dd517b268512fed5b9db956d243c64750c62a1a735ac41bbf0dcb6094489
 
 sdk=src/telink_zigbee_sdk
-# .fetched records the ref and the patch it was made with: a changed sdk.patch fetches again.
 stamp="$SDK_REF $(sha256sum sdk.patch | cut -d' ' -f1)"
 if [ "$(cat "$sdk/.fetched" 2>/dev/null)" != "$stamp" ]; then
   rm -rf "$sdk"

@@ -1,17 +1,7 @@
 #!/usr/bin/env bash
-# Install the bb prerequisites and the consistent database backup timer.
-#
-# Run as root inside CT 103 after create-lxc.sh. This script intentionally does
-# not enroll the machine: the enrollment command from the bb UI is a one-time
-# credential and must be entered interactively as user `bb`, never passed here
-# or written to logs.
 set -euo pipefail
 
-# `pct exec` starts with a minimal PATH (/usr/sbin:/usr/bin:/sbin:/bin), so npm's
-# `#!/usr/bin/env node` shebang cannot find the Node.js installed under
-# /usr/local/bin. Set the full PATH here, not just for individual commands.
 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-# Avoid `perl: warning: Setting locale failed` noise from apt/dpkg under pct exec.
 export LC_ALL=C.UTF-8
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -57,9 +47,6 @@ EOF
 
 die() { echo "error: $*" >&2; exit 1; }
 
-# Debian 13 standard containers ship openssh-server, but the offsite puller is
-# only reachable when sshd is actually running. Check it without touching the
-# sshd configuration.
 sshd_active() {
   systemctl is-active --quiet ssh.service 2>/dev/null ||
     systemctl is-active --quiet sshd.service 2>/dev/null
@@ -70,10 +57,6 @@ install_offsite_key() {
     "$OFFSITE_FROM" 'tar -C /var/backups/bb -cf - bb-server-export.tgz'
 }
 
-# The bridge runs as user bb, never root: the key may only execute the forced
-# command that reads one JSON request from stdin. The plugin token and HMAC
-# secret are not created here; they are written after `bb plugin token` and
-# `bb plugin config ... set hmacSecret` (see README).
 install_dispatch() {
   install -m 755 "$SCRIPT_DIR/bb-dispatch" "$DISPATCH_COMMAND"
   install -d -o "$USER_NAME" -g "$USER_NAME" -m 700 "$DISPATCH_CONFIG_DIR"
@@ -119,13 +102,9 @@ fi
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
-# libatomic1 is required by the Node.js 26 tarball; the Debian 13 container
-# template does not ship it, and node then fails with
-# `libatomic.so.1: cannot open shared object file`.
 apt-get install -y --no-install-recommends \
   ca-certificates curl git libatomic1 python3 sqlite3 xz-utils
 
-# ----- Node.js from the official tarball -----------------------------------
 NODE_ROOT=/usr/local/lib/nodejs/node-v$NODE_VERSION-linux-x64
 if [[ $(/usr/local/bin/node --version 2>/dev/null || true) != "v$NODE_VERSION" ]]; then
   tmp=$(mktemp -d)
@@ -150,7 +129,6 @@ fi
   die "Node.js installation did not produce v$NODE_VERSION"
 /usr/local/bin/npm --version >/dev/null
 
-# ----- dedicated user and a working systemd user bus ------------------------
 if ! id "$USER_NAME" >/dev/null 2>&1; then
   useradd --create-home --home-dir "$USER_HOME" --shell /bin/bash \
     --user-group "$USER_NAME"
@@ -186,7 +164,6 @@ EOF
 fi
 echo "systemd user bus for $USER_NAME: ok (linger enabled)"
 
-# ----- sshd guard for both forced-command keys -----------------------------
 if ! sshd_active; then
   echo "warning: sshd (ssh.service) is not running; ssh keys would not work until it is started" >&2
   if [[ -n $OFFSITE_PUBKEY || -n $DISPATCH_PUBKEY ]]; then
@@ -194,14 +171,12 @@ if ! sshd_active; then
   fi
 fi
 
-# ----- SSH bridge for mcp-gateway -------------------------------------------
 if [[ -f $SCRIPT_DIR/bb-dispatch ]]; then
   install_dispatch
 elif [[ -n $DISPATCH_PUBKEY ]]; then
   die "bb-dispatch is missing next to install-bb.sh; push it along with this script"
 fi
 
-# ----- consistent SQLite backup before the nightly vzdump -------------------
 install -d -m 700 /etc/bb-backup /var/backups/bb
 ENV_FILE=/etc/bb-backup/env
 if [[ -n $DATA_DIR ]]; then
@@ -250,7 +225,6 @@ EOF
 systemctl daemon-reload
 systemctl enable --now bb-db-backup.timer
 
-# ----- offsite pull endpoint ------------------------------------------------
 if [[ -n $OFFSITE_PUBKEY ]]; then
   install_offsite_key
 fi
