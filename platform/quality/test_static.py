@@ -231,7 +231,7 @@ class AndroidDesignSystemTests(unittest.TestCase):
         self.assertEqual(problems, [], "use core/designsystem styles:\n" + "\n".join(problems))
 
     def test_one_filled_button_per_button_group(self) -> None:
-        group = self.RE.compile(r"<(dev\.proflyder\.home\.core\.designsystem\.ButtonRow)\b.*?</\1>", self.RE.S)
+        group = self.RE.compile(r"<([\w.]*\.designsystem\.ButtonRow)\b.*?</\1>", self.RE.S)
         problems = []
         for path in sorted(self.ANDROID.glob("**/src/main/res/layout*/*.xml")):
             for match in group.finditer(path.read_text(encoding="utf-8")):
