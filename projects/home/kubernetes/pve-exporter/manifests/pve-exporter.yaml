@@ -55,7 +55,12 @@ spec:
             - name: config
               mountPath: /etc/pve-exporter
               readOnly: true
+            - name: tmp
+              mountPath: /tmp
       volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 16Mi
         - name: config
           secret:
             secretName: pve-exporter
