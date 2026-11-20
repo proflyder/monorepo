@@ -8,10 +8,6 @@ import com.google.android.material.bottomsheet.BottomSheetDialog
 import dev.proflyder.home.feature.scenarios.impl.databinding.ItemChoiceRowBinding
 import dev.proflyder.home.feature.scenarios.impl.databinding.SheetChoiceBinding
 
-/**
- * Material bottom sheet with one full-width, 56dp action row per choice:
- * 24dp icon, body-large label, ripple over the whole row, no filled button.
- */
 internal class ChoiceSheet(
     private val context: Context,
     @StringRes titleRes: Int,

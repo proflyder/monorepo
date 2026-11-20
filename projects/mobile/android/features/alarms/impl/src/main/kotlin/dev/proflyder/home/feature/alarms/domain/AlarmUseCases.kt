@@ -23,10 +23,6 @@ import dev.zacsweers.metro.Inject
 @Inject class SaveAlarm(
     private val repository: AlarmRepository,
 ) {
-    /**
-     * [defaultLabel] is the localized name used when the editor field is empty,
-     * so the request sent to the server always carries a non-empty label.
-     */
     suspend operator fun invoke(
         existing: Schedule?,
         draft: AlarmDraft,

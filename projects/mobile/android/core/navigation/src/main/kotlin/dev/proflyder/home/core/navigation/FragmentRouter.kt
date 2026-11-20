@@ -10,48 +10,22 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-/** Public navigation surface consumed by the Activity and features. */
 interface Navigator {
     val currentTabId: StateFlow<String>
     val currentTitleRes: StateFlow<Int>
     val canGoBack: StateFlow<Boolean>
 
-    /**
-     * True while the visible screen is a non-tab overlay (Settings, Connection,
-     * Notifications). Such screens are entered from a tab and keep the tab
-     * selection, but the host shows only Back and the title there: the profile
-     * chip and the toolbar actions belong to the main tabs.
-     */
     val currentIsOverlay: StateFlow<Boolean>
 
     fun selectTab(featureId: String)
 
     fun navigate(destination: Destination)
 
-    /**
-     * Opens a deep-link route (`alarms`, `time/timers`, `connection/settings`).
-     * Only a registered feature id or owned route is honoured; unknown or
-     * foreign routes are ignored and return false.
-     */
     fun openRoute(route: String): Boolean
 
-    /** Returns false when the current tab is at its root (Activity should exit). */
     fun back(): Boolean
 }
 
-/**
- * Small typed Fragment router.
- *
- * - FragmentManager owns the real back stack and restores fragments after
- *   process death. The restored fragment/back stack is authoritative; saved
- *   route strings are validated against it instead of recreating it blindly.
- * - Commands emitted while the host is paused or FragmentManager has saved
- *   state are queued and drained only after onResume. This includes Back.
- * - Switching bottom tabs resets the target tab to its root. There is one
- *   shared Fragment back stack, so independent per-tab stacks are not claimed.
- * - Only route strings, tab ids, and resolved title resources are saved; never
- *   tokens or endpoints.
- */
 class FragmentRouter(
     private val fragmentManager: FragmentManager,
     private val containerId: Int,
@@ -90,8 +64,6 @@ class FragmentRouter(
         if (!initialized) {
             initialized = true
             if (!restoreFromFragmentManager()) {
-                // No actual restored fragment. A saved bundle alone must not
-                // leave the container blank: rebuild the selected tab root.
                 enqueue(Command.SelectTab(routeState.currentTabId))
             }
         }
@@ -109,8 +81,6 @@ class FragmentRouter(
             return
         }
         if (!entry.isTab) {
-            // A grouping tab may host this feature (alarms/timers/reminders live
-            // inside "Time"); selecting it opens that tab at the right section.
             val host = registry.tabs().firstNotNullOfOrNull { tab ->
                 tab.hostedDestination(featureId)?.let { destination -> tab to destination }
             }
@@ -118,8 +88,6 @@ class FragmentRouter(
                 enqueue(Command.SelectTab(host.first.id, host.second))
                 return
             }
-            // Settings-style features are not bottom tabs: open them as an
-            // overlay on top of the current tab so Back returns there.
             navigate(entry.rootDestination)
             return
         }
@@ -136,12 +104,6 @@ class FragmentRouter(
         Log.w(TAG, "navigation queue full; dropped new destination")
     }
 
-    /**
-     * A notification tap and a history row both carry a route string, so this
-     * is the one place that decides what a route means: an exact feature id
-     * selects that tab/overlay, an owned route (`time/timers`) opens its owning
-     * feature, and anything unregistered is ignored.
-     */
     override fun openRoute(route: String): Boolean {
         val normalized = route.trim().trim('/')
         if (normalized.isEmpty()) return false
@@ -155,10 +117,6 @@ class FragmentRouter(
 
     override fun back(): Boolean {
         if (!resumed || fragmentManager.isStateSaved) {
-            // Do not silently consume Back while the host cannot run a
-            // transaction: queue it and drain after resume. At the real root
-            // return false so the Activity can finish instead of swallowing
-            // future back presses forever.
             if (!canNavigateBack()) return false
             if (!enqueue(Command.Back)) {
                 Log.w(TAG, "navigation queue full; dropped queued Back")
@@ -175,9 +133,6 @@ class FragmentRouter(
         outState.putStringArrayList(KEY_TABS, arrayListOf(tabId))
         outState.putStringArrayList("$KEY_STACK_PREFIX$tabId", ArrayList(stack))
 
-        // Destination objects are typed and not parcelable; remember the
-        // resolved toolbar title for routes whose fragment FragmentManager
-        // restores. Root titles are recomputed from the live FeatureEntry.
         val titledRoutes = stack.filter { titlesByRoute.containsKey(it) }
         outState.putStringArrayList(KEY_TITLE_ROUTES, ArrayList(titledRoutes))
         outState.putIntegerArrayList(
@@ -191,8 +146,6 @@ class FragmentRouter(
             ?: savedState.stacks.keys.firstNotNullOfOrNull { registry.entry(it)?.takeIf(FeatureEntry::isTab) }
             ?: initialEntry
         val savedStack = savedState.stacks[entry.id].orEmpty()
-        // A grouping tab may have been opened at a non-default section
-        // ("time/timers"); that saved first route is its root for this session.
         val rootRoute = savedStack.firstOrNull()
             ?.takeIf { route -> registry.entryForRoute(route)?.id == entry.id }
             ?: entry.rootDestination.route
@@ -218,11 +171,6 @@ class FragmentRouter(
         mutableIsOverlay.value = currentRouteOverlay()
     }
 
-    /**
-     * Reconciles route state with the actual restored FragmentManager. Returns
-     * false only when the container has no fragment and a root commit is
-     * required.
-     */
     private fun restoreFromFragmentManager(): Boolean {
         val current = fragmentManager.findFragmentById(containerId) ?: return false
         val currentTag = current.tag
@@ -230,14 +178,10 @@ class FragmentRouter(
         val currentEntry = currentTag?.let(registry::entryForRoute)
 
         if (currentTag == null || currentEntry == null) {
-            // An unknown/stale fragment must not be treated as route truth.
             resetToRoot(currentTabEntry())
             return true
         }
 
-        // A non-tab feature (for example Connection) is an overlay on top of a
-        // bottom tab. Its owning tab comes from the back stack root, the saved
-        // tab, or the first tab as a safe fallback.
         val tabEntry = if (currentEntry.isTab) {
             currentEntry
         } else {
@@ -277,8 +221,6 @@ class FragmentRouter(
             owner != null && (owner.id == tabEntry.id || !owner.isTab)
         }
         titlesByRoute.putIfAbsent(rootRoute, tabEntry.titleRes(tabEntry.rootDestination))
-        // The saved title for an editor/settings screen was loaded above; this
-        // is only a safe fallback for an old/corrupt bundle.
         titlesByRoute.putIfAbsent(currentTag, currentEntry.titleRes)
         updateDerivedState()
         if (Log.isLoggable(TAG, Log.DEBUG)) {
@@ -303,8 +245,6 @@ class FragmentRouter(
     private fun performBack(): Boolean {
         if (fragmentManager.backStackEntryCount == 0) {
             if (routeState.isAtRoot()) return false
-            // Route state and FragmentManager diverged. Re-sync once and consume
-            // this Back, but do not trap the user at a phantom inner route.
             if (!restoreFromFragmentManager()) {
                 resetToRoot(registry.entry(routeState.currentTabId) ?: initialEntry)
             }
@@ -314,8 +254,6 @@ class FragmentRouter(
         val popped = routeState.pop()
         fragmentManager.popBackStackImmediate()
         if (popped == null) {
-            // Route state did not own the entry FragmentManager had; rebuild
-            // from the restored fragment instead of leaving the two out of sync.
             restoreFromFragmentManager()
         } else {
             updateDerivedState()
@@ -326,8 +264,6 @@ class FragmentRouter(
 
     private fun enqueue(command: Command): Boolean {
         if (!pending.offer(command)) {
-            // Preserve already accepted commands. Reject only the new command;
-            // clearing the queue would silently lose user navigation.
             Log.w(TAG, "navigation queue full; rejected new command")
             return false
         }
@@ -339,14 +275,11 @@ class FragmentRouter(
         if (!resumed || fragmentManager.isStateSaved || fragmentManager.isDestroyed) return
         runCatching {
             pending.drain { command ->
-                // State may have been saved between commands (e.g. an Activity
-                // transition); stop and keep the rest for the next resume.
                 if (fragmentManager.isStateSaved) throw StateSavedDuringDrain()
                 execute(command)
             }
         }.onFailure { failure ->
             if (failure !is StateSavedDuringDrain) throw failure
-            // Remaining commands stay queued for the next onHostResumed().
         }
     }
 
@@ -379,9 +312,6 @@ class FragmentRouter(
     private fun pushNow(destination: Destination) {
         val entry = registry.entryFor(destination) ?: return
         if (!entry.isTab) {
-            // Overlay on the current tab: do not change the selected bottom tab
-            // and add a real back-stack entry so Back returns to where the user
-            // opened it from.
             if (!routeState.push(destination.route)) {
                 updateDerivedState()
                 return
@@ -399,8 +329,6 @@ class FragmentRouter(
         }
 
         if (!routeState.push(destination.route)) {
-            // Same destination is already current: no second Fragment
-            // transaction and no second back-stack entry (double tap safe).
             updateDerivedState()
             return
         }
@@ -438,8 +366,6 @@ class FragmentRouter(
             .replace(containerId, fragment, destination.route)
         if (addToBackStack) transaction.addToBackStack(destination.route)
         transaction.commit()
-        // Keep route state, canGoBack, and the real Fragment back stack in step;
-        // callers are gated on a resumed, non-state-saved host.
         fragmentManager.executePendingTransactions()
     }
 
@@ -452,7 +378,6 @@ class FragmentRouter(
         mutableIsOverlay.value = currentRouteOverlay()
     }
 
-    /** The visible route is an overlay when its owning feature is not a tab. */
     private fun currentRouteOverlay(): Boolean {
         val entry = registry.entryForRoute(routeState.currentRoute()) ?: return false
         return !entry.isTab

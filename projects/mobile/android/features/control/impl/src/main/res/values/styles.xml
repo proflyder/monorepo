@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Compact one-line tonal chip used by the voice card actions. -->
     <style name="Widget.Control.VoiceChip" parent="Widget.Material3.Button.TonalButton">
         <item name="android:minHeight">@dimen/control_voice_chip_height</item>
         <item name="android:insetTop">0dp</item>

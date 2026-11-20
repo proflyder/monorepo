@@ -11,12 +11,6 @@ import dev.proflyder.home.feature.control.impl.R
 import dev.proflyder.home.feature.control.impl.databinding.SheetVolumeBinding
 import kotlin.math.roundToInt
 
-/**
- * Bottom sheet of the station volume: the main level with a mute toggle and the
- * announcement level. A command is sent when a slider is released, not while
- * dragging. While the sheet is open the phone's hardware volume keys drive the
- * station, never the phone's own volume.
- */
 internal class VolumeSheet(
     context: Context,
     private val entry: ControlEntry,
@@ -100,11 +94,6 @@ internal class VolumeSheet(
     private fun percent(value: Int): String =
         views.root.context.getString(R.string.control_volume_percent, value)
 
-    /**
-     * Hardware volume keys adjust the station by five percent per press. The
-     * event is consumed even at the edge (0 or 100), so the phone's own stream
-     * never changes while the sheet is open.
-     */
     internal fun onHardwareKey(keyCode: Int, event: KeyEvent): Boolean {
         val step = when (keyCode) {
             KeyEvent.KEYCODE_VOLUME_UP -> STEP

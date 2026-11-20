@@ -20,11 +20,6 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
-/**
- * Notices are rendered over the real activity: they must float above the
- * bottom navigation and must be dismissible with a swipe, because the root is
- * a LinearLayout and Material cannot attach its own swipe behavior.
- */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class NoticeSwipeActivityTest {

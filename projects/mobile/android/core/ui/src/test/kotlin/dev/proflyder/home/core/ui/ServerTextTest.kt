@@ -12,7 +12,6 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 
-/** Server keys resolve through `strings.xml`, with explicit argument order. */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class ServerTextTest {

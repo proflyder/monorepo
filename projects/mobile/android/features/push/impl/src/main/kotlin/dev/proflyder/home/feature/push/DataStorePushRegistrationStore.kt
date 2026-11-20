@@ -17,14 +17,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 
-/**
- * Last accepted registration in the app-wide DataStore.
- *
- * The token, its timestamp and the owner-visible name are stored: the token is
- * not a credential
- * for the home server (the bearer token is), but it is still never logged or
- * shown in full, and `allowBackup` is off, so it never leaves the device.
- */
 @SingleIn(AppScope::class)
 @ContributesBinding(AppScope::class)
 @Inject

@@ -13,11 +13,9 @@ class PendingTransitionsTest {
 
         queue.offer("alarms")
         queue.offer("editor")
-        // Not resumed yet: nothing reaches the FragmentManager.
         assertTrue(delivered.isEmpty())
         assertEquals(2, queue.size)
 
-        // Resume drains both, in order, exactly once.
         queue.drain(delivered::add)
         assertEquals(listOf("alarms", "editor"), delivered)
         assertEquals(0, queue.size)
@@ -65,7 +63,6 @@ class PendingTransitionsTest {
                 delivered += command
             }
         } catch (_: IllegalStateException) {
-            // expected
         }
 
         assertEquals(listOf("a"), delivered)

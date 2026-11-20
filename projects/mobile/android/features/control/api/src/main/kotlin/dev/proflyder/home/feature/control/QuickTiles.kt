@@ -6,7 +6,6 @@ import dev.proflyder.home.core.model.FavoriteKind
 import dev.proflyder.home.core.model.FavoriteRef
 import dev.proflyder.home.core.model.Scenario
 
-/** One pinned tile in "Quick actions". */
 sealed interface QuickTile {
     val key: String
 
@@ -18,21 +17,15 @@ sealed interface QuickTile {
         override val key: String get() = "scenario:${scenario.id}"
     }
 
-    /** "Say on the station": a catalog action entry, opened as a text dialog. */
     data class Speak(val entry: ControlEntry, val busy: Boolean) : QuickTile {
         override val key: String get() = "action:${entry.id}"
     }
 
-    /** The built-in "Call the station" action, pinned before the user's favourites. */
     data object Call : QuickTile {
         override val key: String get() = "call"
     }
 }
 
-/**
- * Resolves ordered [FavoriteRef]s against the loaded catalog and scenario list.
- * Pins whose target disappeared are skipped instead of rendered as empty tiles.
- */
 object QuickTiles {
     fun build(
         refs: List<FavoriteRef>,

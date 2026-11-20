@@ -15,7 +15,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Test
 
-/** A rotated token is retried once; an unchanged token is not retried. */
 class TokenRefreshAuthenticatorTest {
     private lateinit var server: MockWebServer
     private lateinit var store: FakeStore

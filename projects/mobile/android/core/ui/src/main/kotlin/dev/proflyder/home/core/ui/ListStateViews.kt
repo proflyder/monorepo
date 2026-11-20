@@ -3,13 +3,6 @@ package dev.proflyder.home.core.ui
 import android.view.View
 import android.widget.TextView
 
-/**
- * Shared loading/empty/error/content rendering for list screens. Exactly one of
- * the four regions is visible; the in-flight refresh over existing content is
- * expressed with [showContent]`(refreshing = true)` rather than a separate state.
- *
- * [error] is the container (message + actions); [errorText] receives the text.
- */
 class ListStateViews(
     private val progress: View,
     private val empty: View,

@@ -4,7 +4,6 @@ import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.model.Schedule
 import java.time.LocalDate
 
-/** Domain contract for one-shot reminders; independent of Android. */
 interface ReminderRepository {
     suspend fun list(): Outcome<List<Schedule>>
     suspend fun get(id: String): Outcome<Schedule>

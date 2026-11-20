@@ -22,7 +22,6 @@ private object HistoryDiff : DiffUtil.ItemCallback<NotificationHistoryEntry>() {
         oldItem == newItem
 }
 
-/** One received message per card: type icon, title, body, relative time. */
 internal class NotificationHistoryAdapter(
     callback: NotificationHistoryAdapterCallback,
 ) : BaseListAdapter<NotificationHistoryEntry, ItemNotificationHistoryBinding, NotificationHistoryAdapterCallback>(
@@ -59,13 +58,11 @@ internal class NotificationHistoryAdapter(
     }
 }
 
-/** The type icon is the same shape the tray notification used. */
 internal fun icon(type: NotificationHistoryType): Int = when (type) {
     NotificationHistoryType.NOTIFY -> R.drawable.settings_ic_notify
     NotificationHistoryType.FIND -> R.drawable.settings_ic_find
 }
 
-/** Spoken label of the row type; the row title is the message itself. */
 internal fun label(type: NotificationHistoryType): Int = when (type) {
     NotificationHistoryType.NOTIFY -> R.string.history_type_notify
     NotificationHistoryType.FIND -> R.string.history_type_find

@@ -179,8 +179,6 @@ class ConnectSchedulerClientTest {
 
         assertTrue(client.getStatus() is Outcome.Success)
 
-        // The logging/inspection layer sees the final request: configured host,
-        // bearer in the header only, Connect headers set.
         val request = seen.single()
         assertEquals(server.hostName, request.url.host)
         assertEquals("/home.v1.SchedulerService/GetStatus", request.url.encodedPath)
@@ -308,8 +306,6 @@ class ConnectSchedulerClientTest {
                 .setBody("{}")
                 .setBodyDelay(1_300, TimeUnit.MILLISECONDS),
         )
-        // Invalid configured timeouts are clamped to the safe minimum, so use
-        // the minimum read timeout and delay beyond it.
         store.set(defaultConfig(readMillis = 1))
         assertEquals(RemoteFailure.Timeout, client().getStatus().failureOrNull())
     }

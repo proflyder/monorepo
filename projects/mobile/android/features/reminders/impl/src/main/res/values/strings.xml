@@ -1,5 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Feature modules are independent; shared UI labels are intentionally duplicated. -->
 <resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="DuplicateStrings">
     <string name="reminders_title">Reminders</string>
     <string name="reminders_add">Add reminder</string>

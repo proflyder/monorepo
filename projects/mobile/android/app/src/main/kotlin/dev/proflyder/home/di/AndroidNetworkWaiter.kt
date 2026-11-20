@@ -7,15 +7,7 @@ import dev.proflyder.home.core.network.NetworkWaiter
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
-/**
- * Waits for a default network (Wi-Fi, LAN or the VPN tunnel) while the phone
- * wakes up after Doze. A resume can race the tunnel coming back, so the first
- * read should wait instead of immediately showing "check LAN or VPN".
- *
- * The call blocks on an OkHttp worker thread, never on the UI thread. When a
- * network already exists the check is a cheap field read.
- */
-@SuppressLint("MissingPermission") // ACCESS_NETWORK_STATE is declared in the app manifest.
+@SuppressLint("MissingPermission")
 class AndroidNetworkWaiter(private val context: Context) : NetworkWaiter {
 
     override fun awaitAvailable(timeoutMillis: Long): Boolean {

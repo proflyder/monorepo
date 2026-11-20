@@ -15,15 +15,6 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
-/**
- * The permission screen is real Material UI: only an inflated layout proves the
- * rows, the button labels and the ring summary render in the dark theme. The
- * PNG is written to Bazel's undeclared outputs as review evidence.
- *
- * The state shown is the one the owner sees before granting anything, which is
- * the case that must be understandable: three "not allowed" rows, the phone
- * name field and an honest warning that the loud ring will not start.
- */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35], qualifiers = "w411dp-h891dp-night-xxhdpi")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)

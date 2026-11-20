@@ -50,7 +50,6 @@ class MainActivity : AppCompatActivity(), NavigatorHost, ViewModelFactoryProvide
     private val bottomNavigation: BottomNavigationView get() = binding.homeNoticeAnchor
     private val toolbar: MaterialToolbar get() = binding.toolbar
 
-    /** The same activity-scoped ViewModel the Home fragment uses. */
     private val controlViewModel: ControlViewModel by viewModels {
         viewModelFactory(ControlViewModel::class.java)
     }
@@ -59,7 +58,6 @@ class MainActivity : AppCompatActivity(), NavigatorHost, ViewModelFactoryProvide
     private val featureByItemId = mutableMapOf<Int, String>()
     private var syncingSelection = false
 
-    /** Elapsed time when the activity left the foreground; 0 before the first start. */
     private var leftForegroundAtNanos = 0L
 
     private val graph get() = (application as HomeApplication).graph
@@ -76,8 +74,6 @@ class MainActivity : AppCompatActivity(), NavigatorHost, ViewModelFactoryProvide
         actionsMenu = ToolbarActionsMenu(this, ::runMenuAction)
         applySystemBarInsets()
 
-        // FragmentRouter inspects the actual restored FragmentManager state;
-        // a non-null savedInstanceState alone does not prove a fragment exists.
         router = FragmentRouter(
             fragmentManager = supportFragmentManager,
             containerId = R.id.fragment_container,
@@ -171,11 +167,6 @@ class MainActivity : AppCompatActivity(), NavigatorHost, ViewModelFactoryProvide
         applyDeepLink(intent)
     }
 
-    /**
-     * A notification tap carries an in-app route (`home://alarms`). The router
-     * accepts only registered features and owned routes; an unknown or foreign
-     * route just opens the app on the current tab.
-     */
     private fun applyDeepLink(intent: Intent?) {
         val route = intent?.getStringExtra(PushIntents.EXTRA_DEEP_LINK)?.trim().orEmpty()
         if (route.isEmpty()) return
@@ -203,8 +194,6 @@ class MainActivity : AppCompatActivity(), NavigatorHost, ViewModelFactoryProvide
         val menu: Menu = bottomNavigation.menu
         menu.clear()
         features.tabs().forEachIndexed { index, entry -> addTab(menu, index + 1, entry) }
-        // Restore the selected tab before attaching the listener so the menu's
-        // automatic first-item selection cannot override router state.
         itemIdByFeature[router.currentTabId.value]?.let { bottomNavigation.selectedItemId = it }
         bottomNavigation.setOnItemSelectedListener { item ->
             if (!syncingSelection) {
@@ -223,8 +212,6 @@ class MainActivity : AppCompatActivity(), NavigatorHost, ViewModelFactoryProvide
     private fun setupToolbar() {
         toolbar.title = null
         toolbar.inflateMenu(R.menu.menu_main)
-        // One actions button; its spoken label comes from resources. The menu
-        // it opens is our own card (ToolbarActionsMenu), not an overflow list.
         toolbar.menu.findItem(R.id.action_menu)?.contentDescription = getString(R.string.app_actions)
         toolbar.setNavigationOnClickListener { onBackPressedDispatcher.onBackPressed() }
         toolbar.setOnMenuItemClickListener(::onToolbarMenuItem)
@@ -251,22 +238,12 @@ class MainActivity : AppCompatActivity(), NavigatorHost, ViewModelFactoryProvide
         }
     }
 
-    /**
-     * Overlays (Settings and the screens it opens) keep only Back and the
-     * title: the profile is switched from the main tabs, and the actions menu
-     * is hidden so the toolbar does not compete with the screen itself.
-     */
     private fun renderToolbarMode(overlay: Boolean) {
         toolbar.menu.findItem(R.id.action_menu)?.isVisible = !overlay
         actionsMenu.dismiss()
         renderProfileChip(controlViewModel.state.value, router.currentTabId.value, overlay)
     }
 
-    /**
-     * The profile is a mode, not a list card: a compact chip next to the Home
-     * title shows the current side and toggles it. It exists only on the Home
-     * tab and only while the catalog exposes the profile switch.
-     */
     private fun renderProfileChip(state: ControlUiState, tabId: String, overlay: Boolean) {
         val profile = state.entries.firstOrNull { it.isProfile }
         val chip = binding.profileChip
@@ -299,11 +276,6 @@ class MainActivity : AppCompatActivity(), NavigatorHost, ViewModelFactoryProvide
     private companion object {
         const val CONTROL_TAB = "control"
 
-        /**
-         * A socket that survived longer than this in the background is almost
-         * certainly dead after Doze; dropping the pool makes the first resume
-         * request open a fresh connection instead of failing and retrying.
-         */
         const val STALE_CONNECTION_NANOS = 15_000_000_000L
     }
 }

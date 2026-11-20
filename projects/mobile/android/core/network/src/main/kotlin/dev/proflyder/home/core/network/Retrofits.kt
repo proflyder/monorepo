@@ -17,7 +17,6 @@ import retrofit2.http.Body
 import retrofit2.http.GET
 import retrofit2.http.POST
 
-/** Connect unary calls of home.v1.SchedulerService. */
 internal interface SchedulerApi {
     @POST("home.v1.SchedulerService/GetStatus")
     fun getStatus(@Body body: EmptyBody): Outcome<SchedulerStatusDto>
@@ -68,7 +67,6 @@ internal interface SchedulerApi {
     fun enqueueTask(@Body body: EnqueueTaskRequestDto): Outcome<EventResponseDto>
 }
 
-/** Connect unary calls of home.v1.ScenarioService on the same scheduler endpoint. */
 internal interface ScenarioApi {
     @POST("home.v1.ScenarioService/ListScenarios")
     fun listScenarios(@Body body: ListScenariosRequestDto): Outcome<ScenariosResponseDto>
@@ -92,7 +90,6 @@ internal interface ScenarioApi {
     fun runScenario(@Body body: RunScenarioRequestDto): Outcome<EventResponseDto>
 }
 
-/** Connect unary calls of home.v1.IntercomService (signaling). */
 internal interface IntercomApi {
     @POST("home.v1.IntercomService/RegisterEndpoint")
     fun registerEndpoint(@Body body: RegisterEndpointRequestDto): Outcome<EndpointResponseDto>
@@ -119,16 +116,11 @@ internal interface IntercomApi {
     fun getStatus(@Body body: EmptyBody): Outcome<IntercomStatusDto>
 }
 
-/** The home control service's read-only catalog. */
 internal interface ControlApi {
     @GET("v1/catalog")
     fun catalog(): Outcome<ControlCatalogDto>
 }
 
-/**
- * Wraps the kotlinx converter so no response can exceed [MAX_RESPONSE_BYTES],
- * even when the server omits Content-Length.
- */
 internal class BoundedResponseConverterFactory(
     private val delegate: Converter.Factory,
     private val contentType: MediaType,
@@ -173,7 +165,6 @@ internal fun checkResponseSize(body: ResponseBody) = when {
     else -> Unit
 }
 
-/** Keeps `Content-Type: application/json` exactly; String bodies would add a charset. */
 private class PlainJsonBody(
     private val delegate: RequestBody,
     private val contentType: MediaType,
@@ -185,21 +176,7 @@ private class PlainJsonBody(
     override fun writeTo(sink: BufferedSink) = delegate.writeTo(sink)
 }
 
-/**
- * Builds the Retrofit instances. Each gets its own OkHttpClient derived from
- * [baseClient] (shared connection pool and dispatcher) with:
- *  1. [ReadRetryInterceptor] (retry idempotent reads after wake-up failures),
- *  2. [ConnectionInterceptor] (endpoint, auth, timeouts from settings),
- *  3. [TimeZoneInterceptor] (the phone's IANA zone on every request),
- *  4. [TokenRefreshAuthenticator] (one retry when the stored token rotated),
- *  5. the caller's [extraInterceptors] (logging, inspection, ...), which
- *     therefore see the final request.
- * Redirects are never followed: a bearer token must not follow a Location.
- * Responses are decoded by kotlinx serialization and adapted to [Outcome] so an
- * endpoint never sees HTTP status or JSON trees.
- */
 internal object HomeRetrofit {
-    // Placeholder only; ConnectionInterceptor rewrites every URL.
     private const val PLACEHOLDER_BASE_URL = "http://localhost/"
     private val JSON_MEDIA_TYPE = "application/json".toMediaType()
 
@@ -214,8 +191,6 @@ internal object HomeRetrofit {
         val client = baseClient.newBuilder()
             .followRedirects(false)
             .followSslRedirects(false)
-            // A stale keep-alive socket after Doze must be replaced by OkHttp
-            // itself, before an application-level retry is needed.
             .retryOnConnectionFailure(true)
             .addInterceptor(ReadRetryInterceptor(networkWaiter, baseClient.connectionPool))
             .addInterceptor(ConnectionInterceptor(settings, target))

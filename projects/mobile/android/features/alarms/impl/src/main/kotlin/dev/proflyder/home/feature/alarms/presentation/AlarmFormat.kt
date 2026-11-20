@@ -38,11 +38,6 @@ internal object AlarmFormat {
         return dayList(context, days)
     }
 
-    /**
-     * The editor's repeat row: a preset name, or "Пн, Ср, Пт" for a custom
-     * selection. An empty custom set still reads as the option's own name
-     * instead of the card's "unsupported repeat" error.
-     */
     fun repeatValue(context: Context, repeat: RepeatKind, weekdays: Set<Int>): String = when (repeat) {
         RepeatKind.ONCE -> context.getString(R.string.alarms_repeat_once)
         RepeatKind.DAILY -> context.getString(R.string.alarms_repeat_daily)
@@ -62,11 +57,6 @@ internal object AlarmFormat {
         }
     }
 
-    /**
-     * One secondary line for the dense card: "Будни · далее завтра 10:00".
-     * It replaces the old separate repeat and "Next:" rows, so the reason for
-     * the alarm and its nearest moment read as one sentence.
-     */
     fun summary(context: Context, schedule: Schedule, nowUnix: Long): String {
         val repeat = repeatSummary(context, schedule)
         return when {

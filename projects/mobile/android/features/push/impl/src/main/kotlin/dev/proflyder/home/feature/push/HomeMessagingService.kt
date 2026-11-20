@@ -8,30 +8,11 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 
-/**
- * FCM entry point.
- *
- * * `onRegistered` — a new or rotated token is registered immediately; a
- *   failure is retried on the next app start (`onUnregistered` forgets the old
- *   one).
- * * `onMessageReceived` — a `phone_find` **data** message starts the loud ring,
- *   anything else becomes an ordinary notification.
- *
- * Both paths work with the app killed: FCM starts this service for a
- * high-priority message, and the ring itself is a foreground service, which a
- * high-priority FCM message is allowed to start from the background. Messages
- * the system renders from a `notification` block never arrive here when the app
- * was killed; the server therefore sends find-phone as data only.
- */
 class HomeMessagingService : FirebaseMessagingService() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     override fun onRegistered(token: String) = register(token)
 
-    /**
-     * FCM 26 delivers new tokens through `onRegistered`; `onNewToken` is kept
-     * because older Play Services releases still call it and lint requires it.
-     */
     @Deprecated("Superseded by onRegistered on FCM 26; kept for older clients.")
     override fun onNewToken(token: String) = register(token)
 
@@ -67,7 +48,6 @@ class HomeMessagingService : FirebaseMessagingService() {
         }
     }
 
-    /** History is written off the main thread; a kept message never blocks the ring. */
     private fun remember(dependencies: PushEntryPoint.Dependencies, message: PushMessage) {
         scope.launch { dependencies.history.record(message) }
     }

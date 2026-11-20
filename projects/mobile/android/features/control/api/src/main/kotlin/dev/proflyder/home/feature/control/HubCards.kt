@@ -9,12 +9,7 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
-/**
- * One live row of the compact Home "next up" block. Only rows that are
- * relevant right now are built; an empty list means the block is hidden.
- */
 sealed interface HubCard {
-    /** Stable identity for the row renderer. */
     val key: String
 
     data class Alarm(val schedule: Schedule, val ringing: Boolean) : HubCard {
@@ -30,26 +25,19 @@ sealed interface HubCard {
     }
 }
 
-/** Localized date words for the live rows; the implementation supplies resources. */
 interface HubScheduleStrings {
     fun today(): String
     fun tomorrow(): String
 
-    /** Short weekday name for ISO day 1..7 (Monday = 1). */
     fun dayOfWeek(isoDay: Int): String
 
     fun time(hour: Int, minute: Int): String
 }
 
 object HubFormat {
-    /** Far dates are rendered with the current locale; built per call so a locale change is honoured. */
     private fun farDate(): DateTimeFormatter =
         DateTimeFormatter.ofPattern("d MMM", Locale.getDefault())
 
-    /**
-     * "сегодня 07:30", "завтра 07:30", "пн 07:30" or "12 нояб. 07:30".
-     * [nowUnix] is the scheduler time, so the phone wall clock cannot shift it.
-     */
     fun whenText(
         epochSeconds: Long,
         zone: ZoneId,
@@ -68,12 +56,10 @@ object HubFormat {
         }
     }
 
-    /** True while the scheduler reports a live occurrence for this alarm. */
     fun isRinging(schedule: Schedule, nowUnix: Long): Boolean =
         schedule.activeOccurrenceUnix > 0 &&
             (schedule.activeUntilUnix <= 0 || schedule.activeUntilUnix > nowUnix)
 
-    /** Remaining seconds of a timer row, using the shared server clock. */
     fun timerRemaining(timer: Timer, nowUnix: Long): Long = when (timer.state) {
         TimerState.RUNNING -> (timer.dueUnix - nowUnix).coerceAtLeast(0L)
         TimerState.PAUSED -> timer.remainingSeconds.coerceAtLeast(0L)
@@ -81,19 +67,11 @@ object HubFormat {
     }
 }
 
-/** A candidate row plus the moment it should be ordered by. */
 private data class HubRow(val card: HubCard, val atUnix: Long)
 
-/**
- * Selects the live rows: enabled alarms, running/paused timers and reminders
- * that fire within the next day, merged into one chronological list. The block
- * shows at most [MAX_ROWS] rows.
- */
 object HubCards {
-    /** More rows would stop the block from being compact; the rest lives in its section. */
     const val MAX_ROWS = 3
 
-    /** A reminder enters the Home block only during the day before it fires. */
     const val REMINDER_WINDOW_SECONDS = 24L * 60L * 60L
 
     fun build(
@@ -122,7 +100,6 @@ object HubCards {
     private fun addTimer(timer: Timer, nowUnix: Long, rows: MutableList<HubRow>) {
         val remaining = HubFormat.timerRemaining(timer, nowUnix)
         if (!timer.isActive || remaining <= 0) return
-        // A paused timer has no due moment; it counts down from now.
         val at = if (timer.state == TimerState.PAUSED) nowUnix + remaining else timer.dueUnix
         rows += HubRow(HubCard.TimerCard(timer), at)
     }
@@ -134,15 +111,9 @@ object HubCards {
         rows += HubRow(HubCard.Reminder(reminder), reminder.nextDueUnix)
     }
 
-    /** Today's date in the scheduler time zone; used by callers that need a date for text. */
     fun today(zone: ZoneId, nowUnix: Long): LocalDate =
         Instant.ofEpochSecond(nowUnix).atZone(zone).toLocalDate()
 
-    /**
-     * Builds the rows, but keeps the previous rows of a source that failed to
-     * load (`null`). A transient RPC failure then cannot make one row vanish
-     * and reappear on the next refresh.
-     */
     fun buildOrKeep(
         alarms: List<Schedule>?,
         timers: List<Timer>?,

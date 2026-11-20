@@ -12,8 +12,6 @@ class IdempotentRequestKeyTest {
         val payload = "alarm:label=Wake;hour=7"
 
         val firstAttempt = identity.keyFor(payload)
-        // The server may have accepted this request while the response was lost.
-        // No markSucceeded() is called, so the retry must use the same key.
         val retry = identity.keyFor(payload)
 
         assertEquals("key-1", firstAttempt)

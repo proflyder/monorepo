@@ -11,12 +11,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 
-/**
- * Self-managed [ConnectionService] backing `TelecomManager.placeCall`.
- *
- * Outgoing calls mirror [dev.proflyder.home.feature.call.CallController]. There
- * is deliberately no incoming-call UI yet: an incoming request is cancelled.
- */
 class HomeConnectionService : ConnectionService() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -45,7 +39,6 @@ class HomeConnectionService : ConnectionService() {
         account: PhoneAccountHandle?,
         request: ConnectionRequest?,
     ): Connection {
-        // TODO(incoming): addNewIncomingCall + ring UI. Until then, decline.
         return Connection.createCanceledConnection()
     }
 

@@ -9,7 +9,6 @@ import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.feature.control.ControlRepository
 import dev.zacsweers.metro.Inject
 
-/** Loads the catalog; entries of kinds this app version cannot present are dropped. */
 @Inject class LoadControlCatalog(
     private val repository: ControlRepository,
 ) {
@@ -30,7 +29,6 @@ import dev.zacsweers.metro.Inject
         repository.send(entry.id, ControlAction.RUN)
 }
 
-/** Presses a stateless button such as "lock" or "unlock" the PC. */
 @Inject class PressControl(
     private val repository: ControlRepository,
 ) {
@@ -45,11 +43,6 @@ import dev.zacsweers.metro.Inject
         repository.send(entry.id, if (on) ControlAction.TURN_ON else ControlAction.TURN_OFF)
 }
 
-/**
- * Switches the assistant profile. `on` means the named (work) profile, `off`
- * the default (personal) one — the profile entity is a plain switch in Home
- * Assistant, so this is the same command as a device toggle.
- */
 @Inject class SetVoiceProfile(
     private val repository: ControlRepository,
 ) {
@@ -64,10 +57,6 @@ import dev.zacsweers.metro.Inject
         repository.adjust(entry.id, adjust)
 }
 
-/**
- * Speaks a text on the station. The text is already normalized and validated
- * by [dev.proflyder.home.feature.control.SpeakText]; the server re-validates it.
- */
 @Inject class SpeakOnStation(
     private val repository: ControlRepository,
 ) {
@@ -75,7 +64,6 @@ import dev.zacsweers.metro.Inject
         repository.speak(entry.id, text)
 }
 
-/** Sets the station volume or its announcement level. */
 @Inject class SetVolume(
     private val repository: ControlRepository,
 ) {
@@ -83,7 +71,6 @@ import dev.zacsweers.metro.Inject
         repository.setVolume(entry.id, level)
 }
 
-/** Silences or restores the station media player. */
 @Inject class SetVolumeMuted(
     private val repository: ControlRepository,
 ) {

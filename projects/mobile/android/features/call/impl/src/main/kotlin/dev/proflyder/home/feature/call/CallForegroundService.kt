@@ -17,12 +17,6 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.launch
 
-/**
- * `phoneCall` foreground service with an ongoing CallStyle notification.
- *
- * Started when a call becomes live and stopped at IDLE/ENDED. "Сбросить" ends
- * the call through the same [CallController] the screen uses.
- */
 class CallForegroundService : Service() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)

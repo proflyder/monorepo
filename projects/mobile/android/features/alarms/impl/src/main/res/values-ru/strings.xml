@@ -8,7 +8,6 @@
     <string name="alarms_stop">Стоп</string>
     <string name="alarms_delete">Удалить</string>
     <string name="alarms_enabled">Включён</string>
-    <!-- Компактная строка карточки: повтор слева, состояние справа. -->
     <string name="alarms_card_next">%1$s · далее %2$s</string>
     <string name="alarms_card_ringing">%1$s · сейчас</string>
     <string name="alarms_card_snoozed">%1$s · отложен до %2$s</string>
@@ -24,9 +23,7 @@
     <string name="alarms_repeat_weekdays">Будни</string>
     <string name="alarms_repeat_weekends">Выходные</string>
     <string name="alarms_repeat_custom">Выбранные дни</string>
-    <!-- Подпись чипа повтора, рядом с «Ежедневно» / «Будни» / «Выходные». -->
     <string name="alarms_repeat_once">Однократно</string>
-    <!-- Сводка однократного будильника в карточке: другая, полная фраза. -->
     <string name="alarms_repeat_once_summary">Однократный будильник</string>
     <string name="alarms_repeat_once_on">Однократно %1$s</string>
     <string name="alarms_repeat_unknown">Неподдерживаемый повтор</string>

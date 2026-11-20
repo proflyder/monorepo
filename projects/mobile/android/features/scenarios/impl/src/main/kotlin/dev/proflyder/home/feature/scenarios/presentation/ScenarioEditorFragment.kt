@@ -41,7 +41,6 @@ class ScenarioEditorFragment :
     private var rendering = false
     private var conflictDialogShown = false
 
-    /** A picker waiting for the catalog to finish loading. */
     private var pendingPick: ((List<ControlEntry>) -> Unit)? = null
     private var catalogWaitDialog: AlertDialog? = null
 
@@ -287,7 +286,6 @@ class ScenarioEditorFragment :
         CatalogPickerDialog(requireContext(), ordered, onSelected).show()
     }
 
-    /** Dismisses the "catalog is loading" dialog and continues a pending picker. */
     private fun drainPendingPick(state: ScenarioEditorUiState) {
         val pending = pendingPick ?: return
         if (state.catalogLoading) return
@@ -487,7 +485,6 @@ class ScenarioEditorFragment :
     }
 }
 
-/** What every step row needs besides the step itself. */
 private data class StepContext(
     val catalog: List<ControlEntry>,
     val catalogLoaded: Boolean,

@@ -11,7 +11,6 @@ import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesIntoSet
 import dev.zacsweers.metro.Inject
 
-/** Sections of the single "Time" bottom tab. */
 enum class TimeSection(val routeSegment: String) {
     ALARMS("alarms"),
     TIMERS("timers"),
@@ -24,11 +23,6 @@ enum class TimeSection(val routeSegment: String) {
     }
 }
 
-/**
- * The "Time" tab. Each section is one route so a deep link
- * (`router.selectTab("alarms")`) can open the tab at the right switch position,
- * while the in-screen toggle changes sections without creating back entries.
- */
 data class TimeDestination(val section: TimeSection = TimeSection.ALARMS) : Destination {
     override val featureId: String = "time"
     override val route: String = "time/${section.routeSegment}"
@@ -65,7 +59,6 @@ class TimeFeatureEntry : FeatureEntry {
     }
 }
 
-/** Placeholder kept next to the entry so the hosting rule is obvious in one file. */
 internal fun sectionFragment(section: TimeSection): Fragment = when (section) {
     TimeSection.ALARMS -> AlarmsFragment()
     TimeSection.TIMERS -> TimersFragment()

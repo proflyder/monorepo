@@ -14,7 +14,6 @@ import kotlinx.coroutines.withContext
 import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 
-/** Transport-level contract used by feature repositories. */
 interface SchedulerClient {
     suspend fun getStatus(): Outcome<SchedulerStatus>
 
@@ -27,10 +26,6 @@ interface SchedulerClient {
     suspend fun snoozeSchedule(id: String, minutes: Int): Outcome<Schedule>
     suspend fun stopSchedule(id: String): Outcome<Schedule>
 
-    /**
-     * Advances a recurring schedule past its next occurrence without disabling
-     * it. One-shot schedules are rejected by the server; disable them instead.
-     */
     suspend fun skipScheduleOccurrence(id: String): Outcome<Schedule>
 
     suspend fun startTimer(label: String, durationSeconds: Long, idempotencyKey: String): Outcome<Timer>
@@ -39,10 +34,6 @@ interface SchedulerClient {
     suspend fun resumeTimer(id: String): Outcome<Timer>
     suspend fun cancelTimer(id: String): Outcome<Timer>
 
-    /**
-     * Durably queues a generic task for an executor group. Returns the event id
-     * once the scheduler accepted it; this is "queued", not "executed".
-     */
     suspend fun enqueueTask(
         taskType: String,
         queue: String,
@@ -51,22 +42,11 @@ interface SchedulerClient {
     ): Outcome<String>
 }
 
-/**
- * Connect unary JSON/HTTP client for home.v1.SchedulerService.
- *
- * Security properties:
- *  - redirects (HTTP and HTTPS) are disabled; a bearer token can never be
- *    forwarded to a Location host,
- *  - the token travels only in the Authorization header, never in the URL,
- *  - the system TLS trust store is used; there is no permissive trust manager,
- *  - no socket is bound to Wi-Fi, so LAN/VPN system routing works unchanged.
- */
 class ConnectSchedulerClient(
     settings: ConnectionSettingsStore,
     baseClient: OkHttpClient,
     private val serverClock: ServerClock,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
-    /** Extra application interceptors (logging, inspection); they run after the connection interceptor. */
     interceptors: List<Interceptor> = emptyList(),
     networkWaiter: NetworkWaiter = NetworkWaiter.Online,
 ) : SchedulerClient {

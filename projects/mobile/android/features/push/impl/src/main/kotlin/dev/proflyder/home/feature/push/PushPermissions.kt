@@ -11,35 +11,19 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 
-/**
- * Reads and fixes the three permissions the loud path depends on.
- *
- * They are granted in different places, so each row of the settings screen has
- * its own real state and its own system settings page:
- *
- * | Permission | Source of truth | Fix |
- * | --- | --- | --- |
- * | notifications | `POST_NOTIFICATIONS` (13+) / enabled channels | runtime dialog or app notification settings |
- * | DND bypass | `NotificationManager.isNotificationPolicyAccessGranted` | `ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS` |
- * | full-screen intent | `canUseFullScreenIntent` (14+) | `ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT` |
- */
 class PushPermissions(private val context: Context) {
 
-    /** Current state as the screen renders it. */
     fun status(): PushPermissionStatus = PushPermissionStatus(
         notifications = notificationsGranted(),
         dndAccess = dndAccessGranted(),
         fullScreenIntent = fullScreenIntentGranted(),
     )
 
-    /** The runtime dialog intent, when the platform still asks. */
     fun notifications(): Intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
         .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
 
-    /** Do Not Disturb access lives outside the app's own settings page. */
     fun dnd(): Intent = Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS)
 
-    /** Full-screen intent allowance (Android 14+). */
     fun fullScreen(): Intent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
         Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT)
             .setData("package:${context.packageName}".toUri())
@@ -47,7 +31,6 @@ class PushPermissions(private val context: Context) {
         appDetails()
     }
 
-    /** App details, the fallback for every permission on older releases. */
     fun appDetails(): Intent = Intent(
         Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
         "package:${context.packageName}".toUri(),

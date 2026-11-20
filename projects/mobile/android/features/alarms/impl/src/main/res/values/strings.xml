@@ -1,5 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Feature modules are independent; shared UI labels are intentionally duplicated. -->
 <resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="DuplicateStrings">
     <string name="alarms_title">Alarms</string>
     <string name="alarms_add">Add alarm</string>
@@ -9,7 +8,6 @@
     <string name="alarms_stop">Stop</string>
     <string name="alarms_delete">Delete</string>
     <string name="alarms_enabled">Enabled</string>
-    <!-- Compact card summary: repeat on the left, the live state on the right. -->
     <string name="alarms_card_next">%1$s · next %2$s</string>
     <string name="alarms_card_ringing">%1$s · now</string>
     <string name="alarms_card_snoozed">%1$s · snoozed until %2$s</string>
@@ -25,9 +23,7 @@
     <string name="alarms_repeat_weekdays">Weekdays</string>
     <string name="alarms_repeat_weekends">Weekends</string>
     <string name="alarms_repeat_custom">Custom days</string>
-    <!-- Repeat chip label, next to "Every day" / "Weekdays" / "Weekends". -->
     <string name="alarms_repeat_once">Once</string>
-    <!-- Card summary of a one-shot alarm; a different, fuller sentence. -->
     <string name="alarms_repeat_once_summary">One-shot alarm</string>
     <string name="alarms_repeat_once_on">Once on %1$s</string>
     <string name="alarms_repeat_unknown">Unsupported repeat</string>

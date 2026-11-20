@@ -14,32 +14,14 @@ import okhttp3.Interceptor
 import okhttp3.Request
 import okhttp3.Response
 
-/**
- * Platform network state. The JVM build (and every unit test) is always online;
- * Android supplies an implementation that actually waits for Wi-Fi or the VPN.
- *
- * [awaitAvailable] blocks on the calling OkHttp thread, never on the UI thread.
- * It returns `false` when no network appeared within the timeout; the request
- * is still attempted so a real connectivity error stays observable.
- */
 fun interface NetworkWaiter {
     fun awaitAvailable(timeoutMillis: Long): Boolean
 
     companion object {
-        /** Used by JVM tests and by platforms without a connectivity manager. */
         val Online: NetworkWaiter = NetworkWaiter { true }
     }
 }
 
-/**
- * Retries idempotent reads (`GET`, Connect `List*`/`Get*` RPCs) after a
- * transport failure. This is what hides the red "check LAN or VPN" alert after
- * the phone wakes up: the first attempt hits a dead keep-alive socket or a
- * still-sleeping tunnel, the next attempt succeeds on a fresh connection.
- *
- * Mutations are never retried here — their idempotency is the caller's contract
- * and lives in the feature repositories, not in the transport.
- */
 internal class ReadRetryInterceptor(
     private val waiter: NetworkWaiter,
     private val pool: ConnectionPool,
@@ -62,7 +44,6 @@ internal class ReadRetryInterceptor(
             when {
                 attempt > maxAttempts || !failure.isRetryableReadFailure() -> throw failure
                 else -> {
-                    // A pooled connection from before Doze is the usual culprit.
                     pool.evictAll()
                     Thread.sleep(retryDelayMillis * (attempt - 1))
                 }
@@ -77,7 +58,6 @@ internal class ReadRetryInterceptor(
     }
 }
 
-/** `GET`/`HEAD`, or a Connect unary RPC whose method only reads (`List`, `Get`). */
 internal fun Request.isIdempotentRead(): Boolean = when (method) {
     "GET", "HEAD" -> true
     "POST" -> when (val rpc = url.pathSegments.lastOrNull().orEmpty()) {
@@ -87,11 +67,6 @@ internal fun Request.isIdempotentRead(): Boolean = when (method) {
     else -> false
 }
 
-/**
- * True when the failure is a real transport problem another attempt can fix.
- * Timeouts are excluded: retrying would only double the user's wait, and the
- * server already had the request.
- */
 internal fun Throwable.isRetryableReadFailure(): Boolean = when {
     isCallCancellation() -> false
     this is RemoteFailureException -> false
@@ -106,11 +81,6 @@ internal fun Throwable.isRetryableReadFailure(): Boolean = when {
     else -> false
 }
 
-/**
- * A cancelled call is not an error: the coroutine requested it. OkHttp reports
- * cancellation as `IOException("Canceled")`, which must never reach the user as
- * a network failure.
- */
 internal fun Throwable.isCallCancellation(): Boolean = when {
     this is CancellationException -> true
     this is InterruptedIOException && message.equals("Canceled", ignoreCase = true) -> true

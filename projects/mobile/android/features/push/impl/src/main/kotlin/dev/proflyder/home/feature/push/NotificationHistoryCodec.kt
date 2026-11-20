@@ -4,11 +4,6 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 
-/**
- * One stored row. It mirrors [NotificationHistoryEntry] instead of serializing
- * the API model directly, so a renamed field never breaks an existing file and
- * an unknown type downgrades to an ordinary notification.
- */
 @Serializable
 internal class NotificationHistoryRecord(
     val id: String = "",
@@ -19,10 +14,6 @@ internal class NotificationHistoryRecord(
     val receivedAtMillis: Long = 0,
 )
 
-/**
- * JSON codec for the persisted log. A corrupt or truncated value decodes to an
- * empty log instead of crashing the service that received the message.
- */
 internal object NotificationHistoryCodec {
     private val json = Json {
         ignoreUnknownKeys = true

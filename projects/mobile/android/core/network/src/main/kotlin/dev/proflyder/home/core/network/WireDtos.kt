@@ -15,14 +15,6 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.longOrNull
 
-/**
- * Wire DTOs of the Connect/JSON APIs.
- *
- * Protobuf JSON sends `int64` as a decimal string, so every such field uses
- * [Int64StringSerializer]; it also accepts a plain number because servers differ
- * slightly in codec versions. Unknown fields and unknown enum values are
- * tolerated (see [WireJson]) so a newer server never breaks an older client.
- */
 object Int64StringSerializer : KSerializer<Long> {
     override val descriptor =
         PrimitiveSerialDescriptor("dev.proflyder.home.Int64String", PrimitiveKind.STRING)
@@ -40,8 +32,7 @@ object Int64StringSerializer : KSerializer<Long> {
     }
 }
 
-/** Shared codec: tolerant of server additions, int64 strings and missing optionals. */
-@Suppress("LongLambda") // Json builder is a flat configuration block, not logic.
+@Suppress("LongLambda")
 val WireJson = Json {
     ignoreUnknownKeys = true
     coerceInputValues = true
@@ -49,7 +40,6 @@ val WireJson = Json {
     encodeDefaults = true
 }
 
-/** Empty protobuf request body (`{}`). */
 @Serializable
 data object EmptyBody
 

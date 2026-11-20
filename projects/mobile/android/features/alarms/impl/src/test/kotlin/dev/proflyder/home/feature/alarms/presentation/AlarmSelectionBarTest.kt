@@ -29,12 +29,6 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
-/**
- * The contextual bar puts each action's label under its icon. At 360dp with a
- * 1.15 font scale, and at 411dp, every visible label must still fit on one
- * line: the old wide buttons broke "Включить" and "Удалить" mid-word.
- * The rendered PNGs show the whole selection screen for the pull request.
- */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35], qualifiers = "ru-rRU-w360dp-h800dp-night-xxhdpi")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -91,13 +85,11 @@ class AlarmSelectionBarTest {
         }
     }
 
-    /** Two picked rows: one checked, one not, to show both indicator states. */
     private fun addSelectionCards(binding: FragmentAlarmsBinding, themed: ContextThemeWrapper) {
         val metrics = themed.resources.displayMetrics
         val margin = themed.resources.getDimensionPixelSize(R.dimen.alarms_screen_margin)
         val cardWidth = metrics.widthPixels - margin * 2
         val cardGap = (12 * metrics.density).toInt()
-        // Clear the 56dp selection header and leave a 12dp gap under it.
         val top = binding.alarmsSelectionBar.layoutParams.height +
             (12 * themed.resources.displayMetrics.density).toInt()
         val container = LinearLayout(themed).apply {
@@ -111,9 +103,6 @@ class AlarmSelectionBarTest {
                 topMargin = top
             }
         }
-        // A RecyclerView gives a row card an unbounded height; measure it the
-        // same way instead of letting the scrim's match_parent child fill the
-        // screen, then pin the measured height inside the column.
         listOf(
             selectionCard(themed, "Работа", selected = true),
             selectionCard(themed, "Зарядка", selected = false),

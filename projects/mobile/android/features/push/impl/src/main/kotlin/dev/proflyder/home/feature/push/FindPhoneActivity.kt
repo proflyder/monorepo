@@ -12,15 +12,6 @@ import dev.proflyder.home.feature.push.impl.databinding.ActivityFindPhoneBinding
 import kotlinx.coroutines.launch
 import dev.proflyder.home.core.ui.applySystemBarsPadding
 
-/**
- * The screen a full-screen intent opens: it turns the display on, shows over
- * the lock screen and offers one button, «Нашёл».
- *
- * Pressing it (or Back, or the notification action) stops the ring through the
- * same [FindPhoneController] the service uses. If the ring already stopped
- * (for example after the 60-second timeout) the screen closes itself, so the
- * owner never faces a stale alarm screen.
- */
 class FindPhoneActivity : AppCompatActivity() {
     private lateinit var binding: ActivityFindPhoneBinding
 

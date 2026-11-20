@@ -10,7 +10,6 @@ import java.time.ZoneId
 import dev.proflyder.home.feature.control.HubScheduleStrings
 import dev.proflyder.home.feature.control.impl.R
 
-/** Resource-backed text for the compact live rows. */
 internal class HubCardTexts(private val context: Context) : HubScheduleStrings {
     override fun today(): String = context.getString(R.string.control_hub_today)
     override fun tomorrow(): String = context.getString(R.string.control_hub_tomorrow)
@@ -20,14 +19,12 @@ internal class HubCardTexts(private val context: Context) : HubScheduleStrings {
     override fun time(hour: Int, minute: Int): String =
         String.format(java.util.Locale.ROOT, "%02d:%02d", hour, minute)
 
-    /** The row's own name, used by the label column and as the toggle description. */
     fun title(card: HubCard): String = when (card) {
         is HubCard.Alarm -> card.schedule.label.ifBlank { context.getString(R.string.control_hub_alarm) }
         is HubCard.TimerCard -> card.timer.label.ifBlank { context.getString(R.string.control_hub_timer) }
         is HubCard.Reminder -> card.schedule.label.ifBlank { context.getString(R.string.control_hub_reminder) }
     }
 
-    /** The label column: an alarm also carries its repeat days (or "ringing"). */
     fun label(card: HubCard): String = when (card) {
         is HubCard.Alarm -> alarmLabel(card)
         is HubCard.TimerCard, is HubCard.Reminder -> title(card)
@@ -57,7 +54,6 @@ internal class HubCardTexts(private val context: Context) : HubScheduleStrings {
         return days.sorted().joinToString(", ") { dayOfWeek(it) }
     }
 
-    /** The time column: a clock moment, or a live countdown for a timer. */
     fun timeText(card: HubCard, remaining: Long?, nowUnix: Long): String = when (card) {
         is HubCard.Alarm -> alarmTimeText(card, nowUnix)
         is HubCard.TimerCard -> DurationText.format(

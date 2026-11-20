@@ -4,7 +4,6 @@ import dev.proflyder.home.core.model.Field
 import dev.proflyder.home.core.model.RemoteFailure
 import java.time.LocalDate
 
-/** Android-free reminder input rules. One-shot reminders need a future date. */
 object ReminderValidation {
     fun validate(draft: ReminderDraft): RemoteFailure? {
         if (draft.label.trim().isEmpty()) return RemoteFailure.Validation(Field.LABEL)

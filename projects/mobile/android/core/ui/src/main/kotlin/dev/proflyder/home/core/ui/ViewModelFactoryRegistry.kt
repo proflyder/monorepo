@@ -9,7 +9,6 @@ import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 
-/** Implemented by MainActivity; backed by the Metro app graph. */
 interface ViewModelFactoryProvider {
     fun viewModelFactory(viewModelClass: Class<out ViewModel>): ViewModelProvider.Factory
 }
@@ -19,11 +18,6 @@ interface ViewModelFactoryContributor {
     fun createFactory(): ViewModelProvider.Factory
 }
 
-/**
- * The composition root collects feature-owned factories. Fragments ask the
- * Activity for the factory of their own ViewModel class; there is no global
- * service locator and no reflection-based graph.
- */
 @SingleIn(AppScope::class)
 @Inject
 class ViewModelFactoryRegistry(
@@ -37,7 +31,6 @@ class ViewModelFactoryRegistry(
             ?: error("No ViewModel factory registered for ${viewModelClass.name}")
 }
 
-/** Simple factory for ViewModels with constructor-injected use cases. */
 class SimpleViewModelFactory<VM : ViewModel>(
     private val create: () -> VM,
 ) : ViewModelProvider.Factory {
@@ -45,10 +38,6 @@ class SimpleViewModelFactory<VM : ViewModel>(
     override fun <T : ViewModel> create(modelClass: Class<T>): T = create() as T
 }
 
-/**
- * Factory for editor ViewModels that persist a non-secret draft in
- * SavedStateHandle across process recreation.
- */
 class SavedStateViewModelFactory<VM : ViewModel>(
     private val create: (SavedStateHandle) -> VM,
 ) : ViewModelProvider.Factory {

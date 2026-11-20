@@ -1,13 +1,5 @@
 package dev.proflyder.home.core.model
 
-/**
- * Domain models mirroring the home.v1 ScenarioService contract.
- *
- * The contract extends each `oneof` without breaking existing definitions, so
- * every trigger, condition and step keeps an [Unknown] variant. The original
- * protobuf-JSON object is retained verbatim; that lets an older app round-trip
- * a newer definition instead of silently dropping what it does not know.
- */
 data class TimeTrigger(
     val timezone: String,
     val at: WallTime,
@@ -21,7 +13,6 @@ sealed interface ScenarioTrigger {
 
     data class Time(val trigger: TimeTrigger) : ScenarioTrigger
 
-    /** A trigger kind this build does not implement; [rawJson] is the original JSON object. */
     data class Unknown(val rawJson: String) : ScenarioTrigger
 
     val isSupported: Boolean get() = this !is Unknown
@@ -36,14 +27,12 @@ sealed interface ScenarioCondition {
         val weekdays: List<Int> = emptyList(),
     ) : ScenarioCondition
 
-    /** A condition kind this build does not implement; [rawJson] is the original JSON object. */
     data class Unknown(val rawJson: String) : ScenarioCondition
 
     val isSupported: Boolean get() = this !is Unknown
 }
 
 sealed interface ScenarioStep {
-    /** Same entry/action/params form as the `home.control` queue task. */
     data class Catalog(
         val entryId: String,
         val action: String,
@@ -54,7 +43,6 @@ sealed interface ScenarioStep {
 
     data class Delay(val seconds: Int) : ScenarioStep
 
-    /** A step kind this build does not implement; [rawJson] is the original JSON object. */
     data class Unknown(val rawJson: String) : ScenarioStep
 
     val isSupported: Boolean get() = this !is Unknown
@@ -72,17 +60,14 @@ data class Scenario(
     val conditions: List<ScenarioCondition>,
     val steps: List<ScenarioStep>,
     val continueOnError: Boolean,
-    /** Earliest time trigger; 0 when disabled, manual-only or exhausted. */
     val nextDueUnix: Long,
 ) {
-    /** True when any part of the definition is newer than this build. */
     val hasUnsupportedParts: Boolean
         get() = triggers.any { !it.isSupported } ||
             conditions.any { !it.isSupported } ||
             steps.any { !it.isSupported }
 }
 
-/** Input for CreateScenario/UpdateScenario. */
 data class ScenarioDraft(
     val label: String,
     val description: String = "",
@@ -94,7 +79,6 @@ data class ScenarioDraft(
     val idempotencyKey: String = "",
 )
 
-/** Server limits for one scenario definition. */
 object ScenarioLimits {
     const val MAX_LABEL_BYTES = 80
     const val MAX_DESCRIPTION_BYTES = 512

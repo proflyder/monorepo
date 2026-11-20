@@ -34,7 +34,6 @@ class RemindersViewModel(
     private var refreshJob: Job? = null
     private var generation = 0
 
-    /** [silent] keeps already loaded data on screen without a spinner (tab returns, resume). */
     fun refresh(silent: Boolean = false) {
         refreshJob?.cancel()
         val requested = ++generation

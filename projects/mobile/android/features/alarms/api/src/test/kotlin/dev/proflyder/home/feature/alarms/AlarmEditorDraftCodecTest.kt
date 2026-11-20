@@ -51,7 +51,6 @@ class AlarmEditorDraftCodecTest {
                 mapOf("alarm_hour" to 7, "alarm_minute" to 0, "alarm_timezone" to "UTC", "alarm_repeat" to "BOGUS"),
             ),
         )
-        // Invalid saved weekdays are filtered rather than crashing.
         val restored = AlarmEditorDraftCodec.fromMap(
             mapOf(
                 "alarm_hour" to 7,

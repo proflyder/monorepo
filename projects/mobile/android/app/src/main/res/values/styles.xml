@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- The toolbar's own rounded menu, opened from the actions button. -->
     <style name="Animation.Home.ToolbarMenu" parent="">
         <item name="android:windowEnterAnimation">@anim/app_toolbar_menu_in</item>
         <item name="android:windowExitAnimation">@anim/app_toolbar_menu_out</item>
@@ -10,7 +9,6 @@
         <item name="android:textColor">?attr/colorOnSurface</item>
     </style>
 
-    <!-- Compact current voice-profile mode in the toolbar title row. -->
     <style name="Widget.Home.ProfileChip" parent="Widget.Material3.Button.OutlinedButton">
         <item name="android:minHeight">@dimen/app_profile_chip_height</item>
         <item name="android:minWidth">0dp</item>
@@ -23,5 +21,4 @@
         <item name="shapeAppearance">@style/ShapeAppearance.Material3.Corner.Full</item>
     </style>
 
-    <!-- Time uses the same compact pill switch as the voice profile. -->
 </resources>

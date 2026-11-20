@@ -4,17 +4,10 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import dev.proflyder.home.core.model.RepeatKind
 
-/**
- * Selection state of the repeat sheet. [SavedStateHandle] receives the
- * arguments as defaults and then keeps every user change, so a rotation (or a
- * process recreation) reopens the sheet with the same choice. The sheet itself
- * publishes the result only on "Done", through the Fragment Result API.
- */
 internal class AlarmRepeatSheetViewModel(private val savedState: SavedStateHandle) : ViewModel() {
     var choice: AlarmRepeatChoice = restore()
         private set
 
-    /** A custom selection needs at least one day; every preset is always valid. */
     val canConfirm: Boolean
         get() = when (choice.repeat) {
             RepeatKind.CUSTOM -> choice.days.isNotEmpty()

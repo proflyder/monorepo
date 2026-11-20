@@ -11,12 +11,6 @@ import dev.proflyder.home.core.model.TimerState
 import dev.proflyder.home.core.model.WallTime
 import kotlinx.serialization.json.JsonElement
 
-/**
- * Maps home.v1 scheduler DTOs to domain models and builds typed requests.
- *
- * Enums are proto names on the wire and int64 values are decimal strings; both
- * are handled by [WireDtos] so mapping stays a pure field translation.
- */
 object SchedulerJson {
     const val SERVICE = "home.v1.SchedulerService"
 

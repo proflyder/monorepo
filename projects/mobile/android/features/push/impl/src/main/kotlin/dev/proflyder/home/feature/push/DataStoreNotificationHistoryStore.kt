@@ -15,15 +15,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 
-/**
- * The received-message log in the app-wide DataStore, one JSON value under its
- * own key (the notification text is not a credential; `allowBackup` is off, so
- * it never leaves the device).
- *
- * Every write reads the persisted value inside the same `edit` transaction, so
- * the FCM service can record a message before any screen loaded the log without
- * overwriting earlier entries.
- */
 @SingleIn(AppScope::class)
 @ContributesBinding(AppScope::class)
 @Inject

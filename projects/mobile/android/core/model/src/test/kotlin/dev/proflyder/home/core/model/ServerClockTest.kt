@@ -31,7 +31,6 @@ class ServerClockTest {
         val time = FakeTime()
         val clock = ServerClock({ time.wallMillis }, { time.elapsedNanos })
 
-        // Server is 90 seconds ahead of the phone at sync time.
         clock.sync(5_090L)
         assertTrue(clock.isSynced)
         assertEquals(5_090L, clock.nowUnix())
@@ -50,16 +49,12 @@ class ServerClockTest {
 
         val before = clock.nowUnix()
 
-        // User/NTP moves the phone clock forward by one hour; elapsed time has
-        // not advanced, so the server-derived countdown must not jump.
         time.wallMillis += 3_600_000L
         assertEquals(before, clock.nowUnix())
 
-        // Moving the wall clock backward must not rewind either.
         time.wallMillis -= 7_200_000L
         assertEquals(before, clock.nowUnix())
 
-        // The offset diagnostic changes, but the countdown source does not.
         assertEquals(before - time.wallMillis / 1000L, clock.offsetSeconds())
     }
 
@@ -72,7 +67,6 @@ class ServerClockTest {
         time.elapsedNanos += 7_500_000_000L
         assertEquals(5_007L, clock.nowUnix())
 
-        // A new GetStatus is authoritative again.
         clock.sync(5_100L)
         assertEquals(5_100L, clock.nowUnix())
         time.elapsedNanos += 1_000_000_000L
@@ -107,7 +101,6 @@ class ServerClockTest {
         )
         assertEquals(200L, clock.remainingSeconds(running))
 
-        // Wall-clock jump by an hour must not expire the timer.
         time.wallMillis += 3_600_000L
         assertEquals(200L, clock.remainingSeconds(running))
 

@@ -2,7 +2,6 @@ package dev.proflyder.home.feature.call
 
 import kotlinx.coroutines.flow.StateFlow
 
-/** The four output routes the call screen exposes. */
 enum class CallAudioRoute {
     EARPIECE,
     SPEAKER,
@@ -10,11 +9,6 @@ enum class CallAudioRoute {
     BLUETOOTH,
 }
 
-/**
- * Platform-neutral description of one audio output device. The Android layer
- * maps `AudioDeviceInfo.type` to [AudioDeviceKind]; the mapping below is pure
- * Kotlin and unit tested.
- */
 enum class AudioDeviceKind {
     EARPIECE,
     SPEAKER,
@@ -30,7 +24,6 @@ data class AudioDevice(val kind: AudioDeviceKind, val name: String = "")
 
 data class AudioRouteOption(
     val route: CallAudioRoute,
-    /** Bluetooth device name, when the route is a specific headset. */
     val label: String? = null,
 )
 
@@ -46,12 +39,6 @@ data class CallAudioRouteState(
     }
 }
 
-/**
- * Maps the current output devices to the route list. Built-in routes are always
- * offered (they do not depend on a hot-plugged device); wired and Bluetooth
- * appear only while such a device is connected. One Bluetooth route covers both
- * SCO and A2DP, because a call always runs over SCO.
- */
 fun audioRoutesFor(devices: List<AudioDevice>): List<AudioRouteOption> {
     val kinds = devices.map { it.kind }.toSet()
     val bluetoothName = devices.firstOrNull {
@@ -70,14 +57,9 @@ fun audioRoutesFor(devices: List<AudioDevice>): List<AudioRouteOption> {
     return routes
 }
 
-/**
- * Selection of the audio output. The implementation owns Android specifics
- * (AudioManager, Telecom `CallEndpoint` on API 34+, Bluetooth permissions).
- */
 interface CallAudioController {
     val state: StateFlow<CallAudioRouteState>
 
-    /** Starts/stops device observation around a live call. */
     fun start()
 
     fun stop()

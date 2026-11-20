@@ -16,7 +16,6 @@ class AlarmEditorTimeTest {
 
     @Test
     fun defaultTimeExactlyOnTheHourStaysInTheFuture() {
-        // 14:00 must become 15:00, not 14:00 which is already now.
         assertEquals(WallTime(15, 0), defaultAlarmTime(at(14, 0)))
     }
 

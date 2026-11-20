@@ -6,7 +6,6 @@ import dev.proflyder.home.core.model.ScheduleDraft
 import dev.proflyder.home.core.model.ScheduleKind
 import dev.proflyder.home.core.model.WallTime
 
-/** Pure draft/schedule mapping shared by the repository and its tests. */
 fun AlarmDraft.toScheduleDraft(idempotencyKey: String): ScheduleDraft = ScheduleDraft(
     label = label.trim(),
     kind = ScheduleKind.ALARM,
@@ -18,7 +17,6 @@ fun AlarmDraft.toScheduleDraft(idempotencyKey: String): ScheduleDraft = Schedule
     idempotencyKey = idempotencyKey,
 )
 
-/** Applies editable fields to an existing server schedule without changing its id/revision. */
 fun Schedule.withAlarmDraft(draft: AlarmDraft): Schedule = copy(
     label = draft.label.trim(),
     at = WallTime(draft.hour, draft.minute),

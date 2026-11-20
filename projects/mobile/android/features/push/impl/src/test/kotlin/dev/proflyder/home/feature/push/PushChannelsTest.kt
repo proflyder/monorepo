@@ -19,14 +19,6 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 
-/**
- * The find channel is the silent carrier of a loud request.
- *
- * Its importance and DND bypass let the full-screen request through, but it
- * must have no sound and no vibration: the ring itself is the `MediaPlayer` in
- * the foreground service, and a channel sound would play the melody a second
- * time and repeat on every notification update.
- */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class PushChannelsTest {
@@ -74,8 +66,6 @@ class PushChannelsTest {
     }
 
     @Test
-    // The legacy fields are deprecated in favour of channels; they are read to
-    // prove that setSilent cleared the sound and vibration on the notification.
     @Suppress("DEPRECATION")
     fun theRingNotificationIsSilentAndAlertsOnce() {
         val context = RuntimeEnvironment.getApplication()

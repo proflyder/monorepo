@@ -4,13 +4,6 @@ import java.net.URI
 import java.net.URISyntaxException
 import java.util.Locale
 
-/**
- * A validated base endpoint for the home server's Connect listener.
- *
- * The client never accepts credentials, query parameters, fragments, or
- * ambiguous schemes. The bearer token is a separate secret and is never part
- * of a URL; [toString] is therefore safe for diagnostics.
- */
 class ServerEndpoint private constructor(
     val scheme: Scheme,
     val host: String,
@@ -28,14 +21,12 @@ class ServerEndpoint private constructor(
 
     val isSecure: Boolean get() = scheme == Scheme.HTTPS
 
-    /** `host:port` with IPv6 literals bracketed, suitable for a Host header. */
     val authority: String
         get() {
             val hostPart = if (host.contains(':')) "[$host]" else host
             return if (portExplicit) "$hostPart:$port" else hostPart
         }
 
-    /** Canonical scheme://authority[/prefix] with no trailing slash. */
     fun baseUrl(): String {
         val hostPart = if (host.contains(':')) "[$host]" else host
         val defaultPort = if (isSecure) 443 else 80
@@ -43,7 +34,6 @@ class ServerEndpoint private constructor(
         return "${scheme.text}://$hostPart$portPart$basePath"
     }
 
-    /** URL for a Connect unary call below [basePath]. */
     fun rpcUrl(service: String, method: String): String {
         require(service.isNotBlank() && method.isNotBlank()) { "service and method are required" }
         return "${baseUrl()}/$service/$method"
@@ -71,13 +61,6 @@ class ServerEndpoint private constructor(
     companion object {
         const val MAX_LENGTH = 512
 
-        /**
-         * Parses a user-entered LAN address or home HTTPS base URL.
-         *
-         * Accepted forms: `http://host[:port][/prefix]`,
-         * `https://host[:port][/prefix]`, IPv4, bracketed IPv6, and DNS names.
-         * A bare host is rejected so the transport is never guessed.
-         */
         fun parse(raw: String): EndpointParseResult {
             val value = raw.trim()
             if (value.isEmpty()) return EndpointParseResult.Invalid(EndpointProblem.EMPTY)
@@ -106,8 +89,6 @@ class ServerEndpoint private constructor(
                 return EndpointParseResult.Invalid(EndpointProblem.USERINFO_NOT_ALLOWED)
             }
             if (uri.rawQuery != null) {
-                // Query strings are rejected because they commonly carry
-                // tokens or debug switches; the token belongs in a header.
                 return EndpointParseResult.Invalid(EndpointProblem.QUERY_NOT_ALLOWED)
             }
             if (uri.rawFragment != null) {
@@ -156,9 +137,6 @@ class ServerEndpoint private constructor(
             if (host.isEmpty() || host.length > 253) return null
 
             if (host.contains(':')) {
-                // IPv6 literal. URI has already validated the bracket syntax,
-                // but reject zone ids and embedded characters that could be
-                // confused with a hostname or authority delimiter.
                 if (!host.matches(Regex("^[0-9a-f:.]+$"))) return null
                 if (host.contains("%")) return null
                 if (!host.contains(":")) return null
@@ -194,12 +172,9 @@ class ServerEndpoint private constructor(
             if (rawPath.isNullOrEmpty() || rawPath == "/") return ""
             if (!rawPath.startsWith("/")) return null
 
-            // Strip exactly one trailing slash first, then validate the whole
-            // remaining path. Returning early here previously skipped traversal
-            // and encoded-path checks for inputs such as `/../` and `/%2e%2e/`.
             val path = if (rawPath.endsWith("/")) rawPath.dropLast(1) else rawPath
             if (path.isEmpty()) return ""
-            if (path == "/") return null // input was "//"
+            if (path == "/") return null
             if (path.contains("//")) return null
             if (path.contains('\\')) return null
             if (path.contains('%')) return null

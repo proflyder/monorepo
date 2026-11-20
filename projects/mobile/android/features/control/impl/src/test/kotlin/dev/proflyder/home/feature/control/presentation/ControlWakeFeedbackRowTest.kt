@@ -24,11 +24,6 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 
-/**
- * Robolectric smoke test of the voice card wake marks: both chips must be
- * visible with localized one-line labels, hidden independently when a script
- * is absent, and a tap must report exactly that action.
- */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class ControlWakeFeedbackRowTest {

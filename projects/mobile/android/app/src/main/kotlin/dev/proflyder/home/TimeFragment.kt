@@ -7,12 +7,6 @@ import androidx.viewpager2.widget.ViewPager2
 import dev.proflyder.home.core.ui.BaseFragment
 import dev.proflyder.home.databinding.FragmentTimeBinding
 
-/**
- * Container for the Alarms / Timers / Reminders screens. The sections live in a
- * [ViewPager2], so a horizontal swipe and the pill tabs drive the same selected
- * page. The selected section is restored from the Fragment's saved state on
- * rotation and from route arguments on a deep link.
- */
 class TimeFragment : BaseFragment<FragmentTimeBinding>(FragmentTimeBinding.Companion::inflate) {
     internal var section: TimeSection = TimeSection.ALARMS
         private set
@@ -57,7 +51,6 @@ class TimeFragment : BaseFragment<FragmentTimeBinding>(FragmentTimeBinding.Compa
         TimeSection.REMINDERS -> R.string.app_time_reminders
     }
 
-    /** Swipe or pill tap landed on another page: keep the pills in step. */
     internal fun onPageChanged(position: Int) {
         section = TimeSection.entries.getOrNull(position) ?: return
         binding.timeTabs.select(position)
@@ -68,7 +61,6 @@ class TimeFragment : BaseFragment<FragmentTimeBinding>(FragmentTimeBinding.Compa
     }
 }
 
-/** One page per Time section; stable ids let the pager restore its state. */
 internal class TimePagerAdapter(host: Fragment) : FragmentStateAdapter(host) {
     override fun getItemCount(): Int = TimeSection.entries.size
 

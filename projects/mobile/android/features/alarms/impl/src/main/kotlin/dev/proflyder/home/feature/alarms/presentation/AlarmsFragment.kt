@@ -34,13 +34,10 @@ class AlarmsFragment : BaseFragment<FragmentAlarmsBinding>(FragmentAlarmsBinding
     private lateinit var adapter: AlarmAdapter
     private lateinit var states: ListStateViews
 
-    /** List top padding without the selection bar; the inset animates from it. */
     private var listBaseTopPadding = 0
 
-    /** Last shown state of the bars; null until the first render. */
     private var selectionBarsShown: Boolean? = null
 
-    /** The single callback instance shared with the adapter. */
     private val adapterCallback = object : BaseAdapterCallback<AlarmRow>(), AlarmAdapterCallback {
         override fun onItemClick(item: AlarmRow) = onAlarmClick(item.alarm)
         override fun onItemLongClick(item: AlarmRow) = viewModel.toggleSelection(item.alarm.id)
@@ -50,7 +47,6 @@ class AlarmsFragment : BaseFragment<FragmentAlarmsBinding>(FragmentAlarmsBinding
         override fun onDelete(alarm: Schedule) = confirmDelete(alarm.id)
     }
 
-    /** Back leaves multi-select first; enabled only while something is selected. */
     private val exitSelection = object : OnBackPressedCallback(false) {
         override fun handleOnBackPressed() = viewModel.clearSelection()
     }
@@ -64,9 +60,6 @@ class AlarmsFragment : BaseFragment<FragmentAlarmsBinding>(FragmentAlarmsBinding
             GridLayoutManager(requireContext(), resources.getInteger(R.integer.alarms_columns))
         binding.alarmsList.adapter = adapter
         listBaseTopPadding = binding.alarmsList.paddingTop
-        // A recreated view starts from the XML end state (bars GONE). Forget
-        // the previous view's state so the first render snaps the bars to the
-        // current selection mode instead of assuming they are already there.
         selectionBarsShown = null
 
         states = ListStateViews(
@@ -79,8 +72,6 @@ class AlarmsFragment : BaseFragment<FragmentAlarmsBinding>(FragmentAlarmsBinding
 
         binding.alarmsRefresh.setupPullToRefresh { viewModel.refresh() }
         binding.alarmsRetry.setOnClickListener { viewModel.refresh() }
-        // With no endpoint/token configured the server is intentionally
-        // unreachable; make the state actionable instead of a dead empty list.
         binding.alarmsOpenConnection.setOnClickListener { requireNavigator().selectTab("connection") }
         binding.alarmsAdd.setOnClickListener { requireNavigator().navigate(AlarmEditorDestination()) }
 
@@ -113,8 +104,6 @@ class AlarmsFragment : BaseFragment<FragmentAlarmsBinding>(FragmentAlarmsBinding
             }
             !hasItems -> states.showEmpty()
             else -> {
-                // Keep the existing list visible while a refresh is in flight;
-                // do not replace it with a spinner.
                 states.showContent()
                 adapter.submitList(
                     state.alarms.map { AlarmRow(it, it.id in state.selectedIds, state.selectionMode) },
@@ -131,7 +120,6 @@ class AlarmsFragment : BaseFragment<FragmentAlarmsBinding>(FragmentAlarmsBinding
         }
         state.actionError?.let { failure ->
             showFailure(failure)
-            // A switch may have moved optimistically; re-render server-confirmed values.
             adapter.notifyItemRangeChanged(0, adapter.itemCount)
             viewModel.consumeActionError()
         }
@@ -142,8 +130,6 @@ class AlarmsFragment : BaseFragment<FragmentAlarmsBinding>(FragmentAlarmsBinding
         exitSelection.isEnabled = selecting
 
         if (selectionBarsShown != selecting) {
-            // The first render (including one restored after rotation or
-            // process death) must land in the end state without animating.
             val animate = selectionBarsShown != null
             selectionBarsShown = selecting
 
@@ -163,8 +149,6 @@ class AlarmsFragment : BaseFragment<FragmentAlarmsBinding>(FragmentAlarmsBinding
                 animate = animate,
             )
 
-            // Overlay the bars and grow the list inset instead of resizing the
-            // list, so content slides rather than jumping under the bar.
             binding.alarmsList.animateVerticalPadding(
                 topPx = listBaseTopPadding + if (selecting) topBarHeight else 0,
                 bottomPx = binding.alarmsList.paddingBottom,
@@ -199,11 +183,6 @@ class AlarmsFragment : BaseFragment<FragmentAlarmsBinding>(FragmentAlarmsBinding
         }
     }
 
-    /**
-     * Turning a recurring alarm off would discard its rule, so ask whether to
-     * skip only the nearest occurrence or disable it entirely. A one-shot alarm
-     * keeps the direct switch behaviour.
-     */
     internal fun requestToggle(alarm: Schedule, enabled: Boolean) {
         when {
             enabled -> viewModel.setEnabled(alarm, true)
@@ -223,7 +202,6 @@ class AlarmsFragment : BaseFragment<FragmentAlarmsBinding>(FragmentAlarmsBinding
             .show()
     }
 
-    /** The switch moved before the choice; put the server state back without a reload. */
     private fun restoreSwitch(alarm: Schedule) {
         val position = viewModel.state.value.alarms.indexOfFirst { it.id == alarm.id }
         if (position >= 0) adapter.notifyItemChanged(position)

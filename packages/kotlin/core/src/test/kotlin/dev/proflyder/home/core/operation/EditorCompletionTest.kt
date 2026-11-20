@@ -10,7 +10,6 @@ class EditorCompletionTest {
     @Test
     fun completionIsRetainedUntilConsumedWithoutAnyCollector() {
         val completion = EditorCompletion<String>()
-        // No collector is active (the Fragment is STOPPED).
         completion.publish("SAVED")
         assertEquals("SAVED", completion.state.value)
         assertEquals("SAVED", completion.consume())
@@ -22,7 +21,6 @@ class EditorCompletionTest {
     fun resumedCollectorCanObserveAPreviouslyPublishedCompletion() = runBlocking {
         val completion = EditorCompletion<String>()
         completion.publish("DELETED")
-        // Collection starts only after the Fragment resumes.
         assertEquals("DELETED", completion.state.first { it != null })
     }
 }

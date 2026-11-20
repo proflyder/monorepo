@@ -104,14 +104,11 @@ class HomeHubTest {
         device = device,
     )
 
-    // --- display names ------------------------------------------------------
-
     @Test
     fun technicalEntityTitlesFallBackToTheDeviceName() {
         assertEquals("Лампа", entry("light.a", title = "Light", device = "Лампа").displayName)
         assertEquals("Светильник", entry("switch.b", ControlKind.SWITCH, title = "Switch", device = "Светильник").displayName)
         assertEquals("Лампа", entry("light.c", title = "", device = "Лампа").displayName)
-        // The title already is the device name: no duplicate second line.
         val same = entry("light.d", title = "Лампа", device = "Лампа")
         assertEquals("Лампа", same.displayName)
         assertNull(same.secondaryName)
@@ -122,11 +119,8 @@ class HomeHubTest {
         val entry = entry("light.ceiling", title = "Ambient", device = "Ceiling lamp")
         assertEquals("Ambient", entry.displayName)
         assertEquals("Ceiling lamp", entry.secondaryName)
-        // Without a device there is no second line.
         assertNull(entry("light.e", title = "Lamp").secondaryName)
     }
-
-    // --- live-row selection -------------------------------------------------
 
     private val strings = object : HubScheduleStrings {
         override fun today() = "сегодня"
@@ -158,9 +152,6 @@ class HomeHubTest {
             reminders = listOf(alarm("r1", epoch(8, 23, 0)), alarm("r2", epoch(10, 19, 0))),
             nowUnix = now,
         )
-        // Paused 21:17, running 21:20, reminder 23:00; the next alarm (07:30)
-        // is beyond the three-row cap. The disabled alarm and the fired timer
-        // are not live rows.
         assertEquals(
             listOf("timer:paused", "timer:t1", "reminder:r1"),
             cards.map { it.key },
@@ -210,8 +201,6 @@ class HomeHubTest {
             ).isEmpty(),
         )
     }
-
-    // --- favorites ----------------------------------------------------------
 
     @Test
     fun pinningTogglesAndKeepsThePinningOrder() {
@@ -285,7 +274,6 @@ class HomeHubTest {
             reminders = listOf(alarm("r1", due)),
             nowUnix = now,
         )
-        // The alarm RPC failed: only the other two lists loaded.
         val cards = HubCards.buildOrKeep(
             alarms = null,
             timers = listOf(timer("t1", due + 600)),
@@ -295,7 +283,6 @@ class HomeHubTest {
         )
         assertEquals(listOf("alarm:a1", "reminder:r1", "timer:t1"), cards.map { it.key })
 
-        // A successful empty list still removes the rows: the server said there is none.
         val emptied = HubCards.buildOrKeep(
             alarms = emptyList(),
             timers = emptyList(),

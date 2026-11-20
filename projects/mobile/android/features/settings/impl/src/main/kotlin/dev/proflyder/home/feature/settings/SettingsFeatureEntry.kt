@@ -11,13 +11,11 @@ import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesIntoSet
 import dev.zacsweers.metro.Inject
 
-/** The single settings list the top app bar opens. */
 object SettingsDestination : Destination {
     override val featureId: String = "settings"
     override val route: String = "settings/hub"
 }
 
-/** The local log of received notifications, opened from the settings list. */
 object NotificationHistoryDestination : Destination {
     override val featureId: String = "settings"
     override val route: String = "settings/history"
@@ -28,11 +26,6 @@ object AppearanceDestination : Destination {
     override val route: String = "settings/appearance"
 }
 
-/**
- * Settings is not a bottom tab: it opens as an overlay from the top app bar and
- * pushes its own sub-screens (the history) on the same stack, so Back returns
- * to the list and then to the tab the owner came from.
- */
 @ContributesIntoSet(AppScope::class)
 @Inject
 class SettingsFeatureEntry : FeatureEntry {

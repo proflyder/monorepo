@@ -8,12 +8,6 @@ import kotlin.math.abs
 import kotlin.math.hypot
 import kotlin.math.sign
 
-/**
- * Drag-to-dismiss for a notice bar: a sideways or downward swipe drags the bar
- * with the finger and dismisses it once the gesture passes a fraction of its
- * size. A tap (below the touch slop) is ignored, so an action button inside the
- * bar keeps working, and an upward drag springs back instead of dismissing.
- */
 internal class NoticeSwipeDismiss(
     private val view: View,
     private val onDismiss: () -> Unit,
@@ -30,9 +24,6 @@ internal class NoticeSwipeDismiss(
         view.setOnTouchListener(this)
     }
 
-    // A tap has no click action of its own here: Material's SnackbarBaseLayout
-    // also swallows all touches, and an action button inside the bar is a
-    // separate clickable child that keeps receiving its own clicks.
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouch(target: View, event: MotionEvent): Boolean = when (dismissing) {
         true -> true

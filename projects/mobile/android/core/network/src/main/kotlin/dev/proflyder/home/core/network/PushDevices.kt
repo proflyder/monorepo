@@ -9,20 +9,7 @@ import kotlinx.serialization.Serializable
 import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 
-/**
- * Push device registration on the home scheduler.
- *
- * The registration lives next to the Connect API on the *same* scheduler base
- * URL and uses the same bearer token, so the app needs no fourth endpoint and
- * no second credential. The scheduler only stores the FCM token; delivery goes
- * through the separate push service.
- *
- * The row is keyed by [deviceId], not by the token: FCM rotates tokens, and a
- * rotation must update the same phone instead of adding a second one. The
- * owner-visible [deviceName] is server metadata and can change on its own.
- */
 interface PushDevicesApi {
-    /** Registers (or refreshes) this device's FCM token. */
     suspend fun register(
         deviceId: String,
         token: String,
@@ -30,14 +17,11 @@ interface PushDevicesApi {
         deviceName: String,
     ): Outcome<Unit>
 
-    /** Changes this device's owner-visible name without re-registering. */
     suspend fun rename(deviceId: String, deviceName: String): Outcome<Unit>
 
-    /** Forgets a token that FCM rejected or that this device replaced. */
     suspend fun unregister(token: String): Outcome<Unit>
 }
 
-/** Wire format of `/v1/push/devices`. */
 @Serializable
 internal data class RegisterDeviceBody(
     val deviceId: String,
@@ -70,7 +54,6 @@ internal data class PushDeviceDto(
 @Serializable
 internal data class RemovedDeviceResponseDto(val removed: Boolean = false)
 
-/** Plain JSON calls on the scheduler endpoint. */
 internal interface PushApi {
     @retrofit2.http.POST("v1/push/devices")
     fun register(
@@ -88,11 +71,6 @@ internal interface PushApi {
     ): Outcome<PushDeviceResponseDto>
 }
 
-/**
- * Retrofit implementation. It reuses [Target.SCHEDULER], so endpoints, the
- * bearer token, timeouts, TLS and the redirect policy are exactly the ones the
- * scheduler client already uses.
- */
 class HttpPushDevicesClient(
     settings: ConnectionSettingsStore,
     baseClient: OkHttpClient,
@@ -139,10 +117,8 @@ class HttpPushDevicesClient(
         withContext(ioDispatcher) { api.remove(RemoveDeviceBody(token)).mapResult { } }
 
     private companion object {
-        /** Matches the scheduler's own metadata bound. */
         const val MAX_META_CHARS = 64
 
-        /** Matches the scheduler's device identity bound. */
         const val MAX_DEVICE_ID_CHARS = 128
     }
 }

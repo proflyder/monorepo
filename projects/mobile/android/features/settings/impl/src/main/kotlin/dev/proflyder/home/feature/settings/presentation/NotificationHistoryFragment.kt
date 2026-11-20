@@ -13,13 +13,6 @@ import dev.proflyder.home.feature.push.NotificationHistoryEntry
 import dev.proflyder.home.feature.settings.impl.R
 import dev.proflyder.home.feature.settings.impl.databinding.FragmentNotificationHistoryBinding
 
-/**
- * The local log of what this phone received: newest first, an icon per type, a
- * relative time, and a tap that follows the message's own in-app deep link.
- *
- * The list is local-only; the server is not asked, so the screen also works
- * while the phone is offline. «Очистить» asks for confirmation first.
- */
 class NotificationHistoryFragment :
     BaseFragment<FragmentNotificationHistoryBinding>(FragmentNotificationHistoryBinding.Companion::inflate) {
     private val viewModel: NotificationHistoryViewModel by viewModels {
@@ -60,7 +53,6 @@ class NotificationHistoryFragment :
         }
     }
 
-    /** A row without a deep link has nothing to open; the type icon still shows what it was. */
     internal fun openLink(entry: NotificationHistoryEntry) {
         val route = entry.deepLink ?: return
         requireNavigator().openRoute(route)

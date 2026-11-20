@@ -9,19 +9,8 @@ import dev.proflyder.home.R
 import okhttp3.Interceptor
 import okhttp3.logging.HttpLoggingInterceptor
 
-/** Application interceptors added to the scheduler and control-catalog clients. */
 class NetworkInterceptors(val list: List<Interceptor>)
 
-/**
- * Network diagnostics, enabled by the `home_network_inspection` bool (a release
- * variant should override it to false so nothing below is created):
- *  - an [HttpLoggingInterceptor] (BODY) writing to logcat under "HomeHttp",
- *  - a Chucker inspector (notification + launcher shortcut "Network activity").
- *
- * The bearer token must never reach either: `Authorization` is redacted in both.
- * Chucker keeps request/response bodies in an on-device database, so retention
- * is one day and bodies are capped.
- */
 object NetworkDiagnostics {
     private const val LOG_TAG = "HomeHttp"
     private const val REDACTED_HEADER = "Authorization"

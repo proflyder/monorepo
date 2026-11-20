@@ -15,7 +15,6 @@ import dev.zacsweers.metro.SingleIn
 import java.io.IOException
 import kotlinx.coroutines.flow.first
 
-/** Pinned Home shortcuts in the app-wide DataStore, ordered as the user pinned them. */
 @SingleIn(AppScope::class)
 @ContributesBinding(AppScope::class)
 @Inject
@@ -35,7 +34,6 @@ class DataStoreFavoritePreferences(
             }
         }.onFailure { failure ->
             if (failure !is IOException) throw failure
-            // The choice just is not remembered; the screen keeps working.
         }
     }
 

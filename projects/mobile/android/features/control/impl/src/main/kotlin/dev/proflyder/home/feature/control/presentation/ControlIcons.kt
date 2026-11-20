@@ -5,32 +5,22 @@ import dev.proflyder.home.core.model.ControlEntry
 import dev.proflyder.home.core.model.ControlKind
 import dev.proflyder.home.feature.control.impl.R
 
-/**
- * Maps the icon hint from Home Assistant (an mdi name without the prefix, e.g.
- * "lightbulb-outline", "weather-night", "laptop") to bundled artwork by keyword,
- * falling back by kind. Nothing here lists entities: only generic keywords.
- */
 internal object ControlIcons {
     private val keywords: List<Pair<List<String>, Int>> = listOf(
         listOf("night", "moon", "sleep", "bed") to R.drawable.control_ic_moon,
         listOf("sun", "weather-sunny", "day", "morning") to R.drawable.control_ic_sun,
         listOf("laptop", "desk", "monitor", "briefcase", "work", "computer") to R.drawable.control_ic_work,
         listOf("bulb", "lamp", "light", "ceiling", "led") to R.drawable.control_ic_bulb,
-        // `lock-open` must be checked before `lock` (keyword matching is
-        // substring based), so "mdi:lock-open" gets the open padlock.
         listOf("lock-open", "lock_open", "unlock", "unlocked") to R.drawable.control_ic_lock_open,
         listOf("lock", "locked", "key") to R.drawable.control_ic_lock,
         listOf("plug", "power", "outlet", "socket", "fan") to R.drawable.control_ic_plug,
         listOf("play", "movie", "television", "tv", "theater", "scene") to R.drawable.control_ic_play,
-        // Device-level one-shot actions ("say on the station").
         listOf("message", "speak", "voice", "text", "comment") to R.drawable.control_ic_message,
         listOf("volume", "speaker", "bullhorn", "megaphone") to R.drawable.control_ic_volume_up,
     )
 
     @DrawableRes
     fun resolve(entry: ControlEntry): Int {
-        // The voice profile is a mode, not a device: its "message" hint must not
-        // reuse the speak artwork.
         if (entry.kind == ControlKind.PROFILE) return R.drawable.control_ic_account
         val hint = entry.icon.lowercase()
         if (hint.isNotEmpty()) {

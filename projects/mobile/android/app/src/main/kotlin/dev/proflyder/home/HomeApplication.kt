@@ -16,11 +16,7 @@ class HomeApplication : Application() {
         super.onCreate()
         graph = createGraphFactory<AppGraph.Factory>().create(this)
         graph.appearance.install(this)
-        // Instantiate the connection store at launch so the Remote Config
-        // source sets defaults and starts its first fetch.
         graph.connectionSettings
-        // Framework-instantiated components (ConnectionService, call Activity,
-        // foreground service) cannot be constructor-injected by Metro.
         CallEntryPoint.install(
             CallEntryPoint.Dependencies(
                 controller = graph.callController,
@@ -30,8 +26,6 @@ class HomeApplication : Application() {
             ),
         )
         graph.callNotifications.start()
-        // Framework-instantiated push components (FCM service, ringing service
-        // and screen) read their collaborators from this entry point.
         PushEntryPoint.install(
             PushEntryPoint.Dependencies(
                 registrar = graph.pushRegistrar,
@@ -40,16 +34,10 @@ class HomeApplication : Application() {
                 history = graph.pushHistory,
             ),
         )
-        // Registers the FCM token (again) on every start and creates channels.
         graph.pushRegistrar.start()
         configureCrashReporting()
     }
 
-    /**
-     * Crashlytics auto-initializes from the merged Firebase manifests when
-     * google-services resources are present. Without them FirebaseApp has no
-     * default app; skip configuration so a clean checkout still launches.
-     */
     private fun configureCrashReporting() {
         if (FirebaseApp.getApps(this).isEmpty()) return
         FirebaseCrashlytics.getInstance()

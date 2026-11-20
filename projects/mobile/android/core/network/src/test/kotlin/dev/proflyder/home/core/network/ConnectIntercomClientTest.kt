@@ -144,7 +144,6 @@ class ConnectIntercomClientTest {
         assertEquals("/home.v1.IntercomService/Watch", request.path)
         assertEquals("Bearer phone-token", request.getHeader("Authorization"))
         assertEquals("application/connect+json", request.getHeader("Content-Type"))
-        // The request is a single Connect envelope carrying an (empty) WatchRequest.
         val raw = request.body.readByteArray()
         val frame = json.parseToJsonElement(raw.copyOfRange(5, raw.size).decodeToString()).jsonObject
         assertTrue(frame.isEmpty())

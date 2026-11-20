@@ -9,15 +9,6 @@ import io.gitlab.arturbosch.detekt.api.Rule
 import io.gitlab.arturbosch.detekt.api.Severity
 import org.jetbrains.kotlin.psi.KtTryExpression
 
-/**
- * Forbids the `try` keyword entirely, including its `catch` and `finally`
- * branches.
- *
- * Failures are values: use `runCatching { }.onSuccess/.onFailure/.getOrElse`
- * (or `suspendRunCatching` for suspending blocks, which rethrows cancellation)
- * and release resources with `use { }`. `finally` is covered by `use`;
- * cleanup that is not a resource belongs after the result.
- */
 class NoTry(config: Config = Config.empty) : Rule(config) {
     override val issue: Issue = Issue(
         id = javaClass.simpleName,

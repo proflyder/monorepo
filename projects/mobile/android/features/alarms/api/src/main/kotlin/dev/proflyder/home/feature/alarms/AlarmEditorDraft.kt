@@ -4,14 +4,6 @@ import dev.proflyder.home.core.model.RepeatKind
 import java.time.LocalDate
 import java.time.LocalDateTime
 
-/**
- * Non-secret editor draft persisted in SavedStateHandle. It intentionally holds
- * no token, endpoint credentials, or schedule payload.
- *
- * A fresh draft defaults to [defaultAlarmTime] so a new alarm never starts in
- * the past, and to a one-shot alarm dated today. Restored drafts keep the
- * persisted values unchanged.
- */
 data class AlarmEditorDraft(
     val existingId: String? = null,
     val existingRevision: Long? = null,
@@ -24,10 +16,6 @@ data class AlarmEditorDraft(
     val onceDate: LocalDate? = LocalDate.now(),
 )
 
-/**
- * Maps a draft to Bundle-compatible primitive values. Kept Android-free so the
- * round-trip and malformed-input behavior can be unit-tested on the JVM.
- */
 object AlarmEditorDraftCodec {
     private const val KEY_EXISTING_ID = "alarm_existing_id"
     private const val KEY_EXISTING_REVISION = "alarm_existing_revision"
@@ -51,7 +39,6 @@ object AlarmEditorDraftCodec {
         KEY_ONCE_DATE to draft.onceDate?.toString(),
     )
 
-    /** Returns null for an empty or fundamentally malformed draft. */
     fun fromMap(values: Map<String, Any?>): AlarmEditorDraft? {
         if (values.isEmpty()) return null
         val hour = (values[KEY_HOUR] as? Number)?.toInt() ?: return null

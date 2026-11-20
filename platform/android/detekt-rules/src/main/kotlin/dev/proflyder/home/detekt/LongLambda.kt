@@ -13,18 +13,6 @@ import org.jetbrains.kotlin.psi.KtLambdaExpression
 import org.jetbrains.kotlin.psi.KtValueArgument
 import org.jetbrains.kotlin.psi.KtValueArgumentList
 
-/**
- * Reports a lambda body with more than `maxLines` statements (default 3); the
- * body belongs in a named function.
- *
- * A single multi-line expression (a `when`, an `if`, or a builder call) is one
- * statement and is not reported: it reads as one unit. The threshold targets
- * callbacks that accumulate unrelated steps.
- *
- * Scope/builder blocks (`apply {}`, `with {}`, `build* {}`) and test bodies
- * (`runTest {}`, `runBlocking {}`) are exempt: the former configure an object,
- * the latter are the body of an already named test function.
- */
 class LongLambda(config: Config = Config.empty) : Rule(config) {
     override val issue: Issue = Issue(
         id = javaClass.simpleName,
@@ -51,10 +39,6 @@ class LongLambda(config: Config = Config.empty) : Rule(config) {
 
     private fun KtLambdaExpression.isScopeBuilderLambda(): Boolean {
         val name = calleeName() ?: return false
-        // Builders (`buildList`, `buildString`, `buildJsonObject`, ...) and the
-        // classic scope functions only configure the receiver; the body is not
-        // behaviour worth naming on its own. `runTest`/`runBlocking` wrap an
-        // already-named test function, so their body is that function's body.
         return name in SCOPE_FUNCTIONS || name.startsWith("build")
     }
 

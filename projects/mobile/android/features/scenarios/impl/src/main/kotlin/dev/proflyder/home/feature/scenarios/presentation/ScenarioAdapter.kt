@@ -10,13 +10,11 @@ import dev.proflyder.home.core.ui.BaseViewHolder
 import dev.proflyder.home.core.ui.setVisible
 import dev.proflyder.home.feature.scenarios.impl.databinding.ItemScenarioBinding
 
-/** One list row: the scenario plus the in-flight mutation flag. */
 internal data class ScenarioRow(
     val scenario: Scenario,
     val busy: Boolean,
 )
 
-/** Row click opens the editor; the switch and Run button are per-card actions. */
 internal interface ScenarioAdapterCallback : AdapterCallback<ScenarioRow> {
     fun onToggle(scenario: Scenario, enabled: Boolean)
     fun onRun(scenario: Scenario)
@@ -44,7 +42,6 @@ internal class ScenarioAdapter(
         binding: ItemScenarioBinding,
         callback: ScenarioAdapterCallback,
     ) : BaseViewHolder<ScenarioRow, ItemScenarioBinding, ScenarioAdapterCallback>(binding, callback) {
-        /** Programmatic `isChecked` must not be reported as a user toggle. */
         private var bindingSwitch = false
 
         init {

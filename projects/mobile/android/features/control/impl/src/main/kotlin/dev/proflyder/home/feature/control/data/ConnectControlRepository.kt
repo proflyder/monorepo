@@ -48,7 +48,6 @@ class ConnectControlRepository(
                 taskType = ControlJson.TASK_TYPE,
                 queue = ControlJson.QUEUE,
                 payloadJson = payloadJson,
-                // One tap = one command; the key only protects a transport retry of that tap.
                 idempotencyKey = UUID.randomUUID().toString(),
             )
         ) {

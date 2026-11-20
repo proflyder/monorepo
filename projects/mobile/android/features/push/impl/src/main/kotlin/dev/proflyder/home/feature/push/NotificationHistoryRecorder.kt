@@ -7,13 +7,6 @@ import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 import java.util.UUID
 
-/**
- * Turns a decoded FCM message into a history row.
- *
- * The find-phone request has no server text, so its row uses the same localized
- * title and the reason the ringing screen shows; an ordinary notification keeps
- * the server title, body and validated in-app deep link.
- */
 @SingleIn(AppScope::class)
 @Inject
 class NotificationHistoryRecorder(

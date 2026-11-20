@@ -3,9 +3,7 @@ package dev.proflyder.home.feature.control
 import kotlin.math.ln
 import kotlin.math.pow
 
-/** Pure color math for previewing a light on the phone (ARGB ints, no Android types). */
 object LightColors {
-    /** Approximate color of a white light at [kelvin] (1000-40000), opaque ARGB. */
     fun kelvinToArgb(kelvin: Int): Int {
         val t = kelvin.coerceIn(1000, 40000) / 100.0
         val red = if (t <= 66) 255.0 else 329.698727446 * (t - 60).pow(-0.1332047592)
@@ -18,7 +16,6 @@ object LightColors {
         return argb(red.toChannel(), green.toChannel(), blue.toChannel())
     }
 
-    /** Fully bright color for [hue] (0-360) and [saturation] (0-100), opaque ARGB. */
     fun hsToArgb(hue: Int, saturation: Int): Int {
         val h = ((hue % 360) + 360) % 360 / 60.0
         val s = saturation.coerceIn(0, 100) / 100.0

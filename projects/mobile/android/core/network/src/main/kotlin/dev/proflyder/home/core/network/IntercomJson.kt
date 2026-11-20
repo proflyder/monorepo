@@ -14,13 +14,6 @@ import dev.proflyder.home.core.model.IntercomStatus
 import dev.proflyder.home.core.model.IntercomWatchEvent
 import kotlinx.serialization.json.JsonElement
 
-/**
- * Maps home.v1.IntercomService DTOs to domain models and builds typed requests.
- *
- * Enum values are the proto names and `int64` fields are decimal strings; both
- * are decoded by [WireDtos]. Unknown fields are ignored so a newer server does
- * not break an older client.
- */
 object IntercomJson {
 
     fun parseEndpoint(element: JsonElement): IntercomEndpoint =

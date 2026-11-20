@@ -34,7 +34,6 @@ internal class ReminderAdapter(
         binding: ItemReminderBinding,
         callback: ReminderAdapterCallback,
     ) : BaseViewHolder<Schedule, ItemReminderBinding, ReminderAdapterCallback>(binding, callback) {
-        /** Programmatic `isChecked` must not be reported as a user toggle. */
         private var binding_ = false
 
         init {

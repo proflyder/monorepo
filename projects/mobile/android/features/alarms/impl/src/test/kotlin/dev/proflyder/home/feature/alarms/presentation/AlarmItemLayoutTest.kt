@@ -32,14 +32,6 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
-/**
- * The dense card is one time/text line at rest: the snooze/stop row appears
- * only while the server reports a live occurrence. At 360dp and 411dp, with
- * the 1.15 large font too, the idle card stays under 112dp. The delete action
- * is a standard 48dp Material icon button with a 24dp glyph, vertically
- * centred with the switch and 4dp away from it; its round ripple stays inside
- * the rounded card outline.
- */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35], qualifiers = "ru-rRU-w360dp-h800dp-night-xxhdpi")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -137,13 +129,6 @@ class AlarmItemLayoutTest {
         }
     }
 
-    /**
-     * In selection mode the card drops its switch and delete: a dimmed switch
-     * would read as the alarm's real state. The right edge belongs to the
-     * circular check, which reuses the delete footprint and the card padding
-     * so the glyph lands on the same centre line, and the labels still fit on
-     * one line.
-     */
     private fun assertSelectionCard(fontScale: Float, pngName: String?) {
         val binding = inflateAndBind(
             fontScale = fontScale,
@@ -164,8 +149,6 @@ class AlarmItemLayoutTest {
         assertEquals("label wrapped: ${binding.alarmLabel.lineCount}", 1, binding.alarmLabel.lineCount)
         assertEquals("summary wrapped: ${binding.alarmSummary.lineCount}", 1, binding.alarmSummary.lineCount)
 
-        // The card is checkable for accessibility, but its built-in corner
-        // check is off: the only selection mark is the circular indicator.
         binding.root.isChecked = true
         assertEquals("card must not draw its own corner check", null, binding.root.checkedIcon)
 
@@ -193,13 +176,6 @@ class AlarmItemLayoutTest {
         }
     }
 
-    /**
-     * The trailing controls share one vertical centre and one baseline of
-     * card padding. The delete action is the standard Material icon button at
-     * its full 48dp touch target: a 24dp glyph (the switch track is 32dp),
-     * 12dp insets, and a state layer that is exactly the button, so the
-     * circle stays at least 8dp inside the card outline.
-     */
     private fun assertDeleteButton(binding: ItemAlarmBinding, cardWidth: Int) {
         val delete = binding.alarmDelete
         val switch = binding.alarmEnabled
@@ -235,7 +211,6 @@ class AlarmItemLayoutTest {
         )
     }
 
-    /** Walks up to the card so the ripple bounds compare in card coordinates. */
     private fun offsetInRoot(root: View, view: View): Pair<Int, Int> {
         var left = 0
         var top = 0
@@ -248,13 +223,6 @@ class AlarmItemLayoutTest {
         return left to top
     }
 
-    /**
-     * Pressed state for review. Robolectric does not rasterise a
-     * RippleDrawable, so the PNG documents the pressed layout and the state
-     * layer is asserted on the button itself: the ripple color is the theme
-     * error color with a state-layer alpha, and pressing turns the pressed
-     * state on for the round 48dp background.
-     */
     private fun assertPressedDelete(fontScale: Float, pngName: String) {
         val binding = inflateAndBind(fontScale, schedule(active = false))
         assertDeleteButton(binding, cardWidth(binding.root))
@@ -270,7 +238,6 @@ class AlarmItemLayoutTest {
         savePng(binding.root, pngName)
     }
 
-    /** The ripple is the theme error color, not the neutral surface tint. */
     private fun assertRippleColor(delete: MaterialButton) {
         val ripple = delete.rippleColor
         assertTrue("delete has no ripple color", ripple != null)
@@ -337,7 +304,6 @@ class AlarmItemLayoutTest {
         activeUntilUnix = if (active) nowUnix + 3600 else 0,
     )
 
-    /** Keeps the review PNG close to the real row: "Будни · далее завтра 10:00". */
     private fun tomorrowAtTen(): Long {
         val zone = ZoneId.of("Asia/Almaty")
         val tomorrow = LocalDate.now(zone).plusDays(1)

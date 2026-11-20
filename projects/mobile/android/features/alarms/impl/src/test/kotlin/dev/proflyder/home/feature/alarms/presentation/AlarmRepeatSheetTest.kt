@@ -22,12 +22,6 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
-/**
- * The repeat sheet replaces the cramped chips: seven equal round day toggles
- * keep a full two-letter label on one line at 360dp and 411dp, even with the
- * 1.15 large font scale. The rendered PNGs document the preset list and the
- * custom-days state for the pull request.
- */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35], qualifiers = "ru-rRU-w360dp-h800dp-night-xxhdpi")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -140,7 +134,6 @@ class AlarmRepeatSheetTest {
         assertEvenlySpacedCentres(binding)
     }
 
-    /** The seven equal cells must put every circle on one arithmetic grid. */
     private fun assertEvenlySpacedCentres(binding: SheetAlarmRepeatBinding) {
         val buttons = dayButtons(binding)
         val centres = buttons.map { button ->

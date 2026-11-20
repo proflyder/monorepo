@@ -14,11 +14,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 
-/**
- * The DiffUtil payload is what keeps a card from blinking: every visual change
- * must map to its aspect, so the holder can update in place instead of a full
- * rebind (which the item animator renders as a crossfade).
- */
 class ControlDiffPayloadTest {
     private fun entry(
         id: String = "light.desk",
@@ -106,7 +101,6 @@ class ControlDiffPayloadTest {
     fun deviceTitleAndIconChangesAreSeparateAspects() {
         assertEquals(setOf(ControlChange.TITLE), changes(device(), device(entry(title = "Reading lamp"))))
         assertEquals(setOf(ControlChange.ICON), changes(device(), device(entry(icon = "desk-lamp"))))
-        // Icon hints are matched case-insensitively.
         assertNull(changes(device(entry(icon = "Desk")), device(entry(icon = "desk"))))
     }
 
@@ -135,8 +129,6 @@ class ControlDiffPayloadTest {
 
     @Test
     fun nonVisualChangeHasNoPayload() {
-        // Actions are not rendered by the row, so this difference cannot be
-        // expressed as a partial update and falls back to a full bind.
         val old = device(entry(actions = setOf(ControlAction.TURN_ON)))
         val new = device(entry(actions = setOf(ControlAction.TURN_ON, ControlAction.TURN_OFF)))
         assertNull(changes(old, new))
@@ -202,8 +194,6 @@ class ControlDiffPayloadTest {
         assertNull(PayloadSet.merge(listOf("not a payload"), ControlChange::class.java))
     }
 
-    // A null payload makes RecyclerView crossfade the whole card; these rows
-    // update in place, so a tap must always produce a typed payload.
     @Test
     fun voiceProfileChangeUpdatesTheCardInPlace() {
         val before = voice(entry(id = "switch.voice_profile", kind = ControlKind.PROFILE, power = PowerState.OFF))

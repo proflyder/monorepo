@@ -11,20 +11,11 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import com.google.android.material.color.MaterialColors
 
-/**
- * A row of compact text pills: the selected one sits on a stadium (the same
- * shape and colour as the bottom navigation indicator) that slides to the
- * newly selected pill. Used for the Time sections and the voice profile, so
- * both switches look identical. It is a plain row of TextViews on purpose:
- * TabLayout brings a minimum height and a bottom divider that do not belong
- * to this design.
- */
 class PillSegments @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
 ) : LinearLayout(context, attrs) {
 
-    /** Called when the user taps another pill; not called for [select]. */
     var onSelected: ((Int) -> Unit)? = null
 
     var selectedIndex: Int = 0
@@ -47,7 +38,6 @@ class PillSegments @JvmOverloads constructor(
         select(selectedIndex.coerceIn(NONE, labels.size - 1))
     }
 
-    /** Programmatic selection (state from the model or a pager swipe); [NONE] clears it. */
     fun select(index: Int) {
         val previous = selectedIndex
         selectedIndex = index
@@ -135,7 +125,6 @@ class PillSegments @JvmOverloads constructor(
     }
 
     companion object {
-        /** No pill selected (state unknown). */
         const val NONE = -1
     }
 }

@@ -9,11 +9,6 @@ import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
-/**
- * Encrypts the bearer token with a non-exportable Android Keystore AES-256/GCM
- * key. Ciphertext is `base64(iv || ciphertext || tag)`; no plaintext token is
- * ever written to SharedPreferences, logs, SavedState, or a URL.
- */
 interface TokenCipher {
     fun encrypt(plaintext: String): String
     fun decrypt(encoded: String): String?
@@ -35,7 +30,6 @@ class KeystoreTokenCipher(
         return Base64.encodeToString(envelope, Base64.NO_WRAP)
     }
 
-    /** Returns null when the key was invalidated or the blob is corrupt. */
     override fun decrypt(encoded: String): String? = runCatching {
         decryptInternal(encoded)
     }.getOrElse { null }
@@ -56,7 +50,6 @@ class KeystoreTokenCipher(
             if (keyStore.containsAlias(alias)) keyStore.deleteEntry(alias)
         }.onFailure { failure ->
             if (failure !is Exception) throw failure
-            // A missing/unavailable keystore needs no cleanup.
         }
     }
 

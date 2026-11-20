@@ -1,5 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Display-only text; making every label selectable would change the UI. -->
 <com.google.android.material.card.MaterialCardView
     xmlns:tools="http://schemas.android.com/tools"
     tools:ignore="SelectableText"
@@ -13,7 +12,6 @@
     android:focusable="true"
     app:checkedIcon="@null">
 
-    <!-- Selection tint: behind the content, crossfaded when the row is picked. -->
     <View
         android:id="@+id/alarm_selection_scrim"
         android:layout_width="match_parent"
@@ -23,12 +21,6 @@
         android:clickable="false"
         android:focusable="false" />
 
-    <!-- Dense card: the time stays the anchor, the name and one summary line
-         sit next to it, and the trailing switch/delete pair keeps the row at a
-         single glance. The 88dp minimum keeps idle rows airy without the old
-         stacked title/repeat/next block. The switch and the 48dp delete button
-         are vertically centred together, 4dp apart; the card end padding
-         (12dp) keeps the round delete ripple off the rounded outline. -->
     <LinearLayout
         android:id="@+id/alarm_card_content"
         android:layout_width="match_parent"
@@ -88,9 +80,6 @@
                     android:textColor="?attr/colorOnSurfaceVariant" />
             </LinearLayout>
 
-            <!-- Idle: switch plus delete. Selection mode: both are gone and the
-                 circular check indicator takes their place, inset by the card
-                 padding so it never touches the rounded corner. -->
             <LinearLayout
                 android:id="@+id/alarm_trailing"
                 android:layout_width="wrap_content"
@@ -134,8 +123,6 @@
             </LinearLayout>
         </androidx.constraintlayout.widget.ConstraintLayout>
 
-        <!-- Snooze/stop exist only while the server reports a live occurrence:
-             an idle alarm row is just time, name, summary and the switch. -->
         <LinearLayout
             android:id="@+id/alarm_actions"
             android:layout_width="match_parent"

@@ -18,7 +18,6 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
-/** Add/edit one time trigger; the timezone is the phone's system IANA zone. */
 internal class TimeTriggerDialog(
     context: Context,
     private val fragmentManager: FragmentManager,

@@ -18,23 +18,11 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
 
-/**
- * Base for screens backed by a generated ViewBinding.
- *
- * The binding exists strictly between [onCreateView] and [onDestroyView]; it is
- * released there so the Fragment never leaks its view hierarchy. Subclasses wire
- * the view in [onBindingCreated] and observe state with [observe].
- *
- * ```
- * class FooFragment : BaseFragment<FragmentFooBinding>(FragmentFooBinding.Companion::inflate)
- * ```
- */
 abstract class BaseFragment<VB : ViewBinding>(
     private val inflateBinding: (LayoutInflater, ViewGroup?, Boolean) -> VB,
 ) : Fragment() {
     private var _binding: VB? = null
 
-    /** Valid between onViewCreated and onDestroyView. */
     protected val binding: VB
         get() = checkNotNull(_binding) { "${javaClass.simpleName}.binding accessed outside the view lifecycle" }
 
@@ -55,13 +43,10 @@ abstract class BaseFragment<VB : ViewBinding>(
         super.onDestroyView()
     }
 
-    /** Set up listeners, adapters and state collection here. */
     protected abstract fun onBindingCreated(binding: VB, savedInstanceState: Bundle?)
 
-    /** Release anything that references views (adapters on RecyclerViews, etc.). */
     protected open fun onBindingDestroyed() = Unit
 
-    /** Runs [block] while the view is at least [minState]; cancelled when it drops below, restarted on return. */
     protected fun repeatOnView(
         minState: Lifecycle.State = Lifecycle.State.STARTED,
         block: suspend CoroutineScope.() -> Unit,
@@ -71,7 +56,6 @@ abstract class BaseFragment<VB : ViewBinding>(
         }
     }
 
-    /** Collects [this] while the view is at least [minState]. */
     protected fun <T> Flow<T>.observe(
         minState: Lifecycle.State = Lifecycle.State.STARTED,
         action: suspend (T) -> Unit,
@@ -84,15 +68,12 @@ abstract class BaseFragment<VB : ViewBinding>(
         Notices.show(binding.root, getString(message))
     }
 
-    /** Error-styled notice (error icon/color); use for actionable failures, not confirmations. */
     protected fun showError(@StringRes message: Int) {
         Notices.show(binding.root, getString(message), NoticeKind.Error, long = true)
     }
 
     protected fun showFailure(failure: RemoteFailure) {
         when {
-            // Right after a resume the tunnel may still be waking up; the read
-            // retries have already tried, so stay quiet instead of alarming.
             failure.isTransientNetwork() && AppForeground.inGrace() -> Unit
             else -> Notices.show(
                 binding.root,
@@ -103,10 +84,6 @@ abstract class BaseFragment<VB : ViewBinding>(
         }
     }
 
-    /**
-     * Material confirmation dialog; [onConfirm] runs only on the positive button.
-     * [destructive] tints the positive button with the error color.
-     */
     protected fun confirm(
         @StringRes message: Int,
         @StringRes positive: Int,

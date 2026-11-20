@@ -4,7 +4,6 @@ import android.content.Context
 import dev.proflyder.home.core.model.Field
 import dev.proflyder.home.core.model.RemoteFailure
 
-/** Turns domain failures into honest, non-secret user-facing text. */
 fun RemoteFailure.userMessage(context: Context): String = when (this) {
     RemoteFailure.NotConfigured -> context.getString(R.string.ui_error_not_configured)
     RemoteFailure.Unauthorized -> context.getString(R.string.ui_error_unauthorized)

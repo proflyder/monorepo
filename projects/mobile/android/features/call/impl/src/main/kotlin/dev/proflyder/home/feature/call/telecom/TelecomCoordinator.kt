@@ -19,18 +19,10 @@ import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 
-/** Registers the app's self-managed phone account exactly once. */
 @SingleIn(AppScope::class)
 @Inject
 class TelecomAccountRegistry(private val context: Context) {
 
-    /**
-     * Registers (or refreshes) the self-managed account and returns its handle,
-     * or null when Telecom is unavailable or refuses. `getPhoneAccount` is not
-     * used: some OEM builds (MIUI, Android 16) guard it with
-     * READ_PHONE_NUMBERS, while re-registering our own account is idempotent
-     * and needs only MANAGE_OWN_CALLS.
-     */
     fun ensureRegistered(): PhoneAccountHandle? {
         val telecom = context.getSystemService(TelecomManager::class.java) ?: return null
         val handle = PhoneAccountHandle(
@@ -53,12 +45,6 @@ class TelecomAccountRegistry(private val context: Context) {
     }
 }
 
-/**
- * Places the outgoing call through [TelecomManager] so the call is a real
- * self-managed call. If Telecom is unavailable (or the account cannot be
- * registered) the call still proceeds directly; only the system call UI and
- * Telecom endpoint routing are lost.
- */
 @SingleIn(AppScope::class)
 @ContributesBinding(AppScope::class)
 @Inject
@@ -70,8 +56,6 @@ class AndroidCallCoordinator(
 
     @SuppressLint("MissingPermission")
     override fun startOutgoingCall() {
-        // MANAGE_OWN_CALLS is a normal permission (granted at install) and is
-        // checked below; lint cannot see through the early return.
         if (!canManageOwnCalls()) {
             controller.placeCall()
             return
@@ -89,8 +73,6 @@ class AndroidCallCoordinator(
             telecom.placeCall(Uri.fromParts("tel", "home", null), extras)
         }.onFailure { failure ->
             if (failure !is Exception) throw failure
-            // No dialer permission, no SIM, or Telecom rejected the request:
-            // still start the call so the feature keeps working.
             controller.placeCall()
         }
     }

@@ -12,7 +12,6 @@ import dev.proflyder.home.feature.scenarios.impl.R
 import dev.proflyder.home.feature.scenarios.impl.databinding.DialogScenarioTimeWindowBinding
 import java.util.Locale
 
-/** Add/edit a time window; an empty weekday set means every day. */
 internal class TimeWindowDialog(
     context: Context,
     private val fragmentManager: FragmentManager,

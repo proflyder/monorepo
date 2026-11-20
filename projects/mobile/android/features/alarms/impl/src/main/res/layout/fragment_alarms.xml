@@ -1,5 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Display-only text; making every label selectable would change the UI. -->
 <FrameLayout
     xmlns:tools="http://schemas.android.com/tools"
     tools:ignore="SelectableText"
@@ -99,7 +98,6 @@
         </FrameLayout>
     </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
 
-    <!-- Multi-select header: overlaid on the list, slides down from above. -->
     <LinearLayout
         android:id="@+id/alarms_selection_bar"
         android:layout_width="match_parent"
@@ -141,10 +139,6 @@
             android:textColor="?attr/colorOnSecondaryContainer" />
     </LinearLayout>
 
-    <!-- Bulk actions: a contextual bar overlaid on the list, sliding up from
-         below. Each action is an icon with a one-line label underneath, so the
-         three equal cells keep their labels intact on 360dp at a 1.15 font
-         scale instead of wrapping "Включ-ить" into two lines. -->
     <com.google.android.material.card.MaterialCardView
         android:id="@+id/alarms_action_bar"
         android:layout_width="match_parent"

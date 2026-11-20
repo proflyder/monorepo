@@ -6,23 +6,9 @@ import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.model.RemoteFailure
 import kotlinx.coroutines.flow.StateFlow
 
-/**
- * User-configured connection settings. The token is held only in memory after
- * being decrypted from Android Keystore-backed storage; [toString] is
- * deliberately redacted so accidental diagnostics cannot leak it.
- */
 data class ConnectionConfig(
     val endpoint: ServerEndpoint? = null,
-    /**
-     * Optional base URL of the home control service (device/scenario catalog).
-     * The scheduler bearer token is also sent to it.
-     */
     val controlEndpoint: ServerEndpoint? = null,
-    /**
-     * Optional base URL of the intercom signaling service (calls). It uses the
-     * same app bearer token as the scheduler and control services: one token
-     * authorizes every home endpoint.
-     */
     val intercomEndpoint: ServerEndpoint? = null,
     val bearerToken: String? = null,
     val connectTimeoutMillis: Long = DEFAULT_CONNECT_TIMEOUT_MILLIS,
@@ -33,11 +19,6 @@ data class ConnectionConfig(
         get() = intercomEndpoint != null && isTokenValid(bearerToken)
     val hasToken: Boolean get() = isTokenValid(bearerToken)
 
-    /**
-     * Storage validity: endpoint and timeouts plus, when present, a header-safe
-     * token. The user may deliberately clear the stored token; such a config is
-     * persistable but not request-ready.
-     */
     fun validatedForStorage(): Outcome<ConnectionConfig> {
         if (endpoint == null) {
             return Outcome.Failure(RemoteFailure.Validation(Field.ENDPOINT))
@@ -54,10 +35,6 @@ data class ConnectionConfig(
         return Outcome.Success(this)
     }
 
-    /**
-     * Request readiness. The scheduler is never authless: an absent or unsafe
-     * token is a controlled validation failure before any HTTP request.
-     */
     fun validated(): Outcome<ConnectionConfig> {
         val storage = validatedForStorage()
         if (storage is Outcome.Failure) return storage
@@ -77,11 +54,6 @@ data class ConnectionConfig(
     companion object {
         const val MAX_TOKEN_LENGTH = 4_096
 
-        /**
-         * Header-safe bearer token: visible ASCII only, no whitespace or
-         * control characters (which would allow header injection or make
-         * OkHttp reject the request).
-         */
         fun isTokenValid(token: String?): Boolean {
             val value = token?.trim().orEmpty()
             if (value.isEmpty() || value.length > MAX_TOKEN_LENGTH) return false
@@ -95,7 +67,6 @@ data class ConnectionConfig(
     }
 }
 
-/** Whether the encrypted token could be read on this device. */
 enum class TokenStatus {
     ABSENT,
     AVAILABLE,
@@ -103,17 +74,8 @@ enum class TokenStatus {
 }
 
 interface ConnectionSettingsStore {
-    /**
-     * Synchronous snapshot composed from the Remote Config endpoints/timeouts
-     * and the device-local token. Interceptors read [StateFlow.value] on I/O
-     * threads.
-     */
     val config: StateFlow<ConnectionConfig>
     val tokenStatus: StateFlow<TokenStatus>
 
-    /**
-     * Persists only the bearer token (`null` clears it); the token is never
-     * written in plaintext. Endpoints and timeouts are owned by Remote Config.
-     */
     suspend fun updateToken(bearerToken: String?): Outcome<Unit>
 }

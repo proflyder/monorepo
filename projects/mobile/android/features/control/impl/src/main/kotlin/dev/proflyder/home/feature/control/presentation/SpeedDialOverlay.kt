@@ -21,13 +21,6 @@ import dev.proflyder.home.feature.control.impl.R
 import dev.proflyder.home.feature.control.impl.databinding.ItemControlSpeedDialActionBinding
 import dev.proflyder.home.feature.control.impl.databinding.OverlayControlSpeedDialBinding
 
-/**
- * The Home quick-actions speed dial. It lives in its own full-window popup so
- * the scrim also covers the bottom navigation. Items are the same Material FAB
- * component as the root action, in a vertical column above a copy of that FAB,
- * with plain labels to their left. They fly out from under the FAB in a
- * bottom-up cascade; closing reverses the animation and fades the scrim.
- */
 internal class SpeedDialOverlay(
     private val anchor: View,
     private val fab: FloatingActionButton,
@@ -88,8 +81,6 @@ internal class SpeedDialOverlay(
         if (isOpen) return
         isOpen = true
         openFrameStarted = false
-        // Hide everything before the popup window paints its first frame;
-        // the exact distance to the FAB is known only after layout.
         content.controlDialScrim.alpha = 0f
         content.controlDialFab.alpha = 0f
         content.controlDialFab.rotation = -90f
@@ -109,7 +100,6 @@ internal class SpeedDialOverlay(
                 if (!positioned) {
                     positioned = true
                     prepareFirstFrame()
-                    // Skip this frame: the clone FAB and column just moved.
                     return false
                 }
                 removePreDrawListener()
@@ -174,7 +164,6 @@ internal class SpeedDialOverlay(
         content.root.postDelayed({ fadeOut() }, total)
     }
 
-    /** Dismiss without animation when the fragment view goes away. */
     fun reset() {
         removePreDrawListener()
         rows.forEach { it.view.animate().cancel() }
@@ -317,7 +306,6 @@ internal class SpeedDialOverlay(
             .start()
     }
 
-    /** How far a row must travel to sit exactly on the speed-dial FAB. */
     internal fun deltaToFab(view: View): Float {
         val fabLocation = IntArray(2).also(content.controlDialFab::getLocationOnScreen)
         val rowLocation = IntArray(2).also(view::getLocationOnScreen)

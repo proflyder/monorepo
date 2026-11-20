@@ -13,15 +13,6 @@ import retrofit2.CallAdapter
 import retrofit2.Response
 import retrofit2.Retrofit
 
-/**
- * Lets an API method declare `Outcome<T>` instead of `Response<T>`.
- *
- * Success bodies are already decoded by the kotlinx converter. Anything else
- * becomes one of the existing [RemoteFailure] values: Connect error envelopes
- * (including their `LocalizedText` detail) through [parseConnectFailure],
- * transport errors through [toRemoteFailure], malformed bodies through
- * [toCallFailure]. Clients therefore never branch on HTTP status themselves.
- */
 class OutcomeCallAdapterFactory(private val json: Json) : CallAdapter.Factory() {
     override fun get(
         returnType: Type,
@@ -37,7 +28,6 @@ class OutcomeCallAdapterFactory(private val json: Json) : CallAdapter.Factory() 
         return OutcomeCallAdapter(delegate, json)
     }
 
-    /** `T` from `Outcome<T>`, unwrapping wildcards from Kotlin covariance. */
     private fun bodyType(type: Type): Type = when (type) {
         is WildcardType -> bodyType(type.upperBounds.first())
         is TypeVariable<*> -> bodyType(type.bounds.first())
@@ -74,8 +64,6 @@ private class OutcomeCallAdapter<T>(
     override fun adapt(call: Call<T>): Outcome<T> {
         val executed = runCatching { delegate.adapt(call).execute() }
         return when (val failure = executed.exceptionOrNull()) {
-            // toCallFailure rethrows cancellation: a cancelled call is not a
-            // user-visible network error.
             null -> executed.getOrThrow().toOutcome()
             else -> Outcome.Failure(failure.toCallFailure())
         }

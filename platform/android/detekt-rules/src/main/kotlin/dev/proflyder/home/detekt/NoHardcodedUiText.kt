@@ -16,15 +16,6 @@ import org.jetbrains.kotlin.psi.KtExpression
 import org.jetbrains.kotlin.psi.KtLiteralStringTemplateEntry
 import org.jetbrains.kotlin.psi.KtStringTemplateExpression
 
-/**
- * Reports user-facing text passed as a string literal to `setText`, `Toast`,
- * `Snackbar` or assigned to a `.text` property; it belongs in `strings.xml`
- * (English + `values-ru`).
- *
- * Android Lint's `HardcodedText` covers XML layouts; this rule covers the
- * Kotlin call sites it cannot see. Empty strings (`setText("")`, used to clear
- * a field) and templates with interpolations are not user-facing literals.
- */
 class NoHardcodedUiText(config: Config = Config.empty) : Rule(config) {
     override val issue: Issue = Issue(
         id = javaClass.simpleName,

@@ -10,7 +10,6 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
 
-/** Material 24-hour time picker. */
 fun FragmentManager.showTimePicker(hour: Int, minute: Int, onPicked: (hour: Int, minute: Int) -> Unit) {
     val picker = MaterialTimePicker.Builder()
         .setTimeFormat(TimeFormat.CLOCK_24H)
@@ -21,10 +20,6 @@ fun FragmentManager.showTimePicker(hour: Int, minute: Int, onPicked: (hour: Int,
     picker.show(this, "time_picker")
 }
 
-/**
- * Material date picker. Material dates are UTC midnights, so conversion goes
- * through [ZoneOffset.UTC]; [notBefore] disables earlier days.
- */
 fun FragmentManager.showDatePicker(selected: LocalDate, notBefore: LocalDate, onPicked: (LocalDate) -> Unit) {
     val picker = MaterialDatePicker.Builder.datePicker()
         .setSelection(selected.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli())

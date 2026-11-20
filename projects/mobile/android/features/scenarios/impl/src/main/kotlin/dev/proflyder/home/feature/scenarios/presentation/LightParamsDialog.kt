@@ -19,11 +19,6 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import kotlin.math.roundToInt
 
-/**
- * Parameters of a light catalog step: brightness, color temperature, effect and
- * transition. Only controls the light reports are shown; `turn_off` accepts
- * only a transition, matching the executor.
- */
 internal class LightParamsDialog(
     context: Context,
     private val entry: ControlEntry,
@@ -57,8 +52,6 @@ internal class LightParamsDialog(
             views.lightTempGroup.setVisible(false)
             effects = emptyList()
         }
-        // A stale effect from an older payload must not be sent if the light no
-        // longer reports it; the executor rejects unknown effects.
         if (effect != null && effect !in effects) effect = null
         buildEffectChipsIfAny(context, effects)
         views.lightEffectLabel.setVisible(effects.isNotEmpty())
@@ -142,7 +135,6 @@ internal class LightParamsDialog(
 
     private fun renderPositive() {
         val button = runCatching { dialog.getButton(DialogInterface.BUTTON_POSITIVE) }.getOrNull() ?: return
-        // An empty field means "omit"; a non-numeric or out-of-range value is invalid.
         val raw = views.lightTransition.text?.toString()?.trim().orEmpty()
         button.isEnabled = raw.isEmpty() || transitionSeconds() != null
     }

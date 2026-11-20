@@ -174,7 +174,6 @@ class ControlCatalogClientTest {
         assertEquals(ControlRole.PRIMARY, lamp.role)
         assertEquals("dev.lamp", night.deviceId)
         assertEquals(ControlRole.SETTING, night.role)
-        // An older server omits the fields: every entry stays its own primary device.
         assertEquals("", legacy.deviceId)
         assertEquals("", legacy.device)
         assertEquals(ControlRole.PRIMARY, legacy.role)
@@ -237,8 +236,6 @@ class ControlCatalogClientTest {
             TestFixtures.read("control_speak_payload.json"),
             payload,
         )
-        // Normalization happens before this point; the codec must not drop or
-        // escape Cyrillic text.
         assertTrue(payload.contains("Добрый вечер"))
     }
 }

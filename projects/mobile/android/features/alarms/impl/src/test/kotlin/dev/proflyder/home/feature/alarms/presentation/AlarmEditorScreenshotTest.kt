@@ -19,13 +19,6 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
-/**
- * The label is optional: in the dark theme the empty field must show the
- * localized default ("Alarm") as its placeholder. The new layout is also a
- * contract: Save is pinned below the scrolling content, so it is reachable
- * without scrolling even on a small 360x640dp phone. PNGs of the real layout are
- * written to Bazel's undeclared outputs as review evidence for the pull request.
- */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35], qualifiers = "w411dp-h891dp-night-xxhdpi")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)

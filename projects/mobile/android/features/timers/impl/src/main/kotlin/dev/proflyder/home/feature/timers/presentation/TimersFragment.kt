@@ -25,7 +25,6 @@ class TimersFragment : BaseFragment<FragmentTimersBinding>(FragmentTimersBinding
 
     private lateinit var adapter: TimerAdapter
 
-    /** The single callback instance shared with the adapter. */
     private val adapterCallback = object : BaseAdapterCallback<TimerRow>(), TimerAdapterCallback {
         override fun onPauseResume(timer: Timer) = viewModel.togglePause(timer)
         override fun onCancel(timer: Timer) = confirmCancel(timer)
@@ -37,7 +36,6 @@ class TimersFragment : BaseFragment<FragmentTimersBinding>(FragmentTimersBinding
         adapter = TimerAdapter(adapterCallback)
         binding.timersList.layoutManager = LinearLayoutManager(requireContext())
         binding.timersList.adapter = adapter
-        // The countdown updates every second; a cross-fade on each tick reads as flicker.
         (binding.timersList.itemAnimator as? SimpleItemAnimator)?.supportsChangeAnimations = false
 
         mapOf(

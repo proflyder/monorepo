@@ -14,12 +14,6 @@ import dev.proflyder.home.feature.control.impl.R
 import dev.proflyder.home.feature.control.impl.databinding.SheetLightBinding
 import kotlin.math.roundToInt
 
-/**
- * Bottom sheet that adjusts one light. Only the controls the light actually
- * supports are shown (a white-only bulb has no color; a dimmable bulb has just
- * brightness). A command is sent when a slider is released, not while dragging,
- * so one gesture is one command.
- */
 internal class LightSheet(
     context: Context,
     entry: ControlEntry,
@@ -32,10 +26,8 @@ internal class LightSheet(
     private var temperature = light.kelvin
     private var hue = light.hue
     private var saturation = light.saturation
-    /** Which of temperature / color the preview currently shows. */
     private var colorMode = light.color && (light.mode == "color" || (light.mode.isEmpty() && !light.colorTemp))
 
-    /** Values Home Assistant does not report (lamp off, or the other mode is active) show "—", not a guess. */
     private var brightnessKnown = light.brightnessPct > 0
     private var temperatureKnown = light.kelvin > 0
 
@@ -124,7 +116,6 @@ internal class LightSheet(
         views.lightSaturation.addOnChangeListener { _, value, fromUser ->
             onSaturationChanged(value, fromUser)
         }
-        // Hue and saturation are always sent together: the server needs both.
         val sendColor: (Float) -> Unit = { onAdjust(LightAdjust(hue = hue, saturation = saturation)) }
         views.lightHue.onRelease(sendColor)
         views.lightSaturation.onRelease(sendColor)
