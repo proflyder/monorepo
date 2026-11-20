@@ -153,6 +153,8 @@ class WindowInsetsScreenshotTest {
 
         val bar = root.findViewById<View>(AlarmsR.id.alarm_editor_save_bar)
         assertEquals("save bar is not on the keyboard", root.height - keyboard, bar.windowBottom())
+        val save = root.findViewById<View>(AlarmsR.id.alarm_editor_save)
+        assertEquals("save button height", root.resources.getDimensionPixelSize(UiR.dimen.ui_save_bar_button_height), save.height)
         val nav = root.findViewById<View>(R.id.home_notice_anchor)
         assertFalse("bottom navigation stays above the keyboard", nav.isShown)
         assertTrue("field hides behind the save bar", field.windowBottom() <= bar.windowTop())
@@ -309,9 +311,12 @@ class WindowInsetsScreenshotTest {
         val content = card.getChildAt(0)
         val name = button.resources.getResourceEntryName(button.id)
         val room = content.width - content.paddingLeft - content.paddingRight
-        assertEquals("$name width", room, button.width)
+        val minWidth = button.resources.getDimensionPixelSize(UiR.dimen.ui_card_button_min_width)
+        assertTrue("$name is full width", button.width < room)
+        assertTrue("$name narrower than the minimum", button.width >= minWidth)
         assertEquals("$name height", height, button.height)
-        assertEquals("$name starts off the content edge", content.paddingLeft, button.windowLeft() - content.windowLeft())
+        assertEquals("$name corner", button.resources.getDimensionPixelSize(UiR.dimen.ui_card_button_radius), button.cornerRadius)
+        assertTrue("$name starts before the content edge", button.windowLeft() - content.windowLeft() >= content.paddingLeft)
     }
 
     private fun assertTextInside(name: String, edit: TextView) {

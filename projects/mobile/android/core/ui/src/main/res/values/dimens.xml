@@ -13,7 +13,10 @@
     <dimen name="ui_text_input_focus_stroke">2dp</dimen>
     <dimen name="ui_text_input_stroke">1dp</dimen>
     <dimen name="ui_text_input_radius">16dp</dimen>
-    <dimen name="ui_card_button_height">56dp</dimen>
+    <dimen name="ui_card_button_height">44dp</dimen>
+    <dimen name="ui_card_button_min_width">120dp</dimen>
+    <dimen name="ui_card_button_padding">20dp</dimen>
+    <dimen name="ui_save_bar_button_height">48dp</dimen>
     <dimen name="ui_card_button_radius">16dp</dimen>
     <dimen name="ui_card_button_stroke">1dp</dimen>
     <dimen name="ui_device_state_card_stroke">1dp</dimen>

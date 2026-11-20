@@ -55,7 +55,7 @@ class CardTextInputLayout @JvmOverloads constructor(
         super.draw(canvas)
         val field = editText
         when {
-            field != null && boxStrokeWidth == 0 -> drawOutline(canvas, field)
+            field != null && boxStrokeWidth == 0 && boxBackgroundMode == BOX_BACKGROUND_FILLED -> drawOutline(canvas, field)
         }
     }
 

@@ -1071,8 +1071,11 @@ outline over the box; layouts keep the plain `TextInputLayout` tag and no
   keeps its 500-character counter.
 
 Buttons inside cards follow one rule (`core/ui` styles): every card action
-spans the card content (`match_parent`), is 56dp high
-(`ui_card_button_height`), has 16dp corners (`ui_card_button_radius`) and
+is 44dp high (`ui_card_button_height`, no insets), as wide as its text with
+20dp side padding but at least 120dp (`ui_card_button_min_width`), aligned to
+the start of the card content; two actions of one card sit in a row with the
+main one on the right (Connection: **Remove stored token**, then **Save and
+test connection**). It has 16dp corners (`ui_card_button_radius`) and
 `textAppearanceLabelLarge`. The action the screen exists for is
 `Widget.Home.CardButton` (filled: **Save and test connection**); other actions
 are `Widget.Home.CardButton.Tonal` (**Refresh config**, **Save name**,
@@ -1081,7 +1084,8 @@ are `Widget.Home.CardButton.Tonal` (**Refresh config**, **Save name**,
 stroke and `colorError` text: **Remove stored token**, shown only while a token
 is stored). Text buttons are not used inside cards, so nothing is indented away
 from the card's content edge. A screen of independent settings with no single
-main action («Phone notifications and find») has no filled button. Every
+main action («Phone notifications and find») has no filled button. Editor
+save bars use `Widget.Home.SaveBarButton` (full width, 48dp). Every
 settings card is `Widget.Home.Card` (filled `colorSurfaceContainer`, no
 stroke) and a card title uses `textAppearanceTitleMedium`.
 
@@ -1100,9 +1104,10 @@ every layout with a field (12+) to check the shared style: no underline,
 all four corners 16dp, a 1dp `colorOutlineVariant` outline at rest and 2dp
 `colorStateOn` focused, a non-empty label inside the box and text inside the
 field's vertical bounds. On Connection and «Phone notifications and find»
-every `MaterialButton` inside a card has the card's content width and 56dp
-height, and every card is a `Widget.Home.Card`. Alarm editor, connection and push screens run in
-Neon and Current, dark and light. It writes
+every `MaterialButton` inside a card has the same 44dp height and corner, a
+width from 120dp to less than the card, starts at the content edge, the alarm
+editor Save is 48dp, and every card is a `Widget.Home.Card`. Alarm editor, connection and push screens run in
+Neon and Emerald, dark and light. It writes
 `insets-<theme>-<dark|light>-{alarm-editor-keyboard,connection,push-settings}.png`
 and `insets-<theme>-home-end.png`.
 

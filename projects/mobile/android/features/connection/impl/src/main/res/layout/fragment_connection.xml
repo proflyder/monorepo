@@ -163,12 +163,6 @@
                             android:saveEnabled="false" />
                     </com.google.android.material.textfield.TextInputLayout>
 
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/connection_clear_token"
-                        style="@style/Widget.Home.CardButton.Danger"
-                        android:layout_marginTop="8dp"
-                        android:text="@string/connection_clear_token" />
-
                     <TextView
                         android:id="@+id/connection_token_status"
                         android:layout_width="match_parent"
@@ -193,11 +187,23 @@
                         android:textColor="?attr/colorError"
                         android:visibility="gone" />
 
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/connection_test"
-                        style="@style/Widget.Home.CardButton"
+                    <LinearLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
-                        android:text="@string/connection_test" />
+                        android:orientation="horizontal">
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/connection_clear_token"
+                            style="@style/Widget.Home.CardButton.Danger"
+                            android:layout_marginEnd="@dimen/ui_tile_gap"
+                            android:text="@string/connection_clear_token" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/connection_test"
+                            style="@style/Widget.Home.CardButton"
+                            android:text="@string/connection_test" />
+                    </LinearLayout>
 
                     <ProgressBar
                         android:id="@+id/connection_progress"

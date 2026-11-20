@@ -178,10 +178,8 @@
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/scenario_editor_save"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
+            style="@style/Widget.Home.SaveBarButton"
             android:layout_marginTop="16dp"
-            android:minHeight="52dp"
             android:text="@string/scenarios_editor_save" />
 
         <com.google.android.material.button.MaterialButton
