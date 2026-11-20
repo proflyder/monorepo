@@ -271,6 +271,7 @@ fn scenario_router(scenario: &str, worlds: &Worlds) -> Router {
     let voice = voice::router(options);
     server::router(server::Options {
         system: None,
+        chat: None,
         auth_token: "mcp-contract-token".to_owned(),
         voice_token: Some("voice-contract-token".to_owned()),
         voice: Some(voice),
@@ -376,6 +377,7 @@ async fn the_real_voice_proxy_client_sees_completed_seq() {
     ));
     let app = server::router(server::Options {
         system: None,
+        chat: None,
         auth_token: "mcp-contract-token".to_owned(),
         voice_token: Some("voice-contract-token".to_owned()),
         voice: Some(voice),

@@ -27,6 +27,7 @@ DEPS = [
     "@crates//:regex",
     "@crates//:reqwest",
     "@crates//:rmcp",
+    "@crates//:rusqlite",
     "@crates//:russh",
     "@crates//:rustls",
     "@crates//:serde",
@@ -38,6 +39,7 @@ DEPS = [
     "@crates//:tokio-util",
     "@crates//:tower",
     "@crates//:tracing",
+    "@crates//:uuid",
     "//packages/rust/voice-contract:voice_contract",
 ]
 
@@ -47,7 +49,10 @@ rust_library(
         ["src/**/*.rs"],
         exclude = ["src/main.rs"],
     ),
-    compile_data = glob(["src/system/testdata/**/*.json"]),
+    compile_data = glob([
+        "src/system/testdata/**/*.json",
+        "src/chat/testdata/**/*.json",
+    ]),
     crate_name = "mcp_gateway",
     edition = "2024",
     lint_config = ":workspace_lints",

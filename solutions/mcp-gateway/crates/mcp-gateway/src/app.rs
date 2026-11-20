@@ -226,11 +226,35 @@ pub async fn run() -> anyhow::Result<()> {
         )
     });
 
+    let chat = if config.chat_hermes_url.is_empty() {
+        None
+    } else {
+        let store = crate::chat::store::Store::open(std::path::Path::new(&config.chat_db))
+            .context("chat store")?;
+        let hermes = crate::chat::hermes::Client::new(
+            &config.chat_hermes_url,
+            config.chat_hermes_token.clone(),
+            &config.chat_session,
+            config.chat_prompt.clone(),
+        )
+        .map_err(anyhow::Error::msg)?;
+        Some(
+            crate::chat::Chat::start(crate::chat::Options {
+                store: Arc::new(store),
+                hermes: Arc::new(hermes),
+                now: Arc::new(crate::chat::system_now),
+                new_id: Arc::new(crate::chat::random_id),
+            })
+            .context("chat")?,
+        )
+    };
+
     let router = server::router(server::Options {
         auth_token: config.auth_token.clone(),
         voice_token: (!config.voice_token.is_empty()).then(|| config.voice_token.clone()),
         voice,
         system,
+        chat,
         groups,
         deps: Arc::clone(&deps),
         metrics: Arc::clone(&metrics),

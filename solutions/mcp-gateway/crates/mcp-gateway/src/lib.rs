@@ -1,5 +1,6 @@
 pub mod app;
 pub mod bb;
+pub mod chat;
 pub mod checks;
 pub mod config;
 pub mod domain;

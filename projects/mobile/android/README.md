@@ -83,6 +83,21 @@ Current device acceptance and remaining work are tracked in
   Robolectric PNGs (`system-overview`, `system-overview-no-data`,
   `system-cluster`, `system-guests-dark`) in `TEST_UNDECLARED_OUTPUTS_DIR`.
 
+## Hermes chat (network contract)
+
+- `core/network` `HttpChatClient` talks to `mcp-gateway` `/v1/chat/*` through
+  the **Home control** address (Traefik sends `/v1/chat/` on that host to the
+  gateway) with the same bearer token: `page(before, limit)`,
+  `send(clientId, text, replyTo)`, `retry(id)` and the SSE `events(after)`
+  (`message` upserts and `delta` `{id, offset, text}`; `offset` is the UTF-16
+  length of the text the delta continues). Errors arrive as
+  `RemoteFailure.Server(code = <resource key>)`, e.g. `chat_text_empty`.
+- `ConnectionInterceptor` keeps the request query string when it rewrites the
+  URL onto the configured host.
+- Tests: `ChatClientTest` reads the server's golden files
+  (`fixtures/chat/*.json`, copied from
+  `solutions/mcp-gateway/crates/mcp-gateway/src/chat/testdata/contract/`).
+
 ## Home hub (devices, live cards, quick actions)
 
 - The catalog comes from the home control service (`GET /v1/catalog`); nothing

@@ -361,7 +361,7 @@ class ManifestTests(unittest.TestCase):
         deployment = next(doc for doc in docs if doc["kind"] == "Deployment")
         spec = deployment["spec"]
         self.assertEqual(spec["replicas"], 1)
-        self.assertEqual(spec["strategy"]["type"], "RollingUpdate")
+        self.assertEqual(spec["strategy"]["type"], "Recreate")
         pod = spec["template"]["spec"]
         self.assertEqual(pod["serviceAccountName"], "mcp-gateway")
         self.assertTrue(pod["securityContext"]["runAsNonRoot"])
@@ -421,7 +421,11 @@ class ManifestTests(unittest.TestCase):
         volumes = {volume["name"]: volume for volume in container_volumes(docs)}
         self.assertEqual(volumes["catalog"]["configMap"]["name"], "mcp-gateway-catalog")
         catalog_items = {(item["key"], item["path"]) for item in volumes["catalog"]["configMap"]["items"]}
-        self.assertEqual(catalog_items, {("catalog.yaml", "catalog.yaml"), ("bb-targets.yaml", "bb-targets.yaml")})
+        self.assertEqual(catalog_items, {
+            ("catalog.yaml", "catalog.yaml"),
+            ("bb-targets.yaml", "bb-targets.yaml"),
+            ("chat-prompt.txt", "chat-prompt.txt"),
+        })
         auth_items = volumes["auth"]["secret"]["items"]
         self.assertEqual(auth_items, [{"key": "token", "path": "token"}])
         telegram_items = {(item["key"], item["path"]) for item in volumes["telegram"]["secret"]["items"]}
@@ -436,6 +440,34 @@ class ManifestTests(unittest.TestCase):
         scheduler_items = volumes["scheduler"]["secret"]["items"]
         self.assertEqual(scheduler_items, [{"key": "token", "path": "token"}])
         self.assertEqual(volumes["scheduler"]["secret"]["secretName"], "mcp-gateway-scheduler")
+
+    def test_app_chat_uses_the_relay_and_a_retained_volume(self):
+        docs = load_docs(DEPLOYMENT)
+        env = {item["name"]: item.get("value") for item in container_env(docs)}
+        self.assertEqual(env["MCP_CHAT_HERMES_URL"], "http://${NODE_LAN_IP}:8644")
+        self.assertEqual(env["MCP_CHAT_HERMES_TOKEN_FILE"], "/run/secrets/mcp-gateway-chat/token")
+        self.assertEqual(env["MCP_CHAT_PROMPT_FILE"], "/etc/mcp-gateway/chat-prompt.txt")
+        self.assertEqual(env["MCP_CHAT_DB"], "/var/lib/mcp-gateway/chat.db")
+        volumes = {volume["name"]: volume for volume in container_volumes(docs)}
+        self.assertEqual(volumes["chat"]["secret"]["secretName"], "mcp-gateway-chat")
+        self.assertEqual(
+            volumes["chat-data"]["persistentVolumeClaim"]["claimName"], "mcp-gateway-chat"
+        )
+        claim = next(doc for doc in docs if doc["kind"] == "PersistentVolumeClaim")
+        self.assertEqual(claim["spec"]["storageClassName"], "local-retain")
+        secrets = {doc["metadata"]["name"]: doc for doc in load_docs(EXTERNAL_SECRETS)}
+        self.assertEqual(
+            secrets["mcp-gateway-chat"]["spec"]["data"][0]["remoteRef"],
+            {"key": "k8s/home-assistant/hermes-chat-relay", "property": "token"},
+        )
+        egress = next(
+            doc for doc in load_docs(NETWORK) if doc["metadata"]["name"] == "mcp-gateway-egress"
+        )["spec"]["egress"]
+        self.assertIn(
+            {"to": [{"ipBlock": {"cidr": "${NODE_LAN_IP}/32"}}],
+             "ports": [{"protocol": "TCP", "port": 8644}]},
+            egress,
+        )
 
     def test_service_is_cluster_ip_only(self):
         docs = load_docs(DEPLOYMENT)
@@ -544,6 +576,11 @@ class ManifestTests(unittest.TestCase):
         for doc in docs:
             self.assertEqual(doc["spec"]["target"]["creationPolicy"], "Owner")
             self.assertEqual(doc["spec"]["target"]["deletionPolicy"], "Retain")
+
+
+def container_env(docs: list[dict]) -> list[dict]:
+    deployment = next(doc for doc in docs if doc["kind"] == "Deployment")
+    return deployment["spec"]["template"]["spec"]["containers"][0]["env"]
 
 
 def container_volumes(docs: list[dict]) -> list[dict]:

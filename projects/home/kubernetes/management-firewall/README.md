@@ -1,9 +1,11 @@
 # K3s management firewall
 
 Single-node policy: allow loopback, the node IPv4 and pod CIDR; drop other
-sources to TCP 6443/10250/9100/9116/9118 and UDP 8472, including IPv6 sources.
+sources to TCP 6443/10250/9100/9116/9118/8644 and UDP 8472, including IPv6 sources.
 Port 9118 is the Hermes config-drift sidecar (Prometheus only; reach it through
-the SSH tunnel like the other dropped ports).
+the SSH tunnel like the other dropped ports). Port 8644 is the app chat relay
+in the Hermes Pod: only `mcp-gateway` (pod CIDR) calls it; it is Bearer-protected
+as well, but must not be reachable from the LAN.
 SSH, Grafana NodePort and application ports are unaffected. This does not
 replace the separate voice-proxy firewall or router policy.
 

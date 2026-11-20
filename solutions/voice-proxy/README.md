@@ -165,6 +165,27 @@ back to the consumer. When enqueueing fails the answer is announced directly.
   `ACK_OUTCOME_DELIVERED` (detail `idle_timeout` if it never settled);
 * a failed announcement is **not** acked: the lease expires back to `PENDING`.
 
+## App chat relay
+
+The Android chat (`mcp-gateway` `/v1/chat/*`) needs Hermes' sessions API,
+which listens only on loopback inside the Hermes Pod. The proxy is already in
+that Pod, so it carries a second, optional listener that relays exactly two
+calls for one session:
+
+| Method | Path | Rule |
+|---|---|---|
+| `POST` | `/api/sessions` | JSON body `id` must equal `HERMES_CHAT_RELAY_SESSION` |
+| `POST` | `/api/sessions/<session>/chat/stream` | path session must match; the SSE body is passed through unchanged |
+
+Everything else answers `404`; a wrong caller token `401`; another session
+`403`. The caller presents `HERMES_CHAT_RELAY_TOKEN_FILE`
+(`k8s/home-assistant/hermes-chat-relay`); upstream calls carry
+`Authorization: Bearer <API_SERVER_KEY>` from `HERMES_API_KEY`, so the gateway
+never sees the Hermes key. The listener is off unless
+`HERMES_CHAT_RELAY_LISTEN` is set (`0.0.0.0:8644` in the Flux HelmRelease);
+`management-firewall` drops `8644` for LAN clients while Pods and the node are
+allowed. Code: `crates/voice-proxy/src/chat_relay.rs`.
+
 ## Configuration
 
 All values come from the environment. A default applies only when the variable
@@ -196,6 +217,12 @@ is **unset**, not when it is set to an empty string.
 | `HERMES_VOICE_ANNOUNCE_SCRIPT` | `script.schedule_announce` | Statement announcement script |
 | `HERMES_VOICE_SATELLITE` | `assist_satellite.iandeks_stantsiia_midi_assist_satellite` | Satellite entity |
 | `HERMES_VOICE_MEDIA_PLAYER` | `media_player.iandeks_stantsiia_midi_media_player` | Media player idle gate |
+| `HERMES_CHAT_RELAY_LISTEN` | — | `host:port` of the app chat relay; empty disables it |
+| `HERMES_CHAT_RELAY_SESSION` | `home-app` | The only Hermes session the relay accepts |
+| `HERMES_CHAT_RELAY_TOKEN_FILE` | — | Caller Bearer file (mcp-gateway) |
+| `HERMES_CHAT_RELAY_TOKEN` | — | Caller Bearer, inline fallback |
+| `HERMES_API_KEY_FILE` | — | Hermes `API_SERVER_KEY` file for relayed calls |
+| `HERMES_API_KEY` | — | Hermes `API_SERVER_KEY`, inline fallback |
 | `HERMES_SCHEDULER_URL` | — | Scheduler base URL (durable queue) |
 | `HERMES_SCHEDULER_TOKEN_FILE` | — | Scheduler token file |
 | `HERMES_SCHEDULER_TOKEN` | — | Scheduler token, inline fallback |

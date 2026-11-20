@@ -28,6 +28,7 @@ pub const DEFAULT_SATELLITE: &str = "assist_satellite.iandeks_stantsiia_midi_ass
 pub const DEFAULT_MEDIA_PLAYER: &str = "media_player.iandeks_stantsiia_midi_media_player";
 pub const DEFAULT_QUEUE_CONSUMER: &str = "voice-proxy-home";
 pub const DEFAULT_ANNOUNCE_TTL: i64 = 10_800;
+pub const DEFAULT_CHAT_RELAY_SESSION: &str = "home-app";
 
 #[derive(Debug, Clone, Parser)]
 #[command(name = "voice-proxy", version, disable_help_subcommand = true)]
@@ -192,6 +193,33 @@ pub struct Settings {
         hide = true
     )]
     pub announce_ttl: i64,
+    #[arg(
+        long,
+        env = "HERMES_CHAT_RELAY_LISTEN",
+        default_value = "",
+        hide = true
+    )]
+    pub chat_relay_listen: String,
+    #[arg(
+        long,
+        env = "HERMES_CHAT_RELAY_SESSION",
+        default_value = DEFAULT_CHAT_RELAY_SESSION,
+        hide = true
+    )]
+    pub chat_relay_session: String,
+    #[arg(
+        long,
+        env = "HERMES_CHAT_RELAY_TOKEN_FILE",
+        default_value = "",
+        hide = true
+    )]
+    pub chat_relay_token_file: String,
+    #[arg(long, env = "HERMES_CHAT_RELAY_TOKEN", default_value = "", hide = true)]
+    pub chat_relay_token: String,
+    #[arg(long, env = "HERMES_API_KEY_FILE", default_value = "", hide = true)]
+    pub api_key_file: String,
+    #[arg(long, env = "HERMES_API_KEY", default_value = "", hide = true)]
+    pub api_key: String,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -262,6 +290,10 @@ pub struct Config {
     pub ha_token: std::sync::Arc<SecretSource>,
     pub gateway_token: std::sync::Arc<SecretSource>,
     pub scheduler_token: std::sync::Arc<SecretSource>,
+    pub chat_relay_listen: String,
+    pub chat_relay_session: String,
+    pub chat_relay_token: std::sync::Arc<SecretSource>,
+    pub api_key: std::sync::Arc<SecretSource>,
     pub log_level: LogLevel,
 }
 
@@ -323,9 +355,20 @@ impl Config {
                 &settings.scheduler_token_file,
                 &settings.scheduler_token,
             )),
+            chat_relay_listen: settings.chat_relay_listen.trim().to_owned(),
+            chat_relay_session: settings.chat_relay_session.trim().to_owned(),
+            chat_relay_token: std::sync::Arc::new(SecretSource::new(
+                &settings.chat_relay_token_file,
+                &settings.chat_relay_token,
+            )),
+            api_key: std::sync::Arc::new(SecretSource::new(
+                &settings.api_key_file,
+                &settings.api_key,
+            )),
             log_level,
         };
         let _ = config.listen()?;
+        let _ = config.chat_relay_address()?;
         Ok(config)
     }
 
@@ -338,6 +381,16 @@ impl Config {
         format!("{host}:{}", self.port)
             .parse()
             .map_err(|_| ConfigError::Listen(self.bind.clone()))
+    }
+
+    pub fn chat_relay_address(&self) -> Result<Option<SocketAddr>, ConfigError> {
+        if self.chat_relay_listen.is_empty() {
+            return Ok(None);
+        }
+        self.chat_relay_listen
+            .parse()
+            .map(Some)
+            .map_err(|_| ConfigError::Listen(self.chat_relay_listen.clone()))
     }
 
     #[must_use]

@@ -8,6 +8,7 @@ use home_worker::{Worker, WorkerConfig};
 use tokio::net::TcpListener;
 
 use crate::api::{Options as ProxyOptions, Proxy};
+use crate::chat_relay::ChatRelay;
 use crate::config::{Config, LogLevel};
 use crate::domain::clock::{Clock, SystemClock};
 use crate::domain::profile::Profile;
@@ -199,6 +200,26 @@ pub async fn run() -> anyhow::Result<()> {
             Profile::Personal => "queue-personal",
         };
         supervisor.spawn(name, async move { worker.run(cancel).await });
+    }
+
+    if let Some(address) = config.chat_relay_address().context("chat relay address")? {
+        let relay = ChatRelay::new(
+            Upstream::new(&config.upstream, DEFAULT_TIMEOUT).context("chat relay upstream")?,
+            &config.chat_relay_session,
+            config.chat_relay_token.provider(),
+            config.api_key.provider(),
+        );
+        let relay_listener = TcpListener::bind(address)
+            .await
+            .context("bind chat relay address")?;
+        tracing::info!(listen = %address, "chat relay listening");
+        let relay_cancel = cancel.clone();
+        supervisor.spawn("chat-relay", async move {
+            if let Err(error) = home_http::serve(relay_listener, relay.router(), relay_cancel).await
+            {
+                tracing::error!(%error, "chat relay stopped");
+            }
+        });
     }
 
     let server = home_http::serve(listener, proxy.router(), cancel.clone());

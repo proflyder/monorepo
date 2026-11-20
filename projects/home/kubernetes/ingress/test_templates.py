@@ -114,6 +114,22 @@ class Routes(unittest.TestCase):
             [{"name": "mcp-gateway", "namespace": "home-assistant", "port": 8080}],
         )
 
+    def test_app_chat_shares_the_control_host_and_streams(self):
+        route = by_name(self.routes, "IngressRoute", "ha-control")["spec"]["routes"][2]
+        self.assertEqual(
+            route["match"], "Host(`control.${HOME_DOMAIN}`) && PathPrefix(`/v1/chat/`)"
+        )
+        self.assertEqual(route["middlewares"], [{"name": "home-allowlist"}])
+        self.assertEqual(
+            route["services"],
+            [{
+                "name": "mcp-gateway",
+                "namespace": "home-assistant",
+                "port": 8080,
+                "responseForwarding": {"flushInterval": "100ms"},
+            }],
+        )
+
     def test_only_documented_placeholders_remain(self):
         text = "\n".join(path.read_text() for path in ROUTES.glob("*.yaml"))
         left = set(re.findall(r"\$\{([A-Z_]+)\}", text))

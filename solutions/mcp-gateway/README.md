@@ -228,6 +228,78 @@ Read-only агрегатор для вкладки «Система» Android-п
 скопировать файлы в `projects/mobile/android/core/network/src/test/resources/fixtures/system/`.
 Входные ответы Prometheus — `src/system/testdata/{hosts,guests,k8s,station}.json`.
 
+## Чат приложения (`/v1/chat/*`)
+
+Вкладка «Чат» Android-приложения — тот же агент Hermes, что в Telegram
+(те же память, skills и MCP-инструменты), в одной постоянной беседе
+приложения. Код — `crates/mcp-gateway/src/chat/` (`model.rs` — JSON-контракт,
+`store.rs` — SQLite, `hermes.rs` — клиент sessions API Hermes, `mod.rs` —
+очередь ходов, события и маршруты).
+
+```
+Android ──HTTPS control.<домен>/v1/chat/*──► Traefik ──► mcp-gateway:8080
+                                                           │ SQLite /var/lib/mcp-gateway/chat.db (PVC)
+                                                           ▼
+                        http://<узел>:8644 (chat relay в voice-proxy, под Hermes, hostNetwork)
+                                                           ▼
+                        Hermes 127.0.0.1:8642 /api/sessions/home-app/chat/stream
+```
+
+- Аутентификация — тот же токен приложения, что `/v1/system/*`
+  (`MCP_APP_TOKEN_FILE`, realm `home-app`). Наружу — только Traefik-маршрут
+  `control.<домен>` + `PathPrefix(/v1/chat/)` с `flushInterval` для SSE;
+  `/mcp`, Hermes API и relay наружу не публикуются.
+- Hermes API слушает только loopback пода Hermes. Gateway ходит к нему через
+  `chat relay` в `voice-proxy` (порт `8644`, отдельный Bearer
+  `k8s/home-assistant/hermes-chat-relay`), который пропускает ровно
+  `POST /api/sessions` и `POST /api/sessions/home-app/chat/stream` для одной
+  сессии и подставляет `API_SERVER_KEY`. Порт закрыт для LAN правилом
+  `management-firewall` (поды и узел разрешены).
+- Беседа — сессия Hermes `home-app` (`MCP_CHAT_SESSION`), создаётся при первом
+  ходе (`409` = уже есть). Персона и формат — `system_message` из
+  `MCP_CHAT_PROMPT_FILE` (`projects/home/kubernetes/mcp-gateway/manifests/chat-prompt.txt`,
+  та же логика, что `telegram_prompt.txt`). Память и skills Hermes общие для
+  всех платформ, поэтому факты из Telegram доступны и здесь.
+- История — SQLite на PVC `mcp-gateway-chat` (`local-retain`, Deployment
+  `Recreate`: один писатель). Hermes хранит контекст агента сам; таблица
+  шлюза — то, что видит приложение: id, `clientId` для идемпотентности,
+  цитата, статус, ключ ошибки. Поэтому история переживает переустановку и
+  второй телефон.
+- Ходы выполняются строго по одному (очередь в памяти + статус `pending` в
+  базе). После рестарта `streaming` → `failed` (`chat_interrupted`), `pending`
+  ставятся в очередь заново. Поток Hermes держит шлюз, а не телефон: закрытое
+  приложение не прерывает ответ.
+
+| Маршрут | Назначение |
+|---|---|
+| `GET /v1/chat/messages?before=<seq>&limit=<n>` | Страница истории (по умолчанию 50, максимум 200) в порядке возрастания `seq`; `hasMore`, `cursor` — текущая версия для `events`. |
+| `POST /v1/chat/messages {clientId, text, replyTo?}` | Сообщение и плейсхолдер ответа `pending`. Повтор с тем же `clientId` возвращает ту же пару без нового хода — офлайн-очередь телефона повторяет безопасно. `replyTo` — id цитируемого сообщения; Hermes получает цитату строкой «[Ответ на сообщение (role): «…»]». |
+| `POST /v1/chat/messages/{id}/retry` | Повтор упавшего ответа (`assistant` + `failed`), иначе `409 chat_not_retryable`. |
+| `GET /v1/chat/events?after=<version>` | SSE. Сначала все сообщения с `version > after`, затем живые события: `message` (полная версия сообщения, `id:` = `version`) и `delta` `{id, offset, text}`. `offset` — длина уже показанного текста в UTF-16 (как `String.length` в Kotlin): клиент применяет дельту, только если она продолжает его текст, иначе ждёт следующего `message`. Keepalive 15 с; при отставании подписчика поток закрывается, клиент переподключается со своим `after`. |
+
+Сообщение: `id`, `seq` (порядок в ленте), `version` (монотонная версия
+изменения), `clientId?`, `role` (`user`/`assistant`/`system`), `kind`
+(`text`; дальше — `alert`), `text` (Markdown), `replyTo? {id, role, text}`
+(текст цитаты обрезан до 200 символов), `status`
+(`pending`/`streaming`/`done`/`failed`), `error?` — ключ ресурса приложения
+(`chat_text_empty`, `chat_text_too_long`, `chat_client_id_invalid`,
+`chat_reply_not_found`, `chat_not_found`, `chat_not_retryable`,
+`chat_upstream_unavailable`, `chat_upstream_failed`, `chat_interrupted`,
+`chat_storage_failed`), `createdAt`/`updatedAt` — unix ms. Ошибки запросов —
+`{"code": "<ключ>"}` с `400/404/409/503` (поле `code` — как у Connect-ошибок,
+поэтому общий парсер приложения отдаёт ключ без отдельного формата). Сервер не шлёт пользовательских
+строк: тексты ошибок — ресурсы приложения.
+
+Текст пользователя ≤ 4000 символов, `clientId` — 1–64 символа
+`[A-Za-z0-9_-]`. Во время генерации текст сохраняется в базу каждые 2 с, а
+снимок для нового подписчика берёт актуальный текст из памяти.
+
+Эталоны — `crates/mcp-gateway/src/chat/testdata/contract/*.json`
+(`send`, `page`, `events`, `error`); их же читает Android-тест
+`core/network` (`ChatClientTest`: `events.json` собирается в SSE-поток). Пересборка: `UPDATE_CHAT_GOLDEN=1 cargo test -p mcp-gateway
+--lib chat`, затем скопировать в
+`projects/mobile/android/core/network/src/test/resources/fixtures/chat/`.
+
 ## Контракт ответа
 
 Каждый инструмент возвращает JSON:
@@ -279,6 +351,11 @@ Read-only агрегатор для вкладки «Система» Android-п
 | `MCP_PUSH_URL` | для `phone` | — | База `solutions/phone-push`, например `http://phone-push.home-assistant.svc.cluster.local:8095`. |
 | `MCP_PUSH_TOKEN_FILE` | для `phone` | — | Bearer push-сервиса: тот же общий токен приложения (`scheduler-auth`). |
 | `MCP_APP_TOKEN_FILE` | нет | — | Включает `/v1/system/*` (дашборд Android). Общий токен приложения (`scheduler-auth`); обязан отличаться от MCP- и voice-токенов. |
+| `MCP_CHAT_HERMES_URL` | нет | — | Включает `/v1/chat/*`: база chat relay (`http://<узел>:8644`). Требует `MCP_APP_TOKEN_FILE`. |
+| `MCP_CHAT_HERMES_TOKEN_FILE` | для чата | — | Bearer chat relay (`secret/k8s/home-assistant/hermes-chat-relay`, ключ `token`). |
+| `MCP_CHAT_PROMPT_FILE` | для чата | — | Системный промпт беседы приложения (`chat-prompt.txt` из ConfigMap). |
+| `MCP_CHAT_SESSION` | нет | `home-app` | Id сессии Hermes; должен совпадать с `HERMES_CHAT_RELAY_SESSION`. |
+| `MCP_CHAT_DB` | нет | `/var/lib/mcp-gateway/chat.db` | SQLite истории чата (PVC `mcp-gateway-chat`). |
 | `MCP_PENDING_TTL` | нет | `90s` | Время жизни отложенного действия. |
 | `MCP_RESTART_COOLDOWN` | нет | `5m` | Минимальный интервал между перезапусками одного workload'а. |
 | `MCP_SELF_RESTART_DELAY` | нет | `20s` | Задержка перезапуска `self_disrupting` сервиса. |
@@ -489,6 +566,7 @@ bb-allowlist настоящими валидаторами.
   - Idempotency key.
   - Sequence of the completed turn; the voice proxy's idempotency key.
   - Idempotency key.
+- `crates/mcp-gateway/src/chat/` — чат приложения: контракт, SQLite-история, клиент Hermes sessions API, очередь ходов и SSE (раздел «Чат приложения»).
 - `crates/mcp-gateway/src/checks.rs` — Typed external catalog probes (`tcp`, `http`, `ha_state`, `ha_template`, `ha_unavailable_summary`), ported from `internal/checks/checks.go`.
   - Build the shared HTTP client with the workspace rustls provider. The workspace `reqwest` trusts only explicitly pinned roots, so an `https://` Home Assistant or external endpoint verifies only when the operating system's bundle is added explicitly …
 - `crates/mcp-gateway/src/config.rs` — Process configuration, ported one-to-one from `solutions/mcp-gateway/internal/config/config.go`.

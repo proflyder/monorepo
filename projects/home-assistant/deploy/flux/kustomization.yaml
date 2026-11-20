@@ -3,3 +3,4 @@ kind: Kustomization
 resources:
   - helmrelease.yaml
   - external-secret-hermes-config.yaml
+  - external-secret-hermes-chat-relay.yaml

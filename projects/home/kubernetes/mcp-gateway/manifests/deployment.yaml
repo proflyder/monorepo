@@ -1,3 +1,19 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mcp-gateway-chat
+  namespace: home-assistant
+  labels:
+    app.kubernetes.io/name: mcp-gateway
+    app.kubernetes.io/part-of: home
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-retain
+  resources:
+    requests:
+      storage: 1Gi
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -11,10 +27,7 @@ metadata:
 spec:
   replicas: 1
   strategy:
-    type: RollingUpdate
-    rollingUpdate:
-      maxUnavailable: 0
-      maxSurge: 1
+    type: Recreate
   selector:
     matchLabels:
       app.kubernetes.io/name: mcp-gateway
@@ -88,6 +101,14 @@ spec:
               value: /run/secrets/mcp-gateway-scheduler/token
             - name: MCP_APP_TOKEN_FILE
               value: /run/secrets/mcp-gateway-scheduler/token
+            - name: MCP_CHAT_HERMES_URL
+              value: "http://${NODE_LAN_IP}:8644"
+            - name: MCP_CHAT_HERMES_TOKEN_FILE
+              value: /run/secrets/mcp-gateway-chat/token
+            - name: MCP_CHAT_PROMPT_FILE
+              value: /etc/mcp-gateway/chat-prompt.txt
+            - name: MCP_CHAT_DB
+              value: /var/lib/mcp-gateway/chat.db
             - name: LOG_LEVEL
               value: info
           ports:
@@ -142,6 +163,11 @@ spec:
             - name: scheduler
               mountPath: /run/secrets/mcp-gateway-scheduler
               readOnly: true
+            - name: chat
+              mountPath: /run/secrets/mcp-gateway-chat
+              readOnly: true
+            - name: chat-data
+              mountPath: /var/lib/mcp-gateway
             - name: tmp
               mountPath: /tmp
       volumes:
@@ -153,6 +179,8 @@ spec:
                 path: catalog.yaml
               - key: bb-targets.yaml
                 path: bb-targets.yaml
+              - key: chat-prompt.txt
+                path: chat-prompt.txt
         - name: auth
           secret:
             secretName: mcp-gateway-auth
@@ -199,6 +227,16 @@ spec:
             items:
               - key: token
                 path: token
+        - name: chat
+          secret:
+            secretName: mcp-gateway-chat
+            defaultMode: 0440
+            items:
+              - key: token
+                path: token
+        - name: chat-data
+          persistentVolumeClaim:
+            claimName: mcp-gateway-chat
         - name: tmp
           emptyDir:
             sizeLimit: 16Mi

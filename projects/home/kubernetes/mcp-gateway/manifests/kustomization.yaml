@@ -12,7 +12,16 @@ configMapGenerator:
     files:
       - catalog.yaml
       - bb-targets.yaml
+      - chat-prompt.txt
 patches:
+  - target:
+      kind: PersistentVolumeClaim
+      name: mcp-gateway-chat
+    patch: |-
+      - op: add
+        path: /metadata/annotations
+        value:
+          kustomize.toolkit.fluxcd.io/prune: disabled
   - target:
       kind: Deployment
       name: mcp-gateway

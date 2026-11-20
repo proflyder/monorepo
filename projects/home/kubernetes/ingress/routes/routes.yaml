@@ -104,6 +104,16 @@ spec:
         - name: mcp-gateway
           namespace: home-assistant
           port: 8080
+    - match: Host(`control.${HOME_DOMAIN}`) && PathPrefix(`/v1/chat/`)
+      kind: Rule
+      middlewares:
+        - name: home-allowlist
+      services:
+        - name: mcp-gateway
+          namespace: home-assistant
+          port: 8080
+          responseForwarding:
+            flushInterval: 100ms
   tls:
     secretName: home-wildcard-tls
 

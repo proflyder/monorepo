@@ -106,6 +106,12 @@ spec:
           port: 443
     - to:
         - ipBlock:
+            cidr: ${NODE_LAN_IP}/32
+      ports:
+        - protocol: TCP
+          port: 8644
+    - to:
+        - ipBlock:
             cidr: ${BB_CT_IP}/32
       ports:
         - protocol: TCP

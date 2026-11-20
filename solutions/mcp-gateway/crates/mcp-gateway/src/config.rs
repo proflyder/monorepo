@@ -16,6 +16,8 @@ pub const DEFAULT_TELEGRAM_API_URL: &str = "https://api.telegram.org";
 pub const DEFAULT_TIMEZONE: &str = "Asia/Almaty";
 pub const DEFAULT_BB_TIMEOUT: Duration = Duration::from_secs(15);
 pub const DEFAULT_BB_USER: &str = "bb";
+pub const DEFAULT_CHAT_DB: &str = "/var/lib/mcp-gateway/chat.db";
+pub const DEFAULT_CHAT_SESSION: &str = "home-app";
 
 #[derive(Debug, Clone)]
 pub struct Config {
@@ -73,6 +75,14 @@ pub struct Config {
     pub push_token_file: String,
     pub push_token: String,
 
+    pub chat_db: String,
+    pub chat_hermes_url: String,
+    pub chat_hermes_token_file: String,
+    pub chat_hermes_token: String,
+    pub chat_session: String,
+    pub chat_prompt_file: String,
+    pub chat_prompt: String,
+
     pub timezone: String,
     pub location: TimeZone,
 }
@@ -129,6 +139,13 @@ impl Config {
             push_url: trimmed(getenv, "MCP_PUSH_URL"),
             push_token_file: trimmed(getenv, "MCP_PUSH_TOKEN_FILE"),
             push_token: String::new(),
+            chat_db: value_or(getenv, "MCP_CHAT_DB", DEFAULT_CHAT_DB),
+            chat_hermes_url: trimmed(getenv, "MCP_CHAT_HERMES_URL"),
+            chat_hermes_token_file: trimmed(getenv, "MCP_CHAT_HERMES_TOKEN_FILE"),
+            chat_hermes_token: String::new(),
+            chat_session: value_or(getenv, "MCP_CHAT_SESSION", DEFAULT_CHAT_SESSION),
+            chat_prompt_file: trimmed(getenv, "MCP_CHAT_PROMPT_FILE"),
+            chat_prompt: String::new(),
             timezone: value_or(getenv, "MCP_TIMEZONE", DEFAULT_TIMEZONE),
             location: TimeZone::UTC,
         };
@@ -211,6 +228,7 @@ impl Config {
         load_push_files(&mut cfg, read_file)?;
         load_bb_files(&mut cfg, read_file)?;
         load_app_files(&mut cfg, read_file)?;
+        load_chat_files(&mut cfg, read_file)?;
         Ok(cfg)
     }
 
@@ -294,6 +312,35 @@ fn load_app_files(cfg: &mut Config, read_file: &ReadFile<'_>) -> Result<(), Stri
         return Err("MCP_APP_TOKEN_FILE must differ from the MCP and voice tokens".to_owned());
     }
     cfg.app_token = token;
+    Ok(())
+}
+
+fn load_chat_files(cfg: &mut Config, read_file: &ReadFile<'_>) -> Result<(), String> {
+    if cfg.chat_hermes_url.is_empty() {
+        return Ok(());
+    }
+    if cfg.app_token.is_empty() {
+        return Err("MCP_CHAT_HERMES_URL requires MCP_APP_TOKEN_FILE".to_owned());
+    }
+    if cfg.chat_hermes_token_file.is_empty() || cfg.chat_prompt_file.is_empty() {
+        return Err(
+            "MCP_CHAT_HERMES_URL requires MCP_CHAT_HERMES_TOKEN_FILE and MCP_CHAT_PROMPT_FILE"
+                .to_owned(),
+        );
+    }
+    cfg.chat_hermes_token = read_secret(
+        read_file,
+        &cfg.chat_hermes_token_file,
+        "MCP_CHAT_HERMES_TOKEN_FILE",
+    )?;
+    let prompt = read_file(&cfg.chat_prompt_file)
+        .map_err(|error| format!("MCP_CHAT_PROMPT_FILE: {error}"))?;
+    String::from_utf8_lossy(&prompt)
+        .trim()
+        .clone_into(&mut cfg.chat_prompt);
+    if cfg.chat_prompt.is_empty() {
+        return Err("MCP_CHAT_PROMPT_FILE is empty".to_owned());
+    }
     Ok(())
 }
 
@@ -548,6 +595,37 @@ mod tests {
         let same = |_: &str| Ok(b"mcp".to_vec());
         let error = Config::load_from(&env(&pairs), &same).expect_err("same token");
         assert!(error.contains("MCP_APP_TOKEN_FILE"), "{error}");
+    }
+
+    #[test]
+    fn chat_needs_the_app_token_relay_token_and_prompt() {
+        let read = |path: &str| {
+            Ok(match path {
+                "/app" => b"app".to_vec(),
+                "/relay" => b"relay\n".to_vec(),
+                "/prompt" => b" prompt \n".to_vec(),
+                _ => b"mcp".to_vec(),
+            })
+        };
+        let full = [
+            ("MCP_AUTH_TOKEN_FILE", "/token"),
+            ("MCP_INFRA_CATALOG_FILE", "/c"),
+            ("MCP_APP_TOKEN_FILE", "/app"),
+            ("MCP_CHAT_HERMES_URL", "http://relay:8644"),
+            ("MCP_CHAT_HERMES_TOKEN_FILE", "/relay"),
+            ("MCP_CHAT_PROMPT_FILE", "/prompt"),
+        ];
+        let config = Config::load_from(&env(&full), &read).expect("config");
+        assert_eq!(config.chat_hermes_token, "relay");
+        assert_eq!(config.chat_prompt, "prompt");
+        assert_eq!(config.chat_session, DEFAULT_CHAT_SESSION);
+        assert_eq!(config.chat_db, DEFAULT_CHAT_DB);
+        let without_app = [full[0], full[1], full[3], full[4], full[5]];
+        let error = Config::load_from(&env(&without_app), &read).expect_err("no app token");
+        assert!(error.contains("MCP_APP_TOKEN_FILE"), "{error}");
+        let without_prompt = [full[0], full[1], full[2], full[3], full[4]];
+        let error = Config::load_from(&env(&without_prompt), &read).expect_err("no prompt");
+        assert!(error.contains("MCP_CHAT_PROMPT_FILE"), "{error}");
     }
 
     #[test]
