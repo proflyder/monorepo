@@ -98,6 +98,63 @@ Current device acceptance and remaining work are tracked in
   (`fixtures/chat/*.json`, copied from
   `solutions/mcp-gateway/crates/mcp-gateway/src/chat/testdata/contract/`).
 
+## Hermes chat (screen)
+
+- `features/chat` is the fifth bottom tab (**Chat**, between Time and System):
+  the same Hermes agent as the Telegram bot, one persistent conversation kept
+  on the server, so a reinstall or a second phone sees the same history.
+- Feed: bubbles (mine on the end in `?colorPrimaryContainer`, the assistant on
+  the start in `?colorSurfaceContainerHigh`, a smaller corner on the tail
+  side), day headers, time and a send status for my messages (clock — waiting
+  for the network, check — delivered, error — not delivered), a typing bubble
+  while the reply has no text yet and a caret while it streams. Assistant text
+  is rendered by `ChatMarkdown` without extra libraries: bold, italic, inline
+  code and fenced blocks, headings, bullet and numbered lists, Markdown links
+  and bare URLs (clickable).
+- Long press opens Reply / Copy / Retry / Delete (delete only for a message the
+  server never accepted); a swipe to the left quotes a message. The quote is
+  shown above the input and inside the sent bubble; the server forwards it to
+  Hermes with the message.
+- The list sticks to the bottom while new messages arrive; when scrolled up a
+  small button returns to the latest messages, and reaching the top loads the
+  previous page (`before=<seq>`).
+- Offline queue: `ChatRepository` keeps unsent messages in DataStore
+  (`chat_outbox`) with their `clientId`; it resends them one by one when the
+  network returns (exponential back-off up to 30 s, `NetworkWaiter`). The server
+  is idempotent on `clientId`, so a resend never duplicates. A message the server
+  rejects (empty, too long, missing quote) stays in the feed with the reason and
+  Retry/Delete; a failed assistant reply shows the reason and Retry.
+- Live updates: while the tab is started the repository reads the SSE stream
+  from its last `cursor`, applies `message` upserts and `delta` chunks
+  (a delta is applied only when its `offset` equals the current text length),
+  and reconnects with back-off; `401` stops the loop.
+- Insets: the input panel uses `pinAboveKeyboard`, the empty/error states follow
+  the list padding so they stay above the panel; `Widget.Home.TextInput.Chat`
+  is the shared input style without a floating hint.
+- Voice: with an empty input the send button is a microphone; hold to record
+  (`AudioRecord`, 16 kHz mono PCM written as WAV — exactly what the server feeds
+  to GigaAM), release to send, slide left to cancel, 2 minutes at most, shorter
+  than 0.6 s is dropped. The first hold asks for `RECORD_AUDIO`. A voice bubble
+  has play/pause, progress and duration (`MediaPlayer`, one at a time) and the
+  server transcript in italics under it («Recognising…» until it arrives).
+- Attachments: the clip button offers Photo (system photo picker, scaled to
+  2048 px and re-encoded as JPEG) and Text file (≤ 256 KB, text/JSON). Picked
+  items wait as chips above the input; on send they are uploaded one by one
+  (`POST /v1/chat/attachments`) before the message, and the uploaded ids are
+  saved in the outbox so a retry never uploads twice. A file that disappeared
+  from the phone fails the message with its own key. Received media are cached
+  under `files/chat-media/<id>`; a photo opens in a dialog on tap.
+- Server error keys map to string resources in `ChatTexts.kt`; the server never
+  sends user-facing text.
+- Tests: `features/chat/impl:chat_test` (timeline reducers, outbox codec,
+  repository queue with an offline/timeout/permanent failure and attachment
+  uploads, feed items, Markdown, Robolectric PNGs `chat-current`,
+  `chat-current-dark`, `chat-neon`, `chat-neon-dark`, `chat-neon-typing`,
+  `chat-media-current` (voice with transcript and playback, file, photo) and
+  `chat-media-neon-dark` (the recording panel)) and
+  `app:window_insets_screenshot_test` (`insets-{neon,current}-chat-keyboard`:
+  the panel sits on the keyboard and the bottom bar hides).
+
 ## Home hub (devices, live cards, quick actions)
 
 - The catalog comes from the home control service (`GET /v1/catalog`); nothing

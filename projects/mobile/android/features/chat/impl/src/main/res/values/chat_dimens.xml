@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <dimen name="chat_screen_margin">12dp</dimen>
+    <dimen name="chat_bubble_radius">18dp</dimen>
+    <dimen name="chat_bubble_tail_radius">6dp</dimen>
+    <dimen name="chat_bubble_padding_horizontal">12dp</dimen>
+    <dimen name="chat_bubble_padding_vertical">8dp</dimen>
+    <dimen name="chat_bubble_gap">4dp</dimen>
+    <dimen name="chat_list_indent">16dp</dimen>
+    <dimen name="chat_swipe_reply_distance">72dp</dimen>
+    <dimen name="chat_image_radius">12dp</dimen>
+</resources>

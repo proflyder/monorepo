@@ -5,6 +5,7 @@ import dev.proflyder.home.core.config.ConnectionSettingsStore
 import dev.proflyder.home.core.config.TokenStatus
 import dev.proflyder.home.core.endpoint.EndpointParseResult
 import dev.proflyder.home.core.endpoint.ServerEndpoint
+import dev.proflyder.home.core.model.ChatAttachmentKind
 import dev.proflyder.home.core.model.ChatEvent
 import dev.proflyder.home.core.model.ChatKind
 import dev.proflyder.home.core.model.ChatRole
@@ -129,6 +130,36 @@ class ChatClientTest {
         assertEquals(ChatStatus.DONE, last.status)
         assertEquals("Свет **включён**.", last.text)
         assertFalse(events.first() is ChatEvent.Delta)
+    }
+
+    @Test
+    fun uploadSendsRawBytesWithTheMimeAndName() = runBlocking {
+        server.enqueue(MockResponse().setBody(fixture("attachment")))
+        val attachment = (client().upload(byteArrayOf(1, 2, 3), "audio/wav", "voice.wav") as Outcome.Success).value
+        val request = server.takeRequest()
+        assertEquals("/v1/chat/attachments?name=voice.wav", request.path)
+        assertEquals("audio/wav", request.getHeader("Content-Type"))
+        assertEquals(3L, request.bodySize)
+        assertEquals(ChatAttachmentKind.VOICE, attachment.kind)
+        assertEquals(1000L, attachment.durationMs)
+    }
+
+    @Test
+    fun aVoiceMessageCarriesItsAttachmentAndTranscript() = runBlocking {
+        val voice = Json.parseToJsonElement(fixture("voice")).toString()
+        server.enqueue(MockResponse().setBody(voice))
+        val message = (client().retry("m_0002") as Outcome.Success).value
+        assertEquals(ChatKind.VOICE, message.kind)
+        assertEquals("включи свет в гостиной", message.transcript)
+        assertEquals("f_0001", message.attachments.single().id)
+    }
+
+    @Test
+    fun downloadReturnsTheBytes() = runBlocking {
+        server.enqueue(MockResponse().setHeader("Content-Type", "image/jpeg").setBody(okio.Buffer().write(byteArrayOf(9, 8, 7))))
+        val bytes = (client().download("f_1") as Outcome.Success).value
+        assertEquals("/v1/chat/attachments/f_1", server.takeRequest().path)
+        assertEquals(listOf<Byte>(9, 8, 7), bytes.toList())
     }
 
     @Test

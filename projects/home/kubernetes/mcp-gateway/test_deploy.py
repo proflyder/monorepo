@@ -453,8 +453,15 @@ class ManifestTests(unittest.TestCase):
         self.assertEqual(
             volumes["chat-data"]["persistentVolumeClaim"]["claimName"], "mcp-gateway-chat"
         )
-        claim = next(doc for doc in docs if doc["kind"] == "PersistentVolumeClaim")
-        self.assertEqual(claim["spec"]["storageClassName"], "local-retain")
+        claims = {doc["metadata"]["name"]: doc for doc in docs if doc["kind"] == "PersistentVolumeClaim"}
+        self.assertEqual(set(claims), {"mcp-gateway-chat", "mcp-gateway-media"})
+        for claim in claims.values():
+            self.assertEqual(claim["spec"]["storageClassName"], "local-retain")
+        self.assertEqual(env["MCP_CHAT_MEDIA_DIR"], "/var/lib/mcp-gateway-media")
+        self.assertEqual(env["MCP_CHAT_STT_ADDRS"], "${NODE_LAN_IP}:10305,${NODE_LAN_IP}:10300")
+        self.assertEqual(
+            volumes["chat-media"]["persistentVolumeClaim"]["claimName"], "mcp-gateway-media"
+        )
         secrets = {doc["metadata"]["name"]: doc for doc in load_docs(EXTERNAL_SECRETS)}
         self.assertEqual(
             secrets["mcp-gateway-chat"]["spec"]["data"][0]["remoteRef"],
@@ -465,7 +472,11 @@ class ManifestTests(unittest.TestCase):
         )["spec"]["egress"]
         self.assertIn(
             {"to": [{"ipBlock": {"cidr": "${NODE_LAN_IP}/32"}}],
-             "ports": [{"protocol": "TCP", "port": 8644}]},
+             "ports": [
+                 {"protocol": "TCP", "port": 8644},
+                 {"protocol": "TCP", "port": 10305},
+                 {"protocol": "TCP", "port": 10300},
+             ]},
             egress,
         )
 

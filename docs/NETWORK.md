@@ -115,8 +115,8 @@ HAOS и K3s используют статические адреса внутр�
 | `30100/tcp` | currency-bot API NodePort | LAN, Bearer, nft LAN/pod allow-list |
 | `30097/tcp` | intercom signaling NodePort (аварийный путь) | LAN/VPN, Bearer, nft LAN/pod allow-list |
 | `10200/tcp` | Piper TTS | LAN/HA |
-| `10300/tcp` | Whisper fallback | LAN/HA |
-| `10305/tcp` | GigaAM STT | LAN/HA |
+| `10300/tcp` | Whisper fallback | LAN/HA, `mcp-gateway` (резерв для голосовых чата) |
+| `10305/tcp` | GigaAM STT | LAN/HA, `mcp-gateway` (голосовые чата) |
 | `8643/tcp` | Hermes voice proxy | только HAOS/K3s/loopback |
 | `8642/tcp` | Hermes API | loopback |
 | `8644/tcp` | chat relay в voice-proxy (Hermes sessions API для `mcp-gateway`) | pod/node; не обычный LAN, Bearer |

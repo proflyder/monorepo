@@ -238,10 +238,22 @@ pub async fn run() -> anyhow::Result<()> {
             config.chat_prompt.clone(),
         )
         .map_err(anyhow::Error::msg)?;
+        let media =
+            crate::chat::media::MediaStore::open(std::path::Path::new(&config.chat_media_dir))
+                .context("chat media")?;
+        let stt: Option<Arc<dyn crate::chat::stt::SpeechToText>> =
+            (!config.chat_stt_addrs.is_empty()).then(|| {
+                Arc::new(crate::chat::stt::Wyoming::new(
+                    config.chat_stt_addrs.clone(),
+                    crate::chat::stt::STT_TIMEOUT,
+                )) as Arc<dyn crate::chat::stt::SpeechToText>
+            });
         Some(
             crate::chat::Chat::start(crate::chat::Options {
                 store: Arc::new(store),
                 hermes: Arc::new(hermes),
+                media: Some(Arc::new(media)),
+                stt,
                 now: Arc::new(crate::chat::system_now),
                 new_id: Arc::new(crate::chat::random_id),
             })

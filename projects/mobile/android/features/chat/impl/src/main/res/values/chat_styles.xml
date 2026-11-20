@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Widget.Home.TextInput.Chat">
+        <item name="hintEnabled">false</item>
+        <item name="boxCollapsedPaddingTop">0dp</item>
+    </style>
+
+    <style name="TextAppearance.Home.ChatMeta" parent="TextAppearance.Material3.LabelSmall">
+        <item name="android:textColor">?attr/colorOnSurfaceVariant</item>
+    </style>
+
+</resources>

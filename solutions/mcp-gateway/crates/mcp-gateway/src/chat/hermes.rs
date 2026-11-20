@@ -19,7 +19,7 @@ pub enum TurnEvent {
 }
 
 pub trait HermesApi: Send + Sync {
-    fn run<'a>(&'a self, message: String, sink: mpsc::Sender<TurnEvent>) -> BoxFuture<'a, ()>;
+    fn run<'a>(&'a self, message: Value, sink: mpsc::Sender<TurnEvent>) -> BoxFuture<'a, ()>;
 }
 
 pub struct Client {
@@ -87,7 +87,7 @@ impl Client {
         }
     }
 
-    async fn stream(&self, message: String, sink: &mpsc::Sender<TurnEvent>) -> TurnEvent {
+    async fn stream(&self, message: Value, sink: &mpsc::Sender<TurnEvent>) -> TurnEvent {
         if let Err(key) = self.ensure_session().await {
             return TurnEvent::Failed(key);
         }
@@ -163,7 +163,7 @@ async fn apply(
 }
 
 impl HermesApi for Client {
-    fn run<'a>(&'a self, message: String, sink: mpsc::Sender<TurnEvent>) -> BoxFuture<'a, ()> {
+    fn run<'a>(&'a self, message: Value, sink: mpsc::Sender<TurnEvent>) -> BoxFuture<'a, ()> {
         Box::pin(async move {
             let terminal = self.stream(message, &sink).await;
             let _sent = sink.send(terminal).await;

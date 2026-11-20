@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:paddingTop="@dimen/chat_bubble_gap"
+    android:paddingBottom="@dimen/chat_bubble_gap">
+
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/chat_typing"
+        style="@style/Widget.Material3.CardView.Filled"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:contentDescription="@string/chat_typing"
+        app:cardBackgroundColor="?attr/colorSurfaceContainerHigh"
+        app:cardCornerRadius="@dimen/chat_bubble_radius">
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:padding="14dp">
+
+            <View
+                android:id="@+id/chat_typing_dot_1"
+                android:layout_width="8dp"
+                android:layout_height="8dp"
+                android:background="@drawable/chat_bg_typing_dot" />
+
+            <View
+                android:id="@+id/chat_typing_dot_2"
+                android:layout_width="8dp"
+                android:layout_height="8dp"
+                android:layout_marginStart="5dp"
+                android:background="@drawable/chat_bg_typing_dot" />
+
+            <View
+                android:id="@+id/chat_typing_dot_3"
+                android:layout_width="8dp"
+                android:layout_height="8dp"
+                android:layout_marginStart="5dp"
+                android:background="@drawable/chat_bg_typing_dot" />
+        </LinearLayout>
+    </com.google.android.material.card.MaterialCardView>
+</FrameLayout>

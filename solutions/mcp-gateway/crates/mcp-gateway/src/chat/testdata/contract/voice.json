@@ -1,0 +1,23 @@
+{
+  "attachments": [
+    {
+      "durationMs": 1000,
+      "id": "f_0001",
+      "kind": "voice",
+      "mime": "audio/wav",
+      "name": "voice.wav",
+      "size": 32044
+    }
+  ],
+  "clientId": "v-1",
+  "createdAt": 1795129665000,
+  "id": "m_0002",
+  "kind": "voice",
+  "role": "user",
+  "seq": 1,
+  "status": "done",
+  "text": "",
+  "transcript": "включи свет в гостиной",
+  "updatedAt": 1795129665000,
+  "version": 4
+}
