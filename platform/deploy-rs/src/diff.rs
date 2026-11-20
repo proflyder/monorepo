@@ -1,11 +1,5 @@
-//! Small difflib-compatible unified diff for `hermes render-config --dry-run`.
-//!
-//! Hunk boundaries are not a contract (the Go implementation says the same);
-//! the diff only has to make a pending render reviewable.
-
 use std::fmt::Write as _;
 
-/// Returns a unified diff, or an empty string when the texts match.
 #[must_use]
 pub fn unified_diff(path: &str, old_text: &str, new_text: &str) -> String {
     let old_lines = split_keep_ends(old_text);
@@ -181,7 +175,6 @@ mod tests {
     #[test]
     fn empty_texts_have_no_diff() {
         assert!(unified_diff("file", "", "").is_empty());
-        // Identical non-empty text has no hunks; only the header is emitted.
         assert!(!unified_diff("file", "a\nb\n", "a\nb\n").contains("@@"));
     }
 

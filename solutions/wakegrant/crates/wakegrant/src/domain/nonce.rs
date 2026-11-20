@@ -6,7 +6,6 @@ use thiserror::Error;
 use time::OffsetDateTime;
 use wakegrant_protocol::b64_encode;
 
-/// A challenge is valid for 60 s (`PROTOCOL.md`).
 pub const NONCE_TTL: Duration = Duration::from_secs(60);
 
 const NONCE_BYTES: usize = 32;
@@ -23,9 +22,6 @@ struct Entry {
     used: bool,
 }
 
-/// Single-use challenges kept in memory. A pod restart loses outstanding
-/// nonces, which is safe: the machine asks for a new one. Grants live in
-/// SQLite.
 #[derive(Debug, Default)]
 pub struct NonceStore {
     inner: Mutex<Inner>,
@@ -43,7 +39,6 @@ impl NonceStore {
         Self::default()
     }
 
-    /// Creates a new 32-byte nonce bound to `machine`.
     #[allow(clippy::significant_drop_tightening)]
     pub fn issue(&self, machine: &str, now: OffsetDateTime) -> Result<String, NonceError> {
         let mut raw = [0u8; NONCE_BYTES];
@@ -63,9 +58,6 @@ impl NonceStore {
         Ok(nonce)
     }
 
-    /// Validates and atomically marks a nonce used. Marking happens before the
-    /// caller verifies the MAC, exactly as `PROTOCOL.md` orders it, so a forged
-    /// request burns its nonce.
     #[allow(clippy::significant_drop_tightening)]
     pub fn consume(
         &self,
@@ -89,13 +81,11 @@ impl NonceStore {
         Ok(())
     }
 
-    /// Number of retained nonces (tests only).
     #[cfg(test)]
     pub(crate) fn len(&self) -> usize {
         self.inner.lock().expect("nonce lock").entries.len()
     }
 
-    /// Seeds a fixed nonce for the contract vectors (tests only).
     #[cfg(test)]
     pub(crate) fn insert_for_test(&self, machine: &str, nonce: &str, now: OffsetDateTime) {
         self.inner.lock().expect("nonce lock").entries.insert(
@@ -109,8 +99,6 @@ impl NonceStore {
     }
 }
 
-/// Drops expired entries at most once a minute so an unauthenticated challenge
-/// flood cannot grow the map without bound.
 fn sweep(inner: &mut Inner, now: OffsetDateTime) {
     if inner.last_sweep.is_some_and(|last| {
         now - last < time::Duration::try_from(SWEEP_INTERVAL).expect("duration")

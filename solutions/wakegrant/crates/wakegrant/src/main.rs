@@ -1,6 +1,3 @@
-//! Command-line entry point. Everything real lives in the library; the only
-//! extra behaviour is the `-healthcheck` probe used by the distroless image.
-
 use anyhow::Context as _;
 
 fn is_healthcheck() -> bool {
@@ -17,8 +14,6 @@ async fn main() -> anyhow::Result<()> {
     wakegrant::app::run().await
 }
 
-/// Loads the same configuration as the server (so a broken Secret mount fails
-/// the probe) and calls `/healthz` on loopback. No secret is printed.
 async fn healthcheck() -> anyhow::Result<()> {
     let config = wakegrant::config::Config::load().context("healthcheck: configuration")?;
     wakegrant::health::probe(&config.healthcheck_url()).await?;

@@ -1,12 +1,3 @@
-//! Слои контента часов и их приоритет: код сопряжения > громкость > голос > обновление >
-//! one-shot > таймер > временный слой > текст/лицо > уровни музыки > время. Чистая часть
-//! `pulsar-clock/src/clock.rs`: без tokio и sysfs.
-//!
-//! Content, first active wins: pairing code (even when disabled) > volume number > voice state
-//! (TIMER_RING always, LISTENING / THINKING / SPEAKING with voice indication on) > update install
-//! (dark) > one-shot > timer countdown > temporary layer > Text / Face > music levels > time.
-//! Disabled: dark.
-
 use pulsar_core::{ClockShot, MusicFrame, UiState};
 
 use crate::ClockFace;
@@ -16,12 +7,10 @@ use crate::MusicSource;
 use crate::clock_fx::{self, Anim, Frame, clamp};
 use crate::font::{self, Cell, DIGITS, Glyphs};
 
-/// Local wall-clock time for the display.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Wall {
     pub hour: i32,
     pub min: i32,
-    /// Within the first half of the current second.
     pub first_half: bool,
 }
 
@@ -29,25 +18,13 @@ const FLASH_MS: i64 = 1500;
 const CODE_PAGE_MS: i64 = 2000;
 const TEMPORARY_MS: i64 = 5000;
 const TEMPORARY_MAX_S: i64 = 3600;
-/// Animation frame step (the stock patterns use 20 ms frames).
 pub const FX_FRAME_MS: i64 = 20;
-/// Level meter redraw while shown.
 const MUSIC_FRAME_MS: i64 = 40;
-/// Meters fall with this time constant.
 const MUSIC_RELEASE_MS: f32 = 250.0;
-/// Each digit's meter spans the recent range of its two bands: the range follows peaks and dips
-/// at once and closes in on the current value with this time constant. A mixed song keeps a
-/// nearly constant spectral tilt and moves by only a few dB, which on a fixed scale left every
-/// song looking alike (measured on a Midi: +-0.15 of 3 segments per digit).
 const RANGE_TAU_MS: f32 = 3000.0;
-/// Narrowest range, in band units: ~7 dB on the speaker reference (45 dB scale), ~9 dB on
-/// Sendspin (60 dB scale); keeps steady passages from blowing noise up to full height.
 const MIN_RANGE: f32 = 0.15;
-/// A source's ranges start over after this long without it.
 const RANGE_KEEP_MS: i64 = 10_000;
-/// Decay step across a gap (frames come every ~33 ms).
 const RANGE_MAX_STEP_MS: i64 = 100;
-/// While the meters are shown, the time takes over for the last `VIZ_TIME_MS` of every cycle.
 const VIZ_CYCLE_MS: i64 = 30_000;
 const VIZ_TIME_MS: i64 = 3000;
 
@@ -84,7 +61,6 @@ impl Content {
         }
     }
 
-    /// Frame step while it moves; 0 = static.
     fn step(&self, scroll_ms: i64) -> i64 {
         match self {
             Self::Text { cells, .. } if cells.len() > DIGITS => scroll_ms,
@@ -103,12 +79,10 @@ impl Content {
     }
 }
 
-/// Recent band range of one music source, per digit.
 #[derive(Clone, Copy, Debug)]
 struct Range {
     lo: [f32; DIGITS],
     hi: [f32; DIGITS],
-    /// Last frame of this source.
     last_ms: i64,
 }
 
@@ -122,43 +96,32 @@ impl Default for Range {
     }
 }
 
-/// Everything the clock shows, without the output: which layer wins and its frame at a time.
 #[derive(Debug)]
 pub struct ClockLayers {
     enabled: bool,
-    /// Monotonic ms of a running countdown; 0 = none.
     timer_end: i64,
-    /// ms left of a paused countdown; 0 = none.
     timer_paused: i64,
     flash_until: i64,
     flash_value: i32,
-    /// Pairing code shown instead of anything else (empty = none).
     code: String,
     code_since: i64,
-    /// Text / Select entities.
     base: Option<Content>,
-    /// Temporary layer (actions).
     overlay: Option<Content>,
     overlay_until: i64,
     scroll_ms: i64,
     ui: UiState,
     voice_indication: bool,
-    /// Двоеточие времени мигает раз в секунду; выключено — горит постоянно.
     colon_blink: bool,
-    /// Voice state / ringing.
     voice: Option<Anim>,
     voice_t0: i64,
-    /// One-shot (boot, player).
     shot: Option<Anim>,
     shot_t0: i64,
     updating: bool,
     levels_on: bool,
     media: bool,
     viz: bool,
-    /// Per digit, 0..1 within its range.
     mus_in: [f32; DIGITS],
     mus_shown: [f32; DIGITS],
-    /// Speaker reference, Sendspin.
     ranges: [Range; 2],
     music: MusicFrames,
     mus_drawn_ms: i64,
@@ -235,8 +198,6 @@ impl ClockLayers {
     pub fn set_text(&mut self, utf8: &str, now: i64) {
         let cells = font::layout_text(utf8.as_bytes());
         if cells.is_empty() {
-            // Non-empty text without cells (only ':') still replaces the face, as the
-            // controller does.
             if matches!(self.base, Some(Content::Text { .. })) || !utf8.is_empty() {
                 self.base = None;
             }
@@ -321,7 +282,6 @@ impl ClockLayers {
         self.update_voice(now);
     }
 
-    /// Мигание двоеточия при показе времени; выключено — двоеточие горит постоянно.
     pub fn set_colon_blink(&mut self, on: bool) {
         self.colon_blink = on;
     }
@@ -344,14 +304,9 @@ impl ClockLayers {
     }
 
     pub fn music_frame(&mut self, f: &MusicFrame, source: MusicSource, now: i64) {
-        // Frames only feed the meters; the frame timer draws them.
         if !self.music.push(*f, source, now) {
             return;
         }
-        // The sources use different scales, so each keeps its own ranges. Music Assistant
-        // restarts the Sendspin stream on every seek / skip (~0.7 s without frames; the speaker
-        // reference fills in meanwhile): a range survives such an interlude frozen, and starts
-        // over only after RANGE_KEEP_MS without frames of its source.
         let r = &mut self.ranges[usize::from(source == MusicSource::Sendspin)];
         let gap = now - r.last_ms;
         let restart = gap >= RANGE_KEEP_MS;
@@ -367,13 +322,9 @@ impl ClockLayers {
                 *lo = x;
                 *hi = x;
             } else {
-                // Fused like the clang-built reference (see clock_fx.rs).
                 *hi = if x > *hi { x } else { (*hi - x).mul_add(k, x) };
                 *lo = if x < *lo { x } else { (*lo - x).mul_add(k, x) };
             }
-            // A range narrower than MIN_RANGE is widened around its centre but kept inside
-            // 0..1, so silence (bands at 0) stays dark instead of showing the middle of the
-            // meter.
             let span = (*hi - *lo).max(MIN_RANGE);
             let base = clamp((*hi + *lo - span) / 2.0, 0.0, 1.0 - span);
             self.mus_in[i] = clamp((x - base) / span, 0.0, 1.0);
@@ -381,8 +332,6 @@ impl ClockLayers {
         r.last_ms = now;
     }
 
-    /// The frame to show at `now` and the ms to its next change before the tick (0 = none).
-    /// `wall` is only asked when the time is shown.
     pub fn compose(&mut self, now: i64, wall: impl FnOnce() -> Wall) -> (Frame, i64) {
         if self.overlay.is_some() && now >= self.overlay_until {
             self.overlay = None;
@@ -416,7 +365,6 @@ impl ClockLayers {
                 frame_step(self.voice_t0),
             )
         } else if self.updating {
-            // Dark until the new binary takes over.
             (Frame::default(), 0)
         } else if let Some(s) = self.shot {
             let end = self.shot_t0 + clock_fx::duration_ms(s);
@@ -430,7 +378,6 @@ impl ClockLayers {
             };
             let left = ((left_ms + 999) / 1000).max(0);
             let mut g = font::timer_glyphs(left);
-            // Blinks at 00:00.
             let blink_off = (now / 500) % 2 != 0;
             let colon = left > 0 || !blink_off;
             if left == 0 && blink_off {
@@ -450,8 +397,6 @@ impl ClockLayers {
             } else {
                 0
             };
-            // Also fires when the temporary layer ends, so a single scroll pass does not show
-            // the start of a second one until the next tick.
             if is_overlay {
                 let left = self.overlay_until - now;
                 next = if step != 0 { next.min(left) } else { left }.max(1);
@@ -460,7 +405,6 @@ impl ClockLayers {
         } else if self.viz && (now - self.viz_t0) % VIZ_CYCLE_MS < VIZ_CYCLE_MS - VIZ_TIME_MS {
             let k = (-((now - self.mus_drawn_ms) as f32) / MUSIC_RELEASE_MS).exp();
             for (shown, &input) in self.mus_shown.iter_mut().zip(&self.mus_in) {
-                // std::max(in, shown * k): NaN in either keeps `in`, as C++ does.
                 let decayed = *shown * k;
                 *shown = if input < decayed { decayed } else { input };
             }
@@ -468,7 +412,6 @@ impl ClockLayers {
             (clock_fx::levels(&self.mus_shown), MUSIC_FRAME_MS)
         } else {
             let w = wall();
-            // Двоеточие горит первую половину каждой секунды; при выключенном мигании — постоянно.
             (
                 glyph_frame(
                     font::time_glyphs(w.hour, w.min),

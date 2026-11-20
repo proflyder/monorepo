@@ -1,5 +1,3 @@
-//! Id сообщений (api.proto `option (id)`): теги protobuf на проводе, в одном месте.
-
 pub const HELLO_REQ: u32 = 1;
 pub const HELLO_RESP: u32 = 2;
 pub const DISCONNECT_REQ: u32 = 5;

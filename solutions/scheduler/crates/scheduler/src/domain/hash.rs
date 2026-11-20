@@ -1,18 +1,8 @@
-//! Canonical idempotency strings and their SHA-1 digests.
-//!
-//! The strings are the Go `canonicalSchedule`/`canonicalTimer`/`canonicalTask`
-//! format byte for byte: field order, empty fields and `true`/`false` matter
-//! because the digest is persisted in the `idempotency` table.
-
 use sha1_smol::Sha1;
 
 use crate::domain::rule::{Repeat, WallTime, weekdays_text};
 use crate::domain::schedule::ScheduleKind;
 
-/// Canonical schedule request.
-///
-/// The fields are ordered deliberately: the layout is part of the persisted
-/// SHA-1 used for idempotency conflict detection.
 #[allow(clippy::too_many_arguments)]
 #[must_use]
 pub fn canonical_schedule(
@@ -36,14 +26,11 @@ pub fn canonical_schedule(
     )
 }
 
-/// Canonical timer request.
 #[must_use]
 pub fn canonical_timer(label: &str, duration_seconds: i64) -> String {
     format!("timer|{label}|{duration_seconds}")
 }
 
-/// Canonical generic task request. `run_at_unix` is the request value, not the
-/// clamped due time.
 #[must_use]
 pub fn canonical_task(
     task_type: &str,
@@ -54,13 +41,11 @@ pub fn canonical_task(
     format!("task|{task_type}|{queue}|{payload_json}|{run_at_unix}")
 }
 
-/// Canonical scenario definition used for idempotent CreateScenario.
 #[must_use]
 pub fn canonical_scenario(body_json: &str, enabled: bool) -> String {
     format!("scenario|{enabled}|{body_json}")
 }
 
-/// Lower-case hex SHA-1 of a canonical request string.
 #[must_use]
 pub fn sha1_hex(canonical: &str) -> String {
     Sha1::from(canonical).digest().to_string()

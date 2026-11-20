@@ -1,9 +1,3 @@
-//! axum HTTP layer: the internal JSON API and the dedicated webhook listener.
-//!
-//! The routes, bodies and the error envelope are the Go service's. The
-//! undocumented `ServeMux` catch-all (`GET /` answering every unknown path) is
-//! deliberately *not* carried over: an unknown route is a 404.
-
 mod error;
 mod history;
 mod json;
@@ -32,15 +26,12 @@ use crate::store::Store;
 pub use error::ErrorEnvelope;
 pub use webhook::handle_webhook;
 
-/// The webhook body cap, matching Go's `maxWebhook`.
 pub const MAX_WEBHOOK_BYTES: usize = 1 << 20;
 
-/// Readiness probe used by `/readyz`.
 pub trait Readiness: Send + Sync {
     fn check(&self) -> BoxFuture<'static, Result<(), String>>;
 }
 
-/// The production readiness check: only the SQLite store.
 pub struct StoreReadiness {
     store: Arc<Store>,
 }
@@ -59,7 +50,6 @@ impl Readiness for StoreReadiness {
     }
 }
 
-/// Always-ready stub used by contract scenarios without a store override.
 pub struct AlwaysReady;
 
 impl Readiness for AlwaysReady {
@@ -68,7 +58,6 @@ impl Readiness for AlwaysReady {
     }
 }
 
-/// Always-unavailable stub for the readiness fixture.
 pub struct NeverReady;
 
 impl Readiness for NeverReady {
@@ -77,10 +66,8 @@ impl Readiness for NeverReady {
     }
 }
 
-/// Size of the dedup window; a long-running process cannot grow unbounded.
 const UPDATE_WINDOW: usize = 1024;
 
-/// Sliding-window deduplication of Telegram `update_id`s.
 #[derive(Debug, Default)]
 pub struct UpdateDedup {
     seen: HashSet<i64>,
@@ -88,7 +75,6 @@ pub struct UpdateDedup {
 }
 
 impl UpdateDedup {
-    /// Record `update_id`; `false` means it was already seen.
     pub fn mark_seen(&mut self, update_id: i64) -> bool {
         if update_id == 0 {
             return true;
@@ -107,7 +93,6 @@ impl UpdateDedup {
     }
 }
 
-/// Everything the two listeners need.
 pub struct ApiState {
     pub token: Token,
     pub webhook_secret: Secret,
@@ -122,9 +107,6 @@ pub struct ApiState {
     pub tasks: TaskTracker,
     pub cancel: CancellationToken,
     pub dedup: Mutex<UpdateDedup>,
-    /// Run a webhook `/trigger` inline instead of acknowledging first. Tests
-    /// use it to observe the effect deterministically; production keeps the
-    /// acknowledge-first behaviour.
     pub dispatch_inline: bool,
 }
 
@@ -139,14 +121,12 @@ impl std::fmt::Debug for ApiState {
 }
 
 impl ApiState {
-    /// Whether a chat id is allowed to command the bot.
     #[must_use]
     pub fn is_allowed_chat(&self, chat_id: i64) -> bool {
         let chat_id = chat_id.to_string();
         self.allowed_chats.contains(&chat_id)
     }
 
-    /// Returns `true` when the update is new.
     pub fn mark_update_seen(&self, update_id: i64) -> bool {
         self.dedup
             .lock()
@@ -155,7 +135,6 @@ impl ApiState {
     }
 }
 
-/// The internal API listener.
 pub fn api_router(state: Arc<ApiState>) -> Router {
     let protected = Router::new()
         .route(
@@ -178,7 +157,6 @@ pub fn api_router(state: Arc<ApiState>) -> Router {
         .with_state(state)
 }
 
-/// The webhook listener: exactly one route.
 pub fn webhook_router(state: Arc<ApiState>) -> Router {
     Router::new()
         .route("/telegram/webhook", post(handle_webhook))
@@ -223,7 +201,6 @@ async fn metrics(State(state): State<Arc<ApiState>>) -> Response {
         .into_response()
 }
 
-/// Constant-time `Authorization: Bearer <API_TOKEN>`.
 async fn require_auth(
     State(state): State<Arc<ApiState>>,
     request: Request,
@@ -246,8 +223,6 @@ async fn require_auth(
     next.run(request).await
 }
 
-/// Log every request and count it by the matched route pattern (never the raw
-/// path, which a scanner could grow without bound).
 async fn observe(State(state): State<Arc<ApiState>>, request: Request, next: Next) -> Response {
     let method = request.method().clone();
     let path = request.uri().path().to_owned();
@@ -279,8 +254,6 @@ async fn observe(State(state): State<Arc<ApiState>>, request: Request, next: Nex
     response
 }
 
-/// Label by the route template, never the raw path: a scanner hitting random
-/// URLs must not create unbounded series. Unknown paths collapse to `other`.
 fn matched_route(path: &str) -> &'static str {
     match path {
         "/" => "/",

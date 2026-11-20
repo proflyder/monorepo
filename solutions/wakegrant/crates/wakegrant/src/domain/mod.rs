@@ -1,8 +1,3 @@
-//! Pure domain logic: purposes, TTL rules, nonces, rate limits and waiters.
-//!
-//! No database, filesystem or network access is needed here, and time comes
-//! through the [`Clock`] trait so every rule is testable with fake time.
-
 mod clock;
 mod grant;
 mod limiter;

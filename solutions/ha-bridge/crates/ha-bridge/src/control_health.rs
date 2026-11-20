@@ -1,20 +1,11 @@
-//! Distroless `ha-control -healthcheck` probe.
-//!
-//! The catalog server has no unauthenticated endpoint, so readiness is an
-//! authenticated `GET /v1/catalog` against the local listener. The bearer
-//! token is read from `CONTROL_TOKEN(_FILE)` by the normal config loader and
-//! never appears in probe arguments or Kubernetes events.
-
 use std::process::ExitCode;
 use std::time::Duration;
 
 use crate::control_config::ControlConfig;
 
-/// A single probe stays below the Kubernetes timeout.
 const TIMEOUT: Duration = Duration::from_secs(4);
 const MAX_BODY: usize = 1 << 20;
 
-/// `ha-control -healthcheck`: authenticated catalog answer with `entries`.
 pub async fn run_healthcheck() -> ExitCode {
     let config = match ControlConfig::load() {
         Ok(config) => config,
@@ -39,7 +30,6 @@ pub async fn run_healthcheck() -> ExitCode {
     }
 }
 
-/// Map the listen address to loopback for the probe, like the Go healthcheck.
 pub fn healthcheck_address(listen: &str) -> Result<String, String> {
     let Some((host, port)) = crate::control_config::split_host_port(listen.trim()) else {
         return Err(format!("invalid CONTROL_LISTEN: {listen}"));
@@ -56,9 +46,6 @@ pub fn healthcheck_address(listen: &str) -> Result<String, String> {
 }
 
 async fn check_catalog(address: &str, config: &ControlConfig) -> Result<(), String> {
-    // The workspace builds reqwest without a default crypto provider; building
-    // a client panics unless one is installed. A provider installed earlier is
-    // kept, so this is safe to call more than once.
     let _already_installed = rustls::crypto::ring::default_provider().install_default();
     let client = reqwest::Client::builder()
         .timeout(TIMEOUT)

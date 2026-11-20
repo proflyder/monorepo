@@ -1,5 +1,3 @@
-//! Parsing and MAC verification of the service responses.
-
 use serde::Deserialize;
 
 use crate::auth::{
@@ -12,8 +10,6 @@ use crate::{Error, b64_decode};
 const NONCE_BYTES: usize = 32;
 const MAC_BYTES: usize = 32;
 
-/// Tolerant reader: unknown fields are ignored. Authenticity comes from the
-/// response MAC, so a new server field must not lock the machine out.
 #[derive(Debug, Deserialize)]
 struct ChallengeWire {
     nonce: String,
@@ -21,8 +17,6 @@ struct ChallengeWire {
     expires_in: Option<i64>,
 }
 
-/// Tolerant reader like [`ChallengeWire`]: unknown fields are ignored and
-/// duplicate known fields still fail.
 #[derive(Debug, Deserialize)]
 struct ClaimWire {
     granted: bool,
@@ -34,9 +28,7 @@ struct ClaimWire {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ChallengeResponse {
-    /// base64, validated to decode to 32 bytes.
     pub nonce: String,
-    /// Seconds; 0 when absent.
     pub expires_in: i64,
 }
 
@@ -61,13 +53,9 @@ pub fn parse_challenge_response(body: &str) -> Result<ChallengeResponse, Error> 
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ClaimOutcome {
-    /// `granted:true` with a valid response mac.
     Granted,
-    /// `granted:false` with a valid response mac.
     Denied,
-    /// Missing, undecodable or wrong mac: treated as denied.
     InvalidMac,
-    /// Not a well-formed claim response at all.
     Malformed,
 }
 
@@ -75,7 +63,6 @@ pub enum ClaimOutcome {
 pub struct ClaimResult {
     pub outcome: ClaimOutcome,
     pub grant_id: String,
-    /// Short, log-safe reason; never contains secrets.
     pub detail: &'static str,
 }
 
@@ -89,18 +76,12 @@ impl ClaimResult {
     }
 }
 
-/// Verifies the v1 server response for `nonce` with `key`. Only
-/// [`ClaimOutcome::Granted`] may arm the provider; every other outcome is
-/// fail-closed.
 pub fn verify_claim_response(body: &str, key: &[u8], machine: &str, nonce: &str) -> ClaimResult {
     verify_claim_response_with(body, key, |granted, grant_id| {
         grant_mac_message(machine, nonce, granted, grant_id)
     })
 }
 
-/// Verifies a purpose-aware server response. The MAC must be computed over the
-/// same purpose that was sent in the claim, so a logon grant cannot be
-/// accepted for an unlock and vice versa.
 pub fn verify_claim_response_for_purpose(
     body: &str,
     key: &[u8],
@@ -145,8 +126,6 @@ fn verify_claim_response_with(
         _ => return ClaimResult::fail(ClaimOutcome::InvalidMac, "mac is not 32 base64 bytes"),
     };
 
-    // Compare the MAC as bytes; encoding the expected value and decoding it
-    // again would only add a step that cannot fail.
     let expected = hmac_sha256_b64(key, &mac_message(claim.granted, &grant_id));
     let Ok(expected) = b64_decode(&expected) else {
         return ClaimResult::fail(ClaimOutcome::InvalidMac, "local mac encoding failed");

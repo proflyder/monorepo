@@ -1,10 +1,3 @@
-//! Zigbee coordinator on pulsar's coordinator firmware (radio/coordinator, a network
-//! co-processor): the chip runs the stack and the trust center, the host chooses the network (PAN
-//! ID, extended PAN ID, key, channel, coordinator IEEE address, frame counter) and gets every APS
-//! frame, ZDO included. Protocol: stock zbhci framing, commands 0x0Axx / 0x8Axx with
-//! little-endian fields (radio/coordinator/coordinator.c has the layouts). ZDO addressed to the
-//! coordinator itself is answered here.
-
 use std::collections::{BTreeMap, VecDeque};
 use std::fmt::Write as _;
 use std::time::Duration;
@@ -40,12 +33,9 @@ const STATE_UP: u8 = 2;
 const MODE_GROUP: u8 = 0x01;
 const MODE_NWK: u8 = 0x02;
 const MODE_IEEE: u8 = 0x03;
-/// zigpy gives up on a confirm after 60 s.
 const CONFIRM_TIMEOUT: Duration = Duration::from_secs(50);
 const SWEEP_MS: u64 = 5000;
-/// Network state (frame counter) every 30 s.
 const STATE_EVERY_SWEEPS: u32 = 6;
-/// The radio's UART buffer holds 256-byte frames.
 const MAX_ASDU: usize = 200;
 
 const ZDO_SUCCESS: u8 = 0x00;
@@ -65,7 +55,6 @@ struct Scan {
     mask: u32,
 }
 
-/// Hooks the C++ code posted to the loop: they run after the current dispatch.
 enum Posted {
     Sent { handle: u32, status: u8 },
     Received(ApsFrame),
@@ -74,7 +63,6 @@ enum Posted {
 #[derive(Clone, Copy, PartialEq, Eq)]
 struct Sweep;
 
-/// What woke the coordinator; hand it back to [`Coordinator::handle`].
 pub struct Wake(WakeKind);
 
 enum WakeKind {
@@ -90,13 +78,10 @@ pub struct Coordinator {
     ready: bool,
     net: Network,
     endpoints: BTreeMap<u8, SimpleDescriptor>,
-    /// By the radio's 8-bit handle: 0x8A10 due.
     sent: BTreeMap<u8, Pending>,
     next_handle: u8,
     scan: Option<Scan>,
-    /// Formation in progress: `Hooks::formed` due.
     form_pending: bool,
-    /// The radio accepted 0x0A01 (acked); the state that follows says how it went.
     form_acked: bool,
     form_config: NetworkConfig,
     sweeps: u32,
@@ -104,10 +89,6 @@ pub struct Coordinator {
 }
 
 impl Coordinator {
-    /// `link`: open, the running firmware identified as pulsar's coordinator. Endpoints may be
-    /// set before [`Coordinator::start`]; nothing else runs until then. Events the link had
-    /// already queued are the coordinator's (as in C++, where `start` took over the link's
-    /// callbacks in the same dispatch).
     pub fn new(link: Link) -> Self {
         Self {
             link,
@@ -133,7 +114,6 @@ impl Coordinator {
         self.on_boot(hooks);
     }
 
-    /// The radio reported its network state.
     pub fn ready(&self) -> bool {
         self.ready
     }
@@ -142,17 +122,14 @@ impl Coordinator {
         &self.net
     }
 
-    /// Frames waiting in the link's queue (in flight included).
     pub fn link_queued(&self) -> usize {
         self.link.queued()
     }
 
-    /// Data requests whose 0x8A10 is due.
     pub fn pending(&self) -> usize {
         self.sent.len()
     }
 
-    /// Next thing to handle: a hook posted earlier, a link event or the 5 s sweep. Cancel-safe.
     pub async fn next(&mut self) -> Wake {
         if !self.posted.is_empty() {
             return Wake(WakeKind::Posted);
@@ -181,9 +158,6 @@ impl Coordinator {
         }
     }
 
-    /// Queues an APS data request (dst by NWK address or group, or by IEEE address when
-    /// `dst_ieee != 0`); the result arrives through `Hooks::sent`. false: it cannot be sent at
-    /// all.
     pub fn send(&mut self, handle: u32, mut f: ApsFrame, dst_ieee: u64) -> bool {
         if !self.ready || !self.net.formed || f.data.len() > MAX_ASDU {
             return false;
@@ -198,7 +172,6 @@ impl Coordinator {
                 f.dst = self.net.nwk;
                 self.local_zdo(handle, &f);
             } else {
-                // Nothing listens on the coordinator's endpoints but the host.
                 self.post_sent(handle, 0xC1);
             }
             return true;
@@ -227,12 +200,8 @@ impl Coordinator {
         put_le16(&mut p, f.profile);
         put_le16(&mut p, f.cluster);
         p.push(f.src_ep);
-        // deCONZ options: 0x01 APS security, 0x02 NWK security (always on here; APS bit 0x02
-        // would turn it off), 0x04 APS ACK, 0x08 fragmentation; the rest are APS tx options as
-        // they are.
         p.push(f.tx_options & 0x0D);
         p.push(f.radius);
-        // At most MAX_ASDU, checked above.
         p.push(f.data.len() as u8);
         p.extend_from_slice(&f.data);
         self.sent.insert(
@@ -246,19 +215,17 @@ impl Coordinator {
         true
     }
 
-    /// Opens (seconds > 0) or closes joining on the coordinator itself.
     pub fn permit_join(&mut self, seconds: u8) {
         self.link.send(PERMIT_JOIN, &[seconds], None);
     }
 
-    /// One of the coordinator's endpoints, by number (0 and 0xFF are not endpoints).
     pub fn set_endpoint(&mut self, d: &SimpleDescriptor) {
         if d.endpoint == 0 || d.endpoint == 0xFF {
             return;
         }
         self.endpoints.insert(d.endpoint, d.clone());
         if self.started {
-            push_endpoint(&mut self.link, d); // else with the others at start
+            push_endpoint(&mut self.link, d);
         }
     }
 
@@ -271,14 +238,11 @@ impl Coordinator {
         }
     }
 
-    /// Erases the network in the radio (devices must join again).
     pub fn factory_reset(&mut self) {
         warn!("zigbee: erasing the network in the radio");
         self.link.send(NET_ERASE, &[], None);
     }
 
-    /// Forms a network (none may exist); `Hooks::formed` reports the result. A formation still
-    /// pending is superseded (`formed(false)` for it first).
     pub fn form(&mut self, c: &NetworkConfig, hooks: &mut dyn Hooks) {
         info!(
             "zigbee: forming a network on channel {}, PAN 0x{:04x}, update id {}",
@@ -295,11 +259,9 @@ impl Coordinator {
         put_le64(&mut p, c.ieee);
         put_le32(&mut p, c.frame_counter);
         p.push(c.update_id);
-        // Accepted: the state that follows the ACK says whether the formation started.
         self.link.send(NET_FORM, &p, Some(AckTag::Form));
     }
 
-    /// Moves the formed network to another channel (broadcast Mgmt_NWK_Update_req).
     pub fn change_channel(&mut self, channel: u8, update_id: u8) {
         info!("zigbee: moving the network to channel {channel}");
         self.link.send(CHANNEL, &[channel, update_id], None);
@@ -318,7 +280,6 @@ impl Coordinator {
     }
 
     fn on_boot(&mut self, hooks: &mut dyn Hooks) {
-        // Everything the radio held in RAM is gone, endpoints included.
         for (_, p) in std::mem::take(&mut self.sent) {
             self.post_sent(p.handle, STATUS_NO_ACK);
         }
@@ -389,7 +350,6 @@ impl Coordinator {
             put_le16(r, me);
         };
         match f.cluster {
-            // NWK_addr_req
             0x0000 => {
                 if b.len() >= 8 && get_le64(b) == self.net.ieee {
                     put_addr(&mut r, &self.net);
@@ -397,7 +357,6 @@ impl Coordinator {
                     r[1] = ZDO_DEVICE_NOT_FOUND;
                 }
             }
-            // IEEE_addr_req
             0x0001 => {
                 if b.len() >= 2 && get_le16(b) == me {
                     put_addr(&mut r, &self.net);
@@ -405,22 +364,17 @@ impl Coordinator {
                     r[1] = ZDO_DEVICE_NOT_FOUND;
                 }
             }
-            // Node_Desc_req: coordinator, 2.4 GHz, FFD + mains + RX on + allocates addresses,
-            // manufacturer 0x140A (the radio's own), buffers 82/128, server mask: primary trust
-            // center + network manager, stack compliance revision 22.
             0x0002 => {
                 put_le16(&mut r, me);
                 r.extend_from_slice(&[
                     0x00, 0x40, 0x8F, 0x0A, 0x14, 0x52, 0x80, 0x00, 0x41, 0x2C, 0x80, 0x00, 0x00,
                 ]);
             }
-            // Simple_Desc_req
             0x0004 => {
                 put_le16(&mut r, me);
                 if let Some(d) = b.get(2).and_then(|ep| self.endpoints.get(ep)) {
                     let mut desc = Vec::new();
                     put_descriptor(&mut desc, d);
-                    // Small: 8 bytes plus two bytes per cluster, at most 32 + 32.
                     r.push(desc.len() as u8);
                     r.extend_from_slice(&desc);
                 } else {
@@ -428,23 +382,18 @@ impl Coordinator {
                     r.push(0);
                 }
             }
-            // Active_EP_req
             0x0005 => {
                 put_le16(&mut r, me);
-                // At most 254 endpoints (0 and 0xFF are refused).
                 r.push(self.endpoints.len() as u8);
                 r.extend(self.endpoints.keys());
             }
-            // Mgmt_Permit_Joining_req
             0x0036 => {
                 if let Some(&seconds) = b.first() {
                     self.permit_join(seconds);
                 }
             }
-            // Mgmt_NWK_Update_req: energy scan of the coordinator itself
             0x0038 => {
                 if b.len() >= 5 && b[4] > 5 {
-                    // channel change / manager update: no response
                     self.post_sent(handle, ZDO_SUCCESS);
                     return;
                 }
@@ -470,9 +419,7 @@ impl Coordinator {
         let mut p = Vec::new();
         put_le32(&mut p, mask);
         p.push(exponent);
-        // aBaseSuperframeDuration * (2^n + 1) per channel; n <= 5 here.
         let ms = 1536 * ((1u64 << exponent) + 1) / 100;
-        // The radio is off the network channel meanwhile: hold other frames back.
         self.link.send_and_hold(
             ED_SCAN,
             &p,
@@ -486,8 +433,6 @@ impl Coordinator {
         let Some(s) = self.scan.take() else {
             return;
         };
-        // [count] count x [channel][energy 0..255], channels ascending as in the mask ->
-        // Mgmt_NWK_Update_notify: channels, transmissions, failures, energies.
         let mut r = vec![s.tsn, ZDO_SUCCESS];
         put_le32(&mut r, s.mask);
         put_le16(&mut r, 0);
@@ -496,7 +441,6 @@ impl Coordinator {
             Some(&c) => usize::from(c).min((p.len() - 1) / 2),
             None => 0,
         };
-        // At most 255: the radio's own count byte.
         r.push(count as u8);
         let mut measured = String::new();
         for i in 0..count {
@@ -509,8 +453,6 @@ impl Coordinator {
     }
 
     fn on_state(&mut self, p: &[u8], hooks: &mut dyn Hooks) {
-        // [state][status][channel][PAN][ext PAN 8][IEEE 8][NWK][update id][key 16][key seq]
-        // [frame counter 4]
         if p.len() < 45 {
             return;
         }
@@ -567,8 +509,6 @@ impl Coordinator {
     }
 
     fn on_indication(&mut self, p: &[u8], hooks: &mut dyn Hooks) {
-        // [dst mode][dst][dst ep][src mode][src 2|8][src ep][profile][cluster][lqi][rssi]
-        // [security][length][asdu]
         if p.len() < 5 {
             return;
         }
@@ -580,7 +520,7 @@ impl Coordinator {
         };
         let mut i = 5;
         if p[4] == MODE_IEEE {
-            f.src = 0xFFFE; // NWK unknown; deCONZ indications carry a NWK source
+            f.src = 0xFFFE;
             i += 8;
         } else {
             if p.len() < i + 2 {
@@ -654,8 +594,6 @@ impl Coordinator {
             });
             false
         });
-        // The radio reports its state on changes only; the frame counter hosts back up moves
-        // on.
         self.sweeps += 1;
         if self.sweeps.is_multiple_of(STATE_EVERY_SWEEPS) && self.ready && self.scan.is_none() {
             self.link.send(NET_GET, &[], None);

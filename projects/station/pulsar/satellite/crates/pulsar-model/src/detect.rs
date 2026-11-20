@@ -1,16 +1,9 @@
-//! Определение модели станции по devicetree / `quasar.cfg` и процессные ALSA-настройки.
-//!
-//! Единственный модуль крейта, который читает файлы и окружение; разбор отделён от чтения и
-//! покрыт тестами.
 #![allow(unsafe_code)]
 
 use std::sync::LazyLock;
 
 use crate::profile::{Alsa, DeviceProfile, LITE2, MIDI, MINI, MINI2, MINI3, Playback};
 
-/// Process-wide ALSA setup, before any thread or audio library is started. Only the Mini sets
-/// ALSA_CONFIG_PATH: its dmix PCM lives in /data/pulsar/asound.conf (put there by
-/// pulsar-install). A missing file leaves the firmware's config, where that PCM does not exist.
 impl Playback {
     pub fn apply_env(&self) {
         let Some(alsa) = &self.alsa else {
@@ -29,13 +22,11 @@ impl Playback {
         }
     }
 
-    /// Absolute libasound path of the model, "" when the usual SONAME lookup should be used.
     pub fn alsa_lib(&self) -> &'static str {
         self.alsa.as_ref().map_or("", |a: &Alsa| a.lib)
     }
 }
 
-/// The `deviceType` value of quasar.cfg (e.g. "yandexmini"), the firmware's own model marker.
 pub fn quasar_device_type(cfg: &str) -> Option<&str> {
     const KEY: &str = "\"deviceType\"";
     let after = cfg.find(KEY)? + KEY.len();
@@ -45,15 +36,12 @@ pub fn quasar_device_type(cfg: &str) -> Option<&str> {
     Some(&rest[..end])
 }
 
-/// The Mini model from its board id, but only when quasar.cfg confirms a Yandex firmware:
-/// `axg_s420_v03` is an Amlogic S420 reference board id, not a Yandex-specific one.
 pub fn mini_from_board_and_cfg(dt_id: &[u8], quasar_cfg: &str) -> Option<&'static DeviceProfile> {
     (quasar_device_type(quasar_cfg) == Some("yandexmini"))
         .then(|| profile_from_dt_id(dt_id))
         .flatten()
 }
 
-/// The profile of this device, read once; None (logged) on unsupported hardware.
 pub fn detect_profile() -> Option<&'static DeviceProfile> {
     static PROFILE: LazyLock<Option<&'static DeviceProfile>> = LazyLock::new(|| {
         let raw = std::fs::read("/proc/device-tree/compatible").unwrap_or_default();
@@ -77,9 +65,6 @@ pub fn detect_profile() -> Option<&'static DeviceProfile> {
     *PROFILE
 }
 
-/// The profile of the first exact "yandex,<codename>" entry of a NUL-separated compatible list,
-/// e.g. "yandex,cucumber-dvt2\0yandex,cucumber\0amlogic, a5\0"; a board variant alone
-/// ("yandex,bergamot-evt1") is no model.
 pub fn profile_from_compatible(raw: &[u8]) -> Option<&'static DeviceProfile> {
     raw.split(|&b| b == 0).find_map(|entry| match entry {
         b"yandex,cucumber" => Some(&MIDI),
@@ -90,8 +75,6 @@ pub fn profile_from_compatible(raw: &[u8]) -> Option<&'static DeviceProfile> {
     })
 }
 
-/// The Mini's devicetree has no yandex,* entry. The board id alone is not a Yandex marker; use
-/// [`mini_from_board_and_cfg`] unless testing the id parser.
 pub fn profile_from_dt_id(raw: &[u8]) -> Option<&'static DeviceProfile> {
     let id = raw.split(|&b| b == 0).next().unwrap_or_default();
     (id == b"axg_s420_v03").then_some(&MINI)
@@ -118,7 +101,6 @@ mod tests {
         assert_eq!(m.leds.ring.first_index, 1);
         assert!(m.leds.logo.is_none());
         assert!(m.zigbee.is_none());
-        // No trailing NUL: the last entry still counts.
         assert_eq!(
             profile_from_compatible(b"amlogic, axg\0yandex,plum")
                 .unwrap()
@@ -158,14 +140,12 @@ mod tests {
         assert!(m.leds.logo.is_none());
         assert!(m.volume.software_volume);
         assert!(m.clock.is_none());
-        // Only KEY_MUTE on the keypad: it toggles the mute, and there is no «Button» entity.
         assert_eq!(
             (m.input.action_key, m.input.mute),
             (None, Some(crate::profile::MuteSwitch::Key(113)))
         );
         assert!(!m.input.has_button_events());
         assert!(!m.input.hardware_mute());
-        // No trailing NUL still counts.
         assert_eq!(
             profile_from_dt_id(b"axg_s420_v03")
                 .unwrap()
@@ -174,7 +154,6 @@ mod tests {
             "yandexmini"
         );
         assert!(profile_from_dt_id(b"axg_s420_v02\0").is_none());
-        // axg_s420_v03 is an Amlogic reference-board id: only a Yandex firmware makes it a Mini.
         let cfg = r#"{"deviceType" : "yandexmini", "x": 1}"#;
         assert_eq!(
             mini_from_board_and_cfg(b"axg_s420_v03\0", cfg)
@@ -187,7 +166,6 @@ mod tests {
         assert!(mini_from_board_and_cfg(b"axg_s420_v02\0", cfg).is_none());
         assert_eq!(quasar_device_type(cfg), Some("yandexmini"));
         assert_eq!(quasar_device_type("{}"), None);
-        // The installer and boot.sh reject these too.
         assert_eq!(quasar_device_type(r#"{"deviceType" "yandexmini"}"#), None);
         assert_eq!(quasar_device_type(r#"{"deviceType": yandexmini}"#), None);
     }
@@ -212,7 +190,6 @@ mod tests {
 
     #[test]
     fn bergamot_requires_exact_compatible() {
-        // A board variant alone, also next to a non-yandex "bergamot".
         for raw in [
             b"yandex,bergamot-evt1\0amlogic, axg\0".as_slice(),
             b"yandex,bergamot-evt1\0amlogic,bergamot\0".as_slice(),
@@ -227,7 +204,6 @@ mod tests {
         assert!(profile_from_compatible(b"yandex,cucumber-dvt2\0amlogic, a5\0").is_none());
         assert!(profile_from_compatible(b"yandex,yandexmini\0").is_none());
         assert!(profile_from_compatible(b"xyandex,plum\0").is_none());
-        // The old installer pattern cut "yandex,station-mini2" at the hyphen.
         assert!(profile_from_compatible(b"yandex,station\0").is_none());
     }
 

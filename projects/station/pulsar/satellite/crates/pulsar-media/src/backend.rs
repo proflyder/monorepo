@@ -1,6 +1,3 @@
-//! The firmware GStreamer backend of the player: one playbin per channel, the GLib thread that
-//! owns the default main context, and the process-wide one-time GStreamer initialisation.
-
 use std::ffi::{CStr, CString, c_void};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, OnceLock};
@@ -15,20 +12,15 @@ use crate::core::{Backend, Channel, Exec, GstState, Machine, Shared, Timer};
 use crate::gst::Call;
 use crate::gst::{self, Api, MainLoop, Pipeline};
 
-/// The firmware's GStreamer: one playbin per channel.
 struct GstBackend {
     api: &'static Api,
     playback: &'static Playback,
-    // Dropped before `out`: the pipelines are in NULL when the output closes the fdsink's fd.
     pipes: [Pipeline; 2],
     out: Output,
 }
 
 impl Backend for GstBackend {
     fn set_state(&mut self, ch: Channel, s: GstState) -> bool {
-        // MUSIC's alsasink opens the device asynchronously after this call, and dmix may switch
-        // the amplifier off when another client closes meanwhile: the gates go on here and again
-        // in `music_playing`. ANNOUNCE is not played by GStreamer (the output opens the PCM).
         if s == GstState::Playing && ch == Channel::Music {
             pulsar_alsa::enable_output(&crate::output_gates(self.playback));
         }
@@ -40,7 +32,6 @@ impl Backend for GstBackend {
     }
 
     fn set_uri(&mut self, ch: Channel, uri: &str) {
-        // As a C string: up to the first NUL.
         if let Ok(uri) = CString::new(uri.split('\0').next().unwrap_or_default()) {
             self.pipes[ch.index()].set_uri(&uri);
         }
@@ -49,7 +40,6 @@ impl Backend for GstBackend {
     fn set_volume(&mut self, ch: Channel, v: f64) {
         match ch {
             Channel::Music => self.pipes[ch.index()].set_volume(v),
-            // ANNOUNCE's playbin stays at 1.0: its output applies the gain.
             Channel::Announce => self.out.set_gain(v),
         }
     }
@@ -103,7 +93,6 @@ impl Backend for GstBackend {
     }
 }
 
-// The fdsink of ANNOUNCE's output; playsink converts to its caps.
 const OUT_SINK: &CStr = c"pcmout";
 
 fn new_pipeline(
@@ -134,9 +123,6 @@ fn new_pipeline(
     Ok(p)
 }
 
-/// Process-wide GStreamer initialisation: dlopen + gst_init + environment, once. The running
-/// player (GLib thread, pipelines, ANNOUNCE output) belongs to the handle and stops with it, but
-/// the slot is never released: as before, a process starts at most one player in its lifetime.
 struct Process {
     api: &'static Api,
     running: AtomicBool,
@@ -147,7 +133,6 @@ fn process() -> Result<&'static Process, PlayerInitError> {
     match PROCESS.get_or_init(|| {
         let api = gst::load().ok_or(PlayerInitError::Load)?;
         gst::set_ssl_cert_file();
-        // Process-global: alsa-lib messages go to the debug log.
         pulsar_alsa::quiet_error_handler();
         if !gst::init(api) {
             return Err(PlayerInitError::GstInit);
@@ -162,8 +147,6 @@ fn process() -> Result<&'static Process, PlayerInitError> {
     }
 }
 
-/// Claims the one player slot of the process. It is never released: a failed or finished player
-/// still means "already started", exactly like the previous static flag.
 fn claim(process: &'static Process) -> Result<(), PlayerInitError> {
     if process.running.swap(true, Ordering::AcqRel) {
         return Err(PlayerInitError::AlreadyStarted);
@@ -171,8 +154,6 @@ fn claim(process: &'static Process) -> Result<(), PlayerInitError> {
     Ok(())
 }
 
-/// The GLib thread with the machine of this player; stopping it (drop) quits the main loop and
-/// joins the thread, whose exit tears the machine down and closes every output.
 pub struct PlayerThread {
     api: &'static Api,
     main_loop: Arc<MainLoop>,
@@ -197,7 +178,6 @@ impl Drop for PlayerThread {
     }
 }
 
-/// Starts the one player of the process. The caller owns the returned thread through its handle.
 pub fn start(
     shared: &Arc<Shared>,
     playback: &'static Playback,

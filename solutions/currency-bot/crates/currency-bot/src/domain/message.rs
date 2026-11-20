@@ -1,17 +1,7 @@
-//! The Telegram HTML message.
-//!
-//! The buy/sell labels are intentionally inverted relative to the model,
-//! exactly as users see them today: "Покупка" prints `sell` and "Продажа"
-//! prints `buy`. Numbers use Go's `%.2f`; Rust's fixed-precision formatter is
-//! correctly rounded on the same binary `f64`, which is what the `.x5` format
-//! vectors pin.
-
 use std::fmt::Write as _;
 
 use super::model::{Alert, Level, Rates};
 
-/// Build the rates message, with alert sections when present (warnings first,
-/// then criticals). The result always ends with a newline.
 #[must_use]
 pub fn format(rates: &Rates, alerts: &[Alert]) -> String {
     let mut out = String::new();
@@ -98,7 +88,6 @@ fn append_alert(out: &mut String, alert: &Alert) {
     out.push('\n');
 }
 
-/// Format with two decimals, matching Go's `%.2f`.
 #[must_use]
 pub fn fmt2(value: f64) -> String {
     format!("{value:.2}")
@@ -124,7 +113,6 @@ mod tests {
 
     #[test]
     fn go_percent_two_rounding_matches_the_x5_cases() {
-        // These are the exact binary half-way-looking values from the vector.
         assert_eq!(fmt2(1.005), "1.00");
         assert_eq!(fmt2(2.675), "2.67");
         assert_eq!(fmt2(480.005), "480.00");

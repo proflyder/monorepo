@@ -1,12 +1,3 @@
-//! Pulsar's `tracing` backend with the C++ daemon's behaviour: stderr lines
-//! "HH:MM:SS.mmm L file:line msg", collapsing of identical consecutive records,
-//! and a bounded sink queue that the ESPHome server streams to API clients
-//! (SubscribeLogs).
-//!
-//! [`init_logger`] installs [`PulsarLayer`] through [`home_telemetry`] and
-//! bridges records of third-party crates (`log`, e.g. rustls) with
-//! `tracing-log`. Pulsar crates themselves log with `tracing` macros.
-
 use std::cell::{Cell, RefCell};
 use std::collections::VecDeque;
 use std::fmt::Write as _;
@@ -22,28 +13,19 @@ use tracing_subscriber::registry::Registry;
 
 use crate::sys;
 
-/// The C++ daemon formatted into char[1024]: at most 1023 bytes of message survive.
 const MSG_MAX: usize = 1023;
-/// API clients that do not read fast enough lose the oldest lines.
 const SINK_QUEUE_MAX: usize = 512;
-/// A warning in a 30 fps path would fill the device's tmpfs log (`/tmp` is RAM); identical
-/// consecutive records are counted instead and summarised at most this often.
 const REPEAT_REPORT_MS: i64 = 30_000;
-/// C++ level numbering (PULSAR_LOG_LEVEL): 0 = debug .. 3 = error; 4 = sink off.
 const SINK_OFF: i32 = 4;
 const TAGS: [char; 4] = ['D', 'I', 'W', 'E'];
 const WARN: i32 = 2;
 
-/// One line queued for API clients.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LogLine {
     pub level: Level,
-    /// "[W][file.rs:12]: message"
     pub text: String,
 }
 
-/// Installs the logger. PULSAR_LOG_LEVEL (atoi: 0 = debug, 1 = info (default), 2 = warn,
-/// 3 = error) filters stderr only; the sink has its own level.
 pub fn init_logger() {
     let level = std::env::var("PULSAR_LOG_LEVEL").map_or(1, |v| atoi(&v));
     {
@@ -51,9 +33,7 @@ pub fn init_logger() {
         g.core.stderr_level = level;
         update_max_level(&g.core);
     }
-    // Records of crates that still log through `log` (rustls, …) become tracing events.
     let _ = tracing_log::LogTracer::init();
-    // The debug filter is the union of stderr and the sink; the layer itself decides per record.
     let _ = TelemetryBuilder::new()
         .with_max_level(LevelFilter::DEBUG)
         .without_default_layer()
@@ -61,19 +41,12 @@ pub fn init_logger() {
         .init();
 }
 
-/// Queues records at `min_level` and above for `take_log_lines`, independently of the stderr
-/// level; `notify` fires when the queue goes from empty to non-empty. Either None turns the
-/// sink off and discards queued lines and the dropped count.
 pub fn set_log_sink(min_level: Option<Level>, notify: Option<Arc<tokio::sync::Notify>>) {
     let mut g = global();
     g.core.set_sink(min_level, notify);
     update_max_level(&g.core);
 }
 
-/// Treats records whose target is `prefix` or lies under it (`prefix::…`) as pulsar's own, like
-/// `pulsar*` targets: stderr at PULSAR_LOG_LEVEL and the sink. Tools call it with
-/// `module_path!()` (their crate name does not start with "pulsar"); before or after
-/// `init_logger`.
 pub fn add_own_target(prefix: &'static str) {
     let mut own = OWN_TARGETS
         .lock()
@@ -83,12 +56,10 @@ pub fn add_own_target(prefix: &'static str) {
     }
 }
 
-/// Stderr's level from PULSAR_LOG_LEVEL (Info until `init_logger`), independent of the sink.
 pub fn stderr_level() -> LevelFilter {
     level_filter(global().core.stderr_level)
 }
 
-/// Takes the queued lines; after an overflow the first one reports how many were dropped.
 pub fn take_log_lines() -> Vec<LogLine> {
     global().core.take()
 }
@@ -102,12 +73,9 @@ static GLOBAL: Mutex<Global> = Mutex::new(Global {
     core: Core::new(1),
     line: String::new(),
 });
-/// Prefixes of `add_own_target`.
 static OWN_TARGETS: Mutex<Vec<&'static str>> = Mutex::new(Vec::new());
 
 thread_local! {
-    // Set while the sink's Notify runs on this thread: a record from there is dropped instead
-    // of re-entering the logger.
     static IN_NOTIFY: Cell<bool> = const { Cell::new(false) };
     static MSG_BUF: RefCell<String> = const { RefCell::new(String::new()) };
 }
@@ -118,8 +86,6 @@ fn global() -> MutexGuard<'static, Global> {
         .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
-/// The `log` bridge's max level is the more verbose of stderr and sink, so disabled records
-/// are dropped by `log` before reaching the subscriber.
 fn update_max_level(core: &Core) {
     log::set_max_level(log_filter(core.stderr_level.min(core.sink_level)));
 }
@@ -162,7 +128,6 @@ fn level_of(num: i32) -> Level {
     }
 }
 
-/// Records of other crates (rustls, tokio, …) are not pulsar's messages: stderr only.
 fn is_foreign(target: &str) -> bool {
     if target.starts_with("pulsar") {
         return false;
@@ -181,7 +146,6 @@ fn basename(file: &str) -> &str {
     file.rsplit('/').next().unwrap_or(file)
 }
 
-/// C atoi: optional white space and sign, then digits; anything else ends the number.
 fn atoi(s: &str) -> i32 {
     let s = s.trim_start();
     let (neg, digits) = match s.as_bytes().first() {
@@ -196,7 +160,6 @@ fn atoi(s: &str) -> i32 {
     if neg { v.wrapping_neg() } else { v }
 }
 
-/// "HH:MM:SS.mmm L file:line msg\n"
 fn format_line(
     buf: &mut String,
     hms: (i32, i32, i32),
@@ -214,8 +177,6 @@ fn format_line(
     );
 }
 
-/// Formats at most `MSG_MAX` bytes, cut at a character boundary; stops the formatter early so a
-/// huge argument costs no more than the limit.
 struct Capped<'a>(&'a mut String);
 
 impl std::fmt::Write for Capped<'_> {
@@ -240,11 +201,6 @@ fn format_msg(buf: &mut String, args: std::fmt::Arguments<'_>) {
     let _ = std::fmt::write(&mut Capped(buf), args);
 }
 
-/// Copies the event's `message` field into the buffer, capped like the C++ daemon's line.
-///
-/// `tracing-log` events carry the real `log` target and location as fields
-/// (`log.target`, `log.file`, `log.line`) and a constant metadata target, so the
-/// visitor also captures those.
 struct MessageVisitor<'a> {
     buf: &'a mut String,
     target: Option<String>,
@@ -264,9 +220,6 @@ impl<'a> MessageVisitor<'a> {
 }
 
 impl MessageVisitor<'_> {
-    /// Fields other than `message` are appended like `tracing`'s own formatter,
-    /// within the same 1023-byte cap. `log.*` carries the bridge's metadata and
-    /// is not part of the C++ line.
     fn field(&mut self, field: &Field) -> bool {
         if field.name() == "message" || field.name().starts_with("log.") {
             return false;
@@ -330,8 +283,6 @@ impl Visit for MessageVisitor<'_> {
     }
 }
 
-/// Where stderr lines go; the process writes them with a wall-clock time stamp, tests record
-/// them.
 trait Stderr {
     fn line(&mut self, level: i32, base: &str, line: u32, msg: &str);
 }
@@ -354,13 +305,10 @@ impl Stderr for ProcessStderr<'_> {
             line,
             msg,
         );
-        // Raw write(2), not std's stderr lock: this runs under GLOBAL, and code holding std's
-        // stderr lock while logging would otherwise deadlock on the lock order.
         sys::write_stderr(self.0.as_bytes());
     }
 }
 
-/// The last record, for collapsing repeats.
 #[derive(Default)]
 struct Last {
     file: String,
@@ -372,7 +320,6 @@ struct Last {
     since_ms: i64,
 }
 
-/// Logger state without global side effects; time comes in as a parameter.
 struct Core {
     stderr_level: i32,
     sink_level: i32,
@@ -419,7 +366,6 @@ impl Core {
         out
     }
 
-    /// Whether a record passes the early filter (stderr or sink would take it).
     fn wanted(&self, level: i32, foreign: bool) -> bool {
         if foreign {
             level >= WARN && level >= self.stderr_level
@@ -428,7 +374,6 @@ impl Core {
         }
     }
 
-    /// Logs one record; returns true when the sink queue went from empty to non-empty.
     #[allow(clippy::too_many_arguments)]
     fn write(
         &mut self,
@@ -522,7 +467,6 @@ impl Core {
     }
 }
 
-/// The Pulsar tracing layer: stderr contract plus the ESPHome log sink.
 struct PulsarLayer;
 
 impl Layer<Registry> for PulsarLayer {
@@ -533,7 +477,6 @@ impl Layer<Registry> for PulsarLayer {
         if *metadata.level() == Level::TRACE {
             tracing::subscriber::Interest::never()
         } else {
-            // The sink level changes at runtime (`set_log_sink`), so `enabled` decides.
             tracing::subscriber::Interest::sometimes()
         }
     }
@@ -543,8 +486,6 @@ impl Layer<Registry> for PulsarLayer {
         if level == Level::TRACE {
             return false;
         }
-        // `tracing-log` events use one static `log` callsite per level; their real
-        // target is a field, so `on_event` filters them by it.
         if metadata.target() == "log" {
             return true;
         }
@@ -563,9 +504,6 @@ impl Layer<Registry> for PulsarLayer {
             return;
         }
         let level = level_num(level);
-        // Formatting runs user Display impls outside the lock. One that logs itself, or a record
-        // during thread teardown, gets a fresh buffer. The visitor runs once so the `log`
-        // bridge's real target and location are known before the foreign check.
         let write = |buf: &mut String| {
             let mut visitor = MessageVisitor::new(buf);
             event.record(&mut visitor);
@@ -601,7 +539,7 @@ impl Layer<Registry> for PulsarLayer {
     }
 }
 
-#[allow(clippy::significant_drop_tightening)] // the guard must outlive the `&mut *g` reborrow
+#[allow(clippy::significant_drop_tightening)]
 fn write_record(
     buf: &str,
     level: i32,
@@ -664,7 +602,6 @@ mod tests {
         assert_eq!(buf.len(), MSG_MAX);
         assert!(buf.starts_with("ax"));
 
-        // A multi-byte character crossing the limit is dropped whole.
         let wide = "я".repeat(600);
         format_msg(&mut buf, format_args!("{wide}"));
         assert_eq!(buf.len(), 1022);
@@ -712,18 +649,15 @@ mod tests {
         core.write(30_000, 2, f, 1, "busy", false, &mut out);
         assert_eq!(out.0[1..], ["W a.rs:1 last message repeated 3 times"]);
 
-        // The next report window starts at the report.
         core.write(59_999, 2, f, 1, "busy", false, &mut out);
         assert_eq!(out.0.len(), 2);
 
-        // Another record flushes the pending count first.
         core.write(60_000, 2, f, 2, "busy", false, &mut out);
         assert_eq!(
             out.0[2..],
             ["W a.rs:1 last message repeated 1 times", "W a.rs:2 busy"]
         );
 
-        // Same text at another level is a different record, and nothing was pending.
         core.write(60_001, 3, f, 2, "busy", false, &mut out);
         assert_eq!(out.0[4..], ["E a.rs:2 busy"]);
     }
@@ -753,7 +687,6 @@ mod tests {
         let mut out = Lines::default();
         core.write(0, 1, "a.rs", 1, "info", false, &mut out);
         core.write(0, 3, "a.rs", 2, "error", false, &mut out);
-        // Foreign records: stderr only, and only from Warn up.
         core.write(0, 1, "rustls/src/conn.rs", 3, "info", true, &mut out);
         core.write(0, 2, "rustls/src/conn.rs", 4, "warn", true, &mut out);
         assert_eq!(
@@ -768,7 +701,6 @@ mod tests {
             }]
         );
 
-        // Debug reaches the sink even when stderr is at Error.
         let mut core = sink_core(3, Level::DEBUG);
         core.write(0, 0, "a.rs", 1, "dbg", false, &mut out);
         assert_eq!(
@@ -867,7 +799,6 @@ mod tests {
         let msg = capture.0.lock().unwrap().clone().expect("event captured");
         assert_eq!(msg, "with fields answer=42 name=x");
 
-        // The same text goes to stderr and to the ESPHome sink.
         let mut core = sink_core(0, Level::INFO);
         let mut out = Lines::default();
         core.write(0, 2, "a.rs", 7, &msg, false, &mut out);

@@ -1,50 +1,29 @@
-//! Turns assistant replies into text that Piper TTS can speak.
-//!
-//! Go's RE2 `\s` and `\b` are ASCII-only, so every whitespace class is written
-//! out explicitly: ASCII whitespace, the C0 information separators
-//! U+001C..U+001F, NEL (U+0085) and the Unicode separator categories Zs, Zl
-//! and Zp. The same set drives [`is_space`], [`trim_space`] and
-//! [`collapse_space`].
-
 use std::fmt;
 
 use caseless::default_case_fold_str;
 use regex::{Regex, RegexBuilder};
 use unicode_normalization::UnicodeNormalization as _;
 
-/// Bounds the buffered streaming tail like the 10 MiB request cap; a runaway
-/// stream fails instead of growing without bound.
 pub const MAX_STREAM_BYTES: usize = 10 << 20;
 
-/// The sentence-final punctuation STT may append.
 const TRAILING_PUNCT: &str = ".!?…";
 
-/// Errors of a streaming sanitizer.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum StreamError {
     #[error("stream text too large")]
     TooLarge,
 }
 
-/// One character of the Unicode space set: ASCII whitespace, the C0
-/// information separators, NEL and the Zs/Zl/Zp categories.
-///
-/// `char::is_whitespace` covers every `Zs`/`Zl`/`Zp` code point (and the
-/// newline family); the information separators are missing there and are added
-/// explicitly.
 #[must_use]
 pub fn is_space(r: char) -> bool {
     matches!(r, '\u{1c}'..='\u{1f}') || r.is_whitespace()
 }
 
-/// Trims the Unicode space set, including the C0 information separators that
-/// `str::trim` leaves behind.
 #[must_use]
 pub fn trim_space(text: &str) -> &str {
     text.trim_matches(is_space)
 }
 
-/// `" ".join(text.split())`: split on runs of whitespace, join with one space.
 #[must_use]
 pub fn collapse_space(text: &str) -> String {
     text.split(is_space)
@@ -95,7 +74,6 @@ impl Patterns {
 }
 
 thread_local! {
-    /// Compiled once per thread: the patterns never change at runtime.
     static PATTERNS: Patterns = Patterns::new();
 }
 
@@ -103,7 +81,6 @@ fn with_patterns<R>(f: impl FnOnce(&Patterns) -> R) -> R {
     PATTERNS.with(f)
 }
 
-/// Returns a TTS-friendly version of an assistant reply.
 #[must_use]
 pub fn sanitize_text(text: &str) -> String {
     if text.is_empty() {
@@ -121,8 +98,6 @@ pub fn sanitize_text(text: &str) -> String {
     })
 }
 
-/// Sanitises every `choices[].message.content` string of an OpenAI Chat
-/// Completions payload, in place.
 pub fn sanitize_chat_payload(payload: &mut serde_json::Value) {
     let Some(choices) = payload
         .get_mut("choices")
@@ -141,10 +116,6 @@ pub fn sanitize_chat_payload(payload: &mut serde_json::Value) {
     }
 }
 
-/// Releases complete sentences while keeping split links and URLs out of
-/// speech. A boundary must be outside links/parentheses and followed by
-/// whitespace; the tail is held until completion, so the regexes never see
-/// half a URL.
 #[derive(Debug, Default)]
 pub struct StreamingSanitizer {
     pending: String,
@@ -157,12 +128,6 @@ impl StreamingSanitizer {
         Self::default()
     }
 
-    /// Adds text and returns the speech that became safe to speak.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`StreamError::TooLarge`] when the buffered tail exceeds
-    /// [`MAX_STREAM_BYTES`].
     pub fn feed(&mut self, text: &str, final_chunk: bool) -> Result<String, StreamError> {
         self.pending.push_str(text);
         if self.pending.len() > MAX_STREAM_BYTES {
@@ -180,7 +145,6 @@ impl StreamingSanitizer {
         let rest = self.pending[end..].to_owned();
         self.pending = rest;
         if final_chunk {
-            // A truncated/incomplete link is never safe to speak at the end.
             with_patterns(|p| {
                 raw = p.truncated_link.replace_all(&raw, "").into_owned();
                 raw = p.truncated_http.replace_all(&raw, "").into_owned();
@@ -200,15 +164,6 @@ impl StreamingSanitizer {
     }
 }
 
-/// The equivalent of the scanner
-///
-/// ```text
-/// r"https?://[^\s)\]]*|[\[\]()]|[.!?…]+(?=\s)"
-/// ```
-///
-/// and returns the byte index after the last sentence boundary that is outside
-/// a link/parenthesis. As in Go, the leftmost-first order of the alternatives
-/// is preserved.
 fn boundary_end(text: &str) -> usize {
     let mut brackets = 0usize;
     let mut parens = 0usize;
@@ -252,9 +207,6 @@ fn boundary_end(text: &str) -> usize {
                     }
                     index += next.len_utf8();
                 }
-                // The lookahead requires whitespace after the run: a
-                // sentence-final mark at the very end of the buffer is not a
-                // boundary yet.
                 if index < text.len() {
                     let next = text[index..].chars().next().expect("in-bounds char");
                     if is_space(next) && brackets == 0 && parens == 0 {
@@ -277,10 +229,6 @@ fn url_scheme_len(text: &str) -> Option<usize> {
     None
 }
 
-/// The compact lowercase form used only for exact cancel matching: NFKC, full
-/// Unicode case folding, whitespace collapsing and sentence-final STT
-/// punctuation removal. Quotes, hyphens and internal commas survive so a
-/// quoted or reworded phrase is not treated as an exact cancel command.
 #[must_use]
 pub fn normalize_utterance(text: &str) -> String {
     let normalized: String = text.nfkc().collect();
@@ -290,8 +238,6 @@ pub fn normalize_utterance(text: &str) -> String {
     collapse_space(trimmed)
 }
 
-/// Returns a short spoken phrase that cannot trigger HA's continued-conversation
-/// mode.
 #[must_use]
 pub fn ensure_not_question(text: &str, agents_down: &str) -> String {
     let mut value = collapse_space(text);
@@ -316,16 +262,12 @@ pub fn ensure_not_question(text: &str, agents_down: &str) -> String {
     value
 }
 
-/// Reports whether `text` ends, after trailing whitespace, with a question
-/// mark. HA continues the dialog only in that case.
 #[must_use]
 pub fn ends_with_question(text: &str) -> bool {
     let trimmed = text.trim_end_matches(is_space);
     trimmed.ends_with('?') || trimmed.ends_with('？')
 }
 
-/// Cuts text to at most `max_chars` characters, preferring the last word
-/// boundary, and strips punctuation that looks wrong before an ellipsis.
 fn truncate_speech(text: &str, max_chars: usize) -> String {
     let mut cut: String = text.chars().take(max_chars).collect();
     if let Some(index) = cut.rfind(' ') {
@@ -335,9 +277,6 @@ fn truncate_speech(text: &str, max_chars: usize) -> String {
         .to_owned()
 }
 
-/// Sanitises and shortens a late answer for a station announcement. A question
-/// keeps its trailing "?" because HA only continues the dialog when the spoken
-/// text ends with one. An over-long answer prefers its final question sentence.
 #[must_use]
 pub fn announce_text(speech: &str, max_chars: usize) -> String {
     let text = sanitize_text(speech);
@@ -417,7 +356,6 @@ mod tests {
                 .expect("feed"),
             ""
         );
-        // The sentence ends after the link; the tail stays buffered.
         assert_eq!(
             sanitizer.feed("mple.com). Хвост", false).expect("feed"),
             " Второе Reuters."
@@ -463,9 +401,7 @@ mod tests {
     fn normalize_utterance_folds_case_and_trailing_punctuation() {
         assert_eq!(normalize_utterance("  ОтМеНа!  "), "отмена");
         assert_eq!(normalize_utterance("Не\u{00a0}надо…"), "не надо");
-        // Full case folding, not lowercase.
         assert_eq!(normalize_utterance("STRASSE"), "strasse");
-        // Quotes survive so a quoted phrase is not an exact command.
         assert_eq!(normalize_utterance("\"отмена\""), "\"отмена\"");
     }
 
@@ -481,7 +417,6 @@ mod tests {
     fn announce_shortens_and_prefers_the_last_question() {
         assert_eq!(announce_text("**Готово**.", 200), "Готово.");
         assert_eq!(announce_text("Очень длинное предложение тут", 10), "Очень…");
-        // A question longer than the budget keeps its trailing "?".
         assert_eq!(
             announce_text("Длинно. А потом вопрос, который важен?", 20),
             "А потом вопрос?"

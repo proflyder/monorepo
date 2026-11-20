@@ -1,14 +1,3 @@
-//! Typed client for the home scheduler (`home.v1.SchedulerService`).
-//!
-//! The voice time tools use the same Connect JSON API as Home Assistant and
-//! the Android app: one durable owner of alarms, reminders and timers. The
-//! gateway never keeps schedule state locally and never plays sound; the
-//! existing `ha-bridge` executor still turns scheduler events into the HA
-//! `alarm_start` / `schedule_announce` / `alarm_stop` scripts.
-//!
-//! The bearer token is read from a file by [`crate::config::Config`] and only
-//! lives in memory here. Requests and errors never include it.
-
 use std::time::Duration;
 
 use serde::{Deserialize, Deserializer, Serialize};
@@ -19,135 +8,99 @@ use crate::tools::BoxFuture;
 const SERVICE: &str = "home.v1.SchedulerService";
 const MAX_BODY_BYTES: usize = 8 << 20;
 
-/// Wall-clock time of day in the request's `Time-Zone`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct WallTime {
-    /// Hour, 0..23.
     #[serde(default)]
     pub hour: i32,
-    /// Minute, 0..59.
     #[serde(default)]
     pub minute: i32,
-    /// Second, 0..59.
     #[serde(default)]
     pub second: i32,
 }
 
-/// One scheduler schedule as the Connect JSON API returns it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct Schedule {
-    /// Stable id.
     #[serde(default)]
     pub id: String,
-    /// Human label.
     #[serde(default)]
     pub label: String,
-    /// `SCHEDULE_KIND_*`.
     #[serde(default)]
     pub kind: String,
-    /// Local time of day.
     #[serde(default)]
     pub at: WallTime,
-    /// `YYYY-MM-DD` for one-shot schedules.
     #[serde(default, rename = "onceDate")]
     pub once_date: String,
-    /// `REPEAT_KIND_*`.
     #[serde(default)]
     pub repeat: String,
-    /// Next occurrence (unix seconds); 0 when disabled or exhausted.
     #[serde(default, rename = "nextDueUnix", deserialize_with = "int64")]
     pub next_due_unix: i64,
-    /// Whether the schedule is enabled.
     #[serde(default, deserialize_with = "bool_or_default")]
     pub enabled: bool,
-    /// Snooze deadline (unix seconds); 0 when not snoozed.
     #[serde(default, rename = "snoozeUntilUnix", deserialize_with = "int64")]
     pub snooze_until_unix: i64,
-    /// Active (ringing) occurrence; 0 when idle.
     #[serde(default, rename = "activeOccurrenceUnix", deserialize_with = "int64")]
     pub active_occurrence_unix: i64,
-    /// End of the ringing window.
     #[serde(default, rename = "activeUntilUnix", deserialize_with = "int64")]
     pub active_until_unix: i64,
-    /// Optimistic-concurrency revision.
     #[serde(default, deserialize_with = "int64")]
     pub revision: i64,
-    /// Opaque executor payload.
     #[serde(default, rename = "payloadJson")]
     pub payload_json: String,
 }
 
-/// One durable timer.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct Timer {
-    /// Stable id.
     #[serde(default)]
     pub id: String,
-    /// Human label.
     #[serde(default)]
     pub label: String,
-    /// Requested duration in seconds.
     #[serde(default, rename = "durationSeconds", deserialize_with = "int64")]
     pub duration_seconds: i64,
-    /// Remaining seconds while paused.
     #[serde(default, rename = "remainingSeconds", deserialize_with = "int64")]
     pub remaining_seconds: i64,
-    /// Due instant while running.
     #[serde(default, rename = "dueUnix", deserialize_with = "int64")]
     pub due_unix: i64,
-    /// `TIMER_STATE_*`.
     #[serde(default)]
     pub state: String,
 }
 
-/// The scheduler subset the voice tools need.
 pub trait SchedulerApi: Send + Sync {
-    /// Whether the backend is configured.
     fn configured(&self) -> bool {
         true
     }
 
-    /// Create one schedule from a Connect JSON request body.
     fn create_schedule<'a>(&'a self, request: Value) -> BoxFuture<'a, Result<Schedule, String>>;
 
-    /// Read one schedule.
     fn get_schedule<'a>(&'a self, id: &'a str) -> BoxFuture<'a, Result<Schedule, String>>;
 
-    /// List schedules of one kind.
     fn list_schedules<'a>(
         &'a self,
         kind: &'a str,
         include_disabled: bool,
     ) -> BoxFuture<'a, Result<Vec<Schedule>, String>>;
 
-    /// Replace a schedule, optionally guarding on the last seen revision.
     fn update_schedule<'a>(
         &'a self,
         schedule: Value,
         expected_revision: i64,
     ) -> BoxFuture<'a, Result<Schedule, String>>;
 
-    /// Delete a schedule.
     fn delete_schedule<'a>(&'a self, id: &'a str) -> BoxFuture<'a, Result<(), String>>;
 
-    /// Enable or disable a schedule.
     fn set_schedule_enabled<'a>(
         &'a self,
         id: &'a str,
         enabled: bool,
     ) -> BoxFuture<'a, Result<Schedule, String>>;
 
-    /// Snooze a ringing schedule.
     fn snooze_schedule<'a>(
         &'a self,
         id: &'a str,
         minutes: i64,
     ) -> BoxFuture<'a, Result<Schedule, String>>;
 
-    /// Stop a ringing schedule.
     fn stop_schedule<'a>(&'a self, id: &'a str) -> BoxFuture<'a, Result<Schedule, String>>;
 
-    /// Start a timer.
     fn start_timer<'a>(
         &'a self,
         label: &'a str,
@@ -155,23 +108,18 @@ pub trait SchedulerApi: Send + Sync {
         idempotency_key: &'a str,
     ) -> BoxFuture<'a, Result<Timer, String>>;
 
-    /// List timers.
     fn list_timers<'a>(
         &'a self,
         include_finished: bool,
     ) -> BoxFuture<'a, Result<Vec<Timer>, String>>;
 
-    /// Cancel a timer.
     fn cancel_timer<'a>(&'a self, id: &'a str) -> BoxFuture<'a, Result<Timer, String>>;
 
-    /// Pause a timer.
     fn pause_timer<'a>(&'a self, id: &'a str) -> BoxFuture<'a, Result<Timer, String>>;
 
-    /// Resume a timer.
     fn resume_timer<'a>(&'a self, id: &'a str) -> BoxFuture<'a, Result<Timer, String>>;
 }
 
-/// The real Connect JSON client.
 #[derive(Clone)]
 pub struct Client {
     http: reqwest::Client,
@@ -190,8 +138,6 @@ impl std::fmt::Debug for Client {
 }
 
 impl Client {
-    /// Build a client. `base_url` is the scheduler root, for example
-    /// `http://scheduler.home-assistant.svc.cluster.local:8098`.
     pub fn new(
         base_url: &str,
         token: String,
@@ -461,8 +407,6 @@ impl SchedulerApi for Client {
     }
 }
 
-/// Connect JSON encodes `int64` as a decimal string. Accept a string, a JSON
-/// number or an absent field so one decoder works for every server version.
 fn int64<'de, D: Deserializer<'de>>(deserializer: D) -> Result<i64, D::Error> {
     let value = Option::<Value>::deserialize(deserializer)?;
     Ok(match value {

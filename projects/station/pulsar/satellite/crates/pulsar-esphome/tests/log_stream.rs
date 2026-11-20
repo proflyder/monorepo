@@ -1,6 +1,3 @@
-//! SubscribeLogs end to end through the installed logger and the public API. Alone in its
-//! binary: the log sink is process-wide.
-
 use std::time::Duration;
 
 use pulsar_esphome::{ApiConfig, ApiEvent, DeviceIdentity, spawn};
@@ -76,18 +73,15 @@ impl Client {
 
     async fn subscribe_logs(&mut self, level: u8) {
         self.send(28, &[0x08, level]).await;
-        // Ping round trip: the subscription is in place.
         self.send(7, &[]).await;
         assert_eq!(self.recv().await.0, 8);
     }
 
-    /// SubscribeLogsResponse lines until one ends with `text`; returns (level, line) of each.
     async fn logs_until(&mut self, text: &str) -> Vec<(u64, String)> {
         let mut lines = Vec::new();
         loop {
             let (t, m) = self.recv().await;
             assert_eq!(t, 29);
-            // [0x08 level][0x1a len message]
             assert_eq!(m[0], 0x08);
             let mut q = 1;
             let level = get_varint(&m, &mut q).unwrap();
@@ -134,7 +128,6 @@ async fn subscribed_clients_get_log_lines_at_their_level() {
                 Some(ApiEvent::ClientConnected { .. })
             ));
 
-            // A debug record reaches the DEBUG subscriber only.
             debug.send(200, &[]).await;
             let lines = debug
                 .logs_until("api: ignoring message type 200 (0 bytes)")
@@ -143,7 +136,6 @@ async fn subscribed_clients_get_log_lines_at_their_level() {
             assert_eq!(*level, 5);
             assert!(line.starts_with("[D][commands.rs:"), "{line}");
 
-            // A warning reaches both.
             let mut bad = Client::connect(port).await;
             bad.send(89, &[]).await;
             for (c, max) in [(&mut debug, 5), (&mut warn, 2)] {

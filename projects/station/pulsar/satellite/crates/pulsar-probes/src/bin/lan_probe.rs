@@ -1,16 +1,3 @@
-//! Probe of the LAN services next to a running daemon: use alternative arbitration ports and the
-//! `_pulsartest._tcp` service type only (docs/stations.md).
-//!
-//!   lan_probe mdns <host> <service> <port> <seconds> [txt...]
-//!       responder for <host>.local with one service; prints every question it answered
-//!   lan_probe claim <station> <port> <wake> <level> [busy]
-//!       claims at once, prints the decision
-//!   lan_probe claim-on-peer <station> <port> <wake> <level> [timeout_s=60] [delay_ms=0]
-//!       claims as soon as another station's claim arrives (same 250 ms window without
-//!       synchronising the starts), or delay_ms later (300 = the early-claim rule: the peer's
-//!       claim is then older than the window but within the 500 ms lookback); prints the decision
-//!   lan_probe listen <port> <seconds>
-//!       prints every claim received
 #![deny(unsafe_code)]
 #![deny(unsafe_op_in_unsafe_fn)]
 
@@ -30,21 +17,17 @@ use tracing_subscriber::filter::LevelFilter;
 use tracing_subscriber::layer::{Context, Layer};
 use tracing_subscriber::prelude::*;
 
-/// A decision comes 250 ms after the claim.
 const DECISION_WAIT: Duration = Duration::from_secs(5);
-/// Peer claims are still printed this long after the decision.
 const PEERS_AFTER: Duration = Duration::from_secs(1);
 const MDNS_ANSWERED: &str = "pulsar_mdns::answered";
 const ARBITER_CLAIM: &str = "pulsar_arbiter::claim";
 
-/// println! that ignores a closed stdout (println! would abort on EPIPE).
 macro_rules! say {
     ($($arg:tt)*) => {{
         let _ = writeln!(std::io::stdout(), $($arg)*);
     }};
 }
 
-/// Diagnostics captured from `tracing`: the services stay free of probe-only channels.
 enum Diag {
     Answered {
         from: String,
@@ -130,7 +113,6 @@ impl<S: Subscriber> Layer<S> for Capture {
     }
 }
 
-/// `0`/`1`/`busy` as the old positional argument.
 fn parse_busy(s: &str) -> Result<bool, String> {
     match s {
         "0" | "false" => Ok(false),
@@ -141,7 +123,6 @@ fn parse_busy(s: &str) -> Result<bool, String> {
 
 #[derive(Subcommand)]
 enum Mode {
-    /// Responder for <host>.local with one service; prints every answered question.
     Mdns {
         host: String,
         service: String,
@@ -149,7 +130,6 @@ enum Mode {
         seconds: u64,
         txt: Vec<String>,
     },
-    /// Claim at once and print the decision.
     Claim {
         station: String,
         port: u16,
@@ -158,7 +138,6 @@ enum Mode {
         #[arg(value_parser = parse_busy, default_value = "0")]
         busy: bool,
     },
-    /// Claim when another station's claim arrives (or delay_ms later).
     ClaimOnPeer {
         station: String,
         port: u16,
@@ -169,8 +148,10 @@ enum Mode {
         #[arg(default_value_t = 0)]
         delay_ms: u64,
     },
-    /// Print every claim received.
-    Listen { port: u16, seconds: u64 },
+    Listen {
+        port: u16,
+        seconds: u64,
+    },
 }
 
 #[derive(Parser)]
@@ -191,7 +172,6 @@ fn main() -> ExitCode {
         )
         .with(Capture { tx: diag_tx })
         .init();
-    // Как в демоне: см. docs/architecture.md, «Модель исполнения», п. 1.
     let rt = match tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .max_blocking_threads(4)
@@ -205,7 +185,6 @@ fn main() -> ExitCode {
     };
     let local = tokio::task::LocalSet::new();
     let code = local.block_on(&rt, run(mode, diag));
-    // The responder's goodbye goes out when its actor stops.
     local.block_on(
         &rt,
         pulsar_core::supervisor().shutdown(Duration::from_secs(3)),
@@ -353,7 +332,6 @@ fn describe(c: &Claim) -> String {
     )
 }
 
-/// Waits for the next peer claim; other diagnostics are skipped.
 async fn next_claim(diag: &mut UnboundedReceiver<Diag>) -> Option<Claim> {
     while let Some(d) = diag.recv().await {
         if let Diag::Claim(c) = d {
@@ -363,8 +341,6 @@ async fn next_claim(diag: &mut UnboundedReceiver<Diag>) -> Option<Claim> {
     None
 }
 
-/// Prints the decision and every peer claim received until 1 s after it, with its time
-/// relative to our claim: a peer that missed the window shows up late instead of not at all.
 async fn report_decision(
     events: &mut UnboundedReceiver<ArbiterEvent>,
     diag: &mut UnboundedReceiver<Diag>,
@@ -403,8 +379,6 @@ async fn report_decision(
     decided
 }
 
-/// Prints every diagnostic of `rx` until `seconds` pass or SIGINT / SIGTERM arrives; returns how
-/// many were printed.
 async fn print_for(
     rx: &mut UnboundedReceiver<Diag>,
     seconds: u64,
@@ -429,7 +403,6 @@ async fn print_for(
     n
 }
 
-/// Pending forever when the handler could not be installed.
 async fn next_signal(s: &mut Option<Signal>) -> Option<()> {
     match s {
         Some(s) => s.recv().await,

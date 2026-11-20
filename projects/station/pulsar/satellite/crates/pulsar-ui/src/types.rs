@@ -1,7 +1,3 @@
-//! Доменные типы интерфейса вместо строк: эффекты кольца, стили музыки часов и кольца, лица
-//! часов, цвет корпуса. Разбор строк — через [`FromStr`], список опций — [`Effect::ALL`],
-//! [`MusicStyle::ALL`], [`ClockMusicStyle::ALL`], [`ClockFace::ALL`].
-
 use std::convert::Infallible;
 use std::fmt;
 use std::str::FromStr;
@@ -9,8 +5,6 @@ use std::str::FromStr;
 use crate::font;
 use crate::led_fx;
 
-/// Эффект пользовательского света и `show_temporary`; `Solid` — ровный цвет, в опциях HA его
-/// нет (там он зовётся "None").
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Effect {
     #[default]
@@ -28,7 +22,6 @@ pub enum Effect {
 }
 
 impl Effect {
-    /// В порядке опций ESPHome (`effect_names()`), без `Solid`.
     pub const ALL: [Self; 10] = [
         Self::Rainbow,
         Self::Breathe,
@@ -60,7 +53,6 @@ impl Effect {
 }
 
 impl FromStr for Effect {
-    /// Неизвестное имя — ошибка; граница решает сама (сейчас это сплошной цвет).
     type Err = ();
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -71,7 +63,6 @@ impl FromStr for Effect {
     }
 }
 
-/// Стиль визуализации музыки кольца (select «Music visualization»).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum MusicStyle {
     #[default]
@@ -104,7 +95,6 @@ impl MusicStyle {
         }
     }
 
-    /// Конкретный стиль рендера; None у "Off" и "All styles" (ими занимается композитор).
     pub fn style(self) -> Option<led_fx::Style> {
         match self {
             Self::Off | Self::All => None,
@@ -124,7 +114,6 @@ impl FromStr for MusicStyle {
     }
 }
 
-/// Стиль музыки часов (select «Clock music»): набор другой, чем у кольца.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum ClockMusicStyle {
     #[default]
@@ -151,7 +140,6 @@ impl FromStr for ClockMusicStyle {
     }
 }
 
-/// Лицо часов: индексы статичных лиц, «Blink», «All faces» и «None» (нет лица).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ClockFace {
     None,
@@ -161,7 +149,6 @@ pub enum ClockFace {
 }
 
 impl ClockFace {
-    /// В порядке опций ESPHome (`face_names()`), без `None`.
     pub const ALL: [Self; 19] = [
         Self::Static(0),
         Self::Static(1),
@@ -193,7 +180,6 @@ impl ClockFace {
         }
     }
 
-    /// Индекс `font::face_glyphs`; None у «None».
     pub fn index(self) -> Option<i32> {
         match self {
             Self::None => None,
@@ -215,8 +201,6 @@ impl FromStr for ClockFace {
     }
 }
 
-/// Цвет корпуса: имя файла `/system/vendor/quasar/ledconfigs/<stem>.json`; пусто — без
-/// коррекции. Набор зависит от прошивки, поэтому списка `ALL` нет.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct CaseColor(Option<String>);
 

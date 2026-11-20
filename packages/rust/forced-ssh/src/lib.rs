@@ -1,17 +1,3 @@
-//! One-exec SSH client for forced commands with pinned `known_hosts`.
-//!
-//! This is the generic part of the former `mcp-gateway` bridge client. Every
-//! call opens one SSH session, requests one command (the server-side forced
-//! command owns the real policy) and returns bounded stdout. The command,
-//! timeout and output limits are caller parameters; nothing here knows about a
-//! particular service.
-//!
-//! `known_hosts` pinning is the security boundary. The client offers only the
-//! host-key algorithms of the key types pinned for the address, so a server
-//! cannot negotiate a type that could never pass verification. Host patterns
-//! follow OpenSSH semantics: comma-separated lists, `!` negation, `*`/`?`
-//! wildcards and `|1|` hashed names.
-
 use std::borrow::Cow;
 use std::fmt;
 use std::path::PathBuf;
@@ -27,36 +13,23 @@ use russh::keys::{
 use russh::{ChannelMsg, Disconnect, Preferred};
 use sha1::Sha1;
 
-/// Default bound for one call, including the SSH handshake.
 pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(15);
-/// Default upper bound for the command answer.
 pub const DEFAULT_MAX_ANSWER_BYTES: usize = 1 << 20;
-/// Default upper bound for collected stderr diagnostics.
 pub const DEFAULT_MAX_STDERR_BYTES: usize = 4 << 10;
 
-/// The phase that failed, for logs and callers.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ErrorClass {
-    /// The private key could not be read or parsed.
     Key,
-    /// The `known_hosts` file could not be read or parsed.
     KnownHosts,
-    /// The TCP connection could not be established.
     Dial,
-    /// The host key is unpinned, mismatched or revoked.
     HostKey,
-    /// The server rejected the public key.
     Auth,
-    /// The SSH handshake failed after the host key was accepted.
     Handshake,
-    /// A channel or exec failed.
     Session,
-    /// The whole call exceeded its timeout.
     Timeout,
 }
 
 impl ErrorClass {
-    /// Stable class name for a structured log line.
     #[must_use]
     pub fn as_str(self) -> &'static str {
         match self {
@@ -72,16 +45,12 @@ impl ErrorClass {
     }
 }
 
-/// How a failed call may be retried.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ErrorKind {
-    /// A dial, handshake, session or timeout failure may succeed later.
     Transient,
-    /// A bad key, file, host key or rejected authentication cannot.
     Permanent,
 }
 
-/// One call failure. It never contains key material or a payload.
 #[derive(Debug)]
 pub struct Error {
     class: ErrorClass,
@@ -96,20 +65,16 @@ impl Error {
         }
     }
 
-    /// The failed phase.
     #[must_use]
     pub fn class(&self) -> ErrorClass {
         self.class
     }
 
-    /// The diagnostic detail. It never contains key material or a payload.
     #[must_use]
     pub fn detail(&self) -> &str {
         &self.detail
     }
 
-    /// Whether a retry may succeed. A timeout, dial, handshake and session
-    /// failure is transient; a rejected host key, key or file is not.
     #[must_use]
     pub fn kind(&self) -> ErrorKind {
         match self.class {
@@ -137,59 +102,39 @@ impl fmt::Display for Error {
 
 impl std::error::Error for Error {}
 
-/// Options for one runner.
 #[derive(Debug, Clone)]
 pub struct Options {
-    /// `host:port` of the SSH server.
     pub address: String,
-    /// The user that owns the restricted key.
     pub user: String,
-    /// An unencrypted ed25519/private key accepted by the server.
     pub key_file: PathBuf,
-    /// Pins the server host key.
     pub known_hosts_file: PathBuf,
-    /// The command requested in the exec channel. A forced command in
-    /// `authorized_keys` decides what actually runs; this is normally the verb
-    /// the agent reads from `$SSH_ORIGINAL_COMMAND`.
     pub command: String,
-    /// Per-call timeout; [`DEFAULT_TIMEOUT`] when `None`.
     pub timeout: Option<Duration>,
-    /// Bound for stdout; [`DEFAULT_MAX_ANSWER_BYTES`] when `None`.
     pub max_answer_bytes: Option<usize>,
-    /// Bound for collected stderr; [`DEFAULT_MAX_STDERR_BYTES`] when `None`.
     pub max_stderr_bytes: Option<usize>,
 }
 
-/// The answer of one call.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Answer {
-    /// Raw stdout, truncated at the configured limit.
     pub stdout: Vec<u8>,
-    /// Non-zero exit codes still carry whatever stdout the command produced.
     pub exit_code: Option<u32>,
 }
 
-/// Executes one forced command per call.
 #[derive(Debug, Clone)]
 pub struct SshRunner {
     options: Options,
 }
 
 impl SshRunner {
-    /// Build a runner. Files are read on every call.
     #[must_use]
     pub fn new(options: Options) -> Self {
         Self { options }
     }
 
-    /// Run the configured command.
     pub async fn run(&self, payload: &[u8]) -> Result<Answer, Error> {
         self.run_command(&self.options.command, payload).await
     }
 
-    /// Run one call with an explicit command, keeping the configured files,
-    /// key, timeout and bounds. Used when the forced command reads its verb
-    /// from `$SSH_ORIGINAL_COMMAND`.
     pub async fn run_command(&self, command: &str, payload: &[u8]) -> Result<Answer, Error> {
         let timeout = self.options.timeout.unwrap_or(DEFAULT_TIMEOUT);
         tokio::time::timeout(timeout, self.call(command, payload))
@@ -206,8 +151,6 @@ impl SshRunner {
             })?;
         let entries = parse_known_hosts(&known_hosts)?;
         let (host, port) = split_address(&self.options.address);
-        // Offer only host key types this host actually pins, so the server
-        // cannot pick a key we would always reject.
         let algorithms = host_key_algorithms(&known_hosts, &self.options.address)?;
 
         let mut config = client::Config {
@@ -294,9 +237,6 @@ impl SshRunner {
         let _ = session
             .disconnect(Disconnect::ByApplication, "", "English")
             .await;
-        // stderr is diagnostics only; it is dropped so a warning can never be
-        // mistaken for the answer. The command name and payload are never
-        // included in an error.
         drop(stderr);
         Ok(Answer { stdout, exit_code })
     }
@@ -350,7 +290,6 @@ impl client::Handler for Handler {
         server_public_key: &PublicKeyOrCertificate,
     ) -> Result<bool, Self::Error> {
         let PublicKeyOrCertificate::PublicKey { key, .. } = server_public_key else {
-            // Certificates need an authority we deliberately do not trust.
             return Err(ConnectError::HostKey);
         };
         if check_host_key_entries(&self.entries, &self.host, self.port, key) {
@@ -361,7 +300,6 @@ impl client::Handler for Handler {
     }
 }
 
-/// Parse a `known_hosts` file into entries.
 fn parse_known_hosts(content: &str) -> Result<Vec<Entry>, Error> {
     KnownHosts::new(content)
         .collect::<Result<Vec<_>, _>>()
@@ -373,14 +311,6 @@ fn parse_known_hosts(content: &str) -> Result<Vec<Entry>, Error> {
         })
 }
 
-/// Host key algorithms the client may negotiate for `address`.
-///
-/// Only algorithms that can verify a pinned key are returned: RSA expands to
-/// `rsa-sha2-256`, `rsa-sha2-512` and `ssh-rsa`, every other type maps to
-/// itself. Marker lines (`@revoked`, `@cert-authority`) are skipped: neither
-/// says which host key type the host presents. An empty result means
-/// `known_hosts` has no entry for the address; the caller then keeps the
-/// library defaults and the host key check still refuses the unknown host.
 pub fn host_key_algorithms(content: &str, address: &str) -> Result<Vec<Algorithm>, Error> {
     let entries: Vec<Entry> = KnownHosts::new(content).filter_map(Result::ok).collect();
     let (host, port) = split_address(address);
@@ -401,7 +331,6 @@ pub fn host_key_algorithms(content: &str, address: &str) -> Result<Vec<Algorithm
     Ok(algorithms)
 }
 
-/// Algorithms that can verify a key of `key_type`.
 fn algorithms_for(key_type: Algorithm) -> Vec<Algorithm> {
     match key_type {
         Algorithm::Rsa { .. } => vec![
@@ -417,11 +346,6 @@ fn algorithms_for(key_type: Algorithm) -> Vec<Algorithm> {
     }
 }
 
-/// Whether the pinned entries accept `key` for `host:port`.
-///
-/// The semantics match Go's `knownhosts` callback: a revoked matching key is
-/// rejected even if another line pins it, a byte-identical key is accepted, and
-/// a key of a pinned type with different bytes is a mismatch.
 #[must_use]
 pub fn check_host_key(content: &str, address: &str, key: &PublicKey) -> bool {
     let Ok(entries) = parse_known_hosts(content) else {
@@ -455,8 +379,6 @@ fn check_host_key_entries(entries: &[Entry], host: &str, port: u16, key: &Public
     false
 }
 
-/// Compare key material, not the `known_hosts` comment (Go compares
-/// `key.Marshal()` bytes only).
 fn same_key(left: &PublicKey, right: &PublicKey) -> bool {
     left.key_data() == right.key_data()
 }
@@ -494,8 +416,6 @@ fn host_patterns_match(patterns: &HostPatterns, host: &str, port: u16) -> bool {
     }
 }
 
-/// Split `host:port` into the parts `known_hosts` matches against, with `22`
-/// implicit.
 fn split_address(address: &str) -> (String, u16) {
     let address = address.trim();
     if let Some(rest) = address.strip_prefix('[')
@@ -525,7 +445,6 @@ fn split_pattern(pattern: &str) -> (&str, u16) {
     (pattern, 22)
 }
 
-/// Render host and port the way `known_hosts` stores them.
 fn normalized_host(host: &str, port: u16) -> String {
     if port == 22 {
         host.to_owned()
@@ -534,8 +453,6 @@ fn normalized_host(host: &str, port: u16) -> String {
     }
 }
 
-/// OpenSSH matching: `*` spans any characters (including separators) and `?`
-/// matches exactly one.
 fn wildcard_match(pattern: &str, text: &str) -> bool {
     let pattern: Vec<char> = pattern.chars().collect();
     let text: Vec<char> = text.chars().collect();

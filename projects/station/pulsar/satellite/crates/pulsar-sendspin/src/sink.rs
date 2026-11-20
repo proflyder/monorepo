@@ -1,12 +1,3 @@
-//! ALSA output of the Sendspin player on the model's playback PCM (dmix, mixed with the GStreamer
-//! channels). `configure` / `release` run on the runtime thread (stream start / end), `write` on
-//! the library's sync task; the PCM is opened lazily by `write`, so the runtime thread never
-//! blocks on it. `io` is held by `write` for its whole duration, including the snd_pcm_wait
-//! slices, so the runtime thread never takes it blocking: configure / release only record a
-//! request (`req`, held for a few instructions) and apply it right away if the audio thread is
-//! idle (try_lock); otherwise the audio thread applies it at its next wait slice and abandons the
-//! write in progress.
-
 use std::sync::atomic::{AtomicU32, Ordering::SeqCst};
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
@@ -18,7 +9,6 @@ use tracing::{debug, error, info};
 use crate::ffi::now_us;
 use crate::gain;
 
-/// Longest snd_pcm_wait() slice inside one write.
 const WAIT_SLICE_MS: i64 = 20;
 const REOPEN_RETRY_MS: u32 = 1000;
 
@@ -34,11 +24,9 @@ pub struct Sink {
     req: Mutex<Req>,
     req_gen: AtomicU32,
     applied_gen: AtomicU32,
-    /// f32 bits of the duck gain the output ramps to, 0..1.
     target_gain: AtomicU32,
 }
 
-/// Audio thread state (under `Sink::io`).
 struct Io {
     device: AlsaDevice,
     active: bool,
@@ -50,7 +38,6 @@ struct Io {
     bits: u8,
     open_failed_logged: bool,
     backoff: Backoff,
-    /// Frames consumed without reaching the device, not yet reported.
     discarded: u32,
     gain: f32,
     scratch: Vec<u8>,
@@ -95,7 +82,6 @@ impl Sink {
         });
     }
 
-    /// Stream ended: drop what is queued and release the device so dmix is not held while idle.
     pub(crate) fn release(&self) {
         self.request(Req::Release);
     }
@@ -103,12 +89,6 @@ impl Sink {
     pub(crate) fn set_gain(&self, g: f32) {
         let g = g.clamp(0.0, 1.0);
         self.target_gain.store(g.to_bits(), SeqCst);
-        // No stream yet (or the device is closed): start the first frame at the new gain instead
-        // of ramping down from 1.0. A desktop/phone volume change before playback is immediate.
-        //
-        // Never block on `io`: the sync thread holds it across a whole `write` (including
-        // `pcm.wait`), and this runs in the controller's event loop on every volume step; a
-        // blocking lock here would stall every channel until the write returns.
         if let Ok(mut io) = self.io.try_lock()
             && (!io.active || !io.device.is_open())
         {
@@ -120,20 +100,13 @@ impl Sink {
         f32::from_bits(self.target_gain.load(SeqCst))
     }
 
-    /// A write now would take the audio: a stream is configured and no request is pending.
-    ///
-    /// Readiness is currently observed through `Status`; kept as the sink-side
-    /// probe for callers that gate on the device instead.
     #[allow(dead_code)]
     pub fn accepts_audio(&self) -> bool {
         !self.pending() && lock(&self.io).active
     }
 
-    /// Sync task: (bytes consumed, frames played to report, their finish time in µs).
     pub(crate) fn write(&self, data: &[u8], timeout_ms: u32) -> (usize, u32, i64) {
         let r = self.write_once(data, timeout_ms);
-        // A request that arrived while `io` was held (request()'s try_lock failed) must not wait
-        // for the next write: a release may be the last event, and the device would stay open.
         if self.pending() {
             self.apply_pending(&mut lock(&self.io));
         }
@@ -154,12 +127,9 @@ impl Sink {
         self.apply_pending(&mut io);
         let bpf = usize::from(io.want_channels) * usize::from(io.want_bits / 8);
         if !io.active || bpf == 0 {
-            return (length, 0, 0); // stale audio after stream end: discard
+            return (length, 0, 0);
         }
         if !io.device.is_open() && !io.open() {
-            // Device unavailable: discard rather than spin the task; the gap is reported as
-            // played with the next timed report so the library's buffered-frames estimate stays
-            // right.
             io.discarded = io.discarded.wrapping_add((length / bpf) as u32);
             return (length - length % bpf, 0, 0);
         }
@@ -200,7 +170,6 @@ impl Sink {
                     }
                 }
                 if self.pending() {
-                    // Stream restarted / ended: this audio is stale.
                     io.scratch = scratch;
                     self.apply_pending(&mut io);
                     return (length, 0, 0);
@@ -219,12 +188,9 @@ impl Sink {
             }
         }
         io.scratch = scratch;
-        // Commit the ramp by the frames actually written; an unwritten tail is presented again.
         io.gain = gain::ramp_end_gain(io.gain, self.target_gain(), io.rate, frames_done);
 
         if frames_done > 0 {
-            // The frames just written finish playing once everything queued ahead of the DAC
-            // (our ring + plug/rate converter + dmix ring) has played: now + snd_pcm_delay().
             if let Ok(delay) = io.device.delay()
                 && delay >= 0
             {
@@ -248,7 +214,7 @@ impl Sink {
         }
         drop(io);
         if lost && frames_done == 0 {
-            return (length - length % bpf, report, finish_us); // device lost mid-write: discard
+            return (length - length % bpf, report, finish_us);
         }
         (frames_done as usize * bpf, report, finish_us)
     }
@@ -305,7 +271,6 @@ impl Io {
             self.close();
         }
         if self.device.is_open() {
-            // Same format: restart from an empty ring.
             let _ = self.device.drop_frames();
             if self.device.prepare().is_err() {
                 self.close();
@@ -318,7 +283,7 @@ impl Io {
         self.open_failed_logged = false;
         self.backoff.reset();
         self.discarded = 0;
-        self.gain = target_gain; // a new stream starts at the current duck level, no ramp
+        self.gain = target_gain;
     }
 
     fn release(&mut self) {
@@ -392,8 +357,6 @@ impl Io {
                 }
                 self.open_failed_logged = true;
                 if self.device.is_open() {
-                    // open_playback succeeded, a parameter step failed: the stream was opened and
-                    // is closed here, as the previous sink reported.
                     info!("sendspin: ALSA '{}' closed", self.playback_name());
                     self.device.close();
                 }
@@ -437,13 +400,12 @@ impl Io {
         }
     }
 
-    /// Applies the (ramping) duck gain into `out`; false: write `data` as is.
     fn scale(&self, data: &[u8], frames: usize, target: f32, out: &mut Vec<u8>) -> bool {
         if self.gain == target && target >= 1.0 {
             return false;
         }
         if self.bits != 16 {
-            return false; // only 16-bit streams are advertised
+            return false;
         }
         gain::scale_s16(
             data,

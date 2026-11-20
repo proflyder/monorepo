@@ -1,9 +1,3 @@
-//! Bearer authentication and graceful serving for axum control APIs.
-//!
-//! [`with_bearer`] wraps a [`Router`] with a constant-time `Authorization:
-//! Bearer <token>` check; [`serve`] owns the `axum::serve` call and stops
-//! accepting connections when the supplied [`CancellationToken`] fires.
-
 use axum::Json;
 use axum::Router;
 use axum::extract::Request;
@@ -20,9 +14,6 @@ use tower_http::limit::RequestBodyLimitLayer;
 use tower_http::timeout::TimeoutLayer;
 use tracing::debug;
 
-/// Plain-text readiness route: `200 ok\n`, matching the Go services.
-// `axum`'s `Handler` is implemented for async functions; there is simply
-// nothing to await in a static readiness body.
 #[allow(clippy::unused_async)]
 pub async fn healthz() -> impl IntoResponse {
     (
@@ -31,12 +22,10 @@ pub async fn healthz() -> impl IntoResponse {
     )
 }
 
-/// Rejects request bodies larger than `bytes` with `413 Payload Too Large`.
 pub fn with_body_limit(router: Router, bytes: usize) -> Router {
     router.layer(RequestBodyLimitLayer::new(bytes))
 }
 
-/// Caps the time a request may take; the layer answers `408 Request Timeout`.
 pub fn with_timeout(router: Router, timeout: Duration) -> Router {
     router.layer(TimeoutLayer::with_status_code(
         StatusCode::REQUEST_TIMEOUT,
@@ -44,7 +33,6 @@ pub fn with_timeout(router: Router, timeout: Duration) -> Router {
     ))
 }
 
-/// Reject requests whose `Authorization` header is not `Bearer <token>`.
 pub async fn require_bearer(token: Token, request: Request, next: Next) -> Response {
     let authorization = request
         .headers()
@@ -64,7 +52,6 @@ pub async fn require_bearer(token: Token, request: Request, next: Next) -> Respo
     next.run(request).await
 }
 
-/// Protect every route of `router` with [`require_bearer`].
 pub fn with_bearer(router: Router, token: Token) -> Router {
     router.layer(middleware::from_fn(move |request, next| {
         let token = token.clone();
@@ -72,10 +59,6 @@ pub fn with_bearer(router: Router, token: Token) -> Router {
     }))
 }
 
-/// Serve `router` on `listener` until `shutdown` is cancelled.
-///
-/// The listener is closed before the future resolves; in-flight requests are
-/// allowed to finish (axum's graceful shutdown).
 pub async fn serve(
     listener: TcpListener,
     router: Router,
@@ -86,8 +69,6 @@ pub async fn serve(
         .await
 }
 
-/// Like [`serve`], but handlers can extract `ConnectInfo<SocketAddr>` — the
-/// per-source-IP rate limiter needs the peer address.
 pub async fn serve_with_connect_info(
     listener: TcpListener,
     router: Router,

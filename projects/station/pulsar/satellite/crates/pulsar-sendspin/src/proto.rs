@@ -1,6 +1,3 @@
-//! Plain protocol values shared by the actor and the C ABI layer (no FFI types here, so the
-//! actor builds and its tests run on the host).
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Codec {
     Flac = 0,
@@ -8,7 +5,6 @@ pub enum Codec {
     Pcm = 2,
 }
 
-/// sendspin::VisualizerDataType (the ones the service asks for).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum VisType {
     Beat = 0,
@@ -16,13 +12,11 @@ pub enum VisType {
     Spectrum = 3,
 }
 
-/// sendspin::VisualizerSpectrumScale.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Scale {
     Log = 1,
 }
 
-/// sendspin::SendspinControllerCommand (transport subset).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Command {
     Play = 0,

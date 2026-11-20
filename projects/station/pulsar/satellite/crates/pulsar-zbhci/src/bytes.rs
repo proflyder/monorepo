@@ -1,7 +1,3 @@
-//! Byte order helpers for the Zigbee radio and deCONZ protocols: Zigbee and pulsar's 0x0Axx radio
-//! messages are little endian, stock zbhci fields big endian. Readers take at least as many bytes
-//! as they decode; callers check the length first.
-
 pub fn put_le16(v: &mut Vec<u8>, x: u16) {
     v.extend_from_slice(&x.to_le_bytes());
 }

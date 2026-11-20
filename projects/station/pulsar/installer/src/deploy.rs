@@ -1,9 +1,3 @@
-//! Deployment: build the payload in a checkout, copy it to `/data/pulsar`, write the boot
-//! hook, migrate old `rootkeeper.sh` hooks and verify the restarted daemon.
-//!
-//! The command order and every message are frozen by `testdata/deploy_*.json` generated
-//! from the Go installer (see docs/development.md, «Правила installer/»).
-
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -56,7 +50,6 @@ pub fn sha256_file(p: &Path) -> String {
     hex::encode(h.finalize())
 }
 
-/// The text up to the first space (sha256sum output -> digest).
 pub fn first_field(s: &str) -> &str {
     s.split(' ').next().unwrap_or("")
 }
@@ -91,18 +84,10 @@ fn git_repo_root(root: &Path) -> PathBuf {
     }
 }
 
-/// `filepath.Ext`: the suffix from the last dot, including a name that is only ".tflite".
 fn go_ext(name: &str) -> &str {
     name.rfind('.').map_or("", |i| &name[i..])
 }
 
-/// Builds missing outputs in a repository checkout; the release archive ships them and no
-/// sources.
-///
-/// Deliberate difference from the Go installer: it called `bazel` from the payload directory
-/// and read `<payload>/bazel-bin`, which only worked when the checkout root was the pulsar
-/// directory. This version accepts `bazel` or the repository's `bazelisk`, runs it at the Git
-/// top level with `--disk_cache=` and asks `bazel info` for the real output base.
 pub fn build(root: &Path, ssh: bool, ui: &mut Ui) -> bool {
     let sat = root.join("satellite");
     if !sat.join("BUILD.bazel").is_file() {
@@ -144,8 +129,6 @@ pub fn build(root: &Path, ssh: bool, ui: &mut Ui) -> bool {
     {
         build_time = String::from_utf8_lossy(&out.stdout).trim().to_string();
     }
-    // The Makefile built both arches. Bazel writes each platform to bazel-bin in turn, so
-    // each build is copied out before the next one replaces it.
     for arch in ["aarch64", "armhf"] {
         let platform = format!("--platforms=//platform/bazel/zig:{arch}_linux");
         let status = Command::new(&bazel)
@@ -168,8 +151,6 @@ pub fn build(root: &Path, ssh: bool, ui: &mut Ui) -> bool {
             Ok(s) => return fail(ui, &exit_status_text(&s)),
             Err(e) => return fail(ui, &e),
         }
-        // The same --define flags: they are part of the configuration, so a different
-        // set would point at another bazel-out directory.
         let info = Command::new(&bazel)
             .args([
                 "info",
@@ -238,11 +219,6 @@ pub fn build(root: &Path, ssh: bool, ui: &mut Ui) -> bool {
     true
 }
 
-/// Copies the daemon, scripts, the radio's firmware images (zigbee) and dropbear (--ssh).
-/// changed: the binary was replaced; sup_changed: supervise.sh differs from the installed
-/// one or the Mini's asound.conf was replaced (the daemon reads it when it starts).
-// The signature mirrors the Go function one-to-one; grouping the arguments would obscure
-// which values are the station's.
 #[allow(clippy::too_many_arguments)]
 pub fn deploy_files(
     adb: &mut dyn Adb,
@@ -291,9 +267,6 @@ pub fn deploy_files(
             return (changed, sup_changed, false);
         }
     }
-    // Scripts: a running shell reads its script incrementally, so replace them atomically
-    // (new inode). A running supervisor keeps executing the old inode: when supervise.sh
-    // changed it is reloaded.
     let sup_have = adb
         .sh(
             s,
@@ -324,8 +297,6 @@ pub fn deploy_files(
         return (changed, sup_changed, false);
     }
     if code == "yandexmini" {
-        // The Mini needs a dmix PCM over hw:0,0 so MUSIC, ANNOUNCE and Sendspin share the
-        // speaker; the daemon selects /data/pulsar/asound.conf through ALSA_CONFIG_PATH.
         let want = sha256_file(&deploy.join("asound.conf"));
         let have = adb
             .sh(
@@ -366,7 +337,6 @@ pub fn deploy_files(
             {
                 return (changed, sup_changed, false);
             }
-            // The running daemon read the old config at start; reload the supervisor and daemon.
             sup_changed = true;
         }
     }
@@ -387,8 +357,6 @@ pub fn deploy_files(
         let _ = adb.sh_to(ui.out, s, "sync");
     }
 
-    // The Ricardo detector is a separate model, not part of the daemon binary.
-    // A checkout without satellite/wakewords keeps whatever is installed.
     if !deploy_wake_models(adb, root, s, ui) {
         return (changed, sup_changed, false);
     }
@@ -431,7 +399,6 @@ pub fn deploy_files(
                 .is_ok();
         }
         if ok {
-            // Running binaries stay busy; mv replaces them atomically.
             ok = adb
                 .sh_to(
                     ui.out,
@@ -455,10 +422,6 @@ pub fn deploy_files(
     (changed, sup_changed, true)
 }
 
-/// Copies every `*.tflite` from `satellite/wakewords` to `/data/pulsar/wakewords`. The model
-/// is deliberately not part of the public source tree: a release or checkout that does not
-/// contain it keeps the installed model, and a fresh install without one logs the missing
-/// Ricardo detector instead of failing the whole daemon.
 fn deploy_wake_models(adb: &mut dyn Adb, root: &Path, s: &str, ui: &mut Ui) -> bool {
     let dir = root.join("satellite").join("wakewords");
     let Ok(entries) = std::fs::read_dir(&dir) else {
@@ -525,9 +488,6 @@ fn deploy_wake_models(adb: &mut dyn Adb, root: &Path, s: &str, ui: &mut Ui) -> b
     true
 }
 
-/// Copies one of pulsar's radio firmware images, read by the daemon only when the Zigbee
-/// role that needs it is chosen. A checkout without `radio/build.sh` output keeps the
-/// installed one.
 fn deploy_radio_image(adb: &mut dyn Adb, root: &Path, s: &str, name: &str, ui: &mut Ui) -> bool {
     let img = root.join("radio").join("out").join(name);
     if img.metadata().map_or(0, |m| m.len()) == 0 {
@@ -570,11 +530,7 @@ fn deploy_radio_image(adb: &mut dyn Adb, root: &Path, s: &str, name: &str, ui: &
     .is_ok()
 }
 
-/// Makes `INIT_PATH` current, then removes the hooks older installers added to
-/// rootkeeper.sh. note: autostart could not be written (said in the final summary); lost:
-/// nothing starts pulsar at boot; !ok: station error.
 pub fn boot_autostart(adb: &mut dyn Adb, s: &str, ts: &str, ui: &mut Ui) -> (String, bool, bool) {
-    // Dropbear is installed by --ssh, in this run or an earlier one: never drop its autostart.
     let dropbear = adb.sh(s, "[ -x /data/dropbear/start.sh ]").is_ok();
     let want = init_script(dropbear);
     let want_sum = sha256_str(&want);
@@ -597,8 +553,6 @@ pub fn boot_autostart(adb: &mut dyn Adb, s: &str, ts: &str, ui: &mut Ui) -> (Str
     (String::new(), false, migrate_rootkeeper(adb, s, ts, ui))
 }
 
-/// Writes `want` to `INIT_PATH`. `reason != ""`: refused, nothing written (protected or
-/// unreadable rootfs, remount failed); !ok: station error, reported on stderr.
 fn write_init_script(
     adb: &mut dyn Adb,
     s: &str,
@@ -616,7 +570,6 @@ fn write_init_script(
     let Ok(cmdline) = adb.sh(s, "cat /proc/cmdline") else {
         return ("cannot read /proc/cmdline".to_string(), true);
     };
-    // The pipe keeps ls from formatting for the pty (columns, colour).
     let mapper = adb
         .sh(s, "ls /dev/mapper 2>/dev/null | cat")
         .unwrap_or_default();
@@ -645,7 +598,6 @@ fn write_init_script(
     if adb.push(s, &file, &src).is_err() {
         return (String::new(), false);
     }
-    // Everything from here on removes the staged file.
     let result = write_init_script_pushed(adb, s, &src, want_sum, rw, want, ui);
     let _ = adb.sh(s, &format!("rm -f {src}"));
     result
@@ -661,7 +613,6 @@ fn write_init_script_pushed(
     want: &str,
     ui: &mut Ui,
 ) -> (String, bool) {
-    // Checked by the shell that runs it at boot (busybox sh).
     if adb.sh(s, &format!("sh -n {src}")).is_err() {
         ui.error(&format!(
             "{s}: {src} fails sh -n on the device, not installed"
@@ -670,8 +621,6 @@ fn write_init_script_pushed(
     }
     let out = adb.sh_raw(s, &write_init_cmd(src, want_sum, !rw));
     let (reason, ok) = match out {
-        // The write command ends with `exit 1` after remount-rw-failed: the marker still
-        // decides the refusal, exactly like Go (which inspected output before the error).
         Ok(o) if o.contains("remount-rw-failed") => {
             ("mount -o remount,rw / failed".to_string(), true)
         }
@@ -701,9 +650,7 @@ fn write_init_script_pushed(
             (String::new(), false)
         }
     };
-    // Whatever happened in between, / must not stay read-write.
     if !rw {
-        // Go ignores `found` here: an unreadable /proc/mounts also counts as done.
         let now = adb.sh(s, "cat /proc/mounts");
         if !now.as_ref().is_ok_and(|m| !root_mount_rw(m).0) {
             let _ = adb.sh(s, "mount -o remount,ro /");
@@ -719,7 +666,6 @@ fn write_init_script_pushed(
     (reason, ok)
 }
 
-/// After `INIT_PATH` could not be written, tells what still starts pulsar at boot.
 fn autostart_fallback(adb: &mut dyn Adb, s: &str, reason: &str, ui: &mut Ui) -> (String, bool) {
     let hook = format!("grep -qxF '{HOOK_SAT}' {INIT_PATH}");
     if adb.sh(s, &hook).is_ok() {
@@ -753,7 +699,6 @@ fn autostart_fallback(adb: &mut dyn Adb, s: &str, reason: &str, ui: &mut Ui) -> 
     )
 }
 
-/// `RK_PATH`'s content; `exists` is false when there is no such file.
 fn read_rootkeeper(adb: &mut dyn Adb, s: &str, ui: &mut Ui) -> (String, bool, bool) {
     if adb.sh(s, &format!("[ -f {RK_PATH} ]")).is_err() {
         return (String::new(), false, true);
@@ -778,8 +723,6 @@ fn read_rootkeeper(adb: &mut dyn Adb, s: &str, ui: &mut Ui) -> (String, bool, bo
     }
 }
 
-/// Removes the hook lines older installers added to rootkeeper.sh (now in `INIT_PATH`),
-/// keeping a backup. Never creates or deletes the file: it belongs to the root method.
 fn migrate_rootkeeper(adb: &mut dyn Adb, s: &str, ts: &str, ui: &mut Ui) -> bool {
     let (rk, exists, ok) = read_rootkeeper(adb, s, ui);
     if !ok || !exists {
@@ -789,7 +732,6 @@ fn migrate_rootkeeper(adb: &mut dyn Adb, s: &str, ts: &str, ui: &mut Ui) -> bool
     if removed == 0 {
         return true;
     }
-    // Nothing but our hook lines and the blank separators we added may go.
     let bad = check_rootkeeper(&out, &rk);
     if !bad.is_empty() {
         ui.error(&format!(
@@ -846,7 +788,6 @@ fn migrate_rootkeeper(adb: &mut dyn Adb, s: &str, ts: &str, ui: &mut Ui) -> bool
     ui.line(&format!(
         "removed the old pulsar lines from {RK_PATH}, diff against {bak} on the device:"
     ));
-    // busybox diff exits 1 when the files differ; its output is the point.
     let d = match adb.sh_raw(s, &format!("diff {bak} {RK_PATH}")) {
         Ok(d) => d,
         Err(e) => e.out().to_string(),
@@ -857,10 +798,6 @@ fn migrate_rootkeeper(adb: &mut dyn Adb, s: &str, ts: &str, ui: &mut Ui) -> bool
     true
 }
 
-/// Runs after a (re)start, at ~10 s and again at ~30 s: the process is alive and, in the log
-/// after the install marker, there is exactly one `=== start` and no crash report, exit or
-/// supervisor message (a binary that crashes and is restarted in between would otherwise
-/// look healthy). On failure, offers to put the previous binary back.
 pub fn health_check(
     adb: &mut dyn Adb,
     s: &str,
@@ -879,7 +816,6 @@ pub fn health_check(
         } else {
             Duration::from_secs(20)
         });
-        // The log may have been copy-truncated by supervise.sh meanwhile: the older half is in .1.
         let full = adb
             .sh(
                 s,
@@ -899,8 +835,6 @@ pub fn health_check(
             unknown = true;
             break;
         }
-        // The old daemon's exit (and the restart) land after the marker: judge only what
-        // follows the first `=== start` after it, which is the new daemon's.
         let after = log
             .split_once(mark)
             .map_or(log.as_str(), |(_, after)| after);
@@ -914,7 +848,6 @@ pub fn health_check(
             .split('\n')
             .filter(|l| l.starts_with("=== start"))
             .count();
-        // «=== alsa:» от supervise.sh — не сбой; см. docs/development.md, «Супервизор».
         if adb.sh_to(ui.out, s, "pidof pulsar >/dev/null").is_err()
             || n != 1
             || log.contains("=== CRASH")
@@ -968,8 +901,6 @@ pub fn health_check(
 }
 
 #[allow(clippy::too_many_arguments)]
-/// Deploys, (re)starts and checks one station; every step checks its own status. `note` is
-/// set when autostart could not be (re)written; `lost`: the station has no autostart at all.
 pub fn install_one(
     adb: &mut dyn Adb,
     root: &Path,
@@ -1004,7 +935,6 @@ pub fn install_one(
         return (true, note, lost);
     }
     ui.line(&format!("== {s}: start"));
-    // Marker in the log: the health check looks only at what happens after it.
     let mark = format!(
         "=== install-marker {} {}",
         std::process::id(),
@@ -1034,7 +964,6 @@ pub fn install_one(
     (true, note, lost)
 }
 
-/// `YYYYMMDDHHMMSS`, local time like Go's `time.Now().Format`.
 fn timestamp() -> String {
     let now = time::OffsetDateTime::now_local().unwrap_or_else(|_| time::OffsetDateTime::now_utc());
     format!(
@@ -1048,7 +977,6 @@ fn timestamp() -> String {
     )
 }
 
-/// An installable station, in the order probe printed it.
 #[derive(Debug, Clone)]
 pub struct Station {
     pub serial: String,
@@ -1057,8 +985,6 @@ pub struct Station {
     pub zigbee: bool,
 }
 
-/// One status line for `s`; records it in `found` if it is installable. Returns `true` when a
-/// device we connected to ourselves must be disconnected again (it is not installable).
 pub fn probe(
     adb: &mut dyn Adb,
     s: &str,
@@ -1075,9 +1001,6 @@ pub fn probe(
     };
     let (mut code, mut supported) = station_code(&compat);
     if code.is_empty() {
-        // The first-generation Mini has no yandex,* compatible entry. axg_s420_v03 is an
-        // Amlogic reference board, not a Yandex marker: require quasar.cfg's deviceType too
-        // (the daemon and boot.sh use the same pair).
         let dtid = adb
             .sh(s, r"tr -d '\0' </proc/device-tree/amlogic-dt-id")
             .unwrap_or_default();
@@ -1103,8 +1026,6 @@ pub fn probe(
     if adb.sh(s, "id -u").unwrap_or_default() != "0" {
         return skip(ui, &format!("{name} — adb is not root, skipped"));
     }
-    // `; true`: a missing loader is not an error. Without it the last [ -x ] exits 1 on a
-    // normal Midi (no armhf loader) and sh() reports a failure that is not an adb failure.
     let Ok(loaders) = adb.sh(
         s,
         r"[ -x /lib/ld-linux-aarch64.so.1 ] && echo aarch64; [ -x /lib/ld-linux-armhf.so.3 ] && echo armhf; true",

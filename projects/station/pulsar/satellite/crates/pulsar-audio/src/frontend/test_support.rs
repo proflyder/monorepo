@@ -1,5 +1,3 @@
-//! Скриптовые порты и хелперы тестов фронтенда.
-
 use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering::Relaxed;
@@ -20,7 +18,6 @@ use super::ports::{CaptureSource, Clock, Detection, Detector, WakeStore};
 use super::processing::{Processing, ProcessingConfig};
 use super::{FrontendEvent, FrontendStats, lock};
 
-/// One chunk a scripted engine answers for: the two VQE outputs and process success.
 pub(super) struct Step {
     gain: Vec<f32>,
     omni: Vec<f32>,
@@ -36,7 +33,6 @@ impl Step {
         }
     }
 
-    /// `VQE_OMNI` и `VQE_OMNI_WITH_GAIN` с разными уровнями.
     pub(super) fn outputs(frame: usize, omni: f32, gain: f32) -> Self {
         Self {
             gain: vec![gain; frame],
@@ -64,7 +60,6 @@ impl ScriptedEngine {
         Self::with_sizes(512, 512, steps)
     }
 
-    /// Движок с размерами VQE конкретной модели: `chunk` кадров захвата → `frame` выходных.
     pub(super) fn with_sizes(chunk: usize, frame: usize, steps: Vec<Step>) -> Self {
         Self {
             frame,
@@ -275,7 +270,6 @@ pub(super) fn midi() -> &'static CaptureLayout {
         .capture
 }
 
-/// Interleaved capture block with every channel equal to `sample`.
 pub(super) fn block(capture: &CaptureLayout, frames: usize, sample: i16) -> Vec<i16> {
     vec![sample; frames * capture.channels as usize]
 }
@@ -324,7 +318,6 @@ pub(super) fn steps(n: usize, amp: f32) -> Vec<Step> {
     (0..n).map(|_| Step::gain(512, amp)).collect()
 }
 
-/// Each chunk's samples are its index, so a pre-roll is checked by value.
 pub(super) fn indexed_steps(n: usize) -> Vec<Step> {
     (0..n)
         .map(|k| Step {

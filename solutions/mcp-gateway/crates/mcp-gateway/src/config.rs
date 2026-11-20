@@ -1,142 +1,79 @@
-//! Process configuration, ported one-to-one from
-//! `solutions/mcp-gateway/internal/config/config.go`.
-//!
-//! Everything is read from the environment; secrets are only read from the
-//! files named by `*_FILE` variables so the deployment never embeds a token in
-//! a manifest and the process can run with a read-only projected volume.
-
 use std::collections::BTreeSet;
 use std::time::Duration;
 
 use jiff::tz::TimeZone;
 
-/// Default listen address.
 pub const DEFAULT_HTTP_ADDR: &str = ":8080";
-/// Default enabled tool groups.
 pub const DEFAULT_GROUPS: &str = "infra.read";
-/// Default pending-action TTL.
 pub const DEFAULT_PENDING_TTL: Duration = Duration::from_secs(90);
-/// Default restart cooldown.
 pub const DEFAULT_COOLDOWN: Duration = Duration::from_secs(5 * 60);
-/// Default delay before a self-disrupting restart.
 pub const DEFAULT_SELF_RESTART_DELAY: Duration = Duration::from_secs(20);
-/// Default per-backend query timeout.
 pub const DEFAULT_QUERY_TIMEOUT: Duration = Duration::from_secs(4);
-/// Default whole `infra_status` budget.
 pub const DEFAULT_STATUS_TIMEOUT: Duration = Duration::from_secs(8);
-/// Default whole `infra_report` budget.
 pub const DEFAULT_REPORT_TIMEOUT: Duration = Duration::from_secs(9);
-/// Default returned log payload cap.
 pub const DEFAULT_LOG_BYTE_CAP: usize = 64 << 10;
-/// Default Telegram Bot API root.
 pub const DEFAULT_TELEGRAM_API_URL: &str = "https://api.telegram.org";
-/// Default home timezone (the zone sent as `Time-Zone` to the scheduler).
 pub const DEFAULT_TIMEZONE: &str = "Asia/Almaty";
-/// Default bb bridge timeout.
 pub const DEFAULT_BB_TIMEOUT: Duration = Duration::from_secs(15);
-/// Default bb SSH user.
 pub const DEFAULT_BB_USER: &str = "bb";
 
-/// A validated process configuration.
 #[derive(Debug, Clone)]
 pub struct Config {
-    /// Listen address, for example `:8080`.
     pub http_addr: String,
-    /// MCP bearer token.
     pub auth_token: String,
-    /// Enabled tool groups, in configuration order.
     pub groups: Vec<String>,
 
-    /// Catalog YAML path.
     pub catalog_file: String,
 
-    /// Prometheus base URL.
     pub prometheus_url: String,
-    /// Alertmanager base URL.
     pub alertmanager_url: String,
-    /// Loki base URL.
     pub loki_url: String,
 
-    /// Home Assistant REST endpoint for `ha_*` checks.
     pub ha_url: String,
-    /// Home Assistant token file.
     pub ha_token_file: String,
-    /// Home Assistant token.
     pub ha_token: String,
 
-    /// Kubernetes API root.
     pub kube_api_url: String,
-    /// ServiceAccount token file.
     pub kube_token_file: String,
-    /// CA bundle file.
     pub kube_ca_file: String,
 
-    /// Telegram Bot API root.
     pub telegram_api_url: String,
-    /// Telegram bot token file.
     pub telegram_token_file: String,
-    /// Telegram chat id file.
     pub telegram_chat_file: String,
-    /// Telegram bot token.
     pub telegram_token: String,
-    /// Fixed Telegram recipient.
     pub telegram_chat_id: String,
 
-    /// Pending restart TTL.
     pub pending_ttl: Duration,
-    /// Restart cooldown.
     pub cooldown: Duration,
-    /// Delay before a self-disrupting restart.
     pub self_restart_delay: Duration,
-    /// Per-backend query timeout.
     pub query_timeout: Duration,
-    /// Whole `infra_status` budget.
     pub status_timeout: Duration,
-    /// Whole `infra_report` budget.
     pub report_timeout: Duration,
-    /// Returned log payload cap.
     pub log_byte_cap: usize,
 
-    /// bb SSH address.
     pub bb_address: String,
-    /// bb SSH user.
     pub bb_user: String,
-    /// bb SSH key file.
     pub bb_key_file: String,
-    /// Pinned `known_hosts` file.
     pub bb_known_hosts_file: String,
-    /// bb bridge timeout.
     pub bb_timeout: Duration,
-    /// Personal allow-list of bb targets.
     pub bb_targets_file: String,
-    /// Thread that receives work-profile voice commands.
     pub bb_dispatcher_thread_id: String,
 
-    /// Voice token file; enables `/v1/voice/*` when set.
     pub voice_token_file: String,
-    /// Voice bearer token.
     pub voice_token: String,
 
     pub app_token_file: String,
     pub app_token: String,
 
-    /// Durable scheduler base URL.
     pub scheduler_url: String,
-    /// Durable scheduler token file.
     pub scheduler_token_file: String,
-    /// Durable scheduler bearer token.
     pub scheduler_token: String,
 
-    /// Phone push service base URL.
     pub push_url: String,
-    /// Phone push token file.
     pub push_token_file: String,
-    /// Phone push bearer token.
     pub push_token: String,
 
-    /// IANA timezone name.
     pub timezone: String,
-    /// Loaded timezone.
     pub location: TimeZone,
 }
 
@@ -144,13 +81,10 @@ type Getenv<'a> = dyn Fn(&str) -> Option<String> + 'a;
 type ReadFile<'a> = dyn Fn(&str) -> std::io::Result<Vec<u8>> + 'a;
 
 impl Config {
-    /// Reads and validates the process environment.
     pub fn load() -> Result<Self, String> {
         Self::load_from(&|key| std::env::var(key).ok(), &|path| std::fs::read(path))
     }
 
-    /// Reads and validates a supplied environment; the seam keeps the config
-    /// tests free of process-global state.
     pub fn load_from(getenv: &Getenv<'_>, read_file: &ReadFile<'_>) -> Result<Self, String> {
         let mut cfg = Self {
             http_addr: value_or(getenv, "MCP_HTTP_ADDR", DEFAULT_HTTP_ADDR),
@@ -280,7 +214,6 @@ impl Config {
         Ok(cfg)
     }
 
-    /// Loopback base URL for the `-healthcheck` probe.
     pub fn healthcheck_url(&self) -> Result<String, String> {
         let (host, port) = self
             .http_addr

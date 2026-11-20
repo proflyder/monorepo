@@ -1,10 +1,3 @@
-//! Passive `/dev/input/eventN` reader and the short-press/hold gesture machine.
-//!
-//! Events are read without `EVIOCGRAB`, so Pulsar keeps receiving the hardware
-//! mute key. Only `EV_KEY`/`KEY_MUTE` transitions reach the tracker: reacting
-//! to any `input_event` (brightness, jack detect, ...) could open the setup
-//! window by accident.
-
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
@@ -19,8 +12,6 @@ pub const EV_KEY: u16 = 1;
 pub const KEY_MUTE: u16 = 113;
 pub const KEY_REPEAT: i32 = 2;
 
-/// 32-bit armhf `struct input_event`: timeval(i32,i32), type u16, code u16,
-/// value i32. Parsed explicitly without `unsafe`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct InputEvent {
     pub sec: i32,
@@ -49,8 +40,6 @@ pub enum ButtonEvent {
     Decision(usize),
 }
 
-/// Pure press grouping. All timers are deadlines, so tests advance the paused
-/// Tokio clock instead of sleeping for production intervals.
 pub struct ButtonTracker {
     press_at: Option<Instant>,
     presses: Vec<Instant>,
@@ -79,7 +68,6 @@ impl ButtonTracker {
         }
     }
 
-    /// Non-key events, other keys and auto-repeat are ignored.
     pub fn on_event(&mut self, event: InputEvent, now: Instant) {
         if event.event_type != EV_KEY || event.code != KEY_MUTE {
             return;
@@ -143,8 +131,6 @@ async fn sleep_until(deadline: Option<Instant>) {
 }
 
 impl Gateway {
-    /// Read the button device until shutdown; a missing device disables the
-    /// button without stopping the gateway.
     pub async fn run_button(
         self: Arc<Self>,
         path: &Path,

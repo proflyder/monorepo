@@ -1,7 +1,3 @@
-//! Small D-Bus client for exercising the gateway on the station:
-//! `bletest --destination :1.4 3 1` writes Commit,
-//! `bletest --destination :1.4 --status 4` reads Status.
-
 use std::collections::HashMap;
 use std::process::ExitCode;
 
@@ -14,7 +10,6 @@ use zbus::Variant;
 struct Args {
     #[arg(long, default_value = "com.station.gateway")]
     destination: String,
-    /// 0 SSID, 1 PSK, 2 token, 3 commit, 4 status.
     index: usize,
     value: Option<String>,
     #[arg(long)]

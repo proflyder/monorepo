@@ -1,16 +1,7 @@
-//! Read-only safety checks for `deploy.sh --execute`.
-//!
-//! Ported from `platform/deploy/internal/preflight`: retired legacy HA writers
-//! must be absent or `off`, no alarm may be ringing, the scheduler endpoint must
-//! match, and the scheduler must answer ready. The HA token is read from the
-//! token file and never printed; any failure exits 1 with the Python messages.
-
 use std::io::Write;
 
 use crate::http::{Client, PREFLIGHT_TIMEOUT};
 
-/// Retired HA schedule writers. A missing entity is safe; an existing one must
-/// be exactly `off`.
 pub const LEGACY_WRITERS: &[&str] = &[
     "automation.alarm_scheduler",
     "automation.schedules_alarm_dispatcher",
@@ -21,21 +12,14 @@ pub const LEGACY_WRITERS: &[&str] = &[
 const OK_MESSAGE: &str =
     "preflight ok: retired writers absent/off, no ringing alarm, scheduler ready";
 
-/// One preflight run.
 pub struct Options<'a> {
-    /// Home Assistant base URL.
     pub ha_url: &'a str,
-    /// File with the HA token.
     pub ha_token_file: &'a str,
-    /// Scheduler base URL.
     pub scheduler_url: &'a str,
-    /// File with the scheduler token.
     pub scheduler_token_file: &'a str,
-    /// Expected `input_text.scheduler_endpoint` value.
     pub expected_endpoint: &'a str,
 }
 
-/// Returns failures for writers that could still execute schedules.
 #[must_use]
 pub fn legacy_writer_failures(states: &std::collections::BTreeMap<String, String>) -> Vec<String> {
     let mut failures = Vec::new();
@@ -51,7 +35,6 @@ pub fn legacy_writer_failures(states: &std::collections::BTreeMap<String, String
     failures
 }
 
-/// Executes every check and returns the process exit status.
 pub fn run(options: &Options, stdout: &mut dyn Write) -> i32 {
     let client = Client::new(PREFLIGHT_TIMEOUT);
     let ha_token = read_token(options.ha_token_file);

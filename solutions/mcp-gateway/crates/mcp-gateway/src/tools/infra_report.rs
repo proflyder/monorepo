@@ -1,5 +1,3 @@
-//! `infra.report`: deliver a long, HTML-escaped Telegram report.
-
 use std::sync::Arc;
 
 use serde::Serialize;
@@ -8,13 +6,11 @@ use serde_json::{Value, json};
 use super::{Annotations, BoxFuture, Deps, ToolGroup, ToolOutcome, ToolSpec, failure, respond};
 use crate::domain::redact;
 
-/// The `infra.report` group.
 pub struct ReportGroup {
     deps: Arc<Deps>,
 }
 
 impl ReportGroup {
-    /// Build the group.
     #[must_use]
     pub fn new(deps: Arc<Deps>) -> Self {
         Self { deps }

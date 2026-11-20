@@ -1,11 +1,7 @@
-//! Output statistics of a Sendspin-style writer: frames written, the delay the device reported,
-//! xruns and the net rate against wall-clock time.
-
 use std::fmt::Write as _;
 
 const REPORT_US: i64 = 10_000_000;
 
-/// Counters of one open device; reset when the device is opened.
 #[derive(Clone, Copy, Debug)]
 pub struct Stats {
     rate: u32,
@@ -36,10 +32,7 @@ impl Stats {
         }
     }
 
-    /// A new device: the counters describe the current open only.
     pub fn reset(&mut self, rate: u32, now_us: i64) {
-        // The delay of the device just closed is still the best estimate of what it holds; a
-        // reopen keeps it, as before.
         let last_delay = self.last_delay_frames;
         *self = Self::new();
         self.last_delay_frames = last_delay;
@@ -55,7 +48,6 @@ impl Stats {
         self.frames_total = self.frames_total.saturating_add(frames as u64);
     }
 
-    /// Records the device's delay reading and the first write time.
     pub fn record_delay(&mut self, delay: i64, now_us: i64) {
         if delay < 0 {
             return;
@@ -68,7 +60,6 @@ impl Stats {
         }
     }
 
-    /// The text of a periodic report, or `None` before the first write (or without a rate).
     pub fn maybe_report(&mut self, now_us: i64, channels: u8, gain: f32) -> Option<String> {
         if now_us - self.report_us < REPORT_US {
             return None;
@@ -136,7 +127,6 @@ mod tests {
             text,
             "48000 Hz/2 ch: 0.0 s total, last 10.0 s: 0.000 s played (-1000000 ppm), output delay 10.0 ms (min 10.0, max 10.0), xruns 0, duck gain 1.00"
         );
-        // The min/max window restarts after a report and prints i32::MAX as before.
         let text = s.maybe_report(20_000_000, 2, 1.0).unwrap();
         assert!(text.contains("min 44739242.6"), "{text}");
     }

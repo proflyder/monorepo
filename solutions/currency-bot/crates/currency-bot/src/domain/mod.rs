@@ -1,5 +1,3 @@
-//! Domain layer: pure model, parser, alert planner, message and schedules.
-
 pub mod alerts;
 pub mod clock;
 pub mod message;

@@ -1,13 +1,3 @@
-//! Parity runner for the frozen contract fixtures.
-//!
-//! Reads `testdata/frozen/manifest.json`, runs the Rust `home-deploy` binary on
-//! every case marked `implemented` and compares stdout, stderr, the exit code
-//! and every declared output file byte for byte with the values recorded from
-//! the Go binary. Cases whose command is not ported yet are reported as skips
-//! with the reason from the manifest, so the remaining work stays visible.
-//!
-//! Usage: `parity_runner <home-deploy binary> <frozen directory>`
-
 use std::collections::HashMap;
 use std::fs;
 use std::io::{Read, Write};
@@ -163,7 +153,6 @@ fn run_case(binary: &Path, root: &Path, case: &Value) -> Result<(), String> {
     Ok(())
 }
 
-/// Replaces the clock-derived smoke Job name with the fixture placeholder.
 fn normalize_smoke(bytes: &[u8]) -> Vec<u8> {
     const MARKER: &[u8] = b"hermes-smoke-";
     let mut output = Vec::with_capacity(bytes.len());
@@ -188,7 +177,6 @@ fn normalize_smoke(bytes: &[u8]) -> Vec<u8> {
     output
 }
 
-/// Returns the local port of a preflight URL in argv.
 fn local_port(argv: &[String]) -> Option<u16> {
     const PREFIX: &str = "http://127.0.0.1:";
     for argument in argv {
@@ -204,7 +192,6 @@ fn local_port(argv: &[String]) -> Option<u16> {
     None
 }
 
-/// Serves the case's `http.json` map while the command runs.
 struct Server {
     stop: Arc<AtomicBool>,
     handle: Option<JoinHandle<()>>,
@@ -264,8 +251,6 @@ fn start_server(cwd: &Path, port: u16) -> Result<Server, String> {
 }
 
 fn serve_connection(mut stream: TcpStream, routes: &HashMap<String, (u16, String)>) {
-    // Accepted sockets can inherit non-blocking mode from the listener on
-    // macOS; reads must block until the request headers arrive.
     let _ = stream.set_nonblocking(false);
     let _ = stream.set_read_timeout(Some(Duration::from_secs(5)));
     let mut request = Vec::new();
@@ -296,8 +281,6 @@ fn serve_connection(mut stream: TcpStream, routes: &HashMap<String, (u16, String
     let _ = stream.write_all(response.as_bytes());
 }
 
-/// Recursively copies a fixture case so a test run never writes into the
-/// checkout (render outputs and fake command traces are generated files).
 fn copy_dir(source: &Path, target: &Path) -> Result<(), String> {
     fs::create_dir_all(target).map_err(|error| format!("create {}: {error}", target.display()))?;
     let entries =

@@ -1,10 +1,3 @@
-//! Replaces a live Deployment with its rendered manifest.
-//!
-//! `kubectl apply`/`patch` only add or update fields, so drift added by an
-//! earlier ad-hoc patch stays forever. This helper renders the desired object
-//! and replaces the live Deployment with it, keeping the same argv, carry-over
-//! rules and messages as `platform/deploy/internal/converge`.
-
 use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
@@ -16,23 +9,15 @@ use crate::gojson;
 use crate::process::Runner;
 use crate::yaml;
 
-/// One converge request.
 pub struct Options<'a> {
-    /// Kubernetes namespace.
     pub namespace: &'a str,
-    /// Deployment name.
     pub name: &'a str,
-    /// Rendered multi-document manifest.
     pub file: &'a str,
-    /// Keep the live replica count.
     pub preserve_replicas: bool,
-    /// Keep the live container env/envFrom.
     pub preserve_env: bool,
-    /// Append `<name>\t<status>` after the Deployment was applied.
     pub summary_file: &'a str,
 }
 
-/// Parses every non-empty YAML document in the rendered file into JSON objects.
 pub fn desired_objects(path: &str) -> Result<Vec<Map<String, Value>>, String> {
     let raw =
         fs::read_to_string(path).map_err(|error| format!("open {path}: {}", reason(&error)))?;
@@ -51,7 +36,6 @@ pub fn desired_objects(path: &str) -> Result<Vec<Map<String, Value>>, String> {
     Ok(objects)
 }
 
-/// Returns the single Deployment document.
 pub fn desired_deployment(objects: &[Map<String, Value>], path: &str) -> Result<Value, String> {
     let deployments: Vec<&Map<String, Value>> = objects
         .iter()
@@ -66,7 +50,6 @@ pub fn desired_deployment(objects: &[Map<String, Value>], path: &str) -> Result<
     Ok(Value::Object(deployments[0].clone()))
 }
 
-/// Drives kubectl and returns the human-readable result line.
 pub fn converge(options: &Options, runner: &dyn Runner) -> Result<String, String> {
     let objects = desired_objects(options.file)?;
     let mut desired = desired_deployment(&objects, options.file)?;
@@ -126,8 +109,6 @@ pub fn converge(options: &Options, runner: &dyn Runner) -> Result<String, String
     Ok(format!("{}: converged to manifest", options.name))
 }
 
-/// Reads `metadata.generation`. The API server increments it exactly when the
-/// desired state changes, which is the same signal `kubectl apply` uses.
 fn generation(object: &Value) -> String {
     let Some(value) = object
         .get("metadata")
@@ -143,7 +124,6 @@ fn generation(object: &Value) -> String {
     }
 }
 
-/// Compares the generation before the replace with the one reported afterwards.
 fn rollout_status(options: &Options, before: &str, runner: &dyn Runner) -> String {
     if options.summary_file.is_empty() {
         return String::new();
@@ -329,7 +309,6 @@ fn nested_string(object: &Value, keys: &[&str]) -> Option<String> {
     value.as_str().map(str::to_string)
 }
 
-/// Python's truth test for the values handled here.
 fn truthy(value: &Value) -> bool {
     match value {
         Value::Null => false,
@@ -365,7 +344,6 @@ fn reason(error: &std::io::Error) -> String {
 
 static TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
 
-/// Writes a temporary file and removes it on drop.
 struct TempFile(PathBuf);
 
 impl TempFile {
@@ -461,7 +439,6 @@ spec:
             desired["spec"]["template"]["spec"]["containers"][0]["env"][0]["value"],
             "true"
         );
-        // Manifest drift still wins: the live bin mount is not carried over.
         assert!(
             desired["spec"]["template"]["spec"]["containers"][0]
                 .get("volumeMounts")

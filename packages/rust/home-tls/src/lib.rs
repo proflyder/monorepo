@@ -1,50 +1,23 @@
-//! Public HTTPS roots for the shared workspace `reqwest` client.
-//!
-//! The workspace builds `reqwest` with `rustls-no-provider`: the station
-//! firmware (`pulsar-update`) pins its own CA bundle and must not inherit a
-//! platform trust store. Cargo unifies features across the whole workspace, so
-//! enabling built-in roots here would also change the firmware. Instead every
-//! client that talks to the public internet loads the operating system's PEM
-//! bundle explicitly with [`system_roots`] and replaces the trust set with
-//! [`with_system_roots`] (or starts from [`public_https_client`]).
-//!
-//! The bundle path is `SSL_CERT_FILE` when set (a deployment or test override),
-//! otherwise the first existing default: `/etc/ssl/certs/ca-certificates.crt`
-//! (distroless static and Debian) or `/etc/ssl/cert.pem` (macOS). A missing,
-//! unreadable, malformed or empty bundle is an error: a service that cannot
-//! reach its public endpoints must fail at start-up rather than silently.
-//!
-//! The ring crypto provider is installed by [`public_https_client`], because
-//! the workspace `reqwest` has no default provider.
-
 use std::path::{Path, PathBuf};
 
-/// Environment variable that overrides the CA bundle path.
 pub const SSL_CERT_FILE: &str = "SSL_CERT_FILE";
 
-/// Primary default bundle: distroless static and Debian/Ubuntu.
 pub const DEFAULT_BUNDLE_PATH: &str = "/etc/ssl/certs/ca-certificates.crt";
 
-/// Secondary default bundle: macOS ships the same PEM format here.
 pub const FALLBACK_BUNDLE_PATH: &str = "/etc/ssl/cert.pem";
 
-/// Why the system roots could not be loaded.
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-    /// The bundle does not exist.
     #[error("no CA bundle at {path}: set SSL_CERT_FILE to a PEM bundle")]
     Missing { path: PathBuf },
-    /// The bundle exists but cannot be read.
     #[error("cannot read CA bundle {path}: {source}")]
     Read {
         path: PathBuf,
         #[source]
         source: std::io::Error,
     },
-    /// The bundle is not valid PEM or contains no certificates.
     #[error("CA bundle {path} has no usable certificates")]
     Empty { path: PathBuf },
-    /// The bundle contains a certificate rustls rejects.
     #[error("invalid CA bundle {path}: {source}")]
     Decode {
         path: PathBuf,
@@ -53,10 +26,6 @@ pub enum Error {
     },
 }
 
-/// Resolve the bundle path: `SSL_CERT_FILE`, else the first default that exists.
-///
-/// An explicit `SSL_CERT_FILE` is never silently replaced by a default: a typo
-/// in the deployment must surface as an error.
 pub fn bundle_path() -> Result<PathBuf, Error> {
     if let Some(configured) = std::env::var_os(SSL_CERT_FILE).filter(|value| !value.is_empty()) {
         return Ok(PathBuf::from(configured));
@@ -72,7 +41,6 @@ pub fn bundle_path() -> Result<PathBuf, Error> {
     })
 }
 
-/// Read every certificate from `path`.
 pub fn roots_from(path: &Path) -> Result<Vec<reqwest::Certificate>, Error> {
     let pem = std::fs::read(path).map_err(|source| {
         if source.kind() == std::io::ErrorKind::NotFound {
@@ -98,33 +66,19 @@ pub fn roots_from(path: &Path) -> Result<Vec<reqwest::Certificate>, Error> {
     Ok(certificates)
 }
 
-/// Load the operating system's public roots (see [`bundle_path`]).
 pub fn system_roots() -> Result<Vec<reqwest::Certificate>, Error> {
     roots_from(&bundle_path()?)
 }
 
-/// Add every system root to `builder`.
-///
-/// Extra roots never narrow the client: they only extend the trust anchors, so
-/// internal HTTP/HTTPS clients can use this unconditionally.
 pub fn with_system_roots(builder: reqwest::ClientBuilder) -> Result<reqwest::ClientBuilder, Error> {
-    // reqwest 0.13 verifies against the platform store by default; pin the
-    // same OS bundle explicitly with `tls_certs_only` so the trust set stays
-    // identical to the pre-0.13 manual-roots build.
     Ok(builder.tls_certs_only(system_roots()?))
 }
 
-/// A fresh `reqwest` builder with the ring provider installed and the system
-/// roots added. Callers set the timeout, redirect policy and proxy themselves.
 pub fn public_https_client() -> Result<reqwest::ClientBuilder, Error> {
     install_crypto_provider();
     with_system_roots(reqwest::Client::builder())
 }
 
-/// Install the process-wide ring provider before the first `reqwest` client.
-///
-/// The workspace `reqwest` is compiled without a default provider and panics
-/// ("No provider set") otherwise. A provider installed earlier is kept.
 pub fn install_crypto_provider() {
     let _already_installed = rustls::crypto::ring::default_provider().install_default();
 }
@@ -146,14 +100,12 @@ mod tests {
     const SERVER_PEM: &str = include_str!("../testdata/server.pem");
     const SERVER_KEY: &str = include_str!("../testdata/server-key.pem");
 
-    /// `SSL_CERT_FILE` is process-global; the tests that touch it take turns.
     static ENV_LOCK: Mutex<()> = Mutex::new(());
 
     fn env_lock() -> MutexGuard<'static, ()> {
         ENV_LOCK.lock().expect("env lock")
     }
 
-    /// Write the test CA into a fresh file and return its path.
     fn ca_file() -> (tempfile::TempDir, PathBuf) {
         let directory = tempfile::tempdir().expect("tempdir");
         let path = directory.path().join("ca.pem");
@@ -161,7 +113,6 @@ mod tests {
         (directory, path)
     }
 
-    /// A loopback HTTPS server that answers one `200 ok` to any request.
     async fn serve_https() -> u16 {
         let certificates: Vec<_> = CertificateDer::pem_slice_iter(SERVER_PEM.as_bytes())
             .collect::<Result<_, _>>()
@@ -230,8 +181,7 @@ mod tests {
     fn ssl_cert_file_overrides_the_bundle() {
         let _guard = env_lock();
         let (_directory, path) = ca_file();
-        // SAFETY: `env_lock` serializes every test that reads or writes the
-        // process environment, and nothing else in this binary reads it.
+        // SAFETY: `env_lock` serializes every test that reads or writes the process environment, and nothing else in this binary reads it.
         unsafe { std::env::set_var(SSL_CERT_FILE, &path) };
         assert_eq!(bundle_path().expect("bundle path"), path);
         assert_eq!(system_roots().expect("roots").len(), 1);
@@ -265,8 +215,6 @@ mod tests {
     #[tokio::test]
     async fn a_client_without_roots_rejects_the_server() {
         let port = serve_https().await;
-        // The workspace default: no roots at all. This is the incident's
-        // failure mode, kept as a regression check for the test CA.
         install_crypto_provider();
         let client = reqwest::Client::builder().build().expect("client");
         let error = client

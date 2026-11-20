@@ -31,7 +31,6 @@ fn strings(v: &[&str]) -> Vec<String> {
     v.iter().map(|s| (*s).to_owned()).collect()
 }
 
-/// The responder of the golden file (see its header).
 fn reference(with_ip: bool) -> Records {
     let mut r = Records::new("pulsar-test");
     r.services.push(Service::new(
@@ -62,7 +61,6 @@ fn reference(with_ip: bool) -> Records {
     r
 }
 
-/// Long labels and TXT strings, seven services.
 fn limits() -> Records {
     let host = "h".repeat(70);
     let mut r = Records::new(&host);
@@ -189,8 +187,6 @@ fn destination(dest: &Dest, from: SocketAddrV4) -> String {
     }
 }
 
-/// Legacy, QU, ANY, case, enumeration, compression (pointer loop, 31 and 32 hops), malformed
-/// and unanswerable questions: the same packets to the same destinations as C++.
 #[test]
 fn query_replies_match_cxx() {
     let cases = query_cases();
@@ -259,7 +255,6 @@ fn short_datagrams_and_responses_are_ignored() {
 
 #[test]
 fn names_are_lowercased_and_followed_through_pointers() {
-    // Header, then "Ab.Local" at 12 and a pointer to it at 22.
     let mut p = vec![0u8; 12];
     p.extend_from_slice(b"\x02Ab\x05Local\x00\xc0\x0c\x00\x01");
     let mut name = Vec::new();
@@ -268,7 +263,6 @@ fn names_are_lowercased_and_followed_through_pointers() {
     assert_eq!((name.as_slice(), pos), (&b"ab.local"[..], 22));
     assert!(read_name(&p, &mut pos, &mut name));
     assert_eq!((name.as_slice(), pos), (&b"ab.local"[..], 24));
-    // Bytes outside ASCII are kept.
     let p = b"\x03\xc3\xa9X\x00";
     let mut pos = 0;
     assert!(read_name(p, &mut pos, &mut name));
@@ -277,7 +271,6 @@ fn names_are_lowercased_and_followed_through_pointers() {
 
 #[test]
 fn names_longer_than_255_bytes_fail() {
-    // 3 labels of 63 bytes + one of 61 + root = 255 bytes on the wire; one of 62 = 256.
     let wire = |last: usize| {
         let mut p = Vec::new();
         for _ in 0..3 {
@@ -308,7 +301,6 @@ fn responder() -> Responder {
     let sock = std::net::UdpSocket::bind("127.0.0.1:0").unwrap();
     sock.set_nonblocking(true).unwrap();
     Responder {
-        // No address: nothing is announced from a test.
         records: Records::new("pulsar-test"),
         sock: UdpSocket::from_std(sock).unwrap(),
         ifindex: 0,
@@ -357,7 +349,6 @@ async fn set_txt_replaces_the_service_txt() {
     );
     let txt: Vec<_> = r.records.services.iter().map(|s| s.txt.clone()).collect();
     assert_eq!(txt, vec![vec!["n=1".to_owned()], vec!["x=1".to_owned()]]);
-    // Before the start announcement nothing is scheduled; after it, every change re-announces.
     assert!(!r.timers.is_set(Timer::AnnounceAgain1));
     r.apply(Cmd::SetTxt("_s9._tcp".into(), Vec::new()), true);
     assert!(!r.timers.is_set(Timer::AnnounceAgain1));
@@ -374,7 +365,6 @@ async fn announcements_repeat_after_1_and_3_s() {
     let start = Instant::now();
     r.schedule_announcements();
     tokio::time::advance(Duration::from_millis(500)).await;
-    // A change meanwhile restarts the series.
     r.schedule_announcements();
     assert_eq!(r.timers.next().await, Timer::AnnounceAgain1);
     assert_eq!(Instant::now() - start, Duration::from_millis(1500));
@@ -387,7 +377,6 @@ async fn announcements_repeat_after_1_and_3_s() {
 async fn network_changes_settle_once() {
     let mut r = responder();
     let start = Instant::now();
-    // First sight of a link that is up: a change that forces an announcement.
     r.on_netlink(
         &[LinkEvent::Link {
             index: 3,
@@ -396,14 +385,12 @@ async fn network_changes_settle_once() {
         false,
     );
     assert!(r.timers.is_set(Timer::Settled) && r.change_forced);
-    // Further events of the burst do not push the check back.
     tokio::time::advance(Duration::from_millis(1000)).await;
     r.on_netlink(&[LinkEvent::Ipv4Addr], false);
     assert_eq!(r.timers.next().await, Timer::Settled);
     assert_eq!(Instant::now() - start, Duration::from_millis(1500));
     r.change_forced = false;
 
-    // Same state again (wireless noise): nothing to do.
     r.on_netlink(
         &[LinkEvent::Link {
             index: 3,
@@ -412,11 +399,9 @@ async fn network_changes_settle_once() {
         false,
     );
     assert!(!r.timers.is_set(Timer::Settled));
-    // Link went down: a change, but no forced announcement.
     r.on_netlink(&[LinkEvent::Link { index: 3, flags: 1 }], false);
     assert!(r.timers.is_set(Timer::Settled) && !r.change_forced);
     r.timers.cancel(Timer::Settled);
-    // Lost messages count as a change with the link up.
     r.on_netlink(&[], true);
     assert!(r.timers.is_set(Timer::Settled) && r.change_forced);
     r.timers.cancel(Timer::Settled);
@@ -429,7 +414,7 @@ fn nlmsg(ty: u16, payload: &[u8]) -> Vec<u8> {
     let mut m = Vec::new();
     m.extend_from_slice(&(16 + payload.len() as u32).to_ne_bytes());
     m.extend_from_slice(&ty.to_ne_bytes());
-    m.extend_from_slice(&[0; 10]); // flags, seq, pid
+    m.extend_from_slice(&[0; 10]);
     m.extend_from_slice(payload);
     while m.len() % 4 != 0 {
         m.push(0);
@@ -438,10 +423,10 @@ fn nlmsg(ty: u16, payload: &[u8]) -> Vec<u8> {
 }
 
 fn ifinfo(index: i32, flags: u32) -> Vec<u8> {
-    let mut p = vec![0, 0, 1, 0]; // family, pad, type
+    let mut p = vec![0, 0, 1, 0];
     p.extend_from_slice(&index.to_ne_bytes());
     p.extend_from_slice(&flags.to_ne_bytes());
-    p.extend_from_slice(&0u32.to_ne_bytes()); // change
+    p.extend_from_slice(&0u32.to_ne_bytes());
     p
 }
 
@@ -459,13 +444,12 @@ fn netlink_messages() {
     ));
     buf.extend(nlmsg(libc::RTM_NEWLINK, &ifinfo(3, up)));
     buf.extend(nlmsg(libc::RTM_DELLINK, &ifinfo(4, up)));
-    buf.extend(nlmsg(libc::RTM_NEWLINK, &[0; 8])); // too short for ifinfomsg
+    buf.extend(nlmsg(libc::RTM_NEWLINK, &[0; 8]));
     buf.extend(nlmsg(libc::RTM_NEWROUTE, &[0; 12]));
     buf.extend(nlmsg(
         libc::RTM_DELADDR,
         &[libc::AF_INET as u8, 24, 0, 0, 3],
     ));
-    // A header claiming more than the datagram holds ends the parse.
     let mut cut = nlmsg(libc::RTM_NEWADDR, &[libc::AF_INET as u8, 24, 0, 0]);
     cut[0] = 200;
     buf.extend(cut);

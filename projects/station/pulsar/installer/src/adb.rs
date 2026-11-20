@@ -1,23 +1,13 @@
-//! The device side of the installer: an `adb` process, or a fake in tests.
-//!
-//! `adb shell` on station firmwares is a pty: output has `\r`, the channel is not
-//! binary-safe (binary data goes through `adb push`/`pull` only), and the exit status is
-//! always 0 — the real one is carried by the `__rc=` marker.
-
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
-/// One device command must fit these firmwares' shell; docs/development.md, «Правила
-/// installer/».
 pub const MAX_COMMAND: usize = 4096;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ShError {
     #[error("no exit status")]
     NoStatus,
-    /// The remote status and the output it produced: a failed `mv`/`ctl.sh` prints its
-    /// message, and Go's `shRaw` returned both.
     #[error("exit {code}")]
     Exit { code: String, out: String },
     #[error("command is {0} bytes, over the {MAX_COMMAND}-byte device limit")]
@@ -27,7 +17,6 @@ pub enum ShError {
 }
 
 impl ShError {
-    /// The station output collected before the failure ("" when there was none).
     pub fn out(&self) -> &str {
         match self {
             Self::Exit { out, .. } => out,
@@ -41,8 +30,6 @@ pub trait Adb {
     fn pull(&mut self, serial: &str, remote: &str, local: &Path) -> io::Result<()>;
     fn sh_raw(&mut self, serial: &str, cmd: &str) -> Result<String, ShError>;
 
-    /// `sh_raw` with trailing newlines removed (for captured output). Like Go's `sh`, a
-    /// failed command still returns its output through the error.
     fn sh(&mut self, serial: &str, cmd: &str) -> Result<String, ShError> {
         match self.sh_raw(serial, cmd) {
             Ok(out) => Ok(out.trim_end_matches('\n').to_string()),
@@ -54,7 +41,6 @@ pub trait Adb {
         }
     }
 
-    /// Runs `cmd` and copies its output to `w` even when the remote status is non-zero.
     fn sh_to(&mut self, w: &mut dyn Write, serial: &str, cmd: &str) -> Result<(), ShError> {
         match self.sh_raw(serial, cmd) {
             Ok(out) => {
@@ -71,8 +57,6 @@ pub trait Adb {
     }
 }
 
-/// Parse a captured `adb shell` stdout: strip `\r`, split off the last `__rc=` marker and
-/// return the output before it. A non-zero remote status carries that output in the error.
 pub fn parse_shell_output(raw: &[u8]) -> Result<String, ShError> {
     let replaced = String::from_utf8_lossy(raw).replace('\r', "");
     let o = replaced.trim_end_matches('\n');
@@ -90,7 +74,6 @@ pub fn parse_shell_output(raw: &[u8]) -> Result<String, ShError> {
     Ok(out.to_string())
 }
 
-/// A duplicate of our stderr for a child's stdout (Go sets `Stdout = os.Stderr`).
 fn stderr_stdio() -> Stdio {
     #[cfg(unix)]
     {
@@ -109,7 +92,6 @@ fn stderr_stdio() -> Stdio {
     Stdio::inherit()
 }
 
-/// The real `adb` executable.
 pub struct ProcessAdb {
     path: PathBuf,
 }
@@ -119,9 +101,6 @@ impl ProcessAdb {
         Self { path: path.into() }
     }
 
-    /// Starts the adb server with our stderr, not a pipe: a server spawned by a captured adb
-    /// call would inherit the pipe and keep it open (blocking that call on Windows). Both
-    /// streams go to stderr, like the Go installer.
     pub fn start_server(&self) -> io::Result<()> {
         let status = Command::new(&self.path)
             .arg("start-server")
@@ -151,7 +130,6 @@ impl ProcessAdb {
             .status();
     }
 
-    /// Serials adb lists in state `device`.
     pub fn devices(&self) -> Vec<String> {
         let Ok(out) = Command::new(&self.path).arg("devices").output() else {
             return Vec::new();
@@ -166,7 +144,6 @@ impl ProcessAdb {
             .collect()
     }
 
-    /// Serials of network devices (`ip:port`).
     pub fn network_devices(&self) -> Vec<String> {
         self.devices()
             .into_iter()
@@ -213,7 +190,6 @@ impl Adb for ProcessAdb {
         if full.len() > MAX_COMMAND {
             return Err(ShError::TooLong(full.len()));
         }
-        // Go uses Output(): stdout is parsed, stderr is captured and dropped.
         let out = Command::new(&self.path)
             .args(["-s", serial, "shell", &full])
             .stderr(Stdio::piped())
@@ -240,7 +216,6 @@ mod tests {
                 Value::String(err) => {
                     let e = got.unwrap_err();
                     assert_eq!(&e.to_string(), err);
-                    // Go returns the output together with a non-zero status.
                     assert_eq!(e.out(), c["out"].as_str().unwrap());
                 }
                 _ => panic!("unexpected fixture"),

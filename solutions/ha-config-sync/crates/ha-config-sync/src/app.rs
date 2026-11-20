@@ -1,6 +1,3 @@
-//! Composition root: configuration, the agent and Home Assistant clients, the
-//! Prometheus listener and the periodic sync loop.
-
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -20,7 +17,6 @@ use crate::metrics::Metrics;
 use crate::protocol::load_desired;
 use crate::sync::Syncer;
 
-/// Start the service and block until a signal or a fatal listener error.
 pub async fn run() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
         .json()
@@ -125,10 +121,8 @@ async fn shutdown_signal() {
     }
 }
 
-/// Default period, re-exported for documentation tests.
 pub const DEFAULT_INTERVAL: Duration = crate::config::DEFAULT_SYNC_INTERVAL;
 
-/// Re-export for callers that only need the mode label.
 pub use crate::config::Mode as SyncMode;
 
 #[cfg(test)]

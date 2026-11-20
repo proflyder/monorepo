@@ -1,14 +1,3 @@
-//! Offline evaluation of a stock spotter model on a recording made on the device: raw capture
-//! WAV (S16, layout of the detected model, e.g. `arecord -D hw:0,1 -c 8 -r 48000` on the Lite 2,
-//! or `frontend_probe --record`) -> Yandex VQE -> spotter. The spotter channel layout is derived
-//! from the model like the daemon does.
-//! usage: ww_offline <wav> [model_dir]   (default: .../spotter_models/activation/alisa)
-//! Prints every spotter event with its time; "HIT" lines are confirmations (events 2 and 5), and
-//! per second the RMS of the speaker reference and of the VQE output (echo cancellation check).
-//! Experiments: VT=<type> feeds every spotter channel from that VQE output; LEGACY=1 — прежнюю
-//! раскладку wake-спотера pulsar (`LEGACY_SPOTTER_TO_VQE`); SPK=<ch>[,<ch>...] заменяет каналы
-//! захвата референса динамика; в отличие от C++-утилиты, их должно быть столько, сколько берёт
-//! пресет VQE модели (библиотека не получает других количеств).
 #![deny(unsafe_code)]
 #![deny(unsafe_op_in_unsafe_fn)]
 
@@ -26,7 +15,6 @@ use pulsar_audio::engine::{
 const DEFAULT_MODEL: &str = "/system/vendor/quasar/spotter_models/activation/alisa";
 const WAV_HEADER: u64 = 44;
 
-// Output is line by line, as the C++ tool's unbuffered stdout; a closed pipe is ignored.
 macro_rules! out {
     ($($arg:tt)*) => {{
         let _ = writeln!(std::io::stdout(), $($arg)*);
@@ -65,8 +53,6 @@ fn run() -> u8 {
         );
         return 2;
     }
-    // The VQE preset fixes the number of speaker reference channels; SPK only picks which
-    // capture channels feed them.
     if spk_channels.len() != m.audio.capture.spk_channels.len() {
         let _ = writeln!(
             std::io::stderr(),
@@ -79,7 +65,6 @@ fn run() -> u8 {
     }
     let args = Cli::parse();
     let model_dir = args.model_dir;
-    // Unlike the C++ tool, also runs on the Lite 2 without LD_LIBRARY_PATH (libiconv.so).
     let _ = preload_deps();
     let lib = match Lib::load() {
         Ok(lib) => lib,
@@ -99,7 +84,6 @@ fn run() -> u8 {
             return 1;
         }
     };
-    // As fseek: a stream that cannot seek is read from where it is.
     let _ = f.seek(SeekFrom::Start(WAV_HEADER));
 
     let (nmic, nspk) = (m.audio.capture.mic_channels.len(), spk_channels.len());
@@ -124,7 +108,6 @@ fn run() -> u8 {
         out!("cfg: input chunk size {}", vqe.chunk());
         return 1;
     };
-    // Samples per spotter channel and chunk: 512, 256 on the Mini 3 and Mini.
     let Ok(frame @ 1..) = usize::try_from(vqe.frame()) else {
         out!("cfg: processing frame {}", vqe.frame());
         return 1;
@@ -147,7 +130,6 @@ fn run() -> u8 {
         &SPOTTER_TO_VQE
     };
     let mut layout = spotter_layout(&counts, table);
-    // VT=<type>: every channel from that VQE output (experiments).
     if let Some(vt) = std::env::var_os("VT") {
         layout.vqe.fill(atoi(&vt.to_string_lossy()));
     }
@@ -191,7 +173,6 @@ fn run() -> u8 {
             for (c, &ch) in spk_ch.iter().enumerate() {
                 let v = f32::from(fr[ch as usize]) / 32768.0;
                 spk[i * nspk + c] = v;
-                // Fused on the station build of the C++ tool (clang -ffp-contract=on).
                 spk_e = f64::from(v).mul_add(f64::from(v), spk_e);
                 spk_n += 1;
             }
@@ -210,7 +191,6 @@ fn run() -> u8 {
             };
             for (i, &x) in d.iter().take(frame).enumerate() {
                 let v = x * 32768.0;
-                // Truncated, unlike the daemon's lrint: the C++ tool's conversion.
                 sbuf[i * nch + k] = if v > 32767.0 {
                     32767
                 } else if v < -32768.0 {
@@ -260,8 +240,6 @@ fn run() -> u8 {
 
 use home_linux::io_error_text as strerror;
 
-/// Leading whitespace, sign and decimal digits of `s`: (value, bytes used); (0, 0) without
-/// digits, as strtoul / atoi.
 fn c_number(s: &[u8]) -> (i64, usize) {
     let mut i = s
         .iter()
@@ -288,14 +266,10 @@ fn c_number(s: &[u8]) -> (i64, usize) {
     (if neg { v.wrapping_neg() } else { v }, i + digits)
 }
 
-/// atoi.
 fn atoi(s: &str) -> i32 {
     c_number(s.as_bytes()).0 as i32
 }
 
-/// SPK=<ch>[,<ch>...] as the C++ tool's strtoul loop: "4,6" -> [4, 6], "4,,6" -> [4, 0, 6],
-/// "4," -> [4]. A character that is neither a digit nor a comma ends the list (the C++ loop
-/// spun there forever).
 fn parse_channels(s: &str) -> Vec<u32> {
     let b = s.as_bytes();
     let mut v = Vec::new();

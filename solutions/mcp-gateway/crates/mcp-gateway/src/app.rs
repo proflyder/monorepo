@@ -1,5 +1,3 @@
-//! Composition root: configuration, telemetry, backends, registry and HTTP.
-
 use std::process::ExitCode;
 use std::sync::Arc;
 use std::time::Duration;
@@ -28,12 +26,10 @@ use crate::tools::{
 };
 use crate::voice;
 
-/// Reported implementation version.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(10);
 
-/// Start the gateway and block until SIGTERM/SIGINT or a listener failure.
 pub async fn run() -> anyhow::Result<()> {
     let config = Config::load()
         .map_err(anyhow::Error::msg)
@@ -298,7 +294,6 @@ fn listen_address(raw: &str) -> anyhow::Result<String> {
     Ok(format!("{host}:{port}"))
 }
 
-/// `mcp-gateway -healthcheck` exit code.
 pub fn healthcheck_exit() -> ExitCode {
     crate::health::run_healthcheck()
 }

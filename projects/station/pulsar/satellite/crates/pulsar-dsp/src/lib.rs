@@ -1,6 +1,3 @@
-//! Чистый DSP звукового тракта: кольцевые буферы, уровни dBFS, FFT-спектр, endpoint-детектор и
-//! WAV-контейнер. Ни FFI, ни модели станции, ни потоков: всё покрыто хостовыми тестами, включая
-//! golden-данные спектра.
 #![deny(unsafe_code)]
 #![deny(unsafe_op_in_unsafe_fn)]
 #![deny(clippy::undocumented_unsafe_blocks)]

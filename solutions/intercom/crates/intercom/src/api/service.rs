@@ -1,9 +1,3 @@
-//! `home.v1.IntercomService` implementation.
-//!
-//! Handlers only translate wire messages and map domain errors; all state
-//! lives in [`crate::domain::Intercom`]. SDP bodies are passed through and
-//! never logged — only their direction and size are observable.
-
 use std::sync::Arc;
 
 use connectrpc::{
@@ -18,7 +12,6 @@ use crate::domain::{
     SdpSignal, SdpType, Signal,
 };
 
-/// Shared intercom API state.
 #[derive(Clone)]
 pub struct Api {
     inner: Arc<crate::domain::Intercom>,

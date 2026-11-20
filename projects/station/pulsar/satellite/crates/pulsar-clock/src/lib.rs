@@ -1,5 +1,3 @@
-//! 4-digit 7-segment clock (sysfs LEDs per `Model`) with its content layers and stock
-//! animations, and the ambient light sensor (iio `ltr308als01`).
 #![deny(unsafe_code)]
 #![deny(unsafe_op_in_unsafe_fn)]
 #![deny(clippy::undocumented_unsafe_blocks)]

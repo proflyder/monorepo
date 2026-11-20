@@ -1,7 +1,3 @@
-//! HA connection and entities, buttons, the light sensor, Zigbee and updates (controller.cpp
-//! "HA connection", "entities", "updates"). `Publisher` keeps the entity-facing state and
-//! publishes it; HA option texts are parsed here only.
-
 use pulsar_clock::ClockMusicStyle;
 use pulsar_core::now_ms;
 use pulsar_esphome::{
@@ -23,8 +19,6 @@ use super::{
 use crate::settings::Settings;
 use crate::version::VERSION;
 
-/// Entity-facing state that survives HA reconnects: the clock's last text/face, the last
-/// published illuminance, the release and update progress, the Zigbee status line.
 pub struct Publisher {
     pub(super) clock_text: String,
     pub(super) clock_face: String,
@@ -50,8 +44,6 @@ impl Publisher {
         }
     }
 
-    /// "Microphones" is on while the speaker listens: neither the mute from HA nor the mute
-    /// button's.
     pub fn publish_microphones(&self, ha: &dyn HaLink, muted: bool) {
         ha.publish_switch(SwitchId::Microphones, !muted);
     }
@@ -59,7 +51,6 @@ impl Publisher {
     pub fn publish_update(&self, ha: &dyn HaLink) {
         let release = self.release.as_ref();
         let version = release.map_or("", |r| r.version().as_str());
-        // latest == current hides the offer: nothing newer, or not checked yet.
         let offer = !version.is_empty() && pulsar_update::release_newer(version, VERSION).0;
         ha.publish_update(&UpdateState {
             in_progress: self.update_installing,
@@ -72,8 +63,6 @@ impl Publisher {
         });
     }
 
-    /// The C++ `on_client_connected` order: HA keeps the entity list per device, so every
-    /// publish and its order is an external contract.
     pub fn on_client_connected(&self, ha: &dyn HaLink, s: &ClientSnapshot) {
         ha.publish_switch(SwitchId::Clock, s.st.clock_on);
         ha.publish_switch(SwitchId::ClockColonBlink, s.st.clock_colon_blink);
@@ -101,8 +90,6 @@ impl Publisher {
         ha.publish_select(SelectId::VoiceColor, &s.st.voice_color);
         if let Some((role, status)) = s.zigbee {
             ha.publish_select(SelectId::ZigbeeMode, role);
-            // The live status, not the "zigbee: …" dedup cache of Changed: its cache stays as
-            // it is (HEAD published `z.status().to_string()` here).
             ha.publish_text_sensor(TextSensorId::Zigbee, status);
         }
         ha.publish_light(s.light);
@@ -112,13 +99,11 @@ impl Publisher {
     }
 }
 
-/// Everything the entity list needs from the controller at `ClientConnected`.
 pub struct ClientSnapshot<'a> {
     pub st: &'a Settings,
     pub light: &'a LightState,
     pub case_color: &'a str,
     pub hw_mic_muted: bool,
-    /// Present when the Zigbee service runs: its select option label and live status line.
     pub zigbee: Option<(&'a str, &'a str)>,
 }
 
@@ -206,7 +191,6 @@ impl Controller {
 
     fn on_time(&mut self, epoch: u32, tz: &str) {
         if !tz.is_empty() {
-            // Only on a change: setenv races with threads reading the environment (GLib).
             if tz != self.applied_tz {
                 pulsar_core::tz::set_tz(tz);
                 tz.clone_into(&mut self.applied_tz);
@@ -220,8 +204,6 @@ impl Controller {
     }
 
     fn on_restart(&mut self) {
-        // A restart cuts the upload short (the shutdown watchdog does not wait ~25 s); the radio
-        // would be written again on the next start, but stays without Zigbee meanwhile.
         if self.zigbee_flashing() {
             warn!(
                 "restart requested from Home Assistant: refused while the Zigbee radio is being written"
@@ -238,8 +220,6 @@ impl Controller {
                 self.st.mic_muted =
                     logic::sw_mute_after_switch(state, self.st.mic_muted, self.hw_mic_muted);
                 if state && self.hw_mic_muted {
-                    // The button's latch cuts the microphones in hardware: there is nothing to
-                    // switch on, and HA must not stay "on" after asking for it.
                     warn!(
                         "mic held by hardware switch: Home Assistant asked for microphones on, publishing off"
                     );
@@ -253,12 +233,7 @@ impl Controller {
                 }
                 self.update_detection();
                 self.update_ui();
-                // The actual state, not the command: "on" under the button mute comes back off.
-                // Published even when the stored mute did not change, otherwise HA keeps showing
-                // the state it asked for.
                 self.publish_microphones();
-                // Privacy: a mute must not be undone by a power cut right after it. A failed
-                // write is logged and stays pending; the mute itself is in effect either way.
                 let _ = self.persist_now();
                 return;
             }
@@ -294,7 +269,6 @@ impl Controller {
                     "wake events: recording {}",
                     if state { "on" } else { "off" }
                 );
-                // Privacy: the choice must survive a power cut right after it.
                 let _ = self.persist_now();
                 self.deps.ha.publish_switch(id, state);
                 return;
@@ -340,7 +314,6 @@ impl Controller {
                     .publish_number(id, self.st.clock_brightness * 100.0);
             }
             NumberId::ClockScroll => {
-                // C++ int(lround(value / 50)) * 50 (Rust saturates where C++ is undefined).
                 let steps = (value / 50.0).round() as i64 as i32;
                 self.st.clock_scroll_ms = steps.wrapping_mul(50).clamp(100, 2000);
                 self.deps
@@ -357,7 +330,6 @@ impl Controller {
                 };
                 self.st.followup_duration_s = s;
                 self.deps.ha.publish_number(id, s as f32);
-                // Ожидание открыто и до STT_START, и без таймера: проверяется по флагу, не по Tk.
                 if s == 0 && self.session.is_listening() && self.session.followup_awaiting_speech()
                 {
                     info!("follow-up: turned off, conversation ends");
@@ -393,7 +365,6 @@ impl Controller {
     fn on_text(&mut self, id: TextId, value: String) {
         self.deps.display.clock.set_text(value.clone());
         self.deps.ha.publish_text(id, &value);
-        // Text and face replace each other on the display; the clock already dropped the face.
         let clears_face = !value.is_empty() && self.entity.clock_face != "None";
         self.entity.clock_text = value;
         if clears_face {
@@ -420,8 +391,6 @@ impl Controller {
                         .ha
                         .publish_select(id, pulsar_zigbee::role(role).label);
                 }
-                // The role starts with the daemon, which writes the radio firmware it needs; the
-                // coordinator's mDNS advertisement is only made in that role.
                 warn!(
                     "zigbee: role {} chosen, restarting",
                     pulsar_zigbee::role(role).name
@@ -430,8 +399,6 @@ impl Controller {
                     .name
                     .clone_into(&mut self.st.zigbee_role);
                 self.st.zigbee_flash_failed = 0;
-                // Before the restart: the next start acts on the role. A failed write stays
-                // pending for the exit flush after run().
                 let _ = self.persist_now();
                 self.deps
                     .ha
@@ -583,8 +550,6 @@ impl Controller {
         self.persist();
     }
 
-    // ---------------- buttons, sensors, Zigbee ----------------
-
     pub(super) fn on_input(&mut self, ev: InputEvent) {
         match ev {
             InputEvent::Mute(m) => {
@@ -600,7 +565,6 @@ impl Controller {
                 if sw_muted != self.st.mic_muted {
                     info!("mute button lifted the mute from Home Assistant");
                     self.st.mic_muted = sw_muted;
-                    // A lost write leaves the speaker muted after a restart (the safe side).
                     self.persist();
                 }
                 self.publish_microphones();
@@ -628,7 +592,6 @@ impl Controller {
                 self.update_detection();
                 self.update_ui();
                 self.publish_microphones();
-                // A write cut short by a power loss must not unmute the station.
                 let _ = self.persist_now();
             }
             InputEvent::Button(Button::Action, p) => {
@@ -641,9 +604,8 @@ impl Controller {
                     },
                 );
                 if p == Press::Long {
-                    return; // exposed to HA automations only
+                    return;
                 }
-                // Во время звонка кнопка действия его сбрасывает (короткое нажатие).
                 if self.call_active {
                     if self.call_phase() != pulsar_call::CallPhase::Idle {
                         self.deps.call.hangup();
@@ -687,8 +649,6 @@ impl Controller {
         }
     }
 
-    /// The status is read only here and when a client connects (as the C++ hook and
-    /// on_client_connected); right after join()/leave() it may still be the previous one.
     pub(super) fn on_zigbee(&mut self, ev: ZigbeeEvent) {
         match ev {
             ZigbeeEvent::Changed => {
@@ -708,21 +668,16 @@ impl Controller {
                     return;
                 }
                 self.st.zigbee_flash_failed = failed_version;
-                // An image the radio refused is not written again after a crash or restart. A
-                // failed write stays pending (logged).
                 let _ = self.persist_now();
             }
         }
     }
-
-    // ---------------- updates ----------------
 
     pub(super) fn publish_update(&self) {
         self.entity.publish_update(&*self.deps.ha);
     }
 
     pub(super) fn check_update(&mut self) {
-        // None: a request is in flight (C++ Updater::check returned silently).
         if let Some(id) = self.deps.updater.check() {
             self.pending_check = Some(id);
         }
@@ -763,13 +718,11 @@ impl Controller {
     }
 
     fn install_update(&mut self, why: &str) {
-        // A check not handled yet would still replace the release (C++ busy() until then).
         if self.deps.updater.busy() || self.entity.update_installing || self.pending_check.is_some()
         {
             return;
         }
         if self.zigbee_flashing() {
-            // The install ends with a restart.
             warn!("update: not while the Zigbee radio is being written");
             return;
         }
@@ -784,9 +737,6 @@ impl Controller {
         warn!("installing release {} ({why})", r.version());
         let previous =
             std::mem::replace(&mut self.st.update_attempt, r.version().as_str().to_owned());
-        // On disk before the updater can replace the binary: still set under another version
-        // after a restart, it tells that the release was rolled back. Without it a bad release
-        // would carry no marker and automatic updates would install it again.
         if !self.persist_now() {
             warn!(
                 "update to {}: update_attempt not written to state.conf, install refused",
@@ -821,8 +771,6 @@ impl Controller {
         }
     }
 
-    /// Every Checked / Installed is handled (the C++ callbacks carried no sequence number);
-    /// the ids only tell when the request in flight has been answered.
     pub(super) fn on_updater(&mut self, ev: UpdateEvent) {
         match ev {
             UpdateEvent::Checked { id, result } => {
@@ -860,10 +808,7 @@ impl Controller {
                     Err(err) => {
                         error!("update to {version} failed: {err}");
                         if !err.fatal() {
-                            // A network failure: the next check tries again.
                             self.st.update_attempt.clear();
-                            // Left set by a crash, it would make automatic updates skip it. A
-                            // failed write stays pending (logged).
                             let _ = self.persist_now();
                         }
                         self.install_failed();
@@ -873,8 +818,6 @@ impl Controller {
         }
     }
 
-    /// An install that ended without a new binary, or never started: HA sees the update entity
-    /// idle again, the clock shows the time.
     fn install_failed(&mut self) {
         self.entity.update_installing = false;
         self.deps.display.clock.set_updating(false);

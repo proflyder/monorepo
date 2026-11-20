@@ -1,23 +1,3 @@
-//! Pure rendering of the LED ring / logo content: voice states, one-shots, effects and music
-//! styles. Colours are "perceptual" 0..1 values; the LED output squares them (gamma 2).
-//!
-//! Strips of 12 LEDs or more are drawn like the Midi's 24-LED contour (LED 0 = home, LED n/2
-//! opposite, symmetry points 0, n/4, n/2, 3n/4); shorter ones like the Lite 2's 3-LED ring. The
-//! voice-state colours and timings are the ones measured on the stock patterns
-//! (/system/vendor/quasar/ledpatterns/{ring,oknix}/*.led); nothing of those files is used at run
-//! time.
-//!
-//! The arithmetic follows the C++ renderer operation by operation (f32 where it used float, f64
-//! where it used double), so that frames match its golden output. clang contracts `a * b + c`
-//! within one expression (-ffp-contract=on) into fused multiply-adds on both stations (aarch64
-//! fmadd, armhf -mcpu=cortex_a53 vfma); those sites are `mul_add` here, everything else is
-//! unfused. `mul_add` is the same single rounding: fmadd on aarch64, vfma on armhf (built with
-//! `-C target-cpu=cortex-a53`, see MODULE.bazel), a libm fma call on the x86_64 host.
-//!
-//! Listening, thinking and speaking use the stock violet by default; the «Voice color» select
-//! (`VoiceColor`) can move them to blue. The error pulse, the timer ring and the one-shots keep
-//! their own measured colours.
-
 use std::convert::Infallible;
 use std::ops::{Add, Mul};
 use std::str::FromStr;
@@ -53,7 +33,6 @@ impl Add for Col {
     }
 }
 
-/// The C++ kTau = 6.2831853f is the same f32.
 const TAU: f32 = std::f32::consts::TAU;
 
 pub fn rgb(r: u8, g: u8, b: u8) -> Col {
@@ -80,7 +59,6 @@ pub fn cmax(a: Col, b: Col) -> Col {
     }
 }
 
-/// h in turns.
 pub fn hsv(h: f32, s: f32, v: f32) -> Col {
     let mut h = h % 1.0;
     if h < 0.0 {
@@ -106,8 +84,6 @@ fn hsvd(deg: f32, s: f32, v: f32) -> Col {
     hsv(deg / 360.0, s, v)
 }
 
-/// Stock raw value (0xRRGGBB as written to the LEDs) at raw ratio k, in perceptual units: after
-/// the gamma-2 output it is the stock value times k.
 pub fn stock(rgb: u32, k: f32) -> Col {
     let k = k.max(0.0);
     let ch = |sh: u32| (((rgb >> sh) & 0xFF) as f32 / 255.0 * k).sqrt();
@@ -131,19 +107,15 @@ pub fn smoothstep(e0: f32, e1: f32, x: f32) -> f32 {
     t * t * t.mul_add(-2.0, 3.0)
 }
 
-/// Smooth 0..1 oscillation with the given period, starting at minimum.
 fn wave(t: f64, period: f64) -> f32 {
     (-0.5f32).mul_add((((t % period) / period) as f32 * TAU).cos(), 0.5)
 }
 
-/// Circular distance between positions a and b on a ring of n LEDs.
 fn cdist(a: f32, b: f32, n: f32) -> f32 {
     let d = (a - b).abs() % n;
     d.min(n - d)
 }
 
-/// Distance (in Midi LEDs) of LED i to the nearest of the four symmetry points 0, n/4, n/2,
-/// 3n/4.
 fn quarter_dist(i: usize, n: usize) -> f32 {
     let q = n as f32 / 4.0;
     let r = i as f32 % q;
@@ -165,7 +137,6 @@ fn hash(x: i32, y: u32) -> f32 {
     ((h ^ (h >> 16)) & 0xFF_FFFF) as f32 / 0xFF_FFFF as f32
 }
 
-/// y is the time axis: kept in f64 so that its fraction stays exact however long the phase runs.
 fn noise1(x: f32, y: f64) -> f32 {
     let fx = x.floor();
     let fy = y.floor();
@@ -184,36 +155,27 @@ fn noise1(x: f32, y: f64) -> f32 {
     (cd - ab).mul_add(v, ab)
 }
 
-/// 2-D value noise in 0..1; y is the (long-running) time axis.
 fn noise(x: f32, y: f64) -> f32 {
     noise1(x, y).mul_add(0.67, 0.33 * noise1(2.0 * x, 2.0 * y))
 }
 
-/// Rings of 12 LEDs or more are drawn like the Midi's contour, shorter ones like the Lite 2's.
 pub fn wide(n: usize) -> bool {
     n >= 12
 }
 
-/// k = 0.55 + 0.45·cos(2πt/period): the stock "breathing" between ~10 % and full.
 fn breathe(t: f64, period: f64) -> f32 {
     0.45f32.mul_add((TAU * ((t % period) / period) as f32).cos(), 0.55)
 }
 
-/// Listening after its 420 ms opening: 100 % <-> 40 % with a 1.54 s period.
 fn listen_k(t: f32) -> f32 {
     0.30f32.mul_add((TAU * ((t - 420.0) % 1540.0 / 1540.0)).cos(), 0.70)
 }
 
-// Timer green of the ring and of the «timer started» one-shot.
 const TIMER_GREEN: u32 = 0x00dc00;
-/// Цвет звонка: циан, которого нет ни у голосовых состояний, ни у таймера.
 const CALL_CYAN: u32 = 0x00b4ff;
 const TIMER_START_GREEN: u32 = 0x00e600;
 const MUTE_RED: u32 = 0xd20000;
 
-/// Voice-state hue: the ESPHome select «Voice color». Violet is the stock look (what the
-/// station showed before the option existed); the error pulse and the timer ring keep their
-/// own colours.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum VoiceColor {
     #[default]
@@ -221,22 +183,16 @@ pub enum VoiceColor {
     Blue,
 }
 
-/// Raw stock colours of the listening / thinking / speaking animations for one option.
 #[derive(Clone, Copy)]
 struct Palette {
-    /// Listening sweep and thinking band on the strip.
     strip: u32,
-    /// Listening / thinking / speaking on the short ring and on the Midi logo.
     small: u32,
-    /// Thinking on the short ring: dim background and the circling point.
     thinking_bg: u32,
     thinking: u32,
-    /// Speaking on the strip and on the short ring.
     speaking: u32,
     speaking_small: u32,
 }
 
-/// Stock alice_* violets: Midi strip; Midi logo and Lite 2 ring.
 const VIOLET: Palette = Palette {
     strip: 0x370fff,
     small: 0x6b0fff,
@@ -246,9 +202,6 @@ const VIOLET: Palette = Palette {
     speaking_small: 0x6c0fff,
 };
 
-/// Violet with the red and green channels exchanged: the same value and saturation, the hue
-/// of each state moved from blue-violet to blue. Spelled out so that a frame stays a constant
-/// (the swap itself is pinned by a test).
 const BLUE: Palette = Palette {
     strip: 0x0f37ff,
     small: 0x0f6bff,
@@ -261,7 +214,6 @@ const BLUE: Palette = Palette {
 impl VoiceColor {
     pub const ALL: [Self; 2] = [Self::Violet, Self::Blue];
 
-    /// `state.conf` (`voice_color=`) and the ESPHome option.
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Violet => "Violet",
@@ -277,8 +229,6 @@ impl VoiceColor {
     }
 }
 
-/// Anything but "Blue" is the stock violet: an unknown key in `state.conf` must not change the
-/// look.
 impl FromStr for VoiceColor {
     type Err = Infallible;
 
@@ -294,7 +244,6 @@ fn fill(out: &mut [Col], c: Col) {
     out.fill(c);
 }
 
-/// Palette hue in degrees (stock "blink" preset sequence), 15 s per entry, 3 s hue crossfade.
 fn palette(t: f64) -> f32 {
     const HUES: [f32; 15] = [
         290.0, 340.0, 20.0, 355.0, 290.0, 250.0, 180.0, 250.0, 290.0, 340.0, 20.0, 48.0, 115.0,
@@ -315,10 +264,6 @@ fn palette(t: f64) -> f32 {
     dh.mul_add(((u - (ENTRY - FADE)) / FADE) as f32, h0)
 }
 
-// ---------------------------------------------------------------------------------------------
-// Voice states
-
-/// Voice states (UiState minus Idle).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Voice {
     Listening,
@@ -326,13 +271,11 @@ pub enum Voice {
     Speaking,
     Error,
     TimerRing,
-    /// Идёт звонок: два противоположных огня обегают кольцо, как вызов.
     Call,
 }
 
 pub const ERROR_MS: i64 = 3540;
 
-/// t in ms since the state started.
 pub fn voice(v: Voice, t: i64, color: VoiceColor, out: &mut [Col]) {
     let p = color.palette();
     let n = out.len();
@@ -345,7 +288,6 @@ pub fn voice(v: Voice, t: i64, color: VoiceColor, out: &mut [Col]) {
                 fill(out, stock(p.small, breathe(f64::from(ft), 1600.0)));
                 return;
             }
-            // Sweep from LED 0 both ways, meeting opposite in 420 ms; then breathe 100 % <-> 40 %.
             for (i, o) in out.iter_mut().enumerate() {
                 let k = if ft < 420.0 {
                     clamp01((ft / 420.0).mul_add(half, -cdist(i as f32, 0.0, nf)) + 1.0)
@@ -357,7 +299,6 @@ pub fn voice(v: Voice, t: i64, color: VoiceColor, out: &mut [Col]) {
         }
         Voice::Thinking => {
             if !wide(n) {
-                // One point circling over a dim violet background.
                 let c = (t % 1620) as f32 / 1620.0 * nf;
                 for (i, o) in out.iter_mut().enumerate() {
                     *o = cmax(
@@ -367,7 +308,6 @@ pub fn voice(v: Voice, t: i64, color: VoiceColor, out: &mut [Col]) {
                 }
                 return;
             }
-            // One band (9 full LEDs, 3-LED tails) circling once per 1.5 s.
             let c = (t % 1500) as f32 / 1500.0 * nf;
             for (i, o) in out.iter_mut().enumerate() {
                 let d = cdist(i as f32, c, nf);
@@ -386,7 +326,6 @@ pub fn voice(v: Voice, t: i64, color: VoiceColor, out: &mut [Col]) {
                 fill(out, stock(p.speaking_small, breathe(f64::from(ft), 1000.0)));
                 return;
             }
-            // Blob opposite LED 0 whose width flickers irregularly (two incommensurate periods).
             let w = 3.0f32.mul_add(
                 (0.5 * (TAU * ft / 530.0).sin())
                     .mul_add(0.4f32.mul_add((TAU * ft / 1600.0).sin(), 0.6), 0.5),
@@ -400,7 +339,6 @@ pub fn voice(v: Voice, t: i64, color: VoiceColor, out: &mut [Col]) {
             }
         }
         Voice::Error => {
-            // Three pulses: 80 ms rise, exponential fade.
             let tau = (t % 1180) as f32;
             let k = if t >= ERROR_MS {
                 0.0
@@ -412,8 +350,6 @@ pub fn voice(v: Voice, t: i64, color: VoiceColor, out: &mut [Col]) {
             fill(out, stock(0xef0000, k));
         }
         Voice::Call => {
-            // Две противоположные точки обегают кольцо за 900 мс (вдвое быстрее таймера) —
-            // паттерн, который не спутать с LISTENING (сплошная волна) и TimerRing (качание).
             let c = (t % 900) as f32 / 900.0 * nf;
             for (i, o) in out.iter_mut().enumerate() {
                 let d = cdist(i as f32, c, nf).min(cdist(i as f32, c + half, nf)) * nf / 24.0;
@@ -432,7 +368,6 @@ pub fn voice(v: Voice, t: i64, color: VoiceColor, out: &mut [Col]) {
                 }
                 return;
             }
-            // Two opposite blobs swaying around LEDs 2.5 and 14.5.
             let c1 = 2.5 + (TAU * ft / 1300.0).sin() * nf / 24.0;
             for (i, o) in out.iter_mut().enumerate() {
                 let d = cdist(i as f32, c1, nf).min(cdist(i as f32, c1 + half, nf)) * 24.0 / nf;
@@ -472,9 +407,6 @@ pub fn voice_logo(v: Voice, t: i64, color: VoiceColor, out: &mut [Col]) {
     }
 }
 
-// ---------------------------------------------------------------------------------------------
-// One-shots
-
 pub const TIMER_STARTED_MS: i64 = 15000;
 pub const MUTE_SWEEP_MS: i64 = 600;
 
@@ -486,7 +418,6 @@ pub fn timer_started(t: i64, out: &mut [Col]) {
         fill(out, stock(TIMER_START_GREEN, 1.0 - ft / total));
         return;
     }
-    // Green at the four symmetry points, shrinking to nothing over 15 s.
     let hw = 2.5 * (1.0 - ft / total);
     let point = if ft < 14400.0 {
         1.0
@@ -506,7 +437,6 @@ pub fn timer_started(t: i64, out: &mut [Col]) {
     }
 }
 
-/// Mute indication one-shot: mic muted (on) / unmuted.
 pub fn mute_sweep(on: bool, t: i64, out: &mut [Col]) {
     let n = out.len();
     let nf = n as f32;
@@ -523,7 +453,6 @@ pub fn mute_sweep(on: bool, t: i64, out: &mut [Col]) {
         );
         return;
     }
-    // Two red heads from LED 0 to the opposite LED (unmute: the other way), with 4-LED tails.
     let half = nf / 2.0;
     let h = (ft / 500.0).min(1.0) * half;
     let tail = if ft > 500.0 {
@@ -545,7 +474,6 @@ pub fn mute_sweep(on: bool, t: i64, out: &mut [Col]) {
     }
 }
 
-/// Steady mute indication of short rings (the Midi shows it on the logo).
 pub fn mute_steady() -> Col {
     stock(0x200000, 1.0)
 }
@@ -578,7 +506,6 @@ pub fn volume(v: f32, out: &mut [Col]) {
     let n = out.len();
     let v = clamp01(v);
     let pts: &[(f32, u32)] = if wide(n) { &WIDE } else { &SHORT };
-    // Per-channel linear interpolation of the raw values.
     let mut j = 1;
     while j < pts.len() - 1 && v > pts[j].0 {
         j += 1;
@@ -594,7 +521,6 @@ pub fn volume(v: f32, out: &mut [Col]) {
         fill(out, stock(raw, 1.0));
         return;
     }
-    // Grows from the four symmetry points.
     let h = 3.5 * v;
     for (i, o) in out.iter_mut().enumerate() {
         let d = quarter_dist(i, n);
@@ -602,14 +528,9 @@ pub fn volume(v: f32, out: &mut [Col]) {
     }
 }
 
-// ---------------------------------------------------------------------------------------------
-// Effects
-
-/// Per-layer state of the stateful effects (Twinkle).
 #[derive(Clone, Debug)]
 pub struct EffectState {
     rng: u32,
-    /// Per LED, seconds since its sparkle started; < 0 idle.
     age: Vec<f32>,
 }
 
@@ -622,8 +543,6 @@ impl Default for EffectState {
     }
 }
 
-/// t: effect phase in s (speed-scaled), dt: its step since the previous frame. bri scales the
-/// result. Returns true if the content moves (needs further frames).
 pub fn effect(
     effect: Effect,
     c: Col,
@@ -654,7 +573,6 @@ pub fn effect(
             let head = ((t / 2.0) % 1.0) as f32 * nf;
             let len = (0.4 * nf).max(1.5);
             for (i, o) in out.iter_mut().enumerate() {
-                // Distance behind the head.
                 let d = 2.0f32.mul_add(nf, head - i as f32) % nf;
                 let k = if d < len {
                     (1.0 - d / len) * (1.0 - d / len)
@@ -669,7 +587,6 @@ pub fn effect(
             if st.age.len() != n {
                 st.age = vec![-1.0; n];
             }
-            // Sparkles per LED per second.
             let rate = if n <= 3 { 0.8 } else { 0.6 };
             for (a, o) in st.age.iter_mut().zip(out.iter_mut()) {
                 if *a >= 0.0 {
@@ -774,10 +691,6 @@ pub fn effect(
     }
 }
 
-// ---------------------------------------------------------------------------------------------
-// Music
-
-/// Music styles, without "Off" / "All styles" (resolved by the compositor).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Style {
     Spectrum,
@@ -794,20 +707,15 @@ impl Style {
 pub struct MusicInput {
     pub bands: [f32; 8],
     pub loudness: f32,
-    /// 1 on a beat, decaying.
     pub flash: f32,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct MusicState {
-    /// Disco rotation, turns.
     theta: f64,
-    /// Disco beat impulse, turns/s.
     impulse: f64,
-    /// Polar centre / target, turns.
     p: f64,
     target: f64,
-    /// Polar: phase of the next target pick.
     next_pick: f64,
     rng: u32,
 }
@@ -825,7 +733,6 @@ impl Default for MusicState {
     }
 }
 
-/// Advances the moving styles by phase step dt (speed-scaled seconds) at phase t.
 pub fn music_step(st: &mut MusicState, inp: &MusicInput, beat: bool, t: f64, dt: f64) {
     if beat {
         st.impulse += 1.0;
@@ -837,7 +744,6 @@ pub fn music_step(st: &mut MusicState, inp: &MusicInput, beat: bool, t: f64, dt:
         st.target = f64::from(xorshift(&mut st.rng)) / 4_294_967_296.0;
         st.next_pick = t + 5.0;
     }
-    // Shortest way, turns.
     let diff = (st.target - st.p + 1.5) % 1.0 - 0.5;
     let step = 0.1 * dt;
     let mv = if diff.abs() <= step {
@@ -867,7 +773,6 @@ pub fn music(s: Style, st: &MusicState, inp: &MusicInput, t: f64, out: &mut [Col
                 }
                 return;
             }
-            // Bass at LED 0, highs opposite, mirrored on both sides.
             for (i, o) in out.iter_mut().enumerate() {
                 let d0 = i.min(n - i);
                 let band = 7.min(d0 * 8 / (n / 2 + 1));

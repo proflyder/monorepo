@@ -1,7 +1,3 @@
-//! Minimal read-only Prometheus HTTP API client: one instant query.
-//!
-//! Wire-compatible with `solutions/mcp-gateway/internal/prometheus/client.go`.
-
 use std::collections::BTreeMap;
 use std::time::Duration;
 
@@ -12,20 +8,15 @@ use crate::{Error, build_http, decode, normalize_base_url};
 const DEFAULT_LIMIT: usize = 20;
 const MAX_BODY_BYTES: usize = 1 << 20;
 
-/// One series returned by an instant query.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Sample {
-    /// Series labels (`metric` in the Prometheus wire format).
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub labels: BTreeMap<String, String>,
-    /// Parsed numeric value. An unparsable value stays `0`, like the Go client.
     pub value: f64,
-    /// The raw string Prometheus returned next to the timestamp.
     #[serde(default)]
     pub raw: String,
 }
 
-/// A Prometheus-compatible API client.
 #[derive(Debug, Clone)]
 pub struct Client {
     http: reqwest::Client,
@@ -33,8 +24,6 @@ pub struct Client {
 }
 
 impl Client {
-    /// Build a client. `base_url` is the API root, for example
-    /// `http://prometheus.example:9090`.
     pub fn new(base_url: impl Into<String>, timeout: Duration) -> Result<Self, Error> {
         Ok(Self {
             http: build_http("prometheus query", timeout)?,
@@ -42,9 +31,6 @@ impl Client {
         })
     }
 
-    /// Run an instant query and return at most `limit` samples.
-    ///
-    /// An empty query is rejected, a non-positive limit becomes `20`.
     pub async fn query(&self, promql: &str, limit: usize) -> Result<Vec<Sample>, Error> {
         const OP: &str = "prometheus query";
         if promql.trim().is_empty() {

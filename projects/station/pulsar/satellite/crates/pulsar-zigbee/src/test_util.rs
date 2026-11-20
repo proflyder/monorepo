@@ -1,5 +1,3 @@
-//! Test helpers: an in-memory radio for the link, GPIO value files, golden comparison.
-
 use std::path::PathBuf;
 use std::pin::{Pin, pin};
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -11,8 +9,6 @@ use tokio::io::{AsyncRead, AsyncWrite, DuplexStream, ReadBuf};
 
 use crate::RadioPaths;
 
-/// Polls `f` once; None if it is not ready. Runs the link and the radio in lock-step from a
-/// single task, so that paused time only moves when the test says so.
 pub fn poll_once<F: Future>(f: F) -> Option<F::Output> {
     let mut f = pin!(f);
     match f.as_mut().poll(&mut Context::from_waker(Waker::noop())) {
@@ -28,7 +24,6 @@ pub fn hex(p: &[u8]) -> String {
     p.iter().map(|b| format!("{b:02x}")).collect()
 }
 
-/// Compares with a golden file line by line, naming the first difference.
 pub fn assert_golden(golden: &str, actual: &str) {
     let want: Vec<&str> = golden.lines().collect();
     let got: Vec<&str> = actual.lines().collect();
@@ -42,14 +37,12 @@ pub fn assert_golden(golden: &str, actual: &str) {
     );
 }
 
-/// The chip's end of an in-memory link.
 pub struct Radio {
     io: DuplexStream,
     rx: Vec<u8>,
 }
 
 impl Radio {
-    /// The next complete frame the link wrote, if one is there.
     pub(crate) fn read_frame(&mut self) -> Option<(u16, Vec<u8>)> {
         let mut buf = [0u8; 512];
         let mut cx = Context::from_waker(Waker::noop());
@@ -97,7 +90,6 @@ impl Radio {
     }
 }
 
-/// A link (reset as at open) and the radio's end of its wire.
 pub fn link_pair(lines: &RadioPaths) -> (Link, Radio) {
     let (a, b) = tokio::io::duplex(1 << 16);
     (
@@ -113,7 +105,6 @@ pub fn link_pair(lines: &RadioPaths) -> (Link, Radio) {
     )
 }
 
-/// Reset / boot files that do not exist: the link boots at once without driving anything.
 pub fn absent_lines() -> RadioPaths {
     RadioPaths {
         tty: String::new(),
@@ -122,7 +113,6 @@ pub fn absent_lines() -> RadioPaths {
     }
 }
 
-/// Reset and boot value files in a temporary directory.
 pub struct Lines {
     dir: PathBuf,
 }
@@ -155,7 +145,6 @@ impl Lines {
         &self.dir
     }
 
-    /// (boot, reset) as last written.
     pub(crate) fn get(&self) -> (String, String) {
         let read = |f: &str| std::fs::read_to_string(self.dir.join(f)).unwrap();
         (read("boot"), read("reset"))
@@ -170,7 +159,6 @@ impl Drop for Lines {
 
 pub use home_linux::testing::open_pty;
 
-/// A valid .ybl image of `version` (0x200 bytes + CRC-32 trailer).
 pub fn ybl_image(version: u32) -> Vec<u8> {
     let size = 0x200usize;
     let mut v: Vec<u8> = (0..size).map(|i| (i * 7 + 3) as u8).collect();

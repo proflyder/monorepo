@@ -1,5 +1,3 @@
-//! `infra.fix`: prepare, confirm and cancel exactly one rollout restart.
-
 use std::sync::Arc;
 
 use serde::Serialize;
@@ -13,13 +11,11 @@ use crate::domain::catalog;
 use crate::domain::state::{self, ACTION_ROLLOUT_RESTART, Action};
 use crate::kubernetes;
 
-/// The `infra.fix` group.
 pub struct FixGroup {
     deps: Arc<Deps>,
 }
 
 impl FixGroup {
-    /// Build the group.
     #[must_use]
     pub fn new(deps: Arc<Deps>) -> Self {
         Self { deps }

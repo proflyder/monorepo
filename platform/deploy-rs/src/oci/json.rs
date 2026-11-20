@@ -1,33 +1,18 @@
-//! Ordered JSON with Python `json.dumps` formatting.
-//!
-//! The OCI helpers must re-serialize `index.json` exactly like Python's
-//! `json.dumps(index, indent=2)`: object key order is preserved and strings
-//! escape everything outside printable ASCII except `<> &`. `serde_json::Value`
-//! sorts map keys (and escapes HTML), so this module keeps a small ordered tree.
-
 use std::fmt;
 
 use serde::de::{Deserialize, Deserializer, MapAccess, SeqAccess, Visitor};
 
-/// One JSON node with insertion-ordered objects.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Json {
-    /// `null`.
     Null,
-    /// `true`/`false`.
     Bool(bool),
-    /// A numeric literal, kept as its textual representation.
     Number(String),
-    /// A string.
     String(String),
-    /// An array.
     Array(Vec<Self>),
-    /// An insertion-ordered object.
     Object(Vec<(String, Self)>),
 }
 
 impl Json {
-    /// Looks up an object member.
     #[must_use]
     pub fn get(&self, key: &str) -> Option<&Self> {
         let Self::Object(entries) = self else {
@@ -39,7 +24,6 @@ impl Json {
             .map(|(_, value)| value)
     }
 
-    /// Mutably looks up an object member.
     pub fn get_mut(&mut self, key: &str) -> Option<&mut Self> {
         let Self::Object(entries) = self else {
             return None;
@@ -50,7 +34,6 @@ impl Json {
             .map(|(_, value)| value)
     }
 
-    /// Inserts or replaces a member, keeping its original position.
     pub fn set(&mut self, key: &str, value: Self) {
         if let Self::Object(entries) = self {
             if let Some((_, existing)) = entries.iter_mut().find(|(name, _)| name == key) {
@@ -61,13 +44,11 @@ impl Json {
         }
     }
 
-    /// Reports whether this is an object.
     #[must_use]
     pub fn is_object(&self) -> bool {
         matches!(self, Self::Object(_))
     }
 
-    /// Parses `data` preserving object key order and numeric literals.
     pub fn parse(data: &[u8]) -> Result<Self, String> {
         let mut deserializer = serde_json::Deserializer::from_slice(data);
         let value = Self::deserialize(&mut deserializer).map_err(|error| error.to_string())?;
@@ -151,8 +132,6 @@ impl<'de> Visitor<'de> for JsonVisitor {
     }
 }
 
-/// Renders like `json.dumps(value, indent=2)`: two spaces per level, no
-/// trailing newline, ASCII-only output.
 #[must_use]
 pub fn dump_indent(value: &Json) -> Vec<u8> {
     let mut buffer = Vec::with_capacity(256);
@@ -160,8 +139,6 @@ pub fn dump_indent(value: &Json) -> Vec<u8> {
     buffer
 }
 
-/// Renders like `json.dumps(value)`: Python's default separators (`, ` and
-/// `: `) on a single line.
 #[must_use]
 pub fn dump_compact(value: &Json) -> Vec<u8> {
     let mut buffer = Vec::with_capacity(128);
@@ -235,10 +212,6 @@ fn append_newline_indent(buffer: &mut Vec<u8>, indent: usize, level: usize) {
     }
 }
 
-/// Escapes a string exactly like Python's `json.dumps` with
-/// `ensure_ascii=True`: short escapes where Python has one, `\uXXXX` for
-/// everything outside printable ASCII (lower-case hex, surrogate pairs for
-/// non-BMP runes), and `<`, `>`, `&` literal.
 fn append_python_string(buffer: &mut Vec<u8>, value: &str) {
     buffer.push(b'"');
     for character in value.chars() {

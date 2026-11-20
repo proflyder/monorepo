@@ -1,35 +1,20 @@
-//! Station volume controls.
-//!
-//! The pulsar media player and the announcement number are hard-coded: the
-//! phone may choose only a catalog entry and a `set`/`mute`/`unmute` action,
-//! never an entity id or a service. The level is a 0–100 percentage in steps of
-//! five, matching both the phone slider and the Home Assistant number entity.
-
 use serde_json::{Map, Value};
 
 use super::Params;
 
-/// The pulsar media player exposed as `media_player.<station>` by the
-/// integration. It is the only mutable media player of the catalog.
 pub const VOLUME_MEDIA_PLAYER: &str = "media_player.iandeks_stantsiia_midi_media_player";
-/// The announcement volume number of the station.
 pub const VOLUME_ANNOUNCE_NUMBER: &str =
     "number.spalnia_iandeks_stantsiia_midi_gromkost_obiavlenii";
 
-/// Live volume state and what the entry can do.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Volume {
-    /// 0–100, rounded from Home Assistant.
     pub level: i32,
     pub muted: bool,
-    /// Whether `mute`/`unmute` are available (the media player, not the number).
     pub mute: bool,
-    /// The entry drives the announcement number instead of the media player.
     pub announce: bool,
 }
 
 impl Volume {
-    /// Validate the level of a `set` action and return it.
     pub fn set_level(&self, params: &Params) -> Result<i32, VolumeError> {
         let level = params.level.ok_or(VolumeError::Missing)?;
         if !(0..=100).contains(&level) {
@@ -41,7 +26,6 @@ impl Volume {
         Ok(level)
     }
 
-    /// Build the `media_player.volume_set` data.
     #[must_use]
     pub fn set_data(level: i32) -> Map<String, Value> {
         let mut data = Map::new();
@@ -52,7 +36,6 @@ impl Volume {
         data
     }
 
-    /// Build the `media_player.volume_mute` data.
     #[must_use]
     pub fn mute_data(muted: bool) -> Map<String, Value> {
         let mut data = Map::new();
@@ -61,7 +44,6 @@ impl Volume {
     }
 }
 
-/// Build the `number.set_value` data.
 #[must_use]
 pub fn value_data(level: i32) -> Map<String, Value> {
     let mut data = Map::new();
@@ -69,7 +51,6 @@ pub fn value_data(level: i32) -> Map<String, Value> {
     data
 }
 
-/// A rejected volume adjustment.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum VolumeError {
     #[error("volume needs a level")]

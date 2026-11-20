@@ -6,7 +6,6 @@ use super::*;
 use crate::release::Digest;
 use crate::test_source::{Fake, FakeAsset, layer, layer_with_digest, release, sha_hex};
 
-/// Временный каталог, удаляется при drop.
 struct TempDir(PathBuf);
 
 impl TempDir {
@@ -41,12 +40,10 @@ impl Drop for TempDir {
     }
 }
 
-/// «Бинарь» релиза: отвечает `--version` как pulsar.
 fn script(version: &str) -> Vec<u8> {
     format!("#!/bin/sh\necho 'pulsar {version}'\n").into_bytes()
 }
 
-/// То же с 300 кБ комментариев после exit: приходит многими чтениями.
 fn big_script(version: &str) -> Vec<u8> {
     let mut script = format!("#!/bin/sh\necho 'pulsar {version}'\nexit 0\n").into_bytes();
     for _ in 0..3000 {
@@ -58,7 +55,6 @@ fn big_script(version: &str) -> Vec<u8> {
 const INSTALLER: Installer = Installer::new("host");
 const ASSET: &str = "pulsar-host.bin";
 
-/// Установка с пустым прогрессом; ошибка и значения прогресса.
 async fn install(
     source: &Fake,
     release: &Release,
@@ -80,8 +76,6 @@ async fn install(
     (result, progress)
 }
 
-/// Тесты установки запускают только что записанные файлы: fork другого теста, пока файл
-/// ещё открыт на запись, дал бы ETXTBSY.
 static EXEC: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
 #[test]
@@ -142,7 +136,6 @@ async fn install_swaps_binary_and_extras() {
             name: "zigbee-router.ybl".into(),
             path: dir.join("zigbee-router.ybl"),
         },
-        // Не в этом релизе (404): ставится без него.
         Extra {
             name: "zigbee-coordinator.ybl".into(),
             path: dir.join("zigbee-coordinator.ybl"),
@@ -226,7 +219,6 @@ async fn install_refuses_bad_releases() {
     };
     let run = async |source: Fake, release: Release, extras: &[Extra]| {
         let (result, _) = install(&source, &release, &binary, extras).await;
-        // Ничего не изменилось и не осталось.
         assert_eq!(fs::read(&binary).expect("binary"), old);
         assert_eq!(dir.names(), ["pulsar"]);
         result
@@ -285,7 +277,6 @@ async fn install_refuses_bad_releases() {
         run(s, r, &e).await,
         fatal("SHA256SUMS lists no zigbee-router.ybl")
     );
-    // Не вина релиза: стоит повторить.
     let (s, r, e) = attempt(
         body(&good),
         body(good_sums.as_bytes()),
@@ -351,7 +342,6 @@ async fn install_reports_file_errors() {
             staged.display()
         )))
     );
-    // Запущенного бинаря нет: .prev не появляется, ничего не подменено.
     let binary = dir.join("pulsar");
     let (result, _) = install(&source, &release, &binary, &[]).await;
     assert_eq!(

@@ -1,10 +1,3 @@
-//! Drives the real `agent/ha-config-agent.sh` against a temporary root.
-//!
-//! The script is embedded at compile time, so the test works from both the
-//! Cargo tree and the Bazel runfiles tree. It needs only POSIX `sh`, `sha256sum`
-//! or `shasum`, `base64` and the usual coreutils. `flock` is optional in the
-//! agent, which is what lets the same test run on macOS.
-
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
@@ -254,8 +247,6 @@ fn the_configured_source_address_is_enforced() {
     let fixture = Fixture::new();
     fixture.ensure_root();
 
-    // No HA_CONFIG_AGENT_ALLOWED_FROM: the SSH server's restrict/command is the
-    // only restriction (development and tests).
     assert_eq!(fixture.run_ok("version", b"").trim(), "ha-config-agent 1");
 
     let allowed = [("HA_CONFIG_AGENT_ALLOWED_FROM", "192.0.2.10")];
@@ -268,7 +259,6 @@ fn the_configured_source_address_is_enforced() {
         "ha-config-agent 1"
     );
 
-    // A comma or space separated list is accepted.
     for list in ["192.0.2.10,192.0.2.11", "192.0.2.10 192.0.2.11"] {
         let environment = [
             ("HA_CONFIG_AGENT_ALLOWED_FROM", list),
@@ -290,14 +280,12 @@ fn the_configured_source_address_is_enforced() {
             .contains("source not allowed")
     );
 
-    // Without SSH_CLIENT/SSH_CONNECTION the source cannot be verified.
     assert!(
         fixture
             .run_err_with("version", b"", &allowed, None)
             .contains("source not allowed")
     );
 
-    // The fallback variable is used when SSH_CLIENT is absent.
     let connection = [
         ("HA_CONFIG_AGENT_ALLOWED_FROM", "192.0.2.10"),
         ("SSH_CONNECTION", "192.0.2.10 41234 192.0.2.1 22222"),
@@ -312,7 +300,6 @@ fn the_configured_source_address_is_enforced() {
 fn glob_arguments_are_never_expanded() {
     let fixture = Fixture::new();
     fixture.ensure_root();
-    // A file that `*` would expand to if `set -f` were missing.
     std::fs::write(fixture.directory.path().join("20260101T000000Z"), b"x").expect("write");
     let error = fixture.run_err_with("restore *", b"", &[], Some(fixture.directory.path()));
     assert!(error.contains("invalid backup id"), "{error}");

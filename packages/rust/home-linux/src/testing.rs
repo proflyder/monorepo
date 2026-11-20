@@ -1,13 +1,9 @@
-//! Test-only helpers: a pseudo-terminal pair for the serial-port code.
-
 use std::ffi::CStr;
 use std::io;
 use std::os::fd::{FromRawFd, OwnedFd};
 
 use crate::Tty;
 
-/// A pseudo-terminal pair: the master end (a [`Tty`], for reading and writing the slave's bytes)
-/// and the path of the slave (a real terminal for the link and the flasher).
 pub fn open_pty() -> io::Result<(Tty, String)> {
     // SAFETY: plain call with valid flags; the result is checked.
     let fd = unsafe { libc::posix_openpt(libc::O_RDWR | libc::O_NOCTTY | libc::O_CLOEXEC) };

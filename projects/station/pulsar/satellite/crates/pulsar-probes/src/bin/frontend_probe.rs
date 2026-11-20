@@ -1,12 +1,3 @@
-//! Runs the microphone front-end without the daemon (stop the service first: the capture device
-//! has one user) and prints its events, plus once a second: VQE chunks, audio chunks, music
-//! frames, the captured rate and how far the processing thread is behind (FIFO).
-//! usage: frontend_probe [seconds=30] [--wake alisa|yandex|ricardo] [--stream] [--music] [--commands]
-//!                       [--record <wav> <seconds>]
-//! Without --commands only the wake word spotter runs (the daemon runs the command spotter too,
-//! unless the microphone is muted). --wake ricardo uses the on-device model in
-//! /data/pulsar/wakewords. --record writes the first <seconds> of the raw capture (all
-//! channels, S16) as a WAV for ww_offline. No sound is played.
 #![deny(unsafe_code)]
 #![deny(unsafe_op_in_unsafe_fn)]
 
@@ -53,7 +44,6 @@ struct Cli {
     music: bool,
     #[arg(long)]
     commands: bool,
-    /// Write the first <seconds> of raw capture as a WAV.
     #[arg(long, num_args = 2, value_names = ["WAV", "SECONDS"])]
     record: Option<Vec<String>>,
 }
@@ -74,7 +64,6 @@ impl Cli {
     }
 }
 
-/// Raw capture into a WAV; the header is written with the final size.
 struct Recorder {
     file: BufWriter<File>,
     path: PathBuf,
@@ -99,7 +88,6 @@ impl Recorder {
         })
     }
 
-    /// Appends up to the requested length; false once complete.
     fn write(&mut self, block: &[i16]) -> std::io::Result<bool> {
         let n = block
             .len()
@@ -161,7 +149,6 @@ fn main() -> ExitCode {
     }
 }
 
-/// Ok(false): no VQE chunk was processed.
 async fn run(m: &'static DeviceProfile, a: Args) -> std::io::Result<bool> {
     out!(
         "frontend_probe: {} ({}), {} s, wake {}, stream {}, music {}, commands {}{}",
@@ -278,7 +265,6 @@ async fn run(m: &'static DeviceProfile, a: Args) -> std::io::Result<bool> {
     let s = h.stats();
     drop(h);
     if let Some(r) = recorder.take() {
-        // Ended before the requested length.
         r.finish()?;
     }
     out!(
@@ -295,7 +281,6 @@ async fn run(m: &'static DeviceProfile, a: Args) -> std::io::Result<bool> {
         s.captured_frames,
         s.dropped_frames
     );
-    // Rates from the first second that had chunks (the capture start is not counted).
     if let Some((t0, s0, audio0, music0)) = first {
         let dt = t0.elapsed().as_secs_f64();
         if dt > 0.5 {

@@ -1,5 +1,3 @@
-//! The compatibility error envelope used by every API failure.
-
 use std::collections::BTreeMap;
 
 use axum::Json;
@@ -9,7 +7,6 @@ use serde::Serialize;
 
 use super::ApiState;
 
-/// Go's `errorResponse` field order and optional fields.
 #[derive(Debug, Serialize)]
 pub struct ErrorEnvelope {
     pub timestamp: String,
@@ -25,7 +22,6 @@ pub struct ErrorEnvelope {
     pub details: Option<BTreeMap<String, String>>,
 }
 
-/// Build and return an error response for `path`.
 #[allow(clippy::too_many_arguments)]
 pub fn write_error(
     state: &ApiState,
@@ -50,7 +46,6 @@ pub fn write_error(
     (status, Json(envelope)).into_response()
 }
 
-/// 401 for a missing or invalid bearer token.
 pub fn unauthorized(state: &ApiState, path: &str) -> Response {
     write_error(
         state,

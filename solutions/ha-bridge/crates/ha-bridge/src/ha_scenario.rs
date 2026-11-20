@@ -1,6 +1,3 @@
-//! `ha-scenario` entry point: the durable `scenario` queue executor plus the
-//! distroless `-healthcheck` probe.
-
 use std::process::ExitCode;
 
 #[tokio::main]

@@ -20,16 +20,12 @@ const GATEWAY: u32 = 0x1500_0351;
 fn firmware_decisions() {
     use Decision::*;
     let r = Mode::Router;
-    // The role's image runs.
     assert_eq!(decide(ROUTER_IMAGE, Some(ROUTER_IMAGE), r, 0), Run);
-    // Another build of the same firmware is replaced...
     assert_eq!(decide(0x5000_0001, Some(ROUTER_IMAGE), r, 0), Flash);
-    // ...unless the radio did not take this image before: keep what runs.
     assert_eq!(
         decide(0x5000_0001, Some(ROUTER_IMAGE), r, ROUTER_IMAGE),
         Keep
     );
-    // Another family is replaced, whatever failed earlier.
     assert_eq!(decide(GATEWAY, Some(ROUTER_IMAGE), r, 0), Flash);
     assert_eq!(
         decide(COORD_IMAGE, Some(ROUTER_IMAGE), r, ROUTER_IMAGE),
@@ -39,7 +35,6 @@ fn firmware_decisions() {
         decide(ROUTER_IMAGE, Some(COORD_IMAGE), Mode::Coordinator, 0),
         Flash
     );
-    // Without a readable image only the family counts.
     assert_eq!(decide(0x5000_0001, None, r, 0), Run);
     assert_eq!(decide(GATEWAY, None, r, 0), Flash);
     assert_eq!(decide(0x51FF_FFFF, None, Mode::Coordinator, 0), Run);
@@ -49,13 +44,9 @@ fn firmware_decisions() {
     assert_eq!(family_name(0x1234_5678), "unknown");
 }
 
-/// What the emulated radio runs, per opening of the link.
 #[derive(Clone)]
 enum Fw {
-    /// Answers 0x0900 with this version; as a router or coordinator it also answers its
-    /// commands.
     Runs(u32),
-    /// No ACK, no answer (an interrupted upload).
     Silent,
 }
 
@@ -89,7 +80,6 @@ type Gate = Arc<(Mutex<bool>, std::sync::Condvar)>;
 
 struct FakeFlasher {
     flashed: Arc<Mutex<u32>>,
-    /// The fake flasher finishes only once this is set.
     gate: Gate,
 }
 
@@ -120,9 +110,7 @@ struct Rig {
     fws: Rc<RefCell<VecDeque<Fw>>>,
     flashed: Arc<Mutex<u32>>,
     gate: Gate,
-    /// The router firmware reports itself on a network.
     joined: Rc<Cell<bool>>,
-    /// Status when spawn returned; its Changed is taken off the channel.
     initial: String,
     dir: Lines,
     rx: UnboundedReceiver<ZigbeeEvent>,
@@ -147,7 +135,6 @@ fn coord_state() -> Vec<u8> {
 }
 
 impl Rig {
-    /// `fws`: what the radio runs at each opening (the last one repeats); `open_fails`: no tty.
     fn spawn(mode: Mode, fws: &[Fw], failed_version: u32, open_fails: bool) -> Self {
         let dir = Lines::new();
         let router_image = dir.dir().join("zigbee-router.ybl");
@@ -192,7 +179,6 @@ impl Rig {
         }
     }
 
-    /// Lets the actor and the radio run (no time passes).
     async fn pump(&mut self) {
         for _ in 0..200 {
             tokio::task::yield_now().await;
@@ -228,7 +214,6 @@ impl Rig {
         }
     }
 
-    /// Lets the flasher finish, waits for its thread, then pumps.
     async fn after_flash(&mut self) {
         *self.gate.0.lock().unwrap() = true;
         self.gate.1.notify_all();
@@ -263,7 +248,6 @@ async fn local<F: Future<Output = ()>>(f: F) {
 async fn off_does_nothing() {
     local(async {
         let mut r = Rig::spawn(Mode::Off, &[Fw::Runs(GATEWAY)], 0, false);
-        // The first Changed is queued before spawn returns.
         assert_eq!(r.initial, "off");
         r.handle.join();
         r.pump().await;
@@ -297,7 +281,6 @@ async fn router_runs_joins_and_leaves() {
                 "changed router: not in a network"
             ]
         );
-        // join: Changed once the actor ran it; leave: no Changed, the status follows.
         r.handle.join();
         r.pump().await;
         assert_eq!(r.take(), ["changed router: joining"]);
@@ -305,7 +288,6 @@ async fn router_runs_joins_and_leaves() {
         r.pump().await;
         assert!(r.take().is_empty());
         assert_eq!(r.status(), "router: not in a network");
-        // Joined (0x8906, then the channel from 0x8045).
         r.joined.set(true);
         {
             let mut radios = r.radios.borrow_mut();
@@ -339,8 +321,6 @@ async fn other_firmware_is_written_then_identified() {
         assert!(r.handle.flashing());
         assert_eq!(r.take(), ["changed writing Router firmware: 0 %"]);
         r.after_flash().await;
-        // The events are read after the fact, so each shows the final status: count them.
-        // 5 % steps: 5..=100 (0 % came with the start), then "starting" and the role's two.
         let seen = r.take();
         let changed = seen.iter().filter(|s| s.starts_with("changed")).count();
         assert_eq!(changed, 20 + 1 + 2, "{seen:?}");
@@ -387,7 +367,6 @@ async fn an_image_given_up_on_is_not_written_again() {
             ["changed error: the radio did not take firmware 0x50010203; not written again"]
         );
         assert_eq!(*r.flashed.lock().unwrap(), 0);
-        // Same family: what runs is kept.
         let mut r = Rig::spawn(Mode::Router, &[Fw::Runs(0x5000_0001)], ROUTER_IMAGE, false);
         r.pump().await;
         assert_eq!(
@@ -404,7 +383,6 @@ async fn an_image_given_up_on_is_not_written_again() {
 #[tokio::test(start_paused = true)]
 async fn silent_radio_is_written_or_asked_again() {
     local(async {
-        // Silent for 10 s: written.
         let mut r = Rig::spawn(
             Mode::Router,
             &[Fw::Silent, Fw::Runs(ROUTER_IMAGE)],
@@ -421,7 +399,6 @@ async fn silent_radio_is_written_or_asked_again() {
         r.after_flash().await;
         assert!(r.status().starts_with("router: "), "{}", r.status());
 
-        // Silent, and its image was given up on: asked again after 60 s.
         let mut r = Rig::spawn(Mode::Router, &[Fw::Silent], ROUTER_IMAGE, false);
         r.pump().await;
         tokio::time::advance(Duration::from_millis(10_000)).await;
@@ -528,7 +505,6 @@ async fn shutdown_during_a_flash_does_not_wait_for_it() {
         let mut r = Rig::spawn(Mode::Router, &[Fw::Runs(GATEWAY)], 0, false);
         r.pump().await;
         assert!(r.handle.flashing());
-        // The upload is stuck (gate closed): dropping the handles still ends the actor at once.
         drop(r.handle);
         let start = tokio::time::Instant::now();
         assert!(
@@ -538,7 +514,6 @@ async fn shutdown_during_a_flash_does_not_wait_for_it() {
                 .is_empty()
         );
         assert_eq!(start.elapsed(), Duration::ZERO);
-        // Let the detached flasher thread finish.
         *r.gate.0.lock().unwrap() = true;
         r.gate.1.notify_all();
     })

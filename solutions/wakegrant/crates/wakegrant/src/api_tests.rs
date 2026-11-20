@@ -1,5 +1,3 @@
-//! End-to-end HTTP tests through the real router and an in-memory store.
-
 use std::sync::{Arc, Mutex};
 
 use axum::Router;

@@ -1,22 +1,3 @@
-//! Self-test harness for the ESPHome API server: runs it with printing event handlers so a real
-//! client (aioesphomeapi, tools/esphome_check.py, Home Assistant) can be pointed
-//! at it. No mDNS: HA does not discover it.
-//!
-//! Usage: api_selftest [port=16053] [name=pulsar-selftest] [run_seconds=120] [key_file]
-//!
-//! key_file: Noise key file as in the daemon's state dir (api_key, base64 of 32 bytes); without
-//! it the server is plaintext-only and encryption unsupported. A key set from the client
-//! (NoiseEncryptionSetKeyRequest) is written there.
-//!
-//! Behaviour:
-//!  - events print "HOOK ..." lines on stdout and echo state back (switch / number / media /
-//!    text / select);
-//!  - once a client subscribes to the voice assistant it sends a start request (wake word
-//!    "Алиса"), streams 20 x 512-sample audio chunks, then a stop request;
-//!  - announcements are acknowledged with VoiceAssistantAnnounceFinished after 300 ms;
-//!  - every 2 s the illuminance sensor is published and a button "action" event fired;
-//!  - the "Restart" button stops the test (exit 0).
-
 use clap::Parser;
 use std::cell::Cell;
 use std::path::PathBuf;
@@ -53,12 +34,10 @@ struct Echo {
     media: MediaState,
     volume: f32,
     muted: bool,
-    /// Set when the test ends: pending voice / announce steps are dropped.
     stopped: Rc<Cell<bool>>,
 }
 
 impl Echo {
-    /// Prints the event the way the C++ hooks did; false: stop the test.
     fn on_event(&mut self, ev: ApiEvent) -> bool {
         match ev {
             ApiEvent::ClientConnected { client_info } => println!("HOOK connected '{client_info}'"),
@@ -106,8 +85,6 @@ impl Echo {
                 self.api.set_active_wake_words(ids);
             }
             ApiEvent::MediaCommand(c) => {
-                // An unknown command value from the wire arrives as None (has_cmd=0 here); the
-                // C++ harness printed has_cmd=1 with the raw value.
                 println!(
                     "HOOK media has_cmd={} cmd={} has_vol={} vol={:.2} has_url={} url={} has_ann={} ann={}",
                     b(c.command.is_some()),
@@ -189,21 +166,17 @@ impl Echo {
                 println!("HOOK restart");
                 return false;
             }
-            // The C++ harness had no handlers for these.
             ApiEvent::Update(_) | ApiEvent::MdnsTxtChanged(_) => {}
         }
         true
     }
 }
 
-/// Sleeps until `at`; false once the test is over (the C++ loop dropped its pending timers).
 async fn wait_until(stopped: &Rc<Cell<bool>>, at: Instant) -> bool {
     sleep_until(at).await;
     !stopped.get()
 }
 
-/// A voice run 500 ms after the subscription: start, 20 chunks of 512 samples 30 ms apart,
-/// stop.
 async fn voice_run(api: ApiHandle, stopped: Rc<Cell<bool>>) {
     if !wait_until(&stopped, Instant::now() + Duration::from_millis(500)).await {
         return;
@@ -244,7 +217,6 @@ fn main() -> ExitCode {
     let (port, name, run_s, key_path) = (cli.port, cli.name, cli.run_seconds, cli.key_file);
     pulsar_core::init_logger();
     pulsar_core::add_own_target(module_path!());
-    // Как в демоне: см. docs/architecture.md, «Модель исполнения», п. 1.
     let rt = match tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .max_blocking_threads(4)
@@ -258,7 +230,6 @@ fn main() -> ExitCode {
     };
     let local = tokio::task::LocalSet::new();
     let code = local.block_on(&rt, run(port, name, run_s, key_path));
-    // The server's teardown (DisconnectRequest to the clients) runs when its actor stops.
     local.block_on(
         &rt,
         pulsar_core::supervisor().shutdown(Duration::from_secs(3)),

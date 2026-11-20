@@ -1,7 +1,3 @@
-//! Локальный HTTPS-сервер для тестов клиента и установщика: rustls с тестовым CA из
-//! tests/data. Файлы вшиты в тестовый бинарь (`include_str!`), поэтому нет двойственности
-//! CARGO_MANIFEST_DIR / runfiles.
-
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, OnceLock};
@@ -18,7 +14,6 @@ const SERVER_PEM: &str = include_str!("../tests/data/server.pem");
 const SERVER_KEY: &str = include_str!("../tests/data/server.key");
 const CA_PEM: &str = include_str!("../tests/data/ca.pem");
 
-/// Путь к тестовому CA на диске (клиент читает бандл из файла, как на станции).
 pub fn ca_file() -> PathBuf {
     static CA: OnceLock<PathBuf> = OnceLock::new();
     CA.get_or_init(|| {
@@ -30,14 +25,10 @@ pub fn ca_file() -> PathBuf {
     .clone()
 }
 
-/// Что соединение делает после ответа.
 #[derive(Clone, Copy)]
 pub enum End {
-    /// TLS close_notify, затем закрыть.
     Close,
-    /// Закрыть без close_notify.
     Drop,
-    /// Держать соединение открытым, ничего не присылая.
     Hang,
 }
 
@@ -74,15 +65,12 @@ pub type Session = (Option<String>, Option<ProtocolVersion>);
 
 pub struct Server {
     pub port: u16,
-    /// Заголовки запросов в порядке прихода.
     pub requests: Arc<std::sync::Mutex<Vec<String>>>,
-    /// SNI и согласованная версия каждого завершённого handshake.
     pub sessions: Arc<std::sync::Mutex<Vec<Session>>>,
     routes: Arc<std::sync::Mutex<HashMap<String, Reply>>>,
 }
 
 impl Server {
-    /// TLS 1.2 и 1.3 на 127.0.0.1 из задачи текущего LocalSet; неизвестный путь — 404.
     pub async fn start() -> Self {
         Self::start_with(rustls::DEFAULT_VERSIONS).await
     }
@@ -130,7 +118,6 @@ impl Server {
                         return;
                     };
                     let sni = start.client_hello().server_name().map(str::to_owned);
-                    // Ошибка — клиент не принял сертификат.
                     let Ok(mut tls) = start.into_stream(config).await else {
                         return;
                     };

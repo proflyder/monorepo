@@ -1,16 +1,7 @@
-//! protobuf-сообщения ESPHome Native API, написанные вручную на prost.
-//!
-//! Объявлены только сообщения, которые сервер отправляет или читает; номера полей и типы — из
-//! vendored `api.proto` (файл `api.proto` в этом крейте). Скалярные поля, которые C++-референс
-//! писал даже при значении protobuf по умолчанию (его `Writer::… force = true`: заголовки
-//! сущностей, уровни логов, пустые строки опций), объявлены `Option<T>`: `Some(default)`
-//! сохраняет ноль на проводе, а обычное поле было бы опущено.
-
 use prost::Message;
 
 pub mod msg;
 
-/// `key` пишется всегда: HA ведёт по нему реестр сущностей.
 #[derive(Clone, PartialEq, Eq, Message)]
 pub struct HelloRequest {
     #[prost(string, optional, tag = "1")]
@@ -116,8 +107,6 @@ pub struct BinarySensorStateResponse {
     pub missing_state: Option<bool>,
 }
 
-/// LightStateResponse. Порядок полей — как у C++-сервера (`1,2,3,10,11,4,5,6,9`), а не по
-/// тегам: golden-захват референса сравнивается байт в байт.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct LightStateResponse {
     pub key: u32,
@@ -664,8 +653,6 @@ pub struct TextStateResponse {
 pub struct TextCommandRequest {
     #[prost(fixed32, optional, tag = "1")]
     pub key: Option<u32>,
-    /// Байты, а не `String`: C++-сервер считал длину «Clock text» по тому, что получил, и
-    /// невалидный UTF-8 проходил в контроллер как lossy-текст (см. `commands::clock_text`).
     #[prost(bytes = "vec", optional, tag = "2")]
     pub state: Option<Vec<u8>>,
 }

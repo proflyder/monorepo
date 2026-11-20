@@ -1,12 +1,3 @@
-//! `bb.read` / `bb.act`: the bb home-dispatcher tool groups.
-//!
-//! Ports `solutions/mcp-gateway/internal/tools/bb.go`. Reading threads is
-//! separate from starting one, mirroring the `infra.read`/`infra.fix` split.
-//! `bb_status` lists only `profile == personal` threads; `bb_prepare_spawn`
-//! resolves a spoken name exclusively among personal targets and stores one
-//! pending spawn for the `MCP_PENDING_TTL` window; `bb_confirm` starts it and
-//! turns on agent conversation mode.
-
 use std::fmt::Write as _;
 use std::sync::Arc;
 
@@ -20,19 +11,15 @@ use super::{
     Annotations, BoxFuture, Deps, ToolGroup, ToolOutcome, ToolSpec, empty_schema, failure, respond,
 };
 
-/// The pending key of `bb.act`; infra's restart store is separate.
 pub const BB_PENDING_KEY: &str = "bb.spawn";
 
-/// Upper bound for the task text accepted from speech.
 pub const MAX_BB_TASK_RUNES: usize = 2000;
 
-/// The `bb.read` group.
 pub struct BbReadGroup {
     deps: Arc<Deps>,
 }
 
 impl BbReadGroup {
-    /// Build the group.
     #[must_use]
     pub fn new(deps: Arc<Deps>) -> Self {
         Self { deps }
@@ -67,13 +54,11 @@ impl ToolGroup for BbReadGroup {
     }
 }
 
-/// The `bb.act` group.
 pub struct BbActGroup {
     deps: Arc<Deps>,
 }
 
 impl BbActGroup {
-    /// Build the group.
     #[must_use]
     pub fn new(deps: Arc<Deps>) -> Self {
         Self { deps }
@@ -133,8 +118,6 @@ impl ToolGroup for BbActGroup {
         })
     }
 }
-
-// --- bb_status ------------------------------------------------------------
 
 #[derive(Debug, Serialize)]
 struct StatusDetail {
@@ -199,8 +182,6 @@ fn status_speech(threads: &[bb::Thread]) -> String {
     speech.push('.');
     speech
 }
-
-// --- bb_prepare_spawn -----------------------------------------------------
 
 #[derive(Debug, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -328,7 +309,6 @@ async fn prepare_spawn(deps: &Deps, arguments: Value) -> ToolOutcome {
     )
 }
 
-/// The tool input of `bb_prepare_spawn`.
 #[derive(Debug, Default, serde::Deserialize)]
 struct SpawnInput {
     #[serde(default)]
@@ -379,8 +359,6 @@ fn new_idempotency_key() -> String {
     }
     key
 }
-
-// --- bb_confirm -----------------------------------------------------------
 
 #[derive(Debug, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -451,8 +429,6 @@ async fn confirm(deps: &Deps) -> ToolOutcome {
         }),
     )
 }
-
-// --- bb_cancel ------------------------------------------------------------
 
 #[derive(Debug, Default, Serialize)]
 struct CancelDetail {

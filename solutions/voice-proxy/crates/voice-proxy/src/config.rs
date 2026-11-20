@@ -1,14 +1,3 @@
-//! Typed environment configuration.
-//!
-//! The contract:
-//!
-//! * a `*_FILE` variable wins over the inline value and is re-read from disk on
-//!   every use; a configured but unreadable file yields an **empty** secret and
-//!   never falls back;
-//! * trailing slashes are stripped from every base URL;
-//! * a default applies only when the variable is unset, not when it is set to
-//!   an empty string.
-
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::time::Duration;
@@ -20,46 +9,26 @@ use thiserror::Error;
 
 use crate::services::TokenProvider;
 
-/// Default OpenAI-compatible upstream.
 pub const DEFAULT_UPSTREAM: &str = "http://127.0.0.1:8642";
-/// Default listen address.
 pub const DEFAULT_BIND: &str = "127.0.0.1";
-/// Default listen port.
 pub const DEFAULT_PORT: u16 = 8643;
-/// Default reasoning effort injected into every chat request.
 pub const DEFAULT_REASONING_EFFORT: &str = "low";
-/// Default profile `input_select` entity.
 pub const DEFAULT_PROFILE_ENTITY: &str = "input_select.ricardo_voice_profile";
-/// Default successful profile-read cache.
 pub const DEFAULT_PROFILE_CACHE_MS: u64 = 2_000;
-/// Default Home Assistant timeout.
 pub const DEFAULT_HA_TIMEOUT: f64 = 3.0;
-/// Default gateway timeout.
 pub const DEFAULT_GATEWAY_TIMEOUT: f64 = 5.0;
-/// Default late-answer budget.
 pub const DEFAULT_RESULT_TIMEOUT: f64 = 900.0;
-/// Default late-answer retry pause.
 pub const DEFAULT_RESULT_RETRY: f64 = 2.0;
-/// Default long-poll wait.
 pub const DEFAULT_RESULT_WAIT: u64 = 25;
-/// Default updates retry minimum.
 pub const DEFAULT_UPDATES_RETRY: f64 = 2.0;
-/// Default updates rescan window.
 pub const DEFAULT_UPDATES_RESCAN: i64 = 300;
-/// Default announcement truncation limit.
 pub const DEFAULT_ANNOUNCE_MAX_CHARS: usize = 200;
-/// Default statement announcement script.
 pub const DEFAULT_ANNOUNCE_SCRIPT: &str = "script.schedule_announce";
-/// Default satellite entity.
 pub const DEFAULT_SATELLITE: &str = "assist_satellite.iandeks_stantsiia_midi_assist_satellite";
-/// Default media-player idle gate.
 pub const DEFAULT_MEDIA_PLAYER: &str = "media_player.iandeks_stantsiia_midi_media_player";
-/// Default scheduler consumer id.
 pub const DEFAULT_QUEUE_CONSUMER: &str = "voice-proxy-home";
-/// Default announcement TTL.
 pub const DEFAULT_ANNOUNCE_TTL: i64 = 10_800;
 
-/// Non-secret settings parsed by clap with `env`.
 #[derive(Debug, Clone, Parser)]
 #[command(name = "voice-proxy", version, disable_help_subcommand = true)]
 pub struct Settings {
@@ -225,8 +194,6 @@ pub struct Settings {
     pub announce_ttl: i64,
 }
 
-/// A secret that may come from a mounted file (re-read on every use) or from
-/// the environment.
 #[derive(Debug, Clone, Default)]
 pub struct SecretSource {
     file: Option<PathBuf>,
@@ -234,7 +201,6 @@ pub struct SecretSource {
 }
 
 impl SecretSource {
-    /// Builds the source; a non-empty file path wins over the inline value.
     #[must_use]
     pub fn new(file: &str, inline: &str) -> Self {
         Self {
@@ -243,8 +209,6 @@ impl SecretSource {
         }
     }
 
-    /// The current plaintext. A configured but unreadable file is empty and
-    /// does not fall back.
     #[must_use]
     pub fn value(&self) -> String {
         self.file.as_ref().map_or_else(
@@ -257,14 +221,11 @@ impl SecretSource {
         )
     }
 
-    /// Whether the secret currently resolves to a non-empty value. A
-    /// configured but unreadable file counts as unset, like the Go checks.
     #[must_use]
     pub fn is_configured(&self) -> bool {
         !self.value().is_empty()
     }
 
-    /// A provider that re-reads the file on every call.
     #[must_use]
     pub fn provider(self: &std::sync::Arc<Self>) -> TokenProvider {
         let source = std::sync::Arc::clone(self);
@@ -272,7 +233,6 @@ impl SecretSource {
     }
 }
 
-/// A validated process configuration.
 #[derive(Debug, Clone)]
 pub struct Config {
     pub upstream: String,
@@ -314,12 +274,6 @@ pub enum ConfigError {
 }
 
 impl Config {
-    /// Reads the process environment. Extra CLI arguments (`-healthcheck`) are
-    /// handled by `main` before this is called.
-    ///
-    /// # Errors
-    ///
-    /// Returns a clap error for an invalid value or a listen-address error.
     pub fn load() -> Result<Self, ConfigError> {
         let program = std::env::args_os()
             .next()
@@ -331,11 +285,6 @@ impl Config {
         )
     }
 
-    /// Builds the validated configuration from parsed settings.
-    ///
-    /// # Errors
-    ///
-    /// Returns a listen-address error.
     pub fn from_settings(settings: Settings, log_level: LogLevel) -> Result<Self, ConfigError> {
         let config = Self {
             upstream: base_url(&settings.upstream),
@@ -376,16 +325,10 @@ impl Config {
             )),
             log_level,
         };
-        // Fail before the service starts rather than on the first request.
         let _ = config.listen()?;
         Ok(config)
     }
 
-    /// The TCP address the HTTP server binds.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error when the bind/port pair is not an address.
     pub fn listen(&self) -> Result<SocketAddr, ConfigError> {
         let host = if self.bind.contains(':') && !self.bind.starts_with('[') {
             format!("[{}]", self.bind)
@@ -397,9 +340,6 @@ impl Config {
             .map_err(|_| ConfigError::Listen(self.bind.clone()))
     }
 
-    /// Routing is enabled only when the full profile → gateway path is
-    /// configured; a partially configured deployment keeps the plain sanitiser
-    /// behaviour.
     #[must_use]
     pub fn routing_enabled(&self) -> bool {
         !self.gateway_url.is_empty()
@@ -408,13 +348,11 @@ impl Config {
             && self.ha_token.is_configured()
     }
 
-    /// Whether the dispatcher updates poller should run.
     #[must_use]
     pub fn updates_enabled(&self) -> bool {
         self.routing_enabled() && !self.updates_disabled
     }
 
-    /// Whether the durable announcement queue is fully configured.
     #[must_use]
     pub fn queue_enabled(&self) -> bool {
         !self.scheduler_url.is_empty()
@@ -422,13 +360,11 @@ impl Config {
             && !self.queue_disabled
     }
 
-    /// The consumer needs both switches.
     #[must_use]
     pub fn queue_enabled_and_routed(&self) -> bool {
         self.queue_enabled() && self.routing_enabled()
     }
 
-    /// The JSON-safe summary printed by `-status`; never a token value.
     #[must_use]
     pub fn redacted(&self) -> Redacted {
         Redacted {
@@ -463,7 +399,6 @@ impl Config {
     }
 }
 
-/// The redacted `-status` summary.
 #[derive(Debug, Clone, Serialize)]
 pub struct Redacted {
     pub listen: String,
@@ -499,12 +434,10 @@ fn seconds(value: f64) -> Duration {
     Duration::from_secs_f64(value.max(0.0))
 }
 
-/// Strips trailing slashes from a base URL.
 fn base_url(value: &str) -> String {
     value.trim().trim_end_matches('/').to_owned()
 }
 
-/// The accepted off spellings, case-insensitively.
 #[must_use]
 pub fn switched_off(value: &str) -> bool {
     matches!(

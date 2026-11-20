@@ -1,16 +1,5 @@
-//! `ICredentialProvider` and the state shared with the credential and the
-//! worker.
-//!
-//! No tile appears until the worker has claimed a valid one-time wakegrant;
-//! every failure path removes it again. [`Session`] is reference-counted and is
-//! the only state the credential and worker touch, so the provider object may
-//! be destroyed at any time.
-
-/// Budget from provider load to the last challenge attempt: 90 s.
 pub const WORKER_BUDGET_MS: u64 = 90 * 1000;
 
-/// Cold-boot window from `GetTickCount64()`: a grant is considered only within
-/// the first 10 minutes after boot.
 pub const MAX_UPTIME_MS: u64 = 10 * 60 * 1000;
 
 pub fn within_budget(elapsed_ms: u64) -> bool {
@@ -60,8 +49,6 @@ mod windows_impl {
 
     use super::within_budget;
 
-    /// `{9459CCEA-4CCC-4435-89BF-E0E132E0C27F}`. Install/uninstall scripts and
-    /// tests pin this value; it must never change.
     pub const PROVIDER_CLSID: GUID = GUID {
         data1: 0x9459_ccea,
         data2: 0x4ccc,
@@ -69,8 +56,6 @@ mod windows_impl {
         data4: [0x89, 0xbf, 0xe0, 0xe1, 0x32, 0xe0, 0xc2, 0x7f],
     };
 
-    /// Number of live worker threads; `DllCanUnloadNow` keeps the DLL mapped
-    /// while any of them is still running.
     pub static ACTIVE_WORKERS: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(0);
 
     struct SessionState {
@@ -81,24 +66,17 @@ mod windows_impl {
         cpus: CREDENTIAL_PROVIDER_USAGE_SCENARIO,
     }
 
-    /// Sentinel for [`Session::worker_generation`]: no worker owns the session.
     const NO_WORKER: u32 = u32::MAX;
 
-    /// State shared by the provider, its credential and the worker.
     pub struct Session {
         state: Mutex<SessionState>,
-        /// Incremented by every cancel; a worker stops as soon as it changes.
         pub cancel_generation: AtomicU32,
-        /// Generation of the worker that currently owns the claim loop, or
-        /// [`NO_WORKER`]. A new generation may start while a cancelled worker
-        /// is still finishing its last bounded request.
         worker_generation: AtomicU32,
         pub serialized: AtomicBool,
         pub load_tick: AtomicU64,
     }
 
-    // SAFETY: the interface pointer in `SessionState` is only reached under
-    // the mutex; the other fields are atomics.
+    // SAFETY: the interface pointer in `SessionState` is only reached under the mutex; the other fields are atomics.
     unsafe impl Send for Session {}
     unsafe impl Sync for Session {}
 
@@ -125,7 +103,6 @@ mod windows_impl {
             lock(&self.state)
         }
 
-        /// Milliseconds since the provider was loaded.
         pub fn elapsed_ms(&self) -> u64 {
             // SAFETY: GetTickCount64 takes no arguments.
             let now = unsafe { GetTickCount64() };
@@ -140,10 +117,6 @@ mod windows_impl {
             self.cancel_generation.load(Ordering::SeqCst)
         }
 
-        /// Claims the claim loop for `generation`. Returns `false` when that
-        /// same generation already owns it. A stale, cancelled generation never
-        /// blocks a newer one: the old worker cannot arm anything because
-        /// [`arm_session`] checks the generation.
         pub fn try_start_worker(&self, generation: u32) -> bool {
             let mut current = self.worker_generation.load(Ordering::SeqCst);
             loop {
@@ -162,8 +135,6 @@ mod windows_impl {
             }
         }
 
-        /// Releases the claim loop, but only if `generation` still owns it; a
-        /// newer worker that already took over is left alone.
         pub fn finish_worker(&self, generation: u32) {
             let _ = self.worker_generation.compare_exchange(
                 generation,
@@ -174,17 +145,13 @@ mod windows_impl {
         }
     }
 
-    /// Outcome of an attempt to arm the session.
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub enum ArmResult {
-        /// Tile shown, LogonUI notified.
         Armed,
         Cancelled,
-        /// LogonUI has not advised us yet: retry shortly, never re-claim.
         Unavailable,
     }
 
-    /// Arms the session and notifies LogonUI once.
     pub fn arm_session(session: &Arc<Session>, generation: u32) -> ArmResult {
         let (events, context) = {
             let mut state = session.lock();
@@ -198,13 +165,10 @@ mod windows_impl {
             state.armed = true;
             (events, state.context)
         };
-        // Cloning the interface added a reference; it is released when `events`
-        // is dropped, after the callback (same as AddRef/Release).
         let _ = unsafe { events.CredentialsChanged(context) };
         ArmResult::Armed
     }
 
-    /// Drops the tile and stops the worker.
     pub fn cancel_session(session: &Arc<Session>) {
         session.cancel_generation.fetch_add(1, Ordering::SeqCst);
         session.lock().armed = false;
@@ -215,8 +179,6 @@ mod windows_impl {
         state.owner_alive && state.armed
     }
 
-    /// Asks LogonUI to re-enumerate without arming (used after a failed
-    /// serialization so the tile disappears instead of lingering).
     pub fn notify_session_changed(session: &Arc<Session>) {
         let borrowed = {
             let state = session.lock();
@@ -231,7 +193,6 @@ mod windows_impl {
         }
     }
 
-    /// Consumes the arming for exactly one serialization attempt.
     pub fn consume_arming(session: &Arc<Session>) -> bool {
         let armed = {
             let mut state = session.lock();
@@ -245,7 +206,6 @@ mod windows_impl {
         if !armed {
             return false;
         }
-        // One grant, one attempt: the worker must not arm again.
         session.cancel_generation.fetch_add(1, Ordering::SeqCst);
         session.serialized.store(true, Ordering::SeqCst);
         true
@@ -255,8 +215,6 @@ mod windows_impl {
         session.lock().cpus
     }
 
-    /// Counts a failed logon only when our serialization was submitted, and
-    /// disables the provider after the third failure.
     pub fn session_note_failed_logon(session: &Arc<Session>) {
         if !session.serialized.swap(false, Ordering::SeqCst) {
             log_event("report_result", "counted=0 reason=not_our_serialization");
@@ -275,12 +233,6 @@ mod windows_impl {
         }
     }
 
-    /// UTF-8 from a NUL-terminated UTF-16 string.
-    ///
-    /// # Safety
-    ///
-    /// `text` must point at a NUL-terminated UTF-16 string that stays valid for
-    /// the duration of the call.
     pub unsafe fn narrow(text: *const u16) -> String {
         if text.is_null() {
             return String::new();
@@ -295,7 +247,6 @@ mod windows_impl {
         String::from_utf16_lossy(wide)
     }
 
-    /// UTF-8 SID of the configured account, empty when it cannot be resolved.
     pub fn configured_user_sid() -> String {
         #[repr(align(8))]
         struct AlignedSid([u8; SECURITY_MAX_SID_SIZE as usize]);
@@ -310,8 +261,6 @@ mod windows_impl {
             return String::new();
         }
 
-        // "." means the local SAM: qualify with the computer name so a domain
-        // account with the same name can never be picked instead.
         let qualified = if domain == widen(".") {
             let mut computer = [0u16; MAX_COMPUTERNAME_LENGTH as usize + 1];
             let mut size = MAX_COMPUTERNAME_LENGTH + 1;
@@ -331,8 +280,6 @@ mod windows_impl {
             value.extend_from_slice(&account);
             value
         };
-        // The only place a `PCWSTR` is built from the account name: `WideNul`
-        // guarantees the terminator `LookupAccountNameW` reads.
         let qualified = WideNul::from_wide(&qualified);
 
         let mut sid = AlignedSid([0u8; SECURITY_MAX_SID_SIZE as usize]);
@@ -372,20 +319,15 @@ mod windows_impl {
         result
     }
 
-    /// Every optional COM method the tile does not expose.
     fn not_implemented<T>() -> WinResult<T> {
         guard(|| Err(E_NOTIMPL.into()), || Err(E_FAIL.into()))
     }
 
-    /// The COM provider object: `ICredentialProvider` +
-    /// `ICredentialProviderSetUserArray`.
     #[implement(ICredentialProvider, ICredentialProviderSetUserArray)]
     pub struct Provider {
         session: Arc<Session>,
         credential: Mutex<Option<ICredentialProviderCredential>>,
         user_array: Mutex<Option<ICredentialProviderUserArray>>,
-        // Declared last so it is dropped last: the DLL stays mapped while the
-        // provider (or any COM reference to it) is alive.
         _dll_ref: DllRef,
     }
 
@@ -401,12 +343,6 @@ mod windows_impl {
             provider
         }
 
-        /// `ClassFactory::CreateInstance` body. `ppv` is always cleared first.
-        ///
-        /// # Safety
-        ///
-        /// COM calling convention: `ppv` is null or writable, `riid` is null or
-        /// points to a valid IID.
         pub unsafe fn create_instance(
             riid: *const GUID,
             ppv: *mut *mut std::ffi::c_void,
@@ -425,14 +361,10 @@ mod windows_impl {
         }
 
         fn start_worker_once(&self) {
-            // A verified grant that is waiting for `GetSerialization` needs no
-            // second claim; a later `Advise` must not add one.
             if session_is_armed(&self.session) {
                 return;
             }
             let cpus = session_scenario(&self.session);
-            // Defense in depth: `Advise` and `SetUsageScenario` both get here,
-            // so only the two supported scenarios may start a claim.
             let purpose = match cpus {
                 CPUS_LOGON => Purpose::Logon,
                 CPUS_UNLOCK_WORKSTATION => Purpose::Unlock,
@@ -441,10 +373,6 @@ mod windows_impl {
                     return;
                 }
             };
-            // Windows 11 calls CPUS_LOGON for the lock screen too, so the
-            // scenario alone is not proof of a cold boot. A session of the
-            // configured user selects unlock; without one, only a fresh boot
-            // selects logon. A failed WTS query or an unsupported state is off.
             let mode = crate::gate::evaluate(purpose);
             if let Mode::Off(reason) = mode {
                 log_event(
@@ -461,9 +389,6 @@ mod windows_impl {
                 log_event("worker", "skipped=budget_exhausted");
                 return;
             }
-            // A worker of the same generation already owns the loop. A
-            // cancelled one (older generation) may still be finishing its last
-            // bounded request; the new generation does not have to wait.
             let generation = self.session.generation();
             if !self.session.try_start_worker(generation) {
                 return;
@@ -481,11 +406,8 @@ mod windows_impl {
             _flags: u32,
         ) -> WinResult<()> {
             if cpus != CPUS_LOGON && cpus != CPUS_UNLOCK_WORKSTATION {
-                // Every other scenario is deliberately unsupported.
                 return Err(E_NOTIMPL.into());
             }
-            // A scenario change invalidates any previous arming and stops a
-            // worker of the previous mode.
             let changed = {
                 let mut state = self.session.lock();
                 let changed = state.cpus != cpus;
@@ -499,9 +421,6 @@ mod windows_impl {
             Ok(())
         }
 
-        // `Ref` is the COM ABI's borrowed-interface wrapper and is `Copy`;
-        // taking it by reference would deviate from the vtable signature this
-        // helper mirrors and from the `windows-core` conventions.
         #[allow(clippy::needless_pass_by_value)]
         fn advise(
             &self,
@@ -513,7 +432,6 @@ mod windows_impl {
             };
             {
                 let mut state = self.session.lock();
-                // Assigning releases the previous interface reference.
                 state.events = Some(events);
                 state.context = context;
             }
@@ -550,7 +468,6 @@ mod windows_impl {
                 pdwdefault.write(CREDENTIAL_PROVIDER_NO_DEFAULT);
                 pbautologonwithdefault.write(BOOL(0));
             }
-            // Only a verified grant of the current mode can show the tile.
             if !session_is_armed(&self.session) {
                 return Ok(());
             }
@@ -586,20 +503,16 @@ mod windows_impl {
                 let mut state = self.session.lock();
                 state.owner_alive = false;
                 state.armed = false;
-                // Dropping the interface releases it.
                 state.events = None;
             }
             self.session
                 .cancel_generation
                 .fetch_add(1, Ordering::SeqCst);
 
-            // The credential keeps its own Session reference and never calls
-            // back into the provider, so releasing it here is safe.
             let _ = lock(&self.credential).take();
             let _ = lock(&self.user_array).take();
 
             log_event("provider_unload", "");
-            // `_dll_ref` drops after this function returns.
         }
     }
 

@@ -1,5 +1,3 @@
-//! Composition root: configuration, telemetry, FCM sender, registry, HTTP.
-
 use std::process::ExitCode;
 use std::sync::Arc;
 
@@ -13,13 +11,10 @@ use crate::config::Config;
 use crate::devices::Registry;
 use crate::fcm::Sender;
 
-/// Reported implementation version.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-/// Seconds a terminated request gets before the process exits.
 const SHUTDOWN_GRACE: u64 = 5;
 
-/// Starts the service and blocks until SIGTERM/SIGINT or a listener failure.
 pub async fn run() -> anyhow::Result<()> {
     let config = Config::load().context("configuration")?;
     TelemetryBuilder::new()
@@ -85,7 +80,6 @@ pub async fn run() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// `phone-push -healthcheck` exit code.
 pub fn healthcheck_exit() -> ExitCode {
     crate::health::run_healthcheck()
 }

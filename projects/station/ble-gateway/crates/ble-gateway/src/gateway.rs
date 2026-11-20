@@ -1,12 +1,3 @@
-//! Daemon state and the behaviours shared by GATT, HTTP, the button and auto
-//! mode.
-//!
-//! The status is a [`tokio::sync::watch`] channel: the status file writer, GATT
-//! notifications and HTTP all read the same value. Commits arrive through an
-//! `mpsc` worker and an async mutex, so two parallel commits never run two
-//! Wi-Fi applies. Long D-Bus operations take short async mutexes; timestamps and
-//! flags use atomics or a one-field `std::sync::Mutex`.
-
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -29,8 +20,6 @@ use crate::gatt::Ble;
 use crate::status::Status;
 use crate::wifi::{WpaClient, validate_wifi};
 
-/// Timings are fields so tests can drive the same code without production
-/// sleeps.
 #[derive(Debug, Clone)]
 pub struct Timings {
     pub auto_tick: Duration,
@@ -107,7 +96,6 @@ impl Gateway {
         })
     }
 
-    /// Build the daemon, connect to BlueZ and spawn every background task.
     pub async fn start(
         config: Config,
         token: Secret,
@@ -254,7 +242,6 @@ impl Gateway {
         self.bluetooth.disable().await;
     }
 
-    /// Validate a commit frame and apply the Wi-Fi network.
     pub async fn handle_commit(self: &Arc<Self>, value: &[u8]) {
         let command = trim_bytes(value);
         info!(request = %String::from_utf8_lossy(command), "commit request");
@@ -284,7 +271,6 @@ impl Gateway {
         .await;
     }
 
-    /// Drain GATT commit frames one at a time until shutdown.
     pub async fn run_commits(
         self: Arc<Self>,
         mut receiver: mpsc::Receiver<Vec<u8>>,
@@ -301,7 +287,6 @@ impl Gateway {
         }
     }
 
-    /// Write the latest status and notify GATT subscribers until shutdown.
     pub async fn status_task(self: Arc<Self>, shutdown: CancellationToken) {
         let mut receiver = self.status_tx.subscribe();
         loop {
@@ -325,7 +310,6 @@ impl Gateway {
         self.ble.notify_status(status.as_str().as_bytes()).await;
     }
 
-    /// Automatic BLE fallback: advertise when Wi-Fi has been down long enough.
     pub async fn auto_loop(self: Arc<Self>, shutdown: CancellationToken) {
         let mut ticker = tokio::time::interval(self.timings.auto_tick);
         ticker.tick().await;
@@ -378,8 +362,6 @@ impl Gateway {
     }
 }
 
-/// Trim whitespace like Go's `strings.TrimSpace`; invalid UTF-8 falls back to
-/// ASCII trimming so Wi-Fi validation still rejects it.
 pub fn trim_bytes(value: &[u8]) -> &[u8] {
     if let Ok(text) = std::str::from_utf8(value) {
         return text.trim().as_bytes();
@@ -392,7 +374,6 @@ pub fn trim_bytes(value: &[u8]) -> &[u8] {
     }
 }
 
-/// Keep digits only and cap at 12 characters.
 pub fn normalize_token(value: &str) -> Option<String> {
     let digits: String = value
         .chars()
@@ -402,7 +383,6 @@ pub fn normalize_token(value: &str) -> Option<String> {
     (!digits.is_empty()).then_some(digits)
 }
 
-/// `status` lives next to the token file.
 pub fn status_path(token_file: &Path) -> PathBuf {
     token_file
         .parent()

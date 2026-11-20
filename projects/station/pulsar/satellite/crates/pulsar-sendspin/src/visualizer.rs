@@ -1,6 +1,3 @@
-//! Accumulates the server's visualizer stream (loudness and beat on the drain thread, spectrum
-//! frames too) into the `MusicFrame` the LEDs and the clock consume.
-
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
 use pulsar_core::MusicFrame;
@@ -23,7 +20,6 @@ impl Visualizer {
         self.beat.store(true, Ordering::Relaxed);
     }
 
-    /// One frame from the server's spectrum bins; `None` without bins.
     pub fn frame(&self, bins: &[u16]) -> Option<MusicFrame> {
         let bands = music::bands(bins)?;
         Some(MusicFrame {
@@ -46,7 +42,6 @@ mod tests {
         let f = v.frame(&[0, 65535]).unwrap();
         assert_eq!(f.loudness, 1.0);
         assert!(f.beat);
-        // The beat is one-shot; the loudness stays.
         let f = v.frame(&[0, 65535]).unwrap();
         assert!(!f.beat);
         assert_eq!(f.loudness, 1.0);

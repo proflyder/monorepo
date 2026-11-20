@@ -1,7 +1,3 @@
-//! Plaintext payload of `secret.bin` after DPAPI machine-scope decryption:
-//! `{"version":1,"password":"<utf-8>","key":"<base64 of 32 bytes>"}`.
-//! Password and key are wiped on drop and redacted in `Debug`.
-
 use core::fmt;
 
 use home_secret::Secret;
@@ -23,8 +19,6 @@ struct SecretWire {
     key: String,
 }
 
-/// Decrypted machine secret. Sharing [`Secret`] keeps the password zeroizing
-/// and redacted; the key has no string form, only a zeroizing byte buffer.
 pub struct MachineSecret {
     password: Secret,
     key: Zeroizing<Vec<u8>>,
@@ -60,8 +54,6 @@ pub fn parse_secret_json(body: &str) -> Result<MachineSecret, Error> {
     if wire.password.is_empty() || wire.password.len() > MAX_PASSWORD_BYTES {
         return Err(Error::new("secret password must be 1..512 bytes"));
     }
-    // A password may contain any byte except NUL; JSON escapes keep line
-    // breaks representable.
     if wire.password.bytes().any(|c| c == 0) {
         return Err(Error::new("secret password contains a NUL"));
     }

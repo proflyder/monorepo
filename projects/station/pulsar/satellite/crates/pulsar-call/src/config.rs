@@ -1,16 +1,9 @@
-//! Конфигурация звонка: endpoint intercom, device token и CA.
-//!
-//! Модуль выключен (см. [`crate::spawn`]) без URL и токена: станция не открывает исходящих
-//! соединений и не рекламирует звонок. Токен читается только из файла с правами `0600`;
-//! сгенерировать его станция не может — endpoint регистрирует владелец.
-
 #[cfg(test)]
 use std::io;
 use std::path::Path;
 
 use home_secret::Token;
 
-/// Ошибка чтения конфигурации. Никогда не содержит путь к токену и его значение.
 #[derive(Debug, thiserror::Error)]
 pub enum ConfigError {
     #[error("call: endpoint URL is not http(s)")]
@@ -23,13 +16,10 @@ pub enum ConfigError {
     Ca,
 }
 
-/// Всё, что нужно клиенту сигналинга.
 #[derive(Clone)]
 pub struct CallConfig {
-    /// База сервиса без завершающего `/`, например `https://intercom.example/v1`.
     endpoint: String,
     token: Token,
-    /// PEM-бандл приватного CA; иначе системные корни transports.
     ca_pem: Option<Vec<u8>>,
 }
 
@@ -43,20 +33,12 @@ impl std::fmt::Debug for CallConfig {
     }
 }
 
-/// Каталог провижининга звонка на станции (рядом с `state.conf`).
 pub const CALL_DIR: &str = "/data/pulsar";
-/// URL сервиса: первая строка файла. Нет файла — звонок выключен.
 pub const URL_FILE: &str = "intercom_url";
-/// Device token станции (`0600`).
 pub const TOKEN_FILE: &str = "intercom_token";
-/// PEM приватного CA (необязателен: без него транспорт использует свои корни).
 pub const CA_FILE: &str = "intercom_ca.pem";
 
 impl CallConfig {
-    /// Конфигурация из каталога провижининга ([`CALL_DIR`]): URL, токен, CA.
-    ///
-    /// Отдельные файлы, а не `state.conf`: кодек `state.conf` побайтово совместим с C++,
-    /// и посторонние ключи ломали бы эталонные фикстуры.
     pub fn load_dir(dir: &Path) -> Result<Option<Self>, ConfigError> {
         let url = match std::fs::read_to_string(dir.join(URL_FILE)) {
             Ok(text) => text.lines().next().unwrap_or_default().trim().to_owned(),
@@ -68,9 +50,6 @@ impl CallConfig {
         Self::load(&url, &token, ca_path)
     }
 
-    /// `url` — endpoint intercom; пусто — модуль выключен.
-    ///
-    /// `token_path` обязателен: файл должен существовать и быть `0600`.
     pub fn load(
         url: &str,
         token_path: &Path,
@@ -96,7 +75,6 @@ impl CallConfig {
         }))
     }
 
-    /// База для `ClientConfig`: без `/home.v1.IntercomService`, если путь уже указан.
     #[must_use]
     pub fn endpoint(&self) -> &str {
         self.endpoint
@@ -123,7 +101,6 @@ fn read_token(path: &Path) -> Result<Token, ConfigError> {
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt as _;
-        // The device token identifies the station: group/other read is a leak.
         if meta.permissions().mode() & 0o077 != 0 {
             return Err(ConfigError::TokenPermissions);
         }
@@ -136,10 +113,6 @@ fn read_token(path: &Path) -> Result<Token, ConfigError> {
     Ok(Token::new(value))
 }
 
-/// Записать токен (провижининг на станции вне этого модуля): `0600`, атомарно.
-///
-/// Нужен тестам; встроенного провижининга токена у станции нет — endpoint регистрирует
-/// владелец, значение не логируется.
 #[cfg(test)]
 pub fn write_token(path: &Path, value: &str) -> io::Result<()> {
     use std::fs::OpenOptions;

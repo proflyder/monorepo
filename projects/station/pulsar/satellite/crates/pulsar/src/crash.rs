@@ -1,18 +1,9 @@
-//! Crash report straight to stderr (the log file), same format as the C++ daemon: everything in
-//! the handler is async-signal-safe (no allocation, no std::io). The deployed binary is stripped;
-//! resolve the addresses with `addr2line -f -e build/<arch>/pulsar.debug` (non-PIE: addresses are
-//! absolute). glibc's backtrace() is not used: it loads libgcc_s lazily on its first call, and on
-//! armhf libgcc_s's unwinder ran into the C++ daemon's static personality routine and
-//! segfaulted; aarch64 walks the frame-pointer chain instead (-C force-frame-pointers=yes),
-//! armhf reports pc/lr only.
-
 use std::cell::UnsafeCell;
 use std::ffi::{c_int, c_void};
 use std::ptr;
 
 const ALTSTACK_SIZE: usize = 64 * 1024;
 
-/// Signal stack of the main thread; only the kernel writes to it, while a handler runs on it.
 struct AltStack(UnsafeCell<[u8; ALTSTACK_SIZE]>);
 
 // SAFETY: Rust code never reads or writes the buffer; it is only handed to sigaltstack once.
@@ -20,7 +11,6 @@ unsafe impl Sync for AltStack {}
 
 static ALTSTACK: AltStack = AltStack(UnsafeCell::new([0; ALTSTACK_SIZE]));
 
-// The register fields read below, checked against the kernel's sigcontext / glibc's ucontext_t.
 #[cfg(target_arch = "aarch64")]
 const _: () = {
     assert!(core::mem::offset_of!(libc::ucontext_t, uc_mcontext) == 176);
@@ -39,7 +29,6 @@ fn put(s: &[u8]) {
     let _ = unsafe { libc::write(2, s.as_ptr().cast(), s.len()) };
 }
 
-/// `<label>0x<hex> `: no leading zeros, a trailing space.
 fn put_hex(label: &[u8], v: usize) {
     let mut b = [0u8; 40];
     let mut n = 0;
@@ -65,11 +54,8 @@ fn put_hex(label: &[u8], v: usize) {
     put(&b[..=n]);
 }
 
-/// SIGSEGV, SIGBUS, SIGABRT (also `panic = "abort"`), SIGFPE, SIGILL.
 #[unsafe(no_mangle)]
 pub extern "C" fn pulsar_crash_handler(sig: c_int, info: *mut libc::siginfo_t, ctx: *mut c_void) {
-    // Whatever below hangs, SIGALRM (default action) ends the process and the supervisor
-    // restarts it.
     // SAFETY: alarm is async-signal-safe.
     unsafe { libc::alarm(3) };
     put(b"\n=== CRASH ");
@@ -92,7 +78,6 @@ pub extern "C" fn pulsar_crash_handler(sig: c_int, info: *mut libc::siginfo_t, c
     put(b"\n");
     #[cfg(target_arch = "aarch64")]
     frame_pointers(ctx.cast());
-    // Other architectures (the host build for tests) report no registers.
     #[cfg(not(any(target_arch = "aarch64", target_arch = "arm")))]
     let _ = ctx;
     // SAFETY: signal and raise are async-signal-safe; the default action ends the process.
@@ -124,8 +109,6 @@ fn registers(uc: *const libc::ucontext_t) {
     put_hex(b"lr=", mc.arm_lr as usize);
 }
 
-/// `fp: <ret> <ret> ...`: x29 points at {previous x29, return address}; up to 40 frames, stops at
-/// a null, misaligned or non-increasing frame pointer or a null return address.
 #[cfg(target_arch = "aarch64")]
 fn frame_pointers(uc: *const libc::ucontext_t) {
     if uc.is_null() {
@@ -137,8 +120,7 @@ fn frame_pointers(uc: *const libc::ucontext_t) {
     let mut i = 0;
     while i < 40 && fp != 0 && fp & 15 == 0 {
         let frame = fp as *const usize;
-        // SAFETY: a 16-byte aligned frame record of the crashed thread's stack; a chain corrupted
-        // into unmapped memory faults again, and SA_RESETHAND makes that fault end the process.
+        // SAFETY: a 16-byte aligned frame record of the crashed thread's stack; a chain corrupted into unmapped memory faults again, and SA_RESETHAND makes that fault end the process.
         let (next, ret) = unsafe { (ptr::read_volatile(frame), ptr::read_volatile(frame.add(1))) };
         if ret == 0 {
             break;
@@ -153,8 +135,6 @@ fn frame_pointers(uc: *const libc::ucontext_t) {
     put(b"\n");
 }
 
-/// Handlers for the crash signals, on their own stack so that a stack overflow still produces a
-/// report.
 pub fn install() {
     let ss = libc::stack_t {
         ss_sp: ALTSTACK.0.get().cast(),

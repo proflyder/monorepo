@@ -1,10 +1,3 @@
-//! The two wakegrant purposes: `logon` after a cold boot and `unlock` for a
-//! running but locked workstation.
-//!
-//! A purpose is part of every purpose-aware MAC message and of the claim body,
-//! so a grant of one purpose can never be used for the other.
-
-/// Grant purpose, exactly as it travels on the wire.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Purpose {
     Logon,
@@ -12,7 +5,6 @@ pub enum Purpose {
 }
 
 impl Purpose {
-    /// Wire value: `logon` or `unlock`.
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::Logon => "logon",
@@ -20,7 +12,6 @@ impl Purpose {
         }
     }
 
-    /// Parses the wire value; anything else is unknown.
     pub fn parse(text: &str) -> Option<Self> {
         match text {
             "logon" => Some(Self::Logon),

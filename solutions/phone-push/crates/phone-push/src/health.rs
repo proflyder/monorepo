@@ -1,9 +1,3 @@
-//! Distroless probes: `/healthz`, `/readyz` and `-healthcheck`.
-//!
-//! The image has no shell or curl, so the binary is its own probe: it loads the
-//! same configuration as the server (a broken Secret mount fails the probe) and
-//! asks the loopback `/healthz`. Neither route needs a token or a secret.
-
 use std::process::ExitCode;
 use std::time::Duration;
 
@@ -16,7 +10,6 @@ use crate::config::Config;
 
 const TIMEOUT: Duration = Duration::from_secs(4);
 
-/// Unauthenticated liveness/readiness routes.
 pub fn router() -> Router {
     Router::new()
         .route("/healthz", get(health))
@@ -27,7 +20,6 @@ async fn health() -> Json<Value> {
     Json(json!({"status": "ok", "service": "phone-push", "version": crate::VERSION}))
 }
 
-/// `phone-push -healthcheck`: a `200 /healthz` is success.
 pub fn run_healthcheck() -> ExitCode {
     let config = match Config::load() {
         Ok(config) => config,

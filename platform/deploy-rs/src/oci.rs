@@ -1,10 +1,3 @@
-//! Inspects and packages the OCI image layouts produced by `rules_oci`.
-//!
-//! A port of `platform/ci/oci_image.py` and `platform/deploy/internal/oci`:
-//! the layout index and manifest are parsed with key order preserved, blobs are
-//! copied byte for byte, and the archives use the Python USTAR/JSON layout, so
-//! `oci pack`/`oci docker` output is byte-identical to the historical helper.
-
 mod archive;
 mod json;
 
@@ -20,23 +13,16 @@ pub use self::json::Json;
 const INDEX_FILE: &str = "index.json";
 const REF_ANNOTATION: &str = "org.opencontainers.image.ref.name";
 
-/// The single image manifest referenced by a layout index.
 pub struct Manifest {
-    /// Manifest blob digest as written in the index.
     pub digest: String,
-    /// Parsed manifest blob (ordered).
     pub value: Json,
-    /// Parsed layout index (ordered).
     pub index: Json,
 }
 
-/// Returns the manifest digest of the (single) image in the layout.
 pub fn digest(directory: &str) -> Result<String, String> {
     Ok(read_manifest(directory)?.digest)
 }
 
-/// Writes a standard OCI archive, annotating the image with `reference`, and
-/// returns the manifest digest.
 pub fn pack(directory: &str, reference: &str, output: &str) -> Result<String, String> {
     let mut manifest = read_manifest(directory)?;
     let Some(Json::Array(manifests)) = manifest.index.get_mut("manifests") else {
@@ -93,8 +79,6 @@ pub fn pack(directory: &str, reference: &str, output: &str) -> Result<String, St
     Ok(manifest.digest)
 }
 
-/// Writes a docker `load` archive to output: uncompressed layers plus a
-/// `manifest.json`, and returns the manifest digest.
 pub fn docker_archive(directory: &str, reference: &str, output: &str) -> Result<String, String> {
     let manifest = read_manifest(directory)?;
     let Some(config) = manifest.value.get("config") else {
@@ -158,7 +142,6 @@ pub fn docker_archive(directory: &str, reference: &str, output: &str) -> Result<
     Ok(manifest.digest)
 }
 
-/// Parses `<directory>/index.json` with key order preserved.
 fn read_index(directory: &str) -> Result<Json, String> {
     let raw = fs::read(format!("{directory}/{INDEX_FILE}")).map_err(|error| error.to_string())?;
     let value = Json::parse(&raw)?;
@@ -168,7 +151,6 @@ fn read_index(directory: &str) -> Result<Json, String> {
     Ok(value)
 }
 
-/// Resolves a `sha256:<hex>` digest to its path in the layout.
 fn blob_path(directory: &str, digest: &str) -> Result<PathBuf, String> {
     let Some((algorithm, value)) = digest.split_once(':') else {
         return Err(format!("unsupported digest: {digest}"));
@@ -182,7 +164,6 @@ fn blob_path(directory: &str, digest: &str) -> Result<PathBuf, String> {
         .join(value))
 }
 
-/// Loads the only image manifest referenced by the layout index.
 fn read_manifest(directory: &str) -> Result<Manifest, String> {
     let index = read_index(directory)?;
     let Some(Json::Array(manifests)) = index.get("manifests") else {
@@ -217,8 +198,6 @@ fn read_manifest(directory: &str) -> Result<Manifest, String> {
     })
 }
 
-/// Returns every regular file under `<directory>/blobs` as a sorted
-/// slash-separated path relative to the layout.
 fn list_blobs(directory: &str) -> Result<Vec<String>, String> {
     let root = Path::new(directory).join("blobs");
     let mut blobs = Vec::new();
@@ -245,7 +224,6 @@ fn strip_sha256(digest: &str) -> &str {
     digest.strip_prefix("sha256:").unwrap_or(digest)
 }
 
-/// Reads data, decompressing a gzip stream when asked.
 fn read_possibly_gzip(path: &Path, compressed: bool) -> Result<Vec<u8>, String> {
     let raw = fs::read(path).map_err(|error| error.to_string())?;
     if !compressed {
@@ -260,7 +238,6 @@ fn read_possibly_gzip(path: &Path, compressed: bool) -> Result<Vec<u8>, String> 
 }
 
 impl Json {
-    /// Returns the string value of a JSON string node.
     #[must_use]
     pub fn as_str(&self) -> Option<&str> {
         match self {

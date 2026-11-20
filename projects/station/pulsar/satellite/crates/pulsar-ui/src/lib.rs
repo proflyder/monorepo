@@ -1,9 +1,3 @@
-//! Чистый домен интерфейса станции: рендер и композиция слоёв кольца LED и 7-сегментных часов
-//! без tokio, sysfs, ввода-вывода и `pulsar-model`.
-//!
-//! Строки `state.conf` и Home Assistant разбираются на границе (контроллер, settings, акторы),
-//! внутри работают типы [`Effect`], [`MusicStyle`], [`ClockMusicStyle`], [`ClockFace`],
-//! [`VoiceColor`] и [`CaseColor`].
 #![deny(unsafe_code)]
 #![deny(unsafe_op_in_unsafe_fn)]
 #![deny(clippy::undocumented_unsafe_blocks)]

@@ -1,5 +1,3 @@
-//! Command entry point: the push service plus the distroless `-healthcheck`.
-
 use std::process::ExitCode;
 
 #[tokio::main]

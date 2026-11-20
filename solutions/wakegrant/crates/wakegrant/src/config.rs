@@ -1,7 +1,3 @@
-//! Typed environment configuration. Variable names and defaults are the Go
-//! service's contract; secrets are files (or a direct env value) and never
-//! appear in an error message.
-
 use std::collections::BTreeMap;
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
@@ -13,21 +9,15 @@ use home_secret::Secret;
 use thiserror::Error;
 use wakegrant_protocol::{b64_decode, is_valid_machine};
 
-/// Default HTTP listen address (`127.0.0.1:8099`).
 pub const DEFAULT_LISTEN: &str = "127.0.0.1:8099";
-/// Default SQLite file name.
 pub const DEFAULT_DB_PATH: &str = "wakegrant.db";
-/// HMAC keys are exactly 32 bytes.
 pub const KEY_SIZE: usize = 32;
 
-/// Machine id → 32-byte HMAC key.
 pub type Keys = BTreeMap<String, Vec<u8>>;
 
-/// Non-secret settings parsed by clap with `env`.
 #[derive(Debug, Clone, Parser)]
 #[command(name = "wakegrant", version, disable_help_subcommand = true)]
 pub struct Settings {
-    /// HTTP listen address.
     #[arg(
         long,
         env = "WAKE_GRANT_LISTEN",
@@ -35,10 +25,8 @@ pub struct Settings {
         value_parser = parse_listen
     )]
     pub listen: SocketAddr,
-    /// SQLite file on the PVC.
     #[arg(long, env = "WAKE_GRANT_DB_PATH", default_value = DEFAULT_DB_PATH)]
     pub db_path: PathBuf,
-    /// Operator cap inside the protocol's 30..600 s.
     #[arg(
         long,
         env = "WAKE_GRANT_MAX_TTL_SECONDS",
@@ -48,7 +36,6 @@ pub struct Settings {
     pub max_ttl_seconds: u64,
 }
 
-/// A validated process configuration.
 #[derive(Debug, Clone)]
 pub struct Config {
     pub listen: SocketAddr,
@@ -94,8 +81,6 @@ pub enum MachinesError {
 }
 
 impl Config {
-    /// Reads the process environment. Extra CLI arguments (`-healthcheck`) are
-    /// handled by `main` before this is called.
     pub fn load() -> Result<Self, ConfigError> {
         let program = std::env::args_os()
             .next()
@@ -120,8 +105,6 @@ impl Config {
         })
     }
 
-    /// Loopback base URL for `-healthcheck`, so the probe never depends on the
-    /// pod IP. A wildcard listen address becomes `127.0.0.1`.
     #[must_use]
     pub fn healthcheck_url(&self) -> String {
         let mut address = self.listen;
@@ -132,16 +115,11 @@ impl Config {
     }
 }
 
-/// Reads a mounted machines Secret.
 pub fn load_machines(path: &Path) -> Result<Keys, ConfigError> {
     let data = std::fs::read(path).map_err(|_| ConfigError::ReadMachines)?;
     Ok(parse_machines(&data)?)
 }
 
-/// Accepts either a JSON object `{"machine":"base64key"}` or newline-separated
-/// `machine=base64key` / `machine base64key` records. Blank lines and lines
-/// starting with `#` are ignored. Every key must decode to exactly 32 bytes so
-/// a truncated Secret fails before the service starts.
 pub fn parse_machines(data: &[u8]) -> Result<Keys, MachinesError> {
     let text = String::from_utf8_lossy(data);
     let trimmed = text.trim();

@@ -1,8 +1,3 @@
-//! Minimal read-only Loki query client.
-//!
-//! Wire-compatible with `solutions/mcp-gateway/internal/loki/client.go`: one
-//! `/loki/api/v1/query_range` call with `direction=backward`, newest lines first.
-
 use std::collections::BTreeMap;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -15,7 +10,6 @@ const DEFAULT_SINCE: Duration = Duration::from_secs(15 * 60);
 const DEFAULT_LIMIT: usize = 50;
 const MAX_BODY_BYTES: usize = 2 << 20;
 
-/// One log line with its stream labels.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Line {
     #[serde(
@@ -28,7 +22,6 @@ pub struct Line {
     pub text: String,
 }
 
-/// A Loki client.
 #[derive(Debug, Clone)]
 pub struct Client {
     http: reqwest::Client,
@@ -36,8 +29,6 @@ pub struct Client {
 }
 
 impl Client {
-    /// Build a client. `base_url` is the Loki root, for example
-    /// `http://loki.example:3100`.
     pub fn new(base_url: impl Into<String>, timeout: Duration) -> Result<Self, Error> {
         Ok(Self {
             http: build_http("loki query", timeout)?,
@@ -45,10 +36,6 @@ impl Client {
         })
     }
 
-    /// Range query for the last `since`, newest lines first, capped at `limit`.
-    ///
-    /// An empty selector is rejected; a zero `since` becomes 15 minutes and a
-    /// zero `limit` becomes `50`.
     pub async fn query(
         &self,
         selector: &str,

@@ -1,13 +1,3 @@
-//! The Sendspin player service: one sendspin-cpp client in server-initiated mode (the library
-//! listens on ws://<ip>:<port>/sendspin; the controller advertises `_sendspin._tcp` over mDNS).
-//!
-//! Threads: the library's protocol task, the player's sync (decode) task and the visualizer's
-//! drain thread are its own; its main loop (`SendspinClient::loop()`) runs on the runtime thread
-//! from the actor's 10 ms tick. Every main loop callback goes through [`EventHandler`]: the sink
-//! configuration, the log line, the published `SendspinEvent` and the stream edge all happen in
-//! one place. Decoded PCM goes from the sync task straight to the ALSA sink; visualizer frames go
-//! from the drain thread straight to the event channel.
-
 use std::ffi::OsStr;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -25,7 +15,6 @@ use crate::state::Status;
 use crate::store::{FileStore, IdentityStore};
 use crate::{SendspinEvent, Transport, volume_percent};
 
-/// Player formats, preferred first.
 const FORMATS: [Format; 5] = [
     Format {
         codec: Codec::Flac,
@@ -63,8 +52,6 @@ const VIS_TYPES: [VisType; 3] = [VisType::Spectrum, VisType::Loudness, VisType::
 
 type SsClient = Client<Ctx>;
 
-/// Lives on the runtime thread (`!Send`). The actor stops (goodbye to the server, library threads
-/// joined) once every handle is dropped.
 #[derive(Clone)]
 pub struct SendspinHandle {
     client: Rc<SsClient>,
@@ -73,9 +60,7 @@ pub struct SendspinHandle {
     sink: Arc<Sink>,
 }
 
-/// State the library's threads reach through the listener.
 struct Ctx {
-    /// All main-loop events, handled in one place (sink, log, published state, stream edges).
     handler: Arc<EventHandler>,
     sink: Arc<Sink>,
     store: Arc<dyn IdentityStore>,
@@ -156,21 +141,14 @@ impl Link for SsClient {
 }
 
 impl SendspinHandle {
-    /// На этом динамике играет аудиопоток Sendspin (конец потока без «stopped» сообщается на 1 с
-    /// позже; см. `state`). Значение меняет актор; сразу после команды геттер отдаёт прежнее.
     pub fn streaming(&self) -> bool {
         self.status.streaming()
     }
 
-    /// Sendspin-сервер (например, Music Assistant) подключён: атомарный флаг, который пишет поток
-    /// библиотеки; чтение не блокирует.
     pub fn connected(&self) -> bool {
         self.client.is_connected()
     }
 
-    /// The daemon is about to be restarted by its supervisor: send `client/goodbye` with reason
-    /// `restart` so Music Assistant redials this player. Without it the library's stop() sends
-    /// `shutdown`, after which MA deliberately does not reconnect until its provider restarts.
     pub fn goodbye_restart(&self) {
         if self.client.is_connected() {
             info!("sendspin: goodbye restart (daemon restarts)");
@@ -178,19 +156,14 @@ impl SendspinHandle {
         }
     }
 
-    /// Software gain 0..1 applied to Sendspin audio (ramped), used for ducking.
     pub fn set_duck_gain(&self, g: f32) {
         self.sink.set_gain(g);
     }
 
-    /// Local volume / mute change (buttons, HA): reported to the server when it differs.
     pub fn report_volume(&self, volume: f32, muted: bool) {
         let _ = self.cmd.send(Cmd::ReportVolume { volume, muted });
     }
 
-    /// Group transport command to the server (controller role), for the whole Sendspin group.
-    /// false when no server is connected or it does not offer the command now (e.g. NEXT with
-    /// an empty queue).
     pub fn transport(&self, t: Transport) -> bool {
         if !self.client.is_connected() {
             return false;
@@ -208,9 +181,6 @@ impl SendspinHandle {
         ok
     }
 
-    /// Another local source took over the speaker: leave the Sendspin group (stops our
-    /// playback, the rest of the group keeps playing). `streaming` changes only with the
-    /// stream end that follows.
     pub fn yield_to_local(&self) {
         if !self.status.streaming() {
             return;
@@ -219,14 +189,11 @@ impl SendspinHandle {
         self.client.leave();
     }
 
-    /// The operator performed the pairing-window gesture.
     pub fn confirm_pairing_window(&self) {
         let _ = self.cmd.send(Cmd::ConfirmPairingWindow);
     }
 }
 
-/// Starts the client (WebSocket server on `cfg.port`) with the current local volume / mute.
-/// Must run inside the controller's `LocalSet`.
 pub fn spawn(
     cfg: &SendspinConfig,
     volume: f32,
@@ -262,10 +229,6 @@ pub fn spawn(
         mac: &cfg.mac,
         port: cfg.port,
         formats: &FORMATS,
-        // 8 log-spaced bands over the range the speaker-reference analyzer covers; ~30 frames/s
-        // matches the LED frame period (33 ms). Only ~1/7 of buffer_capacity holds wire data and
-        // the server sends frames as far ahead as audio (seconds): 64 KB keeps its flow control
-        // from starving them.
         visualizer: Visualizer {
             buffer_capacity: 65536,
             types: &VIS_TYPES,
@@ -276,9 +239,7 @@ pub fn spawn(
             f_max: 7600,
             display_offset_ms: 0,
         },
-        // Dynamic pairing code: six digits shown on the 4-digit clock (paged as 3-3 groups).
         pairing_code_display_digits: true,
-        // The operator pairs with the six-digit code; the provisioning PSK never enters a log.
         pairing_psk_location: "operator",
         unpaired_access: unpaired,
     };

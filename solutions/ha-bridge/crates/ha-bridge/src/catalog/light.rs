@@ -1,21 +1,11 @@
-//! Light capabilities derived from the color modes Home Assistant reports.
-//!
-//! A bulb with only color temperature has no `color`; a dimmable white bulb has
-//! brightness alone. The active mode decides which live values are published:
-//! the mode is resolved before any value, so a color-mode lamp never reports a
-//! stale `color_temp_kelvin`.
-
 use serde::Deserialize;
 use serde_json::{Map, Value};
 
 use super::{DEFAULT_MAX_KELVIN, DEFAULT_MIN_KELVIN};
 
-/// Longest accepted `effect` value, in characters.
 pub const MAX_EFFECT_CHARS: usize = 64;
-/// Longest accepted `transition`, in seconds.
 pub const MAX_TRANSITION_SECS: f64 = 300.0;
 
-/// What a light can be adjusted to, plus its live values.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Light {
     pub brightness: bool,
@@ -27,32 +17,24 @@ pub struct Light {
     pub kelvin: i32,
     pub hue: i32,
     pub saturation: i32,
-    /// `"color_temp"`, `"color"` or empty (unknown / white only).
     pub mode: String,
-    /// Effects advertised by `effect_list`, empty when the bulb does not
-    /// report any (or discovery could not read them).
     pub effects: Vec<String>,
 }
 
-/// The raw Home Assistant data [`Light::new`] derives from.
 #[derive(Debug, Clone, Default)]
 pub struct LightInput {
     pub color_modes: Vec<String>,
     pub min_kelvin: i32,
     pub max_kelvin: i32,
-    /// HA's 0-255 value, -1 when absent.
     pub brightness: i32,
     pub kelvin: i32,
     pub hue: f64,
     pub saturation: f64,
     pub has_hs: bool,
     pub color_mode: String,
-    /// HA's `effect_list` attribute.
     pub effects: Vec<String>,
 }
 
-/// The adjustments of a `set`/`turn_on` command plus the text of a `speak`
-/// action. `None` leaves a value untouched.
 #[derive(Debug, Clone, Default, PartialEq, Deserialize)]
 pub struct Params {
     #[serde(default)]
@@ -63,25 +45,17 @@ pub struct Params {
     pub hue: Option<i32>,
     #[serde(default)]
     pub saturation: Option<i32>,
-    /// A bulb effect such as `"Day"`; must be listed in `effect_list` when the
-    /// bulb advertises one.
     #[serde(default)]
     pub effect: Option<String>,
-    /// Transition time in seconds, `0..=300`.
     #[serde(default)]
     pub transition: Option<f64>,
-    /// Text of a `speak` action. It is validated and sent as a script
-    /// variable, never stored, logged or echoed in an ack detail.
     #[serde(default)]
     pub text: Option<String>,
-    /// Level of a `set` action on a [`super::Kind::Volume`] entry, 0-100 in
-    /// steps of five.
     #[serde(default)]
     pub level: Option<i32>,
 }
 
 impl Params {
-    /// Whether the payload carries no adjustment at all.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.brightness.is_none()
@@ -95,7 +69,6 @@ impl Params {
     }
 }
 
-/// A rejected light adjustment.
 #[derive(Debug, Clone, PartialEq, thiserror::Error)]
 pub enum LightError {
     #[error("light does not support brightness")]
@@ -127,7 +100,6 @@ pub enum LightError {
 }
 
 impl Light {
-    /// Derive the capabilities of a light, or `None` when it is on/off only.
     #[must_use]
     #[allow(clippy::needless_pass_by_value)]
     pub fn new(input: LightInput) -> Option<Self> {
@@ -149,7 +121,6 @@ impl Light {
         if !light.brightness {
             return None;
         }
-        // The active mode decides which live values are meaningful.
         match input.color_mode.to_lowercase().as_str() {
             "color_temp" => "color_temp".clone_into(&mut light.mode),
             "hs" | "xy" | "rgb" | "rgbw" | "rgbww" => "color".clone_into(&mut light.mode),
@@ -185,8 +156,6 @@ impl Light {
         Some(light)
     }
 
-    /// Validate `params` against the capabilities and build `light.turn_on`
-    /// data for the `set` action, which needs at least one adjustment.
     pub fn service_data(&self, params: &Params) -> Result<Map<String, Value>, LightError> {
         let data = self.turn_on_data(params)?;
         if data.is_empty() {
@@ -195,9 +164,6 @@ impl Light {
         Ok(data)
     }
 
-    /// Build `light.turn_on` data for a `turn_on` action. Every adjustment is
-    /// optional, so an empty map simply turns the light on with its current
-    /// settings.
     pub fn turn_on_data(&self, params: &Params) -> Result<Map<String, Value>, LightError> {
         let mut data = Map::new();
         if let Some(brightness) = params.brightness {
@@ -255,9 +221,6 @@ impl Light {
         Ok(data)
     }
 
-    /// Build `light.turn_off` data. Only a transition is meaningful there; an
-    /// adjustment such as brightness would be silently dropped by HA, so it is
-    /// rejected instead.
     pub fn turn_off_data(&self, params: &Params) -> Result<Map<String, Value>, LightError> {
         if params.brightness.is_some()
             || params.kelvin.is_some()
@@ -273,7 +236,6 @@ impl Light {
     }
 }
 
-/// Validate and add the optional transition time.
 fn insert_transition(data: &mut Map<String, Value>, params: &Params) -> Result<(), LightError> {
     let Some(transition) = params.transition else {
         return Ok(());
@@ -285,7 +247,6 @@ fn insert_transition(data: &mut Map<String, Value>, params: &Params) -> Result<(
     Ok(())
 }
 
-/// `math.Round`: halves away from zero.
 fn round(value: f64) -> i32 {
     #[allow(clippy::cast_possible_truncation)]
     let rounded = value.round() as i32;
@@ -384,7 +345,6 @@ mod tests {
         assert_eq!(data["effect"], Value::from("Day"));
         assert_eq!(data["transition"], Value::from(0.5));
 
-        // A known list rejects an effect it does not advertise.
         assert_eq!(
             light
                 .service_data(&Params {
@@ -394,8 +354,6 @@ mod tests {
                 .expect_err("unknown effect"),
             LightError::EffectUnknown
         );
-        // An unreadable list cannot validate, so a non-empty effect is passed
-        // through instead of breaking a working bulb.
         let unlisted = Light {
             brightness: true,
             ..Light::default()
@@ -408,7 +366,6 @@ mod tests {
                 })
                 .is_ok()
         );
-        // Empty or oversized effects are always rejected.
         for effect in [
             String::new(),
             "  ".to_owned(),

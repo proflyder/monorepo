@@ -1,7 +1,3 @@
-//! Replays the golden HTTP fixtures from `solutions/wakegrant/testdata/contract`
-//! through the Rust service. The fixtures are the Go implementation's files,
-//! unchanged.
-
 use std::sync::Arc;
 
 use axum::Router;
@@ -62,11 +58,7 @@ fn new_router(scenario: &str) -> Router {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn contract_fixtures() {
-    // The key vector and nonce are exercised through the fixtures themselves;
-    // this assertion only proves the seeded bytes are the documented ones.
     assert_eq!(b64_decode(VECTOR_NONCE).expect("vector nonce").len(), 32);
-    // Bazel runs with TEST_SRCDIR/runfiles; cargo runs from the package dir
-    // and exports CARGO_MANIFEST_DIR at compile time.
     let dir = if std::env::var_os("TEST_SRCDIR").is_some() {
         "solutions/wakegrant/testdata/contract".to_owned()
     } else {

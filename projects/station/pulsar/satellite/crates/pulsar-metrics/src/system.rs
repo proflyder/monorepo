@@ -1,18 +1,12 @@
-//! Host metrics from `/proc` and `statvfs`. The parsers are pure so the unit
-//! tests run on fixtures; [`Collector`] adds the two reads that need the live
-//! system (the CPU delta between scrapes and `statvfs`).
-
 use std::ffi::CString;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
-/// How many `/proc/stat` modes are reported (`user`..`steal`).
 const CPU_MODES: usize = 8;
 const CPU_NAMES: [&str; CPU_MODES] = [
     "user", "nice", "system", "idle", "iowait", "irq", "softirq", "steal",
 ];
 
-/// Mode labels of `pulsar_cpu_seconds_total`, in [`CpuTimes::seconds`] order.
 #[must_use]
 pub fn mode_names() -> &'static [&'static str] {
     &CPU_NAMES
@@ -20,7 +14,6 @@ pub fn mode_names() -> &'static [&'static str] {
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct CpuTimes {
-    /// CPU-seconds per mode, in [`CPU_NAMES`] order.
     pub seconds: [f64; CPU_MODES],
 }
 
@@ -51,7 +44,6 @@ pub struct Filesystem {
 #[derive(Clone, Debug, Default)]
 pub struct SystemSample {
     pub cpu: CpuTimes,
-    /// 0..1 over the interval since the previous scrape (since boot on the first).
     pub cpu_usage: f64,
     pub loads: [f64; 3],
     pub temperatures: Vec<Temperature>,
@@ -61,10 +53,8 @@ pub struct SystemSample {
     pub uptime: f64,
 }
 
-/// Mounts whose capacity is exported.
 const MOUNTS: [&str; 2] = ["/data", "/"];
 
-/// Live collector: keeps the previous CPU sample for the usage ratio.
 #[derive(Debug)]
 pub struct Collector {
     root: PathBuf,
@@ -80,8 +70,6 @@ impl Collector {
         }
     }
 
-    /// Filesystems and temperatures come from the live system even when `root`
-    /// points at a fixture tree for tests.
     #[must_use]
     pub fn sample(&self) -> SystemSample {
         let cpu = read_proc_stat(&self.root).unwrap_or_default();
@@ -116,8 +104,6 @@ fn read_text(root: &Path, relative: &str) -> Option<String> {
     std::fs::read_to_string(root.join(relative)).ok()
 }
 
-/// `/proc/stat` first `cpu` line. Unknown columns are ignored, so newer kernels
-/// do not break the parse.
 #[must_use]
 pub fn parse_proc_stat(text: &str, hz: f64) -> Option<CpuTimes> {
     let line = text
@@ -235,11 +221,9 @@ fn read_filesystems() -> Vec<Filesystem> {
         .collect()
 }
 
-/// Total and free bytes of a mount (free as `f_bavail`, like `df` for a user).
 fn statvfs(mount: &str) -> Option<(f64, f64)> {
     let path = CString::new(mount).ok()?;
-    // SAFETY: `path` is a valid NUL-terminated string and `stat` points at
-    // writable memory of the size `statvfs` expects.
+    // SAFETY: `path` is a valid NUL-terminated string and `stat` points at writable memory of the size `statvfs` expects.
     let mut stat: libc::statvfs = unsafe { std::mem::zeroed() };
     // SAFETY: both pointers are valid for the duration of the call.
     let rc = unsafe { libc::statvfs(path.as_ptr(), &raw mut stat) };
@@ -279,7 +263,6 @@ mod tests {
     fn cpu_usage_is_the_delta_not_the_boot_average() {
         let first = parse_proc_stat(PROC_STAT, 100.0).unwrap();
         let later = parse_proc_stat(PROC_STAT_LATER, 100.0).unwrap();
-        // 60 new jiffies: 30 busy, 30 idle.
         assert!((cpu_usage(Some(first), later) - 0.5).abs() < 1e-9);
         assert!((cpu_usage(None, first) - 0.2).abs() < 1e-9);
         assert_eq!(cpu_usage(Some(first), first), 0.0);

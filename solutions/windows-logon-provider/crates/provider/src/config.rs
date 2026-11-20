@@ -1,41 +1,26 @@
-//! Registry configuration and the DPAPI-protected secret file.
-//!
-//! Value names, types, limits and error phrases are the install contract in
-//! `README.md`. `FailCount` arithmetic is pure Rust and host-tested.
-
-/// `HKLM\SOFTWARE\Home\KompLogon` (64-bit view).
 pub const REGISTRY_KEY: &str = r"SOFTWARE\Home\KompLogon";
-/// Fixed DPAPI entropy; `set-secret.ps1` uses the same bytes.
 pub const SECRET_ENTROPY: &[u8] = b"home-komp-logon-v1";
 pub const SECRET_PATH: &str = r"C:\ProgramData\Home\KompLogon\secret.bin";
 pub const MAX_SECRET_FILE_BYTES: u64 = 64 * 1024;
-/// Third failed logon disables the provider.
 pub const FAILURE_DISABLE_THRESHOLD: u32 = 3;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Config {
-    /// Normalised URL without a trailing slash.
     pub service_url: String,
     pub machine: String,
     pub user: String,
     pub domain: String,
 }
 
-/// Why the registry configuration cannot be used. Both variants are
-/// log-safe: `Invalid` carries only a static phrase plus the value name.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum ConfigError {
-    /// `Disabled=1`: do nothing at all.
     #[error("disabled")]
     Disabled,
-    /// Missing or invalid values: log and stay closed.
     #[error("{0}")]
     Invalid(String),
 }
 
 impl ConfigError {
-    /// Reason for log lines; `Disabled` has no extra detail, matching the
-    /// installer contract.
     pub fn detail(&self) -> &str {
         match self {
             Self::Disabled => "",
@@ -44,31 +29,22 @@ impl ConfigError {
     }
 }
 
-/// Registry values before validation. `None` means absent or unreadable; the
-/// validation ladder names the first required field that is missing.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
-#[cfg_attr(not(any(windows, test)), allow(dead_code))] // constructed by the registry loader
+#[cfg_attr(not(any(windows, test)), allow(dead_code))]
 pub(crate) struct RawConfig {
     service_url: Option<String>,
     machine: Option<String>,
     user: Option<String>,
     domain: Option<String>,
-    /// `Disabled=1` means "do nothing at all"; absent means enabled.
     disabled: Option<u32>,
 }
 
-/// Reason for log lines: `registry_value_invalid:<field>` keeps the name of
-/// the first failing field, as the installer contract documents.
-#[cfg_attr(not(any(windows, test)), allow(dead_code))] // used by the registry loader
+#[cfg_attr(not(any(windows, test)), allow(dead_code))]
 fn value_invalid(field: &str) -> ConfigError {
     ConfigError::Invalid(format!("registry_value_invalid:{field}"))
 }
 
-/// Validates raw registry values. `Disabled` is checked before the URL and the
-/// other required values, so a disabled provider logs `disabled` even when the
-/// rest of the key is broken. `FailCount` (and `Disabled` itself) may be absent:
-/// both are counters/switch values that default to 0.
-#[cfg_attr(not(any(windows, test)), allow(dead_code))] // called by the registry loader
+#[cfg_attr(not(any(windows, test)), allow(dead_code))]
 pub(crate) fn resolve_config(raw: &RawConfig) -> Result<Config, ConfigError> {
     if raw.disabled.unwrap_or(0) != 0 {
         return Err(ConfigError::Disabled);
@@ -99,7 +75,6 @@ pub(crate) fn resolve_config(raw: &RawConfig) -> Result<Config, ConfigError> {
     })
 }
 
-/// Next stored `FailCount`; saturates at 1000 like `RecordFailedLogon`.
 pub fn next_fail_count(count: u32) -> u32 {
     if count < 1000 { count + 1 } else { count }
 }
@@ -118,13 +93,6 @@ pub fn updated_fail_state(count: u32, disabled: u32) -> (u32, u32) {
     (count, disabled)
 }
 
-/// `SecureZeroMemory` for memory we do not own as a Rust slice (CoTaskMem
-/// buffers, DPAPI output).
-///
-/// # Safety
-///
-/// `ptr` must be valid for writes of `len` bytes, and `len` must describe the
-/// allocation that is wiped (the caller owns it and is about to free it).
 pub unsafe fn secure_zero_raw(ptr: *mut u8, len: usize) {
     for index in 0..len {
         // SAFETY: the caller guarantees the range is writable.
@@ -171,8 +139,6 @@ mod imp {
     const RRF_DWORD: REG_ROUTINE_FLAGS =
         REG_ROUTINE_FLAGS(RRF_RT_REG_DWORD.0 | RRF_SUBKEY_WOW6464KEY.0);
 
-    /// Narrows a NUL-terminated UTF-16 buffer to UTF-8. A malformed surrogate
-    /// is replaced with `?`, like `WideCharToMultiByte(..., 0, ...)`.
     fn utf8_from_wide(wide: &[u16]) -> String {
         let end = wide
             .iter()
@@ -181,8 +147,6 @@ mod imp {
         String::from_utf16_lossy(&wide[..end])
     }
 
-    /// `Ok(Some(value))` when present, `Ok(None)` when absent, `Err(())` when
-    /// the value exists but is unreadable or out of bounds.
     fn read_string(key: HKEY, name: PCWSTR) -> Result<Option<String>, ()> {
         let mut bytes = 0u32;
         // SAFETY: the out-parameter is valid for the duration of the call.
@@ -205,8 +169,7 @@ mod imp {
         }
 
         let mut buffer = vec![0u16; bytes as usize / 2 + 1];
-        // SAFETY: `buffer` has room for `bytes` plus one terminator unit, and
-        // `RegGetValueW` re-reports the byte count it writes.
+        // SAFETY: `buffer` has room for `bytes` plus one terminator unit, and `RegGetValueW` re-reports the byte count it writes.
         let status = unsafe {
             RegGetValueW(
                 key,
@@ -225,13 +188,10 @@ mod imp {
         Ok(Some(utf8_from_wide(&buffer[..units])))
     }
 
-    /// `Ok(Some(value))` when present, `Ok(None)` when absent, `Err(())` when
-    /// the value exists but is unreadable or has the wrong type.
     fn read_dword_value(key: HKEY, name: PCWSTR) -> Result<Option<u32>, ()> {
         let mut value = 0u32;
         let mut bytes = size_of::<u32>() as u32;
-        // SAFETY: `value` is a valid DWORD-sized out-parameter for
-        // RRF_RT_REG_DWORD.
+        // SAFETY: `value` is a valid DWORD-sized out-parameter for RRF_RT_REG_DWORD.
         let status = unsafe {
             RegGetValueW(
                 key,
@@ -259,13 +219,10 @@ mod imp {
         }
     }
 
-    /// Reads an optional `REG_SZ` value; a missing or malformed value is
-    /// `None`, which the validation ladder reports by field name.
     fn optional_string(key: HKEY, name: PCWSTR) -> Option<String> {
         read_string(key, name).ok().flatten()
     }
 
-    /// Reads and validates the registry configuration.
     pub fn load_config() -> Result<Config, ConfigError> {
         let mut key = HKEY::default();
         let key_path = WideNul::new(REGISTRY_KEY);
@@ -283,8 +240,6 @@ mod imp {
             return Err(ConfigError::Invalid("registry_key_missing".to_owned()));
         }
 
-        // Absent `Disabled` means 0. A present but unreadable value is still an
-        // error: it must not silently change the operator's switch.
         let Ok(disabled) = read_dword_value(key, w!("Disabled")) else {
             close_key(key);
             return Err(super::value_invalid("Disabled"));
@@ -296,9 +251,6 @@ mod imp {
             domain: optional_string(key, w!("Domain")),
             disabled,
         };
-        // `Disabled` and the required fields decide first; only a configuration
-        // the provider would actually use is checked for a bad `FailCount`
-        // (absent is 0, a present value of the wrong type is invalid).
         let resolved = super::resolve_config(&raw);
         let fail_count_invalid =
             resolved.is_ok() && read_dword_value(key, w!("FailCount")).is_err();
@@ -309,8 +261,6 @@ mod imp {
         resolved
     }
 
-    /// Reads, DPAPI-decrypts and parses the secret file. `Err` carries a short
-    /// log-safe phrase (never the secret or the decrypted plaintext).
     pub fn load_secret() -> Result<MachineSecret, &'static str> {
         let secret_path = WideNul::new(SECRET_PATH);
         // SAFETY: `secret_path` is NUL-terminated; no security attributes.
@@ -362,8 +312,7 @@ mod imp {
             pbData: SECRET_ENTROPY.as_ptr().cast_mut(),
         };
         let mut output = CRYPT_INTEGER_BLOB::default();
-        // SAFETY: both blobs point to live buffers; `output` is a valid
-        // out-parameter. No prompt and no reserved pointer, as documented for `CryptUnprotectData`.
+        // SAFETY: both blobs point to live buffers; `output` is a valid out-parameter. No prompt and no reserved pointer, as documented for `CryptUnprotectData`.
         let decrypted = unsafe {
             CryptUnprotectData(&input, None, Some(&entropy), None, None, 0, &raw mut output)
         };
@@ -391,13 +340,10 @@ mod imp {
         parsed
     }
 
-    /// Increments `FailCount` and sets `Disabled=1` at the third failure.
-    /// Returns the stored values; `(0, false)` when the key cannot be updated.
     pub fn record_failed_logon() -> (u32, bool) {
         let mut key = HKEY::default();
         let key_path = WideNul::new(REGISTRY_KEY);
-        // SAFETY: `key` is a valid out-parameter and `key_path` is
-        // NUL-terminated.
+        // SAFETY: `key` is a valid out-parameter and `key_path` is NUL-terminated.
         let status = unsafe {
             RegOpenKeyExW(
                 HKEY_LOCAL_MACHINE,
@@ -531,8 +477,6 @@ mod tests {
     }
 }
 
-/// Client-side service URL handling. The provider owns this because it is
-/// registry/install configuration, not part of the shared wire protocol.
 pub mod endpoint {
     use ::http::Uri;
 
@@ -541,10 +485,8 @@ pub mod endpoint {
     #[derive(Debug, Clone, Default, PartialEq, Eq)]
     pub struct ServiceEndpoint {
         pub tls: bool,
-        /// DNS name, IPv4 or IPv6 literal without brackets.
         pub host: String,
         pub port: u16,
-        /// `""` or `"/path"` without a trailing slash.
         pub prefix: String,
     }
 
@@ -556,8 +498,6 @@ pub mod endpoint {
         text.bytes().any(|c| c < 0x20 || c == 0x7f || c == b' ')
     }
 
-    /// Parses `http://host[:port][/path]` or `https://...`. Rejects userinfo,
-    /// queries, fragments, whitespace and control characters.
     pub fn parse_service_url(url: &str) -> Result<ServiceEndpoint, Error> {
         if url.len() > 512 {
             return Err(Error::new("service url too long"));
@@ -641,8 +581,6 @@ pub mod endpoint {
         })
     }
 
-    /// Port after the host of an authority. Rejects non-numeric and out-of-range
-    /// values instead of letting `http::Uri` silently truncate them.
     fn parse_port(authority: &str, default_port: u16) -> Result<u16, Error> {
         let port_text = if let Some(rest) = authority.strip_prefix('[') {
             let close = rest
@@ -670,8 +608,6 @@ pub mod endpoint {
         Ok(port)
     }
 
-    /// Validates the whole machine configuration and normalizes the URL. The
-    /// error is log-safe.
     pub fn validate_config(
         service_url: &str,
         machine: &str,
@@ -712,7 +648,6 @@ pub mod endpoint {
         Ok(render(&parse_service_url(service_url)?, false))
     }
 
-    /// Log-safe service URL for log lines: scheme, host and port only, no path.
     pub fn redact_service_url(url: &str) -> String {
         let Ok(endpoint) = parse_service_url(url) else {
             return "invalid-url".to_owned();
@@ -726,8 +661,6 @@ pub mod endpoint {
         )
     }
 
-    /// `scheme://host[:port][prefix]`; `explicit_port` keeps the port even when it
-    /// is the scheme default (the log always shows it).
     fn render(endpoint: &ServiceEndpoint, explicit_port: bool) -> String {
         let mut result = String::new();
         result.push_str(if endpoint.tls { "https://" } else { "http://" });
@@ -751,7 +684,6 @@ pub mod endpoint {
         }
     }
 
-    /// Request target path for an endpoint, e.g. `/v1/claim` or `/gw/v1/claim`.
     pub fn endpoint_path(endpoint: &ServiceEndpoint, path: &str) -> String {
         let mut result = endpoint.prefix.clone();
         if !path.starts_with('/') {

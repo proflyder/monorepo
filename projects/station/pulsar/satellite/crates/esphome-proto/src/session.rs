@@ -1,19 +1,13 @@
-//! Протокольное состояние одного клиента: фрейминг, Noise handshake и data-кадры. Чистое:
-//! вызывающий подаёт байты и записывает возвращённые байты наружу.
-
 use crate::frame::{self, EncryptError, HandshakeError, Noise, NoiseFrame, Plain, Psk};
 
 pub use crate::frame::EncryptError as EncodeError;
 
-/// Конфигурация одной сессии; `allow_plaintext` = false, когда действует ключ шифрования.
 #[derive(Clone, Debug)]
 pub struct SessionConfig {
     pub name: String,
     pub mac: String,
     pub psk: Psk,
     pub allow_plaintext: bool,
-    /// Файл ключа испорчен, и случайный ключ получить не удалось: любой Noise handshake
-    /// отвергается как неверный ключ, чтобы станция не приняла клиента с известным ключом.
     pub reject_all: bool,
 }
 
@@ -41,24 +35,18 @@ pub enum Proto {
     Noise,
 }
 
-/// Декодированный protobuf-payload; id — это `option (id)` сообщения.
 #[derive(Debug, PartialEq, Eq)]
 pub struct Decoded {
     pub msg_type: u32,
     pub payload: Vec<u8>,
 }
 
-/// Что вызывающий должен сделать после обработки сообщений [`Feed`].
 #[derive(Debug, PartialEq, Eq)]
 pub enum SessionEvent {
-    /// Кадр отказа Noise уже в выходном буфере: сбросить его, затем закрыть клиента.
     Reject(&'static str),
-    /// Закрыть клиента (причина — для лога).
     Close(&'static str),
 }
 
-/// Результат [`Session::feed`]: сколько байт разобрано, декодированные сообщения и необязательное
-/// терминальное действие. `consumed < input.len()` — остаток является неполным кадром.
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct Feed {
     pub consumed: usize,
@@ -70,7 +58,6 @@ pub struct Session {
     cfg: SessionConfig,
     proto: Proto,
     noise: Noise,
-    /// Открытый текст Noise-кадра, который сейчас расшифровывается.
     rx: Vec<u8>,
 }
 
@@ -92,8 +79,6 @@ impl Session {
         self.proto == Proto::Noise && !self.noise.in_handshake()
     }
 
-    /// Разбирает все целые кадры в `input` и дописывает протокольный вывод (server hello,
-    /// ответ handshake, отказ) в `out`.
     pub fn feed(&mut self, input: &[u8], out: &mut Vec<u8>) -> Feed {
         let mut feed = Feed::default();
         let mut pos = 0;
@@ -127,8 +112,6 @@ impl Session {
         feed
     }
 
-    /// Дописывает одно сообщение во фрейминге сессии. До завершения Noise handshake отправлять
-    /// нечего: [`EncodeError::NotReady`], в буфер ничего не пишется.
     pub fn encode(
         &mut self,
         msg_type: u32,
@@ -193,7 +176,6 @@ impl Session {
             NoiseFrame::Frame { body, used } => {
                 if client_hello {
                     if self.cfg.reject_all {
-                        // Как при неверном ключе: server hello, затем MAC failure.
                         frame::append_noise_raw(
                             out,
                             &[

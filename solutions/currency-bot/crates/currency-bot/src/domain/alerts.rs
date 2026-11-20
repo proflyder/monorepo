@@ -1,32 +1,13 @@
-//! Threshold evaluation and deduplication as pure functions.
-//!
-//! The Go checker read the store inside its loop. Here [`plan`] receives two
-//! lookup closures instead, so every rule and its order can be replayed from
-//! the JSON vectors without a database or a fake. The caller (`pipeline`)
-//! supplies the closures over the real store and applies [`Plan::clears`].
-
 use super::model::{
     Alert, AlertKey, Direction, Level, PERIODS, Pair, Period, RateType, Rates, Record, SentAlert,
 };
 
-/// The effects of one threshold pass, in evaluation order.
 #[derive(Debug, Default, Clone, PartialEq)]
 pub struct Plan {
-    /// Alerts that should be delivered.
     pub alerts: Vec<Alert>,
-    /// Dedup rows whose threshold no longer fires. Applied before sending.
     pub clears: Vec<AlertKey>,
 }
 
-/// Evaluate all four periods over the current rates.
-///
-/// `history` returns the newest record at or before the period cutoff, or
-/// `None` when the lookup failed (Go logged the error and skipped the period,
-/// including its clears). `sent` returns the last delivered alert for a key,
-/// or `None` when absent or unreadable.
-///
-/// `skip_dedup` is the manual-trigger contract: candidates are accepted
-/// unconditionally and no dedup row is read or cleared.
 pub fn plan<H, S>(rates: &Rates, skip_dedup: bool, mut history: H, mut sent: S) -> Plan
 where
     H: FnMut(&Period) -> Option<Record>,
@@ -88,9 +69,6 @@ where
     plan
 }
 
-/// Evaluate one threshold pair. Thresholds are inclusive and the direction is
-/// `DOWN` for zero/NaN; rates must be finite and positive, so a broken
-/// historical row cannot divide by zero and emit a `+Inf` alert.
 #[must_use]
 pub fn evaluate(
     period: Period,
@@ -128,21 +106,16 @@ pub fn evaluate(
     })
 }
 
-/// A rate usable in a percentage comparison.
 #[must_use]
 pub fn valid_rate(rate: f64) -> bool {
     rate > 0.0 && rate.is_finite()
 }
 
-/// The five deduplication rules, in the Go order.
 #[must_use]
 pub fn should_send(candidate: &Alert, last: Option<&SentAlert>, period: &Period) -> bool {
     let Some(last) = last else {
         return true;
     };
-    // A zero or non-finite rate_at_alert (imported or corrupted row) cannot
-    // define the re-alert band: without the guard the division yields +Inf and
-    // every candidate is sent. Treat such a row as absent.
     if !valid_rate(last.rate_at_alert) {
         return true;
     }

@@ -1,8 +1,3 @@
-//! The ANNOUNCE output: one writer thread that plays decoded PCM on the model's playback PCM
-//! with the priming / padding / drain policy measured on the stations. The policy itself
-//! ([`Announce`]) is generic over [`PcmDevice`], so the tests run it on a fake device; the
-//! realtime wrapper ([`Output`]) owns the socketpair, the reader thread and the writer thread.
-
 use std::collections::VecDeque;
 use std::io::Read as _;
 use std::os::fd::{AsRawFd as _, RawFd};
@@ -19,7 +14,6 @@ use tracing::{debug, error, info, warn};
 
 use crate::device::{AlsaDevice, PcmDevice, PcmInfo, PcmRequest, Recovery, recover};
 
-/// The format playsink converts to (capsfilter before the fdsink) and the PCM is opened with.
 pub const CAPS: &str = "audio/x-raw,format=S16LE,layout=interleaved,rate=48000,channels=2";
 const RATE: u32 = 48_000;
 const CHANNELS: u32 = 2;
@@ -29,22 +23,13 @@ const fn ms_bytes(ms: u32) -> usize {
     RATE as usize * FRAME_BYTES * ms as usize / 1000
 }
 
-/// Policy of the ANNOUNCE writer. The station numbers (prime 200 ms, silence below two periods,
-/// one-second queue, 100 ms pad, 500 ms drain slack) are measurements: see docs/architecture.md,
-/// «pulsar-media».
 #[derive(Clone, Copy, Debug)]
 pub struct OutputTuning {
-    /// Output starts once this much is queued, or at the end of the item.
     pub prime_ms: u32,
-    /// Device fill below which an empty feed is a stall.
     pub low_periods: usize,
-    /// The reader stops taking from the socket above this.
     pub queue_ms: u32,
-    /// Silence written after the last sample before the drain.
     pub pad_ms: u32,
-    /// Added to the device buffer duration as the longest drain wait.
     pub drain_slack_ms: u64,
-    /// Poll period of the writer while an item is active.
     pub slice_ms: u64,
 }
 
@@ -65,14 +50,10 @@ impl Default for OutputTuning {
     }
 }
 
-/// Writer progress of one output item, reported on the GLib thread.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum OutEvent {
-    /// The first samples went to the device.
     Started(u64),
-    /// The last sample has been played.
     PlayedOut(u64),
-    /// The PCM could not be opened or failed for good.
     Failed(u64),
 }
 
@@ -83,7 +64,6 @@ struct FeedState {
     cancelled: bool,
 }
 
-/// PCM of one item between its reader and the writer.
 #[derive(Default)]
 struct Feed {
     state: Mutex<FeedState>,
@@ -103,9 +83,6 @@ impl Feed {
         self.space.notify_all();
     }
 
-    /// Reader side: appends `chunk`, waiting while `max` bytes are queued. Cancelled items keep
-    /// reading and discarding until the fdsink closes its end: closing the socket under it would
-    /// give GStreamer an EPIPE / error message on the now unwanted item.
     fn push(&self, chunk: &[u8], max: usize) {
         let mut st = self.lock();
         while st.data.len() >= max && !st.cancelled {
@@ -123,31 +100,22 @@ impl Feed {
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Phase {
-    /// Waiting for the prime amount (or the end of the item) before writing.
     Priming,
     Playing,
-    /// Everything is written (plus the silence pad); waiting for the device to play it.
     Draining,
 }
 
-/// The policy on one item; generic over the device so the tests can drive it in memory.
 struct Announce<D: PcmDevice> {
     device: D,
     tuning: OutputTuning,
     info: Option<PcmInfo>,
     cur: Option<(u64, Arc<Feed>)>,
     phase: Phase,
-    /// Started was reported for the current item.
     started: bool,
     drain_deadline: Option<Instant>,
-    /// Frames of the end pad still to write.
     pad_left: usize,
-    /// Gain-scaled PCM on its way to the device.
     scratch: Vec<u8>,
-    /// One period of silence.
     silence: Vec<u8>,
-    /// f32 bits of the channel gain the writer applies (playsink's volume would act on PCM that
-    /// is already queued, up to ~2 s late).
     gain: Arc<AtomicU32>,
 }
 
@@ -168,13 +136,11 @@ impl<D: PcmDevice> Announce<D> {
         }
     }
 
-    /// Item `item` starts (any previous one is dropped).
     pub fn begin(&mut self, item: u64, feed: Arc<Feed>) {
         self.reset();
         self.cur = Some((item, feed));
     }
 
-    /// Drops the current item and stops the device at once.
     pub fn reset(&mut self) {
         if let Some((_, feed)) = self.cur.take() {
             feed.cancel();
@@ -208,7 +174,6 @@ impl<D: PcmDevice> Announce<D> {
             let len = st.data.len();
             if len >= ms_bytes(self.tuning.prime_ms) || (st.eof && len >= FRAME_BYTES) {
                 if self.info.is_none() {
-                    // Not under the feed lock: the GLib thread takes it to cancel the item.
                     drop(st);
                     if self.open().is_err() {
                         self.finish(OutEvent::Failed(item), notify);
@@ -222,7 +187,6 @@ impl<D: PcmDevice> Announce<D> {
                     notify(OutEvent::Started(item));
                 }
             } else if st.eof {
-                // Nothing left to write: play out what the device holds, if it is open.
                 drop(st);
                 if self.info.is_some() {
                     self.start_drain();
@@ -273,14 +237,12 @@ impl<D: PcmDevice> Announce<D> {
         })
     }
 
-    /// Frames queued in the device; None when that cannot be read.
     fn fill(&mut self) -> Option<usize> {
         let info = self.info?;
         let avail = self.device.avail().ok()?;
         Some(info.buffer_frames.saturating_sub(avail))
     }
 
-    /// While stalled: tops the device up with silence so it never runs dry.
     fn keep_alive(&mut self) -> Result<(), ()> {
         let Some(info) = self.info else {
             return Ok(());
@@ -323,7 +285,6 @@ impl<D: PcmDevice> Announce<D> {
         }
     }
 
-    /// Writes what the device takes. Err when the PCM failed for good.
     fn write(&mut self, st: &mut FeedState) -> Result<bool, ()> {
         let mut wrote = false;
         loop {
@@ -359,7 +320,6 @@ impl<D: PcmDevice> Announce<D> {
                 let n = n.min(head_frames);
                 self.device.write(&head[..n * FRAME_BYTES], n)
             } else {
-                // Scaled (or a frame across the ring's wrap): copied into scratch.
                 self.scratch.clear();
                 let mut bytes = head.iter().chain(tail).copied().take(n * FRAME_BYTES);
                 while let (Some(lo), Some(hi)) = (bytes.next(), bytes.next()) {
@@ -419,7 +379,6 @@ impl<D: PcmDevice> Announce<D> {
         }
         let played = match self.device.delay() {
             Ok(d) => self.pad_left == 0 && d <= 0,
-            // Ran dry (xrun): nothing left to play.
             Err(_) => true,
         };
         if played || self.drain_deadline.is_some_and(|t| Instant::now() >= t) {
@@ -456,9 +415,6 @@ impl<D: PcmDevice> Announce<D> {
     }
 }
 
-// ---------------------------------------------------------------------------
-// The realtime wrapper.
-
 enum Cmd {
     Start(u64, Arc<Feed>),
     Flush,
@@ -466,13 +422,11 @@ enum Cmd {
 }
 
 struct Item {
-    /// The end the fdsink writes; dropping it is the item's end of stream for the reader.
     #[allow(dead_code, reason = "held for its drop only")]
     sink_end: UnixStream,
     feed: Arc<Feed>,
 }
 
-/// Owned by the GLib thread's backend.
 pub struct Output {
     cmds: Sender<Cmd>,
     gain: Arc<AtomicU32>,
@@ -482,7 +436,6 @@ pub struct Output {
 }
 
 impl Output {
-    /// Starts the writer thread on the model's playback PCM; `notify` runs on that thread.
     pub fn spawn(
         playback: &'static Playback,
         tuning: OutputTuning,
@@ -514,14 +467,11 @@ impl Output {
         })
     }
 
-    /// Item `item` starts (any previous one is dropped); returns the fd for the fdsink.
     pub fn begin(&mut self, item: u64) -> Option<RawFd> {
         self.flush();
         let (src, sink_end) = UnixStream::pair()
             .inspect_err(|e| error!("player: announce socketpair: {e}"))
             .ok()?;
-        // Non-blocking: a full socket makes the fdsink wait in its GstPoll, which a state change
-        // to NULL interrupts, instead of in write().
         sink_end
             .set_nonblocking(true)
             .inspect_err(|e| error!("player: announce socket: {e}"))
@@ -540,19 +490,15 @@ impl Output {
         Some(fd)
     }
 
-    /// The pipeline reached EOS, everything decoded is in the socket: the reader sees its end
-    /// once it has read the rest, and the writer reports PlayedOut after playing it.
     pub fn end(&mut self) {
         self.item = None;
     }
 
-    /// Channel gain 0..1, applied to what is written from now on.
     pub fn set_gain(&self, gain: f64) {
         #[allow(clippy::cast_possible_truncation, reason = "a gain 0..1")]
         self.gain.store((gain as f32).to_bits(), Ordering::Relaxed);
     }
 
-    /// Drops the current item: queued PCM is discarded and the device stops at once.
     pub fn flush(&mut self) {
         if let Some(item) = self.item.take() {
             item.feed.cancel();
@@ -618,7 +564,6 @@ impl Writer {
     }
 }
 
-/// Socket -> feed until the fdsink's end is closed; discards once the item is cancelled.
 fn read_feed(mut src: UnixStream, feed: &Feed, max: usize) {
     let mut chunk = [0u8; 4096];
     loop {
@@ -683,13 +628,11 @@ mod tests {
     fn primes_before_writing_and_reports_started() {
         let mut r = Rig::new(Rig::tuning());
         r.core.begin(7, Arc::clone(&r.feed));
-        r.push(480); // 10 ms
+        r.push(480);
         r.service();
         assert!(r.events.is_empty());
         assert!(r.core.info.is_none());
-        // A full prime opens the device and reports Started; nothing is written while the fake
-        // device has room.
-        r.push(9600); // 200 ms
+        r.push(9600);
         r.service();
         assert_eq!(r.events, [OutEvent::Started(7)]);
         assert!(r.core.info.is_some());
@@ -705,7 +648,6 @@ mod tests {
         r.events.clear();
         r.feed.eof();
         r.service();
-        // The pad is one period per call until done; the device still holds frames.
         for _ in 0..60 {
             r.service();
             if !r.events.is_empty() {
@@ -729,8 +671,6 @@ mod tests {
         r.core.begin(1, Arc::clone(&r.feed));
         r.push(9600);
         r.service();
-        // Write the rest of the prime, then drain the device: an empty feed below two periods is
-        // a stall, and the writer keeps the device fed with silence.
         r.core.device.play(usize::MAX);
         r.service();
         r.core.device.play(usize::MAX);

@@ -1,18 +1,3 @@
-//! `state.conf`: one `key=value` per line. Byte-compatible with the C++ daemon (controller.cpp
-//! `Settings`), so a binary rolled back by supervise.sh, or rolled forward, reads what the other
-//! wrote: numbers as C++ ostream writes them (`%g`, 6 significant digits) and reads them
-//! (`strtof`), booleans `0` / `1`, `zigbee_flash_failed` in lowercase hex without `0x`.
-//!
-//! Writes are atomic and durable (tmp, fsync, rename, fsync of the directory): /data on the
-//! Lite 2 is ubifs, where a rename reaches the flash long before unsynced data, so a power cut
-//! could leave an empty file and reset every setting. `Store` writes a change `SAVE_DELAY_MS`
-//! after the last one (a slider or a held volume key is one write, not dozens of flash writes);
-//! keys that matter across a restart or a binary swap are written at once.
-//!
-//! The codec keeps only its own types and strings: a value whose vocabulary belongs to another
-//! crate (HA select options, Zigbee role names) is stored as the string that goes to the file,
-//! and the controller maps it to its domain type at the boundary.
-
 use std::ffi::OsString;
 use std::fs::File;
 use std::io::Write as _;
@@ -23,29 +8,21 @@ use pulsar_core::Timers;
 use pulsar_core::fmt::{g6, parse_f32_prefix};
 use tracing::warn;
 
-/// A change is written this long after the last one.
 pub const SAVE_DELAY_MS: u64 = 1000;
 
-/// Option texts persisted in `state.conf`; the controller maps them to the HA/domain option
-/// types. An unknown value falls back to the default listed first in each table, as the C++
-/// codec did.
 const MUSIC_STYLES: [&str; 6] = ["Off", "All styles", "Spectrum", "Pulse", "Disco", "Polar"];
 const MUSIC_STYLE_DEFAULT: &str = "All styles";
 const CLOCK_MUSIC_STYLES: [&str; 2] = ["Off", "Levels"];
 const VOICE_COLORS: [&str; 2] = ["Violet", "Blue"];
 const ZIGBEE_ROLES: [&str; 3] = ["off", "pulsar-coordinator", "router"];
 
-/// User ring light (`light_*=` keys).
 #[derive(Clone, Debug, PartialEq)]
 pub struct Light {
     pub on: bool,
-    /// 0..1.
     pub brightness: f32,
-    /// 0..1 each.
     pub r: f32,
     pub g: f32,
     pub b: f32,
-    /// "" or "None" — no effect.
     pub effect: String,
 }
 
@@ -64,74 +41,37 @@ impl Default for Light {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Settings {
-    /// Volume on the stock curve (`Model::volume_map`), `volume2=`. `volume=` keeps the same raw
-    /// level on the curve of earlier builds, so a binary rolled back by supervise.sh plays as
-    /// loud.
     pub volume: f32,
-    /// `volume2=` was present.
     pub has_volume: bool,
-    /// `volume=`; < 0: absent.
     pub volume_legacy: f32,
-    /// `volume_curve=2`: one interim build wrote `volume=` on the stock curve.
     pub legacy_on_stock: bool,
-    /// Media mute.
     pub muted: bool,
-    /// Software microphone mute.
     pub mic_muted: bool,
     pub clock_on: bool,
     pub clock_brightness: f32,
-    /// Clock level follows the light sensor, with `clock_brightness` as the ceiling.
     pub clock_auto_brightness: bool,
-    /// Двоеточие времени мигает раз в секунду; выключено — горит постоянно.
     pub clock_colon_blink: bool,
-    /// Clock text scroll step.
     pub clock_scroll_ms: i32,
-    /// User ring light.
     pub light: Light,
     pub wake_word: String,
-    /// POSIX TZ (the default matches what the Yandex firmware showed); updated from HA.
     pub tz: String,
-    /// Install new releases without asking.
     pub auto_update: bool,
-    /// Wake arbitration with other pulsar stations.
     pub nearest_answers: bool,
-    /// Music visualisation style of the ring (HA select option text).
     pub music_viz: String,
-    /// Clock music style (HA select option text).
     pub clock_music: String,
-    /// 0.25..4
     pub led_speed: f32,
-    /// Listening / thinking / speaking shown on the ring and the clock.
     pub voice_indication: bool,
-    /// Звук начала прослушивания: после wake word и по кнопке действия.
     pub wake_sound: bool,
-    /// Audio between the end of the wake word and its confirmation goes ahead of the request.
     pub wake_preroll: bool,
-    /// Сколько ждать начала речи в follow-up-реплике, с; 0 — не продолжать разговор.
     pub followup_duration_s: u32,
-    /// Wake-event recording («Wake: запись событий»).
     pub wake_recording: bool,
-    /// Dry run of the Ricardo detector: record, never answer («Wake: тестовый режим»).
     pub wake_dry_run: bool,
-    /// «Громкость объявлений», 0..1: absolute volume on the model's curve for spoken
-    /// announcements (HA announce, TTS answers); the master volume, earcons, the timer ring and
-    /// music are unaffected. Above the current master the gain is capped at it, so the default
-    /// 1.0 keeps the old «as the main volume» behaviour.
     pub announce_volume: f32,
-    /// Усиление звука запроса перед отправкой в HA, дБ («Microphone gain»); 34 — прежний
-    /// уровень усиленного канала, 0 — канал VQE как есть.
     pub mic_gain_db: u32,
-    /// Stem of `pulsar_hw::case_colors()`, "" = none.
     pub led_case_color: String,
-    /// Hue of the ring's listening / thinking / speaking animation (`voice_color=`).
     pub voice_color: String,
-    /// Release being installed. Still set after a restart into another version: that release
-    /// was rolled back by supervise.sh (crash loop), automatic updates skip it.
     pub update_attempt: String,
-    /// `state.conf` `zigbee_role=`: "off", "pulsar-coordinator" or "router".
     pub zigbee_role: String,
-    /// Radio image version given up on (the radio did not take it); not written again until the
-    /// role changes or another image version is installed.
     pub zigbee_flash_failed: u32,
 }
 
@@ -153,7 +93,6 @@ impl Default for Settings {
             wake_word: "ricardo".into(),
             tz: "MSK-3".into(),
             auto_update: false,
-            // One station in this installation: the 250 ms arbitration window only adds latency.
             nearest_answers: false,
             music_viz: MUSIC_STYLE_DEFAULT.into(),
             clock_music: "Off".into(),
@@ -165,8 +104,6 @@ impl Default for Settings {
             wake_recording: true,
             wake_dry_run: false,
             announce_volume: 1.0,
-            // 34 дБ = прежний VQE_OMNI_WITH_GAIN на Миди и Лайт 2 (выход 9 = выход 6 × 50):
-            // обновление не меняет уровень потока, уходящего в STT на живой колонке.
             mic_gain_db: 34,
             led_case_color: String::new(),
             voice_color: "Violet".into(),
@@ -177,8 +114,6 @@ impl Default for Settings {
     }
 }
 
-/// A persisted option text: a known one stays, anything else is the default (as the C++ codec
-/// normalized its enums).
 fn canonical(options: &[&str], value: &str, default: &str) -> String {
     if options.contains(&value) {
         value.to_owned()
@@ -188,7 +123,6 @@ fn canonical(options: &[&str], value: &str, default: &str) -> String {
 }
 
 impl Settings {
-    /// Reads `path` over the current values; false when it cannot be read.
     pub fn load(&mut self, path: &Path) -> bool {
         std::fs::read(path).is_ok_and(|text| {
             self.parse(&text);
@@ -196,12 +130,6 @@ impl Settings {
         })
     }
 
-    /// The C++ `Settings::load` loop: lines split at '\n' only (a '\r' stays in the value), the
-    /// key up to the first '='; unknown keys and lines without '=' are skipped.
-    ///
-    /// Accepted difference: values are decoded as lossy UTF-8 (C++ kept raw bytes), so an
-    /// invalid byte becomes U+FFFD. Such values never come from HA (its strings are UTF-8) nor
-    /// from either daemon's own writes.
     pub fn parse(&mut self, text: &[u8]) {
         for line in text.split(|&b| b == b'\n') {
             let Some(eq) = line.iter().position(|&b| b == b'=') else {
@@ -224,7 +152,6 @@ impl Settings {
                 b"clock_brightness" => self.clock_brightness = fv,
                 b"clock_auto_brightness" => self.clock_auto_brightness = on,
                 b"clock_colon_blink" => self.clock_colon_blink = on,
-                // C++ int(float): truncation (Rust saturates where C++ is undefined).
                 b"clock_scroll_ms" => self.clock_scroll_ms = (fv as i32).clamp(100, 2000),
                 b"light_on" => self.light.on = on,
                 b"light_brightness" => self.light.brightness = fv,
@@ -254,7 +181,6 @@ impl Settings {
                 b"wake_sound" => self.wake_sound = on,
                 b"wake_preroll" => self.wake_preroll = on,
                 b"followup_duration_s" => {
-                    // The HA entity's own clamp (no esphome type leaks into `Settings`).
                     if let Some(s) = pulsar_esphome::followup_duration_s(fv) {
                         self.followup_duration_s = s;
                     }
@@ -280,8 +206,6 @@ impl Settings {
         }
     }
 
-    /// Файл в том виде, как его пишет C++ `Settings::save`: все ключи, в его порядке; ключи,
-    /// добавленные после фикстур эталона, перечислены в шапке `settings/tests.rs`.
     pub fn serialize(&self) -> String {
         let f = |v: f32| g6(f64::from(v));
         let b = |v: bool| u8::from(v);
@@ -332,9 +256,6 @@ impl Settings {
         )
     }
 
-    /// Atomic and durable: written to `<path>.tmp` (the C++ daemon's name; a leftover one is
-    /// truncated) and fsynced, renamed over `path`, then the directory fsynced. A failed write
-    /// is logged, its temporary file removed and `path` left as it was. False on failure.
     pub fn save(&self, path: &Path) -> bool {
         let mut tmp = OsString::from(path.as_os_str());
         tmp.push(".tmp");
@@ -349,15 +270,12 @@ impl Settings {
         let written = f
             .write_all(self.serialize().as_bytes())
             .and_then(|()| f.sync_all());
-        // close(2) is not checked: fsync has already reported any write-back error.
         drop(f);
         if let Err(e) = written.and_then(|()| std::fs::rename(&tmp, path)) {
             warn!("cannot write {}: {e}", path.display());
             let _ = std::fs::remove_file(&tmp);
             return false;
         }
-        // The rename survives a power cut only once the directory is synced. Not a failure:
-        // the new file is in place.
         let dir = match path.parent() {
             Some(p) if !p.as_os_str().is_empty() => p,
             _ => Path::new("."),
@@ -369,10 +287,6 @@ impl Settings {
     }
 }
 
-/// The settings and their `state.conf` writer: `changed` writes `SAVE_DELAY_MS` after the last
-/// change (when `due` completes, the owner calls `flush`), `write_now` at once. Every write is
-/// the whole file, so one write covers every change pending until then. A failed write stays
-/// pending: the next change or `flush` tries again.
 pub struct Store {
     path: PathBuf,
     values: Settings,
@@ -381,7 +295,6 @@ pub struct Store {
 }
 
 impl Store {
-    /// Reads `path` over the defaults (a missing file leaves all defaults).
     pub fn load(path: PathBuf) -> Self {
         let mut values = Settings::default();
         values.load(&path);
@@ -393,7 +306,6 @@ impl Store {
         }
     }
 
-    /// A store over `values` that never read `path` (tests).
     #[cfg(test)]
     pub fn with_values(path: PathBuf, values: Settings) -> Self {
         Self {
@@ -404,14 +316,11 @@ impl Store {
         }
     }
 
-    /// `st` changed: written `SAVE_DELAY_MS` after the last change.
     pub fn changed(&mut self) {
         self.dirty = true;
         self.timer.set((), SAVE_DELAY_MS);
     }
 
-    /// Writes now; a pending delayed write is no longer needed. True = on disk; false = the
-    /// change stays pending (the next change or `flush` tries again).
     #[must_use = "a write that must be on disk has to check it"]
     pub fn write_now(&mut self) -> bool {
         self.timer.cancel(());
@@ -419,15 +328,12 @@ impl Store {
         !self.dirty
     }
 
-    /// Writes if a change is pending.
     pub fn flush(&mut self) {
         if self.dirty {
-            // A failure is logged by save and stays pending for the next change or flush.
             let _ = self.write_now();
         }
     }
 
-    /// Completes when the delayed write is due; pending while none is. Cancel-safe.
     pub async fn due(&mut self) {
         self.timer.next().await;
     }
@@ -447,8 +353,6 @@ impl DerefMut for Store {
     }
 }
 
-/// `strtoul(s, nullptr, 16)`: leading white space, an optional sign, an optional `0x`, then hex
-/// digits; out of range gives `ULONG_MAX` (whose width is the target's), a minus sign negates.
 fn strtoul_hex(s: &str) -> std::ffi::c_ulong {
     let b = s.as_bytes();
     let mut i = 0;

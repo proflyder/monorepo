@@ -1,8 +1,3 @@
-//! Yandex VQE (echo cancellation, beamforming, noise reduction) and phrase spotters from the
-//! firmware's libyandex_evil.so. The safe wrappers ([`Lib`], [`Vqe`], [`SpotterConf`],
-//! [`Spotter`]) and [`spotter_layout`] are public for ww_offline; `Engine` is the daemon's use
-//! of them.
-
 #[allow(unsafe_code)]
 mod ffi;
 
@@ -16,8 +11,6 @@ pub use ffi::{Lib, LoadError, Spotter, SpotterConf, Vqe, VqeStep, preload_deps};
 
 pub const VQE_MODELS: &str = "/system/vendor/quasar/vqe_models";
 
-// voicetech.AudioInputChannelType (VQE output channel types);
-// см. docs/hardware.md, «Библиотеки Яндекса (C API)».
 pub const RAW_MAIN_MIC_SYNC: i32 = 2;
 pub const RAW_AUX_MIC_SYNC: i32 = 3;
 pub const RAW_FEEDBACK_SYNC: i32 = 5;
@@ -26,9 +19,6 @@ pub const VQE_BEAMFORMING: i32 = 7;
 pub const VQE_BNR: i32 = 8;
 pub const VQE_OMNI_WITH_GAIN: i32 = 9;
 
-/// Тип канала спотера (0..5) -> выход VQE: контракт библиотеки, общий для всех моделей.
-/// Командная модель на VQE_OMNI_WITH_GAIN не срабатывала (ww_offline: 0/14 против 10/14 на
-/// VQE_OMNI). См. docs/hardware.md, «Библиотеки Яндекса (C API)».
 pub const SPOTTER_TO_VQE: [i32; 6] = [
     VQE_OMNI,
     VQE_BEAMFORMING,
@@ -38,10 +28,6 @@ pub const SPOTTER_TO_VQE: [i32; 6] = [
     RAW_AUX_MIC_SYNC,
 ];
 
-/// Раскладка wake-спотера pulsar до таблицы библиотеки (с ней wake word работал на всех
-/// моделях): запасная, когда в пресете VQE нет выхода из [`SPOTTER_TO_VQE`]. Командный спотер
-/// получал на тип 0 VQE_OMNI (на VQE_OMNI_WITH_GAIN он не срабатывает): его тип 0 в запасной
-/// раскладке задаёт `Slot::init`.
 pub const LEGACY_SPOTTER_TO_VQE: [i32; 6] = [
     VQE_OMNI_WITH_GAIN,
     RAW_MAIN_MIC_SYNC,
@@ -51,42 +37,30 @@ pub const LEGACY_SPOTTER_TO_VQE: [i32; 6] = [
     VQE_OMNI,
 ];
 
-/// Channel types a spotter config can ask for (0..5).
 pub const SPOTTER_TYPES: usize = SPOTTER_TO_VQE.len();
-// A type asking for this many channels or more gets none (the C++ daemon's guard).
 const TYPE_CHANNELS_LIMIT: i64 = 8;
 const MAX_SPOTTER_CHANNELS: usize = SPOTTER_TYPES * (TYPE_CHANNELS_LIMIT as usize - 1);
 
-// Spotter events (event_id_to_str): 2 / 5 = CONFIRMATION_1ST_STAGE / _2ND_STAGE (hits),
-// 3 = 1ST_STAGE_HIT (the verifier starts waiting for more audio), 6 = REJECTION_2ND_STAGE;
-// 0/4/7/9 mean "need more data / finished". The ids follow the library's name table, checked
-// at start (`Engine::stages`).
 const EV_CONFIRM_1ST: i32 = 2;
 const EV_FIRST_STAGE_HIT: i32 = 3;
 const EV_CONFIRM_2ND: i32 = 5;
 const EV_REJECTION_2ND: i32 = 6;
 const EVENTS_STOP_MASK: u32 = (1 << 0) | (1 << 4) | (1 << 7) | (1 << 9);
 const MAX_EVENTS: usize = 16;
-// One hit per utterance.
 const DEBOUNCE_MS: i64 = 1200;
 
-/// Rate the spotters are fed at: the VQE output.
 pub const SPOTTER_RATE: i32 = 16000;
 
-/// Усиление в дБ -> множитель отсчётов перед [`pulsar_dsp::to_s16`].
 pub fn db_to_gain(db: u32) -> f32 {
     10f32.powf(db as f32 / 20.0)
 }
 
-/// Spotter input channels: per channel its spotter type and the VQE output feeding it.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct SpotterLayout {
     pub types: Vec<i32>,
     pub vqe: Vec<i32>,
 }
 
-/// Раскладка каналов по числу каналов каждого типа в конфиге спотера
-/// (spotter_conf_get_required_channel_count) и таблице тип -> выход VQE.
 pub fn spotter_layout(
     counts: &[i64; SPOTTER_TYPES],
     mapping: &[i32; SPOTTER_TYPES],
@@ -118,7 +92,6 @@ fn vqe_name(ty: i32) -> &'static str {
 }
 
 impl std::fmt::Display for SpotterLayout {
-    /// "0<-omni(6),3<-bnr(8),4<-main_mic_sync(2)"
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for (i, (t, v)) in self.types.iter().zip(&self.vqe).enumerate() {
             if i > 0 {
@@ -130,7 +103,6 @@ impl std::fmt::Display for SpotterLayout {
     }
 }
 
-/// Почему движок не собрался: dlopen, VQE или обязательный спотер.
 #[derive(Debug, thiserror::Error)]
 pub enum EngineError {
     #[error("dlopen libyandex_evil: {0}")]
@@ -145,37 +117,22 @@ pub enum EngineError {
     WakeSpotter(String),
 }
 
-/// Порт движка распознавания: VQE и нативные спотеры. Реализация — [`YandexEngine`] поверх
-/// firmware-библиотеки, тестовая — скрипт, выдающий заданные выходы и события. Детектор Ricardo
-/// живёт за отдельным портом [`crate::frontend::Detector`].
 pub(crate) trait WakeEngine: Send {
-    /// Кадров захвата на один чанк VQE.
     fn chunk(&self) -> usize;
-    /// Выходных сэмплов на чанк VQE.
     fn frame(&self) -> usize;
-    /// Один чанк; false после ошибки.
     fn process(&mut self, mics: &[f32], spk: &[f32]) -> bool;
-    /// Выход VQE-канала `ty` последнего чанка.
     fn output(&self, ty: i32) -> Option<&[f32]>;
-    /// Подать последний чанк спотеру wake-слова.
     fn feed_wake(&mut self) -> Spotted;
-    /// Подать последний чанк командному спотеру.
     fn feed_command(&mut self) -> Vec<String>;
-    /// Переключить модель wake-слова.
     fn set_wake_model(&mut self, dir: &Path) -> bool;
-    /// id текущей модели (ключ `Preroll`).
     fn wake_id(&self) -> &str;
 }
 
-/// Where the events of one fed chunk come from (a spotter, or a script in tests).
 pub(crate) trait EventSource {
-    /// Next event; None after an error (logged).
     fn next_event(&mut self) -> Option<i32>;
-    /// Phrase of the current event; "" when the library has none.
     fn phrase(&mut self) -> String;
 }
 
-/// Last verifier step seen in one fed chunk (events 3 / 6).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) enum Stage {
     #[default]
@@ -184,16 +141,12 @@ pub(crate) enum Stage {
     Rejected,
 }
 
-/// What one fed chunk produced.
 #[derive(Debug, Default, PartialEq, Eq)]
 pub(crate) struct Spotted {
-    /// Confirmed phrases, one per utterance.
     pub phrases: Vec<String>,
     pub stage: Stage,
 }
 
-/// Reads the events of one fed chunk (at most 16, until a stop event): the confirmed phrases,
-/// one per utterance (`DEBOUNCE_MS` after the previous hit), and the last verifier step.
 pub(crate) fn drain_events(
     src: &mut impl EventSource,
     what: &str,
@@ -245,13 +198,11 @@ impl EventSource for Logged<'_> {
     }
 }
 
-/// One spotter of the daemon with its channel layout.
 pub(crate) struct Slot {
     what: &'static str,
     sp: Option<Spotter>,
     layout: SpotterLayout,
     legacy: SpotterLayout,
-    /// Выходы раскладки проверены на первом чанке ([`Slot::resolve`]).
     checked: bool,
     buf: Vec<i16>,
     last_hit_ms: i64,
@@ -270,8 +221,6 @@ impl Slot {
         }
     }
 
-    /// (Re)creates the spotter from the model in `dir`; the previous one is destroyed first.
-    /// `legacy_main` — выход VQE для типа 0 в запасной раскладке.
     fn init(&mut self, lib: &Lib, dir: &Path, legacy_main: i32) -> bool {
         self.sp = None;
         let conf = match SpotterConf::read(lib, dir) {
@@ -295,13 +244,11 @@ impl Slot {
         if let Some(e) = err {
             error!("spotter_conf_native_sample_rate: {e}");
         }
-        // Типы каналов обеих раскладок одинаковы: они зависят только от counts.
         let (sp, err) = Spotter::create(&conf, SPOTTER_RATE, &self.layout.types);
         let ok = err.is_none() && sp.is_some();
         if let Some(e) = err {
             error!("spotter_create_multichannel: {e}");
         }
-        // Kept even when created with an error, as the C++ daemon did.
         self.sp = sp;
         drop(conf);
         if ok {
@@ -315,7 +262,6 @@ impl Slot {
         ok
     }
 
-    /// Раскладка по таблице и запасная, `legacy_main` — выход VQE для типа 0 в запасной.
     fn set_layouts(&mut self, counts: &[i64; SPOTTER_TYPES], legacy_main: i32) {
         self.layout = spotter_layout(counts, &SPOTTER_TO_VQE);
         let mut legacy = LEGACY_SPOTTER_TO_VQE;
@@ -324,8 +270,6 @@ impl Slot {
         self.checked = false;
     }
 
-    /// Выходы раскладки проверяются на первом чанке: без выхода в пресете спотер молча получал бы
-    /// пустые буферы (GetOutputChannelData отдаёт n == 0).
     fn resolve(&mut self, present: impl Fn(i32) -> bool) -> bool {
         let Some(&ty) = self.layout.vqe.iter().find(|&&ty| !present(ty)) else {
             return true;
@@ -350,21 +294,14 @@ impl Slot {
     }
 }
 
-/// The daemon's VQE + wake word spotter + optional command spotter.
 pub(crate) struct YandexEngine {
-    // Fields drop in declaration order: the spotters first, then the VQE (instance, then its
-    // config), as the C++ engine's destructor freed them.
     wake: Slot,
     cmd: Slot,
     vqe: Vqe,
     lib: Lib,
-    /// Capture frames per VQE chunk.
     chunk: usize,
-    /// VQE output samples per chunk.
     frame: usize,
-    /// Id of the wake word model (its directory name, e.g. "alisa").
     wake_id: String,
-    /// Events 3 / 6 carry the names the stage tracking expects.
     stages: bool,
 }
 
@@ -375,8 +312,6 @@ fn model_id(dir: &Path) -> String {
 }
 
 impl YandexEngine {
-    /// dlopen, VQE for the model's preset, the wake word spotter (required) and the command spotter
-    /// (optional: a warning without it). Errors are logged; None = no front-end.
     pub fn start<D>(
         capture: &pulsar_model::Capture,
         wake_dir: &Path,
@@ -395,23 +330,17 @@ impl YandexEngine {
         let vqe = Vqe::new(&lib, preset, Path::new(VQE_MODELS), nmic, nspk)
             .map_err(|(step, message)| EngineError::Vqe { step, message })?;
         let (chunk, frame) = (vqe.chunk(), vqe.frame());
-        // A zero chunk would spin the capture and processing threads.
         let (Ok(chunk_n @ 1..), Ok(frame_n @ 1..)) =
             (usize::try_from(chunk), usize::try_from(frame))
         else {
             return Err(EngineError::VqeShape { chunk, frame });
         };
         info!("VQE '{preset}': {chunk} input frames -> {frame} output samples per chunk");
-        // Порядок обязателен и проверен на Миди: VQE (libyandex_evil) → TFLite/Ricardo → спотеры.
-        // `preload_deps` остаётся в начале, как в старом `Engine::start`; Ricardo же нельзя
-        // ставить ни до VQE, ни после спотеров: обе библиотеки грузятся с RTLD_GLOBAL, и порядок
-        // разрешения глобальных символов должен совпадать с проверенной на станции сборкой.
         let detector = load_detector();
         let (hit, rej) = (
             lib.event_name(EV_FIRST_STAGE_HIT),
             lib.event_name(EV_REJECTION_2ND),
         );
-        // The names may come with or without an "EVENT_" prefix.
         let stages = hit.as_deref().is_some_and(|n| n.ends_with("1ST_STAGE_HIT"))
             && rej
                 .as_deref()
@@ -467,8 +396,6 @@ impl WakeEngine for YandexEngine {
             .ok()
     }
 
-    /// Feeds the last chunk to the wake word spotter: its confirmed phrases and verifier step
-    /// (`Stage::None` when the event ids are not the expected ones).
     fn feed_wake(&mut self) -> Spotted {
         let mut s = feed(&self.vqe, self.frame, &mut self.wake);
         if !self.stages {
@@ -477,7 +404,6 @@ impl WakeEngine for YandexEngine {
         s
     }
 
-    /// Feeds the last chunk to the command spotter; its confirmed phrases.
     fn feed_command(&mut self) -> Vec<String> {
         feed(&self.vqe, self.frame, &mut self.cmd).phrases
     }
@@ -494,7 +420,6 @@ impl WakeEngine for YandexEngine {
 
 fn feed(vqe: &Vqe, frame: usize, s: &mut Slot) -> Spotted {
     if s.sp.is_some() && !s.checked {
-        // Ошибка библиотеки — не отсутствие выхода: проверка повторяется на следующем чанке.
         if let Some(e) = s
             .layout
             .vqe
@@ -555,24 +480,19 @@ mod tests {
 
     #[test]
     fn layout_from_channel_counts() {
-        // Миди alisa: bnr-channel и freq-filter-audio-channel raw-mic (типы 3 и 4).
         let l = spotter_layout(&[1, 0, 0, 1, 1, 0], &SPOTTER_TO_VQE);
         assert_eq!(l.types, [0, 3, 4]);
         assert_eq!(l.vqe, [6, 8, 2]);
         assert_eq!(l.to_string(), "0<-omni(6),3<-bnr(8),4<-main_mic_sync(2)");
-        // Запасная раскладка — та, с которой wake word работал раньше.
         let l = spotter_layout(&[1, 0, 0, 1, 1, 0], &LEGACY_SPOTTER_TO_VQE);
         assert_eq!(l.vqe, [9, 2, 6]);
-        // Lite 2 alisa / yandex: types 0 and 4.
         let l = spotter_layout(&[1, 0, 0, 0, 1, 0], &SPOTTER_TO_VQE);
         assert_eq!(
             (l.types.as_slice(), l.vqe.as_slice()),
             (&[0, 4][..], &[6, 2][..])
         );
-        // Командная модель: только тип 0.
         let l = spotter_layout(&[1, 0, 0, 0, 0, 0], &SPOTTER_TO_VQE);
         assert_eq!(l.to_string(), "0<-omni(6)");
-        // Several channels of a type, every type mapped.
         let l = spotter_layout(&[2, 1, 1, 1, 1, 2], &SPOTTER_TO_VQE);
         assert_eq!(l.types, [0, 0, 1, 2, 3, 4, 5, 5]);
         assert_eq!(l.vqe, [6, 6, 7, 5, 8, 2, 3, 3]);
@@ -580,12 +500,10 @@ mod tests {
 
     #[test]
     fn layout_skips_bad_counts() {
-        // 8 or more channels of a type, or a negative count (error value): none of that type.
         let l = spotter_layout(&[8, -1, 0, 7, 100, 1], &SPOTTER_TO_VQE);
         assert_eq!(l.types, [3, 3, 3, 3, 3, 3, 3, 5]);
         assert_eq!(l.vqe, [8, 8, 8, 8, 8, 8, 8, 3]);
         assert!(spotter_layout(&[0; 6], &SPOTTER_TO_VQE).types.is_empty());
-        // The largest possible layout fits the per-chunk channel table.
         assert_eq!(
             spotter_layout(&[7; 6], &SPOTTER_TO_VQE).types.len(),
             MAX_SPOTTER_CHANNELS
@@ -603,7 +521,6 @@ mod tests {
         let mut s = slot(&wake, VQE_OMNI_WITH_GAIN);
         assert!(s.resolve(|_| true));
         assert_eq!(s.layout.vqe, [6, 8, 2]);
-        // Запасная раскладка не нужна, когда есть все выходы таблицы.
         let mut s = slot(&wake, VQE_OMNI_WITH_GAIN);
         assert!(s.resolve(|ty| ty != VQE_OMNI_WITH_GAIN));
         assert_eq!(s.layout.vqe, [6, 8, 2]);
@@ -612,7 +529,6 @@ mod tests {
         assert_eq!(s.layout.vqe, [9, 2, 6]);
         let mut s = slot(&wake, VQE_OMNI_WITH_GAIN);
         assert!(!s.resolve(|ty| ty != VQE_BNR && ty != VQE_OMNI_WITH_GAIN));
-        // Командный спотер в запасной раскладке остаётся на VQE_OMNI.
         let mut s = slot(&[1, 0, 0, 1, 0, 0], VQE_OMNI);
         assert!(s.resolve(|ty| ty != VQE_BNR));
         assert_eq!(s.layout.vqe, [6, 2]);
@@ -638,7 +554,6 @@ mod tests {
         fn next_event(&mut self) -> Option<i32> {
             let ev = self.events.get(self.polled).copied();
             self.polled += 1;
-            // Past the script: "need more data".
             ev.map_or(Some(0), Result::ok)
         }
 
@@ -667,7 +582,6 @@ mod tests {
 
     #[test]
     fn events_confirmations_are_hits() {
-        // 1, 3, 6, 8 are skipped; 2 and 5 confirm (the phrase is read only for those).
         let mut s = Script::new(&[Ok(1), Ok(2), Ok(3), Ok(6), Ok(8), Ok(0), Ok(5)]);
         let mut last = 0;
         assert_eq!(
@@ -692,11 +606,9 @@ mod tests {
     fn events_debounced_for_1200_ms() {
         let mut last = 0;
         let mut now = 10_000;
-        // Two confirmations of one utterance (1st and 2nd stage): one hit.
         let mut s = Script::new(&[Ok(2), Ok(5)]);
         assert_eq!(drain_events(&mut s, "t", &mut last, || now).phrases, ["p0"]);
         assert_eq!((s.phrases, last), (2, 10_000));
-        // 1199 ms later: still the same utterance.
         now += 1199;
         let mut s = Script::new(&[Ok(2)]);
         assert!(
@@ -705,7 +617,6 @@ mod tests {
                 .is_empty()
         );
         assert_eq!(last, 10_000);
-        // 1200 ms after the hit: a new one.
         now += 1;
         let mut s = Script::new(&[Ok(5)]);
         assert_eq!(drain_events(&mut s, "t", &mut last, || now).phrases, ["p0"]);
@@ -719,18 +630,15 @@ mod tests {
             let mut last = 0;
             drain_events(&mut Script::new(&evs), "t", &mut last, || 5000)
         };
-        // 1st-stage hit, verifier waits for more audio: no phrase yet.
         assert_eq!(stage(&[3, 4]).stage, Stage::FirstStageHit);
         assert!(stage(&[3, 4]).phrases.is_empty());
         assert_eq!(stage(&[3, 6]).stage, Stage::Rejected);
         assert_eq!(stage(&[6, 3]).stage, Stage::FirstStageHit);
-        // Hit and confirmation in one chunk.
         let s = stage(&[3, 5]);
         assert_eq!(
             (s.phrases.as_slice(), s.stage),
             (&["p1".to_string()][..], Stage::FirstStageHit)
         );
-        // A 1st-stage confirmation right after the hit (no verifier wait) is a hit too.
         let s = stage(&[3, 2]);
         assert_eq!((s.phrases.len(), s.stage), (1, Stage::FirstStageHit));
         assert_eq!(stage(&[1, 2]).stage, Stage::None);

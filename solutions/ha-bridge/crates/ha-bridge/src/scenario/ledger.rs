@@ -1,17 +1,3 @@
-//! Scenario execution ledger: which `scenario.fire` events already started and
-//! completed.
-//!
-//! A `scenario` queue event can be re-delivered after a lease expiry or a crash
-//! in the middle of a delay. Steps are side effects, so they must not run
-//! twice for the same event: before the first step the executor writes
-//! `started`, and a later delivery of the same event id that finds `started`
-//! without `completed` is acknowledged `FAILED "interrupted"` instead of being
-//! replayed. `completed` is written after the last step (or the first fatal
-//! step) and suppresses a re-run entirely.
-//!
-//! The file is JSON with atomic writes (`temp + fsync + rename`), it holds no
-//! step parameters and no speak text, and it keeps 30 days / 20 000 entries.
-
 use std::collections::BTreeMap;
 use std::fs::{self, File, OpenOptions};
 use std::io::Write as _;
@@ -23,28 +9,21 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 
-/// How long run records are kept.
 pub const DEFAULT_RETENTION: Duration = Duration::from_secs(30 * 24 * 60 * 60);
-/// Hard cap even without pruning.
 pub const MAX_RUNS: usize = 20_000;
-/// The only supported on-disk version.
 pub const FILE_VERSION: i64 = 1;
 
 static TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 type Clock = Arc<dyn Fn() -> i64 + Send + Sync>;
 
-/// Where one event is in its lifecycle.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum RunState {
-    /// Steps may have produced side effects; the run did not finish.
     Started,
-    /// The run finished (successfully or with a recorded failure).
     Completed,
 }
 
-/// One event record. It never contains a step parameter or spoken text.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RunRecord {
     #[serde(rename = "scenarioId", default)]
@@ -54,14 +33,10 @@ pub struct RunRecord {
     pub updated_unix: i64,
 }
 
-/// The answer to "may this event start?".
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Start {
-    /// No record: the executor may run and just wrote `started`.
     New,
-    /// A previous process started this event and never finished.
     Interrupted,
-    /// The event already finished in a previous process.
     Completed,
 }
 
@@ -73,7 +48,6 @@ struct FileFormat {
     runs: BTreeMap<String, RunRecord>,
 }
 
-/// A ledger failure. Messages never echo a payload or spoken text.
 #[derive(Debug, thiserror::Error)]
 pub enum LedgerError {
     #[error("scenario ledger: read {path}: {source}")]
@@ -89,7 +63,6 @@ pub enum LedgerError {
     Io(String),
 }
 
-/// A concurrency-safe scenario run ledger.
 pub struct ScenarioLedger {
     path: Option<PathBuf>,
     inner: Mutex<BTreeMap<String, RunRecord>>,
@@ -107,14 +80,11 @@ impl std::fmt::Debug for ScenarioLedger {
 }
 
 impl ScenarioLedger {
-    /// Open a file-backed ledger, creating it on the first write. A corrupt or
-    /// newer file is an error: starting empty could repeat side effects.
     pub fn open(path: impl AsRef<Path>) -> Result<Self, LedgerError> {
         let clock = system_clock();
         Self::open_with_clock(path, move || (clock.as_ref())())
     }
 
-    /// Open with an injected clock (tests).
     pub fn open_with_clock(
         path: impl AsRef<Path>,
         clock: impl Fn() -> i64 + Send + Sync + 'static,
@@ -128,13 +98,11 @@ impl ScenarioLedger {
         Ok(ledger)
     }
 
-    /// An in-memory ledger: interruption detection lasts only for this process.
     #[must_use]
     pub fn memory() -> Self {
         Self::memory_with_clock(system_clock_closure())
     }
 
-    /// An in-memory ledger with an injected clock.
     #[must_use]
     pub fn memory_with_clock(clock: impl Fn() -> i64 + Send + Sync + 'static) -> Self {
         Self {
@@ -144,14 +112,11 @@ impl ScenarioLedger {
         }
     }
 
-    /// Backing file, or `None` for an in-memory ledger.
     #[must_use]
     pub fn path(&self) -> Option<&Path> {
         self.path.as_deref()
     }
 
-    /// Atomically claim an event. `Interrupted` is returned when a previous
-    /// process left `started` without `completed`.
     pub fn start(&self, event_id: &str, scenario_id: &str) -> Result<Start, LedgerError> {
         if event_id.is_empty() {
             return Err(LedgerError::Io("empty event id".to_owned()));
@@ -178,7 +143,6 @@ impl ScenarioLedger {
         Ok(Start::New)
     }
 
-    /// Mark the run finished. The record stays for deduplication.
     pub fn complete(&self, event_id: &str) -> Result<(), LedgerError> {
         if event_id.is_empty() {
             return Err(LedgerError::Io("empty event id".to_owned()));
@@ -202,19 +166,16 @@ impl ScenarioLedger {
         self.persist(&format)
     }
 
-    /// State of one event, if it is recorded.
     #[must_use]
     pub fn state(&self, event_id: &str) -> Option<RunState> {
         self.lock().get(event_id).map(|record| record.state)
     }
 
-    /// Number of run records.
     #[must_use]
     pub fn len(&self) -> usize {
         self.lock().len()
     }
 
-    /// Whether no run is recorded.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.len() == 0
@@ -334,7 +295,6 @@ fn trim(runs: &mut BTreeMap<String, RunRecord>) {
     }
 }
 
-/// Create a mode-0600 temp file in `directory` and return its handle and name.
 fn create_temp(directory: &Path) -> Result<(File, PathBuf), LedgerError> {
     for _ in 0..100 {
         let counter = TEMP_COUNTER.fetch_add(1, Ordering::Relaxed);
@@ -437,8 +397,6 @@ mod tests {
         ledger.complete("ev_old").expect("complete");
         clock.fetch_add(31 * 24 * 60 * 60, Ordering::SeqCst);
         ledger.start("ev_new", "sc_2").expect("start");
-        // Pruning happens on load; the in-memory record is still there until
-        // reopen, which is fine for deduplication.
         assert_eq!(ledger.len(), 2);
     }
 }

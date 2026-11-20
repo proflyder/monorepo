@@ -1,7 +1,3 @@
-//! The wake-event writer thread: WAV + sidecar files, `stats.json`, the in-memory index, retention
-//! and the labels the controller asks for. All blocking file work of the feature lives here, off
-//! the audio thread.
-
 use std::ffi::OsString;
 use std::fs::{self, File};
 use std::io::Write as _;
@@ -18,14 +14,9 @@ use super::contract::{Sidecar, Stats, Thresholds, parse_stats, sidecar_json, sta
 use super::logic::{self, MAX_BYTES, MAX_EVENTS, Outcome};
 use super::{Command, Counters, Job, Recording, WakeStoreError};
 
-/// The writer wakes up this often to look for commands and the 60 s stats period.
 const WAKE_MS: u64 = 200;
-/// Outcomes may arrive before the window they belong to (a lost arbitration ~250 ms after the
-/// hit, the audio 1 s later): they wait here for its sidecar.
 const MAX_PENDING_OUTCOMES: usize = 32;
 
-/// Monotonic milliseconds of this process. Интервалы записи не зависят от стенных часов, и
-/// значение важно только разницей — как `pulsar_core::now_ms` (CLOCK_MONOTONIC).
 fn now_ms() -> i64 {
     static START: std::sync::OnceLock<Instant> = std::sync::OnceLock::new();
     START.get_or_init(Instant::now).elapsed().as_millis() as i64
@@ -74,12 +65,10 @@ struct Writer {
     counters: Arc<Counters>,
     cmd: Receiver<Command>,
     jobs: Receiver<Job>,
-    /// `stats.json` as loaded: this run's counters are added on top.
     base: Stats,
     index: Vec<logic::Meta>,
     last_stats_ms: i64,
     last_written: Option<Stats>,
-    /// Outcomes whose sidecar did not exist yet.
     pending_outcomes: Vec<(String, Outcome, Option<String>)>,
 }
 
@@ -93,8 +82,6 @@ fn tmp_of(path: &Path) -> PathBuf {
     PathBuf::from(tmp)
 }
 
-/// Write to `<path>.tmp`, fsync, rename, fsync the directory (the pattern of `state.conf`; the
-/// Lite 2's ubifs needs it or a power cut leaves an empty file).
 fn write_atomic(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
     let tmp = tmp_of(path);
     let mut f = File::create(&tmp)?;
@@ -109,7 +96,6 @@ fn write_atomic(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
     File::open(dir)?.sync_all()
 }
 
-/// Запись файла контракта; путь и шаг остаются в ошибке.
 fn store_atomic(path: &Path, bytes: &[u8]) -> Result<(), WakeStoreError> {
     write_atomic(path, bytes).map_err(|source| WakeStoreError::Io {
         path: path.to_owned(),
@@ -145,7 +131,6 @@ impl Writer {
                 self.last_stats_ms = now_ms();
             }
         }
-        // Clean shutdown: the totals of this run reach the file even inside the 60 s period.
         self.write_stats();
     }
 
@@ -211,8 +196,6 @@ impl Writer {
         }
     }
 
-    /// Пишет WAV и сайдкар. При любой ошибке недописанное событие убирается целиком: без пары
-    /// WAV + JSON оно бесполезно, а `.tmp` не должен остаться ни от одного файла.
     fn try_save(&mut self, rec: &Recording) -> Result<(), WakeStoreError> {
         let side = Sidecar {
             schema: 1,
@@ -228,7 +211,6 @@ impl Writer {
             model_sha256: self.sha256.clone(),
             pulsar_version: self.version.clone(),
             dry_run: rec.dry_run,
-            // A dry-run hit never reaches the controller: its outcome is final here.
             outcome: (rec.kind == super::Kind::Hit && rec.dry_run)
                 .then(|| Outcome::DryRun.as_str().to_owned()),
             stt_text: None,
@@ -294,8 +276,6 @@ impl Writer {
                 stt_text,
             } => {
                 if self.read_sidecar(&id).is_none() {
-                    // The hit's window finishes 1 s after the confirming chunk; an outcome of a
-                    // dialog that never started (arbiter_lost, a quick cancel) comes earlier.
                     if self.pending_outcomes.len() >= MAX_PENDING_OUTCOMES {
                         self.pending_outcomes.remove(0);
                     }
@@ -353,7 +333,6 @@ impl Writer {
     }
 }
 
-/// The events already on disk (a previous run), for retention and the false-alarm window.
 fn scan(dir: &Path) -> Vec<logic::Meta> {
     let mut out = Vec::new();
     let Ok(entries) = fs::read_dir(dir) else {
@@ -451,7 +430,6 @@ mod tests {
         let id = rec.id.clone();
         w.save(&rec);
         made(&dir, &id);
-        // The sidecar has the contract shape and the WAV is 1 s of PCM16.
         let side = w.read_sidecar(&id).unwrap();
         assert_eq!(side.kind, "hit");
         assert_eq!(side.outcome, None);
@@ -460,7 +438,6 @@ mod tests {
             fs::metadata(dir.join(format!("{id}.wav"))).unwrap().len(),
             44 + 32000
         );
-        // Outcome from the controller.
         w.on_command(Command::Outcome {
             id: id.clone(),
             outcome: Outcome::Answered,
@@ -469,14 +446,12 @@ mod tests {
         let side = w.read_sidecar(&id).unwrap();
         assert_eq!(side.outcome.as_deref(), Some("answered"));
         assert_eq!(side.stt_text.as_deref(), Some("включи свет"));
-        // False alarm labels that hit.
         w.on_command(Command::FalseAlarm);
         let side = w.read_sidecar(&id).unwrap();
         assert_eq!(side.label.as_deref(), Some("false"));
         assert_eq!(side.label_source.as_deref(), Some("user"));
         assert!(side.labeled_utc.is_some());
         assert!(w.index[0].labeled);
-        // Stats: 1.5 s of listening, no hit counted by the counters here.
         w.write_stats();
         let stats = parse_stats(&fs::read_to_string(dir.join("stats.json")).unwrap()).unwrap();
         assert!((stats.listening_seconds - 1.5).abs() < 1e-9);
@@ -502,7 +477,6 @@ mod tests {
             label_source: None,
         };
         let id = rec.id.clone();
-        // A lost arbitration arrives before the 1 s post-roll finishes the window.
         w.on_command(Command::Outcome {
             id: id.clone(),
             outcome: Outcome::ArbiterLost,

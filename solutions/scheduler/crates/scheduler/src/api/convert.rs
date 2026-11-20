@@ -1,8 +1,3 @@
-//! Conversions between the generated protobuf messages and the domain model.
-//!
-//! Nothing outside this module names both types: the store never sees protobuf
-//! and the domain never sees wire enums.
-
 use home_proto::v1 as proto;
 
 use crate::domain::DomainError;
@@ -300,10 +295,6 @@ pub fn schedule_to_alarm(schedule: &Schedule, zone: &ClientZone) -> proto::Alarm
     }
 }
 
-/// Converts wire-local recurrence fields to the stored UTC rule.
-///
-/// Returns `(at_utc, repeat, once_unix, weekdays_utc)`. A local weekday or
-/// weekend selection becomes an explicit UTC mask; daily stays daily.
 fn stored_rule(
     repeat_code: i32,
     at: Option<&proto::WallTime>,
@@ -323,7 +314,6 @@ fn stored_rule(
     Ok((stored.at, stored.repeat, stored.once_unix, stored.weekdays))
 }
 
-/// Reconstructs the local repeat kind and weekday list from a stored mask.
 fn local_repeat(stored: Repeat, local_weekdays: &[i32]) -> (Repeat, &[i32]) {
     match stored {
         Repeat::Once => (Repeat::Once, &[]),

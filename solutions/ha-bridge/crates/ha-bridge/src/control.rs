@@ -1,14 +1,3 @@
-//! The `control` queue executor.
-//!
-//! The phone enqueues a generic task (`task_type` = `home.control`) on the
-//! dedicated `control` queue; this handler leases that queue, resolves the
-//! task's entry id and action through the catalog discovered from Home
-//! Assistant right now, calls Home Assistant and acknowledges.
-//!
-//! The payload is data only: it names a catalog entry, and an id that is not in
-//! the current catalog is rejected, so it can never reach an entity the
-//! discovery rules do not expose.
-
 use std::future::Future;
 use std::sync::Arc;
 
@@ -21,7 +10,6 @@ use crate::catalog::{self, Catalog, Params, ServiceCall};
 use crate::control_config::ControlConfig;
 use crate::discovery::CatalogSource;
 
-/// The Home Assistant side-effect surface.
 pub trait ControlHa: Send + Sync {
     fn call_service(
         &self,
@@ -56,7 +44,6 @@ impl<T: ControlHa + ?Sized> ControlHa for Arc<T> {
     }
 }
 
-/// The executor. One instance owns the configured queue.
 pub struct Control<H: ControlHa> {
     config: Arc<ControlConfig>,
     catalog: Arc<dyn CatalogSource>,
@@ -73,7 +60,6 @@ impl<H: ControlHa> std::fmt::Debug for Control<H> {
 }
 
 impl<H: ControlHa> Control<H> {
-    /// Build the executor.
     #[must_use]
     pub fn new(config: Arc<ControlConfig>, catalog: Arc<dyn CatalogSource>, ha: Arc<H>) -> Self {
         Self {
@@ -83,7 +69,6 @@ impl<H: ControlHa> Control<H> {
         }
     }
 
-    /// Resolve one event against the current catalog.
     fn plan(&self, event: &Event, catalog: &Catalog) -> Result<(ServiceCall, String), PlanError> {
         if !event.queue.is_empty() && event.queue != self.config.queue {
             return Err(PlanError::Queue {
@@ -114,9 +99,6 @@ impl<H: ControlHa> Control<H> {
         let snapshot = match self.catalog.get().await {
             Ok(snapshot) => snapshot,
             Err(error) => {
-                // Home Assistant is unreachable, so the command cannot run
-                // either: leave it unacknowledged and let the lease expiry
-                // retry it, unless the attempt limit is already reached.
                 tracing::warn!(
                     attempts = event.attempts,
                     %error,
@@ -190,10 +172,6 @@ impl<H: ControlHa> Handler for Control<H> {
     }
 }
 
-/// The task payload. `entry` and `action` are data; `brightness`, `kelvin`,
-/// `hue` and `saturation` are the light adjustments, `text` is the speak
-/// action's user content. The text is validated by `resolve` and never
-/// logged, echoed in an ack detail or stored.
 #[derive(Debug, Deserialize)]
 struct Command {
     #[serde(default)]
@@ -204,7 +182,6 @@ struct Command {
     params: Params,
 }
 
-/// A rejected control command.
 #[derive(Debug, Clone, PartialEq, thiserror::Error)]
 pub enum PlanError {
     #[error("event queue {actual:?} does not match {expected:?}")]
@@ -238,8 +215,6 @@ fn error_status(error: &home_ha::Error) -> Option<u16> {
     }
 }
 
-/// Render an HA failure like `packages/go/httpapi.Error`: operation and status
-/// only, never a response body.
 fn ha_error_detail(error: &home_ha::Error) -> String {
     match error {
         home_ha::Error::Status { op, status, .. } => format!("{op}: status={status}"),
@@ -251,16 +226,11 @@ fn ha_error_detail(error: &home_ha::Error) -> String {
     }
 }
 
-/// Collapse whitespace and bound the text by characters, never bytes.
 fn detail(text: &str) -> String {
     let joined = text.split_whitespace().collect::<Vec<_>>().join(" ");
     truncate_chars(&joined, 200)
 }
 
-/// The ack detail: whitespace-collapsed and bounded like Go's 200-byte
-/// `detail`, but on character boundaries. 200 characters stay below the
-/// scheduler's 1024-byte ack-detail limit even when every character is
-/// multi-byte.
 fn sanitize_detail(text: &str) -> String {
     let joined = text.split_whitespace().collect::<Vec<_>>().join(" ");
     truncate_chars(&joined, 200)

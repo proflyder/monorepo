@@ -1,9 +1,3 @@
-//! The Midi's radio as a Zigbee router in somebody else's network (Zigbee2MQTT, ZHA, ...): it runs
-//! pulsar's router firmware (radio/router), which joins and leaves on command and otherwise
-//! forwards on its own. Over zbhci: 0x0045 -> 0x8045 network info, 0x0002 network steering
-//! (join), 0x0005 leave + factory new; unsolicited 0x8906 joined, 0x8920 `[event][status]` (1
-//! started: status 0 = on a network; 2 join failed: BDB status; 3 left).
-
 use pulsar_core::Timers;
 use tracing::{info, warn};
 
@@ -19,33 +13,26 @@ const EVENT: u16 = 0x8920;
 const EVENT_STARTED: u8 = 1;
 const EVENT_JOIN_FAILED: u8 = 2;
 const EVENT_LEFT: u8 = 3;
-/// Steering scans every channel, then retries.
 const JOIN_TIMEOUT_MS: u64 = 90_000;
-/// After a leave the firmware erases its network and may restart; it is asked once it settled.
 const AFTER_LEAVE_MS: u64 = 1000;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct State {
-    /// The radio answered with its network state.
     pub ready: bool,
     pub joined: bool,
-    /// Network steering in progress.
     pub joining: bool,
     pub pan: u16,
     pub nwk: u16,
     pub channel: u8,
-    /// Last failure, "" = none.
     pub error: String,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Timer {
     Join,
-    /// One per leave: each asks for the network info again.
     NwkInfo(u64),
 }
 
-/// What woke the router; hand it back to [`Router::handle`].
 pub struct Wake(WakeKind);
 
 enum WakeKind {
@@ -69,8 +56,6 @@ fn join_error(bdb_status: u8) -> String {
 }
 
 impl Router {
-    /// `link`: open, the running firmware identified as pulsar's router. Events the link had
-    /// already queued are the router's.
     pub fn new(link: Link) -> Self {
         Self {
             link,
@@ -88,7 +73,6 @@ impl Router {
         &self.st
     }
 
-    /// Next thing to handle. Cancel-safe.
     pub async fn next(&mut self) -> Wake {
         tokio::select! {
             biased;
@@ -97,7 +81,6 @@ impl Router {
         }
     }
 
-    /// true: the state changed (C++ `changed()`).
     pub fn handle(&mut self, w: Wake) -> bool {
         match w.0 {
             WakeKind::Link(LinkEvent::Frame { ty, payload }) => self.on_frame(ty, &payload),
@@ -136,8 +119,6 @@ impl Router {
         }
     }
 
-    /// Joins the network that currently allows joining (permit join on its coordinator).
-    /// true: the state changed.
     pub fn join(&mut self) -> bool {
         if !self.st.ready || self.st.joined || self.st.joining {
             return false;
@@ -150,8 +131,6 @@ impl Router {
         true
     }
 
-    /// Announces the leave and forgets the network. Changes the state without reporting it,
-    /// as the C++ router did.
     pub fn leave(&mut self) {
         if !self.st.ready {
             return;
@@ -159,7 +138,6 @@ impl Router {
         info!("zigbee router: leaving the network");
         self.st.joining = false;
         self.st.error.clear();
-        // The firmware broadcasts a Leave, erases its network and may restart.
         self.link.send(FACTORY_NEW, &[], Some(AckTag::Leave));
     }
 
@@ -170,8 +148,6 @@ impl Router {
 
     fn on_frame(&mut self, ty: u16, p: &[u8]) -> bool {
         match ty {
-            // [type][capability][on a network][PAN BE][ext PAN 8][NWK BE][IEEE 8][channel];
-            // 0x8906 the same without the channel
             NWK_INFO_RSP | JOINED => {
                 if p.len() < 23 {
                     return false;
@@ -192,7 +168,6 @@ impl Router {
                         "zigbee router: joined PAN 0x{:04x} as 0x{:04x}",
                         self.st.pan, self.st.nwk
                     );
-                    // The channel; its reply publishes the new state.
                     self.link.send(NWK_INFO_REQ, &[], None);
                     return false;
                 }
@@ -231,7 +206,6 @@ mod tests {
     use crate::test_util::{Radio, absent_lines, assert_golden, hex, link_pair, poll_once};
     use pulsar_zbhci::frame::BOOT_IND;
 
-    /// Drives a router and the radio in lock-step, recording what the C++ harness printed.
     struct Run {
         router: Router,
         radio: Radio,
@@ -322,7 +296,6 @@ mod tests {
         v
     }
 
-    /// The C++ router's hooks and frames for the same script (tests/golden/router.txt).
     #[tokio::test(start_paused = true)]
     async fn router_matches_cxx_golden() {
         let (mut link, radio) = link_pair(&absent_lines());

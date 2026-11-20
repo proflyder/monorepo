@@ -1,9 +1,3 @@
-//! BlueZ GATT application, advertisement and characteristic interfaces.
-//!
-//! Objects are exported through `#[zbus::interface]`; BlueZ managers are
-//! reached through `#[zbus::proxy]`. `zbus` stays pure Rust and does not link
-//! libdbus, unlike `bluer`.
-
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
@@ -120,7 +114,6 @@ impl Characteristic {
         let Some(value) = options.get("offset") else {
             return 0;
         };
-        // BlueZ sends the GATT write offset as uint16 (`q`).
         u16::try_from(value.clone())
             .ok()
             .map(i64::from)
@@ -261,7 +254,6 @@ impl Advertisement {
     fn release(&self) {}
 }
 
-/// BlueZ GATT application controller.
 pub struct Ble {
     commit: mpsc::Sender<Vec<u8>>,
     credentials: Arc<Credentials>,

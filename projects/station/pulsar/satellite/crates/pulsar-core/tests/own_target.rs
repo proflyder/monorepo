@@ -1,8 +1,3 @@
-//! Tools' own log targets end to end: records of a target registered with `add_own_target`
-//! (before or after `init_logger`) reach the sink like pulsar's; others stay foreign. The
-//! records come from `log`, so this also covers the `tracing-log` bridge used by third-party
-//! crates. One test per binary, since the logger is global.
-
 use pulsar_core::{add_own_target, init_logger, set_log_sink, take_log_lines};
 use tracing::Level;
 
@@ -11,7 +6,6 @@ fn own_targets_reach_the_sink() {
     add_own_target("early_tool");
     init_logger();
     add_own_target("late_tool");
-    // The sink is on only with a notify.
     let notify = std::sync::Arc::new(tokio::sync::Notify::new());
     set_log_sink(Some(Level::DEBUG), Some(notify));
 

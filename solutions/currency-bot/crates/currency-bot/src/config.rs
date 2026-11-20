@@ -1,8 +1,3 @@
-//! Process configuration loaded 1:1 from the Go service's environment.
-//!
-//! Required values are never empty; the process fails fast otherwise. Secrets
-//! use `home_secret` so `Debug` never prints them.
-
 use std::net::SocketAddr;
 use std::path::PathBuf;
 
@@ -11,22 +6,14 @@ use home_secret::{Secret, Token};
 use jiff::tz::TimeZone;
 use thiserror::Error;
 
-/// Default SQLite path.
 pub const DEFAULT_DB_PATH: &str = "/data/currency-bot.db";
-/// Default API listener.
 pub const DEFAULT_HTTP_ADDR: &str = ":8080";
-/// Default webhook listener.
 pub const DEFAULT_WEBHOOK_ADDR: &str = ":8081";
-/// Default time zone.
 pub const DEFAULT_TIMEZONE: &str = "UTC";
-/// Default rates page.
 pub const DEFAULT_KURS_URL: &str = "https://kurs.kz";
-/// Default Bot API root.
 pub const DEFAULT_TELEGRAM_API: &str = "https://api.telegram.org";
-/// Retention is hard-coded in the Go service and logged at start-up.
 pub const RETENTION_DAYS: i64 = 35;
 
-/// A fully validated process configuration.
 #[derive(Debug, Clone)]
 pub struct Config {
     pub bot_token: Token,
@@ -44,7 +31,6 @@ pub struct Config {
     pub location: TimeZone,
 
     pub hourly_minute: u8,
-    /// Go `time.Weekday`: 0 = Sunday.
     pub cleanup_weekday: i8,
     pub cleanup_hour: u8,
     pub retention_days: i64,
@@ -52,12 +38,10 @@ pub struct Config {
 }
 
 impl Config {
-    /// Read and validate the process environment.
     pub fn load() -> Result<Self, ConfigError> {
         Self::load_from(&|key| std::env::var(key).ok())
     }
 
-    /// Load from an injected environment (tests).
     pub fn load_from(getenv: &dyn Fn(&str) -> Option<String>) -> Result<Self, ConfigError> {
         let trimmed = |key: &str| getenv(key).map(|value| value.trim().to_owned());
         let value_or = |key: &str, default: &str| {
@@ -129,15 +113,11 @@ impl Config {
         })
     }
 
-    /// Loopback address for `-healthcheck`: a wildcard bind becomes
-    /// `127.0.0.1`.
     pub fn healthcheck_address(&self) -> Result<SocketAddr, String> {
         healthcheck_address(&self.http_addr)
     }
 }
 
-/// Why the environment was rejected. Messages match the Go loader and never
-/// contain a secret value.
 #[derive(Debug, Error)]
 pub enum ConfigError {
     #[error("missing required environment variables: {0}")]
@@ -193,11 +173,6 @@ fn parse_weekday(raw: &str) -> Result<i8, ConfigError> {
     Ok(day)
 }
 
-/// Expands a Go-style `:port` listen address into an explicit wildcard host.
-///
-/// Go's `net.Listen` treats `:8080` as "all interfaces"; tokio's
-/// `TcpListener::bind` does not, so the default `HTTP_ADDR`/`WEBHOOK_ADDR`
-/// values must be normalised before binding.
 pub fn normalize_listen(listen: &str) -> Result<String, String> {
     let Some((host, port)) = listen.rsplit_once(':') else {
         return Err(format!("invalid listen address: {listen}"));
@@ -212,7 +187,6 @@ pub fn normalize_listen(listen: &str) -> Result<String, String> {
     Ok(format!("{host}:{port}"))
 }
 
-/// Turns a listen address into a loopback probe address.
 pub fn healthcheck_address(listen: &str) -> Result<SocketAddr, String> {
     let Some((host, port)) = listen.rsplit_once(':') else {
         return Err(format!("invalid listen address: {listen}"));

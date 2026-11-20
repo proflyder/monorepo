@@ -1,7 +1,3 @@
-//! Ambient light sensor: iio device "ltr308als01". Lux = in_intensity_input when present,
-//! otherwise (in_intensity_raw + in_intensity_offset) * in_intensity_scale. Gain/integration
-//! defaults are set by the firmware (/etc/light-sensor.conf) and left untouched. Polled.
-
 use std::path::{Path, PathBuf};
 
 use home_linux as sysfs;
@@ -14,12 +10,10 @@ use crate::clock::{ClockError, Lux};
 const IIO_DIR: &str = "/sys/bus/iio/devices/";
 const SENSOR_NAME: &str = "ltr308als01";
 
-/// Датчик освещённости: одно чтение люксов.
 pub trait LightSensor {
     fn read(&mut self) -> Result<Lux, ClockError>;
 }
 
-/// Sysfs-датчик iio `ltr308als01`.
 struct SysfsLightSensor {
     dir: PathBuf,
 }
@@ -31,8 +25,6 @@ impl LightSensor for SysfsLightSensor {
     }
 }
 
-/// strtod's numeric prefix (after leading white space) of a decimal sysfs value; None when
-/// there is none. Decimal only: no inf / nan / hex forms, which sysfs never gives.
 fn parse_prefix(s: &str) -> Option<f64> {
     let s = s.trim_start_matches([' ', '\t', '\n', '\r', '\x0b', '\x0c']);
     let b = s.as_bytes();
@@ -79,7 +71,6 @@ fn read_lux(dir: &Path) -> Option<f32> {
     Some(((raw + offset) * scale).max(0.0) as f32)
 }
 
-/// The sensor's directory under `iio_dir`.
 fn find(iio_dir: &Path) -> Option<PathBuf> {
     std::fs::read_dir(iio_dir)
         .ok()?
@@ -94,9 +85,6 @@ fn find(iio_dir: &Path) -> Option<PathBuf> {
         })
 }
 
-/// Finds the sensor and polls it every `period_ms`; the first reading is in the channel when
-/// this returns. The poller stops once the receiver is dropped. Err when the sensor is missing
-/// or unreadable; the caller logs it (a missing sensor is normal on some stations).
 pub fn spawn_light_sensor(period_ms: u64) -> Result<mpsc::UnboundedReceiver<Lux>, ClockError> {
     spawn_in(Path::new(IIO_DIR), period_ms)
 }
@@ -118,7 +106,6 @@ fn spawn_poller(
         let _ = tx.send(lux);
     }
     pulsar_core::supervisor().spawn_local("light", async move {
-        // As the C++ loop timer: re-armed `period_ms` after each poll; period 0 polls once more.
         let mut timers = Timers::new();
         timers.set_repeating((), period_ms, period_ms);
         loop {
@@ -212,7 +199,6 @@ mod tests {
             &[("in_intensity_raw", "1\n"), ("in_intensity_offset", "-5\n")],
         );
         assert_eq!(read_lux(&d), Some(0.0));
-        // An unparsable input falls back to raw.
         let d = t.device(
             "e",
             &[("in_intensity_input", "\n"), ("in_intensity_raw", "3\n")],

@@ -1,18 +1,3 @@
-//! The firmware's GLib and GStreamer (/system/vendor/quasar/libs/libquasar_gstreamer.so), loaded
-//! with dlopen and used without headers. Every unsafe call of the player lives here.
-//!
-//! Library loading: libquasar_gstreamer.so has RUNPATH=/system/vendor/quasar/libs, but
-//! libglib.so has none and NEEDs libiconv.so (which lives only in that directory). libiconv.so,
-//! libglib.so and libquasar_gstreamer.so are opened by absolute path, in that order, with
-//! RTLD_GLOBAL; the already-loaded "libiconv.so" SONAME then satisfies glib's dependency, so
-//! LD_LIBRARY_PATH is not needed.
-//!
-//! Struct layouts used without headers (GStreamer 1.x public structs):
-//!   GstMessage: GstMiniObject | GstMessageType type | guint64 timestamp | GstObject *src;
-//!               type/src at 64/80 on aarch64, 36/48 on armhf (GstMiniObject is 36 bytes there;
-//!               the ARM EABI 8-aligns the timestamp).
-//!   GError:     GQuark domain @0 | gint code @4 | gchar *message @8 (same on both ABIs).
-
 use std::error::Error as _;
 use std::ffi::{CStr, CString, c_char, c_int, c_uint, c_void};
 use std::os::unix::ffi::OsStrExt as _;
@@ -29,17 +14,14 @@ type GSourceFunc = unsafe extern "C" fn(Gp) -> c_int;
 type GstBusFunc = unsafe extern "C" fn(Gp, Gp, Gp) -> c_int;
 type ParseFn = unsafe extern "C" fn(Gp, *mut Gp, *mut *mut c_char);
 
-/// A command for the GLib thread (see [`idle_add`]).
 pub type Call = Box<dyn FnOnce() + Send>;
 
 const LIB_DIR: &str = "/system/vendor/quasar/libs/";
 const CA_BUNDLE: &CStr = c"/etc/ssl/certs/ca-certificates.crt";
 
-// GstState NULL (the other values: player::GstState), GstStateChangeReturn FAILURE
 const STATE_NULL: c_int = 1;
 const STATE_CHANGE_FAILURE: c_int = 0;
 
-// GstMessageType
 const MSG_EOS: u32 = 1 << 0;
 const MSG_ERROR: u32 = 1 << 1;
 const MSG_WARNING: u32 = 1 << 2;
@@ -48,10 +30,8 @@ const MSG_STATE_CHANGED: u32 = 1 << 6;
 const MSG_CLOCK_LOST: u32 = 1 << 10;
 
 const FORMAT_TIME: c_int = 3;
-// GST_SEEK_FLAG_FLUSH | GST_SEEK_FLAG_KEY_UNIT
 const SEEK_FLAG_FLUSH_KEY_UNIT: c_int = (1 << 0) | (1 << 2);
 
-// Static plugins compiled into libquasar_gstreamer.so that playbin needs for our formats.
 const PLUGINS: [&str; 24] = [
     "coreelements",
     "playback",
@@ -85,7 +65,7 @@ const PLUGINS: [&str; 24] = [
 )]
 #[repr(C)]
 struct MiniObjectView {
-    type_: usize, // GType (gsize)
+    type_: usize,
     refcount: c_int,
     lockstate: c_int,
     flags: c_uint,
@@ -103,9 +83,9 @@ struct MiniObjectView {
 #[repr(C)]
 struct MessageView {
     mini_object: MiniObjectView,
-    type_: u32, // GstMessageType
+    type_: u32,
     timestamp: u64,
-    src: Gp, // GstObject *
+    src: Gp,
 }
 
 #[cfg(target_arch = "aarch64")]
@@ -122,7 +102,7 @@ const _: () = assert!(
 #[allow(dead_code, reason = "only read through GError pointers")]
 #[repr(C)]
 struct GErrorView {
-    domain: u32, // GQuark
+    domain: u32,
     code: c_int,
     message: *const c_char,
 }
@@ -134,12 +114,10 @@ const _: () = assert!(
         && core::mem::offset_of!(GErrorView, message) == 8
 );
 
-/// Every symbol the player uses, resolved once.
 pub struct Api {
     _iconv: Option<Library>,
     _glib: Library,
     gst: Library,
-    // glib
     main_loop_new: unsafe extern "C" fn(Gp, c_int) -> Gp,
     main_loop_run: unsafe extern "C" fn(Gp),
     main_loop_quit: unsafe extern "C" fn(Gp),
@@ -151,9 +129,7 @@ pub struct Api {
     object_get: unsafe extern "C" fn(Gp, *const c_char, ...),
     error_free: unsafe extern "C" fn(Gp),
     free: unsafe extern "C" fn(Gp),
-    // Optional, like the two below: retry / resume only.
     quark_try_string: Option<unsafe extern "C" fn(*const c_char) -> u32>,
-    // gstreamer
     init_check: unsafe extern "C" fn(*mut c_int, *mut *mut *mut c_char, *mut Gp) -> c_int,
     parse_launch: unsafe extern "C" fn(*const c_char, *mut Gp) -> Gp,
     element_set_state: unsafe extern "C" fn(Gp, c_int) -> c_int,
@@ -170,23 +146,16 @@ pub struct Api {
 }
 
 fn dl_error(e: &libloading::Error) -> String {
-    // The source carries dlerror()'s text ("<file>: cannot open shared object file: ...").
     e.source()
         .map_or_else(|| e.to_string(), ToString::to_string)
 }
 
 fn open(name: &str) -> Result<Library, String> {
-    // SAFETY: the firmware's own libraries; their initialisers have no preconditions and they
-    // are never unloaded (the handles live in the static Api).
+    // SAFETY: the firmware's own libraries; their initialisers have no preconditions and they are never unloaded (the handles live in the static Api).
     unsafe { Library::open(Some(format!("{LIB_DIR}{name}")), RTLD_NOW | RTLD_GLOBAL) }
         .map_err(|e| dl_error(&e))
 }
 
-/// `name` as a function pointer of type `T`, None if the library does not export it (or
-/// exports it as NULL).
-///
-/// # Safety
-/// `T` must be the function pointer type matching the C prototype of `name`.
 unsafe fn opt<T: Copy>(lib: &Library, name: &CStr) -> Option<T> {
     const { assert!(size_of::<T>() == size_of::<*mut c_void>()) };
     // SAFETY: the symbol's address only; the pointer is only used while `lib` stays loaded.
@@ -194,15 +163,10 @@ unsafe fn opt<T: Copy>(lib: &Library, name: &CStr) -> Option<T> {
     if p.is_null() {
         return None;
     }
-    // SAFETY: a non-null code address of a function whose prototype is T (caller guarantee);
-    // the sizes match (asserted above).
+    // SAFETY: a non-null code address of a function whose prototype is T (caller guarantee); the sizes match (asserted above).
     Some(unsafe { std::mem::transmute_copy::<*mut c_void, T>(&p) })
 }
 
-/// As [`opt`], logging a missing symbol and clearing `ok`.
-///
-/// # Safety
-/// As [`opt`].
 unsafe fn req<T: Copy>(lib: &Library, name: &CStr, ok: &mut bool) -> Option<T> {
     // SAFETY: forwarded caller guarantee.
     let s = unsafe { opt::<T>(lib, name) };
@@ -215,15 +179,11 @@ unsafe fn req<T: Copy>(lib: &Library, name: &CStr, ok: &mut bool) -> Option<T> {
 
 static API: LazyLock<Option<Api>> = LazyLock::new(load_api);
 
-/// dlopen + symbol resolution, once per process; None (logged) on failure.
 pub fn load() -> Option<&'static Api> {
     API.as_ref()
 }
 
 fn load_api() -> Option<Api> {
-    // Preload libiconv so libglib.so's DT_NEEDED "libiconv.so" resolves without LD_LIBRARY_PATH.
-    // A failed load keeps the libraries already opened (never dlclose: their initialisers may
-    // have registered state, e.g. GLib types, that outlives a close).
     let iconv = open("libiconv.so")
         .inspect_err(|e| warn!("player: dlopen libiconv: {e}"))
         .ok();
@@ -244,9 +204,7 @@ fn load_api() -> Option<Api> {
         }
     };
     let mut ok = true;
-    // SAFETY: every type below is the prototype from the GLib 2.x / GStreamer 1.x headers, with
-    // gboolean, enums and GstState as int, guint as unsigned int, gint64 as i64, GQuark as u32
-    // and every object pointer as void *.
+    // SAFETY: every type below is the prototype from the GLib 2.x / GStreamer 1.x headers, with gboolean, enums and GstState as int, guint as unsigned int, gint64 as i64, GQuark as u32 and every object pointer as void *.
     unsafe {
         let main_loop_new = req(&glib, c"g_main_loop_new", &mut ok);
         let main_loop_run = req(&glib, c"g_main_loop_run", &mut ok);
@@ -310,8 +268,6 @@ fn load_api() -> Option<Api> {
     }
 }
 
-/// Points OpenSSL (souphttpsrc's TLS backend, below) at the system CA bundle unless the
-/// environment already names one.
 pub fn set_ssl_cert_file() {
     // SAFETY: NUL-terminated path.
     if unsafe { libc::access(CA_BUNDLE.as_ptr(), libc::R_OK) } != 0
@@ -319,9 +275,7 @@ pub fn set_ssl_cert_file() {
     {
         return;
     }
-    // SAFETY: std's environment lock covers Rust readers. C code reading the environment
-    // (getenv) on another thread at this moment would race; the daemon calls
-    // pulsar_media::spawn() before it starts any other service thread, so none exists yet.
+    // SAFETY: std's environment lock covers Rust readers. C code reading the environment (getenv) on another thread at this moment would race; the daemon calls pulsar_media::spawn() before it starts any other service thread, so none exists yet.
     unsafe {
         std::env::set_var(
             "SSL_CERT_FILE",
@@ -330,10 +284,6 @@ pub fn set_ssl_cert_file() {
     };
 }
 
-/// The text of a GError (or "?" without one).
-///
-/// # Safety
-/// `err` is null or a live GError.
 unsafe fn gerror_message(err: Gp) -> String {
     if err.is_null() {
         return "?".to_owned();
@@ -349,7 +299,6 @@ unsafe fn gerror_message(err: Gp) -> String {
         .into_owned()
 }
 
-/// Frees a GError the caller received (null allowed).
 fn free_error(api: &Api, err: Gp) {
     if !err.is_null() {
         // SAFETY: a GError owned by the caller, freed once.
@@ -357,7 +306,6 @@ fn free_error(api: &Api, err: Gp) {
     }
 }
 
-/// gst_init_check, the static plugins and the TLS backend; false (logged) on failure.
 pub fn init(api: &Api) -> bool {
     let mut err: Gp = ptr::null_mut();
     // SAFETY: no argv; out-pointer to a local.
@@ -383,11 +331,6 @@ pub fn init(api: &Api) -> bool {
             warn!("player: plugin {p} not present");
         }
     }
-    // TLS backend for souphttpsrc (https://): glib-networking's OpenSSL module is linked
-    // statically into libquasar_gstreamer.so; loading it with a NULL module registers it as a
-    // static type. Its default CA store is OpenSSL's compiled-in path, which does not exist on
-    // the device ("Unacceptable TLS certificate"); SSL_CERT_FILE (set_ssl_cert_file) points it at
-    // the system bundle.
     // SAFETY: void g_io_openssl_load (GIOModule *module); NULL = static registration.
     if let Some(tls) = unsafe { opt::<unsafe extern "C" fn(Gp)>(&api.gst, c"g_io_openssl_load") } {
         // SAFETY: see above.
@@ -397,14 +340,12 @@ pub fn init(api: &Api) -> bool {
     true
 }
 
-/// A GLib main loop on the default main context.
 pub struct MainLoop {
     api: &'static Api,
     ml: NonNull<c_void>,
 }
 
-// SAFETY: GMainLoop is reference counted with atomic operations; g_main_loop_quit may be called
-// from any thread, g_main_loop_run runs on one thread (the player's).
+// SAFETY: GMainLoop is reference counted with atomic operations; g_main_loop_quit may be called from any thread, g_main_loop_run runs on one thread (the player's).
 unsafe impl Send for MainLoop {}
 // SAFETY: see Send.
 unsafe impl Sync for MainLoop {}
@@ -435,14 +376,12 @@ impl Drop for MainLoop {
 }
 
 unsafe extern "C" fn run_call(data: Gp) -> c_int {
-    // SAFETY: `data` is the Box<Call> leaked by idle_add; this source returns G_SOURCE_REMOVE,
-    // so GLib calls it exactly once.
+    // SAFETY: `data` is the Box<Call> leaked by idle_add; this source returns G_SOURCE_REMOVE, so GLib calls it exactly once.
     let call = unsafe { Box::from_raw(data.cast::<Call>()) };
     call();
-    0 // G_SOURCE_REMOVE
+    0
 }
 
-/// Runs `call` on the thread of the default main context (the player's GLib thread).
 pub fn idle_add(api: &Api, call: Call) {
     let data = Box::into_raw(Box::new(call));
     // SAFETY: run_call matches GSourceFunc and takes ownership of `data`.
@@ -453,7 +392,6 @@ unsafe extern "C" fn on_timeout(user: Gp) -> c_int {
     c_int::from(crate::core::on_timer(user.addr()))
 }
 
-/// A GLib timeout calling `player::on_timer(tag)` every `ms` while it returns true.
 pub fn timeout_add(api: &Api, ms: u32, tag: usize) -> u32 {
     // SAFETY: on_timeout matches GSourceFunc; the tag is a plain integer, never dereferenced.
     unsafe { (api.timeout_add)(ms, on_timeout, ptr::without_provenance_mut(tag)) }
@@ -464,29 +402,23 @@ pub fn source_remove(api: &Api, id: u32) {
     unsafe { (api.source_remove)(id) };
 }
 
-/// The resource-error domain of souphttpsrc's errors; 0 when unknown.
 pub fn resource_error_quark(api: &Api) -> u32 {
     // SAFETY: NUL-terminated string; try_string never creates a quark.
     api.quark_try_string
         .map_or(0, |f| unsafe { f(c"gst-resource-error-quark".as_ptr()) })
 }
 
-/// A playbin element.
 pub struct Pipeline {
     api: &'static Api,
     el: NonNull<c_void>,
-    /// The fdsink ANNOUNCE decodes into (a reference we hold), see [`Pipeline::find_out_sink`].
     out_sink: Option<NonNull<c_void>>,
-    /// GLib source id of the bus watch (0 = none).
     watch: c_uint,
 }
 
-// SAFETY: GstElement is a thread-safe GObject; the player uses it from one thread at a time
-// (created on the caller's, then only on the GLib thread).
+// SAFETY: GstElement is a thread-safe GObject; the player uses it from one thread at a time (created on the caller's, then only on the GLib thread).
 unsafe impl Send for Pipeline {}
 
 impl Pipeline {
-    /// gst_parse_launch; None (logged) on failure.
     pub(crate) fn launch(api: &'static Api, desc: &CStr) -> Option<Self> {
         let mut err: Gp = ptr::null_mut();
         // SAFETY: NUL-terminated description, out-pointer to a local.
@@ -512,54 +444,42 @@ impl Pipeline {
         })
     }
 
-    /// The element's address, for comparing with a message source.
     pub(crate) fn addr(&self) -> *const c_void {
         self.el.as_ptr()
     }
 
-    /// gst_element_set_state; false on GST_STATE_CHANGE_FAILURE.
     pub(crate) fn set_state(&self, state: c_int) -> bool {
         // SAFETY: live element, GstState value.
         unsafe { (self.api.element_set_state)(self.el.as_ptr(), state) != STATE_CHANGE_FAILURE }
     }
 
-    // One setter per property, name and GType fixed here: g_object_set reads the variadic value
-    // as the property's type, which no compiler checks.
-
-    /// playbin "uri" (gchararray).
     pub(crate) fn set_uri(&self, uri: &CStr) {
         let (el, null) = (self.el.as_ptr(), ptr::null::<c_char>());
         // SAFETY: "uri" is a string property; NULL-terminated argument list.
         unsafe { (self.api.object_set)(el, c"uri".as_ptr(), uri.as_ptr(), null) };
     }
 
-    /// playbin "volume" (gdouble).
     pub(crate) fn set_volume(&self, v: f64) {
         let (el, null) = (self.el.as_ptr(), ptr::null::<c_char>());
         // SAFETY: "volume" is a gdouble property; NULL-terminated argument list.
         unsafe { (self.api.object_set)(el, c"volume".as_ptr(), v, null) };
     }
 
-    /// playbin "flags" (GstPlayFlags, a guint flags type).
     pub(crate) fn set_flags(&self, v: u32) {
         let (el, null) = (self.el.as_ptr(), ptr::null::<c_char>());
         // SAFETY: "flags" is a flags (guint) property; NULL-terminated argument list.
         unsafe { (self.api.object_set)(el, c"flags".as_ptr(), v, null) };
     }
 
-    /// Finds the element named `name` inside playbin's "audio-sink" bin and keeps it as the
-    /// output sink of [`Pipeline::set_out_fd`]; false when there is none.
     pub(crate) fn find_out_sink(&mut self, name: &CStr) -> bool {
         let (el, null) = (self.el.as_ptr(), ptr::null::<c_char>());
         let mut bin: Gp = ptr::null_mut();
-        // SAFETY: "audio-sink" is a GstElement property, read into a local (a new reference or
-        // NULL); NULL-terminated argument list.
+        // SAFETY: "audio-sink" is a GstElement property, read into a local (a new reference or NULL); NULL-terminated argument list.
         unsafe { (self.api.object_get)(el, c"audio-sink".as_ptr(), &mut bin, null) };
         if bin.is_null() {
             return false;
         }
-        // SAFETY: `bin` is a live bin we hold a reference to, dropped right after the lookup;
-        // the lookup returns a new reference or NULL.
+        // SAFETY: `bin` is a live bin we hold a reference to, dropped right after the lookup; the lookup returns a new reference or NULL.
         let sink = unsafe {
             let sink = (self.api.bin_get_by_name)(bin, name.as_ptr());
             (self.api.object_unref)(bin);
@@ -569,7 +489,6 @@ impl Pipeline {
         self.out_sink.is_some()
     }
 
-    /// fdsink "fd" (gint) of the output sink; set while the pipeline is in NULL.
     pub(crate) fn set_out_fd(&self, fd: c_int) {
         let Some(sink) = self.out_sink else { return };
         let null = ptr::null::<c_char>();
@@ -577,7 +496,6 @@ impl Pipeline {
         unsafe { (self.api.object_set)(sink.as_ptr(), c"fd".as_ptr(), fd, null) };
     }
 
-    /// Position in ns; None without gst_element_query_position or when the query fails.
     pub(crate) fn query_position(&self) -> Option<i64> {
         let f = self.api.element_query_position?;
         let mut pos = 0i64;
@@ -589,7 +507,6 @@ impl Pipeline {
         self.api.element_seek_simple.is_some()
     }
 
-    /// Flushing key-unit seek to `pos` ns; false when refused (or without the symbol).
     pub(crate) fn seek(&self, pos: i64) -> bool {
         self.api.element_seek_simple.is_some_and(|f| {
             // SAFETY: live element, GstFormat / GstSeekFlags values.
@@ -597,10 +514,8 @@ impl Pipeline {
         })
     }
 
-    /// Bus watch on the default main context calling `player::on_bus(tag, …)`; removed on drop.
     pub(crate) fn add_bus_watch(&mut self, tag: usize) {
-        // SAFETY: live pipeline; the bus reference it returns is dropped after the watch took
-        // its own. The tag is a plain integer, never dereferenced.
+        // SAFETY: live pipeline; the bus reference it returns is dropped after the watch took its own. The tag is a plain integer, never dereferenced.
         unsafe {
             let bus = (self.api.pipeline_get_bus)(self.el.as_ptr());
             if bus.is_null() {
@@ -627,7 +542,6 @@ impl Drop for Pipeline {
     }
 }
 
-/// A bus message during its watch callback.
 pub struct Message {
     api: &'static Api,
     msg: NonNull<c_void>,
@@ -637,12 +551,10 @@ unsafe extern "C" fn on_bus(_bus: Gp, msg: Gp, user: Gp) -> c_int {
     if let (Some(api), Some(msg)) = (load(), NonNull::new(msg)) {
         crate::core::on_bus(user.addr(), &Message { api, msg });
     }
-    1 // keep the watch
+    1
 }
 
 impl Message {
-    /// The message as the player sees it; state changes of elements other than `own` (the
-    /// pipeline) are `Msg::Other`.
     pub(crate) fn parse(&self, own: *const c_void) -> Msg {
         let view = self.msg.as_ptr().cast::<MessageView>();
         // SAFETY: a live GstMessage during the bus callback; layout asserted above.
@@ -680,11 +592,9 @@ impl Message {
         }
     }
 
-    /// gst_message_parse_error / _warning; the GError and debug text are copied and freed.
     fn error(&self, parse: ParseFn) -> ErrorInfo {
         let (mut err, mut dbg): (Gp, *mut c_char) = (ptr::null_mut(), ptr::null_mut());
-        // SAFETY: an error / warning message (checked by the caller), out-pointers to locals;
-        // both results are owned by us afterwards.
+        // SAFETY: an error / warning message (checked by the caller), out-pointers to locals; both results are owned by us afterwards.
         unsafe { parse(self.msg.as_ptr(), &mut err, &mut dbg) };
         // SAFETY: null or the GError just returned.
         let message = unsafe { gerror_message(err) };

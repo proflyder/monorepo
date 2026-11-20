@@ -1,8 +1,3 @@
-//! deCONZ network parameters: the table a ConBee answers, and what the host may write.
-//!
-//! Only the global trust center link key is supported (no install codes). Values the host does
-//! not write keep the radio's current ones.
-
 use pulsar_zbhci::bytes::{get_le16, get_le32, get_le64, put_le16, put_le32, put_le64};
 
 use crate::host::{HostView, bit};
@@ -29,8 +24,6 @@ pub const WATCHDOG_TTL: u8 = 0x26;
 pub const FRAME_COUNTER: u8 = 0x27;
 pub const ZDP_RESPONSE_HANDLING: u8 = 0x28;
 
-/// ConBee III-compatible protocol version: keeps zigpy off the commands this radio has no
-/// equivalent for (update_neighbor, watchdog TTL, source routes).
 pub const PROTOCOL: u16 = 0x0106;
 pub const SECURITY_ONLY_TCLK: u8 = 0x03;
 pub const TC_LINK_KEY: [u8; 16] = *b"ZigBeeAlliance09";
@@ -39,7 +32,6 @@ pub const SUCCESS: u8 = 0;
 pub const UNSUPPORTED: u8 = 4;
 pub const INVALID_VALUE: u8 = 7;
 
-/// `p`: the parameter id, then whatever the command carries. `(status, value without the id)`.
 pub fn read(id: u8, p: &[u8], coord: &dyn Ncp, host: &HostView) -> (u8, Vec<u8>) {
     let net = coord.network();
     let formed = coord.ready() && net.formed;
@@ -107,7 +99,6 @@ pub fn read(id: u8, p: &[u8], coord: &dyn Ncp, host: &HostView) -> (u8, Vec<u8>)
     (status, v)
 }
 
-/// `v`: the value bytes after the parameter id. Returns the status.
 pub fn write(id: u8, v: &[u8], coord: &mut dyn Ncp, host: &mut HostView) -> u8 {
     let (formed, net) = {
         let net = coord.network();
@@ -164,7 +155,6 @@ pub fn write(id: u8, v: &[u8], coord: &mut dyn Ncp, host: &mut HostView) -> u8 {
                 }
             }
         }
-        // [index][key]
         NETWORK_KEY => {
             if need(17, &mut status) {
                 let mut key: NetworkKey = [0u8; 16];
@@ -185,7 +175,6 @@ pub fn write(id: u8, v: &[u8], coord: &mut dyn Ncp, host: &mut HostView) -> u8 {
                 host.update_id = v[0];
             }
         }
-        // Only the global trust center link key; no install-code keys.
         LINK_KEY => {
             if need(24, &mut status) && v[8..24] != TC_LINK_KEY {
                 status = UNSUPPORTED;

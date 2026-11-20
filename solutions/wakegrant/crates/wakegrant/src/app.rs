@@ -1,6 +1,3 @@
-//! Composition root: configuration, telemetry, SQLite store, the HTTP service
-//! and the background cleanup task.
-
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -14,12 +11,10 @@ use crate::config::{Config, LogLevel};
 use crate::domain::{Clock, SystemClock};
 use crate::store::Store;
 
-/// Reported implementation version.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 const CLEANUP_INTERVAL: Duration = Duration::from_secs(300);
 
-/// Starts the service and blocks until SIGTERM/SIGINT or a listener failure.
 pub async fn run() -> anyhow::Result<()> {
     let config = Config::load().context("configuration")?;
     TelemetryBuilder::new()
@@ -86,8 +81,6 @@ fn level_filter(level: LogLevel) -> LevelFilter {
     }
 }
 
-/// Removes consumed and expired grants. The Go service left them forever; a
-/// periodic delete keeps the PVC bounded without changing the wire contract.
 async fn cleanup(store: Arc<Store>, cancel: tokio_util::sync::CancellationToken) {
     let mut interval = tokio::time::interval(CLEANUP_INTERVAL);
     interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);

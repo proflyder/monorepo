@@ -1,17 +1,11 @@
-//! The claim datagram, one ASCII line: `pulsar-wake/1 <station> <wake> <busy 0|1> <level %.1f>`.
-//! Parsing follows the C++ `sscanf("%15s %31s %15s %d %f")` field limits, so both sides accept
-//! and reject the same datagrams (tests/golden/arbiter.txt).
-
 use crate::Claim;
 
 const MAGIC: &[u8] = b"pulsar-wake/1";
-/// The C++ arbiter formatted into char[128] and did not send longer claims.
 const MAX_DATAGRAM: usize = 127;
 const MAGIC_FIELD: usize = 15;
 const STATION_FIELD: usize = 31;
 const WAKE_FIELD: usize = 15;
 
-/// printf("%.1f"): round half to even on the exact binary value, as glibc.
 pub fn level_text(level: f32) -> String {
     if level.is_nan() {
         let sign = if level.is_sign_negative() { "-" } else { "" };
@@ -20,7 +14,6 @@ pub fn level_text(level: f32) -> String {
     format!("{level:.1}")
 }
 
-/// The datagram of a claim; None when it would not fit the C++ buffer.
 pub fn format(c: &Claim) -> Option<String> {
     let d = format!(
         "pulsar-wake/1 {} {} {} {}",
@@ -32,9 +25,6 @@ pub fn format(c: &Claim) -> Option<String> {
     (d.len() <= MAX_DATAGRAM).then_some(d)
 }
 
-/// A claim from a datagram; None unless all five fields parse, the magic matches and the
-/// level is within -100..0 dB (anything else would break the ordering). Text after the level
-/// and after a NUL byte is ignored.
 pub fn parse(datagram: &[u8]) -> Option<Claim> {
     let end = datagram
         .iter()
@@ -60,13 +50,10 @@ pub fn parse(datagram: &[u8]) -> Option<Claim> {
     })
 }
 
-/// isspace() in the C locale.
 fn is_space(b: u8) -> bool {
     b == b' ' || (b'\t'..=b'\r').contains(&b)
 }
 
-/// scanf conversions over a NUL-free byte string: each one skips leading white space; a field
-/// width cuts a %s word, and the next conversion continues right after it.
 struct Scan<'a> {
     s: &'a [u8],
     pos: usize,
@@ -91,7 +78,6 @@ impl<'a> Scan<'a> {
         self.s.get(self.pos).copied()
     }
 
-    /// %<width>s
     fn word(&mut self, width: usize) -> Option<&'a [u8]> {
         self.skip_space();
         let start = self.pos;
@@ -101,7 +87,6 @@ impl<'a> Scan<'a> {
         (self.pos > start).then(|| &self.s[start..self.pos])
     }
 
-    /// %d, reduced to whether the value is non-zero.
     fn int_nonzero(&mut self) -> Option<bool> {
         self.skip_space();
         if matches!(self.peek(), Some(b'+' | b'-')) {
@@ -112,9 +97,6 @@ impl<'a> Scan<'a> {
         (digits > 0).then(|| self.s[start..self.pos].iter().any(|&b| b != b'0'))
     }
 
-    /// %f in decimal notation: the longest prefix that is a number, as strtof. Hexadecimal
-    /// floats, which glibc would also take, count as no number (no station sends them);
-    /// infinity and NaN are dropped by the caller's range check anyway.
     fn float(&mut self) -> Option<f32> {
         self.skip_space();
         let start = self.pos;
@@ -144,7 +126,6 @@ impl<'a> Scan<'a> {
                 self.pos += 1;
             }
             if self.take_while(|b| b.is_ascii_digit()) == 0 {
-                // "1e", "1e+": the exponent is not part of the number.
                 self.pos = mantissa_end;
             }
         }

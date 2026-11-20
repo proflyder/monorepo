@@ -1,56 +1,21 @@
-//! Typed wire contract of the mcp-gateway voice API.
-//!
-//! The routes are served by `solutions/mcp-gateway/crates/mcp-gateway`
-//! (`voice.rs`) and called by `solutions/voice-proxy/crates/voice-proxy`:
-//!
-//! * `POST /v1/voice/utterance` — route one spoken phrase;
-//! * `POST /v1/voice/result` — long-poll the answer of a routed turn;
-//! * `POST /v1/voice/updates` — poll dispatcher turns;
-//! * `GET  /v1/voice/state` — debug view of the agent-conversation switch.
-//!
-//! The types mirror the Go JSON exactly, including the protobuf-free field
-//! names: `route`, `ok`, `threadId`, `afterSeq`, `waitSeconds`, `agentMode`,
-//! `cursor`, `items`, `completedAt`. Request decoding rejects unknown fields,
-//! like the server's `DisallowUnknownFields`. Response decoding tolerates them.
-//!
-//! There is no I/O and no runtime dependency here: this crate is safe to use
-//! from a server, a client and a test.
-//!
-//! An unknown `route` value never fails the parse. It is preserved as
-//! [`Route::Unknown`] so the caller can answer "Сервер агентов недоступен."
-//! instead of inventing a destination.
-
 use std::fmt;
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-/// A profile accepted by the gateway.
 pub const PROFILE_PERSONAL: &str = "personal";
-/// A profile accepted by the gateway.
 pub const PROFILE_WORK: &str = "work";
 
-/// Speech budget accepted from the proxy, in Unicode scalar values.
 pub const MAX_TEXT_RUNES: usize = 2000;
 
-/// Where the gateway routed one phrase.
-///
-/// Only [`Route::Hermes`], [`Route::Bb`] and [`Route::Local`] are known to the
-/// proxy. Any other value is preserved as [`Route::Unknown`]; the proxy must
-/// treat it as an unavailable agent server and must not forward it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Route {
-    /// Forward the phrase to Hermes unchanged.
     Hermes,
-    /// The phrase went to a bb thread; poll the result route.
     Bb,
-    /// The gateway answered locally and the proxy must speak `speech`.
     Local,
-    /// A route this version does not know. The value is the raw route name.
     Unknown(String),
 }
 
 impl Route {
-    /// Parse a raw `route` value without failing on unknown routes.
     #[must_use]
     pub fn parse(raw: &str) -> Self {
         match raw {
@@ -61,7 +26,6 @@ impl Route {
         }
     }
 
-    /// The raw wire value.
     #[must_use]
     pub fn as_str(&self) -> &str {
         match self {
@@ -72,7 +36,6 @@ impl Route {
         }
     }
 
-    /// Whether this is the catch-all route.
     #[must_use]
     pub fn is_unknown(&self) -> bool {
         matches!(self, Self::Unknown(_))
@@ -98,9 +61,6 @@ impl<'de> Deserialize<'de> for Route {
     }
 }
 
-/// One recognised phrase plus the HA voice profile.
-///
-/// Unknown fields are rejected, matching the Go server.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct UtteranceRequest {
@@ -108,8 +68,6 @@ pub struct UtteranceRequest {
     pub profile: String,
 }
 
-/// Where one phrase went. `route` is always present; the other fields are
-/// omitted when the gateway does not set them.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UtteranceResponse {
@@ -125,13 +83,11 @@ pub struct UtteranceResponse {
 }
 
 impl UtteranceResponse {
-    /// Forward the phrase to Hermes.
     #[must_use]
     pub fn hermes() -> Self {
         Self::route(Route::Hermes)
     }
 
-    /// Speak a gateway-local answer.
     #[must_use]
     pub fn local(speech: impl Into<String>) -> Self {
         Self {
@@ -140,7 +96,6 @@ impl UtteranceResponse {
         }
     }
 
-    /// A phrase accepted by a bb thread.
     #[must_use]
     pub fn bb(
         thread_id: impl Into<String>,
@@ -157,7 +112,6 @@ impl UtteranceResponse {
         }
     }
 
-    /// A route this version does not understand.
     #[must_use]
     pub fn unknown(route: impl Into<String>) -> Self {
         Self::route(Route::Unknown(route.into()))
@@ -174,7 +128,6 @@ impl UtteranceResponse {
     }
 }
 
-/// Long-poll one routed turn.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct ResultRequest {
@@ -185,7 +138,6 @@ pub struct ResultRequest {
     pub wait_seconds: i32,
 }
 
-/// The turn outcome. `status` is never omitted.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ResultResponse {
@@ -194,12 +146,10 @@ pub struct ResultResponse {
     pub speech: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub text: Option<String>,
-    /// Sequence of the completed turn, used as the queue idempotency key.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub completed_seq: Option<i64>,
 }
 
-/// Debug view of the agent-conversation switch.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StateResponse {
@@ -208,8 +158,6 @@ pub struct StateResponse {
     pub thread_id: Option<String>,
 }
 
-/// Long-poll dispatcher updates. `after_seq == None` is the bootstrap call:
-/// the gateway returns the current cursor and no history.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct UpdatesRequest {
@@ -219,20 +167,15 @@ pub struct UpdatesRequest {
     pub wait_seconds: Option<i32>,
 }
 
-/// One dispatcher turn the owner did not start.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateItem {
     pub seq: i64,
     pub spoken: String,
-    /// Turn-completed event time in epoch milliseconds; absent when the
-    /// gateway did not report one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub completed_at: Option<i64>,
 }
 
-/// The dispatcher-updates answer. `status` is only set on a failure, mirroring
-/// `{"status":"failed","speech":...}` of the result route.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdatesResponse {
@@ -261,9 +204,6 @@ mod tests {
     {
         serde_json::to_value(value).expect("serialize")
     }
-
-    // Samples below are frozen from the pre-Rust tests on both sides and
-    // replayed by the Rust contract suites.
 
     #[test]
     fn utterance_request_round_trips_like_the_go_client() {

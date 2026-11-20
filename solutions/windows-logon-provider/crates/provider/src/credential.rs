@@ -1,30 +1,15 @@
-//! The single auto-logon tile.
-//!
-//! It never references the provider object, only the shared [`Session`].
-//! `GetSerialization` is the only place that decrypts the DPAPI secret; it
-//! packs `KERB_INTERACTIVE_UNLOCK_LOGON` for `.\<user>`, optionally runs
-//! `CredProtectW` and wipes the password, protected password and key on every
-//! path.
-
-/// Field ids, in descriptor order.
 pub const FIELD_LARGE_TEXT: u32 = 0;
 pub const FIELD_SMALL_TEXT: u32 = 1;
-/// Number of fields exposed to LogonUI.
 pub const FIELD_COUNT: u32 = 2;
 
-/// Tile title, as UTF-8 (tests assert the UTF-16 constants match).
 pub const TILE_TITLE: &str = "Home";
 pub const TILE_SUBTITLE: &str = "Автовход";
 
-/// `L"Home"`, NUL terminated.
 pub const TILE_TITLE_UTF16: &[u16] = &[0x0048, 0x006f, 0x006d, 0x0065, 0x0000];
-/// `L"Автовход"`, NUL terminated. Universal-style code units so the source
-/// encoding cannot change the UI text.
 pub const TILE_SUBTITLE_UTF16: &[u16] = &[
     0x0410, 0x0432, 0x0442, 0x043e, 0x0432, 0x0445, 0x043e, 0x0434, 0x0000,
 ];
 
-/// `0x<lowercase hex>` of the NTSTATUS, as logged by `ReportResult`.
 pub fn hex_status(status: i32) -> String {
     format!("0x{:x}", status as u32)
 }
@@ -79,7 +64,6 @@ mod windows_impl {
 
     const CPGSR: CREDENTIAL_PROVIDER_GET_SERIALIZATION_RESPONSE = CPGSR_NO_CREDENTIAL_NOT_FINISHED;
 
-    /// Wipes a wide buffer on drop, including on early returns.
     struct WipedWide(Vec<u16>);
 
     impl Drop for WipedWide {
@@ -89,7 +73,6 @@ mod windows_impl {
     }
 
     impl WipedWide {
-        /// `PCWSTR` over the buffer; callers must have made it NUL-terminated.
         fn as_pcwstr(&self) -> PCWSTR {
             PCWSTR(self.0.as_ptr())
         }
@@ -124,7 +107,6 @@ mod windows_impl {
         }
     }
 
-    /// CoTaskMem copy of one field descriptor (LogonUI owns it).
     pub fn credential_field_descriptor_at(
         index: u32,
     ) -> WinResult<*mut CREDENTIAL_PROVIDER_FIELD_DESCRIPTOR> {
@@ -142,7 +124,7 @@ mod windows_impl {
             (*copy).dwFieldID = field_id;
             (*copy).cpft = field_type;
             (*copy).pszLabel = PWSTR::null();
-            (*copy).guidFieldType = GUID::default(); // GUID_NULL
+            (*copy).guidFieldType = GUID::default();
         }
         // SAFETY: `label` points at a static NUL-terminated wide string.
         match unsafe { SHStrDupW(label) } {
@@ -159,7 +141,6 @@ mod windows_impl {
         }
     }
 
-    /// `CredProtect` for logon, plain copy already-protected or CREDUI passwords.
     fn protect_if_necessary_and_copy_password(
         password: &[u16],
         cpus: CREDENTIAL_PROVIDER_USAGE_SCENARIO,
@@ -168,8 +149,6 @@ mod windows_impl {
             return Ok(WipedWide(vec![0]));
         }
 
-        // CredProtect takes the buffer together with its terminator, like the
-        // C++ implementation (`wcslen(copy) + 1`).
         let copy = WipedWide(WideNul::from_wide(password).into_vec());
 
         let mut protection = CRED_PROTECTION_TYPE(0);
@@ -182,7 +161,6 @@ mod windows_impl {
             return Ok(WipedWide(copy.0.clone()));
         }
 
-        // First call determines the output length, so it is expected to fail.
         let mut capacity = 0u32;
         // SAFETY: a null output buffer with `capacity == 0` asks for the size.
         let first = unsafe { CredProtectW(false, &copy.0, PWSTR::null(), &raw mut capacity, None) };
@@ -214,10 +192,7 @@ mod windows_impl {
         }
     }
 
-    /// Looks up the "negotiate" authentication package id.
     fn retrieve_negotiate_auth_package() -> Result<u32, HRESULT> {
-        // Same as NEGOSSP_NAME_A: "Negotiate" with the terminating NUL, and
-        // MaximumLength one past the length.
         const NAME: &[u8] = b"Negotiate\0";
         let mut lsa = HANDLE::default();
         // SAFETY: `lsa` is a valid out-parameter.
@@ -245,7 +220,6 @@ mod windows_impl {
         Ok(package)
     }
 
-    /// Builds the packed credential. `Err` is a log-safe `HRESULT`.
     fn serialize(cpus: CREDENTIAL_PROVIDER_USAGE_SCENARIO) -> Result<(Vec<u8>, u32), HRESULT> {
         let config = match load_config() {
             Ok(config) => config,
@@ -266,10 +240,9 @@ mod windows_impl {
         let domain = WipedWide(widen(&config.domain));
         let user = WipedWide(widen(&config.user));
         let password = WipedWide(widen(secret.password()));
-        drop(secret); // `MachineSecret` zeroizes the key and password on drop.
+        drop(secret);
 
         if domain.is_empty() || user.is_empty() || password.is_empty() {
-            // This branch leaves `hr` at E_FAIL and still logs it.
             log_event("serialization_secret", "error=protect_failed");
             return Err(E_FAIL);
         }
@@ -302,12 +275,10 @@ mod windows_impl {
         Ok((packed, package))
     }
 
-    /// Optional COM methods the tile does not expose.
     fn not_implemented<T>() -> WinResult<T> {
         guard(|| Err(E_NOTIMPL.into()), || Err(E_FAIL.into()))
     }
 
-    /// The single auto-logon tile.
     #[implement(ICredentialProviderCredential2)]
     pub struct Credential {
         session: Arc<Session>,
@@ -332,8 +303,6 @@ mod windows_impl {
 
         fn set_deselected(&self) -> WinResult<()> {
             if !self.selected.swap(false, Ordering::SeqCst) {
-                // LogonUI deselects tiles during re-enumeration; that must not
-                // cancel a fresh arming before the automatic submission.
                 return Ok(());
             }
             log_event("cancel", "reason=deselected");
@@ -376,14 +345,10 @@ mod windows_impl {
             log_event("serialization", &format!("elapsed_ms={elapsed}"));
 
             let Ok((mut packed, package)) = result else {
-                // Fail closed: no credential, no status text, no dialog.
-                // Re-enumerate so LogonUI drops the tile instead of
-                // showing a dead one.
                 notify_session_changed(&self.session);
                 return Ok(());
             };
 
-            // The buffer LogonUI frees must come from CoTaskMemAlloc.
             // SAFETY: CoTaskMemAlloc returns a suitably aligned block.
             let buffer = unsafe { CoTaskMemAlloc(packed.len()) } as *mut u8;
             if buffer.is_null() {
@@ -400,8 +365,6 @@ mod windows_impl {
                 (*pcpcs).rgbSerialization = buffer;
                 pcpgsr.write(CPGSR_RETURN_CREDENTIAL_FINISHED);
             }
-            // LogonUI owns the CoTaskMem copy; the local one must not linger in
-            // the Rust heap with the protected password inside.
             packed.zeroize();
             Ok(())
         }
@@ -606,7 +569,6 @@ mod windows_impl {
                 || {
                     let sid = configured_user_sid();
                     if sid.is_empty() {
-                        // The credential stays valid, just unbound.
                         return Err(S_FALSE.into());
                     }
                     let wide = WideNul::new(&sid);
@@ -627,8 +589,6 @@ mod tests {
     fn tile_texts_are_the_documented_strings() {
         assert_eq!(TILE_TITLE, "Home");
         assert_eq!(TILE_SUBTITLE, "Автовход");
-        // The UTF-16 literals used by the COM methods are NUL terminated and
-        // encode exactly those strings.
         assert_eq!(TILE_TITLE_UTF16.last(), Some(&0));
         assert_eq!(TILE_SUBTITLE_UTF16.last(), Some(&0));
         assert_eq!(

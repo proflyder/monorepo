@@ -1,6 +1,3 @@
-//! Источник релизов: OCI-образ в GHCR. Анонимный pull-token, манифест `latest`, слои по
-//! аннотации `org.opencontainers.image.title`.
-
 use std::path::PathBuf;
 
 use serde::Deserialize;
@@ -14,20 +11,15 @@ use crate::version::Version;
 const OCI_MANIFEST: &str = "application/vnd.oci.image.manifest.v1+json";
 const MAX_SMALL: usize = 1 << 20;
 
-/// Настройки OCI-источника.
 pub struct OciConfig {
-    /// `owner/name` или `ghcr.io/owner/name`.
     pub(crate) repo: String,
-    /// `aarch64`, `armhf` или `host` (тесты): суффикс `pulsar-<arch>.bin`.
     pub(crate) arch: &'static str,
     pub(crate) user_agent: String,
     pub(crate) ca_bundle: PathBuf,
-    /// `https://ghcr.io/` или локальный тестовый сервер.
     pub(crate) origin: String,
 }
 
 impl OciConfig {
-    /// Реестр, CA-бандл прошивки и `User-Agent` по умолчанию.
     #[must_use]
     pub fn ghcr(repo: String, current_version: &str, arch: &'static str) -> Self {
         Self {
@@ -40,14 +32,10 @@ impl OciConfig {
     }
 }
 
-/// Порт источника релизов. Публичный ради `update_probe`; актор станции `!Send`, поэтому
-/// трейт не требует `Send`-футур и не используется как `dyn`.
 #[allow(async_fn_in_trait)]
 pub trait ReleaseSource {
-    /// Последний стабильный релиз.
     async fn latest(&self, cancel: &CancellationToken) -> Result<Release, UpdateError>;
 
-    /// Слой релиза целиком; `None` — ассета нет (HTTP 404).
     async fn download(
         &self,
         layer: &Layer,
@@ -57,11 +45,8 @@ pub trait ReleaseSource {
     ) -> Result<Option<Vec<u8>>, UpdateError>;
 }
 
-/// Источник в состоянии «не настроился»: ошибка отдаётся на каждый запрос, как раньше
-/// ошибка загрузки CA.
 pub struct Broken(UpdateError);
 
-/// Диспетчер источников без `dyn`.
 pub enum Source {
     Oci(Oci),
     Broken(Broken),
@@ -107,7 +92,6 @@ pub struct Oci {
 
 impl Oci {
     pub fn new(config: &OciConfig) -> Result<Self, UpdateError> {
-        // Константа демона задаёт реестр: `ghcr.io/owner/name`.
         let repo = config.repo.strip_prefix("ghcr.io/").unwrap_or(&config.repo);
         if !safe_repo(repo) {
             return Err(UpdateError::retry(format!(
@@ -125,7 +109,6 @@ impl Oci {
         })
     }
 
-    /// Анонимный pull-token; токены GHCR живут минуты, поэтому берётся на каждую загрузку.
     async fn token(&self, cancel: &CancellationToken) -> Result<String, UpdateError> {
         let url = format!(
             "{}token?scope=repository:{}:pull&service=ghcr.io",
@@ -193,14 +176,12 @@ fn parse_token(body: &[u8]) -> Result<String, String> {
         .get("token")
         .and_then(serde_json::Value::as_str)
         .ok_or("ghcr.io token: response has no token")?;
-    // Заголовок запроса: без пробелов и управляющих символов.
     if token.is_empty() || !token.bytes().all(|b| b.is_ascii_graphic()) {
         return Err("ghcr.io token: unexpected token".into());
     }
     Ok(token.into())
 }
 
-/// `owner/name`: только строчные символы пути, ровно один слэш.
 fn safe_repo(repo: &str) -> bool {
     let Some((owner, name)) = repo.split_once('/') else {
         return false;
@@ -219,7 +200,6 @@ fn safe_repo(repo: &str) -> bool {
 struct Manifest {
     #[serde(default)]
     annotations: Annotations,
-    /// Нет поля — отказ, как у прежнего парсера.
     layers: Option<Vec<ManifestLayer>>,
 }
 

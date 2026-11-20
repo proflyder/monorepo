@@ -1,12 +1,3 @@
-//! Scenario definitions, revision control and time-trigger materialization.
-//!
-//! A time trigger is materialized as a real `schedules` row with
-//! `kind=SCHEDULE_KIND_SCENARIO` and an opaque payload
-//! `{"scenario_id":"…","trigger_index":n}`. Recurrence, DST handling, missed
-//! grace, dedupe identities and the outbox are therefore shared with alarms.
-//! The scheduler only stores/validates conditions and steps; the future
-//! `ha-scenario` executor evaluates and runs them.
-
 use rusqlite::{Connection, Row, Transaction, params};
 
 use crate::domain::{
@@ -56,7 +47,6 @@ fn get_scenario_tx(tx: &Transaction<'_>, id: &str) -> Result<Scenario, StoreErro
     }
 }
 
-/// Validates and copies client input, never trusting server-derived fields.
 fn prepare_scenario(store: &Store, input: &Scenario) -> Result<Scenario, StoreError> {
     let out = Scenario {
         id: input.id.clone(),
@@ -100,7 +90,6 @@ fn next_due_of(scenario: &Scenario, now_unix: i64) -> Result<i64, StoreError> {
     Ok(next)
 }
 
-/// Earliest next occurrence of the materialized scenario schedules.
 fn next_due(connection: &Connection, scenario_id: &str) -> Result<i64, StoreError> {
     let sql = "SELECT payload_json, next_due_unix FROM schedules
         WHERE kind = ? AND deleted_unix = 0 AND enabled = 1 AND next_due_unix > 0";
@@ -151,10 +140,6 @@ fn remove_scenario_schedules(
 ) -> Result<(), StoreError> {
     for schedule in load_scenario_schedules(tx, &scenario.id)? {
         if let Some(occurrence) = schedule.occurrence_to_close(now_unix) {
-            // A scenario has no audio to silence, so `close_occurrence` only
-            // cancels the pending FIRE. Queue an explicit STOP so a running
-            // executor can abort the occurrence, matching the alarm
-            // `rule_changed` behaviour.
             insert_event(
                 tx,
                 EventInsert {
@@ -310,9 +295,6 @@ fn idempotency_lookup(
 }
 
 impl Store {
-    /// Creates a scenario and materializes its time triggers. A non-empty
-    /// idempotency key replays the original definition when the canonical
-    /// request matches.
     pub fn create_scenario(
         &self,
         input: &Scenario,
@@ -371,7 +353,6 @@ impl Store {
         })
     }
 
-    /// Returns a scenario with its computed next occurrence.
     pub fn get_scenario(&self, id: &str) -> Result<Scenario, StoreError> {
         validate_id(id)?;
         let id = id.to_owned();
@@ -388,7 +369,6 @@ impl Store {
         })
     }
 
-    /// Scenarios ordered by creation time.
     pub fn list_scenarios(&self, include_disabled: bool) -> Result<Vec<Scenario>, StoreError> {
         self.read(move |connection| {
             let mut query = format!("SELECT {SCENARIO_COLS} FROM scenarios");
@@ -407,8 +387,6 @@ impl Store {
         })
     }
 
-    /// Replaces a scenario definition and rebuilds its schedules in the same
-    /// transaction. `expected_revision = 0` disables the concurrency check.
     pub fn update_scenario(
         &self,
         input: &Scenario,
@@ -442,8 +420,6 @@ impl Store {
         })
     }
 
-    /// Deletes a scenario and its materialized schedules. A repeated delete is
-    /// idempotent and returns `false`.
     pub fn delete_scenario(&self, id: &str, now_unix: i64) -> Result<bool, StoreError> {
         validate_id(id)?;
         let ring_window = self.config().ring_window;
@@ -466,7 +442,6 @@ impl Store {
         })
     }
 
-    /// Toggles a scenario and rebuilds (or removes) its schedules.
     pub fn set_scenario_enabled(
         &self,
         id: &str,
@@ -493,8 +468,6 @@ impl Store {
         })
     }
 
-    /// Queues a manual `scenario.fire` event. A non-empty idempotency key
-    /// replays the stored event instead of queueing another run.
     pub fn run_scenario(
         &self,
         id: &str,
@@ -575,7 +548,7 @@ mod tests {
 
     use crate::domain::AckOutcome;
 
-    const BASE: i64 = 1_767_268_800; // 2026-01-01T12:00:00Z
+    const BASE: i64 = 1_767_268_800;
 
     fn store() -> Store {
         Store::open_in_memory(Config::default()).expect("store")

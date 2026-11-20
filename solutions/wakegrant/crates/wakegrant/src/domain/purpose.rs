@@ -1,8 +1,5 @@
 use thiserror::Error;
 
-/// What a grant may do. A logon grant is only valid on a cold boot; an unlock
-/// grant is for a running but locked workstation. The purpose is part of every
-/// purpose-aware MAC message, so one can never be used for the other.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
 pub enum Purpose {
     #[default]

@@ -1,42 +1,20 @@
-//! Ordered YAML values and a `go.yaml.in/yaml/v2`-compatible emitter.
-//!
-//! `runtimevalues` and `manifests` only need an ordered document tree: the Go
-//! implementation used `yaml.MapSlice` because the runtime values file is a
-//! user-facing contract whose key order must survive the split. Deserialization
-//! goes through `serde-saphyr`; serialization is a small emitter that copies
-//! yaml.v2's block layout (sequences are not indented relative to their key,
-//! empty collections are written as `[]`/`{}`), because the emitted file is
-//! compared byte for byte with the Go output.
-
 use std::fmt::{self, Write as _};
 
 use serde::de::{Deserialize, Deserializer, MapAccess, SeqAccess, Visitor};
 
-/// One ordered YAML document node.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub enum Value {
-    /// YAML `null` (`~`, an empty document).
     #[default]
     Null,
-    /// A boolean scalar.
     Bool(bool),
-    /// An integer scalar.
     Int(i64),
-    /// A floating point scalar.
     Float(f64),
-    /// A string scalar.
     Str(String),
-    /// An ordered sequence.
     Seq(Vec<Self>),
-    /// An ordered mapping; duplicate keys keep the first position.
     Map(Vec<(String, Self)>),
 }
 
 impl Value {
-    /// Returns the string value of a scalar, or `""` for every other node.
-    ///
-    /// This mirrors the Go helper's `value.(string)` type assertion: numbers
-    /// and booleans are not stringified.
     #[must_use]
     pub fn as_str(&self) -> &str {
         match self {
@@ -45,7 +23,6 @@ impl Value {
         }
     }
 
-    /// Looks up a key in a mapping, preserving the yaml.v2 first-match rule.
     #[must_use]
     pub fn get(&self, key: &str) -> Option<&Self> {
         let Self::Map(entries) = self else {
@@ -57,7 +34,6 @@ impl Value {
             .map(|(_, value)| value)
     }
 
-    /// Inserts or replaces a key, like `yaml.MapSlice` + `setKey`.
     pub fn set(&mut self, key: &str, value: Self) {
         if let Self::Map(entries) = self {
             if let Some((_, existing)) = entries.iter_mut().find(|(name, _)| name == key) {
@@ -68,7 +44,6 @@ impl Value {
         }
     }
 
-    /// Removes a key from a mapping and reports whether it was present.
     pub fn remove(&mut self, key: &str) -> bool {
         let Self::Map(entries) = self else {
             return false;
@@ -80,19 +55,16 @@ impl Value {
         false
     }
 
-    /// Reports whether this is a non-empty mapping.
     #[must_use]
     pub fn is_mapping(&self) -> bool {
         matches!(self, Self::Map(_))
     }
 
-    /// Reports whether this is a non-empty sequence.
     #[must_use]
     pub fn is_sequence(&self) -> bool {
         matches!(self, Self::Seq(_))
     }
 
-    /// Converts to `serde_json::Value` (the converge/state object model).
     #[must_use]
     pub fn to_json(&self) -> serde_json::Value {
         match self {
@@ -112,8 +84,6 @@ impl Value {
         }
     }
 
-    /// Converts from `serde_json::Value`. Object keys come out sorted, which is
-    /// what `yaml.Marshal` does for Go maps.
     #[must_use]
     pub fn from_json(value: &serde_json::Value) -> Self {
         match value {
@@ -143,21 +113,14 @@ impl Value {
     }
 }
 
-/// Parses every YAML document in `raw`, matching `yaml.NewDecoder` + loop.
-///
-/// Empty documents are returned as `Value::Null` so callers can apply the Go
-/// `len(doc) == 0` rule; `serde-saphyr`'s multi-document helper skips them, so
-/// the split is done here on the raw stream markers.
 pub fn parse_documents(raw: &str) -> Result<Vec<Value>, String> {
     serde_saphyr::from_str_multiple::<Value, Vec<Value>>(raw).map_err(|error| error.to_string())
 }
 
-/// Parses one YAML document.
 pub fn parse(raw: &str) -> Result<Value, String> {
     serde_saphyr::from_str::<Value>(raw).map_err(|error| error.to_string())
 }
 
-/// Serializes one document exactly like `yaml.Marshal` (trailing newline).
 #[must_use]
 pub fn to_string(value: &Value) -> String {
     let mut output = String::new();
@@ -172,9 +135,6 @@ pub fn to_string(value: &Value) -> String {
     output
 }
 
-/// Serializes a multi-document stream the way the Go helper joins documents:
-/// `---\n` between documents, no leading marker, each document ending in a
-/// newline.
 #[must_use]
 pub fn to_string_multiple(values: &[Value]) -> String {
     let mut output = String::new();
@@ -191,9 +151,6 @@ fn emit_map(output: &mut String, entries: &[(String, Value)], indent: usize) {
     emit_map_entries(output, entries, indent, false);
 }
 
-/// Emits map entries. When `inline_first` is set the cursor is already after
-/// `- `, so the first key starts without indentation; the remaining keys use
-/// `indent`.
 fn emit_map_entries(
     output: &mut String,
     entries: &[(String, Value)],
@@ -239,7 +196,6 @@ fn emit_seq(output: &mut String, items: &[Value], indent: usize) {
                 emit_map_entries(output, entries, indent + 2, true);
             }
             Value::Seq(nested) if !nested.is_empty() => {
-                // yaml.v2 writes nested block sequences as `- - value`.
                 let mut rendered = String::new();
                 emit_seq(&mut rendered, nested, indent + 2);
                 let trimmed = rendered
@@ -279,15 +235,25 @@ fn key_scalar(key: &str) -> String {
 }
 
 fn quote_scalar(text: &str, key: bool) -> String {
-    if needs_quotes(text) {
-        double_quote(text)
-    } else if key && text.contains(":") {
-        // A key with a colon is valid plain only when the colon does not start
-        // a value. yaml.v2 quotes these to stay unambiguous.
+    if needs_quotes(text) || (key && text.contains(":")) {
         double_quote(text)
     } else {
         text.to_string()
     }
+}
+
+fn looks_like_radix_or_grouped_number(text: &str, without_sign: &str) -> bool {
+    let prefixed = without_sign.starts_with("0x")
+        || without_sign.starts_with("0o")
+        || without_sign.starts_with("0b")
+        || text.contains('_');
+    prefixed
+        && without_sign
+            .trim_start_matches("0x")
+            .trim_start_matches("0o")
+            .trim_start_matches("0b")
+            .chars()
+            .all(|character| character.is_ascii_hexdigit() || character == '_')
 }
 
 fn needs_quotes(text: &str) -> bool {
@@ -324,8 +290,6 @@ fn needs_quotes(text: &str) -> bool {
     resolves_to_non_string(text)
 }
 
-/// Mirrors the YAML 1.1 implicit resolvers yaml.v2 would apply to a plain
-/// scalar: such a string has to be quoted to stay a string.
 fn resolves_to_non_string(text: &str) -> bool {
     let lower = text.to_ascii_lowercase();
     if matches!(
@@ -341,26 +305,12 @@ fn resolves_to_non_string(text: &str) -> bool {
         .strip_prefix('+')
         .or_else(|| text.strip_prefix('-'))
         .unwrap_or(text);
-    if without_sign.starts_with("0x")
-        || without_sign.starts_with("0o")
-        || without_sign.starts_with("0b")
-        || text.contains('_')
-    {
-        // Underscores and 0x/0o/0b prefixes resolve to numbers in YAML 1.1.
-        if without_sign
-            .trim_start_matches("0x")
-            .trim_start_matches("0o")
-            .trim_start_matches("0b")
-            .chars()
-            .all(|character| character.is_ascii_hexdigit() || character == '_')
-        {
-            return true;
-        }
+    if looks_like_radix_or_grouped_number(text, without_sign) {
+        return true;
     }
     if text.parse::<i64>().is_ok() || text.parse::<u64>().is_ok() || text.parse::<f64>().is_ok() {
         return true;
     }
-    // Sexagesimal (`1:30`) resolves to a number in YAML 1.1.
     if text
         .split(':')
         .all(|part| !part.is_empty() && part.chars().all(|character| character.is_ascii_digit()))
@@ -390,8 +340,6 @@ fn double_quote(text: &str) -> String {
     output.push('"');
     output
 }
-
-// --- serde deserialization -------------------------------------------------
 
 impl<'de> Deserialize<'de> for Value {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
@@ -466,7 +414,6 @@ impl<'de> Visitor<'de> for ValueVisitor {
     }
 }
 
-/// A mapping key coerced to a string the way the Go helper uses `fmt.Sprint`.
 struct YamlKey(String);
 
 impl<'de> Deserialize<'de> for YamlKey {

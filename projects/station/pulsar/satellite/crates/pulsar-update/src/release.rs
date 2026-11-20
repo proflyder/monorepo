@@ -1,14 +1,10 @@
-//! Данные релиза: версия, слои OCI и digest слоя как тип.
-
 use std::fmt;
 
 use crate::version::Version;
-/// SHA-256 слоя OCI (`sha256:<64 hex>`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Digest([u8; 32]);
 
 impl Digest {
-    /// Разбор `sha256:<64 hex>`; другая длина, регистр или алгоритм — отказ.
     pub fn parse(text: &str) -> Option<Self> {
         let hex = text.strip_prefix("sha256:")?;
         if hex.len() != 64 {
@@ -28,7 +24,6 @@ impl Digest {
         Self(bytes)
     }
 
-    /// Совпадает с hex-строкой из `SHA256SUMS` (регистр не важен).
     pub fn matches_hex(self, hex: &str) -> bool {
         hex.len() == 64
             && hex
@@ -56,30 +51,24 @@ impl fmt::Display for Digest {
     }
 }
 
-/// Слой OCI-образа с аннотацией `org.opencontainers.image.title`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Layer {
-    /// Имя ассета релиза (`pulsar-armhf.bin`, `SHA256SUMS`, образы радио).
     pub title: String,
-    /// URL blob'а в реестре.
     pub(crate) url: String,
     pub(crate) digest: Digest,
 }
 
 impl Layer {
-    /// Ожидаемый digest слоя.
     #[must_use]
     pub fn digest(&self) -> Digest {
         self.digest
     }
 }
 
-/// Найденный релиз: всё, что нужно установщику и сущности HA.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Release {
     version: Version,
     page_url: String,
-    /// `owner/name` в GHCR: по нему берётся свежий pull-token.
     oci_repo: String,
     layers: Vec<Layer>,
 }
@@ -99,19 +88,16 @@ impl Release {
         &self.version
     }
 
-    /// Страница пакета в GitHub (ссылка «Release notes» в HA).
     #[must_use]
     pub fn page_url(&self) -> &str {
         &self.page_url
     }
 
-    /// URL ассета по имени слоя.
     #[must_use]
     pub fn asset_url(&self, title: &str) -> Option<&str> {
         self.layer(title).map(|layer| layer.url.as_str())
     }
 
-    /// Слои образа в порядке манифеста.
     #[must_use]
     pub fn layers(&self) -> &[Layer] {
         &self.layers
@@ -121,7 +107,6 @@ impl Release {
         self.layers.iter().find(|layer| layer.title == title)
     }
 
-    /// Тест: подменить digest слоя, не трогая всё остальное.
     #[cfg(test)]
     pub fn set_layer_digest(&mut self, title: &str, digest: Digest) {
         if let Some(layer) = self.layers.iter_mut().find(|layer| layer.title == title) {

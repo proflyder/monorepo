@@ -1,5 +1,3 @@
-//! Entry point: the install flow. Every message and exit code matches the Go installer.
-
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -63,7 +61,6 @@ fn install(adb: &mut ProcessAdb, root: &Path, opts: &Options, ui: &mut Ui) -> u8
     let mut found: Vec<Station> = Vec::new();
     let mut targets = opts.targets.clone();
     if targets.is_empty() {
-        // Already connected network devices first, then mDNS (or the port scan).
         for s in adb.network_devices() {
             seen.push(s.clone());
             let _ = deploy::probe(adb, &s, false, &mut found, ui);
@@ -154,7 +151,6 @@ fn ui_error(ui: &mut Ui, s: &str) {
     let _ = writeln!(ui.err, "{s}");
 }
 
-/// Prints `prompt` on stderr and returns the trimmed answer ("" on EOF).
 fn read_line(prompt: &str) -> String {
     let mut err = io::stderr();
     let _ = write!(err, "{prompt}");
@@ -166,8 +162,6 @@ fn read_line(prompt: &str) -> String {
     }
 }
 
-/// Locates the payload: next to the executable (release archive), else the working directory
-/// or one of its parents (repository checkout).
 fn find_root() -> Result<PathBuf, String> {
     let has = |d: &Path| d.join("satellite").join("deploy").join("boot.sh").is_file();
     if let Ok(exe) = std::env::current_exe()

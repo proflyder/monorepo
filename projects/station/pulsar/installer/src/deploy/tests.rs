@@ -1,7 +1,3 @@
-//! Golden tests for the deploy sequence: a fake `adb` records every call exactly like the
-//! Go generator did and replays the same answers. It can also return non-zero statuses with
-//! output (busybox `diff`, read-only rootfs, failed `ctl.sh`) to keep those paths covered.
-
 use super::*;
 use crate::adb::ShError;
 use crate::cli::Options;
@@ -129,12 +125,10 @@ fn respond(f: &mut Fake, cmd: &str) -> Result<String, ShError> {
         return if f.mounts_rw {
             Ok("wrote".to_string())
         } else {
-            // busybox remount fails, prints the marker and exits 1.
             exit("1", "remount-rw-failed\n")
         };
     }
     if plain.starts_with("diff ") {
-        // busybox diff exits 1 when files differ; the output is still the diff.
         return exit("1", &format!("--- bak\n+++ new\n-{HOOK_SAT}\n\n"));
     }
     let out = match plain {
@@ -450,7 +444,6 @@ impl Adb for HealthFake {
                 || cmd.starts_with("cat /tmp")
                 || cmd == "pidof pulsar >/dev/null"
             {
-                // Go's fake echoed the log and then a newline before the marker.
                 format!("{}\n", self.log)
             } else {
                 String::new()

@@ -1,5 +1,3 @@
-//! Prometheus text exposition (version 0.0.4) of a [`Metrics`] snapshot.
-
 use std::fmt::Write as _;
 
 use crate::catalog;
@@ -75,7 +73,6 @@ pub fn render(metrics: &Metrics, sample: &SystemSample) -> String {
         &[("version", version), ("model", model)],
     );
 
-    // ---- hardware ----
     gauge(
         &mut out,
         "pulsar_cpu_usage_ratio",
@@ -161,7 +158,6 @@ pub fn render(metrics: &Metrics, sample: &SystemSample) -> String {
         sample.uptime,
     );
 
-    // ---- Home Assistant ----
     gauge(
         &mut out,
         "pulsar_ha_connected",
@@ -175,7 +171,6 @@ pub fn render(metrics: &Metrics, sample: &SystemSample) -> String {
         metrics.ha_reconnects.get(),
     );
 
-    // ---- assistant pipeline ----
     header(
         &mut out,
         "pulsar_assistant_requests_total",
@@ -203,7 +198,6 @@ pub fn render(metrics: &Metrics, sample: &SystemSample) -> String {
         &metrics.wake_to_answer,
     );
 
-    // ---- playback ----
     header(
         &mut out,
         "pulsar_playback_started_total",
@@ -256,7 +250,6 @@ pub fn render(metrics: &Metrics, sample: &SystemSample) -> String {
         metrics.volume.get(),
     );
 
-    // ---- calls ----
     gauge(
         &mut out,
         "pulsar_call_active",
@@ -324,7 +317,6 @@ pub fn render(metrics: &Metrics, sample: &SystemSample) -> String {
         metrics.call_overflow.get(),
     );
 
-    // ---- wake word ----
     counter(
         &mut out,
         "pulsar_wake_detections_total",

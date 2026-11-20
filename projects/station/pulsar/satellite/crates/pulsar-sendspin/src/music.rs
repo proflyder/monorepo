@@ -1,8 +1,3 @@
-//! Visualizer data (0..65535 = -60..0 dB, A-weighted) → `MusicFrame` levels.
-
-/// The 8 bands of a `MusicFrame` from the server's spectrum bins, low to high: each band is the
-/// mean of its share of the bins; with fewer than 8 bins, or a band without its own bin, it takes
-/// the bin at its start. None without bins.
 pub fn bands(bins: &[u16]) -> Option<[f32; 8]> {
     let n = bins.len();
     if n == 0 {
@@ -57,10 +52,8 @@ mod tests {
     fn short_spectra_repeat_bins() {
         assert_eq!(bands(&[]), None);
         assert_eq!(bands(&[65535]), Some([1.0; 8]));
-        // 3 bins: bands 0-2 take bin 0, 3-5 bin 1, 6-7 bin 2.
         let b = bands(&[0, 65535, 0]).unwrap();
         assert_eq!(b, [0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 0.0, 0.0]);
-        // 9 bins: band 7 gets two of them.
         let mut bins = [0u16; 9];
         bins[7] = 65535;
         bins[8] = 0;

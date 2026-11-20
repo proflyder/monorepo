@@ -1,5 +1,3 @@
-//! Domain model, pure functions and golden-vector tests.
-
 pub mod clock;
 pub mod event;
 pub mod hash;

@@ -1,9 +1,3 @@
-//! End-to-end sender test against a fake OAuth + FCM pair.
-//!
-//! The RSA key in `testdata/service-account.pem` is a throwaway generated for
-//! these tests only (see the Gitleaks allowlist); it belongs to no Google
-//! project and signs nothing real.
-
 use std::future::Future;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;

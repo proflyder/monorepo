@@ -1,9 +1,3 @@
-//! The `infra_status` aggregate.
-//!
-//! Ports `statusIssues`/`statusVerdict` from `internal/tools/read.go`: the
-//! caller fetches alerts, signals, workloads, restarts and external checks,
-//! this module only turns them into an ordered issue list and a spoken verdict.
-
 use std::fmt::Write as _;
 
 use serde::{Deserialize, Serialize};
@@ -11,127 +5,81 @@ use serde::{Deserialize, Serialize};
 use super::alert::AlertDetail;
 use super::catalog::{self, Catalog};
 
-/// Result of one typed external probe.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CheckResult {
-    /// Catalog service id.
     #[serde(default)]
     pub service: String,
-    /// Check type.
     #[serde(rename = "type", default)]
     pub check_type: String,
-    /// Human label.
     #[serde(default)]
     pub label: String,
-    /// Whether the check passed.
     #[serde(default)]
     pub ok: bool,
-    /// The check was not configured; it is never a failure.
     #[serde(default, skip_serializing_if = "is_false")]
     pub skipped: bool,
-    /// Observed value, for example the unavailable entity count.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub value: String,
-    /// Failure reason.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub error: String,
-    /// Additional details, for example unavailable entity ids.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub details: Vec<String>,
 }
 
-/// One Prometheus signal observation.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SignalDetail {
-    /// Catalog service id.
     pub service: String,
-    /// Human explanation.
     pub meaning: String,
-    /// The PromQL query.
     pub promql: String,
-    /// Whether the signal fired.
     pub firing: bool,
-    /// First sample value.
     #[serde(default, serialize_with = "serialize_go_f64")]
     pub value: f64,
-    /// Query error.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub error: String,
 }
 
-/// One workload availability observation.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkloadDetail {
-    /// Catalog service id.
     pub service: String,
-    /// Namespace.
     pub namespace: String,
-    /// Workload kind.
     pub kind: String,
-    /// Workload name.
     pub name: String,
-    /// Desired replicas.
     pub desired: i64,
-    /// Ready replicas.
     pub ready: i64,
-    /// Available replicas.
     pub available: i64,
-    /// Whether the workload has all desired replicas available.
     pub healthy: bool,
-    /// Read error.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub error: String,
 }
 
-/// One pod restart finding.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PodDetail {
-    /// Catalog service id, when known.
     #[serde(default)]
     pub service: String,
-    /// Namespace.
     pub namespace: String,
-    /// Pod name.
     pub pod: String,
-    /// Container name.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub container: String,
-    /// Human reason: `CrashLoopBackOff` or `перезапуск за последний час`.
     pub reason: String,
-    /// Container restart count.
     pub restarts: i32,
 }
 
-/// The whole `infra_status` detail.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StatusDetail {
-    /// Spoken verdict.
     pub verdict: String,
-    /// RFC3339 UTC check time.
     pub checked_at: String,
-    /// Number of catalog services.
     pub service_count: usize,
-    /// Whether at least one issue was found.
     pub degraded: bool,
-    /// Whether part of the check could not run.
     pub partial: bool,
-    /// Active alerts that count as problems.
     pub alerts: Vec<AlertDetail>,
-    /// Active alerts the catalog marks as permanent background noise.
     pub ignored_alerts: Vec<AlertDetail>,
-    /// Prometheus signals.
     pub signals: Vec<SignalDetail>,
-    /// Kubernetes workloads.
     pub workloads: Vec<WorkloadDetail>,
-    /// Recent pod restarts.
     pub restarts: Vec<PodDetail>,
-    /// Typed external checks.
     pub external_checks: Vec<CheckResult>,
-    /// Errors that made the check partial.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub errors: Vec<String>,
 }
@@ -140,8 +88,6 @@ fn is_false(value: &bool) -> bool {
     !*value
 }
 
-/// Serializes an `f64` the way Go's `encoding/json` does: a whole number has
-/// no `.0` suffix (`0`, `1`, `1.5`).
 pub fn serialize_go_f64<S>(value: &f64, serializer: S) -> Result<S::Ok, S::Error>
 where
     S: serde::Serializer,
@@ -157,12 +103,6 @@ where
     serializer.serialize_f64(*value)
 }
 
-/// Renders one failed check without repeating its label.
-///
-/// The `ha_unavailable_summary` check already says "недоступно сущностей", so
-/// prefixing its label again produced "недоступные сущности: недоступно
-/// сущностей: 1"; here the count and the entity ids stay inline and the label
-/// is used at most once.
 #[must_use]
 pub fn check_issue(check: &CheckResult) -> String {
     if check.check_type == catalog::CHECK_HA_UNAVAILABLE {
@@ -171,7 +111,6 @@ pub fn check_issue(check: &CheckResult) -> String {
     format!("{}: {}", check.label, check.error)
 }
 
-/// Maximum number of unavailable entity ids kept in a spoken issue.
 pub const MAX_UNAVAILABLE_ENTITIES_SHOWN: usize = 5;
 
 fn unavailable_issue(check: &CheckResult) -> String {
@@ -201,7 +140,6 @@ fn unavailable_issue(check: &CheckResult) -> String {
     text
 }
 
-/// The ordered issue list that drives the verdict and `degraded`.
 #[must_use]
 pub fn status_issues(detail: &StatusDetail, catalog: &Catalog) -> Vec<String> {
     let mut issues = Vec::new();
@@ -241,7 +179,6 @@ pub fn status_issues(detail: &StatusDetail, catalog: &Catalog) -> Vec<String> {
     issues
 }
 
-/// The spoken verdict for a status detail.
 #[must_use]
 pub fn status_verdict(detail: &StatusDetail, issues: &[String]) -> String {
     if issues.is_empty() && detail.errors.is_empty() {
@@ -267,7 +204,6 @@ pub fn status_verdict(detail: &StatusDetail, issues: &[String]) -> String {
     text
 }
 
-/// Whether any catalog signal participates in the status aggregate.
 #[must_use]
 pub fn has_status_signals(catalog: &Catalog) -> bool {
     catalog
@@ -277,7 +213,6 @@ pub fn has_status_signals(catalog: &Catalog) -> bool {
         .any(|signal| signal.status)
 }
 
-/// Sorted unique namespaces of the Kubernetes services.
 #[must_use]
 pub fn namespaces_of(catalog: &Catalog) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
@@ -290,7 +225,6 @@ pub fn namespaces_of(catalog: &Catalog) -> Vec<String> {
     out
 }
 
-/// Display name of a service id, falling back to the id itself.
 #[must_use]
 pub fn display_name(catalog: &Catalog, id: &str) -> String {
     catalog

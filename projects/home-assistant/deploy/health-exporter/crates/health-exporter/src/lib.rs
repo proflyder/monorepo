@@ -1,13 +1,3 @@
-//! Runtime chart's TCP health exporter.
-//!
-//! It is the Rust replacement for the former Go binary and keeps its contract:
-//! operational TCP checks only, no commands, no credentials, no conversation
-//! content. Metric names, labels, ports and the `ENDPOINT_HOST_*` environment
-//! variables are unchanged, so the existing dashboards and alerts keep working.
-//!
-//! The same binary is its own in-pod client (`-query URL`), because the
-//! distroless image has no shell, curl or python for the rollout's exec check.
-
 use std::future::Future;
 use std::io;
 use std::pin::Pin;
@@ -21,18 +11,14 @@ use axum::response::IntoResponse;
 use axum::routing::get;
 use tokio::net::TcpStream;
 
-/// TCP connect timeout for one endpoint, matching the Python/Go exporter.
 pub const CONNECT_TIMEOUT: Duration = Duration::from_secs(1);
 
-/// One TCP check. The order is the Python exporter's dict order, so the metrics
-/// text is stable for scraping and diffing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Endpoint {
     pub name: &'static str,
     pub port: u16,
 }
 
-/// The services the home runtime exposes on the host network.
 pub const ENDPOINTS: [Endpoint; 7] = [
     Endpoint {
         name: "ha",
@@ -69,20 +55,13 @@ type DialFn = Box<dyn Fn(String, u16) -> DialFuture + Send + Sync>;
 type HostFn = Box<dyn Fn(&str) -> String + Send + Sync>;
 type NowFn = Box<dyn Fn() -> u64 + Send + Sync>;
 
-/// Renders the metrics document.
 pub struct Exporter {
-    /// Connects to `host:port`. Injectable for tests.
     dial: DialFn,
-    /// Resolves the address for an endpoint name (`ENDPOINT_HOST_<NAME>`).
     host: HostFn,
-    /// Clock in nanoseconds, injectable so a test can assert formatting without
-    /// depending on wall time.
     now: NowFn,
 }
 
 impl Exporter {
-    /// Returns an exporter that reads `ENDPOINT_HOST_*` and dials with a 1s
-    /// timeout, matching the Python implementation.
     #[must_use]
     pub fn new() -> Self {
         let start = std::time::Instant::now();
@@ -115,13 +94,9 @@ impl Exporter {
         }
     }
 
-    /// Renders the Prometheus text exposition.
     pub async fn metrics(&self) -> String {
         use std::fmt::Write as _;
 
-        // `home_endpoint_*` is the current name. The `ricardo_endpoint_*`
-        // series stay for one rollout as deprecated aliases so an older
-        // dashboard or alert rule keeps working while the new exporter lands.
         let mut out = String::from(
             "# HELP home_endpoint_up Whether a configured TCP endpoint accepts connections.\n\
              # TYPE home_endpoint_up gauge\n\
@@ -175,7 +150,6 @@ impl Default for Exporter {
     }
 }
 
-/// Serves `/metrics` and nothing else.
 pub fn router(exporter: Arc<Exporter>) -> Router {
     Router::new()
         .route("/metrics", get(metrics_handler))
@@ -215,8 +189,6 @@ mod tests {
             .join("metrics.golden")
     }
 
-    /// A clock that advances exactly one millisecond per call, mirroring the Go
-    /// golden generator.
     fn step_clock() -> NowFn {
         let counter = AtomicU64::new(0);
         Box::new(move || counter.fetch_add(1_000_000, Ordering::SeqCst))

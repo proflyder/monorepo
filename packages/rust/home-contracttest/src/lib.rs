@@ -1,14 +1,3 @@
-//! Rust runner for the shared golden HTTP fixtures.
-//!
-//! The normative format is `packages/rust/home-contracttest/README.md`; this
-//! crate replays the same `testdata/contract/*.json` against an [`axum::Router`]
-//! through [`tower::ServiceExt::oneshot`]. There is deliberately no `-update`:
-//! the Rust side only verifies committed fixtures.
-//!
-//! Supported: `capture`, `captureHeaders`, `{{name}}` substitution,
-//! `<uuid>`, `<base64-32>` and `<any>` placeholders, structural JSON
-//! comparison and byte-for-byte string bodies.
-
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
@@ -30,7 +19,6 @@ const BASE64: GeneralPurpose = GeneralPurpose::new(
         .with_decode_allow_trailing_bits(true),
 );
 
-/// Fixture failure with the scenario and step that produced it.
 #[derive(Debug, Error)]
 #[error("{scenario} step {step}: {detail}")]
 pub struct Error {
@@ -49,10 +37,6 @@ impl Error {
     }
 }
 
-/// Optional hooks. The factory passed to [`run`] is called once per scenario
-/// and is the place to seed state; `before_step` runs before every request
-/// with the scenario name and the 1-based step number, exactly like Go's
-/// `contracttest.WithBeforeStep` (for example to advance a fake clock).
 type BeforeStep = Box<dyn Fn(&str, usize)>;
 type Normalizer = Box<dyn Fn(&str, &mut Value)>;
 type Skip = Box<dyn Fn(&str) -> bool>;
@@ -71,16 +55,12 @@ impl Options {
         self
     }
 
-    /// Rewrite random values in the actual response into placeholders before
-    /// it is compared. The scenario name is provided.
     #[must_use]
     pub fn with_normalizer(mut self, hook: impl Fn(&str, &mut Value) + 'static) -> Self {
         self.normalizer = Some(Box::new(hook));
         self
     }
 
-    /// Skip a scenario by name. Used when one fixture set contains scenarios
-    /// whose dependencies are implemented in a later change.
     #[must_use]
     pub fn with_skip(mut self, hook: impl Fn(&str) -> bool + 'static) -> Self {
         self.skip = Some(Box::new(hook));
@@ -88,8 +68,6 @@ impl Options {
     }
 }
 
-/// Replays every `*.json` fixture in `dir` and returns the number of
-/// scenarios that passed.
 pub async fn run<F>(dir: impl AsRef<Path>, new_router: F, options: Options) -> Result<usize, Error>
 where
     F: Fn(&str) -> Router,
@@ -716,7 +694,6 @@ fn locate(dir: &Path) -> PathBuf {
     dir.to_owned()
 }
 
-/// Convenience for tests: the two header helpers used by fixtures.
 #[must_use]
 pub fn content_type() -> (&'static str, &'static str) {
     (header::CONTENT_TYPE.as_str(), "application/json")

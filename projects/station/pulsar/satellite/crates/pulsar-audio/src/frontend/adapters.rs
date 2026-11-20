@@ -1,5 +1,3 @@
-//! Продакшен-адаптеры портов: Ricardo и запись wake-событий.
-
 use std::path::Path;
 use std::sync::Arc;
 use std::sync::atomic::Ordering::Relaxed;
@@ -12,8 +10,6 @@ use crate::wake_events::{Capture as WakeCapture, Counters, Job, Recording, WakeI
 
 use super::ports::{Detection, Detector, WakeStore};
 
-/// Рикардо за портом [`Detector`]: модель и порог из манифеста, владение FFI-объектом остаётся
-/// у одного потока обработки.
 pub(super) struct RicardoDetector(RicardoWake);
 
 impl RicardoDetector {
@@ -32,7 +28,6 @@ impl Detector for RicardoDetector {
     }
 }
 
-/// Продакшен-порт записи: кольцо wake-событий на потоке обработки и канал writer'а.
 pub(super) struct RecordingStore {
     capture: WakeCapture,
     jobs: SyncSender<Job>,
@@ -48,7 +43,6 @@ impl RecordingStore {
         }
     }
 
-    /// Hands a finished window to the writer; a full queue drops it and counts the drop.
     fn send(&self, rec: Recording) {
         if self.jobs.try_send(Job::Save(Box::new(rec))).is_err() {
             self.counters.dropped.fetch_add(1, Relaxed);

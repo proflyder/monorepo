@@ -1,8 +1,3 @@
-//! Replays the frozen golden HTTP fixtures against the Rust Connect server.
-//!
-//! The fixtures live in `solutions/scheduler/testdata/contract`; they were
-//! captured from the former Go implementation and are now frozen data.
-
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, OnceLock};

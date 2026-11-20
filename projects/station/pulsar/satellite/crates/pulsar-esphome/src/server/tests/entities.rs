@@ -1,13 +1,9 @@
-//! Сущности: проверки команд на границах (как C++-сервер), подписка и replay состояний,
-//! гейтинг по `Capabilities`, голосовые события.
-
 use esphome_proto::entity::{FOLLOWUP_DURATION_MAX_S, key};
 use esphome_proto::pb::msg;
 use tokio::sync::mpsc::UnboundedReceiver;
 
 use super::*;
 
-/// Ключ состояния (field 1, fixed32) и ключ сущности в ListEntities (field 2, fixed32).
 fn state_key(m: &[u8]) -> Option<u32> {
     field(m, 1).map(Field::u32)
 }
@@ -16,7 +12,6 @@ fn entity_keys(m: &[u8]) -> Option<u32> {
     field(m, 2).map(Field::u32)
 }
 
-/// Все события, накопившиеся после round trip.
 async fn drain(p: &mut Peer, rx: &mut UnboundedReceiver<ApiEvent>) -> Vec<ApiEvent> {
     p.sync().await;
     let mut v = Vec::new();
@@ -54,7 +49,6 @@ fn action(k: u32, args: &[(Option<&str>, Option<i32>, Option<i32>)]) -> ExecuteS
     }
 }
 
-/// Строковый аргумент действия.
 fn s(v: &str) -> (Option<&str>, Option<i32>, Option<i32>) {
     (Some(v), None, None)
 }
@@ -69,7 +63,6 @@ async fn commands_are_validated_like_cxx() {
             p.hello("HA").await;
             event(&mut rx).await;
 
-            // Числа: NaN отброшен, значения обрезаны диапазоном сущности.
             for (k, v) in [
                 (key::NUMBER_CLOCK_BRI.get(), f32::NAN),
                 (key::NUMBER_CLOCK_BRI.get(), 150.0),
@@ -101,7 +94,6 @@ async fn commands_are_validated_like_cxx() {
                 ]
             );
 
-            // Текст: не больше 64 символов, на декодированном тексте (как считал C++).
             let text = |b: Vec<u8>| TextCommandRequest {
                 key: Some(key::TEXT_CLOCK.get()),
                 state: Some(b),
@@ -127,7 +119,6 @@ async fn commands_are_validated_like_cxx() {
                 ]
             );
 
-            // Select: только опции сущности; switch: только известные ключи.
             let select = |k: u32, s: &str| SelectCommandRequest {
                 key: Some(k),
                 state: Some(s.to_owned()),
@@ -185,7 +176,6 @@ async fn commands_are_validated_like_cxx() {
                 ]
             );
 
-            // Media: громкость обрезана, неизвестная команда отброшена, поля только заданные.
             p.send_msg(
                 msg::MEDIA_PLAYER_CMD,
                 &MediaPlayerCommandRequest {
@@ -234,7 +224,6 @@ async fn commands_are_validated_like_cxx() {
                 ]
             );
 
-            // Update: ключ сущности и команды 0..2.
             for (k, cmd) in [
                 (key::UPDATE.get(), 2),
                 (key::UPDATE.get(), 3),
@@ -254,7 +243,6 @@ async fn commands_are_validated_like_cxx() {
                 [ApiEvent::Update(UpdateCommand::Check)]
             );
 
-            // Actions: число аргументов, sint32 и legacy int, проверки эффекта и лица.
             p.send_msg(
                 msg::EXECUTE_SERVICE_REQ,
                 &action(
@@ -348,8 +336,6 @@ async fn commands_are_validated_like_cxx() {
                 ]
             );
 
-            // Свет: rgb масштабируется color_brightness, effect "None" -> "", переход по
-            // умолчанию и с ограничением; сервер отдаёт нормализованное состояние.
             p.send_msg(
                 msg::LIGHT_CMD,
                 &LightCommandRequest {
@@ -392,7 +378,6 @@ async fn commands_are_validated_like_cxx() {
                 },
             )
             .await;
-            // NaN до светодиодов не доходит: команда отброшена целиком.
             p.send_msg(
                 msg::LIGHT_CMD,
                 &LightCommandRequest {
@@ -430,7 +415,6 @@ async fn commands_are_validated_like_cxx() {
                 [light(0.5, 0.25, 0.5, 1000), light(1.0, 0.5, 1.0, 60_000)]
             );
 
-            // Buttons: Zigbee (сущности есть) и Restart.
             for k in [
                 key::BUTTON_ZIGBEE_LEAVE.get(),
                 key::BUTTON_RESTART.get(),
@@ -444,7 +428,6 @@ async fn commands_are_validated_like_cxx() {
                 [ApiEvent::Button(ButtonId::ZigbeeLeave), ApiEvent::Restart]
             );
 
-            // Конфигурация голосового ассистента: одно известное wake word.
             p.send_msg(
                 msg::VA_SET_CONFIG,
                 &VoiceAssistantSetConfiguration {
@@ -462,7 +445,6 @@ async fn commands_are_validated_like_cxx() {
                 },
             )
             .await;
-            // Таймеры: неизвестные значения события отброшены.
             for ev in [3u32, 9] {
                 p.send_msg(
                     msg::VA_TIMER_EVENT_RESP,
@@ -477,7 +459,6 @@ async fn commands_are_validated_like_cxx() {
                 )
                 .await;
             }
-            // События пайплайна только от владельца голоса (здесь его нет).
             p.send_msg(
                 msg::VA_EVENT_RESP,
                 &VoiceAssistantEventResponse {
@@ -555,7 +536,6 @@ async fn voice_events_come_from_the_owner() {
                         event: VaEvent::SttEnd,
                         data: [("text".to_owned(), "b".to_owned())].into(),
                     },
-                    // Тип новее этой сборки всё равно доходит до контроллера (watchdog).
                     ApiEvent::VoiceEvent {
                         event: VaEvent::Unknown(13),
                         data: Default::default(),
@@ -583,18 +563,15 @@ async fn states_go_to_subscribers_and_zigbee_entities_need_modes() {
             let mut p = ts.connect();
             p.hello("HA").await;
             event(&mut rx).await;
-            // Без подписки на состояния ничего не пушится, события отброшены.
             h.publish_switch(SwitchId::Microphones, true);
             h.fire_event(EventId::Button, "action");
             assert!(p.sync().await.is_empty());
-            // Zigbee-сущностей, состояний и кнопок нет.
             let keys = list_keys(&mut p).await;
             assert!(!keys.contains(&key::SELECT_ZIGBEE_MODE.get()));
             assert!(!keys.contains(&key::TEXT_ZIGBEE.get()));
             assert!(!keys.contains(&key::BUTTON_ZIGBEE_JOIN.get()));
             p.send(msg::SUBSCRIBE_STATES_REQ, &[]).await;
             let states = p.sync().await;
-            // Кэшированное значение пришло, Zigbee-состояний нет.
             let mic = states
                 .iter()
                 .find(|(t, m)| {
@@ -607,7 +584,6 @@ async fn states_go_to_subscribers_and_zigbee_entities_need_modes() {
                     .iter()
                     .any(|(_, m)| state_key(m) == Some(key::TEXT_ZIGBEE.get()))
             );
-            // После подписки публикации и события доходят; Zigbee text sensor — нет.
             h.publish_text_sensor(TextSensorId::Zigbee, "x");
             h.publish_sensor(SensorId::Illuminance, 12.5);
             h.fire_event(EventId::Button, "action_long");
@@ -625,7 +601,6 @@ async fn states_go_to_subscribers_and_zigbee_entities_need_modes() {
             assert_eq!(field(&got[0].1, 2).unwrap().flt(), 12.5);
             assert_eq!(field(&got[1].1, 2).unwrap().str(), "action_long");
             assert_eq!(field(&got[2].1, 7).unwrap().str(), "v2");
-            // Zigbee-кнопки игнорируются без сущностей.
             p.send_msg(
                 msg::BUTTON_CMD,
                 &ButtonCommandRequest {
@@ -650,8 +625,6 @@ async fn an_unchanged_switch_state_is_published_every_time() {
             event(&mut rx).await;
             p.send(msg::SUBSCRIBE_STATES_REQ, &[]).await;
             let _ = p.sync().await;
-            // HA asked for "on" under the hardware mute: the controller publishes the real
-            // "off" after every command, so the server must not deduplicate identical states.
             h.publish_switch(SwitchId::Microphones, false);
             h.publish_switch(SwitchId::Microphones, false);
             let got = p.sync().await;
@@ -660,7 +633,6 @@ async fn an_unchanged_switch_state_is_published_every_time() {
                 .filter(|(t, m)| {
                     *t == msg::SWITCH_STATE
                         && state_key(m) == Some(key::SW_MICROPHONES.get())
-                        // `state = false` is encoded as an absent field, as in ESPHome.
                         && field(m, 2).is_none()
                 })
                 .count();
@@ -694,10 +666,6 @@ async fn mini_has_no_clock_lux_mute_case_or_button_entities() {
             p.hello("HA").await;
             event(&mut rx).await;
             let keys = list_keys(&mut p).await;
-            // 23 сущности плюс сервис led_show; без часов, Lux, wake pre-roll, аппаратного
-            // MUTE, цвета корпуса и кнопок Button, но с follow-up duration, microphone gain и
-            // wake sound. Два switch и две кнопки wake-event и select голосового цвета есть
-            // всегда.
             assert_eq!(keys.len(), 24, "keys: {keys:?}");
             assert!(keys.contains(&key::NUMBER_FOLLOWUP_DURATION.get()));
             assert!(keys.contains(&key::NUMBER_MIC_GAIN.get()));
@@ -723,7 +691,6 @@ async fn mini_has_no_clock_lux_mute_case_or_button_entities() {
             for k in absent {
                 assert!(!keys.contains(&k.get()), "unexpected entity key {k:?}");
             }
-            // Начальные состояния несут только перечисленные сущности.
             publish_selftest_states(&h);
             p.send(msg::SUBSCRIBE_STATES_REQ, &[]).await;
             let initial: Vec<u32> = p
@@ -742,7 +709,6 @@ async fn mini_has_no_clock_lux_mute_case_or_button_entities() {
                     "unexpected state for key {k:?}"
                 );
             }
-            // Контроллер может публиковать эти значения; сервер обязан их отбросить.
             h.publish_switch(SwitchId::Clock, true);
             h.publish_switch(SwitchId::ClockColonBlink, true);
             h.publish_switch(SwitchId::ClockAutoBrightness, true);
@@ -757,7 +723,6 @@ async fn mini_has_no_clock_lux_mute_case_or_button_entities() {
             h.publish_sensor(SensorId::Illuminance, 12.5);
             h.fire_event(EventId::Button, "action");
             assert!(p.sync().await.is_empty());
-            // Перечисленная сущность состояние получает.
             h.publish_number(NumberId::LedSpeed, 2.0);
             let got = p.sync().await;
             assert_eq!(got.len(), 1, "{got:?}");
@@ -769,8 +734,6 @@ async fn mini_has_no_clock_lux_mute_case_or_button_entities() {
 
 #[tokio::test]
 async fn clock_auto_brightness_needs_the_clock_and_the_light_sensor() {
-    // Часы, чей датчик света не открылся; датчик света без панели часов (Миди 2, где чип часов
-    // не завёлся). Illuminance перечислен в обоих случаях.
     for (has_clock, has_auto_brightness) in [(true, false), (false, true)] {
         local()
             .run_until(async {
@@ -817,8 +780,6 @@ async fn entity_list_flood_yields_to_other_clients() {
             other.hello("other").await;
             event(&mut rx).await;
             event(&mut rx).await;
-            // 300 ListEntities в одной записи: ~1 MiB ответов; другой клиент обслуживается,
-            // ничего не теряется.
             let mut req = Vec::new();
             for _ in 0..300 {
                 append_plain(&mut req, msg::LIST_ENTITIES_REQ, &[]);
@@ -891,7 +852,7 @@ async fn followup_duration_is_universal_config_and_replays_its_state() {
                         assert_eq!(field(&m, 6).map_or(0.0, Field::flt), 0.0);
                         assert_eq!(field(&m, 7).unwrap().flt(), FOLLOWUP_DURATION_MAX_S as f32);
                         assert_eq!(field(&m, 8).unwrap().flt(), 1.0);
-                        assert_eq!(field(&m, 10).unwrap().u32(), 1); // категория config
+                        assert_eq!(field(&m, 10).unwrap().u32(), 1);
                         assert_eq!(field(&m, 11).unwrap().str(), "s");
                     }
                 }
@@ -997,7 +958,7 @@ async fn wake_sound_and_colon_blink_switches_are_config_and_replay_both_states()
                         found = true;
                         assert_eq!(field(&m, 1).unwrap().str(), oid);
                         assert_eq!(field(&m, 3).unwrap().str(), name);
-                        assert_eq!(field(&m, 8).unwrap().u32(), 1); // категория config
+                        assert_eq!(field(&m, 8).unwrap().u32(), 1);
                     }
                 }
                 assert!(found, "{name}");

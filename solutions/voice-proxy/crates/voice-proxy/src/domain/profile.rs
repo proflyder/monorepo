@@ -1,18 +1,7 @@
-//! The HA `input_select` voice profile and its routing values.
-//!
-//! Two details are part of the contract:
-//!
-//! * only a fresh *successful* read is cached; a failed read is unknown and
-//!   clears the cache, so a stale profile is never used (the cache lives in
-//!   `services::ha`);
-//! * the state is normalised with NFKC and a full Unicode case fold before
-//!   mapping, so fullwidth and non-breaking forms are recognised too.
-
 use unicode_normalization::UnicodeNormalization as _;
 
 use super::sanitize::collapse_space;
 
-/// A routing profile.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Profile {
     Work,
@@ -20,7 +9,6 @@ pub enum Profile {
 }
 
 impl Profile {
-    /// The wire value used by the gateway, the queue names and the payload.
     #[must_use]
     pub const fn as_str(self) -> &'static str {
         match self {
@@ -29,7 +17,6 @@ impl Profile {
         }
     }
 
-    /// Parses an exact wire value.
     #[must_use]
     pub fn parse(value: &str) -> Option<Self> {
         match value {
@@ -40,8 +27,6 @@ impl Profile {
     }
 }
 
-/// Maps an `input_select` state onto a routing profile. Anything else is
-/// unknown.
 #[must_use]
 pub fn map_state(state: &str) -> Option<Profile> {
     match normalize_state(state).as_str() {
@@ -51,7 +36,6 @@ pub fn map_state(state: &str) -> Option<Profile> {
     }
 }
 
-/// NFKC, full Unicode case folding and whitespace collapsing.
 #[must_use]
 pub fn normalize_state(state: &str) -> String {
     let normalized: String = state.nfkc().collect();

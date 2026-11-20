@@ -1,24 +1,9 @@
-//! Append-only diagnostic log for the logon provider.
-//!
-//! Line format, rotation (one generation at 256 KiB) and the event set are the
-//! contract in `README.md`. Calls go through `tracing`; the provider-local
-//! layer below renders the documented line shape through a Win32 append
-//! writer, because `LogonUI` has no stderr and the file must be rotated before
-//! every write. Every field is sanitised (control characters replaced, 240
-//! bytes max) so remote data cannot forge log lines. A write failure is
-//! ignored: logging must never break logon.
-
-/// Directory and files are created by the installer; the path is fixed.
 pub const DATA_DIR: &str = r"C:\ProgramData\Home\KompLogon";
 pub const LOG_PATH: &str = r"C:\ProgramData\Home\KompLogon\logon.log";
 pub const ROTATED_PATH: &str = r"C:\ProgramData\Home\KompLogon\logon.log.1";
-/// Rotation threshold (256 KiB).
 pub const MAX_LOG_BYTES: u64 = 256 * 1024;
-/// Cap for the event name and the field string, in bytes.
 pub const MAX_FIELD_BYTES: usize = 240;
 
-/// Replaces control characters with spaces and caps the result at
-/// [`MAX_FIELD_BYTES`] bytes, matching `SanitizeForLog`.
 pub fn sanitize(text: &str) -> String {
     let mut out = String::with_capacity(text.len().min(MAX_FIELD_BYTES));
     for c in text.chars() {
@@ -100,8 +85,6 @@ mod imp {
     static LOG_LOCK: Mutex<()> = Mutex::new(());
 
     fn ensure_data_dir() {
-        // Idempotent: ERROR_ALREADY_EXISTS is expected. The installer owns the
-        // ACL; if the directory is missing we simply cannot log.
         let data_dir = WideNul::new(DATA_DIR);
         // SAFETY: `data_dir` is NUL-terminated; no security attributes.
         let _ = unsafe { CreateDirectoryW(data_dir.as_pcwstr(), None) };
@@ -110,8 +93,7 @@ mod imp {
     fn rotate_if_needed() {
         let mut data = WIN32_FILE_ATTRIBUTE_DATA::default();
         let log_path = WideNul::new(LOG_PATH);
-        // SAFETY: `data` is a valid, correctly sized out-parameter for
-        // GetFileExInfoStandard, and `log_path` is NUL-terminated.
+        // SAFETY: `data` is a valid, correctly sized out-parameter for GetFileExInfoStandard, and `log_path` is NUL-terminated.
         let attributes = unsafe {
             GetFileAttributesExW(
                 log_path.as_pcwstr(),
@@ -127,7 +109,6 @@ mod imp {
             return;
         }
         let rotated_path = WideNul::new(ROTATED_PATH);
-        // One generation only: the current log always describes the latest run.
         // SAFETY: both paths are NUL-terminated and live for the call.
         unsafe {
             let _ = DeleteFileW(rotated_path.as_pcwstr());
@@ -153,16 +134,11 @@ mod imp {
         )
     }
 
-    /// Appends one line. Never panics for I/O reasons and never blocks the
-    /// caller longer than a single small `WriteFile`.
     fn write_line(line: &str) {
         let _serialized = crate::sync::lock(&LOG_LOCK);
         rotate_if_needed();
         let log_path = WideNul::new(LOG_PATH);
-        // SAFETY: OPEN_ALWAYS creates the file if needed; no security
-        // attributes and no template file are passed, and `log_path` is
-        // NUL-terminated. The handle is closed on every path.
-        // Logging must never break logon: a failed open is ignored.
+        // SAFETY: OPEN_ALWAYS creates the file if needed; no security attributes and no template file are passed, and `log_path` is NUL-terminated. The handle is closed on every path. Logging must never break logon: a failed open is ignored.
         if let Ok(handle) = unsafe {
             CreateFileW(
                 log_path.as_pcwstr(),
@@ -175,8 +151,7 @@ mod imp {
             )
         } {
             let mut written = 0u32;
-            // SAFETY: `handle` is an open append handle and the slice stays
-            // alive for the duration of the call.
+            // SAFETY: `handle` is an open append handle and the slice stays alive for the duration of the call.
             unsafe {
                 let _ = WriteFile(handle, Some(line.as_bytes()), Some(&raw mut written), None);
                 let _ = CloseHandle(handle);
@@ -184,8 +159,6 @@ mod imp {
         }
     }
 
-    /// The two fields every event carries; tracing also records callsite
-    /// metadata, which this fixed log format does not include.
     #[derive(Default)]
     struct LineFields {
         event: String,
@@ -224,9 +197,6 @@ mod imp {
         }
     }
 
-    /// Installed once per DLL lifetime. `Dispatch::with_default` scopes it to
-    /// the call instead of `set_global_default`, which would leave the global
-    /// dispatcher pointing into this DLL after LogonUI unloads it.
     fn dispatch() -> &'static Dispatch {
         static DISPATCH: OnceLock<Dispatch> = OnceLock::new();
         DISPATCH.get_or_init(|| {
@@ -261,7 +231,6 @@ mod tests {
     fn sanitize_caps_at_the_field_limit() {
         let long = "x".repeat(1000);
         assert_eq!(sanitize(&long).len(), MAX_FIELD_BYTES);
-        // Exactly at the limit is not truncated.
         let exact = "y".repeat(MAX_FIELD_BYTES);
         assert_eq!(sanitize(&exact), exact);
     }

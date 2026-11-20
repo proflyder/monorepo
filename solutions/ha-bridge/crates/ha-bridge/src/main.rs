@@ -1,6 +1,3 @@
-//! Command entry point: the executor, plus the distroless `-healthcheck` probe
-//! used by the readiness and liveness executions.
-
 use std::process::ExitCode;
 
 #[tokio::main]

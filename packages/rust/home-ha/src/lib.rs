@@ -1,26 +1,3 @@
-//! Narrow Home Assistant client shared by the home services.
-//!
-//! It calls scripts and services, reads one entity state or the whole state
-//! list, renders a template and probes `/api/`. The entity registry has no REST
-//! endpoint, so [`Client::entity_registry`] opens one short WebSocket
-//! connection (`/api/websocket`), authenticates and asks for
-//! `config/entity_registry/list`. The scheduler owns schedule state; Home
-//! Assistant only performs the side effect, so nothing here knows about
-//! schedules, queues or MCP.
-//!
-//! A private Home Assistant certificate is supplied as PEM bytes or a file
-//! path ([`Client::new_with_ca_pem`], [`Client::new_with_ca_file`]). The crate
-//! never reads `HA_CA_FILE` itself: a consumer resolves its own environment.
-//!
-//! The crate is project-agnostic: callers pass entity ids, scripts and
-//! variables in. The bearer token is a [`home_secret::Token`] and never appears
-//! in `Debug`, an error message or a log line.
-//!
-//! Failures are classified exactly like `packages/go/httpapi`:
-//! [`Error::kind`] is [`ErrorKind::Transient`] for network failures, timeouts,
-//! `408`, `425`, `429` and `5xx` (a retried lease may succeed), and
-//! [`ErrorKind::Permanent`] for every other `4xx` and for a malformed answer.
-
 use std::fmt;
 use std::sync::Arc;
 use std::time::Duration;
@@ -44,19 +21,12 @@ const MAX_STATE_BYTES: usize = 1 << 20;
 const MAX_STATES_BYTES: usize = 8 << 20;
 const MAX_MESSAGE: usize = 200;
 
-/// How a failed call may be retried.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ErrorKind {
-    /// A network failure, timeout, throttling or a `5xx`: retrying later may
-    /// succeed.
     Transient,
-    /// A `4xx`, a malformed answer or an invalid argument: retrying the same
-    /// call cannot succeed.
     Permanent,
 }
 
-/// One Home Assistant call failure. It carries no URL, headers or response
-/// body: only the operation, a safe status/reason and a bounded message.
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("{op}: request failed")]
@@ -82,11 +52,9 @@ pub enum Error {
 }
 
 impl Error {
-    /// Whether a retry may succeed.
     #[must_use]
     pub fn kind(&self) -> ErrorKind {
         match self {
-            // A dropped WebSocket, a timeout or a closed listener may recover.
             Self::Transport { .. } | Self::WebSocket { .. } => ErrorKind::Transient,
             Self::Status { status, .. } => match *status {
                 408 | 425 | 429 => ErrorKind::Transient,
@@ -99,21 +67,18 @@ impl Error {
         }
     }
 
-    /// Convenience predicate for the worker loop.
     #[must_use]
     pub fn is_transient(&self) -> bool {
         self.kind() == ErrorKind::Transient
     }
 }
 
-/// A Home Assistant REST client with a fixed base URL and timeout.
 #[derive(Clone)]
 pub struct Client {
     http: reqwest::Client,
     base_url: String,
     token: Token,
     timeout: Duration,
-    /// PEM bundle used for the private-CA WebSocket connector; never logged.
     ca_pem: Option<Vec<u8>>,
 }
 
@@ -128,13 +93,6 @@ impl fmt::Debug for Client {
 }
 
 impl Client {
-    /// Build a client. `base_url` must not contain credentials or a path.
-    ///
-    /// The workspace builds `reqwest` with rustls and without a default crypto
-    /// provider; building a client panics ("No provider set") unless one is
-    /// installed. The process-wide ring provider is installed once here; a
-    /// provider installed earlier is kept and the error is ignored, so this is
-    /// safe to call for every client.
     pub fn new(
         base_url: impl Into<String>,
         token: Token,
@@ -143,12 +101,6 @@ impl Client {
         Self::build(base_url, token, timeout, None)
     }
 
-    /// Build a client that trusts the given PEM certificate bundle in
-    /// addition to the client's roots.
-    ///
-    /// The workspace `reqwest` trusts only the bundle (`tls_certs_only`), so
-    /// it makes a private Home Assistant certificate usable while public CAs
-    /// stay out of the trust set.
     pub fn new_with_ca_pem(
         base_url: impl Into<String>,
         token: Token,
@@ -158,8 +110,6 @@ impl Client {
         Self::build(base_url, token, timeout, Some(ca_pem))
     }
 
-    /// Like [`Client::new_with_ca_pem`], but reads the PEM bundle from `path`.
-    /// The value is never logged.
     pub fn new_with_ca_file(
         base_url: impl Into<String>,
         token: Token,
@@ -180,8 +130,6 @@ impl Client {
         let ca_pem = ca_pem.map(<[u8]>::to_vec);
         let mut builder = reqwest::Client::builder()
             .timeout(timeout)
-            // An authenticated client must not forward its bearer to a
-            // redirect target; a 3xx is surfaced as a status error instead.
             .redirect(reqwest::redirect::Policy::none());
         if let Some(ca_pem) = ca_pem.as_deref() {
             let certificates = reqwest::Certificate::from_pem_bundle(ca_pem)
@@ -189,8 +137,6 @@ impl Client {
             if certificates.is_empty() {
                 return Err(Error::Certificate { op: "decode CA" });
             }
-            // Trust exactly the supplied Home Assistant CA, not the platform
-            // store (reqwest 0.13 defaults to the latter).
             builder = builder.tls_certs_only(certificates);
         }
         let http = builder.build().map_err(|source| Error::Transport {
@@ -206,8 +152,6 @@ impl Client {
         })
     }
 
-    /// Read the state string of one entity. An unknown entity, a non-object
-    /// body or a missing/non-string state is [`Error::Decode`].
     pub async fn state(&self, entity: &str) -> Result<String, Error> {
         const OP: &str = "read state";
         let entity = entity.trim();
@@ -237,12 +181,6 @@ impl Client {
         payload.state.ok_or(Error::Decode { op: OP })
     }
 
-    /// Read every entity with its state and attributes.
-    ///
-    /// The response is the Home Assistant `/api/states` array. Known
-    /// attributes are typed in [`EntityAttributes`]; everything else is kept
-    /// in [`EntityAttributes::other`] as raw JSON, so a caller never loses a
-    /// field it does not model yet.
     pub async fn entities(&self) -> Result<Vec<Entity>, Error> {
         const OP: &str = "read entities";
         let request = self
@@ -262,13 +200,6 @@ impl Client {
         serde_json::from_slice(&body).map_err(|_| Error::Decode { op: OP })
     }
 
-    /// Read the entity registry: entity id, owning device and entity category.
-    ///
-    /// The registry is WebSocket-only, so this opens one short-lived connection
-    /// to `/api/websocket`, authenticates with the same bearer and sends
-    /// `config/entity_registry/list`. The whole exchange is bounded by the
-    /// client timeout. A failure is [`ErrorKind::Transient`]: the caller may
-    /// keep what it has and retry on the next refresh.
     pub async fn entity_registry(&self) -> Result<Vec<RegistryEntity>, Error> {
         const OP: &str = "read entity registry";
         tokio::time::timeout(self.timeout, self.registry_exchange(OP))
@@ -331,7 +262,6 @@ impl Client {
         }
     }
 
-    /// `http(s)://host:port` → `ws(s)://host:port/api/websocket`.
     fn websocket_url(&self, op: &'static str) -> Result<String, Error> {
         let (scheme, rest) = if let Some(rest) = self.base_url.strip_prefix("https://") {
             ("wss://", rest)
@@ -346,8 +276,6 @@ impl Client {
         Ok(format!("{scheme}{rest}{WEBSOCKET_PATH}"))
     }
 
-    /// rustls connector trusting the configured CA bundle. Without a bundle,
-    /// `connect_async` falls back to the WebPKI roots.
     fn tls_connector(&self, op: &'static str) -> Result<Option<Connector>, Error> {
         let Some(ca_pem) = self.ca_pem.as_deref() else {
             return Ok(None);
@@ -368,12 +296,6 @@ impl Client {
         Ok(Some(Connector::Rustls(Arc::new(config))))
     }
 
-    /// Invoke `<domain>.<service>` with any serializable JSON data. The caller
-    /// decides which call is allowed; this client performs no allowlisting of
-    /// its own.
-    ///
-    /// Typed request structs implement `Serialize`, so a caller does not have
-    /// to build a [`Map`] by hand; `Map<String, Value>` still works.
     pub async fn call_service<D: Serialize>(
         &self,
         domain: &str,
@@ -396,8 +318,6 @@ impl Client {
         self.post_json(OP, &url, body).await
     }
 
-    /// Invoke `<domain>.<service>` on one entity with typed extra data. The
-    /// `data` object is merged with `entity_id`.
     pub async fn call_service_on<D: Serialize>(
         &self,
         domain: &str,
@@ -428,8 +348,6 @@ impl Client {
         self.call_service(domain, service, body).await
     }
 
-    /// Run a script entity with variables. `script` may be a bare script name
-    /// or a full `script.<name>` entity id.
     pub async fn call_script(
         &self,
         script: &str,
@@ -456,8 +374,6 @@ impl Client {
         .await
     }
 
-    /// Render a Home Assistant template and return the text. The template is
-    /// always built by the caller, never taken from an untrusted client.
     pub async fn render_template(&self, template: &str) -> Result<String, Error> {
         const OP: &str = "render template";
         let mut body = Map::new();
@@ -478,8 +394,6 @@ impl Client {
             .map_err(|source| Error::Transport { op: OP, source })
     }
 
-    /// Verify HTTP reachability and the token with the read-only `/api/`
-    /// endpoint.
     pub async fn ping(&self) -> Result<(), Error> {
         const OP: &str = "ping HA";
         let request = self
@@ -509,8 +423,6 @@ impl Client {
         op: &'static str,
         request: reqwest::Request,
     ) -> Result<reqwest::Response, Error> {
-        // The body of a failed response is never read or logged: it may carry
-        // entity attributes or other deployment detail.
         let response = self
             .http
             .execute(request)
@@ -529,7 +441,6 @@ impl Client {
     }
 }
 
-/// One entity from `/api/states`.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct Entity {
     pub entity_id: String,
@@ -540,13 +451,11 @@ pub struct Entity {
 }
 
 impl Entity {
-    /// `attributes.friendly_name` or `""` when absent, matching the Go client.
     #[must_use]
     pub fn name(&self) -> &str {
         self.attributes.friendly_name.as_deref().unwrap_or("")
     }
 
-    /// `attributes.icon` without the `mdi:` prefix, matching the Go client.
     #[must_use]
     pub fn icon(&self) -> &str {
         let icon = self.attributes.icon.as_deref().unwrap_or("");
@@ -554,26 +463,20 @@ impl Entity {
     }
 }
 
-/// One record of `config/entity_registry/list`.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct RegistryEntity {
     pub entity_id: String,
     #[serde(default)]
     pub device_id: Option<String>,
-    /// `None` for a normal entity; `config` or `diagnostic` for a device
-    /// setting.
     #[serde(default)]
     pub entity_category: Option<String>,
 }
 
-/// The Home Assistant attributes the catalog needs; every other attribute is
-/// preserved verbatim in [`EntityAttributes::other`].
 #[derive(Debug, Clone, PartialEq, Default, Deserialize)]
 #[serde(default)]
 pub struct EntityAttributes {
     pub friendly_name: Option<String>,
     pub icon: Option<String>,
-    /// `device_class` of a binary sensor (`lock`, `connectivity`, …).
     pub device_class: Option<String>,
     pub supported_color_modes: Vec<String>,
     pub min_color_temp_kelvin: Option<f64>,
@@ -582,7 +485,6 @@ pub struct EntityAttributes {
     pub color_temp_kelvin: Option<f64>,
     pub hs_color: Option<Vec<f64>>,
     pub color_mode: Option<String>,
-    /// Effects a light advertises.
     pub effect_list: Vec<String>,
     #[serde(flatten)]
     pub other: Map<String, Value>,
@@ -609,7 +511,6 @@ struct StatePayload {
     state: Option<String>,
 }
 
-/// Read the next text frame, skipping keepalive and unrelated binary frames.
 async fn read_text<S>(socket: &mut S, op: &'static str) -> Result<String, Error>
 where
     S: futures_util::Stream<Item = Result<Message, tokio_tungstenite::tungstenite::Error>> + Unpin,
@@ -638,10 +539,6 @@ where
         .map_err(|_| Error::WebSocket { op })
 }
 
-/// Parse one answer of the registry request.
-///
-/// `Ok(None)` means another message kind (an event or an unrelated reply) and
-/// the caller keeps reading; `Err(())` is a failed or malformed reply.
 fn registry_reply(text: &str) -> Result<Option<Vec<RegistryEntity>>, ()> {
     let value: Value = serde_json::from_str(text).map_err(|_| ())?;
     if value.get("id").and_then(Value::as_i64) != Some(REGISTRY_MESSAGE_ID) {
@@ -663,7 +560,6 @@ fn encode(op: &'static str, value: &Value) -> Result<Vec<u8>, Error> {
     })
 }
 
-/// Normalize a configured script name into a Home Assistant entity id.
 #[must_use]
 pub fn script_entity(script: &str) -> String {
     let script = script.trim();
@@ -674,8 +570,6 @@ pub fn script_entity(script: &str) -> String {
     }
 }
 
-/// Domain and service names are protocol identifiers, not free text; rejecting
-/// anything else keeps the path unambiguous without URL-encoding.
 fn valid_identifier(value: &str) -> bool {
     !value.is_empty()
         && value
@@ -683,9 +577,6 @@ fn valid_identifier(value: &str) -> bool {
             .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
 }
 
-/// Entity ids are `<domain>.<object_id>`; both parts use the Home Assistant
-/// slug alphabet. Validating keeps the `/api/states/<entity>` path unambiguous
-/// without URL-encoding.
 fn valid_entity(entity: &str) -> bool {
     !entity.is_empty()
         && entity
@@ -693,7 +584,6 @@ fn valid_entity(entity: &str) -> bool {
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'.'))
 }
 
-/// Bound and redact a server-provided message.
 fn sanitize(message: &str, token: &str) -> String {
     let mut message = message.trim().to_owned();
     if !token.is_empty() {
@@ -802,7 +692,6 @@ mod tests {
         media_content_type: &'a str,
     }
 
-    // Throwaway self-signed test CA (no private key in the tree).
     const TEST_CA_PEM: &str = include_str!("../testdata/test-ca.pem");
 
     fn client(base_url: &str) -> Client {

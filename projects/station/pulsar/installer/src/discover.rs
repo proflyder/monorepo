@@ -1,10 +1,3 @@
-//! Finding stations on the network: an mDNS query for Yandex announcements and the
-//! `--scan` /24 adb-port probe.
-//!
-//! Only answers that announce a Yandex Station get an `adb connect`: stock firmware as
-//! `_yandexio._tcp`, converted ones as ESPHome devices named `yandex-*`. Everything else
-//! (including other Android devices on the network) is left alone.
-
 use std::io::{self, Write};
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4, TcpStream, UdpSocket};
 use std::sync::{Arc, Condvar, Mutex};
@@ -13,17 +6,13 @@ use std::time::{Duration, Instant};
 
 use socket2::{Domain, Protocol, Socket, Type};
 
-/// Whether an mDNS response announces a Yandex Station: an answer PTR for
-/// `_yandexio._tcp.local.` (stock firmware), or for `_esphomelib._tcp.local.` whose
-/// instance label starts with "yandex-". Names compared case-insensitively; unparsable
-/// packets -> false.
 pub fn station_announce(pkt: &[u8]) -> bool {
     if pkt.len() < 12 {
         return false;
     }
     let flags = u16::from_be_bytes([pkt[2], pkt[3]]);
     if flags & 0x8000 == 0 {
-        return false; // not a response
+        return false;
     }
     let qd = u16::from_be_bytes([pkt[4], pkt[5]]) as usize;
     let an = u16::from_be_bytes([pkt[6], pkt[7]]) as usize;
@@ -53,7 +42,7 @@ pub fn station_announce(pkt: &[u8]) -> bool {
         }
         pos = rdata + rdlen;
         if rtype != 12 {
-            continue; // PTR only
+            continue;
         }
         let Ok((target, _)) = parse_name(pkt, rdata) else {
             return false;
@@ -70,8 +59,6 @@ pub fn station_announce(pkt: &[u8]) -> bool {
     false
 }
 
-/// Parses a (possibly compressed) DNS name at `pos`; returns the name and the position just
-/// after its top-level encoding.
 fn parse_name(msg: &[u8], start: usize) -> Result<(String, usize), ()> {
     let mut out = String::new();
     let mut pos = start;
@@ -111,8 +98,6 @@ fn parse_name(msg: &[u8], start: usize) -> Result<(String, usize), ()> {
     }
 }
 
-/// A UDP socket bound to `local` with the mDNS interface and TTL set, like Go's
-/// `SetMulticastInterface`/`SetMulticastTTL`.
 fn mdns_socket(local: Ipv4Addr) -> io::Result<UdpSocket> {
     let socket = Socket::new(Domain::IPV4, Type::DGRAM, Some(Protocol::UDP))?;
     socket.bind(&SocketAddrV4::new(local, 0).into())?;
@@ -130,18 +115,17 @@ fn is_timeout(e: &io::Error) -> bool {
 
 pub fn mdns_query(service: &str) -> Vec<u8> {
     let mut pkt = vec![0u8; 12];
-    pkt[5] = 1; // qdcount = 1
+    pkt[5] = 1;
     for label in service.trim_end_matches('.').split('.') {
         pkt.push(label.len() as u8);
         pkt.extend_from_slice(label.as_bytes());
     }
     pkt.push(0);
-    pkt.extend_from_slice(&12u16.to_be_bytes()); // PTR
-    pkt.extend_from_slice(&1u16.to_be_bytes()); // IN
+    pkt.extend_from_slice(&12u16.to_be_bytes());
+    pkt.extend_from_slice(&1u16.to_be_bytes());
     pkt
 }
 
-/// The local address of the default-route interface (no packet is sent).
 pub fn default_ipv4() -> Option<Ipv4Addr> {
     let sock = UdpSocket::bind((Ipv4Addr::UNSPECIFIED, 0)).ok()?;
     sock.connect((Ipv4Addr::new(192, 0, 2, 1), 9)).ok()?;
@@ -170,10 +154,8 @@ pub fn sort_addrs(addrs: &mut [String]) {
     });
 }
 
-/// `ip:port` for the hosts prefix.1 … prefix.254 accepting TCP on `port`.
 pub fn scan_net(prefix: &str, port: u16) -> Vec<String> {
     let found = Arc::new(Mutex::new(Vec::new()));
-    // Go's semaphore: 254 goroutines, at most 64 dialling at once.
     let slots: Arc<(Mutex<usize>, Condvar)> = Arc::new((Mutex::new(0), Condvar::new()));
     let mut handles = Vec::with_capacity(254);
     for i in 1..=254u8 {
@@ -217,8 +199,6 @@ pub fn scan_net(prefix: &str, port: u16) -> Vec<String> {
     found
 }
 
-/// Finds open adb ports in the /24 of the default-route interface. May reach other Android
-/// devices, which can show an adb authorization prompt.
 pub fn scan(err: &mut dyn Write) -> Vec<String> {
     let Some(ip) = local_ipv4(err) else {
         return Vec::new();
@@ -229,8 +209,6 @@ pub fn scan(err: &mut dyn Write) -> Vec<String> {
     scan_net(&prefix, 5555)
 }
 
-/// Stations announced over mDNS: `ip:5555`. Queries go out from an ephemeral port ("legacy
-/// unicast"): responders answer to that port directly, so port 5353 need not be free.
 pub fn mdns(err: &mut dyn Write) -> Vec<String> {
     let _ = writeln!(err, "looking for stations via mDNS...");
     let Some(local) = local_ipv4(err) else {
@@ -265,8 +243,6 @@ pub fn mdns(err: &mut dyn Write) -> Vec<String> {
             } else {
                 Duration::from_secs(1)
             };
-        // Go sets the absolute deadline even when it is already past: the read then times
-        // out immediately and the retransmit/stop logic below still runs.
         let wait = deadline
             .checked_duration_since(Instant::now())
             .filter(|d| !d.is_zero())
@@ -285,7 +261,6 @@ pub fn mdns(err: &mut dyn Write) -> Vec<String> {
                     }
                 }
             }
-            // Retransmit once, only after a timeout; any other read error stops the search.
             Err(e) if is_timeout(&e) && !resent => {
                 send();
                 resent = true;

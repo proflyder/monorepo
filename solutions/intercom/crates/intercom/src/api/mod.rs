@@ -1,10 +1,3 @@
-//! Connect transport and distroless probe routes.
-//!
-//! Connect JSON/binary over HTTP/1.1 serves every unary RPC; `Watch` is a
-//! server-streaming RPC on the same listener. `/healthz`, `/readyz` and
-//! `/metrics` are plain HTTP because Kubernetes probes and Prometheus must not
-//! need a bearer.
-
 mod auth;
 mod service;
 mod text;
@@ -28,7 +21,6 @@ use http::{Request, Response, header};
 pub use auth::TokenAuth;
 pub use service::Api;
 
-/// Bounds every unary request and response message.
 pub const MAX_BODY_BYTES: usize = 1 << 20;
 
 #[derive(Clone)]
@@ -67,8 +59,6 @@ impl tower::Service<Request<Body>> for ConnectFallback {
     }
 }
 
-/// Builds the axum router: probes plus the Connect service behind one bearer
-/// interceptor.
 pub fn router(api: Api, auth: TokenAuth) -> axum::Router {
     let routes = ConnectRouter::new();
     let routes = <Api as IntercomServiceExt>::register(Arc::new(api.clone()), routes);

@@ -1,13 +1,8 @@
-//! Command entry point: the gateway, plus the distroless `-healthcheck` probe.
-
 use std::process::ExitCode;
 
 use tokio::runtime::Builder;
 
 fn main() -> ExitCode {
-    // `-healthcheck` is synchronous on purpose: it builds its own current-thread
-    // runtime, so it must not start inside `#[tokio::main]` (a nested
-    // `block_on` panics and would turn the liveness probe into a crash loop).
     if matches!(
         std::env::args().nth(1).as_deref(),
         Some("-healthcheck" | "--healthcheck")

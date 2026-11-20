@@ -1,12 +1,3 @@
-//! `tracing` bootstrap shared by the daemons in this repository.
-//!
-//! The builder owns the subscriber layers so a service only decides where the
-//! human-readable log goes and which level applies. Pulsar can attach its
-//! ESPHome sink with [`TelemetryBuilder::with_layer`]; the station BLE gateway
-//! uses the default fmt layer. Local time is captured through
-//! [`local_offset`] **before** the Tokio runtime starts: `time` refuses
-//! `current_local_offset` once the process is multi-threaded.
-
 use std::fmt;
 use std::fs::{File, OpenOptions};
 use std::io::{self, Write};
@@ -27,10 +18,6 @@ const TIMESTAMP: &[time::format_description::BorrowedFormatItem<'static>] = form
     "[year]-[month]-[day]T[hour]:[minute]:[second].[subsecond digits:6][offset_hour sign:mandatory]:[offset_minute]"
 );
 
-/// Local UTC offset for the log timestamp.
-///
-/// Call this on the main thread before building a Tokio runtime; afterwards the
-/// platform may refuse to read `/etc/localtime`.
 #[must_use]
 pub fn local_offset() -> UtcOffset {
     UtcOffset::current_local_offset().unwrap_or(UtcOffset::UTC)
@@ -95,11 +82,8 @@ pub enum LogTarget {
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum LogFormat {
-    /// Human-readable line with the local timestamp (station daemons).
     #[default]
     Text,
-    /// One JSON object per event, in the spirit of the Go `slog` JSON handler:
-    /// `timestamp`, `level`, `fields` and the message.
     Json,
 }
 
@@ -145,7 +129,6 @@ impl TelemetryBuilder {
         }
     }
 
-    /// Append to `path`, creating parent directories.
     #[must_use]
     pub fn with_file(self, path: impl Into<PathBuf>) -> Self {
         Self {
@@ -160,31 +143,23 @@ impl TelemetryBuilder {
         self
     }
 
-    /// Select the line format; JSON matches the home services' log contract.
     #[must_use]
     pub fn with_format(mut self, format: LogFormat) -> Self {
         self.format = format;
         self
     }
 
-    /// Shorthand for [`TelemetryBuilder::with_format`] with [`LogFormat::Json`].
     #[must_use]
     pub fn with_json(self) -> Self {
         self.with_format(LogFormat::Json)
     }
 
-    /// Drop the built-in `fmt` layer.
-    ///
-    /// For a service that brings its own human-readable output as a [`Layer`]
-    /// (Pulsar keeps the C++ daemon's stderr contract); the level filter and
-    /// every attached layer still apply.
     #[must_use]
     pub fn without_default_layer(mut self) -> Self {
         self.default_layer = false;
         self
     }
 
-    /// Attach an extra layer (for example Pulsar's ESPHome sink).
     #[must_use]
     pub fn with_layer<L>(mut self, layer: L) -> Self
     where
@@ -194,7 +169,6 @@ impl TelemetryBuilder {
         self
     }
 
-    /// Build the subscriber without installing it globally.
     pub fn build(self) -> io::Result<impl Subscriber + Send + Sync> {
         let sink = match &self.target {
             LogTarget::Stderr => Sink::Stderr,
@@ -240,20 +214,16 @@ impl TelemetryBuilder {
         Ok(Registry::default().with(LayerSet(layers)))
     }
 
-    /// Install the subscriber as the process-wide default.
     pub fn init(self) -> io::Result<()> {
         tracing::subscriber::set_global_default(self.build()?)
             .map_err(|error| io::Error::new(io::ErrorKind::AlreadyExists, error))
     }
 }
 
-/// Type-erased collection of layers evaluated against [`Registry`].
 struct LayerSet(Vec<Box<dyn Layer<Registry> + Send + Sync>>);
 
 impl Layer<Registry> for LayerSet {
     fn max_level_hint(&self) -> Option<LevelFilter> {
-        // The most verbose inner level decides: `log`'s bridge consults the
-        // process-wide hint before it forwards a record.
         self.0.iter().filter_map(Layer::max_level_hint).max()
     }
 

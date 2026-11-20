@@ -1,30 +1,19 @@
-//! Per-request client time zone.
-//!
-//! Every client sends `Time-Zone: <IANA>` on each request. The scheduler
-//! stores UTC only and converts schedule times to and from the caller's zone
-//! right here. A missing header means UTC (and is logged); an invalid zone is
-//! a 400 so a broken client cannot silently shift alarms.
-
 use connectrpc::{ConnectError, RequestContext};
 use jiff::tz::TimeZone;
 use tracing::warn;
 
 use super::text;
 
-/// Request header carrying the caller's IANA zone.
 pub const HEADER: &str = "time-zone";
 
-/// Zone name used when the header is absent.
 pub const DEFAULT_ZONE: &str = "UTC";
 
-/// A resolved client zone.
 #[derive(Debug, Clone)]
 pub struct ClientZone {
     name: String,
 }
 
 impl ClientZone {
-    /// Resolves the header, defaulting to UTC and rejecting unknown names.
     pub fn from_request(ctx: &RequestContext) -> Result<Self, ConnectError> {
         let raw = ctx
             .header(HEADER)
@@ -49,7 +38,6 @@ impl ClientZone {
         })
     }
 
-    /// UTC fallback for callers without a header.
     #[must_use]
     pub fn utc() -> Self {
         Self {
@@ -57,7 +45,6 @@ impl ClientZone {
         }
     }
 
-    /// IANA name as sent by the client.
     #[must_use]
     pub fn name(&self) -> &str {
         &self.name

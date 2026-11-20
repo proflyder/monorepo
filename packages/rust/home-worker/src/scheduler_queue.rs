@@ -1,5 +1,3 @@
-//! `Queue` implementation over the `home-proto` scheduler client.
-
 use std::future::Future;
 
 use buffa::Enumeration;
@@ -8,7 +6,6 @@ use home_proto::v1::{AckOutcome, DueEvent, EventAction, ListDueEventsRequest, So
 
 use super::{Ack, AckOutcome as Outcome, Action, Event, LeaseRequest, Queue, QueueError, Source};
 
-/// Durable queue backed by `home.v1.SchedulerService`.
 #[derive(Debug, Clone)]
 pub struct SchedulerQueue {
     client: SchedulerClient,
@@ -87,12 +84,9 @@ impl From<DueEvent> for Event {
 fn action_of(action: &buffa::EnumValue<EventAction>) -> Action {
     match action.as_known() {
         Some(EventAction::EVENT_ACTION_STOP) => Action::Stop,
-        // Legacy rows carry UNSPECIFIED; the proto contract says FIRE.
         Some(EventAction::EVENT_ACTION_UNSPECIFIED | EventAction::EVENT_ACTION_FIRE) => {
             Action::Fire
         }
-        // An unknown wire value must not be guessed as FIRE: the handler
-        // decides whether it can act on it.
         None => Action::Other(action.to_i32()),
     }
 }

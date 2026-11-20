@@ -1,8 +1,3 @@
-//! LAN-only HTTP control for Home Assistant voice intents.
-//!
-//! Five routes, one bearer token and one JSON status document. The routes and
-//! field names are the contract consumed by `projects/home-assistant/ha-voice`.
-
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
@@ -38,7 +33,6 @@ pub fn router(gateway: Arc<Gateway>, token: Token) -> Router {
     home_http::with_bearer(router, token)
 }
 
-/// Load the bearer token, bind and spawn the control server.
 pub async fn start(gateway: &Arc<Gateway>, config: &Config, supervisor: &Supervisor) -> Result<()> {
     let token = home_secret::load_or_create_hex(&config.control_token_file, 32)
         .with_context(|| format!("load control token {}", config.control_token_file.display()))?;

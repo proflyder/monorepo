@@ -1,35 +1,23 @@
-//! Currency-bot domain types.
-//!
-//! These mirror the former Go `internal/model` types one for one. The names
-//! are the wire and database spellings (`USD_TO_KZT`, `BUY`, `WARNING`), so
-//! the SQL rows and the HTTP field values stay byte-compatible.
-
 use jiff::Timestamp;
 
-/// One currency pair as users see it on kurs.kz: `buy` is what an exchange
-/// office pays when buying currency from you, `sell` what it charges when
-/// selling currency to you.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ExchangeRate {
     pub buy: f64,
     pub sell: f64,
 }
 
-/// The aggregated USD/KZT and RUB/KZT snapshot.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Rates {
     pub usd_to_kzt: ExchangeRate,
     pub rub_to_kzt: ExchangeRate,
 }
 
-/// One persisted rate snapshot.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Record {
     pub timestamp: Timestamp,
     pub rates: Rates,
 }
 
-/// The currency pair an alert belongs to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Pair {
     UsdToKzt,
@@ -37,7 +25,6 @@ pub enum Pair {
 }
 
 impl Pair {
-    /// The database/JSON spelling.
     #[must_use]
     pub const fn as_str(self) -> &'static str {
         match self {
@@ -46,8 +33,6 @@ impl Pair {
         }
     }
 
-    /// Parse the stored spelling. Unknown values are preserved by the store
-    /// and only feed dedup keys, so an unknown pair is simply `None`.
     #[must_use]
     pub fn parse(value: &str) -> Option<Self> {
         match value {
@@ -57,7 +42,6 @@ impl Pair {
         }
     }
 
-    /// The human-readable label used in messages.
     #[must_use]
     pub const fn display_name(self) -> &'static str {
         match self {
@@ -66,7 +50,6 @@ impl Pair {
         }
     }
 
-    /// The flag shown next to the pair.
     #[must_use]
     pub const fn emoji(self) -> &'static str {
         match self {
@@ -76,7 +59,6 @@ impl Pair {
     }
 }
 
-/// The buy or sell side of a pair.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum RateType {
     Buy,
@@ -101,7 +83,6 @@ impl RateType {
         }
     }
 
-    /// Russian label used in messages.
     #[must_use]
     pub const fn display_name(self) -> &'static str {
         match self {
@@ -111,7 +92,6 @@ impl RateType {
     }
 }
 
-/// Alert severity.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Level {
     Warning,
@@ -137,7 +117,6 @@ impl Level {
     }
 }
 
-/// Sign of the observed change.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Direction {
     Up,
@@ -163,10 +142,6 @@ impl Direction {
     }
 }
 
-/// One threshold lookback window.
-///
-/// `MONTH` is fixed at 720 hours (30 days), exactly as in Kotlin and Go; there
-/// is no calendar-month handling.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Period {
     pub name: &'static str,
@@ -177,7 +152,6 @@ pub struct Period {
     pub re_alert: f64,
 }
 
-/// The evaluation order used by the alert planner: HOUR, DAY, WEEK, MONTH.
 pub const PERIODS: [Period; 4] = [
     Period {
         name: "HOUR",
@@ -214,14 +188,12 @@ pub const PERIODS: [Period; 4] = [
 ];
 
 impl Period {
-    /// Look up a period by its stored name.
     #[must_use]
     pub fn get(name: &str) -> Option<Self> {
         PERIODS.iter().copied().find(|period| period.name == name)
     }
 }
 
-/// Uniquely identifies a deduplicated alert slot.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct AlertKey {
     pub pair: Pair,
@@ -240,7 +212,6 @@ impl AlertKey {
     }
 }
 
-/// One threshold crossing that may be sent to Telegram.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Alert {
     pub level: Level,
@@ -260,7 +231,6 @@ impl Alert {
     }
 }
 
-/// The last delivered alert for one [`AlertKey`].
 #[derive(Debug, Clone, PartialEq)]
 pub struct SentAlert {
     pub key: AlertKey,
@@ -268,7 +238,5 @@ pub struct SentAlert {
     pub direction: Direction,
     pub rate_at_alert: f64,
     pub change_percent: f64,
-    /// Go kept the field in the model but never stored it; it is optional here
-    /// for the same reason.
     pub sent_at: Option<Timestamp>,
 }

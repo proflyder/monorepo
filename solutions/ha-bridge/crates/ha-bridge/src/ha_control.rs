@@ -1,7 +1,3 @@
-//! `ha-control` entry point: the catalog server and control executor, plus the
-//! distroless `-healthcheck` probe used by the readiness and liveness
-//! executions.
-
 use std::process::ExitCode;
 
 #[tokio::main]

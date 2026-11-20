@@ -1,52 +1,29 @@
-//! The routing decision table. Pure: every input is already read, every
-//! output is an effect the caller performs.
-//!
-//! The fail-closed contract is the important part:
-//!
-//! * an unknown profile answers "Не могу подтвердить профиль." and never
-//!   reaches Hermes, for every profile;
-//! * an unknown route, or a gateway response with `ok:false`, answers
-//!   "Сервер агентов недоступен." and is never forwarded;
-//! * a gateway failure in the work profile stays local, because forwarding it
-//!   would run a work phrase in the personal agent; in the personal profile the
-//!   request still reaches Hermes.
-
 use voice_contract::{Route, UtteranceResponse};
 
 use super::profile::Profile;
 use super::sanitize::{ensure_not_question, trim_space};
 
-/// Spoken when the profile cannot be established.
 pub const SPEECH_PROFILE_UNKNOWN: &str = "Не могу подтвердить профиль.";
-/// Spoken when the agent server is unavailable.
 pub const SPEECH_AGENTS_DOWN: &str = "Сервер агентов недоступен.";
 
-/// The gateway half of the input: an answer or a transport/status failure.
 #[derive(Debug, Clone)]
 pub enum GatewayAnswer {
     Ok(UtteranceResponse),
     Failed,
 }
 
-/// A routed bb turn whose final answer must be announced later.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Announcement {
     pub thread_id: String,
     pub after_seq: i64,
 }
 
-/// What the HTTP layer must do for one utterance.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Decision {
-    /// `true` means the utterance must not reach Hermes.
     pub handled: bool,
-    /// The already-shaped local reply, when `handled`.
     pub speech: Option<String>,
-    /// Starts the background result poller after the local reply was written.
     pub announcement: Option<Announcement>,
-    /// Structural outcome for the counter and the log line.
     pub outcome: &'static str,
-    /// The resolved profile, when known.
     pub profile: Option<Profile>,
 }
 
@@ -72,7 +49,6 @@ impl Decision {
     }
 }
 
-/// Resolves one utterance exactly like the Go router.
 #[must_use]
 pub fn decide(profile: Option<Profile>, gateway: GatewayAnswer) -> Decision {
     let Some(profile) = profile else {
@@ -87,7 +63,6 @@ pub fn decide(profile: Option<Profile>, gateway: GatewayAnswer) -> Decision {
     let response = match gateway {
         GatewayAnswer::Failed => {
             return match profile {
-                // Personal speech already went to Hermes before routing.
                 Profile::Personal => Decision::forward(Some(profile), "gateway_down_personal"),
                 Profile::Work => {
                     Decision::local(profile, SPEECH_AGENTS_DOWN.to_owned(), "gateway_down")
@@ -144,8 +119,6 @@ pub fn decide(profile: Option<Profile>, gateway: GatewayAnswer) -> Decision {
         );
     }
 
-    // Unknown route: never forward, and never speak a gateway phrase that may
-    // belong to another destination.
     Decision::local(profile, SPEECH_AGENTS_DOWN.to_owned(), "gateway_failed")
 }
 

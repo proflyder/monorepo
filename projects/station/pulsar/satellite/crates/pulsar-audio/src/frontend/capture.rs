@@ -1,5 +1,3 @@
-//! Захват ALSA: PCM модели, FIFO и поток `audio-capture`.
-
 use std::sync::atomic::{AtomicBool, Ordering::Relaxed};
 use std::sync::mpsc::Receiver;
 use std::sync::{Condvar, Mutex};
@@ -15,13 +13,9 @@ use super::cmd::CaptureCmd;
 use super::ports::CaptureSource;
 use super::{FrontendStats, lock};
 
-/// ALSA buffer in VQE chunks: 256 ms with 32 ms chunks, 128 ms on the Mini 3 and Mini (16 ms);
-/// the device may grant less (Lite 2: 2048 frames).
 const BUFFER_CHUNKS: u64 = 8;
 const READ_WAIT_MS: i32 = 200;
 pub(super) const REOPEN_DELAY: Duration = Duration::from_secs(2);
-// Шаг, с которым спящий поток проверяет остановку: задержка `pause` не должна задерживать
-// `Drop` на весь таймаут ALSA.
 const STOP_POLL: Duration = Duration::from_millis(50);
 
 pub(super) struct Pipe {
@@ -31,7 +25,6 @@ pub(super) struct Pipe {
 
 enum CaptureBuf {
     S16(Vec<i16>),
-    /// Raw S32 frames and their 16-bit conversion.
     S32 {
         raw: Vec<i32>,
         out: Vec<i16>,
@@ -58,7 +51,6 @@ impl CaptureBuf {
         }
     }
 
-    /// The first `samples` samples read, as the VQE's 16-bit input.
     fn samples(&mut self, samples: usize) -> &[i16] {
         match self {
             Self::S16(buf) => &buf[..samples],
@@ -70,8 +62,6 @@ impl CaptureBuf {
     }
 }
 
-/// S32_LE carries a right-justified 24-bit sample on the Mini: shifting out the low `shift` bits
-/// keeps the sign extension and gives the VQE's 16-bit input; anything wider saturates.
 fn s32_to_s16(src: &[i32], shift: u32, dst: &mut [i16]) {
     for (d, &s) in dst.iter_mut().zip(src) {
         *d = (s >> shift).clamp(i32::from(i16::MIN), i32::from(i16::MAX)) as i16;
@@ -83,22 +73,17 @@ pub(super) struct AlsaCapture {
     buf: CaptureBuf,
     dev: &'static str,
     pub(super) nch: usize,
-    /// Frames to read at once, as the device granted (never more than one VQE chunk).
     pub(super) period: usize,
     last_error: i32,
 }
 
 impl AlsaCapture {
-    /// Opens the model's capture PCM: its sample width (S16 or S32), channels, exactly its rate (a
-    /// silent rate mismatch would feed the VQE and spotters wrongly timed audio), period = one VQE
-    /// chunk, buffer = 8. The period may differ (the FIFO decouples ALSA periods from VQE chunks).
     pub(super) fn open(capture: &CaptureLayout, period: usize) -> Result<Self, CaptureError> {
         let dev = capture.pcm;
         let format = match capture.format {
             CaptureFormat::S16 => Format::S16Le,
             CaptureFormat::S32 { .. } => Format::S32Le,
         };
-        // Non-blocking: reads never wait inside ALSA, so a stop never hangs in snd_pcm_readi.
         let mut pcm = Pcm::open(dev, Stream::Capture, true)
             .map_err(|source| CaptureError::Alsa { pcm: dev, source })?;
         let t = pcm.set_hw_params_traced(&HwRequest {
@@ -152,7 +137,6 @@ impl CaptureSource for AlsaCapture {
                 out[..samples].copy_from_slice(self.buf.samples(samples));
                 Ok(n)
             }
-            // EAGAIN: the caller waits on the device instead of spinning.
             Err(e) if e == AlsaError::new(HwStep::Read, -libc::EAGAIN) => Ok(0),
             Err(source) => {
                 self.last_error = source.code;
@@ -188,8 +172,6 @@ fn pause(running: &AtomicBool, d: Duration) {
     }
 }
 
-/// Capture loop with its port opener: production opens ALSA, a test can script frames, errors
-/// and the reopen result.
 pub(super) struct CaptureLoop<'a> {
     pub(super) open: &'a mut dyn FnMut() -> Result<Box<dyn CaptureSource>, CaptureError>,
     pub(super) nch: usize,
@@ -221,7 +203,6 @@ impl CaptureLoop<'_> {
                 continue;
             };
             let n = match src.read(&mut buf) {
-                // EAGAIN: wait on the device, then re-check the stop flag.
                 Ok(0) => {
                     if let Err(e) = src.wait(READ_WAIT_MS) {
                         warn!("capture: {e}");
@@ -258,17 +239,12 @@ impl CaptureLoop<'_> {
     }
 }
 
-/// The failing capture hw_params step and its error, or the rate the device offered instead of
-/// the model's.
 #[derive(Debug, PartialEq, Eq)]
 pub(super) enum HwFail {
     Step(HwStep, i32),
     Rate(u32),
 }
 
-/// Outcome of the capture hw_params in the order the C++ daemon checked them: the rate right
-/// after set_rate_near, then period, buffer, apply (the period / buffer read back afterwards were
-/// not checked there). Ok = the period and buffer the device chose.
 pub(super) fn hw_outcome(t: &HwTrace, rate: u32) -> Result<(u64, u64), HwFail> {
     match t.failed {
         Some((
@@ -283,7 +259,6 @@ pub(super) fn hw_outcome(t: &HwTrace, rate: u32) -> Result<(u64, u64), HwFail> {
     }
 }
 
-/// Почему захват не открылся: шаг ALSA или не та частота, на которую согласился драйвер.
 #[derive(Debug, thiserror::Error)]
 pub enum CaptureError {
     #[error("capture {pcm}: {source}")]
@@ -343,7 +318,6 @@ mod tests {
                 });
             }
             Ok(Box::new(ScriptedCapture {
-                // Первое чтение — ошибка с восстановлением, второе — чанк.
                 reads: [ScriptRead::Error, ScriptRead::Block(vec![7, 8, 9, 10])].into(),
                 recovered: true,
                 recoveries: 0,
@@ -392,8 +366,6 @@ mod tests {
 
     #[test]
     fn s32_capture_keeps_the_top_16_of_24_bits() {
-        // Right-justified 24-bit samples (the Mini, shift 8): the sign survives the shift, and
-        // a value outside 24 bits saturates instead of wrapping.
         let src = [
             -1 << 8,
             0x007F_FF00,
@@ -417,7 +389,6 @@ mod tests {
             let cap = &m.audio.capture;
             let nch = cap.channels as usize;
             let frames = 4;
-            // Sample = frame * 100 + channel.
             let input: Vec<i16> = (0..frames * nch)
                 .map(|s| ((s / nch) * 100 + s % nch) as i16)
                 .collect();
@@ -441,10 +412,8 @@ mod tests {
                 }
             }
         }
-        // Lite 2: mic 0 on ch 0, mic 1 on ch 2, speaker feedback on ch 6.
         let input: Vec<i16> = vec![
-            -32768, 1, 16384, 3, 4, 5, 32767, 7, //
-            8, 9, 10, 11, 12, 13, 14, 15,
+            -32768, 1, 16384, 3, 4, 5, 32767, 7, 8, 9, 10, 11, 12, 13, 14, 15,
         ];
         let (mut mics, mut spk) = ([0.0; 4], [0.0; 2]);
         deinterleave(
@@ -475,7 +444,6 @@ mod tests {
     #[test]
     fn hw_params_checked_in_cxx_order() {
         assert_eq!(hw_outcome(&trace(48000, None), 48000), Ok((1536, 12288)));
-        // The rate is checked right after set_rate_near, before period / buffer / apply.
         assert_eq!(
             hw_outcome(&trace(44100, None), 48000),
             Err(HwFail::Rate(44100))
@@ -500,7 +468,6 @@ mod tests {
             hw_outcome(&trace(48000, Some((HwStep::Apply, -16))), 48000),
             Err(HwFail::Step(HwStep::Apply, -16))
         );
-        // Reading the sizes back was not a C++ step: the near values count.
         assert_eq!(
             hw_outcome(&trace(48000, Some((HwStep::GetPeriod, -5))), 48000),
             Ok((1536, 12288))

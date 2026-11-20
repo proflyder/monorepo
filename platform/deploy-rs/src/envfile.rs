@@ -1,23 +1,7 @@
-//! Private `KEY=VALUE` files.
-//!
-//! Two readers are kept because the deploy scripts had two: the strict parser
-//! used by `render` (a malformed line or a duplicate key is an error) and the
-//! permissive lookup used by `env get` (the first match wins, malformed lines
-//! are skipped). Both are byte-compatible with the Go implementation in
-//! `platform/deploy/internal/envfile`.
-
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;
 
-/// Parses `path` and returns every `KEY=VALUE` pair, in file order.
-///
-/// Errors name the file and 1-based line number:
-///
-/// ```text
-/// <path>:<line>: expected KEY=VALUE
-/// <path>:<line>: duplicate key <key>
-/// ```
 pub fn parse(path: &Path) -> Result<BTreeMap<String, String>, String> {
     let raw = read(path)?;
     let mut values = BTreeMap::new();
@@ -48,10 +32,6 @@ pub fn parse(path: &Path) -> Result<BTreeMap<String, String>, String> {
     Ok(values)
 }
 
-/// Returns the value of `key`, or an empty string when absent.
-///
-/// Mirrors the shell helper: the first matching line wins, malformed lines are
-/// ignored and a duplicate key is not an error.
 pub fn lookup(path: &Path, key: &str) -> Result<String, String> {
     let raw = read(path)?;
     for raw_line in raw.split(|byte| *byte == b'\n') {
@@ -71,7 +51,6 @@ pub fn lookup(path: &Path, key: &str) -> Result<String, String> {
     Ok(String::new())
 }
 
-/// Reads the file with the Go `os.ReadFile` error shape (`open PATH: reason`).
 fn read(path: &Path) -> Result<Vec<u8>, String> {
     fs::read(path).map_err(|error| {
         let reason = match error.kind() {
@@ -83,16 +62,12 @@ fn read(path: &Path) -> Result<Vec<u8>, String> {
     })
 }
 
-/// Trims whitespace and an optional `export ` prefix.
 fn normalize_key(prefix: &str) -> String {
     let key = prefix.trim();
     key.strip_prefix("export ")
         .map_or_else(|| key.to_string(), |rest| rest.trim().to_string())
 }
 
-/// Trims the value and removes every leading/trailing `"` and then `'`.
-///
-/// It reproduces the Go/Python helper exactly, including nested quotes.
 fn unquote(value: &str) -> String {
     let value = value.trim();
     let value = value.trim_matches('"');

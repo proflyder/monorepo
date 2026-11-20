@@ -1,17 +1,3 @@
-//! Announces turns the owner did not start by voice: child completions and
-//! dispatcher messages.
-//!
-//! Two modes exist:
-//!
-//! * with the durable queue every non-owner turn is enqueued for the work
-//!   profile, regardless of the current speaker profile; the queue consumer
-//!   waits for the work profile and an idle station. A restart rescans a recent
-//!   window and the idempotency key drops duplicates;
-//! * without the queue the cursor advances, the profile is re-read and the batch
-//!   is spoken only in the work profile as one utterance.
-//!
-//! Errors back off 2 s → 60 s and never speak or reach Hermes.
-
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -25,7 +11,6 @@ use crate::domain::clock::Clock;
 use crate::domain::profile::Profile;
 use crate::domain::sanitize::{announce_text, trim_space};
 
-/// Tuning of the dispatcher-updates poller.
 #[derive(Debug, Clone)]
 pub struct UpdatesOptions {
     pub rescan: i64,
@@ -51,7 +36,6 @@ impl Default for UpdatesOptions {
     }
 }
 
-/// Long-polls dispatcher updates and announces or enqueues them.
 pub struct Updates {
     gateway: Arc<Gateway>,
     profile: Arc<ProfileReader>,
@@ -96,8 +80,6 @@ impl Updates {
             .is_some_and(|producer| producer.enabled())
     }
 
-    /// Polls until cancelled. It never returns an error: the poller must never
-    /// die.
     pub async fn run(&self, cancel: CancellationToken) {
         let queued = self.queue_enabled();
         let mut cursor: Option<i64> = None;
@@ -181,7 +163,6 @@ impl Updates {
         }
     }
 
-    /// Enqueues each non-owner update and returns `(queued, skipped_stale)`.
     async fn enqueue_batch(&self, items: &[UpdateItem]) -> (usize, usize) {
         let mut queued = 0;
         let mut stale = 0;
@@ -222,7 +203,6 @@ impl Updates {
             .map(|item| trim_space(&item.spoken))
             .filter(|spoken| !spoken.is_empty())
             .collect();
-        // Work profile only: read fresh from HA, no cache.
         let profile = self.profile.fetch().await;
         let Some(Profile::Work) = profile else {
             return (false, false, profile.map_or("unknown", Profile::as_str));
@@ -239,8 +219,6 @@ impl Updates {
     }
 }
 
-/// The completion time of one updates item in epoch seconds. Millisecond values
-/// are converted; `<= 0` is unknown.
 #[must_use]
 pub fn completed_unix(completed_at: Option<i64>) -> Option<i64> {
     let value = completed_at?;

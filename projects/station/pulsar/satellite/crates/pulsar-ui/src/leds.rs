@@ -1,11 +1,3 @@
-//! Композиция слоёв кольца LED (+ логотип Midi): приоритет слоёв, затухания, время и кадр в
-//! RGB. Чистая часть `pulsar-hw/src/leds.rs`: без tokio, sysfs и вывода.
-//!
-//! Ring content, first active wins: volume overlay > voice state (Error / TimerRing always,
-//! Listening / Thinking / Speaking with voice indication on) > one-shots (timer started, mute) >
-//! led_show > mute (Lite 2: steady dim red) > user light > music visualization > off. The Midi
-//! logo shows the voice state, else red while muted, else the ring's average colour.
-
 use pulsar_core::{AmbientDimmer, MusicFrame, UiState, perceptual};
 
 use crate::Effect;
@@ -15,16 +7,11 @@ use crate::MusicStyle;
 use crate::VoiceColor;
 use crate::led_fx::{self as fx, Col};
 
-/// Crossfade between layers.
 pub const FADE_MS: i64 = 250;
-/// Transient volume overlay.
 pub const VOLUME_SHOW_MS: i64 = 1500;
-/// Longest time step of one frame (after an idle stretch).
 const MAX_STEP_MS: i64 = 100;
-/// "All styles": each style this long, crossfading into the next.
 const CYCLE_STYLE_MS: i64 = 30000;
 const CYCLE_FADE_MS: i64 = 1000;
-/// Global cap: never drive LEDs above 80 % PWM.
 const MAX_SCALE: f32 = 0.8;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -34,7 +21,6 @@ pub struct Rgb {
     pub b: u8,
 }
 
-/// Case colour correction: rows are output R, G, B (see the ledconfigs matrix).
 pub type Matrix = [[f32; 3]; 3];
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -58,7 +44,6 @@ pub enum LedCommand {
     },
     ClearTemporary,
     VoiceIndication(bool),
-    /// Select «Voice color»: the hue of the listening / thinking / speaking animation.
     VoiceColor(VoiceColor),
     Speed(f32),
     MusicStyle(MusicStyle),
@@ -69,7 +54,6 @@ pub enum LedCommand {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Layer {
-    /// Before the first frame.
     None,
     Volume,
     Voice,
@@ -81,7 +65,6 @@ pub enum Layer {
     Off,
 }
 
-/// One-shots: the mute sweep shows over the timer-started countdown, which goes on underneath.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Sweep {
     None,
@@ -96,7 +79,6 @@ fn to_voice(s: UiState) -> fx::Voice {
         UiState::Speaking => fx::Voice::Speaking,
         UiState::Error => fx::Voice::Error,
         UiState::Call => fx::Voice::Call,
-        // Idle is never drawn: voice_shown() is false.
         UiState::TimerRing | UiState::Idle => fx::Voice::TimerRing,
     }
 }
@@ -105,8 +87,6 @@ fn to_col(c: Rgb) -> Col {
     fx::rgb(c.r, c.g, c.b)
 }
 
-/// Gamma 2 (perceived brightness roughly linear in the colour values), ambient dimming `d` (on
-/// the perceptual scale), case matrix (hue kept when it would clip), 80 % cap.
 pub fn to_px(c: Col, d: f32, matrix: Option<&Matrix>) -> [u8; 3] {
     let mut p = [
         fx::clamp01(c.r) * d,
@@ -119,7 +99,6 @@ pub fn to_px(c: Col, d: f32, matrix: Option<&Matrix>) -> [u8; 3] {
     if let Some(m) = matrix {
         let mut q = [0f32; 3];
         for (r, q) in q.iter_mut().enumerate() {
-            // Fused as clang contracts it on the stations: m0·p0 + m1·p1 first, then + m2·p2.
             *q = m[r][2]
                 .mul_add(p[2], m[r][0].mul_add(p[0], m[r][1] * p[1]))
                 .max(0.0);
@@ -132,33 +111,27 @@ pub fn to_px(c: Col, d: f32, matrix: Option<&Matrix>) -> [u8; 3] {
     p.map(|v| (v.min(1.0) * MAX_SCALE * 255.0).round() as u8)
 }
 
-/// Layer state and rendering; `frame(now)` leaves the pixels to write in `pixels()`.
 pub struct Compositor {
     n: usize,
     nlogo: usize,
-    /// Lite 2: no logo, mute shown on the ring.
     short_ring: bool,
     matrix: Option<Matrix>,
 
-    // voice state
     state: UiState,
     state_t0: i64,
     voice_indication: bool,
     voice_color: VoiceColor,
-    // one-shots
     sweep: Sweep,
     sweep_t0: i64,
     timer_shot: bool,
     timer_t0: i64,
     muted: bool,
     mute_known: bool,
-    // led_show
     show_on: bool,
     show_effect: Effect,
     show_col: Col,
     show_until: i64,
     show_fx: fx::EffectState,
-    // user light
     user_on: bool,
     user_col: Col,
     user_bri: f32,
@@ -166,31 +139,23 @@ pub struct Compositor {
     user_fx: fx::EffectState,
     user_changed: bool,
     user_transition: u32,
-    // music
     style: MusicStyle,
     media: bool,
     music: MusicFrames,
-    /// Source whose frames are used now (for the log).
     source: Option<MusicSource>,
     source_changed: Option<MusicSource>,
     mus_shown: fx::MusicInput,
     mus_st: fx::MusicState,
     cycle_t0: i64,
-    // volume overlay
     volume: f32,
     volume_until: i64,
-    // time
     speed: f32,
-    /// Speed-scaled seconds.
     phase: f64,
     last_ms: Option<i64>,
-    // composition
     layer: Layer,
-    /// Ring + logo.
     shown: Vec<Col>,
     from: Vec<Col>,
     target: Vec<Col>,
-    /// Next music style ("All styles").
     alt: Vec<Col>,
     fade_t0: i64,
     fade_ms: i64,
@@ -253,7 +218,6 @@ impl Compositor {
         }
     }
 
-    /// Anchors the voice timers at startup (the first state begins here).
     pub fn start_at(&mut self, now: i64) {
         self.state_t0 = now;
     }
@@ -262,19 +226,16 @@ impl Compositor {
         &self.px
     }
 
-    /// Источник кадров музыки сменился (для лога актора), если с прошлого вызова.
     pub fn take_source_change(&mut self) -> Option<MusicSource> {
         self.source_changed.take()
     }
 
-    /// Applies a command at `now`; true if a frame is due at once.
     pub fn apply(&mut self, cmd: LedCommand, now: i64) -> bool {
         match cmd {
             LedCommand::UiState(s) => {
                 if s == self.state {
                     return false;
                 }
-                // The error indication runs to its end; only another active state replaces it.
                 if self.state == UiState::Error
                     && s == UiState::Idle
                     && now - self.state_t0 < fx::ERROR_MS
@@ -294,7 +255,6 @@ impl Compositor {
                     self.sweep = if muted { Sweep::MuteOn } else { Sweep::MuteOff };
                     self.sweep_t0 = now;
                 } else if !first && self.sweep == Sweep::MuteOn {
-                    // Lite 2 unmute: no sweep, the flash goes with the mute.
                     self.sweep = Sweep::None;
                 }
             }
@@ -398,7 +358,6 @@ impl Compositor {
         self.state_t0 = now;
     }
 
-    /// Ring/logo brightness factor from ambient light: 0.3 in the dark .. 1.
     pub fn dim(&self) -> f32 {
         0.3 + 0.7 * (self.dimmer.factor() - 0.02) / 0.98
     }
@@ -415,7 +374,6 @@ impl Compositor {
         self.media && self.style != MusicStyle::Off
     }
 
-    /// Smoothed music inputs: peaks held and released over 250 ms, beat flash over 150 ms.
     fn update_music(&mut self, now: i64, dt_s: f64, beat: bool) {
         let fresh = self.music.fresh(now);
         let frame = self.music.frame();
@@ -439,8 +397,6 @@ impl Compositor {
         if let Some(style) = self.style.style() {
             return self.render_style(style, out);
         }
-        // All styles: Spectrum -> Pulse -> Disco -> Polar, 30 s each on the wall clock, 1 s
-        // crossfade.
         let t = now - self.cycle_t0;
         let i = (t / CYCLE_STYLE_MS % 4) as usize;
         self.render_style(fx::Style::ALL[i], out);
@@ -461,7 +417,6 @@ impl Compositor {
         self.alt = alt;
     }
 
-    /// Draws `lay` into `target` (ring + logo); returns true if it moves.
     fn render(&mut self, now: i64, dt: f64, lay: Layer, target: &mut [Col]) -> bool {
         target.fill(Col::default());
         let (ring, logo) = target.split_at_mut(self.n);
@@ -553,7 +508,6 @@ impl Compositor {
         }
     }
 
-    /// Ends timed content that ran out.
     fn expire(&mut self, now: i64) {
         if self.state == UiState::Error && now - self.state_t0 >= fx::ERROR_MS {
             self.set_state(UiState::Idle, now);
@@ -569,7 +523,6 @@ impl Compositor {
         }
     }
 
-    /// Earliest pending expiry after now.
     pub fn next_expiry(&self, now: i64) -> Option<i64> {
         let mut t: Option<i64> = None;
         let mut take = |e: i64| {
@@ -593,7 +546,6 @@ impl Compositor {
         t
     }
 
-    /// Renders the frame at `now` into the pixels; true if the content moves.
     pub fn frame(&mut self, now: i64) -> bool {
         let step = self.last_ms.map_or(0, |l| (now - l).clamp(0, MAX_STEP_MS));
         self.last_ms = Some(now);
@@ -611,8 +563,6 @@ impl Compositor {
         let mut animated = self.render(now, dt, lay, &mut target);
         self.target = target;
 
-        // Fades: between layers 250 ms (the volume overlay appears at once), user light changes
-        // over their transition.
         let fade = if self.user_changed
             && (lay == Layer::User || (self.layer == Layer::User && lay != self.layer))
         {

@@ -1,18 +1,3 @@
-//! Mixer curves against golden vectors of the C++ reference (tests/golden/curves.txt; the
-//! unit tests of src/player.rs read soup_status.txt and to_uri.txt from the same harness).
-//!
-//! How they were made: the functions were copied verbatim from
-//! `git show rust-port-base:satellite/src/media/player.cpp` (lines 106-115 soup_status, 217-221
-//! to_uri, 701-713 legacy_raw / legacy_volume, 727-754 Mixer::to_raw / from_raw / from_legacy /
-//! to_legacy) into a throwaway harness (not committed) with a stub `Model { volume_map }` and the
-//! maps below, built and run on the x86_64 host with
-//! `zig c++ -std=c++20 -O2 -mfma -o harness main.cpp` (zig 0.14.1; -mfma because the station
-//! builds, -ffp-contract=on with aarch64 fmadd / armhf vfma, fuse `0.1 + 0.9 * v` in
-//! legacy_raw), then `./harness curves|soup|uri`. Outputs print f32 as %.9g (exact round trip).
-//! The same harness built with the station flags (`-target aarch64-linux-gnu.2.36`,
-//! `-target arm-linux-gnueabihf.2.30 -mcpu=cortex_a53`, -O2) printed identical files on a Midi and
-//! a Lite 2, where this test, cross-built, also passed.
-
 use pulsar_core::volume;
 use pulsar_model::{VolumeCurve, VolumePoint, profile_from_compatible};
 
@@ -41,7 +26,6 @@ fn curves_match_cxx() {
         .unwrap()
         .volume;
     let lite2 = &profile_from_compatible(b"yandex,plum\0").unwrap().volume;
-    // Both stations have the stock map.
     assert_eq!(midi.map, lite2.map);
     let (multi, offset, single) = (
         with_map(midi, &MULTI),
@@ -95,14 +79,12 @@ fn curves_match_cxx() {
             _ => panic!("bad golden line {line}"),
         }
     }
-    // 111 + 49 + 12 volumes and raw -5..=300, for each of the 4 maps.
     assert_eq!(counts, [688, 1224, 688, 688]);
 }
 
 #[test]
 fn stock_curve_landmarks() {
     let m = &profile_from_compatible(b"yandex,plum\0").unwrap().volume;
-    // The port's station tests cap the volume at 0.2, i.e. raw 82.
     assert_eq!(volume::to_raw(m, 0.2), 82);
     assert_eq!(volume::to_raw(m, 0.0), 0);
     assert_eq!(volume::to_raw(m, 0.01), 49);
@@ -117,7 +99,6 @@ fn mini3_curve_landmarks() {
     let m = &profile_from_compatible(b"yandex,bergamot\0")
         .unwrap()
         .volume;
-    // Mini 3 stock map: 0 -> 0, 1 -> 33, 20 -> 255 (not the Lite 2's).
     assert_eq!(volume::to_raw(m, 0.0), 0);
     assert_eq!(volume::to_raw(m, 0.01), 33);
     assert_eq!(volume::to_raw(m, 0.05), 33);
@@ -130,8 +111,6 @@ fn mini3_curve_landmarks() {
 
 #[test]
 fn mini2_curve_has_no_lowest_step() {
-    // Linear in percent, no jump to a lowest step: low HA volumes stay low (the C++ curve made
-    // any volume of a two-point map full volume).
     let m = &profile_from_compatible(b"yandex,station-mini2\0")
         .unwrap()
         .volume;

@@ -1,14 +1,7 @@
-//! The radio's roles: `state.conf` `zigbee_role=` value, Home Assistant select option and
-//! firmware family (top byte of the image version, `radio/*/version_cfg.h`).
-
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Mode {
-    /// pulsar leaves the radio alone (whatever firmware it has keeps running); the default, so
-    /// an install never writes the radio on its own.
     Off,
-    /// pulsar's coordinator firmware, a deCONZ coordinator for ZHA and Zigbee2MQTT.
     Coordinator,
-    /// pulsar's router firmware, a repeater in another network.
     Router,
 }
 
@@ -41,15 +34,12 @@ pub const ROLES: [Role; 3] = [
     },
 ];
 
-// A static copy: references into a const would point at temporaries.
 static TABLE: [Role; 3] = ROLES;
 
 pub fn role(m: Mode) -> &'static Role {
     TABLE.iter().find(|r| r.mode == m).unwrap_or(&TABLE[0])
 }
 
-/// `state.conf` value → mode. Anything else, including "coordinator" (Yandex's gateway firmware,
-/// which pulsar no longer drives), is `Off`: the radio is never written without a choice in HA.
 pub fn parse_mode(s: &str) -> Mode {
     TABLE
         .iter()

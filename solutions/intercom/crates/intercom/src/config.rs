@@ -1,11 +1,3 @@
-//! Process configuration for the intercom signaling service.
-//!
-//! Every token is a mounted Secret: the `*_TOKEN` variable wins over the
-//! `*_TOKEN_FILE` form, and neither value ever enters an error message or a
-//! `Debug` rendering. Endpoint identity comes from configuration, not from a
-//! request field: the phone bearer maps to one configured phone endpoint and
-//! the station device token maps to one configured station endpoint.
-
 use std::net::SocketAddr;
 use std::time::Duration;
 
@@ -13,22 +5,14 @@ use home_config::parse_duration_seconds;
 use home_secret::Secret;
 use thiserror::Error;
 
-/// Default listen address.
 pub const DEFAULT_LISTEN: &str = "127.0.0.1:8099";
-/// Default phone endpoint id.
 pub const DEFAULT_PHONE_ENDPOINT: &str = "phone";
-/// Default station endpoint id.
 pub const DEFAULT_STATION_ENDPOINT: &str = "station";
-/// Default ring timeout.
 pub const DEFAULT_RING_TIMEOUT: Duration = Duration::from_secs(30);
-/// Default answer-to-media timeout.
 pub const DEFAULT_CONNECT_TIMEOUT: Duration = Duration::from_secs(20);
-/// Default retention of an ended call.
 pub const DEFAULT_ENDED_RETENTION: Duration = Duration::from_secs(60);
-/// Default longest live call.
 pub const DEFAULT_MAX_CALL: Duration = Duration::from_secs(60 * 60);
 
-/// One authenticated endpoint identity.
 #[derive(Clone)]
 pub struct EndpointConfig {
     pub id: String,
@@ -47,7 +31,6 @@ impl std::fmt::Debug for EndpointConfig {
     }
 }
 
-/// One STUN/TURN entry returned by `GetIceConfig`.
 #[derive(Clone)]
 pub struct IceServerConfig {
     pub urls: Vec<String>,
@@ -66,7 +49,6 @@ impl std::fmt::Debug for IceServerConfig {
     }
 }
 
-/// A fully validated process configuration.
 #[derive(Clone)]
 pub struct Config {
     pub listen: String,
@@ -97,7 +79,6 @@ impl std::fmt::Debug for Config {
     }
 }
 
-/// Why the environment was rejected. Messages never contain a secret value.
 #[derive(Debug, Error)]
 pub enum ConfigError {
     #[error("INTERCOM_TOKEN or INTERCOM_TOKEN_FILE is required")]
@@ -113,12 +94,10 @@ pub enum ConfigError {
 }
 
 impl Config {
-    /// Reads and validates the process environment.
     pub fn load() -> Result<Self, ConfigError> {
         Self::load_from(&|key| std::env::var(key).ok(), &|path| std::fs::read(path))
     }
 
-    /// Loads from injected environment and file readers (used by tests).
     pub fn load_from(
         getenv: &dyn Fn(&str) -> Option<String>,
         read_file: &dyn Fn(&str) -> std::io::Result<Vec<u8>>,
@@ -242,13 +221,11 @@ impl Config {
         Ok(())
     }
 
-    /// Loopback address for the probe: a wildcard bind becomes `127.0.0.1`.
     pub fn healthcheck_address(&self) -> Result<SocketAddr, String> {
         healthcheck_address(&self.listen)
     }
 }
 
-/// Turns a listen address into a loopback probe address.
 pub fn healthcheck_address(listen: &str) -> Result<SocketAddr, String> {
     let Some((host, port)) = listen.rsplit_once(':') else {
         return Err(format!("invalid listen address: {listen}"));
@@ -292,8 +269,6 @@ fn ice_config(
         });
     }
     if servers.is_empty() {
-        // Host candidates only: the LAN/VPN case. Adding TURN later is a
-        // configuration change, not a client change.
         tracing::info!("no ICE servers configured; clients use host candidates only");
     }
     Ok(servers)

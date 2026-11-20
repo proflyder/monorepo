@@ -1,18 +1,3 @@
-//! Composition root: configuration, telemetry, the HTTP proxy and the
-//! background workers.
-//!
-//! Start-up order:
-//!
-//! * the listener is bound first;
-//! * the dispatcher updates poller starts when routing and updates are on;
-//! * one queue consumer per profile starts only when the queue and routing are
-//!   both on (its gate leases only the current profile's queue);
-//! * the router exists only when the full HA + gateway path is configured, so
-//!   a partially configured deployment keeps the plain sanitiser behaviour.
-//!
-//! Shutdown stops accepting requests first, then cancels the workers and joins
-//! them, so an in-flight request can still start its result announcer.
-
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -33,7 +18,6 @@ use crate::services::{
     VoiceRouter, lease_request,
 };
 
-/// Reported implementation version.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(5);
@@ -41,11 +25,6 @@ const WORKER_POLL: Duration = Duration::from_secs(1);
 const WORKER_RETRY_MIN: Duration = Duration::from_secs(2);
 const WORKER_RETRY_MAX: Duration = Duration::from_secs(60);
 
-/// Starts the service and blocks until SIGTERM/SIGINT or a listener failure.
-///
-/// # Errors
-///
-/// Returns a configuration, telemetry, bind or serve failure.
 pub async fn run() -> anyhow::Result<()> {
     let config = Config::load().context("configuration")?;
     TelemetryBuilder::new()

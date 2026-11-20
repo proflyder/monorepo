@@ -1,10 +1,3 @@
-//! Station BLE provisioning gateway.
-//!
-//! The deployed binary is `ble-gateway`; `bletest` is a small D-Bus client for
-//! exercising the exported GATT application on the station. The library exposes
-//! the same modules to unit tests so the gesture machine, the wpa_supplicant
-//! client and the HTTP contract are covered without hardware.
-
 pub mod bluetooth;
 pub mod button;
 pub mod cli;

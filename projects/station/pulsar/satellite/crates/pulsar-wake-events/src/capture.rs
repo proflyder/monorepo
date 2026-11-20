@@ -1,47 +1,34 @@
-//! Audio windows of wake events, inside the audio processing thread: a ring of the
-//! `VQE_OMNI_WITH_GAIN` stream (the detector's input), the hit / near-miss events of the Ricardo
-//! detector and the user-reported miss. Finished buffers leave through a bounded channel; this
-//! module never touches files and only allocates when an event starts or finishes.
-
 use pulsar_dsp::Ring;
 
 use super::logic::{self, Kind};
 use super::logic::{NEAR_AFTER_HIT_MS, NEAR_GAP_MS};
 use super::{HIT_PRE_MS, MISS_MS, POST_MS, RING_MS, Recording};
 
-/// More pending windows than this means the writer stalled: the extra event is dropped.
 const MAX_PENDING: usize = 8;
 
-/// A confirmed hit; the id is already part of the event sent to the controller, which fills the
-/// outcome when the dialog ends.
 #[derive(Clone, Debug, PartialEq)]
 pub struct HitInfo {
     pub id: String,
     pub score: f32,
 }
 
-/// What one chunk produced.
 #[derive(Debug, Default)]
 pub struct Push {
     pub hit: Option<HitInfo>,
     pub near: bool,
     pub finished: Vec<Recording>,
-    /// The window was not kept: too many unfinished ones are already waiting for the writer.
     pub dropped: bool,
 }
 
 struct Pending {
     rec: Recording,
-    /// Chunks still to append after the ones already in `rec`.
     remaining: usize,
 }
 
-/// Ring and capture state of one processing thread.
 pub struct Capture {
     frame: usize,
     ring: Ring<i16>,
     seq: u64,
-    /// Windowed means of the two chunks before the current one.
     prev: Option<f32>,
     prev2: Option<f32>,
     last_hit_ms: Option<i64>,
@@ -66,8 +53,6 @@ impl Capture {
         }
     }
 
-    /// Recording switched off (or the detector stopped): pending windows are discarded, the ring
-    /// must not keep the audio either.
     pub fn reset(&mut self) {
         self.ring.clear();
         self.prev = None;
@@ -86,9 +71,6 @@ impl Capture {
         logic::event_id(utc_ms, kind, self.seq)
     }
 
-    /// One detector chunk. `mean` is this chunk's windowed probability (None while the detector
-    /// window fills or warms up), `hit` the score of a confirmed detection. Call only while
-    /// recording is on and the Ricardo detector is fed.
     pub fn push(
         &mut self,
         chunk: &[i16],
@@ -115,7 +97,6 @@ impl Capture {
 
         if let Some(score) = hit {
             self.last_hit_ms = Some(now_ms);
-            // The detector resets its own window after a hit.
             self.prev = None;
             self.prev2 = None;
             let id = self.id(utc_ms, Kind::Hit);
@@ -143,7 +124,6 @@ impl Capture {
                 dropped = true;
             }
             return Push {
-                // A window that could not be kept has no sidecar to write the outcome to.
                 hit: (!dropped).then_some(HitInfo { id, score }),
                 near: false,
                 finished,
@@ -163,13 +143,10 @@ impl Capture {
                     .is_none_or(|t| now_ms.saturating_sub(t) >= NEAR_GAP_MS)
             {
                 let id = self.id(utc_ms, Kind::Near);
-                // The peak is the previous chunk: the window ends there, and the current chunk
-                // is the first one after it.
                 let mut samples = self
                     .ring
                     .tail(logic::chunks_for(u64::from(HIT_PRE_MS), self.frame) + 1);
                 samples.truncate(samples.len().saturating_sub(self.frame));
-                // The falling chunk is the first one after the peak.
                 samples.extend_from_slice(chunk);
                 let post = logic::chunks_for(u64::from(POST_MS), self.frame);
                 let rec = Recording {
@@ -207,7 +184,6 @@ impl Capture {
         }
     }
 
-    /// «Wake: не услышала»: the last `MISS_MS` of the ring, no post-roll.
     pub fn miss(&mut self, utc_ms: i64) -> Option<Recording> {
         if self.ring.filled_chunks() == 0 {
             return None;
@@ -246,7 +222,6 @@ mod tests {
     #[test]
     fn hit_carries_three_seconds_before_and_one_after() {
         let mut c = Capture::new(FRAME, 0.9);
-        // A full ring, then the confirming chunk (value 11).
         for k in 0..chunks(u64::from(RING_MS)) {
             c.push(&chunk(k), Some(0.1), None, false, 0, 0);
         }
@@ -254,7 +229,6 @@ mod tests {
         let hit = p.hit.clone().unwrap();
         assert_eq!(hit.id, "19700101T000000Z-hit-1");
         assert!(p.finished.is_empty());
-        // One second of post-roll.
         let mut done = Vec::new();
         for _ in 0..chunks(u64::from(POST_MS)) {
             let p = c.push(&chunk(12), None, None, false, 20, 0);
@@ -267,9 +241,7 @@ mod tests {
             rec.samples.len(),
             (chunks(u64::from(HIT_PRE_MS)) + chunks(u64::from(POST_MS))) * FRAME
         );
-        // 3 s + 1 s of audio at 16 kHz.
         assert_eq!(rec.samples.len() / 16, 4032);
-        // The window ends with the confirming chunk.
         assert_eq!(rec.samples[chunks(u64::from(HIT_PRE_MS)) * FRAME - 1], 11);
         assert_eq!(rec.score_peak, 0.95);
     }
@@ -280,7 +252,6 @@ mod tests {
         for k in 0..chunks(u64::from(RING_MS)) {
             c.push(&chunk(k), Some(0.1), None, false, 0, 0);
         }
-        // Rise to 0.7, then fall: the fall chunk creates the near event.
         assert!(!c.push(&chunk(300), Some(0.7), None, false, 1000, 0).near);
         let p = c.push(&chunk(301), Some(0.3), None, false, 1000 + 32, 0);
         assert!(p.near);
@@ -296,7 +267,6 @@ mod tests {
         let rec = &done[0];
         assert_eq!(rec.kind, Kind::Near);
         assert_eq!(rec.id, "19700101T000000Z-near-1");
-        // 3 s ending at the peak chunk (300), then the falling one (301) and 1 s more.
         assert_eq!(
             rec.samples.len(),
             (chunks(u64::from(HIT_PRE_MS)) + chunks(u64::from(POST_MS))) * FRAME
@@ -311,13 +281,10 @@ mod tests {
         for k in 0..5 {
             c.push(&chunk(k), Some(0.1), None, false, 0, 0);
         }
-        // First peak: created.
         c.push(&chunk(6), Some(0.7), None, false, 10_000, 0);
         assert!(c.push(&chunk(7), Some(0.1), None, false, 10_032, 0).near);
-        // A second peak 2 s later: inside NEAR_GAP_MS.
         c.push(&chunk(8), Some(0.7), None, false, 12_000, 0);
         assert!(!c.push(&chunk(9), Some(0.1), None, false, 12_032, 0).near);
-        // A hit resets the means; a peak within 2 s after it is not a near event.
         c.push(&chunk(10), Some(0.1), None, false, 20_000, 0);
         let p = c.push(&chunk(11), Some(0.97), Some(0.97), false, 20_032, 0);
         assert!(p.hit.is_some());
@@ -342,7 +309,6 @@ mod tests {
             rec.samples[rec.samples.len() - 1],
             (chunks(u64::from(RING_MS)) - 1) as i16
         );
-        // Ids of a boot count every event.
         assert_eq!(rec.id, "19700101T001640Z-miss-1");
     }
 

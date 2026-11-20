@@ -1,9 +1,3 @@
-# One Cargo workspace for every first-party Rust crate in the monorepo.
-#
-# Pulsar, the BLE gateway, the Windows logon provider and the station helper
-# share a single dependency view, one lockfile and one compiler toolchain.
-# Cargo is the dependency source of truth; Bazel reads this manifest through
-# crate_universe (see MODULE.bazel) and builds the same crates hermetically.
 [workspace]
 members = [
     "packages/rust/*",
@@ -32,9 +26,6 @@ rust-version = "1.99.1"
 license = "AGPL-3.0-only"
 publish = false
 
-# Every external dependency is declared here and pinned exactly; members use
-# `dep = { workspace = true }` (dev-dependencies add `features = ["test-util"]`
-# to tokio). Upstream Pulsar patches that touch Cargo.toml map their pins here.
 [workspace.dependencies]
 tokio = { version = "=1.54.1", default-features = false, features = ["rt", "rt-multi-thread", "net", "time", "sync", "macros", "signal", "process", "io-util", "fs"] }
 tokio-util = { version = "=0.7.20", default-features = false, features = ["rt", "codec"] }
@@ -43,64 +34,27 @@ tracing-log = { version = "=0.2.0", default-features = false, features = ["log-t
 tracing-subscriber = { version = "=0.3.23", default-features = false, features = ["fmt", "json", "registry", "std"] }
 thiserror = "=2.0.21"
 serde = { version = "=1.0.229", default-features = false, features = ["std", "derive"] }
-# `raw_value`: контракт v1 wake-событий пишет числа в формате `%.6`/`%.3`, а не
-# кратчайшим представлением `f64`; литерал поля собирается как `RawValue`.
 serde_json = { version = "=1.0.154", default-features = false, features = ["std", "raw_value"] }
-# Деплойментные YAML-каталоги mcp-gateway (`catalog.yaml`, `bb-targets.yaml`).
-# `serde-saphyr` — поддерживаемый чистый Rust YAML 1.2 (de)сериализатор на
-# `granit-parser`: `#![forbid(unsafe_code)]`, без C, MIT OR Apache-2.0, с тем же
-# `from_str`/`from_slice`, что и у `serde_yaml`, но без `unsafe-libyaml`.
 serde-saphyr = { version = "=2.1.1", default-features = false, features = ["deserialize"] }
-# Form-encoded bodies in tests of the Telegram client; reqwest already depends
-# on the same version for `RequestBuilder::form`.
 serde_urlencoded = "=0.7.1"
-# Unicode speech rules (DECISIONS 41): the voice-proxy sanitizer needs the same
-# Unicode space set, NFKC and full case folding as the Go implementation.
-# `regex` has no lookahead, so the sentence scanner stays a small state machine.
 regex = { version = "=1.13.1", default-features = false, features = ["std", "perf", "unicode"] }
 unicode-normalization = { version = "=0.1.26", default-features = false, features = ["std"] }
 caseless = "=0.2.2"
-# Incremental SSE decoding of the upstream response body.
 bytes = { version = "=1.12.1", default-features = false, features = ["std"] }
 futures-core = { version = "=0.3.34", default-features = false }
-# The MCP gateway tool groups box their async handlers behind `dyn ToolGroup`,
-# so they need the `BoxFuture` alias and `Stream` combinators.
 futures = { version = "=0.3.34", default-features = false, features = ["std", "async-await"] }
-# MCP server SDK (DECISIONS 41). Only the server and the Streamable HTTP
-# transport; no client, no rmcp `reqwest`, and no `hyper/http2` feature.
 rmcp = { version = "=3.9.0", default-features = false, features = ["server", "transport-streamable-http-server"] }
-# Prometheus text exposition for `mcp_gateway_*` without a second HTTP stack.
 anyhow = "=1.0.104"
 clap = { version = "=4.6.7", default-features = false, features = ["std", "derive", "env", "help", "usage", "error-context"] }
 axum = { version = "=0.8.9", default-features = false, features = ["http1", "json", "tokio", "query"] }
-# HTTP-клиент станции (pulsar-update): только HTTP/1, rustls с провайдером ring и
-# собственными корнями из CA-бандла прошивки (`tls_certs_only`; reqwest 0.13
-# иначе доверяет системному/платформенному хранилищу). aws-lc-rs не собирается
-# zig-тулчейном; http2, cookies, gzip, charset и system-proxy не нужны.
 reqwest = { version = "=0.13.5", default-features = false, features = ["rustls-no-provider", "query", "form"] }
-# Реестр сущностей Home Assistant доступен только по WebSocket: `home-ha`
-# открывает одно короткое соединение на обновление каталога. rustls с корнями
-# WebPKI покрывает публичный HTTPS, HA_CA_FILE задаёт приватный CA.
 tokio-tungstenite = { version = "=0.30.0", default-features = false, features = ["connect", "rustls-tls-webpki-roots"] }
-# Stream/Sink для того же WebSocket-клиента (уже в lock через `futures`).
 futures-util = { version = "=0.3.34", default-features = false, features = ["sink", "std"] }
 getrandom = "=0.4.3"
 hex = "=0.4.3"
-# Android SDK Platform-Tools для установщика Pulsar: их архив — zip, а
-# Redistributable License Google запрещает класть его в репозиторий.
-# `deflate-flate2-zlib-rs` — чистый Rust zlib-rs, без C и на Windows-кросс-сборке;
-# остальные кодеки (bzip2/lzma/zstd/AES) архиву не нужны.
 zip = { version = "=9.4.2", default-features = false, features = ["deflate-flate2-zlib-rs"] }
-# Gzip layer decoding for `home-deploy oci docker` (docker-archive stores the
-# uncompressed layer tar). The backend is the same pure-Rust zlib-rs `zip`
-# already pulls in, so no C and no second codec.
 flate2 = { version = "=1.1.11", default-features = false, features = ["zlib-rs"] }
-# Блокирующий HTTP-клиент установщика для того же архива. rustls с кольцевым
-# провайдером (ring в сборке уже есть у pulsar-update) и корнями WebPKI:
-# установщик работает на чужом компьютере, где CA-бандла прошивки нет.
 ureq = { version = "=3.5.1", default-features = false, features = ["rustls"] }
-# protobuf-кодек ESPHome Native API (esphome-proto): только ручные `derive(Message)`,
-# без protoc и рефлексии; `no-recursion-limit` не нужен, вложенность сообщений фиксирована.
 prost = { version = "=0.14.4", default-features = false, features = ["std", "derive"] }
 base64 = { version = "=0.23.1", default-features = false, features = ["std"] }
 http = { version = "=1.5.0", default-features = false, features = ["std"] }
@@ -111,90 +65,37 @@ ring = "=0.17.14"
 log = { version = "=0.4.35", features = ["std"] }
 libc = "=0.2.191"
 libloading = "=0.9.0"
-# Safe syscall wrappers (errno, pwrite) for the shared Linux helpers.
 rustix = { version = "=1.1.6", default-features = false, features = ["std", "fs", "time", "termios", "event"] }
-# snow: нужны только примитивы Noise_NNpsk0_25519_ChaChaPoly_SHA256; фичи по умолчанию (`std`,
-# `default-resolver-crypto`) тянут ещё ring, BLAKE2 и AES-GCM — они не нужны (ring в сборке и так
-# есть для rustls).
 snow = { version = "=0.10.0", default-features = false, features = ["use-chacha20poly1305", "use-sha2", "use-curve25519", "use-getrandom"] }
 socket2 = { version = "=0.6.5", features = ["all"] }
-# WebRTC для звонка на колонку (pulsar-call): ICE-агент, DTLS-SRTP и RTP без внутренних
-# потоков и сети (sans-IO). DTLS — `str0m-rust-crypto` (чистый Rust вместо OpenSSL);
-# `aws-lc-rs` остаётся транзитивно через `dimpl`/rcgen и собирается zig-тулчейном.
-# SCTP/видео не используются, но `str0m-proto` их тянет как часть общего кодека.
 str0m = { version = "=0.25.0", default-features = false, features = ["rust-crypto"] }
 cc = "=1.11.1"
-# BlueZ is reached over the system bus. zbus is a pure-Rust implementation and
-# its `tokio` feature uses the same runtime as the rest of the daemon; it does
-# not link libdbus (unlike `dbus`/`bluer`).
 zbus = { version = "=6.2.1", default-features = false, features = ["tokio", "proxy", "service", "object-manager"] }
-# std::time cannot format local calendar timestamps without unsafe libc calls;
-# `time` keeps the BLE gateway log format identical to the former Go daemon.
-# `parsing`: обратный разбор `utc` сайдкаров контракта v1 (ретеншн и окно метки).
 time = { version = "=0.3.55", default-features = false, features = ["std", "formatting", "parsing", "local-offset", "macros"] }
-# Server-side configuration and SQLite/HTTP primitives for the home services
-# (DECISIONS 41). `rusqlite` is bundled so the static musl image carries its
-# own SQLite.
 rusqlite = { version = "=0.41.1", features = ["bundled"] }
-# Scheduler ids (DECISIONS 41): `v5` reproduces Go's UUIDv5/DNS event ids and
-# `v7` the same 36-character time-ordered format as `uuid.NewV7`.
 uuid = { version = "=1.29.1", features = ["v4", "v5", "v7"] }
-# SHA-1 of canonical idempotency requests (DECISIONS 41): the same digest the
-# Legacy Go store persisted, so a restarted or migrated scheduler replays keys. It is
-# already in the lock as `uuid`'s own v5 digest; declaring it directly avoids
-# a second SHA-1 implementation.
 sha1_smol = "=1.0.1"
-# IANA time zones with a bundled tzdb (no system tzdata on the station image):
-# `tzdb-bundle-always` keeps DST/gap/fold behaviour reproducible. Pinned so a
-# tzdb update cannot change scheduler occurrences silently.
 jiff = { version = "=0.2.41", default-features = false, features = ["std", "tzdb-bundle-always"] }
 tower = { version = "=0.5.3", default-features = false, features = ["util"] }
 tower-http = { version = "=0.7.1", default-features = false, features = ["limit", "timeout"] }
-# Prometheus exposition for the home services (DECISIONS 41). Pure Rust, no C.
-# The registry is built locally, so no global default registry or process/go
-# collectors leak into the service: only the `currency_bot_*` families are
-# exported. Pin so the dashboard's names, labels and buckets are auditable.
 prometheus-client = { version = "=0.25.2", default-features = false }
 http-body-util = "=0.1.5"
 tempfile = "=3.27.0"
-# home.v1 over the official Connect runtime: `connectrpc` transports and
-# serves the protocol, `buffa` owns protobuf messages and protojson
-# (DECISIONS 41, spike #134). Only the client and JSON codec are needed by the
-# home services' executor/queue clients.
-# No `client` feature: it enables hyper/http2 workspace-wide (h2 in every
-# hyper user, +580 KB in the station firmware). home-proto implements the
-# client transport over the workspace reqwest (HTTP/1.1) instead.
 connectrpc = { version = "=0.9.1", default-features = false, features = ["json"] }
 buffa = { version = "=0.9.2", default-features = false, features = ["std", "json"] }
 buffa-types = { version = "=0.9.2", default-features = false, features = ["std", "json"] }
-# Used only by packages/rust/home-proto/generate.sh in its throwaway build
-# project; pinned here so the code generator cannot drift silently.
 connectrpc-build = "=0.9.0"
-# Exponential backoff of the shared worker loop; `tokio-sleep` keeps the retry
-# future async without pulling the blocking or wasm sleepers.
 backon = { version = "=1.6.0", default-features = false, features = ["std", "tokio-sleep"] }
 hmac = "=0.13.0"
 sha1 = { version = "=0.11.0", default-features = false }
 sha2 = "=0.11.1"
-# SSH-мост bb (mcp-gateway): клиент и встроенный тестовый сервер. Только
-# `ring` + чистый Rust `rsa`; фичи по умолчанию тянут `aws-lc-rs` и `flate2`
-# (C-сборка и сжатие, которые мосту не нужны). `rsa` нужен, чтобы читать
-# RSA-ключи из known_hosts и предлагать rsa-sha2-* так же, как Go-клиент.
 russh = { version = "=0.65.1", default-features = false, features = ["ring", "rsa"] }
-# Тестовые ключи SSH генерируются в тестах, а не лежат в репозитории.
 rand = "=0.10.3"
 subtle = "=2.6.1"
 zeroize = { version = "=1.9.1", features = ["derive"] }
-# Windows API surface: `crates/*/src/bindings.rs` is generated by
-# windows-bindgen (see solutions/windows-logon-provider/bindings.txt), so the
-# runtime needs only the small `windows-core`/`windows-link` support crates.
 windows-core = "=0.62.2"
 windows-link = "=0.2.1"
 
-# Cargo cannot set panic per package. `release` stays unwinding so the logon
-# provider's COM boundary can catch panics; `station` is the aborting profile
-# for the Linux station daemons. The real artifacts are built by Bazel, which
-# keeps the per-target `-C panic`/LTO/strip select()es.
 [profile.release]
 opt-level = 3
 lto = "thin"
@@ -207,18 +108,12 @@ strip = false
 inherits = "release"
 panic = "abort"
 
-# Shared lint policy. CI builds with `-D warnings`; Bazel forwards these exact
-# entries through `extract_cargo_lints` (see the per-package `workspace_lints`
-# targets), so cargo and Bazel lint the same set.
-#
-# `suboptimal_flops`/`imprecise_flops` are deliberately absent: Pulsar's FMA
-# rule forbids rewriting float expressions to `mul_add`, and both lints push
-# exactly that (see projects/station/pulsar/docs/architecture.md).
 [workspace.lints.rust]
 unsafe_op_in_unsafe_fn = "warn"
 unused_qualifications = "warn"
 
 [workspace.lints.clippy]
+missing_safety_doc = "allow"
 assigning_clones = "warn"
 checked_conversions = "warn"
 format_push_string = "warn"

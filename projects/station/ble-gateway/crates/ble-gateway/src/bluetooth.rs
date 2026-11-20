@@ -1,10 +1,3 @@
-//! Classic Bluetooth A2DP-sink mode ("mute x4").
-//!
-//! BlueZ is reached over D-Bus: adapter properties, device disconnects and the
-//! pairing window use proxies. `bluealsad`, `bluealsa-aplay` and `bt-agent`
-//! stay external processes: they have no D-Bus equivalent that would start the
-//! ALSA bridge or the NoInputNoOutput agent for us.
-
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -186,7 +179,6 @@ impl ClassicBluetooth {
         self.mode.load(Ordering::SeqCst)
     }
 
-    /// Turn the pairer on for `window`; the task resets `mode` when it closes.
     pub async fn enable(self: &Arc<Self>) {
         for result in [
             self.adapter.prepare_audio().await,
@@ -210,8 +202,6 @@ impl ClassicBluetooth {
         });
     }
 
-    /// Close the window opened by `generation`, if it is still current. Resets
-    /// `btMode`; the old implementation left it set and inverted the gesture.
     pub async fn close_window(&self, generation: u64) {
         if self.generation.load(Ordering::SeqCst) != generation
             || !self.mode.swap(false, Ordering::SeqCst)

@@ -1,16 +1,7 @@
-//! The two wall-clock schedules, with the same "strictly after now" and
-//! no-catch-up policy as Go.
-//!
-//! Disambiguation follows the shared planner decision (jiff compatible): a
-//! wall time in a spring-forward gap moves forward, and an ambiguous fall-back
-//! time resolves to the earlier instant. The committed schedule vectors pin
-//! the UTC, Asia/Almaty and both Europe/Berlin DST cases.
-
 use jiff::civil::{Date, DateTime, Time};
 use jiff::tz::TimeZone;
 use jiff::{Timestamp, Zoned};
 
-/// The next occurrence at `minute:00` in `zone`, strictly after `now`.
 #[must_use]
 pub fn next_hourly(now: Timestamp, zone: &TimeZone, minute: u8) -> Option<Zoned> {
     let local = now.to_zoned(zone.clone());
@@ -24,15 +15,11 @@ pub fn next_hourly(now: Timestamp, zone: &TimeZone, minute: u8) -> Option<Zoned>
     if candidate.timestamp() > now {
         return Some(candidate);
     }
-    // Adding one hour is an absolute addition in Go (`Add`), so the candidate
-    // can cross a DST gap (01:00 CET + 1h = 03:00 CEST).
     let next =
         Timestamp::from_second(candidate.timestamp().as_second().checked_add(3_600)?).ok()?;
     Some(next.to_zoned(zone.clone()))
 }
 
-/// The next occurrence of `weekday` (Go numbering: 0 = Sunday) at `hour:00:00`
-/// in `zone`, strictly after `now`.
 #[must_use]
 pub fn next_weekly(now: Timestamp, zone: &TimeZone, weekday: i8, hour: u8) -> Option<Zoned> {
     let local = now.to_zoned(zone.clone());
@@ -87,7 +74,6 @@ mod tests {
     #[test]
     fn weekly_moves_to_the_next_matching_day() {
         let utc = TimeZone::get("UTC").expect("UTC");
-        // Sunday, 2026-11-01.
         assert_eq!(
             next_weekly(instant("2026-10-31T12:00:00Z"), &utc, 0, 0)
                 .map(|zoned| crate::domain::time::rfc3339_zoned(&zoned))

@@ -1,8 +1,3 @@
-//! deCONZ's framing: SLIP (0xC0 ends a frame, 0xDB escapes) with a 16-bit two's complement
-//! checksum, LE, after the frame: `[command][seq][status][frame length LE16]...`.
-//!
-//! [`SlipCodec`] is the [`tokio_util::codec`] form; the server's transport uses it directly.
-
 use tokio_util::bytes::{Buf, BufMut, BytesMut};
 use tokio_util::codec::{Decoder, Encoder};
 
@@ -11,16 +6,13 @@ pub const ESC: u8 = 0xDB;
 pub const ESC_END: u8 = 0xDC;
 pub const ESC_ESC: u8 = 0xDD;
 
-/// SLIP bytes kept of one frame; the rest is dropped, as the C++ server did.
 pub const MAX_SLIP: usize = 1024;
 
-/// deCONZ's 16-bit two's complement of the byte sum.
 pub fn checksum(f: &[u8]) -> u16 {
     let sum = f.iter().fold(0u16, |s, &b| s.wrapping_add(u16::from(b)));
     (!sum).wrapping_add(1)
 }
 
-/// The raw (still escaped) bytes of one frame between END markers.
 #[derive(Default)]
 pub struct SlipCodec {
     partial: Vec<u8>,
@@ -111,7 +103,6 @@ mod tests {
             Some(vec![0xC0, 0xDB, 0x01])
         );
         assert_eq!(codec.decode(&mut bytes).unwrap(), None);
-        // Bytes past MAX_SLIP are dropped, END is still recognised.
         let mut bytes = BytesMut::new();
         bytes.put_slice(&[0x55; MAX_SLIP + 10]);
         bytes.put_u8(END);

@@ -1,5 +1,3 @@
-//! No audio is played: the null PCM exercises ALSA's near/get pointer ABI without hardware.
-//! Run on versioned Midi and unversioned Lite 2 firmware after cross-building this tool.
 #![deny(unsafe_code)]
 #![deny(unsafe_op_in_unsafe_fn)]
 
@@ -41,7 +39,6 @@ fn main() -> ExitCode {
         && near.buffer_frames == 24576
         && actual.period_frames == near.period_frames
         && actual.buffer_frames == near.buffer_frames;
-    // alias=no: the library has only the current ABI (unversioned, no __snd_* exports).
     println!(
         "rate={} period={}/{} buffer={}/{} alias={}: {}",
         near.rate,

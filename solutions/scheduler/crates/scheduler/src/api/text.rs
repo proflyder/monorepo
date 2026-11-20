@@ -1,20 +1,12 @@
-//! Stable localization keys for scheduler responses and errors.
-//!
-//! Keys are namespaced snake case and are the contract the Android app resolves
-//! through `strings.xml`. The legacy human-readable message stays on the wire
-//! for older clients; it is never the primary text for a current client.
-
 use home_proto::{localized, localized_with, v1::LocalizedText};
 
 use crate::domain::{DomainError, ErrorKind};
 use crate::store::StoreError;
 
-/// Attaches a localization detail to an error built directly by an API handler.
 pub fn connect(error: connectrpc::ConnectError, key: &str) -> connectrpc::ConnectError {
     error.with_detail(home_proto::error_detail(&localized(key)))
 }
 
-/// Key for an error that has no more specific mapping.
 fn kind_key(kind: ErrorKind) -> &'static str {
     match kind {
         ErrorKind::InvalidArgument => "scheduler.error.invalid_argument",
@@ -27,18 +19,12 @@ fn kind_key(kind: ErrorKind) -> &'static str {
     }
 }
 
-/// Localized error for a domain failure raised during request conversion.
 pub fn domain_error(error: &DomainError) -> connectrpc::ConnectError {
     let text = error_text(&StoreError::Domain(error.clone()));
     connectrpc::ConnectError::invalid_argument(error.to_string())
         .with_detail(home_proto::error_detail(&text))
 }
 
-/// Localized text for a store failure.
-///
-/// Exact details whose wording is part of the client experience get a specific
-/// key; dynamic bounds carry typed arguments; everything else falls back to a
-/// generic per-kind key so a raw English detail never reaches the app.
 #[must_use]
 pub fn error_text(error: &StoreError) -> LocalizedText {
     match error {
@@ -161,8 +147,6 @@ fn bytes(value: &str) -> String {
     value.strip_suffix(" bytes").unwrap_or(value).to_owned()
 }
 
-/// Localized reason of a durable event. Unknown executor details stay
-/// untranslated (empty key) because they are free-form executor text.
 #[must_use]
 pub fn event_detail_text(detail: &str) -> LocalizedText {
     match detail {
@@ -192,7 +176,6 @@ fn detail_with_args(detail: &str) -> LocalizedText {
     localized("")
 }
 
-/// Localized last-tick failure for `GetStatus`.
 #[must_use]
 pub fn tick_error_text(error: &str) -> LocalizedText {
     if error.trim().is_empty() {

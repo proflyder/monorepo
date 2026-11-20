@@ -1,20 +1,3 @@
-//! Typed client of the bb home-dispatcher and the personal-only allow-list.
-//!
-//! Ports `solutions/mcp-gateway/internal/bb/{client,targets}.go`. Every call is
-//! one SSH session running the forced command `bb-dispatch`: one JSON object on
-//! stdin, one JSON answer on stdout. The wire methods are closed:
-//! `targets`, `status`, `validate_spawn`, `spawn`, `send`, `turn_result` and
-//! `updates`.
-//!
-//! The gateway never speaks HTTP to bb and never has a shell. The bridge owns
-//! the plugin token and the HMAC secret; the gateway owns only an ed25519 key
-//! restricted to that bridge and a pinned `known_hosts` file ([`crate::ssh`]).
-//!
-//! [`BbResolver`] maps a spoken project name onto a *personal* target from the
-//! plugin's live list. A work-only project and an unknown alias are
-//! deliberately indistinguishable, so Hermes can never learn that a work
-//! project exists.
-
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -26,55 +9,34 @@ use serde_json::{Value, json};
 
 use crate::ssh::{Answer, SshRunner};
 
-/// Boxed future used by the object-safe bridge traits.
 pub type BbFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
-/// Spoken when the bridge cannot be reached.
 pub const SPEECH_UNAVAILABLE: &str = "Сервер агентов недоступен.";
-/// Spoken when the bridge is not configured.
 pub const SPEECH_NOT_READY: &str = "Сервер агентов не настроен.";
 
-/// The only profile the MCP tools and Hermes may use.
 pub const PROFILE_PERSONAL: &str = "personal";
 
-/// Provider used when a target entry does not pin one.
 pub const DEFAULT_PROVIDER: &str = "claude-code";
 
-/// Default per-call bridge timeout.
 pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(15);
 
-/// Bridge method names. The list is closed.
 pub mod method {
-    /// List spawnable projects.
     pub const TARGETS: &str = "targets";
-    /// Recent and running threads.
     pub const STATUS: &str = "status";
-    /// Validate a spawn without creating a thread.
     pub const VALIDATE_SPAWN: &str = "validate_spawn";
-    /// Create a thread.
     pub const SPAWN: &str = "spawn";
-    /// Append a message to a thread.
     pub const SEND: &str = "send";
-    /// Read one turn's outcome.
     pub const TURN_RESULT: &str = "turn_result";
-    /// Poll completed dispatcher turns.
     pub const UPDATES: &str = "updates";
 }
 
-/// A refused or failed bridge call.
-///
-/// `code` is the plugin/bridge code and `speech` is the short spoken line. It
-/// never contains key material or a payload.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Error {
-    /// Stable machine code.
     pub code: String,
-    /// Short Russian line to speak.
     pub speech: String,
 }
 
 impl Error {
-    /// Builds an error with an explicit code and spoken line.
     #[must_use]
     pub fn new(code: impl Into<String>, speech: impl Into<String>) -> Self {
         Self {
@@ -83,7 +45,6 @@ impl Error {
         }
     }
 
-    /// The generic "server unavailable" error.
     #[must_use]
     pub fn unavailable() -> Self {
         Self::new("bridge_error", SPEECH_UNAVAILABLE)
@@ -98,7 +59,6 @@ impl std::fmt::Display for Error {
 
 impl std::error::Error for Error {}
 
-/// The short spoken line of a bridge error.
 #[must_use]
 pub fn speech_for_error(error: &Error) -> &str {
     if error.speech.is_empty() {
@@ -108,13 +68,7 @@ pub fn speech_for_error(error: &Error) -> &str {
     }
 }
 
-/// Sends one request to the bridge and returns stdout plus the exit code.
-///
-/// A non-zero exit code still carries a JSON answer from the bridge. The trait
-/// keeps the dispatcher testable without a real SSH server; [`SshRunner`] is
-/// the production implementation.
 pub trait Runner: Send + Sync {
-    /// Run one forced-command call.
     fn run<'a>(&'a self, payload: &'a [u8]) -> BbFuture<'a, Result<Answer, crate::ssh::Error>>;
 }
 
@@ -124,14 +78,12 @@ impl Runner for SshRunner {
     }
 }
 
-/// The typed dispatcher API on top of one [`Runner`].
 pub struct Dispatcher {
     runner: Arc<dyn Runner>,
     timeout: Duration,
 }
 
 impl Dispatcher {
-    /// Builds a dispatcher. A zero timeout defaults to 15 s.
     #[must_use]
     pub fn new(runner: Arc<dyn Runner>, timeout: Duration) -> Self {
         Self {
@@ -144,7 +96,6 @@ impl Dispatcher {
         }
     }
 
-    /// Performs one bridge call and returns the raw `result` value.
     pub async fn call(&self, method: &str, params: Value) -> Result<Value, Error> {
         let payload = serde_json::to_vec(&json!({"method": method, "params": params}))
             .map_err(|_| Error::new("invalid_request", "Некорректный запрос."))?;
@@ -178,28 +129,19 @@ impl Dispatcher {
     }
 }
 
-/// The subset used by the MCP tools and the voice path.
 pub trait BbApi: Send + Sync {
-    /// Whether the bridge is configured.
     fn configured(&self) -> bool {
         true
     }
-    /// Lists the projects the plugin can spawn into.
     fn targets(&self) -> BbFuture<'_, Result<Targets, Error>>;
-    /// Returns recent and running threads.
     fn status(&self, limit: usize) -> BbFuture<'_, Result<StatusResult, Error>>;
-    /// Validates a spawn without creating a thread.
     fn validate_spawn(&self, request: SpawnRequest) -> BbFuture<'_, Result<(), Error>>;
-    /// Creates a visible thread; idempotent on `idempotency_key`.
     fn spawn(&self, request: SpawnRequest) -> BbFuture<'_, Result<SpawnResult, Error>>;
-    /// Appends a message to a thread.
     fn send(&self, request: SendRequest) -> BbFuture<'_, Result<SendResult, Error>>;
-    /// Reads the outcome of the turn that follows `after_seq`.
     fn turn_result(
         &self,
         request: TurnResultRequest,
     ) -> BbFuture<'_, Result<TurnResultResult, Error>>;
-    /// Polls completed dispatcher turns the owner did not start.
     fn updates(&self, request: UpdatesRequest) -> BbFuture<'_, Result<UpdatesResult, Error>>;
 }
 
@@ -257,129 +199,91 @@ impl BbApi for Dispatcher {
     }
 }
 
-// --- wire types -----------------------------------------------------------
-
-/// The `targets` result.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Targets {
-    /// Spawnable projects.
     #[serde(default)]
     pub projects: Vec<Target>,
 }
 
-/// One project the plugin can spawn into.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Target {
-    /// Plugin project id.
     #[serde(default)]
     pub project_id: String,
-    /// Human project name.
     #[serde(default)]
     pub name: String,
-    /// Profile the project belongs to.
     #[serde(default)]
     pub profile: String,
-    /// Effective profile policy.
     #[serde(default)]
     pub policy: Policy,
-    /// Source machine of the project.
     #[serde(default)]
     pub machine: Machine,
-    /// Providers available on the machine.
     #[serde(default)]
     pub providers: Vec<Provider>,
 }
 
-/// The effective profile policy from the profiles plugin.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Policy {
-    /// Allowed providers.
     #[serde(default)]
     pub providers: Vec<String>,
-    /// Allowed machines.
     #[serde(default)]
     pub machines: Vec<String>,
 }
 
-/// The project's source machine.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Machine {
-    /// Host id.
     #[serde(default)]
     pub host_id: String,
-    /// Host name.
     #[serde(default)]
     pub name: String,
-    /// Host status.
     #[serde(default)]
     pub status: String,
-    /// Whether the host is online.
     #[serde(default)]
     pub online: bool,
 }
 
-/// One agent provider available on the project's machine.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Provider {
-    /// Provider id.
     #[serde(default)]
     pub provider_id: String,
-    /// Display name.
     #[serde(default)]
     pub display_name: String,
-    /// Models of the provider.
     #[serde(default)]
     pub models: Vec<Model>,
 }
 
-/// One model plus its reasoning levels.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Model {
-    /// Model id.
     #[serde(default)]
     pub model: String,
-    /// Display name.
     #[serde(default)]
     pub display_name: String,
-    /// Reasoning level used when none is requested.
     #[serde(default)]
     pub default_reasoning_level: String,
-    /// Supported reasoning levels.
     #[serde(default)]
     pub reasoning_levels: Vec<String>,
 }
 
-/// The `spawn` params.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SpawnRequest {
-    /// Target profile.
     pub profile: String,
-    /// Target project id.
     pub project_id: String,
-    /// Provider id.
     pub provider_id: String,
-    /// Model id.
     pub model: String,
-    /// Reasoning level.
     pub reasoning_level: String,
-    /// Thread title.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub title: String,
-    /// Initial prompt.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub prompt: String,
-    /// Idempotency key.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub idempotency_key: String,
 }
 
-/// The whole of `validate_spawn`'s params and the common part of `spawn`'s.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SpawnTarget {
@@ -391,7 +295,6 @@ pub struct SpawnTarget {
 }
 
 impl SpawnRequest {
-    /// Narrows the request to the fields `validate_spawn` accepts.
     #[must_use]
     pub fn target(&self) -> SpawnTarget {
         SpawnTarget {
@@ -404,184 +307,130 @@ impl SpawnRequest {
     }
 }
 
-/// The spawned thread identity.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SpawnResult {
-    /// Created thread id.
     #[serde(default)]
     pub thread_id: String,
-    /// Whether the plugin reused an existing thread for the same key.
     #[serde(default)]
     pub idempotent: bool,
 }
 
-/// The `send` params.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SendRequest {
-    /// Destination thread.
     pub thread_id: String,
-    /// Text to append.
     pub text: String,
-    /// Idempotency key.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub idempotency_key: String,
 }
 
-/// The `send` result and the cursor for `turn_result`.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SendResult {
-    /// Destination thread.
     #[serde(default)]
     pub thread_id: String,
-    /// Sequence the answer follows.
     #[serde(default)]
     pub after_seq: i64,
-    /// Request sequence, when the plugin reports one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub request_seq: Option<i64>,
-    /// Request id, when the plugin reports one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub request_id: Option<String>,
-    /// Delivery mode, when the plugin reports one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub delivery: Option<String>,
 }
 
-/// The `turn_result` params.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TurnResultRequest {
-    /// Thread to poll.
     pub thread_id: String,
-    /// Sequence the turn follows.
     pub after_seq: i64,
 }
 
-/// The `updates` params. `after_seq == None` is the bootstrap call.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdatesRequest {
-    /// Cursor to continue from; `None` for the bootstrap call.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub after_seq: Option<i64>,
-    /// Plugin long-poll budget.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub wait_seconds: Option<i32>,
 }
 
-/// One completed non-owner turn and its spoken line.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateItem {
-    /// Event sequence.
     pub seq: i64,
-    /// Spoken line.
     pub spoken: String,
-    /// Turn-completed event time in epoch milliseconds.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub completed_at: Option<i64>,
 }
 
-/// The `updates` answer. `cursor` is the latest event sequence of the thread.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdatesResult {
-    /// Latest event sequence.
     #[serde(default)]
     pub cursor: i64,
-    /// Completed turns after the requested cursor.
     #[serde(default)]
     pub items: Vec<UpdateItem>,
 }
 
-/// The `turn_result` answer.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TurnResultResult {
-    /// Turn status (`running`, `idle`, `waiting_input`, `failed`, ...).
     #[serde(default)]
     pub status: String,
-    /// Spoken line emitted by the agent, if any.
     #[serde(default)]
     pub spoken: Option<String>,
-    /// Full answer text.
     #[serde(default)]
     pub text: String,
-    /// Thread id.
     #[serde(default)]
     pub thread_id: String,
-    /// Request sequence.
     #[serde(default)]
     pub request_seq: Option<i64>,
-    /// Sequence of the completed turn; the voice proxy's idempotency key.
     #[serde(default)]
     pub completed_seq: Option<i64>,
-    /// Turn reference.
     #[serde(default)]
     pub reference: String,
 }
 
-/// One entry of the `status` result.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Thread {
-    /// Thread id.
     #[serde(default)]
     pub id: String,
-    /// Thread title.
     #[serde(default)]
     pub title: String,
-    /// Project name.
     #[serde(default)]
     pub project: String,
-    /// Project id.
     #[serde(default)]
     pub project_id: String,
-    /// Profile.
     #[serde(default)]
     pub profile: String,
-    /// Thread status.
     #[serde(default)]
     pub status: String,
-    /// Runtime in seconds, when the plugin reports one.
     #[serde(default)]
     pub runtime_seconds: Option<i64>,
 }
 
-/// The `status` answer.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StatusResult {
-    /// Known threads.
     #[serde(default)]
     pub threads: Vec<Thread>,
 }
 
-/// The pending value of `bb.act`: everything confirmed later.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct SpawnAction {
-    /// Resolved project name.
     pub project: String,
-    /// Plugin project id.
     pub project_id: String,
-    /// Provider id.
     pub provider_id: String,
-    /// Model id.
     pub model: String,
-    /// Reasoning level.
     pub reasoning_level: String,
-    /// Thread title.
     pub title: String,
-    /// Initial prompt.
     pub prompt: String,
-    /// Idempotency key.
     pub idempotency_key: String,
 }
 
 impl SpawnAction {
-    /// Converts the pending action into the plugin spawn request.
     #[must_use]
     pub fn request(&self) -> SpawnRequest {
         SpawnRequest {
@@ -597,55 +446,39 @@ impl SpawnAction {
     }
 }
 
-// --- personal allow-list --------------------------------------------------
-
-/// The tracked allow-list of spoken project names.
 #[derive(Debug, Deserialize)]
 struct TargetsFile {
     #[serde(default)]
     targets: Vec<TargetEntry>,
 }
 
-/// Maps spoken aliases to one project and its optional pinning.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
 pub struct TargetEntry {
-    /// Plugin project id or its exact name.
     #[serde(default)]
     pub project: String,
-    /// Spoken names; at least one is required.
     #[serde(default)]
     pub aliases: Vec<String>,
-    /// Pinned provider.
     #[serde(default)]
     pub provider: Option<String>,
-    /// Pinned model.
     #[serde(default)]
     pub model: Option<String>,
-    /// Pinned reasoning level.
     #[serde(default)]
     pub effort: Option<String>,
-    /// Prefix of created thread titles.
     #[serde(default)]
     pub title_prefix: Option<String>,
 }
 
-/// The personal-only spoken allow-list.
 #[derive(Debug, Clone, Default)]
 pub struct BbResolver {
     entries: Vec<TargetEntry>,
     default_provider: String,
 }
 
-/// Why a spoken project could not be resolved.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ResolveError {
-    /// Unknown alias, or a project that is not a personal target.
     TargetNotFound,
-    /// The project does not expose the provider.
     ProviderUnavailable,
-    /// The requested model is not allowed by the plugin.
     ModelNotFound,
-    /// The model does not support the requested reasoning level.
     EffortNotSupported,
 }
 
@@ -662,31 +495,22 @@ impl std::fmt::Display for ResolveError {
 
 impl std::error::Error for ResolveError {}
 
-/// A fully validated spawn target.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Resolution {
-    /// Resolved project name.
     pub project: String,
-    /// Plugin project id.
     pub project_id: String,
-    /// Provider id.
     pub provider_id: String,
-    /// Model id.
     pub model: String,
-    /// Reasoning level.
     pub effort: String,
-    /// Title prefix.
     pub title_prefix: String,
 }
 
 impl BbResolver {
-    /// Reads and validates the allow-list file.
     pub fn load(path: &str) -> Result<Self, String> {
         let data = std::fs::read(path).map_err(|error| format!("bb targets: {error}"))?;
         Self::parse(&data)
     }
 
-    /// Validates an allow-list document.
     pub fn parse(data: &[u8]) -> Result<Self, String> {
         let file: TargetsFile =
             serde_saphyr::from_slice(data).map_err(|error| format!("bb targets: {error}"))?;
@@ -735,15 +559,11 @@ impl BbResolver {
         })
     }
 
-    /// The parsed allow-list.
     #[must_use]
     pub fn entries(&self) -> &[TargetEntry] {
         &self.entries
     }
 
-    /// Maps a spoken project name onto a personal target from the plugin's
-    /// live list. `model`/`effort` override the config pinning; both must still
-    /// be allowed by the plugin.
     pub fn resolve(
         &self,
         targets: &Targets,
@@ -839,8 +659,6 @@ fn trimmed_option(value: Option<String>) -> Option<String> {
         .filter(|value| !value.is_empty())
 }
 
-/// The personal target addressed by the configured entry or by the spoken
-/// project name. A project that exists only in another profile is not found.
 fn find_personal<'a>(
     targets: &'a Targets,
     entry: &TargetEntry,
@@ -859,8 +677,6 @@ fn find_personal<'a>(
     })
 }
 
-/// Spoken-name normalization: lower case, ё→е, punctuation and repeated
-/// spaces collapsed.
 #[must_use]
 pub fn normalize(value: &str) -> String {
     let mut out = String::with_capacity(value.len());

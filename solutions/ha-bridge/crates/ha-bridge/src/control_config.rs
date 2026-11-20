@@ -1,15 +1,3 @@
-//! `ha-control` process configuration, loaded 1:1 from the Go `cmd/ha-control`.
-//!
-//! * All three tokens (`HA_TOKEN`, `SCHEDULER_TOKEN`, `CONTROL_TOKEN`) are
-//!   required and `*_FILE` wins over the direct variable, exactly like the Go
-//!   control loader (the scheduler service uses the opposite priority).
-//! * Only the documented `CONTROL_*` durations are configurable; batch size,
-//!   lease and attempt limits stay at the Go defaults.
-//! * `CONTROL_LABEL` was removed and is rejected with the migration hint.
-//! * Durations accept Go syntax (`1s`, `5m`, `1h30m`).
-//!
-//! The token value never appears in an error message.
-
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -20,11 +8,9 @@ use thiserror::Error;
 use crate::catalog::{Rules, ToggleRule, valid_entity};
 use crate::config::{base_url, bool_value, non_empty, token};
 
-/// Default queue carrying control commands.
 pub const DEFAULT_QUEUE: &str = "control";
 const DEFAULT_LISTEN: &str = "127.0.0.1:8099";
 
-/// A fully validated `ha-control` configuration.
 #[derive(Clone)]
 pub struct ControlConfig {
     pub ha_url: String,
@@ -80,7 +66,6 @@ impl std::fmt::Debug for ControlConfig {
     }
 }
 
-/// Why the environment was rejected. Messages never contain a secret value.
 #[derive(Debug, Error)]
 pub enum ControlConfigError {
     #[error("config: {0} is required")]
@@ -96,12 +81,10 @@ pub enum ControlConfigError {
 }
 
 impl ControlConfig {
-    /// Read and validate the process environment.
     pub fn load() -> Result<Self, ControlConfigError> {
         Self::load_from(&|key| std::env::var(key).ok(), &|path| std::fs::read(path))
     }
 
-    /// Load from injected environment and file readers (used by tests).
     pub fn load_from(
         getenv: &dyn Fn(&str) -> Option<String>,
         read_file: &dyn Fn(&str) -> std::io::Result<Vec<u8>>,
@@ -240,7 +223,6 @@ impl ControlConfig {
         })
     }
 
-    /// The rules discovery applies.
     #[must_use]
     pub fn rules(&self) -> Rules {
         Rules {
@@ -250,7 +232,6 @@ impl ControlConfig {
         }
     }
 
-    /// The configured synthetic binary toggles.
     #[must_use]
     pub fn toggles(&self) -> Vec<ToggleRule> {
         self.toggles.clone()
@@ -309,7 +290,6 @@ fn require_token(
         .ok_or(ControlConfigError::TokenRequired { name })
 }
 
-/// `^[a-z][a-z0-9._-]{0,31}$`
 pub(crate) fn valid_queue(value: &str) -> bool {
     let mut bytes = value.bytes();
     let Some(first) = bytes.next() else {
@@ -322,7 +302,6 @@ pub(crate) fn valid_queue(value: &str) -> bool {
         })
 }
 
-/// `^[A-Za-z0-9._-]{1,64}$`
 pub(crate) fn valid_consumer(value: &str) -> bool {
     !value.is_empty()
         && value.len() <= 64
@@ -331,8 +310,6 @@ pub(crate) fn valid_consumer(value: &str) -> bool {
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
 }
 
-/// Split `host:port` the way Go's `net.SplitHostPort` does for our addresses:
-/// an optional bracketed IPv6 host plus a non-empty port.
 #[must_use]
 pub fn split_host_port(listen: &str) -> Option<(&str, &str)> {
     let (host, port) = if let Some(rest) = listen.strip_prefix('[') {

@@ -1,13 +1,3 @@
-//! Master output volume: the softvol "Master Playback Volume" of the model's playback PCM
-//! (`Model::playback_pcm`) on card 0 (2 values, 0..255, linear in dB, Midi -60 dB..0 dB; TLV
-//! mute=0, i.e. raw 0 is the bottom of the range, not silence), on the stock curve of the model
-//! (`Model::volume_map`): volume v is platform level v * top level. The control is a user control
-//! that alsa-lib creates the first time the playback PCM is opened, so [`Mixer::open`]
-//! instantiates it if missing.
-//!
-//! The curves live in `pulsar_core::volume` and repeat the C++ arithmetic step by step (f32 / f64 /
-//! int as there): state.conf values written by one binary are read by the other (`.prev`).
-
 use pulsar_alsa::{Ctl, Pcm, Stream};
 use pulsar_core::volume::{clamp_unit, from_raw, to_raw};
 use pulsar_model::{Playback, VolumeCurve};
@@ -16,7 +6,6 @@ use tracing::{debug, error, info};
 
 const MASTER: &str = "Master Playback Volume";
 
-/// Why the hardware master is unavailable; the mixer keeps the volume in memory.
 #[derive(Clone, Debug, Error)]
 pub enum MixerError {
     #[error("snd_ctl_open hw:0: {0}")]
@@ -25,10 +14,6 @@ pub enum MixerError {
     NoControl(&'static str),
 }
 
-/// Мастер-громкость. Без контрола (открыть не удалось, это в логе) `available()` ложно, и громкость
-/// хранится только в памяти. У моделей с программной громкостью (`Model::software_volume`)
-/// контрола нет: `available()` истинно, и контроллер применяет громкость как усиление каналов.
-/// Не актор: `set_*` применяется синхронно, геттеры сразу видят новое значение.
 pub struct Mixer {
     curve: &'static VolumeCurve,
     ctl: Option<Ctl>,
@@ -37,8 +22,6 @@ pub struct Mixer {
 }
 
 impl Mixer {
-    /// Card 0; adopts the current raw value when it reads as > 0, else the volume stays 0.5 (0.1
-    /// with software volume). Err: no hardware master, the caller keeps a memory-only mixer.
     pub fn open(
         playback: &'static Playback,
         curve: &'static VolumeCurve,
@@ -50,7 +33,6 @@ impl Mixer {
         }
         let ctl = Ctl::open("hw:0").map_err(|e| MixerError::Open(e.to_string()))?;
         if !ctl.mixer_exists(MASTER) {
-            // Opening the softvol PCM once creates the control.
             drop(Pcm::open(playback.pcm, Stream::Playback, true));
             if !ctl.mixer_exists(MASTER) {
                 return Err(MixerError::NoControl(MASTER));
@@ -66,12 +48,10 @@ impl Mixer {
         Ok(mixer)
     }
 
-    /// A memory-only mixer of `curve` (no hardware master).
     pub fn fallback(curve: &'static VolumeCurve) -> Self {
         Self {
             curve,
             ctl: None,
-            // No hardware master: the controller applies this gain to the player channels.
             volume: if curve.software_volume { 0.1 } else { 0.5 },
             muted: false,
         }
@@ -81,12 +61,10 @@ impl Mixer {
         self.curve.software_volume || self.ctl.is_some()
     }
 
-    /// 0..1
     pub fn volume(&self) -> f32 {
         self.volume
     }
 
-    /// 0..1, written to the control at once.
     pub fn set_volume(&mut self, v: f32) {
         self.volume = clamp_unit(v);
         self.apply();
@@ -96,7 +74,6 @@ impl Mixer {
         self.muted
     }
 
-    /// Mute = raw 0 (still -60 dB, not silence).
     pub fn set_muted(&mut self, m: bool) {
         self.muted = m;
         self.apply();
@@ -165,7 +142,6 @@ mod tests {
         assert_eq!(step_alice(0.05, true), 0.1);
         assert_eq!(step_alice(0.15, false), 0.1);
         assert_eq!(step_alice(0.33, false), 0.3);
-        // f32 drift right next to a level counts as that level.
         assert_eq!(step_level(m, 0.150_000_1, false), 0.1);
         assert_eq!(step_level(m, 0.149_999_9, true), 0.2);
         assert_eq!(step_alice(0.199_999_9, true), 0.3);

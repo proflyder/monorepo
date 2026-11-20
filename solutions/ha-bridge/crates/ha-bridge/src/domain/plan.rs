@@ -1,25 +1,15 @@
-//! Map one allowed `(source kind, action)` pair to one configured script.
-//!
-//! The plan never derives a service or entity from the event payload. Anything
-//! not in the allowlist is a structural failure that the bridge acknowledges
-//! as terminal `FAILED`.
-
 use home_worker::{Action, Event, Source};
 use serde_json::{Map, Value, json};
 
 use crate::domain::announce::announce_message;
 
-/// A configured script and the variables passed to it, or a reason to skip HA.
 #[derive(Debug, Clone, PartialEq)]
 pub struct PlannedAction {
-    /// Target script; empty when the event is skipped.
     pub script: String,
     pub variables: Map<String, Value>,
-    /// Present when the event is acknowledged `SKIPPED` without an HA call.
     pub skip_reason: Option<String>,
 }
 
-/// A structural rejection. The exact text is part of the golden vectors.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum PlanError {
     #[error("event queue {queue:?} does not match the configured queue {configured:?}")]
@@ -32,7 +22,6 @@ pub enum PlanError {
     Unsupported { kind: String, action: String },
 }
 
-/// The script names the bridge is allowed to call.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Scripts {
     pub alarm: String,
@@ -40,10 +29,6 @@ pub struct Scripts {
     pub stop: String,
 }
 
-/// Plan one event against the configured queue and scripts.
-///
-/// `configured_queue` is the queue the worker leases; an empty event queue is
-/// accepted because the scheduler may omit the default value on the wire.
 pub fn plan(
     event: &Event,
     configured_queue: &str,
@@ -64,9 +49,6 @@ pub fn plan(
 
     match event.action {
         Action::Stop => match event.source {
-            // The only sound this bridge can safely stop globally is the alarm
-            // it started. A one-shot timer/reminder announcement has no safe
-            // global HA stop.
             Source::Alarm => {
                 let mut variables = clone_variables(&base);
                 variables.insert("reason".to_owned(), json!("scheduler_stop"));
@@ -120,8 +102,6 @@ pub fn plan(
     }
 }
 
-/// The Go bridge's `SourceKind` string. An unknown wire value was normalized
-/// by the client to `enum-<n>`.
 #[must_use]
 pub fn source_kind_label(source: Source) -> String {
     match source {
@@ -135,7 +115,6 @@ pub fn source_kind_label(source: Source) -> String {
     }
 }
 
-/// The Go bridge's `Action` string. Unknown wire values stay `ENUM-<n>`.
 #[must_use]
 pub fn action_label(action: Action) -> String {
     match action {

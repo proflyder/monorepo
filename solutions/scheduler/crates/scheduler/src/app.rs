@@ -1,10 +1,3 @@
-//! Composition root: configuration, telemetry, SQLite store, engine and the
-//! authenticated Connect API.
-//!
-//! Shutdown is ordered: the listener stops accepting and drains in-flight
-//! requests, then the engine task is cancelled and joined, then the SQLite
-//! writer thread is closed.
-
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -19,12 +12,10 @@ use crate::domain::SystemClock;
 use crate::engine::{DEFAULT_PURGE_INTERVAL, Engine};
 use crate::store::{Config as StoreConfig, Store};
 
-/// Reported implementation version (`GetStatus.version`).
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(10);
 
-/// Starts the service and blocks until SIGTERM/SIGINT or a listener failure.
 pub async fn run() -> anyhow::Result<()> {
     let config = Config::load().context("configuration")?;
     TelemetryBuilder::new()
@@ -87,8 +78,6 @@ pub async fn run() -> anyhow::Result<()> {
             server.await
         }
     };
-    // The listener is gone; stop the engine and close the SQLite writer before
-    // propagating a serving failure.
     cancel.cancel();
     let unfinished = supervisor.shutdown(SHUTDOWN_TIMEOUT).await;
     if !unfinished.is_empty() {

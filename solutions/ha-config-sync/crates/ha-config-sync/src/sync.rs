@@ -1,10 +1,3 @@
-//! One sync cycle: measure drift, apply, validate, reload, verify, roll back.
-//!
-//! The state machine is synchronous from the caller's point of view: [`Syncer`]
-//! owns the agent and Home Assistant clients and runs one cycle per call. A
-//! failed desired-set digest is retried with exponential backoff; a new digest
-//! resets it.
-
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -16,18 +9,12 @@ use crate::manifest::Plan;
 use crate::metrics::{ApplyResult, Metrics};
 use crate::protocol::{AgentHash, DesiredFile, PROTOCOL_VERSION};
 
-/// First retry delay after a failed apply.
 pub const BACKOFF_BASE: Duration = Duration::from_secs(5 * 60);
-/// Upper bound for the retry delay.
 pub const BACKOFF_CAP: Duration = Duration::from_secs(6 * 60 * 60);
-/// Default wait for Home Assistant to answer after a restart.
 pub const RESTART_TIMEOUT: Duration = Duration::from_secs(5 * 60);
-/// How long a restart must be observed going down before it counts.
 pub const RESTART_DOWN_TIMEOUT: Duration = Duration::from_secs(90);
-/// Poll period while observing the restart.
 pub const RESTART_POLL: Duration = Duration::from_secs(5);
 
-/// Exponential retry gate for one desired digest.
 #[derive(Debug)]
 pub struct Backoff {
     digest: Option<String>,
@@ -42,7 +29,6 @@ impl Default for Backoff {
 }
 
 impl Backoff {
-    /// An empty gate that allows the first attempt.
     #[must_use]
     pub fn new() -> Self {
         Self {
@@ -52,7 +38,6 @@ impl Backoff {
         }
     }
 
-    /// The delay after `failures` consecutive failures (1-based).
     #[must_use]
     pub fn delay(failures: u32) -> Duration {
         let shift = failures.saturating_sub(1).min(16);
@@ -60,7 +45,6 @@ impl Backoff {
         BACKOFF_BASE.saturating_mul(factor).min(BACKOFF_CAP)
     }
 
-    /// Whether `digest` may be attempted at `now`.
     #[must_use]
     pub fn allows(&self, digest: &str, now: Instant) -> bool {
         if self.digest.as_deref() != Some(digest) {
@@ -70,7 +54,6 @@ impl Backoff {
             .is_none_or(|retry_after| now >= retry_after)
     }
 
-    /// Record a failure and schedule the next attempt.
     pub fn record_failure(&mut self, digest: &str, now: Instant) {
         if self.digest.as_deref() == Some(digest) {
             self.failures = self.failures.saturating_add(1);
@@ -81,47 +64,33 @@ impl Backoff {
         self.retry_after = Some(now + Self::delay(self.failures));
     }
 
-    /// Forget the failure history after a success or a new desired digest.
     pub fn reset(&mut self) {
         self.digest = None;
         self.failures = 0;
         self.retry_after = None;
     }
 
-    /// How many consecutive failures the current digest has.
     #[must_use]
     pub fn failures(&self) -> u32 {
         self.failures
     }
 }
 
-/// How a cycle ended.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Outcome {
-    /// The host already matched the desired set.
     Unchanged,
-    /// Observe mode: drift was measured but not applied.
     Observed,
-    /// Applied, validated, reloaded and verified.
     Applied,
-    /// Restart postponed because the guard entity was not `off`.
     Deferred,
-    /// A deferred restart was completed without touching the files.
     Restarted,
-    /// A failure was rolled back to the backup.
     RolledBack,
-    /// A check, apply or rollback failed.
     Failed,
-    /// A failed digest is inside its backoff window.
     Backoff,
 }
 
-/// The result of one cycle.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CycleReport {
-    /// What happened.
     pub outcome: Outcome,
-    /// Number of drifted files observed at the start.
     pub drift: usize,
 }
 
@@ -131,14 +100,12 @@ impl CycleReport {
     }
 }
 
-/// Why the apply steps stopped.
 #[derive(Debug)]
 enum Stop {
     Deferred,
     Failed(String),
 }
 
-/// The sync worker.
 pub struct Syncer<A: Agent, H: HaApi> {
     agent: A,
     ha: H,
@@ -157,7 +124,6 @@ pub struct Syncer<A: Agent, H: HaApi> {
 }
 
 impl<A: Agent, H: HaApi> Syncer<A, H> {
-    /// Build a worker. `desired` and `plan` are already validated by the caller.
     #[must_use]
     pub fn new(
         agent: A,
@@ -189,29 +155,24 @@ impl<A: Agent, H: HaApi> Syncer<A, H> {
         }
     }
 
-    /// Override the restart wait (tests use a short bound).
     #[must_use]
     pub fn with_restart_timeout(mut self, timeout: Duration) -> Self {
         self.restart_timeout = timeout;
         self
     }
 
-    /// Override the time allowed for Home Assistant to go down (tests use a
-    /// short bound; production needs the 90 s default).
     #[must_use]
     pub fn with_restart_down_timeout(mut self, timeout: Duration) -> Self {
         self.restart_down_timeout = timeout;
         self
     }
 
-    /// Override the polling period used while observing a restart.
     #[must_use]
     pub fn with_restart_poll(mut self, poll: Duration) -> Self {
         self.restart_poll = poll;
         self
     }
 
-    /// Override how many backups survive a successful cycle.
     #[must_use]
     pub fn with_prune_keep(mut self, keep: u32) -> Self {
         self.prune_keep = keep;
@@ -223,7 +184,6 @@ impl<A: Agent, H: HaApi> Syncer<A, H> {
         self.metrics.set_restart_pending(pending);
     }
 
-    /// Run one cycle.
     pub async fn cycle(&mut self) -> CycleReport {
         let started = Instant::now();
         match agent::version(&self.agent).await {
@@ -271,8 +231,6 @@ impl<A: Agent, H: HaApi> Syncer<A, H> {
             return CycleReport::new(Outcome::Unchanged, 0);
         }
         if drifted.is_empty() {
-            // The files are already in place; only the deferred restart is
-            // outstanding. Retry guard -> restart -> wait -> verify.
             let mut restarted = false;
             return match self.restart_flow(&mut restarted).await {
                 Ok(()) => {
@@ -347,8 +305,6 @@ impl<A: Agent, H: HaApi> Syncer<A, H> {
             Err(Stop::Failed(reason)) => {
                 tracing::error!(reason = %reason, "apply failed, rolling back");
                 let rolled_back = self.rollback(&backup, &drifted, restarted).await;
-                // Restoring returns to the pre-apply files; a restart that was
-                // already pending before this cycle is still pending.
                 self.set_restart_pending(pending_before);
                 self.metrics.record_apply_timestamp(unix_now());
                 self.metrics.count_apply(if rolled_back {
@@ -404,17 +360,11 @@ impl<A: Agent, H: HaApi> Syncer<A, H> {
                 .map_err(|error| Stop::Failed(format!("reload {service}: {error}")))?;
         }
         if self.plan.needs_restart(drifted) || self.restart_pending {
-            // A deferred restart is still outstanding even when this cycle's
-            // drift belongs to other files.
             self.restart_flow(restarted).await?;
         }
         self.verify_hashes().await
     }
 
-    /// Guard -> restart request -> observe down -> wait up.
-    ///
-    /// Shared by a normal apply and by a deferred restart whose files are
-    /// already on disk.
     async fn restart_flow(&self, restarted: &mut bool) -> Result<(), Stop> {
         if let Some(entity) = self.restart_guard_entity.as_deref() {
             match self.ha.state(entity).await {
@@ -431,9 +381,6 @@ impl<A: Agent, H: HaApi> Syncer<A, H> {
         self.wait_for_ha_cycle().await
     }
 
-    /// Request a restart. Home Assistant often drops the HTTP connection or
-    /// answers 5xx while it shuts down; that is the expected "restart in
-    /// progress" answer, not a failure. Only a 4xx is a real failure.
     async fn request_restart(&self) -> Result<(), Stop> {
         match self.ha.call_service("homeassistant.restart").await {
             Ok(()) => Ok(()),
@@ -445,9 +392,6 @@ impl<A: Agent, H: HaApi> Syncer<A, H> {
         }
     }
 
-    /// Watch the restart actually happen: first a failed `/api/` probe within
-    /// [`RESTART_DOWN_TIMEOUT`], then a successful one within
-    /// [`RESTART_TIMEOUT`].
     async fn wait_for_ha_cycle(&self) -> Result<(), Stop> {
         let down_deadline = Instant::now() + self.restart_down_timeout;
         loop {
@@ -490,12 +434,6 @@ impl<A: Agent, H: HaApi> Syncer<A, H> {
         Ok(())
     }
 
-    /// Restore the backup and repeat the reload plan.
-    ///
-    /// The return value says whether the files were restored. A reload or
-    /// restart that fails after a successful restore is logged but does not
-    /// change the outcome: the files are back, which is what "rolled back"
-    /// reports to the operator.
     async fn rollback(&self, backup: &str, drifted: &BTreeSet<String>, restarted: bool) -> bool {
         let restored = match agent::restore(&self.agent, backup).await {
             Ok(()) => true,
@@ -519,9 +457,6 @@ impl<A: Agent, H: HaApi> Syncer<A, H> {
     }
 }
 
-/// Whether a restart call failed only because Home Assistant was already
-/// stopping. Transport failures, timeouts (transport errors) and 5xx mean the
-/// restart is in progress; everything else, notably 4xx, is a real failure.
 fn restart_in_progress(error: &HaError) -> bool {
     match error {
         HaError::Transport(_)
@@ -546,7 +481,6 @@ fn truncate(value: &str, limit: usize) -> String {
     value.chars().take(limit).collect()
 }
 
-/// Ensure an agent error is logged by class, not by content.
 #[must_use]
 pub fn describe_agent_error(error: &AgentError) -> &'static str {
     match error {
@@ -557,7 +491,6 @@ pub fn describe_agent_error(error: &AgentError) -> &'static str {
     }
 }
 
-/// Ensure a Home Assistant error is logged by class, not by content.
 #[must_use]
 pub fn describe_ha_error(error: &HaError) -> &'static str {
     match error {
@@ -793,8 +726,6 @@ mod tests {
                         let name = format!("{domain}.{service}");
                         state.calls.lock().expect("calls").push(name);
                         if service == "restart" {
-                            // Even a 5xx or a dropped connection means HA is
-                            // stopping; simulate the downtime in both cases.
                             *state.down_pings.lock().expect("down pings") =
                                 state.restart_down_pings;
                             if state.restart_status != 200 {
@@ -961,7 +892,6 @@ mod tests {
         let report = syncer.cycle().await;
         assert_eq!(report.outcome, Outcome::RolledBack);
         assert_eq!(syncer.agent.restore_calls.load(Ordering::Relaxed), 1);
-        // one failed reload, then the rollback reload also fails.
         assert_eq!(
             metrics
                 .render()
@@ -1004,8 +934,6 @@ mod tests {
                 .contains("ha_config_sync_restart_pending 1\n")
         );
 
-        // Files are already in place, so the next cycle sees no drift but must
-        // still complete the deferred restart.
         ha.set_guard("off");
         let report = syncer.cycle().await;
         assert_eq!(report.outcome, Outcome::Restarted);
@@ -1067,7 +995,6 @@ mod tests {
         );
 
         ha.set_guard("off");
-        // Another managed file drifts before the deferred restart happened.
         syncer
             .agent
             .files

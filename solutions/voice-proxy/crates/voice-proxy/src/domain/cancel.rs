@@ -1,13 +1,7 @@
-//! Exact cancel-phrase guard: the last-resort path for HA's
-//! continued-conversation mode. Matching is exact after [`normalize`], never
-//! fuzzy.
-
 use std::collections::HashSet;
 
 use super::sanitize::normalize_utterance;
 
-/// The exact local cancel phrases registered by the HA custom_sentences
-/// StationCancel intent. The guard must not be broadened into fuzzy matching.
 pub const DEFAULT_CANCEL_PHRASES: &[&str] = &[
     "отмена",
     "отмени",
@@ -20,7 +14,6 @@ pub const DEFAULT_CANCEL_PHRASES: &[&str] = &[
     "неважно",
 ];
 
-/// The phrase set and its normalised lookup form.
 #[derive(Debug, Clone)]
 pub struct CancelGuard {
     phrases: HashSet<String>,
@@ -33,7 +26,6 @@ impl Default for CancelGuard {
 }
 
 impl CancelGuard {
-    /// Builds the lookup set from the configured phrases.
     #[must_use]
     pub fn new(phrases: &[&str]) -> Self {
         Self {
@@ -41,7 +33,6 @@ impl CancelGuard {
         }
     }
 
-    /// Returns the matched phrase, or `None`.
     #[must_use]
     pub fn matches(&self, text: &str) -> Option<String> {
         let normalized = normalize(text);
@@ -49,8 +40,6 @@ impl CancelGuard {
     }
 }
 
-/// The compact lookup form: NFKC, case folding, whitespace collapsing and
-/// trailing STT punctuation removal.
 #[must_use]
 pub fn normalize(text: &str) -> String {
     normalize_utterance(text)

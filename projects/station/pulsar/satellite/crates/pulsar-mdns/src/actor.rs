@@ -1,6 +1,3 @@
-//! The responder actor: one UDP socket, rtnetlink and the announcement schedule. The DNS packets
-//! themselves are built by the pure `dns` module.
-
 use std::io;
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 use std::os::fd::{AsFd as _, OwnedFd};
@@ -15,26 +12,18 @@ use tracing::{Level, debug, error, info, warn};
 use crate::dns::{Dest, GROUP, MAX_SERVICES, MDNS_PORT, Records, Service};
 use crate::{MdnsError, MdnsHandle, sys};
 
-/// RFC 6762 8.3: at least two announcements one second apart; three (0, +1 s, +3 s) also cover
-/// a Wi-Fi link that is still settling after a reconnect.
 const ANNOUNCE_AGAIN_MS: [u64; 2] = [1000, 3000];
-/// Fallback for missed netlink events; announces only on an actual change.
 const POLL_MS: u64 = 30_000;
-/// A burst of netlink events (DHCP renew, reconnect) is handled once, after it settles.
 const SETTLE_MS: u64 = 1_500;
 const RX_BUF: usize = 9000;
 const NETLINK_BUF: usize = 8192;
 
-/// `tracing` target of the per-question diagnostics `lan_probe mdns` reads.
 pub const ANSWERED_TARGET: &str = "pulsar_mdns::answered";
 
 pub struct MdnsService {
-    /// e.g. "_esphomelib._tcp"
     pub service: String,
-    /// Instance label without dots, e.g. the host label.
     pub instance: String,
     pub port: u16,
-    /// "key=value" strings.
     pub txt: Vec<String>,
 }
 
@@ -43,7 +32,6 @@ pub enum Cmd {
     SetTxt(String, Vec<String>),
 }
 
-/// Opens the responder and starts its actor on the current `LocalSet`.
 pub fn start(host: &str) -> Result<MdnsHandle, MdnsError> {
     let sock = open_socket()?;
     let mut r = Responder {
@@ -77,7 +65,6 @@ pub fn start(host: &str) -> Result<MdnsHandle, MdnsError> {
 fn open_socket() -> Result<UdpSocket, MdnsError> {
     let sock =
         Socket::new(Domain::IPV4, Type::DGRAM.nonblocking(), None).map_err(MdnsError::Socket)?;
-    // Shared with any other responder on the station (and lan_probe next to the daemon).
     let _ = sock.set_reuse_address(true);
     let _ = sock.set_reuse_port(true);
     let _ = sock.set_multicast_ttl_v4(255);
@@ -101,12 +88,9 @@ enum Timer {
     Settled,
 }
 
-/// One rtnetlink message that may matter.
 #[derive(Debug, PartialEq, Eq)]
 enum LinkEvent {
-    /// An IPv4 address was added or removed.
     Ipv4Addr,
-    /// Link state of an interface: its IFF_UP | IFF_RUNNING bits, 0 once deleted.
     Link { index: i32, flags: u32 },
 }
 
@@ -118,7 +102,6 @@ struct Responder {
     ifindex: u32,
     ifname: String,
     join_failed: bool,
-    /// ifindex -> last IFF_UP | IFF_RUNNING bits seen.
     link_flags: Vec<(i32, u32)>,
     change_forced: bool,
     timers: Timers<Timer>,
@@ -151,11 +134,9 @@ impl Responder {
                 r = self.sock.recv_from(&mut buf) => self.on_datagram(r, &buf),
             }
         }
-        // The last handle is gone: withdraw the records.
         self.announce(true);
     }
 
-    /// `started` = after the start announcement (C++ `fd_ >= 0`).
     fn apply(&mut self, cmd: Cmd, started: bool) {
         match cmd {
             Cmd::AddService(s) => {
@@ -212,8 +193,6 @@ impl Responder {
     }
 
     fn send_to(&self, pkt: &[u8], to: SocketAddrV4) {
-        // A plain sendto: tokio's try_send_to drops datagrams until the reactor has first seen
-        // the socket writable, which would lose the start announcement.
         if let Err(e) = SockRef::from(&self.sock).send_to(pkt, &to.into()) {
             debug!("mdns: sendto: {}", crate::errstr(&e));
         }
@@ -251,8 +230,6 @@ impl Responder {
         }
     }
 
-    /// Re-reads the interface choice; true if the interface or the address changed. A failed
-    /// getifaddrs changes nothing.
     fn refresh_iface(&mut self) -> bool {
         let changed;
         let Ok(best) = net::best_interface_checked() else {
@@ -278,9 +255,6 @@ impl Responder {
         changed
     }
 
-    /// Re-asserted on every check: after a Wi-Fi reconnect the driver may have dropped the
-    /// membership (or recreated wlan0) while the address stayed the same; EADDRINUSE = still
-    /// joined.
     fn join_group(&mut self) {
         if self.ifindex == 0 {
             return;
@@ -310,8 +284,6 @@ impl Responder {
         }
     }
 
-    /// Re-reads the interface, re-asserts the multicast membership and, on a change or when
-    /// forced (a link came back up), announces again.
     fn check_network(&mut self, force_announce: bool) {
         let old_idx = self.ifindex;
         let changed = self.refresh_iface();
@@ -325,10 +297,7 @@ impl Responder {
         }
     }
 
-    /// Address changes always count. Link messages also carry wireless events (scans, roaming
-    /// noise), so only a change of the up/running state counts.
     fn on_netlink(&mut self, events: &[LinkEvent], overflow: bool) {
-        // Overflow: messages were lost, something happened; recheck.
         let (mut relevant, mut link_up) = (overflow, overflow);
         for ev in events {
             match *ev {
@@ -361,8 +330,6 @@ impl Responder {
     }
 }
 
-/// Drains the rtnetlink socket into `events`; true when the kernel dropped messages (ENOBUFS).
-/// Pending forever without a socket.
 async fn read_netlink(
     nl: Option<&AsyncFd<OwnedFd>>,
     buf: &mut [u8],
@@ -385,10 +352,7 @@ async fn read_netlink(
     }
 }
 
-/// NLMSG_HDRLEN: struct nlmsghdr (len u32, type u16, flags u16, seq u32, pid u32), already a
-/// multiple of NLMSG_ALIGNTO (4).
 const NLMSG_HDRLEN: usize = 16;
-/// Offsets read from struct ifinfomsg: ifi_index at 4, ifi_flags at 8, 16 bytes in all.
 const _: () = {
     assert!(size_of::<libc::nlmsghdr>() == NLMSG_HDRLEN);
     assert!(std::mem::offset_of!(libc::ifinfomsg, ifi_index) == 4);
@@ -396,8 +360,6 @@ const _: () = {
     assert!(size_of::<libc::ifinfomsg>() == 16);
 };
 
-/// Appends the address and link messages of one netlink datagram (struct nlmsghdr, then
-/// ifaddrmsg / ifinfomsg, native byte order).
 fn parse_netlink(mut left: &[u8], events: &mut Vec<LinkEvent>) {
     let ne32 = |b: &[u8], at: usize| u32::from_ne_bytes([b[at], b[at + 1], b[at + 2], b[at + 3]]);
     while left.len() >= NLMSG_HDRLEN {

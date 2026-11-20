@@ -1,14 +1,5 @@
-//! `encoding/json.Marshal`-compatible serialization of `serde_json::Value`.
-//!
-//! `serde_json` writes compact JSON but does not HTML-escape `<`, `>`, `&` or
-//! U+2028/U+2029, while Go's encoder does by default. The converge replace
-//! payload and the rollback restore payload are byte contracts with the Go
-//! binary, so they are serialized here instead. Object keys are sorted by
-//! `serde_json::Map` (a `BTreeMap`), which is also what Go does for maps.
-
 use serde_json::Value;
 
-/// Serializes a JSON value exactly like `json.Marshal`.
 #[must_use]
 pub fn marshal(value: &Value) -> String {
     let mut output = String::new();
@@ -48,8 +39,6 @@ fn append(output: &mut String, value: &Value) {
     }
 }
 
-/// Go's `encodeState.string`: named escapes for common controls, `\u00XX` for
-/// other control bytes, HTML-safe escapes for `<> &`, and `\u2028`/`\u2029`.
 fn append_string(output: &mut String, text: &str) {
     const HEX: &[u8; 16] = b"0123456789abcdef";
     output.push('"');

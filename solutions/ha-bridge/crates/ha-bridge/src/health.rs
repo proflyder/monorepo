@@ -1,10 +1,3 @@
-//! Distroless `ha-bridge -healthcheck` probe.
-//!
-//! The bridge has no listener, so readiness means "the authenticated scheduler
-//! API answers and reports a healthy tick loop". The token is read from its
-//! mounted file by the normal config loader and never appears in process
-//! arguments or probe events.
-
 use std::process::ExitCode;
 use std::time::Duration;
 
@@ -12,10 +5,8 @@ use home_proto::{SchedulerClient, SchedulerError};
 
 use crate::config::Config;
 
-/// A single probe stays below the Kubernetes timeout.
 const TIMEOUT: Duration = Duration::from_secs(5);
 
-/// Build the scheduler client, honouring `SCHEDULER_CA_FILE`.
 pub fn scheduler_client(
     config: &Config,
     timeout: Duration,
@@ -39,7 +30,6 @@ pub fn scheduler_client(
     )
 }
 
-/// `ha-bridge -healthcheck`: authenticated `GetStatus` must report ready.
 pub async fn run_healthcheck() -> ExitCode {
     let config = match Config::load() {
         Ok(config) => config,
@@ -57,11 +47,6 @@ pub async fn run_healthcheck() -> ExitCode {
     .await
 }
 
-/// Shared distroless readiness probe: authenticated `GetStatus.ready`.
-///
-/// Both listener-less executors (`ha-bridge`, `ha-scenario`) use it. The token
-/// is passed by value from the normal config loader and never appears in
-/// process arguments.
 pub async fn probe(
     endpoint: &str,
     token: &home_secret::Token,

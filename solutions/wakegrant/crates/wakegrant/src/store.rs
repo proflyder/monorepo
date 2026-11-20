@@ -1,8 +1,3 @@
-//! Durable grant storage over the shared single-writer SQLite actor.
-//!
-//! The schema is the Go service's schema version 2 (`schema_meta`), so an
-//! existing PVC database opens in place and no table is recreated.
-
 use std::path::Path;
 use std::sync::Arc;
 
@@ -13,7 +8,6 @@ use uuid::Uuid;
 
 use crate::domain::Purpose;
 
-/// Current schema version, matching the Go `wakegrant` store.
 pub const SCHEMA_VERSION: i64 = 2;
 
 const V1: &[&str] = &[
@@ -33,7 +27,6 @@ const V2: &[&str] = &[
     "CREATE INDEX IF NOT EXISTS grants_machine_purpose ON grants(machine, purpose, consumed, expires_unix)",
 ];
 
-/// Ordered Go-compatible migrations.
 pub const MIGRATIONS: &[Migration] = &[
     Migration {
         version: 1,
@@ -55,20 +48,17 @@ pub enum StoreError {
     MissingPath,
 }
 
-/// An issued grant.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Grant {
     pub id: String,
     pub expires_at: OffsetDateTime,
 }
 
-/// Durable grant store.
 pub struct Store {
     db: Arc<Db>,
 }
 
 impl Store {
-    /// Opens (creating if needed) and migrates the database.
     pub fn open(path: impl AsRef<Path>) -> Result<Self, StoreError> {
         let path = path.as_ref();
         if path.as_os_str().is_empty() {
@@ -79,16 +69,12 @@ impl Store {
         })
     }
 
-    /// In-memory store for tests.
     pub fn open_in_memory() -> Result<Self, StoreError> {
         Ok(Self {
             db: Arc::new(Db::open_in_memory(MIGRATIONS)?),
         })
     }
 
-    /// Stores a new grant and replaces any unconsumed grant for the same
-    /// `(machine, purpose)`, so only the newest one of that kind can be
-    /// claimed. A grant of the other purpose is untouched.
     pub async fn create_grant(
         &self,
         machine: &str,
@@ -127,8 +113,6 @@ impl Store {
         Ok(Grant { id, expires_at })
     }
 
-    /// Atomically consumes the newest unexpired unconsumed grant for
-    /// `(machine, purpose)`. `None` means there was nothing to grant.
     pub async fn consume_newest(
         &self,
         machine: &str,
@@ -162,13 +146,11 @@ impl Store {
         }
     }
 
-    /// Health check used by `/healthz`.
     pub async fn ping(&self) -> Result<(), StoreError> {
         self.db.ping().await?;
         Ok(())
     }
 
-    /// Removes consumed and expired grants.
     pub async fn cleanup(&self, now: OffsetDateTime) -> Result<usize, StoreError> {
         let now_secs = now.unix_timestamp();
         let removed = self
@@ -183,7 +165,6 @@ impl Store {
         Ok(removed)
     }
 
-    /// Number of rows (tests only).
     #[cfg(test)]
     pub(crate) async fn count(&self) -> Result<i64, StoreError> {
         let count = self
@@ -195,7 +176,6 @@ impl Store {
         Ok(count)
     }
 
-    /// Seeds the published PROTOCOL.md vector (tests only).
     #[cfg(test)]
     pub(crate) fn insert_grant_for_test(
         &self,

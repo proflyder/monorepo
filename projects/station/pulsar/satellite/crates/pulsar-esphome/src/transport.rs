@@ -1,6 +1,3 @@
-//! Транспорт и слушающий сокет за трейтами: сервер не знает о `TcpStream`, тесты работают на
-//! `tokio::io::duplex`.
-
 use std::io;
 use std::net::{Ipv4Addr, SocketAddr};
 use std::task::{Context, Poll};
@@ -12,8 +9,6 @@ use tokio::net::TcpStream;
 
 use crate::error::SpawnError;
 
-/// Одно соединение. `into_split` отдаёт независимые половины для чтения и записи: клиентская
-/// задача мультиплексирует их в одном `select!`.
 pub trait Transport: 'static {
     fn into_split(self: Box<Self>) -> (Box<dyn AsyncRead + Unpin>, Box<dyn AsyncWrite + Unpin>);
 }
@@ -28,14 +23,12 @@ where
     }
 }
 
-/// Источник соединений. Актор опрашивает его только когда готов принять клиента.
 pub type Incoming = (Box<dyn Transport>, String);
 
 pub trait Listener: 'static {
     fn poll_accept(&mut self, cx: &mut Context<'_>) -> Poll<io::Result<Incoming>>;
 }
 
-/// TCP-порт API (все IPv4-интерфейсы).
 pub struct TcpListener {
     inner: tokio::net::TcpListener,
 }
@@ -67,9 +60,6 @@ impl Listener for TcpListener {
     }
 }
 
-/// Wi-Fi обрывы оставляют полуоткрытые соединения без FIN. Keepalive находит мёртвого
-/// пира примерно за 35 с, `TCP_USER_TIMEOUT` — зависшего (например, во время стрима
-/// микрофона) за 30 с, заметно раньше ping-таймаута API.
 fn configure_socket(stream: &TcpStream) {
     let s = SockRef::from(stream);
     let _ = s.set_tcp_nodelay(true);
@@ -82,7 +72,6 @@ fn configure_socket(stream: &TcpStream) {
     let _ = s.set_tcp_user_timeout(Some(Duration::from_millis(30_000)));
 }
 
-/// Удобный адаптер для тестов: слушатель из канала готовых транспортов.
 #[cfg(test)]
 pub struct ChannelListener {
     rx: tokio::sync::mpsc::UnboundedReceiver<Incoming>,

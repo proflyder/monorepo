@@ -41,7 +41,6 @@ fn layer_priority() {
     let mut l = ClockLayers::new();
     assert_eq!(l.compose(NOW, wall), (time_frame(), 0));
 
-    // Music levels: style on, media playing, a fresh frame.
     l.levels_on = true;
     l.media = true;
     l.music_frame(&bands(0.5), MusicSource::Speaker, NOW);
@@ -70,7 +69,6 @@ fn layer_priority() {
     l.updating = true;
     assert_eq!(l.compose(NOW, wall), (Frame::default(), 0));
 
-    // LISTENING only with voice indication, TIMER_RING always.
     l.set_voice_indication(false, NOW);
     l.set_ui_state(UiState::Listening, NOW);
     assert_eq!(l.compose(NOW, wall), (Frame::default(), 0));
@@ -93,12 +91,10 @@ fn layer_priority() {
     l.enabled = false;
     assert_eq!(l.compose(NOW, wall), (Frame::default(), 0));
 
-    // The pairing code shows even when disabled.
     l.show_code("1234".into(), NOW);
     let code = glyph_frame(font::code_glyphs(b"1234", 0, CODE_PAGE_MS), false);
     assert_eq!(l.compose(NOW, wall), (code, 0));
 
-    // Peel the layers off again.
     l.clear_code();
     assert_eq!(l.compose(NOW, wall).0, Frame::default());
     l.enabled = true;
@@ -127,7 +123,6 @@ fn error_state_shows_nothing_of_its_own() {
     let mut l = ClockLayers::new();
     l.set_ui_state(UiState::Error, NOW);
     assert_eq!(l.compose(NOW, wall).0, time_frame());
-    // Changing the state to the same animation keeps its phase.
     l.set_ui_state(UiState::Thinking, NOW);
     l.set_ui_state(UiState::Thinking, NOW + 500);
     assert_eq!(l.voice_t0, NOW);
@@ -138,7 +133,6 @@ fn one_shot_ends_and_frame_steps() {
     let mut l = ClockLayers::new();
     l.play(ClockShot::Next, NOW);
     assert_eq!(l.compose(NOW + 7, wall).1, 13);
-    // The last frame step is cut at the end of the animation.
     assert_eq!(l.compose(NOW + 1495, wall).1, 5);
     assert_eq!(l.compose(NOW + 1499, wall).1, 1);
     assert_eq!(l.compose(NOW + 1500, wall), (time_frame(), 0));
@@ -154,7 +148,6 @@ fn timer_countdown() {
         shows(&mut l, NOW),
         glyph_frame(font::timer_glyphs(65), true)
     );
-    // Whole seconds are rounded up.
     assert_eq!(
         shows(&mut l, NOW + 1),
         glyph_frame(font::timer_glyphs(65), true)
@@ -167,7 +160,6 @@ fn timer_countdown() {
         shows(&mut l, NOW + 64_001),
         glyph_frame(font::timer_glyphs(1), true)
     );
-    // At 00:00 the digits and the colon blink every 500 ms (NOW is a multiple of 1000).
     let zero = glyph_frame(font::timer_glyphs(0), true);
     assert_eq!(shows(&mut l, NOW + 65_000), zero);
     assert_eq!(shows(&mut l, NOW + 65_499), zero);
@@ -175,7 +167,6 @@ fn timer_countdown() {
     assert_eq!(shows(&mut l, NOW + 66_000), zero);
     assert_eq!(shows(&mut l, NOW + 99_700), Frame::default());
 
-    // Paused: the time left stays.
     l.set_timer(3_600_000, false, NOW);
     assert_eq!(
         shows(&mut l, NOW + 50_000),
@@ -200,7 +191,6 @@ fn flash_number_clamps_and_expires() {
 fn text_and_face_replace_each_other() {
     let mut l = ClockLayers::new();
     l.set_face(ClockFace::Static(3), NOW);
-    // Clearing the text keeps the face; text of only ':' replaces it.
     l.set_text("", NOW);
     assert!(matches!(l.base, Some(Content::Face { face: 3, .. })));
     l.set_text(":", NOW);
@@ -242,10 +232,8 @@ fn moving_content_frame_steps() {
 fn temporary_layer_durations() {
     let mut l = ClockLayers::new();
     l.set_scroll_ms(300);
-    // One pass of a scrolling text: (n + 4) steps.
     l.show_temporary_text("123456", 0, NOW);
     assert_eq!(l.overlay_until, NOW + 10 * 300);
-    // The frame timer also fires when the layer ends.
     assert_eq!(l.compose(NOW + 2950, wall).1, 50);
     assert_eq!(l.compose(NOW + 3000, wall).0, time_frame());
     assert_eq!(l.overlay, None);
@@ -260,7 +248,6 @@ fn temporary_layer_durations() {
     assert_eq!(l.overlay_until, NOW + TEMPORARY_MS);
     l.show_temporary_text("", 5, NOW);
     assert_eq!(l.overlay, None);
-    // A layer that ends right now still gets a 1 ms frame timer.
     l.show_temporary_face(ClockFace::Static(2), 1, NOW);
     assert_eq!(l.compose(NOW + 999, wall).1, 1);
 }
@@ -268,22 +255,18 @@ fn temporary_layer_durations() {
 #[test]
 fn level_ranges_per_source() {
     let mut l = ClockLayers::new();
-    // The first frame of a source starts its range: the minimum span around the value.
     l.music_frame(&bands(0.5), MusicSource::Speaker, NOW);
     assert!(l.mus_in.iter().all(|&v| close(v, 0.5)));
-    // Silence stays dark instead of showing the middle of the meter.
     let mut s = ClockLayers::new();
     s.music_frame(&bands(0.0), MusicSource::Speaker, NOW);
     assert_eq!(s.mus_in, [0.0; 4]);
 
-    // Peaks widen the range at once.
     l.music_frame(&bands(0.9), MusicSource::Speaker, NOW + 33);
     assert!(l.mus_in.iter().all(|&v| close(v, 1.0)));
     let r = l.ranges[0];
     assert!(close(r.hi[0], 0.9));
     let k = (-33.0f32 / RANGE_TAU_MS).exp();
     assert!(close(r.lo[0], 0.9 + (0.5 - 0.9) * k));
-    // The range closes in with a step of at most 100 ms across a gap, and survives a pause.
     l.music_frame(&bands(0.7), MusicSource::Speaker, NOW + 33 + 9_999);
     let k = (-100.0f32 / RANGE_TAU_MS).exp();
     let r2 = l.ranges[0];
@@ -291,7 +274,6 @@ fn level_ranges_per_source() {
     assert!(close(r2.lo[0], 0.7 + (r.lo[0] - 0.7) * k));
     let span = r2.hi[0] - r2.lo[0];
     assert!(close(l.mus_in[0], (0.7 - r2.lo[0]) / span));
-    // 10 s without the source: it starts over.
     l.music_frame(
         &bands(0.2),
         MusicSource::Speaker,
@@ -299,7 +281,6 @@ fn level_ranges_per_source() {
     );
     assert!(close(l.ranges[0].lo[0], 0.2) && close(l.ranges[0].hi[0], 0.2));
 
-    // Bands are averaged pairwise per digit.
     let mut l = ClockLayers::new();
     let f = MusicFrame {
         bands: [0.0, 0.2, 0.4, 0.4, 0.6, 0.6, 1.0, 1.0],
@@ -308,7 +289,6 @@ fn level_ranges_per_source() {
     l.music_frame(&f, MusicSource::Sendspin, NOW);
     let r = l.ranges[1];
     assert!(close(r.lo[0], 0.1) && close(r.lo[1], 0.4) && close(r.lo[3], 1.0));
-    // A full-scale value keeps the span inside 0..1.
     assert!(close(l.mus_in[3], 1.0));
     assert_eq!(l.ranges[0].last_ms, i64::MIN / 2);
 }
@@ -344,24 +324,20 @@ fn meters_cycle_with_the_time_and_fall() {
     feed(&mut l, NOW, 0.8);
     assert_eq!(l.compose(NOW, wall).0, clock_fx::levels(&[0.8; 4]));
     assert_eq!(l.viz_t0, NOW);
-    // The meters fall with a 250 ms time constant.
     feed(&mut l, NOW + 250, 0.0);
     let k = (-1.0f32).exp();
     assert_eq!(
         l.compose(NOW + 250, wall).0,
         clock_fx::levels(&[0.8 * k; 4])
     );
-    // Rises show at once.
     feed(&mut l, NOW + 290, 0.9);
     assert_eq!(l.compose(NOW + 290, wall).0, clock_fx::levels(&[0.9; 4]));
-    // The time takes over for the last 3 s of every 30 s.
     feed(&mut l, NOW + 26_999, 0.9);
     assert_ne!(l.compose(NOW + 26_999, wall).0, time_frame());
     feed(&mut l, NOW + 27_000, 0.9);
     assert_eq!(l.compose(NOW + 27_000, wall), (time_frame(), 0));
     feed(&mut l, NOW + 30_000, 0.9);
     assert_eq!(l.compose(NOW + 30_000, wall).1, MUSIC_FRAME_MS);
-    // Stale frames end the display; the next start resets the meters and the cycle.
     assert_eq!(
         l.compose(NOW + 30_000 + MUSIC_STALE_MS, wall).0,
         time_frame()
@@ -370,7 +346,6 @@ fn meters_cycle_with_the_time_and_fall() {
     feed(&mut l, NOW + 40_000, 0.3);
     assert_eq!(l.compose(NOW + 40_000, wall).0, clock_fx::levels(&[0.3; 4]));
     assert_eq!(l.viz_t0, NOW + 40_000);
-    // Media stopped.
     l.media = false;
     assert_eq!(l.compose(NOW + 40_010, wall).0, time_frame());
 }

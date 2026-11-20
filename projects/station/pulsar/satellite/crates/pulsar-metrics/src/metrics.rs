@@ -1,13 +1,8 @@
-//! Atomically updated metric state. Every recorder only does relaxed atomic
-//! loads/stores, so the audio processing thread and the call loop never block or
-//! allocate here.
-
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::system::SystemSample;
 
-/// `f64` gauge over an `AtomicU64` bit pattern.
 #[derive(Debug)]
 pub struct Gauge(AtomicU64);
 
@@ -56,11 +51,8 @@ impl Counter {
     }
 }
 
-/// Upper bounds of one histogram; the `+Inf` bucket is implicit.
 pub const HISTOGRAM_SLOTS: usize = 16;
 
-/// Cumulative histogram with fixed bounds. At most [`HISTOGRAM_SLOTS`] bounds;
-/// the constructors below fit.
 #[derive(Debug)]
 pub struct Histogram {
     bounds: &'static [f64],
@@ -96,7 +88,6 @@ impl Histogram {
         self.count.fetch_add(1, Ordering::Relaxed);
     }
 
-    /// Cumulative counts per bucket, then `+Inf`.
     #[must_use]
     pub fn buckets(&self) -> Vec<(f64, u64)> {
         let mut running = 0;
@@ -121,7 +112,6 @@ impl Histogram {
     }
 }
 
-/// Atomic `f64` addition through a compare-exchange loop.
 fn add_f64(atomic: &AtomicU64, value: f64) {
     let mut old = atomic.load(Ordering::Relaxed);
     loop {
@@ -185,7 +175,6 @@ impl PlaybackKind {
         ["tts", "announce", "media_announce", "earcon", "ring"];
 }
 
-/// Fixed registry of the daemon's metrics.
 #[derive(Debug)]
 pub struct Metrics {
     pub(crate) info: OnceLock<(String, String)>,
@@ -261,12 +250,10 @@ impl Metrics {
         }
     }
 
-    /// Version and model labels of `pulsar_info`; the first call wins.
     pub fn set_info(&self, version: &str, model: &str) {
         let _ = self.info.set((version.to_owned(), model.to_owned()));
     }
 
-    /// `pulsar_wake_model_info`: loaded detector file and daemon version.
     pub fn set_wake_model(&self, model: &str, version: &str) {
         let _ = self.wake_model.set((model.to_owned(), version.to_owned()));
     }
@@ -303,7 +290,6 @@ impl Metrics {
         self.alsa_xruns.inc();
     }
 
-    /// `kind`: 0 — hardware mute switch, 1 — mute from Home Assistant.
     pub fn set_mute(&self, hardware: bool, software: bool) {
         self.mute[0].set(if hardware { 1.0 } else { 0.0 });
         self.mute[1].set(if software { 1.0 } else { 0.0 });
@@ -366,7 +352,6 @@ impl Metrics {
         self.wake_miss.inc();
     }
 
-    /// `false` — «ложное срабатывание», `missed` — «пропуск» из обратной связи.
     pub fn wake_label(&self, false_alarm: bool) {
         self.wake_labels[usize::from(!false_alarm)].inc();
     }

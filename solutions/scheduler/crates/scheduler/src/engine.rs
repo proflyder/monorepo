@@ -1,13 +1,3 @@
-//! The durable engine loop: one tick per interval plus a periodic purge.
-//!
-//! The loop owns no audio or network side effects; it only advances schedules
-//! and timers into the durable event outbox. Every store call hops to
-//! [`tokio::task::spawn_blocking`] because the store talks to the single SQLite
-//! writer thread and must never block the async runtime.
-//!
-//! Readiness mirrors the Go engine: a successful tick within three intervals
-//! (at least five seconds) and no newer failure.
-
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
@@ -17,10 +7,8 @@ use crate::api::EngineStatus;
 use crate::domain::Clock;
 use crate::store::{Store, StoreError};
 
-/// Default retention purge cadence (one hour, like the Go engine).
 pub const DEFAULT_PURGE_INTERVAL: Duration = Duration::from_secs(60 * 60);
 
-/// The last observed tick facts.
 #[derive(Debug, Clone, Default)]
 struct State {
     last_tick_unix: i64,
@@ -29,7 +17,6 @@ struct State {
     last_error: String,
 }
 
-/// Owns the tick cadence and the readiness snapshot.
 #[derive(Clone)]
 pub struct Engine {
     state: Arc<Mutex<State>>,
@@ -49,8 +36,6 @@ impl std::fmt::Debug for Engine {
 }
 
 impl Engine {
-    /// Builds an engine. A zero tick or purge interval falls back to the Go
-    /// defaults (1s, 1h).
     pub fn new(clock: Arc<dyn Clock>, tick: Duration, purge: Duration) -> Self {
         Self {
             state: Arc::new(Mutex::new(State::default())),
@@ -68,7 +53,6 @@ impl Engine {
         }
     }
 
-    /// Current readiness and last-tick facts for `GetStatus`.
     pub fn status(&self) -> EngineStatus {
         let now = self.clock.now_unix();
         let state = self.state.lock().unwrap_or_else(PoisonError::into_inner);
@@ -85,8 +69,6 @@ impl Engine {
         }
     }
 
-    /// Runs one engine pass. Failures are recorded so `GetStatus` cannot mask a
-    /// broken loop.
     pub async fn tick(&self, store: &Arc<Store>) -> Result<(), StoreError> {
         let now = self.clock.now_unix();
         {
@@ -132,10 +114,7 @@ impl Engine {
         }
     }
 
-    /// Runs the loop until `cancel` fires.
     pub async fn run(&self, store: Arc<Store>, cancel: CancellationToken) {
-        // Tick once immediately so readiness and due work do not wait a full
-        // interval after startup.
         if let Err(error) = self.tick(&store).await
             && !cancel.is_cancelled()
         {
@@ -144,8 +123,6 @@ impl Engine {
         let mut last_purge = self.clock.now_unix();
         let mut interval = tokio::time::interval(self.tick);
         interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
-        // The first tick of a fresh interval completes immediately; consume it
-        // so the loop waits one interval after the startup tick.
         interval.tick().await;
         loop {
             tokio::select! {
@@ -216,8 +193,6 @@ mod tests {
         engine.tick(&store).await.expect("tick");
         assert!(engine.status().ready);
 
-        // A failure at the same clock instant must drop readiness: the contract
-        // is the explicit error flag, not a timestamp comparison.
         engine.record_failure(frozen, "tick failed");
         let status = engine.status();
         assert!(!status.ready);

@@ -1,7 +1,3 @@
-//! Windows half of `cp-selftest.exe`: tries the registered CLSID, otherwise
-//! loads `HomeKompLogon.dll` next to the executable. Output is `PASS`/`FAIL`;
-//! exit codes are 0/1.
-
 use crate::bindings::Windows::Win32::Foundation::{E_FAIL, E_NOTIMPL, S_OK};
 use crate::bindings::Windows::Win32::System::Com::{
     CLSCTX_INPROC_SERVER, COINIT_APARTMENTTHREADED, CoCreateInstance, CoInitializeEx,
@@ -13,7 +9,6 @@ use windows_core::{
     BOOL, GUID, HRESULT, HSTRING, IUnknown, Interface, PCWSTR, Result as WinResult, s,
 };
 
-/// `crates/provider/src/provider.rs` (`PROVIDER_CLSID`).
 const PROVIDER_CLSID: GUID = GUID {
     data1: 0x9459_ccea,
     data2: 0x4ccc,
@@ -42,14 +37,11 @@ fn print(name: &str, hr: HRESULT) {
     );
 }
 
-/// `<directory of this executable>\HomeKompLogon.dll`, NUL terminated by
-/// `HSTRING`.
 fn local_dll_path() -> HSTRING {
     let exe = std::env::current_exe().expect("current executable path");
     HSTRING::from(exe.with_file_name(DLL_NAME).to_string_lossy().as_ref())
 }
 
-/// `CoCreateInstance` fallback: load the DLL next to the executable.
 fn provider_from_dll_next_to_executable() -> WinResult<ICredentialProvider> {
     let path = local_dll_path();
     // SAFETY: `path` is a NUL-terminated wide string.
@@ -167,7 +159,6 @@ pub fn run() -> i32 {
         auto_logon.as_bool() as i32
     );
 
-    // Stop the poller immediately: the self-test must not consume a grant.
     // SAFETY: same live object.
     print("UnAdvise", code_of(&unsafe { provider.UnAdvise() }));
 

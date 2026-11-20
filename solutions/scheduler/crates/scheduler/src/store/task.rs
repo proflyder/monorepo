@@ -1,5 +1,3 @@
-//! Generic one-shot task events in the shared outbox.
-
 use rusqlite::params;
 
 use crate::domain::{
@@ -13,8 +11,6 @@ use super::event::{EVENT_COLS, EventInsert, insert_event, scan_event};
 use super::{QUEUE_TASKS, Store, StoreError};
 
 impl Store {
-    /// Durably queues a generic task event. It is one-shot; recurring generic
-    /// task schedules are not implemented.
     pub fn enqueue_task(
         &self,
         task_type: &str,
@@ -96,8 +92,6 @@ impl Store {
         })
     }
 
-    /// Cancels a task event that is still pending. A leased task is a
-    /// precondition error; terminal events replay unchanged.
     pub fn cancel_task(&self, event_id: &str, now_unix: i64) -> Result<Event, StoreError> {
         validate_event_id(event_id)?;
         let event_id = event_id.to_owned();

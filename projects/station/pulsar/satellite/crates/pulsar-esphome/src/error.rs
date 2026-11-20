@@ -1,11 +1,8 @@
-//! Типизированные ошибки сервера.
-
 use std::io;
 use std::path::PathBuf;
 
 use thiserror::Error;
 
-/// Ошибка запуска сервера: порт не открылся.
 #[derive(Debug, Error)]
 pub enum SpawnError {
     #[error("api: socket: {0}")]
@@ -18,7 +15,6 @@ pub enum SpawnError {
     },
 }
 
-/// Ошибка файла ключа шифрования.
 #[derive(Debug, Error)]
 pub enum KeyError {
     #[error("api: cannot write {path}: {source}")]

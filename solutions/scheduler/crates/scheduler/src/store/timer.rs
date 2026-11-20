@@ -1,5 +1,3 @@
-//! Durable countdown timers.
-
 use rusqlite::{Row, Transaction, params};
 
 use crate::domain::{
@@ -56,8 +54,6 @@ fn idempotency_lookup(
 }
 
 impl Store {
-    /// Starts a durable countdown; a non-empty idempotency key replays the
-    /// original timer when the request matches.
     pub fn start_timer(
         &self,
         label: &str,
@@ -150,7 +146,6 @@ impl Store {
         })
     }
 
-    /// Returns a timer by id.
     pub fn get_timer(&self, id: &str) -> Result<Timer, StoreError> {
         validate_id(id)?;
         let id = id.to_owned();
@@ -167,7 +162,6 @@ impl Store {
         })
     }
 
-    /// Timers ordered by creation time.
     pub fn list_timers(&self, include_finished: bool) -> Result<Vec<Timer>, StoreError> {
         self.read(move |connection| {
             let mut query = format!("SELECT {TIMER_COLS} FROM timers");
@@ -182,7 +176,6 @@ impl Store {
         })
     }
 
-    /// Stores the remaining duration and pauses the timer.
     pub fn pause_timer(&self, id: &str, now_unix: i64) -> Result<Timer, StoreError> {
         let id = id.to_owned();
         self.with_tx(move |tx| {
@@ -218,7 +211,6 @@ impl Store {
         })
     }
 
-    /// Continues a paused timer from its stored remaining duration.
     pub fn resume_timer(&self, id: &str, now_unix: i64) -> Result<Timer, StoreError> {
         let id = id.to_owned();
         self.with_tx(move |tx| {
@@ -253,7 +245,6 @@ impl Store {
         })
     }
 
-    /// Cancels a running or paused timer, or sends STOP for a fired timer.
     pub fn cancel_timer(&self, id: &str, now_unix: i64) -> Result<Timer, StoreError> {
         let id = id.to_owned();
         self.with_tx(move |tx| {

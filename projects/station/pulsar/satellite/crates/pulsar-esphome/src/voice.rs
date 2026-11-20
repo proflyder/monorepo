@@ -1,13 +1,5 @@
-//! Владение голосовым пайплайном: чистые правила, без I/O.
-//!
-//! Владелец — самый свежий клиент после hello, всё ещё подписанный на голосового ассистента.
-//! HA, переподключившаяся после обрыва Wi-Fi, сразу забирает пайплайн у мёртвого сокета; проба
-//! или вторая HA, подписавшаяся и ушедшая, возвращает его предыдущему. Новый клиент при
-//! заполненном лимите может вытеснить установленного, но никогда — владельца.
-
 use tokio::time::Instant;
 
-/// Что выбор владельца и ранг вытеснения видят о клиенте.
 #[derive(Clone, Copy, Debug)]
 pub struct Standing {
     pub id: u64,
@@ -17,7 +9,6 @@ pub struct Standing {
     pub last_rx: Instant,
 }
 
-/// Владелец пайплайна.
 pub fn voice_choice(clients: impl Iterator<Item = Standing>) -> Option<u64> {
     let mut want: Option<Standing> = None;
     for c in clients {
@@ -28,9 +19,6 @@ pub fn voice_choice(clients: impl Iterator<Item = Standing>) -> Option<u64> {
     want.map(|w| w.id)
 }
 
-/// Клиент, завершивший hello при заполненном лимите, заменяет установленного: сначала без
-/// интереса к голосу, никогда — владельца, иначе того, от кого дольше всего не было слышно
-/// (переподключающаяся HA, чей старый сокет ещё не отвалился, попадает внутрь, а старый уходит).
 pub fn eviction_victim(clients: impl Iterator<Item = Standing>) -> (Option<u64>, usize) {
     let rank = |c: &Standing| {
         if c.voice {
@@ -54,7 +42,6 @@ pub fn eviction_victim(clients: impl Iterator<Item = Standing>) -> (Option<u64>,
     (victim.map(|v| v.id), established)
 }
 
-/// Состояние владения и «устаревших» команд предыдущего run.
 #[derive(Debug, Default)]
 pub struct VoiceOwnership {
     current: Option<u64>,
@@ -70,24 +57,19 @@ impl VoiceOwnership {
         self.current
     }
 
-    /// Меняет владельца; возвращает `true`, если он изменился.
     pub fn set_current(&mut self, owner: Option<u64>) -> bool {
         if self.current == owner {
             return false;
         }
         self.current = owner;
-        // Audio/stop, ещё стоящие в очереди от прошлого run, не должны дойти до нового
-        // владельца (в C++ контроллер завершал run внутри hook, до отправки остального).
         self.stale = true;
         true
     }
 
-    /// Новый run: команды снова относятся к текущему владельцу.
     pub fn start_run(&mut self) {
         self.stale = false;
     }
 
-    /// Команды аудио/останова этого run уже не актуальны.
     pub fn is_stale(&self) -> bool {
         self.stale
     }
@@ -127,7 +109,6 @@ mod tests {
             ),
             Some(2)
         );
-        // Подписка до hello не считается.
         assert_eq!(
             voice_choice([stand(1, true, false, 3, 0), stand(2, false, false, 5, 0)].into_iter()),
             Some(1)
@@ -136,12 +117,10 @@ mod tests {
 
     #[test]
     fn eviction_prefers_the_least_useful_and_never_the_owner() {
-        // Ожидающие соединения не считаются и не уходят.
         assert_eq!(
             eviction_victim([stand(1, false, false, 0, 0)].into_iter()),
             (None, 0)
         );
-        // Сначала без интереса к голосу, затем дольше всех молчащие.
         assert_eq!(
             eviction_victim(
                 [
@@ -155,7 +134,6 @@ mod tests {
             ),
             (Some(3), 4)
         );
-        // Затем подписчики, не владеющие пайплайном; владелец — последним.
         assert_eq!(
             eviction_victim(
                 [
@@ -171,7 +149,6 @@ mod tests {
             eviction_victim([stand(1, true, true, 4, 0)].into_iter()),
             (Some(1), 1)
         );
-        // При равенстве — более раннее соединение.
         assert_eq!(
             eviction_victim([stand(1, true, false, 0, 5), stand(2, true, false, 0, 5)].into_iter()),
             (Some(1), 2)

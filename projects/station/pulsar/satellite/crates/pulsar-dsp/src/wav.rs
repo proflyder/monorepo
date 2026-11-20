@@ -1,7 +1,3 @@
-//! Канонический WAV с PCM16: заголовок для дозаписи в поток и готовый файл одним куском.
-
-/// Рифф-заголовок 44 байта для PCM16 с `channels` каналами и `rate` Гц; `data_bytes` — размер
-/// уже записанных/планируемых данных.
 pub fn header(channels: u16, rate: u32, data_bytes: u32) -> [u8; 44] {
     let mut h = [0u8; 44];
     let block = channels * 2;
@@ -20,7 +16,6 @@ pub fn header(channels: u16, rate: u32, data_bytes: u32) -> [u8; 44] {
     h
 }
 
-/// Файл PCM16 целиком: заголовок и выборки. Выборки чередуются по `channels` каналам.
 pub fn pcm16(samples: &[i16], channels: u16, rate: u32) -> Vec<u8> {
     let data = samples.len() * 2;
     let mut out = Vec::with_capacity(44 + data);

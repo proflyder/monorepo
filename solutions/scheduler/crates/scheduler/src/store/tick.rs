@@ -1,5 +1,3 @@
-//! The atomic engine tick: leases, ring windows, snoozes, schedules, timers.
-
 use rusqlite::{Transaction, params};
 
 use crate::domain::{
@@ -15,7 +13,6 @@ use super::{Store, StoreError, bool_to_int};
 const TICK_BATCH_SIZE: i64 = 200;
 const MAX_TICK_BATCHES: usize = 10;
 
-/// Summary of one atomic engine tick.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct TickStats {
     pub fired: i64,
@@ -26,7 +23,6 @@ pub struct TickStats {
 }
 
 impl Store {
-    /// Performs one atomic engine pass.
     pub fn tick(&self, now_unix: i64) -> Result<TickStats, StoreError> {
         let cfg = self.config().clone();
         self.with_tx(move |tx| {
@@ -213,9 +209,6 @@ fn tick_schedule(
     if occurrence <= 0 {
         return Ok(());
     }
-    // A long snooze can reach the next occurrence of the same rule. The
-    // snoozed occurrence is already ringing, so coalesce the regular
-    // occurrence into it instead of emitting a second FIRE.
     if schedule.active_occurrence_unix > 0 && schedule.active_until_unix > now_unix {
         let (next, exhausted) = fast_forward(schedule, now_unix)?;
         return advance_schedule(tx, schedule, next, exhausted, now_unix, ring_window, false);

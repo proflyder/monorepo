@@ -4,7 +4,6 @@ use std::time::Duration;
 
 use time::OffsetDateTime;
 
-/// 60 requests per minute per machine and per source IP.
 pub const CHALLENGE_LIMIT: u32 = 60;
 pub const RATE_WINDOW: Duration = Duration::from_secs(60);
 
@@ -14,8 +13,6 @@ struct Entry {
     count: u32,
 }
 
-/// Small fixed-window counter. Deliberately in memory: a restart only resets
-/// the budget, which cannot bypass a grant.
 #[derive(Debug)]
 pub struct RateLimiter {
     inner: Mutex<HashMap<String, Entry>>,
@@ -38,8 +35,6 @@ impl RateLimiter {
         Self::new(CHALLENGE_LIMIT, RATE_WINDOW)
     }
 
-    /// Distinct prefixes keep the per-endpoint budgets separate
-    /// (`challenge:` and `claim:`).
     pub fn allow(&self, key: &str, now: OffsetDateTime) -> bool {
         let mut entries = self.inner.lock().expect("limiter lock");
         match entries.get_mut(key) {
@@ -64,7 +59,6 @@ impl RateLimiter {
         }
     }
 
-    /// Drops stale windows.
     pub fn prune(&self, now: OffsetDateTime) {
         let mut entries = self.inner.lock().expect("limiter lock");
         entries.retain(|_, entry| now - entry.start < self.window);

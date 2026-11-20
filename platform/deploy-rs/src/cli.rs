@@ -1,11 +1,3 @@
-//! CLI parsing and dispatch.
-//!
-//! The Go binary uses `flag`, which accepts both `-flag` and `--flag`. Every
-//! argument is normalised to the double-dash form before `clap` sees it, so the
-//! existing deploy scripts and manual invocations keep working. Unimplemented
-//! subcommands are declared here (so `--help` lists them) and exit with status
-//! 2 until their module is ported.
-
 use std::io::Write;
 
 use clap::{Arg, ArgAction, Command, error::ErrorKind};
@@ -19,11 +11,8 @@ use crate::{
     preflight, runtimevalues, state,
 };
 
-/// Commands that are declared but not ported yet.
 const NOT_IMPLEMENTED: &[&str] = &[];
 
-/// Every top-level command, used to keep the Go binary's "unknown command"
-/// response (full usage plus one line) instead of clap's shorter message.
 const KNOWN_COMMANDS: &[&str] = &[
     "render",
     "env",
@@ -38,7 +27,6 @@ const KNOWN_COMMANDS: &[&str] = &[
     "hermes",
 ];
 
-/// Runs one CLI invocation and returns the process exit status.
 pub fn run(args: &[String], stdout: &mut dyn Write, stderr: &mut dyn Write) -> i32 {
     if args.is_empty() {
         let _ = write!(stderr, "{USAGE}");
@@ -93,7 +81,6 @@ pub fn run(args: &[String], stdout: &mut dyn Write, stderr: &mut dyn Write) -> i
     }
 }
 
-/// Converts the Go `flag` single-dash form (`-unit`) to `--unit`.
 fn normalize_args(args: &[String]) -> Vec<String> {
     args.iter()
         .map(|arg| {
@@ -389,11 +376,6 @@ fn run_hermes_rollout(
     }
 }
 
-/// Resolves the overlay directory for the Hermes config commands.
-///
-/// Precedence: explicit `--source-dir`, then `HERMES_OVERLAY_DIR`, then the
-/// repository overlay. The environment value is read here rather than through
-/// clap so the fallback stays testable.
 fn overlay_dir(explicit: &str, environment: Option<String>) -> Option<PathBuf> {
     let chosen = if explicit.is_empty() {
         environment.filter(|value| !value.is_empty())
@@ -405,8 +387,6 @@ fn overlay_dir(explicit: &str, environment: Option<String>) -> Option<PathBuf> {
         .or_else(|| repo_root().map(|root| root.join("projects/home-assistant/hermes")))
 }
 
-/// Builds the shared render/plan options for `render-config` and
-/// `drift-exporter`: an explicit flag wins, then the source directory.
 fn hermes_config_options(sub: &clap::ArgMatches) -> hermesconfig::Options {
     let source_dir = overlay_dir(
         sub.get_one::<String>("source-dir")
@@ -458,8 +438,6 @@ fn hermes_config_options(sub: &clap::ArgMatches) -> hermesconfig::Options {
             .get_one::<String>("private-values")
             .map_or("", String::as_str)
             .to_string(),
-        // Only `render-config` defines this flag; `drift-exporter` never
-        // allows placeholders, so an absent id means false rather than a panic.
         allow_placeholders: sub
             .try_get_one::<bool>("allow-placeholders")
             .ok()
@@ -552,8 +530,6 @@ fn run_hermes_assist_smoke(sub: &clap::ArgMatches, stdout: &mut dyn Write) -> Re
             parse_go_duration(value)
         })
         .map_err(|error| Failure::new(format!("hermes assist-smoke: {error}")))?;
-    // The hook runs right after the upgrade, while a restarted Hermes Pod is
-    // still starting: retry until it answers or the window closes.
     let deadline = std::time::Instant::now() + retry_window;
     let code = loop {
         let code = hermes::assist_smoke_client(ha_url, agent, text, token_file, timeout, stdout);
@@ -569,7 +545,6 @@ fn run_hermes_assist_smoke(sub: &clap::ArgMatches, stdout: &mut dyn Write) -> Re
     }
 }
 
-/// Parses a Go duration (`150s`, `1m30s`, `500ms`).
 fn parse_go_duration(value: &str) -> Result<std::time::Duration, String> {
     let mut total = 0.0f64;
     let mut rest = value.trim();
@@ -613,7 +588,6 @@ fn parse_go_duration(value: &str) -> Result<std::time::Duration, String> {
     Ok(std::time::Duration::from_secs_f64(total))
 }
 
-/// Walks up from the working directory to the repository root.
 fn repo_root() -> Option<PathBuf> {
     let mut directory = std::env::current_dir().ok()?;
     loop {
@@ -862,12 +836,10 @@ fn run_secret(matches: &clap::ArgMatches, stdout: &mut dyn Write) -> Result<(), 
     Ok(())
 }
 
-/// A one-value string flag.
 fn string(name: &'static str) -> Arg {
     Arg::new(name).long(name).num_args(1).action(ArgAction::Set)
 }
 
-/// A repeatable one-value string flag.
 fn repeated(name: &'static str) -> Arg {
     Arg::new(name)
         .long(name)
@@ -875,12 +847,10 @@ fn repeated(name: &'static str) -> Arg {
         .action(ArgAction::Append)
 }
 
-/// A boolean flag.
 fn boolean(name: &'static str) -> Arg {
     Arg::new(name).long(name).action(ArgAction::SetTrue)
 }
 
-/// A positional list of files.
 fn files() -> Arg {
     Arg::new("files").num_args(0..).action(ArgAction::Append)
 }

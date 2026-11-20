@@ -1,9 +1,3 @@
-//! SSID/PSK/token buffers written by the GATT characteristics.
-//!
-//! Both the GATT interface and the commit worker share one [`Credentials`], so
-//! a commit always reads a consistent frame without reaching into zbus objects.
-//! Long writes append at the requested byte.
-
 use std::fmt;
 use std::sync::Mutex;
 
@@ -19,7 +13,6 @@ pub enum CredentialField {
 #[derive(Default)]
 pub struct Credentials([Mutex<Vec<u8>>; 3]);
 
-/// Byte-for-byte copy of all three buffers.
 #[derive(Clone, Default, PartialEq, Eq)]
 pub struct CredentialSnapshot {
     pub ssid: Vec<u8>,
@@ -60,8 +53,6 @@ impl Credentials {
         }
     }
 
-    /// Apply a GATT write at `offset`. `false` means an offset past the value
-    /// or beyond the maximum attribute length BlueZ transmits.
     pub fn write(&self, field: CredentialField, value: &[u8], offset: usize) -> bool {
         if offset > 512 {
             return false;
@@ -89,7 +80,6 @@ impl Credentials {
         }
     }
 
-    /// Seed all buffers at once (tests and provisioning tools).
     pub fn set_all(&self, ssid: &[u8], psk: &[u8], token: &[u8]) {
         self.set(CredentialField::Ssid, ssid);
         self.set(CredentialField::Psk, psk);

@@ -1,13 +1,3 @@
-//! Prometheus metrics of the Pulsar daemon on the station.
-//!
-//! The daemon exports `GET /metrics` (Prometheus text format) on the LAN
-//! interface, port [`DEFAULT_PORT`] by default (plus `PULSAR_PORT_OFFSET`).
-//! Hardware metrics are read from `/proc` and `/sys` at scrape time; daemon
-//! metrics are relaxed atomics updated on the existing paths, so the audio
-//! thread and the call loop never block or allocate.
-//!
-//! Names form the contract with the Prometheus rules and Grafana dashboards in
-//! `projects/station/observability`; see [`catalog`].
 #![deny(unsafe_op_in_unsafe_fn)]
 #![deny(clippy::undocumented_unsafe_blocks)]
 
@@ -19,18 +9,15 @@ pub mod system;
 
 pub use metrics::{Histogram, Metrics, PipelineResult, PlaybackKind};
 
-/// Prometheus scrape port before `PULSAR_PORT_OFFSET`.
 pub const DEFAULT_PORT: u16 = 9101;
 
 static GLOBAL: Metrics = Metrics::new();
 
-/// The process-wide registry: every service records here.
 #[must_use]
 pub fn global() -> &'static Metrics {
     &GLOBAL
 }
 
-/// Starts the HTTP endpoint; a bind failure is logged, not fatal.
 pub fn start_http(port: u16) {
     if let Err(e) = http::spawn(port, global()) {
         tracing::warn!("metrics: cannot serve on port {port}: {e}");

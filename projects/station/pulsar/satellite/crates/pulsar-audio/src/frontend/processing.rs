@@ -1,5 +1,3 @@
-//! Поток обработки: VQE, спотеры, детектор, пре-ролл и события.
-
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering::Relaxed};
 use std::sync::mpsc::Receiver;
@@ -25,8 +23,6 @@ use super::ports::{Clock, Detection, Detector, WakeStore};
 use super::state::{StateEvent, StateMachine};
 use super::{FrontendEvent, FrontendStats, lock};
 
-/// Pre-roll ring: 1.024 s at 16 kHz (32 chunks of 32 ms, 64 of 16 ms on the Mini 3 and Mini),
-/// more than any wake word's confirmation delay.
 const PREROLL_SAMPLES: usize = 16384;
 const CHUNK_WAIT: Duration = Duration::from_millis(500);
 
@@ -35,12 +31,9 @@ struct DetectorChunk {
     hit: Option<f32>,
     mean: Option<f32>,
     hit_id: Option<String>,
-    /// Чанк ушёл в детектор (для счётчика прослушанного времени).
     feeding: bool,
 }
 
-/// A struct with the channels and shared pieces of [`Processing`]; keeps `new`'s argument count
-/// down and separates construction from the ports.
 pub(super) struct ProcessingConfig {
     pub(super) capture: &'static CaptureLayout,
     pub(super) preroll: Option<&'static Preroll>,
@@ -50,9 +43,6 @@ pub(super) struct ProcessingConfig {
     pub(super) custom: bool,
 }
 
-/// The processing thread's state and buffers. Generic over the ports so tests can drive it with
-/// scripts and inspect them; production instantiates it with `YandexEngine`, `RicardoDetector`,
-/// `RecordingStore` and `SystemClock`.
 pub(super) struct Processing<E: WakeEngine, D: Detector, S: WakeStore, C: Clock> {
     engine: E,
     detector: Option<D>,
@@ -81,16 +71,11 @@ pub(super) struct Processing<E: WakeEngine, D: Detector, S: WakeStore, C: Clock>
     ana: SpectrumAnalyzer,
     music_was_on: bool,
     ring: Ring<i16>,
-    /// Звук для HA и пре-ролла: `VQE_OMNI` с «Microphone gain».
     pcm_chunk: Vec<i16>,
-    /// Звук детектора Ricardo: прежний `VQE_OMNI_WITH_GAIN`, как до «Microphone gain».
     detector_pcm: Vec<i16>,
-    /// «Microphone gain», дБ: усиление [`Self::pcm_chunk`].
     mic_gain: u32,
-    /// Chunks since the wake spotter's 1st-stage hit, while its verifier waits.
     first_stage_age: Option<usize>,
     frame: usize,
-    /// Capture frames per VQE chunk (ALSA period of the FIFO).
     pub(super) capture_chunk: usize,
     nch: usize,
     mic_ch: &'static [u32],
@@ -156,8 +141,6 @@ impl<E: WakeEngine, D: Detector, S: WakeStore, C: Clock> Processing<E, D, S, C> 
         }
     }
 
-    /// Один чанк: сначала команды, затем те же шаги, что у старого `processing`, каждый — со
-    /// своим портом.
     pub(super) fn process_chunk(&mut self, input: &[i16]) -> Vec<FrontendEvent> {
         self.drain_commands();
         let mut events = Vec::new();
@@ -170,7 +153,6 @@ impl<E: WakeEngine, D: Detector, S: WakeStore, C: Clock> Processing<E, D, S, C> 
         }
         self.level_chunk();
         let det = self.detector_chunk(&mut events);
-        // Listening time is the audio the detector actually heard (contract v1).
         if det.feeding
             && let Some(store) = self.store.as_mut()
         {
@@ -215,9 +197,6 @@ impl<E: WakeEngine, D: Detector, S: WakeStore, C: Clock> Processing<E, D, S, C> 
     }
 
     fn level_chunk(&mut self) {
-        // VQE_OMNI is cleaned of the station's own playback but has no AGC, so it keeps the
-        // distance to the talker; VQE_OMNI_WITH_GAIN, which the spotter hears, normalizes it
-        // away.
         if let Some(d) = self.engine.output(VQE_OMNI)
             && !d.is_empty()
         {
@@ -225,18 +204,13 @@ impl<E: WakeEngine, D: Detector, S: WakeStore, C: Clock> Processing<E, D, S, C> 
         }
     }
 
-    /// Ricardo, окно записи и `Audio` одного чанка.
     fn detector_chunk(&mut self, events: &mut Vec<FrontendEvent>) -> DetectorChunk {
         let mut out = DetectorChunk::default();
         let custom_active = self.custom;
         let detecting = self.state.detecting();
         let dry_run = self.state.dry_run();
-        // В HA и в кольцо пре-ролла идёт VQE_OMNI — главный канал распознавания стока, с
-        // усилением «Microphone gain»; см. docs/hardware.md, «Библиотеки Яндекса (C API)».
-        // Уровень для арбитража считается по нему же без усиления (см. `level_chunk`).
         let Some(d) = self.engine.output(VQE_OMNI).filter(|d| !d.is_empty()) else {
             self.ring.clear();
-            // A missing output is a gap: restart the prior window.
             self.reset_gain_window();
             return out;
         };
@@ -254,8 +228,6 @@ impl<E: WakeEngine, D: Detector, S: WakeStore, C: Clock> Processing<E, D, S, C> 
             return out;
         }
         let slot = &self.pcm_chunk[..];
-        // Детектор Ricardo слышит прежний VQE_OMNI_WITH_GAIN: он обучен и проверен на нём, а
-        // «Microphone gain» меняет только звук для HA и пре-ролл. Нет выхода — тот же чанк.
         let detector_slot: &[i16] = match self
             .engine
             .output(VQE_OMNI_WITH_GAIN)
@@ -267,8 +239,6 @@ impl<E: WakeEngine, D: Detector, S: WakeStore, C: Clock> Processing<E, D, S, C> 
             }
             None => slot,
         };
-        // Детектор Ricardo слышит прежний очищенный VQE_OMNI_WITH_GAIN, как и стоковый спотер;
-        // его подтверждение берёт пре-ролл из кольца (в HA он идёт с «Microphone gain»).
         if custom_active && detecting && !self.custom_failed {
             out.feeding = true;
             match self.detector.as_mut().map(|d| d.feed(detector_slot)) {
@@ -278,8 +248,6 @@ impl<E: WakeEngine, D: Detector, S: WakeStore, C: Clock> Processing<E, D, S, C> 
                     out.mean = Some(score);
                 }
                 Some(Ok(Detection { hit: false, score })) => {
-                    // The windowed mean of every chunk drives the near-miss band;
-                    // negative means the detector window is still filling.
                     if score >= 0.0 {
                         pulsar_metrics::observe_wake_score(f64::from(score));
                     }
@@ -295,8 +263,6 @@ impl<E: WakeEngine, D: Detector, S: WakeStore, C: Clock> Processing<E, D, S, C> 
                 }
             }
         }
-        // Сквозное кольцо 31 с: hit держит 3 с до и 1 с после, miss — последние
-        // 30 с. Выключено при мьюте и без модели Ricardo.
         let recording = self.store.is_some()
             && self.recording
             && custom_active
@@ -312,7 +278,6 @@ impl<E: WakeEngine, D: Detector, S: WakeStore, C: Clock> Processing<E, D, S, C> 
             }
             out.hit_id = store.push(detector_slot, out.mean, out.hit, dry_run, now, utc);
         } else {
-            // No ring without recording: a miss button pressed meanwhile is void.
             self.wake_missed = false;
             if let Some(store) = self.store.as_mut() {
                 store.reset();
@@ -330,8 +295,6 @@ impl<E: WakeEngine, D: Detector, S: WakeStore, C: Clock> Processing<E, D, S, C> 
         };
         pulsar_metrics::wake_detected();
         if self.state.dry_run() {
-            // Recorded with the outcome `dry_run` by the writer; no earcon, no claim, no
-            // dialog, and the music keeps playing.
             info!("Ricardo wake word detected (probability {score:.3}): dry run, not answering");
             return;
         }
@@ -358,7 +321,6 @@ impl<E: WakeEngine, D: Detector, S: WakeStore, C: Clock> Processing<E, D, S, C> 
     }
 
     fn stock_wake(&mut self, events: &mut Vec<FrontendEvent>) {
-        // Kept for the level window's 1.5 s, whatever the VQE chunk.
         self.first_stage_age = self
             .first_stage_age
             .map(|a| a + 1)
@@ -423,7 +385,6 @@ impl<E: WakeEngine, D: Detector, S: WakeStore, C: Clock> Processing<E, D, S, C> 
             FrontendCmd::SetMicGain(db) => {
                 if db != self.mic_gain {
                     self.mic_gain = db;
-                    // В пре-ролле одной команды уровень не скачет.
                     self.ring.clear();
                 }
             }
@@ -432,9 +393,6 @@ impl<E: WakeEngine, D: Detector, S: WakeStore, C: Clock> Processing<E, D, S, C> 
         }
     }
 
-    /// Pre-roll rule for the active detector. The custom Ricardo detector has no stock model
-    /// directory, so its id is not `YandexEngine::wake_id` (which still points at the native
-    /// «Алиса» model kept for rollback) but the `ricardo` entry of `Preroll`.
     fn preroll_rule(&self, stock_id: &str) -> Option<PrerollRule> {
         if !self.preroll_on {
             return None;
@@ -487,8 +445,6 @@ pub(super) fn processing_thread<E, D, S, C>(
     }
 }
 
-/// Wake levels for the local endpoint detector on the stream channel, once the window is full.
-/// A partial window would count its zero padding as a -100 dB floor.
 fn endpoint_prior(hist: &[f32; LEVEL_CHUNKS], filled: usize) -> Option<EndpointPrior> {
     (filled == LEVEL_CHUNKS).then(|| EndpointPrior {
         noise_db: percentile_db(hist, 0.10).as_f32(),
@@ -496,7 +452,6 @@ fn endpoint_prior(hist: &[f32; LEVEL_CHUNKS], filled: usize) -> Option<EndpointP
     })
 }
 
-/// Pre-roll length in chunks for `rule`, given the chunks since the 1st-stage hit.
 fn preroll_chunks(rule: Option<PrerollRule>, first_stage_age: Option<usize>) -> usize {
     match (rule, first_stage_age) {
         (None, _) => 0,
@@ -530,8 +485,6 @@ mod tests {
 
     #[test]
     fn music_analyzer_is_built_from_the_capture_chunk_of_every_model() {
-        // The FFT window is fed by capture-sized chunks; passing the VQE output frame
-        // (512/256) instead disables music analysis on every model (the MIDI regression).
         for profile in pulsar_model::ALL {
             let (chunk, frame) = match profile.identity.codename {
                 "cucumber" => (3072, 512),
@@ -555,7 +508,6 @@ mod tests {
             );
             h.processing.music = true;
             let input = block(&profile.audio.capture, chunk, 0);
-            // The FFT window is 512 samples at 16 kHz: two 16 ms chunks fill it on the Minis.
             let calls = 512 * (profile.audio.capture.rate as usize / 16_000) / chunk;
             let mut events = Vec::new();
             for _ in 0..calls {
@@ -591,8 +543,6 @@ mod tests {
         };
         assert_eq!(level_for(0.1), -20.0);
         let at = |db: f64| 10f64.powf(db / 20.0) as f32;
-        // Половина к нулю от нуля до 0,1 дБ: −32,46 -> −32,5, −32,44 -> −32,4. Это то же
-        // округление, что уходит в UDP-арбитраж строкой `%.1f`.
         assert_eq!(level_for(at(-32.46)), -32.5);
         assert_eq!(level_for(at(-32.44)), -32.4);
     }
@@ -614,7 +564,6 @@ mod tests {
             }
         }
         let (_, preroll, _) = wake.expect("hit on the 33rd chunk");
-        // Fixed(8) for `ricardo`: the confirming chunk is 32, the window starts at 25.
         assert_eq!(preroll.len(), 8 * 512);
         assert_eq!(preroll[0], 25);
         assert_eq!(preroll[preroll.len() - 1], 32);
@@ -661,18 +610,14 @@ mod tests {
         det.extend(misses(4));
         let (mut h, _log, _clock) =
             harness(ScriptedEngine::new(steps(7, 0.0)), vec![], det, None, true);
-        // До подтверждения владелец ничего не получает.
         assert_eq!(audio_count(&process(&mut h, 0)), 0);
         assert_eq!(audio_count(&process(&mut h, 1)), 0);
-        // Подтверждающий чанк уже в пре-ролле, но ещё не в `Audio`.
         let hit = process(&mut h, 2);
         assert!(wake_of(&hit).is_some());
         assert_eq!(audio_count(&hit), 0);
-        // `wake_handled` ещё не пришёл: следующий чанк продолжает пре-ролл.
         assert_eq!(audio_count(&process(&mut h, 3)), 1);
         h.cmd.send(FrontendCmd::WakeHandled).unwrap();
         assert_eq!(audio_count(&process(&mut h, 4)), 0);
-        // Стрим держит поток открытым независимо от `Wake`.
         h.cmd.send(FrontendCmd::SetStreaming(true)).unwrap();
         assert_eq!(audio_count(&process(&mut h, 5)), 1);
         h.cmd.send(FrontendCmd::SetDetection(false)).unwrap();
@@ -701,10 +646,8 @@ mod tests {
                 })
                 .expect("Audio while streaming")
         };
-        // 0 дБ: в HA идёт VQE_OMNI как есть, а не прежний VQE_OMNI_WITH_GAIN.
         assert_eq!(first(&process(&mut h, 0)), 328);
         h.cmd.send(FrontendCmd::SetMicGain(20)).unwrap();
-        // +20 дБ — в десять раз; смена усиления очищает пре-ролл.
         assert_eq!(first(&process(&mut h, 0)), 3277);
     }
 
@@ -751,8 +694,6 @@ mod tests {
         drop(log);
     }
 
-    /// The stock rule anchors the pre-roll at the 1st-stage hit; a model switch must drop that
-    /// anchor, and the Ricardo switch must select its own `Fixed(8)` rule.
     #[test]
     fn switching_model_and_detector_drops_the_old_preroll_anchor() {
         static RULES: &[WakePreroll] = &[
@@ -787,7 +728,6 @@ mod tests {
                 stage: Stage::None,
             },
         ];
-        // The detector switch happens before the last chunk; its hit takes the custom rule.
         let (mut h, _log, _clock) = harness(
             ScriptedEngine::new(indexed_steps(40)),
             std::mem::take(&mut spotted),
@@ -801,16 +741,13 @@ mod tests {
                 first = Some(w);
             }
         }
-        // 1st-stage at chunk 0, confirmation at chunk 4: age 4 + offset 0.
         assert_eq!(first.unwrap().1.len(), 4 * 512);
 
-        // No 1st-stage before the confirmation after the switch: the fallback applies.
         h.cmd
             .send(FrontendCmd::SetModel(Some(PathBuf::from("/models/alisa"))))
             .unwrap();
         assert_eq!(wake_of(&process(&mut h, 0)).unwrap().1.len(), 3 * 512);
 
-        // Switch to Ricardo: its rule is Fixed(8), and the stale stock anchor is gone.
         h.cmd.send(FrontendCmd::SetCustomWake(true)).unwrap();
         let mut custom = None;
         for _ in 0..33 {
@@ -829,17 +766,13 @@ mod tests {
         assert_eq!(preroll_chunks(Some(PrerollRule::Fixed(7)), Some(2)), 7);
         assert_eq!(preroll_chunks(first(3, 9), Some(4)), 7);
         assert_eq!(preroll_chunks(first(-3, 9), Some(4)), 1);
-        // An anchor closer than the offset: nothing rather than the word itself.
         assert_eq!(preroll_chunks(first(-3, 9), Some(2)), 0);
-        // No 1st-stage hit before the confirmation.
         assert_eq!(preroll_chunks(first(-3, 9), None), 9);
     }
 
     #[test]
     fn ricardo_preroll_rule_uses_the_custom_id() {
         let midi = profile_from_compatible(b"yandex,cucumber\0").unwrap();
-        // The custom detector is active: the stock model id ("alisa", kept for rollback) must
-        // not select the rule, or the Ricardo word loses its pre-roll.
         let h = harness_with(
             &midi.audio.capture,
             midi.wake_preroll.as_ref(),
@@ -853,7 +786,6 @@ mod tests {
             h.processing.preroll_rule("alisa"),
             Some(PrerollRule::Fixed(8))
         );
-        // Switched back to a stock spotter: the custom entry no longer applies.
         let h = harness_with(
             &midi.audio.capture,
             midi.wake_preroll.as_ref(),
@@ -871,7 +803,7 @@ mod tests {
 
     #[test]
     fn ricardo_preroll_is_the_last_256_ms_of_the_ring() {
-        const FRAME: usize = 512; // 16 kHz, one VQE chunk = 32 ms
+        const FRAME: usize = 512;
         const RING_CHUNKS: usize = PREROLL_SAMPLES / FRAME;
         let midi = profile_from_compatible(b"yandex,cucumber\0").unwrap();
         let mut ring = Ring::new(FRAME, PREROLL_SAMPLES);
@@ -894,7 +826,6 @@ mod tests {
         let preroll = ring.tail(n);
         assert_eq!(preroll.len(), n * FRAME);
         assert_eq!(preroll.len() / 16, 256, "milliseconds at 16 kHz");
-        // Oldest first, ending with the chunk that confirmed the word.
         assert_eq!(preroll[0], (RING_CHUNKS - n) as i16);
         assert_eq!(preroll[preroll.len() - 1], (RING_CHUNKS - 1) as i16);
     }
@@ -916,8 +847,6 @@ mod tests {
         let mut ring = Ring::new(512, PREROLL_SAMPLES);
         ring.push_chunk(&[16384; 512]);
         assert!(ring.tail(0).is_empty());
-        // `wake_pending` holds the stream open regardless of the pre-roll switch: the owner
-        // raises it for every Wake and lowers it once after `set_streaming`.
         h.processing.state.apply(StateEvent::Wake);
         assert_eq!(h.processing.state.state(), FrontendState::WakePending(1));
         h.processing.apply(FrontendCmd::WakeHandled);

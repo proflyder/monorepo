@@ -1,13 +1,3 @@
-//! wakegrant wire protocol shared by the service and the Windows provider.
-//!
-//! The contract is `packages/contracts/wakegrant/PROTOCOL.md`: both the v1
-//! messages (no `purpose`) and the purpose-aware `logon`/`unlock` messages with
-//! long-poll. The crate is portable — no I/O, no runtime — so it builds for the
-//! Windows provider (`x86_64-pc-windows-gnu`) and for the service alike.
-//!
-//! Client configuration (`ServiceEndpoint`, registry values, DPAPI secret
-//! loading) lives in the provider; this crate owns only the bytes on the wire.
-
 #![forbid(unsafe_code)]
 
 mod auth;

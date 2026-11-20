@@ -1,16 +1,3 @@
-//! The Midi's Zigbee radio offered to Home Assistant (ZHA) and Zigbee2MQTT as a network
-//! coordinator speaking the deCONZ serial protocol (ConBee/RaspBee) over TCP: ZHA (zigpy-deconz)
-//! connects to `socket://<ip>:<port>`, Zigbee2MQTT to `tcp://<ip>:<port>` with adapter "deconz".
-//! The port is advertised over mDNS as `_zigbee-coordinator._tcp` (radio_type=deconz), which ZHA
-//! discovers by itself.
-//!
-//! One client at a time; a new connection replaces the previous one. The transport is any
-//! [`AsyncRead`] + [`AsyncWrite`] connection from an [`Acceptor`], so tests drive the real server
-//! over `tokio::io::duplex`.
-//!
-//! The server is driven by its owner (the Zigbee service): `w = server.next().await` followed by
-//! `server.handle(w, &mut coord)`, and it is the coordinator's [`Hooks`].
-
 use std::collections::{BTreeMap, VecDeque};
 use std::future::poll_fn;
 use std::io;
@@ -31,7 +18,6 @@ use crate::params::{self, INVALID_VALUE, SUCCESS};
 use crate::slip::{SlipCodec, checksum};
 use crate::types::{ApsFrame, Hooks, Ncp};
 
-// Commands.
 pub const APS_DATA_CONFIRM: u8 = 0x04;
 pub const DEVICE_STATE: u8 = 0x07;
 pub const CHANGE_NETWORK_STATE: u8 = 0x08;
@@ -47,26 +33,14 @@ const FLAG_CONFIRM: u8 = 0x04;
 const FLAG_INDICATION: u8 = 0x08;
 const FLAG_FREE_SLOTS: u8 = 0x20;
 
-/// ConBee III (platform 0x09) firmware 0x26780900: zigpy-deconz then scans energy with ZDO
-/// Mgmt_NWK_Update_req to the coordinator (answered by the coordinator) and takes the values as
-/// they are.
 const FIRMWARE_VERSION: u32 = 0x2678_0900;
 const MAX_QUEUED: usize = 64;
-/// Sends awaiting confirm before "no free slots".
 const MAX_IN_FLIGHT: usize = 8;
-/// Replies waiting for a client that does not read: beyond this it is dropped (the radio's
-/// traffic must not pile up in the daemon's memory).
 const OUT_MAX: usize = 64 << 10;
-/// Reads per wake-up; more input waits for the next one, after the radio's events.
 const READS_PER_WAKE: usize = 4;
-/// Frames waiting in the link's queue beyond which APS requests are refused.
 const LINK_QUEUE_MAX: usize = 16;
-/// Accepting is paused this long after an accept error for want of descriptors or memory: the
-/// listener stays ready, so retrying at once would spin.
 const ACCEPT_RETRY_MS: u64 = 500;
 
-/// One client connection: the halves let the read and the write branch of [`Server::next`]
-/// wait at the same time.
 struct Client {
     read: ReadHalf<Conn>,
     write: WriteHalf<Conn>,
@@ -79,18 +53,15 @@ impl Client {
     }
 }
 
-/// The deCONZ server's connection type.
 pub trait AsyncReadWrite: AsyncRead + AsyncWrite + Unpin {}
 impl<T: AsyncRead + AsyncWrite + Unpin> AsyncReadWrite for T {}
 pub type Conn = Box<dyn AsyncReadWrite>;
 
-/// A source of client connections (TCP in production, a duplex queue in tests).
 pub trait Acceptor {
     fn poll_accept(&mut self, cx: &mut Context<'_>) -> Poll<io::Result<(Conn, SocketAddr)>>;
     fn local_addr(&self) -> Option<SocketAddr>;
 }
 
-/// Listens on the port (any address, backlog 2).
 pub struct TcpAcceptor(TcpListener);
 
 impl TcpAcceptor {
@@ -125,9 +96,7 @@ impl Acceptor for TcpAcceptor {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 struct Request {
     req_id: u8,
-    /// deCONZ address mode: 1 group, 2 NWK, 3 IEEE.
     dst_mode: u8,
-    /// NWK, group or IEEE.
     dst_addr: u64,
     dst_ep: u8,
     src_ep: u8,
@@ -139,20 +108,17 @@ struct Confirm {
     status: u8,
 }
 
-/// What woke the server; hand it back to [`Server::handle`].
 pub struct Wake(WakeKind);
 
 enum WakeKind {
     Accept(io::Result<(Conn, SocketAddr)>),
     AcceptResume,
-    /// `n` bytes of the queue went out; `handle` drains them and flushes the rest.
     Wrote(usize),
     Read(Vec<u8>),
     ReadClosed,
     WriteFailed,
 }
 
-/// The outcome of an opportunistic read after the readable wake-up.
 enum TryRead {
     Data(Vec<u8>),
     WouldBlock,
@@ -162,30 +128,22 @@ enum TryRead {
 pub struct Server {
     port: u16,
     acceptor: Option<Box<dyn Acceptor>>,
-    /// Accepting stopped until then after EMFILE & co.
     accept_paused_until: Option<tokio::time::Instant>,
-    /// An accept error was logged; cleared by the next accepted connection.
     accept_failing: bool,
     client: Option<Client>,
     connected: bool,
     codec: SlipCodec,
     inbuf: BytesMut,
     out: BytesMut,
-    /// Per client: confirms of a previous client are dropped.
     generation: u32,
-    /// Device state last sent to the client.
     last_state: u8,
-    /// The host's network view: written parameters, slots, formation.
     host: HostView,
     indications: VecDeque<ApsFrame>,
     confirms: VecDeque<Confirm>,
-    /// Coordinator handle -> request.
     requests: BTreeMap<u32, Request>,
 }
 
 impl Server {
-    /// A server with a ConBee's default endpoint slots; [`Server::attach`] gives them to the
-    /// coordinator. It listens once [`Server::start`] is called.
     pub fn new(port: u16) -> Self {
         Self {
             port,
@@ -206,21 +164,17 @@ impl Server {
         }
     }
 
-    /// A server over `acceptor` instead of a TCP listener (tests).
     pub fn with_acceptor(port: u16, acceptor: impl Acceptor + 'static) -> Self {
         let mut server = Self::new(port);
         server.acceptor = Some(Box::new(acceptor));
         server
     }
 
-    /// Sets the coordinator's endpoints to the slots' (before [`Ncp`] start).
     pub fn attach(&self, coord: &mut dyn Ncp) {
         self.host.attach(coord);
     }
 
-    /// Listens on the port. Errors are logged.
     pub fn start(&mut self) -> bool {
-        // An acceptor provided by the embedder is the listener: do not replace it.
         if self.acceptor.is_some() {
             return true;
         }
@@ -241,19 +195,14 @@ impl Server {
         }
     }
 
-    /// The port actually listened on (tests bind port 0).
     pub fn local_addr(&self) -> Option<SocketAddr> {
         self.acceptor.as_ref().and_then(|a| a.local_addr())
     }
 
-    /// A client is connected.
     pub fn has_client(&self) -> bool {
         self.connected
     }
 
-    /// A connection, client input, or room to write. Cancel-safe: the write branch reports
-    /// exactly the bytes it took as `Wrote(n)`, and a cancelled future is never the one that
-    /// wrote them (the `select!` returns that branch). [`Server::handle`] drains the count.
     pub async fn next(&mut self) -> Wake {
         let paused = self.accept_paused_until;
         let mut read_buf = [0u8; 1024];
@@ -302,8 +251,6 @@ impl Server {
             }
             WakeKind::WriteFailed => self.close_client(),
         }
-        // Replies of the whole batch go out together (and hooks' notifications with the next
-        // wake-up, whose write branch is on while output waits).
         self.flush();
     }
 
@@ -313,7 +260,7 @@ impl Server {
             Some(libc::EMFILE | libc::ENFILE | libc::ENOBUFS | libc::ENOMEM)
         );
         if !exhausted {
-            return; // that connection only
+            return;
         }
         if !self.accept_failing {
             warn!("zigbee: accept: {}", home_linux::io_error_text(e));
@@ -324,10 +271,6 @@ impl Server {
     }
 
     fn on_accept(&mut self, coord: &mut dyn Ncp, conn: Conn, addr: SocketAddr) {
-        // Until the radio has reported its network (start-up, or after it restarted), no host is
-        // served: one told "no network" would form one, which erases the radio. zigpy and
-        // herdsman retry a refused connection; error statuses would break zigpy-deconz (it
-        // asserts UNSUPPORTED).
         if !coord.ready() {
             return;
         }
@@ -356,8 +299,7 @@ impl Server {
         if !self.connected {
             return;
         }
-        self.connected = false; // a write error inside flush() must not come back here
-        // What was already answered goes out first (C++ wrote every reply at once).
+        self.connected = false;
         self.flush();
         self.client = None;
         self.out.clear();
@@ -378,7 +320,6 @@ impl Server {
                     self.out.advance(n);
                 }
                 Poll::Ready(Err(e)) if e.kind() == io::ErrorKind::Interrupted => {}
-                // WouldBlock: the next wake-up writes the rest.
                 Poll::Pending => break,
                 Poll::Ready(Err(e)) if e.kind() == io::ErrorKind::WouldBlock => break,
                 Poll::Ready(Ok(_)) | Poll::Ready(Err(_)) => {
@@ -392,8 +333,6 @@ impl Server {
         }
     }
 
-    /// Client bytes after the readable wake-up: up to [`READS_PER_WAKE`] KiB, so the radio's
-    /// events wait for at most one batch.
     fn on_readable(&mut self, coord: &mut dyn Ncp, first: &[u8]) {
         if !first.is_empty() {
             self.on_bytes(coord, first);
@@ -414,7 +353,6 @@ impl Server {
         }
     }
 
-    /// One non-blocking read (the C++ loop after the readiness wake-up).
     fn try_read(&mut self) -> TryRead {
         let Some(client) = self.client.as_mut() else {
             return TryRead::Closed;
@@ -433,7 +371,6 @@ impl Server {
         }
     }
 
-    /// Client bytes: SLIP frames end at 0xC0.
     pub(crate) fn on_bytes(&mut self, coord: &mut dyn Ncp, bytes: &[u8]) {
         self.inbuf.extend_from_slice(bytes);
         loop {
@@ -451,7 +388,6 @@ impl Server {
     }
 
     fn on_slip(&mut self, coord: &mut dyn Ncp, f: &[u8]) {
-        // Too short or a bad checksum: noise, or the EZSP/ZNP probes ZHA sends to unknown radios.
         if f.len() < 7 {
             return;
         }
@@ -465,7 +401,6 @@ impl Server {
     fn reply(&mut self, cmd: u8, seq: u8, status: u8, body: &[u8], payload_length: bool) {
         let extra = if payload_length { 2 } else { 0 };
         let mut f = vec![cmd, seq, status];
-        // deCONZ frames are short (a 200-byte ASDU at most).
         put_le16(&mut f, (5 + extra + body.len()) as u16);
         if payload_length {
             put_le16(&mut f, body.len() as u16);
@@ -509,12 +444,9 @@ impl Server {
             return;
         }
         self.last_state = s;
-        // seq 0: zigpy numbers its requests 1..255, so this never matches one of them.
         self.reply(DEVICE_STATE_CHANGED, 0, SUCCESS, &[s, 0], false);
     }
 
-    /// `p`: after [command][seq][status][frame length]; commands with a payload length start
-    /// with it.
     fn command(&mut self, coord: &mut dyn Ncp, cmd: u8, seq: u8, p: &[u8]) {
         match cmd {
             VERSION => self.reply(cmd, seq, SUCCESS, &FIRMWARE_VERSION.to_le_bytes(), false),
@@ -566,7 +498,7 @@ impl Server {
         };
         self.last_state = self.device_state(coord);
         let mut b = vec![self.last_state];
-        b.push(if f.group { 0x01 } else { 0x02 }); // group / NWK
+        b.push(if f.group { 0x01 } else { 0x02 });
         put_le16(&mut b, f.dst);
         b.push(f.dst_ep);
         b.push(0x02);
@@ -574,7 +506,6 @@ impl Server {
         b.push(f.src_ep);
         put_le16(&mut b, f.profile);
         put_le16(&mut b, f.cluster);
-        // At most the radio's 0xF9-byte frame.
         put_le16(&mut b, f.data.len() as u16);
         b.extend_from_slice(&f.data);
         b.extend_from_slice(&[0, 0, f.lqi, 0, 0, 0, 0, f.rssi as u8]);
@@ -599,9 +530,6 @@ impl Server {
         self.reply(APS_DATA_CONFIRM, seq, SUCCESS, &b, true);
     }
 
-    /// `p`: [req id][flags][dst mode][dst][dst ep unless group][profile][cluster][src ep]
-    /// [asdu len][asdu][tx options][radius][relays if flags & 2]; `declared`: the payload length
-    /// the frame states (may differ from `p.len()`).
     fn aps_data_request(&mut self, coord: &mut dyn Ncp, seq: u8, p: &[u8], declared: usize) {
         match parse_aps_request(p, declared) {
             Ok((request, frame)) => self.send_aps_request(coord, seq, request, frame),
@@ -621,8 +549,6 @@ impl Server {
         request: Request,
         frame: ApsFrame,
     ) {
-        // A host ignoring the "free slots" flag must not fill the radio's queue (or the daemon's
-        // memory) with requests.
         if coord.pending() >= MAX_IN_FLIGHT || coord.link_queued() > LINK_QUEUE_MAX {
             return self.reply_aps_refused(coord, seq, FAILURE, request.req_id);
         }
@@ -670,9 +596,6 @@ fn parse_aps_request(p: &[u8], declared: usize) -> Result<(Request, ApsFrame), (
         ..Request::default()
     };
     let mut i = 3;
-    // zigbee-herdsman sends NWK_addr_req with NWK mode but the IEEE address in place of the NWK
-    // one (the payload is 6 bytes longer than it declares): sent as the broadcast it is meant to
-    // be.
     let herdsman_nwk_addr = r.dst_mode == 0x02 && n == declared + 6;
     if herdsman_nwk_addr {
         if n < i + 8 {
@@ -750,7 +673,7 @@ impl Hooks for Server {
             return;
         };
         if handle >> 8 != self.generation || !self.connected {
-            return; // a previous client's request
+            return;
         }
         if self.confirms.len() >= MAX_QUEUED {
             self.confirms.pop_front();

@@ -1,6 +1,3 @@
-//! Сообщения сущностей и голосового ассистента: команды HA, проверенные так же, как в
-//! C++-сервере, превращаются в `ApiEvent`.
-
 use std::collections::HashMap;
 
 use esphome_proto::entity::{
@@ -18,8 +15,6 @@ use crate::types::{
     TimerInfo, UpdateCommand, VaEvent, followup_duration_s,
 };
 
-/// LightCommandRequest без transition: default_transition_length ESPHome. Более длинные
-/// обрезаются до минуты (кадры идут весь fade).
 const DEFAULT_TRANSITION_MS: u32 = 1000;
 const MAX_TRANSITION_MS: u32 = 60_000;
 
@@ -27,10 +22,6 @@ fn lossy(b: &[u8]) -> String {
     String::from_utf8_lossy(b).into_owned()
 }
 
-/// Текст для часов: не более CLOCK_TEXT_MAX символов того, что получит контроллер (lossy-
-/// декодирование, где каждая невалидная последовательность — один U+FFFD). Для валидного
-/// UTF-8 это счёт C++; для невалидного C++ считал байты, не являющиеся continuation, и
-/// пропускал, например, "a" + 64 лишних continuation как один символ.
 fn clock_text(b: &[u8]) -> Option<String> {
     let s = lossy(b);
     let n = s.chars().count();
@@ -98,7 +89,6 @@ fn switch_id(key: u32) -> Option<SwitchId> {
 }
 
 impl super::Server {
-    /// Сообщения после транспорта.
     pub(super) fn handle_entities(&mut self, id: u64, msg_type: u32, payload: &[u8]) {
         match msg_type {
             msg::DEVICE_INFO_REQ => self.send_device_info(id),
@@ -147,7 +137,6 @@ impl super::Server {
             }
             msg::VA_CONFIG_REQ => self.send_va_config(id),
             msg::VA_SET_CONFIG => self.on_va_set_config(payload),
-            // HA -> устройство TTS-аудио через API; SPEAKER не объявляется.
             _ => debug!(
                 "api: ignoring message type {msg_type} ({} bytes)",
                 payload.len()
@@ -383,8 +372,6 @@ impl super::Server {
             m.green.unwrap_or(0.0),
             m.blue.unwrap_or(0.0),
         ];
-        // NaN дошёл бы до LED как NaN (C++-сервер пропускал, clamp01 его сохраняет):
-        // отвергается так же, как NaN number.
         if [bri, cbri, rgb[0], rgb[1], rgb[2]]
             .iter()
             .any(|v| v.is_nan())
@@ -442,7 +429,6 @@ impl super::Server {
     }
 
     fn on_voice_event(&mut self, id: u64, payload: &[u8]) {
-        // События пайплайна считаются только от владельца.
         if self.voice.current() != Some(id) {
             return;
         }
@@ -482,7 +468,6 @@ impl super::Server {
         let (mut ignored, mut first_ignored) = (0usize, String::new());
         for ww in m.active_wake_words {
             let known = self.cfg.wake_words.iter().any(|w| w.id == ww);
-            // max_active_wake_words = 1
             if known && ids.is_empty() {
                 ids.push(ww);
             } else {
@@ -492,12 +477,9 @@ impl super::Server {
                 ignored += 1;
             }
         }
-        // Одна строка, сколько бы ни пришло (C++-сервер логировал каждую).
         if ignored > 0 {
             warn!("api: ignoring {ignored} wake word(s), first '{first_ignored}'");
         }
-        // Спотер всегда держит одну модель: пустой / неизвестный выбор оставляет текущее слово,
-        // а контроллер сообщает возврат через set_active_wake_words.
         if ids.is_empty() {
             warn!("api: no known wake word in the new configuration, keeping the current one");
             return;

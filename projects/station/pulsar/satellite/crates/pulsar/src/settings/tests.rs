@@ -1,22 +1,5 @@
-// Фикстуры в tests/golden/settings/ сняты с эталона на C++ (rust-port-base): Settings::load и
-// Settings::save из controller.cpp, перенесённые без изменений во временный хост-харнесс, собранный
-// `zig c++ -std=c++20 -O2`. save_*.conf — `save` значений ниже; load_*.out — `load` из load_*.in,
-// затем `save`. С тех пор правились руками: `wake_preroll` (после `clock_music`; 0 в load_odd.in);
-// `clock_auto_brightness` (после `wake_preroll`); `voice_color` (после `led_case_color`);
-// `followup_duration_s` (10); ключи форка `wake_event_recording` / `wake_dry_run` /
-// `announce_volume` / `mic_gain_db`, а за ними upstream-ключи `wake_sound` (1) и
-// `clock_colon_blink` (1, последним) — и
-// умолчания форка (`wake_word=ricardo`, `nearest_answers=0`).
-//
-// `Settings` больше не хранит чужие доменные типы: опции HA и роль Zigbee — строки `state.conf`,
-// которые контроллер отображает на свои типы на границе.
-
 use super::*;
 
-// Под Bazel тест исполняется из runfiles-дерева, где абсолютный
-// CARGO_MANIFEST_DIR сборочного экшена не существует; PULSAR_MANIFEST_DIR
-// задаёт путь относительно текущего каталога теста. Cargo его не выставляет,
-// поэтому там работает прежний CARGO_MANIFEST_DIR.
 fn dir() -> PathBuf {
     std::env::var_os("PULSAR_MANIFEST_DIR")
         .map_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")), PathBuf::from)
@@ -27,7 +10,6 @@ fn golden(name: &str) -> Vec<u8> {
     std::fs::read(dir().join(name)).unwrap()
 }
 
-/// As the harness read its arguments (strtof).
 fn f(s: &str) -> f32 {
     parse_f32_prefix(s)
 }
@@ -97,7 +79,6 @@ fn save_matches_golden_byte_for_byte() {
 fn parses_a_file_written_by_the_fork() {
     let mut s = Settings::default();
     s.parse(&golden("save_values.conf"));
-    // Written with 6 significant digits: the values read back are those of the text.
     let want = Settings {
         volume: 0.3,
         has_volume: true,
@@ -134,7 +115,6 @@ fn load_then_save_matches_cxx() {
     }
 }
 
-/// A fresh directory under the system temp dir, removed on drop.
 struct TmpDir(PathBuf);
 
 impl TmpDir {
@@ -169,14 +149,12 @@ fn save_is_atomic_and_load_reads_it_back() {
     let mut s = Settings::default();
     assert!(s.load(&path));
     assert_eq!(s.update_attempt, "v1.2.3");
-    // Missing directory: the temporary file cannot be created (logged), nothing written.
     assert!(!values().save(&t.0.join("no/state.conf")));
     assert!(!t.0.join("no").exists());
 }
 
 #[test]
 fn stale_tmp_is_replaced() {
-    // A power cut mid-write leaves `state.conf.tmp`; the next write truncates it.
     let t = TmpDir::new();
     let path = t.0.join("state.conf");
     std::fs::write(t.0.join("state.conf.tmp"), vec![b'x'; 4096]).unwrap();
@@ -185,8 +163,6 @@ fn stale_tmp_is_replaced() {
     assert!(!t.0.join("state.conf.tmp").exists());
 }
 
-// A write that fails half-way (here ENOSPC from /dev/full behind the temporary name) must not
-// be renamed over the good file.
 #[cfg(target_os = "linux")]
 #[test]
 fn failed_write_keeps_the_old_file() {
@@ -202,7 +178,6 @@ fn failed_write_keeps_the_old_file() {
     assert!(std::fs::symlink_metadata(&tmp).is_err());
 }
 
-/// The file's bytes, None when absent.
 fn on_disk(path: &Path) -> Option<Vec<u8>> {
     std::fs::read(path).ok()
 }
@@ -223,7 +198,6 @@ async fn changes_coalesce_into_one_write_after_the_last() {
             advance(Duration::from_millis(50)).await;
         }
     }
-    // Nothing written before SAVE_DELAY_MS after the last change.
     assert!(
         timeout(Duration::from_millis(SAVE_DELAY_MS - 1), sf.due())
             .await
@@ -235,7 +209,6 @@ async fn changes_coalesce_into_one_write_after_the_last() {
     sf.flush();
     assert_eq!(on_disk(&path).unwrap(), sf.serialize().as_bytes());
     assert!(sf.serialize().contains("\nled_speed=2.4\n"));
-    // One write: nothing else pending.
     assert!(timeout(NEVER, sf.due()).await.is_err());
 }
 
@@ -248,9 +221,7 @@ async fn write_now_bypasses_and_cancels_the_debounce() {
     sf.changed();
     sf.zigbee_flash_failed = 0x5101_0203;
     assert!(sf.write_now());
-    // At once, with the change pending before it.
     assert_eq!(on_disk(&path).unwrap(), sf.serialize().as_bytes());
-    // The delayed write is no longer due, and flush has nothing to write.
     assert!(tokio::time::timeout(NEVER, sf.due()).await.is_err());
     std::fs::remove_file(&path).unwrap();
     sf.flush();
@@ -262,14 +233,12 @@ async fn flush_writes_the_latest_value_once() {
     let t = TmpDir::new();
     let path = t.0.join("state.conf");
     let mut sf = Store::with_values(path.clone(), values());
-    // Nothing changed: nothing written.
     sf.flush();
     assert_eq!(on_disk(&path), None);
     sf.led_speed = 1.5;
     sf.changed();
     sf.led_speed = 2.5;
     sf.changed();
-    // The exit flush, before the delay ran out.
     sf.flush();
     assert_eq!(on_disk(&path).unwrap(), sf.serialize().as_bytes());
     assert!(tokio::time::timeout(NEVER, sf.due()).await.is_err());
@@ -286,7 +255,7 @@ async fn failed_flush_is_retried() {
     let mut sf = Store::with_values(path.clone(), values());
     sf.changed();
     sf.due().await;
-    sf.flush(); // the directory is missing: logged, still pending
+    sf.flush();
     assert_eq!(on_disk(&path), None);
     std::fs::create_dir(&dir).unwrap();
     sf.flush();
@@ -295,14 +264,12 @@ async fn failed_flush_is_retried() {
 
 #[tokio::test(start_paused = true)]
 async fn failed_write_now_reports_false_and_stays_pending() {
-    // The install path refuses to replace the binary when update_attempt is not on disk.
     let t = TmpDir::new();
     let dir = t.0.join("later");
     let path = dir.join("state.conf");
     let mut sf = Store::with_values(path.clone(), values());
-    assert!(!sf.write_now()); // the directory is missing: nothing written
+    assert!(!sf.write_now());
     assert_eq!(on_disk(&path), None);
-    // No delayed write is armed; the change stays pending for the next flush.
     assert!(tokio::time::timeout(NEVER, sf.due()).await.is_err());
     std::fs::create_dir(&dir).unwrap();
     sf.flush();
@@ -310,7 +277,6 @@ async fn failed_write_now_reports_false_and_stays_pending() {
     assert!(sf.write_now());
 }
 
-// glibc strtoul(s, nullptr, 16) with a 64-bit unsigned long (the Midi; the host).
 #[cfg(target_pointer_width = "64")]
 #[test]
 fn strtoul_hex_matches_libc() {
@@ -357,7 +323,6 @@ fn clock_auto_brightness_is_always_written() {
 
 #[test]
 fn voice_color_defaults_to_violet_and_round_trips() {
-    // The stock look; a `.prev` binary skips the unknown key, and an old file has none.
     assert_eq!(Settings::default().voice_color, "Violet");
     assert!(
         Settings::default()
@@ -368,15 +333,12 @@ fn voice_color_defaults_to_violet_and_round_trips() {
     s.parse(b"voice_color=Blue\n");
     assert_eq!(s.voice_color, "Blue");
     assert!(s.serialize().contains("\nvoice_color=Blue\n"));
-    // Anything else is the stock violet, not an error.
     s.parse(b"voice_color=blue\n");
     assert_eq!(s.voice_color, "Violet");
     s.parse(b"voice_color=\n");
     assert_eq!(s.voice_color, "Violet");
 }
 
-/// The persisted option texts are the domain crates' option lists, in their order; a domain
-/// name change must fail here, not silently orphan a `state.conf` value.
 #[test]
 fn option_tables_match_the_domain_crates() {
     assert_eq!(
@@ -393,7 +355,6 @@ fn option_tables_match_the_domain_crates() {
     );
     let roles: Vec<&str> = pulsar_zigbee::ROLES.iter().map(|r| r.name).collect();
     assert_eq!(ZIGBEE_ROLES.as_slice(), roles);
-    // The fallbacks are real options, not typos.
     assert!(MUSIC_STYLES.contains(&MUSIC_STYLE_DEFAULT));
     assert!(CLOCK_MUSIC_STYLES.contains(&"Off"));
     assert!(VOICE_COLORS.contains(&"Violet"));
@@ -402,7 +363,6 @@ fn option_tables_match_the_domain_crates() {
 
 #[test]
 fn wake_event_switches_round_trip() {
-    // Recording is on and dry run off by default; the `.prev` binary skips the unknown keys.
     let s = Settings::default();
     assert!(s.wake_recording);
     assert!(!s.wake_dry_run);
@@ -411,14 +371,11 @@ fn wake_event_switches_round_trip() {
     assert!(!parsed.wake_recording);
     assert!(parsed.wake_dry_run);
     assert!(parsed.serialize().contains("wake_dry_run=1\n"));
-    // The newest keys go last, so `wake_dry_run` is no longer the tail.
     assert!(parsed.serialize().ends_with("clock_colon_blink=1\n"));
 }
 
 #[test]
 fn microphone_gain_defaults_roundtrips_and_clamps() {
-    // 34 dB is the previous VQE_OMNI_WITH_GAIN level: an older `state.conf` has no key and
-    // upgrades without changing the audio sent to HA.
     let mut st = Settings::default();
     assert_eq!(st.mic_gain_db, 34);
     assert!(st.serialize().contains("mic_gain_db=34\n"));
@@ -443,7 +400,6 @@ fn microphone_gain_defaults_roundtrips_and_clamps() {
 
 #[test]
 fn announce_volume_defaults_roundtrips_and_clamps() {
-    // 100 % is the old behaviour: an older `state.conf` has no key and reads as 1.0.
     let mut st = Settings::default();
     st.parse(b"unknown_old_setting=1\n");
     assert_eq!(st.announce_volume, 1.0);
@@ -483,7 +439,6 @@ fn followup_duration_defaults_roundtrips_and_clamps() {
         st.parse(format!("followup_duration_s={value}\n").as_bytes());
         assert_eq!(st.followup_duration_s, 7, "{value}");
     }
-    // Разбор как у остальных чисел — strtof: мусор даёт 0, число в начале строки читается.
     for (value, expected) in [
         ("garbage", 0),
         ("", 0),

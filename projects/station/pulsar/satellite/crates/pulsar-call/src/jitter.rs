@@ -1,58 +1,25 @@
-//! Джиттер-буфер downlink: порядок, потери, адаптивная глубина и PLC.
-//!
-//! Кадры хранятся сырыми (для звонка — Opus-пакеты): декодер stateful, поэтому декодирование,
-//! in-band FEC и PLC обязаны идти в порядке воспроизведения. Это делает [`Playout`] в момент
-//! [`JitterBuffer::pop`], а не при приходе пакета.
-//!
-//! Глубина — 40..100 мс (2..5 кадров по 20 мс): меньше — рвётся на Wi-Fi телефона, больше —
-//! слышимая задержка разговора. Гейт по цели действует только при (ре)прайминге — на старте и
-//! после настоящего голодания. В установившемся режиме отдаётся всё, что уже пришло: иначе
-//! каждые 20 мс очередь на выходе пустеет, и ALSA недокармливается.
-//!
-//! [`JitterBuffer::pop`] возвращает `None`, когда поток иссяк дольше
-//! [`JITTER_GIVEUP_MS`](crate::JITTER_GIVEUP_MS): звонок после этого считается потерянным.
-//!
-//! [`pop`]: JitterBuffer::pop
-
 use std::collections::BTreeMap;
 
 use crate::{JITTER_GIVEUP_MS, JITTER_MAX_MS, JITTER_MIN_MS};
 
-/// Кадр слишком опоздал (его место уже отдано дальше) — отбрасывается.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Push {
-    /// Кадр в буфере.
     Queued,
-    /// Номер уже сыгран или заменён PLC.
     Late,
-    /// Такой номер уже есть (дубликат ретрансмиссии).
     Duplicate,
 }
 
-/// Сколько тишины до первого кадра после старта считается нормой, мс.
 const PRIME_TIMEOUT_MS: i64 = 250;
-/// Чистых кадров подряд до уменьшения глубины (5 с при 20 мс).
 const SHRINK_EVERY: u32 = 250;
 
-/// Превращение хранимого кадра в выходной в порядке воспроизведения.
-///
-/// Декодер Opus хранит состояние между кадрами: обычный кадр, FEC и PLC должны вызываться
-/// строго по очереди, поэтому буфер сам ничего не декодирует и не переупорядочивает вызовы.
 pub trait Playout<T> {
-    /// Что отдаётся наружу: для звонка — PCM.
     type Output;
 
-    /// Обычный кадр из буфера.
     fn frame(&mut self, frame: &T) -> Self::Output;
 
-    /// Пропуск на месте ожидаемого номера.
-    ///
-    /// `next` — следующий уже пришедший кадр, если он есть: по нему декодер может
-    /// восстановить пропущенный из in-band FEC, не дожидаясь ретрансмиссии.
     fn lost(&mut self, next: Option<&T>) -> Self::Output;
 }
 
-/// Буфер кадров произвольного типа: сеть даёт `T`, воспроизведение забирает его же.
 pub struct JitterBuffer<T> {
     frame_ms: u32,
     min_frames: u32,
@@ -87,25 +54,21 @@ impl<T> JitterBuffer<T> {
         }
     }
 
-    /// Текущая цель буфера, мс.
     #[must_use]
     pub fn target_ms(&self) -> u32 {
         self.target_frames * self.frame_ms
     }
 
-    /// Кадров готово к выдаче.
     #[must_use]
     pub fn depth(&self) -> usize {
         self.slots.len()
     }
 
-    /// Глубина в миллисекундах.
     #[must_use]
     pub fn depth_ms(&self) -> u32 {
         u32::try_from(self.slots.len()).unwrap_or(u32::MAX) * self.frame_ms
     }
 
-    /// Новый кадр. `now_ms` — CLOCK_MONOTONIC.
     pub fn push(&mut self, seq: u64, frame: T, now_ms: i64) -> Push {
         if !self.started {
             self.started = true;
@@ -114,8 +77,6 @@ impl<T> JitterBuffer<T> {
             self.last_output_ms = now_ms;
         }
         if seq < self.next {
-            // Кадр опоздал: сеть держит больше, чем текущая цель. Увеличиваем цель,
-            // чтобы его место не успели сыграть PLC в следующий раз.
             if self.target_frames < self.max_frames {
                 self.target_frames += 1;
             }
@@ -124,7 +85,6 @@ impl<T> JitterBuffer<T> {
         if self.slots.contains_key(&seq) {
             return Push::Duplicate;
         }
-        // Прыжок больше чем на буфер: поток перезапустился, старые номера уже не сыграть.
         let ahead = seq.saturating_sub(self.next);
         if ahead > u64::from(self.max_frames) * 4 {
             self.reset(seq);
@@ -133,11 +93,6 @@ impl<T> JitterBuffer<T> {
         Push::Queued
     }
 
-    /// Один кадр на выход в порядке воспроизведения.
-    ///
-    /// `None` — кадров нет: ещё идёт пре-buffer, буфер совсем опустел или поток потерян
-    /// (тишина дольше [`JITTER_GIVEUP_MS`]). PLC в пустоту не гонится: после голодания буфер
-    /// снова праймится, и гейт по цели ждёт сеть.
     pub fn pop<O>(&mut self, now_ms: i64, playout: &mut dyn Playout<T, Output = O>) -> Option<O> {
         if !self.started {
             return None;
@@ -163,7 +118,6 @@ impl<T> JitterBuffer<T> {
             return Some(playout.frame(&frame));
         }
 
-        // Совсем пусто: не тянем PLC бесконечно, а ждём сеть и праймимся заново.
         if self.slots.is_empty() {
             if now_ms - self.last_output_ms > i64::from(JITTER_GIVEUP_MS) {
                 return None;
@@ -173,8 +127,6 @@ impl<T> JitterBuffer<T> {
             return None;
         }
 
-        // Пропуск внутри потока: отдаём FEC/PLC и идём к следующему имеющемуся номеру.
-        // Глубина растёт: сеть уже показала потерю порядка.
         self.clean = 0;
         if self.target_frames < self.max_frames {
             self.target_frames += 1;
@@ -201,8 +153,6 @@ mod tests {
     use super::*;
 
     const F: u32 = 20;
-    /// Кадров на входе в буфер в тестах: цель 2 кадра, поэтому на каждую выдачу
-    /// должен быть запас, иначе гейт глубины законно останавливает воспроизведение.
     const PRIME: u64 = 4;
 
     fn frame(v: i16) -> Vec<i16> {
@@ -213,7 +163,6 @@ mod tests {
         vec![-1, -1, -1]
     }
 
-    /// Обычный кадр отдаётся как есть, пропуск считает и заменяет PLC.
     struct Frames<F: FnMut(Option<&Vec<i16>>) -> Vec<i16>>(F);
 
     impl<F: FnMut(Option<&Vec<i16>>) -> Vec<i16>> Playout<Vec<i16>> for Frames<F> {
@@ -232,7 +181,6 @@ mod tests {
         b.pop(now, &mut Frames(|_| plc()))
     }
 
-    /// Заполнить буфер выше целевой глубины.
     fn prime(b: &mut JitterBuffer<Vec<i16>>) {
         for seq in 0..PRIME {
             b.push(seq, frame(seq as i16), 0);
@@ -267,13 +215,9 @@ mod tests {
         assert_eq!(popped(&mut b, 0), Some(frame(0)));
         assert_eq!(popped(&mut b, 20), Some(frame(1)));
         assert_eq!(popped(&mut b, 40), Some(frame(2)));
-        // Установившийся режим: кадр есть — он играет, даже если глубина ниже цели.
-        // Иначе каждые 20 мс возникал бы провал выдачи и недокорм ALSA.
         assert_eq!(popped(&mut b, 60), Some(frame(3)));
-        // Совсем пусто: выдавать нечего, но и PLC в пустоту не идёт.
         assert_eq!(popped(&mut b, 80), None);
         b.push(4, frame(4), 90);
-        // После голодания — репрайминг: ждём цель, а не играем одиночный кадр.
         assert_eq!(popped(&mut b, 100), None);
         b.push(5, frame(5), 110);
         assert_eq!(popped(&mut b, 120), Some(frame(4)));
@@ -314,7 +258,6 @@ mod tests {
         assert_eq!(b.pop(20, &mut playout), Some(vec![9, 9, 9]));
         assert_eq!(lost, 1);
         assert!(b.target_ms() > before, "loss must deepen the buffer");
-        // Установившийся режим не ждёт добора глубины: уже принятый кадр играет сразу.
         assert_eq!(popped(&mut b, 40), Some(frame(2)));
         assert_eq!(popped(&mut b, 60), Some(frame(3)));
     }
@@ -357,7 +300,6 @@ mod tests {
         for tick in 0..PRIME {
             let _ = popped(&mut b, tick as i64 * 20);
         }
-        // Буфер пуст: дальше кадров нет ни в очереди, ни в сети.
         assert!(popped(&mut b, i64::from(JITTER_GIVEUP_MS) + 1000).is_none());
     }
 
@@ -371,7 +313,6 @@ mod tests {
         assert!(b.target_ms() >= JITTER_MIN_MS && b.target_ms() <= JITTER_MAX_MS);
     }
 
-    /// Детерминированный ГПСЧ: тест не должен зависеть от `rand`.
     struct Lcg(u64);
 
     impl Lcg {
@@ -388,23 +329,16 @@ mod tests {
         }
     }
 
-    /// Итоги симуляции выдачи.
     struct Sim {
-        /// Кадров отдано.
         outputs: u64,
-        /// Кадров пришло с опозданием.
         late: u64,
-        /// Пропусков, закрытых FEC/PLC.
         concealed: u64,
-        /// Тиков после прогрева, на которых играть было нечего.
         gaps: u64,
     }
 
-    /// Симуляция: пакеты приходят с джиттером 0..80 мс, выдача идёт по часам 20 мс.
     fn simulate(loss_percent: u64) -> Sim {
         const TOTAL: u64 = 1500;
         const JITTER: u64 = 80;
-        /// Прогрев: прайминг и адаптация цели не считаются голоданием.
         const WARMUP_TICKS: u64 = 100;
         let mut random = Lcg(0x5eed);
         let mut b = JitterBuffer::new(F);
@@ -425,8 +359,6 @@ mod tests {
             gaps: 0,
         };
         let mut next_arrival = 0;
-        // Тики покрывают только время прихода пакетов: хвост после конца потока — это
-        // штатное голодание, а не провал выдачи.
         for tick in 0..TOTAL {
             let now = tick as i64 * 20;
             while next_arrival < arrivals.len() && arrivals[next_arrival].0 as i64 <= now {

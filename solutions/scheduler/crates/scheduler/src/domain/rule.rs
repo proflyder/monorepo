@@ -1,23 +1,9 @@
-//! Recurrence rules in UTC.
-//!
-//! The scheduler is a server: it stores and returns only UTC. A one-shot
-//! rule is a UTC instant. A recurring rule is a UTC time of day plus a UTC
-//! ISO weekday mask, so the next occurrence is a plain calendar computation
-//! with no time-zone database and no DST policy.
-//!
-//! Clients (phones, `mcp-gateway`) own local time: they convert the user's
-//! local wall clock to a UTC time of day and shift the weekday mask when the
-//! local occurrence crosses midnight UTC.
-
 use jiff::Timestamp;
 use jiff::civil::{Date, DateTime, Time};
 use jiff::tz::TimeZone;
 
-/// Upper bound for the recurrence search. Every supported repeat kind has a
-/// matching date within seven days; this is a safety net, not a normal path.
 pub const MAX_LOOKAHEAD_DAYS: i32 = 400;
 
-/// Repeat policy of a schedule rule.
 #[derive(
     Debug, Clone, Copy, Default, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize,
 )]
@@ -33,13 +19,11 @@ pub enum Repeat {
 }
 
 impl Repeat {
-    /// Numeric wire/storage code (`repeat_kind`).
     #[must_use]
     pub const fn code(self) -> i32 {
         self as i32
     }
 
-    /// Reconstructs a repeat from its numeric code.
     #[must_use]
     pub const fn from_code(code: i32) -> Option<Self> {
         match code {
@@ -53,7 +37,6 @@ impl Repeat {
         }
     }
 
-    /// Protobuf enum name, used verbatim in validation messages.
     #[must_use]
     pub const fn name(self) -> &'static str {
         match self {
@@ -66,7 +49,6 @@ impl Repeat {
         }
     }
 
-    /// Parses the protobuf enum name used by the golden planner vectors.
     #[must_use]
     pub fn from_name(name: &str) -> Option<Self> {
         match name {
@@ -81,7 +63,6 @@ impl Repeat {
     }
 }
 
-/// UTC time of day of a recurring schedule.
 #[derive(
     Debug, Clone, Copy, Default, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize,
 )]
@@ -91,21 +72,14 @@ pub struct WallTime {
     pub second: i32,
 }
 
-/// A UTC recurrence.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Rule {
-    /// UTC time of day; unused for [`Repeat::Once`].
     pub at: WallTime,
     pub repeat: Repeat,
-    /// UTC ISO weekdays 1=Mon..7=Sun, `Repeat::Custom` only.
     pub weekdays: Vec<i32>,
-    /// UTC instant for [`Repeat::Once`]; 0 otherwise.
     pub once_unix: i64,
 }
 
-/// A rule validation failure. Its `Display` output starts with the Go error
-/// prefix `invalid schedule rule`, so wrapping it in an `invalid argument`
-/// domain error reproduces the historical message shape.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[error("invalid schedule rule: {detail}")]
 pub struct RuleError {
@@ -113,7 +87,6 @@ pub struct RuleError {
 }
 
 impl RuleError {
-    /// Builds a rule error from a detail message.
     #[must_use]
     pub fn new(detail: impl Into<String>) -> Self {
         Self {
@@ -121,7 +94,6 @@ impl RuleError {
         }
     }
 
-    /// The message without the `invalid schedule rule: ` prefix.
     #[must_use]
     pub fn detail(&self) -> &str {
         &self.detail
@@ -129,7 +101,6 @@ impl RuleError {
 }
 
 impl Rule {
-    /// Reports whether the rule is well formed.
     pub fn validate(&self) -> Result<(), RuleError> {
         if !(0..=23).contains(&self.at.hour) {
             return Err(RuleError::new(format!(
@@ -202,9 +173,6 @@ impl Rule {
         Ok(())
     }
 
-    /// Returns the first occurrence strictly after `after_unix`.
-    ///
-    /// `Ok(None)` means the rule is exhausted: a one-shot instant in the past.
     pub fn next(&self, after_unix: i64) -> Result<Option<i64>, RuleError> {
         self.validate()?;
         if self.repeat == Repeat::Once {
@@ -230,8 +198,6 @@ impl Rule {
         )))
     }
 
-    /// Returns the first occurrence at or after `from_unix`, used to
-    /// fast-forward a lagging schedule.
     pub fn next_inclusive(&self, from_unix: i64) -> Result<Option<i64>, RuleError> {
         self.next(from_unix.saturating_sub(1))
     }
@@ -248,7 +214,6 @@ impl Rule {
     }
 }
 
-/// Sorts ISO weekdays ascending and joins them with commas.
 #[must_use]
 pub fn weekdays_text(days: &[i32]) -> String {
     let mut sorted = days.to_vec();
@@ -260,7 +225,6 @@ pub fn weekdays_text(days: &[i32]) -> String {
         .join(",")
 }
 
-/// Maps a civil date/time in UTC to a Unix instant.
 fn utc_instant(date: Date, at: WallTime) -> Option<i64> {
     let time = Time::new(
         i8::try_from(at.hour).ok()?,
@@ -290,13 +254,11 @@ mod tests {
             repeat: Repeat::Daily,
             ..Rule::default()
         };
-        // 2026-01-01T21:59:00Z -> next is 2026-01-01T22:00:00Z.
         assert_eq!(rule.next(1_767_304_740).unwrap(), Some(1_767_304_800));
     }
 
     #[test]
     fn custom_weekdays_use_the_utc_mask() {
-        // Almaty "weekdays 03:00" becomes Sunday..Thursday 22:00 UTC.
         let rule = Rule {
             at: WallTime {
                 hour: 22,
@@ -307,7 +269,6 @@ mod tests {
             weekdays: vec![7, 1, 2, 3, 4],
             ..Rule::default()
         };
-        // 2026-01-04 is a Sunday: next occurrence is Sunday 22:00Z.
         let next = rule.next(1_767_500_000).unwrap().expect("occurrence");
         assert_eq!(
             Timestamp::from_second(next).unwrap().to_string(),
@@ -410,15 +371,10 @@ mod tests {
     }
 }
 
-/// Reference week Monday used to map local weekdays to UTC weekdays.
 const REFERENCE_YEAR: i16 = 2026;
 const REFERENCE_MONTH: i8 = 1;
 const REFERENCE_MONDAY: i8 = 5;
 
-/// Validates wire-local recurrence fields before they are converted.
-///
-/// The messages are the historical rule messages; a client sees them as
-/// `invalid argument: invalid schedule rule: <detail>`.
 pub fn validate_local_rule(
     at: WallTime,
     repeat: Repeat,
@@ -496,13 +452,6 @@ pub fn validate_local_rule(
     Ok(())
 }
 
-/// Translates a client's local recurrence into the scheduler's UTC rule.
-///
-/// The one-shot case resolves the local date/time to a UTC instant. A
-/// recurring case shifts the time of day and the weekday mask to UTC, using
-/// the zone offset at a reference week. Zones without DST convert exactly;
-/// for a DST zone the current fixed offset is used, because a UTC-only rule
-/// cannot express a local wall clock that moves twice a year.
 #[must_use]
 pub fn local_to_utc(
     timezone: &str,
@@ -540,7 +489,6 @@ pub fn local_to_utc(
     }
 }
 
-/// A recurrence rendered in a client's zone for the wire.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct LocalRule {
     pub at: WallTime,
@@ -548,11 +496,6 @@ pub struct LocalRule {
     pub once_date: String,
 }
 
-/// Renders a stored UTC rule in `zone`.
-///
-/// The inverse of [`local_to_utc`]: a UTC time of day and weekday mask are
-/// mapped back to the local wall clock and local weekday mask, and a one-shot
-/// instant is rendered as a local date.
 #[must_use]
 pub fn utc_to_local(
     zone: &str,
@@ -646,7 +589,6 @@ fn resolve_local(zone: &TimeZone, once_date: &str, at: WallTime) -> Option<i64> 
         .map(|zoned| zoned.timestamp().as_second())
 }
 
-/// UTC time of day for a local time on the reference Monday.
 fn shift_wall_time(zone: &TimeZone, at: WallTime) -> (WallTime, i64) {
     let monday = Date::new(REFERENCE_YEAR, REFERENCE_MONTH, REFERENCE_MONDAY)
         .expect("reference Monday is a valid date");
@@ -667,7 +609,6 @@ fn shift_wall_time(zone: &TimeZone, at: WallTime) -> (WallTime, i64) {
     )
 }
 
-/// UTC weekday mask for a local recurrence.
 fn shift_mask(zone: &TimeZone, at: WallTime, repeat: Repeat, weekdays: &[i32]) -> Vec<i32> {
     let monday =
         Date::new(REFERENCE_YEAR, REFERENCE_MONTH, REFERENCE_MONDAY).expect("reference Monday");
@@ -703,8 +644,6 @@ fn shift_mask(zone: &TimeZone, at: WallTime, repeat: Repeat, weekdays: &[i32]) -
     mask
 }
 
-/// Parses the strict `YYYY-MM-DD` date used by legacy rows and scenario
-/// triggers.
 #[must_use]
 pub fn parse_iso_date(value: &str) -> Option<Date> {
     let bytes = value.as_bytes();

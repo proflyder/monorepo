@@ -1,10 +1,3 @@
-//! The durable announcement queue: a producer that stores a spoken answer as
-//! a `voice.announce` task and a consumer that speaks it only when the station
-//! is idle.
-//!
-//! The payload keys, task type, queue names, idempotency keys and ack outcomes
-//! are a wire contract; see [`crate::domain::queue_payload`].
-
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex, PoisonError};
@@ -21,18 +14,12 @@ use crate::domain::profile::Profile;
 use crate::domain::queue_payload::{self, AnnouncePayload, TASK_TYPE};
 use crate::domain::sanitize::trim_space;
 
-/// Default lease duration of one announcement.
 pub const LEASE_SECONDS: i32 = 120;
-/// An answer that waited longer than this gets the "Пока вас не было: " prefix.
 pub const STALE_AFTER: Duration = Duration::from_secs(120);
-/// How long the station may take to report busy after an announcement.
 pub const BUSY_GRACE: Duration = Duration::from_secs(10);
-/// How long to wait for the station to become idle again.
 pub const IDLE_TIMEOUT: Duration = Duration::from_secs(180);
-/// Ack detail when the station never settled.
 pub const DETAIL_IDLE: &str = "idle_timeout";
 
-/// Scheduler URL plus a token that is re-read on every call.
 pub struct SchedulerAccess {
     url: String,
     timeout: Duration,
@@ -85,7 +72,6 @@ impl SchedulerAccess {
     }
 }
 
-/// Enqueues durable announcements.
 pub struct Producer {
     access: Arc<SchedulerAccess>,
     enabled: bool,
@@ -111,15 +97,11 @@ impl Producer {
         }
     }
 
-    /// Whether the queue is configured and switched on.
     #[must_use]
     pub fn enabled(&self) -> bool {
         self.enabled
     }
 
-    /// Stores one spoken answer and returns `false` when the queue is off, the
-    /// text or profile is unusable, or the scheduler is unreachable. The caller
-    /// then falls back to a direct announcement.
     pub async fn enqueue(
         &self,
         speech: &str,
@@ -152,7 +134,6 @@ impl Producer {
     }
 }
 
-/// [`Queue`] adapter over [`SchedulerAccess`].
 #[derive(Debug, Clone)]
 pub struct SchedulerQueue {
     access: Arc<SchedulerAccess>,
@@ -203,7 +184,6 @@ impl Queue for SchedulerQueue {
     }
 }
 
-/// Gate: the station is idle *and* the current profile owns this queue.
 pub struct StationGate {
     profile: Arc<ProfileReader>,
     satellite: String,
@@ -242,7 +222,6 @@ impl home_worker::Gate for StationGate {
     }
 }
 
-/// Speaks one leased event.
 pub struct AnnouncementHandler {
     announcer: Arc<HaAnnouncer>,
     profile: Arc<ProfileReader>,
@@ -275,9 +254,6 @@ impl AnnouncementHandler {
         }
     }
 
-    /// Waits for an issued announcement to finish; `true` when the station is
-    /// idle again. The station first gets a grace period to report busy (HA
-    /// service calls are asynchronous), then the overall idle budget.
     async fn wait_until_idle(&self) -> bool {
         let start = Instant::now();
         let mut busy_seen = false;
@@ -318,7 +294,6 @@ impl Handler for AnnouncementHandler {
             let speech = with_stale_prefix(&speech, age, STALE_AFTER.as_secs() as i64);
             let (announced, _listening) = self.announcer.announce(&speech).await;
             if !announced {
-                // Leave the event leased: expiry returns it to PENDING.
                 return Outcome::Retry;
             }
             if self.wait_until_idle().await {
@@ -330,10 +305,6 @@ impl Handler for AnnouncementHandler {
     }
 }
 
-/// Reports whether the speaker is free for a queued announcement. Unknown or
-/// unavailable state is busy: speaking into an unknown station would interrupt
-/// a dialog or another announcement. Music `playing` is fine; `announcing` is
-/// the HA announcement channel.
 #[must_use]
 pub fn station_idle(satellite: Option<&str>, media: Option<&str>) -> bool {
     let Some(satellite) = satellite else {
@@ -354,7 +325,6 @@ pub fn station_idle(satellite: Option<&str>, media: Option<&str>) -> bool {
     media != "announcing"
 }
 
-/// Builds a `home_worker::Worker` lease for one profile.
 #[must_use]
 pub fn lease_request(consumer_id: &str, profile: Profile) -> LeaseRequest {
     LeaseRequest {

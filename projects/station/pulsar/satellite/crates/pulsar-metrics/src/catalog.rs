@@ -1,12 +1,3 @@
-//! Metric catalog of `pulsar_*`: the names the daemon exports.
-//!
-//! The list is the contract shared by the Prometheus rules, the Grafana dashboards
-//! and `observability/test_prometheusrule.py`. `render` panics in tests if a metric
-//! is rendered under a name missing here, and every catalog name must appear in a
-//! rendered sample ([`crate::render::tests`]), so a rename cannot silently break
-//! an alert or a panel.
-
-/// Base metric names (histograms without `_bucket`/`_sum`/`_count`).
 pub const NAMES: &[&str] = &[
     "pulsar_info",
     "pulsar_cpu_usage_ratio",
@@ -50,7 +41,6 @@ pub const NAMES: &[&str] = &[
     "pulsar_wake_model_info",
 ];
 
-/// Whether `name` is a catalog base name or one of the derived histogram series.
 #[must_use]
 pub fn contains(name: &str) -> bool {
     if NAMES.contains(&name) {

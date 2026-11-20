@@ -1,14 +1,3 @@
-//! `POST /v1/push/devices` — the phone's push registration surface.
-//!
-//! It is deliberately *not* a Connect RPC: device registration is device
-//! plumbing, not part of the durable schedule contract, and keeping it a plain
-//! JSON route means the phone reuses the scheduler base URL and bearer without
-//! a new Remote Config key or a second endpoint. The scheduler stores tokens
-//! only; delivery happens in `solutions/phone-push`.
-//!
-//! Authentication is the same bearer token as every Connect RPC, compared in
-//! constant time ([`super::auth::BearerAuth`]).
-
 use std::sync::Arc;
 
 use axum::Json;
@@ -21,56 +10,43 @@ use crate::store::{PushDevice, PushDeviceInput, Store, StoreError};
 
 use super::auth::BearerAuth;
 
-/// Shared state of the push routes.
 #[derive(Clone, Debug)]
 pub struct PushState {
     pub store: Arc<Store>,
     pub auth: Arc<BearerAuth>,
 }
 
-/// Registration body: the FCM token plus optional owner-visible metadata.
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RegisterBody {
-    /// Stable device identity chosen by the app (never the FCM token).
     #[serde(default)]
     pub device_id: String,
-    /// FCM registration token.
     #[serde(default)]
     pub token: String,
-    /// Client platform, `android` today.
     #[serde(default)]
     pub platform: String,
-    /// App version string, for operator diagnostics.
     #[serde(default)]
     pub app_version: String,
-    /// Owner-visible device name.
     #[serde(default)]
     pub device_name: String,
 }
 
-/// Removal body.
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RemoveBody {
-    /// Token to forget.
     #[serde(default)]
     pub token: String,
 }
 
-/// Rename body: the name is server-side metadata, no token re-registration.
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RenameBody {
-    /// Stable device identity.
     #[serde(default)]
     pub device_id: String,
-    /// New owner-visible name.
     #[serde(default)]
     pub device_name: String,
 }
 
-/// One device as the wire contract exposes it.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DeviceView {
@@ -79,8 +55,6 @@ pub struct DeviceView {
     pub platform: String,
     pub app_version: String,
     pub device_name: String,
-    /// Decimal string: protobuf JSON carries int64 this way, and the phone
-    /// keeps a single JSON convention.
     pub created_unix: String,
     pub updated_unix: String,
 }
@@ -119,7 +93,6 @@ struct ErrorResponse {
     error: &'static str,
 }
 
-/// `POST /v1/push/devices`.
 pub async fn register(
     State(state): State<PushState>,
     headers: HeaderMap,
@@ -149,7 +122,6 @@ pub async fn register(
     }
 }
 
-/// `POST /v1/push/devices/rename` — changes the owner-visible name only.
 pub async fn rename(
     State(state): State<PushState>,
     headers: HeaderMap,
@@ -172,7 +144,6 @@ pub async fn rename(
     }
 }
 
-/// `GET /v1/push/devices` — the sender reads the registry from here.
 pub async fn list(State(state): State<PushState>, headers: HeaderMap) -> Response {
     if !state.auth.authorized(headers.get(header::AUTHORIZATION)) {
         return error(StatusCode::UNAUTHORIZED, "unauthenticated");
@@ -186,7 +157,6 @@ pub async fn list(State(state): State<PushState>, headers: HeaderMap) -> Respons
     }
 }
 
-/// `POST /v1/push/devices/remove`.
 pub async fn remove(
     State(state): State<PushState>,
     headers: HeaderMap,
@@ -206,8 +176,6 @@ pub async fn remove(
     }
 }
 
-/// Runs one store operation on the blocking pool: the store owns a single
-/// SQLite writer thread and must never block the reactor.
 async fn blocking<T, F>(store: Arc<Store>, call: F) -> Result<T, Box<Response>>
 where
     T: Send + 'static,

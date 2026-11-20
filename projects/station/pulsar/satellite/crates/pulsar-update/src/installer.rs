@@ -1,6 +1,3 @@
-//! Установщик: скачивает и проверяет ассеты, пробует новый бинарь и атомарно подменяет
-//! файлы. Файловая система и запуск `--version` — здесь, сеть — за `ReleaseSource`.
-
 use std::fs::{self, File, OpenOptions, Permissions};
 use std::io::{self, Write as _};
 use std::os::unix::fs::{OpenOptionsExt as _, PermissionsExt as _};
@@ -23,15 +20,12 @@ const MAX_BINARY: usize = 64 << 20;
 const MAX_SMALL: usize = 1 << 20;
 const VERSION_TIMEOUT: Duration = Duration::from_secs(10);
 
-/// Другой ассет релиза, устанавливаемый вместе с бинарником (образы радио): `name` в
-/// релизе, `path` на станции.
 #[derive(Clone, Debug)]
 pub struct Extra {
     pub name: String,
     pub path: PathBuf,
 }
 
-/// Установщик одной сборки: суффикс ассета задан при сборке, не `cfg!(test)`.
 pub struct Installer {
     arch: &'static str,
 }
@@ -41,9 +35,6 @@ impl Installer {
         Self { arch }
     }
 
-    /// Скачивает, проверяет и подменяет `binary`, сохраняя текущий как `.prev`.
-    ///
-    /// `progress` — по байтам бинарника (0..95 отдаёт актор).
     pub async fn install<S: ReleaseSource>(
         &self,
         source: &S,
@@ -96,7 +87,6 @@ impl Installer {
             }
             Some(_) => {}
         }
-        // Выход демона не начинает новых шагов; уже идущая подмена завершается.
         if cancel.is_cancelled() {
             return Err(UpdateError::Cancelled);
         }
@@ -107,7 +97,6 @@ impl Installer {
                 os_text(&e)
             )));
         }
-        // Отмена во время пробы убивает `--version` (kill_on_drop) и убирает pulsar.new.
         let says = tokio::select! {
             biased;
             () = cancel.cancelled() => None,
@@ -130,9 +119,6 @@ impl Installer {
             )));
         }
 
-        // Дополнительные ассеты скачиваются и проверяются первыми и подменяются только
-        // вместе с бинарником: новый образ радио рядом со старым демоном был бы записан
-        // по старому протоколу.
         let mut extras_staged: Vec<Option<PathBuf>> = Vec::with_capacity(extras.len());
         for extra in extras {
             match self
@@ -165,7 +151,6 @@ impl Installer {
         .unwrap_or_else(|e| Err(UpdateError::retry(os_text(&e))))
     }
 
-    /// Скачивает, проверяет и пишет `<path>.new` одного ассета; `None`, если в релизе его нет.
     async fn stage_extra<S: ReleaseSource>(
         &self,
         source: &S,
@@ -178,7 +163,7 @@ impl Installer {
             return Ok(None);
         };
         let Some(fetched) = source.download(layer, MAX_BINARY, None, cancel).await? else {
-            return Ok(None); // релиз без этого ассета
+            return Ok(None);
         };
         let body = hash(fetched)
             .await
@@ -218,8 +203,6 @@ impl Installer {
     }
 }
 
-/// Каталог бинарника, куда пишутся pulsar.new и pulsar.prev. Голое имя файла даёт "."
-/// (иначе `pulsar.new` искался бы в PATH запуском `--version`).
 fn binary_dir(binary: &Path) -> PathBuf {
     match binary.parent() {
         Some(parent) if !parent.as_os_str().is_empty() => parent.to_path_buf(),
@@ -227,7 +210,6 @@ fn binary_dir(binary: &Path) -> PathBuf {
     }
 }
 
-/// Hex digest для `name` в списке sha256sum (`<hex>  <name>` или `<hex> *<name>`).
 fn expected_sha<'a>(sums: &'a [u8], name: &str) -> Option<&'a str> {
     for line in sums.split(|&b| b == b'\n') {
         let line = line.strip_suffix(b"\r").unwrap_or(line);
@@ -246,7 +228,6 @@ fn expected_sha<'a>(sums: &'a [u8], name: &str) -> Option<&'a str> {
     None
 }
 
-/// Сохраняет текущий бинарь как .prev, затем переименовывает дополнительные ассеты и бинарь.
 fn swap(
     binary: &Path,
     dir: &Path,
@@ -254,12 +235,10 @@ fn swap(
     targets: &[PathBuf],
     mut extras_staged: Vec<Option<PathBuf>>,
 ) -> Result<(), UpdateError> {
-    // supervise.sh вернёт .prev, если новый бинарь уйдёт в crash-loop.
     let tmp = dir.join("pulsar.prev.tmp");
     if let Err(e) =
         copy_file(binary, &tmp, 0o755).and_then(|()| fs::rename(&tmp, dir.join("pulsar.prev")))
     {
-        // /data на Лайт 2 мал: недописанная копия не остаётся.
         let _ = fs::remove_file(&tmp);
         drop_staged(staged, &extras_staged);
         return Err(UpdateError::retry(format!(
@@ -306,7 +285,6 @@ fn with_suffix(path: &Path, suffix: &str) -> PathBuf {
     name.into()
 }
 
-/// Файловая работа вне потока рантайма.
 async fn blocking<T: Send + 'static>(
     f: impl FnOnce() -> io::Result<T> + Send + 'static,
 ) -> io::Result<T> {
@@ -315,7 +293,6 @@ async fn blocking<T: Send + 'static>(
         .unwrap_or_else(|e| Err(io::Error::other(e)))
 }
 
-/// SHA-256 скачанного вне потока рантайма (десятки мс для бинаря на Лайт 2).
 async fn hash(body: Vec<u8>) -> io::Result<(Vec<u8>, Digest)> {
     blocking(move || {
         let digest = Digest::of(&body);
@@ -324,8 +301,6 @@ async fn hash(body: Vec<u8>) -> io::Result<(Vec<u8>, Digest)> {
     .await
 }
 
-/// Записывает `data` с правами `mode` (в том числе под umask), fsync; неудачная запись
-/// не оставляет файла.
 async fn write_file(path: PathBuf, data: Vec<u8>, mode: u32) -> io::Result<()> {
     blocking(move || {
         let written = open_for_write(&path, mode).and_then(|mut f| {
@@ -350,7 +325,6 @@ fn open_for_write(path: &Path, mode: u32) -> io::Result<File> {
         .open(path)
 }
 
-/// Копирует `src` в `dst` с правами `mode`, fsync (в ядре: копии бинаря в памяти нет).
 fn copy_file(src: &Path, dst: &Path, mode: u32) -> io::Result<()> {
     let mut from = File::open(src)?;
     let mut to = open_for_write(dst, mode)?;
@@ -359,7 +333,6 @@ fn copy_file(src: &Path, dst: &Path, mode: u32) -> io::Result<()> {
     to.set_permissions(Permissions::from_mode(mode))
 }
 
-/// Первая строка `<path> --version`; "" — не завершился с 0 за таймаут.
 async fn run_version(path: &Path) -> String {
     let deadline = Instant::now() + VERSION_TIMEOUT;
     let mut child = loop {
@@ -370,8 +343,6 @@ async fn run_version(path: &Path) -> String {
             .spawn();
         match spawned {
             Ok(child) => break child,
-            // Только что записанный файл может быть ещё открыт на запись в дочернем
-            // процессе другого потока (до его exec): короткая повторная попытка.
             Err(e) if e.raw_os_error() == Some(libc::ETXTBSY) && Instant::now() < deadline => {
                 tokio::time::sleep(Duration::from_millis(20)).await;
             }

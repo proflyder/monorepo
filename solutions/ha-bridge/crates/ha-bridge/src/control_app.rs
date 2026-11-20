@@ -1,11 +1,3 @@
-//! Composition root of `ha-control`: catalog server and control-queue worker.
-//!
-//! `CONTROL_EXECUTE=false` (the default, and the manifest value) serves the
-//! catalog only; nothing is leased or acknowledged. `CONTROL_EXECUTE=true`
-//! starts the executor on the dedicated `control` queue. Both modes share one
-//! discovery provider, so the catalog the phone reads is the catalog the
-//! executor validates against.
-
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -21,16 +13,11 @@ use crate::control::Control;
 use crate::control_config::ControlConfig;
 use crate::discovery::{CatalogSource, Provider};
 
-/// Reported implementation version, matching the crate.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(10);
-/// Bound for one catalog request. The Go server also bounded header read (5 s),
-/// body read (10 s), write (30 s) and idle keep-alive (120 s); axum applies one
-/// request deadline here, which covers the handler (discovery + write).
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 
-/// Start `ha-control` and block until SIGTERM/SIGINT.
 pub async fn run() -> anyhow::Result<()> {
     let offset = home_telemetry::local_offset();
     let config = ControlConfig::load().context("configuration")?;

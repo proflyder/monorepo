@@ -1,9 +1,3 @@
-//! Model detection: the devicetree codename, the supported userspace ABI and the Mini's
-//! board-id + `quasar.cfg` pair. Must agree with `pulsar-model/src/detect.rs` and
-//! `satellite/deploy/boot.sh` (see docs/development.md, «Установка и станция»).
-
-/// Devicetree codename -> name. Only models listed in `abis` get installed: the daemon
-/// drives model-specific hardware (mic array + VQE preset, LEDs, clock, inputs).
 pub fn model_name(code: &str) -> &'static str {
     match code {
         "cucumber" => "Yandex Station Midi",
@@ -15,15 +9,6 @@ pub fn model_name(code: &str) -> &'static str {
     }
 }
 
-/// Userspace ABIs a model's firmware runs, its usual one first; empty = model not
-/// supported. The installed binary is build/<arch>/pulsar for the first ABI whose dynamic
-/// loader is on the station. A second ABI is only for a userspace actually seen on that
-/// model: some Midi images run a 32-bit userspace on the 64-bit kernel (#13) and need the
-/// armhf build (its ALSA ABI is the one in audio/alsa_abi.h, #14). Lite 2, Mini 2, Mini 3
-/// and Mini stay armhf-only: no 64-bit userspace has been seen on them, and the aarch64
-/// binary needs glibc 2.34 — on a miss it would crash-loop back to the Yandex stack (no
-/// `.prev` on a first install). The armhf build targets glibc 2.23, the Mini's; the 2.30
-/// userlands of the Lite 2, Mini 2 and Mini 3 run it as well.
 pub fn abis(code: &str) -> &'static [&'static str] {
     match code {
         "cucumber" => &["aarch64", "armhf"],
@@ -32,8 +17,6 @@ pub fn abis(code: &str) -> &'static [&'static str] {
     }
 }
 
-/// The model's first ABI whose loader is on the station (loaders: the words the loader
-/// probe printed). `""` = none of the model's ABIs: skip the station.
 pub fn arch_of(code: &str, loaders: &[&str]) -> &'static str {
     for a in abis(code) {
         if loaders.contains(a) {
@@ -43,8 +26,6 @@ pub fn arch_of(code: &str, loaders: &[&str]) -> &'static str {
     ""
 }
 
-/// The `deviceType` string of quasar.cfg, the firmware's own model marker. Deliberately a
-/// tiny parser: the file is JSON-like and only this key is needed.
 pub fn quasar_device_type(cfg: &str) -> &str {
     const KEY: &str = "\"deviceType\"";
     let Some(i) = cfg.find(KEY) else {
@@ -59,17 +40,10 @@ pub fn quasar_device_type(cfg: &str) -> &str {
     rest.find('"').map_or("", |j| &rest[..j])
 }
 
-/// The model has the Zigbee radio the daemon can run as a router (`radio/`), so the router
-/// firmware image is installed next to the daemon.
 pub fn has_zigbee(code: &str) -> bool {
     code == "cucumber"
 }
 
-/// Picks the model from the devicetree compatible list (NUL-separated, one entry per line
-/// or space-separated here). The first entry with a supported codename wins: the list
-/// starts with board-specific variants, e.g. "yandex,cucumber-dvt2" before "yandex,cucumber"
-/// on the Midi. The first codename is returned even when nothing is supported, so that
-/// probe can name the unknown device.
 pub fn station_code(compat: &str) -> (String, bool) {
     let mut first = "";
     for entry in compat.split_whitespace() {
@@ -166,8 +140,6 @@ mod tests {
         }
     }
 
-    /// The daemon's detector is the authority for these codenames; keep the two tables in
-    /// step (detect.rs reads NUL-separated bytes, the installer trims to words).
     #[test]
     fn matches_daemon_detector_table() {
         for (raw, code) in [

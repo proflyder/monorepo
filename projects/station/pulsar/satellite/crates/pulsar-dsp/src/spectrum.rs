@@ -1,45 +1,20 @@
-//! Music features from the speaker reference channels of the capture (what the station itself
-//! plays, after the softvol): 8 bands, loudness, beats. One VQE chunk per call (512 samples at
-//! 16 kHz after decimation, 256 on the Mini 3 and Mini); the FFT runs every 512 samples, on the
-//! front-end's processing thread.
-//!
-//! Rounding follows the C++ daemon as built for the stations: zig c++ (clang,
-//! -ffp-contract=on) fuses `a ± b * c` within one expression into a fused multiply-add on aarch64
-//! and on armhf (cortex-a53, VFPv4). The aarch64 / armhf assembly of spectrum.cpp has exactly
-//! four: the Hann window, std::norm, both updates of the bass mean; those are `mul_add` here.
-//! The complex product is not fused (armhf's vmla / vmls round in between). Without that a
-//! 1-ulp difference could flip a beat decision.
-//!
-//! sinf / cosf / log10f are the platform's: every zig-linked C++ executable carried zig
-//! compiler_rt's (weak definitions pulled in with its other helpers); the Rust armhf link pulls
-//! them in the same way, the aarch64 one resolves glibc's. Those two differ by an ulp at times
-//! (5 of the 512 window values; on the golden test data band values in 47 of 456 chunks, never a
-//! beat).
-
 use pulsar_core::MusicFrame;
 
 const N: usize = 512;
 const BANDS: usize = 8;
 
-// The C++ constant 3.14159265358979f is this f32 (the nearest one to pi).
 const PI: f32 = std::f32::consts::PI;
-/// Band value 0 this far under the running peak.
 const RANGE_DB: f32 = 45.0;
-/// Per 32 ms chunk: the peak follows a fade-out at 3 dB/s.
 const DECAY_DB: f32 = 0.096;
 const FLOOR_DB: f32 = -70.0;
-/// Total power under this: nothing is playing.
 const SILENCE_DB: f32 = -75.0;
-/// ~1 s mean of the bass power.
 const BASS_ALPHA: f32 = 0.031;
-/// Chunks (~250 ms) between beats.
 const BEAT_GAP: i32 = 8;
 
 fn to_db(p: f32) -> f32 {
     10.0 * (p + 1e-12).log10()
 }
 
-/// std::complex<float> arithmetic as libc++ computes it for finite values.
 #[derive(Clone, Copy, Debug, Default)]
 struct C32 {
     re: f32,
@@ -61,7 +36,6 @@ impl C32 {
         }
     }
 
-    /// libc++ multiplies std::complex<float> as `_Complex float`: (ac - bd, ad + bc), not fused.
     fn mul(self, o: Self) -> Self {
         let (ac, bd) = (self.re * o.re, self.im * o.im);
         let (ad, bc) = (self.re * o.im, self.im * o.re);
@@ -71,7 +45,6 @@ impl C32 {
         }
     }
 
-    /// std::norm: |z|², `re * re + im * im` with the first product fused.
     fn norm(self) -> f32 {
         self.re.mul_add(self.re, self.im * self.im)
     }
@@ -83,18 +56,15 @@ pub struct SpectrumAnalyzer {
     buffered: usize,
     window: [f32; N],
     twiddle: [C32; N / 2],
-    /// Band b = bins lo[b] ..= hi[b].
     lo: [usize; BANDS],
     hi: [usize; BANDS],
     buf: [C32; N],
-    /// Running peak, dB; set by reset().
     ref_db: f32,
     bass_mean: f32,
     since_beat: i32,
 }
 
 impl SpectrumAnalyzer {
-    /// `chunk_frames` capture frames at `rate` per call.
     pub fn new(rate: u32, chunk_frames: usize) -> Self {
         let mut a = Self {
             decim: 0,
@@ -143,8 +113,6 @@ impl SpectrumAnalyzer {
         a
     }
 
-    /// False unless the chunk at 16 kHz divides the 512-sample FFT window (rate a multiple of
-    /// 16 kHz).
     pub fn ok(&self) -> bool {
         self.decim != 0
     }
@@ -156,8 +124,6 @@ impl SpectrumAnalyzer {
         self.since_beat = 1000;
     }
 
-    /// `spk`: the chunk's frames of `nspk` interleaved channels in [-1, 1]. True when `out` was
-    /// filled; chunks shorter than 512 samples fill one FFT window over several calls.
     pub fn process(&mut self, spk: &[f32], nspk: usize, out: &mut MusicFrame) -> bool {
         if self.decim == 0 || nspk == 0 {
             return false;
@@ -189,7 +155,6 @@ impl SpectrumAnalyzer {
         }
         self.buffered = 0;
 
-        // In-place iterative radix-2 FFT.
         let mut j = 0usize;
         for i in 1..N {
             let mut bit = N >> 1;
@@ -216,7 +181,6 @@ impl SpectrumAnalyzer {
             len <<= 1;
         }
 
-        // A full-scale sine through the Hann window peaks at N/4: that is 0 dB.
         let scale = 16.0 / (N * N) as f32;
         let mut power = [0.0f32; BANDS];
         let mut total = 0.0f32;
@@ -269,7 +233,6 @@ mod tests {
 
     #[test]
     fn supported_layouts() {
-        // Midi: 96 kHz, chunk 3072; Lite 2: 48 kHz, chunk 1536; Mini 3 and Mini: 48 kHz, chunk 768.
         assert!(SpectrumAnalyzer::new(96000, 3072).ok());
         assert!(SpectrumAnalyzer::new(48000, 1536).ok());
         assert!(SpectrumAnalyzer::new(48000, 768).ok());
@@ -292,7 +255,6 @@ mod tests {
 
     #[test]
     fn mini3_reference_matches_lite2_at_the_same_32ms_cadence() {
-        // Microphones are not analyzer inputs: Mini 3's 3+1 and Lite 2's 2+1 share this reference.
         let mut mini3 = SpectrumAnalyzer::new(48000, 768);
         let mut lite2 = SpectrumAnalyzer::new(48000, 1536);
         let mut got = MusicFrame::default();
@@ -345,7 +307,6 @@ mod tests {
 
     #[test]
     fn band_edges() {
-        // 40 Hz .. 7.6 kHz log-spaced over 31.25 Hz bins (values of the C++ build).
         let a = SpectrumAnalyzer::new(16000, 512);
         assert_eq!(a.lo, [2, 3, 5, 10, 18, 34, 66, 127]);
         assert_eq!(a.hi, [2, 4, 9, 17, 33, 65, 126, 243]);
@@ -353,8 +314,6 @@ mod tests {
 
     #[test]
     fn norm_is_fused_like_the_station_build() {
-        // re² = 1 + 2^-11 + 2^-24 and im² = 2^-24: rounded separately both ties go to even
-        // (1 + 2^-11); fused, the exact sum 1 + 2^-11 + 2^-23 is representable.
         let e = |k: i32| 2f32.powi(k);
         let z = C32 {
             re: 1.0 + e(-12),
