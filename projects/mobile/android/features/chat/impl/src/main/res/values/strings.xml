@@ -6,10 +6,10 @@
     <string name="chat_send">Send</string>
     <string name="chat_scroll_down">Scroll to the latest messages</string>
     <string name="chat_reply_cancel">Cancel reply</string>
-    <string name="chat_typing">Assistant is typing</string>
+    <string name="chat_typing">Ricardo is typing</string>
     <string name="chat_retry">Retry</string>
     <string name="chat_author_me">You</string>
-    <string name="chat_author_assistant">Assistant</string>
+    <string name="chat_author_assistant">Ricardo</string>
     <string name="chat_author_system">Home</string>
     <string name="chat_action_copy">Copy</string>
     <string name="chat_action_reply">Reply</string>
@@ -25,8 +25,8 @@
     <string name="chat_error_chat_reply_not_found">The quoted message is gone.</string>
     <string name="chat_error_chat_not_found">The message was not found.</string>
     <string name="chat_error_chat_not_retryable">This reply cannot be retried.</string>
-    <string name="chat_error_chat_upstream_unavailable">The assistant is unavailable.</string>
-    <string name="chat_error_chat_upstream_failed">The assistant could not finish the reply.</string>
+    <string name="chat_error_chat_upstream_unavailable">Ricardo is unavailable.</string>
+    <string name="chat_error_chat_upstream_failed">Ricardo could not finish the reply.</string>
     <string name="chat_error_chat_interrupted">The reply was interrupted by a server restart.</string>
     <string name="chat_error_chat_storage_failed">The server could not save the chat.</string>
     <string name="chat_error_chat_unauthorized">Access denied: check the token in the connection settings.</string>

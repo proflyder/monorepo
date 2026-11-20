@@ -182,8 +182,7 @@
                 android:id="@+id/chat_failure"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:gravity="center_vertical"
-                android:orientation="horizontal"
+                android:orientation="vertical"
                 android:visibility="gone">
 
                 <TextView
@@ -198,8 +197,9 @@
                     style="@style/Widget.Material3.Button.TextButton"
                     android:layout_width="wrap_content"
                     android:layout_height="40dp"
-                    android:layout_marginStart="4dp"
-                    android:minWidth="0dp"
+                    android:layout_marginTop="2dp"
+                    android:paddingStart="0dp"
+                    android:paddingEnd="8dp"
                     android:text="@string/chat_retry" />
             </LinearLayout>
         </LinearLayout>

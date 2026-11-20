@@ -6,10 +6,10 @@
     <string name="chat_send">Отправить</string>
     <string name="chat_scroll_down">К последним сообщениям</string>
     <string name="chat_reply_cancel">Отменить ответ</string>
-    <string name="chat_typing">Ассистент печатает</string>
+    <string name="chat_typing">Рикардо печатает</string>
     <string name="chat_retry">Повторить</string>
     <string name="chat_author_me">Вы</string>
-    <string name="chat_author_assistant">Ассистент</string>
+    <string name="chat_author_assistant">Рикардо</string>
     <string name="chat_author_system">Дом</string>
     <string name="chat_action_copy">Копировать</string>
     <string name="chat_action_reply">Ответить</string>
@@ -25,8 +25,8 @@
     <string name="chat_error_chat_reply_not_found">Цитируемое сообщение не найдено.</string>
     <string name="chat_error_chat_not_found">Сообщение не найдено.</string>
     <string name="chat_error_chat_not_retryable">Этот ответ нельзя повторить.</string>
-    <string name="chat_error_chat_upstream_unavailable">Ассистент недоступен.</string>
-    <string name="chat_error_chat_upstream_failed">Ассистент не смог закончить ответ.</string>
+    <string name="chat_error_chat_upstream_unavailable">Рикардо недоступен.</string>
+    <string name="chat_error_chat_upstream_failed">Рикардо не смог закончить ответ.</string>
     <string name="chat_error_chat_interrupted">Ответ прервался из-за перезапуска сервера.</string>
     <string name="chat_error_chat_storage_failed">Сервер не смог сохранить чат.</string>
     <string name="chat_error_chat_unauthorized">Нет доступа: проверьте токен в настройках подключения.</string>
