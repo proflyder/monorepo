@@ -18,6 +18,8 @@ import dev.proflyder.home.core.network.NetworkWaiter
 import dev.proflyder.home.core.network.PushDevicesApi
 import dev.proflyder.home.core.network.ScenarioClient
 import dev.proflyder.home.core.network.SchedulerClient
+import dev.proflyder.home.core.network.HttpSystemDashboardClient
+import dev.proflyder.home.core.network.SystemDashboardClient
 import dev.proflyder.home.core.settings.HomeDataStore
 import dev.proflyder.home.core.settings.KeystoreTokenCipher
 import dev.proflyder.home.core.settings.TokenCipher
@@ -168,6 +170,20 @@ object AppBindings {
         interceptors: NetworkInterceptors,
         networkWaiter: NetworkWaiter,
     ): ControlCatalogClient = HttpControlCatalogClient(
+        settings = settings,
+        baseClient = httpClient,
+        interceptors = interceptors.list,
+        networkWaiter = networkWaiter,
+    )
+
+    @Provides
+    @SingleIn(AppScope::class)
+    fun provideSystemDashboardClient(
+        settings: ConnectionSettingsStore,
+        httpClient: OkHttpClient,
+        interceptors: NetworkInterceptors,
+        networkWaiter: NetworkWaiter,
+    ): SystemDashboardClient = HttpSystemDashboardClient(
         settings = settings,
         baseClient = httpClient,
         interceptors = interceptors.list,

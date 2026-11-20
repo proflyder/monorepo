@@ -16,5 +16,6 @@ import org.junit.runners.Suite
     ReadRetryTest::class,
     TokenRefreshAuthenticatorTest::class,
     WireDtosTest::class,
+    SystemDashboardClientTest::class,
 )
 class AllNetworkTests

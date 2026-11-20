@@ -193,6 +193,41 @@ hint, не конфигурация).
 Текст ограничен 2000 символами; действует rate-limit; в slog пишутся маршрут,
 профиль, id треда и длина текста, **никогда** сам текст речи.
 
+## Дашборд системы (`/v1/system/*`)
+
+Read-only агрегатор для вкладки «Система» Android-приложения. Отдельного
+сервиса нет: шлюз уже читает Prometheus, Alertmanager и реестр push, а
+дашборд — это ещё одно представление тех же источников. Код —
+`crates/mcp-gateway/src/system/` (`build.rs` — PromQL и чистый маппинг,
+`model.rs` — JSON-контракт, `mod.rs` — кэш и маршруты).
+
+- Аутентификация: `Authorization: Bearer <токен приложения>`
+  (`MCP_APP_TOKEN_FILE`); MCP- и voice-токены здесь отклоняются (`401`,
+  realm `home-app`). Без `MCP_APP_TOKEN_FILE` маршрутов нет.
+- Снаружи доступен только через Traefik: `control.<домен>` +
+  `PathPrefix(/v1/system/)` → `mcp-gateway:8080`; `/mcp` наружу не
+  публикуется. Приложение использует уже настроенный адрес Home control.
+- Кэш секции 15 с (`CACHE_TTL`); параллельные запросы делят одно обновление.
+  Таймаут одного запроса к Prometheus/реестру 5 с, всей секции 8 с.
+- Ошибка или отсутствие источника → секция `unknown` («нет данных»), HTTP
+  остаётся `200`. Уровни: `ok < unknown < warning < critical`. Общий статус —
+  худший из измеренных секций и алертов (`severity` `critical`/`warning`);
+  `Watchdog`, `InfoInhibitor` и `severity=none` игнорируются.
+
+| Маршрут | Источник | Содержимое |
+|---|---|---|
+| `GET /v1/system/summary` | все секции + Alertmanager | `status`, `generatedAt`, `sections{host,guests,k8s,devices}`, `alerts[]`, `alertsAvailable` |
+| `GET /v1/system/hosts` | node exporter PVE (`job="pve-node"`), prometheus-pve-exporter (`job="pve-guests"`) | хост: CPU, ОЗУ, диск `/`, max coretemp, аптайм; гости: VMID, имя, VM/CT, running, onboot, CPU/ОЗУ/диск/аптайм. Остановленный гость с автозапуском — `critical`, проблемные первыми |
+| `GET /v1/system/k8s` | kube-state-metrics + cAdvisor | неймспейсы → поды: phase, ready/containers, рестарты (всего и за час), waiting reason, CPU, working set, возраст. `Succeeded` скрыты; проблемные неймспейсы и поды первыми |
+| `GET /v1/system/devices` | экспортёр Pulsar (`job="station"`), `phone-push` | колонка: up, версия/модель из `pulsar_info`, задержка = `scrape_duration_seconds`, Wi-Fi RSSI (`pulsar_wifi_rssi_dbm`, если экспортируется), температура, аптайм; телефоны из реестра push (без токенов) |
+
+Числа — JSON numbers; неизвестное значение опускается, а не превращается в `0`.
+Эталонные ответы — `crates/mcp-gateway/src/system/testdata/contract/*.json`
+(их же читает Android-тест `core/network`); пересборка эталонов —
+`UPDATE_SYSTEM_GOLDEN=1 cargo test -p mcp-gateway --lib system`, затем
+скопировать файлы в `projects/mobile/android/core/network/src/test/resources/fixtures/system/`.
+Входные ответы Prometheus — `src/system/testdata/{hosts,guests,k8s,station}.json`.
+
 ## Контракт ответа
 
 Каждый инструмент возвращает JSON:
@@ -243,6 +278,7 @@ hint, не конфигурация).
 | `MCP_SCHEDULER_TOKEN_FILE` | для `time` | — | Bearer планировщика (`secret/k8s/home-assistant/scheduler-auth`, ключ `token`). |
 | `MCP_PUSH_URL` | для `phone` | — | База `solutions/phone-push`, например `http://phone-push.home-assistant.svc.cluster.local:8095`. |
 | `MCP_PUSH_TOKEN_FILE` | для `phone` | — | Bearer push-сервиса: тот же общий токен приложения (`scheduler-auth`). |
+| `MCP_APP_TOKEN_FILE` | нет | — | Включает `/v1/system/*` (дашборд Android). Общий токен приложения (`scheduler-auth`); обязан отличаться от MCP- и voice-токенов. |
 | `MCP_PENDING_TTL` | нет | `90s` | Время жизни отложенного действия. |
 | `MCP_RESTART_COOLDOWN` | нет | `5m` | Минимальный интервал между перезапусками одного workload'а. |
 | `MCP_SELF_RESTART_DELAY` | нет | `20s` | Задержка перезапуска `self_disrupting` сервиса. |

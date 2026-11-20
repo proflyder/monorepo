@@ -1,0 +1,79 @@
+{
+  "guests": [
+    {
+      "diskTotalBytes": 8000000000.0,
+      "diskUsedBytes": 1200000000.0,
+      "kind": "ct",
+      "memTotalBytes": 500000000.0,
+      "name": "vpn",
+      "onboot": true,
+      "running": false,
+      "status": "critical",
+      "vmid": 102
+    },
+    {
+      "cpuRatio": 0.05,
+      "diskTotalBytes": 32000000000.0,
+      "kind": "vm",
+      "memTotalBytes": 4000000000.0,
+      "memUsedBytes": 2100000000.0,
+      "name": "haos",
+      "onboot": true,
+      "running": true,
+      "status": "ok",
+      "uptimeSeconds": 1490000.0,
+      "vmid": 100
+    },
+    {
+      "cpuRatio": 0.31,
+      "diskTotalBytes": 64000000000.0,
+      "kind": "vm",
+      "memTotalBytes": 10000000000.0,
+      "memUsedBytes": 7500000000.0,
+      "name": "lab-k3s",
+      "onboot": true,
+      "running": true,
+      "status": "ok",
+      "uptimeSeconds": 1490100.0,
+      "vmid": 101
+    },
+    {
+      "cpuRatio": 0.02,
+      "diskTotalBytes": 16000000000.0,
+      "diskUsedBytes": 3000000000.0,
+      "kind": "ct",
+      "memTotalBytes": 2000000000.0,
+      "memUsedBytes": 600000000.0,
+      "name": "bb",
+      "onboot": true,
+      "running": true,
+      "status": "ok",
+      "uptimeSeconds": 200000.0,
+      "vmid": 103
+    },
+    {
+      "diskTotalBytes": 8000000000.0,
+      "kind": "vm",
+      "memTotalBytes": 1000000000.0,
+      "name": "sandbox",
+      "onboot": false,
+      "running": false,
+      "status": "ok",
+      "vmid": 104
+    }
+  ],
+  "guestsAvailable": true,
+  "guestsStatus": "critical",
+  "host": {
+    "cpuRatio": 0.234,
+    "diskTotalBytes": 100000000000.0,
+    "diskUsedBytes": 60000000000.0,
+    "memTotalBytes": 16000000000.0,
+    "memUsedBytes": 10000000000.0,
+    "name": "pve",
+    "tempCelsius": 61.0,
+    "up": true,
+    "uptimeSeconds": 1491534.0
+  },
+  "status": "ok"
+}

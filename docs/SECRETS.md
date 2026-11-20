@@ -80,6 +80,7 @@
 | `k8s/home-assistant/wakegrant` | wakegrant issuer token and per-machine keys | ESO → home-assistant |
 | `k8s/monitoring/grafana-admin` | Grafana admin login | ESO → monitoring |
 | `k8s/monitoring/heartbeat` | dead-man switch Worker URL and token | ESO → monitoring |
+| `k8s/monitoring/pve-exporter` | read-only Proxmox API token (`pve-exporter@pve!dashboard`, роль `PVEAuditor`): `user`, `token_name`, `token_value` | ESO → monitoring (prometheus-pve-exporter) |
 | `k8s/nexus/nexus-secrets` | Nexus admin password and read-only `ci-reader` password | ESO → nexus (init container, provisioning Job) |
 | `k8s/test` | smoke probe, not secret | Kubernetes auth smoke |
 | `k8s/vaultwarden/vaultwarden-admin` | Argon2id hash of the Vaultwarden /admin token | ESO → vaultwarden |

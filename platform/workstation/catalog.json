@@ -217,6 +217,10 @@
    "purpose": "dead-man switch Worker URL and token",
    "consumer": "ESO → monitoring"
   },
+  "k8s/monitoring/pve-exporter": {
+   "purpose": "read-only Proxmox API token (pve-exporter@pve!dashboard, PVEAuditor) for prometheus-pve-exporter",
+   "consumer": "ESO → monitoring"
+  },
   "k8s/nexus/nexus-secrets": {
    "purpose": "Nexus admin password and read-only ci-reader password",
    "consumer": "ESO → nexus (init container, provisioning Job)"
