@@ -66,6 +66,8 @@
 | `k8s/currency-bot/cloudflared-tunnel` | Cloudflare Tunnel token for the Telegram webhook | ESO → currency-bot |
 | `k8s/currency-bot/currency-bot` | currency bot Telegram/API credentials | ESO → currency-bot |
 | `k8s/flux-system/git-deploy-key` | Flux GitRepository read-only deploy key and pinned github.com host key | ESO → flux-system (GitRepository) |
+| `k8s/flux-system/app-settings` | non-secret app env for Flux postBuild (`PVE_IP`, `HAOS_IP`, `STATION_IP`, `VPN_CT_IP`, `BB_CT_IP`, NodePorts, `HA_URL`, bb project/thread ids, `CURRENCY_WEBHOOK_URL`) | ESO → flux-system (`flux-app-settings`) |
+| `k8s/flux-system/runtime-values` | Hermes HelmRelease values без токенов (поле `values`) | ESO → flux-system (`runtime-values`, `valuesFrom`) |
 | `k8s/flux-system/settings` | Flux deployment settings (`NEXUS_HOST`, `NEXUS_PUBLIC_HOST`, `NODE_LAN_IP`, `HOME_DOMAIN`, `LAN_CIDR`, `HAOS_ADDRESS`, `PVE_NODE_TARGET`) | ESO → flux-system (postBuild substitution) |
 | `k8s/home-assistant/ha-bridge-ha` | HA long-lived token for ha-bridge | ESO → home-assistant |
 | `k8s/home-assistant/ha-config-sync` | HAOS forced-command agent key and pinned host key for ha-config-sync | ESO → home-assistant |
