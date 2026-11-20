@@ -7,11 +7,11 @@ metadata:
     proflyder.dev/source: "initial pin from live cluster 2026-11-10"
     proflyder.dev/source-commit: "f395ddc752f532a80ed9e48d6bb6a41ab6e08233"
     proflyder.dev/source-tree: "7353622ea63c03a5b28d36435582994f93d27f21"
-    proflyder.dev/verified-at: "2026-11-20T01:52:40Z"
+    proflyder.dev/verified-at: "2026-11-20T01:53:10Z"
     proflyder.dev/run: "https://github.com/proflyder/monorepo/actions/runs/44656464834"
 data:
   BUILD_ID: "f395ddc752f5"
-  CURRENCY_BOT_IMAGE: "ghcr.io/proflyder/currency-bot@sha256:e8accf9a60b23f0a05520c9c745c951c05b96c8e22eda79c6d29570779c9daed"
+  CURRENCY_BOT_IMAGE: "ghcr.io/proflyder/currency-bot@sha256:17ef9272818cb64e1047b63f111c2debac4162f8eec16627f57d2803c7a19ace"
   HA_BRIDGE_IMAGE: "ghcr.io/proflyder/ha-bridge@sha256:50448f5266a652658eb0b7cd3867d2ad72bd54e64e320abba4abffc7fc70bccf"
   HA_CONFIG_SYNC_IMAGE: "ghcr.io/proflyder/ha-config-sync@sha256:2d7e9ab595d770a548235d46e1478fe68bc1dae0416391df344fc09267362464"
   HA_CONTROL_IMAGE: "ghcr.io/proflyder/ha-control@sha256:9cd03a3eca7062910c23501eb6f812ac4c83ea40cae114f2b2d5f516a2970316"
