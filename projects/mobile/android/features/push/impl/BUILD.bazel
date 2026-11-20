@@ -24,6 +24,7 @@ metro_android_library(
         "//projects/mobile/android/core/theme",
         "//projects/mobile/android/core/ui",
         "//projects/mobile/android/features/push/api",
+        "@maven//:androidx_activity_activity_ktx",
         "@maven//:androidx_appcompat_appcompat",
         "@maven//:androidx_core_core_ktx",
         "@maven//:androidx_datastore_datastore_preferences",

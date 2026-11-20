@@ -3,11 +3,14 @@ package dev.proflyder.home.feature.reminders.presentation
 import android.os.Bundle
 import androidx.fragment.app.activityViewModels
 import androidx.recyclerview.widget.GridLayoutManager
-import dev.proflyder.home.core.navigation.requireNavigator
 import dev.proflyder.home.core.model.Schedule
+import dev.proflyder.home.core.navigation.requireNavigator
 import dev.proflyder.home.core.ui.BaseAdapterCallback
 import dev.proflyder.home.core.ui.BaseFragment
 import dev.proflyder.home.core.ui.ListStateViews
+import dev.proflyder.home.core.ui.applyScrollBottomInset
+import dev.proflyder.home.core.ui.fabClearance
+import dev.proflyder.home.core.ui.liftAboveBottomInsets
 import dev.proflyder.home.core.ui.setupPullToRefresh
 import dev.proflyder.home.core.ui.userMessage
 import dev.proflyder.home.core.ui.viewModelFactory
@@ -32,6 +35,8 @@ class RemindersFragment :
     private lateinit var states: ListStateViews
 
     override fun onBindingCreated(binding: FragmentRemindersBinding, savedInstanceState: Bundle?) {
+        binding.remindersList.applyScrollBottomInset(binding.remindersList.fabClearance())
+        binding.remindersAdd.liftAboveBottomInsets()
         adapter = ReminderAdapter(adapterCallback)
         binding.remindersList.layoutManager =
             GridLayoutManager(requireContext(), resources.getInteger(R.integer.reminders_columns))

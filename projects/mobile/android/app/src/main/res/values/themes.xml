@@ -32,6 +32,9 @@
         <item name="shapeAppearanceMediumComponent">@style/ShapeAppearance.Home.Medium</item>
         <item name="shapeAppearanceLargeComponent">@style/ShapeAppearance.Home.Large</item>
 
+        <item name="textInputStyle">@style/Widget.Home.TextInput</item>
+        <item name="bottomSheetDialogTheme">@style/ThemeOverlay.Home.BottomSheetDialog</item>
+
         <item name="android:statusBarColor">?attr/colorSurface</item>
         <item name="android:navigationBarColor">?attr/colorSurfaceContainer</item>
         <item name="android:windowLightStatusBar">@bool/home_light_bars</item>
@@ -52,5 +55,11 @@
     <style name="ShapeAppearance.Home.Large" parent="ShapeAppearance.Material3.LargeComponent">
         <item name="cornerFamily">rounded</item>
         <item name="cornerSize">28dp</item>
+    </style>
+
+    <style name="ThemeOverlay.Home.BottomSheetDialog" parent="ThemeOverlay.Material3.BottomSheetDialog">
+        <item name="android:windowSoftInputMode">adjustResize</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="enableEdgeToEdge">true</item>
     </style>
 </resources>

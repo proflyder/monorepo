@@ -14,6 +14,7 @@ import dev.proflyder.home.core.theme.R as ThemeR
 import dev.proflyder.home.core.theme.ThemeMode
 import dev.proflyder.home.core.ui.BaseFragment
 import dev.proflyder.home.core.ui.PillSegments
+import dev.proflyder.home.core.ui.applyScrollBottomInset
 import dev.proflyder.home.core.ui.viewModelFactory
 import dev.proflyder.home.feature.settings.impl.R
 import dev.proflyder.home.feature.settings.impl.databinding.FragmentAppearanceBinding
@@ -27,6 +28,7 @@ class AppearanceFragment : BaseFragment<FragmentAppearanceBinding>(FragmentAppea
     private val cards = linkedMapOf<AppTheme, ItemAppearanceThemeBinding>()
 
     override fun onBindingCreated(binding: FragmentAppearanceBinding, savedInstanceState: Bundle?) {
+        binding.root.applyScrollBottomInset()
         bindThemeCards(binding, AppThemes.isDynamicAvailable) { onThemeClicked(it) }
         bindModeButtons(binding.appearanceMode) { viewModel.selectMode(it) }
         viewModel.state.observe { render(it) }

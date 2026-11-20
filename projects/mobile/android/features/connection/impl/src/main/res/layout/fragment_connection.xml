@@ -10,6 +10,7 @@
     android:layout_height="match_parent">
 
     <androidx.core.widget.NestedScrollView
+        android:id="@+id/connection_scroll"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:fillViewport="true">
@@ -156,16 +157,17 @@
 
                     <com.google.android.material.textfield.TextInputLayout
                         android:id="@+id/connection_token_layout"
-                        style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                        style="@style/Widget.Home.TextInput"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
-                        android:hint="@string/connection_token"
                         app:endIconMode="password_toggle"
+                        app:hintEnabled="false"
                         app:helperText="@string/connection_token_helper">
 
                         <com.google.android.material.textfield.TextInputEditText
                             android:id="@+id/connection_token"
+                            android:hint="@string/connection_token_placeholder"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:imeOptions="actionDone"

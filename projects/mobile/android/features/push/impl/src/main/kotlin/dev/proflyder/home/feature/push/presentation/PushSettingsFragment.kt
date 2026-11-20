@@ -5,6 +5,8 @@ import android.os.Bundle
 import android.widget.TextView
 import androidx.fragment.app.viewModels
 import dev.proflyder.home.core.ui.BaseFragment
+import dev.proflyder.home.core.ui.applyScrollBottomInset
+import dev.proflyder.home.core.ui.keepFocusedVisible
 import dev.proflyder.home.core.ui.setVisible
 import dev.proflyder.home.core.ui.viewModelFactory
 import dev.proflyder.home.feature.push.PushPermissions
@@ -30,6 +32,8 @@ class PushSettingsFragment :
     private val permissions by lazy { PushPermissions(requireContext().applicationContext) }
 
     override fun onBindingCreated(binding: FragmentPushSettingsBinding, savedInstanceState: Bundle?) {
+        binding.root.applyScrollBottomInset()
+        binding.root.keepFocusedVisible()
         binding.pushNotificationsAction.setOnClickListener { open(permissions.notifications()) }
         binding.pushDndAction.setOnClickListener { open(permissions.dnd()) }
         binding.pushFullScreenAction.setOnClickListener { open(permissions.fullScreen()) }

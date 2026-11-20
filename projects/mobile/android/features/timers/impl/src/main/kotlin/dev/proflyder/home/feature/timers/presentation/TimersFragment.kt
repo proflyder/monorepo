@@ -8,6 +8,8 @@ import dev.proflyder.home.core.model.Timer
 import dev.proflyder.home.core.time.DurationText
 import dev.proflyder.home.core.ui.BaseAdapterCallback
 import dev.proflyder.home.core.ui.BaseFragment
+import dev.proflyder.home.core.ui.applyScrollBottomInset
+import dev.proflyder.home.core.ui.keepFocusedVisible
 import dev.proflyder.home.core.ui.setVisible
 import dev.proflyder.home.core.ui.setupPullToRefresh
 import dev.proflyder.home.core.ui.userMessage
@@ -30,6 +32,8 @@ class TimersFragment : BaseFragment<FragmentTimersBinding>(FragmentTimersBinding
     }
 
     override fun onBindingCreated(binding: FragmentTimersBinding, savedInstanceState: Bundle?) {
+        binding.timersContent.applyScrollBottomInset()
+        binding.timersContent.keepFocusedVisible()
         adapter = TimerAdapter(adapterCallback)
         binding.timersList.layoutManager = LinearLayoutManager(requireContext())
         binding.timersList.adapter = adapter

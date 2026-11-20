@@ -4,11 +4,13 @@ import android.app.KeyguardManager
 import android.os.Build
 import android.os.Bundle
 import android.view.WindowManager
+import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import dev.proflyder.home.feature.push.impl.R
 import dev.proflyder.home.feature.push.impl.databinding.ActivityFindPhoneBinding
 import kotlinx.coroutines.launch
+import dev.proflyder.home.core.ui.applySystemBarsPadding
 
 /**
  * The screen a full-screen intent opens: it turns the display on, shows over
@@ -24,8 +26,10 @@ class FindPhoneActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
         binding = ActivityFindPhoneBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        binding.root.applySystemBarsPadding()
         showOverLockScreen()
         binding.findFound.setOnClickListener { stopAndFinish() }
         val controller = PushEntryPoint.require().findPhone
