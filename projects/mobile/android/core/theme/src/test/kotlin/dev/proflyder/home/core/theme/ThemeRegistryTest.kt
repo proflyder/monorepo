@@ -90,6 +90,13 @@ class ThemeRegistryTest {
             ColorRole.ON_ERROR_CONTAINER to ColorRole.ERROR_CONTAINER,
             ColorRole.PRIMARY to ColorRole.SURFACE,
             ColorRole.ON_STATE_ON to ColorRole.STATE_ON,
+            ColorRole.ON_WARNING to ColorRole.WARNING,
+            ColorRole.ON_SUCCESS to ColorRole.SUCCESS,
+            ColorRole.WARNING to ColorRole.SURFACE,
+            ColorRole.WARNING to ColorRole.SURFACE_CONTAINER,
+            ColorRole.SUCCESS to ColorRole.SURFACE,
+            ColorRole.SUCCESS to ColorRole.SURFACE_CONTAINER,
+            ColorRole.ERROR to ColorRole.SURFACE_CONTAINER,
             ColorRole.STATE_ON_TEXT to ColorRole.SURFACE,
             ColorRole.STATE_ON_TEXT to ColorRole.SURFACE_CONTAINER,
         ) + SURFACES.flatMap { surface ->

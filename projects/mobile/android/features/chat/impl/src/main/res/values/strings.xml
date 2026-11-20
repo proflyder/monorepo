@@ -51,9 +51,9 @@
     <string name="chat_error_chat_voice_format">The voice recording has an unsupported format.</string>
     <string name="chat_error_chat_stt_failed">Could not recognise the voice message.</string>
     <string name="chat_alert_firing">Firing</string>
-    <string name="chat_alert_resolved">✅ Resolved</string>
-    <string name="chat_alert_critical">🔴 Critical</string>
-    <string name="chat_alert_warning">🟠 Warning</string>
+    <string name="chat_alert_resolved">Resolved</string>
+    <string name="chat_alert_critical">Critical alert</string>
+    <string name="chat_alert_warning">Warning alert</string>
     <string name="chat_alert_since">🕒 since %1$s</string>
     <string name="chat_alert_span">🕒 %1$s → %2$s</string>
     <string name="chat_alert_reply">Investigate</string>

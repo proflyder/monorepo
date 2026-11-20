@@ -23,4 +23,8 @@
     <color name="home_outline">#89938E</color>
     <color name="home_outline_variant">#3F4945</color>
     <color name="home_state_on_text">#6FDBC0</color>
+    <color name="home_warning">#FFB95C</color>
+    <color name="home_on_warning">#452B00</color>
+    <color name="home_success">#7DDB8F</color>
+    <color name="home_on_success">#00391A</color>
 </resources>

@@ -58,9 +58,13 @@ internal object ChatFixtures {
                 severity = severity,
                 resolved = resolved,
                 summary = if (severity == "critical") "scheduler перезапускается" else "Пины образов старше суток",
-                description = if (resolved) "" else "3 рестарта за 10 минут, последний — OOMKilled",
-                namespace = "home-assistant",
-                target = "scheduler-7d9",
+                description = when {
+                    resolved -> ""
+                    severity == "critical" -> "3 рестарта за 10 минут, последний — OOMKilled"
+                    else -> "Последний успешный pins-job был 26 часов назад"
+                },
+                namespace = if (severity == "critical") "home-assistant" else "flux-system",
+                target = if (severity == "critical") "scheduler-7d9" else "home-app-pins",
                 startsAtMillis = NOON + seq * MINUTE,
                 endsAtMillis = if (resolved) NOON + (seq + 30) * MINUTE else null,
                 runbookUrl = "https://runbooks.example.com/crash",

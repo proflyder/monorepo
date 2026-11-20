@@ -34,6 +34,8 @@ import dev.proflyder.home.feature.chat.impl.databinding.ItemChatDayBinding
 import dev.proflyder.home.feature.chat.impl.databinding.ItemChatOlderBinding
 import dev.proflyder.home.feature.chat.impl.databinding.ItemChatTypingBinding
 import com.google.android.material.R as MaterialR
+import dev.proflyder.home.core.theme.R as ThemeR
+import androidx.core.view.updateLayoutParams
 
 internal open class ChatAdapterCallbacks : BaseAdapterCallback<ChatItem>() {
     open fun onBubbleMenu(bubble: ChatItem.Bubble, anchor: View) = Unit
@@ -112,10 +114,11 @@ internal class ChatAdapter(
         override fun bind(item: ChatItem) {
             val card = (item as ChatItem.Alert).alert
             val context = views.root.context
-            val (background, foreground) = alertColors(card)
-            views.chatAlertCard.setCardBackgroundColor(MaterialColors.getColor(views.chatAlertCard, background))
-            views.chatAlertCard.strokeColor = MaterialColors.getColor(views.chatAlertCard, foreground)
-            views.chatAlertDot.backgroundTintList = ColorStateList.valueOf(MaterialColors.getColor(views.chatAlertDot, foreground))
+            val (stroke, accent) = alertColors(card)
+            val accentColor = MaterialColors.getColor(views.chatAlertCard, accent)
+            views.chatAlertCard.strokeColor = MaterialColors.getColor(views.chatAlertCard, stroke)
+            views.chatAlertDot.backgroundTintList = ColorStateList.valueOf(accentColor)
+            views.chatAlertState.setTextColor(accentColor)
             views.chatAlertName.text = card.name
             views.chatAlertState.text = context.getString(alertState(card))
             views.chatAlertSummary.text = card.summary.ifEmpty { card.name }
@@ -125,6 +128,9 @@ internal class ChatAdapter(
             views.chatAlertTime.text = alertTime(context, card)
             views.chatAlertRunbook.setVisible(card.runbookUrl.isNotEmpty())
             views.chatAlertReply.setVisible(!card.resolved)
+            views.chatAlertRunbook.updateLayoutParams<ViewGroup.MarginLayoutParams> {
+                marginStart = if (card.resolved) 0 else views.root.resources.getDimensionPixelSize(R.dimen.chat_alert_button_gap)
+            }
         }
     }
 
@@ -335,9 +341,9 @@ internal class RoundedOutline(private val radius: Float) : android.view.ViewOutl
 }
 
 internal fun alertColors(card: ChatAlert): Pair<Int, Int> = when {
-    card.resolved -> MaterialR.attr.colorSurfaceContainerHigh to androidx.appcompat.R.attr.colorPrimary
-    card.severity == "critical" -> MaterialR.attr.colorErrorContainer to androidx.appcompat.R.attr.colorError
-    else -> MaterialR.attr.colorTertiaryContainer to MaterialR.attr.colorTertiary
+    card.resolved -> MaterialR.attr.colorOutlineVariant to ThemeR.attr.colorSuccess
+    card.severity == "critical" -> androidx.appcompat.R.attr.colorError to androidx.appcompat.R.attr.colorError
+    else -> ThemeR.attr.colorWarning to ThemeR.attr.colorWarning
 }
 
 internal fun alertState(card: ChatAlert): Int = when {

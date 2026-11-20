@@ -32,4 +32,8 @@ enum class ColorRole(@AttrRes val attr: Int) {
     STATE_ON(R.attr.colorStateOn),
     ON_STATE_ON(R.attr.colorOnStateOn),
     STATE_ON_TEXT(R.attr.colorStateOnText),
+    WARNING(R.attr.colorWarning),
+    ON_WARNING(R.attr.colorOnWarning),
+    SUCCESS(R.attr.colorSuccess),
+    ON_SUCCESS(R.attr.colorOnSuccess),
 }

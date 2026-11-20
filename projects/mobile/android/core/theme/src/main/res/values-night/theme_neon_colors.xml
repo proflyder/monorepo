@@ -25,4 +25,8 @@
     <color name="theme_neon_surface_container_highest">#2D2850</color>
     <color name="theme_neon_outline">#8E86B0</color>
     <color name="theme_neon_outline_variant">#3F3A5E</color>
+    <color name="theme_neon_warning">#FFC14D</color>
+    <color name="theme_neon_on_warning">#3F2A00</color>
+    <color name="theme_neon_success">#5CF2A0</color>
+    <color name="theme_neon_on_success">#00391C</color>
 </resources>

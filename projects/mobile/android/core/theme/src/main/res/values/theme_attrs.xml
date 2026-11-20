@@ -8,4 +8,8 @@
     <attr name="homeFabStrokeColor" format="color|reference" />
     <attr name="homeFabGlowColor" format="color|reference" />
     <attr name="homeFabElevation" format="dimension|reference" />
+    <attr name="colorWarning" format="color|reference" />
+    <attr name="colorOnWarning" format="color|reference" />
+    <attr name="colorSuccess" format="color|reference" />
+    <attr name="colorOnSuccess" format="color|reference" />
 </resources>

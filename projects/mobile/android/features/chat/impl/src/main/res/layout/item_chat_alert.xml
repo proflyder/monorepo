@@ -19,7 +19,8 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintWidth_percent="0.9"
-        app:strokeWidth="1dp">
+        app:cardBackgroundColor="?attr/colorSurfaceContainer"
+        app:strokeWidth="1.5dp">
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -95,14 +96,18 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="6dp"
-                android:gravity="center_vertical"
+                android:baselineAligned="true"
                 android:orientation="horizontal">
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/chat_alert_reply"
-                    style="@style/Widget.Material3.Button.TonalButton"
+                    style="@style/Widget.Material3.Button.TextButton.Icon"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
+                    android:minWidth="0dp"
+                    android:paddingLeft="0dp"
+                    android:paddingStart="0dp"
+                    android:paddingEnd="12dp"
                     android:text="@string/chat_alert_reply"
                     app:icon="@drawable/chat_ic_reply" />
 
@@ -112,6 +117,10 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginStart="8dp"
+                    android:minWidth="0dp"
+                    android:paddingLeft="0dp"
+                    android:paddingStart="0dp"
+                    android:paddingEnd="12dp"
                     android:text="@string/chat_alert_runbook" />
             </LinearLayout>
         </LinearLayout>
