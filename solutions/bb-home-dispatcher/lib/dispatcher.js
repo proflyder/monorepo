@@ -24,18 +24,10 @@ const DEFAULT_DISPATCHER_REMINDER =
   "Напоминание: ты рабочий голосовой диспетчер; отвечай коротко по-русски " +
   "и заканчивай строкой 🔊 с 1–2 фразами для озвучивания. " +
   VOICE_ANSWER_RULE;
-// A requested compaction that never produces `thread/compacted` must not keep
-// sends in queue mode forever.
 const COMPACTION_PENDING_TIMEOUT_MS = 15 * 60 * 1000;
-// Do not compact again right after a compaction: the recorded usage can still
-// describe the pre-compaction context until the provider reports a new one.
 const COMPACTION_COOLDOWN_MS = 10 * 60 * 1000;
-// The plugin schedule fires on every server scheduler tick. Back off from
-// repeated thread lookups while busy or waiting for the compaction event.
 const NIGHTLY_BUSY_RETRY_MS = 60 * 1000;
 const NIGHTLY_REFRESH_MS = 30 * 1000;
-// `updates` scans completed dispatcher turns in a bounded loop. Skipped turns
-// (owner turns, turns without a 🔊 line) only advance the cursor.
 const UPDATES_POLL_INTERVAL_MS = 1000;
 const UPDATES_MAX_CYCLES = 5000;
 
@@ -60,12 +52,7 @@ export function createDispatcher({
     return value;
   };
 
-  // Idempotency keys must serialize even when two HTTP requests arrive
-  // together: bb may deliver them concurrently, and a check-then-spawn race
-  // would otherwise create two threads for one key.
   const locks = new Map();
-  // In-process backoff for the minute-level schedule; durability comes from
-  // the daily kv marker, not from these timestamps.
   let nextNightlyAttemptAt = 0;
   let nextNightlyRefreshAt = 0;
   async function withLock(key, run) {
@@ -95,13 +82,9 @@ export function createDispatcher({
     };
   }
 
-  // `status` must stay readable even when another setting is invalid, so it
-  // reads the compaction fields without normalizing permissionMode.
   async function readCompactionSettings() {
     return compactionSettingsFrom((await getSettings()) ?? {});
   }
-
-  // ---------------------------------------------------------- compaction --
 
   function compactStateKey(threadId) {
     return `compact:${threadId}`;
@@ -146,8 +129,6 @@ export function createDispatcher({
     await kv.set(compactStateKey(threadId), state);
   }
 
-  // bb records a completed manual compaction as `thread/compacted`. Looking it
-  // up lazily avoids holding the nightly schedule open for the whole turn.
   async function refreshCompactionState(threadId, state, settings) {
     if (state.pending === null) return state;
     const pending = state.pending;
@@ -209,12 +190,8 @@ export function createDispatcher({
 
   function reminderOnce(state, settings, compactFirst) {
     if (settings.dispatcherReminder === "") {
-      // Disabling the reminder still consumes a pending one.
       return { text: "", used: state.pendingReminder };
     }
-    // A compact-first send runs the compaction before delivering this very
-    // message, so the reminder belongs here. Otherwise it rides the first send
-    // after a nightly compaction completed.
     if (!compactFirst && !state.pendingReminder) {
       return { text: "", used: false };
     }
@@ -225,9 +202,6 @@ export function createDispatcher({
     return reminder === "" ? text : `${text}\n\n${reminder}`;
   }
 
-  // One schedule tick: run at most once per local calendar day, after
-  // `compactAt`. A busy dispatcher is retried on the next tick, and a server
-  // that was off overnight catches up on its first tick of the day.
   async function backgroundTick() {
     const settings = await readCompactionSettings();
     if (settings.compactAt === "" || settings.dispatcherThreadId === "") {
@@ -328,8 +302,6 @@ export function createDispatcher({
     }
   }
 
-  // ------------------------------------------------------------- profiles --
-
   async function readProfileProjects() {
     try {
       const response = await sdk().plugins.callRpc({
@@ -397,8 +369,6 @@ export function createDispatcher({
     }
   }
 
-  // One profilePolicy call per profile per request, even though `targets`
-  // lists several projects of the same profile.
   async function policyForProfile(profile, cache) {
     if (cache.has(profile)) return cache.get(profile);
     const policy = await readProfilePolicy(profile);
@@ -550,8 +520,6 @@ export function createDispatcher({
     return promise;
   }
 
-  // -------------------------------------------------------------- methods --
-
   async function targets() {
     const [profiles, projects, hosts] = await Promise.all([
       readProfileProjects(),
@@ -617,7 +585,6 @@ export function createDispatcher({
         ]),
       );
     } catch {
-      // Status stays useful while the profiles plugin is unavailable.
     }
     const hostMap = new Map(hosts.map((host) => [host.id, host]));
     const projectMap = new Map(projects.map((project) => [project.id, project]));
@@ -904,8 +871,6 @@ export function createDispatcher({
           "Писать можно только в треды диспетчера.",
         );
       }
-      // Compaction is decided before the send and persisted after it: a
-      // failed send must not advance the counter or consume the reminder.
       const state = await readCompactState(params.threadId);
       await refreshCompactionState(params.threadId, state, settings);
 
@@ -928,7 +893,6 @@ export function createDispatcher({
         }
       }
 
-      // While a nightly compaction runs, a new prompt must not steer into it.
       const mode = state.pending === null ? "auto" : "queue";
       const reminder = reminderOnce(state, settings, compactFirst);
       const text = appendReminder(params.text, reminder.text);
@@ -939,7 +903,6 @@ export function createDispatcher({
         response = await sdk().threads.send({
           threadId: params.threadId,
           mode,
-          // The SDK rejects `compactFirst` together with `mode: "steer"`.
           ...(compactFirst ? { compactFirst: true } : {}),
           input: [{ type: "text", text, mentions: [] }],
         });
@@ -1030,9 +993,6 @@ export function createDispatcher({
       };
     }
 
-    // The completion is looked up by seq range instead of scanning a fixed
-    // event window: a long turn can produce thousands of item events and must
-    // still correlate exactly.
     const completion = await firstEvent(params.threadId, request.seq, [
       "turn/completed",
     ]);
@@ -1090,8 +1050,6 @@ export function createDispatcher({
     };
   }
 
-  // ------------------------------------------------ dispatcher updates --
-
   async function updates(params) {
     const settings = await readCompactionSettings();
     const threadId = settings.dispatcherThreadId;
@@ -1101,8 +1059,6 @@ export function createDispatcher({
         "Рабочий диспетчер не настроен.",
       );
     }
-    // Bootstrap: report where the caller should start. Never replay history,
-    // otherwise a fresh proxy would speak every old unanswered turn.
     if (params.afterSeq === undefined) {
       return {
         cursor: await lastEventSeq(threadId),
@@ -1111,9 +1067,6 @@ export function createDispatcher({
       };
     }
     const deadline = now() + (params.waitSeconds ?? 0) * 1000;
-    // The cursor is read before the scan and raised to the newest returned
-    // item. A turn that completes during the scan is therefore picked up by
-    // the next call instead of being skipped.
     let cursor = 0;
     for (let cycle = 0; cycle < UPDATES_MAX_CYCLES; cycle += 1) {
       cursor = await lastEventSeq(threadId);
@@ -1128,8 +1081,6 @@ export function createDispatcher({
       if (remaining <= 0) break;
       await delay(Math.min(UPDATES_POLL_INTERVAL_MS, remaining));
     }
-    // A skipped turn (owner turn, no 🔊 line) still advances the cursor, so
-    // the next call starts after it instead of rescanning it forever.
     return { cursor, items: [], speech: "Готово." };
   }
 
@@ -1143,22 +1094,15 @@ export function createDispatcher({
     });
     const items = [];
     for (const completion of Array.isArray(rows) ? rows : []) {
-      // The request may precede afterSeq: it started before the caller's
-      // cursor while the turn itself completed after it.
       const request = await lastEvent(threadId, 0, completion.seq, [
         "client/turn/requested",
       ]);
       if (request === undefined) continue;
       const initiator = request.data?.initiator;
-      // Only `system` (child-completed etc.) and `agent` (another thread's
-      // message) turns were not started by the owner. `user` covers both the
-      // voice phrase and text typed in the UI, which must stay silent here.
       if (initiator !== "system" && initiator !== "agent") continue;
       const text = await lastAgentMessage(threadId, request.seq, completion.seq);
       const spoken = extractSpoken(text);
       if (spoken === null) continue;
-      // Completion time lets the voice proxy drop answers older than its TTL
-      // on a restart rescan instead of speaking them hours late.
       items.push({
         seq: completion.seq,
         spoken,
@@ -1290,8 +1234,6 @@ export function createDispatcher({
       ...(completion === undefined ? {} : { completedSeq: completion.seq }),
     };
   }
-
-  // ---------------------------------------------------------- idempotency --
 
   async function readIdempotent(key, fingerprint) {
     const stored = await kv.get(`idem:${key}`);
@@ -1469,7 +1411,6 @@ function messageOf(cause) {
   return cause instanceof Error ? cause.message : String(cause);
 }
 
-// bb turns a plugin RPC refusal into an error carrying the plugin's code.
 function isNotFound(cause) {
   return (
     isPlainObject(cause) &&

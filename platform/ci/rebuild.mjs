@@ -1,19 +1,4 @@
 #!/usr/bin/env node
-/**
- * Unit selection for the manual "rebuild and deploy" workflow.
- *
- * `deploy-home` selects units from a diff; `deploy-services.yml` selects them
- * from checkboxes, because an operator rebuilding a broken service asked for
- * them explicitly. Both use the same unit map (`units.mjs`) and the same matrix
- * shapes (`affected.mjs`), so a rebuilt unit is published and pinned through the
- * identical reusable workflows — only the selection differs.
- *
- * GitHub allows at most ten `workflow_dispatch` inputs, and the map has more
- * deployable units than that. The groups below are the operator-facing
- * checkboxes; every deployable unit belongs to exactly one group, which the
- * tests enforce, so a new unit cannot be undeployable by hand. `--units` is the
- * exact escape hatch for a single unit id.
- */
 
 import fs from "node:fs";
 import process from "node:process";
@@ -21,45 +6,28 @@ import { pathToFileURL } from "node:url";
 
 import { deployImageFields, loadConfig } from "./affected.mjs";
 
-/**
- * Checkbox groups of the manual rebuild workflow. Ids are deployable unit ids
- * from `platform/ci/units.mjs`'s `deploy` blocks plus the native units.
- */
 export const GROUPS = {
   scheduler: ["scheduler"],
   "ha-bridge": ["ha-bridge"],
-  // Small stateless services that share the same build shape.
   "home-services": ["wakegrant", "intercom", "phone-push", "currency-bot", "mcp-gateway"],
-  // Configuration renderers.
   "ha-config": ["ha-config-sync", "hermes-config"],
   hermes: ["hermes"],
   pulsar: ["pulsar"],
   "logon-provider": ["logon-provider"],
 };
 
-/** Native units are published and promoted, not pinned by `_pin.yml`. */
 export function isNative(unit) {
   return unit.platform === "native";
 }
 
-/** Deployable units: images for Flux, or a native OCI release. */
 export function deployableUnits(config) {
   return config.units.filter((unit) => isNative(unit) || unit.deployImages.length > 0);
 }
 
-/** Every deployable unit id, in unit-map order. */
 export function deployableIds(config) {
   return deployableUnits(config).map((unit) => unit.id);
 }
 
-/**
- * Resolve the requested selection into unit ids.
- *
- * `all` wins over the groups; `units` (a comma separated id list) narrows or
- * replaces them, which is how an operator picks one unit without a checkbox.
- * Unknown ids and empty selections throw: a rebuild that deploys nothing is
- * always a mistake, never a no-op.
- */
 export function selectIds({ all = false, groups = [], units = "", config }) {
   const known = deployableIds(config);
   const wanted = String(units || "")
@@ -96,7 +64,6 @@ export function selectIds({ all = false, groups = [], units = "", config }) {
   return unique;
 }
 
-/** Matrix entry for `_unit.yml` (image rebuild) of one deployable unit. */
 export function imageEntry(unit) {
   const kind = unit.platform === "python" ? "python" : "bazel";
   return {
@@ -114,7 +81,6 @@ export function imageEntry(unit) {
   };
 }
 
-/** Matrix entry for `_native.yml` (build + promote) of one native unit. */
 export function nativeEntry(unit) {
   return {
     id: unit.id,
@@ -131,7 +97,6 @@ export function nativeEntry(unit) {
   };
 }
 
-/** Split a selection into the image matrix, the native matrix and the station. */
 export function plan(config, selection) {
   const ids = selectIds({ ...selection, config });
   const units = ids.map((id) => config.units.find((unit) => unit.id === id));
@@ -193,7 +158,6 @@ export async function main(argv = process.argv.slice(2)) {
   return 0;
 }
 
-/** Run the selection in a test without a subprocess. */
 export function runWithConfig(config, argv) {
   return plan(config, parseArgs(argv));
 }

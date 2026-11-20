@@ -1,38 +1,4 @@
 #!/usr/bin/env node
-/**
- * GHCR cleanup policy for the deploy images (DECISIONS 36).
- *
- * A pull request publishes each built deploy image as
- * `ghcr.io/<registry>/<image>:tree-<git tree hash>`. Those tags are useful only
- * until the PR is merged or abandoned, so this workflow deletes the stale ones.
- *
- * The retention policy, per package:
- *   1. Never delete the newest version, a version tagged `develop`/`latest` or
- *      a semver release, a version whose digest is listed in
- *      `PROTECTED_DIGESTS`, or a version younger than `KEEP_DAYS` days.
- *   2. A "deploy version" carries at least one 40-hex commit-sha tag. Keep the
- *      `DEPLOY_VERSIONS_TO_KEEP` newest deploy versions; older ones beyond that
- *      window are deleted once they are also older than `KEEP_DAYS`.
- *   3. Stale `tree-*`-only and untagged versions are deleted (unless rule 1
- *      protects them).
- *   4. Referrer versions (every tag is `sha256-<64 hex>`, cosign-style) are
- *      deleted only when the image digest they point at is deleted in this run
- *      or no longer exists in the package; otherwise they are kept. They do
- *      not count toward the deploy-version window.
- *
- * Every decision is written to the job summary with a human-readable reason.
- * In particular `develop` and semver tags are never deleted: a Helm rollback
- * and the digests pinned in private values point at them.
- *
- * Packages are exactly the deploy images and the native publish repositories
- * listed in `platform/ci/units.mjs`. Native units also publish `tree-*` tags on
- * PRs, so their release packages (`windows-logon-provider`, `pulsar-firmware`)
- * follow the same policy: `latest`, version and `sha-<commit>` tags survive;
- * stale `tree-*`-only versions are deleted after `KEEP_DAYS`.
- *
- * The selection logic is pure (`planPackageCleanup`) and covered by
- * `ghcr_cleanup.test.mjs`; the GitHub API plumbing is in `runGithubScript`.
- */
 
 import fs from "node:fs";
 import process from "node:process";
@@ -42,51 +8,24 @@ import { config } from "./units.mjs";
 
 export const KEEP_DAYS = 7;
 export const DAY_MS = 24 * 60 * 60 * 1000;
-/** How many deploy versions (commit-sha tagged) each package keeps. */
 export const DEPLOY_VERSIONS_TO_KEEP = 5;
-/** Tags produced by the CI unit job on a pull request. */
 export const TREE_TAG = /^tree-[0-9a-f]{40}$/;
-/** A full commit-sha tag marks a deploy version (rule 2). */
 export const COMMIT_TAG = /^[0-9a-f]{40}$/;
-/**
- * Cosign-style referrer tags: `<algorithm>-<hex>` pointing at an image digest,
- * optionally suffixed with `.` metadata (for example the attestation type).
- */
 export const REFERRER_TAG = /^sha256-([0-9a-f]{64})(?:\..*)?$/;
-/** Tags whose versions must survive: deploy aliases and releases. */
 export const PROTECTED_TAGS = [
   /^develop$/,
   /^latest$/,
-  // The native release uses `sha-<12 hex>`; short bare commit shas stay
-  // protected too. A full 40-hex tag is a deploy version and is governed by
-  // the keep-N window instead.
   /^sha-[0-9a-f]{7,39}$/,
   /^[0-9a-f]{7,39}$/,
   /^v?\d+\.\d+\.\d+(?:[-+].*)?$/,
 ];
-/**
- * Digests that must never be deleted even though the retention window would
- * otherwise select them. `voice-proxy` → sha256:238e…fca9 is the last Python
- * voice-proxy image: the Hermes health-exporter container still runs from it
- * (pinned in private runtime values) until the exporter rollout lands.
- * Digests a running workload still needs although no tag protects them, as
- * { package, digest, reason }. Empty since the health exporter moved to Rust.
- */
 export const PROTECTED_DIGESTS = [];
-/**
- * Packages the policy never considers even if a future unit map lists them.
- * Empty: native release packages are included, with their `latest`, version and
- * `sha-<commit>` tags protected by `PROTECTED_TAGS` and only stale `tree-*`
- * versions eligible for deletion.
- */
 export const EXCLUDED_PACKAGES = new Set();
 
-/** Package name (last GHCR path segment) of a unit's publish repository. */
 function packageName(repository) {
   return String(repository || "").split("/").filter(Boolean).pop() || "";
 }
 
-/** Package names owned by the deploy and native publish units, sorted. */
 export function deployImagePackages(unitsConfig = config) {
   const names = [];
   for (const unit of unitsConfig.units || []) {
@@ -116,7 +55,6 @@ function createdAt(version) {
   return Number.isFinite(value) ? value : null;
 }
 
-/** Rank deploy versions by creation time, falling back to the update time. */
 function updatedAt(version) {
   const value = Date.parse(String(version?.updated_at || ""));
   return Number.isFinite(value) ? value : null;
@@ -130,7 +68,6 @@ function idKey(version) {
   return String(version?.id ?? "");
 }
 
-/** The version `name` is the manifest digest (`sha256:…`). */
 function digestOf(version) {
   return typeof version?.name === "string" ? version.name : "";
 }
@@ -152,7 +89,6 @@ function isReferrerVersion(tags) {
   return tags.length > 0 && tags.every((tag) => REFERRER_TAG.test(tag));
 }
 
-/** `sha256-<hex>[.metadata]` → `sha256:<hex>`. */
 function referrerSubject(tags) {
   for (const tag of tags) {
     const match = REFERRER_TAG.exec(tag);
@@ -163,13 +99,6 @@ function referrerSubject(tags) {
   return null;
 }
 
-/**
- * Decide what to delete for one package.
- *
- * @param {Array<{id: number|string, name?: string, created_at?: string,
- *   updated_at?: string, metadata?: {container?: {tags?: string[]}}}>} versions
- * @param {{now?: number, keepDays?: number}} options
- */
 export function planPackageCleanup(
   versions,
   { now = Date.now(), keepDays = KEEP_DAYS, protectedDigests = PROTECTED_DIGESTS } = {},
@@ -179,8 +108,6 @@ export function planPackageCleanup(
     return { newest: null, decisions: [], delete: [], keep: [] };
   }
 
-  // Newest by creation time, with the id as the tie-breaker (GitHub ids grow
-  // monotonically). A missing date never makes a version "newest".
   let newest = null;
   for (const version of list) {
     if (newest === null) {
@@ -196,8 +123,6 @@ export function planPackageCleanup(
 
   const existingDigests = new Set(list.map(digestOf).filter(Boolean));
 
-  // The newest deploy versions form the per-package retention window. Referrers
-  // never count toward it.
   const deployVersions = list.filter((version) => {
     const tags = tagList(version);
     return !isReferrerVersion(tags) && isDeployVersion(tags);
@@ -213,7 +138,6 @@ export function planPackageCleanup(
   const decisions = new Array(list.length);
   const deletedDigests = new Set();
 
-  // PASS 1: ordinary versions. Their deletions decide which referrers follow.
   list.forEach((version, index) => {
     const tags = tagList(version);
     if (isReferrerVersion(tags)) {
@@ -282,7 +206,6 @@ export function planPackageCleanup(
     }
   }
 
-  // PASS 2: referrers follow the fate of the digest they point at.
   list.forEach((version, index) => {
     const tags = tagList(version);
     if (!isReferrerVersion(tags)) {
@@ -338,7 +261,6 @@ export function planPackageCleanup(
   };
 }
 
-/** `[{"id":…,"created_at":…,"tags":[…]}]` -> the GitHub version shape. */
 export function normalizeApiVersion(version) {
   return {
     id: version.id,
@@ -367,7 +289,6 @@ export function formatPackageSummary(name, plan, { dryRun }) {
   return `${lines.join("\n")}\n`;
 }
 
-/** Read every version of a user- or org-owned container package. */
 export async function fetchVersions(github, { owner, ownerType, packageName }) {
   if (ownerType === "Organization") {
     return github.paginate(github.rest.packages.getAllPackageVersionsForPackageOwnedByOrg, {
@@ -406,11 +327,6 @@ function isNotFound(error) {
   return Number(error?.status) === 404;
 }
 
-/**
- * Entry point for `actions/github-script` in the `ghcr` job of
- * `.github/workflows/cleanup.yml`.
- * `env`: `DRY_RUN` ("true"/"false") and `TOKEN_SOURCE` (informational).
- */
 export async function runGithubScript({ core, github, context, env = process.env }) {
   const dryRun = String(env.DRY_RUN || "false") === "true";
   const owner = context.repo.owner;
@@ -526,13 +442,6 @@ function parseArgs(argv) {
   return args;
 }
 
-/**
- * Local dry run against a fixture (never calls GitHub):
- *
- *   node platform/ci/ghcr_cleanup.mjs --fixture platform/ci/testdata/ghcr-versions.json
- *
- * `--delete` is refused: deletion only happens in the workflow.
- */
 export function main(argv = process.argv.slice(2), log = console.log) {
   const args = parseArgs(argv);
   if (args.help) {

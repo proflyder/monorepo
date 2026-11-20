@@ -1,24 +1,4 @@
 #!/usr/bin/env node
-/**
- * Backup front door behind `mise run backup:list|status|now|verify`.
- *
- * The registry (`platform/ops/backups.mjs`) is the single source of truth:
- * every command printed here is copied from the docs section named by the
- * target's `restore_doc`. Hosts are reached through the documented SSH aliases
- * (`ssh -F ~/.ssh/home-lab/config pve|k3s|haos`), never through a LAN address.
- *
- * `list` is offline. `status` runs read-only freshness/probe commands.
- * `now` and `verify` print a plan first and execute only after an explicit
- * `--yes`; `--dry-run` prints the commands and never calls anything. Restores
- * are deliberately not automated: every target prints its `restore_doc`.
- *
- * Usage:
- *
- *     node platform/mise-tasks/lib/backup.mjs list
- *     node platform/mise-tasks/lib/backup.mjs status [target...] [--dry-run]
- *     node platform/mise-tasks/lib/backup.mjs now <target> [--yes] [--dry-run]
- *     node platform/mise-tasks/lib/backup.mjs verify [target...] [--yes] [--dry-run]
- */
 
 import { spawnSync } from "node:child_process";
 import os from "node:os";
@@ -150,11 +130,6 @@ export function runList(argv, options = {}) {
   return 0;
 }
 
-/**
- * Read-only probe of every selected target. `--dry-run` prints the documented
- * commands instead of running them. A target with `status: null` is reported as
- * `manual` and does not fail the run.
- */
 export function runStatus(argv, options = {}) {
   const spawn = options.spawn ?? defaultExec;
   const stdout = options.stdout ?? process.stdout;
@@ -228,7 +203,6 @@ export function nowPlanLines(target, options = {}) {
   return lines;
 }
 
-/** Plan, confirm, run. Never runs a UI-only target; prints its note instead. */
 export async function runNow(argv, options = {}) {
   const spawn = options.spawn ?? defaultExec;
   const stdout = options.stdout ?? process.stdout;
@@ -302,11 +276,6 @@ export function verifyPlanLines(list, options = {}) {
   return lines;
 }
 
-/**
- * Run the documented verification for the selected targets. The checks may be
- * expensive (restic reads data from Drive), so everything is printed first and
- * one confirmation covers the batch. Restores stay manual.
- */
 export async function runVerify(argv, options = {}) {
   const spawn = options.spawn ?? defaultExec;
   const stdout = options.stdout ?? process.stdout;

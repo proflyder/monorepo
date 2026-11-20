@@ -1,19 +1,3 @@
-// Backup target registry: the single source of truth for "what is backed up,
-// where, when, how to check it and how it is restored".
-//
-// This is data, not code. Every target points at an existing procedure:
-//
-//   * `status`/`run`/`verify` are the commands documented in the same docs
-//     sections as `restore_doc`. They are only turned into argv by
-//     `platform/mise-tasks/lib/backup.mjs`; nothing here executes anything.
-//   * `ssh` selects the documented host alias from
-//     `~/.ssh/home-lab/config` (pve|k3s|haos). No LAN address is hard-coded.
-//   * `run: null` means "only through a UI"; `manual_note` says how.
-//
-// `platform/mise-tasks/lib/backup.test.mjs` validates ids, required fields,
-// action shapes and that every `restore_doc` file and heading still exist, so
-// moving a docs section breaks the test instead of the operator.
-
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -21,7 +5,6 @@ import { fileURLToPath } from "node:url";
 export const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const ROOT = path.resolve(HERE, "../..");
 
-/** Documented host aliases from `~/.ssh/home-lab/config` (`docs/OPERATIONS.md`). */
 export const SSH_HOSTS = ["pve", "k3s", "haos"];
 
 export const REQUIRED_FIELDS = [
@@ -167,7 +150,6 @@ export const TARGETS = [
   },
 ];
 
-/** GitHub-style heading slug, enough to verify `docs/*.md#anchor` links. */
 export function slugifyHeading(heading) {
   return heading
     .trim()
@@ -180,10 +162,6 @@ export function byId(list, id) {
   return list.find((target) => target.id === id) ?? null;
 }
 
-/**
- * Resolve repeated arguments / comma lists to targets. `all` (or no argument,
- * when `defaultAll`) expands to the registry order.
- */
 export function resolveTargets(list, rawArgs = [], options = {}) {
   const defaultAll = options.defaultAll ?? false;
   const requested = rawArgs
@@ -226,7 +204,6 @@ function isAction(value) {
   );
 }
 
-/** Validate the registry; returns a list of problems (empty means valid). */
 export function validateTargets(list = TARGETS, options = {}) {
   const root = options.root ?? ROOT;
   const fileSystem = options.fs ?? fs;

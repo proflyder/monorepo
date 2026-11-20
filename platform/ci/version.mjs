@@ -1,36 +1,4 @@
 #!/usr/bin/env node
-/**
- * Deterministic, monotone release versions for native units.
- *
- * A native unit (Pulsar firmware, the Windows logon provider) used to require a
- * hand-written `VERSION` bump in a separate pull request before every release.
- * The version is now computed from the repository itself:
- *
- *   version = <base major.minor>.<patch>
- *   patch   = <base floor> + <commits touching the unit's paths>
- *
- * `VERSION` holds only the base (`v0.6`, `1.4`). The patch is the number of
- * commits reachable from `HEAD^1` that touch the unit's `paths`, so it grows by
- * one with every merged change of the unit, never repeats and never needs an
- * edit. The optional `MAJOR.MINOR.PATCH` form stays accepted as a *floor*
- * (`v0.5.1020`): it let the file seed a version above an already published tag
- * once, before the counter took over, and keeps a rollover of the minor version
- * monotone.
- *
- * Why `HEAD^1` and not all of history: a pull request builds the merge commit
- * `M = merge(D, H)`, a squash merge lands as `S` on the same `D`. Both have
- * `D` as their first parent, so both compute the same patch and the version
- * baked into the PR-built binary equals the release tag. The merge commit
- * itself is not counted, so the release that a change triggers still gets a
- * fresh number relative to the previous release.
- *
- * The published OCI artifact is the authority: `publish-oci.sh` records
- * `org.opencontainers.image.version`, and the promote path reads that
- * annotation instead of recomputing, so the release tag can never disagree with
- * the binary's `--version` (the station updater compares the two). The module
- * also reads the annotation of an already published tag, which is how a manual
- * re-deploy finds the current release version without a `VERSION` edit.
- */
 
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
@@ -38,19 +6,10 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
-/** `MAJOR.MINOR` with an optional `v` prefix and an optional floor patch. */
 export const BASE_PATTERN = /^(v)?(\d+)\.(\d+)(?:\.(\d+))?$/;
-/** The release tag shape the updater and `promote.mjs` accept. */
 export const VERSION_PATTERN = /^v?\d+\.\d+\.\d+$/;
-/** Annotation `publish-oci.sh` writes next to the artifact. */
 export const VERSION_ANNOTATION = "org.opencontainers.image.version";
 
-/**
- * Split a `VERSION` file into its base and floor.
- *
- * `v0.6` → `{prefix: "v", major: 0, minor: 6, floor: 0}`
- * `v0.5.1020` → `{prefix: "v", major: 0, minor: 5, floor: 1020}`
- */
 export function parseBase(text) {
   const raw = String(text ?? "").trim();
   const match = BASE_PATTERN.exec(raw);
@@ -67,7 +26,6 @@ export function parseBase(text) {
   };
 }
 
-/** Render the computed release version for a base and a patch counter. */
 export function formatVersion(base, patch) {
   if (!Number.isInteger(patch) || patch < 0) {
     throw new Error(`patch must be a non-negative integer, got '${patch}'`);
@@ -75,12 +33,6 @@ export function formatVersion(base, patch) {
   return `${base.prefix}${base.major}.${base.minor}.${patch}`;
 }
 
-/**
- * Compute the version for a base text and a commit counter.
- *
- * The counter is added to the base floor, so a one-time `MAJOR.MINOR.PATCH`
- * seed keeps the sequence above the tag it replaced.
- */
 export function computeVersion(text, count) {
   const base = parseBase(text);
   const commits = Number(count);
@@ -95,10 +47,6 @@ export function computeVersion(text, count) {
   return { version, base, patch, count: commits };
 }
 
-/**
- * Count the commits reachable from `rev` (buffered so the whole expression
- * fails on a git error instead of piping a fatal message through awk).
- */
 export function readCommitCount(exec, { rev, paths }) {
   const targets = [rev, "--", ...paths];
   const output = exec("git", ["rev-list", "--count", ...targets]).trim();
@@ -109,14 +57,6 @@ export function readCommitCount(exec, { rev, paths }) {
   return count;
 }
 
-/**
- * The first-parent revision of HEAD.
- *
- * A shallow checkout (`actions/checkout` defaults to depth 1) has no parent, and
- * silently counting from HEAD would produce a plausible but wrong patch number
- * — the PR binary and the release tag would then disagree. Fail loudly and let
- * the caller fetch full history.
- */
 export function counterRevision(exec) {
   try {
     exec("git", ["rev-parse", "--verify", "--quiet", "HEAD^1^{commit}"]);
@@ -129,7 +69,6 @@ export function counterRevision(exec) {
   }
 }
 
-/** Resolve the version of a native unit from the working tree. */
 export function resolveVersion({ unit, exec, cwd = process.cwd() }) {
   const baseFile = path.join(unit.workdir, "VERSION");
   const absolute = path.join(cwd, baseFile);
@@ -144,7 +83,6 @@ export function resolveVersion({ unit, exec, cwd = process.cwd() }) {
   return { ...computeVersion(baseText, count), baseText: baseText.trim(), baseFile };
 }
 
-/** Read the version annotation of an already published OCI artifact. */
 export function publishedVersion(exec, reference) {
   const text = exec("crane", ["manifest", String(reference || "")]);
   let manifest;
@@ -178,7 +116,6 @@ function realExec(command, args, options = {}) {
   return result.stdout;
 }
 
-/** Native units from the unit map, the one source of paths and workdir. */
 async function nativeUnit(id) {
   const { config } = await import("./units.mjs");
   const unit = config.units.find((entry) => entry.platform === "native" && entry.id === id);
@@ -253,11 +190,6 @@ export async function main(argv = process.argv.slice(2)) {
   return 0;
 }
 
-/**
- * `--github-output` appends to `$GITHUB_OUTPUT` (a step output) and echoes the
- * same lines to the log. Without the flag the bare version is printed, which is
- * what the station audit and shell callers read.
- */
 export function emit(lines, args) {
   const text = String(lines);
   if (!args.githubOutput) {

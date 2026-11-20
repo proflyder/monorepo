@@ -7,13 +7,6 @@ import {
   standardSchema,
 } from "./lib/schema.js";
 
-// Thin, deterministic executor behind the home voice path:
-//
-//   voice / Hermes -> mcp-gateway -> SSH forced command -> curl -> this route
-//
-// There is no LLM here and no arbitrary operation: the seven methods below are
-// the whole surface. bb itself is never exposed; only this plugin route is,
-// with bb's per-plugin token plus an HMAC signature over the exact body.
 export default async function plugin(bb) {
   const settings = bb.settings.define({
     hmacSecret: {
@@ -110,9 +103,6 @@ export default async function plugin(bb) {
     );
   }
 
-  // The cron fires every minute; the dispatcher decides whether the configured
-  // local wall-clock time has been reached. A cron built from `compactAt`
-  // would be fixed at activation and could not follow a live setting change.
   if (typeof bb.background?.schedule === "function") {
     bb.background.schedule("dispatcher-compaction", "* * * * *", async () => {
       try {

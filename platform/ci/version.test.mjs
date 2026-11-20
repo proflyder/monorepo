@@ -1,13 +1,3 @@
-/**
- * Contracts for the deterministic native release version.
- *
- * The version is `<VERSION major.minor>.<commits touching the unit>`, computed
- * from `HEAD^1` so a PR merge ref and its squash commit agree. These tests pin
- * the arithmetic, the git contract and the two properties the station updater
- * depends on: monotone across the old hand-bumped releases and no manual patch
- * in `VERSION` any more.
- */
-
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
@@ -21,7 +11,6 @@ import * as version from "./version.mjs";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const { config } = await import("./units.mjs");
 
-/** Numeric semver comparison, the same order the updater uses. */
 function compare(left, right) {
   const parse = (value) =>
     String(value)
@@ -69,8 +58,6 @@ test("version: a negative counter is rejected", () => {
 });
 
 test("version: the new sequence stays above the last hand-bumped release", () => {
-  // v0.5.1020 is what the station runs today. A base of v0.6 with a small
-  // counter must compare greater, or the updater would refuse every release.
   const next = version.computeVersion("v0.6", 50).version;
   assert.equal(compare(next, "v0.5.1020"), 1, `${next} must be newer than v0.5.1020`);
   assert.equal(compare(version.computeVersion("1.4", 31).version, "1.3.17"), 1);
@@ -175,7 +162,6 @@ test("version: VERSION holds only the major.minor base", () => {
   }
 });
 
-/** The unit map is the one source of `paths` and `workdir`, so read it here. */
 function require_tmpdir() {
   return os.tmpdir();
 }

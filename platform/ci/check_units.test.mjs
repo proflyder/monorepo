@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-/** Focused tests for the CI unit-map validator. */
 
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -95,8 +94,6 @@ function workflowFixture(files) {
 }
 
 test("check_units: a job that promotes without a login is rejected", () => {
-  // The incident shape: promote.mjs re-tags with crane, and the public package
-  // reads anonymously, so only the manifest PUT fails.
   const root = workflowFixture({
     "_native.yml": [
       "on: workflow_call",
@@ -232,7 +229,6 @@ test("check_units: committed rollback blocks are documented and valid", () => {
   assert.ok(withRollback.some((unit) => unit.id === "pulsar" && unit.rollbackKind === "pulsar"));
 });
 
-// --------------------------------------------------------- one trigger ----
 test("check_units: one event per workflow is accepted", () => {
   const root = workflowFixture({
     "ci.yml": ["on:", "  pull_request:", "    branches: [develop]", "jobs: {}"].join("\n"),
@@ -307,7 +303,6 @@ test("check_units: every committed workflow has exactly one trigger", () => {
   assert.deepEqual(checkUnits.workflowTriggerProblems(), []);
 });
 
-// -------------------------------------------- caller/reusable permissions ----
 test("check_units: a caller job granting the reusable's union is accepted", () => {
   const root = workflowFixture({
     "_release.yml": [
@@ -345,9 +340,6 @@ test("check_units: a caller job granting the reusable's union is accepted", () =
 });
 
 test("check_units: a caller job inheriting read-only contents is rejected", () => {
-  // The #338/#339 incident: the caller job had no permissions block, so it
-  // inherited workflow-level `contents: read` while the reusable pinned with
-  // `contents: write`.
   const root = workflowFixture({
     "_release.yml": [
       "on: workflow_call",
@@ -428,7 +420,6 @@ test("check_units: requirements of nested reusables are checked recursively", ()
       problem.includes("checks=none but ./.github/workflows/_outer.yml requires checks=write (via .github/workflows/_inner.yml)"),
     ),
   );
-  // `_outer.yml`'s own caller job must cover `_inner.yml` as well.
   assert.ok(problems.some((problem) => problem.includes("_outer.yml job 'inner'")));
 });
 

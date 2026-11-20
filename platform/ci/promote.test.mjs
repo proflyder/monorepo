@@ -1,8 +1,3 @@
-// Unit tests for the build-once promotion decision (DECISIONS 36).
-//
-// No registry, no network: `planPromotion` takes the command runner as an
-// argument, so every branch (missing tag, failed provenance, digest rewrite)
-// is exercised with a fake `crane`/`gh`.
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
@@ -115,7 +110,6 @@ test("verify args pin repository and the signing workflow identity", () => {
   assert.deepEqual(args.slice(3, 5), ["--repo", REPO]);
   assert.equal(args[5], "--cert-identity-regex");
   assert.equal(args[6], signerIdentityPattern(REPO));
-  // gh rejects --signer-repo combined with --cert-identity-regex.
   assert.ok(!args.includes("--signer-repo"));
 });
 
@@ -126,7 +120,6 @@ test("an existing, attested tree image is promoted without rebuilding", () => {
     [isDigestOf(treeRef), DIGEST_A],
     [isGhVerify, ""],
     [isCraneTag, ""],
-    // Every tag read-back must resolve to the promoted digest.
     [isCraneDigest, DIGEST_A],
   ]);
 
@@ -144,12 +137,10 @@ test("an existing, attested tree image is promoted without rebuilding", () => {
     ["crane", "tag", digestRef, COMMIT],
     ["crane", "tag", digestRef, "develop"],
   ]);
-  // The provenance check must run before any tag is written.
   const firstTag = calls.findIndex(([command, action]) => command === "crane" && action === "tag");
   const verify = calls.findIndex(([command]) => command === "gh");
   assert.ok(verify >= 0 && verify < firstTag);
   assert.equal(result.decisions[0].status, "promoted");
-  // Read-back of both tags happened after tagging.
   assert.deepEqual(
     calls.filter(([command, action]) => command === "crane" && action === "digest")
       .map((call) => call[2])
@@ -206,8 +197,6 @@ test("history search finds the newest verified tree when the current tree has no
   const olderTag = `tree-${olderTree}`;
   const ref = "ghcr.io/proflyder/scheduler";
   const { calls, exec } = recorder([
-    // The registry has builds for the older tree only; the current tree and
-    // the even older tree have no tag.
     [isCraneLs, `develop\nlatest\nsha-${olderCommit.slice(0, 12)}\n${olderTag}\n`],
     [isDigestOf(`${ref}:tree-${TREE}`), new Error("MANIFEST_UNKNOWN: manifest unknown")],
     [isDigestOf(`${ref}:${olderTag}`), DIGEST_A],
@@ -222,8 +211,6 @@ test("history search finds the newest verified tree when the current tree has no
     commit: COMMIT,
     repository: REPO,
     exec,
-    // Newest first, as `readHistory` returns it: the current commit, then a
-    // commit whose tree was never built, then the built one.
     history: [
       { commit: COMMIT, tree: TREE },
       { commit: "e".repeat(40), tree: "f".repeat(40) },
@@ -236,7 +223,6 @@ test("history search finds the newest verified tree when the current tree has no
   assert.deepEqual(result.digests, { scheduler: DIGEST_A });
   assert.equal(result.decisions[0].status, "promoted");
   assert.equal(result.decisions[0].source, olderCommit);
-  // The dispatch still tags the deployed commit and develop with that digest.
   assert.deepEqual(tagsWritten(calls), [
     ["crane", "tag", `${ref}@${DIGEST_A}`, COMMIT],
     ["crane", "tag", `${ref}@${DIGEST_A}`, "develop"],
@@ -252,9 +238,7 @@ test("sibling images resolve from history and are never tagged", () => {
   const bridge = "ghcr.io/proflyder/ha-bridge";
   const { calls, exec } = recorder([
     [isCraneLs, `${olderTag}\n`],
-    // The unit's own image is built for this tree.
     [isDigestOf(`${scheduler}:tree-${TREE}`), DIGEST_A],
-    // The sibling is not; its newest verified build is the older tree.
     [isDigestOf(`${bridge}:tree-${TREE}`), new Error("MANIFEST_UNKNOWN: manifest unknown")],
     [isDigestOf(`${bridge}:${olderTag}`), DIGEST_B],
     [isGhVerify, ""],
@@ -278,7 +262,6 @@ test("sibling images resolve from history and are never tagged", () => {
   assert.equal(sibling.status, "reused");
   assert.equal(sibling.optional, true);
   assert.equal(sibling.source, olderCommit);
-  // Only the unit's own image is retagged.
   assert.deepEqual(
     tagsWritten(calls).map((call) => call[2]),
     [`${scheduler}@${DIGEST_A}`, `${scheduler}@${DIGEST_A}`],
@@ -326,7 +309,6 @@ test("one unusable image falls back for the whole unit before any tag", () => {
     repository: REPO,
     exec,
   });
-  // The verified sibling is not tagged: the unit deploys only as a whole.
   assert.equal(result.mode, "build");
   assert.deepEqual(
     result.decisions.map((decision) => [decision.image, decision.status]),
@@ -342,7 +324,6 @@ test("a tag that resolves to a different digest falls back", () => {
     [isDigestOf(treeRef), DIGEST_A],
     [isGhVerify, ""],
     [isCraneTag, ""],
-    // The tag read-back disagrees with the promoted digest.
     [isCraneDigest, DIGEST_B],
   ]);
   const result = planPromotion({
@@ -463,7 +444,6 @@ function nativeHandlers({ ref, tree, digest, existing = {}, manifests = {}, cand
   const treeRef = `${ref}:tree-${tree}`;
   const tagged = new Map();
   const candidateManifest = candidate || artifactManifest();
-  // `crane digest <ref>:<tag>` -> args[1]; `crane tag <ref>@<digest> <tag>` -> args[2].
   const tagOf = (args) => String(args[args.length - 1]).slice(
     String(args[args.length - 1]).lastIndexOf(":") + 1,
   );
@@ -521,7 +501,6 @@ const LAYER_DIGESTS = {
   SHA256SUMS: `sha256:${"a".repeat(64)}`,
 };
 
-/** Release-shaped manifest; only the annotations differ between rebuilds. */
 function artifactManifest({
   artifactType = "application/vnd.example.windows-logon-provider.v1",
   layerDigests = LAYER_DIGESTS,
@@ -674,15 +653,11 @@ test("an existing version tag with different layer content is refused", () => {
       }),
     /already exists with .*immutable by content/,
   );
-  // The conflicting immutable tag was not overwritten, and `latest` was never
-  // reached because the version is checked first.
   assert.equal(tagsWritten(calls).length, 0);
 });
 
 test("identical content with different annotations is a no-op", () => {
   const ref = "ghcr.io/proflyder/windows-logon-provider";
-  // Two builds of the same files: same artifact type and layers, but different
-  // manifest digests because only `created`/`revision` annotations changed.
   const candidate = artifactManifest({
     annotations: {
       "org.opencontainers.image.created": "2026-02-02T00:00:00Z",
@@ -723,7 +698,6 @@ test("identical content with different annotations is a no-op", () => {
     assert.equal(item.digest, DIGEST_B);
     assert.match(item.detail, /already published with identical content/);
   }
-  // The digest of the kept version tag is what the summary reports.
   assert.match(formatNativeSummary(result), /already published with identical content/);
 });
 
@@ -756,7 +730,6 @@ test("latest follows the kept version tag digest, not the candidate", () => {
   });
   assert.equal(result.mode, "promoted");
   assert.equal(result.digest, DIGEST_B);
-  // The version tag was kept; `latest` moves to its digest, not the candidate.
   assert.deepEqual(tagsWritten(calls), [["crane", "tag", `${ref}@${DIGEST_B}`, "latest"]]);
   assert.equal(result.decisions.find((item) => item.tag === "latest").status, "moved");
   assert.equal(result.decisions.find((item) => item.tag === "latest").digest, DIGEST_B);
@@ -792,7 +765,6 @@ test("a sha tag follows the same content identity rule", () => {
   const changed = artifactManifest({
     layerDigests: { ...LAYER_DIGESTS, SHA256SUMS: `sha256:${"8".repeat(64)}` },
   });
-  // Same content under a different digest is kept.
   {
     const { calls, exec } = recorder(
       nativeHandlers({
@@ -816,7 +788,6 @@ test("a sha tag follows the same content identity rule", () => {
     assert.equal(tagsWritten(calls).length, 0);
     assert.equal(result.decisions.find((item) => item.tag === "sha-bbbbbbbbbbbb").status, "unchanged");
   }
-  // Different content under the same sha tag is a hard failure.
   {
     const { exec } = recorder(
       nativeHandlers({
@@ -851,12 +822,10 @@ test("manifestContent compares ordered layer identity and artifact type", () => 
     "cp-selftest.exe",
     "SHA256SUMS",
   ]);
-  // Manifest-level annotations are not content identity.
   const annotated = manifestContent(
     artifactManifest({ annotations: { "org.opencontainers.image.created": "later" } }),
   );
   assert.equal(sameManifestContent(base, annotated), true);
-  // Layer order matters.
   const reordered = manifestContent(
     artifactManifest({
       layerDigests: {
@@ -867,7 +836,6 @@ test("manifestContent compares ordered layer identity and artifact type", () => 
     }),
   );
   assert.equal(sameManifestContent(base, reordered), false);
-  // Artifact type matters.
   const otherType = manifestContent(artifactManifest({ artifactType: "application/vnd.other" }));
   assert.equal(sameManifestContent(base, otherType), false);
   assert.throws(() => manifestContent("not json"), /not valid JSON/);
@@ -947,14 +915,6 @@ test("output formats carry the digest list and the chosen path", () => {
   assert.match(summary, /path: `build`/);
   assert.match(summary, /not deployable: not every image/);
 });
-
-// --------------------------------------------------------------------------
-// PR-head delta fallback (#195): the squash merge landed on a newer develop
-// --------------------------------------------------------------------------
-//
-// CI verified the PR head H; the merge commit has another tree because another
-// PR landed first. The fallback promotes `tree-<tree(H)>` only when the delta
-// H..merge does not route to this unit.
 
 const PR_HEAD = "c".repeat(40);
 const PR_HEAD_TREE = "d".repeat(40);
@@ -1301,20 +1261,12 @@ test("a sibling image uses history first, then the PR head", () => {
   const decision = result.decisions.find((entry) => entry.image === "ha-bridge");
   assert.equal(decision.status, "reused");
   assert.match(decision.detail, /from PR head/);
-  // Siblings are handed to the renderer, never retagged.
   assert.equal(tagsWritten(calls).filter((call) => String(call[2]).includes("ha-bridge")).length, 0);
 });
 
-// --------------------------------------------------------------------------
-// PR lookups always use the GitHub repository: a native promote passes the GHCR
-// publish repository in `--repository`, which identifies no pull request.
-// --------------------------------------------------------------------------
-
 test("githubRepositoryFor separates the PR repository from the publish repository", () => {
-  // Images already pass the GitHub repository in --repository.
   assert.equal(githubRepositoryFor({ repository: REPO }, {}), REPO);
   assert.equal(githubRepositoryFor({ repository: REPO, native: true }, {}), "");
-  // Native: the publish registry must never stand in for the GitHub repository.
   assert.equal(
     githubRepositoryFor({ native: true, repository: "ghcr.io/proflyder/pulsar-firmware" }, {}),
     "",
@@ -1326,7 +1278,6 @@ test("githubRepositoryFor separates the PR repository from the publish repositor
     ),
     REPO,
   );
-  // An explicit argument wins over the environment.
   assert.equal(
     githubRepositoryFor(
       { native: true, repository: "ghcr.io/proflyder/pulsar-firmware", githubRepository: REPO },
@@ -1337,10 +1288,6 @@ test("githubRepositoryFor separates the PR repository from the publish repositor
   assert.equal(githubRepositoryFor({}, { GITHUB_REPOSITORY: REPO }), REPO);
 });
 
-/**
- * `exec` for a PR-head resolution keyed by the repository it may query: any
- * `gh api` path outside the expected GitHub repository fails the test.
- */
 const PULSAR_PR = [{ number: 329, head: { sha: PR_HEAD, repo: { full_name: REPO } } }];
 
 function prExecFor(apiRepository, { pulls = PULSAR_PR, diff = "" } = {}) {
@@ -1377,8 +1324,6 @@ test("native promotion finds the PR through the GitHub repository, not the publi
     [isGhVerify, ""],
     ...nativeHandlers({ ref, tree: PR_HEAD_TREE, digest: DIGEST_A }),
   ]);
-  // `gh api` and `git` go through the PR-aware executor; registry calls fall
-  // through to the recorder.
   const gitAndGh = prExecFor(REPO, { diff: "docs/STATE.md\n" });
   const routed = (command, args) => {
     if (command === "gh" && args[0] === "api") {
@@ -1405,7 +1350,6 @@ test("native promotion finds the PR through the GitHub repository, not the publi
   const prHead = await preparePrHead({
     args,
     exec: routed,
-    // The delta is docs-only, so the PR-head artifact may be promoted.
     compute: async () => ({
       result: { deploySelected: new Set(["quality"]), changed: ["docs/STATE.md"] },
       entries: { native: [] },
@@ -1416,7 +1360,6 @@ test("native promotion finds the PR through the GitHub repository, not the publi
   assert.equal(prHead.number, 329);
   assert.equal(prHead.tree, PR_HEAD_TREE);
   assert.equal(prHead.affectsUnit, false);
-  // The PR was looked up in the GitHub repository, never in the registry.
   const queries = calls.filter(([command, action]) => command === "gh" && action === "api");
   assert.deepEqual(
     queries.map((call) => call[2]),
@@ -1433,7 +1376,6 @@ test("native promotion finds the PR through the GitHub repository, not the publi
   });
   assert.equal(result.mode, "promoted");
   assert.equal(result.digest, DIGEST_A);
-  // Provenance is verified against the GitHub repository as well.
   const verify = calls.find(([command, action]) => command === "gh" && action === "attestation");
   assert.deepEqual(verify.slice(4, 6), ["--repo", REPO]);
 });
@@ -1498,10 +1440,6 @@ test("resolvePrHeadDelta refuses a publish repository instead of calling the PR 
   assert.match(result.error, /invalid GitHub repository/);
 });
 
-// ------------------------------------------------- computed version ------
-// A native release no longer takes its version from an argument computed by the
-// caller: `publish-oci.sh` records it on the artifact and the promotion reads it,
-// so the release tag can never disagree with the binary the updater compares.
 test("native promotion reads the version from the artifact annotation", () => {
   const ref = "ghcr.io/proflyder/pulsar-firmware";
   const candidate = artifactManifest({

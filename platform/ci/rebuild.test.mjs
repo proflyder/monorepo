@@ -1,13 +1,3 @@
-/**
- * Contracts for the manual rebuild selection.
- *
- * The workflow exposes checkboxes, not unit ids: the grouping must cover every
- * deployable unit exactly once, resolve to real ids, and produce the same
- * matrix shapes `_unit.yml` / `_native.yml` / `_pin.yml` consume. A new unit in
- * `units.mjs` without a group would be undeployable by hand, which is what these
- * tests prevent.
- */
-
 import assert from "node:assert/strict";
 import test from "node:test";
 
@@ -98,7 +88,6 @@ test("rebuild: image entries carry the fields _unit.yml and _pin.yml need", () =
     "home-deploy",
   ]);
   assert.equal(entry.builder, "mixed");
-  // Pinning needs the image names and the optional siblings.
   assert.equal(typeof entry.optional_images, "string");
 });
 
@@ -109,7 +98,6 @@ test("rebuild: a bazel unit passes its own targets and image set", () => {
   assert.equal(entry.kind, "bazel");
   assert.ok(entry.test_targets.includes("//"), "test targets come from the unit map");
   assert.ok(entry.images.startsWith("scheduler"));
-  // build-images.sh owns home-deploy for a bazel unit that does not list it.
   assert.ok(JSON.parse(entry.image_list).includes("home-deploy"));
 });
 

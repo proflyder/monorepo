@@ -228,9 +228,6 @@ function makeWorld() {
       },
     },
     plugins: {
-      // Strict fake: real callRpc calls outputSchema.parse before returning.
-      // A Standard Schema object (only ~standard.validate) fails here, so the
-      // tests reproduce the live `outputSchema.parse is not a function` bug.
       async callRpc({ pluginId, method, input, outputSchema }) {
         record("plugins.callRpc", { pluginId, method, input });
         if (typeof outputSchema?.parse !== "function") {
@@ -704,7 +701,6 @@ test("validate_spawn enforces the profile machine allowlist", async () => {
     method: "validate_spawn",
     params: targetParams({ projectId: "proj_gamma" }),
   });
-  // The machine policy no longer blocks it; `proj_gamma` is offline instead.
   assert.equal(unrestricted.body.code, "machine_offline");
 });
 
@@ -748,7 +744,6 @@ test("targets reports the profile policy and uses it for providers", async () =>
   );
   assert.deepEqual(beta.policy, { providers: null, machines: null });
   assert.equal(response.body.result.profileProvidersConfigured, undefined);
-  // One strict outputSchema.parse per RPC (listProjects + one per profile).
   assert.equal(used.parseCount(), 3);
 });
 
@@ -908,7 +903,6 @@ test("send writes only to plugin threads or the configured dispatcher", async ()
     method: "send",
     params: { threadId: "thr_dispatcher", text: "hi", idempotencyKey: "s1" },
   });
-  // thr_dispatcher must exist in bb; add it for the happy path below.
   assert.equal(dispatcher.body.code, "thread_not_found");
 
   world.threads.set("thr_dispatcher", {
@@ -1124,8 +1118,6 @@ test("status includes running threads with profiles and machine", async () => {
   assert.equal(typeof row.runtimeSeconds, "number");
 });
 
-// ------------------------------------------------------------ compaction --
-
 function addDispatcherThread(world, status = "idle") {
   world.threads.set("thr_dispatcher", {
     id: "thr_dispatcher",
@@ -1222,8 +1214,6 @@ test("nightly compaction skips a busy thread and retries on the next tick", asyn
   assert.equal(busy.reason, "busy");
   assert.equal(world.countCalls("threads.compact"), 0);
 
-  // A busy retry is throttled so the minute-level schedule does not look the
-  // thread up on every server tick.
   world.setThreadStatus("thr_dispatcher", "idle");
   const throttled = await dispatcher.backgroundTick();
   assert.equal(throttled.reason, "throttled");
@@ -1277,8 +1267,6 @@ test("after a completed nightly compaction the reminder rides the next send once
 
   await dispatcher.backgroundTick();
 
-  // While the compaction turn runs, a prompt waits in the queue instead of
-  // steering into the compaction.
   const during = await dispatcher.call("send", {
     threadId: "thr_dispatcher",
     text: "during compaction",
@@ -1346,7 +1334,6 @@ test("send compacts after compactAfterTurns idle sends, never with steer", async
   assert.equal(compactCall.compactFirst, true);
   assert.notEqual(compactCall.mode, "steer");
   assert.equal(compactCall.mode, "auto");
-  // The compaction runs before this message, so the reminder belongs here.
   assert.match(compactCall.input[0].text, /three\n\nROLE REMINDER$/u);
 
   const after = await kv.get("compact:thr_dispatcher");
@@ -1475,8 +1462,6 @@ test("status reports compaction state and settings", async () => {
   assert.equal(row.compact.compactionPending, false);
 });
 
-// -------------------------------------------------------------- updates --
-
 function pushTurn(world, threadId, initiator, spoken, text) {
   let counter = (pushTurn.counters ??= new Map());
   const next = (counter.get(threadId) ?? 0) + 1;
@@ -1575,8 +1560,6 @@ test("updates long-polls, advances the cursor and skips a silent turn", async ()
   const cursor = result.cursor;
   assert.ok(cursor > 0);
 
-  // The skipped turn is before the cursor, so a follow-up call returns at
-  // once instead of rescanning it for the whole wait window.
   delays.length = 0;
   const repeat = await dispatcher.call("updates", {
     afterSeq: cursor,

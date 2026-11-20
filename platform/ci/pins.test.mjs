@@ -1,7 +1,3 @@
-// Unit tests for the pins writer (решение 54).
-//
-// No network and no registry: the text update is pure, and the retry path is
-// exercised through an injected `once`.
 import assert from "node:assert/strict";
 import test from "node:test";
 
@@ -90,7 +86,6 @@ test("updatePins rewrites only this unit's keys and the annotations", () => {
   const { text, changed } = updatePins(PINS, { values, annotations: ANNOTATIONS });
   assert.ok(changed);
   assert.match(text, new RegExp(`WAKEGRANT_IMAGE: "ghcr.io/proflyder/wakegrant@${DIGEST_B}"`));
-  // Another unit's digest is preserved verbatim.
   assert.match(text, new RegExp(`INTERCOM_IMAGE: "ghcr.io/proflyder/intercom@${DIGEST_B}"`));
   assert.match(text, new RegExp(`BUILD_ID: "${"b".repeat(12)}"`));
   for (const key of PINS_ANNOTATIONS) {

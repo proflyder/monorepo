@@ -1,10 +1,4 @@
 #!/usr/bin/env node
-/**
- * Boundary tests for the reviewed public-name allowances in the audit scanner.
- *
- * Sample strings are built by concatenation so this file never contains the
- * personal name as a literal and cannot flag itself.
- */
 
 import assert from "node:assert/strict";
 import fs from "node:fs";

@@ -1,12 +1,3 @@
-// GHCR cleanup policy tests (DECISIONS 36).
-//
-// The selection is a pure function, so these tests pin exactly which package
-// versions may be deleted: stale `tree-*`/untagged versions, deploy versions
-// beyond the five-version window, and referrers whose subject disappears —
-// while the newest, `develop`/semver tags and PROTECTED_DIGESTS survive. The
-// package list is derived from platform/ci/units.mjs, including the native
-// publish repositories (`windows-logon-provider`, `pulsar-firmware`): their
-// release tags are protected and only stale `tree-*` versions are deleted.
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
@@ -76,8 +67,6 @@ test("native release tags survive and stale tree tags are deleted", () => {
     ],
     { now: NOW },
   );
-  // Native release tags are protected; only the stale tree-only and untagged
-  // versions go. The newest version is kept regardless of its tag.
   assert.deepEqual(plan.delete.map((item) => item.id), [2, 1]);
   assert.equal(summary(plan)[6].reason, "newest version of the package");
   for (const id of [5, 4, 3]) {
@@ -136,8 +125,6 @@ test("develop, latest and semver tags are never deleted", () => {
     { now: NOW },
   );
   assert.deepEqual(plan.delete.map((item) => item.id), []);
-  // The newest version (id 5) is kept by age/position, every tagged version by
-  // its protected tag.
   assert.match(summary(plan)[4].reason, /protected tag 'develop'/);
   assert.match(summary(plan)[3].reason, /protected tag 'develop'/);
   assert.match(summary(plan)[2].reason, /protected tag 'v1\.2\.3'/);
@@ -151,7 +138,6 @@ test("only the five newest deploy versions are kept", () => {
     versions.push(version(day, `2026-09-0${day}T00:00:00Z`, [SHA40(String(day))]));
   }
   const plan = planPackageCleanup(versions, { now: NOW });
-  // ids 7..3 are the five newest deploy versions; 1 and 2 are beyond it and old.
   assert.deepEqual(plan.delete.map((item) => item.id), [1, 2]);
   assert.equal(plan.keep.length, 5);
   assert.match(summary(plan)[3].reason, /one of the 5 newest deploy versions/);
@@ -171,14 +157,11 @@ test("a single commit-sha version is kept inside the deploy window", () => {
 });
 
 test("a young deploy version is kept and still occupies one of the five slots", () => {
-  // Six old deploy versions plus a young one: the young one is newest and is
-  // kept by the age gate, so the two oldest fall beyond the five-version window.
   const versions = [];
   for (let day = 1; day <= 6; day += 1) {
     versions.push(version(day, `2026-09-0${day}T00:00:00Z`, [SHA40(String(day))]));
   }
   versions.push(version(7, "2026-11-03T00:00:00Z", [SHA40("7")]));
-  // A newer tree tag so the young deploy version is kept by age, not position.
   versions.push(version(8, "2026-11-03T12:00:00Z", [TREE("8")]));
   const plan = planPackageCleanup(versions, { now: NOW });
   assert.deepEqual(plan.delete.map((item) => item.id), [1, 2]);
@@ -230,7 +213,6 @@ test("referrers do not count toward the deploy window", () => {
   for (let day = 1; day <= 6; day += 1) {
     versions.push(version(day, `2026-09-0${day}T00:00:00Z`, [SHA40(String(day))], DIGEST(String(day))));
   }
-  // A stale referrer pointing at the kept newest deploy version.
   versions.push(version(20, "2026-09-01T00:00:00Z", [REFERRER("6")], DIGEST("f")));
   const plan = planPackageCleanup(versions, { now: NOW });
   assert.deepEqual(plan.delete.map((item) => item.id), [1]);
@@ -322,10 +304,6 @@ test("the CLI dry run reports the fixture decisions without GitHub", () => {
   );
   assert.equal(code, 0);
   const output = lines.join("\n");
-  // scheduler: 102/106 (stale tree/untagged), 104 (deploy beyond the newest 5),
-  // 112 (tree subject) and 113 (its referrer). voice-proxy: 302, 303 and its
-  // referrer 304 (nothing is protected by digest any more). hermes 202 is
-  // protected by `latest`; 101/201/301 are newest.
   assert.match(output, /\*\*delete\*\*.*102|102.*\*\*delete\*\*/);
   assert.match(output, /dry run: 8 version\(s\) would be deleted/);
   assert.doesNotMatch(output, /103.*\*\*delete\*\*/);

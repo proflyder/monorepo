@@ -1,14 +1,5 @@
-// Pure profile policy: no bb SDK, no npm dependencies.
-//
-// The server entry imports these helpers and the CI tests import the same
-// functions directly with `node --test`, so policy changes stay covered
-// without installing node_modules or starting a bb server.
-
-/** Profile names: lowercase, digits, '-' and '_', at most 32 characters. */
 export const PROFILE_NAME = /^[a-z0-9][a-z0-9_-]{0,31}$/;
-/** Environment variable names a profile may set. */
 export const ENV_NAME = /^[A-Z_][A-Z0-9_]*$/;
-/** Providers that exist without any profile declaring them. */
 export const KNOWN_PROVIDERS = [
   "claude-code",
   "codex",
@@ -16,28 +7,13 @@ export const KNOWN_PROVIDERS = [
   "acp-cursor",
   "opencode",
 ];
-/** Directory under a machine's home that holds per-profile provider state. */
 export const PROFILES_DIRNAME = ".bb-profiles";
-/**
- * Machine ids are opaque bb host ids. They cross a comma-separated CLI list,
- * so the only hard rules are "not empty, no comma, no whitespace".
- */
 const HOST_ID = /^[^\s,]+$/;
 
 function trimSlash(value) {
   return value.length > 1 && value.endsWith("/") ? value.slice(0, -1) : value;
 }
 
-/**
- * Default env for a new profile, expressed relative to the home directory of
- * the machine that runs the provider. A `~` prefix is deliberate: the server
- * may run on another machine, so it must not bake its own home directory into
- * newly created profiles. `expandHome` resolves it when the provider starts.
- *
- * @param {string} name
- * @param {string} [home] absolute home or "~" for a relative template
- * @returns {Record<string, Record<string, string>>}
- */
 export function profileEnv(name, home = "~") {
   const root = `${trimSlash(home)}/${PROFILES_DIRNAME}/${name}`;
   return {
@@ -47,14 +23,6 @@ export function profileEnv(name, home = "~") {
   };
 }
 
-/**
- * Expand a leading `~` using the target machine's home. Absolute paths (the
- * values stored before the split-server change) are returned unchanged.
- *
- * @param {string} value
- * @param {string | null | undefined} home
- * @returns {string}
- */
 export function expandHome(value, home) {
   if (home == null || home === "") return value;
   const root = trimSlash(home);
@@ -63,19 +31,8 @@ export function expandHome(value, home) {
   return value;
 }
 
-/**
- * Merge a profile's `*` entries with one provider's entries, expand `~`, and
- * keep only valid env names. Returns a plain object so the server can create
- * missing directories before it turns them into env entries.
- *
- * @param {Record<string, Record<string, string>> | undefined} profile
- * @param {string} providerId
- * @param {string | null | undefined} home
- * @returns {Record<string, string>}
- */
 export function resolveProviderEnv(profile, providerId, home) {
   const merged = { ...(profile?.["*"] ?? {}), ...(profile?.[providerId] ?? {}) };
-  /** @type {Record<string, string>} */
   const result = {};
   for (const [key, value] of Object.entries(merged)) {
     if (ENV_NAME.test(key) && typeof value === "string") {
@@ -85,13 +42,6 @@ export function resolveProviderEnv(profile, providerId, home) {
   return result;
 }
 
-/**
- * Parse the `hostHomes` setting: `{"<hostId>": "/absolute/home"}`.
- * Invalid JSON or entries are ignored, so a typo cannot break provider starts.
- *
- * @param {unknown} raw
- * @returns {Record<string, string>}
- */
 export function parseHostHomes(raw) {
   if (typeof raw !== "string" || raw.trim() === "") return {};
   let parsed;
@@ -103,7 +53,6 @@ export function parseHostHomes(raw) {
   if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
     return {};
   }
-  /** @type {Record<string, string>} */
   const result = {};
   for (const [hostId, home] of Object.entries(parsed)) {
     if (
@@ -117,15 +66,6 @@ export function parseHostHomes(raw) {
   return result;
 }
 
-/**
- * Effective policy for one profile. A missing entry (or an explicit null)
- * means "everything is allowed"; the read RPCs mirror this shape.
- *
- * @param {Record<string, string[] | null>} allowed
- * @param {Record<string, string[] | null>} machines
- * @param {string} profile
- * @returns {{ providers: string[] | null, machines: string[] | null }}
- */
 export function profilePolicy(allowed, machines, profile) {
   return {
     providers: allowed[profile] ?? null,
@@ -133,13 +73,6 @@ export function profilePolicy(allowed, machines, profile) {
   };
 }
 
-/**
- * Parse `bb profiles machines <profile> <hostId,...|all>`.
- * `all` means no restriction and is stored as null.
- *
- * @param {string} input
- * @returns {{ ok: true, value: string[] | null } | { ok: false, error: string }}
- */
 export function parseMachineList(input) {
   const trimmed = input.trim();
   if (trimmed === "all") return { ok: true, value: null };
@@ -158,14 +91,6 @@ export function parseMachineList(input) {
   return { ok: true, value: ids };
 }
 
-/**
- * Check host ids against the machines bb knows about. `knownHosts === null`
- * means the SDK could not list machines: the update proceeds unverified.
- *
- * @param {readonly string[]} ids
- * @param {readonly string[] | null} knownHosts
- * @returns {string | null} error message, or null when valid
- */
 export function validateMachineIds(ids, knownHosts) {
   if (knownHosts === null) return null;
   const known = new Set(knownHosts);
@@ -177,21 +102,6 @@ export function validateMachineIds(ids, knownHosts) {
   return `Unknown machine${unknown.length === 1 ? "" : "s"}: ${unknown.join(", ")} (${available})`;
 }
 
-/**
- * Plan a `bb profiles machines` update without writing kv. The server calls
- * this with the real kv and host list; tests call it with fakes.
- *
- * @param {{
- *   args: readonly string[],
- *   profileNames: readonly string[],
- *   machines: Record<string, string[] | null>,
- *   listHostIds: () => Promise<readonly string[] | null>,
- * }} input
- * @returns {Promise<
- *   | { ok: true, machines: Record<string, string[] | null>, value: string[] | null, warning: string | null }
- *   | { ok: false, error: string }
- * >}
- */
 export async function planMachinesUpdate({ args, profileNames, machines, listHostIds }) {
   if (args.length !== 2) {
     return { ok: false, error: "Usage: bb profiles machines <profile> <hostId,...|all>" };
@@ -222,20 +132,6 @@ export async function planMachinesUpdate({ args, profileNames, machines, listHos
   };
 }
 
-/**
- * The `message.dispatch` verdict for provider and machine allowlists.
- * A restricted machine list rejects a dispatch without a resolved host,
- * because there is nothing to verify against.
- *
- * @param {{
- *   profile: string,
- *   providerId: string,
- *   hostId: string | null,
- *   allowedProviders: readonly string[] | null,
- *   allowedMachines: readonly string[] | null,
- * }} input
- * @returns {{ action: "proceed" } | { action: "reject", message: string }}
- */
 export function dispatchDecision({
   profile,
   providerId,
@@ -275,12 +171,10 @@ export function dispatchDecision({
   return { action: "proceed" };
 }
 
-/** Whether this server can show the native macOS folder dialog. */
 export function folderPickerAvailable(platform) {
   return platform === "darwin";
 }
 
-/** Clear refusal text for servers without a native folder dialog. */
 export function folderPickerError() {
   return (
     "The folder picker is only available when the bb server runs on macOS " +
@@ -288,12 +182,6 @@ export function folderPickerError() {
   );
 }
 
-/**
- * Human-readable policy block for `bb profiles show`.
- *
- * @param {{ providers: readonly string[] | null, machines: readonly string[] | null }} policy
- * @returns {string}
- */
 export function describePolicy(policy) {
   const providers = policy.providers === null ? "all providers" : policy.providers.join(", ");
   const machines = policy.machines === null ? "all machines" : policy.machines.join(", ");

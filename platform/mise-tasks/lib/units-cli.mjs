@@ -1,21 +1,4 @@
 #!/usr/bin/env node
-/**
- * Unit dispatcher behind the mise tasks (`build`, `test`, `units`).
- *
- * The CI unit map (`platform/ci/units.mjs`) is the single source of truth for
- * what a unit runs; this script only turns that map into local commands, so
- * `mise run build <unit>` / `mise run test <unit>` reproduce the matching CI
- * job instead of guessing from a directory name.
- *
- * It has no npm dependencies: Node built-ins plus the unit map only.
- *
- * Usage:
- *
- *     node platform/mise-tasks/lib/units-cli.mjs units
- *     node platform/mise-tasks/lib/units-cli.mjs ids
- *     node platform/mise-tasks/lib/units-cli.mjs build [unit]
- *     node platform/mise-tasks/lib/units-cli.mjs test [unit]
- */
 
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
@@ -29,17 +12,14 @@ import { loadConfig } from "../../ci/affected.mjs";
 export const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const ROOT = path.resolve(HERE, "../../..");
 
-/** All units from the CI map, in declaration order. */
 export function units() {
   return loadConfig().units;
 }
 
-/** A unit is deployable when deploy-home owns images and workloads for it. */
 export function isDeployable(unit) {
   return unit.deployImages.length > 0;
 }
 
-/** Aligned table: id, platform, title, deployable. */
 export function formatTable(list) {
   const rows = [["id", "platform", "title", "deployable"]];
   for (const unit of list) {
@@ -78,10 +58,6 @@ function editDistance(left, right) {
   return previous[right.length];
 }
 
-/**
- * Nearest unit ids for a typo: distance plus substring containment, so both
- * `mise run test sched` and `mise run test schedular` are useful.
- */
 export function suggestIds(ids, query, limit = 5) {
   const needle = query.toLowerCase();
   return ids
@@ -98,7 +74,6 @@ export function suggestIds(ids, query, limit = 5) {
     .map(({ id }) => id);
 }
 
-/** Resolve a unit id, or throw with the closest ids and the list command. */
 export function findUnit(list, id) {
   const unit = list.find((candidate) => candidate.id === id);
   if (unit) {
@@ -116,7 +91,6 @@ export function findUnit(list, id) {
   );
 }
 
-/** How to exercise a unit that has no Bazel build targets. */
 export function unitHint(unit) {
   switch (unit.platform) {
     case "python": {
@@ -143,45 +117,22 @@ export function unitHint(unit) {
   }
 }
 
-/**
- * Optional target override for Bazel units (`_android.yml` narrows the list
- * before calling the task). Space separated, like the
- * workflow inputs.
- */
 function bazelTargetOverride() {
   const raw = process.env.BAZEL_TARGETS;
   return raw ? raw.trim().split(/\s+/).filter(Boolean) : [];
 }
 
-/**
- * Extra Bazel options appended to build and test commands (`BAZEL_EXTRA_ARGS`,
- * space separated). `_android.yml` uses it to build and test the distributable
- * APK once with the release `home_version_code`/`home_version_name` defines, so
- * the APK the tests exercise is exactly the APK that gets signed. Local tasks
- * leave it unset and keep the defaults from `platform/android/android.bazelrc`.
- */
 function bazelExtraArgs() {
   const raw = process.env.BAZEL_EXTRA_ARGS;
   return raw ? raw.trim().split(/\s+/).filter(Boolean) : [];
 }
 
-/**
- * Android-only flags live in `platform/android/android.bazelrc` and are selected
- * with this config, so a change there routes to the Android units only instead
- * of invalidating every unit through the root `.bazelrc`. Passed first, so a
- * caller's own `--define` (distribute.sh version codes) still wins.
- */
 export const ANDROID_CONFIG = "--config=android";
 
-/** Whether a command builds Android targets and needs `--config=android`. */
 export function needsAndroidConfig(unit) {
-  // `null` means the whole workspace (`bazel build //...`), which includes the
-  // Android targets and must behave exactly like a plain `bazel build` did
-  // while these flags still lived in the root `.bazelrc`.
   return unit === null || unit.platform === "android";
 }
 
-/** Build/test targets of a Bazel unit, honouring BAZEL_TARGETS when set. */
 export function bazelTargets(unit, kind) {
   const override = bazelTargetOverride();
   if (override.length) {
@@ -195,12 +146,8 @@ export function bazelTargets(unit, kind) {
     : unit.bazelRoots.map((bazelRoot) => `${bazelRoot}/...`);
 }
 
-/**
- * Commands that build a unit: its Bazel targets.
- */
 export function buildCommands(unit, root = ROOT) {
   if (unit === null) {
-    // `//...` includes the Android targets, so keep the Android config active.
     return [{
       command: "bazel",
       args: ["build", ANDROID_CONFIG, ...bazelExtraArgs(), "//..."],
@@ -238,12 +185,6 @@ function testFiles(root, directories, suffix) {
   return files;
 }
 
-/**
- * Commands that test a unit, mirroring the reusable platform workflow:
- * `bazel test`, Python compile + unittest discovery (plus the Rust deploy
- * tool for deploy_tool
- * units), `node --test`, or the native repository script.
- */
 export function testCommands(unit, root = ROOT) {
   if (unit === null) {
     return [
@@ -282,8 +223,6 @@ export function testCommands(unit, root = ROOT) {
       const commands = [];
       let env;
       if (unit.pythonDeployTool) {
-        // The suites drive a deploy script that execs the Rust deploy CLI
-        // through HOME_DEPLOY; same Bazel target as the home-deploy image.
         const binary = path.join(root, "bazel-bin/platform/deploy-rs/home-deploy");
         commands.push({
           command: "bazel",
@@ -351,7 +290,6 @@ export function testCommands(unit, root = ROOT) {
         ...testFiles(root, ["platform/quality"], ".test.mjs"),
         ...testFiles(root, ["platform/mise-tasks/lib"], ".test.mjs"),
       ];
-      // Same order as `.github/workflows/_quality.yml`.
       return [
         { command: "node", args: ["platform/quality/audit_repository.mjs"], cwd: root },
         {
@@ -403,7 +341,6 @@ export function testCommands(unit, root = ROOT) {
   }
 }
 
-/** Run commands in order; stop at the first failure and return its status. */
 export function runCommands(commands) {
   for (const { command, args, cwd, shell = false, env } of commands) {
     const result = spawnSync(command, args, {

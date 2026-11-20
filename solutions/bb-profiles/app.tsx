@@ -1,7 +1,3 @@
-// bb-plugin-profiles — frontend: a profile switcher in the sidebar footer, a
-// header hook that remembers the last thread per profile, and a "Profiles"
-// page that assigns every project to a profile. The thread list itself is bb's
-// built-in one; the server hides the other profiles' projects in it.
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   definePluginApp,
@@ -18,8 +14,6 @@ import { Input } from "@/components/ui/input";
 const selectClass =
   "h-7 rounded-md border border-border bg-background px-2 text-xs text-foreground";
 
-// Last known state, kept across mounts (the footer popover and the page remount
-// on every open) and across reloads, so they render at once and refresh quietly.
 interface StateCache {
   profiles: string[];
   active: string;
@@ -34,7 +28,6 @@ let cache: StateCache = (() => {
       return { projects: [], folderPicker: false, ...stored } as StateCache;
     }
   } catch {
-    // fall through to the empty cache
   }
   return { profiles: [], active: "work", folderPicker: false, projects: [] };
 })();
@@ -69,7 +62,6 @@ function useProfiles() {
   return { rpc, profiles, active, folderPicker, error, setError, refetch };
 }
 
-// Sidebar footer popover: pick the profile whose projects the list shows.
 function ProfileSwitcher({ dismiss }: { dismiss(): void }) {
   const { rpc, profiles, active, setError, error } = useProfiles();
   const { threads } = useSidebarThreads();
@@ -88,7 +80,6 @@ function ProfileSwitcher({ dismiss }: { dismiss(): void }) {
       })
       .catch((cause) => setError(String(cause)));
   };
-  // With exactly two profiles the icon toggles between them: no popover.
   const toggleTarget =
     profiles.length === 2 ? profiles.find((name) => name !== active) : undefined;
   const toggled = useRef(false);
@@ -96,7 +87,6 @@ function ProfileSwitcher({ dismiss }: { dismiss(): void }) {
     if (toggleTarget === undefined || toggled.current) return;
     toggled.current = true;
     switchTo(toggleTarget);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [toggleTarget]);
   if (toggleTarget !== undefined) return null;
   return (
@@ -136,8 +126,6 @@ function ProfileSwitcher({ dismiss }: { dismiss(): void }) {
   );
 }
 
-// Mounted in every thread header, draws nothing: records the open thread as the
-// last one of its project's profile.
 function RememberThread({ threadId, projectId }: PluginThreadHeaderActionProps) {
   const rpc = useRpc<typeof rpcContract>();
   useEffect(() => {

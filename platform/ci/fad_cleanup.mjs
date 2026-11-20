@@ -1,34 +1,4 @@
 #!/usr/bin/env node
-/**
- * Firebase App Distribution release retention.
- *
- * Every PR that changes the Android app uploads a build to App Distribution
- * (`android-distribute` in `ci.yml`), and nothing removes the old ones: after a
- * week of PRs the tester list is a long scroll of dead builds. This module
- * keeps a rolling 24-hour window per Firebase app:
- *
- *   1. The newest release is never deleted, whatever its age. That is the build
- *      the job that uploaded it (or the last successful upload) just published,
- *      and it is the one a tester installs.
- *   2. A release older than `MAX_AGE_MS` (24 hours) is deleted.
- *   3. A release exactly at the boundary or younger is kept, and so is a
- *      release whose `createTime` cannot be parsed (unknown age is not a
- *      reason to destroy an artifact).
- *
- * Releases are listed with `projects.apps.releases.list` (paginated,
- * `orderBy=createTime desc`) and removed with `releases:batchDelete`, both
- * authenticated by the same service account that uploads the APK: a JWT
- * assertion signed with its private key is exchanged for an OAuth token with
- * the `cloud-platform` scope. Nothing is printed from the credential file.
- *
- * The selection is a pure function (`planReleaseCleanup`) covered by
- * `fad_cleanup.test.mjs`; listing, OAuth and deletion take an injectable
- * `fetch`, so the tests never reach Google.
- *
- * Deleting needs the **Firebase App Distribution Admin** role on the service
- * account (`roles/firebaseappdistro.admin`); uploading only needs the upload
- * permission. A 403 is reported with that hint instead of a bare status.
- */
 
 import crypto from "node:crypto";
 import fs from "node:fs";
@@ -40,17 +10,13 @@ export const TOKEN_URL = "https://oauth2.googleapis.com/token";
 export const CLOUD_PLATFORM_SCOPE = "https://www.googleapis.com/auth/cloud-platform";
 export const MAX_AGE_MS = 24 * 60 * 60 * 1000;
 export const HOUR_MS = 60 * 60 * 1000;
-/** Page size accepted by `projects.apps.releases.list`. */
 export const PAGE_SIZE = 100;
-/** `releases:batchDelete` accepts a bounded name list per call. */
 export const DELETE_CHUNK = 100;
 export const DEFAULT_PACKAGE = "dev.proflyder.home";
-/** Hint appended to a permission failure; the exact IAM role is the fix. */
 export const DELETE_PERMISSION_HINT =
   "grant the service account the Firebase App Distribution Admin role " +
   "(roles/firebaseappdistro.admin) in the Firebase project";
 
-/** Thrown for a non-2xx App Distribution response. */
 export class ApiError extends Error {
   constructor(message, { status, body = "" } = {}) {
     super(message);
@@ -70,12 +36,6 @@ function hoursLabel(maxAgeMs) {
   return Number.isInteger(hours) ? `${hours}h` : `${hours.toFixed(1)}h`;
 }
 
-/**
- * Decide which releases fall out of the retention window.
- *
- * @param {Array<{name?: string, displayName?: string, createTime?: string}>} releases
- * @param {{now?: number, maxAgeMs?: number}} options
- */
 export function planReleaseCleanup(
   releases,
   { now = Date.now(), maxAgeMs = MAX_AGE_MS } = {},
@@ -85,8 +45,6 @@ export function planReleaseCleanup(
     return { newest: null, decisions: [], delete: [], keep: [] };
   }
 
-  // Every release sharing the maximum createTime is "the newest": an upload
-  // race must not make the cleanup pick one of two equally fresh builds.
   let newestTime = null;
   for (const release of list) {
     const created = releaseTime(release);
@@ -116,7 +74,6 @@ export function planReleaseCleanup(
     return { ...base, action: "keep", ageMs, reason: `within the ${window} window` };
   });
 
-  // Report newest first; a release without a date goes last.
   decisions.sort((left, right) => {
     const leftTime = Date.parse(String(left.createTime || ""));
     const rightTime = Date.parse(String(right.createTime || ""));
@@ -134,7 +91,6 @@ export function planReleaseCleanup(
   };
 }
 
-/** `1:1234567890:android:abcdef` → `1234567890` (the project number). */
 export function projectFromAppId(appId) {
   const match = /^1:(\d+):android:/.exec(String(appId || ""));
   if (!match) {
@@ -143,7 +99,6 @@ export function projectFromAppId(appId) {
   return match[1];
 }
 
-/** The `mobilesdk_app_id` of `packageName` in a google-services.json. */
 export function firebaseAppId(googleServices, packageName = DEFAULT_PACKAGE) {
   const clients = Array.isArray(googleServices?.client) ? googleServices.client : [];
   for (const client of clients) {
@@ -163,11 +118,6 @@ function base64url(value) {
   return Buffer.from(value).toString("base64url");
 }
 
-/**
- * A signed JWT assertion for Google's OAuth token endpoint (the
- * service-account flow; no external dependency). `private_key` is a PEM
- * string from the service-account JSON.
- */
 export function buildAssertion(
   credentials,
   { now = Date.now(), lifetimeSeconds = 3600, scope = CLOUD_PLATFORM_SCOPE } = {},
@@ -191,7 +141,6 @@ export function buildAssertion(
   return `${signingInput}.${signature.toString("base64url")}`;
 }
 
-/** Exchange a service-account assertion for an OAuth access token. */
 export async function accessToken({ credentials, fetchImpl = fetch, now = Date.now() } = {}) {
   const tokenUrl = credentials?.token_uri || TOKEN_URL;
   const body = new URLSearchParams({
@@ -252,10 +201,6 @@ async function requestJson({ fetchImpl, url, accessToken: token, method = "GET",
   }
 }
 
-/**
- * Every release of one app, newest first, following `nextPageToken` until the
- * API stops returning one.
- */
 export async function listReleases({
   accessToken: token,
   appName,
@@ -283,10 +228,6 @@ export async function listReleases({
   return releases;
 }
 
-/**
- * Delete release names in batches. A failed batch is reported, not thrown, so
- * one refused batch does not abandon the rest of the cleanup.
- */
 export async function deleteReleases({
   accessToken: token,
   appName,
@@ -325,10 +266,6 @@ function describe(item) {
   return label;
 }
 
-/**
- * One cleanup run: plan, report, and (unless `dryRun`) delete. Returns the plan
- * and the deletion result so a caller can set an exit code.
- */
 export async function runCleanup({
   credentials,
   appId,
@@ -439,16 +376,6 @@ function parseArgs(argv) {
   return args;
 }
 
-/**
- * CLI used by `.github/workflows/cleanup.yml`:
- *
- *   node platform/ci/fad_cleanup.mjs \
- *     --credentials "$FIREBASE_SERVICE_ACCOUNT" \
- *     --google-services "$GOOGLE_SERVICES_JSON" [--apply]
- *
- * `--fixture <json>` ({releases: [...]}) replays the selection locally without
- * credentials or network access; the local CLI never deletes.
- */
 export async function main(argv = process.argv.slice(2), log = console.log) {
   const args = parseArgs(argv);
   if (args.help) {

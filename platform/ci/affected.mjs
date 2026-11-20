@@ -1,49 +1,4 @@
 #!/usr/bin/env node
-/**
- * Compute the CI units affected by a change range.
- *
- * Routing is declarative for paths (`platform/ci/units.mjs`) and dependency
- * based for code:
- *
- *   android - reverse dependencies from the Bazel loading graph
- *             (`bazel query --output=xml`). Rule labels are mapped back to unit
- *             names by `bazel.roots`, so a change in `packages/kotlin` selects
- *             only the applications that actually depend on it. This needs no
- *             JDK and no Android SDK because it never analyses targets.
- *   bazel   - the same loading graph, plus `packages/rust/**` and the Cargo
- *             lockfiles. Lock diffs are resolved to crate_universe aliases and
- *             only their reverse dependencies run; `native` units and the
- *             `hermes` deploy unit opt into the same closure through their
- *             Bazel roots.
- *   MODULE.bazel - global, unless the diff only touches the Maven extension
- *             (`MODULE.bazel#maven` -> android), the Rust/zig/native station
- *             inputs (`MODULE.bazel#native` -> native + bazel) or both.
- *   .bazelrc - global, unless the diff only changes cache/output flags
- *             (`.bazelrc#cache` -> no platform). Android-only flags live in
- *             platform/android/android.bazelrc, which is an Android input only
- *             (`--config=android`, activated by the Android tasks).
- *   platform/bazel/zig, platform/bazel/windows - the station/provider
- *             toolchains (`platform/bazel#native` -> native only).
- *   Cargo.toml - precise only for `[workspace.dependencies]` backed by a
- *             parseable lock diff; workspace members/profile/lints are global.
- *   rust-toolchain.toml - all Rust units.
- *   python  - path rules plus optional declarative `depends_on`.
- *   js      - path rules for dependency-free edge Workers (runs `node --test`).
- *   native  - path rules for non-Bazel C/C++ repository-script builds, plus
- *             the Bazel reverse dependencies of units that declare roots.
- *   quality - always runs.
- *
- * Any failure to compute a dependency closure degrades to "every unit of that
- * platform" (never to "nothing"), as required for a required-check gate.
- *
- * Usage:
- *
- *     platform/ci/affected.mjs --base origin/develop --head HEAD --format text
- *     platform/ci/affected.mjs --base "$BASE_SHA" --format github
- *     platform/ci/affected.mjs --changed-file solutions/x/src/lib.rs --format json
- *
- * Exit status is 0 unless the range cannot be resolved at all.
- */
 
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
@@ -57,9 +12,6 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const DEFAULT_UNITS = path.join(HERE, "units.mjs");
 export const PLATFORMS = ["android", "bazel", "python", "js", "native", "quality"];
 
-// --------------------------------------------------------------------------
-// Configuration
-// --------------------------------------------------------------------------
 export class Unit {
   constructor(init = {}) {
     Object.assign(
@@ -70,42 +22,23 @@ export class Unit {
         title: "",
         paths: [],
         bazelRoots: [],
-        // Roots used to map affected Bazel labels back to this unit. `bazelRoots`
-        // also lists `//packages/rust` for units that run the shared
-        // clippy/rustfmt targets; that root is deliberately excluded here so a
-        // home-ha edit does not select every unit that lints the shared layer.
         routingRoots: [],
         testTargets: [],
         buildTargets: [],
         artifact: "",
         artifactName: "",
-        // The Android unit that builds, tests and signs the distributable APK
-        // (`android-app`). When distribution is selected it must be in the
-        // matrix even if the change routed only a shared Kotlin unit: the
-        // `android-distribute` job downloads that entry's artifact instead of
-        // rebuilding the APK.
         androidRelease: false,
-        // Extra Android SDK packages a unit's Bazel actions need, beyond the
-        // platform/build-tools baseline installed by `_android.yml`.
         bazelSdkPackages: [],
         suites: [],
         compileDirs: [],
-        // Python units whose suites exec the Rust deploy binary.
         pythonDeployTool: false,
         jsTests: [],
-        // Native (non-Bazel) build units: a repository script that produces
-        // host- or cross-built artifacts, plus the pinned toolchain it needs.
         nativeWorkdir: "",
         nativeKind: "script",
         nativePublish: true,
-        // Paths that gate publication: empty means "any affected change".
         nativePublishWhen: [],
-        // Per-unit OCI publish entrypoint and the artifact file/glob whose
-        // provenance is attested next to the pushed manifest.
         nativePublishScript: "",
         nativePublishAttestGlob: "",
-        // Full GHCR reference of the published artifact and the tags
-        // deploy-home attaches when promoting the PR-built tree digest.
         nativePublishRepository: "",
         nativePublishTags: [],
         nativeBuild: "",
@@ -118,24 +51,13 @@ export class Unit {
         nativeToolchainSha256: "",
         nativeToolchainRoot: "",
         dependsOn: [],
-        // Deployable units own container images and Kubernetes workloads. An
-        // empty `deployImages` means "this unit is not deployed by deploy-home".
         deployImages: [],
-        // Images the unit's deploy script renders but does not own/apply; they
-        // are resolved from the newest verified build, not from this change.
         deployOptionalImages: [],
         deployWorkloads: [],
         deployBuilder: "bazel",
-        // Bazel package that owns the `<image>_image`/`<image>_push` targets
-        // (single-image `bazel` units).
         deployTargetRoot: "",
-        // Explicit image -> Bazel package map for `mixed` units, so several
-        // Bazel images can live next to a Dockerfile image.
         deployBazelImages: {},
-        // Kubernetes namespace and the workloads Flux owns for this unit.
         deployNamespace: "",
-        // Documented rollback procedure (see `mise run rollback`). Optional:
-        // units without a documented procedure carry no rollback block.
         rollbackKind: "",
         rollbackStateDir: "",
         rollbackNamespace: "",
@@ -153,9 +75,6 @@ export class Invalidation {
   constructor({ paths = [], platforms = [], deploy = true } = {}) {
     this.paths = paths;
     this.platforms = platforms;
-    // `deploy: false` means "run these CI jobs, but do not redeploy units just
-    // because this path changed". Workflow and CI-harness edits only need the
-    // checks to re-run; they must not roll the home units after merge.
     this.deploy = deploy;
   }
 }
@@ -185,7 +104,6 @@ function list(value) {
   return Array.isArray(value) ? [...value] : [];
 }
 
-// normalizeImageMap keeps `deploy.bazel_images` as a plain image -> package map.
 function normalizeImageMap(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return {};
@@ -214,10 +132,6 @@ export function normalizeConfig(data, label = "units") {
     const routingRoots = list(bazel.routing_roots);
     if (!routingRoots.length) {
       const derived = bazelRoots.filter((root) => root !== "//packages/rust");
-      // A unit that explicitly tests a shared crate is its consumer even when
-      // its own source tree does not import it (e.g. ble-gateway tests the
-      // shared SQLite/HTTP crates). The broad `//packages/rust` clippy target is
-      // not a routing root; only the crate packages named in `test_targets` are.
       for (const target of testTargets) {
         const match = /^\/\/(packages\/rust\/[^/:]+):([^/]+)$/.exec(target);
         if (match && !["clippy", "rustfmt"].includes(match[2])) {
@@ -241,14 +155,10 @@ export function normalizeConfig(data, label = "units") {
       bazelSdkPackages: list(bazel.sdk_packages),
       suites: list(python.suites),
       compileDirs: list(python.compile),
-      // The suite drives a deploy script that execs the Rust deploy binary; the
-      // workflow builds it once and exports HOME_DEPLOY.
       pythonDeployTool: Boolean(python.deploy_tool),
       jsTests: list(js.tests),
       nativeWorkdir: String(native.workdir ?? ""),
       nativeKind: String(native.kind ?? "script"),
-      // `publish: false` keeps a native unit out of deploy-home's OCI
-      // publication entirely; `publish_when` narrows it to a release trigger.
       nativePublish: native.publish !== false,
       nativePublishWhen: list(native.publish_when),
       nativePublishScript: String(native.publish_script ?? ""),
@@ -319,9 +229,6 @@ export async function loadConfigFile(file) {
   return normalizeConfig(module.default ?? module.config, file);
 }
 
-// --------------------------------------------------------------------------
-// Path matching
-// --------------------------------------------------------------------------
 function globToRegex(pattern) {
   const out = [];
   let index = 0;
@@ -365,9 +272,6 @@ export function pathMatches(filePath, patterns) {
   return false;
 }
 
-// --------------------------------------------------------------------------
-// Git
-// --------------------------------------------------------------------------
 function run(command, args, options = {}) {
   return spawnSync(command, args, {
     encoding: "utf8",
@@ -386,13 +290,11 @@ function git(root, ...args) {
 }
 
 export function changedFiles(root, base, head) {
-  // Files touched between base and head, renames expanded to delete+add.
   const out = git(root, "diff", "--name-only", "--no-renames", `${base}...${head}`);
   return [...new Set(out.split("\n").map((line) => line.trim()).filter(Boolean))].sort();
 }
 
 export function gitFileText(root, revision, filePath) {
-  // Content of `filePath` at `revision`, or null when it does not exist there.
   const result = run("git", ["-C", String(root), "show", `${revision}:${filePath}`]);
   if (result.error || result.status !== 0) {
     return null;
@@ -401,7 +303,6 @@ export function gitFileText(root, revision, filePath) {
 }
 
 export function resolveBase(root, requested) {
-  // Pick a base revision, or null when the whole tree must run.
   if (requested) {
     if (/^0+$/.test(requested)) {
       return null;
@@ -409,7 +310,6 @@ export function resolveBase(root, requested) {
     try {
       return git(root, "rev-parse", "--verify", `${requested}^{commit}`).trim();
     } catch {
-      // fall through to the develop merge-base
     }
   }
   for (const candidate of ["origin/develop", "develop"]) {
@@ -425,23 +325,8 @@ export function resolveBase(root, requested) {
   return null;
 }
 
-// --------------------------------------------------------------------------
-// MODULE.bazel scoping
-// --------------------------------------------------------------------------
 export const MODULE_BAZEL = "MODULE.bazel";
 export const MODULE_BAZEL_LOCK = "MODULE.bazel.lock";
-// Virtual changed paths for a scoped MODULE.bazel edit. `units.mjs` maps them
-// to the platforms whose build closure changed, so a Maven artifact bump does
-// not invalidate Rust/Python/JS/native units and a Rust/zig toolchain bump does
-// not invalidate Android/images.
-//
-//   #maven  - rules_jvm_external Maven extension and the rules_android /
-//             rules_android_ndk modules, SDK/NDK extensions, NDK toolchains
-//             -> android only.
-//   #native - rules_rust (toolchains, crate_universe), the zig cc toolchains,
-//             rules_rust windows patches and the station's third-party
-//             C/C++ http_archive()s -> native units + the pulsar-bazel host
-//             checks (they compile the same Rust crates on the host).
 export const MODULE_BAZEL_MAVEN = "MODULE.bazel#maven";
 export const MODULE_BAZEL_NATIVE = "MODULE.bazel#native";
 export const MAVEN_EXTENSION = "@rules_jvm_external//:extensions.bzl";
@@ -450,25 +335,15 @@ export const CRATE_EXTENSION = "@rules_rust//crate_universe:extensions.bzl";
 export const ZIG_TOOLCHAIN_PREFIX = "@zig_0_14_1//";
 export const SENDSPIN_BAZEL_MARKER = "satellite/third_party/bazel";
 
-// `.bazelrc` scoping: a diff that only changes cache or console flags cannot
-// change any build/test result. Its virtual path matches no unit, so PR CI
-// runs the always-on quality job and nothing else (no images/deploy).
 export const BAZELRC = ".bazelrc";
 export const BAZELRC_CACHE = ".bazelrc#cache";
 
-// The station's target-only toolchain inputs. They change how the native
-// station/provider are cross-built, never the host Rust/images/Android builds.
 export const BAZEL_CONFIG_NATIVE = "platform/bazel#native";
 const NATIVE_BAZEL_CONFIG_DIRS = ["platform/bazel/zig/", "platform/bazel/windows/"];
 
 const IDENT = /[\p{L}\p{N}_]/u;
 
 function tokens(text) {
-  // Small Starlark-aware tokenizer: comments, strings and punctuation.
-  //
-  // Only what is needed to compare MODULE.bazel files structurally. Strings
-  // are kept as single tokens, so a `#`, `(` or `)` inside one cannot start a
-  // comment or change the parenthesis nesting.
   const out = [];
   let index = 0;
   const length = text.length;
@@ -573,7 +448,6 @@ function stringValue(token) {
 }
 
 function extensionProxy(list, extension, tag) {
-  // Name bound by `<name> = use_extension(extension, tag)`.
   for (let index = 0; index < list.length - 3; index += 1) {
     if (list[index][0] !== "ident") {
       continue;
@@ -603,8 +477,6 @@ function extensionProxy(list, extension, tag) {
 }
 
 function stripProxyUse(list, proxies) {
-  // Drop `<proxy>.<tag>(...)` calls and `use_repo(<proxy>, ...)` for every
-  // proxy name in `proxies`. Used to peel one scoping category at a time.
   const rest = [];
   let index = 0;
   while (index < list.length) {
@@ -645,9 +517,6 @@ function stripProxyUse(list, proxies) {
   return rest;
 }
 
-// Android build inputs that only change the Android closure: the rules_android
-// and rules_android_ndk modules, their SDK/NDK repository extensions and the
-// NDK cc toolchain registration. They ride on the `#maven` scope (-> android).
 const ANDROID_MODULE = /^rules_android(?:_ndk)?$/;
 const ANDROID_EXTENSION_PREFIX = /^@rules_android(?:_ndk)?\/\//;
 const ANDROID_TOOLCHAIN_PREFIX = "@androidndk//";
@@ -673,10 +542,6 @@ function firstString(args) {
 }
 
 function stripAndroid(list) {
-  // Drop `bazel_dep(name = "rules_android[_ndk]", ...)`, overrides of those
-  // modules, `<proxy> = use_extension("@rules_android[_ndk]//...", ...)` with
-  // every `<proxy>.<tag>(...)`/`use_repo(<proxy>, ...)`, and
-  // `register_toolchains(...)` that only registers `@androidndk//...`.
   const proxies = new Set();
   const rest = [];
   let index = 0;
@@ -735,7 +600,6 @@ function callArguments(list, openIndex) {
 }
 
 function onlyStrings(args, predicate) {
-  // Every argument is a string matching `predicate`; at least one.
   let seen = false;
   for (const token of args) {
     if (token[0] === "punct" && token[1] === ",") {
@@ -754,8 +618,6 @@ function onlyStrings(args, predicate) {
 }
 
 function isZigRegisterToolchains(args) {
-  // `register_toolchains("@zig_0_14_1//:...")`: only the target-constrained
-  // station/provider cc toolchains. Any other register_toolchains stays global.
   return onlyStrings(args, (value) => value.startsWith(ZIG_TOOLCHAIN_PREFIX));
 }
 
@@ -777,8 +639,6 @@ function isRulesRustOverride(args) {
 }
 
 function isSendspinArchive(args) {
-  // Third-party C/C++ of the station's Sendspin player: identified by the
-  // `_SENDSPIN_BAZEL` BUILD-overlay prefix. Other http_archive()s stay global.
   return args.some(
     (token) =>
       (token[0] === "ident" && token[1] === "_SENDSPIN_BAZEL") ||
@@ -787,16 +647,6 @@ function isSendspinArchive(args) {
 }
 
 function stripNative(list) {
-  // Drop the Rust/zig/C++ station and Windows-provider toolchain inputs:
-  //   * `rust.<tag>(...)`, `use_repo(rust, ...)` (rules_rust toolchains)
-  //   * `crate.<tag>(...)`, `use_repo(crate, ...)` (crate_universe workspaces)
-  //   * `zig_sdk_repository(...)`
-  //   * `register_toolchains(...)` that only registers `@zig_0_14_1//...`
-  //   * `single_version_override(module_name = "rules_rust", ...)`
-  //   * `http_archive(...)` with the station's `_SENDSPIN_BAZEL` overlays
-  //
-  // A missing proxy binding leaves its calls in the residual, so the diff
-  // degrades to global rather than being scoped by accident.
   const proxies = new Set(
     [
       extensionProxy(list, RUST_EXTENSION, "rust"),
@@ -838,25 +688,6 @@ function sameTokens(left, right) {
 }
 
 export function moduleBazelScope(oldText, newText) {
-  /**
-   * Scope of a MODULE.bazel diff: "maven", "native", "maven+native" or null.
-   *
-   * Comments and whitespace never count. A diff is scoped only when the
-   * residual tokens after peeling that category are identical:
-   *
-   *   maven  - rules_jvm_external (`maven.install(...)`, `maven.<tag>(...)`,
-   *            `use_repo(maven, ...)` where `maven` is the proxy bound by
-   *            `use_extension("@rules_jvm_external//:extensions.bzl", "maven")`).
-   *   native - `rust.toolchain(...)`/`use_repo(rust, ...)`,
-   *            `crate.from_cargo(...)`/`use_repo(crate, ...)`,
-   *            `zig_sdk_repository(...)`, `register_toolchains("@zig_0_14_1//...")`,
-   *            `single_version_override(module_name = "rules_rust", ...)` and the
-   *            station's `_SENDSPIN_BAZEL` http_archive()s.
-   *
-   * Everything else (any bazel_dep, oci, python, another
-   * extension, an unbalanced or unparseable file, a missing proxy) returns
-   * null: the fail-safe direction is "run everything".
-   */
   const oldTokens = tokens(oldText);
   const newTokens = tokens(newText);
   if (!balanced(oldTokens) || !balanced(newTokens)) {
@@ -890,16 +721,9 @@ export function moduleBazelScope(oldText, newText) {
 }
 
 export function moduleBazelIsMavenOnly(oldText, newText) {
-  // Kept as the narrow predicate used by the Maven-only regression tests.
   return moduleBazelScope(oldText, newText) === "maven";
 }
 
-// --------------------------------------------------------------------------
-// .bazelrc scoping
-// --------------------------------------------------------------------------
-// Flags that only choose a cache location or change console output: they
-// cannot change the bytes any build or test produces. Matched by option name
-// after the command prefix (`common`, `build`, `test`, ...).
 const BAZELRC_CACHE_FLAGS = new Set([
   "disk_cache",
   "experimental_disk_cache_gc_max_size",
@@ -923,15 +747,12 @@ function isCacheFlagName(name) {
 }
 
 function bazelrcStructuralLines(text) {
-  // Lines that can affect a build. Returns null for anything unparseable so
-  // the caller keeps the global invalidation.
   const structural = [];
   for (const raw of text.split(/\r?\n/)) {
     const line = raw.trim();
     if (!line || line.startsWith("#")) {
       continue;
     }
-    // `import`/`try-import` pull in another file this comparison cannot see.
     if (/^(?:try-import|import)\b/.test(line)) {
       return null;
     }
@@ -947,7 +768,6 @@ function bazelrcStructuralLines(text) {
     let cacheOnly = true;
     for (const flag of flags) {
       if (!flag.startsWith("--")) {
-        // A bare value, a short option or a `#` we did not classify.
         return null;
       }
       const name = flag.slice(2).split("=")[0];
@@ -958,8 +778,6 @@ function bazelrcStructuralLines(text) {
         cacheOnly = false;
       }
     }
-    // A line mixing whitelisted and real flags stays significant as a whole:
-    // any edit to it (including its cache part) keeps the global invalidation.
     if (!cacheOnly) {
       structural.push(line);
     }
@@ -968,14 +786,6 @@ function bazelrcStructuralLines(text) {
 }
 
 export function bazelrcIsCacheOnly(oldText, newText) {
-  /**
-   * Whether a `.bazelrc` diff only adds/changes/removes cache/output flags.
-   *
-   * Comments and blank lines are neutral. Any other line is compared verbatim,
-   * so a real flag change, an added/removed line with a real flag, an `import`,
-   * or a line the parser does not understand returns false (global). A missing
-   * base or head is handled by the caller.
-   */
   const oldLines = bazelrcStructuralLines(oldText);
   const newLines = bazelrcStructuralLines(newText);
   if (oldLines === null || newLines === null) {
@@ -992,10 +802,6 @@ function isNativeBazelConfigPath(item) {
 }
 
 function scopeChanges(changed, root, base, head) {
-  // Rewrite globally-invalidating Bazel infrastructure paths to the narrowest
-  // virtual path that still covers their real build closure. Every branch
-  // fails safe: a missing revision, an added/deleted file or an unrecognized
-  // diff keeps the original global path.
   const warnings = [];
   const scoped = [];
   const push = (item) => {
@@ -1021,9 +827,6 @@ function scopeChanges(changed, root, base, head) {
       }
     }
   }
-  // The lock accompanies a scoped MODULE.bazel edit (Maven resolution or
-  // crate_universe/toolchain pins) and follows that same scope. Changed on its
-  // own it stays global: nothing in the diff explains which platform moved.
   const lockFollows = moduleVirtual !== null && changed.includes(MODULE_BAZEL_LOCK);
 
   let cacheOnly = false;
@@ -1083,16 +886,10 @@ function scopeChanges(changed, root, base, head) {
 }
 
 
-// --------------------------------------------------------------------------
-// Cargo workspace / crate_universe routing
-// --------------------------------------------------------------------------
 export const CARGO_MANIFEST = "Cargo.toml";
 export const CARGO_LOCK = "Cargo.lock";
 export const CRATE_UNIVERSE_LOCK = "crate-universe.lock";
 
-// Paths that make the Bazel graph decide Rust units instead of a path glob.
-// `packages/rust/**` seeds the graph by source file; the lockfiles seed it by
-// the crates whose resolved package entries changed.
 export function isRustGraphPath(filePath) {
   return (
     filePath === CARGO_MANIFEST ||
@@ -1123,14 +920,6 @@ function unquoteToml(value) {
   throw new Error(`unexpected TOML string: ${text.slice(0, 40)}`);
 }
 
-/**
- * Parse the package records of a `Cargo.lock`.
- *
- * The router only needs `name`, `version`, `source`, `checksum` and
- * `dependencies`. Anything unexpected throws, so the caller can fall back to
- * "every Rust unit" rather than guess. That is the required fail-safe for a lock
- * format change.
- */
 export function parseCargoLock(text) {
   if (typeof text !== "string" || !text.includes("[[package]]")) {
     throw new Error("Cargo.lock: no [[package]] records");
@@ -1169,7 +958,6 @@ export function parseCargoLock(text) {
       continue;
     }
     if (/^\[[^\]]+\]$/.test(line)) {
-      // A non-package table (`[metadata]`) ends the current package.
       finish();
       inPackage = false;
       collecting = null;
@@ -1291,11 +1079,6 @@ function lockEntryChanged(left, right) {
 }
 
 function cargoLockEntryChanged(left, right, leftEntries, rightEntries) {
-  // Compare resolved package identities, not raw dependency strings: adding a
-  // second version of a crate makes Cargo spell an existing edge as
-  // `name version` even though the edge itself did not move (for example
-  // `ureq -> webpki-roots` vs `ureq -> webpki-roots 1.0.11`). Comparing the raw
-  // text would select every `ureq` consumer for an unrelated websocket bump.
   const leftDeps = new Set();
   const rightDeps = new Set();
   for (const dependency of left.dependencies) {
@@ -1330,7 +1113,6 @@ export function cargoLockChanges(baseText, headText) {
 }
 
 export function crateUniverseChanges(base, head) {
-  // `base` and `head` are parsed crate-universe maps.
   const changed = new Set();
   for (const key of new Set([...base.entries.keys(), ...head.entries.keys()])) {
     const before = base.entries.get(key);
@@ -1378,14 +1160,6 @@ function lockAncestors(keys, entries) {
 }
 
 function resolveLockSeeds(changedKeys, baseEntries, headEntries, baseUniverse, headUniverse) {
-  // A changed crate is routed to the `@crates//:<name>` aliases it reaches.
-  // Transitive-only crates have no alias in the generated repo, so the reverse
-  // closure finds the direct dependency that imports them; the Bazel rdeps then
-  // walk from that alias to every real consumer.
-  //
-  // Every changed package must resolve to at least one alias or workspace path.
-  // Otherwise it would silently disappear from the selection; report it so the
-  // caller can fall back to every Rust unit.
   const entryFor = (key) =>
     headEntries?.get(key) ??
     baseEntries?.get(key) ??
@@ -1440,8 +1214,6 @@ function resolveLockSeeds(changedKeys, baseEntries, headEntries, baseUniverse, h
     for (const universe of [headUniverse, baseUniverse]) {
       const memberPath = universe?.workspaceMembers.get(key);
       if (memberPath) {
-        // Append a file name: `packageForPath` needs a directory with a BUILD
-        // file, not the directory itself (that would fall back to its parent).
         keyPaths.push(`${memberPath}/Cargo.toml`);
       }
     }
@@ -1541,8 +1313,6 @@ function cargoScopeFailure(reason) {
 }
 
 function analyzeCargo(root, base, head, changed) {
-  // Decide whether Cargo.toml/Cargo.lock/crate-universe.lock can be routed by
-  // their concrete crate changes, or must invalidate every Rust unit.
   const manifestChanged = changed.includes(CARGO_MANIFEST);
   const lockChanged = changed.includes(CARGO_LOCK);
   const universeChanged = changed.includes(CRATE_UNIVERSE_LOCK);
@@ -1574,9 +1344,6 @@ function analyzeCargo(root, base, head, changed) {
     }
   }
 
-  // A workspace-dependency edit can change features/default-features (and thus
-  // the compiled code) without moving Cargo.lock. Without a lock diff there is
-  // no crate to route, so keep this conservative.
   if (manifestChanged && !lockChanged && !universeChanged) {
     if (manifestSections.length) {
       return cargoScopeFailure(
@@ -1624,8 +1391,6 @@ function analyzeCargo(root, base, head, changed) {
       }
       changedKeys = crateUniverseChanges(baseUniverse, headUniverse);
     } else {
-      // Defensive: the manifest-only case returned above, so a Cargo change
-      // without a lock diff must not silently route nothing.
       return cargoScopeFailure("Cargo input changed without a lockfile diff");
     }
 
@@ -1674,9 +1439,6 @@ function analyzeCargo(root, base, head, changed) {
 
 
 
-// --------------------------------------------------------------------------
-// Bazel loading graph
-// --------------------------------------------------------------------------
 export const BAZEL_GRAPH_QUERY = 'kind(".*", //...)';
 
 function unescapeXml(value) {
@@ -1699,12 +1461,6 @@ function attributes(text) {
 }
 
 export class BazelGraph {
-  /**
-   * Rule dependency graph from `bazel query --output=xml`.
-   *
-   * Only loading-phase information is used, so the query works without a JDK
-   * or the Android SDK.
-   */
   constructor({ rules = {}, inputs = {}, packageRules = {}, pathIndex = null } = {}) {
     this.rules = rules;
     this.inputs = inputs;
@@ -1783,7 +1539,6 @@ export class BazelGraph {
   }
 
   static labelPath(label) {
-    // `//pkg:sub/file.kt` -> `pkg/sub/file.kt` (repo-relative).
     if (!label.startsWith("//")) {
       return label;
     }
@@ -1795,7 +1550,6 @@ export class BazelGraph {
   }
 
   packageForPath(filePath) {
-    // Nearest Bazel package (ancestor directory with a BUILD file).
     let pkg = filePath.slice(0, Math.max(0, filePath.lastIndexOf("/")));
     for (;;) {
       const key = pkg ? `//${pkg}` : "//";
@@ -1826,8 +1580,6 @@ export class BazelGraph {
           seeds.add(label);
         }
       } else {
-        // Deleted file, new file or BUILD/.bzl change: fall back to the
-        // whole package, which over-approximates safely.
         for (const label of this.packageRules[this.packageForPath(filePath)] ?? []) {
           seeds.add(label);
         }
@@ -1887,9 +1639,6 @@ export function loadBazelGraph(root, bazel, timeout = 300) {
   return BazelGraph.fromXml(result.stdout);
 }
 
-// --------------------------------------------------------------------------
-// Routing
-// --------------------------------------------------------------------------
 class PlatformRoute {
   constructor(platform, mode, units = [], warnings = []) {
     this.platform = platform;
@@ -1917,12 +1666,7 @@ class Route {
     this.routes = routes;
     this.docsOnly = docsOnly;
     this.deployControl = deployControl;
-    // Units selected for deploy-home, which ignores `deploy: false`
-    // invalidations. CI routing (`routes`) keeps using every invalidation.
     this.deploySelected = deploySelected;
-    // True only when an Android application input actually changed. A global
-    // invalidation (MODULE.bazel) or a CI-harness edit still selects the android
-    // units for tests, but must never publish an APK.
     this.androidDistribute = androidDistribute;
     this.warnings = warnings;
   }
@@ -1931,16 +1675,6 @@ class Route {
 export const GLOBAL = "*";
 
 export function androidDistributePaths(config) {
-  /**
-   * Paths whose change means the Android application itself changed.
-   *
-   * Android unit paths cover the application and the shared Kotlin libraries it
-   * builds; deploy-relevant Android invalidations cover the platform build
-   * tooling (for example `platform/android/**`). A global invalidation such as
-   * `MODULE.bazel`, or a CI-harness edit (`deploy: false`), still selects the
-   * Android units for their checks but must never publish an APK: the checks
-   * prove the change is safe, not that the app changed.
-   */
   const patterns = config.byPlatform("android").flatMap((unit) => unit.paths);
   for (const rule of config.invalidations) {
     if (!rule.deploy) {
@@ -1958,12 +1692,6 @@ export function androidDistributePaths(config) {
 }
 
 export function androidDistribution(config, changed) {
-  /**
-   * Whether a changed path is an actual Android application input.
-   *
-   * Markdown is documentation even inside the app tree: it never reaches the
-   * APK, so a README edit must not publish a build.
-   */
   const inputs = changed.filter((item) => !item.toLowerCase().endsWith(".md"));
   if (!inputs.length) {
     return false;
@@ -2035,13 +1763,10 @@ function routePlatforms(
   cargo = null,
   includeTestTargets = true,
 ) {
-  // Select units per platform for the given invalidation set.
   const routes = {};
   const rustGraphRequested = changed.some(isRustGraphPath);
   const cargoLabels = cargo?.mode === "precise" ? cargo.labels : [];
   const cargoPaths = cargo?.mode === "precise" ? cargo.paths : [];
-  // Cargo.toml/Cargo.lock are not Bazel inputs; feeding them to the path index
-  // would fall back to the root package and select the whole repository.
   const graphChanged = changed.filter((item) => !isCargoInputPath(item));
   let graphAffected = null;
   let graphFailure = null;
@@ -2077,10 +1802,6 @@ function routePlatforms(
       unit.routingRoots.some((rootLabel) => labelUnderRoot(label, rootLabel)),
     );
 
-  // --- android / bazel: Bazel reverse dependencies ----------------------
-  // `android` is the JDK/SDK application platform; `bazel` is a generic
-  // Linux Bazel unit (the Pulsar Rust workspace). Both route identically
-  // through the loading graph, which needs no language toolchain.
   for (const platform of ["android", "bazel"]) {
     const bazelRoute = new PlatformRoute(platform, "bazel-graph");
     const units = config.byPlatform(platform);
@@ -2091,8 +1812,6 @@ function routePlatforms(
       const touched = changed.some((item) =>
         units.some((unit) => pathMatches(item, unit.paths)),
       );
-      // Shared Rust inputs have no unit path of their own: they must reach the
-      // graph even when no bazel unit path matched.
       const needsGraph = touched || (platform === "bazel" && rustGraphRequested);
       if (!needsGraph) {
         bazelRoute.mode = "paths";
@@ -2120,7 +1839,6 @@ function routePlatforms(
     routes[platform] = bazelRoute;
   }
 
-  // --- python: paths, plus Bazel image roots for shared Rust crates ------
   const pythonRoute = new PlatformRoute("python", "paths");
   const pythonUnits = config.byPlatform("python");
   if (invalidated.has(GLOBAL) || invalidated.has("python")) {
@@ -2140,8 +1858,6 @@ function routePlatforms(
       if (changed.some((item) => pathMatches(item, unit.paths))) {
         pythonRoute.units.push(unit);
       } else if (rustGraphRequested && unit.routingRoots.length) {
-        // `hermes` owns the voice-proxy/health-exporter images; a shared crate
-        // that reaches either image must also select the deploy unit.
         if (pythonFailed || matchesRoutingRoots(unit, pythonAffected)) {
           pythonRoute.units.push(unit);
         }
@@ -2156,7 +1872,6 @@ function routePlatforms(
   pythonRoute.units = expandDependsOn(config, pythonRoute.units);
   routes.python = pythonRoute;
 
-  // --- js: declarative path rules for dependency-free edge Workers ------
   const jsRoute = new PlatformRoute("js", "paths");
   for (const unit of config.byPlatform("js")) {
     if (invalidated.has(GLOBAL) || invalidated.has("js")) {
@@ -2169,7 +1884,6 @@ function routePlatforms(
   jsRoute.units = expandDependsOn(config, jsRoute.units);
   routes.js = jsRoute;
 
-  // --- native: paths plus Bazel roots for shared Rust crates ------------
   const nativeRoute = new PlatformRoute("native", "paths");
   const nativeUnits = config.byPlatform("native");
   if (invalidated.has(GLOBAL) || invalidated.has("native")) {
@@ -2190,8 +1904,6 @@ function routePlatforms(
         nativeRoute.units.push(unit);
       } else if (rustGraphRequested) {
         if (!unit.routingRoots.length) {
-          // A native unit that cannot be expressed as a Bazel target keeps the
-          // conservative rule: any shared Rust/lock change selects it.
           nativeRoute.units.push(unit);
         } else if (nativeFailed || matchesRoutingRoots(unit, nativeAffected)) {
           nativeRoute.units.push(unit);
@@ -2208,7 +1920,6 @@ function routePlatforms(
   nativeRoute.units = expandDependsOn(config, nativeRoute.units);
   routes.native = nativeRoute;
 
-  // --- quality: always --------------------------------------------------
   routes.quality = new PlatformRoute("quality", "always", [...config.byPlatform("quality")]);
 
   return routes;
@@ -2226,7 +1937,6 @@ export function route(
     graphLoader = null,
   } = {},
 ) {
-  // Route changed paths onto units. Exposed for tests.
   const scoped = scopeChanges(changed, root, base, head);
   changed = scoped.changed;
   const cargo = analyzeCargo(root, base, head, changed);
@@ -2248,11 +1958,6 @@ export function route(
     cargo,
   );
 
-  // Deploy selection ignores `deploy: false` invalidations. CI keeps running
-  // the invalidated jobs (routes above), but a workflow/harness-only change
-  // must not roll every deployable unit after merge. When a deploy-relevant
-  // invalidation covers the same platforms, the CI selection is already the
-  // deploy selection and no second pass is needed.
   const deployInvalidated = invalidatedPlatforms(config, changed, true);
   if (cargo.mode === "all") {
     for (const platform of ["bazel", "native", "python"]) {
@@ -2263,10 +1968,6 @@ export function route(
   const samePlatforms =
     deployInvalidated.size === invalidated.size &&
     [...deployInvalidated].every((platform) => invalidated.has(platform));
-  // A Rust test target (for example mcp-gateway's voice contract test) may
-  // depend on a shared crate without its deployed image changing. CI still
-  // runs it, but deploy selection drops test-only rules so a pure crate change
-  // cannot roll an unrelated service.
   const deployNeedsPrecisePass = changed.some(isRustGraphPath) && cargo.mode !== "all";
   if (samePlatforms && !deployNeedsPrecisePass) {
     deploySelected = new Set(
@@ -2325,8 +2026,6 @@ function space(items) {
   return items.join(" ");
 }
 
-// Python's json.dumps default: `", "` and `": "` separators. The GitHub outputs
-// used to be produced by Python, so keep the exact byte format.
 export function jsonDumps(value) {
   if (value === null) {
     return "null";
@@ -2342,14 +2041,6 @@ export function jsonDumps(value) {
   return JSON.stringify(value);
 }
 
-/**
- * Whether deploy-home should publish this native unit for this change range.
- *
- * PR CI always builds every affected native unit; `publish` only controls the
- * push side (deploy-home filters `publish: false` entries). A `publish_when`
- * unit publishes only when one of its release paths changed, so e.g. a Pulsar
- * source change is tested in the PR but does not create a release.
- */
 export function nativePublishSelected(unit, changed) {
   if (!unit.nativePublish) {
     return false;
@@ -2360,11 +2051,6 @@ export function nativePublishSelected(unit, changed) {
   return changed.some((item) => pathMatches(item, unit.nativePublishWhen));
 }
 
-/**
- * Bazel query expression covering every Android/Kotlin target, so target
- * narrowing sees shared libraries that belong to another unit than the
- * application it builds.
- */
 export function androidUniverse(config) {
   const androidRoots = [
     ...new Set(config.byPlatform("android").flatMap((unit) => unit.bazelRoots)),
@@ -2373,7 +2059,6 @@ export function androidUniverse(config) {
 }
 
 export function matrixEntries(route_, config) {
-  // Matrix payloads for the reusable platform workflows.
   const universe = androidUniverse(config);
   const android = route_.routes.android.units.map((unit) => ({
     id: unit.id,
@@ -2384,10 +2069,6 @@ export function matrixEntries(route_, config) {
     sdk_packages: space(unit.bazelSdkPackages),
     universe,
   }));
-  // `android-distribute` uploads the artifact of the release-owning unit, so
-  // that entry must be in the matrix whenever distribution is selected. A
-  // change can route only a shared Kotlin unit (a new package the app does not
-  // import yet) while still counting as an application input upstream.
   if (route_.androidDistribute) {
     const release = config.units.find(
       (unit) => unit.platform === "android" && unit.androidRelease,
@@ -2404,10 +2085,6 @@ export function matrixEntries(route_, config) {
       });
     }
   }
-  // Shared deploy fields: only a deploy-selected unit publishes images (a
-  // CI-harness change still runs the checks but must not push every image).
-  // A unit without images gets empty values and the `unit` workflow skips the
-  // image/attestation steps.
   const deployFields = (unit) =>
     route_.deploySelected.has(unit.id)
       ? deployImageFields(unit)
@@ -2431,9 +2108,6 @@ export function matrixEntries(route_, config) {
     deploy_tool: false,
     ...deployFields(unit),
   }));
-  // A deploy-selected Python unit that owns images runs its suite and its
-  // image build in the same `unit` job (today Hermes: python checks + mixed
-  // Buildx images); all other Python units keep the plain `_python.yml` job.
   const pythonWithImages = route_.routes.python.units.filter(
     (unit) => unit.deployImages.length && route_.deploySelected.has(unit.id),
   );
@@ -2486,11 +2160,6 @@ export function matrixEntries(route_, config) {
   return { android, bazel, unit: unit_, python, js, native };
 }
 
-/**
- * Image fields of one deployable unit, in the shape `_unit.yml` and `_pin.yml`
- * consume. Shared with the manual rebuild workflow (`platform/ci/rebuild.mjs`),
- * which selects the same units explicitly instead of by diff.
- */
 export function deployImageFields(unit) {
   if (!unit.deployImages.length) {
     return {
@@ -2502,9 +2171,6 @@ export function deployImageFields(unit) {
       bazel_images: "{}",
     };
   }
-  // `build-images.sh` publishes home-deploy for every bazel/mixed unit that
-  // does not own it; include it in the attestation list so deploy-home can
-  // verify the CLI image too.
   const imageList = [...unit.deployImages];
   if (
     (unit.deployBuilder === "bazel" || unit.deployBuilder === "mixed") &&
@@ -2522,18 +2188,6 @@ export function deployImageFields(unit) {
   };
 }
 
-/**
- * Deployable units selected by the same routing as CI.
- *
- * A shared Rust crate change reaches every importer through the Bazel
- * loading graph, so it also deploys every importer that declares a `deploy`
- * block. Units without one (documentation, infrastructure, observability)
- * never appear here, so `deploy-home` cannot pin them by accident.
- *
- * Every deployable unit is applied by Flux. The `pins` job of `deploy-home`
- * promotes the images and commits only the digests to the `deploy/home-apps`
- * machine branch; it never uses the VPN, OpenBao or a kubeconfig.
- */
 export function deployEntries(route_, config) {
   const selected = route_.deploySelected;
   const entries = [];
@@ -2701,7 +2355,6 @@ export async function compute(argv) {
     graphLoader: loader,
   });
 
-  // No base revision (workflow_dispatch, unknown before-SHA): run everything.
   if ((base === null && !args.changedFile.length) || args.all) {
     for (const platform of PLATFORMS) {
       const platformRoute = result.routes[platform];
@@ -2782,10 +2435,6 @@ export async function main(argv = process.argv.slice(2)) {
   return 0;
 }
 
-/**
- * Entry point for `actions/github-script`: set step outputs with core.setOutput
- * and write the routing table with core.summary. No file or stdout plumbing.
- */
 export async function runGithubScript({ core, argv = [] }) {
   const computed = await compute(argv);
   const outputs = githubOutputs(computed);
@@ -2799,8 +2448,6 @@ export async function runGithubScript({ core, argv = [] }) {
   return computed;
 }
 
-// Test seam: mutate these to simulate Git/toolchain failures without touching
-// module bindings (ES modules are immutable from the outside).
 export const internals = {
   gitFileText,
   resolveBase,

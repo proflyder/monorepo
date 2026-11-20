@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-// Unit tests for the deploy/rollback front door; run with `node --test`.
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -37,7 +36,6 @@ function buffer() {
   };
 }
 
-/** Records spawn calls; responses are keyed by the first two argv tokens. */
 function fakeSpawn(responses = {}) {
   const calls = [];
   const spawn = (command, args, options = {}) => {
@@ -53,9 +51,6 @@ function fakeSpawn(responses = {}) {
 const realUnits = units();
 const scheduler = realUnits.find((unit) => unit.id === "scheduler");
 const pulsar = realUnits.find((unit) => unit.id === "pulsar");
-// All live home units are Flux-managed now, so the executable rollback kinds
-// are exercised with a synthetic unit: the code path still exists for admin
-// tooling and must not rot.
 const forwardOnlyUnit = {
   id: "fixture-forward",
   title: "fixture forward-only",
@@ -105,8 +100,6 @@ test("ops: parseDeploy accepts the remaining flags and rejects unknown ones", ()
   assert.deepEqual(parsed.units, ["scheduler"]);
   assert.equal(parsed.yes, true);
   assert.equal(parsed.watch, true);
-  // Executor modes are no longer dispatched through CI: they are Git state
-  // plus `flux suspend` and the admin deploy.sh.
   assert.throws(() => parseDeploy(["--mode=execute"]), /unknown flag/);
   assert.throws(() => parseDeploy(["--bogus"]), /unknown flag/);
 });
@@ -228,7 +221,6 @@ test("ops: hermes rollback leans on HelmRelease remediation and names the helm f
   assert.ok(text.includes("kind: hermes"));
   assert.ok(text.includes("HelmRelease remediation"));
   assert.ok(text.includes("helm --namespace home-assistant rollback runtime"));
-  // Flux writes no local revision state, so the command is instruction-only.
   assert.equal(rollbackCommand(hermes), null);
 });
 
@@ -408,8 +400,6 @@ test("ops: status --live without a kubeconfig refuses to call kubectl", async ()
     units: realUnits,
     env: {},
   });
-  // A workstation may have the documented kubeconfig on disk; only assert the
-  // no-kubectl half when it does not exist.
   if (code !== 0) {
     assert.ok(stderr.text().includes("no kubeconfig for --live"));
     assert.ok(!spawn.calls.some((call) => call.command === "kubectl"));
