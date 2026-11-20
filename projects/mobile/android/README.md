@@ -534,7 +534,10 @@ service, triggered by the `phone_find` / `phone_notify` MCP tools):
   the `MediaPlayer` in the service is the only sound source; the old
   `home_phone_find` channel had its own alarm sound, so it is deleted on every
   start (channel settings are immutable). The notification uses
-  `setOnlyAlertOnce`/`setSilent`, and a repeated start or refresh reuses the
+  `setOnlyAlertOnce` and never `setSilent`: `NotificationCompat.setSilent`
+  puts the notification into a group with `GROUP_ALERT_SUMMARY`, and SystemUI
+  then suppresses the full-screen intent (the ringing screen never opened after
+  #335). The silent channel alone already keeps it quiet. A repeated start or refresh reuses the
   same player instead of layering a second melody. It opens the
   `FindPhoneActivity` over the lock screen through a full-screen intent, and
   stops — sound, vibration, notification and volume restore — on «Нашёл»,
