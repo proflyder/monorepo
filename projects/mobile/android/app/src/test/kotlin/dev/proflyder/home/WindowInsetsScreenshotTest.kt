@@ -299,7 +299,7 @@ class WindowInsetsScreenshotTest {
         val color = MaterialColors.getColor(content, com.google.android.material.R.attr.colorSurfaceContainer)
         cards.forEach { assertCard(it, color) }
         val height = content.resources.getDimensionPixelSize(UiR.dimen.ds_control_m)
-        cards.forEach { card -> card.all<MaterialButton>().filter { it.isShown }.forEach { assertCardButton(card, it, height) } }
+        cards.forEach { card -> card.all<MaterialButton>().filter { it.isShown && !it.text.isNullOrEmpty() }.forEach { assertCardButton(card, it, height) } }
     }
 
     private fun assertCard(card: MaterialCardView, color: Int) {

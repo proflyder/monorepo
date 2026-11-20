@@ -179,5 +179,74 @@ class AndroidThemeColorTests(unittest.TestCase):
         self.assertEqual(problems, [], "\n".join(problems))
 
 
+class AndroidDesignSystemTests(unittest.TestCase):
+    ANDROID = ROOT / "projects/mobile/android"
+    DESIGN_SYSTEM = ANDROID / "core/designsystem"
+    RE = __import__("re")
+    TAG = RE.compile(r"<([A-Za-z0-9_.]+)\b([^>]*)>", RE.S)
+    STYLE = RE.compile(r'\bstyle="@style/([^"]+)"')
+    COMPONENTS = {
+        "Button": ("Widget.Home.Button.", "Widget.Home.IconButton."),
+        "com.google.android.material.button.MaterialButton": ("Widget.Home.Button.", "Widget.Home.IconButton."),
+        "com.google.android.material.textfield.TextInputLayout": (None, "Widget.Home.TextInput"),
+        "com.google.android.material.floatingactionbutton.FloatingActionButton": (None, "Widget.Home.FloatingActionButton"),
+        "com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton": (None, "Widget.Home.ExtendedFloatingActionButton"),
+        "dev.proflyder.home.core.designsystem.OutlinedFloatingActionButton": (None, "Widget.Home.FloatingActionButton"),
+        "com.google.android.material.card.MaterialCardView": ("Widget.Home.Card",),
+        "com.google.android.material.chip.Chip": ("Widget.Home.Chip.",),
+    }
+    KOTLIN = RE.compile(r"\b(MaterialButton|TextInputLayout|FloatingActionButton|ExtendedFloatingActionButton|MaterialCardView|Chip)\(")
+
+    def _outside(self, pattern: str) -> list[Path]:
+        return [p for p in sorted(self.ANDROID.glob(pattern)) if self.DESIGN_SYSTEM not in p.parents]
+
+    def _tag_problem(self, tag: str, attrs: str) -> str | None:
+        allowed = self.COMPONENTS.get(tag)
+        if allowed is None:
+            return None
+        style = self.STYLE.search(attrs)
+        if style is None:
+            return None if None in allowed else "no design-system style"
+        prefixes = tuple(a for a in allowed if a)
+        return None if style.group(1).startswith(prefixes) else "style " + style.group(1)
+
+    def test_widget_styles_are_declared_only_in_the_design_system(self) -> None:
+        problems = []
+        theme = self.ANDROID / "core/theme"
+        for path in self._outside("**/src/main/res/values*/*.xml"):
+            if theme in path.parents:
+                continue
+            for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+                if '<style name="Widget.' in line:
+                    problems.append(f"{path.relative_to(ROOT)}:{number}")
+        self.assertEqual(problems, [], "declare Widget.* styles in core/designsystem:\n" + "\n".join(problems))
+
+    def test_layouts_use_design_system_components(self) -> None:
+        problems = []
+        for path in self._outside("**/src/main/res/layout*/*.xml"):
+            for match in self.TAG.finditer(path.read_text(encoding="utf-8")):
+                problem = self._tag_problem(match.group(1), match.group(2))
+                if problem:
+                    problems.append(f"{path.relative_to(ROOT)}: <{match.group(1).rsplit('.', 1)[-1]}> {problem}")
+        self.assertEqual(problems, [], "use core/designsystem styles:\n" + "\n".join(problems))
+
+    def test_one_filled_button_per_button_group(self) -> None:
+        group = self.RE.compile(r"<([\w.]*\.designsystem\.ButtonRow)\b.*?</\1>", self.RE.S)
+        problems = []
+        for path in sorted(self.ANDROID.glob("**/src/main/res/layout*/*.xml")):
+            for match in group.finditer(path.read_text(encoding="utf-8")):
+                if match.group(0).count("Widget.Home.Button.Filled.") > 1:
+                    problems.append(str(path.relative_to(ROOT)))
+        self.assertEqual(problems, [], "one filled (main) action per ButtonRow/EmptyState:\n" + "\n".join(problems))
+
+    def test_kotlin_does_not_build_components_by_hand(self) -> None:
+        problems = []
+        for path in self._outside("**/src/main/kotlin/**/*.kt"):
+            for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+                if self.KOTLIN.search(line):
+                    problems.append(f"{path.relative_to(ROOT)}:{number}")
+        self.assertEqual(problems, [], "inflate design-system components from layouts:\n" + "\n".join(problems))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

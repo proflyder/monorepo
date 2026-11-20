@@ -43,7 +43,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:maxLines="1"
-                android:textAppearance="@style/TextAppearance.Alarms.CardTime"
+                android:textAppearance="@style/TextAppearance.Home.CardTime"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toTopOf="parent" />
@@ -98,9 +98,7 @@
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/alarm_delete"
-                    style="@style/Widget.Alarms.CardIconButton"
-                    android:layout_width="@dimen/alarms_card_icon_button_size"
-                    android:layout_height="@dimen/alarms_card_icon_button_size"
+                    style="@style/Widget.Home.IconButton.Destructive.L"
                     android:layout_marginStart="@dimen/alarms_card_trailing_gap"
                     android:contentDescription="@string/alarms_delete"
                     app:icon="@drawable/alarms_ic_delete" />
@@ -133,16 +131,14 @@
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/alarm_snooze"
-                style="@style/Widget.Alarms.SnoozeButton"
+                style="@style/Widget.Home.Button.Tonal.S"
                 android:layout_width="wrap_content"
-                android:layout_height="40dp"
                 android:text="@string/alarms_snooze" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/alarm_stop"
-                style="@style/Widget.Alarms.StopButton"
+                style="@style/Widget.Home.Button.Text.S"
                 android:layout_width="wrap_content"
-                android:layout_height="40dp"
                 android:layout_marginStart="4dp"
                 android:text="@string/alarms_stop" />
         </LinearLayout>

@@ -85,11 +85,9 @@
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/scenario_run"
-            style="@style/Widget.Material3.Button.TonalButton"
+            style="@style/Widget.Home.Button.Tonal.M"
             android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
-            android:minHeight="44dp"
             android:text="@string/scenarios_run" />
     </LinearLayout>
 </com.google.android.material.card.MaterialCardView>

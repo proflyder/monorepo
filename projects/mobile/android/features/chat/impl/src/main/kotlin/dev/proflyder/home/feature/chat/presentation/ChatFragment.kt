@@ -35,6 +35,7 @@ import androidx.fragment.app.activityViewModels
 import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import dev.proflyder.home.core.designsystem.Components
 import dev.proflyder.home.core.ui.BaseFragment
 import dev.proflyder.home.core.designsystem.HomePopupMenu
 import dev.proflyder.home.core.ui.pinAboveKeyboard
@@ -151,7 +152,7 @@ class ChatFragment : BaseFragment<FragmentChatBinding>(FragmentChatBinding.Compa
         renderSendButton()
     }
 
-    private fun pendingChip(attachment: LocalAttachment): Chip = Chip(requireContext()).apply {
+    private fun pendingChip(attachment: LocalAttachment): Chip = Components.inputChip(binding.chatPending).apply {
         text = pendingLabel(attachment)
         isCloseIconVisible = true
         closeIconContentDescription = getString(R.string.chat_attachment_remove, text)

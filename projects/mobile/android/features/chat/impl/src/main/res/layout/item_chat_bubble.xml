@@ -10,7 +10,7 @@
 
     <com.google.android.material.card.MaterialCardView
         android:id="@+id/chat_bubble"
-        style="@style/Widget.Material3.CardView.Filled"
+        style="@style/Widget.Home.Card"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         app:cardCornerRadius="@dimen/chat_bubble_radius"
@@ -87,9 +87,7 @@
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/chat_voice_play"
-                    style="@style/Widget.Material3.Button.IconButton.Filled.Tonal"
-                    android:layout_width="44dp"
-                    android:layout_height="44dp"
+                    style="@style/Widget.Home.IconButton.Tonal.M"
                     android:contentDescription="@string/chat_voice_play"
                     app:icon="@drawable/chat_ic_play" />
 
@@ -193,12 +191,9 @@
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/chat_retry"
-                    style="@style/Widget.Material3.Button.TextButton"
+                    style="@style/Widget.Home.Button.Text.M"
                     android:layout_width="wrap_content"
-                    android:layout_height="40dp"
                     android:layout_marginTop="2dp"
-                    android:paddingStart="0dp"
-                    android:paddingEnd="8dp"
                     android:text="@string/chat_retry" />
             </LinearLayout>
         </LinearLayout>

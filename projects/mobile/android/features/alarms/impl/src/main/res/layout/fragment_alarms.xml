@@ -68,22 +68,27 @@
                     android:gravity="center"
                     android:textAppearance="?attr/textAppearanceBodyLarge" />
 
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/alarms_retry"
-                    android:layout_width="wrap_content"
+                <dev.proflyder.home.core.designsystem.ButtonRow
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
-                    android:minHeight="48dp"
-                    android:text="@string/ui_retry" />
+                    android:layout_marginTop="@dimen/ds_space_m"
+                    app:autoEmphasis="true"
+                    app:centered="true"
+                    app:equalWidth="true">
 
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/alarms_open_connection"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:minHeight="48dp"
-                    android:text="@string/alarms_open_connection"
-                    android:visibility="gone" />
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/alarms_retry"
+                        style="@style/Widget.Home.Button.Tonal.M"
+                        android:layout_width="wrap_content"
+                        android:text="@string/ui_retry" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/alarms_open_connection"
+                        style="@style/Widget.Home.Button.Filled.M"
+                        android:layout_width="wrap_content"
+                        android:text="@string/alarms_open_connection"
+                        android:visibility="gone" />
+                </dev.proflyder.home.core.designsystem.ButtonRow>
             </LinearLayout>
 
             <com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
@@ -113,9 +118,7 @@
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/alarms_selection_close"
-            style="@style/Widget.Material3.Button.IconButton"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
+            style="@style/Widget.Home.IconButton.Standard.M"
             android:contentDescription="@string/alarms_selection_close"
             app:icon="@drawable/alarms_ic_close"
             app:iconTint="?attr/colorOnSecondaryContainer" />
@@ -131,15 +134,14 @@
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/alarms_selection_all"
-            style="@style/Widget.Material3.Button.TextButton"
+            style="@style/Widget.Home.Button.Text.M"
             android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:minHeight="48dp"
             android:text="@string/alarms_select_all"
             android:textColor="?attr/colorOnSecondaryContainer" />
     </LinearLayout>
 
     <com.google.android.material.card.MaterialCardView
+            style="@style/Widget.Home.Card"
         android:id="@+id/alarms_action_bar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -162,7 +164,7 @@
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/alarms_selection_enable"
-                style="@style/Widget.Alarms.SelectionAction"
+                style="@style/Widget.Home.Button.BarAction"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
@@ -172,7 +174,7 @@
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/alarms_selection_disable"
-                style="@style/Widget.Alarms.SelectionAction"
+                style="@style/Widget.Home.Button.BarAction"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="4dp"
@@ -183,7 +185,7 @@
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/alarms_selection_delete"
-                style="@style/Widget.Alarms.SelectionAction"
+                style="@style/Widget.Home.Button.BarAction"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="4dp"

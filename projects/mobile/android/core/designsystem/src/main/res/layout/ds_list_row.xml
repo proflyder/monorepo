@@ -10,8 +10,7 @@
         android:layout_height="@dimen/ds_icon_m"
         android:layout_marginEnd="@dimen/ds_space_l"
         android:importantForAccessibility="no"
-        android:visibility="gone"
-        app:tint="?attr/colorOnSurfaceVariant" />
+        android:visibility="gone" />
 
     <LinearLayout
         android:layout_width="0dp"
@@ -23,6 +22,7 @@
             android:id="@+id/ds_row_title"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            app:lineHeight="@dimen/ds_row_title_line_height"
             android:textAppearance="?attr/textAppearanceBodyLarge"
             android:textColor="?attr/colorOnSurface"
             tools:ignore="SelectableText" />

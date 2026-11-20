@@ -6,6 +6,8 @@ import org.junit.runners.Suite
 @RunWith(Suite::class)
 @Suite.SuiteClasses(
     ButtonStylesTest::class,
+    ButtonRowTest::class,
+    PopupPlacementTest::class,
     FabStylesTest::class,
     CatalogScreenshotTest::class,
 )

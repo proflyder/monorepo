@@ -10,7 +10,7 @@
 
     <com.google.android.material.card.MaterialCardView
         android:id="@+id/chat_alert_card"
-        style="@style/Widget.Material3.CardView.Filled"
+        style="@style/Widget.Home.Card"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         app:cardCornerRadius="@dimen/chat_bubble_radius"
@@ -101,26 +101,16 @@
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/chat_alert_reply"
-                    style="@style/Widget.Material3.Button.TextButton.Icon"
+                    style="@style/Widget.Home.Button.Text.M"
                     android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:minWidth="0dp"
-                    android:paddingLeft="0dp"
-                    android:paddingStart="0dp"
-                    android:paddingEnd="12dp"
                     android:text="@string/chat_alert_reply"
                     app:icon="@drawable/chat_ic_reply" />
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/chat_alert_runbook"
-                    style="@style/Widget.Material3.Button.TextButton"
+                    style="@style/Widget.Home.Button.Text.M"
                     android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
                     android:layout_marginStart="8dp"
-                    android:minWidth="0dp"
-                    android:paddingLeft="0dp"
-                    android:paddingStart="0dp"
-                    android:paddingEnd="12dp"
                     android:text="@string/chat_alert_runbook" />
             </LinearLayout>
         </LinearLayout>

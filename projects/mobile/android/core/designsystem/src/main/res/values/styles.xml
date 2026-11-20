@@ -66,6 +66,26 @@
         <item name="android:textColor">?attr/colorOnSurfaceVariant</item>
     </style>
 
+    <style name="Widget.Home.FieldSupportingText" parent="">
+        <item name="android:layout_marginTop">@dimen/ds_space_s</item>
+        <item name="android:paddingStart">@dimen/ds_field_supporting_padding</item>
+        <item name="android:paddingEnd">@dimen/ds_field_supporting_padding</item>
+        <item name="android:textAppearance">?attr/textAppearanceBodySmall</item>
+        <item name="android:textColor">?attr/colorOnSurfaceVariant</item>
+    </style>
+
+    <style name="Widget.Home.FieldSupportingText.Error">
+        <item name="android:textColor">?attr/colorError</item>
+    </style>
+
+    <style name="Widget.Home.ToolbarTitle" parent="">
+        <item name="android:textAppearance">@style/TextAppearance.Home.ToolbarTitle</item>
+        <item name="android:breakStrategy">balanced</item>
+        <item name="android:hyphenationFrequency">none</item>
+        <item name="android:ellipsize">none</item>
+        <item name="android:gravity">center_vertical</item>
+    </style>
+
     <style name="TextAppearance.Home.Time" parent="TextAppearance.Material3.DisplaySmall">
         <item name="android:fontFamily">sans-serif-light</item>
         <item name="android:textSize">48sp</item>
@@ -92,6 +112,14 @@
 
     <style name="TextAppearance.Home.PillTab" parent="TextAppearance.Material3.LabelLarge">
         <item name="android:textAllCaps">false</item>
+    </style>
+
+    <style name="TextAppearance.Home.CardTime" parent="TextAppearance.Material3.HeadlineMedium">
+        <item name="android:fontFamily">sans-serif-light</item>
+        <item name="android:textSize">32sp</item>
+        <item name="android:letterSpacing">-0.02</item>
+        <item name="android:fontFeatureSettings">"tnum"</item>
+        <item name="android:textColor">?attr/colorOnSurface</item>
     </style>
 
     <style name="TextAppearance.Home.ChatMeta" parent="TextAppearance.Material3.LabelSmall">

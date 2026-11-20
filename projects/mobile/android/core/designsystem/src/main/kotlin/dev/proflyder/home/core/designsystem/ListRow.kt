@@ -1,6 +1,7 @@
 package dev.proflyder.home.core.designsystem
 
 import android.content.Context
+import android.content.res.ColorStateList
 import android.content.res.TypedArray
 import android.graphics.drawable.Drawable
 import android.util.AttributeSet
@@ -11,6 +12,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.content.withStyledAttributes
 import androidx.core.view.isVisible
+import com.google.android.material.color.MaterialColors
 import com.google.android.material.materialswitch.MaterialSwitch
 
 class ListRow @JvmOverloads constructor(
@@ -60,6 +62,12 @@ class ListRow @JvmOverloads constructor(
         get() = valueView.text
         set(value) = showText(valueView, value)
 
+    var subtitleTone: Tone = Tone.NEUTRAL
+        set(value) {
+            field = value
+            subtitleView.setTextColor(MaterialColors.getColor(subtitleView, value.attr))
+        }
+
     var chevron: Boolean
         get() = chevronView.isVisible
         set(value) {
@@ -74,6 +82,8 @@ class ListRow @JvmOverloads constructor(
 
     private fun readAttributes(array: TypedArray) {
         icon = array.getDrawable(R.styleable.ListRow_rowIcon)
+        iconView.imageTintList = array.getColorStateList(R.styleable.ListRow_rowIconTint)
+            ?: ColorStateList.valueOf(MaterialColors.getColor(this, com.google.android.material.R.attr.colorOnSurfaceVariant))
         title = array.getText(R.styleable.ListRow_rowTitle)
         subtitle = array.getText(R.styleable.ListRow_rowSubtitle)
         value = array.getText(R.styleable.ListRow_rowValue)
@@ -85,4 +95,11 @@ class ListRow @JvmOverloads constructor(
         view.text = text
         view.isVisible = !text.isNullOrEmpty()
     }
+}
+
+enum class Tone(val attr: Int) {
+    NEUTRAL(com.google.android.material.R.attr.colorOnSurfaceVariant),
+    ERROR(androidx.appcompat.R.attr.colorError),
+    WARNING(R.attr.colorWarning),
+    SUCCESS(R.attr.colorSuccess),
 }

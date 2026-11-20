@@ -7,6 +7,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.PowerManager
 import android.view.View
+import android.view.ViewGroup
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
@@ -31,6 +32,7 @@ import java.util.Locale
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import dev.proflyder.home.core.designsystem.Components
 import dev.proflyder.home.core.ui.applySystemBarsPadding
 
 class CallActivity : AppCompatActivity() {
@@ -271,24 +273,23 @@ class CallActivity : AppCompatActivity() {
         val container = (sheet.findViewById<View>(R.id.call_route_list) as? android.widget.LinearLayout) ?: return
         container.removeAllViews()
         state.available.forEach { option ->
-            container.addView(routeButton(sheet, option, state.selected), routeButtonParams())
+            container.addView(routeButton(container, sheet, option, state.selected), routeButtonParams())
         }
     }
 
     private fun routeButton(
+        container: ViewGroup,
         sheet: BottomSheetDialog,
         option: AudioRouteOption,
         selected: CallAudioRoute,
     ): MaterialButton {
         val isSelected = option.route == selected
-        return MaterialButton(this).apply {
+        return Components.tonalButtonL(container).apply {
             text = if (isSelected) {
                 getString(R.string.call_route_selected, routeLabel(option))
             } else {
                 routeLabel(option)
             }
-            isAllCaps = false
-            minHeight = resources.getDimensionPixelSize(R.dimen.call_route_min_height)
             setOnClickListener { selectRoute(sheet, option) }
         }
     }

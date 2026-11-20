@@ -58,11 +58,10 @@
                 android:textAppearance="?attr/textAppearanceBodyLarge" />
 
             <com.google.android.material.button.MaterialButton
+            style="@style/Widget.Home.Button.Filled.M"
                 android:id="@+id/reminders_retry"
                 android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
-                android:minHeight="48dp"
                 android:text="@string/ui_retry" />
         </LinearLayout>
 

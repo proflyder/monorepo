@@ -7,8 +7,7 @@
     <string name="push_full_screen_title">Полноэкранные уведомления</string>
     <string name="push_permission_granted">Разрешено</string>
     <string name="push_permission_missing">Не разрешено</string>
-    <string name="push_permission_grant">Разрешить</string>
-    <string name="push_permission_open">Открыть</string>
+    <string name="push_permission_open_settings">Открыть настройки: %1$s</string>
     <string name="push_ring_ready">Поиск телефона работает: звонок будет громким даже в беззвучном режиме и в режиме «Не беспокоить».</string>
     <string name="push_ring_incomplete">Поиск телефона не будет звонить громко, пока не разрешены все пункты выше. Уведомление о запросе всё равно придёт.</string>
     <string name="push_register_title">Этот телефон на сервере</string>

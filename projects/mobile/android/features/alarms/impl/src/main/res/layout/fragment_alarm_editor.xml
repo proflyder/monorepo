@@ -24,7 +24,7 @@
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/alarm_editor_time"
-                style="@style/Widget.Alarms.TimeButton"
+                style="@style/Widget.Home.Button.TimeDisplay"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:contentDescription="@string/alarms_editor_time"
@@ -46,35 +46,35 @@
 
                     <com.google.android.material.chip.Chip
                         android:id="@+id/quick_offset_15"
-                        style="@style/Widget.Material3.Chip.Assist"
+                        style="@style/Widget.Home.Chip.Assist"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="@string/alarms_quick_offset_15" />
 
                     <com.google.android.material.chip.Chip
                         android:id="@+id/quick_offset_30"
-                        style="@style/Widget.Material3.Chip.Assist"
+                        style="@style/Widget.Home.Chip.Assist"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="@string/alarms_quick_offset_30" />
 
                     <com.google.android.material.chip.Chip
                         android:id="@+id/quick_offset_60"
-                        style="@style/Widget.Material3.Chip.Assist"
+                        style="@style/Widget.Home.Chip.Assist"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="@string/alarms_quick_offset_60" />
 
                     <com.google.android.material.chip.Chip
                         android:id="@+id/quick_offset_90"
-                        style="@style/Widget.Material3.Chip.Assist"
+                        style="@style/Widget.Home.Chip.Assist"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="@string/alarms_quick_offset_90" />
 
                     <com.google.android.material.chip.Chip
                         android:id="@+id/quick_offset_120"
-                        style="@style/Widget.Material3.Chip.Assist"
+                        style="@style/Widget.Home.Chip.Assist"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="@string/alarms_quick_offset_120" />
@@ -223,11 +223,9 @@
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/alarm_editor_delete"
-                style="@style/Widget.Material3.Button.TextButton"
+                style="@style/Widget.Home.Button.Text.M"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:minHeight="48dp"
                 android:text="@string/alarms_editor_delete"
                 android:textColor="?attr/colorError"
                 android:visibility="gone" />

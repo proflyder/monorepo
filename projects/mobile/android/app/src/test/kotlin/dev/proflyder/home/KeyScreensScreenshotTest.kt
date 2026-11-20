@@ -3,6 +3,9 @@ package dev.proflyder.home
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.view.View
+import android.view.ViewGroup
+import com.google.android.material.button.MaterialButton
+import com.google.android.material.color.MaterialColors
 import dev.proflyder.home.core.navigation.Destination
 import dev.proflyder.home.core.theme.AppTheme
 import dev.proflyder.home.feature.alarms.AlarmEditorDestination
@@ -58,6 +61,20 @@ class KeyScreensScreenshotTest {
         activity.router.selectTab(tab)
         idle(activity)
         shoot(activity, name)
+        assertOneFilledButton(activity, name)
+    }
+
+    private fun assertOneFilledButton(activity: MainActivity, name: String) {
+        val primary = MaterialColors.getColor(activity, androidx.appcompat.R.attr.colorPrimary, 0)
+        val filled = buttons(activity.findViewById(R.id.fragment_container))
+            .filter { it.isShown && !it.text.isNullOrEmpty() && it.backgroundTintList?.defaultColor == primary }
+        assertTrue("$name shows ${filled.size} filled buttons", filled.size <= 1)
+    }
+
+    private fun buttons(view: View): List<MaterialButton> = when (view) {
+        is MaterialButton -> listOf(view)
+        is ViewGroup -> (0 until view.childCount).flatMap { buttons(view.getChildAt(it)) }
+        else -> emptyList()
     }
 
     private fun shootDestination(activity: MainActivity, destination: Destination, name: String) {

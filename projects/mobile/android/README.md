@@ -1074,9 +1074,11 @@ Buttons inside cards follow one rule (`core/designsystem` styles, see its
 README): every card action is size M — 40dp high (`ds_control_m`, no insets),
 as wide as its text with 16dp side padding but at least 120dp
 (`ds_button_min_width`), aligned to
-the start of the card content; two actions of one card sit in a row with the
-main one on the right (Connection: **Remove stored token**, then **Save and
-test connection**). It has 16dp corners (`ds_radius_l`) and
+the start of the card content; two actions of one card are a `ButtonRow`:
+in a row with the main one on the right when both fit, otherwise stacked full
+width with the main one on top (Connection in Russian at 360dp stacks **Save
+and test connection** above **Remove stored token**). Button text never wraps
+or gets cut. It has 16dp corners (`ds_radius_l`) and
 `textAppearanceLabelLarge`. The action the screen exists for is
 `Widget.Home.Button.Filled.M` (**Save and test connection**); other actions
 are `Widget.Home.Button.Tonal.M` (**Refresh config**, **Save name**,
@@ -1090,9 +1092,19 @@ save bars use `Widget.Home.Button.Filled.L` (full width, 48dp). Every
 settings card is `Widget.Home.Card` (filled `colorSurfaceContainer`, no
 stroke) and a card title uses `textAppearanceTitleMedium`.
 
-The toolbar title never clips a letter: it autosizes from 24sp down to 16sp
-and may wrap onto a second line at a word boundary (`breakStrategy=balanced`,
-no hyphenation).
+The toolbar title is the design-system `ToolbarTitle`: it picks the largest
+size from 24sp down to 16sp at which the title fits in two lines, wrapping only
+at a word boundary (balanced, no hyphenation, no ellipsis). The earlier
+AppCompat autoSize did nothing because the title is `wrap_content`.
+`//projects/mobile/android/app:narrow_screens_test` checks «Уведомления и
+поиск телефона» at 360dp and 411dp and the Connection actions at 360dp.
+
+«Phone notifications and find» shows each permission as a `ListRow`: icon,
+title, state (in `colorError` while not allowed) and a trailing tonal
+open-in-new icon button; the whole row opens the same system screen. Status
+lines under a field (Connection token state, errors) use
+`Widget.Home.FieldSupportingText`, so they share the field helper's 16dp
+indent with 8dp between blocks.
 
 `//projects/mobile/android/app:window_insets_screenshot_test` runs the real
 activity with status/navigation/keyboard insets in the Neon and Emerald themes:

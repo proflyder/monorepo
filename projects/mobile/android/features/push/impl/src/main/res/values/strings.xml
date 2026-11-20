@@ -7,8 +7,7 @@
     <string name="push_full_screen_title">Full-screen notifications</string>
     <string name="push_permission_granted">Allowed</string>
     <string name="push_permission_missing">Not allowed</string>
-    <string name="push_permission_grant">Allow</string>
-    <string name="push_permission_open">Open</string>
+    <string name="push_permission_open_settings">Open settings: %1$s</string>
     <string name="push_ring_ready">Find phone works: the ring will be loud even in silent mode and Do Not Disturb.</string>
     <string name="push_ring_incomplete">Find phone will not ring loudly until every permission above is allowed. The notification about the request still arrives.</string>
     <string name="push_register_title">This phone on the server</string>

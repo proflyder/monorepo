@@ -3,8 +3,10 @@ load("//platform/android:defs.bzl", "home_android_lint", "home_detekt")
 package(default_visibility = ["//visibility:public"])
 
 DETEKT_TEST_TARGETS = [
+    "//projects/mobile/android/app:chat_attach_menu_test",
     "//projects/mobile/android/app:key_screens_screenshot_test",
     "//projects/mobile/android/app:main_activity_smoke_test",
+    "//projects/mobile/android/app:narrow_screens_test",
     "//projects/mobile/android/app:toolbar_menu_screenshot_test",
     "//projects/mobile/android/app:theme_screenshot_test",
     "//projects/mobile/android/app:window_insets_screenshot_test",
@@ -95,8 +97,10 @@ test_suite(
         "//projects/mobile/android/features/scenarios/impl:scenario_use_cases_test",
         "//projects/mobile/android/features/settings/impl:screens_screenshot_test",
         "//projects/mobile/android/features/system/impl:system_test",
+        "//projects/mobile/android/app:chat_attach_menu_test",
         "//projects/mobile/android/app:key_screens_screenshot_test",
         "//projects/mobile/android/app:main_activity_smoke_test",
+        "//projects/mobile/android/app:narrow_screens_test",
         "//projects/mobile/android/app:toolbar_menu_screenshot_test",
         "//projects/mobile/android/app:theme_screenshot_test",
         "//projects/mobile/android/app:window_insets_screenshot_test",

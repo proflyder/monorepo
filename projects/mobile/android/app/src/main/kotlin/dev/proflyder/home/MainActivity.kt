@@ -19,6 +19,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.bottomnavigation.BottomNavigationView
+import dev.proflyder.home.core.designsystem.HomePopupMenu
 import dev.proflyder.home.core.navigation.FeatureEntry
 import dev.proflyder.home.core.navigation.FeatureRegistry
 import dev.proflyder.home.core.navigation.FragmentRouter
@@ -203,6 +204,7 @@ class MainActivity : AppCompatActivity(), NavigatorHost, ViewModelFactoryProvide
     }
 
     private fun setupBottomNavigation() {
+        HomePopupMenu.markObstacle(bottomNavigation)
         val menu: Menu = bottomNavigation.menu
         menu.clear()
         features.tabs().forEachIndexed { index, entry -> addTab(menu, index + 1, entry) }

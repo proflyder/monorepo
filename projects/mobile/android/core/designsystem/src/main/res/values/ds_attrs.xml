@@ -1,9 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <attr name="homeDeviceTileStyle" format="reference" />
+    <attr name="homeToolbarTitleStyle" format="reference" />
 
     <declare-styleable name="ListRow">
         <attr name="rowIcon" format="reference" />
+        <attr name="rowIconTint" format="color|reference" />
         <attr name="rowTitle" format="string" />
         <attr name="rowSubtitle" format="string" />
         <attr name="rowValue" format="string" />
@@ -11,10 +13,17 @@
         <attr name="rowSwitch" format="boolean" />
     </declare-styleable>
 
+    <declare-styleable name="ButtonRow">
+        <attr name="equalWidth" format="boolean" />
+        <attr name="centered" format="boolean" />
+        <attr name="autoEmphasis" format="boolean" />
+    </declare-styleable>
+
     <declare-styleable name="EmptyState">
         <attr name="emptyIcon" format="reference" />
         <attr name="emptyText" format="string" />
         <attr name="emptyAction" format="string" />
+        <attr name="emptySecondaryAction" format="string" />
     </declare-styleable>
 
     <declare-styleable name="DeviceTile">

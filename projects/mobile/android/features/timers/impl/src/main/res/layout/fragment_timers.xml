@@ -69,28 +69,28 @@
 
                     <com.google.android.material.chip.Chip
                         android:id="@+id/timers_preset_1"
-                        style="@style/Widget.Material3.Chip.Assist"
+                        style="@style/Widget.Home.Chip.Assist"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="@string/timers_preset_1" />
 
                     <com.google.android.material.chip.Chip
                         android:id="@+id/timers_preset_5"
-                        style="@style/Widget.Material3.Chip.Assist"
+                        style="@style/Widget.Home.Chip.Assist"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="@string/timers_preset_5" />
 
                     <com.google.android.material.chip.Chip
                         android:id="@+id/timers_preset_10"
-                        style="@style/Widget.Material3.Chip.Assist"
+                        style="@style/Widget.Home.Chip.Assist"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="@string/timers_preset_10" />
 
                     <com.google.android.material.chip.Chip
                         android:id="@+id/timers_preset_25"
-                        style="@style/Widget.Material3.Chip.Assist"
+                        style="@style/Widget.Home.Chip.Assist"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="@string/timers_preset_25" />
@@ -104,11 +104,10 @@
                     android:visibility="gone" />
 
                 <com.google.android.material.button.MaterialButton
+            style="@style/Widget.Home.Button.Filled.M"
                     android:id="@+id/timers_start"
                     android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
-                    android:minHeight="52dp"
                     android:text="@string/timers_start" />
 
                 <ProgressBar
@@ -130,11 +129,9 @@
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/timers_retry"
-                    style="@style/Widget.Material3.Button.OutlinedButton"
+                    style="@style/Widget.Home.Button.Outlined.M"
                     android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
                     android:layout_marginBottom="8dp"
-                    android:minHeight="48dp"
                     android:text="@string/ui_retry"
                     android:visibility="gone" />
 
