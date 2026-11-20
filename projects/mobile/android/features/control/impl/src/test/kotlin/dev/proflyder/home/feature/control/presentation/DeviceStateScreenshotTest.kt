@@ -101,6 +101,7 @@ class DeviceStateScreenshotTest {
         assertTilesDiffer(column.getChildAt(3))
         assertSwitchMatchesTile(context, fill(lampOn.findViewById(R.id.control_device_icon)))
         assertAligned(lampOn, column.getChildAt(2))
+        assertSameColumn(lampOn, column.getChildAt(2))
         save(column, "device-states-${theme.key}-$mode.png")
     }
 
@@ -218,6 +219,22 @@ class DeviceStateScreenshotTest {
         val deviceCenter = top(deviceIcon, device) + deviceIcon.height / 2
         val groupCenter = top(groupIcon, group) + groupIcon.height / 2
         assertEquals(deviceCenter.toFloat(), groupCenter.toFloat(), device.resources.displayMetrics.density)
+    }
+
+    private fun assertSameColumn(device: View, group: View) {
+        val deviceIcon = device.findViewById<View>(R.id.control_device_icon)
+        val groupIcon = group.findViewById<View>(R.id.control_row_icon)
+        val deviceTitle = device.findViewById<View>(R.id.control_device_title)
+        val groupTitle = group.findViewById<View>(R.id.control_row_title)
+        assertEquals("icon left", left(deviceIcon, device), left(groupIcon, group))
+        assertEquals("icon width", deviceIcon.width, groupIcon.width)
+        assertEquals("icon height", deviceIcon.height, groupIcon.height)
+        assertEquals("title left", left(deviceTitle, device), left(groupTitle, group))
+    }
+
+    private fun left(view: View, root: View): Int = when (view) {
+        root -> 0
+        else -> view.left + left(view.parent as View, root)
     }
 
     private fun top(view: View, root: View): Int = when (view) {

@@ -40,4 +40,8 @@
     <dimen name="control_group_untitled_gap">-4dp</dimen>
     <dimen name="control_card_padding_bottom_with_settings">8dp</dimen>
     <dimen name="control_card_padding_bottom_plain">16dp</dimen>
+    <dimen name="control_device_icon">48dp</dimen>
+    <dimen name="control_device_icon_padding">12dp</dimen>
+    <dimen name="control_device_text_gap">16dp</dimen>
+    <dimen name="control_device_progress">32dp</dimen>
 </resources>

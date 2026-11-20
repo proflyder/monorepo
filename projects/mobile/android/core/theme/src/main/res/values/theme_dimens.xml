@@ -2,4 +2,6 @@
 <resources>
     <dimen name="theme_neon_glow_elevation">16dp</dimen>
     <dimen name="theme_neon_stroke">1dp</dimen>
+    <dimen name="theme_fab_elevation">6dp</dimen>
+    <dimen name="theme_fab_no_stroke">0dp</dimen>
 </resources>
