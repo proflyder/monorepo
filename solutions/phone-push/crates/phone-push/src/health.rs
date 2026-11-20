@@ -20,7 +20,7 @@ async fn health() -> Json<Value> {
     Json(json!({"status": "ok", "service": "phone-push", "version": crate::VERSION}))
 }
 
-pub fn run_healthcheck() -> ExitCode {
+pub async fn run_healthcheck() -> ExitCode {
     let config = match Config::load() {
         Ok(config) => config,
         Err(error) => {
@@ -35,36 +35,31 @@ pub fn run_healthcheck() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    if let Err(error) = check(&base_url) {
+    if let Err(error) = check(&base_url).await {
         eprintln!("healthcheck: {error}");
         return ExitCode::FAILURE;
     }
     ExitCode::SUCCESS
 }
 
-fn check(base_url: &str) -> Result<(), String> {
+async fn check(base_url: &str) -> Result<(), String> {
+    home_tls::install_crypto_provider();
     let client = reqwest::Client::builder()
         .timeout(TIMEOUT)
         .build()
         .map_err(|error| format!("http client: {error}"))?;
-    let runtime = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .map_err(|error| format!("runtime: {error}"))?;
-    runtime.block_on(async move {
-        let response = client
-            .get(format!("{}/healthz", base_url.trim_end_matches('/')))
-            .send()
-            .await
-            .map_err(|error| format!("/healthz request failed: {error}"))?;
-        if response.status() != reqwest::StatusCode::OK {
-            return Err(format!(
-                "/healthz returned HTTP {}",
-                response.status().as_u16()
-            ));
-        }
-        Ok(())
-    })
+    let response = client
+        .get(format!("{}/healthz", base_url.trim_end_matches('/')))
+        .send()
+        .await
+        .map_err(|error| format!("/healthz request failed: {error}"))?;
+    if response.status() != reqwest::StatusCode::OK {
+        return Err(format!(
+            "/healthz returned HTTP {}",
+            response.status().as_u16()
+        ));
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -93,5 +88,17 @@ mod tests {
         let body: Value =
             serde_json::from_str(&response.text().await.expect("body")).expect("json");
         assert_eq!(body["service"], "phone-push");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn probe_check_succeeds_inside_the_main_runtime() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind");
+        let address = listener.local_addr().expect("addr");
+        tokio::spawn(async move {
+            let _ = axum::serve(listener, router()).await;
+        });
+        check(&format!("http://{address}/")).await.expect("probe");
     }
 }

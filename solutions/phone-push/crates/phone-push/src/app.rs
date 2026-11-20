@@ -80,6 +80,6 @@ pub async fn run() -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn healthcheck_exit() -> ExitCode {
-    crate::health::run_healthcheck()
+pub async fn healthcheck_exit() -> ExitCode {
+    crate::health::run_healthcheck().await
 }
