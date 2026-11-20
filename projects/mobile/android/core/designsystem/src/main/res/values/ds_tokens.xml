@@ -43,4 +43,5 @@
     <dimen name="ds_toolbar_title_min">16sp</dimen>
     <dimen name="ds_toolbar_title_step">1sp</dimen>
     <dimen name="ds_field_supporting_padding">16dp</dimen>
+    <dimen name="ds_row_title_line_height">20sp</dimen>
 </resources>

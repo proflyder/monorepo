@@ -1,6 +1,7 @@
 package dev.proflyder.home.core.designsystem
 
 import android.content.Context
+import android.content.res.ColorStateList
 import android.content.res.TypedArray
 import android.graphics.drawable.Drawable
 import android.util.AttributeSet
@@ -81,6 +82,8 @@ class ListRow @JvmOverloads constructor(
 
     private fun readAttributes(array: TypedArray) {
         icon = array.getDrawable(R.styleable.ListRow_rowIcon)
+        iconView.imageTintList = array.getColorStateList(R.styleable.ListRow_rowIconTint)
+            ?: ColorStateList.valueOf(MaterialColors.getColor(this, com.google.android.material.R.attr.colorOnSurfaceVariant))
         title = array.getText(R.styleable.ListRow_rowTitle)
         subtitle = array.getText(R.styleable.ListRow_rowSubtitle)
         value = array.getText(R.styleable.ListRow_rowValue)

@@ -19,7 +19,7 @@ object DesignCatalog {
         "states" to R.id.ds_catalog_states,
     )
 
-    private val loadingButtons = listOf(
+    internal val loadingButtons = listOf(
         R.id.ds_catalog_loading_filled_s,
         R.id.ds_catalog_loading_filled_m,
         R.id.ds_catalog_loading_filled_l,

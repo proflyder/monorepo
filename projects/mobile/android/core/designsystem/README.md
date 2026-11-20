@@ -41,7 +41,7 @@ the colour roles.
 | Switch | `MaterialSwitch` (theme default `Widget.Home.Switch` from core/theme) | Checked track `colorStateOn`. |
 | Pills | `PillSegments` | The only choice-between-options control; no segmented buttons. |
 | Popup menu | `HomePopupMenu(anchor, menuRes)` | Card with 48 dp rows and icons. |
-| List row | `ListRow` (`app:rowIcon`, `rowTitle`, `rowSubtitle`, `rowValue`, `rowChevron`, `rowSwitch`); child views in XML become the trailing slot | Min height 56 dp; `subtitleTone` = `NEUTRAL`/`ERROR`/`WARNING`/`SUCCESS`. |
+| List row | `ListRow` (`app:rowIcon`, `rowTitle`, `rowSubtitle`, `rowValue`, `rowChevron`, `rowSwitch`); child views in XML become the trailing slot | Min height 56 dp; `subtitleTone` = `NEUTRAL`/`ERROR`/`WARNING`/`SUCCESS`; `app:rowIconTint` (default `colorOnSurfaceVariant`, `colorPrimary` for accent icons such as permissions); titles use a 20sp line height so a wrapped title stays compact. |
 | Section header | `TextView` + `Widget.Home.SectionHeader` | TitleSmall in `colorPrimary`. |
 | Empty state | `EmptyState` (`app:emptyIcon`, `emptyText`, `emptyAction`) | The action is a Filled M button (`emptyState.action`). |
 | Status chip | `TextView` + `Widget.Home.StatusChip.<Error\|Warning\|Success\|Neutral>` | 24 dp pill. |
@@ -122,7 +122,12 @@ the new theme automatically.
 
 - `ButtonLoading.kt`: the loading state remembers text, icon, gravity, padding,
   min width and clickability in a view tag and fixes `minWidth` to the current
-  width, so the button does not change size while the indicator spins.
+  width, so the button does not change size while the indicator spins. The
+  indicator is centred with `ICON_GRAVITY_START` and a start padding of
+  (width − icon size) / 2, because `textStart` gravity with no text drifts left.
+- The catalog screenshot replaces the spinner with a static 270° arc
+  (`freezeLoadingFrame`, tests only): Robolectric never advances the
+  indeterminate animation, so its first frame is a dot.
 - `IconButton` styles use `iconGravity=textStart` with no text so the icon is
   centred inside the inset circle.
 - `ButtonRow` measures every visible child at its natural width first; it

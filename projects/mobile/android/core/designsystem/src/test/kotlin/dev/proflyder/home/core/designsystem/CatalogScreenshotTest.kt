@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.view.LayoutInflater
 import android.view.View
+import com.google.android.material.button.MaterialButton
 import dev.proflyder.home.core.theme.AppTheme
 import java.io.File
 import org.junit.Assert.assertTrue
@@ -33,6 +34,7 @@ class CatalogScreenshotTest {
         val root = DesignCatalog.inflate(LayoutInflater.from(context), null)
         layout(root)
         layout(root)
+        DesignCatalog.loadingButtons.map { root.findViewById<MaterialButton>(it) }.forEach { it.freezeLoadingFrame() }
         DesignCatalog.sections.forEach { (name, id) ->
             val section = root.findViewById<View>(id)
             assertTrue("$name is empty", section.width > 0 && section.height > 0)

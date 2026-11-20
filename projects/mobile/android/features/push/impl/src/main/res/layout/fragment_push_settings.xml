@@ -44,6 +44,7 @@
                     android:clickable="true"
                     android:focusable="true"
                     app:rowIcon="@drawable/push_ic_section_notifications"
+                    app:rowIconTint="?attr/colorPrimary"
                     app:rowTitle="@string/push_notifications_title">
 
                     <com.google.android.material.button.MaterialButton
@@ -63,6 +64,7 @@
                     android:clickable="true"
                     android:focusable="true"
                     app:rowIcon="@drawable/push_ic_dnd"
+                    app:rowIconTint="?attr/colorPrimary"
                     app:rowTitle="@string/push_dnd_title">
 
                     <com.google.android.material.button.MaterialButton
@@ -82,6 +84,7 @@
                     android:clickable="true"
                     android:focusable="true"
                     app:rowIcon="@drawable/push_ic_fullscreen"
+                    app:rowIconTint="?attr/colorPrimary"
                     app:rowTitle="@string/push_full_screen_title">
 
                     <com.google.android.material.button.MaterialButton
