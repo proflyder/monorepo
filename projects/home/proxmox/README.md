@@ -74,3 +74,14 @@ root bootstrap `set-startup-order.sh`: его PVE API требует глоба�
 которое API user не получает. Terraform игнорирует только startup policy. Bootstrap SSH root — отдельный канал.
 State пока локальный с файловой блокировкой; регулярное шифрованное внешнее
 резервирование ещё нужно настроить. Не запускать параллельный apply.
+
+## Заметки к коду
+
+Пояснения, перенесённые из комментариев исходников (код комментариев не содержит, см. `AGENTS.md`).
+
+- `backup-before-install.py` — Cold-copy local PVCs and host recovery files before a destructive OS install.
+- `bootstrap-wifi-mapping.sh` — Preparation only: creates an isolated PCI mapping for the RTL8821CE. It does NOT attach the card to a VM and does NOT change networking. Do not run until a routed/NAT or external Wi-Fi bridge design exists. Hardware bootstrap; never relax IOMMU isolation or use unsafe interrupts.
+- `test_bb.py`
+  - Regression: `grep -q` + pipefail made tar die of SIGPIPE. bsdtar on macOS ignores the closed pipe, so the listing is produced by a small GNU-tar-like streamer: it writes every member and exits non-zero when grep stops reading after the first match.
+- `test_bb_dispatch.py` — Hermetic checks for the bb-dispatch SSH bridge (no CT, no live bb).
+  - ----- local refusals never reach bb ----------------------------------

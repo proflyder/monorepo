@@ -171,3 +171,25 @@ bazel test //solutions/ha-config-sync/... //packages/rust/forced-ssh/...
 `tests/agent.rs` embeds the real script, runs it with `sh` against a temporary
 root and covers hashes, apply, restore (including files that did not exist
 before), path escapes, unknown verbs and pruning.
+
+## Заметки к коду
+
+Пояснения, перенесённые из комментариев исходников (код комментариев не содержит, см. `AGENTS.md`).
+
+- `BUILD.bazel` — The forced-command script is embedded by `src/protocol.rs` (protocol version and allowlist assertions) and by `tests/agent.rs` (real shell execution).
+- `agent/ha-config-agent.sh` — Forced-command agent for ha-config-sync on the Home Assistant OS host.
+  - No pathname expansion: a verb argument like `*` must stay a literal and be rejected by validation, never expand to files in the agent's cwd.
+- `crates/ha-config-sync/src/agent.rs` — The limited agent client: one forced command per call.
+  - Run `verb` with `stdin` and return stdout. Errors must not contain file contents or tokens.
+- `crates/ha-config-sync/src/app.rs` — Composition root: configuration, the agent and Home Assistant clients, the Prometheus listener and the periodic sync loop.
+- `crates/ha-config-sync/src/config.rs` — Environment configuration.
+  - A configuration error; the message never contains the token.
+- `crates/ha-config-sync/src/ha.rs` — Home Assistant REST calls used by a sync cycle.
+- `crates/ha-config-sync/src/lib.rs` — Generic Home Assistant configuration delivery.
+- `crates/ha-config-sync/src/manifest.rs` — The project-owned manifest: which desired globs are delivered and what Home Assistant must reload (or restart) after they change.
+  - Segment-aware glob: `*` and `?` never cross `/`.
+- `crates/ha-config-sync/src/metrics.rs` — Prometheus text exposition for one sync worker.
+- `crates/ha-config-sync/src/protocol.rs` — Wire protocol shared with `agent/ha-config-agent.sh`.
+  - Files that must never be written, even if the pattern would allow them.
+- `crates/ha-config-sync/src/sync.rs` — One sync cycle: measure drift, apply, validate, reload, verify, roll back.
+- `crates/ha-config-sync/tests/agent.rs` — Drives the real `agent/ha-config-agent.sh` against a temporary root.

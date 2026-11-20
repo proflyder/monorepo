@@ -628,3 +628,82 @@ lease отклоняется); держите сумму `delay` в предел
 `interrupted` по ledger, disabled+time → SKIPPED и manual для disabled.
 Фейки scheduler/HA работают на loopback; живые HA, scheduler и колонка в
 тестах не участвуют.
+
+## Заметки к коду
+
+Пояснения, перенесённые из комментариев исходников (код комментариев не содержит, см. `AGENTS.md`).
+
+- `crates/ha-bridge/src/app.rs` — Composition root: configuration, telemetry, the executor worker and the distroless probe entry points.
+- `crates/ha-bridge/src/bridge.rs` — The [`home_worker::Handler`] that executes one scheduled event.
+  - A global alarm_stop may only silence the alarm this bridge started. A stale STOP for an older occurrence, or a STOP that races a newer alarm, must never touch the ringing alarm.
+  - Render an HA failure the way `packages/go/httpapi.Error` does. Only the operation and a status are included: a response body may carry deployment detail and is never logged.
+- `crates/ha-bridge/src/catalog/light.rs` — Light capabilities derived from the color modes Home Assistant reports.
+  - Text of a `speak` action. It is validated and sent as a script variable, never stored, logged or echoed in an ack detail.
+- `crates/ha-bridge/src/catalog/mod.rs` — The phone-facing control catalog: pure rules over discovered Home Assistant data.
+  - A synthetic station volume control: main volume or announcement volume. The entity is fixed by the catalog, never by the command.
+  - The Home Assistant script that performs the speech. The action entry only exists while Home Assistant exposes this script, so a server without the script never advertises the action.
+  - A configured binary control synthesized from a state sensor and a pair of button entities. The app sees one ordinary on/off entry and never the source buttons; the mapping lives in the bridge configuration, not in the client.
+  - Stable localization key of a server-generated title. Empty for titles that come from Home Assistant user data (they are already the user's words and must not be translated).
+  - Every entry flagged unavailable and stripped of state. The stale fallback never pretends Home Assistant is reachable.
+  - Why a `speak` text was rejected. Messages never contain the text itself: it is user content and must not reach logs or ack details.
+  - Validate and trim the text of a `speak` action. The text is bounded by characters, must contain something after trimming and must not contain control characters (`\n`, `\t`, escape/format characters), so a task cannot smuggle terminal or log control sequences.
+  - The status detail a device-less `binary_sensor` contributes to its base. Home Assistant lock semantics are `on` = unlocked (open), `off` = locked (closed).
+  - Build the catalog with configured synthetic toggles. The source button entities of an active toggle are consumed and never appear on their own.
+  - Status detail of a base entity, keyed by the base object id. Only an explicit lock binary sensor with the same `komp_`-style prefix and no registry device (a template entity) can attach; anything else stays an ordinary binary sensor and is never exposed.
+  - A button's state is the time of its last press: `unknown` only means it was never pressed, not that it cannot be pressed.
+  - Whether the entity is a device setting rather than a primary control. Discovery fills [`Raw::role`] from the Home Assistant entity registry category (`config`/`diagnostic` → `setting`, a known `null` → `primary`, an unreadable registry → empty).
+  - Go `path.Match` for the entity ids this catalog uses. Entity ids never contain `/`, so the separator rule collapses to "`*` and `?` match any character". Malformed patterns are reported, matching `path.Match`'s `ErrBadPattern`.
+  - Never pressed (`unknown`) is still pressable, and an area-less button takes its base's room so the client can group them.
+  - The sensor is never an entry of its own, only the switch's detail.
+  - Unknown/unavailable sensors and sensors with a registry device or a non-lock class never invent a status.
+- `crates/ha-bridge/src/catalog/volume.rs` — Station volume controls.
+- `crates/ha-bridge/src/catalog_api.rs` — `GET /v1/catalog` and `GET /healthz`.
+  - One catalog entry on the wire. `device_id`, `device` and `role` are additive: an older server never sends them, an older client ignores them, and they are omitted while empty (the Home Assistant device registry could not be read).
+  - Whether a request header carries the configured bearer token. An empty configured token never authorizes.
+- `crates/ha-bridge/src/config.rs` — Process configuration, loaded 1:1 from the Go bridge's environment.
+  - The scheduler's generic task queue: the HA executor must never lease it.
+  - Why the environment was rejected. Messages keep the Go loader's shape and never contain a secret value.
+- `crates/ha-bridge/src/control.rs` — The `control` queue executor.
+  - The task payload. `entry` and `action` are data; `brightness`, `kelvin`, `hue` and `saturation` are the light adjustments, `text` is the speak action's user content. The text is validated by `resolve` and never logged, echoed in an ack detail or stored.
+  - Render an HA failure like `packages/go/httpapi.Error`: operation and status only, never a response body.
+  - Collapse whitespace and bound the text by characters, never bytes.
+- `crates/ha-bridge/src/control_app.rs` — Composition root of `ha-control`: catalog server and control-queue worker.
+- `crates/ha-bridge/src/control_config.rs` — `ha-control` process configuration, loaded 1:1 from the Go `cmd/ha-control`.
+  - Why the environment was rejected. Messages never contain a secret value.
+- `crates/ha-bridge/src/control_health.rs` — Distroless `ha-control -healthcheck` probe.
+- `crates/ha-bridge/src/discovery.rs` — Build the control catalog from Home Assistant itself.
+  - Areas and hidden flags are nice-to-have. Labels are best effort too, with the fail-closed rule for scripts.
+  - Never hold the std mutex across the discovery await: the future must stay Send for the worker and the axum handler.
+  - Map a registry record to the catalog role. `config` and `diagnostic` entities are device settings (the station's `Clock`/`Wake`/`Microphone` switches); a `null` category is a primary control.
+  - Roles do not depend on the device template.
+- `crates/ha-bridge/src/domain/mod.rs` — Pure executor decisions: which script to call, in which order, and whether a global `alarm_stop` may silence the currently ringing alarm.
+- `crates/ha-bridge/src/domain/order.rs` — Batch ordering: source, then due time, then `STOP` before `FIRE`.
+- `crates/ha-bridge/src/domain/plan.rs` — Map one allowed `(source kind, action)` pair to one configured script.
+- `crates/ha-bridge/src/domain/stop.rs` — Whether a global `alarm_stop` may silence the active alarm.
+- `crates/ha-bridge/src/ha_control.rs` — `ha-control` entry point: the catalog server and control executor, plus the distroless `-healthcheck` probe used by the readiness and liveness executions.
+- `crates/ha-bridge/src/ha_scenario.rs` — `ha-scenario` entry point: the durable `scenario` queue executor plus the distroless `-healthcheck` probe.
+- `crates/ha-bridge/src/health.rs` — Distroless `ha-bridge -healthcheck` probe.
+  - Shared distroless readiness probe: authenticated `GetStatus.ready`. Both listener-less executors (`ha-bridge`, `ha-scenario`) use it. The token is passed by value from the normal config loader and never appears in process arguments.
+- `crates/ha-bridge/src/ledger.rs` — Durable receipt ledger for events whose Home Assistant side effect already succeeded.
+  - One successfully executed event. It never contains tokens or payloads.
+  - A ledger failure. Messages never echo a token or a payload.
+- `crates/ha-bridge/src/lib.rs` — Home Assistant executor for the durable scheduler.
+- `crates/ha-bridge/src/main.rs` — Command entry point: the executor, plus the distroless `-healthcheck` probe used by the readiness and liveness executions.
+- `crates/ha-bridge/src/scenario/executor.rs` — The `scenario` queue executor.
+  - Claim a running slot for one scenario. `None` means an instance is already running: the second FIRE must not run in parallel.
+  - A second FIRE while this scenario runs never queues parallel work. The guard releases the slot on every return path.
+  - ResolveError and SpeakError messages never contain the text.
+  - Render an HA failure like the control executor: operation and status only, never a response body.
+  - Collapse whitespace and bound the text by characters, never bytes.
+- `crates/ha-bridge/src/scenario/ledger.rs` — Scenario execution ledger: which `scenario.fire` events already started and completed.
+  - One event record. It never contains a step parameter or spoken text.
+  - A previous process started this event and never finished.
+  - A ledger failure. Messages never echo a payload or spoken text.
+- `crates/ha-bridge/src/scenario/mod.rs` — Scenario definitions and the pure condition rules.
+  - Convert the wire definition. Unknown oneof variants are dropped; the scheduler rejects them on write, so a dropped variant never reaches a step or condition by accident.
+- `crates/ha-bridge/src/scenario_app.rs` — Composition root of `ha-scenario`: the definition reader, the control catalog and the `scenario` queue executor.
+- `crates/ha-bridge/src/scenario_config.rs` — `ha-scenario` process configuration.
+  - Why the environment was rejected. Messages never contain a secret value.
+- `crates/ha-bridge/src/scenario_health.rs` — Distroless `ha-scenario -healthcheck` probe.
+- `crates/ha-bridge/tests/golden.rs` — Golden vectors generated by the Go bridge and ledger.
+  - The cap keeps the newest receipts and never exceeds 20 000.

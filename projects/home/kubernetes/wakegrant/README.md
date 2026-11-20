@@ -100,3 +100,15 @@ python3 -m unittest discover -s projects/home/kubernetes/wakegrant -p 'test_*.py
 The deploy tests are hermetic: a stub `kubectl` fails at the first cluster
 call, so only validation, rendering and manifest invariants are asserted. The
 protocol itself is tested in Rust (`solutions/wakegrant`).
+
+## Заметки к коду
+
+Пояснения, перенесённые из комментариев исходников (код комментариев не содержит, см. `AGENTS.md`).
+
+- `BUILD.bazel` — Plain-file package: Flux renders these templates (postBuild substitution), and the deploy contracts/tests read them as data.
+- `manifests/external-secrets.yaml` — wakegrant credentials, materialised from OpenBao KV v2 by ESO.
+- `manifests/kustomization.yaml` — Flux-rendered manifest set for the wakegrant pilot (решение 54).
+  - `prune: true` on the app Kustomization must never delete the SQLite volume when a manifest is removed by mistake (решение 54).
+- `manifests/wakegrant.yaml` — wakegrant: one-time logon grants for a machine woken by Home Assistant.
+  - Traceability only: a Deployment metadata change never rolls pods.
+- `test_deploy.py` — Manifest contracts for projects/home/kubernetes/wakegrant.

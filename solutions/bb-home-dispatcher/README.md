@@ -346,3 +346,22 @@ pinned Node без npm-зависимостей. Сборка плагина в�
 - У `threads.spawn` нет отдельного параметра «машина» для
   `project-default`; машина определяется источником проекта. Это совпадает с
   проверкой `machine online`, но не позволяет выбрать другую машину.
+
+## Заметки к коду
+
+Пояснения, перенесённые из комментариев исходников (код комментариев не содержит, см. `AGENTS.md`).
+
+- `BUILD.bazel` — The strict per-method params schema of this plugin, shared with the MCP gateway's wire contract. Bazel exposes it as data so both sides check one hand-written source of truth.
+- `lib/dispatcher.js`
+  - A requested compaction that never produces `thread/compacted` must not keep sends in queue mode forever.
+  - Do not compact again right after a compaction: the recorded usage can still describe the pre-compaction context until the provider reports a new one.
+  - Idempotency keys must serialize even when two HTTP requests arrive together: bb may deliver them concurrently, and a check-then-spawn race would otherwise create two threads for one key.
+  - Compaction is decided before the send and persisted after it: a failed send must not advance the counter or consume the reminder.
+  - While a nightly compaction runs, a new prompt must not steer into it.
+  - Bootstrap: report where the caller should start. Never replay history, otherwise a fresh proxy would speak every old unanswered turn.
+  - ---------------------------------------------------------- idempotency --
+- `lib/errors.js` — DispatchError is the only error type the RPC layer turns into a spoken refusal. Anything else is logged as an internal failure and answered with a generic message so provider or SDK details never reach the voice path.
+- `lib/schema.js` — Strict, dependency-free boundary validation. The plugin runs inside the bb server and must not pull an npm dependency only to reject malformed JSON; the rules below are intentionally small and explicit.
+  - No afterSeq is the bootstrap call: only the current cursor is returned, never history. waitSeconds is capped at the 25 s budget of the voice long-poll.
+- `server.js`
+  - Thin, deterministic executor behind the home voice path: voice / Hermes -> mcp-gateway -> SSH forced command -> curl -> this route There is no LLM here and no arbitrary operation: the seven methods below are the whole surface. bb itself is never exposed;

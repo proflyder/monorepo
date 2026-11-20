@@ -330,3 +330,18 @@ rm -rf secrets/home/vpn
 Сертификат и пользователи живут внутри CT; после destroy они удаляются.
 Приватные копии в `secrets/home/vpn/` — единственный вне-хостовый архив
 учётных данных. При пересоздании CT пользователей нужно добавить заново.
+
+## Заметки к коду
+
+Пояснения, перенесённые из комментариев исходников (код комментариев не содержит, см. `AGENTS.md`).
+
+- `create-lxc.sh` — Create the unprivileged Debian LXC used by the home VPN (ocserv).
+  - /dev/net/tun for ocserv. PVE nesting usually adds it; keep this idempotent.
+- `install-ocserv.sh` — Install and configure ocserv inside the VPN container.
+  - ----- optional client certificate authentication -------------------------- A re-run without --client-ca keeps an already installed CA, so the script stays idempotent. A fresh container without a CA keeps password + TOTP only.
+  - ocserv 1.3 resolves the certificate method through the security module; it only works as the primary method. Password + TOTP therefore becomes the alternative method: clients with a valid certificate skip it, clients without one still log in with password + …
+  - ----- restricted "ci" group ---------------------------------------------- A machine client (CI runner) gets its own pool so the general accept rule for $VPN_CIDR never covers it.
+- `setup-certbot.sh` — Configure automatic Let's Encrypt renewal via the Cloudflare DNS-01 plugin.
+  - ----- deploy hook --------------------------------------------------------- Copy the renewed certificate into ocserv, keeping the self-signed pair as a fallback.
+- `vpncerts.py` — Issue and revoke client certificates for the home ocserv VPN.
+- `vpnusers.py` — Add an ocserv user with a strong password and a TOTP secret.

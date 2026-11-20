@@ -166,3 +166,25 @@ mise run kubectl -- delete namespace traefik cert-manager
 Прямые LAN-адреса и NodePort 30098/30099/30300 продолжают работать
 независимо от этого каталога. DNS-записи удаляются отдельно через Cloudflare
 API.
+
+## Заметки к коду
+
+Пояснения, перенесённые из комментариев исходников (код комментариев не содержит, см. `AGENTS.md`).
+
+- `BUILD.bazel` — Plain-file package: the route templates are consumed by static tests and by the Flux `ingress-routes` Kustomization.
+- `cert-manager/helmrelease.yaml` — cert-manager, adopted from the live `cert-manager` release.
+- `routes/backends.yaml` — Public template. `deploy.sh` substitutes ${HAOS_ADDRESS} (private HAOS IPv4).
+- `routes/certificate.yaml` — Public template. `deploy.sh` substitutes ${HOME_DOMAIN}. Wildcard certificate for all names below the private home suffix. It lives in the same namespace as the IngressRoutes and the Cloudflare API token Secret, so one certificate covers every host without duplicating TLS Secrets.
+- `routes/external-secret-cloudflare.yaml` — Cloudflare API token used by cert-manager ClusterIssuers (ACME DNS-01).
+- `routes/intercom-networkpolicy.yaml` — Public template. `deploy.sh` substitutes ${LAN_CIDR} (the private LAN range).
+- `routes/issuers.yaml` — Public template. ACME account is registered without a contact email, matching the VPN certbot setup; add `email:` here if notifications are wanted.
+- `routes/kustomization.yaml` — Shared HTTPS routes, wildcard certificate and the Cloudflare solver secret.
+- `routes/middleware.yaml` — Public template. `deploy.sh` substitutes ${LAN_CIDR} (the private LAN range). VPN clients are NATed to a LAN address by the VPN container, so they match this allowlist. Pod CIDR keeps in-cluster probes working; loopback covers checks executed on the node.
+- `routes/routes.yaml` — Public template. `deploy.sh` substitutes ${HOME_DOMAIN}.
+- `test_templates.py` — Static contracts for the Traefik/cert-manager ingress manifests.
+- `traefik/helmrelease.yaml` — Traefik, adopted from the live `traefik` release.
+- `traefik/values.yaml` — Public, non-secret values for the Traefik ingress controller.
+  - Intercom `Watch` is a long-lived server-streaming response. Traefik's defaults (read 60s, write 0s, idle 180s) are tuned for ordinary HTTP; keep reads bounded, never time out an active response, and keep idle keep-alive connections much longer.
+  - Traefik must bind host ports 80/443 in the host network namespace. The chart default (UID 65532) cannot do that: containerd does not grant ambient capabilities to non-root processes and the image has no file capabilities, so NET_BIND_SERVICE never reaches the …
+  - Do not enable Prometheus metrics: the chart would bind 9100, which is already used by node-exporter on the host.
+- `verify.sh` — Read-only acceptance checks for the private home HTTPS suffix.

@@ -477,3 +477,71 @@ Kubernetes REST и Telegram; сеть и кластер не использую�
 маршруты utterance, выход из режима, fail-closed для work и long-poll
 результата. `tests/deploy_contract.rs` проверяет tracked-каталог и
 bb-allowlist настоящими валидаторами.
+
+## Заметки к коду
+
+Пояснения, перенесённые из комментариев исходников (код комментариев не содержит, см. `AGENTS.md`).
+
+- `crates/mcp-gateway/src/bb.rs` — Typed client of the bb home-dispatcher and the personal-only allow-list.
+  - A refused or failed bridge call. `code` is the plugin/bridge code and `speech` is the short spoken line. It never contains key material or a payload.
+  - Creates a visible thread; idempotent on `idempotency_key`.
+  - Idempotency key.
+  - Idempotency key.
+  - Sequence of the completed turn; the voice proxy's idempotency key.
+  - Idempotency key.
+- `crates/mcp-gateway/src/checks.rs` — Typed external catalog probes (`tcp`, `http`, `ha_state`, `ha_template`, `ha_unavailable_summary`), ported from `internal/checks/checks.go`.
+  - Build the shared HTTP client with the workspace rustls provider. The workspace `reqwest` trusts only explicitly pinned roots, so an `https://` Home Assistant or external endpoint verifies only when the operating system's bundle is added explicitly …
+- `crates/mcp-gateway/src/config.rs` — Process configuration, ported one-to-one from `solutions/mcp-gateway/internal/config/config.go`.
+- `crates/mcp-gateway/src/domain/alert.rs` — Alertmanager alert ↔ catalog service matching.
+- `crates/mcp-gateway/src/domain/catalog.rs` — Deployment catalog: YAML schema, validation and spoken-name resolution.
+- `crates/mcp-gateway/src/domain/clock.rs` — Injectable time source.
+- `crates/mcp-gateway/src/domain/mod.rs` — Pure domain of the MCP gateway.
+- `crates/mcp-gateway/src/domain/redact.rs` — Secret redaction.
+  - Long base64-ish blobs. This over-approximates on purpose: a 33-character unbroken token is almost never ordinary log text.
+- `crates/mcp-gateway/src/domain/report.rs` — The full `infra_report`: service classification and the Telegram text.
+  - Deliberately paused; never a problem.
+  - Short informational suffix, for example the number of suspended Flux resources. Never a problem by itself.
+  - The Flux consistency entry: every Kustomization and HelmRelease must be `Ready=True`; a suspended resource is reported but is never a problem.
+  - The second line of the Telegram text: a short verdict with an emoji. It never asks a question; the offered follow-up lives in speech.
+  - A suspended resource is shown but never reported as a problem.
+- `crates/mcp-gateway/src/domain/speech.rs` — Spoken-line normalization.
+- `crates/mcp-gateway/src/domain/state.rs` — In-memory gateway state: pending actions, the agent-mode switch and the restart cooldown.
+- `crates/mcp-gateway/src/domain/status.rs` — The `infra_status` aggregate.
+  - The check was not configured; it is never a failure.
+- `crates/mcp-gateway/src/domain/time.rs` — Pure time-tool domain: RFC3339 parsing, validation and spoken text.
+- `crates/mcp-gateway/src/domain/vectors.rs` — Golden-vector tests of the pure domain.
+  - The secret values are assembled from parts so the repository scanner never sees a contiguous credential. The vector file only names them.
+- `crates/mcp-gateway/src/health.rs` — Distroless probe: `mcp-gateway -healthcheck`.
+- `crates/mcp-gateway/src/kubernetes.rs` — Small read-mostly Kubernetes REST client.
+  - List Flux Kustomizations and HelmReleases in every namespace. The report treats a missing `Ready=True` condition as a problem; a `suspend: true` resource is reported separately and is never an error, because a deliberately paused Kustomization is a normal …
+- `crates/mcp-gateway/src/lib.rs` — The MCP gateway: pure domain, shared clients, tool groups and the HTTP surface.
+- `crates/mcp-gateway/src/main.rs`
+  - `-healthcheck` is synchronous on purpose: it builds its own current-thread runtime, so it must not start inside `#[tokio::main]` (a nested `block_on` panics and would turn the liveness probe into a crash loop).
+- `crates/mcp-gateway/src/mcp.rs` — MCP server on the official Rust SDK (`rmcp`).
+  - Peer messages travel back through the session worker that is awaiting this handler, so send from a task: initialization and a concurrently opening GET stream must not wait on the notification.
+- `crates/mcp-gateway/src/metrics.rs` — `mcp_gateway_*` Prometheus series.
+  - `prometheus-client` appends `_total` to counters; the Go-era names already end in `_total`, so the registered names must not.
+- `crates/mcp-gateway/src/push.rs` — Client for the phone push service (`solutions/phone-push`).
+  - Delivery counts returned by the push service. Tokens are never included.
+  - Every registered phone (identity and name; never a token).
+- `crates/mcp-gateway/src/scheduler.rs` — Typed client for the home scheduler (`home.v1.SchedulerService`).
+  - Build a client. `base_url` is the scheduler root, for example `http://scheduler.home-assistant.svc.cluster.local:8098`.
+- `crates/mcp-gateway/src/server.rs` — HTTP surface: authenticated MCP, the separate voice bearer, health, readiness and the Prometheus endpoint.
+- `crates/mcp-gateway/src/ssh.rs` — SSH bridge to the bb home-dispatcher.
+  - One bridge call failure. It never contains key material or a payload.
+- `crates/mcp-gateway/src/tools/bb.rs` — `bb.read` / `bb.act`: the bb home-dispatcher tool groups.
+- `crates/mcp-gateway/src/tools/mod.rs` — Extensible tool groups and the shared tool-call envelope.
+  - Hand-written input schema (`serde_json::json!`, never `schemars`).
+- `crates/mcp-gateway/src/tools/phone.rs` — `phone` tool group: find a phone, send it a notification, list the phones.
+  - Deterministic resolution: one phone never needs a name, several phones need an unambiguous match. Unmatched or ambiguous input returns the candidates so Hermes can ask one question instead of guessing.
+  - Diminutive suffixes: «Стасик», «Машенька», «Сашенька» reduce to the same stem as «Стас», «Маша», «Саша». A strip that would leave fewer than three characters is skipped, so «Вика» never collapses to «в».
+- `crates/mcp-gateway/src/tools/time.rs` — `time` tool group: alarms, timers and reminders through the home scheduler.
+- `crates/mcp-gateway/src/voice.rs` — The `/v1/voice/*` HTTP surface.
+  - Never log the spoken text: only its size and routing metadata.
+  - Delivers one phrase to bb. Failures always stay on the bb route: a work-profile phrase must never fall through to Hermes.
+  - Maps the proxy's Russian or English value onto the two profiles. An unknown value is rejected (fail closed).
+  - Matches a whole utterance, not a fragment, so a task that merely mentions agents is never mistaken for the exit command.
+- `crates/mcp-gateway/tests/contract.rs` — Golden contract replay for the MCP surface and the infra tool groups.
+- `crates/mcp-gateway/tests/deploy_contract.rs` — Deploy-data contract: the tracked catalog and bb allow-list must load with the gateway's real validators.
+- `crates/mcp-gateway/tests/tool_list_changed.rs` — Contract for `notifications/tools/list_changed` on a fresh MCP session.
+- `crates/mcp-gateway/tests/voice.rs` — Golden replays of `/v1/voice/*` plus a real `voice-proxy` client.

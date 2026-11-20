@@ -133,3 +133,9 @@ Rust-раннер только проверяет закоммиченные ф�
 `capture`, `captureHeaders`, `{{name}}`, `<uuid>`, `<base64-32>`, `<any>`,
 структурное сравнение JSON, побайтное сравнение строк, режимы `exact`/
 `semantic` и `response.format: "sse"`.
+
+## Заметки к коду
+
+Пояснения, перенесённые из комментариев исходников (код комментариев не содержит, см. `AGENTS.md`).
+
+- `src/lib.rs` — Rust runner for the shared golden HTTP fixtures.

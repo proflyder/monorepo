@@ -41,3 +41,16 @@ configs/, patches/  PVE/Wi-Fi-драйвер и сетевые примеры (�
 - Hermes не владеет alarm/timer state; локальные intents должны работать без LLM.
 - MA/Spotify — отдельный live-source; один аккаунт = один stream-slot.
 - Секреты и реальные адреса — только в `secrets/`.
+
+## Заметки к коду
+
+Пояснения, перенесённые из комментариев исходников (код комментариев не содержит, см. `AGENTS.md`).
+
+- `e2e/kubernetes_runtime.py` — Read-only acceptance of the migrated cluster and Git-owned dashboards.
+- `e2e/live_ha.py` — Opt-in end-to-end tests against the real Home Assistant.
+  - The confirmation turn is deliberately NOT sent: the gateway must keep the action pending and answer with a question, never restart by itself.
+  - alarm_start is a multi-step script. Do not race its source/volume capture with the stop request: ring goes on before the sequence ends.
+- `e2e/live_hermes.py` — Opt-in live checks for the Hermes fallback API.
+- `e2e/live_scheduler_voice.py` — Opt-in live check: HA voice intents -> canonical SchedulerService.
+  - Unique per process so cleanup can never touch another session's resources. Cyrillic only: the Russian sentence slots do not reliably match Latin labels.
+- `e2e/wyoming_smoke.py` — Synthesize and transcribe a fixed phrase without playback or HA mutations.

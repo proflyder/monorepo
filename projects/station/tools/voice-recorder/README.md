@@ -149,3 +149,12 @@ sh -n projects/station/tools/voice-recorder/recover.sh
 
 Не запускать live запись как hermetic-тест. Voice recordings/connection
 config/диагностика не должны попадать в Git или публичный отчёт.
+
+## Заметки к коду
+
+Пояснения, перенесённые из комментариев исходников (код комментариев не содержит, см. `AGENTS.md`).
+
+- `helper/src/main.rs`
+  - Let VQE settle; never include startup noise in a labelled take.
+- `server.py`
+  - Disk failure must never prevent device restoration.

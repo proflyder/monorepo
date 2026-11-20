@@ -219,3 +219,36 @@ without a Docker daemon. Targets:
 `//solutions/currency-bot:currency-bot_image`, `:currency-bot_load`,
 `:currency-bot_push` (repository `ghcr.io/proflyder/currency-bot`). Entrypoint,
 uid/gid and container ports are unchanged from the Go image.
+
+## Заметки к коду
+
+Пояснения, перенесённые из комментариев исходников (код комментариев не содержит, см. `AGENTS.md`).
+
+- `crates/currency-bot/src/api/history.rs`
+  - `POST /api/trigger`: force a send, do not save history (the Kotlin contract). An unparseable body is silently ignored.
+- `crates/currency-bot/src/api/json.rs` — Go-compatible JSON number formatting.
+- `crates/currency-bot/src/api/mod.rs` — axum HTTP layer: the internal JSON API and the dedicated webhook listener.
+  - Log every request and count it by the matched route pattern (never the raw path, which a scanner could grow without bound).
+  - Label by the route template, never the raw path: a scanner hitting random URLs must not create unbounded series. Unknown paths collapse to `other`.
+- `crates/currency-bot/src/app.rs` — Composition root: configuration, telemetry, SQLite store, the two HTTP listeners and the two periodic jobs.
+  - Retry `setWebhook` with exponential backoff in `[1s, 60s]` until it succeeds or the process shuts down. A Telegram outage at start-up must not crashloop the pod or affect readiness.
+- `crates/currency-bot/src/config.rs` — Process configuration loaded 1:1 from the Go service's environment.
+  - Why the environment was rejected. Messages match the Go loader and never contain a secret value.
+- `crates/currency-bot/src/contract_tests.rs` — Replay of `solutions/currency-bot/testdata/contract/*.json`.
+- `crates/currency-bot/src/domain/alerts.rs` — Threshold evaluation and deduplication as pure functions.
+- `crates/currency-bot/src/domain/message.rs` — The Telegram HTML message.
+- `crates/currency-bot/src/domain/model.rs` — Currency-bot domain types.
+  - Go kept the field in the model but never stored it; it is optional here for the same reason.
+- `crates/currency-bot/src/domain/rates.rs` — Pure kurs.kz extraction: the `var punkts` literal, the intentional IQR filter and the best-five average.
+- `crates/currency-bot/src/domain/schedule.rs` — The two wall-clock schedules, with the same "strictly after now" and no-catch-up policy as Go.
+- `crates/currency-bot/src/domain/texts.rs` — User-visible fixed texts.
+- `crates/currency-bot/src/domain/time.rs` — Timestamp formatting and parsing with Go's exact layouts.
+- `crates/currency-bot/src/domain/vectors.rs` — Replay of `solutions/currency-bot/testdata/vectors/*.json`.
+- `crates/currency-bot/src/health.rs` — Distroless `-healthcheck`: GET the public `/readyz` probe.
+- `crates/currency-bot/src/lib.rs` — currency-bot: kurs.kz rate snapshots, threshold alerts and a Telegram bot.
+- `crates/currency-bot/src/main.rs` — Command entry point: the currency bot service and the distroless `-healthcheck` probe used by the deployment.
+- `crates/currency-bot/src/metrics.rs` — Prometheus exposition: only the `currency_bot_*` families.
+- `crates/currency-bot/src/pipeline.rs` — The fetch → save → threshold → send → record pipeline.
+  - The message is delivered; recording must not be lost. The store call is synchronous and cannot be cancelled like a Go request context.
+- `crates/currency-bot/src/store/mod.rs` — SQLite persistence on the shared single-writer [`home_sqlite::Db`].
+- `crates/currency-bot/src/testdata.rs` — Locate the shared `solutions/currency-bot/testdata` directory in both `cargo test` (package-relative) and Bazel (`TEST_SRCDIR` runfiles).

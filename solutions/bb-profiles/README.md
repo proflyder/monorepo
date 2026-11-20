@@ -166,3 +166,15 @@ allowlist. `bb plugin install path:<new dir>` для того же id тоже �
 
 Не менять `bb.name`, имя пакета и id; не выполнять `bb plugin remove` ради
 обновления; не копировать `node_modules` и `dist/` в Git.
+
+## Заметки к коду
+
+Пояснения, перенесённые из комментариев исходников (код комментариев не содержит, см. `AGENTS.md`).
+
+- `app.tsx` — bb-plugin-profiles — frontend: a profile switcher in the sidebar footer, a header hook that remembers the last thread per profile, and a "Profiles" page that assigns every project to a profile. The thread list itself is bb's built-in one; the server hides the other profiles' projects in it.
+- `lib/policy.js` — Pure profile policy: no bb SDK, no npm dependencies.
+  - Default env for a new profile, expressed relative to the home directory of the machine that runs the provider. A `~` prefix is deliberate: the server may run on another machine, so it must not bake its own home directory into newly created profiles.
+- `server.ts` — bb-plugin-profiles — isolated work/personal profiles for bb.
+  - The provider runs on `hostId`, which may be another machine. Only an explicit hostHomes entry knows its home; the server's home is the safe default for same-machine installs. Existing absolute profile values never consult this.
+  - Apply the project's profile to every provider command. Values are only paths (they show up in diagnostics), never secrets. `context.hostId` names the machine that runs the provider;
+  - Resolve the raw maps: a hook must not throw an RPC refusal, and a profile missing from kv simply means "no restriction".

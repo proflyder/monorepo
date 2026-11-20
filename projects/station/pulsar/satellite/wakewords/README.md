@@ -32,3 +32,9 @@ here. The C++ bridge and its license notes are in
 
 Model versions, data and the from-scratch recipe are documented in the
 monorepo `docs/WAKE-WORD.md`.
+
+## Заметки к коду
+
+Пояснения, перенесённые из комментариев исходников (код комментариев не содержит, см. `AGENTS.md`).
+
+- `.gitignore` — The trained model and its manifest are local artifacts until the voice/data licenses are reviewed for public distribution.

@@ -305,3 +305,40 @@ and the cutover preflight still runs as a Job (`preflight-job.yaml`,
   side effect. Audibility is never claimed by the scheduler or the bridge.
 - STOP for timer/reminder is acknowledged as `ACK_SKIPPED`; the announce is
   one-shot and a global stop could silence another alarm.
+
+## Заметки к коду
+
+Пояснения, перенесённые из комментариев исходников (код комментариев не содержит, см. `AGENTS.md`).
+
+- `BUILD.bazel` — Container images for the home scheduler stack.
+  - The cutover preflight Job runs the same `home-deploy` binary as the deploy scripts, so the cluster never needs a Python image. It is built from the Rust crate and promoted by the same DECISIONS 36 digest path as the three service images above.
+- `backup.sh` — Consistent backup of the scheduler SQLite database and the bridge ledger.
+  - Fail closed: never copy WAL files while a writer still exists.
+- `deploy.sh` — Deploy the durable scheduler and the Home Assistant executors to the home K3s cluster as digest-pinned container images.
+  - CI sets DEPLOY_NO_BUILD=1: the artifacts come from PR CI (promoted digests or the live Deployment), never from a build on the deployment runner.
+  - Pre-deploy state for a safe rollback: deploy.sh records each Deployment it is about to change and marks it only after a successful apply. CI restores from this, never with a blind `kubectl rollout undo`.
+- `manifests/bridge.yaml` — Home Assistant executor for the durable scheduler.
+  - Traceability only: a Deployment metadata change never rolls pods.
+  - Authenticated scheduler readiness; the token comes from the mounted file, never from probe arguments.
+- `manifests/control.yaml` — ha-control: phone-facing catalog server and dedicated control-queue executor.
+  - Traceability only: a Deployment metadata change never rolls pods.
+  - Native HA label id that marks a script as a personal scenario. Icons/areas/names are display only; scripts without this label are never exposed (infrastructure helpers stay hidden).
+- `manifests/external-secrets.yaml` — Scheduler / HA executor credentials, materialised from OpenBao.
+- `manifests/kustomization.yaml` — Flux-rendered manifest set for the HA executors (решение 54): scheduler, ha-bridge, ha-control, ha-scenario.
+  - `prune: true` must never delete a SQLite volume if a manifest is removed by mistake (решение 54).
+- `manifests/preflight-job.yaml` — One-shot cutover preflight, run inside the cluster.
+- `manifests/scenario.yaml` — ha-scenario: the durable `scenario` queue executor.
+  - Traceability only: a Deployment metadata change never rolls pods.
+  - Authenticated scheduler readiness; the token comes from the mounted file, never from probe arguments.
+- `manifests/scheduler.yaml` — Durable scheduler: one process, one SQLite writer, one persistent volume.
+  - Traceability only: a Deployment metadata change never rolls pods.
+  - SQLite is single-writer: never run two pods against the same volume.
+- `nft/apply.sh` — Install or refresh the scheduler/control/intercom NodePort source filter on the K3s node.
+- `nft/scheduler-nodeport.nft` — Minimal exposure for the scheduler, control and intercom NodePorts.
+- `scenarios/seed.mjs` — Seed the durable home.v1.ScenarioService with the household scenarios that used to be Home Assistant YAML scripts.
+  - idempotency_key shared by every retry of the same definition file.
+- `test_deploy_control.sh` — Regression test for deploy.sh control-mode handling with a mocked kubectl.
+  - Pre-resolved digest-pinned images: the regression test must not build or push anything.
+  - 5. Malformed or not-ready GetStatus must also fail closed.
+  - 7. DEPLOY_NO_BUILD=1 (deploy-home) never builds: every image, including the sibling workloads, arrives as a promoted digest.
+  - 9. A malformed or duplicated value must fail closed, before any cluster call.

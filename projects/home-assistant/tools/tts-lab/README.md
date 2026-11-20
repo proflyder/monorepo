@@ -58,3 +58,9 @@ Ruslan дистилляцией Supertonic M1: тем же способом мо
 ## Puriso
 
 Текущий статус — `docs/STATE.md` (от корня репозитория); установка/откат — `projects/home-assistant/tts/puriso/README.md`. `install_puriso.py` скачивает закреплённые веса/config и проверяет SHA256, но не меняет HA/Compose.
+
+## Заметки к коду
+
+Пояснения, перенесённые из комментариев исходников (код комментариев не содержит, см. `AGENTS.md`).
+
+- `generate_samples.py` — Generate TTS audition samples for the station voice lab.

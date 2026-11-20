@@ -51,3 +51,15 @@ OpenBao/ESO, mcp-gateway, Nexus и observability. Hermes и другие про�
 платформу, observability и Vaultwarden разворачивает Flux, ручными остаются
 OpenBao, host-firewall и Cloudflare DNS, сервисы приложений — тоже Flux из
 pins (`deploy-home` только пинует digest'ы).
+
+## Заметки к коду
+
+Пояснения, перенесённые из комментариев исходников (код комментариев не содержит, см. `AGENTS.md`).
+
+- `backup/pve/backup_metrics.py` — Export Proxmox vzdump freshness as Prometheus textfile metrics.
+- `backup/pve/install.sh` — Install vzdump freshness metrics on the Proxmox host from the operator's Mac.
+- `e2e/run-scheduler-smoke.sh` — Local-only scheduler + ha-bridge E2E. Builds binaries into a temp dir and uses loopback fake HA; never touches live HA/ADB.
+- `e2e/scheduler_smoke.py` — Local process E2E: real scheduler + real ha-bridge + fake Home Assistant.
+  - Deployment configuration must never leak into this hermetic test: a local *_TOKEN_FILE, consumer allowlist, DB path or bridge queue would change what is being exercised.
+  - No pending *and* no leased event: an earlier FIRE ack must not mask a still-leased STOP.
+  - 3. Cancel the fired timer: backend state is cancelled, but a one-shot announcement has no safe global audio stop, so the bridge must not call alarm_stop.

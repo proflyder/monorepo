@@ -127,3 +127,9 @@ repo `ghcr.io/proflyder/home-deploy`) — тот же бинарник на dist
 - внешний вход — только собственный VPN (ocserv);
 - секреты — через env/secret files;
 - `ha-bridge` общается с HA, `ha-bridge` не управляет Pulsar напрямую.
+
+## Заметки к коду
+
+Пояснения, перенесённые из комментариев исходников (код комментариев не содержит, см. `AGENTS.md`).
+
+- `resolve.sh` — Resolve and run the `home-deploy` CLI (the Rust port) from the deploy scripts.

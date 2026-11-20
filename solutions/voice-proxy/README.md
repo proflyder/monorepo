@@ -274,3 +274,48 @@ built by Bazel `rules_rust` (static `x86_64-unknown-linux-musl`) and
 `rules_oci`/distroless. It covers config, sanitising, SSE, upstream
 passthrough, routing, the result announcer, the dispatcher updates poller, the
 durable queue producer and consumer, `-healthcheck` and `-status`.
+
+## Заметки к коду
+
+Пояснения, перенесённые из комментариев исходников (код комментариев не содержит, см. `AGENTS.md`).
+
+- `crates/voice-proxy/src/api.rs` — The HTTP surface: GET passthrough and the `POST /v1/chat/completions` pipeline.
+  - Cancelled speech: never spoken and never sent upstream. HA's llama_cpp adapter drops an empty assistant message and then raises "Unable to get response"; a whitespace-only body keeps it valid while `tts_input.strip()` still skips TTS.
+  - Structural evidence only: never the recognised text or payload.
+- `crates/voice-proxy/src/app.rs` — Composition root: configuration, telemetry, the HTTP proxy and the background workers.
+- `crates/voice-proxy/src/config.rs` — Typed environment configuration.
+  - The JSON-safe summary printed by `-status`; never a token value.
+- `crates/voice-proxy/src/contract_tests.rs` — Replays the golden HTTP fixtures from `solutions/voice-proxy/testdata/contract` through the Rust proxy. The fixtures are the Go implementation's files, unchanged.
+- `crates/voice-proxy/src/domain/cancel.rs` — Exact cancel-phrase guard: the last-resort path for HA's continued-conversation mode. Matching is exact after [`normalize`], never fuzzy.
+  - The exact local cancel phrases registered by the HA custom_sentences StationCancel intent. The guard must not be broadened into fuzzy matching.
+- `crates/voice-proxy/src/domain/clock.rs` — Time source for the domain: production uses the wall clock, tests inject a fixed one.
+- `crates/voice-proxy/src/domain/profile.rs` — The HA `input_select` voice profile and its routing values.
+- `crates/voice-proxy/src/domain/queue_payload.rs` — The `voice.announce` wire payload.
+  - The idempotency key of one announcement.
+- `crates/voice-proxy/src/domain/routing.rs` — The routing decision table. Pure: every input is already read, every output is an effect the caller performs.
+  - `true` means the utterance must not reach Hermes.
+  - Unknown route: never forward, and never speak a gateway phrase that may belong to another destination.
+- `crates/voice-proxy/src/domain/sanitize.rs` — Turns assistant replies into text that Piper TTS can speak.
+  - Compiled once per thread: the patterns never change at runtime.
+  - Releases complete sentences while keeping split links and URLs out of speech. A boundary must be outside links/parentheses and followed by whitespace; the tail is held until completion, so the regexes never see half a URL.
+  - A truncated/incomplete link is never safe to speak at the end.
+- `crates/voice-proxy/src/health.rs` — The `-healthcheck` probe of the distroless image: `GET <upstream>/v1/models`.
+- `crates/voice-proxy/src/lib.rs` — voice-proxy: an OpenAI-compatible passthrough that makes assistant replies safe for Piper TTS.
+- `crates/voice-proxy/src/main.rs` — Command-line entry point. Everything real lives in the library; the extra behaviour is the `-healthcheck` / `-status` pair the distroless image needs.
+  - Prints the redacted JSON summary; never a token value.
+- `crates/voice-proxy/src/openai.rs` — Typed OpenAI chat/completions shapes plus the error normalisation HA's `llama_cpp` adapter requires.
+- `crates/voice-proxy/src/relay/sse.rs` — The subset of Server-Sent Events the voice proxy needs: an incremental reader that joins multiline data, tolerates CRLF and forwards comment lines as keepalives.
+- `crates/voice-proxy/src/relay/upstream.rs` — The upstream half: a small OpenAI-compatible passthrough client plus the error normalisation HA's `llama_cpp` adapter requires.
+- `crates/voice-proxy/src/services/gateway.rs` — The mcp-gateway voice client: ask where an utterance belongs, long-poll a routed turn's result and the dispatcher updates.
+  - One gateway call failure. It never contains the bearer or a response body.
+- `crates/voice-proxy/src/services/ha.rs` — Home Assistant access: profile reads, entity states and announcements.
+  - Reads the profile entity, caching only a fresh *successful* read. A failed read is unknown and clears the cache, so a stale profile is never used.
+  - A stale cache is never used: a read error makes the profile unknown.
+  - Speaks late answers through Home Assistant. * a statement runs the announcement script and leaves the satellite alone; * a question uses `assist_satellite.start_conversation`, which speaks and then keeps listening;
+- `crates/voice-proxy/src/services/queue.rs` — The durable announcement queue: a producer that stores a spoken answer as a `voice.announce` task and a consumer that speaks it only when the station is idle.
+  - Ack detail when the station never settled.
+- `crates/voice-proxy/src/services/results.rs` — Announces the final answer of a routed bb turn.
+- `crates/voice-proxy/src/services/router.rs` — The routing service: read the profile, ask the gateway and turn the pair into a [`Decision`] plus the background announcement.
+  - Resolves profile and route for one utterance. It never fails: every failure becomes an explicit decision so the fail-closed contract holds.
+- `crates/voice-proxy/src/services/updates.rs` — Announces turns the owner did not start by voice: child completions and dispatcher messages.
+  - Polls until cancelled. It never returns an error: the poller must never die.

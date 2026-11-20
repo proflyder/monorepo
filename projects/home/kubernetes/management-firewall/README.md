@@ -19,3 +19,9 @@ The script validates rules before applying and replaces only its own table
 in one nft transaction. Kubernetes tables remain managed by their
 owners. Update this policy before adding nodes or changing the node address.
 Rollback: disable the service and delete only `table inet home_k3s`.
+
+## Заметки к коду
+
+Пояснения, перенесённые из комментариев исходников (код комментариев не содержит, см. `AGENTS.md`).
+
+- `rules.nft` — Replace NODE_IPV4 and POD_CIDR before installing; single-node K3s only. CI has no K3s API access (Flux applies workloads in-cluster), so only the node and pod ranges are accepted.

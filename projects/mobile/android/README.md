@@ -1014,3 +1014,282 @@ Themes are code in `core/theme`:
   the palette data in light and night); `//projects/mobile/android/app:theme_screenshot_test`
   writes `theme-<key>-{home,time,appearance}-dark.png` and requires the
   theme's surface to fill the frame.
+
+## Заметки к коду
+
+Пояснения, перенесённые из комментариев исходников (код комментариев не содержит, см. `AGENTS.md`).
+
+- `BUILD.bazel`
+  - Unit tests only. `//projects/mobile/android:android_lint` is intentionally absent: it is a separate CI unit so its findings do not hide test results.
+- `app/src/main/AndroidManifest.xml`
+  - WebRTC: NetworkMonitor aborts natively without network-state access. Push / Find phone (features/push/impl): library permissions are dropped by rules_android, so the app declares them.
+- `app/src/main/kotlin/dev/proflyder/home/di/AndroidNetworkWaiter.kt`
+  - Waits for a default network (Wi-Fi, LAN or the VPN tunnel) while the phone wakes up after Doze. A resume can race the tunnel coming back, so the first read should wait instead of immediately showing "check LAN or VPN".
+- `app/src/main/kotlin/dev/proflyder/home/di/AppGraph.kt`
+  - A bearer token must never be forwarded to a redirect target.
+- `app/src/main/kotlin/dev/proflyder/home/di/NetworkInterceptors.kt`
+  - Network diagnostics, enabled by the `home_network_inspection` bool (a release variant should override it to false so nothing below is created): - an [HttpLoggingInterceptor] (BODY) writing to logcat under "HomeHttp", - a Chucker inspector (notification + …
+- `app/src/main/res/layout/app_toolbar_menu.xml` — The toolbar's custom actions menu: a rounded tonal card with one icon and label per row. It replaces the framework overflow list entirely.
+- `app/src/main/res/menu/menu_main.xml` — One visible actions button. Tapping it opens the app's own rounded menu (app_toolbar_menu.xml); the framework overflow list is never used.
+- `app/src/main/res/values/bools.xml`
+  - Crashlytics collection. The app only sends crash stack traces, device model/OS and app version; never tokens or endpoints. Set to false to keep Crashlytics initialized but not collecting.
+- `app/src/main/res/xml/backup_rules.xml` — Backup and device transfer are disabled for the whole app: the bearer token and server address are private configuration.
+- `app/src/main/res/xml/network_security_config.xml` — The client talks to a user-supplied LAN address or a home HTTPS name reached over the VPN. HTTP is allowed only because users may run the server without TLS on their own network; HTTPS is recommended and cleartext is never enabled for public hosts by this app. See README "Transport security".
+  - Cleartext is a documented private-LAN trade-off; see README "Transport security".
+- `app/src/test/kotlin/dev/proflyder/home/ConnectionSettingsClearTest.kt`
+  - A subsequent request must fail with a controlled configuration error and must not reach OkHttp/server.
+- `app/src/test/kotlin/dev/proflyder/home/HomeFabActivityTest.kt`
+  - First pre-draw positions the clone FAB and gives every row its start state; it must not paint the expanded state in the meantime.
+- `app/src/test/kotlin/dev/proflyder/home/MainActivitySmokeTest.kt`
+  - A single actions button: the framework overflow list must never exist.
+- `core/config/src/main/kotlin/dev/proflyder/home/core/config/ConnectionConfig.kt`
+  - Request readiness. The scheduler is never authless: an absent or unsafe token is a controlled validation failure before any HTTP request.
+  - Persists only the bearer token (`null` clears it); the token is never written in plaintext. Endpoints and timeouts are owned by Remote Config.
+- `core/config/src/main/kotlin/dev/proflyder/home/core/config/RemoteConnectionSource.kt`
+  - Endpoint and timeout state supplied by Firebase Remote Config. The bearer token is deliberately absent: it is a device-local secret and is never read from or written to Remote Config.
+  - Parses the single `home_connection` Remote Config string. Schema: ```json { "schedulerBaseUrl": "https://alarms.example.test", "controlBaseUrl": "https://control.example.test", "intercomBaseUrl": "https://intercom.example.test", "connectTimeoutMs": 5000, …
+- `core/model/src/main/kotlin/dev/proflyder/home/core/model/CatalogGrouping.kt`
+  - Pure grouping of the control catalog for the scenario pickers. - The device name is the group title; when a device is missing, a meaningful entry title is used, otherwise a localized "Scenarios HA"/"Other" kind fallback. Raw entity ids are never exposed.
+- `core/model/src/main/kotlin/dev/proflyder/home/core/model/ControlModels.kt` — What kind of thing a catalog entry controls. Unknown server kinds map to [OTHER] and are not shown.
+  - Live station volume: [level] is 0–100 and [muted] is the media player mute. Announcement volume reports the number entity and is never muted.
+  - Stable localization key of a device status shown under the title (for example `catalog.status.locked` for the PC). Empty when there is no status; the server never sends display text here.
+  - Client-side merge of a device's announcement volume into its main volume row. Never sent by the server and absent from the companion.
+- `core/model/src/main/kotlin/dev/proflyder/home/core/model/Favorites.kt`
+  - Remembers the pinned shortcuts. A null [load] means "never saved yet", so an intentionally emptied list is not replaced by the defaults again.
+- `core/model/src/main/kotlin/dev/proflyder/home/core/model/RemoteFailureExt.kt` — A transport failure that another attempt can fix without user action: the server was unreachable, the wake-up after Doze reset a keep-alive socket, or a request timed out. Such a failure must not become a blocking error notice right after the app returns to the foreground.
+- `core/model/src/main/kotlin/dev/proflyder/home/core/model/ScenarioModels.kt` — Domain models mirroring the home.v1 ScenarioService contract.
+- `core/model/src/main/kotlin/dev/proflyder/home/core/model/SchedulerModels.kt`
+  - True when the request may have reached the server even though no success response was observed. Retrying such a create/start must reuse its idempotency key. Validation/auth/configuration failures were definitely not applied and may start a new operation.
+- `core/model/src/main/kotlin/dev/proflyder/home/core/model/ServerClock.kt` — Maps the phone onto the scheduler's clock.
+- `core/model/src/test/kotlin/dev/proflyder/home/core/model/ServerClockTest.kt`
+  - User/NTP moves the phone clock forward by one hour; elapsed time has not advanced, so the server-derived countdown must not jump.
+  - Moving the wall clock backward must not rewind either.
+  - Wall-clock jump by an hour must not expire the timer.
+- `core/navigation/src/main/kotlin/dev/proflyder/home/core/navigation/Destination.kt`
+  - A typed navigation target. Feature modules define concrete data classes (for example `AlarmEditorDestination(id)`) and the router resolves them through [FeatureEntry]. Only stable identifiers belong in [arguments];
+- `core/navigation/src/main/kotlin/dev/proflyder/home/core/navigation/FragmentRouter.kt`
+  - Small typed Fragment router. - FragmentManager owns the real back stack and restores fragments after process death. The restored fragment/back stack is authoritative; saved route strings are validated against it instead of recreating it blindly.
+  - No actual restored fragment. A saved bundle alone must not leave the container blank: rebuild the selected tab root.
+  - Do not silently consume Back while the host cannot run a transaction: queue it and drain after resume. At the real root return false so the Activity can finish instead of swallowing future back presses forever.
+  - An unknown/stale fragment must not be treated as route truth.
+  - Route state and FragmentManager diverged. Re-sync once and consume this Back, but do not trap the user at a phantom inner route.
+  - Overlay on the current tab: do not change the selected bottom tab and add a real back-stack entry so Back returns to where the user opened it from.
+- `core/network/src/main/kotlin/dev/proflyder/home/core/network/ConnectIntercomClient.kt`
+  - Opens the long-lived server-streaming `Watch` RPC and reconnects with a bounded backoff when it drops. The flow never completes on its own; the caller cancels it. The first connection marks this endpoint online.
+  - Connect JSON client for home.v1.IntercomService. Unary RPCs use `application/json`; `Watch` is server streaming and therefore uses the Connect streaming envelope framing over HTTP/1.1 (`application/connect+json`): a 1-byte flags word, a 4-byte big-endian …
+  - No diagnostic interceptors here: HttpLoggingInterceptor(BODY) and Chucker read the whole response before returning it, and Watch never ends — the phone would never see RINGING -> CONNECTING and never send its offer.
+- `core/network/src/main/kotlin/dev/proflyder/home/core/network/ConnectScenarioClient.kt`
+  - Connect unary JSON/HTTP client for home.v1.ScenarioService. It uses the scheduler endpoint and bearer token, with the same security properties as [ConnectSchedulerClient]: redirects are refused (the token must never follow a Location), the token travels only …
+- `core/network/src/main/kotlin/dev/proflyder/home/core/network/ConnectSchedulerClient.kt`
+  - Connect unary JSON/HTTP client for home.v1.SchedulerService. Security properties: - redirects (HTTP and HTTPS) are disabled; a bearer token can never be forwarded to a Location host, - the token travels only in the Authorization header, never in the URL, - …
+- `core/network/src/main/kotlin/dev/proflyder/home/core/network/ConnectionInterceptor.kt`
+  - Internal request marker: a long-lived server stream (connect `Watch`) must not inherit the unary read timeout. The interceptor removes the header.
+  - Applies the *current* user settings to every request, so the Retrofit interfaces only declare relative paths: - rewrites the URL onto the configured endpoint (including a path prefix), - adds the bearer token (header only, never in the URL) and fixed headers, …
+  - Defensive clamping: corrupted persisted settings must never make OkHttp reject a timeout.
+- `core/network/src/main/kotlin/dev/proflyder/home/core/network/ControlCatalogClient.kt`
+  - Wire format of GET /v1/catalog and of the scheduler task that carries a command.
+  - Task payload: a catalog id and an action only, never an HA service or entity.
+  - Payload of a speak action. The text is user content: it travels only in the task payload and is never put in a URL, a log line or an error.
+  - An unknown kind stays OTHER, so an older app never drives a command it does not understand.
+  - Retrofit implementation ([ControlApi]). Same safety rules as [ConnectSchedulerClient]: no redirects (the bearer token must never follow a Location), token only in the Authorization header, system trust store.
+- `core/network/src/main/kotlin/dev/proflyder/home/core/network/HttpSupport.kt`
+  - Failure of a unary Connect call before a decoded response: transport errors keep their [toRemoteFailure] mapping, malformed JSON becomes a protocol failure, and anything else is a bug the caller should rethrow.
+- `core/network/src/main/kotlin/dev/proflyder/home/core/network/OutcomeCallAdapterFactory.kt`
+  - Lets an API method declare `Outcome<T>` instead of `Response<T>`. Success bodies are already decoded by the kotlinx converter. Anything else becomes one of the existing [RemoteFailure] values: Connect error envelopes (including their `LocalizedText` detail) …
+- `core/network/src/main/kotlin/dev/proflyder/home/core/network/PushDevices.kt`
+  - Wire format of `/v1/push/devices`.
+- `core/network/src/main/kotlin/dev/proflyder/home/core/network/ReadRetry.kt`
+  - Platform network state. The JVM build (and every unit test) is always online; Android supplies an implementation that actually waits for Wi-Fi or the VPN. [awaitAvailable] blocks on the calling OkHttp thread, never on the UI thread.
+  - Retries idempotent reads (`GET`, Connect `List*`/`Get*` RPCs) after a transport failure. This is what hides the red "check LAN or VPN" alert after the phone wakes up: the first attempt hits a dead keep-alive socket or a still-sleeping tunnel, the next attempt …
+  - A cancelled call is not an error: the coroutine requested it. OkHttp reports cancellation as `IOException("Canceled")`, which must never reach the user as a network failure.
+- `core/network/src/main/kotlin/dev/proflyder/home/core/network/Retrofits.kt`
+  - Builds the Retrofit instances. Each gets its own OkHttpClient derived from [baseClient] (shared connection pool and dispatcher) with: 1. [ReadRetryInterceptor] (retry idempotent reads after wake-up failures), 2.
+- `core/network/src/main/kotlin/dev/proflyder/home/core/network/TokenRefreshAuthenticator.kt`
+  - Refreshes the bearer token once after a 401 pushed from a rotated token. ConnectionInterceptor is an application interceptor and does not rerun for an authenticator follow-up, so this class sets the header itself from the current settings.
+- `core/network/src/main/kotlin/dev/proflyder/home/core/network/WireDtos.kt`
+  - Wire DTOs of the Connect/JSON APIs. Protobuf JSON sends `int64` as a decimal string, so every such field uses [Int64StringSerializer]; it also accepts a plain number because servers differ slightly in codec versions.
+- `core/network/src/test/kotlin/dev/proflyder/home/core/network/ControlCatalogClientTest.kt`
+  - Normalization happens before this point; the codec must not drop or escape Cyrillic text.
+- `core/network/src/test/kotlin/dev/proflyder/home/core/network/ScenarioJsonTest.kt`
+  - Saving the same scenario again must not drop the retained objects.
+- `core/remoteconfig/src/main/kotlin/dev/proflyder/home/core/remoteconfig/FirebaseRemoteConnectionSource.kt`
+  - Firebase Remote Config implementation of [RemoteConnectionSource]. Defaults are set locally, the latest activated values are fetched on start, and a real-time config listener activates pushed changes.
+- `core/settings/src/main/kotlin/dev/proflyder/home/core/settings/AndroidConnectionSettingsStore.kt`
+  - Stores the bearer token as Keystore-encrypted ciphertext and composes it with the endpoints/timeouts supplied by [RemoteConnectionSource]. The manifest disables Android backup, so the token never leaves the device.
+- `core/testing/src/main/kotlin/dev/proflyder/home/core/testing/TestFixtures.kt` — Loads a JSON payload from the test classpath (`src/test/resources/fixtures`).
+- `core/ui/src/main/kotlin/dev/proflyder/home/core/ui/AppForeground.kt` — When the app last returned to the foreground. Waking the phone races the Wi-Fi/VPN tunnel: a transient network failure in the first seconds after a resume is expected and must not become a blocking error notice.
+- `core/ui/src/main/kotlin/dev/proflyder/home/core/ui/BaseFragment.kt`
+  - Base for screens backed by a generated ViewBinding. The binding exists strictly between [onCreateView] and [onDestroyView]; it is released there so the Fragment never leaks its view hierarchy.
+- `core/ui/src/main/kotlin/dev/proflyder/home/core/ui/BaseListAdapter.kt`
+  - A typed DiffUtil change payload: the set of [A] aspects that changed on one row. A `getChangePayload` returning it makes the list animator reuse the existing holder (no crossfade) and lets [BaseViewHolder.bindPayloads] update only the affected views.
+- `core/ui/src/main/kotlin/dev/proflyder/home/core/ui/Motion.kt`
+  - Clear the pending end action first: cancelling must not run the previous exit's finalizer, so an interrupted exit keeps its current translation and alpha and the new animation continues from there.
+- `core/ui/src/main/kotlin/dev/proflyder/home/core/ui/Notices.kt`
+  - The single way the app shows transient feedback: a rounded tonal pill with a status icon, floating above the view tagged [R.id.home_notice_anchor] so it never covers navigation. A sideways or downward swipe dismisses it; a tap never does.
+  - The activity root is not a CoordinatorLayout, so Material never installs a SwipeDismissBehavior: the notice must own the gesture.
+- `core/ui/src/main/kotlin/dev/proflyder/home/core/ui/PillSegments.kt`
+  - A row of compact text pills: the selected one sits on a stadium (the same shape and colour as the bottom navigation indicator) that slides to the newly selected pill. Used for the Time sections and the voice profile, so both switches look identical.
+- `core/ui/src/main/kotlin/dev/proflyder/home/core/ui/ServerText.kt`
+  - Resolves a server `LocalizedText.key` to its local resource. Resources are named mechanically after the key: `scheduler.error.not_found` is `@string/server_scheduler_error_not_found` (prefix `server_`, dots become underscores), so adding a server key never …
+- `core/ui/src/main/res/drawable/ui_bg_pill_segment.xml` — Touch feedback of one pill. The selected stadium is drawn by PillSegments itself so it can slide between pills.
+- `core/ui/src/main/res/values/styles.xml`
+  - Large light clock digits, fixed-width so they do not jitter while counting.
+- `detekt.yml` — detekt configuration for the Home Android client.
+- `distribute.sh` — Build the Home Android app and distribute it to Firebase App Distribution.
+  - Release signing material. Locally `mise run admin:android-distribute` passes it from OpenBao through fnox (temp files, removed on exit). The keystore is stored base64-encoded, so SIGNING_KEYSTORE_B64_FILE is decoded into a private temp file here.
+  - Release notes for a GitHub Actions run. On a PR the job exports PR_NUMBER and PR_TITLE (the title is untrusted text, so it arrives through the environment, never as shell source).
+- `features/alarms/api/src/main/kotlin/dev/proflyder/home/feature/alarms/AlarmEditorDraft.kt`
+  - Non-secret editor draft persisted in SavedStateHandle. It intentionally holds no token, endpoint credentials, or schedule payload. A fresh draft defaults to [defaultAlarmTime] so a new alarm never starts in the past, and to a one-shot alarm dated today.
+- `features/alarms/api/src/main/kotlin/dev/proflyder/home/feature/alarms/AlarmEditorTime.kt`
+  - Wall time [offsetMinutes] after [now]. The offset is always counted from the current time, never from a previously selected value, so repeated taps do not accumulate. Minutes are not rounded and crossing midnight wraps.
+- `features/alarms/api/src/main/kotlin/dev/proflyder/home/feature/alarms/AlarmLabel.kt` — The alarm name is optional in the editor. A blank or whitespace-only name keeps the localized default, so the server always receives a non-empty label. The API stays resource-free; the caller supplies the string from `values/`.
+- `features/alarms/impl/src/main/kotlin/dev/proflyder/home/feature/alarms/presentation/AlarmAdapter.kt`
+  - Selection motion is only for the same alarm changing state. A recycled holder bound to a different alarm must show that alarm's selection in its end state, never animate the previous row's selection into the new one.
+  - Programmatic `isChecked` must not be reported as a user toggle.
+- `features/alarms/impl/src/main/kotlin/dev/proflyder/home/feature/alarms/presentation/AlarmEditorViewModel.kt`
+  - Applies the sheet's choice. A custom day set that covers a preset is stored as that preset, so "Пн–Пт" never lingers as a custom list.
+- `features/alarms/impl/src/main/kotlin/dev/proflyder/home/feature/alarms/presentation/AlarmRepeatRules.kt`
+  - Day sets are ISO weekdays: 1 is Monday, 7 is Sunday. A custom selection that covers exactly a preset is stored as that preset, so the editor and the home server never show two different names for the same days.
+- `features/alarms/impl/src/main/kotlin/dev/proflyder/home/feature/alarms/presentation/AlarmsFragment.kt`
+  - Keep the existing list visible while a refresh is in flight; do not replace it with a spinner.
+- `features/alarms/impl/src/main/res/color/alarms_day_toggle_background.xml` — Round day toggle: a filled primary circle when checked, an outlined transparent circle otherwise.
+- `features/alarms/impl/src/main/res/color/alarms_delete_ripple.xml` — The delete ripple is the theme's error color at the Material pressed alpha, so the round state layer belongs to the red button rather than to the neutral card.
+- `features/alarms/impl/src/main/res/layout/item_alarm.xml`
+  - Idle: switch plus delete. Selection mode: both are gone and the circular check indicator takes their place, inset by the card padding so it never touches the rounded corner.
+- `features/alarms/impl/src/main/res/layout/sheet_alarm_repeat.xml` — Modal repeat sheet. The rounded top and the drag handle live on the sheet content itself, so the sheet keeps the app's dark surface when the dialog window is transparent.
+- `features/alarms/impl/src/main/res/values/alarms_dimens.xml` — Fallback before the bottom bar is measured; matches its real height: a 64dp icon+label action plus the 6dp bar padding on both sides.
+- `features/alarms/impl/src/main/res/values/styles.xml`
+  - Seven round day toggles on one row. The size is fixed, not weighted: each toggle keeps a 44dp circle while the equal cells spread them across the sheet width, so a two-letter label never gets clipped.
+  - Contextual bulk action: the icon sits above a small one-line label, so the three cells stay readable at 360dp with a 1.15 font scale. The button never wraps its text; a longer translation is ellipsized.
+- `features/alarms/impl/src/test/kotlin/dev/proflyder/home/feature/alarms/domain/SaveAlarmLabelTest.kt`
+  - The server must never see an empty alarm name: the editor field is optional and [SaveAlarm] fills the localized default where the request is formed.
+- `features/call/api/src/main/kotlin/dev/proflyder/home/feature/call/AudioRoutes.kt`
+  - Maps the current output devices to the route list. Built-in routes are always offered (they do not depend on a hot-plugged device); wired and Bluetooth appear only while such a device is connected.
+- `features/call/api/src/main/kotlin/dev/proflyder/home/feature/call/CallController.kt`
+  - Single source of truth for the live call. UI, Telecom connection, foreground service and notification observe [state] and never keep their own copy.
+- `features/call/api/src/main/kotlin/dev/proflyder/home/feature/call/CallManager.kt`
+  - Media starts only after the server accepted the call, so a busy or offline station never opens the microphone.
+- `features/call/api/src/main/kotlin/dev/proflyder/home/feature/call/CallMedia.kt`
+  - Releases the microphone and the peer connection. Idempotent.
+- `features/call/impl/src/main/kotlin/dev/proflyder/home/feature/call/telecom/TelecomCoordinator.kt`
+  - Registers (or refreshes) the self-managed account and returns its handle, or null when Telecom is unavailable or refuses. `getPhoneAccount` is not used: some OEM builds (MIUI, Android 16) guard it with READ_PHONE_NUMBERS, while re-registering our own account …
+- `features/connection/api/src/main/kotlin/dev/proflyder/home/feature/connection/ConnectionRepository.kt`
+  - Calls home.v1.SchedulerService/GetStatus; never uses mock data.
+  - The token is never displayed; blank input means "keep what is stored".
+- `features/control/api/src/main/kotlin/dev/proflyder/home/feature/control/CompactControls.kt`
+  - One pure rule deciding how a control inside a device card is drawn: a round compact tile or a normal row. A tile is a binary on/off control — it accepts both turn_on and turn_off — inside a card that holds at least two controls.
+- `features/control/api/src/main/kotlin/dev/proflyder/home/feature/control/ControlItems.kt`
+  - A section header. [section] identifies the section (not its title), so a room that happens to be called "Home" never collides with another section. [summary] is a short right-aligned note ("2 of 4 on").
+  - The profile is a mode: only the segmented pills act, never a row tap.
+  - The chip counts describe primary controls only: a device's settings are part of it and never add a chip or a count of their own.
+  - The chips: All, then the device categories that exist, then each room (only when there is more than one, otherwise rooms add nothing).
+  - [leading] items (the live rows and the pinned quick actions) come first, then the single voice card (a mode and wake marks, not content, shown whatever the filter is), then available devices grouped by room and, inside a room, by device, then unavailable …
+  - Visibility comes first: a conditional entry whose target is not in the requested state must never reach cards, chips, counters or the "Unavailable" section.
+  - Dead rows keep the old behaviour: they follow the applied filter too, and a lone setting never shows up as its own unavailable device.
+  - A group is shown when one of its primary controls matches the filter; its settings then follow the device, never the chip.
+- `features/control/api/src/main/kotlin/dev/proflyder/home/feature/control/ControlRepository.kt`
+  - Queues "speak this text on the station". The text is user content: it only ever goes into the task payload, never into a URL or a log line.
+- `features/control/api/src/main/kotlin/dev/proflyder/home/feature/control/SpeakText.kt` — Backwards-compatible name for the shared speech rules now living in `packages/kotlin/core`. The Home screen and the scenario builder must agree on exactly the same normalization.
+- `features/control/api/src/main/kotlin/dev/proflyder/home/feature/control/SpeedDial.kt` — One row of the Home quick-actions dial. The dial is built from the existing quick tiles (call, speak, pinned devices and scenarios) plus the resolved wake-feedback marks, so a newly pinned favourite appears automatically.
+- `features/control/api/src/main/kotlin/dev/proflyder/home/feature/control/WakeFeedback.kt`
+  - Resolves the two Home Assistant scripts that mark a wake event from the catalog. They are ordinary personal scenarios whose entity ids are part of the house contract (`projects/home-assistant/ha-voice/scripts.yaml`), so they are matched by id and never by …
+- `features/control/api/src/test/kotlin/dev/proflyder/home/feature/control/ControlItemsTest.kt`
+  - Its section and key never collide with a room or another section.
+  - A standalone row is titled by its device, never by the short entity title or the id fallback.
+- `features/control/impl/src/main/kotlin/dev/proflyder/home/feature/control/presentation/ControlAdapter.kt`
+  - The single "Voice" card: the profile is a mode, not a device, so only an explicit pill acts (never a row tap); the two wake marks send at once. Programmatic selection during binding must never look like a user choice.
+  - A switch flip is optimistic; put it back until the server confirms. The recurring-alarm skip/disable dialog then decides what actually happens, so a cancelled dialog never leaves a false off state.
+  - Programmatic `isChecked` must not be reported as a user toggle.
+  - Do not animate the thumb when the state is already the target one.
+  - Set the programmatic state before installing the listener, so binding a row can never look like a user toggle.
+- `features/control/impl/src/main/kotlin/dev/proflyder/home/feature/control/presentation/ControlIcons.kt`
+  - The voice profile is a mode, not a device: its "message" hint must not reuse the speak artwork.
+- `features/control/impl/src/main/kotlin/dev/proflyder/home/feature/control/presentation/ControlViewModel.kt`
+  - Loads the live rows and pinned shortcuts. A failing source simply contributes no rows: the hub is optional decoration over the catalog, so one unreachable feature must not replace the whole Home screen.
+  - Never persist defaults computed from a catalog that failed to load.
+  - The executor applies commands asynchronously, so a refresh right after a tap can still return the old state. The tapped value is therefore kept (see [expectedPower]) until the server confirms it or [EXPECT_TTL_MS] passes;
+- `features/control/impl/src/main/kotlin/dev/proflyder/home/feature/control/presentation/SpeakDialog.kt`
+  - The "say on the station" dialog: a multiline text with a 500-character counter. "Say" stays disabled until the text is speakable; the text itself is never logged, only put into the queued command.
+- `features/control/impl/src/main/kotlin/dev/proflyder/home/feature/control/presentation/VolumeSheet.kt`
+  - Bottom sheet of the station volume: the main level with a mute toggle and the announcement level. A command is sent when a slider is released, not while dragging.
+  - Hardware volume keys adjust the station by five percent per press. The event is consumed even at the edge (0 or 100), so the phone's own stream never changes while the sheet is open.
+- `features/control/impl/src/main/res/drawable/control_tile_ripple.xml` — Round pressed highlight for a compact tile: the oval mask keeps the ripple inside the icon circle instead of the square tile cell.
+- `features/control/impl/src/main/res/layout/item_control_hub.xml` — Compact "next up" block: a short list of live rows, hidden when empty. Rows fill the card edge to edge so a row ripple is clipped by the card corners instead of stopping short of them.
+- `features/control/impl/src/main/res/layout/item_control_quick_tile.xml` — A compact quick action: accent icon on the left, a label of up to two lines next to it. Two tiles share a row; every tile has the same height.
+- `features/control/impl/src/main/res/layout/item_control_voice.xml` — One compact voice card: the profile switch and the two wake marks. Rows are hidden independently; the whole card exists only when one of them is.
+- `features/control/impl/src/main/res/layout/overlay_control_speed_dial.xml` — Full-window speed dial: scrim above the bottom navigation, item FABs and a copy of the root FAB. Nothing here paints a panel background.
+- `features/control/impl/src/test/kotlin/dev/proflyder/home/feature/control/presentation/ControlProfileRowTest.kt`
+  - Robolectric smoke test of the voice card profile row: it must inflate with real resources, show the current side, hide the row when there is no profile, and report only *user* choices — the programmatic selection during binding must never send a command.
+  - Re-binding a row never replays a command.
+  - Payload binding is programmatic and must never look like a user toggle.
+- `features/push/api/src/main/kotlin/dev/proflyder/home/feature/push/NotificationHistory.kt`
+  - One FCM message this phone actually received, as the history screen shows it. The text is the decoded payload, already bounded by [PushPayloads], and [deepLink] is the validated `home://…` route (never an arbitrary URL).
+  - Retention rules, kept pure so they are unit-tested without Android: newest first, a repeated [NotificationHistoryEntry.id] replaces its older copy, and the log never grows past [MAX_ENTRIES].
+  - Local log of received messages. It is written by the FCM service (which runs with the app killed) and read by the history screen, so it persists to disk and never depends on the server being reachable.
+- `features/push/api/src/main/kotlin/dev/proflyder/home/feature/push/PushModels.kt`
+  - When the server last accepted it (unix millis); 0 = never.
+  - Registers the token digest for display: never show the whole secret.
+  - Deep link carried by a notification. Only the app's own scheme is accepted, so a server-supplied string can never open another application.
+- `features/push/api/src/test/kotlin/dev/proflyder/home/feature/push/PushApiTest.kt`
+  - Built from parts so the literal can never look like a real credential to a secret scanner.
+- `features/push/impl/src/main/kotlin/dev/proflyder/home/feature/push/AndroidPushDeviceIdentity.kt`
+  - The raw ANDROID_ID never leaves the phone: it is hashed with an app salt below, and only the digest is registered. The lint warning targets code that reports hardware identifiers as-is.
+  - App-specific salt: the server never sees the raw ANDROID_ID.
+- `features/push/impl/src/main/kotlin/dev/proflyder/home/feature/push/DataStoreNotificationHistoryStore.kt`
+  - The received-message log in the app-wide DataStore, one JSON value under its own key (the notification text is not a credential; `allowBackup` is off, so it never leaves the device).
+- `features/push/impl/src/main/kotlin/dev/proflyder/home/feature/push/DataStorePushRegistrationStore.kt`
+  - Last accepted registration in the app-wide DataStore. The token, its timestamp and the owner-visible name are stored: the token is not a credential for the home server (the bearer token is), but it is still never logged or shown in full, and `allowBackup` is …
+- `features/push/impl/src/main/kotlin/dev/proflyder/home/feature/push/FindPhoneActivity.kt`
+  - The screen a full-screen intent opens: it turns the display on, shows over the lock screen and offers one button, «Нашёл». Pressing it (or Back, or the notification action) stops the ring through the same [FindPhoneController] the service uses.
+- `features/push/impl/src/main/kotlin/dev/proflyder/home/feature/push/FindPhoneAudio.kt`
+  - The loud part of find-phone. `USAGE_ALARM` audio plays through the alarm stream, which is exempt from the silent and vibrate ringer modes, and the stream volume is raised to its maximum for the duration of the ring, then restored exactly as it was.
+  - Starts the alarm tone and the repeating vibration. Idempotent. VIBRATE is install-time and declared here.
+- `features/push/impl/src/main/kotlin/dev/proflyder/home/feature/push/FindPhoneService.kt`
+  - Foreground service that keeps the ringing process alive. Started by [FindPhoneController] from a **high-priority FCM data message**, which is exactly the case Android allows a background app to start a foreground service from.
+- `features/push/impl/src/main/kotlin/dev/proflyder/home/feature/push/FirebasePushRegistrar.kt`
+  - Registers this device's FCM token with the home scheduler. The token is registered: * at start ([start]) — so a server that lost the registry or a phone that was reinstalled re-registers without waiting for Google to rotate the token;
+- `features/push/impl/src/main/kotlin/dev/proflyder/home/feature/push/HomeMessagingService.kt`
+  - FCM entry point. * `onRegistered` — a new or rotated token is registered immediately; a failure is retried on the next app start (`onUnregistered` forgets the old one).
+  - History is written off the main thread; a kept message never blocks the ring.
+- `features/push/impl/src/main/kotlin/dev/proflyder/home/feature/push/NotificationHistoryCodec.kt`
+  - One stored row. It mirrors [NotificationHistoryEntry] instead of serializing the API model directly, so a renamed field never breaks an existing file and an unknown type downgrades to an ordinary notification.
+- `features/push/impl/src/main/kotlin/dev/proflyder/home/feature/push/PushChannels.kt`
+  - The app's two notification channels. Channels are created once and their properties cannot be changed later, so a channel id must never be reused with different settings: Android keeps the original sound and vibration of `home_phone_find`, which is why the …
+- `features/push/impl/src/main/kotlin/dev/proflyder/home/feature/push/PushEntryPoint.kt` — Process-wide access to the push collaborators for components the framework instantiates itself (`FirebaseMessagingService`, the foreground service, the ringing activity). They cannot be constructor-injected by Metro, so the application installs this entry point in `onCreate`, exactly like the call feature does.
+- `features/push/impl/src/main/kotlin/dev/proflyder/home/feature/push/PushNotifier.kt`
+  - Draws the two notification shapes. All user-visible text comes from resources; a server message supplies the title and body of an ordinary notification and nothing else.
+- `features/push/impl/src/main/kotlin/dev/proflyder/home/feature/push/PushPayloads.kt` — One decoded FCM message. The server sends two shapes:
+- `features/push/impl/src/main/kotlin/dev/proflyder/home/feature/push/PushPermissions.kt`
+  - Do Not Disturb access lives outside the app's own settings page.
+- `features/push/impl/src/main/kotlin/dev/proflyder/home/feature/push/TextLimits.kt` — Truncates to the server's byte bound without splitting a UTF-8 character.
+- `features/push/impl/src/main/kotlin/dev/proflyder/home/feature/push/presentation/PushSettingsFragment.kt`
+  - «Уведомления и поиск телефона»: the real state of the three permissions the loud path needs and a button that opens the matching system page for each.
+- `features/push/impl/src/main/res/layout/activity_find_phone.xml` — The ringing screen: one button, the reason, and nothing else that could be misread at 3 a.m.
+- `features/push/impl/src/main/res/layout/fragment_push_settings.xml` — Settings screen: three permission rows, a ring summary and the device registration, each section a tonal card with its own icon. Every visible string comes from resources.
+- `features/push/impl/src/test/kotlin/dev/proflyder/home/feature/push/AllPushImplTests.kt`
+  - One ring stops on «Нашёл» or after a minute, never later.
+- `features/push/impl/src/test/kotlin/dev/proflyder/home/feature/push/FindPhoneAudioTest.kt`
+  - The ring must be audible without leaving the phone loud. `USAGE_ALARM` already plays through silent and vibrate modes, so the ringer mode is never changed: the old code switched it to normal and restored only the alarm volume, which permanently took the phone …
+- `features/push/impl/src/test/kotlin/dev/proflyder/home/feature/push/NotificationHistoryStoreTest.kt`
+  - The history is written by the FCM service, which can run before any screen loaded the log. These tests use the real DataStore file, so a message is never lost by an unbounded read-modify-write.
+- `features/push/impl/src/test/kotlin/dev/proflyder/home/feature/push/PushDeviceIdentityTest.kt`
+  - The stable device identity survives token rotation and is never the raw platform id.
+- `features/reminders/impl/src/main/kotlin/dev/proflyder/home/feature/reminders/presentation/ReminderAdapter.kt`
+  - Programmatic `isChecked` must not be reported as a user toggle.
+- `features/scenarios/api/src/main/kotlin/dev/proflyder/home/feature/scenarios/ScenarioEditorDraft.kt`
+  - Non-secret editor draft persisted in SavedStateHandle. It intentionally holds no token, endpoint credentials, or request payload. [hasUnsupportedParts] is derived from the retained unknown oneof variants: a definition created by a newer server can be opened …
+- `features/scenarios/impl/src/main/kotlin/dev/proflyder/home/feature/scenarios/presentation/CatalogPickerDialog.kt`
+  - Catalog picker grouped by room and then by device. Group titles never contain raw entity ids: a missing device falls back to a meaningful entry title or a localized "Scenarios HA"/"Other" label.
+- `features/scenarios/impl/src/main/kotlin/dev/proflyder/home/feature/scenarios/presentation/LightParamsDialog.kt`
+  - A stale effect from an older payload must not be sent if the light no longer reports it; the executor rejects unknown effects.
+- `features/scenarios/impl/src/main/kotlin/dev/proflyder/home/feature/scenarios/presentation/ScenarioAdapter.kt`
+  - Programmatic `isChecked` must not be reported as a user toggle.
+- `features/scenarios/impl/src/main/kotlin/dev/proflyder/home/feature/scenarios/presentation/ScenarioFormat.kt`
+  - Prefer the human device name when HA only sent a technical entity title ("Light", "Switch"); never repeat the same name twice.
+- `features/settings/impl/src/main/kotlin/dev/proflyder/home/feature/settings/presentation/NotificationHistoryViewModel.kt`
+  - Reads the local log only: the history is what the phone received, so it never asks the server (which may well be unreachable right now).
+- `features/settings/impl/src/main/res/layout/fragment_notification_history.xml` — The local received-message log. The header row holds the count and the clear action; the body is either the list or the empty state.
+- `features/settings/impl/src/main/res/layout/fragment_settings.xml` — Settings hub: three navigation rows over tonal cards, one per settings area. Every visible string comes from resources.
+- `features/settings/impl/src/main/res/layout/item_notification_history.xml` — One received message. The type icon carries the spoken label; the chevron appears only when the message has an in-app link.
+- `lint.xml` — Android Lint gate for the Home Android client.
+- `release_info.py` — Read or write the metadata of a distributable Home APK.

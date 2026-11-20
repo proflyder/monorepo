@@ -705,3 +705,391 @@ Scrape-задание `station` в Prometheus описано в
 распространяются под своими лицензиями: sendspin-cpp, ArduinoJson, noise-c, IXWebSocket, micro-flac,
 micro-opus, dropbear, OpenSSH. Установщик написан на Rust (крейт `pulsar-installer`, бинарь `pulsar-install`, лицензия AGPL-3.0). `adb` в архивы не входит: установщик скачивает Android SDK
 Platform-Tools с сайта Google, они распространяются на условиях Google.
+
+## Заметки к коду
+
+Пояснения, перенесённые из комментариев исходников (код комментариев не содержит, см. `AGENTS.md`).
+
+- `.gitattributes` — Imported upstream tree: keep bytes exactly as upstream tracks them. Some fixtures and patches are CRLF, and golden tests compare exact content. The monorepo's core.autocrlf=input must not rewrite this subtree.
+- `installer/src/adb.rs` — The device side of the installer: an `adb` process, or a fake in tests.
+- `installer/src/cli.rs` — Command line: flags and the usage text. Behaviour is the Go installer's: unknown options and bad choices exit 1, `-h` prints the full usage on stdout and exits 0.
+- `installer/src/console.rs` — Keeps a Windows console window that was opened for this process (double-click in Explorer) until Enter, so the output can be read. From a terminal the console is shared.
+- `installer/src/deploy.rs` — Deployment: build the payload in a checkout, copy it to `/data/pulsar`, write the boot hook, migrate old `rootkeeper.sh` hooks and verify the restarted daemon.
+  - Dropbear is installed by --ssh, in this run or an earlier one: never drop its autostart.
+  - Whatever happened in between, / must not stay read-write.
+  - Removes the hook lines older installers added to rootkeeper.sh (now in `INIT_PATH`), keeping a backup. Never creates or deletes the file: it belongs to the root method.
+- `installer/src/deploy/tests.rs` — Golden tests for the deploy sequence: a fake `adb` records every call exactly like the Go generator did and replays the same answers. It can also return non-zero statuses with output (busybox `diff`, read-only rootfs, failed `ctl.sh`) to keep those paths covered.
+- `installer/src/discover.rs` — Finding stations on the network: an mDNS query for Yandex announcements and the `--scan` /24 adb-port probe.
+- `installer/src/lib.rs` — `pulsar-install`: finds rooted Yandex Stations on the local network and installs or updates pulsar.
+- `installer/src/platformtools.rs` — Android SDK Platform-Tools: find `adb`, or download and unpack Google's archive.
+  - Go's exec.LookPath: "." and empty entries do not search the current directory.
+  - `filepath.IsLocal` after `filepath.Join` cleaning: a relative path whose `..` never escapes its base. `a/../b` is local, `../b` is not.
+- `installer/src/probe.rs` — Model detection: the devicetree codename, the supported userspace ABI and the Mini's board-id + `quasar.cfg` pair. Must agree with `pulsar-model/src/detect.rs` and `satellite/deploy/boot.sh` (see docs/development.md, «Установка и станция»).
+  - Userspace ABIs a model's firmware runs, its usual one first; empty = model not supported. The installed binary is build/<arch>/pulsar for the first ABI whose dynamic loader is on the station.
+  - The model's first ABI whose loader is on the station (loaders: the words the loader probe printed). `""` = none of the model's ABIs: skip the station.
+- `installer/src/scripts.rs` — Pure shell text the installer produces or inspects: the init script, the rootfs guard, `/proc/mounts` parsing and the old `rootkeeper.sh` hooks.
+  - `""` if the root filesystem may be written, else the reason it must not be: dm-verity or any device-mapper target (writing under it corrupts the verified image), or /etc not on the filesystem mounted at / together with the firmware.
+  - One device command, so the read-write window never spans two adb calls. The ignored HUP lets it finish if adb drops; the dot name keeps rcS's S??* glob from running a partial file. The subshell keeps exit from skipping `sh_raw`'s status echo.
+  - The script is shared with other tooling and ends in an endless `while` loop: code after it never runs.
+  - Whether `rk` starts pulsar: a hook line before the endless loop (code after it never runs).
+- `publish-oci.sh` — Publish the station release as a public OCI artifact in GHCR with ORAS.
+  - Verify every layer against the uploaded SHA256SUMS before publishing, so a broken artifact never reaches the registry.
+- `radio/Makefile` — Zigbee firmware for the Midi's Telink B91 radio, from the Telink Zigbee SDK (Apache-2.0): router/ (a router in another network) and coordinator/ (network co-processor for pulsar's deCONZ server), both with common/ (board configuration, host-link pieces). Run through build.sh, which fetches the pinned SDK and toolchain and sets SDK / TC. Output: out/zigbee-router.ybl, out/zigbee-coordinator.ybl
+- `radio/build.sh` — Builds the Zigbee firmware for the Station Midi's radio: radio/out/zigbee-coordinator.ybl and radio/out/zigbee-router.ybl. Fetches (once) the pinned Telink Zigbee SDK into radio/src/ and applies sdk.patch, and the Telink RISC-V toolchain (32-bit x86 Linux binaries: needs the i386 C library, e.g.
+- `radio/common/board_cfg.h` — ****************************************************************************************************** Configuration shared by pulsar's radio firmwares (router/, coordinator/) for the Yandex Station Midi radio: a Telink B91 on the station's /dev/ttyS2, driven by pulsar over zbhci. Based on the Telink Zigbee SDK sample gateway (apps/zigbee/sampleGW).
+  - ******************************************************************** ZCL: the cluster modules are compiled because the stock zbhci command code refers to them.
+- `radio/common/pulsar_hci.c` — ****************************************************************************************************** Host-link pieces shared by pulsar's radio firmwares. Licensed under the Apache License 2.0 (see board_cfg.h). *****************************************************************************************************
+- `radio/common/pulsar_hci.h` — ****************************************************************************************************** Host-link pieces shared by pulsar's radio firmwares. Licensed under the Apache License 2.0 (see board_cfg.h).
+- `radio/common/stack_cfg.h` — ****************************************************************************************************** @file stack_cfg.h
+  - @brief Security
+- `radio/coordinator/app_cfg.h` — ****************************************************************************************************** Zigbee coordinator (network co-processor) for the Yandex Station Midi radio. Licensed under the Apache License 2.0 (see common/board_cfg.h). No ZCL in the chip: the host answers ZCL for the coordinator's endpoints.
+- `radio/coordinator/coordinator.c` — ****************************************************************************************************** Zigbee coordinator (network co-processor) for the Yandex Station Midi radio. Licensed under the Apache License 2.0 (see common/board_cfg.h); derived from the Telink Zigbee SDK sample gateway (sampleGateway.c, zb_appCb.c).
+  - Stack library (no header): store a network key in material slot i / make slot i the active one. zb_preConfigNwkKey calls these too, but also flags the key as pre-configured (ss_ib.preConfiguredKeyType |= SS_PRECONFIGURED_NWKKEY): the trust center then never …
+  - ******************************************************************** APS data: requests in flight are matched to their confirm by (source endpoint, APS counter). The stack confirms only to endpoint 0 and registered endpoints;
+  - A Zigbee 3.0 trust center may require a joined device to replace the global link key within 15 s and drop it otherwise; Zigbee 1.2 devices (e.g. Xiaomi) never do. deCONZ does not require it either. BDB restores its default on every init (start, erase).
+- `radio/coordinator/version_cfg.h` — ****************************************************************************************************** Image header and flash layout of the coordinator firmware. Licensed under the Apache License 2.0 (see common/board_cfg.h, which also has the radio's flash map). *****************************************************************************************************
+- `radio/router/app_cfg.h` — ****************************************************************************************************** Zigbee router for the Yandex Station Midi radio. Licensed under the Apache License 2.0 (see common/board_cfg.h). The endpoint has Basic and Identify servers only: the router forwards, it has no application.
+- `radio/router/router.c` — ****************************************************************************************************** Zigbee router for the Yandex Station Midi radio. Licensed under the Apache License 2.0 (see common/board_cfg.h); derived from the Telink Zigbee SDK sample gateway (sampleGateway.c, zb_appCb.c, sampleGatewayEpCfg.c).
+- `radio/router/version_cfg.h` — ****************************************************************************************************** Image header and flash layout of the router firmware. Licensed under the Apache License 2.0 (see common/board_cfg.h, which also has the radio's flash map). *****************************************************************************************************
+- `radio/ybl.c` — ybl: turns a Telink B91 application binary into the .ybl container the Yandex Station Midi's radio bootloader takes (the format of /system/vendor/quasar/zigbee/gateway.ybl): the image as linked, whose header carries its size at 0x18, followed by the zlib CRC-32 of the image, LE. usage: ybl <in.bin> <out.ybl>
+- `satellite/crates/esphome-proto/api.proto` — Vendored reference copy of ESPHome's Native API schema, not compiled: the messages this server uses are written by hand in src/proto.rs (no protoc at build time).
+  - DEPRECATED in ESPHome 2026.1.0 - Password authentication is no longer supported. These messages are kept for protocol documentation but are not processed by the server. Use noise encryption instead: https://esphome.io/components/api/#configuration-variables
+  - Do not close the connection before the acknowledgement arrives
+  - Optional reason the connection is being closed. Older peers that do not send this field will report DISCONNECT_REASON_UNSPECIFIED (0).
+  - DeviceInfoResponse max_data_length values: name = 31 (ESPHOME_DEVICE_NAME_MAX_LEN, validated by validate_hostname) friendly_name = 120 (core/config.FRIENDLY_NAME_MAX_LEN) mac_address/bluetooth_mac_address = 17 (MAC_ADDRESS_PRETTY_BUFFER_SIZE - 1, constexpr) …
+  - Asks the device for the onboarding wizard that Home Assistant presents when the device is added. The wizard is read once, when the device is added, whereas capabilities are read on every connect, so it is a separate message rather than part of …
+  - The wizard, as UTF-8 JSON compressed into a single zstd frame. The device builds it when it is compiled and sends it unchanged, so its size varies with the wizard and its format can grow without new fields here.
+  - Deprecated, should be removed in 2027.8 - https://github.com/esphome/esphome/pull/10318
+  - Key of the transmitter entity from the request false if the request was refused, not sent, superseded, or never reported
+  - Only the subscribed client may change the mode; any other caller -- including one that never subscribed -- is refused with PORT_IN_USE. PROTOCOL is refused with NOT_SUPPORTED when the port has no protocol-aware tap configured.
+- `satellite/crates/esphome-proto/src/api_key.rs` — Разбор `api_key`: base64 из 32 байт, как ESPHome `api: encryption: key`.
+- `satellite/crates/esphome-proto/src/entity.rs` — Устойчивая таблица сущностей: одна [`EntityDef`] на сущность, её ключ, `object_id` и метаданные.
+- `satellite/crates/esphome-proto/src/frame.rs` — Фрейминг Native API. Первый байт клиента выбирает режим: 0x00 — plaintext (`[0x00][varint len][varint type][message]`), 0x01 — Noise.
+- `satellite/crates/esphome-proto/src/lib.rs` — Протокол ESPHome Native API без ввода-вывода.
+- `satellite/crates/esphome-proto/src/pb/mod.rs` — protobuf-сообщения ESPHome Native API, написанные вручную на prost.
+- `satellite/crates/esphome-proto/src/session.rs` — Протокольное состояние одного клиента: фрейминг, Noise handshake и data-кадры. Чистое: вызывающий подаёт байты и записывает возвращённые байты наружу.
+- `satellite/crates/esphome-proto/src/tests.rs` — Golden-оракулы и тесты протокола. `proto.txt` и `selftest_raw.txt` — захват C++-референса; ожидаемые байты никогда не подгоняются под реализацию.
+  - Fail-closed: случайный ключ получить не удалось — не пускаем никого, даже с psk из конфигурации (он нулевой и известен).
+- `satellite/crates/pulsar-alsa/src/ffi.rs` — libasound through dlopen: every symbol is resolved once into [`Lib`]; the safe wrappers below are the only callers of those pointers.
+  - alsa-lib calls the handler as `(file, line, function, err, fmt, ...)`. It is declared here without the variadic tail: on the AAPCS (arm, aarch64 Linux) and SysV x86_64 ABIs the named arguments of a variadic call are passed exactly like those of a plain call, …
+  - The current hw_params ABI: the `__snd_*` alias where the library exports one, else the plain name. # Safety As [`sym`], for both names.
+  - Midi firmware images with a 32-bit userland ship a versioned libasound (ALSA_0.9 + ALSA_0.9.0rc4). There the plain names of the hw_params get / set_*_near functions can bind to the ALSA_0.9 compat entries, which take values instead of pointers (period / …
+- `satellite/crates/pulsar-alsa/src/lib.rs`
+  - Opens the playback PCM with the output gates on. Gates are enabled before the open (a device must never start muted) and again afterwards: dmix turns the amplifier off when its last client closes, so another channel may have closed it between our two calls.
+- `satellite/crates/pulsar-arbiter/src/actor.rs` — The UDP actor: broadcast socket, claim copies and the decision window. Peer claims are parsed and ordered by the pure `wire`/`strategy` modules; timers follow the C++ `WakeArbiter` loop.
+  - `mine` as sent; None when too long for the C++ arbiter's 128-byte buffer (never sent).
+- `satellite/crates/pulsar-arbiter/src/lib.rs` — Wake word arbitration between pulsar stations on one LAN: every station that hears the wake word broadcasts a claim with its level (UDP) and waits a short window for its peers' claims; only the best claim answers. Yandex does the same in its cloud (TSpotterValidation / multiactivation in maind), which is unavailable here.
+- `satellite/crates/pulsar-arbiter/src/strategy.rs` — The decision is pure: ordering of claims, the lookback rule and the solo strategy used when the broadcast socket could not be opened.
+- `satellite/crates/pulsar-arbiter/src/wire.rs` — The claim datagram, one ASCII line: `pulsar-wake/1 <station> <wake> <busy 0|1> <level %.1f>`. Parsing follows the C++ `sscanf("%15s %31s %15s %d %f")` field limits, so both sides accept and reject the same datagrams (tests/golden/arbiter.txt).
+- `satellite/crates/pulsar-audio/build.rs` — Builds the Ricardo microWakeWord detector and its vendored microfrontend.
+  - cargo-zigbuild links zig's static libc++; a native Linux build uses libstdc++ and must not ask for libc++.
+- `satellite/crates/pulsar-audio/ricardo/microwakeword.cpp` — Ricardo on-device wake word ("Рикардо") for the Rust daemon.
+  - Sets the manifest thresholds; call before feeding. The history restarts so the windowed mean never mixes two window sizes.
+- `satellite/crates/pulsar-audio/src/engine/ffi.rs` — libyandex_evil.so through dlopen: every symbol is resolved once into [`Lib`]; the wrappers below are the only callers of those pointers.
+  - The library's C API as function pointers; the library is never unloaded, so they stay valid for the life of the process.
+  - dlopen(path, RTLD_NOW | RTLD_GLOBAL), never unloaded. Err = dlerror text.
+  - libyandex_evil.so needs libtflite.so and, on the Lite 2, libiconv.so from its own directory, which is not on the loader's search path: both are loaded first (global, never unloaded), so no LD_LIBRARY_PATH is needed.
+  - Never unloaded, also after a missing symbol (as the C++ daemon).
+- `satellite/crates/pulsar-audio/src/engine/mod.rs` — Yandex VQE (echo cancellation, beamforming, noise reduction) and phrase spotters from the firmware's libyandex_evil.so. The safe wrappers ([`Lib`], [`Vqe`], [`SpotterConf`], [`Spotter`]) and [`spotter_layout`] are public for ww_offline; `Engine` is the daemon's use of them.
+- `satellite/crates/pulsar-audio/src/frontend/capture.rs`
+  - Frames to read at once, as the device granted (never more than one VQE chunk).
+  - Non-blocking: reads never wait inside ALSA, so a stop never hangs in snd_pcm_readi.
+- `satellite/crates/pulsar-audio/src/frontend/mod.rs` — Microphone front-end: ALSA capture (mic + speaker-feedback channels, layout per Model) -> Yandex VQE (AEC / beamforming / noise reduction, per-model preset) -> Yandex phrase spotters (stock models from /system/vendor/quasar/spotter_models): the wake word ("Алиса"/"Яндекс"), the optional on-device «Рикардо» detector, and, optionally, the command model ("стоп", "громче", ...).
+- `satellite/crates/pulsar-audio/src/frontend/processing.rs`
+  - The FFT window is fed by capture-sized chunks; passing the VQE output frame (512/256) instead disables music analysis on every model (the MIDI regression).
+  - The custom detector is active: the stock model id ("alisa", kept for rollback) must not select the rule, or the Ricardo word loses its pre-roll.
+- `satellite/crates/pulsar-audio/src/lib.rs` — Microphone front-end of the daemon: ALSA capture -> Yandex VQE -> wake word and command spotters -> 16 kHz stream, and music features of the speaker reference. The Yandex engines come from the firmware's libyandex_evil.so (C API, loaded with dlopen; never copied into the repository).
+- `satellite/crates/pulsar-audio/src/ricardo.rs` — Safe wrapper around the C++ microWakeWord detector (`ricardo/microwakeword.cpp`).
+- `satellite/crates/pulsar-audio/src/wake_events.rs` — Публичный фасад контракта v1: реализация живёт в `pulsar-wake-events`, здесь — прежние пути для контроллера и утилит.
+- `satellite/crates/pulsar-call/src/codec.rs` — Кодек звонка и апсемплинг uplink.
+- `satellite/crates/pulsar-call/src/config.rs` — Конфигурация звонка: endpoint intercom, device token и CA.
+  - База сервиса без завершающего `/`, например `https://intercom.example/v1`.
+- `satellite/crates/pulsar-call/src/ffi.rs` — Единственный модуль `unsafe` крейта: FFI к libopus из сборки прошивки (`@opus`).
+- `satellite/crates/pulsar-call/src/jitter.rs` — Джиттер-буфер downlink: порядок, потери, адаптивная глубина и PLC.
+- `satellite/crates/pulsar-call/src/lib.rs` — Звонок на колонку: станция как endpoint STATION в сервисе `home.v1.IntercomService`.
+- `satellite/crates/pulsar-call/src/machine.rs` — Чистая машина состояний звонка: никакого I/O, только входные события и решения.
+- `satellite/crates/pulsar-call/src/rtc.rs` — WebRTC-медиа на `str0m` (sans-IO) поверх одного UDP-сокета.
+- `satellite/crates/pulsar-call/src/service.rs` — Актор звонка: сигналинг + медиа + сборка/выдача аудио.
+- `satellite/crates/pulsar-call/src/signaling.rs` — Клиент сигналинга intercom: Connect JSON поверх HTTP/1.1 (`home-proto`).
+- `satellite/crates/pulsar-clock/src/clock.rs` — 4-digit 7-segment clock, one sysfs LED per segment (names per `Model`), and the clock actor.
+  - Every 20 ticks (~5 s) all segments are rewritten even if unchanged (sysfs state may be changed by others); animation frames in between do not count.
+- `satellite/crates/pulsar-clock/src/clock/tests.rs`
+  - Never below the lowest level that still lights while the user wants it on.
+- `satellite/crates/pulsar-clock/src/lib.rs` — 4-digit 7-segment clock (sysfs LEDs per `Model`) with its content layers and stock animations, and the ambient light sensor (iio `ltr308als01`).
+- `satellite/crates/pulsar-clock/src/light_sensor.rs` — Ambient light sensor: iio device "ltr308als01". Lux = in_intensity_input when present, otherwise (in_intensity_raw + in_intensity_offset) * in_intensity_scale. Gain/integration defaults are set by the firmware (/etc/light-sensor.conf) and left untouched. Polled.
+  - strtod's numeric prefix (after leading white space) of a decimal sysfs value; None when there is none. Decimal only: no inf / nan / hex forms, which sysfs never gives.
+- `satellite/crates/pulsar-core/BUILD.bazel`
+  - Linux-only: the crate uses Linux syscalls/libc ABI. macOS `bazel build //...` skips it through target_compatible_with instead of failing.
+- `satellite/crates/pulsar-core/src/ambient.rs` — Ambient-light dimming factor shared by the clock and the LED ring: log-shaped (dark room ~0.02, 10 lx ~0.4, >= 500 lx full), low-pass filtered, with hysteresis so that sensor noise around a step boundary does not make the LEDs flicker between two levels.
+- `satellite/crates/pulsar-core/src/compat.rs` — The armhf build targets glibc 2.23 (the Mini's userland), which has no `getrandom` (glibc 2.25), yet Rust's standard library references it. This is the syscall wrapper for every 32-bit ARM binary and test harness (all of them link pulsar-core). On the 2.30 userlands (Lite 2, Mini 2, armhf Midi images) the binary still resolves to this definition, the same syscall as libc's.
+- `satellite/crates/pulsar-core/src/fmt.rs` — Number formatting of `state.conf`, byte-compatible with the C++ daemon (`Settings::save` wrote floats with a default ostream, `Settings::load` read them with strtof): C++ and Rust binaries replace each other on the stations and roll back to `.prev`, both reading the same file.
+- `satellite/crates/pulsar-core/src/lib.rs` — Shared runtime pieces of the pulsar daemon: logging, the actor supervisor and timers, network helpers, volume curves and small types used across services.
+- `satellite/crates/pulsar-core/src/logger.rs` — Pulsar's `tracing` backend with the C++ daemon's behaviour: stderr lines "HH:MM:SS.mmm L file:line msg", collapsing of identical consecutive records, and a bounded sink queue that the ESPHome server streams to API clients (SubscribeLogs).
+  - API clients that do not read fast enough lose the oldest lines.
+  - Raw write(2), not std's stderr lock: this runs under GLOBAL, and code holding std's stderr lock while logging would otherwise deadlock on the lock order.
+- `satellite/crates/pulsar-core/src/runtime.rs` — The process thread's [`Supervisor`]: every actor is spawned through it, and `main` waits on the same instance at teardown.
+- `satellite/crates/pulsar-core/src/sys.rs`
+  - The "C" locale, created once; null if newlocale failed. Kept as an address: `locale_t` is a raw pointer, and the object is immutable and never freed.
+- `satellite/crates/pulsar-core/src/timers.rs` — Per-actor timers keyed by the actor's own enum, with the firing order of the C++ `Loop`: every wake-up takes a snapshot of the due keys and returns them in the order they were last armed; a key cancelled or re-armed by the handling of an earlier key of the same snapshot is skipped. Actors rely on this order where two timers come due on the same tick.
+  - Stand-in for a deadline past the end of `Instant`: never, for a daemon.
+- `satellite/crates/pulsar-core/src/volume.rs`
+  - Raw control value of volume `v` (0..1). Level p = v * top level, piecewise linear through the model's map. With `VolumeCurve::min_step` any audible volume is at least the lowest stock step (the map's second point): the stock firmware never sets the raw values …
+- `satellite/crates/pulsar-core/tests/log_sink.rs` — The installed logger end to end: the process-wide sink queue and its notification. One test per binary, since the logger is global.
+- `satellite/crates/pulsar-core/tests/own_target.rs` — Tools' own log targets end to end: records of a target registered with `add_own_target` (before or after `init_logger`) reach the sink like pulsar's; others stay foreign. The records come from `log`, so this also covers the `tracing-log` bridge used by third-party crates. One test per binary, since the logger is global.
+- `satellite/crates/pulsar-deconz/src/host.rs` — The host's view of the network: what a deCONZ client wrote over the radio's current state, deCONZ's endpoint slots, and the erase-then-form sequence zigpy drives.
+- `satellite/crates/pulsar-deconz/src/lib.rs` — The deCONZ coordinator protocol of the Station Midi's Zigbee radio.
+- `satellite/crates/pulsar-deconz/src/params.rs` — deCONZ network parameters: the table a ConBee answers, and what the host may write.
+- `satellite/crates/pulsar-deconz/src/server.rs` — The Midi's Zigbee radio offered to Home Assistant (ZHA) and Zigbee2MQTT as a network coordinator speaking the deCONZ serial protocol (ConBee/RaspBee) over TCP: ZHA (zigpy-deconz) connects to `socket://<ip>:<port>`, Zigbee2MQTT to `tcp://<ip>:<port>` with adapter "deconz". The port is advertised over mDNS as `_zigbee-coordinator._tcp` (radio_type=deconz), which ZHA discovers by itself.
+  - Replies waiting for a client that does not read: beyond this it is dropped (the radio's traffic must not pile up in the daemon's memory).
+  - An acceptor provided by the embedder is the listener: do not replace it.
+  - A connection, client input, or room to write. Cancel-safe: the write branch reports exactly the bytes it took as `Wrote(n)`, and a cancelled future is never the one that wrote them (the `select!` returns that branch). [`Server::handle`] drains the count.
+  - a write error inside flush() must not come back here What was already answered goes out first (C++ wrote every reply at once).
+  - seq 0: zigpy numbers its requests 1..255, so this never matches one of them.
+  - A host ignoring the "free slots" flag must not fill the radio's queue (or the daemon's memory) with requests.
+- `satellite/crates/pulsar-deconz/src/slip.rs` — deCONZ's framing: SLIP (0xC0 ends a frame, 0xDB escapes) with a 16-bit two's complement checksum, LE, after the frame: `[command][seq][status][frame length LE16]...`.
+- `satellite/crates/pulsar-deconz/src/types.rs` — APS/NWK values shared by the deCONZ server and the zigbee coordinator: frames, network state, lightweight descriptors, and the two ports between them.
+  - A count byte: lists never hold more than the radio's 32 clusters.
+- `satellite/crates/pulsar-deconz/tests/server.rs`
+  - APS ACK + NWK security (deCONZ)
+  - The test client never takes its output: replies pile up until 64 KiB.
+- `satellite/crates/pulsar-dsp/src/endpoint.rs` — Experimental local end-of-utterance detector for the voice pipeline.
+  - Per-dialog detector. Feed pre-roll chunks with `post_wake = false`, then live chunks with `post_wake = true`. An end is only reported after sustained speech was seen *after* the wake word was handled.
+  - Live evidence must itself last: pre-roll may fill [`Self::above`] but never counts here, and five live chunks starting from `Waiting` qualify exactly as five later ones do.
+  - The arbitration backlog can exceed the trailing-silence window on a delayed scheduler, so feed it through the same path: an end found there must not be lost.
+  - No live speech follows: never end, keep waiting for a command.
+- `satellite/crates/pulsar-dsp/src/level.rs` — Уровни сигнала в dBFS: единственная точка перевода среднего квадрата в децибелы и единственная точка округления до 0,1 дБ (строку `%.1f` сравнивает арбитраж станций).
+- `satellite/crates/pulsar-dsp/src/lib.rs` — Чистый DSP звукового тракта: кольцевые буферы, уровни dBFS, FFT-спектр, endpoint-детектор и WAV-контейнер. Ни FFI, ни модели станции, ни потоков: всё покрыто хостовыми тестами, включая golden-данные спектра.
+- `satellite/crates/pulsar-dsp/src/ring.rs` — Один круговой буфер на все очереди аудио: FIFO захват → обработка, кольцо пре-ролла и кольцо записи wake-событий. Ёмкость и размер чанка задаются в элементах; старые элементы вытесняются, поэтому память ограничена независимо от темпа читателя.
+- `satellite/crates/pulsar-dsp/src/spectrum.rs` — Music features from the speaker reference channels of the capture (what the station itself plays, after the softvol): 8 bands, loudness, beats. One VQE chunk per call (512 samples at 16 kHz after decimation, 256 on the Mini 3 and Mini); the FFT runs every 512 samples, on the front-end's processing thread.
+- `satellite/crates/pulsar-dsp/tests/spectrum_golden.rs` — SpectrumAnalyzer against the C++ analyzer (tests/golden/spectrum.txt): a sine scenario (three tones and noise, then a fade-out), silence (with a quiet tone fading through the silence threshold) and a beat sequence (80 Hz kicks, strong, weak and one too early), on the Lite 2 layout (48 kHz, chunk 1536, 1 speaker channel) and the Midi one (96 kHz, chunk 3072, 4 channels).
+- `satellite/crates/pulsar-esphome/src/key.rs` — Файл ключа Noise `api_key` (base64 из 32 байт, как `api: encryption: key` ESPHome): пишется авто-провижинингом HA (NoiseEncryptionSetKeyRequest) или `ctl.sh api-key`.
+  - Fail-closed без случайного ключа (getrandom не сработал): каждый Noise handshake отвергается как неверный ключ, plaintext — как «requires encryption» (`has_key`).
+  - Читает файл ключа. Нет файла / пусто / нулевой ключ — ключа нет. Нечитаемый файл или не base64 из 32 байт — fail-closed: кто-то хотел включить шифрование, отката в plaintext нет; случайный ключ не пускает никого, пока файл не исправят (или не удалят).
+- `satellite/crates/pulsar-esphome/src/lib.rs` — Сервер ESPHome Native API: открывает колонку Home Assistant как assist satellite, media player и вспомогательные сущности (порт 6053; plaintext, пока не провижинен ключ Noise, затем Noise). Клиентов может быть несколько (HA, просмотрщик логов, пробы): состояния идут каждому подписчику, голосовой пайплайн — одному владельцу.
+- `satellite/crates/pulsar-esphome/src/server.rs` — Актор API-сервера: TCP-транспорт (plaintext или Noise по первому байту клиента), лимиты соединений и keepalive, владелец голосового пайплайна среди нескольких клиентов, поток логов, ключ шифрования. Сообщения сущностей — в `server/entities.rs`, разбор команд — в `server/commands.rs`.
+- `satellite/crates/pulsar-esphome/src/server/commands.rs` — Сообщения сущностей и голосового ассистента: команды HA, проверенные так же, как в C++-сервере, превращаются в `ApiEvent`.
+- `satellite/crates/pulsar-esphome/src/server/entities.rs` — Сущности: DeviceInfo, ListEntities, типизированные состояния (replay при SubscribeStates, отправка подписчикам при publish) и 60-секундные диагностики.
+- `satellite/crates/pulsar-esphome/src/server/tests.rs` — Сервер на `LocalSet` с клиентами через `tokio::io::duplex`: golden-захват C++-референса, plaintext и Noise, владение голосом и вытеснение, backlog, ключ, таймауты.
+- `satellite/crates/pulsar-esphome/src/server/tests/entities.rs` — Сущности: проверки команд на границах (как C++-сервер), подписка и replay состояний, гейтинг по `Capabilities`, голосовые события.
+  - HA asked for "on" under the hardware mute: the controller publishes the real "off" after every command, so the server must not deduplicate identical states.
+- `satellite/crates/pulsar-esphome/src/transport.rs` — Транспорт и слушающий сокет за трейтами: сервер не знает о `TcpStream`, тесты работают на `tokio::io::duplex`.
+- `satellite/crates/pulsar-esphome/src/types.rs` — Доменные типы сервера: устройство, конфигурация, события для контроллера и значения сущностей. Числовые значения — протокольные (api.proto / aioesphomeapi), как в C++ `api_server.h`.
+- `satellite/crates/pulsar-esphome/src/voice.rs` — Владение голосовым пайплайном: чистые правила, без I/O.
+- `satellite/crates/pulsar-esphome/tests/log_stream.rs` — SubscribeLogs end to end through the installed logger and the public API. Alone in its binary: the log sink is process-wide.
+- `satellite/crates/pulsar-hw/src/input.rs` — Buttons via evdev (devices matched by name in /proc/bus/input/devices, names per Model). Station Midi: touch keys "awinic_sar", mute switch "mute"; Station Lite 2: touch keys "aw9610x", mute switch "gpio-keys"; Station Mini 3: touch keys "aw933xx", mute switch "gpio-keys";
+  - The value file of mute line `gpio` under `dir` (/sys/class/gpio), exported if nobody did. A global GPIO number only names this pin on the kernel it was read from (on the Midi, 475 is Wi-Fi SDIO), so the line is never configured: no `direction`, no `edge` …
+  - Stuck-key guard: a release that never arrives must not block later presses.
+  - Drops a device for the reopen timer; keys still held will never be released.
+  - Resolves when `fd` is readable, Err when the reactor cannot poll it (the device is then closed for the reopen timer); never without a device.
+- `satellite/crates/pulsar-hw/src/input/tests.rs`
+  - The guard lets the next press through although the release never came.
+  - An output is never taken over (nor reconfigured).
+- `satellite/crates/pulsar-hw/src/leds.rs` — LED ring (+ logo) of the Station Midi (24 + 6 RGB) and Lite 2 (3 RGB, no logo); layout per Model.
+  - Do not leave the last frame lit after the daemon exits.
+- `satellite/crates/pulsar-hw/src/lib.rs` — Hardware UI of the supported Yandex Stations (layout per `Model`): the LED ring (+ Midi logo) and the touch / mute buttons. All via framebuffers, sysfs and evdev; no Yandex code.
+- `satellite/crates/pulsar-mdns/src/actor.rs` — The responder actor: one UDP socket, rtnetlink and the announcement schedule. The DNS packets themselves are built by the pure `dns` module.
+- `satellite/crates/pulsar-mdns/src/actor/tests.rs`
+  - Further events of the burst do not push the check back.
+- `satellite/crates/pulsar-mdns/src/dns.rs` — DNS wire format of the responder: typed records, the codec and question answering. No I/O and no runtime; the packets are byte-identical to the C++ responder's (tests/golden/mdns.txt).
+- `satellite/crates/pulsar-mdns/src/lib.rs` — mDNS (RFC 6762/6763) responder: advertises DNS-SD service instances over IPv4 under one host name. Answers PTR/SRV/TXT/A/ANY queries for each service, its instance and "<host>.local", lists every service type in "_services._dns-sd._udp.local", announces on start, on `add_service`/`set_txt` and when the address or link changes (rtnetlink, with a 30 s poll as fallback), and sends goodbyes when the …
+- `satellite/crates/pulsar-media/src/backend.rs` — The firmware GStreamer backend of the player: one playbin per channel, the GLib thread that owns the default main context, and the process-wide one-time GStreamer initialisation.
+  - Process-wide GStreamer initialisation: dlopen + gst_init + environment, once. The running player (GLib thread, pipelines, ANNOUNCE output) belongs to the handle and stops with it, but the slot is never released: as before, a process starts at most one player …
+  - Claims the one player slot of the process. It is never released: a failed or finished player still means "already started", exactly like the previous static flag.
+- `satellite/crates/pulsar-media/src/core.rs` — Audio playback through the GStreamer build bundled with the Yandex firmware into the ALSA playback PCM (`Playback::pcm`: dmix + softvol). Two independent channels: Music - media_player content, can be paused / ducked. Announce - TTS, announcements, earcons; plays over (ducked) music. Decoded by its playbin, played by the ANNOUNCE writer of `pulsar-playback` instead of an alsasink.
+  - The GLib thread's machine: GLib dispatches every source of the default main context (bus watches, timeouts, idle commands) on that thread. GStreamer calls made by the machine never dispatch sources themselves, so the borrow is never re-entered.
+  - ANNOUNCE never retries, even a 5xx.
+- `satellite/crates/pulsar-media/src/gst.rs` — The firmware's GLib and GStreamer (/system/vendor/quasar/libs/libquasar_gstreamer.so), loaded with dlopen and used without headers. Every unsafe call of the player lives here.
+  - are never unloaded (the handles live in the static Api).
+  - Preload libiconv so libglib.so's DT_NEEDED "libiconv.so" resolves without LD_LIBRARY_PATH. A failed load keeps the libraries already opened (never dlclose: their initialisers may have registered state, e.g. GLib types, that outlives a close).
+  - (getenv) on another thread at this moment would race; the daemon calls pulsar_media::spawn() before it starts any other service thread, so none exists yet.
+  - TLS backend for souphttpsrc (https://): glib-networking's OpenSSL module is linked statically into libquasar_gstreamer.so; loading it with a NULL module registers it as a static type.
+  - its own. The tag is a plain integer, never dereferenced.
+- `satellite/crates/pulsar-media/src/lib.rs` — Playback through the firmware's GStreamer (channels Music / Announce; Announce is played by the ANNOUNCE writer of `pulsar-playback`) and the master volume (ALSA "Master Playback Volume", softvol of the model's playback PCM).
+- `satellite/crates/pulsar-media/src/mixer.rs` — Master output volume: the softvol "Master Playback Volume" of the model's playback PCM (`Model::playback_pcm`) on card 0 (2 values, 0..255, linear in dB, Midi -60 dB..0 dB; TLV mute=0, i.e. raw 0 is the bottom of the range, not silence), on the stock curve of the model (`Model::volume_map`): volume v is platform level v * top level.
+- `satellite/crates/pulsar-media/src/player.rs` — Audio playback through the GStreamer build bundled with the Yandex firmware into the ALSA playback PCM (`Playback::pcm`: dmix + softvol). Two independent channels: Music - media_player content, can be paused / ducked. Announce - TTS, announcements, earcons; plays over (ducked) music. Decoded by its playbin, played by the ANNOUNCE writer of `pulsar-playback` instead of an alsasink.
+- `satellite/crates/pulsar-media/tests/mixer_golden.rs` — Mixer curves against golden vectors of the C++ reference (tests/golden/curves.txt; the unit tests of src/player.rs read soup_status.txt and to_uri.txt from the same harness).
+- `satellite/crates/pulsar-metrics/src/catalog.rs` — Metric catalog of `pulsar_*`: the names the daemon exports.
+- `satellite/crates/pulsar-metrics/src/http.rs` — Minimal HTTP/1.1 endpoint: `GET /metrics` on the LAN interface.
+- `satellite/crates/pulsar-metrics/src/lib.rs` — Prometheus metrics of the Pulsar daemon on the station.
+- `satellite/crates/pulsar-metrics/src/metrics.rs` — Atomically updated metric state. Every recorder only does relaxed atomic loads/stores, so the audio processing thread and the call loop never block or allocate here.
+- `satellite/crates/pulsar-metrics/src/system.rs` — Host metrics from `/proc` and `statvfs`. The parsers are pure so the unit tests run on fixtures; [`Collector`] adds the two reads that need the live system (the CPU delta between scrapes and `statvfs`).
+  - `/proc/stat` first `cpu` line. Unknown columns are ignored, so newer kernels do not break the parse.
+- `satellite/crates/pulsar-model/src/detect.rs` — Определение модели станции по devicetree / `quasar.cfg` и процессные ALSA-настройки.
+- `satellite/crates/pulsar-model/src/lib.rs` — Описание железа поддерживаемых Яндекс Станций: набор capability-структур, где отсутствие устройства выражено через `Option` или enum, а не через пустые строки и нули.
+- `satellite/crates/pulsar-model/src/profile.rs`
+  - true: any audible volume is at least the map's second point (the stock firmware never sets the raw values below it).
+  - Midi, frontend_probe 2026-10-28, one talker at 1-2 m: "alisa" confirms with event 5 and the 1st-stage hit (event 3) always comes in the same chunk, so it anchors nothing; "yandex" confirms with event 2 and never reports event 3. Both get a fixed length.
+  - Lite 2, frontend_probe 2026-10-28, one talker at 1-2 m: both models confirm with event 2 (1st stage) and never report a 1st-stage hit (event 3), so the length is fixed.
+  - p3 + q3 form the colon; the rest are auxiliary dots/icons maind never lights for the time.
+- `satellite/crates/pulsar-playback/src/announce.rs` — The ANNOUNCE output: one writer thread that plays decoded PCM on the model's playback PCM with the priming / padding / drain policy measured on the stations. The policy itself ([`Announce`]) is generic over [`PcmDevice`], so the tests run it on a fake device; the realtime wrapper ([`Output`]) owns the socketpair, the reader thread and the writer thread.
+  - While stalled: tops the device up with silence so it never runs dry.
+- `satellite/crates/pulsar-playback/src/call.rs` — Потоковый вывод голоса собеседника: маленький буфер вместо `Announce`-политики.
+- `satellite/crates/pulsar-playback/src/device.rs` — The playback PCM device port and its ALSA implementation: opening with the output gates on, the hardware/software parameters every first-party writer uses, xrun recovery and the reopen backoff shared by the writers.
+- `satellite/crates/pulsar-playback/src/fake.rs` — In-memory [`PcmDevice`] for policy tests: it plays what the writer queues and exposes the operations the tests need to drive (play out, fail the next open / write).
+- `satellite/crates/pulsar-playback/src/lib.rs` — The playback output shared by the ANNOUNCE writer (`pulsar-media`) and the Sendspin sink: one PCM device port ([`PcmDevice`]), xrun recovery, the reopen backoff, statistics and the ANNOUNCE priming / padding / drain policy ([`Announce`]).
+- `satellite/crates/pulsar-playback/src/stats.rs` — Output statistics of a Sendspin-style writer: frames written, the delay the device reported, xruns and the net rate against wall-clock time.
+- `satellite/crates/pulsar-probes/Cargo.toml`
+  - Diagnostic binaries only: never linked into the station daemon. Each `src/bin/*.rs` keeps its historical name, which docs, skills and tools/ refer to.
+- `satellite/crates/pulsar-probes/src/bin/alsa_abi_probe.rs` — No audio is played: the null PCM exercises ALSA's near/get pointer ABI without hardware. Run on versioned Midi and unversioned Lite 2 firmware after cross-building this tool.
+  - alias=no: the library has only the current ABI (unversioned, no __snd_* exports).
+- `satellite/crates/pulsar-probes/src/bin/api_selftest.rs` — Self-test harness for the ESPHome API server: runs it with printing event handlers so a real client (aioesphomeapi, tools/esphome_check.py, Home Assistant) can be pointed at it. No mDNS: HA does not discover it.
+- `satellite/crates/pulsar-probes/src/bin/frontend_probe.rs` — Runs the microphone front-end without the daemon (stop the service first: the capture device has one user) and prints its events, plus once a second: VQE chunks, audio chunks, music frames, the captured rate and how far the processing thread is behind (FIFO).
+- `satellite/crates/pulsar-probes/src/bin/hw_probe.rs` — Hardware probe, run with the daemon stopped. usage: hw_probe leds [state_ms=2000] cycle LED states, effects, music styles (synthetic music at 30 fps), dump sysfs; ring dark after exit hw_probe input [seconds=15] print buttons and the mute switch hw_probe clock [state_ms=2000] time, number, timer, levels, animations, text, face, code, music levels;
+  - The handles do not report whether their device opened (the daemon does not need it): the ring's framebuffer, first sysfs LED or I²C bus, and any clock segment, stand in for C++ open().
+- `satellite/crates/pulsar-probes/src/bin/lan_probe.rs` — Probe of the LAN services next to a running daemon: use alternative arbitration ports and the `_pulsartest._tcp` service type only (docs/stations.md).
+- `satellite/crates/pulsar-probes/src/bin/player_probe.rs` — Player/Mixer probe. Run with the daemon stopped. usage: player_probe <music_uri> <announce_file> <http_base> [https_url] 0. Mixer: set_volume(v) / mute / unmute with v = min(current volume, 0.2), each read back with amixer; playback below runs at v (0.2 = raw 82 on the stock curve, the port's test cap). Nothing plays while the master is muted (raw 0).
+  - try_lock: a panic while the lock is held must not deadlock the hook; a poisoned lock still holds the values to write back.
+- `satellite/crates/pulsar-probes/src/bin/sendspin_probe.rs` — Sendspin-плеер без демона, для tools/sendspin_server.py (запускать при остановленном сервисе станции). usage: sendspin_probe [port=18928] [name=pulsar-test] [seconds=120] [state_dir=/tmp/pulsar-test/sendspin]
+- `satellite/crates/pulsar-probes/src/bin/update_probe.rs` — Пробник обновлений: проверяет OCI-источник и апдейтер без демона. usage: update_probe versions таблица release_newer() для нескольких describe-строк (без сети) update_probe check [owner/repo | ghcr.io/owner/name] последний релиз и его слои так, как их видит демон update_probe download <title> [repo] скачивает слой последнего релиза и проверяет его digest update_probe install --binary <path> …
+- `satellite/crates/pulsar-probes/src/bin/ww_offline.rs` — Offline evaluation of a stock spotter model on a recording made on the device: raw capture WAV (S16, layout of the detected model, e.g. `arecord -D hw:0,1 -c 8 -r 48000` on the Lite 2, or `frontend_probe --record`) -> Yandex VQE -> spotter. The spotter channel layout is derived from the model like the daemon does.
+- `satellite/crates/pulsar-probes/src/bin/zigbee_probe.rs` — Zigbee probe: the Midi's radio without the daemon. usage: zigbee_probe [port] the coordinator (pulsar's coordinator firmware must be in the radio) and its deCONZ server (default 6639; the daemon serves 6638), for zigpy / Zigbee2MQTT zigbee_probe info the running firmware (0x0900) zigbee_probe flash <image.ybl> write a radio firmware image The daemon must not run its Zigbee role at the same time: …
+- `satellite/crates/pulsar-probes/tests/update_probe.rs` — `update_probe` против C++ пробника: tests/golden/versions.txt — stdout C++ `update_probe versions` (тег rust-port-base, сборка хоста zig c++).
+- `satellite/crates/pulsar-sendspin/BUILD.bazel`
+  - The C ABI over sendspin-cpp (shim/sendspin_shim.cpp), only for the stations. zig links its libc++ statically; the former Makefile added the same link-lib after the static sendspin libraries to keep the static link order.
+- `satellite/crates/pulsar-sendspin/build.rs` — Compiles the C shim over sendspin-cpp and links the library statically when the former Makefile provided its per-arch build (PULSAR_SS_SRC, PULSAR_SS_BUILD). Bazel host builds do not set them and leave cfg `sendspin_ffi` unset; the station Bazel build sets the cfg and links the `cc_library` shim in crates/pulsar-sendspin/BUILD.bazel instead of running this script.
+  - zig линкует свои libc++, libc++abi и libunwind статически (см. docs/architecture.md, «Линковка C++ (sendspin-cpp)»). cc уже выдаёт эту библиотеку сразу после шима, то есть до библиотек sendspin;
+- `satellite/crates/pulsar-sendspin/shim/sendspin_shim.cpp` — See sendspin_shim.h. Policy (formats, pairing, visualizer layout, persistence, ALSA output) lives in the Rust service; this file only maps the C ABI onto sendspin-cpp.
+  - Every listener and provider of the client. The callbacks are Rust functions and never unwind. The overrides the library calls on its main loop thread run inside ss_loop / ss_start / ss_destroy, whose catch(...) takes anything they throw (e.g.
+  - sendspin-cpp is compiled with -Dfprintf=pulsar_filtered_fprintf: its host log writes every line with fprintf(stderr, ...), and this redirects them through the Rust redactor first, so a pairing PSK id or an SP: token never reaches the daemon log.
+- `satellite/crates/pulsar-sendspin/shim/sendspin_shim.h` — C ABI over sendspin-cpp's SendspinClient with the player, metadata, controller and visualizer roles, for the Rust service (src/ffi.rs mirrors every declaration here; both sides assert the struct layouts). No C++ exception leaves an ss_* function: each one catches everything and returns its failure value.
+- `satellite/crates/pulsar-sendspin/src/actor.rs` — Main-loop event handling and the service actor. The callbacks of sendspin-cpp run on its main loop thread; [`EventHandler`] is their single handler: it applies the sink request, logs the event, publishes the protocol state and records the stream edges whose 1 s hold the actor applies.
+- `satellite/crates/pulsar-sendspin/src/event.rs` — sendspin-cpp's main loop events as the service receives them from the shim, and the sink request each one makes inside its callback.
+- `satellite/crates/pulsar-sendspin/src/ffi.rs` — Bindings of shim/sendspin_shim.h and a safe `Client` over them. Every unsafe block of the crate is here.
+  - One sendspin-cpp client with all its roles. Not `Send`: every call (and the drop, which stops the library and joins its threads) happens on the thread that created it, which is the library's main loop thread. The listener is never called back into from here.
+- `satellite/crates/pulsar-sendspin/src/gain.rs` — Software duck gain of the Sendspin output: a linear ramp over 80 ms for a full-scale change, applied per frame to 16-bit PCM (the only depth the player advertises). Float operations in the order of the C++ sink, so both produce the same samples.
+  - Scales `frames` interleaved S16_LE frames of `data` into `out`, ramping from `gain` toward `target` one step per frame (`rate` must not be 0). Samples round to nearest even, as lrintf.
+- `satellite/crates/pulsar-sendspin/src/lib.rs` — Native Sendspin player (Music Assistant's synchronized streaming protocol) on the official sendspin-cpp client library, through the C shim in `shim/`. Roles: player (own ALSA sink on the playback dmix), metadata, controller (transport commands), visualizer (8 log bands 40 Hz–7.6 kHz, loudness, beats → `MusicFrame`).
+- `satellite/crates/pulsar-sendspin/src/proto.rs` — Plain protocol values shared by the actor and the C ABI layer (no FFI types here, so the actor builds and its tests run on the host).
+- `satellite/crates/pulsar-sendspin/src/secrets.rs` — Redaction of pairing secrets in log lines. The sendspin-cpp host log writes directly to stderr (`fprintf`). Only the Bazel station build compiles sendspin-cpp, and it does so with `-Dfprintf=pulsar_filtered_fprintf`, so the shim passes every line through [`redact`]. The legacy `build.rs` path links prebuilt sendspin libraries made elsewhere and does not filter them;
+- `satellite/crates/pulsar-sendspin/src/service.rs` — The Sendspin player service: one sendspin-cpp client in server-initiated mode (the library listens on ws://<ip>:<port>/sendspin; the controller advertises `_sendspin._tcp` over mDNS).
+  - The operator pairs with the six-digit code; the provisioning PSK never enters a log.
+- `satellite/crates/pulsar-sendspin/src/sink.rs` — ALSA output of the Sendspin player on the model's playback PCM (dmix, mixed with the GStreamer channels). `configure` / `release` run on the runtime thread (stream start / end), `write` on the library's sync task; the PCM is opened lazily by `write`, so the runtime thread never blocks on it.
+  - No stream yet (or the device is closed): start the first frame at the new gain instead of ramping down from 1.0. A desktop/phone volume change before playback is immediate.
+  - A request that arrived while `io` was held (request()'s try_lock failed) must not wait for the next write: a release may be the last event, and the device would stay open.
+- `satellite/crates/pulsar-sendspin/src/state.rs` — Reported stream state. Music Assistant ends and restarts the stream on every seek / skip (~10 ms apart); a stop or pause comes with group state "stopped" (just before or just after the stream end, seen on a Midi). A stream end without it is held this long, so a restart does not flap the HA media state and the music displays. The audio itself stops at once (the sink is released on every end).
+- `satellite/crates/pulsar-sendspin/src/store.rs` — Identity and pairing storage behind [`IdentityStore`]. The file implementation keeps the C++ daemon's exact format (one file per persistence key, raw bytes, the `unpaired_access` switch), so a pairing made by either binary keeps working under the other; the in-memory one is for tests.
+- `satellite/crates/pulsar-sendspin/src/stub.rs` — Build without sendspin-cpp (host `cargo test`, clippy of the station targets): same API, `spawn` always fails, so no handle ever exists.
+- `satellite/crates/pulsar-sendspin/src/visualizer.rs` — Accumulates the server's visualizer stream (loudness and beat on the drain thread, spectrum frames too) into the `MusicFrame` the LEDs and the clock consume.
+- `satellite/crates/pulsar-ui/src/clock.rs` — Слои контента часов и их приоритет: код сопряжения > громкость > голос > обновление > one-shot > таймер > временный слой > текст/лицо > уровни музыки > время. Чистая часть `pulsar-clock/src/clock.rs`: без tokio и sysfs.
+- `satellite/crates/pulsar-ui/src/clock_fx.rs` — Pure rendering of the 7-segment clock animations: the stock voice / ringing / player / boot patterns and the music level meter. The stock envelopes were measured from the Lite 2's /system/vendor/quasar/ledpatterns/clock/*.binscled.zst (the Midi ships only ringing, the same); nothing of those files is used at run time.
+- `satellite/crates/pulsar-ui/src/font.rs` — Glyphs of the 7-segment clock (bit i = segment 'a' + i), text layout and the static content drawn from glyphs: numbers, the time, timer countdowns, pairing codes, faces.
+- `satellite/crates/pulsar-ui/src/led_fx.rs` — Pure rendering of the LED ring / logo content: voice states, one-shots, effects and music styles. Colours are "perceptual" 0..1 values; the LED output squares them (gamma 2).
+  - Anything but "Blue" is the stock violet: an unknown key in `state.conf` must not change the look.
+- `satellite/crates/pulsar-ui/src/led_fx/tests.rs` — Golden frames of the C++ renderer (`hw/led_fx.cpp` of tag rust-port-base, compiled on the x86_64 host with `zig c++ -std=c++20 -O2 -mfma` and a one-off harness: clang's default -ffp-contract=on then fuses the same `a * b + c` sites as the station builds). Each line of tests/golden/led_fx.txt is `<kind> <params> | r g b ...` with every channel as the hex bits of its f32.
+- `satellite/crates/pulsar-ui/src/leds.rs` — Композиция слоёв кольца LED (+ логотип Midi): приоритет слоёв, затухания, время и кадр в RGB. Чистая часть `pulsar-hw/src/leds.rs`: без tokio, sysfs и вывода.
+  - Global cap: never drive LEDs above 80 % PWM.
+  - Idle is never drawn: voice_shown() is false.
+- `satellite/crates/pulsar-ui/src/lib.rs` — Чистый домен интерфейса станции: рендер и композиция слоёв кольца LED и 7-сегментных часов без tokio, sysfs, ввода-вывода и `pulsar-model`.
+- `satellite/crates/pulsar-ui/src/music.rs` — Общий источник музыки для кольца и часов: приоритет Sendspin над динамиком, «свежесть» кадров. Обе реализации раньше дублировали это в `pulsar-hw/src/leds.rs` и `pulsar-clock/src/clock.rs`.
+- `satellite/crates/pulsar-ui/src/types.rs` — Доменные типы интерфейса вместо строк: эффекты кольца, стили музыки часов и кольца, лица часов, цвет корпуса. Разбор строк — через [`FromStr`], список опций — [`Effect::ALL`], [`MusicStyle::ALL`], [`ClockMusicStyle::ALL`], [`ClockFace::ALL`].
+- `satellite/crates/pulsar-update/src/actor.rs` — Актор обновлений: команды из handle, одна проверка или установка за раз, события в контроллер. Задание — отдельная задача супервизора с собственным `CancellationToken`.
+- `satellite/crates/pulsar-update/src/error.rs` — Ошибка обновления с признаком `fatal`: фатальный релиз (неверная контрольная сумма, бинарь не запускается) автоматическое обновление больше не ставит, сетевая ошибка заслуживает повтора. Текст ошибки видит Home Assistant, поэтому он сохраняется дословно.
+- `satellite/crates/pulsar-update/src/http.rs` — HTTPS-клиент обновлений на reqwest: rustls с провайдером ring и корнями из CA-бандла прошивки. Только HTTP/1; тело читается в память с пределом. Ошибка — типизированная, статус ответа отделён от транспорта.
+- `satellite/crates/pulsar-update/src/installer.rs` — Установщик: скачивает и проверяет ассеты, пробует новый бинарь и атомарно подменяет файлы. Файловая система и запуск `--version` — здесь, сеть — за `ReleaseSource`.
+- `satellite/crates/pulsar-update/src/lib.rs` — Обновления pulsar из OCI-артефакта в GHCR: сущность «Firmware» в Home Assistant находит последний релиз, читает версию и digest слоёв из манифеста, скачивает `pulsar-<arch>.bin`, проверяет digest слоя, `SHA256SUMS` и запуск (`--version`), затем подменяет установленный бинарник (прежний остаётся как `.prev`).
+- `satellite/crates/pulsar-update/src/source.rs` — Источник релизов: OCI-образ в GHCR. Анонимный pull-token, манифест `latest`, слои по аннотации `org.opencontainers.image.title`.
+  - `https://ghcr.io/` или локальный тестовый сервер.
+- `satellite/crates/pulsar-update/src/test_server.rs` — Локальный HTTPS-сервер для тестов клиента и установщика: rustls с тестовым CA из tests/data. Файлы вшиты в тестовый бинарь (`include_str!`), поэтому нет двойственности CARGO_MANIFEST_DIR / runfiles.
+- `satellite/crates/pulsar-update/src/version.rs` — Версия релиза: тег `vMAJOR.MINOR.PATCH` и `git describe`-строка сборки (`v1.2.3-4-gabc1234`, `v1.2.3-dirty`) или голый хеш без тегов.
+- `satellite/crates/pulsar-wake-events/src/capture.rs` — Audio windows of wake events, inside the audio processing thread: a ring of the `VQE_OMNI_WITH_GAIN` stream (the detector's input), the hit / near-miss events of the Ricardo detector and the user-reported miss. Finished buffers leave through a bounded channel; this module never touches files and only allocates when an event starts or finishes.
+  - Recording switched off (or the detector stopped): pending windows are discarded, the ring must not keep the audio either.
+- `satellite/crates/pulsar-wake-events/src/contract.rs` — Контракт v1 wake-событий: сайдкары `<id>.json`, `stats.json` и манифест модели.
+- `satellite/crates/pulsar-wake-events/src/lib.rs` — Wake-event recording for the Ricardo detector (contract v1): the audio windows of confirmed hits, near-misses and user-reported misses, their WAV + JSON sidecars, retention and stats.
+- `satellite/crates/pulsar-wake-events/src/logic.rs` — Pure decisions of wake-event recording: ids and UTC text, retention, the near-miss peak and window sizes. No I/O here, so every rule of the contract is unit-tested next to it.
+- `satellite/crates/pulsar-wake-events/src/writer.rs` — The wake-event writer thread: WAV + sidecar files, `stats.json`, the in-memory index, retention and the labels the controller asks for. All blocking file work of the feature lives here, off the audio thread.
+  - A dry-run hit never reaches the controller: its outcome is final here.
+  - The hit's window finishes 1 s after the confirming chunk; an outcome of a dialog that never started (arbiter_lost, a quick cancel) comes earlier.
+- `satellite/crates/pulsar-wake-events/tests/contract_golden.rs` — Байт-совместимость контракта v1: файл `golden/contract_v1.txt` — вывод прежнего самописного JSON-писателя (снят с `git show HEAD` до замены на serde) на наборе фикстур, включая формат чисел, порядок полей, экранирование и завершающий перевод строки.
+- `satellite/crates/pulsar-zbhci/src/bytes.rs` — Byte order helpers for the Zigbee radio and deCONZ protocols: Zigbee and pulsar's 0x0Axx radio messages are little endian, stock zbhci fields big endian. Readers take at least as many bytes as they decode; callers check the length first.
+- `satellite/crates/pulsar-zbhci/src/frame.rs` — Framing of the Midi's Zigbee co-processor: Telink zbhci.
+  - The length field is 16 bits; payloads never come near it (the radio takes 0xF9).
+  - Normal frames carry at most 0xF9 bytes; only the crash report is longer. A stray 0x55 with a bogus length must not hold back the frames behind it.
+- `satellite/crates/pulsar-zbhci/src/lib.rs` — Transport of the Station Midi's Zigbee co-processor: Telink zbhci framing and the serial link with its stop-and-wait ACKs, retries, hardware reset and boot detection.
+- `satellite/crates/pulsar-zbhci/src/link.rs` — The serial link to the Midi's Zigbee co-processor: zbhci framing, stop-and-wait ACKs, retries and the reset/boot lines.
+  - Opens the tty and hardware-resets the chip; [`LinkEvent::Boot`] follows once its application runs. Must run inside the tokio runtime (the tty is registered with its reactor);
+  - Handlers never touch the codec or rx (only the reset pulse's timer clears them).
+  - Spontaneous restart (watchdog or crash): what is in flight never gets its ACK.
+  - never leave the radio held in reset
+- `satellite/crates/pulsar-zbhci/src/link/tests.rs` — Test harness of the link: an in-memory radio on a duplex, recording reset/boot lines and a pseudo-terminal for the real tty path.
+  - A tty whose other end is gone (pty master closed: hangup, EIO) must not spin: reading stops, timers go on (the ACK times out), then next() just waits. Run on its own thread so a regression fails on the deadline instead of hanging the test run.
+  - A real tty through Link::open: an empty non-blocking read with VMIN = VTIME = 0 returns 0 bytes, which must not count as a hangup. Input arriving in separate chunks keeps being read; only closing the pty's master ends reading, once, without spinning.
+- `satellite/crates/pulsar-zigbee/src/coordinator.rs` — Zigbee coordinator on pulsar's coordinator firmware (radio/coordinator, a network co-processor): the chip runs the stack and the trust center, the host chooses the network (PAN ID, extended PAN ID, key, channel, coordinator IEEE address, frame counter) and gets every APS frame, ZDO included.
+  - deCONZ options: 0x01 APS security, 0x02 NWK security (always on here; APS bit 0x02 would turn it off), 0x04 APS ACK, 0x08 fragmentation; the rest are APS tx options as they are.
+  - [dst mode][dst][dst ep][src mode][src 2|8][src ep][profile][cluster][lqi][rssi] [security][length][asdu]
+- `satellite/crates/pulsar-zigbee/src/flasher.rs` — Writes an application image into the Midi's Zigbee radio through its resident bootloader ("Yandex Bootloader v1.0.02": boot line held while reset is pulsed, then a text menu on the same UART at 115200: "1. upload ybl", "2. run", prompt "BL > "; the image goes over XMODEM, 128-byte blocks, CRC-16 or checksum as the receiver asks). This is maind's own update path (ncp_manager.cpp updateFirmware);
+  - Never write menu keys or an image into a regular file.
+  - Blocking (~25 s for an image), with no way to stop it: run it off the runtime thread, with nothing else holding the tty. `progress` gets 0..1. Errors are logged.
+- `satellite/crates/pulsar-zigbee/src/flasher/tests.rs`
+  - Nothing reached the radio: the closed slave reads as EIO (or end), never as data.
+- `satellite/crates/pulsar-zigbee/src/lib.rs` — The Station Midi's Zigbee radio in one of its roles, and the orchestration around it.
+- `satellite/crates/pulsar-zigbee/src/roles.rs` — The radio's roles: `state.conf` `zigbee_role=` value, Home Assistant select option and firmware family (top byte of the image version, `radio/*/version_cfg.h`).
+  - pulsar leaves the radio alone (whatever firmware it has keeps running); the default, so an install never writes the radio on its own.
+  - `state.conf` value → mode. Anything else, including "coordinator" (Yandex's gateway firmware, which pulsar no longer drives), is `Off`: the radio is never written without a choice in HA.
+- `satellite/crates/pulsar-zigbee/src/router.rs` — The Midi's radio as a Zigbee router in somebody else's network (Zigbee2MQTT, ZHA, ...): it runs pulsar's router firmware (radio/router), which joins and leaves on command and otherwise forwards on its own. Over zbhci: 0x0045 -> 0x8045 network info, 0x0002 network steering (join), 0x0005 leave + factory new; unsolicited 0x8906 joined, 0x8920 `[event][status]` (1 started: status 0 = on a network;
+- `satellite/crates/pulsar-zigbee/src/service.rs` — The Midi's Zigbee radio in one of its roles: off: pulsar leaves the radio alone (whatever firmware it has keeps running); the default, so an install never writes the radio on its own; coordinator: pulsar's coordinator firmware (radio/coordinator, installed next to the daemon), a deCONZ coordinator for ZHA and Zigbee2MQTT (Coordinator + DeconzServer);
+  - Firmware identification and the deCONZ host do not change the status by themselves (what they change goes through changed()).
+  - A flooding LAN client must not starve the other actors.
+- `satellite/crates/pulsar-zigbee/src/test_util.rs`
+  - Reset / boot files that do not exist: the link boots at once without driving anything.
+- `satellite/crates/pulsar/src/controller/call.rs` — Звонок в контроллере: звонок на колонку — «интерком», колонка отвечает сама.
+- `satellite/crates/pulsar/src/controller/entities.rs` — HA connection and entities, buttons, the light sensor, Zigbee and updates (controller.cpp "HA connection", "entities", "updates"). `Publisher` keeps the entity-facing state and publishes it; HA option texts are parsed here only.
+  - The button's latch cuts the microphones in hardware: there is nothing to switch on, and HA must not stay "on" after asking for it.
+  - Privacy: a mute must not be undone by a power cut right after it. A failed write is logged and stays pending; the mute itself is in effect either way.
+  - A write cut short by a power loss must not unmute the station.
+  - An install that ended without a new binary, or never started: HA sees the update entity idle again, the clock shows the time.
+- `satellite/crates/pulsar/src/controller/logic.rs` — Decisions of the controller that depend only on their inputs (controller.cpp), kept apart for the host tests.
+  - The volume to start with and whether it was migrated from `volume=` of an earlier build (then persisted). `volume2=` is authoritative; `volume=` keeps the raw level of the pre-curve mapping (`from_legacy`), or of the stock curve for `volume_curve=2`.
+- `satellite/crates/pulsar/src/controller/logic/tests.rs`
+  - Neither: the mixer's volume, never above 0.3.
+  - A build whose version does not parse never updates itself.
+  - The button never sets the software mute.
+- `satellite/crates/pulsar/src/controller/media.rs`
+  - «Громкость объявлений», 0..1: absolute volume on the model curve for spoken announcements and TTS answers only. 1.0 means «as the master volume» because the announce channel can never be louder than the hardware master (see `announce_gain`).
+  - Announce channel gain: mute zeroes it, speech is never ducked; earcons and the timer ring stay on the master volume. «Громкость объявлений» is an absolute volume on the same dB curve as the master, not a multiplier: 5 % there sounds like 5 % of the station.
+- `satellite/crates/pulsar/src/controller/mod.rs` — Glue between Home Assistant (ESPHome API), the microphone front-end, playback and the hardware UI (C++ controller.cpp). Voice-satellite behaviour follows OHF linux-voice-assistant (satellite.py). The controller owns its state and every service handle; the services report through channels, which `run` serves one event at a time (no re-entrant hooks as in C++).
+  - Updates: releases of this fork on GitHub, never upstream. The first check waits for the network after boot; auto_update stays off by default, so a custom binary is not replaced silently;
+  - Loop timers of the C++ controller. Intended difference: C++ armed an independent timer on every call, so with two error rings pending update_ui ran at the earlier deadline (and again at the later one);
+  - Ends a LISTENING / PROCESSING phase HA never advances.
+  - Next event of an optional channel; never ready without one.
+  - Wake→TTS-start latency, once per wake run. `None` for a run opened without a wake word and for every TTS start after the first: a follow-up answer in the same run must not add a second sample, and playback time is deliberately excluded (the sample is taken …
+- `satellite/crates/pulsar/src/controller/ports.rs` — Порты контроллера: то, что он вызывает у сервисов, и ничего больше.
+- `satellite/crates/pulsar/src/controller/session.rs` — Голосовая сессия: диалог с Home Assistant, follow-up, TTS-отчёт, объявления и earcons (controller.cpp "voice pipeline"). Фаза с данными вместо набора флагов.
+- `satellite/crates/pulsar/src/controller/tests.rs` — Сценарные тесты контроллера на фейковых портах: настоящие `Controller`, `Store` и `select` не участвуют — только домены и вызовы портов.
+  - The first sample is taken when playback starts; later TTS starts in the same run (a follow-up answer) must not add another.
+- `satellite/crates/pulsar/src/controller/voice.rs` — Voice pipeline, wake word arbitration, announcements and local voice commands (controller.cpp "voice pipeline", on_command).
+  - The wake word works as a stop word while ringing. A ringing station takes the turn so that its neighbours do not start a dialog.
+  - Everything after this point is live post-wake speech held during the decision; the detector must not treat it as pre-roll evidence.
+  - The cut answer's completion never closes its dialog (the id changes below), so its sidecar gets the outcome here.
+  - HA applies AnnounceFinished by forcing idle: an answer's report must not arrive over the new dialog's listening state.
+  - Without it a run HA never ends (lost connection state, a hung agent) would leave the ring listening, the microphone streaming and the wake word ignored.
+  - Announcements do not take over the dialog phase, and their end leaves any dialog alone. HA cancels its own running pipeline before it announces (assist_satellite async_internal_announce), so a dialog still active here is either ending (its RUN_END or the …
+- `satellite/crates/pulsar/src/controller/wake.rs` — Арбитраж wake word между станциями: claim, окно решения и потерянный turn (controller.cpp "wake arbitration", `docs/voice.md`, «Арбитраж между станциями»).
+- `satellite/crates/pulsar/src/controller/wiring.rs` — Сборка контроллера: загрузка настроек, порядок спавна сервисов и сборка `Deps`.
+- `satellite/crates/pulsar/src/crash.rs` — Crash report straight to stderr (the log file), same format as the C++ daemon: everything in the handler is async-signal-safe (no allocation, no std::io). The deployed binary is stripped; resolve the addresses with `addr2line -f -e build/<arch>/pulsar.debug` (non-PIE: addresses are absolute).
+- `satellite/crates/pulsar/src/main.rs` — pulsar: Home Assistant voice satellite for Yandex Stations (Midi, Lite 2, Mini 2, Mini). usage: pulsar [--version | state_file]
+- `satellite/crates/pulsar/src/settings.rs` — `state.conf`: one `key=value` per line. Byte-compatible with the C++ daemon (controller.cpp `Settings`), so a binary rolled back by supervise.sh, or rolled forward, reads what the other wrote: numbers as C++ ostream writes them (`%g`, 6 significant digits) and reads them (`strtof`), booleans `0` / `1`, `zigbee_flash_failed` in lowercase hex without `0x`.
+  - Dry run of the Ricardo detector: record, never answer («Wake: тестовый режим»).
+  - The C++ `Settings::load` loop: lines split at '\n' only (a '\r' stays in the value), the key up to the first '='; unknown keys and lines without '=' are skipped.
+  - A store over `values` that never read `path` (tests).
+- `satellite/crates/pulsar/src/settings/tests.rs` — Фикстуры в tests/golden/settings/ сняты с эталона на C++ (rust-port-base): Settings::load и Settings::save из controller.cpp, перенесённые без изменений во временный хост-харнесс, собранный `zig c++ -std=c++20 -O2`. save_*.conf — `save` значений ниже; load_*.out — `load` из load_*.in, затем `save`. С тех пор правились руками: `wake_preroll` (после `clock_music`; 0 в load_odd.in);
+  - A write that fails half-way (here ENOSPC from /dev/full behind the temporary name) must not be renamed over the good file.
+- `satellite/crates/pulsar/src/version.rs` — Set by the release build: the VERSION file and HEAD's commit date (`--define=pulsar_version`, `--define=pulsar_build_time` via satellite/version.bzl); defaults are "unknown".
+- `satellite/deploy/asound.conf` — Mini: dmix over hw:0,0 so GStreamer's two channels and Sendspin can share the speaker. Selected through ALSA_CONFIG_PATH by the daemon (Model::apply_env) when this file exists; includes the firmware's normal config first so hw:, ctl. and /etc/asound.conf definitions keep working.
+- `satellite/deploy/boot.sh` — Boot hook, started in background by /etc/init.d/S99zpulsar (written by pulsar-install), which rcS runs after the firmware's S97quasar / S99quasar (onboot.sh: adbd, quasar in background). Stations set up by older installers may also start it from /data/quasar/rootkeeper.sh. If /data/pulsar/enabled exists: stop the Yandex stack started by onboot.sh and run pulsar under a restart loop.
+  - Never stop the Yandex stack when there is nothing to replace it with.
+  - Once per boot: two hooks (S99zpulsar and a leftover rootkeeper.sh line) may start this at the same time, and both would pass the pidof checks below before either supervisor exists. Never removed: releasing it before the exec would reopen that window;
+  - never two supervisors Supported models only (see satellite/crates/pulsar-core/src/model.rs); anything else keeps the Yandex stack. The first-generation Mini has no yandex,* compatibility entry: the Amlogic S420 board id alone is not Yandex-specific, so …
+- `satellite/deploy/ctl.sh` — pulsar control: enable | disable | restart | reload | status | log | api-key enable - stop the Yandex stack, run pulsar now and on every boot disable - stop pulsar, start the Yandex stack again (also after reboot) reload - restart the supervisor and the daemon (after supervise.sh was replaced);
+- `satellite/deploy/dist.sh` — Assembles the release archive for one host OS: pulsar-install, both daemon builds, the Midi radio's firmware images, dropbear and the device scripts in the repository layout (pulsar-install finds them next to itself). Usage: satellite/deploy/dist.sh <out.zip|out.tar.gz> <pulsar-install binary> (needs: bazel build ...:station_binary for both arches copied to satellite/build/<arch>; radio/build.sh;
+- `satellite/deploy/supervise.sh` — Keeps pulsar running while /data/pulsar/enabled exists. Log: /tmp/pulsar.log (tmpfs, rotated at 1 MB, one .1 kept).
+- `satellite/station_binary.bzl` — Strips the station binary and keeps a separate debug file.
+- `satellite/version.bzl` — Build-time version environment for the station binary.
+- `ssh/build.sh` — Builds static (musl) dropbear + OpenSSH sftp-server with zig into ssh/out/<arch>/ for aarch64 (Station Midi) and armhf (Station Lite 2). Usage: ssh/build.sh (host tools: zig >= 0.13, curl, make; ZIG=/path/to/zig to override)
+- `ssh/start.sh` — Starts dropbear SSH on port 22 (root, blank password allowed: -B). Installed to /data/dropbear; started at boot by /etc/init.d/S99zpulsar (written by pulsar-install). Independent of adbd: never touches adb.
+- `tools/deconz_read.py` — Read-only deCONZ client for pulsar's coordinator (docs/stations.md, "Радио Zigbee").
+- `tools/esphome_check.py` — ESPHome API check harness for pulsar (aioesphomeapi, see requirements.txt).
+- `tools/ha_firmware_deploy.py` — Install a published pulsar release on a station through Home Assistant.
+- `tools/sendspin_server.py` — Sendspin test server for pulsar.
+- `tools/station.sh` — Station helper (docs/stations.md). Never commit station addresses. PULSAR_TAG: free-form tag of the work holding the lock (one word, no spaces).
+- `tools/test_ha_firmware_deploy.py`
+  - The token value must never appear on stdout/stderr.

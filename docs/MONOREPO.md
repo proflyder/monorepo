@@ -242,3 +242,73 @@ JSON/binary и gRPC-Web по HTTP/1.1; отдельного REST API нет. Rus
 кодом. E2E композиции находятся в `projects/<name>/e2e/`. Общая
 инфраструктура проверок репозитория — `platform/quality/`. Корневая
 папка tests не используется; `mise run test` агрегирует локальные наборы.
+
+## Заметки к коду
+
+Пояснения, перенесённые из комментариев исходников (код комментариев не содержит, см. `AGENTS.md`).
+
+- `.bazelrc` — Android-only flags (version defines, the Java toolchain of the Android build tools, protoc/dex workers) live in `platform/android/android.bazelrc` and are activated by `--config=android` in every Android task (the mise unit dispatcher, the whole-workspace mise tasks, `distribute.sh` and the CI cache warm build).
+  - `rust_clippy_test` only exits non-zero on rustc errors: the levels from the root Cargo.toml `[workspace.lints]` (forwarded through `extract_cargo_lints`) are `warn`, so without this flag a new clippy warning passes both the local build and PR CI.
+  - The cache is shared by every checkout/worktree and has no limit by default. The server evicts the least recently used entries in the background while idle; builds never fail on it.
+- `.github/actions/bazel-repository-cache/action.yml` — The Bazel repository cache (downloaded archives: GitHub releases, crates.io, Maven jars) is content-addressed and is *not* written by PR jobs. Only the host-Rust family is archived (`bazel-repo-rust-<os>-<hash>`): Android's downloads are mostly Maven JARs that Nexus already serves, so caching them cost more budget than it saved.
+- `.github/actions/nexus-cache/action.yml` — Single switch: the caller passes the repository variable NEXUS_HOST and the repository secret NEXUS_CI_PASSWORD. An empty value, a missing secret (fork PRs) or an unhealthy Nexus leaves the build on the direct upstream URLs, so CI degrades to the normal path instead of failing.
+  - Probe through the path the public ingress actually exposes (the admin `/service/rest` API is not routed there). npm ping is tiny and cached upstream. If the tunnel or the pod is down, do not rewrite anything: a rewrite replaces the original URL.
+- `.github/workflows/_android-release.yml` — Sign and distribute the Home Android APK to Firebase App Distribution.
+  - Release-note inputs for `distribute.sh --ci --upload-only`. Passed as environment data, never interpolated into the script body, so a PR title cannot inject shell.
+  - Upload-only: the script verifies the APK digest against release-info.json and never builds or signs anything. The release key is applied to the already-tested APK; release-info.json is rewritten for the signed bytes and the upload verifies that digest.
+- `.github/workflows/_android.yml` — Reusable Android platform workflow: one matrix entry per affected application (or shared Kotlin library) unit, plus the dedicated Android Lint and detekt units. The unit is selected by the Bazel reverse dependency graph in `_ci.yml` and runs every declared target (Bazel's cache skips unaffected tests).
+  - The app is always built from its declared target: this entry owns the distributable APK, so a narrowed (possibly empty) build list must not leave the artifact missing. BAZEL_EXTRA_ARGS carries the release versionCode/versionName.
+  - The apk_abi_test log is only printed on failure (--test_output=errors), so repeat the ABI check on the built APK to show the packaged ABIs in the job log ("APK ABIs: arm64-v8a").
+  - The tested, still debug-signed APK plus its release metadata. Only `android-distribute` applies the release key (sign-release.sh), so this job never sees signing secrets.
+- `.github/workflows/_ci.yml` — Smart CI: only the platforms and units a change actually touches.
+  - Firebase App Distribution of the Home Android app on every PR that changes it: the `android-app` matrix entry builds and tests exactly one APK (`android-app-apk`, no secrets involved); this job signs those bytes with the release key and uploads them.
+  - One matrix entry per affected native build: the Windows logon provider (Bazel + rules_rust, hermetic zig toolchain for x86_64-pc-windows-gnu) and the Rust Pulsar tree (Bazel for both arches, installer, radio, ssh;
+  - Expensive regression with real linux/amd64 release binaries. Only when the scheduler, ha-bridge (ha-control) or the Kubernetes deployment changed.
+- `.github/workflows/_cleanup.yml` — Housekeeping pipeline (`workflow_call`), called by two thin wrappers with one trigger each: `cleanup.yml` (daily schedule, always real) and `cleanup-manual.yml` (`workflow_dispatch`, dry run by default). The caller states `dry_run`; `github.event_name` is the caller's event and is never used to branch. A failure in either job leaves the other untouched.
+  - Only the Firebase service account: the cleanup never signs or uploads.
+- `.github/workflows/_deploy-control.yml` — Mocked-kubectl regression for deploy.sh control mode. It needs the Rust home-deploy CLI (the script resolves HOME_DEPLOY) and pre-resolved image digests, so no image build or cluster access is involved.
+- `.github/workflows/_deploy-home.yml` — Home application release from `develop`. Every deployable unit is applied by Flux: this workflow only promotes the digests the merged PR built and attested and commits them to the machine branch `deploy/home-apps`, which Flux reads. The unit map is `platform/ci/units.mjs`, so adding a deployable unit does not need a workflow edit.
+  - Save the caches that PR jobs restore. `ci.yml` does not run on push to `develop`, so this is the only place where a develop-side cache is written. It runs on push only, in parallel with `plan`, with no Environment, no secrets and no VPN;
+  - A cold Android app build is the bulk of this job (the deploy itself only starts after `plan`, so the extra minutes do not delay a roll-out).
+  - Every host Rust build/test target; the deploy itself only starts after `plan`, so the extra minutes do not delay a roll-out.
+  - Native units build once too (DECISIONS 36). `_native.yml` promotes the digest the merged PR built and attested under `tree-<hash>`: it checks the tag exists, verifies provenance against this repository's CI workflows, then attaches the unit's release tags …
+- `.github/workflows/_js.yml` — Reusable JavaScript platform workflow: one matrix entry per unit. Edge Workers in this repository have no package manager and no build step, so the job only needs an official Node distribution and the built-in test runner.
+- `.github/workflows/_native.yml` — Reusable native platform workflow. Two kinds of non-Bazel build share it:
+  - Build once, deploy the same bytes: on the deploy-home path, promote the artifact the merged PR already built and attested under `tree-<hash>` to the unit's release tags. A missing or unverified tree tag fails this job, which also stops every build job below;
+  - Restore-only: the host-Rust family archive covers the common crates and toolchains this cross-build also resolves. Nothing on develop saves a native-specific repository cache, so a miss just downloads the zig/ Windows archives (and a PR never writes them …
+  - Restore-only: the host-Rust family archive covers the common crates and toolchains this cross-build also resolves. Nothing on develop saves a native-specific repository cache, so a miss just downloads the zig/ Windows archives (and a PR never writes them …
+  - Action-output disk cache (.bazelrc only); keyed like the pulsar-bazel unit so both restore the same Rust/C++ objects. Restore-only: see the logon job above for why PRs never write these entries.
+  - Restore-only: the host-Rust family archive covers the common crates and toolchains this cross-build also resolves. Nothing on develop saves a native-specific repository cache, so a miss just downloads the zig/ Windows archives (and a PR never writes them …
+  - Publish the artifact of the same-repo PR build: `ghcr.io/proflyder/<repository>:tree-<git tree hash>` (build once). deploy-home only promotes that digest; it never builds, so this job does not run on the deploy path.
+- `.github/workflows/_pin.yml` — Promote the PR-built digest of one deployable unit and commit its pins.
+  - Every deployable unit is Flux-owned: Flux applies the workload from `deploy/home-apps`, so CI only has to publish the verified digest there.
+  - One caller job per unit. The caller runs them with `max-parallel: 1` (a job-level `concurrency` group must not be used: GitHub keeps only one pending job per group and cancels the rest of a matrix).
+  - The correctness gate: a digest whose `tree-<hash>` tag or provenance does not verify is never written to the branch.
+- `.github/workflows/_python.yml` — One job for every affected Python unit. A CI-global PR used to fan out one `python / <unit>` job per unit (~22 jobs, most finishing in 12-20 s of pure runner/setup overhead). The units share the same checkout, Python, pip and (when needed) Bazel/mise setup, so this job runs their `mise run test <id>` commands sequentially, one `::group::` per unit, and fails at the end with the list of failing …
+  - The test commands come from the unit map via `mise run test <unit>`; tools come from mise-action's install_args, never from `mise run` itself.
+- `.github/workflows/_quality.yml` — Reusable repository gate: audit, static gates, unit-map invariants, workflow linting and secret scanning. Cheap enough to run on every change, including documentation-only ones, which is why it is never routed away.
+  - Every gate runs through the same mise task a workstation uses; tools come from mise-action's install_args, never from `mise run` itself.
+- `.github/workflows/_station-deploy.yml` — Install one published Pulsar release on the station through Home Assistant.
+  - The release job. `_deploy-home.yml` calls it after a merge promoted the release (push mode), after an explicit `units=pulsar` re-deploy of the currently published `latest` (manual mode), or `deploy-services.yml` after an honest rebuild.
+- `.github/workflows/_unit.yml` — One Linux unit job: checks, container images and their provenance.
+  - Restore-only in pull requests: a PR-scoped cache is invisible to every other PR, so writing it only spends the repository's 10 GB budget and the minutes of upload. Only a develop push (`warm-rust`) writes;
+  - Per-index digests for the static attestation steps below. The image order is the unit map's `deploy.images`; `home-deploy` is appended by build-images.sh only when the unit does not own it, so it never shifts the leading indices.
+- `.github/workflows/android-release.yml` — Manual Android release, run by the owner from `develop`.
+- `.github/workflows/ci-manual.yml` — Manual twin of `ci.yml`: the same reusable pipeline (`_ci.yml`), run on demand over every unit instead of the diff of a pull request.
+- `.github/workflows/ci.yml` — Pull-request entry point of the CI pipeline. One trigger only: the whole pipeline lives in `_ci.yml` (workflow_call), and `ci-manual.yml` is the `workflow_dispatch` twin that calls the same reusable. Never add a second event here — see AGENTS.md ("CI: один триггер на воркфлоу").
+- `.github/workflows/cleanup-manual.yml` — Manual twin of the daily `cleanup.yml`, and a dry run by default: both jobs report what they would delete and delete nothing. Same reusable pipeline (`_cleanup.yml`), one trigger only.
+- `.github/workflows/cleanup.yml` — Daily housekeeping entry point. One trigger only: the jobs live in `_cleanup.yml` (workflow_call), and `cleanup-manual.yml` is the `workflow_dispatch` twin. A scheduled run is always real.
+- `.github/workflows/deploy-home-manual.yml` — Manual twin of `deploy-home.yml`: re-pin the current `develop` and, if asked, re-deploy the station. Same reusable pipeline (`_deploy-home.yml`, `mode: manual`), one trigger only.
+- `.github/workflows/deploy-home.yml` — Post-merge release of the home units. This file is the `push` entry point only: the pipeline lives in `_deploy-home.yml` (workflow_call), and `deploy-home-manual.yml` is the `workflow_dispatch` twin that calls it with `mode: manual`.
+  - The same group as the manual wrapper: a release and a manual run never overlap.
+- `.github/workflows/deploy-services.yml` — Manual rebuild-and-deploy of the home units from the current `develop`.
+  - One rebuild at a time: two runs would race on the same tree tags and pins.
+- `Cargo.toml` — One Cargo workspace for every first-party Rust crate in the monorepo.
+  - SHA-1 of canonical idempotency requests (DECISIONS 41): the same digest the Legacy Go store persisted, so a restarted or migrated scheduler replays keys. It is already in the lock as `uuid`'s own v5 digest;
+  - home.v1 over the official Connect runtime: `connectrpc` transports and serves the protocol, `buffa` owns protobuf messages and protojson (DECISIONS 41, spike #134). Only the client and JSON codec are needed by the home services' executor/queue clients.
+- `MODULE.bazel`
+  - rules_rust omits the *-windows-gnu triples because Bazel cannot distinguish them from *-windows-msvc through @platforms constraints.
+  - Static musl service images (wakegrant and the other home services). rules_rust gives x86_64-unknown-linux-musl the same constraints as the glibc host triple (os:linux + cpu:x86_64), so on a Linux exec host the glibc toolchain also matched …
+  - Third-party C/C++ of the station's Sendspin player, pinned to the revisions in satellite/third_party/fetch.sh (sendspin-cpp's own host build). The archives come from GitHub (tags resolve to the same commit as before);
+- `fnox.toml` — Secrets for local scripts — references to OpenBao only, never values.
+- `mise.toml` — Workstation and CI toolchain — the single source of tool versions.

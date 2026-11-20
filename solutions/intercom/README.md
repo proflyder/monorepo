@@ -188,3 +188,20 @@ HTTPS-имя `intercom.home.<home-suffix>` описано в
 обычного деплоя ingress (`INTERCOM_HOST` вычисляется из `HOME_DOMAIN`).
 NodePort закрыт host-фильтром `projects/home/kubernetes/scheduler/nft`:
 источник — только LAN/VPN и pod CIDR.
+
+## Заметки к коду
+
+Пояснения, перенесённые из комментариев исходников (код комментариев не содержит, см. `AGENTS.md`).
+
+- `crates/intercom/src/api/auth.rs` — Bearer authentication shared by unary and streaming RPCs.
+- `crates/intercom/src/api/mod.rs` — Connect transport and distroless probe routes.
+- `crates/intercom/src/api/service.rs` — `home.v1.IntercomService` implementation.
+- `crates/intercom/src/app.rs` — Composition root: configuration, telemetry, in-memory state and the authenticated Connect API.
+- `crates/intercom/src/config.rs` — Process configuration for the intercom signaling service.
+  - Why the environment was rejected. Messages never contain a secret value.
+- `crates/intercom/src/domain.rs` — In-memory call registry and state machine.
+  - A rejected operation. Messages never contain tokens or SDP bodies.
+- `crates/intercom/src/health.rs` — Distroless probes: `-healthcheck` and `-status`.
+- `crates/intercom/src/lib.rs` — WebRTC signaling for phone <-> station calls.
+- `crates/intercom/src/main.rs` — Command entry point: the intercom service plus the distroless `-healthcheck` and `-status` probes used by the deployment.
+- `crates/intercom/tests/signaling.rs` — End-to-end contract test over the real Connect HTTP/1.1 listener.

@@ -49,3 +49,31 @@ wildcard-сертификатом Let's Encrypt от cert-manager; см. [ingres
 Вход снаружи — собственный VPN (ocserv, CT `102`); CI ходит группой `ci`
 только до узла K3s по `tcp/443` (Traefik → HA/OpenBao). Аварийный доступ к
 host — LAN/Wi-Fi или Ethernet. Реальные URL и credentials — в secrets.
+
+## Заметки к коду
+
+Пояснения, перенесённые из комментариев исходников (код комментариев не содержит, см. `AGENTS.md`).
+
+- `apply-runtime.sh` — Apply the full runtime state from the private values file.
+- `cloudflare_dns.py` — Ensure a DNS-only Cloudflare A record for a private home host.
+- `observability/kustomization.yaml` — Observability stack reconciled by Flux.
+- `observability/manifests/external-secret-alertmanager-telegram.yaml` — Alertmanager configuration with the Telegram receiver.
+- `observability/manifests/external-secret-grafana-admin.yaml` — Grafana administrator credentials.
+- `observability/manifests/grafana-lan.yaml` — Read-only operational Grafana UI for the home LAN. Grafana remains a ClusterIP Service behind Traefik; this is a separate NodePort Service so the monitoring Helm release can be upgraded independently.
+- `observability/manifests/helmrelease-dashboards.yaml` — Project-owned dashboards and alert rules, built from the chart in this repository. Same release name/namespace as the live `ha-observability` release; the chart comes from the Flux GitRepository instead of a local path.
+  - The chart lives in this repository and keeps version 0.1.0; with the default ChartVersion strategy template changes (dashboards) never reached the release. Revision upgrades on every new Git revision.
+- `observability/manifests/helmrelease-prometheus.yaml` — kube-prometheus-stack, adopted from the live `monitoring` release.
+- `observability/manifests/helmrelease-station-dashboards.yaml` — Station dashboards («Колонка») from the chart in this repository.
+- `observability/rules/kustomization.yaml` — Backup freshness, Alertmanager delivery and Flux delivery rules, plus the Flux controller PodMonitor. Split out because PrometheusRule/PodMonitor need the Prometheus Operator CRDs that the `monitoring` release installs.
+- `observability/rules/podmonitor-flux.yaml` — Scrape the three Flux controllers for `gotk_*` metrics.
+- `observability/rules/prometheusrule-alertmanager.yaml` — Alertmanager delivery alerts.
+- `observability/rules/prometheusrule-backups.yaml` — Backup freshness alerts.
+- `observability/rules/prometheusrule-flux.yaml` — GitOps delivery alerts for the Flux-managed applications.
+  - Suspended Kustomizations are skipped on purpose (drills, rollback); `suspended` is absent when the manifest never set `spec.suspend`.
+- `observability/rules/prometheusrule-station.yaml` — Alerts for the station (Yandex Station Midi running Pulsar).
+- `observability/test_prometheusrule.py` — Structural sanity checks for the backup, Alertmanager and Flux PrometheusRules.
+  - Flux 2.x controllers only export gotk_reconcile_duration_seconds_* and gotk_token_*; the old reconcile-condition expression could never fire, and its absent() branch alerts forever.
+  - A healthy steady state is an empty result: the ConfigMap exists, the pins source is Ready, and its series exists. Each failure mode below is one branch, so it must not degrade into a permanent alert.
+  - A selector on a label kube-state-metrics never emits silently disables the alert (or makes absent() fire forever), so cross-check every matcher against the customResourceState config.
+- `observability/values/prometheus.yaml` — The default delivery-rate alerts cannot separate the heartbeat webhook from real integrations. They are redeclared with an `integration!="webhook"` filter in rules/prometheusrule-alertmanager.yaml, together with HeartbeatPingFailing for persistent ping failures.
+  - The station (Yandex Station Midi running Pulsar) is an external target on the LAN: Pulsar serves Prometheus text on 9101. The address comes from flux-app-settings (`STATION_IP`), never from Git.

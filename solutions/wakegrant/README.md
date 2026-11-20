@@ -123,3 +123,27 @@ parsing. The fixtures live in `testdata/contract/` and are replayed by
 
 Deployment lives in
 [`projects/home/kubernetes/wakegrant`](../../projects/home/kubernetes/wakegrant).
+
+## Заметки к коду
+
+Пояснения, перенесённые из комментариев исходников (код комментариев не содержит, см. `AGENTS.md`).
+
+- `crates/wakegrant/src/api.rs` — axum HTTP API for the wakegrant protocol.
+  - Emits exactly event, outcome, machine and grantId — never nonces, MACs, tokens, IPs or keys.
+  - Never reveal whether the machine exists.
+- `crates/wakegrant/src/app.rs` — Composition root: configuration, telemetry, SQLite store, the HTTP service and the background cleanup task.
+- `crates/wakegrant/src/config.rs` — Typed environment configuration. Variable names and defaults are the Go service's contract; secrets are files (or a direct env value) and never appear in an error message.
+  - Loopback base URL for `-healthcheck`, so the probe never depends on the pod IP. A wildcard listen address becomes `127.0.0.1`.
+- `crates/wakegrant/src/contract_tests.rs` — Replays the golden HTTP fixtures from `solutions/wakegrant/testdata/contract` through the Rust service. The fixtures are the Go implementation's files, unchanged.
+- `crates/wakegrant/src/domain/grant.rs`
+  - `waitSeconds` is only defined together with an explicit purpose; omitting `purpose` keeps the v1 request byte for byte and is never delayed.
+- `crates/wakegrant/src/domain/mod.rs` — Pure domain logic: purposes, TTL rules, nonces, rate limits and waiters.
+- `crates/wakegrant/src/domain/purpose.rs` — What a grant may do. A logon grant is only valid on a cold boot; an unlock grant is for a running but locked workstation. The purpose is part of every purpose-aware MAC message, so one can never be used for the other.
+- `crates/wakegrant/src/domain/waiter.rs`
+  - Wakes long-poll claims when a matching grant is created. Notifications are per `(machine, purpose)`: an unlock waiter must not wake for a logon grant and vice versa.
+  - A logon broadcast must not wake an unlock waiter.
+- `crates/wakegrant/src/health.rs`
+  - Regression: the first Rust deploy panicked here with "No provider set".
+- `crates/wakegrant/src/lib.rs` — wakegrant service: one-time `logon`/`unlock` grants for a machine woken by Home Assistant.
+- `crates/wakegrant/src/main.rs` — Command-line entry point. Everything real lives in the library; the only extra behaviour is the `-healthcheck` probe used by the distroless image.
+- `crates/wakegrant/src/store.rs` — Durable grant storage over the shared single-writer SQLite actor.
