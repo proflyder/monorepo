@@ -15,11 +15,15 @@
 
 {{ define "home.time" }}{{ (.StartsAt | tz "Asia/Almaty").Format "02.01 15:04" }}{{ end }}
 
+{{ define "home.object" -}}
+{{- with .Labels.deployment }}{{ . | html }}{{ else }}{{ with .Labels.statefulset }}{{ . | html }}{{ else }}{{ with .Labels.daemonset }}{{ . | html }}{{ else }}{{ with .Labels.job_name }}{{ . | html }}{{ else }}{{ with .Labels.pod }}{{ . | html }}{{ else }}{{ with .Labels.instance }}{{ . | html }}{{ end }}{{ end }}{{ end }}{{ end }}{{ end }}{{ end -}}
+{{- end }}
+
 {{ define "home.where" -}}
-{{ if or .Labels.namespace .Labels.pod .Labels.instance }}📍 <code>
+{{ if or .Labels.namespace .Labels.deployment .Labels.statefulset .Labels.daemonset .Labels.job_name .Labels.pod .Labels.instance }}📍 <code>
 {{- with .Labels.namespace }}{{ . | html }}{{ end }}
-{{- if and .Labels.namespace (or .Labels.pod .Labels.instance) }} / {{ end }}
-{{- with .Labels.pod }}{{ . | html }}{{ else }}{{ with .Labels.instance }}{{ . | html }}{{ end }}{{ end -}}
+{{- if and .Labels.namespace (or .Labels.deployment .Labels.statefulset .Labels.daemonset .Labels.job_name .Labels.pod .Labels.instance) }} / {{ end }}
+{{- template "home.object" . -}}
 </code>   {{ end }}
 {{- end }}
 

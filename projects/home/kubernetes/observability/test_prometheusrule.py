@@ -16,6 +16,7 @@ RULE_FILE = RULE_DIR / "prometheusrule-backups.yaml"
 ALERTMANAGER_RULE_FILE = RULE_DIR / "prometheusrule-alertmanager.yaml"
 FLUX_RULE_FILE = RULE_DIR / "prometheusrule-flux.yaml"
 STATION_RULE_FILE = RULE_DIR / "prometheusrule-station.yaml"
+PODS_RULE_FILE = RULE_DIR / "prometheusrule-pods.yaml"
 STATION_DASHBOARDS = ROOT / "projects/station/observability/chart/dashboards"
 HA_RUNTIME_MONITORS = (
     ROOT / "projects/home-assistant/observability/chart/templates/monitors.yaml"
@@ -509,6 +510,21 @@ class RuleFileSyntaxTests(unittest.TestCase):
                     text=True,
                 )
                 self.assertEqual(result.returncode, 0, result.stderr)
+
+
+
+class PodRestartRuleTests(unittest.TestCase):
+    def test_frequent_restarts_alert_exists_and_counts_all_restarts(self) -> None:
+        rules = rules_of(PODS_RULE_FILE)
+        self.assertEqual([rule["alert"] for rule in rules], ["PodRestartingFrequently"])
+        rule = rules[0]
+        self.assertEqual(rule["labels"]["severity"], "warning")
+        self.assertIn("kube_pod_container_status_restarts_total", rule["expr"])
+        self.assertNotIn("waiting_reason", rule["expr"])
+        self.assertIn(
+            "prometheusrule-pods.yaml",
+            (RULE_DIR / "kustomization.yaml").read_text(encoding="utf-8"),
+        )
 
 
 if __name__ == "__main__":

@@ -1,0 +1,27 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: home-pod-alerts
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/part-of: home-observability
+spec:
+  groups:
+    - name: home-pods
+      rules:
+        - alert: PodRestartingFrequently
+          expr: >-
+            increase(kube_pod_container_status_restarts_total[1h]) > 3
+          for: 10m
+          labels:
+            severity: warning
+            component: kubernetes
+          annotations:
+            summary: "Под {{ $labels.namespace }}/{{ $labels.pod }} часто перезапускается"
+            description: >-
+              Контейнер {{ $labels.container }} перезапустился
+              {{ $value | printf "%.0f" }} раз за последний час. Ловит циклы,
+              которые не доходят до CrashLoopBackOff, например убийство
+              по liveness probe. Смотреть `mise run kubectl -- -n
+              {{ $labels.namespace }} describe pod {{ $labels.pod }}`, события
+              Unhealthy и `logs --previous`.
