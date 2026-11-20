@@ -1,6 +1,8 @@
 package dev.proflyder.home.core.network
 
 import dev.proflyder.home.core.config.ConnectionSettingsStore
+import dev.proflyder.home.core.model.ChatAttachment
+import dev.proflyder.home.core.model.ChatAttachmentKind
 import dev.proflyder.home.core.model.ChatEvent
 import dev.proflyder.home.core.model.ChatKind
 import dev.proflyder.home.core.model.ChatMessage
@@ -21,6 +23,10 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import okhttp3.Interceptor
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody
+import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.ResponseBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import retrofit2.http.Body
@@ -32,7 +38,11 @@ import retrofit2.http.Query
 interface ChatClient {
     suspend fun page(before: Long?, limit: Int): Outcome<ChatPage>
 
-    suspend fun send(clientId: String, text: String, replyTo: String?): Outcome<ChatSent>
+    suspend fun send(clientId: String, text: String, replyTo: String?, attachments: List<String> = emptyList()): Outcome<ChatSent>
+
+    suspend fun upload(bytes: ByteArray, mime: String, name: String): Outcome<ChatAttachment>
+
+    suspend fun download(id: String): Outcome<ByteArray>
 
     suspend fun retry(id: String): Outcome<ChatMessage>
 
@@ -44,6 +54,16 @@ internal data class ChatQuoteDto(
     val id: String = "",
     val role: String = "",
     val text: String = "",
+)
+
+@Serializable
+internal data class ChatAttachmentDto(
+    val id: String = "",
+    val kind: String = "",
+    val mime: String = "",
+    val size: Long = 0,
+    val name: String = "",
+    val durationMs: Long? = null,
 )
 
 @Serializable
@@ -60,6 +80,8 @@ internal data class ChatMessageDto(
     val error: String? = null,
     val createdAt: Long = 0,
     val updatedAt: Long = 0,
+    val attachments: List<ChatAttachmentDto> = emptyList(),
+    val transcript: String? = null,
 )
 
 @Serializable
@@ -74,6 +96,7 @@ internal data class ChatSendRequestDto(
     val clientId: String,
     val text: String,
     val replyTo: String? = null,
+    val attachments: List<String> = emptyList(),
 )
 
 @Serializable
@@ -98,6 +121,12 @@ internal interface ChatApi {
 
     @POST("v1/chat/messages/{id}/retry")
     fun retry(@Path("id") id: String, @Body body: EmptyBody): Outcome<ChatMessageDto>
+
+    @POST("v1/chat/attachments")
+    fun upload(@Query("name") name: String, @Body body: RequestBody): Outcome<ChatAttachmentDto>
+
+    @GET("v1/chat/attachments/{id}")
+    fun download(@Path("id") id: String): Outcome<ResponseBody>
 }
 
 internal fun String.toChatRole(): ChatRole = when (this) {
@@ -108,8 +137,24 @@ internal fun String.toChatRole(): ChatRole = when (this) {
 
 internal fun String.toChatKind(): ChatKind = when (this) {
     "alert" -> ChatKind.ALERT
+    "voice" -> ChatKind.VOICE
+    "image" -> ChatKind.IMAGE
+    "file" -> ChatKind.FILE
     else -> ChatKind.TEXT
 }
+
+internal fun ChatAttachmentDto.toDomain(): ChatAttachment = ChatAttachment(
+    id = id,
+    kind = when (kind) {
+        "voice" -> ChatAttachmentKind.VOICE
+        "image" -> ChatAttachmentKind.IMAGE
+        else -> ChatAttachmentKind.FILE
+    },
+    mime = mime,
+    size = size,
+    name = name,
+    durationMs = durationMs,
+)
 
 internal fun String.toChatStatus(): ChatStatus = when (this) {
     "pending" -> ChatStatus.PENDING
@@ -131,6 +176,8 @@ internal fun ChatMessageDto.toDomain(): ChatMessage = ChatMessage(
     errorKey = error,
     createdAtMillis = createdAt,
     updatedAtMillis = updatedAt,
+    attachments = attachments.map { it.toDomain() },
+    transcript = transcript,
 )
 
 internal fun ChatPageDto.toDomain(): ChatPage =
@@ -196,11 +243,23 @@ class HttpChatClient(
     override suspend fun page(before: Long?, limit: Int): Outcome<ChatPage> =
         withContext(ioDispatcher) { api.page(before, limit).mapResult { it.toDomain() } }
 
-    override suspend fun send(clientId: String, text: String, replyTo: String?): Outcome<ChatSent> =
+    override suspend fun send(
+        clientId: String,
+        text: String,
+        replyTo: String?,
+        attachments: List<String>,
+    ): Outcome<ChatSent> = withContext(ioDispatcher) {
+        api.send(ChatSendRequestDto(clientId, text, replyTo, attachments))
+            .mapResult { ChatSent(it.message.toDomain(), it.reply.toDomain()) }
+    }
+
+    override suspend fun upload(bytes: ByteArray, mime: String, name: String): Outcome<ChatAttachment> =
         withContext(ioDispatcher) {
-            api.send(ChatSendRequestDto(clientId, text, replyTo))
-                .mapResult { ChatSent(it.message.toDomain(), it.reply.toDomain()) }
+            api.upload(name, bytes.toRequestBody(mime.toMediaType())).mapResult { it.toDomain() }
         }
+
+    override suspend fun download(id: String): Outcome<ByteArray> =
+        withContext(ioDispatcher) { api.download(id).mapResult { body -> body.use { it.bytes() } } }
 
     override suspend fun retry(id: String): Outcome<ChatMessage> =
         withContext(ioDispatcher) { api.retry(id, EmptyBody).mapResult { it.toDomain() } }

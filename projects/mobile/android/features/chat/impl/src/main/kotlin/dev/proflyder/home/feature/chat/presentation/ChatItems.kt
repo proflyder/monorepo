@@ -1,5 +1,6 @@
 package dev.proflyder.home.feature.chat.presentation
 
+import dev.proflyder.home.core.model.ChatAttachmentKind
 import dev.proflyder.home.core.model.ChatKind
 import dev.proflyder.home.core.model.ChatMessage
 import dev.proflyder.home.core.model.ChatQuote
@@ -12,6 +13,25 @@ import java.time.LocalDate
 import java.time.ZoneId
 
 internal enum class BubbleState { QUEUED, SENT, STREAMING, DONE, FAILED }
+
+internal data class BubbleMedia(
+    val key: String,
+    val id: String?,
+    val path: String?,
+    val kind: ChatAttachmentKind,
+    val name: String,
+    val size: Long,
+    val durationMs: Long?,
+)
+
+internal data class VoicePlayback(
+    val key: String,
+    val positionMs: Long,
+    val durationMs: Long,
+    val playing: Boolean,
+) {
+    val progress: Float get() = if (durationMs <= 0) 0f else (positionMs.toFloat() / durationMs).coerceIn(0f, 1f)
+}
 
 internal sealed interface ChatItem {
     val key: String
@@ -31,6 +51,9 @@ internal sealed interface ChatItem {
         val state: BubbleState,
         val quote: ChatQuote?,
         val errorKey: String?,
+        val media: List<BubbleMedia> = emptyList(),
+        val transcript: String? = null,
+        val playback: VoicePlayback? = null,
     ) : ChatItem {
         val quotable: Boolean get() = messageId != null && text.isNotEmpty()
     }
@@ -45,8 +68,9 @@ internal sealed interface ChatItem {
 }
 
 internal object ChatItems {
-    fun build(timeline: ChatTimeline, zone: ZoneId): List<ChatItem> {
-        val bubbles = timeline.messages.mapNotNull { it.toBubble() } + timeline.outbox.map { it.toBubble() }
+    fun build(timeline: ChatTimeline, zone: ZoneId, playback: VoicePlayback? = null): List<ChatItem> {
+        val bubbles = (timeline.messages.mapNotNull { it.toBubble() } + timeline.outbox.map { it.toBubble() })
+            .map { it.withPlayback(playback) }
         val items = mutableListOf<ChatItem>()
         if (timeline.loadingOlder) items += ChatItem.Older
         bubbles.fold(null as LocalDate?) { day, bubble -> items.addBubble(day, bubble, zone) }
@@ -80,8 +104,13 @@ internal object ChatItems {
             state = status.toState(role),
             quote = replyTo,
             errorKey = errorKey,
+            media = attachments.map { BubbleMedia("a-${it.id}", it.id, null, it.kind, it.name, it.size, it.durationMs) },
+            transcript = transcript,
         )
     }
+
+    private fun ChatItem.Bubble.withPlayback(playback: VoicePlayback?): ChatItem.Bubble =
+        if (playback != null && media.any { it.key == playback.key }) copy(playback = playback) else this
 
     private fun ChatStatus.toState(role: ChatRole): BubbleState = when (this) {
         ChatStatus.FAILED -> BubbleState.FAILED
@@ -101,5 +130,6 @@ internal object ChatItems {
         state = if (failed) BubbleState.FAILED else BubbleState.QUEUED,
         quote = replyTo,
         errorKey = failureKey,
+        media = attachments.map { BubbleMedia("l-${it.path}", it.uploadedId, it.path, it.kind, it.name, it.size, it.durationMs) },
     )
 }

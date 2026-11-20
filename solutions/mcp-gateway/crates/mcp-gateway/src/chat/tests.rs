@@ -11,8 +11,10 @@ use tokio::sync::mpsc;
 use tower::ServiceExt as _;
 
 use super::hermes::{self, HermesApi, SseParser, TurnEvent};
+use super::media::{self, MediaStore, Pcm};
 use super::model::{ErrorKey, SendRequest, Status};
 use super::store::{Store, Update};
+use super::stt::{self, SpeechToText};
 use super::{Chat, Event, Options};
 use crate::tools::BoxFuture;
 
@@ -21,7 +23,7 @@ const NOW: i64 = 1_795_129_665_000;
 #[derive(Default)]
 struct ScriptedHermes {
     scripts: Mutex<Vec<Vec<TurnEvent>>>,
-    seen: Mutex<Vec<String>>,
+    seen: Mutex<Vec<Value>>,
 }
 
 impl ScriptedHermes {
@@ -34,7 +36,7 @@ impl ScriptedHermes {
 }
 
 impl HermesApi for ScriptedHermes {
-    fn run<'a>(&'a self, message: String, sink: mpsc::Sender<TurnEvent>) -> BoxFuture<'a, ()> {
+    fn run<'a>(&'a self, message: Value, sink: mpsc::Sender<TurnEvent>) -> BoxFuture<'a, ()> {
         Box::pin(async move {
             self.seen.lock().expect("seen").push(message);
             let script = self
@@ -55,10 +57,39 @@ fn sequential_ids() -> super::NewId {
     Arc::new(move || format!("m_{:04}", counter.fetch_add(1, Ordering::SeqCst) + 1))
 }
 
+struct FixedStt(&'static str);
+
+impl SpeechToText for FixedStt {
+    fn transcribe<'a>(&'a self, pcm: &'a Pcm) -> BoxFuture<'a, Result<String, String>> {
+        let text = if pcm.samples.is_empty() {
+            String::new()
+        } else {
+            self.0.to_owned()
+        };
+        Box::pin(async move { Ok(text) })
+    }
+}
+
+fn media_dir() -> (tempfile::TempDir, Arc<MediaStore>) {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let media = Arc::new(MediaStore::open(dir.path()).expect("media"));
+    (dir, media)
+}
+
 fn chat_with(store: Arc<Store>, hermes: Arc<ScriptedHermes>) -> Arc<Chat> {
+    chat_with_media(store, hermes, None)
+}
+
+fn chat_with_media(
+    store: Arc<Store>,
+    hermes: Arc<ScriptedHermes>,
+    media: Option<Arc<MediaStore>>,
+) -> Arc<Chat> {
     Chat::start(Options {
         store,
         hermes,
+        media,
+        stt: Some(Arc::new(FixedStt("включи свет в гостиной"))),
         now: Arc::new(|| NOW),
         new_id: sequential_ids(),
     })
@@ -70,6 +101,7 @@ fn request(client_id: &str, text: &str, reply_to: Option<&str>) -> SendRequest {
         client_id: client_id.to_owned(),
         text: text.to_owned(),
         reply_to: reply_to.map(str::to_owned),
+        attachments: Vec::new(),
     }
 }
 
@@ -98,6 +130,8 @@ fn golden(name: &str, body: &Value) {
         "send" => include_str!("testdata/contract/send.json"),
         "page" => include_str!("testdata/contract/page.json"),
         "events" => include_str!("testdata/contract/events.json"),
+        "voice" => include_str!("testdata/contract/voice.json"),
+        "attachment" => include_str!("testdata/contract/attachment.json"),
         _ => include_str!("testdata/contract/error.json"),
     };
     assert_eq!(rendered, expected, "{name}");
@@ -174,8 +208,8 @@ async fn a_turn_streams_and_matches_the_app_contract() {
     assert_eq!(
         hermes.seen.lock().expect("seen").clone(),
         vec![
-            "Включи свет".to_owned(),
-            "[Ответ на сообщение (assistant): «Свет **включён**.»]\nГде?".to_owned()
+            json!("Включи свет"),
+            json!("[Ответ на сообщение (assistant): «Свет **включён**.»]\nГде?")
         ]
     );
 
@@ -281,6 +315,8 @@ async fn a_restart_fails_interrupted_turns_and_resumes_pending_ones() {
             .insert_turn(&super::store::NewTurn {
                 client_id: client,
                 text: "hi",
+                kind: super::model::Kind::Text,
+                attachments: &[],
                 reply_to: None,
                 user_id: ids(),
                 reply_id: ids(),
@@ -303,6 +339,8 @@ async fn a_restart_fails_interrupted_turns_and_resumes_pending_ones() {
     let chat = Chat::start(Options {
         store: Arc::clone(&store),
         hermes,
+        media: None,
+        stt: None,
         now: Arc::new(|| NOW),
         new_id: Arc::new(|| "m_x".to_owned()),
     })
@@ -410,7 +448,7 @@ async fn the_http_client_creates_the_session_and_reads_the_stream() {
     )
     .expect("client");
     let (sink, mut events) = mpsc::channel(16);
-    client.run("hi".to_owned(), sink).await;
+    client.run(json!("hi"), sink).await;
     let mut received = Vec::new();
     while let Some(event) = events.recv().await {
         received.push(event);
@@ -428,4 +466,202 @@ async fn the_http_client_creates_the_session_and_reads_the_stream() {
     assert_eq!(create["id"], "home-app");
     let turn: Value = serde_json::from_str(&calls[1]).expect("turn");
     assert_eq!(turn, json!({"message": "hi", "system_message": "prompt"}));
+}
+
+async fn upload(app: &Router, mime: &str, name: &str, bytes: Vec<u8>) -> (StatusCode, Value) {
+    let request = Request::builder()
+        .method("POST")
+        .uri(format!("/v1/chat/attachments?name={name}"))
+        .header("content-type", mime)
+        .body(Body::from(bytes))
+        .expect("request");
+    let response = app.clone().oneshot(request).await.expect("response");
+    let status = response.status();
+    let bytes = response
+        .into_body()
+        .collect()
+        .await
+        .expect("body")
+        .to_bytes();
+    (
+        status,
+        serde_json::from_slice(&bytes).unwrap_or(Value::Null),
+    )
+}
+
+fn second_of_speech() -> Vec<u8> {
+    media::wav(
+        &vec![1_u8; usize::try_from(media::VOICE_RATE).expect("rate") * 2],
+        media::VOICE_RATE,
+    )
+}
+
+#[tokio::test]
+async fn a_voice_message_is_transcribed_by_stt_and_sent_as_text() {
+    let hermes = ScriptedHermes::with(vec![vec![TurnEvent::Completed("Включил.".to_owned())]]);
+    let (_dir, media) = media_dir();
+    let chat = chat_with_media(
+        Arc::new(Store::in_memory().expect("store")),
+        Arc::clone(&hermes),
+        Some(media),
+    );
+    let app: Router = super::router(Arc::clone(&chat));
+    let (status, attachment) = upload(&app, "audio/wav", "voice.wav", second_of_speech()).await;
+    assert_eq!(status, StatusCode::OK);
+    golden("attachment", &attachment);
+    let (status, sent) = call(
+        &app,
+        "POST",
+        "/v1/chat/messages",
+        Some(json!({"clientId": "v-1", "attachments": [attachment["id"]]})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{sent}");
+    settled(&chat, sent["reply"]["id"].as_str().expect("reply")).await;
+    assert_eq!(
+        hermes.seen.lock().expect("seen").clone(),
+        vec![json!("[Голосовое сообщение]: включи свет в гостиной\n")]
+    );
+    let voice = chat
+        .store
+        .get(sent["message"]["id"].as_str().expect("id"))
+        .expect("get")
+        .expect("message");
+    golden("voice", &serde_json::to_value(&voice).expect("json"));
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!(
+                    "/v1/chat/attachments/{}",
+                    attachment["id"].as_str().expect("id")
+                ))
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    assert_eq!(response.headers()["content-type"], "audio/wav");
+    let bytes = response
+        .into_body()
+        .collect()
+        .await
+        .expect("body")
+        .to_bytes();
+    assert_eq!(bytes.to_vec(), second_of_speech());
+}
+
+#[tokio::test]
+async fn an_image_goes_to_hermes_as_a_vision_part_with_its_caption() {
+    let hermes = ScriptedHermes::with(vec![vec![TurnEvent::Completed("Это плата.".to_owned())]]);
+    let (_dir, media) = media_dir();
+    let chat = chat_with_media(
+        Arc::new(Store::in_memory().expect("store")),
+        Arc::clone(&hermes),
+        Some(media),
+    );
+    let app: Router = super::router(Arc::clone(&chat));
+    let jpeg = vec![0xFF, 0xD8, 0xFF, 0xE0, 1, 2, 3];
+    let (_, attachment) = upload(&app, "image/jpeg", "photo.jpg", jpeg).await;
+    let (_, sent) = call(
+        &app,
+        "POST",
+        "/v1/chat/messages",
+        Some(json!({"clientId": "i-1", "text": "Что это?", "attachments": [attachment["id"]]})),
+    )
+    .await;
+    assert_eq!(sent["message"]["kind"], "image");
+    settled(&chat, sent["reply"]["id"].as_str().expect("reply")).await;
+    let seen = hermes.seen.lock().expect("seen").clone();
+    assert_eq!(seen[0][0], json!({"type": "text", "text": "Что это?"}));
+    assert_eq!(
+        seen[0][1]["image_url"]["url"],
+        "data:image/jpeg;base64,/9j/4AECAw=="
+    );
+}
+
+#[tokio::test]
+async fn uploads_are_validated() {
+    let (_dir, media) = media_dir();
+    let chat = chat_with_media(
+        Arc::new(Store::in_memory().expect("store")),
+        ScriptedHermes::with(vec![]),
+        Some(media),
+    );
+    let app: Router = super::router(chat);
+    let (status, body) = upload(&app, "application/zip", "a.zip", vec![1, 2, 3]).await;
+    assert_eq!(
+        (status, body["code"].clone()),
+        (
+            StatusCode::BAD_REQUEST,
+            json!("chat_attachment_unsupported")
+        )
+    );
+    let stereo = {
+        let mut wav = media::wav(&[0, 0, 0, 0], media::VOICE_RATE);
+        wav[22] = 2;
+        wav
+    };
+    let (_, body) = upload(&app, "audio/wav", "v.wav", stereo).await;
+    assert_eq!(body["code"], "chat_voice_format");
+    let (_, body) = upload(&app, "text/plain", "notes.txt", "лог".as_bytes().to_vec()).await;
+    assert_eq!(body["kind"], "file");
+    let (status, body) = call(
+        &app,
+        "POST",
+        "/v1/chat/messages",
+        Some(json!({"clientId": "x-1", "attachments": ["f_missing"]})),
+    )
+    .await;
+    assert_eq!(
+        (status, body["code"].clone()),
+        (StatusCode::NOT_FOUND, json!("chat_attachment_not_found"))
+    );
+}
+
+#[tokio::test]
+async fn the_wyoming_client_streams_audio_and_reads_the_transcript() {
+    use tokio::io::BufReader;
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind");
+    let address = listener.local_addr().expect("address").to_string();
+    let server = tokio::spawn(async move {
+        let (socket, _) = listener.accept().await.expect("accept");
+        let (read, mut write) = socket.into_split();
+        let mut reader = BufReader::new(read);
+        let mut kinds = Vec::new();
+        loop {
+            let (kind, _) = stt::read_event(&mut reader).await.expect("event");
+            kinds.push(kind.clone());
+            if kind == "audio-stop" {
+                break;
+            }
+        }
+        stt::write_event(&mut write, "transcript", &json!({"text": " привет "}), &[])
+            .await
+            .expect("reply");
+        kinds
+    });
+    let client = stt::Wyoming::new(
+        vec!["127.0.0.1:1".to_owned(), address],
+        Duration::from_secs(5),
+    );
+    let pcm = Pcm {
+        samples: vec![0; stt::CHUNK_BYTES * 2 + 10],
+        rate: media::VOICE_RATE,
+    };
+    assert_eq!(client.transcribe(&pcm).await.expect("transcript"), "привет");
+    assert_eq!(
+        server.await.expect("server"),
+        vec![
+            "transcribe",
+            "audio-start",
+            "audio-chunk",
+            "audio-chunk",
+            "audio-chunk",
+            "audio-stop"
+        ]
+    );
 }

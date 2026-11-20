@@ -8,6 +8,11 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.view.animation.AlphaAnimation
+import android.widget.ImageView
+import android.text.format.DateUtils
+import android.text.format.Formatter
+import android.content.Context
+import dev.proflyder.home.core.model.ChatAttachmentKind
 import android.view.animation.Animation
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.text.getSpans
@@ -31,6 +36,12 @@ internal open class ChatAdapterCallbacks : BaseAdapterCallback<ChatItem>() {
     open fun onBubbleMenu(bubble: ChatItem.Bubble, anchor: View) = Unit
 
     open fun onRetry(bubble: ChatItem.Bubble) = Unit
+
+    open fun onVoice(media: BubbleMedia) = Unit
+
+    open fun onImage(media: BubbleMedia) = Unit
+
+    open fun bindImage(media: BubbleMedia, target: ImageView) = Unit
 }
 
 private typealias ChatHolder = BaseViewHolder<ChatItem, ViewBinding, ChatAdapterCallbacks>
@@ -106,7 +117,13 @@ internal class ChatAdapter(
             views.chatBubble.setOnLongClickListener { openMenu() }
             views.chatText.setOnLongClickListener { openMenu() }
             views.chatRetry.setOnClickListener { callback.onRetry(item as ChatItem.Bubble) }
+            views.chatVoicePlay.setOnClickListener { firstMedia(ChatAttachmentKind.VOICE)?.let(callback::onVoice) }
+            views.chatImage.setOnClickListener { firstMedia(ChatAttachmentKind.IMAGE)?.let(callback::onImage) }
+            views.chatImage.setOnLongClickListener { openMenu() }
         }
+
+        private fun firstMedia(kind: ChatAttachmentKind): BubbleMedia? =
+            (item as ChatItem.Bubble).media.firstOrNull { it.kind == kind }
 
         private fun openMenu(): Boolean {
             callback.onBubbleMenu(item as ChatItem.Bubble, views.chatBubble)
@@ -119,6 +136,7 @@ internal class ChatAdapter(
             paint(bubble)
             bindText(bubble)
             bindQuote(bubble)
+            bindMedia(bubble)
             bindMeta(bubble)
             bindFailure(bubble)
         }
@@ -162,6 +180,37 @@ internal class ChatAdapter(
             views.chatQuoteText.text = markdown.render(quote.text).toString()
         }
 
+        private fun bindMedia(bubble: ChatItem.Bubble) {
+            val image = bubble.media.firstOrNull { it.kind == ChatAttachmentKind.IMAGE }
+            val voice = bubble.media.firstOrNull { it.kind == ChatAttachmentKind.VOICE }
+            val file = bubble.media.firstOrNull { it.kind == ChatAttachmentKind.FILE }
+            views.chatImage.setVisible(image != null)
+            image?.let { callback.bindImage(it, views.chatImage) }
+            views.chatVoice.setVisible(voice != null)
+            voice?.let { bindVoice(it, bubble.playback) }
+            views.chatFile.setVisible(file != null)
+            views.chatFileName.text = file?.let { fileLabel(views.root.context, it) }
+            bindTranscript(bubble, voice)
+        }
+
+        private fun bindVoice(voice: BubbleMedia, playback: VoicePlayback?) {
+            val playing = playback?.playing == true
+            views.chatVoicePlay.setIconResource(if (playing) R.drawable.chat_ic_pause else R.drawable.chat_ic_play)
+            views.chatVoicePlay.contentDescription = views.root.context.getString(
+                if (playing) R.string.chat_voice_pause else R.string.chat_voice_play,
+            )
+            views.chatVoiceProgress.progress = ((playback?.progress ?: 0f) * PROGRESS_MAX).toInt()
+            val shown = playback?.takeIf { it.positionMs > 0 }?.positionMs ?: voice.durationMs ?: 0L
+            views.chatVoiceDuration.text = DateUtils.formatElapsedTime(shown / MILLIS_PER_SECOND)
+        }
+
+        private fun bindTranscript(bubble: ChatItem.Bubble, voice: BubbleMedia?) {
+            val transcript = bubble.transcript
+            val waiting = voice != null && transcript == null && bubble.mine && bubble.state != BubbleState.FAILED
+            views.chatTranscript.setVisible(transcript != null || waiting)
+            views.chatTranscript.text = transcript ?: views.root.context.getString(R.string.chat_transcript_pending)
+        }
+
         private fun bindMeta(bubble: ChatItem.Bubble) {
             views.chatTime.text = chatTime(views.root.context, bubble.atMillis)
             val icon = statusIcon(bubble)
@@ -187,6 +236,8 @@ internal class ChatAdapter(
         const val PULSE_MILLIS = 450L
         const val PULSE_STEP_MILLIS = 150L
         const val STREAMING_CARET = " ▍"
+        const val PROGRESS_MAX = 1000
+        const val MILLIS_PER_SECOND = 1000L
     }
 }
 
@@ -221,3 +272,6 @@ internal fun markdownStyle(view: View): MarkdownStyle = MarkdownStyle(
     linkColor = MaterialColors.getColor(view, androidx.appcompat.R.attr.colorPrimary),
     listIndent = view.resources.getDimensionPixelSize(R.dimen.chat_list_indent),
 )
+
+internal fun fileLabel(context: Context, media: BubbleMedia): String =
+    "${media.name} · ${Formatter.formatShortFileSize(context, media.size)}"

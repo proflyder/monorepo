@@ -4,6 +4,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
+import dev.proflyder.home.core.model.ChatAttachmentKind
 import dev.proflyder.home.core.model.ChatQuote
 import dev.proflyder.home.core.model.ChatRole
 import dev.proflyder.home.core.operation.suspendRunCatching
@@ -30,6 +31,17 @@ data class OutgoingRecord(
     val replyText: String?,
     val createdAtMillis: Long,
     val failureKey: String?,
+    val attachments: List<AttachmentRecord> = emptyList(),
+)
+
+data class AttachmentRecord(
+    val path: String,
+    val kind: String,
+    val mime: String,
+    val name: String,
+    val size: Long,
+    val durationMs: Long?,
+    val uploadedId: String?,
 )
 
 internal fun Outgoing.toRecord(): OutgoingRecord = OutgoingRecord(
@@ -40,6 +52,9 @@ internal fun Outgoing.toRecord(): OutgoingRecord = OutgoingRecord(
     replyText = replyTo?.text,
     createdAtMillis = createdAtMillis,
     failureKey = failureKey,
+    attachments = attachments.map {
+        AttachmentRecord(it.path, it.kind.name, it.mime, it.name, it.size, it.durationMs, it.uploadedId)
+    },
 )
 
 internal fun OutgoingRecord.toOutgoing(): Outgoing = Outgoing(
@@ -48,6 +63,17 @@ internal fun OutgoingRecord.toOutgoing(): Outgoing = Outgoing(
     replyTo = replyId?.let { ChatQuote(it, roleOf(replyRole), replyText.orEmpty()) },
     createdAtMillis = createdAtMillis,
     failureKey = failureKey,
+    attachments = attachments.map(AttachmentRecord::toLocal),
+)
+
+private fun AttachmentRecord.toLocal(): LocalAttachment = LocalAttachment(
+    path = path,
+    kind = ChatAttachmentKind.entries.firstOrNull { it.name == kind } ?: ChatAttachmentKind.FILE,
+    mime = mime,
+    name = name,
+    size = size,
+    durationMs = durationMs,
+    uploadedId = uploadedId,
 )
 
 private fun roleOf(name: String?): ChatRole = ChatRole.entries.firstOrNull { it.name == name } ?: ChatRole.ASSISTANT
@@ -69,6 +95,31 @@ internal object OutboxCodec {
         .put(REPLY_TEXT, record.replyText)
         .put(CREATED, record.createdAtMillis)
         .put(FAILURE, record.failureKey)
+        .put(ATTACHMENTS, JSONArray(record.attachments.map(::attachmentJson)))
+
+    private fun attachmentJson(record: AttachmentRecord): JSONObject = JSONObject()
+        .put(PATH, record.path)
+        .put(KIND, record.kind)
+        .put(MIME, record.mime)
+        .put(NAME, record.name)
+        .put(SIZE, record.size)
+        .put(DURATION, record.durationMs)
+        .put(UPLOADED, record.uploadedId)
+
+    private fun attachmentOf(json: JSONObject): AttachmentRecord = AttachmentRecord(
+        path = json.optString(PATH),
+        kind = json.optString(KIND),
+        mime = json.optString(MIME),
+        name = json.optString(NAME),
+        size = json.optLong(SIZE),
+        durationMs = if (json.has(DURATION) && !json.isNull(DURATION)) json.optLong(DURATION) else null,
+        uploadedId = json.optStringOrNull(UPLOADED),
+    )
+
+    private fun attachmentsOf(json: JSONObject): List<AttachmentRecord> {
+        val array = json.optJSONArray(ATTACHMENTS) ?: return emptyList()
+        return (0 until array.length()).mapNotNull { array.optJSONObject(it)?.let(::attachmentOf) }
+    }
 
     private fun fromJson(json: JSONObject): OutgoingRecord? = json.optString(CLIENT_ID).takeIf { it.isNotEmpty() }?.let {
         OutgoingRecord(
@@ -79,6 +130,7 @@ internal object OutboxCodec {
             replyText = json.optStringOrNull(REPLY_TEXT),
             createdAtMillis = json.optLong(CREATED),
             failureKey = json.optStringOrNull(FAILURE),
+            attachments = attachmentsOf(json),
         )
     }
 
@@ -92,6 +144,14 @@ internal object OutboxCodec {
     private const val REPLY_TEXT = "replyText"
     private const val CREATED = "createdAt"
     private const val FAILURE = "failure"
+    private const val ATTACHMENTS = "attachments"
+    private const val PATH = "path"
+    private const val KIND = "kind"
+    private const val MIME = "mime"
+    private const val NAME = "name"
+    private const val SIZE = "size"
+    private const val DURATION = "durationMs"
+    private const val UPLOADED = "uploadedId"
 }
 
 @SingleIn(AppScope::class)

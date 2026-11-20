@@ -18,6 +18,7 @@ metro_android_library(
         "//projects/mobile/android/core/network",
         "//projects/mobile/android/core/ui",
         "//projects/mobile/android/features/chat/api",
+        "@maven//:androidx_activity_activity_ktx",
         "@maven//:androidx_appcompat_appcompat",
         "@maven//:androidx_constraintlayout_constraintlayout",
         "@maven//:androidx_core_core_ktx",

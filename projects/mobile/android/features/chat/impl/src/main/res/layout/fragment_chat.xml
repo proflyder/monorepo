@@ -147,11 +147,72 @@
                 android:src="@drawable/chat_ic_close" />
         </LinearLayout>
 
+        <HorizontalScrollView
+            android:id="@+id/chat_pending_scroll"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingBottom="6dp"
+            android:scrollbars="none"
+            android:visibility="gone">
+
+            <com.google.android.material.chip.ChipGroup
+                android:id="@+id/chat_pending"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                app:singleLine="true" />
+        </HorizontalScrollView>
+
         <LinearLayout
+            android:id="@+id/chat_recording"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="12dp"
+            android:paddingEnd="12dp"
+            android:visibility="gone">
+
+            <View
+                android:layout_width="10dp"
+                android:layout_height="10dp"
+                android:background="@drawable/chat_bg_record_dot" />
+
+            <TextView
+                android:id="@+id/chat_recording_time"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="10dp"
+                android:fontFeatureSettings="tnum"
+                android:textAppearance="?attr/textAppearanceTitleMedium"
+                android:textColor="?attr/colorOnSurface" />
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="12dp"
+                android:layout_weight="1"
+                android:maxLines="1"
+                android:ellipsize="end"
+                android:text="@string/chat_record_hint"
+                android:textAppearance="?attr/textAppearanceBodySmall"
+                android:textColor="?attr/colorOnSurfaceVariant" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/chat_compose"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:gravity="bottom"
             android:orientation="horizontal">
+
+            <ImageButton
+                android:id="@+id/chat_attach"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:layout_marginEnd="4dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/chat_attach"
+                android:src="@drawable/chat_ic_attach" />
 
             <com.google.android.material.textfield.TextInputLayout
                 android:id="@+id/chat_input_layout"
@@ -173,15 +234,28 @@
                     android:paddingBottom="12dp" />
             </com.google.android.material.textfield.TextInputLayout>
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/chat_send"
-                style="@style/Widget.Material3.Button.IconButton.Filled"
+            <FrameLayout
                 android:layout_width="48dp"
                 android:layout_height="48dp"
-                android:layout_marginStart="8dp"
-                android:contentDescription="@string/chat_send"
-                android:enabled="false"
-                app:icon="@drawable/chat_ic_send" />
+                android:layout_marginStart="8dp">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/chat_send"
+                    style="@style/Widget.Material3.Button.IconButton.Filled"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:contentDescription="@string/chat_send"
+                    android:visibility="gone"
+                    app:icon="@drawable/chat_ic_send" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/chat_mic"
+                    style="@style/Widget.Material3.Button.IconButton.Filled"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:contentDescription="@string/chat_record"
+                    app:icon="@drawable/chat_ic_mic" />
+            </FrameLayout>
         </LinearLayout>
     </LinearLayout>
 </FrameLayout>

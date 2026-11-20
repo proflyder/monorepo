@@ -288,7 +288,10 @@ session has its own transcript; Telegram is unaffected. The prompt is
 Telegram prompt adapted to the app), passed per turn as `system_message` by
 `mcp-gateway`. Transport and storage — `solutions/mcp-gateway/README.md`
 («Чат приложения»); the loopback relay — `solutions/voice-proxy/README.md`
-(«App chat relay»).
+(«App chat relay»). Voice messages from the app are transcribed by the same
+GigaAM/Whisper Wyoming services as the station and reach Hermes as
+«[Голосовое сообщение]: …»; photos reach it as `image_url` parts, the same
+vision path Telegram photos use.
 
 ## Telegram-промпт и `/report`
 

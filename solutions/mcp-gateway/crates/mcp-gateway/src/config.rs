@@ -18,6 +18,7 @@ pub const DEFAULT_BB_TIMEOUT: Duration = Duration::from_secs(15);
 pub const DEFAULT_BB_USER: &str = "bb";
 pub const DEFAULT_CHAT_DB: &str = "/var/lib/mcp-gateway/chat.db";
 pub const DEFAULT_CHAT_SESSION: &str = "home-app";
+pub const DEFAULT_CHAT_MEDIA_DIR: &str = "/var/lib/mcp-gateway/media";
 
 #[derive(Debug, Clone)]
 pub struct Config {
@@ -82,6 +83,8 @@ pub struct Config {
     pub chat_session: String,
     pub chat_prompt_file: String,
     pub chat_prompt: String,
+    pub chat_media_dir: String,
+    pub chat_stt_addrs: Vec<String>,
 
     pub timezone: String,
     pub location: TimeZone,
@@ -146,6 +149,8 @@ impl Config {
             chat_session: value_or(getenv, "MCP_CHAT_SESSION", DEFAULT_CHAT_SESSION),
             chat_prompt_file: trimmed(getenv, "MCP_CHAT_PROMPT_FILE"),
             chat_prompt: String::new(),
+            chat_media_dir: value_or(getenv, "MCP_CHAT_MEDIA_DIR", DEFAULT_CHAT_MEDIA_DIR),
+            chat_stt_addrs: split_list(&trimmed(getenv, "MCP_CHAT_STT_ADDRS")),
             timezone: value_or(getenv, "MCP_TIMEZONE", DEFAULT_TIMEZONE),
             location: TimeZone::UTC,
         };

@@ -8,4 +8,9 @@
     <style name="TextAppearance.Home.ChatMeta" parent="TextAppearance.Material3.LabelSmall">
         <item name="android:textColor">?attr/colorOnSurfaceVariant</item>
     </style>
+
+    <style name="ShapeAppearance.Home.ChatImage" parent="">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">12dp</item>
+    </style>
 </resources>

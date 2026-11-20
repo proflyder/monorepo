@@ -1,5 +1,7 @@
 package dev.proflyder.home.feature.chat
 
+import dev.proflyder.home.core.model.ChatAttachment
+import dev.proflyder.home.core.model.ChatAttachmentKind
 import dev.proflyder.home.core.model.ChatKind
 import dev.proflyder.home.core.model.ChatMessage
 import dev.proflyder.home.core.model.ChatQuote
@@ -33,6 +35,17 @@ internal object ChatFixtures {
         errorKey = error,
         createdAtMillis = NOON + seq * MINUTE,
         updatedAtMillis = NOON + seq * MINUTE,
+    )
+
+    val voice: ChatMessage = message("m10", 10, ChatRole.USER, "", clientId = "c10").copy(
+        kind = ChatKind.VOICE,
+        attachments = listOf(ChatAttachment("f_v", ChatAttachmentKind.VOICE, "audio/wav", 64_044, "voice.wav", 7_400)),
+        transcript = "Включи свет в гостиной и поставь музыку",
+    )
+
+    val log: ChatMessage = message("m12", 12, ChatRole.USER, "Что не так в этом логе?", clientId = "c12").copy(
+        kind = ChatKind.FILE,
+        attachments = listOf(ChatAttachment("f_l", ChatAttachmentKind.FILE, "text/plain", 18_432, "scheduler.log", null)),
     )
 
     val conversation: List<ChatMessage> = listOf(

@@ -3,7 +3,7 @@ use std::sync::{Mutex, PoisonError};
 
 use rusqlite::{Connection, OptionalExtension as _, Row, params};
 
-use super::model::{ErrorKey, Kind, Message, Quote, Role, Status};
+use super::model::{Attachment, ErrorKey, Kind, Message, Quote, Role, Status};
 
 pub const QUOTE_CHARS: usize = 200;
 
@@ -21,14 +21,18 @@ CREATE TABLE IF NOT EXISTS chat_messages (
     status TEXT NOT NULL,
     error TEXT,
     created_at INTEGER NOT NULL,
-    updated_at INTEGER NOT NULL
+    updated_at INTEGER NOT NULL,
+    attachments TEXT,
+    transcript TEXT
 );
 CREATE INDEX IF NOT EXISTS chat_messages_version ON chat_messages(version);
 CREATE INDEX IF NOT EXISTS chat_messages_request ON chat_messages(request_id);
 ";
 
 const COLUMNS: &str = "m.seq, m.id, m.version, m.client_id, m.role, m.kind, m.text, m.status, \
-     m.error, m.created_at, m.updated_at, q.id, q.role, q.text";
+     m.error, m.created_at, m.updated_at, q.id, q.role, q.text, m.attachments, m.transcript";
+
+const ADDED_COLUMNS: [(&str, &str); 2] = [("attachments", "TEXT"), ("transcript", "TEXT")];
 
 const FROM: &str = "chat_messages m LEFT JOIN chat_messages q ON q.id = m.reply_to";
 
@@ -45,6 +49,8 @@ pub enum StoreError {
 pub struct NewTurn<'a> {
     pub client_id: &'a str,
     pub text: &'a str,
+    pub kind: Kind,
+    pub attachments: &'a [Attachment],
     pub reply_to: Option<&'a str>,
     pub user_id: String,
     pub reply_id: String,
@@ -78,6 +84,7 @@ impl Store {
         connection.pragma_update(None, "journal_mode", "WAL")?;
         connection.pragma_update(None, "synchronous", "NORMAL")?;
         connection.execute_batch(SCHEMA)?;
+        migrate(&connection)?;
         Ok(Self {
             connection: Mutex::new(connection),
         })
@@ -164,6 +171,22 @@ impl Store {
         })
     }
 
+    pub fn set_transcript(
+        &self,
+        id: &str,
+        transcript: &str,
+        now: i64,
+    ) -> Result<Message, StoreError> {
+        self.with(|connection| {
+            let version = next_version(connection)?;
+            connection.execute(
+                "UPDATE chat_messages SET transcript = ?2, version = ?3, updated_at = ?4 WHERE id = ?1",
+                params![id, transcript, version, now],
+            )?;
+            fetch(connection, id)?.ok_or(StoreError::NotFound)
+        })
+    }
+
     pub fn update(&self, id: &str, update: &Update<'_>) -> Result<Message, StoreError> {
         self.with(|connection| update_message(connection, id, update))
     }
@@ -244,15 +267,17 @@ fn insert_turn(
     let version = next_version(&transaction)?;
     transaction.execute(
         "INSERT INTO chat_messages (id, version, client_id, role, kind, text, reply_to, \
-         request_id, status, error, created_at, updated_at) \
-         VALUES (?1, ?2, ?3, 'user', 'text', ?4, ?5, NULL, 'done', NULL, ?6, ?6)",
+         request_id, status, error, created_at, updated_at, attachments) \
+         VALUES (?1, ?2, ?3, 'user', ?7, ?4, ?5, NULL, 'done', NULL, ?6, ?6, ?8)",
         params![
             turn.user_id,
             version,
             turn.client_id,
             turn.text,
             turn.reply_to,
-            turn.now
+            turn.now,
+            turn.kind.as_str(),
+            encode_attachments(turn.attachments)
         ],
     )?;
     transaction.execute(
@@ -292,6 +317,26 @@ fn update_message(
     let message = fetch(&transaction, id)?.ok_or(StoreError::NotFound)?;
     transaction.commit()?;
     Ok(message)
+}
+
+fn migrate(connection: &Connection) -> Result<(), StoreError> {
+    let mut statement =
+        connection.prepare("SELECT name FROM pragma_table_info('chat_messages')")?;
+    let present: Vec<String> = statement
+        .query_map([], |row| row.get(0))?
+        .collect::<Result<_, _>>()?;
+    for (name, kind) in ADDED_COLUMNS {
+        if !present.iter().any(|column| column == name) {
+            connection.execute_batch(&format!(
+                "ALTER TABLE chat_messages ADD COLUMN {name} {kind}"
+            ))?;
+        }
+    }
+    Ok(())
+}
+
+fn encode_attachments(attachments: &[Attachment]) -> Option<String> {
+    (!attachments.is_empty()).then(|| serde_json::to_string(attachments).unwrap_or_default())
 }
 
 fn next_version(connection: &Connection) -> Result<i64, rusqlite::Error> {
@@ -334,7 +379,12 @@ fn read_message(row: &Row<'_>) -> rusqlite::Result<Message> {
         text: truncate(quote_text.as_deref().unwrap_or_default(), QUOTE_CHARS),
     });
     let error: Option<String> = row.get(8)?;
+    let attachments: Option<String> = row.get(14)?;
     Ok(Message {
+        attachments: attachments
+            .and_then(|raw| serde_json::from_str(&raw).ok())
+            .unwrap_or_default(),
+        transcript: row.get(15)?,
         seq: row.get(0)?,
         id: row.get(1)?,
         version: row.get(2)?,

@@ -1,6 +1,8 @@
 pub mod hermes;
+pub mod media;
 pub mod model;
 pub mod store;
+pub mod stt;
 
 use std::collections::HashMap;
 use std::convert::Infallible;
@@ -9,7 +11,8 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use axum::Router;
 use axum::body::Body;
-use axum::extract::{Path, Query, State};
+use axum::extract::{DefaultBodyLimit, Path, Query, State};
+use axum::http::HeaderMap;
 use axum::http::{Response, StatusCode, header};
 use axum::response::IntoResponse;
 use axum::response::sse::{Event as SseEvent, KeepAlive, Sse};
@@ -18,12 +21,16 @@ use futures::stream::{self, Stream, StreamExt as _};
 use serde::{Deserialize, Serialize};
 use tokio::sync::{broadcast, mpsc};
 
+use base64::Engine as _;
 use hermes::{HermesApi, TurnEvent};
+use media::{Attachment, AttachmentKind, MediaStore};
 use model::{
-    DEFAULT_PAGE, Delta, ErrorBody, ErrorKey, MAX_CLIENT_ID_CHARS, MAX_PAGE, MAX_TEXT_CHARS,
-    Message, Page, Role, SendRequest, SendResponse, Status,
+    DEFAULT_PAGE, Delta, ErrorBody, ErrorKey, Kind, MAX_ATTACHMENTS, MAX_CLIENT_ID_CHARS, MAX_PAGE,
+    MAX_TEXT_CHARS, Message, Page, Role, SendRequest, SendResponse, Status,
 };
+use serde_json::{Value, json};
 use store::{NewTurn, Store, StoreError, Update};
+use stt::SpeechToText;
 
 pub const PERSIST_EVERY: Duration = Duration::from_secs(2);
 pub const KEEPALIVE: Duration = Duration::from_secs(15);
@@ -43,6 +50,8 @@ pub enum Event {
 pub struct Options {
     pub store: Arc<Store>,
     pub hermes: Arc<dyn HermesApi>,
+    pub media: Option<Arc<MediaStore>>,
+    pub stt: Option<Arc<dyn SpeechToText>>,
     pub now: Now,
     pub new_id: NewId,
 }
@@ -50,6 +59,8 @@ pub struct Options {
 pub struct Chat {
     store: Arc<Store>,
     hermes: Arc<dyn HermesApi>,
+    media: Option<Arc<MediaStore>>,
+    stt: Option<Arc<dyn SpeechToText>>,
     now: Now,
     new_id: NewId,
     events: broadcast::Sender<Event>,
@@ -83,6 +94,8 @@ impl Chat {
         let chat = Arc::new(Self {
             store: options.store,
             hermes: options.hermes,
+            media: options.media,
+            stt: options.stt,
             now: options.now,
             new_id: options.new_id,
             events,
@@ -120,14 +133,18 @@ impl Chat {
         let text = request.text.trim();
         let client_id = request.client_id.trim();
         validate_client_id(client_id)?;
-        match text.chars().count() {
-            0 => return Err(ErrorKey::ChatTextEmpty),
-            count if count > MAX_TEXT_CHARS => return Err(ErrorKey::ChatTextTooLong),
-            _ => {}
+        if text.chars().count() > MAX_TEXT_CHARS {
+            return Err(ErrorKey::ChatTextTooLong);
+        }
+        let attachments = self.resolve(&request.attachments)?;
+        if text.is_empty() && attachments.is_empty() {
+            return Err(ErrorKey::ChatTextEmpty);
         }
         let turn = NewTurn {
             client_id,
             text,
+            kind: kind_of(&attachments),
+            attachments: &attachments,
             reply_to: request.reply_to.as_deref().filter(|id| !id.is_empty()),
             user_id: (self.new_id)(),
             reply_id: (self.new_id)(),
@@ -140,6 +157,45 @@ impl Chat {
             self.enqueue(reply.id.clone());
         }
         Ok(SendResponse { message, reply })
+    }
+
+    fn resolve(&self, ids: &[String]) -> Result<Vec<Attachment>, ErrorKey> {
+        if ids.len() > MAX_ATTACHMENTS {
+            return Err(ErrorKey::ChatTooManyAttachments);
+        }
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let media = self
+            .media
+            .as_ref()
+            .ok_or(ErrorKey::ChatAttachmentUnsupported)?;
+        let attachments = ids
+            .iter()
+            .map(|id| media.get(id))
+            .collect::<Result<Vec<_>, _>>()?;
+        let voice = attachments.iter().any(|a| a.kind == AttachmentKind::Voice);
+        if voice && attachments.len() > 1 {
+            return Err(ErrorKey::ChatTooManyAttachments);
+        }
+        Ok(attachments)
+    }
+
+    pub fn upload(&self, mime: &str, name: &str, bytes: &[u8]) -> Result<Attachment, ErrorKey> {
+        let media = self
+            .media
+            .as_ref()
+            .ok_or(ErrorKey::ChatAttachmentUnsupported)?;
+        let id = format!("f_{}", (self.new_id)().trim_start_matches("m_"));
+        media.save(&id, mime, name, bytes)
+    }
+
+    pub fn download(&self, id: &str) -> Result<(Attachment, Vec<u8>), ErrorKey> {
+        let media = self
+            .media
+            .as_ref()
+            .ok_or(ErrorKey::ChatAttachmentNotFound)?;
+        Ok((media.get(id)?, media.bytes(id)?))
     }
 
     pub fn retry(&self, id: &str) -> Result<Message, ErrorKey> {
@@ -231,20 +287,105 @@ impl Chat {
         }
     }
 
-    fn prompt_for(&self, request: &Message) -> String {
+    fn quote_prefix(&self, request: &Message) -> String {
         let quoted = request
             .reply_to
             .as_ref()
             .and_then(|quote| self.store.get(&quote.id).ok().flatten());
-        match quoted {
-            Some(quoted) => format!(
-                "[Ответ на сообщение ({}): «{}»]\n{}",
+        quoted.map_or_else(String::new, |quoted| {
+            let text = quoted.transcript.as_deref().unwrap_or(&quoted.text);
+            format!(
+                "[Ответ на сообщение ({}): «{}»]\n",
                 quoted.role.as_str(),
-                store::truncate(&quoted.text, QUOTE_FOR_MODEL_CHARS),
-                request.text
-            ),
-            None => request.text.clone(),
+                store::truncate(text, QUOTE_FOR_MODEL_CHARS)
+            )
+        })
+    }
+
+    async fn content_for(&self, request: &Message) -> Result<Value, ErrorKey> {
+        let mut text = self.quote_prefix(request);
+        let mut images = Vec::new();
+        for attachment in &request.attachments {
+            match attachment.kind {
+                AttachmentKind::Voice => {
+                    text.push_str(&self.voice_text(request, attachment).await?);
+                }
+                AttachmentKind::Image => images.push(self.image_part(attachment)?),
+                AttachmentKind::File => text.push_str(&self.file_text(attachment)?),
+            }
         }
+        if !request.text.is_empty() {
+            text.push_str(&request.text);
+        }
+        if images.is_empty() {
+            return Ok(Value::String(text));
+        }
+        let mut parts = vec![json!({"type": "text", "text": text})];
+        parts.extend(images);
+        Ok(Value::Array(parts))
+    }
+
+    async fn voice_text(
+        &self,
+        request: &Message,
+        attachment: &Attachment,
+    ) -> Result<String, ErrorKey> {
+        let transcript = match request.transcript.as_deref() {
+            Some(known) => known.to_owned(),
+            None => self.transcribe(request, attachment).await?,
+        };
+        Ok(format!("[Голосовое сообщение]: {transcript}\n"))
+    }
+
+    async fn transcribe(
+        &self,
+        request: &Message,
+        attachment: &Attachment,
+    ) -> Result<String, ErrorKey> {
+        let stt = self.stt.as_ref().ok_or(ErrorKey::ChatSttFailed)?;
+        let media = self
+            .media
+            .as_ref()
+            .ok_or(ErrorKey::ChatAttachmentNotFound)?;
+        let pcm = media::parse_wav(&media.bytes(&attachment.id)?)?;
+        let transcript = stt.transcribe(&pcm).await.map_err(|error| {
+            tracing::warn!(%error, "chat: speech-to-text failed");
+            ErrorKey::ChatSttFailed
+        })?;
+        if transcript.is_empty() {
+            return Err(ErrorKey::ChatSttFailed);
+        }
+        match self
+            .store
+            .set_transcript(&request.id, &transcript, (self.now)())
+        {
+            Ok(message) => self.publish(Event::Message(message)),
+            Err(error) => tracing::warn!(%error, "chat: transcript not saved"),
+        }
+        Ok(transcript)
+    }
+
+    fn image_part(&self, attachment: &Attachment) -> Result<Value, ErrorKey> {
+        let media = self
+            .media
+            .as_ref()
+            .ok_or(ErrorKey::ChatAttachmentNotFound)?;
+        let encoded =
+            base64::engine::general_purpose::STANDARD.encode(media.bytes(&attachment.id)?);
+        Ok(json!({
+            "type": "image_url",
+            "image_url": {"url": format!("data:{};base64,{encoded}", attachment.mime)}
+        }))
+    }
+
+    fn file_text(&self, attachment: &Attachment) -> Result<String, ErrorKey> {
+        let media = self
+            .media
+            .as_ref()
+            .ok_or(ErrorKey::ChatAttachmentNotFound)?;
+        let bytes = media.bytes(&attachment.id)?;
+        let content = String::from_utf8_lossy(&bytes);
+        Ok(format!("[Файл {}]\n```\n{content}\n```\n", attachment.name))
     }
 
     async fn run_turn(&self, reply_id: &str) {
@@ -252,9 +393,16 @@ impl Chat {
             self.update(reply_id, None, Status::Failed, Some(ErrorKey::ChatNotFound));
             return;
         };
-        let message = self.prompt_for(&request);
         self.set_live(reply_id, Some(String::new()));
         self.update(reply_id, Some(""), Status::Streaming, None);
+        let message = match self.content_for(&request).await {
+            Ok(message) => message,
+            Err(key) => {
+                self.set_live(reply_id, None);
+                self.update(reply_id, Some(""), Status::Failed, Some(key));
+                return;
+            }
+        };
         let (sink, mut events) = mpsc::channel::<TurnEvent>(64);
         let run = self.hermes.run(message, sink);
         let consume = async {
@@ -306,6 +454,16 @@ impl Chat {
     }
 }
 
+fn kind_of(attachments: &[Attachment]) -> Kind {
+    let has = |kind: AttachmentKind| attachments.iter().any(|a| a.kind == kind);
+    match () {
+        () if has(AttachmentKind::Voice) => Kind::Voice,
+        () if has(AttachmentKind::Image) => Kind::Image,
+        () if has(AttachmentKind::File) => Kind::File,
+        () => Kind::Text,
+    }
+}
+
 fn validate_client_id(client_id: &str) -> Result<(), ErrorKey> {
     let valid = !client_id.is_empty()
         && client_id.chars().count() <= MAX_CLIENT_ID_CHARS
@@ -331,6 +489,11 @@ pub fn router<S: Clone + Send + Sync + 'static>(chat: Arc<Chat>) -> Router<S> {
         .route("/v1/chat/messages", get(list).post(send))
         .route("/v1/chat/messages/{id}/retry", post(retry))
         .route("/v1/chat/events", get(events))
+        .route(
+            "/v1/chat/attachments",
+            post(upload).layer(DefaultBodyLimit::max(media::MAX_UPLOAD_BYTES)),
+        )
+        .route("/v1/chat/attachments/{id}", get(download))
         .with_state(chat)
 }
 
@@ -338,6 +501,40 @@ pub fn router<S: Clone + Send + Sync + 'static>(chat: Arc<Chat>) -> Router<S> {
 struct ListQuery {
     before: Option<i64>,
     limit: Option<usize>,
+}
+
+#[derive(Debug, Deserialize)]
+struct UploadQuery {
+    #[serde(default)]
+    name: String,
+}
+
+async fn upload(
+    State(chat): State<Arc<Chat>>,
+    Query(query): Query<UploadQuery>,
+    headers: HeaderMap,
+    body: axum::body::Bytes,
+) -> Response<Body> {
+    let mime = headers
+        .get(header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or_default();
+    respond(chat.upload(mime, &query.name, &body))
+}
+
+async fn download(State(chat): State<Arc<Chat>>, Path(id): Path<String>) -> Response<Body> {
+    match chat.download(&id) {
+        Ok((attachment, bytes)) => Response::builder()
+            .status(StatusCode::OK)
+            .header(header::CONTENT_TYPE, attachment.mime)
+            .header(
+                header::CACHE_CONTROL,
+                "private, max-age=31536000, immutable",
+            )
+            .body(Body::from(bytes))
+            .unwrap_or_default(),
+        Err(key) => error_response(key),
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -411,12 +608,19 @@ fn respond<T: Serialize>(result: Result<T, ErrorKey>) -> Response<Body> {
 
 fn error_response(key: ErrorKey) -> Response<Body> {
     let status = match key {
-        ErrorKey::ChatNotFound | ErrorKey::ChatReplyNotFound => StatusCode::NOT_FOUND,
+        ErrorKey::ChatNotFound | ErrorKey::ChatReplyNotFound | ErrorKey::ChatAttachmentNotFound => {
+            StatusCode::NOT_FOUND
+        }
+        ErrorKey::ChatAttachmentTooLarge => StatusCode::PAYLOAD_TOO_LARGE,
+        ErrorKey::ChatAttachmentUnsupported
+        | ErrorKey::ChatTooManyAttachments
+        | ErrorKey::ChatVoiceFormat => StatusCode::BAD_REQUEST,
         ErrorKey::ChatNotRetryable => StatusCode::CONFLICT,
         ErrorKey::ChatStorageFailed
         | ErrorKey::ChatUpstreamUnavailable
         | ErrorKey::ChatUpstreamFailed
-        | ErrorKey::ChatInterrupted => StatusCode::SERVICE_UNAVAILABLE,
+        | ErrorKey::ChatInterrupted
+        | ErrorKey::ChatSttFailed => StatusCode::SERVICE_UNAVAILABLE,
         ErrorKey::ChatTextEmpty | ErrorKey::ChatTextTooLong | ErrorKey::ChatClientIdInvalid => {
             StatusCode::BAD_REQUEST
         }

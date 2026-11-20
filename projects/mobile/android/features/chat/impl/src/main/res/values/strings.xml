@@ -31,4 +31,23 @@
     <string name="chat_error_chat_storage_failed">The server could not save the chat.</string>
     <string name="chat_error_chat_unauthorized">Access denied: check the token in the connection settings.</string>
     <string name="chat_error_generic">The message was not delivered.</string>
+    <string name="chat_attach">Attach</string>
+    <string name="chat_attach_photo">Photo</string>
+    <string name="chat_attach_file">Text file</string>
+    <string name="chat_attachment_remove">Remove %1$s</string>
+    <string name="chat_record">Hold to record a voice message</string>
+    <string name="chat_record_hint">Release to send, slide left to cancel</string>
+    <string name="chat_record_permission">Allow the microphone to record voice messages.</string>
+    <string name="chat_voice_play">Play voice message</string>
+    <string name="chat_voice_pause">Pause voice message</string>
+    <string name="chat_voice_label">Voice message</string>
+    <string name="chat_transcript_pending">Recognising…</string>
+    <string name="chat_open_image">Open photo</string>
+    <string name="chat_error_chat_attachment_too_large">The attachment is too large.</string>
+    <string name="chat_error_chat_attachment_unsupported">This file type is not supported.</string>
+    <string name="chat_error_chat_attachment_not_found">The attachment is gone.</string>
+    <string name="chat_error_chat_attachment_missing">The file is no longer on the phone.</string>
+    <string name="chat_error_chat_too_many_attachments">Too many attachments in one message.</string>
+    <string name="chat_error_chat_voice_format">The voice recording has an unsupported format.</string>
+    <string name="chat_error_chat_stt_failed">Could not recognise the voice message.</string>
 </resources>
