@@ -19,6 +19,7 @@ import com.google.android.material.color.MaterialColors
 import com.google.android.material.textfield.TextInputLayout
 import dev.proflyder.home.core.theme.AppTheme
 import dev.proflyder.home.feature.alarms.AlarmEditorDestination
+import dev.proflyder.home.feature.chat.ChatRoute
 import dev.proflyder.home.feature.connection.ConnectionDestination
 import dev.proflyder.home.feature.push.PushSettingsDestination
 import java.io.File
@@ -34,6 +35,7 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import dev.proflyder.home.feature.alarms.impl.R as AlarmsR
+import dev.proflyder.home.feature.chat.impl.R as ChatR
 import dev.proflyder.home.feature.connection.impl.R as ConnectionR
 import dev.proflyder.home.feature.control.impl.R as ControlR
 import dev.proflyder.home.feature.push.impl.R as PushR
@@ -102,6 +104,29 @@ class WindowInsetsScreenshotTest {
 
     @Test
     fun connectionFieldsUseTheHomeStyleInCurrent() = connectionFields(AppTheme.CURRENT)
+
+    @Test
+    fun chatPanelSitsOnTheKeyboardInNeon() = chatWithKeyboard(AppTheme.NEON)
+
+    @Test
+    fun chatPanelSitsOnTheKeyboardInCurrent() = chatWithKeyboard(AppTheme.CURRENT)
+
+    private fun chatWithKeyboard(theme: AppTheme) {
+        val activity = launch(theme)
+        activity.router.selectTab(ChatRoute.FEATURE_ID)
+        idle(activity)
+        val root = activity.window.decorView
+        root.findViewById<View>(ChatR.id.chat_input).requestFocus()
+        val keyboard = dp(root, KEYBOARD_DP)
+        applyInsets(activity, keyboard)
+
+        val panel = root.findViewById<View>(ChatR.id.chat_panel)
+        assertEquals("chat panel is not on the keyboard", root.height - keyboard, panel.windowBottom())
+        val nav = root.findViewById<View>(R.id.home_notice_anchor)
+        assertFalse("bottom navigation stays above the keyboard", nav.isShown)
+        assertComposerStyle(root.findViewById(ChatR.id.chat_input_layout))
+        shoot(activity, "insets-${theme.key}-chat-keyboard.png", keyboard)
+    }
 
     private fun alarmEditorWithKeyboard(theme: AppTheme) {
         val activity = launch(theme)
@@ -196,6 +221,14 @@ class WindowInsetsScreenshotTest {
         val view = LayoutInflater.from(activity).inflate(layoutRes, FrameLayout(activity), false)
         val width = (WIDTH_DP * activity.resources.displayMetrics.density).toInt()
         return view.fields().onEach { it.measureAlone(width) }
+    }
+
+    private fun assertComposerStyle(field: TextInputLayout) {
+        val stroke = field.resources.getDimensionPixelSize(dev.proflyder.home.core.ui.R.dimen.ui_text_input_stroke)
+        assertEquals(TextInputLayout.BOX_BACKGROUND_FILLED, field.boxBackgroundMode)
+        assertEquals(stroke, field.boxStrokeWidth)
+        assertFalse("the composer uses a placeholder, not a floating label", field.isHintEnabled)
+        assertFalse(checkNotNull(field.editText).hint.isNullOrBlank())
     }
 
     private fun assertHomeStyle(field: TextInputLayout) {

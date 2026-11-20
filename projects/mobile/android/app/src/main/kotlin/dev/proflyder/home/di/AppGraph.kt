@@ -7,6 +7,7 @@ import dev.proflyder.home.core.config.ConnectionSettingsStore
 import dev.proflyder.home.core.model.ServerClock
 import dev.proflyder.home.core.navigation.FeatureEntry
 import dev.proflyder.home.core.navigation.FeatureRegistry
+import dev.proflyder.home.core.network.ChatClient
 import dev.proflyder.home.core.network.ConnectSchedulerClient
 import dev.proflyder.home.core.network.ConnectScenarioClient
 import dev.proflyder.home.core.network.ConnectIntercomClient
@@ -18,6 +19,7 @@ import dev.proflyder.home.core.network.NetworkWaiter
 import dev.proflyder.home.core.network.PushDevicesApi
 import dev.proflyder.home.core.network.ScenarioClient
 import dev.proflyder.home.core.network.SchedulerClient
+import dev.proflyder.home.core.network.HttpChatClient
 import dev.proflyder.home.core.network.HttpSystemDashboardClient
 import dev.proflyder.home.core.network.SystemDashboardClient
 import dev.proflyder.home.core.settings.HomeDataStore
@@ -168,6 +170,20 @@ object AppBindings {
         interceptors: NetworkInterceptors,
         networkWaiter: NetworkWaiter,
     ): SystemDashboardClient = HttpSystemDashboardClient(
+        settings = settings,
+        baseClient = httpClient,
+        interceptors = interceptors.list,
+        networkWaiter = networkWaiter,
+    )
+
+    @Provides
+    @SingleIn(AppScope::class)
+    fun provideChatClient(
+        settings: ConnectionSettingsStore,
+        httpClient: OkHttpClient,
+        interceptors: NetworkInterceptors,
+        networkWaiter: NetworkWaiter,
+    ): ChatClient = HttpChatClient(
         settings = settings,
         baseClient = httpClient,
         interceptors = interceptors.list,

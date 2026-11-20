@@ -35,15 +35,15 @@ class MainActivitySmokeTest {
     }
 
     @Test
-    fun bottomBarHasFourContentTabsAndOneToolbarAction() {
+    fun bottomBarHasFiveContentTabsAndOneToolbarAction() {
         val controller = Robolectric.buildActivity(MainActivity::class.java).setup()
         val activity = controller.get()
         shadowOf(activity.mainLooper).idle()
 
         val bottom = activity.findViewById<BottomNavigationView>(R.id.home_notice_anchor)
-        assertEquals(4, bottom.menu.size())
+        assertEquals(5, bottom.menu.size())
         val titles = (0 until bottom.menu.size()).map { bottom.menu.getItem(it).title.toString() }
-        assertEquals(listOf("Home", "Scenarios", "Time", "System"), titles)
+        assertEquals(listOf("Home", "Scenarios", "Time", "Chat", "System"), titles)
 
         val toolbar = activity.findViewById<MaterialToolbar>(R.id.toolbar)
         assertEquals(1, toolbar.menu.size())
