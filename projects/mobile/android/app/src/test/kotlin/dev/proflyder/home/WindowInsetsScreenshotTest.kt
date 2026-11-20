@@ -204,6 +204,7 @@ class WindowInsetsScreenshotTest {
         val scroll = root.findViewById<NestedScrollView>(ConnectionR.id.connection_scroll)
         assertFalse(scroll.clipToPadding)
         assertCardsAndButtons(root.findViewById(ConnectionR.id.connection_scroll))
+        assertFalse("clear token shown without a token", root.findViewById<View>(ConnectionR.id.connection_clear_token).isShown)
         shoot(activity, "insets-${theme.key}-${mode(root)}-connection.png", 0)
     }
 
@@ -295,7 +296,7 @@ class WindowInsetsScreenshotTest {
         val color = MaterialColors.getColor(content, com.google.android.material.R.attr.colorSurfaceContainer)
         cards.forEach { assertCard(it, color) }
         val height = content.resources.getDimensionPixelSize(UiR.dimen.ui_card_button_height)
-        cards.forEach { card -> card.all<MaterialButton>().forEach { assertCardButton(card, it, height) } }
+        cards.forEach { card -> card.all<MaterialButton>().filter { it.isShown }.forEach { assertCardButton(card, it, height) } }
     }
 
     private fun assertCard(card: MaterialCardView, color: Int) {

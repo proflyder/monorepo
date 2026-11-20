@@ -1063,8 +1063,9 @@ spans the card content (`match_parent`), is 56dp high
 `Widget.Home.CardButton` (filled: **Save and test connection**); other actions
 are `Widget.Home.CardButton.Tonal` (**Refresh config**, **Save name**,
 **Update registration**, permission **Allow**); destructive ones are
-`Widget.Home.CardButton.Danger` (tonal on `colorErrorContainer`: **Remove stored
-token**). Text buttons are not used inside cards, so nothing is indented away
+`Widget.Home.CardButton.Danger` (outlined: transparent, 1dp `colorError`
+stroke and `colorError` text: **Remove stored token**, shown only while a token
+is stored). Text buttons are not used inside cards, so nothing is indented away
 from the card's content edge. A screen of independent settings with no single
 main action («Phone notifications and find») has no filled button. Every
 settings card is `Widget.Home.Card` (filled `colorSurfaceContainer`, no

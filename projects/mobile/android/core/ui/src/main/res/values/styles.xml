@@ -91,10 +91,19 @@
         <item name="android:textAppearance">?attr/textAppearanceLabelLarge</item>
     </style>
 
-    <style name="Widget.Home.CardButton.Danger" parent="Widget.Home.CardButton.Tonal">
-        <item name="backgroundTint">?attr/colorErrorContainer</item>
-        <item name="android:textColor">?attr/colorOnErrorContainer</item>
-        <item name="iconTint">?attr/colorOnErrorContainer</item>
+    <style name="Widget.Home.CardButton.Danger" parent="Widget.Material3.Button.OutlinedButton">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">@dimen/ui_card_button_height</item>
+        <item name="android:minHeight">@dimen/ui_card_button_height</item>
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+        <item name="cornerRadius">@dimen/ui_card_button_radius</item>
+        <item name="android:textAppearance">?attr/textAppearanceLabelLarge</item>
+        <item name="backgroundTint">@android:color/transparent</item>
+        <item name="strokeColor">?attr/colorError</item>
+        <item name="strokeWidth">@dimen/ui_card_button_stroke</item>
+        <item name="android:textColor">?attr/colorError</item>
+        <item name="iconTint">?attr/colorError</item>
         <item name="rippleColor">?attr/colorError</item>
     </style>
 
