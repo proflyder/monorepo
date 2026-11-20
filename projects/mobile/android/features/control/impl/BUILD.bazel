@@ -17,6 +17,7 @@ metro_android_library(
         "//projects/mobile/android/core/model",
         "//projects/mobile/android/core/navigation",
         "//projects/mobile/android/core/network",
+        "//projects/mobile/android/core/designsystem",
         "//projects/mobile/android/core/ui",
         "//projects/mobile/android/features/alarms/api",
         "//projects/mobile/android/features/call/api",
@@ -73,6 +74,7 @@ kt_android_local_test(
     deps = [
         "//projects/mobile/android/core/model",
         "//projects/mobile/android/core/theme",
+        "//projects/mobile/android/core/designsystem",
         "//projects/mobile/android/core/ui",
         "//projects/mobile/android/features/call/api",
         "//projects/mobile/android/features/control/api",
@@ -109,6 +111,7 @@ kt_android_local_test(
     deps = [
         "//projects/mobile/android/core/model",
         "//projects/mobile/android/core/theme",
+        "//projects/mobile/android/core/designsystem",
         "//projects/mobile/android/core/ui",
         "//projects/mobile/android/features/call/api",
         "//projects/mobile/android/features/control/api",
@@ -144,6 +147,7 @@ kt_android_local_test(
     test_class = "dev.proflyder.home.feature.control.presentation.ControlWakeFeedbackRowTest",
     deps = [
         "//projects/mobile/android/core/model",
+        "//projects/mobile/android/core/designsystem",
         "//projects/mobile/android/core/ui",
         "//projects/mobile/android/features/call/api",
         "//projects/mobile/android/features/control/api",
@@ -163,6 +167,7 @@ kt_android_local_test(
     test_class = "dev.proflyder.home.feature.control.presentation.ControlDiffPayloadTest",
     deps = [
         "//projects/mobile/android/core/model",
+        "//projects/mobile/android/core/designsystem",
         "//projects/mobile/android/core/ui",
         "//projects/mobile/android/features/call/api",
         "//projects/mobile/android/features/control/api",

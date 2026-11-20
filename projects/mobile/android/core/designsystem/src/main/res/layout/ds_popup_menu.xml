@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/ds_popup_menu_items"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:background="@drawable/ds_bg_popup_menu"
+    android:minWidth="@dimen/ds_popup_min_width"
+    android:orientation="vertical"
+    android:padding="@dimen/ds_space_s" />

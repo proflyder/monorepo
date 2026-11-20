@@ -28,10 +28,10 @@
                     android:layout_height="0dp"
                     android:layout_weight="1"
                     android:clipToPadding="false"
-                    android:paddingStart="@dimen/ui_screen_padding"
-                    android:paddingTop="@dimen/ui_tile_gap"
-                    android:paddingEnd="@dimen/ui_screen_padding"
-                    android:paddingBottom="@dimen/ui_section_gap" />
+                    android:paddingStart="@dimen/ds_space_l"
+                    android:paddingTop="@dimen/ds_space_s"
+                    android:paddingEnd="@dimen/ds_space_l"
+                    android:paddingBottom="@dimen/ds_space_xl" />
             </LinearLayout>
 
             <ProgressBar
@@ -108,7 +108,7 @@
         </FrameLayout>
     </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
 
-    <dev.proflyder.home.core.ui.OutlinedFloatingActionButton
+    <dev.proflyder.home.core.designsystem.OutlinedFloatingActionButton
         android:id="@+id/control_quick_fab"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"

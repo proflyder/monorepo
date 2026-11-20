@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <dimen name="ds_space_xs">4dp</dimen>
+    <dimen name="ds_space_s">8dp</dimen>
+    <dimen name="ds_space_m">12dp</dimen>
+    <dimen name="ds_space_l">16dp</dimen>
+    <dimen name="ds_space_xl">24dp</dimen>
+    <dimen name="ds_space_xxl">32dp</dimen>
+
+    <dimen name="ds_radius_s">8dp</dimen>
+    <dimen name="ds_radius_m">12dp</dimen>
+    <dimen name="ds_radius_l">16dp</dimen>
+    <dimen name="ds_radius_xl">28dp</dimen>
+    <dimen name="ds_radius_full">100dp</dimen>
+
+    <dimen name="ds_control_s">32dp</dimen>
+    <dimen name="ds_control_m">40dp</dimen>
+    <dimen name="ds_control_l">48dp</dimen>
+    <dimen name="ds_touch_target">48dp</dimen>
+
+    <dimen name="ds_icon_s">18dp</dimen>
+    <dimen name="ds_icon_m">24dp</dimen>
+
+    <dimen name="ds_stroke_thin">1dp</dimen>
+    <dimen name="ds_stroke_thick">2dp</dimen>
+
+    <dimen name="ds_button_min_width">120dp</dimen>
+    <dimen name="ds_icon_button_inset_s">8dp</dimen>
+    <dimen name="ds_icon_button_inset_m">4dp</dimen>
+    <dimen name="ds_pill_padding_horizontal">14dp</dimen>
+    <dimen name="ds_fab_label_padding_vertical">6dp</dimen>
+    <dimen name="ds_popup_elevation">8dp</dimen>
+    <dimen name="ds_popup_min_width">200dp</dimen>
+    <dimen name="ds_status_chip_height">24dp</dimen>
+    <dimen name="ds_empty_icon">48dp</dimen>
+    <dimen name="ds_list_row_min_height">56dp</dimen>
+</resources>

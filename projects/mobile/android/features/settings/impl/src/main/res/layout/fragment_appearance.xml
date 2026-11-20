@@ -9,10 +9,10 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:paddingStart="@dimen/ui_screen_padding"
-        android:paddingTop="@dimen/ui_screen_padding"
-        android:paddingEnd="@dimen/ui_screen_padding"
-        android:paddingBottom="@dimen/ui_section_gap">
+        android:paddingStart="@dimen/ds_space_l"
+        android:paddingTop="@dimen/ds_space_l"
+        android:paddingEnd="@dimen/ds_space_l"
+        android:paddingBottom="@dimen/ds_space_xl">
 
         <TextView
             android:layout_width="match_parent"
@@ -21,16 +21,16 @@
             android:textAppearance="?attr/textAppearanceTitleSmall"
             android:textColor="?attr/colorOnSurfaceVariant" />
 
-        <dev.proflyder.home.core.ui.PillSegments
+        <dev.proflyder.home.core.designsystem.PillSegments
             android:id="@+id/appearance_mode"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="@dimen/ui_tile_gap" />
+            android:layout_marginTop="@dimen/ds_space_s" />
 
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="@dimen/ui_section_gap"
+            android:layout_marginTop="@dimen/ds_space_xl"
             android:text="@string/settings_appearance_themes"
             android:textAppearance="?attr/textAppearanceTitleSmall"
             android:textColor="?attr/colorOnSurfaceVariant" />

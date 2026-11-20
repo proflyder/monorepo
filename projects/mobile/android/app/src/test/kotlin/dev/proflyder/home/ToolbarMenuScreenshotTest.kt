@@ -70,14 +70,14 @@ class ToolbarMenuScreenshotTest {
     }
 
     private fun assertSharedMenu(menu: View) {
-        assertEquals(UiR.id.ui_popup_menu_items, menu.id)
+        assertEquals(UiR.id.ds_popup_menu_items, menu.id)
         val rows = menu as ViewGroup
         assertTrue(rows.childCount > 0)
         (0 until rows.childCount).map(rows::getChildAt).forEach { assertRowIcon(it) }
     }
 
     private fun assertRowIcon(row: View) {
-        assertNotNull("row icon", row.findViewById<ImageView>(UiR.id.ui_popup_menu_icon).drawable)
+        assertNotNull("row icon", row.findViewById<ImageView>(UiR.id.ds_popup_menu_icon).drawable)
     }
 
     private fun styleOf(activity: MainActivity, attr: Int): Int {
@@ -88,8 +88,8 @@ class ToolbarMenuScreenshotTest {
 
     private fun openPopup(activity: MainActivity): View? {
         val windows = (shadowOf(activity.windowManager) as ShadowWindowManagerImpl).views
-        return windows.lastOrNull { it.findViewById<View>(UiR.id.ui_popup_menu_items) != null }
-            ?.findViewById(UiR.id.ui_popup_menu_items)
+        return windows.lastOrNull { it.findViewById<View>(UiR.id.ds_popup_menu_items) != null }
+            ?.findViewById(UiR.id.ds_popup_menu_items)
     }
 
     private fun launch(theme: AppTheme): MainActivity {

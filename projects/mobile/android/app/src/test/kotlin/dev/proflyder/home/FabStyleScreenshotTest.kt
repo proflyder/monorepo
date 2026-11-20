@@ -17,7 +17,7 @@ import dev.proflyder.home.core.model.ControlKind
 import dev.proflyder.home.core.model.PowerState
 import dev.proflyder.home.core.model.Scenario
 import dev.proflyder.home.core.theme.AppTheme
-import dev.proflyder.home.core.ui.OutlinedFloatingActionButton
+import dev.proflyder.home.core.designsystem.OutlinedFloatingActionButton
 import dev.proflyder.home.feature.control.ControlItem
 import dev.proflyder.home.feature.control.QuickTile
 import dev.proflyder.home.feature.control.SpeedDialItems

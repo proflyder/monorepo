@@ -4,7 +4,7 @@
     style="@style/Widget.Home.Card"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_marginTop="@dimen/ui_tile_gap"
+    android:layout_marginTop="@dimen/ds_space_s"
     android:clickable="true"
     android:focusable="true"
     tools:ignore="SelectableText">
@@ -48,7 +48,7 @@
                 android:id="@+id/appearance_theme_summary"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/ui_tile_gap_half"
+                android:layout_marginTop="@dimen/ds_space_xs"
                 android:textAppearance="?attr/textAppearanceBodySmall"
                 android:textColor="?attr/colorOnSurfaceVariant" />
 

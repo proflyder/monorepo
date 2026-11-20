@@ -1,26 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="DuplicateStrings">
-    <dimen name="ui_screen_padding">16dp</dimen>
-    <dimen name="ui_section_gap">24dp</dimen>
-    <dimen name="ui_card_radius">24dp</dimen>
-    <dimen name="ui_tile_gap">8dp</dimen>
-    <dimen name="ui_tile_gap_half">4dp</dimen>
-    <dimen name="ui_pill_radius">100dp</dimen>
-    <dimen name="ui_pill_padding_horizontal">14dp</dimen>
-    <dimen name="ui_pill_height">32dp</dimen>
-    <dimen name="ui_pill_gap">4dp</dimen>
+<resources>
     <dimen name="ui_fab_clearance">88dp</dimen>
-    <dimen name="ui_text_input_focus_stroke">2dp</dimen>
-    <dimen name="ui_text_input_stroke">1dp</dimen>
-    <dimen name="ui_text_input_radius">16dp</dimen>
-    <dimen name="ui_card_button_height">44dp</dimen>
-    <dimen name="ui_card_button_min_width">120dp</dimen>
-    <dimen name="ui_card_button_padding">20dp</dimen>
-    <dimen name="ui_save_bar_button_height">48dp</dimen>
-    <dimen name="ui_card_button_radius">16dp</dimen>
-    <dimen name="ui_card_button_stroke">1dp</dimen>
-    <dimen name="ui_device_state_card_stroke">1dp</dimen>
-    <dimen name="ui_fab_label_padding_horizontal">12dp</dimen>
-    <dimen name="ui_fab_label_padding_vertical">6dp</dimen>
-    <dimen name="ui_fab_label_radius">12dp</dimen>
 </resources>

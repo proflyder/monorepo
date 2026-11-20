@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<merge xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    tools:parentTag="android.widget.LinearLayout">
+
+    <ImageView
+        android:id="@+id/ds_row_icon"
+        android:layout_width="@dimen/ds_icon_m"
+        android:layout_height="@dimen/ds_icon_m"
+        android:layout_marginEnd="@dimen/ds_space_l"
+        android:importantForAccessibility="no"
+        android:visibility="gone"
+        app:tint="?attr/colorOnSurfaceVariant" />
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/ds_row_title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textAppearance="?attr/textAppearanceBodyLarge"
+            android:textColor="?attr/colorOnSurface"
+            tools:ignore="SelectableText" />
+
+        <TextView
+            android:id="@+id/ds_row_subtitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textAppearance="?attr/textAppearanceBodyMedium"
+            android:textColor="?attr/colorOnSurfaceVariant"
+            android:visibility="gone"
+            tools:ignore="SelectableText" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/ds_row_value"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="@dimen/ds_space_s"
+        android:maxLines="1"
+        android:textAppearance="?attr/textAppearanceBodyMedium"
+        android:textColor="?attr/colorOnSurfaceVariant"
+        android:visibility="gone"
+        tools:ignore="SelectableText" />
+
+    <com.google.android.material.materialswitch.MaterialSwitch
+        android:id="@+id/ds_row_switch"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="@dimen/ds_space_s"
+        android:visibility="gone" />
+
+    <ImageView
+        android:id="@+id/ds_row_chevron"
+        android:layout_width="@dimen/ds_icon_m"
+        android:layout_height="@dimen/ds_icon_m"
+        android:layout_marginStart="@dimen/ds_space_s"
+        android:importantForAccessibility="no"
+        android:src="@drawable/ds_ic_chevron"
+        android:visibility="gone" />
+</merge>

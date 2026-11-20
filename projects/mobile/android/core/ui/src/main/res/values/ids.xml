@@ -2,5 +2,4 @@
 <resources>
     <id name="home_notice_anchor" />
     <id name="ui_motion_padding_animator" />
-    <id name="ui_device_state_fill" />
 </resources>

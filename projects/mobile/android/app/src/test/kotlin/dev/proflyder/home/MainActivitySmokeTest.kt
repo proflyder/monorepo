@@ -6,7 +6,7 @@ import android.widget.TextView
 import androidx.viewpager2.widget.ViewPager2
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.bottomnavigation.BottomNavigationView
-import dev.proflyder.home.core.ui.PillSegments
+import dev.proflyder.home.core.designsystem.PillSegments
 import dev.proflyder.home.feature.alarms.presentation.AlarmsFragment
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -76,13 +76,13 @@ class MainActivitySmokeTest {
         assertEquals(View.VISIBLE, call.visibility)
         assertEquals(View.VISIBLE, settings.visibility)
 
-        val callIcon = call.findViewById<ImageView>(UiR.id.ui_popup_menu_icon)
-        val settingsIcon = settings.findViewById<ImageView>(UiR.id.ui_popup_menu_icon)
+        val callIcon = call.findViewById<ImageView>(UiR.id.ds_popup_menu_icon)
+        val settingsIcon = settings.findViewById<ImageView>(UiR.id.ds_popup_menu_icon)
         assertNotNull("call row must carry a phone icon", callIcon.drawable)
         assertNotNull("settings row must carry a gear icon", settingsIcon.drawable)
 
-        val callLabel = call.findViewById<TextView>(UiR.id.ui_popup_menu_label)
-        val settingsLabel = settings.findViewById<TextView>(UiR.id.ui_popup_menu_label)
+        val callLabel = call.findViewById<TextView>(UiR.id.ds_popup_menu_label)
+        val settingsLabel = settings.findViewById<TextView>(UiR.id.ds_popup_menu_label)
         assertEquals(activity.getString(R.string.app_call), callLabel.text.toString())
         assertEquals(activity.getString(R.string.app_settings), settingsLabel.text.toString())
     }

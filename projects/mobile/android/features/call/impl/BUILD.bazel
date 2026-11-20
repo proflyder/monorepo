@@ -15,6 +15,7 @@ metro_android_library(
         "//projects/mobile/android/core/model",
         "//projects/mobile/android/core/network",
         "//projects/mobile/android/core/settings",
+        "//projects/mobile/android/core/designsystem",
         "//projects/mobile/android/core/ui",
         "//projects/mobile/android/features/call/api",
         "@maven//:androidx_activity_activity_ktx",

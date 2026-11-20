@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="DuplicateStrings">
+    <string name="ds_catalog_title">Design system</string>
+    <string name="ds_catalog_entry">Design system</string>
+    <string name="ds_catalog_entry_summary">Every component in every variant, size and state (debug builds only)</string>
+    <string name="ds_catalog_buttons">Buttons</string>
+    <string name="ds_catalog_icon_buttons">Icon buttons</string>
+    <string name="ds_catalog_fabs">Floating buttons</string>
+    <string name="ds_catalog_fields">Text fields</string>
+    <string name="ds_catalog_cards">Cards</string>
+    <string name="ds_catalog_chips">Chips and statuses</string>
+    <string name="ds_catalog_lists">Lists and switches</string>
+    <string name="ds_catalog_states">Empty state and device tiles</string>
+    <string name="ds_catalog_action">Action</string>
+    <string name="ds_catalog_delete">Delete</string>
+    <string name="ds_catalog_disabled">Disabled</string>
+    <string name="ds_catalog_loading">Loading</string>
+    <string name="ds_catalog_field_label">Name</string>
+    <string name="ds_catalog_field_placeholder">Kitchen light</string>
+    <string name="ds_catalog_field_helper">Shown on the station</string>
+    <string name="ds_catalog_field_error">Enter a short name</string>
+    <string name="ds_catalog_chat_hint">Message</string>
+    <string name="ds_catalog_card_filled">Filled card</string>
+    <string name="ds_catalog_card_selected">Selected card</string>
+    <string name="ds_catalog_card_state_on">Card of a device that is on</string>
+    <string name="ds_catalog_chip_filter">Lights</string>
+    <string name="ds_catalog_chip_assist">Add scene</string>
+    <string name="ds_catalog_status_error">Error</string>
+    <string name="ds_catalog_status_warning">Warning</string>
+    <string name="ds_catalog_status_success">Online</string>
+    <string name="ds_catalog_status_neutral">Idle</string>
+    <string name="ds_catalog_row_title">Notifications</string>
+    <string name="ds_catalog_row_subtitle">Alarms and reminders</string>
+    <string name="ds_catalog_row_value">On</string>
+    <string name="ds_catalog_empty_text">Nothing here yet</string>
+    <string name="ds_catalog_tile_title">Floor lamp</string>
+    <string name="ds_catalog_tile_on">On</string>
+    <string name="ds_catalog_tile_off">Off</string>
+    <string name="ds_catalog_fab_label">Scenario</string>
+    <string name="ds_catalog_fab_extended">New alarm</string>
+    <string name="ds_catalog_menu">Open menu</string>
+    <string name="ds_catalog_icon_action">Add</string>
+</resources>

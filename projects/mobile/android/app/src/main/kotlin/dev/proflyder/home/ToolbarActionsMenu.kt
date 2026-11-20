@@ -2,7 +2,7 @@ package dev.proflyder.home
 
 import android.view.Gravity
 import android.view.View
-import dev.proflyder.home.core.ui.HomePopupMenu
+import dev.proflyder.home.core.designsystem.HomePopupMenu
 
 internal class ToolbarActionsMenu(
     private val onAction: (Int) -> Unit,

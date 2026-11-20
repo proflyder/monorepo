@@ -15,6 +15,7 @@ metro_android_library(
         "//packages/kotlin/core",
         "//projects/mobile/android/core/navigation",
         "//projects/mobile/android/core/theme",
+        "//projects/mobile/android/core/designsystem",
         "//projects/mobile/android/core/ui",
         "//projects/mobile/android/features/push/api",
         "@maven//:androidx_appcompat_appcompat",

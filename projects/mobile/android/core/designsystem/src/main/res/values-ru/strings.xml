@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="DuplicateStrings">
+    <string name="ds_catalog_title">Дизайн-система</string>
+    <string name="ds_catalog_entry">Дизайн-система</string>
+    <string name="ds_catalog_entry_summary">Все компоненты во всех вариантах, размерах и состояниях (только debug-сборка)</string>
+    <string name="ds_catalog_buttons">Кнопки</string>
+    <string name="ds_catalog_icon_buttons">Кнопки-иконки</string>
+    <string name="ds_catalog_fabs">Плавающие кнопки</string>
+    <string name="ds_catalog_fields">Поля ввода</string>
+    <string name="ds_catalog_cards">Карточки</string>
+    <string name="ds_catalog_chips">Чипы и статусы</string>
+    <string name="ds_catalog_lists">Списки и переключатели</string>
+    <string name="ds_catalog_states">Пустое состояние и плитки устройств</string>
+    <string name="ds_catalog_action">Действие</string>
+    <string name="ds_catalog_delete">Удалить</string>
+    <string name="ds_catalog_disabled">Недоступно</string>
+    <string name="ds_catalog_loading">Загрузка</string>
+    <string name="ds_catalog_field_label">Название</string>
+    <string name="ds_catalog_field_placeholder">Свет на кухне</string>
+    <string name="ds_catalog_field_helper">Показывается на колонке</string>
+    <string name="ds_catalog_field_error">Введите короткое название</string>
+    <string name="ds_catalog_chat_hint">Сообщение</string>
+    <string name="ds_catalog_card_filled">Обычная карточка</string>
+    <string name="ds_catalog_card_selected">Выбранная карточка</string>
+    <string name="ds_catalog_card_state_on">Карточка включённого устройства</string>
+    <string name="ds_catalog_chip_filter">Свет</string>
+    <string name="ds_catalog_chip_assist">Добавить сцену</string>
+    <string name="ds_catalog_status_error">Ошибка</string>
+    <string name="ds_catalog_status_warning">Внимание</string>
+    <string name="ds_catalog_status_success">В сети</string>
+    <string name="ds_catalog_status_neutral">Ожидание</string>
+    <string name="ds_catalog_row_title">Уведомления</string>
+    <string name="ds_catalog_row_subtitle">Будильники и напоминания</string>
+    <string name="ds_catalog_row_value">Вкл.</string>
+    <string name="ds_catalog_empty_text">Здесь пока пусто</string>
+    <string name="ds_catalog_tile_title">Торшер</string>
+    <string name="ds_catalog_tile_on">Включён</string>
+    <string name="ds_catalog_tile_off">Выключен</string>
+    <string name="ds_catalog_fab_label">Сценарий</string>
+    <string name="ds_catalog_fab_extended">Новый будильник</string>
+    <string name="ds_catalog_menu">Открыть меню</string>
+    <string name="ds_catalog_icon_action">Добавить</string>
+</resources>

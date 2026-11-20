@@ -129,8 +129,8 @@ Current device acceptance and remaining work are tracked in
   (a delta is applied only when its `offset` equals the current text length),
   and reconnects with back-off; `401` stops the loop.
 - Insets: the input panel uses `pinAboveKeyboard`, the empty/error states follow
-  the list padding so they stay above the panel; `Widget.Home.ChatInput`
-  is the message field: no underline, bubble radius (`chat_bubble_radius`) on
+  the list padding so they stay above the panel; `Widget.Home.TextInput.Chat`
+  (core/designsystem) is the message field: no underline, `ds_radius_l` on
   all corners, `colorSurfaceContainerHigh` fill, a 1dp `colorStateOn` outline
   only while focused, no floating hint; the same in every theme.
 - Voice: with an empty input the send button is a microphone; hold to record
@@ -1048,7 +1048,7 @@ navigation bar sizes.
 
 Text fields share `Widget.Home.TextInput` (also the theme's `textInputStyle`)
 and look like a small card: a rectangle with 16dp on all four corners
-(`ui_text_input_radius`, never a capsule) on `colorSurfaceContainerHigh`, one
+(`ds_radius_l`, never a capsule) on `colorSurfaceContainerHigh`, one
 tone above the `colorSurfaceContainer` card it sits on, with no underline
 (`boxStrokeWidth` 0). A 1dp `colorOutlineVariant` outline follows the corners
 at rest; focused it becomes 2dp `colorStateOn` (primary in Emerald, cyan in
@@ -1070,22 +1070,23 @@ outline over the box; layouts keep the plain `TextInputLayout` tag and no
   clear-text end icon; the token keeps the password toggle; the speak dialog
   keeps its 500-character counter.
 
-Buttons inside cards follow one rule (`core/ui` styles): every card action
-is 44dp high (`ui_card_button_height`, no insets), as wide as its text with
-20dp side padding but at least 120dp (`ui_card_button_min_width`), aligned to
+Buttons inside cards follow one rule (`core/designsystem` styles, see its
+README): every card action is size M — 40dp high (`ds_control_m`, no insets),
+as wide as its text with 16dp side padding but at least 120dp
+(`ds_button_min_width`), aligned to
 the start of the card content; two actions of one card sit in a row with the
 main one on the right (Connection: **Remove stored token**, then **Save and
-test connection**). It has 16dp corners (`ui_card_button_radius`) and
+test connection**). It has 16dp corners (`ds_radius_l`) and
 `textAppearanceLabelLarge`. The action the screen exists for is
-`Widget.Home.CardButton` (filled: **Save and test connection**); other actions
-are `Widget.Home.CardButton.Tonal` (**Refresh config**, **Save name**,
+`Widget.Home.Button.Filled.M` (**Save and test connection**); other actions
+are `Widget.Home.Button.Tonal.M` (**Refresh config**, **Save name**,
 **Update registration**, permission **Allow**); destructive ones are
-`Widget.Home.CardButton.Danger` (outlined: transparent, 1dp `colorError`
+`Widget.Home.Button.Destructive.M` (outlined: transparent, 1dp `colorError`
 stroke and `colorError` text: **Remove stored token**, shown only while a token
 is stored). Text buttons are not used inside cards, so nothing is indented away
 from the card's content edge. A screen of independent settings with no single
 main action («Phone notifications and find») has no filled button. Editor
-save bars use `Widget.Home.SaveBarButton` (full width, 48dp). Every
+save bars use `Widget.Home.Button.Filled.L` (full width, 48dp). Every
 settings card is `Widget.Home.Card` (filled `colorSurfaceContainer`, no
 stroke) and a card title uses `textAppearanceTitleMedium`.
 
@@ -1111,6 +1112,22 @@ Neon and Emerald, dark and light. It writes
 `insets-<theme>-<dark|light>-{alarm-editor-keyboard,connection,push-settings}.png`
 and `insets-<theme>-home-end.png`.
 
+## Design system
+
+Every visual component, style and token lives in `core/designsystem`
+(depends on `core/theme`; every screen module depends on it). The component
+table, size/variant rules, tokens and how to add a component or a theme are in
+[core/designsystem/README.md](core/designsystem/README.md). `core/ui` keeps
+only non-visual utilities (base fragment/adapter/view model, insets, motion
+helpers, notices, server text). Debug builds show **Design system** in
+Settings: the catalog of every component in every variant, size and state.
+`//projects/mobile/android/core/designsystem:designsystem_test` checks button
+sizes, `colorError` on destructive buttons, one FAB outline in every theme and
+renders the catalog (`catalog-<theme>-<dark|light>-<section>.png`);
+`//projects/mobile/android/app:key_screens_screenshot_test` writes
+`screen-<theme>-<mode>-<screen>.png` for Home, Scenarios, Time, Chat, System,
+Connection and the alarm editor.
+
 ## Themes
 
 Themes are code in `core/theme`:
@@ -1126,7 +1143,7 @@ Themes are code in `core/theme`:
   names changed in the rename; the stored keys stay, so a saved choice is kept
   (`ThemeRegistryTest`, `ThemeNamesTest`).
 - No effect exists in only one theme: themes differ in colour, never in
-  whether an outline, glow or accent is present. Audit (core/theme, core/ui):
+  whether an outline, glow or accent is present. Audit (core/theme, core/designsystem):
   FAB outline was 0dp in Emerald/System and 1dp in Neon, and the FAB glow was
   black in Emerald/System; now every theme has a 1dp outline
   (`theme_fab_stroke`) and a glow in its accent (Emerald/System:
@@ -1134,7 +1151,7 @@ Themes are code in `core/theme`:
   uniform: the on-device card outline (`DeviceStateViews`, `colorStateOn` in
   all themes), selected Appearance card outline, switch, pills, section
   labels. `ThemeEffectsTest` checks it.
-- FABs share one style from `core/ui`: `Theme.Home` sets
+- FABs share one style from `core/designsystem`: `Theme.Home` sets
   `floatingActionButtonStyle` / `extendedFloatingActionButtonStyle` to
   `Widget.Home.(Extended)FloatingActionButton`, which read the theme attrs
   `homeFabStrokeWidth`, `homeFabStrokeColor`, `homeFabGlowColor` and
@@ -1144,7 +1161,7 @@ Themes are code in `core/theme`:
   labels use `Widget.Home.FabLabel` (a `surfaceContainerHigh` pill).
   `FabStyleScreenshotTest` checks a 1dp stroke in every theme, equal strokes
   and unclipped glow.
-- Popup menus share one component, `core/ui` `HomePopupMenu`: a menu resource
+- Popup menus share one component, `core/designsystem` `HomePopupMenu`: a menu resource
   (items with icons) rendered as `ui_popup_menu` — a `colorSurfaceContainer`
   card with the card radius, 48dp rows, 24dp icon on the left,
   `TextAppearance.Home.PopupMenuItem`, `Animation.Home.PopupMenu`. Used by
@@ -1154,7 +1171,7 @@ Themes are code in `core/theme`:
   radius and text) for any framework popup. `toolbar_menu_screenshot_test`
   checks both menus and writes `menu-<key>-{actions,chat-attach,appearance}-dark.png`.
 - No segmented buttons anywhere (`MaterialButtonToggleGroup`, bordered
-  segments): a choice between a few options is `core/ui` `PillSegments`
+  segments): a choice between a few options is `core/designsystem` `PillSegments`
   (Time sections, Appearance mode). `AndroidThemeColorTests` enforces it.
 - `?attr/homeSelectedContentColor` (core/theme) is the text colour of a
   selected pill: `colorPrimary` in Current, cyan in Neon.
@@ -1170,7 +1187,7 @@ Themes are code in `core/theme`:
   `Theme.Home` and in every theme overlay: checked track `colorStateOn`, thumb
   `colorOnStateOn`; unchecked track `colorSurfaceContainerHighest`, thumb
   `colorOnSurfaceVariant`, outline `colorOutline`.
-- `core/ui` `DeviceStateViews` styles every device icon, status and card
+- `core/designsystem` `DeviceStateViews` styles every device icon, status and card
   (Home device cards, group rows, station mini-tiles, volume rows): on is an
   accent-filled icon with `colorOnStateOn` glyph, bold accent status and a
   1dp accent card outline; off is `colorSurfaceContainerHighest` with
@@ -1210,7 +1227,7 @@ Themes are code in `core/theme`:
 
 Пояснения, перенесённые из комментариев исходников (код комментариев не содержит, см. `AGENTS.md`).
 
-- `core/ui/.../OutlinedFloatingActionButton.kt`
+- `core/designsystem/.../OutlinedFloatingActionButton.kt`
   - Material `FloatingActionButton` has no stroke attributes (only `ExtendedFloatingActionButton` does), so this subclass reads `strokeWidth`/`strokeColor` from its style and paints them over the content rect with a `MaterialShapeDrawable` of the same shape. Every plain FAB in layouts uses it so the theme style applies one outline everywhere.
 - Device rows (`item_control_device.xml`, `item_control_device_row.xml`) share `control_device_icon*` and `control_device_text_gap`: the single card padding (16dp) equals group inset + row bleed (8dp + 8dp), so icons and titles line up across card kinds.
 
@@ -1322,12 +1339,12 @@ Themes are code in `core/theme`:
 - `core/ui/src/main/kotlin/dev/proflyder/home/core/ui/Notices.kt`
   - The single way the app shows transient feedback: a rounded tonal pill with a status icon, floating above the view tagged [R.id.home_notice_anchor] so it never covers navigation. A sideways or downward swipe dismisses it; a tap never does.
   - The activity root is not a CoordinatorLayout, so Material never installs a SwipeDismissBehavior: the notice must own the gesture.
-- `core/ui/src/main/kotlin/dev/proflyder/home/core/ui/PillSegments.kt`
+- `core/designsystem/src/main/kotlin/dev/proflyder/home/core/designsystem/PillSegments.kt`
   - A row of compact text pills: the selected one sits on a stadium (the same shape and colour as the bottom navigation indicator) that slides to the newly selected pill. Used for the Time sections and the voice profile, so both switches look identical.
 - `core/ui/src/main/kotlin/dev/proflyder/home/core/ui/ServerText.kt`
   - Resolves a server `LocalizedText.key` to its local resource. Resources are named mechanically after the key: `scheduler.error.not_found` is `@string/server_scheduler_error_not_found` (prefix `server_`, dots become underscores), so adding a server key never …
-- `core/ui/src/main/res/drawable/ui_bg_pill_segment.xml` — Touch feedback of one pill. The selected stadium is drawn by PillSegments itself so it can slide between pills.
-- `core/ui/src/main/res/values/styles.xml`
+- `core/designsystem/src/main/res/drawable/ds_bg_pill_segment.xml` — Touch feedback of one pill. The selected stadium is drawn by PillSegments itself so it can slide between pills.
+- `core/designsystem/src/main/res/values/styles.xml`
   - Large light clock digits, fixed-width so they do not jitter while counting.
 - `detekt.yml` — detekt configuration for the Home Android client.
 - `distribute.sh` — Build the Home Android app and distribute it to Firebase App Distribution.

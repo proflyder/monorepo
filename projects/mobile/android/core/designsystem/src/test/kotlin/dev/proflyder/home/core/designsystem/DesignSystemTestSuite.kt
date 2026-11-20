@@ -1,0 +1,12 @@
+package dev.proflyder.home.core.designsystem
+
+import org.junit.runner.RunWith
+import org.junit.runners.Suite
+
+@RunWith(Suite::class)
+@Suite.SuiteClasses(
+    ButtonStylesTest::class,
+    FabStylesTest::class,
+    CatalogScreenshotTest::class,
+)
+class DesignSystemTestSuite

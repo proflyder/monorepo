@@ -16,7 +16,7 @@ import dev.proflyder.home.core.model.LightControls
 import dev.proflyder.home.core.model.PowerState
 import dev.proflyder.home.core.model.VolumeControls
 import dev.proflyder.home.core.ui.BaseAdapterCallback
-import dev.proflyder.home.core.ui.PillSegments
+import dev.proflyder.home.core.designsystem.PillSegments
 import dev.proflyder.home.feature.control.ControlFilter
 import dev.proflyder.home.feature.control.ControlItem
 import dev.proflyder.home.feature.control.HubCard
