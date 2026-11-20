@@ -42,6 +42,8 @@ internal open class ChatAdapterCallbacks : BaseAdapterCallback<ChatItem>() {
     open fun onImage(media: BubbleMedia) = Unit
 
     open fun bindImage(media: BubbleMedia, target: ImageView) = Unit
+
+    open fun bindWave(media: BubbleMedia, target: VoiceWaveView) = Unit
 }
 
 private typealias ChatHolder = BaseViewHolder<ChatItem, ViewBinding, ChatAdapterCallbacks>
@@ -114,6 +116,8 @@ internal class ChatAdapter(
         private val markdown = ChatMarkdown(markdownStyle(views.root))
 
         init {
+            views.chatImage.outlineProvider = RoundedOutline(views.root.resources.getDimension(R.dimen.chat_image_radius))
+            views.chatImage.clipToOutline = true
             views.chatBubble.setOnLongClickListener { openMenu() }
             views.chatText.setOnLongClickListener { openMenu() }
             views.chatRetry.setOnClickListener { callback.onRetry(item as ChatItem.Bubble) }
@@ -164,7 +168,7 @@ internal class ChatAdapter(
         }
 
         private fun bindText(bubble: ChatItem.Bubble) {
-            val body = if (bubble.mine) bubble.text else markdown.render(bubble.text)
+            val body = markdown.render(bubble.text)
             val shown = if (bubble.state == BubbleState.STREAMING) SpannableStringBuilder(body).append(STREAMING_CARET) else body
             views.chatText.setVisible(bubble.text.isNotEmpty())
             views.chatText.text = shown
@@ -185,6 +189,9 @@ internal class ChatAdapter(
             val voice = bubble.media.firstOrNull { it.kind == ChatAttachmentKind.VOICE }
             val file = bubble.media.firstOrNull { it.kind == ChatAttachmentKind.FILE }
             views.chatImage.setVisible(image != null)
+            views.chatBubble.layoutParams = (views.chatBubble.layoutParams as ConstraintLayout.LayoutParams).apply {
+                width = if (image != null) ConstraintLayout.LayoutParams.MATCH_CONSTRAINT else ConstraintLayout.LayoutParams.WRAP_CONTENT
+            }
             image?.let { callback.bindImage(it, views.chatImage) }
             views.chatVoice.setVisible(voice != null)
             voice?.let { bindVoice(it, bubble.playback) }
@@ -199,7 +206,9 @@ internal class ChatAdapter(
             views.chatVoicePlay.contentDescription = views.root.context.getString(
                 if (playing) R.string.chat_voice_pause else R.string.chat_voice_play,
             )
-            views.chatVoiceProgress.progress = ((playback?.progress ?: 0f) * PROGRESS_MAX).toInt()
+            if (views.chatVoiceWave.tag != voice.key) callback.bindWave(voice, views.chatVoiceWave)
+            views.chatVoiceWave.tag = voice.key
+            views.chatVoiceWave.setProgress(playback?.progress ?: 0f)
             val shown = playback?.takeIf { it.positionMs > 0 }?.positionMs ?: voice.durationMs ?: 0L
             views.chatVoiceDuration.text = DateUtils.formatElapsedTime(shown / MILLIS_PER_SECOND)
         }
@@ -236,7 +245,6 @@ internal class ChatAdapter(
         const val PULSE_MILLIS = 450L
         const val PULSE_STEP_MILLIS = 150L
         const val STREAMING_CARET = " ▍"
-        const val PROGRESS_MAX = 1000
         const val MILLIS_PER_SECOND = 1000L
     }
 }
@@ -275,3 +283,9 @@ internal fun markdownStyle(view: View): MarkdownStyle = MarkdownStyle(
 
 internal fun fileLabel(context: Context, media: BubbleMedia): String =
     "${media.name} · ${Formatter.formatShortFileSize(context, media.size)}"
+
+internal class RoundedOutline(private val radius: Float) : android.view.ViewOutlineProvider() {
+    override fun getOutline(view: View, outline: android.graphics.Outline) {
+        outline.setRoundRect(0, 0, view.width, view.height, radius)
+    }
+}

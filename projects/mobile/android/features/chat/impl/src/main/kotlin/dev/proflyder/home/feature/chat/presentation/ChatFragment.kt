@@ -17,7 +17,9 @@ import dev.proflyder.home.core.model.ChatAttachmentKind
 import dev.proflyder.home.feature.chat.data.LocalAttachment
 import dev.proflyder.home.feature.chat.data.VoiceRecorder
 import java.io.File
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import android.content.ClipboardManager
@@ -188,6 +190,16 @@ class ChatFragment : BaseFragment<FragmentChatBinding>(FragmentChatBinding.Compa
         }
     }
 
+    internal fun loadWave(media: BubbleMedia, target: VoiceWaveView) {
+        target.setLevels(null)
+        viewLifecycleOwner.lifecycleScope.launch { showWave(media, target) }
+    }
+
+    private suspend fun showWave(media: BubbleMedia, target: VoiceWaveView) {
+        val levels = viewModel.mediaFile(media)?.let { withContext(Dispatchers.IO) { VoiceLevels.of(it) } }
+        if (target.tag == media.key) target.setLevels(levels)
+    }
+
     internal fun loadImage(media: BubbleMedia, target: ImageView) {
         target.tag = media.key
         target.setImageDrawable(null)
@@ -281,6 +293,8 @@ class ChatFragment : BaseFragment<FragmentChatBinding>(FragmentChatBinding.Compa
         override fun onImage(media: BubbleMedia) = openImage(media)
 
         override fun bindImage(media: BubbleMedia, target: ImageView) = loadImage(media, target)
+
+        override fun bindWave(media: BubbleMedia, target: VoiceWaveView) = loadWave(media, target)
     }
 
     private inner class Recording : RecordGesture {

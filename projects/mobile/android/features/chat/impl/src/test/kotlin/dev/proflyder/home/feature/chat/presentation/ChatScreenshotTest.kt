@@ -50,7 +50,11 @@ class ChatScreenshotTest {
 
     private class LocalImages : ChatAdapterCallbacks() {
         override fun bindImage(media: BubbleMedia, target: ImageView) {
-            media.path?.let { target.setImageBitmap(decodeThumbnail(File(it), target.layoutParams.width)) }
+            media.path?.let { target.setImageBitmap(decodeThumbnail(File(it), PHOTO_WIDTH)) }
+        }
+
+        override fun bindWave(media: BubbleMedia, target: VoiceWaveView) {
+            target.setLevels(FloatArray(VoiceWaveView.BARS) { 0.2f + 0.8f * kotlin.math.abs(kotlin.math.sin(it * 0.45f)) })
         }
     }
 
