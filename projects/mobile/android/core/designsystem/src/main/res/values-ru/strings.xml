@@ -2,7 +2,7 @@
 <resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="DuplicateStrings">
     <string name="ds_catalog_title">Дизайн-система</string>
     <string name="ds_catalog_entry">Дизайн-система</string>
-    <string name="ds_catalog_entry_summary">Все компоненты во всех вариантах, размерах и состояниях (только debug-сборка)</string>
+    <string name="ds_catalog_entry_summary">Каталог компонентов интерфейса</string>
     <string name="ds_catalog_buttons">Кнопки</string>
     <string name="ds_catalog_icon_buttons">Кнопки-иконки</string>
     <string name="ds_catalog_fabs">Плавающие кнопки</string>

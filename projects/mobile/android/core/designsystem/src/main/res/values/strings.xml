@@ -2,7 +2,7 @@
 <resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="DuplicateStrings">
     <string name="ds_catalog_title">Design system</string>
     <string name="ds_catalog_entry">Design system</string>
-    <string name="ds_catalog_entry_summary">Every component in every variant, size and state (debug builds only)</string>
+    <string name="ds_catalog_entry_summary">Catalog of interface components</string>
     <string name="ds_catalog_buttons">Buttons</string>
     <string name="ds_catalog_icon_buttons">Icon buttons</string>
     <string name="ds_catalog_fabs">Floating buttons</string>
