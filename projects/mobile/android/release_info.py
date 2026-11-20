@@ -1,31 +1,4 @@
 #!/usr/bin/env python3
-"""Read or write the metadata of a distributable Home APK.
-
-`_android.yml` builds, tests and signs the APK once, then writes a
-`release-info.json` next to it with the fields App Distribution needs later:
-
-    {
-      "apk": "app-release.apk",
-      "sha256": "…",
-      "package": "dev.proflyder.home",
-      "firebase_app_id": "1:…:android:…",
-      "version_code": 1762700000,
-      "version_name": "0.1.0-abc1234",
-      "commit": "…",
-      "run_url": "…"
-    }
-
-The upload job (`android-distribute`) reads it so it needs only the Firebase
-service account: it never sees the signing key or `google-services.json`.
-
-Usage:
-    release_info.py app-id <google-services.json> [package]
-    release_info.py write --apk <apk> --google-services <json>
-                          --version-code <int> --version-name <name>
-                          --output <release-info.json>
-                          [--commit <sha>] [--run-url <url>]
-    release_info.py read <release-info.json> <key>
-"""
 from __future__ import annotations
 
 import argparse
@@ -77,7 +50,6 @@ def write(args: argparse.Namespace) -> None:
 
 
 def resign(args: argparse.Namespace) -> None:
-    """Point release-info.json at the signed APK (name and digest)."""
     if not os.path.isfile(args.apk):
         sys.exit(f"missing {args.apk}")
     with open(args.input, encoding="utf-8") as handle:

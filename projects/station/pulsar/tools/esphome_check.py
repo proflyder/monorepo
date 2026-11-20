@@ -1,67 +1,4 @@
 #!/usr/bin/env python3
-"""ESPHome API check harness for pulsar (aioesphomeapi, see requirements.txt).
-
-    esphome_check.py --host H --port P [--psk BASE64] <command> [options]
-
-Commands:
-  dump        DeviceInfo, entities (in the order the device lists them), user services and the
-              initial states, one stable text line each, for diff. --mask replaces what differs
-              between builds and hosts: version, compilation time and MAC; the state of uptime,
-              version and illuminance (published every 2 s by api_selftest); state and presence
-              (missing_state) of the Wi-Fi signal and the IP address.
-  commands    one command per entity type, waiting for the echo state where the device sends one.
-  voice-fake  subscribes to the voice assistant and plays HA's side of a pipeline run: on start
-              RUN_START, STT_END, INTENT_END, TTS_END (--tts-url), RUN_END; prints the audio.
-  announce    --media-url URL [--text T] [--start-conversation]: waits for AnnounceFinished.
-  timer       --event started|updated|cancelled|finished --seconds N [--id ID] [--name NAME].
-  set-key     --key BASE64 (empty: clear): NoiseEncryptionSetKeyRequest.
-
-Scenarios against the daemon (a test instance: PULSAR_PORT_OFFSET, service stopped):
-  scenario-voice     announcement (--media-url) with start_conversation; the daemon then starts a
-                     pipeline, answered by a fake run (RUN_START, --listen-s, STT_END,
-                     INTENT_START, --think-s, INTENT_END, TTS_END with --tts-url, RUN_END); waits
-                     --speak-s for the answer to play out and checks that no other run starts
-                     (continue_conversation=0) and the media player ends IDLE.
-  scenario-timer     timer STARTED (--seconds, default 70 here), --hold-s, then FINISHED and
-                     --ring-s of ringing. Nothing in the API stops the ring (button, wake word or
-                     "стоп" do; it ends by itself after 15 min): stop the instance afterwards.
-  scenario-media     play --media-url, pause, resume, volume --media-volume (default 0.1, at
-                     most 0.2), mute, unmute, volume back (at most 0.2), stop; each checked on
-                     the media player state.
-  scenario-entities  every switch, number, select, the text, the light and the actions, each
-                     checked on its echo state, then the previous states restored. Under the
-                     mute button's mute "microphones" only gets "on", which must come back off.
-                     The Zigbee role select only gets its current option (another one restarts
-                     the daemon and writes the radio), the Zigbee buttons are not pressed, auto
-                     update is only set to its current state.
-  scenario-persist   --count N (default 20) commands to the number --entity (led_speed or
-                     clock_text_speed), --interval-ms apart (default 50), each checked on its
-                     echo; the last value is printed and left set (state.conf debounce: one
-                     write ~1 s after the last change). No volume or mute command is sent.
-                     --install: then an update check and the install of the release offered,
-                     waited for up to --install-s (default 300); the daemon exits after it.
-                     Refused on the live API port 6053 (it would replace the installed daemon)
-                     unless --allow-live-port is given; use a test instance (16053).
-  scenario-followup  continued conversation (follow-up duration --followup-s, default 3, set first
-                     and restored at the end). Announcement (--media-url) with start_conversation,
-                     a fake run with STT_VAD_START (not in --case no-vad) answering with
-                     continue_conversation=1 and TTS_END (--tts-url), then the follow-up run
-                     (RUN_START, STT_START at t0) per --case:
-                       speech    STT_VAD_START at t0+N-0.5: no stop until t0+N+3, the run ends
-                                 normally, no third start;
-                       silence   the daemon must stop the run within [t0+N+0.5, t0+N+2];
-                       no-text   ERROR stt-no-text-recognized at t0+1.5: no stop;
-                       no-vad    first run without STT_VAD_START: no stop until t0+N+3, then
-                                 ERROR stt-no-text-recognized;
-                       off       duration 0: no follow-up start at all;
-                       set-zero  duration set to 0 at t0+1: stop within 1.5 s.
-                     Whether the close was quiet is read in the daemon log ("follow-up: ...").
-The LED ring and clock states (LISTENING, THINKING, SPEAKING, TIMER_RING, the timer) are read on
-the station meanwhile (sysfs); the --*-s pauses leave time for that.
-
-Exit status 1 when an expected echo or the voice stop did not come.
-Never point it at a station Home Assistant is using (AGENTS.md, docs/stations.md).
-"""
 
 import argparse
 import asyncio
@@ -80,7 +17,6 @@ from aioesphomeapi import (
 )
 
 MASKED_DEVICE_INFO = {"project_version", "compilation_time", "mac_address"}
-# object_id -> masked fields of its state
 MASKED_STATES = {
     "ip_address": {"state", "missing_state"},
     "wifi_signal": {"state", "missing_state"},
@@ -123,7 +59,6 @@ async def connect(args):
 
 
 async def collect_states(client, keys, settle=0.5, limit=5.0):
-    """First state of every key, in arrival order (initial states of SubscribeStates)."""
     states = {}
     changed = asyncio.Event()
 
@@ -154,7 +89,6 @@ async def cmd_dump(client, args):
         by_key[e.key] = e
     for s in services:
         print(line(s))
-    # Events (button) have no initial state.
     keys = {e.key for e in entities if type(e).__name__ != "EventInfo"}
     for s in await collect_states(client, keys):
         oid = by_key[s.key].object_id if s.key in by_key else "?"
@@ -189,13 +123,11 @@ async def cmd_commands(client, args):
 
     await echo("switch", "microphones", lambda k: client.switch_command(k, False))
     await echo("switch", "microphones", lambda k: client.switch_command(k, True))
-    # Models without a clock (Mini 2 on current firmware, Mini) have no clock entities.
     if "clock_brightness" in ents:
         await echo("number", "clock_brightness", lambda k: client.number_command(k, 150))
     await echo("number", "led_speed", lambda k: client.number_command(k, 1.5))
     if "clock_face" in ents:
         await echo("select", "clock_face", lambda k: client.select_command(k, ents["clock_face"].options[-1]))
-    # Not an option of the select: refused, no echo expected.
     await echo(
         "select", "music_visualization", lambda k: client.select_command(k, "no such style"), 1.0, expect=False
     )
@@ -205,7 +137,6 @@ async def cmd_commands(client, args):
     await echo("media", "media_player", lambda k: client.media_player_command(k, command=MediaPlayerCommand.PAUSE))
     await echo("light", "ring", lambda k: client.light_command(k, state=True, brightness=0.5, rgb=(1.0, 0.5, 0.0)))
     await echo("light", "ring", lambda k: client.light_command(k, effect=ents["ring"].effects[-1]))
-    # Joins whatever Zigbee network permits joining when the daemon runs the router role.
     if "zigbee_join" in ents and args.zigbee_join:
         await echo("button", "zigbee", lambda k: client.button_command(ents["zigbee_join"].key))
     client.update_command(ents["firmware"].key, UpdateCommand.CHECK)
@@ -241,7 +172,7 @@ async def cmd_voice_fake(client, args):
             print("events: RUN_START STT_END INTENT_END TTS_END RUN_END sent")
 
         asyncio.get_running_loop().create_task(pipeline())
-        return 0  # audio over the API
+        return 0
 
     async def stop(abort):
         print(f"stop: abort={abort} audio chunks={audio['chunks']} bytes={audio['bytes']}")
@@ -261,7 +192,6 @@ async def cmd_voice_fake(client, args):
 
 
 async def cmd_announce(client, args):
-    # AnnounceFinished goes to the voice pipeline owner only: subscribe first, as HA does.
     async def start(*_):
         return 0
 
@@ -291,7 +221,6 @@ async def cmd_set_key(client, args):
     print(f"set-key: success={ok}")
 
 class Watch:
-    """Every state the device sends, per key, with a counter to wait for a new one."""
 
     def __init__(self, client):
         self.latest = {}
@@ -307,7 +236,6 @@ class Watch:
         self.event.set()
 
     async def until(self, key, pred, timeout, after=None):
-        """First state of `key` matching `pred` (only states after the `after` count if given)."""
         loop = asyncio.get_running_loop()
         deadline = loop.time() + timeout
         while True:
@@ -330,7 +258,6 @@ async def entities_of(client):
 
 
 async def expect(w, name, key, send, pred, timeout=3.0):
-    """Sends, then waits for a new state of `key` matching `pred`."""
     before = w.seq.get(key, 0)
     send()
     s = await w.until(key, pred, timeout, after=before)
@@ -469,10 +396,9 @@ async def cmd_scenario_entities(client, args):
     switches = ["microphones", "clock_display", "nearest_station_answers", "voice_indication",
                 "command_right_after_wake_word"]
     if "hardware_mic_mute" in k and st("hardware_mic_mute"):
-        # Under the mute button's mute "on" is refused: the switch comes back off.
         await expect(w, "switch microphones -> True (refused: mute button)", k["microphones"], lambda: client.switch_command(k["microphones"], True), lambda s: not s.state)
         switches.remove("microphones")
-    if "clock_auto_brightness" in k:  # only when the light sensor opened at start
+    if "clock_auto_brightness" in k:
         switches.append("clock_auto_brightness")
     for oid in switches:
         if oid not in k:
@@ -620,7 +546,6 @@ async def followup_case(client, w, key, args, n):
         FAILURES.append("followup: no pipeline start after the announcement")
         return
 
-    # Первый run: HA просит продолжить разговор.
     await asyncio.sleep(0.3)
     send(E.VOICE_ASSISTANT_RUN_START)
     send(E.VOICE_ASSISTANT_STT_START)
@@ -647,7 +572,6 @@ async def followup_case(client, w, key, args, n):
         FAILURES.append("followup: no follow-up start after the answer")
         return
 
-    # Follow-up-реплика: окно отсчитывается от STT_START.
     await asyncio.sleep(0.3)
     send(E.VOICE_ASSISTANT_RUN_START)
     send(E.VOICE_ASSISTANT_STT_START)
@@ -709,7 +633,6 @@ async def followup_case(client, w, key, args, n):
     print(f"starts={len(starts)} stops={[rel(t) for t in stops]}")
 
 
-# Values the daemon keeps as sent (inside its clamp, clock_text_speed in steps of 50).
 PERSIST_VALUES = {
     "led_speed": [round(0.5 + 0.1 * i, 1) for i in range(36)],
     "clock_text_speed": [100.0 + 50 * i for i in range(39)],
@@ -737,8 +660,6 @@ async def cmd_scenario_persist(client, args):
         print(f"last {args.entity}={v:g} echoed at {time.strftime('%H:%M:%S')}")
     if not args.install:
         return
-    # update_attempt=<tag> is written at once when the install starts; the install ends with the
-    # daemon's exit (a test instance is not restarted: no supervisor).
     fw = ents["firmware"].key
     offer = await expect(
         w,
@@ -782,7 +703,6 @@ COMMANDS = {
 }
 
 
-# The running daemon's ESPHome API port (a test instance listens at PULSAR_PORT_OFFSET + 6053).
 LIVE_API_PORT = 6053
 
 

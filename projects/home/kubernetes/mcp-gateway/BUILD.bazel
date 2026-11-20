@@ -1,9 +1,3 @@
-# Plain-file package: Flux renders these templates (postBuild substitution), and
-# the deploy contracts/tests read them as data.
-# The catalog and bb allow-list are validated by the real Rust validators in
-# //solutions/mcp-gateway/crates/mcp-gateway:deploy_contract_tests, which consumes
-# these templates as data.
-
 package(default_visibility = ["//visibility:public"])
 
 filegroup(

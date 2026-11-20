@@ -6,9 +6,6 @@ exports_files([
     "toolchain.bzl",
 ])
 
-# Station cross-build targets. The matching cc_toolchain rules live in the
-# generated @zig_0_14_1 repository (platform/bazel/zig/repositories.bzl); these
-# platforms select them together with rules_rust's extra target triples.
 platform(
     name = "aarch64_linux",
     constraint_values = [

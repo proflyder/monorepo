@@ -1,8 +1,5 @@
 package(default_visibility = ["//visibility:public"])
 
-# The strict per-method params schema of this plugin, shared with the MCP
-# gateway's wire contract. Bazel exposes it as data so both sides check one
-# hand-written source of truth.
 filegroup(
     name = "contract_params",
     srcs = ["contract/params.json"],

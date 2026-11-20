@@ -135,7 +135,6 @@ class PrepareTests(unittest.TestCase):
             self.assertEqual([h["partition"] for h in entries["p"]["targets"]], ["train", "guard", "val"])
             self.assertEqual({h["partition"] for h in entries["t"]["targets"]}, {"test"})
             self.assertEqual({e["partition"] for e in entries.values() if e["block"] == "background"}, {"train", "val", "test"})
-            # Mutated audio is rejected before features/training are produced.
             with (recordings / "p.wav").open("ab") as f: f.write(b"changed")
             with self.assertRaisesRegex(ValueError, "changed"):
                 prepare.prepare(recordings, align, asr)

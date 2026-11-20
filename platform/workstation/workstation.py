@@ -1,20 +1,4 @@
 #!/usr/bin/env python3
-"""Workstation access to OpenBao — the only source of secrets.
-
-Run through mise (see mise.toml), e.g. ``mise run secrets:file home/ingress.env``:
-
-  login            human login (userpass + TOTP) → per-machine operator token
-  pull             SSH keys/config into ~/.ssh/home-lab, private notes into secrets/
-  file NAME...     restore legacy secrets/<NAME> files (0600); --all, dir prefixes
-  clean NAME...    remove them again (--all)
-  check            compare catalog.json with the paths that exist in OpenBao
-  doctor           tools, OpenBao token, SSH to the home nodes, gh login
-
-Local state (git-ignored): secrets/openbao/{addr,operator.token,username}. In a
-linked worktree the main checkout's state is used; restored files still land in
-this checkout's secrets/. BAO_ADDR / BAO_TOKEN override the state. Values never
-go to stdout or argv.
-"""
 from __future__ import annotations
 
 import argparse
@@ -57,7 +41,6 @@ def main_checkout(root: pathlib.Path = ROOT) -> pathlib.Path | None:
 
 
 def state_dir(secrets_dir: pathlib.Path) -> pathlib.Path:
-    """secrets/ holding openbao/{addr,operator.token}: this checkout, else the main one."""
     if (secrets_dir / "openbao").is_dir():
         return secrets_dir
     main = main_checkout()
@@ -66,15 +49,11 @@ def state_dir(secrets_dir: pathlib.Path) -> pathlib.Path:
     return secrets_dir
 
 
-# --------------------------------------------------------------------------
-# Catalog and encodings
-# --------------------------------------------------------------------------
 def load_catalog(path: pathlib.Path = CATALOG) -> dict:
     return json.loads(path.read_text())
 
 
 def decode(value: str, encoding: str) -> bytes:
-    """Rebuild original file bytes from a KV string value."""
     raw = value.encode()
     if encoding == "text":
         return raw
@@ -126,7 +105,6 @@ def extract_tar(data: bytes, dest_parent: pathlib.Path) -> None:
 
 
 def prune_empty(base: pathlib.Path, start: pathlib.Path) -> None:
-    """Remove now-empty parent directories up to (not including) base."""
     base = base.resolve()
     current = start
     while current != base and base in current.parents:
@@ -137,9 +115,6 @@ def prune_empty(base: pathlib.Path, start: pathlib.Path) -> None:
         current = current.parent
 
 
-# --------------------------------------------------------------------------
-# OpenBao
-# --------------------------------------------------------------------------
 class Bao:
     def __init__(self, addr: str, token: str | None = None):
         self.addr, self.token = addr.rstrip("/"), token
@@ -211,13 +186,10 @@ def operator(secrets_dir: pathlib.Path, renew: bool = True) -> Bao:
         raise Error("no OpenBao address: run `mise run secrets:login` first")
     bao = Bao(addr, token(secrets_dir))
     if renew:
-        bao.renew()  # periodic token: regular use keeps it alive
+        bao.renew()
     return bao
 
 
-# --------------------------------------------------------------------------
-# Commands
-# --------------------------------------------------------------------------
 def cmd_login(args, out=print, ask=input, secret=getpass.getpass) -> int:
     addr = args.addr or address(args.secrets_dir) or ask(
         "OpenBao address (https://vault.<home-domain>): ").strip()
@@ -317,7 +289,6 @@ FNOX = ROOT / "fnox.toml"
 
 
 def fnox_refs(path: pathlib.Path = FNOX) -> list[dict]:
-    """Every secret reference in fnox.toml as {profile, var, path, field}."""
     import tomllib
     config = tomllib.loads(path.read_text())
     providers = {name: p["path"].removeprefix("secret/") for name, p in config["providers"].items()}
@@ -333,11 +304,6 @@ def fnox_refs(path: pathlib.Path = FNOX) -> list[dict]:
 
 
 def cmd_token(args, out=print) -> int:
-    """Print the operator token for fnox (`credential_command`); renews it first.
-
-    Only fnox calls this: the value goes to its stdout pipe, never to a terminal
-    or log of ours.
-    """
     bao = operator(args.secrets_dir)
     out(bao.token)
     return 0

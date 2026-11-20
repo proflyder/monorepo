@@ -3,8 +3,6 @@ load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_clippy_test", "rust_libr
 
 package(default_visibility = ["//visibility:public"])
 
-# Kept in sync with [package].version in Cargo.toml. Bazel does not derive
-# env!("CARGO_PKG_VERSION"); without this the deployed binary reports 0.0.0.
 PACKAGE_VERSION = "0.1.0"
 
 LIB_DEPS = [
@@ -61,8 +59,6 @@ rust_test(
     deps = LIB_DEPS + ["@crates//:tempfile"],
 )
 
-# The sender integration test starts fake OAuth/FCM servers and signs with a
-# throwaway key from testdata (see the Gitleaks allowlist).
 rust_test(
     name = "sender_tests",
     size = "small",

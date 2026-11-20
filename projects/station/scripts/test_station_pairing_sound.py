@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-"""Tests for the local sound-pairing CLI (not the Telegram bot)."""
 from __future__ import annotations
 
 import shutil

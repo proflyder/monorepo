@@ -1,16 +1,4 @@
 #!/usr/bin/env python3
-"""OpenBao KV helper for the ha-config-sync bootstrap.
-
-Only the owner bootstrap uses it. Values are read/written through the
-workstation operator token (`secrets/openbao/operator.token`); nothing is
-printed except a status word and the non-secret Flux settings on `settings`.
-
-Commands:
-  settings              print HAOS_IP and NODE_LAN_IP as JSON
-  has FIELD             exit 0 when the field exists and is non-empty
-  get-key FILE          write ssh_private_key to FILE (mode 0600)
-  put-key KEYFILE KH    merge ssh_private_key/known_hosts with GET->CAS POST
-"""
 from __future__ import annotations
 
 import json
@@ -21,10 +9,9 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parents[4]
 sys.path.insert(0, str(ROOT / "platform" / "workstation"))
 
-import workstation as ws  # noqa: E402
+import workstation as ws
 
 PATH = "k8s/home-assistant/ha-config-sync"
-# The same app settings Flux substitutes into the ha-config-sync manifests.
 SETTINGS = "k8s/flux-system/app-settings"
 
 

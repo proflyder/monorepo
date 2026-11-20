@@ -16,7 +16,6 @@ DEPS = [
     "@crates//:zip",
 ]
 
-# Pure modules (scripts, detection, deploy plan) plus the adb/discover/console ports.
 rust_library(
     name = "pulsar_installer",
     crate_name = "pulsar_installer",
@@ -30,15 +29,12 @@ rust_library(
     deps = DEPS,
 )
 
-# The binary keeps the installer's name; `crate_name` is the valid Rust identifier.
 rust_binary(
     name = "pulsar-install",
     srcs = ["src/main.rs"],
     crate_name = "pulsar_install",
     edition = "2024",
     lint_config = ":workspace_lints",
-    # The station triples add debuginfo to every aarch64 build; the installer is a
-    # user-facing tool and does not need symbols or line tables.
     rustc_flags = [
         "-C",
         "debuginfo=0",
@@ -48,8 +44,6 @@ rust_binary(
     deps = DEPS + [":pulsar_installer"],
 )
 
-# Golden fixtures generated from the Go installer before it was removed; the tests read
-# them through include_str!/include_bytes!, so they are compile_data of this target.
 rust_test(
     name = "unit_tests",
     crate = ":pulsar_installer",
@@ -59,7 +53,6 @@ rust_test(
     deps = DEPS + ["@crates//:serde_json"],
 )
 
-# Mirrors the root [workspace.lints] through the crate's `[lints] workspace = true`.
 extract_cargo_lints(
     name = "workspace_lints",
     manifest = "Cargo.toml",

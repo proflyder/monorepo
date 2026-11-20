@@ -1,9 +1,4 @@
 #!/usr/bin/env python3
-"""GPU-only bounded personalization or full training from random initialization.
-
-Run inside the existing trainer environment. Original weights/features are read-only;
-personal data, checkpoints and export remain under the private run directory.
-"""
 import argparse
 import hashlib
 import importlib.util
@@ -26,28 +21,14 @@ def negative_partition(entry, start, end):
 
 
 def negative_key(entry, partition):
-    """Feature bucket for a negative window.
-
-    Station false positives keep a separate bucket so they are not diluted by
-    the rest of the hard negatives; other entries keep the existing keys.
-    """
     if entry.get("station_false_positive"):
         return "station_" + partition + "_neg"
     return ("hard_" if entry.get("hard_negative") else "") + partition + "_neg"
 
 
 def mixture_buckets(batch, *, hard, station, synthetic_hard, extra):
-    """Batch composition as ``(source, key, label, count)`` tuples.
-
-    ``source`` selects the feature array group (``real``, ``synthetic`` or
-    ``extra``) instead of carrying the arrays themselves, so the mixture can be
-    unit-tested without TensorFlow/NumPy. Counts always sum to ``batch``; an
-    impossible batch size raises instead of silently yielding a short batch.
-    """
     if extra:
         if station:
-            # Extra voice keeps the v27 shares; the hard-negative slot splits
-            # evenly between personal hard negatives and station false positives.
             if batch % 16:
                 raise ValueError("Batch must divide into sixteen for station and additional voice")
             if hard:
@@ -68,7 +49,6 @@ def mixture_buckets(batch, *, hard, station, synthetic_hard, extra):
                            ("synthetic", "train_neg", 0, batch // 8),
                            ("extra", "train_neg", 0, batch // 8)]
         else:
-            # Half positive, half negative; each new voice supplies both labels.
             buckets = [("real", "train_pos", 1, batch // 8),
                        ("synthetic", "train_pos", 1, batch // 4),
                        ("extra", "train_pos", 1, batch // 8),
@@ -86,8 +66,6 @@ def mixture_buckets(batch, *, hard, station, synthetic_hard, extra):
             buckets.append(("real", "hard_train_neg", 0,
                             batch // (8 if (synthetic_hard or station) else 4)))
         if station:
-            # Station false positives get their own bucket; without personal
-            # hard negatives they take the whole hard-negative share.
             buckets.append(("real", "station_train_neg", 0,
                             batch // (8 if hard else 4)))
         if synthetic_hard:
@@ -98,7 +76,6 @@ def mixture_buckets(batch, *, hard, station, synthetic_hard, extra):
 
 
 def mixture_recipe(*, hard, station, synthetic_hard, extra):
-    """Human-readable description of ``mixture_buckets`` for provenance."""
     if extra:
         if station:
             if hard:
@@ -134,7 +111,6 @@ def mixture_recipe(*, hard, station, synthetic_hard, extra):
 
 
 def mixture_shares(batch, *, hard, station, synthetic_hard, extra):
-    """Per-source batch shares for provenance, derived from ``mixture_buckets``."""
     names = {("real", "train_pos"): "real_positive",
              ("synthetic", "train_pos"): "old_positive",
              ("extra", "train_pos"): "extra_positive",
@@ -150,12 +126,6 @@ def mixture_shares(batch, *, hard, station, synthetic_hard, extra):
 
 
 def merge_manifests(primary, extras):
-    """Merge extra manifests (e.g. station wake events) into the run manifest.
-
-    Identifiers must be unique so a recording can never be counted twice with
-    two different split decisions. The primary manifest keeps its metadata and
-    the merged sources are recorded for provenance.
-    """
     if not isinstance(primary, dict) or primary.get("schema") != 1:
         raise ValueError("Primary manifest schema must be 1")
     records = list(primary.get("records") or [])
@@ -197,7 +167,6 @@ def protects_speech(reference, candidate, blocks, cutoff=.9):
 
 
 def balanced_indices(labels, limit):
-    """Deterministic round-robin coverage without validation/test examples."""
     from collections import defaultdict, deque
     groups = defaultdict(deque)
     for index, label in enumerate(labels):
@@ -211,7 +180,6 @@ def balanced_indices(labels, limit):
 
 
 def parse_pointwise_filters(text):
-    """Parse the comma-separated MixedNet pointwise widths."""
     parts = [item.strip() for item in str(text).split(",")]
     if any(not item for item in parts):
         raise ValueError("Pointwise filters must not contain empty widths")
@@ -233,15 +201,6 @@ def _declared_architecture(cfg, changed=False):
 
 
 def apply_architecture(cfg, pointwise=None, first_conv=None, from_scratch=False):
-    """Apply optional MixedNet width overrides to a trainer config.
-
-    Streaming contract keys (kernels, stride, spectrogram length, residual
-    blocks) are deliberately untouched. Without an explicit override the config
-    is preserved verbatim, so non-MixedNet architectures keep their own fields.
-    A width that differs from the config the checkpoint was trained with cannot
-    be warm-started: Keras would either fail on shape mismatch or silently load
-    a partial model, so the guard requires random initialization instead.
-    """
     updated = dict(cfg)
     if pointwise is None and first_conv is None:
         return updated, _declared_architecture(updated)
@@ -270,7 +229,6 @@ def apply_architecture(cfg, pointwise=None, first_conv=None, from_scratch=False)
 
 
 def model_parameter_counts(model):
-    """Measured topology count; HDF5 file bytes are not a parameter count."""
     import numpy as np
     total = int(model.count_params())
     trainable = int(sum(int(np.size(weight)) for weight in model.trainable_weights))
@@ -278,12 +236,10 @@ def model_parameter_counts(model):
 
 
 def export_signature(details):
-    """Plain-Python description of an exported tensor; NumPy ints are not JSON-safe."""
     return {"shape": [int(value) for value in details["shape"]], "dtype": str(details["dtype"])}
 
 
 def freeze_batchnorm(model, batchnorm_type):
-    """Freeze normalization before compile, including nested model layers."""
     count, visited = 0, set()
     def visit(layer):
         nonlocal count
@@ -300,17 +256,11 @@ def freeze_batchnorm(model, batchnorm_type):
 
 
 def feature_window_bounds(end_seconds, count, length=204):
-    # Microfrontend's first frame covers [0,30ms], then one frame every 10ms.
     end = min(count, int((end_seconds - .03 + 1e-7) / .01) + 1)
     return (end - length, end) if end >= length else None
 
 
 def continuous_examples(audio, requests, extractor, rng, variants=32):
-    """Extract whole-track features once per augmentation, then slice windows.
-
-    requests contain only train/val labels. Test recordings never enter here.
-    The returned partition is authoritative; augmented validation is prohibited.
-    """
     if any(r["partition"] not in {"train", "val"} for r in requests):
         raise ValueError("Continuous extraction accepts train/val only")
     import numpy as np
@@ -391,7 +341,6 @@ def main():
     architecture.update(config_path=str(config_path),
                         config_sha256=hashlib.sha256(config_path.read_bytes()).hexdigest())
     cfg.update(model_name=args.model_name, learning_rate=args.learning_rate, version=args.manifest_version)
-    # Redirect all exports away from the old model and from the repo root.
     trainer.OUTPUT_DIR = run / "training-output"
     output = trainer.OUTPUT_DIR / cfg["model_name"]
     modeldir, featdir = output / "model", output / "mww_features"
@@ -467,9 +416,6 @@ def main():
             if part == "test":
                 continue
             if e.get("hard_negative") and e.get("mined_events"):
-                # Match positive examples: reset the frontend on a short PCM
-                # context around the actual false wake, not on an entire track.
-                # Dense whole-track sampling otherwise mostly trains on pauses.
                 for event in e["mined_events"]:
                     for variant in range(int(e.get("augment_variants", 32))):
                         shift = 0. if variant == 0 else float(rng.uniform(-.3, .1))
@@ -482,8 +428,6 @@ def main():
                             continue
                         clip = audio[max(0, start):end].astype(np.float32)
                         if start < 0:
-                            # Only explicitly negative audio is padded: retain an
-                            # early false wake rather than silently discarding it.
                             clip = np.pad(clip, (-start, 0))
                         if partition == "train" and variant:
                             clip *= float(rng.uniform(.55, 1.6))
@@ -519,13 +463,10 @@ def main():
                     end = int((target["end"] + after) * 16000)
                     start = end - 224 * 160
                     if start < 0 or end > len(audio):
-                        # Preserve actual room PCM; edge targets without full context
-                        # are excluded, not padded with falsely labelled silence.
                         continue
                     clip = audio[start:end].astype(np.float32)
                     if part == "train" and v:
                         clip *= float(rng.uniform(.55, 1.6))
-                        # Small speed variations; never fabricate whisper from normal speech.
                         ratio = float(rng.uniform(.95, 1.05))
                         clip = np.interp(np.arange(0, len(clip), ratio), np.arange(len(clip)), clip)
                     clip = np.clip(clip, -32768, 32767).astype(np.int16)
@@ -553,8 +494,6 @@ def main():
                                    ("val_pos", "positive_val"), ("val_neg", "negative_val")]}
     extra = None
     if args.extra_features:
-        # Extra voice needs personal hard negatives; station false positives can
-        # take that batch slot when the personal manifest has none.
         if synthetic_hard or (not hard and not station):
             raise ValueError("Additional voice mixture requires real hard negatives, without synthetic_hard_features")
         extra = {key: np.load(args.extra_features / (name + ".npy"), mmap_mode="r")
@@ -594,7 +533,6 @@ def main():
                   metrics=[tf.keras.metrics.BinaryAccuracy(), tf.keras.metrics.Recall(), tf.keras.metrics.Precision()])
     batch = cfg["batch_size"]
     arrays = {"real": real, "synthetic": synthetic, "extra": extra}
-    # Fail before TF builds a dataset from an impossible batch size.
     mixture_buckets(batch, hard=hard, station=station,
                     synthetic_hard=synthetic_hard, extra=extra is not None)
     def batches():
@@ -614,13 +552,10 @@ def main():
     if args.from_scratch:
         train = train.unbatch().map(trainer._make_spec_augment_fn(204, cfg),
                                    num_parallel_calls=4).batch(batch).prefetch(2)
-    # Validation uses held-out personal targets and a separate background take.
-    # The user's test recordings are never accessed by training or checkpoint selection.
     vp = real["val_pos"]
     vn = real["val_neg"]
     xval = np.concatenate([vp, vn, np.asarray(synthetic["val_pos"][:200]), np.asarray(synthetic["val_neg"][:200])])
     yval = np.concatenate([np.ones(len(vp)), np.zeros(len(vn)), np.ones(200), np.zeros(200)])
-    # Bound positive length imbalance without copying or augmenting validation audio.
     valweights = np.concatenate([np.full(len(vp), 200 / len(vp)), np.full(len(vn), 200 / len(vn)), np.ones(400)])
     if hard:
         hn = real["hard_val_neg"]
@@ -717,7 +652,6 @@ def main():
     (run / "training-provenance.json").write_text(json.dumps(provenance, indent=2))
     model.load_weights(str(best))
     model.save_weights(str(modeldir / (cfg["model_name"] + "_mww.weights.h5")))
-    # Cover every recorded speech style rather than taking only the first track.
     indices = balanced_indices(train_pos_blocks, 250)
     calibration = np.concatenate([real["train_pos"][indices], np.asarray(synthetic["train_pos"][:250])])
     provenance["calibration"] = {"real_train_indices": indices,
@@ -740,8 +674,6 @@ def main():
                             "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
                             "input": export_signature(inp), "output": export_signature(out)}
     (run / "training-provenance.json").write_text(json.dumps(provenance, indent=2))
-    # A model version is complete only after the export, all epoch weights and
-    # its recipe have been copied and verified in the private append-only registry.
     with tempfile.TemporaryDirectory(prefix="registry-export-", dir=run) as temporary:
         stage = Path(temporary)
         for source in modeldir.rglob("*.h5"):

@@ -9,9 +9,6 @@ metro_android_library(
     srcs = glob(["src/main/kotlin/**/*.kt"]),
     custom_package = "dev.proflyder.home.feature.push.impl",
     manifest = "src/main/AndroidManifest.xml",
-    # rules_android does not merge a library manifest into the APK unless the
-    # library exports it: this module declares the FCM service, the ringing
-    # foreground service and the ringing activity.
     exports_manifest = 1,
     resource_files = glob(["src/main/res/**"]),
     view_binding = True,
@@ -39,7 +36,6 @@ metro_android_library(
     ],
 )
 
-# Pure JVM tests: payload contract with the server and the ring timing.
 kt_android_local_test(
     name = "impl_test",
     srcs = [
@@ -55,9 +51,6 @@ kt_android_local_test(
     ],
 )
 
-# The device identity is what keeps one server row across FCM token
-# rotations; the publisher test pins that contract, and the store test pins the
-# persisted owner-visible name.
 kt_android_local_test(
     name = "identity_test",
     srcs = [
@@ -95,8 +88,6 @@ kt_android_local_test(
     ],
 )
 
-# The local received-message log: order, retention, clear and the message
-# mapping the FCM service writes. The real DataStore file is used.
 kt_android_local_test(
     name = "history_test",
     srcs = ["src/test/kotlin/dev/proflyder/home/feature/push/NotificationHistoryStoreTest.kt"],
@@ -129,16 +120,12 @@ kt_android_local_test(
     ],
 )
 
-# Robolectric resolves SDK 35 to this pinned preinstrumented jar.
 android_all_dir(
     name = "robolectric_android_all_sdk35",
     jar = "@maven//:org_robolectric_android_all_instrumented",
     jar_name = "android-all-instrumented-15-robolectric-13954326-i7.jar",
 )
 
-# The ring must be loud without changing the ringer mode: silent and vibrate
-# survive start/stop, the alarm volume is restored and a repeated start reuses
-# one MediaPlayer.
 kt_android_local_test(
     name = "audio_test",
     srcs = ["src/test/kotlin/dev/proflyder/home/feature/push/FindPhoneAudioTest.kt"],
@@ -168,8 +155,6 @@ kt_android_local_test(
     ],
 )
 
-# The channels are the loud path: a wrong importance would silently mute the
-# ring, so the real NotificationManager is inspected on Robolectric.
 kt_android_local_test(
     name = "channels_test",
     srcs = ["src/test/kotlin/dev/proflyder/home/feature/push/PushChannelsTest.kt"],
@@ -203,7 +188,6 @@ kt_android_local_test(
     ],
 )
 
-# The permission screen in the dark theme. The rendered PNG is review evidence.
 kt_android_local_test(
     name = "settings_screenshot_test",
     srcs = ["src/test/kotlin/dev/proflyder/home/feature/push/presentation/PushSettingsScreenshotTest.kt"],

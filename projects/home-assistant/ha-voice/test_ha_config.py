@@ -1,11 +1,4 @@
 #!/usr/bin/env python3
-"""Static, fast tests for the Home Assistant voice package.
-
-These tests do not need a running HA instance.  They catch the failures that
-are expensive to discover through the satellite: broken YAML, unknown
-entities/scripts, malformed Jinja, intent/sentence drift and regressions in the
-alarm/music state machine.
-"""
 from __future__ import annotations
 
 import json
@@ -24,9 +17,8 @@ HA = ROOT / "projects" / "home-assistant" / "ha-voice"
 
 
 class UniqueKeyLoader(yaml.SafeLoader):
-    """SafeLoader that rejects duplicate mapping keys (PyYAML silently wins)."""
 
-    def construct_mapping(self, node, deep=False):  # type: ignore[no-untyped-def]
+    def construct_mapping(self, node, deep=False):
         mapping: dict[Any, Any] = {}
         for key_node, value_node in node.value:
             key = self.construct_object(key_node, deep=deep)
@@ -41,11 +33,11 @@ class UniqueKeyLoader(yaml.SafeLoader):
         return mapping
 
 
-def _secret(loader, node):  # type: ignore[no-untyped-def]
+def _secret(loader, node):
     return "__SECRET__"
 
 
-def _include(loader, node):  # type: ignore[no-untyped-def]
+def _include(loader, node):
     return [f"__INCLUDE__{node.value}"]
 
 
@@ -75,8 +67,6 @@ REST = load_yaml(HA / "rest_commands.yaml")
 
 
 def yaml_files() -> list[Path]:
-    # sync.yaml is the ha-config-sync delivery manifest, not Home Assistant
-    # configuration; test_sync_manifest.py owns it.
     files = [path for path in HA.rglob("*.yaml") if path.name != "sync.yaml"]
     files += [
         ROOT / "projects" / "home-assistant" / "configs" / "00-installer-config.yaml",
@@ -85,7 +75,6 @@ def yaml_files() -> list[Path]:
 
 
 def walk(value: Any):
-    """Yield every nested scalar/container in a YAML tree."""
     yield value
     if isinstance(value, dict):
         for k, v in value.items():
@@ -174,9 +163,6 @@ class YamlTests(unittest.TestCase):
 
 class MediaUrlTests(unittest.TestCase):
     def test_alarm_media_is_fetchable_from_home_assistant(self):
-        # Live incident: the chime/ringtone URL used a documentation TEST-NET
-        # host, so the ESPHome ffmpeg proxy timed out and the alarm was silent.
-        # HA must fetch its own local media from loopback.
         text = "\n".join(strings(SCRIPTS))
         self.assertNotIn("192.0.2.", text)
         self.assertIn("http://127.0.0.1:8123/local/alarm_chime.wav", text)
@@ -280,7 +266,7 @@ class TemplateTests(unittest.TestCase):
     def test_every_template_parses(self):
         try:
             from jinja2 import Environment, TemplateSyntaxError
-        except ImportError:  # pragma: no cover - optional local dependency
+        except ImportError:
             self.skipTest("jinja2 is not installed")
         env = Environment()
         count = 0
@@ -319,8 +305,6 @@ class IntentTests(unittest.TestCase):
                 for phrase in phrases:
                     for raw in re.findall(r"\{([^{}]+)\}", phrase):
                         list_name = raw.split(":", 1)[0]
-                        # Free-text wildcards (for example a music query) are
-                        # intentionally not backed by a closed list.
                         if list_name in {"query", "timer_name", "text"}:
                             continue
                         self.assertIn(list_name, lists, f"{intent}: undefined list {list_name} in {phrase!r}")
@@ -345,7 +329,6 @@ class IntentTests(unittest.TestCase):
             ),
             "StationWorkMode must queue the native «Сел работать» scenario",
         )
-        # The native definitions live in the scheduler, not in HA YAML.
         self.assertNotIn("work_mode", SCRIPTS)
         definitions = load_yaml(
             ROOT / "projects" / "home" / "kubernetes" / "scheduler" / "scenarios" / "work_mode.json"
@@ -432,10 +415,8 @@ class IntentTests(unittest.TestCase):
         self.assertIn("rest_command.scenario_rpc", services(script))
         self.assertIn("ListScenarios", dump)
         self.assertIn("RunScenario", dump)
-        # Definitions live in the scheduler: HA must not edit or create them.
         for forbidden in ("CreateScenario", "UpdateScenario", "DeleteScenario"):
             self.assertNotIn(forbidden, dump)
-        # An unknown label is a warning, never a guess or a silent HA action.
         self.assertIn("system_log.write", services(script))
         self.assertIn("idempotencyKey", dump)
         self.assertIn("context.id", dump)
@@ -478,7 +459,6 @@ class IntentTests(unittest.TestCase):
     def test_cancel_has_bare_phrases_and_no_side_effects(self):
         cancel = INTENTS["StationCancel"]
         self.assertEqual(services(cancel), [])
-        # Recognized "отмена" ends locally: no spoken answer and no Hermes fallback.
         self.assertNotIn("speech", cancel)
         phrases = set()
         for data in self.sentence_data:
@@ -609,7 +589,6 @@ class AlarmMusicStateMachineTests(unittest.TestCase):
 
 
 class MusicCascadeTests(unittest.TestCase):
-    """Contract tests for search -> play, route safety and candidate memory."""
 
     @classmethod
     def setUpClass(cls):
@@ -777,8 +756,6 @@ class AssistSatelliteRecoveryTests(unittest.TestCase):
         self.assertIn("01M5TAMM4T0CH5RASFJR8MSKT7", dump)
 
 
-# Options HA accepts for a `text` selector; anything else disables the script
-# at load time ("not a valid option"), which no other check here would catch.
 TEXT_SELECTOR_OPTIONS = {
     "multiline", "type", "prefix", "suffix", "autocomplete", "multiple",
 }
@@ -795,7 +772,6 @@ class SelectorOptionTests(unittest.TestCase):
 
 
 class StationSpeakTests(unittest.TestCase):
-    """The catalog "speak on the station" action calls this script."""
 
     SATELLITE = "assist_satellite.iandeks_stantsiia_midi_assist_satellite"
 
@@ -820,8 +796,6 @@ class StationSpeakTests(unittest.TestCase):
         calls = services(script)
         self.assertIn("assist_satellite.announce", calls)
         self.assertIn("script.schedule_announce", calls)
-        # tts.speak on a plain media player leaves the Sendspin group; the
-        # announce path is the duck-safe one.
         self.assertNotIn("tts.speak", calls)
         dump = yaml.safe_dump(script, allow_unicode=True)
         self.assertIn(self.SATELLITE, dump)
@@ -842,7 +816,6 @@ class StationSpeakTests(unittest.TestCase):
 
 
 def _walk(value: Any) -> list[Any]:
-    """Every dict/list node of a parsed script, in source order."""
     if isinstance(value, dict):
         return [value] + [node for child in value.values() for node in _walk(child)]
     if isinstance(value, list):
@@ -864,15 +837,12 @@ class InputContractTests(unittest.TestCase):
         self.assertEqual(numbers["alarm_volume"]["max"], 1)
         self.assertEqual(selects["music_route"]["options"], ["Music Assistant", "Spotify Connect"])
         self.assertNotIn("alarm_repeat", selects)
-        # No legacy alarm datetimes remain; the only helper is the komp
-        # shutdown request marker.
         self.assertEqual(set(dates), {"komp_off_requested"})
         self.assertNotIn("alarm_next", dates)
         self.assertNotIn("alarm_snooze_until", dates)
 
 
 class VoiceProfileTests(unittest.TestCase):
-    """Pin the voice-profile state, its catalogue switch and local intents."""
 
     PROFILE = "input_select.ricardo_voice_profile"
     SWITCH = "switch.ricardo_work_profile"
@@ -905,8 +875,6 @@ class VoiceProfileTests(unittest.TestCase):
         self.assertIn(
             {"platform": "homeassistant", "event": "start"}, automation["trigger"]
         )
-        # The station select may not exist yet: the condition skips the call instead of
-        # failing the run.
         cond = automation["condition"][0]["value_template"]
         self.assertIn(self.STATION_COLOR, cond)
         self.assertIn("'unknown', 'unavailable'", cond)
@@ -961,7 +929,7 @@ class VoiceProfileTests(unittest.TestCase):
 
         try:
             from jinja2 import Environment
-        except ImportError:  # pragma: no cover - optional local dependency
+        except ImportError:
             self.skipTest("jinja2 is not installed")
         env = Environment()
         env.globals["is_state"] = lambda entity, value: entity == self.PROFILE and value == "Рабочий"
@@ -999,7 +967,7 @@ class VoiceProfileTests(unittest.TestCase):
     def test_profile_query_answer_reflects_the_current_option(self):
         try:
             from jinja2 import Environment
-        except ImportError:  # pragma: no cover - optional local dependency
+        except ImportError:
             self.skipTest("jinja2 is not installed")
         template = INTENTS["StationVoiceProfileQuery"]["speech"]["text"]
         cases = (
@@ -1013,15 +981,8 @@ class VoiceProfileTests(unittest.TestCase):
 
 
 class CurrencyRateTests(unittest.TestCase):
-    """Pin the currency-bot API field mapping and the Russian TTS text.
 
-    currency-bot stores kurs.kz `sell` as the rate when YOU BUY currency and
-    `buy` as the rate when YOU SELL. The API keeps those names, so the voice
-    text must say «купить — sell», «продать — buy». The JSON shapes here match
-    `GET /api/latest` from solutions/currency-bot/crates/currency-bot/src/api/history.rs.
-    """
-
-    NOW = datetime(2026, 10, 31, 17, 0, 0, tzinfo=ZoneInfo("Asia/Almaty"))  # 12:00Z
+    NOW = datetime(2026, 10, 31, 17, 0, 0, tzinfo=ZoneInfo("Asia/Almaty"))
 
     SAMPLE = {
         "timestamp": "2026-10-31T12:00:00Z",
@@ -1129,7 +1090,7 @@ class CurrencyRateTests(unittest.TestCase):
         self.assertNotIn("Данные от", result["text"])
 
     def test_old_data_appends_almaty_time(self):
-        content = dict(self.SAMPLE, timestamp="2026-10-31T08:00:00Z")  # 13:00 Almaty
+        content = dict(self.SAMPLE, timestamp="2026-10-31T08:00:00Z")
         result = self.render_currency(content, currency="usd")
         self.assertEqual(result["status"], "ok")
         self.assertTrue(result["text"].endswith(" Данные от 13:00."), result["text"])
@@ -1190,11 +1151,6 @@ class CurrencyRateTests(unittest.TestCase):
 
 
 class KompPowerTests(unittest.TestCase):
-    """Pin the wired desktop «комп»: WoL, ping state and restricted SSH.
-
-    Real host/MAC/user never appear in tracked files: they only live in HA
-    `secrets.yaml`, so every assertion here uses the `__SECRET__` placeholder.
-    """
 
     BINARY_SENSOR = "binary_sensor.komp_v_seti"
     SWITCH = "switch.komp"
@@ -1234,7 +1190,7 @@ class KompPowerTests(unittest.TestCase):
     def _render(self, template: str, online: bool, off_requested_seconds: int | None = None) -> str:
         try:
             from jinja2 import Environment
-        except ImportError:  # pragma: no cover - optional local dependency
+        except ImportError:
             self.skipTest("jinja2 is not installed")
         env = Environment()
         base = datetime(2026, 11, 3, 12, 0, 0, tzinfo=timezone.utc)
@@ -1267,13 +1223,9 @@ class KompPowerTests(unittest.TestCase):
         self.assertEqual(sensor["name"], "Комп в сети")
         self.assertEqual(sensor["unique_id"], "komp_online")
         self.assertEqual(sensor["device_class"], "connectivity")
-        # The whole command (busybox ping + the 1/0 wrapper) comes from secrets:
-        # command_line has no way to splice `!secret` into a longer command.
         self.assertEqual(sensor["command"], "__SECRET__")
         self.assertEqual(sensor["payload_on"], "1")
         self.assertEqual(sensor["payload_off"], "0")
-        # 10 s: Windows stays pingable for 1–2 minutes after shutdown, and a
-        # 30 s poll made «включи комп» answer «Комп уже включён».
         self.assertEqual(sensor["scan_interval"], 10)
         self.assertNotIn("platform", sensor, "legacy platform YAML is not supported anymore")
 
@@ -1283,7 +1235,6 @@ class KompPowerTests(unittest.TestCase):
         sensor = sensors["komp_unlocked"]
         self.assertEqual(sensor["name"], "Комп разблокирован")
         self.assertEqual(sensor["device_class"], "lock")
-        # HA lock device class: on = unlocked/open, off = locked/closed.
         self.assertEqual(sensor["payload_on"], "unlocked")
         self.assertEqual(sensor["payload_off"], "locked")
         self.assertEqual(sensor["scan_interval"], 30)
@@ -1292,14 +1243,12 @@ class KompPowerTests(unittest.TestCase):
             "{{ is_state('binary_sensor.komp_v_seti', 'on') }}",
         )
         command = self._squash(sensor["command"])
-        # The command itself is gated too: no SSH attempt while the PC is off.
         self.assertIn("is_state('binary_sensor.komp_v_seti', 'on')", command)
         self.assertIn("echo offline", command)
         self.assertIn("status", command)
         self.assertIn("ssh -i /config/.ssh/komp_ed25519", command)
         self.assertIn("{{ states('input_text.komp_ssh_target') }}", command)
         self.assertNotIn("@", command)
-        # SSH only ever receives the same single word from the wrapper.
         self.assertTrue(command.startswith('sh -c "{% if '))
         self.assertTrue(command.endswith('status{% else %}echo offline{% endif %}"'))
 
@@ -1316,13 +1265,8 @@ class KompPowerTests(unittest.TestCase):
         self.assertEqual(switch["unique_id"], "komp")
         self.assertEqual(switch["state"], "{{ is_state('binary_sensor.komp_v_seti', 'on') }}")
 
-        # A one-time logon grant is issued first, then WoL. The grant step is
-        # best-effort: a wakegrant outage must still wake the machine.
         self.assertEqual(services(switch["turn_on"]),
                          ["rest_command.wakegrant_issue", "wake_on_lan.send_magic_packet"])
-        # The grant is issued only when the PC is down or shutting down, never
-        # for an already running session: a second line of defence after the
-        # KompOn intent.
         on_dump = yaml.safe_dump(switch["turn_on"], allow_unicode=True)
         self.assertIn(self.BINARY_SENSOR, on_dump)
         self.assertIn("continue_on_error: true", on_dump)
@@ -1332,7 +1276,6 @@ class KompPowerTests(unittest.TestCase):
         )
         mac = wol["data"]["mac"]
         self.assertEqual(mac, "__SECRET__", "MAC must come from secrets.yaml")
-        # Compact catalogue/Android control: no role label, plain switch.
         self.assertNotIn("label", yaml.safe_dump(switch, allow_unicode=True))
         self.assertEqual(services(switch["turn_off"]), ["script.komp_shutdown"])
 
@@ -1381,7 +1324,6 @@ class KompPowerTests(unittest.TestCase):
                     self.assertIn(option, command)
                 self.assertTrue(command.endswith(" " + word), f"{name} must end with {word!r}")
                 self.assertNotIn("@", command, "user@host must come from the secret target")
-                # Only the two words the Windows wrapper accepts.
                 self.assertNotIn("shutdown", commands["komp_cancel_shutdown"].split(target)[-1])
 
     def test_ssh_target_helper_is_initialised_from_secrets(self):
@@ -1392,8 +1334,6 @@ class KompPowerTests(unittest.TestCase):
     def test_scripts_call_the_restricted_commands(self):
         shutdown = SCRIPTS["komp_shutdown"]
         cancel = SCRIPTS["komp_cancel_shutdown"]
-        # The request timestamp is written before SSH: the ping sensor lags, and
-        # voice intents rely on this value to answer «выключается».
         self.assertEqual(
             services(shutdown),
             ["input_datetime.set_datetime", "shell_command.komp_shutdown"],
@@ -1405,7 +1345,6 @@ class KompPowerTests(unittest.TestCase):
             services(cancel),
             ["shell_command.komp_cancel_shutdown", "input_datetime.set_datetime"],
         )
-        # Empty/missing target secret must not launch a half-built ssh command.
         for script in (shutdown, cancel):
             dump = yaml.safe_dump(script, allow_unicode=True)
             self.assertIn(self.TARGET_INPUT, dump)
@@ -1424,8 +1363,6 @@ class KompPowerTests(unittest.TestCase):
             services(unlock),
             ["rest_command.wakegrant_issue_unlock", "homeassistant.update_entity"],
         )
-        # Both refresh the lock sensor after the action, without waiting for
-        # the 30 s poll.
         for name, script in (("komp_lock", lock), ("komp_unlock", unlock)):
             with self.subTest(refresh=name):
                 self.assertEqual(
@@ -1439,13 +1376,10 @@ class KompPowerTests(unittest.TestCase):
                 self.assertIn(self.BINARY_SENSOR, dump)
                 self.assertIn("value_template", dump)
                 self.assertEqual(script["mode"], "single")
-        # Locking also refuses an unset SSH target, like the shutdown script;
-        # unlock never depends on the SSH target at all.
         lock_dump = yaml.safe_dump(lock, allow_unicode=True)
         self.assertIn(self.TARGET_INPUT, lock_dump)
         self.assertIn("unavailable", lock_dump)
         self.assertNotIn(self.TARGET_INPUT, yaml.safe_dump(unlock, allow_unicode=True))
-        # Unlocking a powered-off PC is a no-op, and neither action wakes it.
         for script in (lock, unlock):
             self.assertNotIn("wake_on_lan.send_magic_packet", yaml.safe_dump(script, allow_unicode=True))
 
@@ -1459,8 +1393,6 @@ class KompPowerTests(unittest.TestCase):
         for entity, button in buttons.items():
             with self.subTest(entity=entity):
                 self.assertTrue(button["unique_id"])
-                # The shared `komp` prefix is what the Android catalogue uses
-                # to put both buttons into the switch.komp device group.
                 self.assertTrue(entity.split(".", 1)[1].startswith("komp_"))
 
     def test_intents_are_local_and_reference_the_switch_entities(self):
@@ -1477,7 +1409,6 @@ class KompPowerTests(unittest.TestCase):
         on_dump = yaml.safe_dump(INTENTS["KompOn"], allow_unicode=True)
         self.assertIn(self.SWITCH, on_dump)
         self.assertIn(self.OFF_INPUT, on_dump)
-        # Voice must go through the switch: direct WoL skipped the wakegrant.
         self.assertNotIn("wake_on_lan.send_magic_packet", on_dump)
         self.assertEqual(services(INTENTS["KompOff"]), ["script.komp_shutdown"])
         self.assertIn(self.OFF_INPUT, yaml.safe_dump(INTENTS["KompOff"], allow_unicode=True))
@@ -1502,8 +1433,6 @@ class KompPowerTests(unittest.TestCase):
         starting = "Включаю комп. Он загрузится примерно за минуту."
         self.assertEqual(self._render(on, False), starting)
         self.assertEqual(self._render(on, True), "Комп уже включён.")
-        # Sensor still on, but a shutdown was requested 2 minutes ago: the PC is
-        # going off, so wake it (the live «Комп уже включён» defect).
         self.assertEqual(self._render(on, True, off_requested_seconds=120), starting)
         self.assertEqual(self._render(on, True, off_requested_seconds=600), "Комп уже включён.")
 
@@ -1517,7 +1446,6 @@ class KompPowerTests(unittest.TestCase):
             self._render(off, True),
             "Выключу комп через минуту. Скажите «отмени выключение компа», если передумали.",
         )
-        # A second request inside the 60 s window must not reschedule shutdown.
         self.assertEqual(self._render(off, True, off_requested_seconds=30), "Комп уже выключается.")
         self.assertEqual(
             self._render(off, True, off_requested_seconds=180),
@@ -1567,8 +1495,6 @@ class KompPowerTests(unittest.TestCase):
             {"KompOn", "KompOff", "KompCancelOff", "KompUnlock", "KompLock", "KompStatus"},
         )
 
-        # No phrase is reused by another intent (duplicate detection also runs
-        # globally), and the light intents cannot swallow «комп».
         others: dict[str, str] = {}
         for data in self.sentence_files_data():
             for intent, body in data.get("intents", {}).items():
@@ -1600,7 +1526,6 @@ class KompPowerTests(unittest.TestCase):
             for match in ipv4.finditer(text):
                 address = match.group(0)
                 with self.subTest(path=str(path), address=address):
-                    # Loopback (local media), wildcard bind and TEST-NET only.
                     self.assertTrue(
                         address.startswith(("127.", "192.0.2.")) or address == "0.0.0.0",
                         f"unexpected literal address {address}",

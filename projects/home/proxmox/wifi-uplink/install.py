@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-"""Install a previously tested 4-address Wi-Fi bridge uplink on Proxmox."""
 import argparse
 from datetime import datetime, timezone
 import os

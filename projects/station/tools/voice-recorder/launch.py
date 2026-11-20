@@ -1,4 +1,3 @@
-"""Launch using ignored local configuration, without copying keys or printing values."""
 import json
 import os
 from pathlib import Path

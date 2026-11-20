@@ -3,7 +3,6 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
-# Telegram Bot API sendMessage with HTML chunks.
 DEPS = [
     "//packages/rust/home-secret:home_secret",
     "//packages/rust/home-tls:home_tls",

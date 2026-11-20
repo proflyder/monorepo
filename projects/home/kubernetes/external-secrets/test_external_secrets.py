@@ -1,9 +1,3 @@
-"""Contracts for the OpenBao -> External Secrets Operator migration.
-
-These tests are static: they protect the wiring (store, paths, ownership) so a
-later edit cannot silently point a project at a different OpenBao path or let a
-deploy script write an application Secret again.
-"""
 import re
 import unittest
 from pathlib import Path
@@ -44,24 +38,18 @@ class ExternalSecretsContracts(unittest.TestCase):
                     target = doc["spec"]["target"]
                     ns = doc["metadata"]["namespace"]
                     name = doc["metadata"]["name"]
-                    # Same name/namespace/keys: consumers need no change.
                     self.assertEqual(target["name"], name)
                     self.assertEqual(doc["spec"]["secretStoreRef"]["name"], "openbao")
                     self.assertEqual(doc["spec"]["secretStoreRef"]["kind"], "ClusterSecretStore")
                     self.assertEqual(doc["spec"]["refreshInterval"], "1h")
-                    # Adopt the existing Secret in place; keep it on removal.
                     self.assertEqual(target["creationPolicy"], "Owner")
                     self.assertEqual(target["deletionPolicy"], "Retain")
                     extract = doc["spec"]["dataFrom"][0]["extract"]["key"]
-                    # One OpenBao entry per Secret: k8s/<namespace>/<name>.
                     self.assertEqual(extract, f"k8s/{ns}/{name}")
                     found[(ns, name)] = extract
                 self.assertEqual(found, expected)
 
     def test_alertmanager_config_reads_the_hermes_bot_and_owner_chat(self):
-        # The one deliberate cross-namespace read: Alertmanager alerts and
-        # Hermes chat share one dedicated bot, so both the token and the owner
-        # chat id come from k8s/home-assistant/hermes-environment.
         path = ROOT / "projects/home/kubernetes/observability/manifests/external-secret-alertmanager-telegram.yaml"
         docs = [d for d in yaml.safe_load_all(path.read_text()) if d]
         self.assertEqual(len(docs), 1)
@@ -80,21 +68,17 @@ class ExternalSecretsContracts(unittest.TestCase):
                                 .replace("{{", "").replace("}}", ""))
         routes = config["route"]["routes"]
         self.assertEqual(config["route"]["receiver"], "null")
-        # Watchdog goes to the external dead-man switch, not to Telegram.
         self.assertEqual(routes[0]["receiver"], "heartbeat")
         self.assertEqual(routes[0]["matchers"], ['alertname = "Watchdog"'])
         self.assertEqual(routes[0]["group_wait"], "0s")
         self.assertEqual(routes[0]["group_interval"], "1m")
         self.assertEqual(routes[0]["repeat_interval"], "5m")
-        # InfoInhibitor stays suppressed; it must not reach the heartbeat.
         self.assertEqual(routes[1]["receiver"], "null")
         self.assertEqual(routes[1]["matchers"], ['alertname = "InfoInhibitor"'])
         self.assertEqual(routes[2]["receiver"], "telegram")
         receivers = {receiver["name"]: receiver for receiver in config["receivers"]}
         webhook = receivers["heartbeat"]["webhook_configs"][0]
         self.assertIs(webhook["send_resolved"], False)
-        # A bounded attempt lets Alertmanager retry within group_interval; the
-        # 0.34 http_config has no keep-alive switch, so this is the mitigation.
         self.assertEqual(webhook["timeout"], "10s")
         self.assertNotIn("keep_alive", webhook["http_config"])
         self.assertEqual(webhook["http_config"]["authorization"]["type"], "Bearer")
@@ -102,15 +86,11 @@ class ExternalSecretsContracts(unittest.TestCase):
         self.assertIn("{{ .heartbeat_url | trim }}", raw)
         self.assertIn("{{ .heartbeat_token | trim }}", raw)
         self.assertNotIn('Watchdog|InfoInhibitor', raw)
-        # The message layout comes from the mounted template file.
         self.assertIn('{{ `{{ template "telegram.home.message" . }}` }}', raw)
         self.assertIn("/etc/alertmanager/configmaps/alertmanager-templates/*.tmpl", raw)
-        # The owner id is the first allow-list entry and doubles as the chat id.
         self.assertIn('index (splitList "," .chat_ids) 0', raw)
         tmpl = (ROOT / "projects/home/kubernetes/observability/alertmanager/telegram.tmpl").read_text()
         self.assertIn('{{ define "telegram.home.message" -}}', tmpl)
-        # Each alert carries a fingerprint prefix so a Telegram reply can be
-        # resolved by mcp-gateway's infra_alert.
         self.assertIn('{{ .Fingerprint | reReplaceAll "^(.{12}).*$" "$1" }}', tmpl)
         self.assertIn("ответьте на это сообщение", tmpl)
         values = yaml.safe_load(
@@ -153,7 +133,6 @@ class ExternalSecretsContracts(unittest.TestCase):
                            versions).group(1)
         for section in ("image", "webhook", "certController"):
             block = values["image"] if section == "image" else values[section]["image"]
-            # The literal in the values file must match the reviewed pin.
             self.assertEqual(block["tag"], f"{tag}@{digest}")
 
     def test_operator_and_store_are_owned_by_flux(self):
@@ -173,8 +152,6 @@ class ExternalSecretsContracts(unittest.TestCase):
                                    (ROOT / "projects/home/kubernetes/versions.sh").read_text()).group(1))
 
     def test_deploy_script_only_applies_application_secrets(self):
-        # The operator, the store and infrastructure ExternalSecrets are
-        # Flux-owned; the manual script must not touch them any more.
         text = (ESO_DIR / "deploy.sh").read_text()
         self.assertNotIn("helm upgrade", text)
         self.assertNotIn("clustersecretstore.yaml", text)
@@ -197,7 +174,6 @@ class ExternalSecretsContracts(unittest.TestCase):
             self.assertNotRegex(text, r"kubectl[^\n]*\bcreate\b[^\n]*\bsecret\b")
 
     def test_infrastructure_secrets_are_declared_next_to_their_flux_unit(self):
-        # The infra ExternalSecrets are applied by Flux, not by deploy.sh.
         for rel in ("projects/home/kubernetes/ingress/routes/external-secret-cloudflare.yaml",
                     "projects/home/kubernetes/observability/manifests/external-secret-grafana-admin.yaml",
                     "projects/home/kubernetes/observability/manifests/external-secret-alertmanager-telegram.yaml",
@@ -205,8 +181,6 @@ class ExternalSecretsContracts(unittest.TestCase):
             self.assertTrue((ROOT / rel).is_file(), rel)
 
     def test_flux_owns_externalsecrets_and_ci_never_applies_them(self):
-        # `deploy-home` no longer applies manifests at all: it only pins the
-        # image digests, so ESO readiness is a Flux health check now.
         workflow = (ROOT / ".github/workflows/deploy-home.yml").read_text()
         self.assertNotIn("Verify External Secrets are Ready", workflow)
         self.assertNotIn("environment: Home", workflow)

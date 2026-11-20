@@ -29,16 +29,12 @@ metro_android_library(
     ],
 )
 
-# Robolectric resolves SDK 35 to this pinned preinstrumented jar.
 android_all_dir(
     name = "robolectric_android_all_sdk35",
     jar = "@maven//:org_robolectric_android_all_instrumented",
     jar_name = "android-all-instrumented-15-robolectric-13954326-i7.jar",
 )
 
-# Both settings screens in the dark theme. The rendered PNGs are review
-# evidence for the settings hub (icons, subtitles) and the history list
-# (type icon, relative time, deep-link marker) plus its empty state.
 kt_android_local_test(
     name = "screens_screenshot_test",
     srcs = ["src/test/kotlin/dev/proflyder/home/feature/settings/presentation/SettingsScreensScreenshotTest.kt"],

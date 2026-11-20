@@ -1,30 +1,4 @@
 #!/usr/bin/env python3
-"""Sendspin test server for pulsar.
-
-Drives a Sendspin *client* (the speaker, e.g. sendspin-cpp inside `sendspin_probe`) the way
-Music Assistant does: the server dials the client's WebSocket endpoint
-(`ws://<host>:<port>/sendspin`, server-initiated connection), runs the Noise handshake with
-the sentinel PSK (unpaired access) and then:
-
-  1. prints the client's hello (client_id, name, roles, supported formats),
-  2. streams a gentle 440 Hz sine (-20 dBFS) once per codec in --codecs (FLAC, then PCM by
-     default), with the group STOPPED for ~2 s between the runs,
-  3. sends player volume/mute commands during the first stream (never above 20 %),
-  4. publishes group/update playing/stopped around every stream,
-  5. advertises play/pause/stop/next/previous in the controller state and records every
-     client/command the client sends,
-  6. lets aiosendspin's visualizer role send the audio-derived frames the client requests
-     (loudness, f_peak, spectrum, peak), plus beat frames from a synthetic 120 BPM beat
-     schedule (aiosendspin has no beat detector; beats come from the application),
-  7. stops, disconnects and prints a summary.
-
-Built on aiosendspin's server API (the library Music Assistant uses), which needs the
-`server` extra: `aiosendspin[server]` (PyAV, numpy, pillow). No mDNS advertising or
-discovery is started: the server never listens, it only dials the given client URL.
-
-Example:
-    sendspin_server.py 192.168.1.50 --port 18928 --seconds 10 --volume 15
-"""
 
 from __future__ import annotations
 
@@ -76,7 +50,6 @@ from aiosendspin.server.roles.visualizer import VisualizerGroupRole, VisualizerV
 
 AIOSENDSPIN_VERSION = version("aiosendspin")
 
-# Hard ceiling for any player volume this script lets out on the wire (percent).
 MAX_VOLUME = 20
 
 SAMPLE_RATE = 48_000
@@ -84,14 +57,11 @@ CHANNELS = 2
 BIT_DEPTH = 16
 TONE_HZ = 440
 TONE_DBFS = -20.0
-# 11 periods of 440 Hz are exactly 1200 frames (25 ms) at 48 kHz, so repeating one chunk
-# yields a phase-continuous tone.
 CHUNK_FRAMES = 1200
 CHUNK_US = CHUNK_FRAMES * 1_000_000 // SAMPLE_RATE
-# How far ahead of real time the stream may run (the clients buffer it).
 MAX_AHEAD_US = 1_000_000
 GAP_S = 2.0
-BEAT_INTERVAL_US = 500_000  # synthetic 120 BPM beat schedule for the visualizer
+BEAT_INTERVAL_US = 500_000
 
 CODECS = {"flac": AudioCodec.FLAC, "pcm": AudioCodec.PCM, "opus": AudioCodec.OPUS}
 CONTROLLER_COMMANDS = [
@@ -115,17 +85,10 @@ _T0 = time.monotonic()
 
 
 def log(message: str) -> None:
-    """Print one line prefixed with seconds since script start (monotonic clock)."""
     print(f"[{time.monotonic() - _T0:8.3f}] {message}", flush=True)
 
 
 class AutoTrustPairingStore(InMemoryServerPairingStore):
-    """In-memory pairing store that approves every client for unpaired playback.
-
-    aiosendspin only activates roles on an unpaired (sentinel PSK) connection when the
-    operator trusted the client_id beforehand. The client_id is only known from the hello,
-    so this test server trusts any client it dials; nothing is persisted.
-    """
 
     async def trusted_unpaired(self, client_id: str) -> TrustedUnpairedClient | None:
         trusted = await super().trusted_unpaired(client_id)
@@ -134,12 +97,9 @@ class AutoTrustPairingStore(InMemoryServerPairingStore):
 
 @dataclass
 class WireRecord:
-    """What actually crossed the WebSocket, as seen by the wire tap."""
 
     run: str = "setup"
-    # run label -> list of stream/start player objects sent during that run
     player_stream_starts: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
-    # (run label, binary kind) -> frames sent
     binary: Counter[tuple[str, str]] = field(default_factory=Counter)
     volumes_sent: list[int] = field(default_factory=list)
     mutes_sent: list[bool] = field(default_factory=list)
@@ -150,12 +110,6 @@ class WireRecord:
 
 
 class WireTap:
-    """Observe outgoing/incoming messages of every aiosendspin server connection.
-
-    aiosendspin has no public hook for the messages a connection writes, so this wraps the
-    connection's private send/dispatch methods. It only logs and counts; the single
-    intervention is a guard that drops any player volume command above MAX_VOLUME.
-    """
 
     def __init__(self) -> None:
         self.record = WireRecord()
@@ -164,9 +118,9 @@ class WireTap:
 
     def install(self) -> None:
         tap = self
-        send_message = SendspinConnection._send_message  # noqa: SLF001
-        send_binary = SendspinConnection._send_binary_data  # noqa: SLF001
-        handle_message = SendspinConnection._handle_message  # noqa: SLF001
+        send_message = SendspinConnection._send_message
+        send_binary = SendspinConnection._send_binary_data
+        handle_message = SendspinConnection._handle_message
 
         async def tapped_send_message(conn: Any, wsock: Any, message: ServerMessage) -> None:
             if tap.blocks(message):
@@ -185,12 +139,11 @@ class WireTap:
             tap.on_received(message)
             await handle_message(conn, message, timestamp_us)
 
-        SendspinConnection._send_message = tapped_send_message  # type: ignore[method-assign]  # noqa: SLF001
-        SendspinConnection._send_binary_data = tapped_send_binary  # type: ignore[method-assign]  # noqa: SLF001
-        SendspinConnection._handle_message = tapped_handle_message  # type: ignore[method-assign]  # noqa: SLF001
+        SendspinConnection._send_message = tapped_send_message
+        SendspinConnection._send_binary_data = tapped_send_binary
+        SendspinConnection._handle_message = tapped_handle_message
 
     def blocks(self, message: ServerMessage) -> bool:
-        """Drop a player volume command above MAX_VOLUME, whoever produced it."""
         if not isinstance(message, ServerCommandMessage):
             return False
         player = message.payload.player
@@ -299,7 +252,6 @@ class WireTap:
 
 
 def tone_chunk() -> bytes:
-    """One 25 ms chunk of a 440 Hz stereo sine at TONE_DBFS, 16-bit little-endian PCM."""
     amplitude = 32767 * 10 ** (TONE_DBFS / 20)
     samples = array("h")
     for n in range(CHUNK_FRAMES):
@@ -338,7 +290,6 @@ def print_hello(client: SendspinClient) -> None:
 async def volume_mute_sequence(
     player: PlayerV1Role, volume: int, interval_s: float, done: list[str]
 ) -> None:
-    """Send volume, volume - 5, mute on, mute off, `interval_s` apart."""
     steps: list[tuple[str, Callable[[], None], PlayerCommand]] = [
         (f"volume {volume}", lambda: player.set_volume(volume), PlayerCommand.VOLUME),
         (
@@ -374,7 +325,6 @@ async def stream_tone(
     tap: WireTap,
     volume: int | None,
 ) -> None:
-    """Stream the tone with `codec` for `seconds`, then stop the group."""
     audio_format = AudioFormat(sample_rate=SAMPLE_RATE, bit_depth=BIT_DEPTH, channels=CHANNELS)
     if not player.set_preferred_format(audio_format, codec):
         log(
@@ -419,7 +369,6 @@ async def stream_tone(
                 log(f"{run}: appended synthetic beat schedule ({len(beats)} beats, 120 BPM)")
         await stream.sleep_to_limit_buffer(MAX_AHEAD_US)
 
-    # Let the client play out what it buffered before ending the stream.
     remaining_s = (last_start_us + CHUNK_US - stream.now_us()) / 1_000_000
     if remaining_s > 0 and client.is_connected:
         await asyncio.sleep(remaining_s)
@@ -458,7 +407,6 @@ async def run(args: argparse.Namespace) -> int:
 async def exercise(
     server: SendspinServer, url: str, args: argparse.Namespace, tap: WireTap, runs: list[str]
 ) -> bool:
-    """Connect, stream and send commands; return whether the client connected."""
     added: asyncio.Future[str] = asyncio.get_running_loop().create_future()
 
     def on_server_event(_server: SendspinServer, event: SendspinEvent) -> None:
@@ -477,7 +425,7 @@ async def exercise(
         )
         log("websocket open, waiting for handshake, client/hello and initial client/state")
         client_id = await asyncio.wait_for(added, timeout=15)
-    except Exception as err:  # noqa: BLE001
+    except Exception as err:
         log(f"connection failed: {type(err).__name__}: {err}")
         return False
     client = server.get_client(client_id)
@@ -531,7 +479,6 @@ async def exercise(
             volume=args.volume if index == 0 else None,
         )
 
-    # Make sure the stopped state and stream/end went out before the socket closes.
     if client.is_connected:
         await client.wait_role_drained("player")
         await asyncio.sleep(0.5)
@@ -541,7 +488,6 @@ async def exercise(
 def evaluate(
     connected: bool, args: argparse.Namespace, runs: list[str], rec: WireRecord
 ) -> dict[str, bool]:
-    """Derive the pass/fail checks from what the wire tap saw."""
     checks = {"connection": connected}
     for name, label in zip(args.codecs, runs, strict=True):
         starts = rec.player_stream_starts.get(label, [])
@@ -567,7 +513,6 @@ def evaluate(
 
 
 async def disconnect(server: SendspinServer) -> None:
-    """Close every client connection (no redial), then the server and its HTTP session."""
     for client in server.connected_clients:
         if client.connection is not None:
             await client.connection.disconnect(retry_connection=False)

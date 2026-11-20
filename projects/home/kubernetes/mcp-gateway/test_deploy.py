@@ -1,13 +1,4 @@
 #!/usr/bin/env python3
-"""Deploy contracts for projects/home/kubernetes/mcp-gateway.
-
-Hermetic: no cluster, no network, no secrets. Flux applies the manifests, so
-these tests check them directly. The catalog's schema is validated by the
-gateway's real Rust loader in
-`solutions/mcp-gateway/crates/mcp-gateway/tests/deploy_contract.rs`; here we
-check the things that only the deployment knows: catalog↔RBAC correspondence,
-alias unambiguity, manifest hardening and the documented placeholders.
-"""
 from __future__ import annotations
 
 import re
@@ -29,8 +20,6 @@ EXTERNAL_SECRETS = MANIFESTS / "external-secrets.yaml"
 ALLOWED_CATALOG_PLACEHOLDERS = {"HAOS_IP", "STATION_IP", "PVE_IP", "VPN_CT_IP", "BB_CT_IP"}
 ALLOWED_BB_TARGET_PLACEHOLDERS = {"BB_PROJECT_STATION_LAB", "BB_PROJECT_ENGLISH_NOTES"}
 
-# Workloads the gateway may read but never restart: K3s' own components and
-# the Flux bootstrap.
 READ_ONLY_NAMESPACES = {"kube-system", "flux-system"}
 
 INGESTED_NAMESPACES = {"monitoring", "currency-bot", "openbao", "kube-system"}
@@ -78,9 +67,7 @@ class CatalogTests(unittest.TestCase):
         overview = self.catalog.get("overview", "")
         self.assertIn("Proxmox", overview)
         self.assertIn("Hermes", overview)
-        # Public files must not carry real addresses or secret-looking values.
         self.assertNotRegex(overview, r"\b(?!192\.0\.2\.)\d{1,3}(?:\.\d{1,3}){3}\b")
-        # No credential-looking material (hex/base64 secrets) in a public file.
         self.assertNotRegex(overview, r"\b[0-9a-fA-F]{32,}\b")
 
     def test_ids_are_unique(self):
@@ -111,9 +98,6 @@ class CatalogTests(unittest.TestCase):
             self.assertIn(service.get("group"), order, f"{service['id']}: group is not in group_order")
 
     def test_multi_container_workloads_name_their_main_container(self):
-        # containers[0] selects the image shown in the report and the default
-        # log container; it must be the real main container name of the live
-        # workload (verified against the cluster), not a sidecar or a guess.
         by_id = {service["id"]: service for service in self.services}
         for service_id, container in (
             ("prometheus", "prometheus"),
@@ -126,7 +110,6 @@ class CatalogTests(unittest.TestCase):
             self.assertEqual(by_id[service_id]["containers"][0], container, service_id)
 
     def test_external_services_have_a_host_title(self):
-        # Never print a raw address in a group header when a host name exists.
         for service in self.services:
             if service["kind"] == "external":
                 self.assertTrue(service.get("host_title", "").strip(), service["id"])
@@ -139,7 +122,6 @@ class CatalogTests(unittest.TestCase):
         for service in k8s:
             self.assertIn(service["workload"]["kind"], {"Deployment", "StatefulSet", "DaemonSet"})
             if service["namespace"] in READ_ONLY_NAMESPACES:
-                # K3s and Flux own these; the gateway must never write here.
                 self.assertFalse(service["restart"]["allowed"], service["id"])
                 continue
             self.assertTrue(service["restart"]["allowed"], service["id"])
@@ -171,7 +153,6 @@ class CatalogTests(unittest.TestCase):
         by_id = {service["id"]: service for service in self.services}
         for service_id in ("home-assistant", "music-assistant", "station", "proxmox", "vpn", "bb-host"):
             self.assertTrue(by_id[service_id].get("checks"), service_id)
-        # Every check is typed, labelled and type-complete.
         allowed = {"tcp", "http", "ha_state", "ha_template", "ha_unavailable_summary"}
         for service in self.services:
             for check in service.get("checks", []):
@@ -188,8 +169,6 @@ class CatalogTests(unittest.TestCase):
         station = by_id["station"]
         station_types = {check["type"] for check in station["checks"]}
         self.assertTrue({"tcp", "ha_state", "ha_template"} <= station_types)
-        # The HTTP check against HA must use the REST token, not an anonymous
-        # request that would only prove the login page is reachable.
         ha_http = [check for check in by_id["home-assistant"]["checks"] if check["type"] == "http"]
         self.assertEqual(ha_http[0]["auth"], "ha")
 
@@ -206,9 +185,6 @@ class CatalogTests(unittest.TestCase):
                 self.assertEqual(service["logs"]["source"], "none")
 
     def test_status_signal_labels_match_workload_names(self):
-        # kube-state-metrics labels a workload by its real object name. A
-        # renamed object (operator-managed monitoring StatefulSets) must update
-        # both the catalog workload and the PromQL in the same change.
         label_of = {"Deployment": "deployment", "StatefulSet": "statefulset", "DaemonSet": "daemonset"}
         checked = 0
         for service in self.services:
@@ -258,15 +234,10 @@ class BBTargetTests(unittest.TestCase):
                 self.assertTrue(key, f"{entry['project']}: empty alias")
                 self.assertNotIn(key, seen, f"duplicate alias {alias}")
                 seen.add(key)
-            # The personal profile is fixed; a provider pin must be explicit so
-            # the gateway never silently picks a Pro model.
             self.assertEqual(entry.get("provider"), "claude-code")
             self.assertTrue(entry.get("title_prefix", "").strip())
 
     def test_aliases_do_not_name_work_projects(self):
-        # The allowlist must not expose work project names: Hermes resolves
-        # names only among personal targets, and a work alias would be
-        # misleading.
         aliases = [alias.lower() for entry in load_bb_targets()["targets"] for alias in entry["aliases"]]
         for alias in aliases:
             self.assertNotIn("work", alias)
@@ -343,8 +314,6 @@ class RbacTests(unittest.TestCase):
         self.assertIn(("helm.toolkit.fluxcd.io", "helmreleases"), granted)
 
     def test_write_resource_names_equal_catalog_restartable_workloads(self):
-        # This is the security contract: RBAC cannot grant more than the catalog
-        # lists, and a catalog entry without RBAC would fail at runtime.
         self.assertEqual(self.rbac_targets(), self.catalog_targets())
 
     def test_platform_namespaces_are_read_only(self):
@@ -384,9 +353,6 @@ class RbacTests(unittest.TestCase):
 
 class ManifestTests(unittest.TestCase):
     def test_catalog_only_uses_renderable_placeholders(self):
-        # The catalog is rendered before it becomes a ConfigMap. Only the
-        # documented host placeholders may appear; anything else would fail
-        # the renderer (or leak into PromQL/check URLs).
         found = set(re.findall(r"\$\{([A-Z0-9_]+)\}", CATALOG.read_text()))
         self.assertEqual(found, ALLOWED_CATALOG_PLACEHOLDERS)
 
@@ -405,7 +371,6 @@ class ManifestTests(unittest.TestCase):
         self.assertFalse(container["securityContext"]["allowPrivilegeEscalation"])
         self.assertEqual(container["securityContext"]["capabilities"]["drop"], ["ALL"])
         self.assertIn("limits", container["resources"])
-        # Probes: HTTP readiness plus the distroless self-check.
         self.assertEqual(container["readinessProbe"]["httpGet"]["path"], "/readyz")
         self.assertEqual(container["livenessProbe"]["exec"]["command"][0], "/usr/local/bin/mcp-gateway")
         self.assertEqual(container["livenessProbe"]["exec"]["command"][1], "-healthcheck")
@@ -443,15 +408,12 @@ class ManifestTests(unittest.TestCase):
         self.assertEqual(
             env["MCP_SCHEDULER_TOKEN_FILE"], "/run/secrets/mcp-gateway-scheduler/token"
         )
-        # Phone push: the FCM credential stays in the phone-push pod, so the
-        # gateway only points at the service and reuses the app bearer.
         self.assertEqual(
             env["MCP_PUSH_URL"], "http://phone-push.home-assistant.svc.cluster.local:8095"
         )
         self.assertEqual(
             env["MCP_PUSH_TOKEN_FILE"], "/run/secrets/mcp-gateway-scheduler/token"
         )
-        # Secrets only as files; no secret value and no *_TOKEN env.
         self.assertNotIn("TELEGRAM_BOT_TOKEN", env)
         self.assertNotIn("MCP_AUTH_TOKEN", env)
         self.assertNotIn("MCP_HA_TOKEN", env)
@@ -489,8 +451,6 @@ class ManifestTests(unittest.TestCase):
         sources = ingress["spec"]["ingress"][0]["from"]
         self.assertIn({"ipBlock": {"cidr": "${NODE_LAN_IP}/32"}}, sources)
         self.assertIn({"ipBlock": {"cidr": "${LAN_CIDR}"}}, sources)
-        # Hermes is hostNetwork: there is no pod identity to select, so the
-        # monitoring scrape comes from a namespace selector instead.
         scrape = ingress["spec"]["ingress"][1]["from"]
         self.assertEqual(
             scrape[0]["namespaceSelector"]["matchLabels"]["kubernetes.io/metadata.name"],
@@ -503,8 +463,6 @@ class ManifestTests(unittest.TestCase):
             for port in rule["ports"]
         }
         self.assertTrue({6443, 9090, 9093, 3100, 443, 53, 22, 8098} <= ports)
-        # External catalog checks: HA REST/MA and the station's ports, all on
-        # the LAN CIDR (host IPs are rendered at deploy time).
         self.assertTrue({8123, 8095, 6053, 8928, 8099, 8006} <= ports)
         bb_rule = next(
             rule
@@ -546,7 +504,6 @@ class ManifestTests(unittest.TestCase):
         self.assertEqual(telegram["token"]["key"], "k8s/home-assistant/hermes-environment")
         self.assertEqual(telegram["token"]["property"], "TELEGRAM_BOT_TOKEN")
         self.assertEqual(telegram["chat_id"]["property"], "TELEGRAM_ALLOWED_USERS")
-        # HA REST checks reuse the scheduler bridge's long-lived token.
         ha = by_name["mcp-gateway-ha"]["spec"]["data"]
         self.assertEqual(
             ha,

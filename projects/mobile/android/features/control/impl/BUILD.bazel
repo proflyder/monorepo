@@ -38,16 +38,12 @@ metro_android_library(
     ],
 )
 
-# Robolectric resolves SDK 35 to this pinned preinstrumented jar. Keeping it as
-# a data dependency avoids a runtime Maven download.
 android_all_dir(
     name = "robolectric_android_all_sdk35",
     jar = "@maven//:org_robolectric_android_all_instrumented",
     jar_name = "android-all-instrumented-15-robolectric-13954326-i7.jar",
 )
 
-# The profile row is real Android UI (MaterialButtonToggleGroup), so only an
-# inflated row can prove the binding and the user-choice filter.
 kt_android_local_test(
     name = "profile_row_test",
     srcs = glob(["src/test/kotlin/**/*.kt"]),
@@ -83,8 +79,6 @@ kt_android_local_test(
     ],
 )
 
-# The Voice activator section is real Android UI (Material buttons), so only an
-# inflated row can prove the labels, enabled states and the tap callback.
 kt_android_local_test(
     name = "wake_feedback_row_test",
     srcs = ["src/test/kotlin/dev/proflyder/home/feature/control/presentation/ControlWakeFeedbackRowTest.kt"],
@@ -120,8 +114,6 @@ kt_android_local_test(
     ],
 )
 
-# Payload computation is pure Kotlin; no Robolectric runner is used, but the
-# test still lives in the same android_local_test toolchain as the impl.
 kt_android_local_test(
     name = "control_payload_test",
     srcs = ["src/test/kotlin/dev/proflyder/home/feature/control/presentation/ControlDiffPayloadTest.kt"],
@@ -140,7 +132,6 @@ kt_android_local_test(
     ],
 )
 
-# The speak use case is plain Kotlin over the repository contract.
 kt_android_local_test(
     name = "speak_use_case_test",
     srcs = ["src/test/kotlin/dev/proflyder/home/feature/control/domain/SpeakOnStationTest.kt"],

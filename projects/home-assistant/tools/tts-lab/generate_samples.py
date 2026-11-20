@@ -1,15 +1,4 @@
 #!/usr/bin/env python3
-"""Generate TTS audition samples for the station voice lab.
-
-This is a lab tool, not production code. It uses Silero v5 CIS base
-(`v5_cis_base_nostress`, MIT) and writes 48 kHz mono WAV files.
-
-Example:
-    python3 -m venv .venv
-    . .venv/bin/activate
-    pip install torch silero soundfile
-    python generate_samples.py --out ../../artifacts/tts-samples/silero-v5-cis
-"""
 
 from __future__ import annotations
 

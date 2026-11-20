@@ -1,7 +1,5 @@
 package(default_visibility = ["//visibility:public"])
 
-# The forced-command script is embedded by `src/protocol.rs` (protocol version
-# and allowlist assertions) and by `tests/agent.rs` (real shell execution).
 filegroup(
     name = "agent",
     srcs = ["agent/ha-config-agent.sh"],

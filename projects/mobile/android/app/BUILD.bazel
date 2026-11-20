@@ -54,12 +54,8 @@ metro_android_library(
         "@maven//:androidx_lifecycle_lifecycle_viewmodel_ktx",
         "@maven//:androidx_viewpager2_viewpager2",
         "@maven//:com_google_android_material_material",
-        # Runtime implementation of ListenableFuture used by
-        # androidx.concurrent.futures / androidx.profileinstaller. It must be a
-        # real APK dependency, not just a test-classpath artifact.
         "@maven//:com_google_guava_listenablefuture",
         "@maven//:dev_zacsweers_metro_runtime_jvm",
-        # Room (pulled in by Chucker) references paging classes it does not declare.
         "@maven//:androidx_paging_paging_common",
         "@maven//:com_github_chuckerteam_chucker_library",
         "@maven//:com_google_firebase_firebase_crashlytics",
@@ -76,8 +72,6 @@ home_android_binary(
     deps = [":app_lib"],
 )
 
-# APK-level packaging gate. Robolectric's classpath contains test-only Guava,
-# so only the packaged artifacts can prove the runtime closure is complete.
 sh_test(
     name = "apk_runtime_closure_test",
     srcs = ["//platform/android:apk_runtime_closure.sh"],
@@ -93,7 +87,6 @@ sh_test(
     ],
 )
 
-# The APK must carry phone (arm64-v8a) native libraries, not host-CPU ones.
 sh_test(
     name = "apk_abi_test",
     srcs = ["//platform/android:apk_abi_test.sh"],
@@ -101,9 +94,6 @@ sh_test(
     data = [":app.apk"],
 )
 
-# Library manifests are not merged unless they export them. This gate proves
-# the call feature's activity, services and permissions are in the packaged
-# manifest, so the call button cannot crash on ActivityNotFoundException.
 sh_test(
     name = "apk_manifest_test",
     srcs = ["//platform/android:apk_manifest_test.sh"],
@@ -117,9 +107,6 @@ sh_test(
     ],
 )
 
-# Robolectric resolves SDK 35 to this pinned preinstrumented jar. The staged
-# properties file avoids any runtime Maven download; rules_android turns it into
-# -Drobolectric-deps.properties for the test JVM.
 android_all_dir(
     name = "robolectric_android_all_sdk35",
     jar = "@maven//:org_robolectric_android_all_instrumented",
@@ -203,8 +190,6 @@ kt_android_local_test(
     ],
 )
 
-# Notices are the app's only alert surface; this drives the real activity to
-# prove the swipe gesture and the anchor above the bottom navigation.
 kt_android_local_test(
     name = "notice_swipe_test",
     srcs = ["src/test/kotlin/dev/proflyder/home/NoticeSwipeActivityTest.kt"],
@@ -239,8 +224,6 @@ kt_android_local_test(
     ],
 )
 
-# The custom toolbar actions menu in the dark theme. The rendered PNG is review
-# evidence for the rounded tonal card, both icon rows and the theme tint.
 kt_android_local_test(
     name = "toolbar_menu_screenshot_test",
     srcs = ["src/test/kotlin/dev/proflyder/home/ToolbarMenuScreenshotTest.kt"],

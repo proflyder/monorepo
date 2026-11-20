@@ -9,7 +9,6 @@ import sync_openbao as s
 
 
 class FakeBw(s.Bw):
-    """In-memory vault speaking the subset of the bw CLI the sync uses."""
 
     def __init__(self):
         self.folders, self.items, self.calls, self.files = [], {}, [], {}
@@ -52,7 +51,6 @@ class FakeBw(s.Bw):
         raise AssertionError(args)
 
 
-# Split so repository scanners do not mistake the fixture for a real key.
 PEM = "-----BEGIN OPENSSH " + "PRIVATE KEY-----\nAAA\n-----END OPENSSH " + "PRIVATE KEY-----"
 SNAPSHOT = {
     "infra/ssh/demo": {"key": PEM,

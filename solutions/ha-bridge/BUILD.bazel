@@ -1,6 +1,5 @@
 package(default_visibility = ["//visibility:public"])
 
-# The deployed executors are the Rust crate's binaries.
 alias(
     name = "ha-bridge",
     actual = "//solutions/ha-bridge/crates/ha-bridge:ha-bridge",

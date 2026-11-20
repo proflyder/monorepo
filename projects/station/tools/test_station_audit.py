@@ -1,9 +1,4 @@
 #!/usr/bin/env python3
-"""Hermetic tests for projects/station/tools/station-audit.
-
-No SSH and no station: the remote probe is replaced by a parsed `Remote`
-object, and repository files live in a temporary directory.
-"""
 
 from __future__ import annotations
 
@@ -247,7 +242,6 @@ class PinnedArtifactTests(unittest.TestCase):
             by_path = {row.path: row for row in rows}
             self.assertEqual(by_path["/d/bin"].status, "OK")
             self.assertIn("bin 0.0.0", by_path["/d/bin"].detail)
-            # A rollback slot is still EXTRA unless explicitly allowed.
             self.assertEqual(by_path["/d/bin.prev"].status, "EXTRA")
 
     def test_pinned_hash_drift(self):

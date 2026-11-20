@@ -1,30 +1,4 @@
 #!/usr/bin/python3
-"""SSH forced-command bridge from mcp-gateway (K3s) to the home-dispatcher plugin.
-
-The gateway owns the SSH key; this bridge owns the bb plugin token and the HMAC
-secret. It reads exactly one JSON request from stdin, signs it, POSTs it to the
-plugin route on the bb server loopback and prints the plugin's answer.
-
-    gateway (K3s) --ssh bb@CT103--> /usr/local/bin/bb-dispatch
-      -> POST http://127.0.0.1:<bb-port>/api/v1/plugins/home-dispatcher/http/rpc
-
-Contract:
-
-* stdin: one JSON object with `method` from the seven allowed methods, at most
-  16 KiB. Anything else is refused locally without contacting bb.
-* stdout: the plugin's JSON answer, or
-  `{"ok": false, "code": ..., "speech": ...}` for a local refusal or a
-  transport failure.
-* exit 0   the plugin answered (even with HTTP 4xx/5xx and `ok: false`)
-  exit 1   transport/config failure, code `bridge_error`
-  exit 2   bad request (size, JSON, method), refused without contacting bb
-  exit 3   bridge not configured (missing token/secret, unsafe permissions)
-
-The token and the HMAC secret are read from /home/bb/.config/home-dispatcher/
-({token,hmac}, 0600, owner bb). They are never printed, and request/response
-bodies are never logged. `SSH_ORIGINAL_COMMAND` is ignored by design: the key is
-restricted to this binary and has no other capability.
-"""
 from __future__ import annotations
 
 import hashlib
@@ -75,7 +49,6 @@ SPEECH_INVALID = "Некорректный запрос."
 
 
 class Refusal(Exception):
-    """A local refusal that maps to one exit code and one JSON answer."""
 
     def __init__(self, code: str, speech: str, exit_code: int):
         super().__init__(code)
@@ -95,14 +68,11 @@ def fail(code: str, speech: str, exit_code: int) -> int:
 
 
 def warn(message: str) -> None:
-    # Diagnostics only: never the body, never a secret.
     sys.stderr.write(f"bb-dispatch: {message}\n")
     sys.stderr.flush()
 
 
 def read_stdin_request() -> bytes:
-    # One byte past the limit is enough to detect an oversized body without
-    # buffering an attacker-controlled stream in memory.
     body = sys.stdin.buffer.read(BODY_LIMIT_BYTES + 1)
     if len(body) > BODY_LIMIT_BYTES:
         raise Refusal("body_too_large", SPEECH_TOO_LARGE, EXIT_INVALID)
@@ -152,8 +122,6 @@ def read_config_file(directory: str, name: str) -> str:
     except UnicodeDecodeError:
         raise Refusal("not_configured", SPEECH_NOT_CONFIGURED, EXIT_NOT_CONFIGURED) from None
     if not value or any(not 0x21 <= ord(char) <= 0x7E for char in value):
-        # Printable ASCII without spaces keeps the value safe as an HTTP header
-        # and rejects accidental newlines or truncated files.
         raise Refusal("not_configured", SPEECH_NOT_CONFIGURED, EXIT_NOT_CONFIGURED)
     return value
 
@@ -205,8 +173,6 @@ def resolve_url(values: dict[str, str]) -> str:
     if parsed.scheme not in ("http", "https"):
         raise Refusal("not_configured", SPEECH_NOT_CONFIGURED, EXIT_NOT_CONFIGURED)
     if parsed.username or parsed.password:
-        # Credentials in the URL would end up in diagnostics and are not needed:
-        # the token and secret have dedicated files.
         raise Refusal("not_configured", SPEECH_NOT_CONFIGURED, EXIT_NOT_CONFIGURED)
     if not is_loopback(parsed.hostname or ""):
         warn("BB_DISPATCH_URL must point at the loopback interface")
@@ -243,7 +209,6 @@ def read_response_body(handle) -> bytes:
 
 
 def check_plugin_answer(body: bytes) -> bytes:
-    """Pass the plugin answer through only when it is its documented shape."""
     if not body:
         raise Refusal("bridge_error", SPEECH_UNAVAILABLE, EXIT_BRIDGE)
     try:
@@ -272,8 +237,6 @@ def post(url: str, body: bytes, token: str, secret: str, timeout: float) -> byte
         with urllib.request.urlopen(request, timeout=timeout) as response:
             return read_response_body(response)
     except urllib.error.HTTPError as error:
-        # The plugin refuses malformed or unauthenticated requests with a JSON
-        # body and ok: false; that is still a valid answer for the gateway.
         try:
             return read_response_body(error)
         except Refusal:
@@ -285,8 +248,6 @@ def post(url: str, body: bytes, token: str, secret: str, timeout: float) -> byte
     except Refusal:
         raise
     except (urllib.error.URLError, OSError, ValueError) as error:
-        # Exception text never contains the token or the body. The URL is
-        # loopback-only and has no credentials.
         warn(f"transport error: {error.__class__.__name__}: {error}")
         raise Refusal("bridge_error", SPEECH_UNAVAILABLE, EXIT_BRIDGE) from None
 
@@ -318,7 +279,7 @@ def main() -> int:
         return fail(refusal.code, refusal.speech, refusal.exit_code)
     except BrokenPipeError:
         return EXIT_BRIDGE
-    except Exception as error:  # noqa: BLE001 - never leak internals to stdout
+    except Exception as error:
         warn(f"unexpected error: {error.__class__.__name__}")
         return fail("bridge_error", SPEECH_UNAVAILABLE, EXIT_BRIDGE)
 

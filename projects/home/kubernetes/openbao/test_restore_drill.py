@@ -13,7 +13,7 @@ class RestoreDrillTest(unittest.TestCase):
 
     def test_decode_otp_token(self):
         otp = "abcdefghijklmnopqrstuvwxyz"
-        token = "x" * 25  # synthetic, same length class as a real token
+        token = "x" * 25
         encoded = base64.b64encode(bytes(a ^ b for a, b in zip(token.encode(), otp.encode()))).decode()
         self.assertEqual(rd.decode_otp_token(encoded.rstrip("="), otp), token)
 

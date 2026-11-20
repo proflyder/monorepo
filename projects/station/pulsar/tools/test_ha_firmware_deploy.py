@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-"""Tests for tools/ha_firmware_deploy.py against a fake Home Assistant."""
 
 from __future__ import annotations
 
@@ -15,7 +14,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-import ha_firmware_deploy as deployer  # noqa: E402
+import ha_firmware_deploy as deployer
 
 ENTITY = "update.station_firmware"
 OLD = "v0.5.1000"
@@ -23,7 +22,6 @@ TAG = "v0.5.1001"
 
 
 class FakeStation:
-    """State machine of the HA update entity and the station restart."""
 
     def __init__(self, tag: str):
         self.tag = tag
@@ -33,13 +31,9 @@ class FakeStation:
         self.update_calls = 0
         self.install_calls = 0
         self.polls = 0
-        # Number of `homeassistant.update_entity` calls before the tag shows up.
         self.latest_after_updates = 0
-        # State polls between `update.install` and the new version coming up.
         self.install_delay_polls = 1
-        # Answer the install call without a response (the station went down).
         self.drop_install = False
-        # Flip back to the old version this many polls after the install took.
         self.revert_after_polls = None
         self._install_at = None
         self._revert_at = None
@@ -83,9 +77,9 @@ class _Handler(BaseHTTPRequestHandler):
 
     @property
     def station(self) -> FakeStation:
-        return self.server.station  # type: ignore[attr-defined]
+        return self.server.station
 
-    def log_message(self, *args) -> None:  # keep the test output clean
+    def log_message(self, *args) -> None:
         pass
 
     def _json(self, payload: dict, code: int = 200) -> None:
@@ -102,7 +96,7 @@ class _Handler(BaseHTTPRequestHandler):
             return False
         return True
 
-    def do_GET(self) -> None:  # noqa: N802
+    def do_GET(self) -> None:
         if not self._authorized():
             return
         if self.path != "/api/states/" + ENTITY:
@@ -111,7 +105,7 @@ class _Handler(BaseHTTPRequestHandler):
         self.station.poll()
         self._json(self.station.snapshot())
 
-    def do_POST(self) -> None:  # noqa: N802
+    def do_POST(self) -> None:
         if not self._authorized():
             return
         length = int(self.headers.get("Content-Length") or 0)
@@ -125,7 +119,6 @@ class _Handler(BaseHTTPRequestHandler):
         elif self.path == "/api/services/update/install":
             self.station.install()
             if self.station.drop_install:
-                # The station restarts inside the call: no response at all.
                 self.close_connection = True
                 return
             self._json([])
@@ -136,7 +129,7 @@ class _Handler(BaseHTTPRequestHandler):
 def start_server(station: FakeStation) -> ThreadingHTTPServer:
     server = ThreadingHTTPServer(("127.0.0.1", 0), _Handler)
     server.daemon_threads = True
-    server.station = station  # type: ignore[attr-defined]
+    server.station = station
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     return server
@@ -169,7 +162,6 @@ def run_deploy(server: ThreadingHTTPServer, *extra: str) -> int:
         "0.6",
         *extra,
     ]
-    # The token value must never appear on stdout/stderr.
     out = io.StringIO()
     with contextlib.redirect_stdout(out), contextlib.redirect_stderr(out):
         code = deployer.main(argv)

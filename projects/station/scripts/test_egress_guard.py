@@ -1,9 +1,4 @@
 #!/usr/bin/env python3
-"""Hermetic tests for the station egress-guard rule set.
-
-The script is security-critical and intentionally only uses iptables/ip6tables;
-fake those binaries and assert the allowlist instead of touching the host.
-"""
 from __future__ import annotations
 
 import os

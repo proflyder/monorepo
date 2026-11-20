@@ -1,4 +1,3 @@
-"""Hermetic tests for the PVE vzdump metrics exporter."""
 from __future__ import annotations
 
 import importlib.util

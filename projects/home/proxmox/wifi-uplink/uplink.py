@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-"""One L2 uplink at a time: Ethernet carrier preferred, tested WDS Wi-Fi fallback."""
 import logging
 import os
 from pathlib import Path
@@ -17,7 +16,6 @@ def choose(mode, wired_carrier):
 
 
 def transitions(target, wired, wifi, members):
-    """Detach the other physical uplink before attaching the requested one."""
     selected, other = (wired, wifi) if target == 'ethernet' else (wifi, wired)
     return ([('detach', other)] if other in members else []) + (
         [('attach', selected)] if selected not in members else [])
@@ -39,8 +37,6 @@ def carrier(interface):
 
 
 def tick(bridge, wired, wifi, mode):
-    # A detached manual Ethernet interface starts DOWN after boot. Keep it up
-    # so carrier detection can notice a cable being plugged in later.
     run('ip', 'link', 'set', wired, 'up')
     target = choose(mode, carrier(wired))
     members = {p.name for p in (Path('/sys/class/net') / bridge / 'brif').iterdir()}
@@ -85,7 +81,6 @@ def main():
                 LOG.info('Active bridge uplink: %s (policy: %s)', state, mode)
                 previous = state
         except (OSError, ValueError, subprocess.SubprocessError) as exc:
-            # Do not print command outputs: wireless diagnostics may contain SSIDs.
             LOG.warning('Uplink reconciliation failed: %s; retrying', type(exc).__name__)
         time.sleep(2)
 

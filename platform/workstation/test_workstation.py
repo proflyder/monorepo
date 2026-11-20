@@ -16,7 +16,6 @@ REAL_BAO = ws.Bao
 
 
 class FakeBao:
-    """In-memory OpenBao speaking the endpoints secrets.py uses."""
 
     def __init__(self, kv, mfa=True):
         self.kv, self.mfa, self.calls, self.revoked, self.created = kv, mfa, [], [], []
@@ -77,7 +76,7 @@ class Base(unittest.TestCase):
         self.addCleanup(env.stop)
         import os
         for var in ("BAO_ADDR", "BAO_TOKEN"):
-            os.environ.pop(var, None)  # restored by the patch above
+            os.environ.pop(var, None)
         checkout = mock.patch.object(ws, "main_checkout", return_value=None)
         checkout.start()
         self.addCleanup(checkout.stop)
@@ -126,8 +125,8 @@ class Login(Base):
         self.assertEqual(stat.S_IMODE(token.stat().st_mode), 0o600)
         self.assertEqual(fake.created[0]["display_name"], "workstation-laptop")
         self.assertEqual(fake.created[0]["period"], "720h")
-        self.assertIn("human", fake.revoked)  # human session never outlives login
-        self.assertIn("machine", fake.revoked)  # previous token of this machine
+        self.assertIn("human", fake.revoked)
+        self.assertIn("machine", fake.revoked)
         self.assertNotIn("machine", " ".join(self.out))
 
     def test_login_without_mfa_and_without_previous_token(self):
@@ -162,7 +161,7 @@ class PullFileCheck(Base):
             self.assertEqual((self.secrets / "vpn/ca/k.pem").read_bytes(), b"k")
             self.assertNotIn("A=1", "\n".join(self.out))
             ws.cmd_file(self.args(names=["home"], all=False, clean=True), out=self.out.append)
-        self.assertFalse((self.secrets / "home").exists())  # empty dirs pruned
+        self.assertFalse((self.secrets / "home").exists())
         self.assertTrue((self.secrets / "vpn/ca/k.pem").exists())
 
     def test_unknown_and_escaping_names_rejected(self):
@@ -223,7 +222,6 @@ class Catalog(unittest.TestCase):
         documented = set(CATALOG["paths"])
         for ref in refs:
             self.assertIn(ref["path"], documented, ref)
-        # nothing outside a profile: a bare `fnox exec` must resolve no secret
         self.assertFalse([r for r in refs if r["profile"] == "default"])
 
     def test_admin_tasks_use_defined_profiles(self):
@@ -235,8 +233,6 @@ class Catalog(unittest.TestCase):
             for profile in re.findall(r"fnox\.sh\" -P ([a-z-]+) exec", task.read_text()):
                 used.add(profile)
                 self.assertIn(profile, profiles, task)
-        # Platform deploy tasks moved to Flux; the remaining admin tasks still
-        # cover the independent profiles (OpenBao, ingress verify, backups...).
         self.assertGreaterEqual(len(used), 6)
         for script in re.findall(r'"\$ROOT/(projects/[^"]+)"',
                                  "".join(t.read_text() for t in tasks if "admin" in t.parts)):

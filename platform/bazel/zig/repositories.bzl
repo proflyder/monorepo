@@ -1,13 +1,5 @@
-# Hermetic zig 0.14.1 SDK repository and the cc_toolchain_config macro.
-#
-# The SDK is downloaded once per host and the toolchain config is copied next
-# to it, so `tool_path` entries stay relative to the repository package and no
-# absolute host path leaks into the build. The wrappers pin the target triple,
-# CPU and float ABI; zig also supplies the glibc version and static libc++.
-
 _ZIG_VERSION = "0.14.1"
 
-# Official ziglang.org release tarballs, pinned by sha256.
 _SHA256 = {
     "linux-x86_64": "24aeeec8af16c381934a6cd7d95c807a8cb2cf7df9fa40d359aa884195c4716c",
     "linux-aarch64": "f7a654acc967864f7a050ddacfaa778c7504a0eca8d2b678839c21eea47c992b",
@@ -80,22 +72,12 @@ if [ "$probe" = 1 ]; then target_args=(); fi
 {musl_link}exec "$DIR/zig" "$subcommand" ${target_args[@]+"${target_args[@]}"} "${argv[@]}"
 """
 
-# rules_rust drives the linker directly on windows-gnu targets and therefore
-# needs `dlltool` for the raw-dylib imports used by the official windows-rs
-# crates. Zig ships llvm-dlltool as `zig dlltool`; the wrapper is generated next
-# to the linker so `-C dlltool=<linker dir>/dlltool` resolves inside the
-# sandbox, with no host toolchain.
 _DLLTOOL_WRAPPER = """#!/bin/bash
 set -eu
 DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 exec "$DIR/zig" dlltool "$@"
 """
 
-# rustc's windows-gnu link line is written for a MinGW gcc driver. Zig's `cc`
-# rejects a positional `.def` path passed through `-Wl,`, cannot resolve
-# `-lmsvcrt` (it links UCRT import libraries itself), and does not accept
-# rustc's `-nodefaultlibs`/mingw runtime library set. These translations only
-# apply to the windows wrappers; the station wrappers keep the empty value.
 _WINDOWS_ARGS = """    -Wl,*.def) argv+=("${1#-Wl,}"); shift ;;
     -l:libpthread.a) argv+=("-lwinpthread"); shift ;;
     # zig supplies UCRT/mingw-w64 defaults itself; rustc's gcc-driver flags
@@ -113,10 +95,6 @@ def _host_platform(ctx):
         arch = "aarch64"
     else:
         fail("unsupported zig exec host architecture: {}".format(arch))
-    # Bazel reports the host OS as `ctx.os.name`, which is not the zig archive
-    # spelling: macOS is "mac os x" (older Bazel also "macos"/"darwin"), Linux
-    # is "linux". Normalise the prefix, keep the explicit refusal for anything
-    # else so an unsupported host can never silently pick a wrong archive.
     if os.startswith("mac") or os.startswith("darwin"):
         os = "macos"
     elif os.startswith("linux"):
@@ -143,9 +121,6 @@ def _zig_sdk_repository_impl(ctx):
         stripPrefix = "zig-{}-{}-{}".format(arch, os, _ZIG_VERSION),
     )
 
-    # The toolchain config is maintained in the main repository and copied here
-    # so the generated cc_toolchain rules can resolve their tools by package
-    # relative paths.
     ctx.template("toolchain.bzl", Label("//platform/bazel/zig:toolchain.bzl"), {})
     _generate_wrappers(ctx)
     ctx.file(
@@ -153,9 +128,6 @@ def _zig_sdk_repository_impl(ctx):
         _BUILD_FILE.replace("{sdk_root}", str(ctx.path(""))),
     )
 
-# One wrapper set per target: the triple, CPU and float ABI are baked into the
-# wrapper instead of a per-action flag, matching the former Makefile/cargo-zigbuild
-# invocation.
 _WRAPPERS = [
     ("aarch64", "cc", "cc", "-target aarch64-linux-gnu.2.36"),
     ("aarch64", "cpp", "c++", "-target aarch64-linux-gnu.2.36 -isystem \"$DIR/lib/libcxx/include\" -isystem \"$DIR/lib/libcxxabi/include\""),
@@ -169,10 +141,6 @@ _WRAPPERS = [
     ("armhf", "ranlib", "ranlib", ""),
     ("armhf", "ld", "ld.lld", "-target arm-linux-gnueabihf.2.23"),
     ("armhf", "objcopy", "objcopy", ""),
-    # Windows Credential Provider (solutions/windows-logon-provider). Zig's
-    # x86_64-windows-gnu target uses mingw-w64/UCRT; the resulting PE imports
-    # only system DLLs.
-    # Static musl service images (wakegrant). Fully static libc, no glibc.
     ("x86_64_musl", "cc", "cc", "-target x86_64-linux-musl"),
     ("x86_64_musl", "cpp", "c++", "-target x86_64-linux-musl -isystem \"$DIR/lib/libcxx/include\" -isystem \"$DIR/lib/libcxxabi/include\""),
     ("x86_64_musl", "ar", "ar", ""),
@@ -190,10 +158,6 @@ _WRAPPERS = [
 def _generate_wrappers(ctx):
     for prefix, name, subcommand, args in _WRAPPERS:
         windows_args = _WINDOWS_ARGS if prefix == "windows_x86_64" else ""
-        # Rust's musl link line already carries the self-contained crt and
-        # libc, but zig's cc driver adds its own crt1.o, which duplicates
-        # `_start`. `-nostdlib` is only valid on a link, not on a compile
-        # (it would also drop zig's libc include paths).
         musl_link = ""
         if prefix == "x86_64_musl" and name in ("cc", "cpp"):
             musl_link = """has_compile=0
@@ -214,14 +178,11 @@ fi
             .replace("{musl_link}", musl_link),
             executable = True,
         )
-    # `nm`/`gcov` are never on the code path we build (Rust and static C/C++),
-    # but Bazel expects a valid tool path for them.
     ctx.file(
         "noop",
         "#!/bin/sh\nexit 0\n",
         executable = True,
     )
-    # rules_rust derives `-C dlltool=<linker dir>/dlltool` for windows targets.
     ctx.file(
         "dlltool",
         _DLLTOOL_WRAPPER,

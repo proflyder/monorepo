@@ -1,9 +1,3 @@
-"""Structural contracts for the ha-config-sync deployment (no cluster needed).
-
-Flux applies these manifests; the Rust solution owns the behaviour. These tests
-pin the security posture, the secret wiring, the narrow network egress and the
-alert expressions the dashboards/runbooks rely on.
-"""
 from __future__ import annotations
 
 import re

@@ -160,7 +160,7 @@ class CollectTests(unittest.TestCase):
             files = bundle({hit: (sidecar(hit), wav_bytes()),
                             near: (sidecar(near, kind="near", score_peak=.7), wav_bytes())})
             runner, _ = pull(folder, files)
-            self.assertEqual(len(runner.calls), 1)  # no deletion by default
+            self.assertEqual(len(runner.calls), 1)
             station.set_label(folder, hit, "false")
 
             runner = Runner(tar_bytes(files))
@@ -373,7 +373,6 @@ class FinetuneMergeTests(unittest.TestCase):
 
 class CalibrationTests(unittest.TestCase):
     def test_build_table_and_recommend_lowest_false_positive_setting(self):
-        # pcm is (label, peak) so the fake replay is pure and needs no NumPy/TF.
         def replay(pcm, cutoff, window):
             return {"hits": [1.0] if pcm[1] >= cutoff else []}
 

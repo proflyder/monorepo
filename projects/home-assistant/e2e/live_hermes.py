@@ -1,19 +1,4 @@
 #!/usr/bin/env python3
-"""Opt-in live checks for the Hermes fallback API.
-
-Read-only by default.  A real model turn is opt-in because it costs quota:
-
-    STATION_E2E=1 HERMES_API_KEY=... python3 projects/home-assistant/e2e/live_hermes.py
-    STATION_E2E=1 HERMES_API_KEY=... HERMES_E2E_CHAT=1 \
-        python3 projects/home-assistant/e2e/live_hermes.py
-    STATION_E2E=1 HERMES_API_KEY=... HA_INFRA_E2E=1 \
-        python3 projects/home-assistant/e2e/live_hermes.py
-
-HA_INFRA_E2E=1 additionally asserts that the mcp-infra toolset (the
-mcp-gateway) is advertised and enabled; it needs the gateway deployed.
-
-The API key is supplied only through the environment and never printed.
-"""
 from __future__ import annotations
 
 import json
@@ -79,8 +64,6 @@ class LiveHermesReadOnlyTests(unittest.TestCase):
 
     @unittest.skipUnless(INFRA, "set HA_INFRA_E2E=1 to check the infra MCP toolset")
     def test_infra_mcp_toolset_is_advertised(self):
-        # mcp-gateway is a third MCP server (mcp_servers.infra). Without this
-        # toolset the voice path silently keeps answering without infra tools.
         code, data = api("/v1/toolsets")
         self.assertEqual(code, 200)
         toolsets = data.get("data", []) if isinstance(data, dict) else []

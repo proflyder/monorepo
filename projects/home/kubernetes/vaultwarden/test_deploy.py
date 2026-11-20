@@ -1,8 +1,3 @@
-"""Static contracts for the Vaultwarden manifests (no cluster needed).
-
-The manifests are Flux-rendered; only `NODE_LAN_IP`, `LAN_CIDR` and
-`HOME_DOMAIN` remain as substitutable placeholders.
-"""
 import pathlib
 import re
 import unittest

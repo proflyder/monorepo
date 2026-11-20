@@ -1,12 +1,4 @@
 #!/usr/bin/env python3
-"""Contract tests for the canonical SchedulerService voice integration.
-
-These tests are static and hermetic. They load the real HA YAML, render the
-actual Jinja expressions with a fake clock/timezone and fake Connect JSON
-responses, and assert that requests/speech follow the protobuf contract.
-
-No Home Assistant, scheduler, bridge, network or device is contacted.
-"""
 from __future__ import annotations
 
 import itertools
@@ -25,7 +17,7 @@ HA = ROOT / "projects" / "home-assistant" / "ha-voice"
 
 
 class UniqueKeyLoader(yaml.SafeLoader):
-    def construct_mapping(self, node, deep=False):  # type: ignore[no-untyped-def]
+    def construct_mapping(self, node, deep=False):
         mapping = {}
         for key_node, value_node in node.value:
             key = self.construct_object(key_node, deep=deep)
@@ -104,7 +96,6 @@ def _bool_filter(value, default=False):
 
 
 def _random_filter(sequence):
-    # Deterministic test stand-in for HA's random filter: unique per render.
     next(_RANDOM_COUNTER)
     return next(_RANDOM_COUNTER)
 
@@ -143,7 +134,6 @@ def render(template, context):
 
 
 def render_variables(script, wanted: str, context: dict) -> dict:
-    """Render the variables step containing `wanted` in declaration order."""
     for step in script["sequence"]:
         variables = step.get("variables")
         if not isinstance(variables, dict) or wanted not in variables:
@@ -175,7 +165,6 @@ def render_result(script_name: str, result_name: str, context: dict):
 
 
 def render_alarm_stop_result(context: dict):
-    """Render the nested stop guard and result in their real order."""
     script = SCRIPTS["schedule_alarm_stop"]
     outcome = find_variable_template(script, "stop_outcome")
     guard = find_variable_template(script, "stop_expired_local_ok")
@@ -427,14 +416,10 @@ class RequestContractTests(unittest.TestCase):
         self.assertNotIn("script.schedule_alarm_stop", text)
 
     def test_no_template_uses_a_range_above_ha_sandbox_limit(self):
-        # HA's Jinja sandbox rejects range() sizes above MAX_RANGE (100000).
         for value in re.findall(r"range\(\s*0\s*,\s*(\d+)\s*\)", dump(SCRIPTS)):
             self.assertLessEqual(int(value), 100000)
 
     def test_idempotency_fallback_is_unique_per_invocation(self):
-        # HA documents that `context` is unavailable in a script's variables
-        # section, so the key is captured there with wall-clock microseconds plus
-        # a random suffix instead of relying on context.id.
         cases = (
             ("schedule_alarm_create", "alarm_idempotency_key", "ha:alarm:"),
             ("schedule_timer_start", "timer_idempotency_key", "ha:timer:"),
@@ -680,8 +665,6 @@ class SpeechTruthTests(unittest.TestCase):
         self.assertIn("not was_ringing", music_branch)
         self.assertIn("not_found", music_branch)
 
-        # The bridge may stop the alarm and resume music while StopSchedule is
-        # still in flight. Captured invocation state must prevent music fallback.
         after_fast_stop = {
             **BASE_CONTEXT,
             "was_ringing": was_ringing,
@@ -691,8 +674,6 @@ class SpeechTruthTests(unittest.TestCase):
         }
         self.assertFalse(render(music_branch, after_fast_stop))
 
-        # A command that started with no ringing alarm may stop music only when
-        # the canonical API reports that no active/snoozed alarm exists.
         after_music_only = {
             **BASE_CONTEXT,
             "was_ringing": False,
@@ -727,8 +708,6 @@ class SpeechTruthTests(unittest.TestCase):
         self.assertIn("Звонок остановлен локально", local["text"])
         self.assertNotIn("не подтверждён", local["text"])
 
-        # A newer alarm B started while A's network call timed out: the helper
-        # reports "other", so no local stop and no false acknowledgment.
         other = render(
             template,
             {
@@ -881,7 +860,6 @@ class SpeechTruthTests(unittest.TestCase):
             },
         }
 
-        # A newer occurrence replaced the captured source during the RPC.
         changed, changed_result = render_alarm_stop_result(
             {**base, "stop_confirm": {"outcome": "other"}}
         )
@@ -889,7 +867,6 @@ class SpeechTruthTests(unittest.TestCase):
         self.assertEqual(changed_result["status"], "error")
         self.assertIn("другой звонок", changed_result["text"])
 
-        # An empty captured event id cannot prove the same occurrence.
         no_event, no_event_result = render_alarm_stop_result(
             {
                 **base,
@@ -900,7 +877,6 @@ class SpeechTruthTests(unittest.TestCase):
         self.assertFalse(no_event["stop_expired_local_ok"])
         self.assertEqual(no_event_result["status"], "error")
 
-        # Transport/auth errors are not masked by a local stop.
         for code in ("unavailable", "unauthenticated"):
             failed, failed_result = render_alarm_stop_result(
                 {
@@ -934,13 +910,6 @@ class SpeechTruthTests(unittest.TestCase):
 
 
 class AlarmStopIdentityGuardTests(unittest.TestCase):
-    """A scheduler STOP must prove which FIRE it may silence.
-
-    The bridge passes the identity of the FIRE it started. HA fails closed when
-    that identity is given but the ringing alarm cannot be matched, and stays a
-    safe no-op when the alarm is already silent. Manual stops carry no
-    expectation and always run.
-    """
 
     ORDER = [
         "stop_expected_source",
@@ -998,7 +967,6 @@ class AlarmStopIdentityGuardTests(unittest.TestCase):
         rendered = json.dumps(guard, ensure_ascii=False)
         self.assertIn("stop_identity_skip", rendered)
         self.assertTrue(any(isinstance(step, dict) and "stop" in step for step in guard["then"]))
-        # Nothing turns the alarm off before the guard decision.
         self.assertEqual(sequence[2]["service"], "input_boolean.turn_off")
 
     def test_matching_fire_identity_allows_the_stop(self):
@@ -1032,7 +1000,6 @@ class AlarmStopIdentityGuardTests(unittest.TestCase):
                 self.assertEqual(rendered["stop_identity_reason"], "unknown_active_identity")
 
     def test_expected_stop_after_ring_ends_skips_all_side_effects(self):
-        """A retried scheduler STOP must not media_stop/restore/resume later music."""
         script = SCRIPTS["alarm_stop"]
         for stored_source, stored_event in (("s1", "e1"), ("", ""), ("s1", "e2")):
             with self.subTest(stored_source=stored_source, stored_event=stored_event):
@@ -1045,8 +1012,6 @@ class AlarmStopIdentityGuardTests(unittest.TestCase):
                 self.assertTrue(rendered["stop_identity_skip"])
                 self.assertEqual(rendered["stop_identity_reason"], "already_silent")
 
-        # The guard that consumes this flag stops the script before the first
-        # service call, so turn_off/media_stop/restore/resume stay unreachable.
         sequence = script["sequence"]
         guard = sequence[1]
         self.assertIn("stop_identity_skip", guard["if"][0]["value_template"])
@@ -1077,20 +1042,9 @@ class AlarmStopIdentityGuardTests(unittest.TestCase):
 
 
 class RelativeAlarmTemplateTests(unittest.TestCase):
-    """Regression: HA script variables are rendered to strings.
-
-    `relative_due: "{{ now() + timedelta(...) }}"` becomes a string in a real
-    HA variables step, so calling `.date()` on it raised
-    "UndefinedError: 'str object' has no attribute 'date'" and the live
-    StationAlarmRelative intent failed. The fix derives fields from one epoch
-    integer; these tests render with a non-native environment to reproduce the
-    stringification.
-    """
 
     @staticmethod
     def _ha_value(value):
-        # HA keeps JSON-ish native types but renders a datetime to str; that is
-        # why the old `.date()` on a stored datetime variable failed live.
         if isinstance(value, datetime):
             return str(value)
         return value
@@ -1125,7 +1079,6 @@ class RelativeAlarmTemplateTests(unittest.TestCase):
         }
 
     def _guard_condition(self) -> str:
-        """The fail-closed template that rejects a non-positive duration."""
         for step in SCRIPTS["schedule_alarm_create_relative"]["sequence"]:
             if "if" not in step:
                 continue
@@ -1172,9 +1125,6 @@ class RelativeAlarmTemplateTests(unittest.TestCase):
         )
 
     def test_zero_zero_is_an_error_not_a_one_minute_alarm(self) -> None:
-        # Live regression 2026-11-12: Hermes called this script with
-        # hours=0, minutes=0 and the silent `max(1, ...)` floor created an
-        # alarm one minute later. The script must refuse and explain.
         variables = self._ha_variables(0, 0)
         self.assertTrue(self._is_rejected(variables))
         error = self._error_result(variables)
@@ -1189,7 +1139,6 @@ class RelativeAlarmTemplateTests(unittest.TestCase):
         self.assertFalse(self._is_rejected(self._ha_variables(0, 1)))
 
     def test_fractional_hours_become_minutes(self) -> None:
-        # «через полтора часа» normalizes to hours=1.5 in the sentence list.
         data = self._service_data(self._ha_variables(1.5, 0))
         self.assertEqual(
             (int(data["hour"]), int(data["minute"]), data["day"]), (7, 30, "")
@@ -1200,7 +1149,6 @@ class RelativeAlarmTemplateTests(unittest.TestCase):
         self.assertEqual((int(data["hour"]), int(data["minute"])), (6, 30))
 
     def test_command_text_is_not_used_as_the_alarm_label(self) -> None:
-        # Live regression: Hermes passed name="через час".
         for label in ("через час", "Будильник через час", "таймер на 5 минут"):
             variables = self._ha_variables(1, 0)
             variables.update(
@@ -1237,7 +1185,6 @@ class RelativeAlarmTemplateTests(unittest.TestCase):
         self.assertEqual((int(data["hour"]), int(data["minute"])), (6, 1))
 
     def test_seconds_are_preserved(self) -> None:
-        # Server now 12:34:45 + 5 min must target 12:39:45, not 12:39:00.
         now = NOW.replace(hour=12, minute=34, second=45)
         data = self._service_data(self._ha_variables(0, 5, now=now))
         self.assertEqual(
@@ -1255,13 +1202,6 @@ class RelativeAlarmTemplateTests(unittest.TestCase):
         self.assertEqual(create_fields["second"].get("default"), 0)
 
 class MediaUrlReachabilityTests(unittest.TestCase):
-    """Live incident: the ringtone/chime URL used the sanitized TEST-NET host.
-
-    `http://192.0.2.28:8123/local/...` is unreachable from HA, so the ESPHome
-    ffmpeg proxy timed out and the alarm stayed silent even though the service
-    call returned 2xx and the bridge ACKed DELIVERED. Local media must be
-    fetched from the HA loopback address, never a documentation placeholder.
-    """
 
     def test_local_media_uses_reachable_base(self) -> None:
         text = (HA / "scripts.yaml").read_text(encoding="utf-8")
@@ -1279,8 +1219,6 @@ class MediaUrlReachabilityTests(unittest.TestCase):
         self.assertNotIn("192.0.2.", text)
 
     def test_station_control_base_is_not_test_net(self) -> None:
-        # The same copy step had also replaced the real station control URL with
-        # a TEST-NET placeholder, breaking gateway/bluetooth HTTP commands.
         rest = (HA / "rest_commands.yaml").read_text(encoding="utf-8")
         self.assertNotIn("192.0.2.", rest)
         for path in ("gateway/on", "gateway/off", "bluetooth/on", "bluetooth/off"):
@@ -1335,7 +1273,6 @@ class SchedulerVerificationTests(unittest.TestCase):
             "weekdays": [],
             "payloadJson": "{}",
             "revision": "4",
-            # enabled: false is omitted by protojson
         }
         request = as_json(
             render(
@@ -1574,7 +1511,6 @@ class SingleWriterTests(unittest.TestCase):
         )
 
 class ScenarioRunContractTests(unittest.TestCase):
-    """script.scenario_run resolves a native scheduler scenario by label."""
 
     def _scenario_id(self, label: str, scenarios: list[dict]) -> str:
         context = {

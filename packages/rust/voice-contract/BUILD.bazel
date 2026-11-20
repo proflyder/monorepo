@@ -3,7 +3,6 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
-# Serde types of the mcp-gateway voice API; no I/O, no runtime.
 DEPS = [
     "@crates//:serde",
 ]
@@ -25,7 +24,6 @@ rust_test(
     deps = DEPS + ["@crates//:serde_json"],
 )
 
-# Mirrors the root [workspace.lints] through the crate's `[lints] workspace = true`.
 extract_cargo_lints(
     name = "workspace_lints",
     manifest = "Cargo.toml",

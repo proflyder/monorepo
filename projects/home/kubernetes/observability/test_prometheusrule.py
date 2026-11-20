@@ -1,14 +1,3 @@
-"""Structural sanity checks for the backup, Alertmanager and Flux PrometheusRules.
-
-``promtool`` is not available in the hermetic test environment, so this test
-parses the manifests with PyYAML and asserts the alert contract Alertmanager and
-the Telegram template rely on (names, severity, annotations). The Flux rules get
-an extra contract check: every label they select on `gotk_resource_info` must be
-one that kube-state-metrics is configured to emit, because a selector on a label
-that never exists silently disables the alert (the historical
-`gotk_reconcile_condition` bug). When `promtool` happens to be on PATH the rules
-are also syntax-checked; otherwise that test skips.
-"""
 from __future__ import annotations
 
 import json
@@ -64,12 +53,10 @@ REQUIRED_STATION_ALERTS = {
     "StationMemoryHigh",
     "StationDiskFilling",
 }
-# Metric deleted from the Flux controllers in 2.x; nothing may reference it.
 REMOVED_FLUX_METRIC = "gotk_reconcile_condition"
 
 
 def normalize(expr: str) -> str:
-    """Collapse whitespace so expression contracts survive re-indentation."""
     return " ".join(expr.split())
 
 
@@ -133,7 +120,6 @@ class BackupRuleTests(unittest.TestCase):
             configs["pve-guests"]["relabel_configs"][1]["replacement"],
             "pve-exporter.monitoring.svc:9221",
         )
-        # The real host:port stays out of Git.
         self.assertEqual(
             configs["pve-node"]["static_configs"][0]["targets"], ["${PVE_NODE_TARGET}"]
         )
@@ -219,7 +205,6 @@ class AlertmanagerRuleTests(unittest.TestCase):
 
 
 class FluxRuleTests(unittest.TestCase):
-    """Delivery alerts read the Flux state through kube-state-metrics."""
 
     @classmethod
     def setUpClass(cls) -> None:
@@ -256,9 +241,6 @@ class FluxRuleTests(unittest.TestCase):
                 self.assertNotIn("\t", rule["expr"])
 
     def test_no_rule_references_the_removed_flux_metric(self) -> None:
-        # Flux 2.x controllers only export gotk_reconcile_duration_seconds_* and
-        # gotk_token_*; the old reconcile-condition expression could never fire,
-        # and its absent() branch alerts forever.
         for path in sorted(RULE_DIR.glob("prometheusrule-*.yaml")):
             for rule in rules_of(path):
                 with self.subTest(rules=path.name, name=rule.get("alert") or rule.get("record")):
@@ -278,9 +260,6 @@ class FluxRuleTests(unittest.TestCase):
                 )
 
     def test_pins_stale_covers_configmap_source_and_missing_metrics(self) -> None:
-        # A healthy steady state is an empty result: the ConfigMap exists, the
-        # pins source is Ready, and its series exists. Each failure mode below
-        # is one branch, so it must not degrade into a permanent alert.
         branches = [
             branch.strip()
             for branch in re.split(r"\bor\b", normalize(self.rules["PinsStale"]["expr"]))
@@ -295,9 +274,6 @@ class FluxRuleTests(unittest.TestCase):
         ])
 
     def test_selected_labels_are_emitted_by_kube_state_metrics(self) -> None:
-        # A selector on a label kube-state-metrics never emits silently disables
-        # the alert (or makes absent() fire forever), so cross-check every
-        # matcher against the customResourceState config.
         selectors = re.findall(
             r"gotk_resource_info\{([^}]*)\}", FLUX_RULE_FILE.read_text(encoding="utf-8")
         )
@@ -310,7 +286,6 @@ class FluxRuleTests(unittest.TestCase):
                 resource = self.resources[kind]
                 self.assertEqual(resource["metricNamePrefix"], "gotk")
                 self.assertEqual(resource["metrics"][0]["name"], "resource_info")
-                # kube-state-metrics always adds these three kind labels.
                 labels = {
                     "customresource_group",
                     "customresource_kind",
@@ -339,9 +314,6 @@ class FluxRuleTests(unittest.TestCase):
                 self.assertEqual((gvk["group"], gvk["version"]), (group, version))
 
     def test_default_collectors_stay_enabled_for_kube_configmap_info(self) -> None:
-        # The upstream recipe switches the pod to --custom-resource-state-only;
-        # PinsStale also needs kube_configmap_info, so the default collectors
-        # must keep running.
         self.assertNotIn("collectors", self.ksm)
         self.assertNotIn(
             "--custom-resource-state-only=true", self.ksm.get("extraArgs", [])
@@ -374,7 +346,6 @@ class FluxRuleTests(unittest.TestCase):
 
 
 class StationRuleTests(unittest.TestCase):
-    """The station is an external Pulsar target, not a Kubernetes workload."""
 
     @classmethod
     def setUpClass(cls) -> None:
@@ -426,7 +397,6 @@ class StationRuleTests(unittest.TestCase):
 
 
 class StationMetricsContractTests(unittest.TestCase):
-    """Every metric named by an alert or a dashboard exists in the Pulsar catalog."""
 
     @classmethod
     def setUpClass(cls) -> None:
@@ -470,7 +440,6 @@ class StationMetricsContractTests(unittest.TestCase):
 
 
 class HermesConfigAlertTests(unittest.TestCase):
-    """Drift alerts and scrape target in the HA runtime chart."""
 
     @classmethod
     def setUpClass(cls) -> None:
@@ -520,7 +489,6 @@ class HermesConfigAlertTests(unittest.TestCase):
 
 
 class RuleFileSyntaxTests(unittest.TestCase):
-    """`promtool check rules` over every PrometheusRule when promtool exists."""
 
     @unittest.skipUnless(shutil.which("promtool"), "promtool is not installed")
     def test_every_rule_file_is_valid_promql(self) -> None:

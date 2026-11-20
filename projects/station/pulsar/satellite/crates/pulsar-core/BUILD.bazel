@@ -3,8 +3,6 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
-# Linux-only: the crate uses Linux syscalls/libc ABI. macOS `bazel build //...`
-# skips it through target_compatible_with instead of failing.
 LINUX = ["@platforms//os:linux"]
 
 DEPS = [
@@ -32,8 +30,6 @@ rust_library(
     deps = DEPS,
 )
 
-# Unit tests: `crate` compiles the library sources with --test and inherits its
-# deps/compile_data. Only dev-dependencies are added here.
 rust_test(
     name = "pulsar_core_unit_tests",
     crate = ":pulsar_core",
@@ -71,7 +67,6 @@ rust_test(
     ],
 )
 
-# Mirrors the root [workspace.lints] through the crate's `[lints] workspace = true`.
 extract_cargo_lints(
     name = "workspace_lints",
     manifest = "Cargo.toml",

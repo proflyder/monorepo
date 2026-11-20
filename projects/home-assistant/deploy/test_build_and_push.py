@@ -1,10 +1,4 @@
 #!/usr/bin/env python3
-"""build-and-push.sh: the prebuilt-digest path used by deploy-home (DECISIONS 36).
-
-Hermetic: no Docker daemon, no registry and no network. `docker`, `bazel` and
-`git` are replaced by stubs that record a call and fail, so any build/push for a
-prebuilt image is a hard test failure.
-"""
 from __future__ import annotations
 
 import os
@@ -87,8 +81,6 @@ class PrebuiltDigestTests(unittest.TestCase):
         self.assertEqual(self.digests(), {"hermes": hermes, "voice-proxy": voice})
 
     def test_every_hermes_unit_image_accepts_a_prebuilt_digest(self):
-        # The mixed unit now owns four images; the smoke Job and the runtime
-        # chart exporter must follow the same promote-then-deploy path.
         digests = {
             "hermes": "sha256:" + "1" * 64,
             "voice-proxy": "sha256:" + "2" * 64,

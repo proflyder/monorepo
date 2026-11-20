@@ -26,8 +26,6 @@ rust_library(
     deps = DEPS,
 )
 
-# The unit tests use the test-only pty helpers: the testing variant replaces the normal
-# home-linux (same crate name, both would be `--extern home_linux`).
 TEST_DEPS = [
     d
     for d in DEPS
@@ -48,7 +46,6 @@ rust_test(
     deps = TEST_DEPS,
 )
 
-# Mirrors the root [workspace.lints] through the crate's `[lints] workspace = true`.
 extract_cargo_lints(
     name = "workspace_lints",
     manifest = "Cargo.toml",

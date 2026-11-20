@@ -16,8 +16,6 @@ kt_android_library(
     ],
 )
 
-# Robolectric 4.17 resolves SDK 35 to this pinned preinstrumented jar. Keeping
-# it as a data dependency avoids a runtime Maven download.
 android_all_dir(
     name = "robolectric_android_all_sdk35",
     jar = "@maven//:org_robolectric_android_all_instrumented",
@@ -44,8 +42,6 @@ kt_android_local_test(
         "--add-opens=java.base/jdk.internal.util=ALL-UNNAMED",
     ],
     manifest = "src/test/AndroidManifest.xml",
-    # rules_android turns this file into -Drobolectric-deps.properties and it
-    # maps the pinned SDK 35 jar relative to its own runfiles directory.
     robolectric_properties_file = "robolectric-deps.properties",
     test_class = "dev.proflyder.home.core.navigation.FragmentRouterTest",
     deps = [

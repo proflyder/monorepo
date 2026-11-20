@@ -1,11 +1,4 @@
 #!/usr/bin/env python3
-"""Read-only live checks for the Station BLE gateway HTTP control.
-
-Requires the control token in STATION_CONTROL_TOKEN (never commit it):
-
-    STATION_E2E=1 STATION_CONTROL_TOKEN=... \
-      python3 projects/station/e2e/live_gateway.py -v
-"""
 from __future__ import annotations
 
 import json

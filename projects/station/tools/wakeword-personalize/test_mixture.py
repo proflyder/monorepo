@@ -15,7 +15,6 @@ def counts(**flags):
 
 
 class MixtureBucketTests(unittest.TestCase):
-    """Counts for batch=128; they must match the pre-refactor recipes exactly."""
 
     def test_plain_mixture(self):
         self.assertEqual(counts(hard=False, station=False, synthetic_hard=False, extra=False), {

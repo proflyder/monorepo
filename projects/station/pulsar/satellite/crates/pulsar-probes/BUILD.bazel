@@ -32,7 +32,6 @@ DEPS = [
     "//projects/station/pulsar/satellite/crates/pulsar-zigbee:pulsar_zigbee",
 ]
 
-# Target names are the historical binary names: docs, skills and tools/ refer to them.
 [
     rust_binary(
         name = name,
@@ -56,8 +55,6 @@ DEPS = [
     ]
 ]
 
-# Runs the update_probe binary at runtime. Cargo exports CARGO_BIN_EXE_<bin>;
-# Bazel does not, so it is passed through `env` and the binary is a runfile.
 rust_test(
     name = "update_probe_test",
     srcs = ["tests/update_probe.rs"],
@@ -71,7 +68,6 @@ rust_test(
     target_compatible_with = LINUX,
 )
 
-# Mirrors the root [workspace.lints] through the crate's `[lints] workspace = true`.
 extract_cargo_lints(
     name = "workspace_lints",
     manifest = "Cargo.toml",

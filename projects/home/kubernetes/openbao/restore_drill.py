@@ -1,24 +1,4 @@
 #!/usr/bin/env python3
-"""OpenBao restore drill on a throwaway local stand.
-
-Restores a raft snapshot into a fresh OpenBao container (same pinned image,
-same static seal key), checks that it auto-unseals, regenerates a root token
-from the recovery keys, inventories mounts/auth/policies/KV paths and compares
-every KV entry consumed by External Secrets with the live Kubernetes Secrets
-by SHA-256. No secret value is printed; the stand token is revoked and the
-container and its data are removed at the end (unless --keep).
-
-The live cluster is only read: the snapshot file, ExternalSecret specs and
-the synced Secrets. Taking a fresh snapshot is a separate, documented step:
-
-    kubectl -n openbao create job --from=cronjob/openbao-raft-snapshot <name>
-
-Usage (Docker/Colima on the workstation, SSH host alias from the private
-ssh_config):
-
-    ./restore_drill.py --ssh-config ~/.ssh/home-lab/config \
-        --ssh-host k3s [--snapshot openbao-<ts>.snap | --snapshot-file F]
-"""
 from __future__ import annotations
 
 import argparse
@@ -42,9 +22,6 @@ BACKUP_DIR = "/srv/k3s/volumes/openbao-backups"
 CONTAINER = "restore-drill-openbao"
 PORT = 18200
 
-# Mirrors values/openbao.yaml: raft node id, static seal, declarative audit.
-# Unauthenticated generate-root is disabled by default in OpenBao 2.7; the
-# stand enables it so the recovery keys can mint a root token.
 STAND_CONFIG = """\
 ui = false
 disable_mlock = true
@@ -94,13 +71,6 @@ def digest(value: str | bytes) -> str:
 
 
 def expected_secret_hashes(external_secrets: list[dict], kv: dict[str, dict]) -> dict:
-    """Map (namespace, secret, key) -> sha256 of the value the stand would sync.
-
-    Supports the two shapes used here: dataFrom.extract (all fields) and
-    data[].remoteRef with a property. A missing path/field maps to None.
-    Templated targets render other keys, so their source fields are only
-    checked for presence (TEMPLATED); compare() skips the live value.
-    """
     out: dict[tuple[str, str, str], str | None] = {}
     for item in external_secrets:
         ns = item["metadata"]["namespace"]
@@ -165,7 +135,7 @@ class Stand:
                     status = json.load(resp)
                 if predicate(status):
                     return status
-            except (OSError, json.JSONDecodeError):  # URLError/timeouts while restarting
+            except (OSError, json.JSONDecodeError):
                 pass
             time.sleep(1)
         raise SystemExit(f"stand did not become {what} in {timeout}s")
@@ -177,7 +147,7 @@ class Stand:
                 with urllib.request.urlopen(f"http://127.0.0.1:{PORT}/v1/sys/health", timeout=5) as r:
                     if r.status == 200:
                         return
-            except OSError:  # HTTPError (standby/sealed), URLError, timeouts
+            except OSError:
                 pass
             time.sleep(1)
         raise SystemExit("stand did not become active")
@@ -232,8 +202,6 @@ def main() -> int:
     ssh = ["ssh", "-F", args.ssh_config, args.ssh_host]
     kubectl = ssh + ["sudo", "-n", "k3s", "kubectl"]
     image = pinned_image(VERSIONS.read_text())
-    # Under the home directory: Colima/Docker Desktop share it with the VM,
-    # /var/folders is not mounted. Private and git-ignored.
     base = ROOT / "secrets" / "local" / "restore-drill"
     base.mkdir(parents=True, exist_ok=True, mode=0o700)
     work = Path(tempfile.mkdtemp(prefix="openbao-", dir=base))
@@ -275,7 +243,6 @@ def main() -> int:
              image, "server", "-config=/openbao/config/config.hcl"], capture_output=True)
         stand.wait(lambda s: s.get("initialized") is False, "reachable")
 
-        # Throwaway init only to obtain a token that can call snapshot-force.
         init = stand.call("sys/init", "PUT", {"recovery_shares": 1, "recovery_threshold": 1})
         stand.token = init["root_token"]
         stand.wait_active()
@@ -327,7 +294,7 @@ def main() -> int:
             try:
                 stand.call("auth/token/revoke-self", "POST", {})
                 report["stand_token_revoked"] = True
-            except Exception:  # the container is deleted next anyway
+            except Exception:
                 report["stand_token_revoked"] = False
         if not args.keep:
             subprocess.run(["docker", "rm", "-f", CONTAINER], capture_output=True)

@@ -4,7 +4,6 @@ load("@rules_shell//shell:sh_test.bzl", "sh_test")
 
 package(default_visibility = ["//visibility:public"])
 
-# Kept in sync with [package].version in Cargo.toml.
 PACKAGE_VERSION = "0.1.0"
 
 LIB_DEPS = [
@@ -37,7 +36,6 @@ rust_library(
     deps = LIB_DEPS,
 )
 
-# The CLI under port. The manifests keep calling a binary named `home-deploy`.
 rust_binary(
     name = "home-deploy",
     srcs = ["src/main.rs"],
@@ -47,8 +45,6 @@ rust_binary(
     deps = LIB_DEPS + [":home_deploy_lib"],
 )
 
-# Compares the Rust binary with the frozen Go contract fixtures. Not part of
-# the deployed image; the `parity` sh_test wraps it.
 rust_binary(
     name = "parity_runner",
     srcs = ["src/bin/parity.rs"],
@@ -105,7 +101,6 @@ rust_test(
     ],
 )
 
-# Mirrors the root [workspace.lints] through the crate's `[lints] workspace = true`.
 extract_cargo_lints(
     name = "workspace_lints",
     manifest = "Cargo.toml",
@@ -123,7 +118,6 @@ rustfmt_test(
     ],
 )
 
-# rules_rust turns every clippy warning into an error, the `-D warnings` gate.
 rust_clippy_test(
     name = "clippy",
     size = "small",

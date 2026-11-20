@@ -1,18 +1,4 @@
 #!/usr/bin/env python3
-"""Idempotent OpenBao configuration for the home deployment.
-
-Enables the KV v2 mount, the auth methods (userpass for the human, JWT for
-GitHub Actions, Kubernetes for pods), the policies and the non-secret test
-entries, and checks the declarative stdout audit device. It never prints tokens
-or passwords.
-
-Run through bootstrap.sh, or manually with an admin token:
-
-    BAO_TOKEN=... ./configure.py --addr https://vault.<domain> \
-        --resolve-ip 192.0.2.27 [--enforce-totp]
-
---resolve-ip pins the connection to the node while DNS is still propagating.
-"""
 from __future__ import annotations
 
 import argparse
@@ -30,26 +16,12 @@ SECRETS = ROOT / "secrets" / "openbao"
 GITHUB_ISSUER = "https://token.actions.githubusercontent.com"
 GITHUB_STATION_ENVIRONMENT = "Station"
 GITHUB_ANDROID_ENVIRONMENT = "Android"
-# Android App Distribution runs from PR CI, so every subject is the merge ref of
-# a pull request. Only `android-distribute` (ci.yml) reads secrets: it signs the
-# APK built by the secret-free `android-app` check and uploads it to Firebase.
-# The daily `android-cleanup` role reads the same record from `cleanup.yml` on
-# `develop` to delete releases older than a day.
 GITHUB_ANDROID_REF = "refs/pull/*/merge"
-# The sign + upload job lives in its own reusable workflow (one trigger per
-# workflow file: `ci.yml` is the PR entry point, `android-release.yml` the
-# manual one, and both call `_android-release.yml`).
 GITHUB_ANDROID_WORKFLOW = ".github/workflows/_android-release.yml"
 GITHUB_ANDROID_EVENT = "pull_request"
-# The manual Android release runs from `develop` on workflow_dispatch, so it
-# cannot use the PR-bound role above; it gets its own role on the same policy.
 GITHUB_ANDROID_RELEASE_REF = "refs/heads/develop"
 GITHUB_ANDROID_RELEASE_WORKFLOW = ".github/workflows/_android-release.yml"
 GITHUB_ANDROID_RELEASE_EVENT = "workflow_dispatch"
-# The App Distribution cleanup runs from `develop` (the default branch), never
-# from a PR, so it needs its own role on the same policy: the
-# `android-distribute` role is bound to PR merge refs and cannot assume it.
-# Its jobs also live in the reusable `_cleanup.yml`.
 GITHUB_ANDROID_CLEANUP_REF = "refs/heads/develop"
 GITHUB_ANDROID_CLEANUP_WORKFLOW = ".github/workflows/_cleanup.yml"
 GITHUB_ANDROID_CLEANUP_EVENTS = ["schedule", "workflow_dispatch"]
@@ -237,8 +209,6 @@ def ensure_kv(bao: Bao) -> None:
 
 
 def ensure_audit(bao: Bao) -> None:
-    # Enabled declaratively in the server config (OpenBao 2.7 rejects API
-    # enablement); this only verifies that the device is live.
     devices = keys_of(bao, "/v1/sys/audit")
     if "stdout/" in devices:
         print("audit: stdout device active")
@@ -295,19 +265,6 @@ def ensure_github(bao: Bao, audience: str, repository: str,
     print("auth: jwt (github) " + ("enabled" if created else "already enabled"))
     bao.expect("POST", "/v1/auth/github/config",
                {"oidc_discovery_url": GITHUB_ISSUER, "bound_issuer": GITHUB_ISSUER})
-    # Android App Distribution runs inside PR CI from the `Android` Environment.
-    # Glob claims pin a role to a PR merge ref and to exactly one workflow file:
-    # `repository`, `environment`, `ref=refs/pull/*/merge`, `job_workflow_ref`
-    # and `event_name=pull_request`. The APK is built without secrets by the
-    # reusable `_android.yml`; only the sign/upload job `android-distribute` in
-    # the pipeline reusable `_ci.yml` calls `_android-release.yml`, which is what
-    # the claim names (OIDC signs the called workflow, not the caller). The
-    # `android-release` role below serves the manual release on `develop`, and
-    # `android-cleanup` reads the same record from the scheduled `_cleanup.yml`.
-    # A fork PR never receives an OIDC token (its run has read-only permissions
-    # and no Environment secrets), so only same-repository branches of
-    # collaborators can assume the role. The policy still exposes one KV
-    # record.
     android_roles = {
         "android-distribute": GITHUB_ANDROID_WORKFLOW,
     }
@@ -330,10 +287,6 @@ def ensure_github(bao: Bao, audience: str, repository: str,
             "clock_skew": 60,
         })
         print(f"role: auth/github/role/{role} (audience %s)" % audience)
-    # The manual Android release (`android-release.yml` -> `_android-release.yml`)
-    # runs from `develop` on a workflow_dispatch, so the PR-bound role above
-    # cannot assume it. Same single KV record and same policy, bound to that one
-    # reusable workflow on `develop` and the `Android` Environment.
     bao.expect("POST", "/v1/auth/github/role/android-release", {
         "role_type": "jwt",
         "user_claim": "job_workflow_ref",
@@ -355,11 +308,6 @@ def ensure_github(bao: Bao, audience: str, repository: str,
         "clock_skew": 60,
     })
     print(f"role: auth/github/role/android-release (audience %s)" % audience)
-    # The daily `cleanup.yml` job that trims old App Distribution releases runs
-    # from `develop` on a schedule or a manual dispatch, so it cannot use the
-    # PR-bound role above. It reads the same single KV record (`ci-android`) and
-    # is bound to exactly the reusable `_cleanup.yml` on `develop`, the `Android`
-    # Environment and the two non-PR events.
     bao.expect("POST", "/v1/auth/github/role/android-cleanup", {
         "role_type": "jwt",
         "user_claim": "job_workflow_ref",
@@ -383,9 +331,6 @@ def ensure_github(bao: Bao, audience: str, repository: str,
     print(f"role: auth/github/role/android-cleanup (audience %s)" % audience)
     if not station_repository:
         return
-    # The station deploy runs from a tag through a reusable workflow, so it
-    # binds repository + environment only: the GitHub Environment restricts
-    # which refs may deploy. No ref claim here on purpose.
     bao.expect("POST", "/v1/auth/github/role/deploy-station", {
         "role_type": "jwt",
         "user_claim": "job_workflow_ref",
@@ -419,7 +364,6 @@ def ensure_kubernetes(bao: Bao) -> None:
             "token_policies": policies,
             "token_ttl": "20m",
             "token_max_ttl": "1h",
-            # Empty: accept the pod's default projected token audience.
             "audience": "",
         })
         print(f"role: auth/kubernetes/role/{name}")
@@ -465,7 +409,6 @@ def ensure_totp(bao: Bao, enforce: bool) -> None:
         (SECRETS / "totp-method-id").write_text(method_id + "\n", encoding="utf-8")
 
     if not enforce:
-        # Never removes an existing enforcement; only reports the live state.
         code, _ = bao.call("GET", "/v1/identity/mfa/login-enforcement/userpass-totp")
         if code == 200:
             print("mfa: TOTP already enforced on auth/userpass")
@@ -484,7 +427,6 @@ def ensure_totp(bao: Bao, enforce: bool) -> None:
 
 
 def default_repository() -> str:
-    """Owner/name of the GitHub repository, from the env or the git remote."""
     explicit = os.environ.get("OPENBAO_GITHUB_REPOSITORY")
     if explicit:
         return explicit.strip()
@@ -533,8 +475,6 @@ def main() -> None:
         sys.exit("cannot determine the GitHub repository; set "
                  "OPENBAO_GITHUB_REPOSITORY")
 
-    # The audience must be the public URL GitHub requests tokens for, not a
-    # temporary port-forward or loopback address used to reach the API.
     audience = (args.audience or args.addr).rstrip("/")
     host = audience.split("://", 1)[-1].split("/", 1)[0].split(":", 1)[0]
     if not audience.startswith("https://") or host in ("127.0.0.1", "localhost"):
@@ -557,8 +497,6 @@ def main() -> None:
     if not station_repository:
         print("station: no --station-repository, deploy-station role skipped")
     ensure_kubernetes(bao)
-    # Non-secret probe kept as a negative-path fixture for the Kubernetes auth
-    # smoke (`secret/ci/*` must never be readable by a workload policy).
     ensure_secret(bao, "ci/test", {"probe": "ok-ci",
                                    "purpose": "policy probe, non-secret"})
     ensure_secret(bao, "k8s/test", {"probe": "ok-k8s",

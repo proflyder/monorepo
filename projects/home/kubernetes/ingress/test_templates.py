@@ -1,9 +1,3 @@
-"""Static contracts for the Traefik/cert-manager ingress manifests.
-
-No cluster and no rendering binary are needed: these checks guard the public
-manifest shape and the Flux substitution contract. The private values are
-injected from the `flux-settings` Secret by the `ingress-routes` Kustomization.
-"""
 import pathlib
 import re
 import unittest

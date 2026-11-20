@@ -1,14 +1,4 @@
 #!/usr/bin/env python3
-"""Calibrate cut-off and sliding window from streaming replay scores.
-
-Reuses `evaluate.replay` so the streaming simulation is not duplicated. Runs
-every (cutoff, window) pair on positive recordings and on confirmed station
-false hits, reports recall vs false positives per listening hour and
-recommends the lowest-FP setting that preserves the current recall (0.9/10).
-
-The recommended pair can be written into the model manifest JSON, which Pulsar
-reads as `micro.probability_cutoff` / `micro.sliding_window_size`.
-"""
 import argparse
 import importlib.util
 import json
@@ -69,8 +59,6 @@ def collect_wavs(directory, skip_excluded=True, skip_ids=frozenset()):
                 described = {}
             if skip_excluded and described.get("excluded"):
                 continue
-            # Background takes are not positives; including them would make
-            # recall meaningless.
             if described.get("block") == "background":
                 continue
         result.append(path)
@@ -78,7 +66,6 @@ def collect_wavs(directory, skip_excluded=True, skip_ids=frozenset()):
 
 
 def negative_paths(events_root, include_suspected=False):
-    """Confirmed false hits only; near misses are a separate metric."""
     station = _load("station_events_for_calibrate", "station_events.py")
     overrides = station.load_overrides(events_root)
     paths = []
@@ -136,8 +123,6 @@ def recommend(table, cutoff=0.9, window=10):
     if baseline is None:
         raise ValueError(f"baseline ({cutoff}, {window}) is missing from the table")
     eligible = [row for row in rows if row["recall"] >= baseline["recall"] - 1e-9]
-    # Lowest false-positive rate first; ties prefer the more conservative
-    # detector (higher cutoff, longer smoothing).
     best = min(eligible, key=lambda row: (
         row["false_per_hour"] if row["false_per_hour"] is not None else float("inf"),
         -row["recall"], -row["cutoff"], -row["window"]))
@@ -156,7 +141,6 @@ def validate_threshold(cutoff, window):
 
 
 def write_manifest(path, cutoff, window):
-    """Merge calibrated thresholds into an existing model manifest JSON."""
     validate_threshold(cutoff, window)
     path = Path(path)
     payload = {}

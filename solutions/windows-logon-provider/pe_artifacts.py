@@ -1,16 +1,4 @@
 #!/usr/bin/env python3
-"""PE checks for the Windows logon provider artifacts.
-
-Dependency-free; runs on macOS and the Ubuntu CI runner:
-
-    python3 pe_artifacts.py normalize out/HomeKompLogon.dll out/cp-selftest.exe
-    python3 pe_artifacts.py verify out/HomeKompLogon.dll
-
-`normalize` zeroes the linker-stamped PE timestamps so identical sources give
-identical bytes (immutable OCI tags). `verify` fails unless the DLL imports
-only allowed system DLLs (static CRT) and exports exactly `DllGetClassObject`
-and `DllCanUnloadNow`.
-"""
 from __future__ import annotations
 
 import argparse
@@ -18,7 +6,6 @@ import struct
 import sys
 from pathlib import Path
 
-# System DLLs the provider may import; a dynamic CRT fails the check.
 ALLOWED_DLLS = {
     "advapi32.dll",
     "bcryptprimitives.dll",
@@ -123,9 +110,8 @@ class PE:
         return names
 
     def normalize(self) -> None:
-        """Zero every timestamp the linker may derive from the wall clock."""
         struct.pack_into("<I", self.data, self.elfanew + 8, 0)
-        for index in (0, 6):  # export directory, debug directory
+        for index in (0, 6):
             rva, size = self.data_directory(index)
             if rva == 0 or size == 0:
                 continue

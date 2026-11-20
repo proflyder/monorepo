@@ -2,9 +2,6 @@ load("//platform/bazel/oci:service_image.bzl", "rust_service_image")
 
 package(default_visibility = ["//visibility:public"])
 
-# Static x86_64-unknown-linux-musl binary (zig cc linker, bundled SQLite) on
-# the same digest-pinned distroless static base as the other services. The
-# name, entrypoint and uid match the former Go image.
 rust_service_image(
     name = "currency-bot",
     crate_binary = "//solutions/currency-bot/crates/currency-bot:currency-bot",

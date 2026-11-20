@@ -3,8 +3,6 @@ load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_clippy_test", "rust_libr
 
 package(default_visibility = ["//visibility:public"])
 
-# Kept in sync with [package].version in Cargo.toml. Bazel does not derive
-# env!("CARGO_PKG_VERSION"); without this the deployed binary reports 0.0.0.
 PACKAGE_VERSION = "0.1.0"
 
 LIB_DEPS = [
@@ -76,7 +74,6 @@ rust_test(
     ],
 )
 
-# Mirrors the root [workspace.lints] through the crate's `[lints] workspace = true`.
 extract_cargo_lints(
     name = "workspace_lints",
     manifest = "Cargo.toml",

@@ -2,13 +2,10 @@ load("@rules_rust//rust:defs.bzl", "rust_clippy_test", "rustfmt_test")
 
 package(default_visibility = ["//visibility:public"])
 
-# The release package artifact helpers. Cargo manifests/locks live in the root
-# workspace (/Cargo.toml) and are read by crate_universe from there.
 exports_files([
     "pe_artifacts.py",
 ])
 
-# Host-portable targets: protocol and the provider's safe core.
 _HOST_TARGETS = [
     "//packages/rust/wakegrant-protocol:wakegrant_protocol",
     "//packages/rust/wakegrant-protocol:protocol_tests",
@@ -16,13 +13,11 @@ _HOST_TARGETS = [
     "//solutions/windows-logon-provider/crates/provider:provider_host_tests",
 ]
 
-# Artifacts of the Windows cross-build; only //platform/bazel/windows:x86_64_windows.
 _WINDOWS_TARGETS = [
     "//solutions/windows-logon-provider/crates/provider:provider",
     "//solutions/windows-logon-provider/crates/cp-selftest:cp-selftest",
 ]
 
-# fmt/clippy run once per platform on local targets only; warnings fail.
 rustfmt_test(
     name = "rustfmt",
     size = "small",
@@ -35,8 +30,6 @@ rust_clippy_test(
     targets = _HOST_TARGETS,
 )
 
-# The `platform` attribute transitions only the linted targets; the test itself
-# still runs on the host, which is what makes a Windows cross-clippy possible.
 rustfmt_test(
     name = "rustfmt_windows",
     size = "small",

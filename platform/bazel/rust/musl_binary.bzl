@@ -1,10 +1,3 @@
-"""Builds one Rust binary for the static musl image target.
-
-The image is built from a fully static `x86_64-unknown-linux-musl` binary. A transition is applied to the binary so the CI's usual
-`--platforms=//platform/bazel:linux_amd64` (meaning "the linux/amd64
-image") does not accidentally package a glibc or host executable.
-"""
-
 def _musl_platform_transition_impl(settings, attr):
     _ignore = (settings, attr)
     return {
@@ -23,8 +16,6 @@ _musl_platform_transition = transition(
 
 def _musl_binary_impl(ctx):
     target = ctx.attr.binary
-    # A label with a configuration transition is a single Target in current
-    # Bazel, but older/newer rule wrappers may expose a one-element sequence.
     if type(target) == "list":
         files = []
         for item in target:

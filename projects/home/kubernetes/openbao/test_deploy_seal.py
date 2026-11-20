@@ -1,4 +1,3 @@
-"""The deploy must never replace the live static seal key with a new one."""
 import pathlib
 import re
 import unittest

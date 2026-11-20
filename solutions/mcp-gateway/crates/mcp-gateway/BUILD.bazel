@@ -3,8 +3,6 @@ load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_clippy_test", "rust_libr
 
 package(default_visibility = ["//visibility:public"])
 
-# Kept in sync with [package].version in Cargo.toml. Bazel does not derive
-# env!("CARGO_PKG_VERSION"); without this the deployed binary reports 0.0.0.
 PACKAGE_VERSION = "0.1.0"
 
 DEPS = [
@@ -66,8 +64,6 @@ rust_binary(
     deps = DEPS + [":mcp_gateway"],
 )
 
-# The domain vectors are the port contract and are read from disk (from the
-# runfiles tree under Bazel, from the repository under cargo test).
 rust_test(
     name = "unit_tests",
     size = "small",
@@ -97,8 +93,6 @@ rust_test(
     ],
 )
 
-# Deploy data contract: the tracked catalog and bb allow-list must pass the
-# real validators. Replaces the former Go `catalog_contract_test.go`.
 rust_test(
     name = "deploy_contract_tests",
     size = "small",
@@ -123,9 +117,6 @@ rust_test(
     ],
 )
 
-# Per-session `notifications/tools/list_changed`: the notification must reach
-# the standalone GET stream whether it opens before or after
-# `notifications/initialized`, exactly once.
 rust_test(
     name = "tool_list_changed_tests",
     size = "small",
@@ -155,7 +146,6 @@ rustfmt_test(
     ],
 )
 
-# rules_rust turns every clippy warning into an error, the `-D warnings` gate.
 rust_clippy_test(
     name = "clippy",
     size = "small",

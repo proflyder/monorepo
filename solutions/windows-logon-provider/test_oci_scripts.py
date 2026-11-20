@@ -1,13 +1,4 @@
 #!/usr/bin/env python3
-"""Static contract tests for the OCI distribution scripts.
-
-`publish-oci.sh` runs in CI on `develop` and `fetch.sh` runs on the operator's
-machine, so this suite pins the safe shape without network access: a semver
-`VERSION`, immutable content on an existing tag, ORAS/attestation checks on
-fetch, and no home-specific endpoint baked into the solution.
-
-Run: python3 -m unittest discover -s solutions/windows-logon-provider
-"""
 from __future__ import annotations
 
 import unittest
@@ -22,8 +13,6 @@ INSTALL = HERE / "install.ps1"
 
 class VersionTests(unittest.TestCase):
     def test_version_is_a_major_minor_base(self):
-        # The patch is computed by CI (`platform/ci/version.mjs`): VERSION holds
-        # only the base, so a release needs no version-bump commit.
         text = VERSION.read_text(encoding="utf-8").strip()
         self.assertRegex(text, r"^\d+\.\d+$")
         self.assertIn("--version", PUBLISH.read_text(encoding="utf-8"))
@@ -31,8 +20,6 @@ class VersionTests(unittest.TestCase):
 
 class ReproducibleBuildTests(unittest.TestCase):
     def test_build_normalizes_the_pe_timestamp(self):
-        # Immutable OCI tags need identical bytes for identical sources; the PE
-        # TimeDateStamp was the only varying field.
         build = (HERE / "build.sh").read_text(encoding="utf-8")
         self.assertIn("pe_artifacts.py normalize", build)
         pe = (HERE / "pe_artifacts.py").read_text(encoding="utf-8")
@@ -53,7 +40,6 @@ class PublishScriptTests(unittest.TestCase):
         self.assertIn("cmp -s", self.text)
         self.assertIn("already exists with different content", self.text)
         self.assertIn("the computed version must increase", self.text)
-        # An explicit rebuild may replace the published bytes on purpose.
         self.assertIn('if [[ "$REPLACE" -eq 1 ]]', self.text)
 
     def test_files_and_media_types_match_the_artifact_contract(self):
@@ -67,7 +53,6 @@ class PublishScriptTests(unittest.TestCase):
         self.assertIn("SHA256SUMS:text/plain", self.text)
 
     def test_artifact_type_owner_comes_from_the_registry_path(self):
-        # No second literal of the public account name: the type is derived.
         self.assertIn('owner="${REPOSITORY#*/}"', self.text)
         self.assertIn(".windows-logon-provider.v1", self.text)
 
@@ -115,16 +100,12 @@ class FetchScriptTests(unittest.TestCase):
 class SolutionBoundaryTests(unittest.TestCase):
     def test_install_defaults_are_not_home_specific(self):
         text = INSTALL.read_text(encoding="utf-8-sig")
-        # ServiceUrl, Machine and UserName are required project inputs.
         for name in ("ServiceUrl", "Machine", "UserName"):
             self.assertIn(f"[Parameter(Mandatory = $true)]\n    [string]${name}", text)
-        # The home NodePort and machine name must not be defaults here.
         self.assertNotIn("30130", text)
         self.assertNotIn("'komp'", text)
 
     def test_docs_and_install_surface_have_no_home_endpoint(self):
-        # Protocol vectors intentionally use the documented home example; the
-        # reusable install/docs surface must only carry generic placeholders.
         for path in (PUBLISH, FETCH, INSTALL, HERE / "README.md"):
             text = path.read_text(encoding="utf-8", errors="ignore")
             self.assertNotIn("192.0.2.27:30130", text, path.name)

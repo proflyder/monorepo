@@ -1,21 +1,4 @@
 #!/usr/bin/env python3
-"""Export Proxmox vzdump freshness as Prometheus textfile metrics.
-
-Run by ``vzdump-metrics.timer`` every 15 minutes on the PVE host. The script
-reads ``pvesh get /nodes/<node>/storage/<storage>/content --content backup
---output-format json`` (``pvesm list`` has no JSON output on PVE 9), keeps the
-newest archive
-per guest, resolves the guest name from ``qm config``/``pct config`` (or the
-archive's ``.notes`` file) and atomically writes:
-
-    home_vzdump_last_backup_timestamp_seconds{vmid,guest}
-    home_vzdump_last_backup_bytes{vmid,guest}
-
-The node-exporter textfile collector on PVE serves the file, and Prometheus
-scrapes PVE through the `pve-node` job in
-``projects/home/kubernetes/observability/values/prometheus.yaml`` (the private
-target comes from the `PVE_NODE_TARGET` flux-settings key).
-"""
 from __future__ import annotations
 
 import argparse
@@ -46,7 +29,6 @@ def run_command(command: list[str], timeout: int = 60) -> subprocess.CompletedPr
 
 
 def parse_pvesm_output(text: str) -> list[dict]:
-    """Accept a JSON array, JSON object with ``data``, or JSON lines."""
     stripped = text.strip()
     if not stripped:
         return []
@@ -208,7 +190,7 @@ def main(argv: list[str] | None = None) -> int:
         if not guests:
             raise RuntimeError("no vzdump archives found")
         write_metrics(Path(args.output), guests)
-    except Exception as exc:  # noqa: BLE001 - one concise failure line for journald
+    except Exception as exc:
         print(f"vzdump metrics failed: {exc}", file=sys.stderr)
         return 1
     return 0

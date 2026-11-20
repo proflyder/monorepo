@@ -4,7 +4,7 @@ import tempfile
 import unittest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
-import cloudflare_dns  # noqa: E402
+import cloudflare_dns
 
 
 class FakeApi:

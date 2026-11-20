@@ -32,7 +32,6 @@ metro_android_library(
     ],
 )
 
-# Use cases are plain Kotlin over the repository contract; no Android runtime.
 kt_android_local_test(
     name = "scenario_use_cases_test",
     srcs = glob(["src/test/kotlin/**/*.kt"]),

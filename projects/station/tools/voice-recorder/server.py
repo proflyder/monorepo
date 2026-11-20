@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-"""Local-only recording console. No HA calls, settings edits or replacement daemon."""
 from __future__ import annotations
 import argparse
 import hashlib
@@ -26,7 +25,6 @@ BLOCKS = {"normal", "relaxed", "quiet", "whisper", "commands", "background"}
 
 
 class SSHStream:
-    """Popen-shaped binary stream using the existing password auth, no PTY."""
     def __init__(self, client, command, log_path):
         self.client = client
         stdin, stdout, stderr = client.exec_command(command, get_pty=False, timeout=15)
@@ -177,7 +175,7 @@ class Recorder:
             try:
                 (self.output / (session + "-error.log")).write_text(traceback.format_exc())
             except OSError:
-                pass  # Disk failure must never prevent device restoration.
+                pass
             with self.lock:
                 self.message = str(exc) if isinstance(exc, RuntimeError) else "Сбой соединения. Проверяем восстановление колонки."
                 self.last_error = self.message
@@ -195,7 +193,7 @@ class Recorder:
             try:
                 self.shell(f"test ! -d {BASE}/{session} || touch {BASE}/{session}/stop", timeout=5)
             except Exception:
-                pass  # Device watchdog is independent of this process/connection.
+                pass
             self._verify_restore()
 
     def _lease(self, session):
@@ -217,7 +215,6 @@ class Recorder:
             time.sleep(2)
 
     def consume(self, data):
-        # An interrupted binary stream may end with an incomplete final sample.
         data = data[:len(data) // 2 * 2]
         values = struct.unpack("<" + "h" * (len(data) // 2), data)
         if not values:
@@ -367,7 +364,6 @@ class Handler(BaseHTTPRequestHandler):
         match = re.fullmatch(r"/audio/([a-f0-9]{32})", self.path)
         if match:
             path = self.server.recorder.output / (match[1] + ".wav")
-            # Only completed, labelled takes can be played.
             if path.is_file() and path.with_suffix(".json").is_file():
                 return self.send(200, path.read_bytes(), "audio/wav")
         self.send(404, b'{}')

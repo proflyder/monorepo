@@ -1,28 +1,4 @@
 #!/usr/bin/env python3
-"""Opt-in live check: HA voice intents -> canonical SchedulerService.
-
-Runs real Assistant `conversation.process` calls through the BUILTIN Home
-Assistant agent (not the Hermes LLM agent) and verifies the resulting
-scheduler state through the Connect JSON API.
-
-Safety:
-- read-only by default; mutations require STATION_E2E_MUTATE=1;
-- every run uses a unique label prefix and cleans up only resources it created;
-- the test alarm is always scheduled for TOMORROW at least 2 hours from now in
-  the HA timezone, then deleted immediately; nothing rings or speaks;
-- no token or URL credentials are printed.
-
-Usage:
-  HA_URL=http://<ha>:8123 HA_TOKEN=... SCHEDULER_URL=http://<node>:30098 \
-  SCHEDULER_TOKEN_FILE=/path/token STATION_E2E=1 STATION_E2E_MUTATE=1 \
-  python3 projects/home-assistant/e2e/live_scheduler_voice.py -v
-
-Env:
-  HA_URL (required in practice; default is a TEST-NET placeholder)
-  HA_TOKEN (required)
-  HA_VOICE_AGENT (default conversation.home_assistant)
-  SCHEDULER_URL, SCHEDULER_TOKEN_FILE (required for verification/cleanup)
-"""
 from __future__ import annotations
 
 import json
@@ -43,8 +19,6 @@ TOKEN_FILE = os.environ.get("SCHEDULER_TOKEN_FILE", "").strip()
 LIVE = os.environ.get("STATION_E2E") == "1" and bool(HA_TOKEN)
 MUTATE = LIVE and os.environ.get("STATION_E2E_MUTATE") == "1"
 
-# Unique per process so cleanup can never touch another session's resources.
-# Cyrillic only: the Russian sentence slots do not reliably match Latin labels.
 _SUFFIX = "".join(random.choice("абвгдежзиклмнопрстуфхцчшэюя") for _ in range(6))
 RUN_PREFIX = f"тестголос{_SUFFIX}"
 
@@ -148,8 +122,6 @@ class VoiceRouting(unittest.TestCase):
         schedule_ids: list[str] = []
         try:
             tz = ha_timezone()
-            # now + 3h is always at least 2h away; HA rolls onceDate to the
-            # next day when the wall time has already passed today.
             target = (datetime.now(tz) + timedelta(hours=3)).replace(second=0, microsecond=0)
             wall = f"{target.hour}:{target.minute:02d}"
             speech = say(f"поставь будильник {label} на {wall}")
