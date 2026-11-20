@@ -21,16 +21,23 @@
             <LinearLayout
                 android:id="@+id/toolbar_title_row"
                 android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
+                android:layout_height="match_parent"
                 android:gravity="center_vertical"
                 android:orientation="horizontal">
 
                 <TextView
                     android:id="@+id/toolbar_title"
                     android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
+                    android:layout_height="match_parent"
+                    android:breakStrategy="balanced"
                     android:ellipsize="end"
-                    android:maxLines="1"
+                    android:gravity="center_vertical"
+                    android:hyphenationFrequency="none"
+                    android:maxLines="@integer/app_toolbar_title_max_lines"
+                    app:autoSizeMaxTextSize="@dimen/app_toolbar_title_max_size"
+                    app:autoSizeMinTextSize="@dimen/app_toolbar_title_min_size"
+                    app:autoSizeStepGranularity="@dimen/app_toolbar_title_size_step"
+                    app:autoSizeTextType="uniform"
                     android:textAppearance="@style/TextAppearance.Home.ToolbarTitle"
                     android:textColor="?attr/colorOnSurface"
                     tools:ignore="SelectableText" />

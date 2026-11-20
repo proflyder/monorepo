@@ -125,7 +125,7 @@
 
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/connection_refresh_config"
-                        style="@style/Widget.Material3.Button.TextButton"
+                        style="@style/Widget.Material3.Button.TonalButton"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="4dp"
@@ -146,27 +146,19 @@
                     android:orientation="vertical"
                     android:padding="16dp">
 
-                    <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="@string/connection_token_title"
-                        android:drawableStart="@drawable/connection_ic_token"
-                        android:drawablePadding="@dimen/connection_section_icon_gap"
-                        android:textAppearance="?attr/textAppearanceTitleLarge" />
-
                     <com.google.android.material.textfield.TextInputLayout
                         android:id="@+id/connection_token_layout"
                         style="@style/Widget.Home.TextInput"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp"
+                        android:hint="@string/connection_token_title"
                         app:endIconMode="password_toggle"
-                        app:hintEnabled="false"
-                        app:helperText="@string/connection_token_helper">
+                        app:helperText="@string/connection_token_helper"
+                        app:placeholderText="@string/connection_token_placeholder"
+                        app:startIconDrawable="@drawable/connection_ic_token">
 
                         <com.google.android.material.textfield.TextInputEditText
                             android:id="@+id/connection_token"
-                            android:hint="@string/connection_token_placeholder"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:imeOptions="actionDone"

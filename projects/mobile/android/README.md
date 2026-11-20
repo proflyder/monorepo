@@ -961,19 +961,49 @@ navigation bar sizes.
   Alert dialogs are floating windows and are positioned by the system.
 
 Text fields share `Widget.Home.TextInput` (also the theme's `textInputStyle`):
-filled box on `colorSurfaceContainerHigh`, the card corner radius, no underline
-or outline at rest, a 2dp `colorPrimary` outline only while focused (a focus
-foreground on the edit text), label/hint/helper/error from the theme. A field
-has either a section title or a floating label, never both: the alarm editor
-uses the label **Name** with the default name as placeholder; the token field
-keeps its card title and shows a placeholder instead of a duplicate label.
+a Material 3 filled field on `colorSurfaceContainerHigh` with 12dp top corners
+(`ui_text_input_radius`, never a capsule) and a square bottom edge. At rest a
+1dp `colorOutlineVariant` underline marks it as editable; focused, the
+underline becomes 2dp `colorStateOn` (primary in Current, cyan in Neon), and
+the floating label, cursor and selection handles use the same accent.
+Helper, error and counter text use `textAppearanceBodySmall`.
+
+- Every field has a floating label from resources and the label is always
+  enabled: the text sits under it, never pushed down by an empty label slot.
+  A card or section title never repeats the label — the name field on
+  «Phone notifications and find» and the token field on «Connection» carry
+  their card's name and icon (`startIconDrawable`) themselves.
+- Examples go into `placeholderText`, not the label.
+- Free-text names (alarm, reminder, timer, scenario, phone name) get the
+  clear-text end icon; the token keeps the password toggle; the speak dialog
+  keeps its 500-character counter.
+
+Buttons inside settings cards follow one rule: the action the screen exists
+for is the only filled button (**Save and test connection**, editor **Save**,
+**Start** timer); other card actions are tonal (**Save name**, **Update
+registration**, **Refresh config**, scenario **Add …**); per-row and reset
+actions (permission **Allow**, **Remove stored token**, **Delete**) are text
+buttons. A screen of independent settings with no single main action
+(«Phone notifications and find») has no filled button, so its card actions
+look the same.
+
+The toolbar title never clips a letter: it autosizes from 24sp down to 16sp
+and may wrap onto a second line at a word boundary (`breakStrategy=balanced`,
+no hyphenation).
 
 `//projects/mobile/android/app:window_insets_screenshot_test` runs the real
 activity with status/navigation/keyboard insets in the Neon and Current themes:
 the Save bar bottom equals window height minus the keyboard and does not cover
 the name field, the bottom navigation is hidden with the keyboard, the last
 Home row ends above the FAB and the bottom navigation, and the fields use the
-shared style. It writes `insets-<theme>-{alarm-editor-keyboard,home-end,connection}.png`.
+shared style. The same test opens «Phone notifications and find» in Russian and checks the
+toolbar title is not ellipsized, clipped or broken inside a word, and inflates
+every layout with a field (12+) to check the shared style: 1dp/2dp strokes,
+corner radius below half the field height, a non-empty label and text inside
+the field's vertical bounds. Alarm editor, connection and push screens run in
+Neon and Current, dark and light. It writes
+`insets-<theme>-<dark|light>-{alarm-editor-keyboard,connection,push-settings}.png`
+and `insets-<theme>-home-end.png`.
 
 ## Themes
 

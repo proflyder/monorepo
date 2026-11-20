@@ -1,10 +1,13 @@
 package dev.proflyder.home
 
+import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Rect
+import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.FrameLayout
 import android.widget.TextView
 import androidx.core.graphics.Insets
 import androidx.core.view.ViewCompat
@@ -17,6 +20,7 @@ import com.google.android.material.textfield.TextInputLayout
 import dev.proflyder.home.core.theme.AppTheme
 import dev.proflyder.home.feature.alarms.AlarmEditorDestination
 import dev.proflyder.home.feature.connection.ConnectionDestination
+import dev.proflyder.home.feature.push.PushSettingsDestination
 import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -32,6 +36,10 @@ import org.robolectric.annotation.GraphicsMode
 import dev.proflyder.home.feature.alarms.impl.R as AlarmsR
 import dev.proflyder.home.feature.connection.impl.R as ConnectionR
 import dev.proflyder.home.feature.control.impl.R as ControlR
+import dev.proflyder.home.feature.push.impl.R as PushR
+import dev.proflyder.home.feature.reminders.impl.R as RemindersR
+import dev.proflyder.home.feature.scenarios.impl.R as ScenariosR
+import dev.proflyder.home.feature.timers.impl.R as TimersR
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35], qualifiers = "w411dp-h891dp-night-xxhdpi")
@@ -42,6 +50,46 @@ class WindowInsetsScreenshotTest {
 
     @Test
     fun saveBarSitsOnTheKeyboardInCurrent() = alarmEditorWithKeyboard(AppTheme.CURRENT)
+
+    @Test
+    @Config(qualifiers = LIGHT)
+    fun saveBarSitsOnTheKeyboardInNeonLight() = alarmEditorWithKeyboard(AppTheme.NEON)
+
+    @Test
+    @Config(qualifiers = LIGHT)
+    fun saveBarSitsOnTheKeyboardInCurrentLight() = alarmEditorWithKeyboard(AppTheme.CURRENT)
+
+    @Test
+    @Config(qualifiers = RU_DARK)
+    fun pushNameFieldAndTitleInNeon() = pushSettings(AppTheme.NEON)
+
+    @Test
+    @Config(qualifiers = RU_DARK)
+    fun pushNameFieldAndTitleInCurrent() = pushSettings(AppTheme.CURRENT)
+
+    @Test
+    @Config(qualifiers = RU_LIGHT)
+    fun pushNameFieldAndTitleInNeonLight() = pushSettings(AppTheme.NEON)
+
+    @Test
+    @Config(qualifiers = RU_LIGHT)
+    fun pushNameFieldAndTitleInCurrentLight() = pushSettings(AppTheme.CURRENT)
+
+    @Test
+    @Config(qualifiers = LIGHT)
+    fun connectionFieldsUseTheHomeStyleInNeonLight() = connectionFields(AppTheme.NEON)
+
+    @Test
+    @Config(qualifiers = LIGHT)
+    fun connectionFieldsUseTheHomeStyleInCurrentLight() = connectionFields(AppTheme.CURRENT)
+
+    @Test
+    fun everyFieldInTheAppUsesTheHomeStyle() {
+        val activity = launch(AppTheme.NEON)
+        val fields = FIELD_LAYOUTS.flatMap { inflateFields(activity, it) }
+        assertTrue("expected every app field, found ${fields.size}", fields.size >= FIELD_COUNT)
+        fields.forEach(::assertHomeStyle)
+    }
 
     @Test
     fun homeLastItemClearsBottomNavigationInNeon() = homeScrolledToEnd(AppTheme.NEON)
@@ -60,8 +108,9 @@ class WindowInsetsScreenshotTest {
         activity.router.navigate(AlarmEditorDestination())
         idle(activity)
         val root = activity.window.decorView
-        val label = root.findViewById<View>(AlarmsR.id.alarm_editor_label)
+        val label = root.findViewById<TextView>(AlarmsR.id.alarm_editor_label)
         label.requestFocus()
+        label.text = activity.getString(AlarmsR.string.alarms_label_default)
         val keyboard = dp(root, KEYBOARD_DP)
         applyInsets(activity, keyboard)
 
@@ -73,7 +122,7 @@ class WindowInsetsScreenshotTest {
         assertTrue("field hides behind the save bar", field.windowBottom() <= bar.windowTop())
         assertTrue("field went above the screen", field.windowTop() >= 0)
         assertHomeStyle(field)
-        shoot(activity, "insets-${theme.key}-alarm-editor-keyboard.png", keyboard)
+        shoot(activity, "insets-${theme.key}-${mode(root)}-alarm-editor-keyboard.png", keyboard)
     }
 
     private fun homeScrolledToEnd(theme: AppTheme) {
@@ -113,19 +162,62 @@ class WindowInsetsScreenshotTest {
         assertHomeStyle(field)
         val scroll = root.findViewById<NestedScrollView>(ConnectionR.id.connection_scroll)
         assertFalse(scroll.clipToPadding)
-        shoot(activity, "insets-${theme.key}-connection.png", 0)
+        shoot(activity, "insets-${theme.key}-${mode(root)}-connection.png", 0)
+    }
+
+    private fun pushSettings(theme: AppTheme) {
+        val activity = launch(theme)
+        activity.router.navigate(PushSettingsDestination)
+        idle(activity)
+        val root = activity.window.decorView
+        val name = root.findViewById<TextView>(PushR.id.push_device_name)
+        name.text = activity.getString(PushR.string.push_device_name_sample)
+        applyInsets(activity, 0)
+        assertHomeStyle(name.parentField())
+        assertTitleFits(root.findViewById(R.id.toolbar_title))
+        shoot(activity, "insets-${theme.key}-${mode(root)}-push-settings.png", 0)
+    }
+
+    private fun assertTitleFits(title: TextView) {
+        val layout = checkNotNull(title.layout) { "toolbar title is not laid out" }
+        assertTrue("toolbar title is empty", title.text.isNotBlank())
+        (0 until layout.lineCount).forEach { line ->
+            assertEquals("toolbar title is ellipsized", 0, layout.getEllipsisCount(line))
+            val room = title.width - title.totalPaddingLeft - title.totalPaddingRight + 1
+            assertTrue("toolbar title is clipped", layout.getLineWidth(line) <= room)
+        }
+        (1 until layout.lineCount).forEach { line ->
+            assertTrue("toolbar title breaks inside a word", title.text[layout.getLineStart(line) - 1].isWhitespace())
+        }
+        assertTrue("toolbar title is taller than the toolbar", layout.height <= title.height)
+    }
+
+    private fun inflateFields(activity: MainActivity, layoutRes: Int): List<TextInputLayout> {
+        val view = LayoutInflater.from(activity).inflate(layoutRes, FrameLayout(activity), false)
+        val width = (WIDTH_DP * activity.resources.displayMetrics.density).toInt()
+        return view.fields().onEach { it.measureAlone(width) }
     }
 
     private fun assertHomeStyle(field: TextInputLayout) {
-        val radius = field.resources.getDimension(dev.proflyder.home.core.ui.R.dimen.ui_card_radius)
-        val fill = MaterialColors.getColor(field, com.google.android.material.R.attr.colorSurfaceContainerHigh)
-        assertEquals(TextInputLayout.BOX_BACKGROUND_FILLED, field.boxBackgroundMode)
-        assertEquals(fill, field.boxBackgroundColor)
-        assertEquals(0, field.boxStrokeWidth)
-        assertEquals(0, field.boxStrokeWidthFocused)
-        assertEquals(radius, field.boxCornerRadiusTopStart, 0.5f)
-        assertEquals(radius, field.boxCornerRadiusBottomEnd, 0.5f)
-        assertTrue("no focus outline", field.editText?.foreground != null)
+        val name = field.resources.getResourceEntryName(checkNotNull(field.editText).id)
+        val stroke = field.resources.getDimensionPixelSize(dev.proflyder.home.core.ui.R.dimen.ui_text_input_stroke)
+        val focused = field.resources.getDimensionPixelSize(dev.proflyder.home.core.ui.R.dimen.ui_text_input_focus_stroke)
+        assertEquals(name, TextInputLayout.BOX_BACKGROUND_FILLED, field.boxBackgroundMode)
+        assertEquals(name, stroke, field.boxStrokeWidth)
+        assertEquals(name, focused, field.boxStrokeWidthFocused)
+        assertTrue("$name is a capsule", field.boxCornerRadiusTopStart * 2 < field.height)
+        assertTrue("$name is a capsule", field.boxCornerRadiusTopEnd * 2 < field.height)
+        assertTrue("$name has no label", field.isHintEnabled && !field.hint.isNullOrBlank())
+        assertTextInside(name, checkNotNull(field.editText))
+    }
+
+    private fun assertTextInside(name: String, edit: TextView) {
+        val layout = checkNotNull(edit.layout) { "$name is not laid out" }
+        val top = edit.totalPaddingTop
+        val bottom = top + layout.getLineBottom(0)
+        assertTrue("$name text starts above the field", top >= 0)
+        assertTrue("$name text goes below the field", bottom <= edit.height)
+        assertTrue("$name text is pushed down", top <= edit.height - bottom + LABEL_ROOM_DP * edit.resources.displayMetrics.density)
     }
 
     private fun launch(theme: AppTheme): MainActivity {
@@ -198,6 +290,24 @@ class WindowInsetsScreenshotTest {
     }
 
     private companion object {
+        const val LIGHT = "w411dp-h891dp-notnight-xxhdpi"
+        const val RU_DARK = "ru-w411dp-h891dp-night-xxhdpi"
+        const val RU_LIGHT = "ru-w411dp-h891dp-notnight-xxhdpi"
+        const val FIELD_COUNT = 12
+        const val LABEL_ROOM_DP = 20
+        val FIELD_LAYOUTS = listOf(
+            AlarmsR.layout.fragment_alarm_editor,
+            ConnectionR.layout.fragment_connection,
+            ControlR.layout.dialog_speak,
+            PushR.layout.fragment_push_settings,
+            RemindersR.layout.fragment_reminder_editor,
+            ScenariosR.layout.fragment_scenario_editor,
+            ScenariosR.layout.dialog_scenario_speak,
+            ScenariosR.layout.dialog_scenario_light_params,
+            ScenariosR.layout.dialog_scenario_entity_condition,
+            ScenariosR.layout.dialog_scenario_delay,
+            TimersR.layout.fragment_timers,
+        )
         const val WIDTH_DP = 411
         const val HEIGHT_DP = 891
         const val KEYBOARD_DP = 320
@@ -220,5 +330,27 @@ private fun View.windowTop(): Int {
 }
 
 private fun View.windowBottom(): Int = windowTop() + height
+
+private fun unspecified(): Int = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+
+private fun mode(view: View): String = when (view.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) {
+    Configuration.UI_MODE_NIGHT_YES -> "dark"
+    else -> "light"
+}
+
+private fun View.parentField(): TextInputLayout = generateSequence(parent) { it.parent }
+    .filterIsInstance<TextInputLayout>()
+    .first()
+
+private fun View.measureAlone(width: Int) {
+    measure(exactly(width), unspecified())
+    layout(0, 0, measuredWidth, measuredHeight)
+}
+
+private fun View.fields(): List<TextInputLayout> = when (this) {
+    is TextInputLayout -> listOf(this)
+    is ViewGroup -> (0 until childCount).flatMap { getChildAt(it).fields() }
+    else -> emptyList()
+}
 
 private fun exactly(size: Int): Int = View.MeasureSpec.makeMeasureSpec(size, View.MeasureSpec.EXACTLY)

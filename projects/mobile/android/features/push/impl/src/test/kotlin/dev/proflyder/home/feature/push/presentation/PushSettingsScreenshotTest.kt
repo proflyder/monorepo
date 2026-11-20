@@ -25,6 +25,7 @@ class PushSettingsScreenshotTest {
             RuntimeEnvironment.getApplication(),
             com.google.android.material.R.style.Theme_Material3_Dark_NoActionBar,
         )
+        themed.theme.applyStyle(dev.proflyder.home.core.theme.R.style.ThemeOverlay_Home_Neon, true)
         val binding = FragmentPushSettingsBinding.inflate(LayoutInflater.from(themed))
         val missing = themed.getString(R.string.push_permission_missing)
         binding.pushNotificationsStatus.text = missing
