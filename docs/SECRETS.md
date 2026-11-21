@@ -62,6 +62,7 @@
 | `infra/vpn/clients/ci-pulsar` | VPN client certificate for CI deploy-station | owner |
 | `infra/vpn/clients/owner-phone` | VPN client certificate of the owner's phone | owner |
 | `infra/vpn/owner` | owner VPN login: password, TOTP seed and QR | owner |
+| `infra/vpn/wireguard` | WireGuard server key on CT 102 (`private_key`, `public_key`, `address`, `listen_port`) | owner (`install-wireguard.sh`) |
 | `k8s/cert-manager/cloudflare-api-token` | Cloudflare DNS-01 token for the wildcard certificate | ESO → cert-manager |
 | `k8s/currency-bot/cloudflared-tunnel` | Cloudflare Tunnel token for the Telegram webhook | ESO → currency-bot |
 | `k8s/currency-bot/currency-bot` | currency bot Telegram/API credentials | ESO → currency-bot |
@@ -80,7 +81,7 @@
 | `k8s/home-assistant/mcp-gateway-bb-ssh` | SSH key + known_hosts for bb dispatch from the MCP gateway | ESO → home-assistant |
 | `k8s/home-assistant/mcp-gateway-voice` | voice tool bearer of the MCP gateway | ESO → home-assistant |
 | `k8s/home-assistant/phone-push` | FCM service account (Firebase Cloud Messaging API Admin) for phone-push | ESO → home-assistant |
-| `k8s/home-assistant/scheduler-auth` | scheduler API bearer | ESO → home-assistant |
+| `k8s/home-assistant/scheduler-auth` | scheduler API bearer (`token`), WireGuard peer-sync bearer (`vpn_sync_token`, копия в CT 102 `/etc/wireguard/sync.header`), VPN-профиль (`vpn.json`) | ESO → home-assistant |
 | `k8s/home-assistant/wakegrant` | wakegrant issuer token and per-machine keys | ESO → home-assistant |
 | `k8s/monitoring/grafana-admin` | Grafana admin login | ESO → monitoring |
 | `k8s/monitoring/heartbeat` | dead-man switch Worker URL and token | ESO → monitoring |

@@ -8,6 +8,8 @@
 Интернет
   ├─ VPN 443/tcp+udp ──► CT 102 vpn (ocserv): группы lan / full / ci
   │      lan: 10.77.0.0/24 → домашняя LAN, DNS 192.0.2.1
+  ├─ VPN 51820/udp ───► CT 102 vpn (WireGuard wg0): 10.77.2.0/24, как full;
+  │      peer'ы выдаёт scheduler (/v1/vpn/profile), CT тянет /v1/vpn/peers
   └─ Cloudflare Tunnel ─► K3s cloudflared
          публично /telegram/webhook → currency-bot:8081
          и /repository/* → Nexus (read-only CI cache)

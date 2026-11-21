@@ -145,6 +145,10 @@
    "purpose": "owner VPN login: password, TOTP seed and QR",
    "consumer": "owner"
   },
+  "infra/vpn/wireguard": {
+   "purpose": "WireGuard server key on CT 102 (private_key, public_key, address, listen_port)",
+   "consumer": "owner (install-wireguard.sh)"
+  },
   "k8s/cert-manager/cloudflare-api-token": {
    "purpose": "Cloudflare DNS-01 token for the wildcard certificate",
    "consumer": "ESO → cert-manager"
@@ -218,7 +222,7 @@
    "consumer": "ESO → home-assistant"
   },
   "k8s/home-assistant/scheduler-auth": {
-   "purpose": "scheduler API bearer",
+   "purpose": "scheduler API bearer (token), WireGuard peer-sync bearer (vpn_sync_token) and VPN profile settings (vpn.json)",
    "consumer": "ESO → home-assistant"
   },
   "k8s/home-assistant/wakegrant": {

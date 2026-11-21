@@ -5,6 +5,7 @@ mod error;
 pub mod push;
 mod service;
 mod text;
+pub mod vpn;
 mod zone;
 
 use std::collections::HashSet;
@@ -62,7 +63,18 @@ impl tower::Service<Request<Body>> for ConnectFallback {
     }
 }
 
-pub fn router(service: Service, alarms: AlarmFacade, token: &str) -> axum::Router {
+#[derive(Debug, Clone, Default)]
+pub struct VpnAccess {
+    pub settings: Option<Arc<vpn::VpnSettings>>,
+    pub sync_token: Option<String>,
+}
+
+pub fn router(
+    service: Service,
+    alarms: AlarmFacade,
+    token: &str,
+    vpn_access: VpnAccess,
+) -> axum::Router {
     let store = Arc::clone(service.store());
     let routes = ConnectRouter::new();
     let routes = <Service as SchedulerServiceExt>::register(Arc::new(service.clone()), routes);
@@ -76,6 +88,20 @@ pub fn router(service: Service, alarms: AlarmFacade, token: &str) -> axum::Route
                 .with_max_request_body_size(MAX_BODY_BYTES),
         )
         .with_interceptor_arc(Arc::new(BearerAuth::new(token)));
+    let vpn = vpn::VpnState {
+        store: Arc::clone(&store),
+        app_auth: Arc::new(BearerAuth::new(token)),
+        sync_auth: vpn_access
+            .sync_token
+            .as_deref()
+            .map(|sync| Arc::new(BearerAuth::new(sync))),
+        settings: vpn_access.settings,
+    };
+    let vpn_routes = axum::Router::new()
+        .route("/v1/vpn/profile", axum::routing::post(vpn::register))
+        .route("/v1/vpn/profile/remove", axum::routing::post(vpn::remove))
+        .route("/v1/vpn/peers", axum::routing::get(vpn::peers))
+        .with_state(vpn);
     let push = push::PushState {
         store,
         auth: Arc::new(BearerAuth::new(token)),
@@ -88,5 +114,6 @@ pub fn router(service: Service, alarms: AlarmFacade, token: &str) -> axum::Route
         .route("/v1/push/devices/remove", axum::routing::post(push::remove))
         .route("/v1/push/devices/rename", axum::routing::post(push::rename))
         .with_state(push)
+        .merge(vpn_routes)
         .fallback_service(ConnectFallback { methods, service })
 }

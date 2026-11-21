@@ -7,6 +7,7 @@ mod status;
 mod task;
 mod tick;
 mod timer;
+mod vpn;
 
 use std::fmt;
 use std::sync::{Mutex, PoisonError};
@@ -24,10 +25,11 @@ pub use crate::domain::{
 pub use push::{PushDevice, PushDeviceInput};
 pub use status::{ConsumerStatus, QueueInfo, Status};
 pub use tick::TickStats;
+pub use vpn::{VpnPeer, VpnPeerInput, VpnPool, is_wireguard_key as vpn_key_is_valid};
 
 use crate::domain::ScheduleKind as DomainScheduleKind;
 
-pub const SCHEMA_VERSION: i64 = 5;
+pub const SCHEMA_VERSION: i64 = 6;
 
 pub const QUEUE_HOME: &str = "home";
 pub const QUEUE_TASKS: &str = "tasks";
@@ -156,6 +158,15 @@ const V4: &[&str] = &[
 
 const V5: &[&str] = &["ALTER TABLE schedules ADD COLUMN once_unix INTEGER NOT NULL DEFAULT 0"];
 
+const V6: &[&str] = &["CREATE TABLE IF NOT EXISTS vpn_peers (
+			device_id TEXT PRIMARY KEY,
+			public_key TEXT NOT NULL UNIQUE,
+			host INTEGER NOT NULL UNIQUE,
+			device_name TEXT NOT NULL,
+			created_unix INTEGER NOT NULL,
+			updated_unix INTEGER NOT NULL
+		)"];
+
 pub const MIGRATIONS: &[Migration] = &[
     Migration {
         version: 1,
@@ -178,9 +189,14 @@ pub const MIGRATIONS: &[Migration] = &[
         statements: V4,
     },
     Migration {
-        version: SCHEMA_VERSION,
+        version: 5,
         description: "scheduler v5 UTC-only schedules",
         statements: V5,
+    },
+    Migration {
+        version: SCHEMA_VERSION,
+        description: "scheduler v6 WireGuard peers",
+        statements: V6,
     },
 ];
 

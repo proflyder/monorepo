@@ -243,7 +243,7 @@ fn go_database_opens_and_reads_identically() {
             row.get(0)
         })
         .expect("schema version");
-    assert_eq!(version, 5, "v1 fixture migrates to v5");
+    assert_eq!(version, 6, "v1 fixture migrates to v6");
     let scenarios: i64 = migrated
         .query_row("SELECT COUNT(*) FROM scenarios", [], |row| row.get(0))
         .expect("scenarios table exists");
