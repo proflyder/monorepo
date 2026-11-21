@@ -10,6 +10,13 @@
 
 ## P2 — проверки и улучшения инфраструктуры
 
+- [ ] **WireGuard снаружи.** Сервер на CT 102 работает (`51820/udp`,
+      проверен из LAN). Владельцу: проброс `51820/udp` на ONT и AX3 по
+      образцу `443` (`docs/OPERATIONS.md`, «WireGuard: проброс порта»); после
+      merge PR VPN-API scheduler — проверить, что `wg-peer-sync` перестал
+      получать 404 (`journalctl -u wg-peer-sync`), и пройти подключение с
+      телефона через мобильную сеть.
+
 - [ ] **Удалить старое поле `hermes_private_yaml`.** Flux-конфиг Hermes
       принят (2026-11-21: `render-config` без ошибок, `:9118`
       `hermes_config_drift_files 0`, `hermes_config_check_success 1`, `9118`

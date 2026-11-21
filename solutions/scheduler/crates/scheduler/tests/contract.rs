@@ -76,7 +76,12 @@ fn new_router(scenario: &str) -> axum::Router {
         ..EngineStatus::default()
     });
     let service = Service::new(store, Arc::new(TestClock(clock)), "test", engine, allowed);
-    api::router(service.clone(), AlarmFacade::new(service), TOKEN)
+    api::router(
+        service.clone(),
+        AlarmFacade::new(service),
+        TOKEN,
+        api::VpnAccess::default(),
+    )
 }
 
 fn seed(scenario: &str, store: &Store) {

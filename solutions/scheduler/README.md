@@ -312,6 +312,30 @@ Connect RPC: `POST /v1/push/devices` (upsert по стабильному `device
 реестру), но токен никогда не пишется в лог и не попадает в речь
 MCP-инструментов.
 
+### VPN-профили (`/v1/vpn/*`)
+
+Выдача WireGuard-доступа приложению — тот же base URL и bearer, что
+`/v1/push/devices`. Телефон сам генерирует пару ключей и присылает только
+публичный ключ; приватный ключ не покидает телефон.
+
+- `POST /v1/vpn/profile` `{"deviceId","publicKey","deviceName"}` —
+  идемпотентный upsert по `deviceId`: адрес из пула сохраняется, ротация
+  ключа обновляет ту же строку; ключ другого устройства — `409`, неверный
+  ключ/`deviceId` — `400`, нет настроек — `503`. Ответ — `{"profile":{...}}`
+  с `wireguard.interface` (`address`, `dns`, `mtu`), `wireguard.peer`
+  (`publicKey` сервера, `endpoint`, `allowedIps`, `persistentKeepalive`),
+  `wireguard.splitAllowedIps` и запасным `ocserv` (`url`, `group`,
+  `splitGroup`, `authentication`).
+- `POST /v1/vpn/profile/remove` `{"deviceId"}` → `{"removed":bool}`.
+- `GET /v1/vpn/peers` — только для `wg-peer-sync` на CT 102, отдельный
+  bearer `SCHEDULER_VPN_SYNC_TOKEN_FILE`; токены не взаимозаменяемы.
+
+Настройки — JSON `SCHEDULER_VPN_SETTINGS_FILE` (ключ `vpn.json` в
+`scheduler-auth`). Без файла или с невалидным файлом сервис стартует, а VPN-API
+отвечает `503`. Клиентский сертификат ocserv сервер не выпускает: приватный
+ключ CA по решению хранится только у владельца (`vpncerts.py issue <user>
+--device <phone> --groups full`), импорт `.p12` в приложение — отдельный шаг.
+
 ## Конфигурация
 
 `SCHEDULER_*` и legacy fallback `ALARM_*`:

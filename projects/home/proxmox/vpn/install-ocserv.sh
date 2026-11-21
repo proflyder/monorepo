@@ -16,6 +16,9 @@ CLIENT_CA_DEST=/etc/ocserv/ssl/client-ca.pem
 CLIENT_CRL_DEST=/etc/ocserv/ssl/client-ca.crl
 CI_CIDR=10.77.1.0/24
 CI_HOST=
+WG_CIDR=
+WG_PORT=51820
+WG_IFACE=wg0
 
 usage() {
   cat <<'EOF'
@@ -37,6 +40,11 @@ Options:
   --client-crl PATH     CRL for the client CA (PEM)
   --ci-cidr CIDR        pool for the restricted "ci" group (default 10.77.1.0/24)
   --ci-host ADDRESS     the only host the "ci" group may reach (Traefik/443)
+  --wg-cidr CIDR        WireGuard pool (install-wireguard.sh); opens the UDP
+                        port and gives the pool the same forwarding and NAT as
+                        the lan/full pool
+  --wg-port PORT        WireGuard UDP port (default 51820, never 443)
+  --wg-iface NAME       WireGuard interface (default wg0)
 
 Client certificate login is enabled only when a client CA is supplied (or a
 previously installed /etc/ocserv/ssl/client-ca.pem exists). Password + TOTP
@@ -65,6 +73,9 @@ while (($#)); do
     --client-crl) CLIENT_CRL=$2; shift 2 ;;
     --ci-cidr) CI_CIDR=$2; shift 2 ;;
     --ci-host) CI_HOST=$2; shift 2 ;;
+    --wg-cidr) WG_CIDR=$2; shift 2 ;;
+    --wg-port) WG_PORT=$2; shift 2 ;;
+    --wg-iface) WG_IFACE=$2; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) usage >&2; die "unknown argument: $1" ;;
   esac
@@ -79,6 +90,14 @@ done
 if [[ -n $CI_HOST ]]; then
   [[ $CI_HOST =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] ||
     die "--ci-host must be an IPv4 address: $CI_HOST"
+fi
+
+if [[ -n $WG_CIDR ]]; then
+  [[ $WG_CIDR =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/[0-9]+$ ]] ||
+    die "--wg-cidr must be an IPv4 CIDR: $WG_CIDR"
+  [[ $WG_PORT =~ ^[0-9]+$ && $WG_PORT -ge 1024 && $WG_PORT -le 65535 && $WG_PORT != 443 ]] ||
+    die "--wg-port must be 1024..65535 and not 443: $WG_PORT"
+  [[ $WG_IFACE =~ ^[a-z0-9]+$ ]] || die "--wg-iface is invalid: $WG_IFACE"
 fi
 
 export DEBIAN_FRONTEND=noninteractive
@@ -259,6 +278,15 @@ EOF
 )
 fi
 
+WG_NFT_INPUT=
+WG_NFT_FORWARD=
+WG_NFT_NAT=
+if [[ -n $WG_CIDR ]]; then
+  WG_NFT_INPUT="    iifname \"$IFACE\" udp dport $WG_PORT accept"
+  WG_NFT_FORWARD="    iifname \"$WG_IFACE\" oifname \"$IFACE\" ip saddr $WG_CIDR accept"
+  WG_NFT_NAT="    ip saddr $WG_CIDR oifname \"$IFACE\" masquerade"
+fi
+
 cat >/etc/nftables.conf <<EOF
 #!/usr/sbin/nft -f
 # Managed by projects/home/proxmox/vpn/install-ocserv.sh.
@@ -275,6 +303,7 @@ table inet vpn {
     iifname "$IFACE" tcp dport 443 accept
     iifname "$IFACE" udp dport 443 accept
     ip saddr $LAN_CIDR iifname "$IFACE" tcp dport 22 accept
+${WG_NFT_INPUT}
   }
 
   chain forward {
@@ -285,12 +314,14 @@ table inet vpn {
     ct state established,related accept
     iifname "vpns*" oifname "$IFACE" ip saddr $VPN_CIDR accept
 ${CI_NFT_FORWARD}
+${WG_NFT_FORWARD}
   }
 
   chain postrouting {
     type nat hook postrouting priority srcnat; policy accept;
     ip saddr $VPN_CIDR oifname "$IFACE" masquerade
 ${CI_NFT_NAT}
+${WG_NFT_NAT}
   }
 }
 EOF

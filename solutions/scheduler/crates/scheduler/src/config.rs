@@ -32,6 +32,8 @@ pub struct Config {
     pub tick_interval: Duration,
     pub allowed_consumers: Vec<String>,
     pub scenario_execution: bool,
+    pub vpn_settings_file: Option<PathBuf>,
+    pub vpn_sync_token_file: Option<PathBuf>,
 }
 
 impl std::fmt::Debug for Config {
@@ -50,6 +52,8 @@ impl std::fmt::Debug for Config {
             .field("tick_interval", &self.tick_interval)
             .field("allowed_consumers", &self.allowed_consumers)
             .field("scenario_execution", &self.scenario_execution)
+            .field("vpn_settings_file", &self.vpn_settings_file)
+            .field("vpn_sync_token_file", &self.vpn_sync_token_file)
             .finish_non_exhaustive()
     }
 }
@@ -146,6 +150,9 @@ impl Config {
             tick_interval,
             allowed_consumers,
             scenario_execution,
+            vpn_settings_file: first(getenv, &["SCHEDULER_VPN_SETTINGS_FILE"]).map(PathBuf::from),
+            vpn_sync_token_file: first(getenv, &["SCHEDULER_VPN_SYNC_TOKEN_FILE"])
+                .map(PathBuf::from),
         };
         config.validate()?;
         Ok(config)
