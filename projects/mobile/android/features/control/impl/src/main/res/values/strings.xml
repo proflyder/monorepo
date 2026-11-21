@@ -89,4 +89,5 @@
         <item>Sun</item>
     </string-array>
     <string name="control_call_title">Call the station</string>
+    <string name="control_vpn_title">VPN home</string>
 </resources>

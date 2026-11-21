@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="vpn_title">VPN</string>
+    <string name="vpn_tile_label">VPN домой</string>
+    <string name="vpn_channel_name">Состояние VPN</string>
+    <string name="vpn_external_profile_name">Дом</string>
+
+    <string name="vpn_state_disconnected">Отключено</string>
+    <string name="vpn_state_connecting">Подключение…</string>
+    <string name="vpn_state_connecting_external">Ждём OpenConnect…</string>
+    <string name="vpn_state_connected">Подключено</string>
+    <string name="vpn_state_fallback">WireGuard не ответил</string>
+    <string name="vpn_state_failed">Не подключено</string>
+
+    <string name="vpn_detail_disconnected">Туннель выключен. Дом доступен только из домашней сети.</string>
+    <string name="vpn_detail_connecting">%1$s · ждём рукопожатие</string>
+    <string name="vpn_detail_connected">%1$s · %2$s</string>
+    <string name="vpn_detail_fallback">Нет рукопожатия за 10 с. Откройте OpenConnect на 443, чтобы попасть домой.</string>
+    <string name="vpn_traffic">↓ %1$s · ↑ %2$s</string>
+    <string name="vpn_protocol_wireguard">WireGuard</string>
+    <string name="vpn_protocol_openconnect">OpenConnect</string>
+
+    <string name="vpn_problem_no_profile">Профиля VPN ещё нет: подключитесь один раз к домашнему Wi-Fi или проверьте настройки подключения.</string>
+    <string name="vpn_problem_permission">Android не разрешил VPN. Нажмите «Подключить» и примите системный запрос.</string>
+    <string name="vpn_problem_tunnel">Туннель WireGuard не запустился.</string>
+    <string name="vpn_problem_no_external">Не установлен OpenConnect или Cisco Secure Client.</string>
+
+    <string name="vpn_connect">Подключить</string>
+    <string name="vpn_disconnect">Отключить</string>
+    <string name="vpn_open_external">Открыть OpenConnect</string>
+
+    <string name="vpn_route_title">Маршрут</string>
+    <string name="vpn_route_all">Весь трафик</string>
+    <string name="vpn_route_home">Только дом</string>
+    <string name="vpn_route_all_help">Весь трафик телефона идёт через дом.</string>
+    <string name="vpn_route_home_help">Через туннель идёт только домашняя сеть, остальное — напрямую.</string>
+
+    <string name="vpn_auto_title">Подключать вне дома</string>
+    <string name="vpn_auto_subtitle">Включается вне дома и выключается в домашней сети</string>
+    <string name="vpn_home_unknown">Проверяем сеть…</string>
+    <string name="vpn_home_yes">Сейчас в домашней сети</string>
+    <string name="vpn_home_no">Сейчас вне домашней сети</string>
+
+    <string name="vpn_fallback_title">Запасной канал: OpenConnect на 443</string>
+    <string name="vpn_external_ready">Включается сам, если WireGuard не получил рукопожатие.</string>
+    <string name="vpn_external_missing">Установите OpenConnect или Cisco Secure Client, чтобы работал запасной канал.</string>
+    <string name="vpn_auth_certificate">Сертификат</string>
+    <string name="vpn_auth_password">Пароль + код</string>
+    <string name="vpn_auth_certificate_help">Импортируйте .p12 от владельца и установите его в системное хранилище — VPN-клиент возьмёт его оттуда.</string>
+    <string name="vpn_auth_password_help">VPN-клиент спросит пароль, затем 6-значный код из приложения-аутентификатора.</string>
+    <string name="vpn_certificate_title">Сертификат .p12</string>
+    <string name="vpn_certificate_none">Не импортирован</string>
+    <string name="vpn_certificate_import">Импортировать .p12</string>
+    <string name="vpn_certificate_install">Установить в систему</string>
+    <string name="vpn_certificate_password">Пароль импорта</string>
+    <string name="vpn_certificate_imported">Сертификат импортирован</string>
+    <string name="vpn_certificate_wrong_password">Неверный пароль или в .p12 нет ключа</string>
+    <string name="vpn_certificate_unreadable">Файл не читается</string>
+    <string name="vpn_certificate_too_large">Файл слишком большой для сертификата</string>
+
+    <string name="vpn_profile_title">Профиль устройства</string>
+    <string name="vpn_profile_missing">Профиля ещё нет</string>
+    <string name="vpn_profile_loading">Запрашиваем профиль…</string>
+    <string name="vpn_profile_ready">%1$s · обновлён %2$s</string>
+    <string name="vpn_profile_stale">%1$s (сохранённый)</string>
+    <string name="vpn_problem_not_configured">Сначала укажите сервер и токен в разделе «Подключение».</string>
+    <string name="vpn_problem_offline">Сервер недоступен. Профиль выдаётся дома или через OpenConnect.</string>
+    <string name="vpn_problem_unauthorized">Токен отклонён.</string>
+    <string name="vpn_problem_invalid">Сервер отклонил запрос.</string>
+    <string name="vpn_problem_conflict">Этот ключ принадлежит другому устройству. Перевыпустите профиль.</string>
+    <string name="vpn_problem_limit">Достигнут лимит устройств VPN.</string>
+    <string name="vpn_problem_unavailable">VPN не настроен на сервере.</string>
+    <string name="vpn_problem_server">Ошибка сервера.</string>
+    <string name="vpn_reissue">Перевыпустить профиль</string>
+    <string name="vpn_forget">Забыть устройство</string>
+    <string name="vpn_reissued">Профиль перевыпущен</string>
+    <string name="vpn_forgotten">Устройство забыто</string>
+    <string name="vpn_forget_confirm_title">Забыть это устройство?</string>
+    <string name="vpn_forget_confirm_body">Сервер удалит ключ этого телефона; VPN не будет работать, пока не выпущен новый профиль.</string>
+    <string name="vpn_permission_denied">Разрешение на VPN не выдано</string>
+    <string name="vpn_settings_missing">Нечем открыть</string>
+</resources>

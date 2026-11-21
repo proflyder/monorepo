@@ -6,6 +6,7 @@ import com.google.firebase.crashlytics.FirebaseCrashlytics
 import dev.proflyder.home.di.AppGraph
 import dev.proflyder.home.feature.call.CallEntryPoint
 import dev.proflyder.home.feature.push.PushEntryPoint
+import dev.proflyder.home.feature.vpn.VpnEntryPoint
 import dev.zacsweers.metro.createGraphFactory
 
 class HomeApplication : Application() {
@@ -35,6 +36,14 @@ class HomeApplication : Application() {
             ),
         )
         graph.pushRegistrar.start()
+        VpnEntryPoint.install(
+            VpnEntryPoint.Dependencies(
+                controller = graph.vpnController,
+                profiles = graph.vpnProfiles,
+                settings = graph.vpnSettings,
+                homeNetwork = graph.vpnHomeNetwork,
+            ),
+        )
         configureCrashReporting()
     }
 

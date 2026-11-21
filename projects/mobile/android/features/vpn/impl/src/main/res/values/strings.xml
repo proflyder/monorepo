@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="vpn_title">VPN</string>
+    <string name="vpn_tile_label">Home VPN</string>
+    <string name="vpn_channel_name">VPN status</string>
+    <string name="vpn_external_profile_name">Home</string>
+
+    <string name="vpn_state_disconnected">Disconnected</string>
+    <string name="vpn_state_connecting">Connecting…</string>
+    <string name="vpn_state_connecting_external">Waiting for OpenConnect…</string>
+    <string name="vpn_state_connected">Connected</string>
+    <string name="vpn_state_fallback">WireGuard did not answer</string>
+    <string name="vpn_state_failed">Not connected</string>
+
+    <string name="vpn_detail_disconnected">The tunnel is off. Home stays reachable only from the home network.</string>
+    <string name="vpn_detail_connecting">%1$s · waiting for the handshake</string>
+    <string name="vpn_detail_connected">%1$s · %2$s</string>
+    <string name="vpn_detail_fallback">No handshake in 10 s. Open OpenConnect on 443 to get home.</string>
+    <string name="vpn_traffic">↓ %1$s · ↑ %2$s</string>
+    <string name="vpn_protocol_wireguard">WireGuard</string>
+    <string name="vpn_protocol_openconnect">OpenConnect</string>
+
+    <string name="vpn_problem_no_profile">No VPN profile yet: connect to the home Wi-Fi once or check the connection settings.</string>
+    <string name="vpn_problem_permission">Android did not allow the VPN. Tap Connect and accept the system request.</string>
+    <string name="vpn_problem_tunnel">The WireGuard tunnel could not start.</string>
+    <string name="vpn_problem_no_external">OpenConnect or Cisco Secure Client is not installed.</string>
+
+    <string name="vpn_connect">Connect</string>
+    <string name="vpn_disconnect">Disconnect</string>
+    <string name="vpn_open_external">Open OpenConnect</string>
+
+    <string name="vpn_route_title">Route</string>
+    <string name="vpn_route_all">All traffic</string>
+    <string name="vpn_route_home">Home only</string>
+    <string name="vpn_route_all_help">All phone traffic goes through home.</string>
+    <string name="vpn_route_home_help">Only the home network goes through the tunnel; the rest goes directly.</string>
+
+    <string name="vpn_auto_title">Connect outside home</string>
+    <string name="vpn_auto_subtitle">Turns on away from home and off on the home network</string>
+    <string name="vpn_home_unknown">Checking the network…</string>
+    <string name="vpn_home_yes">Now on the home network</string>
+    <string name="vpn_home_no">Now outside the home network</string>
+
+    <string name="vpn_fallback_title">Fallback: OpenConnect on 443</string>
+    <string name="vpn_external_ready">Used automatically when WireGuard gets no handshake.</string>
+    <string name="vpn_external_missing">Install OpenConnect or Cisco Secure Client to use the fallback.</string>
+    <string name="vpn_auth_certificate">Certificate</string>
+    <string name="vpn_auth_password">Password + code</string>
+    <string name="vpn_auth_certificate_help">Import the .p12 from the owner and install it into the system storage; the VPN client picks it there.</string>
+    <string name="vpn_auth_password_help">The VPN client asks for the password and then the 6-digit code from the authenticator.</string>
+    <string name="vpn_certificate_title">.p12 certificate</string>
+    <string name="vpn_certificate_none">Not imported</string>
+    <string name="vpn_certificate_import">Import .p12</string>
+    <string name="vpn_certificate_install">Install into system</string>
+    <string name="vpn_certificate_password">Import password</string>
+    <string name="vpn_certificate_imported">Certificate imported</string>
+    <string name="vpn_certificate_wrong_password">Wrong password or not a .p12 with a key</string>
+    <string name="vpn_certificate_unreadable">The file cannot be read</string>
+    <string name="vpn_certificate_too_large">The file is too large for a certificate</string>
+
+    <string name="vpn_profile_title">Device profile</string>
+    <string name="vpn_profile_missing">No profile yet</string>
+    <string name="vpn_profile_loading">Requesting the profile…</string>
+    <string name="vpn_profile_ready">%1$s · updated %2$s</string>
+    <string name="vpn_profile_stale">%1$s (last saved)</string>
+    <string name="vpn_problem_not_configured">Set the server and token in Connection first.</string>
+    <string name="vpn_problem_offline">Server is unreachable. The profile is issued at home or through OpenConnect.</string>
+    <string name="vpn_problem_unauthorized">The token was rejected.</string>
+    <string name="vpn_problem_invalid">The server rejected the request.</string>
+    <string name="vpn_problem_conflict">This key belongs to another device. Reissue the profile.</string>
+    <string name="vpn_problem_limit">The VPN device limit is reached.</string>
+    <string name="vpn_problem_unavailable">VPN is not configured on the server.</string>
+    <string name="vpn_problem_server">Server error.</string>
+    <string name="vpn_reissue">Reissue</string>
+    <string name="vpn_forget">Forget device</string>
+    <string name="vpn_reissued">Profile reissued</string>
+    <string name="vpn_forgotten">Device forgotten</string>
+    <string name="vpn_forget_confirm_title">Forget this device?</string>
+    <string name="vpn_forget_confirm_body">The server removes this phone’s key; the VPN stops working until a new profile is issued.</string>
+    <string name="vpn_permission_denied">VPN permission was not granted</string>
+    <string name="vpn_settings_missing">No app can open this</string>
+</resources>

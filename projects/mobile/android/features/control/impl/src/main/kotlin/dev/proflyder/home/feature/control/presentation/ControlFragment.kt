@@ -117,6 +117,7 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
                 is QuickTile.Speak -> openSpeakDialog(tile.entry)
                 is QuickTile.ScenarioTile -> viewModel.runScenarioNow(tile.scenario)
                 QuickTile.Call -> viewModel.callStation()
+                QuickTile.Vpn -> openVpn()
             }
         }
 
@@ -141,7 +142,7 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
                         FavoriteRef(FavoriteKind.SCENARIO, tile.scenario.id),
                         tile.scenario.label,
                     )
-                QuickTile.Call -> Unit
+                QuickTile.Call, QuickTile.Vpn -> Unit
             }
         }
 
@@ -250,6 +251,7 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
             is QuickTile.Speak -> openSpeakDialog(tile.entry)
             is QuickTile.ScenarioTile -> viewModel.runScenarioNow(tile.scenario)
             QuickTile.Call -> viewModel.callStation()
+            QuickTile.Vpn -> openVpn()
         }
     }
 
@@ -274,7 +276,7 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
                 FavoriteRef(FavoriteKind.SCENARIO, tile.scenario.id),
                 tile.scenario.label,
             )
-            QuickTile.Call -> Unit
+            QuickTile.Call, QuickTile.Vpn -> Unit
         }
     }
 
@@ -396,6 +398,8 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
         ) { viewModel.toggleFavorite(entry) }
     }
 
+    internal fun openVpn() = requireNavigator().selectTab(VPN_FEATURE)
+
     internal fun openHubSection(card: HubCard) {
         val featureId = when (card) {
             is HubCard.Alarm -> "alarms"
@@ -434,3 +438,5 @@ class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBind
 
     internal fun ControlEntry.isOn(): Boolean = power == dev.proflyder.home.core.model.PowerState.ON
 }
+
+private const val VPN_FEATURE = "vpn"

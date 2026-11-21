@@ -18,5 +18,6 @@ import org.junit.runners.Suite
     WireDtosTest::class,
     SystemDashboardClientTest::class,
     ChatClientTest::class,
+    VpnProfileClientTest::class,
 )
 class AllNetworkTests

@@ -5,6 +5,8 @@
     <string name="settings_intro">The server connection, phone notifications and what this phone has received.</string>
     <string name="settings_connection_title">Connection</string>
     <string name="settings_connection_subtitle">Home server address and access token</string>
+    <string name="settings_vpn_title">VPN home</string>
+    <string name="settings_vpn_subtitle">WireGuard, OpenConnect fallback, auto-connect</string>
     <string name="settings_notifications_title">Phone notifications and find</string>
     <string name="settings_notifications_subtitle">Permissions for notifications and the loud ring</string>
     <string name="settings_history_title">Notification history</string>

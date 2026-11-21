@@ -1,0 +1,242 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingStart="@dimen/ds_space_l"
+        android:paddingTop="@dimen/ds_space_l"
+        android:paddingEnd="@dimen/ds_space_l"
+        android:paddingBottom="@dimen/ds_space_xl">
+
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/vpn_status_card"
+            style="@style/Widget.Home.Card"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="@dimen/vpn_card_padding">
+
+                <dev.proflyder.home.core.designsystem.ListRow
+                    android:id="@+id/vpn_status_row"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    app:rowIcon="@drawable/vpn_ic_shield"
+                    app:rowIconTint="?attr/colorPrimary"
+                    app:rowTitle="@string/vpn_state_disconnected" />
+
+                <TextView
+                    android:id="@+id/vpn_status_traffic"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/ds_space_xs"
+                    android:textAppearance="?attr/textAppearanceBodySmall"
+                    android:textColor="?attr/colorOnSurfaceVariant"
+                    android:textIsSelectable="true"
+                    android:visibility="gone" />
+
+                <com.google.android.material.progressindicator.LinearProgressIndicator
+                    android:id="@+id/vpn_progress"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/ds_space_s"
+                    android:indeterminate="true"
+                    android:visibility="gone" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/vpn_toggle"
+                    style="@style/Widget.Home.Button.Filled.L"
+                    android:layout_width="match_parent"
+                    android:layout_marginTop="@dimen/ds_space_m"
+                    android:text="@string/vpn_connect"
+                    app:icon="@drawable/vpn_ic_shield" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/vpn_external"
+                    style="@style/Widget.Home.Button.Tonal.M"
+                    android:layout_width="match_parent"
+                    android:layout_marginTop="@dimen/ds_space_s"
+                    android:text="@string/vpn_open_external"
+                    android:visibility="gone"
+                    app:icon="@drawable/ds_ic_open_in_new" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/ds_space_xl"
+            android:text="@string/vpn_route_title"
+            android:textIsSelectable="true"
+                    android:textAppearance="?attr/textAppearanceTitleSmall"
+            android:textColor="?attr/colorOnSurfaceVariant" />
+
+        <dev.proflyder.home.core.designsystem.PillSegments
+            android:id="@+id/vpn_route"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/ds_space_s" />
+
+        <TextView
+            android:id="@+id/vpn_route_help"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/ds_space_s"
+            android:textIsSelectable="true"
+                    android:textAppearance="?attr/textAppearanceBodySmall"
+            android:textColor="?attr/colorOnSurfaceVariant" />
+
+        <com.google.android.material.card.MaterialCardView
+            style="@style/Widget.Home.Card"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/ds_space_l">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="@dimen/vpn_card_padding">
+
+                <dev.proflyder.home.core.designsystem.ListRow
+                    android:id="@+id/vpn_auto_row"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    app:rowIcon="@drawable/vpn_ic_home_wifi"
+                    app:rowIconTint="?attr/colorPrimary"
+                    app:rowSubtitle="@string/vpn_auto_subtitle"
+                    app:rowSwitch="true"
+                    app:rowTitle="@string/vpn_auto_title" />
+
+                <TextView
+                    android:id="@+id/vpn_home_status"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/ds_space_s"
+                    android:textIsSelectable="true"
+                    android:textAppearance="?attr/textAppearanceBodySmall"
+                    android:textColor="?attr/colorOnSurfaceVariant" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <com.google.android.material.card.MaterialCardView
+            style="@style/Widget.Home.Card"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/ds_space_s">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="@dimen/vpn_card_padding">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/vpn_fallback_title"
+                    android:textIsSelectable="true"
+                    android:textAppearance="?attr/textAppearanceTitleSmall" />
+
+                <TextView
+                    android:id="@+id/vpn_external_status"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/ds_space_xs"
+                    android:textIsSelectable="true"
+                    android:textAppearance="?attr/textAppearanceBodySmall"
+                    android:textColor="?attr/colorOnSurfaceVariant" />
+
+                <dev.proflyder.home.core.designsystem.PillSegments
+                    android:id="@+id/vpn_auth"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/ds_space_m" />
+
+                <dev.proflyder.home.core.designsystem.ListRow
+                    android:id="@+id/vpn_certificate_row"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/ds_space_s"
+                    app:rowIcon="@drawable/vpn_ic_key"
+                    app:rowIconTint="?attr/colorPrimary"
+                    app:rowTitle="@string/vpn_certificate_title">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/vpn_certificate_import"
+                        style="@style/Widget.Home.IconButton.Tonal.M"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        app:icon="@drawable/vpn_ic_upload" />
+                </dev.proflyder.home.core.designsystem.ListRow>
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/vpn_certificate_install"
+                    style="@style/Widget.Home.Button.Tonal.S"
+                    android:layout_width="wrap_content"
+                    android:layout_marginTop="@dimen/ds_space_xs"
+                    android:text="@string/vpn_certificate_install"
+                    android:visibility="gone" />
+
+                <TextView
+                    android:id="@+id/vpn_auth_help"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/ds_space_s"
+                    android:textIsSelectable="true"
+                    android:textAppearance="?attr/textAppearanceBodySmall"
+                    android:textColor="?attr/colorOnSurfaceVariant" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <com.google.android.material.card.MaterialCardView
+            style="@style/Widget.Home.Card"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/ds_space_s">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="@dimen/vpn_card_padding">
+
+                <dev.proflyder.home.core.designsystem.ListRow
+                    android:id="@+id/vpn_profile_row"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    app:rowIcon="@drawable/vpn_ic_device"
+                    app:rowIconTint="?attr/colorPrimary"
+                    app:rowTitle="@string/vpn_profile_title" />
+
+                <dev.proflyder.home.core.designsystem.ButtonRow
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/ds_space_m"
+                    app:equalWidth="true">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/vpn_reissue"
+                        style="@style/Widget.Home.Button.Tonal.M"
+                        android:layout_width="wrap_content"
+                        android:text="@string/vpn_reissue" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/vpn_forget"
+                        style="@style/Widget.Home.Button.Destructive.M"
+                        android:layout_width="wrap_content"
+                        android:text="@string/vpn_forget" />
+                </dev.proflyder.home.core.designsystem.ButtonRow>
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+    </LinearLayout>
+</androidx.core.widget.NestedScrollView>

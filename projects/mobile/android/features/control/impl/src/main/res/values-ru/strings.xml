@@ -89,4 +89,5 @@
         <item>вс</item>
     </string-array>
     <string name="control_call_title">Позвонить на колонку</string>
+    <string name="control_vpn_title">VPN домой</string>
 </resources>

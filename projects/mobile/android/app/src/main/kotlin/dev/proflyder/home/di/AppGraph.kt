@@ -15,6 +15,8 @@ import dev.proflyder.home.core.network.ControlCatalogClient
 import dev.proflyder.home.core.network.HttpControlCatalogClient
 import dev.proflyder.home.core.network.IntercomClient
 import dev.proflyder.home.core.network.HttpPushDevicesClient
+import dev.proflyder.home.core.network.HttpVpnProfileClient
+import dev.proflyder.home.core.network.VpnProfileApi
 import dev.proflyder.home.core.network.NetworkWaiter
 import dev.proflyder.home.core.network.PushDevicesApi
 import dev.proflyder.home.core.network.ScenarioClient
@@ -37,6 +39,10 @@ import dev.proflyder.home.feature.push.FindPhoneController
 import dev.proflyder.home.feature.push.FirebasePushRegistrar
 import dev.proflyder.home.feature.push.NotificationHistoryRecorder
 import dev.proflyder.home.feature.push.PushNotifier
+import dev.proflyder.home.feature.vpn.VpnProfiles
+import dev.proflyder.home.feature.vpn.VpnSettingsStore
+import dev.proflyder.home.feature.vpn.tunnel.HomeNetworkMonitor
+import dev.proflyder.home.feature.vpn.tunnel.TunnelVpnController
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.BindingContainer
 import dev.zacsweers.metro.DependencyGraph
@@ -73,6 +79,11 @@ interface AppGraph {
     val findPhoneController: FindPhoneController
 
     val pushHistory: NotificationHistoryRecorder
+
+    val vpnController: TunnelVpnController
+    val vpnProfiles: VpnProfiles
+    val vpnSettings: VpnSettingsStore
+    val vpnHomeNetwork: HomeNetworkMonitor
 
     @DependencyGraph.Factory
     fun interface Factory {
@@ -197,6 +208,18 @@ object AppBindings {
         httpClient: OkHttpClient,
         interceptors: NetworkInterceptors,
     ): PushDevicesApi = HttpPushDevicesClient(
+        settings = settings,
+        baseClient = httpClient,
+        interceptors = interceptors.list,
+    )
+
+    @Provides
+    @SingleIn(AppScope::class)
+    fun provideVpnProfileClient(
+        settings: ConnectionSettingsStore,
+        httpClient: OkHttpClient,
+        interceptors: NetworkInterceptors,
+    ): VpnProfileApi = HttpVpnProfileClient(
         settings = settings,
         baseClient = httpClient,
         interceptors = interceptors.list,

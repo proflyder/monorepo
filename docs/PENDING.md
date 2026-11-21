@@ -23,6 +23,15 @@
 
 ## P3 — приёмка и развитие
 
+### Android: VPN домой
+
+- [ ] **Приёмка встроенного VPN на телефоне.** После merge `feat/android-vpn`
+      и PR сервера (`/v1/vpn/profile`): выпуск профиля дома, WireGuard вне
+      дома, переход на OpenConnect при закрытом `51820/udp`, автоподключение,
+      плитка QS, always-on. Детали — `projects/mobile/android/README.md` (VPN).
+- [ ] **Нативный OpenConnect (libopenconnect через JNI) вместо внешнего
+      клиента.** План и объём — там же, «Notes to the code (VPN)».
+
 ### Станция и голос
 
 - [ ] **Выкатка Pulsar `v0.6.51` на колонку.** Первый релиз с вычисляемой

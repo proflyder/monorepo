@@ -60,6 +60,7 @@
     "com.squareup.okhttp3:okhttp": -750577442,
     "com.squareup.retrofit2:converter-kotlinx-serialization": -1906038759,
     "com.squareup.retrofit2:retrofit": -519203915,
+    "com.wireguard.android:tunnel": 108634926,
     "dev.zacsweers.metro:compiler": 1977966209,
     "dev.zacsweers.metro:runtime-jvm": 453693898,
     "io.getstream:stream-webrtc-android": -1823874798,
@@ -234,6 +235,7 @@
     "com.squareup.okio:okio-jvm": -505501008,
     "com.squareup.retrofit2:converter-kotlinx-serialization": -475331606,
     "com.squareup.retrofit2:retrofit": -2051375609,
+    "com.wireguard.android:tunnel:aar": -103338423,
     "dev.drewhamilton.poko:poko-annotations-jvm": 1252648719,
     "dev.zacsweers.metro:compiler": 1667127973,
     "dev.zacsweers.metro:runtime-jvm": 1079120535,
@@ -1257,6 +1259,12 @@
         "jar": "69c6a2d3451b6df9549a93fab744094ebf07a4b0ce4f453d6c8f575ef0fec9a1"
       },
       "version": "3.0.0"
+    },
+    "com.wireguard.android:tunnel:aar": {
+      "shasums": {
+        "jar": "df8f5358d3a350d707b5614a493fc3e4dbd0e60a8aae9d9a0cd3fe10d94a2f64"
+      },
+      "version": "1.0.20230706"
     },
     "dev.drewhamilton.poko:poko-annotations-jvm": {
       "shasums": {
@@ -2770,6 +2778,10 @@
       "com.squareup.okhttp3:okhttp",
       "org.jetbrains.kotlin:kotlin-stdlib"
     ],
+    "com.wireguard.android:tunnel:aar": [
+      "androidx.annotation:annotation",
+      "androidx.collection:collection"
+    ],
     "dev.drewhamilton.poko:poko-annotations-jvm": [
       "org.jetbrains.kotlin:kotlin-stdlib"
     ],
@@ -3873,6 +3885,13 @@
       "retrofit2",
       "retrofit2.http",
       "retrofit2.internal"
+    ],
+    "com.wireguard.android:tunnel:aar": [
+      "com.wireguard.android.backend",
+      "com.wireguard.android.util",
+      "com.wireguard.config",
+      "com.wireguard.crypto",
+      "com.wireguard.util"
     ],
     "dev.drewhamilton.poko:poko-annotations-jvm": [
       "dev.drewhamilton.poko"
@@ -7739,6 +7758,7 @@
       "com.squareup.okio:okio-jvm",
       "com.squareup.retrofit2:converter-kotlinx-serialization",
       "com.squareup.retrofit2:retrofit",
+      "com.wireguard.android:tunnel:aar",
       "dev.drewhamilton.poko:poko-annotations-jvm",
       "dev.zacsweers.metro:compiler",
       "dev.zacsweers.metro:runtime-jvm",
