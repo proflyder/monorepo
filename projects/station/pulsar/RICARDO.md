@@ -2,10 +2,10 @@
 
 This fork is the Ricardo Rust profile of Pulsar for the Station Midi
 installation. The code lives in the monorepo at `projects/station/pulsar/`; releases are
-versions `v0.5.10NN` published to GHCR (see «Релизы и деплой»), and the station runs the
+CI-computed versions `v0.6.NNN` (manual `v0.5.10NN` before) published to GHCR (see «Релизы и деплой»), and the station runs the
 latest such release, the current one is recorded in the monorepo `docs/STATE.md`.
 
-Base: `Morvex885/pulsar` `v0.6.1` (history keeps the earlier merges since `v0.5.4`).
+Base: `Morvex885/pulsar` `v0.6.2` (history keeps the earlier merges since `v0.5.4`).
 Deliberate deviations from upstream are listed below.
 
 ## Upstream merge и Cargo.toml

@@ -694,9 +694,8 @@ PVC), но сбрасывает выданные nonce — ПК просто з�
 изменение путей провайдера (и общих Rust/Cargo-входов) собирается, проверяется
 и публикуется PR CI как `tree-<hash>` с provenance (build once). На push в
 `develop` `native-release` продвигает проверенный `tree-<hash>` на релизные
-теги, ничего не собирая (нет артефакта или provenance — job падает);
-`publish_when` по `solutions/windows-logon-provider/VERSION` ограничивает
-только релиз:
+теги, ничего не собирая (нет артефакта или provenance — job падает); версия
+вычисляется CI (`VERSION` — база major.minor, решение 60):
 
 ```text
 ghcr.io/proflyder/windows-logon-provider:<VERSION>
@@ -851,8 +850,8 @@ initContainer `render-config` до gateway и как sidecar `config-drift` (`:9
 `k8s/home-assistant/hermes-config` поле `private.yaml`. Ручной
 `home-deploy hermes render-config --source-dir projects/home-assistant/hermes`
 нужен только в аварии (Flux/pins недоступны); штатных ручных рендеров и
-restart'ов больше нет. Миграция секрета, проверка после merge и правило
-firewall `9118` — `KUBERNETES-OPERATIONS.md`, раздел «Автодеплой Hermes».
+restart'ов больше нет. Проверка после выката и правило firewall `9118` —
+`KUBERNETES-OPERATIONS.md`, раздел «Автодеплой Hermes».
 
 ## HA / MA / Matter / K3s компоненты
 

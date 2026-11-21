@@ -8,8 +8,8 @@
 ```text
 PVE host         192.0.2.26   DEXP Jupiter, 32 GiB, NVMe 512 GB + SATA SSD 512 GB (backup)
                  vmbr0; Wi-Fi 4addr/WDS + Ethernet fallback
-VM 100 haos      192.0.2.28   2 vCPU / 4 GiB / 32 GiB, HAOS 2026.10.4
-                 add-ons: Music Assistant 2.10.8, Matter 9.2.0
+VM 100 haos      192.0.2.28   2 vCPU / 4 GiB / 32 GiB, HAOS 18.4, HA Core 2026.11.0
+                 add-ons: Music Assistant 2.10.9, Matter 9.3.0
 VM 101 lab-k3s   192.0.2.27   8 vCPU / 12 GiB / 200 GiB, Ubuntu + K3s
 CT 102 vpn       192.0.2.29   1 vCPU / 512 MiB / 4 GiB, Debian 13, ocserv
 CT 103 bb        192.0.2.30   2 vCPU / 2 GiB / 16 GiB, Debian 13, bb server

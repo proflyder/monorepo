@@ -181,33 +181,18 @@ Telegram. Opt-in Service `hermes-config-drift` рендерится chart'ом �
 `k8s/home-assistant/hermes-config` поле `private.yaml` (ESO,
 `ExternalSecret/hermes-config-private`). Токены остаются в
 `hermes-environment`; в private.yaml только реальные endpoint'ы и Telegram
-chat id. До merge владелец один раз копирует старое поле (значения не печатать):
+chat id. Перенос из старого поля
+`infra/kubernetes/values-private#hermes_private_yaml` выполнен; старое поле
+больше не читается и подлежит удалению владельцем (`PENDING.md`).
 
-```bash
-export VAULT_TOKEN="$(cat secrets/openbao/operator.token)"
-tmp=$(mktemp) && chmod 600 "$tmp"
-mise exec -- bao kv get -format=json secret/infra/kubernetes/values-private |
-  jq '{"private.yaml": .data.data.hermes_private_yaml}' > "$tmp"
-version=$(mise exec -- bao kv metadata get -format=json \
-  secret/k8s/home-assistant/hermes-config 2>/dev/null |
-  jq -r '.data.current_version // 0')
-mise exec -- bao kv put -cas="$version" secret/k8s/home-assistant/hermes-config @"$tmp"
-rm -f "$tmp"; unset VAULT_TOKEN
-```
-
-`-cas` защищает от перезаписи чужой правки; при `version=0` путь создаётся.
-После проверки старое поле `infra/kubernetes/values-private#hermes_private_yaml`
-можно удалить (оно больше не читается).
-
-После merge владелец проверяет: init-логи `render-config` без ошибок,
+Проверка после выката: init-логи `render-config` без ошибок,
 `hermes_config_drift_files 0` и `hermes_config_check_success 1` на `:9118`
-(например, `mise run kubectl -- -n home-assistant port-forward
-deploy/hermes 9118:9118` и `curl -s localhost:9118/metrics`, либо график
-Prometheus), и что плановый rollout не прислал «shutting down» в Telegram. Отдельно применяется host-firewall: `9118` добавлен в drop-список
-`projects/home/kubernetes/management-firewall/rules.nft` (Prometheus скрейпит
-порт из pod-сети, которую правило пропускает; LAN — нет); владелец
-переустанавливает правило по README этого каталога. Откат конфига — revert PR/pins (Flux
-перезапустит Pod со старым образом) или аварийный ручной render.
+(`mise run kubectl -- -n home-assistant port-forward deploy/hermes 9118:9118`
+и `curl -s localhost:9118/metrics`, либо график Prometheus), плановый rollout
+без «shutting down» в Telegram. Порт `9118` закрыт от LAN host-firewall'ом
+(`projects/home/kubernetes/management-firewall/rules.nft`; Prometheus скрейпит
+его из pod-сети). Откат конфига — revert PR/pins (Flux перезапустит Pod со
+старым образом) или аварийный ручной render.
 
 Ручной аварийный путь остаётся `projects/home-assistant/deploy/rollout.sh` →
 `home-deploy hermes rollout` (digest no-op, `helm upgrade`, smoke,

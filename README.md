@@ -64,13 +64,16 @@ read-only путь Nexus `/repository/*` через Cloudflare Tunnel.
 
 ## Статус
 
-- PVE `9.2.24`; HAOS `2026.10.4`; K3s `v1.35.9`.
+- PVE `9.2.24`; HAOS `18.4` (HA Core `2026.11.0`); K3s `v1.35.9`.
 - Wi-Fi 4addr/WDS + Ethernet fallback; VM IP не меняются.
-- Pulsar Rust (armhf, база upstream `v0.6.1`; ранее `v0.5.4`/`f1f5b17`;
+- Pulsar Rust (armhf, база upstream `v0.6.2`; ранее `v0.6.1`, `v0.5.4`/`f1f5b17`;
   Ricardo pre-roll 256 ms; версия — `docs/STATE.md`), wake word «Рикардо»,
   BLE gateway.
-- HAOS add-ons: MA `2.10.8`, Matter `9.2.0`; K3s: STT/TTS/Hermes/
-  scheduler/currency-bot/observability.
+- HAOS add-ons: MA `2.10.9`, Matter `9.3.0`; K3s: STT/TTS/Hermes/
+  scheduler/mcp-gateway/phone-push/currency-bot/OpenBao/Vaultwarden/Nexus/
+  observability под Flux.
+- Android-приложение `dev.proflyder.home` (`projects/mobile/android`):
+  будильники, управление домом, чат с Hermes, раздел «Система».
 - Currency bot живёт в K3s (`currency-bot`), webhook — через Cloudflare Tunnel.
 - Remote — собственный VPN (ocserv), HTTPS-имена; публично только
   Telegram webhook currency-bot и Nexus `/repository/*`.

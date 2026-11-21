@@ -87,7 +87,7 @@
 
 ### Музыка
 
-- MA `2.10.8` в HAOS; Spotify Soloist и Connect.
+- MA `2.10.9` в HAOS; Spotify Soloist и Connect.
 - Sendspin-плеер «Яндекс Станция Миди»; source router
   `Music Assistant` / `Spotify Connect`.
 - Voice play/volume идут через HA scripts; Connect — через Spotify Web API.
@@ -195,11 +195,12 @@ Pulsar живёт в монорепозитории (`projects/station/pulsar/`)
 монорепо, без GitHub Releases и тегов. Поток:
 
 ```text
-PR CI (_native.yml, promote: false): сборка aarch64/armhf с VERSION, radio,
+PR CI (_native.yml, promote: false): сборка aarch64/armhf с вычисленной
+   версией (platform/ci/version.mjs), radio,
    SHA256SUMS, проверка --version под qemu → publish-oci.sh → oras push
    ghcr.io/proflyder/pulsar-firmware:tree-<hash> (+ provenance)
-merge PR в develop с новым VERSION
-   → deploy-home plan: native.publish_when по VERSION → native_units
+merge PR в develop, затрагивающего Pulsar
+   → deploy-home plan: юнит pulsar → native_units
    → native-release: проверка tree-<hash>/provenance, теги <version> и :latest
         на тот же digest (повторной сборки нет)
    → deploy-station: ручной approve в Environment `Station`
@@ -209,8 +210,8 @@ merge PR в develop с новым VERSION
         → проверка installed_version == version и 90 с стабильности
 ```
 
-- Версия форка `v0.5.10NN` больше любого upstream-патча `0.5.x`; при полном
-  переходе на upstream 0.6.x — `v0.6.1001`, поэтому
+- Версия вычисляется CI: база `VERSION` (`v0.6`) + число коммитов Pulsar
+  (решение 60); `v0.6.50` и далее новее ручных `v0.5.10NN`, поэтому
   updater (`vMAJOR.MINOR.PATCH`) видит релиз новее.
 - Откат через CI невозможен (updater только повышает версию): на станции
   `.prev` + `ctl.sh reload`.
