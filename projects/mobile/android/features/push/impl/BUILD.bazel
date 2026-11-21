@@ -55,6 +55,20 @@ kt_android_local_test(
 )
 
 kt_android_local_test(
+    name = "registration_policy_test",
+    srcs = ["src/test/kotlin/dev/proflyder/home/feature/push/PushRegistrationPolicyTest.kt"],
+    associates = [":impl"],
+    custom_package = "dev.proflyder.home.feature.push.impl",
+    manifest = "src/test/AndroidManifest.xml",
+    test_class = "dev.proflyder.home.feature.push.PushRegistrationPolicyTest",
+    deps = [
+        "//projects/mobile/android/features/chat/api",
+        "//projects/mobile/android/features/push/api",
+        "@maven//:junit_junit",
+    ],
+)
+
+kt_android_local_test(
     name = "identity_test",
     srcs = [
         "src/test/kotlin/dev/proflyder/home/feature/push/AllPushIdentityTests.kt",

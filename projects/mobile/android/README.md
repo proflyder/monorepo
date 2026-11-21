@@ -650,9 +650,15 @@ identity, which is correct: the old installation is gone.
 The app registers on the scheduler base URL and bearer it already uses
 (`POST /v1/push/devices`), so no fourth endpoint and no second credential
 exist. A new token updates the row of the same `deviceId`; the scheduler keeps
-one token per device. Registration runs at start and again on every token
-change (`onRegistered`/`onNewToken`); a failure is only shown on the settings
-screen and retried on the next start. `/v1/push/devices/remove` forgets a token
+one token per device. The process starts on every FCM message and after the
+system evicts it, so a start registers only when it is due
+(`PushRegistrationPolicy`): the token, the phone name or the app version
+differ from the last successful registration (persisted in DataStore together
+with its time), or that registration is older than 24 hours. A token change
+(`onNewToken`) and «Обновить регистрацию» always register. A successful rename
+updates the remembered name, so it does not trigger a re-registration. A
+failure saves nothing, is shown on the settings screen and is retried on the
+next start; the rule is pinned by `:registration_policy_test`. `/v1/push/devices/remove` forgets a token
 FCM rejected. Without `google-services.json` (Firebase uninitialized) or
 without a configured server, registration is skipped and the app starts
 normally.

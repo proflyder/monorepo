@@ -20,6 +20,8 @@ data class PushRegistration(
     val token: String? = null,
     val registeredAtMillis: Long = 0,
     val deviceName: String = "",
+    val registeredName: String = "",
+    val appVersion: String = "",
     val busy: Boolean = false,
     val failed: Boolean = false,
 ) {
@@ -35,7 +37,7 @@ interface PushRegistrationStore {
 
     suspend fun load()
 
-    suspend fun saved(token: String, registeredAtMillis: Long)
+    suspend fun saved(token: String, registeredAtMillis: Long, deviceName: String, appVersion: String)
 
     suspend fun savedName(name: String)
 

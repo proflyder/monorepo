@@ -33,15 +33,19 @@ class FirebasePushRegistrar(
         PushChannels.ensure(context)
         scope.launch {
             store.load()
-            registerNow()
+            registerCurrentToken(force = false)
         }
     }
 
     override suspend fun registerNow() {
+        registerCurrentToken(force = true)
+    }
+
+    private suspend fun registerCurrentToken(force: Boolean) {
         @Suppress("DEPRECATION")
         val token = suspendRunCatching { FirebaseMessaging.getInstance().token.await() }
             .getOrElse { return }
-        registerToken(token)
+        registerToken(token, force)
     }
 
     suspend fun unregister(token: String) {
@@ -51,22 +55,32 @@ class FirebasePushRegistrar(
         store.busy(false)
     }
 
-    suspend fun registerToken(token: String) {
+    suspend fun registerToken(token: String, force: Boolean = true) {
         if (token.isBlank()) return
         if (!firebaseReady()) return
         val config = settings.config.value
         if (!config.isConfigured || !config.hasToken) return
-        val name = currentDeviceName()
+        val wanted = PushRegistrationRequest(token, currentDeviceName(), appVersion())
+        val now = System.currentTimeMillis()
+        if (!force && !PushRegistrationPolicy.isDue(store.registration.value, wanted, now)) return
+        publish(wanted, now)
+    }
+
+    private suspend fun publish(wanted: PushRegistrationRequest, now: Long) {
         store.busy(true)
         val result = suspendRunCatching {
-            publisher.publish(token = token, appVersion = appVersion(), deviceName = name)
+            publisher.publish(
+                token = wanted.token,
+                appVersion = wanted.appVersion,
+                deviceName = wanted.deviceName,
+            )
         }.getOrNull()
         store.busy(false)
         when (result) {
             is Outcome.Success -> {
                 store.failed(false)
-                store.savedName(name)
-                store.saved(token, System.currentTimeMillis())
+                store.savedName(wanted.deviceName)
+                store.saved(wanted.token, now, wanted.deviceName, wanted.appVersion)
             }
             else -> store.failed(true)
         }
@@ -84,7 +98,14 @@ class FirebasePushRegistrar(
         store.busy(false)
         val renamed = result is Outcome.Success
         store.failed(!renamed)
+        if (renamed) markRenamed(clean)
         return renamed
+    }
+
+    private suspend fun markRenamed(name: String) {
+        val current = store.registration.value
+        val token = current.token ?: return
+        store.saved(token, current.registeredAtMillis, name, current.appVersion)
     }
 
     override fun permissions(): PushPermissionStatus = permissions.status()

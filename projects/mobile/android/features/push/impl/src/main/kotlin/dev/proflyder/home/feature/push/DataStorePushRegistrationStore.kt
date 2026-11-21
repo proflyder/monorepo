@@ -1,6 +1,7 @@
 package dev.proflyder.home.feature.push
 
 import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.MutablePreferences
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.longPreferencesKey
@@ -35,6 +36,8 @@ class DataStorePushRegistrationStore(
                     token = preferences[KEY_TOKEN],
                     registeredAtMillis = preferences[KEY_REGISTERED_AT] ?: 0,
                     deviceName = preferences[KEY_DEVICE_NAME].orEmpty(),
+                    registeredName = preferences[KEY_REGISTERED_NAME].orEmpty(),
+                    appVersion = preferences[KEY_APP_VERSION].orEmpty(),
                 )
             }
         }.onFailure { failure ->
@@ -42,16 +45,25 @@ class DataStorePushRegistrationStore(
         }
     }
 
-    override suspend fun saved(token: String, registeredAtMillis: Long) {
+    override suspend fun saved(
+        token: String,
+        registeredAtMillis: Long,
+        deviceName: String,
+        appVersion: String,
+    ) {
         suspendRunCatching {
-            dataStore.edit {
-                it[KEY_TOKEN] = token
-                it[KEY_REGISTERED_AT] = registeredAtMillis
-            }
+            dataStore.edit { it.putRegistration(token, registeredAtMillis, deviceName, appVersion) }
         }.onFailure { failure ->
             if (failure !is IOException) throw failure
         }
-        state.update { it.copy(token = token, registeredAtMillis = registeredAtMillis) }
+        state.update {
+            it.copy(
+                token = token,
+                registeredAtMillis = registeredAtMillis,
+                registeredName = deviceName,
+                appVersion = appVersion,
+            )
+        }
     }
 
     override suspend fun savedName(name: String) {
@@ -71,9 +83,23 @@ class DataStorePushRegistrationStore(
         state.update { it.copy(failed = failed) }
     }
 
+    private fun MutablePreferences.putRegistration(
+        token: String,
+        registeredAtMillis: Long,
+        deviceName: String,
+        appVersion: String,
+    ) {
+        this[KEY_TOKEN] = token
+        this[KEY_REGISTERED_AT] = registeredAtMillis
+        this[KEY_REGISTERED_NAME] = deviceName
+        this[KEY_APP_VERSION] = appVersion
+    }
+
     private companion object {
         val KEY_TOKEN = stringPreferencesKey("push_token")
         val KEY_REGISTERED_AT = longPreferencesKey("push_registered_at")
         val KEY_DEVICE_NAME = stringPreferencesKey("push_device_name")
+        val KEY_REGISTERED_NAME = stringPreferencesKey("push_registered_name")
+        val KEY_APP_VERSION = stringPreferencesKey("push_registered_app_version")
     }
 }
