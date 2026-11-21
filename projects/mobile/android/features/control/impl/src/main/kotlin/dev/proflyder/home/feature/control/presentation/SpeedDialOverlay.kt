@@ -374,6 +374,7 @@ private fun QuickTile.label(context: Context): String = when (this) {
     is QuickTile.ScenarioTile -> scenario.label
     is QuickTile.Speak -> entry.localizedDisplayName(context)
     QuickTile.Call -> context.getString(R.string.control_call_title)
+    QuickTile.Vpn -> context.getString(R.string.control_vpn_title)
 }
 
 internal fun SpeedDialItem.description(context: Context): String = when (this) {
@@ -398,6 +399,7 @@ private fun QuickTile.icon(): Int = when (this) {
     is QuickTile.ScenarioTile -> R.drawable.control_ic_play_circle
     is QuickTile.Speak -> R.drawable.control_ic_voice
     QuickTile.Call -> R.drawable.control_ic_call
+    QuickTile.Vpn -> R.drawable.control_ic_vpn
 }
 
 internal fun SpeedDialItem.isActive(): Boolean = when (this) {
@@ -411,7 +413,7 @@ internal fun SpeedDialItem.isEnabled(): Boolean = when (this) {
         is QuickTile.Device -> current.entry.available && !current.busy
         is QuickTile.ScenarioTile -> !current.busy
         is QuickTile.Speak -> current.entry.available && !current.busy
-        QuickTile.Call -> true
+        QuickTile.Call, QuickTile.Vpn -> true
     }
     is SpeedDialItem.Wake -> action.entry.available && !action.busy
 }

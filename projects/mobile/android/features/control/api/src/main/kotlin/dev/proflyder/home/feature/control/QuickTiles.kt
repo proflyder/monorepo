@@ -24,6 +24,10 @@ sealed interface QuickTile {
     data object Call : QuickTile {
         override val key: String get() = "call"
     }
+
+    data object Vpn : QuickTile {
+        override val key: String get() = "vpn"
+    }
 }
 
 object QuickTiles {
@@ -36,7 +40,7 @@ object QuickTiles {
     ): List<QuickTile> {
         val entriesById = entries.associateBy { it.id }
         val scenariosById = scenarios.associateBy { it.id }
-        return listOf(QuickTile.Call) + refs.mapNotNull { ref ->
+        return listOf(QuickTile.Call, QuickTile.Vpn) + refs.mapNotNull { ref ->
             when (ref.kind) {
                 FavoriteKind.DEVICE -> entriesById[ref.id]
                     ?.takeIf { it.isDevice }

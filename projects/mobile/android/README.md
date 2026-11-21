@@ -32,6 +32,7 @@ Current device acceptance and remaining work are tracked in
   - **Connection** → the server/token screen ([Connection](#connection));
   - **Phone notifications and find** → the push permission and registration
     screen ([Push and find phone](#push-and-find-phone));
+  - **VPN home** → the built-in VPN screen ([VPN](#vpn));
   - **Notification history** → the local log of received messages
     ([Notification history](#notification-history));
   - **Appearance** → theme and light/dark mode ([Themes](#themes)).
@@ -59,6 +60,88 @@ Current device acceptance and remaining work are tracked in
   never cleared by a failed request.
 - Loading/empty/error/content states; existing data stays visible during refresh
   or transient errors. Lists never silently become empty.
+
+## VPN
+
+`features/vpn` (api/impl) is the single entry point home from outside: a
+**VPN** row in Settings, a **VPN home** tile in Home's Quick actions (pinned
+after **Call the station**), a Quick Settings tile and the status
+notification all open or drive the same controller.
+
+- Profile: the phone generates a WireGuard key pair (`com.wireguard.crypto`),
+  seals the private key with an Android Keystore AES-GCM key
+  (`KeystoreTokenCipher`, alias `dev.proflyder.home.vpn.secrets.v1`) in the app
+  DataStore and sends only the public key to the scheduler:
+  `POST /v1/vpn/profile {deviceId, publicKey, deviceName}` on the scheduler
+  base URL with the same bearer as `/v1/push/devices`; `deviceId` is the push
+  device id. The answer is stored and reused offline. The first request runs
+  at app start (works at home or through the fallback); an unreachable API,
+  missing token, `400/409/429/503` each have their own text and a saved
+  profile stays usable. **Reissue** rotates the key pair and re-posts it;
+  **Forget device** calls `POST /v1/vpn/profile/remove`, then deletes the
+  profile, the key and the imported certificate.
+- Primary transport: WireGuard `GoBackend` (`com.wireguard.android:tunnel`,
+  its own `VpnService`). The tunnel is built from the profile by
+  `WireGuardConfigText`; **All traffic** uses `allowedIps`, **Home only** uses
+  `splitAllowedIps` (falls back to `allowedIps` when empty). Changing the
+  route reconnects an active tunnel.
+- Fallback: when no handshake arrives within 10 s (`HandshakePolicy`), the
+  tunnel is stopped and the OpenConnect transport starts. At this stage it is
+  an external client: `anyconnect://connect/?name=…&host=<ocserv host>/<group>`
+  (Cisco Secure Client), or the OpenConnect app (`app.openconnect`) when no
+  `anyconnect` handler exists. Group follows the route (`group` or
+  `splitGroup`). The connection counts as up while the system reports a VPN
+  network; Android does not allow the app to start another app from the
+  background, so a background fallback shows **Open OpenConnect** on the
+  screen and in the notification.
+- ocserv authentication (the server does not issue certificates): pill tabs
+  **Certificate** / **Password + code**. A `.p12` is picked with the system
+  file picker, checked with its password (`KeyStore` PKCS12, must contain a
+  key, ≤ 64 KB), stored sealed and offered to the system credential storage
+  (`KeyChain.createInstallIntent`) where the VPN client picks it. The password
+  is not stored. With password + code the client asks for both.
+- Home network: no location or Wi-Fi permissions. For every non-VPN network
+  the app resolves the scheduler host through that network; if it resolves to
+  a private address (RFC 1918 or IPv6 ULA) and a TCP connect to the scheduler
+  port succeeds through that network, the phone is home. **Connect outside
+  home** turns the VPN on away from home and off at home; it acts while the
+  app process lives. For a guaranteed tunnel use Android always-on VPN: the
+  system starts `GoBackend$VpnService`, `GoBackend.setAlwaysOnCallback` calls
+  the controller, which connects with the stored profile.
+- Status: the screen shows state, protocol, connected time and traffic
+  (WireGuard). `VpnStatusService` is a foreground service
+  (`specialUse`, subtype `vpn_tunnel_status`) with the status and
+  **Disconnect**; it stops itself when the VPN is off. `VpnTileService` is a
+  toggleable Quick Settings tile; without the VPN permission it opens the VPN
+  screen (`home://vpn/main` route).
+- Tests: `features/vpn/api:api_test` (routes, config text, handshake policy,
+  home address rules, server codes, OpenConnect link, UAPI stats),
+  `core/network:network_test` (`VpnProfileClientTest`, golden
+  `fixtures/vpn/*.json`), `features/vpn/impl:screen_test` (stored profile and
+  Robolectric PNGs `vpn-light.png`, `vpn-dark.png`, `vpn-fallback-dark.png` in
+  `TEST_UNDECLARED_OUTPUTS_DIR`).
+
+### Notes to the code (VPN)
+
+- WireGuard statistics are read from the backend's UAPI text
+  (`GoBackend.wgGetConfig(currentTunnelHandle)` via reflection, parsed by
+  `WireGuardUapi`) instead of `GoBackend.getStatistics`. The AAR ships
+  `Statistics$PeerStats` as a desugared record whose superclass is the D8
+  global synthetic `com.android.tools.r8.RecordTag`; `rules_android` keeps
+  global synthetics only with dex optimisation, so the class is absent from
+  the APK and loading `PeerStats` would crash. `apk_runtime_closure` lists
+  `RecordTag` as optional for that reason; nothing in the app may touch
+  `Statistics`.
+- Native OpenConnect (next step): build `libopenconnect` (LGPL) with its
+  dependencies (GnuTLS + nettle/gmp or OpenSSL, libxml2, zlib, lz4, stoken
+  optional) for `arm64-v8a` with the NDK toolchain as `cc_library`/foreign
+  rules targets, add a small JNI bridge (the ics-openconnect `LibOpenConnect`
+  API: `setupTunFd`, `obtainCookie`, `makeCstpConnection`, `mainloop`,
+  `setClientCert`, auth form callbacks), and an own `VpnService` that hands
+  the tun fd to it. It plugs in as another `VpnTransport`; the `.p12`
+  password would then have to be stored sealed next to the container.
+  Estimated scope: 3–5 days, mostly the hermetic C dependency build and
+  licence/notice handling.
 
 ## System dashboard
 

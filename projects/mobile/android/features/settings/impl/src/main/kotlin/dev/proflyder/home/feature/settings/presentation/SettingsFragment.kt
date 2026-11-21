@@ -15,6 +15,7 @@ class SettingsFragment : BaseFragment<FragmentSettingsBinding>(FragmentSettingsB
     override fun onBindingCreated(binding: FragmentSettingsBinding, savedInstanceState: Bundle?) {
         binding.root.applyScrollBottomInset()
         binding.settingsConnection.setOnClickListener { openFeature(CONNECTION_FEATURE) }
+        binding.settingsVpn.setOnClickListener { openFeature(VPN_FEATURE) }
         binding.settingsNotifications.setOnClickListener { openFeature(PUSH_FEATURE) }
         binding.settingsHistory.setOnClickListener { requireNavigator().navigate(NotificationHistoryDestination) }
         binding.settingsAppearance.setOnClickListener { requireNavigator().navigate(AppearanceDestination) }
@@ -29,5 +30,6 @@ class SettingsFragment : BaseFragment<FragmentSettingsBinding>(FragmentSettingsB
     private companion object {
         const val CONNECTION_FEATURE = "connection"
         const val PUSH_FEATURE = "push"
+        const val VPN_FEATURE = "vpn"
     }
 }

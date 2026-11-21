@@ -48,6 +48,8 @@ metro_android_library(
         "//projects/mobile/android/features/system/impl",
         "//projects/mobile/android/features/timers/api",
         "//projects/mobile/android/features/timers/impl",
+        "//projects/mobile/android/features/vpn/api",
+        "//projects/mobile/android/features/vpn/impl",
         "@maven//:androidx_activity_activity_ktx",
         "@maven//:androidx_appcompat_appcompat",
         "@maven//:androidx_core_core_ktx",

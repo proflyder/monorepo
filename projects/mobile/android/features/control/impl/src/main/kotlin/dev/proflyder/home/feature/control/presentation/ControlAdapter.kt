@@ -522,6 +522,7 @@ internal class ControlAdapter(
                 is QuickTile.ScenarioTile -> tile.scenario.label
                 is QuickTile.Speak -> tile.entry.localizedDisplayName(views.root.context)
                 QuickTile.Call -> views.root.context.getString(R.string.control_call_title)
+                QuickTile.Vpn -> views.root.context.getString(R.string.control_vpn_title)
             }
             views.quickTileIcon.setImageResource(
                 when (tile) {
@@ -533,6 +534,7 @@ internal class ControlAdapter(
                     is QuickTile.ScenarioTile -> R.drawable.control_ic_play_circle
                     is QuickTile.Speak -> R.drawable.control_ic_voice
                     QuickTile.Call -> R.drawable.control_ic_call
+                    QuickTile.Vpn -> R.drawable.control_ic_vpn
                 },
             )
             views.quickTileIconBg.isActivated = true
@@ -540,7 +542,7 @@ internal class ControlAdapter(
                 is QuickTile.Device -> tile.busy
                 is QuickTile.ScenarioTile -> tile.busy
                 is QuickTile.Speak -> tile.busy
-                QuickTile.Call -> false
+                QuickTile.Call, QuickTile.Vpn -> false
             }
             views.root.alpha = if (busy) DISABLED_ALPHA else 1f
             views.root.setOnClickListener { callback.onQuickTileClick(tile) }

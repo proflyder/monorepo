@@ -47,6 +47,7 @@ private val OPTIONAL_CLASSES = setOf(
     "com.google.firebase.components.Component\$Instantiation",
     "com.google.firebase.messaging.Constants\$FirelogAnalytics\$MessagePriority",
     "com.google.firebase.messaging.TopicOperation\$TopicOperations",
+    "com.android.tools.r8.RecordTag",
 )
 
 private val DEX_NAME_PATTERN = Regex("^classes\\d*\\.dex$")

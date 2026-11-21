@@ -314,6 +314,7 @@ maven.install(
         "com.google.android.gms:play-services-basement:18.12.0",
         "com.google.android.gms:play-services-tasks:18.4.1",
         "com.github.chuckerteam.chucker:library:4.3.1",
+        "com.wireguard.android:tunnel:1.0.20230706",
         "com.squareup.okhttp3:logging-interceptor:5.5.1",
         "com.squareup.okhttp3:mockwebserver:5.5.1",
         "com.squareup.okhttp3:okhttp:5.5.1",

@@ -261,7 +261,7 @@ class HomeHubTest {
             ),
             scenarios = listOf(scenario("s1", 1)),
         )
-        assertEquals(listOf("call", "device:light.a", "action:action.speak", "scenario:s1"), tiles.map { it.key })
+        assertEquals(listOf("call", "vpn", "device:light.a", "action:action.speak", "scenario:s1"), tiles.map { it.key })
         assertFalse(tiles.isEmpty())
     }
 
