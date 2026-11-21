@@ -481,3 +481,51 @@ test("check_units: read-all cannot satisfy a write requirement", () => {
 test("check_units: every committed caller grants its reusable workflows' permissions", () => {
   assert.deepEqual(checkUnits.workflowCallerPermissionProblems(), []);
 });
+
+test("check_units: reading outputs of a matrix job is rejected", () => {
+  const root = workflowFixture({
+    "_release.yml": [
+      "on: workflow_call",
+      "jobs:",
+      "  native-release:",
+      "    strategy:",
+      "      matrix:",
+      "        include: [{ id: pulsar }, { id: logon-provider }]",
+      "    uses: ./.github/workflows/_native.yml",
+      "  deploy-station:",
+      "    needs: [native-release]",
+      "    uses: ./.github/workflows/_station-deploy.yml",
+      "    with:",
+      "      version: ${{ needs.native-release.outputs.version }}",
+      "",
+    ].join("\n"),
+  });
+  const problems = checkUnits.workflowMatrixOutputProblems(root);
+  assert.equal(problems.length, 1);
+  assert.ok(problems[0].includes("_release.yml:12"));
+  assert.ok(problems[0].includes("needs.native-release.outputs"));
+});
+
+test("check_units: reading outputs of a non-matrix job is allowed", () => {
+  const root = workflowFixture({
+    "_release.yml": [
+      "on: workflow_call",
+      "jobs:",
+      "  station-version:",
+      "    runs-on: ubuntu-24.04",
+      "    steps:",
+      "      - run: true",
+      "  deploy-station:",
+      "    needs: [station-version]",
+      "    uses: ./.github/workflows/_station-deploy.yml",
+      "    with:",
+      "      version: ${{ needs.station-version.outputs.version }}",
+      "",
+    ].join("\n"),
+  });
+  assert.deepEqual(checkUnits.workflowMatrixOutputProblems(root), []);
+});
+
+test("check_units: the repository has no matrix output reads", () => {
+  assert.deepEqual(checkUnits.workflowMatrixOutputProblems(), []);
+});
