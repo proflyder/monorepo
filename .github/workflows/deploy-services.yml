@@ -246,9 +246,6 @@ jobs:
     permissions:
       contents: read
       id-token: write
-    concurrency:
-      group: deploy-home-station
-      cancel-in-progress: false
     uses: ./.github/workflows/_station-deploy.yml
     with:
       version: ${{ needs.station-version.outputs.version }}
