@@ -1,0 +1,48 @@
+package dev.proflyder.home.feature.push
+
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class PushRegistrationPolicyTest {
+    private val registeredAt = 1_000_000L
+    private val last = PushRegistration(
+        token = "token-a",
+        registeredAtMillis = registeredAt,
+        deviceName = "Pixel",
+        registeredName = "Pixel",
+        appVersion = "1.2.0",
+    )
+    private val same = PushRegistrationRequest("token-a", "Pixel", "1.2.0")
+
+    @Test
+    fun anUnchangedFreshRegistrationIsSkipped() {
+        assertFalse(PushRegistrationPolicy.isDue(last, same, registeredAt + 60_000))
+        val dayEdge = registeredAt + PushRegistrationPolicy.REFRESH_INTERVAL_MILLIS
+        assertFalse(PushRegistrationPolicy.isDue(last, same, dayEdge))
+    }
+
+    @Test
+    fun aNeverRegisteredPhoneRegisters() {
+        assertTrue(PushRegistrationPolicy.isDue(PushRegistration(), same, registeredAt))
+    }
+
+    @Test
+    fun aChangedTokenNameOrVersionRegisters() {
+        val now = registeredAt + 60_000
+        assertTrue(PushRegistrationPolicy.isDue(last, same.copy(token = "token-b"), now))
+        assertTrue(PushRegistrationPolicy.isDue(last, same.copy(deviceName = "Стас"), now))
+        assertTrue(PushRegistrationPolicy.isDue(last, same.copy(appVersion = "1.3.0"), now))
+    }
+
+    @Test
+    fun aRegistrationOlderThanADayIsRefreshed() {
+        val stale = registeredAt + PushRegistrationPolicy.REFRESH_INTERVAL_MILLIS + 1
+        assertTrue(PushRegistrationPolicy.isDue(last, same, stale))
+    }
+
+    @Test
+    fun aClockGoingBackwardsRegisters() {
+        assertTrue(PushRegistrationPolicy.isDue(last, same, registeredAt - 1))
+    }
+}
