@@ -8,6 +8,7 @@ import android.view.Menu
 import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
+import android.view.ViewTreeObserver
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -30,6 +31,9 @@ class HomePopupMenu(
 ) {
     private val source = PopupMenu(anchor.context, anchor).apply { inflate(menuRes) }
     private var window: PopupWindow? = null
+    private var shownGravity = Gravity.START
+    private var shownAnchor = Rect()
+    private val follower = ViewTreeObserver.OnPreDrawListener { true.also { followAnchor() } }
 
     val menu: Menu
         get() = source.menu
@@ -46,14 +50,35 @@ class HomePopupMenu(
     fun show(gravity: Int = Gravity.START) {
         val list = content()
         list.measure(UNBOUNDED, UNBOUNDED)
+        shownGravity = gravity
+        val position = position(list.measuredWidth, list.measuredHeight)
+        window = build(scrolling(list), list.measuredWidth, position.height).also {
+            it.setOnDismissListener(::stopFollowing)
+            it.showAtLocation(anchor, Gravity.TOP or Gravity.START, position.x, position.top)
+        }
+        anchor.viewTreeObserver.addOnPreDrawListener(follower)
+    }
+
+    private fun position(width: Int, height: Int): PopupPosition {
         val bounds = visibleBounds()
         val anchorBox = windowBox(anchor)
-        val place = PopupPlacements.place(anchorBox.top, anchorBox.bottom, bounds.top, bounds.bottom, list.measuredHeight, ANCHOR_GAP)
-        val x = PopupPlacements.clampX(startX(gravity, anchorBox, list.measuredWidth), list.measuredWidth, bounds.left, bounds.right)
+        val place = PopupPlacements.place(anchorBox.top, anchorBox.bottom, bounds.top, bounds.bottom, height, ANCHOR_GAP)
+        val x = PopupPlacements.clampX(startX(shownGravity, anchorBox, width), width, bounds.left, bounds.right)
         placement = place
-        window = build(scrolling(list), list.measuredWidth, place.height).also {
-            it.showAtLocation(anchor, Gravity.TOP or Gravity.START, x, place.top)
-        }
+        shownAnchor = anchorBox
+        return PopupPosition(x, place.top, place.height)
+    }
+
+    private fun followAnchor() {
+        val popup = window?.takeIf { it.isShowing } ?: return
+        if (windowBox(anchor) == shownAnchor) return
+        val list = (popup.contentView as ViewGroup).getChildAt(0)
+        val position = position(popup.width, list.measuredHeight)
+        popup.update(position.x, position.top, popup.width, position.height)
+    }
+
+    private fun stopFollowing() {
+        anchor.viewTreeObserver.takeIf { it.isAlive }?.removeOnPreDrawListener(follower)
     }
 
     private fun startX(gravity: Int, anchorBox: Rect, width: Int): Int = when (gravity) {
@@ -138,6 +163,8 @@ class HomePopupMenu(
         popup.isOutsideTouchable = true
         return popup
     }
+
+    private data class PopupPosition(val x: Int, val top: Int, val height: Int)
 
     companion object {
         const val ANCHOR_GAP = 0

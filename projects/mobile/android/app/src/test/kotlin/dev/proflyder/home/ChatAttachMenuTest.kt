@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.view.View
 import android.view.WindowManager
+import dev.proflyder.home.core.designsystem.HomePopupMenu
 import dev.proflyder.home.core.theme.AppTheme
 import java.io.File
 import org.junit.Assert.assertNotNull
@@ -29,14 +30,42 @@ class ChatAttachMenuTest {
     @Config(sdk = [35], qualifiers = "ru-w411dp-h800dp-night-xxhdpi")
     fun attachMenuOpensAboveTheAnchorAt800() = assertAttachMenu("chat-attach-menu-800.png")
 
-    private fun assertAttachMenu(name: String) {
+    @Test
+    @Config(sdk = [35], qualifiers = "ru-w411dp-h800dp-night-xxhdpi")
+    fun attachMenuFollowsTheAnchorWhenTheKeyboardHides() {
         val app = RuntimeEnvironment.getApplication() as HomeApplication
+        val activity = openChat(app)
+        val anchor = activity.findViewById<View>(ChatR.id.chat_attach)
+        val panel = activity.findViewById<View>(ChatR.id.chat_panel)
+        panel.translationY = -KEYBOARD_SHIFT * anchor.resources.displayMetrics.density
+        anchor.performClick()
+        idle(activity)
+        val popup = checkNotNull(shadowOf(app).latestPopupWindow)
+        val raised = popup.contentView.rootView.layoutParams as WindowManager.LayoutParams
+        val raisedBottom = raised.y + popup.height
+        panel.translationY = 0f
+        activity.window.decorView.viewTreeObserver.dispatchOnPreDraw()
+        idle(activity)
+        val params = popup.contentView.rootView.layoutParams as WindowManager.LayoutParams
+        val anchorTop = top(anchor)
+        assertTrue("menu moved with the anchor", params.y + popup.height > raisedBottom)
+        assertTrue("menu is above the anchor", params.y + popup.height <= anchorTop)
+        assertTrue("menu touches the anchor", anchorTop - (params.y + popup.height) <= HomePopupMenu.ANCHOR_GAP)
+    }
+
+    private fun openChat(app: HomeApplication): MainActivity {
         app.graph.appearance.selectTheme(AppTheme.CURRENT)
         val activity = Robolectric.buildActivity(MainActivity::class.java).setup().get()
         idle(activity)
         activity.router.selectTab("chat")
         idle(activity)
         layout(activity.window.decorView)
+        return activity
+    }
+
+    private fun assertAttachMenu(name: String) {
+        val app = RuntimeEnvironment.getApplication() as HomeApplication
+        val activity = openChat(app)
         val anchor = activity.findViewById<View>(ChatR.id.chat_attach)
         anchor.performClick()
         idle(activity)
@@ -85,5 +114,6 @@ class ChatAttachMenuTest {
 
     private companion object {
         const val PNG_QUALITY = 100
+        const val KEYBOARD_SHIFT = 300f
     }
 }

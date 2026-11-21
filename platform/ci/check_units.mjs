@@ -636,6 +636,54 @@ export function workflowCallerPermissionProblems(root = DEFAULT_ROOT) {
   return problems;
 }
 
+export function workflowMatrixOutputProblems(root = DEFAULT_ROOT) {
+  const problems = [];
+  const directory = path.resolve(root, ".github/workflows");
+  if (!isDirectory(directory)) {
+    return problems;
+  }
+  const files = fs
+    .readdirSync(directory)
+    .filter((name) => name.endsWith(".yml") || name.endsWith(".yaml"))
+    .sort();
+  for (const name of files) {
+    const relative = `.github/workflows/${name}`;
+    const lines = fs.readFileSync(path.join(directory, name), "utf8").split(/\r?\n/);
+    const jobsLine = lines.findIndex((line) => /^jobs:\s*$/.test(line));
+    if (jobsLine === -1) {
+      continue;
+    }
+    const starts = [];
+    for (let index = jobsLine + 1; index < lines.length; index += 1) {
+      const match = /^ {2}([A-Za-z0-9_-]+):\s*$/.exec(lines[index]);
+      if (match) {
+        starts.push({ job: match[1], index });
+      }
+    }
+    const matrixJobs = new Set();
+    for (let position = 0; position < starts.length; position += 1) {
+      const end = position + 1 < starts.length ? starts[position + 1].index : lines.length;
+      const body = lines.slice(starts[position].index, end);
+      if (body.some((line) => /^ {6}matrix:/.test(line))) {
+        matrixJobs.add(starts[position].job);
+      }
+    }
+    lines.forEach((line, index) => {
+      for (const match of line.matchAll(/needs\.([A-Za-z0-9_-]+)\.outputs\./g)) {
+        if (matrixJobs.has(match[1])) {
+          problems.push(
+            `${relative}:${index + 1} reads needs.${match[1]}.outputs of a matrix job; ` +
+              "GitHub keeps only the output of the leg that finished last, so another " +
+              "matrix entry can win (deploy station got the logon-provider version); " +
+              "read the value from a non-matrix job instead",
+          );
+        }
+      }
+    });
+  }
+  return problems;
+}
+
 function isRegistryLogin(line) {
   return REGISTRY_LOGIN_PATTERNS.some((pattern) => pattern.test(line));
 }
@@ -755,6 +803,7 @@ export async function check(argv) {
       ...workflowRegistryProblems(root),
       ...workflowTriggerProblems(root),
       ...workflowCallerPermissionProblems(root),
+      ...workflowMatrixOutputProblems(root),
     ],
   };
 }
