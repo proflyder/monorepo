@@ -76,10 +76,9 @@
     Исходники — `projects/station/pulsar/`; CI — юнит `pulsar`
     (`_native.yml`: Bazel-сборка обеих архитектур, installer, radio, ssh), хост
     fmt/clippy/тесты — отдельный юнит `pulsar-bazel` (`_unit.yml`).
-    Версия — `projects/station/pulsar/VERSION` (`v<major.minor>.<1000+N>`).
-    Pulsar — обычный publishable native-юнит общего `deploy-home`: поле
-    `native.publish_when` пускает его в `native_units` на push только при
-    изменении VERSION; прочие изменения Pulsar — только PR CI. `native-release`
+    Версию вычисляет CI (`VERSION` — база major.minor, решение 60).
+    Pulsar — обычный publishable native-юнит общего `deploy-home`: любое
+    смерженное изменение Pulsar попадает в `native_units`. `native-release`
     продвигает проверенный PR-артефакт `tree-<hash>` на
     `ghcr.io/proflyder/pulsar-firmware:<version>` (+ `:latest`); при
     missing/unverified деплой падает и ничего не собирает (решение 36).

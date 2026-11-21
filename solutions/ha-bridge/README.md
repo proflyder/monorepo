@@ -636,7 +636,7 @@ lease отклоняется); держите сумму `delay` в предел
 - `crates/ha-bridge/src/app.rs` — Composition root: configuration, telemetry, the executor worker and the distroless probe entry points.
 - `crates/ha-bridge/src/bridge.rs` — The [`home_worker::Handler`] that executes one scheduled event.
   - A global alarm_stop may only silence the alarm this bridge started. A stale STOP for an older occurrence, or a STOP that races a newer alarm, must never touch the ringing alarm.
-  - Render an HA failure the way `packages/go/httpapi.Error` does. Only the operation and a status are included: a response body may carry deployment detail and is never logged.
+  - Render an HA failure. Only the operation and a status are included: a response body may carry deployment detail and is never logged.
 - `crates/ha-bridge/src/catalog/light.rs` — Light capabilities derived from the color modes Home Assistant reports.
   - Text of a `speak` action. It is validated and sent as a script variable, never stored, logged or echoed in an ack detail.
 - `crates/ha-bridge/src/catalog/mod.rs` — The phone-facing control catalog: pure rules over discovered Home Assistant data.
@@ -665,7 +665,7 @@ lease отклоняется); держите сумму `delay` в предел
   - Why the environment was rejected. Messages keep the Go loader's shape and never contain a secret value.
 - `crates/ha-bridge/src/control.rs` — The `control` queue executor.
   - The task payload. `entry` and `action` are data; `brightness`, `kelvin`, `hue` and `saturation` are the light adjustments, `text` is the speak action's user content. The text is validated by `resolve` and never logged, echoed in an ack detail or stored.
-  - Render an HA failure like `packages/go/httpapi.Error`: operation and status only, never a response body.
+  - Render an HA failure: operation and status only, never a response body.
   - Collapse whitespace and bound the text by characters, never bytes.
 - `crates/ha-bridge/src/control_app.rs` — Composition root of `ha-control`: catalog server and control-queue worker.
 - `crates/ha-bridge/src/control_config.rs` — `ha-control` process configuration, loaded 1:1 from the Go `cmd/ha-control`.

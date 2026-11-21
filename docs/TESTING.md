@@ -17,6 +17,19 @@ mise run check         # pre-push: test + repository audit + Gitleaks
 `STATION_CONTROL_TOKEN`/`HERMES_API_KEY`; токены не коммитить.
 CI/repo-quality проверки — Node 20+ (`node --test`), без npm-зависимостей.
 
+Python-тесты — stdlib `unittest`, pytest не нужен. Набор каталогов и способ
+запуска задаёт `platform/quality/run-tests.sh` (его вызывают `mise run test`
+и CI): `python3 -m unittest discover -s <каталог> -p 'test_*.py'`. Флаг `-s`
+кладёт каталог теста в `sys.path`, поэтому тесты импортируют соседний модуль
+по имени (`import restore_drill`, `import sync_openbao`). Запуск одного файла
+из корня (`python3 -m unittest projects/home/kubernetes/openbao/test_restore_drill.py`
+или pytest) падает на этом импорте — это не поломка; запускать так:
+
+```bash
+python3 -m unittest discover -s projects/home/kubernetes/openbao -p 'test_*.py' -v
+python3 -m unittest discover -s projects/home/kubernetes/vaultwarden -p 'test_*.py' -v
+```
+
 ```bash
 export HA_URL=http://192.0.2.28:8123
 export HA_TOKEN='...'
@@ -179,7 +192,7 @@ bazel test  //projects/station/pulsar/satellite/...
 
 ```bash
 bazel build -c opt --platforms=//platform/bazel/zig:armhf_linux \
-  --define=pulsar_version="$(tr -d '[:space:]' < projects/station/pulsar/VERSION)" \
+  --define=pulsar_version="$(node platform/ci/version.mjs --unit pulsar)" \
   //projects/station/pulsar/satellite:station_binary
 # pulsar (stripped, .gnu_debuglink) и pulsar.debug (unstripped) лежат в bazel-bin/.../satellite/
 ```

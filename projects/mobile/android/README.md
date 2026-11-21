@@ -1253,8 +1253,7 @@ Themes are code in `core/theme`:
   - A bearer token must never be forwarded to a redirect target.
 - `app/src/main/kotlin/dev/proflyder/home/di/NetworkInterceptors.kt`
   - Network diagnostics, enabled by the `home_network_inspection` bool (a release variant should override it to false so nothing below is created): - an [HttpLoggingInterceptor] (BODY) writing to logcat under "HomeHttp", - a Chucker inspector (notification + …
-- `app/src/main/res/layout/app_toolbar_menu.xml` — The toolbar's custom actions menu: a rounded tonal card with one icon and label per row. It replaces the framework overflow list entirely.
-- `app/src/main/res/menu/menu_main.xml` — One visible actions button. Tapping it opens the app's own rounded menu (app_toolbar_menu.xml); the framework overflow list is never used.
+- `app/src/main/res/menu/menu_main.xml` — One visible actions button. Tapping it opens the shared `HomePopupMenu` (core/designsystem); the framework overflow list is never used.
 - `app/src/main/res/values/bools.xml`
   - Crashlytics collection. The app only sends crash stack traces, device model/OS and app version; never tokens or endpoints. Set to false to keep Crashlytics initialized but not collecting.
 - `app/src/main/res/xml/backup_rules.xml` — Backup and device transfer are disabled for the whole app: the bearer token and server address are private configuration.
@@ -1376,15 +1375,10 @@ Themes are code in `core/theme`:
   - Day sets are ISO weekdays: 1 is Monday, 7 is Sunday. A custom selection that covers exactly a preset is stored as that preset, so the editor and the home server never show two different names for the same days.
 - `features/alarms/impl/src/main/kotlin/dev/proflyder/home/feature/alarms/presentation/AlarmsFragment.kt`
   - Keep the existing list visible while a refresh is in flight; do not replace it with a spinner.
-- `features/alarms/impl/src/main/res/color/alarms_day_toggle_background.xml` — Round day toggle: a filled primary circle when checked, an outlined transparent circle otherwise.
-- `features/alarms/impl/src/main/res/color/alarms_delete_ripple.xml` — The delete ripple is the theme's error color at the Material pressed alpha, so the round state layer belongs to the red button rather than to the neutral card.
 - `features/alarms/impl/src/main/res/layout/item_alarm.xml`
   - Idle: switch plus delete. Selection mode: both are gone and the circular check indicator takes their place, inset by the card padding so it never touches the rounded corner.
 - `features/alarms/impl/src/main/res/layout/sheet_alarm_repeat.xml` — Modal repeat sheet. The rounded top and the drag handle live on the sheet content itself, so the sheet keeps the app's dark surface when the dialog window is transparent.
 - `features/alarms/impl/src/main/res/values/alarms_dimens.xml` — Fallback before the bottom bar is measured; matches its real height: a 64dp icon+label action plus the 6dp bar padding on both sides.
-- `features/alarms/impl/src/main/res/values/styles.xml`
-  - Seven round day toggles on one row. The size is fixed, not weighted: each toggle keeps a 44dp circle while the equal cells spread them across the sheet width, so a two-letter label never gets clipped.
-  - Contextual bulk action: the icon sits above a small one-line label, so the three cells stay readable at 360dp with a 1.15 font scale. The button never wraps its text; a longer translation is ellipsized.
 - `features/alarms/impl/src/test/kotlin/dev/proflyder/home/feature/alarms/domain/SaveAlarmLabelTest.kt`
   - The server must never see an empty alarm name: the editor field is optional and [SaveAlarm] fills the localized default where the request is formed.
 - `features/call/api/src/main/kotlin/dev/proflyder/home/feature/call/AudioRoutes.kt`

@@ -620,9 +620,9 @@ bb-allowlist настоящими валидаторами.
   - Sequence of the completed turn; the voice proxy's idempotency key.
   - Idempotency key.
 - `crates/mcp-gateway/src/chat/` — чат приложения: контракт, SQLite-история, клиент Hermes sessions API, очередь ходов и SSE (раздел «Чат приложения»).
-- `crates/mcp-gateway/src/checks.rs` — Typed external catalog probes (`tcp`, `http`, `ha_state`, `ha_template`, `ha_unavailable_summary`), ported from `internal/checks/checks.go`.
+- `crates/mcp-gateway/src/checks.rs` — Typed external catalog probes (`tcp`, `http`, `ha_state`, `ha_template`, `ha_unavailable_summary`).
   - Build the shared HTTP client with the workspace rustls provider. The workspace `reqwest` trusts only explicitly pinned roots, so an `https://` Home Assistant or external endpoint verifies only when the operating system's bundle is added explicitly …
-- `crates/mcp-gateway/src/config.rs` — Process configuration, ported one-to-one from `solutions/mcp-gateway/internal/config/config.go`.
+- `crates/mcp-gateway/src/config.rs` — Process configuration.
 - `crates/mcp-gateway/src/domain/alert.rs` — Alertmanager alert ↔ catalog service matching.
 - `crates/mcp-gateway/src/domain/catalog.rs` — Deployment catalog: YAML schema, validation and spoken-name resolution.
 - `crates/mcp-gateway/src/domain/clock.rs` — Injectable time source.
