@@ -6,7 +6,8 @@ use home_runtime::{Supervisor, shutdown_signal};
 use home_telemetry::TelemetryBuilder;
 use tokio::net::TcpListener;
 
-use crate::api::{self, AlarmFacade, Service};
+use crate::api::vpn::VpnSettings;
+use crate::api::{self, AlarmFacade, Service, VpnAccess};
 use crate::config::Config;
 use crate::domain::SystemClock;
 use crate::engine::{DEFAULT_PURGE_INTERVAL, Engine};
@@ -37,10 +38,12 @@ pub async fn run() -> anyhow::Result<()> {
         config.allowed_consumers.clone(),
     )
     .with_scenario_execution(config.scenario_execution);
+    let vpn_access = vpn_access(&config);
     let router = api::router(
         service.clone(),
         AlarmFacade::new(service),
         config.token.expose(),
+        vpn_access,
     );
 
     let listener = TcpListener::bind(&config.listen)
@@ -98,6 +101,49 @@ pub async fn run() -> anyhow::Result<()> {
     Ok(())
 }
 
+fn vpn_access(config: &Config) -> VpnAccess {
+    vpn_access_from(config, &|path| std::fs::read(path))
+}
+
+fn vpn_access_from(
+    config: &Config,
+    read_file: &dyn Fn(&std::path::Path) -> std::io::Result<Vec<u8>>,
+) -> VpnAccess {
+    let settings = config
+        .vpn_settings_file
+        .as_deref()
+        .and_then(|path| load_vpn_settings(path, read_file));
+    let sync_token = config
+        .vpn_sync_token_file
+        .as_deref()
+        .and_then(|path| read_file(path).ok())
+        .map(|bytes| String::from_utf8_lossy(&bytes).trim().to_owned())
+        .filter(|token| !token.is_empty());
+    tracing::info!(
+        vpn_profiles = settings.is_some(),
+        vpn_sync = sync_token.is_some(),
+        "VPN API"
+    );
+    VpnAccess {
+        settings,
+        sync_token,
+    }
+}
+
+fn load_vpn_settings(
+    path: &std::path::Path,
+    read_file: &dyn Fn(&std::path::Path) -> std::io::Result<Vec<u8>>,
+) -> Option<Arc<VpnSettings>> {
+    let Ok(bytes) = read_file(path) else {
+        tracing::warn!(path = %path.display(), "VPN settings file is missing; VPN API disabled");
+        return None;
+    };
+    VpnSettings::parse(&bytes)
+        .inspect_err(|error| tracing::warn!(%error, "VPN settings are invalid; VPN API disabled"))
+        .ok()
+        .map(Arc::new)
+}
+
 fn store_config(config: &Config) -> StoreConfig {
     StoreConfig {
         missed_grace: seconds(config.missed_grace),
@@ -120,6 +166,45 @@ fn seconds(duration: Duration) -> i64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn config_with_vpn() -> Config {
+        Config::load_from(
+            &|key| match key {
+                "SCHEDULER_TOKEN" => Some("t".to_owned()),
+                "SCHEDULER_VPN_SETTINGS_FILE" => Some("/run/vpn.json".to_owned()),
+                "SCHEDULER_VPN_SYNC_TOKEN_FILE" => Some("/run/vpn_sync_token".to_owned()),
+                _ => None,
+            },
+            &|_path| Ok(Vec::new()),
+        )
+        .expect("config")
+    }
+
+    #[test]
+    fn missing_vpn_files_disable_the_vpn_api_without_failing() {
+        let access = vpn_access_from(&config_with_vpn(), &|_path| {
+            Err(std::io::Error::from(std::io::ErrorKind::NotFound))
+        });
+        assert!(access.settings.is_none());
+        assert!(access.sync_token.is_none());
+    }
+
+    #[test]
+    fn vpn_files_enable_the_vpn_api() {
+        let settings = br#"{"pool":"10.77.2.0/24","endpoint":"vpn.example.com:51820",
+            "serverPublicKey":"c2VydmVyLXNlcnZlci1zZXJ2ZXItc2VydmVyLXNlcnY=",
+            "dns":["192.0.2.1"],"allowedIps":["0.0.0.0/0"],
+            "ocserv":{"url":"https://vpn.example.com/","group":"full"}}"#;
+        let access = vpn_access_from(&config_with_vpn(), &|path| {
+            if path.ends_with("vpn.json") {
+                Ok(settings.to_vec())
+            } else {
+                Ok(b"sync-token\n".to_vec())
+            }
+        });
+        assert!(access.settings.is_some());
+        assert_eq!(access.sync_token.as_deref(), Some("sync-token"));
+    }
 
     #[test]
     fn store_config_matches_the_go_defaults() {

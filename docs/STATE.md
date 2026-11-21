@@ -302,6 +302,16 @@
   fullchain/privkey в ocserv и перезапускает его. MSS clamp в forward chain
   стоит до accept. Ручное продление и TXT-записи не нужны.
 - Лимит `max-same-clients = 10`; встроенный бан неудачных попыток.
+- WireGuard (основной протокол приложения «Дом», 2026-11-22): тот же CT,
+  `wg0`, `51820/udp`, пул `10.77.2.0/24` (сервер `.1`), firewall/NAT как у
+  `full` (`install-ocserv.sh --wg-cidr`), модуль `wireguard` грузится на PVE
+  через `/etc/modules-load.d/wireguard.conf`. Peer'ы — из scheduler
+  (`vpn_peers`, схема v6): `wg-peer-sync` (timer 30 с) тянет
+  `GET /v1/vpn/peers` с bearer'ом `vpn_sync_token` и применяет
+  `wg syncconf`. Ключ сервера — `secret/infra/vpn/wireguard`. Проверено из
+  LAN (клиент в netns на PVE: LAN, HA по HTTPS, DNS, интернет); внешний
+  проброс `51820/udp` на ONT/AX3 и API scheduler (до merge/деплоя sync
+  получает 404) — в `PENDING.md`. CI остаётся на OpenConnect.
 - HTTPS-имена LAN/VPN:
   `https://{ha,grafana,alarms,control,currency,intercom,vault,passwords,nexus}.home.example.com`
   через Traefik + cert-manager. Публичного HA нет;

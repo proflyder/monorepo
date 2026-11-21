@@ -249,6 +249,34 @@ TOTP или отозванный сертификат — отказ. Один �
 использовать (ocserv считает это replay), несколько неудач подряд банят IP
 на `min-reauth-time`; свой IP разбанить: `pct exec 102 -- occtl unban ip <IP>`.
 
+### WireGuard (CT 102)
+
+Установка, sync и тест — `projects/home/proxmox/vpn/README.md`. Команды на
+CT 102, которые перезапускают ocserv/nftables/ssh/сеть (`install-ocserv.sh`,
+`install-wireguard.sh`), запускать только отсоединённо — владелец может
+сидеть в интернете через ocserv `full`, синхронный запуск рвёт ему связь:
+
+```bash
+pct exec 102 -- systemd-run --unit=wg-install <команда>
+pct exec 102 -- journalctl -u wg-install --no-pager
+```
+
+Состояние: `pct exec 102 -- wg show wg0`, `journalctl -u wg-peer-sync`.
+
+**WireGuard: проброс порта** (вручную, UI; двойной NAT ONT → AX3 → CT, как
+для `443`). Существующие правила, в том числе `25565`, не менять.
+
+1. ONT (web-интерфейс провайдерского терминала): Forward Rules / Port
+   Mapping → новое правило: протокол `UDP`, внешний порт `51820`, внутренний
+   порт `51820`, внутренний хост — WAN-адрес AX3 (тот же, что в правиле
+   `443`), включить, сохранить.
+2. AX3 (`http://192.0.2.1`): Ещё функции → Безопасность → Перенаправление
+   портов (NAT) → Добавить: устройство — адрес CT `192.0.2.29` (как у `443`),
+   протокол `UDP`, внешний и внутренний порт `51820`, сохранить.
+3. Проверка: телефон в мобильной сети, без Wi-Fi, клиент WireGuard с
+   профилем из `POST /v1/vpn/profile` → handshake в `wg show wg0` и
+   `https://ha.home.example.com/`.
+
 ## BB server (CT 103)
 
 Создание и установка — `projects/home/proxmox/bb/README.md`. Основные

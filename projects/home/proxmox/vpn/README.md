@@ -1,4 +1,4 @@
-# Home VPN (ocserv)
+# Home VPN (WireGuard + ocserv)
 
 Собственный VPN-сервер для доступа к домашней LAN снаружи: OpenConnect /
 Cisco Secure Client. Вход — пароль + TOTP (Google Authenticator) либо
@@ -23,6 +23,9 @@ Let's Encrypt, который продлевается автоматическ�
 | `test_vpnusers.py` | unit-тесты чистой логики |
 | `vpncerts.py` | частный CA и клиентские сертификаты: `init-ca`, `issue`, `revoke`, `list` |
 | `test_vpncerts.py` | unit/локальные интеграционные тесты CA (без сети) |
+| `install-wireguard.sh` | ставит WireGuard (`wg0`) рядом с ocserv, ключ сервера, токен синхронизации, `wg-peer-sync` + timer |
+| `wg-peer-sync.sh` | тянет список peer'ов из scheduler (`GET /v1/vpn/peers`), валидирует и применяет `wg syncconf` |
+| `test_wireguard.py` | тесты рендера/валидации peer'ов и firewall-контракта (без сети и root) |
 
 Схема:
 
@@ -232,6 +235,91 @@ openconnect --authenticate \
 сертификатом отклоняется (клиенту остаётся только пароль + TOTP). Файлы
 отозванного сертификата можно удалить из `secrets/home/vpn/clients/`.
 
+## WireGuard (основной протокол приложения «Дом»)
+
+WireGuard работает в том же CT рядом с ocserv и не трогает его:
+`wg0`, `51820/udp` (ocserv занимает `443/tcp+udp`), пул `10.77.2.0/24`,
+сервер `10.77.2.1`. Сети, DNS и firewall — как у группы `full`: клиенту
+отдаётся `AllowedIPs = 0.0.0.0/0` (или split `192.0.2.0/24` — выбор
+приложения), DNS роутера; nftables разрешает `wg0 → eth0` для пула и
+маскирует его в адрес CT (правила рендерит `install-ocserv.sh --wg-cidr`,
+одна точка правды для firewall CT).
+
+Peer'ы не редактируются руками. Источник правды — scheduler (таблица
+`vpn_peers`, схема v6): приложение присылает свой публичный ключ в
+`POST /v1/vpn/profile`, scheduler выделяет адрес и отвечает конфигом.
+`wg-peer-sync` в CT каждые 30 секунд забирает `GET /v1/vpn/peers` с
+отдельным bearer'ом синхронизации (только чтение списка ключей и адресов) и
+применяет изменения через `wg syncconf` — активные сессии не рвутся.
+Ответ с неверной формой (не-WireGuard ключ, адрес не `/32`, дубли, ошибка
+HTTP) отбрасывается, остаётся последний валидный список
+(`/etc/wireguard/peers.json`), поэтому падение scheduler не отключает
+подключённые телефоны. Приватный ключ телефона не покидает телефон.
+
+Требование хоста: модуль `wireguard` загружен на PVE
+(`/etc/modules-load.d/wireguard.conf`); из unprivileged CT ядро модуль не
+подгружает. `install-wireguard.sh` проверяет это пробным интерфейсом.
+
+Установка (секреты — только временными файлами, удалить после):
+
+```bash
+# на PVE, один раз
+echo wireguard > /etc/modules-load.d/wireguard.conf && modprobe wireguard
+
+# firewall: те же аргументы, что у ocserv, плюс пул/порт WireGuard;
+# отсоединённо (systemd-run), чтобы обрыв сессии через VPN не убил скрипт
+pct exec 102 -- systemd-run --unit=ocserv-install /root/install-ocserv.sh \
+  --lan-cidr 192.0.2.0/24 --dns 192.0.2.1 --server-ip 192.0.2.29 \
+  --server-name vpn.example.com --ci-cidr 10.77.1.0/24 --ci-host 192.0.2.27 \
+  --wg-cidr 10.77.2.0/24 --wg-port 51820
+
+# ключ сервера: secret/infra/vpn/wireguard#private_key
+# токен синхронизации: secret/k8s/home-assistant/scheduler-auth#vpn_sync_token
+pct push 102 /root/vpn-setup/vpn/wg-peer-sync.sh /root/wg-peer-sync.sh --perms 755
+pct push 102 /root/vpn-setup/vpn/install-wireguard.sh /root/install-wireguard.sh --perms 755
+pct push 102 <tmp>/wg.key /root/wg.key --perms 600
+pct push 102 <tmp>/sync.token /root/sync.token --perms 600
+pct exec 102 -- systemd-run --unit=wg-install /root/install-wireguard.sh --address 10.77.2.1/24 \
+  --sync-url https://alarms.home.example.com/v1/vpn/peers \
+  --private-key-file /root/wg.key --sync-token-file /root/sync.token
+pct exec 102 -- journalctl -u wg-install --no-pager
+pct exec 102 -- rm -f /root/wg.key /root/sync.token
+```
+
+Повторный запуск без `--private-key-file`/`--sync-token-file` сохраняет
+установленные ключ и токен. Снаружи нужен проброс `51820/udp` на CT через
+ONT и AX3 (как у `443`), см. `docs/OPERATIONS.md`.
+
+Проверки:
+
+```bash
+pct exec 102 -- wg show wg0
+pct exec 102 -- systemctl status wg-peer-sync.timer
+pct exec 102 -- journalctl -u wg-peer-sync -n 20
+pct exec 102 -- nft list chain inet vpn forward
+```
+
+Тест без телефона — клиент в отдельном network namespace на PVE (сокет
+остаётся в основном namespace, весь трафик netns идёт через туннель):
+
+```bash
+wg genkey | tee /tmp/t.key | wg pubkey   # публичный ключ → тестовый peer
+ip netns add wgtest
+ip link add wgt0 type wireguard
+wg set wgt0 private-key /tmp/t.key peer <server-pub> \
+  endpoint 192.0.2.29:51820 allowed-ips 0.0.0.0/0
+ip link set wgt0 netns wgtest
+ip -n wgtest addr add 10.77.2.250/32 dev wgt0
+ip -n wgtest link set wgt0 up
+ip -n wgtest route add default dev wgt0
+ip netns exec wgtest ping -c2 192.0.2.27
+ip netns del wgtest; rm -f /tmp/t.key
+```
+
+Отзыв: `POST /v1/vpn/profile/remove` (приложение или владелец с bearer'ом
+приложения); через ≤30 секунд peer исчезает из `wg0`. Аварийно — остановить
+`wg-quick@wg0` (ocserv продолжает работать).
+
 ## Группа `ci` (доступ GitHub Actions)
 
 Для CI-доступа к HA (`deploy-station`) и OpenBao (`deploy-station`,
@@ -345,3 +433,5 @@ rm -rf secrets/home/vpn
   - ----- deploy hook --------------------------------------------------------- Copy the renewed certificate into ocserv, keeping the self-signed pair as a fallback.
 - `vpncerts.py` — Issue and revoke client certificates for the home ocserv VPN.
 - `vpnusers.py` — Add an ocserv user with a strong password and a TOTP secret.
+- `install-wireguard.sh` — пробный интерфейс `wgprobe<pid>` проверяет, что модуль ядра доступен, до любых изменений; `wg0.conf` рендерит только `wg-peer-sync` (`--render-only` при установке — из кэша, без сети).
+- `wg-peer-sync.sh` — токен передаётся curl через `-H @file`, чтобы не попасть в argv; `--from-file` нужен тестам и ручному аварийному применению списка.
