@@ -3,6 +3,7 @@ package dev.proflyder.home.feature.alarms.presentation
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.RectF
 import android.os.Looper
 import android.view.LayoutInflater
 import android.view.View
@@ -187,8 +188,9 @@ class AlarmItemLayoutTest {
         assertEquals("delete touch target height is not 48dp", buttonSize, delete.height)
         assertEquals("delete glyph must be 24dp", iconSize, delete.icon?.bounds?.width())
         assertEquals("delete glyph must be 24dp", iconSize, delete.icon?.bounds?.height())
-        assertEquals("delete glyph is not centred in the button", buttonSize / 4, delete.paddingTop)
-        assertEquals("delete glyph is not centred in the button", buttonSize / 4, delete.paddingStart)
+        val (glyphLeft, glyphTop) = glyphOffsetInButton(delete)
+        assertEquals("delete glyph is not centred horizontally", (buttonSize - iconSize) / 2, glyphLeft)
+        assertEquals("delete glyph is not centred vertically", (buttonSize - iconSize) / 2, glyphTop)
         assertEquals(
             "switch and delete are not on one vertical centre",
             switch.top + switch.height / 2,
@@ -209,6 +211,13 @@ class AlarmItemLayoutTest {
             "delete ripple bottom $rippleBottom is below the card height ${binding.root.height}",
             rippleBottom <= binding.root.height,
         )
+    }
+
+    private fun glyphOffsetInButton(button: MaterialButton): Pair<Int, Int> {
+        val bounds = checkNotNull(button.icon).bounds
+        val verticalSpace = button.height - button.compoundPaddingTop - button.compoundPaddingBottom
+        val top = button.compoundPaddingTop + (verticalSpace - bounds.height()) / 2 + bounds.top
+        return button.paddingLeft + bounds.left to top
     }
 
     private fun offsetInRoot(root: View, view: View): Pair<Int, Int> {
@@ -254,7 +263,10 @@ class AlarmItemLayoutTest {
                 assertTrue("ripple alpha $alpha is not a state layer", alpha in 1 until 0xFF)
             }
         }
-        assertEquals("delete shape must be a circle", delete.width / 2, delete.cornerRadius)
+        val shape = delete.shapeAppearanceModel
+        val bounds = RectF(0f, 0f, delete.width.toFloat(), delete.height.toFloat())
+        listOf(shape.topLeftCornerSize, shape.topRightCornerSize, shape.bottomLeftCornerSize, shape.bottomRightCornerSize)
+            .forEach { assertEquals("delete shape must be a circle", delete.width / 2f, it.getCornerSize(bounds), 0.5f) }
     }
 
     private fun inflateAndBind(
