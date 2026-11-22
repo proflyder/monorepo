@@ -1,5 +1,6 @@
 package dev.proflyder.home.feature.scenarios
 
+import dev.proflyder.home.core.model.ConnectCode
 import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.core.model.Scenario
@@ -17,4 +18,4 @@ interface ScenarioRepository {
 }
 
 fun RemoteFailure.isScenarioConflict(): Boolean =
-    this is RemoteFailure.Server && (code == "aborted" || code == "failed_precondition")
+    this is RemoteFailure.Server && (code == ConnectCode.ABORTED || code == ConnectCode.FAILED_PRECONDITION)

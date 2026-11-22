@@ -5,6 +5,7 @@ import android.util.Log
 import com.chuckerteam.chucker.api.ChuckerCollector
 import com.chuckerteam.chucker.api.ChuckerInterceptor
 import com.chuckerteam.chucker.api.RetentionManager
+import dev.proflyder.home.core.network.NetworkInspection
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.BindingContainer
 import dev.zacsweers.metro.ContributesTo
@@ -23,6 +24,7 @@ object NetworkInspectionBindings {
 
     @Provides
     @IntoSet
+    @NetworkInspection
     @SingleIn(AppScope::class)
     fun provideLogging(): Interceptor = HttpLoggingInterceptor { message -> Log.d(LOG_TAG, message) }.apply {
         level = HttpLoggingInterceptor.Level.BODY
@@ -31,6 +33,7 @@ object NetworkInspectionBindings {
 
     @Provides
     @IntoSet
+    @NetworkInspection
     @SingleIn(AppScope::class)
     fun provideChucker(context: Context): Interceptor = ChuckerInterceptor.Builder(context)
         .collector(ChuckerCollector(context, showNotification = true, retentionPeriod = RetentionManager.Period.ONE_DAY))

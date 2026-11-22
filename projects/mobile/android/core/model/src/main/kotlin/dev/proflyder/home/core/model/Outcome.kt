@@ -8,8 +8,9 @@ sealed interface RemoteFailure {
     data class Tls(val detail: String) : RemoteFailure
     data class Server(
         val httpStatus: Int,
-        val code: String,
+        val code: ConnectCode,
         val message: String,
+        val reason: String = "",
         val textKey: String = "",
         val textArgs: Map<String, String> = emptyMap(),
     ) : RemoteFailure

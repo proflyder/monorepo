@@ -30,7 +30,6 @@ import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
 
 @SingleIn(AppScope::class)
@@ -95,11 +94,6 @@ class VpnOpenConnector(
 
     fun release() {
         mutableRoute.value = HomeRoute.READY
-    }
-
-    fun awaitReady(timeoutMillis: Long = ROUTE_WAIT_MILLIS) {
-        if (mutableRoute.value == HomeRoute.READY) return
-        runBlocking { withTimeoutOrNull(timeoutMillis) { route.first { it == HomeRoute.READY } } }
     }
 
     private fun follow(start: () -> Unit) {

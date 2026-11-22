@@ -1,12 +1,11 @@
 package dev.proflyder.home.feature.call.session
 
+import dev.proflyder.home.core.model.ConnectCode
 import dev.proflyder.home.core.model.IntercomEndReason
 import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.feature.call.CallFailure
 
-private const val BUSY_CODE = "failed_precondition"
-
-private val RemoteFailure.isBusy: Boolean get() = this is RemoteFailure.Server && code == BUSY_CODE
+private val RemoteFailure.isBusy: Boolean get() = this is RemoteFailure.Server && code == ConnectCode.FAILED_PRECONDITION
 
 internal fun RemoteFailure.toCallFailure(stationLookup: Boolean = false): CallFailure = when (this) {
     RemoteFailure.NotConfigured, is RemoteFailure.Validation -> CallFailure.NotConfigured

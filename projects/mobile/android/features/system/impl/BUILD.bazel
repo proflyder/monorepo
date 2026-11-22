@@ -15,7 +15,7 @@ metro_android_library(
         "//packages/kotlin/core",
         "//projects/mobile/android/core/model",
         "//projects/mobile/android/core/navigation",
-        "//projects/mobile/android/core/network",
+        "//projects/mobile/android/core/network/api",
         "//projects/mobile/android/core/designsystem",
         "//projects/mobile/android/core/ui",
         "//projects/mobile/android/features/system/api",

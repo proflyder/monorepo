@@ -41,7 +41,7 @@ fun RemoteFailure.userMessage(context: Context): String = when (this) {
 }
 
 private fun RemoteFailure.Server.serverCode(context: Context): String =
-    code.ifBlank { context.getString(R.string.ui_error_http_status, httpStatus) }
+    reason.ifBlank { context.getString(R.string.ui_error_http_status, httpStatus) }
 
 private fun StorageReason.textRes(): Int = when (this) {
     StorageReason.TOKEN_ENCRYPTION -> R.string.ui_error_storage_token

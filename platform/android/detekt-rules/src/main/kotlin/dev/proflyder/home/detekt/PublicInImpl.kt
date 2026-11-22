@@ -57,10 +57,12 @@ class PublicInImpl(config: Config = Config.empty) : Rule(config) {
         val restrictingModifiers = listOf(KtTokens.INTERNAL_KEYWORD, KtTokens.PRIVATE_KEYWORD)
         val memberInjectionAnnotations = setOf("Inject")
         val graphContributionAnnotations = setOf(
+            "Inject",
             "ContributesBinding",
             "ContributesIntoSet",
             "ContributesIntoMap",
             "ContributesTo",
+            "BindingContainer",
         )
     }
 }

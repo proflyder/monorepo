@@ -39,7 +39,7 @@ class AppGraphBindingsTest {
             "TunnelVpnController",
             "HomeNetworkMonitor",
             "VpnOpenConnector",
-            "StaleConnectionEvictor",
+            "ConnectionHealth",
             "ProcessAppForeground",
         )
 

@@ -51,6 +51,24 @@ class PublicInImplTest {
     }
 
     @Test
+    fun `accepts public declarations that Metro must see from the graph module`() {
+        val file = compileContentForTest(
+            """
+                @ContributesBinding(AppScope::class)
+                @Inject
+                class HttpClient
+                @ContributesTo(AppScope::class)
+                @BindingContainer
+                abstract class Bindings
+                class Helper
+            """.trimIndent(),
+            "core/network/impl/src/main/kotlin/HttpClient.kt",
+        )
+
+        assertEquals(1, PublicInImpl().lint(file).size)
+    }
+
+    @Test
     fun `accepts public graph contributions that the app graph must see`() {
         val file = compileContentForTest(
             """
@@ -58,7 +76,6 @@ class PublicInImplTest {
                 class ScreenViewModel
                 @ContributesTo(AppScope::class)
                 interface FeatureInjector
-                @Inject
                 class Helper
                 class InjectedService {
                     @Inject
