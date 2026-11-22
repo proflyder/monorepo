@@ -1,29 +1,19 @@
 package dev.proflyder.home.core.model
 
-data class VpnWireGuardSettings(
-    val address: String,
-    val dns: List<String>,
-    val mtu: Int,
-    val serverPublicKey: String,
-    val endpoint: String,
-    val allowedIps: List<String>,
-    val splitAllowedIps: List<String>,
-    val persistentKeepalive: Int,
-    val lanEndpoint: String = "",
-)
+import kotlinx.serialization.json.JsonObject
 
-data class VpnOcservSettings(
-    val url: String,
-    val group: String,
-    val splitGroup: String,
-    val authentication: List<String>,
-)
+@JvmInline
+value class VpnProtocolId(val value: String)
+
+@JvmInline
+value class TransportSettings(val json: JsonObject)
 
 data class VpnProfile(
     val deviceId: String,
     val deviceName: String,
-    val wireguard: VpnWireGuardSettings,
-    val ocserv: VpnOcservSettings,
+    val transports: Map<VpnProtocolId, TransportSettings>,
     val createdUnix: Long,
     val updatedUnix: Long,
-)
+) {
+    fun settingsOf(protocol: VpnProtocolId): TransportSettings? = transports[protocol]
+}

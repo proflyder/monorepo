@@ -14,6 +14,7 @@ import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import dev.proflyder.home.core.runtime.appGraph
 import dev.proflyder.home.feature.vpn.VpnConnection
+import dev.proflyder.home.feature.vpn.VpnController
 import dev.proflyder.home.feature.vpn.VpnInjector
 import dev.zacsweers.metro.Inject
 import kotlinx.coroutines.CoroutineScope
@@ -27,7 +28,7 @@ class VpnStatusService : Service() {
     private var observing = false
 
     @Inject
-    internal lateinit var controller: TunnelVpnController
+    internal lateinit var controller: VpnController
 
     override fun onCreate() {
         super.onCreate()
@@ -94,7 +95,7 @@ class VpnStatusService : Service() {
     )
 
     private fun fallbackIntent(connection: VpnConnection): Intent? = when (connection) {
-        VpnConnection.FallbackRequired -> VpnNotifications.openAppIntent(this)
+        is VpnConnection.FallbackRequired -> VpnNotifications.openAppIntent(this)
         else -> null
     }
 
@@ -111,7 +112,7 @@ class VpnStatusService : Service() {
     companion object {
         const val ACTION_DISCONNECT = "dev.proflyder.home.vpn.DISCONNECT"
 
-        fun start(context: Context) {
+        internal fun start(context: Context) {
             val intent = Intent(context, VpnStatusService::class.java)
             runCatching { ContextCompat.startForegroundService(context, intent) }
         }

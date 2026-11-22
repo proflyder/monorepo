@@ -13,7 +13,7 @@ import com.google.android.material.button.MaterialButton
 import com.google.android.material.color.MaterialColors
 import dev.proflyder.home.core.theme.AppTheme
 import dev.proflyder.home.feature.vpn.VpnConnection
-import dev.proflyder.home.feature.vpn.VpnProtocol
+import dev.proflyder.home.feature.vpn.FakeTransport
 import dev.proflyder.home.feature.vpn.impl.R
 import java.io.File
 import org.junit.Assert.assertEquals
@@ -35,7 +35,7 @@ class VpnToolbarScreenshotTest {
     @Test
     @Config(qualifiers = "notnight")
     fun connectingLight() = shoot(
-        VpnConnection.Connecting(VpnProtocol.WIREGUARD),
+        VpnConnection.Connecting(FakeTransport.info("wireguard")),
         VpnToggleLook.CONNECTING,
         R.string.vpn_toggle_connecting,
         "vpn-toolbar-connecting.png",
@@ -44,7 +44,7 @@ class VpnToolbarScreenshotTest {
     @Test
     @Config(qualifiers = "notnight")
     fun onLight() = shoot(
-        VpnConnection.Connected(VpnProtocol.WIREGUARD, 1),
+        VpnConnection.Connected(FakeTransport.info("wireguard"), 1, verified = true),
         VpnToggleLook.ON,
         R.string.vpn_toggle_on,
         "vpn-toolbar-on.png",
@@ -53,7 +53,7 @@ class VpnToolbarScreenshotTest {
     @Test
     @Config(qualifiers = "night")
     fun connectingDark() = shoot(
-        VpnConnection.Connecting(VpnProtocol.WIREGUARD),
+        VpnConnection.Connecting(FakeTransport.info("wireguard")),
         VpnToggleLook.CONNECTING,
         R.string.vpn_toggle_connecting,
         "vpn-toolbar-connecting-dark.png",

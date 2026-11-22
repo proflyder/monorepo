@@ -60,14 +60,12 @@
                     android:text="@string/vpn_connect"
                     app:icon="@drawable/vpn_ic_shield" />
 
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/vpn_external"
-                    style="@style/Widget.Home.Button.Tonal.M"
+                <LinearLayout
+                    android:id="@+id/vpn_fallback_options"
                     android:layout_width="match_parent"
-                    android:layout_marginTop="@dimen/ds_space_s"
-                    android:text="@string/vpn_open_external"
-                    android:visibility="gone"
-                    app:icon="@drawable/ds_ic_open_in_new" />
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:visibility="gone" />
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 

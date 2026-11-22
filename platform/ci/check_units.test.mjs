@@ -529,3 +529,41 @@ test("check_units: reading outputs of a non-matrix job is allowed", () => {
 test("check_units: the repository has no matrix output reads", () => {
   assert.deepEqual(checkUnits.workflowMatrixOutputProblems(), []);
 });
+
+function androidSuiteRoot(suiteTests) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "android-suite-"));
+  const android = path.join(root, "projects/mobile/android");
+  fs.mkdirSync(path.join(android, "core/ui"), { recursive: true });
+  fs.writeFileSync(
+    path.join(android, "BUILD.bazel"),
+    `test_suite(\n    name = "android_tests",\n    tests = [\n${suiteTests
+      .map((label) => `        "${label}",`)
+      .join("\n")}\n    ],\n)\n`,
+  );
+  fs.writeFileSync(
+    path.join(android, "core/ui/BUILD.bazel"),
+    'home_jvm_test(\n    name = "motion_test",\n)\n\nhome_jvm_test(\n    name = "swipe_test",\n)\n',
+  );
+  return root;
+}
+
+test("check_units: every android *_test is in android_tests or a unit target", () => {
+  const config = { units: [{ testTargets: ["//projects/mobile/android/core/ui:swipe_test"] }] };
+  const root = androidSuiteRoot(["//projects/mobile/android/core/ui:motion_test"]);
+  try {
+    assert.deepEqual(checkUnits.androidSuiteCoverageProblems(config, root), []);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("check_units: android *_test outside android_tests is a problem", () => {
+  const root = androidSuiteRoot(["//projects/mobile/android/core/ui:motion_test"]);
+  try {
+    const problems = checkUnits.androidSuiteCoverageProblems({ units: [] }, root);
+    assert.equal(problems.length, 1);
+    assert.match(problems[0], /core\/ui:swipe_test: not in .*android_tests/);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});

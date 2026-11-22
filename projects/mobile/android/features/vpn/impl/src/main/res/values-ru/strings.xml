@@ -7,7 +7,7 @@
 
     <string name="vpn_state_disconnected">Отключено</string>
     <string name="vpn_state_connecting">Подключение…</string>
-    <string name="vpn_state_connecting_external">Ждём OpenConnect…</string>
+    <string name="vpn_state_connecting_external">Ждём внешнее приложение…</string>
     <string name="vpn_state_connected">Подключено</string>
     <string name="vpn_state_fallback">WireGuard не ответил</string>
     <string name="vpn_state_home">Домашняя сеть: VPN не нужен</string>
@@ -29,7 +29,7 @@
 
     <string name="vpn_connect">Подключить</string>
     <string name="vpn_disconnect">Отключить</string>
-    <string name="vpn_open_external">Открыть OpenConnect</string>
+    <string name="vpn_open_via">Открыть %1$s</string>
 
     <string name="vpn_route_title">Маршрут</string>
     <string name="vpn_route_all">Весь трафик</string>
@@ -89,4 +89,6 @@
     <string name="vpn_toggle_connecting">VPN подключается. Нажмите, чтобы остановить; удерживайте — настройки VPN</string>
     <string name="vpn_toggle_on">VPN включён. Нажмите, чтобы отключить; удерживайте — настройки VPN</string>
     <string name="vpn_quick_tile_title">VPN домой</string>
+    <string name="vpn_open_app">Выбрать запасной канал</string>
+    <string name="vpn_detail_connected_unverified">%1$s · %2$s · по данным системы, не проверено</string>
 </resources>
