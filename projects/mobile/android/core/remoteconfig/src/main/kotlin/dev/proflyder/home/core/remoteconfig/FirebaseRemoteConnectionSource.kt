@@ -12,13 +12,14 @@ import dev.proflyder.home.core.config.RemoteConnectionSource
 import dev.proflyder.home.core.config.RemoteConnectionState
 import dev.proflyder.home.core.config.parseRemoteConnection
 import dev.proflyder.home.core.operation.suspendRunCatching
+import dev.proflyder.home.core.runtime.IoDispatcher
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.plus
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -30,9 +31,13 @@ import kotlinx.coroutines.tasks.await
 @SingleIn(AppScope::class)
 @ContributesBinding(AppScope::class)
 @Inject
-class FirebaseRemoteConnectionSource(context: Context) : RemoteConnectionSource {
+class FirebaseRemoteConnectionSource(
+    context: Context,
+    appScope: CoroutineScope,
+    @IoDispatcher io: CoroutineDispatcher,
+) : RemoteConnectionSource {
     private val appContext = context.applicationContext
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val scope = appScope + io
     private val refreshMutex = Mutex()
 
     private val app: FirebaseApp? =

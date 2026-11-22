@@ -1,5 +1,6 @@
 package dev.proflyder.home.feature.vpn.data
 
+import dev.proflyder.home.core.model.DeviceIdentity
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
@@ -9,7 +10,6 @@ import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.model.VpnProfile
 import dev.proflyder.home.core.network.VpnProfileApi
 import dev.proflyder.home.core.operation.suspendRunCatching
-import dev.proflyder.home.feature.push.PushDeviceIdentity
 import dev.proflyder.home.feature.vpn.VpnProblems
 import dev.proflyder.home.feature.vpn.VpnProfileProblem
 import dev.proflyder.home.feature.vpn.VpnProfileState
@@ -32,7 +32,7 @@ class RemoteVpnProfiles(
     private val dataStore: DataStore<Preferences>,
     private val api: VpnProfileApi,
     private val keys: VpnKeyVault,
-    private val identity: PushDeviceIdentity,
+    private val identity: DeviceIdentity,
     private val connection: ConnectionSettingsStore,
 ) : VpnProfiles {
     private val mutableState = MutableStateFlow<VpnProfileState>(VpnProfileState.Missing)

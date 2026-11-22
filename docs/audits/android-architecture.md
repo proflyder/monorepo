@@ -119,8 +119,8 @@ core/designsystem   все визуальные компоненты, общие
 | D2 | high | app | `app/…/di/AppGraph.kt:44-46,69-88` | Граф экспонирует impl-типы (`OkHttpClient`, `TunnelVpnController`, `HomeNetworkMonitor`, `VpnOpenConnector`, `FirebasePushRegistrar`) | Экспонировать только API + `Set<AppStartable>` | M |
 | D3 | high | app, core/network | `app/…/di/AppGraph.kt:135-243` | 8 копипастных `@Provides` клиентов с теми же 4–5 аргументами; push/VPN непоследовательно пропускают `networkWaiter` (`:209-229`) | `@ContributesBinding` на internal-реализациях + один `HomeHttp` | M |
 | D4 | med | app, push, call | `app/…/HomeApplication.kt:30-31,49` | `pushRegistrar.start()`, `callNotifications.start()` — императивные вызовы на старте | `AppStartable`-вклады фич | S |
-| D5 | med | core/settings, theme, remoteconfig | `core/settings/…/AndroidConnectionSettingsStore.kt:42`; `core/theme/…/AppearanceController.kt:25`; `core/remoteconfig/…/FirebaseRemoteConnectionSource.kt:35`; `core/settings/…/HomeDataStore.kt:22` | Каждый класс создаёт свой `CoroutineScope(SupervisorJob()+IO)` | Инъекция `@AppScope CoroutineScope` и `IoDispatcher` | S |
-| D6 | med | core/ui | `core/ui/…/AppForeground.kt:3-17`; `app/…/MainActivity.kt:154` | Глобальный `@Volatile` синглтон, пишется из Activity | `AppForeground: StateFlow<Boolean>` из `ProcessLifecycleOwner` | S |
+| D5 | med | core/settings, theme, remoteconfig | `core/settings/…/AndroidConnectionSettingsStore.kt:42`; `core/theme/…/AppearanceController.kt:25`; `core/remoteconfig/…/FirebaseRemoteConnectionSource.kt:35`; `core/settings/…/HomeDataStore.kt:22` | Каждый класс создаёт свой `CoroutineScope(SupervisorJob()+IO)` | Инъекция `@AppScope CoroutineScope` и `IoDispatcher` **Сделано в PR #379 (P1).** Скоупы и `IoDispatcher` инъектируются (`core/runtime/RuntimeBindings`). | S |
+| D6 | med | core/ui | `core/ui/…/AppForeground.kt:3-17`; `app/…/MainActivity.kt:154` | Глобальный `@Volatile` синглтон, пишется из Activity | `AppForeground: StateFlow<Boolean>` из `ProcessLifecycleOwner` **Сделано в PR #379 (P1).** `AppForeground.state` из `ProcessLifecycleOwner` (`ProcessAppForeground : AppStartable`), грейс — `ForegroundGraceNoticePolicy`. | S |
 | D7 | med | app | `app/…/di/NetworkInterceptors.kt:12-35` | `NetworkDiagnostics`-object; Chucker/логирование в main source set, переключение ресурсным bool | Debug-only binding container с `@Multibinds Set<Interceptor>` | S |
 | D8 | med | all | `features/*/impl/…/*ViewModel.kt` (напр. `features/timers/impl/…/TimersViewModel.kt:183-199`) | 16 `ViewModelFactoryContributor` повторяют весь список аргументов конструктора | Metro `Provider`/assisted inject | M |
 | D9 | low | app | `app/…/MainActivity.kt:60,91,205,247` | `(application as HomeApplication).graph` в четырёх местах | Инъекция Activity через граф | S |
@@ -158,8 +158,8 @@ core/designsystem   все визуальные компоненты, общие
 | V10 | med | vpn | `TunnelVpnController.kt:150-174` | Опрос рукопожатия 500 мс и трафика 1 с работает без наблюдателей | `status: Flow` транспорта, статистика только при подписчиках | M |
 | V11 | med | vpn | `features/vpn/impl/…/tunnel/ExternalOpenConnectTransport.kt:41-44` | Рукопожатие подделывается `currentTimeMillis()` при любом системном VPN — чужой VPN = «подключено» | `TRANSPORT_VPN`-callbackFlow, честный статус «внешний, не проверен» | S |
 | V12 | med | vpn | `features/vpn/impl/…/tunnel/WireGuardTransport.kt:77-84,96-97` | Рефлексия по приватным полям `GoBackend` — сломается молча при обновлении | Публичный `backend.getStatistics()` или адаптер с тестом | S |
-| V13 | med | vpn, push | `features/vpn/impl/…/data/RemoteVpnProfiles.kt:35` | VPN зависит от push-овского `PushDeviceIdentity` | `DeviceIdentity` в core | S |
-| V14 | med | vpn/api, core/network | `features/vpn/api/…/VpnRules.kt:121-137`; `core/network/…/HttpSupport.kt:73` | Маппинг ошибок по строкам `"http_400"` ↔ `"http_$httpCode"` | `RemoteFailure.Server.httpStatus: Int` | S |
+| V13 | med | vpn, push | `features/vpn/impl/…/data/RemoteVpnProfiles.kt:35` | VPN зависит от push-овского `PushDeviceIdentity` | `DeviceIdentity` в core **Сделано в PR #379 (P1).** `DeviceIdentity` в core/model, реализация `AndroidDeviceIdentity` в core/runtime. | S |
+| V14 | med | vpn/api, core/network | `features/vpn/api/…/VpnRules.kt:121-137`; `core/network/…/HttpSupport.kt:73` | Маппинг ошибок по строкам `"http_400"` ↔ `"http_$httpCode"` | `RemoteFailure.Server.httpStatus: Int` **Сделано в PR #379 (P1).** `RemoteFailure.Server.httpStatus: Int`, `VpnProblems` по числу. | S |
 | V15 | med | vpn | `features/vpn/impl/…/VpnEntryPoint.kt:18-22` | `ConnectivityManager`-колбэк монитора никогда не снимается | `callbackFlow` с `awaitClose` | S |
 
 ### Сетевой слой (N)
@@ -186,7 +186,7 @@ core/designsystem   все визуальные компоненты, общие
 |---|---|---|---|---|---|---|
 | C1 | med | core/config | `core/config/…/RemoteConnectionSource.kt:37-115` | Ручной разбор JSON-дерева, блоки control/intercom копипастой | `@Serializable` DTO + `parseOptionalEndpoint` | S |
 | C2 | med | core/config | `core/config/…/ConnectionConfig.kt:22-45` | Валидация цепочкой `if`-return | Список правил / `when` | S |
-| C3 | med | core/settings | `AndroidConnectionSettingsStore.kt:97,109` | Английский пользовательский текст в `RemoteFailure.Storage(...)` | `Storage(reason: enum)`, строки в ресурсах | S |
+| C3 | med | core/settings | `AndroidConnectionSettingsStore.kt:97,109` | Английский пользовательский текст в `RemoteFailure.Storage(...)` | `Storage(reason: enum)`, строки в ресурсах **Сделано в PR #379 (P1).** `Storage(reason: StorageReason)`, тексты в ресурсах `core/ui`. | S |
 | C4 | low | core/settings | `AndroidConnectionSettingsStore.kt:143-146` | Мёртвые ключи `KEY_ENDPOINT`, `KEY_*_TIMEOUT` | Удалить или оставить только в миграции | S |
 | C5 | low | core/settings | `AndroidConnectionSettingsStore.kt:81-93` | `updateStoredToken` с одним вызовом + `if/else` | Встроить | S |
 | C6 | med | vpn, push, scenarios, core/config | `StoredVpnProfile.kt:42`; `NotificationHistoryCodec.kt:18`; `ScenarioEditorDraft.kt:42`; `RemoteConnectionSource.kt:37` | Ещё 4 локальных `Json { ignoreUnknownKeys = true }` | Общий `LocalJson` | S |
@@ -247,7 +247,7 @@ core/designsystem   все визуальные компоненты, общие
 | T6 | med | alarms, reminders | `AlarmEditorViewModel.kt:72-94` vs `ReminderEditorViewModel.kt:63-85,193-220` | Почти идентичные draft + `IdempotentRequestKey` + `adoptRestoredCreateIdentity` + `persistDraft` | `EditorDraftSession<D>` | M |
 | T7 | med | timers | `TimersViewModel.kt:50,147-157` | `System.nanoTime()` в VM, тик пересоздаёт всё состояние каждую секунду | Инъекция `Clock`, обратный отсчёт отдельным потоком | M |
 | T8 | low | timers | `TimersFragment.kt:41-46` | Пресеты `"1m"/"5m"/…` строками с обратным парсингом | Список `Duration` | S |
-| T9 | low | timers, control | `features/timers/impl/…/ConnectTimerRepository.kt:20-23`; `ControlViewModel.kt:156` | `syncClock` в таймерном репозитории, но зовёт и Control | Сервис серверных часов в core | S |
+| T9 | low | timers, control | `features/timers/impl/…/ConnectTimerRepository.kt:20-23`; `ControlViewModel.kt:156` | `syncClock` в таймерном репозитории, но зовёт и Control | Сервис серверных часов в core **Сделано в PR #379 (P1).** `ServerClockSync` (core/model) + `SchedulerServerClockSync` (core/network). | S |
 | T10 | low | alarms, reminders, timers | `features/alarms/impl/…/AlarmUseCases.kt:11-21` и аналоги | Сквозные use case без логики | Решение в `DECISIONS.md`: оставлять только с логикой | S |
 | T11 | low | alarms | `AlarmsViewModel.kt:53` | Сортировка будильников в VM; у таймеров/напоминаний своя | Доменный компаратор в API | S |
 | T12 | med | alarms, reminders, timers | `AlarmsFeatureEntry.kt:14,19,36`; `RemindersFeatureEntry.kt:14,19,37`; `TimersFeatureEntry.kt:12,19` | Destination экранов public в impl | В API или internal | M |
@@ -260,7 +260,7 @@ core/designsystem   все визуальные компоненты, общие
 | U1 | med | app | `app/…/MainActivity.kt:52-321` (`120-127`, `181-192`, `271-281`, `321`) | God-Activity: чип профиля через `ControlViewModel`, `CONTROL_TAB = "control"`, разбор push deep-link, VPN-хост, меню | `ToolbarContribution`-набор от фич, `DeepLinkResolver` в core/navigation | M |
 | U2 | med | app, core/navigation | `MainActivity.kt:114-119` | Два коллектора `currentTabId` и ручное `.value` | Один `AppChromeState` StateFlow | S |
 | U3 | med | core/navigation | `core/navigation/…/Destination.kt:8-42`; `FragmentRouter.kt:112` | Маршруты — строки (`startsWith("$id/")`), аргументы — сырой `Bundle` | Типизированный парсер маршрута на `FeatureEntry`, Parcelable-аргументы | M |
-| U4 | low | core/model | `core/model/…/SchedulerModels.kt:109,162` | `Outcome`/`RemoteFailure` в scheduler-файле | `core/model/Outcome.kt` | S |
+| U4 | low | core/model | `core/model/…/SchedulerModels.kt:109,162` | `Outcome`/`RemoteFailure` в scheduler-файле | `core/model/Outcome.kt` **Сделано в PR #379 (P1).** `core/model/Outcome.kt`. | S |
 
 ### Строки и ресурсы (S)
 
@@ -302,7 +302,7 @@ core/designsystem   все визуальные компоненты, общие
 | # | пакет | находки | критерий готовности |
 |---|---|---|---|
 | P0 | **Правила и ограждения**: detekt `PublicInImpl`, `NoDirectStateWrite` (сначала в режиме baseline); else-if — существующий `NoElseIf` — **сделано в PR P0** | Q3, Q2 (неверная) | Правила в `detekt-rules` с тестами; baseline фиксирует текущие нарушения, новые — красный CI |
-| P1 | **core/runtime**: `@AppScope` scope, `IoDispatcher`, `AppForeground` StateFlow, `AppStartable`, `tickerFlow`, `Backoff`, `Clock`, `DeviceIdentity`; `Outcome` в свой файл, `RemoteFailure.Server.httpStatus`, `Storage(reason)` | D5, D6, U4, V13, V14, C3, T9 | Нет `CoroutineScope(SupervisorJob…)` в core; `HomeApplication` итерирует `Set<AppStartable>`; тесты `tickerFlow`/`Backoff` |
+| P1 | **core/runtime** (сделано в PR #379): `@AppScope` scope, `IoDispatcher`, `AppForeground` StateFlow, `AppStartable`, `tickerFlow`, `Backoff`, `Clock`, `DeviceIdentity`; `Outcome` в свой файл, `RemoteFailure.Server.httpStatus`, `Storage(reason)` | D5, D6, U4, V13, V14, C3, T9 | Нет `CoroutineScope(SupervisorJob…)` в core; `HomeApplication` итерирует `Set<AppStartable>`; тесты `tickerFlow`/`Backoff` |
 | P2 | **DI без локаторов**: Metro-аксессоры для Service/Activity, удаление `*EntryPoint`, граф экспонирует только API, VM-фабрики через Provider/assisted, debug-интерсепторы через мультибиндинг | D1, D2, D4, D7, D8, D9 | Нет `object *EntryPoint`; `AppGraph` без impl-типов; push/call стартуют как `AppStartable` |
 | P3 | **Сеть**: `core/network/{api,impl}`, `HomeHttp.rest/stream`, suspend call adapter, `RouteGate`, `@Idempotent`, sealed `Target`, `NetworkJson`, `ConnectionHealth`, internal-мапперы | D3, R2, R5, N1–N9, N11–N13, C6 | Нет `runBlocking`/`CountDownLatch`/`Thread.sleep` в сети; один Retrofit-фабричный путь; `MainActivity` не знает OkHttp; существующие тесты клиентов зелёные |
 | P4 | **Неблокирующий старт настроек**: стор и тема на `stateIn(Loading)`, Remote Config одним `fetch(force)`, `@Serializable` разбор конфига | R3, R4, R8, C1, C2, C4, C5 | Нет `runBlocking` в `core/settings` и `core/theme`; StrictMode-тест старта без disk read на main |

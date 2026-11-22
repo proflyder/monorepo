@@ -31,6 +31,5 @@
     <string name="push_device_name_save">Save name</string>
     <string name="push_device_name_help">Ricardo uses this name to find this phone or send it a notification when the family has several phones. Changing the name does not re-register the phone.</string>
     <string name="push_device_name_saved">Phone name saved.</string>
-    <string name="push_default_device_name">My phone</string>
     <string name="push_device_name_sample">Stas</string>
 </resources>

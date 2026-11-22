@@ -11,6 +11,7 @@ import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.core.model.ScheduleKind
 import dev.proflyder.home.core.model.ServerClock
+import dev.proflyder.home.core.testing.FakeClock
 import java.time.ZoneId
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -36,7 +37,7 @@ class ConnectSchedulerClientTest {
     private lateinit var otherServer: MockWebServer
     private lateinit var store: FakeSettingsStore
     private lateinit var clock: ServerClock
-    private var nowMillis = 1_000_000L
+    private val time = FakeClock(wallMillis = 1_000_000L)
 
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -45,7 +46,7 @@ class ConnectSchedulerClientTest {
         server = MockWebServer().apply { start() }
         otherServer = MockWebServer().apply { start() }
         store = FakeSettingsStore(defaultConfig())
-        clock = ServerClock { nowMillis }
+        clock = ServerClock(time)
     }
 
     @After

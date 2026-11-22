@@ -3,6 +3,7 @@ package dev.proflyder.home.feature.alarms.domain
 import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.core.model.RepeatKind
+import dev.proflyder.home.core.model.StorageReason
 import dev.proflyder.home.core.model.Schedule
 import dev.proflyder.home.core.model.ScheduleKind
 import dev.proflyder.home.core.model.WallTime
@@ -83,6 +84,6 @@ class SaveAlarmLabelTest {
         override suspend fun snooze(id: String, minutes: Int): Outcome<Schedule> = unused()
         override suspend fun stop(id: String): Outcome<Schedule> = unused()
 
-        private fun <T> unused(): Outcome<T> = Outcome.Failure(RemoteFailure.Storage("unused"))
+        private fun <T> unused(): Outcome<T> = Outcome.Failure(RemoteFailure.Storage(StorageReason.SETTINGS_WRITE))
     }
 }

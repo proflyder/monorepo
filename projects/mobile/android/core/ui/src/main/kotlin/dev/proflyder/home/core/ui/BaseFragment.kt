@@ -13,7 +13,6 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.google.android.material.color.MaterialColors
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import dev.proflyder.home.core.model.RemoteFailure
-import dev.proflyder.home.core.model.isTransientNetwork
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
@@ -73,15 +72,9 @@ abstract class BaseFragment<VB : ViewBinding>(
     }
 
     protected fun showFailure(failure: RemoteFailure) {
-        when {
-            failure.isTransientNetwork() && AppForeground.inGrace() -> Unit
-            else -> Notices.show(
-                binding.root,
-                failure.userMessage(requireContext()),
-                NoticeKind.Error,
-                long = true,
-            )
-        }
+        val policy = (activity as? FailureNoticePolicyProvider)?.failureNoticePolicy
+        if (policy?.shouldShow(failure) == false) return
+        Notices.show(binding.root, failure.userMessage(requireContext()), NoticeKind.Error, long = true)
     }
 
     protected fun confirm(

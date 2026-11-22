@@ -70,7 +70,8 @@ fun parseConnectFailure(httpCode: Int, text: String, json: Json): RemoteFailure 
         "deadline_exceeded", "canceled" -> RemoteFailure.Timeout
         "unavailable" -> RemoteFailure.Offline(message.ifBlank { "server unavailable" })
         else -> RemoteFailure.Server(
-            code = code.ifBlank { "http_$httpCode" },
+            httpStatus = httpCode,
+            code = code,
             message = message.ifBlank { "server returned HTTP $httpCode" },
             textKey = localized?.first.orEmpty(),
             textArgs = localized?.second.orEmpty(),

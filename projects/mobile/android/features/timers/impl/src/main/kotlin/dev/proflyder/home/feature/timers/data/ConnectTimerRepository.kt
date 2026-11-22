@@ -17,11 +17,6 @@ class ConnectTimerRepository(
 ) : TimerRepository {
     override suspend fun list(): Outcome<List<Timer>> = client.listTimers(includeFinished = false)
 
-    override suspend fun syncClock(): Outcome<Unit> = when (val result = client.getStatus()) {
-        is Outcome.Success -> Outcome.Success(Unit)
-        is Outcome.Failure -> result
-    }
-
     override suspend fun start(
         label: String,
         durationSeconds: Long,

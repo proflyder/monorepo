@@ -6,12 +6,12 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
+import dev.proflyder.home.core.runtime.IoDispatcher
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -21,8 +21,11 @@ import kotlinx.coroutines.runBlocking
 
 @SingleIn(AppScope::class)
 @Inject
-class AppearanceController(private val dataStore: DataStore<Preferences>) {
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+class AppearanceController(
+    private val dataStore: DataStore<Preferences>,
+    private val scope: CoroutineScope,
+    @IoDispatcher private val io: CoroutineDispatcher,
+) {
     private val mutableState = MutableStateFlow(Appearance())
 
     val state: StateFlow<Appearance> = mutableState.asStateFlow()
@@ -57,7 +60,7 @@ class AppearanceController(private val dataStore: DataStore<Preferences>) {
     )
 
     private fun persist(key: Preferences.Key<String>, value: String) {
-        scope.launch { write(key, value) }
+        scope.launch(io) { write(key, value) }
     }
 
     internal suspend fun write(key: Preferences.Key<String>, value: String) {

@@ -5,6 +5,12 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import dev.proflyder.home.core.config.ConnectionSettingsStore
 import dev.proflyder.home.core.model.ServerClock
+import dev.proflyder.home.core.model.ServerClockSync
+import dev.proflyder.home.core.network.SchedulerServerClockSync
+import dev.proflyder.home.core.runtime.AppStartable
+import dev.proflyder.home.core.runtime.IoDispatcher
+import dev.proflyder.home.core.theme.AppearanceController
+import dev.proflyder.home.core.ui.FailureNoticePolicy
 import dev.proflyder.home.core.navigation.FeatureEntry
 import dev.proflyder.home.core.navigation.FeatureRegistry
 import dev.proflyder.home.core.network.ChatClient
@@ -27,7 +33,6 @@ import dev.proflyder.home.core.network.SystemDashboardClient
 import dev.proflyder.home.core.settings.HomeDataStore
 import dev.proflyder.home.core.settings.KeystoreTokenCipher
 import dev.proflyder.home.core.settings.TokenCipher
-import dev.proflyder.home.core.theme.AppearanceController
 import dev.proflyder.home.core.ui.ViewModelFactoryRegistry
 import dev.proflyder.home.feature.call.CallAudioController
 import dev.proflyder.home.feature.call.CallController
@@ -50,8 +55,8 @@ import dev.zacsweers.metro.DependencyGraph
 import dev.zacsweers.metro.Provides
 import dev.zacsweers.metro.SingleIn
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.plus
 import okhttp3.OkHttpClient
 
 @DependencyGraph(
@@ -63,6 +68,8 @@ interface AppGraph {
     val viewModelFactories: ViewModelFactoryRegistry
 
     val appearance: AppearanceController
+    val startables: Set<AppStartable>
+    val failureNoticePolicy: FailureNoticePolicy
 
     val connectionSettings: ConnectionSettingsStore
 
@@ -97,10 +104,7 @@ interface AppGraph {
 object AppBindings {
     @Provides
     @SingleIn(AppScope::class)
-    fun provideServerClock(): ServerClock = ServerClock(
-        localMillis = System::currentTimeMillis,
-        elapsedNanos = { android.os.SystemClock.elapsedRealtimeNanos() },
-    )
+    fun provideServerClockSync(client: SchedulerClient): ServerClockSync = SchedulerServerClockSync(client)
 
     @Provides
     @SingleIn(AppScope::class)
@@ -117,11 +121,11 @@ object AppBindings {
 
     @Provides
     @SingleIn(AppScope::class)
-    fun provideAppScope(): CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-
-    @Provides
-    @SingleIn(AppScope::class)
-    fun provideDataStore(context: Context): DataStore<Preferences> = HomeDataStore.create(context)
+    fun provideDataStore(
+        context: Context,
+        scope: CoroutineScope,
+        @IoDispatcher io: CoroutineDispatcher,
+    ): DataStore<Preferences> = HomeDataStore.create(context, scope + io)
 
     @Provides
     @SingleIn(AppScope::class)

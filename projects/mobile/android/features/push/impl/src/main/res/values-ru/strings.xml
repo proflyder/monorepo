@@ -31,6 +31,5 @@
     <string name="push_device_name_save">Сохранить имя</string>
     <string name="push_device_name_help">Рикардо использует это имя, чтобы найти телефон или отправить уведомление, когда телефонов в семье несколько. Смена имени не требует повторной регистрации телефона.</string>
     <string name="push_device_name_saved">Имя телефона сохранено.</string>
-    <string name="push_default_device_name">Мой телефон</string>
     <string name="push_device_name_sample">Стас</string>
 </resources>

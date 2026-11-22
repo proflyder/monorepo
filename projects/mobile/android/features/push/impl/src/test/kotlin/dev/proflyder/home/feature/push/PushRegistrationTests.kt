@@ -1,10 +1,7 @@
 package dev.proflyder.home.feature.push
 
-import android.content.Context
-import android.provider.Settings
-import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
-import androidx.datastore.preferences.core.Preferences
+import dev.proflyder.home.core.model.DeviceIdentity
 import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.network.PushDevicesApi
 import java.io.File
@@ -13,55 +10,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
-
-@RunWith(RobolectricTestRunner::class)
-@Config(sdk = [35])
-class PushDeviceIdentityTest {
-    @Test
-    fun theIdentityIsStableAndPseudonymous() = runBlocking {
-        val context = RuntimeEnvironment.getApplication()
-        val identity = AndroidPushDeviceIdentity(context, store(context, "identity"))
-        val first = identity.deviceId()
-        val second = identity.deviceId()
-        assertEquals(first, second)
-        assertEquals(64, first.length)
-        assertTrue(first.all { it in "0123456789abcdef" })
-        val raw = Settings.Secure.getString(
-            context.contentResolver,
-            Settings.Secure.ANDROID_ID,
-        )
-        assertNotEquals(raw, first)
-    }
-
-    @Test
-    fun aNewIdentityObjectReadsThePersistedValue() = runBlocking {
-        val context = RuntimeEnvironment.getApplication()
-        val dataStore = store(context, "identity-restart")
-        val first = AndroidPushDeviceIdentity(context, dataStore).deviceId()
-        val second = AndroidPushDeviceIdentity(context, dataStore).deviceId()
-        assertEquals(first, second)
-    }
-
-    @Test
-    fun theDefaultNameFallsBackToANonBlankString() {
-        val context = RuntimeEnvironment.getApplication()
-        val identity = AndroidPushDeviceIdentity(context, store(context, "identity-name"))
-        assertTrue(identity.defaultName().trim().isNotEmpty())
-    }
-
-    private fun store(context: Context, name: String): DataStore<Preferences> =
-        PreferenceDataStoreFactory.create(
-            scope = CoroutineScope(Dispatchers.IO + SupervisorJob()),
-            produceFile = { File(context.filesDir, "$name.preferences_pb") },
-        )
-}
 
 class PushRegistrationPublisherTest {
     private class FakeApi : PushDevicesApi {
@@ -86,7 +40,7 @@ class PushRegistrationPublisherTest {
         override suspend fun unregister(token: String): Outcome<Unit> = Outcome.Success(Unit)
     }
 
-    private class FixedIdentity(private val id: String) : PushDeviceIdentity {
+    private class FixedIdentity(private val id: String) : DeviceIdentity {
         override suspend fun deviceId(): String = id
 
         override fun defaultName(): String = "Pixel"

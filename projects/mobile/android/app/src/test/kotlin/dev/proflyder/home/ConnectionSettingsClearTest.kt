@@ -12,6 +12,7 @@ import dev.proflyder.home.core.model.Field
 import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.core.model.ServerClock
+import dev.proflyder.home.core.runtime.AndroidClock
 import dev.proflyder.home.core.network.ConnectSchedulerClient
 import dev.proflyder.home.core.settings.AndroidConnectionSettingsStore
 import dev.proflyder.home.core.settings.HomeDataStore
@@ -69,7 +70,7 @@ class ConnectionSettingsClearTest {
     @After
     fun tearDown() = scope.cancel()
 
-    private fun dataStore() = HomeDataStore.create(context, "test-" + UUID.randomUUID(), scope)
+    private fun dataStore() = HomeDataStore.create(context, scope, "test-" + UUID.randomUUID())
 
     private fun endpoint(url: String) = (ServerEndpoint.parse(url) as EndpointParseResult.Valid).endpoint
 
@@ -89,7 +90,7 @@ class ConnectionSettingsClearTest {
     @Test
     fun clearingTokenRemovesCiphertextAndNetworkFailsBeforeRequest() = runBlocking {
         val dataStore = dataStore()
-        val store = AndroidConnectionSettingsStore(dataStore, FakeCipher(), FakeRemoteSource(loadedRemote()))
+        val store = AndroidConnectionSettingsStore(dataStore, FakeCipher(), FakeRemoteSource(loadedRemote()), scope)
 
         val saved = store.updateToken("valid-token")
         assertTrue(saved is Outcome.Success)
@@ -105,7 +106,7 @@ class ConnectionSettingsClearTest {
         val client = ConnectSchedulerClient(
             settings = store,
             baseClient = OkHttpClient(),
-            serverClock = ServerClock(),
+            serverClock = ServerClock(AndroidClock),
         )
         assertEquals(
             RemoteFailure.Validation(Field.TOKEN),
@@ -117,10 +118,10 @@ class ConnectionSettingsClearTest {
     fun tokenPersistsAndEndpointsComeFromRemoteConfig() = runBlocking {
         val dataStore = dataStore()
         val remote = FakeRemoteSource(loadedRemote())
-        val first = AndroidConnectionSettingsStore(dataStore, FakeCipher(), remote)
+        val first = AndroidConnectionSettingsStore(dataStore, FakeCipher(), remote, scope)
         first.updateToken("valid-token")
 
-        val second = AndroidConnectionSettingsStore(dataStore, FakeCipher(), remote)
+        val second = AndroidConnectionSettingsStore(dataStore, FakeCipher(), remote, scope)
         val config = second.config.value
         assertEquals("http://192.0.2.10:8080", config.endpoint?.baseUrl())
         assertEquals("http://192.0.2.10:8099", config.controlEndpoint?.baseUrl())
@@ -133,7 +134,7 @@ class ConnectionSettingsClearTest {
     @Test
     fun remoteConfigChangesRecomposeTheSnapshot() = runBlocking {
         val remote = FakeRemoteSource(loadedRemote())
-        val store = AndroidConnectionSettingsStore(dataStore(), FakeCipher(), remote)
+        val store = AndroidConnectionSettingsStore(dataStore(), FakeCipher(), remote, scope)
         store.updateToken("valid-token")
 
         remote.emit(
@@ -160,6 +161,7 @@ class ConnectionSettingsClearTest {
             dataStore(),
             FakeCipher(),
             FakeRemoteSource(RemoteConnectionState.Unavailable),
+            scope,
         )
         store.updateToken("valid-token")
 
@@ -179,7 +181,7 @@ class ConnectionSettingsClearTest {
             .putLong("read_timeout_millis", 11_000L)
             .commit()
 
-        val store = AndroidConnectionSettingsStore(dataStore(), FakeCipher(), FakeRemoteSource(loadedRemote()))
+        val store = AndroidConnectionSettingsStore(dataStore(), FakeCipher(), FakeRemoteSource(loadedRemote()), scope)
 
         val config = store.config.value
         assertEquals("http://192.0.2.10:8080", config.endpoint?.baseUrl())

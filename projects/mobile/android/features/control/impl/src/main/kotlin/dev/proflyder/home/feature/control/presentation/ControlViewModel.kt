@@ -14,6 +14,7 @@ import dev.proflyder.home.core.model.PowerState
 import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.core.model.Scenario
 import dev.proflyder.home.core.model.ServerClock
+import dev.proflyder.home.core.model.ServerClockSync
 import dev.proflyder.home.core.model.Timer
 import dev.proflyder.home.core.model.TimerState
 import dev.proflyder.home.core.model.VolumeControls
@@ -100,6 +101,7 @@ class ControlViewModel(
     private val reminders: ReminderRepository,
     private val scenarios: ScenarioRepository,
     private val clock: ServerClock,
+    private val clockSync: ServerClockSync,
     private val callLauncher: CallLauncher,
 ) : BaseViewModel<ControlUiState>(ControlUiState(configured = loadCatalog.isConfigured)) {
     private var refreshJob: Job? = null
@@ -153,7 +155,7 @@ class ControlViewModel(
     }
 
     private suspend fun loadHub(catalogOk: Boolean, requested: Int) {
-        timers.syncClock()
+        clockSync.sync()
         val alarmsResult = alarms.list()
         val timersResult = timers.list()
         val scenariosResult = scenarios.list()
@@ -584,6 +586,7 @@ class ControlViewModelFactoryContributor(
     private val reminders: ReminderRepository,
     private val scenarios: ScenarioRepository,
     private val clock: ServerClock,
+    private val clockSync: ServerClockSync,
     private val callLauncher: CallLauncher,
 ) : ViewModelFactoryContributor {
     override val viewModelClass: Class<out ViewModel> = ControlViewModel::class.java
@@ -606,6 +609,7 @@ class ControlViewModelFactoryContributor(
             reminders,
             scenarios,
             clock,
+            clockSync,
             callLauncher,
         )
     }

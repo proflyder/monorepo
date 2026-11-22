@@ -292,7 +292,7 @@ class CallManagerTest {
     fun busyCallMapsFailedPrecondition() = runTest {
         val client = FakeClient().apply {
             endpoints = Outcome.Success(listOf(station))
-            startResult = Outcome.Failure(RemoteFailure.Server("failed_precondition", "busy"))
+            startResult = Outcome.Failure(RemoteFailure.Server(400, "failed_precondition", "busy"))
         }
         val manager = manager(client, FakeMedia())
         manager.placeCall()
