@@ -8,6 +8,10 @@ import android.net.NetworkCapabilities
 import android.net.NetworkRequest
 import dev.proflyder.home.core.config.ConnectionSettingsStore
 import dev.proflyder.home.feature.vpn.HomeNetworkRules
+import dev.proflyder.home.feature.vpn.HomeReachability
+import dev.proflyder.home.feature.vpn.VpnNetworkFlow
+import android.net.LinkProperties
+import dev.proflyder.home.feature.vpn.NetworkState
 import dev.proflyder.home.feature.vpn.VpnSettingsStore
 import dev.proflyder.home.feature.vpn.isActive
 import dev.zacsweers.metro.AppScope
@@ -18,7 +22,10 @@ import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -33,12 +40,23 @@ class HomeNetworkMonitor(
     private val settings: VpnSettingsStore,
     private val controller: TunnelVpnController,
     private val scope: CoroutineScope,
-) {
+) : HomeReachability {
     private val networks = ConcurrentHashMap.newKeySet<Network>()
     private val home = MutableStateFlow<Boolean?>(null)
     private var pending: Job? = null
 
     val atHome: StateFlow<Boolean?> = home.asStateFlow()
+
+    val foreground = MutableStateFlow(false)
+
+    private val reachable = MutableStateFlow<NetworkState?>(null)
+
+    override val state: StateFlow<NetworkState?> = reachable.asStateFlow()
+
+    override suspend fun watch() {
+        reachable.value = null
+        VpnNetworkFlow.settle(defaultNetworkChanges()).collect { reachable.value = snapshot() }
+    }
 
     @SuppressLint("MissingPermission")
     fun start() {
@@ -69,6 +87,39 @@ class HomeNetworkMonitor(
         pending = scope.launch { evaluate() }
     }
 
+    private fun defaultNetworkChanges(): Flow<Unit> = callbackFlow {
+        val listener = DefaultNetworkListener { trySend(Unit) }
+        val registered = register(listener)
+        awaitClose { unregister(listener, registered) }
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun register(listener: DefaultNetworkListener): Boolean {
+        val manager = context.getSystemService(ConnectivityManager::class.java)
+        val registered = manager != null && runCatching { manager.registerDefaultNetworkCallback(listener) }.isSuccess
+        if (!registered) listener.changed()
+        return registered
+    }
+
+    private suspend fun snapshot(): NetworkState {
+        val atHomeNow = checkNow()
+        val ids = networks.toList().ifEmpty { physicalNetworks() }.map { it.networkHandle }.toSet()
+        return NetworkState(atHomeNow, ids)
+    }
+
+    private fun unregister(listener: DefaultNetworkListener, registered: Boolean) {
+        val manager = context.getSystemService(ConnectivityManager::class.java)
+        if (registered) runCatching { manager?.unregisterNetworkCallback(listener) }
+    }
+
+    private class DefaultNetworkListener(val changed: () -> Unit) : ConnectivityManager.NetworkCallback() {
+        override fun onAvailable(network: Network) = changed()
+
+        override fun onLost(network: Network) = changed()
+
+        override fun onLinkPropertiesChanged(network: Network, properties: LinkProperties) = changed()
+    }
+
     suspend fun checkNow(): Boolean? {
         val candidates = networks.toList().ifEmpty { physicalNetworks() }
         if (candidates.isEmpty()) return null
@@ -95,6 +146,7 @@ class HomeNetworkMonitor(
     private suspend fun evaluate() {
         delay(SETTLE_MILLIS)
         val atHomeNow = checkNow() ?: false
+        if (foreground.value) return
         val auto = settings.settings.value.autoConnect
         val active = controller.connection.value.isActive
         when {

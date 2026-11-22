@@ -19,6 +19,7 @@ object VpnEntryPoint {
         dependencies = value
         value.controller.start()
         value.homeNetwork.start()
+        value.opener.start()
     }
 
     fun require(): Dependencies =
