@@ -37,13 +37,13 @@
             android:layout_marginTop="@dimen/control_group_title_gap"
             android:orientation="vertical" />
 
-        <LinearLayout
+        <dev.proflyder.home.core.designsystem.TileGrid
             android:id="@+id/control_group_tiles"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginHorizontal="@dimen/control_row_bleed"
-            android:orientation="vertical"
-            android:visibility="gone" />
+            android:visibility="gone"
+            app:tileColumns="@integer/control_tile_columns" />
 
         <LinearLayout
             android:id="@+id/control_group_actions"
@@ -65,13 +65,13 @@
             android:visibility="gone"
             tools:text="Settings (2)" />
 
-        <LinearLayout
+        <dev.proflyder.home.core.designsystem.TileGrid
             android:id="@+id/control_group_settings_tiles"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginHorizontal="@dimen/control_row_bleed"
-            android:orientation="vertical"
-            android:visibility="gone" />
+            android:visibility="gone"
+            app:tileColumns="@integer/control_tile_columns" />
 
         <LinearLayout
             android:id="@+id/control_group_settings_list"

@@ -1,6 +1,6 @@
 package dev.proflyder.home.feature.control
 
-sealed interface SpeedDialItem {
+internal sealed interface SpeedDialItem {
     val key: String
 
     data class Tile(val tile: QuickTile) : SpeedDialItem {
@@ -12,7 +12,7 @@ sealed interface SpeedDialItem {
     }
 }
 
-object SpeedDialItems {
+internal object SpeedDialItems {
     fun build(
         tiles: List<QuickTile>,
         wake: List<WakeFeedbackAction>,

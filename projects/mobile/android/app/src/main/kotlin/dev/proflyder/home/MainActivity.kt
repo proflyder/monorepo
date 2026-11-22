@@ -23,7 +23,6 @@ import dev.proflyder.home.core.navigation.FeatureRegistry
 import dev.proflyder.home.core.navigation.FragmentRouter
 import dev.proflyder.home.core.navigation.Navigator
 import dev.proflyder.home.core.navigation.NavigatorHost
-import dev.proflyder.home.core.model.PowerState
 import dev.proflyder.home.core.ui.FailureNoticePolicy
 import dev.proflyder.home.core.ui.FailureNoticePolicyProvider
 import dev.proflyder.home.core.ui.applyNavigationInset
@@ -32,11 +31,10 @@ import dev.proflyder.home.core.ui.forContentBetweenBars
 import dev.proflyder.home.core.ui.horizontalInsets
 import dev.proflyder.home.core.ui.keyboardVisible
 import dev.proflyder.home.core.ui.topInset
-import dev.proflyder.home.core.ui.injectedViewModels
 import dev.proflyder.home.databinding.ActivityMainBinding
-import dev.proflyder.home.feature.control.presentation.ControlUiState
-import dev.proflyder.home.feature.control.presentation.ControlViewModel
+import dev.proflyder.home.feature.control.VoiceProfileState
 import dev.proflyder.home.feature.call.CallLauncher
+import dev.proflyder.home.feature.control.VoiceProfileSwitch
 import dev.proflyder.home.feature.chat.ChatFocus
 import dev.proflyder.home.feature.chat.ChatRoute
 import dev.proflyder.home.feature.push.PushDeepLink
@@ -48,6 +46,7 @@ import dev.proflyder.home.feature.vpn.presentation.VpnActivityHost
 import dev.proflyder.home.feature.vpn.impl.R as VpnR
 import dev.zacsweers.metro.Inject
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 
 class MainActivity : AppCompatActivity(), NavigatorHost, FailureNoticePolicyProvider {
@@ -74,7 +73,8 @@ class MainActivity : AppCompatActivity(), NavigatorHost, FailureNoticePolicyProv
     @Inject
     internal lateinit var callLauncher: CallLauncher
 
-    private val controlViewModel: ControlViewModel by injectedViewModels()
+    @Inject
+    internal lateinit var voiceProfile: VoiceProfileSwitch
 
     private val itemIdByFeature = mutableMapOf<String, Int>()
     private val featureByItemId = mutableMapOf<Int, String>()
@@ -129,14 +129,8 @@ class MainActivity : AppCompatActivity(), NavigatorHost, FailureNoticePolicyProv
             router.currentTitleRes.collect { binding.toolbarTitle.setText(it) }
         }
         launch {
-            controlViewModel.state.collect {
-                renderProfileChip(it, router.currentTabId.value, router.currentIsOverlay.value)
-            }
-        }
-        launch {
-            router.currentTabId.collect {
-                renderProfileChip(controlViewModel.state.value, it, router.currentIsOverlay.value)
-            }
+            combine(voiceProfile.profile, router.currentTabId, router.currentIsOverlay, ::ProfileChip)
+                .collect(::renderProfileChip)
         }
         launch {
             router.currentIsOverlay.collect(::renderToolbarMode)
@@ -255,20 +249,20 @@ class MainActivity : AppCompatActivity(), NavigatorHost, FailureNoticePolicyProv
         toolbar.menu.findItem(R.id.action_menu)?.isVisible = !overlay
         vpnToggle.isVisible = !overlay
         actionsMenu.dismiss()
-        renderProfileChip(controlViewModel.state.value, router.currentTabId.value, overlay)
     }
 
-    private fun renderProfileChip(state: ControlUiState, tabId: String, overlay: Boolean) {
-        val profile = state.entries.firstOrNull { it.isProfile }
+    private fun renderProfileChip(state: ProfileChip) {
+        val profile = state.profile
         val chip = binding.profileChip
-        chip.visibility = if (tabId == CONTROL_TAB && !overlay && profile != null) View.VISIBLE else View.GONE
+        chip.visibility = if (state.tabId == CONTROL_TAB && !state.overlay && profile != null) View.VISIBLE else View.GONE
         profile ?: return
-        val work = profile.power == PowerState.ON
-        chip.setText(if (work) R.string.app_profile_work else R.string.app_profile_personal)
+        chip.setText(if (profile.work) R.string.app_profile_work else R.string.app_profile_personal)
         chip.contentDescription = getString(R.string.app_profile_chip, chip.text)
         chip.isEnabled = profile.available
-        chip.setOnClickListener { controlViewModel.setProfile(profile, !work) }
+        chip.setOnClickListener { lifecycleScope.launch { voiceProfile.setWork(!profile.work) } }
     }
+
+    private data class ProfileChip(val profile: VoiceProfileState?, val tabId: String, val overlay: Boolean)
 
     private fun applySystemBarInsets() {
         binding.appbar.doOnApplyInsets { view, insets, initial ->

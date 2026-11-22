@@ -32,4 +32,8 @@
         <attr name="tileStatus" format="string" />
         <attr name="tileOn" format="boolean" />
     </declare-styleable>
+
+    <declare-styleable name="TileGrid">
+        <attr name="tileColumns" format="integer" />
+    </declare-styleable>
 </resources>

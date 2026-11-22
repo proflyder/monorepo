@@ -21,7 +21,8 @@ class SpeedDialTest {
 
     @Test
     fun dialListsTilesInOrderThenWakeMarks() {
-        val tiles = listOf(QuickTile.Call, QuickTile.Device(entry("switch.lamp"), busy = false))
+        val call = QuickTile.Provided(ProvidedTile("call", order = 0, labelRes = 0, iconRes = 0))
+        val tiles = listOf(call, QuickTile.Device(entry("switch.lamp"), busy = false))
         val wake = listOf(
             WakeFeedbackAction(
                 kind = WakeFeedbackKind.FALSE_ALARM,
@@ -31,7 +32,7 @@ class SpeedDialTest {
         )
         val items = SpeedDialItems.build(tiles, wake)
         assertEquals(
-            listOf("tile:call", "tile:device:switch.lamp", "wake:FALSE_ALARM"),
+            listOf("tile:provided:call", "tile:device:switch.lamp", "wake:FALSE_ALARM"),
             items.map { it.key },
         )
     }

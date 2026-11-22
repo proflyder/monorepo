@@ -3,15 +3,6 @@
     <dimen name="control_screen_margin">@dimen/ds_space_l</dimen>
     <integer name="control_columns">2</integer>
     <integer name="control_device_columns">1</integer>
-    <dimen name="control_voice_icon">40dp</dimen>
-    <dimen name="control_voice_icon_padding">10dp</dimen>
-    <dimen name="control_voice_row_min_height">48dp</dimen>
-    <dimen name="control_voice_chip_height">32dp</dimen>
-    <dimen name="control_voice_chip_padding">10dp</dimen>
-    <dimen name="control_voice_chip_icon">18dp</dimen>
-    <dimen name="control_voice_chip_icon_gap">6dp</dimen>
-    <dimen name="control_voice_chip_gap">@dimen/ds_space_s</dimen>
-    <dimen name="control_quick_tile_height">64dp</dimen>
     <dimen name="control_row_corner">12dp</dimen>
     <dimen name="control_row_bleed">8dp</dimen>
     <dimen name="control_card_inset">8dp</dimen>

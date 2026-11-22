@@ -42,4 +42,5 @@
     <string name="call_status_active_timer">In call · %1$s</string>
     <string name="call_route_selected">✓ %1$s</string>
     <string name="call_account_label">Home</string>
+    <string name="call_quick_tile_title">Call the station</string>
 </resources>

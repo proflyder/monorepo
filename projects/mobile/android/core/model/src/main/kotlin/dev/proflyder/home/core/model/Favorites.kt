@@ -1,5 +1,7 @@
 package dev.proflyder.home.core.model
 
+import kotlinx.coroutines.flow.Flow
+
 enum class FavoriteKind {
     DEVICE,
     SCENARIO,
@@ -45,7 +47,9 @@ object Favorites {
 }
 
 interface FavoritePreferences {
-    suspend fun load(): List<FavoriteRef>?
+    val favorites: Flow<List<FavoriteRef>?>
 
-    suspend fun save(refs: List<FavoriteRef>)
+    suspend fun saveIfAbsent(refs: List<FavoriteRef>)
+
+    suspend fun toggle(ref: FavoriteRef): Boolean
 }

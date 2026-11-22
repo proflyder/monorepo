@@ -4,7 +4,6 @@ import androidx.lifecycle.ViewModel
 import dev.proflyder.home.core.model.FavoriteKind
 import dev.proflyder.home.core.model.FavoritePreferences
 import dev.proflyder.home.core.model.FavoriteRef
-import dev.proflyder.home.core.model.Favorites
 import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.core.model.Scenario
@@ -46,12 +45,15 @@ internal class ScenariosViewModel(
     private var refreshJob: Job? = null
     private var generation = 0
 
+    init {
+        launch { favorites.favorites.collect { stored -> updateState { copy(favorites = stored.orEmpty()) } } }
+    }
+
     fun refresh(silent: Boolean = false) {
         refreshJob?.cancel()
         val requested = ++generation
         updateState { copy(refreshing = refreshing || !silent, loadError = null) }
         refreshJob = launch {
-            val savedFavorites = favorites.load()
             when (val result = loadScenarios()) {
                 is Outcome.Success -> {
                     if (requested != generation) return@launch
@@ -62,7 +64,6 @@ internal class ScenariosViewModel(
                                 compareBy({ !it.enabled }, { it.label.lowercase() }),
                             ),
                             loadError = null,
-                            favorites = savedFavorites ?: favorites,
                         )
                     }
                 }
@@ -72,7 +73,6 @@ internal class ScenariosViewModel(
                         copy(
                             refreshing = false,
                             loadError = result.failure,
-                            favorites = savedFavorites ?: favorites,
                         )
                     }
                 }
@@ -118,13 +118,10 @@ internal class ScenariosViewModel(
     fun consumeQueued() = updateState { copy(queuedLabel = null) }
 
     fun toggleFavorite(scenario: Scenario) {
-        val ref = FavoriteRef(FavoriteKind.SCENARIO, scenario.id)
-        val updated = Favorites.toggle(currentState.favorites, ref)
-        val pinned = ref in updated
-        updateState {
-            copy(favorites = updated, favoriteNotice = FavoriteNotice(scenario.label, pinned))
+        launch {
+            val pinned = favorites.toggle(FavoriteRef(FavoriteKind.SCENARIO, scenario.id))
+            updateState { copy(favoriteNotice = FavoriteNotice(scenario.label, pinned)) }
         }
-        launch { favorites.save(updated) }
     }
 
     fun consumeFavoriteNotice() = updateState { copy(favoriteNotice = null) }
