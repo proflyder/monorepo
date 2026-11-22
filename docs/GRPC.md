@@ -1,10 +1,7 @@
 # gRPC / Connect contract
 
-Статус: **развёрнуто**. `solutions/scheduler` — durable SQLite engine,
-Connect/gRPC-Web, outbox, auth; бинари `ha-bridge` (очередь `home`) и `ha-control`
-(каталог Home, очередь `control`) Rust-крейта `solutions/ha-bridge/crates/ha-bridge`
-работают в K3s; HA-звук остаётся у HA, а
-расписания принадлежат scheduler. Android-клиент использует тот же контракт.
+Контракт `home.v1`, по которому Android, HA-исполнители и голос говорят со
+scheduler и intercom. Причины выбора стека — `DECISIONS.md` 41, 48a.
 
 ## Канонические контракты
 
@@ -21,15 +18,15 @@ durable outbox и generic-очереди задач:
 - schedules: `CreateSchedule`, `GetSchedule`, `ListSchedules`,
   `UpdateSchedule`, `DeleteSchedule`, `SetScheduleEnabled`,
   `SnoozeSchedule`, `StopSchedule`, `SkipScheduleOccurrence`;
-- scenarios: `CreateScenario`, `GetScenario`, `ListScenarios`,
-  `UpdateScenario`, `DeleteScenario`, `SetScenarioEnabled`,
-  `RunScenario` (определения хранит scheduler, исполняет отдельный
-  `ha-scenario`);
 - timers: `StartTimer`, `GetTimer`, `ListTimers`, `PauseTimer`,
   `ResumeTimer`, `CancelTimer`;
 - outbox: `ListDueEvents`, `AckEvent`;
 - queue: `EnqueueTask`, `CancelTask`;
 - status: `GetStatus`.
+
+`ScenarioService` (тот же процесс scheduler): `CreateScenario`, `GetScenario`,
+`ListScenarios`, `UpdateScenario`, `DeleteScenario`, `SetScenarioEnabled`,
+`RunScenario`; определения хранит scheduler, исполняет `ha-scenario`.
 
 `AlarmService` сохранён как wire-совместимый facade над теми же schedules
 (`SCHEDULE_KIND_ALARM`). Оба сервиса отдаются одним процессом и одной БД; это
@@ -93,8 +90,8 @@ curl -sS http://127.0.0.1:8098/home.v1.SchedulerService/CreateSchedule \
   процесс не стартует;
 - `SCHEDULER_CONSUMERS` — опциональный allowlist `consumer_id` для
   executor-ов;
-- тело запроса/ответа ограничено 1 MiB, заголовки — 16 KiB, read/write
-  timeouts и `MaxHeaderBytes` заданы на HTTP-сервере;
+- тело запроса/сообщения ограничено 1 MiB, payload расписания — 16 KiB
+  (`SCHEDULER_MAX_PAYLOAD_BYTES`);
 - значения токенов и payload не пишутся в логи; `GetStatus.last_tick_error`
   ограничен и не содержит секретов.
 
@@ -184,7 +181,7 @@ packages/rust/home-proto/generate.sh --check
 
 Android использует типизированные kotlinx.serialization DTO
 (`projects/mobile/android/core/network/impl/src/main/kotlin/dev/proflyder/home/core/network/WireDtos.kt`) поверх Retrofit-клиентов
-Connect JSON; Go-стабы удалены вместе с Go-сервером.
+Connect JSON.
 `packages/proto/home/v1/BUILD.bazel` держит `proto_library` как каноническую
 схему для descriptor tooling и других языков.
 
@@ -193,7 +190,7 @@ Connect JSON; Go-стабы удалены вместе с Go-сервером.
 - **Android** (`projects/mobile/android`, namespace `dev.proflyder.home`,
   Views + Kotlin + Metro, single Activity + typed Fragment router) говорит
   Connect JSON по тому же контракту. Сервер авторитетен для расписаний и
-  событий; нативных phone alarm и push в этом срезе нет. Транспорт —
+  событий; нативных phone alarm нет. Транспорт —
   LAN/VPN; TLS-терминация — на Traefik.
 - **HA bridge** арендует только `queue=home`, маппит `alarm.fire` →
   `alarm_start`, reminder/timer → announce script, `STOP` → `alarm_stop`.

@@ -8,8 +8,8 @@ Mobile clients for the home server.
   server state only: the home server owns scheduling and execution.
 - **iOS — not initialized.** No code or Bazel Apple rules yet.
 
-Android build, test, architecture, permissions, endpoint format, and current
-device-verification status are documented in
+Android build, test, architecture, permissions and endpoint format are
+documented in
 [`android/README.md`](android/README.md). Current system facts and open work are
 in [`docs/STATE.md`](../../docs/STATE.md) and
 [`docs/PENDING.md`](../../docs/PENDING.md); Android tests are documented in

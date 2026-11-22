@@ -75,7 +75,8 @@ from="192.0.2.28",restrict,command="powershell.exe -NoProfile -ExecutionPolicy B
 ```
 
 - `from="192.0.2.28"` — адрес HA (TEST-NET-плейсхолдер, заменить на реальный);
-  ключ не сработает с другого адреса.- `command=` — forced command: клиент не может запустить ничего, кроме
+  ключ не сработает с другого адреса.
+- `command=` — forced command: клиент не может запустить ничего, кроме
   `komp-power.ps1`, а тот принимает только `shutdown`, `cancel`, `lock` и
   `status`.
 - `restrict` отключает port/agent/X11 forwarding и pty.
@@ -128,14 +129,7 @@ schtasks /run /tn '\Home\KompLock'   # экран должен заблокир�
 `LogonUI.exe` появляется на экране блокировки, экране входа и на короткое
 время на UAC-запросе; опрос раз в 30 с такой короткий всплеск обычно не
 замечает. Команда печатает ровно `locked` или `unlocked` и всегда завершается
-кодом 0; проверка:
-
-```bash
-ssh -i /config/.ssh/komp_ed25519 \
-  -o BatchMode=yes -o ConnectTimeout=5 \
-  -o UserKnownHostsFile=/config/.ssh/komp_known_hosts \
-  -o StrictHostKeyChecking=accept-new <user>@<host> status
-```
+кодом 0.
 
 ## Ключ и known_hosts в HA
 
@@ -166,29 +160,14 @@ komp_ping_command: "ping -c 1 -W 1 <host> >/dev/null 2>&1 && echo 1 || echo 0"
 
 ## Проверка
 
-Из Terminal & SSH add-on (HA):
+Из Terminal & SSH add-on (HA): `ping -c 1 -W 1 <host>`, затем по очереди
+`shutdown` (выключение через 60 с), `cancel`, `lock`, `status`:
 
 ```bash
-# ping
-ping -c 1 -W 1 <host>
-
-# SSH: должно запланировать выключение через 60 секунд
 ssh -i /config/.ssh/komp_ed25519 \
   -o BatchMode=yes -o ConnectTimeout=5 \
   -o UserKnownHostsFile=/config/.ssh/komp_known_hosts \
-  -o StrictHostKeyChecking=accept-new <user>@<host> shutdown
-
-# отмена
-ssh -i /config/.ssh/komp_ed25519 \
-  -o BatchMode=yes -o ConnectTimeout=5 \
-  -o UserKnownHostsFile=/config/.ssh/komp_known_hosts \
-  -o StrictHostKeyChecking=accept-new <user>@<host> cancel
-
-# блокировка (задача \Home\KompLock должна быть создана заранее)
-ssh -i /config/.ssh/komp_ed25519 \
-  -o BatchMode=yes -o ConnectTimeout=5 \
-  -o UserKnownHostsFile=/config/.ssh/komp_known_hosts \
-  -o StrictHostKeyChecking=accept-new <user>@<host> lock
+  -o StrictHostKeyChecking=accept-new <user>@<host> <shutdown|cancel|lock|status>
 ```
 
 Из HA: Developer Tools → Actions:
@@ -204,11 +183,3 @@ ssh -i /config/.ssh/komp_ed25519 \
   «заблокируй комп», «разблокируй комп», «комп включён».
 
 Любая другая команда по SSH должна вернуть ошибку и код 1 — это ожидаемо.
-
-## Заметки к коду
-
-Пояснения, перенесённые из комментариев исходников (код комментариев не содержит, см. `AGENTS.md`).
-
-- `install-lock-task.ps1` — <# install-lock-task.ps1 - create the on-demand task that locks the desktop.
-- `komp-power.ps1` — <# komp-power.ps1 - forced-command wrapper for the home desktop («комп»).
-- `test_komp_power_script.py` — Static contract test for the Windows forced-command wrapper.

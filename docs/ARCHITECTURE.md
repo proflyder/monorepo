@@ -1,6 +1,7 @@
 # ARCHITECTURE — устройство стенда
 
-Текущие факты — `STATE.md`; сеть/порты — `NETWORK.md`; деплой — `GIT.md`.
+Текущие факты и версии — `STATE.md`; сеть/порты — `NETWORK.md`; секреты —
+`SECRETS.md`; решения — `DECISIONS.md`; поток веток — `GIT.md`.
 
 ## Компоненты
 
@@ -36,14 +37,13 @@
 - **Scheduler** — единственный владелец расписаний/таймеров; HA bridge
   исполняет очередь `home`, ha-control — каталог Home и очередь `control`.
 - **Currency bot** — Rust-сервис курсов: SQLite на PVC, алерты в Telegram,
-  webhook через Cloudflare Tunnel, внутренний JSON API.
+  webhook через Cloudflare Tunnel, внутренний JSON API
+  (`solutions/currency-bot/README.md`).
 - **Intercom** — Rust-сигналинг WebRTC-звонка телефон ↔ колонка: SDP/ICE
   relay, server-streaming `Watch`; внутреннее имя
   `intercom.home.<home-suffix>` через Traefik, медиа идёт P2P.
 - **Nexus** — кэш артефактов CI: Maven/Google Maven/PyPI/npm через свои
   прокси, read-only публичный путь `/repository/*` через Cloudflare Tunnel.
-  Под Flux — платформа, наблюдаемость, Nexus и все деплой-юниты приложений;
-  ручными остаются OpenBao, host firewall и Cloudflare DNS.
 - **MCP gateway** — единый MCP-сервер для инфраструктуры: чтение
   Prometheus/Alertmanager/Loki/Kubernetes и подтверждаемый rollout restart.
   Hermes сам не имеет доступа к Kubernetes API; весь доступ идёт через шлюз
@@ -89,21 +89,10 @@
 
 ### Музыка
 
-- MA `2.10.9` в HAOS; Spotify Soloist и Connect.
+- MA в HAOS (add-on); Spotify Connect.
 - Sendspin-плеер «Яндекс Станция Миди»; source router
   `Music Assistant` / `Spotify Connect`.
 - Voice play/volume идут через HA scripts; Connect — через Spotify Web API.
-
-### Currency bot
-
-1. Часовой job (`:00` UTC) и `/trigger` парсят kurs.kz и пишут USD/RUB
-   в SQLite на PVC; старые записи старше 35 дней удаляются weekly.
-2. Алерты уходят в Telegram только при порогах HOUR/DAY/WEEK/MONTH;
-   dedup — `sent_alerts`, сообщения не дублируются.
-3. Telegram → Cloudflare Tunnel → `cloudflared` → `/telegram/webhook` на
-   `currency-bot-webhook:8081`; проверяются secret token и allowlist чатов.
-4. LAN/VPN → `https://currency.home.example.com/api/*` → Traefik →
-   Service `:8080` (Bearer). `/metrics` скрейпит Prometheus.
 
 ### Сеть и HTTPS
 
@@ -141,10 +130,8 @@ OpenBao KV v2 secret/k8s/* ──► ESO ClusterSecretStore/openbao
 - **OpenBao** — единственный источник правды для секретов: raft на локальном
   PV, статический auto-unseal, audit в stdout → Loki, UI `vault`.
 - **External Secrets Operator** синхронизирует `secret/k8s/*` в Kubernetes
-  Secrets (`scheduler-auth`, `ha-bridge-ha`, `hermes-environment`,
-  `grafana-admin`, `cloudflare-api-token`, `currency-bot`,
-  `cloudflared-tunnel`); deploy-скрипты их не пишут.
-- GitHub Environment `Home` и входящий CI-доступ в K3s удалены. Приватные
+  Secrets приложений; deploy-скрипты их не пишут. Пути — `SECRETS.md`.
+- Входящего CI-доступа в K3s нет. Приватные
   env приложений лежат в `secret/k8s/flux-system/app-settings`, values Hermes —
   в `secret/k8s/flux-system/runtime-values`; ESO создаёт из них
   `flux-app-settings`/`runtime-values`, и Flux подставляет их при применении.
@@ -167,33 +154,24 @@ OpenBao KV v2 secret/k8s/* ──► ESO ClusterSecretStore/openbao
 - `deploy-home` содержит только `plan`, `pins`, `warm-*`, `native-release` и
   `deploy-station` (pins и станция — общие reusable `_pin.yml` /
   `_station-deploy.yml`, их же использует ручной `deploy-services.yml`).
-  Прежний job `deploy` (VPN группа `ci`, OIDC, `ci-deploy`)
-  удалён вместе с RBAC и сертификатом `ci-github`; правило `6443` снято,
-  `443` и группа `ci` остаются для `deploy-station` (`ci-pulsar`) и
-  `android-distribute` / `android-release` / `android-cleanup` (`ci-android`).
-
+  VPN-группа `ci` (только `tcp/443` до K3s) нужна `deploy-station`
+  (`ci-pulsar`) и Android-джобам OIDC (`ci-android`).
 - Прямой push в `develop` запрещён; merge PR = деплой затронутых юнитов.
 - CI-скачивания Maven/Google Maven/PyPI/npm у Bazel идут напрямую с раннеров,
   а Nexus — запасной путь (второе rewrite-правило) при 429/5xx/обрыве; pip/npm
   шаги используют Nexus, когда заданы `NEXUS_HOST` и `NEXUS_CI_PASSWORD`.
   Nexus, платформу и наблюдаемость разворачивает Flux из Git; вручную
   остаются только OpenBao, host-firewall (nftables) и Cloudflare DNS.
-- Образы scheduler/ha-bridge/ha-control/currency-bot/voice-proxy собираются
-  Bazel `rules_oci` (distroless) и адресуются по digest в GHCR. Hermes
-  собирается Docker из upstream revision; оба образа тоже digest-pinned GHCR,
-  а юнит `hermes` имеет builder `mixed` (Docker + Bazel).
-- currency-bot — data-driven юнит `platform/ci/units.mjs`: свой namespace,
-  `images`/`workloads`; контракт манифестов проверяют manifest-тесты.
-  Workload применяет Flux (`app-currency-bot`) из `develop` с digest'ом из
-  pins-ветки; откат — revert pins-коммита или `flux suspend`, а
-  `home-deploy converge` остаётся только admin-инструментом (drills,
-  cutover) и сохраняет env/режим/replicas.
+- Сервисные образы собираются Bazel `rules_oci` (distroless) и адресуются по
+  digest в GHCR; `hermes` собирается Docker из upstream-ревизии, юнит имеет
+  builder `mixed`. `home-deploy converge` — только admin-инструмент (drills,
+  cutover).
 - Режимы исполнения (`execute`, `shadow`, `control-*`) — Git-состояние в
   `scheduler/manifests/kustomization.yaml`; учения — `flux suspend` плюс
   admin-скрипт `scheduler/deploy.sh`, затем `flux resume`.
 
-Pulsar живёт в монорепозитории (`projects/station/pulsar/`). Релиз — изменение
-`projects/station/pulsar/VERSION` в PR в `develop`; сборка и публикация — в
+Pulsar живёт в монорепозитории (`projects/station/pulsar/`). Релиз — любое
+смерженное изменение `projects/station/pulsar/**`; сборка и публикация — в
 монорепо, без GitHub Releases и тегов. Поток:
 
 ```text
@@ -213,8 +191,7 @@ merge PR в develop, затрагивающего Pulsar
 ```
 
 - Версия вычисляется CI: база `VERSION` (`v0.6`) + число коммитов Pulsar
-  (решение 60); `v0.6.50` и далее новее ручных `v0.5.10NN`, поэтому
-  updater (`vMAJOR.MINOR.PATCH`) видит релиз новее.
+  (решение 60); updater ставит только строго большую `vMAJOR.MINOR.PATCH`.
 - Откат через CI невозможен (updater только повышает версию): на станции
   `.prev` + `ctl.sh reload`.
 - CI-юнит `pulsar-bazel` (`.github/workflows/_unit.yml`) выполняет fmt, clippy и
@@ -228,13 +205,11 @@ merge PR в develop, затрагивающего Pulsar
   `currency-bot-data`; логи — stdout → Alloy → Loki.
 - HA state — HAOS Supervisor backup.
 - K3s data/PV — `/srv/k3s/runtime`, `/srv/k3s/volumes/*`; `Retain`.
-- OpenBao — raft/backups на отдельных PV, audit — stdout → Loki; recovery keys и seal key —
-  у владельца в Bitwarden (`Home recovery`) и в Vaultwarden (`openbao:bootstrap`), не на диске; живой seal key — Secret `openbao-seal`.
+- OpenBao — raft/backups на отдельных PV, audit — stdout → Loki; живой seal
+  key — Secret `openbao-seal`, recovery keys — у владельца, не на диске.
 - bb — SQLite и данные плагинов на CT 103 (`/home/bb/.bb-machines/<host>/`);
   восстанавливаемый артефакт — `bb server export` (`/var/backups/bb`).
-  Плагины `profiles`/`home-dispatcher` — path-источники; их состояние в kv,
-  исходники копируются на CT вручную.
-- Секреты приложений — OpenBao → ESO; приватные копии в `secrets/` — backup.
+- Секреты приложений — OpenBao → ESO.
 - Recovery — `REBUILD.md`, `KUBERNETES-OPERATIONS.md`.
 
 ## Границы

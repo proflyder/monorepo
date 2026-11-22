@@ -1,562 +1,152 @@
 # OPERATIONS — ежедневные команды
 
-Факты — `STATE.md`; K3s — `KUBERNETES-OPERATIONS.md`; сеть — `NETWORK.md`.
+Факты — `STATE.md`; K3s — `KUBERNETES-OPERATIONS.md`; сеть — `NETWORK.md`;
+секреты и доступы — `SECRETS.md`, `WORKSTATION.md`. Подробные команды
+модуля — в его README (таблица ниже); здесь только общие точки входа и то,
+чего нет в README.
 
 ## Единая точка входа: `mise tasks`
 
-`mise tasks` перечисляет локальные задачи. Деплой и откат не угадывают цель по
-имени каталога: список деплоимых юнитов и документированная процедура отката
-живут в `platform/ci/units.mjs` (`deploy` и `rollback` блоки).
+`mise tasks` перечисляет локальные задачи. Деплоимые юниты и процедура отката
+живут в `platform/ci/units.mjs` (`deploy` и `rollback`), список —
+`mise run units`.
 
 ```bash
-# пересчитать и запинить digest'ы затронутых юнитов (deploy-home.yml, ref develop)
-# применение делает Flux; в кластер из CI ничего не катится
-mise run deploy scheduler --dry-run     # печатает gh-команду, ничего не запускает
-mise run deploy scheduler --yes         # без --yes спрашивает подтверждение
+# пересчитать и запинить digest'ы (gh workflow run deploy-home-manual.yml
+# --ref develop -f units=…); применяет Flux, в кластер из CI ничего не катится
+mise run deploy scheduler --dry-run
 mise run deploy scheduler,ha-bridge --yes --watch
 mise run deploy all --yes
 
-# последние запуски deploy-home и подсказка проверки в кластере
-mise run deploy:status
-mise run deploy:status scheduler
-mise run deploy:status scheduler --live  # read-only kubectl get deploy; нужен admin kubeconfig
+mise run deploy:status scheduler          # последние запуски deploy-home
+mise run deploy:status scheduler --live   # + read-only kubectl get deploy
 
-# откат по процедуре из units.mjs
-mise run rollback scheduler --dry-run   # план: kind, что восстанавливается, действие, источник
-mise run rollback scheduler --yes       # выполняет документированную команду
+mise run rollback scheduler --dry-run     # план из units.mjs
+mise run rollback scheduler --yes         # выполнить документированную команду
 ```
 
-`deploy` вызывает `gh workflow run deploy-home-manual.yml --ref develop -f units=…`
-(один триггер на файл: `deploy-home.yml` — только push, ручной вход — его
-обёртка `deploy-home-manual.yml`)
-(единственный input workflow). `deploy:status` только читает `gh run list`;
-`--live` делает read-only `kubectl get deploy`: admin kubeconfig приходит из
-OpenBao через fnox (профиль `kube`), туннель к API поднимается на время
-команды. `rollback --yes` получает kubeconfig так же. `rollback`
-печатает план всегда, выполняет команду только с `--yes`; `forward-only`
-завершается ненулевым кодом, а `pulsar` лишь печатает команду для станции —
-устройство автоматически не трогается. Подробности отката — в разделах ниже.
+`--live` и `rollback --yes` берут admin kubeconfig из OpenBao через fnox
+(профиль `kube`) и сами поднимают туннель к API. `rollback` для `forward-only`
+завершается ненулевым кодом, для `pulsar` только печатает команду для
+станции.
 
-Бэкапы тоже собраны в одну точку: цель — запись реестра
-`platform/ops/backups.mjs` (расписание, где, read-only проверка, команда
-ручного запуска, проверка и ссылка на процедуру restore). Команды — из docs, а
-хосты — через алиасы `ssh -F ~/.ssh/home-lab/config pve|k3s|haos`:
+Бэкапы — реестр `platform/ops/backups.mjs` (раздел «Backup»):
 
 ```bash
-mise run backup:list                      # таблица целей, без сети
-mise run backup:status --dry-run          # печатает read-only команды проверки
-mise run backup:status                    # сводка ok/fail/manual по всем целям
-mise run backup:status offsite-restic
-mise run backup:now offsite-restic --dry-run   # план: команда, note, restore doc
-mise run backup:now offsite-restic --yes       # без --yes спрашивает подтверждение
-mise run backup:verify --dry-run          # restic check / integrity_check и т.п.
-mise run backup:verify offsite-restic --yes
+mise run backup:list
+mise run backup:status [<id>] [--dry-run]
+mise run backup:now <id> --dry-run|--yes
+mise run backup:verify [<id>] --dry-run|--yes
 ```
 
-`backup:now` выполняет только документированную команду выбранной цели; цель,
-доступная только через UI (HA backup), печатает `manual` и ничего не запускает.
-Restore намеренно не автоматизирован: вывод всегда содержит `restore_doc`.
-Подробности и цели — раздел «Backup» ниже.
+`backup:now` выполняет только документированную команду цели; цель только
+через UI (HA backup) печатает `manual`. Restore не автоматизирован: вывод
+содержит `restore_doc`.
 
-
-## ha-config-sync (доставка ha-voice)
-
-`ha-config-sync` — Flux-owned Deployment в `home-assistant`. Он доставляет
-файлы `projects/home-assistant/ha-voice` (список и reload-действия —
-`sync.yaml`) на HAOS `/mnt/data/supervisor/homeassistant`, проверяет
-`check_config`, перезагружает затронутые домены и откатывается при ошибке.
-`shell_commands.yaml` перезапускает HA только когда
-`input_boolean.alarm_ringing` выключен.
+Скрипты с секретами — только `mise run admin:*` (`mise tasks | grep admin:`),
+kubectl/helm — `mise run kubectl|helm -- …`. Разовая команда с kubeconfig:
 
 ```bash
-# один раз, до merge: агент на HAOS + ключ в OpenBao + authorized_keys
-mise run admin:ha-config-sync-bootstrap -- --dry-run
-mise run admin:ha-config-sync-bootstrap
-
-# состояние и метрики
-mise run kubectl -- -n home-assistant get deploy,pod -l app.kubernetes.io/name=ha-config-sync
-mise run kubectl -- -n home-assistant logs deploy/ha-config-sync --tail=100
-mise run kubectl -- -n home-assistant port-forward svc/ha-config-sync 19119:9119
-curl -s localhost:19119/metrics | grep ha_config_sync
+mise run secrets:exec -- -P kube exec -- \
+  platform/workstation/with-kube-tunnel.sh kubectl get pods -A
 ```
 
-Пауза — Git-изменение: `SYNC_MODE=observe` (только drift) или `replicas: 0` в
-`projects/home/kubernetes/ha-config-sync/manifests/deployment.yaml`, затем
-merge. Ручной `kubectl edit` Flux откатит.
+## Где команды модулей
 
-Аварийная ручная доставка (сервис лежит): скопировать нужные YAML через HA
-File Editor/Samba/SSH add-on и выполнить Check configuration → Restart.
-После merge новый образ катится через pins (`HA_CONFIG_SYNC_IMAGE`), откат —
-revert соответствующего коммита `deploy/home-apps`.
+| Тема | Документ |
+|---|---|
+| VPN (ocserv, клиентские сертификаты, WireGuard, проброс портов) | `projects/home/proxmox/vpn/README.md` |
+| BB server (CT 103), плагины, backup базы | `projects/home/proxmox/bb/README.md` |
+| OpenBao | `projects/home/kubernetes/openbao/README.md` |
+| External Secrets Operator | `projects/home/kubernetes/external-secrets/README.md` |
+| Flux, pins, первая установка | `projects/home/kubernetes/flux/README.md` |
+| HTTPS ingress, Cloudflare DNS | `projects/home/kubernetes/ingress/README.md` |
+| Vaultwarden | `projects/home/kubernetes/vaultwarden/README.md` |
+| ha-config-sync (доставка ha-voice) | `projects/home/kubernetes/ha-config-sync/README.md` |
+| MCP-шлюз, голосовой маршрут, мост bb | `projects/home/kubernetes/mcp-gateway/README.md` |
+| Планировщик, ha-bridge, ha-scenario, сид сценариев | `projects/home/kubernetes/scheduler/README.md` |
+| Intercom | `projects/home/kubernetes/intercom/README.md` |
+| wakegrant | `projects/home/kubernetes/wakegrant/README.md` |
+| Currency bot | `projects/home/kubernetes/currency-bot/README.md` |
+| Hermes / runtime | `projects/home-assistant/deploy/README.md`, `KUBERNETES-OPERATIONS.md` |
+| Голос, фразы, профиль | `projects/home-assistant/ha-voice/README.md` |
+| Комп (Windows-ПК) | `projects/home/windows-pc/README.md` |
+| Модуль входа (logon provider) | `solutions/windows-logon-provider/README.md` |
+| Android, App Distribution, ручной релиз | `projects/mobile/android/README.md` |
+| BLE gateway | `projects/station/ble-gateway/README.md` |
+| Wake-события и модель | `projects/station/tools/wakeword-personalize/README.md`, `WAKE-WORD.md` |
+| Offsite backup | `projects/home/backup/offsite/README.md` |
+| Тесты | `TESTING.md` |
 
 ## Доступ
 
 ```bash
-# станция
 adb connect 192.0.2.13:5555
-adb devices
-ssh -i ~/.ssh/home-lab/station_ed25519 root@192.0.2.13   # ключ; пароль — fallback
-mise run station:audit -- --ip 192.0.2.13                # read-only сверка с манифестом
+ssh -i ~/.ssh/home-lab/station_ed25519 root@192.0.2.13   # пароль — fallback
+mise run station:audit -- --ip 192.0.2.13                # read-only сверка
 
-# Proxmox / K3s / HAOS: ключ и config из `mise run secrets:pull`
-ssh -F ~/.ssh/home-lab/config pve
-ssh -F ~/.ssh/home-lab/config k3s 'sudo -n k3s kubectl get pods -A'
-ssh -F ~/.ssh/home-lab/config haos
-
-# скрипты деплоя/обслуживания — `mise run admin:*` (секреты и kubeconfig из
-# OpenBao через fnox, туннель к API — сам; docs/WORKSTATION.md). Для разовых
-# kubectl-команд из примеров ниже:
-mise run secrets:exec -- -P kube exec -- \
-  platform/workstation/with-kube-tunnel.sh kubectl get pods -A
-# или вручную: mise run secrets:file kubernetes-research/kubeconfig,
-# export KUBECONFIG=secrets/kubernetes-research/kubeconfig, затем secrets:clean
+ssh -F ~/.ssh/home-lab/config pve|k3s|haos               # после secrets:pull
 ```
 
-HA: `http://192.0.2.28:8123`  
-MA: `http://192.0.2.28:8095`  
-Grafana LAN: `http://192.0.2.27:30300/`  
-Grafana HTTPS: `https://grafana.home.example.com/`  
-HTTPS вход (LAN/VPN):
-`https://{ha,grafana,alarms,control,currency,intercom,vault,passwords,nexus}.home.example.com/`
+HA `http://192.0.2.28:8123`, MA `:8095`, Grafana LAN
+`http://192.0.2.27:30300/`. HTTPS (LAN/VPN):
+`https://{ha,grafana,alarms,control,currency,intercom,vault,passwords,nexus}.home.example.com/`.
+Реальные адреса — `secrets/NETWORK.md`. Не пробрасывать на роутере
+`8123/8095/8099/6053/6638` и `80/443`.
 
-Только LAN/VPN. Не пробрасывать `8123/8095/8099/6053/6638` и
-`80/443` на роутере.
-
-## VPN (CT 102)
-
-```bash
-# состояние
-pct status 102
-pct exec 102 -- systemctl status ocserv nftables --no-pager
-pct exec 102 -- ss -lntup | grep ':443'
-pct exec 102 -- nft list ruleset
-pct exec 102 -- occtl show users
-pct exec 102 -- occtl show ip bans
-
-# сертификат Let's Encrypt: продление автоматическое (certbot.timer)
-pct exec 102 -- certbot certificates
-pct exec 102 -- certbot renew --dry-run --no-random-sleep-on-renew
-pct exec 102 -- systemctl list-timers certbot.timer
-
-# служебные действия
-pct exec 102 -- ocserv --test-config
-pct exec 102 -- systemctl reload ocserv    # без разрыва сессий
-pct exec 102 -- systemctl restart ocserv   # нужен при смене auth-методов
-pct exec 102 -- systemctl restart nftables
-pct reboot 102
-pct exec 102 -- occtl unban ip <ADDRESS>
-
-# pin публичного ключа для openconnect --servercert
-pct exec 102 -- sh -c \
-  'openssl x509 -in /etc/ocserv/ssl/server-cert.pem -pubkey -noout \
-   | openssl pkey -pubin -outform DER \
-   | openssl dgst -sha256 -binary | openssl base64'
-```
-
-Добавление/ротация пользователя (пароль + TOTP; секреты не печатаются):
-
-```bash
-python3 projects/home/proxmox/vpn/vpnusers.py <user> \
-  --pve 192.0.2.26 \
-  --ssh-key ~/.ssh/home-lab/proxmox_admin \
-  --known-hosts ~/.ssh/home-lab/known_hosts_pve
-# повторная выдача: --force
-```
-
-Приватные файлы — `secrets/home/vpn/<user>.credentials` и `<user>.png`
-(QR для Google Authenticator), каталог `700`, файлы `600`.
-`max-same-clients = 10` — не больше 10 одновременных сессий одного
-пользователя.
-
-Клиентские сертификаты (вход без пароля/TOTP; пароль + TOTP остаётся):
-
-```bash
-# один раз: частный CA; приватный ключ остаётся только на Mac
-python3 projects/home/proxmox/vpn/vpncerts.py init-ca \
-  --pve 192.0.2.26 --ssh-key ~/.ssh/home-lab/proxmox_admin \
-  --known-hosts ~/.ssh/home-lab/known_hosts_pve
-
-# выпуск: p12 + legacy p12 + пароль импорта рядом (600)
-python3 projects/home/proxmox/vpn/vpncerts.py issue <user> --device phone
-
-# отзыв по serial или .p12; обновляет CRL на CT и перезагружает ocserv
-python3 projects/home/proxmox/vpn/vpncerts.py revoke <serial|file.p12> \
-  --pve 192.0.2.26 --ssh-key ~/.ssh/home-lab/proxmox_admin \
-  --known-hosts ~/.ssh/home-lab/known_hosts_pve
-
-python3 projects/home/proxmox/vpn/vpncerts.py list
-```
-
-CA: `secrets/home/vpn/client-ca/` (ключ CA на сервер не копируется);
-клиентские файлы — `secrets/home/vpn/clients/<user>-<device>.p12`.
-На CT лежат только `/etc/ocserv/ssl/client-ca.pem` и `client-ca.crl`.
-После изменения методов аутентификации нужен restart ocserv, после смены
-CRL достаточно reload. Проверка конфигурации — `ocserv --test-config`.
-
-### Доступ CI: станция и Android-дистрибуция
-
-CI больше не входит в K3s: приложения применяет Flux, поэтому `ci-deploy`,
-его RBAC, `secret/ci/deploy-home`, роль OpenBao `deploy-home` и сертификат
-`ci-github` удалены (решение 55 (этап 6.7)). Группа VPN `ci` и `443` нужны
-`deploy-station` (сертификат `ci-pulsar`), `android-distribute`
-(сертификат `ci-android`, Environment `Android` на PR) и ежедневная чистка App
-Distribution `fad` (тот же сертификат и Environment, `develop` по расписанию):
-маршрут ведёт до
-узла, nft разрешает лишь `tcp/443` (Traefik → HA/OpenBao). Правило
-`tcp/6443` (K3s API) снято; SSH и root-helper у CI нет.
-
-```bash
-# проверить состояние (read-only)
-python3 projects/home/proxmox/vpn/vpncerts.py list
-
-# станция: повторить уже опубликованную VERSION через HA
-mise run deploy -- pulsar --yes
-
-# следы старого доступа, которых быть не должно
-mise run kubectl -- -n home-assistant get sa,role,rolebinding | grep ci-deploy
-mise run kubectl -- auth can-i --list --as=system:serviceaccount:home-assistant:ci-deploy
-```
-
-Отзыв сертификата `ci-pulsar` (если станция переедет на другой путь) —
-`vpncerts.py revoke secrets/home/vpn/clients/ci-pulsar.p12` с флагами
-`--pve/--ssh-key/--known-hosts`, как в
-`projects/home/proxmox/vpn/README.md`. Отозванный сертификат не возвращается:
-нужен новый.
-
-Сертификат продлевается автоматически через DNS-01 Cloudflare
-(`certbot.timer`, credentials `/etc/letsencrypt/cloudflare.ini`, deploy hook
-`/etc/letsencrypt/renewal-hooks/deploy/ocserv-ssl.sh`). Ручное продление и
-правка TXT-записи не нужны. Настройка и откат — `projects/home/proxmox/vpn/README.md`.
-
-Проверка только аутентификации (не поднимает туннель на Mac; серверный
-сертификат — публичный Let's Encrypt, `--servercert` не нужен):
-
-```bash
-# пароль + свежий TOTP
-openconnect --authenticate --user=<user> --authgroup=lan \
-  --resolve vpn.example.com:192.0.2.29 https://vpn.example.com/
-
-# клиентский сертификат, без пароля/OTP
-openconnect --authenticate --certificate <user>-phone.p12 \
-  --passwd-on-stdin --authgroup=lan \
-  --resolve vpn.example.com:192.0.2.29 https://vpn.example.com/ \
-  < secrets/home/vpn/clients/<user>-phone.password
-```
-
-`--authenticate` печатает cookie — вывод не публиковать. Верный пароль +
-свежий TOTP или валидный сертификат — успех (код 0, `COOKIE`); неверный
-TOTP или отозванный сертификат — отказ. Один и тот же TOTP повторно не
-использовать (ocserv считает это replay), несколько неудач подряд банят IP
-на `min-reauth-time`; свой IP разбанить: `pct exec 102 -- occtl unban ip <IP>`.
-
-### WireGuard (CT 102)
-
-Установка, sync и тест — `projects/home/proxmox/vpn/README.md`. Команды на
-CT 102, которые перезапускают ocserv/nftables/ssh/сеть (`install-ocserv.sh`,
-`install-wireguard.sh`), запускать только отсоединённо — владелец может
-сидеть в интернете через ocserv `full`, синхронный запуск рвёт ему связь:
-
-```bash
-pct exec 102 -- systemd-run --unit=wg-install <команда>
-pct exec 102 -- journalctl -u wg-install --no-pager
-```
-
-Состояние: `pct exec 102 -- wg show wg0`, `journalctl -u wg-peer-sync`.
-
-**WireGuard: проброс порта** (вручную, UI; двойной NAT ONT → AX3 → CT, как
-для `443`). Существующие правила, в том числе `25565`, не менять.
-
-1. ONT (web-интерфейс провайдерского терминала): Forward Rules / Port
-   Mapping → новое правило: протокол `UDP`, внешний порт `51820`, внутренний
-   порт `51820`, внутренний хост — WAN-адрес AX3 (тот же, что в правиле
-   `443`), включить, сохранить.
-2. AX3 (`http://192.0.2.1`): Ещё функции → Безопасность → Перенаправление
-   портов (NAT) → Добавить: устройство — адрес CT `192.0.2.29` (как у `443`),
-   протокол `UDP`, внешний и внутренний порт `51820`, сохранить.
-3. Проверка: телефон в мобильной сети, без Wi-Fi, клиент WireGuard с
-   профилем из `POST /v1/vpn/profile` → handshake в `wg show wg0` и
-   `https://ha.home.example.com/`.
-
-## BB server (CT 103)
-
-Создание и установка — `projects/home/proxmox/bb/README.md`. Основные
-команды (реальные IP/MAC — `secrets/NETWORK.md`):
-
-```bash
-# состояние CT, Node и user-сервиса bb
-ssh root@192.0.2.26 'pct status 103'
-ssh root@192.0.2.26 'pct exec 103 -- node --version'
-ssh root@192.0.2.26 \
-  "pct exec 103 -- bash -lc 'uid=\$(id -u bb); \
-     runuser -u bb -- env XDG_RUNTIME_DIR=/run/user/\$uid \
-       systemctl --user list-units \"bb-host-daemon-*\" --no-pager'"
-
-# согласованный SQLite backup и ночной vzdump
-ssh root@192.0.2.26 'pct exec 103 -- systemctl list-timers bb-db-backup.timer'
-ssh root@192.0.2.26 'pct exec 103 -- systemctl start bb-db-backup.service'
-ssh root@192.0.2.26 \
-  'pct exec 103 -- sqlite3 /var/backups/bb/bb.db "PRAGMA integrity_check;"'
-ssh root@192.0.2.26 'pvesh get /cluster/backup/nightly'
-
-# перенос сервера: только после подтверждения владельца
-bb settings experiment serverMove true
-bb server move --to bb --check
-```
-
-`/etc/bb-backup/env` содержит `BB_DATA_DIR`; после enrollment путь берётся из
-`bb machine show bb`. Если файла базы нет, таймер завершается успешно с
-предупреждением. Enrollment-команда из UI одноразовая: выполнять её в shell
-пользователя `bb`, не сохранять в репозитории и логах.
-
-Плагины `profiles` и `home-dispatcher` — path-источники на CT; команды
-выполнять в shell пользователя `bb` (см. выше):
-
-```bash
-# плагины и их настройки
-bb plugin list
-bb plugin config home-dispatcher
-bb profiles list
-bb profiles show          # профиль, провайдеры и машины проекта
-
-# сжатие рабочего диспетчера: расписание и статус
-bb plugin list | grep -i home-dispatcher
-
-# проверка моста с K3s-узла (ключ шлюза; вывод — только JSON плагина)
-printf '%s' '{"method":"targets","params":{}}' |
-  ssh -i /etc/mcp-gateway/bb_dispatch_key -o BatchMode=yes bb@192.0.2.30
-```
-
-Ротация: `bb plugin token home-dispatcher --rotate` + перезаписать
-`/home/bb/.config/home-dispatcher/token` (0600); смена `hmacSecret` требует
-одновременно обновить `/home/bb/.config/home-dispatcher/hmac`, иначе плагин
-отвечает 401. Значения не печатать.
+CT 102 (VPN): команды, которые перезапускают ocserv/nftables/ssh/сеть, —
+только отсоединённо (`pct exec 102 -- systemd-run --unit=<name> <команда>`,
+затем `journalctl -u <name>`): синхронный запуск рвёт связь владельцу,
+сидящему через ocserv `full`.
 
 ## Проверка
 
 ```bash
-cd <repo>
-mise run test                # hermetic; не трогает стенд
-mise run test:e2e            # live HA/BLE read-only; нужны токены
+mise run test                # hermetic; стенд не трогает
+mise run test:e2e            # live HA/BLE read-only; нужны HA_URL, HA_TOKEN
 STATION_E2E_MUTATE=1 mise run test:e2e
 STATION_E2E_AUDIO=1 mise run test:e2e
 ```
 
-`mise run test:e2e` требует `HA_URL` (реальный LAN-адрес HA, не пример из
-документации), `HA_TOKEN`, опционально `STATION_CONTROL_TOKEN` и
-`STATION_GATEWAY_URL`. Токены не коммитить и не печатать.
-
 ```bash
-curl -fsS -o /dev/null -w 'HA %{http_code}\n' http://192.0.2.28:8123/
-curl -fsS -o /dev/null -w 'MA %{http_code}\n' http://192.0.2.28:8095/
-curl -fsS -o /dev/null -w 'Grafana %{http_code}\n' \
-  http://192.0.2.27:30300/api/health
-```
-
-```bash
-# HTTPS ingress (LAN/VPN): Traefik/cert-manager/маршруты — Flux
 mise run kubectl -- get kustomizations -A
-mise run kubectl -- -n flux-system annotate kustomization/platform \
+mise run kubectl -- -n flux-system get configmap home-app-images -o yaml   # pins
+mise run kubectl -- -n flux-system annotate kustomization/<name> \
   reconcile.fluxcd.io/requestedAt="$(date +%s)" --overwrite
-NODE_IP=192.0.2.27 ./projects/home/kubernetes/ingress/verify.sh
-
-mise run kubectl -- -n traefik get pods,certificate,ingressroute
-mise run kubectl -- -n cert-manager get challenge,order
+mise run admin:ingress-verify
 ```
 
-Реальные имена, LAN_CIDR и HAOS_ADDRESS — `secrets/home/ingress.env` и
-`flux-settings`; токен Cloudflare хранится в OpenBao
-(`secret/k8s/cert-manager/cloudflare-api-token`) и материализуется ESO.
-Cloudflare DNS-записи — ручной шаг (`cloudflare_dns.py`).
-
-```bash
-# Приложения: Flux катит их из develop, CI только пинует digest'ы
-# в deploy/home-apps (job `pins`).
-mise run kubectl -- -n flux-system get kustomizations | grep app-
-mise run kubectl -- -n flux-system get configmap home-app-images -o yaml
-mise run kubectl -- -n flux-system annotate kustomization/app-ha-executors \
-  reconcile.fluxcd.io/requestedAt="$(date +%s)" --overwrite
-mise run kubectl -- -n home-assistant get deploy,pod,pvc
-mise run kubectl -- -n currency-bot get deploy,pod,pvc
-mise run kubectl -- -n flux-system get helmreleases
-
-# Откат приложения — не kubectl rollout undo: заморозить Kustomization и
-# вернуть предыдущий pins-коммит в deploy/home-apps, затем resume.
-mise run kubectl -- -n flux-system suspend kustomization/app-wakegrant
-```
-
-`app-ha-executors` — один Kustomization на scheduler, `ha-bridge`,
-`ha-control` и `ha-scenario`; режимы и реплики зафиксированы в
-`projects/home/kubernetes/scheduler/manifests/kustomization.yaml`, учения
-переключают их через `flux suspend` + `deploy.sh`, не через live-правку.
-`app-hermes` — `HelmRelease/runtime` с post-upgrade smoke и
-`remediation.strategy: rollback`; ручной аварийный путь —
+Откат приложения — не `kubectl rollout undo`: `flux suspend` Kustomization,
+revert pins-коммита в `deploy/home-apps`, `resume` (`mise run rollback <unit>`
+печатает план). `app-ha-executors` — один Kustomization на scheduler,
+`ha-bridge`, `ha-control`, `ha-scenario`; режимы и реплики — в Git, учения —
+через `flux suspend` + `deploy.sh` (README scheduler). `app-hermes` —
+`HelmRelease/runtime` с `remediation.strategy: rollback`; аварийный путь —
 `projects/home-assistant/deploy/rollout.sh`.
 
-## OpenBao
-
-UI/API — `https://vault.<home-domain>/` (LAN/VPN), файлы —
-`projects/home/kubernetes/openbao/`, подробности — его `README.md`.
-
-```bash
-
-# состояние и логи
-mise run kubectl -- -n openbao get pod,svc,pvc
-mise run kubectl -- -n openbao exec openbao-0 -- /bin/sh -ec \
-  'BAO_ADDR=http://127.0.0.1:8200 bao status'
-mise run kubectl -- -n openbao logs openbao-0 --tail=50
-
-# раскатать конфигурацию (chart/values меняются — только через deploy.sh)
-mise run admin:openbao
-mise run admin:openbao-bootstrap   # идемпотентно; нужен admin-токен
-mise run admin:openbao-verify -- --kubernetes
-
-# рестарт (auto-unseal, без человека)
-mise run kubectl -- -n openbao delete pod openbao-0
-
-# snapshot вручную
-mise run kubectl -- -n openbao create job --from=cronjob/openbao-raft-snapshot snapshot-manual
-mise run kubectl -- -n openbao logs job/snapshot-manual
-```
-
-Операторский токен для KV (без входа человека): `secrets/openbao/operator.token`,
-политика `operator-kv` (`configure.py`: `secret/{ci,k8s,infra}/*`, без
-delete), orphan, period 30 дней.
-
-Секреты владельца (SSH-ключи, CA, бэкап-пароли, admin kubeconfig) — в
-`secret/infra/*`; каталог путей — `docs/SECRETS.md`, рабочее место и задачи
-mise — `docs/WORKSTATION.md`. Скрипты деплоя и обслуживания запускаются через
-`mise run admin:*`: секреты им передаёт fnox (`fnox.toml`, профиль на скрипт,
-временные файлы удаляются после команды):
-
-```bash
-mise tasks | grep admin:                  # что есть
-mise run admin:external-secrets -- --skip-secrets
-mise run secrets:check                    # каталог и fnox.toml ↔ OpenBao
-mise run secrets:file home/ingress.env    # запасной путь: файл вручную…
-mise run secrets:clean home/ingress.env   # …и убрать
-```
-
-Не-секретные локальные данные (бэкапы, датасеты, логи) — `local-data/`
-(git-ignored); инструменты — `mise install`.
-
-```bash
-# BAO_ADDR уже в окружении mise; токен — только на время команды
-BAO_TOKEN=$(cat secrets/openbao/operator.token) bao token lookup
-BAO_TOKEN=$(cat secrets/openbao/operator.token) bao kv get secret/k8s/flux-system/app-settings
-# новый токен машины: mise run secrets:login (пароль + TOTP); каждая задача
-# secrets:* продлевает period 30 дней
-```
-
-Пароль человека задаёт сам пользователь и меняет через UI
-(`Access → Authentication methods → userpass → <user> → Edit`) или API
-`bao write auth/userpass/users/<user> password=…`; файла `human.pass` в
-рабочем дереве нет. В bootstrap-выводе может остаться путь к нему, но
-источник правды — значение в OpenBao.
-
-Recovery keys и seal key — у владельца в Bitwarden (`Home recovery`) и в Vaultwarden (`openbao:bootstrap`), не на диске; root уже отозван, новый
-выпускается `bao operator generate-root` из recovery keys. GitHub Environment
-`Home` больше не существует: единственный CI-доступ в OpenBao — роль
-`deploy-station` (Environment `Station`). Приватные env приложений лежат в
-`secret/k8s/flux-system/app-settings`, values Hermes — в
-`secret/k8s/flux-system/runtime-values`; их читает ESO, а не job
-`deploy-home` (схема — README OpenBao и `projects/home/kubernetes/flux/README.md`).
-
-## External Secrets Operator
-
-Источник правды для приложенческих Secrets — OpenBao `secret/k8s/*`;
-Kubernetes Secrets создаёт ESO. Пути, миграция и ротация —
-`projects/home/kubernetes/external-secrets/README.md`.
-
-```bash
-
-# оператор, store и инфраструктурные ExternalSecrets — Flux
-mise run kubectl -- -n flux-system annotate kustomization/platform \
-  reconcile.fluxcd.io/requestedAt="$(date +%s)" --overwrite
-# application ExternalSecrets вручную (аварийный путь; обычно их ведёт Flux)
-mise run admin:external-secrets
-
-# состояние
-mise run kubectl -- -n external-secrets get pods
-mise run kubectl -- get clustersecretstore openbao
-mise run kubectl -- get externalsecret -A
-
-# немедленная синхронизация после смены значения в OpenBao
-mise run kubectl -- -n home-assistant annotate externalsecret scheduler-auth \
-  force-sync="$(date +%s)" --overwrite
-```
-
-`Kustomization.wait`/`healthChecks` Flux ждут готовности workload'ов, а
-`ExternalSecret` применяет сам Flux; deploy-скрипты не создают и не
-перезаписывают эти Secrets. Первая установка на чистом
-кластере требует однократно поставить ESO (иначе `flux-settings` не из чего
-создать) — см. `projects/home/kubernetes/flux/README.md`.
-
-## Vaultwarden (менеджер паролей)
-
-`https://passwords.<home-domain>/` (LAN/VPN), клиенты Bitwarden (Self-hosted,
-Server URL — этот адрес). Файлы, первый вход, смена пароля `/admin` и
-восстановление — `projects/home/kubernetes/vaultwarden/README.md`.
-
-```bash
-# Vaultwarden reconciled Flux после merge в develop
-mise run kubectl -- -n flux-system annotate kustomization/vaultwarden \
-  reconcile.fluxcd.io/requestedAt="$(date +%s)" --overwrite
-mise run kubectl -- -n vaultwarden get pod,pvc,externalsecret
-mise run kubectl -- -n vaultwarden logs deploy/vaultwarden --tail=50
-```
-
-Пароль `/admin` — `secret/infra/vaultwarden/admin`; в под попадает только
-Argon2id-хэш (`secret/k8s/vaultwarden/vaultwarden-admin`).
+Не запускать второй writer для HA/MA/SQLite: один Deployment — одна replica,
+Recreate; Helm rollback state не откатывает.
 
 ## Внешний heartbeat (dead-man switch)
 
-`Watchdog` уходит на Cloudflare Worker `solutions/heartbeat`: ping раз в
-5 минут, при тишине дольше `GRACE_SECONDS` Worker пишет в Telegram через тот
-же инфра-бот, при восстановлении — recovery. Развёрнут как `home-heartbeat`
-на `workers.dev`; Cloudflare API token (Workers Scripts + KV edit) —
-`secrets/home/cloudflare-workers.env`, остальное — `secrets/home/heartbeat.env`.
+`Watchdog` Alertmanager пингует Cloudflare Worker `solutions/heartbeat`
+(контракт — его README). Приватные значения —
+`secrets/home/heartbeat.env` (`CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`,
+`KV_NAMESPACE_ID`, `PING_TOKEN`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`);
+Alertmanager читает URL и токен из OpenBao `secret/k8s/monitoring/heartbeat`.
 
 ```bash
-# тесты без сети и без Cloudflare
 node --test solutions/heartbeat/src/*.test.js
-
-# приватные значения: secrets/home/heartbeat.env (в .gitignore)
-# CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_API_TOKEN, KV_NAMESPACE_ID,
-# PING_TOKEN, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
-mise run admin:heartbeat
-mise run admin:heartbeat -- --secrets
-
-# liveness, затем ping без токена и с токеном (значение не печатать)
-curl -fsS "https://<worker>.<account-subdomain>.workers.dev/health"
-curl -sS -o /dev/null -w '%{http_code}\n' -X POST \
-  "https://<worker>.<account-subdomain>.workers.dev/ping"        # 401
-set -a; . secrets/home/heartbeat.env; set +a
-curl -sS -o /dev/null -w '%{http_code}\n' -X POST \
-  -H "Authorization: Bearer $PING_TOKEN" -H 'content-type: application/json' \
-  -d '{"status":"firing"}' \
-  "https://<worker>.<account-subdomain>.workers.dev/ping"        # 200
-
-# OpenBao: те же URL и PING_TOKEN для Alertmanager
-bao kv put secret/k8s/monitoring/heartbeat \
-  url="https://<worker>.<account-subdomain>.workers.dev/ping" \
-  token="$PING_TOKEN"
-unset PING_TOKEN
-
-# применить Alertmanager (ESO рендерит webhook_configs из этой записи)
+mise run admin:heartbeat                 # деплой Worker
+mise run admin:heartbeat -- --secrets    # + секреты Worker
 mise run kubectl -- -n monitoring annotate externalsecret alertmanager-telegram \
   force-sync="$(date +%s)" --overwrite
-mise run kubectl -- -n monitoring get externalsecret alertmanager-telegram
 ```
 
-Ротация: новый `PING_TOKEN` — обновить private env, выполнить
-`deploy.sh --secrets`, затем `bao kv put` с новым значением; ESO обновит
-Secret, Alertmanager перечитает config. Смена Telegram-бота — обновить
-`TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID` в env Worker, выполнить
-`--secrets` и обновить `k8s/home-assistant/hermes-environment`, чтобы
-Alertmanager и Hermes остались на том же боте. Cloudflare API token нужен
-только deploy.sh и в OpenBao/Kubernetes не попадает.
-
-Outage-тест без остановки остальных алертов — silence только на Watchdog:
+Ротация `PING_TOKEN`: env → `admin:heartbeat -- --secrets` → запись в
+OpenBao. Смена Telegram-бота — то же плюс
+`secret/k8s/home-assistant/hermes-environment`, чтобы Alertmanager и Hermes
+остались на одном боте. Outage-тест — silence только на `Watchdog`:
 
 ```bash
 mise run kubectl -- -n monitoring exec alertmanager-monitoring-alertmanager-0 -c alertmanager -- \
@@ -564,343 +154,8 @@ mise run kubectl -- -n monitoring exec alertmanager-monitoring-alertmanager-0 -c
   --comment="heartbeat outage test" --alertmanager.url=http://127.0.0.1:9093
 ```
 
-Через `GRACE_SECONDS` + cron-тик (~16–20 мин) приходит «дом молчит»; после
-истечения silence первый ping даёт recovery.
-
-## MCP-шлюз (голосовая диагностика)
-
-Голосом: «проверь сервисы», «что с гермесом», «почему не работает X»,
-«перезапусти планировщик» (два шага с подтверждением), «пришли отчёт».
-Установка, RBAC и ротация — `KUBERNETES-OPERATIONS.md`.
-
-```bash
-
-# состояние и метрики
-mise run kubectl -- -n home-assistant get deploy,pod -l app.kubernetes.io/name=mcp-gateway
-mise run kubectl -- -n home-assistant logs deploy/mcp-gateway --tail=100
-mise run kubectl -- -n home-assistant get --raw \
-  "/api/v1/namespaces/home-assistant/services/http:mcp-gateway:8080/proxy/readyz"
-
-# каталог, который реально смонтирован (сверка с manifests/catalog.yaml)
-mise run kubectl -- -n home-assistant get configmap mcp-gateway-catalog \
-  -o jsonpath='{.data.catalog\.yaml}' | head -40
-
-# секреты синхронизированы
-mise run kubectl -- -n home-assistant get externalsecret mcp-gateway-auth mcp-gateway-telegram
-```
-
-Шлюз не публикуется наружу: порт-форвард нужен только для отладки MCP-клиента
-и требует Bearer-токен из `Secret/mcp-gateway-auth`.
-
-```bash
-mise run kubectl -- -n home-assistant port-forward svc/mcp-gateway 18080:8080
-```
-
-Голос и агенты bb:
-
-```bash
-# маршруты включены и токены на месте
-mise run kubectl -- -n home-assistant get externalsecret mcp-gateway-bb-ssh mcp-gateway-voice
-mise run kubectl -- -n home-assistant logs deploy/mcp-gateway --tail=100 | grep -E '"bb"|"voice"'
-
-# самодиагностика distroless-образа: shell/curl/python внутри нет
-mise run kubectl -- -n home-assistant exec deploy/hermes -c voice-proxy -- \
-  /usr/local/bin/voice-proxy -healthcheck
-mise run kubectl -- -n home-assistant exec deploy/hermes -c voice-proxy -- \
-  /usr/local/bin/voice-proxy -status
-
-# состояние голосового маршрута и bootstrap обновлений диспетчера:
-# kubectl-side port-forward вместо exec в контейнер, токен не печатается
-mise run kubectl -- -n home-assistant port-forward svc/mcp-gateway 18081:8080 &
-VOICE_TOKEN=$(mise run kubectl -- -n home-assistant get secret mcp-gateway-voice \
-  -o jsonpath='{.data.token}' | base64 -d)
-curl -fsS -H "Authorization: Bearer $VOICE_TOKEN" \
-  http://127.0.0.1:18081/v1/voice/state
-# рабочий профиль: только cursor, без истории
-curl -fsS -H "Authorization: Bearer $VOICE_TOKEN" \
-  -H "Content-Type: application/json" -d "{}" \
-  http://127.0.0.1:18081/v1/voice/updates
-kill %1 2>/dev/null || true
-unset VOICE_TOKEN
-```
-
-Голосовой прокси сам опрашивает `/v1/voice/updates` и озвучивает завершённые
-ходы диспетчера, которые начал не владелец (`system`/`agent`), только пока
-профиль «Рабочий». Выключается `HERMES_VOICE_UPDATES=0`; подробности —
-`solutions/voice-proxy/README.md`.
-
-Профиль и цвет кольца станции: HA `input_select.home_voice_profile`,
-`switch.ricardo_work_profile`; станция —
-`select.iandeks_stantsiia_midi_voice_color` (Blue = рабочий).
-
-Проверка моста и плагинов — в разделе «BB server (CT 103)». Ручной эквивалент
-для диагностики (обходит аудит шлюза): `printf` JSON в
-`ssh -i /etc/mcp-gateway/bb_dispatch_key bb@<BB_CT_IP>` с K3s-узла.
-
-Ротация: `mcp-gateway-auth` — перезапустить `mcp-gateway` и `hermes`;
-`mcp-gateway-voice` — перезапустить `mcp-gateway` и `hermes` (voice-proxy);
-`mcp-gateway-bb-ssh` — заменить ключ на CT (строка `authorized_keys`) и в
-OpenBao одновременно. Список личных целей — `manifests/bb-targets.yaml`;
-Flux подставляет `BB_PROJECT_*` из `Secret/flux-app-settings` при рендере
-каталога.
-
-## Комп (Windows-ПК)
-
-Адрес, MAC и пользователь — только в HA `secrets.yaml`
-(`komp_ping_command`, `komp_mac`, `komp_ssh_target`); не печатать их.
-
-```bash
-# из HA: Terminal & SSH add-on — состояние по ping
-ping -c 1 -W 1 <host>
-
-# из HA Terminal & SSH — ограниченный SSH (только shutdown|cancel|lock)
-ssh -i /config/.ssh/komp_ed25519 \
-  -o BatchMode=yes -o ConnectTimeout=5 \
-  -o UserKnownHostsFile=/config/.ssh/komp_known_hosts \
-  -o StrictHostKeyChecking=accept-new <user>@<host> shutdown
-
-# блокировка: задача \Home\KompLock создаётся install-lock-task.ps1
-ssh -i /config/.ssh/komp_ed25519 \
-  -o BatchMode=yes -o ConnectTimeout=5 \
-  -o UserKnownHostsFile=/config/.ssh/komp_known_hosts \
-  -o StrictHostKeyChecking=accept-new <user>@<host> lock
-
-# ключ и known_hosts вне Git, но персистентны внутри HAOS
-ls -l /config/.ssh/komp_ed25519 /config/.ssh/komp_known_hosts
-```
-
-В HA: Actions `shell_command.komp_shutdown` / `shell_command.komp_cancel_shutdown` /
-`shell_command.komp_lock`, `wake_on_lan.send_magic_packet` (mac из секрета),
-сущность `switch.komp`, скрипты `script.komp_lock`/`script.komp_unlock` и кнопки
-`button.komp_lock`/`button.komp_unlock`.
-Голосом: «включи комп», «выключи комп», «отмени выключение компа»,
-«заблокируй комп», «разблокируй комп», «комп включён». Выключение
-откладывается на 60 с, отмена — в этом окне. Блокировка выполняется задачей
-`\Home\KompLock` в интерактивной сессии (`projects/home/windows-pc/README.md`).
-
-### wakegrant — пропуск входа компа
-
-`switch.komp.turn_on` сначала выдаёт одноразовый пропуск
-(`rest_command.wakegrant_issue`), затем отправляет WoL. Сервис —
-`projects/home/kubernetes/wakegrant`, LAN NodePort `30130`
-(`WAKE_GRANT_NODE_PORT`), протокол —
-`packages/contracts/wakegrant/PROTOCOL.md`. Секреты: OpenBao
-`secret/k8s/home-assistant/wakegrant` (`issuer_token`, `machines`), в HA —
-`wakegrant_endpoint` и `wakegrant_bearer` в `secrets.yaml`.
-
-```bash
-# здоровье
-curl -sS http://<k3s-node>:30130/healthz
-
-# журнал: только machine/outcome/grantId, без nonce/MAC/токенов
-mise run kubectl -- -n home-assistant logs deploy/wakegrant --tail=50
-
-# тестовый пропуск; токен читается из приватного файла, не печатается
-curl -sS -X POST http://<k3s-node>:30130/v1/grants \
-  -H "Authorization: Bearer $(<secrets/home/wakegrant.token)" \
-  -H 'Content-Type: application/json' \
-  -d '{"machine":"komp","ttlSeconds":60}'
-# ожидаемо: 201 {"grantId":"…","expiresAt":"…"};
-# 401 — не совпал issuer_token, 400 — нет machine в Secret `machines`
-```
-
-Если сервис недоступен, включение компа продолжает работать:
-`rest_command.wakegrant_issue` помечен `continue_on_error: true`, и ПК
-показывает обычный вход. Пропуск одноразовый, живёт 180 с, повторная выдача
-заменяет предыдущий. Перезапуск пода не теряет выданный пропуск (SQLite на
-PVC), но сбрасывает выданные nonce — ПК просто запросит новый.
-
-### Модуль входа (logon provider)
-
-Провайдер входа — переиспользуемое решение `solutions/windows-logon-provider`
-(Rust, Bazel/rules_rust + zig под `x86_64-pc-windows-gnu`, без Visual Studio).
-Значения `ServiceUrl`, `Machine` и
-`UserName` в решении не хранятся: их передаёт проект при установке (для этого
-ПК — параметры ниже).
-
-Распространение — публичный OCI-артефакт GHCR, а не artifact Actions. Любое
-изменение путей провайдера (и общих Rust/Cargo-входов) собирается, проверяется
-и публикуется PR CI как `tree-<hash>` с provenance (build once). На push в
-`develop` `native-release` продвигает проверенный `tree-<hash>` на релизные
-теги, ничего не собирая (нет артефакта или provenance — job падает); версия
-вычисляется CI (`VERSION` — база major.minor, решение 60):
-
-```text
-ghcr.io/proflyder/windows-logon-provider:<VERSION>
-ghcr.io/proflyder/windows-logon-provider:sha-<12 hex коммита>
-```
-
-Файлы артефакта: `HomeKompLogon.dll`, `cp-selftest.exe`, `SHA256SUMS`.
-Тег `<VERSION>` неизменяем: повторная публикация с тем же содержимым — no-op,
-с другим — ошибка, поэтому релиз
-делается сменой `VERSION`. Provenance attestation создаётся для digest
-артефакта и для DLL. PR из этого репозитория публикует тот же артефакт под
-`tree-<hash>` с provenance (build once); форки и `workflow_dispatch` только
-собирают.
-
-Пакет публичный (унаследовал видимость публичного репозитория при первом
-publish), анонимный `oras pull` работает без токена. Если новый пакет другого
-решения окажется приватным: **профиль владельца → Packages → `<пакет>` →
-Package settings → Danger Zone → Change visibility → Public**.
-
-Получение (Mac/Linux оператора; `oras` и `gh` — из `mise install`, `gh` авторизован):
-
-```bash
-cd solutions/windows-logon-provider
-./fetch.sh <VERSION>                 # или
-./fetch.sh sha256:<digest>           # рекомендуемый pin
-```
-
-`fetch.sh` тянет артефакт в временный каталог, проверяет `SHA256SUMS` и
-`gh attestation verify` для DLL, печатает разрешённый digest. Любое
-расхождение — ошибка. Затем скопировать файлы на ПК по SSH, запустить
-self-test, установить/заменить DLL и записать digest в `docs/STATE.md`
-(там же — текущая установленная версия).
-
-Установка (PowerShell от администратора; `out` — распакованный артефакт):
-
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File install.ps1 `
-  -ServiceUrl 'http://192.0.2.27:30130' `
-  -Machine 'komp' -UserName '<user>' -SourceDir 'C:\path\to\out'
-
-# пароль — SecureString (интерактивно), ключ — одной строкой в stdin
-'BASE64KEY' | powershell -NoProfile -ExecutionPolicy Bypass -File set-secret.ps1
-
-powershell -NoProfile -ExecutionPolicy Bypass -File status.ps1
-```
-
-`install.ps1` требует `-ServiceUrl`, `-Machine` и `-UserName` (домашние
-значения — только в команде проекта, не в решении) и сбрасывает
-`FailCount=0` и `Disabled=0`. Обновление DLL:
-LogonUI держит файл, поэтому `Copy-Item -Force` падает — сначала переименовать
-старый, затем скопировать новый, старый удалить после выхода из системы или
-перезагрузки:
-
-```powershell
-$dir = 'C:\Program Files\Home\KompLogon'
-Move-Item "$dir\HomeKompLogon.dll" "$dir\HomeKompLogon.dll.old" -Force
-Copy-Item .\HomeKompLogon.dll "$dir\HomeKompLogon.dll" -Force
-# .old удалить позже, когда файл больше не занят
-```
-
-`set-secret.ps1` не печатает значения: пароль запрашивается как SecureString,
-ключ читается одной строкой из stdin; echo/историю не использовать.
-`status.ps1` показывает конфигурацию, регистрацию, DLL, `FailCount`/`Disabled`
-и последние строки журнала.
-
-Журнал: `C:\ProgramData\Home\KompLogon\logon.log` (ротация в
-`logon.log.1` при 256 КиБ). Читать административной SSH-сессией; ключ HA
-ограничен только `shutdown`/`cancel`/`lock` и журнал не покажет:
-
-```bash
-ssh <user>@<host> \
-  "powershell -NoProfile -Command \"Get-Content 'C:\\ProgramData\\Home\\KompLogon\\logon.log' -Tail 50\""
-```
-
-Self-test (запускать, когда грант не ожидается — `cp-selftest.exe` на
-мгновение поднимает фоновый поток):
-
-```powershell
-.\cp-selftest.exe     # загрузка провайдера по CLSID вне LogonUI
-```
-
-После трёх неудачных входов провайдер ставит `Disabled=1` и больше ничего не
-делает; снять latch — переустановить (`install.ps1` обнуляет
-`FailCount`/`Disabled`) или поправить значения в реестре.
-
-Удаление — без перезагрузки, регистрации снимаются сразу; журнал остаётся:
-
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File uninstall.ps1
-# -KeepSecret — не удалять secret.bin
-```
-
-## K3s
-
-```bash
-ssh labuser@192.0.2.27
-sudo k3s kubectl get pods -A
-sudo k3s kubectl get deploy,pvc -A
-sudo k3s kubectl top nodes
-sudo systemctl status k3s
-```
-
-С Mac без прямого API:
-
-```bash
-ssh -N -L 127.0.0.1:16443:127.0.0.1:6443 labuser@192.0.2.27
-mise run kubectl -- get pods -A
-```
-
-Helm releases и обновление — `KUBERNETES-OPERATIONS.md`.
-
-Приватный runtime values (путь в `RUNTIME_PRIVATE_VALUES`, файл в `secrets/`)
-обязан давать рендер, совпадающий с живым релизом `runtime`; иначе
-`apply-runtime.sh` заденет несвязанные workloads/PV. Проверка (пустой diff,
-код 0); `helm get values` storage не содержит — он применяется отдельно:
-
-```bash
-mise run helm -- template runtime projects/home-assistant/deploy/chart \
-  -n home-assistant -f "$RUNTIME_PRIVATE_VALUES" \
-  | mise run kubectl -- diff -n home-assistant -f -
-```
-
-Полный `apply-runtime.sh` применяет storage (PV/PVC) через `kubectl`, а
-workloads — через Helm; Flux владеет только workload-половиной
-(`HelmRelease/runtime`). Скрипту нужен digest
-Health exporter'а: `HEALTH_EXPORTER_IMAGE=ghcr.io/proflyder/health-exporter@sha256:…`
-(взять текущий: `mise run kubectl -- -n home-assistant get deployment
-runtime-health-exporter -o jsonpath='{.spec.template.spec.containers[0].image}'`);
-он подставляет image, command и пустые volume-монтирования вместо удалённого
-Python-скрипта/ConfigMap. Автодеплой Hermes
-(build+push → digest в релиз → голосовая проверка → откат) описан в
-`KUBERNETES-OPERATIONS.md`; ручной прогон:
-
-```bash
-mise run secrets:exec -- -P kube exec -- platform/workstation/with-kube-tunnel.sh \
-  home-deploy hermes rollout \
-    --values-file "$RUNTIME_PRIVATE_VALUES" \
-    --hermes-digest sha256:… --voice-proxy-digest sha256:… \
-    --exporter-digest sha256:… \
-    --smoke-image ghcr.io/proflyder/home-deploy@sha256:… \
-    --state-dir /tmp/hermes-state
-```
-
-`--force` — повторить upgrade с теми же digest'ами, `--simulate-smoke-failure`
-— проверить откат. План отката и документированную команду печатает
-`mise run rollback hermes --dry-run`.
-
-Конфиг Hermes (config.yaml, HERMES.md, SOUL.md, prompts, skills) едет тем же
-Flux-релизом: образ `hermes-config` (`HERMES_CONFIG_IMAGE`) запускается как
-initContainer `render-config` до gateway и как sidecar `config-drift` (`:9118`).
-Приватные значения рендера — `Secret/hermes-config-private` из OpenBao
-`k8s/home-assistant/hermes-config` поле `private.yaml`. Ручной
-`home-deploy hermes render-config --source-dir projects/home-assistant/hermes`
-нужен только в аварии (Flux/pins недоступны); штатных ручных рендеров и
-restart'ов больше нет. Проверка после выката и правило firewall `9118` —
-`KUBERNETES-OPERATIONS.md`, раздел «Автодеплой Hermes».
-
-## HA / MA / Matter / K3s компоненты
-
-```bash
-# HAOS
-curl -fsS http://192.0.2.28:8123/api/ | head
-# MA
-curl -fsS http://192.0.2.28:8095/ | head
-# Matter — только внутри HAOS
-# ws://127.0.0.1:5580/ws
-```
-
-В K3s:
-
-```bash
-sudo k3s kubectl -n home-assistant get pods
-sudo k3s kubectl -n monitoring get pods
-```
-
-Не запускать второй writer для HA/MA/SQLite. Один Deployment — одна replica,
-Recreate; Helm rollback не откатывает state.
+Через `GRACE_SECONDS` + cron-тик приходит «дом молчит»; после истечения
+silence первый ping даёт recovery.
 
 ## Станция / Pulsar
 
@@ -909,849 +164,120 @@ adb -s 192.0.2.13:5555 shell '/data/pulsar/ctl.sh status'
 adb -s 192.0.2.13:5555 shell '/data/pulsar/ctl.sh log 100'
 adb -s 192.0.2.13:5555 shell '/data/pulsar/ctl.sh restart'
 adb -s 192.0.2.13:5555 shell '/data/pulsar/ctl.sh disable'  # вернуть maind
-adb -s 192.0.2.13:5555 shell '/data/pulsar/ctl.sh enable'   # Pulsar
+adb -s 192.0.2.13:5555 shell '/data/pulsar/ctl.sh enable'
 adb -s 192.0.2.13:5555 shell '/data/pulsar/pulsar --version'
 ```
 
-Цвет анимации слушания по профилю — HA select
-`select.iandeks_stantsiia_midi_voice_color` (Violet = личный, Blue = рабочий);
-его выставляет автоматизация `voice_profile_station_color`; если сущности
-нет, автоматизация ничего не делает.
-
-Экспериментальный локальный endpointing (см. `PENDING.md`) включается только
-переменной окружения процесса Pulsar: `PULSAR_LOCAL_ENDPOINTING=1`; без неё
-работает прежний путь (HA VAD + 30-секундный watchdog). `ctl.sh reload`
-передаёт своё окружение новому supervisor'у, поэтому включение для текущего
-процесса:
-
-```bash
-adb -s 192.0.2.13:5555 shell 'PULSAR_LOCAL_ENDPOINTING=1 /data/pulsar/ctl.sh reload'
-```
-
-Это не boot-persistent: после reboot или нового supervisor без переменной
-feature снова выключен. Выключить feature без замены бинарника — новый
-`adb shell` без переменной: `/data/pulsar/ctl.sh reload`. Полный откат на
-known-good бинарник — атомарно, не поверх работающего файла:
+Откат на `pulsar.prev` — только на станции, не через CI (updater предлагает
+лишь более новые версии); атомарно, не поверх работающего файла:
 
 ```bash
 adb -s 192.0.2.13:5555 shell 'cd /data/pulsar && cp -p pulsar.prev pulsar.rollback && mv pulsar.rollback pulsar && /data/pulsar/ctl.sh reload'
 ```
 
-Установленная версия и состав — `docs/STATE.md`; `--version` показывает тег
-релиза. Откат на предыдущую сборку — только на станции, не через CI
-(updater предлагает лишь более новые версии): команда выше возвращает
-`pulsar.prev`. Напомнить команду и источник: `mise run rollback pulsar`
-(только печать — станция автоматически не трогается).
+`mise run rollback pulsar` печатает эту команду, станцию не трогает.
 
-### Релиз и деплой Pulsar
+Локальный endpointing (экспериментальный) включается только переменной
+процесса: `PULSAR_LOCAL_ENDPOINTING=1 /data/pulsar/ctl.sh reload`; reload без
+переменной выключает. Не boot-persistent; `deploy.py` модели перезапускает
+Pulsar без неё.
 
-Исходники Pulsar — `projects/station/pulsar/` в монорепозитории. GitHub Releases и теги
-запрещены; релиз публикуется в публичный OCI-пакет
-`ghcr.io/proflyder/pulsar-firmware` (его читает `pulsar_update::UPDATE_REPO`).
-Полная процедура — `projects/station/pulsar/RICARDO.md`, «Релизы и деплой». Кратко:
+При возврате на stock (`ctl.sh disable` или crash-loop) снова откроется
+`quasar-server :31116` без auth — перед возвратом закрыть порт правилом INPUT.
+StationCancel без речи — HA-конфиг, не бинарник.
 
-```bash
-# 1. Обычный PR в develop, squash после зелёного ci-ok. Версию НЕ правим:
-#    её вычисляет CI (platform/ci/version.mjs) детерминированно и монотонно:
-#      version = <VERSION major.minor>.<число коммитов, затрагивающих pulsar
-#      в истории HEAD^1>
-#    VERSION содержит только базу (v0.6). merge сам является релизом:
-#    PR уже собрал release-shaped артефакт (обе архитектуры с этой версией,
-#    radio .ybl, SHA256SUMS, проверка --version под qemu) и опубликовал его
-#    как tree-<git tree hash> с build provenance и аннотацией
-#    org.opencontainers.image.version;
-#    native-release проверяет tree-тег и provenance и ставит на тот же
-#    digest ghcr.io/proflyder/pulsar-firmware:<version> и :latest, беря
-#    версию из аннотации артефакта (не пересчитывая её).
-#    Если tree-тега нет или provenance не сходится — job падает:
-#    deploy-home ничего не собирает и не публикует. Если develop ушёл
-#    вперёд до squash-merge, берётся head PR, но только когда дельта
-#    head→merge не затрагивает pulsar; иначе — подтянуть develop в PR,
-#    дождаться CI и смержить заново.
-#    Тот же tree-тег с другими SHA256SUMS не перезаписывается: publish-oci
-#    оставляет первый артефакт и берёт его digest (сборка не бит-воспроизводима).
-# 2. approve в GitHub Environment `Station` (job deploy-station)
-#    → VPN группа ci → OIDC в OpenBao (deploy-station)
-#    → HA update_entity + update.install
-# 3. повторный запуск уже опубликованного `latest` — workflow_dispatch
-#    `deploy-home (вручную)` с units=pulsar: катится только deploy-station,
-#    версия читается из аннотации опубликованного артефакта; units=all тоже
-#    включает deploy-station.
-# 4. сломанный/недоснятый релиз — workflow_dispatch `Пересобрать и задеплоить
-#    сервисы` с галочкой pulsar: честная сборка с текущего develop,
-#    публикация tree-тега и (при replace_artifacts) замена байтов, затем
-#    promotion и deploy-station.
-```
-
-Версия станции растёт по числу коммитов pulsar, поэтому после перехода с
-ручных `v0.5.10NN` база стала `v0.6`: `v0.6.50` и далее всегда новее
-`v0.5.1020`, и updater не откажется от релиза. `VERSION` руками не меняется
-никогда; при необходимости сменить major/minor достаточно исправить базу.
-
-После approve job `deploy-station` входит в VPN группой `ci` (отдельный клиентский сертификат
-`ci-pulsar`, выпускается `vpncerts.py`) и по GitHub OIDC в OpenBao роль
-`deploy-station`. Политика `ci-station` читает
-`secret/ci/deploy-station` (`ha_url`, `ha_token`, `entity_id`; HA long-lived
-token `ci-pulsar-deploy`, 2 года). Деплой — HA `update_entity` +
-`update.install` на Firmware-сущность станции: колонка скачивает слои OCI,
-проверяет `SHA256SUMS` и `--version`, меняет бинарник (старый — `.prev`) и
-перезапускается. Job ждёт `installed_version == version` и 90 с стабильности;
-откат `supervise.sh` на `.prev` или недоступность сущности дольше 30 с валят
-job. Если версия уже стоит, скрипт пишет `already installed` и выходит
-успешно.
-
-Ручной sync upstream:
-
-```bash
-# в checkout upstream (Morvex885/pulsar) получить диапазон и применить патчем
-git -C <upstream-checkout> diff vOLD..vNEW > /tmp/pulsar-upstream.patch
-git apply -3 --directory=projects/station/pulsar /tmp/pulsar-upstream.patch
-# дальше обычные проверки и PR; конфликты разрешать вручную
-```
-
-Локальные приватные копии CI-значений — `secrets/ci/pulsar/` (`VPN_*`,
-`ha_url`, `ha_token`, `entity_id`); значения не печатать и не коммитить.
-
-Полное выключение endpointing — по-прежнему reload без переменной, как выше.
-Повторное включение endpointing — reload с переменной; длина pre-roll при
-этом не меняется.
-
-StationCancel без речи — HA-конфиг, а не бинарник.
-Штатный `quasar-server`
-остановлен вместе со stock-стеком; при возврате на него (`ctl.sh disable` или
-crash-loop) снова откроется `:31116` без auth — перед возвратом закрыть порт
-правилом INPUT.
-
-Модель wake word меняется отдельно, model-only, без замены бинарника.
-Установлена v28; прежняя v27 — профиль быстрого отката, v24/v22 — старые.
-Быстрый откат на v27 (в реальном запуске подставьте LAN-адрес HA из
-`secrets/NETWORK.md`; deploy.py сам проверит alarm/idle/recorder, сохранит
-backup пары и проверит hashes/HA/MA):
+Модель wake word меняется отдельно от бинарника; текущая и профили отката —
+`STATE.md`. Откат на профиль (подставить LAN-адрес HA):
 
 ```bash
 mise run secrets:exec -- -P station exec -- \
   python3 projects/station/tools/wakeword-personalize/deploy.py \
   --ha-url http://192.0.2.28:8123 \
   --profile projects/station/configs/wakeword-v27.json
-# deploy.py перезапускает Pulsar без local endpointing — вернуть на станции:
-# PULSAR_LOCAL_ENDPOINTING=1 /data/pulsar/ctl.sh reload
 ```
 
-`wakeword-v24.json` и `wakeword-v22.json` — более старые откаты. Установка не заменяет живую
-голосовую приёмку: private `active.json` хранит `live_voice_acceptance=pending`.
-
-### Wake-события
-
-Pulsar пишет `/data/pulsar/wake-events/`; сбор и разметка — `station_events.py`,
-цикл и контракт — `../projects/station/tools/wakeword-personalize/README.md`.
-
-```bash
-# снимок новых событий + stats.json (busybox tar по ssh, без rsync)
-python3 projects/station/tools/wakeword-personalize/station_events.py collect \
-  --host 192.0.2.13 --ssh-key ~/.ssh/home-lab/station_ed25519 \
-  --dest local-data/datasets/station-events
-
-# разбор и метки (локальный labels.json, оригиналы не меняются)
-python3 projects/station/tools/wakeword-personalize/station_events.py report \
-  --events local-data/datasets/station-events
-python3 projects/station/tools/wakeword-personalize/station_events.py review \
-  --events local-data/datasets/station-events
-python3 projects/station/tools/wakeword-personalize/station_events.py label \
-  --events local-data/datasets/station-events --id EVENT_ID --label false
-
-# manifest для finetune.py --extra-manifest
-python3 projects/station/tools/wakeword-personalize/station_events.py to-manifest \
-  --events local-data/datasets/station-events \
-  --output PRIVATE_RUN/station-manifest.json
-
-# калибровка cutoff/window по replay и запись micro.* в манифест модели
-python3 projects/station/tools/wakeword-personalize/calibrate.py \
-  --model PRIVATE_MODEL/ru_ricardo_mww.tflite \
-  --positives PRIVATE_RUN/recordings --events local-data/datasets/station-events \
-  --manifest PRIVATE_MODEL/ru_ricardo_mww.json
-```
-
-`collect --prune-labeled` удаляет с устройства только локально проверенные и
-размеченные файлы; без флага устройство не меняется. Снимки неизменяемы
-(`local-data/datasets/station-events/<UTC>/` + `stats/`); последние на
-2026-11-12 — `20261104T080941Z` и `20261110T195906Z`, 215,36 ч прослушивания.
-`report` группирует события по `model_sha256`, поэтому v27 и v28 не смешиваются;
-события после установки v28 (2026-11-12 ~16:12 UTC) относятся к
-`a039ed2d…`. Дальше — `docs/WAKE-WORD.md`.
-
-После рестарта Pulsar MA переподключается сам: supervised `reload` завершает
-Sendspin-сессию goodbye-причиной `restart`, после чего MA делает redial
-(~3 с) без рестарта add-on MA. Проверка: entity
-`media_player.iandeks_stantsiia_midi` = `idle`, source `Music Assistant Queue`,
-volume 0.3; в `/tmp/pulsar.log` — `sendspin: goodbye restart (daemon restarts)`,
-`sendspin: connection trust unpaired` и `sendspin: server connected: Music
-Assistant`. Необязательное восстановление при реальном сбое (entity остаётся
-`unavailable`) — один рестарт только add-on MA через `hassio.addon_restart`
-(`addon: d5369777_music_assistant`), без рестарта HA.
-
-Проверка OTA/ADB:
+После рестарта Pulsar MA переподключается сам (~3 с). Если
+`media_player.iandeks_stantsiia_midi` остаётся `unavailable` — один рестарт
+add-on MA (`hassio.addon_restart`, `addon: d5369777_music_assistant`), без
+рестарта HA.
 
 ```bash
 projects/station/scripts/station-status.sh
 projects/station/scripts/restore-ota-fortress.sh   # осторожно, откат
 ```
 
+### Релиз и деплой Pulsar
 
-## Артефакты GHCR: сборка на PR и продвижение
+Полная процедура — `projects/station/pulsar/RICARDO.md`, «Релизы и деплой»;
+версия — решение 60. Кратко:
 
-Образ деплой-юнита и native-артефакт (Pulsar, Windows logon provider)
-собираются один раз на PR и после merge не пересобираются (решение 36). PR
-публикует их как `ghcr.io/proflyder/<image>:tree-<git tree hash>` с build
-provenance; `deploy-home` проверяет тег и provenance:
+1. Обычный PR, squash после зелёного `ci-ok`; `VERSION` руками не правится.
+   PR публикует `ghcr.io/proflyder/pulsar-firmware:tree-<hash>` с
+   provenance; merge продвигает этот digest на `<version>` и `latest`.
+2. Approve в Environment `Station` → `deploy-station` (VPN группа `ci`,
+   сертификат `ci-pulsar`, OIDC-роль OpenBao `deploy-station`, секрет
+   `secret/ci/deploy-station`) → HA `update_entity` + `update.install`.
+   Job ждёт `installed_version == version` и 90 с стабильности.
+3. Повтор уже опубликованного `latest` — `mise run deploy pulsar --yes`.
+4. Сломанный релиз — «Пересобрать и задеплоить сервисы» с галочкой `pulsar`.
 
-* образы — ставит на тот же digest теги `<commit sha>` и `develop`;
-* native — ставит `native.publish_tags`: для Pulsar `<version>` и `latest`,
-  для logon provider `<version>` и `sha-<12>`. Версия неизменяема: тот же
-  digest — no-op, другой — отказ; двигается только `latest`.
+Sync upstream — патчем, см. `AGENTS.md` («Вложенные upstream-репозитории»).
 
-### Пересборка сервисов вручную (честная сборка)
-
-Если опубликованные байты неверны, отсутствуют или собраны из уехавшего
-tree, есть отдельный ручной путь: Actions → **«Пересобрать и задеплоить
-сервисы»** (`deploy-services.yml`) → *Run workflow* → ветка **`develop`**.
-Он собирает выбранные юниты **с нуля** из текущего `develop`, публикует их под
-`tree-<hash>` с provenance и дальше идёт той же дорогой, что и `deploy-home`:
-`_pin.yml` (promotion + pins для Flux), `_native.yml` с `promote: true`
-(релизные теги native-юнитов) и `_station-deploy.yml` (станция, Environment
-`Station`).
-
-Выбор — галочки групп из `platform/ci/rebuild.mjs` (GitHub разрешает не больше
-10 inputs, поэтому юниты сгруппированы; поле `units` принимает точные id):
-
-| Галочка | Юниты |
-|---|---|
-| `all` | все деплойные и native-юниты + станция |
-| `scheduler` | `scheduler` (с родственными `ha-bridge`/`ha-control` образами) |
-| `ha_bridge` | `ha-bridge` (`ha-bridge`, `ha-control`, `ha-scenario`) |
-| `home_services` | `wakegrant`, `intercom`, `phone-push`, `currency-bot`, `mcp-gateway` |
-| `ha_config` | `ha-config-sync`, `hermes-config` |
-| `hermes` | `hermes` (`hermes`, `voice-proxy`, `health-exporter`) |
-| `pulsar` | `pulsar` (пересборка прошивки, публикация, promotion, станция) |
-| `logon_provider` | `logon-provider` |
-| `units` | точный список id через запятую (перекрывает галочки) |
-
-`replace_artifacts` (по умолчанию включён) позволяет пересобранным native-байтам
-заменить уже опубликованный `tree-<hash>` и перевести immutable version-тег на
-новый digest — это и есть смысл ручной пересборки. Повторный запуск того же
-коммита безопасен: теги публикуются заново, provenance проверяется снова, pins
-записывают те же digest'ы. Контракт promotion (`tree-<hash>`, provenance,
-`deploy/home-apps`) не меняется — меняется только источник байтов (сборка
-этого запуска вместо PR-артефакта).
-
-`deploy-home` — только promotion и pins: он не запускает `bazel build`/`bazel run`
-и не собирает Docker-образы; применение делает Flux. Native-юниты (Pulsar, logon provider) тоже
-только продвигаются: если `tree-<hash>` не опубликован или provenance не
-сходится, job `native-release` падает с подсказкой перезапустить PR CI; история
-для них не используется, потому что релизный артефакт должен соответствовать
-текущему tree и `VERSION`. `deploy-station` только устанавливает уже
-опубликованный `<version>` через HA и ничего не собирает. Для каждого
-затронутого деплой-юнита
-`_unit.yml` дополнительно публикует `ghcr.io/proflyder/home-deploy`
-(если юнит не собирает его сам); job достаёт из промоутнутого образа
-бинарник `home-deploy` (`crane export`) и передаёт его скриптам через
-`HOME_DEPLOY`. Бинарник собирает `rust_service_image` из
-`//platform/deploy-rs:home-deploy`; Go-реализация удалена.
-
-Ручной `workflow_dispatch` (смена режима ha-bridge, `units=all`) выкатывает
-текущий `develop`, для которого у нетронутых последним PR юнитов нет
-`tree-<hash>`-тега. В этом случае promotion идёт по first-parent истории
-(~200 коммитов) и берёт самый свежий коммит с существующим и проверенным
-`tree-<hash>`; коммит-источник виден в summary. Так же разрешаются
-образы-соседи, которые общий deploy-скрипт рендерит, но не применяет
-(`deploy.optional_images` в `units.mjs`, например ha-bridge/ha-control при
-деплое юнита scheduler). Зависимости от живого кластера нет, поэтому
-механизм работает и при первой установке; аварийное восстановление с нуля всё
-равно удобнее делать локальным запуском deploy-скрипта (там сборка разрешена).
-
-### Squash-merge на уехавший `develop`
-
-Squash-коммит сохраняет tree PR только пока `develop` не ушёл вперёд. Если
-между прогоном PR CI и merge влился другой PR, у merge-коммита другой tree и
-`tree-<hash>` для него нет (PR #204: проверен `310954ce`, влит `fe392157`
-после docs-merge #205). На push в этом случае работает PR-head fallback:
-
-1. `promote.mjs` находит PR по коммиту (`gh api
-   repos/{repo}/commits/{sha}/pulls`, затем `(#N)` из заголовка squash-коммита)
-   и берёт его head `H`;
-2. `git fetch origin refs/pull/N/head`, `H` сверяется с ответом API;
-3. дельта `git diff H <merge-commit>` уходит в `affected.compute`; если юнит в
-   дельту не попал, его входы в merge-коммите идентичны проверенным на `H`,
-   и продвигается `tree-<tree(H)>` (после обычной проверки provenance). В
-   summary: `from PR head <H12>, delta to <merge12> does not affect <unit>`;
-4. если дельта затрагивает юнит — job падает: проверенные и влитые байты
-   разные. Лечение: подтянуть `develop` в PR, дождаться зелёного CI и
-   смержить заново (или `workflow_dispatch` после следующего merged PR).
-
-Та же логика применяется к `home-deploy` и образам-соседям (у них сначала
-история, потом PR head) и к native-юнитам (`_native.yml`,
-`runNativePromotion`): релиз, собранный на head PR, продвигается, только если
-дельта не затрагивает native-юнит; иначе `native-release` падает. Ошибка
-routing'а дельты — отказ (fail closed), а не разрешение.
-
-Профилактика: merge выполнять через `mise run pr:merge <N>` — он подтягивает
-`develop` в PR и ждёт `ci-ok` на итоговом head до merge, поэтому уехавшая база
-не возникает (docs/GIT.md, раздел «Merge»). Fallback выше остаётся страховкой
-`deploy-home`, а не штатным путём.
-
-Pulsar собирается release-shaped на каждом PR, затрагивающем его код, — с
-версией из `VERSION`, radio и `SHA256SUMS`; тег версии создаётся только при
-merge с изменением `VERSION`.
-
-### Воспроизводимая сборка Hermes
-
-`hermes` — единственный образ деплоя, собираемый Dockerfile'ом. Его собирает
-общий скрипт `projects/home-assistant/deploy/images/hermes/build.sh`, который
-вызывает PR CI (`_unit.yml` → `platform/ci/build-images.sh`). Сборка запинена по digest базовых образов:
-apt только из snapshot Debian, `SOURCE_DATE_EPOCH` = время upstream-коммита, а
-Buildx переписывает mtime слоёв (`rewrite-timestamp=true`). Поэтому две сборки
-одной ревизии дают один digest и неподвижный образ не вызывает rollout. В
-`deploy-home` `build-and-push.sh` больше не вызывается: job `pins` принимает
-промоутнутые digest'ы напрямую и ничего не собирает (`DECISIONS` 36).
+## Egress / карантин станции
 
 ```bash
-# две сборки без кэша в разные каталоги → сравнение digest'ов
-projects/home-assistant/deploy/images/hermes/verify-reproducible.sh
-# ожидается «reproducible: sha256:…»
-```
-
-PR CI (`_unit.yml`) читает общий кэш слоёв Buildx
-`ghcr.io/proflyder/hermes:buildcache`; пишут его (`mode=max`) только job'ы,
-которые уже залогинены в GHCR с правом записи. Кэш переиспользует слои с теми
-же входами (apt, `uv`), поэтому ускоряет сборку, но не меняет digest. Пакет
-должен оставаться публичным, иначе чтение кэша из PR без логина будет
-пропущено.
-
-Обновление Hermes — bump `projects/home-assistant/deploy/images/hermes/revision`
-(и при необходимости digest'ов баз и `DEBIAN_SNAPSHOT` в `Dockerfile`); путь
-`projects/home-assistant/deploy/images/hermes/**` привязан к деплой-юниту
-`hermes`, так что изменение доезжает до кластера.
-
-Как понять, что приехало в кластер:
-
-* вкладка Actions → прогон `deploy-home` → summary job'а `pins <unit>`:
-  digest'ы, исходный commit/tree и ссылка на run;
-* `mise run kubectl -- -n flux-system get configmap home-app-images -o yaml`
-  показывает актуальные pins, `get kustomizations -n flux-system` — Ready,
-  `flux events`/алерты — применение;
-* для Hermes — `helm -n home-assistant history runtime` (ревизии создаёт
-  `HelmRelease/runtime`).
-
-Если для образа нет ни текущего tree, ни верифицированной сборки в истории,
-job падает с понятной ошибкой; автосборки на деплой-раннере нет. Частая
-причина — `develop` ушёл вперёд между PR и squash-merge: тогда promotion
-пробует head PR (см. «Squash-merge на уехавший `develop`»). Если и это
-отказано, в summary будет `from PR head <H12> … changes <unit>`: нужно
-подтянуть `develop` в PR, дождаться CI и смержить заново. Локально сборка
-остаётся поведением по умолчанию; в CI её запрещает `DEPLOY_NO_BUILD=1`.
-
-Повторить pins для текущего `develop` (без сборки и без доступа в кластер):
-
-```bash
-mise run deploy -- scheduler --yes      # workflow_dispatch units=scheduler
-```
-
-Ежедневная уборка — reusable `.github/workflows/_cleanup.yml` с двумя
-независимыми параллельными джобами: `ghcr` (образы) и `fad` (сборки в Firebase
-App Distribution). Триггеры — два тонких файла: `cleanup.yml` (расписание раз в
-сутки) и `cleanup-manual.yml` (`workflow_dispatch` с `dry_run` по умолчанию).
-Падение одной джобы не влияет на другую и на `ci-ok`.
-
-### Чистка GHCR
-
-Джоба `ghcr`. Пакеты — образы деплой-юнитов и `native.publish_repository` из
-`units.mjs`, включая `pulsar-firmware` и `windows-logon-provider`. Политика по
-каждому пакету: не удаляются новейшая версия, теги `develop`, `latest`, semver
-и native `sha-<12>`, digest'ы из `PROTECTED_DIGESTS` (сейчас пусто) и версии
-моложе 7 дней. Deploy-версии (40-hex commit-sha тег) сохраняют пять новейших, более
-старые старше 7 дней удаляются. Устаревшие версии только с `tree-*` или без
-тегов удаляются. Referrer-версии с тегами `sha256-<hex>` удаляются вместе со
-своим digest'ом или если его уже нет в пакете; в окно пяти deploy-версий они
-не входят. Каждое решение с причиной пишется в job summary.
-
-```bash
-# локальный dry-run политики на фикстуре (в GitHub не ходит, ничего не удаляет)
-node platform/ci/ghcr_cleanup.mjs \
-  --fixture platform/ci/testdata/ghcr-versions.json --now 2026-11-04T00:00:00Z
-```
-
-Реальный ручной прогон: Actions → `cleanup (вручную)` → Run workflow,
-`dry_run` по умолчанию `true` (снять галочку — удалять). Если `GITHUB_TOKEN`
-не может удалять версии user-owned пакетов, job падает с подсказкой: нужен
-секрет `GHCR_CLEANUP_TOKEN` (токен с правом удаления пакетов и доступом к
-репозиторию).
-
-### Чистка Firebase App Distribution
-
-Джоба `fad`. Каждый Android-PR загружает сборку в App Distribution, поэтому
-окно хранения — сутки на приложение: релизы старше 24 часов удаляются,
-новейший релиз не удаляется никогда (именно его ставят тестеры), более свежие
-остаются. Список — `projects.apps.releases.list` (пагинация,
-`orderBy=createTime desc`), удаление — `releases:batchDelete`; OAuth-токен со
-scope `cloud-platform` получает тот же сервис-аккаунт, что и загрузка
-(`secret/ci/android-distribute`, Environment `Android`, роль OpenBao
-`android-cleanup`). ID приложения и проекта берутся из той же переменной
-репозитория `GOOGLE_SERVICES_JSON_B64`, что и при сборке APK, поэтому уборка и
-загрузка не могут разойтись. Каждое решение с причиной — в логе и job summary.
-
-```bash
-# локальный dry-run отбора на фикстуре (без кредов и сети)
-node platform/ci/fad_cleanup.mjs \
-  --fixture platform/ci/testdata/fad-releases.json --now 2026-11-04T12:00:00Z
-```
-
-Ручной прогон — Actions → `cleanup (вручную)` → Run workflow (`dry_run` по
-умолчанию `true`). Для удаления сервис-аккаунту нужна роль **Firebase App Distribution
-Admin** (`roles/firebaseappdistro.admin`) в проекте Firebase; без неё джоба
-падает с этой подсказкой, ничего не удалив. Роль OpenBao `android-cleanup`
-создаётся `projects/home/kubernetes/openbao/configure.py` и привязана к
-`_cleanup.yml` на `refs/heads/develop` для событий `schedule` и
-`workflow_dispatch`; Environment `Android` должен разрешать ветку `develop`.
-Роль применяется идемпотентно повторным запуском
-`mise run admin:openbao-bootstrap` с admin-токеном в `BAO_TOKEN` (см.
-`projects/home/kubernetes/openbao/README.md`); до этого джоба падает на логине
-в OpenBao.
-
-## Планировщик / HA bridge
-
-Обычный деплой — Flux (`app-ha-executors`); режимы и реплики зафиксированы в
-Git. Учения и cutover — `projects/home/kubernetes/scheduler/README.md`:
-сначала `flux suspend kustomization app-ha-executors`, затем admin-скрипт с
-приватным env (по умолчанию `secrets/home/scheduler.env`, git-ignored) и
-admin-kubeconfig. После учения — вернуть steady-state и `flux resume`.
-
-```bash
-# только один юнит (scheduler | ha-bridge | ha-control; ha-bridge катит и ha-scenario)
-PRIVATE_ENV=secrets/home/scheduler.env KUBECONFIG=<admin> \
-  projects/home/kubernetes/scheduler/deploy.sh --only scheduler
-
-# осознанный переход в shadow (dry-run, 0 реплик)
-PRIVATE_ENV=secrets/home/scheduler.env KUBECONFIG=<admin> \
-  projects/home/kubernetes/scheduler/deploy.sh --shadow
-
-# запуск исполнителя: preflight (в кластере или локально) + execute
-PRIVATE_ENV=secrets/home/scheduler.env HA_TOKEN_FILE=secrets/home/ha.token \
-  KUBECONFIG=<admin> projects/home/kubernetes/scheduler/deploy.sh --execute
-
-# NodePort-фильтр scheduler/control/intercom — host-конфигурация,
-# вручную/root на узле; в env нужны SCHEDULER_NODE_PORT,
-# CONTROL_NODE_PORT и INTERCOM_NODE_PORT
-sudo PRIVATE_ENV=/path/scheduler.env \
-  projects/home/kubernetes/scheduler/nft/apply.sh
-
-# резервная копия SQLite (quiesce + checksums, private путь по умолчанию)
-mise run admin:scheduler-backup
-```
-
-Сигналинг звонка (`solutions/intercom`):
-
-```bash
-# деплой — Flux (app-intercom); вручную только состояние и проба
-
-# состояние и проба
-mise run kubectl -- -n home-assistant rollout status deployment/intercom
-mise run kubectl -- -n home-assistant exec deployment/intercom -- \
-  /usr/local/bin/intercom -status
-mise run kubectl -- -n home-assistant exec deployment/intercom -- \
-  /usr/local/bin/intercom -healthcheck
-
-# phone_token в секрете intercom — это общий токен приложения из
-# secret/k8s/home-assistant/scheduler-auth (поле token), не отдельный секрет.
-
-# NodePort 30097 фильтруется общим nft scheduler/control/intercom
-```
-
-Адрес для клиентов — `https://intercom.home.<home-suffix>/` за Traefik
-(LAN/VPN, `home-allowlist`, wildcard TLS). Именно его нужно положить в
-Firebase Remote Config в `home_connection.intercomBaseUrl` (полный URL без
-`/v1`). NodePort `30097` оставлен аварийным путём. Проверка с LAN:
-
-```bash
-TOKEN=$(tr -d '\r\n' < secrets/home/intercom.token)   # не печатать
-curl -fsS --resolve "intercom.home.<home-suffix>:443:<NODE_IP>" \
-  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-  -d '{}' \
-  "https://intercom.home.<home-suffix>/home.v1.IntercomService/ListEndpoints"
-```
-
-`Watch` — долгоживущий stream; маршрут и entrypoint настроены на
-`flushInterval: 100ms`, `writeTimeout: 0s`, `idleTimeout: 1800s`.
-
-Проверки:
-
-```bash
-mise run kubectl -- -n home-assistant exec deployment/scheduler -- \
-  /usr/local/bin/scheduler -healthcheck
-mise run kubectl -- -n home-assistant exec deployment/scheduler -- \
-  /usr/local/bin/scheduler -status
-mise run kubectl -- -n home-assistant logs deploy/ha-bridge --tail=50
-```
-
-Очередь озвучивания агента: `-status` печатает raw GetStatus, в `queues`
-смотрите `voice-work` / `voice-personal` (`pending`, `leased`) и consumer
-`voice-proxy-home` в `consumers` (`alive` после первого цикла). Растущий
-`leased` без `pending` означает, что станция занята или ответ не подтверждён;
-`FAILED` после `SCHEDULER_EVENT_MAX_ATTEMPTS` пишется в `detail` (без текста).
-Логи — `mise run kubectl -- -n home-assistant logs deploy/hermes -c voice-proxy`: строки
-`queue enqueued|delivered|stale|announce failed` содержат только структуру.
-`HERMES_VOICE_QUEUE=0` возвращает прямой announce без consumer'а.
-
-Сценарии Home control — это HA-метка `scenario` (`CONTROL_SCENARIO_LABEL`,
-default `scenario`): назначьте её скриптам в Settings → Automations & scenes →
-Scripts. Иконки/комнаты/имена — только отображение. `CONTROL_LABEL` удалена.
-Нативные сценарии scheduler (`home.v1.ScenarioService`) в этот каталог не
-входят: каталог строится только из сущностей HA.
-
-Home control (каталог устройств/сценариев):
-`http://<node>:30099` (LAN) или `https://control.home.example.com` (LAN/VPN),
-тот же bearer, что у планировщика; в приложении — поле «Home control address»
-без `/v1/catalog`. Переключение исполнения:
-`deploy.sh --control-execute|--control-catalog`.
-
-«Сказать на колонке» (`action.station_speak`) требует HA-скрипт
-`script.speak_text`. Проверка каталога (bearer — тот же, что у control):
-
-```bash
-curl -fsS -H "Authorization: Bearer $CONTROL_TOKEN" \
-  https://control.home.example.com/v1/catalog \
-  | jq '.entries[] | select(.kind == "action") | {id, title, device, room, actions}'
-```
-
-Записи нет — значит `script.speak_text` отсутствует или скрыт в HA. Команда
-идёт обычной задачей `home.control`/очередь `control`:
-`{"entry":"action.station_speak","action":"speak","text":"…"}` (1–500
-символов, без управляющих). Результат — `ACK_DELIVERED` после 2xx HA;
-`ACK_FAILED` означает неверный текст/неизвестный entry, detail текста не
-содержит. Скрипт молчит при `input_boolean.alarm_ringing = on` и при
-неготовом сателлите откатывается на `schedule_announce`. Текст не пишется в
-логи, ledger, `detail` и отчёты — не добавляйте его в диагностические команды.
-
-### Исполнитель сценариев (ha-scenario)
-
-Определения хранит scheduler (`home.v1.ScenarioService`), исполняет отдельный
-Deployment `ha-scenario` на очереди `scenario`. Он катится вместе с юнитом
-`ha-bridge` (`deploy.sh --only ha-bridge`), 1 реплика, `SCENARIO_EXECUTE=true`;
-ledger — `/data/scenario-ledger.json`. Проверка:
-
-```bash
-mise run kubectl -- -n home-assistant exec deployment/scheduler -- \
-  /usr/local/bin/scheduler -status \
-  | jq '{scenario_store_supported, scenario_execution_supported, queues}'
-mise run kubectl -- -n home-assistant logs deploy/ha-scenario --tail=50
-mise run kubectl -- -n home-assistant exec deploy/ha-scenario -- \
-  /usr/local/bin/ha-scenario -healthcheck
-```
-
-`scenario_execution_supported=true` — это флаг scheduler
-`SCENARIO_EXECUTION=true` в манифесте, а не догадка о наличии пода: при
-выключенном исполнителе флаг снимается тем же PR/деплоем.
-
-Создать сценарий и запустить вручную (`$SCHEDULER_TOKEN` — тот же bearer, что
-у планировщика; адрес — `https://alarms.home.example.com` или LAN NodePort):
-
-```bash
-curl -fsS -X POST -H "Authorization: Bearer $SCHEDULER_TOKEN" \
-  -H 'Content-Type: application/json' \
-  https://alarms.home.example.com/home.v1.ScenarioService/CreateScenario \
-  -d '{
-    "label": "Evening light",
-    "enabled": true,
-    "triggers": [{"manual": {}}],
-    "conditions": [{"entityState": {"entityId": "sun.sun", "state": "below_horizon"}}],
-    "steps": [
-      {"catalog": {"entryId": "scene.focus", "action": "run"}},
-      {"delay": {"seconds": 2}},
-      {"speak": {"text": "Добрый вечер."}}
-    ],
-    "continueOnError": false
-  }' | jq -r '.scenario.id'
-
-# manual-запуск: событие scenario.fire встаёт в очередь scenario
-curl -fsS -X POST -H "Authorization: Bearer $SCHEDULER_TOKEN" \
-  -H 'Content-Type: application/json' \
-  https://alarms.home.example.com/home.v1.ScenarioService/RunScenario \
-  -d '{"id":"<scenario-id>"}' | jq '{id: .event.id, queue: .event.queue}'
-```
-
-Time-триггер добавляется так же: `{"time":{"timezone":"Asia/Almaty",
-"at":{"hour":7,"minute":30},"repeat":"REPEAT_KIND_DAILY"}}`; scheduler сам
-материализует расписание и ставит `scenario.fire`. Окно условий
-`{"timeWindow":{"start":{"hour":22},"end":{"hour":6},"weekdays":[1,2,3,4,5]}}`
-поддерживает переход через полночь; timezone условий — у первого
-time-триггера, иначе `SCENARIO_TIMEZONE`.
-
-### Сид бытовых сценариев
-
-«Блэкаут» и «Сел работать» засеваются идемпотентно из
-`projects/home/kubernetes/scheduler/scenarios/` (`blackout.json`,
-`work_mode.json`, `seed.mjs`). Сид читает `ListScenarios`, создаёт только
-сценарии, чьей метки ещё нет (`idempotencyKey=seed-<slug>`), и никогда не
-перезаписывает существующие: правки владельца в приложении сохраняются.
-Токен передаётся файлом, а не аргументом; в выводе только метки и id.
-
-```bash
-SCHEDULER_URL=https://alarms.home.example.com \
-SCHEDULER_TOKEN_FILE=secrets/home/scheduler.token \
-  node projects/home/kubernetes/scheduler/scenarios/seed.mjs --dry-run   # план
-SCHEDULER_URL=https://alarms.home.example.com \
-SCHEDULER_TOKEN_FILE=secrets/home/scheduler.token \
-  node projects/home/kubernetes/scheduler/scenarios/seed.mjs             # создать
-```
-
-`keep` — сценарий с такой меткой уже есть, `created` — создан,
-`would` — попал бы в план при `--dry-run`. Проверка после сида:
-
-```bash
-curl -fsS -X POST -H "Authorization: Bearer $SCHEDULER_TOKEN" \
-  -H 'Content-Type: application/json' \
-  https://alarms.home.example.com/home.v1.ScenarioService/ListScenarios \
-  -d '{"includeDisabled":true}' | jq -r '.scenarios[].label'
-```
-
-Голос запускает их через `script.scenario_run` по точной метке; ручная
-правка метки в приложении сломает голосовую команду, поэтому метки —
-часть контракта. Тест сида:
-`node --test projects/home/kubernetes/scheduler/scenarios/seed.test.mjs`.
-
-Выключить исполнение (манифест при следующем `deploy.sh` сохранит
-env/реплики, поэтому ручное выключение не откатывается само):
-
-```bash
-mise run kubectl -- -n home-assistant scale deployment/ha-scenario --replicas=0
-# либо оставить под, но не забирать очередь:
-mise run kubectl -- -n home-assistant set env deployment/ha-scenario SCENARIO_EXECUTE=false
-```
-
-Перед снятием флага исполнения снять `SCENARIO_EXECUTION` с scheduler не
-обязательно, но честнее: `mise run kubectl -- -n home-assistant set env deployment/scheduler
-SCENARIO_EXECUTION=false` (манифест вернёт `true` при следующем деплое).
-
-Диагностика: `ACK_SKIPPED` с detail `condition not met` / `scenario is
-disabled` — ожидаемое поведение; `FAILED` `step N: …` — шаг не выполнился,
-повторно он не запускается. `FAILED interrupted` означает, что процесс упал
-после начала шагов; проверьте ledger и выполните сценарий вручную. Текст
-`speak` не попадает в логи, ledger, `detail` и отчёты — не добавляйте его в
-диагностические команды.
-
-Endpoint для Android: `https://alarms.home.example.com` (scheduler) и
-`https://control.home.example.com` (каталог) через Traefik + Let's Encrypt;
-LAN endpoint — `http://<node>:30098`. Переключение Android на HTTPS-имена —
-отдельный шаг. Все варианты требуют bearer.
-
-Пауза исполнения — `deploy.sh --shadow` (0 реплик, данные scheduler
-сохраняются); возврат — `--execute` после preflight. Legacy writers удалены и
-повторно не включаются; два исполнителя одновременно не запускать. Бэкап/restore
-БД — `backup.sh` и процедура в README scheduler.
-
-### Android / App Distribution
-
-Каждый PR в `develop`, затрагивающий Android-приложение (изменился
-`projects/mobile/android/**`, общая Kotlin-библиотека `packages/kotlin/**` или
-`platform/android/**`; routing выставляет `android_distribute` = true), собирает
-APK ровно один раз matrix-запись `android / android-app`
-(`.github/workflows/_android.yml`) — без секретов и без Environment. Она
-собирает `//projects/mobile/android:app` с release-`versionCode`/`versionName`
-и `google-services.json` из переменной репозитория `GOOGLE_SERVICES_JSON_B64`
-(это не секрет: идентификаторы Firebase лежат открытым текстом в любом APK),
-прогоняет тесты на том же `--define`-варианте APK и публикует неподписанный
-artifact `android-app-apk` (`app.apk` + `release-info.json`). Затем job
-`android-distribute` (`_ci.yml` → reusable `.github/workflows/_android-release.yml`)
-(Environment `Android`, VPN
-группа `ci` сертификатом `ci-android`, роль OpenBao `android-distribute` → `secret/ci/android-distribute`),
-дождавшись зелёного всего `android` matrix, скачивает artifact, подписывает его
-`platform/android/sign-release.sh` (`zipalign -P 16`, `apksigner` v2/v3,
-fail-closed проверка SHA-256 сертификата из `signing_cert_sha256`), обновляет
-`release-info.json` под подписанные байты и загружает APK в Firebase App
-Distribution в группу `admins` («Admins») через `distribute.sh --upload-only`.
-Глобальная инвалидация (например `MODULE.bazel`) по-прежнему прогоняет проверки
-`android`, но APK не публикует. Исключение — правка `MODULE.bazel` только внутри
-Maven-расширения (`maven.install(...)`, `use_repo(maven, ...)`): она меняет
-состав APK, поэтому маршрутизируется как `MODULE.bazel#maven` только на
-`android` и публикует APK; scoped-изменения native-входов
-(`MODULE.bazel#native`, `.bazelrc#cache`) не выбирают `android` и APK не
-публикуют. Ключ и пароли лежат только в OpenBao (`secret/ci/android-distribute`:
-`signing_keystore_b64`, `signing_store_password`, `signing_key_password`,
-`signing_key_alias`, `signing_cert_sha256`, `google_services_json_b64`,
-`firebase_service_account_json_b64`), материализуются в `$RUNNER_TEMP`
-(0600/0700) и удаляются; JSON-файлы читаются как однострочный base64, чтобы
-`vault-action` не маскировал их построчно (маска строки `{` вырезала её из
-всех логов), в env последующих шагов попадают только пути. PR из форков
-пропускается: у них нет ни OIDC-токена, ни секретов Environment — сборка и
-тесты идут без секретов, а подпись/artifact/distribution пропускаются с явным
-notice. `android-distribute` не входит в `ci-ok` — неудачная загрузка видна на
-PR, но не блокирует merge; новый push в тот же PR отменяет предыдущую загрузку.
-Локально — `projects/mobile/android/distribute.sh` (`--dry-run` печатает
-команду без загрузки; подпись — тем же `sign-release.sh`). Секреты и запись
-KV — README `projects/home/kubernetes/openbao`; статус — вкладка Actions
-прогона PR (`android / android-app` и `android-distribute`).
-
-#### Ручной релиз Android
-
-Собрать и выложить приложение без PR:
-
-1. Actions → **«Android: собрать и выложить»** (`android-release.yml`) →
-   *Run workflow* → ветка **`develop`** → необязательный текст release notes →
-   *Run workflow*.
-2. Воркфлоу собирает APK с текущего `develop` через тот же `_android.yml`
-   (build → APK-тесты → release `versionCode`/`versionName`), затем
-   `_android-release.yml` подписывает и загружает его в Firebase App
-   Distribution (группа `admins`) — тем же кодом, что PR CI. Локальной сборки
-   нет, `google-services.json` приходит из переменной репозитория
-   `GOOGLE_SERVICES_JSON_B64`.
-3. Гейт — Environment `Android` (approve) и OIDC-роль OpenBao
-   `android-release` (`refs/heads/develop`, `workflow_dispatch`,
-   `job_workflow_ref=…/_android-release.yml@refs/heads/develop`). Роль создаёт
-   `projects/home/kubernetes/openbao/configure.py`; после смены имени workflow
-   её надо применить повторно.
-
-## Currency bot
-
-`solutions/currency-bot` в namespace `currency-bot`; устройство и импорт
-истории — `projects/home/kubernetes/currency-bot/README.md`. Приватные
-значения — `secrets/home/currency-bot.env` и `secrets/currency-bot/`.
-
-```bash
-
-# деплой — Flux (app-currency-bot); вручную только состояние
-
-# состояние; ExternalSecrets должны быть SecretSynced=True
-mise run kubectl -- -n currency-bot get deploy,pod,svc,pvc,externalsecret
-mise run kubectl -- -n currency-bot get --raw \
-  "/api/v1/namespaces/currency-bot/services/http:currency-bot:8080/proxy/readyz"
-
-# LAN NodePort для голосового intent «курс доллара/рубля» (HA Assist).
-# CURRENCY_BOT_NODE_PORT — приватное значение из secrets/home/currency-bot.env;
-# наружу порт не пробрасывается, на узле его фильтрует nft.
-curl -fsS "http://192.0.2.27:<CURRENCY_BOT_NODE_PORT>/api/latest" \
-  -H "Authorization: Bearer <API_TOKEN>"
-
-# однократно на K3s-узле: тот же LAN/pod allowlist, что у scheduler NodePort
-ssh root@192.0.2.27 \
-  env PRIVATE_ENV=/path/to/currency-bot.env \
-  bash projects/home/kubernetes/currency-bot/nft/apply.sh
-
-# логи: JSON в stdout; Alloy шипит их в Loki
-mise run kubectl -- -n currency-bot logs deploy/currency-bot --tail=100
-mise run kubectl -- -n currency-bot logs deploy/cloudflared --tail=50
-
-# ручной прогон через LAN/VPN API (Bearer не печатать)
-curl -fsS -X POST https://currency.home.example.com/api/trigger \
-  -H "Authorization: Bearer <API_TOKEN>"
-
-# webhook, который видит Telegram (токен не печатать)
-curl -fsS "https://api.telegram.org/bot<BOT_TOKEN>/getWebhookInfo"
-```
-
-Webhook — `https://tg.example.com/telegram/webhook`: без secret token — 401,
-с ним — 200. Метрики скрейпит `ServiceMonitor/currency-bot`; Grafana —
-dashboard `currency-bot` (uid `currency-bot`).
-
-Откат приложения — revert pins-коммита в `deploy/home-apps` (план:
-`mise run rollback currency-bot --dry-run`), после чего Flux применяет
-предыдущий digest. `home-deploy state rollback` остаётся admin-инструментом
-для state, записанного admin-скриптом:
-
-```bash
-home-deploy state rollback \
-  --state-dir secrets/local/rendered/currency-bot/state \
-  --namespace currency-bot
-```
-
-Старый VPS-деплой снесён, откат только внутри K3s (выше) или fix forward;
-H2-оригинал и конфиги — `local-data/currency-bot/vps-backup/`. Удаление
-PVC/namespace — только после backup SQLite.
-
-## Egress / карантин
-
-```bash
-adb -s 192.0.2.13:5555 shell \
-  'iptables -S EGRESS_GUARD; ip6tables -S EGRESS_GUARD6'
+adb -s 192.0.2.13:5555 shell 'iptables -S EGRESS_GUARD; ip6tables -S EGRESS_GUARD6'
 adb -s 192.0.2.13:5555 shell /data/quasar/egress-guard.sh
 adb -s 192.0.2.13:5555 shell /data/quasar/egress-guard-off.sh
 adb -s 192.0.2.13:5555 shell /data/quasar/yandex-block.sh
 ```
 
-Guard разрешает LAN/DHCP/NTP и — при `ALLOW_GITHUB=1` (по умолчанию) —
-`tcp/443` только к публичным IPv4-диапазонам GitHub
-(`140.82.112.0/20`, `143.55.64.0/20`, `185.199.108.0/22`, `192.30.252.0/22`)
-для updater'а; публичный WAN и Яндекс — DROP. При смене диапазонов GitHub
-обновить `GITHUB_NETS` в скрипте. Снятие guard не снимает Яндекс-блок/OTA.
+Guard разрешает LAN/DHCP/NTP и при `ALLOW_GITHUB=1` (по умолчанию) `tcp/443`
+к диапазонам GitHub из `GITHUB_NETS` в скрипте (для updater'а); остальной
+WAN и Яндекс — DROP. Снятие guard не снимает Яндекс-блок/OTA.
 
-## BLE gateway
+## Артефакты GHCR и CI-релизы
 
-```bash
-adb -s 192.0.2.13:5555 shell /data/quasar/ble-gateway/status.sh
-adb -s 192.0.2.13:5555 shell /data/quasar/ble-gateway/start.sh
-adb -s 192.0.2.13:5555 shell /data/quasar/ble-gateway/stop.sh
-adb -s 192.0.2.13:5555 shell 'tail -40 /data/quasar/ble-gateway/ble-gateway.log'
-```
+Сборка один раз на PR, после merge только promotion (решение 36); механика,
+PR-head fallback и карта воркфлоу — `DECISIONS.md` и `TESTING.md` (CI).
+Профилактика уехавшей базы — `mise run pr:merge <N>` (`GIT.md`).
 
-GATT: service `a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d`; SSID `…4c01`,
-PSK `…4c02`, token `…4c03`, commit `…4c04`, status `…4c05`.
-Токен — `/data/quasar/ble-gateway/token` (600), не публиковать.
-Кнопки: 1 — mute, 3 — gateway 15 мин, 4 — Bluetooth 90 с, 5 с — gateway
-вместо Yandex setup. 4 нажатия могут уронить Wi-Fi.
+Честная пересборка: Actions → «Пересобрать и задеплоить сервисы»
+(`deploy-services.yml`) на `develop`. Галочки групп — `platform/ci/rebuild.mjs`,
+поле `units` — точные id. `replace_artifacts` позволяет новым native-байтам
+заменить опубликованный `tree-<hash>` и version-тег.
 
-## Голос / расписания
+Что приехало: summary job'а `pins <unit>` в прогоне `deploy-home`, configmap
+`home-app-images`, для Hermes — `mise run helm -- -n home-assistant history runtime`.
 
-Проверка pipeline и фраз — `projects/home-assistant/ha-voice/README.md`.
-Расписания и таймеры — canonical scheduler (см. `STATE.md`); старые
-`todo`/`timer` helpers и legacy single-slot не использовать.
-
-Профиль голоса (Личный/Рабочий) — `input_select.home_voice_profile`;
-менять только вручную: голосом («рабочий профиль», «личный профиль», «какой
-профиль»), на дашборде «Помощник» → «Голос» или карточкой «Личный | Рабочий»
-в Android (`switch.ricardo_work_profile`, метка `voice_profile`). Проверка без
-колонки — тихим `conversation.process`:
-
-```text
-conversation.process: "рабочий профиль"
-conversation.process: "какой профиль"
-conversation.process: "личный профиль"
-```
-
-Свободная речь идёт по профилю: рабочий → постоянный тред-диспетчер через
-`mcp-gateway /v1/voice/utterance` (ответ озвучивает `script.schedule_announce`);
-личный + режим агента → активный тред bb; иначе Hermes. Профиль не читается —
-«Не могу подтвердить профиль», в Hermes ничего не уходит. Маршруты и мост
-bb — раздел «MCP-шлюз (голосовая диагностика)».
-
-Курс валют: «курс доллара», «курс рубля», «курс валют» — локальный intent
-`StationCurrencyRate`; HA читает `GET /api/latest` с LAN NodePort
-currency-bot. В `secrets.yaml` — `currency_bot_endpoint` (base URL без `/api`)
-и `currency_bot_bearer` (`Bearer <API_TOKEN>` — тот же токен, что у API).
-Проверка без колонки:
+Воспроизводимость Hermes (две сборки без кэша → один digest):
 
 ```bash
-python3 -m unittest discover -s projects/home-assistant/ha-voice -p 'test_*.py' -v
+projects/home-assistant/deploy/images/hermes/verify-reproducible.sh
 ```
 
-После применения ha-voice в HA: `conversation.process: "курс доллара"`.
+Обновление Hermes — bump `projects/home-assistant/deploy/images/hermes/revision`.
 
-Hermes:
+Уборка — `_cleanup.yml` (джобы `ghcr` и `fad`), триггеры `cleanup.yml`
+(ежедневно) и `cleanup-manual.yml` (`dry_run` по умолчанию `true`). Политика —
+в коде скриптов; локальный dry-run на фикстурах:
 
 ```bash
-# внутри K3s VM/Pod
-curl -fsS http://127.0.0.1:8642/health
-curl -fsS http://127.0.0.1:8643/v1/models
+node platform/ci/ghcr_cleanup.mjs \
+  --fixture platform/ci/testdata/ghcr-versions.json --now 2026-11-04T00:00:00Z
+node platform/ci/fad_cleanup.mjs \
+  --fixture platform/ci/testdata/fad-releases.json --now 2026-11-04T12:00:00Z
 ```
 
-`8642` — loopback; `8643` — только HAOS/K3s/loopback.
+`ghcr` без права удаления требует секрет `GHCR_CLEANUP_TOKEN`; `fad` — роль
+Firebase App Distribution Admin у сервис-аккаунта и OIDC-роль OpenBao
+`android-cleanup` (`configure.py`, применяется `mise run admin:openbao-bootstrap`).
 
-## Reboot / откат
+## Reboot
 
 ```bash
-# HAOS/VM
-ssh root@192.0.2.26
-qm reboot 100       # HAOS
-qm reboot 101       # K3s
-
-# PVE
-reboot
+ssh -F ~/.ssh/home-lab/config pve 'qm reboot 100'   # HAOS
+ssh -F ~/.ssh/home-lab/config pve 'qm reboot 101'   # K3s
 ```
 
 После reboot проверить HA, K3s pods, Grafana, HTTPS ingress, Sendspin и
@@ -1759,66 +285,38 @@ Pulsar. Аварийный доступ к PVE — LAN/Wi-Fi.
 
 ## Backup
 
-Все цели, их расписание, read-only проверки и команды ручного запуска —
-`mise run backup:list` (реестр `platform/ops/backups.mjs`, `status`/`verify` —
-из этого раздела). Proxmox: ночной vzdump `nightly` (04:00) на SATA SSD,
-storage `backup`.
+Все цели — `mise run backup:list` (реестр `platform/ops/backups.mjs`).
+Proxmox: ночной vzdump `nightly` (04:00), storage `backup`.
 
 ```bash
-ssh pve 'pvesh get /cluster/backup; pvesm list backup | tail'
-ssh pve 'vzdump 101 --storage backup --mode snapshot --compress zstd'  # вручную
-ssh pve 'qmrestore /mnt/pve/backup/dump/<archive> <new-vmid> --storage local-lvm'
+ssh -F ~/.ssh/home-lab/config pve 'pvesh get /cluster/backup; pvesm list backup | tail'
+ssh -F ~/.ssh/home-lab/config pve 'vzdump 101 --storage backup --mode snapshot --compress zstd'
+ssh -F ~/.ssh/home-lab/config pve 'qmrestore /mnt/pve/backup/dump/<archive> <new-vmid> --storage local-lvm'
 ```
 
 Проверочный restore — в новый VMID без сети (`--unique`, отключить `net0`),
-не поверх живой VM. HA full backup — через HA UI/Supervisor (automatic
-encrypted backup 03:30, 3 копии, агент `hassio.local`). K3s recovery и private
-values — `KUBERNETES-OPERATIONS.md`, `REBUILD.md`. Не удалять:
-`/srv/k3s/volumes/*`, `/srv/k3s/recovery`, `secrets/`, `backups/`.
+не поверх живой VM. HA full backup — HA UI/Supervisor (automatic encrypted
+backup 03:30, 3 копии). K3s — `KUBERNETES-OPERATIONS.md`, `REBUILD.md`. Не
+удалять: `/srv/k3s/volumes/*`, `/srv/k3s/recovery`, `secrets/`, `backups/`.
 
 ### Offsite backup (Google Drive + restic)
 
-Live с 2026-11-02: K3s node, таймер `offsite-backup.timer` 04:45 →
-restic-репозиторий `rclone:gdrive:home-offsite-v2` (личный Google Drive, scope
-`drive.file`: rclone видит только файлы своего OAuth client; свой client
-«Desktop app» в Google Cloud project `home-offsite-backup`). Установка/обновление с Mac:
+K3s-узел, `offsite-backup.timer` 04:45 → restic `rclone:gdrive:home-offsite-v2`
+(scope `drive.file`: rclone видит только файлы своего OAuth client).
+Устройство, лимиты, retention и restore —
+`projects/home/backup/offsite/README.md`.
 
 ```bash
-# Private inputs (вне Git):
-#   secrets/home/offsite-backup.env      RESTIC_REPOSITORY, RCLONE_CONFIG, HA_URL, лимиты
-#   secrets/home/offsite-restic.password restic password (копия — password manager)
-#   secrets/home/offsite-rclone.conf     rclone remote `gdrive` (OAuth token)
-#   secrets/home/offsite-ha.token        отдельный HA long-lived token
 mise run admin:offsite-install
 mise run admin:pve-backup-install
-# PVE scrape target (PVE_NODE_TARGET) и HOME_DOMAIN — ключи flux-settings в OpenBao;
-# после изменения дождаться sync flux-settings и reconcile observability
+mise run backup:status offsite-restic
+mise run backup:verify offsite-restic --yes
 ```
 
-Новый OAuth-токен Google: `rclone authorize drive <base64 JSON
-{"client_id","client_secret","scope":"drive.file"}>` с client из
-`secrets/home/offsite-gdrive-client.env`; вывод — base64-JSON с полем `token`;
-собрать `[gdrive] type=drive client_id=… client_secret=… scope=drive.file
-token=…` в `offsite-rclone.conf` и переустановить. Смена client = новый
-репозиторий (drive.file не видит файлы другого client): новая папка, `restic
-init` выполнит установщик. Лимиты: `MAX_STAGING_BYTES` (2 GiB) и `MAX_REPO_BYTES`
-(5 GiB) — превышение = неуспешный запуск и алерт, не загрузка.
-
-Проверки и обслуживание:
-
-```bash
-ssh root@192.0.2.27 'systemctl list-timers offsite-backup.timer'
-ssh root@192.0.2.27 'systemctl start offsite-backup.service'
-ssh root@192.0.2.27 'journalctl -u offsite-backup.service -n 100 --no-pager'
-ssh root@192.0.2.27 'cat /var/lib/node-exporter-textfile/offsite_backup.prom'
-ssh root@192.0.2.27 'set -a; . /etc/offsite-backup/env; set +a; restic snapshots'  # нужен rclone
-ssh root@192.0.2.26 'cat /var/lib/prometheus/node-exporter/vzdump.prom'
-```
-
-Retention: daily `restic forget --keep-daily 7 --keep-weekly 4
---keep-monthly 6`; prune и `restic check --read-data-subset=5%` — по
-воскресеньям. Смена restic password: `restic key add`, затем удалить старый
-ключ, обновить `/etc/offsite-backup/restic.password` и копию вне дома.
-Восстановление — `projects/home/backup/offsite/README.md` и `REBUILD.md`.
-Отзыв доступа к Drive — Google Account → Безопасность → сторонние приложения
-→ rclone (отзывает и рабочий токен: затем новый `rclone authorize`).
+Приватные входы — OpenBao `secret/infra/backup` (`offsite/*`, fnox-профиль
+`offsite`); файлы `home/offsite-rclone.conf` и
+`home/offsite-gdrive-client.env` — через `mise run secrets:file`
+(каталог — `SECRETS.md`). Новый
+OAuth-токен: `rclone authorize drive <base64 JSON {"client_id","client_secret","scope":"drive.file"}>`,
+собрать `[gdrive]` в `offsite-rclone.conf`, переустановить. Смена client =
+новый репозиторий (drive.file не видит файлы другого client).

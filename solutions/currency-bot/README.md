@@ -3,8 +3,9 @@
 One static Rust binary scrapes
 [kurs.kz](https://kurs.kz), stores USD/KZT and RUB/KZT snapshots in SQLite,
 alerts a Telegram chat when a threshold is crossed, and serves a small internal
-JSON API. The crate lives in `crates/currency-bot`; the former Go
-implementation was removed at the cutover.
+JSON API. The crate lives in `crates/currency-bot`; the home
+deployment is described in
+[`projects/home/kubernetes/currency-bot/README.md`](../../projects/home/kubernetes/currency-bot/README.md).
 
 ## Behaviour
 
@@ -44,12 +45,13 @@ implementation was removed at the cutover.
   When a threshold no longer fires, the corresponding row is cleared.
 - **Retention.** A weekly job at `CLEANUP_WEEKDAY` `CLEANUP_HOUR` (default
   Sunday 00:00) deletes history older than 35 days.
+- **`setWebhook`** is retried with exponential backoff in `[1s, 60s]`; a
+  Telegram outage at start-up does not crashloop the pod or affect readiness.
 - **Time zone.** Schedules run in `TZ` (default `UTC`, any IANA zone).
 - **Manual trigger asymmetry (kept intentionally).** `/trigger` and
   `POST /api/trigger` skip dedup reads and always send, but still write
   `sent_alerts` and never save history. This can suppress the next scheduled
-  alert until the rate leaves the re-alert band. The spec identifies this as a
-  quirk, not a bug to fix.
+  alert until the rate leaves the re-alert band.
 
 ## Configuration
 
@@ -134,8 +136,7 @@ otherwise `401`. A request with a valid secret always gets `200 OK`, even when
 the JSON is malformed or handling fails: Telegram retries every non-2xx
 response, which would re-run `/trigger`. `/trigger` is acknowledged first and
 runs in the background, and a seen `update_id` is ignored, so a retried update
-cannot fetch and send twice. Failures are logged only. The webhook is intended
-to be exposed through a Cloudflare Tunnel.
+cannot fetch and send twice. Failures are logged only.
 
 Commands are matched by prefix:
 `/trigger`, `/start`, `/help`. Replies go to the chat that sent the command, and
@@ -170,21 +171,12 @@ JSON via `home-telemetry` to stdout (no files, no Promtail). Every line has
 
 ## Storage
 
-SQLite (`rusqlite` through the shared `home-sqlite` single-writer actor, WAL)
-with the H2 tables translated 1:1:
+SQLite through the shared `home-sqlite` single-writer actor (WAL):
 
 - `currency_history(id, timestamp, usd_buy, usd_sell, rub_buy, rub_sell)`,
   index on `timestamp`; `timestamp` is Unix milliseconds UTC.
 - `sent_alerts(id, pair, period, rate_type, level, direction, rate_at_alert,
   change_percent)` with a unique index on `(pair, period, rate_type)`.
-
-## H2 import
-
-The one-off `currency-bot-import` binary (CSV exports of the former H2 tables
-into SQLite) was deleted with the Go tree; it is not part of the runtime image.
-If a migration is ever needed again, restore it from the `cutover` commit's
-parent history and run it as a one-off Job. The home deployment and its history
-live in `projects/home/kubernetes/currency-bot/README.md`.
 
 ## Build and test
 
@@ -199,56 +191,11 @@ temporary file, and the parser fixture is a captured kurs.kz response with names
 addresses, phones and coordinates stripped. The crate's `unit_tests` target
 replays the frozen data below and runs `rustfmt`/`clippy` as separate targets.
 
-`testdata/` is the language-neutral contract captured from the former Go
-service. It is frozen data, not regenerable from this tree:
+`testdata/` is frozen contract data (HTTP goldens, domain vectors, store
+schema); see [`testdata/README.md`](testdata/README.md).
 
-- `testdata/contract/*.json` — HTTP goldens (exact paths, statuses, significant
-  headers, bodies) replayed by `src/contract_tests.rs`;
-- `testdata/vectors/*.json` — domain vectors for parsing/IQR/best-five, alert
-  thresholds and dedup, exact Telegram HTML (including `.x5` rounding),
-  command texts and schedules (UTC, Asia/Almaty and DST);
-- `testdata/store/schema_v1.sql` — schema v1 with sample rows; the store test
-  loads it, reads the rows and inserts again.
-
-The former generators were Go `-update` tests and were removed with the Go
-code; see `testdata/README.md` for how to regenerate if ever required.
-
-The OCI image follows the scheduler pattern: one static
+The OCI image is one static
 `x86_64-unknown-linux-musl` binary on the digest-pinned distroless base, built
 without a Docker daemon. Targets:
 `//solutions/currency-bot:currency-bot_image`, `:currency-bot_load`,
-`:currency-bot_push` (repository `ghcr.io/proflyder/currency-bot`). Entrypoint,
-uid/gid and container ports are unchanged from the Go image.
-
-## Заметки к коду
-
-Пояснения, перенесённые из комментариев исходников (код комментариев не содержит, см. `AGENTS.md`).
-
-- `crates/currency-bot/src/api/history.rs`
-  - `POST /api/trigger`: force a send, do not save history (the Kotlin contract). An unparseable body is silently ignored.
-- `crates/currency-bot/src/api/json.rs` — Go-compatible JSON number formatting.
-- `crates/currency-bot/src/api/mod.rs` — axum HTTP layer: the internal JSON API and the dedicated webhook listener.
-  - Log every request and count it by the matched route pattern (never the raw path, which a scanner could grow without bound).
-  - Label by the route template, never the raw path: a scanner hitting random URLs must not create unbounded series. Unknown paths collapse to `other`.
-- `crates/currency-bot/src/app.rs` — Composition root: configuration, telemetry, SQLite store, the two HTTP listeners and the two periodic jobs.
-  - Retry `setWebhook` with exponential backoff in `[1s, 60s]` until it succeeds or the process shuts down. A Telegram outage at start-up must not crashloop the pod or affect readiness.
-- `crates/currency-bot/src/config.rs` — Process configuration loaded 1:1 from the Go service's environment.
-  - Why the environment was rejected. Messages match the Go loader and never contain a secret value.
-- `crates/currency-bot/src/contract_tests.rs` — Replay of `solutions/currency-bot/testdata/contract/*.json`.
-- `crates/currency-bot/src/domain/alerts.rs` — Threshold evaluation and deduplication as pure functions.
-- `crates/currency-bot/src/domain/message.rs` — The Telegram HTML message.
-- `crates/currency-bot/src/domain/model.rs` — Currency-bot domain types.
-  - Go kept the field in the model but never stored it; it is optional here for the same reason.
-- `crates/currency-bot/src/domain/rates.rs` — Pure kurs.kz extraction: the `var punkts` literal, the intentional IQR filter and the best-five average.
-- `crates/currency-bot/src/domain/schedule.rs` — The two wall-clock schedules, with the same "strictly after now" and no-catch-up policy as Go.
-- `crates/currency-bot/src/domain/texts.rs` — User-visible fixed texts.
-- `crates/currency-bot/src/domain/time.rs` — Timestamp formatting and parsing with Go's exact layouts.
-- `crates/currency-bot/src/domain/vectors.rs` — Replay of `solutions/currency-bot/testdata/vectors/*.json`.
-- `crates/currency-bot/src/health.rs` — Distroless `-healthcheck`: GET the public `/readyz` probe.
-- `crates/currency-bot/src/lib.rs` — currency-bot: kurs.kz rate snapshots, threshold alerts and a Telegram bot.
-- `crates/currency-bot/src/main.rs` — Command entry point: the currency bot service and the distroless `-healthcheck` probe used by the deployment.
-- `crates/currency-bot/src/metrics.rs` — Prometheus exposition: only the `currency_bot_*` families.
-- `crates/currency-bot/src/pipeline.rs` — The fetch → save → threshold → send → record pipeline.
-  - The message is delivered; recording must not be lost. The store call is synchronous and cannot be cancelled like a Go request context.
-- `crates/currency-bot/src/store/mod.rs` — SQLite persistence on the shared single-writer [`home_sqlite::Db`].
-- `crates/currency-bot/src/testdata.rs` — Locate the shared `solutions/currency-bot/testdata` directory in both `cargo test` (package-relative) and Bazel (`TEST_SRCDIR` runfiles).
+`:currency-bot_push` (repository `ghcr.io/proflyder/currency-bot`).

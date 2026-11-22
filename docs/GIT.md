@@ -42,58 +42,28 @@ gh pr create --base develop --fill          # PR в develop
 
 ## Merge
 
-Merge в `develop` — только `mise run pr:merge <N>` (`platform/ci/safe-merge.mjs`,
-тесты — `safe-merge.test.mjs`). Скрипт:
+Merge в `develop` — только `mise run pr:merge <N>`
+(`platform/ci/safe-merge.mjs`, тесты — `safe-merge.test.mjs`). Скрипт:
 
-- требует OPEN PR в `develop` и полный head; конфликтующий PR — ошибка;
-- сравнивает head с текущим `origin/develop`: если база устарела, по
-  умолчанию вливает `develop` в ветку (`gh pr update-branch`) и ждёт новый
-  head; конфликт при обновлении — ошибка без merge. Обновление ветки — это
-  новый полный прогон CI (15–30 минут и раннеры), поэтому оно пропускается,
-  когда merge безопасен и без него:
-  - на текущем head зелёный `ci-ok`;
-  - GitHub считает PR `MERGEABLE` (без конфликтов), а не `UNKNOWN`;
-  - файлы PR (`merge-base..head`) и файлы новых коммитов `develop`
-    (`merge-base..develop`) не пересекаются, включая старые имена переименованных
-    файлов;
-  - новые коммиты `develop` не трогают CI-глобальные пути: `.github/**`,
-    `platform/ci/**`, `.bazelrc`, `.bazelversion`, `MODULE.bazel*`,
-    `platform/android/android.bazelrc`, `mise.toml`, `Cargo.lock`,
-    `**/maven_install.json`, `package-lock.json`, `pnpm-lock.yaml`,
-    `platform/bazel/**` (константа `CI_GLOBAL_PATHS` в скрипте, покрыта тестом).
-  Тогда скрипт печатает `develop +N commit(s), disjoint from PR files and no
-  CI-global paths → merging on green ci-ok at <sha> without refresh` и мержит
-  без `update-branch`: squash-tree отличается от проверенного tree только
-  чужими по файлам коммитами `develop`, которые сами прошли CI. Если `ci-ok`
-  ещё идёт, скрипт дожидается его, а не выбрасывает прогон. `--always-refresh`
-  возвращает старое поведение — обновлять ветку при любом отставании;
-- после обновления ждёт, пока compare для нового head догонит его (до ~60 с):
-  GitHub несколько секунд отдаёт старый `behind_by`. Повторный `update-branch`
-  не вызывается, пока `develop` действительно не получил новый коммит (sha
-  сверяется через `git/ref/heads/develop`); счётчики обновлений ветки и
-  реальных сдвигов `develop` независимы;
-- ждёт зелёный `ci-ok` на этом head (check-runs API, `--timeout <min>`,
-  по умолчанию 90 минут); красный или недождавшийся `ci-ok` не мержится;
-- перед merge повторно проверяет, что `develop` не ушёл, и при необходимости
-  повторяет обновление или заново проверяет безопасный merge без обновления
-  (до трёх обновлений ветки);
-- мержит `gh pr merge <N> --squash --admin --delete-branch
-  --match-head-commit <head>`: если head сдвинулся между проверкой и merge,
-  GitHub отказывает вместо merge непроверенного tree;
-- печатает merge-sha и ссылку на запуск `deploy-home` (или подсказку, если
-  запуск ещё не появился).
+- требует OPEN PR в `develop` без конфликтов;
+- если база устарела, вливает `develop` в ветку (`gh pr update-branch`) и
+  ждёт зелёный `ci-ok` на новом head (`--timeout <min>`, по умолчанию 90);
+- обновление пропускается (новый прогон CI — 15–30 минут), если на текущем
+  head зелёный `ci-ok`, PR `MERGEABLE`, файлы PR и новых коммитов `develop`
+  не пересекаются (с учётом переименований), и новые коммиты `develop` не
+  трогают `CI_GLOBAL_PATHS` из скрипта; `--always-refresh` отключает это
+  исключение;
+- перед merge снова проверяет базу (до трёх обновлений) и мержит
+  `gh pr merge <N> --squash --admin --delete-branch --match-head-commit <head>`:
+  сдвинутый head GitHub отклонит;
+- печатает merge-sha и ссылку на запуск `deploy-home`.
 
-Почему не `gh pr merge` вручную: `ci-ok` проверяет tree PR, а squash-merge на
+`--dry-run` — план без изменений, `--no-update` — только проверка.
+
+Почему не `gh pr merge` вручную: `ci-ok` проверяет tree PR, а squash на
 уехавший `develop` даёт tree, которого CI не видел, и `deploy-home`
-fail-closed отказывает затронутым юнитам (PR #218 после #217). Рулсет не
-strict, поэтому эту гонку закрывает только проверка базы непосредственно перед
-merge. Проверка пересечения файлов не отменяет правило, а ослабляет его ровно
-настолько: если `develop` и PR меняют разные файлы и не трогают CI-обвязку,
-результат squash-merge — это tree PR плюс уже проверенные на `develop` файлы.
-`--dry-run` показывает план без изменений, `--no-update` только
-проверяет: устаревший head — ошибка, merge не выполняется, `--always-refresh`
-отключает merge без обновления. Токен — обычный `gh`; `GH_TOKEN` учитывается и
-не печатается.
+fail-closed отказывает затронутым юнитам. Ruleset не strict, поэтому гонку
+закрывает только проверка базы непосредственно перед merge.
 
 ## Защита на GitHub
 
@@ -158,19 +128,12 @@ git -c credential.helper= \
 
 ## Версии и публикация артефактов
 
-- Publishable native-юнит (Pulsar, Windows logon provider)
-  собирается и проверяется PR CI на любое изменение своих путей и общих
-  входов (Cargo workspace/lock, используемые `packages/rust/*`, тулчейны,
-  `MODULE.bazel`) и публикует артефакт как `tree-<hash>` с provenance.
-  Версию вычисляет CI (`VERSION` — только major.minor, patch — число
-  коммитов юнита, `platform/ci/version.mjs`, решение 60): каждое смерженное
-  изменение юнита — релиз. На push
-  `deploy-home` только продвигает опубликованный `tree-<hash>`; если его нет
-  или provenance не сходится, job падает — деплой ничего не собирает.
-- Отдельного PR с бампом нет; `VERSION` меняется только при смене
-  major.minor. Тег версии в GHCR неизменяем по
-  содержимому, поэтому повторная публикация того же артефакта — no-op, а
-  другого содержимого под тем же тегом — ошибка.
+Native-юниты (Pulsar, Windows logon provider) PR CI собирает и публикует как
+`tree-<hash>` с provenance; push в `develop` только продвигает его на
+релизные теги. Версию вычисляет CI: `VERSION` — только major.minor, patch —
+число коммитов юнита (`platform/ci/version.mjs`, решение 60); отдельного PR с
+бампом нет. Тег версии неизменяем по содержимому. Подробности —
+`OPERATIONS.md` («Артефакты GHCR и CI-релизы»).
 
 ## Агенты
 

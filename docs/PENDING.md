@@ -11,18 +11,15 @@
 ## P2 — проверки и улучшения инфраструктуры
 
 - [ ] **WireGuard снаружи.** Сервер на CT 102 работает (`51820/udp`,
-      проверен из LAN). Владельцу: проброс `51820/udp` на ONT и AX3 по
-      образцу `443` (`docs/OPERATIONS.md`, «WireGuard: проброс порта»); после
-      merge PR VPN-API scheduler — проверить, что `wg-peer-sync` перестал
-      получать 404 (`journalctl -u wg-peer-sync`), и пройти подключение с
-      телефона через мобильную сеть.
+      проверен из LAN), VPN-API scheduler смержен (#372). Владельцу: проброс
+      `51820/udp` на ONT и AX3 (`docs/OPERATIONS.md`, «WireGuard: проброс
+      порта»); затем проверить, что `wg-peer-sync` не получает 404
+      (`journalctl -u wg-peer-sync`), и подключиться с телефона через
+      мобильную сеть.
 
-- [ ] **Удалить старое поле `hermes_private_yaml`.** Flux-конфиг Hermes
-      принят (2026-11-21: `render-config` без ошибок, `:9118`
-      `hermes_config_drift_files 0`, `hermes_config_check_success 1`, `9118`
-      закрыт в nftables K3s). Осталось владельцу удалить
-      `secret/infra/kubernetes/values-private#hermes_private_yaml` (поле ещё
-      есть; новый источник — `secret/k8s/home-assistant/hermes-config#private.yaml`).
+- [ ] **Удалить старое поле `hermes_private_yaml`.** Владельцу удалить
+      `secret/infra/kubernetes/values-private#hermes_private_yaml`; источник
+      теперь `secret/k8s/home-assistant/hermes-config#private.yaml`.
 - [ ] **Вход `gh` и Codex на CT 103.** Нужен только для агентов, запускаемых
       на самом сервере bb; треды на Mac работают без него. Следующий шаг:
       авторизовать `gh` и Codex под пользователем `bb` перед первым таким
@@ -32,8 +29,8 @@
 
 ### Android: VPN домой
 
-- [ ] **Приёмка встроенного VPN на телефоне.** После merge `feat/android-vpn`
-      и PR сервера (`/v1/vpn/profile`): выпуск профиля дома, WireGuard вне
+- [ ] **Приёмка встроенного VPN на телефоне.** Клиент (#373, #375, #377) и
+      `/v1/vpn/profile` (#372) смержены. Проверить: выпуск профиля дома, WireGuard вне
       дома, переход на OpenConnect при закрытом `51820/udp`, автоподключение,
       плитка QS, always-on. Детали — `projects/mobile/android/README.md` (VPN).
 - [ ] **Нативный OpenConnect (libopenconnect через JNI) вместо внешнего
@@ -41,32 +38,28 @@
 
 ### Станция и голос
 
-- [ ] **Выкатка Pulsar `v0.6.51` на колонку.** Первый релиз с вычисляемой
-      версией опубликован 2026-11-20, но job `deploy station` в `deploy-home`
-      получил версию юнита `logon-provider` (`1.4.62`) вместо `v0.6.51` и упал;
-      на колонке `v0.5.1020` (выкачен 2026-11-18). Следующий шаг: исправить
-      передачу версии Pulsar в `_station-deploy.yml`, перезапустить
-      `deploy-home` с `units=pulsar`, approve.
+- [ ] **Выкатка Pulsar с вычисляемой версией на колонку.** `v0.6.51`
+      опубликован, но `deploy station` упал на чужой версии; передача версии
+      исправлена (#369, #371). На колонке `v0.5.1020`. Следующий шаг:
+      перезапустить `deploy-home` с `units=pulsar`, approve, проверить
+      `installed_version`.
 - [ ] **Приёмка `v0.5.1020` (upstream `v0.6.2`).** Проверить в HA
       переключатели «Wake sound» и «Clock colon blink» (ключи 42/43) и живо
       «Рикардо, стоп» в диалоге от wake word (уходит в HA) и
       от кнопки (отменяет локально). Откат — `rollback` юнита `pulsar` в
       `platform/ci/units.mjs` (`pulsar.prev` + `ctl.sh reload`).
-- [ ] **Ricardo pre-roll 256 ms.** `Fixed(8)` в текущей сборке
-      (`docs/STATE.md`); база n=3, риск среза первого слога.
+- [ ] **Ricardo pre-roll 256 ms.** `PrerollRule::Fixed(8)` в текущей сборке; база n=3, риск среза первого слога.
       Следующий шаг: живая проверка «Рикардо отмена/который час/сколько
       времени» и других фраз. Откат на предыдущую сборку — `pulsar.prev`.
 - [ ] **Локальный endpointing.** Включается только ручным reload, не
-      boot-persistent; после model-only установки
-      `deploy.py` его теряет (2026-11-12 возвращён вручную и проверен в environ процесса); пороги не откалиброваны.
+      boot-persistent; model-only установка через `deploy.py` его теряет;
+      пороги не откалиброваны.
       Следующий шаг: живая проверка «Рикардо отмена» + повтор, обычных пауз,
       continued conversation и earcon; затем калибровка onset/release/trailing
       и решение о boot-persistent/default-on.
-- [ ] **Wake word v28.** Установлен 2026-11-12 model-only (`a039ed2d…e05efb6e`),
-      `live_voice_acceptance=pending`; до v28 на 215,36 ч прослушивания v27 давала
-      0.18 подтверждённых FP/ч. Запись продолжается, на устройстве ничего не
-      удалялось; события после установки несут `model_sha256` v28, `report`
-      группирует их отдельно. Следующий шаг: живая приёмка всех манер речи,
+- [ ] **Wake word v28.** Установлен model-only, `live_voice_acceptance=pending`;
+      у v27 было 0.18 подтверждённых FP/ч. События после установки несут
+      `model_sha256` v28, `report` группирует их отдельно. Следующий шаг: живая приёмка всех манер речи,
       затем через ~неделю `collect` → `report` и сравнение FP/ч с v27; разметить
       24 подозрительных hits. Откат — `wakeword-v27.json`, затем `wakeword-v24.json`.
 - [ ] **deploy.py и local endpointing.** `deploy.py` делает `ctl.sh reload` без
@@ -164,9 +157,8 @@
 - [ ] **Входящие звонки.** Контракт симметричен, `Watch` уже распознаёт
       входящий `RINGING`, но UI и `addNewIncomingCall` — заглушка (сейчас
       отклоняется).
-- [ ] **Push и «Найди телефон»: живая приёмка.** FCM сервис-аккаунт лежит в
-      `secret/k8s/home-assistant/phone-push`, `phone-push` раскатан Flux
-      (healthcheck исправлен #350, full-screen intent — #352). Следующий шаг:
+- [ ] **Push и «Найди телефон»: живая приёмка.** Сервер раскатан
+      (`secret/k8s/home-assistant/phone-push`). Следующий шаг:
       на телефоне выдать три разрешения, открыть приложение и
       проверить: «где телефон» при включённом экране, при выключенном, в фоне
       и с убитым приложением, плюс стоп «Нашёл» и автостоп через минуту.
@@ -177,6 +169,11 @@
       Следующий шаг: добавить `SCHEDULE_KIND_TASK` и тесты повторяемости.
 
 ### Инфраструктура и станция
+
+- [ ] **Logon provider `1.4.x` на Компе.** На ПК `1.3.15`; релиз `1.4.62`
+      (DLL `HomeKompLogon.dll`) есть в GHCR. Следующий шаг (владелец):
+      установить по `solutions/windows-logon-provider/README.md` и проверить
+      вход и разблокировку по пропуску.
 
 - [ ] **Потеря LAN станцией после reboot.** Роутер online, ARP/ADB/ESPHome
       недоступны, BLE Wi-Fi TIMEOUT; cold power cycle восстанавливает.

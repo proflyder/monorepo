@@ -4,9 +4,9 @@
 systemd и deployment, но **не** бизнес-логика.
 
 ```text
-projects/station/          Pulsar/ADB/BLE/provisioning
-projects/home-assistant/   HA/MA/STT/TTS/Hermes
-projects/home/             композиция station + home-assistant
+projects/station/          Pulsar, BLE gateway, конфиги и инструменты станции
+projects/home-assistant/   HA, голос, Hermes, STT/TTS, observability HA
+projects/home/             Proxmox, K3s/Flux-манифесты, VPN, бэкапы, Windows-ПК
 projects/mobile/           Android-клиент
 ```
 

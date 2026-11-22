@@ -1,6 +1,8 @@
 # phone-push (home deployment)
 
-Один stateless Deployment в namespace `home-assistant`, ClusterIP `:8095`.
+FCM-доставка на телефон владельца (поиск телефона, уведомления). Flux
+(`Kustomization/app-phone-push`, образ `PHONE_PUSH_IMAGE` из pins). Один
+stateless Deployment в namespace `home-assistant`, ClusterIP `:8095`.
 Наружу не публикуется: единственный вызывающий — `mcp-gateway`.
 
 ## Что нужно от владельца (один раз)
@@ -46,7 +48,7 @@ mise run kubectl -- -n home-assistant logs deploy/phone-push --tail=50
 mise run kubectl -- -n home-assistant port-forward svc/phone-push 8095:8095
 ```
 
-Звонок проверяется голосом: «Рикардо, где телефон?» — колонка отвечает
+Звонок проверяется голосом: «<wake word>, где телефон?» — колонка отвечает
 «Звоню на телефон», телефон звонит как будильник и останавливается кнопкой
 «Нашёл» или через минуту. Отдельная проверка без телефона (в кластере,
 токен — `scheduler-auth#token`):
@@ -72,13 +74,3 @@ curl -fsS -X POST "$PHONE_PUSH_URL/v1/push/find" \
   scheduler `:8098`, CoreDNS `:53`, HTTPS `:443` (OAuth/FCM).
 - Откат — revert pins-коммита `PHONE_PUSH_IMAGE` или `flux suspend`
   Kustomization `app-phone-push`; своего состояния у сервиса нет.
-
-## Заметки к коду
-
-Пояснения, перенесённые из комментариев исходников (код комментариев не содержит, см. `AGENTS.md`).
-
-- `BUILD.bazel` — Plain-file package: Flux renders these templates (postBuild substitution), and the deploy contract tests read them as data.
-- `manifests/external-secrets.yaml` — phone-push credentials, materialised from OpenBao KV v2 by ESO.
-- `manifests/kustomization.yaml` — Flux-rendered manifest set for phone-push.
-- `manifests/network-policies.yaml` — phone-push network policy.
-- `manifests/phone-push.yaml` — phone-push: FCM delivery for the owner's phone (find-phone + notifications).

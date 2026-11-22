@@ -1,99 +1,58 @@
 # intercom в K3s
 
-Deployment/Service сигналинга звонка; код и контракт —
+Сигналинг звонка телефон ↔ колонка; код и контракт —
 [`solutions/intercom`](../../../../solutions/intercom/README.md).
-
-## Состав
 
 - `manifests/intercom.yaml` — Deployment (1 реплика, `Recreate`: состояние
   звонков in-memory), NodePort `${INTERCOM_NODE_PORT}`, пробы
   `intercom -healthcheck`.
-- `manifests/external-secrets.yaml` — ESO `ExternalSecret/intercom` из
-  OpenBao: `phone_token` — из `secret/k8s/home-assistant/scheduler-auth`
-  (`token`, общий токен приложения), `station_token` — из
-  `secret/k8s/home-assistant/intercom`.
-- HTTPS-маршрут `intercom.home.<home-suffix>` — в
-  `projects/home/kubernetes/ingress/routes/routes.yaml`
-  (`INTERCOM_HOST`), а не здесь: namespace/allow-list/TLS принадлежат
-  ingress-юниту. Адрес для клиентов: `https://intercom.home.<home-suffix>/`
-  (LAN/VPN, `home-allowlist`, wildcard TLS). В Firebase Remote Config это
-  значение поля `intercomBaseUrl` в JSON-параметре `home_connection`:
-
-  ```json
-  {"intercomBaseUrl": "https://intercom.home.<home-suffix>"}
-  ```
-
-  Без завершающего `/v1`, без `:30097` и без `/` в конце. Для имени через
-  Traefik обязателен `https`; аварийный LAN NodePort допускает `http`.
-- `manifests` ingress-юнита также создаёт NetworkPolicy `intercom-ingress`
-  (`intercom-networkpolicy.yaml`): к pod `intercom:8099` допускаются LAN/VPN
-  (`LAN_CIDR`, включая узел с Traefik в `hostNetwork`), pod CIDR и kubelet
-  probes. NodePort-путь идёт с тех же адресов и политикой не блокируется.
-
-`Watch` — долгоживущий server-streaming ответ Connect поверх HTTP/1.1.
-Маршрут явно задаёт `responseForwarding.flushInterval: 100ms`, а
-`../ingress/traefik/values.yaml` — `writeTimeout: 0s` и `idleTimeout: 1800s`,
-поэтому Traefik не буферизует кадры и не обрывает стрим по таймауту.
-NodePort `${INTERCOM_NODE_PORT}` (`30097` на стенде) сохраняется как
-аварийный путь на случай проблем с DNS/Traefik.
+- `manifests/external-secrets.yaml` — `ExternalSecret/intercom`.
+- HTTPS-маршрут `intercom.<HOME_DOMAIN>` и NetworkPolicy `intercom-ingress`
+  принадлежат ingress-юниту (`../ingress/routes/`): LAN/VPN, pod CIDR,
+  kubelet probes.
 
 ## Деплой
 
-Юнит `intercom` в `platform/ci/units.mjs` — deploy-юнит: PR CI собирает
-`ghcr.io/proflyder/intercom` и публикует `tree-<hash>`, merge в `develop`
-пинует digest в `deploy/home-apps`, а Flux (`Kustomization/app-intercom`)
-применяет Deployment из `develop`. Приватные значения:
+Flux (`Kustomization/app-intercom`) применяет `manifests/` из `develop`,
+образ `INTERCOM_IMAGE` — из `deploy/home-apps`. Секреты (`docs/SECRETS.md`):
 
-- `secret/k8s/home-assistant/scheduler-auth` → `token` (общий токен приложения);
-- `secret/k8s/home-assistant/intercom` → `station_token` (device secret,
-  ≥32 случайных байта, не равен токену приложения);
-- `secret/k8s/flux-system/app-settings` → `INTERCOM_NODE_PORT`
-  (`Secret/flux-app-settings`).
+- `secret/k8s/home-assistant/scheduler-auth#token` → `phone_token` (общий
+  токен приложения);
+- `secret/k8s/home-assistant/intercom#station_token` (≥32 случайных байта, не
+  равен токену приложения);
+- `secret/k8s/flux-system/app-settings#INTERCOM_NODE_PORT`.
 
-Откат — revert pins-коммита или `flux suspend`; ручного deploy-скрипта нет.
+NodePort фильтруется на узле `../scheduler/nft` (LAN/VPN и pod CIDR); после
+смены порта или сети переустановить фильтр. NodePort — аварийный путь на
+случай проблем с DNS/Traefik.
 
-NodePort закрыт фильтром `projects/home/kubernetes/scheduler/nft`:
-источник — только LAN/VPN и pod CIDR. После изменения порта/сети
-переустановить фильтр на узле (см. `docs/OPERATIONS.md`).
+Откат — revert pins-коммита (при необходимости сначала
+`flux suspend kustomization/app-intercom`); ручного deploy-скрипта нет.
 
-## Проверка внутреннего имени
+## Клиенты
 
-С LAN/VPN, с bearer-токеном приложения (тот же `phone_token` из
-`secret/k8s/home-assistant/scheduler-auth`):
+Firebase Remote Config, JSON-параметр `home_connection`:
 
-```bash
-# Токен — общий токен приложения. Держите его в локальном private-файле и не
-# печатайте: TOKEN=$(tr -d '\r\n' < secrets/home/intercom.token)
-TOKEN=...
-
-curl -fsS --resolve "intercom.home.<home-suffix>:443:<NODE_IP>" \
-  -H "Authorization: Bearer $TOKEN" \
-  -H 'Content-Type: application/json' \
-  -d '{}' \
-  "https://intercom.home.<home-suffix>/home.v1.IntercomService/ListEndpoints"
+```json
+{"intercomBaseUrl": "https://intercom.home.<home-suffix>"}
 ```
 
-Ожидается `{}` (пустое repeated-поле protobuf JSON опускает) или
-`{"endpoints":[...]}` с зарегистрированными endpoint.
-Проверка `Watch` (стрим не должен обрываться):
+Без `/v1`, без порта и без `/` в конце; через Traefik обязателен `https`,
+аварийный NodePort допускает `http`.
+
+`Watch` — долгий server-streaming Connect поверх HTTP/1.1: маршрут задаёт
+`flushInterval: 100ms`, Traefik — `writeTimeout: 0s`, `idleTimeout: 1800s`.
+
+## Проверка
 
 ```bash
-curl -sS -N --http1.1 --max-time 120 \
-  -H "Authorization: Bearer $TOKEN" \
+TOKEN=$(tr -d '\r\n' < secrets/home/intercom.token)
+curl -fsS -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{}' \
+  "https://intercom.home.<home-suffix>/home.v1.IntercomService/ListEndpoints"
+curl -sS -N --http1.1 --max-time 120 -H "Authorization: Bearer $TOKEN" \
   -H 'Content-Type: application/json' -d '{}' \
   "https://intercom.home.<home-suffix>/home.v1.IntercomService/Watch"
 ```
 
-Стрим держится открытым до `--max-time` (или до события), без ответа
-`504`/обрыва через 60 секунд. Резервный путь:
-`curl -H "Authorization: Bearer $TOKEN" http://<NODE_IP>:30097/healthz`.
-
-## Заметки к коду
-
-Пояснения, перенесённые из комментариев исходников (код комментариев не содержит, см. `AGENTS.md`).
-
-- `BUILD.bazel` — Plain-file package: Flux renders these templates (postBuild substitution), and the deploy contract tests read them as data.
-- `manifests/external-secrets.yaml` — Intercom credentials, materialised from OpenBao KV v2 by ESO.
-- `manifests/intercom.yaml` — intercom signaling: phone <-> station WebRTC call control.
-  - Role endpoints are configuration, never request fields.
-- `manifests/kustomization.yaml` — Flux-rendered manifest set for intercom (решение 54).
+`ListEndpoints` → `{}` или `{"endpoints":[...]}`; `Watch` держится до
+`--max-time` без `504`/обрыва через 60 с.

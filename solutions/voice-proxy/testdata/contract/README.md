@@ -1,7 +1,6 @@
 # Contract fixtures
 
-Формат фикстур и семантика `capture`, `{{name}}` и плейсхолдеров описаны в
-`../../../../../../packages/rust/home-contracttest/README.md`.
-
-Перегенерация: `-update` у Rust-раннера нет; `response`-половина фикстуры
-правится вручную в том же PR, что и изменение wire-поведения.
+Формат фикстур, `capture`, `{{name}}` и плейсхолдеры —
+[`packages/rust/home-contracttest/README.md`](../../../../packages/rust/home-contracttest/README.md).
+`-update` у раннера нет: `response`-половина правится вручную в том же PR, что
+и изменение wire-поведения.

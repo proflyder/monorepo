@@ -1,68 +1,37 @@
 # Диагностика потери сети станции
 
-`station-network-diagnostic.sh` только читает состояние. Он не меняет
-Wi-Fi профили, не перезапускает радио, DHCP, Bluetooth или Pulsar.
-
-Разовая проверка на станции:
+`station-network-diagnostic.sh` (на станции — `/data/quasar/station-network-diagnostic.sh`)
+только читает состояние: не меняет Wi-Fi профили, не перезапускает радио,
+DHCP, Bluetooth или Pulsar, не ставит startup hook и не делает reboot.
 
 ```sh
 DIAG_MAX_SAMPLES=2 DIAG_INTERVAL=1 /data/quasar/station-network-diagnostic.sh run
+/data/quasar/station-network-diagnostic.sh start   # фоновый сбор
+/data/quasar/station-network-diagnostic.sh stop
 ```
 
-Для ограниченного фонового сбора — `start`, остановка — `stop`.
-По умолчанию до 120 samples с интервалом 5 с. Каждый boot имеет отдельную
-папку в `/data/quasar/network-diag/<boot-id>/`, права каталога 0700 и
-файлов 0600. Сохраняются uptime (часы могут скачком установиться через NTP),
-WPA state, адреса/маршруты/соседи, доступность gateway, сетевые процессы и
-ограниченные хвосты kernel/syslog. Команда wpa_cli ограничена по времени.
-Логи содержат сведения о LAN; не добавлять их в Git и не публиковать.
+По умолчанию до 120 samples с интервалом 5 с (`DIAG_MAX_SAMPLES`,
+`DIAG_INTERVAL`, корень `DIAG_ROOT`). Каждый boot — отдельная папка
+`/data/quasar/network-diag/<boot-id>/` (каталог 0700, файлы 0600): uptime,
+WPA state, адреса/маршруты/соседи, доступность gateway, сетевые процессы,
+хвосты kernel/syslog. Логи раскрывают LAN — в Git не добавлять, хранить в
+приватной папке проекта.
 
-Для теста reboot сбор должен запускаться и после загрузки, например через
-временный hook в существующем rootkeeper. Перед этим сохранить оригинал,
-проверить hook на текущем boot и согласовать наличие человека рядом с
-питанием. Сам скрипт **не устанавливает** startup hook и не делает reboot.
-После теста удалить hook/arming flag, забрать логи в приватную папку проекта.
+## Сбор через reboot
 
-## Что установлено 2026-10-28
+Kernel/syslog живут в `/tmp` и теряются при снятии питания, поэтому для
+отказа после reboot сбор нужно запускать и после загрузки — временным hook в
+существующем rootkeeper. Порядок: сохранить оригинал rootkeeper, проверить
+hook на текущем boot, согласовать присутствие человека у питания; после
+теста удалить hook/arming flag и вернуть оригинал со сверкой хэша.
 
-- При отказе HA/Hermes были доступны; сама станция не отвечала на ARP,
-  IPv4/IPv6, ADB/SSH/ESPHome с Mac и K3s VM. Другие LAN-клиенты отвечали.
-- Роутер показывал MAC/IP станции online. BLE после ручного окна работал.
-- Provisioning через BLE дал TIMEOUT; старый профиль восстановлен.
-- Cold power cycle восстановил Rust Pulsar, сеть, HA, голос и Sendspin.
-- На станции Amlogic W1: vlsicomm/aml_sdio и sdio_bt, не адаптер RTL8821CE
-  неттопа. Два основных сохранённых WPA профиля эквивалентны и соответствуют
-  рабочим credentials; постоянного force-DPP флага нет.
-- До удаления работал старый dpp-provision.sh: при отсутствии default route каждые
-  3 с включает DPP listen, не проверяя обычное подключение WPA/DHCP или
-  параллельное BLE provisioning. Это кандидат на гонку, а не доказанная
-  первопричина наблюдавшегося отказа.
-- Старые kernel/syslog были в /tmp и утрачены при снятии питания. Поэтому
-  программный reboot с persistent диагностикой нужен для подтверждения.
-  Также остаётся гипотеза состояния общего Wi-Fi/BT SDIO после warm reboot.
+## Известное
 
-Не менять драйвер, не отключать защиту и не откатывать Rust на C++ только
-на основании этих гипотез.
-
-
-## Контролируемый warm reboot
-
-Тест согласован и выполнен 2026-10-28 с временным startup hook в rootkeeper.
-Новый boot-id подтверждён; ADB вернулся примерно за 18 секунд, WPA COMPLETED,
-IP прежний, HA voice subscription и Sendspin восстановились. В сохранённом
-фрагменте нового boot: 52 samples / 52 успешных gateway ping, отказов нет.
-Следовательно, зависание **не воспроизводится каждым reboot**.
-
-Логи обоих boot скопированы в private
-`local-data/proxmox-install/station-network-diag-warm-test.tar.gz`.
-Временный startup hook/arming flag удалены; оригинал rootkeeper восстановлен
-с проверкой хэша. Драйвер, DPP policy и Wi-Fi profiles не менялись.
-
-## QR/DPP выведен из эксплуатации
-
-По решению пользователя QR/DPP provisioning удалён 2026-10-28. Предложенный
-DPP fault test отменён. Удалены загрузочный запуск и respawn из rootkeeper,
-скрипты, URI/bootstrap keys и runtime bootstrap state; обработка DPP = 0.
-Сохранённые WPA network blocks оставлены без изменений. BLE gateway —
-действующий способ настройки. Происхождение прежнего LAN-отказа этим не
-доказано. Recovery archive скопирован на Mac, ключи не публикуются.
+- Симптом: станция не отвечает на ARP/IPv4/IPv6/ADB/SSH/ESPHome, хотя роутер
+  видит её online; BLE provisioning даёт TIMEOUT; cold power cycle
+  восстанавливает. Контролируемый warm reboot отказ не воспроизвёл —
+  он не на каждом reboot.
+- Wi-Fi/BT станции — Amlogic W1 (`vlsicomm`/`aml_sdio`, `sdio_bt`), общий SDIO;
+  гипотеза — состояние SDIO после warm reboot.
+- Драйвер не менять, защиту не отключать и Pulsar не откатывать только на
+  основании гипотез. Открытая задача — `docs/PENDING.md`.

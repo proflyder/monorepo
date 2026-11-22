@@ -6,35 +6,10 @@ Durable планировщик будильников, напоминаний, �
 Android, будущий агент) забирает событие, выполняет действие и подтверждает
 его.
 
-Статус: durable core, Connect API, `AlarmService` facade, тесты и
-K3s-деплой. scheduler — действующий владелец будильников, таймеров и
-напоминаний; HA выполняет звук по событиям исполнителя. Android-клиент —
-`projects/mobile/android`.
-
-Процесс и контейнерный образ — Rust-крейт `crates/scheduler`
-(static `x86_64-unknown-linux-musl`, `rules_rust`). Go-реализация удалена;
-golden-фикстуры `testdata/contract` и `testdata/go_v1.sql` остаются
-замороженными данными.
-
-## Компоненты Rust-сервиса
-
-```text
-crates/scheduler/
-  src/domain/               чистая рекуррентность, ids, hashes, validation,
-                            определения сценариев
-  src/store/                SQLite schema, транзакции, tick, outbox, purge,
-                            scenario CRUD и материализация триггеров
-  src/api/                  Connect handlers, bearer auth, alarm facade
-  src/config.rs             env 1:1 с Go (SCHEDULER_* + legacy ALARM_*)
-  src/engine.rs             tick/purge loop, readiness на home-runtime
-  src/app.rs                composition root, graceful shutdown
-  src/health.rs             -healthcheck / -status для distroless
-  src/main.rs               entrypoint
-
-testdata/contract/          замороженные golden HTTP-фикстуры
-testdata/planner/, ids.json замороженные векторы recurrence/ids
-testdata/go_v1.sql          замороженный дамп схемы v1 (совместимость PVC)
-```
+Процесс — Rust-крейт `crates/scheduler`; домашний деплой —
+[`projects/home/kubernetes/scheduler/`](../../projects/home/kubernetes/scheduler/README.md).
+`testdata/contract`, `testdata/planner`, `testdata/ids.json` и
+`testdata/go_v1.sql` (дамп схемы v1) — замороженные golden-данные.
 
 `home.v1.AlarmService` отдаётся на том же listener и той же реализации, что и
 `home.v1.SchedulerService`; это facade над теми же schedules, не второй
@@ -73,34 +48,13 @@ decimal string (стандартный protobuf JSON). Пустые/дефолт
 `/home.v1.SchedulerService/<Method>` — это Connect JSON, а не hand-written
 REST.
 
-Отличие Rust-сервиса от прежнего Go: `connectrpc` собран только с feature
-`json` (без `hyper/http2`), поэтому gRPC over h2c сейчас не отдаётся. gRPC-Web
-и Connect unary работают; живых клиентов, которым нужен h2c, не было.
-Добавление h2c — отдельное решение с проверкой зависимостей образа.
+gRPC over h2c не отдаётся: `connectrpc` собран только с feature `json` (без
+`hyper/http2`). Добавление h2c — отдельное решение с проверкой зависимостей
+образа.
 
 Auth: `Authorization: Bearer <token>` на каждом RPC. Сравнение
 constant-time по SHA-256; токен не логируется. `SCHEDULER_CONSUMERS`
 опционально ограничивает `consumer_id` allowlist.
-
-### Env и образ
-
-Переменные окружения и их приоритеты — 1:1 с Go: `SCHEDULER_DB_PATH`,
-`SCHEDULER_LISTEN`, `SCHEDULER_TOKEN(_FILE)`,
-`SCHEDULER_CONSUMERS`, `SCHEDULER_MISSED_GRACE_SECONDS`,
-`SCHEDULER_RING_WINDOW_SECONDS`, `SCHEDULER_EVENT_RETENTION_SECONDS`,
-`SCHEDULER_MAX_TIMER_SECONDS`, `SCHEDULER_MAX_TIMERS`,
-`SCHEDULER_MAX_PAYLOAD_BYTES`, `SCHEDULER_EVENT_MAX_ATTEMPTS`,
-`SCHEDULER_TICK_MS`, `SCENARIO_EXECUTION`; legacy
-`ALARM_DB_PATH/LISTEN` — fallback. `SCHEDULER_TIMEZONE`/`ALARM_TIMEZONE`
-больше не читаются: зона приходит в заголовке каждого запроса.
-`SCHEDULER_TOKEN` побеждает `SCHEDULER_TOKEN_FILE`.
-
-Образ `//projects/home/kubernetes/scheduler:scheduler_image` — static musl
-бинарь на distroless, `user 65534:65534`, entrypoint
-`/usr/local/bin/scheduler`. Durable база — `/data/scheduler.db`; UID и
-права PVC совпадают с прежним Go-образом, поэтому существующий том
-открывается без миграции. `scheduler -healthcheck` и `scheduler -status`
-читают токен из файла и не кладут его в аргументы.
 
 ## Recurrence, UTC и заголовок Time-Zone
 
@@ -229,8 +183,8 @@ outbox переиспользуются. Событие уходит в очер
 disabled-сценария: `enabled` отключает только автотриггеры.
 
 `GetStatus.scenario_store_supported=true`; `scenario_execution_supported`
-отражает deployment-флаг `SCENARIO_EXECUTION` (в K3s — `true`; очередь
-`scenario` исполняет отдельный `ha-scenario`).
+отражает deployment-флаг `SCENARIO_EXECUTION` (очередь `scenario` исполняет
+отдельный `ha-scenario`).
 `ListSchedules` без явного `kind` (UNSPECIFIED) исключает scenario-строки;
 только `kind=SCENARIO` их возвращает, поэтому Android-будильники и голосовые
 скрипты не видят внутренние триггеры. Прямые
@@ -265,15 +219,10 @@ disabled-сценария: `enabled` отключает только автот�
 
 ## Broker / MCP boundary
 
-Сейчас внешнего broker нет: SQLite inbox/outbox достаточен для одного
-always-on home-сервиса. Kafka/NATS можно добавить позже как транспорт
-доставки, не меняя canonical protobuf API: `EnqueueTask`/`ListDueEvents`/
-`AckEvent` остаются контрактом, а broker станет ещё одним consumer/producer.
-
-MCP живёт в общем `solutions/mcp-gateway`, а не в отдельном сервере на
-проект. Scheduler остаётся transport/domain neutral и не импортирует
-Hermes/HA. Группы `scheduler.*` в gateway пока нет; когда появится, gateway
-отвечает за auth/tenant mapping, а scheduler — за durable state.
+Внешнего broker нет: SQLite outbox достаточен для одного home-сервиса. Broker,
+если понадобится, станет ещё одним consumer/producer, а `EnqueueTask`/
+`ListDueEvents`/`AckEvent` останутся контрактом. Scheduler не импортирует
+Hermes/HA; MCP — общий `solutions/mcp-gateway`.
 
 ## Хранилище
 
@@ -287,8 +236,7 @@ Schema version проверяется: БД новее бинарника отв
 created_unix, updated_unix)`, схема v3 — реестр `push_devices`, схема v4
 переключает его первичный ключ с FCM-токена на стабильный `device_id`
 (`push_devices(device_id PRIMARY KEY, token UNIQUE, platform, app_version,
-device_name, created_unix, updated_unix)`). База v1/v2/v3 (в том числе
-созданная прежним Go- или Rust-бинарём) мигрирует на месте при старте без
+device_name, created_unix, updated_unix)`). База v1/v2/v3 мигрирует на месте при старте без
 изменения schedules, timers, events и idempotency. Записи v3, ключённые по
 токену, сохраняются с токеном в роли provisional `device_id`; первая
 регистрация обновлённого приложения присылает настоящий `device_id` и
@@ -328,17 +276,15 @@ MCP-инструментов.
   `wireguard.splitAllowedIps` и запасным `ocserv` (`url`, `group`,
   `splitGroup`, `authentication`).
 - `POST /v1/vpn/profile/remove` `{"deviceId"}` → `{"removed":bool}`.
-- `GET /v1/vpn/peers` — только для `wg-peer-sync` на CT 102, отдельный
+- `GET /v1/vpn/peers` — для синхронизатора пиров на VPN-хосте, отдельный
   bearer `SCHEDULER_VPN_SYNC_TOKEN_FILE`; токены не взаимозаменяемы.
 
-Настройки — JSON `SCHEDULER_VPN_SETTINGS_FILE` (ключ `vpn.json` в
-`scheduler-auth`). Без файла или с невалидным файлом сервис стартует, а VPN-API
+Настройки — JSON `SCHEDULER_VPN_SETTINGS_FILE`. Без файла или с невалидным файлом сервис стартует, а VPN-API
 отвечает `503`. Необязательное поле `lanEndpoint` (`host:port` в домашней
 сети) отдаётся телефону как адрес WireGuard внутри дома: роутер не делает
 hairpin NAT для UDP, поэтому публичный `endpoint` из домашней Wi-Fi не
-отвечает. Клиентский сертификат ocserv сервер не выпускает: приватный
-ключ CA по решению хранится только у владельца (`vpncerts.py issue <user>
---device <phone> --groups full`), импорт `.p12` в приложение — отдельный шаг.
+отвечает. Клиентский сертификат ocserv сервер не выпускает: приватный ключ
+CA хранится только у владельца.
 
 ## Конфигурация
 
@@ -357,9 +303,15 @@ SCHEDULER_MAX_PAYLOAD_BYTES=16384
 SCHEDULER_EVENT_MAX_ATTEMPTS=5
 SCHEDULER_TICK_MS=1000
 SCHEDULER_CONSUMERS=ha-bridge,android       (optional allowlist)
+SCENARIO_EXECUTION=false                    (GetStatus.scenario_execution_supported)
+SCHEDULER_VPN_SETTINGS_FILE=...             (optional, без него /v1/vpn/* → 503)
+SCHEDULER_VPN_SYNC_TOKEN_FILE=...           (optional, bearer /v1/vpn/peers)
 ```
 
-Токен обязателен: без него процесс не стартует. Значения секретов не
+Токен обязателен: без него процесс не стартует; `SCHEDULER_TOKEN` побеждает
+`SCHEDULER_TOKEN_FILE`. Временная зона из env не читается — она приходит в
+заголовке `Time-Zone` каждого запроса. `-healthcheck` и `-status` читают токен
+из файла и не кладут его в аргументы. Значения секретов не
 логируются. Для минимальных хостов IANA tzdata встроена в бинарник.
 
 ## Сборка и проверки
@@ -391,75 +343,3 @@ executor-ом и не гарантируется этим сервисом.
 - SQLite рассчитан на один процесс; горизонтальное масштабирование
   потребует другого storage/broker;
 - звук, громкость, рингтон и restore source остаются у HA/Pulsar.
-
-## Заметки к коду
-
-Пояснения, перенесённые из комментариев исходников (код комментариев не содержит, см. `AGENTS.md`).
-
-- `crates/scheduler/src/api/auth.rs` — Bearer authentication as a Connect interceptor.
-  - The digest is derived from the secret and never printed.
-- `crates/scheduler/src/api/convert.rs` — Conversions between the generated protobuf messages and the domain model.
-- `crates/scheduler/src/api/mod.rs` — Connect transport: one axum fallback serving the scheduler, alarm and scenario protobuf services.
-- `crates/scheduler/src/api/push.rs` — `POST /v1/push/devices` — the phone's push registration surface.
-  - Stable device identity chosen by the app (never the FCM token).
-  - Runs one store operation on the blocking pool: the store owns a single SQLite writer thread and must never block the reactor.
-- `crates/scheduler/src/api/text.rs` — Stable localization keys for scheduler responses and errors.
-  - Localized text for a store failure. Exact details whose wording is part of the client experience get a specific key; dynamic bounds carry typed arguments; everything else falls back to a generic per-kind key so a raw English detail never reaches the app.
-- `crates/scheduler/src/api/zone.rs` — Per-request client time zone.
-- `crates/scheduler/src/app.rs` — Composition root: configuration, telemetry, SQLite store, engine and the authenticated Connect API.
-- `crates/scheduler/src/config.rs` — Process configuration, loaded 1:1 from the Go scheduler's environment.
-  - Advertise `GetStatus.scenario_execution_supported`. The scheduler never executes scenarios; `ha-scenario` does. This is a deployment flag so the status only claims support when that executor is actually rolled out.
-  - Why the environment was rejected. Messages match the Go loader and never contain a secret value.
-- `crates/scheduler/src/domain/clock.rs` — Time source abstraction.
-- `crates/scheduler/src/domain/event.rs` — Outbox event model and stable dedupe identities.
-  - Terminal states are never leased again.
-  - Dedupe key of a manual scenario run. `run_id` is unique per call unless idempotency replays a stored event.
-- `crates/scheduler/src/domain/hash.rs` — Canonical idempotency strings and their SHA-1 digests.
-  - Canonical schedule request. The fields are ordered deliberately: the layout is part of the persisted SHA-1 used for idempotency conflict detection.
-  - Canonical scenario definition used for idempotent CreateScenario.
-- `crates/scheduler/src/domain/id.rs` — Stable identifiers.
-- `crates/scheduler/src/domain/occurrence.rs` — Occurrence math: the ringing window, missed-grace classification and snooze eligibility.
-  - The occurrence that is currently eligible for stop/snooze. There is intentionally no event fallback: `StopSchedule` clears the window, so a stale DELIVERED event must not resurrect snooze eligibility.
-- `crates/scheduler/src/domain/rule.rs` — Recurrence rules in UTC.
-- `crates/scheduler/src/domain/scenario.rs` — Durable scenario definitions.
-  - Serialized definition used as the stored body and idempotency input.
-- `crates/scheduler/src/domain/schedule.rs`
-  - Canonical request string used for idempotency conflict detection.
-- `crates/scheduler/src/domain/timer.rs`
-  - Canonical request string used for idempotency conflict detection.
-- `crates/scheduler/src/domain/validation.rs` — Input validation shared by the future store and API layers.
-  - Idempotency key length limit (bytes).
-  - Validates an optional idempotency key.
-- `crates/scheduler/src/domain/vectors.rs` — Golden vectors shared with the former Go implementation.
-- `crates/scheduler/src/engine.rs` — The durable engine loop: one tick per interval plus a periodic purge.
-  - Tick once immediately so readiness and due work do not wait a full interval after startup.
-- `crates/scheduler/src/health.rs` — Distroless probes: `-healthcheck` and `-status`.
-- `crates/scheduler/src/lib.rs` — Scheduler crate.
-- `crates/scheduler/src/main.rs` — Command entry point: the scheduler service, plus the distroless `-healthcheck` and `-status` probes used by the deployment and smoke tests.
-- `crates/scheduler/src/store/event.rs`
-  - Records a terminal outcome. Repeated acks are idempotent.
-- `crates/scheduler/src/store/migrate.rs` — One-time conversion of legacy local-time schedule rows to UTC.
-  - Rewrites legacy rows and drops the time-zone columns. Idempotent: a database that already went through this pass has no `timezone` column.
-- `crates/scheduler/src/store/mod.rs` — Durable scheduler store on `home-sqlite`.
-- `crates/scheduler/src/store/push.rs` — Push delivery devices (FCM registration tokens).
-  - Stable device identity chosen by the app, never the FCM token.
-  - FCM registration token. Never logged.
-  - Validates a registration request, never trusting server-derived fields.
-  - Inserts or refreshes one device, keyed by `device_id`. A rotated FCM token updates that device's row; a token that was previously attached to a legacy token-keyed row or to another device identity is detached from the old row, so every token maps to exactly …
-- `crates/scheduler/src/store/scenario.rs` — Scenario definitions, revision control and time-trigger materialization.
-  - Validates and copies client input, never trusting server-derived fields.
-  - Creates a scenario and materializes its time triggers. A non-empty idempotency key replays the original definition when the canonical request matches.
-  - Deletes a scenario and its materialized schedules. A repeated delete is idempotent and returns `false`.
-  - Queues a manual `scenario.fire` event. A non-empty idempotency key replays the stored event instead of queueing another run.
-- `crates/scheduler/src/store/schedule.rs`
-  - Validates and normalizes client input, never trusting server-derived fields present in the request.
-  - Creates a durable schedule. A non-empty idempotency key replays the original resource when the canonical request matches.
-  - Scenario rows are internal trigger materialization. They are returned only by an explicit kind=SCENARIO query so alarm and reminder clients never render them as schedules.
-  - Skips the next occurrence of a recurring schedule without disabling it. The pending FIRE of that occurrence is marked skipped (an executor may still hold a lease, so it must not ring), and a currently active occurrence is closed.
-- `crates/scheduler/src/store/status.rs`
-  - Snapshot of scheduler state. It never asserts that sound was audible.
-  - Removes terminal events and idempotency rows older than retention.
-- `crates/scheduler/src/store/timer.rs`
-  - Starts a durable countdown; a non-empty idempotency key replays the original timer when the request matches.
-- `crates/scheduler/tests/contract.rs` — Replays the frozen golden HTTP fixtures against the Rust Connect server.
-- `crates/scheduler/tests/go_database.rs` — Opens a SQL dump produced by the Go store and reads it through the Rust store. This is the rollback-compatibility test: the PVC format belongs to the Go service until cutover.

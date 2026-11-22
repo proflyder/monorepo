@@ -15,18 +15,18 @@ packages/kotlin/     shared Kotlin packages (Android)
 
 ## Заметки к коду
 
-Пояснения, перенесённые из комментариев исходников (код комментариев не содержит, см. `AGENTS.md`).
+Пояснения к коду `packages/kotlin/core` (в исходниках комментариев нет, см. `AGENTS.md`).
 
-- `kotlin/core/src/main/kotlin/dev/proflyder/home/core/endpoint/ServerEndpoint.kt`
-  - A validated base endpoint for the home server's Connect listener. The client never accepts credentials, query parameters, fragments, or ambiguous schemes. The bearer token is a separate secret and is never part of a URL;
-  - Parses a user-entered LAN address or home HTTPS base URL. Accepted forms: `http://host[:port][/prefix]`, `https://host[:port][/prefix]`, IPv4, bracketed IPv6, and DNS names. A bare host is rejected so the transport is never guessed.
-- `kotlin/core/src/main/kotlin/dev/proflyder/home/core/nav/PendingTransitions.kt` — A small, Android-free queue for navigation commands that arrive while the FragmentManager cannot safely commit (state saved or host not resumed).
-- `kotlin/core/src/main/kotlin/dev/proflyder/home/core/nav/TabRouteStack.kt` — Pure selected-tab route state used by the Fragment router.
-  - Adds [route] unless it is already current. Returns whether a route was actually pushed, so the caller never creates a second Fragment transaction/back-stack entry for the same destination.
-- `kotlin/core/src/main/kotlin/dev/proflyder/home/core/operation/IdempotentRequestKey.kt` — Retains one non-secret idempotency key for a logical create/start operation.
-- `kotlin/core/src/main/kotlin/dev/proflyder/home/core/operation/SuspendRunCatching.kt`
-  - `runCatching` for suspending blocks that must not turn cancellation into a failure value. A cancelled coroutine has to keep propagating `CancellationException`; treating it as an ordinary failure leaves work running after its scope died.
-- `kotlin/core/src/main/kotlin/dev/proflyder/home/core/text/SpeakText.kt` — Rules for text spoken on the station, shared by the Home screen and the scenario builder. The server re-validates everything: this is only the local guard that keeps the "Say" button disabled for input the executor rejects.
-  - Characters left for the counter, never negative.
-- `kotlin/core/src/main/kotlin/dev/proflyder/home/core/time/DurationText.kt`
-  - `mm:ss` below one hour, `h:mm:ss` otherwise. Never negative.
+- `endpoint/ServerEndpoint.kt` — базовый адрес Connect-листенера сервера.
+  Принимаются только `http(s)://host[:port][/prefix]` (IPv4, IPv6 в скобках,
+  DNS-имя); голый host отклоняется, чтобы не угадывать транспорт. Учётные
+  данные, query и fragment в URL запрещены: bearer-токен — отдельный секрет.
+- `nav/PendingTransitions.kt` — очередь навигационных команд, пришедших,
+  пока FragmentManager не может безопасно сделать commit (state saved или
+  host не resumed). `TabRouteStack.push` не добавляет маршрут, уже текущий,
+  чтобы не создавать вторую транзакцию.
+- `operation/SuspendRunCatching.kt` — `runCatching` для suspend-блоков,
+  который пробрасывает `CancellationException`: иначе работа продолжалась бы
+  после смерти scope.
+- `text/SpeakText.kt` — локальная проверка текста для колонки (кнопка
+  «Сказать» и конструктор сценариев); сервер всё равно перепроверяет.

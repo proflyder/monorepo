@@ -154,8 +154,8 @@ Verify from the Pod (the tokens are already in the Pod environment from
 `Secret/hermes-environment`; the Pod also runs `voice-proxy`, hence `-c`):
 
 ```bash
-mise run kubectl -- -n home-assistant exec deploy/hermes -c hermes -- hermes mcp test infra
-mise run kubectl -- -n home-assistant exec deploy/hermes -c hermes -- hermes mcp list
+mise run kubectl -- -n home-assistant exec deploy/hermes -c gateway -- hermes mcp test infra
+mise run kubectl -- -n home-assistant exec deploy/hermes -c gateway -- hermes mcp list
 ```
 
 A healthy `mcp test infra` reports the tool count; `401` means the token is
@@ -194,12 +194,6 @@ alarm parser.
 `MCP_SCHEDULER_URL` + `MCP_SCHEDULER_TOKEN_FILE`
 (`k8s/home-assistant/scheduler-auth`, key `token`). Both are part of the
 Flux-rendered mcp-gateway manifest set, not the Hermes PVC.
-
-`config.fragment.yaml`, `voice_prompt.txt`, `SOUL.md` and `HERMES.md` are
-delivered by Flux through the `hermes-config` image: the `render-config`
-initContainer merges them into the PVC before the gateway starts, and a merge
-into `develop` (plus the image pins) is enough. Do not hand-edit the PVC; the
-manual render in «Emergency manual render» is only the fallback.
 
 ## Phone tools (mcp-gateway `phone`)
 
@@ -277,7 +271,6 @@ Alertmanager reads the same OpenBao keys, so the token has one source of truth;
 the currency bot keeps its own bot for rate alerts.  Reply to an alert message
 to quote its fingerprint into the model, then ask `infra_alert` about it.
 
-
 ## App chat
 
 The Android «Чат» tab talks to this same agent through Hermes' sessions API
@@ -295,10 +288,9 @@ vision path Telegram photos use.
 
 ## Telegram-промпт и `/report`
 
-Hermes applies `display.personality: voice` to every platform, so Telegram
-replies used to be cut to the 180-character voice limit even when the tool
-returned a full report.  The fix is a per-chat override, which Hermes reads
-from `platforms.telegram.channel_overrides[<chat_id>].system_prompt`.
+Hermes applies `display.personality: voice` (180-character limit) to every
+platform, so the owner's Telegram chat gets a per-chat override from
+`platforms.telegram.channel_overrides[<chat_id>].system_prompt`.
 
 - `telegram_prompt.txt` is the reviewed prompt for the owner's Telegram chat
   (long structured answers, `/report`, the full MCP tool set, no `exec`).
@@ -317,26 +309,26 @@ from `platforms.telegram.channel_overrides[<chat_id>].system_prompt`.
 - Only our own skill directories are installed; any other skill already on the
   PVC is left untouched, and the renderer never deletes files.
 
-The initContainer installs the override on every Pod start, so merging
-`telegram_prompt.txt` (or the private chat id) is enough; the rollout restarts
-the gateway and `/report` appears in the bot menu on the next Telegram connect.
+`/report` appears in the bot menu on the next Telegram connect after rollout.
 Verify with a `/report` message from the owner account and check the reply
 length (it must exceed 180 characters for a real report).
 
 ## Voice proxy (Rust)
 
-The TTS sanitizer, cancel guard, profile routing, late answers, dispatcher
-updates and durable announcement queue are now the reusable
+HA does not call the Hermes API directly:
+`HA llama_cpp -> http://192.0.2.27:8643/v1 -> Hermes 127.0.0.1:8642`. The TTS
+sanitizer, cancel guard, profile routing, late answers, dispatcher updates and
+durable announcement queue are the reusable
 [`solutions/voice-proxy`](../../../solutions/voice-proxy/README.md) service
 (Rust, `rules_oci`/distroless image). That README is the single contract for every
 `HERMES_*` variable and for `-healthcheck` / `-status`.
 
 Hermes-specific notes:
 
-- HA calls the proxy at `http://192.0.2.27:8643/v1`; the proxy forwards to
-  `127.0.0.1:8642`. The nftables rule in
-  `projects/home/kubernetes/voice-firewall/` still limits clients to HAOS
-  `.28`, the K3s node `.27` and loopback.
+- The proxy binds `0.0.0.0:8643` in the hostNetwork Pod; the nftables rule in
+  `projects/home/kubernetes/voice-firewall/` limits clients to HAOS `.28`, the
+  K3s node `.27` and loopback. It is a presentation layer, not an
+  authentication boundary.
 - The proxy sets `model_options.reasoning_effort=low` (or
   `HERMES_VOICE_REASONING_EFFORT`) only for voice requests.
 - The container is distroless: diagnostics use
@@ -358,11 +350,6 @@ The station assistant is **Рикардо**, the user's personal voice assistant
    (single source; the fragment does not repeat the text).
 3. HA `llama_cpp` conversation subentry — prompt from
    `voice_prompt.txt`, title/entity `Рикардо`.
-
-Commit the reviewed files and merge; the `render-config` initContainer installs
-`SOUL.md` and `agent.personalities.voice` (from `voice_prompt.txt`) into the
-HERMES_HOME on the next rollout, so no hand edit of the PVC is needed. If Flux
-is unavailable, use the manual render in «Emergency manual render».
 
 The HA prompt/title are part of the live `llama_cpp` subentry and are updated
 through its subentry reconfigure flow; keep `voice_prompt.txt` as the source.
@@ -418,35 +405,18 @@ Voice uses this only after the local HA intent path fails.  A question such as
 "что такое фотосинтез" goes to Hermes; "какой будильник" is routed by
 `StationTimeRoute*` to Hermes and answered with `alarm_list`.
 
-## Voice proxy (TTS sanitizer)
-
-HA does not call the Hermes API directly. It calls the K3s `hermes-voice-proxy`
-on the node address:
-
-```text
-HA llama_cpp -> http://192.0.2.27:8643/v1 -> Hermes 127.0.0.1:8642
-```
-
-The proxy binds `0.0.0.0:8643` in the hostNetwork Hermes Pod. An nftables rule
-on the K3s VM allows only HAOS `.28`, the K3s node `.27` and loopback; other
-LAN clients are dropped. Sanitising, routing, announcements and diagnostics
-are documented in [`solutions/voice-proxy/README.md`](../../../solutions/voice-proxy/README.md).
-It is a presentation layer, not an authentication boundary.
-
 ## MCP contract
 
 **Full access is intentional.** All MCP servers are configured without a
 `tools.include`/`tools.exclude` allowlist, with MCP resources and prompts
 enabled:
 
-- **Home Assistant** exposes all discovered HA MCP tools (57 at the time of
-  deployment), including all intent scripts, lights, media players, timers,
+- **Home Assistant** exposes all discovered HA MCP tools, including all intent scripts, lights, media players, timers,
   todos, broadcasts and live context. The time-writing intent/scripts
   (`StationAlarm*`, `StationTimer*`, `StationReminder*`, `StationTimeRoute*`,
   `script.schedule_*`, `script.alarm_*`) are excluded so Hermes uses the typed
   `time` tools instead.
-- **Music Assistant** exposes all discovered MA MCP tools (86 at deployment),
-  including library search, queue/playback/player control, playlists, favorites,
+- **Music Assistant** exposes all discovered MA MCP tools, including library search, queue/playback/player control, playlists, favorites,
   volume, announcements, debug and config namespaces.
 - **infra** (mcp-gateway) exposes the read-only diagnostics, the two-step
   restart pair, `infra_send_report`, the `bb.*` tools and the `time` group;
@@ -459,7 +429,7 @@ computer-use and similar. Only the MCP servers and `web` are enabled, on both
 `time` tools by the HA MCP exclusions and the prompt; the rest of the MCP
 surface stays intentionally broad.
 
-This is a deliberate tradeoff: Hermes can now do anything the HA/MA MCP servers
+This is a deliberate tradeoff: Hermes can do anything the HA/MA MCP servers
 expose. MA config/debug tools and destructive library/queue operations are
 reachable. The MA MCP plugin is experimental. Keep the tokens private and both
 endpoints loopback-only.
@@ -505,12 +475,10 @@ Flow:
 3. Hermes uses the MCP music tools, the MCP `time` tools and `web_search`; HA
    owns the player, source and the alarm audio executor.
 
-Verified without Hermes running: `какой будильник` now intentionally goes to
-Hermes, while the local ring commands (`стоп`, `отложи`, `хватит`,
-`выключи звонок`), lights, music and volume still work. Keep the alarm audio
+Without Hermes the local ring commands (`стоп`, `отложи`, `хватит`,
+`выключи звонок`), lights, music and volume keep working. Keep the alarm audio
 path (`script.alarm_start` / `alarm_stop`) independent of Hermes: the scheduler
 and ha-bridge own it.
-
 
 ## HA MCP tool errors
 
@@ -520,7 +488,7 @@ with a generic `name`/`area`/`floor`/`domain` schema, not the internal
 must resolve the target itself; otherwise HA returns
 `Error handling StationLightOff`.
 
-The intent scripts now resolve `name`/`area` and map aliases such as
+The intent scripts resolve `name`/`area` and map aliases such as
 `лента`/`лету`, `лампа`/`ночник`, `светильник`/`монитор`. The lights also have
 matching HA aliases and are exposed to Assist, so `GetLiveContext` and
 `HassTurnOff` can find them.
@@ -534,18 +502,5 @@ Title-generation warnings about a missing Codex OAuth token are separate from
 the main chat/tool path; main `openai-codex` inference still works through the
 credential pool.
 
-## Заметки к коду
-
-Пояснения, перенесённые из комментариев исходников (код комментариев не содержит, см. `AGENTS.md`).
-
-- `config.fragment.yaml` — Hermes Agent overlay for the Station Midi voice cascade.
-  - The bot token is read from TELEGRAM_BOT_TOKEN (hermes-environment) and TELEGRAM_ALLOWED_USERS restricts the chat to the owner. Long polling is the default transport; do not configure a webhook for this bot.
-  - The /report skill is a Telegram/CLI command that calls infra_report. On the voice api_server surface it is unnecessary (free text already works) and the voice path must not gain a slash entry point.
-  - Alarms, timers and reminders are owned by the durable scheduler through the mcp-gateway `time` group (`time_now`, `alarm_*`, `timer_*`, `reminder_*`).
-- `hermes-private.example.yaml` — Example private values for home-deploy hermes render-config — copy, fill with the real endpoints and keep the copy in secrets/ (for example secrets/home/hermes-private.yaml). Never commit the filled file.
-  - Owner's numeric Telegram chat id (a private chat id equals the user id from TELEGRAM_ALLOWED_USERS). The renderer installs telegram_prompt.txt as platforms.telegram.channel_overrides[<id>].system_prompt and never writes this key into config.yaml.
-- `test_hermes_config.py`
-  - Telegram is enabled by TELEGRAM_BOT_TOKEN from hermes-environment and limited by TELEGRAM_ALLOWED_USERS; a webhook would move it off polling and needs a public ingress, which this bot must not have.
-  - Live regression 2026-11-12: Hermes called schedule_alarm_create_relative(hours=0, minutes=0, name="через час") and the voice path announced a one-minute alarm.
-  - Nothing is invented, but the spoken project goes to the gateway as is: the gateway owns the alias matching, so Hermes must not re-ask first.
-  - The stale copy in the fragment caused drift; the personality is now rendered from voice_prompt.txt and the fragment must not repeat it.
+Private render values: copy [`hermes-private.example.yaml`](hermes-private.example.yaml)
+to `secrets/` (e.g. `secrets/home/hermes-private.yaml`); never commit the filled file.

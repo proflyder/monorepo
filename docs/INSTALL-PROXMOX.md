@@ -3,26 +3,16 @@
 Текущие факты — `STATE.md`. Реальные IP/MAC — `local-data/proxmox-install/install-settings.md`.
 Приватная копия Wi-Fi-профиля и recovery — в `secrets/`.
 
-## Текущая конфигурация
+## Что важно до переустановки
 
-```text
-PVE host         192.0.2.26   DEXP Jupiter, 32 GiB, NVMe 512 GB + SATA SSD 512 GB (backup)
-                 vmbr0; Wi-Fi 4addr/WDS + Ethernet fallback
-VM 100 haos      192.0.2.28   2 vCPU / 4 GiB / 32 GiB, HAOS 18.4, HA Core 2026.11.0
-                 add-ons: Music Assistant 2.10.9, Matter 9.3.0
-VM 101 lab-k3s   192.0.2.27   8 vCPU / 12 GiB / 200 GiB, Ubuntu + K3s
-CT 102 vpn       192.0.2.29   1 vCPU / 512 MiB / 4 GiB, Debian 13, ocserv
-CT 103 bb        192.0.2.30   2 vCPU / 2 GiB / 16 GiB, Debian 13, bb server
-```
+Хосты, ресурсы и версии — `STATE.md`.
 
-- PVE `9.2.24`, root 64 GiB, swap 8 GiB, `local-lvm` ~379 GiB.
 - SATA SSD `/dev/sda1` ext4 `pve-backup` → `/mnt/pve/backup` (fstab по UUID,
   `nofail`), PVE storage `backup` (dir, content backup, `is_mountpoint`),
-  задание `nightly` (vzdump 100,101,102,103 в 04:00). Переустановка PVE этот диск
-  не трогает: выбирать в установщике только `nvme0n1`.
+  задание `nightly` (vzdump 100,101,102,103 в 04:00). Переустановка PVE этот
+  диск не трогает: выбирать в установщике только `nvme0n1`.
 - VM — UEFI, guest agent, startup order 1/2.
-- Terraform — `projects/home/proxmox/terraform/`; state root-only на PVE,
-  копия в `secrets/`. `terraform plan` — No changes.
+- Terraform — `projects/home/proxmox/terraform/`; state root-only на PVE.
 - Wi-Fi uplink — `projects/home/proxmox/wifi-uplink/`; Ethernet fallback.
 
 ## Переустановка PVE
@@ -86,7 +76,7 @@ curl -fsS -o /dev/null -w '%{http_code}\n' \
   http://192.0.2.27:30300/api/health
 
 # K3s
-ssh labuser@192.0.2.27 'sudo k3s kubectl get pods -A'
+ssh -F ~/.ssh/home-lab/config k3s 'sudo -n k3s kubectl get pods -A'
 ```
 
 Проверить после reboot: VM autostart, HA, K3s, Sendspin, Spotify, Pulsar,

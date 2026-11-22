@@ -54,7 +54,7 @@ curl -fsS -o /dev/null -w 'Grafana %{http_code}\n' \
 ```
 
 - HAOS VM running? `qm status 100` на PVE.
-- K3s VM running? `qm status 101`; `sudo k3s kubectl get pods -A`.
+- K3s VM running? `qm status 101`; `mise run kubectl -- get pods -A`.
 - HTTPS ingress: `curl -k --resolve ha.home.example.com:443:<K3S_IP>` и
   `mise run kubectl -- -n traefik get ingressroute,certificate`.
 - Не путать `.27:8123` (закрыт) с `.28:8123`.
@@ -62,8 +62,8 @@ curl -fsS -o /dev/null -w 'Grafana %{http_code}\n' \
 ## Voice / Whisper / Piper
 
 ```bash
-ssh labuser@192.0.2.27
-sudo k3s kubectl -n home-assistant get pods
+mise run kubectl -- -n home-assistant get pods
+ssh -F ~/.ssh/home-lab/config k3s
 curl -fsS http://127.0.0.1:10305/  # Wyoming
 curl -fsS http://127.0.0.1:10200/
 curl -fsS http://127.0.0.1:8643/v1/models
@@ -79,17 +79,14 @@ curl -fsS http://127.0.0.1:8643/v1/models
 Во втором случае проверить IP станции, ESPHome 6053 и ADB/SSH с Mac и VM.
 Запись online в роутере сама по себе не доказывает, что станция отвечает в LAN.
 
-При отсутствии сети резервный BLE gateway открывается тремя короткими
-нажатиями mute или удержанием 5 с **на уже включённой станции**. Wi-Fi
-credentials/token брать только из private recovery; failed provisioning
-должен откатиться на прежний профиль. Не делать factory reset.
+Без сети резервный BLE gateway открывается тремя короткими нажатиями mute
+или удержанием 5 с **на уже включённой станции**
+(`../station/ble-gateway/README.md`). Не делать factory reset.
 
-В наблюдавшемся случае не работали ARP/все LAN-службы;
-BLE provisioning вернул TIMEOUT. Полное отключение питания на 20–30 с
-и включение без кнопок восстановили сеть. Дождаться подключения HA и
-Sendspin, затем проверить живой wake/ответ. Это способ восстановления;
-первопричина отказа Wi-Fi/сетевого стека пока не подтверждена.
-Rust Pulsar/данные не откатывать поверх актуальной установки.
+Если не отвечают ARP и все LAN-службы, а BLE provisioning даёт TIMEOUT —
+отключить питание на 20–30 с и включить без кнопок, дождаться HA и
+Sendspin, проверить wake/ответ. Pulsar не откатывать; диагностика —
+`../station/scripts/NETWORK-DIAGNOSTIC.md`.
 
 ## Boot degraded / нет Ethernet
 

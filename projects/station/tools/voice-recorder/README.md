@@ -28,9 +28,8 @@ Pulsar.** Физический mute не включать: он может вы�
 
 ## Подготовка
 
-Нужен актуальный checkout `projects/station/pulsar` (входит в монорепозиторий),
-Rust/cargo-zigbuild, ARM target и Zig 0.14.1. Helper — член корневого Cargo
-workspace и ссылается на audio/core crates Pulsar; сам Pulsar не редактируется.
+Нужны Rust/cargo-zigbuild, ARM target и Zig 0.14.1. Helper — член корневого
+Cargo workspace и использует audio/core crates Pulsar.
 
 ```sh
 .venv/bin/pip install -r projects/station/tools/voice-recorder/requirements.txt
@@ -41,8 +40,8 @@ projects/station/tools/voice-recorder/build-helper.sh
 
 Другой Zig: `ZIG=/path/to/zig .../build-helper.sh`. Бинарник и target cache
 остаются в `local-data/local-tools/voice-recorder-target/`. Версии зависимостей
-helper закреплены в корневом `/Cargo.lock` (общий workspace). Сборка armhf; для
-других моделей ABI необходимо отдельно проверить до запуска.
+helper — в корневом `/Cargo.lock`. Сборка armhf; ABI других моделей проверять
+до запуска.
 
 Создайте приватный `local-data/voice-recorder/connection.json` (chmod 600):
 
@@ -130,10 +129,9 @@ projects/station/tools/voice-recorder/start.command --recover-device
    `/tmp/voice-recorder/`; при активном lock удаление запрещено.
    Ключи, конфигурация и сервисы станции не затрагиваются.
 3. Остановите локальный сервер Ctrl+C. Автозапуска на Mac нет.
-4. Исходники можно удалить целиком из `projects/station/tools/voice-recorder/`;
-   убрать его строку из агрегатора тестов и ссылку из tools/README.md. Игнорируемые записи и кэш под
-   `local-data/voice-recorder/` / `local-data/local-tools/voice-recorder-target/`
-   удалять отдельно только после решения, что они больше не нужны.
+4. Записи и кэш (`local-data/voice-recorder/`,
+   `local-data/local-tools/voice-recorder-target/`) удалять отдельно, только
+   когда они больше не нужны.
 
 При перезагрузке станции `/tmp` очищается и запускается обычный штатный
 Pulsar. Никакого startup-флага режима записи не создаётся.
@@ -149,12 +147,3 @@ sh -n projects/station/tools/voice-recorder/recover.sh
 
 Не запускать live запись как hermetic-тест. Voice recordings/connection
 config/диагностика не должны попадать в Git или публичный отчёт.
-
-## Заметки к коду
-
-Пояснения, перенесённые из комментариев исходников (код комментариев не содержит, см. `AGENTS.md`).
-
-- `helper/src/main.rs`
-  - Let VQE settle; never include startup noise in a labelled take.
-- `server.py`
-  - Disk failure must never prevent device restoration.

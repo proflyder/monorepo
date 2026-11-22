@@ -7,13 +7,15 @@ the SSH tunnel like the other dropped ports). Port 8644 is the app chat relay
 in the Hermes Pod: only `mcp-gateway` (pod CIDR) calls it; it is Bearer-protected
 as well, but must not be reachable from the LAN.
 SSH, Grafana NodePort and application ports are unaffected. This does not
-replace the separate voice-proxy firewall or router policy.
+replace the separate voice-proxy firewall or router policy. CI has no K3s API
+access (Flux applies workloads in-cluster), so only node and pod ranges are
+accepted on 6443.
 
 1. Render `rules.nft` privately, replacing `NODE_IPV4` with the actual node
    address and `POD_CIDR` with the configured pod network.
 2. Install it mode 0600 as `/etc/nftables.d/home-k3s.nft`.
 3. Install `apply.sh` mode 0755 as `/usr/local/sbin/home-k3s-firewall` and
-   the service in `/etc/systemd/system/`.
+   `k3s-firewall.service` as `/etc/systemd/system/home-k3s-firewall.service`.
 4. Run `systemctl daemon-reload` and `systemctl enable --now home-k3s-firewall`.
 5. Verify denied ports from LAN, then run cluster tests through an SSH tunnel.
 
@@ -21,9 +23,3 @@ The script validates rules before applying and replaces only its own table
 in one nft transaction. Kubernetes tables remain managed by their
 owners. Update this policy before adding nodes or changing the node address.
 Rollback: disable the service and delete only `table inet home_k3s`.
-
-## Заметки к коду
-
-Пояснения, перенесённые из комментариев исходников (код комментариев не содержит, см. `AGENTS.md`).
-
-- `rules.nft` — Replace NODE_IPV4 and POD_CIDR before installing; single-node K3s only. CI has no K3s API access (Flux applies workloads in-cluster), so only the node and pod ranges are accepted.

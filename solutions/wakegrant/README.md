@@ -44,8 +44,8 @@ An explicit `purpose` appends it as the last MAC line, and `waitSeconds`
 (1..25) turns the claim into a long-poll for that purpose. At most 2 waits per
 machine may be outstanding; the next one gets `429`.
 
-Challenge rate limit is 60/min per machine and per source IP, answered as
-`429`; each long-poll claim counts once, so one wait per ~25 s fits easily.
+Challenge and claim are each limited to 60/min per machine and per source IP,
+answered as `429`; each long-poll claim counts once, so one wait per ~25 s fits easily.
 
 The service is transport-agnostic: run it behind HTTPS or a private network
 without protocol changes. It contains no project-specific endpoint or secret.
@@ -84,66 +84,37 @@ decode to exactly 32 bytes; otherwise the process refuses to start.
   the waiter re-reads the store, so a grant created between the first lookup
   and registering cannot be missed. Server shutdown or client disconnect ends
   the wait with no MAC (fail-closed).
-- The HTTP `WriteTimeout` is 40 s so the 25 s long-poll is never cut off.
+- The request timeout is 40 s so the 25 s long-poll is never cut off.
 - Structured JSON logs contain only `machine`, `outcome` and `grantId`. Nonces,
   MACs, tokens and keys are never logged.
 
 ## Implementation
 
-Rust, decision 41 pilot. Crates live in `crates/wakegrant`:
+Rust crate `crates/wakegrant`:
 
 | module | contents |
 |---|---|
 | `domain` | purposes, TTL/wait rules, nonce store, rate limiter, long-poll waiters; pure logic, time via the `Clock` trait |
 | `store` | SQL over `home-sqlite` (single writer, `UPDATE … RETURNING` consumption) |
 | `api` | axum routes, bearer via `home-http`, long-poll on `tokio::sync::Notify`, 4 KiB body limit, 40 s request timeout |
-| `config` | `clap`/`home-config`; the same environment names as the Go service |
+| `config` | `clap`/`home-config` environment parsing |
 | `app` | composition root, `Supervisor` and the periodic grant cleanup |
 
-The binary is a static `x86_64-unknown-linux-musl` executable (zig C toolchain)
-on the same distroless static base, user and entrypoint as before. `-healthcheck`
-is preserved for the Deployment probe.
-
-The schema is Go version 2 (`schema_meta`): an existing PVC database opens in
-place and no table is recreated.
+The binary is a static `x86_64-unknown-linux-musl` executable on a distroless
+static base. `-healthcheck` probes the loopback address and is used by the
+Deployment probe. The SQLite schema is version 2 (`schema_meta`); existing
+databases open in place.
 
 ## Tests
 
 ```bash
-cargo test -p wakegrant
 bazel test //solutions/wakegrant/... //packages/rust/...
 ```
 
-Covered: both PROTOCOL.md test vectors and all four golden HTTP fixtures
-(unchanged from the Go implementation), full issue → challenge → claim flow,
-store newest-grant/purpose isolation, an existing Go v2 database, nonce replay
-and expiry, rate limiting, waiter cap, domain TTL/wait bounds and machines-file
-parsing. The fixtures live in `testdata/contract/` and are replayed by
-`home-contracttest`; there is no `-update` mode on the Rust side.
+Covered: both PROTOCOL.md test vectors and the golden HTTP fixtures in
+`testdata/contract/` (replayed by `home-contracttest`), the full issue →
+challenge → claim flow, purpose isolation, nonce replay and expiry, rate
+limiting, waiter cap and machines-file parsing.
 
 Deployment lives in
 [`projects/home/kubernetes/wakegrant`](../../projects/home/kubernetes/wakegrant).
-
-## Заметки к коду
-
-Пояснения, перенесённые из комментариев исходников (код комментариев не содержит, см. `AGENTS.md`).
-
-- `crates/wakegrant/src/api.rs` — axum HTTP API for the wakegrant protocol.
-  - Emits exactly event, outcome, machine and grantId — never nonces, MACs, tokens, IPs or keys.
-  - Never reveal whether the machine exists.
-- `crates/wakegrant/src/app.rs` — Composition root: configuration, telemetry, SQLite store, the HTTP service and the background cleanup task.
-- `crates/wakegrant/src/config.rs` — Typed environment configuration. Variable names and defaults are the Go service's contract; secrets are files (or a direct env value) and never appear in an error message.
-  - Loopback base URL for `-healthcheck`, so the probe never depends on the pod IP. A wildcard listen address becomes `127.0.0.1`.
-- `crates/wakegrant/src/contract_tests.rs` — Replays the golden HTTP fixtures from `solutions/wakegrant/testdata/contract` through the Rust service. The fixtures are the Go implementation's files, unchanged.
-- `crates/wakegrant/src/domain/grant.rs`
-  - `waitSeconds` is only defined together with an explicit purpose; omitting `purpose` keeps the v1 request byte for byte and is never delayed.
-- `crates/wakegrant/src/domain/mod.rs` — Pure domain logic: purposes, TTL rules, nonces, rate limits and waiters.
-- `crates/wakegrant/src/domain/purpose.rs` — What a grant may do. A logon grant is only valid on a cold boot; an unlock grant is for a running but locked workstation. The purpose is part of every purpose-aware MAC message, so one can never be used for the other.
-- `crates/wakegrant/src/domain/waiter.rs`
-  - Wakes long-poll claims when a matching grant is created. Notifications are per `(machine, purpose)`: an unlock waiter must not wake for a logon grant and vice versa.
-  - A logon broadcast must not wake an unlock waiter.
-- `crates/wakegrant/src/health.rs`
-  - Regression: the first Rust deploy panicked here with "No provider set".
-- `crates/wakegrant/src/lib.rs` — wakegrant service: one-time `logon`/`unlock` grants for a machine woken by Home Assistant.
-- `crates/wakegrant/src/main.rs` — Command-line entry point. Everything real lives in the library; the only extra behaviour is the `-healthcheck` probe used by the distroless image.
-- `crates/wakegrant/src/store.rs` — Durable grant storage over the shared single-writer SQLite actor.
