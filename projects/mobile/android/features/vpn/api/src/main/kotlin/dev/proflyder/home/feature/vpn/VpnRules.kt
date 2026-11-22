@@ -181,3 +181,32 @@ object WireGuardUapi {
     private const val MILLIS_IN_SECOND = 1_000L
     private const val NANOS_IN_MILLI = 1_000_000L
 }
+
+enum class OpenConnectAction {
+    NONE,
+    CONNECT,
+    ASK_PERMISSION,
+}
+
+data class OpenConnectInput(
+    val enabled: Boolean,
+    val atHome: Boolean?,
+    val active: Boolean,
+    val hasProfile: Boolean,
+    val permissionGranted: Boolean,
+    val permissionAsked: Boolean,
+)
+
+object OpenConnectRules {
+    fun decide(input: OpenConnectInput): OpenConnectAction = when {
+        !wanted(input) -> OpenConnectAction.NONE
+        input.permissionGranted -> OpenConnectAction.CONNECT
+        input.permissionAsked -> OpenConnectAction.NONE
+        else -> OpenConnectAction.ASK_PERMISSION
+    }
+
+    fun settled(connection: VpnConnection): Boolean = connection !is VpnConnection.Connecting
+
+    private fun wanted(input: OpenConnectInput): Boolean =
+        input.enabled && input.atHome == false && !input.active && input.hasProfile
+}

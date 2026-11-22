@@ -40,7 +40,15 @@
                     android:visibility="gone"
                     tools:text="Personal" />
             </LinearLayout>
+
+            <include
+                layout="@layout/vpn_toolbar_toggle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="end|center_vertical" />
         </com.google.android.material.appbar.MaterialToolbar>
+
+        <include layout="@layout/vpn_route_banner" />
     </com.google.android.material.appbar.AppBarLayout>
 
     <androidx.fragment.app.FragmentContainerView

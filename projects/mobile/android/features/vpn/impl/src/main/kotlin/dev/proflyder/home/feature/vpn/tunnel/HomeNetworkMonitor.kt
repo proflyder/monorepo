@@ -69,11 +69,32 @@ class HomeNetworkMonitor(
         pending = scope.launch { evaluate() }
     }
 
-    private suspend fun evaluate() {
-        delay(SETTLE_MILLIS)
-        val atHomeNow = networks.toList().any { probe(it) }
+    suspend fun checkNow(): Boolean? {
+        val candidates = networks.toList().ifEmpty { physicalNetworks() }
+        if (candidates.isEmpty()) return null
+        val atHomeNow = candidates.any { probe(it) }
         home.value = atHomeNow
         controller.homeChanged(atHomeNow)
+        return atHomeNow
+    }
+
+    @SuppressLint("MissingPermission")
+    @Suppress("DEPRECATION")
+    private fun physicalNetworks(): List<Network> {
+        val manager = context.getSystemService(ConnectivityManager::class.java) ?: return emptyList()
+        return manager.allNetworks.filter { isPhysical(manager, it) }
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun isPhysical(manager: ConnectivityManager, network: Network): Boolean {
+        val capabilities = manager.getNetworkCapabilities(network) ?: return false
+        return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+            capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
+    }
+
+    private suspend fun evaluate() {
+        delay(SETTLE_MILLIS)
+        val atHomeNow = checkNow() ?: false
         val auto = settings.settings.value.autoConnect
         val active = controller.connection.value.isActive
         when {

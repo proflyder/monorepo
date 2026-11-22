@@ -17,6 +17,8 @@ interface Navigator {
 
     val currentIsOverlay: StateFlow<Boolean>
 
+    val currentHidesBottomBar: StateFlow<Boolean>
+
     fun selectTab(featureId: String)
 
     fun navigate(destination: Destination)
@@ -52,6 +54,9 @@ class FragmentRouter(
 
     private val mutableIsOverlay = MutableStateFlow(false)
     override val currentIsOverlay: StateFlow<Boolean> = mutableIsOverlay.asStateFlow()
+
+    private val mutableHidesBottomBar = MutableStateFlow(false)
+    override val currentHidesBottomBar: StateFlow<Boolean> = mutableHidesBottomBar.asStateFlow()
 
     init {
         mutableTitle.value = initialEntry.titleRes(initialEntry.rootDestination)
@@ -168,7 +173,7 @@ class FragmentRouter(
         mutableTab.value = entry.id
         mutableTitle.value = titlesByRoute[routeState.currentRoute()] ?: entry.titleRes(entry.rootDestination)
         mutableCanGoBack.value = routeState.currentStack().size > 1
-        mutableIsOverlay.value = currentRouteOverlay()
+        updateRouteFlags()
     }
 
     private fun restoreFromFragmentManager(): Boolean {
@@ -375,7 +380,12 @@ class FragmentRouter(
         mutableTitle.value = titlesByRoute[routeState.currentRoute()]
             ?: entry.titleRes(entry.rootDestination)
         mutableCanGoBack.value = fragmentManager.backStackEntryCount > 0
+        updateRouteFlags()
+    }
+
+    private fun updateRouteFlags() {
         mutableIsOverlay.value = currentRouteOverlay()
+        mutableHidesBottomBar.value = registry.entryForRoute(routeState.currentRoute())?.hidesBottomBar == true
     }
 
     private fun currentRouteOverlay(): Boolean {

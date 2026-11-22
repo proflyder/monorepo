@@ -18,6 +18,8 @@ interface FeatureEntry {
 
     val isTab: Boolean get() = true
 
+    val hidesBottomBar: Boolean get() = false
+
     @get:StringRes
     val titleRes: Int
 
