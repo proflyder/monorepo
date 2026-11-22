@@ -14,22 +14,8 @@ interface CallController {
     fun setMuted(muted: Boolean)
 
     fun dismissEnded()
-
-    fun acceptIncoming(callId: String)
-
-    fun declineIncoming(callId: String)
-}
-
-interface CallCoordinator {
-    fun startOutgoingCall()
-
-    fun hangup()
 }
 
 interface CallLauncher {
     fun openCallScreen()
-}
-
-interface CallNotificationController {
-    fun start()
 }

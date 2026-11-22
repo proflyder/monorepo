@@ -3,14 +3,16 @@ package dev.proflyder.home
 import android.app.Application
 import com.google.firebase.FirebaseApp
 import com.google.firebase.crashlytics.FirebaseCrashlytics
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
 import dev.proflyder.home.core.runtime.AppStartable
+import dev.proflyder.home.core.ui.ViewModelFactoryProvider
 import dev.proflyder.home.di.AppGraph
-import dev.proflyder.home.feature.call.CallEntryPoint
 import dev.proflyder.home.feature.push.PushEntryPoint
 import dev.proflyder.home.feature.vpn.VpnEntryPoint
 import dev.zacsweers.metro.createGraphFactory
 
-class HomeApplication : Application() {
+class HomeApplication : Application(), ViewModelFactoryProvider {
     lateinit var graph: AppGraph
         private set
 
@@ -19,15 +21,6 @@ class HomeApplication : Application() {
         graph = createGraphFactory<AppGraph.Factory>().create(this)
         graph.startables.forEach(AppStartable::start)
         graph.connectionSettings
-        CallEntryPoint.install(
-            CallEntryPoint.Dependencies(
-                controller = graph.callController,
-                audioController = graph.callAudioController,
-                coordinator = graph.callCoordinator,
-                telecomBridge = graph.callTelecomBridge,
-            ),
-        )
-        graph.callNotifications.start()
         PushEntryPoint.install(
             PushEntryPoint.Dependencies(
                 registrar = graph.pushRegistrar,
@@ -48,6 +41,9 @@ class HomeApplication : Application() {
         )
         configureCrashReporting()
     }
+
+    override fun viewModelFactory(viewModelClass: Class<out ViewModel>): ViewModelProvider.Factory =
+        graph.viewModelFactories.viewModelFactory(viewModelClass)
 
     private fun configureCrashReporting() {
         if (FirebaseApp.getApps(this).isEmpty()) return

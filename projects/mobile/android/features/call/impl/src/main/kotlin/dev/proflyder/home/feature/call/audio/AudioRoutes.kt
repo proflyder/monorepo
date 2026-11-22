@@ -1,15 +1,15 @@
-package dev.proflyder.home.feature.call
+package dev.proflyder.home.feature.call.audio
 
 import kotlinx.coroutines.flow.StateFlow
 
-enum class CallAudioRoute {
+internal enum class CallAudioRoute {
     EARPIECE,
     SPEAKER,
     WIRED_HEADSET,
     BLUETOOTH,
 }
 
-enum class AudioDeviceKind {
+internal enum class AudioDeviceKind {
     EARPIECE,
     SPEAKER,
     WIRED_HEADSET,
@@ -20,14 +20,14 @@ enum class AudioDeviceKind {
     UNKNOWN,
 }
 
-data class AudioDevice(val kind: AudioDeviceKind, val name: String = "")
+internal data class AudioDevice(val kind: AudioDeviceKind, val name: String = "")
 
-data class AudioRouteOption(
+internal data class AudioRouteOption(
     val route: CallAudioRoute,
     val label: String? = null,
 )
 
-data class CallAudioRouteState(
+internal data class CallAudioRouteState(
     val available: List<AudioRouteOption> = defaultRoutes,
     val selected: CallAudioRoute = CallAudioRoute.EARPIECE,
 ) {
@@ -39,7 +39,7 @@ data class CallAudioRouteState(
     }
 }
 
-fun audioRoutesFor(devices: List<AudioDevice>): List<AudioRouteOption> {
+internal fun audioRoutesFor(devices: List<AudioDevice>): List<AudioRouteOption> {
     val kinds = devices.map { it.kind }.toSet()
     val bluetoothName = devices.firstOrNull {
         it.kind == AudioDeviceKind.BLUETOOTH_SCO || it.kind == AudioDeviceKind.BLUETOOTH_A2DP
@@ -57,7 +57,7 @@ fun audioRoutesFor(devices: List<AudioDevice>): List<AudioRouteOption> {
     return routes
 }
 
-interface CallAudioController {
+internal interface CallAudioController {
     val state: StateFlow<CallAudioRouteState>
 
     fun start()

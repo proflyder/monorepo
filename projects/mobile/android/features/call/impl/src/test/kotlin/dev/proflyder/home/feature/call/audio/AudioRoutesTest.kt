@@ -1,9 +1,9 @@
-package dev.proflyder.home.feature.call
+package dev.proflyder.home.feature.call.audio
 
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
-class AudioRoutesTest {
+internal class AudioRoutesTest {
     @Test
     fun builtInRoutesAreAlwaysOffered() {
         assertEquals(

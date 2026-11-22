@@ -16,7 +16,7 @@ import kotlinx.coroutines.flow.asStateFlow
 
 @SingleIn(AppScope::class)
 @Inject
-class CallTelecomBridge {
+internal class CallTelecomBridge {
 
     private var connection: Connection? = null
     private val mutableEndpoints = MutableStateFlow<List<Int>>(emptyList())

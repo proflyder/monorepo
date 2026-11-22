@@ -1,4 +1,9 @@
-package dev.proflyder.home.feature.call
+package dev.proflyder.home.feature.call.session
+
+import dev.proflyder.home.core.model.Clock
+import dev.proflyder.home.feature.call.CallFailure
+import dev.proflyder.home.feature.call.CallPhase
+import kotlin.time.Duration.Companion.milliseconds
 
 import dev.proflyder.home.core.model.IntercomCall
 import dev.proflyder.home.core.model.IntercomCallState
@@ -29,7 +34,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
-class CallManagerTest {
+internal class CallManagerTest {
 
     private val station = IntercomEndpoint(
         id = "station",
@@ -127,10 +132,19 @@ class CallManagerTest {
         client = client,
         mediaFactory = FakeFactory(media),
         scope = backgroundScope,
-        watchdogMillis = watchdogMillis,
-        newIdempotencyKey = { "key-1" },
-        peerFallbackName = "Station",
+        clock = FixedClock,
+        settings = CallSessionSettings(
+            watchdog = watchdogMillis.milliseconds,
+            peerFallbackName = "Station",
+            newIdempotencyKey = { "key-1" },
+        ),
     )
+
+    private object FixedClock : Clock {
+        override fun wallMillis(): Long = 1_795_200_000_000L
+
+        override fun elapsedNanos(): Long = 0L
+    }
 
     @Test
     fun happyPathRingsConnectsAndBecomesActive() = runTest {
@@ -361,5 +375,24 @@ class CallManagerTest {
         manager.dismissEnded()
         assertEquals(CallPhase.IDLE, manager.state.value.phase)
         assertNull(manager.state.value.callId)
+    }
+
+    @Test
+    fun watchStreamIsOpenOnlyWhileACallIsInProgress() = runTest {
+        val client = FakeClient().apply {
+            endpoints = Outcome.Success(listOf(station))
+            startResult = Outcome.Success(call(IntercomCallState.RINGING))
+        }
+        val manager = manager(client, FakeMedia())
+        runCurrent()
+        assertEquals(0, client.events.subscriptionCount.value)
+
+        manager.placeCall()
+        runCurrent()
+        assertEquals(1, client.events.subscriptionCount.value)
+
+        manager.hangup()
+        runCurrent()
+        assertEquals(0, client.events.subscriptionCount.value)
     }
 }

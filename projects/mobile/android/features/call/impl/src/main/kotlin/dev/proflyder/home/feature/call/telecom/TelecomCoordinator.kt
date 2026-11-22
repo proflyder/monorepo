@@ -12,16 +12,18 @@ import android.telecom.PhoneAccountHandle
 import android.telecom.TelecomManager
 import androidx.core.content.ContextCompat
 import dev.proflyder.home.feature.call.CallController
-import dev.proflyder.home.feature.call.CallCoordinator
 import dev.proflyder.home.feature.call.impl.R
 import dev.zacsweers.metro.AppScope
-import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 
+internal interface CallCoordinator {
+    fun startOutgoingCall()
+}
+
 @SingleIn(AppScope::class)
 @Inject
-class TelecomAccountRegistry(private val context: Context) {
+internal class TelecomAccountRegistry(private val context: Context) {
 
     fun ensureRegistered(): PhoneAccountHandle? {
         val telecom = context.getSystemService(TelecomManager::class.java) ?: return null
@@ -46,9 +48,8 @@ class TelecomAccountRegistry(private val context: Context) {
 }
 
 @SingleIn(AppScope::class)
-@ContributesBinding(AppScope::class)
 @Inject
-class AndroidCallCoordinator(
+internal class AndroidCallCoordinator(
     private val context: Context,
     private val controller: CallController,
     private val registry: TelecomAccountRegistry,
@@ -76,8 +77,6 @@ class AndroidCallCoordinator(
             controller.placeCall()
         }
     }
-
-    override fun hangup() = controller.hangup()
 
     private fun canManageOwnCalls(): Boolean =
         ContextCompat.checkSelfPermission(context, Manifest.permission.MANAGE_OWN_CALLS) ==
