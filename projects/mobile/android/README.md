@@ -90,7 +90,7 @@ notification all open or drive the same controller.
   (`VpnEndpoints`); an empty `lanEndpoint` keeps `endpoint`. The home router
   does not hairpin UDP, so the public name does not answer from the home Wi-Fi.
   When the network changes while WireGuard is up and the wanted endpoint
-  differs, the tunnel is brought up again (`HomeNetworkRules.shouldSwitchEndpoint`);
+  differs, the tunnel is brought up again (`TunnelVpnController.endpointStale`);
   auto-connect disconnect at home wins over the switch.
 - Fallback: when no handshake arrives within 10 s (`HandshakePolicy`), the
   tunnel is stopped and nothing else starts by itself. Outside home the
@@ -116,18 +116,34 @@ notification all open or drive the same controller.
   app process lives. For a guaranteed tunnel use Android always-on VPN: the
   system starts `GoBackend$VpnService`, `GoBackend.setAlwaysOnCallback` calls
   the controller, which connects with the stored profile.
-- Connect on open: **Connect when the app opens away from home** (on by
-  default, `VpnSettings.connectOnOpen`). On every `MainActivity.onStart`
-  `VpnActivityHost` asks `VpnOpenConnector`, which waits for the stored
-  settings and profile, probes the home network right away and applies
-  `OpenConnectRules`: connect only when the phone is not home, the tunnel is
-  not up, a profile exists and the `VpnService` permission is granted. Without
-  the permission the system consent dialog is shown once
-  (`permissionAsked`); later opens skip it. While the decision and the
-  handshake are pending `HomeRouteNetworkWaiter` holds idempotent reads
-  (`NetworkWaiter`, at most 20 s), so screens keep their loading state instead
-  of timing out, and the strip under the toolbar says **Connecting to
-  home…**. At home nothing starts.
+- Connect on open, reactive: **Connect when the app opens away from home** (on
+  by default, `VpnSettings.connectOnOpen`). The question is not "home Wi-Fi or
+  not" but "does the current network reach the home perimeter directly".
+  `HomeReachability` (api) exposes `state: StateFlow<NetworkState?>`;
+  `HomeNetworkMonitor` implements it: while the process is in the foreground
+  (`ProcessLifecycleOwner`, observed by `VpnOpenConnector`) it listens to
+  `registerDefaultNetworkCallback` (available / lost / `LinkProperties`
+  changes), settles the events (`VpnNetworkFlow.settle`: the first one at
+  once, later ones after 1.5 s of quiet) and re-probes every non-VPN network
+  with that network's resolver and `socketFactory`, so the check bypasses our
+  own tunnel when it is up. `NetworkState` holds the result and the handles of
+  the underlying networks, so Wi-Fi → another Wi-Fi, Wi-Fi ↔ mobile and the
+  way back home are all new states, while the tunnel becoming the default
+  network is not. Each distinct state goes through one pure rule
+  (`VpnNetworkFlow.decisions` → `NetworkVpnRules.decide`):
+  no direct access + a setting on (`connectOnOpen` or `autoConnect`) + profile
+  + permission + tunnel down → connect; tunnel up with the wrong endpoint
+  (lan vs public) → reconnect; direct access + **Connect outside home** +
+  tunnel up → disconnect; missing permission → the consent dialog once
+  (`permissionAsked`, delivered to `VpnActivityHost` through
+  `permissionRequests`). The tunnel state is read when a decision is made, not
+  combined into the trigger: a failed attempt or a manual toggle-off must not
+  restart the tunnel until the network changes. While the first check and a
+  connect are pending `HomeRouteNetworkWaiter` holds idempotent reads
+  (`NetworkWaiter`, at most 20 s), so screens keep their loading state, and
+  the strip under the toolbar says **Connecting to home…**. In the background
+  the older `autoConnect` path of `HomeNetworkMonitor` keeps working; it
+  stands aside while the foreground watcher runs.
 - Toolbar toggle: an icon button (`Widget.Home.IconButton.Standard.M`,
   `VpnToolbarToggle`) on the main screens shows off / connecting / on; tap
   toggles the tunnel (asking for the permission when needed), long press opens
@@ -141,7 +157,7 @@ notification all open or drive the same controller.
   **Disconnect**; it stops itself when the VPN is off. `VpnTileService` is a
   toggleable Quick Settings tile; without the VPN permission it opens the VPN
   screen (`home://vpn/main` route).
-- Tests: `features/vpn/api:api_test` (connect on open: home / away / no
+- Tests: `features/vpn/api:api_test` (network sequences with debounce: home Wi-Fi → foreign Wi-Fi → mobile → home, flapping, stale endpoint; connect on open: home / away / no
   profile / no permission / already up, routes, endpoint choice, endpoint
   switch on network change, no external start after a silent WireGuard, config
   text, handshake policy,

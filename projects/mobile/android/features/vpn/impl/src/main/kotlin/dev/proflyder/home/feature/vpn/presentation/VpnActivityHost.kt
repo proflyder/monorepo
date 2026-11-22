@@ -5,10 +5,8 @@ import android.view.View
 import androidx.activity.ComponentActivity
 import androidx.activity.result.ActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.lifecycle.lifecycleScope
 import com.google.android.material.button.MaterialButton
 import dev.proflyder.home.feature.vpn.HomeRoute
-import dev.proflyder.home.feature.vpn.OpenConnectAction
 import dev.proflyder.home.feature.vpn.VpnEntryPoint
 import dev.proflyder.home.feature.vpn.isActive
 import dev.proflyder.home.core.ui.setVisible
@@ -37,17 +35,12 @@ class VpnActivityHost(
     fun observe(scope: CoroutineScope, button: MaterialButton, banner: View) {
         scope.launch { dependencies.controller.connection.collect { VpnToolbarToggle.render(button, it) } }
         scope.launch { dependencies.opener.route.collect { banner.setVisible(it == HomeRoute.CONNECTING) } }
+        scope.launch { dependencies.opener.permissionRequests.collect { ask() } }
     }
 
-    fun onForeground() {
-        activity.lifecycleScope.launch { ask(dependencies.opener.onForeground()) }
-    }
-
-    private fun ask(action: OpenConnectAction) {
-        val request = dependencies.controller.permissionIntent()
-        when {
-            action != OpenConnectAction.ASK_PERMISSION -> Unit
-            request == null -> dependencies.opener.connect()
+    private fun ask() {
+        when (val request = dependencies.controller.permissionIntent()) {
+            null -> dependencies.opener.connect()
             else -> permission.launch(request)
         }
     }

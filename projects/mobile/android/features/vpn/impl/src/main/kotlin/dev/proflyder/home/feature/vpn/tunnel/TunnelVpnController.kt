@@ -96,17 +96,15 @@ class TunnelVpnController(
     }
 
     fun followNetwork(autoConnect: Boolean) {
-        val profile = knownProfile() ?: return
-        val home = wireGuard.atHome
-        val wanted = VpnEndpoints.select(profile.wireguard, home)
-        val switch = HomeNetworkRules.shouldSwitchEndpoint(
-            autoConnect = autoConnect,
-            atHome = home == true,
-            wireGuardActive = wireGuardActive(),
-            tunnelEndpoint = wireGuard.endpoint,
-            wantedEndpoint = wanted,
-        )
-        if (switch) restartIfActive()
+        val home = wireGuard.atHome == true
+        val disconnecting = HomeNetworkRules.shouldDisconnect(autoConnect, home, wireGuardActive())
+        if (endpointStale() && !disconnecting) restartIfActive()
+    }
+
+    fun endpointStale(): Boolean {
+        val profile = knownProfile() ?: return false
+        val wanted = VpnEndpoints.select(profile.wireguard, wireGuard.atHome)
+        return wireGuardActive() && wireGuard.endpoint != wanted
     }
 
     private fun knownProfile(): VpnProfile? = when (val value = profiles.state.value) {

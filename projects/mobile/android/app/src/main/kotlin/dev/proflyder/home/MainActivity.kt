@@ -168,7 +168,6 @@ class MainActivity : AppCompatActivity(), NavigatorHost, ViewModelFactoryProvide
             else -> Unit
         }
         AppForeground.onResumed()
-        vpnHost.onForeground()
     }
 
     override fun onStop() {
