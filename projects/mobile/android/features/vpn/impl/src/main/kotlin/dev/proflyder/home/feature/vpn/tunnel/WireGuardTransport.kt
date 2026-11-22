@@ -6,6 +6,7 @@ import com.wireguard.android.backend.Tunnel
 import com.wireguard.config.Config
 import dev.proflyder.home.core.model.VpnProfile
 import dev.proflyder.home.core.operation.suspendRunCatching
+import dev.proflyder.home.feature.vpn.VpnEndpoints
 import dev.proflyder.home.feature.vpn.VpnProtocol
 import dev.proflyder.home.feature.vpn.VpnRoute
 import dev.proflyder.home.feature.vpn.WireGuardConfigText
@@ -36,10 +37,22 @@ class WireGuardTransport(
         GoBackend.setAlwaysOnCallback { action() }
     }
 
+    @Volatile
+    var atHome: Boolean? = null
+
+    @Volatile
+    var endpoint: String = ""
+        private set
+
     override suspend fun up(profile: VpnProfile, route: VpnRoute): Boolean = withContext(Dispatchers.IO) {
-        val privateKey = keys.keyPair().privateKey.toBase64()
-        val text = WireGuardConfigText.render(profile.wireguard, privateKey, route)
+        val text = configText(profile, route)
         suspendRunCatching { start(Config.parse(text.byteInputStream())) }.isSuccess
+    }
+
+    private suspend fun configText(profile: VpnProfile, route: VpnRoute): String {
+        val home = atHome
+        endpoint = VpnEndpoints.select(profile.wireguard, home)
+        return WireGuardConfigText.render(profile.wireguard, keys.keyPair().privateKey.toBase64(), route, home)
     }
 
     private fun start(parsed: Config) {

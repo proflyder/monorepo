@@ -31,6 +31,7 @@ internal data class VpnInterfaceDto(val address: String, val dns: List<String> =
 internal data class VpnPeerDto(
     val publicKey: String,
     val endpoint: String,
+    val lanEndpoint: String = "",
     val allowedIps: List<String> = emptyList(),
     val persistentKeepalive: Int = 0,
 )
@@ -86,6 +87,7 @@ internal fun VpnProfileDto.toModel(): VpnProfile = VpnProfile(
         allowedIps = wireguard.peer.allowedIps,
         splitAllowedIps = wireguard.splitAllowedIps,
         persistentKeepalive = wireguard.peer.persistentKeepalive,
+        lanEndpoint = wireguard.peer.lanEndpoint,
     ),
     ocserv = VpnOcservSettings(
         url = ocserv.url,

@@ -45,7 +45,7 @@ class VpnStatusService : Service() {
 
     private fun render(connection: VpnConnection) {
         when (connection) {
-            VpnConnection.Disconnected, is VpnConnection.Failed -> finish()
+            VpnConnection.Disconnected, VpnConnection.NotNeededAtHome, is VpnConnection.Failed -> finish()
             else -> notify(connection)
         }
     }

@@ -10,12 +10,14 @@
     <string name="vpn_state_connecting_external">Waiting for OpenConnect…</string>
     <string name="vpn_state_connected">Connected</string>
     <string name="vpn_state_fallback">WireGuard did not answer</string>
+    <string name="vpn_state_home">Home network: VPN not needed</string>
     <string name="vpn_state_failed">Not connected</string>
 
     <string name="vpn_detail_disconnected">The tunnel is off. Home stays reachable only from the home network.</string>
     <string name="vpn_detail_connecting">%1$s · waiting for the handshake</string>
     <string name="vpn_detail_connected">%1$s · %2$s</string>
-    <string name="vpn_detail_fallback">No handshake in 10 s. Open OpenConnect on 443 to get home.</string>
+    <string name="vpn_detail_fallback">No handshake in 10 s. Tap “Open OpenConnect” to get home over 443.</string>
+    <string name="vpn_detail_home">WireGuard did not answer on the home address. On the home Wi-Fi everything is reachable directly, no fallback is needed.</string>
     <string name="vpn_traffic">↓ %1$s · ↑ %2$s</string>
     <string name="vpn_protocol_wireguard">WireGuard</string>
     <string name="vpn_protocol_openconnect">OpenConnect</string>
@@ -42,7 +44,7 @@
     <string name="vpn_home_no">Now outside the home network</string>
 
     <string name="vpn_fallback_title">Fallback: OpenConnect on 443</string>
-    <string name="vpn_external_ready">Used automatically when WireGuard gets no handshake.</string>
+    <string name="vpn_external_ready">Offered with a button when WireGuard gets no handshake outside home.</string>
     <string name="vpn_external_missing">Install OpenConnect or Cisco Secure Client to use the fallback.</string>
     <string name="vpn_auth_certificate">Certificate</string>
     <string name="vpn_auth_password">Password + code</string>

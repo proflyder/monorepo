@@ -323,7 +323,8 @@ MCP-инструментов.
   ключа обновляет ту же строку; ключ другого устройства — `409`, неверный
   ключ/`deviceId` — `400`, нет настроек — `503`. Ответ — `{"profile":{...}}`
   с `wireguard.interface` (`address`, `dns`, `mtu`), `wireguard.peer`
-  (`publicKey` сервера, `endpoint`, `allowedIps`, `persistentKeepalive`),
+  (`publicKey` сервера, `endpoint`, `lanEndpoint`, `allowedIps`,
+  `persistentKeepalive`),
   `wireguard.splitAllowedIps` и запасным `ocserv` (`url`, `group`,
   `splitGroup`, `authentication`).
 - `POST /v1/vpn/profile/remove` `{"deviceId"}` → `{"removed":bool}`.
@@ -332,7 +333,10 @@ MCP-инструментов.
 
 Настройки — JSON `SCHEDULER_VPN_SETTINGS_FILE` (ключ `vpn.json` в
 `scheduler-auth`). Без файла или с невалидным файлом сервис стартует, а VPN-API
-отвечает `503`. Клиентский сертификат ocserv сервер не выпускает: приватный
+отвечает `503`. Необязательное поле `lanEndpoint` (`host:port` в домашней
+сети) отдаётся телефону как адрес WireGuard внутри дома: роутер не делает
+hairpin NAT для UDP, поэтому публичный `endpoint` из домашней Wi-Fi не
+отвечает. Клиентский сертификат ocserv сервер не выпускает: приватный
 ключ CA по решению хранится только у владельца (`vpncerts.py issue <user>
 --device <phone> --groups full`), импорт `.p12` в приложение — отдельный шаг.
 

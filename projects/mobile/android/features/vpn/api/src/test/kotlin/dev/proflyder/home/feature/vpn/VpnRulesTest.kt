@@ -20,6 +20,7 @@ class VpnRulesTest {
         allowedIps = listOf("0.0.0.0/0"),
         splitAllowedIps = listOf("192.0.2.0/24"),
         persistentKeepalive = 25,
+        lanEndpoint = "192.0.2.29:51820",
     )
 
     private val ocserv = VpnOcservSettings("https://vpn.example.com", "full", "lan", listOf("certificate"))
@@ -42,6 +43,36 @@ class VpnRulesTest {
         assertTrue(text.contains("Endpoint = vpn.example.com:51820"))
         assertTrue(text.contains("AllowedIPs = 192.0.2.0/24"))
         assertTrue(text.contains("PersistentKeepalive = 25"))
+    }
+
+    @Test
+    fun homeNetworkUsesTheLanEndpointAndEverywhereElseThePublicOne() {
+        assertEquals("192.0.2.29:51820", VpnEndpoints.select(wireguard, atHome = true))
+        assertEquals("vpn.example.com:51820", VpnEndpoints.select(wireguard, atHome = false))
+        assertEquals("vpn.example.com:51820", VpnEndpoints.select(wireguard, atHome = null))
+        val noLan = wireguard.copy(lanEndpoint = "")
+        assertEquals("vpn.example.com:51820", VpnEndpoints.select(noLan, atHome = true))
+        val text = WireGuardConfigText.render(wireguard, "private-key", VpnRoute.ALL, atHome = true)
+        assertTrue(text.contains("Endpoint = 192.0.2.29:51820"))
+    }
+
+    @Test
+    fun networkChangeSwitchesTheEndpointOfAnActiveTunnelOnly() {
+        val lan = "192.0.2.29:51820"
+        val public = "vpn.example.com:51820"
+        assertTrue(HomeNetworkRules.shouldSwitchEndpoint(false, true, true, public, lan))
+        assertTrue(HomeNetworkRules.shouldSwitchEndpoint(false, false, true, lan, public))
+        assertFalse(HomeNetworkRules.shouldSwitchEndpoint(false, true, true, lan, lan))
+        assertFalse(HomeNetworkRules.shouldSwitchEndpoint(false, true, false, public, lan))
+        assertFalse(HomeNetworkRules.shouldSwitchEndpoint(true, true, true, public, lan))
+    }
+
+    @Test
+    fun silentWireGuardNeverStartsTheExternalClient() {
+        assertEquals(VpnConnection.FallbackRequired, HandshakePolicy.afterWireGuardTimeout(atHome = false))
+        assertEquals(VpnConnection.FallbackRequired, HandshakePolicy.afterWireGuardTimeout(atHome = null))
+        assertEquals(VpnConnection.NotNeededAtHome, HandshakePolicy.afterWireGuardTimeout(atHome = true))
+        assertFalse(HandshakePolicy.afterWireGuardTimeout(atHome = false).isActive)
     }
 
     @Test

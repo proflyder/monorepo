@@ -8,7 +8,6 @@ import android.net.NetworkCapabilities
 import android.net.NetworkRequest
 import dev.proflyder.home.core.config.ConnectionSettingsStore
 import dev.proflyder.home.feature.vpn.HomeNetworkRules
-import dev.proflyder.home.feature.vpn.VpnController
 import dev.proflyder.home.feature.vpn.VpnSettingsStore
 import dev.proflyder.home.feature.vpn.isActive
 import dev.zacsweers.metro.AppScope
@@ -32,7 +31,7 @@ class HomeNetworkMonitor(
     private val context: Context,
     private val connection: ConnectionSettingsStore,
     private val settings: VpnSettingsStore,
-    private val controller: VpnController,
+    private val controller: TunnelVpnController,
     private val scope: CoroutineScope,
 ) {
     private val networks = ConcurrentHashMap.newKeySet<Network>()
@@ -74,11 +73,13 @@ class HomeNetworkMonitor(
         delay(SETTLE_MILLIS)
         val atHomeNow = networks.toList().any { probe(it) }
         home.value = atHomeNow
+        controller.homeChanged(atHomeNow)
         val auto = settings.settings.value.autoConnect
         val active = controller.connection.value.isActive
         when {
             HomeNetworkRules.shouldConnect(auto, atHomeNow, active) -> controller.connect()
             HomeNetworkRules.shouldDisconnect(auto, atHomeNow, active) -> controller.disconnect()
+            else -> controller.followNetwork(auto)
         }
     }
 
