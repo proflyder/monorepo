@@ -24,10 +24,7 @@ class ConditionRouteGate(
     conditions: Set<RouteCondition>,
 ) : RouteGate {
     private val timeout: Duration = ROUTE_WAIT
-    private val ready: Flow<Boolean> = when {
-        conditions.isEmpty() -> flowOf(true)
-        else -> combine(conditions.map { it.ready }) { values -> values.all { it } }
-    }
+    private val ready: Flow<Boolean> = routeReady(conditions)
 
     override suspend fun await() {
         withTimeoutOrNull(timeout) { ready.first { it } }
@@ -36,6 +33,11 @@ class ConditionRouteGate(
     companion object {
         val ROUTE_WAIT: Duration = 20.seconds
     }
+}
+
+internal fun routeReady(conditions: Set<RouteCondition>): Flow<Boolean> = when {
+    conditions.isEmpty() -> flowOf(true)
+    else -> combine(conditions.map { it.ready }) { values -> values.all { it } }
 }
 
 @ContributesIntoSet(AppScope::class, binding = binding<RouteCondition>())

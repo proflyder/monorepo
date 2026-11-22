@@ -15,6 +15,7 @@ import dev.proflyder.home.core.ui.NotificationPermission
 import dev.proflyder.home.feature.vpn.VpnConnection
 import dev.proflyder.home.feature.vpn.VpnController
 import dev.proflyder.home.feature.vpn.VpnInjector
+import dev.proflyder.home.feature.vpn.connect.UserVpnCommands
 import dev.zacsweers.metro.Inject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -30,6 +31,9 @@ class VpnStatusService : Service() {
     internal lateinit var controller: VpnController
 
     @Inject
+    internal lateinit var commands: UserVpnCommands
+
+    @Inject
     internal lateinit var notificationPermission: NotificationPermission
 
     override fun onCreate() {
@@ -43,7 +47,7 @@ class VpnStatusService : Service() {
         VpnNotifications.ensureChannel(this)
         promote(controller.connection.value)
         when (intent?.action) {
-            ACTION_DISCONNECT -> controller.disconnect()
+            ACTION_DISCONNECT -> commands.disconnect()
             else -> observe()
         }
         return START_NOT_STICKY

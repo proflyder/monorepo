@@ -14,6 +14,7 @@ import dev.proflyder.home.feature.vpn.VpnRoute
 import dev.proflyder.home.feature.vpn.VpnSettings
 import dev.proflyder.home.feature.vpn.VpnSettingsStore
 import dev.proflyder.home.feature.vpn.VpnTraffic
+import dev.proflyder.home.feature.vpn.connect.UserVpnCommands
 import dev.proflyder.home.feature.vpn.isActive
 import dev.proflyder.home.feature.vpn.tunnel.VpnPermission
 import dev.zacsweers.metro.AppScope
@@ -73,6 +74,7 @@ internal class VpnViewModel(
     private val settings: VpnSettingsStore,
     private val permission: VpnPermission,
     private val actions: VpnProfileActions,
+    private val commands: UserVpnCommands,
     feed: VpnStateFeed,
 ) : StateViewModel<VpnUiState, VpnIntent, VpnEvent>(VpnUiState()) {
     init {
@@ -99,7 +101,7 @@ internal class VpnViewModel(
         when (intent) {
             VpnIntent.ToggleConnection -> toggle()
             is VpnIntent.PermissionResult -> onPermission(intent.granted)
-            is VpnIntent.ConnectVia -> controller.connectVia(intent.transport)
+            is VpnIntent.ConnectVia -> commands.connectVia(intent.transport)
             is VpnIntent.SetRoute -> launch { settings.setRoute(intent.route).also { controller.reconnect() } }
             is VpnIntent.SetAuth -> launch { settings.setAuth(intent.auth) }
             is VpnIntent.SetAutoConnect -> launch { settings.setAutoConnect(intent.enabled) }
@@ -114,15 +116,15 @@ internal class VpnViewModel(
     private fun toggle() {
         val request = permission.request()
         when {
-            currentState.connection.isActive -> controller.disconnect()
-            request != null -> emit(VpnEvent.RequestPermission(request))
-            else -> controller.connect()
+            currentState.connection.isActive -> commands.disconnect()
+            request != null -> commands.wantUp().also { emit(VpnEvent.RequestPermission(request)) }
+            else -> commands.connect()
         }
     }
 
     private fun onPermission(granted: Boolean) {
         when (granted) {
-            true -> controller.connect()
+            true -> commands.connect()
             false -> emit(VpnEvent.Notice(VpnNotice.PERMISSION_DENIED))
         }
     }

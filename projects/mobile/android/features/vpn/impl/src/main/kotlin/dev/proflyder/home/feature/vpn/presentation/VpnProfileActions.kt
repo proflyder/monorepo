@@ -4,6 +4,7 @@ import android.content.Intent
 import android.net.Uri
 import dev.proflyder.home.feature.vpn.VpnController
 import dev.proflyder.home.feature.vpn.VpnProfiles
+import dev.proflyder.home.feature.vpn.connect.UserVpnCommands
 import dev.proflyder.home.feature.vpn.data.CertificateImport
 import dev.proflyder.home.feature.vpn.data.VpnCertificateStore
 import dev.zacsweers.metro.Inject
@@ -13,6 +14,7 @@ internal class VpnProfileActions(
     private val controller: VpnController,
     private val profiles: VpnProfiles,
     private val certificates: VpnCertificateStore,
+    private val commands: UserVpnCommands,
 ) {
     suspend fun reissue(): VpnNotice? = when (profiles.reissue()) {
         true -> VpnNotice.REISSUED.also { controller.reconnect() }
@@ -20,7 +22,7 @@ internal class VpnProfileActions(
     }
 
     suspend fun forget(): VpnNotice? {
-        controller.disconnect()
+        commands.disconnect()
         return when (profiles.forget()) {
             true -> VpnNotice.FORGOTTEN.also { certificates.clear() }
             false -> null

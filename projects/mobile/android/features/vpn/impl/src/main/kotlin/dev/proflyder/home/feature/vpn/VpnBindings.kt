@@ -15,6 +15,7 @@ import dev.proflyder.home.feature.vpn.transport.openconnect.SystemVpnNetwork
 import dev.proflyder.home.feature.vpn.transport.wireguard.WireGuardTransport
 import dev.proflyder.home.feature.vpn.tunnel.ChainVpnController
 import dev.proflyder.home.feature.vpn.tunnel.SystemVpnPermission
+import dev.proflyder.home.feature.vpn.tunnel.TunnelSwitch
 import dev.proflyder.home.feature.vpn.tunnel.VpnPermission
 import dev.proflyder.home.feature.vpn.tunnel.VpnStatusServiceStarter
 import dev.zacsweers.metro.AppScope
@@ -40,6 +41,9 @@ abstract class VpnBindings {
 
     @Binds
     internal abstract fun controller(impl: ChainVpnController): VpnController
+
+    @Binds
+    internal abstract fun tunnelSwitch(impl: ChainVpnController): TunnelSwitch
 
     @Binds
     internal abstract fun settings(impl: DataStoreVpnSettingsStore): VpnSettingsStore
