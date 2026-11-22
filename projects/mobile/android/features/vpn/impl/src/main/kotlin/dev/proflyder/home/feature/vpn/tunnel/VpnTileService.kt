@@ -8,6 +8,7 @@ import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
 import dev.proflyder.home.core.runtime.appGraph
 import dev.proflyder.home.feature.vpn.VpnConnection
+import dev.proflyder.home.feature.vpn.VpnController
 import dev.proflyder.home.feature.vpn.VpnInjector
 import dev.proflyder.home.feature.vpn.isActive
 import dev.proflyder.home.feature.vpn.presentation.VpnTexts
@@ -24,7 +25,10 @@ class VpnTileService : TileService() {
     private var job: Job? = null
 
     @Inject
-    internal lateinit var controller: TunnelVpnController
+    internal lateinit var controller: VpnController
+
+    @Inject
+    internal lateinit var permission: VpnPermission
 
     override fun onCreate() {
         super.onCreate()
@@ -46,7 +50,7 @@ class VpnTileService : TileService() {
         super.onClick()
         when {
             controller.connection.value.isActive -> controller.disconnect()
-            controller.permissionIntent() != null -> openApp()
+            !permission.granted() -> openApp()
             else -> controller.connect()
         }
     }

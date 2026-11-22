@@ -11,65 +11,58 @@ import dev.proflyder.home.feature.vpn.VpnRoute
 import dev.proflyder.home.feature.vpn.VpnSettings
 import dev.proflyder.home.feature.vpn.VpnSettingsStore
 import dev.zacsweers.metro.AppScope
-import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
-import kotlinx.coroutines.flow.MutableStateFlow
+import androidx.datastore.preferences.core.emptyPreferences
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 
 @SingleIn(AppScope::class)
-@ContributesBinding(AppScope::class)
 @Inject
-class DataStoreVpnSettingsStore(
+internal class DataStoreVpnSettingsStore(
     private val dataStore: DataStore<Preferences>,
+    scope: CoroutineScope,
 ) : VpnSettingsStore {
-    private val state = MutableStateFlow(VpnSettings())
+    override val settings: StateFlow<VpnSettings?> = dataStore.data
+        .catch { emit(emptyPreferences()) }
+        .map(::decode)
+        .stateIn(scope, SharingStarted.Eagerly, null)
 
-    override val settings: StateFlow<VpnSettings> = state.asStateFlow()
-
-    override suspend fun load() {
-        val preferences = suspendRunCatching { dataStore.data.first() }.getOrNull() ?: return
-        state.value = VpnSettings(
-            route = enumOr(preferences[KEY_ROUTE], VpnRoute.ALL),
-            autoConnect = preferences[KEY_AUTO] ?: false,
-            connectOnOpen = preferences[KEY_ON_OPEN] ?: true,
-            permissionAsked = preferences[KEY_PERMISSION_ASKED] ?: false,
-            auth = enumOr(preferences[KEY_AUTH], VpnAuth.CERTIFICATE),
-            certificateName = preferences[KEY_CERTIFICATE].orEmpty(),
-        )
-    }
+    private fun decode(preferences: Preferences): VpnSettings = VpnSettings(
+        route = enumOr(preferences[KEY_ROUTE], VpnRoute.ALL),
+        autoConnect = preferences[KEY_AUTO] ?: false,
+        connectOnOpen = preferences[KEY_ON_OPEN] ?: true,
+        permissionAsked = preferences[KEY_PERMISSION_ASKED] ?: false,
+        auth = enumOr(preferences[KEY_AUTH], VpnAuth.CERTIFICATE),
+        certificateName = preferences[KEY_CERTIFICATE].orEmpty(),
+    )
 
     override suspend fun setRoute(route: VpnRoute) {
         save { it[KEY_ROUTE] = route.name }
-        state.update { it.copy(route = route) }
     }
 
     override suspend fun setAutoConnect(enabled: Boolean) {
         save { it[KEY_AUTO] = enabled }
-        state.update { it.copy(autoConnect = enabled) }
     }
 
     override suspend fun setConnectOnOpen(enabled: Boolean) {
         save { it[KEY_ON_OPEN] = enabled }
-        state.update { it.copy(connectOnOpen = enabled) }
     }
 
     override suspend fun markPermissionAsked() {
         save { it[KEY_PERMISSION_ASKED] = true }
-        state.update { it.copy(permissionAsked = true) }
     }
 
     override suspend fun setAuth(auth: VpnAuth) {
         save { it[KEY_AUTH] = auth.name }
-        state.update { it.copy(auth = auth) }
     }
 
     override suspend fun setCertificateName(name: String) {
         save { it[KEY_CERTIFICATE] = name }
-        state.update { it.copy(certificateName = name) }
     }
 
     private suspend fun save(block: (androidx.datastore.preferences.core.MutablePreferences) -> Unit) {

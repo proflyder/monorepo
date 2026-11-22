@@ -7,6 +7,9 @@ import dev.proflyder.home.core.endpoint.EndpointParseResult
 import dev.proflyder.home.core.endpoint.ServerEndpoint
 import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.model.RemoteFailure
+import dev.proflyder.home.core.model.VpnProtocolId
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.runBlocking
@@ -53,11 +56,12 @@ class VpnProfileClientTest {
         assertEquals("/v1/vpn/profile", request.path)
         assertEquals("Bearer tok-1", request.getHeader("Authorization"))
         assertEquals(fixture("profile_request"), request.body.readUtf8())
-        assertEquals("10.77.2.2/32", profile.wireguard.address)
-        assertEquals(listOf("192.0.2.0/24"), profile.wireguard.splitAllowedIps)
-        assertEquals("vpn.example.com:51820", profile.wireguard.endpoint)
-        assertEquals("192.0.2.29:51820", profile.wireguard.lanEndpoint)
-        assertEquals("lan", profile.ocserv.splitGroup)
+        assertEquals(setOf(VpnProtocolId("wireguard"), VpnProtocolId("ocserv")), profile.transports.keys)
+        val wireguard = profile.settingsOf(VpnProtocolId("wireguard"))!!.json
+        assertEquals("10.77.2.2/32", wireguard["interface"]!!.jsonObject["address"]!!.jsonPrimitive.content)
+        assertEquals("192.0.2.29:51820", wireguard["peer"]!!.jsonObject["lanEndpoint"]!!.jsonPrimitive.content)
+        assertEquals("lan", profile.settingsOf(VpnProtocolId("ocserv"))!!.json["splitGroup"]!!.jsonPrimitive.content)
+        assertEquals("Pixel", profile.deviceName)
         assertEquals(1_795_100_100L, profile.updatedUnix)
     }
 

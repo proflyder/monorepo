@@ -7,7 +7,7 @@
 
     <string name="vpn_state_disconnected">Disconnected</string>
     <string name="vpn_state_connecting">Connecting…</string>
-    <string name="vpn_state_connecting_external">Waiting for OpenConnect…</string>
+    <string name="vpn_state_connecting_external">Waiting for the external app…</string>
     <string name="vpn_state_connected">Connected</string>
     <string name="vpn_state_fallback">WireGuard did not answer</string>
     <string name="vpn_state_home">Home network: VPN not needed</string>
@@ -29,7 +29,7 @@
 
     <string name="vpn_connect">Connect</string>
     <string name="vpn_disconnect">Disconnect</string>
-    <string name="vpn_open_external">Open OpenConnect</string>
+    <string name="vpn_open_via">Open %1$s</string>
 
     <string name="vpn_route_title">Route</string>
     <string name="vpn_route_all">All traffic</string>
@@ -89,4 +89,6 @@
     <string name="vpn_toggle_connecting">VPN connecting. Tap to stop, hold for VPN settings</string>
     <string name="vpn_toggle_on">VPN on. Tap to disconnect, hold for VPN settings</string>
     <string name="vpn_quick_tile_title">VPN home</string>
+    <string name="vpn_open_app">Choose a fallback</string>
+    <string name="vpn_detail_connected_unverified">%1$s · %2$s · reported by the system, not verified</string>
 </resources>
