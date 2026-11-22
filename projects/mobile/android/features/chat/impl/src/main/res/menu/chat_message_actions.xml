@@ -11,9 +11,9 @@
     <item
         android:id="@+id/chat_action_retry"
         android:icon="@drawable/chat_ic_retry"
-        android:title="@string/chat_action_retry" />
+        android:title="@string/ds_action_retry" />
     <item
         android:id="@+id/chat_action_delete"
         android:icon="@drawable/chat_ic_delete"
-        android:title="@string/chat_action_delete" />
+        android:title="@string/ds_action_delete" />
 </menu>

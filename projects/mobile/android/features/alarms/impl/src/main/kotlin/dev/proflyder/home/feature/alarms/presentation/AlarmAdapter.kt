@@ -7,6 +7,9 @@ import dev.proflyder.home.core.model.Schedule
 import dev.proflyder.home.core.presentation.IntentAdapterCallback
 import dev.proflyder.home.core.presentation.KeyedDiff
 import dev.proflyder.home.core.presentation.SwitchBinder
+import dev.proflyder.home.core.presentation.aspectPayload
+import dev.proflyder.home.core.presentation.renderDimmed
+import dev.proflyder.home.core.ui.PayloadSet
 import dev.proflyder.home.core.ui.AdapterCallback
 import dev.proflyder.home.core.ui.BaseListAdapter
 import dev.proflyder.home.core.ui.BaseViewHolder
@@ -37,9 +40,26 @@ internal class AlarmAdapterCallback(
     onLongClick = { row -> AlarmsIntent.LongClick(row.alarm.id) },
 )
 
+internal enum class AlarmAspect {
+    ENABLED,
+    SELECTION,
+    CONTENT,
+}
+
+internal val AlarmDiff = KeyedDiff<AlarmRow>(
+    key = { it.alarm.id },
+    payload = aspectPayload(
+        mapOf(
+            AlarmAspect.ENABLED to { row: AlarmRow -> row.alarm.enabled },
+            AlarmAspect.SELECTION to { row: AlarmRow -> row.selected },
+            AlarmAspect.CONTENT to { row: AlarmRow -> row.copy(alarm = row.alarm.copy(enabled = false), selected = false) },
+        ),
+    ),
+)
+
 internal class AlarmAdapter(
     callback: AlarmAdapterCallback,
-) : BaseListAdapter<AlarmRow, ItemAlarmBinding, AlarmAdapterCallback>(callback, KeyedDiff({ it.alarm.id })) {
+) : BaseListAdapter<AlarmRow, ItemAlarmBinding, AlarmAdapterCallback>(callback, AlarmDiff) {
 
     override fun onCreateHolder(
         inflater: LayoutInflater,
@@ -82,21 +102,33 @@ internal class AlarmAdapter(
                 selected = item.selected,
             )
 
-            binding.root.alpha = if (schedule.enabled || item.selectionMode) 1f else 0.6f
+            renderEnabled(item, animate = false)
+            renderSelection(item)
+        }
+
+        override fun bindPayloads(item: AlarmRow, payloads: List<Any>) {
+            val aspects = PayloadSet.merge(payloads, AlarmAspect::class.java)
+            if (aspects == null || AlarmAspect.CONTENT in aspects) {
+                bind(item)
+                return
+            }
+            if (AlarmAspect.ENABLED in aspects) renderEnabled(item, animate = true)
+            if (AlarmAspect.SELECTION in aspects) renderSelection(item)
+        }
+
+        private fun renderEnabled(item: AlarmRow, animate: Boolean) {
+            binding.root.renderDimmed(!item.alarm.enabled && !item.selectionMode, DISABLED_ALPHA, animate)
+            enabledSwitch.render(item.alarm.enabled)
+        }
+
+        private fun renderSelection(item: AlarmRow) {
             binding.root.isChecked = item.selected
             applySelection(
                 selected = item.selected,
-                animate = shouldAnimateSelection(
-                    previousAlarmId = previousAlarmId,
-                    previousSelected = previousSelected,
-                    alarmId = schedule.id,
-                    selected = item.selected,
-                ),
+                animate = shouldAnimateSelection(previousAlarmId, previousSelected, item.alarm.id, item.selected),
             )
-            previousAlarmId = schedule.id
+            previousAlarmId = item.alarm.id
             previousSelected = item.selected
-
-            enabledSwitch.render(schedule.enabled)
         }
 
         private fun applySelection(selected: Boolean, animate: Boolean) {
@@ -138,5 +170,6 @@ internal class AlarmAdapter(
     private companion object {
         const val SELECTED_STROKE_DP = 2f
         const val SELECTED_SCRIM_ALPHA = 0.12f
+        const val DISABLED_ALPHA = 0.6f
     }
 }

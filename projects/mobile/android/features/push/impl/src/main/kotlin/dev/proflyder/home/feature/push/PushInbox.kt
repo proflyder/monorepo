@@ -13,7 +13,7 @@ import kotlinx.coroutines.launch
 @SingleIn(AppScope::class)
 @ContributesIntoSet(AppScope::class, binding = binding<AppStartable>())
 @Inject
-class PushInbox(
+class PushInbox internal constructor(
     private val context: Context,
     private val scope: CoroutineScope,
     private val tokens: PushTokenSource,

@@ -1,5 +1,6 @@
 package dev.proflyder.home.feature.control.presentation
 
+import android.content.Context
 import dev.proflyder.home.core.navigation.Route
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -12,6 +13,7 @@ import dev.proflyder.home.core.ui.ViewModelSource
 import dev.proflyder.home.feature.alarms.AlarmRepository
 import dev.proflyder.home.feature.control.ControlPreferences
 import dev.proflyder.home.feature.control.ControlRepository
+import dev.proflyder.home.feature.control.impl.R
 import dev.proflyder.home.feature.control.QuickTileProvider
 import dev.proflyder.home.feature.control.data.HomeHubFeed
 import dev.proflyder.home.feature.control.data.HubSources
@@ -28,6 +30,7 @@ internal class ControlScreenDependencies(
     val repository: ControlRepository,
     val preferences: ControlPreferences,
     val favorites: FavoritePreferences,
+    val defaultFavoriteScenarios: Set<String>,
     val providers: Set<QuickTileProvider>,
     val hub: HubSources,
     val clock: ServerClock,
@@ -38,7 +41,7 @@ internal class ControlViewModel(
 ) : StateViewModel<ControlUiState, ControlIntent, ControlEvent>(ControlUiState()) {
     private val hubFeed = HomeHubFeed(dependencies.hub, viewModelScope)
     private val tiles = QuickTileLauncher(dependencies.providers)
-    private val favorites = ControlFavorites(dependencies.favorites)
+    private val favorites = ControlFavorites(dependencies.favorites, dependencies.defaultFavoriteScenarios)
     private val devices = DeviceCommands(dependencies.repository, dependencies.hub.scenarios)
     private val hub = HubCommands(dependencies.hub.alarms, dependencies.hub.timers, hubFeed)
     private val preferences = dependencies.preferences
@@ -98,6 +101,7 @@ internal class ControlViewModel(
 @ClassKey(ControlViewModel::class)
 @Inject
 class ControlViewModelSource internal constructor(
+    context: Context,
     repository: ControlRepository,
     preferences: ControlPreferences,
     favorites: FavoritePreferences,
@@ -114,6 +118,7 @@ class ControlViewModelSource internal constructor(
         repository = repository,
         preferences = preferences,
         favorites = favorites,
+        defaultFavoriteScenarios = context.resources.getStringArray(R.array.control_default_favorite_scenarios).toSet(),
         providers = providers,
         hub = HubSources(alarms, timers, reminders, scenarios, clockSync, foreground),
         clock = clock,

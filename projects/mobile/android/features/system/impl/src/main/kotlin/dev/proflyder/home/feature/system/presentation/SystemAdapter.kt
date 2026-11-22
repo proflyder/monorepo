@@ -4,10 +4,10 @@ import android.content.res.ColorStateList
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import androidx.recyclerview.widget.DiffUtil
 import com.google.android.material.color.MaterialColors
 import dev.proflyder.home.core.model.HealthLevel
 import dev.proflyder.home.core.ui.AdapterCallback
+import dev.proflyder.home.core.presentation.KeyedDiff
 import dev.proflyder.home.core.ui.BaseListAdapter
 import dev.proflyder.home.core.ui.BaseViewHolder
 import dev.proflyder.home.core.ui.ViewBinding
@@ -22,11 +22,7 @@ private typealias SystemAdapterCallback = AdapterCallback<SystemRow>
 
 private typealias SystemHolder = BaseViewHolder<SystemRow, ViewBinding, SystemAdapterCallback>
 
-private object SystemDiff : DiffUtil.ItemCallback<SystemRow>() {
-    override fun areItemsTheSame(oldItem: SystemRow, newItem: SystemRow): Boolean = oldItem.key == newItem.key
-
-    override fun areContentsTheSame(oldItem: SystemRow, newItem: SystemRow): Boolean = oldItem == newItem
-}
+private val SystemDiff = KeyedDiff<SystemRow>(key = { it.key })
 
 internal fun levelColorAttr(level: HealthLevel): Int = when (level) {
     HealthLevel.OK -> androidx.appcompat.R.attr.colorPrimary

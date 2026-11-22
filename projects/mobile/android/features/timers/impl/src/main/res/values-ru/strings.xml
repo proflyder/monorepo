@@ -6,9 +6,6 @@
     <string name="timers_duration">Длительность</string>
     <string name="timers_duration_hint">например, 5м, 1ч 30м, 01:30</string>
     <string name="timers_start">Запустить таймер</string>
-    <string name="timers_pause">Пауза</string>
-    <string name="timers_resume">Продолжить</string>
-    <string name="timers_cancel">Отмена</string>
     <string name="timers_paused">На паузе</string>
     <string name="timers_running">Идёт</string>
     <string name="timers_remaining">Осталось %1$s</string>

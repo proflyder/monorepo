@@ -12,7 +12,6 @@
     <string name="ds_catalog_lists">Lists and switches</string>
     <string name="ds_catalog_states">Empty state and device tiles</string>
     <string name="ds_catalog_action">Action</string>
-    <string name="ds_catalog_delete">Delete</string>
     <string name="ds_catalog_disabled">Disabled</string>
     <string name="ds_catalog_loading">Loading</string>
     <string name="ds_catalog_field_label">Name</string>
@@ -50,4 +49,11 @@
     <string name="ds_light_kelvin">%1$d K</string>
     <string name="ds_light_transition">Transition, seconds (optional, 0–300)</string>
     <string name="ds_action_save">Save</string>
+    <string name="ds_action_delete">Delete</string>
+    <string name="ds_action_cancel">Cancel</string>
+    <string name="ds_action_retry">Retry</string>
+    <string name="ds_action_pause">Pause</string>
+    <string name="ds_action_resume">Resume</string>
+    <string name="ds_action_open_connection">Open Connection</string>
+    <string name="ds_product_name">Home</string>
 </resources>

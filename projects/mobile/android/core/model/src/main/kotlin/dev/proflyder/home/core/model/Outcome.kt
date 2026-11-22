@@ -17,6 +17,7 @@ sealed interface RemoteFailure {
     data class ProtocolFailure(val detail: String) : RemoteFailure
     data class Validation(val field: Field, val detail: String = "") : RemoteFailure
     data class Storage(val reason: StorageReason) : RemoteFailure
+    data object RemoteConfig : RemoteFailure
 }
 
 enum class StorageReason {
@@ -36,6 +37,7 @@ fun RemoteFailure.isAmbiguousRetryable(): Boolean = when (this) {
     RemoteFailure.Unauthorized,
     is RemoteFailure.Validation,
     is RemoteFailure.Storage,
+    RemoteFailure.RemoteConfig,
     -> false
 }
 

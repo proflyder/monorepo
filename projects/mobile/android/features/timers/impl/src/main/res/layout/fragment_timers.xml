@@ -132,7 +132,7 @@
                     style="@style/Widget.Home.Button.Outlined.M"
                     android:layout_width="wrap_content"
                     android:layout_marginBottom="8dp"
-                    android:text="@string/ui_retry"
+                    android:text="@string/ds_action_retry"
                     android:visibility="gone" />
 
                 <TextView

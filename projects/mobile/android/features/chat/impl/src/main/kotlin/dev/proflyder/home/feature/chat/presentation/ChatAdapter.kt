@@ -18,11 +18,11 @@ import dev.proflyder.home.core.model.ChatAttachmentKind
 import android.view.animation.Animation
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.text.getSpans
-import androidx.recyclerview.widget.DiffUtil
 import com.google.android.material.color.MaterialColors
 import com.google.android.material.shape.ShapeAppearanceModel
 import dev.proflyder.home.core.model.ChatKind
 import dev.proflyder.home.core.ui.BaseAdapterCallback
+import dev.proflyder.home.core.presentation.KeyedDiff
 import dev.proflyder.home.core.ui.BaseListAdapter
 import dev.proflyder.home.core.ui.BaseViewHolder
 import dev.proflyder.home.core.ui.ViewBinding
@@ -57,11 +57,7 @@ internal open class ChatAdapterCallbacks : BaseAdapterCallback<ChatItem>() {
 
 private typealias ChatHolder = BaseViewHolder<ChatItem, ViewBinding, ChatAdapterCallbacks>
 
-private object ChatDiff : DiffUtil.ItemCallback<ChatItem>() {
-    override fun areItemsTheSame(oldItem: ChatItem, newItem: ChatItem): Boolean = oldItem.key == newItem.key
-
-    override fun areContentsTheSame(oldItem: ChatItem, newItem: ChatItem): Boolean = oldItem == newItem
-}
+private val ChatDiff = KeyedDiff<ChatItem>(key = { it.key })
 
 internal class ChatAdapter(
     callback: ChatAdapterCallbacks,

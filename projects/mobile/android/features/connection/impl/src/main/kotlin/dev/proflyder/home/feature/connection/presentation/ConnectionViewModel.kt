@@ -7,7 +7,6 @@ import dev.proflyder.home.core.config.TokenStatus
 import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.core.model.SchedulerStatus
-import dev.proflyder.home.core.operation.suspendRunCatching
 import dev.proflyder.home.core.presentation.StateViewModel
 import dev.proflyder.home.core.ui.ViewModelSource
 import dev.proflyder.home.feature.connection.ConnectionRepository
@@ -91,79 +90,60 @@ internal class ConnectionViewModel(
     }
 
     private fun refreshConfig() {
-        val current = currentState
-        if (current.refreshingConfig) return
+        if (currentState.refreshingConfig) return
         updateState { copy(refreshingConfig = true, error = null) }
         launch {
-            suspendRunCatching {
-                repository.refreshRemoteConfig()
-            }.onSuccess {
-                updateState { copy(refreshingConfig = false) }
-                emit(ConnectionEvent.Notice(ConnectionNotice.CONFIG_REFRESHED))
-            }.onFailure { failure ->
-                if (failure !is Exception) throw failure
-                updateState {
-                    copy(
-                        refreshingConfig = false,
-                        error = RemoteFailure.Offline("Remote Config could not be refreshed."),
-                    )
-                }
-            }
+            val refreshed = repository.refreshRemoteConfig()
+            updateState { copy(refreshingConfig = false, error = refreshed.failureOrNull()) }
+            if (refreshed is Outcome.Success) emit(ConnectionEvent.Notice(ConnectionNotice.CONFIG_REFRESHED))
         }
     }
 
     private fun persist(testAfter: Boolean) {
         val current = currentState
         if (current.saving || current.testing) return
+        updateState { copy(saving = true, testing = testAfter, error = null, status = null) }
+        launch { saveThenMaybeTest(current.tokenUpdate(), testAfter) }
+    }
 
-        val tokenUpdate = when {
-            current.clearTokenRequested -> TokenUpdate.Clear
-            current.tokenInput.isNotBlank() -> TokenUpdate.Replace(current.tokenInput)
-            else -> TokenUpdate.Keep
-        }
-
-        updateState {
-            copy(
-                saving = true,
-                testing = testAfter,
-                error = null,
-                status = null,
-            )
-        }
-
-        launch {
-            when (val saved = repository.saveToken(tokenUpdate)) {
-                is Outcome.Failure -> updateState {
-                    copy(saving = false, testing = false, error = saved.failure)
-                }
-                is Outcome.Success -> {
-                    val config: ConnectionConfig = saved.value
-                    updateState {
-                        copy(
-                            tokenInput = "",
-                            clearTokenRequested = false,
-                            hasStoredToken = config.hasToken,
-                            tokenStatus = repository.tokenStatus.value,
-                            saving = false,
-                        )
-                    }
-                    if (!testAfter) {
-                        emit(ConnectionEvent.Notice(ConnectionNotice.SAVED))
-                        return@launch
-                    }
-                    when (val status = repository.testConnection()) {
-                        is Outcome.Success -> {
-                            updateState { copy(testing = false, status = status.value) }
-                            emit(ConnectionEvent.Notice(ConnectionNotice.SAVED_AND_ONLINE))
-                        }
-                        is Outcome.Failure -> updateState {
-                            copy(testing = false, error = status.failure)
-                        }
-                    }
-                }
+    private suspend fun saveThenMaybeTest(update: TokenUpdate, testAfter: Boolean) {
+        when (val saved = repository.saveToken(update)) {
+            is Outcome.Failure -> updateState { copy(saving = false, testing = false, error = saved.failure) }
+            is Outcome.Success -> {
+                applySaved(saved.value)
+                if (testAfter) applyTestResult(repository.testConnection())
+                if (!testAfter) emit(ConnectionEvent.Notice(ConnectionNotice.SAVED))
             }
         }
     }
+
+    private fun applySaved(config: ConnectionConfig) {
+        updateState {
+            copy(
+                tokenInput = "",
+                clearTokenRequested = false,
+                hasStoredToken = config.hasToken,
+                tokenStatus = repository.tokenStatus.value,
+                saving = false,
+            )
+        }
+    }
+
+    private suspend fun applyTestResult(result: Outcome<SchedulerStatus>) {
+        when (result) {
+            is Outcome.Success -> {
+                updateState { copy(testing = false, status = result.value) }
+                emit(ConnectionEvent.Notice(ConnectionNotice.SAVED_AND_ONLINE))
+            }
+            is Outcome.Failure -> updateState { copy(testing = false, error = result.failure) }
+        }
+    }
+}
+
+internal fun ConnectionUiState.tokenUpdate(): TokenUpdate = when {
+    clearTokenRequested -> TokenUpdate.Clear
+    tokenInput.isNotBlank() -> TokenUpdate.Replace(tokenInput)
+    else -> TokenUpdate.Keep
 }
 
 internal fun initialState(repository: ConnectionRepository): ConnectionUiState {

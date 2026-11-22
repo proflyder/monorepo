@@ -88,13 +88,13 @@
                         android:id="@+id/control_retry"
                         style="@style/Widget.Home.Button.Tonal.M"
                         android:layout_width="wrap_content"
-                        android:text="@string/ui_retry" />
+                        android:text="@string/ds_action_retry" />
 
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/control_open_connection"
                         style="@style/Widget.Home.Button.Filled.M"
                         android:layout_width="wrap_content"
-                        android:text="@string/control_open_connection"
+                        android:text="@string/ds_action_open_connection"
                         android:visibility="gone" />
                 </dev.proflyder.home.core.designsystem.ButtonRow>
             </LinearLayout>

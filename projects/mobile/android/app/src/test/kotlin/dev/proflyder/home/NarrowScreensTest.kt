@@ -8,10 +8,7 @@ import androidx.core.widget.NestedScrollView
 import com.google.android.material.button.MaterialButton
 import dev.proflyder.home.core.designsystem.ButtonRow
 import dev.proflyder.home.core.designsystem.ToolbarTitle
-import dev.proflyder.home.core.navigation.Destination
 import dev.proflyder.home.core.theme.AppTheme
-import dev.proflyder.home.feature.connection.ConnectionDestination
-import dev.proflyder.home.feature.push.PushSettingsDestination
 import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -33,7 +30,7 @@ class NarrowScreensTest {
     @Test
     @Config(sdk = [35], qualifiers = "ru-w360dp-h780dp-night-xxhdpi")
     fun connectionButtonsStackOnNarrowScreens() {
-        val activity = open(ConnectionDestination, 360)
+        val activity = open(CONNECTION_ROUTE, 360)
         activity.findViewById<View>(ConnectionR.id.connection_clear_token).visibility = View.VISIBLE
         layout(activity.window.decorView, 360)
         val row = activity.findViewById<ButtonRow>(ConnectionR.id.connection_actions)
@@ -56,7 +53,7 @@ class NarrowScreensTest {
     fun toolbarTitleFitsAt411() = assertTitle(411)
 
     private fun assertTitle(widthDp: Int) {
-        val activity = open(PushSettingsDestination, widthDp)
+        val activity = open(PUSH_SETTINGS_ROUTE, widthDp)
         val title = activity.findViewById<ToolbarTitle>(R.id.toolbar_title)
         val layout = checkNotNull(title.layout)
         assertTrue("at most two lines", layout.lineCount <= 2)
@@ -89,12 +86,12 @@ class NarrowScreensTest {
         assertFalse("${button.text} is cut", button.layout.getEllipsisCount(0) > 0)
     }
 
-    private fun open(destination: Destination, widthDp: Int): MainActivity {
+    private fun open(route: String, widthDp: Int): MainActivity {
         val app = RuntimeEnvironment.getApplication() as HomeApplication
         runBlocking { app.graph.appearance.selectTheme(AppTheme.CURRENT) }
         val activity = Robolectric.buildActivity(MainActivity::class.java).setup().get()
         idle(activity)
-        activity.router.navigate(destination)
+        activity.router.openRoute(route)
         idle(activity)
         layout(activity.window.decorView, widthDp)
         return activity
@@ -129,3 +126,6 @@ class NarrowScreensTest {
         const val PNG_QUALITY = 100
     }
 }
+
+private const val CONNECTION_ROUTE = "connection/settings"
+private const val PUSH_SETTINGS_ROUTE = "push/settings"

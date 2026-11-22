@@ -18,7 +18,7 @@ import dev.zacsweers.metro.SingleIn
 
 @SingleIn(AppScope::class)
 @Inject
-class PushNotifier(
+internal class PushNotifier(
     private val context: Context,
     private val appearance: AppearanceController,
     private val permission: NotificationPermission,

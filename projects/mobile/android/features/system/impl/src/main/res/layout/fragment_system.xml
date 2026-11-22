@@ -51,6 +51,6 @@
             android:id="@+id/system_retry"
             android:layout_width="wrap_content"
             android:layout_marginTop="12dp"
-            android:text="@string/ui_retry" />
+            android:text="@string/ds_action_retry" />
     </LinearLayout>
 </FrameLayout>

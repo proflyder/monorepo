@@ -6,9 +6,6 @@
     <string name="timers_duration">Duration</string>
     <string name="timers_duration_hint">e.g. 5m, 1h 30m, 01:30</string>
     <string name="timers_start">Start timer</string>
-    <string name="timers_pause">Pause</string>
-    <string name="timers_resume">Resume</string>
-    <string name="timers_cancel">Cancel</string>
     <string name="timers_paused">Paused</string>
     <string name="timers_running">Running</string>
     <string name="timers_remaining">Remaining %1$s</string>

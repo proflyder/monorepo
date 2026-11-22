@@ -10,7 +10,10 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 
-internal class ControlFavorites(private val preferences: FavoritePreferences) {
+internal class ControlFavorites(
+    private val preferences: FavoritePreferences,
+    private val defaultScenarioLabels: Set<String>,
+) {
     fun resolved(catalog: Flow<ControlCatalogState>, scenarios: Flow<List<Scenario>?>): Flow<List<FavoriteRef>> =
         combine(preferences.favorites, catalog, scenarios, ::resolve)
             .onEach { resolution -> resolution.seed?.let { preferences.saveIfAbsent(it) } }
@@ -27,7 +30,7 @@ internal class ControlFavorites(private val preferences: FavoritePreferences) {
         if (stored != null) return Resolution(stored, seed = null)
         val loaded = catalog.catalog ?: return Resolution(emptyList(), seed = null)
         val known = scenarios ?: return Resolution(emptyList(), seed = null)
-        val defaults = Favorites.defaults(loaded.entries, known)
+        val defaults = Favorites.defaults(loaded.entries, known, defaultScenarioLabels)
         return Resolution(defaults, seed = defaults)
     }
 

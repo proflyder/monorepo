@@ -17,6 +17,7 @@ fun RemoteFailure.userMessage(context: Context): String = when (this) {
     }
     is RemoteFailure.ProtocolFailure -> context.getString(R.string.ui_error_protocol)
     is RemoteFailure.Storage -> context.getString(reason.textRes())
+    RemoteFailure.RemoteConfig -> context.getString(R.string.ui_error_remote_config)
     is RemoteFailure.Validation -> when (field) {
         Field.ENDPOINT -> context.getString(R.string.ui_validation_endpoint)
         Field.CONTROL_ENDPOINT -> context.getString(R.string.ui_validation_control_endpoint)

@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="DuplicateStrings">
-    <string name="ui_retry">Retry</string>
     <string name="ui_loading">Loading…</string>
     <string name="ui_error_not_configured">No server is configured. Open Connection and enter your home server address.</string>
     <string name="ui_error_unauthorized">The server rejected the bearer token. Check the token in Connection.</string>
@@ -128,4 +127,5 @@
     <string name="ui_empty_alarms">No alarms yet. Alarms run on the home server.</string>
     <string name="ui_empty_reminders">No reminders yet. Reminders are delivered by the home server.</string>
     <string name="ui_empty_timers">No active timers. Timers count down on the home server.</string>
+    <string name="ui_error_remote_config">Remote Config could not be refreshed.</string>
 </resources>

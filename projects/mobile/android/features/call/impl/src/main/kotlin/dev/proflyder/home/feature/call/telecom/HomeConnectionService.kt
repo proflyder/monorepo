@@ -1,5 +1,6 @@
 package dev.proflyder.home.feature.call.telecom
 
+import dev.proflyder.home.core.designsystem.R as DesignR
 import android.telecom.Connection
 import android.telecom.ConnectionRequest
 import android.telecom.ConnectionService
@@ -7,7 +8,6 @@ import android.telecom.PhoneAccountHandle
 import dev.proflyder.home.core.runtime.appGraph
 import dev.proflyder.home.feature.call.CallController
 import dev.proflyder.home.feature.call.CallInjector
-import dev.proflyder.home.feature.call.impl.R
 import dev.zacsweers.metro.Inject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -37,7 +37,7 @@ class HomeConnectionService : ConnectionService() {
             controller = controller,
             bridge = telecomBridge,
             scope = scope,
-            callerName = getString(R.string.call_account_label),
+            callerName = getString(DesignR.string.ds_product_name),
         )
         connection.startOutgoing()
         return connection

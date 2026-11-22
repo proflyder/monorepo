@@ -9,7 +9,7 @@ import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesIntoSet
 import dev.zacsweers.metro.Inject
 
-object ControlListDestination : Destination {
+internal object ControlListDestination : Destination {
     override val featureId: String = "control"
     override val route: String = "control/list"
 }

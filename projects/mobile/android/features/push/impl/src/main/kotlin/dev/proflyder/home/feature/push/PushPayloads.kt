@@ -3,7 +3,7 @@ package dev.proflyder.home.feature.push
 import dev.proflyder.home.feature.chat.ChatFocus
 import dev.proflyder.home.feature.chat.ChatRoute
 
-sealed interface PushMessage {
+internal sealed interface PushMessage {
     data class Find(val reason: String) : PushMessage
 
     data class Notify(
@@ -13,7 +13,7 @@ sealed interface PushMessage {
     ) : PushMessage
 }
 
-object PushPayloads {
+internal object PushPayloads {
     const val KEY_TYPE: String = "type"
     const val KEY_REASON: String = "reason"
     const val KEY_TITLE: String = "title"
@@ -46,7 +46,7 @@ object PushPayloads {
         first?.trim()?.takeIf { it.isNotEmpty() } ?: second?.trim().orEmpty()
 }
 
-object PushChatGate {
+internal object PushChatGate {
     fun shouldSkip(message: PushMessage.Notify, chatVisible: Boolean = ChatFocus.isVisible): Boolean =
         chatVisible && message.deepLink?.route?.let(ChatRoute::isChat) == true
 }

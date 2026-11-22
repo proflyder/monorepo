@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="DuplicateStrings">
-    <string name="ui_retry">Повторить</string>
     <string name="ui_loading">Загрузка…</string>
     <string name="ui_error_not_configured">Сервер не настроен. Откройте «Подключение» и укажите адрес домашнего сервера.</string>
     <string name="ui_error_unauthorized">Сервер отклонил токен. Проверьте токен в «Подключении».</string>
@@ -127,4 +126,5 @@
     <string name="ui_validation_speak">Введите 1–500 символов без управляющих символов.</string>
     <string name="ui_validation_entity">Введите идентификатор сущности Home Assistant, например light.kitchen.</string>
     <string name="ui_validation_unsupported">Сценарий использует части, которые эта версия приложения не поддерживает. Обновите приложение, чтобы его редактировать.</string>
+    <string name="ui_error_remote_config">Не удалось обновить Remote Config.</string>
 </resources>

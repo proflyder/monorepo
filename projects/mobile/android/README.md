@@ -497,9 +497,9 @@ CallStyle notification, and an audio-only WebRTC peer connection.
   `ProximityScreenLock`) и шлёт намерения.
 - DI: Metro не видит `internal`-вклады из другого модуля, поэтому все
   реализации `internal` с `@Inject`, а связывание — в одном публичном
-  `CallBindings` (`internal @Binds`/`@IntoSet`). `CallEntryPoint` для
-  `HomeConnectionService`/`CallForegroundService` ставит
-  `CallEntryPointInstaller` (`AppStartable`), `HomeApplication` его не знает.
+  `CallBindings` (`internal @Binds`/`@IntoSet`). `HomeConnectionService`/
+  `CallForegroundService` получают зависимости member injection через
+  `CallInjector`.
 - Incoming calls are architectural only: while a session is open `Watch`
   recognises an incoming `RINGING` call for this endpoint and declines it. There is no incoming UI yet
   (`HomeConnectionService` cancels incoming connections).
@@ -657,14 +657,9 @@ classes extending `BaseViewModel`, except in `updateState` itself.
 inside a `setOn*Listener`/`addOn*Listener`/`doOn*` lambda, and `x.toggle()` on a
 non-ViewModel receiver. The UI sends an intent and renders the value from the
 ViewModel's StateFlow; local UI flags are not detectable and stay a review item.
-`detekt-baseline.xml` lists the findings of these two rules that existed when
-they were introduced (audit package P0); a finding outside the baseline fails
-the build. Baseline IDs are `rule:file$class$statement`, so identical
-statements in one class share an entry. Migration packages shrink the baseline
-by deleting entries; regenerate it only to remove fixed entries, never to accept
-new ones. To regenerate, build `//projects/mobile/android:detekt` and run the
-detekt binary from its runfiles with the same arguments as `detekt.run` plus
-`--baseline <path> --create-baseline`. Test mock responses live in
+There is no detekt baseline: every rule applies without exceptions, and the
+only allowed public declarations in impl are listed in the Metro rule
+(Architecture → DI → Notes to the code). Test mock responses live in
 `src/test/resources/fixtures/*.json` and are read through
 `dev.proflyder.home.core.testing.TestFixtures`.
 
@@ -1259,12 +1254,29 @@ single `DataStore`, `FeatureRegistry` and the `Set<Interceptor>` multibinding.
 
 #### Notes to the code
 
-- Metro silently skips `internal` contributions from another module: an
-  `internal` class with `@ContributesBinding`/`@ContributesIntoSet`/
-  `@ContributesIntoMap` in a feature impl compiles but never reaches
-  `AppGraph` (missing ViewModel at runtime, startable never started). The
-  contributed class is therefore public (with an `internal constructor` where
-  its dependencies are internal); `PublicInImpl` exempts `@Contributes*`.
+- **Metro and `internal` — one rule.** Metro silently skips `internal`
+  contributions from another module: an `internal` class with
+  `@ContributesBinding`/`@ContributesIntoSet`/`@ContributesIntoMap`/
+  `@ContributesTo` in a feature impl compiles but never reaches `AppGraph`
+  (`Set<FeatureEntry>` is missing a binding, a ViewModel is missing at runtime,
+  a startable never starts). Hence:
+  - implementations are `internal` with `@Inject` and are bound to their API
+    type in one public `XBindings` interface (`@ContributesTo`, members
+    `@Binds internal`/`@IntoSet`), e.g. `VpnBindings`, `CallBindings`;
+  - a class that is itself the contribution (`*ViewModelSource`, `*FeatureEntry`,
+    `*ToolbarContribution`, `AppStartable`s such as `PushInbox`) is public with an
+    `internal constructor`, so its internal dependencies stay invisible outside
+    the module; its public members expose only API types (`rootDestination:
+    Destination`, not the internal destination object);
+  - `@ContributesTo` injector interfaces (`VpnInjector`, …) expose only
+    `inject(...)` for framework-created components.
+  The only other public declarations in `*/impl/src/main/` are custom views
+  referenced from layouts (`VoiceWaveView`): generated view bindings are
+  public and expose them. detekt `PublicInImpl` encodes exactly these
+  exceptions (`@Inject`/`@Contributes*`/`@BindingContainer` annotations, member
+  injection, `View`/`ViewGroup`/layout supertypes); there is no detekt baseline,
+  every other public declaration fails the build. Tests in other modules
+  navigate by route string (`Navigator.openRoute`), not by an impl destination.
   `AppGraphBindingsTest` checks every ViewModel and startable resolves.
 - Navigation is typed. A destination owns its route string and a
   `RouteCodec` (usually its companion) that parses it back; `FeatureEntry.routes`
@@ -1453,6 +1465,26 @@ renders the catalog (`catalog-<theme>-<dark|light>-<section>.png`);
 `//projects/mobile/android/app:key_screens_screenshot_test` writes
 `screen-<theme>-<mode>-<screen>.png` for Home, Scenarios, Time, Chat, System,
 Connection and the alarm editor.
+
+### Notes to the code (design system)
+
+- Shared action labels are `ds_action_*` (`delete`, `cancel`, `retry`,
+  `pause`, `resume`, `save`, `open_connection`) and the product name is
+  `ds_product_name`; features do not copy them into their own strings.
+- `PillSegments` never changes its own selection: a tap only calls
+  `onSelectionRequested`, the selection moves when `render` calls `select`.
+  Screens connect it through `PillSegmentsBinder` / `ScreenFragment.bindPills`
+  (Appearance, Time, VPN, the catalog).
+- Lists never flash on a partial change. `KeyedDiff` always returns a payload
+  (`ItemChanged` when no aspect function is given), so `RecyclerView` rebinds the
+  same holder instead of cross-fading two; `BaseListAdapter` turns off change
+  animations. Rows with a toggle declare aspects with `aspectPayload` and
+  rebind only what changed (`AlarmAspect`, `ReminderAspect`, `ScenarioAspect`);
+  the dim of a disabled row fades with `renderDimmed`.
+- Banners that push content (`vpn_route_banner`, `control_states_banner`)
+  appear and disappear through `RevealBinder`: height and alpha animate
+  together with `HomeMotion` timings. The visibility comes from the screen's
+  ViewModel (`VpnToolbarViewModel.state.routeBannerVisible`).
 
 ## Themes
 

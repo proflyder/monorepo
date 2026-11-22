@@ -1,6 +1,7 @@
 package dev.proflyder.home.feature.control.presentation
 
 import androidx.recyclerview.widget.GridLayoutManager
+import dev.proflyder.home.core.designsystem.RevealBinder
 import dev.proflyder.home.core.ui.ListStateViews
 import dev.proflyder.home.core.ui.setVisible
 import dev.proflyder.home.core.ui.userMessage
@@ -18,6 +19,7 @@ internal class ControlListRenderer(
     private val adapter = ControlAdapter(ControlAdapterCallback(dispatch))
     private val texts by lazy(::controlTexts)
     private var hubWasEmpty = true
+    private val statesBanner = RevealBinder(binding.controlStatesBanner)
     private val states = ListStateViews(
         progress = binding.controlProgress,
         empty = binding.controlEmpty,
@@ -47,7 +49,7 @@ internal class ControlListRenderer(
             else -> showContent(state)
         }
         binding.controlRefresh.isRefreshing = catalog.loading && hasItems
-        binding.controlStatesBanner.setVisible(hasItems && !catalog.statesOk)
+        statesBanner.render(hasItems && !catalog.statesOk)
     }
 
     private fun showError(message: String, configured: Boolean) {

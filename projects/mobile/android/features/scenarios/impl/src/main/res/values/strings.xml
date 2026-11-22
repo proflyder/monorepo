@@ -3,7 +3,6 @@
     <string name="scenarios_title">Scenarios</string>
     <string name="scenarios_add">New scenario</string>
     <string name="scenarios_empty">No scenarios yet. Scenarios are stored and run on the home server.</string>
-    <string name="scenarios_open_connection">Open Connection</string>
     <string name="scenarios_enabled">Enabled</string>
     <string name="scenarios_disabled">Disabled</string>
     <string name="scenarios_run">Run now</string>
@@ -105,7 +104,6 @@
     <string name="scenarios_catalog_empty">The catalog is empty or not loaded yet.</string>
     <string name="scenarios_catalog_loading">Loading the catalog…</string>
     <string name="scenarios_catalog_error_title">Catalog unavailable</string>
-    <string name="scenarios_retry">Retry</string>
     <string name="scenarios_catalog_other_room">Other</string>
     <string name="scenarios_catalog_show_settings">Show service entities (%1$d)</string>
     <string name="scenarios_catalog_group_scenarios">Scenarios HA</string>
@@ -148,9 +146,6 @@
     <string name="scenarios_conflict_message">Another client saved a newer version of this scenario. Reload it? Local edits will be discarded.</string>
     <string name="scenarios_conflict_reload">Reload</string>
     <string name="scenarios_delete_confirm">Delete this scenario from the home server?</string>
-    <string name="scenarios_delete_yes">Delete</string>
-    <string name="scenarios_cancel">Cancel</string>
-    <string name="scenarios_save">Save</string>
     <string name="scenarios_edit">Edit</string>
     <string name="scenarios_remove">Remove</string>
     <string name="scenarios_saved">Scenario saved</string>

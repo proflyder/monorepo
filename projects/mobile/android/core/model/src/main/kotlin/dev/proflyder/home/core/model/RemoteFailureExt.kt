@@ -11,5 +11,6 @@ fun RemoteFailure.isTransientNetwork(): Boolean = when (this) {
     is RemoteFailure.ProtocolFailure,
     is RemoteFailure.Validation,
     is RemoteFailure.Storage,
+    RemoteFailure.RemoteConfig,
     -> false
 }

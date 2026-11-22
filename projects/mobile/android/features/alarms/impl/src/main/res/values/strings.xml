@@ -3,18 +3,14 @@
     <string name="alarms_title">Alarms</string>
     <string name="alarms_add">Add alarm</string>
     <string name="alarms_empty">No alarms yet. Alarms are stored and run on the home server.</string>
-    <string name="alarms_open_connection">Open Connection</string>
     <string name="alarms_snooze">Snooze 9 min</string>
     <string name="alarms_stop">Stop</string>
-    <string name="alarms_delete">Delete</string>
     <string name="alarms_enabled">Enabled</string>
     <string name="alarms_card_next">%1$s · next %2$s</string>
     <string name="alarms_card_ringing">%1$s · now</string>
     <string name="alarms_card_snoozed">%1$s · snoozed until %2$s</string>
     <string name="alarms_card_off">%1$s · off</string>
     <string name="alarms_delete_confirm">Delete this alarm from the home server?</string>
-    <string name="alarms_delete_yes">Delete</string>
-    <string name="alarms_cancel">Cancel</string>
     <string name="alarms_disable_title">Turn off the alarm?</string>
     <string name="alarms_disable_message">This alarm repeats. Skip only the next occurrence, or turn the alarm off completely.</string>
     <string name="alarms_disable_skip_once">Skip once</string>
@@ -42,7 +38,6 @@
     <string name="alarms_repeat_done">Done</string>
     <string name="alarms_editor_days">Days</string>
     <string name="alarms_editor_name">Name</string>
-    <string name="alarms_editor_save">Save</string>
     <string name="alarms_editor_delete">Delete alarm</string>
     <string name="alarms_editor_hint">The home server stores this alarm and decides when it fires. This phone does not schedule local alarms.</string>
     <string name="alarms_day_mon">Mon</string>
@@ -62,7 +57,6 @@
     <string name="alarms_selection_close">Exit selection</string>
     <string name="alarms_selection_enable">Enable</string>
     <string name="alarms_selection_disable">Disable</string>
-    <string name="alarms_selection_delete">Delete</string>
     <plurals name="alarms_selected_count">
         <item quantity="one">%1$d selected</item>
         <item quantity="other">%1$d selected</item>

@@ -1,5 +1,6 @@
 package dev.proflyder.home.feature.alarms.presentation
 
+import dev.proflyder.home.core.designsystem.R as DesignR
 import android.os.Bundle
 import dev.proflyder.home.core.model.RepeatKind
 import dev.proflyder.home.core.presentation.ScreenFragment
@@ -94,7 +95,7 @@ internal class AlarmEditorFragment :
     }
 
     private fun confirmDelete() {
-        confirm(R.string.alarms_delete_confirm, R.string.alarms_delete_yes, R.string.alarms_cancel) {
+        confirm(R.string.alarms_delete_confirm, DesignR.string.ds_action_delete, DesignR.string.ds_action_cancel) {
             dispatch(AlarmEditorIntent.Delete)
         }
     }

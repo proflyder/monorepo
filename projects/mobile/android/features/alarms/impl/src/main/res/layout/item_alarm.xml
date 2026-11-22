@@ -100,7 +100,7 @@
                     android:id="@+id/alarm_delete"
                     style="@style/Widget.Home.IconButton.Destructive.L"
                     android:layout_marginStart="@dimen/alarms_card_trailing_gap"
-                    android:contentDescription="@string/alarms_delete"
+                    android:contentDescription="@string/ds_action_delete"
                     app:icon="@drawable/alarms_ic_delete" />
 
                 <FrameLayout

@@ -22,6 +22,10 @@ class PublicInImpl(config: Config = Config.empty) : Rule(config) {
         debt = Debt.FIVE_MINS,
     )
 
+    private val layoutViewSupertypes: Set<String> by lazy {
+        valueOrDefault("layoutViewSupertypes", defaultLayoutViewSupertypes).toSet()
+    }
+
     private val implPathMarker: String by lazy { valueOrDefault("implPathMarker", "/impl/src/main/") }
 
     override fun visitKtFile(file: KtFile) {
@@ -32,10 +36,13 @@ class PublicInImpl(config: Config = Config.empty) : Rule(config) {
     }
 
     private fun isVisibleOutsideModule(declaration: KtDeclaration): Boolean =
-        restrictingModifiers.none(declaration::hasModifier) && !isGraphContribution(declaration)
+        restrictingModifiers.none(declaration::hasModifier) && !isGraphContribution(declaration) && !isLayoutView(declaration)
 
     private fun isGraphContribution(declaration: KtDeclaration): Boolean =
         declaration.hasAnnotation(graphContributionAnnotations) || hasMemberInjection(declaration)
+
+    private fun isLayoutView(declaration: KtDeclaration): Boolean =
+        (declaration as? KtClass)?.superTypeListEntries.orEmpty().any { it.typeAsUserType?.referencedName in layoutViewSupertypes }
 
     private fun hasMemberInjection(declaration: KtDeclaration): Boolean =
         (declaration as? KtClass)?.getProperties().orEmpty().any { it.hasAnnotation(memberInjectionAnnotations) }
@@ -55,6 +62,7 @@ class PublicInImpl(config: Config = Config.empty) : Rule(config) {
 
     private companion object {
         val restrictingModifiers = listOf(KtTokens.INTERNAL_KEYWORD, KtTokens.PRIVATE_KEYWORD)
+        val defaultLayoutViewSupertypes = listOf("View", "ViewGroup", "FrameLayout", "LinearLayout", "ConstraintLayout")
         val memberInjectionAnnotations = setOf("Inject")
         val graphContributionAnnotations = setOf(
             "Inject",

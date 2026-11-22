@@ -10,6 +10,7 @@ import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.core.model.SchedulerStatus
 import dev.proflyder.home.core.network.SchedulerClient
+import dev.proflyder.home.core.operation.suspendRunCatching
 import dev.proflyder.home.feature.connection.ConnectionRepository
 import dev.proflyder.home.feature.connection.TokenUpdate
 import dev.zacsweers.metro.AppScope
@@ -54,7 +55,10 @@ class DefaultConnectionRepository(
         }
     }
 
-    override suspend fun refreshRemoteConfig() = remote.refresh()
+    override suspend fun refreshRemoteConfig(): Outcome<Unit> = suspendRunCatching { remote.refresh() }.fold(
+        onSuccess = { Outcome.Success(Unit) },
+        onFailure = { Outcome.Failure(RemoteFailure.RemoteConfig) },
+    )
 
     override suspend fun testConnection(): Outcome<SchedulerStatus> = client.getStatus()
 }

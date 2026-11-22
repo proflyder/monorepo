@@ -14,7 +14,6 @@
     <string name="control_filter_switches">Switches</string>
     <string name="control_empty">Nothing to control yet. Home Assistant exposes no lights, switches or scenes to the app.</string>
     <string name="control_not_configured">Set the home control address in Connection to see your scenarios and devices.</string>
-    <string name="control_open_connection">Open Connection</string>
     <string name="control_states_unknown">Home Assistant is not reachable, so device states are unknown.</string>
     <string name="control_scenario_queued">Sent: %1$s</string>
     <string name="control_state_on">On</string>
@@ -59,8 +58,6 @@
     <string name="control_alarm_disable_message">This alarm repeats. Skip only the next occurrence, or turn the alarm off completely.</string>
     <string name="control_alarm_disable_skip_once">Skip once</string>
     <string name="control_alarm_disable_turn_off">Turn off completely</string>
-    <string name="control_hub_pause">Pause</string>
-    <string name="control_hub_resume">Resume</string>
 
     <string name="control_wake_false_alarm">False alarm</string>
     <string name="control_wake_missed">Missed wake</string>

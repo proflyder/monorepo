@@ -3,7 +3,6 @@ package dev.proflyder.home.core.presentation
 import dev.proflyder.home.core.ui.PayloadSet
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -24,7 +23,13 @@ class ItemDiffTest {
         assertTrue(diff.areItemsTheSame(old, renamed))
         assertFalse(diff.areContentsTheSame(old, renamed))
         assertEquals(PayloadSet.of(RowAspect.TITLE), diff.getChangePayload(old, renamed))
-        assertNull(diff.getChangePayload(old, old.copy()))
+        assertEquals(ItemChanged, diff.getChangePayload(old, old.copy()))
+    }
+
+    @Test
+    fun changedItemsWithoutAspectsStillCarryAPayloadSoTheRowIsReboundInPlace() {
+        val plain = KeyedDiff<Row>(key = Row::id)
+        assertEquals(ItemChanged, plain.getChangePayload(Row("1", "Lamp", false), Row("1", "Lamp", true)))
     }
 
     @Test

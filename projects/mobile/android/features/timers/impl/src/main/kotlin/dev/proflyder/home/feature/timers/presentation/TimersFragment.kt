@@ -2,7 +2,6 @@ package dev.proflyder.home.feature.timers.presentation
 
 import android.os.Bundle
 import androidx.recyclerview.widget.LinearLayoutManager
-import androidx.recyclerview.widget.SimpleItemAnimator
 import dev.proflyder.home.core.presentation.RefreshMode
 import dev.proflyder.home.core.presentation.ScreenFragment
 import dev.proflyder.home.core.presentation.TextBinder
@@ -29,7 +28,6 @@ internal class TimersFragment :
         binding.timersContent.keepFocusedVisible()
         binding.timersList.layoutManager = LinearLayoutManager(requireContext())
         binding.timersList.adapter = adapter
-        (binding.timersList.itemAnimator as? SimpleItemAnimator)?.supportsChangeAnimations = false
         label = bindText(binding.timersLabelInput, TimersIntent::SetLabel)
         duration = bindText(binding.timersDurationInput, TimersIntent::SetDuration)
         val chips = listOf(binding.timersPreset1, binding.timersPreset5, binding.timersPreset10, binding.timersPreset25)

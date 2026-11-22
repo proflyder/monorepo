@@ -5,6 +5,7 @@ import android.view.ViewGroup
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
+import androidx.recyclerview.widget.SimpleItemAnimator
 
 interface AdapterCallback<T> {
     fun onItemClick(item: T)
@@ -94,6 +95,11 @@ abstract class BaseListAdapter<T : Any, VB : ViewBinding, CB : AdapterCallback<T
 ) : ListAdapter<T, BaseViewHolder<T, VB, CB>>(diff) {
 
     protected open fun viewTypeOf(item: T): Int = 0
+
+    override fun onAttachedToRecyclerView(recyclerView: RecyclerView) {
+        super.onAttachedToRecyclerView(recyclerView)
+        (recyclerView.itemAnimator as? SimpleItemAnimator)?.supportsChangeAnimations = false
+    }
 
     final override fun getItemViewType(position: Int): Int = viewTypeOf(getItem(position))
 

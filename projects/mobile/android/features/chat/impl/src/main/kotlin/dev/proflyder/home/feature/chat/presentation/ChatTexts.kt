@@ -1,5 +1,6 @@
 package dev.proflyder.home.feature.chat.presentation
 
+import dev.proflyder.home.core.designsystem.R as DesignR
 import android.content.Context
 import android.text.format.DateFormat
 import android.text.format.DateUtils
@@ -30,7 +31,7 @@ internal fun chatErrorText(key: String?): Int = when (key) {
 internal fun chatAuthor(role: ChatRole): Int = when (role) {
     ChatRole.USER -> R.string.chat_author_me
     ChatRole.ASSISTANT -> R.string.chat_author_assistant
-    ChatRole.SYSTEM -> R.string.chat_author_system
+    ChatRole.SYSTEM -> DesignR.string.ds_product_name
 }
 
 internal fun chatTime(context: Context, atMillis: Long): String =

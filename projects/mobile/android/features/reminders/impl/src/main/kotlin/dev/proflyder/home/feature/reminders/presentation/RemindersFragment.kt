@@ -1,5 +1,6 @@
 package dev.proflyder.home.feature.reminders.presentation
 
+import dev.proflyder.home.core.designsystem.R as DesignR
 import android.os.Bundle
 import androidx.recyclerview.widget.GridLayoutManager
 import dev.proflyder.home.core.presentation.RefreshMode
@@ -63,7 +64,7 @@ internal class RemindersFragment :
     }
 
     private fun confirmDelete(id: String) {
-        confirm(R.string.reminders_delete_confirm, R.string.reminders_delete_yes, R.string.reminders_cancel) {
+        confirm(R.string.reminders_delete_confirm, DesignR.string.ds_action_delete, DesignR.string.ds_action_cancel) {
             dispatch(RemindersIntent.Delete(id))
         }
     }

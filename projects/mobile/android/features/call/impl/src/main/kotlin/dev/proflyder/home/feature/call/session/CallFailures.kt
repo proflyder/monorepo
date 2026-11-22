@@ -16,6 +16,7 @@ internal fun RemoteFailure.toCallFailure(stationLookup: Boolean = false): CallFa
     is RemoteFailure.Tls,
     is RemoteFailure.ProtocolFailure,
     is RemoteFailure.Storage,
+    RemoteFailure.RemoteConfig,
     -> CallFailure.Remote(this)
 }
 

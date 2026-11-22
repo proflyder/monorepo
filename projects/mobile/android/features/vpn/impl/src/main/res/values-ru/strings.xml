@@ -3,7 +3,6 @@
     <string name="vpn_title">VPN</string>
     <string name="vpn_tile_label">VPN домой</string>
     <string name="vpn_channel_name">Состояние VPN</string>
-    <string name="vpn_external_profile_name">Дом</string>
 
     <string name="vpn_state_disconnected">Отключено</string>
     <string name="vpn_state_connecting">Подключение…</string>

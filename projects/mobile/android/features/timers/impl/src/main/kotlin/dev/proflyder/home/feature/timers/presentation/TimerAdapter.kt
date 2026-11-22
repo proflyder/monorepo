@@ -1,5 +1,6 @@
 package dev.proflyder.home.feature.timers.presentation
 
+import dev.proflyder.home.core.designsystem.R as DesignR
 import android.view.LayoutInflater
 import android.view.ViewGroup
 import dev.proflyder.home.core.model.Timer
@@ -60,7 +61,7 @@ internal class TimerAdapter(
                 else -> timer.state.name
             }
             binding.timerPauseResume.text = context.getString(
-                if (timer.state == TimerState.PAUSED) R.string.timers_resume else R.string.timers_pause,
+                if (timer.state == TimerState.PAUSED) DesignR.string.ds_action_resume else DesignR.string.ds_action_pause,
             )
             bindRemaining(item, animate = false)
         }

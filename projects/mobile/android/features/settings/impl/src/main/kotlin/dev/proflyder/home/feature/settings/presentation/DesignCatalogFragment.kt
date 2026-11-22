@@ -6,8 +6,13 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.lifecycle.ViewModel
 import dev.proflyder.home.core.designsystem.DesignCatalog
+import dev.proflyder.home.core.designsystem.ListRow
+import dev.proflyder.home.core.designsystem.PillSegments
+import dev.proflyder.home.core.designsystem.R as DesignR
+import dev.proflyder.home.core.presentation.PillSegmentsBinder
 import dev.proflyder.home.core.presentation.ScreenFragment
 import dev.proflyder.home.core.presentation.StateViewModel
+import dev.proflyder.home.core.presentation.SwitchBinder
 import dev.proflyder.home.core.presentation.screenViewModel
 import dev.proflyder.home.core.ui.ViewBinding
 import dev.proflyder.home.core.ui.ViewModelSource
@@ -25,20 +30,50 @@ internal class DesignCatalogBinding(override val root: View) : ViewBinding {
     }
 }
 
-internal class DesignCatalogViewModel : StateViewModel<Unit, Nothing, Nothing>(Unit) {
-    override fun handle(intent: Nothing) = Unit
+internal data class DesignCatalogState(val pill: Int = 0, val switchOn: Boolean = true)
+
+internal sealed interface DesignCatalogIntent {
+    data class SelectPill(val index: Int) : DesignCatalogIntent
+    data class SetSwitch(val on: Boolean) : DesignCatalogIntent
+}
+
+internal class DesignCatalogViewModel :
+    StateViewModel<DesignCatalogState, DesignCatalogIntent, Nothing>(DesignCatalogState()) {
+    override fun handle(intent: DesignCatalogIntent) = when (intent) {
+        is DesignCatalogIntent.SelectPill -> updateState { copy(pill = intent.index) }
+        is DesignCatalogIntent.SetSwitch -> updateState { copy(switchOn = intent.on) }
+    }
 }
 
 internal class DesignCatalogFragment :
-    ScreenFragment<DesignCatalogBinding, Unit, Nothing, Nothing>(DesignCatalogBinding.Companion::inflate) {
+    ScreenFragment<DesignCatalogBinding, DesignCatalogState, DesignCatalogIntent, Nothing>(
+        DesignCatalogBinding.Companion::inflate,
+    ) {
     override val viewModel: DesignCatalogViewModel by screenViewModel()
+
+    private var pills: PillSegmentsBinder<Int>? = null
+    private var switch: SwitchBinder? = null
 
     override fun onScreenCreated(binding: DesignCatalogBinding, savedInstanceState: Bundle?) {
         binding.root.applyScrollBottomInset()
+        val segments = binding.root.findViewById<PillSegments>(DesignR.id.ds_catalog_pills)
+        pills = bindPills(segments, segments.indices(), DesignCatalogIntent::SelectPill)
+        val row = binding.root.findViewById<ListRow>(DesignR.id.ds_catalog_row_switch)
+        switch = bindSwitch(row.switch, DesignCatalogIntent::SetSwitch)
     }
 
-    override fun render(state: Unit) = Unit
+    override fun onBindingDestroyed() {
+        pills = null
+        switch = null
+    }
+
+    override fun render(state: DesignCatalogState) {
+        pills?.render(state.pill)
+        switch?.render(state.switchOn)
+    }
 }
+
+internal fun PillSegments.indices(): List<Int> = (0 until childCount).toList()
 
 @ContributesIntoMap(AppScope::class, binding = binding<ViewModelSource>())
 @ClassKey(DesignCatalogViewModel::class)

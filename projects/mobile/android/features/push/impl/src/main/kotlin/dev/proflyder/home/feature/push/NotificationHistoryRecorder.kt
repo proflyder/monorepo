@@ -9,7 +9,7 @@ import java.util.UUID
 
 @SingleIn(AppScope::class)
 @Inject
-class NotificationHistoryRecorder(
+internal class NotificationHistoryRecorder(
     private val context: Context,
     private val store: NotificationHistoryStore,
 ) {

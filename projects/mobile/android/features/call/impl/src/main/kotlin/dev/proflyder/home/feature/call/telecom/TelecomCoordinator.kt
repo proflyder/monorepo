@@ -1,5 +1,6 @@
 package dev.proflyder.home.feature.call.telecom
 
+import dev.proflyder.home.core.designsystem.R as DesignR
 import android.Manifest
 import android.annotation.SuppressLint
 import android.content.ComponentName
@@ -12,7 +13,6 @@ import android.telecom.PhoneAccountHandle
 import android.telecom.TelecomManager
 import androidx.core.content.ContextCompat
 import dev.proflyder.home.feature.call.CallController
-import dev.proflyder.home.feature.call.impl.R
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
@@ -37,7 +37,7 @@ internal class TelecomAccountRegistry(private val context: Context) {
     }
 
     private fun account(handle: PhoneAccountHandle): PhoneAccount =
-        PhoneAccount.builder(handle, context.getString(R.string.call_account_label))
+        PhoneAccount.builder(handle, context.getString(DesignR.string.ds_product_name))
             .setCapabilities(PhoneAccount.CAPABILITY_SELF_MANAGED)
             .addSupportedUriScheme(PhoneAccount.SCHEME_TEL)
             .build()

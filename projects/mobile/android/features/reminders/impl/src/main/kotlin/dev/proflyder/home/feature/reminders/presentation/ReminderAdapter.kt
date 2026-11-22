@@ -5,6 +5,9 @@ import android.view.ViewGroup
 import dev.proflyder.home.core.model.Schedule
 import dev.proflyder.home.core.presentation.IntentAdapterCallback
 import dev.proflyder.home.core.presentation.KeyedDiff
+import dev.proflyder.home.core.presentation.aspectPayload
+import dev.proflyder.home.core.presentation.renderDimmed
+import dev.proflyder.home.core.ui.PayloadSet
 import dev.proflyder.home.core.presentation.SwitchBinder
 import dev.proflyder.home.core.ui.AdapterCallback
 import dev.proflyder.home.core.ui.BaseListAdapter
@@ -15,9 +18,24 @@ internal class ReminderAdapterCallback(
     val dispatch: (RemindersIntent) -> Unit,
 ) : AdapterCallback<Schedule> by IntentAdapterCallback(dispatch, { RemindersIntent.Open(it.id) })
 
+internal enum class ReminderAspect {
+    ENABLED,
+    CONTENT,
+}
+
+internal val ReminderDiff = KeyedDiff<Schedule>(
+    key = Schedule::id,
+    payload = aspectPayload(
+        mapOf(
+            ReminderAspect.ENABLED to { item: Schedule -> item.enabled },
+            ReminderAspect.CONTENT to { item: Schedule -> item.copy(enabled = false) },
+        ),
+    ),
+)
+
 internal class ReminderAdapter(
     callback: ReminderAdapterCallback,
-) : BaseListAdapter<Schedule, ItemReminderBinding, ReminderAdapterCallback>(callback, KeyedDiff(Schedule::id)) {
+) : BaseListAdapter<Schedule, ItemReminderBinding, ReminderAdapterCallback>(callback, ReminderDiff) {
 
     override fun onCreateHolder(
         inflater: LayoutInflater,
@@ -42,7 +60,16 @@ internal class ReminderAdapter(
         override fun bind(item: Schedule) {
             binding.reminderLabel.text = item.label
             binding.reminderDue.text = ReminderFormat.due(binding.root.context, item)
-            binding.root.alpha = if (item.enabled) 1f else DISABLED_ALPHA
+            renderEnabled(item, animate = false)
+        }
+
+        override fun bindPayloads(item: Schedule, payloads: List<Any>) {
+            val aspects = PayloadSet.merge(payloads, ReminderAspect::class.java)
+            if (aspects == null || ReminderAspect.CONTENT in aspects) bind(item) else renderEnabled(item, animate = true)
+        }
+
+        private fun renderEnabled(item: Schedule, animate: Boolean) {
+            binding.root.renderDimmed(!item.enabled, DISABLED_ALPHA, animate)
             enabledSwitch.render(item.enabled)
         }
     }

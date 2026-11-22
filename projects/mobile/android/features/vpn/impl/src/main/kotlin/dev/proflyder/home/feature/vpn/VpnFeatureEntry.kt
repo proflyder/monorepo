@@ -9,7 +9,7 @@ import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesIntoSet
 import dev.zacsweers.metro.Inject
 
-object VpnDestination : Destination {
+internal object VpnDestination : Destination {
     override val featureId: String = "vpn"
     override val route: String = "vpn/main"
 }
@@ -23,7 +23,7 @@ class VpnFeatureEntry : FeatureEntry {
     override val hidesBottomBar: Boolean = true
     override val titleRes: Int = R.string.vpn_title
     override val iconRes: Int = R.drawable.vpn_ic_shield
-    override val rootDestination = VpnDestination
+    override val rootDestination: Destination = VpnDestination
 
     override fun createFragment(destination: Destination): Fragment = VpnFragment()
 }
