@@ -16,7 +16,7 @@ metro_android_library(
         "//packages/kotlin/core",
         "//projects/mobile/android/core/designsystem",
         "//projects/mobile/android/core/model",
-        "//projects/mobile/android/core/network",
+        "//projects/mobile/android/core/network/api",
         "//projects/mobile/android/core/presentation",
         "//projects/mobile/android/core/runtime",
         "//projects/mobile/android/core/settings",
@@ -68,7 +68,7 @@ kt_android_local_test(
     deps = [
         "//projects/mobile/android/core/designsystem",
         "//projects/mobile/android/core/model",
-        "//projects/mobile/android/core/network",
+        "//projects/mobile/android/core/network/api",
         "//projects/mobile/android/core/presentation",
         "//projects/mobile/android/core/runtime",
         "//projects/mobile/android/core/theme",

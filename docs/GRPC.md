@@ -183,7 +183,7 @@ packages/rust/home-proto/generate.sh --check
 ```
 
 Android использует типизированные kotlinx.serialization DTO
-(`projects/mobile/android/core/network/src/main/kotlin/dev/proflyder/home/core/network/WireDtos.kt`) поверх Retrofit-клиентов
+(`projects/mobile/android/core/network/impl/src/main/kotlin/dev/proflyder/home/core/network/WireDtos.kt`) поверх Retrofit-клиентов
 Connect JSON; Go-стабы удалены вместе с Go-сервером.
 `packages/proto/home/v1/BUILD.bazel` держит `proto_library` как каноническую
 схему для descriptor tooling и других языков.

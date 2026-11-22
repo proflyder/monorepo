@@ -30,7 +30,10 @@ class PublicInImpl(config: Config = Config.empty) : Rule(config) {
     }
 
     private fun isVisibleOutsideModule(declaration: KtDeclaration): Boolean =
-        restrictingModifiers.none(declaration::hasModifier)
+        restrictingModifiers.none(declaration::hasModifier) && !isRequiredByMetro(declaration)
+
+    private fun isRequiredByMetro(declaration: KtDeclaration): Boolean =
+        declaration.annotationEntries.any { it.shortName?.asString() in metroAnnotations }
 
     private fun reportDeclaration(declaration: KtDeclaration) {
         report(
@@ -44,5 +47,12 @@ class PublicInImpl(config: Config = Config.empty) : Rule(config) {
 
     private companion object {
         val restrictingModifiers = listOf(KtTokens.INTERNAL_KEYWORD, KtTokens.PRIVATE_KEYWORD)
+        val metroAnnotations = setOf(
+            "Inject",
+            "ContributesBinding",
+            "ContributesIntoSet",
+            "ContributesTo",
+            "BindingContainer",
+        )
     }
 }

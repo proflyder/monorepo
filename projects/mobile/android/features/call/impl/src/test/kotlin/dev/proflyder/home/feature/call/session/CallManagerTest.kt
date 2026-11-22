@@ -5,6 +5,7 @@ import dev.proflyder.home.feature.call.CallFailure
 import dev.proflyder.home.feature.call.CallPhase
 import kotlin.time.Duration.Companion.milliseconds
 
+import dev.proflyder.home.core.model.ConnectCode
 import dev.proflyder.home.core.model.IntercomCall
 import dev.proflyder.home.core.model.IntercomCallState
 import dev.proflyder.home.core.model.IntercomEndReason
@@ -306,7 +307,7 @@ internal class CallManagerTest {
     fun busyCallMapsFailedPrecondition() = runTest {
         val client = FakeClient().apply {
             endpoints = Outcome.Success(listOf(station))
-            startResult = Outcome.Failure(RemoteFailure.Server(400, "failed_precondition", "busy"))
+            startResult = Outcome.Failure(RemoteFailure.Server(400, ConnectCode.FAILED_PRECONDITION, "busy"))
         }
         val manager = manager(client, FakeMedia())
         manager.placeCall()

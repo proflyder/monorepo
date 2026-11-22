@@ -139,8 +139,9 @@ notification all open or drive the same controller.
   `permissionRequests`). The tunnel state is read when a decision is made, not
   combined into the trigger: a failed attempt or a manual toggle-off must not
   restart the tunnel until the network changes. While the first check and a
-  connect are pending `HomeRouteNetworkWaiter` holds idempotent reads
-  (`NetworkWaiter`, at most 20 s), so screens keep their loading state, and
+  connect are pending `VpnRouteCondition` keeps `RouteGate` closed (every
+  REST call and stream suspends in `RouteGate.await()`, at most 20 s), so
+  screens keep their loading state, and
   the strip under the toolbar says **Connecting to home…**. In the background
   the older `autoConnect` path of `HomeNetworkMonitor` keeps working; it
   stands aside while the foreground watcher runs.
@@ -162,7 +163,7 @@ notification all open or drive the same controller.
   switch on network change, no external start after a silent WireGuard, config
   text, handshake policy,
   home address rules, server codes, OpenConnect link, UAPI stats),
-  `core/network:network_test` (`VpnProfileClientTest`, golden
+  `core/network/impl:impl_test` (`VpnProfileClientTest`, golden
   `fixtures/vpn/*.json`), `features/vpn/impl:screen_test` (toolbar toggle PNGs `vpn-toolbar-{off,connecting,on}.png`, stored profile and
   Robolectric PNGs `vpn-light.png`, `vpn-dark.png`, `vpn-fallback-dark.png`, `vpn-home-dark.png` in
   `TEST_UNDECLARED_OUTPUTS_DIR`).
@@ -206,7 +207,7 @@ notification all open or drive the same controller.
   error state has a Retry button. A missing source is «No data», never zero.
 - Levels use theme attributes only: ok `?colorPrimary`, warning
   `?colorTertiary`, critical `?colorError`, no data `?colorOutline`.
-- Tests: `core/network:network_test` parses the server's golden responses
+- Tests: `core/network/impl:impl_test` parses the server's golden responses
   (`fixtures/system/*.json`, copied from the Rust contract);
   `features/system/impl:system_test` covers the row mapping, the ViewModel and
   Robolectric PNGs (`system-overview`, `system-overview-no-data`,
@@ -214,7 +215,7 @@ notification all open or drive the same controller.
 
 ## Hermes chat (network contract)
 
-- `core/network` `HttpChatClient` talks to `mcp-gateway` `/v1/chat/*` through
+- `core/network/impl` `HttpChatClient` talks to `mcp-gateway` `/v1/chat/*` through
   the **Home control** address (Traefik sends `/v1/chat/` on that host to the
   gateway) with the same bearer token: `page(before, limit)`,
   `send(clientId, text, replyTo)`, `retry(id)` and the SSE `events(after)`
@@ -249,7 +250,7 @@ notification all open or drive the same controller.
   previous page (`before=<seq>`).
 - Offline queue: `ChatRepository` keeps unsent messages in DataStore
   (`chat_outbox`) with their `clientId`; it resends them one by one when the
-  network returns (exponential back-off up to 30 s, `NetworkWaiter`). The server
+  network returns (`Backoff` up to 30 s after `RouteGate.await()`). The server
   is idempotent on `clientId`, so a resend never duplicates. A message the server
   rejects (empty, too long, missing quote) stays in the feed with the reason and
   Retry/Delete; a failed assistant reply shows the reason and Retry.
@@ -1435,12 +1436,10 @@ Themes are code in `core/theme`:
   - Unit tests only. `//projects/mobile/android:android_lint` is intentionally absent: it is a separate CI unit so its findings do not hide test results.
 - `app/src/main/AndroidManifest.xml`
   - WebRTC: NetworkMonitor aborts natively without network-state access. Push / Find phone (features/push/impl): library permissions are dropped by rules_android, so the app declares them.
-- `app/src/main/kotlin/dev/proflyder/home/di/AndroidNetworkWaiter.kt`
-  - Waits for a default network (Wi-Fi, LAN or the VPN tunnel) while the phone wakes up after Doze. A resume can race the tunnel coming back, so the first read should wait instead of immediately showing "check LAN or VPN".
 - `app/src/main/kotlin/dev/proflyder/home/di/AppGraph.kt`
   - A bearer token must never be forwarded to a redirect target.
-- `app/src/main/kotlin/dev/proflyder/home/di/NetworkInterceptors.kt`
-  - Network diagnostics, enabled by the `home_network_inspection` bool (a release variant should override it to false so nothing below is created): - an [HttpLoggingInterceptor] (BODY) writing to logcat under "HomeHttp", - a Chucker inspector (notification + …
+- `app/src/main/kotlin/dev/proflyder/home/di/NetworkDiagnostics.kt`
+  - Contributes into `@NetworkInspection Set<Interceptor>`; `HomeHttp` adds them to unary clients only. Network diagnostics, enabled by the `home_network_inspection` bool (a release variant should override it to false so nothing below is created): - an [HttpLoggingInterceptor] (BODY) writing to logcat under "HomeHttp", - a Chucker inspector (notification + …
 - `app/src/main/res/menu/menu_main.xml` — One visible actions button. Tapping it opens the shared `HomePopupMenu` (core/designsystem); the framework overflow list is never used.
 - `app/src/main/res/values/bools.xml`
   - Crashlytics collection. The app only sends crash stack traces, device model/OS and app version; never tokens or endpoints. Set to false to keep Crashlytics initialized but not collecting.
@@ -1485,44 +1484,33 @@ Themes are code in `core/theme`:
   - An unknown/stale fragment must not be treated as route truth.
   - Route state and FragmentManager diverged. Re-sync once and consume this Back, but do not trap the user at a phantom inner route.
   - Overlay on the current tab: do not change the selected bottom tab and add a real back-stack entry so Back returns to where the user opened it from.
-- `core/network/src/main/kotlin/dev/proflyder/home/core/network/ConnectIntercomClient.kt`
-  - Opens the long-lived server-streaming `Watch` RPC and reconnects with a bounded backoff when it drops. The flow never completes on its own; the caller cancels it. The first connection marks this endpoint online.
-  - Connect JSON client for home.v1.IntercomService. Unary RPCs use `application/json`; `Watch` is server streaming and therefore uses the Connect streaming envelope framing over HTTP/1.1 (`application/connect+json`): a 1-byte flags word, a 4-byte big-endian …
-  - No diagnostic interceptors here: HttpLoggingInterceptor(BODY) and Chucker read the whole response before returning it, and Watch never ends — the phone would never see RINGING -> CONNECTING and never send its offer.
-- `core/network/src/main/kotlin/dev/proflyder/home/core/network/ConnectScenarioClient.kt`
-  - Connect unary JSON/HTTP client for home.v1.ScenarioService. It uses the scheduler endpoint and bearer token, with the same security properties as [ConnectSchedulerClient]: redirects are refused (the token must never follow a Location), the token travels only …
-- `core/network/src/main/kotlin/dev/proflyder/home/core/network/ConnectSchedulerClient.kt`
-  - Connect unary JSON/HTTP client for home.v1.SchedulerService. Security properties: - redirects (HTTP and HTTPS) are disabled; a bearer token can never be forwarded to a Location host, - the token travels only in the Authorization header, never in the URL, - …
-- `core/network/src/main/kotlin/dev/proflyder/home/core/network/ConnectionInterceptor.kt`
-  - Internal request marker: a long-lived server stream (connect `Watch`) must not inherit the unary read timeout. The interceptor removes the header.
-  - Applies the *current* user settings to every request, so the Retrofit interfaces only declare relative paths: - rewrites the URL onto the configured endpoint (including a path prefix), - adds the bearer token (header only, never in the URL) and fixed headers, …
-  - Defensive clamping: corrupted persisted settings must never make OkHttp reject a timeout.
-- `core/network/src/main/kotlin/dev/proflyder/home/core/network/ControlCatalogClient.kt`
-  - Wire format of GET /v1/catalog and of the scheduler task that carries a command.
-  - Task payload: a catalog id and an action only, never an HA service or entity.
-  - Payload of a speak action. The text is user content: it travels only in the task payload and is never put in a URL, a log line or an error.
-  - An unknown kind stays OTHER, so an older app never drives a command it does not understand.
-  - Retrofit implementation ([ControlApi]). Same safety rules as [ConnectSchedulerClient]: no redirects (the bearer token must never follow a Location), token only in the Authorization header, system trust store.
-- `core/network/src/main/kotlin/dev/proflyder/home/core/network/HttpSupport.kt`
-  - Failure of a unary Connect call before a decoded response: transport errors keep their [toRemoteFailure] mapping, malformed JSON becomes a protocol failure, and anything else is a bug the caller should rethrow.
-- `core/network/src/main/kotlin/dev/proflyder/home/core/network/OutcomeCallAdapterFactory.kt`
-  - Lets an API method declare `Outcome<T>` instead of `Response<T>`. Success bodies are already decoded by the kotlinx converter. Anything else becomes one of the existing [RemoteFailure] values: Connect error envelopes (including their `LocalizedText` detail) …
-- `core/network/src/main/kotlin/dev/proflyder/home/core/network/PushDevices.kt`
-  - Wire format of `/v1/push/devices`.
-- `core/network/src/main/kotlin/dev/proflyder/home/core/network/ReadRetry.kt`
-  - Platform network state. The JVM build (and every unit test) is always online; Android supplies an implementation that actually waits for Wi-Fi or the VPN. [awaitAvailable] blocks on the calling OkHttp thread, never on the UI thread.
-  - Retries idempotent reads (`GET`, Connect `List*`/`Get*` RPCs) after a transport failure. This is what hides the red "check LAN or VPN" alert after the phone wakes up: the first attempt hits a dead keep-alive socket or a still-sleeping tunnel, the next attempt …
-  - A cancelled call is not an error: the coroutine requested it. OkHttp reports cancellation as `IOException("Canceled")`, which must never reach the user as a network failure.
-- `core/network/src/main/kotlin/dev/proflyder/home/core/network/Retrofits.kt`
-  - Builds the Retrofit instances. Each gets its own OkHttpClient derived from [baseClient] (shared connection pool and dispatcher) with: 1. [ReadRetryInterceptor] (retry idempotent reads after wake-up failures), 2.
-- `core/network/src/main/kotlin/dev/proflyder/home/core/network/TokenRefreshAuthenticator.kt`
+- `core/network/api` — client contracts (`SchedulerClient`, `ScenarioClient`, `IntercomClient`, `ControlCatalogClient`, `SystemDashboardClient`, `ChatClient`, `PushDevicesApi`, `VpnProfileApi`), `RouteGate`/`RouteCondition`, `@Idempotent`, `@NetworkInspection`, `StreamUnauthorizedException`. Features and `app` depend only on this module; `app` also links `core/network/impl` so Metro sees the contributions.
+- `core/network/impl` — everything is `internal` except what Metro must reach from the graph module (`@Inject`/`@Contributes*` classes: clients, `HomeHttp`, `ConditionRouteGate`, `ActiveNetworkCondition`, `ConnectionHealth`, `NetworkBindings`); detekt `PublicInImpl` exempts exactly these annotations.
+- `core/network/impl/.../HomeHttp.kt`
+  - The only Retrofit/OkHttp factory. `rest(api, target)` builds one Retrofit per client on a per-target OkHttpClient derived from the shared base client (shared pool and dispatcher): redirects off (a bearer token must never follow a Location), `ConnectionInterceptor`, `TimeZoneInterceptor`, `TokenRefreshAuthenticator`, debug inspection interceptors. `stream(target, request, decoder)` is the one long-lived stream path (chat SSE, intercom `Watch`): no read timeout, no OkHttp connection retry, no inspection interceptors (HttpLoggingInterceptor BODY and Chucker read the whole body and a stream never ends), the call is cancelled with the collecting coroutine, 401/403 become `StreamUnauthorizedException`, other non-2xx an `IOException`. Reconnects are the caller's `reconnecting(Backoff)`. The placeholder base URL lives only here.
+- `core/network/impl/.../OutcomeCallAdapterFactory.kt`
+  - Retrofit `suspend fun …(): Outcome<T>` methods. The adapter wraps the Retrofit call into a `Call<Outcome<T>>` whose `enqueue` runs in the app scope: `RouteGate.await()`, then the asynchronous OkHttp call (`awaitResponse`), so no client needs `withContext(IO)` and nothing blocks an OkHttp thread. Only methods marked `@Idempotent` (GET and Connect `Get*`/`List*`) are retried after a transport failure: up to 3 attempts, `delay(150 ms × attempt)`. A cancelled call is rethrown as cancellation, never shown as a network failure. Connect error envelopes become `RemoteFailure.Server(httpStatus, ConnectCode, message, reason, textKey, textArgs)`; `reason` keeps the raw server code (application codes such as `chat_text_empty`).
+- `core/network/impl/.../RouteGates.kt`
+  - `ConditionRouteGate` combines every contributed `RouteCondition` (`ActiveNetworkCondition` from `DefaultNetwork`, `VpnRouteCondition` while the VPN connects on open) and waits for all of them for at most `ROUTE_WAIT` (20 s), the single "wait for the route" timeout of the app. After the timeout the call goes out and fails normally.
+- `core/network/impl/.../ConnectionHealth.kt`
+  - `AppStartable` that evicts the shared connection pool when the app returns to the foreground after at least 15 s in the background (dead keep-alive sockets after Doze) and when the default network changes. Activities do not know OkHttp.
+- `core/network/impl/.../Target.kt`
+  - Sealed target: endpoint field, `endpointOf(config)`, whether the Connect protocol header is sent, and the failure for a missing endpoint (scheduler: not configured; control/intercom: validation of their field).
+- `core/network/impl/.../ConnectionInterceptor.kt`
+  - Applies the *current* settings to every request, so Retrofit interfaces declare only relative paths: rewrites the URL onto the configured endpoint (including a path prefix), the bearer token only in the Authorization header, `User-Agent: home-android/<versionName>` (`AppVersion`), clamped timeouts (corrupted persisted settings must never make OkHttp reject a timeout).
+- `core/network/impl/.../ConnectIntercomClient.kt`
+  - Connect JSON client for `home.v1.IntercomService`. `Watch` is server streaming over HTTP/1.1 with the Connect envelope (`application/connect+json`: a 1-byte flags word, a 4-byte big-endian length, the JSON message); it reconnects with `Backoff` (1 s → 30 s, reset after a stream that ended cleanly) and never completes on its own.
+- `core/network/impl/.../ControlCatalogClient.kt`
+  - Wire format of GET /v1/catalog. An unknown kind stays OTHER, so an older app never drives a command it does not understand. Task payloads for commands live in `features/control/impl` (`ControlTaskPayloads`): a catalog id and an action only, never an HA service or entity; speak text travels only in the payload.
+- `core/network/impl/.../HttpSupport.kt`
+  - One response-size limit (`requireWithinLimit`, 8 MiB) for decoded bodies and error bodies. Transport errors keep their `toRemoteFailure` mapping, malformed JSON becomes a protocol failure.
+- `core/network/impl/.../TokenRefreshAuthenticator.kt`
   - Refreshes the bearer token once after a 401 pushed from a rotated token. ConnectionInterceptor is an application interceptor and does not rerun for an authenticator follow-up, so this class sets the header itself from the current settings.
-- `core/network/src/main/kotlin/dev/proflyder/home/core/network/WireDtos.kt`
-  - Wire DTOs of the Connect/JSON APIs. Protobuf JSON sends `int64` as a decimal string, so every such field uses [Int64StringSerializer]; it also accepts a plain number because servers differ slightly in codec versions.
-- `core/network/src/test/kotlin/dev/proflyder/home/core/network/ControlCatalogClientTest.kt`
-  - Normalization happens before this point; the codec must not drop or escape Cyrillic text.
-- `core/network/src/test/kotlin/dev/proflyder/home/core/network/ScenarioJsonTest.kt`
+- `core/network/impl/.../WireDtos.kt`
+  - Wire DTOs of the Connect/JSON APIs and the one `NetworkJson` configuration. Protobuf JSON sends `int64` as a decimal string, so every such field uses `Int64StringSerializer`; it also accepts a plain number because servers differ slightly in codec versions.
+- `core/network/impl/src/test/.../ScenarioJsonTest.kt`
   - Saving the same scenario again must not drop the retained objects.
+- `core/model/.../LocalJson.kt` — the one `Json` for on-device storage (VPN profile, notification history, scenario drafts, Remote Config document).
 - `core/remoteconfig/src/main/kotlin/dev/proflyder/home/core/remoteconfig/FirebaseRemoteConnectionSource.kt`
   - Firebase Remote Config implementation of [RemoteConnectionSource]. Defaults are set locally, the latest activated values are fetched on start, and a real-time config listener activates pushed changes.
 - `core/presentation/src/main/kotlin/dev/proflyder/home/core/presentation/StateViewModel.kt`
@@ -1710,5 +1698,7 @@ Themes are code in `core/theme`:
 - `core/model/src/main/kotlin/dev/proflyder/home/core/model/Outcome.kt` — `Outcome`/`RemoteFailure` live here, not in the scheduler models. `RemoteFailure.Server.httpStatus` carries the HTTP status as a number (callers such as `VpnProblems` map 400/409/429/503 on it instead of parsing `"http_409"`); `code` is the Connect error code and may be blank. `RemoteFailure.Storage(reason: StorageReason)` has no text: `ErrorText` maps each reason to a resource, and the chat outbox maps `ATTACHMENT_MISSING` to its permanent failure key.
 - `core/model/src/main/kotlin/dev/proflyder/home/core/model/ServerClockSync.kt` — The server clock is synced by one service (`SchedulerServerClockSync`, `GetStatus`), used by both timers and the Home hub; `TimerRepository` no longer owns clock sync.
 - `core/runtime/src/main/kotlin/dev/proflyder/home/core/runtime/TickerFlow.kt` — `tickerFlow(period, initialDelay)` emits at once and then every period while collected; collect it in a ViewModel instead of `while (true) { delay() }` in UI.
-- `core/runtime/src/main/kotlin/dev/proflyder/home/core/runtime/Backoff.kt` — `Backoff(initial, max, factor)` and `Flow.retryWithBackoff`; the attempt counter is the one `retryWhen` passes, so a long-lived stream keeps growing towards `max` until it is resubscribed.
+- `core/runtime/src/main/kotlin/dev/proflyder/home/core/runtime/Backoff.kt` — `Backoff(initial, max, factor)` and `Flow.retryWithBackoff`; the attempt counter is the one `retryWhen` passes, so a long-lived stream keeps growing towards `max` until it is resubscribed. `Flow.reconnecting(backoff, shouldRetry)` is for streams that must stay connected: it resubscribes after a clean end (after `initial`) and after a retryable failure (growing delay, reset by a clean end).
+- `core/runtime/src/main/kotlin/dev/proflyder/home/core/runtime/AndroidDefaultNetwork.kt` — `DefaultNetwork.handle`: the current default network handle (`null` when offline) from `registerDefaultNetworkCallback`, shared while observed.
+- `core/runtime/src/main/kotlin/dev/proflyder/home/core/runtime/AndroidAppVersion.kt` — `AppVersion.name` from the package `versionName`.
 - `core/runtime/src/main/kotlin/dev/proflyder/home/core/runtime/ProcessAppForeground.kt` — Single source of `AppForeground.state`; registered on `ProcessLifecycleOwner` as an `AppStartable`, so no Activity writes foreground state.

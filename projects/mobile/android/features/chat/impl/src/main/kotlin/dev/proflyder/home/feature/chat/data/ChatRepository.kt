@@ -1,6 +1,7 @@
 package dev.proflyder.home.feature.chat.data
 
 import dev.proflyder.home.core.model.ChatAttachment
+import dev.proflyder.home.core.model.ChatEvent
 import dev.proflyder.home.core.model.ChatMessage
 import dev.proflyder.home.core.model.ChatPage
 import dev.proflyder.home.core.model.ChatQuote
@@ -9,9 +10,10 @@ import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.core.model.StorageReason
 import dev.proflyder.home.core.network.ChatClient
-import dev.proflyder.home.core.network.ChatUnauthorizedException
-import dev.proflyder.home.core.network.NetworkWaiter
-import dev.proflyder.home.core.operation.suspendRunCatching
+import dev.proflyder.home.core.network.RouteGate
+import dev.proflyder.home.core.network.StreamUnauthorizedException
+import dev.proflyder.home.core.runtime.Backoff
+import dev.proflyder.home.core.runtime.reconnecting
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
@@ -21,7 +23,11 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
@@ -33,18 +39,11 @@ import kotlinx.coroutines.withContext
 internal class ChatClock(
     val now: () -> Long = System::currentTimeMillis,
     val newClientId: () -> String = { UUID.randomUUID().toString() },
-    val initialBackoffMillis: Long = INITIAL_BACKOFF_MILLIS,
-    val maxBackoffMillis: Long = MAX_BACKOFF_MILLIS,
+    val backoff: Backoff = Backoff(),
     val io: CoroutineDispatcher = Dispatchers.IO,
-) {
-    companion object {
-        const val INITIAL_BACKOFF_MILLIS = 1_000L
-        const val MAX_BACKOFF_MILLIS = 30_000L
-    }
-}
+)
 
 internal const val CHAT_PAGE_SIZE = 50
-internal const val NETWORK_WAIT_MILLIS = 30_000L
 internal const val FAILURE_UNAUTHORIZED = "chat_unauthorized"
 internal const val FAILURE_NOT_SENT = "chat_not_sent"
 
@@ -64,7 +63,7 @@ internal const val FAILURE_FILE_MISSING = "chat_attachment_missing"
 
 internal fun RemoteFailure.sendFailureKey(): String? = when (this) {
     is RemoteFailure.Offline, RemoteFailure.Timeout, is RemoteFailure.Tls, is RemoteFailure.ProtocolFailure -> null
-    is RemoteFailure.Server -> code.takeIf { it in PERMANENT_SEND_CODES }
+    is RemoteFailure.Server -> reason.takeIf { it in PERMANENT_SEND_CODES }
     RemoteFailure.Unauthorized -> FAILURE_UNAUTHORIZED
     is RemoteFailure.Storage -> reason.sendFailureKey()
     RemoteFailure.NotConfigured, is RemoteFailure.Validation -> FAILURE_NOT_SENT
@@ -81,7 +80,7 @@ class ChatRepository(
     private val client: ChatClient,
     private val outboxStore: ChatOutboxStore,
     private val scope: CoroutineScope,
-    private val networkWaiter: NetworkWaiter,
+    private val routeGate: RouteGate,
 ) {
     internal var clock: ChatClock = ChatClock()
 
@@ -142,18 +141,16 @@ class ChatRepository(
     private fun accept(message: ChatMessage) = state.update { it.upsert(message) }
 
     suspend fun runLive() {
-        var wait = clock.initialBackoffMillis
-        while (true) {
-            if (!state.value.loaded) refresh()
-            val outcome = suspendRunCatching { streamOnce() }
-            if (outcome.exceptionOrNull() is ChatUnauthorizedException) return
-            wait = if (outcome.isSuccess) clock.initialBackoffMillis else nextBackoff(wait)
-            delay(wait)
-        }
+        liveEvents().collect { event -> state.update { it.apply(event) } }
     }
 
-    private suspend fun streamOnce() {
-        client.events(state.value.cursor).collect { event -> state.update { it.apply(event) } }
+    private fun liveEvents(): Flow<ChatEvent> = flow { emitAll(connectEvents()) }
+        .reconnecting(clock.backoff) { it !is StreamUnauthorizedException }
+        .catch { if (it !is StreamUnauthorizedException) throw it }
+
+    private suspend fun connectEvents(): Flow<ChatEvent> {
+        if (!state.value.loaded) refresh()
+        return client.events(state.value.cursor)
     }
 
     private fun persistAndKick() {
@@ -170,27 +167,27 @@ class ChatRepository(
     private suspend fun flush() = flushLock.withLock { drain() }
 
     private suspend fun drain() {
-        var wait = clock.initialBackoffMillis
+        var failures = 0L
         while (true) {
             val next = state.value.outbox.firstOrNull { !it.failed } ?: return
-            wait = deliver(next, wait)
+            failures = deliver(next, failures)
         }
     }
 
-    private suspend fun deliver(next: Outgoing, wait: Long): Long {
+    private suspend fun deliver(next: Outgoing, failures: Long): Long {
         val pending = next.attachments.firstOrNull { it.uploadedId == null }
-            ?: return sendUploaded(next, wait)
+            ?: return sendUploaded(next, failures)
         return when (val result = upload(pending)) {
-            is Outcome.Success -> wait.also { attached(next, pending, result.value.id) }
-            is Outcome.Failure -> undelivered(next, result.failure, wait)
+            is Outcome.Success -> failures.also { attached(next, pending, result.value.id) }
+            is Outcome.Failure -> undelivered(next, result.failure, failures)
         }
     }
 
-    private suspend fun sendUploaded(next: Outgoing, wait: Long): Long {
+    private suspend fun sendUploaded(next: Outgoing, failures: Long): Long {
         val ids = next.attachments.mapNotNull { it.uploadedId }
         return when (val result = client.send(next.clientId, next.text, next.replyTo?.id, ids)) {
-            is Outcome.Success -> clock.initialBackoffMillis.also { delivered(result.value) }
-            is Outcome.Failure -> undelivered(next, result.failure, wait)
+            is Outcome.Success -> 0L.also { delivered(result.value) }
+            is Outcome.Failure -> undelivered(next, result.failure, failures)
         }
     }
 
@@ -210,19 +207,17 @@ class ChatRepository(
         persist()
     }
 
-    private suspend fun undelivered(next: Outgoing, failure: RemoteFailure, wait: Long): Long {
-        val key = failure.sendFailureKey() ?: return nextBackoff(wait).also { awaitNetwork(wait) }
+    private suspend fun undelivered(next: Outgoing, failure: RemoteFailure, failures: Long): Long {
+        val key = failure.sendFailureKey() ?: return (failures + 1).also { awaitRoute(failures) }
         state.update { it.markFailed(next.clientId, key) }
         persist()
-        return wait
+        return failures
     }
 
-    private suspend fun awaitNetwork(wait: Long) {
-        withContext(clock.io) { networkWaiter.awaitAvailable(NETWORK_WAIT_MILLIS) }
-        delay(wait)
+    private suspend fun awaitRoute(failures: Long) {
+        routeGate.await()
+        delay(clock.backoff.delayFor(failures))
     }
-
-    private fun nextBackoff(wait: Long): Long = (wait * 2).coerceAtMost(clock.maxBackoffMillis)
 
     private suspend fun restoreOutbox() = restoreLock.withLock { restoreOnce() }
 

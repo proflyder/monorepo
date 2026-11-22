@@ -72,8 +72,6 @@ class MainActivity : AppCompatActivity(), NavigatorHost, ViewModelFactoryProvide
     private val featureByItemId = mutableMapOf<Int, String>()
     private var syncingSelection = false
 
-    private var leftForegroundAtNanos = 0L
-
     private val graph get() = (application as HomeApplication).graph
 
     override val failureNoticePolicy: FailureNoticePolicy get() = graph.failureNoticePolicy
@@ -160,21 +158,6 @@ class MainActivity : AppCompatActivity(), NavigatorHost, ViewModelFactoryProvide
     override fun onResume() {
         super.onResume()
         router.onHostResumed()
-    }
-
-    override fun onStart() {
-        super.onStart()
-        val leftAt = leftForegroundAtNanos
-        when {
-            leftAt == 0L -> Unit
-            System.nanoTime() - leftAt >= STALE_CONNECTION_NANOS -> graph.httpClient.connectionPool.evictAll()
-            else -> Unit
-        }
-    }
-
-    override fun onStop() {
-        leftForegroundAtNanos = System.nanoTime()
-        super.onStop()
     }
 
     override fun onPause() {
@@ -316,7 +299,5 @@ class MainActivity : AppCompatActivity(), NavigatorHost, ViewModelFactoryProvide
 
     private companion object {
         const val CONTROL_TAB = "control"
-
-        const val STALE_CONNECTION_NANOS = 15_000_000_000L
     }
 }

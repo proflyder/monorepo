@@ -3,7 +3,8 @@ package dev.proflyder.home.feature.chat.data
 import dev.proflyder.home.core.model.ChatAttachmentKind
 import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.model.RemoteFailure
-import dev.proflyder.home.core.network.NetworkWaiter
+import dev.proflyder.home.core.model.ConnectCode
+import dev.proflyder.home.core.network.RouteGate
 import java.io.File
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -23,7 +24,7 @@ class ChatRepositoryTest {
 
     private fun TestScope.repository(): ChatRepository {
         val dispatcher = StandardTestDispatcher(testScheduler)
-        return ChatRepository(client, store, this, NetworkWaiter { true }).apply {
+        return ChatRepository(client, store, this, OpenRouteGate).apply {
             clock = ChatClock(now = { 1L }, newClientId = { "c${++ids}" }, io = dispatcher)
         }
     }
@@ -45,7 +46,7 @@ class ChatRepositoryTest {
     @Test
     fun aRejectedMessageStaysWithItsKeyUntilRetried() = runTest {
         val repository = repository()
-        client.sendResults += Outcome.Failure(RemoteFailure.Server(404, "chat_reply_not_found", "gone"))
+        client.sendResults += Outcome.Failure(RemoteFailure.Server(404, ConnectCode.UNKNOWN, "gone", reason = "chat_reply_not_found"))
         repository.send("Ответ", replyTo = null)
         advanceUntilIdle()
         assertEquals("chat_reply_not_found", repository.timeline.value.outbox.single().failureKey)
@@ -98,4 +99,8 @@ class ChatRepositoryTest {
         repository.refresh()
         assertEquals(RemoteFailure.Unauthorized, repository.timeline.value.failure)
     }
+}
+
+private object OpenRouteGate : RouteGate {
+    override suspend fun await() = Unit
 }

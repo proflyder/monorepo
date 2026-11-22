@@ -6,7 +6,6 @@ import dev.proflyder.home.core.model.ControlCatalog
 import dev.proflyder.home.core.model.LightAdjust
 import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.network.ControlCatalogClient
-import dev.proflyder.home.core.network.ControlJson
 import dev.proflyder.home.core.network.SchedulerClient
 import dev.proflyder.home.feature.control.ControlRepository
 import dev.zacsweers.metro.AppScope
@@ -28,25 +27,25 @@ class ConnectControlRepository(
     override suspend fun catalog(): Outcome<ControlCatalog> = catalogClient.fetch()
 
     override suspend fun send(entryId: String, action: ControlAction): Outcome<Unit> =
-        enqueue(ControlJson.commandPayload(entryId, action))
+        enqueue(ControlTaskPayloads.commandPayload(entryId, action))
 
     override suspend fun adjust(entryId: String, adjust: LightAdjust): Outcome<Unit> =
-        enqueue(ControlJson.adjustPayload(entryId, adjust))
+        enqueue(ControlTaskPayloads.adjustPayload(entryId, adjust))
 
     override suspend fun speak(entryId: String, text: String): Outcome<Unit> =
-        enqueue(ControlJson.speakPayload(entryId, text))
+        enqueue(ControlTaskPayloads.speakPayload(entryId, text))
 
     override suspend fun setVolume(entryId: String, level: Int): Outcome<Unit> =
-        enqueue(ControlJson.volumePayload(entryId, level))
+        enqueue(ControlTaskPayloads.volumePayload(entryId, level))
 
     override suspend fun setVolumeMuted(entryId: String, muted: Boolean): Outcome<Unit> =
-        enqueue(ControlJson.mutePayload(entryId, muted))
+        enqueue(ControlTaskPayloads.mutePayload(entryId, muted))
 
     private suspend fun enqueue(payloadJson: String): Outcome<Unit> =
         when (
             val queued = scheduler.enqueueTask(
-                taskType = ControlJson.TASK_TYPE,
-                queue = ControlJson.QUEUE,
+                taskType = ControlTaskPayloads.TASK_TYPE,
+                queue = ControlTaskPayloads.QUEUE,
                 payloadJson = payloadJson,
                 idempotencyKey = UUID.randomUUID().toString(),
             )

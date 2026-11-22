@@ -14,6 +14,9 @@ import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.core.model.ServerClock
 import dev.proflyder.home.core.runtime.AndroidClock
 import dev.proflyder.home.core.network.ConnectSchedulerClient
+import dev.proflyder.home.core.network.HomeHttp
+import dev.proflyder.home.core.network.RouteGate
+import dev.proflyder.home.core.runtime.AppVersion
 import dev.proflyder.home.core.settings.AndroidConnectionSettingsStore
 import dev.proflyder.home.core.settings.HomeDataStore
 import dev.proflyder.home.core.settings.TokenCipher
@@ -103,11 +106,16 @@ class ConnectionSettingsClearTest {
         assertFalse(store.config.value.hasToken)
         assertFalse(dataStore.data.first().hasToken())
 
-        val client = ConnectSchedulerClient(
-            settings = store,
+        val http = HomeHttp(
             baseClient = OkHttpClient(),
-            serverClock = ServerClock(AndroidClock),
+            settings = store,
+            inspection = emptySet(),
+            gate = OpenRouteGate,
+            version = TestAppVersion,
+            scope = scope,
+            io = Dispatchers.IO,
         )
+        val client = ConnectSchedulerClient(http, ServerClock(AndroidClock))
         assertEquals(
             RemoteFailure.Validation(Field.TOKEN),
             client.getStatus().failureOrNull(),
@@ -194,4 +202,12 @@ class ConnectionSettingsClearTest {
 
     private fun Preferences.hasToken(): Boolean =
         asMap().keys.any { it.name == "bearer_token_ciphertext" }
+}
+
+private object OpenRouteGate : RouteGate {
+    override suspend fun await() = Unit
+}
+
+private object TestAppVersion : AppVersion {
+    override val name: String = "test"
 }

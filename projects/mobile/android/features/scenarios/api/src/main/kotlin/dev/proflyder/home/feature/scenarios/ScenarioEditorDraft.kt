@@ -8,7 +8,7 @@ import dev.proflyder.home.core.model.ScenarioStep
 import dev.proflyder.home.core.model.ScenarioTrigger
 import dev.proflyder.home.core.model.TimeTrigger
 import dev.proflyder.home.core.model.WallTime
-import kotlinx.serialization.json.Json
+import dev.proflyder.home.core.model.LocalJson
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
@@ -39,7 +39,6 @@ data class ScenarioEditorDraft(
 
 object ScenarioEditorDraftCodec {
     private const val KEY_DRAFT = "scenario_draft"
-    private val json = Json { ignoreUnknownKeys = true }
 
     fun toMap(draft: ScenarioEditorDraft): Map<String, Any?> =
         mapOf(KEY_DRAFT to encode(draft))
@@ -47,7 +46,7 @@ object ScenarioEditorDraftCodec {
     fun fromMap(values: Map<String, Any?>): ScenarioEditorDraft? {
         val raw = values[KEY_DRAFT] as? String ?: return null
         return runCatching {
-            decode(json.parseToJsonElement(raw).jsonObject)
+            decode(LocalJson.parseToJsonElement(raw).jsonObject)
         }.getOrElse { null }
     }
 

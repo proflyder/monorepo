@@ -5,6 +5,7 @@ package(default_visibility = ["//visibility:public"])
 kt_jvm_library(
     name = "model",
     srcs = glob(["src/main/kotlin/**/*.kt"]),
+    deps = ["@maven//:org_jetbrains_kotlinx_kotlinx_serialization_json"],
 )
 
 kt_jvm_test(
