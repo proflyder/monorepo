@@ -25,6 +25,7 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import dev.proflyder.home.feature.connection.impl.R as ConnectionR
+import kotlinx.coroutines.runBlocking
 
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -90,7 +91,7 @@ class NarrowScreensTest {
 
     private fun open(destination: Destination, widthDp: Int): MainActivity {
         val app = RuntimeEnvironment.getApplication() as HomeApplication
-        app.graph.appearance.selectTheme(AppTheme.CURRENT)
+        runBlocking { app.graph.appearance.selectTheme(AppTheme.CURRENT) }
         val activity = Robolectric.buildActivity(MainActivity::class.java).setup().get()
         idle(activity)
         activity.router.navigate(destination)

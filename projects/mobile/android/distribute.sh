@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-FIREBASE_TOOLS_VERSION="15.34.2"
+FIREBASE_TOOLS_VERSION="15.37.0"
 APP_ID_PACKAGE="dev.proflyder.home"
 TESTER_GROUP="${HOME_TESTERS_GROUP:-admins}"
 

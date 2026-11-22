@@ -56,6 +56,11 @@ internal class ConnectionViewModel(
                 updateState { copy(tokenStatus = tokenStatus) }
             }
         }
+        launch {
+            repository.config.collect { config ->
+                updateState { copy(hasStoredToken = config.hasToken) }
+            }
+        }
     }
 
     fun setToken(value: String) {

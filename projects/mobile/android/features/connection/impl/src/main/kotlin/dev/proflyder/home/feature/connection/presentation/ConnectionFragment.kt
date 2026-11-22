@@ -76,9 +76,10 @@ class ConnectionFragment :
                 TokenStatus.AVAILABLE -> getString(R.string.connection_token_present)
                 TokenStatus.UNREADABLE -> getString(R.string.connection_token_unreadable)
                 TokenStatus.ABSENT -> getString(R.string.connection_token_absent)
+                TokenStatus.LOADING -> getString(R.string.connection_token_loading)
             }
             connectionTokenWarning.setVisible(state.tokenStatus == TokenStatus.UNREADABLE)
-            connectionClearToken.setVisible(state.tokenStatus != TokenStatus.ABSENT)
+            connectionClearToken.setVisible(state.tokenStatus in CLEARABLE_TOKEN)
 
             connectionTest.isEnabled = !state.busy
             connectionRefreshConfig.isEnabled = !state.refreshingConfig
@@ -154,3 +155,5 @@ class ConnectionFragment :
         return lines.joinToString("\n")
     }
 }
+
+private val CLEARABLE_TOKEN = setOf(TokenStatus.AVAILABLE, TokenStatus.UNREADABLE)

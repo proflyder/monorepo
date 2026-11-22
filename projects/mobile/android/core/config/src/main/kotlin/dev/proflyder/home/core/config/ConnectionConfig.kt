@@ -4,7 +4,9 @@ import dev.proflyder.home.core.endpoint.ServerEndpoint
 import dev.proflyder.home.core.model.Field
 import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.model.RemoteFailure
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.map
 
 data class ConnectionConfig(
     val endpoint: ServerEndpoint? = null,
@@ -19,30 +21,14 @@ data class ConnectionConfig(
         get() = intercomEndpoint != null && isTokenValid(bearerToken)
     val hasToken: Boolean get() = isTokenValid(bearerToken)
 
-    fun validatedForStorage(): Outcome<ConnectionConfig> {
-        if (endpoint == null) {
-            return Outcome.Failure(RemoteFailure.Validation(Field.ENDPOINT))
-        }
-        if (connectTimeoutMillis !in MIN_TIMEOUT_MILLIS..MAX_TIMEOUT_MILLIS) {
-            return Outcome.Failure(RemoteFailure.Validation(Field.TIMEOUT))
-        }
-        if (readTimeoutMillis !in MIN_TIMEOUT_MILLIS..MAX_TIMEOUT_MILLIS) {
-            return Outcome.Failure(RemoteFailure.Validation(Field.TIMEOUT))
-        }
-        if (bearerToken != null && !isTokenValid(bearerToken)) {
-            return Outcome.Failure(RemoteFailure.Validation(Field.TOKEN))
-        }
-        return Outcome.Success(this)
-    }
+    fun validatedForStorage(): Outcome<ConnectionConfig> = validatedBy(STORAGE_RULES)
 
-    fun validated(): Outcome<ConnectionConfig> {
-        val storage = validatedForStorage()
-        if (storage is Outcome.Failure) return storage
-        if (!isTokenValid(bearerToken)) {
-            return Outcome.Failure(RemoteFailure.Validation(Field.TOKEN))
-        }
-        return Outcome.Success(this)
-    }
+    fun validated(): Outcome<ConnectionConfig> = validatedBy(STORAGE_RULES + REQUEST_RULES)
+
+    private fun validatedBy(rules: List<ValidationRule>): Outcome<ConnectionConfig> =
+        rules.firstOrNull { !it.accepts(this) }
+            ?.let { Outcome.Failure(RemoteFailure.Validation(it.field)) }
+            ?: Outcome.Success(this)
 
     override fun toString(): String =
         "ConnectionConfig(endpoint=${endpoint?.baseUrl() ?: "<unset>"}, " +
@@ -64,10 +50,24 @@ data class ConnectionConfig(
         const val DEFAULT_READ_TIMEOUT_MILLIS = 20_000L
         const val MIN_TIMEOUT_MILLIS = 1_000L
         const val MAX_TIMEOUT_MILLIS = 120_000L
+
+        private val TIMEOUT_RANGE = MIN_TIMEOUT_MILLIS..MAX_TIMEOUT_MILLIS
+
+        private val STORAGE_RULES = listOf(
+            ValidationRule(Field.ENDPOINT) { it.endpoint != null },
+            ValidationRule(Field.TIMEOUT) { it.connectTimeoutMillis in TIMEOUT_RANGE },
+            ValidationRule(Field.TIMEOUT) { it.readTimeoutMillis in TIMEOUT_RANGE },
+            ValidationRule(Field.TOKEN) { it.bearerToken == null || isTokenValid(it.bearerToken) },
+        )
+
+        private val REQUEST_RULES = listOf(ValidationRule(Field.TOKEN) { isTokenValid(it.bearerToken) })
     }
 }
 
+private class ValidationRule(val field: Field, val accepts: (ConnectionConfig) -> Boolean)
+
 enum class TokenStatus {
+    LOADING,
     ABSENT,
     AVAILABLE,
     UNREADABLE,
@@ -76,6 +76,8 @@ enum class TokenStatus {
 interface ConnectionSettingsStore {
     val config: StateFlow<ConnectionConfig>
     val tokenStatus: StateFlow<TokenStatus>
+
+    val loaded: Flow<Boolean> get() = tokenStatus.map { it != TokenStatus.LOADING }
 
     suspend fun updateToken(bearerToken: String?): Outcome<Unit>
 }

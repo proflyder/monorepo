@@ -30,6 +30,7 @@
     <string name="connection_status">Состояние</string>
     <string name="connection_not_configured">Сервер ещё не настроен.</string>
     <string name="connection_token_absent">Токен не сохранён.</string>
+    <string name="connection_token_loading">Читаем сохранённый токен…</string>
     <string name="connection_token_present">Токен сохранён безопасно.</string>
     <string name="connection_token_unreadable">Сохранённый токен нельзя расшифровать на этом устройстве. Введите его снова, чтобы восстановить доступ.</string>
     <string name="connection_online">Сервер доступен</string>

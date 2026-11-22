@@ -1,6 +1,7 @@
 package dev.proflyder.home
 
 import android.content.Context
+import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import dev.proflyder.home.core.config.ConnectionConfig
 import dev.proflyder.home.core.config.RemoteConnectionSource
@@ -21,11 +22,15 @@ import dev.proflyder.home.core.settings.AndroidConnectionSettingsStore
 import dev.proflyder.home.core.settings.HomeDataStore
 import dev.proflyder.home.core.settings.TokenCipher
 import java.util.UUID
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -93,7 +98,7 @@ class ConnectionSettingsClearTest {
     @Test
     fun clearingTokenRemovesCiphertextAndNetworkFailsBeforeRequest() = runBlocking {
         val dataStore = dataStore()
-        val store = AndroidConnectionSettingsStore(dataStore, FakeCipher(), FakeRemoteSource(loadedRemote()), scope)
+        val store = store(dataStore, FakeCipher(), FakeRemoteSource(loadedRemote()))
 
         val saved = store.updateToken("valid-token")
         assertTrue(saved is Outcome.Success)
@@ -126,11 +131,11 @@ class ConnectionSettingsClearTest {
     fun tokenPersistsAndEndpointsComeFromRemoteConfig() = runBlocking {
         val dataStore = dataStore()
         val remote = FakeRemoteSource(loadedRemote())
-        val first = AndroidConnectionSettingsStore(dataStore, FakeCipher(), remote, scope)
+        val first = store(dataStore, FakeCipher(), remote)
         first.updateToken("valid-token")
 
-        val second = AndroidConnectionSettingsStore(dataStore, FakeCipher(), remote, scope)
-        val config = second.config.value
+        val second = store(dataStore, FakeCipher(), remote)
+        val config = second.loadedConfig()
         assertEquals("http://192.0.2.10:8080", config.endpoint?.baseUrl())
         assertEquals("http://192.0.2.10:8099", config.controlEndpoint?.baseUrl())
         assertEquals("valid-token", config.bearerToken)
@@ -142,7 +147,7 @@ class ConnectionSettingsClearTest {
     @Test
     fun remoteConfigChangesRecomposeTheSnapshot() = runBlocking {
         val remote = FakeRemoteSource(loadedRemote())
-        val store = AndroidConnectionSettingsStore(dataStore(), FakeCipher(), remote, scope)
+        val store = store(dataStore(), FakeCipher(), remote)
         store.updateToken("valid-token")
 
         remote.emit(
@@ -165,12 +170,7 @@ class ConnectionSettingsClearTest {
 
     @Test
     fun unavailableRemoteConfigHasNoEndpointsButKeepsToken() = runBlocking {
-        val store = AndroidConnectionSettingsStore(
-            dataStore(),
-            FakeCipher(),
-            FakeRemoteSource(RemoteConnectionState.Unavailable),
-            scope,
-        )
+        val store = store(dataStore(), FakeCipher(), FakeRemoteSource(RemoteConnectionState.Unavailable))
         store.updateToken("valid-token")
 
         val config = store.config.value
@@ -189,15 +189,42 @@ class ConnectionSettingsClearTest {
             .putLong("read_timeout_millis", 11_000L)
             .commit()
 
-        val store = AndroidConnectionSettingsStore(dataStore(), FakeCipher(), FakeRemoteSource(loadedRemote()), scope)
+        val store = store(dataStore(), FakeCipher(), FakeRemoteSource(loadedRemote()))
 
-        val config = store.config.value
+        val config = store.loadedConfig()
         assertEquals("http://192.0.2.10:8080", config.endpoint?.baseUrl())
         assertEquals("http://192.0.2.10:8099", config.controlEndpoint?.baseUrl())
         assertEquals("legacy-token", config.bearerToken)
         assertEquals(5_000L, config.connectTimeoutMillis)
         assertEquals(20_000L, config.readTimeoutMillis)
         assertEquals(TokenStatus.AVAILABLE, store.tokenStatus.value)
+    }
+
+    @Test
+    fun constructionDoesNotWaitForDiskAndReportsLoading() = runBlocking {
+        val gate = CompletableDeferred<Unit>()
+        val disk = dataStore()
+        val slow = object : DataStore<Preferences> by disk {
+            override val data: Flow<Preferences> = flow { gate.await(); emitAll(disk.data) }
+        }
+        val store = store(slow, FakeCipher(), FakeRemoteSource(loadedRemote()))
+
+        assertEquals(TokenStatus.LOADING, store.tokenStatus.value)
+        assertFalse(store.loaded.first())
+        gate.complete(Unit)
+        withTimeout(5_000) { store.loaded.first { it } }
+        assertEquals(TokenStatus.ABSENT, store.tokenStatus.value)
+    }
+
+    private fun store(
+        dataStore: DataStore<Preferences>,
+        cipher: TokenCipher,
+        remote: RemoteConnectionSource,
+    ) = AndroidConnectionSettingsStore(dataStore, cipher, remote, scope, Dispatchers.IO)
+
+    private suspend fun AndroidConnectionSettingsStore.loadedConfig(): ConnectionConfig {
+        withTimeout(5_000) { loaded.first { it } }
+        return config.value
     }
 
     private fun Preferences.hasToken(): Boolean =

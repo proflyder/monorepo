@@ -4,13 +4,16 @@ import dev.proflyder.home.core.endpoint.EndpointParseResult
 import dev.proflyder.home.core.endpoint.ServerEndpoint
 import dev.proflyder.home.core.model.Field
 import kotlinx.coroutines.flow.StateFlow
-import dev.proflyder.home.core.model.LocalJson
-import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.KSerializer
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.builtins.nullable
+import kotlinx.serialization.builtins.serializer
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.longOrNull
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.SerializationException
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.decodeFromJsonElement
 
 sealed interface RemoteConnectionState {
     data object Unavailable : RemoteConnectionState
@@ -34,98 +37,82 @@ sealed interface RemoteConnectionState {
 
 const val REMOTE_CONNECTION_KEY = "home_connection"
 
+@Serializable
+internal data class RemoteConnectionDocument(
+    @SerialName(SCHEDULER_KEY) val scheduler: String? = null,
+    @SerialName(CONTROL_KEY) val control: String? = null,
+    @SerialName(INTERCOM_KEY) val intercom: String? = null,
+    @SerialName(CONNECT_TIMEOUT_KEY) val connectTimeout: Long? = null,
+    @SerialName(READ_TIMEOUT_KEY) val readTimeout: Long? = null,
+)
+
+private class InvalidDocument(val state: RemoteConnectionState.Invalid) : Exception()
+
+private const val MALFORMED_DETAIL = "Malformed JSON"
+private const val SCHEDULER_KEY = "schedulerBaseUrl"
+private const val CONTROL_KEY = "controlBaseUrl"
+private const val INTERCOM_KEY = "intercomBaseUrl"
+private const val CONNECT_TIMEOUT_KEY = "connectTimeoutMs"
+private const val READ_TIMEOUT_KEY = "readTimeoutMs"
+
+private val DocumentJson = Json { ignoreUnknownKeys = true }
+
+private val DOCUMENT_FIELDS = listOf(
+    DocumentField(SCHEDULER_KEY, Field.ENDPOINT, String.serializer().nullable),
+    DocumentField(CONTROL_KEY, Field.CONTROL_ENDPOINT, String.serializer().nullable),
+    DocumentField(INTERCOM_KEY, Field.INTERCOM_ENDPOINT, String.serializer().nullable),
+    DocumentField(CONNECT_TIMEOUT_KEY, Field.TIMEOUT, Long.serializer().nullable),
+    DocumentField(READ_TIMEOUT_KEY, Field.TIMEOUT, Long.serializer().nullable),
+)
+
 fun parseRemoteConnection(raw: String): RemoteConnectionState {
     if (raw.isBlank()) return RemoteConnectionState.Missing
+    val tree = runCatching { DocumentJson.parseToJsonElement(raw) }
+        .getOrElse { return RemoteConnectionState.Invalid(detail = MALFORMED_DETAIL) }
+    return runCatching { DocumentJson.decodeFromJsonElement<RemoteConnectionDocument>(tree).toState() }
+        .getOrElse { invalidState(it, tree) }
+}
 
-    val document = runCatching {
-        LocalJson.parseToJsonElement(raw).jsonObject
-    }.getOrElse {
-        return RemoteConnectionState.Invalid(detail = "Malformed JSON")
-    }
+private fun invalidState(failure: Throwable, tree: JsonElement): RemoteConnectionState.Invalid = when (failure) {
+    is InvalidDocument -> failure.state
+    is SerializationException -> RemoteConnectionState.Invalid(mistypedField(tree), failure.message.orEmpty())
+    else -> throw failure
+}
 
-    val scheduler = document.stringValue("schedulerBaseUrl")
-        ?: return RemoteConnectionState.Invalid(Field.ENDPOINT, "schedulerBaseUrl is required")
-    if (scheduler.isBlank()) {
-        return RemoteConnectionState.Invalid(Field.ENDPOINT, "schedulerBaseUrl is required")
-    }
+private fun mistypedField(tree: JsonElement): Field? {
+    val document = tree as? JsonObject ?: return null
+    return DOCUMENT_FIELDS.firstOrNull { !it.accepts(document[it.key]) }?.field
+}
 
-    val endpoint = when (val parsed = ServerEndpoint.parse(scheduler)) {
-        is EndpointParseResult.Valid -> parsed.endpoint
-        is EndpointParseResult.Invalid -> return RemoteConnectionState.Invalid(Field.ENDPOINT)
-    }
+private class DocumentField(val key: String, val field: Field, val serializer: KSerializer<*>) {
+    fun accepts(element: JsonElement?): Boolean =
+        element == null || runCatching { DocumentJson.decodeFromJsonElement(serializer, element) }.isSuccess
+}
 
-    val controlElement = document["controlBaseUrl"]
-    val control = when {
-        controlElement == null || controlElement is JsonNull -> ""
-        controlElement is JsonPrimitive -> controlElement.contentOrNull.orEmpty()
-        else -> return RemoteConnectionState.Invalid(
-            Field.CONTROL_ENDPOINT,
-            "controlBaseUrl must be a string",
-        )
-    }
-    val controlEndpoint = if (control.isBlank()) {
-        null
-    } else {
-        when (val parsed = ServerEndpoint.parse(control)) {
-            is EndpointParseResult.Valid -> parsed.endpoint
-            is EndpointParseResult.Invalid -> return RemoteConnectionState.Invalid(Field.CONTROL_ENDPOINT)
-        }
-    }
-
-    val intercomElement = document["intercomBaseUrl"]
-    val intercom = when {
-        intercomElement == null || intercomElement is JsonNull -> ""
-        intercomElement is JsonPrimitive -> intercomElement.contentOrNull.orEmpty()
-        else -> return RemoteConnectionState.Invalid(
-            Field.INTERCOM_ENDPOINT,
-            "intercomBaseUrl must be a string",
-        )
-    }
-    val intercomEndpoint = if (intercom.isBlank()) {
-        null
-    } else {
-        when (val parsed = ServerEndpoint.parse(intercom)) {
-            is EndpointParseResult.Valid -> parsed.endpoint
-            is EndpointParseResult.Invalid -> return RemoteConnectionState.Invalid(Field.INTERCOM_ENDPOINT)
-        }
-    }
-
-    val connectTimeout = document.longValue(
-        "connectTimeoutMs",
-        ConnectionConfig.DEFAULT_CONNECT_TIMEOUT_MILLIS,
-    ) ?: return RemoteConnectionState.Invalid(Field.TIMEOUT, "connectTimeoutMs must be a number")
-    val readTimeout = document.longValue(
-        "readTimeoutMs",
-        ConnectionConfig.DEFAULT_READ_TIMEOUT_MILLIS,
-    ) ?: return RemoteConnectionState.Invalid(Field.TIMEOUT, "readTimeoutMs must be a number")
-
-    val timeoutRange = ConnectionConfig.MIN_TIMEOUT_MILLIS..ConnectionConfig.MAX_TIMEOUT_MILLIS
-    if (connectTimeout !in timeoutRange || readTimeout !in timeoutRange) {
-        return RemoteConnectionState.Invalid(Field.TIMEOUT)
-    }
-
+private fun RemoteConnectionDocument.toState(): RemoteConnectionState.Loaded {
+    val timeouts = ConnectionConfig.MIN_TIMEOUT_MILLIS..ConnectionConfig.MAX_TIMEOUT_MILLIS
+    val connect = connectTimeout ?: ConnectionConfig.DEFAULT_CONNECT_TIMEOUT_MILLIS
+    val read = readTimeout ?: ConnectionConfig.DEFAULT_READ_TIMEOUT_MILLIS
+    if (connect !in timeouts || read !in timeouts) invalid(Field.TIMEOUT)
     return RemoteConnectionState.Loaded(
-        endpoint = endpoint,
-        controlEndpoint = controlEndpoint,
-        intercomEndpoint = intercomEndpoint,
-        connectTimeoutMillis = connectTimeout,
-        readTimeoutMillis = readTimeout,
+        endpoint = parseOptionalEndpoint(scheduler, Field.ENDPOINT) ?: invalid(Field.ENDPOINT, "$SCHEDULER_KEY is required"),
+        controlEndpoint = parseOptionalEndpoint(control, Field.CONTROL_ENDPOINT),
+        intercomEndpoint = parseOptionalEndpoint(intercom, Field.INTERCOM_ENDPOINT),
+        connectTimeoutMillis = connect,
+        readTimeoutMillis = read,
     )
 }
 
-private fun JsonObject.stringValue(key: String): String? {
-    val element = this[key] ?: return null
-    if (element is JsonNull) return null
-    val primitive = element as? JsonPrimitive ?: return null
-    return primitive.contentOrNull
+internal fun parseOptionalEndpoint(raw: String?, field: Field): ServerEndpoint? {
+    if (raw.isNullOrBlank()) return null
+    return when (val parsed = ServerEndpoint.parse(raw)) {
+        is EndpointParseResult.Valid -> parsed.endpoint
+        is EndpointParseResult.Invalid -> invalid(field)
+    }
 }
 
-private fun JsonObject.longValue(key: String, default: Long): Long? {
-    val element = this[key] ?: return default
-    if (element is JsonNull) return default
-    val primitive = element as? JsonPrimitive ?: return null
-    return primitive.longOrNull
-}
+private fun invalid(field: Field, detail: String = ""): Nothing =
+    throw InvalidDocument(RemoteConnectionState.Invalid(field, detail))
 
 interface RemoteConnectionSource {
     val state: StateFlow<RemoteConnectionState>
