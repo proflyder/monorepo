@@ -10,6 +10,7 @@ import dev.proflyder.home.core.runtime.appGraph
 import dev.proflyder.home.feature.vpn.VpnConnection
 import dev.proflyder.home.feature.vpn.VpnController
 import dev.proflyder.home.feature.vpn.VpnInjector
+import dev.proflyder.home.feature.vpn.connect.UserVpnCommands
 import dev.proflyder.home.feature.vpn.isActive
 import dev.proflyder.home.feature.vpn.presentation.VpnTexts
 import dev.zacsweers.metro.Inject
@@ -30,6 +31,9 @@ class VpnTileService : TileService() {
     @Inject
     internal lateinit var permission: VpnPermission
 
+    @Inject
+    internal lateinit var commands: UserVpnCommands
+
     override fun onCreate() {
         super.onCreate()
         appGraph<VpnInjector>().inject(this)
@@ -49,9 +53,9 @@ class VpnTileService : TileService() {
     override fun onClick() {
         super.onClick()
         when {
-            controller.connection.value.isActive -> controller.disconnect()
+            controller.connection.value.isActive -> commands.disconnect()
             !permission.granted() -> openApp()
-            else -> controller.connect()
+            else -> commands.connect()
         }
     }
 

@@ -47,6 +47,7 @@ internal class AutoConnectCoordinator(
     private val profiles: VpnProfiles,
     private val environment: NetworkEnvironment,
     private val foreground: AppForeground,
+    private val userIntent: UserVpnIntent,
     private val scope: CoroutineScope,
 ) : AppStartable {
     private val mutableRoute = MutableStateFlow(HomeRoute.READY)
@@ -131,6 +132,7 @@ internal class AutoConnectCoordinator(
             hasProfile = profiles.state.value.knownProfile != null,
             permissionGranted = permission.granted(),
             permissionAsked = current.permissionAsked,
+            userWish = userIntent.wishOn(trigger.environment),
         )
     }
 

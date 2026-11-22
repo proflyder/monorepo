@@ -16,6 +16,7 @@ import org.junit.Test
 class ConnectionHealthTest {
     private val foreground = MutableStateFlow(ForegroundState(foreground = false, sinceElapsedNanos = 0))
     private val network = MutableStateFlow<Long?>(3L)
+    private val route = MutableStateFlow(true)
     private var signals = 0
 
     @Test
@@ -38,8 +39,17 @@ class ConnectionHealthTest {
         assertEquals(2, signals)
     }
 
+    @Test
+    fun reopeningTheRouteAfterATunnelSwitchIsAStaleSignal() = runTest(UnconfinedTestDispatcher()) {
+        observe()
+        route.value = false
+        assertEquals(0, signals)
+        route.value = true
+        assertEquals(1, signals)
+    }
+
     private fun TestScope.observe() {
-        staleConnectionSignals(foreground, network).onEach { signals += 1 }.launchIn(backgroundScope)
+        staleConnectionSignals(foreground, network, route).onEach { signals += 1 }.launchIn(backgroundScope)
     }
 
     private fun move(foreground: Boolean, atSeconds: Long) {

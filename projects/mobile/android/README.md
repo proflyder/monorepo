@@ -248,7 +248,14 @@ platform/android/         Bazel macros, Metro wiring, APK gate, signing, detekt 
   `Location`), only `@Idempotent` calls are retried, streams (chat SSE,
   intercom `Watch`) have no read timeout and no inspection interceptors.
 - `RouteGate.await()` holds every request until all `RouteCondition`s pass
-  (network present, settings loaded, VPN connecting on open), at most 20 s.
+  (network present, settings loaded, VPN tunnel not switching), at most 20 s.
+  A retry of an `@Idempotent` call waits for the gate again, and reopening
+  the gate after a tunnel switch evicts the OkHttp connection pool
+  (`ConnectionHealth`), so a refresh right after VPN up/down succeeds.
+- VPN auto-connect yields to the user: a manual on/off (toolbar, tile, VPN
+  screen, notification) is stored in `UserVpnIntent` (one `StateFlow`, bound
+  to the physical networks it was made on). While it holds, the policy does
+  nothing; a different network clears it and the policy decides again.
   Nothing blocks an OkHttp or main thread; there is no `runBlocking` in core.
 - Network inspection (logcat `HomeHttp`, Chucker) lives in `app/diagnostics`;
   `--define=home_network_inspection=off` drops it.

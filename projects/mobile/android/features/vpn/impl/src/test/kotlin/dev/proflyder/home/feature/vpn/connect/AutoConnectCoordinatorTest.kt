@@ -28,6 +28,8 @@ class AutoConnectCoordinatorTest {
     private val environment = FakeEnvironment()
     private val foreground = FakeForeground(foreground = true)
     private val permission = FakePermission()
+    private val userIntent = UserVpnIntent(environment)
+    private val user = UserVpnCommands(controller, userIntent)
 
     private fun coordinator(scope: CoroutineScope) = AutoConnectCoordinator(
         controller,
@@ -36,8 +38,11 @@ class AutoConnectCoordinatorTest {
         FakeProfiles(),
         environment,
         foreground,
+        userIntent,
         scope,
     ).also { it.start() }
+
+    private val connected = VpnConnection.Connected(FakeTransport.info("primary"), 0, verified = true)
 
     @Test
     fun opensAwayFromHomeConnectOnceAndRespectAManualDisconnect() = runTest {
@@ -107,5 +112,54 @@ class AutoConnectCoordinatorTest {
         assertEquals(1, requests.size)
         assertTrue(settings.settings.value?.permissionAsked == true)
         assertTrue(controller.commands.isEmpty())
+    }
+
+    @Test
+    fun aManualConnectAtHomeIsNotTornDownByAutoConnect() = runTest {
+        settings.settings.value = VpnSettings(autoConnect = true)
+        environment.state.value = HomeNetworkState.Home(setOf(1L))
+        coordinator(backgroundScope)
+        runCurrent()
+        user.connect()
+        runCurrent()
+        controller.connection.value = connected
+        runCurrent()
+        foreground.move(false)
+        runCurrent()
+        foreground.move(true)
+        runCurrent()
+        assertEquals(listOf("connect"), controller.commands)
+    }
+
+    @Test
+    fun aManualDisconnectAwayIsNotRaisedAgainInTheSameNetwork() = runTest {
+        settings.settings.value = VpnSettings(autoConnect = true)
+        coordinator(backgroundScope)
+        environment.state.value = HomeNetworkState.Away(setOf(1L))
+        runCurrent()
+        controller.connection.value = connected
+        runCurrent()
+        user.disconnect()
+        runCurrent()
+        foreground.move(false)
+        runCurrent()
+        foreground.move(true)
+        runCurrent()
+        assertEquals(listOf("connect", "disconnect"), controller.commands)
+    }
+
+    @Test
+    fun aNewNetworkHandsTheDecisionBackToThePolicy() = runTest {
+        settings.settings.value = VpnSettings(autoConnect = true)
+        environment.state.value = HomeNetworkState.Home(setOf(1L))
+        coordinator(backgroundScope)
+        runCurrent()
+        user.connect()
+        controller.connection.value = connected
+        runCurrent()
+        environment.state.value = HomeNetworkState.Home(setOf(2L))
+        runCurrent()
+        assertEquals(listOf("connect", "disconnect"), controller.commands)
+        assertEquals(null, userIntent.choice.value)
     }
 }
