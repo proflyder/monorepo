@@ -634,7 +634,10 @@ export const config = {
       id: "ha-voice",
       platform: "python",
       title: "projects/home-assistant/ha-voice",
-      paths: ["projects/home-assistant/ha-voice/**"],
+      paths: [
+        "projects/home-assistant/ha-voice/**",
+        "projects/home-assistant/ha-voice/README.md",
+      ],
       python: {
         suites: ["projects/home-assistant/ha-voice"],
       },
@@ -648,6 +651,7 @@ export const config = {
         "projects/home-assistant/hermes/**",
         "projects/home-assistant/hermes/HERMES.md",
         "projects/home-assistant/hermes/SOUL.md",
+        "projects/home-assistant/hermes/README.md",
         "projects/home-assistant/hermes/skills/**/*.md",
         "projects/home-assistant/deploy/images/hermes/**",
         "solutions/voice-proxy/**",
@@ -735,7 +739,11 @@ export const config = {
       id: "ha-deploy",
       platform: "python",
       title: "projects/home-assistant/deploy",
-      paths: ["projects/home-assistant/deploy/**"],
+      paths: [
+        "projects/home-assistant/deploy/**",
+        "projects/home-assistant/deploy/README.md",
+        "solutions/voice-proxy/README.md",
+      ],
       python: {
         suites: ["projects/home-assistant/deploy"],
       },
@@ -762,6 +770,7 @@ export const config = {
       paths: [
         "projects/home/windows-pc/**",
         "solutions/windows-logon-provider/**",
+        "solutions/windows-logon-provider/README.md",
       ],
       python: {
         suites: ["projects/home/windows-pc", "solutions/windows-logon-provider"],
@@ -932,6 +941,8 @@ export const config = {
       title: "projects/home/kubernetes/flux (GitOps toolkit/bootstrap/substitution contract)",
       paths: [
         "projects/home/kubernetes/flux/**",
+        "projects/home/kubernetes/flux/README.md",
+        "docs/SECRETS.md",
         "projects/home/kubernetes/nexus/**",
         "projects/home/kubernetes/external-secrets/**",
         "projects/home/kubernetes/ingress/**",

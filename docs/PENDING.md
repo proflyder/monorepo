@@ -34,7 +34,15 @@
       дома, переход на OpenConnect при закрытом `51820/udp`, автоподключение,
       плитка QS, always-on. Детали — `projects/mobile/android/README.md` (VPN).
 - [ ] **Нативный OpenConnect (libopenconnect через JNI) вместо внешнего
-      клиента.** План и объём — там же, «Notes to the code (VPN)».
+      клиента.** Собрать `libopenconnect` (LGPL) с зависимостями (GnuTLS +
+      nettle/gmp или OpenSSL, libxml2, zlib, lz4; stoken опционально) для
+      `arm64-v8a` NDK-тулчейном как Bazel `cc_library`/foreign rules, тонкий
+      JNI-мост (`setupTunFd`, `obtainCookie`, `makeCstpConnection`,
+      `mainloop`, `setClientCert`, колбэки формы входа) и свой `VpnService`,
+      отдающий ему tun fd. Подключается как ещё один `VpnTransport` в
+      `transport/<protocol>/` плюс строка `@Binds @IntoSet` в `VpnBindings`;
+      пароль `.p12` тогда хранить зашифрованным рядом с контейнером. Оценка
+      3–5 дней, в основном герметичная сборка C-зависимостей и лицензии.
 
 ### Станция и голос
 
