@@ -8,7 +8,7 @@ import dev.zacsweers.metro.SingleIn
 
 @SingleIn(AppScope::class)
 @Inject
-class VpnSecretBox {
+internal class VpnSecretBox {
     private val cipher: TokenCipher by lazy { KeystoreTokenCipher(ALIAS) }
 
     fun seal(plaintext: String): String = cipher.encrypt(plaintext)

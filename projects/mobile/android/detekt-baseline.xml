@@ -69,9 +69,7 @@
     <ID>PublicInImpl:DataStoreControlPreferences.kt$DataStoreControlPreferences : ControlPreferences</ID>
     <ID>PublicInImpl:DataStoreNotificationHistoryStore.kt$DataStoreNotificationHistoryStore : NotificationHistoryStore</ID>
     <ID>PublicInImpl:DataStorePushRegistrationStore.kt$DataStorePushRegistrationStore : PushRegistrationStore</ID>
-    <ID>PublicInImpl:DataStoreVpnSettingsStore.kt$DataStoreVpnSettingsStore : VpnSettingsStore</ID>
     <ID>PublicInImpl:DefaultConnectionRepository.kt$DefaultConnectionRepository : ConnectionRepository</ID>
-    <ID>PublicInImpl:ExternalOpenConnectTransport.kt$ExternalOpenConnectTransport : VpnTransport</ID>
     <ID>PublicInImpl:FindPhoneActivity.kt$FindPhoneActivity : AppCompatActivity</ID>
     <ID>PublicInImpl:FindPhoneAudio.kt$FindPhoneAudio</ID>
     <ID>PublicInImpl:FindPhoneController.kt$FindPhoneController</ID>
@@ -80,7 +78,6 @@
     <ID>PublicInImpl:FindPhoneService.kt$FindPhoneService : Service</ID>
     <ID>PublicInImpl:FirebasePushRegistrar.kt$FirebasePushRegistrar : PushRegistrar</ID>
     <ID>PublicInImpl:HomeMessagingService.kt$HomeMessagingService : FirebaseMessagingService</ID>
-    <ID>PublicInImpl:HomeNetworkMonitor.kt$HomeNetworkMonitor : HomeReachability</ID>
     <ID>PublicInImpl:HttpSystemRepository.kt$HttpSystemRepository : SystemRepository</ID>
     <ID>PublicInImpl:NotificationHistoryFragment.kt$NotificationHistoryFragment : BaseFragment</ID>
     <ID>PublicInImpl:NotificationHistoryRecorder.kt$NotificationHistoryRecorder</ID>
@@ -108,7 +105,6 @@
     <ID>PublicInImpl:SaveReminder.kt$SaveReminder</ID>
     <ID>PublicInImpl:RemindersFeatureEntry.kt$RemindersFeatureEntry : FeatureEntry</ID>
     <ID>PublicInImpl:RemindersViewModel.kt$RemindersViewModelFactoryContributor : ViewModelFactoryContributor</ID>
-    <ID>PublicInImpl:RemoteVpnProfiles.kt$RemoteVpnProfiles : VpnProfiles</ID>
     <ID>PublicInImpl:ScenarioEditorFragment.kt$ScenarioEditorFragment : BaseFragment</ID>
     <ID>PublicInImpl:ScenarioEditorViewModel.kt$ScenarioEditorUiState</ID>
     <ID>PublicInImpl:ScenarioEditorViewModel.kt$ScenarioEditorViewModel : BaseViewModel</ID>
@@ -152,26 +148,11 @@
     <ID>PublicInImpl:TimerUseCases.kt$StartTimer</ID>
     <ID>PublicInImpl:TimersFeatureEntry.kt$TimersFeatureEntry : FeatureEntry</ID>
     <ID>PublicInImpl:TimersViewModel.kt$TimersViewModelFactoryContributor : ViewModelFactoryContributor</ID>
-    <ID>PublicInImpl:TunnelVpnController.kt$TunnelVpnController : VpnController</ID>
     <ID>PublicInImpl:VoiceWaveView.kt$VoiceWaveView : View</ID>
     <ID>PublicInImpl:VpnActivityHost.kt$VpnActivityHost</ID>
-    <ID>PublicInImpl:VpnCertificateStore.kt$CertificateImport</ID>
-    <ID>PublicInImpl:VpnCertificateStore.kt$VpnCertificateStore</ID>
-    <ID>PublicInImpl:VpnEntryPoint.kt$VpnEntryPoint</ID>
     <ID>PublicInImpl:VpnFeatureEntry.kt$VpnDestination : Destination</ID>
     <ID>PublicInImpl:VpnFeatureEntry.kt$VpnFeatureEntry : FeatureEntry</ID>
-    <ID>PublicInImpl:VpnFragment.kt$VpnFragment : BaseFragment</ID>
-    <ID>PublicInImpl:VpnKeyVault.kt$VpnKeyVault</ID>
-    <ID>PublicInImpl:VpnOpenConnector.kt$VpnOpenConnector : DefaultLifecycleObserver</ID>
-    <ID>PublicInImpl:VpnSecretBox.kt$VpnSecretBox</ID>
     <ID>PublicInImpl:VpnStatusService.kt$VpnStatusService : Service</ID>
     <ID>PublicInImpl:VpnTileService.kt$VpnTileService : TileService</ID>
-    <ID>PublicInImpl:VpnTransport.kt$VpnTraffic</ID>
-    <ID>PublicInImpl:VpnTransport.kt$VpnTransport</ID>
-    <ID>PublicInImpl:VpnViewModel.kt$VpnNotice</ID>
-    <ID>PublicInImpl:VpnViewModel.kt$VpnUiState</ID>
-    <ID>PublicInImpl:VpnViewModel.kt$VpnViewModel : BaseViewModel</ID>
-    <ID>PublicInImpl:VpnViewModel.kt$VpnViewModelFactoryContributor : ViewModelFactoryContributor</ID>
-    <ID>PublicInImpl:WireGuardTransport.kt$WireGuardTransport : VpnTransport</ID>
   </CurrentIssues>
 </SmellBaseline>

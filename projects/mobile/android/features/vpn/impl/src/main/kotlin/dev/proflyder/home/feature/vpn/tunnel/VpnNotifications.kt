@@ -35,7 +35,8 @@ internal object VpnNotifications {
             .setOnlyAlertOnce(true)
             .setContentIntent(openApp(context))
             .addAction(0, context.getString(R.string.vpn_disconnect), disconnect(context))
-        fallback?.let { builder.addAction(0, context.getString(R.string.vpn_open_external), activity(context, it)) }
+        fallback?.let { builder.addAction(0, context.getString(R.string.vpn_open_app), activity(context, it)) }
+        (connection as? VpnConnection.Connected)?.let { builder.setWhen(it.sinceMillis).setShowWhen(true).setUsesChronometer(true) }
         return builder.build()
     }
 

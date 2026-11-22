@@ -19,7 +19,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 
-enum class CertificateImport {
+internal enum class CertificateImport {
     IMPORTED,
     WRONG_PASSWORD,
     UNREADABLE,
@@ -28,7 +28,7 @@ enum class CertificateImport {
 
 @SingleIn(AppScope::class)
 @Inject
-class VpnCertificateStore(
+internal class VpnCertificateStore(
     private val context: Context,
     private val dataStore: DataStore<Preferences>,
     private val box: VpnSecretBox,
@@ -45,7 +45,7 @@ class VpnCertificateStore(
     suspend fun installIntent(): Intent? {
         val stored = suspendRunCatching { dataStore.data.first() }.getOrNull() ?: return null
         val bytes = box.open(stored[KEY_P12])?.let { Base64.decode(it, Base64.NO_WRAP) } ?: return null
-        val name = settings.settings.value.certificateName
+        val name = settings.settings.value?.certificateName.orEmpty()
         return KeyChain.createInstallIntent()
             .putExtra(KeyChain.EXTRA_PKCS12, bytes)
             .putExtra(KeyChain.EXTRA_NAME, name)

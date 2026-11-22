@@ -8,15 +8,16 @@ import dev.proflyder.home.feature.vpn.VpnConnectProblem
 import dev.proflyder.home.feature.vpn.VpnConnection
 import dev.proflyder.home.feature.vpn.VpnProfileProblem
 import dev.proflyder.home.feature.vpn.VpnProfileState
-import dev.proflyder.home.feature.vpn.VpnProtocol
+import dev.proflyder.home.feature.vpn.VpnTraffic
+import dev.proflyder.home.feature.vpn.VpnTransportInfo
 import dev.proflyder.home.feature.vpn.impl.R
 
 internal object VpnTexts {
     fun title(connection: VpnConnection): Int = when (connection) {
         VpnConnection.Disconnected -> R.string.vpn_state_disconnected
-        is VpnConnection.Connecting -> connectingTitle(connection.protocol)
+        is VpnConnection.Connecting -> connectingTitle(connection.transport)
         is VpnConnection.Connected -> R.string.vpn_state_connected
-        VpnConnection.FallbackRequired -> R.string.vpn_state_fallback
+        is VpnConnection.FallbackRequired -> R.string.vpn_state_fallback
         VpnConnection.NotNeededAtHome -> R.string.vpn_state_home
         is VpnConnection.Failed -> R.string.vpn_state_failed
     }
@@ -24,25 +25,22 @@ internal object VpnTexts {
     fun detail(context: Context, connection: VpnConnection, nowMillis: Long): String = when (connection) {
         VpnConnection.Disconnected -> context.getString(R.string.vpn_detail_disconnected)
         is VpnConnection.Connecting ->
-            context.getString(R.string.vpn_detail_connecting, context.getString(protocol(connection.protocol)))
+            context.getString(R.string.vpn_detail_connecting, context.getString(connection.transport.labelRes))
         is VpnConnection.Connected -> context.getString(
-            R.string.vpn_detail_connected,
-            context.getString(protocol(connection.protocol)),
+            connectedDetail(connection.verified),
+            context.getString(connection.transport.labelRes),
             duration(nowMillis - connection.sinceMillis),
         )
-        VpnConnection.FallbackRequired -> context.getString(R.string.vpn_detail_fallback)
+        is VpnConnection.FallbackRequired -> context.getString(R.string.vpn_detail_fallback)
         VpnConnection.NotNeededAtHome -> context.getString(R.string.vpn_detail_home)
         is VpnConnection.Failed -> context.getString(problem(connection.problem))
     }
 
-    fun traffic(context: Context, connection: VpnConnection.Connected): String? = when (connection.protocol) {
-        VpnProtocol.WIREGUARD -> context.getString(
-            R.string.vpn_traffic,
-            Formatter.formatShortFileSize(context, connection.rxBytes),
-            Formatter.formatShortFileSize(context, connection.txBytes),
-        )
-        VpnProtocol.OPENCONNECT -> null
-    }
+    fun traffic(context: Context, traffic: VpnTraffic): String = context.getString(
+        R.string.vpn_traffic,
+        Formatter.formatShortFileSize(context, traffic.rxBytes),
+        Formatter.formatShortFileSize(context, traffic.txBytes),
+    )
 
     fun profile(context: Context, state: VpnProfileState): String = when (state) {
         VpnProfileState.Missing -> context.getString(R.string.vpn_profile_missing)
@@ -55,7 +53,7 @@ internal object VpnTexts {
 
     private fun ready(context: Context, profile: VpnProfile): String = context.getString(
         R.string.vpn_profile_ready,
-        profile.wireguard.address,
+        profile.deviceName,
         DateUtils.formatDateTime(context, profile.updatedUnix * MILLIS_IN_SECOND, DATE_FLAGS),
     )
 
@@ -65,21 +63,21 @@ internal object VpnTexts {
         return reason + "\n" + context.getString(R.string.vpn_profile_stale, ready(context, saved))
     }
 
-    private fun connectingTitle(protocol: VpnProtocol): Int = when (protocol) {
-        VpnProtocol.WIREGUARD -> R.string.vpn_state_connecting
-        VpnProtocol.OPENCONNECT -> R.string.vpn_state_connecting_external
+    private fun connectingTitle(transport: VpnTransportInfo): Int = when (transport.external) {
+        true -> R.string.vpn_state_connecting_external
+        false -> R.string.vpn_state_connecting
     }
 
-    fun protocol(protocol: VpnProtocol): Int = when (protocol) {
-        VpnProtocol.WIREGUARD -> R.string.vpn_protocol_wireguard
-        VpnProtocol.OPENCONNECT -> R.string.vpn_protocol_openconnect
+    private fun connectedDetail(verified: Boolean): Int = when (verified) {
+        true -> R.string.vpn_detail_connected
+        false -> R.string.vpn_detail_connected_unverified
     }
 
     private fun problem(problem: VpnConnectProblem): Int = when (problem) {
         VpnConnectProblem.NO_PROFILE -> R.string.vpn_problem_no_profile
         VpnConnectProblem.PERMISSION -> R.string.vpn_problem_permission
         VpnConnectProblem.TUNNEL -> R.string.vpn_problem_tunnel
-        VpnConnectProblem.NO_EXTERNAL_CLIENT -> R.string.vpn_problem_no_external
+        VpnConnectProblem.NO_CLIENT -> R.string.vpn_problem_no_external
     }
 
     fun problem(problem: VpnProfileProblem): Int = when (problem) {
