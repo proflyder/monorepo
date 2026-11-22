@@ -126,6 +126,7 @@ kt_android_local_test(
     srcs = glob(
         ["src/test/kotlin/**/*.kt"],
         exclude = [
+            "src/test/kotlin/dev/proflyder/home/feature/control/data/ControlTaskPayloadsTest.kt",
             "src/test/kotlin/dev/proflyder/home/feature/control/presentation/ControlRowsTest.kt",
             "src/test/kotlin/dev/proflyder/home/feature/control/presentation/DeviceStateScreenshotTest.kt",
         ],

@@ -48,7 +48,6 @@ abstract class CallBindings {
     @IntoSet
     internal abstract fun foregroundStarter(impl: CallForegroundStarter): AppStartable
 
-
     internal companion object {
         @Provides
         internal fun sessionSettings(): CallSessionSettings = CallSessionSettings()

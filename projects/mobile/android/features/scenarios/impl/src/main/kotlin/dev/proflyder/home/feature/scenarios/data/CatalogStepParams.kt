@@ -4,8 +4,11 @@ import dev.proflyder.home.core.model.LightParams
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonBuilder
 
-private val StepParamsJson = Json {
+private val StepParamsJson = Json { lenientWire() }
+
+private fun JsonBuilder.lenientWire() {
     ignoreUnknownKeys = true
     coerceInputValues = true
     explicitNulls = false

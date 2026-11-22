@@ -14,8 +14,11 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonBuilder
 
-private val OutboxJson = Json {
+private val OutboxJson = Json { lenientWire() }
+
+private fun JsonBuilder.lenientWire() {
     ignoreUnknownKeys = true
     coerceInputValues = true
     explicitNulls = false
