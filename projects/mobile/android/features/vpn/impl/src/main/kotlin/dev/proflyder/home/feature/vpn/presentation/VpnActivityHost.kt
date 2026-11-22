@@ -7,6 +7,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import com.google.android.material.button.MaterialButton
 import dev.proflyder.home.feature.vpn.VpnController
 import dev.proflyder.home.feature.vpn.connect.AutoConnectCoordinator
+import dev.proflyder.home.feature.vpn.connect.UserVpnCommands
 import dev.proflyder.home.feature.vpn.isActive
 import dev.proflyder.home.feature.vpn.tunnel.VpnPermission
 import dev.zacsweers.metro.Assisted
@@ -22,6 +23,7 @@ internal class VpnActivityHost(
     private val controller: VpnController,
     private val permission: VpnPermission,
     private val coordinator: AutoConnectCoordinator,
+    private val commands: UserVpnCommands,
 ) {
     @AssistedFactory
     fun interface Factory {
@@ -54,8 +56,8 @@ internal class VpnActivityHost(
 
     private fun toggle() {
         when (controller.connection.value.isActive) {
-            true -> controller.disconnect()
-            false -> askOrConnect()
+            true -> commands.disconnect()
+            false -> commands.wantUp().also { askOrConnect() }
         }
     }
 

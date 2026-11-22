@@ -43,6 +43,10 @@ import kotlinx.coroutines.flow.takeWhile
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
+internal interface TunnelSwitch {
+    val switching: StateFlow<Boolean>
+}
+
 internal sealed interface VpnCommand {
     data class Connect(val via: VpnProtocolId?) : VpnCommand
 
@@ -62,13 +66,16 @@ internal class ChainVpnController(
     private val permission: VpnPermission,
     private val clock: Clock,
     private val scope: CoroutineScope,
-) : VpnController, AppStartable {
+) : VpnController, TunnelSwitch, AppStartable {
     private val state = MutableStateFlow<VpnConnection>(VpnConnection.Disconnected)
+    private val switchingState = MutableStateFlow(false)
     private val commands = Channel<VpnCommand>(Channel.UNLIMITED)
     private var session: Job? = null
     private var active: ActiveTunnel? = null
 
     override val connection: StateFlow<VpnConnection> = state.asStateFlow()
+
+    override val switching: StateFlow<Boolean> = switchingState.asStateFlow()
 
     override val traffic: Flow<VpnTraffic?> = connection
         .map { (it as? VpnConnection.Connected)?.transport?.id }
@@ -95,6 +102,12 @@ internal class ChainVpnController(
     }
 
     private suspend fun execute(command: VpnCommand) {
+        switchingState.value = true
+        perform(command)
+        switchingState.value = false
+    }
+
+    private suspend fun perform(command: VpnCommand) {
         when (command) {
             is VpnCommand.Connect -> connect(command.via)
             VpnCommand.Reconnect -> restart()

@@ -47,4 +47,24 @@ class AutoConnectPolicyTest {
         assertEquals(AutoConnectAction.NONE, AutoConnectPolicy.decide(home.copy(autoConnect = false)))
         assertEquals(AutoConnectAction.NONE, AutoConnectPolicy.decide(home.copy(active = false)))
     }
+
+    @Test
+    fun aManualChoiceOverridesThePolicyInItsNetwork() {
+        val home = away.copy(environment = HomeNetworkState.Home(setOf(1L)), autoConnect = true, active = true)
+        assertEquals(AutoConnectAction.DISCONNECT, AutoConnectPolicy.decide(home))
+        assertEquals(AutoConnectAction.NONE, AutoConnectPolicy.decide(home.copy(userWish = TunnelWish.UP)))
+        val awayAuto = away.copy(autoConnect = true)
+        assertEquals(AutoConnectAction.NONE, AutoConnectPolicy.decide(awayAuto.copy(userWish = TunnelWish.DOWN)))
+    }
+
+    @Test
+    fun aChoiceLastsOnlyInTheNetworkWhereItWasMade() {
+        val choice = UserVpnChoice(TunnelWish.UP, setOf(1L))
+        assertEquals(choice, choice.on(HomeNetworkState.Home(setOf(1L))))
+        assertEquals(choice, choice.on(HomeNetworkState.Unknown))
+        assertEquals(null, choice.on(HomeNetworkState.Away(setOf(2L))))
+        assertEquals(null, choice.on(HomeNetworkState.Offline))
+        val unbound = UserVpnChoice(TunnelWish.DOWN, null)
+        assertEquals(unbound.copy(networks = setOf(3L)), unbound.on(HomeNetworkState.Away(setOf(3L))))
+    }
 }

@@ -19,10 +19,12 @@ internal data class AutoConnectInput(
     val hasProfile: Boolean,
     val permissionGranted: Boolean,
     val permissionAsked: Boolean,
+    val userWish: TunnelWish? = null,
 )
 
 internal object AutoConnectPolicy {
     fun decide(input: AutoConnectInput): AutoConnectAction {
+        if (input.userWish != null) return AutoConnectAction.NONE
         val atHome = input.environment.atHome ?: return AutoConnectAction.NONE
         return when {
             atHome -> atHomeAction(input)

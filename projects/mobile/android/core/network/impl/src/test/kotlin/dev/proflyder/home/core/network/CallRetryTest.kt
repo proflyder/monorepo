@@ -80,6 +80,26 @@ class CallRetryTest {
         assertEquals(2, server.requestCount)
     }
 
+    private class CountingRouteGate : RouteGate {
+        var waits = 0
+
+        override suspend fun await() {
+            waits += 1
+        }
+    }
+
+    @Test
+    fun aRetryAfterARouteSwitchWaitsForTheRouteAgain() = runBlocking {
+        server.enqueue(MockResponse().setSocketPolicy(SocketPolicy.DISCONNECT_AT_START))
+        server.enqueue(MockResponse().setResponseCode(200).setBody(body))
+        val gate = CountingRouteGate()
+
+        val result = HttpControlCatalogClient(testHttp(store, gate = gate)).fetch()
+
+        assertTrue(result is Outcome.Success)
+        assertEquals(2, gate.waits)
+    }
+
     @Test
     fun aCancelledCallNeverBecomesAFailure() {
         val canceling = Interceptor { throw IOException("Canceled") }
