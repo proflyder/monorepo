@@ -392,6 +392,62 @@ export function workflowTriggers(text) {
   return events;
 }
 
+export const ANDROID_SUITE_PACKAGE = "projects/mobile/android";
+export const ANDROID_SUITE_NAME = "android_tests";
+
+function buildFiles(directory) {
+  if (!isDirectory(directory)) {
+    return [];
+  }
+  return fs
+    .readdirSync(directory, { recursive: true })
+    .filter((name) => path.basename(String(name)) === "BUILD.bazel")
+    .map((name) => path.join(directory, String(name)))
+    .sort();
+}
+
+export function declaredTestLabels(packagePath, text) {
+  const names = [...String(text).matchAll(/\bname\s*=\s*"([A-Za-z0-9_.-]+_test)"/g)];
+  return names.map((match) => `//${packagePath}:${match[1]}`);
+}
+
+export function suiteTestLabels(text, suiteName) {
+  const start = String(text).search(
+    new RegExp(`test_suite\\(\\s*name\\s*=\\s*"${suiteName}"`),
+  );
+  if (start === -1) {
+    return null;
+  }
+  const body = /tests\s*=\s*\[([^\]]*)\]/.exec(String(text).slice(start));
+  return body ? [...body[1].matchAll(/"(\/\/[^"]+)"/g)].map((match) => match[1]) : [];
+}
+
+export function androidSuiteCoverageProblems(config, root = DEFAULT_ROOT) {
+  const directory = path.resolve(root, ANDROID_SUITE_PACKAGE);
+  const suiteFile = path.join(directory, "BUILD.bazel");
+  if (!fs.existsSync(suiteFile)) {
+    return [];
+  }
+  const suite = suiteTestLabels(fs.readFileSync(suiteFile, "utf8"), ANDROID_SUITE_NAME);
+  if (!suite) {
+    return [`//${ANDROID_SUITE_PACKAGE}:${ANDROID_SUITE_NAME}: test_suite not found`];
+  }
+  const unitTargets = config.units.flatMap((unit) => unit.testTargets ?? []);
+  const covered = new Set([...suite, ...unitTargets]);
+  const declared = buildFiles(directory).flatMap((file) =>
+    declaredTestLabels(
+      path.relative(root, path.dirname(file)).split(path.sep).join("/"),
+      fs.readFileSync(file, "utf8"),
+    ),
+  );
+  return declared
+    .filter((label) => !covered.has(label))
+    .map(
+      (label) =>
+        `${label}: not in //${ANDROID_SUITE_PACKAGE}:${ANDROID_SUITE_NAME}, CI never runs it`,
+    );
+}
+
 export function workflowTriggerProblems(root = DEFAULT_ROOT) {
   const problems = [];
   const directory = path.resolve(root, ".github/workflows");
@@ -802,6 +858,7 @@ export async function check(argv) {
       ...coverageProblems(config, trackedFiles(root)),
       ...workflowRegistryProblems(root),
       ...workflowTriggerProblems(root),
+      ...androidSuiteCoverageProblems(config, root),
       ...workflowCallerPermissionProblems(root),
       ...workflowMatrixOutputProblems(root),
     ],

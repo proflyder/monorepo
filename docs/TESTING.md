@@ -224,6 +224,13 @@ bazel test --config=android //projects/mobile/android:detekt
 bazel test --config=android //platform/android/...
 ```
 
+Каждый `*_test` под `projects/mobile/android/**` обязан входить в
+`//projects/mobile/android:android_tests` или в `test_targets` юнита
+(`platform/ci/units.mjs`). Иначе `mise run ci:units`
+(`androidSuiteCoverageProblems` в `platform/ci/check_units.mjs`) красный:
+тест вне набора CI никогда не запускает. Новый тест — сразу строка в
+`android_tests`.
+
 Android-гейты и их актуальный состав перечислены в
 `projects/mobile/android/README.md`; на устройстве установлен debug APK,
 интерактивная приёмка (фильтры, сценарии, toggle) ещё не завершена. Push/FCM,
