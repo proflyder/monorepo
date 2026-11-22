@@ -89,3 +89,15 @@ home-rules:
     active: true
   NoHardcodedUiText:
     active: true
+  NoDirectStateWrite:
+    active: true
+    stateNames:
+      - mutableState
+    reducerFunction: updateState
+    viewModelBases:
+      - BaseViewModel
+  PublicInImpl:
+    active: true
+    implPathMarker: /impl/src/main/
+  NoUiOwnedControlState:
+    active: true

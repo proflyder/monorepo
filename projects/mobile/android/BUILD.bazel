@@ -56,6 +56,7 @@ home_android_lint(
 
 home_detekt(
     name = "detekt",
+    baseline = "//projects/mobile/android:detekt-baseline.xml",
     config = "//projects/mobile/android:detekt.yml",
     deps = ["//projects/mobile/android/app:app_lib"] + DETEKT_TEST_TARGETS,
     source_prefix = "projects/mobile/android/",
@@ -115,6 +116,7 @@ test_suite(
 
 exports_files([
     "README.md",
+    "detekt-baseline.xml",
     "detekt.yml",
     "lint.xml",
     "maven_install.json",

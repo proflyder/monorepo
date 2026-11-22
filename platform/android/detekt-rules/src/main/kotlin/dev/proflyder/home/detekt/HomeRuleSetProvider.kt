@@ -15,6 +15,9 @@ class HomeRuleSetProvider : RuleSetProvider {
             LongLambda(config),
             NoInlineJsonInTests(config),
             NoHardcodedUiText(config),
+            NoDirectStateWrite(config),
+            PublicInImpl(config),
+            NoUiOwnedControlState(config),
         ),
     )
 }

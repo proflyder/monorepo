@@ -10,5 +10,8 @@ import org.junit.runners.Suite
     LongLambdaTest::class,
     NoInlineJsonInTestsTest::class,
     NoHardcodedUiTextTest::class,
+    NoDirectStateWriteTest::class,
+    PublicInImplTest::class,
+    NoUiOwnedControlStateTest::class,
 )
 class HomeRulesTestSuite

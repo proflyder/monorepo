@@ -90,6 +90,19 @@ core/designsystem   все визуальные компоненты, общие
   `RefreshController` (latest-wins вместо `generation`), `EditorDraftSession<D>`
   для редакторов с `IdempotentRequestKey`. Фабрики через Metro
   `Provider`/assisted inject, без повторения списка аргументов.
+- **Single responsibility и делегирование.** Крупные блоки одной логики
+  (состояние экрана, загрузка/повторы, подписки, форма, таймеры) — отдельные
+  классы, подключаемые делегированием Kotlin: `class X(...) : Y by impl`,
+  `by lazy`, свойства-делегаты, свои `ReadOnlyProperty`/`ReadWriteProperty`
+  для состояния и настроек. ViewModel/Fragment/адаптеры не копируют и не
+  раздувают такую логику.
+- **Однонаправленный поток UI.** Всё состояние UI, включая тумблеры, чекбоксы
+  и выбранные табы, приходит из ViewModel через StateFlow. Фрагмент, адаптер и
+  вью-холдер только шлют намерение (`onToggle(id, checked)`), ViewModel меняет
+  стейт, UI рисует актуальное значение. Никаких `isChecked = !isChecked` и
+  локальных флагов; биндинг без петли обратного вызова (снять слушатель →
+  выставить значение → вернуть слушатель, или делегат-биндер). Проверяет
+  detekt `NoUiOwnedControlState`.
 - **Тикеры.** `tickerFlow(period)` в ViewModel, `Clock` инъектируется.
 
 ## 2. Находки
@@ -260,9 +273,10 @@ core/designsystem   все визуальные компоненты, общие
 
 | id | сер. | модуль | путь:строка | проблема | целевое решение | объём |
 |---|---|---|---|---|---|---|
-| Q1 | med | все impl | push 28, vpn 24, settings 14, call 13, scenarios 13, alarms 12, reminders 12, chat 11, system 11, control 9, timers 8, connection 8 | 163 public top-level объявления в `impl` при правиле `internal` | Сделать internal после D2; detekt-правило `PublicInImpl` | M |
-| Q2 | med | весь проект | control/impl 43, chat/impl 27, scenarios/impl 16, alarms/impl 15, core/ui 13; напр. `core/network/…/HttpSupport.kt:36`, `OutcomeCallAdapterFactory.kt:82-86`, `features/control/api/…/LightColors.kt:9-10`, `ConnectionFragment.kt:123,140`, `FindPhoneActivity.kt:45` | 172 `if … else` при правиле «только when»; `NoElseIf` ловит лишь `else if` | Правило `NoIfElseExpression` в `platform/android/detekt-rules` + миграция по модулям | M |
-| Q3 | low | detekt | `platform/android/detekt-rules/`, `detekt.yml:81-91` | Не проверяются: `internal` в impl, «только when», `mutableState.value =` | Добавить три правила | M |
+| Q1 | med | все impl | push 28, vpn 24, settings 14, call 13, scenarios 13, alarms 12, reminders 12, chat 11, system 11, control 9, timers 8, connection 8 | 163 public top-level объявления в `impl` при правиле `internal` | Сделать internal после D2; detekt-правило `PublicInImpl` (правило добавлено в PR P0, по нему в baseline 197 объявлений: считаются все top-level, включая функции, свойства и typealias) | M |
+| Q2 | med | весь проект | control/impl 43, chat/impl 27, scenarios/impl 16, alarms/impl 15, core/ui 13; напр. `core/network/…/HttpSupport.kt:36`, `OutcomeCallAdapterFactory.kt:82-86`, `features/control/api/…/LightColors.kt:9-10`, `ConnectionFragment.kt:123,140`, `FindPhoneActivity.kt:45` | ~~172 `if … else` при правиле «только when»~~ — **неверная находка** (поправка владельца): запрещён только `else if` (третья ветка), обычный `if`/`else` разрешён; `else if` уже ловит `NoElseIf`, нарушений нет | Ничего не делать; **закрыто в PR P0** | — |
+| Q4 | low | control | `features/control/impl/…/presentation/SpeedDialOverlay.kt:54` | Открыто ли меню быстрых действий хранит локальный `isOpen` в UI, а не стейт ViewModel (найдено при вводе `NoUiOwnedControlState`, правило такой флаг не ловит) | Состояние меню в `ControlViewModel`, оверлей рисует его | S |
+| Q3 | low | detekt | `platform/android/detekt-rules/`, `detekt.yml:81-91` | Не проверяются: `internal` в impl, `mutableState.value =` (else-if уже проверяет `NoElseIf`) | Добавить два правила | M — **сделано в PR P0**: `PublicInImpl`, `NoDirectStateWrite` + `projects/mobile/android/detekt-baseline.xml` (197 + 59 записей); плюс `NoUiOwnedControlState` (однонаправленный поток UI) — нарушений нет, без baseline |
 
 Соблюдены: `runCatching` вместо `try` (0 `try`), лямбды ≤3 строк и вложенность ≤3
 (detekt `LongLambda`, `NestedBlockDepth`; исключение — C9), строки из ресурсов
@@ -287,7 +301,7 @@ core/designsystem   все визуальные компоненты, общие
 
 | # | пакет | находки | критерий готовности |
 |---|---|---|---|
-| P0 | **Правила и ограждения**: detekt `PublicInImpl`, `NoIfElseExpression`, `NoDirectStateWrite` (сначала в режиме baseline) | Q3 | Правила в `detekt-rules` с тестами; baseline фиксирует текущие нарушения, новые — красный CI |
+| P0 | **Правила и ограждения**: detekt `PublicInImpl`, `NoDirectStateWrite` (сначала в режиме baseline); else-if — существующий `NoElseIf` — **сделано в PR P0** | Q3, Q2 (неверная) | Правила в `detekt-rules` с тестами; baseline фиксирует текущие нарушения, новые — красный CI |
 | P1 | **core/runtime**: `@AppScope` scope, `IoDispatcher`, `AppForeground` StateFlow, `AppStartable`, `tickerFlow`, `Backoff`, `Clock`, `DeviceIdentity`; `Outcome` в свой файл, `RemoteFailure.Server.httpStatus`, `Storage(reason)` | D5, D6, U4, V13, V14, C3, T9 | Нет `CoroutineScope(SupervisorJob…)` в core; `HomeApplication` итерирует `Set<AppStartable>`; тесты `tickerFlow`/`Backoff` |
 | P2 | **DI без локаторов**: Metro-аксессоры для Service/Activity, удаление `*EntryPoint`, граф экспонирует только API, VM-фабрики через Provider/assisted, debug-интерсепторы через мультибиндинг | D1, D2, D4, D7, D8, D9 | Нет `object *EntryPoint`; `AppGraph` без impl-типов; push/call стартуют как `AppStartable` |
 | P3 | **Сеть**: `core/network/{api,impl}`, `HomeHttp.rest/stream`, suspend call adapter, `RouteGate`, `@Idempotent`, sealed `Target`, `NetworkJson`, `ConnectionHealth`, internal-мапперы | D3, R2, R5, N1–N9, N11–N13, C6 | Нет `runBlocking`/`CountDownLatch`/`Thread.sleep` в сети; один Retrofit-фабричный путь; `MainActivity` не знает OkHttp; существующие тесты клиентов зелёные |
@@ -297,10 +311,10 @@ core/designsystem   все визуальные компоненты, общие
 | P7 | **Push реактивно**: `PushTokenSource`, `PushRegistrar` на `combine`, работа сервиса в app-scope, `NotificationPermission` | R6, R7, P1, P2 | Смена сервера/токена регистрирует без перезапуска (тест на фейках); нет `FirebaseMessaging.getInstance()` вне адаптера |
 | P8 | **Базовый ViewModel-слой**: `updateState`-only, `events`, `RefreshController`, `ListLoadState`, `EditorDraftSession`; миграция alarms/reminders/timers | T1–T8, T10–T12, R9 (для time) | Baseline `NoDirectStateWrite` для этих модулей пуст; нет `generation`/`consume*`; refresh не в `onResume` |
 | P9 | **Звонок**: `CallManager` в impl, `CallViewModel`, аудио по состоянию звонка, `LifecycleService` | K1–K6, R12 | Поворот во время звонка не глушит звук (Robolectric-тест); в `call/api` только контракты |
-| P10 | **Управление домом**: репозиторий каталога со StateFlow и политикой обновления, разбиение VM и адаптера, `QuickTileProvider`, билдеры в impl, общий `FavoritePreferences` поток | R10, R11, F1–F8, R9 (control) | `ControlAdapter`/`ControlViewModel` < 300 строк каждый; нет `delay`-reconcile в VM; плитки VPN/звонка вкладываются своими фичами |
+| P10 | **Управление домом**: репозиторий каталога со StateFlow и политикой обновления, разбиение VM и адаптера, `QuickTileProvider`, билдеры в impl, общий `FavoritePreferences` поток | R10, R11, F1–F8, R9 (control), Q4 | `ControlAdapter`/`ControlViewModel` < 300 строк каждый; нет `delay`-reconcile в VM; плитки VPN/звонка вкладываются своими фичами |
 | P11 | **Сценарии и чат**: `EditorDialogFragment<T>`, `LightParamsEditor` + `LightParams`, draft в impl; интерфейс `ChatRepository`, стрим потоком, `RecordingState`, `@Serializable` outbox | F9–F16, C7, R9 (scenarios) | Диалоги переживают поворот; `ChatFragment` не запускает стрим; общий редактор света в designsystem |
 | P12 | **Хром и навигация**: `ToolbarContribution`, `DeepLinkResolver`, `AppChromeState`, типизированные маршруты, `features/time`, system polling в репозиторий | U1–U3, T13, F18 | `MainActivity` < 150 строк, без `CONTROL_TAB`; тесты `FragmentRouter` на типизированных маршрутах |
-| P13 | **Строки и финальная чистка**: `ds_action_*`, заголовки, `Favorites` из ресурсов, конфиги без английских строк, снятие baseline'ов detekt | S1, S2, F17, C8, C9, Q1, Q2 | Baseline'ы detekt удалены, правила P0 действуют без исключений |
+| P13 | **Строки и финальная чистка**: `ds_action_*`, заголовки, `Favorites` из ресурсов, конфиги без английских строк, снятие baseline'ов detekt | S1, S2, F17, C8, C9, Q1 | Baseline'ы detekt удалены, правила P0 действуют без исключений |
 
 Зависимости: P0 → все; P1 → P2, P5, P7, P8; P3 после P2; P6 после P5;
 P8–P11 после P1/P2 и между собой независимы; P13 последним.
