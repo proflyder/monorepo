@@ -138,7 +138,7 @@ kt_android_local_test(
         "//packages/kotlin/core",
         "//projects/mobile/android/core/config",
         "//projects/mobile/android/core/model",
-        "//projects/mobile/android/core/network",
+        "//projects/mobile/android/core/network/api",
         "//projects/mobile/android/core/presentation",
         "//projects/mobile/android/core/runtime",
         "//projects/mobile/android/core/testing",

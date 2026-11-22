@@ -1171,17 +1171,18 @@ single `DataStore`, `FeatureRegistry` and the `Set<Interceptor>` multibinding.
   starter, `ConnectionHealth`, foreground, appearance).
   `HomeApplication` only iterates `graph.startables`. No class creates its own
   `CoroutineScope(SupervisorJob() + …)`.
-- **ViewModels.** A ViewModel is an `internal` `@Inject` class (editors that
-  need a `SavedStateHandle` are `@AssistedInject` with a nested
-  `@AssistedFactory`). Next to it a public `XViewModelSource` with an
-  `internal constructor` takes `() -> XViewModel` (or the assisted factory) and
+- **ViewModels.** One rule for every screen. A ViewModel is an `internal`
+  class; next to it a public `XViewModelSource` with an `internal constructor`
   is contributed with `@ContributesIntoMap` + `@ClassKey(XViewModel::class)`
-  into the `ViewModelSource`/`SavedStateViewModelFactory` maps, so the
-  constructor list is never repeated. `ViewModelFactoryRegistry` (core/ui) is
-  the single `ViewModelProvider.Factory`; fragments use `by injectedViewModels()`,
-  `by injectedActivityViewModels()` or `by screenViewModel()`.
-  `ControlViewModel` is still public and contributed directly because
-  `MainActivity` reads it (chrome work, P12).
+  into the `ViewModelSource` map (or the `SavedStateViewModelFactory` map for
+  editors that need a `SavedStateHandle`). The source takes `() -> XViewModel`
+  when the ViewModel is `@Inject`, or builds it from its dependencies when the
+  constructor needs derived values (draft session, resource strings).
+  `ViewModelFactoryRegistry` (core/ui) is the single `ViewModelProvider.Factory`;
+  `HomeApplication` exposes it as `ViewModelFactoryProvider`, and screens use
+  `by injectedViewModels()`, `by injectedActivityViewModels()` or
+  `by screenViewModel()` (activities: `ComponentActivity.injectedViewModels()`).
+  `AppGraphBindingsTest` resolves every ViewModel from the real graph.
 - **Framework-created components** (services, tile, activities other than
   `MainActivity`) use member injection: `@Inject internal lateinit var` fields
   and `appGraph<FeatureInjector>().inject(this)` in `onCreate`, where

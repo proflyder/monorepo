@@ -2,15 +2,13 @@ package dev.proflyder.home.feature.chat.presentation
 
 import android.graphics.Bitmap
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import dev.proflyder.home.core.model.ChatQuote
 import dev.proflyder.home.core.model.ChatRole
 import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.core.presentation.StateViewModel
-import dev.proflyder.home.core.ui.SimpleViewModelFactory
-import dev.proflyder.home.core.ui.ViewModelFactoryContributor
+import dev.proflyder.home.core.ui.ViewModelSource
 import dev.proflyder.home.feature.chat.data.AttachmentSource
 import dev.proflyder.home.feature.chat.data.AudioVoiceRecorder
 import dev.proflyder.home.feature.chat.data.ChatComponents
@@ -23,8 +21,10 @@ import dev.proflyder.home.feature.chat.data.MediaRef
 import dev.proflyder.home.feature.chat.data.Prepared
 import dev.proflyder.home.feature.chat.data.VoiceCapture
 import dev.zacsweers.metro.AppScope
-import dev.zacsweers.metro.ContributesIntoSet
+import dev.zacsweers.metro.ClassKey
+import dev.zacsweers.metro.ContributesIntoMap
 import dev.zacsweers.metro.Inject
+import dev.zacsweers.metro.binding
 import java.time.ZoneId
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -195,14 +195,13 @@ internal class ChatViewModel(
 
 internal val BubbleMedia.ref: MediaRef get() = MediaRef(id, path)
 
-@ContributesIntoSet(AppScope::class)
+@ContributesIntoMap(AppScope::class, binding = binding<ViewModelSource>())
+@ClassKey(ChatViewModel::class)
 @Inject
-class ChatViewModelFactoryContributor(
+class ChatViewModelSource internal constructor(
     private val components: ChatComponents,
-) : ViewModelFactoryContributor {
-    override val viewModelClass: Class<out ViewModel> = ChatViewModel::class.java
-
-    override fun createFactory(): ViewModelProvider.Factory = SimpleViewModelFactory {
+) : ViewModelSource {
+    override fun create(): ViewModel = run {
         ChatViewModel(components.repository, components.media, AudioVoiceRecorder(components.media::newVoiceFile), ChatVoicePlayer())
     }
 }

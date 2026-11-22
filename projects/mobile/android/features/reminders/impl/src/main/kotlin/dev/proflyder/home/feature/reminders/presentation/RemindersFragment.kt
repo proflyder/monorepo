@@ -1,7 +1,6 @@
 package dev.proflyder.home.feature.reminders.presentation
 
 import android.os.Bundle
-import androidx.fragment.app.activityViewModels
 import androidx.recyclerview.widget.GridLayoutManager
 import dev.proflyder.home.core.navigation.requireNavigator
 import dev.proflyder.home.core.presentation.RefreshMode
@@ -10,10 +9,10 @@ import dev.proflyder.home.core.presentation.render
 import dev.proflyder.home.core.ui.ListStateViews
 import dev.proflyder.home.core.ui.applyScrollBottomInset
 import dev.proflyder.home.core.ui.fabClearance
+import dev.proflyder.home.core.ui.injectedActivityViewModels
 import dev.proflyder.home.core.ui.liftAboveBottomInsets
 import dev.proflyder.home.core.ui.setupPullToRefresh
 import dev.proflyder.home.core.ui.userMessage
-import dev.proflyder.home.core.ui.viewModelFactory
 import dev.proflyder.home.feature.reminders.ReminderEditorDestination
 import dev.proflyder.home.feature.reminders.impl.R
 import dev.proflyder.home.feature.reminders.impl.databinding.FragmentRemindersBinding
@@ -22,7 +21,7 @@ internal class RemindersFragment :
     ScreenFragment<FragmentRemindersBinding, RemindersUiState, RemindersIntent, RemindersEvent>(
         FragmentRemindersBinding.Companion::inflate,
     ) {
-    override val viewModel: RemindersViewModel by activityViewModels { viewModelFactory(RemindersViewModel::class.java) }
+    override val viewModel: RemindersViewModel by injectedActivityViewModels()
 
     private val adapter = ReminderAdapter(ReminderAdapterCallback(::dispatch))
     private var states: ListStateViews? = null

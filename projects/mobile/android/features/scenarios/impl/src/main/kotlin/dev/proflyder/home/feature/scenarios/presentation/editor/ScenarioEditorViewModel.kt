@@ -2,7 +2,6 @@ package dev.proflyder.home.feature.scenarios.presentation.editor
 
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
 import dev.proflyder.home.core.config.ConnectionSettingsStore
 import dev.proflyder.home.core.model.ControlCatalog
 import dev.proflyder.home.core.model.Field
@@ -12,7 +11,6 @@ import dev.proflyder.home.core.model.Scenario
 import dev.proflyder.home.core.presentation.AppEventBus
 import dev.proflyder.home.core.presentation.StateViewModel
 import dev.proflyder.home.core.ui.SavedStateViewModelFactory
-import dev.proflyder.home.core.ui.ViewModelFactoryContributor
 import dev.proflyder.home.feature.scenarios.ScenarioValidation
 import dev.proflyder.home.feature.scenarios.domain.DeleteScenario
 import dev.proflyder.home.feature.scenarios.domain.LoadScenario
@@ -23,8 +21,10 @@ import dev.proflyder.home.feature.scenarios.impl.R
 import dev.proflyder.home.feature.scenarios.isScenarioConflict
 import dev.proflyder.home.feature.scenarios.presentation.ScenariosChanged
 import dev.zacsweers.metro.AppScope
-import dev.zacsweers.metro.ContributesIntoSet
+import dev.zacsweers.metro.ClassKey
+import dev.zacsweers.metro.ContributesIntoMap
 import dev.zacsweers.metro.Inject
+import dev.zacsweers.metro.binding
 
 internal class ScenarioEditorViewModel(
     private val loadScenario: LoadScenario,
@@ -199,21 +199,20 @@ internal fun CatalogState.loadedFrom(result: Outcome<ControlCatalog>): CatalogSt
     is Outcome.Failure -> copy(loading = false, error = result.failure)
 }
 
-@ContributesIntoSet(AppScope::class)
+@ContributesIntoMap(AppScope::class, binding = binding<SavedStateViewModelFactory>())
+@ClassKey(ScenarioEditorViewModel::class)
 @Inject
-class ScenarioEditorViewModelFactoryContributor(
+class ScenarioEditorViewModelSource internal constructor(
     private val loadScenario: LoadScenario,
     private val loadCatalog: LoadScenarioCatalog,
     private val saveScenario: SaveScenario,
     private val deleteScenario: DeleteScenario,
     private val settings: ConnectionSettingsStore,
     private val events: AppEventBus,
-) : ViewModelFactoryContributor {
-    override val viewModelClass: Class<out ViewModel> = ScenarioEditorViewModel::class.java
+) : SavedStateViewModelFactory {
+    override fun create(savedState: SavedStateHandle): ViewModel = build(savedState)
 
-    override fun createFactory(): ViewModelProvider.Factory = SavedStateViewModelFactory { handle -> create(handle) }
-
-    private fun create(handle: SavedStateHandle): ScenarioEditorViewModel {
+    private fun build(handle: SavedStateHandle): ScenarioEditorViewModel {
         val saved = SavedEditorState(handle)
         val session = ScenarioSaveSession(saveScenario, settings, saved)
         return ScenarioEditorViewModel(loadScenario, loadCatalog, deleteScenario, events, saved, session)

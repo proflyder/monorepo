@@ -1,15 +1,13 @@
 package dev.proflyder.home.feature.control.presentation
 
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import dev.proflyder.home.core.model.FavoritePreferences
 import dev.proflyder.home.core.model.ServerClock
 import dev.proflyder.home.core.model.ServerClockSync
 import dev.proflyder.home.core.presentation.StateViewModel
 import dev.proflyder.home.core.runtime.AppForeground
-import dev.proflyder.home.core.ui.SimpleViewModelFactory
-import dev.proflyder.home.core.ui.ViewModelFactoryContributor
+import dev.proflyder.home.core.ui.ViewModelSource
 import dev.proflyder.home.feature.alarms.AlarmRepository
 import dev.proflyder.home.feature.control.ControlPreferences
 import dev.proflyder.home.feature.control.ControlRepository
@@ -20,8 +18,10 @@ import dev.proflyder.home.feature.reminders.ReminderRepository
 import dev.proflyder.home.feature.scenarios.ScenarioRepository
 import dev.proflyder.home.feature.timers.TimerRepository
 import dev.zacsweers.metro.AppScope
-import dev.zacsweers.metro.ContributesIntoSet
+import dev.zacsweers.metro.ClassKey
+import dev.zacsweers.metro.ContributesIntoMap
 import dev.zacsweers.metro.Inject
+import dev.zacsweers.metro.binding
 
 internal class ControlScreenDependencies(
     val repository: ControlRepository,
@@ -92,9 +92,10 @@ internal class ControlViewModel(
     }
 }
 
-@ContributesIntoSet(AppScope::class)
+@ContributesIntoMap(AppScope::class, binding = binding<ViewModelSource>())
+@ClassKey(ControlViewModel::class)
 @Inject
-class ControlViewModelFactoryContributor(
+class ControlViewModelSource internal constructor(
     repository: ControlRepository,
     preferences: ControlPreferences,
     favorites: FavoritePreferences,
@@ -106,7 +107,7 @@ class ControlViewModelFactoryContributor(
     clock: ServerClock,
     clockSync: ServerClockSync,
     foreground: AppForeground,
-) : ViewModelFactoryContributor {
+) : ViewModelSource {
     private val dependencies = ControlScreenDependencies(
         repository = repository,
         preferences = preferences,
@@ -116,7 +117,5 @@ class ControlViewModelFactoryContributor(
         clock = clock,
     )
 
-    override val viewModelClass: Class<out ViewModel> = ControlViewModel::class.java
-
-    override fun createFactory(): ViewModelProvider.Factory = SimpleViewModelFactory { ControlViewModel(dependencies) }
+    override fun create(): ViewModel = ControlViewModel(dependencies)
 }

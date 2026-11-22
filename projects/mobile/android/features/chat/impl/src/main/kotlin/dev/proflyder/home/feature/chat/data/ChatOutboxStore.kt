@@ -10,10 +10,17 @@ import dev.proflyder.home.core.model.ChatRole
 import dev.proflyder.home.core.operation.suspendRunCatching
 import java.io.IOException
 import kotlinx.coroutines.flow.first
-import dev.proflyder.home.core.network.WireJson
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.json.Json
+
+private val OutboxJson = Json {
+    ignoreUnknownKeys = true
+    coerceInputValues = true
+    explicitNulls = false
+    encodeDefaults = true
+}
 
 internal interface ChatOutboxStore {
     suspend fun load(): List<OutgoingRecord>
@@ -81,10 +88,10 @@ private fun roleOf(name: String?): ChatRole = ChatRole.entries.firstOrNull { it.
 internal object OutboxCodec {
     private val serializer = ListSerializer(OutgoingRecord.serializer())
 
-    fun encode(records: List<OutgoingRecord>): String = WireJson.encodeToString(serializer, records)
+    fun encode(records: List<OutgoingRecord>): String = OutboxJson.encodeToString(serializer, records)
 
     fun decode(raw: String?): List<OutgoingRecord> = raw
-        ?.let { runCatching { WireJson.decodeFromString(serializer, it) }.getOrNull() }
+        ?.let { runCatching { OutboxJson.decodeFromString(serializer, it) }.getOrNull() }
         .orEmpty()
         .filter { it.clientId.isNotEmpty() }
 }

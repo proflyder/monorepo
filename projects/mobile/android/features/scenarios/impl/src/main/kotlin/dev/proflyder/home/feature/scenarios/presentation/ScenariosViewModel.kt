@@ -1,7 +1,6 @@
 package dev.proflyder.home.feature.scenarios.presentation
 
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import dev.proflyder.home.core.model.FavoriteKind
 import dev.proflyder.home.core.model.FavoritePreferences
@@ -13,14 +12,15 @@ import dev.proflyder.home.core.presentation.AppEventBus
 import dev.proflyder.home.core.presentation.RefreshMode
 import dev.proflyder.home.core.presentation.StateViewModel
 import dev.proflyder.home.core.presentation.eventsOf
-import dev.proflyder.home.core.ui.SimpleViewModelFactory
-import dev.proflyder.home.core.ui.ViewModelFactoryContributor
+import dev.proflyder.home.core.ui.ViewModelSource
 import dev.proflyder.home.feature.scenarios.domain.LoadScenarios
 import dev.proflyder.home.feature.scenarios.domain.RunScenario
 import dev.proflyder.home.feature.scenarios.domain.SetScenarioEnabled
 import dev.zacsweers.metro.AppScope
-import dev.zacsweers.metro.ContributesIntoSet
+import dev.zacsweers.metro.ClassKey
+import dev.zacsweers.metro.ContributesIntoMap
 import dev.zacsweers.metro.Inject
+import dev.zacsweers.metro.binding
 import java.util.UUID
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
@@ -128,18 +128,17 @@ internal class ScenariosViewModel(
     }
 }
 
-@ContributesIntoSet(AppScope::class)
+@ContributesIntoMap(AppScope::class, binding = binding<ViewModelSource>())
+@ClassKey(ScenariosViewModel::class)
 @Inject
-class ScenariosViewModelFactoryContributor(
+class ScenariosViewModelSource internal constructor(
     private val loadScenarios: LoadScenarios,
     private val setScenarioEnabled: SetScenarioEnabled,
     private val runScenario: RunScenario,
     private val favorites: FavoritePreferences,
     private val events: AppEventBus,
-) : ViewModelFactoryContributor {
-    override val viewModelClass: Class<out ViewModel> = ScenariosViewModel::class.java
-
-    override fun createFactory(): ViewModelProvider.Factory = SimpleViewModelFactory {
+) : ViewModelSource {
+    override fun create(): ViewModel = run {
         ScenariosViewModel(loadScenarios, setScenarioEnabled, runScenario, favorites, events)
     }
 }

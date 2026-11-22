@@ -1,18 +1,17 @@
 package dev.proflyder.home.feature.reminders.presentation
 
 import android.os.Bundle
-import androidx.fragment.app.viewModels
 import dev.proflyder.home.core.navigation.requireNavigator
 import dev.proflyder.home.core.presentation.ScreenFragment
 import dev.proflyder.home.core.presentation.SwitchBinder
 import dev.proflyder.home.core.presentation.TextBinder
 import dev.proflyder.home.core.ui.applyScrollBottomInset
+import dev.proflyder.home.core.ui.injectedViewModels
 import dev.proflyder.home.core.ui.keepFocusedVisible
 import dev.proflyder.home.core.ui.setVisible
 import dev.proflyder.home.core.ui.showDatePicker
 import dev.proflyder.home.core.ui.showTimePicker
 import dev.proflyder.home.core.ui.userMessage
-import dev.proflyder.home.core.ui.viewModelFactory
 import dev.proflyder.home.feature.reminders.ReminderEditorCompletion
 import dev.proflyder.home.feature.reminders.impl.R
 import dev.proflyder.home.feature.reminders.impl.databinding.FragmentReminderEditorBinding
@@ -22,9 +21,7 @@ internal class ReminderEditorFragment :
     ScreenFragment<FragmentReminderEditorBinding, ReminderEditorUiState, ReminderEditorIntent, ReminderEditorEvent>(
         FragmentReminderEditorBinding.Companion::inflate,
     ) {
-    override val viewModel: ReminderEditorViewModel by viewModels {
-        viewModelFactory(ReminderEditorViewModel::class.java)
-    }
+    override val viewModel: ReminderEditorViewModel by injectedViewModels()
 
     private var label: TextBinder? = null
     private var enabled: SwitchBinder? = null

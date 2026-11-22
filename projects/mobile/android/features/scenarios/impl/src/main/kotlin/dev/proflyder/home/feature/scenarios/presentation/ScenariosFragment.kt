@@ -1,7 +1,6 @@
 package dev.proflyder.home.feature.scenarios.presentation
 
 import android.os.Bundle
-import androidx.fragment.app.activityViewModels
 import androidx.recyclerview.widget.GridLayoutManager
 import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.core.navigation.requireNavigator
@@ -11,11 +10,11 @@ import dev.proflyder.home.core.ui.ListStateViews
 import dev.proflyder.home.core.ui.Notices
 import dev.proflyder.home.core.ui.applyScrollBottomInset
 import dev.proflyder.home.core.ui.fabClearance
+import dev.proflyder.home.core.ui.injectedActivityViewModels
 import dev.proflyder.home.core.ui.liftAboveBottomInsets
 import dev.proflyder.home.core.ui.setVisible
 import dev.proflyder.home.core.ui.setupPullToRefresh
 import dev.proflyder.home.core.ui.userMessage
-import dev.proflyder.home.core.ui.viewModelFactory
 import dev.proflyder.home.feature.scenarios.ScenarioEditorDestination
 import dev.proflyder.home.feature.scenarios.impl.R
 import dev.proflyder.home.feature.scenarios.impl.databinding.FragmentScenariosBinding
@@ -24,7 +23,7 @@ internal class ScenariosFragment :
     ScreenFragment<FragmentScenariosBinding, ScenariosUiState, ScenariosIntent, ScenariosEvent>(
         FragmentScenariosBinding.Companion::inflate,
     ) {
-    override val viewModel: ScenariosViewModel by activityViewModels { viewModelFactory(ScenariosViewModel::class.java) }
+    override val viewModel: ScenariosViewModel by injectedActivityViewModels()
 
     private lateinit var adapter: ScenarioAdapter
     private lateinit var states: ListStateViews

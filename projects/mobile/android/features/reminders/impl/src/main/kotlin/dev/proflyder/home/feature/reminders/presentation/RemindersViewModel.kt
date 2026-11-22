@@ -1,7 +1,6 @@
 package dev.proflyder.home.feature.reminders.presentation
 
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.core.model.Schedule
@@ -14,13 +13,14 @@ import dev.proflyder.home.core.presentation.RefreshMode
 import dev.proflyder.home.core.presentation.StateViewModel
 import dev.proflyder.home.core.presentation.eventsOf
 import dev.proflyder.home.core.presentation.valueOr
-import dev.proflyder.home.core.ui.SimpleViewModelFactory
-import dev.proflyder.home.core.ui.ViewModelFactoryContributor
+import dev.proflyder.home.core.ui.ViewModelSource
 import dev.proflyder.home.feature.reminders.ReminderOrder
 import dev.proflyder.home.feature.reminders.ReminderRepository
 import dev.zacsweers.metro.AppScope
-import dev.zacsweers.metro.ContributesIntoSet
+import dev.zacsweers.metro.ClassKey
+import dev.zacsweers.metro.ContributesIntoMap
 import dev.zacsweers.metro.Inject
+import dev.zacsweers.metro.binding
 import kotlinx.coroutines.flow.merge
 
 internal data class RemindersUiState(
@@ -88,13 +88,12 @@ internal class RemindersViewModel(
     }
 }
 
-@ContributesIntoSet(AppScope::class)
+@ContributesIntoMap(AppScope::class, binding = binding<ViewModelSource>())
+@ClassKey(RemindersViewModel::class)
 @Inject
-class RemindersViewModelFactoryContributor(
+class RemindersViewModelSource internal constructor(
     private val repository: ReminderRepository,
     private val bus: AppEventBus,
-) : ViewModelFactoryContributor {
-    override val viewModelClass: Class<out ViewModel> = RemindersViewModel::class.java
-
-    override fun createFactory(): ViewModelProvider.Factory = SimpleViewModelFactory { RemindersViewModel(repository, bus) }
+) : ViewModelSource {
+    override fun create(): ViewModel = RemindersViewModel(repository, bus)
 }

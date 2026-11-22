@@ -3,7 +3,6 @@ package dev.proflyder.home.feature.alarms.presentation
 import android.content.Context
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
 import dev.proflyder.home.core.config.ConnectionSettingsStore
 import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.model.RepeatKind
@@ -16,7 +15,6 @@ import dev.proflyder.home.core.presentation.EditorDraftSession
 import dev.proflyder.home.core.presentation.EditorStatus
 import dev.proflyder.home.core.presentation.StateViewModel
 import dev.proflyder.home.core.ui.SavedStateViewModelFactory
-import dev.proflyder.home.core.ui.ViewModelFactoryContributor
 import dev.proflyder.home.feature.alarms.AlarmDraft
 import dev.proflyder.home.feature.alarms.AlarmEditorCompletion
 import dev.proflyder.home.feature.alarms.AlarmEditorDestination
@@ -28,8 +26,10 @@ import dev.proflyder.home.feature.alarms.domain.SaveAlarm
 import dev.proflyder.home.feature.alarms.impl.R
 import dev.proflyder.home.feature.alarms.quickOffsetTime
 import dev.zacsweers.metro.AppScope
-import dev.zacsweers.metro.ContributesIntoSet
+import dev.zacsweers.metro.ClassKey
+import dev.zacsweers.metro.ContributesIntoMap
 import dev.zacsweers.metro.Inject
+import dev.zacsweers.metro.binding
 import java.time.LocalDate
 import java.time.LocalDateTime
 
@@ -174,20 +174,19 @@ internal class AlarmEditorViewModel(
     }
 }
 
-@ContributesIntoSet(AppScope::class)
+@ContributesIntoMap(AppScope::class, binding = binding<SavedStateViewModelFactory>())
+@ClassKey(AlarmEditorViewModel::class)
 @Inject
-class AlarmEditorViewModelFactoryContributor(
+class AlarmEditorViewModelSource internal constructor(
     private val repository: AlarmRepository,
     private val saveAlarm: SaveAlarm,
     private val settings: ConnectionSettingsStore,
     private val bus: AppEventBus,
     private val context: Context,
-) : ViewModelFactoryContributor {
-    override val viewModelClass: Class<out ViewModel> = AlarmEditorViewModel::class.java
+) : SavedStateViewModelFactory {
+    override fun create(savedState: SavedStateHandle): ViewModel = build(savedState)
 
-    override fun createFactory(): ViewModelProvider.Factory = SavedStateViewModelFactory { savedState -> create(savedState) }
-
-    private fun create(savedState: SavedStateHandle) = AlarmEditorViewModel(
+    private fun build(savedState: SavedStateHandle) = AlarmEditorViewModel(
         repository = repository,
         saveAlarm = saveAlarm,
         bus = bus,

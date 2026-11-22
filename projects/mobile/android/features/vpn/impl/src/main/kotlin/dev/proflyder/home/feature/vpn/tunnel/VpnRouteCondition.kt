@@ -11,6 +11,6 @@ import kotlinx.coroutines.flow.map
 
 @ContributesIntoSet(AppScope::class, binding = binding<RouteCondition>())
 @Inject
-internal class VpnRouteCondition(opener: VpnOpenConnector) : RouteCondition {
+class VpnRouteCondition(opener: VpnOpenConnector) : RouteCondition {
     override val ready: Flow<Boolean> = opener.route.map { it == HomeRoute.READY }
 }

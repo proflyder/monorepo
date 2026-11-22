@@ -2,7 +2,6 @@ package dev.proflyder.home.feature.alarms.presentation
 
 import android.os.Bundle
 import androidx.activity.OnBackPressedCallback
-import androidx.fragment.app.activityViewModels
 import androidx.recyclerview.widget.GridLayoutManager
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import dev.proflyder.home.core.model.RemoteFailure
@@ -13,18 +12,18 @@ import dev.proflyder.home.core.presentation.render
 import dev.proflyder.home.core.ui.ListStateViews
 import dev.proflyder.home.core.ui.applyScrollBottomInset
 import dev.proflyder.home.core.ui.fabClearance
+import dev.proflyder.home.core.ui.injectedActivityViewModels
 import dev.proflyder.home.core.ui.liftAboveBottomInsets
 import dev.proflyder.home.core.ui.setVisible
 import dev.proflyder.home.core.ui.setupPullToRefresh
 import dev.proflyder.home.core.ui.userMessage
-import dev.proflyder.home.core.ui.viewModelFactory
 import dev.proflyder.home.feature.alarms.AlarmEditorDestination
 import dev.proflyder.home.feature.alarms.impl.R
 import dev.proflyder.home.feature.alarms.impl.databinding.FragmentAlarmsBinding
 
 internal class AlarmsFragment :
     ScreenFragment<FragmentAlarmsBinding, AlarmsUiState, AlarmsIntent, AlarmsEvent>(FragmentAlarmsBinding.Companion::inflate) {
-    override val viewModel: AlarmsViewModel by activityViewModels { viewModelFactory(AlarmsViewModel::class.java) }
+    override val viewModel: AlarmsViewModel by injectedActivityViewModels()
 
     private val adapter = AlarmAdapter(AlarmAdapterCallback(::dispatch))
     private var states: ListStateViews? = null

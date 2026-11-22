@@ -11,6 +11,7 @@ import org.junit.runners.Suite
 
 @RunWith(Suite::class)
 @Suite.SuiteClasses(
+    dev.proflyder.home.feature.control.data.ControlTaskPayloadsTest::class,
     ControlItemsTest::class,
     CompactControlsTest::class,
     ConditionalVisibilityTest::class,

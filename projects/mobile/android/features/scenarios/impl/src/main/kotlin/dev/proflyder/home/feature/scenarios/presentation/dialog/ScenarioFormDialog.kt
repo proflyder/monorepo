@@ -4,7 +4,7 @@ import androidx.fragment.app.viewModels
 import androidx.lifecycle.lifecycleScope
 import dev.proflyder.home.core.designsystem.EditorDialogFragment
 import dev.proflyder.home.core.designsystem.EditorSession
-import dev.proflyder.home.core.ui.viewModelFactory
+import dev.proflyder.home.core.ui.injectedViewModelFactory
 import dev.proflyder.home.feature.scenarios.presentation.editor.EditorForm
 import dev.proflyder.home.feature.scenarios.presentation.editor.ScenarioEditorIntent
 import dev.proflyder.home.feature.scenarios.presentation.editor.ScenarioEditorUiState
@@ -20,7 +20,7 @@ import kotlinx.coroutines.flow.stateIn
 internal abstract class ScenarioFormDialog<F : EditorForm>(private val type: KClass<F>) : EditorDialogFragment<F>() {
     private val editor: ScenarioEditorViewModel by viewModels(
         ownerProducer = { requireParentFragment() },
-        factoryProducer = { viewModelFactory(ScenarioEditorViewModel::class.java) },
+        factoryProducer = { requireContext().injectedViewModelFactory() },
     )
 
     override val session: EditorSession<F> by lazy { FormSession(editor, type, lifecycleScope) }

@@ -2,7 +2,6 @@ package dev.proflyder.home.feature.timers.presentation
 
 import android.content.Context
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import dev.proflyder.home.core.config.ConnectionSettingsStore
 import dev.proflyder.home.core.model.Clock
@@ -21,8 +20,7 @@ import dev.proflyder.home.core.presentation.RefreshMode
 import dev.proflyder.home.core.presentation.StateViewModel
 import dev.proflyder.home.core.presentation.valueOr
 import dev.proflyder.home.core.runtime.tickerFlow
-import dev.proflyder.home.core.ui.SimpleViewModelFactory
-import dev.proflyder.home.core.ui.ViewModelFactoryContributor
+import dev.proflyder.home.core.ui.ViewModelSource
 import dev.proflyder.home.feature.timers.TimerOrder
 import dev.proflyder.home.feature.timers.TimerRepository
 import dev.proflyder.home.feature.timers.domain.LoadTimers
@@ -30,8 +28,10 @@ import dev.proflyder.home.feature.timers.domain.StartTimer
 import dev.proflyder.home.feature.timers.impl.R
 import dev.proflyder.home.feature.timers.toTimerInput
 import dev.zacsweers.metro.AppScope
-import dev.zacsweers.metro.ContributesIntoSet
+import dev.zacsweers.metro.ClassKey
+import dev.zacsweers.metro.ContributesIntoMap
 import dev.zacsweers.metro.Inject
+import dev.zacsweers.metro.binding
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -166,9 +166,10 @@ internal class TimersViewModel(
     }
 }
 
-@ContributesIntoSet(AppScope::class)
+@ContributesIntoMap(AppScope::class, binding = binding<ViewModelSource>())
+@ClassKey(TimersViewModel::class)
 @Inject
-class TimersViewModelFactoryContributor(
+class TimersViewModelSource internal constructor(
     private val loadTimers: LoadTimers,
     private val startTimer: StartTimer,
     private val repository: TimerRepository,
@@ -176,12 +177,10 @@ class TimersViewModelFactoryContributor(
     private val settings: ConnectionSettingsStore,
     private val clock: Clock,
     private val context: Context,
-) : ViewModelFactoryContributor {
-    override val viewModelClass: Class<out ViewModel> = TimersViewModel::class.java
+) : ViewModelSource {
+    override fun create(): ViewModel = build()
 
-    override fun createFactory(): ViewModelProvider.Factory = SimpleViewModelFactory(::create)
-
-    private fun create() = TimersViewModel(
+    private fun build() = TimersViewModel(
         loadTimers = loadTimers,
         startTimer = startTimer,
         repository = repository,

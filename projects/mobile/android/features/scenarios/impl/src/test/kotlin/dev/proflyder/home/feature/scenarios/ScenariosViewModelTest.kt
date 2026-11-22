@@ -14,6 +14,8 @@ import dev.proflyder.home.feature.scenarios.presentation.ScenariosIntent
 import dev.proflyder.home.feature.scenarios.presentation.ScenariosViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
@@ -70,8 +72,9 @@ class ScenariosViewModelTest {
     }
 
     private object NoFavorites : FavoritePreferences {
-        override suspend fun load(): List<FavoriteRef>? = null
-        override suspend fun save(refs: List<FavoriteRef>) = Unit
+        override val favorites: Flow<List<FavoriteRef>?> = flowOf(null)
+        override suspend fun saveIfAbsent(refs: List<FavoriteRef>) = Unit
+        override suspend fun toggle(ref: FavoriteRef): Boolean = false
     }
 
     private class CountingRepository : ScenarioRepository {

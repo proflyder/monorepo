@@ -16,7 +16,6 @@ import androidx.core.content.getSystemService
 import androidx.core.net.toUri
 import androidx.core.view.updatePadding
 import androidx.core.widget.doAfterTextChanged
-import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -27,10 +26,10 @@ import dev.proflyder.home.core.designsystem.Components
 import dev.proflyder.home.core.designsystem.HomePopupMenu
 import dev.proflyder.home.core.model.ChatAttachmentKind
 import dev.proflyder.home.core.presentation.ScreenFragment
+import dev.proflyder.home.core.ui.injectedActivityViewModels
 import dev.proflyder.home.core.ui.pinAboveKeyboard
 import dev.proflyder.home.core.ui.setVisible
 import dev.proflyder.home.core.ui.userMessage
-import dev.proflyder.home.core.ui.viewModelFactory
 import dev.proflyder.home.feature.chat.ChatFocus
 import dev.proflyder.home.feature.chat.data.AttachmentSource
 import dev.proflyder.home.feature.chat.data.LocalAttachment
@@ -41,7 +40,7 @@ import kotlinx.coroutines.launch
 internal class ChatFragment : ScreenFragment<FragmentChatBinding, ChatUiState, ChatIntent, ChatEvent>(
     FragmentChatBinding.Companion::inflate,
 ) {
-    override val viewModel: ChatViewModel by activityViewModels { viewModelFactory(ChatViewModel::class.java) }
+    override val viewModel: ChatViewModel by injectedActivityViewModels()
 
     private lateinit var adapter: ChatAdapter
     private lateinit var layoutManager: LinearLayoutManager

@@ -11,7 +11,6 @@ import dev.proflyder.home.core.model.PowerState
 import dev.proflyder.home.core.model.VolumeControls
 import dev.proflyder.home.core.model.map
 import dev.proflyder.home.core.network.ControlCatalogClient
-import dev.proflyder.home.core.network.ControlJson
 import dev.proflyder.home.core.network.SchedulerClient
 import dev.proflyder.home.core.runtime.AppForeground
 import dev.proflyder.home.feature.control.ControlCatalogState
@@ -76,7 +75,7 @@ internal class CatalogRepository(
     override fun refresh() = triggers.request()
 
     override suspend fun send(entryId: String, action: ControlAction): Outcome<Unit> {
-        val payload = ControlJson.commandPayload(entryId, action)
+        val payload = ControlTaskPayloads.commandPayload(entryId, action)
         return when (action) {
             ControlAction.TURN_ON -> command(entryId, Expectation(power = PowerState.ON), payload)
             ControlAction.TURN_OFF -> command(entryId, Expectation(power = PowerState.OFF), payload)
@@ -86,16 +85,16 @@ internal class CatalogRepository(
     }
 
     override suspend fun adjust(entryId: String, adjust: LightAdjust): Outcome<Unit> =
-        command(entryId, Expectation(power = PowerState.ON, adjust = adjust), ControlJson.adjustPayload(entryId, adjust))
+        command(entryId, Expectation(power = PowerState.ON, adjust = adjust), ControlTaskPayloads.adjustPayload(entryId, adjust))
 
     override suspend fun speak(entryId: String, text: String): Outcome<Unit> =
-        enqueue(ControlJson.speakPayload(entryId, text))
+        enqueue(ControlTaskPayloads.speakPayload(entryId, text))
 
     override suspend fun setVolume(entryId: String, level: Int): Outcome<Unit> =
-        volumeCommand(entryId, ControlJson.volumePayload(entryId, level)) { copy(level = level) }
+        volumeCommand(entryId, ControlTaskPayloads.volumePayload(entryId, level)) { copy(level = level) }
 
     override suspend fun setVolumeMuted(entryId: String, muted: Boolean): Outcome<Unit> =
-        volumeCommand(entryId, ControlJson.mutePayload(entryId, muted)) { copy(muted = muted) }
+        volumeCommand(entryId, ControlTaskPayloads.mutePayload(entryId, muted)) { copy(muted = muted) }
 
     private suspend fun volumeCommand(
         entryId: String,
@@ -154,8 +153,8 @@ internal class CatalogRepository(
         copy(catalog = catalog?.let { it.copy(entries = optimistic.overlay(it.entries, expected)) })
 
     private suspend fun enqueue(payloadJson: String): Outcome<Unit> = scheduler.enqueueTask(
-        taskType = ControlJson.TASK_TYPE,
-        queue = ControlJson.QUEUE,
+        taskType = ControlTaskPayloads.TASK_TYPE,
+        queue = ControlTaskPayloads.QUEUE,
         payloadJson = payloadJson,
         idempotencyKey = UUID.randomUUID().toString(),
     ).map { }

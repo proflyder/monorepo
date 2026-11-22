@@ -1,25 +1,24 @@
 package dev.proflyder.home.feature.timers.presentation
 
 import android.os.Bundle
-import androidx.fragment.app.activityViewModels
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.SimpleItemAnimator
 import dev.proflyder.home.core.presentation.RefreshMode
 import dev.proflyder.home.core.presentation.ScreenFragment
 import dev.proflyder.home.core.presentation.TextBinder
 import dev.proflyder.home.core.ui.applyScrollBottomInset
+import dev.proflyder.home.core.ui.injectedActivityViewModels
 import dev.proflyder.home.core.ui.keepFocusedVisible
 import dev.proflyder.home.core.ui.setVisible
 import dev.proflyder.home.core.ui.setupPullToRefresh
 import dev.proflyder.home.core.ui.userMessage
-import dev.proflyder.home.core.ui.viewModelFactory
 import dev.proflyder.home.feature.timers.TIMER_PRESETS
 import dev.proflyder.home.feature.timers.impl.R
 import dev.proflyder.home.feature.timers.impl.databinding.FragmentTimersBinding
 
 internal class TimersFragment :
     ScreenFragment<FragmentTimersBinding, TimersUiState, TimersIntent, TimersEvent>(FragmentTimersBinding.Companion::inflate) {
-    override val viewModel: TimersViewModel by activityViewModels { viewModelFactory(TimersViewModel::class.java) }
+    override val viewModel: TimersViewModel by injectedActivityViewModels()
 
     private val adapter = TimerAdapter(TimerAdapterCallback(::dispatch))
     private var label: TextBinder? = null

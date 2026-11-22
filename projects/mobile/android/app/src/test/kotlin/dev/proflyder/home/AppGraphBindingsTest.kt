@@ -44,17 +44,17 @@ class AppGraphBindingsTest {
         )
 
         val VIEW_MODELS = listOf(
+            "dev.proflyder.home.feature.alarms.presentation.AlarmEditorViewModel",
             "dev.proflyder.home.feature.alarms.presentation.AlarmsViewModel",
             "dev.proflyder.home.feature.call.presentation.CallViewModel",
-            "dev.proflyder.home.feature.alarms.presentation.AlarmEditorViewModel",
             "dev.proflyder.home.feature.chat.presentation.ChatViewModel",
             "dev.proflyder.home.feature.connection.presentation.ConnectionViewModel",
             "dev.proflyder.home.feature.control.presentation.ControlViewModel",
             "dev.proflyder.home.feature.push.presentation.PushSettingsViewModel",
-            "dev.proflyder.home.feature.reminders.presentation.RemindersViewModel",
             "dev.proflyder.home.feature.reminders.presentation.ReminderEditorViewModel",
+            "dev.proflyder.home.feature.reminders.presentation.RemindersViewModel",
             "dev.proflyder.home.feature.scenarios.presentation.ScenariosViewModel",
-            "dev.proflyder.home.feature.scenarios.presentation.ScenarioEditorViewModel",
+            "dev.proflyder.home.feature.scenarios.presentation.editor.ScenarioEditorViewModel",
             "dev.proflyder.home.feature.settings.presentation.AppearanceViewModel",
             "dev.proflyder.home.feature.settings.presentation.NotificationHistoryViewModel",
             "dev.proflyder.home.feature.system.presentation.SystemViewModel",

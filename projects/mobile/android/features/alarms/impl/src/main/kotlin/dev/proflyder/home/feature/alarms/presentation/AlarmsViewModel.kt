@@ -1,8 +1,8 @@
 package dev.proflyder.home.feature.alarms.presentation
 
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.core.model.Schedule
 import dev.proflyder.home.core.presentation.AppEventBus
@@ -11,21 +11,21 @@ import dev.proflyder.home.core.presentation.ListLoadState
 import dev.proflyder.home.core.presentation.ListRefresher
 import dev.proflyder.home.core.presentation.LoadStep
 import dev.proflyder.home.core.presentation.RefreshMode
-import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.presentation.StateViewModel
 import dev.proflyder.home.core.presentation.eventsOf
 import dev.proflyder.home.core.presentation.settle
 import dev.proflyder.home.core.presentation.valueOr
-import dev.proflyder.home.core.ui.SimpleViewModelFactory
-import dev.proflyder.home.core.ui.ViewModelFactoryContributor
+import dev.proflyder.home.core.ui.ViewModelSource
 import dev.proflyder.home.feature.alarms.AlarmDisableChoice
 import dev.proflyder.home.feature.alarms.AlarmOrder
 import dev.proflyder.home.feature.alarms.AlarmRepository
 import dev.proflyder.home.feature.alarms.alarmDisableChoice
 import dev.proflyder.home.feature.alarms.domain.SnoozeAlarm
 import dev.zacsweers.metro.AppScope
-import dev.zacsweers.metro.ContributesIntoSet
+import dev.zacsweers.metro.ClassKey
+import dev.zacsweers.metro.ContributesIntoMap
 import dev.zacsweers.metro.Inject
+import dev.zacsweers.metro.binding
 import kotlinx.coroutines.flow.merge
 
 internal data class AlarmsUiState(
@@ -178,14 +178,13 @@ internal class AlarmsViewModel(
     }
 }
 
-@ContributesIntoSet(AppScope::class)
+@ContributesIntoMap(AppScope::class, binding = binding<ViewModelSource>())
+@ClassKey(AlarmsViewModel::class)
 @Inject
-class AlarmsViewModelFactoryContributor(
+class AlarmsViewModelSource internal constructor(
     private val repository: AlarmRepository,
     private val snoozeAlarm: SnoozeAlarm,
     private val bus: AppEventBus,
-) : ViewModelFactoryContributor {
-    override val viewModelClass: Class<out ViewModel> = AlarmsViewModel::class.java
-
-    override fun createFactory(): ViewModelProvider.Factory = SimpleViewModelFactory { AlarmsViewModel(repository, snoozeAlarm, bus) }
+) : ViewModelSource {
+    override fun create(): ViewModel = AlarmsViewModel(repository, snoozeAlarm, bus)
 }

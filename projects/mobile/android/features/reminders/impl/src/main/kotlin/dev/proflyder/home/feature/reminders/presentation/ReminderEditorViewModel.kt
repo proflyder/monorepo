@@ -2,7 +2,6 @@ package dev.proflyder.home.feature.reminders.presentation
 
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
 import dev.proflyder.home.core.config.ConnectionSettingsStore
 import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.model.RepeatKind
@@ -15,7 +14,6 @@ import dev.proflyder.home.core.presentation.EditorDraftSession
 import dev.proflyder.home.core.presentation.EditorStatus
 import dev.proflyder.home.core.presentation.StateViewModel
 import dev.proflyder.home.core.ui.SavedStateViewModelFactory
-import dev.proflyder.home.core.ui.ViewModelFactoryContributor
 import dev.proflyder.home.feature.reminders.ReminderDraft
 import dev.proflyder.home.feature.reminders.ReminderEditorCompletion
 import dev.proflyder.home.feature.reminders.ReminderEditorDestination
@@ -24,8 +22,10 @@ import dev.proflyder.home.feature.reminders.ReminderEditorDraftCodec
 import dev.proflyder.home.feature.reminders.ReminderRepository
 import dev.proflyder.home.feature.reminders.domain.SaveReminder
 import dev.zacsweers.metro.AppScope
-import dev.zacsweers.metro.ContributesIntoSet
+import dev.zacsweers.metro.ClassKey
+import dev.zacsweers.metro.ContributesIntoMap
 import dev.zacsweers.metro.Inject
+import dev.zacsweers.metro.binding
 import java.time.LocalDate
 
 internal data class ReminderEditorUiState(
@@ -155,19 +155,18 @@ internal class ReminderEditorViewModel(
     }
 }
 
-@ContributesIntoSet(AppScope::class)
+@ContributesIntoMap(AppScope::class, binding = binding<SavedStateViewModelFactory>())
+@ClassKey(ReminderEditorViewModel::class)
 @Inject
-class ReminderEditorViewModelFactoryContributor(
+class ReminderEditorViewModelSource internal constructor(
     private val repository: ReminderRepository,
     private val saveReminder: SaveReminder,
     private val settings: ConnectionSettingsStore,
     private val bus: AppEventBus,
-) : ViewModelFactoryContributor {
-    override val viewModelClass: Class<out ViewModel> = ReminderEditorViewModel::class.java
+) : SavedStateViewModelFactory {
+    override fun create(savedState: SavedStateHandle): ViewModel = build(savedState)
 
-    override fun createFactory(): ViewModelProvider.Factory = SavedStateViewModelFactory { create(it) }
-
-    private fun create(savedState: SavedStateHandle) = ReminderEditorViewModel(
+    private fun build(savedState: SavedStateHandle) = ReminderEditorViewModel(
         repository = repository,
         saveReminder = saveReminder,
         bus = bus,

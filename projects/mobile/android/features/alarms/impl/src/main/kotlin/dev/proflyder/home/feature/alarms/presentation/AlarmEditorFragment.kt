@@ -1,18 +1,17 @@
 package dev.proflyder.home.feature.alarms.presentation
 
 import android.os.Bundle
-import androidx.fragment.app.viewModels
 import dev.proflyder.home.core.model.RepeatKind
 import dev.proflyder.home.core.navigation.requireNavigator
 import dev.proflyder.home.core.presentation.ScreenFragment
 import dev.proflyder.home.core.presentation.SwitchBinder
 import dev.proflyder.home.core.presentation.TextBinder
+import dev.proflyder.home.core.ui.injectedViewModels
 import dev.proflyder.home.core.ui.pinAboveKeyboard
 import dev.proflyder.home.core.ui.setVisible
 import dev.proflyder.home.core.ui.showDatePicker
 import dev.proflyder.home.core.ui.showTimePicker
 import dev.proflyder.home.core.ui.userMessage
-import dev.proflyder.home.core.ui.viewModelFactory
 import dev.proflyder.home.feature.alarms.ALARM_QUICK_OFFSETS_MINUTES
 import dev.proflyder.home.feature.alarms.AlarmEditorCompletion
 import dev.proflyder.home.feature.alarms.impl.R
@@ -25,7 +24,7 @@ internal class AlarmEditorFragment :
     ScreenFragment<FragmentAlarmEditorBinding, AlarmEditorUiState, AlarmEditorIntent, AlarmEditorEvent>(
         FragmentAlarmEditorBinding.Companion::inflate,
     ) {
-    override val viewModel: AlarmEditorViewModel by viewModels { viewModelFactory(AlarmEditorViewModel::class.java) }
+    override val viewModel: AlarmEditorViewModel by injectedViewModels()
 
     private var label: TextBinder? = null
     private var enabled: SwitchBinder? = null
