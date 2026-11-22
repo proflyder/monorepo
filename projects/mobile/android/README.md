@@ -1148,17 +1148,52 @@ is the composition root and the only module that sees every implementation.
 
 Metro's compiler plugin is applied to every Kotlin Android compilation through
 `//platform/android:defs.bzl`. The graph in `app/.../di/AppGraph.kt` is generated
-at compile time: repositories use `@ContributesBinding`, ViewModel factories and
-navigation entries use `@ContributesIntoSet`, `core/runtime` contributes
-`RuntimeBindings` (app `CoroutineScope`, `@IoDispatcher`, `Clock`,
-`ServerClock`, the `Set<AppStartable>` multibinding), and `AppBindings`
-provides the OkHttp/Retrofit clients, `ServerClockSync`, the single
-`DataStore`, and `FeatureRegistry`. Work that has to begin with the process
-is an `AppStartable` contributed with `@ContributesIntoSet`;
-`HomeApplication` only iterates `graph.startables`. No class creates its own
-`CoroutineScope(SupervisorJob() + …)`: long-lived owners inject the app scope
-and `@IoDispatcher`. There is no runtime service locator or hand-written mock
-repository.
+at compile time and exposes only `appearance`, `startables` and
+`inject(MainActivity)`; everything else is reached through contributions.
+Repositories use `@ContributesBinding`, navigation entries `@ContributesIntoSet`,
+`core/runtime` contributes `RuntimeBindings` (app `CoroutineScope`,
+`@IoDispatcher`, `Clock`, `ServerClock`, the `Set<AppStartable>` multibinding),
+and `AppBindings` provides the OkHttp/Retrofit clients, `ServerClockSync`, the
+single `DataStore`, `FeatureRegistry` and the `Set<Interceptor>` multibinding.
+
+- **Start.** Work that begins with the process is an `AppStartable`
+  contributed with `@ContributesIntoSet(binding = binding<AppStartable>())`
+  (VPN controller/home network/route opener, push registrar, call service
+  starter, stale-connection evictor, foreground, appearance).
+  `HomeApplication` only iterates `graph.startables`. No class creates its own
+  `CoroutineScope(SupervisorJob() + …)`.
+- **ViewModels.** A ViewModel is an `internal` `@Inject` class (editors that
+  need a `SavedStateHandle` are `@AssistedInject` with a nested
+  `@AssistedFactory`). Next to it a public `XViewModelSource` with an
+  `internal constructor` takes `() -> XViewModel` (or the assisted factory) and
+  is contributed with `@ContributesIntoMap` + `@ClassKey(XViewModel::class)`
+  into the `ViewModelSource`/`SavedStateViewModelFactory` maps, so the
+  constructor list is never repeated. `ViewModelFactoryRegistry` (core/ui) is
+  the single `ViewModelProvider.Factory`; fragments use `by injectedViewModels()`,
+  `by injectedActivityViewModels()` or `by screenViewModel()`.
+  `ControlViewModel` is still public and contributed directly because
+  `MainActivity` reads it (chrome work, P12).
+- **Framework-created components** (services, tile, activities other than
+  `MainActivity`) use member injection: `@Inject internal lateinit var` fields
+  and `appGraph<FeatureInjector>().inject(this)` in `onCreate`, where
+  `FeatureInjector` is a `@ContributesTo(AppScope::class)` interface in the
+  feature impl (`VpnInjector`, `PushInjector`, `CallInjector`). There are no
+  `object` service locators. Helpers that need an Activity
+  (`VpnActivityHost`) are assisted-injected and created through their factory.
+- **Network inspection** (logcat `HomeHttp` + Chucker) lives in
+  `//projects/mobile/android/app/diagnostics` and contributes its interceptors
+  `@IntoSet`; the build drops the module with
+  `--define=home_network_inspection=off`, leaving the set empty.
+
+#### Notes to the code
+
+- Metro silently skips `internal` contributions from another module: an
+  `internal` class with `@ContributesBinding`/`@ContributesIntoSet`/
+  `@ContributesIntoMap` in a feature impl compiles but never reaches
+  `AppGraph` (missing ViewModel at runtime, startable never started). The
+  contributed class is therefore public (with an `internal constructor` where
+  its dependencies are internal); `PublicInImpl` exempts `@Contributes*`.
+  `AppGraphBindingsTest` checks every ViewModel and startable resolves.
 
 ### Server calls
 
@@ -1186,8 +1221,9 @@ catalog reads use `GET /v1/catalog`.
   otherwise); App Distribution APKs are release-signed by
   `sign-release.sh` with the same personal certificate. APKs are not
   byte-reproducible. See [Signing](#signing).
-- Browsable diagnostics (logcat tag `HomeHttp` + Chucker) are gated by the
-  `home_network_inspection` bool and should be disabled in release variants.
+- Browsable diagnostics (logcat tag `HomeHttp` + Chucker) come from the
+  `app/diagnostics` module; build with `--define=home_network_inspection=off`
+  to leave them out.
 
 ## Known limitations
 
@@ -1439,8 +1475,6 @@ Themes are code in `core/theme`:
   - Waits for a default network (Wi-Fi, LAN or the VPN tunnel) while the phone wakes up after Doze. A resume can race the tunnel coming back, so the first read should wait instead of immediately showing "check LAN or VPN".
 - `app/src/main/kotlin/dev/proflyder/home/di/AppGraph.kt`
   - A bearer token must never be forwarded to a redirect target.
-- `app/src/main/kotlin/dev/proflyder/home/di/NetworkInterceptors.kt`
-  - Network diagnostics, enabled by the `home_network_inspection` bool (a release variant should override it to false so nothing below is created): - an [HttpLoggingInterceptor] (BODY) writing to logcat under "HomeHttp", - a Chucker inspector (notification + …
 - `app/src/main/res/menu/menu_main.xml` — One visible actions button. Tapping it opens the shared `HomePopupMenu` (core/designsystem); the framework overflow list is never used.
 - `app/src/main/res/values/bools.xml`
   - Crashlytics collection. The app only sends crash stack traces, device model/OS and app version; never tokens or endpoints. Set to false to keep Crashlytics initialized but not collecting.
@@ -1669,7 +1703,6 @@ Themes are code in `core/theme`:
   - One stored row. It mirrors [NotificationHistoryEntry] instead of serializing the API model directly, so a renamed field never breaks an existing file and an unknown type downgrades to an ordinary notification.
 - `features/push/impl/src/main/kotlin/dev/proflyder/home/feature/push/PushChannels.kt`
   - The app's two notification channels. Channels are created once and their properties cannot be changed later, so a channel id must never be reused with different settings: Android keeps the original sound and vibration of `home_phone_find`, which is why the …
-- `features/push/impl/src/main/kotlin/dev/proflyder/home/feature/push/PushEntryPoint.kt` — Process-wide access to the push collaborators for components the framework instantiates itself (`FirebaseMessagingService`, the foreground service, the ringing activity). They cannot be constructor-injected by Metro, so the application installs this entry point in `onCreate`, exactly like the call feature does.
 - `features/push/impl/src/main/kotlin/dev/proflyder/home/feature/push/PushNotifier.kt`
   - Draws the two notification shapes. All user-visible text comes from resources; a server message supplies the title and body of an ordinary notification and nothing else.
 - `features/push/impl/src/main/kotlin/dev/proflyder/home/feature/push/PushPayloads.kt` — One decoded FCM message. The server sends two shapes:

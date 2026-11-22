@@ -6,14 +6,15 @@ import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.core.model.Schedule
 import dev.proflyder.home.core.ui.BaseViewModel
-import dev.proflyder.home.core.ui.SimpleViewModelFactory
-import dev.proflyder.home.core.ui.ViewModelFactoryContributor
+import dev.proflyder.home.core.ui.ViewModelSource
 import dev.proflyder.home.feature.reminders.domain.DeleteReminder
 import dev.proflyder.home.feature.reminders.domain.LoadReminders
 import dev.proflyder.home.feature.reminders.domain.SetReminderEnabled
 import dev.zacsweers.metro.AppScope
-import dev.zacsweers.metro.ContributesIntoSet
+import dev.zacsweers.metro.ClassKey
+import dev.zacsweers.metro.ContributesIntoMap
 import dev.zacsweers.metro.Inject
+import dev.zacsweers.metro.binding
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
@@ -25,7 +26,8 @@ data class RemindersUiState(
     val busyId: String? = null,
 )
 
-class RemindersViewModel(
+@Inject
+internal class RemindersViewModel(
     private val loadReminders: LoadReminders,
     private val setEnabled: SetReminderEnabled,
     private val deleteReminder: DeleteReminder,
@@ -100,16 +102,11 @@ class RemindersViewModel(
     }
 }
 
-@ContributesIntoSet(AppScope::class)
+@ContributesIntoMap(AppScope::class, binding = binding<ViewModelSource>())
+@ClassKey(RemindersViewModel::class)
 @Inject
-class RemindersViewModelFactoryContributor(
-    private val loadReminders: LoadReminders,
-    private val setEnabled: SetReminderEnabled,
-    private val deleteReminder: DeleteReminder,
-) : ViewModelFactoryContributor {
-    override val viewModelClass: Class<out ViewModel> = RemindersViewModel::class.java
-
-    override fun createFactory() = SimpleViewModelFactory {
-        RemindersViewModel(loadReminders, setEnabled, deleteReminder)
-    }
+class RemindersViewModelSource internal constructor(
+    private val viewModel: () -> RemindersViewModel,
+) : ViewModelSource {
+    override fun create(): ViewModel = viewModel()
 }

@@ -7,15 +7,21 @@ import android.view.WindowManager
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
+import dev.proflyder.home.core.runtime.appGraph
+import dev.proflyder.home.core.ui.applySystemBarsPadding
 import dev.proflyder.home.feature.push.impl.R
 import dev.proflyder.home.feature.push.impl.databinding.ActivityFindPhoneBinding
+import dev.zacsweers.metro.Inject
 import kotlinx.coroutines.launch
-import dev.proflyder.home.core.ui.applySystemBarsPadding
 
 class FindPhoneActivity : AppCompatActivity() {
     private lateinit var binding: ActivityFindPhoneBinding
 
+    @Inject
+    internal lateinit var controller: FindPhoneController
+
     override fun onCreate(savedInstanceState: Bundle?) {
+        appGraph<PushInjector>().inject(this)
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         binding = ActivityFindPhoneBinding.inflate(layoutInflater)
@@ -23,7 +29,6 @@ class FindPhoneActivity : AppCompatActivity() {
         binding.root.applySystemBarsPadding()
         showOverLockScreen()
         binding.findFound.setOnClickListener { stopAndFinish() }
-        val controller = PushEntryPoint.require().findPhone
         binding.findReason.text = controller.ringing.value.reason
             .ifBlank { getString(R.string.push_find_default_reason) }
         lifecycleScope.launch {
@@ -34,7 +39,7 @@ class FindPhoneActivity : AppCompatActivity() {
     }
 
     private fun stopAndFinish() {
-        runCatching { PushEntryPoint.require().findPhone.stop() }
+        controller.stop()
         finish()
     }
 

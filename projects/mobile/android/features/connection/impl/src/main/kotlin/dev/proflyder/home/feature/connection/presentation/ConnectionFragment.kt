@@ -2,17 +2,16 @@ package dev.proflyder.home.feature.connection.presentation
 
 import android.os.Bundle
 import androidx.core.widget.doAfterTextChanged
-import androidx.fragment.app.viewModels
 import dev.proflyder.home.core.config.RemoteConnectionState
 import dev.proflyder.home.core.config.TokenStatus
 import dev.proflyder.home.core.model.Field
 import dev.proflyder.home.core.ui.BaseFragment
 import dev.proflyder.home.core.ui.applyScrollBottomInset
+import dev.proflyder.home.core.ui.injectedViewModels
 import dev.proflyder.home.core.ui.keepFocusedVisible
 import dev.proflyder.home.core.ui.setVisible
 import dev.proflyder.home.core.ui.setupPullToRefresh
 import dev.proflyder.home.core.ui.userMessage
-import dev.proflyder.home.core.ui.viewModelFactory
 import dev.proflyder.home.feature.connection.impl.R
 import dev.proflyder.home.feature.connection.impl.databinding.FragmentConnectionBinding
 import java.time.Instant
@@ -22,9 +21,7 @@ import java.util.Locale
 
 class ConnectionFragment :
     BaseFragment<FragmentConnectionBinding>(FragmentConnectionBinding.Companion::inflate) {
-    private val viewModel: ConnectionViewModel by viewModels {
-        viewModelFactory(ConnectionViewModel::class.java)
-    }
+    private val viewModel: ConnectionViewModel by injectedViewModels()
 
     private var rendering = false
 

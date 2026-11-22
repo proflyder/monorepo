@@ -9,13 +9,14 @@ import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.core.model.SchedulerStatus
 import dev.proflyder.home.core.operation.suspendRunCatching
 import dev.proflyder.home.core.ui.BaseViewModel
-import dev.proflyder.home.core.ui.SimpleViewModelFactory
-import dev.proflyder.home.core.ui.ViewModelFactoryContributor
+import dev.proflyder.home.core.ui.ViewModelSource
 import dev.proflyder.home.feature.connection.ConnectionRepository
 import dev.proflyder.home.feature.connection.TokenUpdate
 import dev.zacsweers.metro.AppScope
-import dev.zacsweers.metro.ContributesIntoSet
+import dev.zacsweers.metro.ClassKey
+import dev.zacsweers.metro.ContributesIntoMap
 import dev.zacsweers.metro.Inject
+import dev.zacsweers.metro.binding
 
 enum class ConnectionNotice {
     SAVED,
@@ -39,7 +40,8 @@ data class ConnectionUiState(
     val busy: Boolean get() = saving || testing || refreshingConfig
 }
 
-class ConnectionViewModel(
+@Inject
+internal class ConnectionViewModel(
     private val repository: ConnectionRepository,
 ) : BaseViewModel<ConnectionUiState>(initialState(repository)) {
 
@@ -149,18 +151,6 @@ class ConnectionViewModel(
     }
 }
 
-@ContributesIntoSet(AppScope::class)
-@Inject
-class ConnectionViewModelFactoryContributor(
-    private val repository: ConnectionRepository,
-) : ViewModelFactoryContributor {
-    override val viewModelClass: Class<out ViewModel> = ConnectionViewModel::class.java
-
-    override fun createFactory() = SimpleViewModelFactory {
-        ConnectionViewModel(repository)
-    }
-}
-
 internal fun initialState(repository: ConnectionRepository): ConnectionUiState {
     val config = repository.config.value
     return ConnectionUiState(
@@ -168,4 +158,13 @@ internal fun initialState(repository: ConnectionRepository): ConnectionUiState {
         tokenStatus = repository.tokenStatus.value,
         remote = repository.remoteConfig.value,
     )
+}
+
+@ContributesIntoMap(AppScope::class, binding = binding<ViewModelSource>())
+@ClassKey(ConnectionViewModel::class)
+@Inject
+class ConnectionViewModelSource internal constructor(
+    private val viewModel: () -> ConnectionViewModel,
+) : ViewModelSource {
+    override fun create(): ViewModel = viewModel()
 }

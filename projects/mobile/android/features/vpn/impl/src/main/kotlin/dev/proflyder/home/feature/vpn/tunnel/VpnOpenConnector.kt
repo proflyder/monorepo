@@ -3,6 +3,7 @@ package dev.proflyder.home.feature.vpn.tunnel
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
+import dev.proflyder.home.core.runtime.AppStartable
 import dev.proflyder.home.feature.vpn.HomeRoute
 import dev.proflyder.home.feature.vpn.NetworkState
 import dev.proflyder.home.feature.vpn.NetworkVpnAction
@@ -12,8 +13,10 @@ import dev.proflyder.home.feature.vpn.VpnNetworkFlow
 import dev.proflyder.home.feature.vpn.VpnSettingsStore
 import dev.proflyder.home.feature.vpn.isActive
 import dev.zacsweers.metro.AppScope
+import dev.zacsweers.metro.ContributesIntoSet
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
+import dev.zacsweers.metro.binding
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
@@ -31,13 +34,14 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
 
 @SingleIn(AppScope::class)
+@ContributesIntoSet(AppScope::class, binding = binding<AppStartable>())
 @Inject
 class VpnOpenConnector(
     private val controller: TunnelVpnController,
     private val settings: VpnSettingsStore,
     private val home: HomeNetworkMonitor,
     private val scope: CoroutineScope,
-) : DefaultLifecycleObserver {
+) : DefaultLifecycleObserver, AppStartable {
     private val mutableRoute = MutableStateFlow(HomeRoute.READY)
     private val permissionChannel = Channel<Unit>(Channel.CONFLATED)
     private var watcher: Job? = null
@@ -48,7 +52,7 @@ class VpnOpenConnector(
 
     val permissionRequests: Flow<Unit> = permissionChannel.receiveAsFlow()
 
-    fun start() {
+    override fun start() {
         scope.launch(Dispatchers.Main) { ProcessLifecycleOwner.get().lifecycle.addObserver(this@VpnOpenConnector) }
     }
 

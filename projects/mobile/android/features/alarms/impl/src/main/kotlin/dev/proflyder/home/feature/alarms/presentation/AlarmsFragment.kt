@@ -2,7 +2,6 @@ package dev.proflyder.home.feature.alarms.presentation
 
 import android.os.Bundle
 import androidx.activity.OnBackPressedCallback
-import androidx.fragment.app.activityViewModels
 import androidx.recyclerview.widget.GridLayoutManager
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import dev.proflyder.home.core.model.RemoteFailure
@@ -15,11 +14,11 @@ import dev.proflyder.home.core.ui.animateBar
 import dev.proflyder.home.core.ui.animateVerticalPadding
 import dev.proflyder.home.core.ui.applyScrollBottomInset
 import dev.proflyder.home.core.ui.fabClearance
+import dev.proflyder.home.core.ui.injectedActivityViewModels
 import dev.proflyder.home.core.ui.liftAboveBottomInsets
 import dev.proflyder.home.core.ui.setVisible
 import dev.proflyder.home.core.ui.setupPullToRefresh
 import dev.proflyder.home.core.ui.userMessage
-import dev.proflyder.home.core.ui.viewModelFactory
 import dev.proflyder.home.feature.alarms.AlarmDisableChoice
 import dev.proflyder.home.feature.alarms.AlarmEditorDestination
 import dev.proflyder.home.feature.alarms.alarmDisableChoice
@@ -27,9 +26,7 @@ import dev.proflyder.home.feature.alarms.impl.R
 import dev.proflyder.home.feature.alarms.impl.databinding.FragmentAlarmsBinding
 
 class AlarmsFragment : BaseFragment<FragmentAlarmsBinding>(FragmentAlarmsBinding.Companion::inflate) {
-    internal val viewModel: AlarmsViewModel by activityViewModels {
-        viewModelFactory(AlarmsViewModel::class.java)
-    }
+    internal val viewModel: AlarmsViewModel by injectedActivityViewModels()
 
     private lateinit var adapter: AlarmAdapter
     private lateinit var states: ListStateViews

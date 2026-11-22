@@ -19,13 +19,11 @@ import dev.proflyder.home.core.model.Timer
 import dev.proflyder.home.core.model.TimerState
 import dev.proflyder.home.core.model.VolumeControls
 import dev.proflyder.home.core.ui.BaseViewModel
-import dev.proflyder.home.core.ui.SimpleViewModelFactory
-import dev.proflyder.home.core.ui.ViewModelFactoryContributor
 import dev.proflyder.home.feature.alarms.AlarmRepository
+import dev.proflyder.home.feature.call.CallLauncher
 import dev.proflyder.home.feature.control.ControlFilter
 import dev.proflyder.home.feature.control.ControlItems
 import dev.proflyder.home.feature.control.ControlPreferences
-import dev.proflyder.home.feature.call.CallLauncher
 import dev.proflyder.home.feature.control.HubCard
 import dev.proflyder.home.feature.control.HubCards
 import dev.proflyder.home.feature.control.HubFormat
@@ -45,8 +43,10 @@ import dev.proflyder.home.feature.reminders.ReminderRepository
 import dev.proflyder.home.feature.scenarios.ScenarioRepository
 import dev.proflyder.home.feature.timers.TimerRepository
 import dev.zacsweers.metro.AppScope
-import dev.zacsweers.metro.ContributesIntoSet
+import dev.zacsweers.metro.ClassKey
+import dev.zacsweers.metro.ContributesIntoMap
 import dev.zacsweers.metro.Inject
+import dev.zacsweers.metro.binding
 import java.util.UUID
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -84,6 +84,9 @@ data class ControlUiState(
     val nowUnix: Long = 0,
 )
 
+@ContributesIntoMap(AppScope::class, binding = binding<ViewModel>())
+@ClassKey
+@Inject
 class ControlViewModel(
     private val loadCatalog: LoadControlCatalog,
     private val runScenario: RunScenario,
@@ -564,54 +567,6 @@ class ControlViewModel(
         const val RECONCILE_DELAY_MS = 1_500L
         const val RECONCILE_ATTEMPTS = 8
         const val EXPECT_TTL_MS = 15_000L
-    }
-}
-
-@ContributesIntoSet(AppScope::class)
-@Inject
-class ControlViewModelFactoryContributor(
-    private val loadCatalog: LoadControlCatalog,
-    private val runScenario: RunScenario,
-    private val pressControl: PressControl,
-    private val setDevicePower: SetDevicePower,
-    private val setVoiceProfile: SetVoiceProfile,
-    private val adjustLight: AdjustLight,
-    private val speakOnStation: SpeakOnStation,
-    private val setStationVolume: SetVolume,
-    private val setStationMuted: SetVolumeMuted,
-    private val preferences: ControlPreferences,
-    private val favorites: FavoritePreferences,
-    private val alarms: AlarmRepository,
-    private val timers: TimerRepository,
-    private val reminders: ReminderRepository,
-    private val scenarios: ScenarioRepository,
-    private val clock: ServerClock,
-    private val clockSync: ServerClockSync,
-    private val callLauncher: CallLauncher,
-) : ViewModelFactoryContributor {
-    override val viewModelClass: Class<out ViewModel> = ControlViewModel::class.java
-
-    override fun createFactory() = SimpleViewModelFactory {
-        ControlViewModel(
-            loadCatalog,
-            runScenario,
-            pressControl,
-            setDevicePower,
-            setVoiceProfile,
-            adjustLight,
-            speakOnStation,
-            setStationVolume,
-            setStationMuted,
-            preferences,
-            favorites,
-            alarms,
-            timers,
-            reminders,
-            scenarios,
-            clock,
-            clockSync,
-            callLauncher,
-        )
     }
 }
 

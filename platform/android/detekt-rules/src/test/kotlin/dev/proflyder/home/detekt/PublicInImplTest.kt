@@ -49,4 +49,25 @@ class PublicInImplTest {
         assertEquals(0, PublicInImpl().lint(api).size)
         assertEquals(0, PublicInImpl().lint(test).size)
     }
+
+    @Test
+    fun `accepts public graph contributions that the app graph must see`() {
+        val file = compileContentForTest(
+            """
+                @ContributesIntoMap(AppScope::class)
+                class ScreenViewModel
+                @ContributesTo(AppScope::class)
+                interface FeatureInjector
+                @Inject
+                class Helper
+                class InjectedService {
+                    @Inject
+                    lateinit var controller: Controller
+                }
+            """.trimIndent(),
+            "features/alarms/impl/src/main/kotlin/Screen.kt",
+        )
+
+        assertEquals(1, PublicInImpl().lint(file).size)
+    }
 }

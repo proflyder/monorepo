@@ -5,8 +5,7 @@ import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.core.model.Schedule
 import dev.proflyder.home.core.ui.BaseViewModel
-import dev.proflyder.home.core.ui.SimpleViewModelFactory
-import dev.proflyder.home.core.ui.ViewModelFactoryContributor
+import dev.proflyder.home.core.ui.ViewModelSource
 import dev.proflyder.home.feature.alarms.domain.DeleteAlarm
 import dev.proflyder.home.feature.alarms.domain.LoadAlarms
 import dev.proflyder.home.feature.alarms.domain.SetAlarmEnabled
@@ -14,8 +13,10 @@ import dev.proflyder.home.feature.alarms.domain.SkipAlarmOccurrence
 import dev.proflyder.home.feature.alarms.domain.SnoozeAlarm
 import dev.proflyder.home.feature.alarms.domain.StopAlarm
 import dev.zacsweers.metro.AppScope
-import dev.zacsweers.metro.ContributesIntoSet
+import dev.zacsweers.metro.ClassKey
+import dev.zacsweers.metro.ContributesIntoMap
 import dev.zacsweers.metro.Inject
+import dev.zacsweers.metro.binding
 import kotlinx.coroutines.Job
 
 data class AlarmsUiState(
@@ -30,7 +31,8 @@ data class AlarmsUiState(
     val allSelected: Boolean get() = alarms.isNotEmpty() && selectedIds.size == alarms.size
 }
 
-class AlarmsViewModel(
+@Inject
+internal class AlarmsViewModel(
     private val loadAlarms: LoadAlarms,
     private val setAlarmEnabled: SetAlarmEnabled,
     private val skipAlarmOccurrence: SkipAlarmOccurrence,
@@ -146,19 +148,11 @@ class AlarmsViewModel(
     private fun AlarmsUiState.withoutAlarm(id: String): List<Schedule> = alarms.filterNot { it.id == id }
 }
 
-@ContributesIntoSet(AppScope::class)
+@ContributesIntoMap(AppScope::class, binding = binding<ViewModelSource>())
+@ClassKey(AlarmsViewModel::class)
 @Inject
-class AlarmsViewModelFactoryContributor(
-    private val loadAlarms: LoadAlarms,
-    private val setAlarmEnabled: SetAlarmEnabled,
-    private val skipAlarmOccurrence: SkipAlarmOccurrence,
-    private val deleteAlarm: DeleteAlarm,
-    private val snoozeAlarm: SnoozeAlarm,
-    private val stopAlarm: StopAlarm,
-) : ViewModelFactoryContributor {
-    override val viewModelClass: Class<out ViewModel> = AlarmsViewModel::class.java
-
-    override fun createFactory() = SimpleViewModelFactory {
-        AlarmsViewModel(loadAlarms, setAlarmEnabled, skipAlarmOccurrence, deleteAlarm, snoozeAlarm, stopAlarm)
-    }
+class AlarmsViewModelSource internal constructor(
+    private val viewModel: () -> AlarmsViewModel,
+) : ViewModelSource {
+    override fun create(): ViewModel = viewModel()
 }

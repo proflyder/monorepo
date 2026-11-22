@@ -8,21 +8,20 @@ import dev.proflyder.home.core.model.ControlEntry
 import dev.proflyder.home.core.model.Field
 import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.model.RemoteFailure
+import dev.proflyder.home.core.model.RepeatKind
 import dev.proflyder.home.core.model.Scenario
 import dev.proflyder.home.core.model.ScenarioCondition
 import dev.proflyder.home.core.model.ScenarioDraft
+import dev.proflyder.home.core.model.ScenarioLimits
 import dev.proflyder.home.core.model.ScenarioStep
 import dev.proflyder.home.core.model.ScenarioTrigger
 import dev.proflyder.home.core.model.TimeTrigger
 import dev.proflyder.home.core.model.WallTime
-import dev.proflyder.home.core.model.RepeatKind
 import dev.proflyder.home.core.model.isAmbiguousRetryable
 import dev.proflyder.home.core.operation.EditorCompletion
 import dev.proflyder.home.core.operation.IdempotentRequestKey
 import dev.proflyder.home.core.ui.BaseViewModel
 import dev.proflyder.home.core.ui.SavedStateViewModelFactory
-import dev.proflyder.home.core.ui.ViewModelFactoryContributor
-import dev.proflyder.home.core.model.ScenarioLimits
 import dev.proflyder.home.feature.scenarios.ScenarioEditorCompletion
 import dev.proflyder.home.feature.scenarios.ScenarioEditorDraft
 import dev.proflyder.home.feature.scenarios.ScenarioEditorDraftCodec
@@ -34,8 +33,13 @@ import dev.proflyder.home.feature.scenarios.domain.SaveScenario
 import dev.proflyder.home.feature.scenarios.isScenarioConflict
 import dev.proflyder.home.feature.scenarios.toScenarioDraft
 import dev.zacsweers.metro.AppScope
-import dev.zacsweers.metro.ContributesIntoSet
+import dev.zacsweers.metro.Assisted
+import dev.zacsweers.metro.AssistedFactory
+import dev.zacsweers.metro.AssistedInject
+import dev.zacsweers.metro.ClassKey
+import dev.zacsweers.metro.ContributesIntoMap
 import dev.zacsweers.metro.Inject
+import dev.zacsweers.metro.binding
 import java.time.LocalDateTime
 import java.time.ZoneId
 import kotlinx.coroutines.flow.StateFlow
@@ -56,14 +60,20 @@ data class ScenarioEditorUiState(
     val hasUnsupportedParts: Boolean get() = draft.hasUnsupportedParts
 }
 
-class ScenarioEditorViewModel(
+@AssistedInject
+internal class ScenarioEditorViewModel(
     private val loadScenario: LoadScenario,
     private val loadCatalog: LoadScenarioCatalog,
     private val saveScenario: SaveScenario,
     private val deleteScenario: DeleteScenario,
     private val settings: ConnectionSettingsStore,
-    private val savedState: SavedStateHandle,
+    @Assisted private val savedState: SavedStateHandle,
 ) : BaseViewModel<ScenarioEditorUiState>(ScenarioEditorUiState()) {
+    @AssistedFactory
+    fun interface Factory {
+        fun create(savedState: SavedStateHandle): ScenarioEditorViewModel
+    }
+
     private val restoredDraft: ScenarioEditorDraft? = ScenarioEditorDraftCodec.fromMap(
         savedState.keys().associateWith { key -> savedState.get<Any?>(key) },
     )
@@ -398,25 +408,11 @@ internal fun ScenarioEditorDraft.restoredExisting(): Scenario? {
 internal fun List<ControlEntry>.titleOf(entryId: String): String? =
     firstOrNull { it.id == entryId }?.let { it.title.ifBlank { it.id } }
 
-@ContributesIntoSet(AppScope::class)
+@ContributesIntoMap(AppScope::class, binding = binding<SavedStateViewModelFactory>())
+@ClassKey(ScenarioEditorViewModel::class)
 @Inject
-class ScenarioEditorViewModelFactoryContributor(
-    private val loadScenario: LoadScenario,
-    private val loadCatalog: LoadScenarioCatalog,
-    private val saveScenario: SaveScenario,
-    private val deleteScenario: DeleteScenario,
-    private val settings: ConnectionSettingsStore,
-) : ViewModelFactoryContributor {
-    override val viewModelClass: Class<out ViewModel> = ScenarioEditorViewModel::class.java
-
-    override fun createFactory() = SavedStateViewModelFactory { savedState ->
-        ScenarioEditorViewModel(
-            loadScenario = loadScenario,
-            loadCatalog = loadCatalog,
-            saveScenario = saveScenario,
-            deleteScenario = deleteScenario,
-            settings = settings,
-            savedState = savedState,
-        )
-    }
+class ScenarioEditorViewModelSource internal constructor(
+    private val factory: ScenarioEditorViewModel.Factory,
+) : SavedStateViewModelFactory {
+    override fun create(savedState: SavedStateHandle): ViewModel = factory.create(savedState)
 }

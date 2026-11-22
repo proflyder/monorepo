@@ -2,7 +2,6 @@ package dev.proflyder.home.feature.control.presentation
 
 import android.os.Bundle
 import androidx.activity.OnBackPressedCallback
-import androidx.fragment.app.activityViewModels
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -17,11 +16,11 @@ import dev.proflyder.home.core.ui.ListStateViews
 import dev.proflyder.home.core.ui.Notices
 import dev.proflyder.home.core.ui.applyScrollBottomInset
 import dev.proflyder.home.core.ui.fabClearance
+import dev.proflyder.home.core.ui.injectedActivityViewModels
 import dev.proflyder.home.core.ui.liftAboveBottomInsets
 import dev.proflyder.home.core.ui.setVisible
 import dev.proflyder.home.core.ui.setupPullToRefresh
 import dev.proflyder.home.core.ui.userMessage
-import dev.proflyder.home.core.ui.viewModelFactory
 import dev.proflyder.home.feature.alarms.AlarmDisableChoice
 import dev.proflyder.home.feature.alarms.alarmDisableChoice
 import dev.proflyder.home.feature.control.ControlFilter
@@ -41,9 +40,7 @@ import dev.proflyder.home.feature.control.impl.databinding.FragmentControlBindin
 import kotlinx.coroutines.delay
 
 class ControlFragment : BaseFragment<FragmentControlBinding>(FragmentControlBinding.Companion::inflate) {
-    internal val viewModel: ControlViewModel by activityViewModels {
-        viewModelFactory(ControlViewModel::class.java)
-    }
+    internal val viewModel: ControlViewModel by injectedActivityViewModels()
 
     private lateinit var adapter: ControlAdapter
     private lateinit var states: ListStateViews

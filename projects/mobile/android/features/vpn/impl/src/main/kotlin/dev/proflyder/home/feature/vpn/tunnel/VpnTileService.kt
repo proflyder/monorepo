@@ -6,10 +6,12 @@ import android.content.Intent
 import android.os.Build
 import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
+import dev.proflyder.home.core.runtime.appGraph
 import dev.proflyder.home.feature.vpn.VpnConnection
-import dev.proflyder.home.feature.vpn.VpnEntryPoint
+import dev.proflyder.home.feature.vpn.VpnInjector
 import dev.proflyder.home.feature.vpn.isActive
 import dev.proflyder.home.feature.vpn.presentation.VpnTexts
+import dev.zacsweers.metro.Inject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -21,10 +23,18 @@ class VpnTileService : TileService() {
     private val scope = CoroutineScope(root + Dispatchers.Main.immediate)
     private var job: Job? = null
 
+    @Inject
+    internal lateinit var controller: TunnelVpnController
+
+    override fun onCreate() {
+        super.onCreate()
+        appGraph<VpnInjector>().inject(this)
+    }
+
     override fun onStartListening() {
         super.onStartListening()
         job?.cancel()
-        job = scope.launch { VpnEntryPoint.require().controller.connection.collect(::render) }
+        job = scope.launch { controller.connection.collect(::render) }
     }
 
     override fun onStopListening() {
@@ -34,7 +44,6 @@ class VpnTileService : TileService() {
 
     override fun onClick() {
         super.onClick()
-        val controller = VpnEntryPoint.require().controller
         when {
             controller.connection.value.isActive -> controller.disconnect()
             controller.permissionIntent() != null -> openApp()

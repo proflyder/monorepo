@@ -13,6 +13,7 @@ metro_android_library(
     resource_files = glob(["src/main/res/**"]),
     view_binding = True,
     deps = [
+        "//projects/mobile/android/core/runtime",
         "//projects/mobile/android/features/chat/api",
         "//packages/kotlin/core",
         "//projects/mobile/android/core/config",

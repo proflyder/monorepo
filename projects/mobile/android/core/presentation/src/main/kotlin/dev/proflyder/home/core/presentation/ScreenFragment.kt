@@ -5,11 +5,10 @@ import android.view.LayoutInflater
 import android.view.ViewGroup
 import android.widget.CompoundButton
 import androidx.fragment.app.Fragment
-import androidx.fragment.app.viewModels
 import androidx.lifecycle.ViewModel
 import dev.proflyder.home.core.ui.BaseFragment
 import dev.proflyder.home.core.ui.ViewBinding
-import dev.proflyder.home.core.ui.viewModelFactory
+import dev.proflyder.home.core.ui.injectedViewModels
 
 abstract class ScreenFragment<VB : ViewBinding, S : Any, I : Any, E : Any>(
     inflateBinding: (LayoutInflater, ViewGroup?, Boolean) -> VB,
@@ -37,4 +36,4 @@ abstract class ScreenFragment<VB : ViewBinding, S : Any, I : Any, E : Any>(
 }
 
 inline fun <reified VM : ViewModel> Fragment.screenViewModel(): Lazy<VM> =
-    viewModels { viewModelFactory(VM::class.java) }
+    injectedViewModels()

@@ -14,7 +14,6 @@ import dev.proflyder.home.core.operation.EditorCompletion
 import dev.proflyder.home.core.operation.IdempotentRequestKey
 import dev.proflyder.home.core.ui.BaseViewModel
 import dev.proflyder.home.core.ui.SavedStateViewModelFactory
-import dev.proflyder.home.core.ui.ViewModelFactoryContributor
 import dev.proflyder.home.feature.reminders.ReminderDraft
 import dev.proflyder.home.feature.reminders.ReminderEditorCompletion
 import dev.proflyder.home.feature.reminders.ReminderEditorDraft
@@ -23,8 +22,13 @@ import dev.proflyder.home.feature.reminders.domain.DeleteReminder
 import dev.proflyder.home.feature.reminders.domain.LoadReminder
 import dev.proflyder.home.feature.reminders.domain.SaveReminder
 import dev.zacsweers.metro.AppScope
-import dev.zacsweers.metro.ContributesIntoSet
+import dev.zacsweers.metro.Assisted
+import dev.zacsweers.metro.AssistedFactory
+import dev.zacsweers.metro.AssistedInject
+import dev.zacsweers.metro.ClassKey
+import dev.zacsweers.metro.ContributesIntoMap
 import dev.zacsweers.metro.Inject
+import dev.zacsweers.metro.binding
 import java.time.LocalDate
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -42,13 +46,19 @@ data class ReminderEditorUiState(
     val loadFailed: Boolean = false,
 )
 
-class ReminderEditorViewModel(
+@AssistedInject
+internal class ReminderEditorViewModel(
     private val loadReminder: LoadReminder,
     private val saveReminder: SaveReminder,
     private val deleteReminder: DeleteReminder,
     private val settings: ConnectionSettingsStore,
-    private val savedState: SavedStateHandle,
+    @Assisted private val savedState: SavedStateHandle,
 ) : BaseViewModel<ReminderEditorUiState>(restoreState(savedState)) {
+    @AssistedFactory
+    fun interface Factory {
+        fun create(savedState: SavedStateHandle): ReminderEditorViewModel
+    }
+
     private val restoredDraft: ReminderEditorDraft? = ReminderEditorDraftCodec.fromMap(
         savedState.keys().associateWith { key -> savedState.get<Any?>(key) },
     )
@@ -247,21 +257,6 @@ class ReminderEditorViewModel(
     }
 }
 
-@ContributesIntoSet(AppScope::class)
-@Inject
-class ReminderEditorViewModelFactoryContributor(
-    private val loadReminder: LoadReminder,
-    private val saveReminder: SaveReminder,
-    private val deleteReminder: DeleteReminder,
-    private val settings: ConnectionSettingsStore,
-) : ViewModelFactoryContributor {
-    override val viewModelClass: Class<out ViewModel> = ReminderEditorViewModel::class.java
-
-    override fun createFactory() = SavedStateViewModelFactory { savedState ->
-        ReminderEditorViewModel(loadReminder, saveReminder, deleteReminder, settings, savedState)
-    }
-}
-
 internal fun restoreState(savedState: SavedStateHandle): ReminderEditorUiState =
     ReminderEditorDraftCodec.fromMap(savedState.keys().associateWith { key -> savedState.get<Any?>(key) })?.toUiState()
         ?: ReminderEditorUiState()
@@ -294,4 +289,13 @@ private fun ReminderEditorDraft.restoredExisting(): Schedule? {
         createdUnix = 0,
         updatedUnix = 0,
     )
+}
+
+@ContributesIntoMap(AppScope::class, binding = binding<SavedStateViewModelFactory>())
+@ClassKey(ReminderEditorViewModel::class)
+@Inject
+class ReminderEditorViewModelSource internal constructor(
+    private val factory: ReminderEditorViewModel.Factory,
+) : SavedStateViewModelFactory {
+    override fun create(savedState: SavedStateHandle): ViewModel = factory.create(savedState)
 }

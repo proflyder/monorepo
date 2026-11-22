@@ -3,10 +3,7 @@ package dev.proflyder.home.feature.vpn.presentation
 import android.content.Intent
 import android.net.Uri
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
 import dev.proflyder.home.core.presentation.StateViewModel
-import dev.proflyder.home.core.ui.SimpleViewModelFactory
-import dev.proflyder.home.core.ui.ViewModelFactoryContributor
 import dev.proflyder.home.feature.vpn.VpnAuth
 import dev.proflyder.home.feature.vpn.VpnConnection
 import dev.proflyder.home.feature.vpn.VpnProfileState
@@ -20,9 +17,12 @@ import dev.proflyder.home.feature.vpn.isActive
 import dev.proflyder.home.feature.vpn.tunnel.ExternalOpenConnectTransport
 import dev.proflyder.home.feature.vpn.tunnel.HomeNetworkMonitor
 import dev.proflyder.home.feature.vpn.tunnel.TunnelVpnController
+import dev.proflyder.home.core.ui.ViewModelSource
 import dev.zacsweers.metro.AppScope
-import dev.zacsweers.metro.ContributesIntoSet
+import dev.zacsweers.metro.ClassKey
+import dev.zacsweers.metro.ContributesIntoMap
 import dev.zacsweers.metro.Inject
+import dev.zacsweers.metro.binding
 import kotlinx.coroutines.flow.combine
 
 enum class VpnNotice {
@@ -65,6 +65,7 @@ data class VpnUiState(
     val busy: Boolean = false,
 )
 
+@Inject
 internal class VpnViewModel(
     private val controller: TunnelVpnController,
     private val profiles: VpnProfiles,
@@ -180,19 +181,11 @@ internal class VpnViewModel(
     }
 }
 
-@ContributesIntoSet(AppScope::class)
+@ContributesIntoMap(AppScope::class, binding = binding<ViewModelSource>())
+@ClassKey(VpnViewModel::class)
 @Inject
-class VpnViewModelFactoryContributor(
-    private val controller: TunnelVpnController,
-    private val profiles: VpnProfiles,
-    private val settings: VpnSettingsStore,
-    private val home: HomeNetworkMonitor,
-    private val certificates: VpnCertificateStore,
-    private val external: ExternalOpenConnectTransport,
-) : ViewModelFactoryContributor {
-    override val viewModelClass: Class<out ViewModel> = VpnViewModel::class.java
-
-    override fun createFactory(): ViewModelProvider.Factory = SimpleViewModelFactory {
-        VpnViewModel(controller, profiles, settings, home, certificates, external)
-    }
+class VpnViewModelSource internal constructor(
+    private val viewModel: () -> VpnViewModel,
+) : ViewModelSource {
+    override fun create(): ViewModel = viewModel()
 }

@@ -1,15 +1,15 @@
 package dev.proflyder.home.feature.settings.presentation
 
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
 import dev.proflyder.home.core.presentation.StateViewModel
-import dev.proflyder.home.core.ui.SimpleViewModelFactory
-import dev.proflyder.home.core.ui.ViewModelFactoryContributor
 import dev.proflyder.home.feature.push.NotificationHistoryEntry
 import dev.proflyder.home.feature.push.NotificationHistoryStore
+import dev.proflyder.home.core.ui.ViewModelSource
 import dev.zacsweers.metro.AppScope
-import dev.zacsweers.metro.ContributesIntoSet
+import dev.zacsweers.metro.ClassKey
+import dev.zacsweers.metro.ContributesIntoMap
 import dev.zacsweers.metro.Inject
+import dev.zacsweers.metro.binding
 
 data class NotificationHistoryUiState(
     val entries: List<NotificationHistoryEntry> = emptyList(),
@@ -27,6 +27,7 @@ internal sealed interface HistoryEvent {
     data class OpenRoute(val route: String) : HistoryEvent
 }
 
+@Inject
 internal class NotificationHistoryViewModel(
     private val store: NotificationHistoryStore,
 ) : StateViewModel<NotificationHistoryUiState, HistoryIntent, HistoryEvent>(
@@ -52,14 +53,11 @@ internal class NotificationHistoryViewModel(
     }
 }
 
-@ContributesIntoSet(AppScope::class)
+@ContributesIntoMap(AppScope::class, binding = binding<ViewModelSource>())
+@ClassKey(NotificationHistoryViewModel::class)
 @Inject
-class NotificationHistoryViewModelFactoryContributor(
-    private val store: NotificationHistoryStore,
-) : ViewModelFactoryContributor {
-    override val viewModelClass: Class<out ViewModel> = NotificationHistoryViewModel::class.java
-
-    override fun createFactory(): ViewModelProvider.Factory = SimpleViewModelFactory {
-        NotificationHistoryViewModel(store)
-    }
+class NotificationHistoryViewModelSource internal constructor(
+    private val viewModel: () -> NotificationHistoryViewModel,
+) : ViewModelSource {
+    override fun create(): ViewModel = viewModel()
 }

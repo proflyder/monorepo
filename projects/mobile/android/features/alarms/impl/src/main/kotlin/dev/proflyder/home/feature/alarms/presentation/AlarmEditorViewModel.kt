@@ -1,6 +1,5 @@
 package dev.proflyder.home.feature.alarms.presentation
 
-import android.content.Context
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -16,7 +15,6 @@ import dev.proflyder.home.core.operation.EditorCompletion
 import dev.proflyder.home.core.operation.IdempotentRequestKey
 import dev.proflyder.home.core.ui.BaseViewModel
 import dev.proflyder.home.core.ui.SavedStateViewModelFactory
-import dev.proflyder.home.core.ui.ViewModelFactoryContributor
 import dev.proflyder.home.feature.alarms.AlarmDraft
 import dev.proflyder.home.feature.alarms.AlarmEditorCompletion
 import dev.proflyder.home.feature.alarms.AlarmEditorDraft
@@ -25,11 +23,15 @@ import dev.proflyder.home.feature.alarms.defaultAlarmTime
 import dev.proflyder.home.feature.alarms.domain.DeleteAlarm
 import dev.proflyder.home.feature.alarms.domain.LoadAlarm
 import dev.proflyder.home.feature.alarms.domain.SaveAlarm
-import dev.proflyder.home.feature.alarms.impl.R
 import dev.proflyder.home.feature.alarms.quickOffsetTime
 import dev.zacsweers.metro.AppScope
-import dev.zacsweers.metro.ContributesIntoSet
+import dev.zacsweers.metro.Assisted
+import dev.zacsweers.metro.AssistedFactory
+import dev.zacsweers.metro.AssistedInject
+import dev.zacsweers.metro.ClassKey
+import dev.zacsweers.metro.ContributesIntoMap
 import dev.zacsweers.metro.Inject
+import dev.zacsweers.metro.binding
 import java.time.LocalDate
 import java.time.LocalDateTime
 import kotlinx.coroutines.flow.StateFlow
@@ -50,14 +52,20 @@ data class AlarmEditorUiState(
     val loadFailed: Boolean = false,
 )
 
-class AlarmEditorViewModel(
+@AssistedInject
+internal class AlarmEditorViewModel(
     private val loadAlarm: LoadAlarm,
     private val saveAlarm: SaveAlarm,
     private val deleteAlarm: DeleteAlarm,
     private val settings: ConnectionSettingsStore,
-    private val savedState: SavedStateHandle,
-    private val defaultLabel: String,
+    @Assisted private val savedState: SavedStateHandle,
+    private val defaultLabel: DefaultAlarmLabel,
 ) : BaseViewModel<AlarmEditorUiState>(restoreState(savedState)) {
+    @AssistedFactory
+    fun interface Factory {
+        fun create(savedState: SavedStateHandle): AlarmEditorViewModel
+    }
+
     private val restoredDraft: AlarmEditorDraft? = AlarmEditorDraftCodec.fromMap(
         savedState.keys().associateWith { key -> savedState.get<Any?>(key) },
     )
@@ -167,7 +175,7 @@ class AlarmEditorViewModel(
         }
         mutableState.value = current.copy(saving = true, error = null)
         viewModelScope.launch {
-            when (val result = saveAlarm(current.existing, draft, key, defaultLabel)) {
+            when (val result = saveAlarm(current.existing, draft, key, defaultLabel.value())) {
                 is Outcome.Success -> {
                     createIdentity.markSucceeded()
                     clearPendingKey()
@@ -292,29 +300,6 @@ class AlarmEditorViewModel(
     }
 }
 
-@ContributesIntoSet(AppScope::class)
-@Inject
-class AlarmEditorViewModelFactoryContributor(
-    private val loadAlarm: LoadAlarm,
-    private val saveAlarm: SaveAlarm,
-    private val deleteAlarm: DeleteAlarm,
-    private val settings: ConnectionSettingsStore,
-    private val context: Context,
-) : ViewModelFactoryContributor {
-    override val viewModelClass: Class<out ViewModel> = AlarmEditorViewModel::class.java
-
-    override fun createFactory() = SavedStateViewModelFactory { savedState ->
-        AlarmEditorViewModel(
-            loadAlarm = loadAlarm,
-            saveAlarm = saveAlarm,
-            deleteAlarm = deleteAlarm,
-            settings = settings,
-            savedState = savedState,
-            defaultLabel = context.getString(R.string.alarms_label_default),
-        )
-    }
-}
-
 internal fun restoreState(savedState: SavedStateHandle): AlarmEditorUiState =
     AlarmEditorDraftCodec.fromMap(savedState.keys().associateWith { key -> savedState.get<Any?>(key) })?.toUiState()
         ?: AlarmEditorUiState()
@@ -357,4 +342,13 @@ private fun AlarmEditorDraft.restoredExisting(): Schedule? {
         createdUnix = 0,
         updatedUnix = 0,
     )
+}
+
+@ContributesIntoMap(AppScope::class, binding = binding<SavedStateViewModelFactory>())
+@ClassKey(AlarmEditorViewModel::class)
+@Inject
+class AlarmEditorViewModelSource internal constructor(
+    private val factory: AlarmEditorViewModel.Factory,
+) : SavedStateViewModelFactory {
+    override fun create(savedState: SavedStateHandle): ViewModel = factory.create(savedState)
 }

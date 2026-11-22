@@ -8,6 +8,8 @@ import io.gitlab.arturbosch.detekt.api.Issue
 import io.gitlab.arturbosch.detekt.api.Rule
 import io.gitlab.arturbosch.detekt.api.Severity
 import org.jetbrains.kotlin.lexer.KtTokens
+import org.jetbrains.kotlin.psi.KtAnnotated
+import org.jetbrains.kotlin.psi.KtClass
 import org.jetbrains.kotlin.psi.KtDeclaration
 import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.psi.KtNamedDeclaration
@@ -30,7 +32,16 @@ class PublicInImpl(config: Config = Config.empty) : Rule(config) {
     }
 
     private fun isVisibleOutsideModule(declaration: KtDeclaration): Boolean =
-        restrictingModifiers.none(declaration::hasModifier)
+        restrictingModifiers.none(declaration::hasModifier) && !isGraphContribution(declaration)
+
+    private fun isGraphContribution(declaration: KtDeclaration): Boolean =
+        declaration.hasAnnotation(graphContributionAnnotations) || hasMemberInjection(declaration)
+
+    private fun hasMemberInjection(declaration: KtDeclaration): Boolean =
+        (declaration as? KtClass)?.getProperties().orEmpty().any { it.hasAnnotation(memberInjectionAnnotations) }
+
+    private fun KtAnnotated.hasAnnotation(names: Set<String>): Boolean =
+        annotationEntries.any { it.shortName?.asString() in names }
 
     private fun reportDeclaration(declaration: KtDeclaration) {
         report(
@@ -44,5 +55,12 @@ class PublicInImpl(config: Config = Config.empty) : Rule(config) {
 
     private companion object {
         val restrictingModifiers = listOf(KtTokens.INTERNAL_KEYWORD, KtTokens.PRIVATE_KEYWORD)
+        val memberInjectionAnnotations = setOf("Inject")
+        val graphContributionAnnotations = setOf(
+            "ContributesBinding",
+            "ContributesIntoSet",
+            "ContributesIntoMap",
+            "ContributesTo",
+        )
     }
 }

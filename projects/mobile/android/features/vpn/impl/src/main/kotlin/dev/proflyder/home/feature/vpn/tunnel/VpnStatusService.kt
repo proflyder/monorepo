@@ -12,8 +12,10 @@ import android.os.IBinder
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
+import dev.proflyder.home.core.runtime.appGraph
 import dev.proflyder.home.feature.vpn.VpnConnection
-import dev.proflyder.home.feature.vpn.VpnEntryPoint
+import dev.proflyder.home.feature.vpn.VpnInjector
+import dev.zacsweers.metro.Inject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -24,14 +26,21 @@ class VpnStatusService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var observing = false
 
+    @Inject
+    internal lateinit var controller: TunnelVpnController
+
+    override fun onCreate() {
+        super.onCreate()
+        appGraph<VpnInjector>().inject(this)
+    }
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        val dependencies = VpnEntryPoint.require()
         VpnNotifications.ensureChannel(this)
-        promote(dependencies.controller.connection.value)
+        promote(controller.connection.value)
         when (intent?.action) {
-            ACTION_DISCONNECT -> dependencies.controller.disconnect()
+            ACTION_DISCONNECT -> controller.disconnect()
             else -> observe()
         }
         return START_NOT_STICKY
@@ -40,7 +49,7 @@ class VpnStatusService : Service() {
     private fun observe() {
         if (observing) return
         observing = true
-        scope.launch { VpnEntryPoint.require().controller.connection.collect(::render) }
+        scope.launch { controller.connection.collect(::render) }
     }
 
     private fun render(connection: VpnConnection) {

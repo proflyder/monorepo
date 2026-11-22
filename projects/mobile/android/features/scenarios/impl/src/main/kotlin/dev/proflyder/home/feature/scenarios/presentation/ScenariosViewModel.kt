@@ -9,15 +9,16 @@ import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.core.model.Scenario
 import dev.proflyder.home.core.ui.BaseViewModel
-import dev.proflyder.home.core.ui.SimpleViewModelFactory
-import dev.proflyder.home.core.ui.ViewModelFactoryContributor
+import dev.proflyder.home.core.ui.ViewModelSource
 import dev.proflyder.home.feature.scenarios.domain.DeleteScenario
 import dev.proflyder.home.feature.scenarios.domain.LoadScenarios
 import dev.proflyder.home.feature.scenarios.domain.RunScenario
 import dev.proflyder.home.feature.scenarios.domain.SetScenarioEnabled
 import dev.zacsweers.metro.AppScope
-import dev.zacsweers.metro.ContributesIntoSet
+import dev.zacsweers.metro.ClassKey
+import dev.zacsweers.metro.ContributesIntoMap
 import dev.zacsweers.metro.Inject
+import dev.zacsweers.metro.binding
 import java.util.UUID
 import kotlinx.coroutines.Job
 
@@ -34,7 +35,8 @@ data class ScenariosUiState(
 
 data class FavoriteNotice(val label: String, val pinned: Boolean)
 
-class ScenariosViewModel(
+@Inject
+internal class ScenariosViewModel(
     private val loadScenarios: LoadScenarios,
     private val setScenarioEnabled: SetScenarioEnabled,
     private val deleteScenario: DeleteScenario,
@@ -135,18 +137,11 @@ class ScenariosViewModel(
         scenarios.map { if (it.id == updated.id) updated else it }
 }
 
-@ContributesIntoSet(AppScope::class)
+@ContributesIntoMap(AppScope::class, binding = binding<ViewModelSource>())
+@ClassKey(ScenariosViewModel::class)
 @Inject
-class ScenariosViewModelFactoryContributor(
-    private val loadScenarios: LoadScenarios,
-    private val setScenarioEnabled: SetScenarioEnabled,
-    private val deleteScenario: DeleteScenario,
-    private val runScenario: RunScenario,
-    private val favorites: FavoritePreferences,
-) : ViewModelFactoryContributor {
-    override val viewModelClass: Class<out ViewModel> = ScenariosViewModel::class.java
-
-    override fun createFactory() = SimpleViewModelFactory {
-        ScenariosViewModel(loadScenarios, setScenarioEnabled, deleteScenario, runScenario, favorites)
-    }
+class ScenariosViewModelSource internal constructor(
+    private val viewModel: () -> ScenariosViewModel,
+) : ViewModelSource {
+    override fun create(): ViewModel = viewModel()
 }

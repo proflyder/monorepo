@@ -11,16 +11,17 @@ import dev.proflyder.home.core.model.TimerState
 import dev.proflyder.home.core.model.isAmbiguousRetryable
 import dev.proflyder.home.core.operation.IdempotentRequestKey
 import dev.proflyder.home.core.ui.BaseViewModel
-import dev.proflyder.home.core.ui.SimpleViewModelFactory
-import dev.proflyder.home.core.ui.ViewModelFactoryContributor
+import dev.proflyder.home.core.ui.ViewModelSource
 import dev.proflyder.home.feature.timers.domain.CancelTimer
 import dev.proflyder.home.feature.timers.domain.LoadTimers
 import dev.proflyder.home.feature.timers.domain.PauseTimer
 import dev.proflyder.home.feature.timers.domain.ResumeTimer
 import dev.proflyder.home.feature.timers.domain.StartTimer
 import dev.zacsweers.metro.AppScope
-import dev.zacsweers.metro.ContributesIntoSet
+import dev.zacsweers.metro.ClassKey
+import dev.zacsweers.metro.ContributesIntoMap
 import dev.zacsweers.metro.Inject
+import dev.zacsweers.metro.binding
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
@@ -35,7 +36,8 @@ data class TimersUiState(
     val serverTimeSynced: Boolean = false,
 )
 
-class TimersViewModel(
+@Inject
+internal class TimersViewModel(
     private val loadTimers: LoadTimers,
     private val startTimer: StartTimer,
     private val pauseTimer: PauseTimer,
@@ -180,20 +182,11 @@ class TimersViewModel(
     }
 }
 
-@ContributesIntoSet(AppScope::class)
+@ContributesIntoMap(AppScope::class, binding = binding<ViewModelSource>())
+@ClassKey(TimersViewModel::class)
 @Inject
-class TimersViewModelFactoryContributor(
-    private val loadTimers: LoadTimers,
-    private val startTimer: StartTimer,
-    private val pauseTimer: PauseTimer,
-    private val resumeTimer: ResumeTimer,
-    private val cancelTimer: CancelTimer,
-    private val clock: ServerClock,
-    private val settings: ConnectionSettingsStore,
-) : ViewModelFactoryContributor {
-    override val viewModelClass: Class<out ViewModel> = TimersViewModel::class.java
-
-    override fun createFactory() = SimpleViewModelFactory {
-        TimersViewModel(loadTimers, startTimer, pauseTimer, resumeTimer, cancelTimer, clock, settings)
-    }
+class TimersViewModelSource internal constructor(
+    private val viewModel: () -> TimersViewModel,
+) : ViewModelSource {
+    override fun create(): ViewModel = viewModel()
 }

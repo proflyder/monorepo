@@ -2,17 +2,16 @@ package dev.proflyder.home.feature.reminders.presentation
 
 import android.os.Bundle
 import androidx.core.widget.doAfterTextChanged
-import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
 import dev.proflyder.home.core.navigation.requireNavigator
 import dev.proflyder.home.core.ui.BaseFragment
 import dev.proflyder.home.core.ui.applyScrollBottomInset
+import dev.proflyder.home.core.ui.injectedViewModels
 import dev.proflyder.home.core.ui.keepFocusedVisible
 import dev.proflyder.home.core.ui.setVisible
 import dev.proflyder.home.core.ui.showDatePicker
 import dev.proflyder.home.core.ui.showTimePicker
 import dev.proflyder.home.core.ui.userMessage
-import dev.proflyder.home.core.ui.viewModelFactory
 import dev.proflyder.home.feature.reminders.ReminderEditorCompletion
 import dev.proflyder.home.feature.reminders.ReminderEditorDestination
 import dev.proflyder.home.feature.reminders.impl.R
@@ -21,9 +20,7 @@ import java.time.LocalDate
 
 class ReminderEditorFragment :
     BaseFragment<FragmentReminderEditorBinding>(FragmentReminderEditorBinding.Companion::inflate) {
-    private val viewModel: ReminderEditorViewModel by viewModels {
-        viewModelFactory(ReminderEditorViewModel::class.java)
-    }
+    private val viewModel: ReminderEditorViewModel by injectedViewModels()
 
     private var rendering = false
 

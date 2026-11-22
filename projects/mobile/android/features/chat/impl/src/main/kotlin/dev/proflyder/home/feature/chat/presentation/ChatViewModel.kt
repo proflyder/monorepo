@@ -1,24 +1,24 @@
 package dev.proflyder.home.feature.chat.presentation
 
+import android.net.Uri
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import dev.proflyder.home.core.model.ChatQuote
 import dev.proflyder.home.core.model.ChatRole
 import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.model.RemoteFailure
-import dev.proflyder.home.core.ui.SimpleViewModelFactory
-import dev.proflyder.home.core.ui.ViewModelFactoryContributor
-import android.net.Uri
+import dev.proflyder.home.core.ui.ViewModelSource
 import dev.proflyder.home.feature.chat.data.ChatMedia
 import dev.proflyder.home.feature.chat.data.ChatRepository
+import dev.proflyder.home.feature.chat.data.ChatTimeline
 import dev.proflyder.home.feature.chat.data.LocalAttachment
 import dev.proflyder.home.feature.chat.data.Prepared
-import java.io.File
-import dev.proflyder.home.feature.chat.data.ChatTimeline
 import dev.zacsweers.metro.AppScope
-import dev.zacsweers.metro.ContributesIntoSet
+import dev.zacsweers.metro.ClassKey
+import dev.zacsweers.metro.ContributesIntoMap
 import dev.zacsweers.metro.Inject
+import dev.zacsweers.metro.binding
+import java.io.File
 import java.time.ZoneId
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -38,6 +38,7 @@ internal data class ChatUiState(
     val hasMore: Boolean = false,
 )
 
+@Inject
 internal class ChatViewModel(
     private val repository: ChatRepository,
     private val media: ChatMedia,
@@ -49,12 +50,12 @@ internal class ChatViewModel(
     private val failures = MutableSharedFlow<RemoteFailure>(extraBufferCapacity = 1)
     private val rejections = MutableSharedFlow<String>(extraBufferCapacity = 1)
 
-    val state: StateFlow<ChatUiState> = combine(repository.timeline, reply, pending, playback, ::toState)
+    internal val state: StateFlow<ChatUiState> = combine(repository.timeline, reply, pending, playback, ::toState)
         .stateIn(viewModelScope, SharingStarted.Eagerly, ChatUiState())
 
-    val errors = failures.asSharedFlow()
+    internal val errors = failures.asSharedFlow()
 
-    val rejected = rejections.asSharedFlow()
+    internal val rejected = rejections.asSharedFlow()
 
     private fun toState(
         timeline: ChatTimeline,
@@ -70,17 +71,17 @@ internal class ChatViewModel(
         hasMore = timeline.hasMore,
     )
 
-    suspend fun runLive() = repository.runLive()
+    internal suspend fun runLive() = repository.runLive()
 
-    fun refresh() {
+    internal fun refresh() {
         viewModelScope.launch { report(repository.refresh()) }
     }
 
-    fun loadOlder() {
+    internal fun loadOlder() {
         viewModelScope.launch { repository.loadOlder() }
     }
 
-    fun send(text: String): Boolean {
+    internal fun send(text: String): Boolean {
         val attachments = pending.value
         if (text.isBlank() && attachments.isEmpty()) return false
         repository.send(text, reply.value, attachments)
@@ -89,18 +90,18 @@ internal class ChatViewModel(
         return true
     }
 
-    fun sendVoice(voice: LocalAttachment) {
+    internal fun sendVoice(voice: LocalAttachment) {
         repository.send("", reply.value, listOf(voice))
         reply.value = null
     }
 
-    fun newVoiceFile(): File = media.newFile(VOICE_EXTENSION)
+    internal fun newVoiceFile(): File = media.newFile(VOICE_EXTENSION)
 
-    fun attachImage(uri: Uri) {
+    internal fun attachImage(uri: Uri) {
         viewModelScope.launch { accept(media.prepareImage(uri)) }
     }
 
-    fun attachFile(uri: Uri) {
+    internal fun attachFile(uri: Uri) {
         viewModelScope.launch { accept(media.prepareFile(uri)) }
     }
 
@@ -111,27 +112,27 @@ internal class ChatViewModel(
         }
     }
 
-    fun removePending(path: String) {
+    internal fun removePending(path: String) {
         pending.value = pending.value.filterNot { it.path == path }
     }
 
-    suspend fun mediaFile(item: BubbleMedia): File? =
+    internal suspend fun mediaFile(item: BubbleMedia): File? =
         item.path?.let(::File)?.takeIf { it.isFile } ?: item.id?.let { media.fileFor(it) }
 
-    fun onPlayback(state: VoicePlayback?) {
+    internal fun onPlayback(state: VoicePlayback?) {
         playback.value = state
     }
 
-    fun replyTo(bubble: ChatItem.Bubble) {
+    internal fun replyTo(bubble: ChatItem.Bubble) {
         val id = bubble.messageId ?: return
         reply.value = ChatQuote(id, if (bubble.mine) ChatRole.USER else ChatRole.ASSISTANT, bubble.text)
     }
 
-    fun cancelReply() {
+    internal fun cancelReply() {
         reply.value = null
     }
 
-    fun retry(bubble: ChatItem.Bubble) {
+    internal fun retry(bubble: ChatItem.Bubble) {
         val clientId = bubble.clientId
         when {
             bubble.messageId == null && clientId != null -> repository.retryOutgoing(clientId)
@@ -140,7 +141,7 @@ internal class ChatViewModel(
         }
     }
 
-    fun discard(bubble: ChatItem.Bubble) {
+    internal fun discard(bubble: ChatItem.Bubble) {
         val clientId = bubble.clientId ?: return
         if (bubble.messageId == null) repository.discardOutgoing(clientId)
     }
@@ -157,13 +158,11 @@ internal class ChatViewModel(
 private const val VOICE_EXTENSION = "wav"
 private const val MAX_PENDING = 4
 
-@ContributesIntoSet(AppScope::class)
+@ContributesIntoMap(AppScope::class, binding = binding<ViewModelSource>())
+@ClassKey(ChatViewModel::class)
 @Inject
-class ChatViewModelFactoryContributor(
-    private val repository: ChatRepository,
-    private val media: ChatMedia,
-) : ViewModelFactoryContributor {
-    override val viewModelClass: Class<out ViewModel> = ChatViewModel::class.java
-
-    override fun createFactory(): ViewModelProvider.Factory = SimpleViewModelFactory { ChatViewModel(repository, media) }
+class ChatViewModelSource internal constructor(
+    private val viewModel: () -> ChatViewModel,
+) : ViewModelSource {
+    override fun create(): ViewModel = viewModel()
 }

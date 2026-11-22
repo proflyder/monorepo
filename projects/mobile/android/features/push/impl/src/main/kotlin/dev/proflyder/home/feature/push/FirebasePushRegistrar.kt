@@ -1,24 +1,28 @@
 package dev.proflyder.home.feature.push
 
-import dev.proflyder.home.core.model.DeviceIdentity
-import dev.proflyder.home.core.text.takeUtf8Bytes
 import android.content.Context
 import com.google.firebase.FirebaseApp
 import com.google.firebase.messaging.FirebaseMessaging
 import dev.proflyder.home.core.config.ConnectionSettingsStore
+import dev.proflyder.home.core.model.DeviceIdentity
 import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.network.PushDevicesApi
 import dev.proflyder.home.core.operation.suspendRunCatching
+import dev.proflyder.home.core.runtime.AppStartable
+import dev.proflyder.home.core.text.takeUtf8Bytes
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesBinding
+import dev.zacsweers.metro.ContributesIntoSet
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
+import dev.zacsweers.metro.binding
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 
 @SingleIn(AppScope::class)
-@ContributesBinding(AppScope::class)
+@ContributesIntoSet(AppScope::class, binding = binding<AppStartable>())
+@ContributesBinding(AppScope::class, binding = binding<PushRegistrar>())
 @Inject
 class FirebasePushRegistrar(
     private val context: Context,
@@ -28,10 +32,10 @@ class FirebasePushRegistrar(
     private val identity: DeviceIdentity,
     private val settings: ConnectionSettingsStore,
     private val scope: CoroutineScope,
-) : PushRegistrar {
+) : PushRegistrar, AppStartable {
     private val permissions: PushPermissions = PushPermissions(context)
 
-    fun start() {
+    override fun start() {
         PushChannels.ensure(context)
         scope.launch {
             store.load()

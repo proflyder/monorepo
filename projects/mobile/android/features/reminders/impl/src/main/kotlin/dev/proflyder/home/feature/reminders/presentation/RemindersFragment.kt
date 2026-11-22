@@ -1,7 +1,6 @@
 package dev.proflyder.home.feature.reminders.presentation
 
 import android.os.Bundle
-import androidx.fragment.app.activityViewModels
 import androidx.recyclerview.widget.GridLayoutManager
 import dev.proflyder.home.core.model.Schedule
 import dev.proflyder.home.core.navigation.requireNavigator
@@ -10,19 +9,17 @@ import dev.proflyder.home.core.ui.BaseFragment
 import dev.proflyder.home.core.ui.ListStateViews
 import dev.proflyder.home.core.ui.applyScrollBottomInset
 import dev.proflyder.home.core.ui.fabClearance
+import dev.proflyder.home.core.ui.injectedActivityViewModels
 import dev.proflyder.home.core.ui.liftAboveBottomInsets
 import dev.proflyder.home.core.ui.setupPullToRefresh
 import dev.proflyder.home.core.ui.userMessage
-import dev.proflyder.home.core.ui.viewModelFactory
 import dev.proflyder.home.feature.reminders.ReminderEditorDestination
 import dev.proflyder.home.feature.reminders.impl.R
 import dev.proflyder.home.feature.reminders.impl.databinding.FragmentRemindersBinding
 
 class RemindersFragment :
     BaseFragment<FragmentRemindersBinding>(FragmentRemindersBinding.Companion::inflate) {
-    internal val viewModel: RemindersViewModel by activityViewModels {
-        viewModelFactory(RemindersViewModel::class.java)
-    }
+    internal val viewModel: RemindersViewModel by injectedActivityViewModels()
 
     private lateinit var adapter: ReminderAdapter
 

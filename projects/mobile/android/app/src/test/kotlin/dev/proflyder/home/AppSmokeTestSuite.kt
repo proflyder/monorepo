@@ -6,6 +6,7 @@ import org.junit.runners.Suite
 @RunWith(Suite::class)
 @Suite.SuiteClasses(
     MainActivitySmokeTest::class,
+    AppGraphBindingsTest::class,
     ConnectionSettingsClearTest::class,
 )
 class AppSmokeTestSuite

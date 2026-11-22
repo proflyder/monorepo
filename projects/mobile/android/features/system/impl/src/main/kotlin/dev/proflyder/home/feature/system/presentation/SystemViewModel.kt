@@ -5,12 +5,13 @@ import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.core.model.SystemSnapshot
 import dev.proflyder.home.core.ui.BaseViewModel
-import dev.proflyder.home.core.ui.SimpleViewModelFactory
-import dev.proflyder.home.core.ui.ViewModelFactoryContributor
+import dev.proflyder.home.core.ui.ViewModelSource
 import dev.proflyder.home.feature.system.SystemRepository
 import dev.zacsweers.metro.AppScope
-import dev.zacsweers.metro.ContributesIntoSet
+import dev.zacsweers.metro.ClassKey
+import dev.zacsweers.metro.ContributesIntoMap
 import dev.zacsweers.metro.Inject
+import dev.zacsweers.metro.binding
 import kotlinx.coroutines.Job
 
 data class SystemUiState(
@@ -19,7 +20,8 @@ data class SystemUiState(
     val error: RemoteFailure? = null,
 )
 
-class SystemViewModel(
+@Inject
+internal class SystemViewModel(
     private val repository: SystemRepository,
 ) : BaseViewModel<SystemUiState>(SystemUiState()) {
     private var job: Job? = null
@@ -36,12 +38,11 @@ class SystemViewModel(
     }
 }
 
-@ContributesIntoSet(AppScope::class)
+@ContributesIntoMap(AppScope::class, binding = binding<ViewModelSource>())
+@ClassKey(SystemViewModel::class)
 @Inject
-class SystemViewModelFactoryContributor(
-    private val repository: SystemRepository,
-) : ViewModelFactoryContributor {
-    override val viewModelClass: Class<out ViewModel> = SystemViewModel::class.java
-
-    override fun createFactory() = SimpleViewModelFactory { SystemViewModel(repository) }
+class SystemViewModelSource internal constructor(
+    private val viewModel: () -> SystemViewModel,
+) : ViewModelSource {
+    override fun create(): ViewModel = viewModel()
 }

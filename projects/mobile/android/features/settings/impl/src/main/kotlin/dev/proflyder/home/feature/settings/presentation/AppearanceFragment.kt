@@ -5,7 +5,7 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import androidx.core.view.ViewCompat
-import androidx.fragment.app.viewModels
+import dev.proflyder.home.core.designsystem.PillSegments
 import dev.proflyder.home.core.theme.AppTheme
 import dev.proflyder.home.core.theme.AppThemes
 import dev.proflyder.home.core.theme.Appearance
@@ -13,17 +13,14 @@ import dev.proflyder.home.core.theme.ColorRole
 import dev.proflyder.home.core.theme.R as ThemeR
 import dev.proflyder.home.core.theme.ThemeMode
 import dev.proflyder.home.core.ui.BaseFragment
-import dev.proflyder.home.core.designsystem.PillSegments
 import dev.proflyder.home.core.ui.applyScrollBottomInset
-import dev.proflyder.home.core.ui.viewModelFactory
+import dev.proflyder.home.core.ui.injectedViewModels
 import dev.proflyder.home.feature.settings.impl.R
 import dev.proflyder.home.feature.settings.impl.databinding.FragmentAppearanceBinding
 import dev.proflyder.home.feature.settings.impl.databinding.ItemAppearanceThemeBinding
 
 class AppearanceFragment : BaseFragment<FragmentAppearanceBinding>(FragmentAppearanceBinding.Companion::inflate) {
-    private val viewModel: AppearanceViewModel by viewModels {
-        viewModelFactory(AppearanceViewModel::class.java)
-    }
+    private val viewModel: AppearanceViewModel by injectedViewModels()
 
     private val cards = linkedMapOf<AppTheme, ItemAppearanceThemeBinding>()
 

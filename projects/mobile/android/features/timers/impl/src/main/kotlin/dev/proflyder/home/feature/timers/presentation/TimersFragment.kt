@@ -1,7 +1,6 @@
 package dev.proflyder.home.feature.timers.presentation
 
 import android.os.Bundle
-import androidx.fragment.app.activityViewModels
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.SimpleItemAnimator
 import dev.proflyder.home.core.model.Timer
@@ -9,19 +8,17 @@ import dev.proflyder.home.core.time.DurationText
 import dev.proflyder.home.core.ui.BaseAdapterCallback
 import dev.proflyder.home.core.ui.BaseFragment
 import dev.proflyder.home.core.ui.applyScrollBottomInset
+import dev.proflyder.home.core.ui.injectedActivityViewModels
 import dev.proflyder.home.core.ui.keepFocusedVisible
 import dev.proflyder.home.core.ui.setVisible
 import dev.proflyder.home.core.ui.setupPullToRefresh
 import dev.proflyder.home.core.ui.userMessage
-import dev.proflyder.home.core.ui.viewModelFactory
 import dev.proflyder.home.feature.timers.impl.R
 import dev.proflyder.home.feature.timers.impl.databinding.FragmentTimersBinding
 import kotlinx.coroutines.delay
 
 class TimersFragment : BaseFragment<FragmentTimersBinding>(FragmentTimersBinding.Companion::inflate) {
-    internal val viewModel: TimersViewModel by activityViewModels {
-        viewModelFactory(TimersViewModel::class.java)
-    }
+    internal val viewModel: TimersViewModel by injectedActivityViewModels()
 
     private lateinit var adapter: TimerAdapter
 

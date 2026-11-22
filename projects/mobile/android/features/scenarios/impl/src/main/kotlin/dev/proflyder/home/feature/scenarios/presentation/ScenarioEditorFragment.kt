@@ -4,7 +4,6 @@ import android.os.Bundle
 import android.widget.ProgressBar
 import androidx.appcompat.app.AlertDialog
 import androidx.core.widget.doAfterTextChanged
-import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import dev.proflyder.home.core.model.ControlEntry
@@ -15,10 +14,10 @@ import dev.proflyder.home.core.model.ScenarioTrigger
 import dev.proflyder.home.core.navigation.requireNavigator
 import dev.proflyder.home.core.ui.BaseFragment
 import dev.proflyder.home.core.ui.applyScrollBottomInset
+import dev.proflyder.home.core.ui.injectedViewModels
 import dev.proflyder.home.core.ui.keepFocusedVisible
 import dev.proflyder.home.core.ui.setVisible
 import dev.proflyder.home.core.ui.userMessage
-import dev.proflyder.home.core.ui.viewModelFactory
 import dev.proflyder.home.feature.scenarios.ScenarioEditorCompletion
 import dev.proflyder.home.feature.scenarios.ScenarioEditorDestination
 import dev.proflyder.home.feature.scenarios.describeTriggers
@@ -34,9 +33,7 @@ import kotlinx.serialization.json.put
 
 class ScenarioEditorFragment :
     BaseFragment<FragmentScenarioEditorBinding>(FragmentScenarioEditorBinding.Companion::inflate) {
-    private val viewModel: ScenarioEditorViewModel by viewModels {
-        viewModelFactory(ScenarioEditorViewModel::class.java)
-    }
+    private val viewModel: ScenarioEditorViewModel by injectedViewModels()
 
     private var rendering = false
     private var conflictDialogShown = false

@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.VpnService
 import dev.proflyder.home.core.model.VpnProfile
+import dev.proflyder.home.core.runtime.AppStartable
 import dev.proflyder.home.feature.vpn.HandshakePolicy
 import dev.proflyder.home.feature.vpn.HandshakeVerdict
 import dev.proflyder.home.feature.vpn.HomeNetworkRules
@@ -18,8 +19,10 @@ import dev.proflyder.home.feature.vpn.VpnSettingsStore
 import dev.proflyder.home.feature.vpn.isActive
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesBinding
+import dev.zacsweers.metro.ContributesIntoSet
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
+import dev.zacsweers.metro.binding
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -30,7 +33,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 @SingleIn(AppScope::class)
-@ContributesBinding(AppScope::class)
+@ContributesIntoSet(AppScope::class, binding = binding<AppStartable>())
+@ContributesBinding(AppScope::class, binding = binding<VpnController>())
 @Inject
 class TunnelVpnController(
     private val context: Context,
@@ -39,7 +43,7 @@ class TunnelVpnController(
     private val wireGuard: WireGuardTransport,
     private val openConnect: ExternalOpenConnectTransport,
     private val scope: CoroutineScope,
-) : VpnController {
+) : VpnController, AppStartable {
     private val state = MutableStateFlow<VpnConnection>(VpnConnection.Disconnected)
     private var job: Job? = null
     private val loaded = CompletableDeferred<Unit>()
@@ -49,7 +53,7 @@ class TunnelVpnController(
 
     override val connection: StateFlow<VpnConnection> = state.asStateFlow()
 
-    fun start() {
+    override fun start() {
         wireGuard.onAlwaysOn { connect() }
         scope.launch { prepare() }
     }

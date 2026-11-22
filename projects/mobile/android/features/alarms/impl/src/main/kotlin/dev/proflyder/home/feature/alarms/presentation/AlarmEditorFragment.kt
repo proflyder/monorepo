@@ -2,18 +2,17 @@ package dev.proflyder.home.feature.alarms.presentation
 
 import android.os.Bundle
 import androidx.core.widget.doAfterTextChanged
-import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
 import com.google.android.material.chip.Chip
 import dev.proflyder.home.core.model.RepeatKind
 import dev.proflyder.home.core.navigation.requireNavigator
 import dev.proflyder.home.core.ui.BaseFragment
+import dev.proflyder.home.core.ui.injectedViewModels
 import dev.proflyder.home.core.ui.pinAboveKeyboard
 import dev.proflyder.home.core.ui.setVisible
 import dev.proflyder.home.core.ui.showDatePicker
 import dev.proflyder.home.core.ui.showTimePicker
 import dev.proflyder.home.core.ui.userMessage
-import dev.proflyder.home.core.ui.viewModelFactory
 import dev.proflyder.home.feature.alarms.ALARM_QUICK_OFFSETS_MINUTES
 import dev.proflyder.home.feature.alarms.AlarmEditorCompletion
 import dev.proflyder.home.feature.alarms.AlarmEditorDestination
@@ -25,9 +24,7 @@ import java.util.Locale
 
 class AlarmEditorFragment :
     BaseFragment<FragmentAlarmEditorBinding>(FragmentAlarmEditorBinding.Companion::inflate) {
-    private val viewModel: AlarmEditorViewModel by viewModels {
-        viewModelFactory(AlarmEditorViewModel::class.java)
-    }
+    private val viewModel: AlarmEditorViewModel by injectedViewModels()
 
     private var rendering = false
 

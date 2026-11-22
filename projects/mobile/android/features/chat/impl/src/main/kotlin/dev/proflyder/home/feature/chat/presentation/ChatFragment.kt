@@ -1,54 +1,51 @@
 package dev.proflyder.home.feature.chat.presentation
 
 import android.Manifest
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Intent
-import androidx.core.net.toUri
-import dev.proflyder.home.feature.chat.ChatFocus
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.content.ClipData
-import android.content.pm.PackageManager
+import android.os.Bundle
 import android.text.format.DateUtils
+import android.view.View
 import android.widget.ImageView
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
-import androidx.lifecycle.lifecycleScope
-import com.google.android.material.chip.Chip
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
-import dev.proflyder.home.core.model.ChatAttachmentKind
-import dev.proflyder.home.feature.chat.data.LocalAttachment
-import dev.proflyder.home.feature.chat.data.VoiceRecorder
-import java.io.File
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.withContext
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
-import android.content.ClipboardManager
-import android.os.Bundle
-import android.view.View
 import androidx.core.content.getSystemService
+import androidx.core.net.toUri
 import androidx.core.view.updatePadding
 import androidx.core.widget.doAfterTextChanged
-import androidx.fragment.app.activityViewModels
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.google.android.material.chip.Chip
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import dev.proflyder.home.core.designsystem.Components
-import dev.proflyder.home.core.ui.BaseFragment
 import dev.proflyder.home.core.designsystem.HomePopupMenu
+import dev.proflyder.home.core.model.ChatAttachmentKind
+import dev.proflyder.home.core.ui.BaseFragment
+import dev.proflyder.home.core.ui.injectedActivityViewModels
 import dev.proflyder.home.core.ui.pinAboveKeyboard
 import dev.proflyder.home.core.ui.setVisible
 import dev.proflyder.home.core.ui.userMessage
-import dev.proflyder.home.core.ui.viewModelFactory
+import dev.proflyder.home.feature.chat.ChatFocus
+import dev.proflyder.home.feature.chat.data.LocalAttachment
+import dev.proflyder.home.feature.chat.data.VoiceRecorder
 import dev.proflyder.home.feature.chat.impl.R
 import dev.proflyder.home.feature.chat.impl.databinding.FragmentChatBinding
+import java.io.File
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class ChatFragment : BaseFragment<FragmentChatBinding>(FragmentChatBinding.Companion::inflate) {
-    internal val viewModel: ChatViewModel by activityViewModels {
-        viewModelFactory(ChatViewModel::class.java)
-    }
+    internal val viewModel: ChatViewModel by injectedActivityViewModels()
 
     private lateinit var adapter: ChatAdapter
     private lateinit var layoutManager: LinearLayoutManager

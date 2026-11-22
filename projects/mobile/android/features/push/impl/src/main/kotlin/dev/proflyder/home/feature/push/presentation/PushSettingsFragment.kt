@@ -2,15 +2,14 @@ package dev.proflyder.home.feature.push.presentation
 
 import android.content.ActivityNotFoundException
 import android.os.Bundle
-import androidx.fragment.app.viewModels
 import com.google.android.material.button.MaterialButton
 import dev.proflyder.home.core.designsystem.ListRow
 import dev.proflyder.home.core.designsystem.Tone
 import dev.proflyder.home.core.ui.BaseFragment
 import dev.proflyder.home.core.ui.applyScrollBottomInset
+import dev.proflyder.home.core.ui.injectedViewModels
 import dev.proflyder.home.core.ui.keepFocusedVisible
 import dev.proflyder.home.core.ui.setVisible
-import dev.proflyder.home.core.ui.viewModelFactory
 import dev.proflyder.home.feature.push.PushPermissions
 import dev.proflyder.home.feature.push.PushRegistration
 import dev.proflyder.home.feature.push.impl.R
@@ -18,9 +17,7 @@ import dev.proflyder.home.feature.push.impl.databinding.FragmentPushSettingsBind
 
 class PushSettingsFragment :
     BaseFragment<FragmentPushSettingsBinding>(FragmentPushSettingsBinding.Companion::inflate) {
-    private val viewModel: PushSettingsViewModel by viewModels {
-        viewModelFactory(PushSettingsViewModel::class.java)
-    }
+    private val viewModel: PushSettingsViewModel by injectedViewModels()
 
     private val permissions by lazy { PushPermissions(requireContext().applicationContext) }
 

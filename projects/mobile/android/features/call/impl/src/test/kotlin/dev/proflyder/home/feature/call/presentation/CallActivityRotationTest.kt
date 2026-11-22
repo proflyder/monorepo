@@ -2,7 +2,7 @@ package dev.proflyder.home.feature.call.presentation
 
 import android.os.Looper
 import android.widget.TextView
-import dev.proflyder.home.core.ui.SimpleViewModelFactory
+import dev.proflyder.home.core.ui.ViewModelFactoryRegistry
 import dev.proflyder.home.feature.call.CallPhase
 import dev.proflyder.home.feature.call.CallSnapshot
 import dev.proflyder.home.feature.call.CallTestApplication
@@ -41,9 +41,11 @@ internal class CallActivityRotationTest {
 
     @Test
     fun rotationDuringACallKeepsTheAudioRoute() {
-        CallTestApplication.factory = SimpleViewModelFactory {
-            CallViewModel(controller, FakeCoordinator(), audio, FakePermissions(), clock)
-        }
+        CallTestApplication.factory = ViewModelFactoryRegistry(
+            viewModels = emptyMap(),
+            viewModelSources = mapOf(CallViewModel::class to CallViewModelSource(::callViewModel)),
+            savedStateViewModels = emptyMap(),
+        )
         CallAudioSession(controller, audio, scope).start()
         val stopsBefore = audio.stops
 
@@ -60,4 +62,6 @@ internal class CallActivityRotationTest {
         activity.pause().stop().destroy()
         assertEquals(stopsBefore, audio.stops)
     }
+
+    private fun callViewModel() = CallViewModel(controller, FakeCoordinator(), audio, FakePermissions(), clock)
 }

@@ -7,17 +7,27 @@ import androidx.activity.result.ActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import com.google.android.material.button.MaterialButton
 import dev.proflyder.home.feature.vpn.HomeRoute
-import dev.proflyder.home.feature.vpn.VpnEntryPoint
+import dev.proflyder.home.feature.vpn.tunnel.TunnelVpnController
+import dev.proflyder.home.feature.vpn.tunnel.VpnOpenConnector
+import dev.zacsweers.metro.Assisted
+import dev.zacsweers.metro.AssistedFactory
+import dev.zacsweers.metro.AssistedInject
 import dev.proflyder.home.feature.vpn.isActive
 import dev.proflyder.home.core.ui.setVisible
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
+@AssistedInject
 class VpnActivityHost(
-    private val activity: ComponentActivity,
-    private val openScreen: () -> Unit,
+    @Assisted activity: ComponentActivity,
+    @Assisted private val openScreen: () -> Unit,
+    private val controller: TunnelVpnController,
+    private val opener: VpnOpenConnector,
 ) {
-    private val dependencies get() = VpnEntryPoint.require()
+    @AssistedFactory
+    fun interface Factory {
+        fun create(activity: ComponentActivity, openScreen: () -> Unit): VpnActivityHost
+    }
 
     private val permission = activity.registerForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
@@ -33,32 +43,31 @@ class VpnActivityHost(
     }
 
     fun observe(scope: CoroutineScope, button: MaterialButton, banner: View) {
-        scope.launch { dependencies.controller.connection.collect { VpnToolbarToggle.render(button, it) } }
-        scope.launch { dependencies.opener.route.collect { banner.setVisible(it == HomeRoute.CONNECTING) } }
-        scope.launch { dependencies.opener.permissionRequests.collect { ask() } }
+        scope.launch { controller.connection.collect { VpnToolbarToggle.render(button, it) } }
+        scope.launch { opener.route.collect { banner.setVisible(it == HomeRoute.CONNECTING) } }
+        scope.launch { opener.permissionRequests.collect { ask() } }
     }
 
     private fun ask() {
-        when (val request = dependencies.controller.permissionIntent()) {
-            null -> dependencies.opener.connect()
+        when (val request = controller.permissionIntent()) {
+            null -> opener.connect()
             else -> permission.launch(request)
         }
     }
 
     private fun toggle() {
-        val controller = dependencies.controller
         val request = controller.permissionIntent()
         when {
             controller.connection.value.isActive -> controller.disconnect()
             request != null -> permission.launch(request)
-            else -> dependencies.opener.connect()
+            else -> opener.connect()
         }
     }
 
     private fun onPermission(result: ActivityResult) {
         when (result.resultCode) {
-            Activity.RESULT_OK -> dependencies.opener.connect()
-            else -> dependencies.opener.release()
+            Activity.RESULT_OK -> opener.connect()
+            else -> opener.release()
         }
     }
 }

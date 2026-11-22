@@ -1,0 +1,16 @@
+load("//platform/android:defs.bzl", "metro_android_library")
+
+package(default_visibility = ["//projects/mobile/android/app:__pkg__"])
+
+metro_android_library(
+    name = "diagnostics",
+    srcs = glob(["src/main/kotlin/**/*.kt"]),
+    custom_package = "dev.proflyder.home.diagnostics",
+    manifest = "src/main/AndroidManifest.xml",
+    deps = [
+        "@maven//:com_github_chuckerteam_chucker_library",
+        "@maven//:com_squareup_okhttp3_logging_interceptor",
+        "@maven//:com_squareup_okhttp3_okhttp",
+        "@maven//:dev_zacsweers_metro_runtime_jvm",
+    ],
+)
