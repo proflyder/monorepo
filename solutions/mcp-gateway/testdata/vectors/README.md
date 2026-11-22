@@ -1,8 +1,7 @@
 # Domain vectors (frozen)
 
 Языко-нейтральные векторы чистых функций домена. Их читает Rust-раннер
-`crates/mcp-gateway/src/domain/vectors.rs`; исходный Go-раннер удалён вместе с
-Go-реализацией, поэтому `-update` больше нет.
+`crates/mcp-gateway/src/domain/vectors.rs`; генератора и `-update` нет.
 
 Формат:
 

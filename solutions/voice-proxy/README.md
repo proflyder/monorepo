@@ -182,9 +182,8 @@ Everything else answers `404`; a wrong caller token `401`; another session
 (`k8s/home-assistant/hermes-chat-relay`); upstream calls carry
 `Authorization: Bearer <API_SERVER_KEY>` from `HERMES_API_KEY`, so the gateway
 never sees the Hermes key. The listener is off unless
-`HERMES_CHAT_RELAY_LISTEN` is set (`0.0.0.0:8644` in the Flux HelmRelease);
-`management-firewall` drops `8644` for LAN clients while Pods and the node are
-allowed. Code: `crates/voice-proxy/src/chat_relay.rs`.
+`HERMES_CHAT_RELAY_LISTEN` is set; the deployed port and its firewall rule are in
+[`docs/NETWORK.md`](../../docs/NETWORK.md).
 
 ## Configuration
 
@@ -257,25 +256,16 @@ profile, counts and timings only — never recognised speech.
 
 ## Architecture
 
-```text
-crates/voice-proxy/src
-  domain/    pure logic, no I/O: sanitize, cancel, profile, routing table,
-             announce shaping, queue payload, Clock
-  openai     typed chat/completions requests, chunks and responses;
-             unknown fields travel through #[serde(flatten)]
-  relay      upstream reqwest client and the incremental SSE subset
-  services   HA (profile, state, announcements), gateway, router, late
-             answers, updates poller, durable queue producer/consumer
-  api        axum surface: cancel guard -> routing -> reasoning effort ->
-             buffered or streaming relay
-  config     clap + env contract, *_FILE re-read on every use
-  app        Supervisor composition root; health  -healthcheck probe
-```
+`crates/voice-proxy/src`: `domain/` is pure logic without I/O (sanitize,
+cancel, profile, routing table, announce shaping, queue payload, clock);
+`services/` holds HA, gateway, router, late answers, updates poller and the
+durable queue; `api` is the axum surface; `config` the env contract. Clock and
+token sources are injected, so the domain is deterministic in tests.
+`home-worker` owns the lease → handle → ack loop; the consumer supplies a
+`Gate` (profile + idle station) and a `Handler` (stale/empty/announce).
 
-`home-worker` owns the lease -> handle -> ack loop; the consumer supplies a
-`Gate` (profile + idle station) and a `Handler` (stale/empty/announce). Clock
-and token sources are injected, so the domain is deterministic in tests and a
-rotated mounted secret is picked up without a restart.
+The cancel phrases are the exact ones registered by the HA custom_sentences
+`StationCancel` intent; the guard must never become fuzzy matching.
 
 ## Tests
 
@@ -291,58 +281,4 @@ streaming test that feeds the same text char-by-char and at every split index.
 `domain::queue_payload` pins the `voice.announce` payload bytes and feeds them
 to the consumer. HTTP dependencies are local `axum` servers in the unit tests
 (Home Assistant, Hermes upstream, gateway and scheduler); the golden HTTP
-fixtures in `testdata/contract/` are replayed by `home-contracttest` without
-changes.
-
-## Status
-
-Deployed: the Hermes unit runs this binary in the `voice-proxy` container,
-built by Bazel `rules_rust` (static `x86_64-unknown-linux-musl`) and
-`rules_oci`/distroless. It covers config, sanitising, SSE, upstream
-passthrough, routing, the result announcer, the dispatcher updates poller, the
-durable queue producer and consumer, `-healthcheck` and `-status`.
-
-## Заметки к коду
-
-Пояснения, перенесённые из комментариев исходников (код комментариев не содержит, см. `AGENTS.md`).
-
-- `crates/voice-proxy/src/api.rs` — The HTTP surface: GET passthrough and the `POST /v1/chat/completions` pipeline.
-  - Cancelled speech: never spoken and never sent upstream. HA's llama_cpp adapter drops an empty assistant message and then raises "Unable to get response"; a whitespace-only body keeps it valid while `tts_input.strip()` still skips TTS.
-  - Structural evidence only: never the recognised text or payload.
-- `crates/voice-proxy/src/app.rs` — Composition root: configuration, telemetry, the HTTP proxy and the background workers.
-- `crates/voice-proxy/src/config.rs` — Typed environment configuration.
-  - The JSON-safe summary printed by `-status`; never a token value.
-- `crates/voice-proxy/src/contract_tests.rs` — Replays the golden HTTP fixtures from `solutions/voice-proxy/testdata/contract` through the Rust proxy. The fixtures are the Go implementation's files, unchanged.
-- `crates/voice-proxy/src/domain/cancel.rs` — Exact cancel-phrase guard: the last-resort path for HA's continued-conversation mode. Matching is exact after [`normalize`], never fuzzy.
-  - The exact local cancel phrases registered by the HA custom_sentences StationCancel intent. The guard must not be broadened into fuzzy matching.
-- `crates/voice-proxy/src/domain/clock.rs` — Time source for the domain: production uses the wall clock, tests inject a fixed one.
-- `crates/voice-proxy/src/domain/profile.rs` — The HA `input_select` voice profile and its routing values.
-- `crates/voice-proxy/src/domain/queue_payload.rs` — The `voice.announce` wire payload.
-  - The idempotency key of one announcement.
-- `crates/voice-proxy/src/domain/routing.rs` — The routing decision table. Pure: every input is already read, every output is an effect the caller performs.
-  - `true` means the utterance must not reach Hermes.
-  - Unknown route: never forward, and never speak a gateway phrase that may belong to another destination.
-- `crates/voice-proxy/src/domain/sanitize.rs` — Turns assistant replies into text that Piper TTS can speak.
-  - Compiled once per thread: the patterns never change at runtime.
-  - Releases complete sentences while keeping split links and URLs out of speech. A boundary must be outside links/parentheses and followed by whitespace; the tail is held until completion, so the regexes never see half a URL.
-  - A truncated/incomplete link is never safe to speak at the end.
-- `crates/voice-proxy/src/health.rs` — The `-healthcheck` probe of the distroless image: `GET <upstream>/v1/models`.
-- `crates/voice-proxy/src/lib.rs` — voice-proxy: an OpenAI-compatible passthrough that makes assistant replies safe for Piper TTS.
-- `crates/voice-proxy/src/main.rs` — Command-line entry point. Everything real lives in the library; the extra behaviour is the `-healthcheck` / `-status` pair the distroless image needs.
-  - Prints the redacted JSON summary; never a token value.
-- `crates/voice-proxy/src/openai.rs` — Typed OpenAI chat/completions shapes plus the error normalisation HA's `llama_cpp` adapter requires.
-- `crates/voice-proxy/src/relay/sse.rs` — The subset of Server-Sent Events the voice proxy needs: an incremental reader that joins multiline data, tolerates CRLF and forwards comment lines as keepalives.
-- `crates/voice-proxy/src/relay/upstream.rs` — The upstream half: a small OpenAI-compatible passthrough client plus the error normalisation HA's `llama_cpp` adapter requires.
-- `crates/voice-proxy/src/services/gateway.rs` — The mcp-gateway voice client: ask where an utterance belongs, long-poll a routed turn's result and the dispatcher updates.
-  - One gateway call failure. It never contains the bearer or a response body.
-- `crates/voice-proxy/src/services/ha.rs` — Home Assistant access: profile reads, entity states and announcements.
-  - Reads the profile entity, caching only a fresh *successful* read. A failed read is unknown and clears the cache, so a stale profile is never used.
-  - A stale cache is never used: a read error makes the profile unknown.
-  - Speaks late answers through Home Assistant. * a statement runs the announcement script and leaves the satellite alone; * a question uses `assist_satellite.start_conversation`, which speaks and then keeps listening;
-- `crates/voice-proxy/src/services/queue.rs` — The durable announcement queue: a producer that stores a spoken answer as a `voice.announce` task and a consumer that speaks it only when the station is idle.
-  - Ack detail when the station never settled.
-- `crates/voice-proxy/src/services/results.rs` — Announces the final answer of a routed bb turn.
-- `crates/voice-proxy/src/services/router.rs` — The routing service: read the profile, ask the gateway and turn the pair into a [`Decision`] plus the background announcement.
-  - Resolves profile and route for one utterance. It never fails: every failure becomes an explicit decision so the fail-closed contract holds.
-- `crates/voice-proxy/src/services/updates.rs` — Announces turns the owner did not start by voice: child completions and dispatcher messages.
-  - Polls until cancelled. It never returns an error: the poller must never die.
+fixtures in `testdata/contract/` are replayed by `home-contracttest`.

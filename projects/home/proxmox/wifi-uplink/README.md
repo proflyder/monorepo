@@ -6,9 +6,8 @@ HAOS/K3s и application endpoints не меняются. NAT, PCI passthrough и
 внутренняя routed сеть не нужны. IPv6 link-local/multicast остаются в LAN.
 
 **Не универсальная возможность любого Wi-Fi:** и драйвер, и AP должны
-передавать кадры 4-address. На текущем оборудовании это проверено отдельным
-network namespace с другим MAC: DHCP, gateway ping и IPv6 multicast.
-После смены роутера/firmware/драйвера проверку повторять. Обычный ping самого
+передавать кадры 4-address. После смены роутера/firmware/драйвера проверять
+отдельным network namespace с другим MAC: DHCP, gateway ping и IPv6 multicast. Обычный ping самого
 Proxmox не доказывает передачу трафика VM.
 
 ## Политика uplink
@@ -44,10 +43,8 @@ Installer сохраняет previous config в root-only timestamp directory,
 и закрытый профиль. Перед первым live-переключением подготовить timed
 rollback на Ethernet. Installer не создаёт профиль и не печатает credentials.
 
-Исходный public source и private профиль — разные артефакты: профиль нужен
-при disaster restore, Git его не содержит. На текущем PVE профиль находится
-в `/etc/wpa_supplicant/wpa_supplicant-wlp4s0.conf`; закрытая копия сетевой
-конфигурации сохранена отдельно от хоста.
+Профиль нужен при disaster restore и в Git не хранится; на PVE он лежит в
+`/etc/wpa_supplicant/wpa_supplicant-wlp4s0.conf`.
 
 ## Диагностика и приёмка
 
@@ -86,13 +83,3 @@ VM и host сохранят прежние адреса. При ручном for
 - Sendspin станции после reboot не находится по IPv4 mDNS через AP: в MA
   Sendspin provider **Manual IP addresses for discovery** задан адрес станции
   (пример: `192.0.2.13`). При восстановлении MA вернуть эту настройку.
-
-Источники: [Linux Wireless 4-address](https://wireless.docs.kernel.org/en/latest/en/users/documentation/iw.html),
-[Music Assistant Sendspin settings](https://www.music-assistant.io/player-support/sendspin/).
-
-## Заметки к коду
-
-Пояснения, перенесённые из комментариев исходников (код комментариев не содержит, см. `AGENTS.md`).
-
-- `uplink.py`
-  - Do not print command outputs: wireless diagnostics may contain SSIDs.

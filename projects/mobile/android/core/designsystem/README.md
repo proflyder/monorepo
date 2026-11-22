@@ -123,29 +123,11 @@ the new theme automatically.
 
 ## Заметки к коду
 
-- `ButtonLoading.kt`: the loading state remembers text, icon, gravity, padding,
-  min width and clickability in a view tag and fixes `minWidth` to the current
-  width, so the button does not change size while the indicator spins. The
-  indicator is centred with `ICON_GRAVITY_START` and a start padding of
-  (width − icon size) / 2, because `textStart` gravity with no text drifts left.
-- The catalog screenshot replaces the spinner with a static 270° arc
+- `ButtonLoading.kt` fixes `minWidth` to the current width and centres the
+  indicator with `ICON_GRAVITY_START` plus a start padding of
+  (width − icon size) / 2: `textStart` gravity with no text drifts left.
+- Catalog screenshots replace the spinner with a static arc
   (`freezeLoadingFrame`, tests only): Robolectric never advances the
-  indeterminate animation, so its first frame is a dot.
-- `IconButton` styles use `iconGravity=textStart` with no text so the icon is
-  centred inside the inset circle.
-- `ButtonRow` measures every visible child at its natural width first; it
-  stacks when their sum plus 8dp gaps exceeds the available width, then
-  re-measures them at the full width and lays them out in reverse order so
-  the main action is on top.
-- `ToolbarTitle.fits` checks every word against the width (a word never
-  breaks), the balanced line count (at most two) and, when bounded, the
-  height.
-- `HomePopupMenu` / `PopupPlacements.place`: the visible area is the root
-  minus `systemBars|ime|displayCutout` insets, cut at the nearest marked
-  obstacle below (or above) the anchor. The menu goes below when its height
-  fits, above when it fits there, else to the larger side with that side's
-  height (the list scrolls). The background drawable has an 8dp transparent
-  inset, so the window touches the anchor (`ANCHOR_GAP` 0) and the card sits
-  8dp from it.
-- `DeviceTile` reads its card style from `?attr/homeDeviceTileStyle`
-  (`Widget.Home.Card` in `Base.Theme.Home`).
+  indeterminate animation.
+- `HomePopupMenu`: the popup background has an 8dp transparent inset, so the
+  window touches the anchor (`ANCHOR_GAP` 0) and the card still sits 8dp away.

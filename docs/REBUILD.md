@@ -49,7 +49,6 @@ K3s — `KUBERNETES-OPERATIONS.md`.
 offsite-копия в Google Drive владельца (папка `home-offsite-v2`). Нужны restic
 password из password manager и доступ к Google-аккаунту (новый
 `rclone authorize`, см. `OPERATIONS.md`); без пароля копия не читается.
-Проверено 2026-11-02: restore на Mac, все файлы совпали с `MANIFEST.json`.
 
 ```bash
 export RCLONE_CONFIG=/path/to/rclone.conf     # remote [gdrive], scope drive.file
@@ -86,19 +85,17 @@ ha-bridge; `home-assistant/backup_*.tar` — в HA onboarding;
 3. Остановить K3s перед восстановлением datastore.
 4. Вернуть SQLite cluster snapshot, token, TLS/cred, config.
 5. Вернуть `/srv/k3s/volumes/*` до старта Pods.
-6. Поднять образы: сначала попробовать pull из GHCR по digest для всех
-   деплой-юнитов из `platform/ci/units.mjs` (`scheduler`, `ha-bridge`,
-   `ha-control`, `ha-scenario`, `mcp-gateway`, `intercom`, `wakegrant`,
-   `currency-bot`, `hermes`, `voice-proxy`, `health-exporter`,
-   `home-deploy`); `hermes` — Docker, остальные — Bazel `rules_oci`; если
-   пакеты недоступны — импортировать OCI-архивы
+6. Образы — публичные пакеты GHCR по digest из pins (юниты —
+   `platform/ci/units.mjs`); если пакеты недоступны — «Пересобрать и
+   задеплоить сервисы» или импорт OCI-архивов
    (`sudo k3s ctr images import --platform linux/amd64 <archive>`).
 7. Восстановить OpenBao: PV raft/backups, Secret `openbao-seal`,
-   recovery keys из `secrets/openbao/`; проверить auto-unseal и логин.
+   recovery keys — из Bitwarden; проверить auto-unseal и логин.
    Если PV потерян — поднять пустой OpenBao, восстановить snapshot (§6).
 8. Bootstrap Flux (`mise run admin:flux-bootstrap`): `GitRepository`,
    Kustomization и HelmRelease применят платформу, observability и
-   workload'ы; PV/PVC — `apply-runtime.sh`, OpenBao — вручную.
+   workload'ы; PV/PVC — `apply-runtime.sh` (`KUBERNETES-OPERATIONS.md`,
+   «Runtime chart»), OpenBao — вручную.
 9. Проверить pods, PV, Grafana, HTTPS ingress, ExternalSecrets и voice
    endpoints.
 
@@ -110,7 +107,8 @@ Hermes auth старой копией.
 - ADB/SSH: только LAN; ключ — `~/.ssh/home-lab/station_ed25519`, аварийный
   пароль — OpenBao `secret/infra/station/access#ssh_root_password`.
 - Pulsar: `/data/pulsar`; бинарник — `ghcr.io/proflyder/pulsar-firmware:<version>`
-  (установка — `deploy-station` или `pulsar-install`), откат — `pulsar.prev`.
+  (установка — `deploy-station` или `pulsar-install`), откат — `pulsar.prev`
+  (`OPERATIONS.md`).
 - Wake word: baseline v1 — `artifacts/wakeword/ricardo-v1/`; установленная
   персональная v28 — private `local-data/wakeword/model-registry/ricardo/`,
   ставится model-only профилем `projects/station/configs/wakeword-personal.json`
@@ -161,14 +159,14 @@ curl -fsS -o /dev/null -w 'HA %{http_code}\n' http://192.0.2.28:8123/
 curl -fsS -o /dev/null -w 'MA %{http_code}\n' http://192.0.2.28:8095/
 curl -fsS -o /dev/null -w 'Grafana %{http_code}\n' \
   http://192.0.2.27:30300/api/health
-ssh labuser@192.0.2.27 'sudo k3s kubectl get pods -A'
+ssh -F ~/.ssh/home-lab/config k3s 'sudo -n k3s kubectl get pods -A'
 ```
 
 Проверить reboot host/VM без Ethernet, HTTPS ingress, voice, alarm/stop/resume,
 Spotify/MA. Полный disaster restore на запасном железе ещё не выполнялся;
 это не заменяется обычным reboot-тестом.
 
-## 6. Restore OpenBao и scheduler (проверено 2026-11-02)
+## 6. Restore OpenBao и scheduler
 
 Учения проводятся на временном локальном стенде (Docker/Colima на Mac) и
 ничего не меняют в live. Live только читается: snapshot, ExternalSecret,
@@ -206,8 +204,8 @@ SHA-256 каждое поле ExternalSecret с live Secret и в конце о�
   recovery keys, сделать работу, отозвать токен и вернуть настройку.
 - Вне кластера `kubernetes` auth не стартует (нет SA CA) — для стенда это
   ожидаемо.
-- RPO ночного snapshot — до 24 ч: 2026-11-02 ночной snapshot уже не содержал
-  изменений за 1 ноября. После изменения секретов снимать snapshot вручную.
+- RPO ночного snapshot — до 24 ч: после изменения секретов снимать snapshot
+  вручную.
 
 ### Scheduler из SQLite
 

@@ -11,17 +11,19 @@
 - [Kubernetes/K3s](docs/KUBERNETES-OPERATIONS.md)
 - [Сеть и порты](docs/NETWORK.md)
 - [Восстановление](docs/REBUILD.md)
+- [Секреты и доступы](docs/SECRETS.md)
 - [Все документы](docs/README.md)
 
 ## Что где
 
 ```text
-projects/station/       Pulsar, ADB, BLE, provisioning
+projects/station/       Pulsar, BLE gateway, инструменты станции
 projects/home/          Proxmox, K3s, Terraform, VPN
 projects/home-assistant/HA, voice, Hermes, MA, TTS, dashboards
 projects/mobile/        Android-клиент
-solutions/              переиспользуемые scheduler/bridge/currency-bot/intercom/mcp-gateway/wakegrant
-packages/               proto, общий Rust/Kotlin-код
+solutions/              переиспользуемые сервисы (scheduler, mcp-gateway, …)
+packages/               proto, контракты, общий Rust/Kotlin-код
+platform/               CI, Bazel, деплой, проверки качества
 docs/                   эксплуатация и политики
 secrets/                реальные адреса, доступы, recovery (вне Git)
 ```
@@ -30,53 +32,17 @@ secrets/                реальные адреса, доступы, recovery 
 
 - **HAOS** — единственный HA runtime: Home Assistant, Music Assistant,
   Matter Server как add-ons.
-- **K3s** — GigaAM/Whisper/Piper, Hermes + voice proxy, scheduler,
-  ha-bridge, ha-control, ha-scenario, intercom, currency-bot, Nexus,
-  observability.
-- **Traefik + cert-manager** — HTTPS-имена `ha`, `grafana`, `alarms`,
-  `control`, `currency`, `intercom`, `vault`, `passwords`, `nexus` под
-  `*.home.example.com` с wildcard-сертификатом Let's Encrypt
-  (ACME DNS-01 Cloudflare) и allow-list LAN/VPN.
-- **VPN** — собственный ocserv в CT 102: `443/tcp+udp`, вход клиентским
-  сертификатом или паролем + TOTP, группы `lan`/`full`/`ci`.
-- **Cloudflare Tunnel** — единственный публичный HTTP-путь:
-  `tg.example.com/telegram/webhook` для currency-bot и
-  `ci-nexus.<public-zone>/repository/*` для CI-кэша Nexus; остальное LAN/VPN.
-- **OpenBao + External Secrets Operator** — единственный источник правды для
-  секретов; ESO создаёт Kubernetes Secrets из `secret/k8s/*`.
-- **CI/CD** — GitHub Actions: PR → `ci-ok` → squash merge → `deploy-home`
-  пинует проверенные digest'ы затронутых юнитов, применяет их Flux; образы
-  GHCR по digest. Входящего доступа CI в K3s нет.
+- **K3s** — STT/TTS, Hermes + voice-proxy, scheduler и его исполнители,
+  intercom, mcp-gateway, currency-bot, OpenBao, Vaultwarden, Nexus,
+  observability; всё, кроме OpenBao, применяет Flux.
+- **VPN** — собственный WireGuard + ocserv в CT 102.
+- **Станция** — Pulsar (Rust, armhf), wake word «Рикардо», BLE gateway.
+- **Android** — `dev.proflyder.home` (`projects/mobile/android`).
+- **CI/CD** — PR → `ci-ok` → squash merge → `deploy-home` пинует digest'ы,
+  Flux применяет. Входящего доступа CI в K3s нет.
 
-## Доступ
-
-```bash
-adb connect 192.0.2.13:5555
-ssh root@192.0.2.13          # ключ; пароль — fallback
-ssh root@192.0.2.26          # PVE
-ssh labuser@192.0.2.27       # K3s VM
-```
-
-HA `192.0.2.28:8123`, MA `192.0.2.28:8095`, Grafana
-`192.0.2.27:30300/`. Имена `https://<name>.home.example.com` — только через
-LAN/VPN. Публично доступны только VPN `443/tcp+udp`, webhook currency-bot и
-read-only путь Nexus `/repository/*` через Cloudflare Tunnel.
-
-## Статус
-
-- PVE `9.2.24`; HAOS `18.4` (HA Core `2026.11.0`); K3s `v1.35.9`.
-- Wi-Fi 4addr/WDS + Ethernet fallback; VM IP не меняются.
-- Pulsar Rust (armhf, база upstream `v0.6.2`; ранее `v0.6.1`, `v0.5.4`/`f1f5b17`;
-  Ricardo pre-roll 256 ms; версия — `docs/STATE.md`), wake word «Рикардо»,
-  BLE gateway.
-- HAOS add-ons: MA `2.10.9`, Matter `9.3.0`; K3s: STT/TTS/Hermes/
-  scheduler/mcp-gateway/phone-push/currency-bot/OpenBao/Vaultwarden/Nexus/
-  observability под Flux.
-- Android-приложение `dev.proflyder.home` (`projects/mobile/android`):
-  будильники, управление домом, чат с Hermes, раздел «Система».
-- Currency bot живёт в K3s (`currency-bot`), webhook — через Cloudflare Tunnel.
-- Remote — собственный VPN (ocserv), HTTPS-имена; публично только
-  Telegram webhook currency-bot и Nexus `/repository/*`.
+Версии, адреса и порты — `docs/STATE.md` и `docs/NETWORK.md`; доступы —
+`docs/SECRETS.md` (раздел «Доступ к хостам»).
 
 ## Тесты
 
@@ -92,11 +58,9 @@ mise run test:e2e  # live HA/BLE, нужны токены
 ## Публикация
 
 Изменения попадают в `develop` только через pull request (squash, обязательный
-`ci-ok`); merge в `develop` пересчитывает pins, а сервисы применяет Flux. Публикуются рабочие
-ветки `<type>/<name>`, без секретов и Git-истории с приватными данными. Перед
-push: `mise run test`, `node platform/quality/audit_repository.mjs`, проверка
-`docs/SENSITIVE-DATA.md` и Gitleaks (их же выполняет pre-push guard). Не
-использовать `push --all`, `--mirror`, `--tags` или `--no-verify`. Поток
-веток и PR — `docs/GIT.md`.
+`ci-ok`); merge в `develop` пересчитывает pins, а сервисы применяет Flux.
+Перед push: `mise run test`, `node platform/quality/audit_repository.mjs`,
+реестр приватных данных (`docs/SECURITY.md`) и Gitleaks (их же выполняет
+pre-push guard). Поток веток и PR — `docs/GIT.md`.
 
 Секреты, записи голоса, backups и тяжёлые сборки остаются вне Git.

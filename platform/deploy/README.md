@@ -1,8 +1,7 @@
 # platform/deploy
 
 Общие шаблоны развёртывания и `resolve.sh`. Сам CLI `home-deploy` — Rust-крейт
-[`platform/deploy-rs`](../deploy-rs/README.md); Go-реализация удалена, здесь
-остались только точка входа скриптов и общие Kubernetes-манифесты.
+[`platform/deploy-rs`](../deploy-rs/README.md).
 
 ```text
 resolve.sh         находит и запускает Rust-бинарник из deploy-скриптов
@@ -25,14 +24,10 @@ home_deploy render --unit scheduler --env "$PRIVATE_ENV" --out "$RENDER_DIR" \
 `bazel-bin/platform/deploy-rs/home-deploy` после `bazel build` →
 `bazel run //platform/deploy-rs:home-deploy --` (Bazelisk — из `mise install`).
 
-CI больше не запускает этот инструмент для деплоя: образ
-`ghcr.io/proflyder/home-deploy` собирается и аттестуется на PR, а скрипты
-запускают админ вручную (локальный `bazel run` или извлечённый бинарник). Контракт — образ,
-а не язык: сейчас его собирает `rust_service_image` из
-`//platform/deploy-rs:home-deploy`.
-`DEPLOY_NO_BUILD=1` в CI также запрещает запасные пути `bazel-bin` и `bazel
-run`. На node, где запускается `nft/apply.sh`, нужен уже установленный бинарник
-(например `/usr/local/bin/home-deploy`) или `HOME_DEPLOY`.
+CI этот инструмент для деплоя не запускает (применяет Flux, решение 54): его
+вызывают admin-скрипты и in-cluster Job'ы. `DEPLOY_NO_BUILD=1` запрещает
+запасные пути `bazel-bin` и `bazel run`. На узле, где запускается
+`nft/apply.sh`, нужен установленный бинарник или `HOME_DEPLOY`.
 
 ## Команды
 
@@ -56,70 +51,23 @@ run`. На node, где запускается `nft/apply.sh`, нужен уже
 | `hermes render-config --home DIR [--private-values F] [--dry-run\|--check]` | сливает `config.fragment.yaml` в живой `HERMES_HOME` |
 | `hermes assist-smoke` | один Assist-ход через HA API в кластере (клиент smoke Job) |
 
-`converge`: support objects (Service/PVC)
-применяются через `apply`, отсутствующий Deployment создаётся, существующий
-заменяется через `replace` с повторным использованием `resourceVersion`.
-`--preserve-replicas` и `--preserve-env` переносят ручной режим/масштаб;
-остальные поля и drift удаляются. Тест сравнивает argv и разобранные
-JSON-payload'ы с эталонными трассами
-(`platform/deploy-rs/testdata/frozen/cases/converge-*/trace/`).
+- `converge`: Service/PVC — `apply`; отсутствующий Deployment создаётся,
+  существующий заменяется `replace` с его `resourceVersion`, drift удаляется
+  (кроме `--preserve-replicas`/`--preserve-env`). `--summary-file` пишет
+  `created|unchanged|rolled-out` по сравнению `metadata.generation`.
+- `render --rollout-key`: pod template получает хеш всего отрендеренного юнита,
+  а `BUILD_ID` — только аннотация Deployment, поэтому новая ревизия Git без
+  изменения содержимого не перезапускает pods (решение 38).
+- `render` отказывает на неизвестный/пустой placeholder и оставшийся `${` —
+  полу-отрендеренный манифест не попадёт в кластер.
+- `state rollback` не трогает Deployment без `.applied` и восстанавливает
+  записанный объект целиком.
+- `preflight` — read-only: retired HA-writers выключены, нет звонящего
+  будильника, scheduler `ready=true`, endpoint HA указывает на него.
 
-`--summary-file` пишет по строке `<name>\t<status>` на каждый Deployment:
-`created`, `unchanged` или `rolled-out`. Статус определяется сравнением
-`metadata.generation` до и после `replace` (это то же, по чему Kubernetes
-создаёт новый ReplicaSet), поэтому rollout не угадывается по сообщению
-kubectl. Админ/deploy-скрипты собирают эти строки в отчёт.
-
-### Rollout без перезапуска при неизменном содержимом
-
-Pod template аннотируется `proflyder.dev/rollout: ${ROLLOUT_ID}` —
-content-addressed хешем всего, что рендерится для юнита (digest'ы всех
-образов, значения из private env, данные ConfigMap, probes, resources).
-`BUILD_ID` (`<git rev>-<image fingerprint>`) остаётся только в аннотации
-`proflyder.dev/build` самого Deployment: смена ревизии
-Git видна для трассировки, но не меняет pod template, поэтому
-`kubectl apply`/`replace` не создаёт новый ReplicaSet. Изменение образа,
-отрендеренного конфига или смонтированного ConfigMap по-прежнему меняет
-`ROLLOUT_ID` и перезапускает pods. Тот же подход применяется к юнитам
-scheduler, currency-bot, mcp-gateway и wakegrant; первый deploy после
-смены формата аннотации один раз перезапускает все pods. Прежние ключи с
-доменом `*.dev` нигде не читаются: rollout определяется по
-`metadata.generation`, поэтому fallback не нужен, а старые аннотации просто
-исчезают при первом `replace`. ESO-managed
-Secret'ы в хеш не входят: они не рендерятся юнитом и управляются отдельно
-(как и до этого изменения); отрендеренные ConfigMap, которые монтирует
-pod, входят.
-
-
-`state` хранит маркеры `.applied` в `--state-dir`. `rollback` не трогает Deployment без
-`.applied`, не делает запрос, если generation не изменился, и восстанавливает
-записанный объект целиком.
-
-`preflight` — read-only проверки с ненулевым кодом выхода при отказе: retired
-HA-writers отсутствуют или `off`, нет звонящего будильника, scheduler отвечает
-`ready=true`, endpoint HA указывает на этот scheduler.
-
-`render` отказывает на неизвестный/пустой placeholder и на оставшийся `${`,
-поэтому полу-отрендеренный манифест не попадает в кластер. Frozen-паритет
-(`bazel test //platform/deploy-rs:unit_tests //platform/deploy-rs:parity`)
-сравнивает вывод побайтно с эталонами в `platform/deploy-rs/testdata/frozen/`,
-включая байты OCI-архивов и digest.
-
-Образ `home-deploy` (`//projects/home/kubernetes/scheduler:home-deploy_image`,
-repo `ghcr.io/proflyder/home-deploy`) — тот же бинарник на distroless
-(`user 65534`); его запускают in-cluster preflight Job и Assist smoke Job
-юнита `hermes`. Собирается и
-продвигается вместе с образами юнитов scheduler и hermes (DECISIONS 36).
-
-Образ `health-exporter`
-(`//projects/home-assistant/deploy/health-exporter:health-exporter_image`, repo
-`ghcr.io/proflyder/health-exporter`, исходники в `projects/home-assistant/deploy/health-exporter/crates/health-exporter`).
-`hermes rollout` подставляет его digest, command и пустые volume-монтирования
-в релиз `runtime`.
-
-`hermes render-config` сохраняет правила Python-рендерера (deep merge,
-отказ на TEST-NET placeholder, `.prev`, `--dry-run`/`--check`). Поведение
-закреплено unit-тестами `hermesconfig`.
+Образ `ghcr.io/proflyder/home-deploy`
+(`//projects/home/kubernetes/scheduler:home-deploy_image`) — тот же бинарник
+на distroless; его запускают preflight Job и Assist smoke Job юнита `hermes`.
 
 Правила развёртывания:
 
@@ -127,9 +75,3 @@ repo `ghcr.io/proflyder/home-deploy`) — тот же бинарник на dist
 - внешний вход — только собственный VPN (ocserv);
 - секреты — через env/secret files;
 - `ha-bridge` общается с HA, `ha-bridge` не управляет Pulsar напрямую.
-
-## Заметки к коду
-
-Пояснения, перенесённые из комментариев исходников (код комментариев не содержит, см. `AGENTS.md`).
-
-- `resolve.sh` — Resolve and run the `home-deploy` CLI (the Rust port) from the deploy scripts.

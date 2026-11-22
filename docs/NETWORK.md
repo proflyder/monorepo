@@ -31,7 +31,7 @@
                  │      ├── VM 101  Ubuntu/K3s    192.0.2.27
                  │      │      STT/TTS, Hermes, intercom, Nexus, observability
                  │      ├── CT 102  vpn           192.0.2.29
-                 │      │      ocserv, OpenConnect, TOTP
+                 │      │      ocserv (OpenConnect), WireGuard
                  │      └── CT 103  bb            192.0.2.30
                  │             bb server, SQLite, исходящий Connect
                  │
@@ -47,7 +47,7 @@
 - **HAOS VM** — Home Assistant, Music Assistant и Matter Server add-ons.
 - **K3s VM** — STT/TTS, Hermes, currency-bot, intercom, Nexus, наблюдаемость
   и Grafana.
-- **VPN CT** — ocserv для входа в домашнюю LAN снаружи (пароль + TOTP).
+- **VPN CT** — вход в домашнюю LAN снаружи: WireGuard и ocserv.
 - **BB CT** — сервер bb и SQLite; входящих портов не публикует, ходит
   исходящим HTTPS к bb Connect.
 - **Cloudflare Tunnel** — единственный публичный HTTP-путь: webhook
@@ -112,6 +112,9 @@ HAOS и K3s используют статические адреса внутр�
 | `80/tcp` | Traefik, редирект на HTTPS | LAN/VPN, IP allow-list |
 | `443/tcp` | Traefik, TLS для `*.home.example.com` | LAN/VPN, IP allow-list |
 | `30300/tcp` | Grafana NodePort | LAN, login required |
+| `30098/tcp` | scheduler NodePort (`SCHEDULER_NODE_PORT`) | LAN/VPN, Bearer, nft LAN/pod allow-list |
+| `30099/tcp` | ha-control NodePort (`CONTROL_NODE_PORT`) | LAN/VPN, Bearer, nft LAN/pod allow-list |
+| `30130/tcp` | wakegrant NodePort (`WAKE_GRANT_NODE_PORT`) | LAN |
 | `30100/tcp` | currency-bot API NodePort | LAN, Bearer, nft LAN/pod allow-list |
 | `30097/tcp` | intercom signaling NodePort (аварийный путь) | LAN/VPN, Bearer, nft LAN/pod allow-list |
 | `10200/tcp` | Piper TTS | LAN/HA |
@@ -159,13 +162,13 @@ Nexus (`home/kubernetes/nexus`) слушает `8081` только внутри 
 |---|---|---|
 | `443/tcp` | ocserv, TLS/OpenConnect | LAN + проброс ONT/AX3 |
 | `443/udp` | ocserv, DTLS | LAN + проброс ONT/AX3 |
-| `51820/udp` | WireGuard `wg0`, пул `10.77.2.0/24` | LAN + проброс ONT/AX3 (ожидает владельца) |
+| `51820/udp` | WireGuard `wg0`, пул `10.77.2.0/24` | LAN; проброс ONT/AX3 — `PENDING.md` |
 | `22/tcp` | SSH | только LAN `192.0.2.0/24` |
 
 Внутри CT — пул `10.77.0.0/24`, nftables `drop` по умолчанию, masquerade
 VPN → LAN/WAN. Профили `lan`/`full`; отдельная группа `ci` получает пул
 `10.77.1.0/24` и маршрут только до K3s. На пользователя — не больше 10
-одновременных сессий. Наружу проброшен только `443/tcp+udp`; сертификат
+одновременных сессий. Сертификат
 Let's Encrypt для `vpn.example.com` продлевается certbot-ом (DNS-01
 Cloudflare) автоматически.
 
@@ -202,7 +205,8 @@ egress ровно на `${BB_CT_IP}:22`, публикации API bb наруж�
 | `6638/tcp` | Zigbee coordinator | закрыт/не используется; без auth, не публиковать |
 
 Станция использует egress guard: публичный WAN закрыт, разрешены LAN,
-loopback, DHCP, multicast и NTP. Это часть голосового контура и не должно
+loopback, DHCP, multicast, NTP и `tcp/443` к диапазонам GitHub для updater'а
+(`ALLOW_GITHUB`, `GITHUB_NETS` в `station-egress-guard.sh`). Это часть голосового контура и не должно
 меняться без отдельной проверки Pulsar/HA.
 
 ## 4. Grafana и HA
@@ -244,8 +248,7 @@ VPN доступен из LAN по `https://192.0.2.29/` и снаружи по
 - при входе по сертификату клиент не показывает выбор группы: по умолчанию
   `lan`, а `full` выбирается адресом сервера с суффиксом группы
   (`vpn.example.com/full`) — на телефоне это отдельное подключение
-  «Home full» с тем же сертификатом. Проверено с мобильной сети 2026-11-01:
-  внешний IP — домашний, сайты и HTTPS-имена дома открываются;
+  «Home full» с тем же сертификатом;
 - NAT/masquerade делает CT, маршруты на LAN-устройствах не нужны;
 - сертификат Let's Encrypt на `vpn.example.com`, продление certbot-ом
   (DNS-01 Cloudflare);
@@ -314,7 +317,7 @@ Remotely-managed Cloudflare Tunnel `home-k3s` работает как Deployment
   allow-list; в интернет не пробрасывается.
 - `80/443` на узле K3s обслуживает только Traefik с IP allow-list; роутер их
   не пробрасывает, имена `*.home.example.com` работают только из LAN/VPN.
-- VPN `443/tcp+udp` — единственный входящий порт из интернета; SSH в
+- Из интернета входят только порты VPN (`443/tcp+udp`, `51820/udp`); SSH в
   VPN-CT остаётся LAN-only. HTTP наружу идёт только исходящим Cloudflare
   Tunnel: `tg.example.com/telegram/webhook` и read-only
   `ci-nexus.<public-zone>/repository/*`.
@@ -365,8 +368,7 @@ ssh -N -L 127.0.0.1:16443:127.0.0.1:6443 <user>@<K3S_IP>
 - `ARCHITECTURE.md` — устройство стенда и потоки;
 - `KUBERNETES-OPERATIONS.md` — K3s, Helm и firewall;
 - `INSTALL-PROXMOX.md` — VM, Terraform и Wi-Fi uplink;
-- `SECURITY.md` — сетевые политики;
-- `SENSITIVE-DATA.md` — реестр приватных данных (без значений).
+- `SECURITY.md` — политики, риски и реестр приватных данных.
 
 Реальная карта с LAN-IP, именами VPN/HTTPS и точными firewall source —
 `secrets/NETWORK.md`; она не входит в публичный Git.

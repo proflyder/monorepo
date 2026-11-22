@@ -64,9 +64,7 @@
   `time_*`: сначала `time_now`, затем `alarm_set` / `timer_set` /
   `reminder_set` с абсолютным RFC3339. Источник истины — durable
   `SchedulerService`; звук по-прежнему играет ha-bridge через
-  `script.alarm_start` / `schedule_announce` / `alarm_stop`. Никаких
-  `alarm_hour`/`alarm_minute`/`timer_minutes` и intent-скриптов
-  `StationAlarmSet/Relative/Update/...` больше нет;
+  `script.alarm_start` / `schedule_announce` / `alarm_stop`;
 - локально остаются только мгновенные команды без параметров:
   «стоп» / «хватит» / «останови будильник» / «выключи звонок» →
   `StationAlarmStop` и «отложи будильник» / «ещё девять минут» →
@@ -95,21 +93,20 @@
   Отдельный случай — продолжение диалога: если ответ Hermes заканчивается
   вопросом, HA выставляет `continue_conversation=true` и следующий run
   намеренно обходит `prefer_local_intents` (`_intent_agent_only`), отправляя
-  «отмена» сразу агенту. Это был live-дефект; теперь
-  `hermes-voice-proxy` (v6) перехватывает точную нормализованную фразу
+  «отмена» сразу агенту. Поэтому voice proxy
+  (`solutions/voice-proxy`, `domain/cancel.rs`) перехватывает точную нормализованную фразу
   последнего пользовательского сообщения до вызова Hermes и возвращает пустой
   SSE/JSON completion. HA отвечает `action_done` без TTS; `processed_locally`
   остаётся `false`, потому что ответ формально пришёл от conversation-агента,
   а не от локального intent. Свободные запросы и follow-up после отмены
-  по-прежнему идут в Hermes.
+  идут в Hermes.
 
 Громкость: `volume_mode=sync_spotify` + Web API volume. Слайдер Spotify
 меняет MA/Pulsar; voice «громкость 1…10» меняет MA/Pulsar и Spotify app.
 `spotify_connect_set_volume` сначала делает локальный
 `media_player.volume_set`, затем необязательный Spotify Web API; ошибка
-Spotify (429/токен) больше не мешает локальной громкости. Проверено 5 → 0.5,
-20% ↔ 0.2, 30% ↔ 0.3. ASR prompt и aliases `грокость`/`громкасть`;
-observed fallback `громкая стрима` → 3.
+Spotify (429/токен) не мешает локальной громкости. ASR-алиасы
+`грокость`/`громкасть`, `громкая стрима` → 3.
 
 Музыкальный каскад:
 
@@ -126,10 +123,8 @@ observed fallback `громкая стрима` → 3.
 ```
 
 Spotify 429 обрабатывается голосовым ответом; поиск не выдумывает URI.
-После снятия 429 проверены поиск и play (`Белые розы`, `Nirvana`).
-В Spotify-ветке `music_search` поля `tracks/albums/playlists/artists`
-читаются через `content.get(...).get('items')`; старый `.items` давал
-`TypeError: builtin_function_or_method`. MA-ветка использует
+В Spotify-ветке `music_search` поля читаются через
+`content.get(...).get('items')`: атрибут `.items` у dict — метод. MA-ветка использует
 `music_assistant.play_media`; Connect-ветка — Spotify Web API. Не смешивать:
 Connect сохраняет source, MA переключает на MA Queue.
 
@@ -157,7 +152,7 @@ Pipeline `Рикардо` использует `conversation.hermes_agent` с
 ## Как устроено
 
 ```text
-Pulsar (Алиса)
+Pulsar («Рикардо»)
   → HA Assist pipeline «Рикардо»
   → custom_sentences/ru/station_control.yaml
   → custom_sentences/ru/station_time.yaml   (время → Hermes → MCP `time`)
@@ -259,10 +254,8 @@ idempotency key от `context.id`. Метка не найдена или schedul
 - `input_text.yaml` — `alarm_previous_source`, scheduler endpoint/active-*
 - `www/alarm_chime.wav` — локальный chime для announce/таймеров
 - `www/alarm_ringtone.wav` — приватный пользовательский трек (вне Git;
-  перед deploy предоставить свой файл или восстановить из `secrets/local/`), повторяется
-  `alarm_loop` до stop
-  Источник — пользовательский MP3 `HONEYMOAN - Too Much` (4:54), сконвертирован
-  целиком; файл локальный, не для публикации.
+  перед deploy предоставить свой файл или восстановить из `secrets/local/`),
+  повторяется `alarm_loop` до stop
 
 Notes stay in Home Assistant:
 
@@ -330,16 +323,15 @@ lovelace:
       filename: schedules_dashboard.yaml
 ```
 
-Скопируйте `schedules_dashboard.yaml` в config; после restart появится раздел
-«Помощник».
+`schedules_dashboard.yaml` доставляет `ha-config-sync`; после restart появится
+раздел «Помощник».
 
 Цвет кольца Pulsar по профилю (Violet = личный, Blue = рабочий) задаёт
 автоматизация `voice_profile_station_color` в `automations.yaml`: при смене
 `input_select.ricardo_voice_profile`, при старте HA и когда select станции
 появляется после недоступности она выставляет
 `select.iandeks_stantsiia_midi_voice_color`. Select «Voice color» приходит с
-релизом Pulsar; по умолчанию станция показывает прежний фиолетовый, а пока
-сущности нет, автоматизация ничего не делает. Менять `light.ring`/`led_show`
+Pulsar; пока сущности нет, автоматизация ничего не делает. Менять `light.ring`/`led_show`
 для этого бессмысленно — во время LISTENING их перекрывает voice state
 прошивки.
 
@@ -415,12 +407,9 @@ HA integration Music Assistant. Есть режим `Music Assistant` / `Spotify
 - «включи любимое» — MA-ветка проверяет Liked Songs и при 429 отвечает
   fallback-текстом; Connect-ветка вызывает Spotify Web API `play`.
 
-Connect-устройство уже paired: Web API возвращает 204 и запускает Liked Songs
-через Connect → Sendspin → Pulsar. Громкость в Connect идёт через Web API +
+Connect-ветка запускает Liked Songs через Spotify Web API → Sendspin → Pulsar. Громкость в Connect идёт через Web API +
 MA (`sync_spotify`), поэтому app/Pulsar не расходятся. Токен/URL/context лежат
 в `secrets.yaml`, не в документации.
-
-
 
 ## Комп (Windows-ПК)
 
@@ -469,8 +458,7 @@ Ping остаётся `on` ещё 1–2 минуты после `shutdown /s /t 
 `input_datetime.komp_off_requested` до SSH, а intents считают недавний запрос
 признаком «выключается». Так «выключи комп», а сразу за ним «включи комп»
 снова включают ПК, а не отвечают «уже включён». Голосовое включение идёт
-только через `switch.komp.turn_on`, чтобы выдавался пропуск wakegrant;
-прямой `wake_on_lan` из intent этого не делал.
+только через `switch.komp.turn_on`, чтобы выдавался пропуск wakegrant.
 
 `command_line` не умеет склеивать `!secret` с текстом, поэтому целиком
 команда ping (с адресом) лежит в `secrets.yaml` как `komp_ping_command`:
@@ -658,7 +646,7 @@ currency_bot_bearer: "Bearer <currency-bot API_TOKEN>"
 будильников, таймеров и напоминаний: это были бы параллельные писатели.
 Разделы «Будильники», «Таймеры», «Напоминания» — read-only указатели на
 Android-приложение и голос. «Заметки» остаются `todo.notes` и редактируются
-как раньше.
+в dashboard.
 
 ### Ограничения
 
@@ -677,52 +665,5 @@ python3 -m unittest discover -s projects/home-assistant/ha-voice -p 'test_*.py' 
 ```
 
 Тесты не обращаются к живому HA/scheduler: Jinja рендерится с фиксированным
-`Asia/Almaty`, ответы Connect подменяются словарями. Live-проверки и
-включение executor — задача deployment worker.
-
-## Заметки к коду
-
-Пояснения, перенесённые из комментариев исходников (код комментариев не содержит, см. `AGENTS.md`).
-
-- `BUILD.bazel`
-  - Exactly the files ha-config-sync delivers. Kept explicit (not `glob("*.yaml")`) so configuration.yaml/secrets.yaml/scenes.yaml, tests and README can never enter the image by accident; test_sync_manifest.py checks the same set.
-- `command_line.yaml` — `ping` integration is UI-only now (YAML ping is not supported), so the wired desktop «комп» reachability is one command_line binary sensor.
-  - HA templates only the arguments of a command_line command, never the program itself, so the condition lives inside `sh -c`.
-- `custom_sentences/ru/station_alarm.yaml` — Only the two parameterless "the alarm is ringing right now" commands stay local: they must stop or snooze sound even if Hermes/the network is down. Creating, moving, listing and cancelling alarms lives in Hermes through the mcp-gateway `time` tools (durable scheduler), never in HA sentence templates.
-- `custom_sentences/ru/station_komp.yaml` — Voice control of the wired Windows desktop «комп» (alias «мой комп»).
-- `custom_sentences/ru/station_schedules.yaml` — Notes stay in Home Assistant (`todo.notes`). Everything about time — alarms, timers and reminders — is routed to Hermes by `station_time.yaml` and handled by the mcp-gateway `time` tools on the durable scheduler; no timer or reminder sentence templates live here any more.
-- `custom_sentences/ru/station_time.yaml` — Voice routing for everything time-related.
-- `input_datetime.yaml` — Timestamp of the last voice/app shutdown request for the wired desktop. The ping sensor stays `on` for 1–2 minutes after Windows accepts `shutdown /s /t 60`, so «включи комп» must treat a recent request as «выключается» instead of «уже включён». `script.komp_shutdown` writes the value right before the SSH call; the intents read it.
-- `input_text.yaml`
-  - Station HTTP control base URL. Non-secret value, but kept out of Git via secrets.yaml so the tracked file never contains a real address.
-- `intent_scripts.yaml`
-  - A running but locked PC: issue a one-time unlock grant. Nothing is sent to a powered-off PC, and this intent never wakes it (that is KompOn).
-- `scripts.yaml`
-  - Local volume is authoritative. Spotify Web API is an optional mirror: a 429/expired token must never prevent the station from changing volume.
-  - A scheduler STOP that arrives after the ring already ended (for example a retried lease) must not run the global media stop/restore: by then the user may have resumed music. With no expectation (manual/emergency stop) the cleanup still runs.
-  - Never talk over a ringing alarm: the wake phrase and the chime own the speaker then, and a spoken text would cut the ringtone.
-  - Fail closed: «через непонятно что» must not become a one-minute alarm.
-  - --- Legacy rollback-only dispatchers --------------------------------------- These still write the old HA todo/timer helpers. Their automations are disabled (initial_state: false) so they never compete with the canonical scheduler.
-- `shell_commands.yaml` — Restricted SSH into the wired Windows desktop («комп»).
-- `sync.yaml` — Deliverable Home Assistant YAML for ha-voice and what each change needs.
-- `templates.yaml` — Home Assistant template entities.
-  - Issue a one-time logon grant only when the PC is down (or is already shutting down): a logon grant must not exist for an already running session.
-- `test_custom_sentences.py` — Sentence-routing contract for the Russian voice intents.
-- `test_ha_config.py` — Static, fast tests for the Home Assistant voice package.
-  - Live incident: the chime/ringtone URL used a documentation TEST-NET host, so the ESPHome ffmpeg proxy timed out and the alarm was silent. HA must fetch its own local media from loopback.
-  - Definitions live in the scheduler: HA must not edit or create them.
-  - An unknown label is a warning, never a guess or a silent HA action.
-  - Pin the wired desktop «комп»: WoL, ping state and restricted SSH. Real host/MAC/user never appear in tracked files: they only live in HA `secrets.yaml`, so every assertion here uses the `__SECRET__` placeholder.
-  - The grant is issued only when the PC is down or shutting down, never for an already running session: a second line of defence after the KompOn intent.
-  - Empty/missing target secret must not launch a half-built ssh command.
-  - Locking also refuses an unset SSH target, like the shutdown script; unlock never depends on the SSH target at all.
-  - A second request inside the 60 s window must not reschedule shutdown.
-- `test_scheduler_contract.py` — Contract tests for the canonical SchedulerService voice integration.
-  - A retried scheduler STOP must not media_stop/restore/resume later music.
-  - Regression: HA script variables are rendered to strings. `relative_due: "{{ now() + timedelta(...) }}"` becomes a string in a real HA variables step, so calling `.date()` on it raised "UndefinedError: 'str object' has no attribute 'date'" and the live …
-  - The fail-closed template that rejects a non-positive duration.
-  - Live regression 2026-11-12: Hermes called this script with hours=0, minutes=0 and the silent `max(1, ...)` floor created an alarm one minute later. The script must refuse and explain.
-  - Live regression: Hermes passed name="через час".
-  - Live incident: the ringtone/chime URL used the sanitized TEST-NET host. `http://192.0.2.28:8123/local/...` is unreachable from HA, so the ESPHome ffmpeg proxy timed out and the alarm stayed silent even though the service call returned 2xx and the bridge ACKed …
-- `test_sync_manifest.py` — Contract for the ha-voice file set delivered by ha-config-sync.
-  - `*` and `?` never cross `/`, like the Rust and shell validators.
+`Asia/Almaty`, ответы Connect подменяются словарями. Live-проверка —
+`../e2e/live_scheduler_voice.py`.
