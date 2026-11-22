@@ -7,13 +7,14 @@ import android.view.LayoutInflater
 import android.view.View
 import androidx.appcompat.view.ContextThemeWrapper
 import com.google.android.material.color.MaterialColors
-import dev.proflyder.home.core.model.VpnOcservSettings
-import dev.proflyder.home.core.model.VpnProfile
-import dev.proflyder.home.core.model.VpnWireGuardSettings
 import dev.proflyder.home.core.theme.AppTheme
 import dev.proflyder.home.feature.vpn.VpnConnection
 import dev.proflyder.home.feature.vpn.VpnProfileState
-import dev.proflyder.home.feature.vpn.VpnProtocol
+import dev.proflyder.home.core.model.VpnProtocolId
+import dev.proflyder.home.feature.vpn.VpnSamples
+import dev.proflyder.home.feature.vpn.VpnTraffic
+import dev.proflyder.home.feature.vpn.VpnTransportInfo
+import android.widget.Button
 import dev.proflyder.home.feature.vpn.VpnRoute
 import dev.proflyder.home.feature.vpn.VpnSettings
 import dev.proflyder.home.feature.vpn.impl.R
@@ -29,27 +30,6 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
-internal object VpnSamples {
-    val profile = VpnProfile(
-        deviceId = "device-1",
-        deviceName = "Pixel",
-        wireguard = VpnWireGuardSettings(
-            address = "10.77.2.2/32",
-            dns = listOf("192.0.2.1"),
-            mtu = 1380,
-            serverPublicKey = "server-key",
-            endpoint = "vpn.example.com:51820",
-            allowedIps = listOf("0.0.0.0/0"),
-            splitAllowedIps = listOf("192.0.2.0/24"),
-            persistentKeepalive = 25,
-            lanEndpoint = "192.0.2.29:51820",
-        ),
-        ocserv = VpnOcservSettings("https://vpn.example.com", "full", "lan", listOf("certificate", "password+totp")),
-        createdUnix = 1_795_100_000,
-        updatedUnix = 1_795_100_100,
-    )
-}
-
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35], qualifiers = "w411dp-h891dp-xxhdpi")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -58,12 +38,18 @@ class VpnScreenshotTest {
 
     private val intents = mutableListOf<VpnIntent>()
 
+    private val wireGuard = VpnTransportInfo(VpnProtocolId("wireguard"), R.string.vpn_protocol_wireguard, external = false)
+
+    private val openConnect = VpnTransportInfo(VpnProtocolId("ocserv"), R.string.vpn_protocol_openconnect, external = true)
+
     private val connected = VpnUiState(
-        connection = VpnConnection.Connected(VpnProtocol.WIREGUARD, now - 754_000, 12_582_912, 1_048_576),
+        connection = VpnConnection.Connected(wireGuard, now - 754_000, verified = true),
+        traffic = VpnTraffic(12_582_912, 1_048_576),
+        nowMillis = now,
         profile = VpnProfileState.Ready(VpnSamples.profile),
         settings = VpnSettings(route = VpnRoute.HOME, autoConnect = true, certificateName = "owner-phone"),
         atHome = false,
-        externalInstalled = true,
+        fallbackReady = true,
     )
 
     @Test
@@ -86,6 +72,21 @@ class VpnScreenshotTest {
         assertTrue(binding.vpnAutoRow.switch.isChecked)
         binding.vpnToggle.performClick()
         assertEquals(VpnIntent.ToggleConnection, intents.last())
+        binding.vpnRoute.getChildAt(0).performClick()
+        assertEquals(VpnIntent.SetRoute(VpnRoute.ALL), intents.last())
+        assertEquals(VpnRoute.HOME.ordinal, binding.vpnRoute.selectedIndex)
+    }
+
+    @Test
+    @Config(qualifiers = "night")
+    fun externalTunnelIsShownAsUnverifiedDark() {
+        val state = connected.copy(connection = VpnConnection.Connected(openConnect, now - 60_000, verified = false), traffic = null)
+        val binding = render(state)
+        val context = binding.root.context
+        val label = context.getString(R.string.vpn_protocol_openconnect)
+        assertEquals(context.getString(R.string.vpn_detail_connected_unverified, label, "01:00"), binding.vpnStatusRow.subtitle.toString())
+        assertFalse(binding.vpnStatusTraffic.visibility == View.VISIBLE)
+        save(binding.root, "vpn-external-dark.png")
     }
 
     @Test
@@ -96,12 +97,16 @@ class VpnScreenshotTest {
     @Config(qualifiers = "night")
     fun fallbackAndOfflineProfileDark() {
         val state = VpnUiState(
-            connection = VpnConnection.FallbackRequired,
+            connection = VpnConnection.FallbackRequired(listOf(openConnect)),
             profile = VpnProfileState.Failed(dev.proflyder.home.feature.vpn.VpnProfileProblem.OFFLINE, VpnSamples.profile),
             atHome = null,
         )
         val binding = render(state)
-        assertTrue(binding.vpnExternal.visibility == View.VISIBLE)
+        assertTrue(binding.vpnFallbackOptions.visibility == View.VISIBLE)
+        val option = binding.vpnFallbackOptions.getChildAt(0) as Button
+        assertEquals(binding.root.context.getString(R.string.vpn_open_via, "OpenConnect"), option.text.toString())
+        option.performClick()
+        assertEquals(VpnIntent.ConnectVia(VpnProtocolId("ocserv")), intents.last())
         assertFalse(binding.vpnStatusTraffic.visibility == View.VISIBLE)
         save(binding.root, "vpn-fallback-dark.png")
     }
@@ -113,11 +118,11 @@ class VpnScreenshotTest {
             connection = VpnConnection.NotNeededAtHome,
             profile = VpnProfileState.Ready(VpnSamples.profile),
             atHome = true,
-            externalInstalled = true,
+            fallbackReady = true,
         )
         val binding = render(state)
         val context = binding.root.context
-        assertFalse(binding.vpnExternal.visibility == View.VISIBLE)
+        assertFalse(binding.vpnFallbackOptions.visibility == View.VISIBLE)
         assertEquals(context.getString(R.string.vpn_state_home), binding.vpnStatusRow.title.toString())
         assertEquals(context.getString(R.string.vpn_connect), binding.vpnToggle.text.toString())
         save(binding.root, "vpn-home-dark.png")
@@ -127,7 +132,7 @@ class VpnScreenshotTest {
         val context = themed()
         val binding = FragmentVpnBinding.inflate(LayoutInflater.from(context))
         binding.root.setBackgroundColor(MaterialColors.getColor(context, com.google.android.material.R.attr.colorSurface, 0))
-        VpnScreen(binding) { intents += it }.render(state, now)
+        VpnScreen(binding) { intents += it }.render(state)
         return binding
     }
 

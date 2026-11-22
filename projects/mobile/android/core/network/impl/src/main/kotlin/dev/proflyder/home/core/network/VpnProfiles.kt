@@ -5,10 +5,14 @@ import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
-import dev.proflyder.home.core.model.VpnOcservSettings
+import dev.proflyder.home.core.model.TransportSettings
 import dev.proflyder.home.core.model.VpnProfile
-import dev.proflyder.home.core.model.VpnWireGuardSettings
+import dev.proflyder.home.core.model.VpnProtocolId
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonObject
 
 @Serializable
 internal data class VpnProfileBody(val deviceId: String, val publicKey: String, val deviceName: String)
@@ -17,44 +21,7 @@ internal data class VpnProfileBody(val deviceId: String, val publicKey: String, 
 internal data class VpnRemoveBody(val deviceId: String)
 
 @Serializable
-internal data class VpnInterfaceDto(val address: String, val dns: List<String> = emptyList(), val mtu: Int = 0)
-
-@Serializable
-internal data class VpnPeerDto(
-    val publicKey: String,
-    val endpoint: String,
-    val lanEndpoint: String = "",
-    val allowedIps: List<String> = emptyList(),
-    val persistentKeepalive: Int = 0,
-)
-
-@Serializable
-internal data class VpnWireGuardDto(
-    val `interface`: VpnInterfaceDto,
-    val peer: VpnPeerDto,
-    val splitAllowedIps: List<String> = emptyList(),
-)
-
-@Serializable
-internal data class VpnOcservDto(
-    val url: String = "",
-    val group: String = "",
-    val splitGroup: String = "",
-    val authentication: List<String> = emptyList(),
-)
-
-@Serializable
-internal data class VpnProfileDto(
-    val deviceId: String,
-    val deviceName: String = "",
-    val wireguard: VpnWireGuardDto,
-    val ocserv: VpnOcservDto = VpnOcservDto(),
-    val createdUnix: String = "0",
-    val updatedUnix: String = "0",
-)
-
-@Serializable
-internal data class VpnProfileResponseDto(val profile: VpnProfileDto)
+internal data class VpnProfileResponseDto(val profile: JsonObject)
 
 @Serializable
 internal data class VpnRemovedResponseDto(val removed: Boolean = false)
@@ -67,29 +34,19 @@ internal interface VpnApi {
     suspend fun remove(@retrofit2.http.Body body: VpnRemoveBody): Outcome<VpnRemovedResponseDto>
 }
 
-internal fun VpnProfileDto.toModel(): VpnProfile = VpnProfile(
-    deviceId = deviceId,
-    deviceName = deviceName,
-    wireguard = VpnWireGuardSettings(
-        address = wireguard.`interface`.address,
-        dns = wireguard.`interface`.dns,
-        mtu = wireguard.`interface`.mtu,
-        serverPublicKey = wireguard.peer.publicKey,
-        endpoint = wireguard.peer.endpoint,
-        allowedIps = wireguard.peer.allowedIps,
-        splitAllowedIps = wireguard.splitAllowedIps,
-        persistentKeepalive = wireguard.peer.persistentKeepalive,
-        lanEndpoint = wireguard.peer.lanEndpoint,
-    ),
-    ocserv = VpnOcservSettings(
-        url = ocserv.url,
-        group = ocserv.group,
-        splitGroup = ocserv.splitGroup,
-        authentication = ocserv.authentication,
-    ),
-    createdUnix = createdUnix.toLongOrNull() ?: 0,
-    updatedUnix = updatedUnix.toLongOrNull() ?: 0,
+internal fun JsonObject.toVpnProfile(): VpnProfile = VpnProfile(
+    deviceId = text("deviceId"),
+    deviceName = text("deviceName"),
+    transports = entries
+        .filter { (key, value) -> key !in PROFILE_FIELDS && value is JsonObject }
+        .associate { (key, value) -> VpnProtocolId(key) to TransportSettings(value.jsonObject) },
+    createdUnix = text("createdUnix").toLongOrNull() ?: 0,
+    updatedUnix = text("updatedUnix").toLongOrNull() ?: 0,
 )
+
+private fun JsonObject.text(key: String): String = (get(key) as? JsonPrimitive)?.contentOrNull.orEmpty()
+
+private val PROFILE_FIELDS = setOf("deviceId", "deviceName", "createdUnix", "updatedUnix")
 
 @SingleIn(AppScope::class)
 @ContributesBinding(AppScope::class)
@@ -108,7 +65,7 @@ class HttpVpnProfileClient(private val http: HomeHttp) : VpnProfileApi {
                 publicKey = publicKey,
                 deviceName = deviceName.take(MAX_NAME_CHARS),
             ),
-        ).mapResult { it.profile.toModel() }
+        ).mapResult { it.profile.toVpnProfile() }
 
     override suspend fun remove(deviceId: String): Outcome<Boolean> =
         api.remove(VpnRemoveBody(deviceId.take(MAX_DEVICE_ID_CHARS))).mapResult { it.removed }

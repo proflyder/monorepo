@@ -80,71 +80,78 @@ notification all open or drive the same controller.
   profile stays usable. **Reissue** rotates the key pair and re-posts it;
   **Forget device** calls `POST /v1/vpn/profile/remove`, then deletes the
   profile, the key and the imported certificate.
-- Primary transport: WireGuard `GoBackend` (`com.wireguard.android:tunnel`,
-  its own `VpnService`). The tunnel is built from the profile by
-  `WireGuardConfigText`; **All traffic** uses `allowedIps`, **Home only** uses
-  `splitAllowedIps` (falls back to `allowedIps` when empty). Changing the
-  route reconnects an active tunnel.
-- Endpoint: on the home network (`HomeNetworkMonitor`) WireGuard uses
-  `wireguard.peer.lanEndpoint` from the profile, elsewhere `endpoint`
-  (`VpnEndpoints`); an empty `lanEndpoint` keeps `endpoint`. The home router
-  does not hairpin UDP, so the public name does not answer from the home Wi-Fi.
-  When the network changes while WireGuard is up and the wanted endpoint
-  differs, the tunnel is brought up again (`TunnelVpnController.endpointStale`);
-  auto-connect disconnect at home wins over the switch.
-- Fallback: when no handshake arrives within 10 s (`HandshakePolicy`), the
-  tunnel is stopped and nothing else starts by itself. Outside home the
-  screen shows **WireGuard did not answer** with **Open OpenConnect**; at home
-  it shows **Home network: VPN not needed** without a fallback
-  (`HandshakePolicy.afterWireGuardTimeout`). The OpenConnect transport opens
-  only from that button. At this stage it is an external client: `anyconnect://connect/?name=…&host=<ocserv host>/<group>`
-  (Cisco Secure Client), or the OpenConnect app (`app.openconnect`) when no
-  `anyconnect` handler exists. Group follows the route (`group` or
-  `splitGroup`). The connection counts as up while the system reports a VPN
-  network.
+- Transports: `VpnController` (api) knows no protocol. Each transport is an
+  internal `VpnTransport` in `impl/transport/<protocol>/`, contributed into
+  `Set<VpnTransport>` by `VpnBindings`, with its own id (the key of its
+  settings in the profile), order, handshake timeout, `status` flow and
+  settings decoder. `VpnTransportChain` orders them: automatic transports are
+  tried in order, external ones (they hand over to another app) start only
+  from a button. `VpnProfile` (core/model) carries
+  `transports: Map<VpnProtocolId, TransportSettings>`; core/network copies
+  every object field of the server profile into it untouched.
+- WireGuard (`transport/wireguard`, `GoBackend`, its own `VpnService`): the
+  tunnel is built by `WireGuardConfigText` from `WireGuardSettings`;
+  **All traffic** uses `allowedIps`, **Home only** uses `splitAllowedIps`
+  (falls back to `allowedIps` when empty). Changing the route reconnects an
+  active tunnel.
+- Endpoint: every `up()` gets a `TunnelRequest(profile, settings, route,
+  atHome)`; on the home network WireGuard uses `peer.lanEndpoint`, elsewhere
+  `endpoint` (an empty `lanEndpoint` keeps `endpoint`). The home router does
+  not hairpin UDP, so the public name does not answer from the home Wi-Fi.
+  While a tunnel is up the controller follows `NetworkEnvironment` and asks
+  the transport `needsRestart(current, next)`; WireGuard says yes when the
+  endpoint changes and is brought up again.
+- Fallback: when no automatic transport gets a handshake in its timeout
+  (WireGuard 10 s), it is stopped and nothing else starts by itself. Outside
+  home the screen shows **WireGuard did not answer** with one **Open …**
+  button per external transport (`VpnConnection.FallbackRequired(options)`);
+  at home it shows **Home network: VPN not needed**. The OpenConnect
+  transport (`transport/openconnect`) is an external client:
+  `anyconnect://connect/?name=…&host=<ocserv host>/<group>` (Cisco Secure
+  Client), or the OpenConnect app (`app.openconnect`) when no `anyconnect`
+  handler exists. Group follows the route (`group` or `splitGroup`). Its
+  status comes from a `TRANSPORT_VPN` network callback and is shown as
+  "reported by the system, not verified": any system VPN counts, the app
+  cannot see whose it is.
 - ocserv authentication (the server does not issue certificates): pill tabs
   **Certificate** / **Password + code**. A `.p12` is picked with the system
   file picker, checked with its password (`KeyStore` PKCS12, must contain a
   key, ≤ 64 KB), stored sealed and offered to the system credential storage
   (`KeyChain.createInstallIntent`) where the VPN client picks it. The password
   is not stored. With password + code the client asks for both.
-- Home network: no location or Wi-Fi permissions. For every non-VPN network
-  the app resolves the scheduler host through that network; if it resolves to
-  a private address (RFC 1918 or IPv6 ULA) and a TCP connect to the scheduler
-  port succeeds through that network, the phone is home. **Connect outside
-  home** turns the VPN on away from home and off at home; it acts while the
-  app process lives. For a guaranteed tunnel use Android always-on VPN: the
-  system starts `GoBackend$VpnService`, `GoBackend.setAlwaysOnCallback` calls
-  the controller, which connects with the stored profile.
-- Connect on open, reactive: **Connect when the app opens away from home** (on
-  by default, `VpnSettings.connectOnOpen`). The question is not "home Wi-Fi or
-  not" but "does the current network reach the home perimeter directly".
-  `HomeReachability` (api) exposes `state: StateFlow<NetworkState?>`;
-  `HomeNetworkMonitor` implements it: while the process is in the foreground
-  (`ProcessLifecycleOwner`, observed by `VpnOpenConnector`) it listens to
-  `registerDefaultNetworkCallback` (available / lost / `LinkProperties`
-  changes), settles the events (`VpnNetworkFlow.settle`: the first one at
-  once, later ones after 1.5 s of quiet) and re-probes every non-VPN network
-  with that network's resolver and `socketFactory`, so the check bypasses our
-  own tunnel when it is up. `NetworkState` holds the result and the handles of
-  the underlying networks, so Wi-Fi → another Wi-Fi, Wi-Fi ↔ mobile and the
-  way back home are all new states, while the tunnel becoming the default
-  network is not. Each distinct state goes through one pure rule
-  (`VpnNetworkFlow.decisions` → `NetworkVpnRules.decide`):
-  no direct access + a setting on (`connectOnOpen` or `autoConnect`) + profile
-  + permission + tunnel down → connect; tunnel up with the wrong endpoint
-  (lan vs public) → reconnect; direct access + **Connect outside home** +
-  tunnel up → disconnect; missing permission → the consent dialog once
-  (`permissionAsked`, delivered to `VpnActivityHost` through
-  `permissionRequests`). The tunnel state is read when a decision is made, not
-  combined into the trigger: a failed attempt or a manual toggle-off must not
-  restart the tunnel until the network changes. While the first check and a
-  connect are pending `VpnRouteCondition` keeps `RouteGate` closed (every
-  REST call and stream suspends in `RouteGate.await()`, at most 20 s), so
-  screens keep their loading state, and
-  the strip under the toolbar says **Connecting to home…**. In the background
-  the older `autoConnect` path of `HomeNetworkMonitor` keeps working; it
-  stands aside while the foreground watcher runs.
+- Home network: no location or Wi-Fi permissions. `NetworkEnvironment`
+  (api) is a `StateFlow<HomeNetworkState>` (`Unknown` / `Offline` /
+  `Home(networks)` / `Away(networks)`); `AndroidNetworkEnvironment` builds it
+  from a non-VPN `registerNetworkCallback` (`callbackFlow` with `awaitClose`,
+  so the callback goes away with the last subscriber, `WhileSubscribed`),
+  settles bursts (`settle`: the first change at once, later ones after 1.5 s
+  of quiet) and probes each non-VPN network with its own resolver and
+  `socketFactory`: the scheduler host must resolve to a private address
+  (RFC 1918 or IPv6 ULA) and accept a TCP connect. The handles of the
+  networks are part of the state, so Wi-Fi → another Wi-Fi, Wi-Fi ↔ mobile
+  and the way back home are new states, while our own tunnel is not.
+- Automatic connect: `AutoConnectCoordinator : AppStartable` combines
+  `AppForeground`, `autoConnect`, whether the tunnel is up and, while any of
+  them needs it, `NetworkEnvironment`. Each distinct trigger (foreground,
+  network, `autoConnect`) goes through `AutoConnectPolicy.decide`: away from
+  home + profile + tunnel down + (**Connect outside home**, or foreground and
+  **Connect when the app opens**, on by default) → connect; at home +
+  **Connect outside home** + tunnel up → disconnect; missing permission in
+  the foreground → the consent dialog once (`permissionAsked`, delivered to
+  `VpnActivityHost` through `permissionRequests`). The tunnel state is read
+  when a decision is made, not part of the trigger, so a failed attempt or a
+  manual toggle-off does not restart the tunnel until the network or the
+  foreground changes. While the first check and a connect are pending
+  `VpnRouteCondition` keeps `RouteGate` closed (every REST call and stream
+  suspends in `RouteGate.await()`, at most 20 s) and the strip under the
+  toolbar says **Connecting to home…**. For a guaranteed tunnel use Android
+  always-on VPN: the system starts `GoBackend$VpnService`, the transport's
+  `systemStarts` flow asks the controller to connect.
+- Controller: `ChainVpnController` is an actor: `connect`, `connectVia`,
+  `reconnect` and `disconnect` are commands in one channel, executed in order
+  by one coroutine that cancels and joins the running session before the
+  next one, so a disconnect cannot race a connect. Traffic is a cold flow
+  (`VpnController.traffic`), polled only while the VPN screen watches it.
 - Toolbar toggle: an icon button (`Widget.Home.IconButton.Standard.M`,
   `VpnToolbarToggle`) on the main screens shows off / connecting / on; tap
   toggles the tunnel (asking for the permission when needed), long press opens
@@ -152,27 +159,37 @@ notification all open or drive the same controller.
 - The VPN screen hides the bottom tab bar (`FeatureEntry.hidesBottomBar`,
   `Navigator.currentHidesBottomBar`); content then takes the navigation-bar
   inset itself.
-- Status: the screen shows state, protocol, connected time and traffic
-  (WireGuard). `VpnStatusService` is a foreground service
+- Status: the screen shows state, transport, connected time (`tickerFlow`
+  while the screen is visible) and traffic (WireGuard). `VpnStatusServiceStarter`
+  starts `VpnStatusService` when the tunnel becomes active; it is a foreground service
   (`specialUse`, subtype `vpn_tunnel_status`) with the status and
   **Disconnect**; it stops itself when the VPN is off. `VpnTileService` is a
   toggleable Quick Settings tile; without the VPN permission it opens the VPN
   screen (`home://vpn/main` route).
-- Tests: `features/vpn/api:api_test` (network sequences with debounce: home Wi-Fi → foreign Wi-Fi → mobile → home, flapping, stale endpoint; connect on open: home / away / no
-  profile / no permission / already up, routes, endpoint choice, endpoint
-  switch on network change, no external start after a silent WireGuard, config
-  text, handshake policy,
-  home address rules, server codes, OpenConnect link, UAPI stats),
+- Tests: `features/vpn/impl:screen_test` — `AutoConnectPolicyTest`,
+  `AutoConnectCoordinatorTest` (fake environment, foreground, settings and
+  controller: connect on open, manual disconnect respected, background
+  auto-connect and home disconnect, permission asked once),
+  `ChainVpnControllerTest` (a third fake transport joins the chain without
+  changes, external fallback offered only away, command order, restart on a
+  network change, permission/profile failures), `TransportProtocolsTest`
+  (routes, endpoints, config text, OpenConnect link, UAPI stats, the private
+  `GoBackend` members the statistics adapter reads), `EnvironmentRulesTest`,
+  `StoredVpnProfileTest`, toolbar toggle PNGs
+  `vpn-toolbar-{off,connecting,on}.png` and Robolectric PNGs `vpn-light.png`,
+  `vpn-dark.png`, `vpn-fallback-dark.png`, `vpn-home-dark.png`,
+  `vpn-external-dark.png` in `TEST_UNDECLARED_OUTPUTS_DIR`;
   `core/network/impl:impl_test` (`VpnProfileClientTest`, golden
-  `fixtures/vpn/*.json`), `features/vpn/impl:screen_test` (toolbar toggle PNGs `vpn-toolbar-{off,connecting,on}.png`, stored profile and
-  Robolectric PNGs `vpn-light.png`, `vpn-dark.png`, `vpn-fallback-dark.png`, `vpn-home-dark.png` in
-  `TEST_UNDECLARED_OUTPUTS_DIR`).
+  `fixtures/vpn/*.json`).
 
 ### Notes to the code (VPN)
 
 - WireGuard statistics are read from the backend's UAPI text
-  (`GoBackend.wgGetConfig(currentTunnelHandle)` via reflection, parsed by
-  `WireGuardUapi`) instead of `GoBackend.getStatistics`. The AAR ships
+  (`GoBackend.wgGetConfig(currentTunnelHandle)` via reflection in the
+  `GoBackendUapi` adapter behind `WireGuardStatsSource`, parsed by
+  `WireGuardUapi`) instead of `GoBackend.getStatistics`;
+  `TransportProtocolsTest` fails when a library update renames those private
+  members. The AAR ships
   `Statistics$PeerStats` as a desugared record whose superclass is the D8
   global synthetic `com.android.tools.r8.RecordTag`; `rules_android` keeps
   global synthetics only with dex optimisation, so the class is absent from
@@ -185,10 +202,18 @@ notification all open or drive the same controller.
   rules targets, add a small JNI bridge (the ics-openconnect `LibOpenConnect`
   API: `setupTunFd`, `obtainCookie`, `makeCstpConnection`, `mainloop`,
   `setClientCert`, auth form callbacks), and an own `VpnService` that hands
-  the tun fd to it. It plugs in as another `VpnTransport`; the `.p12`
+  the tun fd to it. It plugs in as another `VpnTransport` (a new class in
+  `transport/<protocol>/` and one `@Binds @IntoSet` line in `VpnBindings`); the `.p12`
   password would then have to be stored sealed next to the container.
   Estimated scope: 3–5 days, mostly the hermetic C dependency build and
   licence/notice handling.
+- The stored profile keeps the server's transport objects as JSON
+  (`StoredVpnProfile.transports`). A profile saved in the older flat format
+  does not decode; `VpnProfileSync` registers again with the stored key as
+  soon as the server is configured, so the device keeps its keys and id.
+- Internal implementations reach the graph through `VpnBindings`
+  (`@Binds internal`), the public `VpnViewModelSource` and the
+  `VpnActivityHost` factory, both with internal constructors.
 
 ## System dashboard
 
@@ -1167,7 +1192,8 @@ single `DataStore`, `FeatureRegistry` and the `Set<Interceptor>` multibinding.
 
 - **Start.** Work that begins with the process is an `AppStartable`
   contributed with `@ContributesIntoSet(binding = binding<AppStartable>())`
-  (VPN controller/home network/route opener, push registrar, call service
+  (VPN controller, auto-connect coordinator, status service starter and
+  profile sync through `VpnBindings`, push registrar, call service
   starter, `ConnectionHealth`, foreground, appearance).
   `HomeApplication` only iterates `graph.startables`. No class creates its own
   `CoroutineScope(SupervisorJob() + …)`.

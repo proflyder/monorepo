@@ -1,12 +1,9 @@
 package dev.proflyder.home.feature.vpn
 
 import dev.proflyder.home.core.model.VpnProfile
+import dev.proflyder.home.core.model.VpnProtocolId
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
-
-enum class VpnProtocol {
-    WIREGUARD,
-    OPENCONNECT,
-}
 
 enum class VpnRoute {
     ALL,
@@ -48,26 +45,40 @@ sealed interface VpnProfileState {
     data class Failed(val problem: VpnProfileProblem, val profile: VpnProfile? = null) : VpnProfileState
 }
 
+val VpnProfileState.knownProfile: VpnProfile?
+    get() = when (this) {
+        is VpnProfileState.Ready -> profile
+        is VpnProfileState.Failed -> profile
+        else -> null
+    }
+
 enum class VpnConnectProblem {
     NO_PROFILE,
     PERMISSION,
     TUNNEL,
-    NO_EXTERNAL_CLIENT,
+    NO_CLIENT,
 }
+
+data class VpnTransportInfo(
+    val id: VpnProtocolId,
+    val labelRes: Int,
+    val external: Boolean,
+)
+
+data class VpnTraffic(val rxBytes: Long, val txBytes: Long)
 
 sealed interface VpnConnection {
     data object Disconnected : VpnConnection
 
-    data class Connecting(val protocol: VpnProtocol) : VpnConnection
+    data class Connecting(val transport: VpnTransportInfo) : VpnConnection
 
     data class Connected(
-        val protocol: VpnProtocol,
+        val transport: VpnTransportInfo,
         val sinceMillis: Long,
-        val rxBytes: Long = 0,
-        val txBytes: Long = 0,
+        val verified: Boolean,
     ) : VpnConnection
 
-    data object FallbackRequired : VpnConnection
+    data class FallbackRequired(val options: List<VpnTransportInfo>) : VpnConnection
 
     data object NotNeededAtHome : VpnConnection
 
@@ -77,16 +88,8 @@ sealed interface VpnConnection {
 val VpnConnection.isActive: Boolean
     get() = this is VpnConnection.Connecting || this is VpnConnection.Connected
 
-enum class HomeRoute {
-    READY,
-    CHECKING,
-    CONNECTING,
-}
-
 interface VpnSettingsStore {
-    val settings: StateFlow<VpnSettings>
-
-    suspend fun load()
+    val settings: StateFlow<VpnSettings?>
 
     suspend fun setRoute(route: VpnRoute)
 
@@ -104,8 +107,6 @@ interface VpnSettingsStore {
 interface VpnProfiles {
     val state: StateFlow<VpnProfileState>
 
-    suspend fun load()
-
     suspend fun ensure(): VpnProfile?
 
     suspend fun reissue(): Boolean
@@ -116,7 +117,15 @@ interface VpnProfiles {
 interface VpnController {
     val connection: StateFlow<VpnConnection>
 
+    val traffic: Flow<VpnTraffic?>
+
+    fun availableTransports(): List<VpnTransportInfo>
+
     fun connect()
+
+    fun connectVia(transport: VpnProtocolId)
+
+    fun reconnect()
 
     fun disconnect()
 }

@@ -43,13 +43,8 @@ internal class VpnFragment :
         screen = null
     }
 
-    override fun onResume() {
-        super.onResume()
-        dispatch(VpnIntent.Refresh)
-    }
-
     override fun render(state: VpnUiState) {
-        screen?.render(state, System.currentTimeMillis())
+        screen?.render(state)
     }
 
     override fun onEvent(event: VpnEvent) {
@@ -108,12 +103,15 @@ internal class VpnScreen(
 
     private val connectOnOpen = SwitchBinder(binding.vpnOpenRow.switch) { dispatch(VpnIntent.SetConnectOnOpen(it)) }
 
+    private val route = PillSegmentsBinder(binding.vpnRoute, VpnRoute.entries) { dispatch(VpnIntent.SetRoute(it)) }
+
+    private val auth = PillSegmentsBinder(binding.vpnAuth, VpnAuth.entries) { dispatch(VpnIntent.SetAuth(it)) }
+
+    private val fallbacks = FallbackButtons(binding.vpnFallbackOptions) { dispatch(VpnIntent.ConnectVia(it)) }
+
     init {
         labels()
         binding.vpnToggle.setOnClickListener { dispatch(VpnIntent.ToggleConnection) }
-        binding.vpnExternal.setOnClickListener { dispatch(VpnIntent.OpenExternal) }
-        binding.vpnRoute.onSelected = { index -> dispatch(VpnIntent.SetRoute(VpnRoute.entries[index])) }
-        binding.vpnAuth.onSelected = { index -> dispatch(VpnIntent.SetAuth(VpnAuth.entries[index])) }
         binding.vpnCertificateInstall.setOnClickListener { dispatch(VpnIntent.InstallCertificate) }
         binding.vpnReissue.setOnClickListener { dispatch(VpnIntent.Reissue) }
     }
@@ -125,8 +123,8 @@ internal class VpnScreen(
         binding.vpnCertificateImport.contentDescription = context.getString(R.string.vpn_certificate_import)
     }
 
-    fun render(state: VpnUiState, nowMillis: Long) {
-        renderStatus(state.connection, nowMillis, state.busy)
+    fun render(state: VpnUiState) {
+        renderStatus(state)
         renderRoute(state)
         renderAuth(state)
         val context = binding.root.context
@@ -136,22 +134,23 @@ internal class VpnScreen(
         binding.vpnForget.isEnabled = !state.busy
     }
 
-    private fun renderStatus(connection: VpnConnection, nowMillis: Long, busy: Boolean) {
+    private fun renderStatus(state: VpnUiState) {
         val context = binding.root.context
+        val connection = state.connection
         binding.vpnStatusRow.title = context.getString(VpnTexts.title(connection))
-        binding.vpnStatusRow.subtitle = VpnTexts.detail(context, connection, nowMillis)
+        binding.vpnStatusRow.subtitle = VpnTexts.detail(context, connection, state.nowMillis)
         binding.vpnStatusRow.subtitleTone = statusTone(connection)
-        val traffic = (connection as? VpnConnection.Connected)?.let { VpnTexts.traffic(context, it) }
+        val traffic = state.traffic?.takeIf { connection is VpnConnection.Connected }?.let { VpnTexts.traffic(context, it) }
         binding.vpnStatusTraffic.text = traffic
         binding.vpnStatusTraffic.setVisible(traffic != null)
-        binding.vpnProgress.setVisible(connection is VpnConnection.Connecting || busy)
+        binding.vpnProgress.setVisible(connection is VpnConnection.Connecting || state.busy)
         binding.vpnToggle.setText(toggleText(connection))
-        binding.vpnExternal.setVisible(connection == VpnConnection.FallbackRequired)
+        fallbacks.render((connection as? VpnConnection.FallbackRequired)?.options.orEmpty())
     }
 
     private fun renderRoute(state: VpnUiState) {
         val context = binding.root.context
-        binding.vpnRoute.select(state.settings.route.ordinal)
+        route.render(state.settings.route)
         binding.vpnRouteHelp.text = context.getString(routeHelp(state.settings.route))
         autoConnect.render(state.settings.autoConnect)
         connectOnOpen.render(state.settings.connectOnOpen)
@@ -161,8 +160,8 @@ internal class VpnScreen(
     private fun renderAuth(state: VpnUiState) {
         val context = binding.root.context
         val certificate = state.settings.auth == VpnAuth.CERTIFICATE
-        binding.vpnAuth.select(state.settings.auth.ordinal)
-        binding.vpnExternalStatus.text = context.getString(externalText(state.externalInstalled))
+        auth.render(state.settings.auth)
+        binding.vpnExternalStatus.text = context.getString(externalText(state.fallbackReady))
         binding.vpnCertificateRow.setVisible(certificate)
         binding.vpnCertificateRow.subtitle = state.settings.certificateName.ifBlank { context.getString(R.string.vpn_certificate_none) }
         binding.vpnCertificateInstall.setVisible(certificate && state.settings.certificateName.isNotBlank())
@@ -170,12 +169,12 @@ internal class VpnScreen(
     }
 
     private fun toggleText(connection: VpnConnection): Int = when {
-        connection.isActive || connection == VpnConnection.FallbackRequired -> R.string.vpn_disconnect
+        connection.isActive || connection is VpnConnection.FallbackRequired -> R.string.vpn_disconnect
         else -> R.string.vpn_connect
     }
 
     private fun statusTone(connection: VpnConnection): Tone = when (connection) {
-        is VpnConnection.Failed, VpnConnection.FallbackRequired -> Tone.ERROR
+        is VpnConnection.Failed, is VpnConnection.FallbackRequired -> Tone.ERROR
         else -> Tone.NEUTRAL
     }
 

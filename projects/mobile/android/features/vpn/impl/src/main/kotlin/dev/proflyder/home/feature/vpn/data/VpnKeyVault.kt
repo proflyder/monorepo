@@ -14,7 +14,7 @@ import kotlinx.coroutines.flow.first
 
 @SingleIn(AppScope::class)
 @Inject
-class VpnKeyVault(
+internal class VpnKeyVault(
     private val dataStore: DataStore<Preferences>,
     private val box: VpnSecretBox,
 ) {
