@@ -16,7 +16,7 @@ class PillSegments @JvmOverloads constructor(
     attrs: AttributeSet? = null,
 ) : LinearLayout(context, attrs) {
 
-    var onSelected: ((Int) -> Unit)? = null
+    var onSelectionRequested: ((Int) -> Unit)? = null
 
     var selectedIndex: Int = 0
         private set
@@ -51,13 +51,7 @@ class PillSegments @JvmOverloads constructor(
     }
 
     internal fun tap(index: Int) {
-        when (index == selectedIndex || !isEnabled) {
-            true -> Unit
-            false -> {
-                select(index)
-                onSelected?.invoke(index)
-            }
-        }
+        if (index != selectedIndex && isEnabled) onSelectionRequested?.invoke(index)
     }
 
     override fun onLayout(changed: Boolean, l: Int, t: Int, r: Int, b: Int) {

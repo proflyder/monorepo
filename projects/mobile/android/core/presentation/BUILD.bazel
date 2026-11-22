@@ -11,6 +11,7 @@ metro_android_library(
     manifest = "src/main/AndroidManifest.xml",
     deps = [
         "//packages/kotlin/core",
+        "//projects/mobile/android/core/designsystem",
         "//projects/mobile/android/core/model",
         "//projects/mobile/android/core/navigation",
         "//projects/mobile/android/core/ui",
@@ -56,6 +57,7 @@ kt_android_local_test(
     test_class = "dev.proflyder.home.core.presentation.AllPresentationTests",
     deps = [
         "//packages/kotlin/core",
+        "//projects/mobile/android/core/designsystem",
         "//projects/mobile/android/core/model",
         "//projects/mobile/android/core/ui",
         "@maven//:androidx_lifecycle_lifecycle_viewmodel_ktx",

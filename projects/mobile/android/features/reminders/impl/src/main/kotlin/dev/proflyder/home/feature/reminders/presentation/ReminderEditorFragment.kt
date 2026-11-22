@@ -1,5 +1,6 @@
 package dev.proflyder.home.feature.reminders.presentation
 
+import dev.proflyder.home.core.designsystem.R as DesignR
 import android.os.Bundle
 import dev.proflyder.home.core.presentation.ScreenFragment
 import dev.proflyder.home.core.presentation.SwitchBinder
@@ -69,7 +70,7 @@ internal class ReminderEditorFragment :
     }
 
     private fun confirmDelete() {
-        confirm(R.string.reminders_delete_confirm, R.string.reminders_delete_yes, R.string.reminders_cancel) {
+        confirm(R.string.reminders_delete_confirm, DesignR.string.ds_action_delete, DesignR.string.ds_action_cancel) {
             dispatch(ReminderEditorIntent.Delete)
         }
     }

@@ -6,9 +6,9 @@ import dev.proflyder.home.core.model.ControlKind
 import dev.proflyder.home.core.model.PowerState
 import dev.proflyder.home.feature.control.ControlFilter
 import dev.proflyder.home.feature.control.ControlItem
+import dev.proflyder.home.core.presentation.ItemChanged
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -27,15 +27,14 @@ class ControlDiffPayloadTest {
     private fun device(entry: ControlEntry = entry(), busy: Boolean = false) = ControlItem.Device(entry, busy, statesKnown = true)
 
     @Test
-    fun identicalItemsHaveNoPayload() {
-        assertNull(ControlDiff.getChangePayload(device(), device()))
+    fun identicalItemsAreNotChanged() {
         assertTrue(ControlDiff.areContentsTheSame(device(), device()))
     }
 
     @Test
     fun aChangedItemIsUpdatedInPlace() {
-        assertEquals(ControlItemChanged, ControlDiff.getChangePayload(device(), device(entry(PowerState.ON))))
-        assertEquals(ControlItemChanged, ControlDiff.getChangePayload(device(), device(busy = true)))
+        assertEquals(ItemChanged, ControlDiff.getChangePayload(device(), device(entry(PowerState.ON))))
+        assertEquals(ItemChanged, ControlDiff.getChangePayload(device(), device(busy = true)))
         assertTrue(ControlDiff.areItemsTheSame(device(), device(entry(title = "Lamp"))))
     }
 
@@ -46,7 +45,7 @@ class ControlDiffPayloadTest {
         val after = ControlItem.Filters(chips, ControlFilter.Lights)
         assertTrue(ControlDiff.areItemsTheSame(before, after))
         assertFalse(ControlDiff.areContentsTheSame(before, after))
-        assertEquals(ControlItemChanged, ControlDiff.getChangePayload(before, after))
+        assertEquals(ItemChanged, ControlDiff.getChangePayload(before, after))
     }
 
     @Test

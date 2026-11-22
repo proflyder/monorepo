@@ -1,5 +1,6 @@
 package dev.proflyder.home.feature.control.presentation
 
+import dev.proflyder.home.core.designsystem.R as DesignR
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -66,7 +67,7 @@ internal class HubRowBinder(
         val paused = card.timer.state == TimerState.PAUSED
         row.hubRowAction.setImageResource(if (paused) R.drawable.control_ic_play else R.drawable.control_ic_pause)
         row.hubRowAction.contentDescription = row.root.context.getString(
-            if (paused) R.string.control_hub_resume else R.string.control_hub_pause,
+            if (paused) DesignR.string.ds_action_resume else DesignR.string.ds_action_pause,
         )
     }
 

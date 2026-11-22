@@ -11,5 +11,6 @@ import org.junit.runners.Suite
     FabStylesTest::class,
     CatalogScreenshotTest::class,
     LightParamsEditorScreenshotTest::class,
+    RevealBinderTest::class,
 )
 class DesignSystemTestSuite

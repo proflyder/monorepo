@@ -14,7 +14,7 @@ interface ConnectionRepository {
 
     suspend fun saveToken(update: TokenUpdate): Outcome<ConnectionConfig>
 
-    suspend fun refreshRemoteConfig()
+    suspend fun refreshRemoteConfig(): Outcome<Unit>
 
     suspend fun testConnection(): Outcome<SchedulerStatus>
 }

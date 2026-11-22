@@ -80,7 +80,7 @@
                 style="@style/Widget.Home.Button.Destructive.M"
                 android:layout_width="wrap_content"
                 android:layout_marginStart="4dp"
-                android:text="@string/timers_cancel" />
+                android:text="@string/ds_action_cancel" />
         </LinearLayout>
     </LinearLayout>
 </com.google.android.material.card.MaterialCardView>

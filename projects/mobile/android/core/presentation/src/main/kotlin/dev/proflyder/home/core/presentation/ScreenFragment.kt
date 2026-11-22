@@ -1,5 +1,6 @@
 package dev.proflyder.home.core.presentation
 
+import dev.proflyder.home.core.designsystem.PillSegments
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.ViewGroup
@@ -41,6 +42,9 @@ abstract class ScreenFragment<VB : ViewBinding, S : Any, I : Any, E : Any>(
 
     protected fun bindSwitch(view: CompoundButton, toIntent: (Boolean) -> I): SwitchBinder =
         SwitchBinder(view) { checked -> dispatch(toIntent(checked)) }
+
+    protected fun <T> bindPills(view: PillSegments, values: List<T>, toIntent: (T) -> I): PillSegmentsBinder<T> =
+        PillSegmentsBinder(view, values) { value -> dispatch(toIntent(value)) }
 
     protected fun bindText(view: EditText, toIntent: (String) -> I): TextBinder =
         TextBinder(view) { text -> dispatch(toIntent(text)) }

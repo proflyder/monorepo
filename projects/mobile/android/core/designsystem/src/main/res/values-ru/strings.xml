@@ -12,7 +12,6 @@
     <string name="ds_catalog_lists">Списки и переключатели</string>
     <string name="ds_catalog_states">Пустое состояние и плитки устройств</string>
     <string name="ds_catalog_action">Действие</string>
-    <string name="ds_catalog_delete">Удалить</string>
     <string name="ds_catalog_disabled">Недоступно</string>
     <string name="ds_catalog_loading">Загрузка</string>
     <string name="ds_catalog_field_label">Название</string>
@@ -50,4 +49,11 @@
     <string name="ds_light_kelvin">%1$d K</string>
     <string name="ds_light_transition">Переход, секунды (необязательно, 0–300)</string>
     <string name="ds_action_save">Сохранить</string>
+    <string name="ds_action_delete">Удалить</string>
+    <string name="ds_action_cancel">Отмена</string>
+    <string name="ds_action_retry">Повторить</string>
+    <string name="ds_action_pause">Пауза</string>
+    <string name="ds_action_resume">Продолжить</string>
+    <string name="ds_action_open_connection">Открыть «Подключение»</string>
+    <string name="ds_product_name">Дом</string>
 </resources>

@@ -51,9 +51,6 @@ def _detekt_impl(ctx):
     if not plugin:
         fail("detekt: plugins target %s produced no jar" % ctx.attr.plugins.label)
 
-    baseline_files = [ctx.file.baseline] if ctx.file.baseline else []
-    baseline_flag = "".join([" \\\n  --baseline \"%s\"" % file.short_path for file in baseline_files])
-
     runner = ctx.actions.declare_file(ctx.label.name + ".run")
     ctx.actions.write(
         runner,
@@ -67,7 +64,7 @@ def _detekt_impl(ctx):
             "  --config \"%s\" \\" % ctx.file.config.short_path,
             "  --plugins \"%s\" \\" % plugin[0].short_path,
             "  --base-path \"$TEST_SRCDIR/$TEST_WORKSPACE\" \\",
-            "  --jvm-target 17" + baseline_flag,
+            "  --jvm-target 17",
         ]) + "\n",
         is_executable = True,
     )
@@ -78,7 +75,7 @@ def _detekt_impl(ctx):
             runner,
             ctx.file.config,
             plugin[0],
-        ] + baseline_files,
+        ],
     )
     runfiles = runfiles.merge(ctx.attr._detekt[DefaultInfo].default_runfiles)
     return [
@@ -97,10 +94,6 @@ _detekt_test = rule(
         "deps": attr.label_list(aspects = [_detekt_aspect]),
         "config": attr.label(
             doc = "detekt.yml configuration file.",
-            allow_single_file = True,
-        ),
-        "baseline": attr.label(
-            doc = "detekt baseline XML with accepted existing findings.",
             allow_single_file = True,
         ),
         "plugins": attr.label(
@@ -125,13 +118,11 @@ def home_detekt(
         deps,
         config,
         plugins = "//platform/android/detekt-rules:detekt-rules",
-        source_prefix = "",
-        baseline = None):
+        source_prefix = ""):
     _detekt_test(
         name = name,
         deps = deps,
         config = config,
         plugins = plugins,
         source_prefix = source_prefix,
-        baseline = baseline,
     )

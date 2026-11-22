@@ -49,14 +49,14 @@ class ControlFavoritesTest {
     @Test
     fun storedFavoritesWinAndAreNotReseeded() = runBlocking {
         val preferences = FakePreferences(emptyList())
-        val refs = ControlFavorites(preferences).resolved(flowOf(loaded), flowOf(emptyList())).first()
+        val refs = ControlFavorites(preferences, emptySet()).resolved(flowOf(loaded), flowOf(emptyList())).first()
         assertEquals(emptyList<FavoriteRef>(), refs)
     }
 
     @Test
     fun defaultsAreSeededOnceTheCatalogAndScenariosAreKnown() = runBlocking {
         val preferences = FakePreferences(null)
-        val favorites = ControlFavorites(preferences)
+        val favorites = ControlFavorites(preferences, emptySet())
         assertEquals(emptyList<FavoriteRef>(), favorites.resolved(flowOf(ControlCatalogState()), flowOf(emptyList())).first())
         assertNull(preferences.stored.value)
         val refs = favorites.resolved(flowOf(loaded), flowOf(emptyList())).first()
@@ -68,7 +68,7 @@ class ControlFavoritesTest {
     fun togglingReportsTheNewPinState() = runBlocking {
         val preferences = FakePreferences(emptyList())
         val subject = PinSubject.Entry(speak, FavoriteRef(FavoriteKind.ACTION, speak.id))
-        val event = ControlFavorites(preferences).toggle(subject)
+        val event = ControlFavorites(preferences, emptySet()).toggle(subject)
         assertEquals(ControlEvent.Notice(ControlNotice.FavoriteChanged(subject, pinned = true)), event)
         assertTrue(subject.ref in preferences.stored.value.orEmpty())
     }

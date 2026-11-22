@@ -26,12 +26,7 @@ internal class ControlAdapterCallback(
 
 internal typealias ControlHolder = BaseViewHolder<ControlItem, ViewBinding, ControlAdapterCallback>
 
-internal object ControlItemChanged
-
-internal val ControlDiff = KeyedDiff<ControlItem>(
-    key = { it.key },
-    payload = { old, new -> ControlItemChanged.takeIf { old != new } },
-)
+internal val ControlDiff = KeyedDiff<ControlItem>(key = { it.key })
 
 internal class ControlAdapter(
     callback: ControlAdapterCallback,

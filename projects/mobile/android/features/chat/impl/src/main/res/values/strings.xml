@@ -7,14 +7,10 @@
     <string name="chat_scroll_down">Scroll to the latest messages</string>
     <string name="chat_reply_cancel">Cancel reply</string>
     <string name="chat_typing">Ricardo is typing</string>
-    <string name="chat_retry">Retry</string>
     <string name="chat_author_me">You</string>
     <string name="chat_author_assistant">Ricardo</string>
-    <string name="chat_author_system">Home</string>
     <string name="chat_action_copy">Copy</string>
     <string name="chat_action_reply">Reply</string>
-    <string name="chat_action_retry">Retry</string>
-    <string name="chat_action_delete">Delete</string>
     <string name="chat_copied">Copied</string>
     <string name="chat_state_queued">Waiting for the network</string>
     <string name="chat_state_sent">Sent</string>

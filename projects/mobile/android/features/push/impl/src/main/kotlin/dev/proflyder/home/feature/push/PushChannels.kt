@@ -5,7 +5,7 @@ import android.app.NotificationManager
 import android.content.Context
 import dev.proflyder.home.feature.push.impl.R
 
-object PushChannels {
+internal object PushChannels {
     const val NOTIFICATIONS: String = "home_notifications"
 
     const val FIND: String = "home_phone_find_v2"
@@ -43,6 +43,6 @@ object PushChannels {
         }
 }
 
-object Vibration {
+internal object Vibration {
     val PATTERN: LongArray = longArrayOf(0, 800, 400, 800, 400)
 }

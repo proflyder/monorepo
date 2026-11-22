@@ -9,7 +9,7 @@ import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesIntoSet
 import dev.zacsweers.metro.Inject
 
-object ConnectionDestination : Destination {
+internal object ConnectionDestination : Destination {
     override val featureId: String = "connection"
     override val route: String = "connection/settings"
 }

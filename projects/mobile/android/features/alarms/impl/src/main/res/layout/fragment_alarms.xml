@@ -80,13 +80,13 @@
                         android:id="@+id/alarms_retry"
                         style="@style/Widget.Home.Button.Tonal.M"
                         android:layout_width="wrap_content"
-                        android:text="@string/ui_retry" />
+                        android:text="@string/ds_action_retry" />
 
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/alarms_open_connection"
                         style="@style/Widget.Home.Button.Filled.M"
                         android:layout_width="wrap_content"
-                        android:text="@string/alarms_open_connection"
+                        android:text="@string/ds_action_open_connection"
                         android:visibility="gone" />
                 </dev.proflyder.home.core.designsystem.ButtonRow>
             </LinearLayout>
@@ -190,9 +190,9 @@
                 android:layout_height="wrap_content"
                 android:layout_marginStart="4dp"
                 android:layout_weight="1"
-                android:text="@string/alarms_selection_delete"
+                android:text="@string/ds_action_delete"
                 android:textColor="?attr/colorError"
-                android:tooltipText="@string/alarms_selection_delete"
+                android:tooltipText="@string/ds_action_delete"
                 app:icon="@drawable/alarms_ic_delete"
                 app:iconTint="?attr/colorError" />
         </LinearLayout>

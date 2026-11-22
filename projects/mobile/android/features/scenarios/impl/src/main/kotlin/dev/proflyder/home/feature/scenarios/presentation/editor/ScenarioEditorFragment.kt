@@ -1,5 +1,6 @@
 package dev.proflyder.home.feature.scenarios.presentation.editor
 
+import dev.proflyder.home.core.designsystem.R as DesignR
 import android.os.Bundle
 import android.widget.ProgressBar
 import androidx.annotation.DrawableRes
@@ -150,14 +151,14 @@ internal class ScenarioEditorFragment : ScreenFragment<
     private fun catalogError(failure: RemoteFailure) = MaterialAlertDialogBuilder(requireContext())
         .setTitle(R.string.scenarios_catalog_error_title)
         .setMessage(failure.userMessage(requireContext()))
-        .setPositiveButton(R.string.scenarios_retry) { _, _ -> dispatch(ScenarioEditorIntent.ReloadCatalog) }
+        .setPositiveButton(DesignR.string.ds_action_retry) { _, _ -> dispatch(ScenarioEditorIntent.ReloadCatalog) }
         .setNegativeButton(android.R.string.cancel) { _, _ -> dispatch(ScenarioEditorIntent.DismissPrompt) }
         .create()
 
     private fun confirmDelete() = MaterialAlertDialogBuilder(requireContext())
         .setMessage(R.string.scenarios_delete_confirm)
-        .setPositiveButton(R.string.scenarios_delete_yes) { _, _ -> dispatch(ScenarioEditorIntent.ConfirmDelete) }
-        .setNegativeButton(R.string.scenarios_cancel) { _, _ -> dispatch(ScenarioEditorIntent.DismissPrompt) }
+        .setPositiveButton(DesignR.string.ds_action_delete) { _, _ -> dispatch(ScenarioEditorIntent.ConfirmDelete) }
+        .setNegativeButton(DesignR.string.ds_action_cancel) { _, _ -> dispatch(ScenarioEditorIntent.DismissPrompt) }
         .create()
 
     private fun conflict() = MaterialAlertDialogBuilder(requireContext())

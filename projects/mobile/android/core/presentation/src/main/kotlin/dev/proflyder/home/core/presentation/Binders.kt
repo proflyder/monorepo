@@ -6,6 +6,7 @@ import android.view.View
 import android.widget.Checkable
 import android.widget.EditText
 import android.widget.RadioGroup
+import dev.proflyder.home.core.designsystem.PillSegments
 
 class CheckableBinder<V>(
     private val view: V,
@@ -88,5 +89,20 @@ class TextBinder(
         override fun afterTextChanged(s: Editable?) {
             onText(s?.toString().orEmpty())
         }
+    }
+}
+
+class PillSegmentsBinder<T>(
+    private val pills: PillSegments,
+    private val values: List<T>,
+    private val onIntent: (T) -> Unit,
+) : ControlBinder<T> {
+    init {
+        pills.onSelectionRequested = { index -> values.getOrNull(index)?.let(onIntent) }
+    }
+
+    override fun render(value: T) {
+        val index = values.indexOf(value)
+        if (pills.selectedIndex != index) pills.select(index)
     }
 }

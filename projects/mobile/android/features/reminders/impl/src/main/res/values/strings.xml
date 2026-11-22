@@ -3,13 +3,10 @@
     <string name="reminders_title">Reminders</string>
     <string name="reminders_add">Add reminder</string>
     <string name="reminders_empty">No reminders yet. The home server delivers one-shot reminders.</string>
-    <string name="reminders_delete">Delete</string>
     <string name="reminders_enabled">Enabled</string>
     <string name="reminders_due">Due: %1$s</string>
     <string name="reminders_off">Disabled</string>
     <string name="reminders_delete_confirm">Delete this reminder from the home server?</string>
-    <string name="reminders_delete_yes">Delete</string>
-    <string name="reminders_cancel">Cancel</string>
     <string name="reminders_editor_title_new">New reminder</string>
     <string name="reminders_editor_title_edit">Edit reminder</string>
     <string name="reminders_editor_label">Label</string>

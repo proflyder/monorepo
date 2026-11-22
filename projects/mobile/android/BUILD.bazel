@@ -19,6 +19,7 @@ DETEKT_TEST_TARGETS = [
     "//projects/mobile/android/core/theme:theme_test",
     "//projects/mobile/android/core/ui:motion_test",
     "//projects/mobile/android/features/alarms/api:api_test",
+    "//projects/mobile/android/features/alarms/impl:adapter_payload_test",
     "//projects/mobile/android/features/alarms/impl:editor_screenshot_test",
     "//projects/mobile/android/features/alarms/impl:item_layout_test",
     "//projects/mobile/android/features/alarms/impl:selection_animation_test",
@@ -55,7 +56,6 @@ home_android_lint(
 
 home_detekt(
     name = "detekt",
-    baseline = "//projects/mobile/android:detekt-baseline.xml",
     config = "//projects/mobile/android:detekt.yml",
     deps = ["//projects/mobile/android/app:app_lib"] + DETEKT_TEST_TARGETS,
     source_prefix = "projects/mobile/android/",
@@ -77,6 +77,7 @@ test_suite(
         "//projects/mobile/android/core/theme:theme_test",
         "//projects/mobile/android/core/ui:motion_test",
         "//projects/mobile/android/features/alarms/api:api_test",
+        "//projects/mobile/android/features/alarms/impl:adapter_payload_test",
         "//projects/mobile/android/features/alarms/impl:editor_screenshot_test",
         "//projects/mobile/android/features/alarms/impl:item_layout_test",
         "//projects/mobile/android/features/alarms/impl:repeat_sheet_test",
@@ -132,7 +133,6 @@ test_suite(
 
 exports_files([
     "README.md",
-    "detekt-baseline.xml",
     "detekt.yml",
     "lint.xml",
     "maven_install.json",

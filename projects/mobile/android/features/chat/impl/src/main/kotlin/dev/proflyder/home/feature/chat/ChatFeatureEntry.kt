@@ -10,7 +10,7 @@ import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesIntoSet
 import dev.zacsweers.metro.Inject
 
-object ChatDestination : Destination {
+internal object ChatDestination : Destination {
     override val featureId: String = ChatRoute.FEATURE_ID
     override val route: String = ChatRoute.ROOT
 }

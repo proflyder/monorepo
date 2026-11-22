@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="control_default_favorite_scenarios" translatable="false">
+        <item>блэкаут</item>
+        <item>blackout</item>
+        <item>сел работать</item>
+        <item>work mode</item>
+    </string-array>
+</resources>

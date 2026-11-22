@@ -1,5 +1,6 @@
 package dev.proflyder.home.feature.alarms.presentation
 
+import dev.proflyder.home.core.designsystem.R as DesignR
 import android.os.Bundle
 import androidx.activity.OnBackPressedCallback
 import androidx.recyclerview.widget.GridLayoutManager
@@ -86,12 +87,12 @@ internal class AlarmsFragment :
             .setMessage(R.string.alarms_disable_message)
             .setNeutralButton(R.string.alarms_disable_skip_once) { _, _ -> dispatch(AlarmsIntent.SkipOnce(id)) }
             .setPositiveButton(R.string.alarms_disable_turn_off) { _, _ -> dispatch(AlarmsIntent.TurnOff(id)) }
-            .setNegativeButton(R.string.alarms_cancel, null)
+            .setNegativeButton(DesignR.string.ds_action_cancel, null)
             .show()
     }
 
     private fun confirmDelete(id: String) {
-        confirm(R.string.alarms_delete_confirm, R.string.alarms_delete_yes, R.string.alarms_cancel) {
+        confirm(R.string.alarms_delete_confirm, DesignR.string.ds_action_delete, DesignR.string.ds_action_cancel) {
             dispatch(AlarmsIntent.Delete(id))
         }
     }
@@ -99,8 +100,8 @@ internal class AlarmsFragment :
     private fun confirmDeleteSelected(count: Int) {
         confirm(
             resources.getQuantityString(R.plurals.alarms_delete_selected_confirm, count, count),
-            R.string.alarms_delete_yes,
-            R.string.alarms_cancel,
+            DesignR.string.ds_action_delete,
+            DesignR.string.ds_action_cancel,
         ) { dispatch(AlarmsIntent.DeleteSelected) }
     }
 }

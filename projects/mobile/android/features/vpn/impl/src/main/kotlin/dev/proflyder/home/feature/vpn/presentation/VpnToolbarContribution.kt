@@ -9,9 +9,11 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.google.android.material.button.MaterialButton
+import dev.proflyder.home.core.designsystem.RevealBinder
 import dev.proflyder.home.core.navigation.Navigator
 import dev.proflyder.home.core.navigation.ToolbarContribution
 import dev.proflyder.home.core.navigation.ToolbarSlots
+import dev.proflyder.home.core.ui.injectedViewModels
 import dev.proflyder.home.feature.vpn.VpnDestination
 import dev.proflyder.home.feature.vpn.impl.R
 import dev.zacsweers.metro.AppScope
@@ -22,22 +24,29 @@ import kotlinx.coroutines.launch
 
 @ContributesIntoSet(AppScope::class, binding = binding<ToolbarContribution>())
 @Inject
-class VpnToolbarContribution(
+class VpnToolbarContribution internal constructor(
     private val hosts: VpnActivityHost.Factory,
 ) : ToolbarContribution {
     override val order: Int = 10
 
     override fun attach(activity: AppCompatActivity, slots: ToolbarSlots, navigator: Navigator) {
         val toggle = slots.end.inflateChild(R.layout.vpn_toolbar_toggle) as MaterialButton
-        val banner = slots.below.inflateChild(R.layout.vpn_route_banner)
+        val banner = RevealBinder(slots.below.inflateChild(R.layout.vpn_route_banner))
         val host = hosts.create(activity) { navigator.navigate(VpnDestination) }
+        val model by activity.injectedViewModels<VpnToolbarViewModel>()
         host.bind(toggle)
         activity.lifecycleScope.launch {
             activity.repeatOnLifecycle(Lifecycle.State.STARTED) {
-                host.observe(this, toggle, banner)
+                host.observePermissionRequests(this)
+                launch { model.state.collect { render(it, toggle, banner) } }
                 navigator.chrome.collect { toggle.isVisible = !it.overlay }
             }
         }
+    }
+
+    private fun render(state: VpnToolbarState, toggle: MaterialButton, banner: RevealBinder) {
+        VpnToolbarToggle.render(toggle, state.connection)
+        banner.render(state.routeBannerVisible)
     }
 
     private fun ViewGroup.inflateChild(layout: Int): View =

@@ -231,7 +231,7 @@ class HomeHubTest {
                 FavoriteRef(FavoriteKind.SCENARIO, "s.blackout"),
                 FavoriteRef(FavoriteKind.SCENARIO, "s.work"),
             ),
-            Favorites.defaults(entries, scenarios),
+            Favorites.defaults(entries, scenarios, setOf(" БЛЭКАУТ", "сел работать")),
         )
     }
 

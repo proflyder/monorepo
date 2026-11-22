@@ -11,7 +11,7 @@ import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
 
-class FindPhoneAudio(private val context: Context) {
+internal class FindPhoneAudio(private val context: Context) {
     private val audioManager: AudioManager? = context.getSystemService(AudioManager::class.java)
     private var player: MediaPlayer? = null
     private var vibrator: Vibrator? = null

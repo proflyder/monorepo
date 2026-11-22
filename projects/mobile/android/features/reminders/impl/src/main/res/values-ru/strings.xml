@@ -3,13 +3,10 @@
     <string name="reminders_title">Напоминания</string>
     <string name="reminders_add">Добавить напоминание</string>
     <string name="reminders_empty">Напоминаний пока нет. Домашний сервер доставляет однократные напоминания.</string>
-    <string name="reminders_delete">Удалить</string>
     <string name="reminders_enabled">Включено</string>
     <string name="reminders_due">Срок: %1$s</string>
     <string name="reminders_off">Выключено</string>
     <string name="reminders_delete_confirm">Удалить это напоминание с домашнего сервера?</string>
-    <string name="reminders_delete_yes">Удалить</string>
-    <string name="reminders_cancel">Отмена</string>
     <string name="reminders_editor_title_new">Новое напоминание</string>
     <string name="reminders_editor_title_edit">Изменить напоминание</string>
     <string name="reminders_editor_label">Название</string>

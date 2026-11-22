@@ -87,4 +87,18 @@ class PublicInImplTest {
 
         assertEquals(1, PublicInImpl().lint(file).size)
     }
+
+    @Test
+    fun `accepts public custom views that generated view bindings reference`() {
+        val file = compileContentForTest(
+            """
+                class WaveView(context: Context) : View(context)
+                class Row(context: Context) : FrameLayout(context)
+                class Helper(context: Context) : Any()
+            """.trimIndent(),
+            "features/chat/impl/src/main/kotlin/WaveView.kt",
+        )
+
+        assertEquals(1, PublicInImpl().lint(file).size)
+    }
 }

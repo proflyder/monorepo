@@ -67,7 +67,7 @@ internal fun RemoteFailure.sendFailureKey(): String? = when (this) {
     is RemoteFailure.Server -> reason.takeIf { it in PERMANENT_SEND_CODES }
     RemoteFailure.Unauthorized -> FAILURE_UNAUTHORIZED
     is RemoteFailure.Storage -> reason.sendFailureKey()
-    RemoteFailure.NotConfigured, is RemoteFailure.Validation -> FAILURE_NOT_SENT
+    RemoteFailure.NotConfigured, RemoteFailure.RemoteConfig, is RemoteFailure.Validation -> FAILURE_NOT_SENT
 }
 
 private fun StorageReason.sendFailureKey(): String = when (this) {

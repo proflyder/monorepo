@@ -3,7 +3,6 @@
     <string name="scenarios_title">Сценарии</string>
     <string name="scenarios_add">Новый сценарий</string>
     <string name="scenarios_empty">Сценариев пока нет. Они хранятся и выполняются на домашнем сервере.</string>
-    <string name="scenarios_open_connection">Открыть «Подключение»</string>
     <string name="scenarios_enabled">Включён</string>
     <string name="scenarios_disabled">Выключен</string>
     <string name="scenarios_run">Запустить</string>
@@ -107,7 +106,6 @@
     <string name="scenarios_catalog_empty">Каталог пуст или ещё не загружен.</string>
     <string name="scenarios_catalog_loading">Загрузка каталога…</string>
     <string name="scenarios_catalog_error_title">Каталог недоступен</string>
-    <string name="scenarios_retry">Повторить</string>
     <string name="scenarios_catalog_other_room">Другое</string>
     <string name="scenarios_catalog_show_settings">Показать служебные (%1$d)</string>
     <string name="scenarios_catalog_group_scenarios">Сценарии HA</string>
@@ -150,9 +148,6 @@
     <string name="scenarios_conflict_message">Другой клиент сохранил более новую версию сценария. Загрузить её? Локальные изменения будут потеряны.</string>
     <string name="scenarios_conflict_reload">Загрузить заново</string>
     <string name="scenarios_delete_confirm">Удалить сценарий с домашнего сервера?</string>
-    <string name="scenarios_delete_yes">Удалить</string>
-    <string name="scenarios_cancel">Отмена</string>
-    <string name="scenarios_save">Сохранить</string>
     <string name="scenarios_edit">Изменить</string>
     <string name="scenarios_remove">Убрать</string>
     <string name="scenarios_saved">Сценарий сохранён</string>

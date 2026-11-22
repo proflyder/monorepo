@@ -340,7 +340,7 @@
                     style="@style/Widget.Home.Button.Destructive.S"
                     android:layout_width="wrap_content"
                     android:layout_marginEnd="@dimen/ds_space_s"
-                    android:text="@string/ds_catalog_delete" />
+                    android:text="@string/ds_action_delete" />
                 <com.google.android.material.button.MaterialButton
                     style="@style/Widget.Home.Button.Destructive.S"
                     android:layout_width="wrap_content"
@@ -365,7 +365,7 @@
                     style="@style/Widget.Home.Button.Destructive.M"
                     android:layout_width="wrap_content"
                     android:layout_marginEnd="@dimen/ds_space_s"
-                    android:text="@string/ds_catalog_delete" />
+                    android:text="@string/ds_action_delete" />
                 <com.google.android.material.button.MaterialButton
                     style="@style/Widget.Home.Button.Destructive.M"
                     android:layout_width="wrap_content"
@@ -390,7 +390,7 @@
                     style="@style/Widget.Home.Button.Destructive.L"
                     android:layout_width="wrap_content"
                     android:layout_marginEnd="@dimen/ds_space_s"
-                    android:text="@string/ds_catalog_delete" />
+                    android:text="@string/ds_action_delete" />
                 <com.google.android.material.button.MaterialButton
                     style="@style/Widget.Home.Button.Destructive.L"
                     android:layout_width="wrap_content"
@@ -413,7 +413,7 @@
                 <com.google.android.material.button.MaterialButton
                     style="@style/Widget.Home.Button.Destructive.M"
                     android:layout_width="wrap_content"
-                    android:text="@string/ds_catalog_delete" />
+                    android:text="@string/ds_action_delete" />
 
                 <com.google.android.material.button.MaterialButton
                     style="@style/Widget.Home.Button.Filled.M"

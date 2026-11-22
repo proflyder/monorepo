@@ -15,7 +15,7 @@ import kotlinx.coroutines.launch
 
 @SingleIn(AppScope::class)
 @Inject
-class FindPhoneController(
+internal class FindPhoneController(
     private val context: Context,
     private val scope: CoroutineScope,
 ) {
@@ -56,12 +56,12 @@ class FindPhoneController(
         FindPhoneTiming.isExpired(startedAtMillis, nowMillis)
 }
 
-data class FindPhoneState(
+internal data class FindPhoneState(
     val active: Boolean = false,
     val reason: String = "",
 )
 
-object FindPhoneTiming {
+internal object FindPhoneTiming {
     const val AUTO_STOP_MILLIS: Long = 60_000
 
     fun remainingMillis(startedAtMillis: Long, nowMillis: Long): Long =

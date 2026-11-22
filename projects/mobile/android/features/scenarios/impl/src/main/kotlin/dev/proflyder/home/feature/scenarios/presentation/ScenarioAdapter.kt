@@ -5,6 +5,9 @@ import android.view.ViewGroup
 import dev.proflyder.home.core.model.Scenario
 import dev.proflyder.home.core.presentation.IntentAdapterCallback
 import dev.proflyder.home.core.presentation.KeyedDiff
+import dev.proflyder.home.core.presentation.aspectPayload
+import dev.proflyder.home.core.presentation.renderDimmed
+import dev.proflyder.home.core.ui.PayloadSet
 import dev.proflyder.home.core.presentation.SwitchBinder
 import dev.proflyder.home.core.ui.AdapterCallback
 import dev.proflyder.home.core.ui.BaseListAdapter
@@ -35,9 +38,24 @@ internal class ScenarioAdapterIntents(
     override fun onRun(scenario: Scenario) = dispatch(ScenariosIntent.Run(scenario))
 }
 
+internal enum class ScenarioAspect {
+    STATE,
+    CONTENT,
+}
+
+internal val ScenarioDiff = KeyedDiff<ScenarioRow>(
+    key = { it.scenario.id },
+    payload = aspectPayload(
+        mapOf(
+            ScenarioAspect.STATE to { row: ScenarioRow -> row.scenario.enabled to row.busy },
+            ScenarioAspect.CONTENT to { row: ScenarioRow -> row.scenario.copy(enabled = false) },
+        ),
+    ),
+)
+
 internal class ScenarioAdapter(
     callback: ScenarioAdapterCallback,
-) : BaseListAdapter<ScenarioRow, ItemScenarioBinding, ScenarioAdapterCallback>(callback, KeyedDiff({ it.scenario.id })) {
+) : BaseListAdapter<ScenarioRow, ItemScenarioBinding, ScenarioAdapterCallback>(callback, ScenarioDiff) {
 
     override fun onCreateHolder(
         inflater: LayoutInflater,
@@ -65,11 +83,20 @@ internal class ScenarioAdapter(
             binding.scenarioDescription.setVisible(scenario.description.isNotBlank())
             binding.scenarioTriggers.text = ScenarioFormat.triggerSummary(context, scenario)
             binding.scenarioNext.text = ScenarioFormat.nextDue(context, scenario)
-            binding.root.alpha = if (scenario.enabled) 1f else DISABLED_ALPHA
+            binding.scenarioUnsupported.setVisible(scenario.hasUnsupportedParts)
+            renderState(item, animate = false)
+        }
+
+        override fun bindPayloads(item: ScenarioRow, payloads: List<Any>) {
+            val aspects = PayloadSet.merge(payloads, ScenarioAspect::class.java)
+            if (aspects == null || ScenarioAspect.CONTENT in aspects) bind(item) else renderState(item, animate = true)
+        }
+
+        private fun renderState(item: ScenarioRow, animate: Boolean) {
+            binding.root.renderDimmed(!item.scenario.enabled, DISABLED_ALPHA, animate)
             binding.scenarioRun.isEnabled = !item.busy
             binding.scenarioEnabled.isEnabled = !item.busy
-            enabled.render(scenario.enabled)
-            binding.scenarioUnsupported.setVisible(scenario.hasUnsupportedParts)
+            enabled.render(item.scenario.enabled)
         }
 
         private companion object {

@@ -1,5 +1,6 @@
 package dev.proflyder.home.feature.vpn.transport.openconnect
 
+import dev.proflyder.home.core.designsystem.R as DesignR
 import android.annotation.SuppressLint
 import android.content.ActivityNotFoundException
 import android.content.Context
@@ -46,7 +47,7 @@ internal class ExternalOpenConnectTransport(
 
     override suspend fun up(request: TunnelRequest): Boolean {
         val settings = OpenConnectSettings.of(request.settings) ?: return false
-        val name = context.getString(R.string.vpn_external_profile_name)
+        val name = context.getString(DesignR.string.ds_product_name)
         val link = OpenConnectLink.connect(settings, request.route, name) ?: return false
         val intent = view(link).takeIf { resolvable(it) } ?: openConnectApp() ?: return false
         launched.value = launch(intent)

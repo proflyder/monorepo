@@ -5,13 +5,13 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import androidx.core.view.ViewCompat
-import dev.proflyder.home.core.designsystem.PillSegments
 import dev.proflyder.home.core.theme.AppTheme
 import dev.proflyder.home.core.theme.AppThemes
 import dev.proflyder.home.core.theme.Appearance
 import dev.proflyder.home.core.theme.ColorRole
 import dev.proflyder.home.core.theme.R as ThemeR
 import dev.proflyder.home.core.theme.ThemeMode
+import dev.proflyder.home.core.presentation.PillSegmentsBinder
 import dev.proflyder.home.core.presentation.ScreenFragment
 import dev.proflyder.home.core.presentation.screenViewModel
 import dev.proflyder.home.core.ui.applyScrollBottomInset
@@ -26,19 +26,23 @@ internal class AppearanceFragment :
     override val viewModel: AppearanceViewModel by screenViewModel()
 
     private val cards = linkedMapOf<AppTheme, ItemAppearanceThemeBinding>()
+    private var mode: PillSegmentsBinder<ThemeMode>? = null
 
     override fun onScreenCreated(binding: FragmentAppearanceBinding, savedInstanceState: Bundle?) {
         binding.root.applyScrollBottomInset()
         bindThemeCards(binding, AppThemes.isDynamicAvailable) { dispatch(AppearanceIntent.SelectTheme(it)) }
-        bindModeButtons(binding.appearanceMode) { dispatch(AppearanceIntent.SelectMode(it)) }
+        binding.appearanceMode.setLabels(ThemeMode.entries.map { getString(MODE_LABELS.getValue(it)) })
+        mode = bindPills(binding.appearanceMode, ThemeMode.entries, AppearanceIntent::SelectMode)
     }
 
     override fun onBindingDestroyed() {
         cards.clear()
+        mode = null
     }
 
     override fun render(state: Appearance) {
-        renderAppearance(binding, cards, state)
+        mode?.render(state.mode)
+        renderThemeCards(cards, state)
     }
 
     internal fun bindThemeCards(binding: FragmentAppearanceBinding, dynamic: Boolean, onClick: (AppTheme) -> Unit) {
@@ -91,17 +95,7 @@ private fun tint(view: View, color: Int) {
     ViewCompat.setBackgroundTintList(view, ColorStateList.valueOf(color))
 }
 
-internal fun bindModeButtons(pills: PillSegments, onSelect: (ThemeMode) -> Unit) {
-    pills.setLabels(ThemeMode.entries.map { pills.context.getString(MODE_LABELS.getValue(it)) })
-    pills.onSelected = { onSelect(ThemeMode.entries[it]) }
-}
-
-internal fun renderAppearance(
-    binding: FragmentAppearanceBinding,
-    cards: Map<AppTheme, ItemAppearanceThemeBinding>,
-    appearance: Appearance,
-) {
-    binding.appearanceMode.select(appearance.mode.ordinal)
+internal fun renderThemeCards(cards: Map<AppTheme, ItemAppearanceThemeBinding>, appearance: Appearance) {
     cards.forEach { (theme, card) -> renderCard(card, theme == appearance.theme) }
 }
 

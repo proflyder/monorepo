@@ -7,14 +7,10 @@
     <string name="chat_scroll_down">К последним сообщениям</string>
     <string name="chat_reply_cancel">Отменить ответ</string>
     <string name="chat_typing">Рикардо печатает</string>
-    <string name="chat_retry">Повторить</string>
     <string name="chat_author_me">Вы</string>
     <string name="chat_author_assistant">Рикардо</string>
-    <string name="chat_author_system">Дом</string>
     <string name="chat_action_copy">Копировать</string>
     <string name="chat_action_reply">Ответить</string>
-    <string name="chat_action_retry">Повторить</string>
-    <string name="chat_action_delete">Удалить</string>
     <string name="chat_copied">Скопировано</string>
     <string name="chat_state_queued">Ждёт сети</string>
     <string name="chat_state_sent">Отправлено</string>

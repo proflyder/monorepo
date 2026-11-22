@@ -249,6 +249,6 @@
             android:id="@+id/alarm_editor_save"
             style="@style/Widget.Home.Button.Filled.L"
             android:layout_width="match_parent"
-            android:text="@string/alarms_editor_save" />
+            android:text="@string/ds_action_save" />
     </LinearLayout>
 </FrameLayout>

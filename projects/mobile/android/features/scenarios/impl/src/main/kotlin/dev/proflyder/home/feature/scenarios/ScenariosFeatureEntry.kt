@@ -12,12 +12,12 @@ import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesIntoSet
 import dev.zacsweers.metro.Inject
 
-object ScenarioListDestination : Destination {
+internal object ScenarioListDestination : Destination {
     override val featureId: String = "scenarios"
     override val route: String = "scenarios/list"
 }
 
-data class ScenarioEditorDestination(
+internal data class ScenarioEditorDestination(
     val scenarioId: String? = null,
 ) : Destination {
     override val featureId: String = "scenarios"

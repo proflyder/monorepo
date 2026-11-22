@@ -23,8 +23,6 @@ import dev.proflyder.home.core.designsystem.CardTextInputLayout
 import dev.proflyder.home.core.designsystem.R as DesignR
 import dev.proflyder.home.core.theme.AppTheme
 import dev.proflyder.home.feature.chat.ChatRoute
-import dev.proflyder.home.feature.connection.ConnectionDestination
-import dev.proflyder.home.feature.push.PushSettingsDestination
 import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -200,7 +198,7 @@ class WindowInsetsScreenshotTest {
 
     private fun connectionFields(theme: AppTheme) {
         val activity = launch(theme)
-        activity.router.navigate(ConnectionDestination)
+        activity.router.openRoute(CONNECTION_ROUTE)
         idle(activity)
         applyInsets(activity, 0)
         val root = activity.window.decorView
@@ -215,7 +213,7 @@ class WindowInsetsScreenshotTest {
 
     private fun pushSettings(theme: AppTheme) {
         val activity = launch(theme)
-        activity.router.navigate(PushSettingsDestination)
+        activity.router.openRoute(PUSH_SETTINGS_ROUTE)
         idle(activity)
         val root = activity.window.decorView
         val name = root.findViewById<TextView>(PushR.id.push_device_name)
@@ -479,3 +477,6 @@ private fun View.fields(): List<TextInputLayout> = when (this) {
 }
 
 private fun exactly(size: Int): Int = View.MeasureSpec.makeMeasureSpec(size, View.MeasureSpec.EXACTLY)
+
+private const val CONNECTION_ROUTE = "connection/settings"
+private const val PUSH_SETTINGS_ROUTE = "push/settings"

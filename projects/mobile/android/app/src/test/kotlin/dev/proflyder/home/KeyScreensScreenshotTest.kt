@@ -6,9 +6,7 @@ import android.view.View
 import android.view.ViewGroup
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.color.MaterialColors
-import dev.proflyder.home.core.navigation.Destination
 import dev.proflyder.home.core.theme.AppTheme
-import dev.proflyder.home.feature.connection.ConnectionDestination
 import java.io.File
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -79,8 +77,8 @@ class KeyScreensScreenshotTest {
         else -> emptyList()
     }
 
-    private fun shootDestination(activity: MainActivity, destination: Destination, name: String) {
-        activity.router.navigate(destination)
+    private fun shootDestination(activity: MainActivity, route: String, name: String) {
+        activity.router.openRoute(route)
         idle(activity)
         shoot(activity, name)
         activity.router.back()
@@ -97,8 +95,8 @@ class KeyScreensScreenshotTest {
         idle(activity)
     }
 
-    private fun destinations(): List<Pair<String, Destination>> = listOf(
-        "connection" to ConnectionDestination,
+    private fun destinations(): List<Pair<String, String>> = listOf(
+        "connection" to CONNECTION_ROUTE,
     )
 
     private fun idle(activity: MainActivity) {
@@ -142,3 +140,5 @@ class KeyScreensScreenshotTest {
         )
     }
 }
+
+private const val CONNECTION_ROUTE = "connection/settings"

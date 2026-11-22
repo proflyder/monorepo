@@ -9,7 +9,7 @@ import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesIntoSet
 import dev.zacsweers.metro.Inject
 
-object PushSettingsDestination : Destination {
+internal object PushSettingsDestination : Destination {
     override val featureId: String = "push"
     override val route: String = "push/settings"
 }
@@ -22,7 +22,7 @@ class PushFeatureEntry : FeatureEntry {
     override val isTab: Boolean = false
     override val titleRes: Int = R.string.push_title
     override val iconRes: Int = R.drawable.push_ic_notification
-    override val rootDestination = PushSettingsDestination
+    override val rootDestination: Destination = PushSettingsDestination
 
     override fun createFragment(destination: Destination): Fragment = PushSettingsFragment()
 }
