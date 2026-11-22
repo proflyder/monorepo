@@ -182,10 +182,10 @@ class ReminderEditorViewModelFactoryContributor(
     }
 }
 
-private fun ReminderEditorUiState.toDraft(): ReminderDraft =
+internal fun ReminderEditorUiState.toDraft(): ReminderDraft =
     ReminderDraft(label = label, date = date, hour = hour, minute = minute, enabled = enabled)
 
-private fun ReminderEditorUiState.toEditorDraft(): ReminderEditorDraft = ReminderEditorDraft(
+internal fun ReminderEditorUiState.toEditorDraft(): ReminderEditorDraft = ReminderEditorDraft(
     existingId = existing?.id,
     existingRevision = existing?.revision,
     label = label,
@@ -195,7 +195,7 @@ private fun ReminderEditorUiState.toEditorDraft(): ReminderEditorDraft = Reminde
     enabled = enabled,
 )
 
-private fun Schedule.toUiState(): ReminderEditorUiState = ReminderEditorUiState(
+internal fun Schedule.toUiState(): ReminderEditorUiState = ReminderEditorUiState(
     existing = this,
     label = label,
     date = runCatching { LocalDate.parse(onceDate) }.getOrDefault(LocalDate.now()),
@@ -205,7 +205,7 @@ private fun Schedule.toUiState(): ReminderEditorUiState = ReminderEditorUiState(
     editing = true,
 )
 
-private fun ReminderEditorDraft.toUiState(): ReminderEditorUiState = ReminderEditorUiState(
+internal fun ReminderEditorDraft.toUiState(): ReminderEditorUiState = ReminderEditorUiState(
     existing = restoredExisting(),
     label = label,
     date = date,
@@ -215,7 +215,7 @@ private fun ReminderEditorDraft.toUiState(): ReminderEditorUiState = ReminderEdi
     editing = existingId != null,
 )
 
-private fun ReminderEditorDraft.restoredExisting(): Schedule? {
+internal fun ReminderEditorDraft.restoredExisting(): Schedule? {
     val id = existingId ?: return null
     return Schedule(
         id = id,

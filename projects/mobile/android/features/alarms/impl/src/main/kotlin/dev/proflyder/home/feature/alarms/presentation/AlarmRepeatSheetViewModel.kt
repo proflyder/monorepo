@@ -57,7 +57,7 @@ internal class AlarmRepeatSheetViewModel(
         const val KEY_REPEAT = "alarm_repeat_choice"
         const val KEY_DAYS = "alarm_repeat_days"
 
-        private fun restore(savedState: SavedStateHandle): AlarmRepeatChoice {
+        internal fun restore(savedState: SavedStateHandle): AlarmRepeatChoice {
             val repeat = savedState.get<String>(KEY_REPEAT)
                 ?.let { name -> RepeatKind.entries.firstOrNull { it.name == name } }
                 ?: RepeatKind.ONCE

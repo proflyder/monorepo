@@ -221,7 +221,7 @@ internal fun AlarmEditorUiState.withRepeat(repeat: RepeatKind, days: Set<Int>): 
     )
 }
 
-private fun AlarmEditorUiState.toAlarmDraft(): AlarmDraft = AlarmDraft(
+internal fun AlarmEditorUiState.toAlarmDraft(): AlarmDraft = AlarmDraft(
     label = label,
     hour = hour,
     minute = minute,
@@ -231,7 +231,7 @@ private fun AlarmEditorUiState.toAlarmDraft(): AlarmDraft = AlarmDraft(
     onceDate = if (repeat == RepeatKind.ONCE) onceDate else null,
 )
 
-private fun AlarmEditorUiState.toEditorDraft(): AlarmEditorDraft = AlarmEditorDraft(
+internal fun AlarmEditorUiState.toEditorDraft(): AlarmEditorDraft = AlarmEditorDraft(
     existingId = existing?.id,
     existingRevision = existing?.revision,
     label = label,
@@ -243,9 +243,9 @@ private fun AlarmEditorUiState.toEditorDraft(): AlarmEditorDraft = AlarmEditorDr
     onceDate = onceDate,
 )
 
-private fun AlarmEditorDraft.toAlarmDraft(): AlarmDraft = toUiState().toAlarmDraft()
+internal fun AlarmEditorDraft.toAlarmDraft(): AlarmDraft = toUiState().toAlarmDraft()
 
-private fun Schedule.toUiState(): AlarmEditorUiState = AlarmEditorUiState(
+internal fun Schedule.toUiState(): AlarmEditorUiState = AlarmEditorUiState(
     existing = this,
     label = label,
     hour = at.hour,
@@ -257,7 +257,7 @@ private fun Schedule.toUiState(): AlarmEditorUiState = AlarmEditorUiState(
     editing = true,
 )
 
-private fun AlarmEditorDraft.toUiState(): AlarmEditorUiState = AlarmEditorUiState(
+internal fun AlarmEditorDraft.toUiState(): AlarmEditorUiState = AlarmEditorUiState(
     existing = restoredExisting(),
     label = label,
     hour = hour,
@@ -269,7 +269,7 @@ private fun AlarmEditorDraft.toUiState(): AlarmEditorUiState = AlarmEditorUiStat
     editing = existingId != null,
 )
 
-private fun AlarmEditorDraft.restoredExisting(): Schedule? {
+internal fun AlarmEditorDraft.restoredExisting(): Schedule? {
     val id = existingId ?: return null
     return Schedule(
         id = id,
