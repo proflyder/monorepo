@@ -74,6 +74,38 @@ adb install -r bazel-bin/projects/mobile/android/app/app.apk
 - `platform/android/sign-release_test.sh` self-tests release signing with a
   throwaway key in the `android / android-app` unit.
 
+## Android Studio
+
+Plugin: **Bazel for Android Studio** (ASwB, `com.google.idea.bazel.aswb`,
+[Marketplace](https://plugins.jetbrains.com/plugin/9185-bazel-for-android-studio)).
+Its build must match the IDE build exactly (Settings → Plugins → Marketplace
+picks it; AS 2026.2.2 = `262.10968.63`). Since 2025 ASwB is developed in AOSP
+and ships only query sync; the JetBrains Bazel plugin does not support Android
+targets, and Gradle sync is not used here.
+
+1. Make the SDK visible to the IDE process (it runs Bazel itself; without
+   `ANDROID_HOME` `bazel query` fails on `@androidsdk//:aapt2`):
+   `launchctl setenv ANDROID_HOME ~/Library/Android/sdk` and
+   `launchctl setenv ANDROID_NDK_HOME ~/Library/Android/sdk/ndk/28.2.13676358`,
+   then restart Android Studio (or start it from a shell with both set).
+2. Settings → Bazel Settings → Bazel binary: `bazelisk` from `mise`
+   (`mise which bazelisk`).
+3. File → Import Bazel Project → workspace = repository root → *Import project
+   view file* → `projects/mobile/android/.bazelproject`.
+4. Sync. Highlighting comes from source; to resolve generated code (R,
+   view binding, Metro) and dependencies run *Bazel → Build dependencies* on
+   a file or *Enable analysis* for the working set. The plugin writes its aspect
+   into `.aswb/` (ignored by Git) and builds with `--config=android`.
+5. Run/Debug: Bazel run configuration for `//projects/mobile/android/app:app`
+   (`android_binary`, ABI `arm64-v8a`); unit tests via the gutter icon or a
+   Bazel test configuration for a `kt_android_local_test`/`kt_jvm_test` target.
+
+Known limitations: no Gradle-style Build Variants, Compose preview or Layout
+Inspector live updates; generated code appears only after *Build
+dependencies*; the first dependency build is a full Android build (minutes);
+an ASwB update after an IDE update is required, the plugin is pinned to one
+IDE build.
+
 ## Signing
 
 `rules_android` signs only with `--ks-pass pass:android` and no alias, so the
