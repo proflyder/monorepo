@@ -12,15 +12,15 @@
     android:paddingBottom="8dp">
 
     <TextView
-        android:id="@+id/light_note"
+        android:id="@+id/ds_light_note"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="@string/scenarios_light_note"
+        android:text="@string/ds_light_note"
         android:textAppearance="?attr/textAppearanceBodySmall"
         android:textColor="?attr/colorOnSurfaceVariant" />
 
     <LinearLayout
-        android:id="@+id/light_brightness_group"
+        android:id="@+id/ds_light_brightness_group"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
@@ -29,11 +29,11 @@
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="@string/scenarios_light_brightness"
+            android:text="@string/ds_light_brightness"
             android:textAppearance="?attr/textAppearanceTitleSmall" />
 
         <com.google.android.material.slider.Slider
-            android:id="@+id/light_brightness"
+            android:id="@+id/ds_light_brightness"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:stepSize="1"
@@ -41,14 +41,14 @@
             android:valueTo="100" />
 
         <TextView
-            android:id="@+id/light_brightness_value"
+            android:id="@+id/ds_light_brightness_value"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:textAppearance="?attr/textAppearanceBodySmall" />
     </LinearLayout>
 
     <LinearLayout
-        android:id="@+id/light_temp_group"
+        android:id="@+id/ds_light_temp_group"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
@@ -57,47 +57,47 @@
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="@string/scenarios_light_temperature"
+            android:text="@string/ds_light_temperature"
             android:textAppearance="?attr/textAppearanceTitleSmall" />
 
         <com.google.android.material.slider.Slider
-            android:id="@+id/light_temp"
+            android:id="@+id/ds_light_temp"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:stepSize="50" />
 
         <TextView
-            android:id="@+id/light_temp_value"
+            android:id="@+id/ds_light_temp_value"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:textAppearance="?attr/textAppearanceBodySmall" />
     </LinearLayout>
 
     <TextView
-        android:id="@+id/light_effect_label"
+        android:id="@+id/ds_light_effect_label"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
-        android:text="@string/scenarios_light_effect"
+        android:text="@string/ds_light_effect"
         android:textAppearance="?attr/textAppearanceTitleSmall"
         android:visibility="gone" />
 
     <com.google.android.material.chip.ChipGroup
-        android:id="@+id/light_effects"
+        android:id="@+id/ds_light_effects"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:visibility="gone"
         app:singleLine="false"
-        app:singleSelection="true" />
+        app:singleSelection="false" />
 
     <com.google.android.material.textfield.TextInputLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
-        android:hint="@string/scenarios_light_transition">
+        android:hint="@string/ds_light_transition">
 
         <com.google.android.material.textfield.TextInputEditText
-            android:id="@+id/light_transition"
+            android:id="@+id/ds_light_transition"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:inputType="numberDecimal" />

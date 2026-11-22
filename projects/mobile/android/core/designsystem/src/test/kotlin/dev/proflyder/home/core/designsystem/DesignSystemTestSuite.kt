@@ -10,5 +10,6 @@ import org.junit.runners.Suite
     PopupPlacementTest::class,
     FabStylesTest::class,
     CatalogScreenshotTest::class,
+    LightParamsEditorScreenshotTest::class,
 )
 class DesignSystemTestSuite

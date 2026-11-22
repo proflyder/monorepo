@@ -2,8 +2,10 @@ package dev.proflyder.home.feature.scenarios.presentation
 
 import android.view.LayoutInflater
 import android.view.ViewGroup
-import androidx.recyclerview.widget.DiffUtil
 import dev.proflyder.home.core.model.Scenario
+import dev.proflyder.home.core.presentation.IntentAdapterCallback
+import dev.proflyder.home.core.presentation.KeyedDiff
+import dev.proflyder.home.core.presentation.SwitchBinder
 import dev.proflyder.home.core.ui.AdapterCallback
 import dev.proflyder.home.core.ui.BaseListAdapter
 import dev.proflyder.home.core.ui.BaseViewHolder
@@ -20,16 +22,22 @@ internal interface ScenarioAdapterCallback : AdapterCallback<ScenarioRow> {
     fun onRun(scenario: Scenario)
 }
 
-private object ScenarioDiff : DiffUtil.ItemCallback<ScenarioRow>() {
-    override fun areItemsTheSame(oldItem: ScenarioRow, newItem: ScenarioRow): Boolean =
-        oldItem.scenario.id == newItem.scenario.id
+internal class ScenarioAdapterIntents(
+    private val dispatch: (ScenariosIntent) -> Unit,
+) : ScenarioAdapterCallback,
+    AdapterCallback<ScenarioRow> by IntentAdapterCallback(
+        dispatch,
+        onClick = { row -> ScenariosIntent.Open(row.scenario) },
+        onLongClick = { row -> ScenariosIntent.AskPin(row.scenario) },
+    ) {
+    override fun onToggle(scenario: Scenario, enabled: Boolean) = dispatch(ScenariosIntent.SetEnabled(scenario, enabled))
 
-    override fun areContentsTheSame(oldItem: ScenarioRow, newItem: ScenarioRow): Boolean = oldItem == newItem
+    override fun onRun(scenario: Scenario) = dispatch(ScenariosIntent.Run(scenario))
 }
 
 internal class ScenarioAdapter(
     callback: ScenarioAdapterCallback,
-) : BaseListAdapter<ScenarioRow, ItemScenarioBinding, ScenarioAdapterCallback>(callback, ScenarioDiff) {
+) : BaseListAdapter<ScenarioRow, ItemScenarioBinding, ScenarioAdapterCallback>(callback, KeyedDiff({ it.scenario.id })) {
 
     override fun onCreateHolder(
         inflater: LayoutInflater,
@@ -42,13 +50,10 @@ internal class ScenarioAdapter(
         binding: ItemScenarioBinding,
         callback: ScenarioAdapterCallback,
     ) : BaseViewHolder<ScenarioRow, ItemScenarioBinding, ScenarioAdapterCallback>(binding, callback) {
-        private var bindingSwitch = false
+        private val enabled = SwitchBinder(binding.scenarioEnabled) { checked -> callback.onToggle(item.scenario, checked) }
 
         init {
             forwardRowClicks()
-            binding.scenarioEnabled.setOnCheckedChangeListener { _, checked ->
-                if (!bindingSwitch) callback.onToggle(item.scenario, checked)
-            }
             binding.scenarioRun.setOnClickListener { callback.onRun(item.scenario) }
         }
 
@@ -60,13 +65,15 @@ internal class ScenarioAdapter(
             binding.scenarioDescription.setVisible(scenario.description.isNotBlank())
             binding.scenarioTriggers.text = ScenarioFormat.triggerSummary(context, scenario)
             binding.scenarioNext.text = ScenarioFormat.nextDue(context, scenario)
-            binding.root.alpha = if (scenario.enabled) 1f else 0.7f
+            binding.root.alpha = if (scenario.enabled) 1f else DISABLED_ALPHA
             binding.scenarioRun.isEnabled = !item.busy
             binding.scenarioEnabled.isEnabled = !item.busy
-            bindingSwitch = true
-            binding.scenarioEnabled.isChecked = scenario.enabled
-            bindingSwitch = false
+            enabled.render(scenario.enabled)
             binding.scenarioUnsupported.setVisible(scenario.hasUnsupportedParts)
+        }
+
+        private companion object {
+            const val DISABLED_ALPHA = 0.7f
         }
     }
 }

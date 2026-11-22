@@ -9,6 +9,7 @@ import android.graphics.Paint
 import android.widget.ImageView
 import dev.proflyder.home.core.model.ChatAttachmentKind
 import dev.proflyder.home.feature.chat.data.LocalAttachment
+import dev.proflyder.home.feature.chat.data.decodeThumbnail
 import android.view.LayoutInflater
 import android.view.View
 import androidx.recyclerview.widget.LinearLayoutManager

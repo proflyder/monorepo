@@ -30,6 +30,12 @@
     <ID>PublicInImpl:AppearanceViewModel.kt$AppearanceViewModel : ViewModel</ID>
     <ID>PublicInImpl:AppearanceViewModel.kt$AppearanceViewModelFactoryContributor : ViewModelFactoryContributor</ID>
     <ID>PublicInImpl:CallBindings.kt$CallBindings</ID>
+    <ID>PublicInImpl:CallActivity.kt$CallActivity : AppCompatActivity</ID>
+    <ID>PublicInImpl:CallEntryPoint.kt$CallEntryPoint</ID>
+    <ID>PublicInImpl:CallForegroundService.kt$CallForegroundService : Service</ID>
+    <ID>PublicInImpl:CallNotificationControllerImpl.kt$CallNotificationControllerImpl : CallNotificationController</ID>
+    <ID>PublicInImpl:CallTelecomBridge.kt$CallTelecomBridge</ID>
+    <ID>PublicInImpl:ChatComponents.kt$ChatComponents</ID>
     <ID>PublicInImpl:ChatFeatureEntry.kt$ChatDestination : Destination</ID>
     <ID>PublicInImpl:ChatFeatureEntry.kt$ChatFeatureEntry : FeatureEntry</ID>
     <ID>PublicInImpl:ChatFragment.kt$ChatFragment : BaseFragment</ID>

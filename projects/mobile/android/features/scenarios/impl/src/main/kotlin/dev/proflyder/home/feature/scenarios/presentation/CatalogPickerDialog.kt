@@ -1,5 +1,6 @@
 package dev.proflyder.home.feature.scenarios.presentation
 
+import dev.proflyder.home.core.presentation.SwitchBinder
 import android.content.Context
 import android.view.LayoutInflater
 import android.view.View
@@ -24,23 +25,22 @@ import dev.proflyder.home.feature.scenarios.impl.databinding.SheetChoiceBinding
 internal class CatalogPickerDialog(
     private val context: Context,
     rawEntries: List<ControlEntry>,
-    private val onSelect: (ControlEntry) -> Unit,
+    private val includeSettings: Boolean,
+    private val onSelect: (String) -> Unit,
+    private val onShowSettings: (Boolean) -> Unit,
 ) {
-    private val dialog = BottomSheetDialog(context)
+    val dialog = BottomSheetDialog(context)
     private val views = SheetChoiceBinding.inflate(LayoutInflater.from(context))
     private val labels = ResourceGroupingLabels(context)
     private val entries = rawEntries.map { entry ->
         entry.copy(title = serverText(context, entry.titleKey, entry.titleArgs) ?: entry.title)
     }
-    private var includeSettings = false
 
     init {
         views.choiceTitle.setText(R.string.scenarios_catalog_title)
         renderList()
         dialog.setContentView(NestedScrollView(context).apply { addView(views.root) })
     }
-
-    fun show() = dialog.show()
 
     private fun renderList() {
         val list = views.choiceItems
@@ -76,8 +76,8 @@ internal class CatalogPickerDialog(
         row.catalogRowSubtitle.text = actions
         row.catalogRowSubtitle.setVisible(actions.isNotBlank())
         row.root.setOnClickListener {
-            onSelect(entry)
             dialog.dismiss()
+            onSelect(entry.id)
         }
         return row.root
     }
@@ -86,11 +86,7 @@ internal class CatalogPickerDialog(
         val views = ItemCatalogSettingsBinding.inflate(LayoutInflater.from(context))
         views.catalogShowSettings.text =
             context.getString(R.string.scenarios_catalog_show_settings, count)
-        views.catalogShowSettings.isChecked = includeSettings
-        views.catalogShowSettings.setOnCheckedChangeListener { _, checked ->
-            includeSettings = checked
-            renderList()
-        }
+        SwitchBinder(views.catalogShowSettings, onShowSettings).render(includeSettings)
         return views.root
     }
 

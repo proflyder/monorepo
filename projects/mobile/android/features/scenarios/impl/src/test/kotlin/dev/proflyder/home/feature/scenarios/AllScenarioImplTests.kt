@@ -7,5 +7,7 @@ import org.junit.runners.Suite
 @Suite.SuiteClasses(
     ScenarioUseCasesTest::class,
     ScenarioEditorViewModelTest::class,
+    ScenarioEditorDraftCodecTest::class,
+    ScenariosViewModelTest::class,
 )
 class AllScenarioImplTests

@@ -143,14 +143,6 @@
     </string-array>
 
     <string name="scenarios_light_dialog_title">Light parameters</string>
-    <string name="scenarios_light_note">Only parameters the light reports are shown. Turn off accepts only a transition.</string>
-    <string name="scenarios_light_brightness">Brightness</string>
-    <string name="scenarios_light_temperature">Color temperature</string>
-    <string name="scenarios_light_effect">Effect</string>
-    <string name="scenarios_light_effect_none">None</string>
-    <string name="scenarios_light_percent">%1$d%%</string>
-    <string name="scenarios_light_kelvin">%1$d K</string>
-    <string name="scenarios_light_transition">Transition, seconds (optional, 0–300)</string>
 
     <string name="scenarios_conflict_title">Changed on the server</string>
     <string name="scenarios_conflict_message">Another client saved a newer version of this scenario. Reload it? Local edits will be discarded.</string>

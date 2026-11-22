@@ -18,6 +18,8 @@ metro_android_library(
         "//projects/mobile/android/core/network/api",
         "//projects/mobile/android/core/runtime",
         "//projects/mobile/android/core/designsystem",
+        "//projects/mobile/android/core/presentation",
+        "//projects/mobile/android/core/runtime",
         "//projects/mobile/android/core/ui",
         "//projects/mobile/android/features/chat/api",
         "@maven//:androidx_activity_activity_ktx",
@@ -33,6 +35,7 @@ metro_android_library(
         "@maven//:dev_zacsweers_metro_runtime_jvm",
         "@maven//:org_jetbrains_kotlinx_kotlinx_coroutines_android",
         "@maven//:org_jetbrains_kotlinx_kotlinx_coroutines_core",
+        "@maven//:org_jetbrains_kotlinx_kotlinx_serialization_json",
     ],
 )
 
@@ -72,6 +75,8 @@ kt_android_local_test(
         "//projects/mobile/android/core/runtime",
         "//projects/mobile/android/core/theme",
         "//projects/mobile/android/core/designsystem",
+        "//projects/mobile/android/core/presentation",
+        "//projects/mobile/android/core/runtime",
         "//projects/mobile/android/core/ui",
         "//projects/mobile/android/features/chat/api",
         "@maven//:androidx_appcompat_appcompat",

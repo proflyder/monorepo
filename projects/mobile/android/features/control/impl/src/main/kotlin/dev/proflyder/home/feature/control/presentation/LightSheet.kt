@@ -8,6 +8,7 @@ import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.slider.Slider
 import dev.proflyder.home.core.model.ControlEntry
 import dev.proflyder.home.core.model.LightAdjust
+import dev.proflyder.home.core.model.LightRanges
 import dev.proflyder.home.core.ui.setVisible
 import dev.proflyder.home.feature.control.LightColors
 import dev.proflyder.home.feature.control.impl.R
@@ -22,6 +23,7 @@ internal class LightSheet(
     private val dialog = BottomSheetDialog(context)
     private val views = SheetLightBinding.inflate(LayoutInflater.from(context))
     private val light = requireNotNull(entry.light)
+    private val ranges = LightRanges.of(light)
 
     private var temperature = light.kelvin
     private var hue = light.hue
@@ -45,8 +47,12 @@ internal class LightSheet(
     fun dismiss() = dialog.dismiss()
 
     private fun setupBrightness() {
-        views.lightBrightnessGroup.setVisible(light.brightness)
-        val start = if (brightnessKnown) light.brightnessPct.coerceIn(1, 100).toFloat() else 100f
+        val range = ranges.brightness
+        views.lightBrightnessGroup.setVisible(range != null)
+        if (range == null) return
+        views.lightBrightness.valueFrom = range.first.toFloat()
+        views.lightBrightness.valueTo = range.last.toFloat()
+        val start = (ranges.brightnessOf(light.brightnessPct.takeIf { brightnessKnown }, LightRanges.MAX_BRIGHTNESS) ?: range.last).toFloat()
         views.lightBrightness.value = start
         showPercent(start)
         views.lightBrightness.addOnChangeListener { _, value, fromUser ->
@@ -62,12 +68,12 @@ internal class LightSheet(
     }
 
     private fun setupTemperature() {
-        views.lightTempGroup.setVisible(light.colorTemp)
-        if (!light.colorTemp) return
-        views.lightTemp.valueFrom = roundTo50(light.minKelvin).toFloat()
-        views.lightTemp.valueTo = roundTo50(light.maxKelvin).coerceAtLeast(roundTo50(light.minKelvin) + 50).toFloat()
-        val start = (if (temperature > 0) temperature else (light.minKelvin + light.maxKelvin) / 2)
-        temperature = roundTo50(start).coerceIn(views.lightTemp.valueFrom.toInt(), views.lightTemp.valueTo.toInt())
+        val range = ranges.kelvin
+        views.lightTempGroup.setVisible(range != null)
+        if (range == null) return
+        views.lightTemp.valueFrom = range.first.toFloat()
+        views.lightTemp.valueTo = range.last.toFloat()
+        temperature = ranges.kelvinOf(temperature, 0) ?: range.first
         views.lightTempBar.background = GradientDrawable(
             GradientDrawable.Orientation.LEFT_RIGHT,
             intArrayOf(
@@ -147,8 +153,6 @@ internal class LightSheet(
             override fun onStopTrackingTouch(slider: Slider) = action(slider.value)
         })
     }
-
-    private fun roundTo50(value: Int) = (value / 50.0).roundToInt() * 50
 
     private companion object {
         const val NEUTRAL_KELVIN = 4000

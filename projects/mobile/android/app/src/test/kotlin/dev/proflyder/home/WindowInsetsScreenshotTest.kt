@@ -20,6 +20,7 @@ import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
 import com.google.android.material.textfield.TextInputLayout
 import dev.proflyder.home.core.designsystem.CardTextInputLayout
+import dev.proflyder.home.core.designsystem.R as DesignR
 import dev.proflyder.home.core.theme.AppTheme
 import dev.proflyder.home.feature.chat.ChatRoute
 import dev.proflyder.home.feature.connection.ConnectionDestination
@@ -413,7 +414,7 @@ class WindowInsetsScreenshotTest {
             RemindersR.layout.fragment_reminder_editor,
             ScenariosR.layout.fragment_scenario_editor,
             ScenariosR.layout.dialog_scenario_speak,
-            ScenariosR.layout.dialog_scenario_light_params,
+            DesignR.layout.ds_light_params_editor,
             ScenariosR.layout.dialog_scenario_entity_condition,
             ScenariosR.layout.dialog_scenario_delay,
             TimersR.layout.fragment_timers,

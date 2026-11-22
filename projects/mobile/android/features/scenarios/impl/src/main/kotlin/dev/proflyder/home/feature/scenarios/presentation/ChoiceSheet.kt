@@ -19,7 +19,7 @@ internal class ChoiceSheet(
         val onClick: () -> Unit,
     )
 
-    private val dialog = BottomSheetDialog(context)
+    val dialog = BottomSheetDialog(context)
 
     init {
         val views = SheetChoiceBinding.inflate(LayoutInflater.from(context))

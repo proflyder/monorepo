@@ -193,3 +193,6 @@ internal object ScenarioFormat {
 
     const val SEPARATOR = " · "
 }
+
+internal fun List<ControlEntry>.titleOf(entryId: String): String? =
+    firstOrNull { it.id == entryId }?.let { it.title.ifBlank { it.id } }
