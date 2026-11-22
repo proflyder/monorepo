@@ -1,7 +1,8 @@
 package dev.proflyder.home.feature.settings.presentation
 
 import androidx.lifecycle.ViewModel
-import dev.proflyder.home.core.ui.BaseViewModel
+import androidx.lifecycle.ViewModelProvider
+import dev.proflyder.home.core.presentation.StateViewModel
 import dev.proflyder.home.core.ui.SimpleViewModelFactory
 import dev.proflyder.home.core.ui.ViewModelFactoryContributor
 import dev.proflyder.home.feature.push.NotificationHistoryEntry
@@ -10,20 +11,25 @@ import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesIntoSet
 import dev.zacsweers.metro.Inject
 
-enum class HistoryNotice {
-    CLEARED,
-}
-
 data class NotificationHistoryUiState(
     val entries: List<NotificationHistoryEntry> = emptyList(),
-    val notice: HistoryNotice? = null,
 ) {
     val isEmpty: Boolean get() = entries.isEmpty()
 }
 
-class NotificationHistoryViewModel(
+internal sealed interface HistoryIntent {
+    data class Open(val entry: NotificationHistoryEntry) : HistoryIntent
+    data object Clear : HistoryIntent
+}
+
+internal sealed interface HistoryEvent {
+    data object Cleared : HistoryEvent
+    data class OpenRoute(val route: String) : HistoryEvent
+}
+
+internal class NotificationHistoryViewModel(
     private val store: NotificationHistoryStore,
-) : BaseViewModel<NotificationHistoryUiState>(
+) : StateViewModel<NotificationHistoryUiState, HistoryIntent, HistoryEvent>(
     NotificationHistoryUiState(entries = store.entries.value),
 ) {
     init {
@@ -31,15 +37,18 @@ class NotificationHistoryViewModel(
         launch { store.entries.collect { stored -> updateState { copy(entries = stored) } } }
     }
 
-    fun clear() {
-        launch {
-            store.clear()
-            updateState { copy(notice = HistoryNotice.CLEARED) }
+    override fun handle(intent: HistoryIntent) {
+        when (intent) {
+            is HistoryIntent.Open -> intent.entry.deepLink?.let { emit(HistoryEvent.OpenRoute(it)) }
+            HistoryIntent.Clear -> clear()
         }
     }
 
-    fun consumeNotice() {
-        updateState { copy(notice = null) }
+    private fun clear() {
+        launch {
+            store.clear()
+            emit(HistoryEvent.Cleared)
+        }
     }
 }
 
@@ -50,7 +59,7 @@ class NotificationHistoryViewModelFactoryContributor(
 ) : ViewModelFactoryContributor {
     override val viewModelClass: Class<out ViewModel> = NotificationHistoryViewModel::class.java
 
-    override fun createFactory() = SimpleViewModelFactory {
+    override fun createFactory(): ViewModelProvider.Factory = SimpleViewModelFactory {
         NotificationHistoryViewModel(store)
     }
 }

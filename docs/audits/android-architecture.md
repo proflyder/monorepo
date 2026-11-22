@@ -309,12 +309,86 @@ core/designsystem   все визуальные компоненты, общие
 | P5 | **VPN: окружение и координатор** (сверить/слить с `feat/vpn-network-observe`): `NetworkEnvironment`, `AutoConnectCoordinator`, политики в impl, `TunnelRequest` вместо `atHome` | R1, V4, V6, V7, V15 | Activity не вызывает `onForeground`/`checkNow`; автоподключение покрыто тестом на фейковых потоках |
 | P6 | **VPN: транспорт за интерфейсом**: `VpnTransport` + `VpnTransportChain`, протокол-нейтральный `VpnProfile`, протокольный код в `impl/transport/*`, актор-контроллер, статус потоком, честный статус внешнего VPN | V1, V2, V3, V5, V8–V12 | Добавление фейкового третьего транспорта в тесте не требует правок VM/Fragment/контроллера; в `vpn/api` нет WireGuard/OpenConnect |
 | P7 | **Push реактивно**: `PushTokenSource`, `PushRegistrar` на `combine`, работа сервиса в app-scope, `NotificationPermission` | R6, R7, P1, P2 | Смена сервера/токена регистрирует без перезапуска (тест на фейках); нет `FirebaseMessaging.getInstance()` вне адаптера |
-| P8 | **Базовый ViewModel-слой**: `updateState`-only, `events`, `RefreshController`, `ListLoadState`, `EditorDraftSession`; миграция alarms/reminders/timers | T1–T8, T10–T12, R9 (для time) | Baseline `NoDirectStateWrite` для этих модулей пуст; нет `generation`/`consume*`; refresh не в `onResume` |
-| P9 | **Звонок**: `CallManager` в impl, `CallViewModel`, аудио по состоянию звонка, `LifecycleService` | K1–K6, R12 | Поворот во время звонка не глушит звук (Robolectric-тест); в `call/api` только контракты |
-| P10 | **Управление домом**: репозиторий каталога со StateFlow и политикой обновления, разбиение VM и адаптера, `QuickTileProvider`, билдеры в impl, общий `FavoritePreferences` поток | R10, R11, F1–F8, R9 (control), Q4 | `ControlAdapter`/`ControlViewModel` < 300 строк каждый; нет `delay`-reconcile в VM; плитки VPN/звонка вкладываются своими фичами |
-| P11 | **Сценарии и чат**: `EditorDialogFragment<T>`, `LightParamsEditor` + `LightParams`, draft в impl; интерфейс `ChatRepository`, стрим потоком, `RecordingState`, `@Serializable` outbox | F9–F16, C7, R9 (scenarios) | Диалоги переживают поворот; `ChatFragment` не запускает стрим; общий редактор света в designsystem |
-| P12 | **Хром и навигация**: `ToolbarContribution`, `DeepLinkResolver`, `AppChromeState`, типизированные маршруты, `features/time`, system polling в репозиторий | U1–U3, T13, F18 | `MainActivity` < 150 строк, без `CONTROL_TAB`; тесты `FragmentRouter` на типизированных маршрутах |
+| P8 | **Базовый ViewModel-слой** на `core/presentation`: `StateViewModel<S, I, E>` (`updateState`-only, `events`), `by latest()` вместо `generation`/`RefreshController`, `RefreshMode`, `ListLoadState`, `EditorDraftSession`; `AppEventBus` (`ScheduleChanged` из редакторов → мягкое обновление списков); миграция alarms/reminders/timers | T1–T8, T10–T12, R9 (для time) | Baseline `NoDirectStateWrite` для этих модулей пуст; нет `generation`/`consume*`; refresh не в `onResume` |
+| P9 | **Звонок**: `CallManager` в impl, `CallViewModel` на `StateViewModel` (команды — намерения, «положить трубку»/разрешения — события), аудио по состоянию звонка, `LifecycleService` | K1–K6, R12 | Поворот во время звонка не глушит звук (Robolectric-тест); в `call/api` только контракты |
+| P10 | **Управление домом**: репозиторий каталога со StateFlow и политикой обновления, разбиение VM и адаптера (`KeyedDiff` + `aspectPayload`, клики через `IntentAdapterCallback`, тумблеры устройств только из state), `QuickTileProvider`, билдеры в impl, общий `FavoritePreferences` поток | R10, R11, F1–F8, R9 (control) | `ControlAdapter`/`ControlViewModel` < 300 строк каждый; нет `delay`-reconcile в VM; плитки VPN/звонка вкладываются своими фичами |
+| P11 | **Сценарии и чат**: `EditorDialogFragment<T>`, `LightParamsEditor` + `LightParams`, draft в impl, редакторы на `StateViewModel` + `SwitchBinder`; интерфейс `ChatRepository`, стрим потоком, `RecordingState`, `@Serializable` outbox | F9–F16, C7, R9 (scenarios) | Диалоги переживают поворот; `ChatFragment` не запускает стрим; общий редактор света в designsystem |
+| P12 | **Хром и навигация**: `ToolbarContribution`, `DeepLinkResolver`, `AppChromeState`, типизированные маршруты (переход — событие `OpenRoute` из ViewModel), `features/time`, system polling в репозиторий; все экраны — `ScreenFragment` | U1–U3, T13, F18 | `MainActivity` < 150 строк, без `CONTROL_TAB`; тесты `FragmentRouter` на типизированных маршрутах |
 | P13 | **Строки и финальная чистка**: `ds_action_*`, заголовки, `Favorites` из ресурсов, конфиги без английских строк, снятие baseline'ов detekt | S1, S2, F17, C8, C9, Q1 | Baseline'ы detekt удалены, правила P0 действуют без исключений |
 
 Зависимости: P0 → все; P1 → P2, P5, P7, P8; P3 после P2; P6 после P5;
 P8–P11 после P1/P2 и между собой независимы; P13 последним.
+
+## 4. Базовый слой presentation
+
+Модуль `core/presentation` задаёт общий каркас экранов. Он надстроен над
+`core/ui` (`BaseViewModel.updateState`, `BaseFragment`, `BaseListAdapter`,
+`PayloadSet`) и не дублирует его.
+
+### Принципы
+
+| принцип | реализация |
+|---|---|
+| Единый источник правды: всё состояние экрана, включая тумблеры, приходит из ViewModel | один `StateFlow<S>`; меняется только через `updateState`; флаги загрузки — поля `S`, общий `ListLoadState` — в P8 |
+| Однонаправленный поток: UI только отправляет намерения | `dispatch(intent: I)` → `handle(intent)`; намерения — sealed-интерфейс фичи |
+| Одноразовые события ViewModel → UI не теряются и не повторяются | `StateViewModel.events`: `Channel(UNLIMITED)` + `receiveAsFlow`; событие ждёт `STARTED` и доставляется один раз; полей `notice` и методов `consume*` нет |
+| Мягкое и полное обновление различаются | `RefreshMode.SOFT/HARD` + `Refreshable` |
+| Последний запрос побеждает | `LatestLauncher` и делегат `by latest()` / `scope.latestLauncher()` вместо `generation` |
+| Невидимые экраны обновляются в фоне по глобальным событиям | `AppEventBus` за интерфейсом, типобезопасные `AppEvent`, `eventsOf<T>()`; `SharedFlowAppEventBus` через Metro `@ContributesBinding`, буфер 64 с `DROP_OLDEST`, публикация не блокирует |
+| Списки сравниваются по ключу, перерисовываются только изменившиеся поля | `KeyedDiff(key, payload)` + `aspectPayload(mapOf(Aspect to getter))` → `PayloadSet`, обработка в `bindPayloads` из `core/ui` |
+| Обработчики адаптера — один делегат | `IntentAdapterCallback(dispatch, onClick, onLongClick)` превращает клики в намерения; фича подключает его через `by` |
+| Общая конфигурация для холдеров | холдер получает типизированный `CB` из `core/ui`; конфигурацию экрана фича добавляет в свой интерфейс `CB`, адаптер реализует его |
+| Разовая настройка холдера | `init` или `by lazy`, если настройке нужен первый элемент |
+| Зависимости только через Metro, ViewModel без `Context` и UI-эффектов | показы сообщений и переходы — события, их выполняет фрагмент |
+
+### Устройство модуля
+
+- `StateViewModel<S, I, E>`: `state` (из `BaseViewModel`), `events: Flow<E>`,
+  `dispatch(I)`, защищённые `handle`, `emit`, `latest()`. Состояние меняется
+  только через `updateState`; одноразовые сообщения — только через `emit`.
+  Поля `notice` и методы `consume*` больше не нужны.
+- `ScreenFragment<VB, S, I, E>`: финальный `onBindingCreated` подписывает
+  `render(state)` и `onEvent(event)` на `STARTED`. Фича реализует
+  `onScreenCreated`, `render`, `onEvent` и отправляет намерения через
+  `dispatch`. ViewModel получается делегатом `by screenViewModel()`.
+- `ControlBinder<T>` / `SwitchBinder`: при клике тумблер не меняет своё
+  положение. Он отправляет намерение с желаемым значением и сразу возвращается
+  к последнему отрисованному state. Новое положение приходит только из
+  ViewModel. Программная отрисовка обратный вызов не вызывает.
+- `AppEventBus`: публикует событие тот, кто изменил данные (например, редактор).
+  ViewModel других экранов подписываются в `viewModelScope` и обновляются в
+  фоне (`RefreshMode.SOFT`), пока экран невидим. Шина не заменяет `StateFlow`
+  репозиториев: если источник правды уже реактивный, шина не нужна.
+- Ограничение: события в `Channel` не переживают смерть процесса. Всё, что
+  должно пережить её, хранится в state или в сторе.
+
+### Образцы
+
+- **VPN** (`features/vpn/impl/.../presentation`): `VpnIntent`/`VpnEvent`.
+  Решение «отключить / запросить разрешение / подключить» перенесено из
+  фрагмента в ViewModel (`VpnEvent.RequestPermission`). Результат системного
+  разрешения возвращается намерением `PermissionResult`; установка сертификата
+  приходит событием `Open`. Тумблеры «Подключать вне дома» и «Подключать при
+  открытии» — `SwitchBinder`. Разметка с обработчиками собрана в `VpnScreen`,
+  её проверяют скриншот-тесты и тест кликов
+  (`switchesSendIntentsAndShowOnlyTheRenderedState`).
+- **История уведомлений** (`features/settings/impl`): пример адаптера —
+  `KeyedDiff(NotificationHistoryEntry::id)`, клики через
+  `IntentAdapterCallback(::dispatch, HistoryIntent::Open)`; переход и «Очищено»
+  приходят событиями `HistoryEvent`.
+
+### Как мигрировать фичу
+
+1. Описать `sealed interface <F>Intent` и `<F>Event` рядом с ViewModel.
+2. Унаследовать ViewModel от `StateViewModel<S, I, E>` и разобрать намерения в
+   `handle` через `when`. Публичные методы-команды, поля `notice`/`error` для
+   одноразовых показов и `consume*` удалить.
+3. Перевести фрагмент на `ScreenFragment` и `by screenViewModel()`. Обработчики
+   только вызывают `dispatch(...)`. Переключаемые контролы оформить через
+   `SwitchBinder`, не читать `isChecked` и не записывать его напрямую.
+4. Перезапуски загрузки обернуть в `by latest()` (убирает `refreshJob` и
+   `generation`).
+5. Адаптер: `KeyedDiff` + `aspectPayload` и `IntentAdapterCallback` через `by`.
+6. Если фича меняет данные, которые показывает другой экран без реактивного
+   стора, опубликовать `AppEvent`, а на другом экране подписаться через
+   `eventsOf<T>()`.

@@ -7,14 +7,13 @@ import android.net.Uri
 import android.os.Bundle
 import androidx.activity.result.ActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.fragment.app.viewModels
-import androidx.lifecycle.lifecycleScope
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import dev.proflyder.home.core.designsystem.Tone
-import dev.proflyder.home.core.ui.BaseFragment
+import dev.proflyder.home.core.presentation.ScreenFragment
+import dev.proflyder.home.core.presentation.SwitchBinder
+import dev.proflyder.home.core.presentation.screenViewModel
 import dev.proflyder.home.core.ui.applyScrollBottomInset
 import dev.proflyder.home.core.ui.setVisible
-import dev.proflyder.home.core.ui.viewModelFactory
 import dev.proflyder.home.feature.vpn.VpnAuth
 import dev.proflyder.home.feature.vpn.VpnConnection
 import dev.proflyder.home.feature.vpn.VpnProfileState
@@ -22,69 +21,52 @@ import dev.proflyder.home.feature.vpn.VpnRoute
 import dev.proflyder.home.feature.vpn.impl.R
 import dev.proflyder.home.feature.vpn.impl.databinding.FragmentVpnBinding
 import dev.proflyder.home.feature.vpn.isActive
-import kotlinx.coroutines.launch
 
-class VpnFragment : BaseFragment<FragmentVpnBinding>(FragmentVpnBinding.Companion::inflate) {
-    private val viewModel: VpnViewModel by viewModels { viewModelFactory(VpnViewModel::class.java) }
+internal class VpnFragment :
+    ScreenFragment<FragmentVpnBinding, VpnUiState, VpnIntent, VpnEvent>(FragmentVpnBinding.Companion::inflate) {
+    override val viewModel: VpnViewModel by screenViewModel()
 
     private val permission = registerForActivityResult(ActivityResultContracts.StartActivityForResult(), ::onPermission)
 
     private val certificatePicker = registerForActivityResult(ActivityResultContracts.OpenDocument(), ::onCertificate)
 
-    override fun onBindingCreated(binding: FragmentVpnBinding, savedInstanceState: Bundle?) {
+    private var screen: VpnScreen? = null
+
+    override fun onScreenCreated(binding: FragmentVpnBinding, savedInstanceState: Bundle?) {
         binding.root.applyScrollBottomInset()
-        VpnScreenBinder.labels(binding)
-        binding.vpnToggle.setOnClickListener { onToggle() }
-        binding.vpnExternal.setOnClickListener { viewModel.openExternal() }
-        binding.vpnRoute.onSelected = { index -> viewModel.setRoute(VpnRoute.entries[index]) }
-        binding.vpnAuth.onSelected = { index -> viewModel.setAuth(VpnAuth.entries[index]) }
-        binding.vpnOpenRow.switch.setOnClickListener { viewModel.setConnectOnOpen(binding.vpnOpenRow.switch.isChecked) }
-        binding.vpnAutoRow.switch.setOnClickListener { viewModel.setAutoConnect(binding.vpnAutoRow.switch.isChecked) }
+        screen = VpnScreen(binding, ::dispatch)
         binding.vpnCertificateImport.setOnClickListener { certificatePicker.launch(CERTIFICATE_TYPES) }
-        binding.vpnCertificateInstall.setOnClickListener { installCertificate() }
-        binding.vpnReissue.setOnClickListener { viewModel.reissue() }
         binding.vpnForget.setOnClickListener { confirmForget() }
-        viewModel.state.observe { render(it) }
+    }
+
+    override fun onBindingDestroyed() {
+        screen = null
     }
 
     override fun onResume() {
         super.onResume()
-        viewModel.refresh()
+        dispatch(VpnIntent.Refresh)
     }
 
-    private fun render(state: VpnUiState) {
-        VpnScreenBinder.render(binding, state, System.currentTimeMillis())
-        state.notice?.let { notice ->
-            showNotice(notice)
-            viewModel.consumeNotice()
-        }
+    override fun render(state: VpnUiState) {
+        screen?.render(state, System.currentTimeMillis())
     }
 
-    private fun onToggle() {
-        val request = viewModel.permissionIntent()
-        when {
-            viewModel.state.value.connection.isActive -> viewModel.toggle()
-            request != null -> permission.launch(request)
-            else -> viewModel.connect()
+    override fun onEvent(event: VpnEvent) {
+        when (event) {
+            is VpnEvent.Notice -> showNotice(event.notice)
+            is VpnEvent.RequestPermission -> permission.launch(event.request)
+            is VpnEvent.Open -> open(event.target)
         }
     }
 
     private fun onPermission(result: ActivityResult) {
-        when (result.resultCode) {
-            Activity.RESULT_OK -> viewModel.connect()
-            else -> showError(R.string.vpn_permission_denied)
-        }
+        dispatch(VpnIntent.PermissionResult(result.resultCode == Activity.RESULT_OK))
     }
 
     private fun onCertificate(uri: Uri?) {
         val picked = uri ?: return
-        VpnCertificateDialog(requireContext()) { password -> viewModel.importCertificate(picked, password) }.show()
-    }
-
-    private fun installCertificate() {
-        viewLifecycleOwner.lifecycleScope.launch {
-            viewModel.installIntent()?.let(::open)
-        }
+        VpnCertificateDialog(requireContext()) { password -> dispatch(VpnIntent.ImportCertificate(picked, password)) }.show()
     }
 
     private fun confirmForget() {
@@ -92,7 +74,7 @@ class VpnFragment : BaseFragment<FragmentVpnBinding>(FragmentVpnBinding.Companio
             .setTitle(R.string.vpn_forget_confirm_title)
             .setMessage(R.string.vpn_forget_confirm_body)
             .setNegativeButton(android.R.string.cancel, null)
-            .setPositiveButton(R.string.vpn_forget) { _, _ -> viewModel.forget() }
+            .setPositiveButton(R.string.vpn_forget) { _, _ -> dispatch(VpnIntent.Forget) }
             .show()
     }
 
@@ -104,6 +86,7 @@ class VpnFragment : BaseFragment<FragmentVpnBinding>(FragmentVpnBinding.Companio
             VpnNotice.CERTIFICATE_WRONG_PASSWORD -> showError(R.string.vpn_certificate_wrong_password)
             VpnNotice.CERTIFICATE_UNREADABLE -> showError(R.string.vpn_certificate_unreadable)
             VpnNotice.CERTIFICATE_TOO_LARGE -> showError(R.string.vpn_certificate_too_large)
+            VpnNotice.PERMISSION_DENIED -> showError(R.string.vpn_permission_denied)
         }
     }
 
@@ -117,18 +100,35 @@ class VpnFragment : BaseFragment<FragmentVpnBinding>(FragmentVpnBinding.Companio
     }
 }
 
-internal object VpnScreenBinder {
-    fun labels(binding: FragmentVpnBinding) {
+internal class VpnScreen(
+    private val binding: FragmentVpnBinding,
+    dispatch: (VpnIntent) -> Unit,
+) {
+    private val autoConnect = SwitchBinder(binding.vpnAutoRow.switch) { dispatch(VpnIntent.SetAutoConnect(it)) }
+
+    private val connectOnOpen = SwitchBinder(binding.vpnOpenRow.switch) { dispatch(VpnIntent.SetConnectOnOpen(it)) }
+
+    init {
+        labels()
+        binding.vpnToggle.setOnClickListener { dispatch(VpnIntent.ToggleConnection) }
+        binding.vpnExternal.setOnClickListener { dispatch(VpnIntent.OpenExternal) }
+        binding.vpnRoute.onSelected = { index -> dispatch(VpnIntent.SetRoute(VpnRoute.entries[index])) }
+        binding.vpnAuth.onSelected = { index -> dispatch(VpnIntent.SetAuth(VpnAuth.entries[index])) }
+        binding.vpnCertificateInstall.setOnClickListener { dispatch(VpnIntent.InstallCertificate) }
+        binding.vpnReissue.setOnClickListener { dispatch(VpnIntent.Reissue) }
+    }
+
+    private fun labels() {
         val context = binding.root.context
         binding.vpnRoute.setLabels(listOf(context.getString(R.string.vpn_route_all), context.getString(R.string.vpn_route_home)))
         binding.vpnAuth.setLabels(listOf(context.getString(R.string.vpn_auth_certificate), context.getString(R.string.vpn_auth_password)))
         binding.vpnCertificateImport.contentDescription = context.getString(R.string.vpn_certificate_import)
     }
 
-    fun render(binding: FragmentVpnBinding, state: VpnUiState, nowMillis: Long) {
-        renderStatus(binding, state.connection, nowMillis, state.busy)
-        renderRoute(binding, state)
-        renderAuth(binding, state)
+    fun render(state: VpnUiState, nowMillis: Long) {
+        renderStatus(state.connection, nowMillis, state.busy)
+        renderRoute(state)
+        renderAuth(state)
         val context = binding.root.context
         binding.vpnProfileRow.subtitle = VpnTexts.profile(context, state.profile)
         binding.vpnProfileRow.subtitleTone = profileTone(state.profile)
@@ -136,7 +136,7 @@ internal object VpnScreenBinder {
         binding.vpnForget.isEnabled = !state.busy
     }
 
-    private fun renderStatus(binding: FragmentVpnBinding, connection: VpnConnection, nowMillis: Long, busy: Boolean) {
+    private fun renderStatus(connection: VpnConnection, nowMillis: Long, busy: Boolean) {
         val context = binding.root.context
         binding.vpnStatusRow.title = context.getString(VpnTexts.title(connection))
         binding.vpnStatusRow.subtitle = VpnTexts.detail(context, connection, nowMillis)
@@ -149,16 +149,16 @@ internal object VpnScreenBinder {
         binding.vpnExternal.setVisible(connection == VpnConnection.FallbackRequired)
     }
 
-    private fun renderRoute(binding: FragmentVpnBinding, state: VpnUiState) {
+    private fun renderRoute(state: VpnUiState) {
         val context = binding.root.context
         binding.vpnRoute.select(state.settings.route.ordinal)
         binding.vpnRouteHelp.text = context.getString(routeHelp(state.settings.route))
-        binding.vpnAutoRow.switch.isChecked = state.settings.autoConnect
-        binding.vpnOpenRow.switch.isChecked = state.settings.connectOnOpen
+        autoConnect.render(state.settings.autoConnect)
+        connectOnOpen.render(state.settings.connectOnOpen)
         binding.vpnHomeStatus.text = context.getString(homeText(state.atHome))
     }
 
-    private fun renderAuth(binding: FragmentVpnBinding, state: VpnUiState) {
+    private fun renderAuth(state: VpnUiState) {
         val context = binding.root.context
         val certificate = state.settings.auth == VpnAuth.CERTIFICATE
         binding.vpnAuth.select(state.settings.auth.ordinal)

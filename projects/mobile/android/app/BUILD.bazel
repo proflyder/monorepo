@@ -21,6 +21,7 @@ metro_android_library(
         "//projects/mobile/android/core/config",
         "//projects/mobile/android/core/model",
         "//projects/mobile/android/core/navigation",
+        "//projects/mobile/android/core/presentation",
         "//projects/mobile/android/core/network",
         "//projects/mobile/android/core/remoteconfig",
         "//projects/mobile/android/core/runtime",

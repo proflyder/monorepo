@@ -1,61 +1,54 @@
 package dev.proflyder.home.feature.settings.presentation
 
 import android.os.Bundle
-import androidx.fragment.app.viewModels
 import androidx.recyclerview.widget.LinearLayoutManager
 import dev.proflyder.home.core.navigation.requireNavigator
-import dev.proflyder.home.core.ui.BaseAdapterCallback
-import dev.proflyder.home.core.ui.BaseFragment
+import dev.proflyder.home.core.presentation.IntentAdapterCallback
+import dev.proflyder.home.core.presentation.ScreenFragment
+import dev.proflyder.home.core.presentation.screenViewModel
+import dev.proflyder.home.core.ui.AdapterCallback
 import dev.proflyder.home.core.ui.applyScrollBottomInset
 import dev.proflyder.home.core.ui.setVisible
-import dev.proflyder.home.core.ui.viewModelFactory
 import dev.proflyder.home.feature.push.NotificationHistoryEntry
 import dev.proflyder.home.feature.settings.impl.R
 import dev.proflyder.home.feature.settings.impl.databinding.FragmentNotificationHistoryBinding
 
-class NotificationHistoryFragment :
-    BaseFragment<FragmentNotificationHistoryBinding>(FragmentNotificationHistoryBinding.Companion::inflate) {
-    private val viewModel: NotificationHistoryViewModel by viewModels {
-        viewModelFactory(NotificationHistoryViewModel::class.java)
-    }
+internal class NotificationHistoryFragment :
+    ScreenFragment<FragmentNotificationHistoryBinding, NotificationHistoryUiState, HistoryIntent, HistoryEvent>(
+        FragmentNotificationHistoryBinding.Companion::inflate,
+    ) {
+    override val viewModel: NotificationHistoryViewModel by screenViewModel()
 
-    private lateinit var adapter: NotificationHistoryAdapter
+    private val callback = object :
+        NotificationHistoryAdapterCallback,
+        AdapterCallback<NotificationHistoryEntry> by IntentAdapterCallback(::dispatch, HistoryIntent::Open) {}
 
-    private val callback = object : BaseAdapterCallback<NotificationHistoryEntry>(),
-        NotificationHistoryAdapterCallback {
-        override fun onItemClick(item: NotificationHistoryEntry) = openLink(item)
-    }
+    private val adapter by lazy { NotificationHistoryAdapter(callback) }
 
-    override fun onBindingCreated(binding: FragmentNotificationHistoryBinding, savedInstanceState: Bundle?) {
+    override fun onScreenCreated(binding: FragmentNotificationHistoryBinding, savedInstanceState: Bundle?) {
         binding.historyList.applyScrollBottomInset()
-        adapter = NotificationHistoryAdapter(callback)
         binding.historyList.layoutManager = LinearLayoutManager(requireContext())
         binding.historyList.adapter = adapter
         binding.historyClear.setOnClickListener { confirmClear() }
-        viewModel.state.observe { render(it) }
     }
 
     override fun onBindingDestroyed() {
         binding.historyList.adapter = null
     }
 
-    private fun render(state: NotificationHistoryUiState) {
+    override fun render(state: NotificationHistoryUiState) {
         adapter.submitList(state.entries)
         binding.historyClear.setVisible(!state.isEmpty)
         binding.historyCount.text = getString(R.string.history_count, state.entries.size)
         binding.historyCount.setVisible(!state.isEmpty)
         binding.historyEmpty.setVisible(state.isEmpty)
-        state.notice?.let { notice ->
-            when (notice) {
-                HistoryNotice.CLEARED -> showMessage(R.string.history_cleared)
-            }
-            viewModel.consumeNotice()
-        }
     }
 
-    internal fun openLink(entry: NotificationHistoryEntry) {
-        val route = entry.deepLink ?: return
-        requireNavigator().openRoute(route)
+    override fun onEvent(event: HistoryEvent) {
+        when (event) {
+            HistoryEvent.Cleared -> showMessage(R.string.history_cleared)
+            is HistoryEvent.OpenRoute -> requireNavigator().openRoute(event.route)
+        }
     }
 
     private fun confirmClear() {
@@ -63,6 +56,6 @@ class NotificationHistoryFragment :
             message = R.string.history_clear_message,
             positive = R.string.history_clear,
             negative = android.R.string.cancel,
-        ) { viewModel.clear() }
+        ) { dispatch(HistoryIntent.Clear) }
     }
 }

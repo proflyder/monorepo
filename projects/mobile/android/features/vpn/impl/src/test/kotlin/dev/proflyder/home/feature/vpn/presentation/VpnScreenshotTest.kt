@@ -56,6 +56,8 @@ internal object VpnSamples {
 class VpnScreenshotTest {
     private val now = 1_795_200_000_000L
 
+    private val intents = mutableListOf<VpnIntent>()
+
     private val connected = VpnUiState(
         connection = VpnConnection.Connected(VpnProtocol.WIREGUARD, now - 754_000, 12_582_912, 1_048_576),
         profile = VpnProfileState.Ready(VpnSamples.profile),
@@ -73,6 +75,17 @@ class VpnScreenshotTest {
         assertTrue(binding.vpnAutoRow.switch.isChecked)
         assertTrue(binding.vpnOpenRow.switch.isChecked)
         save(binding.root, "vpn-light.png")
+    }
+
+    @Test
+    @Config(qualifiers = "notnight")
+    fun switchesSendIntentsAndShowOnlyTheRenderedState() {
+        val binding = render(connected)
+        binding.vpnAutoRow.switch.performClick()
+        assertEquals(listOf<VpnIntent>(VpnIntent.SetAutoConnect(false)), intents)
+        assertTrue(binding.vpnAutoRow.switch.isChecked)
+        binding.vpnToggle.performClick()
+        assertEquals(VpnIntent.ToggleConnection, intents.last())
     }
 
     @Test
@@ -114,8 +127,7 @@ class VpnScreenshotTest {
         val context = themed()
         val binding = FragmentVpnBinding.inflate(LayoutInflater.from(context))
         binding.root.setBackgroundColor(MaterialColors.getColor(context, com.google.android.material.R.attr.colorSurface, 0))
-        VpnScreenBinder.labels(binding)
-        VpnScreenBinder.render(binding, state, now)
+        VpnScreen(binding) { intents += it }.render(state, now)
         return binding
     }
 
