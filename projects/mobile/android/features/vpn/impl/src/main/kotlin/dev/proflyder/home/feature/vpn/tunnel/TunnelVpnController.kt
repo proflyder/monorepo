@@ -3,11 +3,15 @@ package dev.proflyder.home.feature.vpn.tunnel
 import android.content.Context
 import android.content.Intent
 import android.net.VpnService
+import dev.proflyder.home.core.model.VpnProfile
 import dev.proflyder.home.feature.vpn.HandshakePolicy
 import dev.proflyder.home.feature.vpn.HandshakeVerdict
+import dev.proflyder.home.feature.vpn.HomeNetworkRules
 import dev.proflyder.home.feature.vpn.VpnConnectProblem
 import dev.proflyder.home.feature.vpn.VpnConnection
 import dev.proflyder.home.feature.vpn.VpnController
+import dev.proflyder.home.feature.vpn.VpnEndpoints
+import dev.proflyder.home.feature.vpn.VpnProfileState
 import dev.proflyder.home.feature.vpn.VpnProfiles
 import dev.proflyder.home.feature.vpn.VpnProtocol
 import dev.proflyder.home.feature.vpn.VpnSettingsStore
@@ -79,6 +83,36 @@ class TunnelVpnController(
         job = scope.launch { restart() }
     }
 
+    fun homeChanged(atHome: Boolean) {
+        wireGuard.atHome = atHome
+    }
+
+    fun followNetwork(autoConnect: Boolean) {
+        val profile = knownProfile() ?: return
+        val home = wireGuard.atHome
+        val wanted = VpnEndpoints.select(profile.wireguard, home)
+        val switch = HomeNetworkRules.shouldSwitchEndpoint(
+            autoConnect = autoConnect,
+            atHome = home == true,
+            wireGuardActive = wireGuardActive(),
+            tunnelEndpoint = wireGuard.endpoint,
+            wantedEndpoint = wanted,
+        )
+        if (switch) restartIfActive()
+    }
+
+    private fun knownProfile(): VpnProfile? = when (val value = profiles.state.value) {
+        is VpnProfileState.Ready -> value.profile
+        is VpnProfileState.Failed -> value.profile
+        else -> null
+    }
+
+    private fun wireGuardActive(): Boolean = when (val value = state.value) {
+        is VpnConnection.Connecting -> value.protocol == VpnProtocol.WIREGUARD
+        is VpnConnection.Connected -> value.protocol == VpnProtocol.WIREGUARD
+        else -> false
+    }
+
     private suspend fun restart() {
         stop()
         VpnStatusService.start(context)
@@ -138,15 +172,11 @@ class TunnelVpnController(
 
     private suspend fun fallback(failed: VpnTransport) {
         active = null
-        when (failed.protocol) {
-            VpnProtocol.WIREGUARD -> switchToExternal(failed)
-            VpnProtocol.OPENCONNECT -> state.value = VpnConnection.FallbackRequired
-        }
-    }
-
-    private suspend fun switchToExternal(failed: VpnTransport) {
         failed.down()
-        runExternal()
+        state.value = when (failed.protocol) {
+            VpnProtocol.WIREGUARD -> HandshakePolicy.afterWireGuardTimeout(wireGuard.atHome)
+            VpnProtocol.OPENCONNECT -> VpnConnection.FallbackRequired
+        }
     }
 
     private suspend fun stop() {

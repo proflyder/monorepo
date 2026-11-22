@@ -24,6 +24,8 @@ pub struct OcservSettings {
 pub struct VpnSettingsFile {
     pub pool: String,
     pub endpoint: String,
+    #[serde(default)]
+    pub lan_endpoint: String,
     pub server_public_key: String,
     pub dns: Vec<String>,
     pub allowed_ips: Vec<String>,
@@ -60,6 +62,9 @@ impl VpnSettings {
         }
         if file.endpoint.trim().is_empty() || !file.endpoint.contains(':') {
             return Err("VPN settings: endpoint must be host:port".into());
+        }
+        if !file.lan_endpoint.is_empty() && !file.lan_endpoint.contains(':') {
+            return Err("VPN settings: lanEndpoint must be host:port".into());
         }
         if file.allowed_ips.is_empty() {
             return Err("VPN settings: allowedIps is empty".into());
@@ -113,6 +118,7 @@ struct InterfaceView {
 struct ServerPeerView {
     public_key: String,
     endpoint: String,
+    lan_endpoint: String,
     allowed_ips: Vec<String>,
     persistent_keepalive: u16,
 }
@@ -188,6 +194,7 @@ fn profile_view(settings: &VpnSettings, peer: &VpnPeer) -> ProfileView {
             peer: ServerPeerView {
                 public_key: file.server_public_key.clone(),
                 endpoint: file.endpoint.clone(),
+                lan_endpoint: file.lan_endpoint.clone(),
                 allowed_ips: file.allowed_ips.clone(),
                 persistent_keepalive: file.persistent_keepalive,
             },
@@ -353,7 +360,7 @@ mod tests {
     fn settings_json() -> String {
         format!(
             r#"{{"pool":"10.77.2.0/24","endpoint":"vpn.example.com:51820",
-            "serverPublicKey":"{SERVER_KEY}","dns":["192.0.2.1"],
+            "lanEndpoint":"192.0.2.29:51820","serverPublicKey":"{SERVER_KEY}","dns":["192.0.2.1"],
             "allowedIps":["0.0.0.0/0"],"splitAllowedIps":["192.0.2.0/24"],
             "ocserv":{{"url":"https://vpn.example.com/","group":"full","splitGroup":"lan"}}}}"#
         )
@@ -427,6 +434,10 @@ mod tests {
         assert_eq!(
             profile["wireguard"]["peer"]["endpoint"],
             "vpn.example.com:51820"
+        );
+        assert_eq!(
+            profile["wireguard"]["peer"]["lanEndpoint"],
+            "192.0.2.29:51820"
         );
         assert_eq!(profile["wireguard"]["peer"]["allowedIps"][0], "0.0.0.0/0");
         assert_eq!(profile["wireguard"]["peer"]["persistentKeepalive"], 25);
@@ -512,5 +523,14 @@ mod tests {
         assert!(VpnSettings::parse(bad_pool.as_bytes()).is_err());
         let plain = settings_json().replace("https://vpn", "http://vpn");
         assert!(VpnSettings::parse(plain.as_bytes()).is_err());
+        let bad_lan = settings_json().replace("192.0.2.29:51820", "192.0.2.29");
+        assert!(VpnSettings::parse(bad_lan.as_bytes()).is_err());
+    }
+
+    #[test]
+    fn the_lan_endpoint_is_optional() {
+        let without = settings_json().replace(r#""lanEndpoint":"192.0.2.29:51820","#, "");
+        let settings = VpnSettings::parse(without.as_bytes()).expect("settings");
+        assert_eq!(settings.file.lan_endpoint, "");
     }
 }

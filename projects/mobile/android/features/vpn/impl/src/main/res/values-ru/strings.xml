@@ -10,12 +10,14 @@
     <string name="vpn_state_connecting_external">Ждём OpenConnect…</string>
     <string name="vpn_state_connected">Подключено</string>
     <string name="vpn_state_fallback">WireGuard не ответил</string>
+    <string name="vpn_state_home">Домашняя сеть: VPN не нужен</string>
     <string name="vpn_state_failed">Не подключено</string>
 
     <string name="vpn_detail_disconnected">Туннель выключен. Дом доступен только из домашней сети.</string>
     <string name="vpn_detail_connecting">%1$s · ждём рукопожатие</string>
     <string name="vpn_detail_connected">%1$s · %2$s</string>
-    <string name="vpn_detail_fallback">Нет рукопожатия за 10 с. Откройте OpenConnect на 443, чтобы попасть домой.</string>
+    <string name="vpn_detail_fallback">Нет рукопожатия за 10 с. Нажмите «Открыть OpenConnect», чтобы попасть домой через 443.</string>
+    <string name="vpn_detail_home">WireGuard не ответил по домашнему адресу. В домашней Wi-Fi всё доступно напрямую, запасной канал не нужен.</string>
     <string name="vpn_traffic">↓ %1$s · ↑ %2$s</string>
     <string name="vpn_protocol_wireguard">WireGuard</string>
     <string name="vpn_protocol_openconnect">OpenConnect</string>
@@ -42,7 +44,7 @@
     <string name="vpn_home_no">Сейчас вне домашней сети</string>
 
     <string name="vpn_fallback_title">Запасной канал: OpenConnect на 443</string>
-    <string name="vpn_external_ready">Включается сам, если WireGuard не получил рукопожатие.</string>
+    <string name="vpn_external_ready">Предлагается кнопкой, если вне дома WireGuard не получил рукопожатие.</string>
     <string name="vpn_external_missing">Установите OpenConnect или Cisco Secure Client, чтобы работал запасной канал.</string>
     <string name="vpn_auth_certificate">Сертификат</string>
     <string name="vpn_auth_password">Пароль + код</string>

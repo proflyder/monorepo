@@ -67,6 +67,8 @@ sealed interface VpnConnection {
 
     data object FallbackRequired : VpnConnection
 
+    data object NotNeededAtHome : VpnConnection
+
     data class Failed(val problem: VpnConnectProblem) : VpnConnection
 }
 

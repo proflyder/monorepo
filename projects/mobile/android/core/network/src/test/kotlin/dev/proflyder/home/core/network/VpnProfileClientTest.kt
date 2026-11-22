@@ -58,6 +58,7 @@ class VpnProfileClientTest {
         assertEquals("10.77.2.2/32", profile.wireguard.address)
         assertEquals(listOf("192.0.2.0/24"), profile.wireguard.splitAllowedIps)
         assertEquals("vpn.example.com:51820", profile.wireguard.endpoint)
+        assertEquals("192.0.2.29:51820", profile.wireguard.lanEndpoint)
         assertEquals("lan", profile.ocserv.splitGroup)
         assertEquals(1_795_100_100L, profile.updatedUnix)
     }

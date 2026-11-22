@@ -24,12 +24,14 @@ internal data class StoredVpnProfile(
     val ocservAuthentication: List<String>,
     val createdUnix: Long,
     val updatedUnix: Long,
+    val lanEndpoint: String = "",
 ) {
     fun toModel(): VpnProfile = VpnProfile(
         deviceId = deviceId,
         deviceName = deviceName,
         wireguard = VpnWireGuardSettings(
             address, dns, mtu, serverPublicKey, endpoint, allowedIps, splitAllowedIps, persistentKeepalive,
+            lanEndpoint,
         ),
         ocserv = VpnOcservSettings(ocservUrl, ocservGroup, ocservSplitGroup, ocservAuthentication),
         createdUnix = createdUnix,
@@ -44,6 +46,7 @@ internal data class StoredVpnProfile(
                 profile.deviceId, profile.deviceName, address, dns, mtu, serverPublicKey, endpoint,
                 allowedIps, splitAllowedIps, persistentKeepalive, profile.ocserv.url, profile.ocserv.group,
                 profile.ocserv.splitGroup, profile.ocserv.authentication, profile.createdUnix, profile.updatedUnix,
+                lanEndpoint,
             )
         }
 

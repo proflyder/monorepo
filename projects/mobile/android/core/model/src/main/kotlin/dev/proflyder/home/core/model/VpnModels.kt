@@ -9,6 +9,7 @@ data class VpnWireGuardSettings(
     val allowedIps: List<String>,
     val splitAllowedIps: List<String>,
     val persistentKeepalive: Int,
+    val lanEndpoint: String = "",
 )
 
 data class VpnOcservSettings(

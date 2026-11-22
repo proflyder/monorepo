@@ -85,15 +85,23 @@ notification all open or drive the same controller.
   `WireGuardConfigText`; **All traffic** uses `allowedIps`, **Home only** uses
   `splitAllowedIps` (falls back to `allowedIps` when empty). Changing the
   route reconnects an active tunnel.
+- Endpoint: on the home network (`HomeNetworkMonitor`) WireGuard uses
+  `wireguard.peer.lanEndpoint` from the profile, elsewhere `endpoint`
+  (`VpnEndpoints`); an empty `lanEndpoint` keeps `endpoint`. The home router
+  does not hairpin UDP, so the public name does not answer from the home Wi-Fi.
+  When the network changes while WireGuard is up and the wanted endpoint
+  differs, the tunnel is brought up again (`HomeNetworkRules.shouldSwitchEndpoint`);
+  auto-connect disconnect at home wins over the switch.
 - Fallback: when no handshake arrives within 10 s (`HandshakePolicy`), the
-  tunnel is stopped and the OpenConnect transport starts. At this stage it is
-  an external client: `anyconnect://connect/?name=…&host=<ocserv host>/<group>`
+  tunnel is stopped and nothing else starts by itself. Outside home the
+  screen shows **WireGuard did not answer** with **Open OpenConnect**; at home
+  it shows **Home network: VPN not needed** without a fallback
+  (`HandshakePolicy.afterWireGuardTimeout`). The OpenConnect transport opens
+  only from that button. At this stage it is an external client: `anyconnect://connect/?name=…&host=<ocserv host>/<group>`
   (Cisco Secure Client), or the OpenConnect app (`app.openconnect`) when no
   `anyconnect` handler exists. Group follows the route (`group` or
   `splitGroup`). The connection counts as up while the system reports a VPN
-  network; Android does not allow the app to start another app from the
-  background, so a background fallback shows **Open OpenConnect** on the
-  screen and in the notification.
+  network.
 - ocserv authentication (the server does not issue certificates): pill tabs
   **Certificate** / **Password + code**. A `.p12` is picked with the system
   file picker, checked with its password (`KeyStore` PKCS12, must contain a
@@ -114,11 +122,13 @@ notification all open or drive the same controller.
   **Disconnect**; it stops itself when the VPN is off. `VpnTileService` is a
   toggleable Quick Settings tile; without the VPN permission it opens the VPN
   screen (`home://vpn/main` route).
-- Tests: `features/vpn/api:api_test` (routes, config text, handshake policy,
+- Tests: `features/vpn/api:api_test` (routes, endpoint choice, endpoint
+  switch on network change, no external start after a silent WireGuard, config
+  text, handshake policy,
   home address rules, server codes, OpenConnect link, UAPI stats),
   `core/network:network_test` (`VpnProfileClientTest`, golden
   `fixtures/vpn/*.json`), `features/vpn/impl:screen_test` (stored profile and
-  Robolectric PNGs `vpn-light.png`, `vpn-dark.png`, `vpn-fallback-dark.png` in
+  Robolectric PNGs `vpn-light.png`, `vpn-dark.png`, `vpn-fallback-dark.png`, `vpn-home-dark.png` in
   `TEST_UNDECLARED_OUTPUTS_DIR`).
 
 ### Notes to the code (VPN)

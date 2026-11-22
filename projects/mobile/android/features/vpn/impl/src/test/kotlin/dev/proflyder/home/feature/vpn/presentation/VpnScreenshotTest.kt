@@ -42,6 +42,7 @@ internal object VpnSamples {
             allowedIps = listOf("0.0.0.0/0"),
             splitAllowedIps = listOf("192.0.2.0/24"),
             persistentKeepalive = 25,
+            lanEndpoint = "192.0.2.29:51820",
         ),
         ocserv = VpnOcservSettings("https://vpn.example.com", "full", "lan", listOf("certificate", "password+totp")),
         createdUnix = 1_795_100_000,
@@ -89,6 +90,23 @@ class VpnScreenshotTest {
         assertTrue(binding.vpnExternal.visibility == View.VISIBLE)
         assertFalse(binding.vpnStatusTraffic.visibility == View.VISIBLE)
         save(binding.root, "vpn-fallback-dark.png")
+    }
+
+    @Test
+    @Config(qualifiers = "night")
+    fun wireGuardSilentAtHomeOffersNoFallbackDark() {
+        val state = VpnUiState(
+            connection = VpnConnection.NotNeededAtHome,
+            profile = VpnProfileState.Ready(VpnSamples.profile),
+            atHome = true,
+            externalInstalled = true,
+        )
+        val binding = render(state)
+        val context = binding.root.context
+        assertFalse(binding.vpnExternal.visibility == View.VISIBLE)
+        assertEquals(context.getString(R.string.vpn_state_home), binding.vpnStatusRow.title.toString())
+        assertEquals(context.getString(R.string.vpn_connect), binding.vpnToggle.text.toString())
+        save(binding.root, "vpn-home-dark.png")
     }
 
     private fun render(state: VpnUiState): FragmentVpnBinding {

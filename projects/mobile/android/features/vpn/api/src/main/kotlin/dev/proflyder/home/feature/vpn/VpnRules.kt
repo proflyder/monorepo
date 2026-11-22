@@ -20,8 +20,20 @@ object VpnRoutes {
     }
 }
 
+object VpnEndpoints {
+    fun select(settings: VpnWireGuardSettings, atHome: Boolean?): String = when {
+        atHome == true && settings.lanEndpoint.isNotBlank() -> settings.lanEndpoint
+        else -> settings.endpoint
+    }
+}
+
 object WireGuardConfigText {
-    fun render(settings: VpnWireGuardSettings, privateKey: String, route: VpnRoute): String = buildString {
+    fun render(
+        settings: VpnWireGuardSettings,
+        privateKey: String,
+        route: VpnRoute,
+        atHome: Boolean? = false,
+    ): String = buildString {
         appendLine("[Interface]")
         appendLine("PrivateKey = $privateKey")
         appendLine("Address = ${settings.address}")
@@ -30,7 +42,7 @@ object WireGuardConfigText {
         appendLine()
         appendLine("[Peer]")
         appendLine("PublicKey = ${settings.serverPublicKey}")
-        appendLine("Endpoint = ${settings.endpoint}")
+        appendLine("Endpoint = ${VpnEndpoints.select(settings, atHome)}")
         appendList("AllowedIPs", VpnRoutes.allowedIps(settings, route))
         appendPositive("PersistentKeepalive", settings.persistentKeepalive)
     }
@@ -70,6 +82,11 @@ object HandshakePolicy {
         nowMillis - startedAtMillis >= timeoutMillis -> HandshakeVerdict.FALLBACK
         else -> HandshakeVerdict.WAIT
     }
+
+    fun afterWireGuardTimeout(atHome: Boolean?): VpnConnection = when (atHome) {
+        true -> VpnConnection.NotNeededAtHome
+        else -> VpnConnection.FallbackRequired
+    }
 }
 
 object HomeNetworkRules {
@@ -84,6 +101,15 @@ object HomeNetworkRules {
 
     fun shouldDisconnect(autoConnect: Boolean, atHome: Boolean, active: Boolean): Boolean =
         autoConnect && atHome && active
+
+    fun shouldSwitchEndpoint(
+        autoConnect: Boolean,
+        atHome: Boolean,
+        wireGuardActive: Boolean,
+        tunnelEndpoint: String,
+        wantedEndpoint: String,
+    ): Boolean = wireGuardActive && tunnelEndpoint != wantedEndpoint &&
+        !shouldDisconnect(autoConnect, atHome, wireGuardActive)
 
     private fun isUniqueLocal(address: Inet6Address): Boolean =
         address.address[0].toInt() and ULA_MASK == ULA_PREFIX

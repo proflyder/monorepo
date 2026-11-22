@@ -17,6 +17,7 @@ internal object VpnTexts {
         is VpnConnection.Connecting -> connectingTitle(connection.protocol)
         is VpnConnection.Connected -> R.string.vpn_state_connected
         VpnConnection.FallbackRequired -> R.string.vpn_state_fallback
+        VpnConnection.NotNeededAtHome -> R.string.vpn_state_home
         is VpnConnection.Failed -> R.string.vpn_state_failed
     }
 
@@ -30,6 +31,7 @@ internal object VpnTexts {
             duration(nowMillis - connection.sinceMillis),
         )
         VpnConnection.FallbackRequired -> context.getString(R.string.vpn_detail_fallback)
+        VpnConnection.NotNeededAtHome -> context.getString(R.string.vpn_detail_home)
         is VpnConnection.Failed -> context.getString(problem(connection.problem))
     }
 
