@@ -1,12 +1,13 @@
 package dev.proflyder.home.feature.control.domain
 
 import dev.proflyder.home.core.model.ControlAction
-import dev.proflyder.home.core.model.ControlCatalog
 import dev.proflyder.home.core.model.ControlEntry
 import dev.proflyder.home.core.model.ControlKind
 import dev.proflyder.home.core.model.LightAdjust
 import dev.proflyder.home.core.model.Outcome
+import dev.proflyder.home.feature.control.ControlCatalogState
 import dev.proflyder.home.feature.control.ControlRepository
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -17,10 +18,9 @@ class SpeakOnStationTest {
         val speaks = mutableListOf<Pair<String, String>>()
         var result: Outcome<Unit> = Outcome.Success(Unit)
 
-        override val isConfigured: Boolean = true
+        override val catalog = MutableStateFlow(ControlCatalogState())
 
-        override suspend fun catalog(): Outcome<ControlCatalog> =
-            Outcome.Success(ControlCatalog(emptyList(), statesOk = true))
+        override fun refresh() = Unit
 
         override suspend fun send(entryId: String, action: ControlAction): Outcome<Unit> = result
 

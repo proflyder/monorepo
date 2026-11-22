@@ -6,46 +6,59 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.viewmodel.CreationExtras
 import dev.zacsweers.metro.AppScope
+import dev.zacsweers.metro.BindingContainer
+import dev.zacsweers.metro.ContributesBinding
+import dev.zacsweers.metro.ContributesTo
 import dev.zacsweers.metro.Inject
+import dev.zacsweers.metro.Multibinds
 import dev.zacsweers.metro.SingleIn
+import kotlin.reflect.KClass
 
 interface ViewModelFactoryProvider {
-    fun viewModelFactory(viewModelClass: Class<out ViewModel>): ViewModelProvider.Factory
+    val viewModelFactory: ViewModelProvider.Factory
 }
 
-interface ViewModelFactoryContributor {
-    val viewModelClass: Class<out ViewModel>
-    fun createFactory(): ViewModelProvider.Factory
+interface ViewModelSource {
+    fun create(): ViewModel
+}
+
+interface SavedStateViewModelFactory {
+    fun create(savedState: SavedStateHandle): ViewModel
+}
+
+@ContributesTo(AppScope::class)
+@BindingContainer
+interface ViewModelMultibindings {
+    @Multibinds(allowEmpty = true)
+    fun viewModels(): Map<KClass<*>, ViewModel>
+
+    @Multibinds(allowEmpty = true)
+    fun viewModelSources(): Map<KClass<*>, ViewModelSource>
+
+    @Multibinds(allowEmpty = true)
+    fun savedStateViewModels(): Map<KClass<*>, SavedStateViewModelFactory>
 }
 
 @SingleIn(AppScope::class)
+@ContributesBinding(AppScope::class, binding = dev.zacsweers.metro.binding<ViewModelProvider.Factory>())
 @Inject
 class ViewModelFactoryRegistry(
-    contributors: Set<ViewModelFactoryContributor>,
-) : ViewModelFactoryProvider {
-    private val factories: Map<Class<out ViewModel>, ViewModelProvider.Factory> =
-        contributors.associate { it.viewModelClass to it.createFactory() }
-
-    override fun viewModelFactory(viewModelClass: Class<out ViewModel>): ViewModelProvider.Factory =
-        factories[viewModelClass]
-            ?: error("No ViewModel factory registered for ${viewModelClass.name}")
-}
-
-class SimpleViewModelFactory<VM : ViewModel>(
-    private val create: () -> VM,
+    private val viewModels: Map<KClass<*>, () -> ViewModel>,
+    private val viewModelSources: Map<KClass<*>, ViewModelSource>,
+    private val savedStateViewModels: Map<KClass<*>, SavedStateViewModelFactory>,
 ) : ViewModelProvider.Factory {
-    @Suppress("UNCHECKED_CAST")
-    override fun <T : ViewModel> create(modelClass: Class<T>): T = create() as T
-}
-
-class SavedStateViewModelFactory<VM : ViewModel>(
-    private val create: (SavedStateHandle) -> VM,
-) : ViewModelProvider.Factory {
-    @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>, extras: CreationExtras): T =
-        create(extras.createSavedStateHandle()) as T
+        build(modelClass) { extras.createSavedStateHandle() }
 
-    @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T =
-        create(SavedStateHandle.createHandle(null, null)) as T
+        build(modelClass) { SavedStateHandle.createHandle(null, null) }
+
+    private fun <T : ViewModel> build(modelClass: Class<T>, savedState: () -> SavedStateHandle): T {
+        val key = modelClass.kotlin
+        val model = viewModels[key]?.invoke()
+            ?: viewModelSources[key]?.create()
+            ?: savedStateViewModels[key]?.create(savedState())
+            ?: error("No ViewModel binding for ${modelClass.name}")
+        return requireNotNull(modelClass.cast(model))
+    }
 }

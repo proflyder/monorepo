@@ -43,7 +43,10 @@ internal class FakeChatClient : ChatClient {
     override suspend fun retry(id: String): Outcome<ChatMessage> =
         Outcome.Success(ChatFixtures.message(id, seq, ChatRole.ASSISTANT, "", status = ChatStatus.PENDING))
 
-    override fun events(after: Long): Flow<ChatEvent> = emptyFlow()
+    var events: Flow<ChatEvent> = emptyFlow()
+    var streams = 0
+
+    override fun events(after: Long): Flow<ChatEvent> = events.also { streams++ }
 
     fun accepted(clientId: String, text: String): ChatSent {
         seq += 2

@@ -2,272 +2,191 @@ package dev.proflyder.home.feature.reminders.presentation
 
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
 import dev.proflyder.home.core.config.ConnectionSettingsStore
 import dev.proflyder.home.core.model.Outcome
-import dev.proflyder.home.core.model.RemoteFailure
+import dev.proflyder.home.core.model.RepeatKind
 import dev.proflyder.home.core.model.Schedule
 import dev.proflyder.home.core.model.ScheduleKind
 import dev.proflyder.home.core.model.WallTime
-import dev.proflyder.home.core.model.isAmbiguousRetryable
-import dev.proflyder.home.core.operation.EditorCompletion
-import dev.proflyder.home.core.operation.IdempotentRequestKey
-import dev.proflyder.home.core.ui.BaseViewModel
+import dev.proflyder.home.core.presentation.AppEventBus
+import dev.proflyder.home.core.presentation.EditorDraftCodec
+import dev.proflyder.home.core.presentation.EditorDraftSession
+import dev.proflyder.home.core.presentation.EditorStatus
+import dev.proflyder.home.core.presentation.StateViewModel
 import dev.proflyder.home.core.ui.SavedStateViewModelFactory
-import dev.proflyder.home.core.ui.ViewModelFactoryContributor
 import dev.proflyder.home.feature.reminders.ReminderDraft
 import dev.proflyder.home.feature.reminders.ReminderEditorCompletion
+import dev.proflyder.home.feature.reminders.ReminderEditorDestination
 import dev.proflyder.home.feature.reminders.ReminderEditorDraft
 import dev.proflyder.home.feature.reminders.ReminderEditorDraftCodec
-import dev.proflyder.home.feature.reminders.domain.DeleteReminder
-import dev.proflyder.home.feature.reminders.domain.LoadReminder
+import dev.proflyder.home.feature.reminders.ReminderRepository
 import dev.proflyder.home.feature.reminders.domain.SaveReminder
 import dev.zacsweers.metro.AppScope
-import dev.zacsweers.metro.ContributesIntoSet
+import dev.zacsweers.metro.ClassKey
+import dev.zacsweers.metro.ContributesIntoMap
 import dev.zacsweers.metro.Inject
+import dev.zacsweers.metro.binding
 import java.time.LocalDate
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.launch
 
-data class ReminderEditorUiState(
-    val loading: Boolean = false,
-    val saving: Boolean = false,
+internal data class ReminderEditorUiState(
     val existing: Schedule? = null,
     val label: String = "",
     val date: LocalDate = LocalDate.now(),
-    val hour: Int = 9,
+    val hour: Int = DEFAULT_HOUR,
     val minute: Int = 0,
     val enabled: Boolean = true,
-    val error: RemoteFailure? = null,
-    val loadFailed: Boolean = false,
-)
+    val status: EditorStatus = EditorStatus(),
+    val editing: Boolean = false,
+) {
+    private companion object {
+        const val DEFAULT_HOUR = 9
+    }
+}
 
-class ReminderEditorViewModel(
-    private val loadReminder: LoadReminder,
+internal sealed interface ReminderEditorIntent {
+    data class SetLabel(val value: String) : ReminderEditorIntent
+    data class SetDate(val value: LocalDate) : ReminderEditorIntent
+    data class SetTime(val hour: Int, val minute: Int) : ReminderEditorIntent
+    data class SetEnabled(val value: Boolean) : ReminderEditorIntent
+    data object PickDate : ReminderEditorIntent
+    data object PickTime : ReminderEditorIntent
+    data object Save : ReminderEditorIntent
+    data object RequestDelete : ReminderEditorIntent
+    data object Delete : ReminderEditorIntent
+    data object CompletionShown : ReminderEditorIntent
+}
+
+internal sealed interface ReminderEditorEvent {
+    data class PickDate(val selected: LocalDate) : ReminderEditorEvent
+    data class PickTime(val hour: Int, val minute: Int) : ReminderEditorEvent
+    data object ConfirmDelete : ReminderEditorEvent
+    data class Completed(val completion: ReminderEditorCompletion) : ReminderEditorEvent
+}
+
+internal object ReminderDraftCodec : EditorDraftCodec<ReminderEditorDraft> {
+    override fun encode(draft: ReminderEditorDraft): Map<String, Any?> = ReminderEditorDraftCodec.toMap(draft)
+
+    override fun decode(values: Map<String, Any?>): ReminderEditorDraft? = ReminderEditorDraftCodec.fromMap(values)
+}
+
+internal typealias ReminderDraftSession = EditorDraftSession<ReminderEditorDraft, ReminderDraft, ReminderEditorCompletion>
+
+internal class ReminderEditorViewModel(
+    private val repository: ReminderRepository,
     private val saveReminder: SaveReminder,
-    private val deleteReminder: DeleteReminder,
-    private val settings: ConnectionSettingsStore,
-    private val savedState: SavedStateHandle,
-) : BaseViewModel<ReminderEditorUiState>(restoreState(savedState)) {
-    private val restoredDraft: ReminderEditorDraft? = ReminderEditorDraftCodec.fromMap(
-        savedState.keys().associateWith { key -> savedState.get<Any?>(key) },
-    )
-
-    private val editorCompletion = EditorCompletion(
-        savedState.get<String>(KEY_COMPLETION)?.let { raw ->
-            ReminderEditorCompletion.entries.firstOrNull { it.name == raw }
-        },
-    )
-    val completion: StateFlow<ReminderEditorCompletion?> = editorCompletion.state
-
-    private val createIdentity = IdempotentRequestKey<CreatePayload>()
-    private var started = false
-
+    private val bus: AppEventBus,
+    private val session: ReminderDraftSession,
+    reminderId: String?,
+) : StateViewModel<ReminderEditorUiState, ReminderEditorIntent, ReminderEditorEvent>(
+    session.restored?.toUiState() ?: ReminderEditorUiState(editing = reminderId != null),
+) {
     init {
-        val savedKey = savedState.get<String>(KEY_CREATE_KEY)
-        val savedEndpoint = savedState.get<String>(KEY_CREATE_ENDPOINT)
-        val currentEndpoint = settings.config.value.endpoint?.baseUrl().orEmpty()
-        adoptRestoredCreateIdentity(savedKey, savedEndpoint, currentEndpoint)
+        session.restored?.takeIf { it.existingId == null }?.let { session.adoptRestoredCreate(it.toUiState().toDraft()) }
+        session.pendingCompletion?.let { emit(ReminderEditorEvent.Completed(it)) }
+        start(reminderId)
     }
 
-    private fun adoptRestoredCreateIdentity(
-        savedKey: String?,
-        savedEndpoint: String?,
-        currentEndpoint: String,
-    ) {
-        val draft = restoredDraft ?: return
-        if (draft.existingId != null) return
-        if (savedKey == null || savedEndpoint != currentEndpoint) return
-        createIdentity.adopt(CreatePayload(draft.toReminderDraft(), currentEndpoint), savedKey)
-    }
-
-    private data class CreatePayload(
-        val draft: ReminderDraft,
-        val endpoint: String,
-    )
-
-    fun start(reminderId: String?) {
-        if (started) return
-        started = true
-        if (restoredDraft != null) return
-        if (reminderId == null) {
-            persistDraft()
-            return
+    override fun handle(intent: ReminderEditorIntent) {
+        when (intent) {
+            is ReminderEditorIntent.SetLabel -> edit { copy(label = intent.value) }
+            is ReminderEditorIntent.SetDate -> edit { copy(date = intent.value) }
+            is ReminderEditorIntent.SetTime -> edit { copy(hour = intent.hour, minute = intent.minute) }
+            is ReminderEditorIntent.SetEnabled -> edit { copy(enabled = intent.value) }
+            ReminderEditorIntent.PickDate -> emit(ReminderEditorEvent.PickDate(currentState.date))
+            ReminderEditorIntent.PickTime -> emit(ReminderEditorEvent.PickTime(currentState.hour, currentState.minute))
+            ReminderEditorIntent.Save -> save()
+            ReminderEditorIntent.RequestDelete -> emit(ReminderEditorEvent.ConfirmDelete)
+            ReminderEditorIntent.Delete -> delete()
+            ReminderEditorIntent.CompletionShown -> session.consumeCompletion()
         }
-        mutableState.value = mutableState.value.copy(loading = true, error = null)
-        viewModelScope.launch {
-            when (val result = loadReminder(reminderId)) {
-                is Outcome.Success -> {
-                    mutableState.value = result.value.toState()
-                    persistDraft()
-                }
-                is Outcome.Failure -> mutableState.value = mutableState.value.copy(
-                    loading = false,
-                    error = result.failure,
-                    loadFailed = true,
-                )
+    }
+
+    private fun start(reminderId: String?) {
+        if (session.restored != null) return
+        if (reminderId == null) return session.persist(currentState.toEditorDraft())
+        updateState { copy(status = status.loadingStarted()) }
+        launch {
+            when (val result = repository.get(reminderId)) {
+                is Outcome.Success -> loaded(result.value)
+                is Outcome.Failure -> updateState { copy(status = status.loadFailed(result.failure)) }
             }
         }
     }
 
-    fun setLabel(value: String) = edit { it.copy(label = value) }
+    private fun loaded(reminder: Schedule) {
+        updateState { reminder.toUiState() }
+        session.persist(currentState.toEditorDraft())
+    }
 
-    fun setDate(value: LocalDate) = edit { it.copy(date = value) }
+    private fun edit(transform: ReminderEditorUiState.() -> ReminderEditorUiState) {
+        updateState(transform)
+        session.edited(currentState.toEditorDraft())
+    }
 
-    fun setTime(hour: Int, minute: Int) = edit { it.copy(hour = hour, minute = minute) }
-
-    fun setEnabled(value: Boolean) = edit { it.copy(enabled = value) }
-
-    fun save() {
-        val current = mutableState.value
-        if (current.saving) return
-        val draft = current.toReminderDraft()
-        val endpoint = settings.config.value.endpoint?.baseUrl().orEmpty()
-        val key = if (current.existing == null) {
-            createIdentity.keyFor(CreatePayload(draft, endpoint)).also {
-                savedState[KEY_CREATE_KEY] = it
-                savedState[KEY_CREATE_ENDPOINT] = endpoint
+    private fun save() {
+        val current = currentState
+        if (current.status.saving) return
+        val draft = current.toDraft()
+        updateState { copy(status = status.savingStarted()) }
+        launch {
+            val result = session.submit(draft.takeIf { current.existing == null }) { key ->
+                saveReminder(current.existing, draft, key)
             }
-        } else {
-            clearPendingKey()
-            ""
-        }
-        mutableState.value = current.copy(saving = true, error = null)
-        viewModelScope.launch {
-            when (val result = saveReminder(current.existing, draft, key)) {
-                is Outcome.Success -> {
-                    createIdentity.markSucceeded()
-                    clearPendingKey()
-                    mutableState.value = mutableState.value.copy(
-                        saving = false,
-                        existing = result.value,
-                        error = null,
-                    )
-                    persistDraft()
-                    setCompletion(ReminderEditorCompletion.SAVED)
-                }
-                is Outcome.Failure -> {
-                    if (!result.failure.isAmbiguousRetryable()) {
-                        createIdentity.reset()
-                        clearPendingKey()
-                    }
-                    mutableState.value = mutableState.value.copy(
-                        saving = false,
-                        error = result.failure,
-                    )
-                }
-            }
+            if (result is Outcome.Success) updateState { copy(existing = result.value) }
+            finish(result, ReminderEditorCompletion.SAVED)
         }
     }
 
-    fun delete() {
-        val existing = mutableState.value.existing ?: return
-        if (mutableState.value.saving) return
-        mutableState.value = mutableState.value.copy(saving = true, error = null)
-        viewModelScope.launch {
-            when (val result = deleteReminder(existing.id)) {
-                is Outcome.Success -> {
-                    mutableState.value = mutableState.value.copy(saving = false, error = null)
-                    setCompletion(ReminderEditorCompletion.DELETED)
-                }
-                is Outcome.Failure -> mutableState.value = mutableState.value.copy(
-                    saving = false,
-                    error = result.failure,
-                )
-            }
-        }
+    private fun delete() {
+        val existing = currentState.existing ?: return
+        if (currentState.status.saving) return
+        updateState { copy(status = status.savingStarted()) }
+        launch { finish(repository.delete(existing.id), ReminderEditorCompletion.DELETED) }
     }
 
-    fun consumeCompletion() {
-        editorCompletion.consume()
-        savedState.remove<String>(KEY_COMPLETION)
-    }
-
-    private fun edit(transform: (ReminderEditorUiState) -> ReminderEditorUiState) {
-        createIdentity.reset()
-        clearPendingKey()
-        mutableState.value = transform(mutableState.value)
-        persistDraft()
-    }
-
-    private fun clearPendingKey() {
-        savedState.remove<String>(KEY_CREATE_KEY)
-        savedState.remove<String>(KEY_CREATE_ENDPOINT)
-    }
-
-    private fun ReminderEditorUiState.toReminderDraft(): ReminderDraft = ReminderDraft(
-        label = label,
-        date = date,
-        hour = hour,
-        minute = minute,
-        enabled = enabled,
-    )
-
-    private fun ReminderEditorDraft.toReminderDraft(): ReminderDraft = ReminderDraft(
-        label = label,
-        date = date,
-        hour = hour,
-        minute = minute,
-        enabled = enabled,
-    )
-
-    private fun setCompletion(completion: ReminderEditorCompletion) {
-        editorCompletion.publish(completion)
-        savedState[KEY_COMPLETION] = completion.name
-    }
-
-    private fun persistDraft() {
-        val current = mutableState.value
-        val draft = ReminderEditorDraft(
-            existingId = current.existing?.id,
-            existingRevision = current.existing?.revision,
-            label = current.label,
-            date = current.date,
-            hour = current.hour,
-            minute = current.minute,
-            enabled = current.enabled,
-        )
-        ReminderEditorDraftCodec.toMap(draft).forEach { (key, value) -> savedState[key] = value }
-    }
-
-    private fun Schedule.toState(): ReminderEditorUiState = ReminderEditorUiState(
-        loading = false,
-        existing = this,
-        label = label,
-        date = runCatching { LocalDate.parse(onceDate) }.getOrDefault(LocalDate.now()),
-        hour = at.hour,
-        minute = at.minute,
-        enabled = enabled,
-    )
-
-    companion object {
-        private const val KEY_COMPLETION = "reminder_completion"
-        private const val KEY_CREATE_KEY = "reminder_create_key"
-        private const val KEY_CREATE_ENDPOINT = "reminder_create_endpoint"
+    private fun finish(result: Outcome<*>, completion: ReminderEditorCompletion) {
+        val failure = (result as? Outcome.Failure)?.failure
+        updateState { copy(status = status.settled(failure)) }
+        if (failure != null) return
+        session.persist(currentState.toEditorDraft())
+        session.complete(completion)
+        bus.publish(RemindersChanged)
+        emit(ReminderEditorEvent.Completed(completion))
     }
 }
 
-@ContributesIntoSet(AppScope::class)
+@ContributesIntoMap(AppScope::class, binding = binding<SavedStateViewModelFactory>())
+@ClassKey(ReminderEditorViewModel::class)
 @Inject
-class ReminderEditorViewModelFactoryContributor(
-    private val loadReminder: LoadReminder,
+class ReminderEditorViewModelSource internal constructor(
+    private val repository: ReminderRepository,
     private val saveReminder: SaveReminder,
-    private val deleteReminder: DeleteReminder,
     private val settings: ConnectionSettingsStore,
-) : ViewModelFactoryContributor {
-    override val viewModelClass: Class<out ViewModel> = ReminderEditorViewModel::class.java
+    private val bus: AppEventBus,
+) : SavedStateViewModelFactory {
+    override fun create(savedState: SavedStateHandle): ViewModel = build(savedState)
 
-    override fun createFactory() = SavedStateViewModelFactory { savedState ->
-        ReminderEditorViewModel(loadReminder, saveReminder, deleteReminder, settings, savedState)
+    private fun build(savedState: SavedStateHandle) = ReminderEditorViewModel(
+        repository = repository,
+        saveReminder = saveReminder,
+        bus = bus,
+        session = EditorDraftSession(savedState, KEY_PREFIX, ReminderDraftCodec, ReminderEditorCompletion.entries) {
+            settings.config.value.endpoint?.baseUrl().orEmpty()
+        },
+        reminderId = savedState.get<String>(ReminderEditorDestination.ARG_REMINDER_ID),
+    )
+
+    private companion object {
+        const val KEY_PREFIX = "reminder"
     }
 }
 
-internal fun restoreState(savedState: SavedStateHandle): ReminderEditorUiState =
-    ReminderEditorDraftCodec.fromMap(savedState.keys().associateWith { key -> savedState.get<Any?>(key) })?.toUiState()
-        ?: ReminderEditorUiState()
+internal fun ReminderEditorUiState.toDraft(): ReminderDraft =
+    ReminderDraft(label = label, date = date, hour = hour, minute = minute, enabled = enabled)
 
-private fun ReminderEditorDraft.toUiState(): ReminderEditorUiState = ReminderEditorUiState(
-    existing = restoredExisting(),
+internal fun ReminderEditorUiState.toEditorDraft(): ReminderEditorDraft = ReminderEditorDraft(
+    existingId = existing?.id,
+    existingRevision = existing?.revision,
     label = label,
     date = date,
     hour = hour,
@@ -275,7 +194,27 @@ private fun ReminderEditorDraft.toUiState(): ReminderEditorUiState = ReminderEdi
     enabled = enabled,
 )
 
-private fun ReminderEditorDraft.restoredExisting(): Schedule? {
+internal fun Schedule.toUiState(): ReminderEditorUiState = ReminderEditorUiState(
+    existing = this,
+    label = label,
+    date = runCatching { LocalDate.parse(onceDate) }.getOrDefault(LocalDate.now()),
+    hour = at.hour,
+    minute = at.minute,
+    enabled = enabled,
+    editing = true,
+)
+
+internal fun ReminderEditorDraft.toUiState(): ReminderEditorUiState = ReminderEditorUiState(
+    existing = restoredExisting(),
+    label = label,
+    date = date,
+    hour = hour,
+    minute = minute,
+    enabled = enabled,
+    editing = existingId != null,
+)
+
+internal fun ReminderEditorDraft.restoredExisting(): Schedule? {
     val id = existingId ?: return null
     return Schedule(
         id = id,
@@ -283,7 +222,7 @@ private fun ReminderEditorDraft.restoredExisting(): Schedule? {
         kind = ScheduleKind.REMINDER,
         at = WallTime(hour, minute),
         onceDate = date.toString(),
-        repeat = dev.proflyder.home.core.model.RepeatKind.ONCE,
+        repeat = RepeatKind.ONCE,
         weekdays = emptyList(),
         nextDueUnix = 0,
         enabled = enabled,

@@ -55,20 +55,30 @@ internal object WavWriter {
     }
 }
 
-internal class VoiceRecorder(
+internal interface VoiceCapture {
+    fun start(scope: CoroutineScope): Boolean
+
+    fun elapsedMillis(): Long
+
+    suspend fun stop(): LocalAttachment?
+
+    fun cancel()
+}
+
+internal class AudioVoiceRecorder(
     private val newFile: () -> File,
     private val clock: () -> Long = SystemClock::elapsedRealtime,
-) {
+) : VoiceCapture {
     private var job: Job? = null
     private var buffer = ByteArrayOutputStream()
     private var startedAt = 0L
 
-    val recording: Boolean get() = job?.isActive == true
+    private val recording: Boolean get() = job?.isActive == true
 
-    fun elapsedMillis(): Long = if (recording) clock() - startedAt else 0L
+    override fun elapsedMillis(): Long = if (recording) clock() - startedAt else 0L
 
     @SuppressLint("MissingPermission")
-    fun start(scope: CoroutineScope): Boolean {
+    override fun start(scope: CoroutineScope): Boolean {
         val minimum = AudioRecord.getMinBufferSize(WavWriter.SAMPLE_RATE, CHANNEL, ENCODING)
         if (minimum <= 0 || recording) return false
         val record = AudioRecord(MediaRecorder.AudioSource.VOICE_RECOGNITION, WavWriter.SAMPLE_RATE, CHANNEL, ENCODING, minimum * 2)
@@ -90,7 +100,7 @@ internal class VoiceRecorder(
         record.release()
     }
 
-    suspend fun stop(): LocalAttachment? {
+    override suspend fun stop(): LocalAttachment? {
         val running = job ?: return null
         running.cancel()
         running.join()
@@ -100,7 +110,7 @@ internal class VoiceRecorder(
         return withContext(Dispatchers.IO) { save(pcm) }
     }
 
-    fun cancel() {
+    override fun cancel() {
         job?.cancel()
         job = null
     }
@@ -119,7 +129,6 @@ internal class VoiceRecorder(
     }
 
     companion object {
-        const val MAX_MILLIS = 120_000L
         const val MIN_MILLIS = 600L
         private const val WAV_MIME = "audio/wav"
         private const val CHANNEL = AudioFormat.CHANNEL_IN_MONO

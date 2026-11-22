@@ -3,20 +3,23 @@ package dev.proflyder.home.feature.vpn.tunnel
 import android.annotation.SuppressLint
 import android.content.Context
 import android.net.ConnectivityManager
+import android.net.LinkProperties
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
 import dev.proflyder.home.core.config.ConnectionSettingsStore
+import dev.proflyder.home.core.runtime.AppStartable
 import dev.proflyder.home.feature.vpn.HomeNetworkRules
 import dev.proflyder.home.feature.vpn.HomeReachability
-import dev.proflyder.home.feature.vpn.VpnNetworkFlow
-import android.net.LinkProperties
 import dev.proflyder.home.feature.vpn.NetworkState
+import dev.proflyder.home.feature.vpn.VpnNetworkFlow
 import dev.proflyder.home.feature.vpn.VpnSettingsStore
 import dev.proflyder.home.feature.vpn.isActive
 import dev.zacsweers.metro.AppScope
+import dev.zacsweers.metro.ContributesIntoSet
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
+import dev.zacsweers.metro.binding
 import java.net.InetSocketAddress
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CoroutineScope
@@ -25,14 +28,15 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @SingleIn(AppScope::class)
+@ContributesIntoSet(AppScope::class, binding = binding<AppStartable>())
 @Inject
 class HomeNetworkMonitor(
     private val context: Context,
@@ -40,7 +44,7 @@ class HomeNetworkMonitor(
     private val settings: VpnSettingsStore,
     private val controller: TunnelVpnController,
     private val scope: CoroutineScope,
-) : HomeReachability {
+) : HomeReachability, AppStartable {
     private val networks = ConcurrentHashMap.newKeySet<Network>()
     private val home = MutableStateFlow<Boolean?>(null)
     private var pending: Job? = null
@@ -59,7 +63,7 @@ class HomeNetworkMonitor(
     }
 
     @SuppressLint("MissingPermission")
-    fun start() {
+    override fun start() {
         val manager = context.getSystemService(ConnectivityManager::class.java) ?: return
         val request = NetworkRequest.Builder()
             .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)

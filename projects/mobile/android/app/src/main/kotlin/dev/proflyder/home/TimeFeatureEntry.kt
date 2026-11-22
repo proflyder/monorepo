@@ -4,9 +4,6 @@ import android.os.Bundle
 import androidx.fragment.app.Fragment
 import dev.proflyder.home.core.navigation.Destination
 import dev.proflyder.home.core.navigation.FeatureEntry
-import dev.proflyder.home.feature.alarms.presentation.AlarmsFragment
-import dev.proflyder.home.feature.reminders.presentation.RemindersFragment
-import dev.proflyder.home.feature.timers.presentation.TimersFragment
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesIntoSet
 import dev.zacsweers.metro.Inject
@@ -57,10 +54,4 @@ class TimeFeatureEntry : FeatureEntry {
         "reminders" -> TimeDestination(TimeSection.REMINDERS)
         else -> null
     }
-}
-
-internal fun sectionFragment(section: TimeSection): Fragment = when (section) {
-    TimeSection.ALARMS -> AlarmsFragment()
-    TimeSection.TIMERS -> TimersFragment()
-    TimeSection.REMINDERS -> RemindersFragment()
 }

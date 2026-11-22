@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <bool name="home_light_bars">true</bool>
-    <bool name="home_network_inspection">true</bool>
     <bool name="home_crash_reporting">true</bool>
 </resources>

@@ -850,6 +850,7 @@ export function spawnExec(command, args, options = {}) {
   const result = spawnSync(command, args, {
     encoding: "utf8",
     env: process.env,
+    maxBuffer: 256 * 1024 * 1024,
     ...options,
   });
   if (result.error) {

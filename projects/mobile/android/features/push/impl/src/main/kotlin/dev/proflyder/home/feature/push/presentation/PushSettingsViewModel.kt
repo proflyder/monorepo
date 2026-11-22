@@ -2,15 +2,16 @@ package dev.proflyder.home.feature.push.presentation
 
 import androidx.lifecycle.ViewModel
 import dev.proflyder.home.core.ui.BaseViewModel
-import dev.proflyder.home.core.ui.SimpleViewModelFactory
-import dev.proflyder.home.core.ui.ViewModelFactoryContributor
+import dev.proflyder.home.core.ui.ViewModelSource
 import dev.proflyder.home.feature.push.PushPermissionStatus
-import dev.proflyder.home.feature.push.PushRegistration
 import dev.proflyder.home.feature.push.PushRegistrar
+import dev.proflyder.home.feature.push.PushRegistration
 import dev.proflyder.home.feature.push.PushRegistrationStore
 import dev.zacsweers.metro.AppScope
-import dev.zacsweers.metro.ContributesIntoSet
+import dev.zacsweers.metro.ClassKey
+import dev.zacsweers.metro.ContributesIntoMap
 import dev.zacsweers.metro.Inject
+import dev.zacsweers.metro.binding
 
 enum class PushNotice {
     REGISTERED,
@@ -27,7 +28,8 @@ data class PushSettingsUiState(
     val canRing: Boolean get() = permissions.canRing
 }
 
-class PushSettingsViewModel(
+@Inject
+internal class PushSettingsViewModel(
     private val registrar: PushRegistrar,
     private val store: PushRegistrationStore,
 ) : BaseViewModel<PushSettingsUiState>(
@@ -72,15 +74,11 @@ class PushSettingsViewModel(
     }
 }
 
-@ContributesIntoSet(AppScope::class)
+@ContributesIntoMap(AppScope::class, binding = binding<ViewModelSource>())
+@ClassKey(PushSettingsViewModel::class)
 @Inject
-class PushSettingsViewModelFactoryContributor(
-    private val registrar: PushRegistrar,
-    private val store: PushRegistrationStore,
-) : ViewModelFactoryContributor {
-    override val viewModelClass: Class<out ViewModel> = PushSettingsViewModel::class.java
-
-    override fun createFactory() = SimpleViewModelFactory {
-        PushSettingsViewModel(registrar, store)
-    }
+class PushSettingsViewModelSource internal constructor(
+    private val viewModel: () -> PushSettingsViewModel,
+) : ViewModelSource {
+    override fun create(): ViewModel = viewModel()
 }

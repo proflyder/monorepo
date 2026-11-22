@@ -1,124 +1,92 @@
 package dev.proflyder.home.feature.scenarios.presentation
 
 import android.os.Bundle
-import androidx.fragment.app.activityViewModels
 import androidx.recyclerview.widget.GridLayoutManager
-import dev.proflyder.home.core.model.FavoriteKind
-import dev.proflyder.home.core.model.FavoriteRef
 import dev.proflyder.home.core.model.RemoteFailure
-import dev.proflyder.home.core.model.Scenario
 import dev.proflyder.home.core.navigation.requireNavigator
-import dev.proflyder.home.core.ui.BaseAdapterCallback
-import dev.proflyder.home.core.ui.BaseFragment
+import dev.proflyder.home.core.presentation.RefreshMode
+import dev.proflyder.home.core.presentation.ScreenFragment
 import dev.proflyder.home.core.ui.ListStateViews
 import dev.proflyder.home.core.ui.Notices
 import dev.proflyder.home.core.ui.applyScrollBottomInset
 import dev.proflyder.home.core.ui.fabClearance
+import dev.proflyder.home.core.ui.injectedActivityViewModels
 import dev.proflyder.home.core.ui.liftAboveBottomInsets
 import dev.proflyder.home.core.ui.setVisible
 import dev.proflyder.home.core.ui.setupPullToRefresh
 import dev.proflyder.home.core.ui.userMessage
-import dev.proflyder.home.core.ui.viewModelFactory
 import dev.proflyder.home.feature.scenarios.ScenarioEditorDestination
 import dev.proflyder.home.feature.scenarios.impl.R
 import dev.proflyder.home.feature.scenarios.impl.databinding.FragmentScenariosBinding
 
-class ScenariosFragment : BaseFragment<FragmentScenariosBinding>(FragmentScenariosBinding.Companion::inflate) {
-    internal val viewModel: ScenariosViewModel by activityViewModels {
-        viewModelFactory(ScenariosViewModel::class.java)
-    }
+internal class ScenariosFragment :
+    ScreenFragment<FragmentScenariosBinding, ScenariosUiState, ScenariosIntent, ScenariosEvent>(
+        FragmentScenariosBinding.Companion::inflate,
+    ) {
+    override val viewModel: ScenariosViewModel by injectedActivityViewModels()
 
     private lateinit var adapter: ScenarioAdapter
     private lateinit var states: ListStateViews
 
-    private val adapterCallback = object : BaseAdapterCallback<ScenarioRow>(), ScenarioAdapterCallback {
-        override fun onItemClick(item: ScenarioRow) = onScenarioClick(item.scenario)
-        override fun onItemLongClick(item: ScenarioRow) = showPinDialog(item.scenario)
-        override fun onToggle(scenario: Scenario, enabled: Boolean) = viewModel.setEnabled(scenario, enabled)
-        override fun onRun(scenario: Scenario) = viewModel.run(scenario)
-    }
-
-    override fun onBindingCreated(binding: FragmentScenariosBinding, savedInstanceState: Bundle?) {
-        binding.scenariosList.applyScrollBottomInset(binding.scenariosList.fabClearance())
-        binding.scenariosAdd.liftAboveBottomInsets()
-        adapter = ScenarioAdapter(adapterCallback)
-        binding.scenariosList.layoutManager =
-            GridLayoutManager(requireContext(), resources.getInteger(R.integer.scenarios_columns))
-        binding.scenariosList.adapter = adapter
+    override fun onScreenCreated(binding: FragmentScenariosBinding, savedInstanceState: Bundle?) = with(binding) {
+        scenariosList.applyScrollBottomInset(scenariosList.fabClearance())
+        scenariosAdd.liftAboveBottomInsets()
+        adapter = ScenarioAdapter(ScenarioAdapterIntents(::dispatch))
+        scenariosList.layoutManager = GridLayoutManager(requireContext(), resources.getInteger(R.integer.scenarios_columns))
+        scenariosList.adapter = adapter
         states = ListStateViews(
-            progress = binding.scenariosProgress,
-            empty = binding.scenariosEmpty,
-            error = binding.scenariosError,
-            content = binding.scenariosList,
-            errorText = binding.scenariosErrorText,
+            progress = scenariosProgress,
+            empty = scenariosEmpty,
+            error = scenariosError,
+            content = scenariosList,
+            errorText = scenariosErrorText,
         )
-        binding.scenariosRefresh.setupPullToRefresh { viewModel.refresh() }
-        binding.scenariosRetry.setOnClickListener { viewModel.refresh() }
-        binding.scenariosOpenConnection.setOnClickListener { requireNavigator().selectTab("connection") }
-        binding.scenariosAdd.setOnClickListener { requireNavigator().navigate(ScenarioEditorDestination()) }
-
-        viewModel.state.observe { render(it) }
+        scenariosRefresh.setupPullToRefresh { dispatch(ScenariosIntent.Refresh(RefreshMode.HARD)) }
+        scenariosRetry.setOnClickListener { dispatch(ScenariosIntent.Refresh(RefreshMode.HARD)) }
+        scenariosOpenConnection.setOnClickListener { requireNavigator().selectTab(CONNECTION_TAB) }
+        scenariosAdd.setOnClickListener { requireNavigator().navigate(ScenarioEditorDestination()) }
     }
 
-    override fun onResume() {
-        super.onResume()
-        viewModel.refresh(silent = true)
-    }
-
-    private fun render(state: ScenariosUiState) {
+    override fun render(state: ScenariosUiState) {
         val hasItems = state.scenarios.isNotEmpty()
         val loadError = state.loadError
         when {
             state.refreshing && !hasItems -> states.showLoading()
-            loadError != null && !hasItems -> {
-                states.showError(loadError.userMessage(requireContext()))
-                binding.scenariosOpenConnection.setVisible(loadError == RemoteFailure.NotConfigured)
-            }
+            loadError != null && !hasItems -> showLoadError(loadError)
             !hasItems -> states.showEmpty()
-            else -> {
-                states.showContent()
-                adapter.submitList(state.scenarios.map { ScenarioRow(it, state.busy) })
-            }
+            else -> states.showContent().also { adapter.submitList(state.scenarios.map { ScenarioRow(it, state.busy) }) }
         }
         binding.scenariosRefresh.isRefreshing = state.refreshing && hasItems
+    }
 
-        if (loadError != null && hasItems) {
-            showFailure(loadError)
-            viewModel.consumeLoadError()
-        }
-        state.actionError?.let { failure ->
-            showFailure(failure)
-            adapter.notifyItemRangeChanged(0, adapter.itemCount)
-            viewModel.consumeActionError()
-        }
-        state.queuedLabel?.let { label ->
-            Notices.show(binding.root, getString(R.string.scenarios_run_queued, label))
-            viewModel.consumeQueued()
-        }
-        state.favoriteNotice?.let { notice ->
-            Notices.show(
-                binding.root,
-                getString(
-                    if (notice.pinned) R.string.scenarios_favorite_pinned else R.string.scenarios_favorite_unpinned,
-                    notice.label,
-                ),
-            )
-            viewModel.consumeFavoriteNotice()
+    override fun onEvent(event: ScenariosEvent) {
+        when (event) {
+            is ScenariosEvent.Failure -> showFailure(event.failure)
+            is ScenariosEvent.Queued -> notice(getString(R.string.scenarios_run_queued, event.label))
+            is ScenariosEvent.Pinned -> notice(getString(pinnedText(event.pinned), event.label))
+            is ScenariosEvent.Open -> requireNavigator().navigate(ScenarioEditorDestination(event.scenarioId))
+            is ScenariosEvent.ConfirmPin -> confirmPin(event)
         }
     }
 
-    internal fun showPinDialog(scenario: Scenario) {
-        val ref = FavoriteRef(FavoriteKind.SCENARIO, scenario.id)
-        val pinned = ref in viewModel.state.value.favorites
-        confirm(
-            message = scenario.label,
-            positive = if (pinned) R.string.scenarios_unpin else R.string.scenarios_pin,
-            negative = android.R.string.cancel,
-            destructive = false,
-        ) { viewModel.toggleFavorite(scenario) }
+    private fun showLoadError(failure: RemoteFailure) {
+        states.showError(failure.userMessage(requireContext()))
+        binding.scenariosOpenConnection.setVisible(failure == RemoteFailure.NotConfigured)
     }
 
-    internal fun onScenarioClick(scenario: Scenario) {
-        requireNavigator().navigate(ScenarioEditorDestination(scenario.id))
+    private fun confirmPin(event: ScenariosEvent.ConfirmPin) = confirm(
+        message = event.scenario.label,
+        positive = if (event.pinned) R.string.scenarios_unpin else R.string.scenarios_pin,
+        negative = android.R.string.cancel,
+        destructive = false,
+    ) { dispatch(ScenariosIntent.TogglePin(event.scenario)) }
+
+    private fun pinnedText(pinned: Boolean): Int =
+        if (pinned) R.string.scenarios_favorite_pinned else R.string.scenarios_favorite_unpinned
+
+    private fun notice(text: String) = Notices.show(binding.root, text)
+
+    private companion object {
+        const val CONNECTION_TAB = "connection"
     }
 }

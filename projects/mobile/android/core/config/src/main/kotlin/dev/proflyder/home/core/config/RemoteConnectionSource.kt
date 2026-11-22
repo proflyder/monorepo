@@ -4,7 +4,7 @@ import dev.proflyder.home.core.endpoint.EndpointParseResult
 import dev.proflyder.home.core.endpoint.ServerEndpoint
 import dev.proflyder.home.core.model.Field
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.serialization.json.Json
+import dev.proflyder.home.core.model.LocalJson
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -34,13 +34,11 @@ sealed interface RemoteConnectionState {
 
 const val REMOTE_CONNECTION_KEY = "home_connection"
 
-private val remoteJson = Json { ignoreUnknownKeys = true }
-
 fun parseRemoteConnection(raw: String): RemoteConnectionState {
     if (raw.isBlank()) return RemoteConnectionState.Missing
 
     val document = runCatching {
-        remoteJson.parseToJsonElement(raw).jsonObject
+        LocalJson.parseToJsonElement(raw).jsonObject
     }.getOrElse {
         return RemoteConnectionState.Invalid(detail = "Malformed JSON")
     }

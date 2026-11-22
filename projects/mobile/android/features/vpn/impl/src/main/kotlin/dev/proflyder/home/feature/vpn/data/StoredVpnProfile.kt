@@ -4,7 +4,7 @@ import dev.proflyder.home.core.model.VpnOcservSettings
 import dev.proflyder.home.core.model.VpnProfile
 import dev.proflyder.home.core.model.VpnWireGuardSettings
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.Json
+import dev.proflyder.home.core.model.LocalJson
 
 @Serializable
 internal data class StoredVpnProfile(
@@ -39,8 +39,6 @@ internal data class StoredVpnProfile(
     )
 
     companion object {
-        private val json = Json { ignoreUnknownKeys = true }
-
         fun of(profile: VpnProfile): StoredVpnProfile = with(profile.wireguard) {
             StoredVpnProfile(
                 profile.deviceId, profile.deviceName, address, dns, mtu, serverPublicKey, endpoint,
@@ -50,10 +48,10 @@ internal data class StoredVpnProfile(
             )
         }
 
-        fun encode(profile: VpnProfile): String = json.encodeToString(serializer(), of(profile))
+        fun encode(profile: VpnProfile): String = LocalJson.encodeToString(serializer(), of(profile))
 
         fun decode(text: String?): VpnProfile? = text
-            ?.let { runCatching { json.decodeFromString(serializer(), it) }.getOrNull() }
+            ?.let { runCatching { LocalJson.decodeFromString(serializer(), it) }.getOrNull() }
             ?.toModel()
     }
 }

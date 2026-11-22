@@ -7,14 +7,11 @@ import android.view.MenuItem
 import android.view.View
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.enableEdgeToEdge
-import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.isVisible
 import androidx.core.view.updatePadding
 import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.google.android.material.appbar.MaterialToolbar
@@ -26,7 +23,6 @@ import dev.proflyder.home.core.navigation.FeatureRegistry
 import dev.proflyder.home.core.navigation.FragmentRouter
 import dev.proflyder.home.core.navigation.Navigator
 import dev.proflyder.home.core.navigation.NavigatorHost
-import dev.proflyder.home.core.model.PowerState
 import dev.proflyder.home.core.ui.FailureNoticePolicy
 import dev.proflyder.home.core.ui.FailureNoticePolicyProvider
 import dev.proflyder.home.core.ui.applyNavigationInset
@@ -35,10 +31,10 @@ import dev.proflyder.home.core.ui.forContentBetweenBars
 import dev.proflyder.home.core.ui.horizontalInsets
 import dev.proflyder.home.core.ui.keyboardVisible
 import dev.proflyder.home.core.ui.topInset
-import dev.proflyder.home.core.ui.ViewModelFactoryProvider
 import dev.proflyder.home.databinding.ActivityMainBinding
-import dev.proflyder.home.feature.control.presentation.ControlUiState
-import dev.proflyder.home.feature.control.presentation.ControlViewModel
+import dev.proflyder.home.feature.control.VoiceProfileState
+import dev.proflyder.home.feature.call.CallLauncher
+import dev.proflyder.home.feature.control.VoiceProfileSwitch
 import dev.proflyder.home.feature.chat.ChatFocus
 import dev.proflyder.home.feature.chat.ChatRoute
 import dev.proflyder.home.feature.push.PushDeepLink
@@ -48,13 +44,14 @@ import dev.proflyder.home.feature.settings.SettingsDestination
 import dev.proflyder.home.feature.vpn.VpnDestination
 import dev.proflyder.home.feature.vpn.presentation.VpnActivityHost
 import dev.proflyder.home.feature.vpn.impl.R as VpnR
+import dev.zacsweers.metro.Inject
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 
-class MainActivity : AppCompatActivity(), NavigatorHost, ViewModelFactoryProvider, FailureNoticePolicyProvider {
+class MainActivity : AppCompatActivity(), NavigatorHost, FailureNoticePolicyProvider {
     internal lateinit var router: FragmentRouter
     private lateinit var binding: ActivityMainBinding
-    private lateinit var features: FeatureRegistry
     internal lateinit var actionsMenu: ToolbarActionsMenu
     private lateinit var vpnHost: VpnActivityHost
 
@@ -64,26 +61,30 @@ class MainActivity : AppCompatActivity(), NavigatorHost, ViewModelFactoryProvide
     private val vpnBanner: View get() = binding.root.findViewById(VpnR.id.vpn_route_banner)
     private var keyboardShown = false
 
-    private val controlViewModel: ControlViewModel by viewModels {
-        viewModelFactory(ControlViewModel::class.java)
-    }
+    @Inject
+    internal lateinit var features: FeatureRegistry
+
+    @Inject
+    override lateinit var failureNoticePolicy: FailureNoticePolicy
+
+    @Inject
+    internal lateinit var vpnHostFactory: VpnActivityHost.Factory
+
+    @Inject
+    internal lateinit var callLauncher: CallLauncher
+
+    @Inject
+    internal lateinit var voiceProfile: VoiceProfileSwitch
 
     private val itemIdByFeature = mutableMapOf<String, Int>()
     private val featureByItemId = mutableMapOf<Int, String>()
     private var syncingSelection = false
 
-    private var leftForegroundAtNanos = 0L
-
-    private val graph get() = (application as HomeApplication).graph
-
-    override val failureNoticePolicy: FailureNoticePolicy get() = graph.failureNoticePolicy
-
     override val navigator: Navigator get() = router
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        (application as HomeApplication).graph.inject(this)
         super.onCreate(savedInstanceState)
-        val graph = (application as HomeApplication).graph
-        features = graph.featureRegistry
         enableEdgeToEdge()
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
@@ -98,7 +99,7 @@ class MainActivity : AppCompatActivity(), NavigatorHost, ViewModelFactoryProvide
         )
         setupBottomNavigation()
         setupToolbar()
-        vpnHost = VpnActivityHost(this) { router.navigate(VpnDestination) }
+        vpnHost = vpnHostFactory.create(this) { router.navigate(VpnDestination) }
         vpnHost.bind(vpnToggle)
         applyDeepLink(intent)
 
@@ -128,14 +129,8 @@ class MainActivity : AppCompatActivity(), NavigatorHost, ViewModelFactoryProvide
             router.currentTitleRes.collect { binding.toolbarTitle.setText(it) }
         }
         launch {
-            controlViewModel.state.collect {
-                renderProfileChip(it, router.currentTabId.value, router.currentIsOverlay.value)
-            }
-        }
-        launch {
-            router.currentTabId.collect {
-                renderProfileChip(controlViewModel.state.value, it, router.currentIsOverlay.value)
-            }
+            combine(voiceProfile.profile, router.currentTabId, router.currentIsOverlay, ::ProfileChip)
+                .collect(::renderProfileChip)
         }
         launch {
             router.currentIsOverlay.collect(::renderToolbarMode)
@@ -160,21 +155,6 @@ class MainActivity : AppCompatActivity(), NavigatorHost, ViewModelFactoryProvide
     override fun onResume() {
         super.onResume()
         router.onHostResumed()
-    }
-
-    override fun onStart() {
-        super.onStart()
-        val leftAt = leftForegroundAtNanos
-        when {
-            leftAt == 0L -> Unit
-            System.nanoTime() - leftAt >= STALE_CONNECTION_NANOS -> graph.httpClient.connectionPool.evictAll()
-            else -> Unit
-        }
-    }
-
-    override fun onStop() {
-        leftForegroundAtNanos = System.nanoTime()
-        super.onStop()
     }
 
     override fun onPause() {
@@ -207,9 +187,6 @@ class MainActivity : AppCompatActivity(), NavigatorHost, ViewModelFactoryProvide
         router.onHostSaveState(outState)
         super.onSaveInstanceState(outState)
     }
-
-    override fun viewModelFactory(viewModelClass: Class<out ViewModel>): ViewModelProvider.Factory =
-        (application as HomeApplication).graph.viewModelFactories.viewModelFactory(viewModelClass)
 
     private fun syncBottomSelection(featureId: String) {
         val itemId = itemIdByFeature[featureId] ?: return
@@ -262,7 +239,7 @@ class MainActivity : AppCompatActivity(), NavigatorHost, ViewModelFactoryProvide
 
     private fun runMenuAction(actionId: Int) {
         when (actionId) {
-            R.id.menu_action_call -> (application as HomeApplication).graph.callLauncher.openCallScreen()
+            R.id.menu_action_call -> callLauncher.openCallScreen()
             R.id.menu_action_settings -> router.navigate(SettingsDestination)
             else -> Unit
         }
@@ -272,20 +249,20 @@ class MainActivity : AppCompatActivity(), NavigatorHost, ViewModelFactoryProvide
         toolbar.menu.findItem(R.id.action_menu)?.isVisible = !overlay
         vpnToggle.isVisible = !overlay
         actionsMenu.dismiss()
-        renderProfileChip(controlViewModel.state.value, router.currentTabId.value, overlay)
     }
 
-    private fun renderProfileChip(state: ControlUiState, tabId: String, overlay: Boolean) {
-        val profile = state.entries.firstOrNull { it.isProfile }
+    private fun renderProfileChip(state: ProfileChip) {
+        val profile = state.profile
         val chip = binding.profileChip
-        chip.visibility = if (tabId == CONTROL_TAB && !overlay && profile != null) View.VISIBLE else View.GONE
+        chip.visibility = if (state.tabId == CONTROL_TAB && !state.overlay && profile != null) View.VISIBLE else View.GONE
         profile ?: return
-        val work = profile.power == PowerState.ON
-        chip.setText(if (work) R.string.app_profile_work else R.string.app_profile_personal)
+        chip.setText(if (profile.work) R.string.app_profile_work else R.string.app_profile_personal)
         chip.contentDescription = getString(R.string.app_profile_chip, chip.text)
         chip.isEnabled = profile.available
-        chip.setOnClickListener { controlViewModel.setProfile(profile, !work) }
+        chip.setOnClickListener { lifecycleScope.launch { voiceProfile.setWork(!profile.work) } }
     }
+
+    private data class ProfileChip(val profile: VoiceProfileState?, val tabId: String, val overlay: Boolean)
 
     private fun applySystemBarInsets() {
         binding.appbar.doOnApplyInsets { view, insets, initial ->
@@ -316,7 +293,5 @@ class MainActivity : AppCompatActivity(), NavigatorHost, ViewModelFactoryProvide
 
     private companion object {
         const val CONTROL_TAB = "control"
-
-        const val STALE_CONNECTION_NANOS = 15_000_000_000L
     }
 }

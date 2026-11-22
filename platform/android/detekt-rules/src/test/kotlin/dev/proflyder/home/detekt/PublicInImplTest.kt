@@ -49,4 +49,42 @@ class PublicInImplTest {
         assertEquals(0, PublicInImpl().lint(api).size)
         assertEquals(0, PublicInImpl().lint(test).size)
     }
+
+    @Test
+    fun `accepts public declarations that Metro must see from the graph module`() {
+        val file = compileContentForTest(
+            """
+                @ContributesBinding(AppScope::class)
+                @Inject
+                class HttpClient
+                @ContributesTo(AppScope::class)
+                @BindingContainer
+                abstract class Bindings
+                class Helper
+            """.trimIndent(),
+            "core/network/impl/src/main/kotlin/HttpClient.kt",
+        )
+
+        assertEquals(1, PublicInImpl().lint(file).size)
+    }
+
+    @Test
+    fun `accepts public graph contributions that the app graph must see`() {
+        val file = compileContentForTest(
+            """
+                @ContributesIntoMap(AppScope::class)
+                class ScreenViewModel
+                @ContributesTo(AppScope::class)
+                interface FeatureInjector
+                class Helper
+                class InjectedService {
+                    @Inject
+                    lateinit var controller: Controller
+                }
+            """.trimIndent(),
+            "features/alarms/impl/src/main/kotlin/Screen.kt",
+        )
+
+        assertEquals(1, PublicInImpl().lint(file).size)
+    }
 }

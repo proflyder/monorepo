@@ -2,8 +2,12 @@ package dev.proflyder.home.core.runtime
 
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
+import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.retryWhen
 
 data class Backoff(
@@ -34,4 +38,27 @@ fun <T> Flow<T>.retryWithBackoff(
     shouldRetry: (Throwable) -> Boolean = { true },
 ): Flow<T> = retryWhen { cause, attempt ->
     shouldRetry(cause).also { retry -> if (retry) delay(backoff.delayFor(attempt)) }
+}
+
+fun <T> Flow<T>.reconnecting(
+    backoff: Backoff,
+    shouldRetry: (Throwable) -> Boolean,
+): Flow<T> = flow {
+    var failures = 0L
+    while (true) {
+        val failure = ReconnectFailure()
+        emitAll(this@reconnecting.catch { failure.record(it, shouldRetry) })
+        failures = if (failure.happened) failures + 1 else 0L
+        delay(if (failures == 0L) backoff.initial else backoff.delayFor(failures - 1))
+    }
+}
+
+private class ReconnectFailure {
+    var happened: Boolean = false
+        private set
+
+    fun record(cause: Throwable, shouldRetry: (Throwable) -> Boolean) {
+        if (cause is CancellationException || !shouldRetry(cause)) throw cause
+        happened = true
+    }
 }

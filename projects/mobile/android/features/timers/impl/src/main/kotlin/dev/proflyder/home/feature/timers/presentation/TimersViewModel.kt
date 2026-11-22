@@ -1,8 +1,10 @@
 package dev.proflyder.home.feature.timers.presentation
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dev.proflyder.home.core.config.ConnectionSettingsStore
+import dev.proflyder.home.core.model.Clock
 import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.core.model.ServerClock
@@ -10,190 +12,181 @@ import dev.proflyder.home.core.model.Timer
 import dev.proflyder.home.core.model.TimerState
 import dev.proflyder.home.core.model.isAmbiguousRetryable
 import dev.proflyder.home.core.operation.IdempotentRequestKey
-import dev.proflyder.home.core.ui.BaseViewModel
-import dev.proflyder.home.core.ui.SimpleViewModelFactory
-import dev.proflyder.home.core.ui.ViewModelFactoryContributor
-import dev.proflyder.home.feature.timers.domain.CancelTimer
+import dev.proflyder.home.core.presentation.ExclusiveActions
+import dev.proflyder.home.core.presentation.ListLoadState
+import dev.proflyder.home.core.presentation.ListRefresher
+import dev.proflyder.home.core.presentation.LoadStep
+import dev.proflyder.home.core.presentation.RefreshMode
+import dev.proflyder.home.core.presentation.StateViewModel
+import dev.proflyder.home.core.presentation.valueOr
+import dev.proflyder.home.core.runtime.tickerFlow
+import dev.proflyder.home.core.ui.ViewModelSource
+import dev.proflyder.home.feature.timers.TimerOrder
+import dev.proflyder.home.feature.timers.TimerRepository
 import dev.proflyder.home.feature.timers.domain.LoadTimers
-import dev.proflyder.home.feature.timers.domain.PauseTimer
-import dev.proflyder.home.feature.timers.domain.ResumeTimer
 import dev.proflyder.home.feature.timers.domain.StartTimer
+import dev.proflyder.home.feature.timers.impl.R
+import dev.proflyder.home.feature.timers.toTimerInput
 import dev.zacsweers.metro.AppScope
-import dev.zacsweers.metro.ContributesIntoSet
+import dev.zacsweers.metro.ClassKey
+import dev.zacsweers.metro.ContributesIntoMap
 import dev.zacsweers.metro.Inject
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.launch
+import dev.zacsweers.metro.binding
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
 
-data class TimersUiState(
-    val refreshing: Boolean = true,
-    val starting: Boolean = false,
+internal data class TimersUiState(
+    val load: ListLoadState = ListLoadState(),
     val timers: List<Timer> = emptyList(),
-    val loadError: RemoteFailure? = null,
-    val actionError: RemoteFailure? = null,
+    val rows: List<TimerRow> = emptyList(),
+    val form: TimerForm = TimerForm(),
+    val starting: Boolean = false,
     val busyId: String? = null,
-    val tick: Long = 0,
-    val serverTimeSynced: Boolean = false,
 )
 
-class TimersViewModel(
+internal sealed interface TimersIntent {
+    data class Refresh(val mode: RefreshMode) : TimersIntent
+    data class SetLabel(val value: String) : TimersIntent
+    data class SetDuration(val value: String) : TimersIntent
+    data class Preset(val duration: Duration) : TimersIntent
+    data object Start : TimersIntent
+    data class TogglePause(val id: String) : TimersIntent
+    data class RequestCancel(val id: String) : TimersIntent
+    data class Cancel(val id: String) : TimersIntent
+}
+
+internal sealed interface TimersEvent {
+    data class Failure(val failure: RemoteFailure) : TimersEvent
+    data class ConfirmCancel(val id: String) : TimersEvent
+}
+
+internal class TimersViewModel(
     private val loadTimers: LoadTimers,
     private val startTimer: StartTimer,
-    private val pauseTimer: PauseTimer,
-    private val resumeTimer: ResumeTimer,
-    private val cancelTimer: CancelTimer,
-    private val clock: ServerClock,
+    private val repository: TimerRepository,
+    private val serverClock: ServerClock,
     private val settings: ConnectionSettingsStore,
-) : BaseViewModel<TimersUiState>(TimersUiState()) {
-
-    private var refreshJob: Job? = null
-    private var generation = 0
-    private var lastRefreshNanos = System.nanoTime()
-    private var lastExpiryRefreshNanos = 0L
-
-    private val createIdentity = IdempotentRequestKey<StartPayload>()
-
-    private data class StartPayload(
-        val label: String,
-        val durationSeconds: Long,
-        val endpoint: String,
+    private val defaultLabel: String,
+    clock: Clock,
+) : StateViewModel<TimersUiState, TimersIntent, TimersEvent>(TimersUiState()) {
+    private val refreshPolicy = TimerRefreshPolicy(clock)
+    private val loader = ListRefresher(viewModelScope, { loadTimers() }, ::onLoad)
+    private val actions = ExclusiveActions(
+        scope = viewModelScope,
+        onBusy = { id -> updateState { copy(busyId = id) } },
+        onFailure = { emit(TimersEvent.Failure(it)) },
     )
+    private val startIdentity = IdempotentRequestKey<StartPayload>()
 
-    fun refresh(silent: Boolean = false) {
-        refreshJob?.cancel()
-        val requested = ++generation
-        lastRefreshNanos = System.nanoTime()
-        mutableState.value = mutableState.value.copy(refreshing = mutableState.value.refreshing || !silent, loadError = null)
-        refreshJob = viewModelScope.launch {
-            val result = loadTimers()
-            if (requested != generation) return@launch
-            when (result) {
-                is Outcome.Success -> mutableState.value = mutableState.value.copy(
-                    refreshing = false,
-                    timers = result.value.sortedBy { it.createdUnix },
-                    loadError = null,
-                    serverTimeSynced = clock.isSynced,
-                )
-                is Outcome.Failure -> mutableState.value = mutableState.value.copy(
-                    refreshing = false,
-                    loadError = result.failure,
-                )
-            }
+    private data class StartPayload(val label: String, val seconds: Long, val endpoint: String)
+
+    init {
+        loader.refreshOn(screenShown)
+        countdownWhileVisible()
+    }
+
+    override fun handle(intent: TimersIntent) {
+        when (intent) {
+            is TimersIntent.Refresh -> loader.refresh(intent.mode)
+            is TimersIntent.SetLabel -> updateState { copy(form = form.copy(label = intent.value)) }
+            is TimersIntent.SetDuration -> updateState { copy(form = form.copy(duration = intent.value, durationInvalid = false)) }
+            is TimersIntent.Preset -> updateState { copy(form = form.copy(duration = intent.duration.toTimerInput(), durationInvalid = false)) }
+            TimersIntent.Start -> start()
+            is TimersIntent.TogglePause -> togglePause(intent.id)
+            is TimersIntent.RequestCancel -> emit(TimersEvent.ConfirmCancel(intent.id))
+            is TimersIntent.Cancel -> cancel(intent.id)
         }
     }
 
-    fun start(label: String, durationSeconds: Long) {
-        if (mutableState.value.starting) return
-        val normalizedLabel = label.trim()
-        val payload = StartPayload(
-            label = normalizedLabel,
-            durationSeconds = durationSeconds,
-            endpoint = settings.config.value.endpoint?.baseUrl().orEmpty(),
-        )
-        val key = createIdentity.keyFor(payload)
-        mutableState.value = mutableState.value.copy(starting = true, actionError = null)
-        viewModelScope.launch {
-            when (val result = startTimer(normalizedLabel, durationSeconds, key)) {
-                is Outcome.Success -> {
-                    createIdentity.markSucceeded()
-                    mutableState.value = mutableState.value.copy(
-                        starting = false,
-                        timers = (mutableState.value.timers + result.value).sortedBy { it.createdUnix },
-                    )
-                }
-                is Outcome.Failure -> {
-                    if (!result.failure.isAmbiguousRetryable()) createIdentity.reset()
-                    mutableState.value = mutableState.value.copy(
-                        starting = false,
-                        actionError = result.failure,
-                    )
-                }
-            }
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private fun countdownWhileVisible() {
+        screenVisible
+            .flatMapLatest { visible -> if (visible) tickerFlow(TICK) else emptyFlow() }
+            .onEach { tick() }
+            .launchIn(viewModelScope)
+    }
+
+    private fun tick() {
+        updateState { copy(rows = timers.toRows()) }
+        if (!loader.isRefreshing && refreshPolicy.due(currentState.rows)) loader.refresh(RefreshMode.SOFT)
+    }
+
+    private fun onLoad(step: LoadStep<List<Timer>>) {
+        if (step is LoadStep.Started) refreshPolicy.refreshed()
+        updateState { withTimers(step.valueOr(timers)).copy(load = load.after(step)) }
+        if (step is LoadStep.Failed && currentState.timers.isNotEmpty()) emit(TimersEvent.Failure(step.failure))
+    }
+
+    private fun start() {
+        val form = currentState.form.validated()
+        val seconds = form.seconds
+        updateState { copy(form = form) }
+        if (seconds == null || currentState.starting) return
+        val label = form.labelOr(defaultLabel)
+        val key = startIdentity.keyFor(StartPayload(label, seconds, settings.config.value.endpoint?.baseUrl().orEmpty()))
+        updateState { copy(starting = true) }
+        launch { started(startTimer(label, seconds, key)) }
+    }
+
+    private fun started(result: Outcome<Timer>) {
+        when (result) {
+            is Outcome.Success -> startIdentity.markSucceeded()
+            is Outcome.Failure -> if (!result.failure.isAmbiguousRetryable()) startIdentity.reset()
+        }
+        updateState { (if (result is Outcome.Success) withTimers(timers + result.value) else this).copy(starting = false) }
+        if (result is Outcome.Failure) emit(TimersEvent.Failure(result.failure))
+    }
+
+    private fun togglePause(id: String) {
+        val timer = currentState.timers.firstOrNull { it.id == id } ?: return
+        val paused = timer.state == TimerState.PAUSED
+        actions.run(id, { if (paused) repository.resume(id) else repository.pause(id) }) { updated ->
+            updateState { withTimers(timers.map { if (it.id == updated.id) updated else it }) }
         }
     }
 
-    fun togglePause(timer: Timer) {
-        if (mutableState.value.busyId != null) return
-        mutableState.value = mutableState.value.copy(busyId = timer.id, actionError = null)
-        viewModelScope.launch {
-            val action = if (timer.state == TimerState.PAUSED) resumeTimer(timer.id) else pauseTimer(timer.id)
-            when (val result = action) {
-                is Outcome.Success -> replace(result.value)
-                is Outcome.Failure -> mutableState.value = mutableState.value.copy(
-                    busyId = null,
-                    actionError = result.failure,
-                )
-            }
-        }
+    private fun cancel(id: String) {
+        actions.run(id, { repository.cancel(id) }) { updateState { withTimers(timers.filterNot { it.id == id }) } }
     }
 
-    fun cancel(timer: Timer) {
-        if (mutableState.value.busyId != null) return
-        mutableState.value = mutableState.value.copy(busyId = timer.id, actionError = null)
-        viewModelScope.launch {
-            when (val result = cancelTimer(timer.id)) {
-                is Outcome.Success -> mutableState.value = mutableState.value.copy(
-                    busyId = null,
-                    timers = mutableState.value.timers.filterNot { it.id == timer.id },
-                )
-                is Outcome.Failure -> mutableState.value = mutableState.value.copy(
-                    busyId = null,
-                    actionError = result.failure,
-                )
-            }
-        }
+    private fun TimersUiState.withTimers(next: List<Timer>): TimersUiState {
+        val sorted = next.sortedWith(TimerOrder)
+        return copy(timers = sorted, rows = sorted.toRows())
     }
 
-    fun tick() {
-        val now = System.nanoTime()
-        mutableState.value = mutableState.value.copy(tick = mutableState.value.tick + 1)
-        val expired = mutableState.value.timers.any {
-            it.state == TimerState.RUNNING && clock.remainingSeconds(it) == 0L
-        }
-        val periodicDue = now - lastRefreshNanos >= PERIODIC_REFRESH_NANOS
-        val expiryDue = expired && now - lastExpiryRefreshNanos >= EXPIRY_REFRESH_NANOS
-        if ((periodicDue || expiryDue) && !mutableState.value.refreshing) {
-            if (expired) lastExpiryRefreshNanos = now
-            refresh(silent = true)
-        }
-    }
-
-    fun remaining(timer: Timer): Long = clock.remainingSeconds(timer)
-
-    fun consumeActionError() {
-        mutableState.value = mutableState.value.copy(actionError = null)
-    }
-
-    fun consumeLoadError() {
-        mutableState.value = mutableState.value.copy(loadError = null)
-    }
-
-    private fun replace(timer: Timer) {
-        mutableState.value = mutableState.value.copy(
-            busyId = null,
-            timers = mutableState.value.timers.map { if (it.id == timer.id) timer else it },
-        )
-    }
+    private fun List<Timer>.toRows(): List<TimerRow> = map { TimerRow(it, serverClock.remainingSeconds(it)) }
 
     private companion object {
-        const val PERIODIC_REFRESH_NANOS = 30_000_000_000L
-        const val EXPIRY_REFRESH_NANOS = 10_000_000_000L
+        val TICK = 1.seconds
     }
 }
 
-@ContributesIntoSet(AppScope::class)
+@ContributesIntoMap(AppScope::class, binding = binding<ViewModelSource>())
+@ClassKey(TimersViewModel::class)
 @Inject
-class TimersViewModelFactoryContributor(
+class TimersViewModelSource internal constructor(
     private val loadTimers: LoadTimers,
     private val startTimer: StartTimer,
-    private val pauseTimer: PauseTimer,
-    private val resumeTimer: ResumeTimer,
-    private val cancelTimer: CancelTimer,
-    private val clock: ServerClock,
+    private val repository: TimerRepository,
+    private val serverClock: ServerClock,
     private val settings: ConnectionSettingsStore,
-) : ViewModelFactoryContributor {
-    override val viewModelClass: Class<out ViewModel> = TimersViewModel::class.java
+    private val clock: Clock,
+    private val context: Context,
+) : ViewModelSource {
+    override fun create(): ViewModel = build()
 
-    override fun createFactory() = SimpleViewModelFactory {
-        TimersViewModel(loadTimers, startTimer, pauseTimer, resumeTimer, cancelTimer, clock, settings)
-    }
+    private fun build() = TimersViewModel(
+        loadTimers = loadTimers,
+        startTimer = startTimer,
+        repository = repository,
+        serverClock = serverClock,
+        settings = settings,
+        defaultLabel = context.getString(R.string.timers_default_label),
+        clock = clock,
+    )
 }

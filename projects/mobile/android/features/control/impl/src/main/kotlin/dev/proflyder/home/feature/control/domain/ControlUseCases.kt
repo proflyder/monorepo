@@ -1,77 +1,54 @@
 package dev.proflyder.home.feature.control.domain
 
 import dev.proflyder.home.core.model.ControlAction
-import dev.proflyder.home.core.model.ControlCatalog
 import dev.proflyder.home.core.model.ControlEntry
-import dev.proflyder.home.core.model.ControlKind
 import dev.proflyder.home.core.model.LightAdjust
 import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.feature.control.ControlRepository
-import dev.zacsweers.metro.Inject
 
-@Inject class LoadControlCatalog(
-    private val repository: ControlRepository,
-) {
-    val isConfigured: Boolean get() = repository.isConfigured
-
-    suspend operator fun invoke(): Outcome<ControlCatalog> = when (val result = repository.catalog()) {
-        is Outcome.Success -> Outcome.Success(
-            result.value.copy(entries = result.value.entries.filter { it.kind != ControlKind.OTHER }),
-        )
-        is Outcome.Failure -> result
-    }
-}
-
-@Inject class RunScenario(
+internal class RunScenario(
     private val repository: ControlRepository,
 ) {
     suspend operator fun invoke(entry: ControlEntry): Outcome<Unit> =
         repository.send(entry.id, ControlAction.RUN)
 }
 
-@Inject class PressControl(
+internal class PressControl(
     private val repository: ControlRepository,
 ) {
     suspend operator fun invoke(entry: ControlEntry): Outcome<Unit> =
         repository.send(entry.id, ControlAction.PRESS)
 }
 
-@Inject class SetDevicePower(
+internal class SetDevicePower(
     private val repository: ControlRepository,
 ) {
     suspend operator fun invoke(entry: ControlEntry, on: Boolean): Outcome<Unit> =
         repository.send(entry.id, if (on) ControlAction.TURN_ON else ControlAction.TURN_OFF)
 }
 
-@Inject class SetVoiceProfile(
-    private val repository: ControlRepository,
-) {
-    suspend operator fun invoke(entry: ControlEntry, work: Boolean): Outcome<Unit> =
-        repository.send(entry.id, if (work) ControlAction.TURN_ON else ControlAction.TURN_OFF)
-}
-
-@Inject class AdjustLight(
+internal class AdjustLight(
     private val repository: ControlRepository,
 ) {
     suspend operator fun invoke(entry: ControlEntry, adjust: LightAdjust): Outcome<Unit> =
         repository.adjust(entry.id, adjust)
 }
 
-@Inject class SpeakOnStation(
+internal class SpeakOnStation(
     private val repository: ControlRepository,
 ) {
     suspend operator fun invoke(entry: ControlEntry, text: String): Outcome<Unit> =
         repository.speak(entry.id, text)
 }
 
-@Inject class SetVolume(
+internal class SetVolume(
     private val repository: ControlRepository,
 ) {
     suspend operator fun invoke(entry: ControlEntry, level: Int): Outcome<Unit> =
         repository.setVolume(entry.id, level)
 }
 
-@Inject class SetVolumeMuted(
+internal class SetVolumeMuted(
     private val repository: ControlRepository,
 ) {
     suspend operator fun invoke(entry: ControlEntry, muted: Boolean): Outcome<Unit> =

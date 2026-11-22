@@ -6,17 +6,19 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import dev.proflyder.home.core.runtime.appGraph
+import dev.zacsweers.metro.Inject
 
 class FindPhoneService : Service() {
-    private lateinit var audio: FindPhoneAudio
-    private lateinit var notifier: PushNotifier
+    private val audio by lazy { FindPhoneAudio(this) }
+
+    @Inject
+    internal lateinit var notifier: PushNotifier
     private var ringing = false
 
     override fun onCreate() {
         super.onCreate()
-        val dependencies = PushEntryPoint.require()
-        audio = FindPhoneAudio(this)
-        notifier = dependencies.notifications
+        appGraph<PushInjector>().inject(this)
         PushChannels.ensure(this)
     }
 

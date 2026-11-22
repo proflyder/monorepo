@@ -2,11 +2,8 @@
 <resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="DuplicateStrings">
     <string name="control_title">Дом</string>
     <string name="control_section_scenarios">Сценарии</string>
-    <string name="control_section_voice">Голос</string>
-    <string name="control_voice_profile">Профиль</string>
     <string name="control_section_other">Другие устройства</string>
     <string name="control_section_unavailable">Недоступно</string>
-    <string name="control_section_actions">Действия</string>
     <string name="control_speak_title">Сказать на колонке</string>
     <string name="control_speak_hint">Текст для озвучивания</string>
     <string name="control_speak_send">Сказать</string>
@@ -29,8 +26,6 @@
     <string name="control_tile_description">%1$s, %2$s</string>
     <string name="control_command_sent">Команда отправлена</string>
     <string name="control_device_settings">Настройки (%1$d)</string>
-    <string name="control_profile_personal">Личный</string>
-    <string name="control_profile_work">Рабочий</string>
     <string name="control_light_brightness">Яркость</string>
     <string name="control_light_temperature">Цветовая температура</string>
     <string name="control_light_color">Цвет</string>
@@ -66,8 +61,6 @@
     <string name="control_alarm_disable_turn_off">Отключить совсем</string>
     <string name="control_hub_pause">Пауза</string>
     <string name="control_hub_resume">Продолжить</string>
-    <string name="control_quick_actions_title">Быстрые действия</string>
-    <string name="control_quick_actions_hint">Долгий тап по устройству, чтобы закрепить.</string>
 
     <string name="control_wake_false_alarm">Ложное</string>
     <string name="control_wake_missed">Не услышал</string>
@@ -88,6 +81,4 @@
         <item>сб</item>
         <item>вс</item>
     </string-array>
-    <string name="control_call_title">Позвонить на колонку</string>
-    <string name="control_vpn_title">VPN домой</string>
 </resources>

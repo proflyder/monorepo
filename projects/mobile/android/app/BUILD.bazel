@@ -22,7 +22,8 @@ metro_android_library(
         "//projects/mobile/android/core/model",
         "//projects/mobile/android/core/navigation",
         "//projects/mobile/android/core/presentation",
-        "//projects/mobile/android/core/network",
+        "//projects/mobile/android/core/network/api",
+        "//projects/mobile/android/core/network/impl",
         "//projects/mobile/android/core/remoteconfig",
         "//projects/mobile/android/core/runtime",
         "//projects/mobile/android/core/settings",
@@ -64,13 +65,19 @@ metro_android_library(
         "@maven//:com_google_guava_listenablefuture",
         "@maven//:dev_zacsweers_metro_runtime_jvm",
         "@maven//:androidx_paging_paging_common",
-        "@maven//:com_github_chuckerteam_chucker_library",
         "@maven//:com_google_firebase_firebase_crashlytics",
         "@maven//:com_google_firebase_firebase_messaging",
-        "@maven//:com_squareup_okhttp3_logging_interceptor",
         "@maven//:com_squareup_okhttp3_okhttp",
         "@maven//:org_jetbrains_kotlinx_kotlinx_coroutines_android",
-    ],
+    ] + select({
+        ":network_inspection_off": [],
+        "//conditions:default": ["//projects/mobile/android/app/diagnostics"],
+    }),
+)
+
+config_setting(
+    name = "network_inspection_off",
+    define_values = {"home_network_inspection": "off"},
 )
 
 home_android_binary(
@@ -146,7 +153,8 @@ kt_android_local_test(
     deps = [
         "//projects/mobile/android/core/config",
         "//projects/mobile/android/core/model",
-        "//projects/mobile/android/core/network",
+        "//projects/mobile/android/core/network/api",
+        "//projects/mobile/android/core/network/impl",
         "//projects/mobile/android/core/settings",
         "//projects/mobile/android/features/control/api",
         "@maven//:androidx_appcompat_appcompat",
@@ -159,6 +167,7 @@ kt_android_local_test(
 kt_android_local_test(
     name = "main_activity_smoke_test",
     srcs = [
+        "src/test/kotlin/dev/proflyder/home/AppGraphBindingsTest.kt",
         "src/test/kotlin/dev/proflyder/home/AppSmokeTestSuite.kt",
         "src/test/kotlin/dev/proflyder/home/ConnectionSettingsClearTest.kt",
         "src/test/kotlin/dev/proflyder/home/MainActivitySmokeTest.kt",
@@ -186,8 +195,10 @@ kt_android_local_test(
     deps = [
         "//projects/mobile/android/core/config",
         "//projects/mobile/android/core/model",
-        "//projects/mobile/android/core/network",
+        "//projects/mobile/android/core/network/api",
+        "//projects/mobile/android/core/network/impl",
         "//projects/mobile/android/core/runtime",
+        "@maven//:androidx_lifecycle_lifecycle_viewmodel_ktx",
         "//projects/mobile/android/core/settings",
         "//projects/mobile/android/core/designsystem",
         "//projects/mobile/android/core/ui",
@@ -261,7 +272,8 @@ kt_android_local_test(
     deps = [
         "//projects/mobile/android/core/config",
         "//projects/mobile/android/core/model",
-        "//projects/mobile/android/core/network",
+        "//projects/mobile/android/core/network/api",
+        "//projects/mobile/android/core/network/impl",
         "//projects/mobile/android/core/settings",
         "//projects/mobile/android/core/theme",
         "//projects/mobile/android/core/designsystem",
@@ -303,7 +315,8 @@ kt_android_local_test(
     deps = [
         "//projects/mobile/android/core/config",
         "//projects/mobile/android/core/model",
-        "//projects/mobile/android/core/network",
+        "//projects/mobile/android/core/network/api",
+        "//projects/mobile/android/core/network/impl",
         "//projects/mobile/android/core/settings",
         "//projects/mobile/android/core/theme",
         "//projects/mobile/android/features/settings/impl",
@@ -342,7 +355,8 @@ kt_android_local_test(
     deps = [
         "//projects/mobile/android/core/config",
         "//projects/mobile/android/core/model",
-        "//projects/mobile/android/core/network",
+        "//projects/mobile/android/core/network/api",
+        "//projects/mobile/android/core/network/impl",
         "//projects/mobile/android/core/settings",
         "//projects/mobile/android/core/theme",
         "//projects/mobile/android/core/navigation",
@@ -383,7 +397,8 @@ kt_android_local_test(
     deps = [
         "//projects/mobile/android/core/config",
         "//projects/mobile/android/core/model",
-        "//projects/mobile/android/core/network",
+        "//projects/mobile/android/core/network/api",
+        "//projects/mobile/android/core/network/impl",
         "//projects/mobile/android/core/settings",
         "//projects/mobile/android/core/theme",
         "//projects/mobile/android/core/designsystem",
@@ -426,7 +441,8 @@ kt_android_local_test(
     deps = [
         "//projects/mobile/android/core/config",
         "//projects/mobile/android/core/model",
-        "//projects/mobile/android/core/network",
+        "//projects/mobile/android/core/network/api",
+        "//projects/mobile/android/core/network/impl",
         "//projects/mobile/android/core/settings",
         "//projects/mobile/android/core/theme",
         "//projects/mobile/android/core/designsystem",
@@ -469,7 +485,8 @@ kt_android_local_test(
     deps = [
         "//projects/mobile/android/core/config",
         "//projects/mobile/android/core/model",
-        "//projects/mobile/android/core/network",
+        "//projects/mobile/android/core/network/api",
+        "//projects/mobile/android/core/network/impl",
         "//projects/mobile/android/core/settings",
         "//projects/mobile/android/core/theme",
         "//projects/mobile/android/core/designsystem",
@@ -521,7 +538,8 @@ kt_android_local_test(
     deps = [
         "//projects/mobile/android/core/config",
         "//projects/mobile/android/core/model",
-        "//projects/mobile/android/core/network",
+        "//projects/mobile/android/core/network/api",
+        "//projects/mobile/android/core/network/impl",
         "//projects/mobile/android/core/settings",
         "//projects/mobile/android/core/theme",
         "//projects/mobile/android/core/designsystem",

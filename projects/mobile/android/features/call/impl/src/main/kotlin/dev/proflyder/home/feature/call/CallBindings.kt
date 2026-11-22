@@ -1,14 +1,12 @@
 package dev.proflyder.home.feature.call
 
 import dev.proflyder.home.core.runtime.AppStartable
-import dev.proflyder.home.core.ui.ViewModelFactoryContributor
 import dev.proflyder.home.feature.call.audio.AndroidCallAudioController
 import dev.proflyder.home.feature.call.audio.CallAudioController
 import dev.proflyder.home.feature.call.audio.CallAudioSession
 import dev.proflyder.home.feature.call.media.WebRtcCallMediaFactory
 import dev.proflyder.home.feature.call.presentation.AndroidCallPermissions
 import dev.proflyder.home.feature.call.presentation.CallPermissions
-import dev.proflyder.home.feature.call.presentation.CallViewModelFactoryContributor
 import dev.proflyder.home.feature.call.session.CallManager
 import dev.proflyder.home.feature.call.session.CallMediaFactory
 import dev.proflyder.home.feature.call.session.CallSessionSettings
@@ -49,14 +47,6 @@ abstract class CallBindings {
     @Binds
     @IntoSet
     internal abstract fun foregroundStarter(impl: CallForegroundStarter): AppStartable
-
-    @Binds
-    @IntoSet
-    internal abstract fun entryPointInstaller(impl: CallEntryPointInstaller): AppStartable
-
-    @Binds
-    @IntoSet
-    internal abstract fun viewModel(impl: CallViewModelFactoryContributor): ViewModelFactoryContributor
 
     internal companion object {
         @Provides

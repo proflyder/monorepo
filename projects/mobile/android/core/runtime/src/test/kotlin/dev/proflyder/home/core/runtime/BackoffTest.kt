@@ -4,6 +4,8 @@ import java.io.IOException
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.take
+import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.test.currentTime
 import kotlinx.coroutines.test.runTest
@@ -41,6 +43,25 @@ class BackoffTest {
     fun failuresThatShouldNotRetryAreRethrown() = runTest {
         flow<Int> { throw IllegalStateException("fatal") }
             .retryWithBackoff(backoff) { it is IOException }
+            .first()
+    }
+
+    @Test
+    fun reconnectingResubscribesAfterFailuresAndCompletions() = runTest {
+        var connections = 0
+        val values = flow {
+            connections += 1
+            if (connections == 2) throw IOException("dropped")
+            emit(connections)
+        }.reconnecting(backoff) { it is IOException }.take(2).toList()
+        assertEquals(listOf(1, 3), values)
+        assertEquals(2_000L, currentTime)
+    }
+
+    @Test(expected = IllegalStateException::class)
+    fun reconnectingRethrowsFailuresThatShouldNotRetry() = runTest {
+        flow<Int> { throw IllegalStateException("fatal") }
+            .reconnecting(backoff) { it is IOException }
             .first()
     }
 }

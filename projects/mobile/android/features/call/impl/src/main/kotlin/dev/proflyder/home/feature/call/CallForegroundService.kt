@@ -5,16 +5,20 @@ import android.content.pm.ServiceInfo
 import android.os.Build
 import androidx.lifecycle.LifecycleService
 import androidx.lifecycle.lifecycleScope
+import dev.proflyder.home.core.runtime.appGraph
+import dev.zacsweers.metro.Inject
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
-internal class CallForegroundService : LifecycleService() {
+class CallForegroundService : LifecycleService() {
 
-    private val controller: CallController by lazy { CallEntryPoint.require().controller }
+    @Inject
+    lateinit var controller: CallController
     private val notifications by lazy { CallNotifications(this) }
     private var observation: Job? = null
 
     override fun onCreate() {
+        appGraph<CallInjector>().inject(this)
         super.onCreate()
         notifications.createChannel()
     }

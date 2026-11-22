@@ -2,7 +2,7 @@ package dev.proflyder.home.feature.push
 
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
-import kotlinx.serialization.json.Json
+import dev.proflyder.home.core.model.LocalJson
 
 @Serializable
 internal class NotificationHistoryRecord(
@@ -15,18 +15,14 @@ internal class NotificationHistoryRecord(
 )
 
 internal object NotificationHistoryCodec {
-    private val json = Json {
-        ignoreUnknownKeys = true
-        encodeDefaults = true
-    }
     private val serializer = ListSerializer(NotificationHistoryRecord.serializer())
 
     fun encode(entries: List<NotificationHistoryEntry>): String =
-        json.encodeToString(serializer, entries.map(::toRecord))
+        LocalJson.encodeToString(serializer, entries.map(::toRecord))
 
     fun decode(raw: String?): List<NotificationHistoryEntry> {
         if (raw.isNullOrBlank()) return emptyList()
-        return runCatching { json.decodeFromString(serializer, raw) }
+        return runCatching { LocalJson.decodeFromString(serializer, raw) }
             .getOrElse { emptyList() }
             .mapNotNull(::toEntry)
             .let(NotificationHistoryRules::bounded)

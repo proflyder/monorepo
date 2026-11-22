@@ -3,8 +3,10 @@ package dev.proflyder.home.feature.alarms.presentation
 import android.animation.ValueAnimator
 import android.view.LayoutInflater
 import android.view.ViewGroup
-import androidx.recyclerview.widget.DiffUtil
 import dev.proflyder.home.core.model.Schedule
+import dev.proflyder.home.core.presentation.IntentAdapterCallback
+import dev.proflyder.home.core.presentation.KeyedDiff
+import dev.proflyder.home.core.presentation.SwitchBinder
 import dev.proflyder.home.core.ui.AdapterCallback
 import dev.proflyder.home.core.ui.BaseListAdapter
 import dev.proflyder.home.core.ui.BaseViewHolder
@@ -27,23 +29,17 @@ internal fun shouldAnimateSelection(
 ): Boolean =
     previousAlarmId == alarmId && previousSelected != null && previousSelected != selected
 
-internal interface AlarmAdapterCallback : AdapterCallback<AlarmRow> {
-    fun onToggle(alarm: Schedule, enabled: Boolean)
-    fun onSnooze(alarm: Schedule)
-    fun onStop(alarm: Schedule)
-    fun onDelete(alarm: Schedule)
-}
-
-private object AlarmDiff : DiffUtil.ItemCallback<AlarmRow>() {
-    override fun areItemsTheSame(oldItem: AlarmRow, newItem: AlarmRow): Boolean =
-        oldItem.alarm.id == newItem.alarm.id
-
-    override fun areContentsTheSame(oldItem: AlarmRow, newItem: AlarmRow): Boolean = oldItem == newItem
-}
+internal class AlarmAdapterCallback(
+    val dispatch: (AlarmsIntent) -> Unit,
+) : AdapterCallback<AlarmRow> by IntentAdapterCallback(
+    dispatch = dispatch,
+    onClick = { row -> AlarmsIntent.Click(row.alarm.id) },
+    onLongClick = { row -> AlarmsIntent.LongClick(row.alarm.id) },
+)
 
 internal class AlarmAdapter(
     callback: AlarmAdapterCallback,
-) : BaseListAdapter<AlarmRow, ItemAlarmBinding, AlarmAdapterCallback>(callback, AlarmDiff) {
+) : BaseListAdapter<AlarmRow, ItemAlarmBinding, AlarmAdapterCallback>(callback, KeyedDiff({ it.alarm.id })) {
 
     override fun onCreateHolder(
         inflater: LayoutInflater,
@@ -56,7 +52,9 @@ internal class AlarmAdapter(
         binding: ItemAlarmBinding,
         callback: AlarmAdapterCallback,
     ) : BaseViewHolder<AlarmRow, ItemAlarmBinding, AlarmAdapterCallback>(binding, callback) {
-        private var binding_ = false
+        private val enabledSwitch = SwitchBinder(binding.alarmEnabled) { enabled ->
+            callback.dispatch(AlarmsIntent.Toggle(item.alarm.id, enabled))
+        }
 
         private var previousAlarmId: String? = null
 
@@ -67,12 +65,9 @@ internal class AlarmAdapter(
         init {
             binding.root.isCheckable = true
             forwardRowClicks()
-            binding.alarmEnabled.setOnCheckedChangeListener { _, checked ->
-                if (!binding_) callback.onToggle(item.alarm, checked)
-            }
-            binding.alarmSnooze.setOnClickListener { callback.onSnooze(item.alarm) }
-            binding.alarmStop.setOnClickListener { callback.onStop(item.alarm) }
-            binding.alarmDelete.setOnClickListener { callback.onDelete(item.alarm) }
+            binding.alarmSnooze.setOnClickListener { callback.dispatch(AlarmsIntent.Snooze(item.alarm.id)) }
+            binding.alarmStop.setOnClickListener { callback.dispatch(AlarmsIntent.Stop(item.alarm.id)) }
+            binding.alarmDelete.setOnClickListener { callback.dispatch(AlarmsIntent.RequestDelete(item.alarm.id)) }
         }
 
         override fun bind(item: AlarmRow) {
@@ -101,9 +96,7 @@ internal class AlarmAdapter(
             previousAlarmId = schedule.id
             previousSelected = item.selected
 
-            binding_ = true
-            binding.alarmEnabled.isChecked = schedule.enabled
-            binding_ = false
+            enabledSwitch.render(schedule.enabled)
         }
 
         private fun applySelection(selected: Boolean, animate: Boolean) {

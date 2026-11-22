@@ -1,5 +1,6 @@
 package dev.proflyder.home.feature.vpn
 
+import dev.proflyder.home.core.model.ConnectCode
 import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.core.model.VpnOcservSettings
 import dev.proflyder.home.core.model.VpnWireGuardSettings
@@ -101,10 +102,10 @@ class VpnRulesTest {
 
     @Test
     fun serverCodesMapToProblems() {
-        assertEquals(VpnProfileProblem.CONFLICT, VpnProblems.of(RemoteFailure.Server(409, "", "")))
-        assertEquals(VpnProfileProblem.LIMIT, VpnProblems.of(RemoteFailure.Server(429, "", "")))
-        assertEquals(VpnProfileProblem.UNAVAILABLE, VpnProblems.of(RemoteFailure.Server(503, "", "")))
-        assertEquals(VpnProfileProblem.INVALID, VpnProblems.of(RemoteFailure.Server(400, "", "")))
+        assertEquals(VpnProfileProblem.CONFLICT, VpnProblems.of(RemoteFailure.Server(409, ConnectCode.UNKNOWN, "")))
+        assertEquals(VpnProfileProblem.LIMIT, VpnProblems.of(RemoteFailure.Server(429, ConnectCode.UNKNOWN, "")))
+        assertEquals(VpnProfileProblem.UNAVAILABLE, VpnProblems.of(RemoteFailure.Server(503, ConnectCode.UNKNOWN, "")))
+        assertEquals(VpnProfileProblem.INVALID, VpnProblems.of(RemoteFailure.Server(400, ConnectCode.UNKNOWN, "")))
         assertEquals(VpnProfileProblem.OFFLINE, VpnProblems.of(RemoteFailure.Timeout))
         assertEquals(VpnProfileProblem.UNAUTHORIZED, VpnProblems.of(RemoteFailure.Unauthorized))
     }

@@ -1,0 +1,13 @@
+load("//platform/android:defs.bzl", "home_jvm_library")
+
+package(default_visibility = ["//visibility:public"])
+
+home_jvm_library(
+    name = "api",
+    srcs = glob(["src/main/kotlin/**/*.kt"]),
+    deps = [
+        "//projects/mobile/android/core/model",
+        "@maven//:dev_zacsweers_metro_runtime_jvm",
+        "@maven//:org_jetbrains_kotlinx_kotlinx_coroutines_core",
+    ],
+)

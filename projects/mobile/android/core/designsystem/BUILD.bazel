@@ -11,11 +11,15 @@ metro_android_library(
     manifest = "src/main/AndroidManifest.xml",
     resource_files = glob(["src/main/res/**"]),
     deps = [
+        "//projects/mobile/android/core/model",
         "//projects/mobile/android/core/theme",
         "@maven//:androidx_appcompat_appcompat",
         "@maven//:androidx_core_core_ktx",
+        "@maven//:androidx_fragment_fragment_ktx",
+        "@maven//:androidx_lifecycle_lifecycle_runtime_ktx",
         "@maven//:com_google_android_material_material",
         "@maven//:dev_zacsweers_metro_runtime_jvm",
+        "@maven//:org_jetbrains_kotlinx_kotlinx_coroutines_android",
     ],
 )
 
@@ -49,6 +53,7 @@ kt_android_local_test(
     robolectric_properties_file = "robolectric-deps.properties",
     test_class = "dev.proflyder.home.core.designsystem.DesignSystemTestSuite",
     deps = [
+        "//projects/mobile/android/core/model",
         "//projects/mobile/android/core/theme",
         "@maven//:androidx_appcompat_appcompat",
         "@maven//:com_google_android_material_material",

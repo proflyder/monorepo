@@ -88,4 +88,5 @@
     <string name="vpn_toggle_off">VPN выключен. Нажмите, чтобы подключить; удерживайте — настройки VPN</string>
     <string name="vpn_toggle_connecting">VPN подключается. Нажмите, чтобы остановить; удерживайте — настройки VPN</string>
     <string name="vpn_toggle_on">VPN включён. Нажмите, чтобы отключить; удерживайте — настройки VPN</string>
+    <string name="vpn_quick_tile_title">VPN домой</string>
 </resources>

@@ -2,7 +2,9 @@ package dev.proflyder.home.feature.chat.presentation
 
 import android.media.AudioAttributes
 import android.media.MediaPlayer
-import java.io.File
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.currentCoroutineContext
@@ -10,27 +12,37 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
-internal class ChatVoicePlayer(
-    private val onState: (VoicePlayback?) -> Unit,
-) {
+internal interface VoicePlayer {
+    val playback: StateFlow<VoicePlayback?>
+
+    fun toggle(scope: CoroutineScope, mediaKey: String, path: String)
+
+    fun release()
+}
+
+internal class ChatVoicePlayer : VoicePlayer {
+    private val state = MutableStateFlow<VoicePlayback?>(null)
+
+    override val playback: StateFlow<VoicePlayback?> = state.asStateFlow()
+
     private var player: MediaPlayer? = null
     private var key: String? = null
     private var ticker: Job? = null
 
-    fun toggle(scope: CoroutineScope, mediaKey: String, file: File) {
+    override fun toggle(scope: CoroutineScope, mediaKey: String, path: String) {
         val current = player
         when {
             current != null && key == mediaKey && current.isPlaying -> pause(current)
             current != null && key == mediaKey -> resume(scope, current)
-            else -> start(scope, mediaKey, file)
+            else -> start(scope, mediaKey, path)
         }
     }
 
-    private fun start(scope: CoroutineScope, mediaKey: String, file: File) {
+    private fun start(scope: CoroutineScope, mediaKey: String, path: String) {
         release()
         val created = MediaPlayer()
         created.setAudioAttributes(SPEECH)
-        created.setDataSource(file.path)
+        created.setDataSource(path)
         created.setOnCompletionListener { finish() }
         created.prepare()
         player = created
@@ -59,20 +71,20 @@ internal class ChatVoicePlayer(
 
     private fun publish(current: MediaPlayer) {
         val mediaKey = key ?: return
-        onState(VoicePlayback(mediaKey, current.currentPosition.toLong(), current.duration.toLong(), current.isPlaying))
+        state.value = (VoicePlayback(mediaKey, current.currentPosition.toLong(), current.duration.toLong(), current.isPlaying))
     }
 
     private fun finish() {
         release()
     }
 
-    fun release() {
+    override fun release() {
         ticker?.cancel()
         ticker = null
         player?.release()
         player = null
         key = null
-        onState(null)
+        state.value = null
     }
 
     private companion object {

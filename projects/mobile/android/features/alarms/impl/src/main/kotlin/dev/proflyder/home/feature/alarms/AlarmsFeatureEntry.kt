@@ -11,12 +11,12 @@ import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesIntoSet
 import dev.zacsweers.metro.Inject
 
-object AlarmListDestination : Destination {
+internal object AlarmListDestination : Destination {
     override val featureId: String = "alarms"
     override val route: String = "alarms/list"
 }
 
-data class AlarmEditorDestination(
+internal data class AlarmEditorDestination(
     val alarmId: String? = null,
 ) : Destination {
     override val featureId: String = "alarms"

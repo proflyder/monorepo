@@ -6,12 +6,11 @@ import android.os.Bundle
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
-import dev.proflyder.home.core.ui.applicationViewModelFactory
+import dev.proflyder.home.core.ui.injectedViewModels
 import dev.proflyder.home.core.ui.applySystemBarsPadding
 import dev.proflyder.home.feature.call.impl.R
 import dev.proflyder.home.feature.call.impl.databinding.ActivityCallBinding
@@ -19,7 +18,7 @@ import kotlinx.coroutines.launch
 
 internal class CallActivity : AppCompatActivity() {
 
-    internal val viewModel: CallViewModel by viewModels { applicationViewModelFactory(CallViewModel::class.java) }
+    internal val viewModel: CallViewModel by injectedViewModels()
     private val texts by lazy { CallTexts(this) }
     private val routeSheet by lazy { CallRouteSheet(this, texts, viewModel::dispatch) }
     private val proximity by lazy { ProximityScreenLock(this) }

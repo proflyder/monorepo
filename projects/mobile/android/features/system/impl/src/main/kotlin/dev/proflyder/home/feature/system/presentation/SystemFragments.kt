@@ -1,15 +1,14 @@
 package dev.proflyder.home.feature.system.presentation
 
 import android.os.Bundle
-import androidx.fragment.app.activityViewModels
 import androidx.recyclerview.widget.LinearLayoutManager
 import dev.proflyder.home.core.model.SystemSnapshot
 import dev.proflyder.home.core.navigation.requireNavigator
 import dev.proflyder.home.core.ui.BaseFragment
+import dev.proflyder.home.core.ui.injectedActivityViewModels
 import dev.proflyder.home.core.ui.setVisible
 import dev.proflyder.home.core.ui.setupPullToRefresh
 import dev.proflyder.home.core.ui.userMessage
-import dev.proflyder.home.core.ui.viewModelFactory
 import dev.proflyder.home.feature.system.SystemDetailDestination
 import dev.proflyder.home.feature.system.impl.databinding.FragmentSystemBinding
 import kotlinx.coroutines.delay
@@ -17,9 +16,7 @@ import kotlinx.coroutines.delay
 internal const val AUTO_REFRESH_MILLIS = 30_000L
 
 abstract class SystemScreenFragment : BaseFragment<FragmentSystemBinding>(FragmentSystemBinding.Companion::inflate) {
-    internal val viewModel: SystemViewModel by activityViewModels {
-        viewModelFactory(SystemViewModel::class.java)
-    }
+    internal val viewModel: SystemViewModel by injectedActivityViewModels()
 
     private lateinit var adapter: SystemAdapter
 

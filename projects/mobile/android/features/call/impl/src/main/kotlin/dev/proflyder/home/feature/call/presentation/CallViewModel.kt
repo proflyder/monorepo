@@ -1,12 +1,14 @@
 package dev.proflyder.home.feature.call.presentation
 
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
 import dev.proflyder.home.core.model.Clock
 import dev.proflyder.home.core.presentation.StateViewModel
 import dev.proflyder.home.core.runtime.tickerFlow
-import dev.proflyder.home.core.ui.SimpleViewModelFactory
-import dev.proflyder.home.core.ui.ViewModelFactoryContributor
+import dev.proflyder.home.core.ui.ViewModelSource
+import dev.zacsweers.metro.AppScope
+import dev.zacsweers.metro.ClassKey
+import dev.zacsweers.metro.ContributesIntoMap
+import dev.zacsweers.metro.binding
 import dev.proflyder.home.feature.call.CallController
 import dev.proflyder.home.feature.call.CallPhase
 import dev.proflyder.home.feature.call.CallSnapshot
@@ -27,6 +29,7 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 
+@Inject
 internal class CallViewModel(
     private val controller: CallController,
     private val coordinator: CallCoordinator,
@@ -121,17 +124,11 @@ internal class CallViewModel(
     }
 }
 
+@ContributesIntoMap(AppScope::class, binding = binding<ViewModelSource>())
+@ClassKey(CallViewModel::class)
 @Inject
-internal class CallViewModelFactoryContributor(
-    private val controller: CallController,
-    private val coordinator: CallCoordinator,
-    private val audio: CallAudioController,
-    private val permissions: CallPermissions,
-    private val clock: Clock,
-) : ViewModelFactoryContributor {
-    override val viewModelClass: Class<out ViewModel> = CallViewModel::class.java
-
-    override fun createFactory(): ViewModelProvider.Factory = SimpleViewModelFactory {
-        CallViewModel(controller, coordinator, audio, permissions, clock)
-    }
+class CallViewModelSource internal constructor(
+    private val viewModel: () -> CallViewModel,
+) : ViewModelSource {
+    override fun create(): ViewModel = viewModel()
 }

@@ -61,32 +61,32 @@ class AlarmRepeatSheetTest {
     @Test
     fun doneStaysDisabledWhileCustomHasNoDays() {
         val viewModel = AlarmRepeatSheetViewModel(SavedStateHandle())
-        viewModel.choose(RepeatKind.CUSTOM)
-        assertFalse(viewModel.canConfirm)
-        viewModel.setDay(1, true)
-        assertTrue(viewModel.canConfirm)
-        viewModel.setDay(1, false)
-        assertFalse(viewModel.canConfirm)
+        viewModel.dispatch(AlarmRepeatIntent.Choose(RepeatKind.CUSTOM))
+        assertFalse(viewModel.state.value.canConfirm)
+        viewModel.dispatch(AlarmRepeatIntent.SetDay(1, true))
+        assertTrue(viewModel.state.value.canConfirm)
+        viewModel.dispatch(AlarmRepeatIntent.SetDay(1, false))
+        assertFalse(viewModel.state.value.canConfirm)
     }
 
     @Test
     fun savedStateRestoresTheOpenChoice() {
         val handle = SavedStateHandle()
         val first = AlarmRepeatSheetViewModel(handle)
-        first.choose(RepeatKind.CUSTOM)
-        first.setDay(1, true)
-        first.setDay(3, true)
+        first.dispatch(AlarmRepeatIntent.Choose(RepeatKind.CUSTOM))
+        first.dispatch(AlarmRepeatIntent.SetDay(1, true))
+        first.dispatch(AlarmRepeatIntent.SetDay(3, true))
 
         val second = AlarmRepeatSheetViewModel(handle)
-        assertEquals(AlarmRepeatChoice(RepeatKind.CUSTOM, setOf(1, 3)), second.choice)
+        assertEquals(AlarmRepeatChoice(RepeatKind.CUSTOM, setOf(1, 3)), second.state.value.choice)
     }
 
     @Test
     fun customDaysMatchingAPresetBecomeThatPreset() {
         val viewModel = AlarmRepeatSheetViewModel(SavedStateHandle())
-        viewModel.choose(RepeatKind.CUSTOM)
-        listOf(6, 7).forEach { viewModel.setDay(it, true) }
-        assertEquals(RepeatKind.WEEKENDS, viewModel.choice.normalized().repeat)
+        viewModel.dispatch(AlarmRepeatIntent.Choose(RepeatKind.CUSTOM))
+        listOf(6, 7).forEach { viewModel.dispatch(AlarmRepeatIntent.SetDay(it, true)) }
+        assertEquals(RepeatKind.WEEKENDS, viewModel.state.value.choice.normalized().repeat)
     }
 
     private fun customBinding(): SheetAlarmRepeatBinding {
