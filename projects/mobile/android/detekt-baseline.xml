@@ -146,7 +146,7 @@
     <ID>PublicInImpl:HomeConnection.kt$HomeConnection : Connection</ID>
     <ID>PublicInImpl:HomeConnectionService.kt$HomeConnectionService : ConnectionService</ID>
     <ID>PublicInImpl:HomeMessagingService.kt$HomeMessagingService : FirebaseMessagingService</ID>
-    <ID>PublicInImpl:HomeNetworkMonitor.kt$HomeNetworkMonitor</ID>
+    <ID>PublicInImpl:HomeNetworkMonitor.kt$HomeNetworkMonitor : HomeReachability</ID>
     <ID>PublicInImpl:HttpSystemRepository.kt$HttpSystemRepository : SystemRepository</ID>
     <ID>PublicInImpl:NotificationHistoryFragment.kt$NotificationHistoryFragment : BaseFragment</ID>
     <ID>PublicInImpl:NotificationHistoryRecorder.kt$NotificationHistoryRecorder</ID>
@@ -246,7 +246,7 @@
     <ID>PublicInImpl:VpnFeatureEntry.kt$VpnFeatureEntry : FeatureEntry</ID>
     <ID>PublicInImpl:VpnFragment.kt$VpnFragment : BaseFragment</ID>
     <ID>PublicInImpl:VpnKeyVault.kt$VpnKeyVault</ID>
-    <ID>PublicInImpl:VpnOpenConnector.kt$VpnOpenConnector</ID>
+    <ID>PublicInImpl:VpnOpenConnector.kt$VpnOpenConnector : DefaultLifecycleObserver</ID>
     <ID>PublicInImpl:VpnSecretBox.kt$VpnSecretBox</ID>
     <ID>PublicInImpl:VpnStatusService.kt$VpnStatusService : Service</ID>
     <ID>PublicInImpl:VpnTileService.kt$VpnTileService : TileService</ID>
