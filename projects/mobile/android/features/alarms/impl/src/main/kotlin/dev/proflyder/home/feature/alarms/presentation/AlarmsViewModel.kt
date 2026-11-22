@@ -1,5 +1,7 @@
 package dev.proflyder.home.feature.alarms.presentation
 
+import dev.proflyder.home.feature.alarms.AlarmEditorDestination
+import dev.proflyder.home.core.navigation.Route
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dev.proflyder.home.core.model.Outcome
@@ -62,9 +64,8 @@ internal sealed interface AlarmsIntent {
 
 internal sealed interface AlarmsEvent {
     data class Failure(val failure: RemoteFailure) : AlarmsEvent
-    data class OpenEditor(val id: String?) : AlarmsEvent
+    data class OpenRoute(val route: Route) : AlarmsEvent
     data class AskDisable(val id: String) : AlarmsEvent
-    data object OpenConnection : AlarmsEvent
     data class ConfirmDelete(val id: String) : AlarmsEvent
     data class ConfirmDeleteSelected(val count: Int) : AlarmsEvent
 }
@@ -81,11 +82,15 @@ internal class AlarmsViewModel(
         loader.refreshOn(merge(screenShown, bus.eventsOf<AlarmsChanged>()))
     }
 
+    private fun openEditor(id: String?) {
+        emit(AlarmsEvent.OpenRoute(Route.Screen(AlarmEditorDestination(id))))
+    }
+
     override fun handle(intent: AlarmsIntent) {
         when (intent) {
             is AlarmsIntent.Refresh -> loader.refresh(intent.mode)
-            AlarmsIntent.Add -> emit(AlarmsEvent.OpenEditor(null))
-            AlarmsIntent.OpenConnection -> emit(AlarmsEvent.OpenConnection)
+            AlarmsIntent.Add -> openEditor(null)
+            AlarmsIntent.OpenConnection -> emit(AlarmsEvent.OpenRoute(Route.Tab(CONNECTION_FEATURE)))
             is AlarmsIntent.Click -> click(intent.id)
             is AlarmsIntent.LongClick -> toggleSelection(intent.id)
             is AlarmsIntent.Toggle -> toggle(intent.id, intent.enabled)
@@ -122,7 +127,7 @@ internal class AlarmsViewModel(
 
     private fun click(id: String) = when (currentState.selectionMode) {
         true -> toggleSelection(id)
-        false -> emit(AlarmsEvent.OpenEditor(id))
+        false -> openEditor(id)
     }
 
     private fun toggleSelection(id: String) = updateState {
@@ -188,3 +193,5 @@ class AlarmsViewModelSource internal constructor(
 ) : ViewModelSource {
     override fun create(): ViewModel = AlarmsViewModel(repository, snoozeAlarm, bus)
 }
+
+private const val CONNECTION_FEATURE = "connection"

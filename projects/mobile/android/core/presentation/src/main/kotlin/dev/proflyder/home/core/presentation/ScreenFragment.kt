@@ -7,6 +7,9 @@ import android.widget.CompoundButton
 import android.widget.EditText
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.ViewModel
+import dev.proflyder.home.core.navigation.Route
+import dev.proflyder.home.core.navigation.open
+import dev.proflyder.home.core.navigation.requireNavigator
 import dev.proflyder.home.core.ui.BaseFragment
 import dev.proflyder.home.core.ui.ViewBinding
 import dev.proflyder.home.core.ui.injectedViewModels
@@ -30,6 +33,10 @@ abstract class ScreenFragment<VB : ViewBinding, S : Any, I : Any, E : Any>(
 
     protected fun dispatch(intent: I) {
         viewModel.dispatch(intent)
+    }
+
+    protected fun navigate(route: Route) {
+        requireNavigator().open(route)
     }
 
     protected fun bindSwitch(view: CompoundButton, toIntent: (Boolean) -> I): SwitchBinder =

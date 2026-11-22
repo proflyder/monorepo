@@ -20,6 +20,7 @@ metro_android_library(
         "//projects/mobile/android/core/model",
         "//projects/mobile/android/core/navigation",
         "//projects/mobile/android/core/network/api",
+        "//projects/mobile/android/core/presentation",
         "//projects/mobile/android/core/theme",
         "//projects/mobile/android/core/designsystem",
         "//projects/mobile/android/core/ui",
@@ -63,9 +64,33 @@ kt_android_local_test(
     manifest = "src/test/AndroidManifest.xml",
     test_class = "dev.proflyder.home.feature.push.PushRegistrationPolicyTest",
     deps = [
+        "//packages/kotlin/core",
+        "//projects/mobile/android/core/config",
         "//projects/mobile/android/features/chat/api",
         "//projects/mobile/android/features/push/api",
         "@maven//:junit_junit",
+    ],
+)
+
+kt_android_local_test(
+    name = "registrar_test",
+    srcs = ["src/test/kotlin/dev/proflyder/home/feature/push/HomePushRegistrarTest.kt"],
+    associates = [":impl"],
+    custom_package = "dev.proflyder.home.feature.push.impl",
+    manifest = "src/test/AndroidManifest.xml",
+    test_class = "dev.proflyder.home.feature.push.HomePushRegistrarTest",
+    deps = [
+        "//packages/kotlin/core",
+        "//projects/mobile/android/core/config",
+        "//projects/mobile/android/core/model",
+        "//projects/mobile/android/core/network/api",
+        "//projects/mobile/android/core/runtime",
+        "//projects/mobile/android/core/testing",
+        "//projects/mobile/android/features/chat/api",
+        "//projects/mobile/android/features/push/api",
+        "@maven//:junit_junit",
+        "@maven//:org_jetbrains_kotlinx_kotlinx_coroutines_core",
+        "@maven//:org_jetbrains_kotlinx_kotlinx_coroutines_test",
     ],
 )
 

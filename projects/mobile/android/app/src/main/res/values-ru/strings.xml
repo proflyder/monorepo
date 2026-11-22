@@ -1,13 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_settings">Настройки</string>
-    <string name="app_time_title">Время</string>
-    <string name="app_time_alarms">Будильники</string>
-    <string name="app_time_timers">Таймеры</string>
-    <string name="app_time_reminders">Напоминания</string>
-    <string name="app_call">Позвонить</string>
     <string name="app_actions">Действия</string>
-    <string name="app_profile_personal">Личный</string>
-    <string name="app_profile_work">Рабочий</string>
-    <string name="app_profile_chip">Профиль ассистента: %1$s</string>
 </resources>

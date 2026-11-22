@@ -24,7 +24,5 @@ class TimersFeatureEntry : FeatureEntry {
     override val iconRes: Int = R.drawable.timers_ic_tab
     override val rootDestination: Destination = TimerListDestination
 
-    override fun supports(destination: Destination): Boolean = destination is TimerListDestination
-
     override fun createFragment(destination: Destination): Fragment = TimersFragment()
 }

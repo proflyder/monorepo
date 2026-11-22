@@ -29,4 +29,6 @@ internal fun testHttp(
 
 internal object TestVersion : AppVersion {
     override val name: String = "test"
+
+    override val debuggable: Boolean = false
 }

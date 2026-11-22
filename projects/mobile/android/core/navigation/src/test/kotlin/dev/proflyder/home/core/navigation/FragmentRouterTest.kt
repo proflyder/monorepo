@@ -28,8 +28,8 @@ class FragmentRouterTest {
 
         assertFragment(activity, "alarms/list")
         assertEquals(0, activity.supportFragmentManager.backStackEntryCount)
-        assertEquals(ALARMS_TITLE, activity.router.currentTitleRes.value)
-        assertFalse(activity.router.canGoBack.value)
+        assertEquals(ALARMS_TITLE, activity.router.chrome.value.titleRes)
+        assertFalse(activity.router.chrome.value.canGoBack)
         assertFalse("at root, Back must let the Activity finish", activity.router.back())
     }
 
@@ -41,15 +41,15 @@ class FragmentRouterTest {
 
         assertFragment(activity, "alarms/editor/7")
         assertEquals(1, activity.supportFragmentManager.backStackEntryCount)
-        assertEquals(EDITOR_TITLE, activity.router.currentTitleRes.value)
-        assertTrue(activity.router.canGoBack.value)
+        assertEquals(EDITOR_TITLE, activity.router.chrome.value.titleRes)
+        assertTrue(activity.router.chrome.value.canGoBack)
 
         assertTrue(activity.router.back())
 
         assertFragment(activity, "alarms/list")
         assertEquals(0, activity.supportFragmentManager.backStackEntryCount)
-        assertEquals(ALARMS_TITLE, activity.router.currentTitleRes.value)
-        assertFalse(activity.router.canGoBack.value)
+        assertEquals(ALARMS_TITLE, activity.router.chrome.value.titleRes)
+        assertFalse(activity.router.chrome.value.canGoBack)
     }
 
     @Test
@@ -82,14 +82,14 @@ class FragmentRouterTest {
 
         assertFragment(second, "alarms/editor/7")
         assertEquals(1, second.supportFragmentManager.backStackEntryCount)
-        assertEquals("alarms", second.router.currentTabId.value)
-        assertEquals(EDITOR_TITLE, second.router.currentTitleRes.value)
-        assertTrue(second.router.canGoBack.value)
+        assertEquals("alarms", second.router.chrome.value.tabId)
+        assertEquals(EDITOR_TITLE, second.router.chrome.value.titleRes)
+        assertTrue(second.router.chrome.value.canGoBack)
 
         assertTrue(second.router.back())
         assertFragment(second, "alarms/list")
         assertEquals(0, second.supportFragmentManager.backStackEntryCount)
-        assertEquals(ALARMS_TITLE, second.router.currentTitleRes.value)
+        assertEquals(ALARMS_TITLE, second.router.chrome.value.titleRes)
     }
 
     @Test
@@ -104,8 +104,8 @@ class FragmentRouterTest {
 
         assertFragment(activity, "timers/list")
         assertEquals(0, activity.supportFragmentManager.backStackEntryCount)
-        assertEquals("timers", activity.router.currentTabId.value)
-        assertEquals(TIMERS_TITLE, activity.router.currentTitleRes.value)
+        assertEquals("timers", activity.router.chrome.value.tabId)
+        assertEquals(TIMERS_TITLE, activity.router.chrome.value.titleRes)
     }
 
     @Test
@@ -120,8 +120,8 @@ class FragmentRouterTest {
 
         assertNotNull(currentFragment(activity))
         assertFragment(activity, "alarms/list")
-        assertEquals("alarms", activity.router.currentTabId.value)
-        assertEquals(ALARMS_TITLE, activity.router.currentTitleRes.value)
+        assertEquals("alarms", activity.router.chrome.value.tabId)
+        assertEquals(ALARMS_TITLE, activity.router.chrome.value.titleRes)
     }
 
     @Test
@@ -157,8 +157,8 @@ class FragmentRouterTest {
 
         assertFragment(second, "alarms/editor/7")
         assertEquals(1, second.supportFragmentManager.backStackEntryCount)
-        assertEquals("alarms", second.router.currentTabId.value)
-        assertTrue(second.router.canGoBack.value)
+        assertEquals("alarms", second.router.chrome.value.tabId)
+        assertTrue(second.router.chrome.value.canGoBack)
 
         assertTrue(second.router.back())
         assertFragment(second, "alarms/list")
@@ -236,15 +236,15 @@ class FragmentRouterTest {
 
         assertFragment(activity, "timers/list")
         assertEquals(0, activity.supportFragmentManager.backStackEntryCount)
-        assertEquals("timers", activity.router.currentTabId.value)
-        assertEquals(TIMERS_TITLE, activity.router.currentTitleRes.value)
-        assertFalse(activity.router.canGoBack.value)
+        assertEquals("timers", activity.router.chrome.value.tabId)
+        assertEquals(TIMERS_TITLE, activity.router.chrome.value.titleRes)
+        assertFalse(activity.router.chrome.value.canGoBack)
 
         activity.router.selectTab("alarms")
 
         assertFragment(activity, "alarms/list")
         assertEquals(0, activity.supportFragmentManager.backStackEntryCount)
-        assertEquals(ALARMS_TITLE, activity.router.currentTitleRes.value)
+        assertEquals(ALARMS_TITLE, activity.router.chrome.value.titleRes)
     }
 
     @Test
@@ -265,19 +265,19 @@ class FragmentRouterTest {
         activity.router.navigate(SettingsDestination)
 
         assertFragment(activity, "settings")
-        assertEquals("alarms", activity.router.currentTabId.value)
-        assertEquals(SETTINGS_TITLE, activity.router.currentTitleRes.value)
-        assertTrue(activity.router.canGoBack.value)
-        assertTrue("settings is a non-tab overlay", activity.router.currentIsOverlay.value)
+        assertEquals("alarms", activity.router.chrome.value.tabId)
+        assertEquals(SETTINGS_TITLE, activity.router.chrome.value.titleRes)
+        assertTrue(activity.router.chrome.value.canGoBack)
+        assertTrue("settings is a non-tab overlay", activity.router.chrome.value.overlay)
         assertEquals(1, activity.supportFragmentManager.backStackEntryCount)
 
         assertTrue(activity.router.back())
 
         assertFragment(activity, "alarms/list")
-        assertEquals("alarms", activity.router.currentTabId.value)
-        assertEquals(ALARMS_TITLE, activity.router.currentTitleRes.value)
-        assertFalse(activity.router.canGoBack.value)
-        assertFalse("a tab root is not an overlay", activity.router.currentIsOverlay.value)
+        assertEquals("alarms", activity.router.chrome.value.tabId)
+        assertEquals(ALARMS_TITLE, activity.router.chrome.value.titleRes)
+        assertFalse(activity.router.chrome.value.canGoBack)
+        assertFalse("a tab root is not an overlay", activity.router.chrome.value.overlay)
     }
 
     @Test
@@ -287,12 +287,68 @@ class FragmentRouterTest {
         activity.router.selectTab("settings")
 
         assertFragment(activity, "settings")
-        assertEquals("alarms", activity.router.currentTabId.value)
-        assertEquals(SETTINGS_TITLE, activity.router.currentTitleRes.value)
+        assertEquals("alarms", activity.router.chrome.value.tabId)
+        assertEquals(SETTINGS_TITLE, activity.router.chrome.value.titleRes)
 
         assertTrue(activity.router.back())
         assertFragment(activity, "alarms/list")
-        assertEquals("alarms", activity.router.currentTabId.value)
+        assertEquals("alarms", activity.router.chrome.value.tabId)
+    }
+
+    @Test
+    fun aTypedRouteOpensTheDestinationWithParcelableArguments() {
+        val activity = launch()
+
+        assertTrue(activity.router.openRoute("/alarms/editor/7/"))
+
+        assertFragment(activity, "alarms/editor/7")
+        val fragment = checkNotNull(currentFragment(activity))
+        val decoded by fragment.destination(AlarmEditorDestination)
+        assertEquals(AlarmEditorDestination("7"), decoded)
+        assertEquals(EDITOR_TITLE, activity.router.chrome.value.titleRes)
+    }
+
+    @Test
+    fun aRouteOpenedBeforeTheFirstResumeLandsOnTopOfTheInitialTab() {
+        val controller = Robolectric.buildActivity(TestActivity::class.java).create()
+        controller.get().router.openRoute("settings")
+        controller.start().resume().visible()
+        val activity = LaunchedActivity(controller, controller.get())
+
+        assertFragment(activity, "settings")
+        assertTrue(activity.router.back())
+        assertFragment(activity, "alarms/list")
+    }
+
+    @Test
+    fun malformedTypedRoutesAreRejected() {
+        val activity = launch()
+
+        assertFalse(activity.router.openRoute("alarms/editor"))
+        assertFalse(activity.router.openRoute("alarms/editor/7/extra"))
+        assertFalse(activity.router.openRoute("alarms/other/7"))
+        assertFragment(activity, "alarms/list")
+    }
+
+    @Test
+    fun registryResolvesRoutesThroughTheTypedParser() {
+        assertEquals("alarms", TEST_REGISTRY.entryForRoute("alarms/editor/9")?.id)
+        assertEquals(null, TEST_REGISTRY.entryForRoute("alarms/editor"))
+        assertEquals(AlarmEditorDestination("9"), AlarmsEntry().parse(checkNotNull(RoutePath.of("alarms/editor/9"))))
+        assertTrue(AlarmsEntry().supports(AlarmEditorDestination("9")))
+        assertFalse(TimersEntry().supports(AlarmEditorDestination("9")))
+    }
+
+    @Test
+    fun chromeIsPublishedAsOneState() {
+        val activity = launch()
+
+        activity.router.navigate(SettingsDestination)
+
+        assertEquals(
+            AppChromeState(tabId = "alarms", titleRes = SETTINGS_TITLE, canGoBack = true, overlay = true),
+            activity.router.chrome.value,
+        )
     }
 
     @Test
@@ -318,7 +374,7 @@ class FragmentRouterTest {
         activity.router.navigate(SettingsDestination)
 
         assertFragment(activity, "settings")
-        assertEquals("alarms", activity.router.currentTabId.value)
+        assertEquals("alarms", activity.router.chrome.value.tabId)
 
         assertTrue(activity.router.back())
         assertFragment(activity, "alarms/editor/7")
@@ -337,13 +393,13 @@ class FragmentRouterTest {
         val second = launch(bundle)
 
         assertFragment(second, "settings")
-        assertEquals("alarms", second.router.currentTabId.value)
-        assertEquals(SETTINGS_TITLE, second.router.currentTitleRes.value)
-        assertTrue(second.router.canGoBack.value)
+        assertEquals("alarms", second.router.chrome.value.tabId)
+        assertEquals(SETTINGS_TITLE, second.router.chrome.value.titleRes)
+        assertTrue(second.router.chrome.value.canGoBack)
 
         assertTrue(second.router.back())
         assertFragment(second, "alarms/list")
-        assertEquals("alarms", second.router.currentTabId.value)
+        assertEquals("alarms", second.router.chrome.value.tabId)
     }
 
     private fun launch(bundle: Bundle? = null): LaunchedActivity {
@@ -445,7 +501,10 @@ data class AlarmEditorDestination(val alarmId: String) : Destination {
     override val featureId: String = "alarms"
     override val route: String = "alarms/editor/$alarmId"
 
-    override fun arguments(): Bundle = Bundle().apply { putString("alarm_id", alarmId) }
+    companion object : RouteCodec<AlarmEditorDestination> {
+        override fun decode(path: RoutePath): AlarmEditorDestination? =
+            path.tail("alarms", "editor")?.let(::AlarmEditorDestination)
+    }
 }
 
 private object TimersRootDestination : Destination {
@@ -465,11 +524,10 @@ private class AlarmsEntry : FeatureEntry {
     override val iconRes: Int = 0
     override val rootDestination: Destination = AlarmsRootDestination
 
+    override val routes: List<RouteCodec<*>> = listOf(RouteCodec.fixed(AlarmsRootDestination), AlarmEditorDestination)
+
     override fun titleRes(destination: Destination): Int =
         if (destination is AlarmEditorDestination) EDITOR_TITLE else ALARMS_TITLE
-
-    override fun supports(destination: Destination): Boolean =
-        destination is AlarmsRootDestination || destination is AlarmEditorDestination
 
     override fun createFragment(destination: Destination): Fragment = TestFragment()
 }
@@ -481,9 +539,6 @@ private class TimersEntry : FeatureEntry {
     override val iconRes: Int = 0
     override val rootDestination: Destination = TimersRootDestination
 
-    override fun supports(destination: Destination): Boolean =
-        destination is TimersRootDestination
-
     override fun createFragment(destination: Destination): Fragment = TestFragment()
 }
 
@@ -494,8 +549,6 @@ private class SettingsEntry : FeatureEntry {
     override val titleRes: Int = SETTINGS_TITLE
     override val iconRes: Int = 0
     override val rootDestination: Destination = SettingsDestination
-
-    override fun supports(destination: Destination): Boolean = destination is SettingsDestination
 
     override fun createFragment(destination: Destination): Fragment = TestFragment()
 }

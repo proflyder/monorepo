@@ -2,7 +2,6 @@ package dev.proflyder.home.feature.alarms.presentation
 
 import android.os.Bundle
 import dev.proflyder.home.core.model.RepeatKind
-import dev.proflyder.home.core.navigation.requireNavigator
 import dev.proflyder.home.core.presentation.ScreenFragment
 import dev.proflyder.home.core.presentation.SwitchBinder
 import dev.proflyder.home.core.presentation.TextBinder
@@ -85,6 +84,7 @@ internal class AlarmEditorFragment :
             is AlarmEditorEvent.PickRepeat -> openRepeatSheet(event.repeat, event.days)
             AlarmEditorEvent.ConfirmDelete -> confirmDelete()
             is AlarmEditorEvent.Completed -> complete(event.completion)
+            is AlarmEditorEvent.OpenRoute -> navigate(event.route)
         }
     }
 
@@ -100,12 +100,11 @@ internal class AlarmEditorFragment :
     }
 
     private fun complete(completion: AlarmEditorCompletion) {
-        dispatch(AlarmEditorIntent.CompletionShown)
         val message = when (completion) {
             AlarmEditorCompletion.SAVED -> R.string.alarms_saved
             AlarmEditorCompletion.DELETED -> R.string.alarms_deleted
         }
         showMessage(message)
-        requireNavigator().back()
+        dispatch(AlarmEditorIntent.CompletionShown)
     }
 }

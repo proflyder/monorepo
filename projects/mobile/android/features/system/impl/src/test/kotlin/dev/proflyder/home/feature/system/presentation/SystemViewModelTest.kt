@@ -3,13 +3,27 @@ package dev.proflyder.home.feature.system.presentation
 import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.core.model.SystemSnapshot
+import dev.proflyder.home.core.navigation.Route
+import dev.proflyder.home.feature.system.SystemDetailDestination
 import dev.proflyder.home.feature.system.SystemFixtures
 import dev.proflyder.home.feature.system.SystemRepository
+import dev.proflyder.home.feature.system.SystemState
+import dev.proflyder.home.feature.system.data.PollingSystemRepository
+import dev.proflyder.home.feature.system.data.SystemRefreshPolicy
 import dev.proflyder.home.feature.system.data.combine
+import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -21,12 +35,13 @@ import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class SystemViewModelTest {
-    private class Repository(var next: Outcome<SystemSnapshot>) : SystemRepository {
-        var calls = 0
+    private class FakeRepository : SystemRepository {
+        val mutable = MutableStateFlow(SystemState())
+        override val state: StateFlow<SystemState> = mutable
+        var refreshes = 0
 
-        override suspend fun load(): Outcome<SystemSnapshot> {
-            calls++
-            return next
+        override fun refresh() {
+            refreshes++
         }
     }
 
@@ -37,22 +52,64 @@ class SystemViewModelTest {
     fun tearDown() = Dispatchers.resetMain()
 
     @Test
-    fun aFailedRefreshKeepsTheLastSnapshot() {
-        val repository = Repository(Outcome.Success(SystemFixtures.snapshot))
+    fun theScreenMirrorsTheRepositoryAndReportsAFailedRefreshOnce() = runTest(UnconfinedTestDispatcher()) {
+        val repository = FakeRepository()
         val viewModel = SystemViewModel(repository)
-        viewModel.refresh()
-        assertEquals(SystemFixtures.snapshot, viewModel.state.value.snapshot)
-        assertFalse(viewModel.state.value.loading)
+        val events = mutableListOf<SystemEvent>()
+        backgroundScope.launch { viewModel.events.toList(events) }
 
-        repository.next = Outcome.Failure(RemoteFailure.Offline("down"))
-        viewModel.refresh()
+        repository.mutable.value = SystemState(loading = false, snapshot = SystemFixtures.snapshot)
         assertEquals(SystemFixtures.snapshot, viewModel.state.value.snapshot)
-        assertEquals(RemoteFailure.Offline("down"), viewModel.state.value.error)
 
-        repository.next = Outcome.Success(SystemFixtures.empty)
-        viewModel.refresh()
-        assertNull(viewModel.state.value.error)
-        assertEquals(3, repository.calls)
+        repository.mutable.value = repository.mutable.value.copy(loading = true)
+        repository.mutable.value = SystemState(false, SystemFixtures.snapshot, RemoteFailure.Offline("down"))
+        assertEquals(listOf(SystemEvent.RefreshFailed(RemoteFailure.Offline("down"))), events)
+
+        viewModel.dispatch(SystemIntent.Refresh)
+        viewModel.dispatch(SystemIntent.OpenSection(SystemSection.CLUSTER))
+        assertEquals(1, repository.refreshes)
+        assertEquals(SystemEvent.OpenRoute(Route.Screen(SystemDetailDestination(SystemSection.CLUSTER))), events.last())
+    }
+
+    @Test
+    fun theRepositoryPollsOnlyWhileObservedAndKeepsTheLastSnapshot() = runTest(StandardTestDispatcher()) {
+        val results = ArrayDeque<Outcome<SystemSnapshot>>(
+            listOf(Outcome.Success(SystemFixtures.snapshot), Outcome.Failure(RemoteFailure.Offline("down"))),
+        )
+        var calls = 0
+        val repository = PollingSystemRepository(
+            load = {
+                calls++
+                results.removeFirstOrNull() ?: Outcome.Success(SystemFixtures.empty)
+            },
+            scope = backgroundScope,
+            policy = SystemRefreshPolicy(period = 30.seconds, stopTimeout = 1.seconds),
+        )
+        runCurrent()
+        assertEquals(0, calls)
+
+        val watcher = backgroundScope.launch { repository.state.collect {} }
+        runCurrent()
+        assertEquals(1, calls)
+        assertEquals(SystemFixtures.snapshot, repository.state.value.snapshot)
+        assertFalse(repository.state.value.loading)
+
+        repository.refresh()
+        runCurrent()
+        assertEquals(2, calls)
+        assertEquals(SystemFixtures.snapshot, repository.state.value.snapshot)
+        assertEquals(RemoteFailure.Offline("down"), repository.state.value.error)
+
+        advanceTimeBy(30.seconds)
+        runCurrent()
+        assertEquals(3, calls)
+        assertNull(repository.state.value.error)
+
+        watcher.cancel()
+        advanceTimeBy(120.seconds)
+        runCurrent()
+        assertEquals(3, calls)
+        assertTrue(repository.state.value.snapshot != null)
     }
 
     @Test

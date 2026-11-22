@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="time_title">Time</string>
+    <string name="time_alarms">Alarms</string>
+    <string name="time_timers">Timers</string>
+    <string name="time_reminders">Reminders</string>
+</resources>

@@ -1,9 +1,10 @@
 package dev.proflyder.home.feature.scenarios
 
-import android.os.Bundle
 import androidx.fragment.app.Fragment
 import dev.proflyder.home.core.navigation.Destination
 import dev.proflyder.home.core.navigation.FeatureEntry
+import dev.proflyder.home.core.navigation.RouteCodec
+import dev.proflyder.home.core.navigation.RoutePath
 import dev.proflyder.home.feature.scenarios.impl.R
 import dev.proflyder.home.feature.scenarios.presentation.editor.ScenarioEditorFragment
 import dev.proflyder.home.feature.scenarios.presentation.ScenariosFragment
@@ -20,15 +21,13 @@ data class ScenarioEditorDestination(
     val scenarioId: String? = null,
 ) : Destination {
     override val featureId: String = "scenarios"
-    override val route: String =
-        if (scenarioId == null) "scenarios/editor/new" else "scenarios/editor/$scenarioId"
+    override val route: String = "scenarios/editor/${scenarioId ?: NEW}"
 
-    override fun arguments(): Bundle = Bundle().apply {
-        if (scenarioId != null) putString(ARG_SCENARIO_ID, scenarioId)
-    }
+    companion object : RouteCodec<ScenarioEditorDestination> {
+        private const val NEW = "new"
 
-    companion object {
-        const val ARG_SCENARIO_ID = "scenario_id"
+        override fun decode(path: RoutePath): ScenarioEditorDestination? =
+            path.tail("scenarios", "editor")?.let { ScenarioEditorDestination(it.takeUnless { id -> id == NEW }) }
     }
 }
 
@@ -40,6 +39,8 @@ class ScenariosFeatureEntry : FeatureEntry {
     override val titleRes: Int = R.string.scenarios_title
     override val iconRes: Int = R.drawable.scenarios_ic_tab
     override val rootDestination: Destination = ScenarioListDestination
+    override val routes: List<RouteCodec<*>> =
+        listOf(RouteCodec.fixed(ScenarioListDestination), ScenarioEditorDestination)
 
     override fun titleRes(destination: Destination): Int = when (destination) {
         is ScenarioEditorDestination ->
@@ -50,9 +51,6 @@ class ScenariosFeatureEntry : FeatureEntry {
             }
         else -> titleRes
     }
-
-    override fun supports(destination: Destination): Boolean =
-        destination is ScenarioListDestination || destination is ScenarioEditorDestination
 
     override fun createFragment(destination: Destination): Fragment = when (destination) {
         is ScenarioEditorDestination -> ScenarioEditorFragment()

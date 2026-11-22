@@ -31,11 +31,38 @@ class AppGraphBindingsTest {
         assertTrue(names.toString(), names.containsAll(STARTABLES))
     }
 
+    @Test
+    fun chromeAndDeepLinksAreContributedByFeatures() {
+        val activity = Robolectric.buildActivity(MainActivity::class.java).setup().get()
+        assertEquals(
+            setOf("VoiceProfileToolbarChip", "VpnToolbarContribution"),
+            activity.toolbarContributions.map { it::class.java.simpleName }.toSet(),
+        )
+        assertEquals(
+            setOf("CallToolbarAction", "SettingsToolbarAction"),
+            activity.toolbarActions.map { it::class.java.simpleName }.toSet(),
+        )
+        assertTrue(activity.features.entry("time") != null)
+    }
+
+    @Test
+    fun aPushDeepLinkOpensTheTypedRoute() {
+        val intent = android.content.Intent(RuntimeEnvironment.getApplication(), MainActivity::class.java)
+            .putExtra(dev.proflyder.home.feature.push.PushIntents.EXTRA_DEEP_LINK, "settings/history")
+        val activity = Robolectric.buildActivity(MainActivity::class.java, intent).setup().get()
+        org.robolectric.Shadows.shadowOf(activity.mainLooper).idle()
+        activity.supportFragmentManager.executePendingTransactions()
+        assertEquals("settings/history", activity.supportFragmentManager.findFragmentById(R.id.fragment_container)?.tag)
+        assertEquals(null, activity.intent.getStringExtra(dev.proflyder.home.feature.push.PushIntents.EXTRA_DEEP_LINK))
+    }
+
     private companion object {
         val STARTABLES = setOf(
             "CallForegroundStarter",
             "CallAudioSession",
-            "FirebasePushRegistrar",
+            "HomePushRegistrar",
+            "FirebasePushTokenSource",
+            "PushInbox",
             "ChainVpnController",
             "AutoConnectCoordinator",
             "VpnStatusServiceStarter",
@@ -57,8 +84,11 @@ class AppGraphBindingsTest {
             "dev.proflyder.home.feature.scenarios.presentation.ScenariosViewModel",
             "dev.proflyder.home.feature.scenarios.presentation.editor.ScenarioEditorViewModel",
             "dev.proflyder.home.feature.settings.presentation.AppearanceViewModel",
+            "dev.proflyder.home.feature.settings.presentation.DesignCatalogViewModel",
+            "dev.proflyder.home.feature.settings.presentation.SettingsViewModel",
             "dev.proflyder.home.feature.settings.presentation.NotificationHistoryViewModel",
             "dev.proflyder.home.feature.system.presentation.SystemViewModel",
+            "dev.proflyder.home.feature.time.presentation.TimeViewModel",
             "dev.proflyder.home.feature.timers.presentation.TimersViewModel",
             "dev.proflyder.home.feature.vpn.presentation.VpnViewModel",
         )

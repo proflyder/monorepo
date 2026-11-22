@@ -1,5 +1,6 @@
 package dev.proflyder.home.feature.control.presentation
 
+import dev.proflyder.home.core.navigation.Route
 import dev.proflyder.home.core.model.ControlEntry
 import dev.proflyder.home.core.model.FavoriteRef
 import dev.proflyder.home.core.model.LightAdjust
@@ -122,6 +123,8 @@ internal sealed interface ControlIntent {
     data class Dial(val open: Boolean) : ControlIntent
 
     data class ActivateTile(val key: String) : ControlIntent
+
+    data object OpenConnection : ControlIntent
 }
 
 internal sealed interface ControlNotice {
@@ -149,5 +152,5 @@ internal sealed interface ControlEvent {
 
     data class AskAlarmDisable(val card: HubCard.Alarm) : ControlEvent
 
-    data class OpenFeature(val featureId: String) : ControlEvent
+    data class OpenRoute(val route: Route) : ControlEvent
 }

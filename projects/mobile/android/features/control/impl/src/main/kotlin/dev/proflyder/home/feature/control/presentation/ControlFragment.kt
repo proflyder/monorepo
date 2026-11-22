@@ -3,7 +3,6 @@ package dev.proflyder.home.feature.control.presentation
 import android.os.Bundle
 import androidx.activity.OnBackPressedCallback
 import androidx.recyclerview.widget.RecyclerView
-import dev.proflyder.home.core.navigation.requireNavigator
 import dev.proflyder.home.core.presentation.ScreenFragment
 import dev.proflyder.home.core.presentation.screenViewModel
 import dev.proflyder.home.core.ui.Notices
@@ -36,7 +35,7 @@ internal class ControlFragment :
         requireActivity().onBackPressedDispatcher.addCallback(viewLifecycleOwner, dialBack)
         binding.controlRefresh.setupPullToRefresh { dispatch(ControlIntent.Refresh) }
         binding.controlRetry.setOnClickListener { dispatch(ControlIntent.Refresh) }
-        binding.controlOpenConnection.setOnClickListener { requireNavigator().selectTab(CONNECTION_FEATURE) }
+        binding.controlOpenConnection.setOnClickListener { dispatch(ControlIntent.OpenConnection) }
     }
 
     override fun render(state: ControlUiState) {
@@ -54,7 +53,7 @@ internal class ControlFragment :
             is ControlEvent.OpenSpeak -> dialogs.openSpeak(event.entry)
             is ControlEvent.ConfirmPin -> dialogs.confirmPin(event.entry, event.pinned)
             is ControlEvent.AskAlarmDisable -> dialogs.askAlarmDisable(event.card)
-            is ControlEvent.OpenFeature -> requireNavigator().selectTab(event.featureId)
+            is ControlEvent.OpenRoute -> navigate(event.route)
         }
     }
 
@@ -71,9 +70,5 @@ internal class ControlFragment :
             if (viewModel.state.value.layout.dialOpen || dy == 0) return
             if (dy > 0) binding.controlQuickFab.hide() else binding.controlQuickFab.show()
         }
-    }
-
-    private companion object {
-        const val CONNECTION_FEATURE = "connection"
     }
 }

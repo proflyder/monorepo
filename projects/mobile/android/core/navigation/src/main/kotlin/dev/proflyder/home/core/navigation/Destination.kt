@@ -1,6 +1,5 @@
 package dev.proflyder.home.core.navigation
 
-import android.os.Bundle
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import androidx.fragment.app.Fragment
@@ -8,8 +7,6 @@ import androidx.fragment.app.Fragment
 interface Destination {
     val featureId: String
     val route: String
-
-    fun arguments(): Bundle = Bundle.EMPTY
 }
 
 interface FeatureEntry {
@@ -28,13 +25,17 @@ interface FeatureEntry {
 
     val rootDestination: Destination
 
+    val routes: List<RouteCodec<*>> get() = listOf(RouteCodec.fixed(rootDestination))
+
     @StringRes
     fun titleRes(destination: Destination): Int = titleRes
 
-    fun ownsRoute(route: String): Boolean =
-        route == rootDestination.route || route.startsWith("$id/")
+    fun parse(path: RoutePath): Destination? = routes.firstNotNullOfOrNull { it.decode(path) }
 
-    fun supports(destination: Destination): Boolean
+    fun deepLink(path: RoutePath): Destination? = parse(path)
+
+    fun supports(destination: Destination): Boolean =
+        RoutePath.of(destination.route)?.let(::parse) == destination
 
     fun createFragment(destination: Destination): Fragment
 
@@ -62,7 +63,7 @@ class FeatureRegistry(entries: Collection<FeatureEntry>) {
     fun entry(id: String): FeatureEntry? = byId[id]
 
     fun entryForRoute(route: String): FeatureEntry? {
-        if (route.isBlank()) return null
-        return ordered.firstOrNull { it.ownsRoute(route) }
+        val path = RoutePath.of(route) ?: return null
+        return ordered.firstOrNull { it.parse(path) != null }
     }
 }

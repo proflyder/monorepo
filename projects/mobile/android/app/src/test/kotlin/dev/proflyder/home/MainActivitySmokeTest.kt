@@ -1,12 +1,15 @@
 package dev.proflyder.home
 
 import android.view.View
+import android.view.ViewGroup
+import androidx.fragment.app.Fragment
 import android.widget.ImageView
 import android.widget.TextView
 import androidx.viewpager2.widget.ViewPager2
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.bottomnavigation.BottomNavigationView
 import dev.proflyder.home.core.designsystem.PillSegments
+import dev.proflyder.home.feature.time.TimeSection
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -19,6 +22,11 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import dev.proflyder.home.core.ui.R as UiR
 import dev.proflyder.home.feature.alarms.impl.R as AlarmsR
+import dev.proflyder.home.feature.call.impl.R as CallR
+import dev.proflyder.home.feature.control.impl.R as ControlR
+import dev.proflyder.home.feature.settings.impl.R as SettingsR
+import dev.proflyder.home.feature.time.impl.R as TimeR
+import dev.proflyder.home.feature.vpn.impl.R as VpnR
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
@@ -69,8 +77,8 @@ class MainActivitySmokeTest {
         val opened = activity.actionsMenu.contentView
         assertNotNull("the actions button must open the custom menu", opened)
         val content = requireNotNull(opened)
-        val call = content.findViewById<View>(R.id.menu_action_call)
-        val settings = content.findViewById<View>(R.id.menu_action_settings)
+        val call = content.findViewById<View>(CallR.id.call_toolbar_action)
+        val settings = content.findViewById<View>(SettingsR.id.settings_toolbar_action)
         assertNotNull(call)
         assertNotNull(settings)
         assertEquals(View.VISIBLE, call.visibility)
@@ -83,8 +91,8 @@ class MainActivitySmokeTest {
 
         val callLabel = call.findViewById<TextView>(UiR.id.ds_popup_menu_label)
         val settingsLabel = settings.findViewById<TextView>(UiR.id.ds_popup_menu_label)
-        assertEquals(activity.getString(R.string.app_call), callLabel.text.toString())
-        assertEquals(activity.getString(R.string.app_settings), settingsLabel.text.toString())
+        assertEquals(activity.getString(CallR.string.call_toolbar_action), callLabel.text.toString())
+        assertEquals(activity.getString(SettingsR.string.settings_toolbar_action), settingsLabel.text.toString())
     }
 
     @Test
@@ -97,7 +105,7 @@ class MainActivitySmokeTest {
         toolbar.menu.performIdentifierAction(R.id.action_menu, 0)
         shadowOf(activity.mainLooper).idle()
         val opened = requireNotNull(activity.actionsMenu.contentView)
-        opened.findViewById<View>(R.id.menu_action_settings).performClick()
+        opened.findViewById<View>(SettingsR.id.settings_toolbar_action).performClick()
         shadowOf(activity.mainLooper).idle()
         activity.supportFragmentManager.executePendingTransactions()
 
@@ -112,7 +120,7 @@ class MainActivitySmokeTest {
         assertEquals(
             "the profile chip belongs to the main tabs only",
             View.GONE,
-            activity.findViewById<View>(R.id.profile_chip).visibility,
+            activity.findViewById<View>(ControlR.id.control_profile_chip).visibility,
         )
 
         activity.router.back()
@@ -125,20 +133,13 @@ class MainActivitySmokeTest {
 
     @Test
     fun selectingTheAlarmsFeatureOpensTheTimeTabOnAlarms() {
-        val controller = Robolectric.buildActivity(MainActivity::class.java).setup()
-        val activity = controller.get()
-        shadowOf(activity.mainLooper).idle()
+        val activity = launchedOn("alarms")
 
-        activity.router.selectTab("alarms")
-        shadowOf(activity.mainLooper).idle()
-        activity.supportFragmentManager.executePendingTransactions()
-
-        val time = activity.supportFragmentManager.findFragmentById(R.id.fragment_container)
-        assertTrue("selecting alarms must open the Time container", time is TimeFragment)
-        assertEquals(TimeSection.ALARMS, (time as TimeFragment).section)
+        val time = timeFragment(activity)
+        assertEquals("time/alarms", time.tag)
         time.childFragmentManager.executePendingTransactions()
         assertTrue(time.childFragmentManager.fragments.any { it.view?.findViewById<View>(AlarmsR.id.alarms_list) != null })
-        assertEquals(0, time.requireView().findViewById<ViewPager2>(R.id.time_pager).currentItem)
+        assertEquals(TimeSection.ALARMS.ordinal, pager(time).currentItem)
 
         val bottom = activity.findViewById<BottomNavigationView>(R.id.home_notice_anchor)
         assertEquals("Time", bottom.menu.findItem(bottom.selectedItemId).title.toString())
@@ -146,55 +147,60 @@ class MainActivitySmokeTest {
 
     @Test
     fun selectingTheTimersFeatureOpensTheTimeTabOnTimers() {
-        val controller = Robolectric.buildActivity(MainActivity::class.java).setup()
-        val activity = controller.get()
-        shadowOf(activity.mainLooper).idle()
+        val activity = launchedOn("timers")
 
-        activity.router.selectTab("timers")
-        shadowOf(activity.mainLooper).idle()
-        activity.supportFragmentManager.executePendingTransactions()
-
-        val time = activity.supportFragmentManager.findFragmentById(R.id.fragment_container) as TimeFragment
-        assertEquals(TimeSection.TIMERS, time.section)
+        val time = timeFragment(activity)
+        assertEquals("time/timers", time.tag)
+        assertEquals(TimeSection.TIMERS.ordinal, pager(time).currentItem)
     }
 
     @Test
     fun swipingTheTimePagerSelectsTheMatchingPill() {
-        val controller = Robolectric.buildActivity(MainActivity::class.java).setup()
-        val activity = controller.get()
+        val activity = launchedOn("alarms")
+        val time = timeFragment(activity)
+
+        pager(time).setCurrentItem(TimeSection.REMINDERS.ordinal, false)
         shadowOf(activity.mainLooper).idle()
 
-        activity.router.selectTab("alarms")
-        shadowOf(activity.mainLooper).idle()
-        activity.supportFragmentManager.executePendingTransactions()
-
-        val time = activity.supportFragmentManager.findFragmentById(R.id.fragment_container) as TimeFragment
-        val pager = time.requireView().findViewById<ViewPager2>(R.id.time_pager)
-        pager.setCurrentItem(TimeSection.REMINDERS.ordinal, false)
-        shadowOf(activity.mainLooper).idle()
-
-        assertEquals(TimeSection.REMINDERS, time.section)
-        val tabs = time.requireView().findViewById<PillSegments>(R.id.time_tabs)
-        assertEquals(TimeSection.REMINDERS.ordinal, tabs.selectedIndex)
+        assertEquals(TimeSection.REMINDERS.ordinal, tabs(time).selectedIndex)
     }
 
     @Test
     fun tappingATimePillMovesThePager() {
-        val controller = Robolectric.buildActivity(MainActivity::class.java).setup()
-        val activity = controller.get()
+        val activity = launchedOn("alarms")
+        val time = timeFragment(activity)
+
+        tabs(time).getChildAt(TimeSection.TIMERS.ordinal).performClick()
         shadowOf(activity.mainLooper).idle()
 
-        activity.router.selectTab("alarms")
+        assertEquals(TimeSection.TIMERS.ordinal, pager(time).currentItem)
+        assertEquals(TimeSection.TIMERS.ordinal, tabs(time).selectedIndex)
+    }
+
+    @Test
+    fun theProfileChipIsContributedByTheControlFeature() {
+        val activity = Robolectric.buildActivity(MainActivity::class.java).setup().get()
+        shadowOf(activity.mainLooper).idle()
+
+        val row = activity.findViewById<ViewGroup>(R.id.toolbar_title_row)
+        assertNotNull(row.findViewById<View>(ControlR.id.control_profile_chip))
+        assertNotNull(activity.findViewById<View>(R.id.toolbar_end_slot).findViewById<View>(VpnR.id.vpn_toolbar_toggle))
+        assertNotNull(activity.findViewById<View>(R.id.appbar_below_slot).findViewById<View>(VpnR.id.vpn_route_banner))
+    }
+
+    private fun launchedOn(featureId: String): MainActivity {
+        val activity = Robolectric.buildActivity(MainActivity::class.java).setup().get()
+        shadowOf(activity.mainLooper).idle()
+        activity.router.selectTab(featureId)
         shadowOf(activity.mainLooper).idle()
         activity.supportFragmentManager.executePendingTransactions()
-
-        val time = activity.supportFragmentManager.findFragmentById(R.id.fragment_container) as TimeFragment
-        val tabs = time.requireView().findViewById<PillSegments>(R.id.time_tabs)
-        val pager = time.requireView().findViewById<ViewPager2>(R.id.time_pager)
-        tabs.getChildAt(TimeSection.TIMERS.ordinal).performClick()
-        shadowOf(activity.mainLooper).idle()
-
-        assertEquals(TimeSection.TIMERS, time.section)
-        assertEquals(TimeSection.TIMERS.ordinal, pager.currentItem)
+        return activity
     }
+
+    private fun timeFragment(activity: MainActivity): Fragment =
+        checkNotNull(activity.supportFragmentManager.findFragmentById(R.id.fragment_container))
+
+    private fun pager(time: Fragment): ViewPager2 = time.requireView().findViewById(TimeR.id.time_pager)
+
+    private fun tabs(time: Fragment): PillSegments = time.requireView().findViewById(TimeR.id.time_tabs)
 }

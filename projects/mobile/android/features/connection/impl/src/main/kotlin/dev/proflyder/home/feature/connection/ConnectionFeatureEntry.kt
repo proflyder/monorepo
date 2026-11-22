@@ -24,7 +24,5 @@ class ConnectionFeatureEntry : FeatureEntry {
     override val iconRes: Int = R.drawable.connection_ic_tab
     override val rootDestination: Destination = ConnectionDestination
 
-    override fun supports(destination: Destination): Boolean = destination is ConnectionDestination
-
     override fun createFragment(destination: Destination): Fragment = ConnectionFragment()
 }

@@ -1,13 +1,13 @@
 package dev.proflyder.home.feature.connection.presentation
 
 import android.os.Bundle
-import androidx.core.widget.doAfterTextChanged
 import dev.proflyder.home.core.config.RemoteConnectionState
 import dev.proflyder.home.core.config.TokenStatus
 import dev.proflyder.home.core.model.Field
-import dev.proflyder.home.core.ui.BaseFragment
+import dev.proflyder.home.core.presentation.ScreenFragment
+import dev.proflyder.home.core.presentation.TextBinder
+import dev.proflyder.home.core.presentation.screenViewModel
 import dev.proflyder.home.core.ui.applyScrollBottomInset
-import dev.proflyder.home.core.ui.injectedViewModels
 import dev.proflyder.home.core.ui.keepFocusedVisible
 import dev.proflyder.home.core.ui.setVisible
 import dev.proflyder.home.core.ui.setupPullToRefresh
@@ -19,37 +19,40 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
-class ConnectionFragment :
-    BaseFragment<FragmentConnectionBinding>(FragmentConnectionBinding.Companion::inflate) {
-    private val viewModel: ConnectionViewModel by injectedViewModels()
+internal class ConnectionFragment :
+    ScreenFragment<FragmentConnectionBinding, ConnectionUiState, ConnectionIntent, ConnectionEvent>(
+        FragmentConnectionBinding.Companion::inflate,
+    ) {
+    override val viewModel: ConnectionViewModel by screenViewModel()
 
-    private var rendering = false
+    private lateinit var tokenBinder: TextBinder
 
-    override fun onBindingCreated(binding: FragmentConnectionBinding, savedInstanceState: Bundle?) {
+    override fun onScreenCreated(binding: FragmentConnectionBinding, savedInstanceState: Bundle?) {
         binding.connectionScroll.applyScrollBottomInset()
         binding.connectionScroll.keepFocusedVisible()
-        binding.connectionToken.doAfterTextChanged {
-            if (!rendering) viewModel.setToken(it?.toString().orEmpty())
-        }
-        binding.connectionRefresh.setupPullToRefresh {
-            viewModel.test()
-            binding.connectionRefresh.isRefreshing = viewModel.state.value.busy
-        }
-        binding.connectionTest.setOnClickListener { viewModel.test() }
-        binding.connectionRefreshConfig.setOnClickListener { viewModel.refreshConfig() }
-        binding.connectionClearToken.setOnClickListener {
-            binding.connectionToken.setText("")
-            viewModel.requestClearToken()
-        }
-        viewModel.state.observe { render(it) }
+        tokenBinder = bindText(binding.connectionToken, ConnectionIntent::EditToken)
+        binding.connectionRefresh.setupPullToRefresh { dispatch(ConnectionIntent.Test) }
+        binding.connectionTest.setOnClickListener { dispatch(ConnectionIntent.Test) }
+        binding.connectionRefreshConfig.setOnClickListener { dispatch(ConnectionIntent.RefreshConfig) }
+        binding.connectionClearToken.setOnClickListener { dispatch(ConnectionIntent.ClearToken) }
     }
 
-    private fun render(state: ConnectionUiState) {
-        val loaded = loadedConfiguration(state.remote)
-        rendering = true
-        with(binding) {
-            if (connectionToken.text?.toString() != state.tokenInput) connectionToken.setText(state.tokenInput)
+    override fun onEvent(event: ConnectionEvent) {
+        when (event) {
+            is ConnectionEvent.Notice -> showMessage(noticeText(event.notice))
+        }
+    }
 
+    private fun noticeText(notice: ConnectionNotice): Int = when (notice) {
+        ConnectionNotice.SAVED -> R.string.connection_saved
+        ConnectionNotice.SAVED_AND_ONLINE -> R.string.connection_saved_and_online
+        ConnectionNotice.CONFIG_REFRESHED -> R.string.connection_remote_refreshed
+    }
+
+    override fun render(state: ConnectionUiState) {
+        val loaded = loadedConfiguration(state.remote)
+        tokenBinder.render(state.tokenInput)
+        with(binding) {
             connectionRemoteState.text = remoteStateText(state.remote)
             connectionRemoteScheduler.text = loaded?.endpoint?.baseUrl()
                 ?: getString(R.string.connection_remote_not_provided)
@@ -87,18 +90,6 @@ class ConnectionFragment :
             connectionError.setVisible(state.error != null)
             connectionError.text = state.error?.userMessage(requireContext())
             connectionStatusText.text = statusText(state, loaded != null)
-        }
-        rendering = false
-
-        state.notice?.let { notice ->
-            showMessage(
-                when (notice) {
-                    ConnectionNotice.SAVED -> R.string.connection_saved
-                    ConnectionNotice.SAVED_AND_ONLINE -> R.string.connection_saved_and_online
-                    ConnectionNotice.CONFIG_REFRESHED -> R.string.connection_remote_refreshed
-                },
-            )
-            viewModel.consumeNotice()
         }
     }
 

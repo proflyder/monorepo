@@ -25,7 +25,5 @@ class VpnFeatureEntry : FeatureEntry {
     override val iconRes: Int = R.drawable.vpn_ic_shield
     override val rootDestination = VpnDestination
 
-    override fun supports(destination: Destination): Boolean = destination is VpnDestination
-
     override fun createFragment(destination: Destination): Fragment = VpnFragment()
 }

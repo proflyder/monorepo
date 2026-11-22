@@ -1,76 +1,83 @@
 package dev.proflyder.home.feature.push.presentation
 
 import androidx.lifecycle.ViewModel
-import dev.proflyder.home.core.ui.BaseViewModel
+import androidx.lifecycle.viewModelScope
+import dev.proflyder.home.core.presentation.StateViewModel
 import dev.proflyder.home.core.ui.ViewModelSource
+import dev.proflyder.home.feature.push.PushPermissionProbe
 import dev.proflyder.home.feature.push.PushPermissionStatus
 import dev.proflyder.home.feature.push.PushRegistrar
 import dev.proflyder.home.feature.push.PushRegistration
 import dev.proflyder.home.feature.push.PushRegistrationStore
+import dev.proflyder.home.feature.push.PushSyncStatus
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ClassKey
 import dev.zacsweers.metro.ContributesIntoMap
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.binding
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
 
-enum class PushNotice {
-    REGISTERED,
-    NAME_SAVED,
-    FAILED,
-}
-
-data class PushSettingsUiState(
+internal data class PushSettingsUiState(
     val permissions: PushPermissionStatus = PushPermissionStatus(),
     val registration: PushRegistration = PushRegistration(),
-    val deviceName: String = "",
-    val notice: PushNotice? = null,
+    val sync: PushSyncStatus = PushSyncStatus(),
+    val nameDraft: String? = null,
 ) {
     val canRing: Boolean get() = permissions.canRing
+    val deviceName: String get() = nameDraft ?: registration.deviceName
+}
+
+internal sealed interface PushSettingsIntent {
+    data object Register : PushSettingsIntent
+    data class EditName(val name: String) : PushSettingsIntent
+    data object SaveName : PushSettingsIntent
+    data class OpenSettings(val screen: PushSettingsScreen) : PushSettingsIntent
+}
+
+internal sealed interface PushSettingsEvent {
+    data object Registered : PushSettingsEvent
+    data object NameSaved : PushSettingsEvent
+    data object Failed : PushSettingsEvent
+    data class OpenSettings(val screen: PushSettingsScreen) : PushSettingsEvent
 }
 
 @Inject
 internal class PushSettingsViewModel(
     private val registrar: PushRegistrar,
-    private val store: PushRegistrationStore,
-) : BaseViewModel<PushSettingsUiState>(
-    PushSettingsUiState(
-        permissions = registrar.permissions(),
-        registration = store.registration.value,
-        deviceName = store.registration.value.deviceName,
-    ),
-) {
+    private val probe: PushPermissionProbe,
+    store: PushRegistrationStore,
+) : StateViewModel<PushSettingsUiState, PushSettingsIntent, PushSettingsEvent>(PushSettingsUiState()) {
     init {
-        launch {
-            store.registration.collect { registration ->
-                updateState {
-                    copy(registration = registration, deviceName = registration.deviceName)
-                }
-            }
+        combine(store.registration, registrar.status) { registration, sync -> registration to sync }
+            .onEach { (registration, sync) -> updateState { copy(registration = registration, sync = sync) } }
+            .launchIn(viewModelScope)
+        screenShown.onEach { updateState { copy(permissions = probe.status()) } }.launchIn(viewModelScope)
+    }
+
+    override fun handle(intent: PushSettingsIntent) {
+        when (intent) {
+            PushSettingsIntent.Register -> register()
+            is PushSettingsIntent.EditName -> updateState { copy(nameDraft = intent.name) }
+            PushSettingsIntent.SaveName -> saveName()
+            is PushSettingsIntent.OpenSettings -> emit(PushSettingsEvent.OpenSettings(intent.screen))
         }
     }
 
-    fun refreshPermissions() {
-        updateState { copy(permissions = registrar.permissions()) }
-    }
-
-    fun registerNow() {
+    private fun register() {
         launch {
-            registrar.registerNow()
-            val failed = store.registration.value.failed
-            updateState { copy(notice = if (failed) PushNotice.FAILED else PushNotice.REGISTERED) }
+            emit(if (registrar.registerNow()) PushSettingsEvent.Registered else PushSettingsEvent.Failed)
         }
     }
 
-    fun saveDeviceName(name: String) {
+    private fun saveName() {
+        val name = state.value.deviceName
         launch {
             val saved = registrar.saveDeviceName(name)
-            val notice = if (saved) PushNotice.NAME_SAVED else PushNotice.FAILED
-            updateState { copy(notice = notice) }
+            updateState { copy(nameDraft = null) }
+            emit(if (saved) PushSettingsEvent.NameSaved else PushSettingsEvent.Failed)
         }
-    }
-
-    fun consumeNotice() {
-        updateState { copy(notice = null) }
     }
 }
 

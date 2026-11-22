@@ -1,9 +1,10 @@
 package dev.proflyder.home.feature.system
 
-import android.os.Bundle
 import androidx.fragment.app.Fragment
 import dev.proflyder.home.core.navigation.Destination
 import dev.proflyder.home.core.navigation.FeatureEntry
+import dev.proflyder.home.core.navigation.RouteCodec
+import dev.proflyder.home.core.navigation.RoutePath
 import dev.proflyder.home.feature.system.impl.R
 import dev.proflyder.home.feature.system.presentation.SystemDetailFragment
 import dev.proflyder.home.feature.system.presentation.SystemFragment
@@ -12,19 +13,18 @@ import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesIntoSet
 import dev.zacsweers.metro.Inject
 
-object SystemOverviewDestination : Destination {
+internal object SystemOverviewDestination : Destination {
     override val featureId: String = "system"
     override val route: String = "system/overview"
 }
 
-data class SystemDetailDestination(val section: String) : Destination {
+internal data class SystemDetailDestination(val section: SystemSection) : Destination {
     override val featureId: String = "system"
-    override val route: String = "system/detail/$section"
+    override val route: String = "system/detail/${section.route}"
 
-    override fun arguments(): Bundle = Bundle().apply { putString(ARG_SECTION, section) }
-
-    companion object {
-        const val ARG_SECTION = "system_section"
+    companion object : RouteCodec<SystemDetailDestination> {
+        override fun decode(path: RoutePath): SystemDetailDestination? =
+            SystemSection.fromRouteOrNull(path.tail("system", "detail"))?.let(::SystemDetailDestination)
     }
 }
 
@@ -36,14 +36,13 @@ class SystemFeatureEntry : FeatureEntry {
     override val titleRes: Int = R.string.system_title
     override val iconRes: Int = R.drawable.system_ic_tab
     override val rootDestination: Destination = SystemOverviewDestination
+    override val routes: List<RouteCodec<*>> =
+        listOf(RouteCodec.fixed(SystemOverviewDestination), SystemDetailDestination)
 
     override fun titleRes(destination: Destination): Int = when (destination) {
-        is SystemDetailDestination -> SystemSection.fromRoute(destination.section).titleRes
+        is SystemDetailDestination -> destination.section.titleRes
         else -> titleRes
     }
-
-    override fun supports(destination: Destination): Boolean =
-        destination is SystemOverviewDestination || destination is SystemDetailDestination
 
     override fun createFragment(destination: Destination): Fragment = when (destination) {
         is SystemDetailDestination -> SystemDetailFragment()

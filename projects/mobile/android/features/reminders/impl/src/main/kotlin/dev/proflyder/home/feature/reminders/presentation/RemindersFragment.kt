@@ -2,7 +2,6 @@ package dev.proflyder.home.feature.reminders.presentation
 
 import android.os.Bundle
 import androidx.recyclerview.widget.GridLayoutManager
-import dev.proflyder.home.core.navigation.requireNavigator
 import dev.proflyder.home.core.presentation.RefreshMode
 import dev.proflyder.home.core.presentation.ScreenFragment
 import dev.proflyder.home.core.presentation.render
@@ -13,7 +12,6 @@ import dev.proflyder.home.core.ui.injectedActivityViewModels
 import dev.proflyder.home.core.ui.liftAboveBottomInsets
 import dev.proflyder.home.core.ui.setupPullToRefresh
 import dev.proflyder.home.core.ui.userMessage
-import dev.proflyder.home.feature.reminders.ReminderEditorDestination
 import dev.proflyder.home.feature.reminders.impl.R
 import dev.proflyder.home.feature.reminders.impl.databinding.FragmentRemindersBinding
 
@@ -59,7 +57,7 @@ internal class RemindersFragment :
     override fun onEvent(event: RemindersEvent) {
         when (event) {
             is RemindersEvent.Failure -> showFailure(event.failure)
-            is RemindersEvent.OpenEditor -> requireNavigator().navigate(ReminderEditorDestination(event.id))
+            is RemindersEvent.OpenRoute -> navigate(event.route)
             is RemindersEvent.ConfirmDelete -> confirmDelete(event.id)
         }
     }

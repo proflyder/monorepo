@@ -1,6 +1,7 @@
 package dev.proflyder.home.feature.settings.presentation
 
 import androidx.lifecycle.ViewModel
+import dev.proflyder.home.core.navigation.Route
 import dev.proflyder.home.core.presentation.StateViewModel
 import dev.proflyder.home.feature.push.NotificationHistoryEntry
 import dev.proflyder.home.feature.push.NotificationHistoryStore
@@ -11,7 +12,7 @@ import dev.zacsweers.metro.ContributesIntoMap
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.binding
 
-data class NotificationHistoryUiState(
+internal data class NotificationHistoryUiState(
     val entries: List<NotificationHistoryEntry> = emptyList(),
 ) {
     val isEmpty: Boolean get() = entries.isEmpty()
@@ -24,7 +25,7 @@ internal sealed interface HistoryIntent {
 
 internal sealed interface HistoryEvent {
     data object Cleared : HistoryEvent
-    data class OpenRoute(val route: String) : HistoryEvent
+    data class OpenRoute(val route: Route) : HistoryEvent
 }
 
 @Inject
@@ -40,7 +41,7 @@ internal class NotificationHistoryViewModel(
 
     override fun handle(intent: HistoryIntent) {
         when (intent) {
-            is HistoryIntent.Open -> intent.entry.deepLink?.let { emit(HistoryEvent.OpenRoute(it)) }
+            is HistoryIntent.Open -> intent.entry.deepLink?.let { emit(HistoryEvent.OpenRoute(Route.Link(it))) }
             HistoryIntent.Clear -> clear()
         }
     }

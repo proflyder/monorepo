@@ -1,5 +1,6 @@
 package dev.proflyder.home.feature.control.presentation
 
+import dev.proflyder.home.core.navigation.Route
 import dev.proflyder.home.core.model.ControlAction
 import dev.proflyder.home.core.model.ControlEntry
 import dev.proflyder.home.core.model.ControlKind
@@ -112,7 +113,7 @@ class ControlTapsTest {
             override fun activate(): QuickTileAction = QuickTileAction.Handled.also { calls++ }
         }
         val launcher = QuickTileLauncher(setOf(vpn, call))
-        assertEquals(ControlEvent.OpenFeature("vpn"), launcher.activate("vpn"))
+        assertEquals(ControlEvent.OpenRoute(Route.Tab("vpn")), launcher.activate("vpn"))
         assertNull(launcher.activate("call"))
         assertEquals(1, calls)
         assertNull(launcher.activate("missing"))

@@ -1,5 +1,7 @@
 package dev.proflyder.home.feature.reminders.presentation
 
+import dev.proflyder.home.feature.reminders.ReminderEditorDestination
+import dev.proflyder.home.core.navigation.Route
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dev.proflyder.home.core.model.RemoteFailure
@@ -40,7 +42,7 @@ internal sealed interface RemindersIntent {
 
 internal sealed interface RemindersEvent {
     data class Failure(val failure: RemoteFailure) : RemindersEvent
-    data class OpenEditor(val id: String?) : RemindersEvent
+    data class OpenRoute(val route: Route) : RemindersEvent
     data class ConfirmDelete(val id: String) : RemindersEvent
 }
 
@@ -59,11 +61,15 @@ internal class RemindersViewModel(
         loader.refreshOn(merge(screenShown, bus.eventsOf<RemindersChanged>()))
     }
 
+    private fun openEditor(id: String?) {
+        emit(RemindersEvent.OpenRoute(Route.Screen(ReminderEditorDestination(id))))
+    }
+
     override fun handle(intent: RemindersIntent) {
         when (intent) {
             is RemindersIntent.Refresh -> loader.refresh(intent.mode)
-            RemindersIntent.Add -> emit(RemindersEvent.OpenEditor(null))
-            is RemindersIntent.Open -> emit(RemindersEvent.OpenEditor(intent.id))
+            RemindersIntent.Add -> openEditor(null)
+            is RemindersIntent.Open -> openEditor(intent.id)
             is RemindersIntent.Toggle -> toggle(intent.id, intent.enabled)
             is RemindersIntent.RequestDelete -> emit(RemindersEvent.ConfirmDelete(intent.id))
             is RemindersIntent.Delete -> delete(intent.id)

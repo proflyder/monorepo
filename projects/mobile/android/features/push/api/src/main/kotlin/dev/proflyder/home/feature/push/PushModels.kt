@@ -22,8 +22,7 @@ data class PushRegistration(
     val deviceName: String = "",
     val registeredName: String = "",
     val appVersion: String = "",
-    val busy: Boolean = false,
-    val failed: Boolean = false,
+    val server: String = "",
 ) {
     fun tokenHint(): String = token?.takeLast(TOKEN_HINT_CHARS).orEmpty()
 
@@ -32,26 +31,47 @@ data class PushRegistration(
     }
 }
 
+data class PushSyncStatus(
+    val busy: Boolean = false,
+    val failed: Boolean = false,
+)
+
+data class PushRegistrationRecord(
+    val token: String,
+    val registeredAtMillis: Long,
+    val deviceName: String,
+    val appVersion: String,
+    val server: String,
+)
+
 interface PushRegistrationStore {
     val registration: StateFlow<PushRegistration>
 
     suspend fun load()
 
-    suspend fun saved(token: String, registeredAtMillis: Long, deviceName: String, appVersion: String)
+    suspend fun saved(record: PushRegistrationRecord)
 
     suspend fun savedName(name: String)
+}
 
-    suspend fun busy(busy: Boolean)
+interface PushTokenSource {
+    val token: StateFlow<String?>
 
-    suspend fun failed(failed: Boolean)
+    fun refreshed(token: String)
+
+    fun revoked(token: String)
 }
 
 interface PushRegistrar {
-    suspend fun registerNow()
+    val status: StateFlow<PushSyncStatus>
+
+    suspend fun registerNow(): Boolean
 
     suspend fun saveDeviceName(name: String): Boolean
+}
 
-    fun permissions(): PushPermissionStatus
+interface PushPermissionProbe {
+    fun status(): PushPermissionStatus
 }
 
 data class PushDeepLink(val route: String) {

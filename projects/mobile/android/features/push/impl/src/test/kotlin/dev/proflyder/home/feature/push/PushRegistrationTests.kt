@@ -50,23 +50,19 @@ class PushRegistrationPublisherTest {
     fun aRotatedTokenIsSentWithTheSameDeviceId() = runBlocking {
         val api = FakeApi()
         val publisher = PushRegistrationPublisher(api, FixedIdentity("device-a"))
-        publisher.publish(token = "token-a", appVersion = "1.0", deviceName = "Стас")
-        publisher.publish(token = "token-b", appVersion = "1.0", deviceName = "Стас")
+        publisher.publish(PushRegistrationRequest("token-a", "Стас", "1.0", SERVER))
+        publisher.publish(PushRegistrationRequest("token-b", "Стас", "1.0", SERVER))
         assertEquals(2, api.registrations.size)
         assertEquals("device-a", api.registrations[0][0])
         assertEquals("device-a", api.registrations[1][0])
         assertEquals("token-a", api.registrations[0][1])
         assertEquals("token-b", api.registrations[1][1])
         assertEquals("Стас", api.registrations[1][3])
+        assertTrue(api.renames.isEmpty())
     }
 
-    @Test
-    fun renamingUsesTheSameDeviceIdWithoutAToken() = runBlocking {
-        val api = FakeApi()
-        val publisher = PushRegistrationPublisher(api, FixedIdentity("device-a"))
-        publisher.rename("Аня")
-        assertEquals(listOf(listOf("device-a", "Аня")), api.renames)
-        assertTrue(api.registrations.isEmpty())
+    private companion object {
+        const val SERVER = "https://home.test/"
     }
 }
 

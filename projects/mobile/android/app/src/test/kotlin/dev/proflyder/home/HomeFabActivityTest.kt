@@ -104,7 +104,7 @@ class HomeFabActivityTest {
         shadowOf(activity.mainLooper).idle()
         activity.supportFragmentManager.executePendingTransactions()
 
-        assertEquals("scenarios", activity.router.currentTabId.value)
+        assertEquals("scenarios", activity.router.chrome.value.tabId)
         assertNull(popupRoot(activity))
     }
 

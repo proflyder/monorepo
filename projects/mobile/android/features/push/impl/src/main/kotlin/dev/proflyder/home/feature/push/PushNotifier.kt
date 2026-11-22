@@ -1,19 +1,16 @@
 package dev.proflyder.home.feature.push
 
-import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Notification
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
-import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
-import androidx.core.content.ContextCompat
 import dev.proflyder.home.core.theme.AppThemes
 import dev.proflyder.home.core.theme.AppearanceController
 import dev.proflyder.home.core.theme.ColorRole
+import dev.proflyder.home.core.ui.NotificationPermission
 import dev.proflyder.home.feature.push.impl.R
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.Inject
@@ -24,6 +21,7 @@ import dev.zacsweers.metro.SingleIn
 class PushNotifier(
     private val context: Context,
     private val appearance: AppearanceController,
+    private val permission: NotificationPermission,
 ) {
     private val accent: Int
         get() = AppThemes.color(context, appearance.state.value.theme, ColorRole.PRIMARY)
@@ -75,7 +73,7 @@ class PushNotifier(
     }
 
     private fun openAppIntent(link: PushDeepLink?): PendingIntent {
-        val intent = Intent(context, mainActivityClass())
+        val intent = launchIntent()
             .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
         if (link != null) intent.putExtra(PushIntents.EXTRA_DEEP_LINK, link.route)
         return PendingIntent.getActivity(
@@ -109,26 +107,15 @@ class PushNotifier(
 
     @SuppressLint("MissingPermission")
     private fun post(id: Int, notification: Notification) {
-        if (!canPostNotifications()) return
+        if (!permission.granted()) return
         runCatching {
             NotificationManagerCompat.from(context).notify(id, notification)
         }
     }
 
-    private fun canPostNotifications(): Boolean {
-        val postAllowed = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            ContextCompat.checkSelfPermission(
-                context,
-                Manifest.permission.POST_NOTIFICATIONS,
-            ) == PackageManager.PERMISSION_GRANTED
-        } else {
-            true
-        }
-        return postAllowed && NotificationManagerCompat.from(context).areNotificationsEnabled()
-    }
-
-    private fun mainActivityClass(): Class<*> =
-        runCatching { Class.forName(MAIN_ACTIVITY) }.getOrElse { FindPhoneActivity::class.java }
+    private fun launchIntent(): Intent =
+        context.packageManager.getLaunchIntentForPackage(context.packageName)
+            ?: Intent(context, FindPhoneActivity::class.java)
 
     private companion object {
         const val NOTIFY_ID = 71
@@ -136,8 +123,6 @@ class PushNotifier(
         const val REQUEST_OPEN = 1
         const val REQUEST_FIND = 2
         const val REQUEST_STOP = 3
-
-        const val MAIN_ACTIVITY = "dev.proflyder.home.MainActivity"
     }
 
     fun findNotificationId(): Int = FIND_ID

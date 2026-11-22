@@ -1,35 +1,40 @@
 package dev.proflyder.home.feature.settings.presentation
 
-import android.content.pm.ApplicationInfo
 import android.os.Bundle
+import android.view.View
 import androidx.core.view.isVisible
-import dev.proflyder.home.core.navigation.requireNavigator
-import dev.proflyder.home.core.ui.BaseFragment
+import dev.proflyder.home.core.presentation.ScreenFragment
+import dev.proflyder.home.core.presentation.screenViewModel
 import dev.proflyder.home.core.ui.applyScrollBottomInset
-import dev.proflyder.home.feature.settings.AppearanceDestination
-import dev.proflyder.home.feature.settings.DesignSystemDestination
-import dev.proflyder.home.feature.settings.NotificationHistoryDestination
 import dev.proflyder.home.feature.settings.impl.databinding.FragmentSettingsBinding
 
-class SettingsFragment : BaseFragment<FragmentSettingsBinding>(FragmentSettingsBinding.Companion::inflate) {
-    override fun onBindingCreated(binding: FragmentSettingsBinding, savedInstanceState: Bundle?) {
+internal class SettingsFragment :
+    ScreenFragment<FragmentSettingsBinding, SettingsUiState, SettingsIntent, SettingsEvent>(
+        FragmentSettingsBinding.Companion::inflate,
+    ) {
+    override val viewModel: SettingsViewModel by screenViewModel()
+
+    override fun onScreenCreated(binding: FragmentSettingsBinding, savedInstanceState: Bundle?) {
         binding.root.applyScrollBottomInset()
-        binding.settingsConnection.setOnClickListener { openFeature(CONNECTION_FEATURE) }
-        binding.settingsVpn.setOnClickListener { openFeature(VPN_FEATURE) }
-        binding.settingsNotifications.setOnClickListener { openFeature(PUSH_FEATURE) }
-        binding.settingsHistory.setOnClickListener { requireNavigator().navigate(NotificationHistoryDestination) }
-        binding.settingsAppearance.setOnClickListener { requireNavigator().navigate(AppearanceDestination) }
-        binding.settingsDesignSystem.isVisible = isDebugBuild()
-        binding.settingsDesignSystem.setOnClickListener { requireNavigator().navigate(DesignSystemDestination) }
+        link(binding.settingsConnection, SettingsLink.CONNECTION)
+        link(binding.settingsVpn, SettingsLink.VPN)
+        link(binding.settingsNotifications, SettingsLink.NOTIFICATIONS)
+        link(binding.settingsHistory, SettingsLink.HISTORY)
+        link(binding.settingsAppearance, SettingsLink.APPEARANCE)
+        link(binding.settingsDesignSystem, SettingsLink.DESIGN_SYSTEM)
     }
 
-    private fun isDebugBuild(): Boolean = requireContext().applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
+    override fun render(state: SettingsUiState) {
+        binding.settingsDesignSystem.isVisible = state.designSystemVisible
+    }
 
-    private fun openFeature(featureId: String) = requireNavigator().selectTab(featureId)
+    override fun onEvent(event: SettingsEvent) {
+        when (event) {
+            is SettingsEvent.OpenRoute -> navigate(event.route)
+        }
+    }
 
-    private companion object {
-        const val CONNECTION_FEATURE = "connection"
-        const val PUSH_FEATURE = "push"
-        const val VPN_FEATURE = "vpn"
+    private fun link(view: View, link: SettingsLink) {
+        view.setOnClickListener { dispatch(SettingsIntent.Open(link)) }
     }
 }

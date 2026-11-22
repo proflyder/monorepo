@@ -1,5 +1,6 @@
 package dev.proflyder.home.feature.scenarios.presentation.editor
 
+import dev.proflyder.home.core.navigation.destination
 import androidx.lifecycle.SavedStateHandle
 import dev.proflyder.home.feature.scenarios.ScenarioEditorDestination
 import dev.proflyder.home.feature.scenarios.domain.PendingCreate
@@ -8,7 +9,7 @@ import kotlin.properties.ReadWriteProperty
 import kotlin.reflect.KProperty
 
 internal class SavedEditorState(private val handle: SavedStateHandle) : PendingCreateStore {
-    val scenarioId: String? get() = handle[ScenarioEditorDestination.ARG_SCENARIO_ID]
+    val scenarioId: String? get() = handle.destination(ScenarioEditorDestination)?.scenarioId
 
     private var pendingKey: String? by handle.saved(KEY_CREATE_KEY)
     private var pendingEndpoint: String? by handle.saved(KEY_CREATE_ENDPOINT)

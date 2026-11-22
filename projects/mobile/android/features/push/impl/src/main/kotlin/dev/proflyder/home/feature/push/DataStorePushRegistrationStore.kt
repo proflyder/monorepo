@@ -38,6 +38,7 @@ class DataStorePushRegistrationStore(
                     deviceName = preferences[KEY_DEVICE_NAME].orEmpty(),
                     registeredName = preferences[KEY_REGISTERED_NAME].orEmpty(),
                     appVersion = preferences[KEY_APP_VERSION].orEmpty(),
+                    server = preferences[KEY_SERVER].orEmpty(),
                 )
             }
         }.onFailure { failure ->
@@ -45,23 +46,19 @@ class DataStorePushRegistrationStore(
         }
     }
 
-    override suspend fun saved(
-        token: String,
-        registeredAtMillis: Long,
-        deviceName: String,
-        appVersion: String,
-    ) {
+    override suspend fun saved(record: PushRegistrationRecord) {
         suspendRunCatching {
-            dataStore.edit { it.putRegistration(token, registeredAtMillis, deviceName, appVersion) }
+            dataStore.edit { it.putRegistration(record) }
         }.onFailure { failure ->
             if (failure !is IOException) throw failure
         }
         state.update {
             it.copy(
-                token = token,
-                registeredAtMillis = registeredAtMillis,
-                registeredName = deviceName,
-                appVersion = appVersion,
+                token = record.token,
+                registeredAtMillis = record.registeredAtMillis,
+                registeredName = record.deviceName,
+                appVersion = record.appVersion,
+                server = record.server,
             )
         }
     }
@@ -75,24 +72,12 @@ class DataStorePushRegistrationStore(
         state.update { it.copy(deviceName = name) }
     }
 
-    override suspend fun busy(busy: Boolean) {
-        state.update { it.copy(busy = busy) }
-    }
-
-    override suspend fun failed(failed: Boolean) {
-        state.update { it.copy(failed = failed) }
-    }
-
-    private fun MutablePreferences.putRegistration(
-        token: String,
-        registeredAtMillis: Long,
-        deviceName: String,
-        appVersion: String,
-    ) {
-        this[KEY_TOKEN] = token
-        this[KEY_REGISTERED_AT] = registeredAtMillis
-        this[KEY_REGISTERED_NAME] = deviceName
-        this[KEY_APP_VERSION] = appVersion
+    private fun MutablePreferences.putRegistration(record: PushRegistrationRecord) {
+        this[KEY_TOKEN] = record.token
+        this[KEY_REGISTERED_AT] = record.registeredAtMillis
+        this[KEY_REGISTERED_NAME] = record.deviceName
+        this[KEY_APP_VERSION] = record.appVersion
+        this[KEY_SERVER] = record.server
     }
 
     private companion object {
@@ -101,5 +86,6 @@ class DataStorePushRegistrationStore(
         val KEY_DEVICE_NAME = stringPreferencesKey("push_device_name")
         val KEY_REGISTERED_NAME = stringPreferencesKey("push_registered_name")
         val KEY_APP_VERSION = stringPreferencesKey("push_registered_app_version")
+        val KEY_SERVER = stringPreferencesKey("push_registered_server")
     }
 }

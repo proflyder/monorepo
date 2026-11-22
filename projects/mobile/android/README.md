@@ -226,8 +226,11 @@ notification all open or drive the same controller.
   **Nettop (Proxmox)**, **Guests (VM/CT)**, **Cluster**, **Devices**. Tapping a
   card opens its detail list: host metrics; every VM/CT; namespaces → pods with
   problems first; the speaker and the phones registered for push.
-- Pull-to-refresh plus an automatic refresh every 30 s while the screen is
-  started (`repeatOnLifecycle(STARTED)`); the server caches each section 15 s.
+- Pull-to-refresh plus an automatic refresh every 30 s while the screen
+  observes the data: `PollingSystemRepository` owns `StateFlow<SystemState>`
+  (`stateIn(WhileSubscribed)` over `tickerFlow` and refresh requests), so the
+  poll stops 5 s after the last screen stops collecting and the fragment has no
+  timer; the server caches each section 15 s.
   A failed refresh keeps the last data and shows a notice; with no data the
   error state has a Retry button. A missing source is «No data», never zero.
 - Levels use theme attributes only: ok `?colorPrimary`, warning
@@ -841,8 +844,11 @@ service, triggered by the `phone_find` / `phone_notify` MCP tools):
   the background and the app killed.
 - **Notification** — `phone_notify` or a `notification` block: title, body and
   an optional `home://…` deep link on the ordinary `home_notifications`
-  channel. The tap opens the app; a deep link naming a feature id selects that
-  tab, anything else just opens the current tab. Every label and button is a
+  channel. The tap opens the app through its launch intent;
+  `PushDeepLinkSource` hands the route to `DeepLinkResolver`, which parses it
+  with the typed `FeatureEntry.parse` of the owning feature (a feature id
+  selects that tab, `alarms/editor/<id>` opens the editor). An unknown route
+  just opens the current tab. Every label and button is a
   string resource; the server only supplies the text.
 
 **Device identity and registration.** The server keys a phone by the app's
@@ -857,18 +863,21 @@ identity, which is correct: the old installation is gone.
 The app registers on the scheduler base URL and bearer it already uses
 (`POST /v1/push/devices`), so no fourth endpoint and no second credential
 exist. A new token updates the row of the same `deviceId`; the scheduler keeps
-one token per device. The process starts on every FCM message and after the
-system evicts it, so a start registers only when it is due
-(`PushRegistrationPolicy`): the token, the phone name or the app version
+one token per device. Registration is reactive: `HomePushRegistrar`
+(an `AppStartable`) combines the FCM token (`PushTokenSource`), the configured
+server (`ConnectionSettingsStore.config`), the phone name and the app version,
+and registers whenever that combination changes and is due
+(`PushRegistrationPolicy`): the token, the name, the version or the server
 differ from the last successful registration (persisted in DataStore together
-with its time), or that registration is older than 24 hours. A token change
-(`onNewToken`) and «Обновить регистрацию» always register. A successful rename
-updates the remembered name, so it does not trigger a re-registration. A
-failure saves nothing, is shown on the settings screen and is retried on the
-next start; the rule is pinned by `:registration_policy_test`. `/v1/push/devices/remove` forgets a token
-FCM rejected. Without `google-services.json` (Firebase uninitialized) or
-without a configured server, registration is skipped and the app starts
-normally.
+with its time), or that registration is older than 24 hours. Configuring the
+server or a rotated token therefore registers without an app restart.
+«Обновить регистрацию» always registers; saving a new name registers it once.
+A failure saves nothing, is shown on the settings screen and is retried on the
+next change or start; the rules are pinned by `:registration_policy_test` and
+`:registrar_test` (fake token, settings and API flows). `/v1/push/devices/remove`
+forgets a token FCM rejected. Without `google-services.json` (Firebase
+uninitialized) the token source stays empty, and without a configured server
+nothing is sent; the app starts normally.
 
 **Permissions screen.** «Уведомления и поиск телефона» (top app bar ⚙ →
 Settings) shows the real state of the three permissions the loud path needs and
@@ -883,9 +892,9 @@ opens the matching system page for each:
 The screen also shows whether this phone is registered on the server (only the
 last six characters of the token are displayed), offers «Обновить
 регистрацию», and has a **phone name** field. The name defaults to the phone
-model; the owner can set a family name such as «Стас». Saving the name calls
-`POST /v1/push/devices/rename`, so the server updates the existing row without
-re-registering the token, and the name is persisted in DataStore. Ricardo's
+model; the owner can set a family name such as «Стас». Saving the name
+persists it in DataStore and registers it on the existing `deviceId` row (the
+same `POST /v1/push/devices`, so the server keeps one row per device). Ricardo's
 `phone_find` / `phone_notify` / `phone_list` tools match that name, including
 Russian cases and diminutives, when several phones are registered.
 `USE_FULL_SCREEN_INTENT`, `ACCESS_NOTIFICATION_POLICY`, `VIBRATE` and
@@ -1149,7 +1158,7 @@ with `--config=android`), so manual uploads can pass the same values.
 
 ```text
 projects/mobile/android/
-  app/                    single Activity, app graph, tabs, Time container, diagnostics
+  app/                    single Activity (chrome only), app graph, diagnostics
   core/
     model/                Android-free domain: Outcome/RemoteFailure, Clock, ServerClock, DeviceIdentity
     runtime/              app CoroutineScope, IoDispatcher, Clock/AppForeground/DeviceIdentity impls,
@@ -1158,7 +1167,8 @@ projects/mobile/android/
     remoteconfig/         Firebase Remote Config endpoint/timeout source
     settings/             DataStore + Keystore token + legacy migration
     network/              Retrofit/OkHttp Connect + control catalog + errors
-    navigation/           typed destinations, FeatureEntry, FragmentRouter
+    navigation/           typed routes (RoutePath/RouteCodec/RouteArgs), FeatureEntry, FragmentRouter,
+                          AppChromeState, Route, DeepLinkResolver, ToolbarContribution/ToolbarAction
     ui/                   base Fragment/ViewModel, ViewBinding, list states
     presentation/         StateViewModel/ScreenFragment, binders, list loading, editor drafts
   features/
@@ -1170,6 +1180,8 @@ projects/mobile/android/
     control/{api,impl}    Home catalog, filters, scenario/device/profile actions
     scenarios/{api,impl}  scenario list/editor, draft codec and validation
     connection/{api,impl}
+    system/{api,impl}     System tab: polling repository, overview and detail screens
+    time/{api,impl}       Time tab: pager over alarms, timers and reminders
 packages/kotlin/core/     shared Kotlin utilities (endpoint/time/nav state)
 platform/android/         Bazel macros, Metro wiring, APK gate, ViewBinding gen
 ```
@@ -1197,6 +1209,13 @@ single `DataStore`, `FeatureRegistry` and the `Set<Interceptor>` multibinding.
   starter, `ConnectionHealth`, foreground, appearance).
   `HomeApplication` only iterates `graph.startables`. No class creates its own
   `CoroutineScope(SupervisorJob() + …)`.
+- **Chrome.** `MainActivity` owns no feature knowledge: it builds the
+  `FragmentRouter`, renders one `AppChromeState` (tab, title, back, overlay,
+  bottom bar) through `ToolbarChrome` and `BottomTabs`, and attaches the
+  `Set<ToolbarContribution>` (VPN toggle and route banner, voice-profile chip)
+  into the toolbar slots. The actions menu is the `Set<ToolbarAction>`
+  (call, settings); deep links come from `Set<DeepLinkSource>` through
+  `DeepLinkResolver`.
 - **ViewModels.** One rule for every screen. A ViewModel is an `internal`
   class; next to it a public `XViewModelSource` with an `internal constructor`
   is contributed with `@ContributesIntoMap` + `@ClassKey(XViewModel::class)`
@@ -1231,6 +1250,24 @@ single `DataStore`, `FeatureRegistry` and the `Set<Interceptor>` multibinding.
   contributed class is therefore public (with an `internal constructor` where
   its dependencies are internal); `PublicInImpl` exempts `@Contributes*`.
   `AppGraphBindingsTest` checks every ViewModel and startable resolves.
+- Navigation is typed. A destination owns its route string and a
+  `RouteCodec` (usually its companion) that parses it back; `FeatureEntry.routes`
+  lists the codecs, so `parse`, `supports` and `FeatureRegistry.entryForRoute`
+  never compare prefixes. The router passes `RouteArgs` (Parcelable) as the
+  fragment arguments; a fragment reads its destination with
+  `by destination(Codec)` and a ViewModel with `SavedStateHandle.destination(Codec)`.
+  Screens never call the navigator: a ViewModel emits `OpenRoute(Route)` and
+  `ScreenFragment.navigate` applies it. A route opened before the first resume
+  (a cold-start deep link) is applied on top of the initial tab.
+- Every screen is a `ScreenFragment` on a `StateViewModel`, including static
+  ones (`DesignCatalogFragment`), so navigation and messages always arrive as
+  events. The Time pager keeps the selected section in `TimeViewModel`
+  (`SavedStateHandle`), the pager and the pills only render it.
+- `TimeFragment` reads `FeatureRegistry` through the `TimeGraph` accessor
+  (`appGraph<TimeGraph>()`): a fragment is created by the router, not by the
+  graph, and an internal fragment cannot be member-injected from `AppGraph`.
+- `NotificationPermission` (core/ui) is the single `POST_NOTIFICATIONS` +
+  "notifications enabled" check for push and the VPN status notification.
 
 ### Server calls
 
@@ -1727,11 +1764,12 @@ Themes are code in `core/theme`:
   - Starts the alarm tone and the repeating vibration. Idempotent. VIBRATE is install-time and declared here.
 - `features/push/impl/src/main/kotlin/dev/proflyder/home/feature/push/FindPhoneService.kt`
   - Foreground service that keeps the ringing process alive. Started by [FindPhoneController] from a **high-priority FCM data message**, which is exactly the case Android allows a background app to start a foreground service from.
-- `features/push/impl/src/main/kotlin/dev/proflyder/home/feature/push/FirebasePushRegistrar.kt`
-  - Registers this device's FCM token with the home scheduler. The token is registered: * at start ([start]) — so a server that lost the registry or a phone that was reinstalled re-registers without waiting for Google to rotate the token;
+- `features/push/impl/src/main/kotlin/dev/proflyder/home/feature/push/FirebasePushTokenSource.kt`
+  - The only place that touches `FirebaseMessaging`: it reads the current token at start and publishes refreshed or revoked tokens as `StateFlow<String?>`.
+- `features/push/impl/src/main/kotlin/dev/proflyder/home/feature/push/HomePushRegistrar.kt`
+  - `combine(token, server, name)` → due check → register, under one `Mutex`, so a rename and the flow never send the same registration twice. `busy` comes from the in-flight counter (`InFlight`), which is decremented even when the call throws.
 - `features/push/impl/src/main/kotlin/dev/proflyder/home/feature/push/HomeMessagingService.kt`
-  - FCM entry point. * `onRegistered` — a new or rotated token is registered immediately; a failure is retried on the next app start (`onUnregistered` forgets the old one).
-  - History is written off the main thread; a kept message never blocks the ring.
+  - FCM entry point. It only decodes the message and forwards tokens and messages to `PushInbox`, which works in the app scope: the service's own lifetime ends right after the callback and must not cancel a token or history write.
 - `features/push/impl/src/main/kotlin/dev/proflyder/home/feature/push/NotificationHistoryCodec.kt`
   - One stored row. It mirrors [NotificationHistoryEntry] instead of serializing the API model directly, so a renamed field never breaks an existing file and an unknown type downgrades to an ordinary notification.
 - `features/push/impl/src/main/kotlin/dev/proflyder/home/feature/push/PushChannels.kt`
@@ -1739,8 +1777,8 @@ Themes are code in `core/theme`:
 - `features/push/impl/src/main/kotlin/dev/proflyder/home/feature/push/PushNotifier.kt`
   - Draws the two notification shapes. All user-visible text comes from resources; a server message supplies the title and body of an ordinary notification and nothing else.
 - `features/push/impl/src/main/kotlin/dev/proflyder/home/feature/push/PushPayloads.kt` — One decoded FCM message. The server sends two shapes:
-- `features/push/impl/src/main/kotlin/dev/proflyder/home/feature/push/PushPermissions.kt`
-  - Do Not Disturb access lives outside the app's own settings page.
+- `features/push/impl/src/main/kotlin/dev/proflyder/home/feature/push/AndroidPushPermissions.kt`
+  - Do Not Disturb access lives outside the app's own settings page. The settings screen re-reads the permissions whenever it starts collecting state (`screenShown`), so returning from a system page shows the new state without an `onResume` hook.
 - `packages/kotlin/core/src/main/kotlin/dev/proflyder/home/core/text/Utf8Limit.kt` — Truncates to the server's byte bound without splitting a UTF-8 character.
 - `features/push/impl/src/main/kotlin/dev/proflyder/home/feature/push/presentation/PushSettingsFragment.kt`
   - «Уведомления и поиск телефона»: the real state of the three permissions the loud path needs and a button that opens the matching system page for each.

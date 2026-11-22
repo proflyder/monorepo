@@ -4,6 +4,8 @@ import android.os.Bundle
 import android.util.Log
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentManager
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
 import dev.proflyder.home.core.nav.PendingTransitions
 import dev.proflyder.home.core.nav.TabRouteStack
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -11,13 +13,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 interface Navigator {
-    val currentTabId: StateFlow<String>
-    val currentTitleRes: StateFlow<Int>
-    val canGoBack: StateFlow<Boolean>
-
-    val currentIsOverlay: StateFlow<Boolean>
-
-    val currentHidesBottomBar: StateFlow<Boolean>
+    val chrome: StateFlow<AppChromeState>
 
     fun selectTab(featureId: String)
 
@@ -33,7 +29,7 @@ class FragmentRouter(
     private val containerId: Int,
     private val registry: FeatureRegistry,
     savedState: RouterSavedState? = null,
-) : Navigator {
+) : Navigator, DefaultLifecycleObserver {
     private val initialEntry = registry.tabs().firstOrNull()
         ?: error("at least one bottom-bar feature is required")
     private val routeState = TabRouteStack(initialEntry.id, initialEntry.rootDestination.route)
@@ -43,24 +39,13 @@ class FragmentRouter(
     private var resumed = false
     private var initialized = false
 
-    private val mutableTab = MutableStateFlow(initialEntry.id)
-    override val currentTabId: StateFlow<String> = mutableTab.asStateFlow()
-
-    private val mutableTitle = MutableStateFlow(initialEntry.titleRes)
-    override val currentTitleRes: StateFlow<Int> = mutableTitle.asStateFlow()
-
-    private val mutableCanGoBack = MutableStateFlow(false)
-    override val canGoBack: StateFlow<Boolean> = mutableCanGoBack.asStateFlow()
-
-    private val mutableIsOverlay = MutableStateFlow(false)
-    override val currentIsOverlay: StateFlow<Boolean> = mutableIsOverlay.asStateFlow()
-
-    private val mutableHidesBottomBar = MutableStateFlow(false)
-    override val currentHidesBottomBar: StateFlow<Boolean> = mutableHidesBottomBar.asStateFlow()
+    private val mutableChrome = MutableStateFlow(
+        AppChromeState(tabId = initialEntry.id, titleRes = initialEntry.titleRes(initialEntry.rootDestination)),
+    )
+    override val chrome: StateFlow<AppChromeState> = mutableChrome.asStateFlow()
 
     init {
-        mutableTitle.value = initialEntry.titleRes(initialEntry.rootDestination)
-        titlesByRoute[initialEntry.rootDestination.route] = mutableTitle.value
+        titlesByRoute[initialEntry.rootDestination.route] = mutableChrome.value.titleRes
         if (savedState != null) restoreSavedState(savedState)
     }
 
@@ -68,16 +53,25 @@ class FragmentRouter(
         resumed = true
         if (!initialized) {
             initialized = true
-            if (!restoreFromFragmentManager()) {
-                enqueue(Command.SelectTab(routeState.currentTabId))
-            }
+            if (!restoreFromFragmentManager()) showInitialTabBeforeQueued()
         }
         drainIfPossible()
+    }
+
+    private fun showInitialTabBeforeQueued() {
+        val queued = pending.snapshot()
+        pending.clear()
+        pending.offer(Command.SelectTab(routeState.currentTabId))
+        queued.forEach(pending::offer)
     }
 
     fun onHostPaused() {
         resumed = false
     }
+
+    override fun onResume(owner: LifecycleOwner) = onHostResumed()
+
+    override fun onPause(owner: LifecycleOwner) = onHostPaused()
 
     override fun selectTab(featureId: String) {
         val entry = registry.entry(featureId)
@@ -110,12 +104,13 @@ class FragmentRouter(
     }
 
     override fun openRoute(route: String): Boolean {
-        val normalized = route.trim().trim('/')
-        if (normalized.isEmpty()) return false
-        val entry = registry.entry(normalized) ?: registry.entryForRoute(normalized) ?: return false
+        val path = RoutePath.of(route) ?: return false
+        val byId = registry.entry(path.value)
+        val entry = byId ?: registry.entryForRoute(path.value) ?: return false
+        val destination = (if (byId != null) entry.rootDestination else entry.deepLink(path)) ?: return false
         when {
-            entry.isTab -> selectTab(entry.id)
-            else -> navigate(entry.rootDestination)
+            entry.isTab && destination.route == entry.rootDestination.route -> selectTab(entry.id)
+            else -> navigate(destination)
         }
         return true
     }
@@ -170,10 +165,7 @@ class FragmentRouter(
         }
         titlesByRoute[rootRoute] = entry.titleRes(entry.rootDestination)
 
-        mutableTab.value = entry.id
-        mutableTitle.value = titlesByRoute[routeState.currentRoute()] ?: entry.titleRes(entry.rootDestination)
-        mutableCanGoBack.value = routeState.currentStack().size > 1
-        updateRouteFlags()
+        publishChrome(entry, canGoBack = routeState.currentStack().size > 1)
     }
 
     private fun restoreFromFragmentManager(): Boolean {
@@ -365,7 +357,7 @@ class FragmentRouter(
     private fun replaceFragment(destination: Destination, addToBackStack: Boolean) {
         val entry = registry.entryFor(destination) ?: return
         val fragment: Fragment = entry.createFragment(destination)
-        fragment.arguments = Bundle(destination.arguments())
+        fragment.arguments = RouteArgs.bundle(destination)
         val transaction = fragmentManager.beginTransaction()
             .setReorderingAllowed(true)
             .replace(containerId, fragment, destination.route)
@@ -376,16 +368,18 @@ class FragmentRouter(
 
     private fun updateDerivedState() {
         val entry = registry.entry(routeState.currentTabId) ?: initialEntry
-        mutableTab.value = entry.id
-        mutableTitle.value = titlesByRoute[routeState.currentRoute()]
-            ?: entry.titleRes(entry.rootDestination)
-        mutableCanGoBack.value = fragmentManager.backStackEntryCount > 0
-        updateRouteFlags()
+        publishChrome(entry, canGoBack = fragmentManager.backStackEntryCount > 0)
     }
 
-    private fun updateRouteFlags() {
-        mutableIsOverlay.value = currentRouteOverlay()
-        mutableHidesBottomBar.value = registry.entryForRoute(routeState.currentRoute())?.hidesBottomBar == true
+    private fun publishChrome(tab: FeatureEntry, canGoBack: Boolean) {
+        val routeEntry = registry.entryForRoute(routeState.currentRoute())
+        mutableChrome.value = AppChromeState(
+            tabId = tab.id,
+            titleRes = titlesByRoute[routeState.currentRoute()] ?: tab.titleRes(tab.rootDestination),
+            canGoBack = canGoBack,
+            overlay = currentRouteOverlay(),
+            hidesBottomBar = routeEntry?.hidesBottomBar == true,
+        )
     }
 
     private fun currentRouteOverlay(): Boolean {

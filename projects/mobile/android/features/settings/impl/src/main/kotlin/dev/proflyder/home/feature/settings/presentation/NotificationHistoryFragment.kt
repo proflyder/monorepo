@@ -2,7 +2,6 @@ package dev.proflyder.home.feature.settings.presentation
 
 import android.os.Bundle
 import androidx.recyclerview.widget.LinearLayoutManager
-import dev.proflyder.home.core.navigation.requireNavigator
 import dev.proflyder.home.core.presentation.IntentAdapterCallback
 import dev.proflyder.home.core.presentation.ScreenFragment
 import dev.proflyder.home.core.presentation.screenViewModel
@@ -47,7 +46,7 @@ internal class NotificationHistoryFragment :
     override fun onEvent(event: HistoryEvent) {
         when (event) {
             HistoryEvent.Cleared -> showMessage(R.string.history_cleared)
-            is HistoryEvent.OpenRoute -> requireNavigator().openRoute(event.route)
+            is HistoryEvent.OpenRoute -> navigate(event.route)
         }
     }
 
