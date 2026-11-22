@@ -233,6 +233,13 @@ Push в `develop` CI не запускает: туда попадают толь
   затронуты.
 - python — `paths` (+ `depends_on`), `hermes` — ещё rdeps его образов;
   native — `paths` + rdeps своих корней.
+- `*.md`/`*.mdx` не выбирают юниты сборки, тестов и деплоя
+  (`routableChanges` в `affected.mjs`), кроме путей, которые юнит или
+  инвалидация перечисляет паттерном на `.md`/`.mdx` (Hermes `HERMES.md`,
+  `SOUL.md`, `skills/**/*.md`; `docs/SECRETS.md` у `workstation`). Новый
+  md-контент, который попадает в образ или читается тестом, добавлять в
+  `paths` юнита явно. `quality` и `ci-ok` идут всегда, `docs_only` — по
+  полному списку изменений.
 - База PR — `HEAD^1` merge-коммита, а не `pull_request.base.sha` (иначе в
   diff попадают чужие PR); push — `github.event.before`.
 

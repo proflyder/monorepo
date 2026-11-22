@@ -646,6 +646,9 @@ export const config = {
       title: "projects/home-assistant/hermes",
       paths: [
         "projects/home-assistant/hermes/**",
+        "projects/home-assistant/hermes/HERMES.md",
+        "projects/home-assistant/hermes/SOUL.md",
+        "projects/home-assistant/hermes/skills/**/*.md",
         "projects/home-assistant/deploy/images/hermes/**",
         "solutions/voice-proxy/**",
         "projects/home-assistant/deploy/health-exporter/**",
@@ -697,6 +700,7 @@ export const config = {
         "projects/home-assistant/hermes/voice_prompt.txt",
         "projects/home-assistant/hermes/telegram_prompt.txt",
         "projects/home-assistant/hermes/skills/**",
+        "projects/home-assistant/hermes/skills/**/*.md",
         "platform/deploy-rs/**",
         "platform/bazel/oci/**",
       ],
