@@ -7,10 +7,12 @@ import dev.zacsweers.metro.ContributesIntoSet
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.binding
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 
 @ContributesIntoSet(AppScope::class, binding = binding<RouteCondition>())
 @Inject
-class VpnRouteCondition(opener: VpnOpenConnector) : RouteCondition {
-    override val ready: Flow<Boolean> = opener.route.map { it == HomeRoute.READY }
+class VpnRouteCondition(private val opener: Lazy<VpnOpenConnector>) : RouteCondition {
+    override val ready: Flow<Boolean> = flow { emitAll(opener.value.route) }.map { it == HomeRoute.READY }
 }
