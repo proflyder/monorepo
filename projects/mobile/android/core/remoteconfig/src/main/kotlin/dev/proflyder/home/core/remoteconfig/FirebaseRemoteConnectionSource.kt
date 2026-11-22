@@ -42,7 +42,7 @@ class FirebaseRemoteConnectionSource(
     @IoDispatcher io: CoroutineDispatcher,
 ) : RemoteConnectionSource, AppStartable {
     private val appContext = context.applicationContext
-    private val scope = appScope + io
+    internal val scope = appScope + io
     private val fetchMutex = Mutex()
     private val available: Boolean = FirebaseApp.getApps(appContext).isNotEmpty()
     private val remoteConfig: FirebaseRemoteConfig by lazy { FirebaseRemoteConfig.getInstance() }
@@ -77,7 +77,7 @@ class FirebaseRemoteConnectionSource(
         publish()
     }
 
-    private suspend fun activateUpdate() = fetchMutex.withLock {
+    internal suspend fun activateUpdate() = fetchMutex.withLock {
         suspendRunCatching { remoteConfig.activate().await() }
             .onSuccess { publish() }
             .onFailure { markFailed() }
@@ -92,8 +92,8 @@ class FirebaseRemoteConnectionSource(
         mutableState.value = parseRemoteConnection(remoteConfig.getString(REMOTE_CONNECTION_KEY))
     }
 
-    private fun markFailed() {
-        mutableState.update { RemoteConnectionState.FetchFailed(it.lastKnown) }
+    internal fun markFailed() {
+        mutableState.update { RemoteConnectionState.FetchFailed(it.lastLoaded) }
     }
 
     private inner class UpdateListener : ConfigUpdateListener {
@@ -113,7 +113,7 @@ class FirebaseRemoteConnectionSource(
     }
 }
 
-private val RemoteConnectionState.lastKnown: RemoteConnectionState.Loaded?
+internal val RemoteConnectionState.lastLoaded: RemoteConnectionState.Loaded?
     get() = when (this) {
         is RemoteConnectionState.Loaded -> this
         is RemoteConnectionState.FetchFailed -> lastKnown
