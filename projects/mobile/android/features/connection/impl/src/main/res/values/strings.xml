@@ -30,6 +30,7 @@
     <string name="connection_status">Status</string>
     <string name="connection_not_configured">No server configured yet.</string>
     <string name="connection_token_absent">No token stored.</string>
+    <string name="connection_token_loading">Reading the stored token…</string>
     <string name="connection_token_present">Token stored securely.</string>
     <string name="connection_token_unreadable">The stored token cannot be decrypted on this device. Enter it again to restore access.</string>
     <string name="connection_online">Server online</string>

@@ -12,35 +12,33 @@ import dev.proflyder.home.core.theme.Appearance
 import dev.proflyder.home.core.theme.ColorRole
 import dev.proflyder.home.core.theme.R as ThemeR
 import dev.proflyder.home.core.theme.ThemeMode
-import dev.proflyder.home.core.ui.BaseFragment
+import dev.proflyder.home.core.presentation.ScreenFragment
+import dev.proflyder.home.core.presentation.screenViewModel
 import dev.proflyder.home.core.ui.applyScrollBottomInset
-import dev.proflyder.home.core.ui.injectedViewModels
 import dev.proflyder.home.feature.settings.impl.R
 import dev.proflyder.home.feature.settings.impl.databinding.FragmentAppearanceBinding
 import dev.proflyder.home.feature.settings.impl.databinding.ItemAppearanceThemeBinding
 
-class AppearanceFragment : BaseFragment<FragmentAppearanceBinding>(FragmentAppearanceBinding.Companion::inflate) {
-    private val viewModel: AppearanceViewModel by injectedViewModels()
+internal class AppearanceFragment :
+    ScreenFragment<FragmentAppearanceBinding, Appearance, AppearanceIntent, Nothing>(
+        FragmentAppearanceBinding.Companion::inflate,
+    ) {
+    override val viewModel: AppearanceViewModel by screenViewModel()
 
     private val cards = linkedMapOf<AppTheme, ItemAppearanceThemeBinding>()
 
-    override fun onBindingCreated(binding: FragmentAppearanceBinding, savedInstanceState: Bundle?) {
+    override fun onScreenCreated(binding: FragmentAppearanceBinding, savedInstanceState: Bundle?) {
         binding.root.applyScrollBottomInset()
-        bindThemeCards(binding, AppThemes.isDynamicAvailable) { onThemeClicked(it) }
-        bindModeButtons(binding.appearanceMode) { viewModel.selectMode(it) }
-        viewModel.state.observe { render(it) }
+        bindThemeCards(binding, AppThemes.isDynamicAvailable) { dispatch(AppearanceIntent.SelectTheme(it)) }
+        bindModeButtons(binding.appearanceMode) { dispatch(AppearanceIntent.SelectMode(it)) }
     }
 
     override fun onBindingDestroyed() {
         cards.clear()
     }
 
-    internal fun onThemeClicked(theme: AppTheme) {
-        if (viewModel.selectTheme(theme)) requireActivity().recreate()
-    }
-
-    private fun render(appearance: Appearance) {
-        renderAppearance(binding, cards, appearance)
+    override fun render(state: Appearance) {
+        renderAppearance(binding, cards, state)
     }
 
     internal fun bindThemeCards(binding: FragmentAppearanceBinding, dynamic: Boolean, onClick: (AppTheme) -> Unit) {

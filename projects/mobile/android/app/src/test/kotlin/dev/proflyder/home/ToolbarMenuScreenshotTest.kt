@@ -25,6 +25,7 @@ import org.robolectric.shadows.ShadowWindowManagerImpl
 import androidx.appcompat.R as AppCompatR
 import dev.proflyder.home.core.ui.R as UiR
 import dev.proflyder.home.feature.chat.impl.R as ChatR
+import kotlinx.coroutines.runBlocking
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35], qualifiers = "w411dp-h891dp-night-xxhdpi")
@@ -94,7 +95,7 @@ class ToolbarMenuScreenshotTest {
 
     private fun launch(theme: AppTheme): MainActivity {
         val app = RuntimeEnvironment.getApplication() as HomeApplication
-        app.graph.appearance.selectTheme(theme)
+        runBlocking { app.graph.appearance.selectTheme(theme) }
         val activity = Robolectric.buildActivity(MainActivity::class.java).setup().get()
         idle(activity)
         return activity

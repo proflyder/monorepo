@@ -5,6 +5,7 @@ package(default_visibility = ["//visibility:public"])
 kt_jvm_library(
     name = "config",
     srcs = glob(["src/main/kotlin/**/*.kt"]),
+    plugins = ["//platform/android:serialization_compiler_plugin"],
     deps = [
         "//packages/kotlin/core",
         "//projects/mobile/android/core/model",

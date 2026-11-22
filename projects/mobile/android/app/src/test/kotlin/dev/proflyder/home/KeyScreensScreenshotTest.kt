@@ -20,6 +20,7 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import dev.proflyder.home.feature.alarms.impl.R as AlarmsR
+import kotlinx.coroutines.runBlocking
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35], qualifiers = "w411dp-h891dp-night-xxhdpi")
@@ -48,7 +49,7 @@ class KeyScreensScreenshotTest {
 
     private fun shootAll(theme: AppTheme, mode: String) {
         val app = RuntimeEnvironment.getApplication() as HomeApplication
-        app.graph.appearance.selectTheme(theme)
+        runBlocking { app.graph.appearance.selectTheme(theme) }
         val activity = Robolectric.buildActivity(MainActivity::class.java).setup().get()
         idle(activity)
         TABS.forEach { (name, tab) -> shootTab(activity, tab, "screen-${theme.key}-$mode-$name.png") }

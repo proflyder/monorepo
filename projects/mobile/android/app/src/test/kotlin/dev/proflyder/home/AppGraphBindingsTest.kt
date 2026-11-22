@@ -42,6 +42,8 @@ class AppGraphBindingsTest {
             "VpnProfileSync",
             "ConnectionHealth",
             "ProcessAppForeground",
+            "FirebaseRemoteConnectionSource",
+            "AppearanceInstaller",
         )
 
         val VIEW_MODELS = listOf(

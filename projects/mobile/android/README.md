@@ -563,11 +563,20 @@ list and then to that tab.
   read from or written to DataStore: Remote Config is authoritative. On the
   first launch after the upgrade, `SharedPreferencesMigration` imports the
   legacy `home_connection` file, so the encrypted token survives; the old
-  endpoint/timeout keys remain only for that migration and are otherwise
-  unused.
-- Readers use a synchronous in-memory snapshot because interceptors read
-  settings on I/O threads. The snapshot composes the Remote Config values with
-  the device-local token and is replaced immediately when either changes.
+  endpoint/timeout keys are not read by the app.
+- Nothing reads DataStore or decrypts the token on the main thread or at graph
+  creation. `AndroidConnectionSettingsStore` exposes `config` and
+  `tokenStatus` as `StateFlow` built with `stateIn` from the DataStore flow
+  (decoded on the I/O dispatcher, `StoredTokenSource`) and from
+  `RemoteConnectionSource.state`. Until the first read `tokenStatus` is
+  `LOADING` and `loaded` emits `false`; the connection screen shows a loading
+  line and saving waits for `loaded`. `updateToken` writes DataStore and
+  returns once `config` reflects the new token, so DataStore stays the only
+  source of truth.
+- Interceptors read `config.value` on OkHttp threads. Requests are gated:
+  `ConnectionSettingsLoadedCondition` is a `RouteCondition`, so
+  `RouteGate.await()` holds a request until the token and the cached Remote
+  Config are loaded.
 - `android:allowBackup="false"`; backup/data-extraction rules exclude prefs,
   databases, and files. Tokens are never placed in URLs, `SavedState`, Fragment
   arguments, or logs. Diagnostics redact `Authorization`.
@@ -955,7 +964,14 @@ Firebase uses its own installation id, not the app's Home credentials.
 ### Remote Config connection document
 
 The app reads one string parameter, `home_connection`. Its in-app default is
-empty, which means "not configured". The value is a JSON object; unknown keys
+empty, which means "not configured". `FirebaseRemoteConnectionSource` is an
+`AppStartable`: the Firebase instance is created lazily on the I/O dispatcher
+in `start()`, the cached value is published, and every fetch goes through one
+`fetch(force)` under a mutex (start: `force = false`, the screen's refresh:
+`force = true`; real-time updates only activate under the same mutex). The
+document is decoded into the `@Serializable` `RemoteConnectionDocument`;
+optional addresses go through `parseOptionalEndpoint`, and a wrong JSON type
+is reported for the field it belongs to. The value is a JSON object; unknown keys
 are ignored so a future field does not break older clients.
 
 | Field | Type | Required | Meaning |
@@ -1479,9 +1495,16 @@ Themes are code in `core/theme`:
   content-based `DynamicColorsOptions` seed was rejected: it regenerates the
   palette and cannot keep exact colours.
 - The choice (`appearance_theme`, `appearance_mode`) lives in the app
-  DataStore. `HomeApplication` reads it once before the first activity and sets
-  `AppCompatDelegate` night mode, so the first frame is already themed. A theme
-  change recreates the activity; a mode change is applied by AppCompat.
+  DataStore. `AppearanceController.state` is a `StateFlow` over the DataStore
+  flow (read on the I/O dispatcher, default `Appearance()` until loaded); there
+  is no blocking read at startup. `ThemeApplier` applies the current theme in
+  `onActivityPreCreated`, remembers which theme each activity got and, while
+  `loaded` is `false`, holds the first frame with a pre-draw listener. Each
+  stored value is applied on the main dispatcher: night mode through
+  `AppCompatDelegate`, and every activity created with another theme is
+  recreated. So a theme change from the Appearance screen and a stored theme
+  that arrives after the first activity follow the same path; the screen only
+  dispatches `AppearanceIntent`.
 - Adding a theme: one `AppTheme` entry, its palette in `Palettes`, the
   `@color/theme_<key>_*` resources (values + values-night) and the overlay.
   Screens and the Appearance list need no changes.

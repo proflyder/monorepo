@@ -1,6 +1,8 @@
 package dev.proflyder.home.feature.settings.presentation
 
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import dev.proflyder.home.core.presentation.StateViewModel
 import dev.proflyder.home.core.theme.AppTheme
 import dev.proflyder.home.core.theme.Appearance
 import dev.proflyder.home.core.theme.AppearanceController
@@ -11,15 +13,30 @@ import dev.zacsweers.metro.ClassKey
 import dev.zacsweers.metro.ContributesIntoMap
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.binding
-import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
+
+internal sealed interface AppearanceIntent {
+    data class SelectTheme(val theme: AppTheme) : AppearanceIntent
+
+    data class SelectMode(val mode: ThemeMode) : AppearanceIntent
+}
 
 @Inject
-internal class AppearanceViewModel(private val controller: AppearanceController) : ViewModel() {
-    val state: StateFlow<Appearance> = controller.state
+internal class AppearanceViewModel(
+    private val controller: AppearanceController,
+) : StateViewModel<Appearance, AppearanceIntent, Nothing>(controller.state.value) {
+    init {
+        viewModelScope.launch { controller.state.collect { appearance -> updateState { appearance } } }
+    }
 
-    fun selectTheme(theme: AppTheme): Boolean = controller.selectTheme(theme)
+    override fun handle(intent: AppearanceIntent) {
+        viewModelScope.launch { apply(intent) }
+    }
 
-    fun selectMode(mode: ThemeMode) = controller.selectMode(mode)
+    private suspend fun apply(intent: AppearanceIntent) = when (intent) {
+        is AppearanceIntent.SelectTheme -> controller.selectTheme(intent.theme)
+        is AppearanceIntent.SelectMode -> controller.selectMode(intent.mode)
+    }
 }
 
 @ContributesIntoMap(AppScope::class, binding = binding<ViewModelSource>())

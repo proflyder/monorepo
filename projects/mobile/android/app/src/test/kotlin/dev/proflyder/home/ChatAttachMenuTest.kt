@@ -18,6 +18,7 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import dev.proflyder.home.feature.chat.impl.R as ChatR
+import kotlinx.coroutines.runBlocking
 
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -54,7 +55,7 @@ class ChatAttachMenuTest {
     }
 
     private fun openChat(app: HomeApplication): MainActivity {
-        app.graph.appearance.selectTheme(AppTheme.CURRENT)
+        runBlocking { app.graph.appearance.selectTheme(AppTheme.CURRENT) }
         val activity = Robolectric.buildActivity(MainActivity::class.java).setup().get()
         idle(activity)
         activity.router.selectTab("chat")

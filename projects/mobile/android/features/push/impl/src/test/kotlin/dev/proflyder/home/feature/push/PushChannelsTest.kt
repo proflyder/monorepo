@@ -89,6 +89,7 @@ class PushChannelsTest {
         PreferenceDataStoreFactory.create { File(context.filesDir, "push-appearance.preferences_pb") },
         CoroutineScope(Dispatchers.Unconfined),
         Dispatchers.Unconfined,
+        Dispatchers.Unconfined,
     )
 
     private fun manager(context: android.content.Context): NotificationManager =

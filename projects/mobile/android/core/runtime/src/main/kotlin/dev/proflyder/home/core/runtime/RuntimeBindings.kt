@@ -29,6 +29,10 @@ abstract class RuntimeBindings {
         fun provideIoDispatcher(): CoroutineDispatcher = Dispatchers.IO
 
         @Provides
+        @MainDispatcher
+        fun provideMainDispatcher(): CoroutineDispatcher = Dispatchers.Main.immediate
+
+        @Provides
         @SingleIn(AppScope::class)
         fun provideClock(): Clock = AndroidClock
 

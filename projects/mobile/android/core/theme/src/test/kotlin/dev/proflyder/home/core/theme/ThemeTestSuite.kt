@@ -9,5 +9,6 @@ import org.junit.runners.Suite
     ThemeOverlayConsistencyTest::class,
     ThemeNamesTest::class,
     ThemeEffectsTest::class,
+    AppearanceControllerTest::class,
 )
 class ThemeTestSuite

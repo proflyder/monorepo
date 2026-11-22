@@ -17,6 +17,7 @@ import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 
 @SingleIn(AppScope::class)
 @ContributesBinding(AppScope::class)
@@ -31,6 +32,7 @@ class DefaultConnectionRepository(
     override val remoteConfig: StateFlow<RemoteConnectionState> = remote.state
 
     override suspend fun saveToken(update: TokenUpdate): Outcome<ConnectionConfig> {
+        settings.loaded.first { it }
         val token = when (update) {
             TokenUpdate.Keep -> when (settings.tokenStatus.value) {
                 TokenStatus.UNREADABLE -> return Outcome.Failure(RemoteFailure.Validation(Field.TOKEN))
