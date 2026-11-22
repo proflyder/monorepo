@@ -2208,6 +2208,25 @@ test("real repo: explicitly listed hermes markdown still selects its units", () 
   }
 });
 
+test("real repo: README read by a contract test selects its python units", () => {
+  const config = affected.loadConfig();
+  for (const [file, ids] of [
+    ["solutions/voice-proxy/README.md", ["ha-deploy"]],
+    ["projects/home-assistant/hermes/README.md", ["hermes"]],
+    ["projects/home-assistant/ha-voice/README.md", ["ha-voice"]],
+    ["projects/home/kubernetes/flux/README.md", ["flux-deploy"]],
+  ]) {
+    const result = withDeps({}, () =>
+      affected.route(config, [file], { root: REPO, base: "b", graph: loadFixtureGraph() }),
+    );
+    assert.equal(result.docsOnly, true, file);
+    const python = result.routes.python.units.map((unit) => unit.id);
+    for (const id of ids) {
+      assert.ok(python.includes(id), `${file} -> ${id}`);
+    }
+  }
+});
+
 test("routable changes keep code and explicit markdown only", () => {
   const config = affected.loadConfig();
   assert.deepEqual(
