@@ -5,7 +5,7 @@ import androidx.fragment.app.Fragment
 import dev.proflyder.home.core.navigation.Destination
 import dev.proflyder.home.core.navigation.FeatureEntry
 import dev.proflyder.home.feature.scenarios.impl.R
-import dev.proflyder.home.feature.scenarios.presentation.ScenarioEditorFragment
+import dev.proflyder.home.feature.scenarios.presentation.editor.ScenarioEditorFragment
 import dev.proflyder.home.feature.scenarios.presentation.ScenariosFragment
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesIntoSet

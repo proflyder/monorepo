@@ -1,4 +1,4 @@
-package dev.proflyder.home.feature.scenarios
+package dev.proflyder.home.feature.scenarios.presentation.editor
 
 import dev.proflyder.home.core.model.RepeatKind
 import dev.proflyder.home.core.model.Scenario
@@ -20,7 +20,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 
-data class ScenarioEditorDraft(
+internal data class ScenarioEditorDraft(
     val existingId: String? = null,
     val existingRevision: Long? = null,
     val label: String = "",
@@ -37,7 +37,7 @@ data class ScenarioEditorDraft(
             steps.any { !it.isSupported }
 }
 
-object ScenarioEditorDraftCodec {
+internal object ScenarioEditorDraftCodec {
     private const val KEY_DRAFT = "scenario_draft"
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -211,12 +211,7 @@ object ScenarioEditorDraftCodec {
         this[name] as? JsonArray ?: JsonArray(emptyList())
 }
 
-enum class ScenarioEditorCompletion {
-    SAVED,
-    DELETED,
-}
-
-fun ScenarioEditorDraft.toScenarioDraft(idempotencyKey: String = ""): ScenarioDraft = ScenarioDraft(
+internal fun ScenarioEditorDraft.toScenarioDraft(idempotencyKey: String = ""): ScenarioDraft = ScenarioDraft(
     label = label.trim(),
     description = description.trim(),
     enabled = enabled,
@@ -226,3 +221,21 @@ fun ScenarioEditorDraft.toScenarioDraft(idempotencyKey: String = ""): ScenarioDr
     continueOnError = continueOnError,
     idempotencyKey = idempotencyKey,
 )
+
+internal fun ScenarioEditorDraft.restoredExisting(): Scenario? {
+    val id = existingId ?: return null
+    return Scenario(
+        id = id,
+        label = label,
+        description = description,
+        enabled = enabled,
+        revision = existingRevision ?: 0,
+        createdUnix = 0,
+        updatedUnix = 0,
+        triggers = triggers,
+        conditions = conditions,
+        steps = steps,
+        continueOnError = continueOnError,
+        nextDueUnix = 0,
+    )
+}

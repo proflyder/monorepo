@@ -11,10 +11,7 @@ import dev.proflyder.home.core.model.StorageReason
 import dev.proflyder.home.core.network.ChatClient
 import dev.proflyder.home.core.network.ChatUnauthorizedException
 import dev.proflyder.home.core.network.NetworkWaiter
-import dev.proflyder.home.core.operation.suspendRunCatching
-import dev.zacsweers.metro.AppScope
-import dev.zacsweers.metro.Inject
-import dev.zacsweers.metro.SingleIn
+import dev.proflyder.home.core.runtime.Backoff
 import java.io.File
 import java.util.UUID
 import kotlinx.coroutines.CoroutineDispatcher
@@ -23,12 +20,19 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.merge
+import kotlinx.coroutines.flow.retryWhen
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlin.time.Duration.Companion.milliseconds
 
 internal class ChatClock(
     val now: () -> Long = System::currentTimeMillis,
@@ -37,6 +41,8 @@ internal class ChatClock(
     val maxBackoffMillis: Long = MAX_BACKOFF_MILLIS,
     val io: CoroutineDispatcher = Dispatchers.IO,
 ) {
+    val backoff: Backoff get() = Backoff(initialBackoffMillis.milliseconds, maxBackoffMillis.milliseconds)
+
     companion object {
         const val INITIAL_BACKOFF_MILLIS = 1_000L
         const val MAX_BACKOFF_MILLIS = 30_000L
@@ -44,6 +50,7 @@ internal class ChatClock(
 }
 
 internal const val CHAT_PAGE_SIZE = 50
+internal const val LIVE_STOP_MILLIS = 5_000L
 internal const val NETWORK_WAIT_MILLIS = 30_000L
 internal const val FAILURE_UNAUTHORIZED = "chat_unauthorized"
 internal const val FAILURE_NOT_SENT = "chat_not_sent"
@@ -75,14 +82,28 @@ private fun StorageReason.sendFailureKey(): String = when (this) {
     StorageReason.TOKEN_ENCRYPTION, StorageReason.SETTINGS_WRITE -> FAILURE_NOT_SENT
 }
 
-@SingleIn(AppScope::class)
-@Inject
-class ChatRepository(
+internal interface ChatRepository {
+    val timeline: StateFlow<ChatTimeline>
+
+    suspend fun refresh(): Outcome<Unit>
+
+    suspend fun loadOlder()
+
+    fun send(text: String, replyTo: ChatQuote?, attachments: List<LocalAttachment> = emptyList())
+
+    fun retryOutgoing(clientId: String)
+
+    fun discardOutgoing(clientId: String)
+
+    suspend fun retryReply(id: String): Outcome<Unit>
+}
+
+internal class LiveChatRepository(
     private val client: ChatClient,
     private val outboxStore: ChatOutboxStore,
     private val scope: CoroutineScope,
     private val networkWaiter: NetworkWaiter,
-) {
+) : ChatRepository {
     internal var clock: ChatClock = ChatClock()
 
     private val state = MutableStateFlow(ChatTimeline())
@@ -90,9 +111,13 @@ class ChatRepository(
     private val restoreLock = Mutex()
     private var restored = false
 
-    internal val timeline: StateFlow<ChatTimeline> = state.asStateFlow()
+    override val timeline: StateFlow<ChatTimeline> by lazy {
+        merge(state, liveUpdates()).stateIn(scope, SharingStarted.WhileSubscribed(LIVE_STOP_MILLIS), state.value)
+    }
 
-    suspend fun refresh(): Outcome<Unit> {
+    internal val snapshot: ChatTimeline get() = state.value
+
+    override suspend fun refresh(): Outcome<Unit> {
         restoreOutbox()
         return when (val page = client.page(before = null, limit = CHAT_PAGE_SIZE)) {
             is Outcome.Success -> Outcome.Success(Unit).also { onPage(page.value) }
@@ -105,7 +130,7 @@ class ChatRepository(
         kick()
     }
 
-    suspend fun loadOlder() {
+    override suspend fun loadOlder() {
         val current = state.value
         val oldest = current.oldestSeq ?: return
         if (!current.hasMore || current.loadingOlder) return
@@ -116,7 +141,7 @@ class ChatRepository(
         }
     }
 
-    internal fun send(text: String, replyTo: ChatQuote?, attachments: List<LocalAttachment> = emptyList()) {
+    override fun send(text: String, replyTo: ChatQuote?, attachments: List<LocalAttachment>) {
         val trimmed = text.trim()
         if (trimmed.isEmpty() && attachments.isEmpty()) return
         val outgoing = Outgoing(clock.newClientId(), trimmed, replyTo, clock.now(), attachments = attachments)
@@ -124,37 +149,46 @@ class ChatRepository(
         persistAndKick()
     }
 
-    fun retryOutgoing(clientId: String) {
+    override fun retryOutgoing(clientId: String) {
         state.update { it.clearFailure(clientId) }
         persistAndKick()
     }
 
-    fun discardOutgoing(clientId: String) {
+    override fun discardOutgoing(clientId: String) {
         state.update { it.remove(clientId) }
         scope.launch { persist() }
     }
 
-    suspend fun retryReply(id: String): Outcome<Unit> = when (val result = client.retry(id)) {
+    override suspend fun retryReply(id: String): Outcome<Unit> = when (val result = client.retry(id)) {
         is Outcome.Success -> Outcome.Success(Unit).also { accept(result.value) }
         is Outcome.Failure -> result
     }
 
     private fun accept(message: ChatMessage) = state.update { it.upsert(message) }
 
-    suspend fun runLive() {
-        var wait = clock.initialBackoffMillis
-        while (true) {
-            if (!state.value.loaded) refresh()
-            val outcome = suspendRunCatching { streamOnce() }
-            if (outcome.exceptionOrNull() is ChatUnauthorizedException) return
-            wait = if (outcome.isSuccess) clock.initialBackoffMillis else nextBackoff(wait)
-            delay(wait)
-        }
+    private fun liveUpdates(): Flow<Nothing> {
+        var failures = 0L
+        return flow<Nothing> { streamOnce { failures = 0 } }
+            .retryWhen { cause, _ -> shouldReconnect(cause, failures++) }
+            .catch { }
     }
 
-    private suspend fun streamOnce() {
-        client.events(state.value.cursor).collect { event -> state.update { it.apply(event) } }
+    private suspend fun shouldReconnect(cause: Throwable, failures: Long): Boolean {
+        if (cause is ChatUnauthorizedException) return false
+        delay(if (cause is StreamClosed) clock.backoff.initial else clock.backoff.delayFor(failures))
+        return true
     }
+
+    private suspend fun streamOnce(onEvent: () -> Unit) {
+        if (!state.value.loaded) refresh()
+        client.events(state.value.cursor).collect { event ->
+            onEvent()
+            state.update { it.apply(event) }
+        }
+        throw StreamClosed()
+    }
+
+    private class StreamClosed : IllegalStateException("chat stream closed")
 
     private fun persistAndKick() {
         scope.launch {

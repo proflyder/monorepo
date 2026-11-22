@@ -40,4 +40,14 @@
     <string name="ds_catalog_fab_extended">New alarm</string>
     <string name="ds_catalog_menu">Open menu</string>
     <string name="ds_catalog_icon_action">Add</string>
+
+    <string name="ds_light_note">Only parameters the light reports are shown. Turn off accepts only a transition.</string>
+    <string name="ds_light_brightness">Brightness</string>
+    <string name="ds_light_temperature">Color temperature</string>
+    <string name="ds_light_effect">Effect</string>
+    <string name="ds_light_effect_none">None</string>
+    <string name="ds_light_percent">%1$d%%</string>
+    <string name="ds_light_kelvin">%1$d K</string>
+    <string name="ds_light_transition">Transition, seconds (optional, 0–300)</string>
+    <string name="ds_action_save">Save</string>
 </resources>

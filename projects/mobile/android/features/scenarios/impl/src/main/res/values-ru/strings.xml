@@ -145,14 +145,6 @@
     </string-array>
 
     <string name="scenarios_light_dialog_title">Параметры света</string>
-    <string name="scenarios_light_note">Показаны только параметры, которые сообщает лампа. Для выключения доступен только переход.</string>
-    <string name="scenarios_light_brightness">Яркость</string>
-    <string name="scenarios_light_temperature">Цветовая температура</string>
-    <string name="scenarios_light_effect">Эффект</string>
-    <string name="scenarios_light_effect_none">Без эффекта</string>
-    <string name="scenarios_light_percent">%1$d%%</string>
-    <string name="scenarios_light_kelvin">%1$d K</string>
-    <string name="scenarios_light_transition">Переход, секунды (необязательно, 0–300)</string>
 
     <string name="scenarios_conflict_title">Изменён на сервере</string>
     <string name="scenarios_conflict_message">Другой клиент сохранил более новую версию сценария. Загрузить её? Локальные изменения будут потеряны.</string>

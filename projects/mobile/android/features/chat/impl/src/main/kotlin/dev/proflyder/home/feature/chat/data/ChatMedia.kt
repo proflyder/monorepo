@@ -5,12 +5,10 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.provider.OpenableColumns
+import androidx.core.net.toUri
 import dev.proflyder.home.core.model.ChatAttachmentKind
 import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.network.ChatClient
-import dev.zacsweers.metro.AppScope
-import dev.zacsweers.metro.Inject
-import dev.zacsweers.metro.SingleIn
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.InputStream
@@ -27,17 +25,47 @@ internal sealed interface Prepared {
 internal const val REJECT_TOO_LARGE = "chat_attachment_too_large"
 internal const val REJECT_UNSUPPORTED = "chat_attachment_unsupported"
 
-@SingleIn(AppScope::class)
-@Inject
-class ChatMedia(
+@JvmInline
+internal value class AttachmentSource(val uri: String)
+
+internal data class MediaRef(val id: String?, val path: String?)
+
+internal interface ChatMedia {
+    fun newVoiceFile(): File
+
+    suspend fun prepareImage(source: AttachmentSource): Prepared
+
+    suspend fun prepareFile(source: AttachmentSource): Prepared
+
+    suspend fun thumbnail(media: MediaRef, width: Int): Bitmap?
+
+    suspend fun waveLevels(media: MediaRef, bars: Int): FloatArray?
+
+    suspend fun localPath(media: MediaRef): String?
+}
+
+internal class AndroidChatMedia(
     private val context: Context,
     private val client: ChatClient,
-) {
+) : ChatMedia {
     private val directory: File by lazy { File(context.filesDir, MEDIA_DIR).apply { mkdirs() } }
 
-    internal fun newFile(extension: String): File = File(directory, "local-${UUID.randomUUID()}.$extension")
+    override fun newVoiceFile(): File = newFile(VOICE_EXTENSION)
 
-    internal suspend fun fileFor(id: String): File? = withContext(Dispatchers.IO) {
+    override suspend fun thumbnail(media: MediaRef, width: Int): Bitmap? =
+        fileOf(media)?.let { withContext(Dispatchers.IO) { decodeThumbnail(it, width) } }
+
+    override suspend fun waveLevels(media: MediaRef, bars: Int): FloatArray? =
+        fileOf(media)?.let { withContext(Dispatchers.IO) { VoiceLevels.of(it, bars) } }
+
+    override suspend fun localPath(media: MediaRef): String? = fileOf(media)?.path
+
+    private suspend fun fileOf(media: MediaRef): File? =
+        media.path?.let(::File)?.takeIf { it.isFile } ?: media.id?.let { fileFor(it) }
+
+    private fun newFile(extension: String): File = File(directory, "local-${UUID.randomUUID()}.$extension")
+
+    private suspend fun fileFor(id: String): File? = withContext(Dispatchers.IO) {
         val cached = File(directory, id)
         when {
             cached.isFile -> cached
@@ -51,9 +79,11 @@ class ChatMedia(
             is Outcome.Failure -> null
         }
 
-    internal suspend fun prepareImage(uri: Uri): Prepared = withContext(Dispatchers.IO) { imageFrom(uri) }
+    override suspend fun prepareImage(source: AttachmentSource): Prepared =
+        withContext(Dispatchers.IO) { imageFrom(source.uri.toUri()) }
 
-    internal suspend fun prepareFile(uri: Uri): Prepared = withContext(Dispatchers.IO) { fileFrom(uri) }
+    override suspend fun prepareFile(source: AttachmentSource): Prepared =
+        withContext(Dispatchers.IO) { fileFrom(source.uri.toUri()) }
 
     private fun imageFrom(uri: Uri): Prepared {
         val bitmap = decodeScaled(uri) ?: return Prepared.Rejected(REJECT_UNSUPPORTED)
@@ -114,6 +144,7 @@ class ChatMedia(
 
     private companion object {
         const val MEDIA_DIR = "chat-media"
+        const val VOICE_EXTENSION = "wav"
         const val JPEG_EXTENSION = "jpg"
         const val TEXT_EXTENSION = "txt"
         const val JPEG_MIME = "image/jpeg"
@@ -123,4 +154,11 @@ class ChatMedia(
         const val BUFFER_BYTES = 8192
         val TEXT_MIMES = setOf("text/plain", "text/markdown", "text/csv", "application/json", "text/x-log")
     }
+}
+
+internal fun decodeThumbnail(file: File, targetWidth: Int): Bitmap? {
+    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    BitmapFactory.decodeFile(file.path, bounds)
+    val sample = generateSequence(1) { it * 2 }.first { bounds.outWidth / it <= maxOf(targetWidth, 1) * 2 }
+    return BitmapFactory.decodeFile(file.path, BitmapFactory.Options().apply { inSampleSize = sample })
 }

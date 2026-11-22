@@ -40,4 +40,14 @@
     <string name="ds_catalog_fab_extended">Новый будильник</string>
     <string name="ds_catalog_menu">Открыть меню</string>
     <string name="ds_catalog_icon_action">Добавить</string>
+
+    <string name="ds_light_note">Показаны только параметры, которые сообщает лампа. Для выключения доступен только переход.</string>
+    <string name="ds_light_brightness">Яркость</string>
+    <string name="ds_light_temperature">Цветовая температура</string>
+    <string name="ds_light_effect">Эффект</string>
+    <string name="ds_light_effect_none">Без эффекта</string>
+    <string name="ds_light_percent">%1$d%%</string>
+    <string name="ds_light_kelvin">%1$d K</string>
+    <string name="ds_light_transition">Переход, секунды (необязательно, 0–300)</string>
+    <string name="ds_action_save">Сохранить</string>
 </resources>

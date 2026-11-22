@@ -5,7 +5,17 @@ import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.core.network.NetworkWaiter
 import java.io.File
+import dev.proflyder.home.core.model.ChatEvent
+import dev.proflyder.home.core.model.ChatRole
+import dev.proflyder.home.feature.chat.ChatFixtures
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.onCompletion
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -21,9 +31,9 @@ class ChatRepositoryTest {
     private val store = MemoryOutboxStore()
     private var ids = 0
 
-    private fun TestScope.repository(): ChatRepository {
+    private fun TestScope.repository(): LiveChatRepository {
         val dispatcher = StandardTestDispatcher(testScheduler)
-        return ChatRepository(client, store, this, NetworkWaiter { true }).apply {
+        return LiveChatRepository(client, store, this, NetworkWaiter { true }).apply {
             clock = ChatClock(now = { 1L }, newClientId = { "c${++ids}" }, io = dispatcher)
         }
     }
@@ -34,11 +44,11 @@ class ChatRepositoryTest {
         client.sendResults += Outcome.Failure(RemoteFailure.Offline("no network"))
         client.sendResults += Outcome.Failure(RemoteFailure.Timeout)
         repository.send("  Включи свет  ", replyTo = null)
-        assertEquals("Включи свет", repository.timeline.value.outbox.single().text)
+        assertEquals("Включи свет", repository.snapshot.outbox.single().text)
         advanceUntilIdle()
         assertEquals(listOf("c1", "c1", "c1"), client.sentIds)
-        assertTrue(repository.timeline.value.outbox.isEmpty())
-        assertEquals(listOf("Включи свет", ""), repository.timeline.value.messages.map { it.text })
+        assertTrue(repository.snapshot.outbox.isEmpty())
+        assertEquals(listOf("Включи свет", ""), repository.snapshot.messages.map { it.text })
         assertTrue(store.records.isEmpty())
     }
 
@@ -48,11 +58,11 @@ class ChatRepositoryTest {
         client.sendResults += Outcome.Failure(RemoteFailure.Server(404, "chat_reply_not_found", "gone"))
         repository.send("Ответ", replyTo = null)
         advanceUntilIdle()
-        assertEquals("chat_reply_not_found", repository.timeline.value.outbox.single().failureKey)
+        assertEquals("chat_reply_not_found", repository.snapshot.outbox.single().failureKey)
         assertEquals("chat_reply_not_found", store.records.single().failureKey)
         repository.retryOutgoing("c1")
         advanceUntilIdle()
-        assertTrue(repository.timeline.value.outbox.isEmpty())
+        assertTrue(repository.snapshot.outbox.isEmpty())
     }
 
     @Test
@@ -62,8 +72,8 @@ class ChatRepositoryTest {
         assertEquals(Outcome.Success(Unit), repository.refresh())
         advanceUntilIdle()
         assertEquals(listOf("saved"), client.sentIds)
-        assertNull(repository.timeline.value.failure)
-        assertTrue(repository.timeline.value.loaded)
+        assertNull(repository.snapshot.failure)
+        assertTrue(repository.snapshot.loaded)
     }
 
     @Test
@@ -75,7 +85,7 @@ class ChatRepositoryTest {
         advanceUntilIdle()
         assertEquals(listOf(voice.name, voice.name), client.uploads)
         assertEquals(listOf(listOf("f_${voice.name}")), client.sentAttachments)
-        assertTrue(repository.timeline.value.outbox.isEmpty())
+        assertTrue(repository.snapshot.outbox.isEmpty())
     }
 
     @Test
@@ -84,7 +94,7 @@ class ChatRepositoryTest {
         val missing = File("/nonexistent/voice.wav")
         repository.send("", replyTo = null, attachments = listOf(voiceAttachment(missing)))
         advanceUntilIdle()
-        assertEquals(FAILURE_FILE_MISSING, repository.timeline.value.outbox.single().failureKey)
+        assertEquals(FAILURE_FILE_MISSING, repository.snapshot.outbox.single().failureKey)
         assertTrue(client.uploads.isEmpty())
     }
 
@@ -96,6 +106,28 @@ class ChatRepositoryTest {
         client.page = Outcome.Failure(RemoteFailure.Unauthorized)
         val repository = repository()
         repository.refresh()
-        assertEquals(RemoteFailure.Unauthorized, repository.timeline.value.failure)
+        assertEquals(RemoteFailure.Unauthorized, repository.snapshot.failure)
+    }
+
+    @Test
+    fun theLiveStreamRunsOnlyWhileTheTimelineIsObserved() = runTest {
+        val cancelled = CompletableDeferred<Unit>()
+        val message = ChatFixtures.message("a1", 1, ChatRole.ASSISTANT, "Готово")
+        client.events = flow {
+            emit(ChatEvent.Upsert(message))
+            awaitCancellation()
+        }.onCompletion { cancelled.complete(Unit) }
+        val repository = LiveChatRepository(client, store, backgroundScope, NetworkWaiter { true })
+        runCurrent()
+        assertEquals(0, client.streams)
+
+        val watcher = backgroundScope.launch { repository.timeline.collect { } }
+        runCurrent()
+        assertEquals(1, client.streams)
+        assertEquals(listOf("Готово"), repository.timeline.value.messages.map { it.text })
+
+        watcher.cancel()
+        advanceTimeBy(LIVE_STOP_MILLIS + 1)
+        assertTrue(cancelled.isCompleted)
     }
 }

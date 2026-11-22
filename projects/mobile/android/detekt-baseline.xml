@@ -91,6 +91,7 @@
     <ID>PublicInImpl:CallForegroundService.kt$CallForegroundService : Service</ID>
     <ID>PublicInImpl:CallNotificationControllerImpl.kt$CallNotificationControllerImpl : CallNotificationController</ID>
     <ID>PublicInImpl:CallTelecomBridge.kt$CallTelecomBridge</ID>
+    <ID>PublicInImpl:ChatComponents.kt$ChatComponents</ID>
     <ID>PublicInImpl:ChatFeatureEntry.kt$ChatDestination : Destination</ID>
     <ID>PublicInImpl:ChatFeatureEntry.kt$ChatFeatureEntry : FeatureEntry</ID>
     <ID>PublicInImpl:ChatFragment.kt$ChatFragment : BaseFragment</ID>

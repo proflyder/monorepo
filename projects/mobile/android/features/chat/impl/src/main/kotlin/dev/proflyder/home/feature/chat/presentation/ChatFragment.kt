@@ -1,109 +1,102 @@
 package dev.proflyder.home.feature.chat.presentation
 
 import android.Manifest
-import android.content.Intent
-import androidx.core.net.toUri
-import dev.proflyder.home.feature.chat.ChatFocus
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.os.Bundle
 import android.text.format.DateUtils
+import android.view.View
 import android.widget.ImageView
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
-import androidx.lifecycle.lifecycleScope
-import com.google.android.material.chip.Chip
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
-import dev.proflyder.home.core.model.ChatAttachmentKind
-import dev.proflyder.home.feature.chat.data.LocalAttachment
-import dev.proflyder.home.feature.chat.data.VoiceRecorder
-import java.io.File
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.withContext
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
-import android.content.ClipboardManager
-import android.os.Bundle
-import android.view.View
 import androidx.core.content.getSystemService
+import androidx.core.net.toUri
 import androidx.core.view.updatePadding
 import androidx.core.widget.doAfterTextChanged
 import androidx.fragment.app.activityViewModels
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.google.android.material.chip.Chip
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import dev.proflyder.home.core.designsystem.Components
-import dev.proflyder.home.core.ui.BaseFragment
 import dev.proflyder.home.core.designsystem.HomePopupMenu
+import dev.proflyder.home.core.model.ChatAttachmentKind
+import dev.proflyder.home.core.presentation.ScreenFragment
 import dev.proflyder.home.core.ui.pinAboveKeyboard
 import dev.proflyder.home.core.ui.setVisible
 import dev.proflyder.home.core.ui.userMessage
 import dev.proflyder.home.core.ui.viewModelFactory
+import dev.proflyder.home.feature.chat.ChatFocus
+import dev.proflyder.home.feature.chat.data.AttachmentSource
+import dev.proflyder.home.feature.chat.data.LocalAttachment
 import dev.proflyder.home.feature.chat.impl.R
 import dev.proflyder.home.feature.chat.impl.databinding.FragmentChatBinding
+import kotlinx.coroutines.launch
 
-class ChatFragment : BaseFragment<FragmentChatBinding>(FragmentChatBinding.Companion::inflate) {
-    internal val viewModel: ChatViewModel by activityViewModels {
-        viewModelFactory(ChatViewModel::class.java)
-    }
+internal class ChatFragment : ScreenFragment<FragmentChatBinding, ChatUiState, ChatIntent, ChatEvent>(
+    FragmentChatBinding.Companion::inflate,
+) {
+    override val viewModel: ChatViewModel by activityViewModels { viewModelFactory(ChatViewModel::class.java) }
 
     private lateinit var adapter: ChatAdapter
     private lateinit var layoutManager: LinearLayoutManager
     private var lastCount = 0
-    private lateinit var recorder: VoiceRecorder
-    private lateinit var player: ChatVoicePlayer
-    private var recordingTicker: Job? = null
 
     private val pickImage = registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
-        uri?.let(viewModel::attachImage)
+        uri?.let { dispatch(ChatIntent.AttachImage(AttachmentSource(it.toString()))) }
     }
 
     private val pickFile = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        uri?.let(viewModel::attachFile)
+        uri?.let { dispatch(ChatIntent.AttachFile(AttachmentSource(it.toString()))) }
     }
 
     private val askMicrophone = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (!granted) showError(R.string.chat_record_permission)
     }
 
-    override fun onBindingCreated(binding: FragmentChatBinding, savedInstanceState: Bundle?) {
+    override fun onScreenCreated(binding: FragmentChatBinding, savedInstanceState: Bundle?) = with(binding) {
         adapter = ChatAdapter(Callbacks())
         layoutManager = LinearLayoutManager(requireContext()).apply { stackFromEnd = true }
-        binding.chatList.layoutManager = layoutManager
-        binding.chatList.adapter = adapter
-        binding.chatList.addOnScrollListener(ScrollWatcher())
-        ItemTouchHelper(SwipeToReply(::onSwipeReply)).attachToRecyclerView(binding.chatList)
-        binding.chatPanel.pinAboveKeyboard(binding.chatList)
-        binding.chatList.addOnLayoutChangeListener(StatesFollowList(binding.chatStates))
-        recorder = VoiceRecorder(viewModel::newVoiceFile)
-        player = ChatVoicePlayer(viewModel::onPlayback)
-        binding.chatInput.doAfterTextChanged { renderSendButton() }
-        binding.chatSend.setOnClickListener { send() }
-        binding.chatMic.setOnTouchListener(RecordTouch(Recording(), resources.getDimension(R.dimen.chat_swipe_reply_distance)))
-        binding.chatAttach.setOnClickListener { showAttachMenu(it) }
-        viewModel.rejected.observe { showError(chatErrorText(it)) }
-        binding.chatReplyCancel.setOnClickListener { viewModel.cancelReply() }
-        binding.chatScrollDown.setOnClickListener { scrollToEnd(smooth = true) }
-        binding.chatErrorRetry.setOnClickListener { viewModel.refresh() }
-        viewModel.state.observe { render(it) }
-        viewModel.errors.observe { showFailure(it) }
-        repeatOnView { viewModel.runLive() }
+        chatList.layoutManager = layoutManager
+        chatList.adapter = adapter
+        chatList.addOnScrollListener(ScrollWatcher())
+        ItemTouchHelper(SwipeToReply(::onSwipeReply)).attachToRecyclerView(chatList)
+        chatPanel.pinAboveKeyboard(chatList)
+        chatList.addOnLayoutChangeListener(StatesFollowList(chatStates))
+        chatInput.doAfterTextChanged { dispatch(ChatIntent.InputChanged(it?.toString().orEmpty())) }
+        chatSend.setOnClickListener { dispatch(ChatIntent.Send) }
+        chatMic.setOnTouchListener(RecordTouch(Recording(), resources.getDimension(R.dimen.chat_swipe_reply_distance)))
+        chatAttach.setOnClickListener { HomePopupMenu(it, R.menu.chat_attach, ::onAttachChoice).show() }
+        chatReplyCancel.setOnClickListener { dispatch(ChatIntent.CancelReply) }
+        chatScrollDown.setOnClickListener { scrollToEnd(smooth = true) }
+        chatErrorRetry.setOnClickListener { dispatch(ChatIntent.Refresh) }
     }
 
-    internal fun render(state: ChatUiState) {
+    override fun render(state: ChatUiState) {
         val empty = state.items.isEmpty()
         binding.chatProgress.setVisible(!state.loaded && state.failure == null && empty)
         binding.chatError.setVisible(!state.loaded && state.failure != null && empty)
         binding.chatErrorText.text = state.failure?.userMessage(requireContext())
         binding.chatEmpty.setVisible(state.loaded && empty)
+        renderComposer(state)
         renderReply(state)
         renderPending(state)
+        renderRecording(state.recording)
         val follow = isAtEnd() || state.items.size > lastCount && state.items.lastOrNull().isMine()
         lastCount = state.items.size
         adapter.submitList(state.items) { afterSubmit(follow) }
+    }
+
+    override fun onEvent(event: ChatEvent) {
+        when (event) {
+            is ChatEvent.Failure -> showFailure(event.failure)
+            is ChatEvent.Rejected -> showError(chatErrorText(event.key))
+        }
     }
 
     override fun onStart() {
@@ -129,44 +122,37 @@ class ChatFragment : BaseFragment<FragmentChatBinding>(FragmentChatBinding.Compa
         (it as? ChatItem.Bubble)?.messageId == messageId || (it as? ChatItem.Alert)?.messageId == messageId
     }.takeIf { it >= 0 }
 
-    internal fun openLink(url: String) {
-        runCatching { startActivity(Intent(Intent.ACTION_VIEW, url.toUri())) }
-    }
-
-    override fun onBindingDestroyed() {
-        recorder.cancel()
-        player.release()
-        recordingTicker?.cancel()
-    }
-
-    private fun renderSendButton() {
-        val canSend = !binding.chatInput.text.isNullOrBlank() || viewModel.state.value.pending.isNotEmpty()
-        binding.chatSend.setVisible(canSend)
-        binding.chatMic.setVisible(!canSend)
+    private fun renderComposer(state: ChatUiState) = with(binding) {
+        if (chatInput.text?.toString() != state.draft) chatInput.setText(state.draft)
+        chatSend.setVisible(state.canSend)
+        chatMic.setVisible(!state.canSend)
     }
 
     private fun renderPending(state: ChatUiState) {
         binding.chatPendingScroll.setVisible(state.pending.isNotEmpty())
         binding.chatPending.removeAllViews()
         state.pending.forEach { binding.chatPending.addView(pendingChip(it)) }
-        renderSendButton()
+    }
+
+    private fun renderRecording(recording: RecordingState) = with(binding) {
+        val active = recording as? RecordingState.Active
+        chatRecording.setVisible(active != null)
+        chatCompose.setVisible(active == null)
+        chatMic.isPressed = active != null
+        active?.let { chatRecordingTime.text = DateUtils.formatElapsedTime(it.elapsedMillis / MILLIS_PER_SECOND) }
     }
 
     private fun pendingChip(attachment: LocalAttachment): Chip = Components.inputChip(binding.chatPending).apply {
         text = pendingLabel(attachment)
         isCloseIconVisible = true
         closeIconContentDescription = getString(R.string.chat_attachment_remove, text)
-        setOnCloseIconClickListener { viewModel.removePending(attachment.path) }
+        setOnCloseIconClickListener { dispatch(ChatIntent.RemovePending(attachment.path)) }
     }
 
     private fun pendingLabel(attachment: LocalAttachment): String = when (attachment.kind) {
         ChatAttachmentKind.IMAGE -> getString(R.string.chat_attach_photo)
         ChatAttachmentKind.VOICE -> getString(R.string.chat_voice_label)
         ChatAttachmentKind.FILE -> attachment.name
-    }
-
-    private fun showAttachMenu(anchor: View) {
-        HomePopupMenu(anchor, R.menu.chat_attach, ::onAttachChoice).show()
     }
 
     private fun onAttachChoice(itemId: Int) {
@@ -180,71 +166,8 @@ class ChatFragment : BaseFragment<FragmentChatBinding>(FragmentChatBinding.Compa
         val granted = ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.RECORD_AUDIO) ==
             PackageManager.PERMISSION_GRANTED
         if (!granted) return false.also { askMicrophone.launch(Manifest.permission.RECORD_AUDIO) }
-        if (!recorder.start(viewLifecycleOwner.lifecycleScope)) return false
-        player.release()
-        showRecording(true)
-        recordingTicker = viewLifecycleOwner.lifecycleScope.launch { tickRecording() }
-        return true
-    }
-
-    private suspend fun tickRecording() {
-        while (recorder.recording) {
-            val elapsed = recorder.elapsedMillis()
-            binding.chatRecordingTime.text = DateUtils.formatElapsedTime(elapsed / MILLIS_PER_SECOND)
-            if (elapsed >= VoiceRecorder.MAX_MILLIS) finishRecording(send = true)
-            delay(RECORDING_TICK_MILLIS)
-        }
-    }
-
-    internal fun finishRecording(send: Boolean) {
-        recordingTicker?.cancel()
-        showRecording(false)
-        if (!send) return recorder.cancel()
-        viewLifecycleOwner.lifecycleScope.launch { recorder.stop()?.let(viewModel::sendVoice) }
-    }
-
-    private fun showRecording(recording: Boolean) {
-        binding.chatRecording.setVisible(recording)
-        binding.chatCompose.setVisible(!recording)
-        binding.chatMic.isPressed = recording
-        if (recording) binding.chatRecordingTime.text = DateUtils.formatElapsedTime(0)
-    }
-
-    internal fun toggleVoice(media: BubbleMedia) {
-        viewLifecycleOwner.lifecycleScope.launch {
-            viewModel.mediaFile(media)?.let { player.toggle(viewLifecycleOwner.lifecycleScope, media.key, it) }
-        }
-    }
-
-    internal fun loadWave(media: BubbleMedia, target: VoiceWaveView) {
-        target.setLevels(null)
-        viewLifecycleOwner.lifecycleScope.launch { showWave(media, target) }
-    }
-
-    private suspend fun showWave(media: BubbleMedia, target: VoiceWaveView) {
-        val levels = viewModel.mediaFile(media)?.let { withContext(Dispatchers.IO) { VoiceLevels.of(it) } }
-        if (target.tag == media.key) target.setLevels(levels)
-    }
-
-    internal fun loadImage(media: BubbleMedia, target: ImageView) {
-        target.tag = media.key
-        target.setImageDrawable(null)
-        viewLifecycleOwner.lifecycleScope.launch { showImage(media, target) }
-    }
-
-    private suspend fun showImage(media: BubbleMedia, target: ImageView) {
-        val bitmap = viewModel.mediaFile(media)?.let { decodeThumbnail(it, target.layoutParams.width) }
-        if (target.tag == media.key) target.setImageBitmap(bitmap)
-    }
-
-    internal fun openImage(media: BubbleMedia) {
-        viewLifecycleOwner.lifecycleScope.launch { viewModel.mediaFile(media)?.let(::showFullImage) }
-    }
-
-    private fun showFullImage(file: File) {
-        val view = ImageView(requireContext()).apply { adjustViewBounds = true }
-        view.setImageBitmap(decodeThumbnail(file, resources.displayMetrics.widthPixels))
-        MaterialAlertDialogBuilder(requireContext()).setView(view).show()
+        dispatch(ChatIntent.StartRecording)
+        return viewModel.state.value.recording is RecordingState.Active
     }
 
     private fun renderReply(state: ChatUiState) {
@@ -252,14 +175,12 @@ class ChatFragment : BaseFragment<FragmentChatBinding>(FragmentChatBinding.Compa
         binding.chatReplyBar.setVisible(quote != null)
         quote ?: return
         binding.chatReplyAuthor.setText(chatAuthor(quote.role))
-        binding.chatReplyText.text = ChatMarkdown(plainStyle()).render(quote.text).toString()
+        binding.chatReplyText.text = ChatMarkdown(MarkdownStyle(0, 0, 0, 0)).render(quote.text).toString()
     }
 
-    private fun plainStyle(): MarkdownStyle = MarkdownStyle(0, 0, 0, 0)
-
-    private fun send() {
-        val text = binding.chatInput.text?.toString().orEmpty()
-        if (viewModel.send(text)) binding.chatInput.text = null
+    internal fun replyTo(bubble: ChatItem.Bubble) {
+        dispatch(ChatIntent.ReplyTo(bubble))
+        binding.chatInput.requestFocus()
     }
 
     internal fun isAtEnd(): Boolean {
@@ -274,9 +195,8 @@ class ChatFragment : BaseFragment<FragmentChatBinding>(FragmentChatBinding.Compa
     }
 
     private fun onSwipeReply(position: Int) {
-        adapter.bubbleAt(position)?.takeIf { it.quotable }?.let(viewModel::replyTo)
+        adapter.bubbleAt(position)?.takeIf { it.quotable }?.let(::replyTo)
         adapter.notifyItemChanged(position)
-        binding.chatInput.requestFocus()
     }
 
     internal fun showMenu(bubble: ChatItem.Bubble, anchor: View) {
@@ -290,10 +210,10 @@ class ChatFragment : BaseFragment<FragmentChatBinding>(FragmentChatBinding.Compa
 
     private fun onMenuAction(bubble: ChatItem.Bubble, itemId: Int) {
         when (itemId) {
-            R.id.chat_action_reply -> viewModel.replyTo(bubble).also { binding.chatInput.requestFocus() }
+            R.id.chat_action_reply -> replyTo(bubble)
             R.id.chat_action_copy -> copy(bubble.text)
-            R.id.chat_action_retry -> viewModel.retry(bubble)
-            R.id.chat_action_delete -> viewModel.discard(bubble)
+            R.id.chat_action_retry -> dispatch(ChatIntent.Retry(bubble))
+            R.id.chat_action_delete -> dispatch(ChatIntent.Discard(bubble))
             else -> Unit
         }
     }
@@ -304,25 +224,43 @@ class ChatFragment : BaseFragment<FragmentChatBinding>(FragmentChatBinding.Compa
         showMessage(R.string.chat_copied)
     }
 
+    internal fun loadImage(media: BubbleMedia, target: ImageView, width: Int) {
+        target.tag = media.key
+        target.setImageDrawable(null)
+        viewLifecycleOwner.lifecycleScope.launch { viewModel.thumbnail(media, width).let { if (target.tag == media.key) target.setImageBitmap(it) } }
+    }
+
+    internal fun loadWave(media: BubbleMedia, target: VoiceWaveView) {
+        target.setLevels(null)
+        viewLifecycleOwner.lifecycleScope.launch { viewModel.waveLevels(media).let { if (target.tag == media.key) target.setLevels(it) } }
+    }
+
+    internal fun openImage(media: BubbleMedia) {
+        val view = ImageView(requireContext()).apply { adjustViewBounds = true }
+        loadImage(media, view, resources.displayMetrics.widthPixels)
+        MaterialAlertDialogBuilder(requireContext()).setView(view).show()
+    }
+
+    internal fun openLink(url: String) {
+        runCatching { startActivity(Intent(Intent.ACTION_VIEW, url.toUri())) }
+    }
+
     private fun ChatItem?.isMine(): Boolean = (this as? ChatItem.Bubble)?.mine == true
 
     private inner class Callbacks : ChatAdapterCallbacks() {
         override fun onBubbleMenu(bubble: ChatItem.Bubble, anchor: View) = showMenu(bubble, anchor)
 
-        override fun onRetry(bubble: ChatItem.Bubble) = viewModel.retry(bubble)
+        override fun onRetry(bubble: ChatItem.Bubble) = dispatch(ChatIntent.Retry(bubble))
 
-        override fun onVoice(media: BubbleMedia) = toggleVoice(media)
+        override fun onVoice(media: BubbleMedia) = dispatch(ChatIntent.ToggleVoice(media))
 
         override fun onImage(media: BubbleMedia) = openImage(media)
 
-        override fun bindImage(media: BubbleMedia, target: ImageView) = loadImage(media, target)
+        override fun bindImage(media: BubbleMedia, target: ImageView) = loadImage(media, target, target.layoutParams.width)
 
         override fun bindWave(media: BubbleMedia, target: VoiceWaveView) = loadWave(media, target)
 
-        override fun onAlertReply(alert: ChatItem.Alert) {
-            viewModel.replyTo(alert.asBubble())
-            binding.chatInput.requestFocus()
-        }
+        override fun onAlertReply(alert: ChatItem.Alert) = replyTo(alert.asBubble())
 
         override fun onLink(url: String) = openLink(url)
     }
@@ -330,22 +268,21 @@ class ChatFragment : BaseFragment<FragmentChatBinding>(FragmentChatBinding.Compa
     private inner class Recording : RecordGesture {
         override fun onRecordStart(): Boolean = startRecording()
 
-        override fun onRecordSend() = finishRecording(send = true)
+        override fun onRecordSend() = dispatch(ChatIntent.FinishRecording(send = true))
 
-        override fun onRecordCancel() = finishRecording(send = false)
+        override fun onRecordCancel() = dispatch(ChatIntent.FinishRecording(send = false))
     }
 
     private inner class ScrollWatcher : RecyclerView.OnScrollListener() {
         override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
             binding.chatScrollDown.setVisible(!isAtEnd())
             val first = layoutManager.findFirstVisibleItemPosition()
-            if (first in 0..OLDER_THRESHOLD && viewModel.state.value.hasMore) viewModel.loadOlder()
+            if (first in 0..OLDER_THRESHOLD) dispatch(ChatIntent.LoadOlder)
         }
     }
 
     private companion object {
         const val OLDER_THRESHOLD = 3
-        const val RECORDING_TICK_MILLIS = 250L
         const val MILLIS_PER_SECOND = 1000L
         val FILE_TYPES = arrayOf("text/plain", "text/markdown", "text/csv", "application/json")
     }
@@ -389,11 +326,4 @@ internal class SwipeToReply(
     private companion object {
         const val SWIPE_THRESHOLD = 0.25f
     }
-}
-
-internal fun decodeThumbnail(file: File, targetWidth: Int): Bitmap? {
-    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-    BitmapFactory.decodeFile(file.path, bounds)
-    val sample = generateSequence(1) { it * 2 }.first { bounds.outWidth / it <= maxOf(targetWidth, 1) * 2 }
-    return BitmapFactory.decodeFile(file.path, BitmapFactory.Options().apply { inSampleSize = sample })
 }
