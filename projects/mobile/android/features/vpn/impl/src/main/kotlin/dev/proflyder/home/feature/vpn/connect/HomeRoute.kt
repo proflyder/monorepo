@@ -23,10 +23,10 @@ internal fun routeOpen(route: HomeRoute, connection: VpnConnection, switching: B
 @Inject
 internal class VpnRouteCondition(
     private val coordinator: Lazy<AutoConnectCoordinator>,
-    controller: VpnController,
-    tunnel: TunnelSwitch,
+    private val controller: Lazy<VpnController>,
+    private val tunnel: Lazy<TunnelSwitch>,
 ) : RouteCondition {
-    override val ready: Flow<Boolean> =
-        combine(flow { emitAll(coordinator.value.route) }, controller.connection, tunnel.switching, ::routeOpen)
-            .distinctUntilChanged()
+    override val ready: Flow<Boolean> = flow {
+        emitAll(combine(coordinator.value.route, controller.value.connection, tunnel.value.switching, ::routeOpen))
+    }.distinctUntilChanged()
 }
