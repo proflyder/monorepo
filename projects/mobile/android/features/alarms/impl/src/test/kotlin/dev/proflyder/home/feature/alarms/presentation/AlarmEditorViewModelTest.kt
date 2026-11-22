@@ -1,5 +1,9 @@
 package dev.proflyder.home.feature.alarms.presentation
 
+import dev.proflyder.home.core.navigation.Route
+import dev.proflyder.home.core.presentation.RouteNotice
+import dev.proflyder.home.feature.alarms.AlarmEditorDestination
+import dev.proflyder.home.feature.alarms.impl.R
 import androidx.lifecycle.SavedStateHandle
 import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.core.presentation.EditorDraftSession
@@ -72,7 +76,16 @@ class AlarmEditorViewModelTest {
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { bus.eventsOf<AlarmsChanged>().collect { changed += it } }
         val viewModel = viewModel(SavedStateHandle(), alarmId = "a1")
         viewModel.dispatch(AlarmEditorIntent.Save)
-        assertEquals(AlarmEditorEvent.Completed(AlarmEditorCompletion.SAVED), viewModel.events.first())
+        assertEquals(AlarmEditorEvent.Completed(RouteNotice(R.string.alarms_saved)), viewModel.events.first())
         assertEquals(listOf(AlarmsChanged), changed)
+    }
+
+    @Test
+    fun creatingAnAlarmOffersToOpenIt() = runTest {
+        val viewModel = viewModel(SavedStateHandle())
+        viewModel.dispatch(AlarmEditorIntent.Save)
+        val notice = (viewModel.events.first() as AlarmEditorEvent.Completed).notice
+        val created = checkNotNull(viewModel.state.value.existing).id
+        assertEquals(Route.Screen(AlarmEditorDestination(created)), notice.route)
     }
 }

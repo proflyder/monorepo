@@ -1,5 +1,6 @@
 package dev.proflyder.home.feature.push.presentation
 
+import dev.proflyder.home.core.presentation.bindText
 import android.os.Bundle
 import com.google.android.material.button.MaterialButton
 import dev.proflyder.home.core.designsystem.ListRow

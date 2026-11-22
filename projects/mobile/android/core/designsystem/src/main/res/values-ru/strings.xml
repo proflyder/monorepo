@@ -55,5 +55,7 @@
     <string name="ds_action_pause">Пауза</string>
     <string name="ds_action_resume">Продолжить</string>
     <string name="ds_action_open_connection">Открыть «Подключение»</string>
+    <string name="ds_action_open">Открыть</string>
+    <string name="ds_action_done">Готово</string>
     <string name="ds_product_name">Дом</string>
 </resources>

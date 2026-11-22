@@ -15,6 +15,7 @@ import dev.proflyder.home.core.presentation.AppEventBus
 import dev.proflyder.home.core.presentation.EditorDraftCodec
 import dev.proflyder.home.core.presentation.EditorDraftSession
 import dev.proflyder.home.core.presentation.EditorStatus
+import dev.proflyder.home.core.presentation.RouteNotice
 import dev.proflyder.home.core.presentation.StateViewModel
 import dev.proflyder.home.core.ui.SavedStateViewModelFactory
 import dev.proflyder.home.feature.alarms.AlarmDraft
@@ -69,7 +70,7 @@ internal sealed interface AlarmEditorEvent {
     data class PickDate(val selected: LocalDate) : AlarmEditorEvent
     data class PickRepeat(val repeat: RepeatKind, val days: Set<Int>) : AlarmEditorEvent
     data object ConfirmDelete : AlarmEditorEvent
-    data class Completed(val completion: AlarmEditorCompletion) : AlarmEditorEvent
+    data class Completed(val notice: RouteNotice) : AlarmEditorEvent
     data class OpenRoute(val route: Route) : AlarmEditorEvent
 }
 
@@ -93,7 +94,7 @@ internal class AlarmEditorViewModel(
 ) {
     init {
         session.restored?.takeIf { it.existingId == null }?.let { session.adoptRestoredCreate(it.toAlarmDraft()) }
-        session.pendingCompletion?.let { emit(AlarmEditorEvent.Completed(it)) }
+        session.pendingCompletion?.let { emit(AlarmEditorEvent.Completed(noticeFor(it, created = null))) }
         start(alarmId)
     }
 
@@ -153,13 +154,14 @@ internal class AlarmEditorViewModel(
         if (current.status.saving) return
         val draft = current.toAlarmDraft()
         updateState { copy(status = status.savingStarted()) }
-        launch {
-            val result = session.submit(draft.takeIf { current.existing == null }) { key ->
-                saveAlarm(current.existing, draft, key, defaultLabel)
-            }
-            if (result is Outcome.Success) updateState { copy(existing = result.value) }
-            finish(result, AlarmEditorCompletion.SAVED)
-        }
+        launch { submit(current.existing, draft) }
+    }
+
+    private suspend fun submit(existing: Schedule?, draft: AlarmDraft) {
+        val result = session.submit(draft.takeIf { existing == null }) { key -> saveAlarm(existing, draft, key, defaultLabel) }
+        val created = (result as? Outcome.Success)?.value?.id?.takeIf { existing == null }
+        if (result is Outcome.Success) updateState { copy(existing = result.value) }
+        finish(result, AlarmEditorCompletion.SAVED, created)
     }
 
     private fun delete() {
@@ -169,14 +171,19 @@ internal class AlarmEditorViewModel(
         launch { finish(repository.delete(existing.id), AlarmEditorCompletion.DELETED) }
     }
 
-    private fun finish(result: Outcome<*>, completion: AlarmEditorCompletion) {
+    private fun finish(result: Outcome<*>, completion: AlarmEditorCompletion, created: String? = null) {
         val failure = (result as? Outcome.Failure)?.failure
         updateState { copy(status = status.settled(failure)) }
         if (failure != null) return
         session.persist(currentState.toEditorDraft())
         session.complete(completion)
         bus.publish(AlarmsChanged)
-        emit(AlarmEditorEvent.Completed(completion))
+        emit(AlarmEditorEvent.Completed(noticeFor(completion, created)))
+    }
+
+    private fun noticeFor(completion: AlarmEditorCompletion, created: String?): RouteNotice = when (completion) {
+        AlarmEditorCompletion.SAVED -> RouteNotice(R.string.alarms_saved, created?.let { Route.Screen(AlarmEditorDestination(it)) })
+        AlarmEditorCompletion.DELETED -> RouteNotice(R.string.alarms_deleted)
     }
 }
 

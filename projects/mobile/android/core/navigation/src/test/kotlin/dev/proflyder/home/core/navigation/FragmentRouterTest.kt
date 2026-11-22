@@ -1,5 +1,7 @@
 package dev.proflyder.home.core.navigation
 
+import dev.proflyder.home.core.testing.FakeAppLogger
+
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -452,6 +454,7 @@ class TestActivity : FragmentActivity() {
             fragmentManager = supportFragmentManager,
             containerId = CONTAINER_ID,
             registry = TEST_REGISTRY,
+            logger = FakeAppLogger(),
             savedState = FragmentRouter.RouterSavedState.from(savedInstanceState),
         )
         onBackPressedDispatcher.addCallback(

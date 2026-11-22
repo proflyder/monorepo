@@ -8,6 +8,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import dev.proflyder.home.core.model.AppLogger
 import dev.proflyder.home.core.navigation.AppChromeState
 import dev.proflyder.home.core.navigation.DeepLinkResolver
 import dev.proflyder.home.core.navigation.FeatureRegistry
@@ -44,6 +45,9 @@ class MainActivity : AppCompatActivity(), NavigatorHost, FailureNoticePolicyProv
     @Inject
     internal lateinit var deepLinks: DeepLinkResolver
 
+    @Inject
+    internal lateinit var logger: AppLogger
+
     override val navigator: Navigator get() = router
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -56,6 +60,7 @@ class MainActivity : AppCompatActivity(), NavigatorHost, FailureNoticePolicyProv
             fragmentManager = supportFragmentManager,
             containerId = R.id.fragment_container,
             registry = features,
+            logger = logger,
             savedState = FragmentRouter.RouterSavedState.from(savedInstanceState),
         )
         lifecycle.addObserver(router)

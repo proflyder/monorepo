@@ -291,6 +291,28 @@ platform/android/         Bazel macros, Metro wiring, APK gate, signing, detekt 
   `Set<DeepLinkSource>`. Home quick-action tiles of other features come from
   `Set<QuickTileProvider>`.
 
+### Shared infrastructure
+
+- Logging goes through `AppLogger` (`core/model`): `DebugAppLogger` or
+  `ReleaseAppLogger` (warn and above) by `AppEnvironment`, `FakeAppLogger` in
+  tests. detekt forbids `android.util.Log` outside `LogcatAppLogger`.
+- `AnalyticsTracker` is a `CompositeAnalyticsTracker` over
+  `Set<AnalyticsBackend>`; each backend declares the environments it runs in
+  (today only `LogAnalyticsBackend` for debug). Every resumed `TrackedScreen`
+  (`ScreenFragment`, `ScreenBottomSheet`) is reported automatically.
+- Bottom sheets with their own state extend `ScreenBottomSheet<VB, S, I, E>`
+  (same model as `ScreenFragment`, `by screenViewModel()`). Plain choices use
+  `OptionsSheet` and `WheelSheet` from `core/designsystem`; results come back
+  through the Fragment Result API.
+- Sectioned lists: the adapter implements `SectionedAdapter`; decorations
+  `StickySectionHeaders().attachTo(list)` (a tap on the pinned header goes to
+  the header), `GroupDividers` (only between rows of a group) and `GroupCards`
+  (rounded first and last row of a group).
+- A notice with an action is a `RouteNotice(message, route)` shown by
+  `showNotice`: a snackbar with "Open" that opens the typed `Route`.
+- Back handlers are registered with `addBackCallback`; `backDispatcher`
+  prefers the enclosing dialog over the activity.
+
 ### DI
 
 Metro's compiler plugin runs on every Kotlin Android compilation

@@ -1,6 +1,11 @@
 package dev.proflyder.home.core.runtime
 
+import dev.proflyder.home.core.model.AnalyticsBackend
+import dev.proflyder.home.core.model.AnalyticsTracker
+import dev.proflyder.home.core.model.AppEnvironment
+import dev.proflyder.home.core.model.AppLogger
 import dev.proflyder.home.core.model.Clock
+import dev.proflyder.home.core.model.CompositeAnalyticsTracker
 import dev.proflyder.home.core.model.ServerClock
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.BindingContainer
@@ -18,6 +23,9 @@ import kotlinx.coroutines.SupervisorJob
 abstract class RuntimeBindings {
     @Multibinds(allowEmpty = true)
     abstract fun startables(): Set<AppStartable>
+
+    @Multibinds(allowEmpty = true)
+    abstract fun analyticsBackends(): Set<AnalyticsBackend>
 
     companion object {
         @Provides
@@ -39,5 +47,22 @@ abstract class RuntimeBindings {
         @Provides
         @SingleIn(AppScope::class)
         fun provideServerClock(clock: Clock): ServerClock = ServerClock(clock)
+
+        @Provides
+        @SingleIn(AppScope::class)
+        fun provideEnvironment(version: AppVersion): AppEnvironment =
+            if (version.debuggable) AppEnvironment.DEBUG else AppEnvironment.RELEASE
+
+        @Provides
+        @SingleIn(AppScope::class)
+        fun provideLogger(environment: AppEnvironment): AppLogger = when (environment) {
+            AppEnvironment.DEBUG -> DebugAppLogger()
+            AppEnvironment.RELEASE -> ReleaseAppLogger()
+        }
+
+        @Provides
+        @SingleIn(AppScope::class)
+        fun provideAnalytics(backends: Set<AnalyticsBackend>, environment: AppEnvironment): AnalyticsTracker =
+            CompositeAnalyticsTracker(backends, environment)
     }
 }

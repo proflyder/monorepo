@@ -1,5 +1,7 @@
 package dev.proflyder.home.feature.reminders.presentation
 
+import dev.proflyder.home.core.presentation.bindSwitch
+import dev.proflyder.home.core.presentation.bindText
 import dev.proflyder.home.core.designsystem.R as DesignR
 import android.os.Bundle
 import dev.proflyder.home.core.presentation.ScreenFragment

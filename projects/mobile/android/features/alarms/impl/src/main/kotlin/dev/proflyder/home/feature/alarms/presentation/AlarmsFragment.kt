@@ -1,5 +1,6 @@
 package dev.proflyder.home.feature.alarms.presentation
 
+import dev.proflyder.home.core.presentation.addBackCallback
 import dev.proflyder.home.core.designsystem.R as DesignR
 import android.os.Bundle
 import androidx.activity.OnBackPressedCallback
@@ -51,7 +52,7 @@ internal class AlarmsFragment :
         binding.alarmsRetry.setOnClickListener { dispatch(AlarmsIntent.Refresh(RefreshMode.HARD)) }
         binding.alarmsOpenConnection.setOnClickListener { dispatch(AlarmsIntent.OpenConnection) }
         binding.alarmsAdd.setOnClickListener { dispatch(AlarmsIntent.Add) }
-        requireActivity().onBackPressedDispatcher.addCallback(viewLifecycleOwner, exitSelection)
+        addBackCallback(exitSelection)
     }
 
     override fun onBindingDestroyed() {

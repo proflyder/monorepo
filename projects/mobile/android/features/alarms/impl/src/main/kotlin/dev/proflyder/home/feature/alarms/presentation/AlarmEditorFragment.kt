@@ -1,9 +1,13 @@
 package dev.proflyder.home.feature.alarms.presentation
 
+import dev.proflyder.home.core.presentation.bindSwitch
+import dev.proflyder.home.core.presentation.bindText
 import dev.proflyder.home.core.designsystem.R as DesignR
 import android.os.Bundle
 import dev.proflyder.home.core.model.RepeatKind
+import dev.proflyder.home.core.presentation.RouteNotice
 import dev.proflyder.home.core.presentation.ScreenFragment
+import dev.proflyder.home.core.presentation.showNotice
 import dev.proflyder.home.core.presentation.SwitchBinder
 import dev.proflyder.home.core.presentation.TextBinder
 import dev.proflyder.home.core.ui.injectedViewModels
@@ -13,7 +17,6 @@ import dev.proflyder.home.core.ui.showDatePicker
 import dev.proflyder.home.core.ui.showTimePicker
 import dev.proflyder.home.core.ui.userMessage
 import dev.proflyder.home.feature.alarms.ALARM_QUICK_OFFSETS_MINUTES
-import dev.proflyder.home.feature.alarms.AlarmEditorCompletion
 import dev.proflyder.home.feature.alarms.impl.R
 import dev.proflyder.home.feature.alarms.impl.databinding.FragmentAlarmEditorBinding
 import java.time.LocalDate
@@ -84,7 +87,7 @@ internal class AlarmEditorFragment :
             }
             is AlarmEditorEvent.PickRepeat -> openRepeatSheet(event.repeat, event.days)
             AlarmEditorEvent.ConfirmDelete -> confirmDelete()
-            is AlarmEditorEvent.Completed -> complete(event.completion)
+            is AlarmEditorEvent.Completed -> complete(event.notice)
             is AlarmEditorEvent.OpenRoute -> navigate(event.route)
         }
     }
@@ -100,12 +103,8 @@ internal class AlarmEditorFragment :
         }
     }
 
-    private fun complete(completion: AlarmEditorCompletion) {
-        val message = when (completion) {
-            AlarmEditorCompletion.SAVED -> R.string.alarms_saved
-            AlarmEditorCompletion.DELETED -> R.string.alarms_deleted
-        }
-        showMessage(message)
+    private fun complete(notice: RouteNotice) {
+        showNotice(notice)
         dispatch(AlarmEditorIntent.CompletionShown)
     }
 }

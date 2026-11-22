@@ -12,12 +12,15 @@ import com.google.android.material.snackbar.Snackbar
 
 enum class NoticeKind { Info, Error }
 
+data class NoticeAction(val label: CharSequence, val onClick: () -> Unit)
+
 object Notices {
     fun show(
         view: View,
         message: CharSequence,
         kind: NoticeKind = NoticeKind.Info,
         long: Boolean = false,
+        action: NoticeAction? = null,
     ): Snackbar {
         val context = view.context
         val snackbar = Snackbar.make(
@@ -47,6 +50,7 @@ object Notices {
         text.setCompoundDrawablesRelativeWithIntrinsicBounds(icon(kind, accent, view), null, null, null)
         text.compoundDrawablePadding = (context.resources.displayMetrics.density * 12).toInt()
         view.rootView.findViewById<View>(R.id.home_notice_anchor)?.let { snackbar.anchorView = it }
+        action?.let { snackbar.setAction(it.label) { _ -> it.onClick() }.setActionTextColor(accent) }
         snackbar.animationMode = BaseTransientBottomBar.ANIMATION_MODE_SLIDE
         NoticeSwipeDismiss(container, snackbar::dismiss).attach()
         snackbar.show()

@@ -1,11 +1,13 @@
 package dev.proflyder.home.core.navigation
 
 import android.os.Bundle
-import android.util.Log
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentManager
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
+import dev.proflyder.home.core.model.AppLogger
+import dev.proflyder.home.core.model.debug
+import dev.proflyder.home.core.model.warn
 import dev.proflyder.home.core.nav.PendingTransitions
 import dev.proflyder.home.core.nav.TabRouteStack
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -28,6 +30,7 @@ class FragmentRouter(
     private val fragmentManager: FragmentManager,
     private val containerId: Int,
     private val registry: FeatureRegistry,
+    private val logger: AppLogger,
     savedState: RouterSavedState? = null,
 ) : Navigator, DefaultLifecycleObserver {
     private val initialEntry = registry.tabs().firstOrNull()
@@ -76,7 +79,7 @@ class FragmentRouter(
     override fun selectTab(featureId: String) {
         val entry = registry.entry(featureId)
         if (entry == null) {
-            Log.w(TAG, "ignoring unknown feature tab")
+            logger.warn(TAG, "ignoring unknown feature tab")
             return
         }
         if (!entry.isTab) {
@@ -96,11 +99,11 @@ class FragmentRouter(
     override fun navigate(destination: Destination) {
         val entry = registry.entryFor(destination)
         if (entry == null || !entry.supports(destination)) {
-            Log.w(TAG, "ignoring unregistered destination")
+            logger.warn(TAG, "ignoring unregistered destination")
             return
         }
         if (enqueue(Command.Push(destination))) return
-        Log.w(TAG, "navigation queue full; dropped new destination")
+        logger.warn(TAG, "navigation queue full; dropped new destination")
     }
 
     override fun openRoute(route: String): Boolean {
@@ -119,7 +122,7 @@ class FragmentRouter(
         if (!resumed || fragmentManager.isStateSaved) {
             if (!canNavigateBack()) return false
             if (!enqueue(Command.Back)) {
-                Log.w(TAG, "navigation queue full; dropped queued Back")
+                logger.warn(TAG, "navigation queue full; dropped queued Back")
             }
             return true
         }
@@ -220,9 +223,7 @@ class FragmentRouter(
         titlesByRoute.putIfAbsent(rootRoute, tabEntry.titleRes(tabEntry.rootDestination))
         titlesByRoute.putIfAbsent(currentTag, currentEntry.titleRes)
         updateDerivedState()
-        if (Log.isLoggable(TAG, Log.DEBUG)) {
-            Log.d(TAG, "restored ${routeState.currentStack()}")
-        }
+        logger.debug(TAG, "restored ${routeState.currentStack()}")
         return true
     }
 
@@ -254,14 +255,14 @@ class FragmentRouter(
             restoreFromFragmentManager()
         } else {
             updateDerivedState()
-            Log.d(TAG, "back to ${routeState.currentRoute()}")
+            logger.debug(TAG, "back to ${routeState.currentRoute()}")
         }
         return true
     }
 
     private fun enqueue(command: Command): Boolean {
         if (!pending.offer(command)) {
-            Log.w(TAG, "navigation queue full; rejected new command")
+            logger.warn(TAG, "navigation queue full; rejected new command")
             return false
         }
         drainIfPossible()

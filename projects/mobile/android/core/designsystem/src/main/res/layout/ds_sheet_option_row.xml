@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="@dimen/ds_control_l"
+    android:background="?attr/selectableItemBackground"
+    android:clickable="true"
+    android:focusable="true"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:paddingStart="@dimen/ds_space_xl"
+    android:paddingEnd="@dimen/ds_space_xl"
+    tools:ignore="Overdraw,SelectableText">
+
+    <ImageView
+        android:id="@+id/ds_sheet_option_icon"
+        android:layout_width="@dimen/ds_icon_m"
+        android:layout_height="@dimen/ds_icon_m"
+        android:layout_marginEnd="@dimen/ds_space_l"
+        android:importantForAccessibility="no"
+        app:tint="?attr/colorOnSurfaceVariant" />
+
+    <TextView
+        android:id="@+id/ds_sheet_option_label"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:textAppearance="?attr/textAppearanceBodyLarge"
+        android:textColor="?attr/colorOnSurface" />
+
+    <ImageView
+        android:id="@+id/ds_sheet_option_check"
+        android:layout_width="@dimen/ds_icon_m"
+        android:layout_height="@dimen/ds_icon_m"
+        android:importantForAccessibility="no"
+        android:src="@drawable/ds_ic_check"
+        app:tint="?attr/colorPrimary" />
+</LinearLayout>
