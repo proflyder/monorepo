@@ -12,17 +12,11 @@ OpenBao (`secret/{k8s,ci,infra}/*`).
 
 ## Устройство
 
-```text
-projects/home/kubernetes/vaultwarden/
-  kustomization.yaml          Flux entry point (ресурсы ниже)
-  manifests/namespace.yaml
-  manifests/external-secrets.yaml   secret/k8s/vaultwarden/vaultwarden-admin → Secret vaultwarden-admin
-  manifests/network-policies.yaml   ingress 8080 только с узла/LAN; egress только DNS
-  manifests/vaultwarden.yaml        PVC local-retain 2Gi, Deployment (Recreate), Service
-  manifests/ingressroute.yaml       passwords.<home-domain> → vaultwarden:8080
-  test_deploy.py, test_cloudflare_dns.py
-  (DNS-запись создаётся вручную, см. «Деплой»)
-```
+Flux Kustomization `vaultwarden` (`kustomization.yaml` → `manifests/`):
+namespace, ExternalSecret, NetworkPolicies (ingress 8080 только с узла/LAN,
+egress только DNS), PVC `vaultwarden-data` (`local-retain` 2Gi, `keep` +
+`prune: disabled`), Deployment (`Recreate`, один SQLite writer), Service,
+IngressRoute.
 
 - Образ `docker.io/vaultwarden/server` по digest (`versions.sh`), non-root
   (65534), read-only rootfs, порт 8080, WebSocket-уведомления на том же порту.
@@ -64,14 +58,7 @@ mise run kubectl -- -n vaultwarden get pod,pvc,externalsecret
 Обновление версии — новый digest в `versions.sh` **и** в
 `manifests/vaultwarden.yaml` (тест сверяет их), затем merge.
 
-DNS-запись `passwords.<home-domain>` → узел K3s создаётся вручную:
-
-```bash
-mise run secrets:file home/vpn/cloudflare.env
-python3 projects/home/kubernetes/cloudflare_dns.py \
-  secrets/home/vpn/cloudflare.env passwords.<home-domain> <node-lan-ip>
-mise run secrets:clean
-```
+DNS-запись `passwords.<home-domain>` — вручную (`cloudflare_dns.py`, `../README.md`).
 
 ## Первый вход
 
@@ -87,8 +74,8 @@ mise run secrets:clean
 `sync_openbao.py` копирует все пути `secret/{ci,k8s,infra}/*` в папку `OpenBao`:
 Secure Note `openbao:<path>` (короткие значения — скрытые поля, длинные —
 вложения), отдельные SSH key items `ssh:infra/ssh/...` для SSH-агента
-Bitwarden и `openbao:bootstrap` (operator token, recovery keys, seal key из
-`secrets/openbao/`). Идемпотентно (поле `_digest`), удалённые в OpenBao записи
+Bitwarden и `openbao:bootstrap` (operator token; recovery keys и seal key
+обновляются, только если лежат на диске — иначе item не трогается). Идемпотентно (поле `_digest`), удалённые в OpenBao записи
 только отмечаются. Править — в OpenBao, затем перезапуск:
 
 ```bash
@@ -105,20 +92,3 @@ bw lock
 `vaultwarden/files.tar` распаковать рядом, в корень PVC `vaultwarden-data`
 при остановленном Deployment (`kubectl scale --replicas=0`), затем
 `--replicas=1`.
-
-## Заметки к коду
-
-Пояснения, перенесённые из комментариев исходников (код комментариев не содержит, см. `AGENTS.md`).
-
-- `kustomization.yaml` — Vaultwarden, reconciled by Flux.
-- `manifests/external-secrets.yaml` — Vaultwarden secrets, materialised from OpenBao KV v2 by ESO.
-- `manifests/ingressroute.yaml` — Host suffix is substituted from the flux-settings Secret (`HOME_DOMAIN`).
-- `manifests/network-policies.yaml` — TEMPLATE: NODE_LAN_IP and LAN_CIDR come from the private ingress env.
-- `manifests/vaultwarden.yaml` — Vaultwarden: Bitwarden-compatible password manager (official Bitwarden apps, browser extensions and `bw` CLI point at https://passwords.<home-domain>/).
-  - Never let Kustomize pruning or a Helm uninstall delete the SQLite volume.
-  - SQLite is single-writer: never two pods against the same volume.
-- `sync_openbao.py` — Copy every OpenBao KV secret into Vaultwarden (one-way, idempotent).
-  - Recovery keys and the seal key now live only with the owner. Without them on disk the item is left alone, never rewritten without the keys.
-- `test_deploy.py` — Static contracts for the Vaultwarden manifests (no cluster needed).
-- `test_sync_openbao.py`
-  - Split so repository scanners do not mistake the fixture for a real key.

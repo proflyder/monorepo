@@ -8,15 +8,13 @@ LAN UI: `http://192.0.2.27:30300/` (NodePort `grafana-lan`); HTTPS
 Release `ha-observability` устанавливается в namespace monitoring, Grafana sidecar
 читает ConfigMaps только из monitoring и provision’ит JSON. Имена Pod не нужны.
 
-В репозитории пять дашбордов: K3s VM (файл `nettop.json` — историческое
-имя), cluster, runtime voice endpoints, infrastructure logs и currency bot.
+В репозитории пять дашбордов: K3s VM (файл `nettop.json`), cluster, runtime voice endpoints, infrastructure logs и currency bot.
 `currency-bot.json` показывает `currency_bot_rate` (USD/RUB → KZT, buy/sell),
 job runs/failures, parse duration, Telegram send failures, HTTP requests по
 route/status, а Loki-панели — объём логов по `level` и ERROR-строки
 `{namespace="currency-bot"}`. Диапазон по умолчанию — `now-7d` под retention
 Loki. Datasource UIDs: `prometheus`, `loki`; dashboard UIDs
-стабильны, UI-изменения provisioned dashboard не сохраняются. Экспериментальную
-копию можно экспортировать в JSON и принять обычным code review.
+стабильны, UI-изменения provisioned dashboard не сохраняются — менять JSON в Git.
 
 Release `ha-observability` (вместе с Prometheus/Loki/Alloy) reconciled Flux из
 этого каталога: HelmRelease `ha-observability` в
@@ -33,8 +31,7 @@ Alloy собирает CRI-логи kube-system/monitoring и `currency-bot`, и
 собственный Pod. Redaction вырезает Bearer/`token=`/`password=`/`api_key=`
 маркеры и Telegram bot token (`<digits>:<35 chars>`); контракт проверяется
 `projects/home-assistant/deploy/test_charts.py::AlloyPrivacy`.
-Тексты речи, запросы/ответы Hermes и приватные данные HA не собираются. Фильтр
-секретных маркеров проверен синтетическим Pod через полную цепочку Alloy→Loki.
+Тексты речи, запросы/ответы Hermes и приватные данные HA не собираются.
 Расширение списка источников требует отдельной проверки содержимого, одной
 redaction regex недостаточно. Алерты уходят во внешний канал — Telegram через
 `k8s/home-assistant/hermes-environment` (`TELEGRAM_BOT_TOKEN`,
@@ -45,4 +42,4 @@ redaction regex недостаточно. Алерты уходят во вне�
 
 Приложения не обязаны иметь нативный `/metrics`: TCP availability собирается
 health exporter’ом, host/container state — node-exporter/kubelet/kube-state-metrics.
-Полная STT/TTS/LLM latency instrumentation — отдельная последующая задача.
+STT/TTS/LLM latency не инструментирована (`docs/PENDING.md`).

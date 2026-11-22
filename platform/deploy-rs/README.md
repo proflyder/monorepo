@@ -1,47 +1,8 @@
-# home-deploy (Rust port)
+# home-deploy
 
-Rust implementation of the `home-deploy` deploy CLI. It is the executable
-contract: `platform/deploy/resolve.sh`, the CI image and the in-cluster Jobs all
-use `//platform/deploy-rs:home-deploy`. The former Go implementation has been
-removed; `testdata/frozen` keeps the captured Go/Python outputs as the parity
-fixtures (they are frozen data, not generated at test time).
-
-## Layout
-
-```text
-Cargo.toml            crate manifest (member of the root workspace)
-BUILD.bazel           rust_binary home-deploy, unit_tests, clippy, rustfmt, parity
-src/main.rs           process entry point
-src/lib.rs            shared usage text and module list
-src/cli.rs            clap definitions + Go-`flag` single-dash normalisation
-src/envfile.rs        strict `KEY=VALUE` parser and permissive `env get` lookup
-src/buildid.rs        `<revision>-<12 hex of sha256>`
-src/render.rs         literal `${KEY}` substitution, allowlists, rollout fingerprint
-src/yaml.rs           ordered YAML tree + yaml.v2-compatible emitter
-src/manifests.rs      `eso names` and the bootstrap `secret opaque` JSON
-src/runtimevalues.rs  storage/workload split and health-exporter pin
-src/process.rs        kubectl runner (system + fake for tests)
-src/converge.rs       Deployment converge with preserve rules
-src/state.rs          rollback markers (fail-closed record)
-src/gojson.rs         `encoding/json.Marshal`-compatible payloads
-src/http.rs           JSON HTTP client for preflight / assist-smoke
-src/preflight.rs      read-only cutover checks
-src/hermes.rs         Hermes rollout, smoke Job and Assist client
-src/hermesconfig.rs   Hermes config merge, plan, diff and apply
-src/hermesdrift.rs    read-only Hermes config drift exporter (`/metrics`)
-src/diff.rs           unified diff for `render-config --dry-run`
-src/oci.rs            layout index/manifest, OCI and docker archives
-src/oci/json.rs       ordered JSON with Python `json.dumps` formatting
-src/oci/archive.rs    Python-compatible USTAR writer
-src/bin/parity.rs     frozen-fixture runner
-tests/parity.sh       Bazel sh_test wrapper for the runner
-testdata/frozen/      contract fixtures captured from the Go binary
-```
-
-Every subcommand is ported: `env get`, `build-id`, `render`, `eso names`,
-`secret opaque`, `runtime split`, `oci digest`, `oci pack`/`oci docker`,
-`converge`, `state`, `preflight`, `hermes rollout`, `hermes render-config`,
-`hermes drift-exporter` and `hermes assist-smoke`.
+The `home-deploy` deploy CLI (Rust). `platform/deploy/resolve.sh`, the image and
+the in-cluster Jobs all use `//platform/deploy-rs:home-deploy`. Subcommands —
+[`platform/deploy/README.md`](../deploy/README.md).
 
 ## Hermes config delivery
 
@@ -85,43 +46,14 @@ running so the alert fires instead of the sidecar crash-looping.
 
 ## Frozen contract fixtures
 
-`testdata/frozen/manifest.json` lists every case: argv, working directory,
-expected exit code, stdout/stderr files, output files, and either
-`"status": "implemented"` or `"status": "skip"` with the reason. The parity
-test runs the Rust binary on every implemented case in a temporary copy of the
-case directory and compares bytes; skipped cases are printed with their reason
-so the remaining scope is visible.
-
-Captured from the Go binary (57 cases):
-
-| Group | Cases | Notes |
-|---|---|---|
-| CLI / env / build-id | 13 | no args, `--help`, unknown command, single-dash flags, env quoting and duplicates |
-| render | 13 | every unit (scheduler, currency-bot, mcp-gateway, wakegrant, ingress, nft) plus refusals, `--set` override and fingerprint |
-| eso / secret / runtime split | 4 | name lists, opaque Secret JSON, storage/workload split |
-| OCI | 4 | digest, OCI archive, docker archive, single-dash flags |
-| converge | 4 | create, manifest-wins, drift-preserve, support objects with fake kubectl traces |
-| state | 6 | record (live/absent/fail-closed), mark, rollback and first-install delete |
-| preflight | 8 | fake HTTP: ok, alarm, legacy writer, endpoint mismatch, not ready, HTTP/JSON errors |
-| hermes rollout | 5 | no-op, upgrade + smoke, smoke failure + rollback, `--rollback-only` |
-
-All 57 cases pass byte for byte: CLI/env/build-id/render (26), `eso names`,
-`secret opaque` (2), `runtime split`, four OCI cases, four converge cases, six
-state cases, eight preflight cases and five Hermes rollout cases. There are no
-skipped cases. The parity runner starts a local HTTP server for the preflight
-cases and normalises the clock-derived smoke Job name.
-
-Fake `kubectl`/`helm` scripts record every argv (with `-f` payloads and stdin)
-under the case's `trace/`; the smoke Job name is normalised because it is
-derived from the clock. Preflight cases ship the HTTP response map in
-`http.json`.
-
-## Frozen fixtures
-
-`testdata/frozen` was captured from the Go implementation and the Python
-renderer before the Go code was removed. The fixtures are frozen data: there is
-no generator in the tree any more. Treat a changed expected file as a deliberate
-contract change and review it like code; the parity test must stay green.
+`testdata/frozen/manifest.json` lists every case (argv, exit code,
+stdout/stderr, output files). The `parity` test runs the binary on each case in
+a temporary copy and compares bytes, including OCI archives; fake
+`kubectl`/`helm` record argv and payloads under the case's `trace/`, preflight
+cases get a local HTTP server from `http.json`. There is no generator: a changed
+expected file is a deliberate contract change and is reviewed like code. Some
+emitters (`yaml.rs`, `gojson.rs`, `oci/json.rs`, `oci/archive.rs`, single-dash
+flags in `cli.rs`) exist only to keep these bytes stable.
 
 ## Checks
 
@@ -134,34 +66,9 @@ bazel test //platform/deploy-rs/...   # unit_tests, clippy, rustfmt, parity
 
 ## Заметки к коду
 
-Пояснения, перенесённые из комментариев исходников (код комментариев не содержит, см. `AGENTS.md`).
-
-- `src/bin/parity.rs` — Parity runner for the frozen contract fixtures.
-  - Recursively copies a fixture case so a test run never writes into the checkout (render outputs and fake command traces are generated files).
-- `src/buildid.rs` — Short deploy build identifiers.
-- `src/cli.rs` — CLI parsing and dispatch.
-  - Only `render-config` defines this flag; `drift-exporter` never allows placeholders, so an absent id means false rather than a panic.
-- `src/converge.rs` — Replaces a live Deployment with its rendered manifest.
-- `src/diff.rs` — Small difflib-compatible unified diff for `hermes render-config --dry-run`.
-- `src/envfile.rs` — Private `KEY=VALUE` files.
-- `src/gojson.rs` — `encoding/json.Marshal`-compatible serialization of `serde_json::Value`.
-- `src/hermes.rs` — Promotes Hermes/voice-proxy/health-exporter digests into the `runtime` Helm release.
-  - Performs one Assist turn through the in-cluster HA API and prints the JSON result line the rollout parses. The token is read from the mounted Secret file and is never printed. The exit status is 1 on every failure;
-- `src/hermesconfig.rs` — Renders the reviewed Hermes overlay into a live HERMES_HOME.
-  - Only a semantic change is a write: formatting-only differences (Hermes rewrites the file itself) must not churn the config or `.prev`.
-- `src/hermesdrift.rs` — Read-only Hermes config drift exporter.
-  - Builds one read-only plan and converts it into a metric result. The second element carries the unredacted error text for the caller to log; metrics never include it.
-- `src/http.rs` — Small HTTP client shared by preflight and the Assist smoke check.
-- `src/lib.rs` — Home deployment tooling.
-- `src/manifests.rs` — Manifest helpers used by the deploy scripts.
-- `src/oci.rs` — Inspects and packages the OCI image layouts produced by `rules_oci`.
-- `src/oci/archive.rs` — Python-compatible USTAR writer used by the OCI archives.
-- `src/oci/json.rs` — Ordered JSON with Python `json.dumps` formatting.
-- `src/preflight.rs` — Read-only safety checks for `deploy.sh --execute`.
-- `src/process.rs` — Subprocess runner for `kubectl` (and later `helm`).
-- `src/render.rs` — Literal `${KEY}` substitution for the private deploy templates.
-- `src/runtimevalues.rs` — Splits a `helm template` render and the private runtime values into the two ownership domains of the runtime chart.
-- `src/state.rs` — Deploy rollback markers.
-  - Remembers the live Deployment name (or its absence) and clears the applied marker. `state_dir` must already exist. The probe is fail-closed: only a NotFound answer from the API server means "the Deployment does not exist".
-- `src/yaml.rs` — Ordered YAML values and a `go.yaml.in/yaml/v2`-compatible emitter.
-- `tests/parity.sh` — Parity gate: run the Rust binary over the frozen Go contract fixtures.
+- `state record` is fail-closed: only a NotFound answer from the API server
+  means the Deployment does not exist.
+- `hermes render-config` writes only on a semantic change; formatting-only
+  differences do not touch the file or `.prev`.
+- `drift-exporter` never allows placeholders and never puts the error text into
+  metrics.

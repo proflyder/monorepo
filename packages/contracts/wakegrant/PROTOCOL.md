@@ -34,8 +34,8 @@ The original v1 protocol had no `purpose` field and always meant `logon`.
 A request that **omits** `purpose` keeps the v1 wire format byte for byte:
 it selects the `logon` grant and uses the v1 claim/grant MAC messages below.
 An explicit `"purpose":"logon"` (or `"unlock"`) selects the purpose-aware
-messages, which append the purpose as a final line. This lets the already
-installed v1 Windows provider keep working while the unlock feature is added.
+messages, which append the purpose as a final line, so an installed v1
+provider keeps working.
 
 Long-poll (`waitSeconds`) is only defined together with an explicit `purpose`;
 a request without `purpose` is never delayed.

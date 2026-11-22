@@ -1,87 +1,41 @@
 # Proxmox bootstrap
 
-Физическая установка и этапы восстановления: [runbook](../../../docs/INSTALL-PROXMOX.md).
+Хост Proxmox и его гости: VM 100 `haos`, VM 101 K3s, CT 102 `vpn`, CT 103
+`bb`. Факты (версии, адреса, ресурсы) — `docs/STATE.md`, реальные адреса —
+`secrets/NETWORK.md`, физическая установка и восстановление —
+`docs/INSTALL-PROXMOX.md` и `docs/REBUILD.md`.
 
-## Текущее состояние
+| Путь | Что |
+|---|---|
+| [vpn/](vpn/README.md) | CT 102: ocserv + WireGuard |
+| [bb/](bb/README.md) | CT 103: bb server |
+| [wifi-uplink/](wifi-uplink/) | Wi-Fi 4-address/WDS uplink `vmbr0` с fallback на Ethernet |
+| `terraform/` | VM 100 и 101 (`prevent_destroy`) |
+| `cloud-init.yaml` | публичная часть cloud-init K3s (приватная добавляет SSH key); сохраняет SSH host keys при смене instance ID |
+| `authorize.sh HOST KEY KNOWN_HOSTS` | интерактивно с Mac после установки PVE: ssh-copy-id отдельного ключа; fingerprint сверить с физической консолью |
+| `bootstrap-host.sh` | no-subscription repository, отключение enterprise/Ceph feeds, upgrade simulation (само обновление и reboot — отдельно) |
+| `set-startup-order.sh` | startup order 1/2/3 для HAOS, K3s, bb (root: PVE API требует `Sys.Modify`, которого у API user нет) |
+| `versions.sh` | версии шаблонов и Node.js для CT |
+| `bootstrap-wifi-mapping.sh`, `backup-before-install.py` | разовые помощники миграции; в эксплуатации не используются |
 
-PVE `9.2.24`; host management `192.0.2.26`; VM `100 haos` (`192.0.2.28`,
-2 vCPU/4 GiB/32 GiB), VM `101 lab-k3s` (`192.0.2.27`, 8 vCPU/12 GiB/200 GiB),
-CT `102 vpn` (`192.0.2.29`, Debian 13, ocserv) и CT `103 bb`
-(`192.0.2.30`, Debian 13, 2 vCPU/2 GiB/16 GiB). Static IP в guests,
-startup order 1/2/3. HAOS add-ons: Matter `9.2.0`, Music Assistant `2.10.8`.
-Terraform plan — no changes; state root-only на PVE и копия в `secrets/`.
-HAOS восстановлен, K3s runtime и HTTPS ingress приняты read-only E2E.
-HA-совместимый endpoint HAOS доступен напрямую `.28:8123`; compatibility
-HAProxy удалён.
+## Terraform
 
-Wi-Fi RTL8821CE работает на host как 4-address/WDS uplink `vmbr0`,
-VM IP и L2/multicast сохраняются. `home-uplink` выбирает один uplink:
-Ethernet при carrier, иначе Wi-Fi. NAT и PCI passthrough не требуются.
-Исходники/установка/откат: [wifi-uplink](wifi-uplink/).
-`bootstrap-wifi-mapping.sh` и `backup-before-install.py` — помощники разовой
-миграции на PVE; в текущей эксплуатации не используются.
+- Каталог и state — на PVE в root-only `/var/lib/home-terraform/`; после apply
+  state сохраняется в OpenBao
+  `secret/infra/proxmox/terraform#pve_terraform_tfstate`. Конфигурация
+  синхронизируется из tracked `main.tf`, lock копируется обратно.
+- Запуск на Linux с проверкой CA (Go TLS на macOS игнорирует
+  `SSL_CERT_FILE`), `insecure=false`, CA получен по проверенному SSH.
+  Endpoint/token — из environment, не из tfvars.
+- API user: read-only audit, VM admin только для 100/101, место на `local` и
+  `local-lvm`, `vmbr0`. Startup policy Terraform игнорирует.
+- Статический IP K3s — приватные переменные `k3s_ipv4_address` (CIDR) и
+  `k3s_ipv4_gateway`; DHCP по умолчанию — только для новых инсталляций.
+- State с локальной файловой блокировкой: не запускать параллельный apply.
 
-VPN-сервер (ocserv) разворачивается отдельным unprivileged CT 102 `vpn`
-скриптами [vpn](vpn/): создание LXC, установка ocserv с nftables,
-пользователи и клиентские сертификаты. Публичный сертификат Let's Encrypt
-продлевается автоматически (DNS-01 Cloudflare); группа `ci` — только до узла
-K3s по `tcp/443`.
-Проброс на роутере — только `443/tcp+udp`; подробности и откат — в
-[vpn/README.md](vpn/README.md).
+## Проверки
 
-Сервер bb разворачивается отдельным unprivileged CT 103 `bb` (Debian 13,
-2 vCPU / 2 GiB / 16 GiB) скриптами [bb](bb/): фиксированный MAC и static IP,
-Node.js по checksum, пользователь `bb` с linger и проверкой systemd user bus.
-Внутри CT работает согласованный SQLite backup перед ночным vzdump; при
-недоступном user bus enrollment запрещён и нужна VM. Подробности и перенос —
-[bb/README.md](bb/README.md). `set-startup-order.sh` задаёт order 1/2/3 для
-HAOS, K3s и bb.
-
-Статический IP K3s задаётся приватными Terraform variables
-`k3s_ipv4_address` (CIDR) и `k3s_ipv4_gateway`; default DHCP — только для
-новых универсальных инсталляций. `cloud-init.yaml` сохраняет существующие
-SSH host keys при смене config-drive instance ID.
-
-`authorize.sh HOST KEY KNOWN_HOSTS` запускается интерактивно на Mac после установки
-PVE: добавляет отдельный ключ через ssh-copy-id и проверяет доступ. Fingerprint
-обязательно сравнить с физической консолью. Приватный wrapper с параметрами
-находится в `local-data/proxmox-install/authorize-proxmox.sh`.
-
-Проверки: `python3 -m unittest discover -s projects/home/proxmox -v` и
-`bash -n projects/home/proxmox/authorize.sh`.
-
-`bootstrap-host.sh` включает подписанный no-subscription PVE repository, отключает
-неиспользуемые enterprise/Ceph feeds, сохраняет исходные sources в host backup.
-Показывает upgrade simulation; само обновление и reboot выполняются отдельно.
-
-`terraform/main.tf` закрепляет версии CLI/provider и описывает VM 100 (HAOS,
-4 GiB / 32 GiB) и 101 (Ubuntu 24.04 LTS, 12 GiB / 200 GiB). `prevent_destroy`
-защищает от случайного удаления через Terraform. Образы и private cloud-init
-snippet загружаются bootstrap-этапом; Terraform использует их storage IDs.
-`cloud-init.yaml` — публичная часть, приватная добавляет SSH public key.
-
-Авторитетный Terraform directory/state находится на PVE в root-only
-`/var/lib/home-terraform/`; после apply state сохраняется в OpenBao
-`secret/infra/proxmox/terraform#pve_terraform_tfstate`. Terraform запускается на Linux
-с проверкой CA (Go TLS на macOS игнорирует `SSL_CERT_FILE`); системное trust
-store Mac не меняется.
-Конфигурация синхронизируется из tracked main.tf; lock копируется обратно в source.
-TLS проверяется CA, полученным по проверенному SSH; `insecure=false`.
-Provider endpoint/token берутся из environment, не из публичных tfvars.
-API user имеет read-only audit, VM admin только для 100/101, выделение места
-на local и local-lvm и использование vmbr0. Порядок старта задаётся отдельно
-root bootstrap `set-startup-order.sh`: его PVE API требует глобального Sys.Modify,
-которое API user не получает. Terraform игнорирует только startup policy. Bootstrap SSH root — отдельный канал.
-State пока локальный с файловой блокировкой; регулярное шифрованное внешнее
-резервирование ещё нужно настроить. Не запускать параллельный apply.
-
-## Заметки к коду
-
-Пояснения, перенесённые из комментариев исходников (код комментариев не содержит, см. `AGENTS.md`).
-
-- `backup-before-install.py` — Cold-copy local PVCs and host recovery files before a destructive OS install.
-- `bootstrap-wifi-mapping.sh` — Preparation only: creates an isolated PCI mapping for the RTL8821CE. It does NOT attach the card to a VM and does NOT change networking. Do not run until a routed/NAT or external Wi-Fi bridge design exists. Hardware bootstrap; never relax IOMMU isolation or use unsafe interrupts.
-- `test_bb.py`
-  - Regression: `grep -q` + pipefail made tar die of SIGPIPE. bsdtar on macOS ignores the closed pipe, so the listing is produced by a small GNU-tar-like streamer: it writes every member and exits non-zero when grep stops reading after the first match.
-- `test_bb_dispatch.py` — Hermetic checks for the bb-dispatch SSH bridge (no CT, no live bb).
-  - ----- local refusals never reach bb ----------------------------------
+```bash
+python3 -m unittest discover -s projects/home/proxmox -v
+bash -n projects/home/proxmox/authorize.sh
+```

@@ -12,9 +12,8 @@ Service wakegrant      NodePort ${WAKE_GRANT_NODE_PORT} → 8099
 Secret wakegrant       ESO ← secret/k8s/home-assistant/wakegrant
 ```
 
-NodePort `30130` is free in the repository: the scheduler uses `30098/30099`,
-currency-bot `30100` and Grafana `30300`. The value is deployment-specific and
-lives in OpenBao `secret/k8s/flux-system/app-settings` (key
+The NodePort (e.g. `30130`; must not collide with scheduler `30098/30099`,
+currency-bot and Grafana `30300`) lives in OpenBao `secret/k8s/flux-system/app-settings` (key
 `WAKE_GRANT_NODE_PORT` → `Secret/flux-app-settings`), never in Git.
 
 ## Secrets
@@ -37,19 +36,13 @@ openssl rand -hex 32            # issuer_token
 openssl rand -base64 32         # machine key for komp
 ```
 
-Apply the ExternalSecret (ESO must already be installed):
-
-```bash
-mise run kubectl -- apply -f projects/home/kubernetes/wakegrant/manifests/external-secrets.yaml
-mise run kubectl -- -n home-assistant wait --for=condition=Ready externalsecret/wakegrant --timeout=120s
-```
+The ExternalSecret is part of the Flux manifest set.
 
 ## Deploy
 
 Flux applies the unit (`Kustomization/app-wakegrant`) from `develop`, with the
 image digest from `deploy/home-apps`. After a merge, `deploy-home`'s `pins`
-job promotes the verified digest and commits it; no VPN, kubeconfig or
-manual script is involved.
+job promotes the verified digest.
 
 ```bash
 # what Flux is applying
@@ -100,15 +93,3 @@ python3 -m unittest discover -s projects/home/kubernetes/wakegrant -p 'test_*.py
 The deploy tests are hermetic: a stub `kubectl` fails at the first cluster
 call, so only validation, rendering and manifest invariants are asserted. The
 protocol itself is tested in Rust (`solutions/wakegrant`).
-
-## Заметки к коду
-
-Пояснения, перенесённые из комментариев исходников (код комментариев не содержит, см. `AGENTS.md`).
-
-- `BUILD.bazel` — Plain-file package: Flux renders these templates (postBuild substitution), and the deploy contracts/tests read them as data.
-- `manifests/external-secrets.yaml` — wakegrant credentials, materialised from OpenBao KV v2 by ESO.
-- `manifests/kustomization.yaml` — Flux-rendered manifest set for the wakegrant pilot (решение 54).
-  - `prune: true` on the app Kustomization must never delete the SQLite volume when a manifest is removed by mistake (решение 54).
-- `manifests/wakegrant.yaml` — wakegrant: one-time logon grants for a machine woken by Home Assistant.
-  - Traceability only: a Deployment metadata change never rolls pods.
-- `test_deploy.py` — Manifest contracts for projects/home/kubernetes/wakegrant.

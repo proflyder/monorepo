@@ -30,8 +30,7 @@
 |---|---|
 | [`ARCHITECTURE.md`](ARCHITECTURE.md) | компоненты и потоки |
 | [`DECISIONS.md`](DECISIONS.md) | ключевые решения |
-| [`SECURITY.md`](SECURITY.md) | сеть, VPN, секреты, обновления |
-| [`SENSITIVE-DATA.md`](SENSITIVE-DATA.md) | реестр приватных данных без значений |
+| [`SECURITY.md`](SECURITY.md) | сеть, VPN, секреты, обновления, реестр приватных данных |
 | [`GRPC.md`](GRPC.md) | gRPC-контракт |
 | [`MONOREPO.md`](MONOREPO.md) | структура репозитория |
 
@@ -39,9 +38,7 @@
 
 | Документ | Содержимое |
 |---|---|
-| [`STATION-SOFTWARE.md`](STATION-SOFTWARE.md) | состав ПО колонки, манифест и `station-audit` |
-| [`PROVISIONING.md`](PROVISIONING.md) | BLE gateway / восстановление Wi-Fi |
-| [`OTA-FORTRESS.md`](OTA-FORTRESS.md) | OTA/ADB-защита |
+| [`STATION-SOFTWARE.md`](STATION-SOFTWARE.md) | состав ПО колонки, `station-audit`, OTA/ADB fortress, Wi-Fi provisioning |
 | [`WAKE-WORD.md`](WAKE-WORD.md) | сборка и установка «Рикардо» |
 
 ## Правила
@@ -50,4 +47,4 @@
 2. Не добавлять историю, дневники, ресерчи и планы в `docs/`.
 3. Не дублировать состояние между документами: ссылаться на владельца факта.
 4. В публичных документах — адреса-примеры `192.0.2.x`; реальные — в `secrets/`.
-5. Перед публикацией: `mise run test` + проверка `SENSITIVE-DATA.md`.
+5. Перед публикацией: `mise run test` + проверка `SECURITY.md` («Приватные данные»).

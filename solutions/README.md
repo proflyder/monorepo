@@ -4,19 +4,21 @@
 компонент с собственным API/бинарником, но **без привязки к конкретному
 проекту, базе или инстансу**.
 
-| Solution | Язык | Назначение | Статус |
-|---|---|---|---|
-| `scheduler/` | Rust (`crates/scheduler`) | durable scheduler: alarms/reminders/timers как conveniences, SQLite outbox/queue, leases/ack, Connect unary + gRPC-Web по HTTP/1.1 (gRPC/h2c не отдаётся) | развёрнут |
-| `ha-bridge/` | Rust (`crates/ha-bridge`: `ha-bridge`, `ha-control` и `ha-scenario`) | executor-адаптер: арендует `queue=home`, запускает HA audio scripts, подтверждает события; `ha-control` — каталог Home и очередь `control`; `ha-scenario` — очередь `scenario` | развёрнут |
-| `currency-bot/` | Rust | курсы kurs.kz → SQLite, алерты и API; Telegram webhook | развёрнут |
-| `mcp-gateway/` | Rust | MCP Streamable HTTP шлюз: группы `infra.read`, `infra.fix`, `infra.report`, `bb.read`/`bb.act` и голосовой маршрут `/v1/voice/*`; каталог сервисов из env | развёрнут |
-| `voice-proxy/` | Rust | OpenAI-совместимый прокси перед LLM: делает ответы пригодными для Piper TTS | развёрнут |
-| `wakegrant/` | Rust | одноразовые гранты входа для ПК, разбуженного HA (`packages/contracts/wakegrant`) | развёрнут |
-| `intercom/` | Rust | сигналинг WebRTC-звонка телефон ↔ колонка: endpoint-регистрация, состояние звонка, SDP/ICE relay, `Watch` | развёрнут |
-| `heartbeat/` | JS | Cloudflare Worker: внешний dead-man switch для Alertmanager `Watchdog` | развёрнут |
-| `bb-home-dispatcher/` | TS | плагин bb: детерминированный исполнитель голосовых команд от `mcp-gateway` | развёрнут |
-| `bb-profiles/` | TS | плагин bb: изолированные профили (логины, конфиги, провайдеры, машины) | развёрнут |
-| `windows-logon-provider/` | Rust (`windows-bindgen`/`windows-core`, Bazel + zig) | Windows Credential Provider: плитка входа только при гранте `wakegrant`; конфигурация приходит при установке; публикуется в GHCR как OCI-артефакт | установлен на домашнем ПК |
+| Solution | Язык | Назначение |
+|---|---|---|
+| `scheduler/` | Rust (`crates/scheduler`) | durable scheduler: alarms/reminders/timers как conveniences, SQLite outbox/queue, leases/ack, Connect unary + gRPC-Web по HTTP/1.1 (gRPC/h2c не отдаётся) |
+| `ha-bridge/` | Rust (`crates/ha-bridge`: `ha-bridge`, `ha-control` и `ha-scenario`) | executor-адаптер: арендует `queue=home`, запускает HA audio scripts, подтверждает события; `ha-control` — каталог Home и очередь `control`; `ha-scenario` — очередь `scenario` |
+| `currency-bot/` | Rust | курсы kurs.kz → SQLite, алерты и API; Telegram webhook |
+| `mcp-gateway/` | Rust | MCP Streamable HTTP шлюз: группы `infra.read`, `infra.fix`, `infra.report`, `bb.read`/`bb.act` и голосовой маршрут `/v1/voice/*`; каталог сервисов из env |
+| `voice-proxy/` | Rust | OpenAI-совместимый прокси между HA и LLM: маршрут по голосовому профилю, cancel guard, ответы для Piper TTS, очередь поздних озвучиваний, chat relay |
+| `wakegrant/` | Rust | одноразовые гранты входа для ПК, разбуженного HA (`packages/contracts/wakegrant`) |
+| `intercom/` | Rust | сигналинг WebRTC-звонка телефон ↔ колонка: endpoint-регистрация, состояние звонка, SDP/ICE relay, `Watch` |
+| `ha-config-sync/` | Rust | доставка YAML Home Assistant на HAOS-хост, периодическая синхронизация и автооткат |
+| `phone-push/` | Rust | доставка на телефон через FCM HTTP v1: «найди телефон» и уведомления |
+| `heartbeat/` | JS | Cloudflare Worker: внешний dead-man switch для Alertmanager `Watchdog` |
+| `bb-home-dispatcher/` | TS | плагин bb: детерминированный исполнитель голосовых команд от `mcp-gateway` |
+| `bb-profiles/` | TS | плагин bb: изолированные профили (логины, конфиги, провайдеры, машины) |
+| `windows-logon-provider/` | Rust (`windows-bindgen`/`windows-core`, Bazel + zig) | Windows Credential Provider: плитка входа только при гранте `wakegrant`; конфигурация приходит при установке; публикуется в GHCR как OCI-артефакт |
 
 ## Правила
 
@@ -27,8 +29,9 @@
   очередями, а не отдельные планировщики;
 - generic `EnqueueTask` — реальная one-shot очередь; recurring generic tasks
   и event-trigger rules — future;
-- executor арендует только свои очереди: HA bridge — `home`, generic
-  workers — `tasks`, `ha-scenario` — `scenario`;
+- executor арендует только свои очереди: HA bridge — `home`, `ha-control` —
+  `control`, `ha-scenario` — `scenario`, voice-proxy — `voice-work`/`voice-personal`,
+  generic workers — `tasks`;
 - общие контракты — в `packages/proto`, общий код — в `packages/rust`;
 - секреты, endpoint и DB path приходят из env/конфига проекта;
 - `solutions/` не импортирует `projects/` и не содержит project-specific

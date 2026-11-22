@@ -800,7 +800,7 @@ test("deploy: shared proto package deploys scheduler and ha-bridge", () => {
 
 test("deploy: hermes change selects its images", () => {
   const config = affected.loadConfig();
-  const result = routeReal(["projects/home-assistant/hermes/README.md"]);
+  const result = routeReal(["projects/home-assistant/hermes/hermes-private.example.yaml"]);
   const entries = affected.deployEntries(result, config);
   assert.deepEqual(entries.map((entry) => entry.id), ["hermes"]);
   assert.equal(entries[0].images, "hermes voice-proxy health-exporter home-deploy");
@@ -829,7 +829,7 @@ test("unit matrix: a Bazel service carries its image fields in the same entry", 
 
 test("unit matrix: an image-owning Python unit runs in the unit job, not python", () => {
   const config = affected.loadConfig();
-  const result = routeReal(["projects/home-assistant/hermes/README.md"]);
+  const result = routeReal(["projects/home-assistant/hermes/hermes-private.example.yaml"]);
   const entries = affected.matrixEntries(result, config);
   const unit = entries.unit.find((entry) => entry.id === "hermes");
   assert.equal(unit.kind, "python");
@@ -2096,8 +2096,8 @@ test("platform bazel routing: windows patches reach only native", () => {
 });
 
 test("platform bazel routing: other files under platform/bazel stay global", () => {
-  const result = routeReal(["platform/bazel/README.md"]);
-  assert.deepEqual(result.changed, ["platform/bazel/README.md"]);
+  const result = routeReal(["platform/bazel/downloader.cfg"]);
+  assert.deepEqual(result.changed, ["platform/bazel/downloader.cfg"]);
   assert.equal(result.routes.android.mode, "all");
 });
 
@@ -2161,4 +2161,69 @@ test("MODULE.bazel: rules_android/NDK edits scope to android (#maven)", () => {
     affected.moduleBazelScope(base, base.replace('"0.60.0"', '"0.61.0"')),
     null,
   );
+});
+
+test("real repo: markdown-only android change selects no build or deploy unit", () => {
+  const config = affected.loadConfig();
+  const result = withDeps({}, () =>
+    affected.route(config, ["projects/mobile/android/core/designsystem/README.md"], {
+      root: REPO,
+      base: "b",
+      graph: loadFixtureGraph(),
+    }),
+  );
+  assert.equal(result.docsOnly, true);
+  assert.deepEqual(result.changed, ["projects/mobile/android/core/designsystem/README.md"]);
+  for (const platform of ["android", "bazel", "python", "js", "native"]) {
+    assert.deepEqual(result.routes[platform].units, [], platform);
+  }
+  assert.deepEqual(affected.deployEntries(result, config), []);
+  assert.equal(result.androidDistribute, false);
+  assert.ok(result.routes.quality.units.length);
+});
+
+test("real repo: explicitly listed hermes markdown still selects its units", () => {
+  const config = affected.loadConfig();
+  for (const file of [
+    "projects/home-assistant/hermes/HERMES.md",
+    "projects/home-assistant/hermes/SOUL.md",
+    "projects/home-assistant/hermes/skills/time/SKILL.md",
+  ]) {
+    const result = withDeps({}, () =>
+      affected.route(config, [file], { root: REPO, base: "b", graph: loadFixtureGraph() }),
+    );
+    assert.equal(result.docsOnly, true, file);
+    assert.ok(
+      result.routes.bazel.units.some((unit) => unit.id === "hermes-config"),
+      file,
+    );
+    assert.ok(
+      affected.deployEntries(result, config).some((entry) => entry.id === "hermes-config"),
+      file,
+    );
+    assert.ok(
+      result.routes.python.units.some((unit) => unit.id === "hermes"),
+      file,
+    );
+  }
+});
+
+test("routable changes keep code and explicit markdown only", () => {
+  const config = affected.loadConfig();
+  assert.deepEqual(
+    affected.routableChanges(config, [
+      "projects/mobile/android/README.md",
+      "projects/mobile/android/app/src/Main.kt",
+      "docs/SECRETS.md",
+      "docs/guide.mdx",
+    ]),
+    ["projects/mobile/android/app/src/Main.kt", "docs/SECRETS.md"],
+  );
+});
+
+test("real repo: platform/bazel markdown is not a global invalidation", () => {
+  const result = routeReal(["platform/bazel/README.md"]);
+  assert.equal(result.docsOnly, true);
+  assert.deepEqual(result.routes.android.units, []);
+  assert.deepEqual(result.routes.bazel.units, []);
 });

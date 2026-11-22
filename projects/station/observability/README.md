@@ -18,8 +18,7 @@ ConfigMaps из namespace `monitoring` и создаёт отдельную па
 | `station-pulsar.json` | `station-pulsar` | Ассистент, звук и звонки, связь с HA, wake-word |
 
 Datasource UID — `prometheus`; dashboard'ы провиженятся, правки в UI не
-сохраняются. Экспериментальную копию можно экспортировать и принять обычным
-code review.
+сохраняются — менять JSON в Git.
 
 Release `station-observability` (namespace `monitoring`, chart из этого
 каталога) ставит Flux из `develop`:
@@ -30,10 +29,18 @@ Release `station-observability` (namespace `monitoring`, chart из этого
 - Job `station` — `projects/home/kubernetes/observability/values/prometheus.yaml`,
   target `${STATION_IP}:9101` из `Secret/flux-app-settings`.
 - PrometheusRule `home-station-alerts` —
-  `projects/home/kubernetes/observability/rules/prometheusrule-station.yaml`
-  (`StationDown`, `StationCpuHot`, `StationMemoryHigh`, `StationDiskFilling`).
-- Telegram-маршрутизация общая с остальными алертами (severity `warning`).
+  `projects/home/kubernetes/observability/rules/prometheusrule-station.yaml`,
+  Telegram, severity `warning`:
+  - `StationDown` — нет `up{job="station"}` 5 минут;
+  - `StationCpuHot` — SoC > 85 °C 10 минут (запас до штатного троттлинга
+    Amlogic около 90 °C);
+  - `StationMemoryHigh` — available < 10% RAM 10 минут;
+  - `StationDiskFilling` — свободно < 15% `/data` или прогноз заполнения за
+    24 ч, 30 минут.
+- Prometheus в `monitoring` не ограничен egress-NetworkPolicy, отдельных
+  правил для внешнего таргета не нужно.
 
 Контракт имён проверяется `projects/home/kubernetes/observability/test_prometheusrule.py`:
 каждая метрика из правил и этих дашбордов должна быть в
-`projects/station/pulsar/satellite/crates/pulsar-metrics/src/catalog.rs`.
+`projects/station/pulsar/satellite/crates/pulsar-metrics/src/catalog.rs`
+(`python3 -m unittest projects.home.kubernetes.observability.test_prometheusrule`).

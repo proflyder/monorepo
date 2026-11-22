@@ -3,15 +3,13 @@
 Chart `chart/` управляет Piper, Whisper, GigaAM, Hermes
 (gateway+proxy в одном Pod) и TCP health exporter. HA Core, **Music
 Assistant** и **Matter Server** работают отдельно в HAOS как add-ons;
-их workload/storage-блоков в приватных values нет (chart остаётся общим и
-может отрендерить любые values для rollback-сценария).
+их workload/storage-блоков в приватных values нет.
 Все приложения используют hostNetwork для сохранения loopback и LAN
 discovery. Каждый Deployment имеет Recreate; данные сохраняются в Retain
 local PV/PVC.
 
-HAProxy `haos-proxy` удалён. HAOS обращается к HA напрямую `.28:8123`;
-Hermes voice proxy слушает `.27:8643` и ограничен nftables-правилом:
-только HAOS `.28` и сам K3s `.27`. HAOS `internal_url` — `.28:8123`.
+HAOS обращается к HA напрямую `.28:8123` (`internal_url`); Hermes voice proxy слушает `.27:8643` и ограничен nftables-правилом:
+только HAOS `.28` и сам K3s `.27`.
 
 Tracked `values.yaml` пуст: реальные images/digests, host paths и параметры
 развёртывания находятся в приватных values. Ключи Hermes передаются отдельно
@@ -31,9 +29,9 @@ mcp/web. SQLite 3.53.4 собирается по checksum из Dockerfile тог
 revision; tini reaps дочерние процессы. Изменение источника требует нового image
 и проверки API + реального модельного запроса, а не одного TCP health.
 
-Voice proxy — Rust-сервис `solutions/voice-proxy`, а не Dockerfile: образ
+Voice proxy — Rust-сервис `solutions/voice-proxy`: образ
 собирается Bazel `rules_oci` из `//solutions/voice-proxy:voice-proxy_image`
-(distroless, без shell и python) и пушится байт-в-байт целью
+(distroless, без shell) и пушится байт-в-байт целью
 `//solutions/voice-proxy:voice-proxy_push`; `docker push` переписал бы
 media type и digest. Все образы публикуются в GHCR (`ghcr.io/proflyder/...`)
 по digest `imagePullPolicy: IfNotPresent`, без pull-secret. Юнит `hermes`
@@ -65,18 +63,16 @@ Health exporter — Rust-бинарник
 `health-exporter/crates/health-exporter` (distroless-образ
 `//projects/home-assistant/deploy/health-exporter:health-exporter_image`,
 `ghcr.io/proflyder/health-exporter`): метрики `up` по endpoint'ам, порт 9116,
-цели из переменных `ENDPOINT_HOST_*`. Карта больше не владеет exporter'ом:
-`hermes rollout` (и `apply-runtime.sh` через `HEALTH_EXPORTER_IMAGE`) задают
+цели из переменных `ENDPOINT_HOST_*`. `hermes rollout` (и `apply-runtime.sh` через `HEALTH_EXPORTER_IMAGE`) задают
 image, command и пустые `volumeMounts`/`volumes` через `helm --set/--set-json`,
-поэтому приватные values менять не нужно. Assist smoke Job тоже собран из
-`home-deploy`, а не из python-образа: `home-deploy hermes assist-smoke`.
+поэтому приватные values менять не нужно. Assist smoke Job —
+`home-deploy hermes assist-smoke`; post-upgrade hook — решение 54.
 
 ## Voice routing: приватные values
 
 Маршрутизация профиля включается только переменными контейнера
-`voice-proxy` (`workloads.hermes.containers[1]`). Пока их нет, прокси работает
-как раньше, поэтому новый образ раскатывается безопасно и до настройки
-маршрутов.
+`voice-proxy` (`workloads.hermes.containers[1]`); без них прокси работает без
+маршрутизации.
 
 В `runtime_values` (OpenBao `secret/k8s/flux-system/runtime-values`) нужны адреса и ссылки на
 секреты; значения токенов остаются в Kubernetes Secrets:
@@ -112,9 +108,8 @@ workloads:
 `Secret/hermes-environment`. Pod Hermes работает с `hostNetwork`, поэтому
 NetworkPolicy на него не действует; scheduler тоже не имеет ingress-policy,
 a egress к `mcp-gateway:8080`, `scheduler:8098` и HA `:8123` разрешён. Новых
-сетевых правил для очереди не требуется. Имена переменных и их defaults не
-менялись при переходе на Rust, поэтому приватным values нужна только одна
-правка — readiness/liveness probe контейнера `voice-proxy`:
+сетевых правил для очереди не требуется. Probe контейнера `voice-proxy` —
+только TCP:
 
 ```yaml
           - name: voice-proxy
@@ -123,9 +118,8 @@ a egress к `mcp-gateway:8080`, `scheduler:8098` и HA `:8123` разрешён.
               tcpSocket: {port: 8643}
 ```
 
-Exec-probe вида `python3 …` или `sh -c` в distroless-образе не работает;
-TCP-проверка порта 8643 — единственный корректный вариант (аналог прежнего
-health exporter). Обновляет приватные values оператор; в Git их нет. Полный
+Exec-probe (`sh -c`, интерпретаторы) в distroless-образе не работает.
+Обновляет приватные values оператор; в Git их нет. Полный
 контракт переменных — в `solutions/voice-proxy/README.md`. Если понадобится
 файловый вариант, используйте `HERMES_HA_TOKEN_FILE`,
 `HERMES_VOICE_GATEWAY_TOKEN_FILE` и `HERMES_SCHEDULER_TOKEN_FILE` с тем же
@@ -168,30 +162,4 @@ helm lint projects/home-assistant/observability/chart
 Health exporter проверяет только TCP connect и экспортирует
 `home_endpoint_up{endpoint="..."}`; это не измерение end-to-end voice latency.
 Полные live проверки — `e2e/kubernetes_runtime.py`, `e2e/wyoming_smoke.py`
-и существующие HA/Hermes E2E. Пути приведены относительно проекта home-assistant.
-[Эксплуатация](../../../docs/KUBERNETES-OPERATIONS.md).
-
-## Заметки к коду
-
-Пояснения, перенесённые из комментариев исходников (код комментариев не содержит, см. `AGENTS.md`).
-
-- `chart/templates/hermes-config-drift.yaml` — Opt-in scrape target for the `config-drift` sidecar. The sidecar runs in the hostNetwork Hermes Pod, so Prometheus reaches it through the Pod IP; this ClusterIP Service only gives the ServiceMonitor a stable port name.
-- `chart/templates/runtime.yaml`
-  - Storage is applied by apply-runtime.sh with kubectl and deliberately kept out of the Helm release so a CI `helm upgrade` never needs cluster-scoped RBAC. Keep also protects the data if it is still tracked by an older release.
-- `chart/templates/smoke-hook.yaml` — Post-upgrade smoke hook (решение 54).
-- `flux/external-secret-hermes-config.yaml` — Hermes private render values (real HA/MA endpoints and the Telegram owner chat id). The reviewed overlay itself ships in the `hermes-config` image; this Secret supplies only the values the renderer deep-merges after the fragment.
-- `flux/helmrelease.yaml` — Flux entry point for the Hermes runtime Helm release (решение 54).
-- `flux/kustomization.yaml` — Manifest set for Kustomization/app-hermes (решение 54).
-- `health-exporter/crates/health-exporter/src/lib.rs` — Runtime chart's TCP health exporter.
-- `health-exporter/crates/health-exporter/src/main.rs` — Command-line entry point: serve `/metrics`, or fetch it with `-query` for the rollout's exec probe. Everything reusable lives in the library.
-- `images/build-and-push.sh` — Build and push the Hermes gateway and voice-proxy images to GHCR.
-- `images/hermes/Dockerfile` — Debian 13 still ships SQLite 3.46.1, which contains the upstream WAL-reset corruption bug. Build a pinned shared library for the runtime image instead of relying on a distro backport that trixie does not currently provide. See #70480 and https://sqlite.org/wal.html#walresetbug.
-  - apt, dpkg, alternatives and fontconfig keep wall-clock state; leaving their logs/caches in the layer would make every build a different image.
-  - Build context is a git archive of the pinned, reviewed Hermes revision, never HOME.
-- `images/hermes/build.sh` — Build the Hermes gateway image reproducibly (DECISIONS 36).
-- `images/hermes/verify-reproducible.sh` — Prove the Hermes image is reproducible (DECISIONS 36).
-- `manifests/external-secrets.yaml` — Hermes environment (API key, HA/MA tokens and runtime flags).
-- `rebase_hermes_state.py` — Rebase persisted Hermes profile references after relocating HERMES_HOME.
-- `rollout.sh` — Deploy entry point for the `hermes` unit (deploy-home.yml matrix `script`).
-- `test_build_and_push.py` — build-and-push.sh: the prebuilt-digest path used by deploy-home (DECISIONS 36).
-- `test_voice_routing_contract.py` — Contract for the private voice-routing values of the Hermes Deployment.
+и HA/Hermes E2E в `../e2e/`. [Эксплуатация](../../../docs/KUBERNETES-OPERATIONS.md).

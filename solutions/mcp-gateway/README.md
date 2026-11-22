@@ -42,27 +42,18 @@ MCP client (Hermes, IDE, agent)          voice proxy
 ### Уведомление об изменении списка инструментов
 
 После инициализации каждой MCP-сессии шлюз один раз отправляет
-`notifications/tools/list_changed` (возможность объявлена в `initialize` как
-`tools.listChanged`). Это нужно клиентам, которые переживают рестарт шлюза:
-при переподключении Hermes заново вызывает `tools/list`, но его собственный
-реестр инструментов не перезаписывается, если сервер молчит (upstream
-`_register_discovered_tools_if_needed` возвращается раньше времени), поэтому
-клиент узнаёт о новом наборе только из этого уведомления. Перезапускать
-Hermes при изменении набора инструментов шлюза не нужно.
-
-Доставка не зависит от порядка: SDK (`rmcp` 3.9.0) создаёт общий канал сессии
-с уже закрытым приёмником, поэтому уведомление, отправленное до открытия
-standalone GET-потока, кэшируется (до 16 кадров) и проигрывается при
-подключении потока; если поток уже открыт — уходит в него сразу. Повторных
-попыток нет, `on_initialized` не блокирует обработку запросов, а ошибка
-отправки только пишется в лог (без payload и токенов). POST-обёртка
-(`event: message`, буферизация тела) на GET-путь не распространяется.
+`notifications/tools/list_changed` (`tools.listChanged` в `initialize`):
+Hermes при переподключении не перезаписывает свой реестр инструментов, пока
+сервер молчит, поэтому без уведомления новый набор не увидит и Hermes пришлось
+бы перезапускать. Уведомление, отправленное до открытия standalone GET-потока,
+буферизуется SDK и проигрывается при подключении; повторов нет, ошибка только
+логируется.
 
 ## Группы инструментов
 
 Группы включаются через `MCP_GROUPS` (CSV). Неизвестная группа — ошибка
-запуска. Реестр расширяемый: новая группа реализует `group.Group` и
-регистрируется в `app`, без изменений транспорта и auth.
+запуска. Реестр расширяемый: новая группа реализует трейт `ToolGroup`
+(`tools/mod.rs`) и регистрируется в `app`, без изменений транспорта и auth.
 
 ### `infra.read` (все `readOnlyHint=true`)
 
@@ -190,7 +181,7 @@ gateway и Hermes его не видят. `MCP_GROUPS` должен включа
 личного профиля; фраза выхода из него работает в любом профиле. Состояние
 режима — in-memory, один активный тред, исчезает при рестарте (это routing
 hint, не конфигурация).
-Текст ограничен 2000 символами; действует rate-limit; в slog пишутся маршрут,
+Текст ограничен 2000 символами; действует rate-limit; в лог пишутся маршрут,
 профиль, id треда и длина текста, **никогда** сам текст речи.
 
 ## Дашборд системы (`/v1/system/*`)
@@ -198,15 +189,13 @@ hint, не конфигурация).
 Read-only агрегатор для вкладки «Система» Android-приложения. Отдельного
 сервиса нет: шлюз уже читает Prometheus, Alertmanager и реестр push, а
 дашборд — это ещё одно представление тех же источников. Код —
-`crates/mcp-gateway/src/system/` (`build.rs` — PromQL и чистый маппинг,
-`model.rs` — JSON-контракт, `mod.rs` — кэш и маршруты).
+`crates/mcp-gateway/src/system/`.
 
 - Аутентификация: `Authorization: Bearer <токен приложения>`
   (`MCP_APP_TOKEN_FILE`); MCP- и voice-токены здесь отклоняются (`401`,
   realm `home-app`). Без `MCP_APP_TOKEN_FILE` маршрутов нет.
-- Снаружи доступен только через Traefik: `control.<домен>` +
-  `PathPrefix(/v1/system/)` → `mcp-gateway:8080`; `/mcp` наружу не
-  публикуется. Приложение использует уже настроенный адрес Home control.
+- Внешний маршрут (только `/v1/system/` и `/v1/chat/`, без `/mcp`) — в
+  [README деплоя](../../projects/home/kubernetes/mcp-gateway/README.md).
 - Кэш секции 15 с (`CACHE_TTL`); параллельные запросы делят одно обновление.
   Таймаут одного запроса к Prometheus/реестру 5 с, всей секции 8 с.
 - Ошибка или отсутствие источника → секция `unknown` («нет данных»), HTTP
@@ -232,36 +221,24 @@ Read-only агрегатор для вкладки «Система» Android-п
 
 Вкладка «Чат» Android-приложения — тот же агент Hermes, что в Telegram
 (те же память, skills и MCP-инструменты), в одной постоянной беседе
-приложения. Код — `crates/mcp-gateway/src/chat/` (`model.rs` — JSON-контракт,
-`store.rs` — SQLite, `hermes.rs` — клиент sessions API Hermes, `mod.rs` —
-очередь ходов, события и маршруты).
+приложения. Код — `crates/mcp-gateway/src/chat/`.
 
 ```
-Android ──HTTPS control.<домен>/v1/chat/*──► Traefik ──► mcp-gateway:8080
-                                                           │ SQLite /var/lib/mcp-gateway/chat.db (PVC)
-                                                           ▼
-                        http://<узел>:8644 (chat relay в voice-proxy, под Hermes, hostNetwork)
-                                                           ▼
-                        Hermes 127.0.0.1:8642 /api/sessions/home-app/chat/stream
+Android ──/v1/chat/*──► mcp-gateway ──► chat relay (voice-proxy) ──► Hermes /api/sessions/home-app/chat/stream
+                            │ SQLite MCP_CHAT_DB
 ```
 
 - Аутентификация — тот же токен приложения, что `/v1/system/*`
-  (`MCP_APP_TOKEN_FILE`, realm `home-app`). Наружу — только Traefik-маршрут
-  `control.<домен>` + `PathPrefix(/v1/chat/)` с `flushInterval` для SSE;
-  `/mcp`, Hermes API и relay наружу не публикуются.
+  (`MCP_APP_TOKEN_FILE`, realm `home-app`).
 - Hermes API слушает только loopback пода Hermes. Gateway ходит к нему через
-  `chat relay` в `voice-proxy` (порт `8644`, отдельный Bearer
-  `k8s/home-assistant/hermes-chat-relay`), который пропускает ровно
+  chat relay в `voice-proxy` (отдельный Bearer), который пропускает ровно
   `POST /api/sessions` и `POST /api/sessions/home-app/chat/stream` для одной
-  сессии и подставляет `API_SERVER_KEY`. Порт закрыт для LAN правилом
-  `management-firewall` (поды и узел разрешены).
+  сессии и подставляет `API_SERVER_KEY` — см. [voice-proxy](../voice-proxy/README.md#app-chat-relay).
 - Беседа — сессия Hermes `home-app` (`MCP_CHAT_SESSION`), создаётся при первом
   ходе (`409` = уже есть). Персона и формат — `system_message` из
-  `MCP_CHAT_PROMPT_FILE` (`projects/home/kubernetes/mcp-gateway/manifests/chat-prompt.txt`,
-  та же логика, что `telegram_prompt.txt`). Память и skills Hermes общие для
+  `MCP_CHAT_PROMPT_FILE`. Память и skills Hermes общие для
   всех платформ, поэтому факты из Telegram доступны и здесь.
-- История — SQLite на PVC `mcp-gateway-chat` (`local-retain`, Deployment
-  `Recreate`: один писатель). Hermes хранит контекст агента сам; таблица
+- История — SQLite `MCP_CHAT_DB` с одним писателем (одна реплика). Hermes хранит контекст агента сам; таблица
   шлюза — то, что видит приложение: id, `clientId` для идемпотентности,
   цитата, статус, ключ ошибки. Поэтому история переживает переустановку и
   второй телефон.
@@ -297,15 +274,13 @@ Android ──HTTPS control.<домен>/v1/chat/*──► Traefik ──► mc
 - В `POST /v1/chat/messages` вложения передаются `attachments: [id]` (до 4;
   голосовое — только одно и без других вложений); текст при вложениях может
   быть пустым. `kind` сообщения: `voice`, `image`, `file` или `text`.
-- Голосовое распознаёт тот же STT, что голосовой путь станции:
-  `MCP_CHAT_STT_ADDRS` — Wyoming GigaAM `:10305`, затем Whisper `:10300`
-  (по очереди, таймаут 60 с). Расшифровка сохраняется в поле `transcript`
+- Голосовое распознаёт Wyoming STT из `MCP_CHAT_STT_ADDRS` (по очереди,
+  таймаут 60 с). Расшифровка сохраняется в поле `transcript`
   сообщения пользователя (событие `message` с новой версией, приложение
   показывает её под голосовым), Hermes получает «[Голосовое сообщение]:
   <текст>». Ошибка/пустая речь — ответ `failed` с `chat_stt_failed`
   (повтор перезапускает распознавание).
-- Файлы — на PVC `mcp-gateway-media` (`MCP_CHAT_MEDIA_DIR`,
-  `<id>.bin` + `<id>.json`); история — на `mcp-gateway-chat`.
+- Файлы — в `MCP_CHAT_MEDIA_DIR` (`<id>.bin` + `<id>.json`).
 
 ### Алерты и push
 
@@ -324,12 +299,11 @@ Android ──HTTPS control.<домен>/v1/chat/*──► Traefik ──► mc
 - Push через `phone-push` (`MCP_PUSH_URL`, группа `phone`), deep link
   `home://chat/message/<id>`: один раз на новый алерт (`firing`) и один раз на
   готовый ответ Рикардо. Решение алерта и сообщения пользователя push не
-  шлют. Отдельных push алертов в приложении раньше не было, поэтому дублей нет;
-  приложение само не показывает уведомление чата, пока вкладка «Чат» открыта.
+  шлют; приложение само не показывает уведомление чата, пока вкладка «Чат» открыта.
 
 Сообщение: `id`, `seq` (порядок в ленте), `version` (монотонная версия
 изменения), `clientId?`, `role` (`user`/`assistant`/`system`), `kind`
-(`text`; дальше — `alert`), `text` (Markdown), `replyTo? {id, role, text}`
+(`text`/`voice`/`image`/`file`/`alert`), `text` (Markdown), `replyTo? {id, role, text}`
 (текст цитаты обрезан до 200 символов), `status`
 (`pending`/`streaming`/`done`/`failed`), `error?` — ключ ресурса приложения
 (`chat_text_empty`, `chat_text_too_long`, `chat_client_id_invalid`,
@@ -401,12 +375,12 @@ Android ──HTTPS control.<домен>/v1/chat/*──► Traefik ──► mc
 | `MCP_PUSH_URL` | для `phone` | — | База `solutions/phone-push`, например `http://phone-push.home-assistant.svc.cluster.local:8095`. |
 | `MCP_PUSH_TOKEN_FILE` | для `phone` | — | Bearer push-сервиса: тот же общий токен приложения (`scheduler-auth`). |
 | `MCP_APP_TOKEN_FILE` | нет | — | Включает `/v1/system/*` (дашборд Android). Общий токен приложения (`scheduler-auth`); обязан отличаться от MCP- и voice-токенов. |
-| `MCP_CHAT_HERMES_URL` | нет | — | Включает `/v1/chat/*`: база chat relay (`http://<узел>:8644`). Требует `MCP_APP_TOKEN_FILE`. |
+| `MCP_CHAT_HERMES_URL` | нет | — | Включает `/v1/chat/*`: база chat relay. Требует `MCP_APP_TOKEN_FILE`. |
 | `MCP_CHAT_HERMES_TOKEN_FILE` | для чата | — | Bearer chat relay (`secret/k8s/home-assistant/hermes-chat-relay`, ключ `token`). |
 | `MCP_CHAT_PROMPT_FILE` | для чата | — | Системный промпт беседы приложения (`chat-prompt.txt` из ConfigMap). |
 | `MCP_CHAT_SESSION` | нет | `home-app` | Id сессии Hermes; должен совпадать с `HERMES_CHAT_RELAY_SESSION`. |
-| `MCP_CHAT_DB` | нет | `/var/lib/mcp-gateway/chat.db` | SQLite истории чата (PVC `mcp-gateway-chat`). |
-| `MCP_CHAT_MEDIA_DIR` | нет | `/var/lib/mcp-gateway/media` | Каталог вложений (в деплое — PVC `mcp-gateway-media`). |
+| `MCP_CHAT_DB` | нет | `/var/lib/mcp-gateway/chat.db` | SQLite истории чата. |
+| `MCP_CHAT_MEDIA_DIR` | нет | `/var/lib/mcp-gateway/media` | Каталог вложений. |
 | `MCP_CHAT_ALERTS_TOKEN_FILE` | нет | — | Включает `POST /v1/chat/alerts` (вебхук Alertmanager); токен отличается от остальных. |
 | `MCP_CHAT_STT_ADDRS` | нет | — | Wyoming STT `host:port` через запятую, по порядку (GigaAM, затем Whisper). Без него голосовые получают `chat_stt_failed`. |
 | `MCP_PENDING_TTL` | нет | `90s` | Время жизни отложенного действия. |
@@ -415,7 +389,6 @@ Android ──HTTPS control.<домен>/v1/chat/*──► Traefik ──► mc
 | `MCP_QUERY_TIMEOUT` | нет | `4s` | Таймаут одного запроса к бэкенду. |
 | `MCP_STATUS_TIMEOUT` | нет | `8s` | Таймаут всего `infra_status`. |
 | `MCP_LOG_BYTE_CAP` | нет | `65536` | Максимальный размер логов в ответе. |
-| `LOG_LEVEL` | нет | `info` | `debug`, `info`, `warn`, `error`. |
 
 Незаданный бэкенд не роняет процесс: инструмент честно сообщает, что бэкенд не
 настроен, а `infra_status` помечает проверку как неполную.
@@ -438,8 +411,8 @@ targets:
   `targets`; проект из другого профиля даёт тот же отказ, что неизвестное имя.
 - Явно заданные `model`/`effort` всё равно проверяются по списку моделей и
   reasoning-уровней плагина; неподдерживаемое значение — отказ до pending.
-- Pending spawn лежит в `pending.Keyed` под ключом `bb.spawn`, restart — в
-  отдельном `pending.Store`, поэтому группы не перезаписывают друг друга.
+- Pending spawn лежит в `KeyedStore` под ключом `bb.spawn`, restart — в
+  отдельном `PendingStore`, поэтому группы не перезаписывают друг друга.
 
 ## Каталог сервисов
 
@@ -583,8 +556,6 @@ checks:
 - `mcp_gateway_voice_utterances_total{route,outcome}` — маршруты голосовых фраз.
 - `mcp_gateway_tool_list_changed_total{outcome}` — попытки объявить новый
   список инструментов MCP-сессии (`sent`/`error`).
-- Только `mcp_gateway_*`: Go/process-коллекторов нет, как и мёртвой
-  `mcp_gateway_backend_up`.
 
 ## Сборка и тесты
 
@@ -607,72 +578,3 @@ Kubernetes REST и Telegram; сеть и кластер не использую�
 маршруты utterance, выход из режима, fail-closed для work и long-poll
 результата. `tests/deploy_contract.rs` проверяет tracked-каталог и
 bb-allowlist настоящими валидаторами.
-
-## Заметки к коду
-
-Пояснения, перенесённые из комментариев исходников (код комментариев не содержит, см. `AGENTS.md`).
-
-- `crates/mcp-gateway/src/bb.rs` — Typed client of the bb home-dispatcher and the personal-only allow-list.
-  - A refused or failed bridge call. `code` is the plugin/bridge code and `speech` is the short spoken line. It never contains key material or a payload.
-  - Creates a visible thread; idempotent on `idempotency_key`.
-  - Idempotency key.
-  - Idempotency key.
-  - Sequence of the completed turn; the voice proxy's idempotency key.
-  - Idempotency key.
-- `crates/mcp-gateway/src/chat/` — чат приложения: контракт, SQLite-история, клиент Hermes sessions API, очередь ходов и SSE (раздел «Чат приложения»).
-- `crates/mcp-gateway/src/checks.rs` — Typed external catalog probes (`tcp`, `http`, `ha_state`, `ha_template`, `ha_unavailable_summary`).
-  - Build the shared HTTP client with the workspace rustls provider. The workspace `reqwest` trusts only explicitly pinned roots, so an `https://` Home Assistant or external endpoint verifies only when the operating system's bundle is added explicitly …
-- `crates/mcp-gateway/src/config.rs` — Process configuration.
-- `crates/mcp-gateway/src/domain/alert.rs` — Alertmanager alert ↔ catalog service matching.
-- `crates/mcp-gateway/src/domain/catalog.rs` — Deployment catalog: YAML schema, validation and spoken-name resolution.
-- `crates/mcp-gateway/src/domain/clock.rs` — Injectable time source.
-- `crates/mcp-gateway/src/domain/mod.rs` — Pure domain of the MCP gateway.
-- `crates/mcp-gateway/src/domain/redact.rs` — Secret redaction.
-  - Long base64-ish blobs. This over-approximates on purpose: a 33-character unbroken token is almost never ordinary log text.
-- `crates/mcp-gateway/src/domain/report.rs` — The full `infra_report`: service classification and the Telegram text.
-  - Deliberately paused; never a problem.
-  - Short informational suffix, for example the number of suspended Flux resources. Never a problem by itself.
-  - The Flux consistency entry: every Kustomization and HelmRelease must be `Ready=True`; a suspended resource is reported but is never a problem.
-  - The second line of the Telegram text: a short verdict with an emoji. It never asks a question; the offered follow-up lives in speech.
-  - A suspended resource is shown but never reported as a problem.
-- `crates/mcp-gateway/src/domain/speech.rs` — Spoken-line normalization.
-- `crates/mcp-gateway/src/domain/state.rs` — In-memory gateway state: pending actions, the agent-mode switch and the restart cooldown.
-- `crates/mcp-gateway/src/domain/status.rs` — The `infra_status` aggregate.
-  - The check was not configured; it is never a failure.
-- `crates/mcp-gateway/src/domain/time.rs` — Pure time-tool domain: RFC3339 parsing, validation and spoken text.
-- `crates/mcp-gateway/src/domain/vectors.rs` — Golden-vector tests of the pure domain.
-  - The secret values are assembled from parts so the repository scanner never sees a contiguous credential. The vector file only names them.
-- `crates/mcp-gateway/src/health.rs` — Distroless probe: `mcp-gateway -healthcheck`.
-- `crates/mcp-gateway/src/kubernetes.rs` — Small read-mostly Kubernetes REST client.
-  - List Flux Kustomizations and HelmReleases in every namespace. The report treats a missing `Ready=True` condition as a problem; a `suspend: true` resource is reported separately and is never an error, because a deliberately paused Kustomization is a normal …
-- `crates/mcp-gateway/src/lib.rs` — The MCP gateway: pure domain, shared clients, tool groups and the HTTP surface.
-- `crates/mcp-gateway/src/main.rs`
-  - `-healthcheck` is synchronous on purpose: it builds its own current-thread runtime, so it must not start inside `#[tokio::main]` (a nested `block_on` panics and would turn the liveness probe into a crash loop).
-- `crates/mcp-gateway/src/mcp.rs` — MCP server on the official Rust SDK (`rmcp`).
-  - Peer messages travel back through the session worker that is awaiting this handler, so send from a task: initialization and a concurrently opening GET stream must not wait on the notification.
-- `crates/mcp-gateway/src/metrics.rs` — `mcp_gateway_*` Prometheus series.
-  - `prometheus-client` appends `_total` to counters; the Go-era names already end in `_total`, so the registered names must not.
-- `crates/mcp-gateway/src/push.rs` — Client for the phone push service (`solutions/phone-push`).
-  - Delivery counts returned by the push service. Tokens are never included.
-  - Every registered phone (identity and name; never a token).
-- `crates/mcp-gateway/src/scheduler.rs` — Typed client for the home scheduler (`home.v1.SchedulerService`).
-  - Build a client. `base_url` is the scheduler root, for example `http://scheduler.home-assistant.svc.cluster.local:8098`.
-- `crates/mcp-gateway/src/server.rs` — HTTP surface: authenticated MCP, the separate voice bearer, health, readiness and the Prometheus endpoint.
-- `crates/mcp-gateway/src/ssh.rs` — SSH bridge to the bb home-dispatcher.
-  - One bridge call failure. It never contains key material or a payload.
-- `crates/mcp-gateway/src/tools/bb.rs` — `bb.read` / `bb.act`: the bb home-dispatcher tool groups.
-- `crates/mcp-gateway/src/tools/mod.rs` — Extensible tool groups and the shared tool-call envelope.
-  - Hand-written input schema (`serde_json::json!`, never `schemars`).
-- `crates/mcp-gateway/src/tools/phone.rs` — `phone` tool group: find a phone, send it a notification, list the phones.
-  - Deterministic resolution: one phone never needs a name, several phones need an unambiguous match. Unmatched or ambiguous input returns the candidates so Hermes can ask one question instead of guessing.
-  - Diminutive suffixes: «Стасик», «Машенька», «Сашенька» reduce to the same stem as «Стас», «Маша», «Саша». A strip that would leave fewer than three characters is skipped, so «Вика» never collapses to «в».
-- `crates/mcp-gateway/src/tools/time.rs` — `time` tool group: alarms, timers and reminders through the home scheduler.
-- `crates/mcp-gateway/src/voice.rs` — The `/v1/voice/*` HTTP surface.
-  - Never log the spoken text: only its size and routing metadata.
-  - Delivers one phrase to bb. Failures always stay on the bb route: a work-profile phrase must never fall through to Hermes.
-  - Maps the proxy's Russian or English value onto the two profiles. An unknown value is rejected (fail closed).
-  - Matches a whole utterance, not a fragment, so a task that merely mentions agents is never mistaken for the exit command.
-- `crates/mcp-gateway/tests/contract.rs` — Golden contract replay for the MCP surface and the infra tool groups.
-- `crates/mcp-gateway/tests/deploy_contract.rs` — Deploy-data contract: the tracked catalog and bb allow-list must load with the gateway's real validators.
-- `crates/mcp-gateway/tests/tool_list_changed.rs` — Contract for `notifications/tools/list_changed` on a fresh MCP session.
-- `crates/mcp-gateway/tests/voice.rs` — Golden replays of `/v1/voice/*` plus a real `voice-proxy` client.

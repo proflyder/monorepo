@@ -90,27 +90,19 @@
 | `k8s/test` | smoke probe, not secret | Kubernetes auth smoke |
 | `k8s/vaultwarden/vaultwarden-admin` | Argon2id hash of the Vaultwarden /admin token | ESO → vaultwarden |
 
-`k8s/home-assistant/hermes-config#private.yaml` заменяет старый
-`infra/kubernetes/values-private#hermes_private_yaml` после перевода Hermes на
-init container. Перенос выполнен (GET → merge → POST с `options.cas`, команда —
-`docs/KUBERNETES-OPERATIONS.md`, раздел «Автодеплой Hermes»); старое поле ещё
-лежит в OpenBao и не читается, его удаляет владелец (`PENDING.md`).
+Старое поле `infra/kubernetes/values-private#hermes_private_yaml` не
+читается (заменено `k8s/home-assistant/hermes-config#private.yaml`); удаление —
+`PENDING.md`.
 
-Поля `ci/android-distribute` для release-подписи APK: `signing_keystore_b64`
-(base64 PKCS12-ключа), `signing_store_password`, `signing_key_password`,
-`signing_key_alias`, `signing_cert_sha256` (обязательный ожидаемый отпечаток
-сертификата) и `firebase_service_account_json_b64` (base64 одного JSON в одну
-строку: CI декодирует его в `$RUNNER_TEMP`, многострочный
-`firebase_service_account_json` больше не читается — `vault-action` маскирует
-каждую строку, и GitHub вырезает из логов строку-маску `{`).
-`google-services.json` в этой записи не нужен: APK собирается без секретов,
-а файл приходит из repository variable `GOOGLE_SERVICES_JSON_B64`.
-Локально они восстанавливаются как `secrets/android/home-release.keystore`,
-`home-release.store.password`, `home-release.key.password`, `home-release.alias`,
-`home-release.cert.sha256` (`mise run secrets:file android/<имя>`), но обычно
-их передаёт fnox: `mise run admin:android-distribute` (профиль `android`); старые
-`keystore_b64`/`keystore_password` больше не читаются. Процедура — Android
-README, раздел Signing.
+Поля `ci/android-distribute`: `signing_keystore_b64` (base64 PKCS12),
+`signing_store_password`, `signing_key_password`, `signing_key_alias`,
+`signing_cert_sha256` (обязательный ожидаемый отпечаток) и
+`firebase_service_account_json_b64` — base64 одной строкой, потому что
+`vault-action` маскирует каждую строку многострочного значения.
+`google-services.json` не секрет: приходит из repository variable
+`GOOGLE_SERVICES_JSON_B64`. Локально — fnox-профиль `android`
+(`mise run admin:android-distribute`) или `mise run secrets:file android/<имя>`.
+Процедура — Android README, раздел Signing.
 
 ## Доступ к хостам
 
@@ -123,7 +115,7 @@ README, раздел Signing.
 |---|---|---|
 | PVE, K3s, HAOS | `ssh -F ~/.ssh/home-lab/config pve\|k3s\|haos` | `infra/ssh/proxmox-admin` |
 | Комп (Windows) | `ssh -i ~/.ssh/home-lab/dev_ed25519 -o UserKnownHostsFile=~/.ssh/home-lab/known_hosts_komp <user>@<komp-ip>`; ключ `komp-dev-mac`, админ, без forced command; PowerShell — через `-EncodedCommand` | `infra/ssh/komp#dev_ed25519` |
-| Комп из HA | только `shutdown`/`cancel` (forced command) | `infra/ssh/komp#komp_ed25519` |
+| Комп из HA | только `shutdown`/`cancel`/`lock` (forced command) | `infra/ssh/komp#komp_ed25519` |
 | Колонка | `ssh -i ~/.ssh/home-lab/station_ed25519 root@<station-ip>` | `infra/ssh/station` |
 | WSL на компе | `~/.ssh/home-lab/wsl_ed25519` | `infra/ssh/wsl` |
 

@@ -16,8 +16,13 @@
   `bb.providers.experimental_contributeEnv` со следующего сообщения.
 - Allowlist провайдеров (`allowed`) и машин (`machines`) проверяется хуком
   `message.dispatch` до отправки сообщения провайдеру.
-- `null` (команда `all`) означает «без ограничения». Так устроены все профили
-  без явной записи, поэтому включение плагина ничего не блокирует.
+- `null` (команда `all`) означает «без ограничения». Профиль без записи в
+  `allowed`/`machines` не ограничен. Исключение — свежая установка без ключа
+  `allowed`: тогда действует `work → ["claude-code"]`.
+- Профили по умолчанию (пока нет ключа `profiles`): `work` без env (обычные
+  `~/.claude`, `~/.codex`) и `personal` с `CLAUDE_CONFIG_DIR` и
+  `GH_CONFIG_DIR` в `~/.bb-profiles/personal/`. Профиль по умолчанию для
+  непривязанных проектов — настройка `defaultProfile` (`work`).
 - Боковая панель показывает только проекты активного профиля; страница
   **Profiles** назначает профили и создаёт проекты.
 
@@ -109,72 +114,20 @@ CI-юнит `bb-profiles` (`platform/ci/units.mjs`) запускает те же
 
 ## Раскатка на сервер bb
 
-Плагин установлен как локальный path-плагин. bb хранит состояние по id
-(`<bb-data-dir>/plugins/profiles/`) отдельно от исходников, поэтому обновление
-содержимого той же папки и `bb plugin reload` сохраняют профили, привязки и
-allowlist. `bb plugin install path:<new dir>` для того же id тоже переносит
-источник с сохранением настроек; `bb plugin remove` — нет.
+Плагин установлен как локальный path-плагин. Состояние bb хранит по id
+(`<bb-data-dir>/plugins/profiles/`) отдельно от исходников, поэтому
+обновление той же папки сохраняет профили, привязки и allowlist;
+`bb plugin install path:<new dir>` для того же id тоже их сохраняет,
+`bb plugin remove` — нет.
 
-1. Собрать и проверить новую версию на рабочей машине:
+```bash
+cp -a "$HOME/bb-plugins/bb-plugin-profiles" "$HOME/bb-plugins/bb-plugin-profiles.backup"
+rsync -a --delete --exclude node_modules --exclude .git \
+  solutions/bb-profiles/ "$HOME/bb-plugins/bb-plugin-profiles/"
+cd "$HOME/bb-plugins/bb-plugin-profiles" && npm install && bb plugin build
+bb plugin reload profiles
+bb plugin logs profiles -n 50 && bb profiles list
+```
 
-   ```bash
-   cd solutions/bb-profiles
-   npm install
-   npm test
-   bb plugin build
-   ```
-
-2. Сделать резервную копию текущей папки плагина на сервере (только исходники,
-   не `<bb-data-dir>`):
-
-   ```bash
-   cp -a "$HOME/bb-plugins/bb-plugin-profiles" \
-         "$HOME/bb-plugins/bb-plugin-profiles.backup"
-   ```
-
-3. Обновить тот же путь — предпочтительный вариант, id и kv не меняются:
-
-   ```bash
-   # скопировать новые исходники и dist/ в существующую папку
-   rsync -a --delete --exclude node_modules --exclude .git \
-     solutions/bb-profiles/ "$HOME/bb-plugins/bb-plugin-profiles/"
-   cd "$HOME/bb-plugins/bb-plugin-profiles"
-   npm install
-   bb plugin build
-   bb plugin reload profiles
-   ```
-
-   Либо установить из нового каталога — bb перенесёт path-источник и сохранит
-   настройки:
-
-   ```bash
-   bb plugin install path:"$HOME/bb-plugins/bb-plugin-profiles-new"
-   ```
-
-4. Проверить:
-
-   ```bash
-   bb plugin list
-   bb plugin logs profiles -n 50
-   bb profiles list
-   bb profiles show
-   ```
-
-5. Откат: вернуть содержимое из `bb-plugin-profiles.backup`, выполнить
-   `bb plugin reload profiles`. Состояние в `<bb-data-dir>/plugins/profiles/`
-   при этом не затрагивается.
-
-Не менять `bb.name`, имя пакета и id; не выполнять `bb plugin remove` ради
-обновления; не копировать `node_modules` и `dist/` в Git.
-
-## Заметки к коду
-
-Пояснения, перенесённые из комментариев исходников (код комментариев не содержит, см. `AGENTS.md`).
-
-- `app.tsx` — bb-plugin-profiles — frontend: a profile switcher in the sidebar footer, a header hook that remembers the last thread per profile, and a "Profiles" page that assigns every project to a profile. The thread list itself is bb's built-in one; the server hides the other profiles' projects in it.
-- `lib/policy.js` — Pure profile policy: no bb SDK, no npm dependencies.
-  - Default env for a new profile, expressed relative to the home directory of the machine that runs the provider. A `~` prefix is deliberate: the server may run on another machine, so it must not bake its own home directory into newly created profiles.
-- `server.ts` — bb-plugin-profiles — isolated work/personal profiles for bb.
-  - The provider runs on `hostId`, which may be another machine. Only an explicit hostHomes entry knows its home; the server's home is the safe default for same-machine installs. Existing absolute profile values never consult this.
-  - Apply the project's profile to every provider command. Values are only paths (they show up in diagnostics), never secrets. `context.hostId` names the machine that runs the provider;
-  - Resolve the raw maps: a hook must not throw an RPC refusal, and a profile missing from kv simply means "no restriction".
+Откат: вернуть содержимое из `bb-plugin-profiles.backup` и выполнить
+`bb plugin reload profiles`; состояние в `<bb-data-dir>` не затрагивается.

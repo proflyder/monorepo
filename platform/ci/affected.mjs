@@ -1925,6 +1925,23 @@ function routePlatforms(
   return routes;
 }
 
+export function isMarkdownPath(filePath) {
+  const lower = filePath.toLowerCase();
+  return lower.endsWith(".md") || lower.endsWith(".mdx");
+}
+
+export function explicitMarkdownPatterns(config) {
+  return [
+    ...config.units.flatMap((unit) => unit.paths),
+    ...config.invalidations.flatMap((rule) => rule.paths),
+  ].filter(isMarkdownPath);
+}
+
+export function routableChanges(config, changed) {
+  const explicit = explicitMarkdownPatterns(config);
+  return changed.filter((item) => !isMarkdownPath(item) || pathMatches(item, explicit));
+}
+
 export function route(
   config,
   changed,
@@ -1938,7 +1955,8 @@ export function route(
   } = {},
 ) {
   const scoped = scopeChanges(changed, root, base, head);
-  changed = scoped.changed;
+  const allChanged = scoped.changed;
+  changed = routableChanges(config, allChanged);
   const cargo = analyzeCargo(root, base, head, changed);
   const invalidated = invalidatedPlatforms(config, changed);
   if (cargo.mode === "all") {
@@ -1995,8 +2013,8 @@ export function route(
   }
 
   const docsOnly =
-    Boolean(changed.length) &&
-    changed.every((item) => item.endsWith(".md") || item.endsWith(".mdx") || item.startsWith("docs/"));
+    Boolean(allChanged.length) &&
+    allChanged.every((item) => isMarkdownPath(item) || item.startsWith("docs/"));
   const affectedIds = new Set(
     Object.values(routes).flatMap((platformRoute) =>
       platformRoute.units.map((unit) => unit.id),
@@ -2012,7 +2030,7 @@ export function route(
   return new Route({
     base,
     head,
-    changed,
+    changed: allChanged,
     routes,
     docsOnly,
     deployControl,

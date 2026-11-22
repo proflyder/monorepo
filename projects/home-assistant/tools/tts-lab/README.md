@@ -35,7 +35,7 @@ python generate_samples.py
 Silero). Модели `v5_5_ru`/`v5_6_ru` — CC BY-NC; для домашнего использования
 это допустимо, для коммерческого — нет.
 
-## Проверено и отвергнуто (октябрь 2026)
+## Проверено и отвергнуто
 
 Для замены Piper Puriso рассматривались варианты ниже; сэмплы и скрипты не
 хранятся. Требования: русский, CPU без GPU (VM 8 vCPU), локально, Wyoming/HA.
@@ -58,9 +58,3 @@ Ruslan дистилляцией Supertonic M1: тем же способом мо
 ## Puriso
 
 Текущий статус — `docs/STATE.md` (от корня репозитория); установка/откат — `projects/home-assistant/tts/puriso/README.md`. `install_puriso.py` скачивает закреплённые веса/config и проверяет SHA256, но не меняет HA/Compose.
-
-## Заметки к коду
-
-Пояснения, перенесённые из комментариев исходников (код комментариев не содержит, см. `AGENTS.md`).
-
-- `generate_samples.py` — Generate TTS audition samples for the station voice lab.

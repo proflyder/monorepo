@@ -7,9 +7,9 @@
 
 - Станция рекламируется как `Station-Gateway`.
 - Телефон подключается и пишет SSID/PSK/token в GATT-характеристики.
-- Станция добавляет новую сеть через нативный control-интерфейс
-  `wpa_supplicant` (unix datagram `/var/run/wpa_supplicant/wlan0`), сохраняет
-  старую и откатывается, если новая не поднялась.
+- Станция добавляет новую сеть через control-интерфейс `wpa_supplicant`
+  (`/var/run/wpa_supplicant/wlan0`), сохраняет старую и откатывается, если
+  новая не поднялась за 20 с.
 - Автоматически включает BLE, если Wi-Fi нет больше 20 секунд.
 - Три коротких нажатия кнопки mute открывают/закрывают ручное окно на 15 минут.
 
@@ -105,8 +105,7 @@ adb -s 192.0.2.13:5555 shell 'chmod 755 /data/quasar/ble-gateway/*.sh /data/quas
 adb -s 192.0.2.13:5555 shell /data/quasar/ble-gateway/status.sh
 ```
 
-`station/start.sh` запускает `ble-gateway --auto=true --log …`; этот синтаксис
-сохранён.
+`station/start.sh` запускает `ble-gateway --auto=true --log …`.
 
 ## CLI
 
@@ -115,7 +114,7 @@ ble-gateway [OPTIONS]
 
   --auto[=<BOOL>]              авто-режим (по умолчанию true; --auto, --auto=false, --auto=1)
   --log <PATH>                 append-лог вместо stderr (каталог создаётся)
-  --log-level <LEVEL>          уровень по умолчанию (RUST_LOG как уровень важнее), default info
+  --log-level <FILTER>         уровень по умолчанию (RUST_LOG важнее), default info
   --token-file <PATH>          default /data/quasar/ble-gateway/token
   --button <PATH>              default /dev/input/event2
   --dry-run                    не менять Wi-Fi, Commit отвечает DRY_RUN_OK
@@ -129,39 +128,23 @@ ble-gateway [OPTIONS]
   -V, --version                версия
 ```
 
-`--test-wpa` теперь завершается кодом 0, когда временная сеть добавлена,
-заполнена и удалена; ошибка `add_network`/`set_network`/`remove_network`
-даёт ненулевой код.
+`--test-wpa` возвращает 0, если временная сеть добавлена, заполнена и
+удалена, иначе ненулевой код.
 
 ## Архитектура
 
-- `cli` — clap derive, единая `Config`.
-- `gateway` — состояние и общие сценарии. Статус — `tokio::sync::watch`
-  (его читают файл `status`, GATT notify и HTTP). Commit'ы приходят в
-  `mpsc` и разбираются одним worker'ом; `tokio::sync::Mutex` дополнительно
-  сериализует apply, поэтому два параллельных Commit не запускают два
-  `SELECT_NETWORK`. BLE-регистрация и Bluetooth-переключения — короткие
-  async-мьютексы; таймстемпы и флаги — атомики/`std::sync::Mutex` на одно
-  поле.
-- `wifi` — типизированный клиент control-интерфейса `wpa_supplicant`
-  (`STATUS`, `LIST_NETWORKS`, `ADD_NETWORK`, `SET_NETWORK` с квотированием,
-  `ENABLE_NETWORK`, `SELECT_NETWORK`, `REMOVE_NETWORK`, `SAVE_CONFIG`,
-  `RECONNECT`) и последовательность apply/rollback.
-- `gatt` — `#[zbus::interface]` для GATT-объектов и `#[zbus::proxy]` для
-  `GattManager1`/`LEAdvertisingManager1`; `Connectable` ставится через
-  `org.freedesktop.DBus.Properties`. `zbus` выбран
-  сознательно: он pure-Rust и не линкует libdbus; `bluer` требует libdbus и
-  поэтому не используется.
-- `bluetooth` — `Adapter1` proxy (`Powered`/`Pairable`/`Discoverable`),
-  отключение устройств через `ObjectManager` + `Device1`; `bluealsad`,
-  `bluealsa-aplay` и `bt-agent` остаются внешними процессами (у них нет
-  D-Bus-эквивалента запуска ALSA-моста/агента).
-- `button` — разбор 32-bit `input_event` без `unsafe` и чистый автомат
-  жестов на `tokio::time::Instant` (тесты на `tokio::time::pause`).
-- `control` — axum + `home-http` bearer; маршруты/поля те же, что читает
-  `projects/home-assistant/ha-voice`.
-- Логи — `tracing` через `home-telemetry`: локальное время, stderr или
-  append-файл. Формат строк отличается от старого Go/ручного логгера.
+- `gateway` — общее состояние; статус — `tokio::sync::watch` (файл `status`,
+  GATT notify, HTTP). Commit'ы идут через `mpsc` одному worker'у, apply
+  дополнительно сериализован — два параллельных Commit не дают два
+  `SELECT_NETWORK`.
+- `wifi` — клиент control-интерфейса `wpa_supplicant` и apply/rollback;
+  значение `SET_NETWORK` (может быть паролем) в ошибки не попадает.
+- `gatt`/`bluetooth` — BlueZ через `zbus`: pure-Rust, без libdbus (`bluer`
+  требует libdbus, поэтому не используется). `bluealsad`, `bluealsa-aplay`,
+  `bt-agent` — внешние процессы.
+- `button` — разбор `input_event` и автомат жестов; `control` — axum +
+  `home-http` bearer, маршруты — те, что читает `projects/home-assistant/ha-voice`.
+- `bin/bletest` — D-Bus клиент для проверки на станции.
 
 ## HTTP control (для HA)
 
@@ -203,18 +186,13 @@ bazel build -c opt --platforms=//platform/bazel/zig:armhf_linux \
 bazel test //packages/rust/... //projects/station/ble-gateway/...
 ```
 
-`bazel test` запускает unit-тесты, `clippy` (warnings = errors) и `rustfmt`.
-Кросс-сборка использует тот же hermetic zig toolchain и Rust-тулчейн, что и
-Pulsar (`rules_rust` в корневом `MODULE.bazel`), поэтому отдельный
-rustup-тулчейн не нужен.
+`bazel test` запускает unit-тесты, `clippy` (warnings = errors) и `rustfmt`;
+toolchain — hermetic zig + `rules_rust` из корневого `MODULE.bazel`.
 
-Новый бинарник — armhf ELF. На станции: остановить gateway,
-заменить `/data/quasar/ble-gateway/ble-gateway`, запустить `start.sh`.
-Старый бинарник сохраняется как `ble-gateway.prev`.
+Замена на станции и запись `deployed_sha256` —
+[`docs/STATION-SOFTWARE.md`](../../../docs/STATION-SOFTWARE.md), «Обновление BLE gateway».
 
 ## `bletest`
-
-`bletest` — маленький D-Bus клиент (clap):
 
 ```bash
 ./bletest --destination :1.4 3 1          # записать Commit
@@ -230,23 +208,3 @@ rm -rf /data/quasar/ble-gateway
 ```
 
 Wi-Fi-профили не удаляются. Rootfs/OTA не меняются.
-
-## Заметки к коду
-
-Пояснения, перенесённые из комментариев исходников (код комментариев не содержит, см. `AGENTS.md`).
-
-- `crates/ble-gateway/src/bin/bletest.rs` — Small D-Bus client for exercising the gateway on the station: `bletest --destination :1.4 3 1` writes Commit, `bletest --destination :1.4 --status 4` reads Status.
-- `crates/ble-gateway/src/bluetooth.rs` — Classic Bluetooth A2DP-sink mode ("mute x4").
-- `crates/ble-gateway/src/button.rs` — Passive `/dev/input/eventN` reader and the short-press/hold gesture machine.
-- `crates/ble-gateway/src/control.rs` — LAN-only HTTP control for Home Assistant voice intents.
-- `crates/ble-gateway/src/credentials.rs` — SSID/PSK/token buffers written by the GATT characteristics.
-- `crates/ble-gateway/src/gateway.rs` — Daemon state and the behaviours shared by GATT, HTTP, the button and auto mode.
-- `crates/ble-gateway/src/gatt.rs` — BlueZ GATT application, advertisement and characteristic interfaces.
-- `crates/ble-gateway/src/lib.rs` — Station BLE provisioning gateway.
-- `crates/ble-gateway/src/status.rs` — Status values shared by the GATT status characteristic, the status file and the HTTP control API.
-- `crates/ble-gateway/src/test_support.rs` — Shared helpers for the unit tests: temporary directories, a fake `wpa_supplicant` control socket and a recording Bluetooth adapter.
-- `crates/ble-gateway/src/wifi.rs` — Native `wpa_supplicant` control-interface client and the Wi-Fi apply / rollback sequence.
-  - `SET_NETWORK <id> <field> <value>` may carry the Wi-Fi password. Every error stores only the verb, id and field; the value is never formatted.
-- `station/stop.sh`
-  - Kill all gateway processes by exact comm name (never matches this shell).
-- `version.bzl` — Build-time identity for the station BLE gateway.

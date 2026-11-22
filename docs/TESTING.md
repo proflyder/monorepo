@@ -1,40 +1,43 @@
 # TESTING
 
-Тесты — рядом с кодом; `platform/quality/` — общие проверки и аудит.
+Тесты — рядом с кодом; `platform/quality/` — общие проверки и аудит; E2E —
+`projects/<project>/e2e/`. Общей корневой папки tests нет.
 
 ## Быстрый старт
 
 ```bash
 python3 -m pip install -r requirements-test.txt
-mise run test          # hermetic, без сети/станции
+mise run test          # hermetic, без сети/станции — gate
 mise run test <unit>   # тесты одного CI-юнита (список — `mise run units`)
-mise run coverage      # coverage; reports/TEST-COVERAGE.md (not tracked)
+mise run test:bazel    # bazel test //...
+mise run coverage      # reports/TEST-COVERAGE.md (не в Git)
 mise run test:e2e      # live HA/BLE read-only; нужны токены
-mise run check         # pre-push: test + repository audit + Gitleaks
+mise run check         # pre-push: test + audit + Gitleaks
 ```
 
-`mise run test` — gate. `mise run test:e2e` требует `HA_TOKEN`, опционально
-`STATION_CONTROL_TOKEN`/`HERMES_API_KEY`; токены не коммитить.
-CI/repo-quality проверки — Node 20+ (`node --test`), без npm-зависимостей.
+`mise run test:e2e` требует `HA_TOKEN`, опционально
+`STATION_CONTROL_TOKEN`/`HERMES_API_KEY`; токены не коммитить. CI/quality
+проверки — Node 20+ (`node --test`), без npm-зависимостей.
 
-Python-тесты — stdlib `unittest`, pytest не нужен. Набор каталогов и способ
-запуска задаёт `platform/quality/run-tests.sh` (его вызывают `mise run test`
-и CI): `python3 -m unittest discover -s <каталог> -p 'test_*.py'`. Флаг `-s`
-кладёт каталог теста в `sys.path`, поэтому тесты импортируют соседний модуль
-по имени (`import restore_drill`, `import sync_openbao`). Запуск одного файла
-из корня (`python3 -m unittest projects/home/kubernetes/openbao/test_restore_drill.py`
-или pytest) падает на этом импорте — это не поломка; запускать так:
+Python-тесты — stdlib `unittest`. Каталоги задаёт
+`platform/quality/run-tests.sh`: `python3 -m unittest discover -s <каталог>
+-p 'test_*.py'`. `-s` кладёт каталог в `sys.path`, и тесты импортируют
+соседний модуль по имени, поэтому запуск одного файла из корня падает на
+импорте — это не поломка. Запускать так:
 
 ```bash
 python3 -m unittest discover -s projects/home/kubernetes/openbao -p 'test_*.py' -v
-python3 -m unittest discover -s projects/home/kubernetes/vaultwarden -p 'test_*.py' -v
 ```
+
+На чистом checkout `mise run test` печатает `SKIP` для тестов, которым нужен
+игнорируемый nested checkout `projects/station/resources/quasar-connect-bot`.
+
+Live E2E:
 
 ```bash
 export HA_URL=http://192.0.2.28:8123
 export HA_TOKEN='...'
 mise run test:e2e
-
 STATION_E2E_MUTATE=1 mise run test:e2e
 STATION_E2E_AUDIO=1 mise run test:e2e
 ```
@@ -46,196 +49,100 @@ teardown восстанавливает source/volume.
 
 | Слой | Что проверяет |
 |---|---|
-| HA static | YAML, duplicate keys, entities/services/scripts, Jinja, intents, alarm/music state |
+| HA static | YAML, duplicate keys, entities/services/scripts, Jinja, intents |
 | Hermes | model/provider, MCP allowlist, web search, voice sanitizer |
 | Egress guard | IPv4/IPv6 allowlist, NTP, idempotency |
 | Static gates | shell syntax, ShellCheck errors, Python syntax, secret patterns |
-| Scheduler | SQLite store/tick/planner, Connect API, auth, tasks/queues |
-| HA bridge | config/queue, Connect JSON, HA REST, dry-run, at-least-once, ledger |
-| Audit scanner | approved public domain/namespace allowances and lookalikes |
-| Pairing | WAV/OGG, token redaction |
+| Scheduler / HA bridge | SQLite store/tick/planner, Connect API, auth, очереди, at-least-once, ledger |
 | BLE gateway | token, Wi-Fi validation/rollback, WPA, GATT, HTTP auth/status |
-| Windows logon provider | portable protocol/HMAC/config vectors, cross-build exports/imports, static install scripts, on-PC self-test |
-| Heartbeat Worker | grace-логика, auth, KV transitions, Telegram-доставка (моки) |
-| HA live | API, entities, text intents, optional mutation/alarm |
-| Gateway live | bearer auth, status shape, method guards |
-| MCP gateway | Rust/Bazel unit (фейки backend'ов), каталог↔RBAC и контракт манифестов, fake SSH |
-| bb plugins | `node --test` диспетчера и `profiles`; контракт `params.json` с обеих сторон |
-| Voice routing | Rust-юнит `solutions/voice-proxy`, `test_voice_routing_contract.py`, мост `test_bb_dispatch.py` |
-| Pulsar Rust | `bazel test //projects/station/pulsar/satellite/...` (fmt/clippy/tests, Linux) и `bazel build -c opt --platforms=//platform/bazel/zig:<arch>_linux //projects/station/pulsar/satellite:station_binary` для `aarch64`/`armhf` — CI-юниты `pulsar-bazel` (`_unit.yml`) и `pulsar` (`_native.yml`) |
-| Pulsar installer | Rust-тесты установщика и golden-фикстуры из [`projects/station/pulsar/installer/`](../projects/station/pulsar/installer); `bazel test //projects/station/pulsar/installer/...` |
+| Windows logon provider | protocol/HMAC/config-векторы, PE exports/imports, install-скрипты, self-test на ПК |
+| Heartbeat Worker | grace-логика, auth, KV transitions, Telegram (моки) |
+| MCP gateway | Rust-юнит (фейки backend'ов), каталог↔RBAC, fake SSH |
+| Voice routing | `solutions/voice-proxy`, `test_voice_routing_contract.py`, `test_bb_dispatch.py` |
+| Pulsar | `bazel test //projects/station/pulsar/...` (fmt/clippy/tests, Linux) и кросс-сборка `aarch64`/`armhf` |
+| HA / Gateway live | API, entities, text intents, bearer auth, method guards |
 
-## Hermes
+## Сервисы и голос
 
 ```bash
-export HERMES_API_URL=http://127.0.0.1:8642
-export HERMES_API_KEY='...'
-python3 projects/home-assistant/e2e/live_hermes.py -v
-
-HERMES_E2E_CHAT=1 python3 projects/home-assistant/e2e/live_hermes.py -v
-
-# Реальный model turn через conversation.hermes_agent в Home Assistant:
-STATION_E2E=1 HA_HERMES_AGENT_TEST=1 python3 projects/home-assistant/e2e/live_ha.py -v
-```
-
-HA read-only gate проверяет доступность `conversation.hermes_agent`; прямой
-Hermes `/health` и `/v1/models` не заменяют регистрацию агента в HA.
-
-## Scheduler и HA bridge
-
-`mise run test` запускает герметичные suites, `mise run test <unit>` — проверки
-одного юнита. Отдельные команды:
-
-```bash
-bazel test //solutions/... //packages/...
-bazel test //platform/deploy-rs/...
-cargo test -p scheduler -p ha-bridge
-```
-
-`platform/deploy-rs` содержит frozen parity-фикстуры: fake kubectl
-записывает argv и payload, а `bazel test //platform/deploy-rs:parity`
-сравнивает их с трассами и файлами, снятыми с Go-реализации до её удаления.
-`state` покрывает record (live/absent/fail-closed), mark, rollback и
-first-install delete; `preflight` — legacy-writer проверки и HTTP-сценарии на
-локальных фейковых HTTP-серверах.
-
-Тесты scheduler/bridge герметичны: SQLite — во временном каталоге, scheduler,
-HA и Connect-клиенты — через локальные фейковые HTTP-серверы; живые HA, ADB и
-устройство не используются. Scheduler API отдаёт Connect JSON на
-`/home.v1.SchedulerService/<Method>`; bridge проверяется как настоящий
-клиент этого контракта.
-
-Heartbeat Worker тестируется встроенным Node-раннером без npm:
-
-```bash
+bazel test //solutions/... //packages/... //platform/deploy-rs/...
+cargo test -p scheduler -p ha-bridge -p voice-proxy -p health-exporter
 node --test solutions/heartbeat/src/*.test.js
+node --test solutions/bb-home-dispatcher/tests/*.test.js
+(cd solutions/bb-profiles && npm test)
+python3 -m unittest discover -s projects/home-assistant/ha-voice -p 'test_*.py' -v
+python3 -m unittest discover -s projects/home-assistant/deploy -p 'test_*.py' -v
+python3 -m unittest discover -s projects/home-assistant/hermes -p 'test_*.py' -v
+python3 -m unittest discover -s projects/home/kubernetes/mcp-gateway -p 'test_*.py' -v
+python3 -m unittest discover -s projects/home/proxmox -p 'test_*.py' -v
 ```
 
-Локальный процессный E2E (настоящие бинарники scheduler + bridge, fake HA на
-loopback, временные SQLite/ledger, dummy-токены):
+Все герметичны: SQLite во временном каталоге, HA/Connect/SSH/плагин bb —
+локальные фейки. `bazel test //platform/deploy-rs:parity` сравнивает argv и
+payload fake kubectl с замороженными фикстурами.
+
+Процессный E2E scheduler + bridge (настоящие бинарники, fake HA на loopback):
 
 ```bash
-python3 projects/home/e2e/scheduler_smoke.py -v
-# или
 projects/home/e2e/run-scheduler-smoke.sh
 ```
 
-Он проверяет: auth reject без/с неверным токеном, timer → FIRE → fake HA →
-DELIVERED, generic task остаётся в очереди `tasks`, STOP через StopSchedule.
-Живой звук и HA shadow-import этот тест **не** проверяет.
-
-Голосовые адаптеры:
-
-```bash
-python3 -m unittest discover -s projects/home-assistant/ha-voice -p 'test_*.py' -v
-```
-
-HA voice tests проверяют контракт Connect JSON, truthfulness речи, отсутствие
-legacy snooze/start и сохранение `enabled:false` при update; живые
-HA/scheduler не используются.
+Проверяет auth reject, timer → FIRE → fake HA → DELIVERED, generic task в
+очереди `tasks`, STOP. Живой звук не проверяет.
 
 Живая проверка голосового маршрута — тихий `conversation.process` через
-builtin-агент (`conversation.home_assistant`), не через Hermes: create/list/
-update/enable/disable/delete, timer start/pause/resume/cancel и reminder
-create/list. Результаты и scheduler state сверяются через
-`ListSchedules`/`ListTimers`; звук и микрофон этим не проверяются.
+builtin-агент (`conversation.home_assistant`), сверка через
+`ListSchedules`/`ListTimers`.
 
-### bb, шлюз и голосовой профиль
+Hermes live:
 
 ```bash
-# плагины bb (без bb SDK и сети)
-node --test solutions/bb-home-dispatcher/tests/*.test.js
-(cd solutions/bb-profiles && npm test)
-
-# шлюз: Rust-тесты, каталог↔RBAC, контракт полей и деплой
-bazel test //solutions/mcp-gateway/...
-python3 -m unittest projects/home/kubernetes/mcp-gateway/test_deploy.py -v
-
-# мост и authorized_keys на локальном HTTP-double плагина
-python3 -m unittest projects/home/proxmox/test_bb_dispatch.py -v
-
-# голос: маршрут по профилю, fail-closed, cancel guard, announce, очередь
-cargo test -p voice-proxy
-bazel test //solutions/voice-proxy/crates/voice-proxy:unit_tests
-python3 -m unittest projects/home-assistant/deploy/test_voice_routing_contract.py -v
-
-# деплой-инструменты и Hermes rollout/render-config
-bazel test //platform/deploy-rs/...
-cargo test -p health-exporter
-bazel test //projects/home-assistant/deploy/health-exporter/...
-python3 -m unittest discover -s projects/home-assistant/deploy -p 'test_*.py' -v
-python3 -m unittest discover -s projects/home-assistant/hermes -p 'test_*.py' -v
+export HERMES_API_URL=http://127.0.0.1:8642 HERMES_API_KEY='...'
+python3 projects/home-assistant/e2e/live_hermes.py -v
+HERMES_E2E_CHAT=1 python3 projects/home-assistant/e2e/live_hermes.py -v
+STATION_E2E=1 HA_HERMES_AGENT_TEST=1 python3 projects/home-assistant/e2e/live_ha.py -v
 ```
 
-Тесты герметичны: SSH и плагин подменяются фейками, живой CT/кластер не
-нужны. Живая приёмка рабочего профиля через колонку — `PENDING.md`.
+Прямой Hermes `/health` не заменяет проверку регистрации
+`conversation.hermes_agent` в HA.
 
-Bazel-гейты отдельные:
+## Pulsar
 
 ```bash
-# backend-таргеты (Bazelisk — `mise install`; `bazel` — shim на него)
-bazel test //solutions/... //packages/...
-
-# Rust-хост Pulsar (Linux; на macOS цели пропускаются через
-# target_compatible_with, поэтому build проходит без сборки)
 bazel build //projects/station/pulsar/...
-bazel test  //projects/station/pulsar/satellite/...
-```
-
-`bazel test` для Pulsar включает юнит- и интеграционные тесты, golden-файлы,
-`rustfmt` и `clippy` (warnings = errors). `clippy` линтует ровно
-`[workspace.lints]` корневого `/Cargo.toml`: каждый crate-пакет передаёт
-`extract_cargo_lints(... workspace = "//:Cargo.toml")` в `lint_config`, поэтому
-`cargo clippy --workspace` и Bazel дают один набор предупреждений. На macOS те же
-цели несовместимы и пропускаются; реальная сборка/тесты — только на Linux.
-Станционная кросс-сборка и разбор crash-файла — там же:
-
-```bash
+bazel test  //projects/station/pulsar/...
 bazel build -c opt --platforms=//platform/bazel/zig:armhf_linux \
   --define=pulsar_version="$(node platform/ci/version.mjs --unit pulsar)" \
   //projects/station/pulsar/satellite:station_binary
-# pulsar (stripped, .gnu_debuglink) и pulsar.debug (unstripped) лежат в bazel-bin/.../satellite/
 ```
-Android-сборка/тесты требуют Android SDK и выполняются из
-`projects/mobile/android` отдельно; они не входят в backend `mise run test`.
+
+На macOS цели несовместимы и пропускаются (`target_compatible_with`); реальные
+тесты — Linux. `clippy` линтует `[workspace.lints]` корневого `Cargo.toml`
+(`extract_cargo_lints`), поэтому Cargo и Bazel дают один набор
+предупреждений. Кросс-сборка кладёт `pulsar` (stripped, `.gnu_debuglink`) и
+`pulsar.debug` в `bazel-bin/.../satellite/`.
+
+## Android
 
 ```bash
 export ANDROID_HOME="${ANDROID_HOME:-$HOME/Library/Android/sdk}"
-bazel test --config=android \
-  //projects/mobile/android:android_tests \
-  //projects/mobile/android/app:main_activity_smoke_test \
-  //projects/mobile/android:app \
-  //solutions/scheduler/... //solutions/ha-bridge/... //packages/proto/... \
-  --nocache_test_results --test_output=errors
+bazel test --config=android //projects/mobile/android:android_tests \
+  //projects/mobile/android/app:main_activity_smoke_test
 bazel build --config=android //projects/mobile/android:app
-# debug APK: bazel-bin/projects/mobile/android/app/app.apk
-
-# Android Lint (separate CI unit `android / android-lint`, not in android_tests)
-# needs cmdline-tools 23.0.
 bazel test --config=android //projects/mobile/android:android_lint
-
-# detekt (separate CI unit `android / android-detekt`, not in android_tests):
-# built-in rules, formatting and the first-party `home-rules` plug-in.
 bazel test --config=android //projects/mobile/android:detekt
-
-# Bazel-инструменты Android (Kotlin/JVM, exec-конфигурация): генераторы
-# ViewBinding/google-services, lint runner и APK closure; их тесты входят
-# в android_tests.
 bazel test --config=android //platform/android/...
 ```
 
-Каждый `*_test` под `projects/mobile/android/**` обязан входить в
-`//projects/mobile/android:android_tests` или в `test_targets` юнита
-(`platform/ci/units.mjs`). Иначе `mise run ci:units`
-(`androidSuiteCoverageProblems` в `platform/ci/check_units.mjs`) красный:
-тест вне набора CI никогда не запускает. Новый тест — сразу строка в
-`android_tests`.
-
-Android-гейты и их актуальный состав перечислены в
-`projects/mobile/android/README.md`; на устройстве установлен debug APK,
-интерактивная приёмка (фильтры, сценарии, toggle) ещё не завершена. Push/FCM,
-offline cache и generic task UI не реализованы. APK debug-signed, appId
-`dev.proflyder.home`, minSdk 26, target/compile 36, только `INTERNET`.
+- `--config=android` обязателен (решение 50).
+- Каждый `*_test` под `projects/mobile/android/**` входит в `android_tests`
+  или `test_targets` юнита, иначе `mise run ci:units`
+  (`androidSuiteCoverageProblems`) красный.
+- `android_lint` (нужен `cmdline-tools;23.0`) и `detekt` — отдельные CI-юниты,
+  не в `android_tests`.
+- `AndroidDesignSystemTests` в `platform/quality/test_static.py` запрещает
+  стили `Widget.*` и компоненты без стиля дизайн-системы вне
+  `core/designsystem` — см. `projects/mobile/android/core/designsystem/README.md`.
 
 ## BLE gateway
 
@@ -249,696 +156,204 @@ Read-only: 401 без токена, `/status`, 405 на неверные мет�
 
 ## Windows logon provider
 
-`solutions/windows-logon-provider` — Rust-креденшел-провайдер, кросс-сборка
-Bazel/rules_rust + герметичный zig под `x86_64-pc-windows-gnu`. Проверки:
-
 ```bash
 cd solutions/windows-logon-provider
-./run-tests.sh      # bazel test: protocol/HMAC/config-векторы на host + rustfmt/clippy (host и Windows)
-./build.sh          # кросс-сборка; pe_artifacts.py проверяет exports (DllGetClassObject/DllCanUnloadNow) и imports
-python3 -m unittest discover -s . -p 'test_*.py' -v   # статический контракт install/set-secret/uninstall/status
+./run-tests.sh
+./build.sh
+python3 -m unittest discover -s . -p 'test_*.py' -v
 ```
 
-Bazel и Rust/zig-тулчейн приходят из `MODULE.bazel`; на macOS/Linux Bazelisk
-берётся из `PATH` (`mise install`, см. `mise.toml`), либо задаётся `BAZELISK`. Отдельного mingw-архива и
-host clang++ нет: `build.sh` собирает
-`//solutions/windows-logon-provider/crates/provider:provider` под
-`//platform/bazel/windows:x86_64_windows`, обнуляет PE-таймстемп для
-воспроизводимости и проверяет импорты/экспорты через `pe_artifacts.py`.
-CI (платформа `native`, `_native.yml`) ставит pinned Bazelisk, кеширует Bazel
-и запускает оба скрипта, затем публикует DLL, `cp-selftest.exe` и
-`SHA256SUMS` артефактом; ПК из CI недоступен. PR из этого репозитория
-публикует тот же артефакт через ORAS под `tree-<hash>` с provenance
-(build once); merge только продвигает проверенный digest на теги `VERSION` и
-`sha-<12>`; при missing/unverified job падает и ничего не собирает
-(`publish-oci.sh` в деплое не вызывается). Тег версии неизменяем по
-содержимому. Форки не публикуют;
-проверка получения и проверки digest — `fetch.sh`.
-
-На самом ПК — self-test (когда грант не ожидается) и живая приёмка:
-
-```powershell
-.\cp-selftest.exe     # загрузка провайдера вне LogonUI
-```
-
-Живой чеклист: голос «включи комп» → экран входа → рабочий стол без PIN;
-включение кнопкой → обычный вход; wakegrant недоступен → обычный вход, без
-плитки и зависаний.
+`run-tests.sh` — host-векторы и rustfmt/clippy (host и Windows); `build.sh` —
+кросс-сборка, обнуление PE-таймстемпа и проверка exports/imports
+(`pe_artifacts.py`); Python — статический контракт install-скриптов. На ПК:
+`.\cp-selftest.exe`. Живой чеклист: «включи комп» → рабочий стол без PIN;
+кнопка → обычный вход; wakegrant недоступен → обычный вход без плитки.
 
 ## Не автоматизировано
 
-- реальный BlueZ/ALSA/event2/Wi-Fi rollback на станции;
-- установка прошивки Pulsar на реальную станцию вне `deploy-station`;
-- микрофон/ASR, Spotify 429, реальный звук;
-- `resources/spotify-autostart/spotify.sh` — документированный legacy,
-  исключён из syntax gate.
-
-Эти пути — live/ручная приёмка. Структурная проверка HA не равна runtime coverage.
+Реальный BlueZ/ALSA/Wi-Fi rollback на станции, установка Pulsar вне
+`deploy-station`, микрофон/ASR, реальный звук. Структурная проверка HA не
+равна runtime coverage.
 
 ## CI (GitHub Actions)
 
-`.github/workflows/ci.yml` — hermetic-проверки без деплоя и без секретов.
-Сам он только вызывает reusable `_ci.yml`; триггер у него ровно один —
-pull request в `develop`. Ручной полный прогон — отдельный файл
-`ci-manual.yml` (`workflow_dispatch`), который вызывает тот же reusable
-с `mode: all`. Push в `develop` CI не запускает: он меняется только через PR
-с зелёным `ci-ok`, повторный прогон после squash-merge избыточен.
-`permissions: contents: read`, `concurrency` отменяет устаревший прогон только
-для PR. Выкладка — отдельный `.github/workflows/deploy-home.yml` на push в
-`develop` (см. ниже); его job-ы `warm-android` и `warm-rust` после merge —
-единственные писатели develop-стороны кэшей. Кэши разделены по семействам,
-потому что Android и host-Rust скачивают и компилируют разное, а лимит GitHub
-(10 ГБ) общий:
+Причины решений — `DECISIONS.md` 36, 49–51, 54, 59.
 
-### Правило: один триггер на воркфлоу
-
-У каждого файла в `.github/workflows/` ровно одно событие в `on:` — либо
-`workflow_dispatch`, либо `workflow_call`, либо `pull_request`, либо `push`,
-либо `schedule`. Причина: несколько событий в одном файле размазывают
-триггерную обвязку и провоцируют ветвление по `github.event_name` внутри
-общей логики. Если нужны и PR, и ручной запуск — это два тонких файла-обёртки,
-которые вызывают один reusable workflow (`_*.yml`, `on: workflow_call`).
-
-| Триггер | Тонкая обёртка | Общая логика |
+| Триггер | Обёртка | Reusable |
 |---|---|---|
-| `pull_request` в `develop` | `ci.yml` (он же публикует required check `ci-ok`) | `_ci.yml` |
+| `pull_request` в `develop` | `ci.yml` (публикует `ci-ok`) | `_ci.yml` |
 | `workflow_dispatch` (все юниты) | `ci-manual.yml` | `_ci.yml` |
 | `workflow_dispatch` (Android-релиз) | `android-release.yml` | `_android.yml` + `_android-release.yml` |
 | `push` в `develop` | `deploy-home.yml` | `_deploy-home.yml` → `_pin.yml`, `_native.yml`, `_station-deploy.yml` |
-| `workflow_dispatch` (допин текущего develop) | `deploy-home-manual.yml` | `_deploy-home.yml` |
-| `workflow_dispatch` (честная пересборка) | `deploy-services.yml` | `_unit.yml`, `_pin.yml`, `_native.yml`, `_station-deploy.yml` |
-| `schedule` (ежедневная уборка) | `cleanup.yml` | `_cleanup.yml` |
-| `workflow_dispatch` (уборка, dry run по умолчанию) | `cleanup-manual.yml` | `_cleanup.yml` |
+| `workflow_dispatch` (допин develop) | `deploy-home-manual.yml` | `_deploy-home.yml` |
+| `workflow_dispatch` (пересборка) | `deploy-services.yml` | `_unit.yml`, `_pin.yml`, `_native.yml`, `_station-deploy.yml` |
+| `schedule` (уборка) | `cleanup.yml` | `_cleanup.yml` |
+| `workflow_dispatch` (уборка, dry run) | `cleanup-manual.yml` | `_cleanup.yml` |
 
-Правила для reusable (`_*.yml`): только `on: workflow_call`, никаких
-`github.event_name` для ветвления — вызывающий передаёт явный input
-(`mode`, `dry_run`, `same_repository`, `distribution`, `save_cache`). Имя
-required check `ci-ok` и имя файла `deploy-home.yml` — часть контракта branch
-protection и `platform/ci/safe-merge.mjs`; проверка `/`-префикса не появляется,
-потому что job `ci-ok` остаётся в `ci.yml` (вызывается только reusable
-`_ci.yml`, а его агрегат приходит как output `ok`/`failing`).
+Push в `develop` CI не запускает: туда попадают только PR с зелёным `ci-ok`.
 
-Правило проверяется автоматически: `platform/ci/check_units.mjs`
-(`workflowTriggerProblems`, `mise run ci:units`) падает, если в `on:` больше
-одного события, если `_*.yml` имеет не `workflow_call` или если файл без `_`
-объявлен как reusable.
+### Правило: один триггер на воркфлоу
+
+Ровно одно событие в `on:`; reusable — только `_*.yml` с `workflow_call`, без
+ветвления по `github.event_name` (явные inputs `mode`, `dry_run`,
+`same_repository`, `distribution`, `save_cache`). Новый триггер — новый тонкий
+файл, вызывающий существующий `_*.yml`; общие шаги — composite action в
+`.github/actions/<name>/`. Проверка — `workflowTriggerProblems`
+(`mise run ci:units`).
 
 ### Правило: caller выдаёт права reusable
 
-GitHub требует, чтобы права вызывающего job были не меньше прав, запрошенных
-любым job вызываемого reusable — рекурсивно. Иначе прогон падает на
-`startup_failure` ещё до старта job'ов (инцидент #338/#339: `deploy-home.yml`
-job `release` наследовал workflow-level `contents: read`, а `_native.yml`
-публиковал образы с `packages: write`). `actionlint` этого не ловит.
-
-- Эффективные права caller-job: job-level `permissions`, иначе workflow-level,
-  иначе «нет прав».
-- Требуемые права reusable: union его workflow-level и job-level `permissions`
-  по всем job'ам, плюс рекурсивно всё, что запрашивают вложенные
-  `uses: ./.github/workflows/_*.yml`.
-- Сравнение по уровню `none < read < write` для каждого scope; `read-all` не
-  покрывает `write`.
-
-Правило проверяет `workflowCallerPermissionProblems` в
-`platform/ci/check_units.mjs` (`mise run ci:units`): проблема называет файл,
-job, scope, выданный и требуемый уровень и reusable (с путём вложенного файла).
-Поэтому job, который вызывает reusable, перечисляет полный union его прав, а
-не только «свои»: комментарий с объяснением, зачем нужен каждый scope, живёт
-рядом с `permissions:`.
-
-**Как добавить новый триггер.** Не добавляйте событие в существующий файл.
-Создайте `<name>.yml` с одним `on:` и job, который вызывает уже существующий
-`_*.yml` с нужными inputs. Если общей логики ещё нет — вынесите job в новый
-`_<name>.yml` (`on: workflow_call`) и сделайте обёртками оба файла. Общие
-шаги (не job) — composite action в `.github/actions/<name>/action.yml`.
-
-* Android: `bazel-android-<os>-warm-<hash>` (disk cache). `warm-android`
-  собирает все build/test-цели юнитов платформы `android` из
-  `platform/ci/units.mjs` с `--config=android`. Develop-стороны repository cache
-  для Android нет: почти всё скачиваемое — Maven-артефакты (сотни МБ JAR),
-  которые раннер качает напрямую (Nexus — только запасной путь), и отдельный
-  архив не окупается.
-* Host-Rust: `bazel-repo-rust-<os>-<hash>` (repository cache) и
-  `bazel-rust-<os>-warm-<hash>` (disk cache). `warm-rust` собирает все
-  build/test-цели юнитов платформы `bazel` без `--config=android` — ровно те
-  флаги, что у `_unit.yml`, иначе configuration checksum (Android version
-  defines) не совпал бы с PR-сборкой.
-
-PR-джобы восстанавливают только своё семейство: `_android.yml` —
-`bazel-android-` (только disk), `_unit.yml`/`_native.yml`/`_deploy-control.yml`
-— `bazel-rust-` и `bazel-repo-rust-`. Ключи упорядочены family → unit →
-content, поэтому `restore-keys` дают цепочку «точный ключ → юнит с другими
-lock-файлами → семейный warm-кэш». Смена lock-файлов не даёт полный холод, но и
-не смешивает семейства.
-
-Repository cache (`~/.cache/bazel-repo`) хранит скачанные архивы
-(`content_addressable/`, sha256) и отдельно их распакованные копии
-(`contents/`). В GitHub архивируется только `content_addressable`: распакованные
-копии — производные и в несколько раз больше (Rust-тулчейн распаковывается на
-каждую toolchain-репу), Bazel распаковывает их сам. `warm-rust` восстанавливает
-свой repository cache **только по точному ключу**: при смене hash каталог
-начинается с пустого, поэтому старые версии архивов не накапливаются. PR-джобы
-могут взять предыдущее поколение по префиксу, но никогда не пишут его.
-`bazel fetch` в warm не используется: он тянет *все* зарегистрированные
-toolchain (NDK, zig, Windows, musl) даже для Rust-only целей и именно из-за него
-общий кэш разросся до 8 ГБ; `bazel build` фетчит только нужное семейству.
-
-Дисковый кэш ограничен по размеру в каждом warm-job
-(`--experimental_disk_cache_gc_max_size`: 5G Android, 3G Rust) и сохраняется
-снимком под стабильным префиксом; superseded-записи вытесняет общий LRU.
-PR-прогоны кэши только читают (`actions/cache/restore`): GitHub привязывает
-кэш к ref'у, который его записал, поэтому кэш, сохранённый PR'ом, не виден
-другим PR'ам — он лишь тратит общий лимит 10 ГБ и минуты на загрузку. Save
-в reusable workflow остаётся только для `develop` (ручной
-`workflow_dispatch`) и для `warm-*`. У юнитов без develop-писателя
-(`_native.yml`, `_deploy-control.yml`) дисковый кэш только восстанавливается:
-пока такой сборки на develop нет, лучше не плодить копии на каждый PR.
-Версии инструментов CI (Python, Node, gitleaks, actionlint, shellcheck,
-kubectl, helm, oras) — из `mise.toml`/`mise.lock` через `jdx/mise-action`,
-как и на рабочем месте (`docs/WORKSTATION.md`).
-
-Скачивания идут напрямую с раннеров GitHub (Azure, у каждого свой IP) — это
-основной путь. Домашний Nexus — запасной: если заданы repository variable
-`NEXUS_HOST` и secret `NEXUS_CI_PASSWORD`, composite action
-`.github/actions/nexus-cache` пишет `~/.netrc`, `~/.npmrc`, `pip.conf` и
-рендерит `platform/bazel/downloader.cfg` в `~/.bazelrc`. `downloader.cfg`
-ставит прямой URL первым правилом, а прокси Nexus (`maven-central`,
-`google-maven`, `pypi`, `npmjs`) — вторым для того же хоста: Bazel пробует
-совпавшие rewrite-правила по порядку и уходит в Nexus только при 429/5xx или
-обрыве соединения, а не делит домашний канал между всеми раннерами постоянно.
-GitHub releases, codeload и nodejs.org через Nexus не идут (их архивы берёт
-repository cache Bazel). Без переменной, без секрета (форк-PR) или при
-недоступном `/repository/npmjs/-/ping` остаётся прямой путь.
-
-
-Проверки, тесты и сборки внутри reusable workflow запускаются теми же
-mise-задачами, что и локально: `mise run test <unit>` / `mise run build
-<unit>` (диспетчер по `platform/ci/units.mjs`) и задачи `_quality.yml` —
-`audit`, `test:static`, `ci:units`, `test:ci`, `lint:shell`, `lint:actions`,
-`scan:secrets`. Список задач — `mise tasks`, их код — `platform/mise-tasks/`.
-Каждый job с `mise run` выставляет `MISE_TASK_RUN_AUTO_INSTALL=false`:
-инструменты ставит только `jdx/mise-action` (`install_args`), а не сама
-задача. Механика Actions (matrix, кэши, artifacts, OIDC, публикация,
-деплой) остаётся в workflow.
+Права caller-job (job-level, иначе workflow-level, иначе ничего) должны быть
+не меньше union прав всех job'ов reusable, рекурсивно, по уровню
+`none < read < write`. Иначе GitHub падает на `startup_failure` до старта
+(`actionlint` не ловит). Проверка — `workflowCallerPermissionProblems`.
 
 ### Маршрутизация по юнитам
 
-CI не гоняет всё на каждый push. Единица запуска — **юнит**: один сервис,
-одно приложение, общая библиотека или каталог тестов. Юнит = одна запись в
-matrix одного платформенного workflow.
+Единица запуска — юнит из `platform/ci/units.mjs` (единственный источник:
+`id`, `platform`, `paths`, команды, Bazel-корни, `invalidations`, `deploy`).
+Проверки внутри workflow — те же `mise run test|build <unit>`, что локально.
 
-| Платформа | Reusable workflow | Что делает юнит |
+| Платформа | Reusable | Что делает |
 |---|---|---|
-| android | `_android.yml` | JDK 21 + SDK 36, `bazel build` затем `bazel test`, APK в artifact |
-| unit | `_unit.yml` | Linux-runner: `kind=bazel` — `bazel build`/`test` (Rust-сервисы, `home-deploy`, хост Pulsar), `kind=python` — Python-suite Hermes; затем образы юнита (`bazel`/`docker`/`mixed`) в том же Bazel-сервере, push `tree-<hash>` и attestation в том же job |
-| python | `_python.yml` | один job на все затронутые Python-юниты: один checkout/mise/pip, затем `mise run test <id>` последовательно с `::group::`, в конце список упавших |
-| js | `_js.yml` | pinned Node + `node --test` по `*.test.js`, без npm |
-| native | `_native.yml` | pinned toolchain download + sha256, host tests, cross-build, `SHA256SUMS` artifact; same-repo PR публикует release-shaped `tree-<hash>` с provenance |
-| quality | `_quality.yml` | audit, static gates, unit-map, actionlint, shellcheck, Gitleaks |
+| android | `_android.yml` | `bazel build` + `bazel test`, APK artifact |
+| unit | `_unit.yml` | `kind=bazel`/`python`, затем образы, push `tree-<hash>` и attestation в том же job |
+| python | `_python.yml` | все затронутые Python-юниты одним job |
+| js | `_js.yml` | `node --test`, без npm |
+| native | `_native.yml` | кросс-сборка, `SHA256SUMS`, release-shaped `tree-<hash>` |
+| quality | `_quality.yml` | audit, lint:comments, static, ci:units, test:ci, shellcheck, actionlint, Gitleaks — всегда |
 
-`_ci.yml` содержит только координацию: `changes` → matrix-вызовы reusable
-workflow → `gate` (агрегат результатов). Обёртки `ci.yml` и `ci-manual.yml`
-передают событие inputs и не дублируют ни одного job; required check `ci-ok`
-публикует `ci.yml` по output `ok`/`failing` от `_ci.yml`. Исключение —
-`android-distribute`.
-`android-distribute` ждёт весь `android` matrix и при
-PR (не из форка) с `android_distribute` = true скачивает готовый
-`android-app-apk`, подписывает его релизным ключом и загружает в Firebase: он
-ничего не собирает. Этот output true, когда изменился реальный вход
-приложения
-(`projects/mobile/android/**`, `packages/kotlin/**` или `platform/android/**`)
-либо `MODULE.bazel` изменился только внутри Maven-расширения
-rules_jvm_external (виртуальный путь `MODULE.bazel#maven`): тогда меняется
-Maven/APK-замыкание. Прочие глобальные инвалидации (остальной `MODULE.bazel`,
-`.bazelrc`, toolchain-файлы) прогоняют проверки `android`, но APK не
-публикуют; `.bazelrc` с диффом только cache/output-флагов
-(`.bazelrc#cache`) не выбирает `android` вовсе. Job намеренно не входит в
-`ci-ok`, поэтому его падение не блокирует merge.
+Затронутость:
 
-Распространяемый APK собирается ровно один раз — в matrix-записи
-`android / android-app` (`_android.yml`) без секретов и Environment:
-`google-services.json` из переменной репозитория `GOOGLE_SERVICES_JSON_B64` →
-`bazel build` `:app` с release-`versionCode`/`versionName` (`BAZEL_EXTRA_ARGS`)
-→ `bazel test` с теми же `--define`, поэтому `apk_runtime_closure_test` и
-`apk_abi_test` проверяют ровно публикуемый APK → неподписанный artifact
-`android-app-apk` (`app.apk` + `release-info.json`). Ни одна запись Android
-matrix секретов не читает.
-`android-distribute` (job `_ci.yml` → reusable `_android-release.yml`,
-Environment `Android`, роль OpenBao `android-distribute`) скачивает artifact,
-подписывает его `platform/android/sign-release.sh`, обновляет
-`release-info.json` (`release_info.py resign`) и вызывает
-`distribute.sh --upload-only`. Тот же `_android-release.yml` использует ручной
-`android-release.yml` (роль `android-release`, ветка `develop`) — сборка,
-подпись и дистрибуция живут только там. Удаление старых сборок — отдельная
-ежедневная джоба `fad` reusable `_cleanup.yml` (24-часовое окно, роль OpenBao
-`android-cleanup`); она не входит в PR-проверки.
+- android/bazel — обратные зависимости Bazel (`bazel query`, loading phase:
+  без JDK/SDK); изменённый файл — `rule-input`, новый/удалённый файл или
+  `BUILD`/`.bzl` — весь пакет.
+- `Cargo.lock`/`crate-universe.lock` сравниваются структурно, изменённые
+  крейты → rdeps в Bazel. `packages/rust/**` выбирает только юниты, чьи цели
+  затронуты.
+- python — `paths` (+ `depends_on`), `hermes` — ещё rdeps его образов;
+  native — `paths` + rdeps своих корней.
+- `*.md`/`*.mdx` не выбирают юниты сборки, тестов и деплоя
+  (`routableChanges` в `affected.mjs`), кроме путей, которые юнит или
+  инвалидация перечисляет паттерном на `.md`/`.mdx` (Hermes `HERMES.md`,
+  `SOUL.md`, `skills/**/*.md`; `docs/SECRETS.md` у `workstation`). Новый
+  md-контент, который попадает в образ или читается тестом, добавлять в
+  `paths` юнита явно. `quality` и `ci-ok` идут всегда, `docs_only` — по
+  полному списку изменений.
+- База PR — `HEAD^1` merge-коммита, а не `pull_request.base.sha` (иначе в
+  diff попадают чужие PR); push — `github.event.before`.
 
+Fallback — только «больше», никогда «ничего»: `MODULE.bazel`, `.bazelrc`,
+`.bazelversion`, `BUILD.bazel`, `platform/bazel/**` → все юниты. Узкие
+исключения (`affected.mjs` сравнивает структурно, при сомнении — глобально):
+Maven-расширение `MODULE.bazel` → только android; Rust/zig/crate_universe →
+native + bazel; дифф `.bazelrc` только по cache/output-флагам → только
+quality; `platform/bazel/zig|windows/**` → native;
+`platform/android/android.bazelrc` → android. Ошибка `bazel query` → все
+android/bazel/native; база не определена → все; пустой diff → только quality.
 
-Android-платформа состоит из трёх юнитов с одними и теми же `paths` и
-Bazel-корнем: `android-app` (сборка APK и unit/UI-тесты), `android-lint`
-(только `//projects/mobile/android:android_lint`) и `android-detekt`
-(только `//projects/mobile/android:detekt`). Любое изменение Android
-модуля, ресурса или `platform/android/**` выбирает все три, поэтому они видны
-как отдельные matrix-job'ы `android / android-app`, `android / android-lint` и
-`android / android-detekt`. Находка lint или detekt валит только свой job и не
-обрывает `bazel test` приложения; `android-distribute` требует зелёный весь
-`android` matrix, поэтому такая находка также пропускает публикацию APK.
-`_android.yml` сначала выполняет `bazel build`, затем `bazel test`; шаги
-`android-lint` и `android-detekt` названы «Android Lint» и «detekt», остальные
-— `bazel test <unit>`. Дополнительные SDK-пакеты юнит объявляет полем
-`bazel.sdk_packages` (у lint — `cmdline-tools;23.0`), и workflow устанавливает
-их только для этого job. Юнит с `bazel.release: true`
-(`android-app`) владеет распространяемым APK: когда `android_distribute`
-выбран, `matrixEntries` добавляет его в матрицу, даже если изменение
-затронуло только общий Kotlin-юнит, — иначе `android-distribute` не нашёл бы
-artifact.
+`android-distribute` (вне `ci-ok`) подписывает и выкладывает готовый
+`android-app-apk`, только если изменился реальный вход приложения
+(`projects/mobile/android/**`, `packages/kotlin/**`, `platform/android/**`,
+Maven-часть `MODULE.bazel`).
 
-`changes` выдаёт outputs `android_units`, `unit_units`, `python_units`,
-`js_units`, `native_units`, `deploy_control`, `android_distribute`,
-`base_sha`, `docs_only`; каждый output — JSON-массив записей matrix
-(`android_distribute` — `true`/`false`). `unit_units` объединяет Bazel-юниты
-и те Python-юниты, которые владеют образами (сегодня Hermes), поэтому у
-такого юнита один build/test job, а не два; attestation — шаги этого же
-job'а, без отдельных `attest / <id>`-задач. `python_units` — список всех
-затронутых Python-юнитов без образов, и `_python.yml` прогоняет их в одном
-job последовательно.
-Типичный сервисный PR теперь запускает `changes`, `quality`,
-один `unit / <id>` (проверки + образы + attestation) и `ci-ok` (плюс
-`deploy-control`, если затронут scheduler/ha-bridge); раньше были отдельные
-`bazel / <id>`, `images / <id>` и по job'у на каждый digest. На
-CI-global PR вместо ~22 `python / <id>` остаётся один `python` job.
-Пустой массив означает «пропустить job» (законный skip для `ci-ok`).
-Для `pull_request` база маршрутизации — первый родитель проверенного
-merge-коммита (`git rev-parse HEAD^1`), а не `pull_request.base.sha` из
-события: последний может быть старше tip'а `develop`, на котором собран
-`refs/pull/N/merge`, и тогда в diff `base..merge` попадают файлы чужих PR.
-`push` использует `github.event.before`.
+`platform/ci/check_units.mjs` (`mise run ci:units`) падает, если: дубли id,
+пустые или слишком широкие `paths`; android-юнит без корней/целей; битый
+`depends_on`; python-suite без `test_*.py`; **tracked
+`*.rs`/`*.py`/`*.kt`/`*.js`/`*.mjs`/`*.sh`/`*.bzl`/`BUILD.bazel` не
+принадлежит ни одному юниту**; запись в GHCR без логина; caller выдаёт
+меньше прав, чем reusable. Новый юнит — запись в `units.mjs`.
 
-Образы деплой-юнитов собираются в том же job `unit / <id>` (`_unit.yml`):
-сначала идут проверки юнита, затем `<image>_image`/Docker-образы в том же
-Bazel-сервере, поэтому второй сборки тех же целей нет. На PR из этого
-репозитория они сразу публикуются как `tree-<git tree hash>` с build
-provenance (решение 36); форки и `workflow_dispatch` только собирают — у них
-нет прав на registry. Attestation создаётся шагами того же job `unit`
-(по одному статическому шагу на индекс образа, максимум 4 — это проверяет
-`check_units.mjs`); отдельных `attest`-job'ов больше нет, и у юнита без
-образов никаких attest-строк не появляется. Docker и
-mixed (Hermes Buildx) — ветки того же шага `platform/ci/build-images.sh`.
+### Required check и релиз
 
-Native-юниты с `native.publish_script` (`pulsar`, `logon-provider`) следуют
-тому же правилу: `_native.yml` после сборки публикует release-shaped артефакт
-под `tree-<hash>` и аттестует digest. Pulsar собирается так на каждом PR
-(версия из `VERSION`, radio, `SHA256SUMS`, проверка `--version` под qemu), а
-не только при изменении `VERSION`. Права `packages`/`id-token`/`attestations`
-выданы job `unit` (образы) и `native` (native-артефакты); у
-`android-distribute` есть только `id-token`.
-
-### Карта юнитов
-
-`platform/ci/units.mjs` (ES-модуль, без npm) — единственный источник правды: `id`, `platform`,
-`paths`, способ запуска (`bazel.test_targets`, `python.suites`, `native.*`)
-и Bazel-корни для сопоставления графа с юнитами. Рядом:
-
-* `invalidations` — пути, которые валят больше юнитов, чем совпало по `paths`
-  (`MODULE.bazel`, `MODULE.bazel.lock`, `.bazelrc`, `.bazelversion`,
-  `BUILD.bazel`, toolchain-файлы → все платформы; `platform/android/**` →
-  все android-юниты; `rust-toolchain.toml` → native + bazel;
-  `requirements-test.txt` → python+quality). Флаг `deploy: false` оставляет
-  правило только для CI: правка workflow или `platform/ci/**` перезапускает
-  проверки, но `deploy-home` не выкатывает юнит, выбранный лишь таким
-  правилом.
-* `MODULE.bazel` — глобальная инвалидация с тремя исключениями
-  (fail safe — «больше», не «меньше»). `affected.mjs` сравнивает base/head
-  структурно и подменяет путь виртуальным, только если после снятия нужной
-  категории остальные токены совпадают:
-  * Maven-расширение rules_jvm_external (`maven.install(...)`, любые
-    `maven.<tag>(...)`, `use_repo(maven, ...)`, где `maven` — переменная из
-    `use_extension("@rules_jvm_external//:extensions.bzl", "maven")`) →
-    `MODULE.bazel#maven`, только `android` (меняется Maven/APK-замыкание);
-  * Rust/zig/native-входы станции: `rust.toolchain(...)`/`use_repo(rust, ...)`,
-    `crate.from_cargo(...)`/`use_repo(crate, ...)` (crate_universe),
-    `zig_sdk_repository(...)`, `register_toolchains(...)` только с аргументами
-    `@zig_0_14_1//...`, `single_version_override(module_name = "rules_rust", ...)`
-    и `http_archive(...)` сторонних C/C++ станции (build_file с
-    `_SENDSPIN_BAZEL`) → `MODULE.bazel#native`, платформы `native` и `bazel`
-    (хост-проверки Pulsar компилируют те же крейты, что и кросс-сборка);
-  * Maven и native вместе → оба виртуальных пути (объединение платформ).
-  Всё остальное (`bazel_dep` любого модуля, `oci`,
-  python, другая extension, неразбираемый файл, отсутствующая base или
-  добавление/удаление `MODULE.bazel`) оставляет глобальную инвалидацию.
-  `MODULE.bazel.lock` следует scope только вместе со scoped-изменением
-  `MODULE.bazel`; отдельно от него — глобальный.
-* `.bazelrc` — глобальная инвалидация, кроме диффа, который меняет только
-  cache/output-флаги и комментарии. Белый список — по имени опции после
-  префикса команды (`common`/`build`/`test`/...): `--disk_cache`,
-  `--experimental_disk_cache_gc_*`, `--repository_cache`,
-  `--repo_contents_cache*`, `--announce_rc`, `--color`, `--curses`,
-  `--show_progress*`, `--test_output`, `--test_summary`,
-  `--verbose_failures`. `--remote_cache` в белый список не входит. Такой
-  дифф становится `.bazelrc#cache`, не совпадает ни с одним юнитом и гоняет
-  только always-on `quality` (deploy ничего не катит). Строка, смешивающая
-  cache- и настоящий флаг, значима целиком; `import`/`try-import`,
-  неизвестный флаг, неразбираемая строка, отсутствующая base или
-  добавление/удаление файла — глобально.
-* `platform/android/android.bazelrc` — **не** глобальный вход, хотя и
-  называется `*.bazelrc`: он попадает под `platform/android/**` и выбирает
-  только android-юниты. Здесь лежат Android-специфичные флаги (version
-  defines, Java-toolchain build-инструментов, protoc/dex workers,
-  `--android_platforms`), а корневой `.bazelrc` подключает файл через
-  `try-import` и не содержит их. Активация — `--config=android`: его
-  передают диспетчер юнитов (`mise run build|test` для android-юнитов и
-  `mise run build`/`mise run test:bazel` на весь workspace),
-  `projects/mobile/android/distribute.sh` и Android-сборка в
-  `deploy-home` → `warm-android`. Без конфига Android-сборка падает на
-  анализе (`$(home_version_name) not defined`), а не собирает тихо APK
-  чужой ABI; после #234 это дополнительно ловит `apk_abi_test`.
-* `platform/bazel/zig/**` и `platform/bazel/windows/**` — только платформа
-  `native` (виртуальный `platform/bazel#native`): это target-constrained
-  zig cc-toolchain'ы и rules_rust-патчи для кросс-сборки станции и Windows
-  provider; хост-сборки Rust/образов/Android их не выбирают. Остальной
-  `platform/bazel/**` остаётся глобальным.
-* Любое другое изменение (`bazel_dep`, toolchain, `oci`, python),
-  неразбираемый файл, отсутствующая base-ревизия или
-  добавление/удаление `MODULE.bazel` оставляют глобальную инвалидацию:
-  fail safe — «больше», не «меньше».
-* `deploy_control` — какие юниты и пути включают дорогую регрессию
-  `mise run test:deploy-control` (scheduler, ha-bridge/ha-control,
-  `projects/home/kubernetes/scheduler/**`).
-* `deploy` (у деплоимых юнитов) — `images`, `workloads` и `builder`
-  (`bazel`/`docker`/`mixed`). По нему `deploy-home` и job `unit` в `ci.yml`
-  выбирают, что именно собирать и раскатывать; инфраструктурные юниты этой
-  секции не имеют. `mixed` — один юнит с обоими типами образов: сегодня
-  `hermes` (Docker) и `voice-proxy` (Bazel `//solutions/voice-proxy`).
-
-### Как считается затронутость
-
-| Платформа | Источник зависимостей | Пример |
-|---|---|---|
-| android | обратные зависимости Bazel (`bazel query --output=xml`, loading phase) | правка `packages/kotlin/core` выбирает `kotlin-shared` и только те приложения, что от него зависят |
-| bazel | те же обратные зависимости Bazel, что у android; общие Rust-крейты и `Cargo.lock` выбираются по rdeps | правка `packages/rust/home-ha` выбирает `ha-bridge` и `voice-proxy`, но не `scheduler`/`pulsar-bazel` |
-| python | пути юнита (+ `depends_on`), а для `hermes` ещё и rdeps его Bazel-образов | правка `home-tls` выбирает `hermes` через `health-exporter` |
-| native | пути юнита; `pulsar` и `logon-provider` дополнительно по rdeps своих Bazel-корней | правка `wakegrant-protocol` выбирает `logon-provider`, правка `home-runtime` — `pulsar` |
-| quality | всегда | audit/Gitleaks/shellcheck идут на любом изменении |
-
-Android-граф берётся из loading-фазы намеренно: он не требует JDK и Android
-SDK, поэтому маршрутизация дешёвая и не может «сломаться из-за toolchain».
-
-Изменённый файл сопоставляется с `rule-input` (source file); для нового,
-удалённого файла или правки `BUILD.bazel`/`.bzl` берётся весь пакет — это
-безопасное over-approximation.
-
-### Общие Rust-входы: `packages/rust`, `Cargo.lock`, `crate-universe.lock`
-
-`packages/rust/**` не валидирует все Rust-юниты. Изменённый файл попадает в
-Bazel-граф как source input, и юнит выбирается, только если затронутая цель
-лежит под его routing-корнем. `//packages/rust` как общий корень для
-clippy/rustfmt исключён: иначе правка одного крейта выбирала бы каждый юнит,
-который линтует общий слой. Юнит, который явно тестирует крейт
-(`test_targets` вида `//packages/rust/<crate>:unit_tests`), получает
-`//packages/rust/<crate>` в routing-корни.
-
-`Cargo.lock` и `crate-universe.lock` сравниваются между base и head как TOML
-(`[[package]]`: name/version/source/checksum/dependencies) и JSON
-(`crates`/`direct_deps`/`workspace_members`). Изменёнными считаются
-добавленные, удалённые пакеты и пакеты с другой версией, checksum или списком
-зависимостей. Для них строится обратное замыкание по графу зависимостей:
-* прямой крейт → `@crates//:<name>` (alias crate_universe);
-* транзитивный крейт без alias → ближайший прямой предок, от которого Bazel
-  rdeps уже доходят до реальных потребителей;
-* изменённый workspace-member → его путь, чтобы выбрать сам крейт.
-Затем берутся rdeps в графе Bazel. `Cargo.toml` сужается только если дифф
-затрагивает исключительно `[workspace.dependencies]` и есть разбираемый
-lock-diff; `[workspace] members`, `[profile]`, `[workspace.lints]`, правка
-`[workspace.dependencies]` без изменения lock (могли поменяться
-`features`/`default-features`), неразбираемый/добавленный/удалённый lock,
-изменённый пакет без alias/workspace-пути или ошибка Bazel — «все Rust-юниты»
-(native + bazel, а для deploy ещё и graph-aware python). `rust-toolchain.toml`
-всегда «все Rust-юниты».
-
-### Fallback: только «больше», никогда «ничего»
-
-* `MODULE.bazel`/`MODULE.bazel.lock`, `.bazelrc`, `.bazelversion`,
-  `.bazelignore`, `BUILD.bazel`, `platform/bazel/**` → все платформы и все
-  юниты; исключения — scoped-диффы, описанные выше: `MODULE.bazel#maven` →
-  только android, `MODULE.bazel#native` → native + pulsar-bazel,
-  `.bazelrc#cache` → ни одной платформы, `platform/bazel#native` → native;
-* `bazel query` упал → все android, bazel и native юниты (и graph-aware
-  python-юнит `hermes`); ошибка разбора `Cargo.lock`/`crate-universe.lock`
-  откатывает к тому же «все Rust-юниты»;
-* база не определена (новый push, `workflow_dispatch`) → все юниты
-  (`affected.mjs --all`);
-* база определена, но `git diff` пуст → ни один тяжёлый юнит, только quality.
-
-Внутри android-юнита идут все объявленные цели: незатронутые изменением
-тесты Bazel берёт из кэша (действий и результатов тестов), поэтому отдельного
-сужения через target-determinator нет.
-
-
-### Инварианты и проверки
-
-`platform/ci/check_units.mjs` падает, если:
-
-* в карте дубли id, неизвестная платформа, пустые `paths` или слишком широкий
-  шаблон (`**`);
-* android-юнит не объявил `bazel.roots`, `test_targets` или цель вне корней;
-* `depends_on` ссылается на несуществующий юнит;
-* объявленный python-suite не содержит `test_*.py` (для каталогов без
-  герметичных тестов есть `python.compile`: только `compileall`);
-* **любой tracked `*.rs`/`*.py`/`*.kt`/`*.js`/`*.mjs`/`*.sh`/`*.bzl`/`BUILD.bazel` не
-  принадлежит ни одному юниту** — новый тест не может молча выпасть из CI;
-* job workflow пишет в registry (`crane tag`/`crane push`, `oras push`/`oras
-  tag`, `platform/ci/promote.mjs`, `push-to-registry: true`) без логина в
-  `ghcr.io` до первой записи;
-* job с `uses: ./.github/workflows/_*.yml` выдаёт меньше прав, чем требует
-  вызываемый reusable (рекурсивно, включая workflow-level `permissions`), —
-  GitHub упал бы на `startup_failure`.
-
-Тесты маршрутизатора: `platform/ci/affected.test.mjs` (включая фикстуру
-`testdata/units-two-apps.mjs` с двумя Android-приложениями и общим
-Kotlin-юнитом).
-
-### Расширение
-
-Новый язык по возможности идёт через Bazel (`platform: bazel`,
-`bazel.roots`), как Rust у Pulsar. Действительно новая платформа: reusable
-workflow `_<platform>.yml` с inputs юнита, `platform` в `units.mjs`, расчёт
-затронутых юнитов в `affected.mjs` и job с matrix в `ci.yml`. Новый юнит — это новая запись в `units.mjs` и путь в
-`paths`; отдельный job не нужен.
+`ci-ok` (`if: always()`) — единственный required check `develop`: зелёный,
+только если все зависимые job'ы `success` или законно `skipped`
+(`platform/ci/ci_gate.mjs`). `deploy-home` ничего не собирает: `pins`
+продвигает проверенные `tree-<hash>` и коммитит digest'ы в `deploy/home-apps`,
+`native-release` ставит релизные теги, `deploy-station` ставит версию после
+approve (решения 36, 54, 55).
 
 ### Локальное воспроизведение
 
 ```bash
-# каталог юнитов и их команды
-mise run units                    # id, platform, title, deployable
-mise run build <unit>             # bazel build целей юнита (без юнита — //...)
-mise run test <unit>              # команды юнита из units.mjs
-mise run test:bazel               # bazel test //...
-
-# какие юниты выбрал бы CI для диапазона (по умолчанию origin/develop...HEAD)
+mise run units
 mise run ci:affected
 mise run ci:affected --base HEAD~3 --head HEAD
-platform/ci/affected.sh --base origin/develop --format json
-platform/ci/affected.sh --base HEAD~3 --format text
-
-# имитация конкретного изменения без коммита
 platform/ci/affected.sh --changed-file solutions/scheduler/crates/scheduler/src/store/tick.rs
-platform/ci/affected.sh --changed-file packages/kotlin/core/src/main/kotlin/.../TimeText.kt
-
-# принудительно все юниты (то же, что workflow_dispatch)
 platform/ci/affected.sh --all
-
-mise run ci:units                               # инварианты карты юнитов
-node --test platform/ci/*.test.mjs platform/quality/*.test.mjs        # маршрутизатор, gate и аудит
-# продвижение по tree hash: теги, digest, история, PR-head дельта и отказ —
-# без registry и сети (exec/compute инжектируются)
+mise run ci:units
+mise run test:ci
 node --test platform/ci/promote.test.mjs
-# политика чистки GHCR: pure-функция + локальный dry-run по фикстуре
-node --test platform/ci/ghcr_cleanup.test.mjs
-node platform/ci/ghcr_cleanup.mjs --fixture platform/ci/testdata/ghcr-versions.json \
-  --now 2026-11-04T00:00:00Z
-# окно хранения App Distribution (24 ч, новейший релиз, пагинация, batchDelete)
-node --test platform/ci/fad_cleanup.test.mjs
-node platform/ci/fad_cleanup.mjs --fixture platform/ci/testdata/fad-releases.json \
-  --now 2026-11-04T12:00:00Z
-mise run test                                   # герметичный gate (включает CI-тесты)
-mise run test:deploy-control                    # регрессия deploy control
-
-# те же проверки, что в _quality.yml
-mise run audit                                  # private data, ссылки, gitlinks
-mise run test:static                            # Python static gate
-mise run ci:units                               # инварианты карты юнитов
-mise run test:ci                                # node --test platform/ci + platform/quality + mise dispatcher
-mise run lint:shell                             # shellcheck -S error
-mise run lint:actions                           # actionlint
-mise run scan:secrets                           # Gitleaks (working tree)
+node platform/ci/ghcr_cleanup.mjs --fixture platform/ci/testdata/ghcr-versions.json --now 2026-11-04T00:00:00Z
+node platform/ci/fad_cleanup.mjs --fixture platform/ci/testdata/fad-releases.json --now 2026-11-04T12:00:00Z
+mise run test:deploy-control
+mise run audit
+mise run test:static
+mise run lint:shell
+mise run lint:actions
+mise run scan:secrets
 ```
 
-`affected.sh` только читает Git и граф загрузки Bazel: он ничего не собирает,
-не деплоит и не трогает устройства. Версии сторонних actions закреплены
-commit SHA (сверены с тегами через `gh api`); Bazelisk `1.30.0`, actionlint
-`1.7.12` и Gitleaks `8.30.1` скачиваются с
-проверкой sha256.
-
-На чистом checkout (CI) отсутствуют игнорируемые источники, поэтому
-`mise run test` явно печатает `SKIP` для тестов, которым нужен nested
-`projects/station/resources/quasar-connect-bot`; локально, где источник
-есть, те же тесты выполняются. Pulsar теперь лежит в дереве
-(`projects/station/pulsar/`), поэтому его установщик и Rust-тесты доступны
-всегда; установщик — крейт `pulsar-installer` корневого Cargo workspace и
-проверяется Bazel-целями `//projects/station/pulsar/installer/...`. `test_deploy_control.sh` больше не требует
-собранных бинарников: он передаёт deploy.sh заранее разрешённые
-digest-пины образов, поэтому `mise run test` и `mise run test:deploy-control`
-запускают его без Bazel. Путь продвижения (`PREBUILT_DIGESTS`,
-`PREBUILT_DIGESTS_FILE`, решение 36) покрыт `test_deploy_control.sh`
-(scheduler) и `test_build_and_push.py`: образ не собирается и не пушится,
-digest попадает в отрендеренный манифест, а кривое/дублирующее значение
-падает fail-closed. У остальных юнитов этого пути больше нет — CI только
-пинует digest, манифесты проверяют `test_flux.py` и manifest-тесты.
-`projects/home-assistant/deploy/test_build_and_push.py` проверяет то же для
-`build-and-push.sh` (`hermes`, `voice-proxy`, `health-exporter`,
-`home-deploy`) с заглушками docker/bazel/git. Hermes rollout и
-render-config покрыты Rust-тестами `platform/deploy-rs`: Hermes rollout —
-frozen parity (`hermes`), `hermesconfig` — unit-тестами слияния, отказа на
-TEST-NET и `.prev`; health exporter — Rust `.../deploy/health-exporter`
-(`cargo test -p health-exporter` и Bazel-юнит `health-exporter`).
-
-### Required check
-
-`ci-ok` (`if: always()`) — единственный required status check для ruleset
-ветки `develop`. Он зелёный только если все зависимые job'ы завершились
-`success` или законно `skipped`; любой `failure`/`cancelled` (включая упавший
-`changes`) делает его красным. Логика вынесена в `platform/ci/ci_gate.mjs`.
-Matrix-entry `android / android-lint` (и `android / android-detekt`) не требует
-отдельной записи в gate: они входят в job `android`, чей результат `ci-ok`
-уже проверяет, поэтому падение lint или detekt делает `ci-ok` красным как и
-любой другой android-юнит.
-
-### Релиз (`deploy-home`)
-
-Push в `develop` — это squash-merge PR; `plan` прогоняет тот же `units.mjs`
-по диапазону `before..sha` и выбирает только затронутые юниты. Применение
-делает Flux, поэтому workflow не входит в VPN, не читает OpenBao и не
-вызывает kubectl/helm: job `pins` проверяет provenance и коммитит digest'ы в
-`deploy/home-apps`. Документация и инфраструктурные юниты без `deploy` ничего
-не пинуют.
-
-- Смена режима исполнителей (`preserve`, `execute`, `shadow`, `control-*`)
-  больше не dispatch-параметр: steady-state в Git, учения — `flux suspend` +
-  admin-скрипт `scheduler/deploy.sh`.
-- Hermes/voice-proxy (builder `mixed`): `hermes` — Docker, `voice-proxy` —
-  Bazel/rules_oci; PR CI собирает и публикует их; `pins` проверяет digest'ы,
-  `HelmRelease/runtime` обновляет релиз, post-upgrade smoke hook валит upgrade
-  и `remediation.strategy: rollback` возвращает прежнюю ревизию.
-- Build once (решение 36): job считает tree деплоимого коммита и продвигает
-  digest'ы PR-сборки (`tree-<hash>` + проверенный provenance), включая
-  `home-deploy`, из образа которого достаётся CLI. На `workflow_dispatch` и
-  для образов-соседей (`deploy.optional_images`) берётся самый свежий
-  верифицированный тег в first-parent истории; коммит-источник — в summary.
-  Если `develop` ушёл вперёд после PR CI, на push берётся head PR, но только
-  когда `affected.compute` по дельте `git diff H <merge>` не выбирает юнит
-  (`promote.test.mjs`: дельта не затрагивает → promoted from PR head;
-  затрагивает / нет PR / provenance не сходится → refused). Deploy-home
-  ничего не собирает: если хоть один образ не прошёл проверку, job падает, а
-  не откатывается на сборку. Выбранный путь и digest'ы видны в job summary
-  `pins <unit>`.
-- Native (Pulsar, logon provider): job `native-release` вызывает `_native.yml`
-  с `promote: true`. Тот проверяет `tree-<hash>` и provenance, ставит релизные
-  теги на тот же digest; при missing/unverified job падает — деплой ничего не
-  собирает и не публикует, история для native не применяется. PR-head
-  fallback действует так же, как для образов: артефакт head PR продвигается,
-  только если дельта до merge не затрагивает native-юнит, иначе job падает.
-  PR CI (`promote: false`) по-прежнему собирает и публикует `tree-<hash>`.
-  `deploy-station` ждёт `native-release` и только ставит опубликованную версию.
-- Откат — только применённого объекта; изменение целиком откатывается новым
-  PR с `git revert`.
-
-Pulsar: хост-сборка и тесты — Bazel-юнит `pulsar-bazel`; станционные
-бинарники (Bazel), radio, ssh, installer и релиз — native-юнит `pulsar`
-(`_native.yml`). Каждый PR собирает release-shaped артефакт и публикует
-`tree-<hash>`; merge только продвигает его на релизные теги, а при
-отсутствии/непроверенном теге job падает.
+`affected.sh` только читает Git и граф загрузки Bazel. Версии инструментов CI
+— из `mise.toml`/`mise.lock` через `jdx/mise-action`; job'ы с `mise run`
+выставляют `MISE_TASK_RUN_AUTO_INSTALL=false`.
 
 ## Публикация
 
 ```bash
 node platform/quality/audit_repository.mjs
-node --test platform/ci/*.test.mjs platform/quality/*.test.mjs
 mise run test
 ```
 
-Проверить локальные Markdown-ссылки, приватные пути, историю Git и
-`SENSITIVE-DATA.md`. Эвристика не заменяет ручной аудит.
-
-`audit_repository.mjs` содержит два узких публичных исключения, одобренных
-пользователем: точный домен `proflyder.dev` и Android namespace
-`dev.proflyder.home` с подпакетами/путём `dev/proflyder/home`. Исключения
-удаляются только как целые токены с границами; другие TLD, username,
-поддомены, длинные хосты/пути и смешанные строки по-прежнему дают ошибку.
-Границы закреплены `platform/quality/audit_repository.test.mjs`. Общих
-исключений Gitleaks нет.
-
-## Android: дизайн-система
-
-`platform/quality/test_static.py` (`AndroidDesignSystemTests`) запрещает вне
-`projects/mobile/android/core/designsystem` объявлять стили `Widget.*`,
-использовать в layout кнопки, поля, FAB, карточки и чипы без стиля
-дизайн-системы и создавать эти компоненты конструктором в Kotlin. Механизм и
-исключения — `projects/mobile/android/core/designsystem/README.md`
-(«Static check»).
+`audit_repository.mjs` проверяет локальные Markdown-ссылки, приватные пути и
+реестр `SECURITY.md` («Приватные данные»); эвристика не заменяет ручной аудит. Публичные
+исключения — только точный домен `proflyder.dev` и namespace
+`dev.proflyder.home` (`dev/proflyder/home`) как целые токены; границы
+закреплены `audit_repository.test.mjs`. Общих исключений Gitleaks нет.
 
 ## Код без комментариев
 
 В коде на любом языке нет комментариев: ни строчных, ни блочных, ни
 doc-комментариев (`//`, `/* */`, `///`, `//!`, KDoc, `#`, docstring,
-`<!-- -->`, `--`). Пояснения живут только в Markdown: README модуля
-(раздел «Заметки к коду»), `docs/`, `AGENTS.md`. Код, которому нужно
-инлайн-пояснение, переписывается: имя функции или константы вместо
-комментария.
+`<!-- -->`, `--`). Пояснения — только в Markdown: README модуля (раздел
+«Заметки к коду»), `docs/`, `AGENTS.md`. Код, которому нужно пояснение,
+переписывается: имя функции или константы вместо комментария.
 
-Единственная проверка — `platform/quality/no_comments.mjs`:
+Проверка — `platform/quality/no_comments.mjs`:
 
 ```bash
-mise run lint:comments            # весь репозиторий, файл:строка на каждое нарушение
-node platform/quality/no_comments.mjs --staged   # то же для staged (pre-commit)
-node platform/quality/no_comments.mjs --fix      # удалить найденное (затем перенести смысл в docs)
-node platform/quality/no_comments.mjs --stats    # счёт по расширениям
+mise run lint:comments
+node platform/quality/no_comments.mjs --staged
+node platform/quality/no_comments.mjs --fix
+node platform/quality/no_comments.mjs --stats
 node --test platform/quality/no_comments.test.mjs
 ```
 
-Где работает: хук `.githooks/pre-commit` (staged), `.githooks/pre-push`
-(весь репозиторий), шаг `No comments in code` в `_quality.yml` → job
-`quality` → `ci-ok`.
+Работает в `.githooks/pre-commit` (staged), `.githooks/pre-push` (весь
+репозиторий) и шаге `No comments in code` в `_quality.yml` → `ci-ok`.
 
-Сканер — набор лексеров, а не regex по строкам: `#` и `//` внутри строк,
-URL, raw-строк Rust (`r#"…"#`), шаблонов Kotlin/JS (`${…}`), regex JS,
-YAML в кавычках, heredoc и `$#`/`${x#y}` в shell комментариями не считаются.
-Языки: Rust, Kotlin/Java, JS/TS, C/C++, proto, Python/Starlark (BUILD,
-`.bzl`, MODULE.bazel; docstring считается комментарием), shell, YAML
-(скрипты в блоках `run:`/`script:` и блоки с ключом-именем файла
-проверяются как код своего языка), TOML (в т.ч. `mise.toml`), Dockerfile,
-nftables, `.conf`/`.cfg`, `.bazelrc`, Makefile, ini/systemd/properties/env,
-`.gitignore`/`.gitattributes`/`.editorconfig`, XML (Android res/manifest),
-SQL, PowerShell; файлы без расширения — по shebang. Markdown и `.txt` не
-проверяются.
+Сканер — лексеры по языкам, а не regex: `#` и `//` внутри строк, URL,
+raw-строк Rust, шаблонов Kotlin/JS, regex JS, heredoc и `$#`/`${x#y}` не
+считаются. Скрипты в YAML-блоках `run:`/`script:` проверяются как код своего
+языка; файлы без расширения — по shebang. Markdown и `.txt` не проверяются.
 
-Исключения (один список `EXCLUDED` в сканере): `testdata/`, `fixtures/`,
-`tests/golden/`, `third_party/`, `vendor/`, `generated/`, `resources/`,
-`artifacts/`, вендорные TensorFlow microfrontend и kissfft, `*.lock`,
-`*.patch`.
+Исключения (`EXCLUDED`): `testdata/`, `fixtures/`, `tests/golden/`,
+`third_party/`, `vendor/`, `generated/`, `resources/`, `artifacts/`,
+вендорные TensorFlow microfrontend и kissfft, `gradlew`/`gradlew.bat`,
+`*.lock`, `*.patch`.
 
 Allowlist (`ALLOWED`) — только директивы, без которых не работает
-инструмент: shebang `#!` в первой строке; `#MISE`/`#USAGE` в
-`platform/mise-tasks/`; `# shellcheck disable|source|shell=`; директивы
-парсера Dockerfile (`# syntax=`, `# escape=`, `# check=`) в первой строке;
-`#cloud-config`; `#Requires` в PowerShell; однострочный `// SAFETY: …`
-в Rust (его требует `#![deny(clippy::undocumented_unsafe_blocks)]`).
-Doc-разделы `# Safety` удалены, поэтому в workspace
-`clippy::missing_safety_doc = "allow"`; контракт unsafe-функции описывается
+инструмент: shebang `#!` в первой строке; `#MISE`/`#USAGE` в `mise-tasks/`;
+`# shellcheck disable|source|shell=`; директивы парсера Dockerfile
+(`# syntax=`, `# escape=`, `# check=`) в первой строке; `#cloud-config`;
+`#Requires` в PowerShell; однострочный `// SAFETY: …` в Rust (его требует
+`clippy::undocumented_unsafe_blocks`). Поэтому в workspace
+`clippy::missing_safety_doc = "allow"`, а контракт unsafe-функции описывается
 в README крейта. Новое исключение — только с обоснованием здесь и тестом в
 `no_comments.test.mjs`.
 
-Версии GitHub Actions, закреплённых по SHA (раньше были комментарием
-после SHA):
+Версии GitHub Actions, закреплённых по SHA (комментарий после SHA запрещён).
+При обновлении менять SHA в workflow и строку здесь:
 
 | Action | Версия | SHA |
 | --- | --- | --- |
@@ -956,5 +371,3 @@ Doc-разделы `# Safety` удалены, поэтому в workspace
 | hashicorp/vault-action | v4.0.0 | 892a26828f195e65540a40b4768ae4571f51ebfc |
 | jdx/mise-action | v5.2.7 | b44d12e7d0d8ee7461bb893e1b1993500433185b |
 | mlugg/setup-zig | v2.2.1 | d1434d08867e3ee9daa34448df10607b98908d29 |
-
-При обновлении action менять SHA в workflow и строку здесь.

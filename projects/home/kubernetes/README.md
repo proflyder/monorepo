@@ -1,79 +1,62 @@
 # Домашний Kubernetes
 
-Рабочая композиция: один K3s server/worker в Ubuntu VM `lab-k3s` на Proxmox,
-собственный containerd, GigaAM/Whisper/Piper/Hermes, observability и
-HTTPS ingress. HA Core, **Music Assistant** и **Matter Server** живут
-в HAOS VM как add-ons. Pulsar и
-BLE gateway остаются на станции. Версии зафиксированы в `versions.sh`.
+Один K3s server/worker в Ubuntu VM на Proxmox: GigaAM/Whisper/Piper/Hermes,
+scheduler и HA-исполнители, intercom, OpenBao/ESO, mcp-gateway, Nexus,
+observability и HTTPS ingress. HA Core, Music Assistant и Matter Server живут в
+HAOS VM, Pulsar и BLE gateway — на станции. Версии chart'ов и образов —
+`versions.sh`; факты (адреса, ресурсы, версии add-ons) — `docs/STATE.md`, сеть —
+`docs/NETWORK.md`, эксплуатация и восстановление —
+`docs/KUBERNETES-OPERATIONS.md`.
 
-- [Эксплуатация и восстановление](../../../docs/KUBERNETES-OPERATIONS.md).
-- [Текущее состояние](../../../docs/STATE.md).
-- [Сеть и порты](../../../docs/NETWORK.md).
-- [Chart приложений](../../home-assistant/deploy/README.md).
-- [Дашборды и мониторинг](../../home-assistant/observability/README.md).
-- [HTTPS ingress Traefik + cert-manager](ingress/).
-- [Nexus — кэш артефактов для CI](nexus/).
-- [Flux — pull-based GitOps для платформы, observability, Vaultwarden, Nexus и всех деплой-юнитов приложений](flux/).
-- [OpenBao](openbao/).
-- [External Secrets Operator](external-secrets/).
-- [Hermes voice-proxy firewall](voice-firewall/).
-- Intercom signaling (WebRTC call) — `intercom/`, деплой merge'ем в `develop`.
+## Кто что применяет
 
-`/srv/k3s` находится на диске VM 200 GiB. K3s data-dir:
-`/srv/k3s/runtime`. Новые observability PVC используют `local-retain`;
-существующие данные приложений — static local PV с Retain. Это локальное
-хранение, не репликация. VM `lab-k3s` — 12 GiB, `192.0.2.27`;
-HAOS — 4 GiB, `192.0.2.28`; host Proxmox — `192.0.2.26`.
-MA/Matter add-ons: `core_matter_server 9.3.0`, `d5369777_music_assistant 2.10.9`.
+- **Flux** (`flux/`): платформа (ESO → cert-manager → Traefik → маршруты),
+  observability, Vaultwarden, Nexus, pve-exporter и все юниты приложений
+  (образы — из ветки pins). Меняется только merge'ем в `develop`; ручной
+  `kubectl apply`/Helm над этими объектами Flux откатит.
+- **Вручную**: `openbao/`, host-firewall (`management-firewall/`,
+  `voice-firewall/`, `scheduler/nft/`), Cloudflare DNS и storage chart'а
+  `runtime`.
 
-## Обновление
+| Каталог | Что |
+|---|---|
+| [flux/](flux/) | GitOps, pins, приватные значения Flux |
+| [openbao/](openbao/) | секрет-сервер |
+| [external-secrets/](external-secrets/) | ESO и `ClusterSecretStore/openbao` |
+| [ingress/](ingress/) | Traefik + cert-manager, общие маршруты |
+| `observability/` | kube-prometheus-stack, Loki, Alloy, правила; дашборды — `projects/home-assistant/observability/` |
+| [vaultwarden/](vaultwarden/), [nexus/](nexus/) | менеджер паролей, кэш артефактов CI |
+| [scheduler/](scheduler/), [mcp-gateway/](mcp-gateway/), [intercom/](intercom/), [phone-push/](phone-push/), [wakegrant/](wakegrant/), [currency-bot/](currency-bot/), [ha-config-sync/](ha-config-sync/), [pve-exporter/](pve-exporter/) | юниты приложений |
+| [management-firewall/](management-firewall/), [voice-firewall/](voice-firewall/) | nftables на узле K3s |
 
-Traefik, cert-manager, ESO, observability и Vaultwarden обновляются merge'ем
-в `develop` (Flux). Chart приложений (`runtime`) катит Flux, а его storage — вручную
-(`apply-runtime.sh`):
+Chart Hermes (`runtime`) — `projects/home-assistant/deploy/README.md`.
+
+## Ручные инструменты
+
+Storage chart'а `runtime` (static PV/PVC) Flux не применяет:
 
 ```bash
-export RUNTIME_PRIVATE_VALUES=/private/path/runtime-values.yaml
-./projects/home/kubernetes/apply-runtime.sh
+RUNTIME_PRIVATE_VALUES=/private/path/runtime-values.yaml \
+HEALTH_EXPORTER_IMAGE=ghcr.io/proflyder/health-exporter@sha256:… \
+KUBECONFIG=… ./projects/home/kubernetes/apply-runtime.sh
 ```
 
-Изменения HelmRelease и values — в Git; вручную Helm-релизы не трогать.
-Не выполнять параллельные Helm операции над одним release; rollback — в
-runbook (`docs/KUBERNETES-OPERATIONS.md`).
+DNS-only A-запись для приватного имени (`ha`, `grafana`, `alarms`, `control`,
+`currency`, `intercom`, `passwords`, `vault`, `nexus`):
 
-Администрирование — по SSH или через закрытый tunnel. API/kubelet/node metrics
-закрыты от обычного LAN; Grafana доступна по `https://grafana.home.example.com/`,
-в LAN по `http://192.0.2.27:30300/`. HTTPS-имена `*.home.example.com`
-обслуживает Traefik (`hostNetwork`, `80/443`, IP allow-list) с
-wildcard-сертификатом Let's Encrypt от cert-manager; см. [ingress/](ingress/).
-Вход снаружи — собственный VPN (ocserv, CT `102`); CI ходит группой `ci`
-только до узла K3s по `tcp/443` (Traefik → HA/OpenBao). Аварийный доступ к
-host — LAN/Wi-Fi или Ethernet. Реальные URL и credentials — в secrets.
+```bash
+mise run secrets:file home/vpn/cloudflare.env
+python3 projects/home/kubernetes/cloudflare_dns.py \
+  secrets/home/vpn/cloudflare.env <host>.<home-domain> <node-lan-ip>
+mise run secrets:clean
+```
 
-## Заметки к коду
+`ctl.sh` — статус/логи на самом узле (`sudo k3s kubectl`).
 
-Пояснения, перенесённые из комментариев исходников (код комментариев не содержит, см. `AGENTS.md`).
+## Ограничения
 
-- `apply-runtime.sh` — Apply the full runtime state from the private values file.
-- `cloudflare_dns.py` — Ensure a DNS-only Cloudflare A record for a private home host.
-- `observability/kustomization.yaml` — Observability stack reconciled by Flux.
-- `observability/manifests/external-secret-alertmanager-telegram.yaml` — Alertmanager configuration with the Telegram receiver.
-- `observability/manifests/external-secret-grafana-admin.yaml` — Grafana administrator credentials.
-- `observability/manifests/grafana-lan.yaml` — Read-only operational Grafana UI for the home LAN. Grafana remains a ClusterIP Service behind Traefik; this is a separate NodePort Service so the monitoring Helm release can be upgraded independently.
-- `observability/manifests/helmrelease-dashboards.yaml` — Project-owned dashboards and alert rules, built from the chart in this repository. Same release name/namespace as the live `ha-observability` release; the chart comes from the Flux GitRepository instead of a local path.
-  - The chart lives in this repository and keeps version 0.1.0; with the default ChartVersion strategy template changes (dashboards) never reached the release. Revision upgrades on every new Git revision.
-- `observability/manifests/helmrelease-prometheus.yaml` — kube-prometheus-stack, adopted from the live `monitoring` release.
-- `observability/manifests/helmrelease-station-dashboards.yaml` — Station dashboards («Колонка») from the chart in this repository.
-- `observability/rules/kustomization.yaml` — Backup freshness, Alertmanager delivery and Flux delivery rules, plus the Flux controller PodMonitor. Split out because PrometheusRule/PodMonitor need the Prometheus Operator CRDs that the `monitoring` release installs.
-- `observability/rules/podmonitor-flux.yaml` — Scrape the three Flux controllers for `gotk_*` metrics.
-- `observability/rules/prometheusrule-alertmanager.yaml` — Alertmanager delivery alerts.
-- `observability/rules/prometheusrule-backups.yaml` — Backup freshness alerts.
-- `observability/rules/prometheusrule-flux.yaml` — GitOps delivery alerts for the Flux-managed applications.
-  - Suspended Kustomizations are skipped on purpose (drills, rollback); `suspended` is absent when the manifest never set `spec.suspend`.
-- `observability/rules/prometheusrule-station.yaml` — Alerts for the station (Yandex Station Midi running Pulsar).
-- `observability/test_prometheusrule.py` — Structural sanity checks for the backup, Alertmanager and Flux PrometheusRules.
-  - Flux 2.x controllers only export gotk_reconcile_duration_seconds_* and gotk_token_*; the old reconcile-condition expression could never fire, and its absent() branch alerts forever.
-  - A healthy steady state is an empty result: the ConfigMap exists, the pins source is Ready, and its series exists. Each failure mode below is one branch, so it must not degrade into a permanent alert.
-  - A selector on a label kube-state-metrics never emits silently disables the alert (or makes absent() fire forever), so cross-check every matcher against the customResourceState config.
-- `observability/values/prometheus.yaml` — The default delivery-rate alerts cannot separate the heartbeat webhook from real integrations. They are redeclared with an `integration!="webhook"` filter in rules/prometheusrule-alertmanager.yaml, together with HeartbeatPingFailing for persistent ping failures.
-  - The station (Yandex Station Midi running Pulsar) is an external target on the LAN: Pulsar serves Prometheus text on 9101. The address comes from flux-app-settings (`STATION_IP`), never from Git.
+- `/srv/k3s` — локальный диск VM (data-dir `/srv/k3s/runtime`); PVC —
+  `local-retain` или static local PV с Retain. Это не репликация.
+- API/kubelet/node metrics закрыты от обычного LAN (`management-firewall/`);
+  доступ — `mise run kubectl` (SSH-туннель) или VPN.
+- Не выполнять параллельные Helm-операции над одним release.

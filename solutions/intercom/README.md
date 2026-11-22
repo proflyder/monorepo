@@ -125,6 +125,8 @@ RINGING --Answer(callee)--> CONNECTING --offer+answer--> ACTIVE
 | `INTERCOM_STATION_TOKEN` / `_FILE` | — | station device token (обязателен) |
 | `INTERCOM_PHONE_ENDPOINT_ID` | `phone` | identity телефона |
 | `INTERCOM_STATION_ENDPOINT_ID` | `station` | identity колонки |
+| `INTERCOM_PHONE_DISPLAY_NAME`, `INTERCOM_STATION_DISPLAY_NAME` | `Phone`, `Station` | имена endpoint'ов по умолчанию |
+| `INTERCOM_PHONE_CAPABILITIES`, `INTERCOM_STATION_CAPABILITIES` | `audio` | comma-separated capabilities по умолчанию |
 | `INTERCOM_RING_TIMEOUT_SECONDS` | `30` | RINGING |
 | `INTERCOM_CONNECT_TIMEOUT_SECONDS` | `20` | CONNECTING |
 | `INTERCOM_MAX_CALL_SECONDS` | `3600` | ACTIVE |
@@ -162,46 +164,6 @@ bazelisk test //solutions/intercom/...
 
 ## Деплой
 
-Манифесты — `projects/home/kubernetes/intercom/`, юнит CI — `intercom` в
-`platform/ci/units.mjs`. PR CI собирает `ghcr.io/proflyder/intercom` и
-публикует `tree-<hash>`; merge в `develop` пинует проверенный digest
-(`DEPLOY_NO_BUILD=1`, build-once) в `deploy/home-apps`, а Flux
-(`Kustomization/app-intercom`) применяет Deployment из `develop`. Откат —
-revert pins-коммита или `flux suspend`; ручного deploy-скрипта нет, а
-состояние звонков живёт только в памяти (`rollback.kind: forward-only`).
-
-Секреты:
-
-- OpenBao `secret/k8s/home-assistant/scheduler-auth` → `token`: общий токен
-  приложения, ESO кладёт его в ключ `phone_token` секрета `intercom`;
-- OpenBao `secret/k8s/home-assistant/intercom` → `station_token` (device
-  secret, ≥32 случайных байта, не равен токену приложения);
-- `secret/k8s/flux-system/app-settings` → `INTERCOM_NODE_PORT` (30097)
-  через `Secret/flux-app-settings`;
-- локальный `secrets/home/intercom.env` — только для разовой ручной
-  проверки, не для деплоя.
-
-ESO-манифест применяется один раз:
-`mise run kubectl -- apply -f projects/home/kubernetes/intercom/manifests/external-secrets.yaml`.
-HTTPS-имя `intercom.home.<home-suffix>` описано в
-`projects/home/kubernetes/ingress/routes/routes.yaml` и появляется после
-обычного деплоя ingress (`INTERCOM_HOST` вычисляется из `HOME_DOMAIN`).
-NodePort закрыт host-фильтром `projects/home/kubernetes/scheduler/nft`:
-источник — только LAN/VPN и pod CIDR.
-
-## Заметки к коду
-
-Пояснения, перенесённые из комментариев исходников (код комментариев не содержит, см. `AGENTS.md`).
-
-- `crates/intercom/src/api/auth.rs` — Bearer authentication shared by unary and streaming RPCs.
-- `crates/intercom/src/api/mod.rs` — Connect transport and distroless probe routes.
-- `crates/intercom/src/api/service.rs` — `home.v1.IntercomService` implementation.
-- `crates/intercom/src/app.rs` — Composition root: configuration, telemetry, in-memory state and the authenticated Connect API.
-- `crates/intercom/src/config.rs` — Process configuration for the intercom signaling service.
-  - Why the environment was rejected. Messages never contain a secret value.
-- `crates/intercom/src/domain.rs` — In-memory call registry and state machine.
-  - A rejected operation. Messages never contain tokens or SDP bodies.
-- `crates/intercom/src/health.rs` — Distroless probes: `-healthcheck` and `-status`.
-- `crates/intercom/src/lib.rs` — WebRTC signaling for phone <-> station calls.
-- `crates/intercom/src/main.rs` — Command entry point: the intercom service plus the distroless `-healthcheck` and `-status` probes used by the deployment.
-- `crates/intercom/tests/signaling.rs` — End-to-end contract test over the real Connect HTTP/1.1 listener.
+Манифесты, секреты, маршрут и откат —
+[`projects/home/kubernetes/intercom/README.md`](../../projects/home/kubernetes/intercom/README.md).
+Состояние звонков живёт только в памяти, поэтому откат forward-only.

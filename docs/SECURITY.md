@@ -1,13 +1,14 @@
 # SECURITY — политики и риски
 
-Факты — `STATE.md`; приватные пути — `SENSITIVE-DATA.md`.
+Факты — `STATE.md`; сеть — `NETWORK.md`; пути OpenBao — `SECRETS.md`.
+Реестр приватных данных — раздел «Приватные данные» ниже.
 
 ## Границы
 
 - Стенд только для своих устройств в своей сети.
 - Не публиковать `secrets/`, ключи, архивы, HA auth, логи с токенами.
 - Не пробрасывать HA/MA/ADB/Zigbee в интернет.
-- Публичный доступ — собственный VPN (ocserv), webhook currency-bot и
+- Публичный доступ — собственный VPN (WireGuard, ocserv), webhook currency-bot и
   read-only `/repository/*` Nexus через Cloudflare Tunnel; больше наружу
   ничего не публикуется.
 
@@ -24,8 +25,8 @@
   `8099` — bearer token; `9101` — метрики, доступ только с адреса
   Prometheus; ADB root без пароля; SSH root по паролю.
 - `6638` Zigbee — без auth; сейчас закрыт/не используется, наружу не выставлять.
-- ONT/AX3: проброшен только VPN `443/tcp+udp`; внешний скан 2026-10-31: из
-  WAN открыт лишь `443/tcp` (`22`, `80`, `8006`, `8443` закрыты).
+- ONT/AX3: пробрасываются только порты VPN; `22`, `80`, `8006`, `8443` из WAN
+  закрыты.
 
 ## VPN
 
@@ -49,8 +50,7 @@
   (`6443`), SSH, PVE, станция и другие LAN-адреса недоступны. Порт `443` и
   группа `ci` нужны сертификатам `ci-pulsar` (`deploy-station`) и
   `ci-android` (`android-distribute`).
-- Сервер проброшен на ONT/AX3: снаружи открыт только `443/tcp+udp`; SSH в CT
-  остаётся только из LAN. Лимит `max-same-clients = 10` на пользователя.
+- SSH в CT — только из LAN. Лимит `max-same-clients = 10` на пользователя.
 - Серверный сертификат — публичный Let's Encrypt с автоматическим продлением
   (certbot, DNS-01 Cloudflare). Приватные пароли/TOTP/QR и ключ клиентского
   CA — только в `secrets/home/vpn/`.
@@ -85,13 +85,12 @@
 
 ## Секреты
 
-`secrets/` — 700, файлы 600. Реестр — `SENSITIVE-DATA.md`.
+`secrets/` — 700, файлы 600. Реестр — «Приватные данные» ниже.
 
 - `secrets/NETWORK.md` — реальные IP/порты/VPN/HTTPS (копия в OpenBao
   `secret/infra/docs/network`).
 - Пароли, ключи и сертификаты — только OpenBao (`docs/SECRETS.md`); локально
   `secrets/openbao/{addr,operator.token}` и `~/.ssh/home-lab/`.
-- QR/DPP отключён; прежний материал — только в private recovery archive.
 - currency-bot: VPS key/config, tunnel/API tokens, env — OpenBao
   `secret/infra/{ssh/currency-bot-vps,currency-bot/vps,cloudflare/currency-bot-tunnel}`;
   экспорт SQLite/CSV — `local-data/currency-bot/`.
@@ -120,7 +119,7 @@
 - Auto-unseal — встроенный `static` seal: 32-байтный ключ в Kubernetes Secret
   `openbao-seal` на том же узле, что и raft-данные. Это компромисс ради
   перезагрузки без человека: компромисс узла даёт и ключ, и данные. Ключ не
-  копируется в snapshot. Риск принят владельцем (2026-11-01), KMS не
+  копируется в snapshot. Риск принят владельцем, KMS не
   планируется; в offsite-бэкапе ключ и raft-снапшоты хранятся раздельно.
 - Recovery keys (5/3) и seal key — у владельца в Bitwarden (`Home recovery`) и в Vaultwarden (`openbao:bootstrap`), не на диске.
   Root-токен после bootstrap отозван; новый выпускается процедурой
@@ -128,22 +127,22 @@
 - Человек: `userpass` (имя — `secrets/openbao/username`) → политика `admin` с запретом
   `sys/seal`, `sys/step-down`, `sys/raw/*`, `sys/replication/*`,
   `sys/rotate`, `sys/rekey*`. Вход человека — пароль + обязательный
-  TOTP (enforcement на `auth/userpass` с 2026-10-31).
+  TOTP (enforcement на `auth/userpass`).
 - Операторская автоматизация (агент на Mac владельца): orphan periodic token
   (period 30 дней, продлевается при использовании) с политикой `operator-kv` —
-  только create/read/update/patch KV `secret/{ci,k8s}/*`, без delete/destroy,
-  `sys/*`, auth и политик. Файл `secrets/openbao/operator.token` (600, только
-  Mac). Компромисс Mac даёт чтение/изменение секретов приложений и CI —
-  принято владельцем 2026-11-02; отзыв — `bao token revoke` или UI.
+  только create/read/update/patch KV `secret/{ci,k8s,infra}/*`, без
+  delete/destroy, `sys/*`, auth и политик. Файл
+  `secrets/openbao/operator.token` (600). Компромисс рабочей машины даёт
+  чтение/изменение этих секретов — риск принят владельцем; отзыв — `bao token revoke` или UI.
 - CI: `jwt` mount `github`, только GitHub OIDC (без статических токенов):
   issuer `https://token.actions.githubusercontent.com`, audience = адрес
   OpenBao, TTL 10/15 мин. Остались роли `deploy-station` (Environment
   `Station`, политика `ci-station` — только `secret/ci/deploy-station`),
   `android-distribute` (Environment `Android` на PR, политика `ci-android` —
   только `secret/ci/android-distribute`) и `android-cleanup` (та же политика и
-  Environment, но для ежедневной чистки App Distribution из `develop`). Роль
-  `deploy-home`/политика `ci-deploy` удалены: home-сервисы применяет Flux, CI в
-  OpenBao за ними не ходит.
+  Environment, но для ежедневной чистки App Distribution из `develop`) и
+  `android-release` (ручной релиз). Home-сервисы применяет Flux, CI в OpenBao
+  за ними не ходит.
 - Поды: `kubernetes` auth через TokenReview (`system:auth-delegator` на SA
   `openbao`); политика `k8s-read` — read только `secret/k8s/*`. Роль
   `external-secrets` используется External Secrets Operator (namespace
@@ -153,13 +152,10 @@
   и metadata запросов видны — Loki доступен только из LAN/VPN.
 - Backup — raft snapshot в локальный PV, ночной vzdump на отдельный SSD и
   зашифрованная offsite-копия (restic → Google Drive). Ключ auto-unseal и
-  recovery keys в offsite-архив не входят; restore на отдельном стенде
-  проверен 2026-11-02 (`REBUILD.md` §6).
-- Приложенческие Secrets (`scheduler-auth`, `ha-bridge-ha`,
-  `hermes-environment`, `grafana-admin`, `cloudflare-api-token`,
-  `currency-bot`, `cloudflared-tunnel`) перенесены в
-  `secret/k8s/*`; источник правды — OpenBao, Kubernetes Secrets создаёт ESO.
-  Локальные копии в `secrets/` — бэкап/bootstrap, не используются деплоем.
+  recovery keys в offsite-архив не входят; restore drill — `REBUILD.md` §6.
+- Секреты приложений живут в `secret/k8s/*`; источник правды — OpenBao,
+  Kubernetes Secrets создаёт ESO. Ручные правки Kubernetes Secret ESO
+  перезапишет.
 - Не переносятся: `openbao-seal` (нужен до старта OpenBao), helm release
   Secrets, SA token Secrets, TLS, выпускаемые cert-manager, служебные Secrets
   контроллеров.
@@ -194,17 +190,14 @@
 - CI не имеет SSH, root и доступа к K3s API: группа `ci` маршрутизируется
   только до `K3S_NODE`, VPN nft разрешает только `tcp/443` (Traefik → HA для
   `deploy-station`, OpenBao для OIDC `deploy-station`/`android-distribute`);
-  правило `6443` снято. Сертификат `ci-github` и
-  ServiceAccount/RBAC `ci-deploy` удалены, root-helper с узла убран.
-  CI-пользователи VPN — `ci-pulsar` (станция) и `ci-android`
+  `6443` закрыт. CI-пользователи VPN — `ci-pulsar` (станция) и `ci-android`
   (App Distribution).
-- Kubeconfig CI больше не существует: применение в кластере делает Flux
-  in-cluster, без входящего ServiceAccount.
+- Kubeconfig у CI нет: применение в кластере делает Flux in-cluster.
 - Образы неизменяемы и адресуются по digest; GHCR-пакеты должны быть
   публичными (pull без секрета), push выполняет job-scoped `GITHUB_TOKEN` в
   CI-джобах, собирающих образ (unit/native), с `packages: write`; job `pins`
   пишет только pins-ветку и имеет `contents: write`.
-- Environment `Home` удалён. Секреты Environment `Station` (VPN p12/пароль,
+- Секреты Environment `Station` (VPN p12/пароль,
   `OPENBAO_ADDR`, `OPENBAO_ROLE`) загружаются primary вручную через `gh`; в Git
   их нет. Приватные env приложений лежат в `secret/k8s/flux-system/app-settings`,
   values Hermes — в `secret/k8s/flux-system/runtime-values`; их читает ESO
@@ -214,10 +207,9 @@
 ## Логи / публикация
 
 - Логи стека/станции могут содержать IP, SSID, device_id, URL.
-- Перед публикацией: `mise run test`, `SENSITIVE-DATA.md`, проверка истории Git.
+- Перед публикацией: `mise run test`, реестр «Приватные данные», проверка истории Git.
 - Публичные docs используют `192.0.2.x`; реальные значения — только `secrets/`.
-- История и старые research/plan документы удалены из рабочего дерева;
-  при публикации проверять всю Git-историю, а не только HEAD.
+- При публикации проверять всю Git-историю, а не только HEAD.
 
 ## Обновления / recovery
 
@@ -235,3 +227,48 @@
 - Не делать `setenforce 0`, не оставлять rootfs `rw`, не запускать `curl | sh`.
 - Не выставлять `31116` в LAN; stock `quasar-server` API без auth. Сейчас
   stock-стек остановлен (работает Pulsar); при возврате закрыть порт.
+
+## Приватные данные
+
+Реестр мест, где лежат приватные данные (значений здесь нет). Все секреты —
+в OpenBao: `secret/k8s/*` (ESO), `secret/ci/*` (CI), `secret/infra/*` (доступ
+владельца: SSH-ключи, CA, VPN, бэкап-пароли, admin kubeconfig, Terraform,
+Wi-Fi/BLE станции). Файл, который читает локальный скрипт, выдаёт fnox через
+`mise run admin:*` во временных файлах; вручную — `mise run secrets:file` /
+`secrets:clean`.
+
+### Высокий риск
+
+| Путь | Что | Почему |
+|---|---|---|
+| `secrets/NETWORK.md` | реальные LAN IP, порты, VPN/HTTPS | карта сети |
+| `secrets/openbao/` | operator token, адрес, TOTP method id | постоянный KV-доступ агентов |
+| `~/.ssh/home-lab/` | ключи PVE/K3s/HAOS, Комп, VPS + known_hosts | рабочий SSH; копии в `secret/infra/ssh/*` |
+| `local-data/local/backups/`, `local-data/proxmox-install/*.tar*` | бэкапы станции/HA/Wi-Fi | внутри исторические токены/ключи |
+| `/data/quasar/ble-gateway/token`, `control-token` | BLE и HTTP control токены | смена Wi-Fi, управление gateway |
+| `/var/lib/shim-signed/mok/MOK.priv` на PVE | MOK private key | DKMS при Secure Boot |
+| Hermes `auth.json`/`.env` | HA/MA tokens, OAuth | доступ к HA/MA/LLM |
+
+### Средний риск
+
+| Путь | Что | Почему |
+|---|---|---|
+| `local-data/local/logs/`, `archive/logs/` | статусы/диагностика | IP, URL, иногда токены |
+| `local-data/local/artifacts/` | архивы, pcap, прошивки | метаданные/ключи внутри |
+| `local-data/local/snapshots/` | снапшоты станции и проекта | сеть/конфиги |
+| `projects/station/configs/*.env` | station env | IP/URL, возможно ключи |
+| `artifacts/firmware/*.zip` | прошивка Station 2 | юридический риск, риск кирпича |
+| `artifacts/alice-mitm-*`, `artifacts/prior-session/` | bootstrap kit, транскрипт сессии | ключи и секреты внутри |
+
+Низкий риск: `projects/station/configs/*.crt` (публичные сертификаты),
+`artifacts/ssh/dropbear*` (бинарники, не ключи).
+
+### Правила
+
+1. Не публиковать `secrets/`, бэкапы, `artifacts/prior-session`,
+   `archive/legacy/**/certs/*.key`.
+2. В docs и чатах — имена переменных, не значения.
+3. Offsite — только шифрованный архив с отдельным паролем.
+4. При утечке — ротация SSH/ADB/BLE/LLM/VPN, отзыв HA tokens.
+5. Значение секрета приложения менять в `secret/k8s/<ns>/<name>` и
+   запускать `force-sync` ESO.

@@ -10,9 +10,9 @@ Deliberate deviations from upstream are listed below.
 
 ## Upstream merge и Cargo.toml
 
-Pulsar — член единого корневого Cargo workspace: `projects/station/pulsar/satellite`
-своего `Cargo.toml` (workspace), `Cargo.lock`, `crate-universe.lock` и
-`rust-toolchain.toml` больше не имеет. Upstream-патч (`git diff vA..vB` →
+Pulsar — член единого корневого Cargo workspace: у `projects/station/pulsar/satellite`
+нет своего workspace `Cargo.toml`, `Cargo.lock`, `crate-universe.lock` и
+`rust-toolchain.toml`. Upstream-патч (`git diff vA..vB` →
 `git apply -3`) применяется как обычно, но его правки манифестов переносятся
 вручную:
 
@@ -151,11 +151,7 @@ adb -s <serial> pull /data/pulsar/wake-events/ ./wake-events/
 scp -r root@<ip>:/data/pulsar/wake-events/ ./wake-events/
 ```
 
-Проверки: `bazel test //projects/station/pulsar/satellite/...` (fmt, clippy с `-D warnings`,
-юнит/интеграционные тесты, golden-файлы; Linux). На станции подтверждено живой работой:
-запись с микрофона идёт с 2026-11-01 (на 2026-11-12 — 215,36 ч прослушивания), манифест
-рядом с моделью задаёт cutoff/window, кнопки HA и `outcome` заполняются. Сбор и разметка
-этих событий — `projects/station/tools/wakeword-personalize/README.md`.
+Сбор и разметка этих событий — `projects/station/tools/wakeword-personalize/README.md`.
 
 ## Build
 
@@ -189,8 +185,8 @@ cp /path/to/ru_ricardo_mww.json satellite/wakewords/
 ```
 
 `pulsar-install` copies it to `/data/pulsar/wakewords/` with a SHA-256 check. The installer is
-the Rust crate `projects/station/pulsar/installer`; upstream changes to it are ported to Rust by
-hand (the Go implementation is gone). Run it from the pulsar directory:
+the Rust crate `projects/station/pulsar/installer`; upstream installer changes are ported by
+hand. Run it from the pulsar directory:
 `cd projects/station/pulsar && cargo run -p pulsar-installer -- --list`.
 Without the model the daemon starts but logs that the Ricardo detector is
 missing; it does not silently fall back to «Алиса».
@@ -203,9 +199,8 @@ missing; it does not silently fall back to «Алиса».
 
 Версию вычисляет CI, руками её править не нужно: `projects/station/pulsar/VERSION` хранит только
 базу `v0.6`, а patch = число коммитов, затрагивающих `projects/station/pulsar/**` в истории
-`HEAD^1` (`platform/ci/version.mjs`). Первый релиз новой схемы — `v0.6.50` и далее; он новее
-последнего ручного `v0.5.1020`, поэтому сравнение версий (`vMAJOR.MINOR.PATCH`) считает релиз
-новее. Смену major.minor достаточно записать в `VERSION` одной строкой.
+`HEAD^1` (`platform/ci/version.mjs`). Вычисляемые `v0.6.NNN` новее ручных `v0.5.10NN`.
+Смену major.minor достаточно записать в `VERSION` одной строкой.
 
 1. Обычный PR в `develop`. Отдельный PR «поднять версию» не нужен: смерженное изменение Pulsar
    само является релизом.
@@ -224,15 +219,15 @@ missing; it does not silently fall back to «Алиса».
 4. Сломанный или недоснятый релиз пересобирается вручную: Actions → «Пересобрать и задеплоить
    сервисы» (`deploy-services.yml`) с галочкой `pulsar`. Это единственный путь, который
    собирает Pulsar с нуля и может заменить опубликованные байты (`replace_artifacts`).
-4. Job `deploy-station` ждёт одобрения в Environment `Station` (required reviewer).
-5. После одобрения job поднимает VPN (группа `ci`), затем `hashicorp/vault-action` по
+5. Job `deploy-station` ждёт одобрения в Environment `Station` (required reviewer).
+6. После одобрения job поднимает VPN (группа `ci`), затем `hashicorp/vault-action` по
    GitHub OIDC (роль `deploy-station`) читает `secret/data/ci/deploy-station` и вызывает
    `tools/ha_firmware_deploy.py --tag <version>`: HA `homeassistant.update_entity` → сущность
    «Firmware» видит версию → `update.install` → колонка скачивает слои, проверяет `SHA256SUMS`
    и `--version`, меняет бинарник (старый остаётся `.prev`) и перезапускается. Скрипт ждёт
    `installed_version == version` и ещё 90 с следит за стабильностью; откат `supervise.sh` на
    `.prev` или недоступность сущности дольше 30 с валят job.
-6. Проверить в HA: «Firmware» показывает установленную версию, колонка онлайн; при сомнениях —
+7. Проверить в HA: «Firmware» показывает установленную версию, колонка онлайн; при сомнениях —
    `ctl.sh log` на станции.
 
 ### Источник обновлений — GHCR
@@ -265,45 +260,8 @@ missing; it does not silently fall back to «Алиса».
 - в OpenBao роль `deploy-station` для `auth/github` и секрет `secret/data/ci/deploy-station`
   с ключами `ha_url`, `ha_token`, `entity_id` (сущность `update.<station>_firmware`).
 
-## Verification performed
-
-All checks were host-side; no binary was installed and no station was touched.
-
-- `cargo fmt --all --check` (macOS host, Rust 1.99.1): pass.
-- `cargo clippy --workspace --all-targets --locked -- -D warnings` in
-  `rust:1.99.1-bookworm`, `linux/arm64`: pass.
-- `cargo test --workspace --exclude pulsar-update` in the same container: all
-  suites pass, including the new Ricardo pre-roll tests
-  (`ricardo_preroll_rule_uses_the_custom_id`,
-  `ricardo_preroll_is_the_last_512_ms_of_the_ring`,
-  `preroll_off_is_empty_but_the_wake_hold_is_separate`).
-- `cargo test -p pulsar-update`: 27 passed, 7 failed on arm64. The tests in
-  upstream hard-code the x86_64 asset name `pulsar-host.bin` while the binary
-  reports `pulsar-aarch64.bin`; an export of the unmodified upstream `v0.5.2`
-  (`4cba44a`) shows the same 7 failures on arm64, so this is a pre-existing
-  upstream test limitation, not a merge regression. The new GHCR tests (token,
-  manifest, layer digest, bearer only to ghcr.io) pass on arm64.
-- `bazel build -c opt --platforms=//platform/bazel/zig:armhf_linux
-  --define=pulsar_version=… //projects/station/pulsar/satellite:station_binary`:
-  the daemon compiles and links as an ARM EABI5 armhf ELF
-  (`bazel-bin/projects/station/pulsar/satellite/pulsar.debug`); the stripped
-  `pulsar` is produced by Bazel and CI copies both to
-  `satellite/build/armhf/`.
-
-Not performed: live microphone/wake-word acceptance, real `libtflite.so`
-loading on the station, ESPHome entity regression, Spotify/MA playback, or a
-rollback test. Those remain a separate deployment gate.
-
 ## Rollback
 
-The previous Rust binary and its model are untouched. If this merge is ever
-installed, keep:
-
-```text
-/data/pulsar/pulsar.prev
-/data/pulsar/state.conf
-/data/pulsar/wakewords/ru_ricardo_mww.tflite
-```
-
-and restore `pulsar.prev` with `ctl.sh restart`. The previous Rust build also
-accepts the same `wake_word=ricardo` state and model path.
+Keep `/data/pulsar/pulsar.prev`, `state.conf` (compatible with `.prev`) and
+`wakewords/ru_ricardo_mww.tflite`; restore `pulsar.prev` with `ctl.sh restart`.
+Commands — monorepo `docs/OPERATIONS.md`.
