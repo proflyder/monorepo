@@ -6,7 +6,7 @@ import dev.proflyder.home.core.model.ControlKind
 import dev.proflyder.home.core.model.ControlRole
 import dev.proflyder.home.core.model.PowerState
 
-sealed interface ControlItem {
+internal sealed interface ControlItem {
     val key: String
 
     data class Header(
@@ -50,19 +50,6 @@ sealed interface ControlItem {
         override val key: String get() = "hub"
     }
 
-    data class QuickActions(val tiles: List<QuickTile>, val hint: Boolean) : ControlItem {
-        override val key: String get() = "quick_actions"
-    }
-
-    data class Voice(
-        val profile: Profile? = null,
-        val actions: List<WakeFeedbackAction> = emptyList(),
-    ) : ControlItem {
-        override val key: String get() = "voice"
-
-        data class Profile(val entry: ControlEntry, val busy: Boolean)
-    }
-
     data class Filters(val chips: List<FilterChip>, val selected: ControlFilter) : ControlItem {
         override val key: String get() = "filters"
     }
@@ -70,9 +57,9 @@ sealed interface ControlItem {
     data class FilterChip(val filter: ControlFilter, val label: String, val count: Int)
 }
 
-data class ControlFilterOption(val filter: ControlFilter, val count: Int)
+internal data class ControlFilterOption(val filter: ControlFilter, val count: Int)
 
-fun ControlEntry.isVisible(entries: List<ControlEntry>): Boolean {
+internal fun ControlEntry.isVisible(entries: List<ControlEntry>): Boolean {
     val condition = visibleWhen ?: return true
     val target = entries.firstOrNull { it.id == condition.entry } ?: return false
     val on = when (target.power) {
@@ -87,19 +74,17 @@ fun ControlEntry.isVisible(entries: List<ControlEntry>): Boolean {
     }
 }
 
-fun visibleEntries(entries: List<ControlEntry>): List<ControlEntry> =
+internal fun visibleEntries(entries: List<ControlEntry>): List<ControlEntry> =
     entries.filter { it.isVisible(entries) }
 
-class ControlTexts(
+internal class ControlTexts(
     val otherDevices: String,
     val scenarios: String,
     val unavailable: String,
-    val voice: String,
     val onSummary: (on: Int, total: Int) -> String,
-    val actions: String = "Actions",
-    val all: String = "All",
-    val lights: String = "Lights",
-    val switches: String = "Switches",
+    val all: String,
+    val lights: String,
+    val switches: String,
 ) {
     fun filterLabel(filter: ControlFilter, count: Int): String {
         val name = when (filter) {
@@ -113,8 +98,7 @@ class ControlTexts(
     }
 }
 
-object ControlItems {
-    private const val SECTION_VOICE = "voice"
+internal object ControlItems {
     private const val SECTION_UNAVAILABLE = "unavailable"
     private const val SECTION_OTHER = "other"
     private const val SECTION_ROOM_PREFIX = "room:"
@@ -159,23 +143,12 @@ object ControlItems {
         expandedDevices: Set<String> = emptySet(),
         leading: List<ControlItem> = emptyList(),
         collapsedRooms: Set<String> = emptySet(),
-        wakeFeedback: List<WakeFeedbackAction> = emptyList(),
-        voiceCard: Boolean = true,
     ): List<ControlItem> {
         val visible = visibleEntries(entries)
         val applied = effectiveFilter(visible, filter)
-        val profile = visible.firstOrNull { it.isProfile }
         val content = visible.filterNot { it.isProfile }
         val items = mutableListOf<ControlItem>()
         items += leading
-
-        if (voiceCard && (profile != null || wakeFeedback.isNotEmpty())) {
-            items += ControlItem.Header(SECTION_VOICE, texts.voice)
-            items += ControlItem.Voice(
-                profile = profile?.let { ControlItem.Voice.Profile(it, busy = it.id in pending) },
-                actions = wakeFeedback,
-            )
-        }
 
         val filterOptions = options(visible)
         if (filterOptions.size > 1) {

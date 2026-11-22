@@ -314,32 +314,39 @@ notification all open or drive the same controller.
   compact switch (turning a recurring alarm off asks skip-once vs disable), a
   timer row has a small pause/resume button, and tapping a row opens its section.
   Data comes from the existing feature repositories through their API modules.
-  The hub refreshes on resume and pull-to-refresh.
+  The catalog and the hub are `StateFlow`s in the data layer
+  (`ConnectControlRepository`, `HomeHubFeed`) with one refresh policy
+  (`ControlRefreshPolicy`): they reload while the app is in the foreground and
+  someone observes them (immediately on return, then every 30 s), on
+  pull-to-refresh and after commands. Screens never refresh on resume.
 - **Quick actions** open from a FAB as a speed-dial overlay: tapping a row
   runs the action, long-pressing a device or scenario pins/unpins it. The dial
   lists pinned devices, scenarios, the "Say on the station" action, the wake
-  marks and the built-in Call tile; order and set are kept in DataStore. Pins
+  marks and the tiles other features contribute through `QuickTileProvider`
+  (`@ContributesIntoSet`: Call from `features/call`, VPN from `features/vpn`);
+  order and set are kept in DataStore. Pins
   are changed by long-pressing a device in a room group or a native scenario in
   the scenario list (**Pin to Home** / **Unpin**). A non-light device tile
   toggles on tap; a light tile opens its brightness/color sheet on tap. On first
   launch the speak action and the native **Blackout** / **Work mode** scenarios
-  (when they exist) are pinned. The built-in Call item is always present.
+  (when they exist) are pinned. Contributed tiles are always present. Whether
+  the dial is open is ViewModel state, like every other control on the screen.
 - Filter chips (All / Lights / Switches, plus room filters) are persisted in
-  DataStore and restored on launch. Room sections are collapsible; the folded
-  state is UI-only.
-- The **Voice** card sits between Quick actions and the rooms and merges the
-  assistant profile with the two wake marks. The profile is an HA switch
-  carrying the `voice_profile` label (shown as `kind: "profile"`) and uses the
-  shared pill switch — **Personal** (`turn_off`) / **Work** (`turn_on`); row
-  taps do not act, only an explicit pill does. The wake chips (`ear-off` /
-  `ear`) send the `script.wake_false_alarm` and `script.wake_missed` marks at
-  once. Each row hides on its own, and the card disappears when neither the
-  profile nor a wake script exists.
+  DataStore (`ControlPreferences.filter` flow) and restored on launch. Room
+  sections are collapsible; the folded state lives in the ViewModel.
+- The assistant profile is an HA switch carrying the `voice_profile` label
+  (shown as `kind: "profile"`); it is switched from the toolbar chip on the Home
+  tab through `VoiceProfileSwitch` — **Personal** (`turn_off`) / **Work**
+  (`turn_on`). The wake marks (`script.wake_false_alarm`,
+  `script.wake_missed`) are items of the quick-actions dial.
 - Tapping a scenario or toggling a device enqueues a scheduler task
   `home.control` on the `control` queue (`EnqueueTask`). The phone only queues;
-  the server executor owns execution. Device switches are optimistic and then
-  re-read from the server; the profile uses the same optimistic update and
-  re-read. Delivery is at-least-once, not exactly-once.
+  the server executor owns execution. Device switches, light adjustments and
+  volume are optimistic: `OptimisticDeviceState` overlays the expected value on
+  the catalog until the server reports it or 15 s pass, and the repository
+  re-reads the catalog on the settle schedule of the policy (no polling in the
+  ViewModel). A failed command drops the expectation and reloads. Delivery is
+  at-least-once, not exactly-once.
 - Without a Home control address the tab explains what to configure; it does not
   fail silently.
 
@@ -611,11 +618,11 @@ sources still fails the build.
 `android_tests` covers endpoint/security rules, time/duration parsing, Connect
 JSON mapping and failures, idempotency, navigation queue/restoration, the real
 Metro graph via a Robolectric cold launch, a Robolectric smoke of the real
-profile row (`//projects/mobile/android/features/control/impl:profile_row_test`),
+Home rows (`//projects/mobile/android/features/control/impl:control_rows_test`),
 the Home hub model (live-row selection/order/cap and the 24 h reminder window,
-"tomorrow 07:30" text, favorites
-pin/order/defaults, display-name rule) in
-`//projects/mobile/android/features/control/api:api_test`, the call state
+"tomorrow 07:30" text, favorites pin/order/defaults, display-name rule, catalog
+refresh policy and optimistic state, tap routing) in
+`//projects/mobile/android/features/control/impl:control_logic_test`, the call state
 machine (dialing → connecting → active → ended, local and remote hangup,
 media/ICE failure, timeout, permission denial, busy/offline), the Connect
 streaming `Watch` parser over a fake HTTP server, audio-route mapping, a
@@ -1562,38 +1569,37 @@ Themes are code in `core/theme`:
 - `features/connection/api/src/main/kotlin/dev/proflyder/home/feature/connection/ConnectionRepository.kt`
   - Calls home.v1.SchedulerService/GetStatus; never uses mock data.
   - The token is never displayed; blank input means "keep what is stored".
-- `features/control/api/src/main/kotlin/dev/proflyder/home/feature/control/CompactControls.kt`
+- `features/control/api/src/main/kotlin/dev/proflyder/home/feature/control/ControlRepository.kt`
+  - `catalog` is the single source of truth for Home devices: a `StateFlow` with `configured`/`loading`/`failure` and the last good catalog (a failed reload keeps it).
+  - Queues "speak this text on the station". The text is user content: it only ever goes into the task payload, never into a URL or a log line.
+  - `VoiceProfileSwitch` exposes the assistant profile for the toolbar chip without the app knowing about the catalog.
+- `features/control/api/src/main/kotlin/dev/proflyder/home/feature/control/QuickTileProvider.kt` — A feature contributes a dial tile with `@ContributesIntoSet`; `activate()` either handles the tap itself or asks Home to open a feature tab. Home knows no feature by name.
+- `features/control/api/src/main/kotlin/dev/proflyder/home/feature/control/SpeakText.kt` — Backwards-compatible name for the shared speech rules now living in `packages/kotlin/core`. The Home screen and the scenario builder must agree on exactly the same normalization.
+- `features/control/impl/src/main/kotlin/dev/proflyder/home/feature/control/CompactControls.kt`
   - One pure rule deciding how a control inside a device card is drawn: a round compact tile or a normal row. A tile is a binary on/off control — it accepts both turn_on and turn_off — inside a card that holds at least two controls.
-- `features/control/api/src/main/kotlin/dev/proflyder/home/feature/control/ControlItems.kt`
+- `features/control/impl/src/main/kotlin/dev/proflyder/home/feature/control/ControlItems.kt`
   - A section header. [section] identifies the section (not its title), so a room that happens to be called "Home" never collides with another section. [summary] is a short right-aligned note ("2 of 4 on").
-  - The profile is a mode: only the segmented pills act, never a row tap.
   - The chip counts describe primary controls only: a device's settings are part of it and never add a chip or a count of their own.
   - The chips: All, then the device categories that exist, then each room (only when there is more than one, otherwise rooms add nothing).
-  - [leading] items (the live rows and the pinned quick actions) come first, then the single voice card (a mode and wake marks, not content, shown whatever the filter is), then available devices grouped by room and, inside a room, by device, then unavailable …
+  - [leading] items (the live rows) come first, then available devices grouped by room and, inside a room, by device, then unavailable ones. The profile entry is never a row.
   - Visibility comes first: a conditional entry whose target is not in the requested state must never reach cards, chips, counters or the "Unavailable" section.
-  - Dead rows keep the old behaviour: they follow the applied filter too, and a lone setting never shows up as its own unavailable device.
+  - Dead rows follow the applied filter too, and a lone setting never shows up as its own unavailable device.
   - A group is shown when one of its primary controls matches the filter; its settings then follow the device, never the chip.
-- `features/control/api/src/main/kotlin/dev/proflyder/home/feature/control/ControlRepository.kt`
-  - Queues "speak this text on the station". The text is user content: it only ever goes into the task payload, never into a URL or a log line.
-- `features/control/api/src/main/kotlin/dev/proflyder/home/feature/control/SpeakText.kt` — Backwards-compatible name for the shared speech rules now living in `packages/kotlin/core`. The Home screen and the scenario builder must agree on exactly the same normalization.
-- `features/control/api/src/main/kotlin/dev/proflyder/home/feature/control/SpeedDial.kt` — One row of the Home quick-actions dial. The dial is built from the existing quick tiles (call, speak, pinned devices and scenarios) plus the resolved wake-feedback marks, so a newly pinned favourite appears automatically.
-- `features/control/api/src/main/kotlin/dev/proflyder/home/feature/control/WakeFeedback.kt`
-  - Resolves the two Home Assistant scripts that mark a wake event from the catalog. They are ordinary personal scenarios whose entity ids are part of the house contract (`projects/home-assistant/ha-voice/scripts.yaml`), so they are matched by id and never by …
-- `features/control/api/src/test/kotlin/dev/proflyder/home/feature/control/ControlItemsTest.kt`
-  - Its section and key never collide with a room or another section.
-  - A standalone row is titled by its device, never by the short entity title or the id fallback.
-- `features/control/impl/src/main/kotlin/dev/proflyder/home/feature/control/presentation/ControlAdapter.kt`
-  - The single "Voice" card: the profile is a mode, not a device, so only an explicit pill acts (never a row tap); the two wake marks send at once. Programmatic selection during binding must never look like a user choice.
-  - A switch flip is optimistic; put it back until the server confirms. The recurring-alarm skip/disable dialog then decides what actually happens, so a cancelled dialog never leaves a false off state.
-  - Programmatic `isChecked` must not be reported as a user toggle.
-  - Do not animate the thumb when the state is already the target one.
-  - Set the programmatic state before installing the listener, so binding a row can never look like a user toggle.
+- `features/control/impl/src/main/kotlin/dev/proflyder/home/feature/control/SpeedDial.kt` — One row of the Home quick-actions dial: the contributed tiles, the pinned devices, scenarios and speak action, then the resolved wake-feedback marks, so a newly pinned favourite appears automatically.
+- `features/control/impl/src/main/kotlin/dev/proflyder/home/feature/control/WakeFeedback.kt`
+  - Resolves the two Home Assistant scripts that mark a wake event from the catalog. They are ordinary personal scenarios whose entity ids are part of the house contract (`projects/home-assistant/ha-voice/scripts.yaml`), so they are matched by id and never by label.
+- `features/control/impl/src/main/kotlin/dev/proflyder/home/feature/control/data/ConnectControlRepository.kt`
+  - The catalog is shared through `stateIn(appScope, WhileSubscribed)`; fetching runs only on triggers of `RefreshTriggers` (foreground ticker, explicit refresh, settle steps), so nothing polls in the background.
+  - The executor applies commands asynchronously, so a read right after a tap can still return the old value. The command records an `Expectation`; `OptimisticDeviceState` overlays it until the server agrees or the TTL passes, and the settle steps of `ControlRefreshPolicy` stop as soon as it is met.
+- `features/control/impl/src/main/kotlin/dev/proflyder/home/feature/control/data/HomeHubFeed.kt`
+  - A failing source keeps its last known list: the hub is optional decoration over the catalog, so one unreachable feature must not empty the whole block.
+- `features/control/impl/src/main/kotlin/dev/proflyder/home/feature/control/presentation/ControlViewModel.kt`
+  - The ViewModel only dispatches intents to delegates: `ControlScreenSources` (combines catalog, hub with a one-second ticker while a timer runs, favorites, filter, pending sets and layout), `DeviceCommands`, `HubCommands`, `ControlFavorites`, `ControlLayoutState`, `QuickTileLauncher`. Tap routing is the pure `ControlTaps`.
+  - Default favorites are persisted once (`saveIfAbsent`) and only from a loaded catalog and scenario list, so a failed load never stores a wrong default.
+- `features/control/impl/src/main/kotlin/dev/proflyder/home/feature/control/presentation/EntryRowBinder.kt`
+  - One binding for an entry row in a standalone card and inside a device group (power, volume, button variants). Switches render through `SwitchBinder`: a click only sends the intent and the position comes back with the state. The recurring-alarm switch in the hub works the same way, so a cancelled skip/disable dialog never leaves a false off state.
 - `features/control/impl/src/main/kotlin/dev/proflyder/home/feature/control/presentation/ControlIcons.kt`
   - The voice profile is a mode, not a device: its "message" hint must not reuse the speak artwork.
-- `features/control/impl/src/main/kotlin/dev/proflyder/home/feature/control/presentation/ControlViewModel.kt`
-  - Loads the live rows and pinned shortcuts. A failing source simply contributes no rows: the hub is optional decoration over the catalog, so one unreachable feature must not replace the whole Home screen.
-  - Never persist defaults computed from a catalog that failed to load.
-  - The executor applies commands asynchronously, so a refresh right after a tap can still return the old state. The tapped value is therefore kept (see [expectedPower]) until the server confirms it or [EXPECT_TTL_MS] passes;
 - `features/control/impl/src/main/kotlin/dev/proflyder/home/feature/control/presentation/SpeakDialog.kt`
   - The "say on the station" dialog: a multiline text with a 500-character counter. "Say" stays disabled until the text is speakable; the text itself is never logged, only put into the queued command.
 - `features/control/impl/src/main/kotlin/dev/proflyder/home/feature/control/presentation/VolumeSheet.kt`
@@ -1601,13 +1607,9 @@ Themes are code in `core/theme`:
   - Hardware volume keys adjust the station by five percent per press. The event is consumed even at the edge (0 or 100), so the phone's own stream never changes while the sheet is open.
 - `features/control/impl/src/main/res/drawable/control_tile_ripple.xml` — Round pressed highlight for a compact tile: the oval mask keeps the ripple inside the icon circle instead of the square tile cell.
 - `features/control/impl/src/main/res/layout/item_control_hub.xml` — Compact "next up" block: a short list of live rows, hidden when empty. Rows fill the card edge to edge so a row ripple is clipped by the card corners instead of stopping short of them.
-- `features/control/impl/src/main/res/layout/item_control_quick_tile.xml` — A compact quick action: accent icon on the left, a label of up to two lines next to it. Two tiles share a row; every tile has the same height.
-- `features/control/impl/src/main/res/layout/item_control_voice.xml` — One compact voice card: the profile switch and the two wake marks. Rows are hidden independently; the whole card exists only when one of them is.
 - `features/control/impl/src/main/res/layout/overlay_control_speed_dial.xml` — Full-window speed dial: scrim above the bottom navigation, item FABs and a copy of the root FAB. Nothing here paints a panel background.
-- `features/control/impl/src/test/kotlin/dev/proflyder/home/feature/control/presentation/ControlProfileRowTest.kt`
-  - Robolectric smoke test of the voice card profile row: it must inflate with real resources, show the current side, hide the row when there is no profile, and report only *user* choices — the programmatic selection during binding must never send a command.
-  - Re-binding a row never replays a command.
-  - Payload binding is programmatic and must never look like a user toggle.
+- `features/control/impl/src/test/kotlin/dev/proflyder/home/feature/control/presentation/ControlRowsTest.kt`
+  - Robolectric smoke of the real rows: a tap only sends an intent, the switch keeps the rendered state until the next state arrives, and re-binding a group keeps its row views.
 - `features/push/api/src/main/kotlin/dev/proflyder/home/feature/push/NotificationHistory.kt`
   - One FCM message this phone actually received, as the history screen shows it. The text is the decoded payload, already bounded by [PushPayloads], and [deepLink] is the validated `home://…` route (never an arbitrary URL).
   - Retention rules, kept pure so they are unit-tested without Android: newest first, a repeated [NotificationHistoryEntry.id] replaces its older copy, and the log never grows past [MAX_ENTRIES].

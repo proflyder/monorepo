@@ -5,8 +5,6 @@ import android.widget.LinearLayout
 import androidx.fragment.app.Fragment
 import com.google.android.material.bottomnavigation.BottomNavigationView
 import com.google.android.material.floatingactionbutton.FloatingActionButton
-import dev.proflyder.home.feature.control.QuickTile
-import dev.proflyder.home.feature.control.SpeedDialItems
 import java.time.Duration
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -36,17 +34,6 @@ class HomeFabActivityTest {
     private fun fab(activity: MainActivity): FloatingActionButton =
         requireNotNull(home(activity).view).findViewById(R.id.control_quick_fab)
 
-    private fun seedCallItem(activity: MainActivity) {
-        val overlay = home(activity).javaClass
-            .getDeclaredField("speedDial")
-            .apply { isAccessible = true }
-            .get(home(activity))
-        val items = SpeedDialItems.build(listOf(QuickTile.Call), emptyList())
-        overlay.javaClass
-            .getMethod("render", List::class.java)
-            .invoke(overlay, items)
-    }
-
     private fun popupRoot(activity: MainActivity): View? {
         val windows = (shadowOf(activity.windowManager) as ShadowWindowManagerImpl).views
         return windows.firstNotNullOfOrNull { window ->
@@ -57,12 +44,11 @@ class HomeFabActivityTest {
     @Test
     fun itemsAreHiddenAndAtTheFabBeforeTheFirstAnimationFrame() {
         val activity = launch()
-        seedCallItem(activity)
 
         fab(activity).performClick()
         val root = requireNotNull(popupRoot(activity))
         val earlyItems = root.findViewById<LinearLayout>(R.id.control_dial_items)
-        assertEquals(1, earlyItems.childCount)
+        assertEquals(PROVIDED_TILES, earlyItems.childCount)
         assertEquals(0f, earlyItems.getChildAt(0).alpha, 0.001f)
         root.measure(
             View.MeasureSpec.makeMeasureSpec(1000, View.MeasureSpec.EXACTLY),
@@ -72,7 +58,7 @@ class HomeFabActivityTest {
         root.viewTreeObserver.dispatchOnPreDraw()
 
         val items = root.findViewById<LinearLayout>(R.id.control_dial_items)
-        assertEquals(1, items.childCount)
+        assertEquals(PROVIDED_TILES, items.childCount)
         val row = items.getChildAt(0)
         assertEquals(0f, row.alpha, 0.001f)
         assertEquals(0.6f, row.scaleX, 0.001f)
@@ -82,7 +68,6 @@ class HomeFabActivityTest {
     @Test
     fun fabOpensTheDialAndScrimAndBackCloseIt() {
         val activity = launch()
-        seedCallItem(activity)
         assertNull(popupRoot(activity))
 
         fab(activity).performClick()
@@ -91,7 +76,7 @@ class HomeFabActivityTest {
         assertTrue(root.findViewById<View>(R.id.control_dial_scrim).isShown)
 
         val items = root.findViewById<LinearLayout>(R.id.control_dial_items)
-        assertEquals(1, items.childCount)
+        assertEquals(PROVIDED_TILES, items.childCount)
         val item = items.getChildAt(0).findViewById<FloatingActionButton>(R.id.control_dial_action)
         assertTrue(item.isEnabled)
         assertTrue(item.hasOnClickListeners())
@@ -121,5 +106,9 @@ class HomeFabActivityTest {
 
         assertEquals("scenarios", activity.router.currentTabId.value)
         assertNull(popupRoot(activity))
+    }
+
+    private companion object {
+        const val PROVIDED_TILES = 2
     }
 }

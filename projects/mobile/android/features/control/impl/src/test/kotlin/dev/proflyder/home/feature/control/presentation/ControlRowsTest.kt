@@ -8,6 +8,7 @@ import android.widget.TextView
 import androidx.appcompat.view.ContextThemeWrapper
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.materialswitch.MaterialSwitch
+import dev.proflyder.home.core.designsystem.TileGrid
 import dev.proflyder.home.core.model.ControlAction
 import dev.proflyder.home.core.model.ControlEntry
 import dev.proflyder.home.core.model.ControlKind
@@ -15,13 +16,7 @@ import dev.proflyder.home.core.model.ControlRole
 import dev.proflyder.home.core.model.LightControls
 import dev.proflyder.home.core.model.PowerState
 import dev.proflyder.home.core.model.VolumeControls
-import dev.proflyder.home.core.ui.BaseAdapterCallback
-import dev.proflyder.home.core.designsystem.PillSegments
-import dev.proflyder.home.feature.control.ControlFilter
 import dev.proflyder.home.feature.control.ControlItem
-import dev.proflyder.home.feature.control.HubCard
-import dev.proflyder.home.feature.control.QuickTile
-import dev.proflyder.home.feature.control.WakeFeedbackAction
 import dev.proflyder.home.feature.control.impl.R
 import dev.proflyder.home.feature.control.impl.databinding.ItemControlDeviceTileBinding
 import org.junit.Assert.assertEquals
@@ -36,63 +31,8 @@ import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
-class ControlProfileRowTest {
-    private val changes = mutableListOf<Boolean>()
-    private val powerChanges = mutableListOf<Boolean>()
-    private val rowClicks = mutableListOf<ControlItem>()
-    private val settingsToggles = mutableListOf<String>()
-
-    private val callback = object : BaseAdapterCallback<ControlItem>(), ControlAdapterCallback {
-        override fun onItemClick(item: ControlItem) {
-            rowClicks += item
-        }
-
-        override fun onPowerChanged(entry: ControlEntry, on: Boolean) {
-            powerChanges += on
-        }
-
-        override fun onButtonPressed(entry: ControlEntry) = Unit
-
-        override fun onProfileChanged(entry: ControlEntry, work: Boolean) {
-            changes += work
-        }
-
-        override fun onToggleSettings(deviceId: String) {
-            settingsToggles += deviceId
-        }
-
-        override fun onHeaderClick(header: ControlItem.Header) = Unit
-
-        override fun onPinToggle(entry: ControlEntry) = Unit
-
-        override fun onHubCardClick(card: HubCard) = Unit
-
-        override fun onHubPrimary(card: HubCard) = Unit
-
-        override fun onQuickTileClick(tile: QuickTile) = Unit
-
-        override fun onQuickTileLongClick(tile: QuickTile) = Unit
-
-        override fun onWakeAction(action: WakeFeedbackAction) = Unit
-
-        override fun onFilterSelected(filter: ControlFilter) = Unit
-    }
-
-    private fun profile(power: PowerState?, available: Boolean = true) = ControlEntry(
-        id = "switch.voice_profile",
-        kind = ControlKind.PROFILE,
-        title = "Voice profile",
-        room = "",
-        icon = "account-voice",
-        actions = setOf(ControlAction.TURN_ON, ControlAction.TURN_OFF),
-        power = power,
-        available = available,
-    )
-
-    private fun voice(power: PowerState?, available: Boolean = true, busy: Boolean = false) =
-        ControlItem.Voice(
-            profile = ControlItem.Voice.Profile(profile(power, available), busy),
-        )
+class ControlRowsTest {
+    private val intents = mutableListOf<ControlIntent>()
 
     private fun device(power: PowerState?, light: LightControls? = null) = ControlEntry(
         id = "light.desk",
@@ -106,111 +46,45 @@ class ControlProfileRowTest {
         light = light,
     )
 
-    private class Row(
-        val root: View,
-        val tabs: PillSegments,
-        val profileRow: View,
-    ) {
-        val personal get() = tabs.getChildAt(0) as TextView
-        val work get() = tabs.getChildAt(1) as TextView
-    }
-
-    private fun bind(item: ControlItem.Voice): Row {
-        val themed = ContextThemeWrapper(
-            RuntimeEnvironment.getApplication(),
-            com.google.android.material.R.style.Theme_Material3_DayNight_NoActionBar,
-        )
-        val parent = FrameLayout(themed)
-        val adapter = ControlAdapter(callback)
-        adapter.submitList(listOf(item))
-        val holder = adapter.onCreateViewHolder(parent, adapter.getItemViewType(0))
-        adapter.onBindViewHolder(holder, 0)
-        return Row(
-            holder.itemView,
-            holder.itemView.findViewById(R.id.control_voice_profile_tabs),
-            holder.itemView.findViewById(R.id.control_voice_profile_row),
-        )
-    }
+    private fun themed() = ContextThemeWrapper(
+        RuntimeEnvironment.getApplication(),
+        com.google.android.material.R.style.Theme_Material3_DayNight_NoActionBar,
+    )
 
     @Test
-    fun showsTheCurrentProfileAndReportsOnlyTaps() {
-        val off = bind(voice(PowerState.OFF))
-        assertEquals(View.VISIBLE, off.profileRow.visibility)
-        assertEquals("Profile", off.root.findViewById<android.widget.TextView>(R.id.control_voice_profile_title).text)
-        assertEquals("Personal", off.personal.text)
-        assertEquals("Work", off.work.text)
-        assertEquals(0, off.tabs.selectedIndex)
-        assertEquals(emptyList<Boolean>(), changes)
-
-        off.work.performClick()
-        assertEquals(listOf(true), changes)
-        off.personal.performClick()
-        assertEquals(listOf(true, false), changes)
-
-        val on = bind(voice(PowerState.ON))
-        assertEquals(1, on.tabs.selectedIndex)
-        assertEquals(listOf(true, false), changes)
-    }
-
-    @Test
-    fun unknownStateSelectsNeitherSideAndSendsNothing() {
-        val row = bind(voice(null))
-        assertEquals(-1, row.tabs.selectedIndex)
-        assertEquals(emptyList<Boolean>(), changes)
-    }
-
-    @Test
-    fun unavailableOrBusyRowCannotBeChosen() {
-        val unavailable = bind(voice(PowerState.OFF, available = false))
-        unavailable.work.performClick()
-        assertEquals(emptyList<Boolean>(), changes)
-
-        val busy = bind(voice(PowerState.OFF, busy = true))
-        busy.work.performClick()
-        assertEquals(emptyList<Boolean>(), changes)
-    }
-
-    @Test
-    fun aVoiceCardWithoutAProfileHidesTheProfileRow() {
-        val actionsOnly = ControlItem.Voice(actions = emptyList())
-        val row = bind(actionsOnly)
-        assertEquals(View.GONE, row.profileRow.visibility)
-    }
-
-    @Test
-    fun theRowItselfDoesNothing() {
-        val row = bind(voice(PowerState.OFF))
-        row.root.performClick()
-        assertEquals(emptyList<ControlItem>(), rowClicks)
-        assertEquals(emptyList<Boolean>(), changes)
-    }
-
-    @Test
-    fun powerChangeUpdatesTheSameHolderThroughThePayload() {
-        val themed = ContextThemeWrapper(
-            RuntimeEnvironment.getApplication(),
-            com.google.android.material.R.style.Theme_Material3_DayNight_NoActionBar,
-        )
-        val parent = FrameLayout(themed)
+    fun powerChangeRendersFromStateAndATapOnlySendsAnIntent() {
         val off = ControlItem.Device(device(PowerState.OFF), busy = false, statesKnown = true)
         val on = ControlItem.Device(device(PowerState.ON), busy = false, statesKnown = true)
-
-        val before = ControlAdapter(callback)
-        before.submitList(listOf(off))
-        val holder = before.onCreateViewHolder(parent, before.getItemViewType(0))
-        before.onBindViewHolder(holder, 0)
+        val adapter = ControlAdapter(ControlAdapterCallback(intents::add))
+        adapter.submitList(listOf(off))
+        val holder = adapter.onCreateViewHolder(FrameLayout(themed()), adapter.getItemViewType(0))
+        adapter.onBindViewHolder(holder, 0)
         val switch = holder.itemView.findViewById<MaterialSwitch>(R.id.control_device_switch)
         assertFalse(switch.isChecked)
 
+        switch.performClick()
+        assertFalse("the switch waits for the state", switch.isChecked)
+        assertEquals(listOf(ControlIntent.Command(DeviceCommand.Power(off.entry, true))), intents)
+
         val payload = requireNotNull(ControlDiff.getChangePayload(off, on))
-        val after = ControlAdapter(callback)
+        val after = ControlAdapter(ControlAdapterCallback(intents::add))
         after.submitList(listOf(on))
         after.onBindViewHolder(holder, 0, mutableListOf(payload))
-
         assertTrue(switch.isChecked)
-        val state = holder.itemView.findViewById<android.widget.TextView>(R.id.control_device_state)
-        assertEquals("On", state.text.toString())
-        assertEquals(emptyList<Boolean>(), powerChanges)
+        assertEquals("On", holder.itemView.findViewById<TextView>(R.id.control_device_state).text.toString())
+        assertEquals(1, intents.size)
+    }
+
+    @Test
+    fun aRowTapAndHoldBecomeIntents() {
+        val item = ControlItem.Device(device(PowerState.OFF), busy = false, statesKnown = true)
+        val root = bindAny(item)
+        root.performClick()
+        root.performLongClick()
+        assertEquals(
+            listOf(ControlIntent.Tap(TapTarget.Item(item)), ControlIntent.Hold(TapTarget.Item(item))),
+            intents,
+        )
     }
 
     private fun setting(power: PowerState?) = ControlEntry(
@@ -242,12 +116,8 @@ class ControlProfileRowTest {
     )
 
     private fun bindAny(item: ControlItem): View {
-        val themed = ContextThemeWrapper(
-            RuntimeEnvironment.getApplication(),
-            com.google.android.material.R.style.Theme_Material3_DayNight_NoActionBar,
-        )
-        val parent = FrameLayout(themed)
-        val adapter = ControlAdapter(callback)
+        val parent = FrameLayout(themed())
+        val adapter = ControlAdapter(ControlAdapterCallback(intents::add))
         adapter.submitList(listOf(item))
         val holder = adapter.onCreateViewHolder(parent, adapter.getItemViewType(0))
         adapter.onBindViewHolder(holder, 0)
@@ -284,19 +154,15 @@ class ControlProfileRowTest {
         val settingsButton = root.findViewById<MaterialButton>(R.id.control_group_settings)
         assertEquals("Settings (1)", settingsButton.text.toString())
         assertEquals(View.VISIBLE, settingsButton.visibility)
-        assertEquals(View.GONE, root.findViewById<LinearLayout>(R.id.control_group_settings_tiles).visibility)
+        assertEquals(View.GONE, root.findViewById<View>(R.id.control_group_settings_tiles).visibility)
         assertEquals(View.GONE, root.findViewById<LinearLayout>(R.id.control_group_settings_list).visibility)
         settingsButton.performClick()
-        assertEquals(listOf("dev.desk"), settingsToggles)
+        assertEquals(listOf(ControlIntent.ToggleDevice("dev.desk")), intents)
 
         val expanded = bindAny(group.copy(expanded = true))
-        val settingsTiles = expanded.findViewById<LinearLayout>(R.id.control_group_settings_tiles)
+        val settingsTiles = expanded.findViewById<TileGrid>(R.id.control_group_settings_tiles)
         assertEquals(View.VISIBLE, settingsTiles.visibility)
-        val tileRow = settingsTiles.getChildAt(0) as LinearLayout
-        assertEquals(
-            1,
-            (0 until tileRow.childCount).count { tileRow.getChildAt(it).visibility == View.VISIBLE },
-        )
+        assertEquals(1, settingsTiles.childCount)
         assertEquals(View.GONE, expanded.findViewById<LinearLayout>(R.id.control_group_settings_list).visibility)
     }
 
@@ -335,9 +201,8 @@ class ControlProfileRowTest {
         assertEquals(View.VISIBLE, header.visibility)
         assertEquals("Колонка", header.text.toString())
         assertEquals(View.GONE, root.findViewById<LinearLayout>(R.id.control_group_primary).visibility)
-        val tiles = root.findViewById<LinearLayout>(R.id.control_group_tiles)
-        assertEquals(View.VISIBLE, tiles.visibility)
-        val row = tiles.getChildAt(0) as LinearLayout
+        val row = root.findViewById<TileGrid>(R.id.control_group_tiles)
+        assertEquals(View.VISIBLE, row.visibility)
         val labels = (0 until 3).map {
             row.getChildAt(it).findViewById<android.widget.TextView>(R.id.control_tile_label).text.toString()
         }
@@ -361,14 +226,14 @@ class ControlProfileRowTest {
             RuntimeEnvironment.getApplication(),
             com.google.android.material.R.style.Theme_Material3_DayNight_NoActionBar,
         )
-        val adapter = ControlAdapter(callback)
+        val adapter = ControlAdapter(ControlAdapterCallback(intents::add))
         adapter.submitList(listOf(group))
         val holder = adapter.onCreateViewHolder(FrameLayout(themed), adapter.getItemViewType(0))
         adapter.onBindViewHolder(holder, 0)
         val settingsList = holder.itemView.findViewById<LinearLayout>(R.id.control_group_settings_list)
         val before = settingsList.getChildAt(0)
 
-        val busy = ControlAdapter(callback)
+        val busy = ControlAdapter(ControlAdapterCallback(intents::add))
         busy.submitList(
             listOf(
                 group.copy(
@@ -410,9 +275,8 @@ class ControlProfileRowTest {
             statesKnown = true,
         )
         val root = bindAny(group)
-        val tiles = root.findViewById<LinearLayout>(R.id.control_group_tiles)
-        val row = tiles.getChildAt(0) as LinearLayout
-        val tile = ItemControlDeviceTileBinding.bind(row.getChildAt(0))
+        val tiles = root.findViewById<TileGrid>(R.id.control_group_tiles)
+        val tile = ItemControlDeviceTileBinding.bind(tiles.getChildAt(0))
         assertTrue(tile.controlTileRipple.foreground is RippleDrawable)
         assertTrue(tile.controlTileRipple.clipToOutline)
         assertSame(OvalTileOutlineProvider, tile.controlTileRipple.outlineProvider)
@@ -488,9 +352,8 @@ class ControlProfileRowTest {
 
         assertTrue("text bottom to card bottom", root.height - textBottom <= limit)
 
-        val tiles = root.findViewById<LinearLayout>(R.id.control_group_tiles)
-        val tileRow = tiles.getChildAt(0) as LinearLayout
-        val label = tileRow.getChildAt(0).findViewById<TextView>(R.id.control_tile_label)
+        val tiles = root.findViewById<TileGrid>(R.id.control_group_tiles)
+        val label = tiles.getChildAt(0).findViewById<TextView>(R.id.control_tile_label)
         val labelBottom = topIn(root, label) + label.height
         assertTrue("tile label to settings text", textTop - labelBottom <= limit)
     }

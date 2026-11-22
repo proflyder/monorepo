@@ -42,4 +42,5 @@
     <string name="call_status_active_timer">Разговор · %1$s</string>
     <string name="call_route_selected">✓ %1$s</string>
     <string name="call_account_label">Дом</string>
+    <string name="call_quick_tile_title">Позвонить на колонку</string>
 </resources>

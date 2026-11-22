@@ -18,8 +18,10 @@ class ConditionalVisibilityTest {
         otherDevices = "Other",
         scenarios = "Scenarios",
         unavailable = "Unavailable",
-        voice = "Voice",
         onSummary = { on, total -> "$on of $total on" },
+        all = "All",
+        lights = "Lights",
+        switches = "Switches",
     )
 
     private fun entry(

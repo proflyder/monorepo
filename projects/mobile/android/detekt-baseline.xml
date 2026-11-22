@@ -102,7 +102,6 @@
     <ID>PublicInImpl:ChatRepository.kt$ChatRepository</ID>
     <ID>PublicInImpl:ChatViewModel.kt$ChatViewModelFactoryContributor : ViewModelFactoryContributor</ID>
     <ID>PublicInImpl:ConnectAlarmRepository.kt$ConnectAlarmRepository : AlarmRepository</ID>
-    <ID>PublicInImpl:ConnectControlRepository.kt$ConnectControlRepository : ControlRepository</ID>
     <ID>PublicInImpl:ConnectReminderRepository.kt$ConnectReminderRepository : ReminderRepository</ID>
     <ID>PublicInImpl:ConnectScenarioRepository.kt$ConnectScenarioRepository : ScenarioRepository</ID>
     <ID>PublicInImpl:ConnectTimerRepository.kt$ConnectTimerRepository : TimerRepository</ID>
@@ -113,21 +112,14 @@
     <ID>PublicInImpl:ConnectionViewModel.kt$ConnectionUiState</ID>
     <ID>PublicInImpl:ConnectionViewModel.kt$ConnectionViewModel : BaseViewModel</ID>
     <ID>PublicInImpl:ConnectionViewModel.kt$ConnectionViewModelFactoryContributor : ViewModelFactoryContributor</ID>
+    <ID>PublicInImpl:CallQuickTileProvider.kt$CallQuickTileProvider : QuickTileProvider</ID>
+    <ID>PublicInImpl:ConnectControlRepository.kt$ConnectControlRepository : ControlRepositoryVoiceProfileSwitch</ID>
+    <ID>PublicInImpl:ConnectControlRepository.kt$ConnectControlRepository : ControlRepository by catalogVoiceProfileSwitch by CatalogVoiceProfileSwitch(catalog)</ID>
+    <ID>PublicInImpl:ConnectControlRepository.kt$ConnectControlRepository : ControlRepository by catalog, VoiceProfileSwitch by CatalogVoiceProfileSwitch(catalog)</ID>
+    <ID>PublicInImpl:ConnectControlRepository.kt$ConnectControlRepository</ID>
+    <ID>PublicInImpl:VpnQuickTileProvider.kt$VpnQuickTileProvider : QuickTileProvider</ID>
     <ID>PublicInImpl:ControlFeatureEntry.kt$ControlFeatureEntry : FeatureEntry</ID>
     <ID>PublicInImpl:ControlFeatureEntry.kt$ControlListDestination : Destination</ID>
-    <ID>PublicInImpl:ControlFragment.kt$ControlFragment : BaseFragment</ID>
-    <ID>PublicInImpl:ControlUseCases.kt$AdjustLight</ID>
-    <ID>PublicInImpl:ControlUseCases.kt$LoadControlCatalog</ID>
-    <ID>PublicInImpl:ControlUseCases.kt$PressControl</ID>
-    <ID>PublicInImpl:ControlUseCases.kt$RunScenario</ID>
-    <ID>PublicInImpl:ControlUseCases.kt$SetDevicePower</ID>
-    <ID>PublicInImpl:ControlUseCases.kt$SetVoiceProfile</ID>
-    <ID>PublicInImpl:ControlUseCases.kt$SetVolume</ID>
-    <ID>PublicInImpl:ControlUseCases.kt$SetVolumeMuted</ID>
-    <ID>PublicInImpl:ControlUseCases.kt$SpeakOnStation</ID>
-    <ID>PublicInImpl:ControlViewModel.kt$ControlNotice</ID>
-    <ID>PublicInImpl:ControlViewModel.kt$ControlUiState</ID>
-    <ID>PublicInImpl:ControlViewModel.kt$ControlViewModel : BaseViewModel</ID>
     <ID>PublicInImpl:ControlViewModel.kt$ControlViewModelFactoryContributor : ViewModelFactoryContributor</ID>
     <ID>PublicInImpl:DataStoreControlPreferences.kt$DataStoreControlPreferences : ControlPreferences</ID>
     <ID>PublicInImpl:DataStoreNotificationHistoryStore.kt$DataStoreNotificationHistoryStore : NotificationHistoryStore</ID>

@@ -9,7 +9,7 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
-sealed interface HubCard {
+internal sealed interface HubCard {
     val key: String
 
     data class Alarm(val schedule: Schedule, val ringing: Boolean) : HubCard {
@@ -25,7 +25,7 @@ sealed interface HubCard {
     }
 }
 
-interface HubScheduleStrings {
+internal interface HubScheduleStrings {
     fun today(): String
     fun tomorrow(): String
 
@@ -34,7 +34,7 @@ interface HubScheduleStrings {
     fun time(hour: Int, minute: Int): String
 }
 
-object HubFormat {
+internal object HubFormat {
     private fun farDate(): DateTimeFormatter =
         DateTimeFormatter.ofPattern("d MMM", Locale.getDefault())
 
@@ -69,7 +69,7 @@ object HubFormat {
 
 private data class HubRow(val card: HubCard, val atUnix: Long)
 
-object HubCards {
+internal object HubCards {
     const val MAX_ROWS = 3
 
     const val REMINDER_WINDOW_SECONDS = 24L * 60L * 60L

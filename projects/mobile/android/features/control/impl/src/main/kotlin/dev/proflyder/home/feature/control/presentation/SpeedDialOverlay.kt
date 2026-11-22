@@ -13,6 +13,7 @@ import androidx.core.graphics.drawable.toDrawable
 import com.google.android.material.animation.AnimationUtils
 import com.google.android.material.color.MaterialColors
 import com.google.android.material.floatingactionbutton.FloatingActionButton
+import dev.proflyder.home.core.designsystem.bindAvailability
 import dev.proflyder.home.core.model.PowerState
 import dev.proflyder.home.feature.control.QuickTile
 import dev.proflyder.home.feature.control.SpeedDialItem
@@ -24,9 +25,7 @@ import dev.proflyder.home.feature.control.impl.databinding.OverlayControlSpeedDi
 internal class SpeedDialOverlay(
     private val anchor: View,
     private val fab: FloatingActionButton,
-    private val onClick: (SpeedDialItem) -> Unit,
-    private val onLongClick: (SpeedDialItem) -> Unit,
-    private val onOpenChanged: (Boolean) -> Unit,
+    private val dispatch: (ControlIntent) -> Unit,
 ) {
     private val context = anchor.context
     private val content = OverlayControlSpeedDialBinding.inflate(LayoutInflater.from(context))
@@ -51,23 +50,20 @@ internal class SpeedDialOverlay(
         setOnDismissListener { dismissed() }
     }
 
-    var isOpen = false
-        private set
+    private var isOpen = false
 
     init {
-        fab.setOnClickListener { toggle() }
-        content.controlDialScrim.setOnClickListener { close() }
-        content.controlDialFab.setOnClickListener { close() }
+        fab.setOnClickListener { dispatch(ControlIntent.Dial(open = !isOpen)) }
+        content.controlDialScrim.setOnClickListener { dispatch(ControlIntent.Dial(open = false)) }
+        content.controlDialFab.setOnClickListener { dispatch(ControlIntent.Dial(open = false)) }
     }
 
-    fun toggle() {
-        when (isOpen) {
-            true -> close()
-            false -> open()
-        }
+    fun render(newItems: List<SpeedDialItem>, open: Boolean) {
+        renderItems(newItems)
+        if (open) open() else close()
     }
 
-    fun render(newItems: List<SpeedDialItem>) {
+    private fun renderItems(newItems: List<SpeedDialItem>) {
         val changed = rows.size != newItems.size ||
             rows.zip(newItems).any { (row, item) -> row.key != item.key }
         items = newItems
@@ -77,7 +73,7 @@ internal class SpeedDialOverlay(
         }
     }
 
-    fun open() {
+    private fun open() {
         if (isOpen) return
         isOpen = true
         openFrameStarted = false
@@ -86,7 +82,6 @@ internal class SpeedDialOverlay(
         content.controlDialFab.rotation = -90f
         rows.forEach { hideRow(it) }
         popup.showAtLocation(anchor, Gravity.TOP or Gravity.START, 0, 0)
-        onOpenChanged(true)
         waitForLayoutThenAnimate()
     }
 
@@ -148,12 +143,11 @@ internal class SpeedDialOverlay(
         preDrawListener = null
     }
 
-    fun close() {
+    private fun close() {
         if (!isOpen) return
         isOpen = false
         openFrameStarted = false
         removePreDrawListener()
-        onOpenChanged(false)
         content.controlDialFab.animate()
             .rotation(-90f)
             .setDuration(itemDuration)
@@ -177,7 +171,7 @@ internal class SpeedDialOverlay(
         openFrameStarted = false
         if (isOpen) {
             isOpen = false
-            onOpenChanged(false)
+            dispatch(ControlIntent.Dial(open = false))
         }
         rows.forEach { row ->
             row.view.translationY = 0f
@@ -338,24 +332,21 @@ internal class SpeedDialOverlay(
                     else com.google.android.material.R.attr.colorOnSurfaceVariant,
                 ),
             )
-            binding.controlDialAction.alpha = if (enabled) 1f else DISABLED_ALPHA
+            binding.controlDialAction.bindAvailability(enabled)
             binding.controlDialAction.isEnabled = enabled
             binding.controlDialAction.contentDescription = item.description(context)
-            binding.controlDialAction.setOnClickListener {
-                if (!enabled) return@setOnClickListener
-                close()
-                onClick(item)
-            }
-            binding.controlDialAction.setOnLongClickListener {
-                onLongClick(item)
-                true
-            }
+            binding.controlDialAction.setOnClickListener { dispatch(ControlIntent.Tap(TapTarget.Dial(item))) }
+            binding.controlDialAction.setOnLongClickListener { hold(item) }
         }
+    }
+
+    internal fun hold(item: SpeedDialItem): Boolean {
+        dispatch(ControlIntent.Hold(TapTarget.Dial(item)))
+        return true
     }
 
     private companion object {
         const val ITEM_SCALE = 0.6f
-        const val DISABLED_ALPHA = 0.5f
     }
 }
 
@@ -373,8 +364,7 @@ private fun QuickTile.label(context: Context): String = when (this) {
     is QuickTile.Device -> entry.localizedDisplayName(context)
     is QuickTile.ScenarioTile -> scenario.label
     is QuickTile.Speak -> entry.localizedDisplayName(context)
-    QuickTile.Call -> context.getString(R.string.control_call_title)
-    QuickTile.Vpn -> context.getString(R.string.control_vpn_title)
+    is QuickTile.Provided -> context.getString(tile.labelRes)
 }
 
 internal fun SpeedDialItem.description(context: Context): String = when (this) {
@@ -398,8 +388,7 @@ private fun QuickTile.icon(): Int = when (this) {
     is QuickTile.Device -> ControlIcons.resolve(entry)
     is QuickTile.ScenarioTile -> R.drawable.control_ic_play_circle
     is QuickTile.Speak -> R.drawable.control_ic_voice
-    QuickTile.Call -> R.drawable.control_ic_call
-    QuickTile.Vpn -> R.drawable.control_ic_vpn
+    is QuickTile.Provided -> tile.iconRes
 }
 
 internal fun SpeedDialItem.isActive(): Boolean = when (this) {
@@ -413,7 +402,7 @@ internal fun SpeedDialItem.isEnabled(): Boolean = when (this) {
         is QuickTile.Device -> current.entry.available && !current.busy
         is QuickTile.ScenarioTile -> !current.busy
         is QuickTile.Speak -> current.entry.available && !current.busy
-        QuickTile.Call, QuickTile.Vpn -> true
+        is QuickTile.Provided -> true
     }
     is SpeedDialItem.Wake -> action.entry.available && !action.busy
 }

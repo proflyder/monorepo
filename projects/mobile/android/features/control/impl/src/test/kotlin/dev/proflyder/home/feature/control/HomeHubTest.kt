@@ -254,6 +254,10 @@ class HomeHubTest {
             FavoriteRef(FavoriteKind.DEVICE, "gone"),
         )
         val tiles = QuickTiles.build(
+            provided = listOf(
+                ProvidedTile("vpn", order = 1, labelRes = 0, iconRes = 0),
+                ProvidedTile("call", order = 0, labelRes = 0, iconRes = 0),
+            ),
             refs = refs,
             entries = listOf(
                 entry("light.a"),
@@ -261,7 +265,7 @@ class HomeHubTest {
             ),
             scenarios = listOf(scenario("s1", 1)),
         )
-        assertEquals(listOf("call", "vpn", "device:light.a", "action:action.speak", "scenario:s1"), tiles.map { it.key })
+        assertEquals(listOf("provided:call", "provided:vpn", "device:light.a", "action:action.speak", "scenario:s1"), tiles.map { it.key })
         assertFalse(tiles.isEmpty())
     }
 

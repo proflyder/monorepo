@@ -38,6 +38,7 @@ import dev.proflyder.home.feature.call.CallAudioController
 import dev.proflyder.home.feature.call.CallController
 import dev.proflyder.home.feature.call.CallCoordinator
 import dev.proflyder.home.feature.call.CallLauncher
+import dev.proflyder.home.feature.control.VoiceProfileSwitch
 import dev.proflyder.home.feature.call.CallNotificationController
 import dev.proflyder.home.feature.call.telecom.CallTelecomBridge
 import dev.proflyder.home.feature.push.FindPhoneController
@@ -80,6 +81,7 @@ interface AppGraph {
     val callCoordinator: CallCoordinator
     val callNotifications: CallNotificationController
     val callLauncher: CallLauncher
+    val voiceProfile: VoiceProfileSwitch
     val callTelecomBridge: CallTelecomBridge
 
     val pushRegistrar: FirebasePushRegistrar

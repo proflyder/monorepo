@@ -17,8 +17,10 @@ class ControlItemsTest {
         otherDevices = "Other devices",
         scenarios = "Scenarios",
         unavailable = "Unavailable",
-        voice = "Voice",
         onSummary = { on, total -> "$on of $total on" },
+        all = "All",
+        lights = "Lights",
+        switches = "Switches",
     )
 
     private fun entry(
@@ -71,8 +73,6 @@ class ControlItemsTest {
         filterNot { it is ControlItem.Filters }.map {
             when (it) {
                 is ControlItem.Header -> "# ${it.title}" + (it.summary?.let { s -> " ($s)" } ?: "")
-                is ControlItem.Voice -> "V profile=${it.profile?.entry?.id ?: ""}" +
-                    " wake=${it.actions.joinToString(",") { action -> action.kind.name }}"
                 is ControlItem.Scenario -> "S ${it.entry.id}"
                 is ControlItem.Device -> "D ${it.entry.id}"
                 is ControlItem.DeviceGroup ->
@@ -80,31 +80,29 @@ class ControlItemsTest {
                         " p=[${it.primary.joinToString(",") { row -> row.entry.id }}]" +
                         " s=[${it.settings.joinToString(",") { row -> row.entry.id }}]"
                 is ControlItem.Hub -> "H ${it.cards.joinToString(",") { card -> card.key }}"
-                is ControlItem.QuickActions -> "Q ${it.tiles.joinToString(",") { tile -> tile.key }}"
                 is ControlItem.Filters -> "F ${it.chips.joinToString(",") { chip -> chip.label }}"
             }
         }
 
     @Test
-    fun filterChipsSitBetweenQuickActionsAndTheRoomSections() {
+    fun filterChipsSitBetweenTheHubAndTheRoomSections() {
         val items = ControlItems.build(
             entries = sample,
             pending = emptySet(),
             statesOk = true,
             filter = ControlFilter.All,
             texts = texts,
-            leading = listOf(ControlItem.QuickActions(emptyList(), hint = true)),
+            leading = listOf(ControlItem.Hub(emptyList(), emptyMap(), 0)),
         )
         val kinds = items.map {
             when (it) {
-                is ControlItem.QuickActions -> "quick"
+                is ControlItem.Hub -> "hub"
                 is ControlItem.Filters -> "filters"
                 is ControlItem.Header -> "header:${it.section}"
-                is ControlItem.Voice -> "voice"
                 else -> "row"
             }
         }
-        assertEquals(listOf("quick", "filters", "header:room:Bedroom"), kinds.take(3))
+        assertEquals(listOf("hub", "filters", "header:room:Bedroom"), kinds.take(3))
         val chips = items.filterIsInstance<ControlItem.Filters>().single().chips
         assertEquals(listOf("All · 5", "Lights · 4", "Switches · 1", "Bedroom · 3", "Workspace · 1"), chips.map { it.label })
     }
@@ -209,10 +207,9 @@ class ControlItemsTest {
     private val withProfile = listOf(profile) + sample
 
     @Test
-    fun profileIsPinnedAboveDevices() {
+    fun profileIsNotListedAmongDevices() {
         assertEquals(
             listOf(
-                "# Voice", "V profile=switch.voice_profile wake=",
                 "# Bedroom (1 of 2 on)", "D light.a", "D light.b",
                 "# Workspace (0 of 1 on)", "D switch.fan",
                 "# Other devices (1 of 1 on)", "D light.hall",
@@ -222,7 +219,7 @@ class ControlItemsTest {
         )
         val keys = build(withProfile).map { it.key }
         assertEquals(keys.size, keys.toSet().size)
-        assertEquals(listOf("voice", "room:Bedroom", "room:Workspace", "other", "unavailable"),
+        assertEquals(listOf("room:Bedroom", "room:Workspace", "other", "unavailable"),
             build(withProfile).filterIsInstance<ControlItem.Header>().map { it.section })
     }
 
@@ -230,12 +227,11 @@ class ControlItemsTest {
     fun profileIsNotAFilterableCategoryAndNotCounted() {
         assertEquals(ControlItems.options(sample), ControlItems.options(withProfile))
         assertEquals(
-            listOf("# Voice", "V profile=switch.voice_profile wake=", "# Workspace (0 of 1 on)", "D switch.fan"),
+            listOf("# Workspace (0 of 1 on)", "D switch.fan"),
             build(withProfile, filter = ControlFilter.Switches).describe(),
         )
         assertEquals(
             listOf(
-                "# Voice", "V profile=switch.voice_profile wake=",
                 "# Bedroom (1 of 2 on)", "D light.a", "D light.b",
                 "# Unavailable (1)", "D light.dead",
             ),
@@ -246,19 +242,14 @@ class ControlItemsTest {
     @Test
     fun profileAloneIsNotAnEmptyList() {
         val items = build(listOf(profile))
-        assertEquals(listOf("# Voice", "V profile=switch.voice_profile wake="), items.describe())
+        assertEquals(emptyList<String>(), items.describe())
         assertEquals(listOf(ControlFilterOption(ControlFilter.All, 0)), ControlItems.options(listOf(profile)))
         assertEquals(ControlFilter.All, ControlItems.effectiveFilter(listOf(profile), ControlFilter.Scenarios))
         assertEquals(ControlFilter.Scenarios, ControlItems.effectiveFilter(emptyList(), ControlFilter.Scenarios))
     }
 
     @Test
-    fun voiceCarriesTheBusyFlagAndDevicesKeepTheirKnownState() {
-        val idle = build(withProfile).filterIsInstance<ControlItem.Voice>().single().profile
-        assertFalse(requireNotNull(idle).busy)
-        val busy = build(withProfile, pending = setOf("switch.voice_profile"))
-            .filterIsInstance<ControlItem.Voice>().single().profile
-        assertTrue(requireNotNull(busy).busy)
+    fun devicesKeepTheirKnownState() {
         assertTrue(build(withProfile, statesOk = false).filterIsInstance<ControlItem.Device>().all { !it.statesKnown })
     }
 
@@ -446,14 +437,11 @@ class ControlItemsTest {
     }
 
     @Test
-    fun leadingHubAndQuickActionsPrecedeTheProfileAndRooms() {
-        val leading = listOf(
-            ControlItem.Hub(emptyList(), emptyMap(), 0),
-            ControlItem.QuickActions(emptyList(), hint = true),
-        )
+    fun leadingHubPrecedesTheRooms() {
+        val leading = listOf(ControlItem.Hub(emptyList(), emptyMap(), 0))
         assertEquals(
             listOf(
-                "H ", "Q ",
+                "H ",
                 "# Bedroom (1 of 2 on)", "D light.a", "D light.b",
                 "# Workspace (0 of 1 on)", "D switch.fan",
                 "# Other devices (1 of 1 on)", "D light.hall",

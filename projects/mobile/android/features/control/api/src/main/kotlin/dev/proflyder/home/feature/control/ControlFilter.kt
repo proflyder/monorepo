@@ -1,5 +1,7 @@
 package dev.proflyder.home.feature.control
 
+import kotlinx.coroutines.flow.Flow
+
 sealed interface ControlFilter {
     data object All : ControlFilter
     data object Scenarios : ControlFilter
@@ -31,7 +33,7 @@ sealed interface ControlFilter {
 }
 
 interface ControlPreferences {
-    suspend fun loadFilter(): ControlFilter?
+    val filter: Flow<ControlFilter?>
 
     suspend fun saveFilter(filter: ControlFilter)
 }

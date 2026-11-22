@@ -17,12 +17,7 @@ import dev.proflyder.home.core.model.ControlKind
 import dev.proflyder.home.core.model.PowerState
 import dev.proflyder.home.core.theme.AppTheme
 import dev.proflyder.home.core.theme.ColorRole
-import dev.proflyder.home.core.ui.BaseAdapterCallback
-import dev.proflyder.home.feature.control.ControlFilter
 import dev.proflyder.home.feature.control.ControlItem
-import dev.proflyder.home.feature.control.HubCard
-import dev.proflyder.home.feature.control.QuickTile
-import dev.proflyder.home.feature.control.WakeFeedbackAction
 import dev.proflyder.home.feature.control.impl.R
 import java.io.File
 import org.junit.Assert.assertEquals
@@ -38,31 +33,7 @@ import org.robolectric.annotation.GraphicsMode
 @Config(sdk = [35], qualifiers = "w411dp-h891dp-xxhdpi")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class DeviceStateScreenshotTest {
-    private val callback = object : BaseAdapterCallback<ControlItem>(), ControlAdapterCallback {
-        override fun onPowerChanged(entry: ControlEntry, on: Boolean) = Unit
-
-        override fun onButtonPressed(entry: ControlEntry) = Unit
-
-        override fun onProfileChanged(entry: ControlEntry, work: Boolean) = Unit
-
-        override fun onToggleSettings(deviceId: String) = Unit
-
-        override fun onHeaderClick(header: ControlItem.Header) = Unit
-
-        override fun onPinToggle(entry: ControlEntry) = Unit
-
-        override fun onHubCardClick(card: HubCard) = Unit
-
-        override fun onHubPrimary(card: HubCard) = Unit
-
-        override fun onQuickTileClick(tile: QuickTile) = Unit
-
-        override fun onQuickTileLongClick(tile: QuickTile) = Unit
-
-        override fun onWakeAction(action: WakeFeedbackAction) = Unit
-
-        override fun onFilterSelected(filter: ControlFilter) = Unit
-    }
+    private val callback = ControlAdapterCallback {}
 
     @Test
     @Config(qualifiers = "notnight")

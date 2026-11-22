@@ -3,19 +3,19 @@ package dev.proflyder.home.feature.control
 import dev.proflyder.home.core.model.ControlEntry
 import dev.proflyder.home.core.model.ControlKind
 
-enum class WakeFeedbackKind {
+internal enum class WakeFeedbackKind {
     FALSE_ALARM,
 
     MISSED,
 }
 
-data class WakeFeedbackAction(
+internal data class WakeFeedbackAction(
     val kind: WakeFeedbackKind,
     val entry: ControlEntry,
     val busy: Boolean,
 )
 
-object WakeFeedback {
+internal object WakeFeedback {
     const val FALSE_ALARM_ENTRY_ID = "script.wake_false_alarm"
     const val MISSED_ENTRY_ID = "script.wake_missed"
 
