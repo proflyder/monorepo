@@ -1,11 +1,11 @@
 package dev.proflyder.home.feature.reminders.presentation
 
 import android.os.Bundle
-import androidx.core.widget.doAfterTextChanged
 import androidx.fragment.app.viewModels
-import androidx.lifecycle.Lifecycle
 import dev.proflyder.home.core.navigation.requireNavigator
-import dev.proflyder.home.core.ui.BaseFragment
+import dev.proflyder.home.core.presentation.ScreenFragment
+import dev.proflyder.home.core.presentation.SwitchBinder
+import dev.proflyder.home.core.presentation.TextBinder
 import dev.proflyder.home.core.ui.applyScrollBottomInset
 import dev.proflyder.home.core.ui.keepFocusedVisible
 import dev.proflyder.home.core.ui.setVisible
@@ -14,81 +14,76 @@ import dev.proflyder.home.core.ui.showTimePicker
 import dev.proflyder.home.core.ui.userMessage
 import dev.proflyder.home.core.ui.viewModelFactory
 import dev.proflyder.home.feature.reminders.ReminderEditorCompletion
-import dev.proflyder.home.feature.reminders.ReminderEditorDestination
 import dev.proflyder.home.feature.reminders.impl.R
 import dev.proflyder.home.feature.reminders.impl.databinding.FragmentReminderEditorBinding
 import java.time.LocalDate
 
-class ReminderEditorFragment :
-    BaseFragment<FragmentReminderEditorBinding>(FragmentReminderEditorBinding.Companion::inflate) {
-    private val viewModel: ReminderEditorViewModel by viewModels {
+internal class ReminderEditorFragment :
+    ScreenFragment<FragmentReminderEditorBinding, ReminderEditorUiState, ReminderEditorIntent, ReminderEditorEvent>(
+        FragmentReminderEditorBinding.Companion::inflate,
+    ) {
+    override val viewModel: ReminderEditorViewModel by viewModels {
         viewModelFactory(ReminderEditorViewModel::class.java)
     }
 
-    private var rendering = false
+    private var label: TextBinder? = null
+    private var enabled: SwitchBinder? = null
 
-    override fun onBindingCreated(binding: FragmentReminderEditorBinding, savedInstanceState: Bundle?) {
+    override fun onScreenCreated(binding: FragmentReminderEditorBinding, savedInstanceState: Bundle?) {
         binding.root.applyScrollBottomInset()
         binding.root.keepFocusedVisible()
-        val reminderId = arguments?.getString(ReminderEditorDestination.ARG_REMINDER_ID)
-        viewModel.start(reminderId)
-        binding.reminderEditorDelete.setVisible(reminderId != null)
-
-        binding.reminderEditorLabel.doAfterTextChanged {
-            if (!rendering) viewModel.setLabel(it?.toString().orEmpty())
-        }
-        binding.reminderEditorEnabled.setOnCheckedChangeListener { _, checked ->
-            if (!rendering) viewModel.setEnabled(checked)
-        }
-        binding.reminderEditorDate.setOnClickListener { pickDate() }
-        binding.reminderEditorTime.setOnClickListener { pickTime() }
-        binding.reminderEditorSave.setOnClickListener { viewModel.save() }
-        binding.reminderEditorDelete.setOnClickListener { confirmDelete() }
-
-        viewModel.state.observe { render(it) }
-        viewModel.completion.observe(Lifecycle.State.RESUMED) { completion -> handleCompletion(completion) }
+        label = bindText(binding.reminderEditorLabel, ReminderEditorIntent::SetLabel)
+        enabled = bindSwitch(binding.reminderEditorEnabled, ReminderEditorIntent::SetEnabled)
+        binding.reminderEditorDate.setOnClickListener { dispatch(ReminderEditorIntent.PickDate) }
+        binding.reminderEditorTime.setOnClickListener { dispatch(ReminderEditorIntent.PickTime) }
+        binding.reminderEditorSave.setOnClickListener { dispatch(ReminderEditorIntent.Save) }
+        binding.reminderEditorDelete.setOnClickListener { dispatch(ReminderEditorIntent.RequestDelete) }
     }
 
-    private fun handleCompletion(completion: ReminderEditorCompletion?) {
-        if (completion == null) return
-        viewModel.consumeCompletion()
-        showMessage(
-            if (completion == ReminderEditorCompletion.DELETED) {
-                R.string.reminders_deleted
-            } else {
-                R.string.reminders_saved
-            },
-        )
-        requireNavigator().back()
+    override fun onBindingDestroyed() {
+        label = null
+        enabled = null
     }
 
-    private fun render(state: ReminderEditorUiState) = with(binding) {
-        rendering = true
-        if (reminderEditorLabel.text?.toString() != state.label) reminderEditorLabel.setText(state.label)
+    override fun render(state: ReminderEditorUiState) = with(binding) {
+        label?.render(state.label)
+        enabled?.render(state.enabled)
         reminderEditorDate.text = ReminderFormat.dateLabel(state.date)
         reminderEditorTime.text = ReminderFormat.timeLabel(state.hour, state.minute)
-        reminderEditorEnabled.isChecked = state.enabled
-        val idle = !state.saving && !state.loading && !state.loadFailed
-        reminderEditorSave.isEnabled = idle
-        reminderEditorDelete.isEnabled = idle
-        reminderEditorProgress.setVisible(state.saving || state.loading)
-        reminderEditorError.setVisible(state.error != null)
-        reminderEditorError.text = state.error?.userMessage(requireContext())
-        rendering = false
+        reminderEditorDelete.setVisible(state.editing)
+        reminderEditorSave.isEnabled = state.status.idle
+        reminderEditorDelete.isEnabled = state.status.idle
+        reminderEditorProgress.setVisible(state.status.busy)
+        reminderEditorError.setVisible(state.status.error != null)
+        reminderEditorError.text = state.status.error?.userMessage(requireContext())
     }
 
-    private fun pickDate() {
-        childFragmentManager.showDatePicker(viewModel.state.value.date, LocalDate.now(), viewModel::setDate)
-    }
-
-    private fun pickTime() {
-        val state = viewModel.state.value
-        childFragmentManager.showTimePicker(state.hour, state.minute, viewModel::setTime)
+    override fun onEvent(event: ReminderEditorEvent) {
+        when (event) {
+            is ReminderEditorEvent.PickDate -> childFragmentManager.showDatePicker(event.selected, LocalDate.now()) {
+                dispatch(ReminderEditorIntent.SetDate(it))
+            }
+            is ReminderEditorEvent.PickTime -> childFragmentManager.showTimePicker(event.hour, event.minute) { h, m ->
+                dispatch(ReminderEditorIntent.SetTime(h, m))
+            }
+            ReminderEditorEvent.ConfirmDelete -> confirmDelete()
+            is ReminderEditorEvent.Completed -> complete(event.completion)
+        }
     }
 
     private fun confirmDelete() {
         confirm(R.string.reminders_delete_confirm, R.string.reminders_delete_yes, R.string.reminders_cancel) {
-            viewModel.delete()
+            dispatch(ReminderEditorIntent.Delete)
         }
+    }
+
+    private fun complete(completion: ReminderEditorCompletion) {
+        dispatch(ReminderEditorIntent.CompletionShown)
+        val message = when (completion) {
+            ReminderEditorCompletion.SAVED -> R.string.reminders_saved
+            ReminderEditorCompletion.DELETED -> R.string.reminders_deleted
+        }
+        showMessage(message)
+        requireNavigator().back()
     }
 }

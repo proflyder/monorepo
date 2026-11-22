@@ -1,115 +1,100 @@
 package dev.proflyder.home.feature.reminders.presentation
 
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.core.model.Schedule
-import dev.proflyder.home.core.ui.BaseViewModel
+import dev.proflyder.home.core.presentation.AppEventBus
+import dev.proflyder.home.core.presentation.ExclusiveActions
+import dev.proflyder.home.core.presentation.ListLoadState
+import dev.proflyder.home.core.presentation.ListRefresher
+import dev.proflyder.home.core.presentation.LoadStep
+import dev.proflyder.home.core.presentation.RefreshMode
+import dev.proflyder.home.core.presentation.StateViewModel
+import dev.proflyder.home.core.presentation.eventsOf
+import dev.proflyder.home.core.presentation.valueOr
 import dev.proflyder.home.core.ui.SimpleViewModelFactory
 import dev.proflyder.home.core.ui.ViewModelFactoryContributor
-import dev.proflyder.home.feature.reminders.domain.DeleteReminder
-import dev.proflyder.home.feature.reminders.domain.LoadReminders
-import dev.proflyder.home.feature.reminders.domain.SetReminderEnabled
+import dev.proflyder.home.feature.reminders.ReminderOrder
+import dev.proflyder.home.feature.reminders.ReminderRepository
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesIntoSet
 import dev.zacsweers.metro.Inject
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.merge
 
-data class RemindersUiState(
-    val refreshing: Boolean = true,
+internal data class RemindersUiState(
+    val load: ListLoadState = ListLoadState(),
     val reminders: List<Schedule> = emptyList(),
-    val loadError: RemoteFailure? = null,
-    val actionError: RemoteFailure? = null,
     val busyId: String? = null,
 )
 
-class RemindersViewModel(
-    private val loadReminders: LoadReminders,
-    private val setEnabled: SetReminderEnabled,
-    private val deleteReminder: DeleteReminder,
-) : BaseViewModel<RemindersUiState>(RemindersUiState()) {
+internal sealed interface RemindersIntent {
+    data class Refresh(val mode: RefreshMode) : RemindersIntent
+    data object Add : RemindersIntent
+    data class Open(val id: String) : RemindersIntent
+    data class Toggle(val id: String, val enabled: Boolean) : RemindersIntent
+    data class RequestDelete(val id: String) : RemindersIntent
+    data class Delete(val id: String) : RemindersIntent
+}
 
-    private var refreshJob: Job? = null
-    private var generation = 0
+internal sealed interface RemindersEvent {
+    data class Failure(val failure: RemoteFailure) : RemindersEvent
+    data class OpenEditor(val id: String?) : RemindersEvent
+    data class ConfirmDelete(val id: String) : RemindersEvent
+}
 
-    fun refresh(silent: Boolean = false) {
-        refreshJob?.cancel()
-        val requested = ++generation
-        mutableState.value = mutableState.value.copy(refreshing = mutableState.value.refreshing || !silent, loadError = null)
-        refreshJob = viewModelScope.launch {
-            val result = loadReminders()
-            if (requested != generation) return@launch
-            when (result) {
-                is Outcome.Success -> mutableState.value = mutableState.value.copy(
-                    refreshing = false,
-                    reminders = result.value.sortedBy { "${it.onceDate}${it.at.hour}${it.at.minute}" },
-                    loadError = null,
-                )
-                is Outcome.Failure -> mutableState.value = mutableState.value.copy(
-                    refreshing = false,
-                    loadError = result.failure,
-                )
-            }
+internal class RemindersViewModel(
+    private val repository: ReminderRepository,
+    bus: AppEventBus,
+) : StateViewModel<RemindersUiState, RemindersIntent, RemindersEvent>(RemindersUiState()) {
+    private val loader = ListRefresher(viewModelScope, repository::list, ::onLoad)
+    private val actions = ExclusiveActions(
+        scope = viewModelScope,
+        onBusy = { id -> updateState { copy(busyId = id) } },
+        onFailure = { emit(RemindersEvent.Failure(it)) },
+    )
+
+    init {
+        loader.refreshOn(merge(screenShown, bus.eventsOf<RemindersChanged>()))
+    }
+
+    override fun handle(intent: RemindersIntent) {
+        when (intent) {
+            is RemindersIntent.Refresh -> loader.refresh(intent.mode)
+            RemindersIntent.Add -> emit(RemindersEvent.OpenEditor(null))
+            is RemindersIntent.Open -> emit(RemindersEvent.OpenEditor(intent.id))
+            is RemindersIntent.Toggle -> toggle(intent.id, intent.enabled)
+            is RemindersIntent.RequestDelete -> emit(RemindersEvent.ConfirmDelete(intent.id))
+            is RemindersIntent.Delete -> delete(intent.id)
         }
     }
 
-    fun toggle(reminder: Schedule, enabled: Boolean) {
-        if (mutableState.value.busyId != null) return
-        mutableState.value = mutableState.value.copy(busyId = reminder.id, actionError = null)
-        viewModelScope.launch {
-            when (val result = setEnabled(reminder.id, enabled)) {
-                is Outcome.Success -> mutableState.value = mutableState.value.copy(
-                    busyId = null,
-                    reminders = mutableState.value.reminders.map {
-                        if (it.id == result.value.id) result.value else it
-                    },
-                )
-                is Outcome.Failure -> mutableState.value = mutableState.value.copy(
-                    busyId = null,
-                    actionError = result.failure,
-                )
-            }
+    private fun onLoad(step: LoadStep<List<Schedule>>) {
+        updateState { copy(load = load.after(step), reminders = step.valueOr(reminders).sortedWith(ReminderOrder)) }
+        if (step is LoadStep.Failed && currentState.reminders.isNotEmpty()) emit(RemindersEvent.Failure(step.failure))
+    }
+
+    private fun toggle(id: String, enabled: Boolean) {
+        actions.run(id, { repository.setEnabled(id, enabled) }) { updated ->
+            updateState { copy(reminders = reminders.map { if (it.id == updated.id) updated else it }) }
         }
     }
 
-    fun delete(reminder: Schedule) {
-        if (mutableState.value.busyId != null) return
-        mutableState.value = mutableState.value.copy(busyId = reminder.id, actionError = null)
-        viewModelScope.launch {
-            when (val result = deleteReminder(reminder.id)) {
-                is Outcome.Success -> mutableState.value = mutableState.value.copy(
-                    busyId = null,
-                    reminders = mutableState.value.reminders.filterNot { it.id == reminder.id },
-                )
-                is Outcome.Failure -> mutableState.value = mutableState.value.copy(
-                    busyId = null,
-                    actionError = result.failure,
-                )
-            }
+    private fun delete(id: String) {
+        actions.run(id, { repository.delete(id) }) {
+            updateState { copy(reminders = reminders.filterNot { it.id == id }) }
         }
-    }
-
-    fun consumeActionError() {
-        mutableState.value = mutableState.value.copy(actionError = null)
-    }
-
-    fun consumeLoadError() {
-        mutableState.value = mutableState.value.copy(loadError = null)
     }
 }
 
 @ContributesIntoSet(AppScope::class)
 @Inject
 class RemindersViewModelFactoryContributor(
-    private val loadReminders: LoadReminders,
-    private val setEnabled: SetReminderEnabled,
-    private val deleteReminder: DeleteReminder,
+    private val repository: ReminderRepository,
+    private val bus: AppEventBus,
 ) : ViewModelFactoryContributor {
     override val viewModelClass: Class<out ViewModel> = RemindersViewModel::class.java
 
-    override fun createFactory() = SimpleViewModelFactory {
-        RemindersViewModel(loadReminders, setEnabled, deleteReminder)
-    }
+    override fun createFactory(): ViewModelProvider.Factory = SimpleViewModelFactory { RemindersViewModel(repository, bus) }
 }

@@ -10,5 +10,8 @@ import org.junit.runners.Suite
     AppEventBusTest::class,
     SwitchBinderTest::class,
     ItemDiffTest::class,
+    ListRefresherTest::class,
+    EditorDraftSessionTest::class,
+    BindersTest::class,
 )
 class AllPresentationTests

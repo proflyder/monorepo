@@ -1099,8 +1099,9 @@ projects/mobile/android/
     network/              Retrofit/OkHttp Connect + control catalog + errors
     navigation/           typed destinations, FeatureEntry, FragmentRouter
     ui/                   base Fragment/ViewModel, ViewBinding, list states
+    presentation/         StateViewModel/ScreenFragment, binders, list loading, editor drafts
   features/
-    alarms/{api,impl}     domain contract / use cases + repository + UI
+    alarms/{api,impl}     domain contract, ordering / validating use cases + repository + UI
     reminders/{api,impl}
     timers/{api,impl}
     call/{api,impl}       intercom state machine, WebRTC, Telecom, call screen
@@ -1505,6 +1506,16 @@ Themes are code in `core/theme`:
   - App-wide typed events so screens kept in the back stack refresh in the background. Buffer 64 with `DROP_OLDEST`; publishers never suspend. Use only when the source of truth is not already a shared `StateFlow`.
 - `core/presentation/src/main/kotlin/dev/proflyder/home/core/presentation/LatestLauncher.kt`
   - Latest request wins: launching cancels the previous job, so a stale refresh cannot overwrite a fresher result.
+- `core/presentation/src/main/kotlin/dev/proflyder/home/core/presentation/ListLoad.kt`
+  - `ListLoadState` (refreshing + failure) replaces the per-screen `refreshing`/`loadError` fields; `ListRefresher` turns `suspend () -> Outcome<T>` into `LoadStep`s on a `LatestLauncher`. A soft refresh keeps the current indicator, a hard one shows it. A failure while items are visible is an event, not a field to consume.
+- `core/presentation/src/main/kotlin/dev/proflyder/home/core/presentation/StateViewModel.kt` (visibility)
+  - `screenVisible` is derived from the state's subscription count, so "the screen is shown" is a flow in the ViewModel: list screens refresh on `screenShown`, timers tick only while visible. No `onResume` hooks.
+- `core/presentation/src/main/kotlin/dev/proflyder/home/core/presentation/ExclusiveActions.kt`
+  - One row action at a time per list: `run` and the sequential `runAll` (bulk) report the busy key and the first failure; successes are applied by the caller's reducer.
+- `core/presentation/src/main/kotlin/dev/proflyder/home/core/presentation/EditorDraftSession.kt`
+  - Shared editor plumbing for alarms and reminders: draft codec, idempotent create key bound to the endpoint, completion that survives process death, and `EditorStatus` (loading/saving/loadFailed/error).
+- `core/presentation/src/main/kotlin/dev/proflyder/home/core/presentation/Binders.kt`
+  - `CheckableBinder`, `RadioGroupBinder` and `TextBinder` follow `SwitchBinder`: user input becomes an intent, programmatic rendering never reports back, and checkable controls snap back to the rendered value until the state changes.
 - `core/settings/src/main/kotlin/dev/proflyder/home/core/settings/AndroidConnectionSettingsStore.kt`
   - Stores the bearer token as Keystore-encrypted ciphertext and composes it with the endpoints/timeouts supplied by [RemoteConnectionSource]. The manifest disables Android backup, so the token never leaves the device.
 - `core/testing/src/main/kotlin/dev/proflyder/home/core/testing/TestFixtures.kt` — Loads a JSON payload from the test classpath (`src/test/resources/fixtures`).
@@ -1536,13 +1547,17 @@ Themes are code in `core/theme`:
 - `features/alarms/api/src/main/kotlin/dev/proflyder/home/feature/alarms/AlarmLabel.kt` — The alarm name is optional in the editor. A blank or whitespace-only name keeps the localized default, so the server always receives a non-empty label. The API stays resource-free; the caller supplies the string from `values/`.
 - `features/alarms/impl/src/main/kotlin/dev/proflyder/home/feature/alarms/presentation/AlarmAdapter.kt`
   - Selection motion is only for the same alarm changing state. A recycled holder bound to a different alarm must show that alarm's selection in its end state, never animate the previous row's selection into the new one.
-  - Programmatic `isChecked` must not be reported as a user toggle.
+  - The enable switch is a `SwitchBinder`: a tap sends `AlarmsIntent.Toggle` and the switch keeps the rendered value. Turning off a repeating alarm first asks (skip once / turn off) through `AlarmsEvent.AskDisable`; cancelling the dialog needs no restore because the switch never moved.
 - `features/alarms/impl/src/main/kotlin/dev/proflyder/home/feature/alarms/presentation/AlarmEditorViewModel.kt`
+  - The draft, the pending create idempotency key (with the endpoint it was made for) and the completion live in `SavedStateHandle` through `EditorDraftSession`. An edit drops the key; a timeout keeps it, so a retry after process death reuses it; a different server gets a new key. A completion survives process death and is delivered once as `AlarmEditorEvent.Completed`.
+  - The repeat sheet is `AlarmRepeatSheetViewModel` on `StateViewModel`; the radio list and the day toggles are binders that only send intents.
   - Applies the sheet's choice. A custom day set that covers a preset is stored as that preset, so "Пн–Пт" never lingers as a custom list.
 - `features/alarms/impl/src/main/kotlin/dev/proflyder/home/feature/alarms/presentation/AlarmRepeatRules.kt`
   - Day sets are ISO weekdays: 1 is Monday, 7 is Sunday. A custom selection that covers exactly a preset is stored as that preset, so the editor and the home server never show two different names for the same days.
 - `features/alarms/impl/src/main/kotlin/dev/proflyder/home/feature/alarms/presentation/AlarmsFragment.kt`
   - Keep the existing list visible while a refresh is in flight; do not replace it with a spinner.
+  - Alarms, reminders and timers have no `onResume` refresh. Their list ViewModels refresh when the screen starts collecting state (`StateViewModel.screenShown`, also after the app returns to the foreground) and when the matching editor publishes `AlarmsChanged`/`RemindersChanged` on `AppEventBus`, so a list kept alive in the Time pager is already fresh when shown. A stale load cannot overwrite a newer one (`ListRefresher` runs on `LatestLauncher`).
+  - Dialogs (delete, bulk delete, disable choice) are events from the ViewModel; the fragment only shows them and sends the chosen intent.
 - `features/alarms/impl/src/main/res/layout/item_alarm.xml`
   - Idle: switch plus delete. Selection mode: both are gone and the circular check indicator takes their place, inset by the card padding so it never touches the rounded corner.
 - `features/alarms/impl/src/main/res/layout/sheet_alarm_repeat.xml` — Modal repeat sheet. The rounded top and the drag handle live on the sheet content itself, so the sheet keeps the app's dark surface when the dialog window is transparent.
@@ -1661,7 +1676,12 @@ Themes are code in `core/theme`:
 - `core/runtime/src/test/kotlin/dev/proflyder/home/core/runtime/DeviceIdentityTest.kt`
   - The stable device identity survives token rotation and is never the raw platform id.
 - `features/reminders/impl/src/main/kotlin/dev/proflyder/home/feature/reminders/presentation/ReminderAdapter.kt`
-  - Programmatic `isChecked` must not be reported as a user toggle.
+  - The enable switch is a `SwitchBinder`: its position changes only when the server answer reaches the state.
+- `features/reminders/impl/src/main/kotlin/dev/proflyder/home/feature/reminders/presentation/ReminderEditorViewModel.kt`
+  - Same editor contract as alarms: `EditorDraftSession` keeps the draft, the pending create key and the completion in `SavedStateHandle`.
+- `features/timers/impl/src/main/kotlin/dev/proflyder/home/feature/timers/presentation/TimersViewModel.kt`
+  - The countdown is a `tickerFlow(1 s)` that runs only while the screen collects state (`screenVisible`). A tick recomputes `rows` from the server clock; the adapter diffs by timer id and rebinds only the remaining time (`TimerAspect.REMAINING`). `TimerRefreshPolicy` reloads every 30 s and once per 10 s after a running timer reaches zero; it reads the injected `Clock`, never `System.nanoTime`.
+  - The start form (label, duration, inline error) lives in the state; presets are `TIMER_PRESETS: List<Duration>` and fill the field through `Duration.toTimerInput()`.
 - `features/scenarios/api/src/main/kotlin/dev/proflyder/home/feature/scenarios/ScenarioEditorDraft.kt`
   - Non-secret editor draft persisted in SavedStateHandle. It intentionally holds no token, endpoint credentials, or request payload. [hasUnsupportedParts] is derived from the retained unknown oneof variants: a definition created by a newer server can be opened …
 - `features/scenarios/impl/src/main/kotlin/dev/proflyder/home/feature/scenarios/presentation/CatalogPickerDialog.kt`

@@ -3,27 +3,27 @@ package dev.proflyder.home.feature.alarms.presentation
 import android.content.Context
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.ViewModelProvider
 import dev.proflyder.home.core.config.ConnectionSettingsStore
 import dev.proflyder.home.core.model.Outcome
-import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.core.model.RepeatKind
 import dev.proflyder.home.core.model.Schedule
 import dev.proflyder.home.core.model.ScheduleKind
 import dev.proflyder.home.core.model.WallTime
-import dev.proflyder.home.core.model.isAmbiguousRetryable
-import dev.proflyder.home.core.operation.EditorCompletion
-import dev.proflyder.home.core.operation.IdempotentRequestKey
-import dev.proflyder.home.core.ui.BaseViewModel
+import dev.proflyder.home.core.presentation.AppEventBus
+import dev.proflyder.home.core.presentation.EditorDraftCodec
+import dev.proflyder.home.core.presentation.EditorDraftSession
+import dev.proflyder.home.core.presentation.EditorStatus
+import dev.proflyder.home.core.presentation.StateViewModel
 import dev.proflyder.home.core.ui.SavedStateViewModelFactory
 import dev.proflyder.home.core.ui.ViewModelFactoryContributor
 import dev.proflyder.home.feature.alarms.AlarmDraft
 import dev.proflyder.home.feature.alarms.AlarmEditorCompletion
+import dev.proflyder.home.feature.alarms.AlarmEditorDestination
 import dev.proflyder.home.feature.alarms.AlarmEditorDraft
 import dev.proflyder.home.feature.alarms.AlarmEditorDraftCodec
+import dev.proflyder.home.feature.alarms.AlarmRepository
 import dev.proflyder.home.feature.alarms.defaultAlarmTime
-import dev.proflyder.home.feature.alarms.domain.DeleteAlarm
-import dev.proflyder.home.feature.alarms.domain.LoadAlarm
 import dev.proflyder.home.feature.alarms.domain.SaveAlarm
 import dev.proflyder.home.feature.alarms.impl.R
 import dev.proflyder.home.feature.alarms.quickOffsetTime
@@ -32,12 +32,8 @@ import dev.zacsweers.metro.ContributesIntoSet
 import dev.zacsweers.metro.Inject
 import java.time.LocalDate
 import java.time.LocalDateTime
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.launch
 
-data class AlarmEditorUiState(
-    val loading: Boolean = false,
-    val saving: Boolean = false,
+internal data class AlarmEditorUiState(
     val existing: Schedule? = null,
     val label: String = "",
     val hour: Int = defaultAlarmTime(LocalDateTime.now()).hour,
@@ -46,286 +42,220 @@ data class AlarmEditorUiState(
     val weekdays: Set<Int> = emptySet(),
     val enabled: Boolean = true,
     val onceDate: LocalDate? = LocalDate.now(),
-    val error: RemoteFailure? = null,
-    val loadFailed: Boolean = false,
+    val status: EditorStatus = EditorStatus(),
+    val editing: Boolean = false,
 )
 
-class AlarmEditorViewModel(
-    private val loadAlarm: LoadAlarm,
+internal sealed interface AlarmEditorIntent {
+    data class SetLabel(val value: String) : AlarmEditorIntent
+    data class SetTime(val hour: Int, val minute: Int) : AlarmEditorIntent
+    data class QuickOffset(val minutes: Int) : AlarmEditorIntent
+    data class SetRepeat(val repeat: RepeatKind, val days: Set<Int>) : AlarmEditorIntent
+    data class SetEnabled(val value: Boolean) : AlarmEditorIntent
+    data class SetDate(val value: LocalDate) : AlarmEditorIntent
+    data object PickTime : AlarmEditorIntent
+    data object PickDate : AlarmEditorIntent
+    data object PickRepeat : AlarmEditorIntent
+    data object Save : AlarmEditorIntent
+    data object RequestDelete : AlarmEditorIntent
+    data object Delete : AlarmEditorIntent
+    data object CompletionShown : AlarmEditorIntent
+}
+
+internal sealed interface AlarmEditorEvent {
+    data class PickTime(val hour: Int, val minute: Int) : AlarmEditorEvent
+    data class PickDate(val selected: LocalDate) : AlarmEditorEvent
+    data class PickRepeat(val repeat: RepeatKind, val days: Set<Int>) : AlarmEditorEvent
+    data object ConfirmDelete : AlarmEditorEvent
+    data class Completed(val completion: AlarmEditorCompletion) : AlarmEditorEvent
+}
+
+internal object AlarmDraftCodec : EditorDraftCodec<AlarmEditorDraft> {
+    override fun encode(draft: AlarmEditorDraft): Map<String, Any?> = AlarmEditorDraftCodec.toMap(draft)
+
+    override fun decode(values: Map<String, Any?>): AlarmEditorDraft? = AlarmEditorDraftCodec.fromMap(values)
+}
+
+internal typealias AlarmDraftSession = EditorDraftSession<AlarmEditorDraft, AlarmDraft, AlarmEditorCompletion>
+
+internal class AlarmEditorViewModel(
+    private val repository: AlarmRepository,
     private val saveAlarm: SaveAlarm,
-    private val deleteAlarm: DeleteAlarm,
-    private val settings: ConnectionSettingsStore,
-    private val savedState: SavedStateHandle,
+    private val bus: AppEventBus,
+    private val session: AlarmDraftSession,
     private val defaultLabel: String,
-) : BaseViewModel<AlarmEditorUiState>(restoreState(savedState)) {
-    private val restoredDraft: AlarmEditorDraft? = AlarmEditorDraftCodec.fromMap(
-        savedState.keys().associateWith { key -> savedState.get<Any?>(key) },
-    )
-
-    private val editorCompletion = EditorCompletion(
-        savedState.get<String>(KEY_COMPLETION)?.let { raw ->
-            AlarmEditorCompletion.entries.firstOrNull { it.name == raw }
-        },
-    )
-    val completion: StateFlow<AlarmEditorCompletion?> = editorCompletion.state
-
-    private val createIdentity = IdempotentRequestKey<CreatePayload>()
-
-    private var started = false
-
+    alarmId: String?,
+) : StateViewModel<AlarmEditorUiState, AlarmEditorIntent, AlarmEditorEvent>(
+    session.restored?.toUiState() ?: AlarmEditorUiState(editing = alarmId != null),
+) {
     init {
-        val savedKey = savedState.get<String>(KEY_CREATE_KEY)
-        val savedEndpoint = savedState.get<String>(KEY_CREATE_ENDPOINT)
-        val currentEndpoint = settings.config.value.endpoint?.baseUrl().orEmpty()
-        adoptRestoredCreateIdentity(savedKey, savedEndpoint, currentEndpoint)
+        session.restored?.takeIf { it.existingId == null }?.let { session.adoptRestoredCreate(it.toAlarmDraft()) }
+        session.pendingCompletion?.let { emit(AlarmEditorEvent.Completed(it)) }
+        start(alarmId)
     }
 
-    private fun adoptRestoredCreateIdentity(
-        savedKey: String?,
-        savedEndpoint: String?,
-        currentEndpoint: String,
-    ) {
-        val draft = restoredDraft ?: return
-        if (draft.existingId != null) return
-        if (savedKey == null || savedEndpoint != currentEndpoint) return
-        createIdentity.adopt(CreatePayload(draft.toAlarmDraft(), currentEndpoint), savedKey)
-    }
-
-    private data class CreatePayload(
-        val draft: AlarmDraft,
-        val endpoint: String,
-    )
-
-    fun start(alarmId: String?) {
-        if (started) return
-        started = true
-        if (restoredDraft != null) return
-        if (alarmId == null) {
-            persistDraft()
-            return
+    override fun handle(intent: AlarmEditorIntent) {
+        when (intent) {
+            is AlarmEditorIntent.SetLabel -> edit { copy(label = intent.value) }
+            is AlarmEditorIntent.SetTime -> edit { copy(hour = intent.hour, minute = intent.minute) }
+            is AlarmEditorIntent.QuickOffset -> edit { withQuickOffset(LocalDateTime.now(), intent.minutes) }
+            is AlarmEditorIntent.SetRepeat -> edit { withRepeat(intent.repeat, intent.days) }
+            is AlarmEditorIntent.SetEnabled -> edit { copy(enabled = intent.value) }
+            is AlarmEditorIntent.SetDate -> edit { copy(onceDate = intent.value) }
+            AlarmEditorIntent.Save -> save()
+            AlarmEditorIntent.Delete -> delete()
+            AlarmEditorIntent.CompletionShown -> session.consumeCompletion()
+            else -> emitPicker(intent)
         }
-        mutableState.value = mutableState.value.copy(loading = true, error = null)
-        viewModelScope.launch {
-            when (val result = loadAlarm(alarmId)) {
-                is Outcome.Success -> {
-                    mutableState.value = result.value.toState()
-                    persistDraft()
-                }
-                is Outcome.Failure -> mutableState.value = mutableState.value.copy(
-                    loading = false,
-                    error = result.failure,
-                    loadFailed = true,
-                )
+    }
+
+    private fun emitPicker(intent: AlarmEditorIntent) {
+        val state = currentState
+        when (intent) {
+            AlarmEditorIntent.PickTime -> emit(AlarmEditorEvent.PickTime(state.hour, state.minute))
+            AlarmEditorIntent.PickDate -> emit(AlarmEditorEvent.PickDate(state.onceDate ?: LocalDate.now()))
+            AlarmEditorIntent.PickRepeat -> emit(AlarmEditorEvent.PickRepeat(state.repeat, state.weekdays))
+            AlarmEditorIntent.RequestDelete -> emit(AlarmEditorEvent.ConfirmDelete)
+            else -> Unit
+        }
+    }
+
+    private fun start(alarmId: String?) {
+        if (session.restored != null) return
+        if (alarmId == null) return session.persist(currentState.toEditorDraft())
+        updateState { copy(status = status.loadingStarted()) }
+        launch {
+            when (val result = repository.get(alarmId)) {
+                is Outcome.Success -> loaded(result.value)
+                is Outcome.Failure -> updateState { copy(status = status.loadFailed(result.failure)) }
             }
         }
     }
 
-    fun setLabel(value: String) = edit { it.copy(label = value) }
-
-    fun setTime(hour: Int, minute: Int) = edit { it.copy(hour = hour, minute = minute) }
-
-    fun applyQuickOffset(offsetMinutes: Int) = edit {
-        it.withQuickOffset(LocalDateTime.now(), offsetMinutes)
+    private fun loaded(alarm: Schedule) {
+        updateState { alarm.toUiState() }
+        session.persist(currentState.toEditorDraft())
     }
 
-    fun setRepeatAndDays(repeat: RepeatKind, days: Set<Int>) = edit { state ->
-        val normalized = when (repeat) {
-            RepeatKind.CUSTOM -> AlarmRepeatRules.presetFor(days)
-            else -> repeat
-        }
-        val weekdays = when (normalized) {
-            RepeatKind.CUSTOM -> days
-            else -> AlarmRepeatRules.daysForPreset(normalized).ifEmpty { state.weekdays }
-        }
-        state.copy(
-            repeat = normalized,
-            weekdays = weekdays,
-            onceDate = when (normalized == RepeatKind.ONCE) {
-                true -> state.onceDate ?: LocalDate.now()
-                false -> null
-            },
-        )
+    private fun edit(transform: AlarmEditorUiState.() -> AlarmEditorUiState) {
+        updateState(transform)
+        session.edited(currentState.toEditorDraft())
     }
 
-    fun setEnabled(value: Boolean) = edit { it.copy(enabled = value) }
-
-    fun setDate(value: LocalDate) = edit { it.copy(onceDate = value) }
-
-    fun save() {
-        val current = mutableState.value
-        if (current.saving) return
+    private fun save() {
+        val current = currentState
+        if (current.status.saving) return
         val draft = current.toAlarmDraft()
-        val endpoint = settings.config.value.endpoint?.baseUrl().orEmpty()
-        val key = if (current.existing == null) {
-            createIdentity.keyFor(CreatePayload(draft, endpoint)).also {
-                savedState[KEY_CREATE_KEY] = it
-                savedState[KEY_CREATE_ENDPOINT] = endpoint
+        updateState { copy(status = status.savingStarted()) }
+        launch {
+            val result = session.submit(draft.takeIf { current.existing == null }) { key ->
+                saveAlarm(current.existing, draft, key, defaultLabel)
             }
-        } else {
-            clearPendingKey()
-            ""
-        }
-        mutableState.value = current.copy(saving = true, error = null)
-        viewModelScope.launch {
-            when (val result = saveAlarm(current.existing, draft, key, defaultLabel)) {
-                is Outcome.Success -> {
-                    createIdentity.markSucceeded()
-                    clearPendingKey()
-                    mutableState.value = mutableState.value.copy(
-                        saving = false,
-                        existing = result.value,
-                        error = null,
-                    )
-                    persistDraft()
-                    setCompletion(AlarmEditorCompletion.SAVED)
-                }
-                is Outcome.Failure -> {
-                    if (!result.failure.isAmbiguousRetryable()) {
-                        createIdentity.reset()
-                        clearPendingKey()
-                    }
-                    mutableState.value = mutableState.value.copy(
-                        saving = false,
-                        error = result.failure,
-                    )
-                }
-            }
+            if (result is Outcome.Success) updateState { copy(existing = result.value) }
+            finish(result, AlarmEditorCompletion.SAVED)
         }
     }
 
-    fun delete() {
-        val existing = mutableState.value.existing ?: return
-        if (mutableState.value.saving) return
-        mutableState.value = mutableState.value.copy(saving = true, error = null)
-        viewModelScope.launch {
-            when (val result = deleteAlarm(existing.id)) {
-                is Outcome.Success -> {
-                    mutableState.value = mutableState.value.copy(saving = false, error = null)
-                    setCompletion(AlarmEditorCompletion.DELETED)
-                }
-                is Outcome.Failure -> mutableState.value = mutableState.value.copy(
-                    saving = false,
-                    error = result.failure,
-                )
-            }
-        }
+    private fun delete() {
+        val existing = currentState.existing ?: return
+        if (currentState.status.saving) return
+        updateState { copy(status = status.savingStarted()) }
+        launch { finish(repository.delete(existing.id), AlarmEditorCompletion.DELETED) }
     }
 
-    fun consumeCompletion() {
-        editorCompletion.consume()
-        savedState.remove<String>(KEY_COMPLETION)
-    }
-
-    private fun edit(transform: (AlarmEditorUiState) -> AlarmEditorUiState) {
-        createIdentity.reset()
-        clearPendingKey()
-        mutableState.value = transform(mutableState.value)
-        persistDraft()
-    }
-
-    private fun clearPendingKey() {
-        savedState.remove<String>(KEY_CREATE_KEY)
-        savedState.remove<String>(KEY_CREATE_ENDPOINT)
-    }
-
-    private fun AlarmEditorUiState.toAlarmDraft(): AlarmDraft = AlarmDraft(
-        label = label,
-        hour = hour,
-        minute = minute,
-        repeat = repeat,
-        weekdays = weekdays.sorted(),
-        enabled = enabled,
-        onceDate = if (repeat == RepeatKind.ONCE) onceDate else null,
-    )
-
-    private fun AlarmEditorDraft.toAlarmDraft(): AlarmDraft = AlarmDraft(
-        label = label,
-        hour = hour,
-        minute = minute,
-        repeat = repeat,
-        weekdays = weekdays.sorted(),
-        enabled = enabled,
-        onceDate = if (repeat == RepeatKind.ONCE) onceDate else null,
-    )
-
-    private fun setCompletion(completion: AlarmEditorCompletion) {
-        editorCompletion.publish(completion)
-        savedState[KEY_COMPLETION] = completion.name
-    }
-
-    private fun persistDraft() {
-        val current = mutableState.value
-        val draft = AlarmEditorDraft(
-            existingId = current.existing?.id,
-            existingRevision = current.existing?.revision,
-            label = current.label,
-            hour = current.hour,
-            minute = current.minute,
-            repeat = current.repeat,
-            weekdays = current.weekdays.sorted(),
-            enabled = current.enabled,
-            onceDate = current.onceDate,
-        )
-        AlarmEditorDraftCodec.toMap(draft).forEach { (key, value) -> savedState[key] = value }
-    }
-
-    private fun Schedule.toState(): AlarmEditorUiState = AlarmEditorUiState(
-        loading = false,
-        existing = this,
-        label = label,
-        hour = at.hour,
-        minute = at.minute,
-        repeat = repeat,
-        weekdays = weekdays.toSet(),
-        enabled = enabled,
-        onceDate = if (repeat == RepeatKind.ONCE) {
-            runCatching { LocalDate.parse(onceDate) }.getOrNull()
-        } else {
-            null
-        },
-    )
-
-    companion object {
-        private const val KEY_COMPLETION = "alarm_completion"
-        private const val KEY_CREATE_KEY = "alarm_create_key"
-        private const val KEY_CREATE_ENDPOINT = "alarm_create_endpoint"
+    private fun finish(result: Outcome<*>, completion: AlarmEditorCompletion) {
+        val failure = (result as? Outcome.Failure)?.failure
+        updateState { copy(status = status.settled(failure)) }
+        if (failure != null) return
+        session.persist(currentState.toEditorDraft())
+        session.complete(completion)
+        bus.publish(AlarmsChanged)
+        emit(AlarmEditorEvent.Completed(completion))
     }
 }
 
 @ContributesIntoSet(AppScope::class)
 @Inject
 class AlarmEditorViewModelFactoryContributor(
-    private val loadAlarm: LoadAlarm,
+    private val repository: AlarmRepository,
     private val saveAlarm: SaveAlarm,
-    private val deleteAlarm: DeleteAlarm,
     private val settings: ConnectionSettingsStore,
+    private val bus: AppEventBus,
     private val context: Context,
 ) : ViewModelFactoryContributor {
     override val viewModelClass: Class<out ViewModel> = AlarmEditorViewModel::class.java
 
-    override fun createFactory() = SavedStateViewModelFactory { savedState ->
-        AlarmEditorViewModel(
-            loadAlarm = loadAlarm,
-            saveAlarm = saveAlarm,
-            deleteAlarm = deleteAlarm,
-            settings = settings,
-            savedState = savedState,
-            defaultLabel = context.getString(R.string.alarms_label_default),
-        )
+    override fun createFactory(): ViewModelProvider.Factory = SavedStateViewModelFactory { savedState -> create(savedState) }
+
+    private fun create(savedState: SavedStateHandle) = AlarmEditorViewModel(
+        repository = repository,
+        saveAlarm = saveAlarm,
+        bus = bus,
+        session = EditorDraftSession(savedState, KEY_PREFIX, AlarmDraftCodec, AlarmEditorCompletion.entries) {
+            settings.config.value.endpoint?.baseUrl().orEmpty()
+        },
+        defaultLabel = context.getString(R.string.alarms_label_default),
+        alarmId = savedState.get<String>(AlarmEditorDestination.ARG_ALARM_ID),
+    )
+
+    private companion object {
+        const val KEY_PREFIX = "alarm"
     }
 }
 
-internal fun restoreState(savedState: SavedStateHandle): AlarmEditorUiState =
-    AlarmEditorDraftCodec.fromMap(savedState.keys().associateWith { key -> savedState.get<Any?>(key) })?.toUiState()
-        ?: AlarmEditorUiState()
-
-internal fun AlarmEditorUiState.withQuickOffset(
-    now: LocalDateTime,
-    offsetMinutes: Int,
-): AlarmEditorUiState {
+internal fun AlarmEditorUiState.withQuickOffset(now: LocalDateTime, offsetMinutes: Int): AlarmEditorUiState {
     val time = quickOffsetTime(now, offsetMinutes)
     return copy(hour = time.hour, minute = time.minute)
 }
+
+internal fun AlarmEditorUiState.withRepeat(repeat: RepeatKind, days: Set<Int>): AlarmEditorUiState {
+    val normalized = if (repeat == RepeatKind.CUSTOM) AlarmRepeatRules.presetFor(days) else repeat
+    val chosenDays = when (normalized) {
+        RepeatKind.CUSTOM -> days
+        else -> AlarmRepeatRules.daysForPreset(normalized).ifEmpty { weekdays }
+    }
+    return copy(
+        repeat = normalized,
+        weekdays = chosenDays,
+        onceDate = if (normalized == RepeatKind.ONCE) onceDate ?: LocalDate.now() else null,
+    )
+}
+
+private fun AlarmEditorUiState.toAlarmDraft(): AlarmDraft = AlarmDraft(
+    label = label,
+    hour = hour,
+    minute = minute,
+    repeat = repeat,
+    weekdays = weekdays.sorted(),
+    enabled = enabled,
+    onceDate = if (repeat == RepeatKind.ONCE) onceDate else null,
+)
+
+private fun AlarmEditorUiState.toEditorDraft(): AlarmEditorDraft = AlarmEditorDraft(
+    existingId = existing?.id,
+    existingRevision = existing?.revision,
+    label = label,
+    hour = hour,
+    minute = minute,
+    repeat = repeat,
+    weekdays = weekdays.sorted(),
+    enabled = enabled,
+    onceDate = onceDate,
+)
+
+private fun AlarmEditorDraft.toAlarmDraft(): AlarmDraft = toUiState().toAlarmDraft()
+
+private fun Schedule.toUiState(): AlarmEditorUiState = AlarmEditorUiState(
+    existing = this,
+    label = label,
+    hour = at.hour,
+    minute = at.minute,
+    repeat = repeat,
+    weekdays = weekdays.toSet(),
+    enabled = enabled,
+    onceDate = if (repeat == RepeatKind.ONCE) runCatching { LocalDate.parse(onceDate) }.getOrNull() else null,
+    editing = true,
+)
 
 private fun AlarmEditorDraft.toUiState(): AlarmEditorUiState = AlarmEditorUiState(
     existing = restoredExisting(),
@@ -336,6 +266,7 @@ private fun AlarmEditorDraft.toUiState(): AlarmEditorUiState = AlarmEditorUiStat
     weekdays = weekdays.toSet(),
     enabled = enabled,
     onceDate = onceDate,
+    editing = existingId != null,
 )
 
 private fun AlarmEditorDraft.restoredExisting(): Schedule? {

@@ -7,7 +7,6 @@ import androidx.viewpager2.widget.ViewPager2
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.bottomnavigation.BottomNavigationView
 import dev.proflyder.home.core.designsystem.PillSegments
-import dev.proflyder.home.feature.alarms.presentation.AlarmsFragment
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -19,6 +18,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import dev.proflyder.home.core.ui.R as UiR
+import dev.proflyder.home.feature.alarms.impl.R as AlarmsR
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
@@ -137,7 +137,7 @@ class MainActivitySmokeTest {
         assertTrue("selecting alarms must open the Time container", time is TimeFragment)
         assertEquals(TimeSection.ALARMS, (time as TimeFragment).section)
         time.childFragmentManager.executePendingTransactions()
-        assertTrue(time.childFragmentManager.fragments.any { it is AlarmsFragment })
+        assertTrue(time.childFragmentManager.fragments.any { it.view?.findViewById<View>(AlarmsR.id.alarms_list) != null })
         assertEquals(0, time.requireView().findViewById<ViewPager2>(R.id.time_pager).currentItem)
 
         val bottom = activity.findViewById<BottomNavigationView>(R.id.home_notice_anchor)

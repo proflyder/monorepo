@@ -11,12 +11,12 @@ import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesIntoSet
 import dev.zacsweers.metro.Inject
 
-object ReminderListDestination : Destination {
+internal object ReminderListDestination : Destination {
     override val featureId: String = "reminders"
     override val route: String = "reminders/list"
 }
 
-data class ReminderEditorDestination(
+internal data class ReminderEditorDestination(
     val reminderId: String? = null,
 ) : Destination {
     override val featureId: String = "reminders"

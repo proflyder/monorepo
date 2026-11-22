@@ -69,6 +69,10 @@ internal class TimePagerAdapter(host: Fragment) : FragmentStateAdapter(host) {
     override fun containsItem(itemId: Long): Boolean =
         TimeSection.entries.any { it.ordinal.toLong() == itemId }
 
-    override fun createFragment(position: Int): Fragment =
-        sectionFragment(TimeSection.entries[position])
+    private val features = (host.requireActivity().application as HomeApplication).graph.featureRegistry
+
+    override fun createFragment(position: Int): Fragment {
+        val entry = checkNotNull(features.entry(TimeSection.entries[position].routeSegment))
+        return entry.createFragment(entry.rootDestination)
+    }
 }
