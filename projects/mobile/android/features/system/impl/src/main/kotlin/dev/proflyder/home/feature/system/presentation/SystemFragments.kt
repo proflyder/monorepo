@@ -3,49 +3,40 @@ package dev.proflyder.home.feature.system.presentation
 import android.os.Bundle
 import androidx.recyclerview.widget.LinearLayoutManager
 import dev.proflyder.home.core.model.SystemSnapshot
-import dev.proflyder.home.core.navigation.requireNavigator
-import dev.proflyder.home.core.ui.BaseFragment
-import dev.proflyder.home.core.ui.injectedActivityViewModels
+import dev.proflyder.home.core.navigation.destination
+import dev.proflyder.home.core.presentation.IntentAdapterCallback
+import dev.proflyder.home.core.presentation.ScreenFragment
+import dev.proflyder.home.core.presentation.screenViewModel
 import dev.proflyder.home.core.ui.setVisible
 import dev.proflyder.home.core.ui.setupPullToRefresh
 import dev.proflyder.home.core.ui.userMessage
 import dev.proflyder.home.feature.system.SystemDetailDestination
+import dev.proflyder.home.feature.system.SystemState
 import dev.proflyder.home.feature.system.impl.databinding.FragmentSystemBinding
-import kotlinx.coroutines.delay
 
-internal const val AUTO_REFRESH_MILLIS = 30_000L
+internal abstract class SystemScreenFragment :
+    ScreenFragment<FragmentSystemBinding, SystemState, SystemIntent, SystemEvent>(FragmentSystemBinding.Companion::inflate) {
+    override val viewModel: SystemViewModel by screenViewModel()
 
-abstract class SystemScreenFragment : BaseFragment<FragmentSystemBinding>(FragmentSystemBinding.Companion::inflate) {
-    internal val viewModel: SystemViewModel by injectedActivityViewModels()
+    private val adapter by lazy { SystemAdapter(IntentAdapterCallback(::dispatch, ::sectionIntent)) }
 
-    private lateinit var adapter: SystemAdapter
+    abstract fun rows(snapshot: SystemSnapshot): List<SystemRow>
 
-    internal abstract fun rows(snapshot: SystemSnapshot): List<SystemRow>
-
-    internal open fun onSection(section: SystemSection) = Unit
-
-    override fun onBindingCreated(binding: FragmentSystemBinding, savedInstanceState: Bundle?) {
-        adapter = SystemAdapter(
-            object : SystemAdapterCallbacks() {
-                override fun onSectionClick(section: SystemSection) = onSection(section)
-            },
-        )
+    override fun onScreenCreated(binding: FragmentSystemBinding, savedInstanceState: Bundle?) {
         binding.systemList.layoutManager = LinearLayoutManager(requireContext())
         binding.systemList.adapter = adapter
-        binding.systemRefresh.setupPullToRefresh { viewModel.refresh() }
-        binding.systemRetry.setOnClickListener { viewModel.refresh() }
-        viewModel.state.observe { render(it) }
-        repeatOnView { autoRefresh() }
+        binding.systemRefresh.setupPullToRefresh { dispatch(SystemIntent.Refresh) }
+        binding.systemRetry.setOnClickListener { dispatch(SystemIntent.Refresh) }
     }
 
-    private suspend fun autoRefresh() {
-        while (true) {
-            viewModel.refresh()
-            delay(AUTO_REFRESH_MILLIS)
-        }
+    private fun sectionIntent(row: SystemRow): SystemIntent? =
+        (row as? SystemRow.Card)?.let { SystemIntent.OpenSection(it.section) }
+
+    override fun onBindingDestroyed() {
+        binding.systemList.adapter = null
     }
 
-    internal fun render(state: SystemUiState) {
+    override fun render(state: SystemState) {
         val snapshot = state.snapshot
         val error = state.error
         binding.systemRefresh.isRefreshing = state.loading && snapshot != null
@@ -53,24 +44,23 @@ abstract class SystemScreenFragment : BaseFragment<FragmentSystemBinding>(Fragme
         binding.systemError.setVisible(snapshot == null && error != null && !state.loading)
         binding.systemErrorText.text = error?.userMessage(requireContext())
         adapter.submitList(snapshot?.let { rows(it) }.orEmpty())
-        when {
-            snapshot != null && error != null && !state.loading -> showFailure(error)
-            else -> Unit
+    }
+
+    override fun onEvent(event: SystemEvent) {
+        when (event) {
+            is SystemEvent.RefreshFailed -> showFailure(event.failure)
+            is SystemEvent.OpenRoute -> navigate(event.route)
         }
     }
 }
 
-class SystemFragment : SystemScreenFragment() {
+internal class SystemFragment : SystemScreenFragment() {
     override fun rows(snapshot: SystemSnapshot): List<SystemRow> = SystemRows(requireContext()).overview(snapshot)
-
-    override fun onSection(section: SystemSection) =
-        requireNavigator().navigate(SystemDetailDestination(section.route))
 }
 
-class SystemDetailFragment : SystemScreenFragment() {
-    private val section: SystemSection
-        get() = SystemSection.fromRoute(requireArguments().getString(SystemDetailDestination.ARG_SECTION))
+internal class SystemDetailFragment : SystemScreenFragment() {
+    private val destination by destination(SystemDetailDestination)
 
     override fun rows(snapshot: SystemSnapshot): List<SystemRow> =
-        SystemRows(requireContext()).detail(section, snapshot)
+        SystemRows(requireContext()).detail(destination?.section ?: SystemSection.HOST, snapshot)
 }

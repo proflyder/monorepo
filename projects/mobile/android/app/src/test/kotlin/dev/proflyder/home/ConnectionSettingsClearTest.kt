@@ -235,4 +235,6 @@ private object OpenRouteGate : RouteGate {
 
 private object TestAppVersion : AppVersion {
     override val name: String = "test"
+
+    override val debuggable: Boolean = false
 }

@@ -8,7 +8,6 @@ import androidx.core.widget.doAfterTextChanged
 import androidx.fragment.app.DialogFragment
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import dev.proflyder.home.core.model.RemoteFailure
-import dev.proflyder.home.core.navigation.requireNavigator
 import dev.proflyder.home.core.presentation.ScreenFragment
 import dev.proflyder.home.core.presentation.SwitchBinder
 import dev.proflyder.home.core.presentation.screenViewModel
@@ -84,7 +83,8 @@ internal class ScenarioEditorFragment : ScreenFragment<
 
     override fun onEvent(event: ScenarioEditorEvent) {
         when (event) {
-            is ScenarioEditorEvent.Finished -> showMessage(event.message).also { requireNavigator().back() }
+            is ScenarioEditorEvent.Finished -> showMessage(event.message)
+            is ScenarioEditorEvent.OpenRoute -> navigate(event.route)
             is ScenarioEditorEvent.Error -> showError(event.message)
         }
     }

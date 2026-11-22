@@ -8,5 +8,6 @@ kt_jvm_library(
     deps = [
         "//packages/kotlin/core",
         "//projects/mobile/android/core/model",
+        "@maven//:org_jetbrains_kotlinx_kotlinx_coroutines_core",
     ],
 )

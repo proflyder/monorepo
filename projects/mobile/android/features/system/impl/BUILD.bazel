@@ -17,6 +17,8 @@ metro_android_library(
         "//projects/mobile/android/core/navigation",
         "//projects/mobile/android/core/network/api",
         "//projects/mobile/android/core/designsystem",
+        "//projects/mobile/android/core/presentation",
+        "//projects/mobile/android/core/runtime",
         "//projects/mobile/android/core/ui",
         "//projects/mobile/android/features/system/api",
         "@maven//:androidx_appcompat_appcompat",
@@ -64,6 +66,8 @@ kt_android_local_test(
     deps = [
         "//projects/mobile/android/core/model",
         "//projects/mobile/android/core/designsystem",
+        "//projects/mobile/android/core/navigation",
+        "//projects/mobile/android/core/presentation",
         "//projects/mobile/android/core/ui",
         "//projects/mobile/android/features/system/api",
         "@maven//:androidx_appcompat_appcompat",

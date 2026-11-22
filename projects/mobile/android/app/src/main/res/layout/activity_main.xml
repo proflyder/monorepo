@@ -30,25 +30,22 @@
                     android:layout_width="wrap_content"
                     android:layout_height="match_parent"
                     tools:ignore="SelectableText" />
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/profile_chip"
-                    style="@style/Widget.Home.Button.Pill.Outlined"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="@dimen/app_profile_chip_gap"
-                    android:visibility="gone"
-                    tools:text="Personal" />
             </LinearLayout>
 
-            <include
-                layout="@layout/vpn_toolbar_toggle"
+            <LinearLayout
+                android:id="@+id/toolbar_end_slot"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_gravity="end|center_vertical" />
+                android:layout_gravity="end|center_vertical"
+                android:gravity="center_vertical"
+                android:orientation="horizontal" />
         </com.google.android.material.appbar.MaterialToolbar>
 
-        <include layout="@layout/vpn_route_banner" />
+        <LinearLayout
+            android:id="@+id/appbar_below_slot"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical" />
     </com.google.android.material.appbar.AppBarLayout>
 
     <androidx.fragment.app.FragmentContainerView

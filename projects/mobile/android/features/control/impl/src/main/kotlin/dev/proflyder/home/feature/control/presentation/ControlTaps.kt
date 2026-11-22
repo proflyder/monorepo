@@ -1,5 +1,6 @@
 package dev.proflyder.home.feature.control.presentation
 
+import dev.proflyder.home.core.navigation.Route
 import dev.proflyder.home.core.model.ControlEntry
 import dev.proflyder.home.core.model.ControlKind
 import dev.proflyder.home.core.model.FavoriteKind
@@ -23,7 +24,7 @@ internal object ControlTaps {
         is TapTarget.Item -> tapItem(target.item, state)
         is TapTarget.Tile -> tapTile(target.tile, state)
         is TapTarget.Dial -> tapDial(target.item)
-        is TapTarget.Hub -> ControlReaction.Emit(ControlEvent.OpenFeature(target.card.featureId))
+        is TapTarget.Hub -> ControlReaction.Emit(ControlEvent.OpenRoute(Route.Tab(target.card.featureId)))
     }
 
     fun hold(target: TapTarget, state: ControlUiState): ControlReaction = when (target) {

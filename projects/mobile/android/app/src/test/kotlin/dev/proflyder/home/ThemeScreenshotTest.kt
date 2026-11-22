@@ -6,7 +6,6 @@ import android.view.View
 import com.google.android.material.color.MaterialColors
 import dev.proflyder.home.core.theme.AppTheme
 import dev.proflyder.home.core.theme.ColorRole
-import dev.proflyder.home.feature.settings.AppearanceDestination
 import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -45,7 +44,7 @@ class ThemeScreenshotTest {
         activity.router.selectTab("time")
         idle(activity)
         shoot(activity, surface, "theme-${theme.key}-time-dark.png")
-        activity.router.navigate(AppearanceDestination)
+        activity.router.openRoute("settings/appearance")
         idle(activity)
         shoot(activity, surface, "theme-${theme.key}-appearance-dark.png")
     }

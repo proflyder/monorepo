@@ -1,5 +1,6 @@
 package dev.proflyder.home.feature.scenarios.presentation.editor
 
+import dev.proflyder.home.core.navigation.Route
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import dev.proflyder.home.core.config.ConnectionSettingsStore
@@ -191,6 +192,7 @@ internal class ScenarioEditorViewModel(
     private fun finish(message: Int) {
         appEvents.publish(ScenariosChanged)
         emit(ScenarioEditorEvent.Finished(message))
+        emit(ScenarioEditorEvent.OpenRoute(Route.Back))
     }
 }
 

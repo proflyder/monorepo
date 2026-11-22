@@ -1,5 +1,6 @@
 package dev.proflyder.home.feature.system.presentation
 
+import dev.proflyder.home.core.ui.BaseAdapterCallback
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
@@ -33,7 +34,7 @@ class SystemScreenshotTest {
         val context = themed()
         val list = RecyclerView(context)
         list.layoutManager = LinearLayoutManager(context)
-        val adapter = SystemAdapter(SystemAdapterCallbacks())
+        val adapter = SystemAdapter(BaseAdapterCallback())
         list.adapter = adapter
         list.setPadding(48, 36, 48, 36)
         list.setBackgroundColor(MaterialColors.getColor(list, com.google.android.material.R.attr.colorSurface))

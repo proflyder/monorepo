@@ -1,5 +1,7 @@
 package dev.proflyder.home.feature.reminders.presentation
 
+import dev.proflyder.home.core.navigation.Route
+import dev.proflyder.home.core.navigation.destination
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import dev.proflyder.home.core.config.ConnectionSettingsStore
@@ -61,6 +63,7 @@ internal sealed interface ReminderEditorEvent {
     data class PickTime(val hour: Int, val minute: Int) : ReminderEditorEvent
     data object ConfirmDelete : ReminderEditorEvent
     data class Completed(val completion: ReminderEditorCompletion) : ReminderEditorEvent
+    data class OpenRoute(val route: Route) : ReminderEditorEvent
 }
 
 internal object ReminderDraftCodec : EditorDraftCodec<ReminderEditorDraft> {
@@ -97,7 +100,10 @@ internal class ReminderEditorViewModel(
             ReminderEditorIntent.Save -> save()
             ReminderEditorIntent.RequestDelete -> emit(ReminderEditorEvent.ConfirmDelete)
             ReminderEditorIntent.Delete -> delete()
-            ReminderEditorIntent.CompletionShown -> session.consumeCompletion()
+            ReminderEditorIntent.CompletionShown -> {
+                session.consumeCompletion()
+                emit(ReminderEditorEvent.OpenRoute(Route.Back))
+            }
         }
     }
 
@@ -173,7 +179,7 @@ class ReminderEditorViewModelSource internal constructor(
         session = EditorDraftSession(savedState, KEY_PREFIX, ReminderDraftCodec, ReminderEditorCompletion.entries) {
             settings.config.value.endpoint?.baseUrl().orEmpty()
         },
-        reminderId = savedState.get<String>(ReminderEditorDestination.ARG_REMINDER_ID),
+        reminderId = savedState.destination(ReminderEditorDestination)?.reminderId,
     )
 
     private companion object {

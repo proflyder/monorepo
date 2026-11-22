@@ -1,11 +1,9 @@
 package dev.proflyder.home.feature.vpn.tunnel
 
-import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Service
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
@@ -13,6 +11,7 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import dev.proflyder.home.core.runtime.appGraph
+import dev.proflyder.home.core.ui.NotificationPermission
 import dev.proflyder.home.feature.vpn.VpnConnection
 import dev.proflyder.home.feature.vpn.VpnController
 import dev.proflyder.home.feature.vpn.VpnInjector
@@ -29,6 +28,9 @@ class VpnStatusService : Service() {
 
     @Inject
     internal lateinit var controller: VpnController
+
+    @Inject
+    internal lateinit var notificationPermission: NotificationPermission
 
     override fun onCreate() {
         super.onCreate()
@@ -63,7 +65,7 @@ class VpnStatusService : Service() {
     @SuppressLint("MissingPermission")
     private fun notify(connection: VpnConnection) {
         val manager = NotificationManagerCompat.from(this)
-        when (canNotify()) {
+        when (notificationPermission.granted()) {
             true -> runCatching { manager.notify(VpnNotifications.NOTIFICATION_ID, notification(connection)) }
             false -> Unit
         }
@@ -81,11 +83,6 @@ class VpnStatusService : Service() {
     private fun foregroundType(): Int = when {
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE -> ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
         else -> 0
-    }
-
-    private fun canNotify(): Boolean = when {
-        Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU -> true
-        else -> checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
     }
 
     private fun notification(connection: VpnConnection) = VpnNotifications.build(

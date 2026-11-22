@@ -5,7 +5,6 @@ import androidx.activity.OnBackPressedCallback
 import androidx.recyclerview.widget.GridLayoutManager
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import dev.proflyder.home.core.model.RemoteFailure
-import dev.proflyder.home.core.navigation.requireNavigator
 import dev.proflyder.home.core.presentation.RefreshMode
 import dev.proflyder.home.core.presentation.ScreenFragment
 import dev.proflyder.home.core.presentation.render
@@ -17,7 +16,6 @@ import dev.proflyder.home.core.ui.liftAboveBottomInsets
 import dev.proflyder.home.core.ui.setVisible
 import dev.proflyder.home.core.ui.setupPullToRefresh
 import dev.proflyder.home.core.ui.userMessage
-import dev.proflyder.home.feature.alarms.AlarmEditorDestination
 import dev.proflyder.home.feature.alarms.impl.R
 import dev.proflyder.home.feature.alarms.impl.databinding.FragmentAlarmsBinding
 
@@ -75,9 +73,8 @@ internal class AlarmsFragment :
     override fun onEvent(event: AlarmsEvent) {
         when (event) {
             is AlarmsEvent.Failure -> showFailure(event.failure)
-            is AlarmsEvent.OpenEditor -> requireNavigator().navigate(AlarmEditorDestination(event.id))
+            is AlarmsEvent.OpenRoute -> navigate(event.route)
             is AlarmsEvent.AskDisable -> askDisable(event.id)
-            AlarmsEvent.OpenConnection -> requireNavigator().selectTab(CONNECTION_TAB)
             is AlarmsEvent.ConfirmDelete -> confirmDelete(event.id)
             is AlarmsEvent.ConfirmDeleteSelected -> confirmDeleteSelected(event.count)
         }
@@ -105,9 +102,5 @@ internal class AlarmsFragment :
             R.string.alarms_delete_yes,
             R.string.alarms_cancel,
         ) { dispatch(AlarmsIntent.DeleteSelected) }
-    }
-
-    private companion object {
-        const val CONNECTION_TAB = "connection"
     }
 }

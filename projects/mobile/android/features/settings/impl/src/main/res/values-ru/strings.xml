@@ -26,4 +26,5 @@
     <string name="settings_appearance_mode_system">Системный</string>
     <string name="settings_appearance_mode_light">Светлый</string>
     <string name="settings_appearance_mode_dark">Тёмный</string>
+    <string name="settings_toolbar_action">Настройки</string>
 </resources>

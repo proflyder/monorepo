@@ -13,17 +13,12 @@ class PushRegistrationPublisher(
     private val client: PushDevicesApi,
     private val identity: DeviceIdentity,
 ) {
-    internal suspend fun publish(
-        token: String,
-        appVersion: String,
-        deviceName: String,
-    ): Outcome<Unit> = client.register(
+    internal suspend fun publish(request: PushRegistrationRequest): Outcome<Unit> = client.register(
         deviceId = identity.deviceId(),
-        token = token,
-        appVersion = appVersion,
-        deviceName = deviceName,
+        token = request.token,
+        appVersion = request.appVersion,
+        deviceName = request.deviceName,
     )
 
-    internal suspend fun rename(deviceName: String): Outcome<Unit> =
-        client.rename(deviceId = identity.deviceId(), deviceName = deviceName)
+    internal suspend fun unregister(token: String): Outcome<Unit> = client.unregister(token)
 }

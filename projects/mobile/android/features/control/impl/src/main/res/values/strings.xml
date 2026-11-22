@@ -81,4 +81,7 @@
         <item>Sat</item>
         <item>Sun</item>
     </string-array>
+    <string name="control_profile_personal">Personal</string>
+    <string name="control_profile_work">Work</string>
+    <string name="control_profile_chip">Voice profile: %1$s</string>
 </resources>

@@ -3,7 +3,6 @@ package dev.proflyder.home.feature.scenarios.presentation
 import android.os.Bundle
 import androidx.recyclerview.widget.GridLayoutManager
 import dev.proflyder.home.core.model.RemoteFailure
-import dev.proflyder.home.core.navigation.requireNavigator
 import dev.proflyder.home.core.presentation.RefreshMode
 import dev.proflyder.home.core.presentation.ScreenFragment
 import dev.proflyder.home.core.ui.ListStateViews
@@ -15,7 +14,6 @@ import dev.proflyder.home.core.ui.liftAboveBottomInsets
 import dev.proflyder.home.core.ui.setVisible
 import dev.proflyder.home.core.ui.setupPullToRefresh
 import dev.proflyder.home.core.ui.userMessage
-import dev.proflyder.home.feature.scenarios.ScenarioEditorDestination
 import dev.proflyder.home.feature.scenarios.impl.R
 import dev.proflyder.home.feature.scenarios.impl.databinding.FragmentScenariosBinding
 
@@ -43,8 +41,8 @@ internal class ScenariosFragment :
         )
         scenariosRefresh.setupPullToRefresh { dispatch(ScenariosIntent.Refresh(RefreshMode.HARD)) }
         scenariosRetry.setOnClickListener { dispatch(ScenariosIntent.Refresh(RefreshMode.HARD)) }
-        scenariosOpenConnection.setOnClickListener { requireNavigator().selectTab(CONNECTION_TAB) }
-        scenariosAdd.setOnClickListener { requireNavigator().navigate(ScenarioEditorDestination()) }
+        scenariosOpenConnection.setOnClickListener { dispatch(ScenariosIntent.OpenConnection) }
+        scenariosAdd.setOnClickListener { dispatch(ScenariosIntent.Add) }
     }
 
     override fun render(state: ScenariosUiState) {
@@ -64,7 +62,7 @@ internal class ScenariosFragment :
             is ScenariosEvent.Failure -> showFailure(event.failure)
             is ScenariosEvent.Queued -> notice(getString(R.string.scenarios_run_queued, event.label))
             is ScenariosEvent.Pinned -> notice(getString(pinnedText(event.pinned), event.label))
-            is ScenariosEvent.Open -> requireNavigator().navigate(ScenarioEditorDestination(event.scenarioId))
+            is ScenariosEvent.OpenRoute -> navigate(event.route)
             is ScenariosEvent.ConfirmPin -> confirmPin(event)
         }
     }
@@ -85,8 +83,4 @@ internal class ScenariosFragment :
         if (pinned) R.string.scenarios_favorite_pinned else R.string.scenarios_favorite_unpinned
 
     private fun notice(text: String) = Notices.show(binding.root, text)
-
-    private companion object {
-        const val CONNECTION_TAB = "connection"
-    }
 }

@@ -15,6 +15,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import dev.proflyder.home.core.ui.AndroidNotificationPermission
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -73,7 +74,7 @@ class PushChannelsTest {
         val context = RuntimeEnvironment.getApplication()
         PushChannels.ensure(context)
 
-        val notification = PushNotifier(context, appearance(context)).ring("Рикардо")
+        val notification = PushNotifier(context, appearance(context), AndroidNotificationPermission(context)).ring("Рикардо")
 
         assertEquals(PushChannels.FIND, notification.channelId)
         assertNull(notification.sound)

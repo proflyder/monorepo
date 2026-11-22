@@ -8,7 +8,6 @@ import android.view.ViewGroup
 import android.widget.ImageView
 import com.google.android.material.appbar.MaterialToolbar
 import dev.proflyder.home.core.theme.AppTheme
-import dev.proflyder.home.feature.settings.AppearanceDestination
 import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -54,7 +53,7 @@ class ToolbarMenuScreenshotTest {
         activity.actionsMenu.dismiss()
         idle(activity)
 
-        activity.router.navigate(AppearanceDestination)
+        activity.router.openRoute("settings/appearance")
         idle(activity)
         shoot("menu-${theme.key}-appearance-dark.png", activity)
 

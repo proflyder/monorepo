@@ -1,5 +1,6 @@
 package dev.proflyder.home.feature.control.presentation
 
+import dev.proflyder.home.core.navigation.Route
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dev.proflyder.home.core.model.FavoritePreferences
@@ -64,6 +65,7 @@ internal class ControlViewModel(
             is ControlIntent.ToggleRoom -> layout.toggleRoom(intent.section)
             is ControlIntent.Dial -> layout.setDial(intent.open)
             is ControlIntent.ActivateTile -> tiles.activate(intent.key)?.let(::emit)
+            ControlIntent.OpenConnection -> emit(ControlEvent.OpenRoute(Route.Tab(CONNECTION_FEATURE)))
         }
     }
 
@@ -119,3 +121,5 @@ class ControlViewModelSource internal constructor(
 
     override fun create(): ViewModel = ControlViewModel(dependencies)
 }
+
+private const val CONNECTION_FEATURE = "connection"

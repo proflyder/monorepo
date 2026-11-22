@@ -80,7 +80,7 @@ class SystemRowsTest {
         assertEquals(HealthLevel.WARNING, ratioLevel(0.9))
         assertEquals(HealthLevel.WARNING, tempLevel(75.0))
         assertEquals(HealthLevel.CRITICAL, tempLevel(85.0))
-        assertEquals(SystemSection.CLUSTER, SystemSection.fromRoute("cluster"))
-        assertEquals(SystemSection.HOST, SystemSection.fromRoute("bogus"))
+        assertEquals(SystemSection.CLUSTER, SystemSection.fromRouteOrNull("cluster"))
+        assertEquals(null, SystemSection.fromRouteOrNull("bogus"))
     }
 }

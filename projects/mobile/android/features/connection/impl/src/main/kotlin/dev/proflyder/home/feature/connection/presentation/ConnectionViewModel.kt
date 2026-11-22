@@ -8,7 +8,7 @@ import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.core.model.SchedulerStatus
 import dev.proflyder.home.core.operation.suspendRunCatching
-import dev.proflyder.home.core.ui.BaseViewModel
+import dev.proflyder.home.core.presentation.StateViewModel
 import dev.proflyder.home.core.ui.ViewModelSource
 import dev.proflyder.home.feature.connection.ConnectionRepository
 import dev.proflyder.home.feature.connection.TokenUpdate
@@ -18,13 +18,24 @@ import dev.zacsweers.metro.ContributesIntoMap
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.binding
 
-enum class ConnectionNotice {
+internal enum class ConnectionNotice {
     SAVED,
     SAVED_AND_ONLINE,
     CONFIG_REFRESHED,
 }
 
-data class ConnectionUiState(
+internal sealed interface ConnectionIntent {
+    data class EditToken(val value: String) : ConnectionIntent
+    data object ClearToken : ConnectionIntent
+    data object Test : ConnectionIntent
+    data object RefreshConfig : ConnectionIntent
+}
+
+internal sealed interface ConnectionEvent {
+    data class Notice(val notice: ConnectionNotice) : ConnectionEvent
+}
+
+internal data class ConnectionUiState(
     val tokenInput: String = "",
     val clearTokenRequested: Boolean = false,
     val hasStoredToken: Boolean = false,
@@ -35,7 +46,6 @@ data class ConnectionUiState(
     val testing: Boolean = false,
     val error: RemoteFailure? = null,
     val status: SchedulerStatus? = null,
-    val notice: ConnectionNotice? = null,
 ) {
     val busy: Boolean get() = saving || testing || refreshingConfig
 }
@@ -43,7 +53,7 @@ data class ConnectionUiState(
 @Inject
 internal class ConnectionViewModel(
     private val repository: ConnectionRepository,
-) : BaseViewModel<ConnectionUiState>(initialState(repository)) {
+) : StateViewModel<ConnectionUiState, ConnectionIntent, ConnectionEvent>(initialState(repository)) {
 
     init {
         launch {
@@ -63,25 +73,33 @@ internal class ConnectionViewModel(
         }
     }
 
-    fun setToken(value: String) {
+    override fun handle(intent: ConnectionIntent) {
+        when (intent) {
+            is ConnectionIntent.EditToken -> setToken(intent.value)
+            ConnectionIntent.ClearToken -> requestClearToken()
+            ConnectionIntent.Test -> persist(testAfter = true)
+            ConnectionIntent.RefreshConfig -> refreshConfig()
+        }
+    }
+
+    private fun setToken(value: String) {
         updateState { copy(tokenInput = value, clearTokenRequested = false, error = null, status = null) }
     }
 
-    fun requestClearToken() {
+    private fun requestClearToken() {
         updateState { copy(tokenInput = "", clearTokenRequested = true) }
     }
 
-    fun test() = persist(testAfter = true)
-
-    fun refreshConfig() {
+    private fun refreshConfig() {
         val current = currentState
         if (current.refreshingConfig) return
-        updateState { copy(refreshingConfig = true, error = null, notice = null) }
+        updateState { copy(refreshingConfig = true, error = null) }
         launch {
             suspendRunCatching {
                 repository.refreshRemoteConfig()
             }.onSuccess {
-                updateState { copy(refreshingConfig = false, notice = ConnectionNotice.CONFIG_REFRESHED) }
+                updateState { copy(refreshingConfig = false) }
+                emit(ConnectionEvent.Notice(ConnectionNotice.CONFIG_REFRESHED))
             }.onFailure { failure ->
                 if (failure !is Exception) throw failure
                 updateState {
@@ -92,10 +110,6 @@ internal class ConnectionViewModel(
                 }
             }
         }
-    }
-
-    fun consumeNotice() {
-        updateState { copy(notice = null) }
     }
 
     private fun persist(testAfter: Boolean) {
@@ -113,7 +127,6 @@ internal class ConnectionViewModel(
                 saving = true,
                 testing = testAfter,
                 error = null,
-                notice = null,
                 status = null,
             )
         }
@@ -135,16 +148,13 @@ internal class ConnectionViewModel(
                         )
                     }
                     if (!testAfter) {
-                        updateState { copy(notice = ConnectionNotice.SAVED) }
+                        emit(ConnectionEvent.Notice(ConnectionNotice.SAVED))
                         return@launch
                     }
                     when (val status = repository.testConnection()) {
-                        is Outcome.Success -> updateState {
-                            copy(
-                                testing = false,
-                                status = status.value,
-                                notice = ConnectionNotice.SAVED_AND_ONLINE,
-                            )
+                        is Outcome.Success -> {
+                            updateState { copy(testing = false, status = status.value) }
+                            emit(ConnectionEvent.Notice(ConnectionNotice.SAVED_AND_ONLINE))
                         }
                         is Outcome.Failure -> updateState {
                             copy(testing = false, error = status.failure)

@@ -24,8 +24,5 @@ class PushFeatureEntry : FeatureEntry {
     override val iconRes: Int = R.drawable.push_ic_notification
     override val rootDestination = PushSettingsDestination
 
-    override fun supports(destination: Destination): Boolean =
-        destination is PushSettingsDestination
-
     override fun createFragment(destination: Destination): Fragment = PushSettingsFragment()
 }

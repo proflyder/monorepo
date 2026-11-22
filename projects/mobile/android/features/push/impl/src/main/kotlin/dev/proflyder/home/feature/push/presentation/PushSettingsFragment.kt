@@ -1,103 +1,80 @@
 package dev.proflyder.home.feature.push.presentation
 
-import android.content.ActivityNotFoundException
 import android.os.Bundle
 import com.google.android.material.button.MaterialButton
 import dev.proflyder.home.core.designsystem.ListRow
 import dev.proflyder.home.core.designsystem.Tone
-import dev.proflyder.home.core.ui.BaseFragment
+import dev.proflyder.home.core.presentation.ScreenFragment
+import dev.proflyder.home.core.presentation.TextBinder
+import dev.proflyder.home.core.presentation.screenViewModel
 import dev.proflyder.home.core.ui.applyScrollBottomInset
-import dev.proflyder.home.core.ui.injectedViewModels
 import dev.proflyder.home.core.ui.keepFocusedVisible
 import dev.proflyder.home.core.ui.setVisible
-import dev.proflyder.home.feature.push.PushPermissions
 import dev.proflyder.home.feature.push.PushRegistration
 import dev.proflyder.home.feature.push.impl.R
 import dev.proflyder.home.feature.push.impl.databinding.FragmentPushSettingsBinding
 
-class PushSettingsFragment :
-    BaseFragment<FragmentPushSettingsBinding>(FragmentPushSettingsBinding.Companion::inflate) {
-    private val viewModel: PushSettingsViewModel by injectedViewModels()
+internal class PushSettingsFragment :
+    ScreenFragment<FragmentPushSettingsBinding, PushSettingsUiState, PushSettingsIntent, PushSettingsEvent>(
+        FragmentPushSettingsBinding.Companion::inflate,
+    ) {
+    override val viewModel: PushSettingsViewModel by screenViewModel()
 
-    private val permissions by lazy { PushPermissions(requireContext().applicationContext) }
+    private lateinit var nameBinder: TextBinder
 
-    override fun onBindingCreated(binding: FragmentPushSettingsBinding, savedInstanceState: Bundle?) {
+    override fun onScreenCreated(binding: FragmentPushSettingsBinding, savedInstanceState: Bundle?) {
         binding.root.applyScrollBottomInset()
         binding.root.keepFocusedVisible()
-        bindRow(binding.pushNotificationsRow, binding.pushNotificationsAction) { open(permissions.notifications()) }
-        bindRow(binding.pushDndRow, binding.pushDndAction) { open(permissions.dnd()) }
-        bindRow(binding.pushFullScreenRow, binding.pushFullScreenAction) { open(permissions.fullScreen()) }
-        binding.pushRegister.setOnClickListener { viewModel.registerNow() }
-        binding.pushDeviceNameSave.setOnClickListener {
-            viewModel.saveDeviceName(binding.pushDeviceName.text.toString())
-        }
-        viewModel.state.observe { render(it) }
+        bindRow(binding.pushNotificationsRow, binding.pushNotificationsAction, PushSettingsScreen.NOTIFICATIONS)
+        bindRow(binding.pushDndRow, binding.pushDndAction, PushSettingsScreen.DND)
+        bindRow(binding.pushFullScreenRow, binding.pushFullScreenAction, PushSettingsScreen.FULL_SCREEN)
+        binding.pushRegister.setOnClickListener { dispatch(PushSettingsIntent.Register) }
+        binding.pushDeviceNameSave.setOnClickListener { dispatch(PushSettingsIntent.SaveName) }
+        nameBinder = bindText(binding.pushDeviceName, PushSettingsIntent::EditName)
     }
 
-    override fun onResume() {
-        super.onResume()
-        viewModel.refreshPermissions()
-    }
-
-    private fun render(state: PushSettingsUiState) {
+    override fun render(state: PushSettingsUiState) {
         with(binding) {
             renderRow(pushNotificationsRow, state.permissions.notifications)
             renderRow(pushDndRow, state.permissions.dndAccess)
             renderRow(pushFullScreenRow, state.permissions.fullScreenIntent)
-            pushRingSummary.text = if (state.canRing) {
-                getString(R.string.push_ring_ready)
-            } else {
-                getString(R.string.push_ring_incomplete)
-            }
-            pushRegistration.text = registrationText(state.registration)
-            pushRegister.isEnabled = !state.registration.busy
-            pushDeviceNameSave.isEnabled = !state.registration.busy
-            pushProgress.setVisible(state.registration.busy)
-            if (!pushDeviceName.hasFocus() && pushDeviceName.text.toString() != state.deviceName) {
-                pushDeviceName.setText(state.deviceName)
-            }
+            pushRingSummary.setText(if (state.canRing) R.string.push_ring_ready else R.string.push_ring_incomplete)
+            pushRegistration.text = registrationText(state.registration, state.sync.busy)
+            pushRegister.isEnabled = !state.sync.busy
+            pushDeviceNameSave.isEnabled = !state.sync.busy
+            pushProgress.setVisible(state.sync.busy)
         }
-        state.notice?.let { notice ->
-            when (notice) {
-                PushNotice.REGISTERED -> showMessage(R.string.push_registered)
-                PushNotice.NAME_SAVED -> showMessage(R.string.push_device_name_saved)
-                PushNotice.FAILED -> showError(R.string.push_register_failed)
-            }
-            viewModel.consumeNotice()
+        nameBinder.render(state.deviceName)
+    }
+
+    override fun onEvent(event: PushSettingsEvent) {
+        when (event) {
+            PushSettingsEvent.Registered -> showMessage(R.string.push_registered)
+            PushSettingsEvent.NameSaved -> showMessage(R.string.push_device_name_saved)
+            PushSettingsEvent.Failed -> showError(R.string.push_register_failed)
+            is PushSettingsEvent.OpenSettings -> open(event.screen)
         }
     }
 
-    private fun bindRow(row: ListRow, action: MaterialButton, open: () -> Unit) {
+    private fun bindRow(row: ListRow, action: MaterialButton, screen: PushSettingsScreen) {
         action.contentDescription = getString(R.string.push_permission_open_settings, row.title)
-        row.setOnClickListener { open() }
-        action.setOnClickListener { open() }
+        row.setOnClickListener { dispatch(PushSettingsIntent.OpenSettings(screen)) }
+        action.setOnClickListener { dispatch(PushSettingsIntent.OpenSettings(screen)) }
     }
 
     private fun renderRow(row: ListRow, granted: Boolean) {
-        row.subtitle = getString(permissionStatus(granted))
-        row.subtitleTone = permissionTone(granted)
+        row.subtitle = getString(if (granted) R.string.push_permission_granted else R.string.push_permission_missing)
+        row.subtitleTone = if (granted) Tone.NEUTRAL else Tone.ERROR
     }
 
-    private fun permissionStatus(granted: Boolean): Int = when {
-        granted -> R.string.push_permission_granted
-        else -> R.string.push_permission_missing
-    }
-
-    private fun permissionTone(granted: Boolean): Tone = when {
-        granted -> Tone.NEUTRAL
-        else -> Tone.ERROR
-    }
-
-    private fun registrationText(registration: PushRegistration): String = when {
-        registration.busy -> getString(R.string.push_registering)
+    private fun registrationText(registration: PushRegistration, busy: Boolean): String = when {
+        busy -> getString(R.string.push_registering)
         registration.token == null -> getString(R.string.push_not_registered)
         else -> getString(R.string.push_registered_hint, registration.tokenHint())
     }
 
-    private fun open(intent: android.content.Intent) {
-        runCatching { startActivity(intent) }
-            .onFailure { failure ->
-                if (failure is ActivityNotFoundException) showError(R.string.push_settings_missing)
-            }
+    private fun open(screen: PushSettingsScreen) {
+        runCatching { startActivity(screen.intent(requireContext())) }
+            .onFailure { showError(R.string.push_settings_missing) }
     }
 }

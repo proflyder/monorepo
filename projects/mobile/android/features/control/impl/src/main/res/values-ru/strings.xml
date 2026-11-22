@@ -81,4 +81,7 @@
         <item>сб</item>
         <item>вс</item>
     </string-array>
+    <string name="control_profile_personal">Личный</string>
+    <string name="control_profile_work">Рабочий</string>
+    <string name="control_profile_chip">Профиль ассистента: %1$s</string>
 </resources>

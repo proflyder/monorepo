@@ -8,7 +8,6 @@ import androidx.recyclerview.widget.DiffUtil
 import com.google.android.material.color.MaterialColors
 import dev.proflyder.home.core.model.HealthLevel
 import dev.proflyder.home.core.ui.AdapterCallback
-import dev.proflyder.home.core.ui.BaseAdapterCallback
 import dev.proflyder.home.core.ui.BaseListAdapter
 import dev.proflyder.home.core.ui.BaseViewHolder
 import dev.proflyder.home.core.ui.ViewBinding
@@ -19,13 +18,7 @@ import dev.proflyder.home.feature.system.impl.databinding.ItemSystemNoteBinding
 import dev.proflyder.home.feature.system.impl.databinding.ItemSystemRowBinding
 import dev.proflyder.home.feature.system.impl.databinding.ItemSystemStatusBinding
 
-internal interface SystemAdapterCallback : AdapterCallback<SystemRow> {
-    fun onSectionClick(section: SystemSection)
-}
-
-internal open class SystemAdapterCallbacks : BaseAdapterCallback<SystemRow>(), SystemAdapterCallback {
-    override fun onSectionClick(section: SystemSection) = Unit
-}
+private typealias SystemAdapterCallback = AdapterCallback<SystemRow>
 
 private typealias SystemHolder = BaseViewHolder<SystemRow, ViewBinding, SystemAdapterCallback>
 
@@ -55,8 +48,8 @@ internal fun View.tintLevel(level: HealthLevel) {
 }
 
 internal class SystemAdapter(
-    callback: SystemAdapterCallback,
-) : BaseListAdapter<SystemRow, ViewBinding, SystemAdapterCallback>(callback, SystemDiff) {
+    callback: AdapterCallback<SystemRow>,
+) : BaseListAdapter<SystemRow, ViewBinding, AdapterCallback<SystemRow>>(callback, SystemDiff) {
 
     override fun viewTypeOf(item: SystemRow): Int = when (item) {
         is SystemRow.Status -> TYPE_STATUS
@@ -96,7 +89,7 @@ internal class SystemAdapter(
             views.systemCardLight.tintLevel(card.level)
             views.systemCardTitle.text = card.title
             views.systemCardLines.text = card.lines
-            views.root.setOnClickListener { callback.onSectionClick(card.section) }
+            views.root.setOnClickListener { callback.onItemClick(card) }
         }
     }
 

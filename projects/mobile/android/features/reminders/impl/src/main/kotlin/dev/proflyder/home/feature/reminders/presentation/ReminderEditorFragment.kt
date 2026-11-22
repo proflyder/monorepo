@@ -1,7 +1,6 @@
 package dev.proflyder.home.feature.reminders.presentation
 
 import android.os.Bundle
-import dev.proflyder.home.core.navigation.requireNavigator
 import dev.proflyder.home.core.presentation.ScreenFragment
 import dev.proflyder.home.core.presentation.SwitchBinder
 import dev.proflyder.home.core.presentation.TextBinder
@@ -65,6 +64,7 @@ internal class ReminderEditorFragment :
             }
             ReminderEditorEvent.ConfirmDelete -> confirmDelete()
             is ReminderEditorEvent.Completed -> complete(event.completion)
+            is ReminderEditorEvent.OpenRoute -> navigate(event.route)
         }
     }
 
@@ -75,12 +75,11 @@ internal class ReminderEditorFragment :
     }
 
     private fun complete(completion: ReminderEditorCompletion) {
-        dispatch(ReminderEditorIntent.CompletionShown)
         val message = when (completion) {
             ReminderEditorCompletion.SAVED -> R.string.reminders_saved
             ReminderEditorCompletion.DELETED -> R.string.reminders_deleted
         }
         showMessage(message)
-        requireNavigator().back()
+        dispatch(ReminderEditorIntent.CompletionShown)
     }
 }

@@ -1,5 +1,7 @@
 package dev.proflyder.home.feature.alarms.presentation
 
+import dev.proflyder.home.core.navigation.Route
+import dev.proflyder.home.core.navigation.destination
 import android.content.Context
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
@@ -68,6 +70,7 @@ internal sealed interface AlarmEditorEvent {
     data class PickRepeat(val repeat: RepeatKind, val days: Set<Int>) : AlarmEditorEvent
     data object ConfirmDelete : AlarmEditorEvent
     data class Completed(val completion: AlarmEditorCompletion) : AlarmEditorEvent
+    data class OpenRoute(val route: Route) : AlarmEditorEvent
 }
 
 internal object AlarmDraftCodec : EditorDraftCodec<AlarmEditorDraft> {
@@ -104,7 +107,10 @@ internal class AlarmEditorViewModel(
             is AlarmEditorIntent.SetDate -> edit { copy(onceDate = intent.value) }
             AlarmEditorIntent.Save -> save()
             AlarmEditorIntent.Delete -> delete()
-            AlarmEditorIntent.CompletionShown -> session.consumeCompletion()
+            AlarmEditorIntent.CompletionShown -> {
+                session.consumeCompletion()
+                emit(AlarmEditorEvent.OpenRoute(Route.Back))
+            }
             else -> emitPicker(intent)
         }
     }
@@ -194,7 +200,7 @@ class AlarmEditorViewModelSource internal constructor(
             settings.config.value.endpoint?.baseUrl().orEmpty()
         },
         defaultLabel = context.getString(R.string.alarms_label_default),
-        alarmId = savedState.get<String>(AlarmEditorDestination.ARG_ALARM_ID),
+        alarmId = savedState.destination(AlarmEditorDestination)?.alarmId,
     )
 
     private companion object {

@@ -1,5 +1,6 @@
 package dev.proflyder.home.feature.scenarios
 
+import dev.proflyder.home.core.navigation.RouteArgs
 import androidx.lifecycle.SavedStateHandle
 import dev.proflyder.home.core.config.ConnectionConfig
 import dev.proflyder.home.core.config.ConnectionSettingsStore
@@ -165,7 +166,7 @@ class ScenarioEditorViewModelTest {
         handle: SavedStateHandle = SavedStateHandle(),
         scenarioId: String? = "sc-1",
     ): ScenarioEditorViewModel {
-        scenarioId?.let { handle[ScenarioEditorDestination.ARG_SCENARIO_ID] = it }
+        scenarioId?.let { handle[RouteArgs.KEY] = RouteArgs(ScenarioEditorDestination(it).route) }
         val repository = FakeScenarioRepository(scenarioDelayMillis)
         val saved = SavedEditorState(handle)
         return ScenarioEditorViewModel(

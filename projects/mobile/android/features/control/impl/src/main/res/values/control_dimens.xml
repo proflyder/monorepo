@@ -35,4 +35,5 @@
     <dimen name="control_device_icon_padding">12dp</dimen>
     <dimen name="control_device_text_gap">16dp</dimen>
     <dimen name="control_device_progress">32dp</dimen>
+    <dimen name="control_profile_chip_gap">8dp</dimen>
 </resources>

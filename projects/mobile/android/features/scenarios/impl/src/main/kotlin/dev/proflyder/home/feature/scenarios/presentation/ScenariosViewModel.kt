@@ -1,5 +1,7 @@
 package dev.proflyder.home.feature.scenarios.presentation
 
+import dev.proflyder.home.feature.scenarios.ScenarioEditorDestination
+import dev.proflyder.home.core.navigation.Route
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dev.proflyder.home.core.model.FavoriteKind
@@ -42,13 +44,15 @@ internal sealed interface ScenariosIntent {
     data class Open(val scenario: Scenario) : ScenariosIntent
     data class AskPin(val scenario: Scenario) : ScenariosIntent
     data class TogglePin(val scenario: Scenario) : ScenariosIntent
+    data object Add : ScenariosIntent
+    data object OpenConnection : ScenariosIntent
 }
 
 internal sealed interface ScenariosEvent {
     data class Failure(val failure: RemoteFailure) : ScenariosEvent
     data class Queued(val label: String) : ScenariosEvent
     data class Pinned(val label: String, val pinned: Boolean) : ScenariosEvent
-    data class Open(val scenarioId: String) : ScenariosEvent
+    data class OpenRoute(val route: Route) : ScenariosEvent
     data class ConfirmPin(val scenario: Scenario, val pinned: Boolean) : ScenariosEvent
 }
 
@@ -72,10 +76,16 @@ internal class ScenariosViewModel(
             is ScenariosIntent.Refresh -> refresh(intent.mode)
             is ScenariosIntent.SetEnabled -> setEnabled(intent.scenario, intent.enabled)
             is ScenariosIntent.Run -> run(intent.scenario)
-            is ScenariosIntent.Open -> emit(ScenariosEvent.Open(intent.scenario.id))
+            is ScenariosIntent.Open -> openEditor(intent.scenario.id)
+            ScenariosIntent.Add -> openEditor(null)
+            ScenariosIntent.OpenConnection -> emit(ScenariosEvent.OpenRoute(Route.Tab(CONNECTION_FEATURE)))
             is ScenariosIntent.AskPin -> emit(ScenariosEvent.ConfirmPin(intent.scenario, currentState.isPinned(intent.scenario)))
             is ScenariosIntent.TogglePin -> togglePin(intent.scenario)
         }
+    }
+
+    private fun openEditor(scenarioId: String?) {
+        emit(ScenariosEvent.OpenRoute(Route.Screen(ScenarioEditorDestination(scenarioId))))
     }
 
     private fun refresh(mode: RefreshMode) {
@@ -142,3 +152,5 @@ class ScenariosViewModelSource internal constructor(
         ScenariosViewModel(loadScenarios, setScenarioEnabled, runScenario, favorites, events)
     }
 }
+
+private const val CONNECTION_FEATURE = "connection"

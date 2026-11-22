@@ -20,9 +20,12 @@ import kotlinx.coroutines.coroutineScope
 @ContributesBinding(AppScope::class)
 @Inject
 class HttpSystemRepository(
-    private val client: SystemDashboardClient,
-) : SystemRepository {
-    override suspend fun load(): Outcome<SystemSnapshot> = coroutineScope { loadAll(this) }
+    client: SystemDashboardClient,
+    scope: CoroutineScope,
+) : SystemRepository by PollingSystemRepository(SystemSnapshotLoader(client)::load, scope, SystemRefreshPolicy())
+
+internal class SystemSnapshotLoader(private val client: SystemDashboardClient) {
+    suspend fun load(): Outcome<SystemSnapshot> = coroutineScope { loadAll(this) }
 
     private suspend fun loadAll(scope: CoroutineScope): Outcome<SystemSnapshot> {
         val summary = scope.async { client.summary() }

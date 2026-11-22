@@ -5,6 +5,7 @@ import android.graphics.Rect
 import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.Menu
+import android.view.MenuInflater
 import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
@@ -26,10 +27,13 @@ import androidx.core.view.size
 
 class HomePopupMenu(
     private val anchor: View,
-    @MenuRes menuRes: Int,
+    populate: (Menu) -> Unit,
     private val onItem: (Int) -> Unit,
 ) {
-    private val source = PopupMenu(anchor.context, anchor).apply { inflate(menuRes) }
+    constructor(anchor: View, @MenuRes menuRes: Int, onItem: (Int) -> Unit) :
+        this(anchor, { menu -> MenuInflater(anchor.context).inflate(menuRes, menu) }, onItem)
+
+    private val source = PopupMenu(anchor.context, anchor).apply { populate(menu) }
     private var window: PopupWindow? = null
     private var shownGravity = Gravity.START
     private var shownAnchor = Rect()

@@ -23,7 +23,5 @@ class ControlFeatureEntry : FeatureEntry {
     override val iconRes: Int = R.drawable.control_ic_tab
     override val rootDestination: Destination = ControlListDestination
 
-    override fun supports(destination: Destination): Boolean = destination is ControlListDestination
-
     override fun createFragment(destination: Destination): Fragment = ControlFragment()
 }
