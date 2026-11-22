@@ -118,3 +118,7 @@ dist/
 *.tfvars
 *.tfvars.json
 crash.log
+
+.aswb/
+.ijwb/
+.clwb/

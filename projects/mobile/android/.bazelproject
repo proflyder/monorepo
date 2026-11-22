@@ -1,0 +1,22 @@
+workspace_type: android
+additional_languages:
+  kotlin
+android_sdk_platform: android-36
+java_language_level: 17
+use_query_sync: true
+
+directories:
+  projects/mobile/android
+  platform/android
+  packages/kotlin/core
+
+derive_targets_from_directories: true
+
+test_sources:
+  projects/mobile/android/*/src/test/*
+  projects/mobile/android/*/*/src/test/*
+  projects/mobile/android/*/*/*/src/test/*
+  platform/android/*/src/test/*
+
+build_flags:
+  --config=android
