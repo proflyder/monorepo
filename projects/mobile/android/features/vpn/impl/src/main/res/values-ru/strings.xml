@@ -81,4 +81,11 @@
     <string name="vpn_forget_confirm_body">Сервер удалит ключ этого телефона; VPN не будет работать, пока не выпущен новый профиль.</string>
     <string name="vpn_permission_denied">Разрешение на VPN не выдано</string>
     <string name="vpn_settings_missing">Нечем открыть</string>
+
+    <string name="vpn_open_title">Подключать при открытии вне дома</string>
+    <string name="vpn_open_subtitle">Поднимает туннель до загрузки данных, если телефон не в домашней сети</string>
+    <string name="vpn_route_connecting">Подключаемся к дому…</string>
+    <string name="vpn_toggle_off">VPN выключен. Нажмите, чтобы подключить; удерживайте — настройки VPN</string>
+    <string name="vpn_toggle_connecting">VPN подключается. Нажмите, чтобы остановить; удерживайте — настройки VPN</string>
+    <string name="vpn_toggle_on">VPN включён. Нажмите, чтобы отключить; удерживайте — настройки VPN</string>
 </resources>

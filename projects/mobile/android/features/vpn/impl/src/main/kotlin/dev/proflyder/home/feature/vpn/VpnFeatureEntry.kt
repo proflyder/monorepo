@@ -20,6 +20,7 @@ class VpnFeatureEntry : FeatureEntry {
     override val id: String = "vpn"
     override val order: Int = 8
     override val isTab: Boolean = false
+    override val hidesBottomBar: Boolean = true
     override val titleRes: Int = R.string.vpn_title
     override val iconRes: Int = R.drawable.vpn_ic_shield
     override val rootDestination = VpnDestination

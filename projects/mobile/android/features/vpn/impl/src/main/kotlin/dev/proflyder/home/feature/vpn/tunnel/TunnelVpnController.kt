@@ -20,6 +20,7 @@ import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -41,6 +42,7 @@ class TunnelVpnController(
 ) : VpnController {
     private val state = MutableStateFlow<VpnConnection>(VpnConnection.Disconnected)
     private var job: Job? = null
+    private val loaded = CompletableDeferred<Unit>()
 
     @Volatile
     private var active: VpnTransport? = null
@@ -55,13 +57,19 @@ class TunnelVpnController(
     private suspend fun prepare() {
         settings.load()
         profiles.load()
+        loaded.complete(Unit)
         profiles.ensure()
     }
+
+    suspend fun awaitLoaded() = loaded.await()
+
+    fun hasProfile(): Boolean = knownProfile() != null
 
     fun permissionIntent(): Intent? = VpnService.prepare(context)
 
     override fun connect() {
         if (job?.isActive == true) return
+        state.value = VpnConnection.Connecting(VpnProtocol.WIREGUARD)
         VpnStatusService.start(context)
         job = scope.launch { runWireGuard() }
     }

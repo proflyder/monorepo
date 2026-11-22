@@ -42,6 +42,7 @@ class HomeApplication : Application() {
                 profiles = graph.vpnProfiles,
                 settings = graph.vpnSettings,
                 homeNetwork = graph.vpnHomeNetwork,
+                opener = graph.vpnOpener,
             ),
         )
         configureCrashReporting()

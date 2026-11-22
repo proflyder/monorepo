@@ -38,6 +38,7 @@ class VpnFragment : BaseFragment<FragmentVpnBinding>(FragmentVpnBinding.Companio
         binding.vpnExternal.setOnClickListener { viewModel.openExternal() }
         binding.vpnRoute.onSelected = { index -> viewModel.setRoute(VpnRoute.entries[index]) }
         binding.vpnAuth.onSelected = { index -> viewModel.setAuth(VpnAuth.entries[index]) }
+        binding.vpnOpenRow.switch.setOnClickListener { viewModel.setConnectOnOpen(binding.vpnOpenRow.switch.isChecked) }
         binding.vpnAutoRow.switch.setOnClickListener { viewModel.setAutoConnect(binding.vpnAutoRow.switch.isChecked) }
         binding.vpnCertificateImport.setOnClickListener { certificatePicker.launch(CERTIFICATE_TYPES) }
         binding.vpnCertificateInstall.setOnClickListener { installCertificate() }
@@ -153,6 +154,7 @@ internal object VpnScreenBinder {
         binding.vpnRoute.select(state.settings.route.ordinal)
         binding.vpnRouteHelp.text = context.getString(routeHelp(state.settings.route))
         binding.vpnAutoRow.switch.isChecked = state.settings.autoConnect
+        binding.vpnOpenRow.switch.isChecked = state.settings.connectOnOpen
         binding.vpnHomeStatus.text = context.getString(homeText(state.atHome))
     }
 

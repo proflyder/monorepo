@@ -108,7 +108,18 @@
                 android:padding="@dimen/vpn_card_padding">
 
                 <dev.proflyder.home.core.designsystem.ListRow
+                    android:id="@+id/vpn_open_row"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    app:rowIcon="@drawable/vpn_ic_shield"
+                    app:rowIconTint="?attr/colorPrimary"
+                    app:rowSubtitle="@string/vpn_open_subtitle"
+                    app:rowSwitch="true"
+                    app:rowTitle="@string/vpn_open_title" />
+
+                <dev.proflyder.home.core.designsystem.ListRow
                     android:id="@+id/vpn_auto_row"
+                    android:layout_marginTop="@dimen/ds_space_s"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     app:rowIcon="@drawable/vpn_ic_home_wifi"

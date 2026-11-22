@@ -43,6 +43,7 @@ import dev.proflyder.home.feature.vpn.VpnProfiles
 import dev.proflyder.home.feature.vpn.VpnSettingsStore
 import dev.proflyder.home.feature.vpn.tunnel.HomeNetworkMonitor
 import dev.proflyder.home.feature.vpn.tunnel.TunnelVpnController
+import dev.proflyder.home.feature.vpn.tunnel.VpnOpenConnector
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.BindingContainer
 import dev.zacsweers.metro.DependencyGraph
@@ -84,6 +85,7 @@ interface AppGraph {
     val vpnProfiles: VpnProfiles
     val vpnSettings: VpnSettingsStore
     val vpnHomeNetwork: HomeNetworkMonitor
+    val vpnOpener: VpnOpenConnector
 
     @DependencyGraph.Factory
     fun interface Factory {
@@ -110,7 +112,8 @@ object AppBindings {
 
     @Provides
     @SingleIn(AppScope::class)
-    fun provideNetworkWaiter(context: Context): NetworkWaiter = AndroidNetworkWaiter(context)
+    fun provideNetworkWaiter(context: Context, opener: VpnOpenConnector): NetworkWaiter =
+        HomeRouteNetworkWaiter(AndroidNetworkWaiter(context), opener::awaitReady)
 
     @Provides
     @SingleIn(AppScope::class)

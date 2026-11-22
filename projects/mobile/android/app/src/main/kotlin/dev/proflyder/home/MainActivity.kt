@@ -19,6 +19,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.bottomnavigation.BottomNavigationView
+import com.google.android.material.button.MaterialButton
 import dev.proflyder.home.core.designsystem.HomePopupMenu
 import dev.proflyder.home.core.navigation.FeatureEntry
 import dev.proflyder.home.core.navigation.FeatureRegistry
@@ -43,6 +44,9 @@ import dev.proflyder.home.feature.push.PushDeepLink
 import dev.proflyder.home.feature.push.PushIntents
 import dev.proflyder.home.feature.push.PushPayloads
 import dev.proflyder.home.feature.settings.SettingsDestination
+import dev.proflyder.home.feature.vpn.VpnDestination
+import dev.proflyder.home.feature.vpn.presentation.VpnActivityHost
+import dev.proflyder.home.feature.vpn.impl.R as VpnR
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
@@ -51,9 +55,13 @@ class MainActivity : AppCompatActivity(), NavigatorHost, ViewModelFactoryProvide
     private lateinit var binding: ActivityMainBinding
     private lateinit var features: FeatureRegistry
     internal lateinit var actionsMenu: ToolbarActionsMenu
+    private lateinit var vpnHost: VpnActivityHost
 
     private val bottomNavigation: BottomNavigationView get() = binding.homeNoticeAnchor
     private val toolbar: MaterialToolbar get() = binding.toolbar
+    private val vpnToggle: MaterialButton get() = binding.root.findViewById(VpnR.id.vpn_toolbar_toggle)
+    private val vpnBanner: View get() = binding.root.findViewById(VpnR.id.vpn_route_banner)
+    private var keyboardShown = false
 
     private val controlViewModel: ControlViewModel by viewModels {
         viewModelFactory(ControlViewModel::class.java)
@@ -87,6 +95,8 @@ class MainActivity : AppCompatActivity(), NavigatorHost, ViewModelFactoryProvide
         )
         setupBottomNavigation()
         setupToolbar()
+        vpnHost = VpnActivityHost(this) { router.navigate(VpnDestination) }
+        vpnHost.bind(vpnToggle)
         applyDeepLink(intent)
 
         onBackPressedDispatcher.addCallback(
@@ -104,6 +114,10 @@ class MainActivity : AppCompatActivity(), NavigatorHost, ViewModelFactoryProvide
     }
 
     private suspend fun CoroutineScope.observeAppState() {
+        vpnHost.observe(this, vpnToggle, vpnBanner)
+        launch {
+            router.currentHidesBottomBar.collect { onBottomBarChanged() }
+        }
         launch {
             router.currentTabId.collect(::syncBottomSelection)
         }
@@ -154,6 +168,7 @@ class MainActivity : AppCompatActivity(), NavigatorHost, ViewModelFactoryProvide
             else -> Unit
         }
         AppForeground.onResumed()
+        vpnHost.onForeground()
     }
 
     override fun onStop() {
@@ -254,6 +269,7 @@ class MainActivity : AppCompatActivity(), NavigatorHost, ViewModelFactoryProvide
 
     private fun renderToolbarMode(overlay: Boolean) {
         toolbar.menu.findItem(R.id.action_menu)?.isVisible = !overlay
+        vpnToggle.isVisible = !overlay
         actionsMenu.dismiss()
         renderProfileChip(controlViewModel.state.value, router.currentTabId.value, overlay)
     }
@@ -276,15 +292,25 @@ class MainActivity : AppCompatActivity(), NavigatorHost, ViewModelFactoryProvide
             view.updatePadding(left = sides.left, top = initial.top + insets.topInset(), right = sides.right)
         }
         ViewCompat.setOnApplyWindowInsetsListener(binding.root) { _, insets ->
-            bottomNavigation.isVisible = !insets.keyboardVisible()
+            keyboardShown = insets.keyboardVisible()
+            renderBottomBar()
             insets
         }
         bottomNavigation.applyNavigationInset()
         ViewCompat.setOnApplyWindowInsetsListener(binding.fragmentContainer) { view, insets ->
             val sides = insets.horizontalInsets()
             view.updatePadding(left = sides.left, right = sides.right)
-            insets.forContentBetweenBars(bottomCovered = !insets.keyboardVisible())
+            insets.forContentBetweenBars(bottomCovered = !insets.keyboardVisible() && !router.currentHidesBottomBar.value)
         }
+    }
+
+    private fun onBottomBarChanged() {
+        renderBottomBar()
+        ViewCompat.requestApplyInsets(binding.root)
+    }
+
+    private fun renderBottomBar() {
+        bottomNavigation.isVisible = !keyboardShown && !router.currentHidesBottomBar.value
     }
 
     private companion object {

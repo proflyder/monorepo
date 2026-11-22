@@ -90,6 +90,10 @@ class VpnViewModel(
         }
     }
 
+    fun setConnectOnOpen(enabled: Boolean) {
+        launch { settings.setConnectOnOpen(enabled) }
+    }
+
     fun setAuth(auth: VpnAuth) {
         launch { settings.setAuth(auth) }
     }

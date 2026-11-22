@@ -35,6 +35,8 @@ class DataStoreVpnSettingsStore(
         state.value = VpnSettings(
             route = enumOr(preferences[KEY_ROUTE], VpnRoute.ALL),
             autoConnect = preferences[KEY_AUTO] ?: false,
+            connectOnOpen = preferences[KEY_ON_OPEN] ?: true,
+            permissionAsked = preferences[KEY_PERMISSION_ASKED] ?: false,
             auth = enumOr(preferences[KEY_AUTH], VpnAuth.CERTIFICATE),
             certificateName = preferences[KEY_CERTIFICATE].orEmpty(),
         )
@@ -48,6 +50,16 @@ class DataStoreVpnSettingsStore(
     override suspend fun setAutoConnect(enabled: Boolean) {
         save { it[KEY_AUTO] = enabled }
         state.update { it.copy(autoConnect = enabled) }
+    }
+
+    override suspend fun setConnectOnOpen(enabled: Boolean) {
+        save { it[KEY_ON_OPEN] = enabled }
+        state.update { it.copy(connectOnOpen = enabled) }
+    }
+
+    override suspend fun markPermissionAsked() {
+        save { it[KEY_PERMISSION_ASKED] = true }
+        state.update { it.copy(permissionAsked = true) }
     }
 
     override suspend fun setAuth(auth: VpnAuth) {
@@ -70,6 +82,8 @@ class DataStoreVpnSettingsStore(
     private companion object {
         val KEY_ROUTE = stringPreferencesKey("vpn_route")
         val KEY_AUTO = booleanPreferencesKey("vpn_auto_connect")
+        val KEY_ON_OPEN = booleanPreferencesKey("vpn_connect_on_open")
+        val KEY_PERMISSION_ASKED = booleanPreferencesKey("vpn_permission_asked")
         val KEY_AUTH = stringPreferencesKey("vpn_auth")
         val KEY_CERTIFICATE = stringPreferencesKey("vpn_certificate_name")
     }

@@ -71,6 +71,7 @@ class VpnScreenshotTest {
         assertEquals(binding.root.context.getString(R.string.vpn_disconnect), binding.vpnToggle.text.toString())
         assertTrue(binding.vpnStatusTraffic.visibility == View.VISIBLE)
         assertTrue(binding.vpnAutoRow.switch.isChecked)
+        assertTrue(binding.vpnOpenRow.switch.isChecked)
         save(binding.root, "vpn-light.png")
     }
 

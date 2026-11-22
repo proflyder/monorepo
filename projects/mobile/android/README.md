@@ -116,18 +116,38 @@ notification all open or drive the same controller.
   app process lives. For a guaranteed tunnel use Android always-on VPN: the
   system starts `GoBackend$VpnService`, `GoBackend.setAlwaysOnCallback` calls
   the controller, which connects with the stored profile.
+- Connect on open: **Connect when the app opens away from home** (on by
+  default, `VpnSettings.connectOnOpen`). On every `MainActivity.onStart`
+  `VpnActivityHost` asks `VpnOpenConnector`, which waits for the stored
+  settings and profile, probes the home network right away and applies
+  `OpenConnectRules`: connect only when the phone is not home, the tunnel is
+  not up, a profile exists and the `VpnService` permission is granted. Without
+  the permission the system consent dialog is shown once
+  (`permissionAsked`); later opens skip it. While the decision and the
+  handshake are pending `HomeRouteNetworkWaiter` holds idempotent reads
+  (`NetworkWaiter`, at most 20 s), so screens keep their loading state instead
+  of timing out, and the strip under the toolbar says **Connecting to
+  home…**. At home nothing starts.
+- Toolbar toggle: an icon button (`Widget.Home.IconButton.Standard.M`,
+  `VpnToolbarToggle`) on the main screens shows off / connecting / on; tap
+  toggles the tunnel (asking for the permission when needed), long press opens
+  the VPN screen. The Quick Settings tile stays.
+- The VPN screen hides the bottom tab bar (`FeatureEntry.hidesBottomBar`,
+  `Navigator.currentHidesBottomBar`); content then takes the navigation-bar
+  inset itself.
 - Status: the screen shows state, protocol, connected time and traffic
   (WireGuard). `VpnStatusService` is a foreground service
   (`specialUse`, subtype `vpn_tunnel_status`) with the status and
   **Disconnect**; it stops itself when the VPN is off. `VpnTileService` is a
   toggleable Quick Settings tile; without the VPN permission it opens the VPN
   screen (`home://vpn/main` route).
-- Tests: `features/vpn/api:api_test` (routes, endpoint choice, endpoint
+- Tests: `features/vpn/api:api_test` (connect on open: home / away / no
+  profile / no permission / already up, routes, endpoint choice, endpoint
   switch on network change, no external start after a silent WireGuard, config
   text, handshake policy,
   home address rules, server codes, OpenConnect link, UAPI stats),
   `core/network:network_test` (`VpnProfileClientTest`, golden
-  `fixtures/vpn/*.json`), `features/vpn/impl:screen_test` (stored profile and
+  `fixtures/vpn/*.json`), `features/vpn/impl:screen_test` (toolbar toggle PNGs `vpn-toolbar-{off,connecting,on}.png`, stored profile and
   Robolectric PNGs `vpn-light.png`, `vpn-dark.png`, `vpn-fallback-dark.png`, `vpn-home-dark.png` in
   `TEST_UNDECLARED_OUTPUTS_DIR`).
 

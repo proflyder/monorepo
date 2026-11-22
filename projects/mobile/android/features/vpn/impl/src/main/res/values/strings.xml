@@ -81,4 +81,11 @@
     <string name="vpn_forget_confirm_body">The server removes this phone’s key; the VPN stops working until a new profile is issued.</string>
     <string name="vpn_permission_denied">VPN permission was not granted</string>
     <string name="vpn_settings_missing">No app can open this</string>
+
+    <string name="vpn_open_title">Connect when the app opens away from home</string>
+    <string name="vpn_open_subtitle">Brings the tunnel up before loading data if the phone is not on the home network</string>
+    <string name="vpn_route_connecting">Connecting to home…</string>
+    <string name="vpn_toggle_off">VPN off. Tap to connect, hold for VPN settings</string>
+    <string name="vpn_toggle_connecting">VPN connecting. Tap to stop, hold for VPN settings</string>
+    <string name="vpn_toggle_on">VPN on. Tap to disconnect, hold for VPN settings</string>
 </resources>

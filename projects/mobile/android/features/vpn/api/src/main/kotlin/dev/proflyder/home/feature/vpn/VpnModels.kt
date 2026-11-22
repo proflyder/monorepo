@@ -21,6 +21,8 @@ enum class VpnAuth {
 data class VpnSettings(
     val route: VpnRoute = VpnRoute.ALL,
     val autoConnect: Boolean = false,
+    val connectOnOpen: Boolean = true,
+    val permissionAsked: Boolean = false,
     val auth: VpnAuth = VpnAuth.CERTIFICATE,
     val certificateName: String = "",
 )
@@ -75,6 +77,12 @@ sealed interface VpnConnection {
 val VpnConnection.isActive: Boolean
     get() = this is VpnConnection.Connecting || this is VpnConnection.Connected
 
+enum class HomeRoute {
+    READY,
+    CHECKING,
+    CONNECTING,
+}
+
 interface VpnSettingsStore {
     val settings: StateFlow<VpnSettings>
 
@@ -83,6 +91,10 @@ interface VpnSettingsStore {
     suspend fun setRoute(route: VpnRoute)
 
     suspend fun setAutoConnect(enabled: Boolean)
+
+    suspend fun setConnectOnOpen(enabled: Boolean)
+
+    suspend fun markPermissionAsked()
 
     suspend fun setAuth(auth: VpnAuth)
 
