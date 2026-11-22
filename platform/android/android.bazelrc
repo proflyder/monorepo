@@ -71,5 +71,4 @@ build:android --@rules_android//flags:desugar_java8_libs=false
 build:android --keep_going
 
 build:android --extra_toolchains=//platform/android:kotlin_toolchain
-build:android --persistent_multiplex_android_tools
 build:android --@rules_jvm_external//settings:stamp_manifest=false
