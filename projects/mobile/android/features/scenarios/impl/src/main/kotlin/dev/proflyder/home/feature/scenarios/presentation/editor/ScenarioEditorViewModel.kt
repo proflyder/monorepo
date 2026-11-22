@@ -10,8 +10,10 @@ import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.core.model.Scenario
 import dev.proflyder.home.core.presentation.AppEventBus
+import dev.proflyder.home.core.presentation.RouteNotice
 import dev.proflyder.home.core.presentation.StateViewModel
 import dev.proflyder.home.core.ui.SavedStateViewModelFactory
+import dev.proflyder.home.feature.scenarios.ScenarioEditorDestination
 import dev.proflyder.home.feature.scenarios.ScenarioValidation
 import dev.proflyder.home.feature.scenarios.domain.DeleteScenario
 import dev.proflyder.home.feature.scenarios.domain.LoadScenario
@@ -170,7 +172,7 @@ internal class ScenarioEditorViewModel(
 
     private fun onSaved(result: Outcome<Scenario>) {
         when (result) {
-            is Outcome.Success -> adopt(result.value).also { finish(R.string.scenarios_saved) }
+            is Outcome.Success -> saved(result.value, created = currentState.existing == null)
             is Outcome.Failure -> updateState {
                 copy(saving = false, error = result.failure, prompt = ScenarioPrompt.Conflict.takeIf { result.failure.isScenarioConflict() })
             }
@@ -183,13 +185,19 @@ internal class ScenarioEditorViewModel(
         updateState { copy(saving = true, error = null, prompt = null) }
         launch {
             when (val result = deleteScenario(existing.id)) {
-                is Outcome.Success -> finish(R.string.scenarios_deleted).also { updateState { copy(saving = false) } }
+                is Outcome.Success -> finish(RouteNotice(R.string.scenarios_deleted)).also { updateState { copy(saving = false) } }
                 is Outcome.Failure -> updateState { copy(saving = false, error = result.failure) }
             }
         }
     }
 
-    private fun finish(message: Int) {
+    private fun saved(scenario: Scenario, created: Boolean) {
+        adopt(scenario)
+        val open = Route.Screen(ScenarioEditorDestination(scenario.id)).takeIf { created }
+        finish(RouteNotice(R.string.scenarios_saved, open))
+    }
+
+    private fun finish(message: RouteNotice) {
         appEvents.publish(ScenariosChanged)
         emit(ScenarioEditorEvent.Finished(message))
         emit(ScenarioEditorEvent.OpenRoute(Route.Back))

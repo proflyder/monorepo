@@ -1,10 +1,9 @@
 package dev.proflyder.home.feature.scenarios.presentation.editor
 
+import dev.proflyder.home.core.presentation.bindSwitch
 import dev.proflyder.home.core.designsystem.R as DesignR
 import android.os.Bundle
 import android.widget.ProgressBar
-import androidx.annotation.DrawableRes
-import androidx.annotation.StringRes
 import androidx.core.widget.doAfterTextChanged
 import androidx.fragment.app.DialogFragment
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -12,6 +11,7 @@ import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.core.presentation.ScreenFragment
 import dev.proflyder.home.core.presentation.SwitchBinder
 import dev.proflyder.home.core.presentation.screenViewModel
+import dev.proflyder.home.core.presentation.showNotice
 import dev.proflyder.home.core.ui.applyScrollBottomInset
 import dev.proflyder.home.core.ui.keepFocusedVisible
 import dev.proflyder.home.core.ui.setVisible
@@ -19,8 +19,6 @@ import dev.proflyder.home.core.ui.userMessage
 import dev.proflyder.home.feature.scenarios.impl.R
 import dev.proflyder.home.feature.scenarios.impl.databinding.FragmentScenarioEditorBinding
 import dev.proflyder.home.feature.scenarios.presentation.CatalogPickerDialog
-import dev.proflyder.home.feature.scenarios.presentation.ChoiceSheet
-import dev.proflyder.home.feature.scenarios.presentation.ScenarioFormat
 import dev.proflyder.home.feature.scenarios.presentation.dialog.DelayFormDialog
 import dev.proflyder.home.feature.scenarios.presentation.dialog.EntityConditionFormDialog
 import dev.proflyder.home.feature.scenarios.presentation.dialog.LightFormDialog
@@ -39,6 +37,7 @@ internal class ScenarioEditorFragment : ScreenFragment<
     override val viewModel: ScenarioEditorViewModel by screenViewModel()
 
     private val promptSlot = DialogSlot()
+    private val menus = ScenarioEditorMenus(this, ::dispatch)
     private lateinit var sections: ScenarioDraftSections
     private lateinit var enabled: SwitchBinder
     private lateinit var continueOnError: SwitchBinder
@@ -51,9 +50,10 @@ internal class ScenarioEditorFragment : ScreenFragment<
         scenarioEditorDescription.doAfterTextChanged { dispatch(ScenarioEditorIntent.SetDescription(it?.toString().orEmpty())) }
         enabled = bindSwitch(scenarioEditorEnabled, ScenarioEditorIntent::SetEnabled)
         continueOnError = bindSwitch(scenarioEditorContinueOnError, ScenarioEditorIntent::SetContinueOnError)
-        scenarioEditorAddTrigger.setOnClickListener { showAddTriggerSheet() }
-        scenarioEditorAddCondition.setOnClickListener { showAddConditionSheet() }
-        scenarioEditorAddStep.setOnClickListener { showAddStepSheet() }
+        menus.attach()
+        scenarioEditorAddTrigger.setOnClickListener { menus.open(EditorMenu.TRIGGER) }
+        scenarioEditorAddCondition.setOnClickListener { menus.open(EditorMenu.CONDITION) }
+        scenarioEditorAddStep.setOnClickListener { menus.open(EditorMenu.STEP) }
         scenarioEditorSave.setOnClickListener { dispatch(ScenarioEditorIntent.Save) }
         scenarioEditorDelete.setOnClickListener { dispatch(ScenarioEditorIntent.RequestDelete) }
         scenarioEditorCatalogStatus.setOnClickListener { dispatch(ScenarioEditorIntent.ReloadCatalog) }
@@ -84,7 +84,7 @@ internal class ScenarioEditorFragment : ScreenFragment<
 
     override fun onEvent(event: ScenarioEditorEvent) {
         when (event) {
-            is ScenarioEditorEvent.Finished -> showMessage(event.message)
+            is ScenarioEditorEvent.Finished -> showNotice(event.notice)
             is ScenarioEditorEvent.OpenRoute -> navigate(event.route)
             is ScenarioEditorEvent.Error -> showError(event.message)
         }
@@ -110,8 +110,9 @@ internal class ScenarioEditorFragment : ScreenFragment<
 
     private fun renderPrompt(prompt: ScenarioPrompt?, catalog: CatalogState) {
         val dismiss = { dispatch(ScenarioEditorIntent.DismissPrompt) }
+        menus.renderActions(prompt as? ScenarioPrompt.ChooseAction)
         when {
-            prompt == null -> promptSlot.clear()
+            prompt == null || prompt is ScenarioPrompt.ChooseAction -> promptSlot.clear()
             prompt is ScenarioPrompt.PickEntry && catalog.loading -> promptSlot.show(CATALOG_WAIT, dismiss, ::catalogWait)
             prompt is ScenarioPrompt.PickEntry && catalog.error != null -> promptSlot.show(catalog.error, dismiss) { catalogError(catalog.error) }
             else -> promptSlot.show(prompt to catalog.entries, dismiss) { promptDialog(prompt, catalog) }
@@ -120,7 +121,7 @@ internal class ScenarioEditorFragment : ScreenFragment<
 
     private fun promptDialog(prompt: ScenarioPrompt, catalog: CatalogState) = when (prompt) {
         is ScenarioPrompt.PickEntry -> catalogPicker(prompt, catalog)
-        is ScenarioPrompt.ChooseAction -> actionSheet(prompt)
+        is ScenarioPrompt.ChooseAction -> error("action choice is rendered by ScenarioEditorMenus")
         ScenarioPrompt.ConfirmDelete -> confirmDelete()
         ScenarioPrompt.Conflict -> conflict()
     }
@@ -132,15 +133,6 @@ internal class ScenarioEditorFragment : ScreenFragment<
         onSelect = { dispatch(ScenarioEditorIntent.EntryPicked(it)) },
         onShowSettings = { dispatch(ScenarioEditorIntent.ShowSettingsEntries(it)) },
     ).dialog
-
-    private fun actionSheet(prompt: ScenarioPrompt.ChooseAction) = ChoiceSheet(
-        requireContext(),
-        R.string.scenarios_action_dialog_title,
-        prompt.actions.map { wire -> choice(ScenarioFormat.actionLabel(requireContext(), wire), actionIcon(wire), ScenarioEditorIntent.ActionChosen(wire)) },
-    ).dialog
-
-    private fun actionIcon(wire: String): Int =
-        if (wire == ScenarioPromptFlow.ACTION_SPEAK) R.drawable.scenarios_ic_speak else R.drawable.scenarios_ic_tune
 
     private fun catalogWait() = MaterialAlertDialogBuilder(requireContext())
         .setTitle(R.string.scenarios_catalog_loading)
@@ -167,33 +159,6 @@ internal class ScenarioEditorFragment : ScreenFragment<
         .setPositiveButton(R.string.scenarios_conflict_reload) { _, _ -> dispatch(ScenarioEditorIntent.Reload) }
         .setNegativeButton(android.R.string.cancel) { _, _ -> dispatch(ScenarioEditorIntent.DismissPrompt) }
         .create()
-
-    private fun showAddTriggerSheet() = showMenu(
-        R.string.scenarios_editor_add_trigger_title,
-        choice(R.string.scenarios_editor_add_trigger_time, R.drawable.scenarios_ic_schedule, ScenarioEditorIntent.AddTimeTrigger),
-    )
-
-    private fun showAddConditionSheet() = showMenu(
-        R.string.scenarios_editor_add_condition_title,
-        choice(R.string.scenarios_editor_add_condition_entity, R.drawable.scenarios_ic_devices, ScenarioEditorIntent.AddEntityCondition),
-        choice(R.string.scenarios_editor_add_condition_window, R.drawable.scenarios_ic_schedule, ScenarioEditorIntent.AddTimeWindow),
-    )
-
-    private fun showAddStepSheet() = showMenu(
-        R.string.scenarios_editor_add_step_title,
-        choice(R.string.scenarios_editor_add_action, R.drawable.scenarios_ic_tune, ScenarioEditorIntent.AddCatalogStep),
-        choice(R.string.scenarios_editor_add_speak, R.drawable.scenarios_ic_speak, ScenarioEditorIntent.AddSpeakStep),
-        choice(R.string.scenarios_editor_add_delay, R.drawable.scenarios_ic_timer, ScenarioEditorIntent.AddDelayStep),
-    )
-
-    private fun showMenu(@StringRes title: Int, vararg choices: ChoiceSheet.Choice) =
-        ChoiceSheet(requireContext(), title, choices.toList()).dialog.show()
-
-    private fun choice(@StringRes label: Int, @DrawableRes icon: Int, intent: ScenarioEditorIntent) =
-        choice(getString(label), icon, intent)
-
-    private fun choice(label: String, @DrawableRes icon: Int, intent: ScenarioEditorIntent) =
-        ChoiceSheet.Choice(label, icon) { dispatch(intent) }
 
     private companion object {
         const val CATALOG_WAIT = "catalog_wait"

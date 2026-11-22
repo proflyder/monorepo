@@ -397,3 +397,16 @@ P8–P11 после P1/P2 и между собой независимы; P13 п�
 6. Если фича меняет данные, которые показывает другой экран без реактивного
    стора, опубликовать `AppEvent`, а на другом экране подписаться через
    `eventsOf<T>()`.
+
+## 5. Инфраструктурные пакеты
+
+Не находки аудита, а общие паттерны поверх `core/*`, которые фичи подключают
+вместо самодельных решений.
+
+| # | пакет | состав | статус |
+|---|---|---|---|
+| A1 | **Логи и аналитика** | `AppLogger` (интерфейс в `core/model`; `DebugAppLogger`/`ReleaseAppLogger` в `core/runtime`, `FakeAppLogger` в `core/testing`), выбор по `AppEnvironment`; `AnalyticsTracker` = `CompositeAnalyticsTracker` над `Set<AnalyticsBackend>`, бэкенды включаются по окружению (пока `LogAnalyticsBackend` для debug); `ScreenTracking : AppStartable` шлёт `trackScreen` для каждого возобновлённого `TrackedScreen` (`ScreenFragment`, `ScreenBottomSheet`). detekt `ForbiddenImport` запрещает `android.util.Log` вне `LogcatAppLogger` | сделано в PR #PR_NUMBER |
+| A2 | **Шиты** | `ScreenBottomSheet<VB, S, I, E>` с той же моделью, что `ScreenFragment` (`by screenViewModel()`, `render`/`onEvent`/`dispatch`, общий `IntentSink` для `bindSwitch`/`bindPills`/`bindText`); общие `OptionsSheet` и `WheelSheet` в `core/designsystem`, результат — Fragment Result API. Переведены `AlarmRepeatSheet` и меню редактора сценария (бывший `ChoiceSheet`) | сделано в PR #PR_NUMBER |
+| A3 | **Декорации списков** | `SectionedAdapter` + `StickySectionHeaders` (закреплённый заголовок, тап по нему уходит в заголовок, а не в строку под ним), `GroupDividers` (разделитель только внутри группы), `GroupCards` (скругление первой и последней строки группы). Применено: устройства по комнатам (sticky), история уведомлений (группы по дням) | сделано в PR #PR_NUMBER |
+| A4 | **Уведомление с переходом** | `RouteNotice(message, route)` + `Fragment.showNotice`: снекбар с действием «Открыть» по типизированному `Route`. После создания будильника и сценария | сделано в PR #PR_NUMBER |
+| A5 | **«Назад» в диалогах** | `Fragment.backDispatcher`/`addBackCallback` ищут `OnBackPressedDispatcher` ближайшего диалога, затем Activity | сделано в PR #PR_NUMBER |

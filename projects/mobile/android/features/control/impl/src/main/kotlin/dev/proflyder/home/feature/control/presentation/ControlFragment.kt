@@ -1,5 +1,6 @@
 package dev.proflyder.home.feature.control.presentation
 
+import dev.proflyder.home.core.presentation.addBackCallback
 import android.os.Bundle
 import androidx.activity.OnBackPressedCallback
 import androidx.recyclerview.widget.RecyclerView
@@ -32,7 +33,7 @@ internal class ControlFragment :
         list = ControlListRenderer(binding, ::dispatch)
         speedDial = SpeedDialOverlay(binding.controlRoot, binding.controlQuickFab, ::dispatch)
         binding.controlList.addOnScrollListener(FabOnScroll())
-        requireActivity().onBackPressedDispatcher.addCallback(viewLifecycleOwner, dialBack)
+        addBackCallback(dialBack)
         binding.controlRefresh.setupPullToRefresh { dispatch(ControlIntent.Refresh) }
         binding.controlRetry.setOnClickListener { dispatch(ControlIntent.Refresh) }
         binding.controlOpenConnection.setOnClickListener { dispatch(ControlIntent.OpenConnection) }

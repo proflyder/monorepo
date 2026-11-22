@@ -14,6 +14,8 @@
     <string name="history_count">Saved: %1$d</string>
     <string name="history_clear">Clear</string>
     <string name="history_clear_message">Every saved notification will be removed from this phone. The notifications already shown in the status bar are not affected.</string>
+    <string name="history_day_today">Today</string>
+    <string name="history_day_yesterday">Yesterday</string>
     <string name="history_cleared">History cleared.</string>
     <string name="history_empty">Nothing here yet</string>
     <string name="history_empty_hint">Notifications from Ricardo and find-phone requests this phone receives will appear here.</string>

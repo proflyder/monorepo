@@ -10,6 +10,7 @@ kt_android_library(
     manifest = "src/main/AndroidManifest.xml",
     deps = [
         "//packages/kotlin/core",
+        "//projects/mobile/android/core/model",
         "@maven//:androidx_appcompat_appcompat",
         "@maven//:androidx_core_core_ktx",
         "@maven//:androidx_fragment_fragment_ktx",
@@ -49,6 +50,7 @@ kt_android_local_test(
     test_class = "dev.proflyder.home.core.navigation.FragmentRouterTest",
     deps = [
         ":navigation",
+        "//projects/mobile/android/core/testing",
         "@maven//:androidx_fragment_fragment_ktx",
         "@maven//:junit_junit",
         "@maven//:org_robolectric_robolectric",

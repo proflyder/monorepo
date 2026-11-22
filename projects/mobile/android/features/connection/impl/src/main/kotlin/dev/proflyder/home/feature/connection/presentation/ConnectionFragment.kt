@@ -1,5 +1,6 @@
 package dev.proflyder.home.feature.connection.presentation
 
+import dev.proflyder.home.core.presentation.bindText
 import android.os.Bundle
 import dev.proflyder.home.core.config.RemoteConnectionState
 import dev.proflyder.home.core.config.TokenStatus

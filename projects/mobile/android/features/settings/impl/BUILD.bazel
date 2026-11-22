@@ -13,6 +13,7 @@ metro_android_library(
     view_binding = True,
     deps = [
         "//packages/kotlin/core",
+        "//projects/mobile/android/core/model",
         "//projects/mobile/android/core/navigation",
         "//projects/mobile/android/core/presentation",
         "//projects/mobile/android/core/runtime",

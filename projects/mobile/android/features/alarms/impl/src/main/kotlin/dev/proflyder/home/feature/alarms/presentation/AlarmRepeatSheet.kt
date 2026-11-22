@@ -1,70 +1,54 @@
 package dev.proflyder.home.feature.alarms.presentation
 
 import android.os.Bundle
-import android.view.LayoutInflater
-import android.view.View
-import android.view.ViewGroup
-import androidx.fragment.app.viewModels
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.SavedStateViewModelFactory
-import androidx.lifecycle.lifecycleScope
-import androidx.lifecycle.repeatOnLifecycle
-import com.google.android.material.bottomsheet.BottomSheetDialogFragment
+import androidx.lifecycle.SavedStateHandle
+import androidx.lifecycle.ViewModel
 import dev.proflyder.home.core.model.RepeatKind
 import dev.proflyder.home.core.presentation.CheckableBinder
 import dev.proflyder.home.core.presentation.RadioGroupBinder
+import dev.proflyder.home.core.presentation.ScreenBottomSheet
+import dev.proflyder.home.core.presentation.screenViewModel
+import dev.proflyder.home.core.ui.SavedStateViewModelFactory
 import dev.proflyder.home.core.ui.setVisible
 import dev.proflyder.home.feature.alarms.impl.R
 import dev.proflyder.home.feature.alarms.impl.databinding.SheetAlarmRepeatBinding
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.launch
+import dev.zacsweers.metro.AppScope
+import dev.zacsweers.metro.ClassKey
+import dev.zacsweers.metro.ContributesIntoMap
+import dev.zacsweers.metro.Inject
+import dev.zacsweers.metro.binding
 
-internal class AlarmRepeatSheet : BottomSheetDialogFragment() {
-    private var sheetBinding: SheetAlarmRepeatBinding? = null
+internal class AlarmRepeatSheet :
+    ScreenBottomSheet<SheetAlarmRepeatBinding, AlarmRepeatSheetState, AlarmRepeatIntent, AlarmRepeatEvent>(
+        SheetAlarmRepeatBinding.Companion::inflate,
+    ) {
+    override val viewModel: AlarmRepeatSheetViewModel by screenViewModel()
+
     private var options: RadioGroupBinder<RepeatKind>? = null
     private var days: List<CheckableBinder<*>> = emptyList()
 
-    private val viewModel: AlarmRepeatSheetViewModel by viewModels {
-        SavedStateViewModelFactory(requireActivity().application, this, arguments)
-    }
-
-    override fun onCreateView(
-        inflater: LayoutInflater,
-        container: ViewGroup?,
-        savedInstanceState: Bundle?,
-    ): View = SheetAlarmRepeatBinding.inflate(inflater, container, false).also { sheetBinding = it }.root
-
-    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
-        super.onViewCreated(view, savedInstanceState)
-        val binding = checkNotNull(sheetBinding)
+    override fun onSheetCreated(binding: SheetAlarmRepeatBinding, savedInstanceState: Bundle?) {
         binding.sheetCancel.setOnClickListener { dismiss() }
-        binding.sheetDone.setOnClickListener { viewModel.dispatch(AlarmRepeatIntent.Confirm) }
-        options = RadioGroupBinder(binding.repeatOptions, ::optionId, ::repeatFor) { repeat ->
-            viewModel.dispatch(AlarmRepeatIntent.Choose(repeat))
-        }
+        binding.sheetDone.setOnClickListener { dispatch(AlarmRepeatIntent.Confirm) }
+        options = RadioGroupBinder(binding.repeatOptions, ::optionId, ::repeatFor) { dispatch(AlarmRepeatIntent.Choose(it)) }
         days = dayToggles(binding).mapIndexed { index, toggle ->
-            CheckableBinder(toggle) { selected -> viewModel.dispatch(AlarmRepeatIntent.SetDay(index + 1, selected)) }
+            CheckableBinder(toggle) { selected -> dispatch(AlarmRepeatIntent.SetDay(index + 1, selected)) }
         }
-        viewModel.state.observe { render(it) }
-        viewModel.events.observe { onEvent(it) }
     }
 
-    override fun onDestroyView() {
-        sheetBinding = null
+    override fun onSheetDestroyed() {
         options = null
         days = emptyList()
-        super.onDestroyView()
     }
 
-    private fun render(state: AlarmRepeatSheetState) {
-        val binding = sheetBinding ?: return
+    override fun render(state: AlarmRepeatSheetState) {
         options?.render(state.choice.repeat)
         binding.repeatDaysGroup.setVisible(state.choice.repeat == RepeatKind.CUSTOM)
         days.forEachIndexed { index, day -> day.render(state.choice.days.contains(index + 1)) }
         binding.sheetDone.isEnabled = state.canConfirm
     }
 
-    private fun onEvent(event: AlarmRepeatEvent) {
+    override fun onEvent(event: AlarmRepeatEvent) {
         when (event) {
             is AlarmRepeatEvent.Confirmed -> publish(event.choice)
         }
@@ -79,12 +63,6 @@ internal class AlarmRepeatSheet : BottomSheetDialogFragment() {
             },
         )
         dismiss()
-    }
-
-    private fun <T> Flow<T>.observe(action: (T) -> Unit) {
-        viewLifecycleOwner.lifecycleScope.launch {
-            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) { collect { action(it) } }
-        }
     }
 
     private fun dayToggles(binding: SheetAlarmRepeatBinding) = with(binding) {
@@ -126,4 +104,11 @@ internal class AlarmRepeatSheet : BottomSheetDialogFragment() {
             return AlarmEditorIntent.SetRepeat(repeat, days)
         }
     }
+}
+
+@ContributesIntoMap(AppScope::class, binding = binding<SavedStateViewModelFactory>())
+@ClassKey(AlarmRepeatSheetViewModel::class)
+@Inject
+class AlarmRepeatSheetViewModelSource : SavedStateViewModelFactory {
+    override fun create(savedState: SavedStateHandle): ViewModel = AlarmRepeatSheetViewModel(savedState)
 }

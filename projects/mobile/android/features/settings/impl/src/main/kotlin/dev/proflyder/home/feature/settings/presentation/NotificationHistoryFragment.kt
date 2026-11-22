@@ -8,7 +8,6 @@ import dev.proflyder.home.core.presentation.screenViewModel
 import dev.proflyder.home.core.ui.AdapterCallback
 import dev.proflyder.home.core.ui.applyScrollBottomInset
 import dev.proflyder.home.core.ui.setVisible
-import dev.proflyder.home.feature.push.NotificationHistoryEntry
 import dev.proflyder.home.feature.settings.impl.R
 import dev.proflyder.home.feature.settings.impl.databinding.FragmentNotificationHistoryBinding
 
@@ -20,7 +19,7 @@ internal class NotificationHistoryFragment :
 
     private val callback = object :
         NotificationHistoryAdapterCallback,
-        AdapterCallback<NotificationHistoryEntry> by IntentAdapterCallback(::dispatch, HistoryIntent::Open) {}
+        AdapterCallback<HistoryRow> by IntentAdapterCallback(::dispatch, ::openIntent) {}
 
     private val adapter by lazy { NotificationHistoryAdapter(callback) }
 
@@ -28,6 +27,7 @@ internal class NotificationHistoryFragment :
         binding.historyList.applyScrollBottomInset()
         binding.historyList.layoutManager = LinearLayoutManager(requireContext())
         binding.historyList.adapter = adapter
+        binding.historyList.addHistoryDecorations()
         binding.historyClear.setOnClickListener { confirmClear() }
     }
 
@@ -36,7 +36,7 @@ internal class NotificationHistoryFragment :
     }
 
     override fun render(state: NotificationHistoryUiState) {
-        adapter.submitList(state.entries)
+        adapter.submitList(state.rows)
         binding.historyClear.setVisible(!state.isEmpty)
         binding.historyCount.text = getString(R.string.history_count, state.entries.size)
         binding.historyCount.setVisible(!state.isEmpty)
@@ -49,6 +49,8 @@ internal class NotificationHistoryFragment :
             is HistoryEvent.OpenRoute -> navigate(event.route)
         }
     }
+
+    private fun openIntent(row: HistoryRow): HistoryIntent? = (row as? HistoryRow.Item)?.let { HistoryIntent.Open(it.entry) }
 
     private fun confirmClear() {
         confirm(

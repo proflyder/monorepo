@@ -1,5 +1,7 @@
 package dev.proflyder.home.feature.settings.presentation
 
+import dev.proflyder.home.core.presentation.bindSwitch
+import dev.proflyder.home.core.presentation.bindPills
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View

@@ -14,6 +14,8 @@
     <string name="history_count">Сохранено: %1$d</string>
     <string name="history_clear">Очистить</string>
     <string name="history_clear_message">Все сохранённые уведомления будут удалены с этого телефона. Уведомления, уже показанные в шторке, останутся.</string>
+    <string name="history_day_today">Сегодня</string>
+    <string name="history_day_yesterday">Вчера</string>
     <string name="history_cleared">История очищена.</string>
     <string name="history_empty">Здесь пока пусто</string>
     <string name="history_empty_hint">Здесь появятся уведомления от Рикардо и запросы «где телефон», которые получит этот телефон.</string>

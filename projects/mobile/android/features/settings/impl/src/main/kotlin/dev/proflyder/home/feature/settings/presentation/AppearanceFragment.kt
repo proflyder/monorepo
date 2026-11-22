@@ -1,5 +1,6 @@
 package dev.proflyder.home.feature.settings.presentation
 
+import dev.proflyder.home.core.presentation.bindPills
 import android.content.res.ColorStateList
 import android.os.Bundle
 import android.view.LayoutInflater

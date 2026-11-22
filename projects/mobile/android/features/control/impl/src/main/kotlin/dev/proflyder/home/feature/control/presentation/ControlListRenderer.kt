@@ -2,6 +2,7 @@ package dev.proflyder.home.feature.control.presentation
 
 import androidx.recyclerview.widget.GridLayoutManager
 import dev.proflyder.home.core.designsystem.RevealBinder
+import dev.proflyder.home.core.designsystem.list.StickySectionHeaders
 import dev.proflyder.home.core.ui.ListStateViews
 import dev.proflyder.home.core.ui.setVisible
 import dev.proflyder.home.core.ui.userMessage
@@ -35,6 +36,7 @@ internal class ControlListRenderer(
             spanSizeLookup = ControlSpans(adapter, spanCount, deviceSpan)
         }
         binding.controlList.adapter = adapter
+        StickySectionHeaders().attachTo(binding.controlList)
     }
 
     fun render(state: ControlUiState) {

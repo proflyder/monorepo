@@ -8,6 +8,7 @@ metro_android_library(
     custom_package = "dev.proflyder.home.diagnostics",
     manifest = "src/main/AndroidManifest.xml",
     deps = [
+        "//projects/mobile/android/core/model",
         "//projects/mobile/android/core/network/api",
         "@maven//:com_github_chuckerteam_chucker_library",
         "@maven//:com_squareup_okhttp3_logging_interceptor",

@@ -9,5 +9,6 @@ import org.junit.runners.Suite
     BackoffTest::class,
     ProcessAppForegroundTest::class,
     DeviceIdentityTest::class,
+    ObservabilityTest::class,
 )
 class RuntimeTests

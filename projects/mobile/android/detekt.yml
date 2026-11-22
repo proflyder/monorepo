@@ -40,6 +40,12 @@ style:
     active: true
   UnusedPrivateProperty:
     active: true
+  ForbiddenImport:
+    active: true
+    imports:
+      - value: 'android.util.Log'
+        reason: 'Use AppLogger from core/model; only LogcatAppLogger writes to logcat.'
+    excludes: ['**/core/runtime/src/main/kotlin/dev/proflyder/home/core/runtime/LogcatAppLogger.kt']
 
 formatting:
   active: true

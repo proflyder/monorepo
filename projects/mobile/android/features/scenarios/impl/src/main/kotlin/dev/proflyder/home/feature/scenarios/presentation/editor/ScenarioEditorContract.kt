@@ -1,5 +1,6 @@
 package dev.proflyder.home.feature.scenarios.presentation.editor
 
+import dev.proflyder.home.core.presentation.RouteNotice
 import dev.proflyder.home.core.navigation.Route
 import androidx.annotation.StringRes
 import dev.proflyder.home.core.model.RemoteFailure
@@ -57,7 +58,7 @@ internal sealed interface ScenarioEditorIntent {
 }
 
 internal sealed interface ScenarioEditorEvent {
-    data class Finished(@StringRes val message: Int) : ScenarioEditorEvent
+    data class Finished(val notice: RouteNotice) : ScenarioEditorEvent
     data class OpenRoute(val route: Route) : ScenarioEditorEvent
     data class Error(@StringRes val message: Int) : ScenarioEditorEvent
 }

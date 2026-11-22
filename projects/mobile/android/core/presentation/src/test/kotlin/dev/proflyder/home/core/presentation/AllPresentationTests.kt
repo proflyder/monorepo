@@ -15,5 +15,6 @@ import org.junit.runners.Suite
     ListRefresherTest::class,
     EditorDraftSessionTest::class,
     BindersTest::class,
+    ScreenInfrastructureTest::class,
 )
 class AllPresentationTests

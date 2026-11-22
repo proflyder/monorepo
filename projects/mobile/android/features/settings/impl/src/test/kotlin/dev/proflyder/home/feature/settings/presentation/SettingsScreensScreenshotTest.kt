@@ -13,6 +13,10 @@ import dev.proflyder.home.feature.settings.impl.R
 import dev.proflyder.home.feature.settings.impl.databinding.FragmentNotificationHistoryBinding
 import dev.proflyder.home.feature.settings.impl.databinding.FragmentSettingsBinding
 import java.io.File
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.ZoneOffset
+import org.junit.Assert.assertEquals
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -36,12 +40,45 @@ class SettingsScreensScreenshotTest {
         val themed = theme()
         val binding = FragmentNotificationHistoryBinding.inflate(LayoutInflater.from(themed))
         binding.historyList.layoutManager = LinearLayoutManager(themed)
-        binding.historyList.adapter = NotificationHistoryAdapter(NoopCallback())
-        (binding.historyList.adapter as NotificationHistoryAdapter).submitList(messages(themed))
+        binding.historyList.adapter = NotificationHistoryAdapter(NoopCallback()).apply { submitList(rows(messages(themed))) }
+        binding.historyList.addHistoryDecorations()
         binding.historyCount.text = themed.getString(R.string.history_count, 3)
         binding.historyEmpty.visibility = View.GONE
         savePng(binding.root, "notification-history-dark.png")
     }
+
+    @Test
+    fun theDayHeaderStaysPinnedWhileTheGroupScrollsUnderIt() {
+        val themed = theme()
+        val binding = FragmentNotificationHistoryBinding.inflate(LayoutInflater.from(themed))
+        binding.historyList.layoutManager = LinearLayoutManager(themed)
+        val many = (1..8).flatMap { messages(themed) }.mapIndexed { index, entry -> entry.copy(id = "e$index") }
+        binding.historyList.adapter = NotificationHistoryAdapter(NoopCallback()).apply { submitList(rows(many)) }
+        binding.historyList.addHistoryDecorations()
+        binding.historyEmpty.visibility = View.GONE
+        savePng(binding.root, "notification-history-sticky-dark.png") { binding.historyList.scrollBy(0, SCROLL_PX) }
+    }
+
+    @Test
+    fun historyRowsGroupEntriesByDayWithRelativeLabels() {
+        val zone = ZoneOffset.UTC
+        val today = LocalDate.of(2026, 11, 23)
+        val at = { date: LocalDate -> date.atStartOfDay(zone).toInstant().toEpochMilli() + HOUR_MILLIS }
+        val entries = listOf(today, today, today.minusDays(1), today.minusDays(5)).mapIndexed { index, date ->
+            NotificationHistoryEntry(id = "e$index", type = NotificationHistoryType.NOTIFY, title = "t", body = "b", receivedAtMillis = at(date))
+        }
+
+        val rows = HistoryRows.of(entries, today, zone)
+
+        assertEquals(
+            listOf(HistoryDay.TODAY, HistoryDay.YESTERDAY, HistoryDay.EARLIER),
+            rows.filterIsInstance<HistoryRow.Day>().map { it.day },
+        )
+        assertEquals(listOf("day", "entry", "entry", "day", "entry", "day", "entry"), rows.map { it.key.substringBefore(':') })
+    }
+
+    private fun rows(entries: List<NotificationHistoryEntry>): List<HistoryRow> =
+        HistoryRows.of(entries, LocalDate.now(), ZoneId.systemDefault())
 
     @Test
     fun theEmptyHistoryExplainsWhatWillAppear() {
@@ -86,13 +123,16 @@ class SettingsScreensScreenshotTest {
         com.google.android.material.R.style.Theme_Material3_Dark_NoActionBar,
     )
 
-    private class NoopCallback : BaseAdapterCallback<NotificationHistoryEntry>(),
+    private class NoopCallback : BaseAdapterCallback<HistoryRow>(),
         NotificationHistoryAdapterCallback
 
-    private fun savePng(root: View, name: String) {
+    private fun savePng(root: View, name: String, afterLayout: () -> Unit = {}) {
         val metrics = root.resources.displayMetrics
         val width = (411 * metrics.density).toInt()
         val height = (891 * metrics.density).toInt()
+        root.measure(exactly(width), exactly(height))
+        root.layout(0, 0, width, height)
+        afterLayout()
         root.measure(exactly(width), exactly(height))
         root.layout(0, 0, width, height)
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
@@ -108,5 +148,6 @@ class SettingsScreensScreenshotTest {
         const val MINUTE_MILLIS = 60_000L
         const val HOUR_MILLIS = 3_600_000L
         const val DAY_MILLIS = 86_400_000L
+        const val SCROLL_PX = 700
     }
 }

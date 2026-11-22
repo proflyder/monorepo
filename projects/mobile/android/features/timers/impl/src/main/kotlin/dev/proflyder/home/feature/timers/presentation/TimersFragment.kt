@@ -1,5 +1,6 @@
 package dev.proflyder.home.feature.timers.presentation
 
+import dev.proflyder.home.core.presentation.bindText
 import android.os.Bundle
 import androidx.recyclerview.widget.LinearLayoutManager
 import dev.proflyder.home.core.presentation.RefreshMode

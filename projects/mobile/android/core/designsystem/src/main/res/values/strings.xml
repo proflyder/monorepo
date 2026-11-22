@@ -55,5 +55,7 @@
     <string name="ds_action_pause">Pause</string>
     <string name="ds_action_resume">Resume</string>
     <string name="ds_action_open_connection">Open Connection</string>
+    <string name="ds_action_open">Open</string>
+    <string name="ds_action_done">Done</string>
     <string name="ds_product_name">Home</string>
 </resources>

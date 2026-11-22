@@ -1,6 +1,7 @@
 package dev.proflyder.home.feature.settings.presentation
 
 import androidx.lifecycle.ViewModel
+import dev.proflyder.home.core.model.Clock
 import dev.proflyder.home.core.navigation.Route
 import dev.proflyder.home.core.presentation.StateViewModel
 import dev.proflyder.home.feature.push.NotificationHistoryEntry
@@ -11,9 +12,12 @@ import dev.zacsweers.metro.ClassKey
 import dev.zacsweers.metro.ContributesIntoMap
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.binding
+import java.time.Instant
+import java.time.ZoneId
 
 internal data class NotificationHistoryUiState(
     val entries: List<NotificationHistoryEntry> = emptyList(),
+    val rows: List<HistoryRow> = emptyList(),
 ) {
     val isEmpty: Boolean get() = entries.isEmpty()
 }
@@ -31,13 +35,17 @@ internal sealed interface HistoryEvent {
 @Inject
 internal class NotificationHistoryViewModel(
     private val store: NotificationHistoryStore,
-) : StateViewModel<NotificationHistoryUiState, HistoryIntent, HistoryEvent>(
-    NotificationHistoryUiState(entries = store.entries.value),
-) {
+    private val clock: Clock,
+) : StateViewModel<NotificationHistoryUiState, HistoryIntent, HistoryEvent>(NotificationHistoryUiState()) {
+    private val zone: ZoneId = ZoneId.systemDefault()
+
     init {
         launch { store.load() }
-        launch { store.entries.collect { stored -> updateState { copy(entries = stored) } } }
+        launch { store.entries.collect { stored -> updateState { copy(entries = stored, rows = rowsOf(stored)) } } }
     }
+
+    private fun rowsOf(entries: List<NotificationHistoryEntry>): List<HistoryRow> =
+        HistoryRows.of(entries, Instant.ofEpochMilli(clock.wallMillis()).atZone(zone).toLocalDate(), zone)
 
     override fun handle(intent: HistoryIntent) {
         when (intent) {

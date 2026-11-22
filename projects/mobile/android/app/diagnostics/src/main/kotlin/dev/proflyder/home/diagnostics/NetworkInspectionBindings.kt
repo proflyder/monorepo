@@ -1,10 +1,11 @@
 package dev.proflyder.home.diagnostics
 
 import android.content.Context
-import android.util.Log
 import com.chuckerteam.chucker.api.ChuckerCollector
 import com.chuckerteam.chucker.api.ChuckerInterceptor
 import com.chuckerteam.chucker.api.RetentionManager
+import dev.proflyder.home.core.model.AppLogger
+import dev.proflyder.home.core.model.debug
 import dev.proflyder.home.core.network.NetworkInspection
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.BindingContainer
@@ -26,7 +27,7 @@ object NetworkInspectionBindings {
     @IntoSet
     @NetworkInspection
     @SingleIn(AppScope::class)
-    fun provideLogging(): Interceptor = HttpLoggingInterceptor { message -> Log.d(LOG_TAG, message) }.apply {
+    fun provideLogging(logger: AppLogger): Interceptor = HttpLoggingInterceptor { message -> logger.debug(LOG_TAG, message) }.apply {
         level = HttpLoggingInterceptor.Level.BODY
         redactHeader(REDACTED_HEADER)
     }

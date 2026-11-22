@@ -1,5 +1,6 @@
 package dev.proflyder.home.feature.time.presentation
 
+import dev.proflyder.home.core.presentation.bindPills
 import android.os.Bundle
 import androidx.fragment.app.Fragment
 import androidx.viewpager2.adapter.FragmentStateAdapter

@@ -2,6 +2,7 @@ package dev.proflyder.home.feature.control.presentation
 
 import android.view.LayoutInflater
 import android.view.ViewGroup
+import dev.proflyder.home.core.designsystem.list.SectionedAdapter
 import dev.proflyder.home.core.presentation.IntentAdapterCallback
 import dev.proflyder.home.core.presentation.KeyedDiff
 import dev.proflyder.home.core.ui.AdapterCallback
@@ -30,7 +31,10 @@ internal val ControlDiff = KeyedDiff<ControlItem>(key = { it.key })
 
 internal class ControlAdapter(
     callback: ControlAdapterCallback,
-) : BaseListAdapter<ControlItem, ViewBinding, ControlAdapterCallback>(callback, ControlDiff) {
+) : BaseListAdapter<ControlItem, ViewBinding, ControlAdapterCallback>(callback, ControlDiff),
+    SectionedAdapter {
+    override fun isSectionHeader(position: Int): Boolean = getItem(position) is ControlItem.Header
+
     override fun viewTypeOf(item: ControlItem): Int = ControlViewType.of(item).ordinal
 
     override fun onCreateHolder(inflater: LayoutInflater, parent: ViewGroup, viewType: Int): ControlHolder =
