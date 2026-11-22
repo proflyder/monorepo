@@ -117,6 +117,8 @@ test_suite(
         "//projects/mobile/android/features/push/impl:audio_test",
         "//projects/mobile/android/features/push/impl:identity_test",
         "//projects/mobile/android/features/push/impl:registration_policy_test",
+        "//projects/mobile/android/features/push/impl:registrar_test",
+        "//projects/mobile/android/features/time/impl:time_test",
         "//projects/mobile/android/features/reminders/impl:view_model_test",
         "//projects/mobile/android/features/timers/impl:view_model_test",
         "//projects/mobile/android/features/vpn/impl:screen_test",
