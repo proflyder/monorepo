@@ -42,6 +42,7 @@ metro_android_library(
 
 kt_android_local_test(
     name = "impl_test",
+    robolectric_properties_file = "//platform/android:robolectric-none.properties",
     srcs = [
         "src/test/kotlin/dev/proflyder/home/feature/push/AllPushImplTests.kt",
     ],
@@ -58,6 +59,7 @@ kt_android_local_test(
 
 kt_android_local_test(
     name = "registration_policy_test",
+    robolectric_properties_file = "//platform/android:robolectric-none.properties",
     srcs = ["src/test/kotlin/dev/proflyder/home/feature/push/PushRegistrationPolicyTest.kt"],
     associates = [":impl"],
     custom_package = "dev.proflyder.home.feature.push.impl",
@@ -74,6 +76,7 @@ kt_android_local_test(
 
 kt_android_local_test(
     name = "registrar_test",
+    robolectric_properties_file = "//platform/android:robolectric-none.properties",
     srcs = ["src/test/kotlin/dev/proflyder/home/feature/push/HomePushRegistrarTest.kt"],
     associates = [":impl"],
     custom_package = "dev.proflyder.home.feature.push.impl",

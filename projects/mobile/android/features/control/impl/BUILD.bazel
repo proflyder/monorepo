@@ -123,6 +123,7 @@ kt_android_local_test(
 
 kt_android_local_test(
     name = "control_logic_test",
+    robolectric_properties_file = "//platform/android:robolectric-none.properties",
     srcs = glob(
         ["src/test/kotlin/**/*.kt"],
         exclude = [
@@ -154,6 +155,7 @@ kt_android_local_test(
 
 kt_android_local_test(
     name = "task_payloads_test",
+    robolectric_properties_file = "//platform/android:robolectric-none.properties",
     srcs = ["src/test/kotlin/dev/proflyder/home/feature/control/data/ControlTaskPayloadsTest.kt"],
     associates = [":impl"],
     custom_package = "dev.proflyder.home.feature.control.impl",

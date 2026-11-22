@@ -37,6 +37,7 @@ metro_android_library(
 
 kt_android_local_test(
     name = "selection_animation_test",
+    robolectric_properties_file = "//platform/android:robolectric-none.properties",
     srcs = [
         "src/test/kotlin/dev/proflyder/home/feature/alarms/domain/SaveAlarmLabelTest.kt",
         "src/test/kotlin/dev/proflyder/home/feature/alarms/presentation/AlarmCardModeTest.kt",

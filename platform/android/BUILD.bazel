@@ -59,6 +59,7 @@ genrule(
 )
 
 exports_files([
+    "robolectric-none.properties",
     "defs.bzl",
     "detekt.bzl",
     "lint.bzl",

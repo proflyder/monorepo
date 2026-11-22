@@ -36,6 +36,7 @@ metro_android_library(
 
 kt_android_local_test(
     name = "view_model_test",
+    robolectric_properties_file = "//platform/android:robolectric-none.properties",
     srcs = glob(["src/test/kotlin/**/*.kt"]),
     associates = [":impl"],
     custom_package = "dev.proflyder.home.feature.reminders.impl",
