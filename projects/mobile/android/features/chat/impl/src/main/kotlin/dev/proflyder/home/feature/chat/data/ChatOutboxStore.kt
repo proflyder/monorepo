@@ -7,23 +7,13 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import dev.proflyder.home.core.model.ChatAttachmentKind
 import dev.proflyder.home.core.model.ChatQuote
 import dev.proflyder.home.core.model.ChatRole
+import dev.proflyder.home.core.model.LocalJson
 import dev.proflyder.home.core.operation.suspendRunCatching
 import java.io.IOException
 import kotlinx.coroutines.flow.first
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonBuilder
-
-private val OutboxJson = Json { lenientWire() }
-
-private fun JsonBuilder.lenientWire() {
-    ignoreUnknownKeys = true
-    coerceInputValues = true
-    explicitNulls = false
-    encodeDefaults = true
-}
 
 internal interface ChatOutboxStore {
     suspend fun load(): List<OutgoingRecord>
@@ -91,10 +81,10 @@ private fun roleOf(name: String?): ChatRole = ChatRole.entries.firstOrNull { it.
 internal object OutboxCodec {
     private val serializer = ListSerializer(OutgoingRecord.serializer())
 
-    fun encode(records: List<OutgoingRecord>): String = OutboxJson.encodeToString(serializer, records)
+    fun encode(records: List<OutgoingRecord>): String = LocalJson.encodeToString(serializer, records)
 
     fun decode(raw: String?): List<OutgoingRecord> = raw
-        ?.let { runCatching { OutboxJson.decodeFromString(serializer, it) }.getOrNull() }
+        ?.let { runCatching { LocalJson.decodeFromString(serializer, it) }.getOrNull() }
         .orEmpty()
         .filter { it.clientId.isNotEmpty() }
 }

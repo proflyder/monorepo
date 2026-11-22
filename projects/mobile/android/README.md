@@ -1554,7 +1554,7 @@ Themes are code in `core/theme`:
   - Wire DTOs of the Connect/JSON APIs and the one `NetworkJson` configuration. Protobuf JSON sends `int64` as a decimal string, so every such field uses `Int64StringSerializer`; it also accepts a plain number because servers differ slightly in codec versions.
 - `core/network/impl/src/test/.../ScenarioJsonTest.kt`
   - Saving the same scenario again must not drop the retained objects.
-- `core/model/.../LocalJson.kt` — the one `Json` for on-device storage (VPN profile, notification history, scenario drafts, Remote Config document).
+- `core/model/.../LocalJson.kt` — the one `Json` for on-device storage and feature payloads (VPN profile, notification history, scenario drafts and step params, chat outbox, Remote Config document); tolerant: unknown keys ignored, nulls omitted, invalid values coerced to defaults.
 - `core/remoteconfig/src/main/kotlin/dev/proflyder/home/core/remoteconfig/FirebaseRemoteConnectionSource.kt`
   - Firebase Remote Config implementation of [RemoteConnectionSource]. Defaults are set locally, the latest activated values are fetched on start, and a real-time config listener activates pushed changes.
 - `core/presentation/src/main/kotlin/dev/proflyder/home/core/presentation/StateViewModel.kt`

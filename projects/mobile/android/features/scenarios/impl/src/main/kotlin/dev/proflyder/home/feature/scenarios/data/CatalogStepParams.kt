@@ -1,33 +1,23 @@
 package dev.proflyder.home.feature.scenarios.data
 
 import dev.proflyder.home.core.model.LightParams
+import dev.proflyder.home.core.model.LocalJson
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonBuilder
-
-private val StepParamsJson = Json { lenientWire() }
-
-private fun JsonBuilder.lenientWire() {
-    ignoreUnknownKeys = true
-    coerceInputValues = true
-    explicitNulls = false
-    encodeDefaults = true
-}
 
 internal object CatalogStepParams {
     const val EMPTY = "{}"
 
-    fun speak(text: String): String = StepParamsJson.encodeToString(SpeakParams.serializer(), SpeakParams(text))
+    fun speak(text: String): String = LocalJson.encodeToString(SpeakParams.serializer(), SpeakParams(text))
 
     fun speakText(raw: String): String = decode(raw, SpeakParams.serializer())?.text.orEmpty()
 
-    fun light(params: LightParams): String = StepParamsJson.encodeToString(LightParamsWire.serializer(), params.toWire())
+    fun light(params: LightParams): String = LocalJson.encodeToString(LightParamsWire.serializer(), params.toWire())
 
     fun lightParams(raw: String): LightParams = decode(raw, LightParamsWire.serializer())?.toModel() ?: LightParams()
 
     private fun <T> decode(raw: String, serializer: kotlinx.serialization.KSerializer<T>): T? =
-        runCatching { StepParamsJson.decodeFromString(serializer, raw.ifBlank { EMPTY }) }.getOrNull()
+        runCatching { LocalJson.decodeFromString(serializer, raw.ifBlank { EMPTY }) }.getOrNull()
 
     @Serializable
     private data class SpeakParams(val text: String = "")
