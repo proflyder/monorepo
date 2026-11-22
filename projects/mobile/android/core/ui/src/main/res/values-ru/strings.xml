@@ -105,7 +105,9 @@
     <string name="ui_empty_reminders">Пока нет напоминаний. Напоминания отправляет домашний сервер.</string>
     <string name="ui_empty_timers">Нет активных таймеров. Таймеры отсчитываются на домашнем сервере.</string>
     <string name="ui_error_protocol">Сервер вернул неожиданный ответ.</string>
-    <string name="ui_error_storage">Не удалось безопасно сохранить настройки: %1$s</string>
+    <string name="ui_error_storage_token">Не удалось безопасно сохранить настройки: токен не зашифровать на этом устройстве.</string>
+    <string name="ui_error_storage_settings">Не удалось безопасно сохранить настройки: запись на устройство не удалась.</string>
+    <string name="ui_error_storage_attachment">Файл вложения больше не найден на устройстве.</string>
     <string name="ui_validation_control_endpoint">Укажите полный адрес http:// или https:// для службы управления домом или оставьте поле пустым.</string>
     <string name="ui_validation_endpoint">Укажите полный адрес http:// или https://.</string>
     <string name="ui_validation_intercom_endpoint">Укажите полный адрес http:// или https:// для службы звонков или оставьте поле пустым.</string>

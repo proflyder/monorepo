@@ -1,5 +1,6 @@
 package dev.proflyder.home.feature.push
 
+import dev.proflyder.home.core.model.DeviceIdentity
 import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.network.PushDevicesApi
 import dev.zacsweers.metro.AppScope
@@ -10,7 +11,7 @@ import dev.zacsweers.metro.SingleIn
 @Inject
 class PushRegistrationPublisher(
     private val client: PushDevicesApi,
-    private val identity: PushDeviceIdentity,
+    private val identity: DeviceIdentity,
 ) {
     internal suspend fun publish(
         token: String,

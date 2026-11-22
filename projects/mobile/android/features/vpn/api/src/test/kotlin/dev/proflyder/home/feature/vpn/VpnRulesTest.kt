@@ -101,10 +101,10 @@ class VpnRulesTest {
 
     @Test
     fun serverCodesMapToProblems() {
-        assertEquals(VpnProfileProblem.CONFLICT, VpnProblems.of(RemoteFailure.Server("http_409", "")))
-        assertEquals(VpnProfileProblem.LIMIT, VpnProblems.of(RemoteFailure.Server("http_429", "")))
-        assertEquals(VpnProfileProblem.UNAVAILABLE, VpnProblems.of(RemoteFailure.Server("http_503", "")))
-        assertEquals(VpnProfileProblem.INVALID, VpnProblems.of(RemoteFailure.Server("http_400", "")))
+        assertEquals(VpnProfileProblem.CONFLICT, VpnProblems.of(RemoteFailure.Server(409, "", "")))
+        assertEquals(VpnProfileProblem.LIMIT, VpnProblems.of(RemoteFailure.Server(429, "", "")))
+        assertEquals(VpnProfileProblem.UNAVAILABLE, VpnProblems.of(RemoteFailure.Server(503, "", "")))
+        assertEquals(VpnProfileProblem.INVALID, VpnProblems.of(RemoteFailure.Server(400, "", "")))
         assertEquals(VpnProfileProblem.OFFLINE, VpnProblems.of(RemoteFailure.Timeout))
         assertEquals(VpnProfileProblem.UNAUTHORIZED, VpnProblems.of(RemoteFailure.Unauthorized))
     }

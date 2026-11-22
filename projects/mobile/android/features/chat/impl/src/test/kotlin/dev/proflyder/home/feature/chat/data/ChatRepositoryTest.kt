@@ -45,7 +45,7 @@ class ChatRepositoryTest {
     @Test
     fun aRejectedMessageStaysWithItsKeyUntilRetried() = runTest {
         val repository = repository()
-        client.sendResults += Outcome.Failure(RemoteFailure.Server("chat_reply_not_found", "gone"))
+        client.sendResults += Outcome.Failure(RemoteFailure.Server(404, "chat_reply_not_found", "gone"))
         repository.send("Ответ", replyTo = null)
         advanceUntilIdle()
         assertEquals("chat_reply_not_found", repository.timeline.value.outbox.single().failureKey)

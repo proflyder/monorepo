@@ -14,6 +14,7 @@ import dev.proflyder.home.core.config.TokenStatus
 import dev.proflyder.home.core.model.Field
 import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.model.RemoteFailure
+import dev.proflyder.home.core.model.StorageReason
 import dev.proflyder.home.core.operation.suspendRunCatching
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesBinding
@@ -21,8 +22,6 @@ import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 import java.io.IOException
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -38,8 +37,8 @@ class AndroidConnectionSettingsStore(
     private val dataStore: DataStore<Preferences>,
     private val cipher: TokenCipher,
     private val remote: RemoteConnectionSource,
+    scope: CoroutineScope,
 ) : ConnectionSettingsStore {
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     private val initial: Preferences = runBlocking {
         dataStore.data.catch { if (it is IOException) emit(emptyPreferences()) else throw it }.first()
@@ -94,7 +93,7 @@ class AndroidConnectionSettingsStore(
             runCatching {
                 cipher.encrypt(normalizedToken)
             }.getOrElse {
-                return Outcome.Failure(RemoteFailure.Storage("The token could not be encrypted on this device."))
+                return Outcome.Failure(RemoteFailure.Storage(StorageReason.TOKEN_ENCRYPTION))
             }
         } else {
             null
@@ -106,7 +105,7 @@ class AndroidConnectionSettingsStore(
             }
         }.onFailure { failure ->
             if (failure !is IOException) throw failure
-            return Outcome.Failure(RemoteFailure.Storage("Settings could not be saved on this device."))
+            return Outcome.Failure(RemoteFailure.Storage(StorageReason.SETTINGS_WRITE))
         }
 
         apply(normalizedToken)

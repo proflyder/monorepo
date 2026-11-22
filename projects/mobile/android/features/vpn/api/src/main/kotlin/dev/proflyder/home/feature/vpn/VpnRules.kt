@@ -123,17 +123,22 @@ object VpnProblems {
         RemoteFailure.NotConfigured -> VpnProfileProblem.NOT_CONFIGURED
         RemoteFailure.Unauthorized -> VpnProfileProblem.UNAUTHORIZED
         is RemoteFailure.Offline, RemoteFailure.Timeout, is RemoteFailure.Tls -> VpnProfileProblem.OFFLINE
-        is RemoteFailure.Server -> ofCode(failure.code)
+        is RemoteFailure.Server -> ofHttpStatus(failure.httpStatus)
         else -> VpnProfileProblem.SERVER
     }
 
-    private fun ofCode(code: String): VpnProfileProblem = when (code) {
-        "http_400" -> VpnProfileProblem.INVALID
-        "http_409" -> VpnProfileProblem.CONFLICT
-        "http_429" -> VpnProfileProblem.LIMIT
-        "http_503" -> VpnProfileProblem.UNAVAILABLE
+    private fun ofHttpStatus(status: Int): VpnProfileProblem = when (status) {
+        HTTP_BAD_REQUEST -> VpnProfileProblem.INVALID
+        HTTP_CONFLICT -> VpnProfileProblem.CONFLICT
+        HTTP_TOO_MANY_REQUESTS -> VpnProfileProblem.LIMIT
+        HTTP_UNAVAILABLE -> VpnProfileProblem.UNAVAILABLE
         else -> VpnProfileProblem.SERVER
     }
+
+    private const val HTTP_BAD_REQUEST = 400
+    private const val HTTP_CONFLICT = 409
+    private const val HTTP_TOO_MANY_REQUESTS = 429
+    private const val HTTP_UNAVAILABLE = 503
 }
 
 object OpenConnectLink {

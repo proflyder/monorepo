@@ -27,7 +27,8 @@ import dev.proflyder.home.core.navigation.FragmentRouter
 import dev.proflyder.home.core.navigation.Navigator
 import dev.proflyder.home.core.navigation.NavigatorHost
 import dev.proflyder.home.core.model.PowerState
-import dev.proflyder.home.core.ui.AppForeground
+import dev.proflyder.home.core.ui.FailureNoticePolicy
+import dev.proflyder.home.core.ui.FailureNoticePolicyProvider
 import dev.proflyder.home.core.ui.applyNavigationInset
 import dev.proflyder.home.core.ui.doOnApplyInsets
 import dev.proflyder.home.core.ui.forContentBetweenBars
@@ -50,7 +51,7 @@ import dev.proflyder.home.feature.vpn.impl.R as VpnR
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
-class MainActivity : AppCompatActivity(), NavigatorHost, ViewModelFactoryProvider {
+class MainActivity : AppCompatActivity(), NavigatorHost, ViewModelFactoryProvider, FailureNoticePolicyProvider {
     internal lateinit var router: FragmentRouter
     private lateinit var binding: ActivityMainBinding
     private lateinit var features: FeatureRegistry
@@ -74,6 +75,8 @@ class MainActivity : AppCompatActivity(), NavigatorHost, ViewModelFactoryProvide
     private var leftForegroundAtNanos = 0L
 
     private val graph get() = (application as HomeApplication).graph
+
+    override val failureNoticePolicy: FailureNoticePolicy get() = graph.failureNoticePolicy
 
     override val navigator: Navigator get() = router
 
@@ -167,7 +170,6 @@ class MainActivity : AppCompatActivity(), NavigatorHost, ViewModelFactoryProvide
             System.nanoTime() - leftAt >= STALE_CONNECTION_NANOS -> graph.httpClient.connectionPool.evictAll()
             else -> Unit
         }
-        AppForeground.onResumed()
     }
 
     override fun onStop() {

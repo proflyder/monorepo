@@ -9,8 +9,6 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.preferencesDataStoreFile
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
 
 object HomeDataStore {
     const val DEFAULT_FILE_NAME = "home_prefs"
@@ -18,8 +16,8 @@ object HomeDataStore {
 
     fun create(
         context: Context,
+        scope: CoroutineScope,
         fileName: String = DEFAULT_FILE_NAME,
-        scope: CoroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob()),
     ): DataStore<Preferences> {
         val appContext = context.applicationContext
         return PreferenceDataStoreFactory.create(

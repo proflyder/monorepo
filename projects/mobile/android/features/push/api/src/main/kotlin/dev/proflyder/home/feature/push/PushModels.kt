@@ -54,12 +54,6 @@ interface PushRegistrar {
     fun permissions(): PushPermissionStatus
 }
 
-interface PushDeviceIdentity {
-    suspend fun deviceId(): String
-
-    fun defaultName(): String
-}
-
 data class PushDeepLink(val route: String) {
     companion object {
         const val SCHEME = "home"

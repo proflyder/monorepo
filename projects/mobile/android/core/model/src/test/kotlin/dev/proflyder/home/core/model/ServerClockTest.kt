@@ -6,9 +6,13 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ServerClockTest {
-    private class FakeTime {
+    private class FakeTime : Clock {
         var wallMillis: Long = 5_000_000L
         var elapsedNanos: Long = 0L
+
+        override fun wallMillis(): Long = wallMillis
+
+        override fun elapsedNanos(): Long = elapsedNanos
 
         fun advanceSeconds(seconds: Long) {
             wallMillis += seconds * 1_000L
@@ -19,7 +23,7 @@ class ServerClockTest {
     @Test
     fun wallClockFallbackIsUsedOnlyBeforeSync() {
         val time = FakeTime()
-        val clock = ServerClock({ time.wallMillis }, { time.elapsedNanos })
+        val clock = ServerClock(time)
         assertFalse(clock.isSynced)
         assertEquals(5_000L, clock.nowUnix())
         time.wallMillis += 30_000L
@@ -29,7 +33,7 @@ class ServerClockTest {
     @Test
     fun syncUsesServerTimestampAndMonotonicElapsedTime() {
         val time = FakeTime()
-        val clock = ServerClock({ time.wallMillis }, { time.elapsedNanos })
+        val clock = ServerClock(time)
 
         clock.sync(5_090L)
         assertTrue(clock.isSynced)
@@ -44,7 +48,7 @@ class ServerClockTest {
     @Test
     fun wallClockCorrectionAfterSyncDoesNotJumpCountdown() {
         val time = FakeTime()
-        val clock = ServerClock({ time.wallMillis }, { time.elapsedNanos })
+        val clock = ServerClock(time)
         clock.sync(5_000L)
 
         val before = clock.nowUnix()
@@ -61,7 +65,7 @@ class ServerClockTest {
     @Test
     fun elapsedTimeAdvancesCountdownAndResyncCorrectsDrift() {
         val time = FakeTime()
-        val clock = ServerClock({ time.wallMillis }, { time.elapsedNanos })
+        val clock = ServerClock(time)
         clock.sync(5_000L)
 
         time.elapsedNanos += 7_500_000_000L
@@ -76,7 +80,7 @@ class ServerClockTest {
     @Test
     fun ignoresInvalidServerTimestamp() {
         val time = FakeTime()
-        val clock = ServerClock({ time.wallMillis }, { time.elapsedNanos })
+        val clock = ServerClock(time)
         clock.sync(0L)
         assertFalse(clock.isSynced)
         assertEquals(5_000L, clock.nowUnix())
@@ -85,7 +89,7 @@ class ServerClockTest {
     @Test
     fun computesTimerRemainingFromMonotonicServerTime() {
         val time = FakeTime()
-        val clock = ServerClock({ time.wallMillis }, { time.elapsedNanos })
+        val clock = ServerClock(time)
         clock.sync(1_000L)
 
         val running = Timer(

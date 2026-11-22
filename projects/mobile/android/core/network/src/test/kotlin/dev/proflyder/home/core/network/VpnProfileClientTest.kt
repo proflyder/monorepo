@@ -68,7 +68,7 @@ class VpnProfileClientTest {
         server.enqueue(MockResponse().setResponseCode(409).setBody(fixture("error_conflict")))
         val failure = (client().register("dev-1", "pub-key", "Pixel") as Outcome.Failure).failure
         assertTrue(failure is RemoteFailure.Server)
-        assertEquals("http_409", (failure as RemoteFailure.Server).code)
+        assertEquals(409, (failure as RemoteFailure.Server).httpStatus)
     }
 
     @Test

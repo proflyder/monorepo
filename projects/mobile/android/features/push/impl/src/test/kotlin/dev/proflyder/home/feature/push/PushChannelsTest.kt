@@ -8,6 +8,8 @@ import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import dev.proflyder.home.core.theme.AppTheme
 import dev.proflyder.home.core.theme.AppearanceController
 import java.io.File
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -85,6 +87,8 @@ class PushChannelsTest {
 
     private fun appearance(context: android.content.Context) = AppearanceController(
         PreferenceDataStoreFactory.create { File(context.filesDir, "push-appearance.preferences_pb") },
+        CoroutineScope(Dispatchers.Unconfined),
+        Dispatchers.Unconfined,
     )
 
     private fun manager(context: android.content.Context): NotificationManager =

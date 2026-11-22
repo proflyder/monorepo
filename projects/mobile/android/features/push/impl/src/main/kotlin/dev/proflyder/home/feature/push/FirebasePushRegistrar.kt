@@ -1,5 +1,7 @@
 package dev.proflyder.home.feature.push
 
+import dev.proflyder.home.core.model.DeviceIdentity
+import dev.proflyder.home.core.text.takeUtf8Bytes
 import android.content.Context
 import com.google.firebase.FirebaseApp
 import com.google.firebase.messaging.FirebaseMessaging
@@ -23,7 +25,7 @@ class FirebasePushRegistrar(
     private val store: PushRegistrationStore,
     private val client: PushDevicesApi,
     private val publisher: PushRegistrationPublisher,
-    private val identity: PushDeviceIdentity,
+    private val identity: DeviceIdentity,
     private val settings: ConnectionSettingsStore,
     private val scope: CoroutineScope,
 ) : PushRegistrar {

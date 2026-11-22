@@ -1,4 +1,4 @@
-package dev.proflyder.home.feature.push
+package dev.proflyder.home.core.runtime
 
 import android.annotation.SuppressLint
 import android.content.Context
@@ -8,7 +8,8 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
-import dev.proflyder.home.feature.push.impl.R
+import dev.proflyder.home.core.model.DeviceIdentity
+import dev.proflyder.home.core.text.takeUtf8Bytes
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
@@ -21,10 +22,10 @@ import kotlinx.coroutines.flow.first
 @SingleIn(AppScope::class)
 @ContributesBinding(AppScope::class)
 @Inject
-class AndroidPushDeviceIdentity(
+class AndroidDeviceIdentity(
     private val context: Context,
     private val dataStore: DataStore<Preferences>,
-) : PushDeviceIdentity {
+) : DeviceIdentity {
     override suspend fun deviceId(): String {
         val stored = dataStore.data.first()[KEY_DEVICE_ID]
         if (!stored.isNullOrBlank()) return stored
@@ -35,7 +36,7 @@ class AndroidPushDeviceIdentity(
 
     override fun defaultName(): String = Build.MODEL.orEmpty().trim()
         .takeUtf8Bytes(NAME_BYTES)
-        .ifEmpty { context.getString(R.string.push_default_device_name) }
+        .ifEmpty { context.getString(R.string.runtime_default_device_name) }
 
     @SuppressLint("HardwareIds")
     private fun generate(): String {

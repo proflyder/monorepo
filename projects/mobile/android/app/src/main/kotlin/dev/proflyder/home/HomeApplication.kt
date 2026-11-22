@@ -3,6 +3,7 @@ package dev.proflyder.home
 import android.app.Application
 import com.google.firebase.FirebaseApp
 import com.google.firebase.crashlytics.FirebaseCrashlytics
+import dev.proflyder.home.core.runtime.AppStartable
 import dev.proflyder.home.di.AppGraph
 import dev.proflyder.home.feature.call.CallEntryPoint
 import dev.proflyder.home.feature.push.PushEntryPoint
@@ -16,7 +17,7 @@ class HomeApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         graph = createGraphFactory<AppGraph.Factory>().create(this)
-        graph.appearance.install(this)
+        graph.startables.forEach(AppStartable::start)
         graph.connectionSettings
         CallEntryPoint.install(
             CallEntryPoint.Dependencies(

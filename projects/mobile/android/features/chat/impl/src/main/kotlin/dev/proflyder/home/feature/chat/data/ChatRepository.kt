@@ -7,6 +7,7 @@ import dev.proflyder.home.core.model.ChatQuote
 import dev.proflyder.home.core.model.ChatSent
 import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.model.RemoteFailure
+import dev.proflyder.home.core.model.StorageReason
 import dev.proflyder.home.core.network.ChatClient
 import dev.proflyder.home.core.network.ChatUnauthorizedException
 import dev.proflyder.home.core.network.NetworkWaiter
@@ -63,9 +64,15 @@ internal const val FAILURE_FILE_MISSING = "chat_attachment_missing"
 
 internal fun RemoteFailure.sendFailureKey(): String? = when (this) {
     is RemoteFailure.Offline, RemoteFailure.Timeout, is RemoteFailure.Tls, is RemoteFailure.ProtocolFailure -> null
-    is RemoteFailure.Server -> code.takeIf { it in PERMANENT_SEND_CODES || it == FAILURE_FILE_MISSING }
+    is RemoteFailure.Server -> code.takeIf { it in PERMANENT_SEND_CODES }
     RemoteFailure.Unauthorized -> FAILURE_UNAUTHORIZED
-    RemoteFailure.NotConfigured, is RemoteFailure.Validation, is RemoteFailure.Storage -> FAILURE_NOT_SENT
+    is RemoteFailure.Storage -> reason.sendFailureKey()
+    RemoteFailure.NotConfigured, is RemoteFailure.Validation -> FAILURE_NOT_SENT
+}
+
+private fun StorageReason.sendFailureKey(): String = when (this) {
+    StorageReason.ATTACHMENT_MISSING -> FAILURE_FILE_MISSING
+    StorageReason.TOKEN_ENCRYPTION, StorageReason.SETTINGS_WRITE -> FAILURE_NOT_SENT
 }
 
 @SingleIn(AppScope::class)
@@ -189,7 +196,7 @@ class ChatRepository(
 
     private suspend fun upload(attachment: LocalAttachment): Outcome<ChatAttachment> {
         val bytes = withContext(clock.io) { File(attachment.path).takeIf { it.isFile }?.readBytes() }
-            ?: return Outcome.Failure(RemoteFailure.Server(FAILURE_FILE_MISSING, attachment.path))
+            ?: return Outcome.Failure(RemoteFailure.Storage(StorageReason.ATTACHMENT_MISSING))
         return client.upload(bytes, attachment.mime, attachment.name)
     }
 

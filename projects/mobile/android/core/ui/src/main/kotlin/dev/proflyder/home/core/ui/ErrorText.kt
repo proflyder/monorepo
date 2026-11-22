@@ -3,6 +3,7 @@ package dev.proflyder.home.core.ui
 import android.content.Context
 import dev.proflyder.home.core.model.Field
 import dev.proflyder.home.core.model.RemoteFailure
+import dev.proflyder.home.core.model.StorageReason
 
 fun RemoteFailure.userMessage(context: Context): String = when (this) {
     RemoteFailure.NotConfigured -> context.getString(R.string.ui_error_not_configured)
@@ -11,11 +12,11 @@ fun RemoteFailure.userMessage(context: Context): String = when (this) {
     is RemoteFailure.Offline -> context.getString(R.string.ui_error_offline)
     is RemoteFailure.Tls -> context.getString(R.string.ui_error_tls)
     is RemoteFailure.Server -> serverText(context, textKey, textArgs) ?: when {
-        message.isNotBlank() -> context.getString(R.string.ui_error_server, code, message)
-        else -> context.getString(R.string.ui_error_server_generic, code)
+        message.isNotBlank() -> context.getString(R.string.ui_error_server, serverCode(context), message)
+        else -> context.getString(R.string.ui_error_server_generic, serverCode(context))
     }
     is RemoteFailure.ProtocolFailure -> context.getString(R.string.ui_error_protocol)
-    is RemoteFailure.Storage -> context.getString(R.string.ui_error_storage, detail)
+    is RemoteFailure.Storage -> context.getString(reason.textRes())
     is RemoteFailure.Validation -> when (field) {
         Field.ENDPOINT -> context.getString(R.string.ui_validation_endpoint)
         Field.CONTROL_ENDPOINT -> context.getString(R.string.ui_validation_control_endpoint)
@@ -37,4 +38,13 @@ fun RemoteFailure.userMessage(context: Context): String = when (this) {
         Field.ENTITY -> context.getString(R.string.ui_validation_entity)
         Field.UNSUPPORTED -> context.getString(R.string.ui_validation_unsupported)
     }
+}
+
+private fun RemoteFailure.Server.serverCode(context: Context): String =
+    code.ifBlank { context.getString(R.string.ui_error_http_status, httpStatus) }
+
+private fun StorageReason.textRes(): Int = when (this) {
+    StorageReason.TOKEN_ENCRYPTION -> R.string.ui_error_storage_token
+    StorageReason.SETTINGS_WRITE -> R.string.ui_error_storage_settings
+    StorageReason.ATTACHMENT_MISSING -> R.string.ui_error_storage_attachment
 }

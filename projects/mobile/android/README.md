@@ -1090,7 +1090,9 @@ with `--config=android`), so manual uploads can pass the same values.
 projects/mobile/android/
   app/                    single Activity, app graph, tabs, Time container, diagnostics
   core/
-    model/                Android-free scheduler domain + server clock
+    model/                Android-free domain: Outcome/RemoteFailure, Clock, ServerClock, DeviceIdentity
+    runtime/              app CoroutineScope, IoDispatcher, Clock/AppForeground/DeviceIdentity impls,
+                          AppStartable, tickerFlow, Backoff
     config/               remote connection contract/JSON parser + redaction
     remoteconfig/         Firebase Remote Config endpoint/timeout source
     settings/             DataStore + Keystore token + legacy migration
@@ -1119,9 +1121,15 @@ is the composition root and the only module that sees every implementation.
 Metro's compiler plugin is applied to every Kotlin Android compilation through
 `//platform/android:defs.bzl`. The graph in `app/.../di/AppGraph.kt` is generated
 at compile time: repositories use `@ContributesBinding`, ViewModel factories and
-navigation entries use `@ContributesIntoSet`, and `AppBindings` provides the
-OkHttp/Retrofit clients, `ServerClock`, the single `DataStore`, and
-`FeatureRegistry`. There is no runtime service locator or hand-written mock
+navigation entries use `@ContributesIntoSet`, `core/runtime` contributes
+`RuntimeBindings` (app `CoroutineScope`, `@IoDispatcher`, `Clock`,
+`ServerClock`, the `Set<AppStartable>` multibinding), and `AppBindings`
+provides the OkHttp/Retrofit clients, `ServerClockSync`, the single
+`DataStore`, and `FeatureRegistry`. Work that has to begin with the process
+is an `AppStartable` contributed with `@ContributesIntoSet`;
+`HomeApplication` only iterates `graph.startables`. No class creates its own
+`CoroutineScope(SupervisorJob() + …)`: long-lived owners inject the app scope
+and `@IoDispatcher`. There is no runtime service locator or hand-written mock
 repository.
 
 ### Server calls
@@ -1492,7 +1500,7 @@ Themes are code in `core/theme`:
 - `core/settings/src/main/kotlin/dev/proflyder/home/core/settings/AndroidConnectionSettingsStore.kt`
   - Stores the bearer token as Keystore-encrypted ciphertext and composes it with the endpoints/timeouts supplied by [RemoteConnectionSource]. The manifest disables Android backup, so the token never leaves the device.
 - `core/testing/src/main/kotlin/dev/proflyder/home/core/testing/TestFixtures.kt` — Loads a JSON payload from the test classpath (`src/test/resources/fixtures`).
-- `core/ui/src/main/kotlin/dev/proflyder/home/core/ui/AppForeground.kt` — When the app last returned to the foreground. Waking the phone races the Wi-Fi/VPN tunnel: a transient network failure in the first seconds after a resume is expected and must not become a blocking error notice.
+- `core/ui/src/main/kotlin/dev/proflyder/home/core/ui/FailureNoticePolicy.kt` — `ForegroundGraceNoticePolicy` hides transient network failures for 6 s after the process returns to the foreground (`AppForeground.state` from `ProcessLifecycleOwner`, stamped with the injected `Clock`); `BaseFragment` asks the hosting Activity through `FailureNoticePolicyProvider`. Waking the phone races the Wi-Fi/VPN tunnel: a transient network failure in the first seconds after a resume is expected and must not become a blocking error notice.
 - `core/ui/src/main/kotlin/dev/proflyder/home/core/ui/BaseFragment.kt`
   - Base for screens backed by a generated ViewBinding. The binding exists strictly between [onCreateView] and [onDestroyView]; it is released there so the Fragment never leaks its view hierarchy.
 - `core/ui/src/main/kotlin/dev/proflyder/home/core/ui/BaseListAdapter.kt`
@@ -1602,7 +1610,7 @@ Themes are code in `core/theme`:
   - Deep link carried by a notification. Only the app's own scheme is accepted, so a server-supplied string can never open another application.
 - `features/push/api/src/test/kotlin/dev/proflyder/home/feature/push/PushApiTest.kt`
   - Built from parts so the literal can never look like a real credential to a secret scanner.
-- `features/push/impl/src/main/kotlin/dev/proflyder/home/feature/push/AndroidPushDeviceIdentity.kt`
+- `core/runtime/src/main/kotlin/dev/proflyder/home/core/runtime/AndroidDeviceIdentity.kt` — `DeviceIdentity` (core/model) shared by push registration and VPN profiles; the DataStore key stays `push_device_id` so existing installs keep their id.
   - The raw ANDROID_ID never leaves the phone: it is hashed with an app salt below, and only the digest is registered. The lint warning targets code that reports hardware identifiers as-is.
   - App-specific salt: the server never sees the raw ANDROID_ID.
 - `features/push/impl/src/main/kotlin/dev/proflyder/home/feature/push/DataStoreNotificationHistoryStore.kt`
@@ -1631,7 +1639,7 @@ Themes are code in `core/theme`:
 - `features/push/impl/src/main/kotlin/dev/proflyder/home/feature/push/PushPayloads.kt` — One decoded FCM message. The server sends two shapes:
 - `features/push/impl/src/main/kotlin/dev/proflyder/home/feature/push/PushPermissions.kt`
   - Do Not Disturb access lives outside the app's own settings page.
-- `features/push/impl/src/main/kotlin/dev/proflyder/home/feature/push/TextLimits.kt` — Truncates to the server's byte bound without splitting a UTF-8 character.
+- `packages/kotlin/core/src/main/kotlin/dev/proflyder/home/core/text/Utf8Limit.kt` — Truncates to the server's byte bound without splitting a UTF-8 character.
 - `features/push/impl/src/main/kotlin/dev/proflyder/home/feature/push/presentation/PushSettingsFragment.kt`
   - «Уведомления и поиск телефона»: the real state of the three permissions the loud path needs and a button that opens the matching system page for each.
 - `features/push/impl/src/main/res/layout/activity_find_phone.xml` — The ringing screen: one button, the reason, and nothing else that could be misread at 3 a.m.
@@ -1642,7 +1650,7 @@ Themes are code in `core/theme`:
   - The ring must be audible without leaving the phone loud. `USAGE_ALARM` already plays through silent and vibrate modes, so the ringer mode is never changed: the old code switched it to normal and restored only the alarm volume, which permanently took the phone …
 - `features/push/impl/src/test/kotlin/dev/proflyder/home/feature/push/NotificationHistoryStoreTest.kt`
   - The history is written by the FCM service, which can run before any screen loaded the log. These tests use the real DataStore file, so a message is never lost by an unbounded read-modify-write.
-- `features/push/impl/src/test/kotlin/dev/proflyder/home/feature/push/PushDeviceIdentityTest.kt`
+- `core/runtime/src/test/kotlin/dev/proflyder/home/core/runtime/DeviceIdentityTest.kt`
   - The stable device identity survives token rotation and is never the raw platform id.
 - `features/reminders/impl/src/main/kotlin/dev/proflyder/home/feature/reminders/presentation/ReminderAdapter.kt`
   - Programmatic `isChecked` must not be reported as a user toggle.
@@ -1663,3 +1671,8 @@ Themes are code in `core/theme`:
 - `features/settings/impl/src/main/res/layout/item_notification_history.xml` — One received message. The type icon carries the spoken label; the chevron appears only when the message has an in-app link.
 - `lint.xml` — Android Lint gate for the Home Android client.
 - `release_info.py` — Read or write the metadata of a distributable Home APK.
+- `core/model/src/main/kotlin/dev/proflyder/home/core/model/Outcome.kt` — `Outcome`/`RemoteFailure` live here, not in the scheduler models. `RemoteFailure.Server.httpStatus` carries the HTTP status as a number (callers such as `VpnProblems` map 400/409/429/503 on it instead of parsing `"http_409"`); `code` is the Connect error code and may be blank. `RemoteFailure.Storage(reason: StorageReason)` has no text: `ErrorText` maps each reason to a resource, and the chat outbox maps `ATTACHMENT_MISSING` to its permanent failure key.
+- `core/model/src/main/kotlin/dev/proflyder/home/core/model/ServerClockSync.kt` — The server clock is synced by one service (`SchedulerServerClockSync`, `GetStatus`), used by both timers and the Home hub; `TimerRepository` no longer owns clock sync.
+- `core/runtime/src/main/kotlin/dev/proflyder/home/core/runtime/TickerFlow.kt` — `tickerFlow(period, initialDelay)` emits at once and then every period while collected; collect it in a ViewModel instead of `while (true) { delay() }` in UI.
+- `core/runtime/src/main/kotlin/dev/proflyder/home/core/runtime/Backoff.kt` — `Backoff(initial, max, factor)` and `Flow.retryWithBackoff`; the attempt counter is the one `retryWhen` passes, so a long-lived stream keeps growing towards `max` until it is resubscribed.
+- `core/runtime/src/main/kotlin/dev/proflyder/home/core/runtime/ProcessAppForeground.kt` — Single source of `AppForeground.state`; registered on `ProcessLifecycleOwner` as an `AppStartable`, so no Activity writes foreground state.
