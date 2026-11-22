@@ -1,17 +1,17 @@
-package dev.proflyder.home.feature.call
+package dev.proflyder.home.feature.call.session
 
 import dev.proflyder.home.core.model.IntercomIceCandidate
 import dev.proflyder.home.core.model.IntercomIceServer
 import dev.proflyder.home.core.model.Outcome
 import kotlinx.coroutines.flow.Flow
 
-sealed interface CallMediaEvent {
+internal sealed interface CallMediaEvent {
     data class LocalCandidate(val candidate: IntercomIceCandidate) : CallMediaEvent
 
     data object Failed : CallMediaEvent
 }
 
-interface CallMedia {
+internal interface CallMedia {
     val events: Flow<CallMediaEvent>
 
     suspend fun prepare(iceServers: List<IntercomIceServer>): Outcome<Unit>
@@ -27,6 +27,6 @@ interface CallMedia {
     fun close()
 }
 
-interface CallMediaFactory {
+internal interface CallMediaFactory {
     fun create(): CallMedia
 }

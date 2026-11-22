@@ -12,15 +12,8 @@ import android.os.Looper
 import android.telecom.CallEndpoint
 import androidx.annotation.RequiresApi
 import androidx.core.content.ContextCompat
-import dev.proflyder.home.feature.call.AudioDevice
-import dev.proflyder.home.feature.call.AudioDeviceKind
-import dev.proflyder.home.feature.call.CallAudioController
-import dev.proflyder.home.feature.call.CallAudioRoute
-import dev.proflyder.home.feature.call.CallAudioRouteState
-import dev.proflyder.home.feature.call.audioRoutesFor
 import dev.proflyder.home.feature.call.telecom.CallTelecomBridge
 import dev.zacsweers.metro.AppScope
-import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 import kotlinx.coroutines.CoroutineScope
@@ -31,9 +24,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 @SingleIn(AppScope::class)
-@ContributesBinding(AppScope::class)
 @Inject
-class AndroidCallAudioController(
+internal class AndroidCallAudioController(
     private val context: Context,
     private val telecomBridge: CallTelecomBridge,
     private val scope: CoroutineScope,

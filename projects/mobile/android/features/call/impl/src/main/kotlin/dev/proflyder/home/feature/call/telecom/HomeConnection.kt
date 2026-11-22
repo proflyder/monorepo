@@ -16,7 +16,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
-class HomeConnection(
+internal class HomeConnection(
     private val controller: CallController,
     private val bridge: CallTelecomBridge,
     private val scope: CoroutineScope,

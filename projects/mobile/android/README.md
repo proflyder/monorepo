@@ -414,7 +414,9 @@ CallStyle notification, and an audio-only WebRTC peer connection.
   `GetIceConfig`, and the server-streaming `Watch`. `Watch` uses the Connect
   envelope framing (1 flag byte + 4-byte big-endian length) because bidi
   streaming would require HTTP/2; the stream reconnects with a bounded backoff
-  and also marks the phone online.
+  and also marks the phone online. `Watch` is open only while a call session is
+  in progress: the session opens it before `ListEndpoints` and closes it when
+  the call ends, so an idle app keeps no stream.
 - The phone is always the caller: it calls the first online STATION endpoint,
   otherwise the first STATION endpoint (which then fails as `UNAVAILABLE` if
   offline), then `RINGING` → `CONNECTING` (the caller creates and sends the
@@ -425,9 +427,11 @@ CallStyle notification, and an audio-only WebRTC peer connection.
   supported and falls back to software; the audio mode is
   `MODE_IN_COMMUNICATION`. `GetIceConfig` supplies STUN/TURN; an empty list
   means host candidates for the LAN/VPN case.
-- `CallManager` is the single source of truth (`StateFlow<CallSnapshot>`)
-  consumed by the screen, the Telecom connection and the notification. The
-  state machine is plain Kotlin and unit-tested on the JVM.
+- `CallController.state` (`StateFlow<CallSnapshot>`) is the single source of
+  truth consumed by the screen, the Telecom connection, the audio route and the
+  notification. `features/call/api` holds only contracts (`CallController`,
+  `CallLauncher`, `CallSnapshot`/`CallPhase`/`CallFailure`); the state machine
+  (`session/CallManager`) and everything else are `internal` in `impl`.
 - Audio output: **Phone**, **Speaker**, **Headset**, **Bluetooth <name>**. On
   API 34+ selection goes through the Telecom `CallEndpoint` API
   (`requestCallEndpointChange`, `onAvailableCallEndpointsChanged`); older
@@ -436,9 +440,33 @@ CallStyle notification, and an audio-only WebRTC peer connection.
   `BLUETOOTH_CONNECT` is denied.
 - Mute disables the local audio track. The in-call screen uses a proximity wake
   lock while the call is active (`showWhenLocked`/`turnScreenOn`).
-- Incoming calls are architectural only: `Watch` recognises an incoming
-  `RINGING` call for this endpoint and declines it. There is no incoming UI yet
-  (`TODO(incoming)` in `CallManager` / `HomeConnectionService`).
+
+### Call: заметки к коду
+
+- Аудиомаршрут живёт по состоянию звонка, а не по экрану: `CallAudioSession`
+  (`AppStartable`) включает `MODE_IN_COMMUNICATION` на `ACTIVE` и выключает на
+  любой другой фазе. `CallActivity` аудио не трогает, поэтому поворот или
+  закрытие экрана не глушат звонок (Robolectric `CallActivityRotationTest`).
+- Уведомление и foreground-сервис запускает `CallForegroundStarter`
+  (`AppStartable`) на переходе в живой звонок; `CallForegroundService` —
+  `LifecycleService`, наблюдает состояние в `lifecycleScope` и сам
+  останавливается на `ENDED`/`IDLE`. Тексты фаз, причин и ошибок — один
+  `CallTexts` для экрана и уведомления.
+- Экран: `CallViewModel` (`StateViewModel`) собирает `CallScreenState` из
+  `CallController.state`, маршрутов аудио, флагов экрана и `tickerFlow` по
+  инъектируемому `Clock` (только в `ACTIVE`). Разрешения, открытие листа
+  маршрутов, mute, «назад» и закрытие — намерения `CallIntent`; разовые
+  действия (`RequestPermissions`, `Finish`, `MoveToBack`) — `CallEvent`.
+  Activity только рисует (`CallScreen`, `CallRouteSheet`,
+  `ProximityScreenLock`) и шлёт намерения.
+- DI: Metro не видит `internal`-вклады из другого модуля, поэтому все
+  реализации `internal` с `@Inject`, а связывание — в одном публичном
+  `CallBindings` (`internal @Binds`/`@IntoSet`). `CallEntryPoint` для
+  `HomeConnectionService`/`CallForegroundService` ставит
+  `CallEntryPointInstaller` (`AppStartable`), `HomeApplication` его не знает.
+- Incoming calls are architectural only: while a session is open `Watch`
+  recognises an incoming `RINGING` call for this endpoint and declines it. There is no incoming UI yet
+  (`HomeConnectionService` cancels incoming connections).
 
 ### Call permissions
 

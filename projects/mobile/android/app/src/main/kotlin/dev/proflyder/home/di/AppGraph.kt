@@ -34,12 +34,7 @@ import dev.proflyder.home.core.settings.HomeDataStore
 import dev.proflyder.home.core.settings.KeystoreTokenCipher
 import dev.proflyder.home.core.settings.TokenCipher
 import dev.proflyder.home.core.ui.ViewModelFactoryRegistry
-import dev.proflyder.home.feature.call.CallAudioController
-import dev.proflyder.home.feature.call.CallController
-import dev.proflyder.home.feature.call.CallCoordinator
 import dev.proflyder.home.feature.call.CallLauncher
-import dev.proflyder.home.feature.call.CallNotificationController
-import dev.proflyder.home.feature.call.telecom.CallTelecomBridge
 import dev.proflyder.home.feature.push.FindPhoneController
 import dev.proflyder.home.feature.push.FirebasePushRegistrar
 import dev.proflyder.home.feature.push.NotificationHistoryRecorder
@@ -75,12 +70,7 @@ interface AppGraph {
 
     val httpClient: OkHttpClient
 
-    val callController: CallController
-    val callAudioController: CallAudioController
-    val callCoordinator: CallCoordinator
-    val callNotifications: CallNotificationController
     val callLauncher: CallLauncher
-    val callTelecomBridge: CallTelecomBridge
 
     val pushRegistrar: FirebasePushRegistrar
     val pushNotifier: PushNotifier

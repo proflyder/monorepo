@@ -7,14 +7,12 @@ import dev.proflyder.home.core.config.ConnectionSettingsStore
 import dev.proflyder.home.feature.call.impl.R
 import dev.proflyder.home.feature.call.presentation.CallActivity
 import dev.zacsweers.metro.AppScope
-import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 
 @SingleIn(AppScope::class)
-@ContributesBinding(AppScope::class)
 @Inject
-class AndroidCallLauncher(
+internal class AndroidCallLauncher(
     private val context: Context,
     private val settings: ConnectionSettingsStore,
 ) : CallLauncher {

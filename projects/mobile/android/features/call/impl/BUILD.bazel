@@ -1,4 +1,6 @@
+load("@rules_kotlin//kotlin:android.bzl", "kt_android_local_test")
 load("//platform/android:defs.bzl", "metro_android_library")
+load(":robolectric_android_all.bzl", "android_all_dir")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -12,19 +14,72 @@ metro_android_library(
     view_binding = True,
     deps = [
         "//packages/kotlin/core",
+        "//projects/mobile/android/core/designsystem",
         "//projects/mobile/android/core/model",
         "//projects/mobile/android/core/network",
+        "//projects/mobile/android/core/presentation",
+        "//projects/mobile/android/core/runtime",
         "//projects/mobile/android/core/settings",
-        "//projects/mobile/android/core/designsystem",
         "//projects/mobile/android/core/ui",
         "//projects/mobile/android/features/call/api",
         "@maven//:androidx_activity_activity_ktx",
         "@maven//:androidx_appcompat_appcompat",
         "@maven//:androidx_core_core_ktx",
         "@maven//:androidx_lifecycle_lifecycle_runtime_ktx",
+        "@maven//:androidx_lifecycle_lifecycle_service",
+        "@maven//:androidx_lifecycle_lifecycle_viewmodel_ktx",
         "@maven//:com_google_android_material_material",
         "@maven//:dev_zacsweers_metro_runtime_jvm",
         "@maven//:io_getstream_stream_webrtc_android",
         "@maven//:org_jetbrains_kotlinx_kotlinx_coroutines_android",
+    ],
+)
+
+android_all_dir(
+    name = "robolectric_android_all_sdk35",
+    jar = "@maven//:org_robolectric_android_all_instrumented",
+    jar_name = "android-all-instrumented-15-robolectric-13954326-i7.jar",
+)
+
+kt_android_local_test(
+    name = "call_test",
+    srcs = glob(["src/test/kotlin/**/*.kt"]),
+    associates = [":impl"],
+    custom_package = "dev.proflyder.home.feature.call.impl",
+    data = [
+        "robolectric-deps.properties",
+        ":robolectric_android_all_sdk35",
+    ],
+    jvm_flags = [
+        "-Drobolectric.offline=true",
+        "--add-opens=java.base/java.lang=ALL-UNNAMED",
+        "--add-opens=java.base/java.io=ALL-UNNAMED",
+        "--add-opens=java.base/java.net=ALL-UNNAMED",
+        "--add-opens=java.base/java.security=ALL-UNNAMED",
+        "--add-opens=java.base/java.text=ALL-UNNAMED",
+        "--add-opens=java.base/java.util=ALL-UNNAMED",
+        "--add-opens=java.base/java.util.concurrent=ALL-UNNAMED",
+        "--add-opens=java.base/jdk.internal.util=ALL-UNNAMED",
+    ],
+    kotlinc_opts = "//platform/android:jvm17_options",
+    manifest = "src/test/AndroidManifest.xml",
+    robolectric_properties_file = "robolectric-deps.properties",
+    test_class = "dev.proflyder.home.feature.call.AllCallImplTests",
+    deps = [
+        "//projects/mobile/android/core/designsystem",
+        "//projects/mobile/android/core/model",
+        "//projects/mobile/android/core/network",
+        "//projects/mobile/android/core/presentation",
+        "//projects/mobile/android/core/runtime",
+        "//projects/mobile/android/core/theme",
+        "//projects/mobile/android/core/ui",
+        "//projects/mobile/android/features/call/api",
+        "@maven//:androidx_appcompat_appcompat",
+        "@maven//:androidx_lifecycle_lifecycle_viewmodel_ktx",
+        "@maven//:com_google_android_material_material",
+        "@maven//:junit_junit",
+        "@maven//:org_jetbrains_kotlinx_kotlinx_coroutines_android",
+        "@maven//:org_jetbrains_kotlinx_kotlinx_coroutines_test",
+        "@maven//:org_robolectric_robolectric",
     ],
 )

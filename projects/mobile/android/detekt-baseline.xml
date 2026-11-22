@@ -80,17 +80,10 @@
     <ID>PublicInImpl:AlarmsViewModel.kt$AlarmsUiState</ID>
     <ID>PublicInImpl:AlarmsViewModel.kt$AlarmsViewModel : BaseViewModel</ID>
     <ID>PublicInImpl:AlarmsViewModel.kt$AlarmsViewModelFactoryContributor : ViewModelFactoryContributor</ID>
-    <ID>PublicInImpl:AndroidCallAudioController.kt$AndroidCallAudioController : CallAudioController</ID>
-    <ID>PublicInImpl:AndroidCallLauncher.kt$AndroidCallLauncher : CallLauncher</ID>
-    <ID>PublicInImpl:AppCallController.kt$AppCallController : CallController</ID>
     <ID>PublicInImpl:AppearanceFragment.kt$AppearanceFragment : BaseFragment</ID>
     <ID>PublicInImpl:AppearanceViewModel.kt$AppearanceViewModel : ViewModel</ID>
     <ID>PublicInImpl:AppearanceViewModel.kt$AppearanceViewModelFactoryContributor : ViewModelFactoryContributor</ID>
-    <ID>PublicInImpl:CallActivity.kt$CallActivity : AppCompatActivity</ID>
-    <ID>PublicInImpl:CallEntryPoint.kt$CallEntryPoint</ID>
-    <ID>PublicInImpl:CallForegroundService.kt$CallForegroundService : Service</ID>
-    <ID>PublicInImpl:CallNotificationControllerImpl.kt$CallNotificationControllerImpl : CallNotificationController</ID>
-    <ID>PublicInImpl:CallTelecomBridge.kt$CallTelecomBridge</ID>
+    <ID>PublicInImpl:CallBindings.kt$CallBindings</ID>
     <ID>PublicInImpl:ChatFeatureEntry.kt$ChatDestination : Destination</ID>
     <ID>PublicInImpl:ChatFeatureEntry.kt$ChatFeatureEntry : FeatureEntry</ID>
     <ID>PublicInImpl:ChatFragment.kt$ChatFragment : BaseFragment</ID>
@@ -142,8 +135,6 @@
     <ID>PublicInImpl:FindPhoneController.kt$FindPhoneTiming</ID>
     <ID>PublicInImpl:FindPhoneService.kt$FindPhoneService : Service</ID>
     <ID>PublicInImpl:FirebasePushRegistrar.kt$FirebasePushRegistrar : PushRegistrar</ID>
-    <ID>PublicInImpl:HomeConnection.kt$HomeConnection : Connection</ID>
-    <ID>PublicInImpl:HomeConnectionService.kt$HomeConnectionService : ConnectionService</ID>
     <ID>PublicInImpl:HomeMessagingService.kt$HomeMessagingService : FirebaseMessagingService</ID>
     <ID>PublicInImpl:HomeNetworkMonitor.kt$HomeNetworkMonitor : HomeReachability</ID>
     <ID>PublicInImpl:HttpSystemRepository.kt$HttpSystemRepository : SystemRepository</ID>
@@ -221,8 +212,6 @@
     <ID>PublicInImpl:SystemViewModel.kt$SystemUiState</ID>
     <ID>PublicInImpl:SystemViewModel.kt$SystemViewModel : BaseViewModel</ID>
     <ID>PublicInImpl:SystemViewModel.kt$SystemViewModelFactoryContributor : ViewModelFactoryContributor</ID>
-    <ID>PublicInImpl:TelecomCoordinator.kt$AndroidCallCoordinator : CallCoordinator</ID>
-    <ID>PublicInImpl:TelecomCoordinator.kt$TelecomAccountRegistry</ID>
     <ID>PublicInImpl:TimerAdapter.kt$TimerRow</ID>
     <ID>PublicInImpl:TimerUseCases.kt$CancelTimer</ID>
     <ID>PublicInImpl:TimerUseCases.kt$LoadTimers</ID>
@@ -255,7 +244,6 @@
     <ID>PublicInImpl:VpnViewModel.kt$VpnUiState</ID>
     <ID>PublicInImpl:VpnViewModel.kt$VpnViewModel : BaseViewModel</ID>
     <ID>PublicInImpl:VpnViewModel.kt$VpnViewModelFactoryContributor : ViewModelFactoryContributor</ID>
-    <ID>PublicInImpl:WebRtcCallMedia.kt$WebRtcCallMediaFactory : CallMediaFactory</ID>
     <ID>PublicInImpl:WireGuardTransport.kt$WireGuardTransport : VpnTransport</ID>
   </CurrentIssues>
 </SmellBaseline>

@@ -16,6 +16,7 @@
     "androidx.lifecycle:lifecycle-process": 995309170,
     "androidx.lifecycle:lifecycle-runtime": 109668457,
     "androidx.lifecycle:lifecycle-runtime-ktx": -185244345,
+    "androidx.lifecycle:lifecycle-service": 311332972,
     "androidx.lifecycle:lifecycle-viewmodel": -1716047459,
     "androidx.lifecycle:lifecycle-viewmodel-ktx": 1022588027,
     "androidx.lifecycle:lifecycle-viewmodel-savedstate": 1920369170,
@@ -143,6 +144,7 @@
     "androidx.lifecycle:lifecycle-runtime-ktx-android:aar": -500721111,
     "androidx.lifecycle:lifecycle-runtime-ktx:aar": -472734262,
     "androidx.lifecycle:lifecycle-runtime:aar": -558294590,
+    "androidx.lifecycle:lifecycle-service:aar": 744922830,
     "androidx.lifecycle:lifecycle-viewmodel-android:aar": -310135756,
     "androidx.lifecycle:lifecycle-viewmodel-ktx:aar": -194454544,
     "androidx.lifecycle:lifecycle-viewmodel-savedstate-android:aar": -1843966927,
@@ -705,6 +707,12 @@
     "androidx.lifecycle:lifecycle-runtime:aar": {
       "shasums": {
         "jar": "9c6ca66c29dff2da8dd60556de19614f9734020394ff994e5acbecddfa89bd85"
+      },
+      "version": "2.11.0"
+    },
+    "androidx.lifecycle:lifecycle-service:aar": {
+      "shasums": {
+        "jar": "262c24e5218c19610c12a07465cf34e2e45b9cf63eb10471013f6ba01ff18522"
       },
       "version": "2.11.0"
     },
@@ -2248,6 +2256,10 @@
       "androidx.lifecycle:lifecycle-runtime-android:aar",
       "org.jetbrains.kotlin:kotlin-stdlib"
     ],
+    "androidx.lifecycle:lifecycle-service:aar": [
+      "androidx.lifecycle:lifecycle-runtime:aar",
+      "org.jetbrains.kotlin:kotlin-stdlib"
+    ],
     "androidx.lifecycle:lifecycle-viewmodel-android:aar": [
       "androidx.annotation:annotation-jvm",
       "androidx.collection:collection-jvm",
@@ -3336,6 +3348,9 @@
       "androidx.lifecycle"
     ],
     "androidx.lifecycle:lifecycle-runtime-android:aar": [
+      "androidx.lifecycle"
+    ],
+    "androidx.lifecycle:lifecycle-service:aar": [
       "androidx.lifecycle"
     ],
     "androidx.lifecycle:lifecycle-viewmodel-android:aar": [
@@ -7664,6 +7679,7 @@
       "androidx.lifecycle:lifecycle-runtime-ktx-android:aar",
       "androidx.lifecycle:lifecycle-runtime-ktx:aar",
       "androidx.lifecycle:lifecycle-runtime:aar",
+      "androidx.lifecycle:lifecycle-service:aar",
       "androidx.lifecycle:lifecycle-viewmodel-android:aar",
       "androidx.lifecycle:lifecycle-viewmodel-ktx:aar",
       "androidx.lifecycle:lifecycle-viewmodel-savedstate-android:aar",

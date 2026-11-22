@@ -9,3 +9,9 @@ fun <VM : ViewModel> Fragment.viewModelFactory(viewModelClass: Class<VM>): ViewM
     check(host is ViewModelFactoryProvider) { "Activity must implement ViewModelFactoryProvider" }
     return host.viewModelFactory(viewModelClass)
 }
+
+fun <VM : ViewModel> android.app.Activity.applicationViewModelFactory(viewModelClass: Class<VM>): ViewModelProvider.Factory {
+    val host = application
+    check(host is ViewModelFactoryProvider) { "Application must implement ViewModelFactoryProvider" }
+    return host.viewModelFactory(viewModelClass)
+}

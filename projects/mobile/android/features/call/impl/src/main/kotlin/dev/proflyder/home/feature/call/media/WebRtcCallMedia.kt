@@ -5,11 +5,10 @@ import dev.proflyder.home.core.model.IntercomIceCandidate
 import dev.proflyder.home.core.model.IntercomIceServer
 import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.model.RemoteFailure
-import dev.proflyder.home.feature.call.CallMedia
-import dev.proflyder.home.feature.call.CallMediaEvent
-import dev.proflyder.home.feature.call.CallMediaFactory
+import dev.proflyder.home.feature.call.session.CallMedia
+import dev.proflyder.home.feature.call.session.CallMediaEvent
+import dev.proflyder.home.feature.call.session.CallMediaFactory
 import dev.zacsweers.metro.AppScope
-import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 import java.util.concurrent.atomic.AtomicBoolean
@@ -29,9 +28,8 @@ import org.webrtc.SdpObserver
 import org.webrtc.SessionDescription
 
 @SingleIn(AppScope::class)
-@ContributesBinding(AppScope::class)
 @Inject
-class WebRtcCallMediaFactory(private val context: Context) : CallMediaFactory {
+internal class WebRtcCallMediaFactory(private val context: Context) : CallMediaFactory {
 
     override fun create(): CallMedia = WebRtcCallMedia(context.applicationContext)
 }
