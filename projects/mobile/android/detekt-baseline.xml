@@ -1,0 +1,262 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>NoDirectStateWrite:AlarmEditorViewModel.kt$AlarmEditorViewModel$mutableState.value = current.copy(saving = true, error = null)</ID>
+    <ID>NoDirectStateWrite:AlarmEditorViewModel.kt$AlarmEditorViewModel$mutableState.value = mutableState.value.copy( loading = false, error = result.failure, loadFailed = true, )</ID>
+    <ID>NoDirectStateWrite:AlarmEditorViewModel.kt$AlarmEditorViewModel$mutableState.value = mutableState.value.copy( saving = false, error = result.failure, )</ID>
+    <ID>NoDirectStateWrite:AlarmEditorViewModel.kt$AlarmEditorViewModel$mutableState.value = mutableState.value.copy( saving = false, existing = result.value, error = null, )</ID>
+    <ID>NoDirectStateWrite:AlarmEditorViewModel.kt$AlarmEditorViewModel$mutableState.value = mutableState.value.copy(loading = true, error = null)</ID>
+    <ID>NoDirectStateWrite:AlarmEditorViewModel.kt$AlarmEditorViewModel$mutableState.value = mutableState.value.copy(saving = false, error = null)</ID>
+    <ID>NoDirectStateWrite:AlarmEditorViewModel.kt$AlarmEditorViewModel$mutableState.value = mutableState.value.copy(saving = true, error = null)</ID>
+    <ID>NoDirectStateWrite:AlarmEditorViewModel.kt$AlarmEditorViewModel$mutableState.value = result.value.toState()</ID>
+    <ID>NoDirectStateWrite:AlarmEditorViewModel.kt$AlarmEditorViewModel$mutableState.value = transform(mutableState.value)</ID>
+    <ID>NoDirectStateWrite:ReminderEditorViewModel.kt$ReminderEditorViewModel$mutableState.value = current.copy(saving = true, error = null)</ID>
+    <ID>NoDirectStateWrite:ReminderEditorViewModel.kt$ReminderEditorViewModel$mutableState.value = mutableState.value.copy( loading = false, error = result.failure, loadFailed = true, )</ID>
+    <ID>NoDirectStateWrite:ReminderEditorViewModel.kt$ReminderEditorViewModel$mutableState.value = mutableState.value.copy( saving = false, error = result.failure, )</ID>
+    <ID>NoDirectStateWrite:ReminderEditorViewModel.kt$ReminderEditorViewModel$mutableState.value = mutableState.value.copy( saving = false, existing = result.value, error = null, )</ID>
+    <ID>NoDirectStateWrite:ReminderEditorViewModel.kt$ReminderEditorViewModel$mutableState.value = mutableState.value.copy(loading = true, error = null)</ID>
+    <ID>NoDirectStateWrite:ReminderEditorViewModel.kt$ReminderEditorViewModel$mutableState.value = mutableState.value.copy(saving = false, error = null)</ID>
+    <ID>NoDirectStateWrite:ReminderEditorViewModel.kt$ReminderEditorViewModel$mutableState.value = mutableState.value.copy(saving = true, error = null)</ID>
+    <ID>NoDirectStateWrite:ReminderEditorViewModel.kt$ReminderEditorViewModel$mutableState.value = result.value.toState()</ID>
+    <ID>NoDirectStateWrite:ReminderEditorViewModel.kt$ReminderEditorViewModel$mutableState.value = transform(mutableState.value)</ID>
+    <ID>NoDirectStateWrite:RemindersViewModel.kt$RemindersViewModel$mutableState.value = mutableState.value.copy( busyId = null, actionError = result.failure, )</ID>
+    <ID>NoDirectStateWrite:RemindersViewModel.kt$RemindersViewModel$mutableState.value = mutableState.value.copy( busyId = null, reminders = mutableState.value.reminders.filterNot { it.id == reminder.id }, )</ID>
+    <ID>NoDirectStateWrite:RemindersViewModel.kt$RemindersViewModel$mutableState.value = mutableState.value.copy( busyId = null, reminders = mutableState.value.reminders.map { if (it.id == result.value.id) result.value else it }, )</ID>
+    <ID>NoDirectStateWrite:RemindersViewModel.kt$RemindersViewModel$mutableState.value = mutableState.value.copy( refreshing = false, loadError = result.failure, )</ID>
+    <ID>NoDirectStateWrite:RemindersViewModel.kt$RemindersViewModel$mutableState.value = mutableState.value.copy( refreshing = false, reminders = result.value.sortedBy { "${it.onceDate}${it.at.hour}${it.at.minute}" }, loadError = null, )</ID>
+    <ID>NoDirectStateWrite:RemindersViewModel.kt$RemindersViewModel$mutableState.value = mutableState.value.copy(actionError = null)</ID>
+    <ID>NoDirectStateWrite:RemindersViewModel.kt$RemindersViewModel$mutableState.value = mutableState.value.copy(busyId = reminder.id, actionError = null)</ID>
+    <ID>NoDirectStateWrite:RemindersViewModel.kt$RemindersViewModel$mutableState.value = mutableState.value.copy(loadError = null)</ID>
+    <ID>NoDirectStateWrite:RemindersViewModel.kt$RemindersViewModel$mutableState.value = mutableState.value.copy(refreshing = mutableState.value.refreshing || !silent, loadError = null)</ID>
+    <ID>NoDirectStateWrite:ScenarioEditorViewModel.kt$ScenarioEditorViewModel$mutableState.value = current.copy(error = RemoteFailure.Validation(Field.UNSUPPORTED))</ID>
+    <ID>NoDirectStateWrite:ScenarioEditorViewModel.kt$ScenarioEditorViewModel$mutableState.value = current.copy(error = failure)</ID>
+    <ID>NoDirectStateWrite:ScenarioEditorViewModel.kt$ScenarioEditorViewModel$mutableState.value = current.copy(saving = true, error = null, conflict = false)</ID>
+    <ID>NoDirectStateWrite:ScenarioEditorViewModel.kt$ScenarioEditorViewModel$mutableState.value = mutableState.value.copy( catalogLoading = false, catalog = result.value.entries, catalogError = null, )</ID>
+    <ID>NoDirectStateWrite:ScenarioEditorViewModel.kt$ScenarioEditorViewModel$mutableState.value = mutableState.value.copy( catalogLoading = false, catalogError = result.failure, )</ID>
+    <ID>NoDirectStateWrite:ScenarioEditorViewModel.kt$ScenarioEditorViewModel$mutableState.value = mutableState.value.copy( draft = transform(mutableState.value.draft), error = null, conflict = false, )</ID>
+    <ID>NoDirectStateWrite:ScenarioEditorViewModel.kt$ScenarioEditorViewModel$mutableState.value = mutableState.value.copy( existing = restoredDraft.restoredExisting(), draft = restoredDraft, )</ID>
+    <ID>NoDirectStateWrite:ScenarioEditorViewModel.kt$ScenarioEditorViewModel$mutableState.value = mutableState.value.copy( loading = false, error = result.failure, )</ID>
+    <ID>NoDirectStateWrite:ScenarioEditorViewModel.kt$ScenarioEditorViewModel$mutableState.value = mutableState.value.copy( loading = false, error = result.failure, loadFailed = true, )</ID>
+    <ID>NoDirectStateWrite:ScenarioEditorViewModel.kt$ScenarioEditorViewModel$mutableState.value = mutableState.value.copy( loading = false, existing = result.value, draft = draft, error = null, conflict = false, )</ID>
+    <ID>NoDirectStateWrite:ScenarioEditorViewModel.kt$ScenarioEditorViewModel$mutableState.value = mutableState.value.copy( loading = false, existing = result.value, draft = draft, error = null, loadFailed = false, )</ID>
+    <ID>NoDirectStateWrite:ScenarioEditorViewModel.kt$ScenarioEditorViewModel$mutableState.value = mutableState.value.copy( saving = false, error = result.failure, )</ID>
+    <ID>NoDirectStateWrite:ScenarioEditorViewModel.kt$ScenarioEditorViewModel$mutableState.value = mutableState.value.copy( saving = false, error = result.failure, conflict = true, )</ID>
+    <ID>NoDirectStateWrite:ScenarioEditorViewModel.kt$ScenarioEditorViewModel$mutableState.value = mutableState.value.copy( saving = false, existing = result.value, draft = draft, error = null, conflict = false, )</ID>
+    <ID>NoDirectStateWrite:ScenarioEditorViewModel.kt$ScenarioEditorViewModel$mutableState.value = mutableState.value.copy(catalogLoading = true, catalogError = null)</ID>
+    <ID>NoDirectStateWrite:ScenarioEditorViewModel.kt$ScenarioEditorViewModel$mutableState.value = mutableState.value.copy(loading = true, error = null)</ID>
+    <ID>NoDirectStateWrite:ScenarioEditorViewModel.kt$ScenarioEditorViewModel$mutableState.value = mutableState.value.copy(loading = true, error = null, conflict = false)</ID>
+    <ID>NoDirectStateWrite:ScenarioEditorViewModel.kt$ScenarioEditorViewModel$mutableState.value = mutableState.value.copy(saving = false, error = null)</ID>
+    <ID>NoDirectStateWrite:ScenarioEditorViewModel.kt$ScenarioEditorViewModel$mutableState.value = mutableState.value.copy(saving = true, error = null)</ID>
+    <ID>NoDirectStateWrite:TimersViewModel.kt$TimersViewModel$mutableState.value = mutableState.value.copy( busyId = null, actionError = result.failure, )</ID>
+    <ID>NoDirectStateWrite:TimersViewModel.kt$TimersViewModel$mutableState.value = mutableState.value.copy( busyId = null, timers = mutableState.value.timers.filterNot { it.id == timer.id }, )</ID>
+    <ID>NoDirectStateWrite:TimersViewModel.kt$TimersViewModel$mutableState.value = mutableState.value.copy( busyId = null, timers = mutableState.value.timers.map { if (it.id == timer.id) timer else it }, )</ID>
+    <ID>NoDirectStateWrite:TimersViewModel.kt$TimersViewModel$mutableState.value = mutableState.value.copy( refreshing = false, loadError = result.failure, )</ID>
+    <ID>NoDirectStateWrite:TimersViewModel.kt$TimersViewModel$mutableState.value = mutableState.value.copy( refreshing = false, timers = result.value.sortedBy { it.createdUnix }, loadError = null, serverTimeSynced = clock.isSynced, )</ID>
+    <ID>NoDirectStateWrite:TimersViewModel.kt$TimersViewModel$mutableState.value = mutableState.value.copy( starting = false, actionError = result.failure, )</ID>
+    <ID>NoDirectStateWrite:TimersViewModel.kt$TimersViewModel$mutableState.value = mutableState.value.copy( starting = false, timers = (mutableState.value.timers + result.value).sortedBy { it.createdUnix }, )</ID>
+    <ID>NoDirectStateWrite:TimersViewModel.kt$TimersViewModel$mutableState.value = mutableState.value.copy(actionError = null)</ID>
+    <ID>NoDirectStateWrite:TimersViewModel.kt$TimersViewModel$mutableState.value = mutableState.value.copy(busyId = timer.id, actionError = null)</ID>
+    <ID>NoDirectStateWrite:TimersViewModel.kt$TimersViewModel$mutableState.value = mutableState.value.copy(loadError = null)</ID>
+    <ID>NoDirectStateWrite:TimersViewModel.kt$TimersViewModel$mutableState.value = mutableState.value.copy(refreshing = mutableState.value.refreshing || !silent, loadError = null)</ID>
+    <ID>NoDirectStateWrite:TimersViewModel.kt$TimersViewModel$mutableState.value = mutableState.value.copy(starting = true, actionError = null)</ID>
+    <ID>NoDirectStateWrite:TimersViewModel.kt$TimersViewModel$mutableState.value = mutableState.value.copy(tick = mutableState.value.tick + 1)</ID>
+    <ID>PublicInImpl:AlarmEditorFragment.kt$AlarmEditorFragment : BaseFragment</ID>
+    <ID>PublicInImpl:AlarmEditorViewModel.kt$AlarmEditorUiState</ID>
+    <ID>PublicInImpl:AlarmEditorViewModel.kt$AlarmEditorViewModel : BaseViewModel</ID>
+    <ID>PublicInImpl:AlarmEditorViewModel.kt$AlarmEditorViewModelFactoryContributor : ViewModelFactoryContributor</ID>
+    <ID>PublicInImpl:AlarmUseCases.kt$DeleteAlarm</ID>
+    <ID>PublicInImpl:AlarmUseCases.kt$LoadAlarm</ID>
+    <ID>PublicInImpl:AlarmUseCases.kt$LoadAlarms</ID>
+    <ID>PublicInImpl:AlarmUseCases.kt$SaveAlarm</ID>
+    <ID>PublicInImpl:AlarmUseCases.kt$SetAlarmEnabled</ID>
+    <ID>PublicInImpl:AlarmUseCases.kt$SkipAlarmOccurrence</ID>
+    <ID>PublicInImpl:AlarmUseCases.kt$SnoozeAlarm</ID>
+    <ID>PublicInImpl:AlarmUseCases.kt$StopAlarm</ID>
+    <ID>PublicInImpl:AlarmsFeatureEntry.kt$AlarmEditorDestination : Destination</ID>
+    <ID>PublicInImpl:AlarmsFeatureEntry.kt$AlarmListDestination : Destination</ID>
+    <ID>PublicInImpl:AlarmsFeatureEntry.kt$AlarmsFeatureEntry : FeatureEntry</ID>
+    <ID>PublicInImpl:AlarmsFragment.kt$AlarmsFragment : BaseFragment</ID>
+    <ID>PublicInImpl:AlarmsViewModel.kt$AlarmsUiState</ID>
+    <ID>PublicInImpl:AlarmsViewModel.kt$AlarmsViewModel : BaseViewModel</ID>
+    <ID>PublicInImpl:AlarmsViewModel.kt$AlarmsViewModelFactoryContributor : ViewModelFactoryContributor</ID>
+    <ID>PublicInImpl:AndroidCallAudioController.kt$AndroidCallAudioController : CallAudioController</ID>
+    <ID>PublicInImpl:AndroidCallLauncher.kt$AndroidCallLauncher : CallLauncher</ID>
+    <ID>PublicInImpl:AndroidPushDeviceIdentity.kt$AndroidPushDeviceIdentity : PushDeviceIdentity</ID>
+    <ID>PublicInImpl:AppCallController.kt$AppCallController : CallController</ID>
+    <ID>PublicInImpl:AppearanceFragment.kt$AppearanceFragment : BaseFragment</ID>
+    <ID>PublicInImpl:AppearanceViewModel.kt$AppearanceViewModel : ViewModel</ID>
+    <ID>PublicInImpl:AppearanceViewModel.kt$AppearanceViewModelFactoryContributor : ViewModelFactoryContributor</ID>
+    <ID>PublicInImpl:CallActivity.kt$CallActivity : AppCompatActivity</ID>
+    <ID>PublicInImpl:CallEntryPoint.kt$CallEntryPoint</ID>
+    <ID>PublicInImpl:CallForegroundService.kt$CallForegroundService : Service</ID>
+    <ID>PublicInImpl:CallNotificationControllerImpl.kt$CallNotificationControllerImpl : CallNotificationController</ID>
+    <ID>PublicInImpl:CallTelecomBridge.kt$CallTelecomBridge</ID>
+    <ID>PublicInImpl:ChatFeatureEntry.kt$ChatDestination : Destination</ID>
+    <ID>PublicInImpl:ChatFeatureEntry.kt$ChatFeatureEntry : FeatureEntry</ID>
+    <ID>PublicInImpl:ChatFragment.kt$ChatFragment : BaseFragment</ID>
+    <ID>PublicInImpl:ChatMedia.kt$ChatMedia</ID>
+    <ID>PublicInImpl:ChatOutboxStore.kt$AttachmentRecord</ID>
+    <ID>PublicInImpl:ChatOutboxStore.kt$ChatOutboxStore</ID>
+    <ID>PublicInImpl:ChatOutboxStore.kt$DataStoreChatOutboxStore : ChatOutboxStore</ID>
+    <ID>PublicInImpl:ChatOutboxStore.kt$OutgoingRecord</ID>
+    <ID>PublicInImpl:ChatRepository.kt$ChatRepository</ID>
+    <ID>PublicInImpl:ChatViewModel.kt$ChatViewModelFactoryContributor : ViewModelFactoryContributor</ID>
+    <ID>PublicInImpl:ConnectAlarmRepository.kt$ConnectAlarmRepository : AlarmRepository</ID>
+    <ID>PublicInImpl:ConnectControlRepository.kt$ConnectControlRepository : ControlRepository</ID>
+    <ID>PublicInImpl:ConnectReminderRepository.kt$ConnectReminderRepository : ReminderRepository</ID>
+    <ID>PublicInImpl:ConnectScenarioRepository.kt$ConnectScenarioRepository : ScenarioRepository</ID>
+    <ID>PublicInImpl:ConnectTimerRepository.kt$ConnectTimerRepository : TimerRepository</ID>
+    <ID>PublicInImpl:ConnectionFeatureEntry.kt$ConnectionDestination : Destination</ID>
+    <ID>PublicInImpl:ConnectionFeatureEntry.kt$ConnectionFeatureEntry : FeatureEntry</ID>
+    <ID>PublicInImpl:ConnectionFragment.kt$ConnectionFragment : BaseFragment</ID>
+    <ID>PublicInImpl:ConnectionViewModel.kt$ConnectionNotice</ID>
+    <ID>PublicInImpl:ConnectionViewModel.kt$ConnectionUiState</ID>
+    <ID>PublicInImpl:ConnectionViewModel.kt$ConnectionViewModel : BaseViewModel</ID>
+    <ID>PublicInImpl:ConnectionViewModel.kt$ConnectionViewModelFactoryContributor : ViewModelFactoryContributor</ID>
+    <ID>PublicInImpl:ControlFeatureEntry.kt$ControlFeatureEntry : FeatureEntry</ID>
+    <ID>PublicInImpl:ControlFeatureEntry.kt$ControlListDestination : Destination</ID>
+    <ID>PublicInImpl:ControlFragment.kt$ControlFragment : BaseFragment</ID>
+    <ID>PublicInImpl:ControlUseCases.kt$AdjustLight</ID>
+    <ID>PublicInImpl:ControlUseCases.kt$LoadControlCatalog</ID>
+    <ID>PublicInImpl:ControlUseCases.kt$PressControl</ID>
+    <ID>PublicInImpl:ControlUseCases.kt$RunScenario</ID>
+    <ID>PublicInImpl:ControlUseCases.kt$SetDevicePower</ID>
+    <ID>PublicInImpl:ControlUseCases.kt$SetVoiceProfile</ID>
+    <ID>PublicInImpl:ControlUseCases.kt$SetVolume</ID>
+    <ID>PublicInImpl:ControlUseCases.kt$SetVolumeMuted</ID>
+    <ID>PublicInImpl:ControlUseCases.kt$SpeakOnStation</ID>
+    <ID>PublicInImpl:ControlViewModel.kt$ControlNotice</ID>
+    <ID>PublicInImpl:ControlViewModel.kt$ControlUiState</ID>
+    <ID>PublicInImpl:ControlViewModel.kt$ControlViewModel : BaseViewModel</ID>
+    <ID>PublicInImpl:ControlViewModel.kt$ControlViewModelFactoryContributor : ViewModelFactoryContributor</ID>
+    <ID>PublicInImpl:DataStoreControlPreferences.kt$DataStoreControlPreferences : ControlPreferences</ID>
+    <ID>PublicInImpl:DataStoreNotificationHistoryStore.kt$DataStoreNotificationHistoryStore : NotificationHistoryStore</ID>
+    <ID>PublicInImpl:DataStorePushRegistrationStore.kt$DataStorePushRegistrationStore : PushRegistrationStore</ID>
+    <ID>PublicInImpl:DataStoreVpnSettingsStore.kt$DataStoreVpnSettingsStore : VpnSettingsStore</ID>
+    <ID>PublicInImpl:DefaultConnectionRepository.kt$DefaultConnectionRepository : ConnectionRepository</ID>
+    <ID>PublicInImpl:ExternalOpenConnectTransport.kt$ExternalOpenConnectTransport : VpnTransport</ID>
+    <ID>PublicInImpl:FindPhoneActivity.kt$FindPhoneActivity : AppCompatActivity</ID>
+    <ID>PublicInImpl:FindPhoneAudio.kt$FindPhoneAudio</ID>
+    <ID>PublicInImpl:FindPhoneController.kt$FindPhoneController</ID>
+    <ID>PublicInImpl:FindPhoneController.kt$FindPhoneState</ID>
+    <ID>PublicInImpl:FindPhoneController.kt$FindPhoneTiming</ID>
+    <ID>PublicInImpl:FindPhoneService.kt$FindPhoneService : Service</ID>
+    <ID>PublicInImpl:FirebasePushRegistrar.kt$FirebasePushRegistrar : PushRegistrar</ID>
+    <ID>PublicInImpl:HomeConnection.kt$HomeConnection : Connection</ID>
+    <ID>PublicInImpl:HomeConnectionService.kt$HomeConnectionService : ConnectionService</ID>
+    <ID>PublicInImpl:HomeMessagingService.kt$HomeMessagingService : FirebaseMessagingService</ID>
+    <ID>PublicInImpl:HomeNetworkMonitor.kt$HomeNetworkMonitor : HomeReachability</ID>
+    <ID>PublicInImpl:HttpSystemRepository.kt$HttpSystemRepository : SystemRepository</ID>
+    <ID>PublicInImpl:NotificationHistoryFragment.kt$NotificationHistoryFragment : BaseFragment</ID>
+    <ID>PublicInImpl:NotificationHistoryRecorder.kt$NotificationHistoryRecorder</ID>
+    <ID>PublicInImpl:NotificationHistoryViewModel.kt$HistoryNotice</ID>
+    <ID>PublicInImpl:NotificationHistoryViewModel.kt$NotificationHistoryUiState</ID>
+    <ID>PublicInImpl:NotificationHistoryViewModel.kt$NotificationHistoryViewModel : BaseViewModel</ID>
+    <ID>PublicInImpl:NotificationHistoryViewModel.kt$NotificationHistoryViewModelFactoryContributor : ViewModelFactoryContributor</ID>
+    <ID>PublicInImpl:PushChannels.kt$PushChannels</ID>
+    <ID>PublicInImpl:PushChannels.kt$Vibration</ID>
+    <ID>PublicInImpl:PushEntryPoint.kt$PushEntryPoint</ID>
+    <ID>PublicInImpl:PushFeatureEntry.kt$PushFeatureEntry : FeatureEntry</ID>
+    <ID>PublicInImpl:PushFeatureEntry.kt$PushSettingsDestination : Destination</ID>
+    <ID>PublicInImpl:PushNotifier.kt$PushNotifier</ID>
+    <ID>PublicInImpl:PushPayloads.kt$PushChatGate</ID>
+    <ID>PublicInImpl:PushPayloads.kt$PushMessage</ID>
+    <ID>PublicInImpl:PushPayloads.kt$PushPayloads</ID>
+    <ID>PublicInImpl:PushPermissions.kt$PushPermissions</ID>
+    <ID>PublicInImpl:PushRegistrationPublisher.kt$PushRegistrationPublisher</ID>
+    <ID>PublicInImpl:PushSettingsFragment.kt$PushSettingsFragment : BaseFragment</ID>
+    <ID>PublicInImpl:PushSettingsViewModel.kt$PushNotice</ID>
+    <ID>PublicInImpl:PushSettingsViewModel.kt$PushSettingsUiState</ID>
+    <ID>PublicInImpl:PushSettingsViewModel.kt$PushSettingsViewModel : BaseViewModel</ID>
+    <ID>PublicInImpl:PushSettingsViewModel.kt$PushSettingsViewModelFactoryContributor : ViewModelFactoryContributor</ID>
+    <ID>PublicInImpl:ReminderEditorFragment.kt$ReminderEditorFragment : BaseFragment</ID>
+    <ID>PublicInImpl:ReminderEditorViewModel.kt$ReminderEditorUiState</ID>
+    <ID>PublicInImpl:ReminderEditorViewModel.kt$ReminderEditorViewModel : BaseViewModel</ID>
+    <ID>PublicInImpl:ReminderEditorViewModel.kt$ReminderEditorViewModelFactoryContributor : ViewModelFactoryContributor</ID>
+    <ID>PublicInImpl:ReminderUseCases.kt$DeleteReminder</ID>
+    <ID>PublicInImpl:ReminderUseCases.kt$LoadReminder</ID>
+    <ID>PublicInImpl:ReminderUseCases.kt$LoadReminders</ID>
+    <ID>PublicInImpl:ReminderUseCases.kt$SaveReminder</ID>
+    <ID>PublicInImpl:ReminderUseCases.kt$SetReminderEnabled</ID>
+    <ID>PublicInImpl:RemindersFeatureEntry.kt$ReminderEditorDestination : Destination</ID>
+    <ID>PublicInImpl:RemindersFeatureEntry.kt$ReminderListDestination : Destination</ID>
+    <ID>PublicInImpl:RemindersFeatureEntry.kt$RemindersFeatureEntry : FeatureEntry</ID>
+    <ID>PublicInImpl:RemindersFragment.kt$RemindersFragment : BaseFragment</ID>
+    <ID>PublicInImpl:RemindersViewModel.kt$RemindersUiState</ID>
+    <ID>PublicInImpl:RemindersViewModel.kt$RemindersViewModel : BaseViewModel</ID>
+    <ID>PublicInImpl:RemindersViewModel.kt$RemindersViewModelFactoryContributor : ViewModelFactoryContributor</ID>
+    <ID>PublicInImpl:RemoteVpnProfiles.kt$RemoteVpnProfiles : VpnProfiles</ID>
+    <ID>PublicInImpl:ScenarioEditorFragment.kt$ScenarioEditorFragment : BaseFragment</ID>
+    <ID>PublicInImpl:ScenarioEditorViewModel.kt$ScenarioEditorUiState</ID>
+    <ID>PublicInImpl:ScenarioEditorViewModel.kt$ScenarioEditorViewModel : BaseViewModel</ID>
+    <ID>PublicInImpl:ScenarioEditorViewModel.kt$ScenarioEditorViewModelFactoryContributor : ViewModelFactoryContributor</ID>
+    <ID>PublicInImpl:ScenarioUseCases.kt$DeleteScenario</ID>
+    <ID>PublicInImpl:ScenarioUseCases.kt$LoadScenario</ID>
+    <ID>PublicInImpl:ScenarioUseCases.kt$LoadScenarioCatalog</ID>
+    <ID>PublicInImpl:ScenarioUseCases.kt$LoadScenarios</ID>
+    <ID>PublicInImpl:ScenarioUseCases.kt$RunScenario</ID>
+    <ID>PublicInImpl:ScenarioUseCases.kt$SaveScenario</ID>
+    <ID>PublicInImpl:ScenarioUseCases.kt$SetScenarioEnabled</ID>
+    <ID>PublicInImpl:ScenariosFeatureEntry.kt$ScenarioEditorDestination : Destination</ID>
+    <ID>PublicInImpl:ScenariosFeatureEntry.kt$ScenarioListDestination : Destination</ID>
+    <ID>PublicInImpl:ScenariosFeatureEntry.kt$ScenariosFeatureEntry : FeatureEntry</ID>
+    <ID>PublicInImpl:ScenariosFragment.kt$ScenariosFragment : BaseFragment</ID>
+    <ID>PublicInImpl:ScenariosViewModel.kt$FavoriteNotice</ID>
+    <ID>PublicInImpl:ScenariosViewModel.kt$ScenariosUiState</ID>
+    <ID>PublicInImpl:ScenariosViewModel.kt$ScenariosViewModel : BaseViewModel</ID>
+    <ID>PublicInImpl:ScenariosViewModel.kt$ScenariosViewModelFactoryContributor : ViewModelFactoryContributor</ID>
+    <ID>PublicInImpl:SettingsFeatureEntry.kt$AppearanceDestination : Destination</ID>
+    <ID>PublicInImpl:SettingsFeatureEntry.kt$DesignSystemDestination : Destination</ID>
+    <ID>PublicInImpl:SettingsFeatureEntry.kt$NotificationHistoryDestination : Destination</ID>
+    <ID>PublicInImpl:SettingsFeatureEntry.kt$SettingsDestination : Destination</ID>
+    <ID>PublicInImpl:SettingsFeatureEntry.kt$SettingsFeatureEntry : FeatureEntry</ID>
+    <ID>PublicInImpl:SettingsFragment.kt$SettingsFragment : BaseFragment</ID>
+    <ID>PublicInImpl:SystemFeatureEntry.kt$SystemDetailDestination : Destination</ID>
+    <ID>PublicInImpl:SystemFeatureEntry.kt$SystemFeatureEntry : FeatureEntry</ID>
+    <ID>PublicInImpl:SystemFeatureEntry.kt$SystemOverviewDestination : Destination</ID>
+    <ID>PublicInImpl:SystemFragments.kt$SystemDetailFragment : SystemScreenFragment</ID>
+    <ID>PublicInImpl:SystemFragments.kt$SystemFragment : SystemScreenFragment</ID>
+    <ID>PublicInImpl:SystemFragments.kt$SystemScreenFragment : BaseFragment</ID>
+    <ID>PublicInImpl:SystemSection.kt$SystemSection</ID>
+    <ID>PublicInImpl:SystemViewModel.kt$SystemUiState</ID>
+    <ID>PublicInImpl:SystemViewModel.kt$SystemViewModel : BaseViewModel</ID>
+    <ID>PublicInImpl:SystemViewModel.kt$SystemViewModelFactoryContributor : ViewModelFactoryContributor</ID>
+    <ID>PublicInImpl:TelecomCoordinator.kt$AndroidCallCoordinator : CallCoordinator</ID>
+    <ID>PublicInImpl:TelecomCoordinator.kt$TelecomAccountRegistry</ID>
+    <ID>PublicInImpl:TimerAdapter.kt$TimerRow</ID>
+    <ID>PublicInImpl:TimerUseCases.kt$CancelTimer</ID>
+    <ID>PublicInImpl:TimerUseCases.kt$LoadTimers</ID>
+    <ID>PublicInImpl:TimerUseCases.kt$PauseTimer</ID>
+    <ID>PublicInImpl:TimerUseCases.kt$ResumeTimer</ID>
+    <ID>PublicInImpl:TimerUseCases.kt$StartTimer</ID>
+    <ID>PublicInImpl:TimersFeatureEntry.kt$TimerListDestination : Destination</ID>
+    <ID>PublicInImpl:TimersFeatureEntry.kt$TimersFeatureEntry : FeatureEntry</ID>
+    <ID>PublicInImpl:TimersFragment.kt$TimersFragment : BaseFragment</ID>
+    <ID>PublicInImpl:TimersViewModel.kt$TimersUiState</ID>
+    <ID>PublicInImpl:TimersViewModel.kt$TimersViewModel : BaseViewModel</ID>
+    <ID>PublicInImpl:TimersViewModel.kt$TimersViewModelFactoryContributor : ViewModelFactoryContributor</ID>
+    <ID>PublicInImpl:TunnelVpnController.kt$TunnelVpnController : VpnController</ID>
+    <ID>PublicInImpl:VoiceWaveView.kt$VoiceWaveView : View</ID>
+    <ID>PublicInImpl:VpnActivityHost.kt$VpnActivityHost</ID>
+    <ID>PublicInImpl:VpnCertificateStore.kt$CertificateImport</ID>
+    <ID>PublicInImpl:VpnCertificateStore.kt$VpnCertificateStore</ID>
+    <ID>PublicInImpl:VpnEntryPoint.kt$VpnEntryPoint</ID>
+    <ID>PublicInImpl:VpnFeatureEntry.kt$VpnDestination : Destination</ID>
+    <ID>PublicInImpl:VpnFeatureEntry.kt$VpnFeatureEntry : FeatureEntry</ID>
+    <ID>PublicInImpl:VpnFragment.kt$VpnFragment : BaseFragment</ID>
+    <ID>PublicInImpl:VpnKeyVault.kt$VpnKeyVault</ID>
+    <ID>PublicInImpl:VpnOpenConnector.kt$VpnOpenConnector : DefaultLifecycleObserver</ID>
+    <ID>PublicInImpl:VpnSecretBox.kt$VpnSecretBox</ID>
+    <ID>PublicInImpl:VpnStatusService.kt$VpnStatusService : Service</ID>
+    <ID>PublicInImpl:VpnTileService.kt$VpnTileService : TileService</ID>
+    <ID>PublicInImpl:VpnTransport.kt$VpnTraffic</ID>
+    <ID>PublicInImpl:VpnTransport.kt$VpnTransport</ID>
+    <ID>PublicInImpl:VpnViewModel.kt$VpnNotice</ID>
+    <ID>PublicInImpl:VpnViewModel.kt$VpnUiState</ID>
+    <ID>PublicInImpl:VpnViewModel.kt$VpnViewModel : BaseViewModel</ID>
+    <ID>PublicInImpl:VpnViewModel.kt$VpnViewModelFactoryContributor : ViewModelFactoryContributor</ID>
+    <ID>PublicInImpl:WebRtcCallMedia.kt$WebRtcCallMediaFactory : CallMediaFactory</ID>
+    <ID>PublicInImpl:WireGuardTransport.kt$WireGuardTransport : VpnTransport</ID>
+  </CurrentIssues>
+</SmellBaseline>

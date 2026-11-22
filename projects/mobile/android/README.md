@@ -568,13 +568,30 @@ for a documented false positive, scoped to the narrowest element or module.
 **detekt** is the second static-analysis gate, also a separate CI unit
 (`android / android-detekt`). `detekt.yml` enables `NestedBlockDepth` (3),
 `LongMethod`, `ComplexCondition`, `TooGenericExceptionCaught`, the `unused*`
-rules and a focused set of formatting rules; findings are failures and there is
-no baseline. `platform/android/detekt-rules` provides the first-party
+rules and a focused set of formatting rules; findings are failures.
+`platform/android/detekt-rules` provides the first-party
 `home-rules` plug-in (`NoElseIf`, `NoTry`, `LongLambda`, `NoInlineJsonInTests`,
-`NoHardcodedUiText`), loaded with `--plugins` by the Bazel rule in
+`NoHardcodedUiText`, `PublicInImpl`, `NoDirectStateWrite`, `NoUiOwnedControlState`), loaded with `--plugins` by the Bazel rule in
 `platform/android/detekt.bzl`. `NoTry` forbids `try`/`catch`/`finally`
 entirely: use `runCatching`, `suspendRunCatching` (rethrows
-`CancellationException`) or `use { }`. Test mock responses live in
+`CancellationException`) or `use { }`. `NoElseIf` forbids only `else if` chains (a third branch); a plain `if`/`else`
+is allowed. `PublicInImpl` requires every top-level declaration under
+`*/impl/src/main/` to be `internal` or `private`. `NoDirectStateWrite` forbids
+`mutableState.value =`, `+=` and `mutableState.update/emit/tryEmit/...` inside
+classes extending `BaseViewModel`, except in `updateState` itself.
+`NoUiOwnedControlState` enforces one-way UI data flow: it reports
+`isChecked`/`isSelected`/`isActivated`/`checked` set to `!` of itself or set
+inside a `setOn*Listener`/`addOn*Listener`/`doOn*` lambda, and `x.toggle()` on a
+non-ViewModel receiver. The UI sends an intent and renders the value from the
+ViewModel's StateFlow; local UI flags are not detectable and stay a review item.
+`detekt-baseline.xml` lists the findings of these two rules that existed when
+they were introduced (audit package P0); a finding outside the baseline fails
+the build. Baseline IDs are `rule:file$class$statement`, so identical
+statements in one class share an entry. Migration packages shrink the baseline
+by deleting entries; regenerate it only to remove fixed entries, never to accept
+new ones. To regenerate, build `//projects/mobile/android:detekt` and run the
+detekt binary from its runfiles with the same arguments as `detekt.run` plus
+`--baseline <path> --create-baseline`. Test mock responses live in
 `src/test/resources/fixtures/*.json` and are read through
 `dev.proflyder.home.core.testing.TestFixtures`.
 
