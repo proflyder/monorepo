@@ -119,7 +119,6 @@ test_suite(
         "//projects/mobile/android/features/push/impl:registration_policy_test",
         "//projects/mobile/android/features/reminders/impl:view_model_test",
         "//projects/mobile/android/features/timers/impl:view_model_test",
-        "//projects/mobile/android/features/vpn/api:api_test",
         "//projects/mobile/android/features/vpn/impl:screen_test",
         "//platform/android/tools/apk_runtime_closure:apk_runtime_closure_test",
         "//platform/android/detekt-rules:detekt_rules_test",
