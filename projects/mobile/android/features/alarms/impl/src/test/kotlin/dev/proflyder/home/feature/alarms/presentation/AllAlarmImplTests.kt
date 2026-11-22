@@ -11,6 +11,8 @@ import org.junit.runners.Suite
     AlarmEditorDefaultsTest::class,
     AlarmQuickOffsetStateTest::class,
     AlarmRepeatRulesTest::class,
+    AlarmsViewModelTest::class,
+    AlarmEditorViewModelTest::class,
     dev.proflyder.home.feature.alarms.domain.SaveAlarmLabelTest::class,
 )
 class AllAlarmImplTests

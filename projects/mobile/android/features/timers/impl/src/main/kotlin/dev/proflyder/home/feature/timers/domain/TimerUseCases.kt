@@ -32,21 +32,3 @@ import dev.zacsweers.metro.Inject
         return repository.start(label, durationSeconds, idempotencyKey)
     }
 }
-
-@Inject class PauseTimer(
-    private val repository: TimerRepository,
-) {
-    suspend operator fun invoke(id: String): Outcome<Timer> = repository.pause(id)
-}
-
-@Inject class ResumeTimer(
-    private val repository: TimerRepository,
-) {
-    suspend operator fun invoke(id: String): Outcome<Timer> = repository.resume(id)
-}
-
-@Inject class CancelTimer(
-    private val repository: TimerRepository,
-) {
-    suspend operator fun invoke(id: String): Outcome<Timer> = repository.cancel(id)
-}

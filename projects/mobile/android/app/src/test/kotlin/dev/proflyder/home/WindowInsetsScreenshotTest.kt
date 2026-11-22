@@ -21,7 +21,6 @@ import com.google.android.material.card.MaterialCardView
 import com.google.android.material.textfield.TextInputLayout
 import dev.proflyder.home.core.designsystem.CardTextInputLayout
 import dev.proflyder.home.core.theme.AppTheme
-import dev.proflyder.home.feature.alarms.AlarmEditorDestination
 import dev.proflyder.home.feature.chat.ChatRoute
 import dev.proflyder.home.feature.connection.ConnectionDestination
 import dev.proflyder.home.feature.push.PushSettingsDestination
@@ -134,7 +133,9 @@ class WindowInsetsScreenshotTest {
 
     private fun alarmEditorWithKeyboard(theme: AppTheme) {
         val activity = launch(theme)
-        activity.router.navigate(AlarmEditorDestination())
+        activity.router.selectTab("alarms")
+        idle(activity)
+        activity.findViewById<View>(AlarmsR.id.alarms_add).performClick()
         idle(activity)
         val root = activity.window.decorView
         val label = root.findViewById<TextView>(AlarmsR.id.alarm_editor_label)

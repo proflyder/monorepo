@@ -10,8 +10,11 @@ metro_android_library(
     custom_package = "dev.proflyder.home.core.presentation",
     manifest = "src/main/AndroidManifest.xml",
     deps = [
+        "//packages/kotlin/core",
+        "//projects/mobile/android/core/model",
         "//projects/mobile/android/core/ui",
         "@maven//:androidx_fragment_fragment_ktx",
+        "@maven//:androidx_lifecycle_lifecycle_viewmodel_savedstate",
         "@maven//:androidx_lifecycle_lifecycle_runtime_ktx",
         "@maven//:androidx_lifecycle_lifecycle_viewmodel_ktx",
         "@maven//:androidx_recyclerview_recyclerview",
@@ -51,8 +54,11 @@ kt_android_local_test(
     robolectric_properties_file = "robolectric-deps.properties",
     test_class = "dev.proflyder.home.core.presentation.AllPresentationTests",
     deps = [
+        "//packages/kotlin/core",
+        "//projects/mobile/android/core/model",
         "//projects/mobile/android/core/ui",
         "@maven//:androidx_lifecycle_lifecycle_viewmodel_ktx",
+        "@maven//:androidx_lifecycle_lifecycle_viewmodel_savedstate",
         "@maven//:androidx_recyclerview_recyclerview",
         "@maven//:com_google_android_material_material",
         "@maven//:junit_junit",

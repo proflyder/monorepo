@@ -9,7 +9,7 @@ import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesIntoSet
 import dev.zacsweers.metro.Inject
 
-object TimerListDestination : Destination {
+internal object TimerListDestination : Destination {
     override val featureId: String = "timers"
     override val route: String = "timers/list"
 }

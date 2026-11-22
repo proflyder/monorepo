@@ -4,6 +4,7 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.ViewGroup
 import android.widget.CompoundButton
+import android.widget.EditText
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.ViewModel
 import dev.proflyder.home.core.ui.BaseFragment
@@ -33,6 +34,9 @@ abstract class ScreenFragment<VB : ViewBinding, S : Any, I : Any, E : Any>(
 
     protected fun bindSwitch(view: CompoundButton, toIntent: (Boolean) -> I): SwitchBinder =
         SwitchBinder(view) { checked -> dispatch(toIntent(checked)) }
+
+    protected fun bindText(view: EditText, toIntent: (String) -> I): TextBinder =
+        TextBinder(view) { text -> dispatch(toIntent(text)) }
 }
 
 inline fun <reified VM : ViewModel> Fragment.screenViewModel(): Lazy<VM> =

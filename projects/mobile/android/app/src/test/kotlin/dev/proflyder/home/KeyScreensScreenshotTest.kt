@@ -8,7 +8,6 @@ import com.google.android.material.button.MaterialButton
 import com.google.android.material.color.MaterialColors
 import dev.proflyder.home.core.navigation.Destination
 import dev.proflyder.home.core.theme.AppTheme
-import dev.proflyder.home.feature.alarms.AlarmEditorDestination
 import dev.proflyder.home.feature.connection.ConnectionDestination
 import java.io.File
 import org.junit.Assert.assertTrue
@@ -20,6 +19,7 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import dev.proflyder.home.feature.alarms.impl.R as AlarmsR
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35], qualifiers = "w411dp-h891dp-night-xxhdpi")
@@ -55,6 +55,7 @@ class KeyScreensScreenshotTest {
         destinations().forEach { (name, destination) ->
             shootDestination(activity, destination, "screen-${theme.key}-$mode-$name.png")
         }
+        shootAlarmEditor(activity, "screen-${theme.key}-$mode-alarm-editor.png")
     }
 
     private fun shootTab(activity: MainActivity, tab: String, name: String) {
@@ -85,9 +86,18 @@ class KeyScreensScreenshotTest {
         idle(activity)
     }
 
+    private fun shootAlarmEditor(activity: MainActivity, name: String) {
+        activity.router.selectTab("alarms")
+        idle(activity)
+        activity.findViewById<View>(AlarmsR.id.alarms_add).performClick()
+        idle(activity)
+        shoot(activity, name)
+        activity.router.back()
+        idle(activity)
+    }
+
     private fun destinations(): List<Pair<String, Destination>> = listOf(
         "connection" to ConnectionDestination,
-        "alarm-editor" to AlarmEditorDestination(),
     )
 
     private fun idle(activity: MainActivity) {
