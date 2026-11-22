@@ -152,4 +152,13 @@ class RemoteConnectionSourceTest {
 
         assertEquals("http://192.0.2.10:30098", loaded.endpoint.baseUrl())
     }
+
+    @Test
+    fun wrongFieldTypeReportsThatField() {
+        val control = parseRemoteConnection(TestFixtures.read("control_not_string.json"))
+        val intercom = parseRemoteConnection(TestFixtures.read("intercom_not_string.json"))
+
+        assertEquals(Field.CONTROL_ENDPOINT, (control as RemoteConnectionState.Invalid).field)
+        assertEquals(Field.INTERCOM_ENDPOINT, (intercom as RemoteConnectionState.Invalid).field)
+    }
 }

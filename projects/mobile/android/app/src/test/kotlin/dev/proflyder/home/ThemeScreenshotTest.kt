@@ -17,6 +17,7 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import kotlinx.coroutines.runBlocking
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35], qualifiers = "w411dp-h891dp-night-xxhdpi")
@@ -33,7 +34,7 @@ class ThemeScreenshotTest {
 
     private fun shootAll(theme: AppTheme) {
         val app = RuntimeEnvironment.getApplication() as HomeApplication
-        app.graph.appearance.selectTheme(theme)
+        runBlocking { app.graph.appearance.selectTheme(theme) }
         val activity = Robolectric.buildActivity(MainActivity::class.java).setup().get()
         idle(activity)
         val surface = MaterialColors.getColor(activity, ColorRole.SURFACE.attr, 0)

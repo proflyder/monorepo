@@ -20,7 +20,7 @@ import dev.proflyder.home.feature.settings.impl.databinding.FragmentAppearanceBi
 import dev.proflyder.home.feature.settings.impl.databinding.ItemAppearanceThemeBinding
 
 internal class AppearanceFragment :
-    ScreenFragment<FragmentAppearanceBinding, Appearance, AppearanceIntent, AppearanceEvent>(
+    ScreenFragment<FragmentAppearanceBinding, Appearance, AppearanceIntent, Nothing>(
         FragmentAppearanceBinding.Companion::inflate,
     ) {
     override val viewModel: AppearanceViewModel by screenViewModel()
@@ -41,13 +41,7 @@ internal class AppearanceFragment :
         renderAppearance(binding, cards, state)
     }
 
-    override fun onEvent(event: AppearanceEvent) {
-        when (event) {
-            AppearanceEvent.ThemeChanged -> requireActivity().recreate()
-        }
-    }
-
-    private fun bindThemeCards(binding: FragmentAppearanceBinding, dynamic: Boolean, onClick: (AppTheme) -> Unit) {
+    internal fun bindThemeCards(binding: FragmentAppearanceBinding, dynamic: Boolean, onClick: (AppTheme) -> Unit) {
         AppTheme.entries.forEach { theme ->
             cards[theme] = addThemeCard(binding, theme, dynamic).also { it.root.setOnClickListener { onClick(theme) } }
         }

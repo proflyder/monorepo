@@ -13,31 +13,29 @@ import dev.zacsweers.metro.ClassKey
 import dev.zacsweers.metro.ContributesIntoMap
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.binding
-import kotlinx.coroutines.flow.launchIn
-import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.launch
 
 internal sealed interface AppearanceIntent {
     data class SelectTheme(val theme: AppTheme) : AppearanceIntent
-    data class SelectMode(val mode: ThemeMode) : AppearanceIntent
-}
 
-internal sealed interface AppearanceEvent {
-    data object ThemeChanged : AppearanceEvent
+    data class SelectMode(val mode: ThemeMode) : AppearanceIntent
 }
 
 @Inject
 internal class AppearanceViewModel(
     private val controller: AppearanceController,
-) : StateViewModel<Appearance, AppearanceIntent, AppearanceEvent>(controller.state.value) {
+) : StateViewModel<Appearance, AppearanceIntent, Nothing>(controller.state.value) {
     init {
-        controller.state.onEach { appearance -> updateState { appearance } }.launchIn(viewModelScope)
+        viewModelScope.launch { controller.state.collect { appearance -> updateState { appearance } } }
     }
 
     override fun handle(intent: AppearanceIntent) {
-        when (intent) {
-            is AppearanceIntent.SelectTheme -> if (controller.selectTheme(intent.theme)) emit(AppearanceEvent.ThemeChanged)
-            is AppearanceIntent.SelectMode -> controller.selectMode(intent.mode)
-        }
+        viewModelScope.launch { apply(intent) }
+    }
+
+    private suspend fun apply(intent: AppearanceIntent) = when (intent) {
+        is AppearanceIntent.SelectTheme -> controller.selectTheme(intent.theme)
+        is AppearanceIntent.SelectMode -> controller.selectMode(intent.mode)
     }
 }
 

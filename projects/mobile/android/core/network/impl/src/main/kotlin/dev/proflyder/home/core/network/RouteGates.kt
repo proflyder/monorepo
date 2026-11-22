@@ -1,5 +1,6 @@
 package dev.proflyder.home.core.network
 
+import dev.proflyder.home.core.config.ConnectionSettingsStore
 import dev.proflyder.home.core.runtime.DefaultNetwork
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesBinding
@@ -41,4 +42,10 @@ class ConditionRouteGate(
 @Inject
 class ActiveNetworkCondition(network: DefaultNetwork) : RouteCondition {
     override val ready: Flow<Boolean> = network.handle.map { it != null }
+}
+
+@ContributesIntoSet(AppScope::class, binding = binding<RouteCondition>())
+@Inject
+class ConnectionSettingsLoadedCondition(settings: ConnectionSettingsStore) : RouteCondition {
+    override val ready: Flow<Boolean> = settings.loaded
 }
