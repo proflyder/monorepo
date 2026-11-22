@@ -141,7 +141,7 @@ class ConnectionSettingsClearTest {
         assertEquals("valid-token", config.bearerToken)
         assertEquals(5_000L, config.connectTimeoutMillis)
         assertEquals(20_000L, config.readTimeoutMillis)
-        assertEquals(TokenStatus.AVAILABLE, second.tokenStatus.value)
+        assertEquals(TokenStatus.AVAILABLE, withTimeout(5_000) { second.tokenStatus.first { it != TokenStatus.LOADING } })
     }
 
     @Test
@@ -197,7 +197,7 @@ class ConnectionSettingsClearTest {
         assertEquals("legacy-token", config.bearerToken)
         assertEquals(5_000L, config.connectTimeoutMillis)
         assertEquals(20_000L, config.readTimeoutMillis)
-        assertEquals(TokenStatus.AVAILABLE, store.tokenStatus.value)
+        assertEquals(TokenStatus.AVAILABLE, withTimeout(5_000) { store.tokenStatus.first { it != TokenStatus.LOADING } })
     }
 
     @Test
@@ -212,8 +212,8 @@ class ConnectionSettingsClearTest {
         assertEquals(TokenStatus.LOADING, store.tokenStatus.value)
         assertFalse(store.loaded.first())
         gate.complete(Unit)
-        withTimeout(5_000) { store.loaded.first { it } }
-        assertEquals(TokenStatus.ABSENT, store.tokenStatus.value)
+        val status = withTimeout(5_000) { store.tokenStatus.first { it != TokenStatus.LOADING } }
+        assertEquals(TokenStatus.ABSENT, status)
     }
 
     private fun store(
@@ -222,10 +222,8 @@ class ConnectionSettingsClearTest {
         remote: RemoteConnectionSource,
     ) = AndroidConnectionSettingsStore(dataStore, cipher, remote, scope, Dispatchers.IO)
 
-    private suspend fun AndroidConnectionSettingsStore.loadedConfig(): ConnectionConfig {
-        withTimeout(5_000) { loaded.first { it } }
-        return config.value
-    }
+    private suspend fun AndroidConnectionSettingsStore.loadedConfig(): ConnectionConfig =
+        withTimeout(5_000) { config.first { it.bearerToken != null } }
 
     private fun Preferences.hasToken(): Boolean =
         asMap().keys.any { it.name == "bearer_token_ciphertext" }
