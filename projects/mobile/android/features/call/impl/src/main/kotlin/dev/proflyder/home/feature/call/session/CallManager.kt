@@ -275,16 +275,16 @@ internal class CallManager(
     }
 }
 
-private fun List<IntercomEndpoint>.preferredStation(): IntercomEndpoint? =
+internal fun List<IntercomEndpoint>.preferredStation(): IntercomEndpoint? =
     firstOrNull { it.kind == IntercomEndpointKind.STATION && it.online }
         ?: firstOrNull { it.kind == IntercomEndpointKind.STATION }
 
-private fun IntercomEndReason.reported(): IntercomEndReason = when (this) {
+internal fun IntercomEndReason.reported(): IntercomEndReason = when (this) {
     IntercomEndReason.CANCELED, IntercomEndReason.DECLINED -> this
     else -> IntercomEndReason.HANGUP
 }
 
-private fun IntercomCallState.toPhase(fallback: CallPhase): CallPhase = when (this) {
+internal fun IntercomCallState.toPhase(fallback: CallPhase): CallPhase = when (this) {
     IntercomCallState.RINGING -> CallPhase.RINGING
     IntercomCallState.CONNECTING -> CallPhase.CONNECTING
     IntercomCallState.ACTIVE -> CallPhase.ACTIVE

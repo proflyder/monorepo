@@ -19,7 +19,7 @@ import kotlinx.coroutines.launch
 
 internal class CallActivity : AppCompatActivity() {
 
-    private val viewModel: CallViewModel by viewModels { applicationViewModelFactory(CallViewModel::class.java) }
+    internal val viewModel: CallViewModel by viewModels { applicationViewModelFactory(CallViewModel::class.java) }
     private val texts by lazy { CallTexts(this) }
     private val routeSheet by lazy { CallRouteSheet(this, texts, viewModel::dispatch) }
     private val proximity by lazy { ProximityScreenLock(this) }
