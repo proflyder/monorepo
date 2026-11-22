@@ -2,7 +2,7 @@ package dev.proflyder.home.feature.settings.presentation
 
 import android.view.LayoutInflater
 import android.view.ViewGroup
-import androidx.recyclerview.widget.DiffUtil
+import dev.proflyder.home.core.presentation.KeyedDiff
 import dev.proflyder.home.core.ui.AdapterCallback
 import dev.proflyder.home.core.ui.BaseListAdapter
 import dev.proflyder.home.core.ui.BaseViewHolder
@@ -14,19 +14,11 @@ import dev.proflyder.home.feature.settings.impl.databinding.ItemNotificationHist
 
 internal interface NotificationHistoryAdapterCallback : AdapterCallback<NotificationHistoryEntry>
 
-private object HistoryDiff : DiffUtil.ItemCallback<NotificationHistoryEntry>() {
-    override fun areItemsTheSame(oldItem: NotificationHistoryEntry, newItem: NotificationHistoryEntry): Boolean =
-        oldItem.id == newItem.id
-
-    override fun areContentsTheSame(oldItem: NotificationHistoryEntry, newItem: NotificationHistoryEntry): Boolean =
-        oldItem == newItem
-}
-
 internal class NotificationHistoryAdapter(
     callback: NotificationHistoryAdapterCallback,
 ) : BaseListAdapter<NotificationHistoryEntry, ItemNotificationHistoryBinding, NotificationHistoryAdapterCallback>(
     callback,
-    HistoryDiff,
+    KeyedDiff(NotificationHistoryEntry::id),
 ) {
     override fun onCreateHolder(
         inflater: LayoutInflater,

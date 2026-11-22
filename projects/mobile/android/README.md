@@ -1497,6 +1497,14 @@ Themes are code in `core/theme`:
   - Saving the same scenario again must not drop the retained objects.
 - `core/remoteconfig/src/main/kotlin/dev/proflyder/home/core/remoteconfig/FirebaseRemoteConnectionSource.kt`
   - Firebase Remote Config implementation of [RemoteConnectionSource]. Defaults are set locally, the latest activated values are fetched on start, and a real-time config listener activates pushed changes.
+- `core/presentation/src/main/kotlin/dev/proflyder/home/core/presentation/StateViewModel.kt`
+  - One state, typed intents in, one-shot events out. Events go through an unlimited `Channel`: an event emitted while the screen is stopped waits for the next `STARTED` collector and is delivered exactly once (not across process death). Background and rationale: `docs/audits/android-architecture.md`, section 4.
+- `core/presentation/src/main/kotlin/dev/proflyder/home/core/presentation/ControlBinder.kt`
+  - `SwitchBinder` keeps the control showing the last rendered state: a click only sends the wanted value as an intent and snaps back; the new position arrives from the ViewModel.
+- `core/presentation/src/main/kotlin/dev/proflyder/home/core/presentation/AppEventBus.kt`
+  - App-wide typed events so screens kept in the back stack refresh in the background. Buffer 64 with `DROP_OLDEST`; publishers never suspend. Use only when the source of truth is not already a shared `StateFlow`.
+- `core/presentation/src/main/kotlin/dev/proflyder/home/core/presentation/LatestLauncher.kt`
+  - Latest request wins: launching cancels the previous job, so a stale refresh cannot overwrite a fresher result.
 - `core/settings/src/main/kotlin/dev/proflyder/home/core/settings/AndroidConnectionSettingsStore.kt`
   - Stores the bearer token as Keystore-encrypted ciphertext and composes it with the endpoints/timeouts supplied by [RemoteConnectionSource]. The manifest disables Android backup, so the token never leaves the device.
 - `core/testing/src/main/kotlin/dev/proflyder/home/core/testing/TestFixtures.kt` — Loads a JSON payload from the test classpath (`src/test/resources/fixtures`).
