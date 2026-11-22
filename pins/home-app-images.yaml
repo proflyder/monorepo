@@ -5,12 +5,12 @@ metadata:
   namespace: flux-system
   annotations:
     proflyder.dev/source: "initial pin from live cluster 2026-11-10"
-    proflyder.dev/source-commit: "e9daabd090fe39692f92765e47dd7e4db3d5bde2"
-    proflyder.dev/source-tree: "4078a98a4cd41b87ee7f31928511140b4559d849"
-    proflyder.dev/verified-at: "2026-11-21T22:51:24Z"
-    proflyder.dev/run: "https://github.com/proflyder/monorepo/actions/runs/44958747688"
+    proflyder.dev/source-commit: "c21d68e2d33e3d6645f452c900a3e28ce8b4651a"
+    proflyder.dev/source-tree: "b1e3dcf5329051a912002328f40a53468ad94d92"
+    proflyder.dev/verified-at: "2026-11-22T11:01:27Z"
+    proflyder.dev/run: "https://github.com/proflyder/monorepo/actions/runs/45015119049"
 data:
-  BUILD_ID: "e9daabd090fe"
+  BUILD_ID: "c21d68e2d33e"
   CURRENCY_BOT_IMAGE: "ghcr.io/proflyder/currency-bot@sha256:17ef9272818cb64e1047b63f111c2debac4162f8eec16627f57d2803c7a19ace"
   HA_BRIDGE_IMAGE: "ghcr.io/proflyder/ha-bridge@sha256:04b31c2efd4f832f0b31e5bef34ec444a4d54740a2265b0339e36ab3f6b5c3c7"
   HA_CONFIG_SYNC_IMAGE: "ghcr.io/proflyder/ha-config-sync@sha256:ed946277931faa385f957730d991587dc8fea397824a794b92a99dda3ddf09f9"
@@ -23,6 +23,6 @@ data:
   INTERCOM_IMAGE: "ghcr.io/proflyder/intercom@sha256:dbad77f78e805596cf49162edabf995ed104e3cfde1708434367d23d47c429e0"
   MCP_GATEWAY_IMAGE: "ghcr.io/proflyder/mcp-gateway@sha256:6293c8cb3d02705f2876eda40c2ad6843ef2b552efae79a6dc1ad136dbde2b19"
   PHONE_PUSH_IMAGE: "ghcr.io/proflyder/phone-push@sha256:862a76377d857be10d73b1cfc4a970f2c511b60b72667e8ab927284540aa01dd"
-  SCHEDULER_IMAGE: "ghcr.io/proflyder/scheduler@sha256:f6bf5bd20195fb8c7b57e0de90a7011cb549eecaab16241b34c252fecf8590ce"
+  SCHEDULER_IMAGE: "ghcr.io/proflyder/scheduler@sha256:65fce768b809fac15c7eae81f241e440e7912070ff9ad4453bc9812b3e544f86"
   VOICE_PROXY_IMAGE: "ghcr.io/proflyder/voice-proxy@sha256:539ea1acddc1e269a69f268c56f79c648ec61736e461f2c7a11702ed82584688"
   WAKEGRANT_IMAGE: "ghcr.io/proflyder/wakegrant@sha256:f3116bc1ee516e500dc26b211ebd9482e29963f63dea23ad1f0a87ddb5c93635"
