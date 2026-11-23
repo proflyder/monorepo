@@ -36,6 +36,7 @@ fn fixture() -> Fixture {
         AlarmFacade::new(service),
         TOKEN,
         VpnAccess::default(),
+        Arc::clone(&sync) as Arc<dyn crate::sync::SyncSink>,
     );
     Fixture { app, store, sync }
 }

@@ -11,6 +11,7 @@ use serde_json::{Value, json};
 
 use crate::devices::Registry;
 use crate::fcm::{self, Message, Sender};
+use crate::history::{self, HistoryClient, HistoryEntry};
 
 pub const MAX_REASON_CHARS: usize = 200;
 pub const MAX_TITLE_CHARS: usize = 120;
@@ -21,6 +22,7 @@ pub const MAX_DEEP_LINK_CHARS: usize = 512;
 pub struct PushState {
     pub sender: Arc<Sender>,
     pub registry: Arc<Registry>,
+    pub history: Arc<HistoryClient>,
     pub token: Token,
 }
 
@@ -30,6 +32,7 @@ impl std::fmt::Debug for PushState {
             .debug_struct("PushState")
             .field("sender", &self.sender)
             .field("registry", &self.registry)
+            .field("history", &self.history)
             .finish_non_exhaustive()
     }
 }
@@ -67,7 +70,13 @@ pub struct SyncBody {
     pub origin_device_id: Option<String>,
 }
 
-pub const SYNC_ENTITIES: [&str; 4] = ["alarms", "reminders", "timers", "scenarios"];
+pub const SYNC_ENTITIES: [&str; 5] = [
+    "alarms",
+    "reminders",
+    "timers",
+    "scenarios",
+    "notifications",
+];
 pub const SYNC_OPS: [&str; 2] = ["upsert", "delete"];
 pub const MAX_SYNC_ID_CHARS: usize = 128;
 
@@ -134,6 +143,7 @@ pub async fn deliver(
     message: &Message,
     sender: &Sender,
     registry: &Registry,
+    history: &HistoryClient,
     now: i64,
     audience: Audience<'_>,
 ) -> Delivery {
@@ -152,9 +162,16 @@ pub async fn deliver(
     let total = devices.len();
     let mut sent = 0;
     let mut failed = 0;
+    let row = history_row(message);
     for device in devices {
-        match sender.send(&device.token, message, now).await {
-            Ok(()) => sent += 1,
+        let record_id = uuid::Uuid::new_v4().to_string();
+        match sender.send(&device.token, message, &record_id, now).await {
+            Ok(()) => {
+                sent += 1;
+                if let Some(row) = &row {
+                    remember(history, &device.device_id, &record_id, row).await;
+                }
+            }
             Err(fcm::Error::Unregistered) => {
                 if let Err(error) = registry.forget(&device.token).await {
                     tracing::warn!(error = %error, "could not forget an unregistered token");
@@ -201,6 +218,7 @@ async fn find(
             &message,
             &state.sender,
             &state.registry,
+            &state.history,
             now(),
             Audience::only(body.device_id.as_deref()),
         )
@@ -242,6 +260,7 @@ async fn notify(
             &message,
             &state.sender,
             &state.registry,
+            &state.history,
             now(),
             Audience::only(body.device_id.as_deref()),
         )
@@ -265,11 +284,55 @@ async fn sync(
             &message,
             &state.sender,
             &state.registry,
+            &state.history,
             now(),
             Audience::all_but(body.origin_device_id.as_deref()),
         )
         .await,
     )
+}
+
+struct HistoryRow {
+    kind: &'static str,
+    title: String,
+    body: String,
+    deep_link: Option<String>,
+}
+
+fn history_row(message: &Message) -> Option<HistoryRow> {
+    match message {
+        Message::Find { reason } => Some(HistoryRow {
+            kind: history::FIND_KIND,
+            title: String::new(),
+            body: reason.clone(),
+            deep_link: None,
+        }),
+        Message::Notification {
+            title,
+            body,
+            deep_link,
+        } => Some(HistoryRow {
+            kind: history::NOTIFY_KIND,
+            title: title.clone(),
+            body: body.clone(),
+            deep_link: deep_link.clone(),
+        }),
+        Message::Sync { .. } => None,
+    }
+}
+
+async fn remember(history: &HistoryClient, device_id: &str, id: &str, row: &HistoryRow) {
+    let entry = HistoryEntry {
+        device_id: device_id.to_owned(),
+        id: id.to_owned(),
+        kind: row.kind.to_owned(),
+        title: row.title.clone(),
+        body: row.body.clone(),
+        deep_link: row.deep_link.clone(),
+    };
+    if let Err(error) = history.record(&entry).await {
+        tracing::warn!(%error, "notification history write failed");
+    }
 }
 
 fn sync_message(body: &SyncBody) -> Option<Message> {

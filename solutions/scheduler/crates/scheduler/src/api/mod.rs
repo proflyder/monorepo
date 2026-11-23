@@ -2,6 +2,7 @@ mod alarm;
 mod auth;
 mod convert;
 mod error;
+mod notifications;
 pub mod push;
 mod service;
 #[cfg(test)]
@@ -25,6 +26,7 @@ use http::{Request, Response, StatusCode, header};
 pub use alarm::AlarmFacade;
 pub use service::{EngineStatus, Service};
 
+use crate::sync::SyncSink;
 use auth::BearerAuth;
 
 pub const MAX_BODY_BYTES: usize = 1 << 20;
@@ -76,6 +78,7 @@ pub fn router(
     alarms: AlarmFacade,
     token: &str,
     vpn_access: VpnAccess,
+    sync: Arc<dyn SyncSink>,
 ) -> axum::Router {
     let store = Arc::clone(service.store());
     let routes = ConnectRouter::new();
@@ -104,10 +107,39 @@ pub fn router(
         .route("/v1/vpn/profile/remove", axum::routing::post(vpn::remove))
         .route("/v1/vpn/peers", axum::routing::get(vpn::peers))
         .with_state(vpn);
-    let push = push::PushState {
-        store,
-        auth: Arc::new(BearerAuth::new(token)),
+    let auth = Arc::new(BearerAuth::new(token));
+    let notifications = notifications::NotificationState {
+        store: Arc::clone(&store),
+        auth: Arc::clone(&auth),
+        sync,
     };
+    let history_routes = axum::Router::new()
+        .route(
+            "/v1/push/history",
+            axum::routing::get(notifications::history).post(notifications::record),
+        )
+        .route(
+            "/v1/push/history/unread-count",
+            axum::routing::get(notifications::unread),
+        )
+        .route(
+            "/v1/push/history/read",
+            axum::routing::post(notifications::set_read),
+        )
+        .route(
+            "/v1/push/history/read-all",
+            axum::routing::post(notifications::read_all),
+        )
+        .route(
+            "/v1/push/history/remove",
+            axum::routing::post(notifications::remove),
+        )
+        .route(
+            "/v1/push/history/clear",
+            axum::routing::post(notifications::clear),
+        )
+        .with_state(notifications);
+    let push = push::PushState { store, auth };
     axum::Router::new()
         .route(
             "/v1/push/devices",
@@ -117,5 +149,6 @@ pub fn router(
         .route("/v1/push/devices/rename", axum::routing::post(push::rename))
         .with_state(push)
         .merge(vpn_routes)
+        .merge(history_routes)
         .fallback_service(ConnectFallback { methods, service })
 }

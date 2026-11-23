@@ -25,6 +25,7 @@ LIB_DEPS = [
     "@crates//:tokio",
     "@crates//:tokio-util",
     "@crates//:tracing",
+    "@crates//:uuid",
 ]
 
 rust_library(

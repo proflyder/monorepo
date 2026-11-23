@@ -118,7 +118,7 @@ fn a_find_message_is_sent_through_oauth_and_reuses_the_cached_token() {
         reason: "где телефон".to_owned(),
     };
     for _ in 0..2 {
-        block_on(sender.send("device-token", &message, 1_700_000_000)).expect("send");
+        block_on(sender.send("device-token", &message, "entry-1", 1_700_000_000)).expect("send");
     }
     let token_requests = fake.token_requests.lock().expect("lock").clone();
     assert_eq!(token_requests.len(), 1, "the access token is cached");
@@ -144,7 +144,7 @@ fn a_notification_is_sent_data_only_with_text_and_deep_link() {
         body: "Дверь открыта".to_owned(),
         deep_link: Some("home://alarms".to_owned()),
     };
-    block_on(sender.send("device-token", &message, 1_700_000_000)).expect("send");
+    block_on(sender.send("device-token", &message, "entry-1", 1_700_000_000)).expect("send");
     let messages = fake.messages.lock().expect("lock").clone();
     assert!(messages[0].1["message"].get("notification").is_none());
     assert!(
@@ -166,8 +166,8 @@ fn an_unregistered_token_is_reported_so_the_caller_can_forget_it() {
     let message = Message::Find {
         reason: String::new(),
     };
-    let error =
-        block_on(sender.send("device-token", &message, 1_700_000_000)).expect_err("dead token");
+    let error = block_on(sender.send("device-token", &message, "entry-1", 1_700_000_000))
+        .expect_err("dead token");
     assert!(matches!(error, Error::Unregistered), "{error}");
 }
 

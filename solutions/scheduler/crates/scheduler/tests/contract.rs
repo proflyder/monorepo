@@ -6,6 +6,7 @@ use home_contracttest::Options;
 use scheduler::api::{self, AlarmFacade, EngineStatus, Service};
 use scheduler::domain::Clock;
 use scheduler::store::{Config, Store};
+use scheduler::sync::NoSync;
 
 const TOKEN: &str = "contract-test-token";
 const BASE: i64 = 1_767_268_800;
@@ -81,6 +82,7 @@ fn new_router(scenario: &str) -> axum::Router {
         AlarmFacade::new(service),
         TOKEN,
         api::VpnAccess::default(),
+        Arc::new(NoSync),
     )
 }
 

@@ -136,13 +136,13 @@ impl Message {
     }
 
     #[must_use]
-    pub fn payload(&self, token: &str) -> Value {
+    pub fn payload(&self, token: &str, record_id: &str) -> Value {
         match self {
             Self::Find { reason } => json!({
                 "message": {
                     "token": token,
                     "android": {"priority": "high"},
-                    "data": {"type": FIND_TYPE, "reason": reason},
+                    "data": {"type": FIND_TYPE, "reason": reason, "notificationId": record_id},
                 }
             }),
             Self::Sync { entity, op, id } => json!({
@@ -157,7 +157,12 @@ impl Message {
                 body,
                 deep_link,
             } => {
-                let mut data = json!({"type": NOTIFY_TYPE, "title": title, "body": body});
+                let mut data = json!({
+                    "type": NOTIFY_TYPE,
+                    "title": title,
+                    "body": body,
+                    "notificationId": record_id,
+                });
                 if let Some(link) = deep_link {
                     data["deepLink"] = json!(link);
                 }
@@ -230,13 +235,19 @@ impl Sender {
         &self.account.project_id
     }
 
-    pub async fn send(&self, token: &str, message: &Message, now: i64) -> Result<(), Error> {
+    pub async fn send(
+        &self,
+        token: &str,
+        message: &Message,
+        record_id: &str,
+        now: i64,
+    ) -> Result<(), Error> {
         let access = self.access_token(now).await?;
         let url = format!(
             "{}/v1/projects/{}/messages:send",
             self.fcm_url, self.account.project_id
         );
-        let payload = serde_json::to_vec(&message.payload(token))
+        let payload = serde_json::to_vec(&message.payload(token, record_id))
             .map_err(|_| Error::Request("body".to_owned()))?;
         let response = self
             .http
@@ -349,7 +360,7 @@ mod tests {
         let payload = Message::Find {
             reason: "Рикардо".to_owned(),
         }
-        .payload("token");
+        .payload("token", "entry-1");
         let message = &payload["message"];
         assert!(message.get("notification").is_none());
         assert_eq!(message["android"]["priority"], "high");
@@ -365,7 +376,7 @@ mod tests {
             op: "upsert".to_owned(),
             id: "alarm-1".to_owned(),
         }
-        .payload("token");
+        .payload("token", "entry-1");
         let message = &payload["message"];
         assert!(message.get("notification").is_none());
         assert!(message["android"].get("notification").is_none());
@@ -382,7 +393,7 @@ mod tests {
             body: "Готово".to_owned(),
             deep_link: Some("home://alarms".to_owned()),
         }
-        .payload("token");
+        .payload("token", "entry-1");
         let message = &payload["message"];
         assert!(message.get("notification").is_none());
         assert!(message["android"].get("notification").is_none());
