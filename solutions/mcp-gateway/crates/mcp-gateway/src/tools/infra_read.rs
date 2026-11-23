@@ -1125,6 +1125,11 @@ async fn fetch_flux(deps: &Deps) -> Option<Result<Vec<report::FluxResource>, Str
                 ready: resource.ready,
                 suspended: resource.suspended,
                 message: resource.message,
+                status: resource.status,
+                reason: resource.reason,
+                last_transition: resource
+                    .last_transition
+                    .and_then(|at| Timestamp::from_second(at.unix_timestamp()).ok()),
             })
             .collect()
     }))

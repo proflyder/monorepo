@@ -22,6 +22,8 @@ ALLOWED_BB_TARGET_PLACEHOLDERS = {"BB_PROJECT_STATION_LAB", "BB_PROJECT_ENGLISH_
 
 READ_ONLY_NAMESPACES = {"kube-system", "flux-system"}
 
+RESTART_NOT_EXPOSED = {("monitoring", "pve-exporter")}
+
 INGESTED_NAMESPACES = {"monitoring", "currency-bot", "openbao", "kube-system"}
 
 
@@ -121,6 +123,10 @@ class CatalogTests(unittest.TestCase):
         self.assertTrue(external)
         for service in k8s:
             self.assertIn(service["workload"]["kind"], {"Deployment", "StatefulSet", "DaemonSet"})
+            if (service["namespace"], service["id"]) in RESTART_NOT_EXPOSED:
+                self.assertFalse(service["restart"]["allowed"], service["id"])
+                self.assertFalse(service["restart"].get("warning", "").strip(), service["id"])
+                continue
             if service["namespace"] in READ_ONLY_NAMESPACES:
                 self.assertFalse(service["restart"]["allowed"], service["id"])
                 continue
@@ -162,7 +168,8 @@ class CatalogTests(unittest.TestCase):
                     self.assertTrue(check.get("host", "").startswith("${"))
                     self.assertTrue(0 < int(check["port"]) <= 65535)
                 if check["type"] == "http":
-                    self.assertIn("${", check["url"])
+                    if service["kind"] == "external":
+                        self.assertIn("${", check["url"])
                     self.assertIn(check.get("auth", "none"), {"none", "ha"})
                 if check["type"] in {"ha_state", "ha_template"}:
                     self.assertTrue(check.get("entity_id") or check.get("template"))
@@ -312,6 +319,23 @@ class RbacTests(unittest.TestCase):
             self.assertIn(("apps", resource), granted)
         self.assertIn(("kustomize.toolkit.fluxcd.io", "kustomizations"), granted)
         self.assertIn(("helm.toolkit.fluxcd.io", "helmreleases"), granted)
+
+    def test_every_restartable_catalog_workload_has_a_role_in_its_namespace(self):
+        targets = self.rbac_targets()
+        missing = []
+        for service in self.catalog["services"]:
+            if service["kind"] != "k8s" or not service["restart"]["allowed"]:
+                continue
+            kind = service["workload"]["kind"]
+            names = targets.get((service["namespace"], kind), set())
+            if service["workload"]["name"] not in names:
+                missing.append(f"{service['namespace']}/{kind}/{service['workload']['name']}")
+        self.assertEqual(
+            missing,
+            [],
+            "catalog allows a restart that no RBAC Role in the same namespace grants:\n"
+            + "\n".join(missing),
+        )
 
     def test_write_resource_names_equal_catalog_restartable_workloads(self):
         self.assertEqual(self.rbac_targets(), self.catalog_targets())

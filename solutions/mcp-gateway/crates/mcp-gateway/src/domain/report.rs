@@ -112,6 +112,10 @@ pub struct WorkloadRef {
     pub name: String,
 }
 
+pub const FLUX_READY_STATUS_UNKNOWN: &str = "Unknown";
+pub const FLUX_REASON_PROGRESSING: &str = "Progressing";
+pub const FLUX_PROGRESSING_GRACE_SECONDS: i64 = 900;
+
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FluxResource {
@@ -122,6 +126,12 @@ pub struct FluxResource {
     pub suspended: bool,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub message: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub status: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub reason: String,
+    #[serde(skip)]
+    pub last_transition: Option<Timestamp>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -204,7 +214,7 @@ pub fn build_report(input: &ReportInput<'_>) -> ReportDetail {
     if let Some(flux) = &input.flux
         && !is_empty_ok(flux)
     {
-        detail.services.push(collect_flux_report(flux));
+        detail.services.push(collect_flux_report(flux, input.now));
     }
     if let Some(workloads) = &input.workloads
         && !is_empty_ok(workloads)
@@ -360,7 +370,7 @@ fn collect_workload_report(
     item
 }
 
-fn collect_flux_report(flux: &Result<Vec<FluxResource>, String>) -> ServiceReport {
+fn collect_flux_report(flux: &Result<Vec<FluxResource>, String>, now: Timestamp) -> ServiceReport {
     let mut item = ServiceReport {
         id: SERVICE_FLUX.to_owned(),
         name: "Flux".to_owned(),
@@ -380,12 +390,17 @@ fn collect_flux_report(flux: &Result<Vec<FluxResource>, String>) -> ServiceRepor
         }
     };
     let mut suspended = 0usize;
+    let mut progressing = 0usize;
     for resource in resources {
         if resource.suspended {
             suspended += 1;
             continue;
         }
         if resource.ready {
+            continue;
+        }
+        if flux_is_progressing(resource, now) {
+            progressing += 1;
             continue;
         }
         if item.status == STATUS_OK {
@@ -401,10 +416,24 @@ fn collect_flux_report(flux: &Result<Vec<FluxResource>, String>) -> ServiceRepor
             resource.kind, resource.namespace, resource.name
         ));
     }
-    if suspended > 0 {
-        item.note = format!("приостановлено {suspended}");
+    let mut notes: Vec<String> = Vec::new();
+    if progressing > 0 {
+        notes.push(format!("обновляется {progressing}"));
     }
+    if suspended > 0 {
+        notes.push(format!("приостановлено {suspended}"));
+    }
+    item.note = notes.join(", ");
     item
+}
+
+fn flux_is_progressing(resource: &FluxResource, now: Timestamp) -> bool {
+    if resource.status != FLUX_READY_STATUS_UNKNOWN || resource.reason != FLUX_REASON_PROGRESSING {
+        return false;
+    }
+    resource
+        .last_transition
+        .is_none_or(|at| now.as_second() - at.as_second() < FLUX_PROGRESSING_GRACE_SECONDS)
 }
 
 fn collect_coverage_report(
@@ -892,17 +921,41 @@ mod tests {
             } else {
                 "health check failed".to_owned()
             },
+            ..FluxResource::default()
         }
+    }
+
+    fn progressing(name: &str, at: Option<&str>) -> FluxResource {
+        FluxResource {
+            kind: "Kustomization".to_owned(),
+            namespace: "flux-system".to_owned(),
+            name: name.to_owned(),
+            ready: false,
+            status: FLUX_READY_STATUS_UNKNOWN.to_owned(),
+            reason: FLUX_REASON_PROGRESSING.to_owned(),
+            last_transition: at.map(|raw| raw.parse().expect("time")),
+            message: "Progressing: reconciliation in progress".to_owned(),
+            ..FluxResource::default()
+        }
+    }
+
+    const FLUX_NOW: &str = "2026-11-01T12:00:00Z";
+
+    fn flux_now() -> Timestamp {
+        FLUX_NOW.parse().expect("time")
     }
 
     #[test]
     fn flux_reports_every_not_ready_resource_with_its_kind_and_message() {
-        let entry = collect_flux_report(&Ok(vec![
-            flux("Kustomization", "apps", false, false),
-            flux("HelmRelease", "runtime", false, false),
-            flux("Kustomization", "paused", false, true),
-            flux("Kustomization", "platform", true, false),
-        ]));
+        let entry = collect_flux_report(
+            &Ok(vec![
+                flux("Kustomization", "apps", false, false),
+                flux("HelmRelease", "runtime", false, false),
+                flux("Kustomization", "paused", false, true),
+                flux("Kustomization", "platform", true, false),
+            ]),
+            flux_now(),
+        );
         assert_eq!(entry.status, STATUS_DEGRADED);
         assert_eq!(entry.kind, SERVICE_FLUX);
         assert_eq!(entry.group, PLATFORM_GROUP);
@@ -918,18 +971,84 @@ mod tests {
 
     #[test]
     fn flux_is_ok_when_everything_is_ready_or_suspended() {
-        let entry = collect_flux_report(&Ok(vec![
-            flux("Kustomization", "apps", true, false),
-            flux("Kustomization", "paused", false, true),
-        ]));
+        let entry = collect_flux_report(
+            &Ok(vec![
+                flux("Kustomization", "apps", true, false),
+                flux("Kustomization", "paused", false, true),
+            ]),
+            flux_now(),
+        );
         assert_eq!(entry.status, STATUS_OK);
         assert!(entry.issues.is_empty());
         assert_eq!(entry.note, "приостановлено 1");
     }
 
     #[test]
+    fn flux_progressing_inside_the_alert_window_is_reported_as_updating() {
+        let entry = collect_flux_report(
+            &Ok(vec![progressing("apps", Some("2026-11-01T11:50:00Z"))]),
+            flux_now(),
+        );
+        assert_eq!(entry.status, STATUS_OK);
+        assert!(entry.issues.is_empty());
+        assert_eq!(entry.note, "обновляется 1");
+        assert!(!is_problem(&entry));
+    }
+
+    #[test]
+    fn flux_progressing_without_a_transition_time_counts_as_recent() {
+        let entry = collect_flux_report(&Ok(vec![progressing("apps", None)]), flux_now());
+        assert_eq!(entry.status, STATUS_OK);
+        assert_eq!(entry.note, "обновляется 1");
+    }
+
+    #[test]
+    fn flux_progressing_past_the_alert_window_is_a_problem() {
+        let entry = collect_flux_report(
+            &Ok(vec![progressing("apps", Some("2026-11-01T11:45:00Z"))]),
+            flux_now(),
+        );
+        assert_eq!(entry.status, STATUS_DEGRADED);
+        assert_eq!(
+            entry.issues,
+            vec!["Kustomization flux-system/apps: Progressing: reconciliation in progress"]
+        );
+        assert!(entry.note.is_empty());
+        assert!(is_problem(&entry));
+    }
+
+    #[test]
+    fn flux_failed_ready_stays_a_problem_right_after_the_transition() {
+        let mut resource = progressing("apps", Some("2026-11-01T11:59:00Z"));
+        resource.status = "False".to_owned();
+        resource.reason = "HealthCheckFailed".to_owned();
+        resource.message = "HealthCheckFailed: Deployment/nexus is not ready".to_owned();
+        let entry = collect_flux_report(&Ok(vec![resource]), flux_now());
+        assert_eq!(entry.status, STATUS_DEGRADED);
+        assert_eq!(
+            entry.issues,
+            vec![
+                "Kustomization flux-system/apps: HealthCheckFailed: Deployment/nexus is not ready"
+            ]
+        );
+    }
+
+    #[test]
+    fn flux_updating_and_suspended_share_the_note() {
+        let entry = collect_flux_report(
+            &Ok(vec![
+                progressing("apps", Some("2026-11-01T11:59:00Z")),
+                flux("Kustomization", "paused", false, true),
+            ]),
+            flux_now(),
+        );
+        assert_eq!(entry.status, STATUS_OK);
+        assert_eq!(entry.note, "обновляется 1, приостановлено 1");
+    }
+
+    #[test]
     fn flux_read_error_is_unknown_and_visible() {
-        let entry = collect_flux_report(&Err("HTTP 403".to_owned()));
+        let entry = collect_flux_report(&Err("HTTP 403".to_owned()), flux_now());
         assert_eq!(entry.status, STATUS_UNKNOWN);
         assert_eq!(entry.issues, vec!["проверка Flux недоступна: HTTP 403"]);
         assert!(is_problem(&entry));

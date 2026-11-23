@@ -349,12 +349,19 @@ impl Client {
                 let mut message = String::new();
                 let mut ready = false;
                 let mut saw_ready = false;
+                let mut status = String::new();
+                let mut reason = String::new();
+                let mut last_transition = None;
                 for condition in &item.status.conditions {
                     if condition.condition_type != "Ready" {
                         continue;
                     }
                     saw_ready = true;
                     ready = condition.status == "True";
+                    condition.status.clone_into(&mut status);
+                    condition.reason.clone_into(&mut reason);
+                    last_transition =
+                        parse_time("kubernetes flux", condition.last_transition_time.as_deref())?;
                     if condition.reason.is_empty() {
                         message.clone_from(&condition.message);
                     } else {
@@ -371,6 +378,9 @@ impl Client {
                     ready: ready && saw_ready,
                     suspended: item.spec.suspend,
                     message: message.trim().to_owned(),
+                    status,
+                    reason,
+                    last_transition,
                 });
             }
         }
@@ -603,6 +613,9 @@ pub struct FluxResource {
     pub ready: bool,
     pub suspended: bool,
     pub message: String,
+    pub status: String,
+    pub reason: String,
+    pub last_transition: Option<OffsetDateTime>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -940,6 +953,8 @@ struct FluxConditionJson {
     reason: String,
     #[serde(default)]
     message: String,
+    #[serde(default, rename = "lastTransitionTime")]
+    last_transition_time: Option<String>,
 }
 
 #[cfg(test)]
@@ -1413,7 +1428,7 @@ mod tests {
                             "spec": {"suspend": false},
                             "status": {"conditions": [
                                 {"type": "Reconciling", "status": "False", "reason": "Progressing", "message": "когда-нибудь"},
-                                {"type": "Ready", "status": "False", "reason": "HealthCheckFailed", "message": "Deployment/nexus is not ready"}
+                                {"type": "Ready", "status": "False", "reason": "HealthCheckFailed", "message": "Deployment/nexus is not ready", "lastTransitionTime": "2026-11-01T11:40:00Z"}
                             ]}
                         },
                         {
@@ -1441,12 +1456,19 @@ mod tests {
         assert_eq!(flux[0].kind, "HelmRelease");
         assert!(flux[0].ready);
         assert!(!flux[1].ready);
+        assert_eq!(flux[1].status, "False");
+        assert_eq!(flux[1].reason, "HealthCheckFailed");
+        assert_eq!(
+            flux[1].last_transition,
+            Some(OffsetDateTime::parse("2026-11-01T11:40:00Z", &Rfc3339).expect("time"))
+        );
         assert_eq!(
             flux[1].message,
             "HealthCheckFailed: Deployment/nexus is not ready"
         );
         assert!(flux[2].suspended);
         assert!(!flux[2].ready);
+        assert!(flux[2].last_transition.is_none());
     }
 
     #[test]
