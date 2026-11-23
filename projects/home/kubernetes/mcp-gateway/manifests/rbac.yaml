@@ -69,6 +69,7 @@ rules:
       - wakegrant
       - mcp-gateway
       - ha-config-sync
+      - phone-push
     verbs: ["patch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1

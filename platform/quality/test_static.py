@@ -6,6 +6,8 @@ import subprocess
 import unittest
 from pathlib import Path
 
+import yaml
+
 ROOT = Path(__file__).resolve().parents[2]
 KNOWN_BROKEN_LEGACY = {ROOT / "resources" / "spotify-autostart" / "spotify.sh"}
 
@@ -107,6 +109,52 @@ class SecretHygieneTests(unittest.TestCase):
                     if pattern.search(line):
                         hits.append(f"{path}:{i}")
         self.assertEqual(hits, [])
+
+
+class KubernetesCatalogCoverageTests(unittest.TestCase):
+    KUBERNETES = ROOT / "projects/home/kubernetes"
+    CATALOG = KUBERNETES / "mcp-gateway/manifests/catalog.yaml"
+    WORKLOAD_KINDS = {"Deployment", "StatefulSet", "DaemonSet"}
+
+    def manifest_workloads(self) -> set[tuple[str, str, str]]:
+        workloads: set[tuple[str, str, str]] = set()
+        for path in sorted(self.KUBERNETES.rglob("*.yaml")):
+            for document in yaml.safe_load_all(path.read_text(encoding="utf-8")):
+                if not isinstance(document, dict) or document.get("kind") not in self.WORKLOAD_KINDS:
+                    continue
+                metadata = document.get("metadata") or {}
+                namespace = str(metadata.get("namespace") or "default")
+                name = str(metadata.get("name") or "")
+                if name:
+                    workloads.add((namespace, document["kind"], name))
+        return workloads
+
+    def catalog_workloads(self) -> tuple[set[tuple[str, str, str]], set[tuple[str, str, str]]]:
+        catalog = yaml.safe_load(self.CATALOG.read_text(encoding="utf-8"))
+        services = {
+            (service["namespace"], service["workload"]["kind"], service["workload"]["name"])
+            for service in catalog.get("services", [])
+            if service.get("kind") == "k8s"
+        }
+        ignored = {
+            tuple(part for part in str(entry).split("/") if part)
+            for entry in catalog.get("ignore_workloads", [])
+        }
+        return services, ignored
+
+    def test_every_manifest_workload_is_in_the_report_catalog(self):
+        services, ignored = self.catalog_workloads()
+        missing = [
+            f"{namespace}/{kind}/{name}"
+            for namespace, kind, name in sorted(self.manifest_workloads() - services - ignored)
+        ]
+        self.assertEqual(
+            missing,
+            [],
+            "workloads missing from the report catalog and ignore_workloads "
+            "(projects/home/kubernetes/mcp-gateway/manifests/catalog.yaml):\n"
+            + "\n".join(missing),
+        )
 
 
 class AndroidManifestPermissionTests(unittest.TestCase):

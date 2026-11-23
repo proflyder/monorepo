@@ -378,6 +378,20 @@ fn report_vectors_match_go() {
                             .and_then(Value::as_str)
                             .unwrap_or_default()
                             .to_owned(),
+                        status: item
+                            .get("status")
+                            .and_then(Value::as_str)
+                            .unwrap_or_default()
+                            .to_owned(),
+                        reason: item
+                            .get("reason")
+                            .and_then(Value::as_str)
+                            .unwrap_or_default()
+                            .to_owned(),
+                        last_transition: item
+                            .get("lastTransitionTime")
+                            .and_then(Value::as_str)
+                            .and_then(|raw| raw.parse().ok()),
                     })
                     .collect())
             }),
