@@ -20,10 +20,12 @@ import dev.proflyder.home.core.model.NotificationHistory
 import dev.proflyder.home.core.model.NotificationHistoryType
 import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.presentation.ListItemIntent
+import dev.proflyder.home.core.testing.FakeClock
 import dev.proflyder.home.core.ui.BaseAdapterCallback
-import dev.proflyder.home.core.ui.SwipeAction
 import dev.proflyder.home.core.ui.SwipeActions
 import dev.proflyder.home.core.ui.SwipeBackground
+import dev.proflyder.home.core.ui.SwipeStyle
+import dev.proflyder.home.core.ui.swipeAction
 import dev.proflyder.home.feature.push.NotificationHistoryRepository
 import dev.proflyder.home.feature.settings.impl.R
 import dev.proflyder.home.feature.settings.impl.databinding.FragmentNotificationHistoryBinding
@@ -32,8 +34,14 @@ import java.time.LocalDate
 import java.time.ZoneId
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.setMain
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import org.junit.After
+import org.junit.Before
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -48,15 +56,29 @@ import org.robolectric.annotation.GraphicsMode
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35], qualifiers = "w411dp-h891dp-night-xxhdpi")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
+@OptIn(ExperimentalCoroutinesApi::class)
 class HistorySwipeTest {
+    private val dispatcher = StandardTestDispatcher()
+
+    @Before
+    fun setUp() {
+        Dispatchers.setMain(dispatcher)
+    }
+
+    @After
+    fun tearDown() {
+        Dispatchers.resetMain()
+    }
+
     private val now = System.currentTimeMillis()
     private val entries = listOf(entry("a", now, read = false), entry("b", now - HOUR, read = true), entry("c", now - 2 * HOUR, read = false))
 
     @Test
     fun deletingKeepsTheEntryForUndoAndUndoPutsItBack() {
         val repository = FakeRepository(entries)
-        val model = NotificationHistoryViewModel(repository, CoroutineScope(Dispatchers.Main))
+        val model = NotificationHistoryViewModel(repository, FakeClock(now), CoroutineScope(Dispatchers.Main))
         idle()
+        assertEquals(listOf("a", "b", "c"), model.state.value.pages.items.map { it.key })
 
         model.dispatch(ListItemIntent.Remove("b"))
         idle()
@@ -72,7 +94,7 @@ class HistorySwipeTest {
     @Test
     fun swipingRightTogglesReadBothWays() {
         val repository = FakeRepository(entries)
-        val model = NotificationHistoryViewModel(repository, CoroutineScope(Dispatchers.Main))
+        val model = NotificationHistoryViewModel(repository, FakeClock(now), CoroutineScope(Dispatchers.Main))
         idle()
 
         model.dispatch(HistoryIntent.ToggleRead("a"))
@@ -86,13 +108,15 @@ class HistorySwipeTest {
     @Test
     fun readingAllMarksEveryEntry() {
         val repository = FakeRepository(entries)
-        val model = NotificationHistoryViewModel(repository, CoroutineScope(Dispatchers.Main))
+        val model = NotificationHistoryViewModel(repository, FakeClock(now), CoroutineScope(Dispatchers.Main))
         idle()
 
         model.dispatch(HistoryIntent.ReadAll)
         idle()
 
         assertTrue(repository.paged.state.value.items.all { it.read })
+        assertTrue(!model.state.value.hasUnread)
+        assertTrue(model.state.value.rows.isNotEmpty())
     }
 
     @Test
@@ -102,11 +126,9 @@ class HistorySwipeTest {
         val calls = mutableListOf<String>()
         val swipe = SwipeActions(
             themed,
-            left = action<ListItemIntent>(ItemTouchHelper.LEFT, R.drawable.settings_ic_delete) { ListItemIntent.Remove(it) },
-            right = action<HistoryIntent>(ItemTouchHelper.RIGHT, R.drawable.settings_ic_mark_unread) { HistoryIntent.ToggleRead(it) },
+            left = swipeAction(ItemTouchHelper.LEFT, SwipeStyle.Delete) { position -> calls += "left:$position" },
+            right = swipeAction(ItemTouchHelper.RIGHT, SwipeStyle.ToggleRead) { position -> calls += "right:$position" },
             itemAt = { position -> (binding.historyList.adapter as NotificationHistoryAdapter).currentList.getOrNull(position)?.let { (it as? HistoryRow.Item)?.entry } },
-            dispatchLeft = { calls += it.toString() },
-            dispatchRight = { calls += it.toString() },
         )
         val header = checkNotNull(binding.historyList.findViewHolderForAdapterPosition(0))
         val first = checkNotNull(binding.historyList.findViewHolderForAdapterPosition(1))
@@ -125,15 +147,15 @@ class HistorySwipeTest {
         val binding = list(themed)
         val canvas = Canvas(Bitmap.createBitmap(binding.root.width, binding.root.height, Bitmap.Config.ARGB_8888))
         val item = checkNotNull(binding.historyList.findViewHolderForAdapterPosition(1)).itemView
-        val delete = SwipeAction(ItemTouchHelper.LEFT, R.drawable.settings_ic_delete, color(themed, com.google.android.material.R.attr.colorError), color(themed, com.google.android.material.R.attr.colorOnError)) { null }
-        val toggle = SwipeAction(ItemTouchHelper.RIGHT, R.drawable.settings_ic_mark_unread, color(themed, androidx.appcompat.R.attr.colorPrimary), color(themed, com.google.android.material.R.attr.colorOnPrimary)) { null }
+        val delete = swipeAction(ItemTouchHelper.LEFT, SwipeStyle.Delete) { }
+        val toggle = swipeAction(ItemTouchHelper.RIGHT, SwipeStyle.ToggleRead) { }
         val background = SwipeBackground(themed)
 
         background.draw(canvas, item, -SWIPE_PX, delete)
         background.draw(canvas, item, SWIPE_PX, toggle)
 
-        assertEquals(delete.color, color(themed, com.google.android.material.R.attr.colorError))
-        assertEquals(toggle.color, color(themed, androidx.appcompat.R.attr.colorPrimary))
+        assertEquals(color(themed, com.google.android.material.R.attr.colorError), color(themed, SwipeStyle.Delete.colorAttr))
+        assertEquals(color(themed, androidx.appcompat.R.attr.colorPrimary), color(themed, SwipeStyle.ToggleRead.colorAttr))
     }
 
     @Test
@@ -141,8 +163,8 @@ class HistorySwipeTest {
         val themed = theme()
         val binding = list(themed)
         val item = checkNotNull(binding.historyList.findViewHolderForAdapterPosition(1)).itemView
-        val delete = SwipeAction(ItemTouchHelper.LEFT, R.drawable.settings_ic_delete, color(themed, com.google.android.material.R.attr.colorError), color(themed, com.google.android.material.R.attr.colorOnError)) { null }
-        val toggle = SwipeAction(ItemTouchHelper.RIGHT, R.drawable.settings_ic_mark_unread, color(themed, androidx.appcompat.R.attr.colorPrimary), color(themed, com.google.android.material.R.attr.colorOnPrimary)) { null }
+        val delete = swipeAction(ItemTouchHelper.LEFT, SwipeStyle.Delete) { }
+        val toggle = swipeAction(ItemTouchHelper.RIGHT, SwipeStyle.ToggleRead) { }
         val background = SwipeBackground(themed)
 
         save(swipedRow(item, background, -SWIPE_PX, delete), "notification-history-swipe-left.png")
@@ -158,7 +180,7 @@ class HistorySwipeTest {
         save(bitmap(binding.root), "notification-history-after-delete.png")
     }
 
-    private fun swipedRow(item: View, background: SwipeBackground, dx: Float, action: SwipeAction<*>): Bitmap {
+    private fun swipedRow(item: View, background: SwipeBackground, dx: Float, action: dev.proflyder.home.core.ui.SwipeAction): Bitmap {
         val bitmap = Bitmap.createBitmap(item.width, item.height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
         canvas.translate(-item.left.toFloat(), -item.top.toFloat())
@@ -173,14 +195,6 @@ class HistorySwipeTest {
         val bitmap = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
         view.draw(Canvas(bitmap))
         return bitmap
-    }
-
-    private fun <T> action(
-        direction: Int,
-        icon: Int,
-        intent: (String) -> T,
-    ) = SwipeAction(direction, icon, 0, 0) { position ->
-        position.takeIf { it > 0 }?.let { intent("entry") }
     }
 
     private fun list(themed: ContextThemeWrapper): FragmentNotificationHistoryBinding {
@@ -262,7 +276,10 @@ class HistorySwipeTest {
 
     private fun color(themed: ContextThemeWrapper, attr: Int): Int = MaterialColors.getColor(themed, attr, 0)
 
-    private fun idle() = shadowOf(Looper.getMainLooper()).idle()
+    private fun idle() {
+        dispatcher.scheduler.runCurrent()
+        shadowOf(Looper.getMainLooper()).idle()
+    }
 
     private fun save(bitmap: Bitmap, name: String) {
         val dir = System.getenv("TEST_UNDECLARED_OUTPUTS_DIR") ?: return

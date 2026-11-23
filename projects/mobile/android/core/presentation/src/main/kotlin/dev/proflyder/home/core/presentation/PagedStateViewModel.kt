@@ -7,6 +7,7 @@ import dev.proflyder.home.core.model.Keyed
 import dev.proflyder.home.core.model.Outcome
 import dev.proflyder.home.core.model.RemoteFailure
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.yield
 
 interface PagedScreenState<T : Keyed> {
     val pages: PagedState<T>
@@ -24,8 +25,14 @@ abstract class PagedStateViewModel<T : Keyed, S : PagedScreenState<T>, I : Any, 
     private val paging = PagingHandler(list, undo)
 
     init {
-        launch { paging.state.collect { pages -> updateState { copyPaging(pages, pendingRemoval) } } }
-        launch { paging.pendingUndo.collect { item -> updateState { copyPaging(pages, item) } } }
+        launch {
+            yield()
+            paging.state.collect { pages -> updateState { copyPaging(pages, pendingRemoval) } }
+        }
+        launch {
+            yield()
+            paging.pendingUndo.collect { item -> updateState { copyPaging(pages, item) } }
+        }
     }
 
     fun dispatch(intent: PagingIntent) = paging.dispatch(intent)

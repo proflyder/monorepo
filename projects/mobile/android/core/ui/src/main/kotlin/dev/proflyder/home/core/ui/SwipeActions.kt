@@ -6,13 +6,11 @@ import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.RecyclerView
 import dev.proflyder.home.core.model.Keyed
 
-class SwipeActions<L, R>(
+class SwipeActions(
     context: Context,
-    private val left: SwipeAction<L>,
-    private val right: SwipeAction<R>,
+    private val left: SwipeAction,
+    private val right: SwipeAction,
     private val itemAt: (Int) -> Keyed?,
-    private val dispatchLeft: (L) -> Unit,
-    private val dispatchRight: (R) -> Unit,
 ) : ItemTouchHelper.SimpleCallback(0, ItemTouchHelper.LEFT or ItemTouchHelper.RIGHT) {
     private val background = SwipeBackground(context)
 
@@ -22,23 +20,14 @@ class SwipeActions<L, R>(
         target: RecyclerView.ViewHolder,
     ): Boolean = false
 
-    override fun getSwipeDirs(recyclerView: RecyclerView, viewHolder: RecyclerView.ViewHolder): Int {
-        val position = viewHolder.bindingAdapterPosition
-        if (itemAt(position) == null) return 0
-        val leftDirs = if (left.intentFor(position) != null) ItemTouchHelper.LEFT else 0
-        val rightDirs = if (right.intentFor(position) != null) ItemTouchHelper.RIGHT else 0
-        return leftDirs or rightDirs
-    }
+    override fun getSwipeDirs(recyclerView: RecyclerView, viewHolder: RecyclerView.ViewHolder): Int =
+        if (itemAt(viewHolder.bindingAdapterPosition) == null) 0 else left.direction or right.direction
 
     override fun getSwipeThreshold(viewHolder: RecyclerView.ViewHolder): Float = SWIPE_THRESHOLD
 
     override fun onSwiped(viewHolder: RecyclerView.ViewHolder, direction: Int) {
         val position = viewHolder.bindingAdapterPosition
-        if (direction == ItemTouchHelper.LEFT) {
-            left.intentFor(position)?.let(dispatchLeft)
-        } else {
-            right.intentFor(position)?.let(dispatchRight)
-        }
+        if (direction == ItemTouchHelper.LEFT) left.onSwiped(position) else right.onSwiped(position)
         recover(viewHolder)
     }
 

@@ -196,7 +196,7 @@ class PagedList<T : Keyed>(
             throw failure
         }
         synchronized(lock) {
-            if (result is Outcome.Failure) rollback(backup)
+            if (result is Outcome.Failure) rollback(backup) else settle(edit)
         }
         return result
     }
@@ -247,6 +247,10 @@ class PagedList<T : Keyed>(
         val optimistic = before.mapValues { (_, item) -> transform(item) }
         mutable.value = mutable.value.copy(items = mutable.value.items.map(transform))
         return Backup.All(before, optimistic)
+    }
+
+    private fun settle(edit: ListEdit<T>) {
+        if (edit is ListEdit.Remove) hidden.remove(edit.key)
     }
 
     private fun rollback(backup: Backup<T>) {

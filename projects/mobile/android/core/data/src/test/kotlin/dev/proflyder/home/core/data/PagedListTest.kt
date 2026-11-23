@@ -199,13 +199,14 @@ class PagedListTest {
     fun aSuccessfulRemoveKeepsTheItemHidden() = runTest {
         val source = FakeSource(
             Outcome.Success(Page(rows("a", "b"), "next")),
-            Outcome.Success(Page(rows("a", "c"), null)),
+            Outcome.Success(Page(rows("b", "c"), null)),
         )
         val list = list(source)
         list.dispatch(PagingAction.Refresh(RefreshMode.HARD))
         advanceUntilIdle()
 
         val result = list.commit(ListEdit.Remove("a"), { Outcome.Success(Unit) })
+        list.reveal("a")
         list.dispatch(PagingAction.LoadMore)
         advanceUntilIdle()
 

@@ -275,8 +275,10 @@ its source and its own actions.
    `dispatch(PagingIntent)`, `dispatch(ListItemIntent)` and the normal
    `dispatch(I)`; every action enters the ViewModel. The screen intent keeps
    only its own actions (Open/ToggleRead/ReadAll/Clear). The base copies pages
-   and the pending removal into `S` via `copyPaging`, and maps a failed removal
-   commit (revealed item) to `E` via `pagingFailure`.
+   and the pending removal into `S` via `copyPaging`; the screen also derives
+   rows/day sections and `hasUnread` there with its injected `Clock`, so the
+   fragment only renders slices. A failed removal commit (revealed item) maps
+   to `E` via `pagingFailure`.
 5. The fragment wires the list with one `PagingBinder` call (RecyclerView,
    `ListStateViews`, content adapter, failure text, `PagingIntent` sink,
    optional `SwipeRefreshLayout`) and renders with
@@ -287,10 +289,12 @@ its source and its own actions.
    import them without a dependency cycle; it only uses core-ui views and the
    footer adapter. It installs `ConcatAdapter(content, PagingFooterAdapter)`,
    `loadMoreNearEnd`, retry and loading/empty/error rendering. Swipes are
-   declared with `SwipeAction(direction, icon, color, iconTint, intentFor)` and
-   `SwipeActions<L, R>`; left and right dispatch different intent types
-   directly to `viewModel.dispatch`. The callback resets the holder after every
-   swipe and draws only the active action background, so no plaque remains.
+   declared with `SwipeAction(direction, SwipeStyle, onSwiped)`/
+   `swipeAction(...)` and `SwipeActions(left, right, itemAt)`;
+   `SwipeStyle.Delete`/`ToggleRead` keep icons and theme attrs in core/ui, and
+   each action calls `viewModel.dispatch` itself. The callback resets the
+   holder after every swipe and draws only the active action background, so no
+   plaque remains.
 
 The screen state keeps `PagedState<T>` as one field; day sections, counters and
 badges are selectors in `render`.

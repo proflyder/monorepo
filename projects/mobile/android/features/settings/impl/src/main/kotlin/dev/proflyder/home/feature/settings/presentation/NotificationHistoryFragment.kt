@@ -13,14 +13,13 @@ import dev.proflyder.home.core.presentation.screenViewModel
 import dev.proflyder.home.core.ui.AdapterCallback
 import dev.proflyder.home.core.ui.ListStateViews
 import dev.proflyder.home.core.ui.SwipeActions
+import dev.proflyder.home.core.ui.SwipeStyle
 import dev.proflyder.home.core.ui.applyScrollBottomInset
 import dev.proflyder.home.core.ui.setVisible
 import dev.proflyder.home.core.ui.swipeAction
 import dev.proflyder.home.core.ui.userMessage
 import dev.proflyder.home.feature.settings.impl.R
 import dev.proflyder.home.feature.settings.impl.databinding.FragmentNotificationHistoryBinding
-import java.time.LocalDate
-import java.time.ZoneId
 
 internal class NotificationHistoryFragment :
     ScreenFragment<FragmentNotificationHistoryBinding, NotificationHistoryUiState, HistoryIntent, HistoryEvent>(
@@ -56,13 +55,11 @@ internal class NotificationHistoryFragment :
         binding.historyList.addHistoryDecorations()
         binding.historyClear.setOnClickListener { confirmClear() }
         binding.historyReadAll.setOnClickListener { viewModel.dispatch(HistoryIntent.ReadAll) }
-        render({ rows(it) }, adapter::submitList)
+        render(NotificationHistoryUiState::rows, adapter::submitList)
         render(NotificationHistoryUiState::pages, binder::render)
         render(NotificationHistoryUiState::pendingRemoval, undo::render)
-        render(NotificationHistoryUiState::pages) { pages ->
-            renderCount(pages.items.size)
-            binding.historyReadAll.setVisible(pages.items.any { !it.read })
-        }
+        render(NotificationHistoryUiState::pages) { pages -> renderCount(pages.items.size) }
+        render(NotificationHistoryUiState::hasUnread) { binding.historyReadAll.setVisible(it) }
     }
 
     override fun onBindingDestroyed() {
@@ -70,28 +67,23 @@ internal class NotificationHistoryFragment :
         binding.historyList.adapter = null
     }
 
-    private fun rows(state: NotificationHistoryUiState): List<HistoryRow> =
-        HistoryRows.of(state.pages.items, LocalDate.now(), ZoneId.systemDefault())
-
     private fun renderCount(count: Int) = with(binding) {
         historyClear.setVisible(count > 0)
         historyCount.text = getString(R.string.history_count, count)
         historyCount.setVisible(count > 0)
     }
 
-    private fun swipes(): SwipeActions<ListItemIntent, HistoryIntent> {
+    private fun swipes(): SwipeActions {
         val context = requireContext()
         return SwipeActions(
             context,
-            left = swipeAction<ListItemIntent>(context, ItemTouchHelper.LEFT, R.drawable.settings_ic_delete, com.google.android.material.R.attr.colorError, com.google.android.material.R.attr.colorOnError) { position ->
-                entryAt(position)?.let { ListItemIntent.Remove(it.key) }
+            left = swipeAction(ItemTouchHelper.LEFT, SwipeStyle.Delete) { position ->
+                entryAt(position)?.let { viewModel.dispatch(ListItemIntent.Remove(it.key)) }
             },
-            right = swipeAction<HistoryIntent>(context, ItemTouchHelper.RIGHT, R.drawable.settings_ic_mark_unread, androidx.appcompat.R.attr.colorPrimary, com.google.android.material.R.attr.colorOnPrimary) { position ->
-                entryAt(position)?.let { HistoryIntent.ToggleRead(it.key) }
+            right = swipeAction(ItemTouchHelper.RIGHT, SwipeStyle.ToggleRead) { position ->
+                entryAt(position)?.let { viewModel.dispatch(HistoryIntent.ToggleRead(it.key)) }
             },
-            itemAt = { position -> (adapter.currentList.getOrNull(position) as? HistoryRow.Item)?.entry },
-            dispatchLeft = viewModel::dispatch,
-            dispatchRight = viewModel::dispatch,
+            itemAt = ::entryAt,
         )
     }
 

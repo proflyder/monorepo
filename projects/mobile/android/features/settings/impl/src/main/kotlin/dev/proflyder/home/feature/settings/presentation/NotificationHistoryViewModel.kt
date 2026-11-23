@@ -3,6 +3,7 @@ package dev.proflyder.home.feature.settings.presentation
 import androidx.lifecycle.ViewModel
 import dev.proflyder.home.core.data.FeatureScope
 import dev.proflyder.home.core.data.PagedState
+import dev.proflyder.home.core.model.Clock
 import dev.proflyder.home.core.model.NotificationHistory
 import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.core.navigation.Route
@@ -16,11 +17,15 @@ import dev.zacsweers.metro.ClassKey
 import dev.zacsweers.metro.ContributesIntoMap
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.binding
+import java.time.Instant
+import java.time.ZoneId
 import kotlinx.coroutines.CoroutineScope
 
 internal data class NotificationHistoryUiState(
     override val pages: PagedState<NotificationHistory> = PagedState(),
     override val pendingRemoval: NotificationHistory? = null,
+    val rows: List<HistoryRow> = emptyList(),
+    val hasUnread: Boolean = false,
 ) : PagedScreenState<NotificationHistory>
 
 internal sealed interface HistoryIntent {
@@ -38,6 +43,7 @@ internal sealed interface HistoryEvent {
 
 internal class NotificationHistoryViewModel(
     private val repository: NotificationHistoryRepository,
+    private val clock: Clock,
     appScope: CoroutineScope,
 ) : PagedStateViewModel<NotificationHistory, NotificationHistoryUiState, HistoryIntent, HistoryEvent>(
     NotificationHistoryUiState(),
@@ -45,8 +51,17 @@ internal class NotificationHistoryViewModel(
     appScope,
     repository::remove,
 ) {
+    private val zone: ZoneId = ZoneId.systemDefault()
+
     override fun copyPaging(pages: PagedState<NotificationHistory>, pendingRemoval: NotificationHistory?): NotificationHistoryUiState =
-        NotificationHistoryUiState(pages, pendingRemoval)
+        NotificationHistoryUiState(
+            pages = pages,
+            pendingRemoval = pendingRemoval,
+            rows = HistoryRows.of(pages.items, today(), zone),
+            hasUnread = pages.items.any { !it.read },
+        )
+
+    private fun today() = Instant.ofEpochMilli(clock.wallMillis()).atZone(zone).toLocalDate()
 
     override fun pagingFailure(failure: RemoteFailure): HistoryEvent = HistoryEvent.Failure(failure)
 
@@ -90,7 +105,8 @@ internal class NotificationHistoryViewModel(
 @Inject
 class NotificationHistoryViewModelSource internal constructor(
     private val history: FeatureScope<NotificationHistoryRepository>,
+    private val clock: Clock,
     private val appScope: CoroutineScope,
 ) : ViewModelSource {
-    override fun create(): ViewModel = history.viewModel { NotificationHistoryViewModel(it, appScope) }
+    override fun create(): ViewModel = history.viewModel { NotificationHistoryViewModel(it, clock, appScope) }
 }
