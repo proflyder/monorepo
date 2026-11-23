@@ -1,11 +1,14 @@
 package dev.proflyder.home.feature.push
 
 import dev.proflyder.home.core.data.FeatureLifetime
+import dev.proflyder.home.core.data.LoadState
+import dev.proflyder.home.core.data.PagingAction
 import dev.proflyder.home.core.data.RefreshMode
 import dev.proflyder.home.core.data.SyncEntity
 import dev.proflyder.home.core.data.SyncOp
 import dev.proflyder.home.core.data.SyncSignal
 import dev.proflyder.home.core.data.SyncSignals
+import dev.proflyder.home.core.model.ConnectCode
 import dev.proflyder.home.core.model.NotificationHistory
 import dev.proflyder.home.core.model.NotificationHistoryPage
 import dev.proflyder.home.core.model.NotificationHistoryType
@@ -18,6 +21,8 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -25,14 +30,14 @@ import org.junit.Test
 @Suppress("LongLambda")
 class SchedulerNotificationHistoryRepositoryTest {
     @Test
-    fun theFirstPageFillsThePagerAndTheUnreadBadge() = runTest {
+    fun theFirstPageFillsTheListAndTheUnreadBadge() = runTest {
         val api = FakeApi(entries = listOf(entry("a", read = false), entry("b", read = true)))
         withRepository(api) { repository ->
             advanceUntilIdle()
 
-            assertEquals(listOf("a", "b"), repository.pager.state.value.items.map { it.id })
+            assertEquals(listOf("a", "b"), repository.paged.state.value.items.map { it.key })
             assertEquals(1, repository.unread.value)
-            assertEquals(null, api.requestedCursor)
+            assertNull(api.requestedCursor)
         }
     }
 
@@ -46,7 +51,7 @@ class SchedulerNotificationHistoryRepositoryTest {
             val result = repository.setRead(entry("a", read = false), true)
 
             assertTrue(result is Outcome.Failure)
-            assertEquals(false, repository.pager.state.value.items.single().read)
+            assertEquals(false, repository.paged.state.value.item("a")?.read)
         }
     }
 
@@ -59,54 +64,37 @@ class SchedulerNotificationHistoryRepositoryTest {
             val result = repository.setRead(entry("a", read = false), true)
 
             assertTrue(result is Outcome.Success)
-            assertEquals(true, repository.pager.state.value.items.single().read)
+            assertEquals(true, repository.paged.state.value.item("a")?.read)
             assertEquals(0, repository.unread.value)
         }
     }
 
     @Test
-    fun aPendingDeleteIsFilteredFromSyncedPagesUntilItIsConfirmed() = runTest {
+    fun aHiddenDeleteIsFilteredFromARefresh() = runTest {
         val api = FakeApi(entries = listOf(entry("a"), entry("b")))
         withRepository(api) { repository ->
             advanceUntilIdle()
-            val target = repository.pager.state.value.items.first { it.id == "a" }
+            repository.paged.hide("a")
 
-            repository.removeLocal(target)
-            repository.pager.refresh(RefreshMode.HARD)
+            repository.paged.dispatch(PagingAction.Refresh(RefreshMode.HARD))
             advanceUntilIdle()
 
-            assertEquals(listOf("b"), repository.pager.state.value.items.map { it.id })
+            assertEquals(listOf("b"), repository.paged.state.value.items.map { it.key })
         }
     }
 
     @Test
-    fun undoingAPendingDeleteLetsTheEntryComeBackFromTheServer() = runTest {
+    fun removingCallsTheServerAndKeepsTheItemHidden() = runTest {
         val api = FakeApi(entries = listOf(entry("a"), entry("b")))
         withRepository(api) { repository ->
             advanceUntilIdle()
-            val target = repository.pager.state.value.items.first { it.id == "a" }
-
-            val removal = checkNotNull(repository.removeLocal(target))
-            repository.restoreLocal(removal)
-            repository.pager.refresh(RefreshMode.HARD)
-            advanceUntilIdle()
-
-            assertEquals(listOf("a", "b"), repository.pager.state.value.items.map { it.id })
-        }
-    }
-
-    @Test
-    fun removingAfterTheUndoWindowCallsTheServer() = runTest {
-        val api = FakeApi(entries = listOf(entry("a"), entry("b")))
-        withRepository(api) { repository ->
-            advanceUntilIdle()
-            repository.removeLocal(entry("a"))
+            repository.paged.hide("a")
 
             val result = repository.remove(entry("a"))
 
             assertTrue(result is Outcome.Success)
             assertEquals(listOf("a"), api.removed)
-            assertEquals(listOf("b"), repository.pager.state.value.items.map { it.id })
+            assertEquals(listOf("b"), repository.paged.state.value.items.map { it.key })
         }
     }
 
@@ -118,17 +106,17 @@ class SchedulerNotificationHistoryRepositoryTest {
         withRepository(api, signals) { repository ->
             advanceUntilIdle()
             repeat(2) {
-                repository.pager.loadMore()
+                repository.paged.dispatch(PagingAction.LoadMore)
                 advanceUntilIdle()
             }
-            assertEquals(60, repository.pager.state.value.items.size)
+            assertEquals(60, repository.paged.state.value.items.size)
 
             api.entries = listOf(entry("fresh")) + entries
             signals.emit(SyncSignal.Changed(SyncEntity.NOTIFICATIONS, SyncOp.UPSERT, "fresh"))
             advanceUntilIdle()
 
-            assertEquals(61, repository.pager.state.value.items.size)
-            assertEquals("fresh", repository.pager.state.value.items.first().id)
+            assertEquals(61, repository.paged.state.value.items.size)
+            assertEquals("fresh", repository.paged.state.value.items.first().key)
         }
     }
 
@@ -142,7 +130,10 @@ class SchedulerNotificationHistoryRepositoryTest {
             signals.emit(SyncSignal.Changed(SyncEntity.NOTIFICATIONS, SyncOp.DELETE, "a"))
             advanceUntilIdle()
 
-            assertEquals(listOf("b"), repository.pager.state.value.items.map { it.id })
+            assertEquals(listOf("b"), repository.paged.state.value.items.map { it.key })
+            repository.paged.dispatch(PagingAction.Refresh(RefreshMode.HARD))
+            advanceUntilIdle()
+            assertFalse(repository.paged.state.value.items.any { it.key == "a" })
         }
     }
 
@@ -152,8 +143,8 @@ class SchedulerNotificationHistoryRepositoryTest {
         withRepository(api) { repository ->
             advanceUntilIdle()
 
-            assertTrue(repository.pager.state.value.items.isEmpty())
-            assertEquals(null, repository.pager.state.value.failure)
+            assertTrue(repository.paged.state.value.items.isEmpty())
+            assertFalse(repository.paged.state.value.refresh is LoadState.Failed)
             assertEquals(0, repository.unread.value)
         }
     }
@@ -164,21 +155,19 @@ class SchedulerNotificationHistoryRepositoryTest {
         block: suspend TestScope.(SchedulerNotificationHistoryRepository) -> Unit,
     ) {
         FeatureLifetime(this).use { lifetime ->
-            val repository = SchedulerNotificationHistoryRepository(
+            block(SchedulerNotificationHistoryRepository(
                 api,
                 lifetime,
                 object : SyncSignals {
                     override val signals = signals
                 },
-            )
-            block(repository)
+            ))
         }
     }
 
     private class FakeApi(
         var entries: List<NotificationHistory> = emptyList(),
         var failRead: Boolean = false,
-        private val pageSize: Int = 20,
         private val rejectWithoutDevice: Boolean = false,
     ) : NotificationHistoryApi {
         var requestedCursor: String? = null
@@ -188,7 +177,7 @@ class SchedulerNotificationHistoryRepositoryTest {
             if (rejectWithoutDevice) return Outcome.Failure(ServerError)
             requestedCursor = cursor
             val start = cursor?.toIntOrNull() ?: 0
-            val page = entries.drop(start).take(pageSize)
+            val page = entries.drop(start).take(20)
             val next = start + page.size
             return Outcome.Success(NotificationHistoryPage(page, next.takeIf { it < entries.size }?.toString()))
         }
@@ -216,7 +205,7 @@ class SchedulerNotificationHistoryRepositoryTest {
     private companion object {
         val ServerError = RemoteFailure.Server(
             httpStatus = 400,
-            code = dev.proflyder.home.core.model.ConnectCode.INVALID_ARGUMENT,
+            code = ConnectCode.INVALID_ARGUMENT,
             message = "invalid argument",
         )
 

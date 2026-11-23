@@ -238,7 +238,7 @@ projects/mobile/android/
   app/                    single Activity (chrome only), AppGraph, diagnostics
   core/
     model/                Android-free domain: Outcome/RemoteFailure, Clock, ServerClock, DeviceIdentity
-    data/                 EntityStore, EntitySource, Pager, FeatureScope (Android-free)
+    data/                 EntityStore, EntitySource, PagedList, FeatureScope (Android-free)
     runtime/              app scope, IoDispatcher, AppStartable, AppForeground, tickerFlow, Backoff
     config/ remoteconfig/ connection contract and its Firebase source
     settings/             DataStore + Keystore token
@@ -251,6 +251,46 @@ projects/mobile/android/
 packages/kotlin/core/     shared Kotlin utilities
 platform/android/         Bazel macros, Metro wiring, APK gate, signing, detekt rules
 ```
+
+### Paged lists
+
+Cursor lists are assembled from core pieces; a screen declares only its model,
+its source and its own actions.
+
+1. The model implements `Keyed` (`core/model`); no `keyOf` lambdas.
+2. The data source implements `PagedSource<T>` (`core/data`) and returns
+   `Page<T>(items, next)`; `PagedList` owns the only
+   `StateFlow<PagedState<T>>`. `PagingReducer` is pure: `Refresh`, `Reload`
+   (merge the first page into the loaded tail), `LoadMore`, `Retry`; transitions
+   and `LoadState` are tested without coroutines.
+3. The repository implements `PagedSource`, owns `PagedList`, and exposes domain
+   commands. Mutations are `ListEdit.Update` / `Remove` / `UpdateAll` committed
+   through `PagedList.commit`, which rolls back only the edited keys on failure.
+   `hide(key)` filters an item from the current state and from every incoming
+   page (pending delete); `reveal(key)` restores it. Sync signals dispatch
+   `PagingAction.Reload` or `hide`, never a full reset.
+4. The ViewModel creates `UndoableRemoval` (hide + `UndoWindow`, commit on
+   expiry or `close`) and `PagingHandler` (`core/presentation`). The handler
+   owns the shared `PagingIntent` (`Refresh`, `LoadMore`, `Retry`) and
+   `ListItemIntent` (`Remove`, `Undo`); the screen's own sealed intent keeps
+   only Open/ToggleRead/ReadAll/Clear and delegates `Remove`. Intents are not
+   wrapped: the fragment calls `viewModel.paging.dispatch(PagingIntent.*)` for
+   shared actions and `dispatch(ScreenIntent.*)` for its own.
+5. The fragment wires the list with one `PagingBinder` call (RecyclerView,
+   `ListStateViews`, content adapter, lifecycle owner, handler, failure text,
+   `PagingIntent` sink, optional `SwipeRefreshLayout`). `PagingBinder` lives in
+   `core/presentation` next to the shared intents, because `core/ui` cannot
+   import them without a dependency cycle; it only uses core-ui views and the
+   footer adapter. The binder installs
+   `ConcatAdapter(content, PagingFooterAdapter)`, `loadMoreNearEnd`, retry and
+   loading/empty/error rendering. Swipes are declared with
+   `SwipeAction(direction, icon, color, iconTint, intentFor)` and
+   `SwipeActions`; it resets the holder after every swipe and draws the
+   background of the active action only, so no plaque remains after a row is
+   removed.
+
+The screen state keeps `PagedState<T>` as one field; day sections, counters and
+badges are selectors in `render`.
 
 ### Module rules
 
@@ -391,14 +431,9 @@ platform/android/         Bazel macros, Metro wiring, APK gate, signing, detekt 
   flight. Lists, editors and the home screen subscribe to the store; an editor
   closes itself when its entity disappears. `LatestLauncher` makes the last
   request win.
-- Long server lists use `Pager` (`core/data`): cursor, page size 20, a mutex
-  around loads, `PagingState` (first load, append, errors, end), and optimistic
-  `update`/`remove`/`restore` with rollback. `PagingDelegate`
-  (`core/presentation`) feeds the state into a ViewModel; the screen renders
-  loading/error/empty with `ListStateViews` and appends a
-  `PagingFooterAdapter` through `ConcatAdapter`, with `loadMoreNearEnd`
-  requesting the next page. Notification history is owned by the scheduler and
-  fetched this way; the app has no local history copy.
+- Long server lists use the reusable paging stack; see `Paged lists` below.
+  Notification history is owned by the scheduler and fetched this way; the app
+  has no local history copy.
 - Lists use `KeyedDiff`, which always returns a payload, so a partial change
   rebinds the same holder (`aspectPayload` per aspect) and never cross-fades.
 - Editors share `EditorDraftSession`: draft, the create idempotency key bound

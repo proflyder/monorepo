@@ -5,7 +5,8 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import dev.proflyder.home.core.data.PagingState
+import dev.proflyder.home.core.data.LoadState
+import dev.proflyder.home.core.data.PagedState
 import dev.proflyder.home.core.ui.databinding.ItemPagingFooterBinding
 
 enum class PagingFooter {
@@ -14,9 +15,9 @@ enum class PagingFooter {
     ERROR,
 }
 
-fun PagingState<*>.footer(): PagingFooter = when {
-    appendFailure != null -> PagingFooter.ERROR
-    appending -> PagingFooter.LOADING
+fun PagedState<*>.footer(): PagingFooter = when (append) {
+    is LoadState.Failed -> PagingFooter.ERROR
+    LoadState.Loading -> PagingFooter.LOADING
     else -> PagingFooter.NONE
 }
 

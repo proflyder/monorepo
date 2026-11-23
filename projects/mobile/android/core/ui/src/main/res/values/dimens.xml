@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <dimen name="ui_fab_clearance">88dp</dimen>
+    <dimen name="ui_swipe_radius">16dp</dimen>
+    <dimen name="ui_swipe_icon_inset">24dp</dimen>
 </resources>

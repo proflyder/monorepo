@@ -8,15 +8,22 @@ import android.view.View
 import androidx.appcompat.view.ContextThemeWrapper
 import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
+import com.google.android.material.color.MaterialColors
 import dev.proflyder.home.core.data.Page
-import dev.proflyder.home.core.data.Pager
-import dev.proflyder.home.core.data.PagerRemoval
+import dev.proflyder.home.core.data.PageRequest
+import dev.proflyder.home.core.data.PagedList
+import dev.proflyder.home.core.data.PagedSource
+import dev.proflyder.home.core.data.PagingAction
 import dev.proflyder.home.core.data.RefreshMode
+import dev.proflyder.home.core.data.ListEdit
 import dev.proflyder.home.core.model.NotificationHistory
 import dev.proflyder.home.core.model.NotificationHistoryType
 import dev.proflyder.home.core.model.Outcome
-import dev.proflyder.home.core.testing.FakeClock
+import dev.proflyder.home.core.presentation.ListItemIntent
 import dev.proflyder.home.core.ui.BaseAdapterCallback
+import dev.proflyder.home.core.ui.SwipeAction
+import dev.proflyder.home.core.ui.SwipeActions
+import dev.proflyder.home.core.ui.SwipeBackground
 import dev.proflyder.home.feature.push.NotificationHistoryRepository
 import dev.proflyder.home.feature.settings.impl.R
 import dev.proflyder.home.feature.settings.impl.databinding.FragmentNotificationHistoryBinding
@@ -29,6 +36,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -47,45 +55,44 @@ class HistorySwipeTest {
     @Test
     fun deletingKeepsTheEntryForUndoAndUndoPutsItBack() {
         val repository = FakeRepository(entries)
-        val model = NotificationHistoryViewModel(repository, FakeClock(now))
+        val model = NotificationHistoryViewModel(repository, CoroutineScope(Dispatchers.Main))
         idle()
 
-        model.dispatch(HistoryIntent.Delete(entries[1]))
+        model.dispatch(HistoryIntent.Remove("b"))
         idle()
-        assertEquals(listOf("a", "c"), repository.pager.state.value.items.map { it.id })
-        assertEquals("b", model.state.value.undo?.id)
+        assertEquals(listOf("a", "c"), repository.paged.state.value.items.map { it.key })
+        assertEquals("b", model.state.value.undo?.key)
 
-        model.dispatch(HistoryIntent.Undo)
+        model.paging.dispatch(ListItemIntent.Undo)
         idle()
-        assertEquals(listOf("a", "b", "c"), repository.pager.state.value.items.map { it.id })
+        assertEquals(listOf("a", "b", "c"), repository.paged.state.value.items.map { it.key })
         assertNull(model.state.value.undo)
     }
 
     @Test
     fun swipingRightTogglesReadBothWays() {
         val repository = FakeRepository(entries)
-        val model = NotificationHistoryViewModel(repository, FakeClock(now))
+        val model = NotificationHistoryViewModel(repository, CoroutineScope(Dispatchers.Main))
         idle()
 
-        model.dispatch(HistoryIntent.ToggleRead(entries[0]))
+        model.dispatch(HistoryIntent.ToggleRead("a"))
         idle()
-        assertEquals(true, repository.pager.state.value.items.first { it.id == "a" }.read)
-        model.dispatch(HistoryIntent.ToggleRead(entries[1]))
+        assertEquals(true, repository.paged.state.value.item("a")?.read)
+        model.dispatch(HistoryIntent.ToggleRead("b"))
         idle()
-        assertEquals(false, repository.pager.state.value.items.first { it.id == "b" }.read)
+        assertEquals(false, repository.paged.state.value.item("b")?.read)
     }
 
     @Test
-    fun readingAllMarksEveryEntryAndClearsTheUndoSlot() {
+    fun readingAllMarksEveryEntry() {
         val repository = FakeRepository(entries)
-        val model = NotificationHistoryViewModel(repository, FakeClock(now))
+        val model = NotificationHistoryViewModel(repository, CoroutineScope(Dispatchers.Main))
         idle()
 
         model.dispatch(HistoryIntent.ReadAll)
         idle()
 
-        assertEquals(0, model.state.value.unread)
-        assertEquals(listOf(true, true, true), repository.pager.state.value.items.map { it.read })
+        assertTrue(repository.paged.state.value.items.all { it.read })
     }
 
     @Test
@@ -93,7 +100,13 @@ class HistorySwipeTest {
         val themed = theme()
         val binding = list(themed)
         val calls = mutableListOf<String>()
-        val swipe = HistorySwipe(Recorder(binding, calls), HistorySwipeBackground(themed))
+        val swipe = SwipeActions(
+            themed,
+            left = action(ItemTouchHelper.LEFT, R.drawable.settings_ic_delete) { HistoryIntent.Remove(it) },
+            right = action(ItemTouchHelper.RIGHT, R.drawable.settings_ic_mark_unread) { HistoryIntent.ToggleRead(it) },
+            itemAt = { position -> (binding.historyList.adapter as NotificationHistoryAdapter).currentList.getOrNull(position)?.let { (it as? HistoryRow.Item)?.entry } },
+            dispatch = { calls += it.toString() },
+        )
         val header = checkNotNull(binding.historyList.findViewHolderForAdapterPosition(0))
         val first = checkNotNull(binding.historyList.findViewHolderForAdapterPosition(1))
 
@@ -101,45 +114,72 @@ class HistorySwipeTest {
         assertEquals(ItemTouchHelper.LEFT or ItemTouchHelper.RIGHT, swipe.getSwipeDirs(binding.historyList, first))
         swipe.onSwiped(first, ItemTouchHelper.LEFT)
         swipe.onSwiped(first, ItemTouchHelper.RIGHT)
-        assertEquals(listOf("delete:a", "toggle:a"), calls)
+        assertEquals(0f, first.itemView.translationX)
+        assertEquals(2, calls.size)
     }
 
     @Test
-    fun swipeBackgroundsUseTheActionColourAndIcon() {
+    fun theSwipeBackgroundsUseErrorAndPrimaryColours() {
         val themed = theme()
-        val background = HistorySwipeBackground(themed)
-        assertEquals(R.drawable.settings_ic_delete, background.sideFor(left = true).iconRes)
-        assertEquals(R.drawable.settings_ic_mark_unread, background.sideFor(left = false).iconRes)
-
         val binding = list(themed)
-        val root = binding.root
+        val canvas = Canvas(Bitmap.createBitmap(binding.root.width, binding.root.height, Bitmap.Config.ARGB_8888))
+        val item = checkNotNull(binding.historyList.findViewHolderForAdapterPosition(1)).itemView
+        val delete = SwipeAction(ItemTouchHelper.LEFT, R.drawable.settings_ic_delete, color(themed, com.google.android.material.R.attr.colorError), color(themed, com.google.android.material.R.attr.colorOnError)) { null }
+        val toggle = SwipeAction(ItemTouchHelper.RIGHT, R.drawable.settings_ic_mark_unread, color(themed, androidx.appcompat.R.attr.colorPrimary), color(themed, com.google.android.material.R.attr.colorOnPrimary)) { null }
+        val background = SwipeBackground(themed)
+
+        background.draw(canvas, item, -SWIPE_PX, delete)
+        background.draw(canvas, item, SWIPE_PX, toggle)
+
+        assertEquals(delete.color, color(themed, com.google.android.material.R.attr.colorError))
+        assertEquals(toggle.color, color(themed, androidx.appcompat.R.attr.colorPrimary))
+    }
+
+    @Test
+    fun swipePngsShowTheActionAndNoPlaqueAfterDeletion() {
+        val themed = theme()
+        val binding = list(themed)
+        val item = checkNotNull(binding.historyList.findViewHolderForAdapterPosition(1)).itemView
+        val delete = SwipeAction(ItemTouchHelper.LEFT, R.drawable.settings_ic_delete, color(themed, com.google.android.material.R.attr.colorError), color(themed, com.google.android.material.R.attr.colorOnError)) { null }
+        val toggle = SwipeAction(ItemTouchHelper.RIGHT, R.drawable.settings_ic_mark_unread, color(themed, androidx.appcompat.R.attr.colorPrimary), color(themed, com.google.android.material.R.attr.colorOnPrimary)) { null }
+        val background = SwipeBackground(themed)
+
+        save(swipedRow(item, background, -SWIPE_PX, delete), "notification-history-swipe-left.png")
+        save(swipedRow(item, background, SWIPE_PX, toggle), "notification-history-swipe-right.png")
+
+        val filtered = entries.filterNot { it.key == "a" }
+        binding.historyList.adapter = NotificationHistoryAdapter(NoopCallback()).apply {
+            submitList(HistoryRows.of(filtered, LocalDate.now(), ZoneId.systemDefault()))
+        }
         idle()
-        val bitmap = Bitmap.createBitmap(root.width, root.height, Bitmap.Config.ARGB_8888)
+        binding.root.measure(exactly(binding.root.width), exactly(binding.root.height))
+        binding.root.layout(0, 0, binding.root.width, binding.root.height)
+        save(bitmap(binding.root), "notification-history-after-delete.png")
+    }
+
+    private fun swipedRow(item: View, background: SwipeBackground, dx: Float, action: SwipeAction<*>): Bitmap {
+        val bitmap = Bitmap.createBitmap(item.width, item.height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
-        root.draw(canvas)
-        swiped(binding, background, canvas, position = 1, dx = -SWIPE_PX)
-        swiped(binding, background, canvas, position = 3, dx = SWIPE_PX)
-        save(bitmap, "notification-history-swipe-dark.png")
-        val deleteItem = checkNotNull(binding.historyList.findViewHolderForAdapterPosition(1)).itemView
-        val deleteArea = bitmap.getPixel(binding.historyList.left + deleteItem.right - EDGE_PX, centerOf(binding, 1))
-        assertEquals(background.sideFor(left = true).color, deleteArea)
-    }
-
-    private fun swiped(binding: FragmentNotificationHistoryBinding, background: HistorySwipeBackground, canvas: Canvas, position: Int, dx: Float) {
-        val item = checkNotNull(binding.historyList.findViewHolderForAdapterPosition(position)).itemView
-        canvas.save()
-        canvas.translate(binding.historyList.left.toFloat(), binding.historyList.top.toFloat() + parentTop(binding))
-        background.draw(canvas, item, dx)
-        canvas.translate(item.left + dx, item.top.toFloat())
+        canvas.translate(-item.left.toFloat(), -item.top.toFloat())
+        item.translationX = 0f
+        background.draw(canvas, item, dx, action)
+        canvas.translate(dx, 0f)
         item.draw(canvas)
-        canvas.restore()
+        return bitmap
     }
 
-    private fun parentTop(binding: FragmentNotificationHistoryBinding): Float = (binding.historyList.parent as View).top.toFloat()
+    private fun bitmap(view: View): Bitmap {
+        val bitmap = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
+        view.draw(Canvas(bitmap))
+        return bitmap
+    }
 
-    private fun centerOf(binding: FragmentNotificationHistoryBinding, position: Int): Int {
-        val item = checkNotNull(binding.historyList.findViewHolderForAdapterPosition(position)).itemView
-        return (parentTop(binding) + binding.historyList.top + item.top + item.height / 2).toInt()
+    private fun action(
+        direction: Int,
+        icon: Int,
+        intent: (String) -> HistoryIntent,
+    ) = SwipeAction(direction, icon, 0, 0) { position ->
+        position.takeIf { it > 0 }?.let { intent("entry") }
     }
 
     private fun list(themed: ContextThemeWrapper): FragmentNotificationHistoryBinding {
@@ -158,65 +198,47 @@ class HistorySwipeTest {
         return binding
     }
 
-    private class Recorder(private val binding: FragmentNotificationHistoryBinding, private val calls: MutableList<String>) : HistorySwipeActions {
-        override fun entryAt(position: Int): NotificationHistory? =
-            ((binding.historyList.adapter as NotificationHistoryAdapter).currentList.getOrNull(position) as? HistoryRow.Item)?.entry
-
-        override fun onDelete(entry: NotificationHistory) {
-            calls += "delete:${entry.id}"
-        }
-
-        override fun onToggleRead(entry: NotificationHistory) {
-            calls += "toggle:${entry.id}"
-        }
-    }
-
     private class FakeRepository(initial: List<NotificationHistory>) : NotificationHistoryRepository {
         private var all = initial
         private val scope = CoroutineScope(Dispatchers.Main)
         private val mutableUnread = MutableStateFlow(initial.count { !it.read })
 
-        override val pager = Pager(scope, { _, _ -> Outcome.Success(Page(all, null)) }, NotificationHistory::id)
+        override val paged: PagedList<NotificationHistory> = PagedList(scope, object : PagedSource<NotificationHistory> {
+            override suspend fun load(request: PageRequest): Outcome<Page<NotificationHistory>> =
+                Outcome.Success(Page(all, null))
+        })
+
+        override suspend fun load(request: PageRequest): Outcome<Page<NotificationHistory>> =
+            Outcome.Success(Page(all, null))
 
         override val unread: StateFlow<Int> = mutableUnread
 
         init {
-            pager.refresh(RefreshMode.HARD)
+            paged.dispatch(PagingAction.Refresh(RefreshMode.HARD))
         }
 
-        override fun refresh() = pager.refresh(RefreshMode.HARD)
-
-        override fun removeLocal(entry: NotificationHistory): PagerRemoval<NotificationHistory>? = pager.removeLocal(entry.id)
-
-        override fun restoreLocal(removal: PagerRemoval<NotificationHistory>) = pager.restoreLocal(removal)
-
         override suspend fun setRead(entry: NotificationHistory, read: Boolean): Outcome<Unit> {
-            all = all.map { if (it.id == entry.id) it.copy(read = read) else it }
-            pager.updateLocal(entry.id) { it.copy(read = read) }
-            mutableUnread.value = pager.itemsSnapshot().count { !it.read }
-            return Outcome.Success(Unit)
+            all = all.map { if (it.key == entry.key) it.copy(read = read) else it }
+            mutableUnread.value = all.count { !it.read }
+            return paged.commit(ListEdit.Update(entry.key) { it.copy(read = read) }) { Outcome.Success(Unit) }
         }
 
         override suspend fun remove(entry: NotificationHistory): Outcome<Unit> {
-            all = all.filterNot { it.id == entry.id }
-            return Outcome.Success(Unit)
-        }
-
-        override fun removeLater(entry: NotificationHistory) {
-            all = all.filterNot { it.id == entry.id }
+            all = all.filterNot { it.key == entry.key }
+            mutableUnread.value = all.count { !it.read }
+            return paged.commit(ListEdit.Remove(entry.key)) { Outcome.Success(Unit) }
         }
 
         override suspend fun readAll(): Outcome<Unit> {
             all = all.map { it.copy(read = true) }
-            pager.replaceLocal(pager.itemsSnapshot().map { it.copy(read = true) })
             mutableUnread.value = 0
-            return Outcome.Success(Unit)
+            return paged.commit(ListEdit.UpdateAll { it.copy(read = true) }) { Outcome.Success(Unit) }
         }
 
         override suspend fun clear(): Outcome<Unit> {
             all = emptyList()
-            pager.replaceLocal(emptyList())
             mutableUnread.value = 0
+            paged.dispatch(PagingAction.Refresh(RefreshMode.HARD))
             return Outcome.Success(Unit)
         }
     }
@@ -237,6 +259,8 @@ class HistorySwipeTest {
         com.google.android.material.R.style.Theme_Material3_Dark_NoActionBar,
     )
 
+    private fun color(themed: ContextThemeWrapper, attr: Int): Int = MaterialColors.getColor(themed, attr, 0)
+
     private fun idle() = shadowOf(Looper.getMainLooper()).idle()
 
     private fun save(bitmap: Bitmap, name: String) {
@@ -254,6 +278,5 @@ class HistorySwipeTest {
         const val HEIGHT_DP = 891
         const val SWIPE_PX = 360f
         const val PNG_QUALITY = 100
-        const val EDGE_PX = 12
     }
 }

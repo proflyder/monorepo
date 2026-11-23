@@ -18,7 +18,9 @@ data class NotificationHistory(
     val deepLink: String? = null,
     val createdUnix: Long,
     val read: Boolean = false,
-)
+) : Keyed {
+    override val key: String get() = id
+}
 
 data class NotificationHistoryPage(
     val entries: List<NotificationHistory>,

@@ -336,3 +336,16 @@
     состояние домашнего сервера, а не телефона; `mcp-gateway` по решению 62
     владеет чатом Hermes, а не уведомлениями, и локальная DataStore-копия
     расходилась между устройствами и не переживала переустановку.
+68. **Пагинация Android — один PagedList и чистый reducer.** Список с курсором
+    собирается из `PagedSource`, `PagedList` (единственный владелец
+    `StateFlow<PagedState>`) и чистого `PagingReducer` (`Refresh`, `Reload`,
+    `LoadMore`, `Retry`), поэтому переходы тестируются без корутин. Правки —
+    `ListEdit.Update/Remove/UpdateAll` через `commit` с откатом только своих
+    ключей; скрытые ключи фильтруют текущий список и входящие страницы, без
+    `pendingDeletes` в репозитории. Общие `PagingIntent`/`ListItemIntent`
+    обрабатывает `PagingHandler`, `UndoableRemoval` держит undo поверх
+    `UndoWindow`; экран описывает только свои интенты. `PagingBinder` одним
+    вызовом связывает RecyclerView, `ConcatAdapter`, `ListStateViews`,
+    SwipeRefresh и догрузку, а `SwipeActions` объявляет действия без ручного
+    `ItemTouchHelper`. Причина: прежние `Pager`/`PagingDelegate` были тонкими
+    обёртками, интенты и undo дублировались в каждом экране.

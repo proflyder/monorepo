@@ -1,7 +1,8 @@
 package dev.proflyder.home.core.presentation
 
 import dev.proflyder.home.core.data.ListLoadState
-import dev.proflyder.home.core.data.PagingState
+import dev.proflyder.home.core.data.LoadState
+import dev.proflyder.home.core.data.PagedState
 import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.core.ui.ListStateViews
 
@@ -20,14 +21,14 @@ fun ListStateViews.render(
 }
 
 fun ListStateViews.render(
-    paging: PagingState<*>,
+    pages: PagedState<*>,
     failureText: (RemoteFailure) -> CharSequence,
 ) {
-    val failure = paging.failure
+    val refresh = pages.refresh
     when {
-        paging.hasItems -> showContent(paging.refreshing)
-        paging.refreshing -> showLoading()
-        failure != null -> showError(failureText(failure))
+        pages.items.isNotEmpty() -> showContent(pages.isRefreshing)
+        refresh is LoadState.Loading -> showLoading()
+        refresh is LoadState.Failed -> showError(failureText(refresh.failure))
         else -> showEmpty()
     }
 }
