@@ -12,6 +12,8 @@ import dev.proflyder.home.core.ui.keepFocusedVisible
 import dev.proflyder.home.core.ui.setVisible
 import dev.proflyder.home.feature.push.PushPermissionStatus
 import dev.proflyder.home.feature.push.PushRegistration
+import dev.proflyder.home.feature.push.PushRegistrationResult
+import dev.proflyder.home.core.ui.userMessage
 import dev.proflyder.home.feature.push.impl.R
 import dev.proflyder.home.feature.push.impl.databinding.FragmentPushSettingsBinding
 
@@ -53,9 +55,16 @@ internal class PushSettingsFragment :
         when (event) {
             PushSettingsEvent.Registered -> showMessage(R.string.push_registered)
             PushSettingsEvent.NameSaved -> showMessage(R.string.push_device_name_saved)
-            PushSettingsEvent.Failed -> showError(R.string.push_register_failed)
+            is PushSettingsEvent.Failed -> showError(registrationError(event.result))
             is PushSettingsEvent.OpenSettings -> open(event.screen)
         }
+    }
+
+    private fun registrationError(result: PushRegistrationResult): String = when (result) {
+        PushRegistrationResult.NoPushToken -> getString(R.string.push_register_failed_no_token)
+        PushRegistrationResult.NotConfigured -> getString(R.string.push_register_failed_not_configured)
+        is PushRegistrationResult.Rejected -> getString(R.string.push_register_failed_reason, result.failure.userMessage(requireContext()))
+        PushRegistrationResult.Done -> getString(R.string.push_registered)
     }
 
     private fun bindRow(row: ListRow, action: MaterialButton, screen: PushSettingsScreen) {

@@ -12,6 +12,7 @@ import org.junit.runners.Suite
 @RunWith(Suite::class)
 @Suite.SuiteClasses(
     CallManagerTest::class,
+    CallServiceTypesTest::class,
     AudioRoutesTest::class,
     CallAudioSessionTest::class,
     CallViewModelTest::class,

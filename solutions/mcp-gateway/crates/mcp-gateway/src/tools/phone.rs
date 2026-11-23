@@ -304,10 +304,10 @@ fn requested_name(arguments: &Value) -> Option<&str> {
 }
 
 fn choose<'a>(devices: &'a [Device], name: &str) -> Choice<'a> {
-    if devices.len() == 1 {
+    let query = tokens(name);
+    if query.is_empty() && devices.len() == 1 {
         return Choice::One(&devices[0]);
     }
-    let query = tokens(name);
     if query.is_empty() {
         return Choice::Ask(devices.iter().collect());
     }
@@ -359,8 +359,14 @@ fn list_speech(devices: &[Device]) -> String {
 }
 
 fn ask_speech(candidates: &[&Device], name: &str) -> String {
-    if candidates.is_empty() {
+    if candidates.is_empty() && name.is_empty() {
         return SPEECH_NO_PHONE.to_owned();
+    }
+    if candidates.is_empty() {
+        return format!(
+            "Телефон «{}» не зарегистрирован. {SPEECH_REGISTER_HINT}",
+            spoken_name(name)
+        );
     }
     let names = quoted_names(candidates);
     if name.is_empty() {
@@ -372,7 +378,22 @@ fn ask_speech(candidates: &[&Device], name: &str) -> String {
     if matched {
         return format!("Под это имя подходит несколько телефонов: {names}. Какой выбрать?");
     }
-    format!("Не нашёл телефон «{name}». Есть: {names}. На какой звонить?")
+    format!(
+        "Телефон «{}» не зарегистрирован. Есть: {names}. {SPEECH_REGISTER_HINT}",
+        spoken_name(name)
+    )
+}
+
+fn spoken_name(name: &str) -> String {
+    let words: Vec<&str> = name
+        .split_whitespace()
+        .filter(|word| !PHONE_WORDS.contains(&word.to_lowercase().as_str()))
+        .collect();
+    if words.is_empty() {
+        name.to_owned()
+    } else {
+        words.join(" ")
+    }
 }
 
 fn quoted_names(devices: &[&Device]) -> String {
@@ -487,6 +508,8 @@ fn strip(word: &str, suffixes: &[&str], keep: usize) -> String {
 const SPEECH_NOT_CONFIGURED: &str = "Уведомления на телефон не настроены.";
 const SPEECH_PUSH_FAILED: &str = "Не удалось отправить на телефон. Попробуй ещё раз.";
 const SPEECH_NO_PHONE: &str = "Телефон не зарегистрирован. Открой приложение на телефоне.";
+const SPEECH_REGISTER_HINT: &str =
+    "Открой на нём приложение и в настройках уведомлений укажи имя телефона и обнови регистрацию.";
 const SPEECH_NAME_TOO_LONG: &str = "Имя телефона слишком длинное. Назови имя короче.";
 
 const PHONE_FIND_DESCRIPTION: &str = "\
@@ -716,11 +739,50 @@ mod tests {
     }
 
     #[test]
-    fn a_single_phone_rings_without_a_name_even_when_a_name_was_said() {
+    fn a_single_phone_rings_when_no_name_was_said() {
         let (group, fake) = fixture(&[("device-a", "Стас")]);
-        let outcome = call(&group, "phone_find", json!({"name": "Аня"}));
+        let outcome = call(&group, "phone_find", json!({}));
         assert_eq!(outcome.speech, "Звоню на телефон «Стас».");
         assert_eq!(calls(&fake), ["devices", "find::device-a"]);
+    }
+
+    #[test]
+    fn a_named_phone_that_is_not_registered_never_rings_another_one() {
+        let (group, fake) = fixture(&[("device-a", "Стас")]);
+        let outcome = call(&group, "phone_find", json!({"name": "телефон Дарьи"}));
+        assert_eq!(
+            outcome.speech,
+            "Телефон «Дарьи» не зарегистрирован. Есть: «Стас». Открой на нём приложение и в настройках уведомлений укажи имя телефона и обнови регистрацию."
+        );
+        assert_eq!(calls(&fake), ["devices"]);
+    }
+
+    #[test]
+    fn a_named_phone_rings_when_it_is_the_only_one() {
+        let (group, fake) = fixture(&[("device-a", "Стас")]);
+        let outcome = call(&group, "phone_find", json!({"name": "Стаса"}));
+        assert_eq!(outcome.speech, "Звоню на телефон «Стас».");
+        assert_eq!(calls(&fake), ["devices", "find::device-a"]);
+    }
+
+    #[test]
+    fn the_named_phone_rings_among_several() {
+        let (group, fake) = fixture(&[("device-a", "Стас"), ("device-b", "Дарья")]);
+        let outcome = call(&group, "phone_find", json!({"name": "Дарьи"}));
+        assert_eq!(outcome.speech, "Звоню на телефон «Дарья».");
+        assert_eq!(calls(&fake), ["devices", "find::device-b"]);
+    }
+
+    #[test]
+    fn a_named_phone_without_any_registered_phone_names_it() {
+        let (group, fake) = fixture(&[]);
+        let outcome = call(&group, "phone_find", json!({"name": "Дарьи"}));
+        assert!(
+            outcome
+                .speech
+                .starts_with("Телефон «Дарьи» не зарегистрирован.")
+        );
+        assert_eq!(calls(&fake), ["devices"]);
     }
 
     #[test]
@@ -751,7 +813,7 @@ mod tests {
         let outcome = call(&group, "phone_find", json!({"name": "Петя"}));
         assert_eq!(
             outcome.speech,
-            "Не нашёл телефон «Петя». Есть: «Стас», «Аня». На какой звонить?"
+            "Телефон «Петя» не зарегистрирован. Есть: «Стас», «Аня». Открой на нём приложение и в настройках уведомлений укажи имя телефона и обнови регистрацию."
         );
         assert!(!calls(&fake).iter().any(|call| call.starts_with("find:")));
     }

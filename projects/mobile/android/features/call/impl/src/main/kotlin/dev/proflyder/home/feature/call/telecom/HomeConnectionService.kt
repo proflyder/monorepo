@@ -46,7 +46,9 @@ class HomeConnectionService : ConnectionService() {
     override fun onCreateOutgoingConnectionFailed(
         account: PhoneAccountHandle?,
         request: ConnectionRequest?,
-    ) = Unit
+    ) {
+        controller.placeCall()
+    }
 
     override fun onCreateIncomingConnection(
         account: PhoneAccountHandle?,

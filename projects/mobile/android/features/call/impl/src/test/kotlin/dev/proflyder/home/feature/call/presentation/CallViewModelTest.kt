@@ -90,6 +90,19 @@ internal class CallViewModelTest {
     }
 
     @Test
+    fun theScreenIsBlankedByProximityOnlyOnTheEarpiece() = runTest {
+        controller.mutableState.value = CallSnapshot(phase = CallPhase.ACTIVE, activeSinceUnix = clock.wall / 1_000)
+        val viewModel = viewModel()
+        runCurrent()
+        assertTrue(viewModel.state.value.proximityLock)
+        audio.state.value = audio.state.value.copy(selected = CallAudioRoute.SPEAKER)
+        runCurrent()
+        assertFalse(viewModel.state.value.proximityLock)
+        controller.mutableState.value = CallSnapshot(phase = CallPhase.ENDED)
+        runCurrent()
+    }
+
+    @Test
     fun muteAndRoutesAreIntentsRenderedFromState() = runTest {
         controller.mutableState.value = CallSnapshot(phase = CallPhase.RINGING)
         val viewModel = viewModel()

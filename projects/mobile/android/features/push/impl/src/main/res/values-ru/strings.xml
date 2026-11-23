@@ -16,7 +16,9 @@
     <string name="push_registered_hint">Зарегистрирован, токен заканчивается на %1$s</string>
     <string name="push_register">Обновить регистрацию</string>
     <string name="push_registered">Регистрация обновлена.</string>
-    <string name="push_register_failed">Не удалось зарегистрировать: проверьте адрес сервера и токен доступа.</string>
+    <string name="push_register_failed_no_token">Не удалось получить токен уведомлений Google (FCM). Проверьте интернет и сервисы Google Play на этом телефоне и повторите.</string>
+    <string name="push_register_failed_not_configured">Не заданы адрес сервера или токен доступа. Заполните их на экране «Подключение».</string>
+    <string name="push_register_failed_reason">Не удалось зарегистрировать: %1$s</string>
     <string name="push_settings_missing">Эта страница настроек недоступна на этом устройстве.</string>
     <string name="push_channel_notifications_name">Уведомления дома</string>
     <string name="push_channel_notifications_description">Сообщения от Рикардо: напоминания, статус и ответы.</string>

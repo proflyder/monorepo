@@ -31,8 +31,12 @@ class FirebasePushTokenSource(
     override val token: StateFlow<String?> = current.asStateFlow()
 
     override fun start() {
-        if (FirebaseApp.getApps(context).isEmpty()) return
-        scope.launch { fetch()?.let(::refreshed) }
+        scope.launch { fetch() }
+    }
+
+    override suspend fun fetch(): String? {
+        if (FirebaseApp.getApps(context).isEmpty()) return null
+        return requestToken()?.also(::refreshed) ?: current.value
     }
 
     override fun refreshed(token: String) {
@@ -44,6 +48,8 @@ class FirebasePushTokenSource(
     }
 
     @Suppress("DEPRECATION")
-    private suspend fun fetch(): String? =
-        suspendRunCatching { FirebaseMessaging.getInstance().token.await() }.getOrNull()
+    private suspend fun requestToken(): String? =
+        suspendRunCatching { FirebaseMessaging.getInstance().token.await() }
+            .getOrNull()
+            ?.takeIf { it.isNotBlank() }
 }

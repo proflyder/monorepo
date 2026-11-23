@@ -7,6 +7,7 @@ import dev.proflyder.home.core.endpoint.EndpointParseResult
 import dev.proflyder.home.core.endpoint.ServerEndpoint
 import dev.proflyder.home.core.model.DeviceIdentity
 import dev.proflyder.home.core.model.Outcome
+import dev.proflyder.home.core.model.RemoteFailure
 import dev.proflyder.home.core.network.PushDevicesApi
 import dev.proflyder.home.core.runtime.AppVersion
 import dev.proflyder.home.core.testing.FakeClock
@@ -113,12 +114,61 @@ class HomePushRegistrarTest {
         tokens.refreshed("token-a")
         registrar.start()
         scope.runCurrent()
-        var saved = false
+        var saved: PushRegistrationResult? = null
         scope.backgroundScope.launch { saved = registrar.saveDeviceName("  Кухня  ") }
         scope.runCurrent()
-        assertTrue(saved)
+        assertEquals(PushRegistrationResult.Done, saved)
         assertEquals(listOf("Pixel", "Кухня"), api.names)
         assertEquals("Кухня", store.registration.value.registeredName)
+    }
+
+    @Test
+    fun registerNowFetchesAMissingPushTokenBeforeGivingUp() {
+        settings.configure("https://home.test")
+        tokens.fetchable = "token-late"
+        val result = registerNow()
+        assertEquals(PushRegistrationResult.Done, result)
+        assertEquals(listOf("token-late"), api.tokens)
+    }
+
+    @Test
+    fun registerNowWithoutAPushTokenSaysSoAndSendsNothing() {
+        settings.configure("https://home.test")
+        val result = registerNow()
+        assertEquals(PushRegistrationResult.NoPushToken, result)
+        assertTrue(api.tokens.isEmpty())
+        assertTrue(registrar.status.value.failed)
+    }
+
+    @Test
+    fun registerNowWithoutAServerSaysItIsNotConfigured() {
+        tokens.refreshed("token-a")
+        assertEquals(PushRegistrationResult.NotConfigured, registerNow())
+        assertTrue(api.tokens.isEmpty())
+    }
+
+    @Test
+    fun registerNowReportsTheServerRejection() {
+        settings.configure("https://home.test")
+        tokens.refreshed("token-a")
+        api.result = { Outcome.Failure(RemoteFailure.Unauthorized) }
+        assertEquals(PushRegistrationResult.Rejected(RemoteFailure.Unauthorized), registerNow())
+    }
+
+    @Test
+    fun registerNowTurnsAnUnexpectedErrorIntoAProtocolFailure() {
+        settings.configure("https://home.test")
+        tokens.refreshed("token-a")
+        api.result = { error("boom") }
+        val result = registerNow()
+        assertTrue((result as PushRegistrationResult.Rejected).failure is RemoteFailure.ProtocolFailure)
+    }
+
+    private fun registerNow(): PushRegistrationResult? {
+        var result: PushRegistrationResult? = null
+        scope.backgroundScope.launch { result = registrar.registerNow() }
+        scope.runCurrent()
+        return result
     }
 
     @Test
@@ -184,6 +234,9 @@ class HomePushRegistrarTest {
     private class MutableTokenSource : PushTokenSource {
         private val current = MutableStateFlow<String?>(null)
         override val token: StateFlow<String?> = current.asStateFlow()
+        var fetchable: String? = null
+
+        override suspend fun fetch(): String? = fetchable?.also { current.value = it } ?: current.value
 
         override fun refreshed(token: String) {
             current.value = token

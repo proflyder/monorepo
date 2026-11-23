@@ -8,6 +8,7 @@ import dev.proflyder.home.feature.push.PushPermissionProbe
 import dev.proflyder.home.feature.push.PushPermissionStatus
 import dev.proflyder.home.feature.push.PushRegistrar
 import dev.proflyder.home.feature.push.PushRegistration
+import dev.proflyder.home.feature.push.PushRegistrationResult
 import dev.proflyder.home.feature.push.PushRegistrationStore
 import dev.proflyder.home.feature.push.PushSyncStatus
 import dev.zacsweers.metro.AppScope
@@ -39,7 +40,7 @@ internal sealed interface PushSettingsIntent {
 internal sealed interface PushSettingsEvent {
     data object Registered : PushSettingsEvent
     data object NameSaved : PushSettingsEvent
-    data object Failed : PushSettingsEvent
+    data class Failed(val result: PushRegistrationResult) : PushSettingsEvent
     data class OpenSettings(val screen: PushSettingsScreen) : PushSettingsEvent
 }
 
@@ -66,9 +67,7 @@ internal class PushSettingsViewModel(
     }
 
     private fun register() {
-        launch {
-            emit(if (registrar.registerNow()) PushSettingsEvent.Registered else PushSettingsEvent.Failed)
-        }
+        launch { emit(registrar.registerNow().toEvent(PushSettingsEvent.Registered)) }
     }
 
     private fun saveName() {
@@ -76,8 +75,13 @@ internal class PushSettingsViewModel(
         launch {
             val saved = registrar.saveDeviceName(name)
             updateState { copy(nameDraft = null) }
-            emit(if (saved) PushSettingsEvent.NameSaved else PushSettingsEvent.Failed)
+            emit(saved.toEvent(PushSettingsEvent.NameSaved))
         }
+    }
+
+    private fun PushRegistrationResult.toEvent(success: PushSettingsEvent): PushSettingsEvent = when (this) {
+        PushRegistrationResult.Done -> success
+        else -> PushSettingsEvent.Failed(this)
     }
 }
 
